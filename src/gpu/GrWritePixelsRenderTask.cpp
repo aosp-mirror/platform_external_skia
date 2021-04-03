@@ -18,7 +18,7 @@ sk_sp<GrRenderTask> GrWritePixelsTask::Make(GrDrawingManager* dm,
                                             GrColorType dstColorType,
                                             const GrMipLevel texels[],
                                             int levelCount,
-                                            sk_sp<SkData> pixelStorage) {
+                                            bool prepForSampling) {
     return sk_sp<GrRenderTask>(new GrWritePixelsTask(dm,
                                                      std::move(dst),
                                                      rect,
@@ -26,7 +26,7 @@ sk_sp<GrRenderTask> GrWritePixelsTask::Make(GrDrawingManager* dm,
                                                      dstColorType,
                                                      texels,
                                                      levelCount,
-                                                     std::move(pixelStorage)));
+                                                     prepForSampling));
 }
 
 GrWritePixelsTask::GrWritePixelsTask(GrDrawingManager* dm,
@@ -36,11 +36,11 @@ GrWritePixelsTask::GrWritePixelsTask(GrDrawingManager* dm,
                                      GrColorType dstColorType,
                                      const GrMipLevel texels[],
                                      int levelCount,
-                                     sk_sp<SkData> pixelStorage)
+                                     bool prepForSampling)
         : fRect(rect)
         , fSrcColorType(srcColorType)
         , fDstColorType(dstColorType)
-        , fStorage(std::move(pixelStorage)) {
+        , fPrepForSampling(prepForSampling) {
     this->addTarget(dm, std::move(dst));
     fLevels.reset(levelCount);
     std::copy_n(texels, levelCount, fLevels.get());
@@ -72,5 +72,6 @@ bool GrWritePixelsTask::onExecute(GrOpFlushState* flushState) {
                                           fDstColorType,
                                           fSrcColorType,
                                           fLevels.get(),
-                                          fLevels.count());
+                                          fLevels.count(),
+                                          fPrepForSampling);
 }
