@@ -16,7 +16,9 @@
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBreakStatement.h"
 #include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLConstructorArray.h"
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
+#include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLContinueStatement.h"
 #include "src/sksl/ir/SkSLDiscardStatement.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
@@ -428,6 +430,16 @@ std::unique_ptr<Statement> Rehydrator::statement() {
     }
 }
 
+ExpressionArray Rehydrator::expressionArray() {
+    uint8_t count = this->readU8();
+    ExpressionArray array;
+    array.reserve_back(count);
+    for (int i = 0; i < count; ++i) {
+        array.push_back(this->expression());
+    }
+    return array;
+}
+
 std::unique_ptr<Expression> Rehydrator::expression() {
     int kind = this->readU8();
     switch (kind) {
@@ -443,20 +455,27 @@ std::unique_ptr<Expression> Rehydrator::expression() {
         }
         case Rehydrator::kConstructor_Command: {
             const Type* type = this->type();
-            uint8_t argCount = this->readU8();
-            ExpressionArray args;
-            args.reserve_back(argCount);
-            for (int i = 0; i < argCount; ++i) {
-                args.push_back(this->expression());
-            }
+            ExpressionArray args = this->expressionArray();
             auto ctor = Constructor::Convert(fContext, /*offset=*/-1, *type, std::move(args));
             SkASSERT(ctor);
             return ctor;
         }
+        case Rehydrator::kConstructorArray_Command: {
+            const Type* type = this->type();
+            return ConstructorArray::Make(fContext, /*offset=*/-1, *type, this->expressionArray());
+        }
         case Rehydrator::kConstructorDiagonalMatrix_Command: {
             const Type* type = this->type();
+            ExpressionArray args = this->expressionArray();
+            SkASSERT(args.size() == 1);
             return ConstructorDiagonalMatrix::Make(fContext, /*offset=*/-1, *type,
-                                                   this->expression());
+                                                   std::move(args[0]));
+        }
+        case Rehydrator::kConstructorSplat_Command: {
+            const Type* type = this->type();
+            ExpressionArray args = this->expressionArray();
+            SkASSERT(args.size() == 1);
+            return ConstructorSplat::Make(fContext, /*offset=*/-1, *type, std::move(args[0]));
         }
         case Rehydrator::kFieldAccess_Command: {
             std::unique_ptr<Expression> base = this->expression();
@@ -474,12 +493,7 @@ std::unique_ptr<Expression> Rehydrator::expression() {
             const Type* type = this->type();
             const FunctionDeclaration* f = this->symbolRef<FunctionDeclaration>(
                                                                 Symbol::Kind::kFunctionDeclaration);
-            uint8_t argCount = this->readU8();
-            ExpressionArray args;
-            args.reserve_back(argCount);
-            for (int i = 0; i < argCount; ++i) {
-                args.push_back(this->expression());
-            }
+            ExpressionArray args = this->expressionArray();
             return FunctionCall::Make(fContext, /*offset=*/-1, type, *f, std::move(args));
         }
         case Rehydrator::kIndex_Command: {
