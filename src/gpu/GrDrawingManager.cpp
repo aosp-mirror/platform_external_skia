@@ -821,7 +821,7 @@ bool GrDrawingManager::newWritePixelsTask(sk_sp<GrSurfaceProxy> dst,
                                           GrColorType dstColorType,
                                           const GrMipLevel levels[],
                                           int levelCount,
-                                          sk_sp<SkData> owner) {
+                                          bool prepForSampling) {
     SkDEBUGCODE(this->validate());
     SkASSERT(fContext);
 
@@ -844,7 +844,7 @@ bool GrDrawingManager::newWritePixelsTask(sk_sp<GrSurfaceProxy> dst,
                                                                   dstColorType,
                                                                   levels,
                                                                   levelCount,
-                                                                  std::move(owner)));
+                                                                  prepForSampling));
     if (!task) {
         return false;
     }
