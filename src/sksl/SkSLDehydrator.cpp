@@ -16,7 +16,9 @@
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBreakStatement.h"
 #include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLConstructorArray.h"
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
+#include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLContinueStatement.h"
 #include "src/sksl/ir/SkSLDiscardStatement.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
@@ -254,16 +256,10 @@ void Dehydrator::write(const SymbolTable& symbols) {
     }
 }
 
-void Dehydrator::writeSingleArgumentConstructor(const SingleArgumentConstructor& c) {
-    this->write(c.type());
-    this->write(c.argument().get());
-}
-
-void Dehydrator::writeMultiArgumentConstructor(const MultiArgumentConstructor& c) {
-    this->write(c.type());
-    this->writeU8(c.arguments().size());
-    for (const auto& arg : c.arguments()) {
-        this->write(arg.get());
+void Dehydrator::writeExpressionSpan(const SkSpan<const std::unique_ptr<Expression>>& span) {
+    this->writeU8(span.size());
+    for (const auto& expr : span) {
+        this->write(expr.get());
     }
 }
 
@@ -290,12 +286,26 @@ void Dehydrator::write(const Expression* e) {
 
             case Expression::Kind::kConstructor:
                 this->writeCommand(Rehydrator::kConstructor_Command);
-                this->writeMultiArgumentConstructor(e->as<Constructor>());
+                this->write(e->type());
+                this->writeExpressionSpan(e->as<Constructor>().argumentSpan());
+                break;
+
+            case Expression::Kind::kConstructorArray:
+                this->writeCommand(Rehydrator::kConstructorArray_Command);
+                this->write(e->type());
+                this->writeExpressionSpan(e->as<ConstructorArray>().argumentSpan());
                 break;
 
             case Expression::Kind::kConstructorDiagonalMatrix:
                 this->writeCommand(Rehydrator::kConstructorDiagonalMatrix_Command);
-                this->writeSingleArgumentConstructor(e->as<ConstructorDiagonalMatrix>());
+                this->write(e->type());
+                this->writeExpressionSpan(e->as<ConstructorDiagonalMatrix>().argumentSpan());
+                break;
+
+            case Expression::Kind::kConstructorSplat:
+                this->writeCommand(Rehydrator::kConstructorSplat_Command);
+                this->write(e->type());
+                this->writeExpressionSpan(e->as<ConstructorSplat>().argumentSpan());
                 break;
 
             case Expression::Kind::kExternalFunctionCall:

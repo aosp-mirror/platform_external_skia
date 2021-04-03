@@ -8,7 +8,9 @@
 #include "src/sksl/ir/SkSLConstructor.h"
 
 #include "src/sksl/ir/SkSLBoolLiteral.h"
+#include "src/sksl/ir/SkSLConstructorArray.h"
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
+#include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLFloatLiteral.h"
 #include "src/sksl/ir/SkSLIntLiteral.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
@@ -33,7 +35,7 @@ std::unique_ptr<Expression> Constructor::Convert(const Context& context,
         return MakeCompoundConstructor(context, offset, type, std::move(args));
     }
     if (type.isArray() && type.columns() > 0) {
-        return MakeArrayConstructor(context, offset, type, std::move(args));
+        return ConstructorArray::Convert(context, offset, type, std::move(args));
     }
 
     context.fErrors.error(offset, "cannot construct '" + type.displayName() + "'");
@@ -86,14 +88,10 @@ std::unique_ptr<Expression> Constructor::MakeCompoundConstructor(const Context& 
                                                                     std::move(args));
         SkASSERT(typecast);
 
-        if (type.isMatrix()) {
-            // Matrix-from-scalar creates a diagonal matrix.
-            return ConstructorDiagonalMatrix::Make(context, offset, type, std::move(typecast));
-        }
-
-        ExpressionArray typecastArgs;
-        typecastArgs.push_back(std::move(typecast));
-        return std::make_unique<Constructor>(offset, type, std::move(typecastArgs));
+        // Matrix-from-scalar creates a diagonal matrix; vector-from-scalar creates a splat.
+        return type.isMatrix()
+                       ? ConstructorDiagonalMatrix::Make(context, offset, type, std::move(typecast))
+                       : ConstructorSplat::Make(context, offset, type, std::move(typecast));
     }
 
     int expected = type.rows() * type.columns();
@@ -182,39 +180,6 @@ std::unique_ptr<Expression> Constructor::MakeCompoundConstructor(const Context& 
     return std::make_unique<Constructor>(offset, type, std::move(args));
 }
 
-std::unique_ptr<Expression> Constructor::MakeArrayConstructor(const Context& context,
-                                                              int offset,
-                                                              const Type& type,
-                                                              ExpressionArray args) {
-    SkASSERTF(type.isArray() && type.columns() > 0, "%s", type.description().c_str());
-
-    // ES2 doesn't support first-class array types.
-    if (context.fConfig->strictES2Mode()) {
-        context.fErrors.error(offset, "construction of array type '" + type.displayName() +
-                                      "' is not supported");
-        return nullptr;
-    }
-
-    // Check that the number of constructor arguments matches the array size.
-    if (type.columns() != args.count()) {
-        context.fErrors.error(offset, String::printf("invalid arguments to '%s' constructor "
-                                                     "(expected %d elements, but found %d)",
-                                                     type.displayName().c_str(), type.columns(),
-                                                     args.count()));
-        return nullptr;
-    }
-
-    // Convert each constructor argument to the array's component type.
-    const Type& baseType = type.componentType();
-    for (std::unique_ptr<Expression>& argument : args) {
-        argument = baseType.coerceExpression(std::move(argument), context);
-        if (!argument) {
-            return nullptr;
-        }
-    }
-    return std::make_unique<Constructor>(offset, type, std::move(args));
-}
-
 std::unique_ptr<Expression> Constructor::SimplifyConversion(const Type& constructorType,
                                                             const Expression& expr) {
     if (expr.is<IntLiteral>()) {
@@ -261,6 +226,9 @@ Expression::ComparisonResult Constructor::compareConstant(const Expression& othe
     if (other.is<ConstructorDiagonalMatrix>()) {
         return other.compareConstant(*this);
     }
+    if (other.is<ConstructorSplat>()) {
+        return other.compareConstant(*this);
+    }
     if (!other.is<Constructor>()) {
         return ComparisonResult::kUnknown;
     }
@@ -301,17 +269,6 @@ Expression::ComparisonResult Constructor::compareConstant(const Expression& othe
                 if (getMatComponent(col, row) != c.getMatComponent(col, row)) {
                     return ComparisonResult::kNotEqual;
                 }
-            }
-        }
-        return ComparisonResult::kEqual;
-    }
-
-    if (myType.isArray()) {
-        SkASSERT(myType.columns() == c.type().columns());
-        for (int col = 0; col < myType.columns(); col++) {
-            ComparisonResult check = this->arguments()[col]->compareConstant(*c.arguments()[col]);
-            if (check != ComparisonResult::kEqual) {
-                return check;
             }
         }
         return ComparisonResult::kEqual;
@@ -416,8 +373,7 @@ SKSL_FLOAT Constructor::getMatComponent(int col, int row) const {
             return col == row ? this->getConstantValue<SKSL_FLOAT>(*this->arguments()[0]) : 0.0;
         }
         if (argType.isMatrix()) {
-            SkASSERT(this->arguments()[0]->is<Constructor>() ||
-                     this->arguments()[0]->is<ConstructorDiagonalMatrix>());
+            SkASSERT(this->arguments()[0]->isAnyConstructor());
             // single matrix argument. make sure we're within the argument's bounds.
             if (col < argType.columns() && row < argType.rows()) {
                 // within bounds, defer to argument
@@ -485,6 +441,16 @@ bool Constructor::getConstantBool() const {
     return expr.type().isBoolean() ? expr.getConstantBool() :
            expr.type().isInteger() ? (bool)expr.getConstantInt() :
                                      (bool)expr.getConstantFloat();
+}
+
+AnyConstructor& Expression::asAnyConstructor() {
+    SkASSERT(this->isAnyConstructor());
+    return static_cast<AnyConstructor&>(*this);
+}
+
+const AnyConstructor& Expression::asAnyConstructor() const {
+    SkASSERT(this->isAnyConstructor());
+    return static_cast<const AnyConstructor&>(*this);
 }
 
 }  // namespace SkSL

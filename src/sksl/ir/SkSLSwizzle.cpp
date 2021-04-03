@@ -6,6 +6,7 @@
  */
 
 #include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
 
 namespace SkSL {
@@ -147,18 +148,12 @@ std::unique_ptr<Expression> Swizzle::Make(const Context& context,
     }));
 
     // SkSL supports splatting a scalar via `scalar.xxxx`, but not all versions of GLSL allow this.
-    // Replace swizzles with equivalent constructors (`scalar.xxx` --> `half3(value)`).
+    // Replace swizzles with equivalent splat constructors (`scalar.xxx` --> `half3(value)`).
     if (exprType.isScalar()) {
         int offset = expr->fOffset;
-
-        ExpressionArray ctorArgs;
-        ctorArgs.push_back(std::move(expr));
-
-        auto ctor = Constructor::Convert(context, offset,
-                                         exprType.toCompound(context, components.size(),/*rows=*/1),
-                                         std::move(ctorArgs));
-        SkASSERT(ctor);
-        return ctor;
+        return ConstructorSplat::Make(context, offset,
+                                      exprType.toCompound(context, components.size(), /*rows=*/1),
+                                      std::move(expr));
     }
 
     if (context.fConfig->fSettings.fOptimize) {
@@ -189,23 +184,23 @@ std::unique_ptr<Expression> Swizzle::Make(const Context& context,
             return Swizzle::Make(context, std::move(base.base()), combined);
         }
 
+        // `half4(scalar).zyy` can be optimized to `half3(scalar)`, and `half3(scalar).y` can be
+        // optimized to just `scalar`. The swizzle components don't actually matter, as every field
+        // in a splat constructor holds the same value.
+        if (expr->is<ConstructorSplat>()) {
+            ConstructorSplat& splat = expr->as<ConstructorSplat>();
+            return ConstructorSplat::Make(
+                    context, splat.fOffset,
+                    splat.type().componentType().toCompound(context, components.size(), /*rows=*/1),
+                    std::move(splat.argument()));
+        }
+
         // Optimize swizzles of constructors.
         if (expr->is<Constructor>()) {
             Constructor& base = expr->as<Constructor>();
             std::unique_ptr<Expression> replacement;
             const Type& componentType = exprType.componentType();
             int swizzleSize = components.size();
-
-            // `half4(scalar).zyy` can be optimized to `half3(scalar)`. The swizzle components don't
-            // actually matter since all fields are the same.
-            if (base.arguments().size() == 1 && base.arguments().front()->type().isScalar()) {
-                auto ctor = Constructor::Convert(
-                        context, base.fOffset,
-                        componentType.toCompound(context, swizzleSize, /*rows=*/1),
-                        std::move(base.arguments()));
-                SkASSERT(ctor);
-                return ctor;
-            }
 
             // Swizzles can duplicate some elements and discard others, e.g.
             // `half4(1, 2, 3, 4).xxz` --> `half3(1, 1, 3)`. However, there are constraints:

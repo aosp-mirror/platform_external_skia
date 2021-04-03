@@ -10,6 +10,8 @@
 #include <memory>
 
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/ir/SkSLConstructorArray.h"
+#include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLExtension.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
@@ -199,9 +201,10 @@ void GLSLCodeGenerator::writeExpression(const Expression& expr, Precedence paren
         case Expression::Kind::kConstructor:
             this->writeConstructor(expr.as<Constructor>(), parentPrecedence);
             break;
+        case Expression::Kind::kConstructorArray:
         case Expression::Kind::kConstructorDiagonalMatrix:
-            this->writeSingleArgumentConstructor(expr.as<ConstructorDiagonalMatrix>(),
-                                                 parentPrecedence);
+        case Expression::Kind::kConstructorSplat:
+            this->writeAnyConstructor(expr.asAnyConstructor(), parentPrecedence);
             break;
         case Expression::Kind::kIntLiteral:
             this->writeIntLiteral(expr.as<IntLiteral>());
@@ -733,27 +736,18 @@ void GLSLCodeGenerator::writeConstructor(const Constructor& c, Precedence parent
         this->writeExpression(*c.arguments()[0], parentPrecedence);
         return;
     }
-    return this->writeMultiArgumentConstructor(c, parentPrecedence);
+    return this->writeAnyConstructor(c, parentPrecedence);
 }
 
-void GLSLCodeGenerator::writeMultiArgumentConstructor(const MultiArgumentConstructor& c,
-                                                      Precedence parentPrecedence) {
+void GLSLCodeGenerator::writeAnyConstructor(const AnyConstructor& c, Precedence parentPrecedence) {
     this->writeType(c.type());
     this->write("(");
     const char* separator = "";
-    for (const auto& arg : c.arguments()) {
+    for (const auto& arg : c.argumentSpan()) {
         this->write(separator);
         separator = ", ";
         this->writeExpression(*arg, Precedence::kSequence);
     }
-    this->write(")");
-}
-
-void GLSLCodeGenerator::writeSingleArgumentConstructor(const SingleArgumentConstructor& c,
-                                                       Precedence parentPrecedence) {
-    this->writeType(c.type());
-    this->write("(");
-    this->writeExpression(*c.argument(), Precedence::kSequence);
     this->write(")");
 }
 
