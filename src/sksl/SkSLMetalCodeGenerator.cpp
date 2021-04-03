@@ -10,6 +10,9 @@
 #include "src/core/SkScopeExit.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLMemoryLayout.h"
+#include "src/sksl/ir/SkSLConstructorArray.h"
+#include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
+#include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLExtension.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
@@ -171,9 +174,15 @@ void MetalCodeGenerator::writeExpression(const Expression& expr, Precedence pare
         case Expression::Kind::kConstructor:
             this->writeConstructor(expr.as<Constructor>(), parentPrecedence);
             break;
+        case Expression::Kind::kConstructorArray:
+            this->writeConstructorArray(expr.as<ConstructorArray>(), parentPrecedence);
+            break;
         case Expression::Kind::kConstructorDiagonalMatrix:
             this->writeSingleArgumentConstructor(expr.as<ConstructorDiagonalMatrix>(),
                                                  parentPrecedence);
+            break;
+        case Expression::Kind::kConstructorSplat:
+            this->writeSingleArgumentConstructor(expr.as<ConstructorSplat>(), parentPrecedence);
             break;
         case Expression::Kind::kIntLiteral:
             this->writeIntLiteral(expr.as<IntLiteral>());
@@ -1041,6 +1050,8 @@ bool MetalCodeGenerator::matrixConstructHelperIsNeeded(const Constructor& c) {
 
 void MetalCodeGenerator::writeConstructor(const Constructor& c, Precedence parentPrecedence) {
     const Type& constructorType = c.type();
+    SkASSERT(!constructorType.isArray());
+
     // Handle special cases for single-argument constructors.
     if (c.arguments().size() == 1) {
         // If the type is coercible, emit it directly.
@@ -1082,7 +1093,7 @@ void MetalCodeGenerator::writeConstructor(const Constructor& c, Precedence paren
 
     // Explicitly invoke the constructor, passing in the necessary arguments.
     this->writeType(constructorType);
-    this->write(constructorType.isArray() ? "{" : "(");
+    this->write("(");
     const char* separator = "";
     int scalarCount = 0;
     for (const std::unique_ptr<Expression>& arg : c.arguments()) {
@@ -1105,7 +1116,7 @@ void MetalCodeGenerator::writeConstructor(const Constructor& c, Precedence paren
             scalarCount = 0;
         }
     }
-    this->write(constructorType.isArray() ? "}" : ")");
+    this->write(")");
 }
 
 void MetalCodeGenerator::writeSingleArgumentConstructor(const SingleArgumentConstructor& c,
@@ -1114,6 +1125,19 @@ void MetalCodeGenerator::writeSingleArgumentConstructor(const SingleArgumentCons
     this->write("(");
     this->writeExpression(*c.argument(), Precedence::kSequence);
     this->write(")");
+}
+
+void MetalCodeGenerator::writeConstructorArray(const ConstructorArray& c,
+                                               Precedence parentPrecedence) {
+    this->writeType(c.type());
+    this->write("{");
+    const char* separator = "";
+    for (const std::unique_ptr<Expression>& arg : c.arguments()) {
+        this->write(separator);
+        separator = ", ";
+        this->writeExpression(*arg, Precedence::kSequence);
+    }
+    this->write("}");
 }
 
 void MetalCodeGenerator::writeFragCoord() {
@@ -2238,16 +2262,16 @@ MetalCodeGenerator::Requirements MetalCodeGenerator::requirements(const Expressi
             }
             return result;
         }
-        case Expression::Kind::kConstructor: {
-            const Constructor& c = e->as<Constructor>();
+        case Expression::Kind::kConstructor:
+        case Expression::Kind::kConstructorArray:
+        case Expression::Kind::kConstructorDiagonalMatrix:
+        case Expression::Kind::kConstructorSplat: {
+            const AnyConstructor& c = e->asAnyConstructor();
             Requirements result = kNo_Requirements;
-            for (const auto& arg : c.arguments()) {
+            for (const auto& arg : c.argumentSpan()) {
                 result |= this->requirements(arg.get());
             }
             return result;
-        }
-        case Expression::Kind::kConstructorDiagonalMatrix: {
-            return this->requirements(e->as<ConstructorDiagonalMatrix>().argument().get());
         }
         case Expression::Kind::kFieldAccess: {
             const FieldAccess& f = e->as<FieldAccess>();
