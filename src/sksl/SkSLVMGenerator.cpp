@@ -20,7 +20,6 @@
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLConstructorArray.h"
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
-#include "src/sksl/ir/SkSLConstructorScalarCast.h"
 #include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLContinueStatement.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
@@ -249,7 +248,7 @@ private:
     Value writeConstructor(const Constructor& c);
     Value writeMultiArgumentConstructor(const MultiArgumentConstructor& c);
     Value writeConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c);
-    Value writeConstructorScalarCast(const ConstructorScalarCast& c);
+    Value writeConstructorCast(const AnyConstructor& c);
     Value writeConstructorSplat(const ConstructorSplat& c);
     Value writeFunctionCall(const FunctionCall& c);
     Value writeExternalFunctionCall(const ExternalFunctionCall& c);
@@ -340,8 +339,10 @@ static inline bool is_uniform(const SkSL::Variable& var) {
 
 static size_t slot_count(const Type& type) {
     switch (type.typeKind()) {
+        case Type::TypeKind::kColorFilter:
         case Type::TypeKind::kFragmentProcessor:
         case Type::TypeKind::kOther:
+        case Type::TypeKind::kShader:
         case Type::TypeKind::kVoid:
             return 0;
         case Type::TypeKind::kStruct: {
@@ -382,9 +383,9 @@ SkVMGenerator::SkVMGenerator(const Program& program,
             const Variable& var = decl.var();
             SkASSERT(fVariableMap.find(&var) == fVariableMap.end());
 
-            // For most variables, fVariableMap stores an index into fSlots, but for fragment
-            // processors (child shaders), fVariableMap stores the index to pass to fSampleChild().
-            if (var.type().isFragmentProcessor()) {
+            // For most variables, fVariableMap stores an index into fSlots, but for children,
+            // fVariableMap stores the index to pass to fSampleChild().
+            if (var.type().isEffectChild()) {
                 fVariableMap[&var] = fpCount++;
                 continue;
             }
@@ -792,12 +793,16 @@ Value SkVMGenerator::writeTypeConversion(const Value& src,
     return {};
 }
 
-Value SkVMGenerator::writeConstructorScalarCast(const ConstructorScalarCast& c) {
-    const Type& srcType = c.argument()->type();
+Value SkVMGenerator::writeConstructorCast(const AnyConstructor& c) {
+    auto arguments = c.argumentSpan();
+    SkASSERT(arguments.size() == 1);
+    const Expression& argument = *arguments.front();
+
+    const Type& srcType = argument.type();
     const Type& dstType = c.type();
     Type::NumberKind srcKind = base_number_kind(srcType);
     Type::NumberKind dstKind = base_number_kind(dstType);
-    Value src = this->writeExpression(*c.argument());
+    Value src = this->writeExpression(argument);
     return this->writeTypeConversion(src, srcKind, dstKind);
 }
 
@@ -1046,9 +1051,10 @@ Value SkVMGenerator::writeIntrinsicCall(const FunctionCall& c) {
     const size_t nargs = c.arguments().size();
 
     if (found->second == Intrinsic::kSample) {
-        // Sample is very special, the first argument is an FP, which can't be evaluated
+        // Sample is very special, the first argument is a child (shader/colorFilter), which can't
+        // be evaluated
         const Context& ctx = *fProgram.fContext;
-        if (nargs > 2 || !c.arguments()[0]->type().isFragmentProcessor() ||
+        if (nargs > 2 || !c.arguments()[0]->type().isEffectChild() ||
             (nargs == 2 && (c.arguments()[1]->type() != *ctx.fTypes.fFloat2 &&
                             c.arguments()[1]->type() != *ctx.fTypes.fFloat3x3))) {
             SkDEBUGFAIL("Invalid call to sample");
@@ -1492,7 +1498,8 @@ Value SkVMGenerator::writeExpression(const Expression& e) {
         case Expression::Kind::kConstructorDiagonalMatrix:
             return this->writeConstructorDiagonalMatrix(e.as<ConstructorDiagonalMatrix>());
         case Expression::Kind::kConstructorScalarCast:
-            return this->writeConstructorScalarCast(e.as<ConstructorScalarCast>());
+        case Expression::Kind::kConstructorVectorCast:
+            return this->writeConstructorCast(e.asAnyConstructor());
         case Expression::Kind::kConstructorSplat:
             return this->writeConstructorSplat(e.as<ConstructorSplat>());
         case Expression::Kind::kFieldAccess:
@@ -1864,7 +1871,7 @@ bool testingOnly_ProgramToSkVMShader(const Program& program, skvm::Builder* buil
         if (e->is<GlobalVarDeclaration>()) {
             const GlobalVarDeclaration& decl = e->as<GlobalVarDeclaration>();
             const Variable& var = decl.declaration()->as<VarDeclaration>().var();
-            if (var.type().isFragmentProcessor()) {
+            if (var.type().isEffectChild()) {
                 childSlots++;
             } else if (is_uniform(var)) {
                 uniformSlots += slot_count(var.type());
