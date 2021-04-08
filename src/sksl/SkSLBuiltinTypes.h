@@ -138,6 +138,9 @@ public:
     const std::unique_ptr<Type> fSkCaps;
     const std::unique_ptr<Type> fFragmentProcessor;
 
+    const std::unique_ptr<Type> fColorFilter;
+    const std::unique_ptr<Type> fShader;
+
 private:
     static std::unique_ptr<Type> MakeScalarType(const char* name, const char* abbrev,
                                                 Type::NumberKind numberKind, int priority,
@@ -153,9 +156,8 @@ private:
                                                  bool isDepth, bool isArrayedTexture,
                                                  bool isMultisampled, bool isSampled);
     static std::unique_ptr<Type> MakeSamplerType(const char* name, const Type& textureType);
-    static std::unique_ptr<Type> MakeSeparateSamplerType(const char* name);
-    static std::unique_ptr<Type> MakeOtherType(const char* name);
-    static std::unique_ptr<Type> MakeVoidType(const char* name);
+    static std::unique_ptr<Type> MakeSpecialType(const char* name, const char* abbrev,
+                                                 Type::TypeKind typeKind);
 };
 
 }  // namespace SkSL

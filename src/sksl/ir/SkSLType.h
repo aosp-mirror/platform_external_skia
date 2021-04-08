@@ -76,6 +76,7 @@ public:
     enum class TypeKind {
         kArray,
         kEnum,
+        kFragmentProcessor,
         kGeneric,
         kMatrix,
         kOther,
@@ -86,6 +87,10 @@ public:
         kTexture,
         kVector,
         kVoid,
+
+        // Types that represent stages in the Skia pipeline
+        kColorFilter,
+        kShader,
     };
 
     enum class NumberKind {
@@ -216,11 +221,14 @@ public:
      */
     bool isOpaque() const {
         switch (fTypeKind) {
+            case TypeKind::kColorFilter:
+            case TypeKind::kFragmentProcessor:
             case TypeKind::kOther:
-            case TypeKind::kVoid:
             case TypeKind::kSampler:
             case TypeKind::kSeparateSampler:
+            case TypeKind::kShader:
             case TypeKind::kTexture:
+            case TypeKind::kVoid:
                 return true;
             default:
                 return false;
@@ -290,6 +298,46 @@ public:
         return fRows;
     }
 
+    /**
+     * Returns the number of scalars needed to hold this type.
+     */
+    size_t slotCount() const {
+        switch (this->typeKind()) {
+            case Type::TypeKind::kColorFilter:
+            case Type::TypeKind::kFragmentProcessor:
+            case Type::TypeKind::kGeneric:
+            case Type::TypeKind::kOther:
+            case Type::TypeKind::kSampler:
+            case Type::TypeKind::kSeparateSampler:
+            case Type::TypeKind::kShader:
+            case Type::TypeKind::kTexture:
+            case Type::TypeKind::kVoid:
+                return 0;
+
+            case Type::TypeKind::kScalar:
+            case Type::TypeKind::kEnum:
+                return 1;
+
+            case Type::TypeKind::kVector:
+                return this->columns();
+
+            case Type::TypeKind::kMatrix:
+                return this->columns() * this->rows();
+
+            case Type::TypeKind::kStruct: {
+                size_t slots = 0;
+                for (const Field& field : this->fields()) {
+                    slots += field.fType->slotCount();
+                }
+                return slots;
+            }
+            case Type::TypeKind::kArray:
+                SkASSERT(this->columns() > 0);
+                return this->columns() * this->componentType().slotCount();
+        }
+        SkUNREACHABLE;
+    }
+
     const std::vector<Field>& fields() const {
         SkASSERT(this->isStruct());
         return fFields;
@@ -354,6 +402,16 @@ public:
         return fTypeKind == TypeKind::kEnum;
     }
 
+    bool isFragmentProcessor() const {
+        return fTypeKind == TypeKind::kFragmentProcessor;
+    }
+
+    // Is this type something that can be bound & sampled from an SkRuntimeEffect?
+    // Includes types that represent stages of the Skia pipeline (colorFilter and shader).
+    bool isEffectChild() const {
+        return fTypeKind == TypeKind::kColorFilter || fTypeKind == TypeKind::kShader;
+    }
+
     bool isMultisampled() const {
         SkASSERT(TypeKind::kSampler == fTypeKind || TypeKind::kTexture == fTypeKind);
         return fIsMultisampled;
@@ -395,14 +453,14 @@ private:
 
     using INHERITED = Symbol;
 
-    // Constructor for MakeOtherType.
-    Type(const char* name)
+    // Constructor for MakeSpecialType.
+    Type(const char* name, const char* abbrev, TypeKind kind)
             : INHERITED(-1, kSymbolKind, name)
-            , fAbbreviatedName("O")
-            , fTypeKind(TypeKind::kOther)
+            , fAbbreviatedName(abbrev)
+            , fTypeKind(kind)
             , fNumberKind(NumberKind::kNonnumeric) {}
 
-    // Constructor for MakeVoidType, MakeEnumType and MakeSeparateSamplerType.
+    // Constructor for MakeEnumType.
     Type(String name, const char* abbrev, TypeKind kind)
             : INHERITED(-1, kSymbolKind, "")
             , fAbbreviatedName(abbrev)

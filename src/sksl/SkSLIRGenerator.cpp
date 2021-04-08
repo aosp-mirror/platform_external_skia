@@ -294,11 +294,13 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
         }
     }
     if (this->programKind() == ProgramKind::kRuntimeEffect) {
-        if ((modifiers.fFlags & Modifiers::kIn_Flag) &&
-            *baseType != *fContext.fTypes.fFragmentProcessor) {
-            this->errorReporter().error(offset,
-                                        "'in' variables not permitted in runtime effects");
+        if (modifiers.fFlags & Modifiers::kIn_Flag) {
+            this->errorReporter().error(offset, "'in' variables not permitted in runtime effects");
         }
+    }
+    if (baseType->isEffectChild() && !(modifiers.fFlags & Modifiers::kUniform_Flag)) {
+        this->errorReporter().error(
+                offset, "variables of type '" + baseType->displayName() + "' must be uniform");
     }
     if ((modifiers.fLayout.fFlags & Layout::kKey_Flag) &&
         (modifiers.fFlags & Modifiers::kUniform_Flag)) {
@@ -1044,10 +1046,10 @@ void IRGenerator::convertFunction(const ASTNode& f) {
             }
             type = fSymbolTable->addArrayDimension(type, arraySize);
         }
-        // Only the (builtin) declarations of 'sample' are allowed to have FP parameters.
-        // (You can pass other opaque types to functions safely; this restriction is
-        // fragment-processor specific.)
-        if (*type == *fContext.fTypes.fFragmentProcessor && !fIsBuiltinCode) {
+        // Only the (builtin) declarations of 'sample' are allowed to have shader/colorFilter or FP
+        // parameters. You can pass other opaque types to functions safely; this restriction is
+        // specific to "child" objects.
+        if ((type->isEffectChild() || type->isFragmentProcessor()) && !fIsBuiltinCode) {
             this->errorReporter().error(
                     param.fOffset, "parameters of type '" + type->displayName() + "' not allowed");
             return;
@@ -1524,7 +1526,7 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, StringFra
                 !(modifiers.fFlags & Modifiers::kUniform_Flag) &&
                 !(modifiers.fLayout.fFlags & Layout::kKey_Flag) &&
                 modifiers.fLayout.fBuiltin == -1 &&
-                var->type() != *fContext.fTypes.fFragmentProcessor &&
+                !var->type().isFragmentProcessor() &&
                 var->type().typeKind() != Type::TypeKind::kSampler) {
                 bool valid = false;
                 for (const auto& decl : fFile->root()) {

@@ -6,6 +6,8 @@
  */
 
 #include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLConstructorScalarCast.h"
+#include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
 
 namespace SkSL {
@@ -94,10 +96,9 @@ std::unique_ptr<Expression> Swizzle::Convert(const Context& context,
             case SwizzleComponent::ZERO:
                 if (constantZeroIdx == -1) {
                     // Synthesize a 'type(0)' argument at the end of the constructor.
-                    ExpressionArray zeroArgs;
-                    zeroArgs.push_back(IntLiteral::Make(context, offset, /*value=*/0));
-                    constructorArgs.push_back(Constructor::Convert(context, offset, *numberType,
-                                                                   std::move(zeroArgs)));
+                    constructorArgs.push_back(ConstructorScalarCast::Make(
+                            context, offset, *numberType,
+                            IntLiteral::Make(context, offset, /*value=*/0)));
                     constantZeroIdx = constantFieldIdx++;
                 }
                 swizzleComponents.push_back(constantZeroIdx);
@@ -105,10 +106,9 @@ std::unique_ptr<Expression> Swizzle::Convert(const Context& context,
             case SwizzleComponent::ONE:
                 if (constantOneIdx == -1) {
                     // Synthesize a 'type(1)' argument at the end of the constructor.
-                    ExpressionArray oneArgs;
-                    oneArgs.push_back(IntLiteral::Make(context, offset, /*value=*/1));
-                    constructorArgs.push_back(Constructor::Convert(context, offset, *numberType,
-                                                                   std::move(oneArgs)));
+                    constructorArgs.push_back(ConstructorScalarCast::Make(
+                            context, offset, *numberType,
+                            IntLiteral::Make(context, offset, /*value=*/1)));
                     constantOneIdx = constantFieldIdx++;
                 }
                 swizzleComponents.push_back(constantOneIdx);
@@ -147,18 +147,12 @@ std::unique_ptr<Expression> Swizzle::Make(const Context& context,
     }));
 
     // SkSL supports splatting a scalar via `scalar.xxxx`, but not all versions of GLSL allow this.
-    // Replace swizzles with equivalent constructors (`scalar.xxx` --> `half3(value)`).
+    // Replace swizzles with equivalent splat constructors (`scalar.xxx` --> `half3(value)`).
     if (exprType.isScalar()) {
         int offset = expr->fOffset;
-
-        ExpressionArray ctorArgs;
-        ctorArgs.push_back(std::move(expr));
-
-        auto ctor = Constructor::Convert(context, offset,
-                                         exprType.toCompound(context, components.size(),/*rows=*/1),
-                                         std::move(ctorArgs));
-        SkASSERT(ctor);
-        return ctor;
+        return ConstructorSplat::Make(context, offset,
+                                      exprType.toCompound(context, components.size(), /*rows=*/1),
+                                      std::move(expr));
     }
 
     if (context.fConfig->fSettings.fOptimize) {
@@ -189,23 +183,24 @@ std::unique_ptr<Expression> Swizzle::Make(const Context& context,
             return Swizzle::Make(context, std::move(base.base()), combined);
         }
 
+        // `half4(scalar).zyy` can be optimized to `half3(scalar)`, and `half3(scalar).y` can be
+        // optimized to just `scalar`. The swizzle components don't actually matter, as every field
+        // in a splat constructor holds the same value.
+        if (expr->is<ConstructorSplat>()) {
+            ConstructorSplat& splat = expr->as<ConstructorSplat>();
+            return ConstructorSplat::Make(
+                    context, splat.fOffset,
+                    splat.type().componentType().toCompound(context, components.size(), /*rows=*/1),
+                    std::move(splat.argument()));
+        }
+
         // Optimize swizzles of constructors.
-        if (expr->is<Constructor>()) {
-            Constructor& base = expr->as<Constructor>();
+        if (expr->isAnyConstructor()) {
+            AnyConstructor& base = expr->asAnyConstructor();
+            auto baseArguments = base.argumentSpan();
             std::unique_ptr<Expression> replacement;
             const Type& componentType = exprType.componentType();
             int swizzleSize = components.size();
-
-            // `half4(scalar).zyy` can be optimized to `half3(scalar)`. The swizzle components don't
-            // actually matter since all fields are the same.
-            if (base.arguments().size() == 1 && base.arguments().front()->type().isScalar()) {
-                auto ctor = Constructor::Convert(
-                        context, base.fOffset,
-                        componentType.toCompound(context, swizzleSize, /*rows=*/1),
-                        std::move(base.arguments()));
-                SkASSERT(ctor);
-                return ctor;
-            }
 
             // Swizzles can duplicate some elements and discard others, e.g.
             // `half4(1, 2, 3, 4).xxz` --> `half3(1, 1, 3)`. However, there are constraints:
@@ -228,8 +223,8 @@ std::unique_ptr<Expression> Swizzle::Make(const Context& context,
             int numConstructorArgs = base.type().columns();
             ConstructorArgMap argMap[4] = {};
             int writeIdx = 0;
-            for (int argIdx = 0; argIdx < base.arguments().count(); ++argIdx) {
-                const Expression& arg = *base.arguments()[argIdx];
+            for (int argIdx = 0; argIdx < (int)baseArguments.size(); ++argIdx) {
+                const Expression& arg = *baseArguments[argIdx];
                 int argWidth = arg.type().columns();
                 for (int componentIdx = 0; componentIdx < argWidth; ++componentIdx) {
                     argMap[writeIdx].fArgIndex = argIdx;
@@ -252,7 +247,7 @@ std::unique_ptr<Expression> Swizzle::Make(const Context& context,
             bool safeToOptimize = true;
             for (int index = 0; index < numConstructorArgs; ++index) {
                 int8_t constructorArgIndex = argMap[index].fArgIndex;
-                const Expression& baseArg = *base.arguments()[constructorArgIndex];
+                const Expression& baseArg = *baseArguments[constructorArgIndex];
 
                 // Check that non-trivial expressions are not swizzled in more than once.
                 if (exprUsed[constructorArgIndex] > 1 && !Analysis::IsTrivialExpression(baseArg)) {
@@ -274,7 +269,7 @@ std::unique_ptr<Expression> Swizzle::Make(const Context& context,
                 SkSTArray<4, ReorderedArgument> reorderedArgs;
                 for (int8_t c : components) {
                     const ConstructorArgMap& argument = argMap[c];
-                    const Expression& baseArg = *base.arguments()[argument.fArgIndex];
+                    const Expression& baseArg = *baseArguments[argument.fArgIndex];
 
                     if (baseArg.type().isScalar()) {
                         // This argument is a scalar; add it to the list as-is.
@@ -304,7 +299,7 @@ std::unique_ptr<Expression> Swizzle::Make(const Context& context,
                 ExpressionArray newArgs;
                 newArgs.reserve_back(swizzleSize);
                 for (const ReorderedArgument& reorderedArg : reorderedArgs) {
-                    std::unique_ptr<Expression>& origArg = base.arguments()[reorderedArg.fArgIndex];
+                    std::unique_ptr<Expression>& origArg = baseArguments[reorderedArg.fArgIndex];
 
                     // Clone the original argument if there are multiple references to it; just
                     // steal it if there's only one reference left.

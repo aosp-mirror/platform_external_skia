@@ -674,6 +674,10 @@ sk_sp<GrTexture> GrGLGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
 
     auto texture = GrGLTexture::MakeWrapped(this, mipmapStatus, desc,
                                             backendTex.getGLTextureParams(), cacheable, ioType);
+    if (this->glCaps().isFormatRenderable(backendTex.getBackendFormat(), 1)) {
+        // Pessimistically assume this external texture may have been bound to a FBO.
+        texture->baseLevelWasBoundToFBO();
+    }
     return std::move(texture);
 }
 
@@ -790,7 +794,7 @@ sk_sp<GrRenderTarget> GrGLGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
     GrGLRenderTarget::IDs rtIDs;
     rtIDs.fRTFBOID = info.fFBOID;
     rtIDs.fMSColorRenderbufferID = 0;
-    rtIDs.fTexFBOID = GrGLRenderTarget::kUnresolvableFBOID;
+    rtIDs.fSingleSampleFBOID = GrGLRenderTarget::kUnresolvableFBOID;
     rtIDs.fRTFBOOwnership = GrBackendObjectOwnership::kBorrowed;
 
     int sampleCount = this->glCaps().getRenderTargetSampleCount(backendRT.sampleCnt(), format);
@@ -823,6 +827,23 @@ bool GrGLGpu::onWritePixels(GrSurface* surface, int left, int top, int width, in
     }
 
     this->bindTextureToScratchUnit(glTex->target(), glTex->textureID());
+
+    // If we have mips make sure the base/max levels cover the full range so that the uploads go to
+    // the right levels. We've found some Radeons require this.
+    if (mipLevelCount && this->glCaps().mipmapLevelControlSupport()) {
+        auto params = glTex->parameters();
+        GrGLTextureParameters::NonsamplerState nonsamplerState = params->nonsamplerState();
+        int maxLevel = glTex->maxMipmapLevel();
+        if (params->nonsamplerState().fBaseMipMapLevel != 0) {
+            GL_CALL(TexParameteri(glTex->target(), GR_GL_TEXTURE_BASE_LEVEL, 0));
+            nonsamplerState.fBaseMipMapLevel = 0;
+        }
+        if (params->nonsamplerState().fMaxMipmapLevel != maxLevel) {
+            GL_CALL(TexParameteri(glTex->target(), GR_GL_TEXTURE_MAX_LEVEL, maxLevel));
+            nonsamplerState.fBaseMipMapLevel = maxLevel;
+        }
+        params->set(nullptr, nonsamplerState, fResetTimestampForTextureParameters);
+    }
 
     SkASSERT(!GrGLFormatIsCompressed(glTex->format()));
     SkIRect dstRect = SkIRect::MakeXYWH(left, top, width, height);
@@ -982,7 +1003,7 @@ bool GrGLGpu::uploadColorToTex(GrGLFormat textureFormat,
                 }
                 bpp = ii.bpp();
             }
-            levels[i] = {pixelStorage.get(), levelDims.width()*bpp};
+            levels[i] = {pixelStorage.get(), levelDims.width()*bpp, nullptr};
         }
     }
     this->uploadTexData(texDims, target, SkIRect::MakeSize(texDims), externalFormat, externalType,
@@ -1154,7 +1175,7 @@ bool GrGLGpu::createRenderTargetObjects(const GrGLTexture::Desc& desc,
     rtIDs->fMSColorRenderbufferID = 0;
     rtIDs->fRTFBOID = 0;
     rtIDs->fRTFBOOwnership = GrBackendObjectOwnership::kOwned;
-    rtIDs->fTexFBOID = 0;
+    rtIDs->fSingleSampleFBOID = 0;
 
     GrGLenum colorRenderbufferFormat = 0; // suppress warning
 
@@ -1166,8 +1187,8 @@ bool GrGLGpu::createRenderTargetObjects(const GrGLTexture::Desc& desc,
         goto FAILED;
     }
 
-    GL_CALL(GenFramebuffers(1, &rtIDs->fTexFBOID));
-    if (!rtIDs->fTexFBOID) {
+    GL_CALL(GenFramebuffers(1, &rtIDs->fSingleSampleFBOID));
+    if (!rtIDs->fSingleSampleFBOID) {
         goto FAILED;
     }
 
@@ -1175,20 +1196,25 @@ bool GrGLGpu::createRenderTargetObjects(const GrGLTexture::Desc& desc,
     // the texture bound to the other. The exception is the IMG multisample extension. With this
     // extension the texture is multisampled when rendered to and then auto-resolves it when it is
     // rendered from.
-    if (sampleCount > 1 && this->glCaps().usesMSAARenderBuffers()) {
+    if (sampleCount <= 1) {
+        rtIDs->fRTFBOID = rtIDs->fSingleSampleFBOID;
+    } else {
         GL_CALL(GenFramebuffers(1, &rtIDs->fRTFBOID));
-        GL_CALL(GenRenderbuffers(1, &rtIDs->fMSColorRenderbufferID));
-        if (!rtIDs->fRTFBOID || !rtIDs->fMSColorRenderbufferID) {
+        if (!rtIDs->fRTFBOID) {
             goto FAILED;
         }
-        colorRenderbufferFormat = this->glCaps().getRenderbufferInternalFormat(desc.fFormat);
-    } else {
-        rtIDs->fRTFBOID = rtIDs->fTexFBOID;
+        if (!this->glCaps().usesImplicitMSAAResolve()) {
+            GL_CALL(GenRenderbuffers(1, &rtIDs->fMSColorRenderbufferID));
+            if (!rtIDs->fMSColorRenderbufferID) {
+                goto FAILED;
+            }
+            colorRenderbufferFormat = this->glCaps().getRenderbufferInternalFormat(desc.fFormat);
+        }
     }
 
     // below here we may bind the FBO
     fHWBoundRenderTargetUniqueID.makeInvalid();
-    if (rtIDs->fRTFBOID != rtIDs->fTexFBOID) {
+    if (rtIDs->fMSColorRenderbufferID) {
         SkASSERT(sampleCount > 1);
         GL_CALL(BindRenderbuffer(GR_GL_RENDERBUFFER, rtIDs->fMSColorRenderbufferID));
         if (!this->renderbufferStorageMSAA(*fGLContext, sampleCount, colorRenderbufferFormat,
@@ -1200,23 +1226,25 @@ bool GrGLGpu::createRenderTargetObjects(const GrGLTexture::Desc& desc,
                                         GR_GL_COLOR_ATTACHMENT0,
                                         GR_GL_RENDERBUFFER,
                                         rtIDs->fMSColorRenderbufferID));
-    }
-    this->bindFramebuffer(GR_GL_FRAMEBUFFER, rtIDs->fTexFBOID);
-
-    if (this->glCaps().usesImplicitMSAAResolve() && sampleCount > 1) {
+    } else if (sampleCount > 1) {
+        // multisampled_render_to_texture
+        SkASSERT(this->glCaps().usesImplicitMSAAResolve());  // Otherwise fMSColorRenderbufferID!=0.
+        SkASSERT(rtIDs->fRTFBOID != rtIDs->fSingleSampleFBOID);
+        this->bindFramebuffer(GR_GL_FRAMEBUFFER, rtIDs->fRTFBOID);
         GL_CALL(FramebufferTexture2DMultisample(GR_GL_FRAMEBUFFER,
                                                 GR_GL_COLOR_ATTACHMENT0,
                                                 desc.fTarget,
                                                 desc.fID,
                                                 0,
                                                 sampleCount));
-    } else {
-        GL_CALL(FramebufferTexture2D(GR_GL_FRAMEBUFFER,
-                                     GR_GL_COLOR_ATTACHMENT0,
-                                     desc.fTarget,
-                                     desc.fID,
-                                     0));
     }
+
+    this->bindFramebuffer(GR_GL_FRAMEBUFFER, rtIDs->fSingleSampleFBOID);
+    GL_CALL(FramebufferTexture2D(GR_GL_FRAMEBUFFER,
+                                 GR_GL_COLOR_ATTACHMENT0,
+                                 desc.fTarget,
+                                 desc.fID,
+                                 0));
 
     return true;
 
@@ -1224,11 +1252,11 @@ FAILED:
     if (rtIDs->fMSColorRenderbufferID) {
         GL_CALL(DeleteRenderbuffers(1, &rtIDs->fMSColorRenderbufferID));
     }
-    if (rtIDs->fRTFBOID != rtIDs->fTexFBOID) {
+    if (rtIDs->fRTFBOID != rtIDs->fSingleSampleFBOID) {
         this->deleteFramebuffer(rtIDs->fRTFBOID);
     }
-    if (rtIDs->fTexFBOID) {
-        this->deleteFramebuffer(rtIDs->fTexFBOID);
+    if (rtIDs->fSingleSampleFBOID) {
+        this->deleteFramebuffer(rtIDs->fSingleSampleFBOID);
     }
     return false;
 }
@@ -2087,17 +2115,15 @@ bool GrGLGpu::readOrTransferPixelsFrom(GrSurface* surface, int left, int top, in
     }
 
     if (renderTarget) {
-        if (renderTarget->numSamples() <= 1 ||
-            renderTarget->renderFBOID() == renderTarget->textureFBOID()) {  // Also catches FBO 0.
-            SkASSERT(!renderTarget->requiresManualMSAAResolve());
-            this->flushRenderTargetNoColorWrites(renderTarget);
-        } else if (GrGLRenderTarget::kUnresolvableFBOID == renderTarget->textureFBOID()) {
-            SkASSERT(!renderTarget->requiresManualMSAAResolve());
-            return false;
-        } else {
-            SkASSERT(renderTarget->requiresManualMSAAResolve());
+        if (renderTarget->numSamples() > 1) {
+            // Bind the texture FBO since we can't read pixels from an MSAA framebuffer.
+            if (renderTarget->singleSampleFBOID() == GrGLRenderTarget::kUnresolvableFBOID) {
+                return false;
+            }
             // we don't track the state of the READ FBO ID.
-            this->bindFramebuffer(GR_GL_READ_FRAMEBUFFER, renderTarget->textureFBOID());
+            this->bindFramebuffer(GR_GL_READ_FRAMEBUFFER, renderTarget->singleSampleFBOID());
+        } else {
+            this->flushRenderTargetNoColorWrites(renderTarget);
         }
     } else {
         // Use a temporary FBO.
@@ -2293,10 +2319,10 @@ void GrGLGpu::onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resol
     SkASSERT(this->glCaps().usesMSAARenderBuffers());
 
     GrGLRenderTarget* rt = static_cast<GrGLRenderTarget*>(target);
-    SkASSERT(rt->textureFBOID() != rt->renderFBOID());
-    SkASSERT(rt->textureFBOID() != 0 && rt->renderFBOID() != 0);
+    SkASSERT(rt->requiresManualMSAAResolve());
+    SkASSERT(rt->singleSampleFBOID() != 0 && rt->renderFBOID() != 0);
     this->bindFramebuffer(GR_GL_READ_FRAMEBUFFER, rt->renderFBOID());
-    this->bindFramebuffer(GR_GL_DRAW_FRAMEBUFFER, rt->textureFBOID());
+    this->bindFramebuffer(GR_GL_DRAW_FRAMEBUFFER, rt->singleSampleFBOID());
 
     // make sure we go through flushRenderTarget() since we've modified
     // the bound DRAW FBO ID.
@@ -3497,27 +3523,13 @@ bool GrGLGpu::onRegenerateMipMapLevels(GrTexture* texture) {
     return true;
 }
 
-void GrGLGpu::querySampleLocations(
-        GrRenderTarget* renderTarget, SkTArray<SkPoint>* sampleLocations) {
-    this->flushRenderTargetNoColorWrites(static_cast<GrGLRenderTarget*>(renderTarget));
-
-    int effectiveSampleCnt;
-    GR_GL_GetIntegerv(this->glInterface(), GR_GL_SAMPLES, &effectiveSampleCnt);
-    SkASSERT(effectiveSampleCnt >= renderTarget->numSamples());
-
-    sampleLocations->reset(effectiveSampleCnt);
-    for (int i = 0; i < effectiveSampleCnt; ++i) {
-        GL_CALL(GetMultisamplefv(GR_GL_SAMPLE_POSITION, i, &(*sampleLocations)[i].fX));
-    }
-}
-
 void GrGLGpu::xferBarrier(GrRenderTarget* rt, GrXferBarrierType type) {
     SkASSERT(type);
     switch (type) {
         case kTexture_GrXferBarrierType: {
             GrGLRenderTarget* glrt = static_cast<GrGLRenderTarget*>(rt);
-            SkASSERT(glrt->textureFBOID() != 0 && glrt->renderFBOID() != 0);
-            if (glrt->textureFBOID() != glrt->renderFBOID()) {
+            SkASSERT(glrt->singleSampleFBOID() != 0 && glrt->renderFBOID() != 0);
+            if (glrt->requiresManualMSAAResolve()) {
                 // The render target uses separate storage so no need for glTextureBarrier.
                 // FIXME: The render target will resolve automatically when its texture is bound,
                 // but we could resolve only the bounds that will be read if we do it here instead.
@@ -3642,11 +3654,13 @@ bool GrGLGpu::onUpdateBackendTexture(const GrBackendTexture& backendTexture,
     SkASSERT(data->type() != BackendTextureData::Type::kCompressed);
     bool result = false;
     if (data->type() == BackendTextureData::Type::kPixmaps) {
-        SkTDArray<GrMipLevel> texels;
+        SkTArray<GrMipLevel> texels;
+        texels.push_back_n(numMipLevels);
         GrColorType colorType = data->pixmap(0).colorType();
-        texels.append(numMipLevels);
         for (int i = 0; i < numMipLevels; ++i) {
-            texels[i] = {data->pixmap(i).addr(), data->pixmap(i).rowBytes()};
+            texels[i] = {data->pixmap(i).addr(),
+                         data->pixmap(i).rowBytes(),
+                         data->pixmap(i).pixelStorage()};
         }
         SkIRect dstRect = SkIRect::MakeSize(backendTexture.dimensions());
         result = this->uploadColorTypeTexData(glFormat, colorType, backendTexture.dimensions(),

@@ -22,6 +22,8 @@
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLConstructorCompound.h"
+#include "src/sksl/ir/SkSLConstructorMatrixResize.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLExtension.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
@@ -206,10 +208,10 @@ protected:
 
     void writeFunctionCall(const FunctionCall& c);
 
-    bool matrixConstructHelperIsNeeded(const Constructor& c);
-    String getMatrixConstructHelper(const Constructor& c);
+    bool matrixConstructHelperIsNeeded(const ConstructorCompound& c);
+    String getMatrixConstructHelper(const AnyConstructor& c);
     void assembleMatrixFromMatrix(const Type& sourceMatrix, int rows, int columns);
-    void assembleMatrixFromExpressions(const ExpressionArray& args, int rows, int columns);
+    void assembleMatrixFromExpressions(const AnyConstructor& ctor, int rows, int columns);
 
     void writeMatrixCompMult();
 
@@ -227,7 +229,22 @@ protected:
 
     bool canCoerce(const Type& t1, const Type& t2);
 
-    void writeConstructor(const Constructor& c, Precedence parentPrecedence);
+    void writeConstructorCompound(const ConstructorCompound& c, Precedence parentPrecedence);
+
+    void writeConstructorCompoundMatrix(const ConstructorCompound& c, Precedence parentPrecedence);
+
+    void writeConstructorMatrixResize(const ConstructorMatrixResize& c,
+                                      Precedence parentPrecedence);
+
+    void writeAnyConstructor(const AnyConstructor& c,
+                             const char* leftBracket,
+                             const char* rightBracket,
+                             Precedence parentPrecedence);
+
+    void writeCastConstructor(const AnyConstructor& c,
+                              const char* leftBracket,
+                              const char* rightBracket,
+                              Precedence parentPrecedence);
 
     void writeFieldAccess(const FieldAccess& f);
 

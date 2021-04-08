@@ -107,24 +107,19 @@ GrAtlasTextOp::GrAtlasTextOp(MaskType maskType,
     this->setBounds(deviceRect, HasAABloat::kNo, IsHairline::kNo);
 }
 
-auto GrAtlasTextOp::Geometry::MakeForBlob(GrRecordingContext* rc,
-                                          const GrAtlasSubRun& subRun,
+auto GrAtlasTextOp::Geometry::MakeForBlob(const GrAtlasSubRun& subRun,
                                           const SkMatrix& drawMatrix,
                                           SkPoint drawOrigin,
                                           SkIRect clipRect,
                                           sk_sp<GrTextBlob> blob,
                                           const SkPMColor4f& color) -> Geometry* {
-    auto arena = rc->priv().recordTimeAllocator();
-    // Bypass the automatic dtor behavior in SkArenaAlloc. I'm leaving this up to the Op to run
-    // all geometry dtors for now.
-    void* geo = arena->makeBytesAlignedTo(sizeof(Geometry), alignof(Geometry));
-    return new (geo) Geometry{subRun,
-                              drawMatrix,
-                              drawOrigin,
-                              clipRect,
-                              std::move(blob),
-                              nullptr,
-                              color};
+    return new Geometry{subRun,
+                        drawMatrix,
+                        drawOrigin,
+                        clipRect,
+                        std::move(blob),
+                        nullptr,
+                        color};
 }
 
 void GrAtlasTextOp::Geometry::fillVertexData(void *dst, int offset, int count) const {
@@ -502,9 +497,7 @@ GrOp::Owner GrAtlasTextOp::CreateOpTestingOnly(GrSurfaceDrawContext* rtc,
     drawMatrix.preTranslate(x, y);
     auto drawOrigin = SkPoint::Make(x, y);
     SkGlyphRunBuilder builder;
-    builder.drawTextUTF8(font, text, textLen, drawOrigin);
-
-    auto glyphRunList = builder.useGlyphRunList();
+    auto glyphRunList = builder.textToGlyphRunList(font, text, textLen, drawOrigin);
     if (glyphRunList.empty()) {
         return nullptr;
     }

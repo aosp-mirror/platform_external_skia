@@ -2388,17 +2388,11 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
             ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
                     ctInfo.fExternalIOFormatCount);
             int ioIdx = 0;
-            // Format: RGB8, Surface: kRGB_888x, Data: kRGB_888x
+            // Format: RGB8, Surface: kRGB_888x, Data: kRGB_888
             {
                 auto& ioFormat = ctInfo.fExternalIOFormats[ioIdx++];
-                ioFormat.fColorType = GrColorType::kRGB_888x;
+                ioFormat.fColorType = GrColorType::kRGB_888;
                 ioFormat.fExternalType = GR_GL_UNSIGNED_BYTE;
-                // This is technically the wrong format to use for this color type since the color
-                // type is 4 bytes but the format is 3. However, we don't currently upload data of
-                // this type so the format is only used when creating an empty texture. If we want
-                // to support uploading data we should add in RGB_888 GrColorType. Additionally, on
-                // the FormatInfo we should have a default format to use when we want to create an
-                // empty texture.
                 ioFormat.fExternalTexImageFormat = GR_GL_RGB;
                 ioFormat.fExternalReadFormat = 0;
             }
@@ -3598,7 +3592,13 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         if (ctxInfo.driverVersion() <= GR_GL_DRIVER_VER(219, 0, 0)) {
             fPerformStencilClearsAsDraws = true;
         }
-        fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO = true;
+        // This is known to be fixed sometime between driver 129.0 and 145.0 on Nexus 6P.
+        // On driver 129 on Android M it fails the unit tests called WritePixelsPendingIO without
+        // the workaround. It passes on Android N with driver 145 without the workaround.
+        // skbug.com/11834
+        if (ctxInfo.driverVersion() < GR_GL_DRIVER_VER(145, 0, 0)) {
+            fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO = true;
+        }
     }
 
     if (fDriverBugWorkarounds.gl_clear_broken) {
@@ -4160,7 +4160,8 @@ GrCaps::SurfaceReadPixelsSupport GrGLCaps::surfaceSupportsReadPixels(
     } else if (auto rt = static_cast<const GrGLRenderTarget*>(surface->asRenderTarget())) {
         // glReadPixels does not allow reading back from a MSAA framebuffer. If the underlying
         // GrSurface doesn't have a second FBO to resolve to then we must make a copy.
-        if (rt->numSamples() > 1 && rt->textureFBOID() == GrGLRenderTarget::kUnresolvableFBOID) {
+        if (rt->numSamples() > 1 &&
+            rt->singleSampleFBOID() == GrGLRenderTarget::kUnresolvableFBOID) {
             return SurfaceReadPixelsSupport::kCopyToTexture2D;
         }
     }

@@ -143,6 +143,7 @@ sksl_error_tests = [
   "/sksl/errors/Ossfuzz31410.sksl",
   "/sksl/errors/Ossfuzz31469.sksl",
   "/sksl/errors/Ossfuzz32587.sksl",
+  "/sksl/errors/Ossfuzz32851.sksl",
   "/sksl/errors/OverflowFloatLiteral.sksl",
   "/sksl/errors/OverflowIntLiteral.sksl",
   "/sksl/errors/OverflowParamArraySize.sksl",
@@ -444,6 +445,7 @@ sksl_shared_tests = [
 ]
 
 sksl_folding_tests = [
+  "/sksl/folding/ArrayFolding.sksl",
   "/sksl/folding/AssignmentOps.sksl",
   "/sksl/folding/BoolFolding.sksl",
   "/sksl/folding/FloatFolding.sksl",
@@ -570,11 +572,13 @@ sksl_rte_error_tests = [
   "/sksl/runtime_errors/IllegalArrayOps.rte",
   "/sksl/runtime_errors/IllegalIndexing.rte",
   "/sksl/runtime_errors/IllegalOperators.rte",
+  "/sksl/runtime_errors/IllegalShaderUse.rte",
   "/sksl/runtime_errors/IllegalStatements.rte",
   "/sksl/runtime_errors/LoopConditionErrors.rte",
   "/sksl/runtime_errors/LoopExpressionErrors.rte",
   "/sksl/runtime_errors/LoopInitializerErrors.rte",
   "/sksl/runtime_errors/LoopStructureErrors.rte",
+  "/sksl/runtime_errors/UnsupportedTypeFragmentProcessor.rte",
   "/sksl/runtime_errors/UnsupportedTypeSampler.rte",
   "/sksl/runtime_errors/UnsupportedTypeTexture.rte",
 ]

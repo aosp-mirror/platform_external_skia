@@ -14,6 +14,7 @@
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLConstructorArray.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
 #include "src/sksl/ir/SkSLForStatement.h"
@@ -73,7 +74,7 @@ private:
 
     void writeExpression(const Expression& expr, Precedence parentPrecedence);
     void writeFunctionCall(const FunctionCall& c);
-    void writeConstructor(const Constructor& c, Precedence parentPrecedence);
+    void writeAnyConstructor(const AnyConstructor& c, Precedence parentPrecedence);
     void writeFieldAccess(const FieldAccess& f);
     void writeSwizzle(const Swizzle& swizzle);
     void writeBinaryExpression(const BinaryExpression& b, Precedence parentPrecedence);
@@ -142,7 +143,7 @@ void PipelineStageCodeGenerator::writeFunctionCall(const FunctionCall& c) {
     const ExpressionArray& arguments = c.arguments();
     if (function.isBuiltin() && function.name() == "sample") {
         SkASSERT(arguments.size() <= 2);
-        SkASSERT("fragmentProcessor" == arguments[0]->type().name());
+        SkASSERT(arguments[0]->type().isEffectChild());
         SkASSERT(arguments[0]->is<VariableReference>());
         int index = 0;
         bool found = false;
@@ -152,7 +153,7 @@ void PipelineStageCodeGenerator::writeFunctionCall(const FunctionCall& c) {
                 const VarDeclaration& decl = global.declaration()->as<VarDeclaration>();
                 if (&decl.var() == arguments[0]->as<VariableReference>().variable()) {
                     found = true;
-                } else if (decl.var().type() == *fProgram.fContext->fTypes.fFragmentProcessor) {
+                } else if (decl.var().type().isEffectChild()) {
                     ++index;
                 }
             }
@@ -219,10 +220,9 @@ void PipelineStageCodeGenerator::writeVariableReference(const VariableReference&
                     found = true;
                     break;
                 }
-                // Skip over fragmentProcessors (shaders).
-                // These are indexed separately from other globals.
-                if (var.modifiers().fFlags & flag &&
-                    var.type() != *fProgram.fContext->fTypes.fFragmentProcessor) {
+                // Skip over children (shaders/colorFilters). These are indexed separately from
+                // other globals.
+                if ((var.modifiers().fFlags & flag) && !var.type().isEffectChild()) {
                     ++index;
                 }
             }
@@ -408,8 +408,14 @@ void PipelineStageCodeGenerator::writeExpression(const Expression& expr,
         case Expression::Kind::kIntLiteral:
             this->write(expr.description());
             break;
-        case Expression::Kind::kConstructor:
-            this->writeConstructor(expr.as<Constructor>(), parentPrecedence);
+        case Expression::Kind::kConstructorArray:
+        case Expression::Kind::kConstructorCompound:
+        case Expression::Kind::kConstructorCompoundCast:
+        case Expression::Kind::kConstructorDiagonalMatrix:
+        case Expression::Kind::kConstructorMatrixResize:
+        case Expression::Kind::kConstructorScalarCast:
+        case Expression::Kind::kConstructorSplat:
+            this->writeAnyConstructor(expr.asAnyConstructor(), parentPrecedence);
             break;
         case Expression::Kind::kFieldAccess:
             this->writeFieldAccess(expr.as<FieldAccess>());
@@ -442,12 +448,12 @@ void PipelineStageCodeGenerator::writeExpression(const Expression& expr,
     }
 }
 
-void PipelineStageCodeGenerator::writeConstructor(const Constructor& c,
-                                                  Precedence parentPrecedence) {
+void PipelineStageCodeGenerator::writeAnyConstructor(const AnyConstructor& c,
+                                                     Precedence parentPrecedence) {
     this->writeType(c.type());
     this->write("(");
     const char* separator = "";
-    for (const auto& arg : c.arguments()) {
+    for (const auto& arg : c.argumentSpan()) {
         this->write(separator);
         separator = ", ";
         this->writeExpression(*arg, Precedence::kSequence);

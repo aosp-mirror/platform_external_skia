@@ -43,6 +43,10 @@ public:
     void disconnect(DisconnectType) override;
     bool disconnected() const { return fDisconnected; }
 
+    void releaseUnlockedBackendObjects() override {
+        fResourceProvider.releaseUnlockedBackendObjects();
+    }
+
     GrThreadSafePipelineBuilder* pipelineBuilder() override;
     sk_sp<GrThreadSafePipelineBuilder> refPipelineBuilder() override;
 
@@ -72,8 +76,6 @@ public:
     GrVkResourceProvider& resourceProvider() { return fResourceProvider; }
 
     GrVkPrimaryCommandBuffer* currentCommandBuffer() const { return fMainCmdBuffer; }
-
-    void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>*) override;
 
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override;
 

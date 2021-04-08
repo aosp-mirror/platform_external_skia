@@ -709,8 +709,20 @@ SpvId SPIRVCodeGenerator::writeExpression(const Expression& expr, OutputStream& 
             return this->writeBinaryExpression(expr.as<BinaryExpression>(), out);
         case Expression::Kind::kBoolLiteral:
             return this->writeBoolLiteral(expr.as<BoolLiteral>());
-        case Expression::Kind::kConstructor:
-            return this->writeConstructor(expr.as<Constructor>(), out);
+        case Expression::Kind::kConstructorArray:
+            return this->writeArrayConstructor(expr.as<ConstructorArray>(), out);
+        case Expression::Kind::kConstructorDiagonalMatrix:
+            return this->writeConstructorDiagonalMatrix(expr.as<ConstructorDiagonalMatrix>(), out);
+        case Expression::Kind::kConstructorMatrixResize:
+            return this->writeConstructorMatrixResize(expr.as<ConstructorMatrixResize>(), out);
+        case Expression::Kind::kConstructorScalarCast:
+            return this->writeConstructorScalarCast(expr.as<ConstructorScalarCast>(), out);
+        case Expression::Kind::kConstructorSplat:
+            return this->writeConstructorSplat(expr.as<ConstructorSplat>(), out);
+        case Expression::Kind::kConstructorCompound:
+            return this->writeConstructorCompound(expr.as<ConstructorCompound>(), out);
+        case Expression::Kind::kConstructorCompoundCast:
+            return this->writeConstructorCompoundCast(expr.as<ConstructorCompoundCast>(), out);
         case Expression::Kind::kIntLiteral:
             return this->writeIntLiteral(expr.as<IntLiteral>());
         case Expression::Kind::kFieldAccess:
@@ -915,7 +927,7 @@ SpvId SPIRVCodeGenerator::writeSpecialIntrinsic(const FunctionCall& c, SpecialIn
             args.reserve_back(2);
             args.push_back(IntLiteral::Make(fContext, /*offset=*/-1, /*value=*/0));
             args.push_back(IntLiteral::Make(fContext, /*offset=*/-1, /*value=*/0));
-            Constructor ctor(/*offset=*/-1, *fContext.fTypes.fInt2, std::move(args));
+            ConstructorCompound ctor(/*offset=*/-1, *fContext.fTypes.fInt2, std::move(args));
             SpvId coords = this->writeConstantVector(ctor);
             if (arguments.size() == 1) {
                 this->writeInstruction(SpvOpImageRead,
@@ -1168,7 +1180,7 @@ SpvId SPIRVCodeGenerator::writeFunctionCall(const FunctionCall& c, OutputStream&
     return result;
 }
 
-SpvId SPIRVCodeGenerator::writeConstantVector(const Constructor& c) {
+SpvId SPIRVCodeGenerator::writeConstantVector(const AnyConstructor& c) {
     const Type& type = c.type();
     SkASSERT(type.isVector() && c.isCompileTimeConstant());
 
@@ -1176,25 +1188,13 @@ SpvId SPIRVCodeGenerator::writeConstantVector(const Constructor& c) {
     SPIRVVectorConstant key{this->getType(type),
                             /*fValueId=*/{SpvId(-1), SpvId(-1), SpvId(-1), SpvId(-1)}};
 
-    if (c.componentType().isFloat()) {
-        for (int i = 0; i < type.columns(); i++) {
-            FloatLiteral literal(c.fOffset, c.getFVecComponent(i), &c.componentType());
-            key.fValueId[i] = this->writeFloatLiteral(literal);
+    for (int n = 0; n < type.columns(); n++) {
+        const Expression* expr = c.getConstantSubexpression(n);
+        if (!expr) {
+            SkDEBUGFAILF("writeConstantVector: %s not actually constant", c.description().c_str());
+            return (SpvId)-1;
         }
-    } else if (c.componentType().isInteger()) {
-        for (int i = 0; i < type.columns(); i++) {
-            IntLiteral literal(c.fOffset, c.getIVecComponent(i), &c.componentType());
-            key.fValueId[i] = this->writeIntLiteral(literal);
-        }
-    } else if (c.componentType().isBoolean()) {
-        for (int i = 0; i < type.columns(); i++) {
-            BoolLiteral literal(c.fOffset, c.getBVecComponent(i), &c.componentType());
-            key.fValueId[i] = this->writeBoolLiteral(literal);
-        }
-    } else {
-        SkDEBUGFAILF("unexpected vector component type: %s",
-                     c.componentType().displayName().c_str());
-        return SpvId(-1);
+        key.fValueId[n] = this->writeExpression(*expr, fConstantBuffer);
     }
 
     // Check to see if we've already synthesized this vector constant.
@@ -1213,10 +1213,32 @@ SpvId SPIRVCodeGenerator::writeConstantVector(const Constructor& c) {
     return iter->second;
 }
 
-SpvId SPIRVCodeGenerator::writeFloatConstructor(const Constructor& c, OutputStream& out) {
-    SkASSERT(c.arguments().size() == 1);
+SpvId SPIRVCodeGenerator::castScalarToType(SpvId inputExprId,
+                                           const Type& inputType,
+                                           const Type& outputType,
+                                           OutputStream& out) {
+    if (outputType.isFloat()) {
+        return this->castScalarToFloat(inputExprId, inputType, outputType, out);
+    }
+    if (outputType.isSigned()) {
+        return this->castScalarToSignedInt(inputExprId, inputType, outputType, out);
+    }
+    if (outputType.isUnsigned()) {
+        return this->castScalarToUnsignedInt(inputExprId, inputType, outputType, out);
+    }
+    if (outputType.isBoolean()) {
+        return this->castScalarToBoolean(inputExprId, inputType, outputType, out);
+    }
+
+    fErrors.error(-1, "unsupported cast: " + inputType.description() +
+                      " to " + outputType.description());
+    return inputExprId;
+}
+
+SpvId SPIRVCodeGenerator::writeFloatConstructor(const AnyConstructor& c, OutputStream& out) {
+    SkASSERT(c.argumentSpan().size() == 1);
     SkASSERT(c.type().isFloat());
-    const Expression& ctorExpr = *c.arguments()[0];
+    const Expression& ctorExpr = *c.argumentSpan().front();
     SpvId expressionId = this->writeExpression(ctorExpr, out);
     return this->castScalarToFloat(expressionId, ctorExpr.type(), c.type(), out);
 }
@@ -1249,10 +1271,10 @@ SpvId SPIRVCodeGenerator::castScalarToFloat(SpvId inputId, const Type& inputType
     return result;
 }
 
-SpvId SPIRVCodeGenerator::writeIntConstructor(const Constructor& c, OutputStream& out) {
-    SkASSERT(c.arguments().size() == 1);
+SpvId SPIRVCodeGenerator::writeIntConstructor(const AnyConstructor& c, OutputStream& out) {
+    SkASSERT(c.argumentSpan().size() == 1);
     SkASSERT(c.type().isSigned());
-    const Expression& ctorExpr = *c.arguments()[0];
+    const Expression& ctorExpr = *c.argumentSpan().front();
     SpvId expressionId = this->writeExpression(ctorExpr, out);
     return this->castScalarToSignedInt(expressionId, ctorExpr.type(), c.type(), out);
 }
@@ -1286,10 +1308,10 @@ SpvId SPIRVCodeGenerator::castScalarToSignedInt(SpvId inputId, const Type& input
     return result;
 }
 
-SpvId SPIRVCodeGenerator::writeUIntConstructor(const Constructor& c, OutputStream& out) {
-    SkASSERT(c.arguments().size() == 1);
+SpvId SPIRVCodeGenerator::writeUIntConstructor(const AnyConstructor& c, OutputStream& out) {
+    SkASSERT(c.argumentSpan().size() == 1);
     SkASSERT(c.type().isUnsigned());
-    const Expression& ctorExpr = *c.arguments()[0];
+    const Expression& ctorExpr = *c.argumentSpan().front();
     SpvId expressionId = this->writeExpression(ctorExpr, out);
     return this->castScalarToUnsignedInt(expressionId, ctorExpr.type(), c.type(), out);
 }
@@ -1323,10 +1345,10 @@ SpvId SPIRVCodeGenerator::castScalarToUnsignedInt(SpvId inputId, const Type& inp
     return result;
 }
 
-SpvId SPIRVCodeGenerator::writeBooleanConstructor(const Constructor& c, OutputStream& out) {
-    SkASSERT(c.arguments().size() == 1);
+SpvId SPIRVCodeGenerator::writeBooleanConstructor(const AnyConstructor& c, OutputStream& out) {
+    SkASSERT(c.argumentSpan().size() == 1);
     SkASSERT(c.type().isBoolean());
-    const Expression& ctorExpr = *c.arguments()[0];
+    const Expression& ctorExpr = *c.argumentSpan().front();
     SpvId expressionId = this->writeExpression(ctorExpr, out);
     return this->castScalarToBoolean(expressionId, ctorExpr.type(), c.type(), out);
 }
@@ -1391,28 +1413,24 @@ void SPIRVCodeGenerator::writeUniformScaleMatrix(SpvId id, SpvId diagonal, const
     }
 }
 
-void SPIRVCodeGenerator::writeMatrixCopy(SpvId id, SpvId src, const Type& srcType,
-                                         const Type& dstType, OutputStream& out) {
+SpvId SPIRVCodeGenerator::writeMatrixCopy(SpvId src, const Type& srcType, const Type& dstType,
+                                          OutputStream& out) {
     SkASSERT(srcType.isMatrix());
     SkASSERT(dstType.isMatrix());
     SkASSERT(srcType.componentType() == dstType.componentType());
+    SpvId id = this->nextId(&dstType);
     SpvId srcColumnType = this->getType(srcType.componentType().toCompound(fContext,
                                                                            srcType.rows(),
                                                                            1));
     SpvId dstColumnType = this->getType(dstType.componentType().toCompound(fContext,
                                                                            dstType.rows(),
                                                                            1));
-    SpvId zeroId;
-    if (dstType.componentType() == *fContext.fTypes.fFloat) {
-        FloatLiteral zero(/*offset=*/-1, /*value=*/0.0, fContext.fTypes.fFloat.get());
-        zeroId = this->writeFloatLiteral(zero);
-    } else if (dstType.componentType() == *fContext.fTypes.fInt) {
-        IntLiteral zero(/*offset=*/-1, /*value=*/0, fContext.fTypes.fInt.get());
-        zeroId = this->writeIntLiteral(zero);
-    } else {
-        SK_ABORT("unsupported matrix component type");
-    }
-    SpvId zeroColumn = 0;
+    SkASSERT(dstType.componentType().isFloat());
+    FloatLiteral zero(/*offset=*/-1, /*value=*/0.0, &dstType.componentType());
+    const SpvId zeroId = this->writeFloatLiteral(zero);
+    FloatLiteral one(/*offset=*/-1, /*value=*/1.0, &dstType.componentType());
+    const SpvId oneId = this->writeFloatLiteral(one);
+
     SpvId columns[4];
     for (int i = 0; i < dstType.columns(); i++) {
         if (i < srcType.columns()) {
@@ -1432,36 +1450,33 @@ void SPIRVCodeGenerator::writeMatrixCopy(SpvId id, SpvId src, const Type& srcTyp
                 this->writeWord(dstColumnType, out);
                 this->writeWord(dstColumn, out);
                 this->writeWord(srcColumn, out);
-                for (int j = 0; j < delta; ++j) {
-                    this->writeWord(zeroId, out);
+                for (int j = srcType.rows(); j < dstType.rows(); ++j) {
+                    this->writeWord((i == j) ? oneId : zeroId, out);
                 }
             }
             else {
                 // dst column is smaller, need to swizzle the src column
                 dstColumn = this->nextId(&dstType);
-                int count = dstType.rows();
-                this->writeOpCode(SpvOpVectorShuffle, 5 + count, out);
+                this->writeOpCode(SpvOpVectorShuffle, 5 + dstType.rows(), out);
                 this->writeWord(dstColumnType, out);
                 this->writeWord(dstColumn, out);
                 this->writeWord(srcColumn, out);
                 this->writeWord(srcColumn, out);
-                for (int j = 0; j < count; j++) {
+                for (int j = 0; j < dstType.rows(); j++) {
                     this->writeWord(j, out);
                 }
             }
             columns[i] = dstColumn;
         } else {
-            // we're past the end of the src matrix, need a vector of zeroes
-            if (!zeroColumn) {
-                zeroColumn = this->nextId(&dstType);
-                this->writeOpCode(SpvOpCompositeConstruct, 3 + dstType.rows(), out);
-                this->writeWord(dstColumnType, out);
-                this->writeWord(zeroColumn, out);
-                for (int j = 0; j < dstType.rows(); ++j) {
-                    this->writeWord(zeroId, out);
-                }
+            // we're past the end of the src matrix, need to synthesize an identity-matrix column
+            SpvId identityColumn = this->nextId(&dstType);
+            this->writeOpCode(SpvOpCompositeConstruct, 3 + dstType.rows(), out);
+            this->writeWord(dstColumnType, out);
+            this->writeWord(identityColumn, out);
+            for (int j = 0; j < dstType.rows(); ++j) {
+                this->writeWord((i == j) ? oneId : zeroId, out);
             }
-            columns[i] = zeroColumn;
+            columns[i] = identityColumn;
         }
     }
     this->writeOpCode(SpvOpCompositeConstruct, 3 + dstType.columns(), out);
@@ -1470,6 +1485,7 @@ void SPIRVCodeGenerator::writeMatrixCopy(SpvId id, SpvId src, const Type& srcTyp
     for (int i = 0; i < dstType.columns(); i++) {
         this->writeWord(columns[i], out);
     }
+    return id;
 }
 
 void SPIRVCodeGenerator::addColumnEntry(SpvId columnType, Precision precision,
@@ -1494,26 +1510,23 @@ void SPIRVCodeGenerator::addColumnEntry(SpvId columnType, Precision precision,
     }
 }
 
-SpvId SPIRVCodeGenerator::writeMatrixConstructor(const Constructor& c, OutputStream& out) {
+SpvId SPIRVCodeGenerator::writeMatrixConstructor(const ConstructorCompound& c, OutputStream& out) {
     const Type& type = c.type();
     SkASSERT(type.isMatrix());
-    SkASSERT(c.arguments().size() > 0);
+    SkASSERT(!c.arguments().empty());
     const Type& arg0Type = c.arguments()[0]->type();
     // go ahead and write the arguments so we don't try to write new instructions in the middle of
     // an instruction
     std::vector<SpvId> arguments;
-    for (size_t i = 0; i < c.arguments().size(); i++) {
-        arguments.push_back(this->writeExpression(*c.arguments()[i], out));
+    arguments.reserve(c.arguments().size());
+    for (const std::unique_ptr<Expression>& arg : c.arguments()) {
+        arguments.push_back(this->writeExpression(*arg, out));
     }
     SpvId result = this->nextId(&type);
     int rows = type.rows();
     int columns = type.columns();
-    if (arguments.size() == 1 && arg0Type.isScalar()) {
-        this->writeUniformScaleMatrix(result, arguments[0], type, out);
-    } else if (arguments.size() == 1 && arg0Type.isMatrix()) {
-        this->writeMatrixCopy(result, arguments[0], arg0Type, type, out);
-    } else if (arguments.size() == 1 &&
-               arg0Type.isVector()) {
+    if (arguments.size() == 1 && arg0Type.isVector()) {
+        // Special-case handling of float4 -> mat2x2.
         SkASSERT(type.rows() == 2 && type.columns() == 2);
         SkASSERT(arg0Type.columns() == 4);
         SpvId componentType = this->getType(type.componentType());
@@ -1571,87 +1584,52 @@ SpvId SPIRVCodeGenerator::writeMatrixConstructor(const Constructor& c, OutputStr
     return result;
 }
 
-SpvId SPIRVCodeGenerator::writeVectorConstructor(const Constructor& c, OutputStream& out) {
+SpvId SPIRVCodeGenerator::writeConstructorCompound(const ConstructorCompound& c,
+                                                   OutputStream& out) {
+    return c.type().isMatrix() ? this->writeMatrixConstructor(c, out)
+                               : this->writeVectorConstructor(c, out);
+}
+
+SpvId SPIRVCodeGenerator::writeVectorConstructor(const ConstructorCompound& c, OutputStream& out) {
     const Type& type = c.type();
+    const Type& componentType = type.componentType();
     SkASSERT(type.isVector());
-    // Constructing a vector from another vector (even if it's constant) requires our general
-    // case code, to deal with (possible) per-element type conversion.
-    bool vectorToVector = c.arguments().size() == 1 && c.arguments()[0]->type().isVector();
-    if (c.isCompileTimeConstant() && !vectorToVector) {
+
+    if (c.isCompileTimeConstant()) {
         return this->writeConstantVector(c);
     }
-    // go ahead and write the arguments so we don't try to write new instructions in the middle of
-    // an instruction
+
     std::vector<SpvId> arguments;
     for (size_t i = 0; i < c.arguments().size(); i++) {
         const Type& argType = c.arguments()[i]->type();
-        if (argType.isVector()) {
-            // SPIR-V doesn't support vector(vector-of-different-type) directly, so we need to
-            // extract the components and convert them in that case manually. On top of that,
-            // as of this writing there's a bug in the Intel Vulkan driver where
-            // OpCompositeConstruct doesn't handle vector arguments at all, so we always extract
-            // vector components and pass them into OpCompositeConstruct individually.
-            SpvId vec = this->writeExpression(*c.arguments()[i], out);
-            const Type& src = argType.componentType();
-            const Type& dst = type.componentType();
-            if (c.arguments().size() == 1 && src.numberKind() == dst.numberKind()) {
-                return vec;
-            }
+        SkASSERT(componentType == argType.componentType());
 
+        if (argType.isVector()) {
+            // There's a bug in the Intel Vulkan driver where OpCompositeConstruct doesn't handle
+            // vector arguments at all, so we always extract each vector component and pass them
+            // into OpCompositeConstruct individually.
+            SpvId vec = this->writeExpression(*c.arguments()[i], out);
             for (int j = 0; j < argType.columns(); j++) {
-                SpvId swizzle = this->nextId(&src);
-                this->writeInstruction(SpvOpCompositeExtract, this->getType(src), swizzle, vec, j,
-                                       out);
-                if (dst.isFloat()) {
-                    arguments.push_back(this->castScalarToFloat(swizzle, src, dst, out));
-                } else if (dst.isSigned()) {
-                    arguments.push_back(this->castScalarToSignedInt(swizzle, src, dst, out));
-                } else if (dst.isUnsigned()) {
-                    arguments.push_back(this->castScalarToUnsignedInt(swizzle, src, dst, out));
-                } else if (dst.isBoolean()) {
-                    arguments.push_back(this->castScalarToBoolean(swizzle, src, dst, out));
-                } else {
-                    arguments.push_back(swizzle);
-                    fErrors.error(c.arguments()[i]->fOffset, "unsupported cast in SPIR-V: vector " +
-                                                             src.description() + " to " +
-                                                             dst.description());
-                }
+                SpvId componentId = this->nextId(&componentType);
+                this->writeInstruction(SpvOpCompositeExtract, this->getType(componentType),
+                                       componentId, vec, j, out);
+                arguments.push_back(componentId);
             }
         } else {
             arguments.push_back(this->writeExpression(*c.arguments()[i], out));
         }
     }
-    SpvId result = this->nextId(&type);
-    if (arguments.size() == 1 && c.arguments()[0]->type().isScalar()) {
-        this->writeOpCode(SpvOpCompositeConstruct, 3 + type.columns(), out);
-        this->writeWord(this->getType(type), out);
-        this->writeWord(result, out);
-        for (int i = 0; i < type.columns(); i++) {
-            this->writeWord(arguments[0], out);
-        }
-    } else {
-        SkASSERT(arguments.size() > 1);
-        this->writeOpCode(SpvOpCompositeConstruct, 3 + (int32_t) arguments.size(), out);
-        this->writeWord(this->getType(type), out);
-        this->writeWord(result, out);
-        for (SpvId id : arguments) {
-            this->writeWord(id, out);
-        }
-    }
-    return result;
+
+    return this->writeComposite(arguments, type, out);
 }
 
-SpvId SPIRVCodeGenerator::writeArrayConstructor(const Constructor& c, OutputStream& out) {
-    const Type& type = c.type();
-    SkASSERT(type.isArray());
-    // go ahead and write the arguments so we don't try to write new instructions in the middle of
-    // an instruction
-    std::vector<SpvId> arguments;
-    for (size_t i = 0; i < c.arguments().size(); i++) {
-        arguments.push_back(this->writeExpression(*c.arguments()[i], out));
-    }
+SpvId SPIRVCodeGenerator::writeComposite(const std::vector<SpvId>& arguments,
+                                         const Type& type,
+                                         OutputStream& out) {
+    SkASSERT((int)arguments.size() == type.columns());
+
     SpvId result = this->nextId(&type);
-    this->writeOpCode(SpvOpCompositeConstruct, 3 + (int32_t) c.arguments().size(), out);
+    this->writeOpCode(SpvOpCompositeConstruct, 3 + (int32_t) arguments.size(), out);
     this->writeWord(this->getType(type), out);
     this->writeWord(result, out);
     for (SpvId id : arguments) {
@@ -1660,32 +1638,100 @@ SpvId SPIRVCodeGenerator::writeArrayConstructor(const Constructor& c, OutputStre
     return result;
 }
 
-SpvId SPIRVCodeGenerator::writeConstructor(const Constructor& c, OutputStream& out) {
+SpvId SPIRVCodeGenerator::writeConstructorSplat(const ConstructorSplat& c, OutputStream& out) {
+    // Use writeConstantVector to deduplicate constant splats.
+    if (c.isCompileTimeConstant()) {
+        return this->writeConstantVector(c);
+    }
+
+    // Write the splat argument.
+    SpvId argument = this->writeExpression(*c.argument(), out);
+
+    // Generate a OpCompositeConstruct which repeats the argument N times.
+    std::vector<SpvId> arguments(/*count*/ c.type().columns(), /*value*/ argument);
+    return this->writeComposite(arguments, c.type(), out);
+}
+
+
+SpvId SPIRVCodeGenerator::writeArrayConstructor(const ConstructorArray& c, OutputStream& out) {
     const Type& type = c.type();
-    if (c.arguments().size() == 1 &&
-        this->getActualType(type) == this->getActualType(c.arguments()[0]->type())) {
-        return this->writeExpression(*c.arguments()[0], out);
+    SkASSERT(type.isArray());
+    std::vector<SpvId> arguments;
+    arguments.reserve(c.arguments().size());
+    for (size_t i = 0; i < c.arguments().size(); i++) {
+        arguments.push_back(this->writeExpression(*c.arguments()[i], out));
     }
-    if (type.isFloat()) {
-        return this->writeFloatConstructor(c, out);
-    } else if (type.isSigned()) {
-        return this->writeIntConstructor(c, out);
-    } else if (type.isUnsigned()) {
-        return this->writeUIntConstructor(c, out);
-    } else if (type.isBoolean()) {
-        return this->writeBooleanConstructor(c, out);
+    return this->writeComposite(arguments, type, out);
+}
+
+SpvId SPIRVCodeGenerator::writeConstructorScalarCast(const ConstructorScalarCast& c,
+                                                     OutputStream& out) {
+    const Type& type = c.type();
+    if (this->getActualType(type) == this->getActualType(c.argument()->type())) {
+        return this->writeExpression(*c.argument(), out);
     }
-    switch (type.typeKind()) {
-        case Type::TypeKind::kVector:
-            return this->writeVectorConstructor(c, out);
-        case Type::TypeKind::kMatrix:
-            return this->writeMatrixConstructor(c, out);
-        case Type::TypeKind::kArray:
-            return this->writeArrayConstructor(c, out);
-        default:
-            fErrors.error(c.fOffset, "unsupported constructor: " + c.description());
-            return -1;
+
+    const Expression& ctorExpr = *c.argument();
+    SpvId expressionId = this->writeExpression(ctorExpr, out);
+    return this->castScalarToType(expressionId, ctorExpr.type(), type, out);
+}
+
+SpvId SPIRVCodeGenerator::writeConstructorCompoundCast(const ConstructorCompoundCast& c,
+                                                       OutputStream& out) {
+    const Type& ctorType = c.type();
+    const Type& argType = c.argument()->type();
+    SkASSERT(ctorType.isVector() || ctorType.isMatrix());
+
+    // Write the composite that we are casting. If the actual type matches, we are done.
+    SpvId compositeId = this->writeExpression(*c.argument(), out);
+    if (this->getActualType(ctorType) == this->getActualType(argType)) {
+        return compositeId;
     }
+
+    // writeMatrixCopy can cast matrices to a different type.
+    if (ctorType.isMatrix()) {
+        return this->writeMatrixCopy(compositeId, argType, ctorType, out);
+    }
+
+    // SPIR-V doesn't support vector(vector-of-different-type) directly, so we need to extract the
+    // components and convert each one manually.
+    const Type& srcType = argType.componentType();
+    const Type& dstType = ctorType.componentType();
+
+    std::vector<SpvId> arguments;
+    arguments.reserve(argType.columns());
+    for (int index = 0; index < argType.columns(); ++index) {
+        SpvId componentId = this->nextId(&srcType);
+        this->writeInstruction(SpvOpCompositeExtract, this->getType(srcType), componentId,
+                               compositeId, index, out);
+        arguments.push_back(this->castScalarToType(componentId, srcType, dstType, out));
+    }
+
+    return this->writeComposite(arguments, ctorType, out);
+}
+
+SpvId SPIRVCodeGenerator::writeConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c,
+                                                         OutputStream& out) {
+    const Type& type = c.type();
+    SkASSERT(type.isMatrix());
+    SkASSERT(c.argument()->type().isScalar());
+
+    // Write out the scalar argument.
+    SpvId argument = this->writeExpression(*c.argument(), out);
+
+    // Build the diagonal matrix.
+    SpvId result = this->nextId(&type);
+    this->writeUniformScaleMatrix(result, argument, type, out);
+    return result;
+}
+
+SpvId SPIRVCodeGenerator::writeConstructorMatrixResize(const ConstructorMatrixResize& c,
+                                                       OutputStream& out) {
+    // Write the input matrix.
+    SpvId argument = this->writeExpression(*c.argument(), out);
+
+    // Use matrix-copy to resize the input matrix to its new size.
+    return this->writeMatrixCopy(argument, c.argument()->type(), c.type(), out);
 }
 
 static SpvStorageClass_ get_storage_class(const Variable& var,
