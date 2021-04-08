@@ -15,7 +15,6 @@
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLConstructorArray.h"
-#include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
 #include "src/sksl/ir/SkSLForStatement.h"
@@ -411,7 +410,9 @@ void PipelineStageCodeGenerator::writeExpression(const Expression& expr,
             break;
         case Expression::Kind::kConstructor:
         case Expression::Kind::kConstructorArray:
+        case Expression::Kind::kConstructorComposite:
         case Expression::Kind::kConstructorDiagonalMatrix:
+        case Expression::Kind::kConstructorMatrixResize:
         case Expression::Kind::kConstructorScalarCast:
         case Expression::Kind::kConstructorSplat:
         case Expression::Kind::kConstructorVectorCast:
