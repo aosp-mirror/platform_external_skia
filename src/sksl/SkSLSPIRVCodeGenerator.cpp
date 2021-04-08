@@ -715,10 +715,14 @@ SpvId SPIRVCodeGenerator::writeExpression(const Expression& expr, OutputStream& 
             return this->writeArrayConstructor(expr.as<ConstructorArray>(), out);
         case Expression::Kind::kConstructorDiagonalMatrix:
             return this->writeConstructorDiagonalMatrix(expr.as<ConstructorDiagonalMatrix>(), out);
+        case Expression::Kind::kConstructorMatrixResize:
+            return this->writeConstructorMatrixResize(expr.as<ConstructorMatrixResize>(), out);
         case Expression::Kind::kConstructorScalarCast:
             return this->writeConstructorScalarCast(expr.as<ConstructorScalarCast>(), out);
         case Expression::Kind::kConstructorSplat:
             return this->writeConstructorSplat(expr.as<ConstructorSplat>(), out);
+        case Expression::Kind::kConstructorComposite:
+            return this->writeConstructorComposite(expr.as<ConstructorComposite>(), out);
         case Expression::Kind::kConstructorVectorCast:
             return this->writeConstructorVectorCast(expr.as<ConstructorVectorCast>(), out);
         case Expression::Kind::kIntLiteral:
@@ -925,7 +929,7 @@ SpvId SPIRVCodeGenerator::writeSpecialIntrinsic(const FunctionCall& c, SpecialIn
             args.reserve_back(2);
             args.push_back(IntLiteral::Make(fContext, /*offset=*/-1, /*value=*/0));
             args.push_back(IntLiteral::Make(fContext, /*offset=*/-1, /*value=*/0));
-            Constructor ctor(/*offset=*/-1, *fContext.fTypes.fInt2, std::move(args));
+            ConstructorComposite ctor(/*offset=*/-1, *fContext.fTypes.fInt2, std::move(args));
             SpvId coords = this->writeConstantVector(ctor);
             if (arguments.size() == 1) {
                 this->writeInstruction(SpvOpImageRead,
@@ -1186,25 +1190,13 @@ SpvId SPIRVCodeGenerator::writeConstantVector(const AnyConstructor& c) {
     SPIRVVectorConstant key{this->getType(type),
                             /*fValueId=*/{SpvId(-1), SpvId(-1), SpvId(-1), SpvId(-1)}};
 
-    if (c.componentType().isFloat()) {
-        for (int i = 0; i < type.columns(); i++) {
-            FloatLiteral literal(c.fOffset, c.getFVecComponent(i), &c.componentType());
-            key.fValueId[i] = this->writeFloatLiteral(literal);
+    for (int n = 0; n < type.columns(); n++) {
+        const Expression* expr = c.getConstantSubexpression(n);
+        if (!expr) {
+            SkDEBUGFAILF("writeConstantVector: %s not actually constant", c.description().c_str());
+            return (SpvId)-1;
         }
-    } else if (c.componentType().isInteger()) {
-        for (int i = 0; i < type.columns(); i++) {
-            IntLiteral literal(c.fOffset, c.getIVecComponent(i), &c.componentType());
-            key.fValueId[i] = this->writeIntLiteral(literal);
-        }
-    } else if (c.componentType().isBoolean()) {
-        for (int i = 0; i < type.columns(); i++) {
-            BoolLiteral literal(c.fOffset, c.getBVecComponent(i), &c.componentType());
-            key.fValueId[i] = this->writeBoolLiteral(literal);
-        }
-    } else {
-        SkDEBUGFAILF("unexpected vector component type: %s",
-                     c.componentType().displayName().c_str());
-        return SpvId(-1);
+        key.fValueId[n] = this->writeExpression(*expr, fConstantBuffer);
     }
 
     // Check to see if we've already synthesized this vector constant.
@@ -1434,17 +1426,12 @@ void SPIRVCodeGenerator::writeMatrixCopy(SpvId id, SpvId src, const Type& srcTyp
     SpvId dstColumnType = this->getType(dstType.componentType().toCompound(fContext,
                                                                            dstType.rows(),
                                                                            1));
-    SpvId zeroId;
-    if (dstType.componentType() == *fContext.fTypes.fFloat) {
-        FloatLiteral zero(/*offset=*/-1, /*value=*/0.0, fContext.fTypes.fFloat.get());
-        zeroId = this->writeFloatLiteral(zero);
-    } else if (dstType.componentType() == *fContext.fTypes.fInt) {
-        IntLiteral zero(/*offset=*/-1, /*value=*/0, fContext.fTypes.fInt.get());
-        zeroId = this->writeIntLiteral(zero);
-    } else {
-        SK_ABORT("unsupported matrix component type");
-    }
-    SpvId zeroColumn = 0;
+    SkASSERT(dstType.componentType().isFloat());
+    FloatLiteral zero(/*offset=*/-1, /*value=*/0.0, &dstType.componentType());
+    const SpvId zeroId = this->writeFloatLiteral(zero);
+    FloatLiteral one(/*offset=*/-1, /*value=*/1.0, &dstType.componentType());
+    const SpvId oneId = this->writeFloatLiteral(one);
+
     SpvId columns[4];
     for (int i = 0; i < dstType.columns(); i++) {
         if (i < srcType.columns()) {
@@ -1464,36 +1451,33 @@ void SPIRVCodeGenerator::writeMatrixCopy(SpvId id, SpvId src, const Type& srcTyp
                 this->writeWord(dstColumnType, out);
                 this->writeWord(dstColumn, out);
                 this->writeWord(srcColumn, out);
-                for (int j = 0; j < delta; ++j) {
-                    this->writeWord(zeroId, out);
+                for (int j = srcType.rows(); j < dstType.rows(); ++j) {
+                    this->writeWord((i == j) ? oneId : zeroId, out);
                 }
             }
             else {
                 // dst column is smaller, need to swizzle the src column
                 dstColumn = this->nextId(&dstType);
-                int count = dstType.rows();
-                this->writeOpCode(SpvOpVectorShuffle, 5 + count, out);
+                this->writeOpCode(SpvOpVectorShuffle, 5 + dstType.rows(), out);
                 this->writeWord(dstColumnType, out);
                 this->writeWord(dstColumn, out);
                 this->writeWord(srcColumn, out);
                 this->writeWord(srcColumn, out);
-                for (int j = 0; j < count; j++) {
+                for (int j = 0; j < dstType.rows(); j++) {
                     this->writeWord(j, out);
                 }
             }
             columns[i] = dstColumn;
         } else {
-            // we're past the end of the src matrix, need a vector of zeroes
-            if (!zeroColumn) {
-                zeroColumn = this->nextId(&dstType);
-                this->writeOpCode(SpvOpCompositeConstruct, 3 + dstType.rows(), out);
-                this->writeWord(dstColumnType, out);
-                this->writeWord(zeroColumn, out);
-                for (int j = 0; j < dstType.rows(); ++j) {
-                    this->writeWord(zeroId, out);
-                }
+            // we're past the end of the src matrix, need to synthesize an identity-matrix column
+            SpvId identityColumn = this->nextId(&dstType);
+            this->writeOpCode(SpvOpCompositeConstruct, 3 + dstType.rows(), out);
+            this->writeWord(dstColumnType, out);
+            this->writeWord(identityColumn, out);
+            for (int j = 0; j < dstType.rows(); ++j) {
+                this->writeWord((i == j) ? oneId : zeroId, out);
             }
-            columns[i] = zeroColumn;
+            columns[i] = identityColumn;
         }
     }
     this->writeOpCode(SpvOpCompositeConstruct, 3 + dstType.columns(), out);
@@ -1526,26 +1510,24 @@ void SPIRVCodeGenerator::addColumnEntry(SpvId columnType, Precision precision,
     }
 }
 
-SpvId SPIRVCodeGenerator::writeMatrixConstructor(const Constructor& c, OutputStream& out) {
+SpvId SPIRVCodeGenerator::writeMatrixConstructor(const ConstructorComposite& c, OutputStream& out) {
     const Type& type = c.type();
     SkASSERT(type.isMatrix());
-    SkASSERT(c.arguments().size() > 0);
+    SkASSERT(!c.arguments().empty());
     const Type& arg0Type = c.arguments()[0]->type();
     // go ahead and write the arguments so we don't try to write new instructions in the middle of
     // an instruction
     std::vector<SpvId> arguments;
-    for (size_t i = 0; i < c.arguments().size(); i++) {
-        arguments.push_back(this->writeExpression(*c.arguments()[i], out));
+    arguments.reserve(c.arguments().size());
+    for (const std::unique_ptr<Expression>& arg : c.arguments()) {
+        arguments.push_back(this->writeExpression(*arg, out));
     }
     SpvId result = this->nextId(&type);
     int rows = type.rows();
     int columns = type.columns();
-    if (arguments.size() == 1 && arg0Type.isScalar()) {
-        this->writeUniformScaleMatrix(result, arguments[0], type, out);
-    } else if (arguments.size() == 1 && arg0Type.isMatrix()) {
+    if (arguments.size() == 1 && arg0Type.isMatrix()) {
         this->writeMatrixCopy(result, arguments[0], arg0Type, type, out);
-    } else if (arguments.size() == 1 &&
-               arg0Type.isVector()) {
+    } else if (arguments.size() == 1 && arg0Type.isVector()) {
         SkASSERT(type.rows() == 2 && type.columns() == 2);
         SkASSERT(arg0Type.columns() == 4);
         SpvId componentType = this->getType(type.componentType());
@@ -1603,38 +1585,36 @@ SpvId SPIRVCodeGenerator::writeMatrixConstructor(const Constructor& c, OutputStr
     return result;
 }
 
-SpvId SPIRVCodeGenerator::writeVectorConstructor(const Constructor& c, OutputStream& out) {
+SpvId SPIRVCodeGenerator::writeConstructorComposite(const ConstructorComposite& c,
+                                                    OutputStream& out) {
+    return c.type().isMatrix() ? this->writeMatrixConstructor(c, out)
+                               : this->writeVectorConstructor(c, out);
+}
+
+SpvId SPIRVCodeGenerator::writeVectorConstructor(const ConstructorComposite& c, OutputStream& out) {
     const Type& type = c.type();
+    const Type& componentType = type.componentType();
     SkASSERT(type.isVector());
-    // Constructing a vector from another vector (even if it's constant) requires our general
-    // case code, to deal with (possible) per-element type conversion.
-    bool vectorToVector = c.arguments().size() == 1 && c.arguments()[0]->type().isVector();
-    if (c.isCompileTimeConstant() && !vectorToVector) {
+
+    if (c.isCompileTimeConstant()) {
         return this->writeConstantVector(c);
     }
-    // go ahead and write the arguments so we don't try to write new instructions in the middle of
-    // an instruction
+
     std::vector<SpvId> arguments;
     for (size_t i = 0; i < c.arguments().size(); i++) {
         const Type& argType = c.arguments()[i]->type();
-        if (argType.isVector()) {
-            // SPIR-V doesn't support vector(vector-of-different-type) directly, so we need to
-            // extract the components and convert them in that case manually. On top of that,
-            // as of this writing there's a bug in the Intel Vulkan driver where
-            // OpCompositeConstruct doesn't handle vector arguments at all, so we always extract
-            // vector components and pass them into OpCompositeConstruct individually.
-            SpvId vec = this->writeExpression(*c.arguments()[i], out);
-            const Type& srcType = argType.componentType();
-            const Type& dstType = type.componentType();
-            if (c.arguments().size() == 1 && srcType.numberKind() == dstType.numberKind()) {
-                return vec;
-            }
+        SkASSERT(componentType == argType.componentType());
 
+        if (argType.isVector()) {
+            // There's a bug in the Intel Vulkan driver where OpCompositeConstruct doesn't handle
+            // vector arguments at all, so we always extract each vector component and pass them
+            // into OpCompositeConstruct individually.
+            SpvId vec = this->writeExpression(*c.arguments()[i], out);
             for (int j = 0; j < argType.columns(); j++) {
-                SpvId componentId = this->nextId(&srcType);
-                this->writeInstruction(SpvOpCompositeExtract, this->getType(srcType), componentId,
-                                       vec, j, out);
-                arguments.push_back(this->castScalarToType(componentId, srcType, dstType, out));
+                SpvId componentId = this->nextId(&componentType);
+                this->writeInstruction(SpvOpCompositeExtract, this->getType(componentType),
+                                       componentId, vec, j, out);
+                arguments.push_back(componentId);
             }
         } else {
             arguments.push_back(this->writeExpression(*c.arguments()[i], out));
@@ -1691,12 +1671,6 @@ SpvId SPIRVCodeGenerator::writeConstructor(const Constructor& c, OutputStream& o
         this->getActualType(type) == this->getActualType(c.arguments()[0]->type())) {
         return this->writeExpression(*c.arguments()[0], out);
     }
-    if (type.isVector()) {
-        return this->writeVectorConstructor(c, out);
-    }
-    if (type.isMatrix()) {
-        return this->writeMatrixConstructor(c, out);
-    }
     fErrors.error(c.fOffset, "unsupported constructor: " + c.description());
     return -1;
 }
@@ -1726,10 +1700,7 @@ SpvId SPIRVCodeGenerator::writeConstructorVectorCast(const ConstructorVectorCast
     }
 
     // SPIR-V doesn't support vector(vector-of-different-type) directly, so we need to extract the
-    // components and convert them in that case manually. On top of that, as of this writing there's
-    // a bug in the Intel Vulkan driver where OpCompositeConstruct doesn't handle vector arguments
-    // at all, so we always extract vector components and pass them into OpCompositeConstruct
-    // individually.
+    // components and convert each one manually.
     const Type& srcType = argType.componentType();
     const Type& dstType = ctorType.componentType();
 
@@ -1756,6 +1727,18 @@ SpvId SPIRVCodeGenerator::writeConstructorDiagonalMatrix(const ConstructorDiagon
     // Build the diagonal matrix.
     SpvId result = this->nextId(&type);
     this->writeUniformScaleMatrix(result, argument, type, out);
+    return result;
+}
+
+SpvId SPIRVCodeGenerator::writeConstructorMatrixResize(const ConstructorMatrixResize& c,
+                                                       OutputStream& out) {
+    // Write the input matrix.
+    SpvId argument = this->writeExpression(*c.argument(), out);
+
+    // Use matrix-copy to resize the input matrix to its new size.
+    const Type& type = c.type();
+    SpvId result = this->nextId(&type);
+    this->writeMatrixCopy(result, argument, c.argument()->type(), type, out);
     return result;
 }
 

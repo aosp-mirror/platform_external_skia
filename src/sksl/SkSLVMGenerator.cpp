@@ -20,6 +20,7 @@
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLConstructorArray.h"
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
+#include "src/sksl/ir/SkSLConstructorMatrixResize.h"
 #include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLContinueStatement.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
@@ -246,8 +247,9 @@ private:
     Value writeExpression(const Expression& expr);
     Value writeBinaryExpression(const BinaryExpression& b);
     Value writeConstructor(const Constructor& c);
-    Value writeMultiArgumentConstructor(const MultiArgumentConstructor& c);
+    Value writeAggregationConstructor(const AnyConstructor& c);
     Value writeConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c);
+    Value writeConstructorMatrixResize(const ConstructorMatrixResize& c);
     Value writeConstructorCast(const AnyConstructor& c);
     Value writeConstructorSplat(const ConstructorSplat& c);
     Value writeFunctionCall(const FunctionCall& c);
@@ -337,29 +339,6 @@ static inline bool is_uniform(const SkSL::Variable& var) {
     return var.modifiers().fFlags & Modifiers::kUniform_Flag;
 }
 
-static size_t slot_count(const Type& type) {
-    switch (type.typeKind()) {
-        case Type::TypeKind::kColorFilter:
-        case Type::TypeKind::kFragmentProcessor:
-        case Type::TypeKind::kOther:
-        case Type::TypeKind::kShader:
-        case Type::TypeKind::kVoid:
-            return 0;
-        case Type::TypeKind::kStruct: {
-            size_t slots = 0;
-            for (const auto& f : type.fields()) {
-                slots += slot_count(*f.fType);
-            }
-            return slots;
-        }
-        case Type::TypeKind::kArray:
-            SkASSERT(type.columns() > 0);
-            return type.columns() * slot_count(type.componentType());
-        default:
-            return type.columns() * type.rows();
-    }
-}
-
 SkVMGenerator::SkVMGenerator(const Program& program,
                              skvm::Builder* builder,
                              SkSpan<skvm::Val> uniforms,
@@ -397,7 +376,7 @@ SkVMGenerator::SkVMGenerator(const Program& program,
             // getSlot() allocates space for the variable's value in fSlots, initializes it to zero,
             // and populates fVariableMap.
             size_t slot   = this->getSlot(var),
-                   nslots = slot_count(var.type());
+                   nslots = var.type().slotCount();
 
             if (int builtin = var.modifiers().fLayout.fBuiltin; builtin >= 0) {
                 // builtin variables are system-defined, with special semantics. The only builtin
@@ -434,7 +413,7 @@ void SkVMGenerator::writeFunction(const FunctionDefinition& function,
                                   SkSpan<skvm::Val> arguments,
                                   SkSpan<skvm::Val> outReturn) {
     const FunctionDeclaration& decl = function.declaration();
-    SkASSERT(slot_count(decl.returnType()) == outReturn.size());
+    SkASSERT(decl.returnType().slotCount() == outReturn.size());
 
     fFunctionStack.push_back({outReturn, /*returned=*/fBuilder->splat(0)});
 
@@ -442,7 +421,7 @@ void SkVMGenerator::writeFunction(const FunctionDefinition& function,
     size_t argIdx = 0;
     for (const Variable* p : decl.parameters()) {
         size_t paramSlot = this->getSlot(*p),
-               nslots    = slot_count(p->type());
+               nslots    = p->type().slotCount();
 
         for (size_t i = 0; i < nslots; ++i) {
             fSlots[paramSlot + i] = arguments[argIdx + i];
@@ -456,7 +435,7 @@ void SkVMGenerator::writeFunction(const FunctionDefinition& function,
     // Copy 'out' and 'inout' parameters back to their caller-supplied argument storage
     argIdx = 0;
     for (const Variable* p : decl.parameters()) {
-        size_t nslots = slot_count(p->type());
+        size_t nslots = p->type().slotCount();
 
         if (p->modifiers().fFlags & Modifiers::kOut_Flag) {
             size_t paramSlot = this->getSlot(*p);
@@ -478,7 +457,7 @@ size_t SkVMGenerator::getSlot(const Variable& v) {
     }
 
     size_t slot   = fSlots.size(),
-           nslots = slot_count(v.type());
+           nslots = v.type().slotCount();
     fSlots.resize(slot + nslots, fBuilder->splat(0.0f).id);
     fVariableMap[&v] = slot;
     return slot;
@@ -545,7 +524,7 @@ Value SkVMGenerator::writeBinaryExpression(const BinaryExpression& b) {
             std::swap(rCols, rRows);
         }
         SkASSERT(lCols == rRows);
-        SkASSERT(slot_count(b.type()) == static_cast<size_t>(lRows * rCols));
+        SkASSERT(b.type().slotCount() == static_cast<size_t>(lRows * rCols));
         Value result(lRows * rCols);
         size_t resultIdx = 0;
         for (int c = 0; c < rCols; ++c)
@@ -654,12 +633,10 @@ Value SkVMGenerator::writeBinaryExpression(const BinaryExpression& b) {
     }
 }
 
-Value SkVMGenerator::writeMultiArgumentConstructor(const MultiArgumentConstructor& c) {
-    // Multi-argument constructors just aggregate their arguments, with no conversion
-    // NOTE: This (SkSL rule) is actually more restrictive than GLSL.
-    Value result(slot_count(c.type()));
+Value SkVMGenerator::writeAggregationConstructor(const AnyConstructor& c) {
+    Value result(c.type().slotCount());
     size_t resultIdx = 0;
-    for (const auto &arg : c.arguments()) {
+    for (const auto &arg : c.argumentSpan()) {
         Value tmp = this->writeExpression(*arg);
         for (size_t tmpSlot = 0; tmpSlot < tmp.slots(); ++tmpSlot) {
             result[resultIdx++] = tmp[tmpSlot];
@@ -672,7 +649,7 @@ Value SkVMGenerator::writeConstructor(const Constructor& c) {
     if (c.arguments().size() > 1) {
         // Multi-argument constructors just aggregate their arguments, with no conversion
         // NOTE: This (SkSL rule) is actually more restrictive than GLSL.
-        return this->writeMultiArgumentConstructor(c);
+        return this->writeAggregationConstructor(c);
     }
 
     const Type& srcType = c.arguments()[0]->type();
@@ -680,44 +657,16 @@ Value SkVMGenerator::writeConstructor(const Constructor& c) {
     Type::NumberKind srcKind = base_number_kind(srcType),
                      dstKind = base_number_kind(dstType);
     Value src = this->writeExpression(*c.arguments()[0]);
-    size_t dstSlots = slot_count(dstType);
+    size_t dstSlots = dstType.slotCount();
 
     // Conversion among "similar" types (floatN <-> halfN), (shortN <-> intN), etc. is a no-op
     if (srcKind == dstKind && src.slots() == dstSlots) {
         return src;
     }
 
-    // TODO: Handle signed vs. unsigned. GLSL ES 1.0 only has 'int', so no problem yet.
     if (srcKind != dstKind) {
         // One argument constructors can do type conversion
         return this->writeTypeConversion(src, srcKind, dstKind);
-    }
-
-    // Matrices can be constructed from scalars or other matrices
-    if (dstType.isMatrix()) {
-        Value dst(dstType.rows() * dstType.columns());
-        size_t dstIndex = 0;
-        if (srcType.isMatrix()) {
-            // Matrix-from-matrix uses src where it overlaps, fills in missing with identity
-            for (int c = 0; c < dstType.columns(); ++c)
-            for (int r = 0; r < dstType.rows(); ++r) {
-                if (c < srcType.columns() && r < srcType.rows()) {
-                    dst[dstIndex++] = src[c * srcType.rows() + r];
-                } else {
-                    dst[dstIndex++] = fBuilder->splat(c == r ? 1.0f : 0.0f);
-                }
-            }
-        } else if (srcType.isScalar()) {
-            // Matrix-from-scalar builds a diagonal scale matrix
-            for (int c = 0; c < dstType.columns(); ++c)
-            for (int r = 0; r < dstType.rows(); ++r) {
-                dst[dstIndex++] = (c == r ? f32(src) : fBuilder->splat(0.0f));
-            }
-        } else {
-            SkDEBUGFAIL("Invalid matrix constructor");
-        }
-        SkASSERT(dstIndex == dst.slots());
-        return dst;
     }
 
     SkDEBUGFAIL("Invalid constructor");
@@ -840,17 +789,39 @@ Value SkVMGenerator::writeConstructorDiagonalMatrix(const ConstructorDiagonalMat
     return dst;
 }
 
+Value SkVMGenerator::writeConstructorMatrixResize(const ConstructorMatrixResize& c) {
+    const Type& srcType = c.argument()->type();
+    const Type& dstType = c.type();
+    Value src = this->writeExpression(*c.argument());
+    Value dst(dstType.rows() * dstType.columns());
+
+    // Matrix-from-matrix uses src where it overlaps, and fills in missing fields with identity.
+    size_t dstIndex = 0;
+    for (int c = 0; c < dstType.columns(); ++c) {
+        for (int r = 0; r < dstType.rows(); ++r) {
+            if (c < srcType.columns() && r < srcType.rows()) {
+                dst[dstIndex++] = src[c * srcType.rows() + r];
+            } else {
+                dst[dstIndex++] = fBuilder->splat(c == r ? 1.0f : 0.0f);
+            }
+        }
+    }
+
+    SkASSERT(dstIndex == dst.slots());
+    return dst;
+}
+
 size_t SkVMGenerator::fieldSlotOffset(const FieldAccess& expr) {
     size_t offset = 0;
     for (int i = 0; i < expr.fieldIndex(); ++i) {
-        offset += slot_count(*expr.base()->type().fields()[i].fType);
+        offset += (*expr.base()->type().fields()[i].fType).slotCount();
     }
     return offset;
 }
 
 Value SkVMGenerator::writeFieldAccess(const FieldAccess& expr) {
     Value base = this->writeExpression(*expr.base());
-    Value field(slot_count(expr.type()));
+    Value field(expr.type().slotCount());
     size_t offset = this->fieldSlotOffset(expr);
     for (size_t i = 0; i < field.slots(); ++i) {
         field[i] = base[offset + i];
@@ -868,13 +839,13 @@ size_t SkVMGenerator::indexSlotOffset(const IndexExpression& expr) {
     // The GLSL spec leaves that behavior undefined - we'll just clamp everything here.
     indexValue = SkTPin(indexValue, 0, expr.base()->type().columns() - 1);
 
-    size_t stride = slot_count(expr.type());
+    size_t stride = expr.type().slotCount();
     return indexValue * stride;
 }
 
 Value SkVMGenerator::writeIndexExpression(const IndexExpression& expr) {
     Value base = this->writeExpression(*expr.base());
-    Value element(slot_count(expr.type()));
+    Value element(expr.type().slotCount());
     size_t offset = this->indexSlotOffset(expr);
     for (size_t i = 0; i < element.slots(); ++i) {
         element[i] = base[offset + i];
@@ -884,7 +855,7 @@ Value SkVMGenerator::writeIndexExpression(const IndexExpression& expr) {
 
 Value SkVMGenerator::writeVariableExpression(const VariableReference& expr) {
     size_t slot = this->getSlot(*expr.variable());
-    Value val(slot_count(expr.type()));
+    Value val(expr.type().slotCount());
     for (size_t i = 0; i < val.slots(); ++i) {
         val[i] = fSlots[slot + i];
     }
@@ -1325,7 +1296,7 @@ Value SkVMGenerator::writeFunctionCall(const FunctionCall& f) {
     }
 
     // Create storage for the return value
-    size_t nslots = slot_count(f.type());
+    size_t nslots = f.type().slotCount();
     Value result(nslots);
     for (size_t i = 0; i < nslots; ++i) {
         result[i] = fBuilder->splat(0.0f);
@@ -1342,7 +1313,7 @@ Value SkVMGenerator::writeFunctionCall(const FunctionCall& f) {
     const std::unique_ptr<Expression>* argIter = f.arguments().begin();
     size_t valIdx = 0;
     for (const Variable* p : decl.parameters()) {
-        size_t nslots = slot_count(p->type());
+        size_t nslots = p->type().slotCount();
         if (p->modifiers().fFlags & Modifiers::kOut_Flag) {
             Value v(nslots);
             for (size_t i = 0; i < nslots; ++i) {
@@ -1369,7 +1340,7 @@ Value SkVMGenerator::writeExternalFunctionCall(const ExternalFunctionCall& c) {
     }
 
     // Create storage for the return value
-    size_t nslots = slot_count(c.type());
+    size_t nslots = c.type().slotCount();
     std::vector<skvm::F32> result(nslots, fBuilder->splat(0.0f));
 
     c.function().call(fBuilder, args.data(), result.data(), this->mask());
@@ -1494,9 +1465,12 @@ Value SkVMGenerator::writeExpression(const Expression& e) {
         case Expression::Kind::kConstructor:
             return this->writeConstructor(e.as<Constructor>());
         case Expression::Kind::kConstructorArray:
-            return this->writeMultiArgumentConstructor(e.as<ConstructorArray>());
+        case Expression::Kind::kConstructorComposite:
+            return this->writeAggregationConstructor(e.asAnyConstructor());
         case Expression::Kind::kConstructorDiagonalMatrix:
             return this->writeConstructorDiagonalMatrix(e.as<ConstructorDiagonalMatrix>());
+        case Expression::Kind::kConstructorMatrixResize:
+            return this->writeConstructorMatrixResize(e.as<ConstructorMatrixResize>());
         case Expression::Kind::kConstructorScalarCast:
         case Expression::Kind::kConstructorVectorCast:
             return this->writeConstructorCast(e.asAnyConstructor());
@@ -1532,7 +1506,7 @@ Value SkVMGenerator::writeExpression(const Expression& e) {
 }
 
 Value SkVMGenerator::writeStore(const Expression& lhs, const Value& rhs) {
-    SkASSERTF(rhs.slots() == slot_count(lhs.type()),
+    SkASSERTF(rhs.slots() == lhs.type().slotCount(),
               "lhs=%s (%s)\nrhs=%d slot",
               lhs.type().description().c_str(), lhs.description().c_str(), rhs.slots());
 
@@ -1590,7 +1564,7 @@ Value SkVMGenerator::writeStore(const Expression& lhs, const Value& rhs) {
     size_t varSlot = this->getSlot(var);
     skvm::I32 mask = this->mask();
     for (size_t i = rhs.slots(); i --> 0;) {
-        SkASSERT(slots[i] < slot_count(var.type()));
+        SkASSERT(slots[i] < var.type().slotCount());
         skvm::F32 curr = f32(fSlots[varSlot + slots[i]]),
                   next = f32(rhs[i]);
         fSlots[varSlot + slots[i]] = select(mask, next, curr).id;
@@ -1623,7 +1597,7 @@ void SkVMGenerator::writeForStatement(const ForStatement& f) {
     SkAssertResult(Analysis::ForLoopIsValidForES2(f.fOffset, f.initializer().get(), f.test().get(),
                                                   f.next().get(), f.statement().get(), &loop,
                                                   /*errors=*/nullptr));
-    SkASSERT(slot_count(loop.fIndex->type()) == 1);
+    SkASSERT(loop.fIndex->type().slotCount() == 1);
 
     size_t indexSlot = this->getSlot(*loop.fIndex);
     double val = loop.fStart;
@@ -1677,7 +1651,7 @@ void SkVMGenerator::writeReturnStatement(const ReturnStatement& r) {
 
 void SkVMGenerator::writeVarDeclaration(const VarDeclaration& decl) {
     size_t slot   = this->getSlot(decl.var()),
-           nslots = slot_count(decl.var().type());
+           nslots = decl.var().type().slotCount();
 
     Value val = decl.value() ? this->writeExpression(*decl.value()) : Value{};
     for (size_t i = 0; i < nslots; ++i) {
@@ -1736,7 +1710,7 @@ skvm::Color ProgramToSkVM(const Program& program,
     skvm::Val result[4] = {zero,zero,zero,zero};
     size_t paramSlots = 0;
     for (const SkSL::Variable* param : function.declaration().parameters()) {
-        paramSlots += slot_count(param->type());
+        paramSlots += param->type().slotCount();
     }
     SkASSERT(paramSlots <= SK_ARRAY_COUNT(args));
 
@@ -1761,7 +1735,7 @@ bool ProgramToSkVM(const Program& program,
     std::vector<skvm::Val> argVals;
 
     for (const Variable* p : function.declaration().parameters()) {
-        size_t slots = slot_count(p->type());
+        size_t slots = p->type().slotCount();
         signature->fParameterSlots += slots;
         for (size_t i = 0; i < slots; ++i) {
             argPtrs.push_back(b->varying<float>());
@@ -1772,7 +1746,7 @@ bool ProgramToSkVM(const Program& program,
     std::vector<skvm::Ptr> returnPtrs;
     std::vector<skvm::Val> returnVals;
 
-    signature->fReturnSlots = slot_count(function.declaration().returnType());
+    signature->fReturnSlots = function.declaration().returnType().slotCount();
     for (size_t i = 0; i < signature->fReturnSlots; ++i) {
         returnPtrs.push_back(b->varying<float>());
         returnVals.push_back(b->splat(0.0f).id);
@@ -1787,7 +1761,7 @@ bool ProgramToSkVM(const Program& program,
     // Propagate those changes back to our varying buffers:
     size_t argIdx = 0;
     for (const Variable* p : function.declaration().parameters()) {
-        size_t nslots = slot_count(p->type());
+        size_t nslots = p->type().slotCount();
         if (p->modifiers().fFlags & Modifiers::kOut_Flag) {
             for (size_t i = 0; i < nslots; ++i) {
                 b->storeF(argPtrs[argIdx + i], skvm::F32{b, argVals[argIdx + i]});
@@ -1874,7 +1848,7 @@ bool testingOnly_ProgramToSkVMShader(const Program& program, skvm::Builder* buil
             if (var.type().isEffectChild()) {
                 childSlots++;
             } else if (is_uniform(var)) {
-                uniformSlots += slot_count(var.type());
+                uniformSlots += var.type().slotCount();
             }
         }
     }

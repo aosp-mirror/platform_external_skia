@@ -11,6 +11,7 @@
 #include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLConstructorArray.h"
+#include "src/sksl/ir/SkSLConstructorComposite.h"
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 #include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLFloatLiteral.h"
@@ -72,6 +73,16 @@ static std::unique_ptr<Expression> negate_operand(const Context& context,
                 ConstructorSplat& ctor = operand->as<ConstructorSplat>();
                 return ConstructorSplat::Make(context, ctor.fOffset, ctor.type(),
                                               negate_operand(context, std::move(ctor.argument())));
+            }
+            break;
+
+        case Expression::Kind::kConstructorComposite:
+            // Convert `-vecN(literal, ...)` into `vecN(-literal, ...)`.
+            if (context.fConfig->fSettings.fOptimize && value->isCompileTimeConstant()) {
+                ConstructorComposite& ctor = operand->as<ConstructorComposite>();
+                return ConstructorComposite::Make(
+                        context, ctor.fOffset, ctor.type(),
+                        negate_operands(context, std::move(ctor.arguments())));
             }
             break;
 
