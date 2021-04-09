@@ -11,7 +11,7 @@
 #include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLConstructorArray.h"
-#include "src/sksl/ir/SkSLConstructorComposite.h"
+#include "src/sksl/ir/SkSLConstructorCompound.h"
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 #include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLFloatLiteral.h"
@@ -76,34 +76,13 @@ static std::unique_ptr<Expression> negate_operand(const Context& context,
             }
             break;
 
-        case Expression::Kind::kConstructorComposite:
+        case Expression::Kind::kConstructorCompound:
             // Convert `-vecN(literal, ...)` into `vecN(-literal, ...)`.
             if (context.fConfig->fSettings.fOptimize && value->isCompileTimeConstant()) {
-                ConstructorComposite& ctor = operand->as<ConstructorComposite>();
-                return ConstructorComposite::Make(
+                ConstructorCompound& ctor = operand->as<ConstructorCompound>();
+                return ConstructorCompound::Make(
                         context, ctor.fOffset, ctor.type(),
                         negate_operands(context, std::move(ctor.arguments())));
-            }
-            break;
-
-        case Expression::Kind::kConstructor:
-            // To be consistent with prior behavior, the conversion of a negated constructor into a
-            // constructor of negative values is only performed when optimization is on.
-            // Conceptually it's pretty similar to the int/float optimizations above, though.
-            if (context.fConfig->fSettings.fOptimize && value->isCompileTimeConstant()) {
-                Constructor& ctor = operand->as<Constructor>();
-
-                // We've found a negated constant constructor, e.g.:
-                //     -float4(float3(floatLiteral(1)), floatLiteral(2))
-                // To optimize this, the outer negation is removed and each argument is negated:
-                //     float4(-float3(floatLiteral(1)), floatLiteral(-2))
-                // Recursion will continue to push negation inwards as deeply as possible:
-                //     float4(float3(floatLiteral(-1)), floatLiteral(-2))
-                auto negatedCtor = Constructor::Convert(
-                        context, ctor.fOffset, ctor.type(),
-                        negate_operands(context, std::move(ctor.arguments())));
-                SkASSERT(negatedCtor);
-                return negatedCtor;
             }
             break;
 
