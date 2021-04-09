@@ -710,7 +710,8 @@ SpvId SPIRVCodeGenerator::writeExpression(const Expression& expr, OutputStream& 
         case Expression::Kind::kBoolLiteral:
             return this->writeBoolLiteral(expr.as<BoolLiteral>());
         case Expression::Kind::kConstructorArray:
-            return this->writeArrayConstructor(expr.as<ConstructorArray>(), out);
+        case Expression::Kind::kConstructorStruct:
+            return this->writeCompositeConstructor(expr.asAnyConstructor(), out);
         case Expression::Kind::kConstructorDiagonalMatrix:
             return this->writeConstructorDiagonalMatrix(expr.as<ConstructorDiagonalMatrix>(), out);
         case Expression::Kind::kConstructorMatrixResize:
@@ -1626,7 +1627,7 @@ SpvId SPIRVCodeGenerator::writeVectorConstructor(const ConstructorCompound& c, O
 SpvId SPIRVCodeGenerator::writeComposite(const std::vector<SpvId>& arguments,
                                          const Type& type,
                                          OutputStream& out) {
-    SkASSERT((int)arguments.size() == type.columns());
+    SkASSERT(arguments.size() == (type.isStruct() ? type.fields().size() : (size_t)type.columns()));
 
     SpvId result = this->nextId(&type);
     this->writeOpCode(SpvOpCompositeConstruct, 3 + (int32_t) arguments.size(), out);
@@ -1653,15 +1654,17 @@ SpvId SPIRVCodeGenerator::writeConstructorSplat(const ConstructorSplat& c, Outpu
 }
 
 
-SpvId SPIRVCodeGenerator::writeArrayConstructor(const ConstructorArray& c, OutputStream& out) {
-    const Type& type = c.type();
-    SkASSERT(type.isArray());
+SpvId SPIRVCodeGenerator::writeCompositeConstructor(const AnyConstructor& c, OutputStream& out) {
+    SkASSERT(c.type().isArray() || c.type().isStruct());
+    auto ctorArgs = c.argumentSpan();
+
     std::vector<SpvId> arguments;
-    arguments.reserve(c.arguments().size());
-    for (size_t i = 0; i < c.arguments().size(); i++) {
-        arguments.push_back(this->writeExpression(*c.arguments()[i], out));
+    arguments.reserve(ctorArgs.size());
+    for (const std::unique_ptr<Expression>& arg : ctorArgs) {
+        arguments.push_back(this->writeExpression(*arg, out));
     }
-    return this->writeComposite(arguments, type, out);
+
+    return this->writeComposite(arguments, c.type(), out);
 }
 
 SpvId SPIRVCodeGenerator::writeConstructorScalarCast(const ConstructorScalarCast& c,
@@ -2394,6 +2397,9 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const Type& leftType, SpvId lhs,
                 return this->writeMatrixComparison(*operandType, lhs, rhs, SpvOpFOrdEqual,
                                                    SpvOpIEqual, SpvOpAll, SpvOpLogicalAnd, out);
             }
+            if (operandType->isStruct()) {
+                return this->writeStructComparison(*operandType, lhs, op, rhs, out);
+            }
             SkASSERT(resultType.isBoolean());
             const Type* tmpType;
             if (operandType->isVector()) {
@@ -2412,6 +2418,9 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const Type& leftType, SpvId lhs,
             if (operandType->isMatrix()) {
                 return this->writeMatrixComparison(*operandType, lhs, rhs, SpvOpFOrdNotEqual,
                                                    SpvOpINotEqual, SpvOpAny, SpvOpLogicalOr, out);
+            }
+            if (operandType->isStruct()) {
+                return this->writeStructComparison(*operandType, lhs, op, rhs, out);
             }
             [[fallthrough]];
         case Token::Kind::TK_LOGICALXOR:
@@ -2503,21 +2512,85 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const Type& leftType, SpvId lhs,
     }
 }
 
+SpvId SPIRVCodeGenerator::writeStructComparison(const Type& structType, SpvId lhs, Operator op,
+                                                SpvId rhs, OutputStream& out) {
+    // The inputs must be structs containing fields, and the op must be == or !=.
+    SkASSERT(structType.isStruct());
+    SkASSERT(op.kind() == Token::Kind::TK_EQEQ || op.kind() == Token::Kind::TK_NEQ);
+    const std::vector<Type::Field>& fields = structType.fields();
+    SkASSERT(!fields.empty());
+
+    // Synthesize equality checks for each field in the struct.
+    const Type& boolType = *fContext.fTypes.fBool;
+    SpvId boolTypeId = this->getType(boolType);
+    SpvId allComparisons = (SpvId)-1;
+    for (int index = 0; index < (int)fields.size(); ++index) {
+        // Get the left and right versions of this field.
+        const Type& fieldType = *fields[index].fType;
+        SpvId fieldTypeId = this->getType(fieldType);
+
+        SpvId fieldL = this->nextId(&fieldType);
+        this->writeInstruction(SpvOpCompositeExtract, fieldTypeId, fieldL, lhs, index, out);
+        SpvId fieldR = this->nextId(&fieldType);
+        this->writeInstruction(SpvOpCompositeExtract, fieldTypeId, fieldR, rhs, index, out);
+        // Use `writeBinaryExpression` with the requested == or != operator on these fields.
+        SpvId comparison = this->writeBinaryExpression(fieldType, fieldL, op, fieldType, fieldR,
+                                                       boolType, out);
+        // If this is the first field, we don't need to merge comparison results with anything.
+        if (allComparisons == (SpvId)-1) {
+            allComparisons = comparison;
+            continue;
+        }
+        // Use LogicalAnd or LogicalOr to combine the comparison with all the other comparisons.
+        SpvId logicalOp = this->nextId(&boolType);
+        switch (op.kind()) {
+            case Token::Kind::TK_EQEQ:
+                this->writeInstruction(SpvOpLogicalAnd, boolTypeId, logicalOp,
+                                       comparison, allComparisons, out);
+                break;
+            case Token::Kind::TK_NEQ:
+                this->writeInstruction(SpvOpLogicalOr, boolTypeId, logicalOp,
+                                       comparison, allComparisons, out);
+                break;
+            default:
+                return (SpvId)-1;
+        }
+        allComparisons = logicalOp;
+    }
+    return allComparisons;
+}
+
+static float division_by_literal_value(Operator op, const Expression& right) {
+    // If this is a division by a literal value, returns that literal value. Otherwise, returns 0.
+    if (op.kind() == Token::Kind::TK_SLASH && right.is<FloatLiteral>()) {
+        float rhsValue = right.as<FloatLiteral>().value();
+        if (std::isfinite(rhsValue)) {
+            return rhsValue;
+        }
+    }
+    return 0.0f;
+}
+
 SpvId SPIRVCodeGenerator::writeBinaryExpression(const BinaryExpression& b, OutputStream& out) {
     const Expression* left = b.left().get();
     const Expression* right = b.right().get();
     Operator op = b.getOperator();
-    // handle cases where we don't necessarily evaluate both LHS and RHS
+
     switch (op.kind()) {
         case Token::Kind::TK_EQ: {
+            // Handles assignment.
             SpvId rhs = this->writeExpression(*right, out);
             this->getLValue(*left, out)->store(rhs, out);
             return rhs;
         }
         case Token::Kind::TK_LOGICALAND:
-            return this->writeLogicalAnd(b, out);
+            // Handles short-circuiting; we don't necessarily evaluate both LHS and RHS.
+            return this->writeLogicalAnd(*b.left(), *b.right(), out);
+
         case Token::Kind::TK_LOGICALOR:
-            return this->writeLogicalOr(b, out);
+            // Handles short-circuiting; we don't necessarily evaluate both LHS and RHS.
+            return this->writeLogicalOr(*b.left(), *b.right(), out);
+
         default:
             break;
     }
@@ -2532,20 +2605,17 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const BinaryExpression& b, Outpu
         lhs = this->writeExpression(*left, out);
     }
 
-    SpvId rhs = (SpvId)-1;
-    if (op.kind() == Token::Kind::TK_SLASH && right->is<FloatLiteral>()) {
-        float rhsValue = right->as<FloatLiteral>().value();
-        if (std::isfinite(rhsValue) && rhsValue != 0.0f) {
-            // Rewrite floating-point division by a literal into multiplication by the reciprocal.
-            // This converts `expr / 2` into `expr * 0.5`
-            // This improves codegen, especially for certain types of divides (e.g. vector/scalar).
-            op = Operator(Token::Kind::TK_STAR);
-            FloatLiteral reciprocal{right->fOffset, 1.0f / rhsValue, &right->type()};
-            rhs = this->writeExpression(reciprocal, out);
-        }
-    }
-
-    if (rhs == (SpvId)-1) {
+    SpvId rhs;
+    float rhsValue = division_by_literal_value(op, *right);
+    if (rhsValue != 0.0f) {
+        // Rewrite floating-point division by a literal into multiplication by the reciprocal.
+        // This converts `expr / 2` into `expr * 0.5`
+        // This improves codegen, especially for certain types of divides (e.g. vector/scalar).
+        op = Operator(Token::Kind::TK_STAR);
+        FloatLiteral reciprocal{right->fOffset, 1.0f / rhsValue, &right->type()};
+        rhs = this->writeExpression(reciprocal, out);
+    } else {
+        // Write the right-hand side expression normally.
         rhs = this->writeExpression(*right, out);
     }
 
@@ -2557,18 +2627,18 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const BinaryExpression& b, Outpu
     return result;
 }
 
-SpvId SPIRVCodeGenerator::writeLogicalAnd(const BinaryExpression& a, OutputStream& out) {
-    SkASSERT(a.getOperator().kind() == Token::Kind::TK_LOGICALAND);
+SpvId SPIRVCodeGenerator::writeLogicalAnd(const Expression& left, const Expression& right,
+                                          OutputStream& out) {
     BoolLiteral falseLiteral(/*offset=*/-1, /*value=*/false, fContext.fTypes.fBool.get());
     SpvId falseConstant = this->writeBoolLiteral(falseLiteral);
-    SpvId lhs = this->writeExpression(*a.left(), out);
+    SpvId lhs = this->writeExpression(left, out);
     SpvId rhsLabel = this->nextId(nullptr);
     SpvId end = this->nextId(nullptr);
     SpvId lhsBlock = fCurrentBlock;
     this->writeInstruction(SpvOpSelectionMerge, end, SpvSelectionControlMaskNone, out);
     this->writeInstruction(SpvOpBranchConditional, lhs, rhsLabel, end, out);
     this->writeLabel(rhsLabel, out);
-    SpvId rhs = this->writeExpression(*a.right(), out);
+    SpvId rhs = this->writeExpression(right, out);
     SpvId rhsBlock = fCurrentBlock;
     this->writeInstruction(SpvOpBranch, end, out);
     this->writeLabel(end, out);
@@ -2578,18 +2648,18 @@ SpvId SPIRVCodeGenerator::writeLogicalAnd(const BinaryExpression& a, OutputStrea
     return result;
 }
 
-SpvId SPIRVCodeGenerator::writeLogicalOr(const BinaryExpression& o, OutputStream& out) {
-    SkASSERT(o.getOperator().kind() == Token::Kind::TK_LOGICALOR);
+SpvId SPIRVCodeGenerator::writeLogicalOr(const Expression& left, const Expression& right,
+                                         OutputStream& out) {
     BoolLiteral trueLiteral(/*offset=*/-1, /*value=*/true, fContext.fTypes.fBool.get());
     SpvId trueConstant = this->writeBoolLiteral(trueLiteral);
-    SpvId lhs = this->writeExpression(*o.left(), out);
+    SpvId lhs = this->writeExpression(left, out);
     SpvId rhsLabel = this->nextId(nullptr);
     SpvId end = this->nextId(nullptr);
     SpvId lhsBlock = fCurrentBlock;
     this->writeInstruction(SpvOpSelectionMerge, end, SpvSelectionControlMaskNone, out);
     this->writeInstruction(SpvOpBranchConditional, lhs, end, rhsLabel, out);
     this->writeLabel(rhsLabel, out);
-    SpvId rhs = this->writeExpression(*o.right(), out);
+    SpvId rhs = this->writeExpression(right, out);
     SpvId rhsBlock = fCurrentBlock;
     this->writeInstruction(SpvOpBranch, end, out);
     this->writeLabel(end, out);
