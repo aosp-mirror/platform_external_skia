@@ -246,7 +246,6 @@ private:
 
     Value writeExpression(const Expression& expr);
     Value writeBinaryExpression(const BinaryExpression& b);
-    Value writeConstructor(const Constructor& c);
     Value writeAggregationConstructor(const AnyConstructor& c);
     Value writeConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c);
     Value writeConstructorMatrixResize(const ConstructorMatrixResize& c);
@@ -643,34 +642,6 @@ Value SkVMGenerator::writeAggregationConstructor(const AnyConstructor& c) {
         }
     }
     return result;
-}
-
-Value SkVMGenerator::writeConstructor(const Constructor& c) {
-    if (c.arguments().size() > 1) {
-        // Multi-argument constructors just aggregate their arguments, with no conversion
-        // NOTE: This (SkSL rule) is actually more restrictive than GLSL.
-        return this->writeAggregationConstructor(c);
-    }
-
-    const Type& srcType = c.arguments()[0]->type();
-    const Type& dstType = c.type();
-    Type::NumberKind srcKind = base_number_kind(srcType),
-                     dstKind = base_number_kind(dstType);
-    Value src = this->writeExpression(*c.arguments()[0]);
-    size_t dstSlots = dstType.slotCount();
-
-    // Conversion among "similar" types (floatN <-> halfN), (shortN <-> intN), etc. is a no-op
-    if (srcKind == dstKind && src.slots() == dstSlots) {
-        return src;
-    }
-
-    if (srcKind != dstKind) {
-        // One argument constructors can do type conversion
-        return this->writeTypeConversion(src, srcKind, dstKind);
-    }
-
-    SkDEBUGFAIL("Invalid constructor");
-    return {};
 }
 
 Value SkVMGenerator::writeTypeConversion(const Value& src,
@@ -1462,17 +1433,15 @@ Value SkVMGenerator::writeExpression(const Expression& e) {
             return this->writeBinaryExpression(e.as<BinaryExpression>());
         case Expression::Kind::kBoolLiteral:
             return fBuilder->splat(e.as<BoolLiteral>().value() ? ~0 : 0);
-        case Expression::Kind::kConstructor:
-            return this->writeConstructor(e.as<Constructor>());
         case Expression::Kind::kConstructorArray:
-        case Expression::Kind::kConstructorComposite:
+        case Expression::Kind::kConstructorCompound:
             return this->writeAggregationConstructor(e.asAnyConstructor());
         case Expression::Kind::kConstructorDiagonalMatrix:
             return this->writeConstructorDiagonalMatrix(e.as<ConstructorDiagonalMatrix>());
         case Expression::Kind::kConstructorMatrixResize:
             return this->writeConstructorMatrixResize(e.as<ConstructorMatrixResize>());
         case Expression::Kind::kConstructorScalarCast:
-        case Expression::Kind::kConstructorVectorCast:
+        case Expression::Kind::kConstructorCompoundCast:
             return this->writeConstructorCast(e.asAnyConstructor());
         case Expression::Kind::kConstructorSplat:
             return this->writeConstructorSplat(e.as<ConstructorSplat>());
