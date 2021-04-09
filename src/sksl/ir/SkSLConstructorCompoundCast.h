@@ -17,15 +17,16 @@
 namespace SkSL {
 
 /**
- * Represents the construction of a vector cast, such as `half3(myInt3)`.
+ * Represents the construction of a vector/matrix typecast, such as `half3(myInt3)` or
+ * `float4x4(myHalf4x4)`. Matrix resizes are done in ConstructorMatrixResize, not here.
  *
- * These always contain exactly 1 vector of matching size, and are never constant.
+ * These always contain exactly 1 vector or matrix of matching size, and are never constant.
  */
-class ConstructorVectorCast final : public SingleArgumentConstructor {
+class ConstructorCompoundCast final : public SingleArgumentConstructor {
 public:
-    static constexpr Kind kExpressionKind = Kind::kConstructorVectorCast;
+    static constexpr Kind kExpressionKind = Kind::kConstructorCompoundCast;
 
-    ConstructorVectorCast(int offset, const Type& type, std::unique_ptr<Expression> arg)
+    ConstructorCompoundCast(int offset, const Type& type, std::unique_ptr<Expression> arg)
         : INHERITED(offset, kExpressionKind, &type, std::move(arg)) {}
 
     static std::unique_ptr<Expression> Make(const Context& context,
@@ -34,12 +35,13 @@ public:
                                             std::unique_ptr<Expression> arg);
 
     bool isCompileTimeConstant() const override {
-        // If this were a compile-time constant, we would have made a ConstructorComposite instead.
+        // If this were a compile-time constant, we would have made a ConstructorCompound instead.
         return false;
     }
 
     std::unique_ptr<Expression> clone() const override {
-        return std::make_unique<ConstructorVectorCast>(fOffset, this->type(), argument()->clone());
+        return std::make_unique<ConstructorCompoundCast>(fOffset, this->type(),
+                                                          argument()->clone());
     }
 
 private:
