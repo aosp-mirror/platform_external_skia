@@ -2,6 +2,11 @@ use_relative_paths = True
 
 vars = {
   "checkout_chromium": False,
+
+  # Three lines of non-changing comments so that
+  # the commit queue can handle CLs rolling different
+  # dependencies without interference from each other.
+  'sk_tool_revision': 'git_revision:2035342cd48947273648ff1971f6ebc9e7ecfb91',
 }
 
 deps = {
@@ -47,6 +52,16 @@ deps = {
   "../src": {
     "url": "https://chromium.googlesource.com/chromium/src.git@5368f81b40a5b5e368d53f12beae893bf2a4b381",
     "condition": "checkout_chromium",
+  },
+
+  'bin': {
+    'packages': [
+      {
+        'package': 'skia/tools/sk/${{platform}}',
+        'version': Var('sk_tool_revision'),
+      }
+    ],
+    'dep_type': 'cipd',
   },
 }
 
