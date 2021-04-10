@@ -58,7 +58,6 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO = false;
     fUseDrawInsteadOfAllRenderTargetWrites = false;
     fRequiresCullFaceEnableDisableWhenDrawingLinesAfterNonLines = false;
-    fDetachStencilFromMSAABuffersBeforeReadPixels = false;
     fDontSetBaseOrMaxLevelForExternalTextures = false;
     fNeverDisableColorWrites = false;
     fMustSetAnyTexParameterToEnableMipmapping = false;
@@ -1491,6 +1490,9 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
             r8Support = version >= GR_GL_VER(3, 0) || ctxInfo.hasExtension("GL_EXT_texture_rg");
         } else if (GR_IS_GR_WEBGL(standard)) {
             r8Support = ctxInfo.version() >= GR_GL_VER(2, 0);
+        }
+        if (formatWorkarounds.fDisallowR8ForPowerVRSGX54x) {
+            r8Support = false;
         }
 
         if (r8Support) {
@@ -3535,6 +3537,14 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         fMipmapSupport = false;
     }
 
+#ifdef SK_BUILD_FOR_ANDROID
+    if (kPowerVR54x_GrGLRenderer == ctxInfo.renderer()) {
+        // Flutter found glTexSubImage2D for GL_RED is much slower than GL_ALPHA on the
+        // "MC18 PERSONAL SHOPPER"
+        formatWorkarounds->fDisallowR8ForPowerVRSGX54x = true;
+    }
+#endif
+
     // https://b.corp.google.com/issues/143074513
     if (kAdreno615_GrGLRenderer == ctxInfo.renderer()) {
         fMSFBOType = kNone_MSFBOType;
@@ -3623,13 +3633,6 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     if (kAdreno3xx_GrGLRenderer == ctxInfo.renderer() &&
         ctxInfo.driverVersion() > GR_GL_DRIVER_VER(53, 0, 0)) {
         fRequiresCullFaceEnableDisableWhenDrawingLinesAfterNonLines = true;
-    }
-
-    // This was reproduced on a Pixel 1, but the unit test + config + options that exercise it are
-    // only tested on very specific bots. The driver claims that ReadPixels is an invalid operation
-    // when reading from an auto-resolving MSAA framebuffer that has stencil attached.
-    if (kQualcomm_GrGLDriver == ctxInfo.driver()) {
-        fDetachStencilFromMSAABuffersBeforeReadPixels = true;
     }
 
     // TODO: Don't apply this on iOS?
@@ -4108,7 +4111,6 @@ void GrGLCaps::onApplyOptionsOverrides(const GrContextOptions& options) {
         SkASSERT(!fDisallowTexSubImageForUnormConfigTexturesEverBoundToFBO);
         SkASSERT(!fUseDrawInsteadOfAllRenderTargetWrites);
         SkASSERT(!fRequiresCullFaceEnableDisableWhenDrawingLinesAfterNonLines);
-        SkASSERT(!fDetachStencilFromMSAABuffersBeforeReadPixels);
         SkASSERT(!fDontSetBaseOrMaxLevelForExternalTextures);
         SkASSERT(!fNeverDisableColorWrites);
     }
