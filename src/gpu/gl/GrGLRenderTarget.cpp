@@ -28,8 +28,8 @@ GrGLRenderTarget::GrGLRenderTarget(GrGLGpu* gpu,
                                    GrGLAttachment* stencil)
         : GrSurface(gpu, dimensions, GrProtected::kNo)
         , INHERITED(gpu, dimensions, sampleCount, GrProtected::kNo, stencil) {
-    this->setFlags(gpu->glCaps(), ids);
     this->init(format, ids);
+    this->setFlags(gpu->glCaps(), ids);
     this->registerWithCacheWrapped(GrWrapCacheable::kNo);
 }
 
@@ -40,23 +40,24 @@ GrGLRenderTarget::GrGLRenderTarget(GrGLGpu* gpu,
                                    const IDs& ids)
         : GrSurface(gpu, dimensions, GrProtected::kNo)
         , INHERITED(gpu, dimensions, sampleCount, GrProtected::kNo) {
-    this->setFlags(gpu->glCaps(), ids);
     this->init(format, ids);
+    this->setFlags(gpu->glCaps(), ids);
 }
 
 inline void GrGLRenderTarget::setFlags(const GrGLCaps& glCaps, const IDs& idDesc) {
-    if (!idDesc.fRTFBOID) {
+    GrGLuint renderFBOID = (this->numSamples() > 1) ? fMultisampleFBOID : fSingleSampleFBOID;
+    if (renderFBOID == 0) {
         this->setGLRTFBOIDIs0();
     }
 }
 
 void GrGLRenderTarget::init(GrGLFormat format, const IDs& idDesc) {
-     fRTFBOID                = idDesc.fRTFBOID;
-     fSingleSampleFBOID      = idDesc.fSingleSampleFBOID;
-     fMSColorRenderbufferID  = idDesc.fMSColorRenderbufferID;
-     fRTFBOOwnership         = idDesc.fRTFBOOwnership;
-     fRTFormat               = format;
-    fNumSamplesOwnedPerPixel = this->totalSamples();
+    fMultisampleFBOID = idDesc.fMultisampleFBOID;
+    fSingleSampleFBOID = idDesc.fSingleSampleFBOID;
+    fMSColorRenderbufferID = idDesc.fMSColorRenderbufferID;
+    fRTFBOOwnership = idDesc.fRTFBOOwnership;
+    fRTFormat = format;
+    fTotalMemorySamplesPerPixel = idDesc.fTotalMemorySamplesPerPixel;
 }
 
 GrGLFormat stencil_bits_to_format(int stencilBits) {
@@ -101,7 +102,7 @@ sk_sp<GrGLRenderTarget> GrGLRenderTarget::MakeWrapped(GrGLGpu* gpu,
 
 GrBackendRenderTarget GrGLRenderTarget::getBackendRenderTarget() const {
     GrGLFramebufferInfo fbi;
-    fbi.fFBOID = fRTFBOID;
+    fbi.fFBOID = (this->numSamples() > 1) ? fMultisampleFBOID : fSingleSampleFBOID;
     fbi.fFormat = GrGLFormatToEnum(this->format());
     int numStencilBits = 0;
     if (GrAttachment* stencil = this->getStencilAttachment()) {
@@ -120,13 +121,18 @@ GrBackendFormat GrGLRenderTarget::backendFormat() const {
 
 size_t GrGLRenderTarget::onGpuMemorySize() const {
     return GrSurface::ComputeSize(this->backendFormat(), this->dimensions(),
-                                  fNumSamplesOwnedPerPixel, GrMipmapped::kNo);
+                                  fTotalMemorySamplesPerPixel, GrMipmapped::kNo);
 }
 
 bool GrGLRenderTarget::completeStencilAttachment() {
     GrGLGpu* gpu = this->getGLGpu();
     const GrGLInterface* interface = gpu->glInterface();
     GrAttachment* stencil = this->getStencilAttachment();
+
+    GrGLuint stencilFBOID = (this->numSamples() > 1) ? fMultisampleFBOID : fSingleSampleFBOID;
+    gpu->invalidateBoundRenderTarget();
+    gpu->bindFramebuffer(GR_GL_FRAMEBUFFER, stencilFBOID);
+
     if (nullptr == stencil) {
         GR_GL_CALL(interface, FramebufferRenderbuffer(GR_GL_FRAMEBUFFER,
                                                       GR_GL_STENCIL_ATTACHMENT,
@@ -134,22 +140,9 @@ bool GrGLRenderTarget::completeStencilAttachment() {
         GR_GL_CALL(interface, FramebufferRenderbuffer(GR_GL_FRAMEBUFFER,
                                                       GR_GL_DEPTH_ATTACHMENT,
                                                       GR_GL_RENDERBUFFER, 0));
-#ifdef SK_DEBUG
-        if (!gpu->glCaps().skipErrorChecks()) {
-            // This check can cause problems in Chromium if the context has been asynchronously
-            // abandoned (see skbug.com/5200)
-            GrGLenum status;
-            GR_GL_CALL_RET(interface, status, CheckFramebufferStatus(GR_GL_FRAMEBUFFER));
-            SkASSERT(GR_GL_FRAMEBUFFER_COMPLETE == status);
-        }
-#endif
-        return true;
     } else {
         const GrGLAttachment* glStencil = static_cast<const GrGLAttachment*>(stencil);
         GrGLuint rb = glStencil->renderbufferID();
-
-        gpu->invalidateBoundRenderTarget();
-        gpu->bindFramebuffer(GR_GL_FRAMEBUFFER, this->renderFBOID());
         GR_GL_CALL(interface, FramebufferRenderbuffer(GR_GL_FRAMEBUFFER,
                                                       GR_GL_STENCIL_ATTACHMENT,
                                                       GR_GL_RENDERBUFFER, rb));
@@ -162,42 +155,44 @@ bool GrGLRenderTarget::completeStencilAttachment() {
                                                           GR_GL_DEPTH_ATTACHMENT,
                                                           GR_GL_RENDERBUFFER, 0));
         }
-
+    }
 
 #ifdef SK_DEBUG
-        if (!gpu->glCaps().skipErrorChecks()) {
-            // This check can cause problems in Chromium if the context has been asynchronously
-            // abandoned (see skbug.com/5200)
-            GrGLenum status;
-            GR_GL_CALL_RET(interface, status, CheckFramebufferStatus(GR_GL_FRAMEBUFFER));
-            SkASSERT(GR_GL_FRAMEBUFFER_COMPLETE == status);
-        }
-#endif
-        return true;
+    if (!gpu->glCaps().skipErrorChecks()) {
+        // This check can cause problems in Chromium if the context has been asynchronously
+        // abandoned (see skbug.com/5200)
+        GrGLenum status;
+        GR_GL_CALL_RET(interface, status, CheckFramebufferStatus(GR_GL_FRAMEBUFFER));
+        SkASSERT(GR_GL_FRAMEBUFFER_COMPLETE == status);
     }
+#endif
+
+    return true;
 }
 
 void GrGLRenderTarget::onRelease() {
     if (GrBackendObjectOwnership::kBorrowed != fRTFBOOwnership) {
         GrGLGpu* gpu = this->getGLGpu();
         if (fSingleSampleFBOID) {
+            SkASSERT(fSingleSampleFBOID != fMultisampleFBOID);
             gpu->deleteFramebuffer(fSingleSampleFBOID);
         }
-        if (fRTFBOID && fRTFBOID != fSingleSampleFBOID) {
-            gpu->deleteFramebuffer(fRTFBOID);
+        if (fMultisampleFBOID) {
+            SkASSERT(fMultisampleFBOID != fSingleSampleFBOID);
+            gpu->deleteFramebuffer(fMultisampleFBOID);
         }
         if (fMSColorRenderbufferID) {
             GL_CALL(DeleteRenderbuffers(1, &fMSColorRenderbufferID));
         }
     }
-    fRTFBOID                = 0;
+    fMultisampleFBOID       = 0;
     fSingleSampleFBOID      = 0;
     fMSColorRenderbufferID  = 0;
     INHERITED::onRelease();
 }
 
 void GrGLRenderTarget::onAbandon() {
-    fRTFBOID                = 0;
+    fMultisampleFBOID       = 0;
     fSingleSampleFBOID      = 0;
     fMSColorRenderbufferID  = 0;
     INHERITED::onAbandon();
@@ -229,15 +224,13 @@ void GrGLRenderTarget::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) 
         return;
     }
 
-    // Don't log the framebuffer, as the framebuffer itself doesn't contribute to meaningful
-    // memory usage. It is always a wrapper around either:
-    // - a texture, which is owned elsewhere, and will be dumped there
-    // - a renderbuffer, which will be dumped below.
-
-    // Log any renderbuffer's contribution to memory.
-    if (fMSColorRenderbufferID) {
+    int numSamplesNotInTexture = fTotalMemorySamplesPerPixel;
+    if (this->asTexture()) {
+        --numSamplesNotInTexture;  // GrGLTexture::dumpMemoryStatistics accounts for 1 sample.
+    }
+    if (numSamplesNotInTexture >= 1) {
         size_t size = GrSurface::ComputeSize(this->backendFormat(), this->dimensions(),
-                                             this->msaaSamples(), GrMipmapped::kNo);
+                                             numSamplesNotInTexture, GrMipmapped::kNo);
 
         // Due to this resource having both a texture and a renderbuffer component, dump as
         // skia/gpu_resources/resource_#/renderbuffer
@@ -251,28 +244,4 @@ void GrGLRenderTarget::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) 
         traceMemoryDump->setMemoryBacking(resourceName.c_str(), "gl_renderbuffer",
                                           renderbuffer_id.c_str());
     }
-}
-
-int GrGLRenderTarget::msaaSamples() const {
-    if (fSingleSampleFBOID == kUnresolvableFBOID || fSingleSampleFBOID != fRTFBOID) {
-        // If the render target's FBO is external (fSingleSampleFBOID == kUnresolvableFBOID), or if
-        // we own the render target's FBO (fSingleSampleFBOID == fRTFBOID) then we use the provided
-        // sample count.
-        return this->numSamples();
-    }
-
-    // When fSingleSampleFBOID == fRTFBOID, we either are not using MSAA, or MSAA is auto resolving,
-    // so use 0 for the sample count.
-    return 0;
-}
-
-int GrGLRenderTarget::totalSamples() const {
-  int total_samples = this->msaaSamples();
-
-  if (fSingleSampleFBOID != kUnresolvableFBOID) {
-      // If we own the resolve buffer then that is one more sample per pixel.
-      total_samples += 1;
-  }
-
-  return total_samples;
 }
