@@ -10,15 +10,14 @@
 
 #include "include/private/SkTHash.h"
 
-#include "src/gpu/GrGpuResourcePriv.h"
 #include "src/gpu/GrHashMapWithCache.h"
 #include "src/gpu/GrSurface.h"
-#include "src/gpu/GrSurfaceProxyPriv.h"
+#include "src/gpu/GrSurfaceProxy.h"
 
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkTMultiMap.h"
 
-class GrResourceProvider;
+class GrDirectContext;
 
 // Print out explicit allocation information
 #define GR_ALLOCATION_SPEW 0
@@ -69,8 +68,8 @@ class GrResourceProvider;
  */
 class GrResourceAllocator {
 public:
-    GrResourceAllocator(GrResourceProvider* resourceProvider SkDEBUGCODE(, int numOpsTasks))
-            : fResourceProvider(resourceProvider) {}
+    GrResourceAllocator(GrDirectContext* dContext SkDEBUGCODE(, int numOpsTasks))
+            : fDContext(dContext) {}
 
     ~GrResourceAllocator();
 
@@ -134,15 +133,7 @@ private:
     class Register {
     public:
         // It's OK to pass an invalid scratch key iff the proxy has a unique key.
-        Register(GrSurfaceProxy* originatingProxy, GrScratchKey scratchKey)
-                : fOriginatingProxy(originatingProxy)
-                , fScratchKey(std::move(scratchKey)) {
-            SkASSERT(originatingProxy);
-            SkASSERT(!originatingProxy->isInstantiated());
-            SkASSERT(!originatingProxy->isLazy());
-            SkASSERT(this->scratchKey().isValid() ^ this->uniqueKey().isValid());
-            SkDEBUGCODE(fUniqueID = CreateUniqueID();)
-        }
+        Register(GrSurfaceProxy* originatingProxy, GrScratchKey);
 
         const GrScratchKey& scratchKey() const { return fScratchKey; }
         const GrUniqueKey& uniqueKey() const { return fOriginatingProxy->getUniqueKey(); }
@@ -252,7 +243,7 @@ private:
     // Compositing use cases can create > 80 intervals.
     static const int kInitialArenaSize = 128 * sizeof(Interval);
 
-    GrResourceProvider*          fResourceProvider;
+    GrDirectContext*             fDContext;
     FreePoolMultiMap             fFreePool;          // Recently created/used GrSurfaces
     IntvlHash                    fIntvlHash;         // All the intervals, hashed by proxyID
 
