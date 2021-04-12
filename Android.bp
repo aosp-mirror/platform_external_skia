@@ -630,6 +630,7 @@ cc_library_static {
           "src/gpu/GrPaint.cpp",
           "src/gpu/GrPathRenderer.cpp",
           "src/gpu/GrPathRendererChain.cpp",
+          "src/gpu/GrPersistentCacheUtils.cpp",
           "src/gpu/GrPipeline.cpp",
           "src/gpu/GrProcessor.cpp",
           "src/gpu/GrProcessorAnalysis.cpp",
