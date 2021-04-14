@@ -384,11 +384,13 @@ const skvm::Program* SkRuntimeEffect::getFilterColorProgram() {
         // (uniforms or children).
         skvm::Builder p;
 
-        // We allocate a uniform color for each child in the SkSL. When we run this program
-        // later, these uniform values are replaced with either the results of the child,
-        // or the input color (if the child is nullptr). These Uniform ids are loads from the
-        // *first* arg ptr.
+        // We allocate a uniform color for the input color, and for each child in the SkSL.
+        // When we run this program later, these uniform values are replaced with either the
+        // results of the child, or the input color (if the child is nullptr). These Uniform ids
+        // are loads from the *first* arg ptr.
         skvm::Uniforms childColorUniforms{p.uniform(), 0};
+        skvm::Color inputColor =
+                p.uniformColor(/*placeholder*/ SkColors::kWhite, &childColorUniforms);
         std::vector<skvm::Color> childColors;
         for (size_t i = 0; i < fChildren.size(); ++i) {
             childColors.push_back(
@@ -415,6 +417,7 @@ const skvm::Program* SkRuntimeEffect::getFilterColorProgram() {
                                                  uniform,
                                                  /*device=*/zeroCoord,
                                                  /*local=*/zeroCoord,
+                                                 inputColor,
                                                  sampleChild);
 
         // Then store the result to the *third* arg ptr
@@ -517,7 +520,7 @@ public:
             return GrFPFailure(nullptr);
         }
 
-        auto fp = GrSkSLFP::Make(context, fEffect, "Runtime_Color_Filter", std::move(uniforms));
+        auto fp = GrSkSLFP::Make(fEffect, "Runtime_Color_Filter", std::move(uniforms));
         for (const auto& child : fChildren) {
             std::unique_ptr<GrFragmentProcessor> childFP;
             if (child) {
@@ -575,7 +578,7 @@ public:
         }
 
         return SkSL::ProgramToSkVM(*fEffect->fBaseProgram, fEffect->fMain, p, uniform,
-                                   /*device=*/zeroCoord, /*local=*/zeroCoord, sampleChild);
+                                   /*device=*/zeroCoord, /*local=*/zeroCoord, c, sampleChild);
     }
 
     SkPMColor4f onFilterColor4f(const SkPMColor4f& color, SkColorSpace* dstCS) const override {
@@ -589,9 +592,11 @@ public:
         SkASSERT(inputs && program);
 
         // 'program' defines sampling any child as returning a uniform color. Assemble a buffer
-        // containing those colors. For any null children, the sample result is just the input
-        // color. For non-null children, it's the result of that child filtering the input color.
+        // containing those colors. The first entry is always the input color. Subsequent entries
+        // are for children. For any null children, the sample result is just the input color.
+        // For non-null children, it's the result of that child filtering the input color.
         SkSTArray<1, SkPMColor4f, true> inputColors;
+        inputColors.push_back(color);
         for (const auto &child : fChildren) {
             inputColors.push_back(child ? as_CFB(child)->onFilterColor4f(color, dstCS) : color);
         }
@@ -687,7 +692,7 @@ public:
             return nullptr;
         }
 
-        auto fp = GrSkSLFP::Make(args.fContext, fEffect, "runtime_shader", std::move(uniforms));
+        auto fp = GrSkSLFP::Make(fEffect, "runtime_shader", std::move(uniforms));
         for (const auto& child : fChildren) {
             auto childFP = child ? as_SB(child)->asFragmentProcessor(args) : nullptr;
             fp->addChild(std::move(childFP));
@@ -756,7 +761,7 @@ public:
         }
 
         return SkSL::ProgramToSkVM(*fEffect->fBaseProgram, fEffect->fMain, p, uniform,
-                                   device, local, sampleChild);
+                                   device, local, paint, sampleChild);
     }
 
     void flatten(SkWriteBuffer& buffer) const override {
@@ -837,14 +842,13 @@ sk_sp<SkFlattenable> SkRTShader::CreateProc(SkReadBuffer& buffer) {
 
 #if SK_SUPPORT_GPU
 std::unique_ptr<GrFragmentProcessor> SkRuntimeEffect::makeFP(
-        GrRecordingContext* recordingContext,
         sk_sp<SkData> uniforms,
         std::unique_ptr<GrFragmentProcessor> children[],
         size_t childCount) const {
     if (!uniforms) {
         uniforms = SkData::MakeEmpty();
     }
-    auto fp = GrSkSLFP::Make(recordingContext, sk_ref_sp(this), "make_fp", std::move(uniforms));
+    auto fp = GrSkSLFP::Make(sk_ref_sp(this), "make_fp", std::move(uniforms));
     for (size_t i = 0; i < childCount; ++i) {
         fp->addChild(std::move(children[i]));
     }
@@ -895,8 +899,7 @@ sk_sp<SkImage> SkRuntimeEffect::makeImage(GrRecordingContext* recordingContext,
             return nullptr;
         }
 
-        auto fp = GrSkSLFP::Make(recordingContext,
-                                 sk_ref_sp(this),
+        auto fp = GrSkSLFP::Make(sk_ref_sp(this),
                                  "runtime_image",
                                  std::move(uniforms));
         GrColorInfo colorInfo(resultInfo.colorInfo());
