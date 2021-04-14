@@ -6,21 +6,21 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling different
   # dependencies without interference from each other.
-  'sk_tool_revision': 'git_revision:6f229e984aa98e156d40bff6ea0b5b164ecacc84',
+  'sk_tool_revision': 'git_revision:7b892cc5882d069b77f1d10f8ba664a8fffec4ec',
 }
 
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
   "common"                                : "https://skia.googlesource.com/common.git@9737551d7a52c3db3262db5856e6bcd62c462b92",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@f92eb43ce91716ce571d517fa6d38c0b845a461f",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@15f4925ac3a6710739a7424631f4b65ba9c3c227",
   "third_party/externals/brotli"          : "https://skia.googlesource.com/external/github.com/google/brotli.git@e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, and tint for SPIRV compilation.
   # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
-  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@edb79bafba1f894a2f342df85a5da3b4bd40af58",
+  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@e19004566464cff0adaa26fb129ee6e7406bd747",
   "third_party/externals/jinja2"          : "https://chromium.googlesource.com/chromium/src/third_party/jinja2@a82a4944a7f2496639f34a89c9923be5908b80aa",
   "third_party/externals/markupsafe"      : "https://chromium.googlesource.com/chromium/src/third_party/markupsafe@0944e71f4b2cb9a871bcbe353f95e889b64a611a",
-  "third_party/externals/tint"            : "https://dawn.googlesource.com/tint@c8ffbe43a7b35eb5696afc1691249a5627fd3a4b",
+  "third_party/externals/tint"            : "https://dawn.googlesource.com/tint@c3bbb4d079e4c749ee3d03795fba71c173ff076f",
   "third_party/externals/dng_sdk"         : "https://android.googlesource.com/platform/external/dng_sdk.git@c8d0c9b1d16bfda56f15165d39e0ffa360a11123",
   "third_party/externals/egl-registry"    : "https://skia.googlesource.com/external/github.com/KhronosGroup/EGL-Registry@a0bca08de07c7d7651047bedc0b653cfaaa4f2ae",
   "third_party/externals/expat"           : "https://chromium.googlesource.com/external/github.com/libexpat/libexpat.git@e976867fb57a0cd87e3b0fe05d59e0ed63c6febb",
@@ -50,7 +50,7 @@ deps = {
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@c876c8f87101c5a75f6014b0f832499afeb65b73",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@5368f81b40a5b5e368d53f12beae893bf2a4b381",
+    "url": "https://chromium.googlesource.com/chromium/src.git@f9ddd1cf5caa3370a2fb6c27a9fd5364a8346d1a",
     "condition": "checkout_chromium",
   },
 

@@ -31,10 +31,10 @@ namespace SkSL {
 
 namespace dsl {
 
-DSLWriter::DSLWriter(SkSL::Compiler* compiler)
+DSLWriter::DSLWriter(SkSL::Compiler* compiler, SkSL::ProgramKind kind)
     : fCompiler(compiler) {
-    SkSL::ParsedModule module = fCompiler->moduleForProgramKind(SkSL::ProgramKind::kFragment);
-    fConfig.fKind = SkSL::ProgramKind::kFragment;
+    SkSL::ParsedModule module = fCompiler->moduleForProgramKind(kind);
+    fConfig.fKind = kind;
 
     SkSL::IRGenerator& ir = *fCompiler->fIRGenerator;
     fOldSymbolTable = ir.fSymbolTable;
@@ -129,7 +129,7 @@ DSLPossibleExpression DSLWriter::Coerce(std::unique_ptr<Expression> left, const 
 }
 
 DSLPossibleExpression DSLWriter::Construct(const SkSL::Type& type,
-                                           std::vector<DSLExpression> rawArgs) {
+                                           SkTArray<DSLExpression> rawArgs) {
     SkSL::ExpressionArray args;
     args.reserve_back(rawArgs.size());
 
