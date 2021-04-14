@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "src/sksl/SkSLGLSLCodeGenerator.h"
+#include "src/sksl/codegen/SkSLGLSLCodeGenerator.h"
 
 #include <memory>
 
@@ -1472,12 +1472,6 @@ void GLSLCodeGenerator::writeProgramElement(const ProgramElement& e) {
 }
 
 void GLSLCodeGenerator::writeInputVars() {
-    if (fProgram.fInputs.fRTWidth) {
-        const char* precision = usesPrecisionModifiers() ? "highp " : "";
-        fGlobals.writeText("uniform ");
-        fGlobals.writeText(precision);
-        fGlobals.writeText("float " SKSL_RTWIDTH_NAME ";\n");
-    }
     if (fProgram.fInputs.fRTHeight) {
         const char* precision = usesPrecisionModifiers() ? "highp " : "";
         fGlobals.writeText("uniform ");

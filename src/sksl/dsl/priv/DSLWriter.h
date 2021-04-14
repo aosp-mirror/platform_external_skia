@@ -43,7 +43,7 @@ class ErrorHandler;
  */
 class DSLWriter {
 public:
-    DSLWriter(SkSL::Compiler* compiler);
+    DSLWriter(SkSL::Compiler* compiler, SkSL::ProgramKind kind);
 
     ~DSLWriter();
 
@@ -140,6 +140,10 @@ public:
     static void EndFragmentProcessor();
 
     static GrGLSLUniformHandler::UniformHandle VarUniformHandle(const DSLVar& var);
+#else
+    static bool InFragmentProcessor() {
+        return false;
+    }
 #endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 
     static std::unique_ptr<SkSL::Expression> Call(const FunctionDeclaration& function,
@@ -153,7 +157,7 @@ public:
     static DSLPossibleExpression Coerce(std::unique_ptr<Expression> left, const SkSL::Type& type);
 
     static DSLPossibleExpression Construct(const SkSL::Type& type,
-                                           std::vector<DSLExpression> rawArgs);
+                                           SkTArray<DSLExpression> rawArgs);
 
     static std::unique_ptr<Expression> ConvertBinary(std::unique_ptr<Expression> left, Operator op,
                                                      std::unique_ptr<Expression> right);

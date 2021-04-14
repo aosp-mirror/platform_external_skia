@@ -358,6 +358,7 @@ GrOpsTask::GrOpsTask(GrDrawingManager* drawingMgr,
                      GrAuditTrail* auditTrail)
         : GrRenderTask()
         , fAuditTrail(auditTrail)
+        , fUsesMSAASurface(view.asRenderTargetProxy()->numSamples() > 1)
         , fTargetSwizzle(view.swizzle())
         , fTargetOrigin(view.origin())
           SkDEBUGCODE(, fNumClips(0)) {
@@ -479,6 +480,7 @@ void GrOpsTask::onPrepare(GrOpFlushState* flushState) {
 #endif
             GrOpFlushState::OpArgs opArgs(chain.head(),
                                           dstView,
+                                          fUsesMSAASurface,
                                           chain.appliedClip(),
                                           chain.dstProxyView(),
                                           fRenderPassXferBarriers,
@@ -501,6 +503,7 @@ void GrOpsTask::onPrepare(GrOpFlushState* flushState) {
 
 static GrOpsRenderPass* create_render_pass(GrGpu* gpu,
                                            GrRenderTarget* rt,
+                                           bool useMSAASurface,
                                            GrAttachment* stencil,
                                            GrSurfaceOrigin origin,
                                            const SkIRect& bounds,
@@ -526,9 +529,8 @@ static GrOpsRenderPass* create_render_pass(GrGpu* gpu,
         stencilStoreOp,
     };
 
-    return gpu->getOpsRenderPass(rt, stencil, origin, bounds,
-                                 kColorLoadStoreInfo, stencilLoadAndStoreInfo, sampledProxies,
-                                 renderPassXferBarriers);
+    return gpu->getOpsRenderPass(rt, useMSAASurface, stencil, origin, bounds, kColorLoadStoreInfo,
+                                 stencilLoadAndStoreInfo, sampledProxies, renderPassXferBarriers);
 }
 
 // TODO: this is where GrOp::renderTarget is used (which is fine since it
@@ -612,6 +614,7 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
 
     GrOpsRenderPass* renderPass = create_render_pass(flushState->gpu(),
                                                      proxy->peekRenderTarget(),
+                                                     fUsesMSAASurface,
                                                      stencil,
                                                      fTargetOrigin,
                                                      fClippedContentBounds,
@@ -641,6 +644,7 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
 
         GrOpFlushState::OpArgs opArgs(chain.head(),
                                       dstView,
+                                      fUsesMSAASurface,
                                       chain.appliedClip(),
                                       chain.dstProxyView(),
                                       fRenderPassXferBarriers,
