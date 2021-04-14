@@ -17,32 +17,33 @@
 
 #define GL_CALL(X) GR_GL_CALL(fGpu->glInterface(), X)
 
-void GrGLOpsRenderPass::set(GrRenderTarget* rt, const SkIRect& contentBounds,
+void GrGLOpsRenderPass::set(GrRenderTarget* rt, bool useMSAASurface, const SkIRect& contentBounds,
                             GrSurfaceOrigin origin, const LoadAndStoreInfo& colorInfo,
                             const StencilLoadAndStoreInfo& stencilInfo) {
     SkASSERT(fGpu);
     SkASSERT(!fRenderTarget);
     SkASSERT(fGpu == rt->getContext()->priv().getGpu());
 
-    this->INHERITED::set(rt, origin);
+    this->INHERITED::set(rt, useMSAASurface, origin);
     fContentBounds = contentBounds;
     fColorLoadAndStoreInfo = colorInfo;
     fStencilLoadAndStoreInfo = stencilInfo;
 }
 
 void GrGLOpsRenderPass::onBegin() {
-    fGpu->beginCommandBuffer(fRenderTarget, fContentBounds, fOrigin, fColorLoadAndStoreInfo,
-                             fStencilLoadAndStoreInfo);
+    fGpu->beginCommandBuffer(fRenderTarget, fUseMSAASurface, fContentBounds, fOrigin,
+                             fColorLoadAndStoreInfo, fStencilLoadAndStoreInfo);
 }
 
 void GrGLOpsRenderPass::onEnd() {
-    fGpu->endCommandBuffer(fRenderTarget, fColorLoadAndStoreInfo, fStencilLoadAndStoreInfo);
+    fGpu->endCommandBuffer(fRenderTarget, fUseMSAASurface, fColorLoadAndStoreInfo,
+                           fStencilLoadAndStoreInfo);
 }
 
 bool GrGLOpsRenderPass::onBindPipeline(const GrProgramInfo& programInfo,
                                        const SkRect& drawBounds) {
     fPrimitiveType = programInfo.primitiveType();
-    return fGpu->flushGLState(fRenderTarget, programInfo);
+    return fGpu->flushGLState(fRenderTarget, fUseMSAASurface, programInfo);
 }
 
 void GrGLOpsRenderPass::onSetScissorRect(const SkIRect& scissor) {
@@ -384,7 +385,7 @@ void GrGLOpsRenderPass::multiDrawElementsANGLEOrWebGL(const GrBuffer* drawIndire
 }
 
 void GrGLOpsRenderPass::onClear(const GrScissorState& scissor, std::array<float, 4> color) {
-    fGpu->clear(scissor, color, fRenderTarget, fOrigin);
+    fGpu->clear(scissor, color, fRenderTarget, fUseMSAASurface, fOrigin);
 }
 
 void GrGLOpsRenderPass::onClearStencilClip(const GrScissorState& scissor, bool insideStencilMask) {
