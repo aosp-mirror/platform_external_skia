@@ -885,6 +885,7 @@ cc_library_static {
           "src/ports/SkOSLibrary_posix.cpp",
           "src/sksl/SkSLCPPUniformCTypes.cpp",
           "src/sksl/codegen/SkSLCPPCodeGenerator.cpp",
+          "src/sksl/codegen/SkSLDSLCPPCodeGenerator.cpp",
           "src/sksl/codegen/SkSLGLSLCodeGenerator.cpp",
           "src/sksl/codegen/SkSLHCodeGenerator.cpp",
           "src/sksl/codegen/SkSLMetalCodeGenerator.cpp",
