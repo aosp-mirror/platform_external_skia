@@ -153,8 +153,7 @@ public:
 
 #if SK_SUPPORT_GPU
     // For internal use.
-    std::unique_ptr<GrFragmentProcessor> makeFP(GrRecordingContext*,
-                                                sk_sp<SkData> uniforms,
+    std::unique_ptr<GrFragmentProcessor> makeFP(sk_sp<SkData> uniforms,
                                                 std::unique_ptr<GrFragmentProcessor> children[],
                                                 size_t childCount) const;
 #endif
@@ -174,7 +173,11 @@ private:
     uint32_t hash() const { return fHash; }
     bool usesSampleCoords() const { return fUsesSampleCoords; }
 
-    const skvm::Program* getFilterColorProgram();
+    struct FilterColorInfo {
+        const skvm::Program& program;
+        bool                 alphaUnchanged;
+    };
+    FilterColorInfo getFilterColorInfo();
 
 #if SK_SUPPORT_GPU
     friend class GrSkSLFP;      // fBaseProgram, fSampleUsages
@@ -196,6 +199,7 @@ private:
 
     SkOnce fColorFilterProgramOnce;
     std::unique_ptr<skvm::Program> fColorFilterProgram;
+    bool fColorFilterProgramLeavesAlphaUnchanged;
 
     bool   fUsesSampleCoords;
     bool   fAllowColorFilter;
