@@ -40,10 +40,10 @@ static wgpu::LoadOp to_dawn_load_op(GrLoadOp loadOp) {
     }
 }
 
-GrDawnOpsRenderPass::GrDawnOpsRenderPass(GrDawnGpu* gpu, GrRenderTarget* rt, bool useMSAASurface,
-                                         GrSurfaceOrigin origin, const LoadAndStoreInfo& colorInfo,
+GrDawnOpsRenderPass::GrDawnOpsRenderPass(GrDawnGpu* gpu, GrRenderTarget* rt, GrSurfaceOrigin origin,
+                                         const LoadAndStoreInfo& colorInfo,
                                          const StencilLoadAndStoreInfo& stencilInfo)
-        : INHERITED(rt, useMSAASurface, origin)
+        : INHERITED(rt, origin)
         , fGpu(gpu)
         , fColorInfo(colorInfo) {
     fEncoder = fGpu->device().CreateCommandEncoder();
@@ -186,7 +186,7 @@ void GrDawnOpsRenderPass::onBindBuffers(sk_sp<const GrBuffer> indexBuffer,
     }
     if (indexBuffer) {
         wgpu::Buffer index = static_cast<const GrDawnBuffer*>(indexBuffer.get())->get();
-        fPassEncoder.SetIndexBufferWithFormat(index, wgpu::IndexFormat::Uint16);
+        fPassEncoder.SetIndexBuffer(index, wgpu::IndexFormat::Uint16);
     }
 }
 
