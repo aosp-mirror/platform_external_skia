@@ -582,6 +582,20 @@ CanvasKit.onRuntimeInitialized = function() {
     this._drawDRRect(oPtr, iPtr, paint);
   };
 
+  CanvasKit.Canvas.prototype.drawGlyphs = function(glyphs, positions, x, y, font, paint) {
+    if (!(glyphs.length*2 == positions.length)) {
+        throw 'Need glyphs and positions array to agree on the length';
+    }
+
+    const glyphs_ptr    = copy1dArray(glyphs, 'HEAPU16');
+    const positions_ptr = copy1dArray(positions, 'HEAPF32');
+
+    this._drawGlyphs(glyphs.length, glyphs_ptr, positions_ptr, x, y, font, paint);
+
+    freeArraysThatAreNotMallocedByUsers(positions_ptr, positions);
+    freeArraysThatAreNotMallocedByUsers(glyphs_ptr,    glyphs);
+  };
+
   CanvasKit.Canvas.prototype.drawImageNine = function(img, center, dest, filter, paint) {
     var cPtr = copyIRectToWasm(center);
     var dPtr = copyRectToWasm(dest);
@@ -615,13 +629,13 @@ CanvasKit.onRuntimeInitialized = function() {
 
   CanvasKit.Canvas.prototype.drawPatch = function(cubics, colors, texs, mode, paint) {
     if (cubics.length < 24) {
-        throw "Need 12 cubic points";
+        throw 'Need 12 cubic points';
     }
     if (colors && colors.length < 4) {
-        throw "Need 4 colors";
+        throw 'Need 4 colors';
     }
     if (texs && texs.length < 8) {
-        throw "Need 4 shader coordinates";
+        throw 'Need 4 shader coordinates';
     }
 
     const cubics_ptr =          copy1dArray(cubics, 'HEAPF32');
