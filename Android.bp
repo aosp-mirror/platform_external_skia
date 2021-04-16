@@ -723,7 +723,6 @@ cc_library_static {
           "src/gpu/effects/generated/GrClampFragmentProcessor.cpp",
           "src/gpu/effects/generated/GrColorMatrixFragmentProcessor.cpp",
           "src/gpu/effects/generated/GrConfigConversionEffect.cpp",
-          "src/gpu/effects/generated/GrConstColorProcessor.cpp",
           "src/gpu/effects/generated/GrDeviceSpaceEffect.cpp",
           "src/gpu/effects/generated/GrDitherEffect.cpp",
           "src/gpu/effects/generated/GrEllipseEffect.cpp",
