@@ -134,6 +134,7 @@ var CanvasKit = {
     getMaxWidth: function() {},
     getMinIntrinsicWidth: function() {},
     getWordBoundary: function() {},
+    getShapedRuns: function() {},
     layout: function() {},
 
     // private API
@@ -1017,8 +1018,6 @@ var CanvasKit = {
 // unless they go on the prototype.
 CanvasKit.Paragraph.prototype.getRectsForRange = function() {};
 CanvasKit.Paragraph.prototype.getRectsForPlaceholders = function() {};
-
-CanvasKit.Picture.prototype.saveAsFile = function() {};
 
 CanvasKit.Surface.prototype.dispose = function() {};
 CanvasKit.Surface.prototype.flush = function() {};
