@@ -1114,6 +1114,11 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFor, r, ctxInfo) {
         ExpectError error(r, "error: expected 'bool', but found 'int'\n");
         For(i = 0, i + 10, ++i, i += 5).release();
     }
+
+    {
+        ExpectError error(r, "error: invalid for loop initializer\n");
+        For(If(i == 0, i = 1), i < 10, ++i, i += 5).release();
+    }
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFunction, r, ctxInfo) {
@@ -1492,7 +1497,7 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLModifiers, r, ctxInfo) {
     // Uniforms do not need to be explicitly declared
 }
 
-DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSample, r, ctxInfo) {
+DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSampleFragmentProcessor, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/true,
                            SkSL::ProgramKind::kFragmentProcessor);
     DSLVar child(kUniform_Modifier, kFragmentProcessor_Type, "child");
@@ -1507,6 +1512,20 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSample, r, ctxInfo) {
     {
         ExpectError error(r, "error: no match for sample(fragmentProcessor, bool)\n");
         Sample(child, true).release();
+    }
+}
+
+DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSampleShader, r, ctxInfo) {
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/true,
+                           SkSL::ProgramKind::kRuntimeEffect);
+    DSLVar shader(kUniform_Modifier, kShader_Type, "shader");
+    EXPECT_EQUAL(Sample(shader), "sample(shader)");
+    EXPECT_EQUAL(Sample(shader, Float2(0, 0)), "sample(shader, float2(0.0, 0.0))");
+    EXPECT_EQUAL(Sample(shader, Float3x3(1)), "sample(shader, float3x3(1.0))");
+
+    {
+        ExpectError error(r, "error: no match for sample(shader, half4)\n");
+        Sample(shader, Half4(1)).release();
     }
 }
 
