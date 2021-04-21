@@ -81,8 +81,8 @@ public:
                 1, kMaxResolveLevel);
         fIsRoundJoin = isRoundJoin;
 #if USE_SIMD
-        fWangsTermQuadratic = GrWangsFormula::length_term<2>(fTolerances.fParametricIntolerance);
-        fWangsTermCubic = GrWangsFormula::length_term<3>(fTolerances.fParametricIntolerance);
+        fWangsTermQuadratic = GrWangsFormula::length_term<2>(fTolerances.fParametricPrecision);
+        fWangsTermCubic = GrWangsFormula::length_term<3>(fTolerances.fParametricPrecision);
 #endif
     }
 
@@ -112,7 +112,7 @@ public:
 
     void countQuad(const SkPoint pts[3], SkPoint lastControlPoint, int8_t* resolveLevelPtr) {
         float numParametricSegments =
-                GrWangsFormula::quadratic(fTolerances.fParametricIntolerance, pts);
+                GrWangsFormula::quadratic(fTolerances.fParametricPrecision, pts);
         float rotation = SkMeasureQuadRotation(pts);
         if (fIsRoundJoin) {
             SkVector nextTan = ((pts[0] == pts[1]) ? pts[2] : pts[1]) - pts[0];
@@ -122,8 +122,7 @@ public:
     }
 
     void countCubic(const SkPoint pts[4], SkPoint lastControlPoint, int8_t* resolveLevelPtr) {
-        float numParametricSegments =
-                GrWangsFormula::cubic(fTolerances.fParametricIntolerance, pts);
+        float numParametricSegments = GrWangsFormula::cubic(fTolerances.fParametricPrecision, pts);
         SkVector tan0 = ((pts[0] == pts[1]) ? pts[2] : pts[1]) - pts[0];
         SkVector tan1 = pts[3] - ((pts[3] == pts[2]) ? pts[1] : pts[2]);
         float rotation = SkMeasureAngleBetweenVectors(tan0, tan1);
@@ -527,13 +526,7 @@ GrStrokeIndirectTessellator::GrStrokeIndirectTessellator(ShaderFlags shaderFlags
                     // close to what the actual number of subdivisions would have been.
                     [[fallthrough]];
                 case Verb::kQuad: {
-                    // Check for a cusp. A conic of any class can only have a cusp if it is a
-                    // degenerate flat line with a 180 degree turnarund. To detect this, the
-                    // beginning and ending tangents must be parallel (a.cross(b) == 0) and pointing
-                    // in opposite directions (a.dot(b) < 0).
-                    SkVector a = pts[1] - pts[0];
-                    SkVector b = pts[2] - pts[1];
-                    if (a.cross(b) == 0 && a.dot(b) < 0) {
+                    if (GrPathUtils::conicHasCusp(pts)) {
                         // The curve has a cusp. Draw two lines and a circle instead of a quad.
                         int8_t cuspResolveLevel = counter.countCircles(1);
                         *nextResolveLevel++ = -cuspResolveLevel;  // Negative signals a cusp.
