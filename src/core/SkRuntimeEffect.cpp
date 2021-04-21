@@ -91,20 +91,6 @@ SharedCompiler::Impl* SharedCompiler::gImpl = nullptr;
 
 }  // namespace SkSL
 
-// Accepts a valid marker, or "normals(<marker>)"
-static bool parse_marker(const SkSL::StringFragment& marker, uint32_t* id, uint32_t* flags) {
-    SkString s = marker;
-    if (s.startsWith("normals(") && s.endsWith(')')) {
-        *flags |= SkRuntimeEffect::Uniform::kMarkerNormals_Flag;
-        s.set(marker.fChars + 8, marker.fLength - 9);
-    }
-    if (!SkCanvasPriv::ValidateMarker(s.c_str())) {
-        return false;
-    }
-    *id = SkOpts::hash_fn(s.c_str(), s.size(), 0);
-    return true;
-}
-
 static bool init_uniform_type(const SkSL::Context& ctx,
                               const SkSL::Type* type,
                               SkRuntimeEffect::Uniform* v) {
@@ -148,12 +134,7 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl, const Options& opti
         settings.fInlineThreshold = 0;
         settings.fForceNoInline = options.forceNoInline;
         settings.fAllowNarrowingConversions = true;
-        program = compiler->convertProgram(SkSL::ProgramKind::kRuntimeEffect,
-                                           SkSL::String(sksl.c_str(), sksl.size()),
-                                           settings);
-        // TODO: Many errors aren't caught until we process the generated Program here. Catching those
-        // in the IR generator would provide better errors messages (with locations).
-        #define RETURN_FAILURE(...) return Result{nullptr, SkStringPrintf(__VA_ARGS__)}
+        program = compiler->convertProgram(kind, SkSL::String(sksl.c_str(), sksl.size()), settings);
 
         if (!program) {
             RETURN_FAILURE("%s", compiler->errorText().c_str());
@@ -178,7 +159,19 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl,
     settings.fForceNoInline = options.forceNoInline;
     settings.fAllowNarrowingConversions = true;
 
-    const SkSL::FunctionDefinition* main = nullptr;
+    // Find 'main', then locate the sample coords parameter. (It might not be present.)
+    const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
+    if (!main) {
+        RETURN_FAILURE("missing 'main' function");
+    }
+    const auto& mainParams = main->declaration().parameters();
+    auto iter = std::find_if(mainParams.begin(), mainParams.end(), [](const SkSL::Variable* p) {
+        return p->modifiers().fLayout.fBuiltin == SK_MAIN_COORDS_BUILTIN;
+    });
+    const SkSL::ProgramUsage::VariableCounts sampleCoordsUsage =
+            iter != mainParams.end() ? program->usage()->get(**iter)
+                                     : SkSL::ProgramUsage::VariableCounts{};
+
     uint32_t flags = 0;
     switch (kind) {
         case SkSL::ProgramKind::kRuntimeColorFilter: flags |= kAllowColorFilter_Flag; break;
@@ -187,7 +180,9 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl,
                                                                kAllowShader_Flag);    break;
         default: SkUNREACHABLE;
     }
-    if (SkSL::Analysis::ReferencesSampleCoords(*program)) {
+
+
+    if (sampleCoordsUsage.fRead || sampleCoordsUsage.fWrite) {
         flags |= kUsesSampleCoords_Flag;
     }
 
@@ -195,13 +190,11 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl,
     // can sample children with matrices or explicit coords. Because the children are color filters,
     // we know (by induction) that they don't use those coords, so we keep the overall invariant.
     //
-    // Further down, we also ensure that color filters can't use varyings or layout(marker), which
-    // would allow them to change behavior based on the CTM.
     // TODO(skbug.com/11813): When ProgramKind is always kRuntimeColorFilter or kRuntimeShader,
     // this can be simpler. There is no way for color filters to refer to sk_FragCoord or sample
     // coords in that mode.
     if ((flags & kAllowColorFilter_Flag) &&
-        (SkSL::Analysis::ReferencesFragCoords(*program) || (flags & kUsesSampleCoords_Flag))) {
+        ((flags & kUsesSampleCoords_Flag) || SkSL::Analysis::ReferencesFragCoords(*program))) {
         flags &= ~kAllowColorFilter_Flag;
     }
 
@@ -209,12 +202,11 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl,
     std::vector<Uniform> uniforms;
     std::vector<SkString> children;
     std::vector<SkSL::SampleUsage> sampleUsages;
-    std::vector<Varying> varyings;
     const SkSL::Context& ctx(compiler->context());
 
     // Go through program elements, pulling out information that we need
     for (const SkSL::ProgramElement* elem : program->elements()) {
-        // Variables (uniform, varying, etc.)
+        // Variables (uniform, etc.)
         if (elem->is<SkSL::GlobalVarDeclaration>()) {
             const SkSL::GlobalVarDeclaration& global = elem->as<SkSL::GlobalVarDeclaration>();
             const SkSL::VarDeclaration& varDecl = global.declaration()->as<SkSL::VarDeclaration>();
@@ -222,18 +214,11 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl,
             const SkSL::Variable& var = varDecl.var();
             const SkSL::Type& varType = var.type();
 
-            // Varyings (only used in conjunction with drawVertices)
-            if (var.modifiers().fFlags & SkSL::Modifiers::kVarying_Flag) {
-                flags &= ~kAllowColorFilter_Flag;
-                varyings.push_back({var.name(),
-                                    varType.typeKind() == SkSL::Type::TypeKind::kVector
-                                            ? varType.columns()
-                                            : 1});
-            }
             // Child effects that can be sampled ('shader' or 'colorFilter')
-            else if (varType.isEffectChild()) {
+            if (varType.isEffectChild()) {
                 children.push_back(var.name());
-                sampleUsages.push_back(SkSL::Analysis::GetSampleUsage(*program, var));
+                sampleUsages.push_back(SkSL::Analysis::GetSampleUsage(
+                        *program, var, sampleCoordsUsage.fWrite != 0));
             }
             // 'uniform' variables
             else if (var.modifiers().fFlags & SkSL::Modifiers::kUniform_Flag) {
@@ -253,16 +238,6 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl,
                     RETURN_FAILURE("Invalid uniform type: '%s'", type->displayName().c_str());
                 }
 
-                const SkSL::StringFragment& marker(var.modifiers().fLayout.fMarker);
-                if (marker.fLength) {
-                    uni.flags |= Uniform::kMarker_Flag;
-                    flags &= ~kAllowColorFilter_Flag;
-                    if (!parse_marker(marker, &uni.marker, &uni.flags)) {
-                        RETURN_FAILURE("Invalid 'marker' string: '%.*s'", (int)marker.fLength,
-                                        marker.fChars);
-                    }
-                }
-
                 if (var.modifiers().fLayout.fFlags & SkSL::Layout::Flag::kSRGBUnpremul_Flag) {
                     uni.flags |= Uniform::kSRGBUnpremul_Flag;
                 }
@@ -274,18 +249,6 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl,
                 uniforms.push_back(uni);
             }
         }
-        // Functions
-        else if (elem->is<SkSL::FunctionDefinition>()) {
-            const auto& func = elem->as<SkSL::FunctionDefinition>();
-            const SkSL::FunctionDeclaration& decl = func.declaration();
-            if (decl.isMain()) {
-                main = &func;
-            }
-        }
-    }
-
-    if (!main) {
-        RETURN_FAILURE("missing 'main' function");
     }
 
 #undef RETURN_FAILURE
@@ -297,7 +260,6 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl,
                                                       std::move(uniforms),
                                                       std::move(children),
                                                       std::move(sampleUsages),
-                                                      std::move(varyings),
                                                       flags));
     return Result{std::move(effect), SkString()};
 }
@@ -401,7 +363,6 @@ SkRuntimeEffect::SkRuntimeEffect(SkString sksl,
                                  std::vector<Uniform>&& uniforms,
                                  std::vector<SkString>&& children,
                                  std::vector<SkSL::SampleUsage>&& sampleUsages,
-                                 std::vector<Varying>&& varyings,
                                  uint32_t flags)
         : fHash(SkGoodHash()(sksl))
         , fSkSL(std::move(sksl))
@@ -410,7 +371,6 @@ SkRuntimeEffect::SkRuntimeEffect(SkString sksl,
         , fUniforms(std::move(uniforms))
         , fChildren(std::move(children))
         , fSampleUsages(std::move(sampleUsages))
-        , fVaryings(std::move(varyings))
         , fFlags(flags) {
     SkASSERT(fBaseProgram);
     SkASSERT(fChildren.size() == fSampleUsages.size());
@@ -507,7 +467,6 @@ SkRuntimeEffect::FilterColorInfo SkRuntimeEffect::getFilterColorInfo() {
 
 static sk_sp<SkData> get_xformed_uniforms(const SkRuntimeEffect* effect,
                                           sk_sp<SkData> baseUniforms,
-                                          const SkMatrixProvider* matrixProvider,
                                           const SkColorSpace* dstCS) {
     using Flags = SkRuntimeEffect::Uniform::Flags;
     using Type = SkRuntimeEffect::Uniform::Type;
@@ -523,26 +482,7 @@ static sk_sp<SkData> get_xformed_uniforms(const SkRuntimeEffect* effect,
     };
 
     for (const auto& v : effect->uniforms()) {
-        if (v.flags & Flags::kMarker_Flag) {
-            SkASSERT(v.type == Type::kFloat4x4);
-            // Color filters don't provide a matrix provider, but shouldn't be allowed to get here
-            SkASSERT(matrixProvider);
-            SkM44* localToMarker = SkTAddOffset<SkM44>(writableData(), v.offset);
-            if (!matrixProvider->getLocalToMarker(v.marker, localToMarker)) {
-                // We couldn't provide a matrix that was requested by the SkSL
-                return nullptr;
-            }
-            if (v.flags & Flags::kMarkerNormals_Flag) {
-                // Normals need to be transformed by the inverse-transpose of the upper-left
-                // 3x3 portion (scale + rotate) of the matrix.
-                localToMarker->setRow(3, {0, 0, 0, 1});
-                localToMarker->setCol(3, {0, 0, 0, 1});
-                if (!localToMarker->invert(localToMarker)) {
-                    return nullptr;
-                }
-                *localToMarker = localToMarker->transpose();
-            }
-        } else if (v.flags & Flags::kSRGBUnpremul_Flag) {
+        if (v.flags & Flags::kSRGBUnpremul_Flag) {
             SkASSERT(v.type == Type::kFloat3 || v.type == Type::kFloat4);
             if (steps.flags.mask()) {
                 float* color = SkTAddOffset<float>(writableData(), v.offset);
@@ -586,10 +526,8 @@ public:
                                    GrRecordingContext* context,
                                    const GrColorInfo& colorInfo) const override {
         sk_sp<SkData> uniforms =
-                get_xformed_uniforms(fEffect.get(), fUniforms, nullptr, colorInfo.colorSpace());
-        if (!uniforms) {
-            return GrFPFailure(nullptr);
-        }
+                get_xformed_uniforms(fEffect.get(), fUniforms, colorInfo.colorSpace());
+        SkASSERT(uniforms);
 
         auto fp = GrSkSLFP::Make(fEffect, "Runtime_Color_Filter", std::move(uniforms));
         for (const auto& child : fChildren) {
@@ -620,10 +558,8 @@ public:
     skvm::Color onProgram(skvm::Builder* p, skvm::Color c,
                           SkColorSpace* dstCS,
                           skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const override {
-        sk_sp<SkData> inputs = get_xformed_uniforms(fEffect.get(), fUniforms, nullptr, dstCS);
-        if (!inputs) {
-            return {};
-        }
+        sk_sp<SkData> inputs = get_xformed_uniforms(fEffect.get(), fUniforms, dstCS);
+        SkASSERT(inputs);
 
         // The color filter code might use sample-with-matrix (even though the matrix/coords are
         // ignored by the child). There should be no way for the color filter to use device coords.
@@ -657,9 +593,7 @@ public:
         const skvm::Program& program = fEffect->getFilterColorInfo().program;
 
         // Get our specific uniform values
-        sk_sp<SkData> inputs = get_xformed_uniforms(fEffect.get(), fUniforms, nullptr, dstCS);
-
-        // There should be no way for a color filter (which can't use "marker") to fail here
+        sk_sp<SkData> inputs = get_xformed_uniforms(fEffect.get(), fUniforms, dstCS);
         SkASSERT(inputs);
 
         // 'program' defines sampling any child as returning a uniform color. Assemble a buffer
@@ -746,11 +680,9 @@ public:
             return nullptr;
         }
 
-        sk_sp<SkData> uniforms = get_xformed_uniforms(
-                fEffect.get(), fUniforms, &args.fMatrixProvider, args.fDstColorInfo->colorSpace());
-        if (!uniforms) {
-            return nullptr;
-        }
+        sk_sp<SkData> uniforms =
+                get_xformed_uniforms(fEffect.get(), fUniforms, args.fDstColorInfo->colorSpace());
+        SkASSERT(uniforms);
 
         auto fp = GrSkSLFP::Make(fEffect, "runtime_shader", std::move(uniforms));
         for (const auto& child : fChildren) {
@@ -788,11 +720,8 @@ public:
                           const SkMatrixProvider& matrices, const SkMatrix* localM,
                           const SkColorInfo& dst,
                           skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const override {
-        sk_sp<SkData> inputs =
-                get_xformed_uniforms(fEffect.get(), fUniforms, &matrices, dst.colorSpace());
-        if (!inputs) {
-            return {};
-        }
+        sk_sp<SkData> inputs = get_xformed_uniforms(fEffect.get(), fUniforms, dst.colorSpace());
+        SkASSERT(inputs);
 
         SkMatrix inv;
         if (!this->computeTotalInverse(matrices.localToDevice(), localM, &inv)) {
@@ -953,18 +882,13 @@ sk_sp<SkImage> SkRuntimeEffect::makeImage(GrRecordingContext* recordingContext,
         if (!fillContext) {
             return nullptr;
         }
-        SkSimpleMatrixProvider matrixProvider(SkMatrix::I());
-        uniforms = get_xformed_uniforms(this,
-                                        std::move(uniforms),
-                                        &matrixProvider,
-                                        resultInfo.colorSpace());
-        if (!uniforms) {
-            return nullptr;
-        }
+        uniforms = get_xformed_uniforms(this, std::move(uniforms), resultInfo.colorSpace());
+        SkASSERT(uniforms);
 
         auto fp = GrSkSLFP::Make(sk_ref_sp(this),
                                  "runtime_image",
                                  std::move(uniforms));
+        SkSimpleMatrixProvider matrixProvider(SkMatrix::I());
         GrColorInfo colorInfo(resultInfo.colorInfo());
         GrFPArgs args(recordingContext, matrixProvider, &colorInfo);
         for (size_t i = 0; i < childCount; ++i) {

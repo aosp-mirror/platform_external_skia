@@ -59,9 +59,7 @@ public:
 
         enum Flags {
             kArray_Flag         = 0x1,
-            kMarker_Flag        = 0x2,
-            kMarkerNormals_Flag = 0x4,
-            kSRGBUnpremul_Flag  = 0x8,
+            kSRGBUnpremul_Flag  = 0x2,
         };
 
         SkString  name;
@@ -69,15 +67,9 @@ public:
         Type      type;
         int       count;
         uint32_t  flags;
-        uint32_t  marker;
 
         bool isArray() const { return SkToBool(this->flags & kArray_Flag); }
         size_t sizeInBytes() const;
-    };
-
-    struct Varying {
-        SkString name;
-        int      width;  // 1 - 4 (floats)
     };
 
     struct Options {
@@ -172,7 +164,6 @@ public:
 
     ConstIterable<Uniform> uniforms() const { return ConstIterable<Uniform>(fUniforms); }
     ConstIterable<SkString> children() const { return ConstIterable<SkString>(fChildren); }
-    ConstIterable<Varying> varyings() const { return ConstIterable<Varying>(fVaryings); }
 
     // Returns pointer to the named uniform variable's description, or nullptr if not found
     const Uniform* findUniform(const char* name) const;
@@ -204,7 +195,6 @@ private:
                     std::vector<Uniform>&& uniforms,
                     std::vector<SkString>&& children,
                     std::vector<SkSL::SampleUsage>&& sampleUsages,
-                    std::vector<Varying>&& varyings,
                     uint32_t flags);
 
     static Result Make(std::unique_ptr<SkSL::Program> program, SkSL::ProgramKind kind);
@@ -241,7 +231,6 @@ private:
     std::vector<Uniform> fUniforms;
     std::vector<SkString> fChildren;
     std::vector<SkSL::SampleUsage> fSampleUsages;
-    std::vector<Varying>  fVaryings;
 
     SkOnce fColorFilterProgramOnce;
     std::unique_ptr<skvm::Program> fColorFilterProgram;
