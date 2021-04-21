@@ -7,11 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+ - Add 'drawGlyphs' to 'Canvas'
  - Add `drawPatch` to `Canvas`.
  - Add `Strut` as a `RectHeightStyle` enum.
  - `CanvasKit.RuntimeEffect` now supports integer uniforms in the SkSL. These are still passed
    to `RuntimeEffect.makeShader` as floats (like all other uniforms), and will be converted to
    integers internally, to match the expectations of the shader.
+ - Add 'halfLeading' to `TextStyle` and `StrutStyle`.
+
+### Removed
+ - `Picture.saveAsFile()`, in favor of `Picture.serialize()` where clients can control how to
+    store/encode the bytes.
 
 ## [0.25.1] - 2021-03-30
 

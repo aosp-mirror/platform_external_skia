@@ -7,7 +7,7 @@
 
 #include "src/gpu/GrShaderCaps.h"
 #include "src/sksl/SkSLCompiler.h"
-#include "src/sksl/SkSLPipelineStageCodeGenerator.h"
+#include "src/sksl/codegen/SkSLPipelineStageCodeGenerator.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/ir/SkSLVariable.h"
 
@@ -49,7 +49,7 @@ bool FuzzSKSL2Pipeline(sk_sp<SkData> bytes) {
     };
 
     Callbacks callbacks;
-    SkSL::PipelineStage::ConvertProgram(*program, "coords", &callbacks);
+    SkSL::PipelineStage::ConvertProgram(*program, "coords", "inColor", &callbacks);
     return true;
 }
 

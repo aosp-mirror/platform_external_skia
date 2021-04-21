@@ -355,11 +355,14 @@ inline void GrOpsTask::OpChain::validate() const {
 
 GrOpsTask::GrOpsTask(GrDrawingManager* drawingMgr,
                      GrSurfaceProxyView view,
-                     GrAuditTrail* auditTrail)
+                     GrAuditTrail* auditTrail,
+                     sk_sp<GrArenas> arenas)
         : GrRenderTask()
         , fAuditTrail(auditTrail)
+        , fUsesMSAASurface(view.asRenderTargetProxy()->numSamples() > 1)
         , fTargetSwizzle(view.swizzle())
         , fTargetOrigin(view.origin())
+        , fArenas{std::move(arenas)}
           SkDEBUGCODE(, fNumClips(0)) {
     fAllocators.push_back(std::make_unique<SkArenaAlloc>(4096));
     this->addTarget(drawingMgr, view.detachProxy());
@@ -374,6 +377,7 @@ void GrOpsTask::deleteOps() {
 
 GrOpsTask::~GrOpsTask() {
     this->deleteOps();
+    this->target(0)->asRenderTargetProxy()->clearArenas();
 }
 
 void GrOpsTask::addOp(GrDrawingManager* drawingMgr, GrOp::Owner op,
@@ -479,6 +483,7 @@ void GrOpsTask::onPrepare(GrOpFlushState* flushState) {
 #endif
             GrOpFlushState::OpArgs opArgs(chain.head(),
                                           dstView,
+                                          fUsesMSAASurface,
                                           chain.appliedClip(),
                                           chain.dstProxyView(),
                                           fRenderPassXferBarriers,
@@ -501,6 +506,7 @@ void GrOpsTask::onPrepare(GrOpFlushState* flushState) {
 
 static GrOpsRenderPass* create_render_pass(GrGpu* gpu,
                                            GrRenderTarget* rt,
+                                           bool useMSAASurface,
                                            GrAttachment* stencil,
                                            GrSurfaceOrigin origin,
                                            const SkIRect& bounds,
@@ -526,9 +532,8 @@ static GrOpsRenderPass* create_render_pass(GrGpu* gpu,
         stencilStoreOp,
     };
 
-    return gpu->getOpsRenderPass(rt, stencil, origin, bounds,
-                                 kColorLoadStoreInfo, stencilLoadAndStoreInfo, sampledProxies,
-                                 renderPassXferBarriers);
+    return gpu->getOpsRenderPass(rt, useMSAASurface, stencil, origin, bounds, kColorLoadStoreInfo,
+                                 stencilLoadAndStoreInfo, sampledProxies, renderPassXferBarriers);
 }
 
 // TODO: this is where GrOp::renderTarget is used (which is fine since it
@@ -612,6 +617,7 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
 
     GrOpsRenderPass* renderPass = create_render_pass(flushState->gpu(),
                                                      proxy->peekRenderTarget(),
+                                                     fUsesMSAASurface,
                                                      stencil,
                                                      fTargetOrigin,
                                                      fClippedContentBounds,
@@ -641,6 +647,7 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
 
         GrOpFlushState::OpArgs opArgs(chain.head(),
                                       dstView,
+                                      fUsesMSAASurface,
                                       chain.appliedClip(),
                                       chain.dstProxyView(),
                                       fRenderPassXferBarriers,

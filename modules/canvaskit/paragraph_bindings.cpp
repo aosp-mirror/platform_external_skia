@@ -11,7 +11,6 @@
 
 #include "modules/skparagraph/include/DartTypes.h"
 #include "modules/skparagraph/include/Paragraph.h"
-#include "modules/skparagraph/include/ParagraphBuilder.h"
 #include "modules/skparagraph/include/TextStyle.h"
 #include "modules/skparagraph/include/TypefaceFontProvider.h"
 #include "modules/skparagraph/src/ParagraphBuilderImpl.h"
@@ -53,6 +52,7 @@ struct SimpleTextStyle {
     SkScalar letterSpacing;
     SkScalar wordSpacing;
     SkScalar heightMultiplier;
+    bool halfLeading;
     uintptr_t /* const char* */ localePtr;
     int localeLen;
     SimpleFontStyle fontStyle;
@@ -76,6 +76,7 @@ struct SimpleStrutStyle {
     SimpleFontStyle fontStyle;
     SkScalar fontSize;
     SkScalar heightMultiplier;
+    bool halfLeading;
     SkScalar leading;
     bool strutEnabled;
     bool forceStrutHeight;
@@ -103,6 +104,8 @@ para::StrutStyle toStrutStyle(const SimpleStrutStyle& s) {
         ss.setHeight(s.heightMultiplier);
         ss.setHeightOverride(true);
     }
+    ss.setHalfLeading(s.halfLeading);
+
     if (s.leading != 0) {
         ss.setLeading(s.leading);
     }
@@ -147,6 +150,8 @@ para::TextStyle toTextStyle(const SimpleTextStyle& s) {
         ts.setHeight(s.heightMultiplier);
         ts.setHeightOverride(true);
     }
+
+    ts.setHalfLeading(s.halfLeading);
 
     ts.setDecoration(para::TextDecoration(s.decoration));
     ts.setDecorationStyle(s.decorationStyle);
@@ -304,6 +309,55 @@ JSArray GetLineMetrics(para::Paragraph& self) {
     return result;
 }
 
+/*
+ *  Returns Runs[K]
+ *
+ *  Run --> { font: ???, glyphs[N], positions[N*2], offsets[N], origin: x,y }
+ *
+ *  K = number of runs
+ *  N = number of glyphs in a given run
+ */
+JSArray GetShapedRuns(para::Paragraph& self) {
+    struct Run {
+        SkFont  font;
+        SkPoint origin;
+        int     index;
+        int     count;
+    };
+    std::vector<Run>      runs;
+    std::vector<uint16_t> glyphs;
+    std::vector<SkPoint>  positions;
+    std::vector<uint32_t> offsets;
+
+    self.visit([&](const para::Paragraph::VisitorInfo& info) {
+        // add 1 Run
+        runs.push_back({info.font, info.origin, (int)glyphs.size(), info.count});
+        // append the arrays
+        glyphs.insert(glyphs.end(), info.glyphs, info.glyphs + info.count);
+        positions.insert(positions.end(), info.positions, info.positions + info.count);
+        offsets.insert(offsets.end(), info.utf8Starts, info.utf8Starts + info.count);
+    });
+
+    JSArray jruns = emscripten::val::array();
+
+    for (const auto& crun : runs) {
+        const int N = crun.count;
+        const int I = crun.index;
+
+        JSObject jrun = emscripten::val::object();
+
+        jrun.set("glyphs"   , MakeTypedArray(N,   &glyphs[I],       "Uint16Array"));
+        jrun.set("positions", MakeTypedArray(N*2, &positions[I].fX, "Float32Array"));
+        jrun.set("offsets"  , MakeTypedArray(N,   &offsets[I],      "Uint32Array"));
+        jrun.set("origin_x" , crun.origin.fX);
+        jrun.set("origin_y" , crun.origin.fY);
+
+        jruns.call<void>("push", jrun);
+
+    }
+    return jruns;
+}
+
 EMSCRIPTEN_BINDINGS(Paragraph) {
 
     class_<para::Paragraph>("Paragraph")
@@ -319,6 +373,7 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         .function("getMinIntrinsicWidth", &para::Paragraph::getMinIntrinsicWidth)
         .function("_getRectsForPlaceholders", &GetRectsForPlaceholders)
         .function("_getRectsForRange", &GetRectsForRange)
+        .function("getShapedRuns", &GetShapedRuns)
         .function("getWordBoundary", &para::Paragraph::getWordBoundary)
         .function("layout", &para::Paragraph::layout);
 
@@ -398,82 +453,6 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
       }), allow_raw_pointers());
 
 
-    enum_<para::Affinity>("Affinity")
-        .value("Upstream",   para::Affinity::kUpstream)
-        .value("Downstream", para::Affinity::kDownstream);
-
-    enum_<para::TextDecorationStyle>("DecorationStyle")
-        .value("Solid",  para::TextDecorationStyle::kSolid)
-        .value("Double", para::TextDecorationStyle::kDouble)
-        .value("Dotted", para::TextDecorationStyle::kDotted)
-        .value("Dashed", para::TextDecorationStyle::kDashed)
-        .value("Wavy",   para::TextDecorationStyle::kWavy);
-
-    enum_<SkFontStyle::Slant>("FontSlant")
-        .value("Upright",              SkFontStyle::Slant::kUpright_Slant)
-        .value("Italic",               SkFontStyle::Slant::kItalic_Slant)
-        .value("Oblique",              SkFontStyle::Slant::kOblique_Slant);
-
-    enum_<SkFontStyle::Weight>("FontWeight")
-        .value("Invisible",            SkFontStyle::Weight::kInvisible_Weight)
-        .value("Thin",                 SkFontStyle::Weight::kThin_Weight)
-        .value("ExtraLight",           SkFontStyle::Weight::kExtraLight_Weight)
-        .value("Light",                SkFontStyle::Weight::kLight_Weight)
-        .value("Normal",               SkFontStyle::Weight::kNormal_Weight)
-        .value("Medium",               SkFontStyle::Weight::kMedium_Weight)
-        .value("SemiBold",             SkFontStyle::Weight::kSemiBold_Weight)
-        .value("Bold",                 SkFontStyle::Weight::kBold_Weight)
-        .value("ExtraBold",            SkFontStyle::Weight::kExtraBold_Weight)
-        .value("Black"    ,            SkFontStyle::Weight::kBlack_Weight)
-        .value("ExtraBlack",           SkFontStyle::Weight::kExtraBlack_Weight);
-
-    enum_<SkFontStyle::Width>("FontWidth")
-        .value("UltraCondensed",       SkFontStyle::Width::kUltraCondensed_Width)
-        .value("ExtraCondensed",       SkFontStyle::Width::kExtraCondensed_Width)
-        .value("Condensed",            SkFontStyle::Width::kCondensed_Width)
-        .value("SemiCondensed",        SkFontStyle::Width::kSemiCondensed_Width)
-        .value("Normal",               SkFontStyle::Width::kNormal_Width)
-        .value("SemiExpanded",         SkFontStyle::Width::kSemiExpanded_Width)
-        .value("Expanded",             SkFontStyle::Width::kExpanded_Width)
-        .value("ExtraExpanded",        SkFontStyle::Width::kExtraExpanded_Width)
-        .value("UltraExpanded",        SkFontStyle::Width::kUltraExpanded_Width);
-
-    enum_<para::PlaceholderAlignment>("PlaceholderAlignment")
-        .value("Baseline",      para::PlaceholderAlignment::kBaseline)
-        .value("AboveBaseline", para::PlaceholderAlignment::kAboveBaseline)
-        .value("BelowBaseline", para::PlaceholderAlignment::kBelowBaseline)
-        .value("Top",           para::PlaceholderAlignment::kTop)
-        .value("Bottom",        para::PlaceholderAlignment::kBottom)
-        .value("Middle",        para::PlaceholderAlignment::kMiddle);
-
-    enum_<para::RectHeightStyle>("RectHeightStyle")
-        .value("Tight",                     para::RectHeightStyle::kTight)
-        .value("Max",                       para::RectHeightStyle::kMax)
-        .value("IncludeLineSpacingMiddle",  para::RectHeightStyle::kIncludeLineSpacingMiddle)
-        .value("IncludeLineSpacingTop",     para::RectHeightStyle::kIncludeLineSpacingTop)
-        .value("IncludeLineSpacingBottom",  para::RectHeightStyle::kIncludeLineSpacingBottom)
-        .value("Strut",                     para::RectHeightStyle::kStrut);
-
-    enum_<para::RectWidthStyle>("RectWidthStyle")
-        .value("Tight",  para::RectWidthStyle::kTight)
-        .value("Max",    para::RectWidthStyle::kMax);
-
-    enum_<para::TextAlign>("TextAlign")
-        .value("Left",    para::TextAlign::kLeft)
-        .value("Right",   para::TextAlign::kRight)
-        .value("Center",  para::TextAlign::kCenter)
-        .value("Justify", para::TextAlign::kJustify)
-        .value("Start",   para::TextAlign::kStart)
-        .value("End",     para::TextAlign::kEnd);
-
-    enum_<para::TextBaseline>("TextBaseline")
-        .value("Alphabetic",  para::TextBaseline::kAlphabetic)
-        .value("Ideographic", para::TextBaseline::kIdeographic);
-
-    enum_<para::TextDirection>("TextDirection")
-        .value("LTR",    para::TextDirection::kLtr)
-        .value("RTL",    para::TextDirection::kRtl);
-
     // These value objects make it easier to send data across the wire.
     value_object<para::PositionWithAffinity>("PositionWithAffinity")
         .field("pos",      &para::PositionWithAffinity::position)
@@ -502,6 +481,7 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         .field("fontSize",         &SimpleStrutStyle::fontSize)
         .field("fontStyle",        &SimpleStrutStyle::fontStyle)
         .field("heightMultiplier", &SimpleStrutStyle::heightMultiplier)
+        .field("halfLeading",      &SimpleStrutStyle::halfLeading)
         .field("leading",          &SimpleStrutStyle::leading)
         .field("forceStrutHeight", &SimpleStrutStyle::forceStrutHeight);
 
@@ -519,6 +499,7 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         .field("letterSpacing",         &SimpleTextStyle::letterSpacing)
         .field("wordSpacing",           &SimpleTextStyle::wordSpacing)
         .field("heightMultiplier",      &SimpleTextStyle::heightMultiplier)
+        .field("halfLeading",           &SimpleTextStyle::halfLeading)
         .field("_localePtr",            &SimpleTextStyle::localePtr)
         .field("_localeLen",            &SimpleTextStyle::localeLen)
         .field("fontStyle",             &SimpleTextStyle::fontStyle)

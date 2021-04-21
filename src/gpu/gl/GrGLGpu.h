@@ -71,7 +71,7 @@ public:
     GrGLenum bindBuffer(GrGpuBufferType type, const GrBuffer*);
 
     // Flushes state from GrProgramInfo to GL. Returns false if the state couldn't be set.
-    bool flushGLState(GrRenderTarget*, const GrProgramInfo&);
+    bool flushGLState(GrRenderTarget*, bool useMultisampleFBO, const GrProgramInfo&);
     void flushScissorRect(const SkIRect& scissor, int rtHeight, GrSurfaceOrigin);
 
     // The flushRenderTarget methods will all set the initial viewport to the full extent of the
@@ -106,7 +106,8 @@ public:
     // The GrGLOpsRenderPass does not buffer up draws before submitting them to the gpu.
     // Thus this is the implementation of the clear call for the corresponding passthrough function
     // on GrGLOpsRenderPass.
-    void clear(const GrScissorState&, std::array<float, 4> color, GrRenderTarget*, GrSurfaceOrigin);
+    void clear(const GrScissorState&, std::array<float, 4> color, GrRenderTarget*,
+               bool useMultisampleFBO, GrSurfaceOrigin);
 
     // The GrGLOpsRenderPass does not buffer up draws before submitting them to the gpu.
     // Thus this is the implementation of the clearStencil call for the corresponding passthrough
@@ -114,11 +115,13 @@ public:
     void clearStencilClip(const GrScissorState&, bool insideStencilMask,
                           GrRenderTarget*, GrSurfaceOrigin);
 
-    void beginCommandBuffer(GrRenderTarget*, const SkIRect& bounds, GrSurfaceOrigin,
+    void beginCommandBuffer(GrRenderTarget*, bool useMultisampleFBO,
+                            const SkIRect& bounds, GrSurfaceOrigin,
                             const GrOpsRenderPass::LoadAndStoreInfo& colorLoadStore,
                             const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilLoadStore);
 
-    void endCommandBuffer(GrRenderTarget*, const GrOpsRenderPass::LoadAndStoreInfo& colorLoadStore,
+    void endCommandBuffer(GrRenderTarget*, bool useMultisampleFBO,
+                          const GrOpsRenderPass::LoadAndStoreInfo& colorLoadStore,
                           const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilLoadStore);
 
     void invalidateBoundRenderTarget() {
@@ -209,13 +212,14 @@ private:
                                                       GrMipmapped,
                                                       GrProtected) override;
 
-    bool onUpdateBackendTexture(const GrBackendTexture&,
-                                sk_sp<GrRefCntedCallback> finishedCallback,
-                                const BackendTextureData*) override;
+    bool onClearBackendTexture(const GrBackendTexture&,
+                               sk_sp<GrRefCntedCallback> finishedCallback,
+                               std::array<float, 4> color) override;
 
     bool onUpdateCompressedBackendTexture(const GrBackendTexture&,
                                           sk_sp<GrRefCntedCallback> finishedCallback,
-                                          const BackendTextureData*) override;
+                                          const void* data,
+                                          size_t length) override;
 
     void onResetContext(uint32_t resetBits) override;
 
@@ -329,6 +333,7 @@ private:
                          GrGpuFinishedContext finishedContext) override;
 
     GrOpsRenderPass* onGetOpsRenderPass(GrRenderTarget*,
+                                        bool useMSAASurface,
                                         GrAttachment*,
                                         GrSurfaceOrigin,
                                         const SkIRect&,
@@ -356,7 +361,6 @@ private:
         void abandon();
         void reset();
         sk_sp<GrGLProgram> findOrCreateProgram(GrDirectContext*,
-                                               GrRenderTarget*,
                                                const GrProgramInfo&);
         sk_sp<GrGLProgram> findOrCreateProgram(GrDirectContext*,
                                                const GrProgramDesc&,
@@ -367,11 +371,10 @@ private:
     private:
         struct Entry;
 
-        sk_sp<GrGLProgram> findOrCreateProgram(GrDirectContext*,
-                                               GrRenderTarget*,
-                                               const GrProgramDesc&,
-                                               const GrProgramInfo&,
-                                               Stats::ProgramCacheResult*);
+        sk_sp<GrGLProgram> findOrCreateProgramImpl(GrDirectContext*,
+                                                   const GrProgramDesc&,
+                                                   const GrProgramInfo&,
+                                                   Stats::ProgramCacheResult*);
 
         struct DescHash {
             uint32_t operator()(const GrProgramDesc& desc) const {
@@ -450,7 +453,7 @@ private:
     bool uploadColorToTex(GrGLFormat textureFormat,
                           SkISize texDims,
                           GrGLenum target,
-                          SkColor4f color,
+                          std::array<float, 4> color,
                           uint32_t levelMask);
 
     // Pushes data to the currently bound texture to the currently active unit. 'dstRect' must be

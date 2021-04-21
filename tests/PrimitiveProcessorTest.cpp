@@ -80,14 +80,14 @@ private:
                     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
                         const GP& gp = args.fGeomProc.cast<GP>();
                         args.fVaryingHandler->emitAttributes(gp);
-                        this->writeOutputPosition(args.fVertBuilder, gpArgs,
-                                                  gp.fAttributes[0].name());
+                        WriteOutputPosition(args.fVertBuilder, gpArgs, gp.fAttributes[0].name());
                         GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
                         fragBuilder->codeAppendf("const half4 %s = half4(1);", args.fOutputColor);
                         fragBuilder->codeAppendf("const half4 %s = half4(1);",
                                                  args.fOutputCoverage);
                     }
                     void setData(const GrGLSLProgramDataManager&,
+                                 const GrShaderCaps&,
                                  const GrGeometryProcessor&) override {}
                 };
                 return new GLSLGP();
@@ -175,8 +175,9 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(VertexAttributeCount, reporter, ctxInfo) {
     GrGpu* gpu = context->priv().getGpu();
 #endif
 
-    auto surfaceDrawContext = GrSurfaceDrawContext::Make(
-            context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {1, 1});
+    auto surfaceDrawContext = GrSurfaceDrawContext::Make(context, GrColorType::kRGBA_8888, nullptr,
+                                                         SkBackingFit::kApprox, {1, 1},
+                                                         SkSurfaceProps());
     if (!surfaceDrawContext) {
         ERRORF(reporter, "Could not create render target context.");
         return;

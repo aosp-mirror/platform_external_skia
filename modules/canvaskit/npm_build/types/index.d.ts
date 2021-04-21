@@ -648,6 +648,14 @@ export interface LineMetrics {
     lineNumber: number;
 }
 
+export interface GlyphRun {
+    glyphs: Uint16Array;
+    positions: Float32Array;    // alternating x0, y0, x1, y1, ...
+    offsets: Uint32Array;
+    origin_x: number;
+    origin_y: number;
+}
+
 /**
  * This object is a wrapper around a pointer to some memory on the WASM heap. The type of the
  * pointer was determined at creation time.
@@ -804,6 +812,8 @@ export interface Paragraph extends EmbindObject<Paragraph> {
      * @param offset
      */
     getWordBoundary(offset: number): URange;
+
+    getShapedRuns(): GlyphRun[];
 
     /**
      * Lays out the text in the paragraph so it is wrapped to the given width.
@@ -1102,6 +1112,20 @@ export interface Canvas extends EmbindObject<Canvas> {
      * @param paint
      */
     drawDRRect(outer: InputRRect, inner: InputRRect, paint: Paint): void;
+
+    /**
+     * Draws a run of glyphs, at corresponding positions, in a given font.
+     * @param glyphs the array of glyph IDs (Uint16TypedArray)
+     * @param positions the array of x,y floats to position each glyph
+     * @param x x-coordinate of the origin of the entire run
+     * @param x y-coordinate of the origin of the entire run
+     * @param font the font that contains the glyphs
+     * @param paint
+     */
+    drawGlyphs(glyphs: InputGlyphIDArray,
+               positions: InputFlattenedPointArray,
+               x: number, y: number,
+               font: Font, paint: Paint): void;
 
     /**
      * Draws the given image with its top-left corner at (left, top) using the current clip,
@@ -1538,10 +1562,22 @@ export interface ContourMeasure extends EmbindObject<ContourMeasure> {
     length(): number;
 }
 
+export interface FontMetrics {
+    ascent: number,     // suggested space above the baseline. < 0
+    descent: number,    // suggested space below the baseline. > 0
+    leading: number,    // suggested spacing between descent of previous line and ascent of next line.
+    bounds?: Rect,      // smallest rect containing all glyphs (relative to 0,0)
+}
+
 /**
  * See SkFont.h for more on this class.
  */
 export interface Font extends EmbindObject<Font> {
+    /**
+     * Returns the FontMetrics for this font.
+     */
+    getMetrics(): FontMetrics;
+
     /**
      * Retrieves the bounds for each glyph in glyphs.
      * If paint is not null, its stroking, PathEffect, and MaskFilter fields are respected.
@@ -2630,6 +2666,7 @@ export interface StrutStyle {
     fontStyle?: FontStyle;
     fontSize?: number;
     heightMultiplier?: number;
+    halfLeading?: boolean;
     leading?: number;
     forceStrutHeight?: boolean;
 }
@@ -2661,6 +2698,7 @@ export interface TextStyle {
     fontStyle?: FontStyle;
     foregroundColor?: InputColor;
     heightMultiplier?: number;
+    halfLeading?: boolean;
     letterSpacing?: number;
     locale?: string;
     shadows?: TextShadow[];
@@ -3526,11 +3564,8 @@ export type FlattenedPointArray = Float32Array;
  * be the top, left, right, bottom point for each rectangle.
  */
 export type FlattenedRectangleArray = Float32Array;
-/**
- * Regardless of the format we use internally for GlyphID (16 bit unsigned atm), we expose them
- * as 32 bit unsigned.
- */
-export type GlyphIDArray = Uint32Array;
+
+export type GlyphIDArray = Uint16Array;
 /**
  * PathCommand contains a verb and then any arguments needed to fulfill that path verb.
  * Examples:

@@ -886,7 +886,8 @@ void SkCanvas::DrawDeviceWithFilter(SkBaseDevice* src, const SkImageFilter* filt
 
         // The snapped backdrop content needs to be transformed by fromRoot into the layer space,
         // and stored in a temporary surface, which is then used as the input to the actual filter.
-        auto tmpSurface = special->makeSurface(colorType, colorSpace, layerInputBounds.size());
+        auto tmpSurface = special->makeSurface(colorType, colorSpace, layerInputBounds.size(),
+                                               kPremul_SkAlphaType, dst->surfaceProps());
         if (!tmpSurface) {
             return;
         }
@@ -1799,31 +1800,9 @@ void SkCanvas::drawVertices(const SkVertices* vertices, SkBlendMode mode, const 
     // We expect fans to be converted to triangles when building or deserializing SkVertices.
     SkASSERT(vertices->priv().mode() != SkVertices::kTriangleFan_VertexMode);
 
-    // If the vertices contain custom attributes, ensure they line up with the paint's shader.
-    const SkRuntimeEffect* effect =
-            paint.getShader() ? as_SB(paint.getShader())->asRuntimeEffect() : nullptr;
-    if ((size_t)vertices->priv().attributeCount() != (effect ? effect->varyings().count() : 0)) {
-        return;
-    }
-    if (effect) {
-        int attrIndex = 0;
-        for (const auto& v : effect->varyings()) {
-            const SkVertices::Attribute& attr(vertices->priv().attributes()[attrIndex++]);
-            // Mismatch between the SkSL varying and the vertex shader output for this attribute
-            if (attr.channelCount() != v.width) {
-                return;
-            }
-            // If we can't provide any of the asked-for matrices, we can't draw this
-            if (attr.fMarkerID && !fMarkerStack->findMarker(attr.fMarkerID, nullptr)) {
-                return;
-            }
-        }
-    }
-
 #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
     // Preserve legacy behavior for Android: ignore the SkShader if there are no texCoords present
-    if (paint.getShader() &&
-        !(vertices->priv().hasTexCoords() || vertices->priv().hasCustomData())) {
+    if (paint.getShader() && !vertices->priv().hasTexCoords()) {
         SkPaint noShaderPaint(paint);
         noShaderPaint.setShader(nullptr);
         this->onDrawVerticesObject(vertices, mode, noShaderPaint);
@@ -2278,14 +2257,17 @@ void SkCanvas::drawImageRect(const SkImage* image, const SkRect& dst,
 
 void SkCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                               const SkPaint& paint) {
-    const SkRect bounds = blob->bounds().makeOffset(x, y);
+    auto glyphRunList = fScratchGlyphRunBuilder->blobToGlyphRunList(*blob, {x, y});
+    this->onDrawGlyphRunList(glyphRunList, paint);
+}
+
+void SkCanvas::onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) {
+    SkRect bounds = glyphRunList.sourceBounds();
     if (this->internalQuickReject(bounds, paint)) {
         return;
     }
-
     AutoLayerForImageFilter layer(this, paint, &bounds);
-    // We can't hoist building the glyph run list because some of the text blob runs may be RSXform.
-    fScratchGlyphRunBuilder->drawTextBlob(layer.paint(), *blob, {x, y}, this->topDevice());
+    this->topDevice()->drawGlyphRunList(glyphRunList, layer.paint());
 }
 
 // These call the (virtual) onDraw... method
@@ -2294,8 +2276,52 @@ void SkCanvas::drawSimpleText(const void* text, size_t byteLength, SkTextEncodin
     TRACE_EVENT0("skia", TRACE_FUNC);
     if (byteLength) {
         sk_msan_assert_initialized(text, SkTAddOffset<const void>(text, byteLength));
-        this->drawTextBlob(SkTextBlob::MakeFromText(text, byteLength, font, encoding), x, y, paint);
+        const SkGlyphRunList& glyphRunList =
+            fScratchGlyphRunBuilder->textToGlyphRunList(
+                    font, paint, text, byteLength, {x, y}, encoding);
+        this->onDrawGlyphRunList(glyphRunList, paint);
     }
+}
+
+void SkCanvas::drawGlyphs(int count, const SkGlyphID glyphs[], const SkPoint positions[],
+                          SkPoint origin, const SkFont& font, const SkPaint& paint) {
+    if (count <= 0) { return; }
+
+    SkGlyphRun glyphRun {
+        font,
+        SkSpan(positions, count),
+        SkSpan(glyphs, count),
+        SkSpan<const char>(),
+        SkSpan<const uint32_t>(),
+        SkSpan<SkVector>()
+    };
+    SkGlyphRunList glyphRunList {
+        glyphRun,
+        glyphRun.sourceBounds(paint).makeOffset(origin),
+        origin
+    };
+    this->onDrawGlyphRunList(glyphRunList, paint);
+}
+
+void SkCanvas::drawGlyphs(int count, const SkGlyphID* glyphs, const SkPoint* positions,
+                          const uint32_t* clusters, int textByteCount, const char* utf8text,
+                          SkPoint origin, const SkFont& font, const SkPaint& paint) {
+    if (count <= 0) { return; }
+
+    SkGlyphRun glyphRun {
+        font,
+        SkSpan(positions, count),
+        SkSpan(glyphs, count),
+        SkSpan(utf8text, textByteCount),
+        SkSpan(clusters, count),
+        SkSpan<SkVector>()
+    };
+    SkGlyphRunList glyphRunList {
+        glyphRun,
+        glyphRun.sourceBounds(paint).makeOffset(origin),
+        origin
+    };
+    this->onDrawGlyphRunList(glyphRunList, paint);
 }
 
 void SkCanvas::drawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,

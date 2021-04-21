@@ -673,6 +673,8 @@ if (skia_compile_processors || skia_compile_sksl_tests) {
       "src/sksl/sksl_geom.sksl",
       "src/sksl/sksl_gpu.sksl",
       "src/sksl/sksl_public.sksl",
+      "src/sksl/sksl_rt_colorfilter.sksl",
+      "src/sksl/sksl_rt_shader.sksl",
       "src/sksl/sksl_runtime.sksl",
       "src/sksl/sksl_vert.sksl",
     ]
@@ -780,8 +782,15 @@ if (skia_compile_sksl_tests) {
         src = resourcesDir + partialPath
 
         dir = get_path_info(dst, "dir")
-        name = get_path_info(dst, "name")
-        ext = get_path_info(dst, "extension")
+
+        # We want to support double-extensions (for '.dsl.cpp') but GN doesn't natively handle this.
+        # Workaround: http://go/ggroup/a/chromium.org/g/gn-dev/c/RdEpjeYtb-4
+        # For input path "file.aa.bb", name will contain "file" and ext will contain ".aa.bb".
+        # For input path "file.cc", name will contain "file" and ext will contain ".cc".
+        nameTmp = get_path_info(dst, "name")
+        name = get_path_info(nameTmp, "name")
+        ext = get_path_info(nameTmp, "extension")
+        ext += get_path_info(dst, "extension")
         response_file_contents += rebase_path([
                                                 src,
                                                 dir,
@@ -790,9 +799,9 @@ if (skia_compile_sksl_tests) {
 
         foreach(outExtension, invoker.outExtensions) {
           # SPIR-V uses separate extensions for .vert and .geom shaders.
-          if (outExtension == ".asm.frag" && ext == "vert") {
+          if (ext == "vert" && outExtension == ".asm.frag") {
             outExtension = ".asm.vert"
-          } else if (outExtension == ".asm.frag" && ext == "geom") {
+          } else if (ext == "geom" && outExtension == ".asm.frag") {
             outExtension = ".asm.geom"
           }
           outputs +=
@@ -809,6 +818,15 @@ if (skia_compile_sksl_tests) {
       ".h",
     ]
     lang = "--fp"
+    settings = "--settings"
+  }
+  compile_sksl("dsl_fp_tests") {
+    sources = sksl_dsl_fp_tests_sources
+    outExtensions = [
+      ".dsl.cpp",
+      ".h",
+    ]
+    lang = "--dslfp"
     settings = "--settings"
   }
   compile_sksl("glsl_tests") {
@@ -2455,8 +2473,13 @@ if (skia_enable_tools) {
     test_app("androidkit") {
       is_shared_library = true
 
-      sources = [ "modules/androidkit/Canvas.cpp" ]
-      libs = []
+      sources = [
+        "modules/androidkit/src/AndroidKit.cpp",
+        "modules/androidkit/src/Canvas.cpp",
+        "modules/androidkit/src/Paint.cpp",
+        "modules/androidkit/src/Surface.cpp",
+      ]
+      libs = [ "jnigraphics" ]
 
       deps = [ ":skia" ]
     }
@@ -2534,7 +2557,6 @@ if (skia_enable_tools) {
       ]
     } else if (is_mac) {
       sources += [
-        "tools/sk_app/mac/RasterWindowContext_mac.mm",
         "tools/sk_app/mac/WindowContextFactory_mac.h",
         "tools/sk_app/mac/Window_mac.h",
         "tools/sk_app/mac/Window_mac.mm",
@@ -2547,7 +2569,6 @@ if (skia_enable_tools) {
       ]
     } else if (is_ios) {
       sources += [
-        "tools/sk_app/ios/RasterWindowContext_ios.mm",
         "tools/sk_app/ios/WindowContextFactory_ios.h",
         "tools/sk_app/ios/Window_ios.h",
         "tools/sk_app/ios/Window_ios.mm",
@@ -2569,9 +2590,15 @@ if (skia_enable_tools) {
           sources += [ "tools/sk_app/win/ANGLEWindowContext_win.cpp" ]
         }
       } else if (is_mac) {
-        sources += [ "tools/sk_app/mac/GLWindowContext_mac.mm" ]
+        sources += [
+          "tools/sk_app/mac/GLWindowContext_mac.mm",
+          "tools/sk_app/mac/RasterWindowContext_mac.mm",
+        ]
       } else if (is_ios) {
-        sources += [ "tools/sk_app/ios/GLWindowContext_ios.mm" ]
+        sources += [
+          "tools/sk_app/ios/GLWindowContext_ios.mm",
+          "tools/sk_app/ios/RasterWindowContext_ios.mm",
+        ]
       }
     }
 
@@ -2840,7 +2867,7 @@ if (skia_enable_tools) {
     ]
   }
 
-  if (skia_use_gl && skia_use_icu && skia_use_harfbuzz) {
+  if (skia_use_icu && skia_use_harfbuzz) {
     test_app("editor") {
       is_shared_library = is_android
       deps = [ "modules/skplaintexteditor:editor_app" ]

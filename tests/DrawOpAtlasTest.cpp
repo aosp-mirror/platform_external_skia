@@ -196,8 +196,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrAtlasTextOpPreparation, reporter, ctxInfo) 
     auto gpu = context->priv().getGpu();
     auto resourceProvider = context->priv().resourceProvider();
 
-    auto rtc = GrSurfaceDrawContext::Make(
-            context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {32, 32});
+    auto rtc = GrSurfaceDrawContext::Make(context, GrColorType::kRGBA_8888, nullptr,
+                                          SkBackingFit::kApprox, {32, 32}, SkSurfaceProps());
 
     SkPaint paint;
     paint.setColor(SK_ColorRED);
@@ -227,6 +227,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrAtlasTextOpPreparation, reporter, ctxInfo) 
     GrSurfaceProxyView surfaceView = rtc->writeSurfaceView();
     GrOpFlushState::OpArgs opArgs(op.get(),
                                   surfaceView,
+                                  false /*usesMSAASurface*/,
                                   nullptr,
                                   GrXferProcessor::DstProxyView(),
                                   GrXferBarrierFlags::kNone,

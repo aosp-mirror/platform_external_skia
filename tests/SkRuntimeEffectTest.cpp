@@ -16,6 +16,7 @@
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkTLazy.h"
 #include "src/gpu/GrColor.h"
+#include "src/gpu/GrFragmentProcessor.h"
 #include "tests/Test.h"
 
 #include <algorithm>
@@ -55,13 +56,6 @@ DEF_TEST(SkRuntimeEffectInvalid_NoInVariables, r) {
     test_invalid_effect(r, "in half3x3 m;" EMPTY_MAIN, "'in'");
 }
 
-DEF_TEST(SkRuntimeEffectInvalid_MarkerRequiresFloat4x4, r) {
-    // 'marker' is only permitted on float4x4 uniforms
-    test_invalid_effect(r,
-                        "layout(marker=local_to_world) uniform float3x3 localToWorld;" EMPTY_MAIN,
-                        "float4x4");
-}
-
 DEF_TEST(SkRuntimeEffectInvalid_UndefinedFunction, r) {
     test_invalid_effect(r, "half4 missing(); half4 main() { return missing(); }",
                            "undefined function");
@@ -93,10 +87,114 @@ DEF_TEST(SkRuntimeEffectInvalidColorFilters, r) {
     // but not valid color filters
     test("half4 main(float2 p) { return half2(p).xy01; }");
     test("half4 main(float2 p) { return half2(sk_FragCoord.xy).xy01; }");
+}
 
-    // We also can't use layout(marker), which would give the runtime color filter CTM information
-    test("layout(marker=ctm) uniform float4x4 ctm;"
-         "half4 main(float2 p) { return half4(half(ctm[0][0]), 0, 0, 1); }");
+DEF_TEST(SkRuntimeEffectForColorFilter, r) {
+    // Tests that the color filter factory rejects or accepts certain SkSL constructs
+    auto test_valid = [r](const char* sksl) {
+        auto [effect, errorText] = SkRuntimeEffect::MakeForColorFilter(SkString(sksl));
+        REPORTER_ASSERT(r, effect, errorText.c_str());
+    };
+
+    auto test_invalid = [r](const char* sksl, const char* expected) {
+        auto [effect, errorText] = SkRuntimeEffect::MakeForColorFilter(SkString(sksl));
+        REPORTER_ASSERT(r, !effect);
+        REPORTER_ASSERT(r,
+                        errorText.contains(expected),
+                        "Expected error message to contain \"%s\". Actual message: \"%s\"",
+                        expected,
+                        errorText.c_str());
+    };
+
+    // Color filters must use the 'half4 main(half4)' signature. Either color can be float4/vec4
+    test_valid("half4  main(half4  c) { return c; }");
+    test_valid("float4 main(half4  c) { return c; }");
+    test_valid("half4  main(float4 c) { return c; }");
+    test_valid("float4 main(float4 c) { return c; }");
+    test_valid("vec4   main(half4  c) { return c; }");
+    test_valid("half4  main(vec4   c) { return c; }");
+    test_valid("vec4   main(vec4   c) { return c; }");
+
+    // Invalid return types
+    test_invalid("void  main(half4 c) {}",                "'main' must return");
+    test_invalid("half3 main(half4 c) { return c.rgb; }", "'main' must return");
+
+    // Invalid argument types (some are valid as shaders, but not color filters)
+    test_invalid("half4 main() { return half4(1); }",           "'main' parameter");
+    test_invalid("half4 main(float2 p) { return half4(1); }",   "'main' parameter");
+    test_invalid("half4 main(float2 p, half4 c) { return c; }", "'main' parameter");
+
+    // sk_FragCoord should not be available
+    test_invalid("half4 main(half4 c) { return sk_FragCoord.xy01; }", "unknown identifier");
+
+    // Sampling a child shader requires that we pass explicit coords
+    test_valid("uniform shader child;"
+               "half4 main(half4 c) { return sample(child, c.rg); }");
+
+    test_invalid(
+            "uniform shader child;"
+            "half4 main(half4 c) { return sample(child); }",
+            "expected 2 arguments");
+    test_invalid(
+            "uniform shader child;"
+            "half4 main(half4 c) { return sample(child, float3x3(1)); }",
+            "expected 'float2'");
+}
+
+DEF_TEST(SkRuntimeEffectForShader, r) {
+    // Tests that the shader factory rejects or accepts certain SkSL constructs
+    auto test_valid = [r](const char* sksl) {
+        auto [effect, errorText] = SkRuntimeEffect::MakeForShader(SkString(sksl));
+        REPORTER_ASSERT(r, effect, errorText.c_str());
+    };
+
+    auto test_invalid = [r](const char* sksl, const char* expected) {
+        auto [effect, errorText] = SkRuntimeEffect::MakeForShader(SkString(sksl));
+        REPORTER_ASSERT(r, !effect);
+        REPORTER_ASSERT(r,
+                        errorText.contains(expected),
+                        "Expected error message to contain \"%s\". Actual message: \"%s\"",
+                        expected,
+                        errorText.c_str());
+    };
+
+    // Shaders must use either the 'half4 main(float2)' or 'half4 main(float2, half4)' signature
+    // Either color can be half4/float4/vec4, but the coords must be float2/vec2
+    test_valid("half4  main(float2 p) { return p.xyxy; }");
+    test_valid("float4 main(float2 p) { return p.xyxy; }");
+    test_valid("vec4   main(float2 p) { return p.xyxy; }");
+    test_valid("half4  main(vec2   p) { return p.xyxy; }");
+    test_valid("vec4   main(vec2   p) { return p.xyxy; }");
+    test_valid("half4  main(float2 p, half4  c) { return c; }");
+    test_valid("half4  main(float2 p, float4 c) { return c; }");
+    test_valid("half4  main(float2 p, vec4   c) { return c; }");
+    test_valid("float4 main(float2 p, half4  c) { return c; }");
+    test_valid("vec4   main(float2 p, half4  c) { return c; }");
+    test_valid("vec4   main(vec2   p, vec4   c) { return c; }");
+
+    // Invalid return types
+    test_invalid("void  main(float2 p) {}",                "'main' must return");
+    test_invalid("half3 main(float2 p) { return p.xy1; }", "'main' must return");
+
+    // Invalid argument types (some are valid as color filters, but not shaders)
+    test_invalid("half4 main() { return half4(1); }", "'main' parameter");
+    test_invalid("half4 main(half4 c) { return c; }", "'main' parameter");
+
+    // sk_FragCoord should be available
+    test_valid("half4 main(float2 p) { return sk_FragCoord.xy01; }");
+
+    // Sampling a child shader requires that we pass explicit coords
+    test_valid("uniform shader child;"
+               "half4 main(float2 p) { return sample(child, p); }");
+
+    test_invalid(
+            "uniform shader child;"
+            "half4 main(float2 p) { return sample(child); }",
+            "expected 2 arguments");
+    test_invalid(
+            "uniform shader child;"
+            "half4 main(float2 p) { return sample(child, float3x3(1)); }",
+            "expected 'float2'");
 }
 
 class TestEffect {
@@ -224,10 +322,6 @@ static void test_RuntimeEffect_Shaders(skiatest::Reporter* r, GrRecordingContext
 
     // Runtime effects should use relaxed precision rules by default
     effect.build("half4 main(float2 p) { return float4(p - 0.5, 0, 1); }");
-    effect.test(0xFF000000, 0xFF0000FF, 0xFF00FF00, 0xFF00FFFF);
-
-    // ... and support GLSL type names
-    effect.build("half4 main(float2 p) { return vec4(p - 0.5, 0, 1); }");
     effect.test(0xFF000000, 0xFF0000FF, 0xFF00FF00, 0xFF00FFFF);
 
     // ... and support *returning* float4 (aka vec4), not just half4
@@ -422,19 +516,65 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkRuntimeStructNameReuse_GPU, r, ctxInfo) {
 DEF_TEST(SkRuntimeColorFilterFlags, r) {
     {   // Here's a non-trivial filter that doesn't change alpha.
         auto [effect, err] = SkRuntimeEffect::Make(SkString{
-                "uniform shader input; half4 main() { return sample(input) + half4(1,1,1,0); }"});
+                "half4 main(half4 color) { return color + half4(1,1,1,0); }"});
         REPORTER_ASSERT(r, effect && err.isEmpty());
-        sk_sp<SkColorFilter> input = nullptr,
-                            filter = effect->makeColorFilter(SkData::MakeEmpty(), &input, 1);
+        sk_sp<SkColorFilter> filter = effect->makeColorFilter(SkData::MakeEmpty());
         REPORTER_ASSERT(r, filter && filter->isAlphaUnchanged());
     }
 
     {  // Here's one that definitely changes alpha.
         auto [effect, err] = SkRuntimeEffect::Make(SkString{
-                "uniform shader input; half4 main() { return sample(input) + half4(0,0,0,4); }"});
+                "half4 main(half4 color) { return color + half4(0,0,0,4); }"});
         REPORTER_ASSERT(r, effect && err.isEmpty());
-        sk_sp<SkColorFilter> input = nullptr,
-                            filter = effect->makeColorFilter(SkData::MakeEmpty(), &input, 1);
+        sk_sp<SkColorFilter> filter = effect->makeColorFilter(SkData::MakeEmpty());
         REPORTER_ASSERT(r, filter && !filter->isAlphaUnchanged());
     }
+}
+
+DEF_TEST(SkRuntimeShaderSampleUsage, r) {
+    auto test = [&](const char* src, bool expectExplicit) {
+        auto [effect, err] =
+                SkRuntimeEffect::MakeForShader(SkStringPrintf("uniform shader child; %s", src));
+        REPORTER_ASSERT(r, effect);
+
+        auto child = GrFragmentProcessor::MakeColor({ 1, 1, 1, 1 });
+        auto fp = effect->makeFP(nullptr, &child, 1);
+        REPORTER_ASSERT(r, fp);
+
+        REPORTER_ASSERT(r, fp->childProcessor(0)->isSampledWithExplicitCoords() == expectExplicit);
+    };
+
+    // This test verifies that we detect calls to sample where the coords are the same as those
+    // passed to main. In those cases, it's safe to turn the "explicit" sampling into "passthrough"
+    // sampling. This optimization is implemented very conservatively.
+
+    // Cases where our optimization is valid, and works:
+
+    // Direct use of passed-in coords
+    test("half4 main(float2 xy) { return sample(child, xy); }", false);
+    // Sample with passed-in coords, read (but don't write) sample coords elsewhere
+    test("half4 main(float2 xy) { return sample(child, xy) + sin(xy.x); }", false);
+
+    // Cases where our optimization is not valid, and does not happen:
+
+    // Sampling with values completely unrelated to passed-in coords
+    test("half4 main(float2 xy) { return sample(child, float2(0, 0)); }", true);
+    // Use of expression involving passed in coords
+    test("half4 main(float2 xy) { return sample(child, xy * 0.5); }", true);
+    // Use of coords after modification
+    test("half4 main(float2 xy) { xy *= 2; return sample(child, xy); }", true);
+    // Use of coords after modification via out-param call
+    test("void adjust(inout float2 xy) { xy *= 2; }"
+         "half4 main(float2 xy) { adjust(xy); return sample(child, xy); }", true);
+
+    // There should (must) not be any false-positive cases. There are false-negatives.
+    // In all of these cases, our optimization would be valid, but does not happen:
+
+    // Direct use of passed-in coords, modified after use
+    test("half4 main(float2 xy) { half4 c = sample(child, xy); xy *= 2; return c; }", true);
+    // Passed-in coords copied to a temp variable
+    test("half4 main(float2 xy) { float2 p = xy; return sample(child, p); }", true);
+    // Use of coords passed to helper function
+    test("half4 helper(float2 xy) { return sample(child, xy); }"
+         "half4 main(float2 xy) { return helper(xy); }", true);
 }

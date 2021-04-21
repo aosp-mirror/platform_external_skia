@@ -1,45 +1,50 @@
+/*
+ * Copyright 2021 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 package org.skia.androidkit;
 
-import android.graphics.Bitmap;
-import android.graphics.Paint;
-import android.util.Log;
-
-import java.lang.reflect.Method;
+import org.skia.androidkit.Color;
+import org.skia.androidkit.Paint;
+import org.skia.androidkit.Surface;
 
 public class Canvas {
-    private long mNativeCanvasWrapper;
-    private Bitmap mBitmap;
-
-    private static final String TAG = "ANDROIDKIT";
-
-    static {
-        Log.d(TAG, "loading lib");
-        System.loadLibrary("androidkit");
-    }
-    public Canvas(Bitmap bitmap) {
-        if (!bitmap.isMutable()) {
-            throw new IllegalStateException("Immutable bitmap passed to Canvas constructor");
-        }
-        // --------- ugly class reflection to get the @hide method -----------
-        Object bitmapProxy = null;
-        try {
-            Class c = Class.forName("android.graphics.Bitmap");
-            Method m = c.getMethod("getNativeInstance");
-            bitmapProxy = m.invoke(bitmap);
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
-        }
-        mNativeCanvasWrapper = nInitRaster(Long.parseLong(bitmapProxy.toString()));
-        // --------------------------------------------------------------------
-        mBitmap = bitmap;
-    }
+    private long mNativeInstance;
+    private Surface mSurface;
 
     public void drawRect(float left, float right, float top, float bottom, Paint paint) {
-        //nDrawRect(mNativeCanvasWrapper, left, right, top, bottom, paint.getNativeInstance());
+        nDrawRect(mNativeInstance, left, right, top, bottom, paint.getNativeInstance());
     }
 
-    private static native long nInitRaster(long bitmapHandle);
-    private static native long nDrawRect(long canvasProxy, float left, float right, float top, float bottom, long paintProxy);
+    public void drawColor(Color c) {
+        nDrawColor(mNativeInstance, c.r(), c.g(), c.b(), c.a());
+    }
 
+    public void drawColor(float r, float g, float b, float a) {
+        nDrawColor(mNativeInstance, r, g, b, a);
+    }
+
+    public void drawColor(int icolor) {
+        nDrawColor(mNativeInstance,
+            (float)((icolor >> 16) & 0xff) / 255,
+            (float)((icolor >>  8) & 0xff) / 255,
+            (float)((icolor >>  0) & 0xff) / 255,
+            (float)((icolor >> 24) & 0xff) / 255
+        );
+    }
+
+    // package private
+    Canvas(Surface surface, long native_instance) {
+        mNativeInstance = native_instance;
+        mSurface = surface;
+    }
+
+    private static native void nDrawColor(long nativeInstance, float r, float g, float b, float a);
+
+    private static native void nDrawRect(long nativeInstance,
+                                         float left, float right, float top, float bottom,
+                                         long nativePaint);
 }

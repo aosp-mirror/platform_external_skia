@@ -930,12 +930,15 @@ int SkTextBlob::getIntercepts(const SkScalar bounds[2], SkScalar intervals[],
     }
 
     SkGlyphRunBuilder builder;
-    builder.textBlobToGlyphRunListIgnoringRSXForm(*this, SkPoint{0, 0});
-    auto glyphRunList = builder.useGlyphRunList();
+    auto glyphRunList = builder.blobToGlyphRunList(*this, {0, 0});
 
     int intervalCount = 0;
     for (const SkGlyphRun& glyphRun : glyphRunList) {
-        intervalCount = get_glyph_run_intercepts(glyphRun, *paint, bounds, intervals, &intervalCount);
+        // Ignore RSXForm runs.
+        if (glyphRun.scaledRotations().empty()) {
+            intervalCount = get_glyph_run_intercepts(
+                glyphRun, *paint, bounds, intervals, &intervalCount);
+        }
     }
 
     return intervalCount;
@@ -958,6 +961,24 @@ bool SkTextBlob::Iter::next(Run* rec) {
             rec->fUtf8Size_forTest = fRunRecord->textSize();
             rec->fUtf8_forTest = fRunRecord->textBuffer();
 #endif
+        }
+        if (fRunRecord->isLastRun()) {
+            fRunRecord = nullptr;
+        } else {
+            fRunRecord = RunRecord::Next(fRunRecord);
+        }
+        return true;
+    }
+    return false;
+}
+
+bool SkTextBlob::Iter::experimentalNext(ExperimentalRun* rec) {
+    if (fRunRecord) {
+        if (rec) {
+            rec->font = fRunRecord->font();
+            rec->count = fRunRecord->glyphCount();
+            rec->glyphs = fRunRecord->glyphBuffer();
+            rec->positions = fRunRecord->pointBuffer();
         }
         if (fRunRecord->isLastRun()) {
             fRunRecord = nullptr;

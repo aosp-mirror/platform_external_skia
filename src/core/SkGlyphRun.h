@@ -44,6 +44,7 @@ public:
     SkSpan<const uint32_t> clusters() const { return fClusters; }
     SkSpan<const char> text() const { return fText; }
     SkSpan<const SkVector> scaledRotations() const { return fScaledRotations; }
+    SkRect sourceBounds(const SkPaint& paint) const;
 
 private:
     // GlyphIDs and positions.
@@ -66,10 +67,13 @@ public:
     // Blob maybe null.
     SkGlyphRunList(
             const SkTextBlob* blob,
+            SkRect bounds,
             SkPoint origin,
             SkSpan<const SkGlyphRun> glyphRunList);
 
-    SkGlyphRunList(const SkGlyphRun& glyphRun);
+    SkGlyphRunList(const SkGlyphRun& glyphRun, const SkRect& bounds, SkPoint origin);
+
+
 
     uint64_t uniqueID() const;
     bool anyRunsLCD() const;
@@ -79,13 +83,23 @@ public:
     size_t runCount() const { return fGlyphRuns.size(); }
     size_t totalGlyphCount() const {
         size_t glyphCount = 0;
-        for(const auto& run : fGlyphRuns) {
+        for (const SkGlyphRun& run : *this) {
             glyphCount += run.runSize();
         }
         return glyphCount;
     }
 
+    bool hasRSXForm() const {
+        for (const SkGlyphRun& run : *this) {
+            if (!run.scaledRotations().empty()) { return true; }
+        }
+        return false;
+    }
+
+    sk_sp<SkTextBlob> makeBlob() const;
+
     SkPoint origin() const { return fOrigin; }
+    SkRect sourceBounds() const { return fSourceBounds; }
     const SkTextBlob* blob() const { return fOriginalTextBlob; }
 
     auto begin() -> decltype(fGlyphRuns.begin())               { return fGlyphRuns.begin();  }
@@ -99,27 +113,26 @@ public:
 private:
     // The text blob is needed to hookup the call back that the SkTextBlob destructor calls. It
     // should be used for nothing else
-    const SkTextBlob*  fOriginalTextBlob{nullptr};
-    SkPoint fOrigin = {0, 0};
+    const SkTextBlob* fOriginalTextBlob{nullptr};
+    const SkRect fSourceBounds{SkRect::MakeEmpty()};
+    const SkPoint fOrigin = {0, 0};
 };
 
 class SkGlyphRunBuilder {
 public:
     const SkGlyphRunList& textToGlyphRunList(const SkFont& font,
+                                             const SkPaint& paint,
                                              const void* bytes,
                                              size_t byteLength,
                                              SkPoint origin,
                                              SkTextEncoding encoding = SkTextEncoding::kUTF8);
-    void drawTextBlob(const SkPaint& paint, const SkTextBlob& blob, SkPoint origin, SkBaseDevice*);
-
-    void textBlobToGlyphRunListIgnoringRSXForm(const SkTextBlob& blob, SkPoint origin);
-
-    const SkGlyphRunList& useGlyphRunList();
+    const SkGlyphRunList& blobToGlyphRunList(const SkTextBlob& blob, SkPoint origin);
 
     bool empty() const { return fGlyphRunListStorage.empty(); }
 
 private:
-    void initialize(size_t totalRunSize);
+    void initialize(int totalRunSize);
+    void initialize(const SkTextBlob& blob);
     SkSpan<const SkGlyphID> textToGlyphIDs(
             const SkFont& font, const void* bytes, size_t byteLength, SkTextEncoding);
 
@@ -131,13 +144,13 @@ private:
             SkSpan<const uint32_t> clusters,
             SkSpan<const SkVector> scaledRotations);
 
-    void makeGlyphRunList(const SkTextBlob* blob, SkPoint origin);
+    const SkGlyphRunList& makeGlyphRunList(
+            const SkTextBlob* blob, const SkRect& bounds, SkPoint origin);
 
-    SkPoint* simplifyTextBlobIgnoringRSXForm(const SkTextBlobRunIterator& it,
-                                             SkPoint* positionsCursor);
-
-    size_t fMaxTotalRunSize{0};
+    int fMaxTotalRunSize{0};
     SkAutoTMalloc<SkPoint> fPositions;
+    int fMaxScaledRotations{0};
+    SkAutoTMalloc<SkVector> fScaledRotations;
 
     std::vector<SkGlyphRun> fGlyphRunListStorage;
     SkGlyphRunList fGlyphRunList;

@@ -104,7 +104,9 @@ private:
 };
 
 class GLSLClockwiseTestProcessor : public GrGLSLGeometryProcessor {
-    void setData(const GrGLSLProgramDataManager&, const GrGeometryProcessor&) override {}
+    void setData(const GrGLSLProgramDataManager&,
+                 const GrShaderCaps&,
+                 const GrGeometryProcessor&) override {}
 
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
         const ClockwiseTestProcessor& proc = args.fGeomProc.cast<ClockwiseTestProcessor>();
@@ -252,9 +254,9 @@ void ClockwiseGM::onDraw(GrRecordingContext* ctx, GrSurfaceDrawContext* rtc, SkC
     // Draw the test to an off-screen, top-down render target.
     GrColorType rtcColorType = rtc->colorInfo().colorType();
     if (auto topLeftRTC = GrSurfaceDrawContext::Make(
-                ctx, rtcColorType, nullptr, SkBackingFit::kExact, {100, 200}, 1,
-                GrMipmapped::kNo, GrProtected::kNo, kTopLeft_GrSurfaceOrigin, SkBudgeted::kYes,
-                nullptr)) {
+                ctx, rtcColorType, nullptr, SkBackingFit::kExact, {100, 200}, SkSurfaceProps(),
+                1, GrMipmapped::kNo, GrProtected::kNo, kTopLeft_GrSurfaceOrigin,
+                SkBudgeted::kYes)) {
         topLeftRTC->clear(SK_PMColor4fTRANSPARENT);
         topLeftRTC->addDrawOp(ClockwiseTestOp::Make(ctx, false, 0));
         topLeftRTC->addDrawOp(ClockwiseTestOp::Make(ctx, true, 100));
@@ -276,9 +278,9 @@ void ClockwiseGM::onDraw(GrRecordingContext* ctx, GrSurfaceDrawContext* rtc, SkC
 
     // Draw the test to an off-screen, bottom-up render target.
     if (auto topLeftRTC = GrSurfaceDrawContext::Make(
-                ctx, rtcColorType, nullptr, SkBackingFit::kExact, {100, 200}, 1,
-                GrMipmapped::kNo, GrProtected::kNo, kBottomLeft_GrSurfaceOrigin, SkBudgeted::kYes,
-                nullptr)) {
+                ctx, rtcColorType, nullptr, SkBackingFit::kExact, {100, 200}, SkSurfaceProps(),
+                1, GrMipmapped::kNo, GrProtected::kNo, kBottomLeft_GrSurfaceOrigin,
+                SkBudgeted::kYes)) {
         topLeftRTC->clear(SK_PMColor4fTRANSPARENT);
         topLeftRTC->addDrawOp(ClockwiseTestOp::Make(ctx, false, 0));
         topLeftRTC->addDrawOp(ClockwiseTestOp::Make(ctx, true, 100));

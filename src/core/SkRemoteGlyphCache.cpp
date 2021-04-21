@@ -829,7 +829,7 @@ public:
     }
 
 protected:
-    void drawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) override {
+    void onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) override {
         #if SK_SUPPORT_GPU
         GrContextOptions ctxOptions;
         GrSDFTControl control =
@@ -896,6 +896,14 @@ SkStrikeServer::SkStrikeServer(DiscardableHandleManager* dhm)
         : fImpl(new SkStrikeServerImpl{dhm}) { }
 
 SkStrikeServer::~SkStrikeServer() = default;
+
+std::unique_ptr<SkCanvas> SkStrikeServer::makeAnalysisCanvas(int width, int height,
+                                                             const SkSurfaceProps& props,
+                                                             sk_sp<SkColorSpace> colorSpace,
+                                                             bool DFTSupport) {
+    return std::make_unique<SkTextBlobCacheDiffCanvas>(width, height, props, this,
+                                                       std::move(colorSpace), DFTSupport);
+}
 
 sk_sp<SkData> SkStrikeServer::serializeTypeface(SkTypeface* tf) {
     return fImpl->serializeTypeface(tf);

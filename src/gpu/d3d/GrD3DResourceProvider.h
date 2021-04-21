@@ -27,6 +27,7 @@ class GrD3DCommandSignature;
 class GrD3DDirectCommandList;
 class GrD3DGpu;
 class GrD3DPipelineState;
+class GrD3DRenderTarget;
 class GrSamplerState;
 
 class GrD3DResourceProvider {
@@ -39,7 +40,8 @@ public:
 
     void recycleDirectCommandList(std::unique_ptr<GrD3DDirectCommandList>);
 
-    sk_sp<GrD3DRootSignature> findOrCreateRootSignature(int numTextureSamplers);
+    sk_sp<GrD3DRootSignature> findOrCreateRootSignature(int numTextureSamplers,
+                                                        int numUAVs = 0);
 
     sk_sp<GrD3DCommandSignature> findOrCreateCommandSignature(GrD3DCommandSignature::ForIndexed,
                                                               unsigned int slot);
@@ -53,21 +55,24 @@ public:
     GrD3DDescriptorHeap::CPUHandle createConstantBufferView(ID3D12Resource* bufferResource,
                                                             size_t offset,
                                                             size_t size);
-    GrD3DDescriptorHeap::CPUHandle createShaderResourceView(ID3D12Resource* resource);
-    GrD3DDescriptorHeap::CPUHandle createUnorderedAccessView(ID3D12Resource* resource);
-    void recycleCBVSRVUAV(const GrD3DDescriptorHeap::CPUHandle&);
+    GrD3DDescriptorHeap::CPUHandle createShaderResourceView(ID3D12Resource* resource,
+                                                            unsigned int mostDetailedMip = 0,
+                                                            unsigned int mipLevels = -1);
+    GrD3DDescriptorHeap::CPUHandle createUnorderedAccessView(ID3D12Resource* resource,
+                                                             unsigned int mipSlice);
+    void recycleShaderView(const GrD3DDescriptorHeap::CPUHandle&);
 
     D3D12_CPU_DESCRIPTOR_HANDLE findOrCreateCompatibleSampler(const GrSamplerState& params);
 
-    sk_sp<GrD3DDescriptorTable> findOrCreateShaderResourceTable(
-            const std::vector<D3D12_CPU_DESCRIPTOR_HANDLE>& shaderResourceViews);
+    sk_sp<GrD3DDescriptorTable> findOrCreateShaderViewTable(
+            const std::vector<D3D12_CPU_DESCRIPTOR_HANDLE>& shaderViews);
     sk_sp<GrD3DDescriptorTable> findOrCreateSamplerTable(
             const std::vector<D3D12_CPU_DESCRIPTOR_HANDLE>& samplers);
     GrD3DDescriptorTableManager* descriptorTableMgr() {
         return &fDescriptorTableManager;
     }
 
-    GrD3DPipelineState* findOrCreateCompatiblePipelineState(GrRenderTarget*,
+    GrD3DPipelineState* findOrCreateCompatiblePipelineState(GrD3DRenderTarget*,
                                                             const GrProgramInfo&);
 
     D3D12_GPU_VIRTUAL_ADDRESS uploadConstantData(void* data, size_t size);
@@ -90,7 +95,7 @@ private:
         ~PipelineStateCache();
 
         void release();
-        GrD3DPipelineState* refPipelineState(GrRenderTarget*, const GrProgramInfo&);
+        GrD3DPipelineState* refPipelineState(GrD3DRenderTarget*, const GrProgramInfo&);
 
         void markPipelineStateUniformsDirty();
 

@@ -23,14 +23,12 @@
 
 const int GrGLSLProgramBuilder::kVarsPerBlock = 8;
 
-GrGLSLProgramBuilder::GrGLSLProgramBuilder(GrRenderTarget* renderTarget,
-                                           const GrProgramDesc& desc,
+GrGLSLProgramBuilder::GrGLSLProgramBuilder(const GrProgramDesc& desc,
                                            const GrProgramInfo& programInfo)
         : fVS(this)
         , fGS(this)
         , fFS(this)
         , fStageIndex(-1)
-        , fRenderTarget(renderTarget)
         , fDesc(desc)
         , fProgramInfo(programInfo)
         , fGeometryProcessor(nullptr)
@@ -317,14 +315,6 @@ void GrGLSLProgramBuilder::nameExpression(SkString* output, const char* baseName
 
 void GrGLSLProgramBuilder::appendUniformDecls(GrShaderFlags visibility, SkString* out) const {
     this->uniformHandler()->appendUniformDecls(visibility, out);
-}
-
-void GrGLSLProgramBuilder::addRTWidthUniform(const char* name) {
-    SkASSERT(!fUniformHandles.fRTWidthUni.isValid());
-    GrGLSLUniformHandler* uniformHandler = this->uniformHandler();
-    fUniformHandles.fRTWidthUni =
-            uniformHandler->internalAddUniformArray(nullptr, kFragment_GrShaderFlag, kHalf_GrSLType,
-                                                    name, false, 0, nullptr);
 }
 
 void GrGLSLProgramBuilder::addRTHeightUniform(const char* name) {

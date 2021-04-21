@@ -112,7 +112,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrMeshTest, reporter, ctxInfo) {
 
     auto rtc = GrSurfaceDrawContext::Make(
             dContext, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
-            {kImageWidth, kImageHeight});
+            {kImageWidth, kImageHeight}, SkSurfaceProps());
     if (!rtc) {
         ERRORF(reporter, "could not create render target context.");
         return;
@@ -494,7 +494,9 @@ private:
 };
 
 class GLSLMeshTestProcessor : public GrGLSLGeometryProcessor {
-    void setData(const GrGLSLProgramDataManager&, const GrGeometryProcessor&) final {}
+    void setData(const GrGLSLProgramDataManager&,
+                 const GrShaderCaps&,
+                 const GrGeometryProcessor&) final {}
 
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) final {
         const GrMeshTestProcessor& mp = args.fGeomProc.cast<GrMeshTestProcessor>();

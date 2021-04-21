@@ -16,6 +16,7 @@
 #include "src/gpu/d3d/GrD3DGpu.h"
 #include "src/gpu/d3d/GrD3DPipelineState.h"
 #include "src/gpu/d3d/GrD3DPipelineStateBuilder.h"
+#include "src/gpu/d3d/GrD3DRenderTarget.h"
 
 GrD3DResourceProvider::GrD3DResourceProvider(GrD3DGpu* gpu)
         : fGpu(gpu)
@@ -48,14 +49,15 @@ void GrD3DResourceProvider::recycleDirectCommandList(
     fAvailableDirectCommandLists.push_back(std::move(commandList));
 }
 
-sk_sp<GrD3DRootSignature> GrD3DResourceProvider::findOrCreateRootSignature(int numTextureSamplers) {
+sk_sp<GrD3DRootSignature> GrD3DResourceProvider::findOrCreateRootSignature(int numTextureSamplers,
+                                                                           int numUAVs) {
     for (int i = 0; i < fRootSignatures.count(); ++i) {
-        if (fRootSignatures[i]->isCompatible(numTextureSamplers)) {
+        if (fRootSignatures[i]->isCompatible(numTextureSamplers, numUAVs)) {
             return fRootSignatures[i];
         }
     }
 
-    auto rootSig = GrD3DRootSignature::Make(fGpu, numTextureSamplers);
+    auto rootSig = GrD3DRootSignature::Make(fGpu, numTextureSamplers, numUAVs);
     if (!rootSig) {
         return nullptr;
     }
@@ -105,18 +107,18 @@ GrD3DDescriptorHeap::CPUHandle GrD3DResourceProvider::createConstantBufferView(
 }
 
 GrD3DDescriptorHeap::CPUHandle GrD3DResourceProvider::createShaderResourceView(
-        ID3D12Resource* resource) {
-    return fCpuDescriptorManager.createShaderResourceView(fGpu, resource);
+        ID3D12Resource* resource, unsigned int highestMip, unsigned int mipLevels) {
+    return fCpuDescriptorManager.createShaderResourceView(fGpu, resource, highestMip, mipLevels);
 }
 
 GrD3DDescriptorHeap::CPUHandle GrD3DResourceProvider::createUnorderedAccessView(
-        ID3D12Resource* resource) {
-    return fCpuDescriptorManager.createUnorderedAccessView(fGpu, resource);
+        ID3D12Resource* resource, unsigned int mipSlice) {
+    return fCpuDescriptorManager.createUnorderedAccessView(fGpu, resource, mipSlice);
 }
 
-void GrD3DResourceProvider::recycleCBVSRVUAV(
+void GrD3DResourceProvider::recycleShaderView(
         const GrD3DDescriptorHeap::CPUHandle& view) {
-    fCpuDescriptorManager.recycleCBVSRVUAV(view);
+    fCpuDescriptorManager.recycleShaderView(view);
 }
 
 static D3D12_TEXTURE_ADDRESS_MODE wrap_mode_to_d3d_address_mode(GrSamplerState::WrapMode wrapMode) {
@@ -175,14 +177,13 @@ D3D12_CPU_DESCRIPTOR_HANDLE GrD3DResourceProvider::findOrCreateCompatibleSampler
     return sampler;
 }
 
-sk_sp<GrD3DDescriptorTable> GrD3DResourceProvider::findOrCreateShaderResourceTable(
-    const std::vector<D3D12_CPU_DESCRIPTOR_HANDLE>& shaderResourceViews) {
+sk_sp<GrD3DDescriptorTable> GrD3DResourceProvider::findOrCreateShaderViewTable(
+    const std::vector<D3D12_CPU_DESCRIPTOR_HANDLE>& shaderViews) {
 
     auto createFunc = [this](GrD3DGpu* gpu, unsigned int numDesc) {
-        return this->fDescriptorTableManager.createCBVSRVUAVTable(gpu, numDesc);
+        return this->fDescriptorTableManager.createShaderViewTable(gpu, numDesc);
     };
-    return fShaderResourceDescriptorTableCache.findOrCreateDescTable(shaderResourceViews,
-                                                                     createFunc);
+    return fShaderResourceDescriptorTableCache.findOrCreateDescTable(shaderViews, createFunc);
 }
 
 sk_sp<GrD3DDescriptorTable> GrD3DResourceProvider::findOrCreateSamplerTable(
@@ -194,7 +195,7 @@ sk_sp<GrD3DDescriptorTable> GrD3DResourceProvider::findOrCreateSamplerTable(
 }
 
 GrD3DPipelineState* GrD3DResourceProvider::findOrCreateCompatiblePipelineState(
-        GrRenderTarget* rt, const GrProgramInfo& info) {
+        GrD3DRenderTarget* rt, const GrProgramInfo& info) {
     return fPipelineStateCache->refPipelineState(rt, info);
 }
 
@@ -266,7 +267,7 @@ void GrD3DResourceProvider::PipelineStateCache::release() {
 }
 
 GrD3DPipelineState* GrD3DResourceProvider::PipelineStateCache::refPipelineState(
-        GrRenderTarget* renderTarget, const GrProgramInfo& programInfo) {
+        GrD3DRenderTarget* renderTarget, const GrProgramInfo& programInfo) {
 #ifdef GR_PIPELINE_STATE_CACHE_STATS
     ++fTotalRequests;
 #endif

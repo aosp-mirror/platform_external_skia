@@ -911,6 +911,18 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                                      uintptr_t /* float* */ innerPtr, const SkPaint& paint) {
             self.drawDRRect(ptrToSkRRect(outerPtr), ptrToSkRRect(innerPtr), paint);
         }))
+        .function("_drawGlyphs", optional_override([](SkCanvas& self,
+                                                      int count,
+                                                      uintptr_t /* uint16_t* */ glyphs,
+                                                      uintptr_t /* SkPoint*  */ positions,
+                                                      float x, float y,
+                                                      const SkFont& font,
+                                                      const SkPaint& paint)->void {
+            self.drawGlyphs(count,
+                            reinterpret_cast<const uint16_t*>(glyphs),
+                            reinterpret_cast<const SkPoint*>(positions),
+                            {x, y}, font, paint);
+        }))
         // TODO: deprecate this version, and require sampling
         .function("drawImage", optional_override([](SkCanvas& self, const sk_sp<SkImage>& image,
                                                     SkScalar x, SkScalar y, const SkPaint* paint) {
@@ -1190,6 +1202,22 @@ EMSCRIPTEN_BINDINGS(Skia) {
             int actualCodePoints = self.textToGlyphs(str, strLen, SkTextEncoding::kUTF8,
                                                      glyphIDs, expectedCodePoints);
             return actualCodePoints;
+        }))
+        .function("getMetrics", optional_override([](SkFont& self) -> JSObject {
+            SkFontMetrics fm;
+            self.getMetrics(&fm);
+
+            JSObject j = emscripten::val::object();
+            j.set("ascent",  fm.fAscent);
+            j.set("descent", fm.fDescent);
+            j.set("leading", fm.fLeading);
+            if (!(fm.fFlags & SkFontMetrics::kBoundsInvalid_Flag)) {
+                const float rect[] = {
+                    fm.fXMin, fm.fTop, fm.fXMax, fm.fBottom
+                };
+                j.set("bounds", MakeTypedArray(4, rect, "Float32Array"));
+            }
+            return j;
         }))
         .function("getScaleX", &SkFont::getScaleX)
         .function("getSize", &SkFont::getSize)
@@ -1680,7 +1708,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                                      emscripten::val errHandler
                                                     )->sk_sp<SkRuntimeEffect> {
             SkString s(sksl.c_str(), sksl.length());
-            auto [effect, errorText] = SkRuntimeEffect::Make(s);
+            auto [effect, errorText] = SkRuntimeEffect::MakeForShader(s);
             if (!effect) {
                 errHandler.call<void>("onError", val(errorText.c_str()));
                 return nullptr;

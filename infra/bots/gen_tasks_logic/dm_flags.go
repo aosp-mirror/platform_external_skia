@@ -340,13 +340,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("_ test _ GLBackendAllocationTest")
 		}
 
-		// skbug.com/9033 - these devices run out of memory on this test
-		// when opList splitting reduction is enabled
-		if b.gpu() && (b.model("Nexus7", "NVIDIA_Shield", "Nexus5x") ||
-			(b.os("Win10") && b.gpu("GTX660") && b.extraConfig("Vulkan"))) {
-			skip("_", "gm", "_", "savelayer_clipmask")
-		}
-
 		// skbug.com/9043 - these devices render this test incorrectly
 		// when opList splitting reduction is enabled
 		if b.gpu() && b.extraConfig("Vulkan") && (b.gpu("RadeonR9M470X", "RadeonHD7770")) {
@@ -428,6 +421,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("mtltestprecompile svg _ Chalkboard.svg")
 			skip("mtltestprecompile svg _ Ghostscript_Tiger.svg")
 		}
+		// Test reduced shader mode on iPhone 11 as representative iOS device
+		if b.model("iPhone11") && b.extraConfig("Metal") {
+			configs = append(configs, "mtlreducedshaders")
+		}
 
 		if b.gpu("AppleM1") && !b.extraConfig("Metal") {
 			skip("_ test _ TransferPixelsFromTextureTest")  // skia:11814
@@ -437,10 +434,15 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			args = append(args, "--reduceOpsTaskSplitting", "true")
 		}
 
+		// Test reduceOpsTaskSplitting fallback when over budget.
+		if b.model("NUC7i5BNK") && b.extraConfig("ASAN") {
+			args = append(args, "--gpuResourceCacheLimit", "16777216")
+		}
+
 		// Test rendering to wrapped dsts on a few bots
 		// Also test "glenarrow", which hits F16 surfaces and F16 vertex colors.
 		if b.extraConfig("BonusConfigs") {
-			configs = []string{"glbetex", "glbert", "glenarrow"}
+			configs = []string{"glbetex", "glbert", "glenarrow", "glreducedshaders"}
 		}
 
 		if b.os("ChromeOS") {
@@ -937,6 +939,11 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		match = append(match, "~WritePixelsNonTextureMSAA_Gpu")
 		// skbug.com/11366
 		match = append(match, "~SurfacePartialDraw_Gpu")
+	}
+
+	if b.extraConfig("Metal") && b.gpu("PowerVRGX6450") && b.matchOs("iOS") {
+	        // skbug.com/11885
+	        match = append(match, "~flight_animated_image")
 	}
 
 	if b.extraConfig("Direct3D") {

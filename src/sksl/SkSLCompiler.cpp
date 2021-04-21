@@ -13,17 +13,18 @@
 #include "src/core/SkScopeExit.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/sksl/SkSLAnalysis.h"
-#include "src/sksl/SkSLCPPCodeGenerator.h"
 #include "src/sksl/SkSLConstantFolder.h"
-#include "src/sksl/SkSLGLSLCodeGenerator.h"
-#include "src/sksl/SkSLHCodeGenerator.h"
 #include "src/sksl/SkSLIRGenerator.h"
-#include "src/sksl/SkSLMetalCodeGenerator.h"
 #include "src/sksl/SkSLOperators.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLRehydrator.h"
-#include "src/sksl/SkSLSPIRVCodeGenerator.h"
-#include "src/sksl/SkSLSPIRVtoHLSL.h"
+#include "src/sksl/codegen/SkSLCPPCodeGenerator.h"
+#include "src/sksl/codegen/SkSLDSLCPPCodeGenerator.h"
+#include "src/sksl/codegen/SkSLGLSLCodeGenerator.h"
+#include "src/sksl/codegen/SkSLHCodeGenerator.h"
+#include "src/sksl/codegen/SkSLMetalCodeGenerator.h"
+#include "src/sksl/codegen/SkSLSPIRVCodeGenerator.h"
+#include "src/sksl/codegen/SkSLSPIRVtoHLSL.h"
 #include "src/sksl/ir/SkSLEnum.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
@@ -62,6 +63,8 @@
 #include "src/sksl/generated/sksl_geom.dehydrated.sksl"
 #include "src/sksl/generated/sksl_gpu.dehydrated.sksl"
 #include "src/sksl/generated/sksl_public.dehydrated.sksl"
+#include "src/sksl/generated/sksl_rt_colorfilter.dehydrated.sksl"
+#include "src/sksl/generated/sksl_rt_shader.dehydrated.sksl"
 #include "src/sksl/generated/sksl_runtime.dehydrated.sksl"
 #include "src/sksl/generated/sksl_vert.dehydrated.sksl"
 
@@ -241,35 +244,63 @@ const ParsedModule& Compiler::loadPublicModule() {
     return fPublicModule;
 }
 
+static void add_glsl_type_aliases(SkSL::SymbolTable* symbols, const SkSL::BuiltinTypes& types) {
+    // Add some aliases to the runtime effect modules so that it's friendlier, and more like GLSL
+    symbols->addAlias("vec2", types.fFloat2.get());
+    symbols->addAlias("vec3", types.fFloat3.get());
+    symbols->addAlias("vec4", types.fFloat4.get());
+
+    symbols->addAlias("ivec2", types.fInt2.get());
+    symbols->addAlias("ivec3", types.fInt3.get());
+    symbols->addAlias("ivec4", types.fInt4.get());
+
+    symbols->addAlias("bvec2", types.fBool2.get());
+    symbols->addAlias("bvec3", types.fBool3.get());
+    symbols->addAlias("bvec4", types.fBool4.get());
+
+    symbols->addAlias("mat2", types.fFloat2x2.get());
+    symbols->addAlias("mat3", types.fFloat3x3.get());
+    symbols->addAlias("mat4", types.fFloat4x4.get());
+}
+
 const ParsedModule& Compiler::loadRuntimeEffectModule() {
     if (!fRuntimeEffectModule.fSymbols) {
-        fRuntimeEffectModule = this->parseModule(ProgramKind::kRuntimeEffect, MODULE_DATA(runtime),
-                                                 this->loadPublicModule());
-
-        // Add some aliases to the runtime effect module so that it's friendlier, and more like GLSL
-        fRuntimeEffectModule.fSymbols->addAlias("vec2", fContext->fTypes.fFloat2.get());
-        fRuntimeEffectModule.fSymbols->addAlias("vec3", fContext->fTypes.fFloat3.get());
-        fRuntimeEffectModule.fSymbols->addAlias("vec4", fContext->fTypes.fFloat4.get());
-
-        fRuntimeEffectModule.fSymbols->addAlias("bvec2", fContext->fTypes.fBool2.get());
-        fRuntimeEffectModule.fSymbols->addAlias("bvec3", fContext->fTypes.fBool3.get());
-        fRuntimeEffectModule.fSymbols->addAlias("bvec4", fContext->fTypes.fBool4.get());
-
-        fRuntimeEffectModule.fSymbols->addAlias("mat2", fContext->fTypes.fFloat2x2.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat3", fContext->fTypes.fFloat3x3.get());
-        fRuntimeEffectModule.fSymbols->addAlias("mat4", fContext->fTypes.fFloat4x4.get());
+        fRuntimeEffectModule = this->parseModule(
+                ProgramKind::kRuntimeEffect, MODULE_DATA(runtime), this->loadPublicModule());
+        add_glsl_type_aliases(fRuntimeEffectModule.fSymbols.get(), fContext->fTypes);
     }
     return fRuntimeEffectModule;
 }
 
+const ParsedModule& Compiler::loadRuntimeColorFilterModule() {
+    if (!fRuntimeColorFilterModule.fSymbols) {
+        fRuntimeColorFilterModule = this->parseModule(ProgramKind::kRuntimeColorFilter,
+                                                      MODULE_DATA(rt_colorfilter),
+                                                      this->loadPublicModule());
+        add_glsl_type_aliases(fRuntimeColorFilterModule.fSymbols.get(), fContext->fTypes);
+    }
+    return fRuntimeColorFilterModule;
+}
+
+const ParsedModule& Compiler::loadRuntimeShaderModule() {
+    if (!fRuntimeShaderModule.fSymbols) {
+        fRuntimeShaderModule = this->parseModule(
+                ProgramKind::kRuntimeShader, MODULE_DATA(rt_shader), this->loadPublicModule());
+        add_glsl_type_aliases(fRuntimeShaderModule.fSymbols.get(), fContext->fTypes);
+    }
+    return fRuntimeShaderModule;
+}
+
 const ParsedModule& Compiler::moduleForProgramKind(ProgramKind kind) {
     switch (kind) {
-        case ProgramKind::kVertex:            return this->loadVertexModule();        break;
-        case ProgramKind::kFragment:          return this->loadFragmentModule();      break;
-        case ProgramKind::kGeometry:          return this->loadGeometryModule();      break;
-        case ProgramKind::kFragmentProcessor: return this->loadFPModule();            break;
-        case ProgramKind::kRuntimeEffect:     return this->loadRuntimeEffectModule(); break;
-        case ProgramKind::kGeneric:           return this->loadPublicModule();        break;
+        case ProgramKind::kVertex:             return this->loadVertexModule();             break;
+        case ProgramKind::kFragment:           return this->loadFragmentModule();           break;
+        case ProgramKind::kGeometry:           return this->loadGeometryModule();           break;
+        case ProgramKind::kFragmentProcessor:  return this->loadFPModule();                 break;
+        case ProgramKind::kRuntimeEffect:      return this->loadRuntimeEffectModule();      break;
+        case ProgramKind::kRuntimeColorFilter: return this->loadRuntimeColorFilterModule(); break;
+        case ProgramKind::kRuntimeShader:      return this->loadRuntimeShaderModule();      break;
+        case ProgramKind::kGeneric:            return this->loadPublicModule();             break;
     }
     SkUNREACHABLE;
 }
@@ -826,6 +857,13 @@ bool Compiler::toMetal(Program& program, String* out) {
 bool Compiler::toCPP(Program& program, String name, OutputStream& out) {
     AutoSource as(this, program.fSource.get());
     CPPCodeGenerator cg(fContext.get(), &program, this, name, &out);
+    bool result = cg.generateCode();
+    return result;
+}
+
+bool Compiler::toDSLCPP(Program& program, String name, OutputStream& out) {
+    AutoSource as(this, program.fSource.get());
+    DSLCPPCodeGenerator cg(fContext.get(), &program, this, name, &out);
     bool result = cg.generateCode();
     return result;
 }

@@ -461,7 +461,7 @@ GR_DECLARE_STATIC_UNIQUE_KEY(gIndexBufferKey);
 
 void FillRRectOp::onPrepareDraws(Target* target) {
     // We request no multisample, but some platforms don't support disabling it on MSAA targets.
-    if (target->rtProxy()->numSamples() > 1 && !target->caps().multisampleDisableSupport()) {
+    if (target->usesMSAASurface() && !target->caps().multisampleDisableSupport()) {
         fProcessorFlags |= ProcessorFlags::kMSAAEnabled;
     }
 
@@ -671,7 +671,9 @@ class FillRRectOp::Processor::Impl : public GrGLSLGeometryProcessor {
         f->codeAppendf("half4 %s = half4(coverage);", args.fOutputCoverage);
     }
 
-    void setData(const GrGLSLProgramDataManager&, const GrGeometryProcessor&) override {}
+    void setData(const GrGLSLProgramDataManager&,
+                 const GrShaderCaps&,
+                 const GrGeometryProcessor&) override {}
 };
 
 
