@@ -1203,6 +1203,22 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                                      glyphIDs, expectedCodePoints);
             return actualCodePoints;
         }))
+        .function("getMetrics", optional_override([](SkFont& self) -> JSObject {
+            SkFontMetrics fm;
+            self.getMetrics(&fm);
+
+            JSObject j = emscripten::val::object();
+            j.set("ascent",  fm.fAscent);
+            j.set("descent", fm.fDescent);
+            j.set("leading", fm.fLeading);
+            if (!(fm.fFlags & SkFontMetrics::kBoundsInvalid_Flag)) {
+                const float rect[] = {
+                    fm.fXMin, fm.fTop, fm.fXMax, fm.fBottom
+                };
+                j.set("bounds", MakeTypedArray(4, rect, "Float32Array"));
+            }
+            return j;
+        }))
         .function("getScaleX", &SkFont::getScaleX)
         .function("getSize", &SkFont::getSize)
         .function("getSkewX", &SkFont::getSkewX)
@@ -1692,7 +1708,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                                      emscripten::val errHandler
                                                     )->sk_sp<SkRuntimeEffect> {
             SkString s(sksl.c_str(), sksl.length());
-            auto [effect, errorText] = SkRuntimeEffect::Make(s);
+            auto [effect, errorText] = SkRuntimeEffect::MakeForShader(s);
             if (!effect) {
                 errHandler.call<void>("onError", val(errorText.c_str()));
                 return nullptr;
