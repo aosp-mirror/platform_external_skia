@@ -32,8 +32,10 @@
 #if SK_SUPPORT_GPU
 #include "include/gpu/GrDirectContext.h"
 #include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrImageContextPriv.h"
 #include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/SkGr.h"
 #include "src/image/SkImage_Gpu.h"
 #endif
 #include "include/gpu/GrBackendSurface.h"
@@ -315,6 +317,26 @@ std::tuple<GrSurfaceProxyView, GrColorType> SkImage_Base::asView(GrRecordingCont
     }
     return this->onAsView(context, mipmapped, policy);
 }
+
+std::unique_ptr<GrFragmentProcessor> SkImage_Base::asFragmentProcessor(
+        GrRecordingContext* rContext,
+        SkSamplingOptions sampling,
+        const SkTileMode tileModes[2],
+        const SkMatrix& m,
+        const SkRect* subset,
+        const SkRect* domain) const {
+    if (!rContext) {
+        return {};
+    }
+    if (sampling.useCubic && !GrValidCubicResampler(sampling.cubic)) {
+        return {};
+    }
+    if (sampling.mipmap != SkMipmapMode::kNone &&
+        (!rContext->priv().caps()->mipmapSupport() || this->dimensions().area() <= 1)) {
+        sampling = SkSamplingOptions(sampling.filter);
+    }
+    return this->onAsFragmentProcessor(rContext, sampling, tileModes, m, subset, domain);
+}
 #endif
 
 GrBackendTexture SkImage_Base::onGetBackendTexture(bool flushPendingGrContextIO,
@@ -399,10 +421,12 @@ sk_sp<SkImage> SkImage::makeWithFilter(GrRecordingContext* rContext, const SkIma
         return nullptr;
     }
     srcSpecialImage = SkSpecialImage::MakeFromImage(rContext, subset,
-                                                    sk_ref_sp(const_cast<SkImage*>(this)));
+                                                    sk_ref_sp(const_cast<SkImage*>(this)),
+                                                    SkSurfaceProps());
 #else
     srcSpecialImage = SkSpecialImage::MakeFromImage(nullptr, subset,
-                                                    sk_ref_sp(const_cast<SkImage*>(this)));
+                                                    sk_ref_sp(const_cast<SkImage*>(this)),
+                                                    SkSurfaceProps());
 #endif
     if (!srcSpecialImage) {
         return nullptr;
