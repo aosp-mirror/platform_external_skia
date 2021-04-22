@@ -14,6 +14,7 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkImagePriv.h"
+#include "src/core/SkSurfacePriv.h"
 #include "src/gpu/GrAHardwareBufferUtils.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrContextThreadSafeProxyPriv.h"
@@ -134,16 +135,16 @@ sk_sp<SkImage> SkSurface_Gpu::onNewImageSnapshot(const SkIRect* subset) {
     }
 
     const SkImageInfo info = fDevice->imageInfo();
-    sk_sp<SkImage> image;
-    if (srcView.asTextureProxy()) {
-        // The surfaceDrawContext coming out of SkGpuDevice should always be exact and the
-        // above copy creates a kExact surfaceContext.
-        SkASSERT(srcView.proxy()->priv().isExact());
-        image = sk_make_sp<SkImage_Gpu>(sk_ref_sp(rContext), kNeedNewImageUniqueID,
-                                        std::move(srcView), info.colorType(), info.alphaType(),
-                                        info.refColorSpace());
+    if (!srcView.asTextureProxy()) {
+        return nullptr;
     }
-    return image;
+    // The surfaceDrawContext coming out of SkGpuDevice should always be exact and the
+    // above copy creates a kExact surfaceContext.
+    SkASSERT(srcView.proxy()->priv().isExact());
+    return sk_make_sp<SkImage_Gpu>(sk_ref_sp(rContext),
+                                   kNeedNewImageUniqueID,
+                                   std::move(srcView),
+                                   info.colorInfo());
 }
 
 void SkSurface_Gpu::onWritePixels(const SkPixmap& src, int x, int y) {
@@ -302,9 +303,10 @@ void SkSurface_Gpu::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y,
         const SkImageInfo info = fDevice->imageInfo();
         GrSurfaceProxyView view(std::move(srcProxy), sdc->origin(), sdc->readSwizzle());
         sk_sp<SkImage> image;
-        image = sk_make_sp<SkImage_Gpu>(sk_ref_sp(canvasContext), kNeedNewImageUniqueID,
-                                        std::move(view), info.colorType(), info.alphaType(),
-                                        info.refColorSpace());
+        image = sk_make_sp<SkImage_Gpu>(sk_ref_sp(canvasContext),
+                                        kNeedNewImageUniqueID,
+                                        std::move(view),
+                                        info.colorInfo());
         canvas->drawImage(image.get(), x, y, sampling, paint);
         return true;
     };
@@ -418,8 +420,8 @@ sk_sp<SkSurface> SkSurface::MakeRenderTarget(GrRecordingContext* context,
 
     auto sdc = GrSurfaceDrawContext::Make(
             context, grColorType, c.refColorSpace(), SkBackingFit::kExact,
-            c.dimensions(), c.sampleCount(), GrMipmapped(c.isMipMapped()), c.isProtected(),
-            c.origin(), budgeted, &c.surfaceProps());
+            c.dimensions(), c.surfaceProps(), c.sampleCount(), GrMipmapped(c.isMipMapped()),
+            c.isProtected(), c.origin(), budgeted);
     if (!sdc) {
         return nullptr;
     }
@@ -530,8 +532,8 @@ sk_sp<SkSurface> SkSurface::MakeFromBackendTexture(GrRecordingContext* context,
     }
 
     auto sdc = GrSurfaceDrawContext::MakeFromBackendTexture(
-            context, grColorType, std::move(colorSpace), tex, sampleCnt, origin, props,
-            std::move(releaseHelper));
+            context, grColorType, std::move(colorSpace), tex, sampleCnt, origin,
+            SkSurfacePropsCopyOrDefault(props), std::move(releaseHelper));
     if (!sdc) {
         return nullptr;
     }
@@ -588,7 +590,7 @@ bool SkSurface_Gpu::onReplaceBackendTexture(const GrBackendTexture& backendTextu
     }
     auto sdc = GrSurfaceDrawContext::MakeFromBackendTexture(
             context, oldSDC->colorInfo().colorType(), std::move(colorSpace), backendTexture,
-            sampleCnt, origin, &this->props(), std::move(releaseHelper));
+            sampleCnt, origin, this->props(), std::move(releaseHelper));
     if (!sdc) {
         return false;
     }
@@ -644,7 +646,7 @@ sk_sp<SkSurface> SkSurface::MakeFromBackendRenderTarget(GrRecordingContext* cont
                                                                  std::move(colorSpace),
                                                                  rt,
                                                                  origin,
-                                                                 props,
+                                                                 SkSurfacePropsCopyOrDefault(props),
                                                                  std::move(releaseHelper));
     if (!sdc) {
         return nullptr;
