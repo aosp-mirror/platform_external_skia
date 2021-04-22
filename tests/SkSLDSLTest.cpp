@@ -1016,6 +1016,9 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBlock, r, ctxInfo) {
     Var a(kInt_Type, "a", 1), b(kInt_Type, "b", 2);
     Statement y = Block(Declare(a), Declare(b), a = b);
     EXPECT_EQUAL(y, "{ int a = 1; int b = 2; (a = b); }");
+
+    Statement z = (If(a > 0, --a), ++b);
+    EXPECT_EQUAL(z, "if ((a > 0)) --a; ++b;");
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBreak, r, ctxInfo) {
@@ -1103,12 +1106,22 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLDo, r, ctxInfo) {
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFor, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/false);
-    Statement x = For(Statement(), Expression(), Expression(), Block());
-    EXPECT_EQUAL(x, "for (;;) {}");
+    EXPECT_EQUAL(For(Statement(), Expression(), Expression(), Block()),
+                "for (;;) {}");
 
     Var i(kInt_Type, "i", 0);
-    Statement y = For(Declare(i), i < 10, ++i, i += 5);
-    EXPECT_EQUAL(y, "for (int i = 0; (i < 10); ++i) (i += 5);");
+    EXPECT_EQUAL(For(Declare(i), i < 10, ++i, i += 5),
+                "for (int i = 0; (i < 10); ++i) (i += 5);");
+
+    Var j(kInt_Type, "j", 0);
+    Var k(kInt_Type, "k", 10);
+    EXPECT_EQUAL(For((Declare(j), Declare(k)), j < k, ++j, Block()), R"(
+                 {
+                     int j = 0;
+                     int k = 10;
+                     for (; (j < k); ++j) {}
+                 }
+    )");
 
     {
         ExpectError error(r, "error: expected 'bool', but found 'int'\n");
