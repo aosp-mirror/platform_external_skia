@@ -335,7 +335,7 @@ void GrSurfaceDrawContext::drawGlyphRunListNoCache(const GrClip* clip,
     const SkPoint drawOrigin = glyphRunList.origin();
     SkMatrix drawMatrix = viewMatrix.localToDevice();
     drawMatrix.preTranslate(drawOrigin.x(), drawOrigin.y());
-    GrSubRunAllocator* const alloc = this->recordingContext()->priv().recordTimeSubRunAllocator();
+    GrSubRunAllocator* const alloc = this->subRunAlloc();
 
     for (auto& glyphRun : glyphRunList) {
         GrSubRunNoCachePainter painter{this, alloc, clip, viewMatrix, glyphRunList, paint};
@@ -415,8 +415,10 @@ void GrSurfaceDrawContext::drawGlyphRunList(const GrClip* clip,
         return;
     }
 
-    if (gGrDrawTextNoCache) {
-        // drawGlyphRunListNoCache lives in GrTextBlob.cpp to share sub run implementation code.
+    if (gGrDrawTextNoCache || glyphRunList.blob() == nullptr) {
+        // If the glyphRunList does not have an associated text blob, then it was created by one of
+        // the direct draw APIs (drawGlyphs, etc.). There is no need to create a GrTextBlob just
+        // build the sub run directly and place it in the op.
         this->drawGlyphRunListNoCache(clip, viewMatrix, glyphRunList, paint);
     } else {
         this->drawGlyphRunListWithCache(clip, viewMatrix, glyphRunList, paint);
@@ -829,28 +831,16 @@ GrOpsTask::CanDiscardPreviousOps GrSurfaceDrawContext::canDiscardPreviousOpsOnFu
     // Although the clear will ignore the stencil buffer, following draw ops may not so we can't get
     // rid of all the preceding ops. Beware! If we ever add any ops that have a side effect beyond
     // modifying the stencil buffer we will need a more elaborate tracking system (skbug.com/7002).
-    return GrOpsTask::CanDiscardPreviousOps(!fNumStencilSamples);
+    return GrOpsTask::CanDiscardPreviousOps(!fNeedsStencil);
 }
 
-void GrSurfaceDrawContext::setNeedsStencil(bool useMixedSamplesIfNotMSAA) {
-    // Don't clear stencil until after we've changed fNumStencilSamples. This ensures we don't loop
-    // forever in the event that there are driver bugs and we need to clear as a draw.
-    bool hasInitializedStencil = fNumStencilSamples > 0;
-
-    int numRequiredSamples = this->numSamples();
-    if (useMixedSamplesIfNotMSAA && 1 == numRequiredSamples) {
-        SkASSERT(this->asRenderTargetProxy()->canUseMixedSamples(*this->caps()));
-        numRequiredSamples =
-                this->caps()->internalMultisampleCount(this->asSurfaceProxy()->backendFormat());
-    }
-    SkASSERT(numRequiredSamples > 0);
-
-    if (numRequiredSamples > fNumStencilSamples) {
-        fNumStencilSamples = numRequiredSamples;
-        this->asRenderTargetProxy()->setNeedsStencil(fNumStencilSamples);
-    }
-
+void GrSurfaceDrawContext::setNeedsStencil() {
+    // Don't clear stencil until after we've set fNeedsStencil. This ensures we don't loop forever
+    // in the event that there are driver bugs and we need to clear as a draw.
+    bool hasInitializedStencil = fNeedsStencil;
+    fNeedsStencil = true;
     if (!hasInitializedStencil) {
+        this->asRenderTargetProxy()->setNeedsStencil();
         if (this->caps()->performStencilClearsAsDraws()) {
             // There is a driver bug with clearing stencil. We must use an op to manually clear the
             // stencil buffer before the op that required 'setNeedsStencil'.
@@ -863,7 +853,7 @@ void GrSurfaceDrawContext::setNeedsStencil(bool useMixedSamplesIfNotMSAA) {
 }
 
 void GrSurfaceDrawContext::internalStencilClear(const SkIRect* scissor, bool insideStencilMask) {
-    this->setNeedsStencil(/* useMixedSamplesIfNotMSAA = */ false);
+    this->setNeedsStencil();
 
     GrScissorState scissorState(this->asSurfaceProxy()->backingStoreDimensions());
     if (scissor && !scissorState.set(*scissor)) {
@@ -1897,7 +1887,7 @@ void GrSurfaceDrawContext::addDrawOp(const GrClip* clip,
     bool usesUserStencilBits = fixedFunctionFlags & GrDrawOp::FixedFunctionFlags::kUsesStencil;
 
     if (usesUserStencilBits) {  // Stencil clipping will call setNeedsStencil on its own, if needed.
-        this->setNeedsStencil(usesHWAA);
+        this->setNeedsStencil();
     }
 
     bool skipDraw = false;
@@ -1920,20 +1910,8 @@ void GrSurfaceDrawContext::addDrawOp(const GrClip* clip,
         return;
     }
 
-    bool willUseStencil = usesUserStencilBits || appliedClip.hasStencilClip();
-    SkASSERT(!willUseStencil || fNumStencilSamples > 0);
-
-    // If stencil is enabled and the framebuffer is mixed sampled, then the graphics pipeline will
-    // have mixed sampled coverage, regardless of whether HWAA is enabled. (e.g., a non-aa draw
-    // that uses a stencil test when the stencil buffer is multisampled.)
-    bool hasMixedSampledCoverage = (
-            willUseStencil && fNumStencilSamples > this->numSamples());
-    SkASSERT(!hasMixedSampledCoverage ||
-             this->asRenderTargetProxy()->canUseMixedSamples(*this->caps()));
-
     GrClampType clampType = GrColorTypeClampType(this->colorInfo().colorType());
-    GrProcessorSet::Analysis analysis = drawOp->finalize(
-            *this->caps(), &appliedClip, hasMixedSampledCoverage, clampType);
+    GrProcessorSet::Analysis analysis = drawOp->finalize(*this->caps(), &appliedClip, clampType);
 
     // Must be called before setDstProxyView so that it sees the final bounds of the op.
     op->setClippedBounds(bounds);
