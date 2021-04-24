@@ -100,7 +100,8 @@ public:
     bool wrapsSecondaryCommandBuffer() const { return SkToBool(fExternalFramebuffer); }
     sk_sp<GrVkFramebuffer> externalFramebuffer() const;
 
-    bool canAttemptStencilAttachment() const override {
+    bool canAttemptStencilAttachment(bool useMSAASurface) const override {
+        SkASSERT(useMSAASurface == (this->numSamples() > 1));
         // We don't know the status of the stencil attachment for wrapped external secondary command
         // buffers so we just assume we don't have one.
         return !this->wrapsSecondaryCommandBuffer();
@@ -120,12 +121,6 @@ public:
                                                  const GrProgramInfo& programInfo,
                                                  GrVkRenderPass::AttachmentsDescriptor* desc,
                                                  GrVkRenderPass::AttachmentFlags* flags);
-
-    // So that we don't need to rewrite descriptor sets each time, we keep a cached input descriptor
-    // set on the the RT and simply reuse that descriptor set for this render target only. This call
-    // will not ref the GrVkDescriptorSet so the caller must manually ref it if it wants to keep it
-    // alive.
-    const GrVkDescriptorSet* inputDescSet(GrVkGpu*, bool forResolve);
 
 protected:
     enum class CreateType {
@@ -168,7 +163,7 @@ private:
                            SelfDependencyFlags selfDepFlags,
                            LoadFromResolve);
 
-    bool completeStencilAttachment() override;
+    bool completeStencilAttachment(GrAttachment* stencil, bool useMSAASurface) override;
 
     // In Vulkan we call the release proc after we are finished with the underlying
     // GrVkImage::Resource object (which occurs after the GPU has finished all work on it).
