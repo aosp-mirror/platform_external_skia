@@ -28,9 +28,6 @@ private:
 
     SkStrokeRec& headStroke() { return fPathStrokeList.fStroke; }
     SkPMColor4f& headColor() { return fPathStrokeList.fColor; }
-    GrStrokeTessellateOp* nextInChain() const {
-        return static_cast<GrStrokeTessellateOp*>(this->GrDrawOp::nextInChain());
-    }
 
     // Returns whether it is a good tradeoff to use the dynamic states flagged in the given
     // bitfield. Dynamic states improve batching, but if they aren't already enabled, they come at
@@ -54,8 +51,7 @@ private:
     const char* name() const override { return "GrStrokeTessellateOp"; }
     void visitProxies(const VisitProxyFunc& fn) const override;
     FixedFunctionFlags fixedFunctionFlags() const override;
-    GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*,
-                                      bool hasMixedSampledCoverage, GrClampType) override;
+    GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*, GrClampType) override;
     CombineResult onCombineIfPossible(GrOp*, SkArenaAlloc*, const GrCaps&) override;
 
     // Creates the tessellator and the stencil/fill program(s) we will use with it.

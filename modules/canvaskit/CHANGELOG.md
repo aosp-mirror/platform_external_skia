@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] - 2021-04-23
+
 ### Added
  - Add 'drawGlyphs' to 'Canvas'
  - Add `drawPatch` to `Canvas`.
@@ -14,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    to `RuntimeEffect.makeShader` as floats (like all other uniforms), and will be converted to
    integers internally, to match the expectations of the shader.
  - Add 'halfLeading' to `TextStyle` and `StrutStyle`.
+ - `ParagraphStyle` now accepts textHeightBehavior.
 
 ### Removed
  - `Picture.saveAsFile()`, in favor of `Picture.serialize()` where clients can control how to
