@@ -100,11 +100,12 @@ sk_sp<GrGLRenderTarget> GrGLRenderTarget::MakeWrapped(GrGLGpu* gpu,
 }
 
 GrBackendRenderTarget GrGLRenderTarget::getBackendRenderTarget() const {
+    bool useMultisampleFBO = (this->numSamples() > 1);
     GrGLFramebufferInfo fbi;
-    fbi.fFBOID = (this->numSamples() > 1) ? fMultisampleFBOID : fSingleSampleFBOID;
+    fbi.fFBOID = (useMultisampleFBO) ? fMultisampleFBOID : fSingleSampleFBOID;
     fbi.fFormat = GrGLFormatToEnum(this->format());
     int numStencilBits = 0;
-    if (GrAttachment* stencil = this->getStencilAttachment()) {
+    if (GrAttachment* stencil = this->getStencilAttachment(useMultisampleFBO)) {
         numStencilBits = GrBackendFormatStencilBits(stencil->backendFormat());
     }
 
@@ -123,14 +124,18 @@ size_t GrGLRenderTarget::onGpuMemorySize() const {
                                   fTotalMemorySamplesPerPixel, GrMipmapped::kNo);
 }
 
-bool GrGLRenderTarget::completeStencilAttachment() {
+bool GrGLRenderTarget::completeStencilAttachment(GrAttachment* stencil, bool useMultisampleFBO) {
     GrGLGpu* gpu = this->getGLGpu();
     const GrGLInterface* interface = gpu->glInterface();
-    GrAttachment* stencil = this->getStencilAttachment();
 
-    GrGLuint stencilFBOID = (this->stencilIsOnMultisampleFBO()) ? fMultisampleFBOID
-                                                                : fSingleSampleFBOID;
-    gpu->invalidateBoundRenderTarget();
+    if (this->numSamples() == 1 && useMultisampleFBO) {
+        // We will be rendering to the dynamic msaa fbo. Make sure to initialize it first.
+        if (!this->ensureDynamicMSAAAttachment()) {
+            return false;
+        }
+    }
+
+    GrGLuint stencilFBOID = (useMultisampleFBO) ? fMultisampleFBOID : fSingleSampleFBOID;
     gpu->bindFramebuffer(GR_GL_FRAMEBUFFER, stencilFBOID);
 
     if (nullptr == stencil) {
@@ -170,6 +175,49 @@ bool GrGLRenderTarget::completeStencilAttachment() {
     return true;
 }
 
+bool GrGLRenderTarget::ensureDynamicMSAAAttachment() {
+    SkASSERT(this->numSamples() == 1);
+    if (fMultisampleFBOID) {
+        return true;
+    }
+    SkASSERT(!fDynamicMSAAAttachment);
+
+    GrResourceProvider* resourceProvider = this->getContext()->priv().resourceProvider();
+    const GrCaps& caps = *this->getGpu()->caps();
+
+    int internalSampleCount = caps.internalMultisampleCount(this->backendFormat());
+    if (internalSampleCount <= 1) {
+        return false;
+    }
+
+    GL_CALL(GenFramebuffers(1, &fMultisampleFBOID));
+    if (!fMultisampleFBOID) {
+        return false;
+    }
+
+    this->getGLGpu()->bindFramebuffer(GR_GL_FRAMEBUFFER, fMultisampleFBOID);
+
+    if (resourceProvider->caps()->msaaResolvesAutomatically()) {
+        if (GrGLTexture* glTex = static_cast<GrGLTexture*>(this->asTexture())) {
+            GL_CALL(FramebufferTexture2DMultisample(GR_GL_FRAMEBUFFER, GR_GL_COLOR_ATTACHMENT0,
+                                                    glTex->target(), glTex->textureID(),
+                                                    0 /*mipMapLevel*/, internalSampleCount));
+            return true;
+        }
+    }
+
+    fDynamicMSAAAttachment.reset(static_cast<GrGLAttachment*>(resourceProvider->makeMSAAAttachment(
+            this->dimensions(), this->backendFormat(), internalSampleCount,
+            GrProtected(this->isProtected())).release()));
+    if (!fDynamicMSAAAttachment) {
+        return false;
+    }
+
+    GL_CALL(FramebufferRenderbuffer(GR_GL_FRAMEBUFFER, GR_GL_COLOR_ATTACHMENT0, GR_GL_RENDERBUFFER,
+                                    fDynamicMSAAAttachment->renderbufferID()));
+    return true;
+}
+
 void GrGLRenderTarget::onRelease() {
     if (GrBackendObjectOwnership::kBorrowed != fRTFBOOwnership) {
         GrGLGpu* gpu = this->getGLGpu();
@@ -203,7 +251,7 @@ GrGLGpu* GrGLRenderTarget::getGLGpu() const {
     return static_cast<GrGLGpu*>(this->getGpu());
 }
 
-bool GrGLRenderTarget::canAttemptStencilAttachment() const {
+bool GrGLRenderTarget::canAttemptStencilAttachment(bool useMultisampleFBO) const {
     if (this->getGpu()->getContext()->priv().caps()->avoidStencilBuffers()) {
         return false;
     }
@@ -211,7 +259,9 @@ bool GrGLRenderTarget::canAttemptStencilAttachment() const {
     // Only modify the FBO's attachments if we have created the FBO. Public APIs do not currently
     // allow for borrowed FBO ownership, so we can safely assume that if an object is owned,
     // Skia created it.
-    return this->fRTFBOOwnership == GrBackendObjectOwnership::kOwned;
+    return this->fRTFBOOwnership == GrBackendObjectOwnership::kOwned ||
+           // The dmsaa attachment is always owned and always supports adding stencil.
+           (this->numSamples() == 1 && useMultisampleFBO);
 }
 
 void GrGLRenderTarget::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
