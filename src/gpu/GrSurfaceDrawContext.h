@@ -660,6 +660,8 @@ public:
 private:
     enum class QuadOptimization;
 
+    void willReplaceOpsTask(GrOpsTask* prevTask, GrOpsTask* nextTask) override;
+
     GrAAType chooseAAType(GrAA);
 
     GrOpsTask::CanDiscardPreviousOps canDiscardPreviousOpsOnFullClear() const override;
@@ -727,7 +729,8 @@ private:
 
     SkGlyphRunListPainter* glyphPainter() { return &fGlyphPainter; }
 
-    SkSurfaceProps fSurfaceProps;
+    const SkSurfaceProps fSurfaceProps;
+    const bool fCanUseDynamicMSAA;
 
     bool fNeedsStencil = false;
 
