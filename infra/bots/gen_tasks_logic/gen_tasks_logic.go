@@ -227,14 +227,12 @@ var (
 		},
 	}
 
-	// Enable reduceOpsTaskSplitting option on these models
-	// skbug.com/10877#c27
-	REDUCE_OPS_TASK_SPLITTING_MODELS = []string{
-		"AndroidOne",
-		"GalaxyS20",
-		"Nexus5x",
-		"Nexus7",
-		"NUC7i5BNK",
+	// Set dontReduceOpsTaskSplitting option on these models
+	DONT_REDUCE_OPS_TASK_SPLITTING_MODELS = []string{
+		"NUC5PPYH",
+		"Pixel4",
+		"Pixel4XL",
+		"Pixel5",
 	}
 )
 
@@ -919,6 +917,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"TegraK1":             "10575.22.0",
 					"IntelHDGraphics615":  "10575.22.0",
 					"IntelUHDGraphics605": "13729.56.0",
+					"RadeonVega3":         "13729.56.0",
 				}[b.parts["cpu_or_gpu_value"]]
 				if !ok {
 					log.Fatalf("Entry %q not found in ChromeOS GPU mapping.", b.parts["cpu_or_gpu_value"])

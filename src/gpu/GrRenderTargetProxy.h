@@ -12,6 +12,7 @@
 #include "src/core/SkArenaAlloc.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrNativeRect.h"
+#include "src/gpu/GrSubRunAllocator.h"
 #include "src/gpu/GrSurfaceProxy.h"
 #include "src/gpu/GrSwizzle.h"
 
@@ -28,13 +29,16 @@ public:
         SkDEBUGCODE(if (fIsFlushed) SK_ABORT("Using a flushed arena");)
         return &fArenaAlloc;
     }
-
     void flush() {
         SkDEBUGCODE(fIsFlushed = true;)
     }
+    GrSubRunAllocator* subRunAlloc() { return &fSubRunAllocator; }
 
 private:
     SkArenaAlloc fArenaAlloc{1024};
+    // An allocator specifically designed to minimize the overhead of sub runs. It provides a
+    // different dtor semantics than SkArenaAlloc.
+    GrSubRunAllocator fSubRunAllocator{1024};
     SkDEBUGCODE(bool fIsFlushed = false;)
 };
 
@@ -50,26 +54,12 @@ public:
     // Actually instantiate the backing rendertarget, if necessary.
     bool instantiate(GrResourceProvider*) override;
 
-    bool canUseMixedSamples(const GrCaps& caps) const {
-        return caps.mixedSamplesSupport() && !this->glRTFBOIDIs0() &&
-               caps.internalMultisampleCount(this->backendFormat()) > 1 &&
-               this->canChangeStencilAttachment();
-    }
-
     /*
-     * Indicate that a draw to this proxy requires stencil, and how many stencil samples it needs.
-     * The number of stencil samples on this proxy will be equal to the largest sample count passed
-     * to this method.
+     * Indicate that a draw to this proxy requires stencil.
      */
-    void setNeedsStencil(int8_t numStencilSamples) {
-        SkASSERT(numStencilSamples >= fSampleCnt);
-        fNumStencilSamples = std::max(numStencilSamples, fNumStencilSamples);
-    }
+    void setNeedsStencil() { fNeedsStencil = true; }
 
-    /**
-     * Returns the number of stencil samples this proxy will use, or 0 if it does not use stencil.
-     */
-    int numStencilSamples() const { return fNumStencilSamples; }
+    int needsStencil() const { return fNeedsStencil; }
 
     /**
      * Returns the number of samples/pixel in the color buffer (One if non-MSAA).
@@ -182,7 +172,7 @@ private:
     // that particular class don't require it. Changing the size of this object can move the start
     // address of other types, leading to this problem.
     int8_t             fSampleCnt;
-    int8_t             fNumStencilSamples = 0;
+    int8_t             fNeedsStencil = false;
     WrapsVkSecondaryCB fWrapsVkSecondaryCB;
     SkIRect            fMSAADirtyRect = SkIRect::MakeEmpty();
     sk_sp<GrArenas>    fArenas{nullptr};
