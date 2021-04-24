@@ -108,8 +108,8 @@ public:
     }
 #endif
 
-    sk_sp<GrAttachment> makeStencilAttachmentForRenderTarget(const GrRenderTarget*,
-                                                             SkISize dimensions) override;
+    sk_sp<GrAttachment> makeStencilAttachment(const GrBackendFormat& /*colorFormat*/,
+                                              SkISize dimensions, int numStencilSamples) override;
 
     GrBackendFormat getPreferredStencilFormat(const GrBackendFormat&) override {
         return GrBackendFormat::MakeVk(this->vkCaps().preferredStencilFormat());
@@ -137,8 +137,8 @@ public:
 
     bool loadMSAAFromResolve(GrVkCommandBuffer* commandBuffer,
                              const GrVkRenderPass& renderPass,
-                             GrSurface* dst,
-                             GrSurface* src,
+                             GrAttachment* dst,
+                             GrVkAttachment* src,
                              const SkIRect& srcRect);
 
     bool onRegenerateMipMapLevels(GrTexture* tex) override;
@@ -187,7 +187,7 @@ public:
     bool beginRenderPass(const GrVkRenderPass*,
                          sk_sp<const GrVkFramebuffer>,
                          const VkClearValue* colorClear,
-                         GrVkRenderTarget*,
+                         const GrSurface*,
                          const SkIRect& renderPassBounds,
                          bool forSecondaryCB);
     void endRenderPass(GrRenderTarget* target, GrSurfaceOrigin origin, const SkIRect& bounds);
