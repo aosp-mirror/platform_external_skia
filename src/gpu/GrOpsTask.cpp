@@ -391,8 +391,9 @@ void GrOpsTask::addOp(GrDrawingManager* drawingMgr, GrOp::Owner op,
 }
 
 void GrOpsTask::addDrawOp(GrDrawingManager* drawingMgr, GrOp::Owner op,
-                          const GrProcessorSet::Analysis& processorAnalysis,
-                          GrAppliedClip&& clip, const DstProxyView& dstProxyView,
+                          GrDrawOp::FixedFunctionFlags fixedFunctionFlags,
+                          const GrProcessorSet::Analysis& processorAnalysis, GrAppliedClip&& clip,
+                          const DstProxyView& dstProxyView,
                           GrTextureResolveManager textureResolveManager, const GrCaps& caps) {
     auto addDependency = [&](GrSurfaceProxy* p, GrMipmapped mipmapped) {
         this->addSampledTexture(p);
@@ -419,6 +420,16 @@ void GrOpsTask::addDrawOp(GrDrawingManager* drawingMgr, GrOp::Owner op,
     if (processorAnalysis.usesNonCoherentHWBlending()) {
         fRenderPassXferBarriers |= GrXferBarrierFlags::kBlend;
     }
+
+#ifdef SK_DEBUG
+    // Ensure we can support dynamic msaa if the caller is trying to trigger it.
+    GrRenderTargetProxy* rtProxy = this->target(0)->asRenderTargetProxy();
+    if (rtProxy->numSamples() == 1 &&
+        (fixedFunctionFlags & GrDrawOp::FixedFunctionFlags::kUsesHWAA)) {
+        SkASSERT(caps.supportsDynamicMSAA(rtProxy));
+    }
+#endif
+    fUsesMSAASurface |= (fixedFunctionFlags & GrDrawOp::FixedFunctionFlags::kUsesHWAA);
 
     this->recordOp(std::move(op), processorAnalysis, clip.doesClip() ? &clip : nullptr,
                    &dstProxyView, caps);
@@ -563,11 +574,12 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
 
     GrAttachment* stencil = nullptr;
     if (proxy->needsStencil()) {
-        if (!flushState->resourceProvider()->attachStencilAttachment(renderTarget)) {
+        if (!flushState->resourceProvider()->attachStencilAttachment(renderTarget,
+                                                                     fUsesMSAASurface)) {
             SkDebugf("WARNING: failed to attach a stencil buffer. Rendering will be skipped.\n");
             return false;
         }
-        stencil = renderTarget->getStencilAttachment();
+        stencil = renderTarget->getStencilAttachment(fUsesMSAASurface);
     }
 
     GrLoadOp stencilLoadOp;
@@ -682,8 +694,6 @@ void GrOpsTask::reset() {
 }
 
 int GrOpsTask::mergeFrom(SkSpan<const sk_sp<GrRenderTask>> tasks) {
-    // Find the index of the last color-clearing task. -1 indicates this or "there are none."
-    int indexOfLastColorClear = -1;
     int mergedCount = 0;
     for (const sk_sp<GrRenderTask>& task : tasks) {
         auto opsTask = task->asOpsTask();
@@ -694,7 +704,9 @@ int GrOpsTask::mergeFrom(SkSpan<const sk_sp<GrRenderTask>> tasks) {
         SkASSERT(fTargetSwizzle == opsTask->fTargetSwizzle);
         SkASSERT(fTargetOrigin == opsTask->fTargetOrigin);
         if (GrLoadOp::kClear == opsTask->fColorLoadOp) {
-            indexOfLastColorClear = &task - tasks.begin();
+            // TODO(11903): Go back to actually dropping ops tasks when we are merged with
+            // color clear.
+            return 0;
         }
         mergedCount += 1;
     }
@@ -704,24 +716,6 @@ int GrOpsTask::mergeFrom(SkSpan<const sk_sp<GrRenderTask>> tasks) {
 
     SkSpan<const sk_sp<GrOpsTask>> opsTasks(
             reinterpret_cast<const sk_sp<GrOpsTask>*>(tasks.data()), SkToSizeT(mergedCount));
-    if (indexOfLastColorClear >= 0) {
-        // If any dropped task needs to preserve stencil, for now just bail on the merge.
-        // Could keep the merge and insert a clear op, but might be tricky due to closed task.
-        if (fMustPreserveStencil) {
-            return 0;
-        }
-        for (const auto& opsTask : opsTasks.first(indexOfLastColorClear)) {
-            if (opsTask->fMustPreserveStencil) {
-                return 0;
-            }
-        }
-        // Clear `this` and forget about the tasks pre-color-clear.
-        this->reset();
-        opsTasks = opsTasks.last(opsTasks.count() - indexOfLastColorClear);
-        // Copy the color-clear into `this`.
-        fColorLoadOp = GrLoadOp::kClear;
-        fLoadClearColor = opsTasks.front()->fLoadClearColor;
-    }
     int addlDeferredProxyCount = 0;
     int addlProxyCount = 0;
     int addlOpChainCount = 0;
@@ -732,6 +726,7 @@ int GrOpsTask::mergeFrom(SkSpan<const sk_sp<GrRenderTask>> tasks) {
         fClippedContentBounds.join(opsTask->fClippedContentBounds);
         fTotalBounds.join(opsTask->fTotalBounds);
         fRenderPassXferBarriers |= opsTask->fRenderPassXferBarriers;
+        fUsesMSAASurface |= opsTask->fUsesMSAASurface;
         SkDEBUGCODE(fNumClips += opsTask->fNumClips);
     }
 

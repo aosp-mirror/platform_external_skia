@@ -103,6 +103,14 @@ public:
     // Applies any necessary workarounds and returns the GL primitive type to use in draw calls.
     GrGLenum prepareToDraw(GrPrimitiveType primitiveType);
 
+    enum class ResolveDirection : bool {
+        kSingleToMSAA,
+        kMSAAToSingle
+    };
+
+    void resolveRenderFBOs(GrGLRenderTarget*, const SkIRect& resolveRect, ResolveDirection,
+                           bool invalidateReadBufferAfterBlit = false);
+
     // The GrGLOpsRenderPass does not buffer up draws before submitting them to the gpu.
     // Thus this is the implementation of the clear call for the corresponding passthrough function
     // on GrGLOpsRenderPass.
@@ -113,14 +121,14 @@ public:
     // Thus this is the implementation of the clearStencil call for the corresponding passthrough
     // function on GrGLOpsrenderPass.
     void clearStencilClip(const GrScissorState&, bool insideStencilMask,
-                          GrRenderTarget*, GrSurfaceOrigin);
+                          GrRenderTarget*, bool useMultisampleFBO, GrSurfaceOrigin);
 
-    void beginCommandBuffer(GrRenderTarget*, bool useMultisampleFBO,
+    void beginCommandBuffer(GrGLRenderTarget*, bool useMultisampleFBO,
                             const SkIRect& bounds, GrSurfaceOrigin,
                             const GrOpsRenderPass::LoadAndStoreInfo& colorLoadStore,
                             const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilLoadStore);
 
-    void endCommandBuffer(GrRenderTarget*, bool useMultisampleFBO,
+    void endCommandBuffer(GrGLRenderTarget*, bool useMultisampleFBO,
                           const GrOpsRenderPass::LoadAndStoreInfo& colorLoadStore,
                           const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilLoadStore);
 
@@ -128,15 +136,13 @@ public:
         fHWBoundRenderTargetUniqueID.makeInvalid();
     }
 
-    sk_sp<GrAttachment> makeStencilAttachmentForRenderTarget(const GrRenderTarget* rt,
-                                                             SkISize dimensions) override;
+    sk_sp<GrAttachment> makeStencilAttachment(const GrBackendFormat& colorFormat,
+                                              SkISize dimensions, int numStencilSamples) override;
 
     sk_sp<GrAttachment> makeMSAAAttachment(SkISize dimensions,
                                            const GrBackendFormat& format,
                                            int numSamples,
-                                           GrProtected isProtected) override {
-        return nullptr;
-    }
+                                           GrProtected isProtected) override;
 
     void deleteBackendTexture(const GrBackendTexture&) override;
 
@@ -332,7 +338,7 @@ private:
                          GrGpuFinishedContext finishedContext) override;
 
     GrOpsRenderPass* onGetOpsRenderPass(GrRenderTarget*,
-                                        bool useMSAASurface,
+                                        bool useMultisampleFBO,
                                         GrAttachment*,
                                         GrSurfaceOrigin,
                                         const SkIRect&,
