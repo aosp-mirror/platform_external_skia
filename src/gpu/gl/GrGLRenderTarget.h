@@ -44,23 +44,20 @@ public:
     GrGLuint singleSampleFBOID() const { return fSingleSampleFBOID; }
     GrGLuint multisampleFBOID() const { return fMultisampleFBOID; }
 
-    // If we have a multisample FBO, that is always where the stencil goes. With dynamic MSAA there
-    // will be a multisample FBO even if numSamples is 1.
-    bool stencilIsOnMultisampleFBO() const {
-        return this->numSamples() > 1 || fMultisampleFBOID != 0;
-    }
-
     GrBackendRenderTarget getBackendRenderTarget() const override;
 
     GrBackendFormat backendFormat() const override;
 
-    bool canAttemptStencilAttachment() const override;
+    bool canAttemptStencilAttachment(bool useMultisampleFBO) const override;
 
     // GrGLRenderTarget overrides dumpMemoryStatistics so it can log its texture and renderbuffer
     // components separately.
     void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const override;
 
     GrGLFormat format() const { return fRTFormat; }
+
+    bool hasDynamicMSAAAttachment() const { return SkToBool(fDynamicMSAAAttachment); }
+    bool ensureDynamicMSAAAttachment();
 
 protected:
     // Constructor for subclasses.
@@ -85,9 +82,11 @@ private:
     void setFlags(const GrGLCaps&, const IDs&);
 
     GrGLGpu* getGLGpu() const;
-    bool completeStencilAttachment() override;
+    bool completeStencilAttachment(GrAttachment* stencil, bool useMultisampleFBO) override;
 
     size_t onGpuMemorySize() const override;
+
+    sk_sp<GrGLAttachment> fDynamicMSAAAttachment;
 
     GrGLuint    fMultisampleFBOID;
     GrGLuint    fSingleSampleFBOID;
