@@ -1342,7 +1342,7 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
     // We don't allow the client to supply a premade stencil buffer. We always create one if needed.
     SkASSERT(!backendRT.stencilBits());
     if (tgt) {
-        SkASSERT(tgt->canAttemptStencilAttachment());
+        SkASSERT(tgt->canAttemptStencilAttachment(tgt->numSamples() > 1));
     }
 
     return std::move(tgt);
@@ -1369,8 +1369,8 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapVulkanSecondaryCBAsRenderTarget(
 
 bool GrVkGpu::loadMSAAFromResolve(GrVkCommandBuffer* commandBuffer,
                                   const GrVkRenderPass& renderPass,
-                                  GrSurface* dst,
-                                  GrSurface* src,
+                                  GrAttachment* dst,
+                                  GrVkAttachment* src,
                                   const SkIRect& srcRect) {
     return fMSAALoadManager.loadMSAAFromResolve(this, commandBuffer, renderPass, dst, src, srcRect);
 }
@@ -1468,13 +1468,8 @@ bool GrVkGpu::onRegenerateMipMapLevels(GrTexture* tex) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-sk_sp<GrAttachment> GrVkGpu::makeStencilAttachmentForRenderTarget(const GrRenderTarget* rt,
-                                                                  SkISize dimensions,
-                                                                  int numStencilSamples) {
-    SkASSERT(numStencilSamples == rt->numSamples() || this->caps()->mixedSamplesSupport());
-    SkASSERT(dimensions.width() >= rt->width());
-    SkASSERT(dimensions.height() >= rt->height());
-
+sk_sp<GrAttachment> GrVkGpu::makeStencilAttachment(const GrBackendFormat& /*colorFormat*/,
+                                                   SkISize dimensions, int numStencilSamples) {
     VkFormat sFmt = this->vkCaps().preferredStencilFormat();
 
     fStats.incStencilAttachmentCreates();
@@ -2437,13 +2432,13 @@ bool GrVkGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
 bool GrVkGpu::beginRenderPass(const GrVkRenderPass* renderPass,
                               sk_sp<const GrVkFramebuffer> framebuffer,
                               const VkClearValue* colorClear,
-                              GrVkRenderTarget* target,
+                              const GrSurface* target,
                               const SkIRect& renderPassBounds,
                               bool forSecondaryCB) {
     if (!this->currentCommandBuffer()) {
         return false;
     }
-    SkASSERT (!target->wrapsSecondaryCommandBuffer());
+    SkASSERT (!framebuffer->isExternal());
 
 #ifdef SK_DEBUG
     uint32_t index;

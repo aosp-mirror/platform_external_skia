@@ -77,6 +77,13 @@ public:
         kGrDistanceFieldLCDTextGeoProc_ClassID,
         kGrDistanceFieldPathGeoProc_ClassID,
         kGrDitherEffect_ClassID,
+        kGrDSLFPTest_DoStatement_ClassID,
+        kGrDSLFPTest_ForStatement_ClassID,
+        kGrDSLFPTest_IfStatement_ClassID,
+        kGrDSLFPTest_SwitchStatement_ClassID,
+        kGrDSLFPTest_Swizzle_ClassID,
+        kGrDSLFPTest_Ternary_ClassID,
+        kGrDSLFPTest_WhileStatement_ClassID,
         kGrDualIntervalGradientColorizer_ClassID,
         kGrEllipseEffect_ClassID,
         kGrFillRRectOp_Processor_ClassID,
@@ -152,7 +159,7 @@ public:
 #if GR_TEST_UTILS
     virtual SkString onDumpInfo() const { return SkString(); }
 
-    virtual SkString dumpInfo() const final {
+    SkString dumpInfo() const {
         SkString info(name());
         info.append(this->onDumpInfo());
         return info;

@@ -2326,6 +2326,7 @@ if (skia_enable_tools) {
       "fuzz/FuzzPolyUtils.cpp",
       "fuzz/FuzzRegionOp.cpp",
       "fuzz/FuzzSkParagraph.cpp",
+      "fuzz/FuzzTriangulation.cpp",
       "fuzz/oss_fuzz/FuzzAndroidCodec.cpp",
       "fuzz/oss_fuzz/FuzzAnimatedImage.cpp",
       "fuzz/oss_fuzz/FuzzImage.cpp",
@@ -2477,6 +2478,8 @@ if (skia_enable_tools) {
         "modules/androidkit/src/AndroidKit.cpp",
         "modules/androidkit/src/Canvas.cpp",
         "modules/androidkit/src/Paint.cpp",
+        "modules/androidkit/src/RuntimeShaderBuilder.cpp",
+        "modules/androidkit/src/Shader.cpp",
         "modules/androidkit/src/Surface.cpp",
       ]
       libs = [ "jnigraphics" ]
@@ -3047,6 +3050,14 @@ if (skia_enable_tools) {
       sources = [
         "fuzz/FuzzPathop.cpp",
         "fuzz/oss_fuzz/FuzzPathop.cpp",
+      ]
+      deps = []
+    }
+
+    libfuzzer_app("api_triangulation") {
+      sources = [
+        "fuzz/FuzzTriangulation.cpp",
+        "fuzz/oss_fuzz/FuzzTriangulation.cpp",
       ]
       deps = []
     }

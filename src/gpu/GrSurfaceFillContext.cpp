@@ -291,10 +291,7 @@ void GrSurfaceFillContext::addDrawOp(GrOp::Owner owner) {
     GrClampType clampType = GrColorTypeClampType(this->colorInfo().colorType());
     auto clip = GrAppliedClip::Disabled();
     const GrCaps& caps = *this->caps();
-    GrProcessorSet::Analysis analysis = op->finalize(caps,
-                                                     &clip,
-                                                     /*mixed sample coverage*/ false,
-                                                     clampType);
+    GrProcessorSet::Analysis analysis = op->finalize(caps, &clip, clampType);
     SkASSERT(!(op->fixedFunctionFlags() & GrDrawOp::FixedFunctionFlags::kUsesStencil));
     SkASSERT(!analysis.requiresDstTexture());
     SkRect bounds = owner->bounds();
@@ -309,6 +306,7 @@ void GrSurfaceFillContext::addDrawOp(GrOp::Owner owner) {
     GrXferProcessor::DstProxyView dstProxyView;
     this->getOpsTask()->addDrawOp(fContext->priv().drawingManager(),
                                   std::move(owner),
+                                  op->fixedFunctionFlags(),
                                   analysis,
                                   std::move(clip),
                                   dstProxyView,

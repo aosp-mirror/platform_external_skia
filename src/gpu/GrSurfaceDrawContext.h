@@ -22,7 +22,6 @@
 #include "src/gpu/GrSurfaceProxyView.h"
 #include "src/gpu/GrXferProcessor.h"
 #include "src/gpu/geometry/GrQuad.h"
-#include "src/gpu/text/GrTextBlob.h"
 
 class GrBackendSemaphore;
 class GrClip;
@@ -661,10 +660,12 @@ public:
 private:
     enum class QuadOptimization;
 
+    void willReplaceOpsTask(GrOpsTask* prevTask, GrOpsTask* nextTask) override;
+
     GrAAType chooseAAType(GrAA);
 
     GrOpsTask::CanDiscardPreviousOps canDiscardPreviousOpsOnFullClear() const override;
-    void setNeedsStencil(bool useMixedSamplesIfNotMSAA);
+    void setNeedsStencil();
 
     void internalStencilClear(const SkIRect* scissor, bool insideStencilMask);
 
@@ -728,9 +729,10 @@ private:
 
     SkGlyphRunListPainter* glyphPainter() { return &fGlyphPainter; }
 
-    SkSurfaceProps fSurfaceProps;
+    const SkSurfaceProps fSurfaceProps;
+    const bool fCanUseDynamicMSAA;
 
-    int fNumStencilSamples = 0;
+    bool fNeedsStencil = false;
 
     GrDstSampleType fDstSampleType = GrDstSampleType::kNone;
 

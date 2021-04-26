@@ -73,10 +73,10 @@ void GrVkPipelineState::freeGPUResources(GrVkGpu* gpu) {
 }
 
 bool GrVkPipelineState::setAndBindUniforms(GrVkGpu* gpu,
-                                           const GrRenderTarget* renderTarget,
+                                           SkISize colorAttachmentDimensions,
                                            const GrProgramInfo& programInfo,
                                            GrVkCommandBuffer* commandBuffer) {
-    this->setRenderTargetState(renderTarget, programInfo.origin());
+    this->setRenderTargetState(colorAttachmentDimensions, programInfo.origin());
 
     fGeometryProcessor->setData(fDataManager, *gpu->caps()->shaderCaps(), programInfo.geomProc());
     for (int i = 0; i < programInfo.pipeline().numFragmentProcessors(); ++i) {
@@ -230,37 +230,33 @@ bool GrVkPipelineState::setAndBindTextures(GrVkGpu* gpu,
 }
 
 bool GrVkPipelineState::setAndBindInputAttachment(GrVkGpu* gpu,
-                                                  GrVkRenderTarget* renderTarget,
+                                                  gr_rp<const GrVkDescriptorSet> inputDescSet,
                                                   GrVkCommandBuffer* commandBuffer) {
-    SkASSERT(renderTarget->colorAttachment()->supportsInputAttachmentUsage());
-    const GrVkDescriptorSet* descriptorSet = renderTarget->inputDescSet(gpu, /*forResolve=*/false);
-
-    if (!descriptorSet) {
-        return false;
-    }
+    SkASSERT(inputDescSet);
     commandBuffer->bindDescriptorSets(gpu, fPipeline->layout(), GrVkUniformHandler::kInputDescSet,
-                                      /*setCount=*/1, descriptorSet->descriptorSet(),
+                                      /*setCount=*/1, inputDescSet->descriptorSet(),
                                       /*dynamicOffsetCount=*/0, /*dynamicOffsets=*/nullptr);
     // We don't add the input resource to the command buffer to track since the input will be
     // the same as the color attachment which is already tracked on the command buffer.
-    commandBuffer->addRecycledResource(descriptorSet);
+    commandBuffer->addRecycledResource(std::move(inputDescSet));
     return true;
 }
 
-void GrVkPipelineState::setRenderTargetState(const GrRenderTarget* rt, GrSurfaceOrigin origin) {
+void GrVkPipelineState::setRenderTargetState(SkISize colorAttachmentDimensions,
+                                             GrSurfaceOrigin origin) {
 
     // Load the RT height uniform if it is needed to y-flip gl_FragCoord.
     if (fBuiltinUniformHandles.fRTHeightUni.isValid() &&
-        fRenderTargetState.fRenderTargetSize.fHeight != rt->height()) {
-        fDataManager.set1f(fBuiltinUniformHandles.fRTHeightUni, SkIntToScalar(rt->height()));
+        fRenderTargetState.fRenderTargetSize.fHeight != colorAttachmentDimensions.height()) {
+        fDataManager.set1f(fBuiltinUniformHandles.fRTHeightUni,
+                           SkIntToScalar(colorAttachmentDimensions.height()));
     }
 
     // set RT adjustment
-    SkISize dimensions = rt->dimensions();
     SkASSERT(fBuiltinUniformHandles.fRTAdjustmentUni.isValid());
     if (fRenderTargetState.fRenderTargetOrigin != origin ||
-        fRenderTargetState.fRenderTargetSize != dimensions) {
-        fRenderTargetState.fRenderTargetSize = dimensions;
+        fRenderTargetState.fRenderTargetSize != colorAttachmentDimensions) {
+        fRenderTargetState.fRenderTargetSize = colorAttachmentDimensions;
         fRenderTargetState.fRenderTargetOrigin = origin;
 
         float rtAdjustmentVec[4];

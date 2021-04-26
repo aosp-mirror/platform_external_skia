@@ -493,14 +493,24 @@ sk_sp<GrGpuBuffer> GrResourceProvider::createBuffer(size_t size, GrGpuBufferType
     return buffer;
 }
 
-bool GrResourceProvider::attachStencilAttachment(GrRenderTarget* rt, int numStencilSamples) {
+static int num_stencil_samples(const GrRenderTarget* rt, bool useMSAASurface, const GrCaps& caps) {
+    int numSamples = rt->numSamples();
+    if (numSamples == 1 && useMSAASurface) {  // Are we using dynamic msaa?
+        numSamples = caps.internalMultisampleCount(rt->backendFormat());
+        SkASSERT(numSamples > 1);  // Caller must ensure dmsaa is supported before trying to use it.
+    }
+    return numSamples;
+}
+
+bool GrResourceProvider::attachStencilAttachment(GrRenderTarget* rt, bool useMSAASurface) {
     SkASSERT(rt);
-    GrAttachment* stencil = rt->getStencilAttachment();
-    if (stencil && stencil->numSamples() == numStencilSamples) {
+    GrAttachment* stencil = rt->getStencilAttachment(useMSAASurface);
+    if (stencil) {
+        SkASSERT(stencil->numSamples() == num_stencil_samples(rt, useMSAASurface, *this->caps()));
         return true;
     }
 
-    if (!rt->wasDestroyed() && rt->canAttemptStencilAttachment()) {
+    if (!rt->wasDestroyed() && rt->canAttemptStencilAttachment(useMSAASurface)) {
         GrUniqueKey sbKey;
 
 #if 0
@@ -509,12 +519,12 @@ bool GrResourceProvider::attachStencilAttachment(GrRenderTarget* rt, int numSten
             height = SkNextPow2(height);
         }
 #endif
-        GrBackendFormat stencilFormat =
-                this->gpu()->getPreferredStencilFormat(rt->backendFormat());
+        GrBackendFormat stencilFormat = this->gpu()->getPreferredStencilFormat(rt->backendFormat());
         if (!stencilFormat.isValid()) {
             return false;
         }
         GrProtected isProtected = rt->isProtected() ? GrProtected::kYes : GrProtected::kNo;
+        int numStencilSamples = num_stencil_samples(rt, useMSAASurface, *this->caps());
         GrAttachment::ComputeSharedAttachmentUniqueKey(
                 *this->caps(), stencilFormat, rt->dimensions(),
                 GrAttachment::UsageFlags::kStencilAttachment, numStencilSamples, GrMipmapped::kNo,
@@ -522,20 +532,19 @@ bool GrResourceProvider::attachStencilAttachment(GrRenderTarget* rt, int numSten
         auto stencil = this->findByUniqueKey<GrAttachment>(sbKey);
         if (!stencil) {
             // Need to try and create a new stencil
-            stencil = this->gpu()->makeStencilAttachmentForRenderTarget(rt, rt->dimensions(),
-                                                                        numStencilSamples);
+            stencil = this->gpu()->makeStencilAttachment(rt->backendFormat(), rt->dimensions(),
+                                                         numStencilSamples);
             if (!stencil) {
                 return false;
             }
             this->assignUniqueKeyToResource(sbKey, stencil.get());
         }
-        rt->attachStencilAttachment(std::move(stencil));
+        rt->attachStencilAttachment(std::move(stencil), useMSAASurface);
     }
-
-    if (GrAttachment* stencil = rt->getStencilAttachment()) {
-        return stencil->numSamples() == numStencilSamples;
-    }
-    return false;
+    stencil = rt->getStencilAttachment(useMSAASurface);
+    SkASSERT(!stencil ||
+             stencil->numSamples() == num_stencil_samples(rt, useMSAASurface, *this->caps()));
+    return stencil != nullptr;
 }
 
 sk_sp<GrAttachment> GrResourceProvider::makeMSAAAttachment(SkISize dimensions,

@@ -158,53 +158,37 @@ private:
     size_t fLockStride = 0;
 };
 
-class CpuVertexAllocator : public GrEagerVertexAllocator {
-public:
-    CpuVertexAllocator() = default;
-
-#ifdef SK_DEBUG
-    ~CpuVertexAllocator() override {
-        SkASSERT(!fLockStride && !fVertices && !fVertexData);
-    }
-#endif
-
-    void* lock(size_t stride, int eagerCount) override {
-        SkASSERT(!fLockStride && !fVertices && !fVertexData);
-        SkASSERT(stride && eagerCount);
-
-        fVertices = sk_malloc_throw(eagerCount * stride);
-        fLockStride = stride;
-
-        return fVertices;
-    }
-
-    void unlock(int actualCount) override {
-        SkASSERT(fLockStride && fVertices && !fVertexData);
-
-        fVertices = sk_realloc_throw(fVertices, actualCount * fLockStride);
-
-        fVertexData = GrThreadSafeCache::MakeVertexData(fVertices, actualCount, fLockStride);
-
-        fVertices = nullptr;
-        fLockStride = 0;
-    }
-
-    sk_sp<GrThreadSafeCache::VertexData> detachVertexData() {
-        SkASSERT(!fLockStride && !fVertices && fVertexData);
-
-        return std::move(fVertexData);
-    }
-
-private:
-    sk_sp<GrThreadSafeCache::VertexData> fVertexData;
-
-    void*  fVertices = nullptr;
-    size_t fLockStride = 0;
-};
-
 }  // namespace
 
+//-------------------------------------------------------------------------------------------------
+void* GrCpuVertexAllocator::lock(size_t stride, int eagerCount) {
+    SkASSERT(!fLockStride && !fVertices && !fVertexData);
+    SkASSERT(stride && eagerCount);
 
+    fVertices = sk_malloc_throw(eagerCount * stride);
+    fLockStride = stride;
+
+    return fVertices;
+}
+
+void GrCpuVertexAllocator::unlock(int actualCount) {
+    SkASSERT(fLockStride && fVertices && !fVertexData);
+
+    fVertices = sk_realloc_throw(fVertices, actualCount * fLockStride);
+
+    fVertexData = GrThreadSafeCache::MakeVertexData(fVertices, actualCount, fLockStride);
+
+    fVertices = nullptr;
+    fLockStride = 0;
+}
+
+sk_sp<GrThreadSafeCache::VertexData> GrCpuVertexAllocator::detachVertexData() {
+    SkASSERT(!fLockStride && !fVertices && fVertexData);
+
+    return std::move(fVertexData);
+}
+
+//-------------------------------------------------------------------------------------------------
 GrTriangulatingPathRenderer::GrTriangulatingPathRenderer()
   : fMaxVerbCount(GR_AA_TESSELLATOR_MAX_VERB_COUNT) {
 }
@@ -298,15 +282,13 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
-    GrProcessorSet::Analysis finalize(
-            const GrCaps& caps, const GrAppliedClip* clip, bool hasMixedSampledCoverage,
-            GrClampType clampType) override {
+    GrProcessorSet::Analysis finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                      GrClampType clampType) override {
         GrProcessorAnalysisCoverage coverage = fAntiAlias
                                                        ? GrProcessorAnalysisCoverage::kSingleChannel
                                                        : GrProcessorAnalysisCoverage::kNone;
         // This Op uses uniform (not vertex) color, so doesn't need to track wide color.
-        return fHelper.finalizeProcessors(
-                caps, clip, hasMixedSampledCoverage, clampType, coverage, &fColor, nullptr);
+        return fHelper.finalizeProcessors(caps, clip, clampType, coverage, &fColor, nullptr);
     }
 
 private:
@@ -536,7 +518,7 @@ private:
             return;
         }
 
-        CpuVertexAllocator allocator;
+        GrCpuVertexAllocator allocator;
 
         bool isLinear;
         int vertexCount = Triangulate(&allocator, fViewMatrix, fShape, fDevClipBounds, tol,

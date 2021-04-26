@@ -86,7 +86,7 @@ public:
         return fResolveAttachment ? fResolveAttachment.get() : fColorAttachment.get();
     }
 
-    std::pair<const GrVkRenderPass*, GrVkResourceProvider::CompatibleRPHandle> getSimpleRenderPass(
+    const GrVkRenderPass* getSimpleRenderPass(
             bool withResolve,
             bool withStencil,
             SelfDependencyFlags selfDepFlags,
@@ -100,7 +100,8 @@ public:
     bool wrapsSecondaryCommandBuffer() const { return SkToBool(fExternalFramebuffer); }
     sk_sp<GrVkFramebuffer> externalFramebuffer() const;
 
-    bool canAttemptStencilAttachment() const override {
+    bool canAttemptStencilAttachment(bool useMSAASurface) const override {
+        SkASSERT(useMSAASurface == (this->numSamples() > 1));
         // We don't know the status of the stencil attachment for wrapped external secondary command
         // buffers so we just assume we don't have one.
         return !this->wrapsSecondaryCommandBuffer();
@@ -120,12 +121,6 @@ public:
                                                  const GrProgramInfo& programInfo,
                                                  GrVkRenderPass::AttachmentsDescriptor* desc,
                                                  GrVkRenderPass::AttachmentFlags* flags);
-
-    // So that we don't need to rewrite descriptor sets each time, we keep a cached input descriptor
-    // set on the the RT and simply reuse that descriptor set for this render target only. This call
-    // will not ref the GrVkDescriptorSet so the caller must manually ref it if it wants to keep it
-    // alive.
-    const GrVkDescriptorSet* inputDescSet(GrVkGpu*, bool forResolve);
 
 protected:
     enum class CreateType {
@@ -158,16 +153,17 @@ private:
     GrVkAttachment* dynamicMSAAAttachment();
     GrVkAttachment* msaaAttachment();
 
-    const GrVkRenderPass* createSimpleRenderPass(bool withResolve,
-                                                 bool withStencil,
-                                                 SelfDependencyFlags selfDepFlags,
-                                                 LoadFromResolve);
-    const GrVkFramebuffer* createFramebuffer(bool withResolve,
-                                             bool withStencil,
-                                             SelfDependencyFlags selfDepFlags,
-                                             LoadFromResolve);
+    std::pair<const GrVkRenderPass*, GrVkResourceProvider::CompatibleRPHandle>
+        createSimpleRenderPass(bool withResolve,
+                               bool withStencil,
+                               SelfDependencyFlags selfDepFlags,
+                               LoadFromResolve);
+    void createFramebuffer(bool withResolve,
+                           bool withStencil,
+                           SelfDependencyFlags selfDepFlags,
+                           LoadFromResolve);
 
-    bool completeStencilAttachment() override;
+    bool completeStencilAttachment(GrAttachment* stencil, bool useMSAASurface) override;
 
     // In Vulkan we call the release proc after we are finished with the underlying
     // GrVkImage::Resource object (which occurs after the GPU has finished all work on it).
@@ -187,12 +183,11 @@ private:
 
     // We can have a renderpass with and without resolve attachment, stencil attachment,
     // input attachment dependency, advanced blend dependency, and loading from resolve. All 5 of
-    // these being completely orthogonal. Thus we have a total of 32 types of render passes.
-    static constexpr int kNumCachedRenderPasses = 32;
+    // these being completely orthogonal. Thus we have a total of 32 types of render passes. We then
+    // cache a framebuffer for each type of these render passes.
+    static constexpr int kNumCachedFramebuffers = 32;
 
-    const GrVkFramebuffer*                   fCachedFramebuffers[kNumCachedRenderPasses];
-    const GrVkRenderPass*                    fCachedRenderPasses[kNumCachedRenderPasses];
-    GrVkResourceProvider::CompatibleRPHandle fCompatibleRPHandles[kNumCachedRenderPasses];
+    sk_sp<const GrVkFramebuffer> fCachedFramebuffers[kNumCachedFramebuffers];
 
     const GrVkDescriptorSet* fCachedInputDescriptorSet = nullptr;
 

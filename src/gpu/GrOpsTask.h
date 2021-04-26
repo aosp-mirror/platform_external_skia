@@ -70,8 +70,9 @@ public:
 
     void addOp(GrDrawingManager*, GrOp::Owner, GrTextureResolveManager, const GrCaps&);
 
-    void addDrawOp(GrDrawingManager*, GrOp::Owner, const GrProcessorSet::Analysis&,
-                   GrAppliedClip&&, const DstProxyView&, GrTextureResolveManager, const GrCaps&);
+    void addDrawOp(GrDrawingManager*, GrOp::Owner, GrDrawOp::FixedFunctionFlags,
+                   const GrProcessorSet::Analysis&, GrAppliedClip&&, const DstProxyView&,
+                   GrTextureResolveManager, const GrCaps&);
 
     void discard();
 
@@ -265,9 +266,6 @@ private:
     // For ops/opsTask we have mean: 5 stdDev: 28
     SkSTArray<25, OpChain> fOpChains;
 
-    // MDB TODO: 4096 for the first allocation may be huge overkill. Gather statistics to determine
-    // the correct size.
-    SkSTArray<1, std::unique_ptr<SkArenaAlloc>> fAllocators;
     sk_sp<GrArenas> fArenas;
     SkDEBUGCODE(int fNumClips;)
 
