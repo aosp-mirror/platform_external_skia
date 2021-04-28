@@ -7,11 +7,27 @@
 
 #include <android/bitmap.h>
 #include <android/log.h>
+#include <android/native_window_jni.h>
+#include <android/native_window.h>
 #include <jni.h>
 
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
+#include "tools/sk_app/Application.h"
+#include "tools/sk_app/DisplayParams.h"
+#include "tools/sk_app/WindowContext.h"
+#include "tools/sk_app/android/WindowContextFactory_android.h"
+
+namespace sk_app {
+// Required to appease the dynamic linker.
+// TODO: split WindowContext from sk_app.
+Application* Application::Create(int argc, char** argv, void* platformData) {
+    return nullptr;
+}
+}
+
+#include "modules/androidkit/src/SurfaceThread.h"
 
 namespace {
 
@@ -20,10 +36,46 @@ public:
     virtual void release(JNIEnv*) = 0;
     virtual void flushAndSubmit() = 0;
 
-    SkCanvas* getCanvas() const { return fSurface->getCanvas(); }
+    SkCanvas* getCanvas() const {
+        if (fSurface) {
+            return fSurface->getCanvas();
+        }
+        return nullptr;
+    }
+
+    int width()  const { return fSurface ? fSurface->width()  : 0; }
+    int height() const { return fSurface ? fSurface->height() : 0; }
 
 protected:
     sk_sp<SkSurface> fSurface;
+};
+
+class WindowSurface final : public Surface {
+public:
+    WindowSurface(ANativeWindow* win, std::unique_ptr<sk_app::WindowContext> wctx)
+        : fWindow(win)
+        , fWindowContext(std::move(wctx))
+    {
+        SkASSERT(fWindow);
+        SkASSERT(fWindowContext);
+
+        fSurface = fWindowContext->getBackbufferSurface();
+    }
+
+private:
+    void release(JNIEnv* env) override {
+        fWindowContext.reset();
+        ANativeWindow_release(fWindow);
+    }
+
+    void flushAndSubmit() override {
+        fSurface->flushAndSubmit();
+        fWindowContext->swapBuffers();
+        fSurface = fWindowContext->getBackbufferSurface();
+    }
+
+    ANativeWindow*                         fWindow;
+    std::unique_ptr<sk_app::WindowContext> fWindowContext;
 };
 
 class BitmapSurface final : public Surface {
@@ -91,14 +143,64 @@ private:
     jobject fBitmap;
 };
 
+// SkSurface created from being passed an android.view.Surface
+// For now, assume we are always rendering with OpenGL
+// TODO: refactor to wrap a WindowSurface
+class ThreadedSurface final : public Surface {
+public:
+    ThreadedSurface(JNIEnv* env, jobject surface) {
+        // TODO: when creating multiple surfaces, they should use the same SurfaceThread
+        fWindow = ANativeWindow_fromSurface(env, surface);
+    }
+
+private:
+    void release(JNIEnv* env) override {
+        fThread.postMessage(Message(kAllSurfacesDestroyed));
+        if (fWindow) {
+            ANativeWindow_release(fWindow);
+        }
+       fSurface.reset();
+    }
+
+    void flushAndSubmit() override{
+        // implented in followup CL (issue:400816)
+    }
+
+    ANativeWindow* fWindow;
+    // TODO: Decouple thread from WindowSurface if user wants to manage their own thread
+    SurfaceThread fThread;
+};
+
+// JNI methods
+
 static jlong Surface_CreateBitmap(JNIEnv* env, jobject, jobject bitmap) {
     return reinterpret_cast<jlong>(new BitmapSurface(env, bitmap));
+}
+
+static jlong Surface_CreateThreadedSurface(JNIEnv* env, jobject, jobject surface) {
+    return reinterpret_cast<jlong>(new ThreadedSurface(env, surface));
+}
+
+static jlong Surface_CreateVK(JNIEnv* env, jobject, jobject jsurface) {
+    auto* win = ANativeWindow_fromSurface(env, jsurface);
+    if (!win) {
+        return 0;
+    }
+
+    // TODO: match window params?
+    sk_app::DisplayParams params;
+    auto winctx = sk_app::window_context_factory::MakeVulkanForAndroid(win, params);
+    if (!winctx) {
+        return 0;
+    }
+
+    return reinterpret_cast<jlong>(sk_make_sp<WindowSurface>(win, std::move(winctx)).release());
 }
 
 static void Surface_Release(JNIEnv* env, jobject, jlong native_surface) {
     if (auto* surface = reinterpret_cast<Surface*>(native_surface)) {
         surface->release(env);
-        delete surface;
+        SkSafeUnref(surface);
     }
 }
 
@@ -115,15 +217,31 @@ static void Surface_FlushAndSubmit(JNIEnv* env, jobject, jlong native_surface) {
     }
 }
 
+static int Surface_GetWidth(JNIEnv* env, jobject, jlong native_surface) {
+    const auto* surface = reinterpret_cast<Surface*>(native_surface);
+    return surface ? surface->width() : 0;
+}
+
+static int Surface_GetHeight(JNIEnv* env, jobject, jlong native_surface) {
+    const auto* surface = reinterpret_cast<Surface*>(native_surface);
+    return surface ? surface->height() : 0;
+}
+
 }  // namespace
 
 int register_androidkit_Surface(JNIEnv* env) {
     static const JNINativeMethod methods[] = {
         {"nCreateBitmap"   , "(Landroid/graphics/Bitmap;)J",
-            reinterpret_cast<void*>(Surface_CreateBitmap)},
-        {"nRelease"        , "(J)V", reinterpret_cast<void*>(Surface_Release)},
+            reinterpret_cast<void*>(Surface_CreateBitmap)                            },
+        {"nCreateThreadedSurface"  , "(Landroid/view/Surface;)J",
+            reinterpret_cast<void*>(Surface_CreateThreadedSurface)                   },
+        {"nCreateVKSurface", "(Landroid/view/Surface;)J",
+            reinterpret_cast<void*>(Surface_CreateVK)                                },
+        {"nRelease"        , "(J)V", reinterpret_cast<void*>(Surface_Release)        },
         {"nGetNativeCanvas", "(J)J", reinterpret_cast<void*>(Surface_GetNativeCanvas)},
-        {"nFlushAndSubmit" , "(J)V", reinterpret_cast<void*>(Surface_FlushAndSubmit)},
+        {"nFlushAndSubmit" , "(J)V", reinterpret_cast<void*>(Surface_FlushAndSubmit) },
+        {"nGetWidth"       , "(J)I", reinterpret_cast<void*>(Surface_GetWidth)       },
+        {"nGetHeight"      , "(J)I", reinterpret_cast<void*>(Surface_GetHeight)      },
     };
 
     const auto clazz = env->FindClass("org/skia/androidkit/Surface");
