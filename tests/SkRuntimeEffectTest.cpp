@@ -14,6 +14,7 @@
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/GrDirectContext.h"
 #include "src/core/SkColorSpacePriv.h"
+#include "src/core/SkRuntimeEffectPriv.h"
 #include "src/core/SkTLazy.h"
 #include "src/gpu/GrColor.h"
 #include "src/gpu/GrFragmentProcessor.h"
@@ -72,23 +73,6 @@ DEF_TEST(SkRuntimeEffectInvalid_SkCapsDisallowed, r) {
             r,
             "half4 main(float2 p) { return sk_Caps.integerSupport ? half4(1) : half4(0); }",
             "unknown identifier 'sk_Caps'");
-}
-
-DEF_TEST(SkRuntimeEffectInvalidColorFilters, r) {
-    auto test = [r](const char* sksl) {
-        auto [effect, errorText] = SkRuntimeEffect::Make(SkString(sksl));
-        REPORTER_ASSERT(r, effect);
-
-        sk_sp<SkData> uniforms = SkData::MakeUninitialized(effect->uniformSize());
-
-        REPORTER_ASSERT(r, effect->makeShader(uniforms, nullptr, 0, nullptr, false));
-        REPORTER_ASSERT(r, !effect->makeColorFilter(uniforms));
-    };
-
-    // Runtime effects that use sample coords or sk_FragCoord are valid shaders,
-    // but not valid color filters
-    test("half4 main(float2 p) { return half2(p).xy01; }");
-    test("half4 main(float2 p) { return half2(sk_FragCoord.xy).xy01; }");
 }
 
 DEF_TEST(SkRuntimeEffectForColorFilter, r) {
