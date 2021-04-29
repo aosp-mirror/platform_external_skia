@@ -22,7 +22,6 @@
 #include "src/gpu/GrAHardwareBufferUtils.h"
 #include "src/gpu/GrBackendTextureImageGenerator.h"
 #include "src/gpu/GrBackendUtils.h"
-#include "src/gpu/GrBitmapTextureMaker.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrColorSpaceXform.h"
 #include "src/gpu/GrContextThreadSafeProxyPriv.h"
@@ -69,7 +68,7 @@ inline SkImage_Gpu::ProxyChooser::~ProxyChooser() {
     // The image is being destroyed. If there is a stable copy proxy but we've been able to use
     // the volatile proxy for all requests then we can skip the copy.
     if (fVolatileToStableCopyTask) {
-        fVolatileToStableCopyTask->canSkip();
+        fVolatileToStableCopyTask->makeSkippable();
     }
 }
 
@@ -102,7 +101,7 @@ inline sk_sp<GrSurfaceProxy> SkImage_Gpu::ProxyChooser::makeVolatileProxyStable(
     SkAutoSpinlock hold(fLock);
     if (fVolatileProxy) {
         fStableProxy = std::move(fVolatileProxy);
-        fVolatileToStableCopyTask->canSkip();
+        fVolatileToStableCopyTask->makeSkippable();
         fVolatileToStableCopyTask.reset();
     }
     return fStableProxy;
@@ -666,9 +665,8 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromPixmap(GrDirectContext* dContext,
     // Turn the pixmap into a GrTextureProxy
     SkBitmap bmp;
     bmp.installPixels(*pixmap);
-    GrBitmapTextureMaker bitmapMaker(dContext, bmp, GrImageTexGenPolicy::kNew_Uncached_Budgeted);
-    GrMipmapped mipMapped = buildMips ? GrMipmapped::kYes : GrMipmapped::kNo;
-    auto view = bitmapMaker.view(mipMapped);
+    GrMipmapped mipmapped = buildMips ? GrMipmapped::kYes : GrMipmapped::kNo;
+    auto [view, ct] = GrMakeUncachedBitmapProxyView(dContext, bmp, mipmapped);
     if (!view) {
         return SkImage::MakeRasterCopy(*pixmap);
     }
@@ -681,7 +679,7 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromPixmap(GrDirectContext* dContext,
 
     std::unique_ptr<GrSemaphore> sema = gpu->prepareTextureForCrossContextUsage(texture.get());
 
-    SkColorType skCT = GrColorTypeToSkColorType(bitmapMaker.colorType());
+    SkColorType skCT = GrColorTypeToSkColorType(ct);
     auto gen = GrBackendTextureImageGenerator::Make(std::move(texture), view.origin(),
                                                     std::move(sema), skCT,
                                                     pixmap->alphaType(),
