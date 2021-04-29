@@ -510,6 +510,7 @@ export interface CanvasKit {
     readonly UnderlineDecoration: number;
     readonly OverlineDecoration: number;
     readonly LineThroughDecoration: number;
+    readonly WhiteSpace_GlyphRunFlag: number;   // the entire run is made up of whitespace(s)
 }
 
 export interface Camera {
@@ -649,12 +650,21 @@ export interface LineMetrics {
     lineNumber: number;
 }
 
+/**
+ * Information for a run of shaped text. See Paragraph.getShapedRuns()
+ *
+ * Notes:
+ * positions is documented as Float32, but it holds twice as many as you expect, and they
+ * are treated logically as pairs of floats: {x0, y0}, {x1, y1}, ... for each glyph.
+ *
+ * positions and offsets arrays have 1 extra slot (actually 2 for positions)
+ * to describe the location "after" the last glyph in the glyphs array.
+ */
 export interface GlyphRun {
     glyphs: Uint16Array;
     positions: Float32Array;    // alternating x0, y0, x1, y1, ...
     offsets: Uint32Array;
-    origin_x: number;
-    origin_y: number;
+    flags: number;              // see ..._GlyphRunFlag values
 }
 
 /**
@@ -1120,7 +1130,7 @@ export interface Canvas extends EmbindObject<Canvas> {
      * @param glyphs the array of glyph IDs (Uint16TypedArray)
      * @param positions the array of x,y floats to position each glyph
      * @param x x-coordinate of the origin of the entire run
-     * @param x y-coordinate of the origin of the entire run
+     * @param y y-coordinate of the origin of the entire run
      * @param font the font that contains the glyphs
      * @param paint
      */
