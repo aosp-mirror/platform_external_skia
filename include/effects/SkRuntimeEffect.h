@@ -76,6 +76,11 @@ public:
         // For testing purposes, completely disable the inliner. (Normally, Runtime Effects don't
         // run the inliner directly, but they still get an inlining pass once they are painted.)
         bool forceNoInline = false;
+        // For testing purposes only; only honored when GR_TEST_UTILS is enabled. This flag lifts
+        // the ES2 restrictions on Runtime Effects that are gated by the `strictES2Mode` check.
+        // Be aware that the software renderer and pipeline-stage effect are still largely
+        // ES3-unaware and can still fail or crash if post-ES2 features are used.
+        bool enforceES2Restrictions = true;
     };
 
     // If the effect is compiled successfully, `effect` will be non-null.
@@ -175,14 +180,6 @@ public:
 #endif
 
 private:
-    // For internal use: Make supports SkSL that is legal as either an SkShader or SkColorFilter.
-    // makeColorFilter might return nullptr, if the effect is dependent on position in any way.
-    static Result Make(SkString sksl, const Options&);
-
-    static Result Make(SkString sksl) {
-        return Make(std::move(sksl), Options{});
-    }
-
     enum Flags {
         kUsesSampleCoords_Flag = 0x1,
         kAllowColorFilter_Flag = 0x2,
@@ -219,7 +216,6 @@ private:
 #if SK_SUPPORT_GPU
     friend class GrSkSLFP;             // fBaseProgram, fSampleUsages
     friend class GrGLSLSkSLFP;         //
-    friend class GrRuntimeFPBuilder;  // Make
 #endif
 
     friend class SkRTShader;            // fBaseProgram, fMain
