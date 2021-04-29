@@ -282,14 +282,12 @@ ResultCode processCommand(std::vector<SkSL::String>& args) {
         kind = SkSL::ProgramKind::kGeometry;
     } else if (inputPath.endsWith(".fp")) {
         kind = SkSL::ProgramKind::kFragmentProcessor;
-    } else if (inputPath.endsWith(".rte")) {
-        kind = SkSL::ProgramKind::kRuntimeEffect;
     } else if (inputPath.endsWith(".rtcf")) {
         kind = SkSL::ProgramKind::kRuntimeColorFilter;
     } else if (inputPath.endsWith(".rts")) {
         kind = SkSL::ProgramKind::kRuntimeShader;
     } else {
-        printf("input filename must end in '.vert', '.frag', '.geom', '.fp', '.rte', '.rtcf', "
+        printf("input filename must end in '.vert', '.frag', '.geom', '.fp', '.rtcf', "
                "'.rts', or '.sksl'\n");
         return ResultCode::kInputError;
     }
@@ -446,12 +444,6 @@ ResultCode processCommand(std::vector<SkSL::String>& args) {
                                                   index,
                                                   coords.empty() ? "" : ", ",
                                                   coords.c_str());
-                        }
-                        String sampleChildWithMatrix(int index, String matrix) override {
-                            return String::printf("sample(child_%d%s%s)",
-                                                  index,
-                                                  matrix.empty() ? "" : ", ",
-                                                  matrix.c_str());
                         }
 
                         String              fOutput;

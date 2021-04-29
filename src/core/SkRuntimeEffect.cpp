@@ -133,6 +133,9 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl, const Options& opti
         SkSL::Program::Settings settings;
         settings.fInlineThreshold = 0;
         settings.fForceNoInline = options.forceNoInline;
+#if GR_TEST_UTILS
+        settings.fEnforceES2Restrictions = options.enforceES2Restrictions;
+#endif
         settings.fAllowNarrowingConversions = true;
         program = compiler->convertProgram(kind, SkSL::String(sksl.c_str(), sksl.size()), settings);
 
@@ -176,8 +179,6 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl,
     switch (kind) {
         case SkSL::ProgramKind::kRuntimeColorFilter: flags |= kAllowColorFilter_Flag; break;
         case SkSL::ProgramKind::kRuntimeShader:      flags |= kAllowShader_Flag;      break;
-        case SkSL::ProgramKind::kRuntimeEffect:      flags |= (kAllowColorFilter_Flag |
-                                                               kAllowShader_Flag);    break;
         default: SkUNREACHABLE;
     }
 
@@ -186,16 +187,11 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl,
         flags |= kUsesSampleCoords_Flag;
     }
 
-    // Color filters are not allowed to depend on position (local or device) in any way, but they
-    // can sample children with matrices or explicit coords. Because the children are color filters,
-    // we know (by induction) that they don't use those coords, so we keep the overall invariant.
-    //
-    // TODO(skbug.com/11813): When ProgramKind is always kRuntimeColorFilter or kRuntimeShader,
-    // this can be simpler. There is no way for color filters to refer to sk_FragCoord or sample
-    // coords in that mode.
-    if ((flags & kAllowColorFilter_Flag) &&
-        ((flags & kUsesSampleCoords_Flag) || SkSL::Analysis::ReferencesFragCoords(*program))) {
-        flags &= ~kAllowColorFilter_Flag;
+    // Color filters are not allowed to depend on position (local or device) in any way.
+    // The signature of main, and the declarations in sksl_rt_colorfilter should guarantee this.
+    if (flags & kAllowColorFilter_Flag) {
+        SkASSERT(!(flags & kUsesSampleCoords_Flag));
+        SkASSERT(!SkSL::Analysis::ReferencesFragCoords(*program));
     }
 
     size_t offset = 0;
@@ -262,10 +258,6 @@ SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl,
                                                       std::move(sampleUsages),
                                                       flags));
     return Result{std::move(effect), SkString()};
-}
-
-SkRuntimeEffect::Result SkRuntimeEffect::Make(SkString sksl, const Options& options) {
-    return Make(std::move(sksl), options, SkSL::ProgramKind::kRuntimeEffect);
 }
 
 SkRuntimeEffect::Result SkRuntimeEffect::MakeForColorFilter(SkString sksl, const Options& options) {
@@ -380,9 +372,12 @@ SkRuntimeEffect::SkRuntimeEffect(SkString sksl,
     // be accounted for in `fHash`. If you've added a new field to Options and caused the static-
     // assert below to trigger, please incorporate your field into `fHash` and update KnownOptions
     // to match the layout of Options.
-    struct KnownOptions { bool b; };
+    struct KnownOptions { bool a, b; };
     static_assert(sizeof(Options) == sizeof(KnownOptions));
-    fHash = SkOpts::hash_fn(&options.forceNoInline, sizeof(options.forceNoInline), fHash);
+    fHash = SkOpts::hash_fn(&options.forceNoInline,
+                      sizeof(options.forceNoInline), fHash);
+    fHash = SkOpts::hash_fn(&options.enforceES2Restrictions,
+                      sizeof(options.enforceES2Restrictions), fHash);
 }
 
 SkRuntimeEffect::~SkRuntimeEffect() = default;
@@ -562,10 +557,8 @@ public:
         sk_sp<SkData> inputs = get_xformed_uniforms(fEffect.get(), fUniforms, dstCS);
         SkASSERT(inputs);
 
-        // The color filter code might use sample-with-matrix (even though the matrix/coords are
-        // ignored by the child). There should be no way for the color filter to use device coords.
-        // Regardless, just to be extra-safe, we pass something valid (0, 0) as both coords, so
-        // the builder isn't trying to do math on invalid values.
+        // There should be no way for the color filter to use device coords, but we need to supply
+        // something. (Uninitialized values can trigger asserts in skvm::Builder).
         skvm::Coord zeroCoord = { p->splat(0.0f), p->splat(0.0f) };
 
         auto sampleChild = [&](int ix, skvm::Coord /*coord*/) {

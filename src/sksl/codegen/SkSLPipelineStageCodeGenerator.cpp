@@ -165,19 +165,14 @@ void PipelineStageCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         }
         SkASSERT(found);
 
-        String coordsOrMatrix;
+        String coords;
         if (arguments.size() > 1) {
             AutoOutputBuffer outputToBuffer(this);
             this->writeExpression(*arguments[1], Precedence::kSequence);
-            coordsOrMatrix = outputToBuffer.fBuffer.str();
+            coords = outputToBuffer.fBuffer.str();
         }
 
-        bool matrixCall = arguments.size() == 2 && arguments[1]->type().isMatrix();
-        if (matrixCall) {
-            this->write(fCallbacks->sampleChildWithMatrix(index, std::move(coordsOrMatrix)));
-        } else {
-            this->write(fCallbacks->sampleChild(index, std::move(coordsOrMatrix)));
-        }
+        this->write(fCallbacks->sampleChild(index, std::move(coords)));
         return;
     }
 
@@ -364,6 +359,17 @@ void PipelineStageCodeGenerator::writeProgramElement(const ProgramElement& e) {
 }
 
 String PipelineStageCodeGenerator::typeName(const Type& type) {
+    if (type.isArray()) {
+        // This is necessary so that name mangling on arrays-of-structs works properly.
+        String arrayName = this->typeName(type.componentType());
+        arrayName.push_back('[');
+        if (type.columns() != Type::kUnsizedArray) {
+            arrayName += to_string(type.columns());
+        }
+        arrayName.push_back(']');
+        return arrayName;
+    }
+
     auto it = fStructNames.find(&type);
     return it != fStructNames.end() ? it->second : type.name();
 }
