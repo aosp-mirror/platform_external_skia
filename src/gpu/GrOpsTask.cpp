@@ -858,7 +858,7 @@ void GrOpsTask::visitProxies_debugOnly(const GrOp::VisitProxyFunc& func) const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void GrOpsTask::onCanSkip() {
+void GrOpsTask::onMakeSkippable() {
     this->deleteOps();
     fDeferredProxies.reset();
     fColorLoadOp = GrLoadOp::kLoad;
@@ -881,6 +881,11 @@ bool GrOpsTask::onIsUsed(GrSurfaceProxy* proxyToCheck) const {
 }
 
 void GrOpsTask::gatherProxyIntervals(GrResourceAllocator* alloc) const {
+    SkASSERT(this->isClosed());
+    if (this->isNoOp()) {
+        return;
+    }
+
     for (int i = 0; i < fDeferredProxies.count(); ++i) {
         SkASSERT(!fDeferredProxies[i]->isInstantiated());
         // We give all the deferred proxies a write usage at the very start of flushing. This
