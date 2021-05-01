@@ -1530,6 +1530,10 @@ group("modules") {
   ]
 }
 
+group("experimental") {
+  deps = [ "experimental/sktext" ]
+}
+
 config("our_vulkan_headers") {
   include_dirs = [ "include/third_party/vulkan" ]
 }
@@ -1678,6 +1682,11 @@ if (skia_enable_tools) {
                                   [ rebase_path("skps", root_build_dir) ],
                                   "trim string")) {
           data_sources += [ "skps" ]
+        }
+        if ("True" == exec_script("//gn/checkdir.py",
+                                  [ rebase_path("mskps", root_build_dir) ],
+                                  "trim string")) {
+          data_sources += [ "mskps" ]
         }
       }
     } else {
@@ -1877,6 +1886,8 @@ if (skia_enable_tools) {
       "tools/DDLTileHelper.cpp",
       "tools/DDLTileHelper.h",
       "tools/LsanSuppressions.cpp",
+      "tools/MSKPPlayer.cpp",
+      "tools/MSKPPlayer.h",
       "tools/ProcStats.cpp",
       "tools/ProcStats.h",
       "tools/Resources.cpp",
@@ -2074,6 +2085,7 @@ if (skia_enable_tools) {
       ":flags",
       ":gpu_tool_utils",
       ":xml",
+      "experimental/sktext:samples",
       "modules/audioplayer",
       "modules/skparagraph:samples",
       "modules/skshaper",
@@ -2476,6 +2488,7 @@ if (skia_enable_tools) {
       sources = [
         "modules/androidkit/src/AndroidKit.cpp",
         "modules/androidkit/src/Canvas.cpp",
+        "modules/androidkit/src/Matrix.cpp",
         "modules/androidkit/src/Paint.cpp",
         "modules/androidkit/src/RuntimeShaderBuilder.cpp",
         "modules/androidkit/src/Shader.cpp",
@@ -2707,6 +2720,8 @@ if (skia_enable_tools) {
         "tools/viewer/ImGuiLayer.h",
         "tools/viewer/ImageSlide.cpp",
         "tools/viewer/ImageSlide.h",
+        "tools/viewer/MSKPSlide.cpp",
+        "tools/viewer/MSKPSlide.h",
         "tools/viewer/ParticlesSlide.cpp",
         "tools/viewer/ParticlesSlide.h",
         "tools/viewer/SKPSlide.cpp",
@@ -2744,6 +2759,7 @@ if (skia_enable_tools) {
         ":tool_utils",
         ":trace",
         "experimental/skrive",
+        "experimental/sktext",
         "modules/audioplayer",
         "modules/particles",
         "modules/skottie",

@@ -173,6 +173,26 @@ protected:
                                        GrSurfaceProxyView src,
                                        GrMipmapped,
                                        GrImageTexGenPolicy);
+
+    static std::unique_ptr<GrFragmentProcessor> MakeFragmentProcessorFromView(GrRecordingContext*,
+                                                                              GrSurfaceProxyView,
+                                                                              SkAlphaType,
+                                                                              SkSamplingOptions,
+                                                                              const SkTileMode[2],
+                                                                              const SkMatrix&,
+                                                                              const SkRect* subset,
+                                                                              const SkRect* domain);
+
+    /**
+     * Returns input view if it is already mipmapped. Otherwise, attempts to make a mipmapped view
+     * with the same contents. If the mipmapped copy is successfully created it will be cached
+     * using the image unique ID. A subsequent call with the same unique ID will return the cached
+     * view if it has not been purged. The view is cached with a key domain specific to this
+     * function.
+     */
+    static GrSurfaceProxyView FindOrMakeCachedMipmappedView(GrRecordingContext*,
+                                                            GrSurfaceProxyView,
+                                                            uint32_t imageUniqueID);
 #endif
 
 private:

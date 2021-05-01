@@ -20,7 +20,6 @@
 #include "src/shaders/SkBitmapProcShader.h"
 
 #if SK_SUPPORT_GPU
-#include "src/gpu/GrTextureAdjuster.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrBicubicEffect.h"
 #include "src/gpu/effects/GrTextureEffect.h"
@@ -422,9 +421,11 @@ std::tuple<GrSurfaceProxyView, GrColorType> SkImage_Raster::onAsView(
         if (policy != GrImageTexGenPolicy::kDraw) {
             return {CopyView(rContext, fPinnedView, mipmapped, policy), fPinnedColorType};
         }
-        GrColorInfo colorInfo(fPinnedColorType, this->alphaType(), this->refColorSpace());
-        GrTextureAdjuster adjuster(rContext, fPinnedView, colorInfo, fPinnedUniqueID);
-        return {adjuster.view(mipmapped), adjuster.colorType()};
+        if (mipmapped == GrMipmapped::kYes) {
+            auto view = FindOrMakeCachedMipmappedView(rContext, fPinnedView, fPinnedUniqueID);
+            return {std::move(view), fPinnedColorType};
+        }
+        return {fPinnedView, fPinnedColorType};
     }
     if (policy == GrImageTexGenPolicy::kDraw) {
         return GrMakeCachedBitmapProxyView(rContext, fBitmap, mipmapped);
@@ -440,73 +441,20 @@ std::tuple<GrSurfaceProxyView, GrColorType> SkImage_Raster::onAsView(
 }
 
 std::unique_ptr<GrFragmentProcessor> SkImage_Raster::onAsFragmentProcessor(
-        GrRecordingContext* context,
+        GrRecordingContext* rContext,
         SkSamplingOptions sampling,
         const SkTileMode tileModes[2],
         const SkMatrix& m,
         const SkRect* subset,
         const SkRect* domain) const {
     auto mm = sampling.mipmap == SkMipmapMode::kNone ? GrMipmapped::kNo : GrMipmapped::kYes;
-    auto [view, ct] = this->asView(context, mm);
-    if (!view) {
-        return nullptr;
-    }
-    const GrCaps& caps = *context->priv().caps();
-    auto wmx = SkTileModeToWrapMode(tileModes[0]);
-    auto wmy = SkTileModeToWrapMode(tileModes[1]);
-    if (sampling.useCubic) {
-        if (subset) {
-            if (domain) {
-                return GrBicubicEffect::MakeSubset(std::move(view),
-                                                   this->alphaType(),
-                                                   m,
-                                                   wmx,
-                                                   wmy,
-                                                   *subset,
-                                                   *domain,
-                                                   sampling.cubic,
-                                                   GrBicubicEffect::Direction::kXY,
-                                                   *context->priv().caps());
-            }
-            return GrBicubicEffect::MakeSubset(std::move(view),
-                                               this->alphaType(),
-                                               m,
-                                               wmx,
-                                               wmy,
-                                               *subset,
-                                               sampling.cubic,
-                                               GrBicubicEffect::Direction::kXY,
-                                               *context->priv().caps());
-        }
-        return GrBicubicEffect::Make(std::move(view),
-                                     this->alphaType(),
-                                     m,
-                                     wmx,
-                                     wmy,
-                                     sampling.cubic,
-                                     GrBicubicEffect::Direction::kXY,
-                                     *context->priv().caps());
-    }
-
-    GrSamplerState sampler(wmx, wmy, sampling.filter, sampling.mipmap);
-    if (subset) {
-        if (domain) {
-            return GrTextureEffect::MakeSubset(std::move(view),
-                                               this->alphaType(),
-                                               m,
-                                               sampler,
-                                               *subset,
-                                               *domain,
-                                               caps);
-        }
-        return GrTextureEffect::MakeSubset(std::move(view),
-                                           this->alphaType(),
-                                           m,
-                                           sampler,
-                                           *subset,
-                                           caps);
-    } else {
-        return GrTextureEffect::Make(std::move(view), this->alphaType(), m, sampler, caps);
-    }
+    return MakeFragmentProcessorFromView(rContext,
+                                         std::get<0>(this->asView(rContext, mm)),
+                                         this->alphaType(),
+                                         sampling,
+                                         tileModes,
+                                         m,
+                                         subset,
+                                         domain);
 }
 #endif

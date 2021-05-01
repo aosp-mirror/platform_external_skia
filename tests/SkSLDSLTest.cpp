@@ -162,6 +162,14 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFloat, r, ctxInfo) {
     EXPECT_EQUAL(Float4(0, 1, 2, 3),
                 "float4(0.0, 1.0, 2.0, 3.0)");
 
+    DSLVar x(kFloat_Type, "x");
+    EXPECT_EQUAL(x = 1.0, "(x = 1.0)");
+    EXPECT_EQUAL(x = 1.0f, "(x = 1.0)");
+
+    DSLVar y(kFloat2_Type, "y");
+    EXPECT_EQUAL(y.x() = 1.0, "(y.x = 1.0)");
+    EXPECT_EQUAL(y.x() = 1.0f, "(y.x = 1.0)");
+
     {
         ExpectError error(r, "error: floating point value is infinite\n");
         Float(std::numeric_limits<float>::infinity()).release();
@@ -1081,6 +1089,23 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLDeclare, r, ctxInfo) {
         ExpectError error(r, "error: variable has already been declared\n");
         Declare(d).release();
     }
+
+    {
+        Var e(kUniform_Modifier, kInt_Type, "e");
+        ExpectError error(r, "error: this variable must be declared with DeclareGlobal\n");
+        Declare(e).release();
+    }
+}
+
+DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLDeclareGlobal, r, ctxInfo) {
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/false);
+    Var x(kInt_Type, "x", 0);
+    DeclareGlobal(x);
+    Var y(kUniform_Modifier, kFloat2_Type, "y");
+    DeclareGlobal(y);
+    REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 2);
+    EXPECT_EQUAL(*DSLWriter::ProgramElements()[0], "int x = 0;");
+    EXPECT_EQUAL(*DSLWriter::ProgramElements()[1], "uniform float2 y;");
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLDiscard, r, ctxInfo) {
@@ -1264,6 +1289,9 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLIf, r, ctxInfo) {
     Statement y = If(a > b, a -= b, b -= a);
     EXPECT_EQUAL(y, "if ((a > b)) (a -= b); else (b -= a);");
 
+    Statement z = StaticIf(a > b, a -= b, b -= a);
+    EXPECT_EQUAL(z, "@if ((a > b)) (a -= b); else (b -= a);");
+
     {
         ExpectError error(r, "error: expected 'bool', but found 'float'\n");
         If(a + b, a -= b).release();
@@ -1310,6 +1338,21 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSwitch, r, ctxInfo) {
     );
     EXPECT_EQUAL(x, R"(
         switch (b) {
+            case 0: (a = 0.0); break;
+            case 1: (a = 1.0); continue;
+            case 2: (a = 2.0);
+            default: discard;
+        }
+    )");
+
+    Statement y = StaticSwitch(b,
+        Case(0, a = 0, Break()),
+        Case(1, a = 1, Continue()),
+        Case(2, a = 2  /*Fallthrough*/),
+        Default(Discard())
+    );
+    EXPECT_EQUAL(y, R"(
+        @switch (b) {
             case 0: (a = 0.0); break;
             case 1: (a = 1.0); continue;
             case 2: (a = 2.0);
@@ -1524,6 +1567,7 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLModifiers, r, ctxInfo) {
 
     Var v8(kUniform_Modifier, kInt_Type, "v8");
     REPORTER_ASSERT(r, DSLWriter::Var(v8).modifiers().fFlags == SkSL::Modifiers::kUniform_Flag);
+    DSLWriter::MarkDeclared(v8);
     // Uniforms do not need to be explicitly declared
 }
 

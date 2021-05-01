@@ -42,7 +42,8 @@ void GrGLConvexPolyEffect::emitCode(EmitArgs& args) {
 
     using namespace SkSL::dsl;
     StartFragmentProcessor(this, &args);
-    Var edgeArray(kUniform_Modifier, Array(kHalf3_Type, cpe.getEdgeCount()));
+    Var edgeArray(kUniform_Modifier, Array(kHalf3_Type, cpe.getEdgeCount()), "edgeArray");
+    DeclareGlobal(edgeArray);
     fEdgeUniform = VarUniformHandle(edgeArray);
     Var alpha(kHalf_Type, "alpha", 1);
     Declare(alpha);
@@ -168,8 +169,12 @@ std::unique_ptr<GrGLSLFragmentProcessor> GrConvexPolyEffect::onMakeProgramImpl()
 }
 
 GrConvexPolyEffect::GrConvexPolyEffect(std::unique_ptr<GrFragmentProcessor> inputFP,
-                                       GrClipEdgeType edgeType, int n, const SkScalar edges[])
-        : INHERITED(kGrConvexPolyEffect_ClassID, kCompatibleWithCoverageAsAlpha_OptimizationFlag)
+                                       GrClipEdgeType edgeType,
+                                       int n,
+                                       const SkScalar edges[])
+        : INHERITED(kGrConvexPolyEffect_ClassID,
+                    ProcessorOptimizationFlags(inputFP.get()) &
+                            kCompatibleWithCoverageAsAlpha_OptimizationFlag)
         , fEdgeType(edgeType)
         , fEdgeCount(n) {
     // Factory function should have already ensured this.
@@ -185,7 +190,7 @@ GrConvexPolyEffect::GrConvexPolyEffect(std::unique_ptr<GrFragmentProcessor> inpu
 }
 
 GrConvexPolyEffect::GrConvexPolyEffect(const GrConvexPolyEffect& that)
-        : INHERITED(kGrConvexPolyEffect_ClassID, kCompatibleWithCoverageAsAlpha_OptimizationFlag)
+        : INHERITED(kGrConvexPolyEffect_ClassID, that.optimizationFlags())
         , fEdgeType(that.fEdgeType)
         , fEdgeCount(that.fEdgeCount) {
     this->cloneAndRegisterAllChildProcessors(that);

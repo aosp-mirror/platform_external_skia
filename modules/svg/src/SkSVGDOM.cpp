@@ -242,6 +242,7 @@ SortedDictionaryEntry<sk_sp<SkSVGNode>(*)()> gTagFactories[] = {
     { "feBlend"           , []() -> sk_sp<SkSVGNode> { return SkSVGFeBlend::Make();            }},
     { "feColorMatrix"     , []() -> sk_sp<SkSVGNode> { return SkSVGFeColorMatrix::Make();      }},
     { "feComposite"       , []() -> sk_sp<SkSVGNode> { return SkSVGFeComposite::Make();        }},
+    { "feDiffuseLighting" , []() -> sk_sp<SkSVGNode> { return SkSVGFeDiffuseLighting::Make();  }},
     { "feDisplacementMap" , []() -> sk_sp<SkSVGNode> { return SkSVGFeDisplacementMap::Make();  }},
     { "feDistantLight"    , []() -> sk_sp<SkSVGNode> { return SkSVGFeDistantLight::Make();     }},
     { "feFlood"           , []() -> sk_sp<SkSVGNode> { return SkSVGFeFlood::Make();            }},
@@ -436,7 +437,7 @@ void SkSVGDOM::render(SkCanvas* canvas) const {
         SkSVGLengthContext       lctx(fContainerSize);
         SkSVGPresentationContext pctx;
         fRoot->render(SkSVGRenderContext(canvas, fFontMgr, fResourceProvider, fIDMapper, lctx, pctx,
-                                         nullptr));
+                                         {nullptr, nullptr}));
     }
 }
 
