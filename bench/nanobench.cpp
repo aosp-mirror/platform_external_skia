@@ -14,6 +14,7 @@
 #include "bench/CodecBench.h"
 #include "bench/CodecBenchPriv.h"
 #include "bench/GMBench.h"
+#include "bench/MSKPBench.h"
 #include "bench/RecordingBench.h"
 #include "bench/ResultsWriter.h"
 #include "bench/SKPAnimationBench.h"
@@ -40,6 +41,7 @@
 #include "src/utils/SkOSPath.h"
 #include "tools/AutoreleasePool.h"
 #include "tools/CrashHandler.h"
+#include "tools/MSKPPlayer.h"
 #include "tools/ProcStats.h"
 #include "tools/Stats.h"
 #include "tools/flags/CommonFlags.h"
@@ -127,7 +129,8 @@ static DEFINE_bool(bbh, true, "Build a BBH for SKPs?");
 static DEFINE_bool(loopSKP, true, "Loop SKPs like we do for micro benches?");
 static DEFINE_int(flushEvery, 10, "Flush --outResultsFile every Nth run.");
 static DEFINE_bool(gpuStats, false, "Print GPU stats after each gpu benchmark?");
-static DEFINE_bool(gpuStatsDump, false, "Dump GPU states after each benchmark to json");
+static DEFINE_bool(gpuStatsDump, false, "Dump GPU stats after each benchmark to json");
+static DEFINE_bool(dmsaaStatsDump, false, "Dump DMSAA stats after each benchmark to json");
 static DEFINE_bool(keepAlive, false, "Print a message every so often so that we don't time out");
 static DEFINE_bool(csv, false, "Print status in CSV format");
 static DEFINE_string(sourceType, "",
@@ -169,6 +172,7 @@ static DEFINE_bool2(verbose, v, false, "enable verbose output from the test driv
 
 
 static DEFINE_string(skps, "skps", "Directory to read skps from.");
+static DEFINE_string(mskps, "mskps", "Directory to read mskps from.");
 static DEFINE_string(svgs, "", "Directory to read SVGs from, or a single SVG file.");
 static DEFINE_string(texttraces, "", "Directory to read TextBlobTrace files from.");
 
@@ -650,6 +654,7 @@ public:
     BenchmarkStream() : fBenches(BenchRegistry::Head())
                       , fGMs(skiagm::GMRegistry::Head()) {
         collect_files(FLAGS_skps, ".skp", &fSKPs);
+        collect_files(FLAGS_mskps, ".mskp", &fMSKPs);
         collect_files(FLAGS_svgs, ".svg", &fSVGs);
         collect_files(FLAGS_texttraces, ".trace", &fTextBlobTraces);
 
@@ -699,6 +704,22 @@ public:
         }
 
         return SkPicture::MakeFromStream(stream.get());
+    }
+
+    static std::unique_ptr<MSKPPlayer> ReadMSKP(const char* path) {
+        // Not strictly necessary, as it will be checked again later,
+        // but helps to avoid a lot of pointless work if we're going to skip it.
+        if (CommandLineFlags::ShouldSkip(FLAGS_match, SkOSPath::Basename(path).c_str())) {
+            return nullptr;
+        }
+
+        std::unique_ptr<SkStreamSeekable> stream = SkStream::MakeFromFile(path);
+        if (!stream) {
+            SkDebugf("Could not read %s.\n", path);
+            return nullptr;
+        }
+
+        return MSKPPlayer::Make(stream.get());
     }
 
     static sk_sp<SkPicture> ReadSVGPicture(const char* path) {
@@ -866,6 +887,19 @@ public:
                 return new SKPAnimationBench(name.c_str(), pic.get(), fClip, std::move(animation),
                                              FLAGS_loopSKP);
             }
+        }
+
+        // Read all MSKPs as benches
+        while (fCurrentMSKP < fMSKPs.count()) {
+            const SkString& path = fMSKPs[fCurrentMSKP++];
+            std::unique_ptr<MSKPPlayer> player = ReadMSKP(path.c_str());
+            if (!player) {
+                continue;
+            }
+            SkString name = SkOSPath::Basename(path.c_str());
+            fSourceType = "mskp";
+            fBenchType = "mskp";
+            return new MSKPBench(std::move(name), std::move(player));
         }
 
         for (; fCurrentCodec < fImages.count(); fCurrentCodec++) {
@@ -1104,6 +1138,7 @@ private:
     SkIRect            fClip;
     SkTArray<SkScalar> fScales;
     SkTArray<SkString> fSKPs;
+    SkTArray<SkString> fMSKPs;
     SkTArray<SkString> fSVGs;
     SkTArray<SkString> fTextBlobTraces;
     SkTArray<SkString> fImages;
@@ -1117,6 +1152,7 @@ private:
     const char* fBenchType;   // How we bench it: micro, recording, playback, ...
     int fCurrentRecording = 0;
     int fCurrentDeserialPicture = 0;
+    int fCurrentMSKP = 0;
     int fCurrentScale = 0;
     int fCurrentSKP = 0;
     int fCurrentSVG = 0;
@@ -1240,6 +1276,8 @@ int main(int argc, char** argv) {
                  FLAGS_samples, "samples");
     }
 
+    GrRecordingContextPriv::DMSAAStats combinedDMSAAStats;
+
     SkTArray<Config> configs;
     create_configs(&configs);
 
@@ -1340,10 +1378,17 @@ int main(int argc, char** argv) {
 
             SkTArray<SkString> keys;
             SkTArray<double> values;
-            bool gpuStatsDump = FLAGS_gpuStatsDump && Benchmark::kGPU_Backend == configs[i].backend;
-            if (gpuStatsDump) {
-                // TODO cache stats
-                bench->getGpuStats(canvas, &keys, &values);
+            if (configs[i].backend == Benchmark::kGPU_Backend) {
+                if (FLAGS_gpuStatsDump) {
+                    // TODO cache stats
+                    bench->getGpuStats(canvas, &keys, &values);
+                }
+                if (FLAGS_dmsaaStatsDump && bench->getDMSAAStats(canvas->recordingContext())) {
+                    const auto& dmsaaStats = canvas->recordingContext()->priv().dmsaaStats();
+                    dmsaaStats.dumpKeyValuePairs(&keys, &values);
+                    dmsaaStats.dump();
+                    combinedDMSAAStats.merge(dmsaaStats);
+                }
             }
 
             bench->perCanvasPostDraw(canvas);
@@ -1377,7 +1422,7 @@ int main(int argc, char** argv) {
             }
             log.endArray(); // samples
             benchStream.fillCurrentMetrics(log);
-            if (gpuStatsDump) {
+            if (!keys.empty()) {
                 // dump to json, only SKPBench currently returns valid keys / values
                 SkASSERT(keys.count() == values.count());
                 for (int i = 0; i < keys.count(); i++) {
@@ -1457,6 +1502,11 @@ int main(int argc, char** argv) {
         if (!configs.empty()) {
             log.endBench();
         }
+    }
+
+    if (FLAGS_dmsaaStatsDump) {
+        SkDebugf("<<Total Combined DMSAA Stats>>\n");
+        combinedDMSAAStats.dump();
     }
 
     SkGraphics::PurgeAllCaches();
