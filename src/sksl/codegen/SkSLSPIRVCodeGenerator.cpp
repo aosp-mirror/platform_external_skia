@@ -483,12 +483,10 @@ const Type& SPIRVCodeGenerator::getActualType(const Type& type) {
         if (type.componentType() == *fContext.fTypes.fHalf) {
             return fContext.fTypes.fFloat->toCompound(fContext, type.columns(), type.rows());
         }
-        if (type.componentType() == *fContext.fTypes.fShort ||
-            type.componentType() == *fContext.fTypes.fByte) {
+        if (type.componentType() == *fContext.fTypes.fShort) {
             return fContext.fTypes.fInt->toCompound(fContext, type.columns(), type.rows());
         }
-        if (type.componentType() == *fContext.fTypes.fUShort ||
-            type.componentType() == *fContext.fTypes.fUByte) {
+        if (type.componentType() == *fContext.fTypes.fUShort) {
             return fContext.fTypes.fUInt->toCompound(fContext, type.columns(), type.rows());
         }
     }
@@ -2078,7 +2076,7 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
                         Modifiers::kUniform_Flag);
                 const Variable* intfVar = fSynthetics.takeOwnershipOfSymbol(
                         std::make_unique<Variable>(/*offset=*/-1,
-                                                   fProgram.fModifiers->addToPool(modifiers),
+                                                   fProgram.fModifiers->add(modifiers),
                                                    name,
                                                    intfStruct.get(),
                                                    /*builtin=*/false,
@@ -3494,7 +3492,7 @@ void SPIRVCodeGenerator::writeUniformBuffer(std::shared_ptr<SymbolTable> topLeve
     Modifiers modifiers{layout, Modifiers::kUniform_Flag};
 
     fUniformBuffer.fInnerVariable = std::make_unique<Variable>(
-            /*offset=*/-1, fProgram.fModifiers->addToPool(modifiers), kUniformBufferName,
+            /*offset=*/-1, fProgram.fModifiers->add(modifiers), kUniformBufferName,
             fUniformBuffer.fStruct.get(), /*builtin=*/false, Variable::Storage::kGlobal);
 
     // Create an interface block object for this global variable.
