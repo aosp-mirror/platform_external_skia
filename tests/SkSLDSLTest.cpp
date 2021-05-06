@@ -1322,13 +1322,13 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFor, r, ctxInfo) {
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFunction, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/false);
-    Var coords(kHalf2_Type, "coords");
+    Var coords(kFloat2_Type, "coords");
     DSLFunction(kVoid_Type, "main", coords).define(
         sk_FragColor() = Half4(coords, 0, 1)
     );
     REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 1);
     EXPECT_EQUAL(*DSLWriter::ProgramElements()[0],
-                 "void main(half2 coords) { (sk_FragColor = half4(coords, 0.0, 1.0)); }");
+                 "void main(float2 coords) { (sk_FragColor = half4(half2(coords), 0.0, 1.0)); }");
 
     {
         DSLWriter::Reset();
@@ -1789,4 +1789,17 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLStruct, r, ctxInfo) {
     REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 3);
     EXPECT_EQUAL(*DSLWriter::ProgramElements()[2],
                  "struct NestedStruct { int x; SimpleStruct simple; };");
+}
+
+DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLWrapper, r, ctxInfo) {
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
+    std::vector<Wrapper<DSLExpression>> exprs;
+    exprs.push_back(DSLExpression(1));
+    exprs.emplace_back(2.0);
+    EXPECT_EQUAL(std::move(*exprs[0]), "1");
+    EXPECT_EQUAL(std::move(*exprs[1]), "2.0");
+
+    std::vector<Wrapper<DSLVar>> vars;
+    vars.emplace_back(DSLVar(kInt_Type, "x"));
+    REPORTER_ASSERT(r, DSLWriter::Var(*vars[0]).name() == "x");
 }
