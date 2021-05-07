@@ -50,8 +50,6 @@ skia_gpu_sources = [
   "$_src/gpu/GrBackendUtils.cpp",
   "$_src/gpu/GrBackendUtils.h",
   "$_src/gpu/GrBaseContextPriv.h",
-  "$_src/gpu/GrBitmapTextureMaker.cpp",
-  "$_src/gpu/GrBitmapTextureMaker.h",
   "$_src/gpu/GrBlend.h",
   "$_src/gpu/GrBlockAllocator.cpp",
   "$_src/gpu/GrBlockAllocator.h",
@@ -126,8 +124,6 @@ skia_gpu_sources = [
   "$_src/gpu/GrImageContext.cpp",
   "$_src/gpu/GrImageContextPriv.h",
   "$_src/gpu/GrImageInfo.h",
-  "$_src/gpu/GrImageTextureMaker.cpp",
-  "$_src/gpu/GrImageTextureMaker.h",
   "$_src/gpu/GrInnerFanTriangulator.h",
   "$_src/gpu/GrManagedResource.cpp",
   "$_src/gpu/GrManagedResource.h",
@@ -246,12 +242,6 @@ skia_gpu_sources = [
   "$_src/gpu/GrTestUtils.h",
   "$_src/gpu/GrTexture.cpp",
   "$_src/gpu/GrTexture.h",
-  "$_src/gpu/GrTextureAdjuster.cpp",
-  "$_src/gpu/GrTextureAdjuster.h",
-  "$_src/gpu/GrTextureMaker.cpp",
-  "$_src/gpu/GrTextureMaker.h",
-  "$_src/gpu/GrTextureProducer.cpp",
-  "$_src/gpu/GrTextureProducer.h",
   "$_src/gpu/GrTextureProxy.cpp",
   "$_src/gpu/GrTextureProxy.h",
   "$_src/gpu/GrTextureProxyCacheAccess.h",
@@ -642,6 +632,12 @@ skia_ccpr_sources = [
 skia_gpu_sources += skia_ccpr_sources
 
 skia_null_gpu_sources = [ "$_src/gpu/gl/GrGLMakeNativeInterface_none.cpp" ]
+
+skia_nga_sources = [
+  # Sk files
+  "$_src/gpu/SkGpuDevice_nga.cpp",
+  "$_src/gpu/SkGpuDevice_nga.h",
+]
 
 skia_vk_sources = [
   "$_include/gpu/vk/GrVkBackendContext.h",

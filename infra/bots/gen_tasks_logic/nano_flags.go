@@ -57,7 +57,8 @@ func (b *taskBuilder) nanobenchFlags(doUpload bool) {
 			// iOS crashes with MSAA (skia:6399)
 			// Nexus7 (Tegra3) does not support MSAA.
 			// MSAA is disabled on Pixel3a (https://b.corp.google.com/issues/143074513).
-			if b.os("iOS") || b.model("Nexus7", "Pixel3a") {
+			// MSAA is disabled on Pixel5 (https://skbug.com/11152).
+			if b.os("iOS") || b.model("Nexus7", "Pixel3a", "Pixel5") {
 				sampleCount = 0
 			}
 		} else if b.matchGpu("Intel") {
@@ -241,16 +242,24 @@ func (b *taskBuilder) nanobenchFlags(doUpload bool) {
 		// skia:9972
 		match = append(match, "~^path_text_clipped_uncached$")
 	}
-	if (b.model("Pixel5")) {
-		// skia:11152
-		match = append(match, "~path")
-	}
 
 	if b.model(DONT_REDUCE_OPS_TASK_SPLITTING_MODELS...) {
 		args = append(args, "--dontReduceOpsTaskSplitting", "true")
 	}
 	if b.model("NUC7i5BNK") {
 		args = append(args, "--gpuResourceCacheLimit", "16777216")
+	}
+
+	if b.extraConfig("DMSAAStats") {
+		// Render tiled, single-frame skps with an extremely tall canvas that hopefully allows for
+		// us to tile most or all of the content.
+		args = append(args,
+			"--sourceType", "skp", "--clip", "0,0,1600,16384", "--GPUbenchTileW", "1600",
+			"--GPUbenchTileH", "512", "--samples", "1", "--loops", "1", "--config", "gldmsaa",
+			"--dmsaaStatsDump")
+		// Don't collect stats on the skps generated from vector content. We want these to actually
+		// trigger dmsaa.
+		match = append(match, "~svg", "~chalkboard", "~motionmark", "~ccpr")
 	}
 
 	// We do not need or want to benchmark the decodes of incomplete images.

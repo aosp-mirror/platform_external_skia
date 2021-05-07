@@ -19,8 +19,8 @@ namespace SkSL {
 namespace dsl {
 
 void DSLFunction::init(const DSLType& returnType, const char* name,
-                       std::vector<DSLVar*> params) {
-    std::vector<const Variable*> paramVars;
+                       SkTArray<DSLVar*> params) {
+    std::vector<std::unique_ptr<Variable>> paramVars;
     paramVars.reserve(params.size());
     bool isMain = !strcmp(name, "main");
     auto typeIsValidForColor = [&](const SkSL::Type& type) {
@@ -45,7 +45,8 @@ void DSLFunction::init(const DSLType& returnType, const char* name,
         param->fStorage = SkSL::VariableStorage::kParameter;
         if (paramVars.empty()) {
             SkSL::ProgramKind kind = DSLWriter::Context().fConfig->fKind;
-            if (isMain && (kind == ProgramKind::kRuntimeEffect ||
+            if (isMain && (kind == ProgramKind::kRuntimeColorFilter ||
+                           kind == ProgramKind::kRuntimeShader ||
                            kind == ProgramKind::kFragmentProcessor)) {
                 const SkSL::Type& type = param->fType.skslType();
                 // We verify that the signature is fully correct later. For now, if this is an .fp
@@ -58,20 +59,30 @@ void DSLFunction::init(const DSLType& returnType, const char* name,
                 }
             }
         }
-        paramVars.push_back(&DSLWriter::Var(*param));
+        std::unique_ptr<SkSL::Variable> paramVar = DSLWriter::ParameterVar(*param);
+        if (!paramVar) {
+            return;
+        }
+        paramVars.push_back(std::move(paramVar));
         param->fDeclaration = nullptr;
     }
-    SkSL::SymbolTable& symbols = *DSLWriter::SymbolTable();
-    fDecl = symbols.add(std::make_unique<SkSL::FunctionDeclaration>(
-                                             /*offset=*/-1,
-                                             DSLWriter::Modifiers(SkSL::Modifiers()),
-                                             isMain ? name : DSLWriter::Name(name),
-                                             std::move(paramVars), fReturnType,
-                                             /*builtin=*/false));
+    SkASSERT(paramVars.size() == params.size());
+    for (size_t i = 0; i < params.size(); ++i) {
+        params[i]->fVar = paramVars[i].get();
+    }
+    fDecl = SkSL::FunctionDeclaration::Convert(DSLWriter::Context(),
+                                               *DSLWriter::SymbolTable(),
+                                               /*offset=*/-1,
+                                               DSLWriter::Modifiers(SkSL::Modifiers()),
+                                               isMain ? name : DSLWriter::Name(name),
+                                               std::move(paramVars), &returnType.skslType(),
+                                               /*isBuiltin=*/false);
 }
 
 void DSLFunction::define(DSLBlock block) {
-    SkASSERT(fDecl);
+    if (!fDecl) {
+        return;
+    }
     SkASSERTF(!fDecl->definition(), "function '%s' already defined", fDecl->description().c_str());
     std::unique_ptr<Statement> body = block.release();
     DSLWriter::IRGenerator().finalizeFunction(*fDecl, body.get());
@@ -86,11 +97,11 @@ void DSLFunction::define(DSLBlock block) {
     DSLWriter::ProgramElements().push_back(std::move(function));
 }
 
-DSLExpression DSLFunction::call(SkTArray<DSLExpression> args) {
+DSLExpression DSLFunction::call(SkTArray<DSLWrapper<DSLExpression>> args) {
     ExpressionArray released;
     released.reserve_back(args.size());
-    for (DSLExpression& arg : args) {
-        released.push_back(arg.release());
+    for (DSLWrapper<DSLExpression>& arg : args) {
+        released.push_back(arg->release());
     }
     return DSLWriter::Call(*fDecl, std::move(released));
 }

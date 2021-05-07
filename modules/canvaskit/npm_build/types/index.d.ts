@@ -438,6 +438,7 @@ export interface CanvasKit {
     readonly FilterQuality: FilterQualityEnumValues;
     readonly FontEdging: FontEdgingEnumValues;
     readonly FontHinting: FontHintingEnumValues;
+    readonly GlyphRunFlags: GlyphRunFlagValues;
     readonly ImageFormat: ImageFormatEnumValues;
     readonly MipmapMode: MipmapModeEnumValues;
     readonly PaintStyle: PaintStyleEnumValues;
@@ -649,12 +650,37 @@ export interface LineMetrics {
     lineNumber: number;
 }
 
+export interface Range {
+    first: number;
+    last:  number;
+}
+
+/**
+ * Information for a run of shaped text. See Paragraph.getShapedLines()
+ *
+ * Notes:
+ * positions is documented as Float32, but it holds twice as many as you expect, and they
+ * are treated logically as pairs of floats: {x0, y0}, {x1, y1}, ... for each glyph.
+ *
+ * positions and offsets arrays have 1 extra slot (actually 2 for positions)
+ * to describe the location "after" the last glyph in the glyphs array.
+ */
 export interface GlyphRun {
     glyphs: Uint16Array;
     positions: Float32Array;    // alternating x0, y0, x1, y1, ...
     offsets: Uint32Array;
-    origin_x: number;
-    origin_y: number;
+    flags: number;              // see GlyphRunFlags
+}
+
+/**
+ * Information for a paragraph of text. See Paragraph.getShapedLines()
+ */
+ export interface ShapedLine {
+    textRange: Range;   // first and last character offsets for the line (derived from runs[])
+    top: number;        // top y-coordinate for the line
+    bottom: number;     // bottom y-coordinate for the line
+    baseline: number;   // baseline y-coordinate for the line
+    runs: GlyphRun[];   // array of GlyphRun objects for the line
 }
 
 /**
@@ -814,7 +840,10 @@ export interface Paragraph extends EmbindObject<Paragraph> {
      */
     getWordBoundary(offset: number): URange;
 
-    getShapedRuns(): GlyphRun[];
+    /**
+     * Returns an array of ShapedLine objects, describing the paragraph.
+     */
+    getShapedLines(): ShapedLine[];
 
     /**
      * Lays out the text in the paragraph so it is wrapped to the given width.
@@ -1120,7 +1149,7 @@ export interface Canvas extends EmbindObject<Canvas> {
      * @param glyphs the array of glyph IDs (Uint16TypedArray)
      * @param positions the array of x,y floats to position each glyph
      * @param x x-coordinate of the origin of the entire run
-     * @param x y-coordinate of the origin of the entire run
+     * @param y y-coordinate of the origin of the entire run
      * @param font the font that contains the glyphs
      * @param paint
      */
@@ -3850,6 +3879,13 @@ export interface FontWidthEnumValues extends EmbindEnum {
     Expanded: FontWidth;
     ExtraExpanded: FontWidth;
     UltraExpanded: FontWidth;
+}
+
+/*
+ *  These values can be OR'd together
+ */
+export interface GlyphRunFlagValues {
+    IsWhiteSpace: number;
 }
 
 export interface ImageFormatEnumValues extends EmbindEnum {

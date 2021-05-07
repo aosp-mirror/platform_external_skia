@@ -77,12 +77,9 @@ private:
     std::shared_ptr<SymbolTable> fOldSymbols;
 };
 
-Rehydrator::Rehydrator(const Context* context, ModifiersPool* modifiers,
-                       std::shared_ptr<SymbolTable> symbolTable, ErrorReporter* errorReporter,
+Rehydrator::Rehydrator(const Context* context,  std::shared_ptr<SymbolTable> symbolTable,
                        const uint8_t* src, size_t length)
                 : fContext(*context)
-                , fModifiers(*modifiers)
-                , fErrors(errorReporter)
                 , fSymbolTable(std::move(symbolTable))
                 , fStart(src)
     SkDEBUGCODE(, fEnd(fStart + length)) {
@@ -184,8 +181,12 @@ const Symbol* Rehydrator::symbol() {
             const Type* returnType = this->type();
             const FunctionDeclaration* result =
                     fSymbolTable->takeOwnershipOfSymbol(std::make_unique<FunctionDeclaration>(
-                                              /*offset=*/-1, fModifiers.addToPool(modifiers), name,
-                                              std::move(parameters), returnType, /*builtin=*/true));
+                            /*offset=*/-1,
+                            this->modifiersPool().add(modifiers),
+                            name,
+                            std::move(parameters),
+                            returnType,
+                            /*builtin=*/true));
             this->addSymbol(id, result);
             return result;
         }
@@ -252,7 +253,7 @@ const Symbol* Rehydrator::symbol() {
         }
         case kVariable_Command: {
             uint16_t id = this->readU16();
-            const Modifiers* m = fModifiers.addToPool(this->modifiers());
+            const Modifiers* m = this->modifiersPool().add(this->modifiers());
             StringFragment name = this->readString();
             const Type* type = this->type();
             Variable::Storage storage = (Variable::Storage) this->readU8();
@@ -564,7 +565,7 @@ std::unique_ptr<Expression> Rehydrator::expression() {
         case Rehydrator::kVariableReference_Command: {
             const Variable* var = this->symbolRef<Variable>(Symbol::Kind::kVariable);
             VariableReference::RefKind refKind = (VariableReference::RefKind) this->readU8();
-            return std::make_unique<VariableReference>(-1, var, refKind);
+            return VariableReference::Make(/*offset=*/-1, var, refKind);
         }
         case Rehydrator::kVoid_Command:
             return nullptr;
@@ -585,7 +586,7 @@ std::shared_ptr<SymbolTable> Rehydrator::symbolTable(bool inherit) {
     std::shared_ptr<SymbolTable> oldTable = fSymbolTable;
     std::shared_ptr<SymbolTable> result =
             inherit ? std::make_shared<SymbolTable>(fSymbolTable, /*builtin=*/true)
-                    : std::make_shared<SymbolTable>(fErrors, /*builtin=*/true);
+                    : std::make_shared<SymbolTable>(this->errorReporter(), /*builtin=*/true);
     fSymbolTable = result;
     std::vector<const Symbol*> ownedSymbols;
     ownedSymbols.reserve(ownedCount);

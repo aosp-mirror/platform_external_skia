@@ -73,15 +73,22 @@ public:
     virtual void updateForegroundPaint(size_t from, size_t to, SkPaint paint) = 0;
     virtual void updateBackgroundPaint(size_t from, size_t to, SkPaint paint) = 0;
 
+    enum VisitorFlags {
+        kWhiteSpace_VisitorFlag = 1 << 0,
+    };
     struct VisitorInfo {
         const SkFont&   font;
         SkPoint         origin;
+        SkScalar        advanceX;
         int             count;
-        const uint16_t* glyphs;
-        const SkPoint*  positions;
-        const uint32_t* utf8Starts;
+        const uint16_t* glyphs;     // count values
+        const SkPoint*  positions;  // count values
+        const uint32_t* utf8Starts; // count+1 values
+        unsigned        flags;
     };
-    using Visitor = std::function<void(const VisitorInfo&)>;
+
+    // lineNumber begins at 0. If info is null, this signals the end of that line.
+    using Visitor = std::function<void(int lineNumber, const VisitorInfo*)>;
     virtual void visit(const Visitor&) = 0;
 
 protected:

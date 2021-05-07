@@ -217,7 +217,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		if b.os("Android", "iOS") {
 			glPrefix = "gles"
 			// MSAA is disabled on Pixel3a (https://b.corp.google.com/issues/143074513).
-			if b.model("Pixel3a") {
+			// MSAA is disabled on Pixel5 (https://skbug.com/11152).
+			if b.model("Pixel3a", "Pixel5") {
 				sampleCount = 0
 			}
 		} else if b.matchGpu("Intel") {
@@ -837,9 +838,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		}
 	}
 
-	if b.matchGpu("Adreno[456][0-9][0-9]") { // skia:11308, skia:11891 - disable on Adreno 4/5/6xx
-		skip("_", "tests", "_", "SkSLMatrixEquality_GPU")
-		skip("_", "tests", "_", "DSLFPTest_SwitchStatement")
+	if b.matchGpu("Adreno[3456][0-9][0-9]") { // disable broken tests on Adreno 3/4/5/6xx
+		skip("_", "tests", "_", "SkSLMatrixEquality_GPU")      // skia:11308
+		skip("_", "tests", "_", "DSLFPTest_SwitchStatement")   // skia:11891
+		skip("_", "tests", "_", "SkSLStructsInFunctions_GPU")  // skia:11929
 	}
 
 	match := []string{}

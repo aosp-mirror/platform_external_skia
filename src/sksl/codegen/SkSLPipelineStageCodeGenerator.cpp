@@ -144,16 +144,17 @@ void PipelineStageCodeGenerator::writeFunctionCall(const FunctionCall& c) {
     const FunctionDeclaration& function = c.function();
     const ExpressionArray& arguments = c.arguments();
     if (function.isBuiltin() && function.name() == "sample") {
-        SkASSERT(arguments.size() <= 2);
-        SkASSERT(arguments[0]->type().isEffectChild());
-        SkASSERT(arguments[0]->is<VariableReference>());
+        SkASSERT(arguments.size() == 2);
+        const Expression* child = arguments[0].get();
+        SkASSERT(child->type().isEffectChild());
+        SkASSERT(child->is<VariableReference>());
         int index = 0;
         bool found = false;
         for (const ProgramElement* p : fProgram.elements()) {
             if (p->is<GlobalVarDeclaration>()) {
                 const GlobalVarDeclaration& global = p->as<GlobalVarDeclaration>();
                 const VarDeclaration& decl = global.declaration()->as<VarDeclaration>();
-                if (&decl.var() == arguments[0]->as<VariableReference>().variable()) {
+                if (&decl.var() == child->as<VariableReference>().variable()) {
                     found = true;
                 } else if (decl.var().type().isEffectChild()) {
                     ++index;
@@ -165,19 +166,25 @@ void PipelineStageCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         }
         SkASSERT(found);
 
-        String coordsOrMatrix;
-        if (arguments.size() > 1) {
+        // Shaders require a coordinate argument. Color filters require a color argument.
+        // When we call sampleChild, the other value remains empty.
+        String color;
+        String coords;
+        {
             AutoOutputBuffer outputToBuffer(this);
-            this->writeExpression(*arguments[1], Precedence::kSequence);
-            coordsOrMatrix = outputToBuffer.fBuffer.str();
+            this->writeExpression(*arguments.back(), Precedence::kSequence);
+            if (child->type().typeKind() == Type::TypeKind::kShader) {
+                SkASSERT(arguments[1]->type() == *fProgram.fContext->fTypes.fFloat2);
+                coords = outputToBuffer.fBuffer.str();
+            } else {
+                SkASSERT(child->type().typeKind() == Type::TypeKind::kColorFilter);
+                SkASSERT(arguments[1]->type() == *fProgram.fContext->fTypes.fHalf4 ||
+                         arguments[1]->type() == *fProgram.fContext->fTypes.fFloat4);
+                color = outputToBuffer.fBuffer.str();
+            }
         }
 
-        bool matrixCall = arguments.size() == 2 && arguments[1]->type().isMatrix();
-        if (matrixCall) {
-            this->write(fCallbacks->sampleChildWithMatrix(index, std::move(coordsOrMatrix)));
-        } else {
-            this->write(fCallbacks->sampleChild(index, std::move(coordsOrMatrix)));
-        }
+        this->write(fCallbacks->sampleChild(index, std::move(coords), std::move(color)));
         return;
     }
 
@@ -364,6 +371,17 @@ void PipelineStageCodeGenerator::writeProgramElement(const ProgramElement& e) {
 }
 
 String PipelineStageCodeGenerator::typeName(const Type& type) {
+    if (type.isArray()) {
+        // This is necessary so that name mangling on arrays-of-structs works properly.
+        String arrayName = this->typeName(type.componentType());
+        arrayName.push_back('[');
+        if (type.columns() != Type::kUnsizedArray) {
+            arrayName += to_string(type.columns());
+        }
+        arrayName.push_back(']');
+        return arrayName;
+    }
+
     auto it = fStructNames.find(&type);
     return it != fStructNames.end() ? it->second : type.name();
 }

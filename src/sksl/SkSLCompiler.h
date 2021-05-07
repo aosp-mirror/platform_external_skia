@@ -189,7 +189,6 @@ private:
     const ParsedModule& loadFPModule();
     const ParsedModule& loadGeometryModule();
     const ParsedModule& loadPublicModule();
-    const ParsedModule& loadRuntimeEffectModule();
     const ParsedModule& loadRuntimeColorFilterModule();
     const ParsedModule& loadRuntimeShaderModule();
 
@@ -226,18 +225,17 @@ private:
     ParsedModule fFPModule;                  // [GPU] + FP features
 
     ParsedModule fPublicModule;              // [Root] + Public features
-    ParsedModule fRuntimeEffectModule;       // [Public] + Runtime effect decls
     ParsedModule fRuntimeColorFilterModule;  // [Public] + Runtime shader decls
     ParsedModule fRuntimeShaderModule;       // [Public] + Runtime color filter decls
 
     // holds ModifiersPools belonging to the core includes for lifetime purposes
-    std::vector<std::unique_ptr<ModifiersPool>> fModifiers;
+    ModifiersPool fCoreModifiers;
 
     Inliner fInliner;
     std::unique_ptr<IRGenerator> fIRGenerator;
 
-    const String* fSource;
-    int fErrorCount;
+    const String* fSource = nullptr;
+    int fErrorCount = 0;
     String fErrorText;
     std::vector<size_t> fErrorTextLength;
 

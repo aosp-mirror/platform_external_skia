@@ -22,7 +22,6 @@
 #include "src/gpu/GrAHardwareBufferUtils.h"
 #include "src/gpu/GrBackendTextureImageGenerator.h"
 #include "src/gpu/GrBackendUtils.h"
-#include "src/gpu/GrBitmapTextureMaker.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrColorSpaceXform.h"
 #include "src/gpu/GrContextThreadSafeProxyPriv.h"
@@ -31,13 +30,11 @@
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrImageContextPriv.h"
 #include "src/gpu/GrImageInfo.h"
-#include "src/gpu/GrImageTextureMaker.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrSemaphore.h"
 #include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrTexture.h"
-#include "src/gpu/GrTextureAdjuster.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/GrTextureProxyPriv.h"
 #include "src/gpu/GrYUVATextureProxies.h"
@@ -69,7 +66,7 @@ inline SkImage_Gpu::ProxyChooser::~ProxyChooser() {
     // The image is being destroyed. If there is a stable copy proxy but we've been able to use
     // the volatile proxy for all requests then we can skip the copy.
     if (fVolatileToStableCopyTask) {
-        fVolatileToStableCopyTask->canSkip();
+        fVolatileToStableCopyTask->makeSkippable();
     }
 }
 
@@ -102,7 +99,7 @@ inline sk_sp<GrSurfaceProxy> SkImage_Gpu::ProxyChooser::makeVolatileProxyStable(
     SkAutoSpinlock hold(fLock);
     if (fVolatileProxy) {
         fStableProxy = std::move(fVolatileProxy);
-        fVolatileToStableCopyTask->canSkip();
+        fVolatileToStableCopyTask->makeSkippable();
         fVolatileToStableCopyTask.reset();
     }
     return fStableProxy;
@@ -666,9 +663,8 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromPixmap(GrDirectContext* dContext,
     // Turn the pixmap into a GrTextureProxy
     SkBitmap bmp;
     bmp.installPixels(*pixmap);
-    GrBitmapTextureMaker bitmapMaker(dContext, bmp, GrImageTexGenPolicy::kNew_Uncached_Budgeted);
-    GrMipmapped mipMapped = buildMips ? GrMipmapped::kYes : GrMipmapped::kNo;
-    auto view = bitmapMaker.view(mipMapped);
+    GrMipmapped mipmapped = buildMips ? GrMipmapped::kYes : GrMipmapped::kNo;
+    auto [view, ct] = GrMakeUncachedBitmapProxyView(dContext, bmp, mipmapped);
     if (!view) {
         return SkImage::MakeRasterCopy(*pixmap);
     }
@@ -681,7 +677,7 @@ sk_sp<SkImage> SkImage::MakeCrossContextFromPixmap(GrDirectContext* dContext,
 
     std::unique_ptr<GrSemaphore> sema = gpu->prepareTextureForCrossContextUsage(texture.get());
 
-    SkColorType skCT = GrColorTypeToSkColorType(bitmapMaker.colorType());
+    SkColorType skCT = GrColorTypeToSkColorType(ct);
     auto gen = GrBackendTextureImageGenerator::Make(std::move(texture), view.origin(),
                                                     std::move(sema), skCT,
                                                     pixmap->alphaType(),
@@ -828,23 +824,24 @@ bool SkImage::MakeBackendTextureFromSkImage(GrDirectContext* direct,
 }
 
 std::tuple<GrSurfaceProxyView, GrColorType> SkImage_Gpu::onAsView(
-        GrRecordingContext* context,
+        GrRecordingContext* recordingContext,
         GrMipmapped mipmapped,
         GrImageTexGenPolicy policy) const {
-    if (!fContext->priv().matches(context)) {
+    if (!fContext->priv().matches(recordingContext)) {
         return {};
     }
     if (policy != GrImageTexGenPolicy::kDraw) {
-        return {CopyView(context, this->makeView(context), mipmapped, policy),
+        return {CopyView(recordingContext, this->makeView(recordingContext), mipmapped, policy),
                 SkColorTypeToGrColorType(this->colorType())};
     }
-    GrSurfaceProxyView view = this->makeView(context);
-    GrColorType ct = SkColorTypeAndFormatToGrColorType(context->priv().caps(),
+    GrSurfaceProxyView view = this->makeView(recordingContext);
+    GrColorType ct = SkColorTypeAndFormatToGrColorType(recordingContext->priv().caps(),
                                                        this->colorType(),
                                                        view.proxy()->backendFormat());
-    GrColorInfo colorInfo(ct, this->alphaType(), this->refColorSpace());
-    GrTextureAdjuster adjuster(context, std::move(view), colorInfo, this->uniqueID());
-    return {adjuster.view(mipmapped), adjuster.colorType()};
+    if (mipmapped == GrMipmapped::kYes) {
+        view = FindOrMakeCachedMipmappedView(recordingContext, std::move(view), this->uniqueID());
+    }
+    return {std::move(view), ct};
 }
 
 std::unique_ptr<GrFragmentProcessor> SkImage_Gpu::onAsFragmentProcessor(
@@ -857,19 +854,15 @@ std::unique_ptr<GrFragmentProcessor> SkImage_Gpu::onAsFragmentProcessor(
     if (!fContext->priv().matches(rContext)) {
         return {};
     }
-    GrSurfaceProxyView view = this->makeView(rContext);
-    GrColorType ct = SkColorTypeAndFormatToGrColorType(rContext->priv().caps(),
-                                                       this->colorType(),
-                                                       view.proxy()->backendFormat());
-    GrColorInfo colorInfo(ct, this->alphaType(), this->refColorSpace());
-    GrTextureAdjuster adjuster(rContext, std::move(view), colorInfo, this->uniqueID());
-    auto wmx = SkTileModeToWrapMode(tileModes[0]);
-    auto wmy = SkTileModeToWrapMode(tileModes[1]);
-    if (sampling.useCubic) {
-        return adjuster.createBicubicFragmentProcessor(m, subset, domain, wmx, wmy, sampling.cubic);
-    }
-    GrSamplerState sampler(wmx, wmy, sampling.filter, sampling.mipmap);
-    return adjuster.createFragmentProcessor(m, subset, domain, sampler);
+    auto mm = sampling.mipmap == SkMipmapMode::kNone ? GrMipmapped::kNo : GrMipmapped::kYes;
+    return MakeFragmentProcessorFromView(rContext,
+                                         std::get<0>(this->asView(rContext, mm)),
+                                         this->alphaType(),
+                                         sampling,
+                                         tileModes,
+                                         m,
+                                         subset,
+                                         domain);
 }
 
 GrSurfaceProxyView SkImage_Gpu::makeView(GrRecordingContext* rContext) const {

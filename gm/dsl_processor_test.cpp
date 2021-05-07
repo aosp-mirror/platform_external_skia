@@ -8,7 +8,6 @@
 #include "gm/gm.h"
 #include "include/core/SkFont.h"
 #include "include/effects/SkRuntimeEffect.h"
-#include "src/gpu/GrBitmapTextureMaker.h"
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/ops/GrFillRectOp.h"
@@ -40,7 +39,8 @@ public:
                 Declare(x);
                 SkASSERT(DSLWriter::Var(x).initialValue()->description() == "1");
 
-                Var blueAlpha(kUniform_Modifier, kHalf2_Type);
+                Var blueAlpha(kUniform_Modifier, kHalf2_Type, "blueAlpha");
+                DeclareGlobal(blueAlpha);
                 fBlueAlphaUniform = VarUniformHandle(blueAlpha);
                 Var coords(kFloat4_Type, sk_FragCoord());
                 Declare(coords);

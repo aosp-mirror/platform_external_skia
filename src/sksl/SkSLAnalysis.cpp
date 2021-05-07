@@ -110,25 +110,6 @@ protected:
                         } else {
                             fUsage.merge(SampleUsage::Explicit());
                         }
-                    } else if (coords->type() == *fContext.fTypes.fFloat3x3) {
-                        // Determine the type of matrix for this call site
-                        if (coords->isConstantOrUniform()) {
-                            if (coords->is<VariableReference>() || coords->isAnyConstructor()) {
-                                // FIXME if this is a constant, we should parse the float3x3
-                                // constructor and determine if the resulting matrix introduces
-                                // perspective.
-                                fUsage.merge(SampleUsage::UniformMatrix(coords->description()));
-                            } else {
-                                // FIXME this is really to workaround a restriction of the
-                                // downstream code that relies on the SampleUsage's fExpression to
-                                // identify uniform names. Once they are tracked separately, any
-                                // uniform expression can work, but right now this avoids issues
-                                // from '0.5 * matrix' that is both a constant AND a uniform.
-                                fUsage.merge(SampleUsage::VariableMatrix());
-                            }
-                        } else {
-                            fUsage.merge(SampleUsage::VariableMatrix());
-                        }
                     } else {
                         // sample(fp, half4 inputColor) -> PassThrough
                         fUsage.merge(SampleUsage::PassThrough());
@@ -1071,7 +1052,6 @@ public:
                 return true;
 
             // These should never appear in final IR
-            case Expression::Kind::kDefined:
             case Expression::Kind::kExternalFunctionReference:
             case Expression::Kind::kFunctionReference:
             case Expression::Kind::kTypeReference:
@@ -1160,7 +1140,6 @@ bool ProgramVisitor::visit(const Program& program) {
 template <typename T> bool TProgramVisitor<T>::visitExpression(typename T::Expression& e) {
     switch (e.kind()) {
         case Expression::Kind::kBoolLiteral:
-        case Expression::Kind::kDefined:
         case Expression::Kind::kExternalFunctionReference:
         case Expression::Kind::kFloatLiteral:
         case Expression::Kind::kFunctionReference:

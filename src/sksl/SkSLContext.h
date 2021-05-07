@@ -41,13 +41,11 @@ public:
     // The Context holds a reference to our shader caps bits.
     const ShaderCapsClass& fCaps;
 
+    // The Context holds a pointer to our pool of modifiers.
+    ModifiersPool* fModifiersPool = nullptr;
+
     // The Context holds a pointer to the configuration of the program being compiled.
     ProgramConfig* fConfig = nullptr;
-
-    // A sentinel expression used to mark that a variable has a value during dataflow analysis (when
-    // it could have several different values, or the analyzer is otherwise unable to assign it a
-    // specific expression)
-    const std::unique_ptr<Expression> fDefined_Expression;
 };
 
 }  // namespace SkSL

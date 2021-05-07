@@ -40,13 +40,8 @@ public:
             FPCallbacks(GrGLSLSkSLFP* self,
                         EmitArgs& args,
                         const char* inputColor,
-                        const std::vector<SkSL::SampleUsage>& sampleUsages,
                         const SkSL::Context& context)
-                    : fSelf(self)
-                    , fArgs(args)
-                    , fInputColor(inputColor)
-                    , fSampleUsages(sampleUsages)
-                    , fContext(context) {}
+                    : fSelf(self), fArgs(args), fInputColor(inputColor), fContext(context) {}
 
             using String = SkSL::String;
 
@@ -100,7 +95,7 @@ public:
                 fArgs.fFragBuilder->definitionAppend(declaration);
             }
 
-            String sampleChild(int index, String coords) override {
+            String sampleChild(int index, String coords, String color) override {
                 // If the child was sampled using the coords passed to main (and they are never
                 // modified), then we will have marked the child as PassThrough. The code generator
                 // doesn't know that, and still supplies coords. Inside invokeChild, we assert that
@@ -113,30 +108,21 @@ public:
                 // To prevent the assert, we pass the empty string in this case. Note that for
                 // children sampled like this, invokeChild doesn't even use the coords parameter,
                 // except for that assert.
-                if (fSampleUsages[index].fPassThrough) {
+                const GrFragmentProcessor* child = fArgs.fFp.childProcessor(index);
+                if (child && !child->isSampledWithExplicitCoords()) {
                     coords.clear();
                 }
-                return String(fSelf->invokeChild(index, fInputColor, fArgs, coords).c_str());
+                return String(fSelf->invokeChild(index,
+                                                 color.empty() ? fInputColor : color.c_str(),
+                                                 fArgs,
+                                                 coords)
+                                      .c_str());
             }
 
-            String sampleChildWithMatrix(int index, String matrix) override {
-                // If the child is sampled with a uniform matrix, we need to pass the empty string.
-                // 'invokeChildWithMatrix' will assert that the passed-in matrix matches the one
-                // extracted from the SkSL when the sample usages were determined. We've mangled
-                // the uniform names, though, so it won't match.
-                const GrFragmentProcessor* child = fArgs.fFp.childProcessor(index);
-                const bool hasUniformMatrix = child && child->sampleUsage().hasUniformMatrix();
-                return String(
-                        fSelf->invokeChildWithMatrix(
-                                     index, fInputColor, fArgs, hasUniformMatrix ? "" : matrix)
-                                .c_str());
-            }
-
-            GrGLSLSkSLFP*                         fSelf;
-            EmitArgs&                             fArgs;
-            const char*                           fInputColor;
-            const std::vector<SkSL::SampleUsage>& fSampleUsages;
-            const SkSL::Context&                  fContext;
+            GrGLSLSkSLFP*        fSelf;
+            EmitArgs&            fArgs;
+            const char*          fInputColor;
+            const SkSL::Context& fContext;
         };
 
         // Snap off a global copy of the input color at the start of main. We need this when
@@ -156,8 +142,7 @@ public:
             args.fFragBuilder->codeAppendf("float2 %s = %s;\n", coords, args.fSampleCoord);
         }
 
-        FPCallbacks callbacks(
-                this, args, inputColorCopy.c_str(), fp.fEffect->fSampleUsages, *program.fContext);
+        FPCallbacks callbacks(this, args, inputColorCopy.c_str(), *program.fContext);
         SkSL::PipelineStage::ConvertProgram(program, coords, args.fInputColor, &callbacks);
     }
 
@@ -205,12 +190,11 @@ std::unique_ptr<GrSkSLFP> GrSkSLFP::Make(sk_sp<SkRuntimeEffect> effect,
     return std::unique_ptr<GrSkSLFP>(new GrSkSLFP(std::move(effect), name, std::move(uniforms)));
 }
 
-GrSkSLFP::GrSkSLFP(sk_sp<SkRuntimeEffect> effect,
-                   const char* name,
-                   sk_sp<SkData> uniforms)
+GrSkSLFP::GrSkSLFP(sk_sp<SkRuntimeEffect> effect, const char* name, sk_sp<SkData> uniforms)
         : INHERITED(kGrSkSLFP_ClassID,
-                    effect->allowColorFilter() ? kConstantOutputForConstantInput_OptimizationFlag
-                                               : kNone_OptimizationFlags)
+                    effect->getFilterColorInfo().program
+                            ? kConstantOutputForConstantInput_OptimizationFlag
+                            : kNone_OptimizationFlags)
         , fEffect(std::move(effect))
         , fName(name)
         , fUniforms(std::move(uniforms)) {
@@ -264,7 +248,8 @@ std::unique_ptr<GrFragmentProcessor> GrSkSLFP::clone() const {
 }
 
 SkPMColor4f GrSkSLFP::constantOutputForConstantInput(const SkPMColor4f& inputColor) const {
-    const skvm::Program& program = fEffect->getFilterColorInfo().program;
+    const skvm::Program* program = fEffect->getFilterColorInfo().program;
+    SkASSERT(program);
 
     SkSTArray<3, SkPMColor4f, true> childColors;
     childColors.push_back(inputColor);
@@ -273,7 +258,7 @@ SkPMColor4f GrSkSLFP::constantOutputForConstantInput(const SkPMColor4f& inputCol
     }
 
     SkPMColor4f result;
-    program.eval(1, childColors.begin(), fUniforms->data(), result.vec());
+    program->eval(1, childColors.begin(), fUniforms->data(), result.vec());
     return result;
 }
 

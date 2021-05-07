@@ -7,7 +7,6 @@
 
 #include "src/sksl/codegen/SkSLCPPCodeGenerator.h"
 
-#include "include/private/SkSLSampleUsage.h"
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLCPPUniformCTypes.h"
 #include "src/sksl/SkSLCompiler.h"
@@ -218,8 +217,7 @@ String CPPCodeGenerator::formatRuntimeValue(const Type& type,
         return "%d";
     }
     if (type == *fContext.fTypes.fInt4 ||
-        type == *fContext.fTypes.fShort4 ||
-        type == *fContext.fTypes.fByte4) {
+        type == *fContext.fTypes.fShort4) {
         formatArgs->push_back(cppCode + ".left()");
         formatArgs->push_back(cppCode + ".top()");
         formatArgs->push_back(cppCode + ".right()");
@@ -397,27 +395,14 @@ void CPPCodeGenerator::writeFunctionCall(const FunctionCall& c) {
             inputColor = ", " + inputColorName + ".c_str()";
         }
 
-        // coords can be float2, float3x3, or not there at all. They appear right after the fp.
+        // If coords are present, they're float2. They appear right after the fp.
         String inputCoord;
-        String invokeFunction = "invokeChild";
         if (arguments.size() > 1) {
             if (arguments[1]->type().name() == "float2") {
                 // Invoking child with explicit coordinates at this call site
                 inputCoord = this->getSampleVarName("_coords", sampleCounter);
                 addExtraEmitCodeLine(convertSKSLExpressionToCPP(*arguments[1], inputCoord));
                 inputCoord.append(".c_str()");
-            } else if (arguments[1]->type().name() == "float3x3") {
-                // Invoking child with a matrix, sampling relative to the input coords.
-                invokeFunction = "invokeChildWithMatrix";
-                SampleUsage usage = Analysis::GetSampleUsage(fProgram, child);
-
-                if (!usage.hasUniformMatrix()) {
-                    inputCoord = this->getSampleVarName("_matrix", sampleCounter);
-                    addExtraEmitCodeLine(convertSKSLExpressionToCPP(*arguments[1], inputCoord));
-                    inputCoord.append(".c_str()");
-                }
-                // else pass in the empty string to rely on invokeChildWithMatrix's automatic
-                // uniform resolution
             }
         }
         if (!inputCoord.empty()) {
@@ -427,8 +412,8 @@ void CPPCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         // Write the output handling after the possible input handling
         String childName = this->getSampleVarName("_sample", sampleCounter);
         String childIndexStr = to_string(this->getChildFPIndex(child));
-        addExtraEmitCodeLine("SkString " + childName + " = this->" + invokeFunction + "(" +
-                             childIndexStr + inputColor + ", args" + inputCoord + ");");
+        addExtraEmitCodeLine("SkString " + childName + " = this->invokeChild(" + childIndexStr +
+                             inputColor + ", args" + inputCoord + ");");
 
         this->write("%s");
         fFormatArgs.push_back(childName + ".c_str()");
@@ -468,14 +453,6 @@ static const char* glsltype_string(const Context& context, const Type& type) {
     if (type == *context.fTypes.fBool2   ) { return "kBool2_GrSLType";    }
     if (type == *context.fTypes.fBool3   ) { return "kBool3_GrSLType";    }
     if (type == *context.fTypes.fBool4   ) { return "kBool4_GrSLType";    }
-    if (type == *context.fTypes.fByte    ) { return "kByte_GrSLType";     }
-    if (type == *context.fTypes.fByte2   ) { return "kByte2_GrSLType";    }
-    if (type == *context.fTypes.fByte3   ) { return "kByte3_GrSLType";    }
-    if (type == *context.fTypes.fByte4   ) { return "kByte4_GrSLType";    }
-    if (type == *context.fTypes.fUByte   ) { return "kUByte_GrSLType";    }
-    if (type == *context.fTypes.fUByte2  ) { return "kUByte2_GrSLType";   }
-    if (type == *context.fTypes.fUByte3  ) { return "kUByte3_GrSLType";   }
-    if (type == *context.fTypes.fUByte4  ) { return "kUByte4_GrSLType";   }
     if (type == *context.fTypes.fShort   ) { return "kShort_GrSLType";    }
     if (type == *context.fTypes.fShort2  ) { return "kShort2_GrSLType";   }
     if (type == *context.fTypes.fShort3  ) { return "kShort3_GrSLType";   }

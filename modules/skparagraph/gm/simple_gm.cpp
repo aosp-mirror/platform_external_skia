@@ -94,17 +94,32 @@ protected:
     }
 
     void drawFromVisitor(SkCanvas* canvas, skia::textlayout::Paragraph* para) const {
-        SkPaint p;
+        SkPaint p, p2;
         p.setColor(0xFF0000FF);
-        para->visit([canvas, p](const skia::textlayout::Paragraph::VisitorInfo& info) {
-            canvas->drawGlyphs(info.count, info.glyphs, info.positions, info.origin, info.font, p);
+        p2.setColor(0xFFFF0000);
+        p2.setStrokeWidth(4);
+        p2.setStrokeCap(SkPaint::kSquare_Cap);
 
-            if (info.utf8Starts && false) {
+        para->visit([&](int, const skia::textlayout::Paragraph::VisitorInfo* info) {
+            if (!info) {
+                return;
+            }
+            canvas->drawGlyphs(info->count, info->glyphs, info->positions, info->origin,
+                               info->font, p);
+
+            if (info->utf8Starts && false) {
                 SkString str;
-                for (int i = 0; i < info.count; ++i) {
-                    str.appendUnichar(gSpeach[info.utf8Starts[i]]);
+                for (int i = 0; i < info->count; ++i) {
+                    str.appendUnichar(gSpeach[info->utf8Starts[i]]);
                 }
                 SkDebugf("'%s'\n", str.c_str());
+            }
+
+            if (false) {    // show position points
+            for (int i = 0; i < info->count; ++i) {
+                auto pos = info->positions[i];
+                canvas->drawPoint(pos.fX + info->origin.fX, pos.fY + info->origin.fY, p2);
+            }
             }
         });
     }
@@ -151,7 +166,7 @@ protected:
     bool runAsBench() const override { return true; }
 
     bool onAnimate(double /*nanos*/) override {
-        return true;
+        return false;
     }
 
 private:

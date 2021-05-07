@@ -19,6 +19,8 @@
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/private/SkSLDefines.h"  // for kDefaultInlineThreshold
 #include "include/utils/SkRandom.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
@@ -46,7 +48,7 @@ static void test_one_permutation(skiatest::Reporter* r,
     }
 
     SkString shaderString{reinterpret_cast<const char*>(shaderData->bytes()), shaderData->size()};
-    SkRuntimeEffect::Result result = SkRuntimeEffect::Make(shaderString, options);
+    SkRuntimeEffect::Result result = SkRuntimeEffect::MakeForShader(shaderString, options);
     if (!result.effect) {
         ERRORF(r, "%s%s: %s", testFile, permutationSuffix, result.errorText.c_str());
         return;
@@ -92,8 +94,12 @@ static void test_one_permutation(skiatest::Reporter* r,
                     SkColorGetA(color), SkColorGetR(color), SkColorGetG(color), SkColorGetB(color));
 }
 
-static void test_permutations(skiatest::Reporter* r, SkSurface* surface, const char* testFile) {
+static void test_permutations(skiatest::Reporter* r,
+                              SkSurface* surface,
+                              const char* testFile,
+                              bool worksInES2) {
     SkRuntimeEffect::Options options;
+    options.enforceES2Restrictions = worksInES2;
     options.forceNoInline = false;
     test_one_permutation(r, surface, testFile, "", options);
 
@@ -105,14 +111,28 @@ static void test_cpu(skiatest::Reporter* r, const char* testFile) {
     const SkImageInfo info = SkImageInfo::MakeN32Premul(kRect.width(), kRect.height());
     sk_sp<SkSurface> surface(SkSurface::MakeRaster(info));
 
-    test_permutations(r, surface.get(), testFile);
+    test_permutations(r, surface.get(), testFile, /*worksInES2=*/true);
 }
 
 static void test_gpu(skiatest::Reporter* r, GrDirectContext* ctx, const char* testFile) {
     const SkImageInfo info = SkImageInfo::MakeN32Premul(kRect.width(), kRect.height());
     sk_sp<SkSurface> surface(SkSurface::MakeRenderTarget(ctx, SkBudgeted::kNo, info));
 
-    test_permutations(r, surface.get(), testFile);
+    test_permutations(r, surface.get(), testFile, /*worksInES2=*/true);
+}
+
+static void test_es3(skiatest::Reporter* r, GrDirectContext* ctx, const char* testFile) {
+    // We don't have an ES2 caps bit, so we check for integer support and derivatives support.
+    // Our ES2 bots should return false for these.
+    if (!ctx->priv().caps()->shaderCaps()->shaderDerivativeSupport() ||
+        !ctx->priv().caps()->shaderCaps()->integerSupport()) {
+        return;
+    }
+    // ES3-only tests never run on the CPU, because SkVM lacks support for many non-ES2 features.
+    const SkImageInfo info = SkImageInfo::MakeN32Premul(kRect.width(), kRect.height());
+    sk_sp<SkSurface> surface(SkSurface::MakeRenderTarget(ctx, SkBudgeted::kNo, info));
+
+    test_permutations(r, surface.get(), testFile, /*worksInES2=*/false);
 }
 
 #define SKSL_TEST_CPU(name, path)                                   \
@@ -123,19 +143,28 @@ static void test_gpu(skiatest::Reporter* r, GrDirectContext* ctx, const char* te
     DEF_GPUTEST_FOR_RENDERING_CONTEXTS(name ## _GPU, r, ctxInfo) {  \
         test_gpu(r, ctxInfo.directContext(), path);                 \
     }
+#define SKSL_TEST_ES3(name, path)                                   \
+    DEF_GPUTEST_FOR_RENDERING_CONTEXTS(name ## _GPU, r, ctxInfo) {  \
+        test_es3(r, ctxInfo.directContext(), path);                 \
+    }
 #define SKSL_TEST(name, path) SKSL_TEST_CPU(name, path) SKSL_TEST_GPU(name, path)
 
 SKSL_TEST(SkSLAssignmentOps,                   "folding/AssignmentOps.sksl")
 SKSL_TEST(SkSLBoolFolding,                     "folding/BoolFolding.sksl")
 SKSL_TEST(SkSLIntFoldingES2,                   "folding/IntFoldingES2.sksl")
+SKSL_TEST_ES3(SkSLIntFoldingES3,               "folding/IntFoldingES3.sksl")
 SKSL_TEST(SkSLFloatFolding,                    "folding/FloatFolding.sksl")
-SKSL_TEST(SkSLMatrixFoldingES2,                "folding/MatrixFoldingES2.sksl")
+// skbug.com/11919: Fails on Nexus5/7, and Intel GPUs
+SKSL_TEST_CPU(SkSLMatrixFoldingES2,            "folding/MatrixFoldingES2.sksl")
 SKSL_TEST(SkSLSelfAssignment,                  "folding/SelfAssignment.sksl")
 SKSL_TEST(SkSLShortCircuitBoolFolding,         "folding/ShortCircuitBoolFolding.sksl")
+SKSL_TEST(SkSLSwizzleFolding,                  "folding/SwizzleFolding.sksl")
 SKSL_TEST(SkSLVectorScalarFolding,             "folding/VectorScalarFolding.sksl")
 SKSL_TEST(SkSLVectorVectorFolding,             "folding/VectorVectorFolding.sksl")
 
 SKSL_TEST(SkSLForBodyMustBeInlinedIntoAScope,     "inliner/ForBodyMustBeInlinedIntoAScope.sksl")
+SKSL_TEST_ES3(SkSLForInitializerExpressionsCanBeInlined,
+         "inliner/ForInitializerExpressionsCanBeInlined.sksl")
 SKSL_TEST(SkSLForWithoutReturnInsideCanBeInlined, "inliner/ForWithoutReturnInsideCanBeInlined.sksl")
 SKSL_TEST(SkSLForWithReturnInsideCannotBeInlined, "inliner/ForWithReturnInsideCannotBeInlined.sksl")
 SKSL_TEST(SkSLIfBodyMustBeInlinedIntoAScope,      "inliner/IfBodyMustBeInlinedIntoAScope.sksl")
@@ -152,7 +181,8 @@ SKSL_TEST(SkSLInlinerUsesTempVarForMultipleReturns,
 SKSL_TEST(SkSLInlinerUsesTempVarForReturnsInsideBlockWithVar,
      "inliner/InlinerUsesTempVarForReturnsInsideBlockWithVar.sksl")
 SKSL_TEST(SkSLInlineThreshold,                    "inliner/InlineThreshold.sksl")
-SKSL_TEST(SkSLInlineWithInoutArgument,            "inliner/InlineWithInoutArgument.sksl")
+// skbug.com/11919: Fails on Adreno + Vulkan
+SKSL_TEST_CPU(SkSLInlineWithInoutArgument,        "inliner/InlineWithInoutArgument.sksl")
 SKSL_TEST(SkSLInlineWithModifiedArgument,         "inliner/InlineWithModifiedArgument.sksl")
 SKSL_TEST(SkSLInlineWithNestedBigCalls,           "inliner/InlineWithNestedBigCalls.sksl")
 SKSL_TEST(SkSLInlineWithUnmodifiedArgument,       "inliner/InlineWithUnmodifiedArgument.sksl")
@@ -165,6 +195,9 @@ SKSL_TEST(SkSLSwizzleCanBeInlinedDirectly,        "inliner/SwizzleCanBeInlinedDi
 SKSL_TEST(SkSLTernaryResultsCannotBeInlined,      "inliner/TernaryResultsCannotBeInlined.sksl")
 SKSL_TEST(SkSLTernaryTestCanBeInlined,            "inliner/TernaryTestCanBeInlined.sksl")
 SKSL_TEST(SkSLTrivialArgumentsInlineDirectly,     "inliner/TrivialArgumentsInlineDirectly.sksl")
+SKSL_TEST_ES3(SkSLWhileBodyMustBeInlinedIntoAScope,
+         "inliner/WhileBodyMustBeInlinedIntoAScope.sksl")
+SKSL_TEST_ES3(SkSLWhileTestCannotBeInlined,       "inliner/WhileTestCannotBeInlined.sksl")
 
 // TODO(skia:11052): SPIR-V does not yet honor `out` param semantics correctly
 SKSL_TEST_CPU(SkSLInlinerHonorsGLSLOutParamSemantics,
@@ -175,9 +208,11 @@ SKSL_TEST(SkSLIntrinsicCeil,                   "intrinsics/Ceil.sksl")
 SKSL_TEST(SkSLIntrinsicClampFloat,             "intrinsics/ClampFloat.sksl")
 SKSL_TEST(SkSLIntrinsicMaxFloat,               "intrinsics/MaxFloat.sksl")
 SKSL_TEST(SkSLIntrinsicMinFloat,               "intrinsics/MinFloat.sksl")
-SKSL_TEST(SkSLIntrinsicMixFloat,               "intrinsics/MixFloat.sksl")
+// skbug.com/11919: Fails on Adreno + Vulkan
+SKSL_TEST_CPU(SkSLIntrinsicMixFloat,           "intrinsics/MixFloat.sksl")
 SKSL_TEST(SkSLIntrinsicSignFloat,              "intrinsics/SignFloat.sksl")
 
+SKSL_TEST_ES3(SkSLArrayComparison,             "shared/ArrayComparison.sksl")
 SKSL_TEST(SkSLArrayTypes,                      "shared/ArrayTypes.sksl")
 SKSL_TEST(SkSLAssignment,                      "shared/Assignment.sksl")
 SKSL_TEST(SkSLCastsRoundTowardZero,            "shared/CastsRoundTowardZero.sksl")
@@ -204,9 +239,12 @@ SKSL_TEST(SkSLMultipleAssignments,             "shared/MultipleAssignments.sksl"
 SKSL_TEST(SkSLNegatedVectorLiteral,            "shared/NegatedVectorLiteral.sksl")
 SKSL_TEST(SkSLNumberCasts,                     "shared/NumberCasts.sksl")
 SKSL_TEST(SkSLOperatorsES2,                    "shared/OperatorsES2.sksl")
-SKSL_TEST(SkSLOutParams,                       "shared/OutParams.sksl")
-SKSL_TEST(SkSLOutParamsNoInline,               "shared/OutParamsNoInline.sksl")
-SKSL_TEST(SkSLOutParamsTricky,                 "shared/OutParamsTricky.sksl")
+
+// skbug.com/11919: Fails on Adreno + Vulkan
+SKSL_TEST_CPU(SkSLOutParams,                   "shared/OutParams.sksl")
+SKSL_TEST_CPU(SkSLOutParamsNoInline,           "shared/OutParamsNoInline.sksl")
+SKSL_TEST_CPU(SkSLOutParamsTricky,             "shared/OutParamsTricky.sksl")
+
 SKSL_TEST(SkSLResizeMatrix,                    "shared/ResizeMatrix.sksl")
 SKSL_TEST(SkSLReturnsValueOnEveryPathES2,      "shared/ReturnsValueOnEveryPathES2.sksl")
 SKSL_TEST(SkSLScalarConversionConstructorsES2, "shared/ScalarConversionConstructorsES2.sksl")
@@ -225,7 +263,8 @@ SKSL_TEST(SkSLTernaryExpression,               "shared/TernaryExpression.sksl")
 SKSL_TEST(SkSLUnaryPositiveNegative,           "shared/UnaryPositiveNegative.sksl")
 SKSL_TEST(SkSLUnusedVariables,                 "shared/UnusedVariables.sksl")
 SKSL_TEST(SkSLVectorConstructors,              "shared/VectorConstructors.sksl")
-SKSL_TEST(SkSLVectorScalarMath,                "shared/VectorScalarMath.sksl")
+// skbug.com/11919: Fails on Nexus5/7, and Intel GPUs
+SKSL_TEST_CPU(SkSLVectorScalarMath,            "shared/VectorScalarMath.sksl")
 
 /*
 // Incompatible with Runtime Effects because calling a function before its definition is disallowed.
@@ -236,17 +275,12 @@ SKSL_TEST(SkSLFunctionPrototype,               "shared/FunctionPrototype.sksl")
 /*
 TODO(skia:11209): enable these tests when Runtime Effects have support for ES3
 
-SKSL_TEST(SkSLIntFoldingES3,                   "folding/IntFoldingES3.sksl")
 SKSL_TEST(SkSLMatrixFoldingES3,                "folding/MatrixFoldingES3.sksl")
 
 SKSL_TEST(SkSLDoWhileBodyMustBeInlinedIntoAScope, "inliner/DoWhileBodyMustBeInlinedIntoAScope.sksl")
 SKSL_TEST(SkSLDoWhileTestCannotBeInlined,         "inliner/DoWhileTestCannotBeInlined.sksl")
-SKSL_TEST(SkSLEnumsCanBeInlinedSafely,            "inliner/EnumsCanBeInlinedSafely.sksl")
-SKSL_TEST(SkSLForInitializerExpressionsCanBeInlined,
-     "inliner/ForInitializerExpressionsCanBeInlined.sksl")
+SKSL_TEST(SkSLEnumsCanBeInlinedSafely,         "inliner/EnumsCanBeInlinedSafely.sksl")
 SKSL_TEST(SkSLStaticSwitch,                       "inliner/StaticSwitch.sksl")
-SKSL_TEST(SkSLWhileBodyMustBeInlinedIntoAScope,   "inliner/WhileBodyMustBeInlinedIntoAScope.sksl")
-SKSL_TEST(SkSLWhileTestCannotBeInlined,           "inliner/WhileTestCannotBeInlined.sksl")
 
 SKSL_TEST(SkSLIntrinsicAbsInt,                 "intrinsics/AbsInt.sksl")
 SKSL_TEST(SkSLIntrinsicClampInt,               "intrinsics/ClampInt.sksl")

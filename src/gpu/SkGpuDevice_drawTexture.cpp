@@ -14,16 +14,12 @@
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkSpecialImage.h"
-#include "src/gpu/GrBitmapTextureMaker.h"
 #include "src/gpu/GrBlurUtils.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrColorSpaceXform.h"
-#include "src/gpu/GrImageTextureMaker.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrStyle.h"
 #include "src/gpu/GrSurfaceDrawContext.h"
-#include "src/gpu/GrTextureAdjuster.h"
-#include "src/gpu/GrTextureMaker.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrBicubicEffect.h"
 #include "src/gpu/effects/GrBlendFragmentProcessor.h"
@@ -319,7 +315,7 @@ static ImageDrawMode optimize_sample_area(const SkISize& image, const SkRect* or
 
 /**
  * Checks whether the paint is compatible with using GrSurfaceDrawContext::drawTexture. It is more
- * efficient than the GrTextureProducer general case.
+ * efficient than the SkImage general case.
  */
 static bool can_use_draw_texture(const SkPaint& paint, bool useCubicResampler, SkMipmapMode mm) {
     return (!paint.getColorFilter() && !paint.getShader() && !paint.getMaskFilter() &&

@@ -74,11 +74,14 @@ static void test_dsl_fp(skiatest::Reporter* r,
                                         ##__VA_ARGS__);                                   \
     }
 
-DSL_FP_TEST_ES2(DSLFPTest_IfStatement, /*one:*/ 1.0f)
+DSL_FP_TEST_ES2(DSLFPTest_IfStatement, /*one:*/ 1.0f, /*unused:*/ 555.0f)
 DSL_FP_TEST_ES2(DSLFPTest_Swizzle)
-DSL_FP_TEST_ES2(DSLFPTest_Ternary, /*colorGreen:*/ SkPMColor4f{0, 1, 0, 1},
-                                   /*colorRed:*/ SkPMColor4f{1, 0, 0, 1})
+DSL_FP_TEST_ES2(DSLFPTest_Ternary, /*primaryColors:*/true,
+                                   /*colorGreen:*/   SkPMColor4f{0.0, 1.0, 0.0, 1.0},
+                                   /*colorRed:*/     SkPMColor4f{1.0, 0.0, 0.0, 1.0},
+                                   /*colorOrange:*/  SkPMColor4f{1.0, 0.5, 0.0, 1.0},
+                                   /*colorPurple:*/  SkPMColor4f{0.5, 0.0, 0.5, 1.0})
 DSL_FP_TEST(DSLFPTest_DoStatement, /*shouldLoop:*/ false)
 DSL_FP_TEST(DSLFPTest_ForStatement, /*colorWhite:*/ SkPMColor4f{1, 1, 1, 1})
-DSL_FP_TEST(DSLFPTest_SwitchStatement)
+DSL_FP_TEST(DSLFPTest_SwitchStatement, /*ten:*/ 10);
 DSL_FP_TEST(DSLFPTest_WhileStatement)

@@ -18,7 +18,7 @@ bool FuzzSKSL2Pipeline(sk_sp<SkData> bytes) {
     SkSL::Compiler compiler(caps.get());
     SkSL::Program::Settings settings;
     std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
-                                                    SkSL::ProgramKind::kRuntimeEffect,
+                                                    SkSL::ProgramKind::kRuntimeShader,
                                                     SkSL::String((const char*) bytes->data(),
                                                                  bytes->size()),
                                                     settings);
@@ -37,14 +37,16 @@ bool FuzzSKSL2Pipeline(sk_sp<SkData> bytes) {
         void defineStruct(const char* /*definition*/) override {}
         void declareGlobal(const char* /*declaration*/) override {}
 
-        String sampleChild(int index, String coords) override {
-            return SkSL::String::printf("sample(%d%s%s)", index, coords.empty() ? "" : ", ",
-                                        coords.c_str());
-        }
-
-        String sampleChildWithMatrix(int index, String matrix) override {
-            return SkSL::String::printf("sample(%d%s%s)", index, matrix.empty() ? "" : ", ",
-                                        matrix.c_str());
+        String sampleChild(int index, String coords, String color) override {
+            String result = "sample(" + SkSL::to_string(index);
+            if (!coords.empty()) {
+                result += ", " + coords;
+            }
+            if (!color.empty()) {
+                result += ", " + color;
+            }
+            result += ")";
+            return result;
         }
     };
 

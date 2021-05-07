@@ -44,6 +44,11 @@ CanvasKit.onRuntimeInitialized = function() {
   CanvasKit.ColorSpace.DISPLAY_P3 = CanvasKit.ColorSpace._MakeDisplayP3();
   CanvasKit.ColorSpace.ADOBE_RGB = CanvasKit.ColorSpace._MakeAdobeRGB();
 
+  // Use quotes to tell closure compiler not to minify the names
+  CanvasKit['GlyphRunFlags'] = {
+    'IsWhiteSpace': CanvasKit['_GlyphRunFlags_isWhiteSpace'],
+  };
+
   CanvasKit.Path.MakeFromCmds = function(cmds) {
     var ptrLen = loadCmdsTypedArray(cmds);
     var path = CanvasKit.Path._MakeFromCmds(ptrLen[0], ptrLen[1]);
@@ -583,8 +588,8 @@ CanvasKit.onRuntimeInitialized = function() {
   };
 
   CanvasKit.Canvas.prototype.drawGlyphs = function(glyphs, positions, x, y, font, paint) {
-    if (!(glyphs.length*2 == positions.length)) {
-        throw 'Need glyphs and positions array to agree on the length';
+    if (!(glyphs.length*2 <= positions.length)) {
+        throw 'Not enough positions for the array of gyphs';
     }
 
     const glyphs_ptr    = copy1dArray(glyphs, 'HEAPU16');

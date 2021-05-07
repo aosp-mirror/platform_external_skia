@@ -41,7 +41,7 @@ public:
 
     DSLVar(DSLModifiers modifiers, DSLType type, DSLExpression initialValue);
 
-    DSLVar(DSLVar&&) = delete;
+    DSLVar(DSLVar&&) = default;
 
     ~DSLVar();
 
@@ -98,6 +98,10 @@ public:
     }
 
     DSLPossibleExpression operator=(float expr) {
+        return this->operator=(DSLExpression(expr));
+    }
+
+    DSLPossibleExpression operator=(double expr) {
         return this->operator=(DSLExpression(expr));
     }
 

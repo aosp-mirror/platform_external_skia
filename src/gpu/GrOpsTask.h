@@ -44,6 +44,7 @@ public:
     GrOpsTask* asOpsTask() override { return this; }
 
     bool isEmpty() const { return fOpChains.empty(); }
+    bool usesMSAASurface() const { return fUsesMSAASurface; }
 
     /**
      * Empties the draw buffer of any queued up draws.
@@ -222,7 +223,7 @@ private:
         SkRect fBounds;
     };
 
-    void onCanSkip() override;
+    void onMakeSkippable() override;
 
     bool onIsUsed(GrSurfaceProxy*) const override;
 

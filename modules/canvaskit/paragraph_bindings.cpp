@@ -312,52 +312,91 @@ JSArray GetLineMetrics(para::Paragraph& self) {
 }
 
 /*
- *  Returns Runs[K]
- *
- *  Run --> { font: ???, glyphs[N], positions[N*2], offsets[N], origin: x,y }
- *
- *  K = number of runs
- *  N = number of glyphs in a given run
+ *  Returns Lines[]
  */
-JSArray GetShapedRuns(para::Paragraph& self) {
-    struct Run {
-        SkFont  font;
-        SkPoint origin;
-        int     index;
-        int     count;
+JSArray GetShapedLines(para::Paragraph& self) {
+    struct LineAccumulate {
+        int         lineNumber  = -1;   // deliberately -1 from starting value
+        uint32_t    minOffset   = 0xFFFFFFFF;
+        uint32_t    maxOffset   = 0;
+        float       minAscent   = 0;
+        float       maxDescent  = 0;
+        // not really accumulated, but definitely set
+        float       baseline    = 0;
+
+        void reset(int lineNumber) {
+            new (this) LineAccumulate;
+            this->lineNumber = lineNumber;
+        }
     };
-    std::vector<Run>      runs;
-    std::vector<uint16_t> glyphs;
-    std::vector<SkPoint>  positions;
-    std::vector<uint32_t> offsets;
 
-    self.visit([&](const para::Paragraph::VisitorInfo& info) {
-        // add 1 Run
-        runs.push_back({info.font, info.origin, (int)glyphs.size(), info.count});
-        // append the arrays
-        glyphs.insert(glyphs.end(), info.glyphs, info.glyphs + info.count);
-        positions.insert(positions.end(), info.positions, info.positions + info.count);
-        offsets.insert(offsets.end(), info.utf8Starts, info.utf8Starts + info.count);
-    });
+    // where we accumulate our js output
+    JSArray  jlines = emscripten::val::array();
+    JSObject jline = emscripten::val::null();
+    JSArray  jruns = emscripten::val::null();
+    LineAccumulate accum;
 
-    JSArray jruns = emscripten::val::array();
+    self.visit([&](int lineNumber, const para::Paragraph::VisitorInfo* info) {
+        if (!info) {
+            // end of current line
+            JSObject range = emscripten::val::object();
+            range.set("first", accum.minOffset);
+            range.set("last",  accum.maxOffset);
+            jline.set("textRange", range);
 
-    for (const auto& crun : runs) {
-        const int N = crun.count;
-        const int I = crun.index;
+            jline.set("top", accum.baseline + accum.minAscent);
+            jline.set("bottom", accum.baseline + accum.maxDescent);
+            jline.set("baseline", accum.baseline);
+            return;
+        }
+
+        if (lineNumber != accum.lineNumber) {
+            SkASSERT(lineNumber == accum.lineNumber + 1);   // assume monotonic
+
+            accum.reset(lineNumber);
+            jruns = emscripten::val::array();
+
+            jline = emscripten::val::array();
+            jline.set("runs", jruns);
+            // will assign textRange and metrics on end-of-line signal
+
+            jlines.call<void>("push", jline);
+        }
+
+        // append the run
+        const int N = info->count;   // glyphs
+        const int N1 = N + 1;       // positions, offsets have 1 extra (trailing) slot
 
         JSObject jrun = emscripten::val::object();
 
-        jrun.set("glyphs"   , MakeTypedArray(N,   &glyphs[I],       "Uint16Array"));
-        jrun.set("positions", MakeTypedArray(N*2, &positions[I].fX, "Float32Array"));
-        jrun.set("offsets"  , MakeTypedArray(N,   &offsets[I],      "Uint32Array"));
-        jrun.set("origin_x" , crun.origin.fX);
-        jrun.set("origin_y" , crun.origin.fY);
+        jrun.set("flags",   info->flags);
+        jrun.set("glyphs",  MakeTypedArray(N,  info->glyphs,     "Uint16Array"));
+        jrun.set("offsets", MakeTypedArray(N1, info->utf8Starts, "Uint32Array"));
+
+        // we need to modify the positions, so make a temp copy
+        SkAutoSTMalloc<32, SkPoint> positions(N1);
+        for (int i = 0; i < N; ++i) {
+            positions.get()[i] = info->positions[i] + info->origin;
+        }
+        positions.get()[N] = { info->advanceX, positions.get()[N - 1].fY };
+        jrun.set("positions", MakeTypedArray(N1*2, (const float*)positions.get(), "Float32Array"));
 
         jruns.call<void>("push", jrun);
 
-    }
-    return jruns;
+        // update accum
+        {   SkFontMetrics fm;
+            info->font.getMetrics(&fm);
+
+            accum.minAscent  = std::min(accum.minAscent,  fm.fAscent);
+            accum.maxDescent = std::max(accum.maxDescent, fm.fDescent);
+            accum.baseline   = info->origin.fY;
+
+            accum.minOffset  = std::min(accum.minOffset,  info->utf8Starts[0]);
+            accum.maxOffset  = std::max(accum.maxOffset,  info->utf8Starts[N]);
+        }
+
+    });
+    return jlines;
 }
 
 EMSCRIPTEN_BINDINGS(Paragraph) {
@@ -375,7 +414,7 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         .function("getMinIntrinsicWidth", &para::Paragraph::getMinIntrinsicWidth)
         .function("_getRectsForPlaceholders", &GetRectsForPlaceholders)
         .function("_getRectsForRange", &GetRectsForRange)
-        .function("getShapedRuns", &GetShapedRuns)
+        .function("getShapedLines", &GetShapedLines)
         .function("getWordBoundary", &para::Paragraph::getWordBoundary)
         .function("layout", &para::Paragraph::layout);
 

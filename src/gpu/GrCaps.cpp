@@ -81,6 +81,7 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fAvoidWritePixelsFastPath = false;
     fRequiresManualFBBarrierAfterTessellatedStencilDraw = false;
     fNativeDrawIndexedIndirectIsBroken = false;
+    fAvoidReorderingRenderTasks = false;
 
     fPreferVRAMUseOverFlushes = true;
 
@@ -239,6 +240,7 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
                        fRequiresManualFBBarrierAfterTessellatedStencilDraw);
     writer->appendBool("Native draw indexed indirect is broken [workaround]",
                        fNativeDrawIndexedIndirectIsBroken);
+    writer->appendBool("Avoid DAG reordering [workaround]", fAvoidReorderingRenderTasks);
 
     if (this->advancedBlendEquationSupport()) {
         writer->appendHexU32("Advanced Blend Equation Disable Flags", fAdvBlendEqDisableFlags);
@@ -433,6 +435,7 @@ GrDstSampleType GrCaps::getDstSampleTypeForProxy(const GrRenderTargetProxy* rt) 
 }
 
 bool GrCaps::supportsDynamicMSAA(const GrRenderTargetProxy* rtProxy) const {
-    return this->internalMultisampleCount(rtProxy->backendFormat()) > 1 &&
+    return rtProxy->numSamples() == 1 &&
+           this->internalMultisampleCount(rtProxy->backendFormat()) > 1 &&
            this->onSupportsDynamicMSAA(rtProxy);
 }

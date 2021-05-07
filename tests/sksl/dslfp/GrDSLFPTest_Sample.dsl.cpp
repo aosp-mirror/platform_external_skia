@@ -16,26 +16,19 @@
 #include "src/sksl/dsl/priv/DSLFPs.h"
 #include "src/sksl/dsl/priv/DSLWriter.h"
 
-#if defined(__clang__)
-#pragma clang diagnostic ignored "-Wcomma"
-#endif
-
 class GrGLSLDSLFPTest_Sample : public GrGLSLFragmentProcessor {
 public:
     GrGLSLDSLFPTest_Sample() {}
     void emitCode(EmitArgs& args) override {
-        const GrDSLFPTest_Sample& _outer = args.fFp.cast<GrDSLFPTest_Sample>();
-        (void) _outer;
+        [[maybe_unused]] const GrDSLFPTest_Sample& _outer = args.fFp.cast<GrDSLFPTest_Sample>();
 
         using namespace SkSL::dsl;
         StartFragmentProcessor(this, &args);
-Var coords(kConst_Modifier, DSLType(kFloat2_Type), "coords", Float2(0.5f));
-Var xform(kConst_Modifier, DSLType(kFloat3x3_Type), "xform", Float3x3(2.0f));
-Var inColor(kConst_Modifier, DSLType(kHalf4_Type), "inColor", Half4(0.75f));
-Declare(coords);
-Declare(xform);
-Declare(inColor);
-Return(((((SampleChild(0) * SampleChild(1, coords)) * SampleChild(2, xform)) * SampleChild(0, inColor)) * SampleChild(1, coords, inColor)) * SampleChild(2, xform, inColor));
+Var _coords(kConst_Modifier, DSLType(kFloat2_Type), "coords", Float2(0.5f));
+Var _inColor(kConst_Modifier, DSLType(kHalf4_Type), "inColor", Half4(0.75f));
+Declare(_coords);
+Declare(_inColor);
+Return(((SampleChild(0) * SampleChild(1, _coords)) * SampleChild(0, _inColor)) * SampleChild(1, _coords, _inColor));
         EndFragmentProcessor();
     }
 private:

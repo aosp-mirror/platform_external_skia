@@ -319,6 +319,11 @@ void GrSurfaceDrawContext::willReplaceOpsTask(GrOpsTask* prevTask, GrOpsTask* ne
         // values?
         nextTask->setInitialStencilContent(GrOpsTask::StencilContent::kPreserved);
     }
+#if GR_GPU_STATS && GR_TEST_UTILS
+    if (fCanUseDynamicMSAA) {
+        fContext->priv().dmsaaStats().fNumRenderPasses++;
+    }
+#endif
 }
 
 inline GrAAType GrSurfaceDrawContext::chooseAAType(GrAA aa) {
@@ -395,7 +400,6 @@ void GrSurfaceDrawContext::drawGlyphRunListWithCache(const GrClip* clip,
 
     if (blob == nullptr || !blob->canReuse(paint, drawMatrix)) {
         if (blob != nullptr) {
-            SkASSERT(!drawMatrix.hasPerspective());
             // We have to remake the blob because changes may invalidate our masks.
             // TODO we could probably get away with reuse most of the time if the pointer is unique,
             //      but we'd have to clear the SubRun information
@@ -921,9 +925,9 @@ bool GrSurfaceDrawContext::stencilPath(const GrHardClip* clip,
     canDrawArgs.fViewMatrix = &viewMatrix;
     canDrawArgs.fShape = &shape;
     canDrawArgs.fPaint = nullptr;
+    canDrawArgs.fSurfaceProps = &fSurfaceProps;
     canDrawArgs.fAAType = (doStencilMSAA == GrAA::kYes) ? GrAAType::kMSAA : GrAAType::kNone;
     canDrawArgs.fHasUserStencilSettings = false;
-    canDrawArgs.fTargetIsWrappedVkSecondaryCB = this->wrapsVkSecondaryCB();
     GrPathRenderer* pr = this->drawingManager()->getPathRenderer(
             canDrawArgs, false, GrPathRendererChain::DrawType::kStencil);
     if (!pr) {
@@ -1613,10 +1617,9 @@ bool GrSurfaceDrawContext::drawAndStencilPath(const GrHardClip* clip,
     canDrawArgs.fViewMatrix = &viewMatrix;
     canDrawArgs.fShape = &shape;
     canDrawArgs.fPaint = &paint;
+    canDrawArgs.fSurfaceProps = &fSurfaceProps;
     canDrawArgs.fClipConservativeBounds = &clipConservativeBounds;
     canDrawArgs.fAAType = aaType;
-    SkASSERT(!this->wrapsVkSecondaryCB());
-    canDrawArgs.fTargetIsWrappedVkSecondaryCB = false;
     canDrawArgs.fHasUserStencilSettings = hasUserStencilSettings;
 
     // Don't allow the SW renderer
@@ -1777,8 +1780,8 @@ void GrSurfaceDrawContext::drawShapeUsingPathRenderer(const GrClip* clip,
     canDrawArgs.fViewMatrix = &viewMatrix;
     canDrawArgs.fShape = &shape;
     canDrawArgs.fPaint = &paint;
+    canDrawArgs.fSurfaceProps = &fSurfaceProps;
     canDrawArgs.fClipConservativeBounds = &clipConservativeBounds;
-    canDrawArgs.fTargetIsWrappedVkSecondaryCB = this->wrapsVkSecondaryCB();
     canDrawArgs.fHasUserStencilSettings = false;
     canDrawArgs.fAAType = aaType;
 
@@ -1956,9 +1959,25 @@ void GrSurfaceDrawContext::addDrawOp(const GrClip* clip,
     if (willAddFn) {
         willAddFn(op.get(), opsTask->uniqueID());
     }
+
+#if GR_GPU_STATS && GR_TEST_UTILS
+    if (fCanUseDynamicMSAA && usesHWAA) {
+        if (!opsTask->usesMSAASurface()) {
+            fContext->priv().dmsaaStats().fNumMultisampleRenderPasses++;
+        }
+        fContext->priv().dmsaaStats().fTriggerCounts[op->name()]++;
+    }
+#endif
+
     opsTask->addDrawOp(this->drawingManager(), std::move(op), fixedFunctionFlags, analysis,
                        std::move(appliedClip), dstProxyView,
                        GrTextureResolveManager(this->drawingManager()), *this->caps());
+
+#ifdef SK_DEBUG
+    if (fCanUseDynamicMSAA && usesHWAA) {
+        SkASSERT(opsTask->usesMSAASurface());
+    }
+#endif
 }
 
 bool GrSurfaceDrawContext::setupDstProxyView(const GrOp& op,

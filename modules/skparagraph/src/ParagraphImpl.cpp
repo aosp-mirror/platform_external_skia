@@ -903,16 +903,7 @@ void ParagraphImpl::computeEmptyMetrics() {
     SkFont font(typeface, textStyle.getFontSize());
     fEmptyMetrics = InternalLineMetrics(font, paragraphStyle().getStrutStyle().getForceStrutHeight());
 
-    if (emptyParagraph) {
-        // For an empty text we apply both TextHeightBehaviour flags
-        // In case of non-empty paragraph TextHeightBehaviour flags will be applied at the appropriate place
-        auto disableFirstAscent = (paragraphStyle().getTextHeightBehavior() & TextHeightBehavior::kDisableFirstAscent) == TextHeightBehavior::kDisableFirstAscent;
-        auto disableLastDescent = (paragraphStyle().getTextHeightBehavior() & TextHeightBehavior::kDisableLastDescent) == TextHeightBehavior::kDisableLastDescent;
-        fEmptyMetrics.update(
-            disableFirstAscent ? fEmptyMetrics.rawAscent() : fEmptyMetrics.ascent(),
-            disableLastDescent ? fEmptyMetrics.rawDescent() : fEmptyMetrics.descent(),
-            fEmptyMetrics.leading());
-    } else if (!paragraphStyle().getStrutStyle().getForceStrutHeight() &&
+    if (!paragraphStyle().getStrutStyle().getForceStrutHeight() &&
         textStyle.getHeightOverride()) {
         const auto intrinsicHeight = fEmptyMetrics.height();
         const auto strutHeight = textStyle.getHeight() * textStyle.getFontSize();
@@ -928,6 +919,18 @@ void ParagraphImpl::computeEmptyMetrics() {
                 fEmptyMetrics.descent() * multiplier,
                 fEmptyMetrics.leading() * multiplier);
         }
+    }
+
+    if (emptyParagraph) {
+        // For an empty text we apply both TextHeightBehaviour flags
+        // In case of non-empty paragraph TextHeightBehaviour flags will be applied at the appropriate place
+        // We have to do it here because we skip wrapping for an empty text
+        auto disableFirstAscent = (paragraphStyle().getTextHeightBehavior() & TextHeightBehavior::kDisableFirstAscent) == TextHeightBehavior::kDisableFirstAscent;
+        auto disableLastDescent = (paragraphStyle().getTextHeightBehavior() & TextHeightBehavior::kDisableLastDescent) == TextHeightBehavior::kDisableLastDescent;
+        fEmptyMetrics.update(
+            disableFirstAscent ? fEmptyMetrics.rawAscent() : fEmptyMetrics.ascent(),
+            disableLastDescent ? fEmptyMetrics.rawDescent() : fEmptyMetrics.descent(),
+            fEmptyMetrics.leading());
     }
 
     if (fParagraphStyle.getStrutStyle().getStrutEnabled()) {
@@ -1048,6 +1051,7 @@ void ParagraphImpl::ensureUTF16Mapping() {
 }
 
 void ParagraphImpl::visit(const Visitor& visitor) {
+    int lineNumber = 0;
     for (auto& line : fLines) {
         for (auto& rec : line.fTextBlobCache) {
             SkTextBlob::Iter iter(*rec.fBlob);
@@ -1068,17 +1072,22 @@ void ParagraphImpl::visit(const Visitor& visitor) {
             clusterPtr += rec.fVisitor_Pos;
 
             while (iter.experimentalNext(&run)) {
-                visitor({
+                const Paragraph::VisitorInfo info = {
                     run.font,
                     rec.fOffset,
+                    rec.fClipRect.fRight,
                     run.count,
                     run.glyphs,
                     run.positions,
                     clusterPtr,
-                });
+                    0,  // flags
+                };
+                visitor(lineNumber, &info);
                 clusterPtr += run.count;
             }
         }
+        visitor(lineNumber, nullptr);   // signal end of line
+        lineNumber += 1;
     }
 }
 

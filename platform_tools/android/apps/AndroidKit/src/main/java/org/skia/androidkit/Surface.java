@@ -8,11 +8,13 @@
 package org.skia.androidkit;
 
 import android.graphics.Bitmap;
+import android.os.Build;
+import android.support.annotation.RequiresApi;
+
 import org.skia.androidkit.Canvas;
 
 public class Surface {
     private long mNativeInstance;
-    private Canvas mCanvas;
 
     /**
      * Create a Surface backed by the provided Bitmap.
@@ -23,11 +25,30 @@ public class Surface {
         this(CreateBitmapInstance(bitmap));
     }
 
+    @RequiresApi(Build.VERSION_CODES.N)
+    static public Surface CreateVulkan(android.view.Surface surface) {
+        return new Surface(nCreateVKSurface(surface));
+    }
+
+    static public Surface CreateGL(android.view.Surface surface) {
+        return new Surface(nCreateGLSurface(surface));
+    }
+
+    /**
+     * Create a Surface backed by the provided Android Surface (android.view.Surface).
+     * AndroidKit handles thread management. Assumes OpenGL backend.
+     */
+    static public Surface createThreadedSurface(android.view.Surface surface) {
+        return new Surface(nCreateThreadedSurface(surface));
+    }
+
     /**
      * The Canvas associated with this Surface.
      */
     public Canvas getCanvas() {
-        return mCanvas;
+        // TODO: given that canvases are now ephemeral, it would make sense to be more explicit
+        // e.g. lockCanvas/unlockCanvasAndPost?
+        return new Canvas(this, nGetNativeCanvas(mNativeInstance));
     }
 
     /***
@@ -38,6 +59,14 @@ public class Surface {
      */
     public void flushAndSubmit() {
         nFlushAndSubmit(mNativeInstance);
+    }
+
+    public int getWidth() {
+        return nGetWidth(mNativeInstance);
+    }
+
+    public int getHeight() {
+        return nGetHeight(mNativeInstance);
     }
 
     /**
@@ -56,7 +85,6 @@ public class Surface {
 
     private Surface(long native_instance) {
         mNativeInstance = native_instance;
-        mCanvas = new Canvas(this, nGetNativeCanvas(native_instance));
     }
 
     private static long CreateBitmapInstance(Bitmap bitmap) {
@@ -67,7 +95,13 @@ public class Surface {
     }
 
     private static native long nCreateBitmap(Bitmap bitmap);
+    private static native long nCreateThreadedSurface(android.view.Surface surface);
+    private static native long nCreateVKSurface(android.view.Surface surface);
+    private static native long nCreateGLSurface(android.view.Surface surface);
+
     private static native void nRelease(long nativeInstance);
     private static native long nGetNativeCanvas(long nativeInstance);
     private static native void nFlushAndSubmit(long nativeInstance);
+    private static native int  nGetWidth(long nativeInstance);
+    private static native int  nGetHeight(long nativeInstance);
 }

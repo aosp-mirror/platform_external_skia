@@ -21,6 +21,7 @@
 #include "modules/svg/include/SkSVGFeDisplacementMap.h"
 #include "modules/svg/include/SkSVGFeFlood.h"
 #include "modules/svg/include/SkSVGFeGaussianBlur.h"
+#include "modules/svg/include/SkSVGFeImage.h"
 #include "modules/svg/include/SkSVGFeLightSource.h"
 #include "modules/svg/include/SkSVGFeLighting.h"
 #include "modules/svg/include/SkSVGFeMorphology.h"
@@ -242,10 +243,12 @@ SortedDictionaryEntry<sk_sp<SkSVGNode>(*)()> gTagFactories[] = {
     { "feBlend"           , []() -> sk_sp<SkSVGNode> { return SkSVGFeBlend::Make();            }},
     { "feColorMatrix"     , []() -> sk_sp<SkSVGNode> { return SkSVGFeColorMatrix::Make();      }},
     { "feComposite"       , []() -> sk_sp<SkSVGNode> { return SkSVGFeComposite::Make();        }},
+    { "feDiffuseLighting" , []() -> sk_sp<SkSVGNode> { return SkSVGFeDiffuseLighting::Make();  }},
     { "feDisplacementMap" , []() -> sk_sp<SkSVGNode> { return SkSVGFeDisplacementMap::Make();  }},
     { "feDistantLight"    , []() -> sk_sp<SkSVGNode> { return SkSVGFeDistantLight::Make();     }},
     { "feFlood"           , []() -> sk_sp<SkSVGNode> { return SkSVGFeFlood::Make();            }},
     { "feGaussianBlur"    , []() -> sk_sp<SkSVGNode> { return SkSVGFeGaussianBlur::Make();     }},
+    { "feImage"           , []() -> sk_sp<SkSVGNode> { return SkSVGFeImage::Make();            }},
     { "feMorphology"      , []() -> sk_sp<SkSVGNode> { return SkSVGFeMorphology::Make();       }},
     { "feOffset"          , []() -> sk_sp<SkSVGNode> { return SkSVGFeOffset::Make();           }},
     { "fePointLight"      , []() -> sk_sp<SkSVGNode> { return SkSVGFePointLight::Make();       }},
@@ -436,7 +439,7 @@ void SkSVGDOM::render(SkCanvas* canvas) const {
         SkSVGLengthContext       lctx(fContainerSize);
         SkSVGPresentationContext pctx;
         fRoot->render(SkSVGRenderContext(canvas, fFontMgr, fResourceProvider, fIDMapper, lctx, pctx,
-                                         nullptr));
+                                         {nullptr, nullptr}));
     }
 }
 

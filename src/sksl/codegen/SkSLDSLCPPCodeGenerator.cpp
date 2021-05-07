@@ -7,7 +7,6 @@
 
 #include "src/sksl/codegen/SkSLDSLCPPCodeGenerator.h"
 
-#include "include/private/SkSLSampleUsage.h"
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLCPPUniformCTypes.h"
 #include "src/sksl/SkSLCompiler.h"
@@ -207,8 +206,7 @@ String DSLCPPCodeGenerator::formatRuntimeValue(const Type& type,
         return "%d";
     }
     if (type == *fContext.fTypes.fInt4 ||
-        type == *fContext.fTypes.fShort4 ||
-        type == *fContext.fTypes.fByte4) {
+        type == *fContext.fTypes.fShort4) {
         formatArgs->push_back(cppCode + ".left()");
         formatArgs->push_back(cppCode + ".top()");
         formatArgs->push_back(cppCode + ".right()");
@@ -280,13 +278,21 @@ void DSLCPPCodeGenerator::writeTernaryExpression(const TernaryExpression& t,
 
 void DSLCPPCodeGenerator::writeVariableReference(const VariableReference& ref) {
     const Variable& var = *ref.variable();
+    if (fCPPMode) {
+        this->write(var.name());
+        return;
+    }
 
-    if (!fCPPMode) {
-        if (var.modifiers().fLayout.fBuiltin == SK_MAIN_COORDS_BUILTIN) {
+    switch (var.modifiers().fLayout.fBuiltin) {
+        case SK_MAIN_COORDS_BUILTIN:
             this->write("sk_SampleCoord()");
             fAccessSampleCoordsDirectly = true;
             return;
-        }
+        case SK_FRAGCOORD_BUILTIN:
+            this->write("sk_FragCoord()");
+            return;
+        default:
+            break;
     }
 
     this->write(this->getVariableCppName(var));
@@ -339,57 +345,64 @@ void DSLCPPCodeGenerator::writeFunctionCall(const FunctionCall& c) {
     }
 
     if (function.isBuiltin()) {
-        static const auto* kBuiltinNames = new std::unordered_map<String, String>{
-                {"abs", "Abs"},
-                {"all", "All"},
-                {"any", "Any"},
-                {"ceil", "Ceil"},
-                {"clamp", "Clamp"},
-                {"cos", "Cos"},
-                {"cross", "Cross"},
-                {"degrees", "Degrees"},
-                {"distance", "Distance"},
-                {"dot", "Dot"},
-                {"equal", "Equal"},
-                {"exp", "Exp"},
-                {"exp2", "Exp2"},
-                {"faceforward", "Faceforward"},
-                {"floor", "Floor"},
-                {"fract", "Fract"},
-                {"greaterThan", "GreaterThan"},
-                {"greaterThanEqual", "GreaterThanEqual"},
-                {"inversesqrt", "Inversesqrt"},
-                {"inverse", "Inverse"},
-                {"length", "Length"},
-                {"lessThan", "LessThan"},
-                {"lessThanEqual", "LessThanEqual"},
-                {"log", "Log"},
-                {"max", "Max"},
-                {"min", "Min"},
-                {"mix", "Mix"},
-                {"mod", "Mod"},
-                {"normalize", "Normalize"},
-                {"not", "Not"},
-                {"pow", "Pow"},
-                {"radians", "Radians"},
-                {"reflect", "Reflect"},
-                {"refract", "Refract"},
-                {"saturate", "Saturate"},
-                {"sign", "Sign"},
-                {"sin", "Sin"},
-                {"smoothstep", "Smoothstep"},
-                {"sqrt", "Sqrt"},
-                {"step", "Step"},
-                {"tan", "Tan"},
-                {"unpremul", "Unpremul"}};
+        if (fCPPMode) {
+            this->write(function.name());
+        } else {
+            static const auto* kBuiltinNames = new std::unordered_map<IntrinsicKind, const char*>{
+                    {k_abs_IntrinsicKind, "Abs"},
+                    {k_all_IntrinsicKind, "All"},
+                    {k_any_IntrinsicKind, "Any"},
+                    {k_atan_IntrinsicKind, "Atan"},
+                    {k_ceil_IntrinsicKind, "Ceil"},
+                    {k_clamp_IntrinsicKind, "Clamp"},
+                    {k_cos_IntrinsicKind, "Cos"},
+                    {k_cross_IntrinsicKind, "Cross"},
+                    {k_degrees_IntrinsicKind, "Degrees"},
+                    {k_distance_IntrinsicKind, "Distance"},
+                    {k_dot_IntrinsicKind, "Dot"},
+                    {k_equal_IntrinsicKind, "Equal"},
+                    {k_exp_IntrinsicKind, "Exp"},
+                    {k_exp2_IntrinsicKind, "Exp2"},
+                    {k_faceforward_IntrinsicKind, "Faceforward"},
+                    {k_floor_IntrinsicKind, "Floor"},
+                    {k_fract_IntrinsicKind, "SkSL::dsl::Fract"},
+                    {k_greaterThan_IntrinsicKind, "GreaterThan"},
+                    {k_greaterThanEqual_IntrinsicKind, "GreaterThanEqual"},
+                    {k_inversesqrt_IntrinsicKind, "Inversesqrt"},
+                    {k_inverse_IntrinsicKind, "Inverse"},
+                    {k_length_IntrinsicKind, "Length"},
+                    {k_lessThan_IntrinsicKind, "LessThan"},
+                    {k_lessThanEqual_IntrinsicKind, "LessThanEqual"},
+                    {k_log_IntrinsicKind, "Log"},
+                    {k_max_IntrinsicKind, "Max"},
+                    {k_min_IntrinsicKind, "Min"},
+                    {k_mix_IntrinsicKind, "Mix"},
+                    {k_mod_IntrinsicKind, "Mod"},
+                    {k_normalize_IntrinsicKind, "Normalize"},
+                    {k_not_IntrinsicKind, "Not"},
+                    {k_pow_IntrinsicKind, "Pow"},
+                    {k_radians_IntrinsicKind, "Radians"},
+                    {k_reflect_IntrinsicKind, "Reflect"},
+                    {k_refract_IntrinsicKind, "Refract"},
+                    {k_saturate_IntrinsicKind, "Saturate"},
+                    {k_sign_IntrinsicKind, "Sign"},
+                    {k_sin_IntrinsicKind, "Sin"},
+                    {k_smoothstep_IntrinsicKind, "Smoothstep"},
+                    {k_sqrt_IntrinsicKind, "Sqrt"},
+                    {k_step_IntrinsicKind, "Step"},
+                    {k_tan_IntrinsicKind, "Tan"},
+                    {k_unpremul_IntrinsicKind, "Unpremul"}};
 
-        auto iter = kBuiltinNames->find(function.name());
-        if (iter == kBuiltinNames->end()) {
-            fErrors.error(c.fOffset, "unrecognized built-in function '" + function.name() + "'");
-            return;
+            auto iter = kBuiltinNames->find(function.intrinsicKind());
+            if (iter == kBuiltinNames->end()) {
+                fErrors.error(c.fOffset,
+                              "unrecognized built-in function '" + function.name() + "'");
+                return;
+            }
+
+            this->write(iter->second);
         }
 
-        this->write(iter->second);
         this->write("(");
         const char* separator = "";
         for (const std::unique_ptr<Expression>& argument : c.arguments()) {
@@ -487,7 +500,7 @@ void DSLCPPCodeGenerator::writeReturnStatement(const ReturnStatement& r) {
 }
 
 void DSLCPPCodeGenerator::writeIfStatement(const IfStatement& stmt) {
-    this->write("If(");
+    this->write(stmt.isStatic() ? "StaticIf(" : "If(");
     this->writeExpression(*stmt.test(), Precedence::kTopLevel);
     this->write(", /*Then:*/ ");
     this->writeStatement(*stmt.ifTrue());
@@ -511,21 +524,20 @@ static bool variable_exists_with_name(const std::unordered_map<const Variable*, 
 const char* DSLCPPCodeGenerator::getVariableCppName(const Variable& var) {
     String& cppName = fVariableCppNames[&var];
     if (cppName.empty()) {
-        if (!variable_exists_with_name(fVariableCppNames, var.name())) {
-            // Nothing needs to change; use the name as-is.
-            cppName = var.name();
-        } else {
-            // Another variable with the same name exists in the function, at a different scope.
-            // Append a numeric prefix to disambiguate the two. (This check could be more efficient,
-            // but it really doesn't matter much; this case is rare, and we don't compile DSL CPPs
-            // at Skia runtime.)
-            for (int prefix=0;; ++prefix) {
-                String prefixedName = String::printf("_%d_%.*s", prefix, (int)var.name().size(),
-                                                                 var.name().data());
-                if (!variable_exists_with_name(fVariableCppNames, prefixedName)) {
-                    cppName = std::move(prefixedName);
-                    break;
-                }
+        // Append a prefix to the variable name. This serves two purposes:
+        // - disambiguates variables with the same name that live in different SkSL scopes
+        // - gives the DSLVar a distinct name, leaving the original name free to be given to a
+        //   C++ constant, for the case of layout-keys that need to work in C++ `when` expressions
+        // Probing for a unique name could be more efficient, but it really doesn't matter much;
+        // overlapping names are super rare, and we only compile DSLs in skslc at build time.
+        for (int prefix = 0;; ++prefix) {
+            String prefixedName = (prefix > 0 || !islower(var.name()[0]))
+                    ? String::printf("_%d_%.*s", prefix, (int)var.name().size(), var.name().data())
+                    : String::printf("_%.*s", (int)var.name().size(), var.name().data());
+
+            if (!variable_exists_with_name(fVariableCppNames, prefixedName)) {
+                cppName = std::move(prefixedName);
+                break;
             }
         }
     }
@@ -533,42 +545,73 @@ const char* DSLCPPCodeGenerator::getVariableCppName(const Variable& var) {
     return cppName.c_str();
 }
 
-void DSLCPPCodeGenerator::writeVar(const Variable& var) {
-    this->write("Var ");
-    this->write(this->getVariableCppName(var));
+void DSLCPPCodeGenerator::writeCppInitialValue(const Variable& var) {
+    // `formatRuntimeValue` generates a C++ format string (which we don't need, since
+    // we're not formatting anything at runtime) and a vector of the arguments within
+    // the variable (which we do need, to fill in the Var's initial value).
+    std::vector<String> argumentList;
+    (void) this->formatRuntimeValue(var.type(), var.modifiers().fLayout,
+                                    var.name(), &argumentList);
+
+    this->write(this->getTypeName(var.type()));
     this->write("(");
+    const char* separator = "";
+    for (const String& arg : argumentList) {
+        this->write(separator);
+        this->write(arg);
+        separator = ", ";
+    }
+    this->write(")");
+}
+
+void DSLCPPCodeGenerator::writeVarCtorExpression(const Variable& var) {
     this->write(this->getDSLModifiers(var.modifiers()));
     this->write(", ");
     this->write(this->getDSLType(var.type()));
     this->write(", \"");
-    this->write(this->getVariableCppName(var));
+    this->write(var.name());
     this->write("\"");
     if (var.initialValue()) {
         this->write(", ");
-        this->writeExpression(*var.initialValue(), Precedence::kTopLevel);
+        if (is_private(var)) {
+            // The initial value was calculated in C++ (see writePrivateVarValues). This value can
+            // be baked into the DSL as a constant.
+            this->writeCppInitialValue(var);
+        } else {
+            // Write the variable's initial-value expression in DSL.
+            this->writeExpression(*var.initialValue(), Precedence::kTopLevel);
+        }
     }
+}
+
+void DSLCPPCodeGenerator::writeVar(const Variable& var) {
+    this->write("Var ");
+    this->write(this->getVariableCppName(var));
+    this->write("(");
+    this->writeVarCtorExpression(var);
     this->write(");\n");
 }
 
 void DSLCPPCodeGenerator::writeVarDeclaration(const VarDeclaration& varDecl, bool global) {
+    const Variable& var = varDecl.var();
     if (!global) {
-        const Variable& var = varDecl.var();
-        {
-            // We want to divert our output into fFunctionHeader, but fFunctionHeader is just a
-            // String, not a StringStream. So instead, we divert into a temporary stream and append
-            // that stream into fFunctionHeader afterwards.
-            StringStream stream;
-            AutoOutputStream divert(this, &stream);
+        // We want to divert our output into fFunctionHeader, but fFunctionHeader is just a
+        // String, not a StringStream. So instead, we divert into a temporary stream and append
+        // that stream into fFunctionHeader afterwards.
+        StringStream stream;
+        AutoOutputStream divert(this, &stream);
 
-            this->writeVar(var);
+        this->writeVar(var);
 
-            fFunctionHeader += stream.str();
-        }
-
-        this->write("Declare(");
-        this->write(this->getVariableCppName(var));
-        this->write(")");
+        fFunctionHeader += stream.str();
+    } else {
+        // For global variables, we can write the Var directly into the code stream.
+        this->writeVar(var);
     }
+
+    this->write("Declare(");
+    this->write(this->getVariableCppName(var));
+    this->write(")");
 }
 
 void DSLCPPCodeGenerator::writeForStatement(const ForStatement& f) {
@@ -614,7 +657,7 @@ void DSLCPPCodeGenerator::writeDoStatement(const DoStatement& d) {
 }
 
 void DSLCPPCodeGenerator::writeSwitchStatement(const SwitchStatement& s) {
-    this->write("Switch(");
+    this->write(s.isStatic() ? "StaticSwitch(" : "Switch(");
     this->writeExpression(*s.value(), Precedence::kTopLevel);
     for (const std::unique_ptr<Statement>& stmt : s.cases()) {
         const SwitchCase& c = stmt->as<SwitchCase>();
@@ -651,6 +694,9 @@ void DSLCPPCodeGenerator::writeAnyConstructor(const AnyConstructor& c,
 }
 
 String DSLCPPCodeGenerator::getTypeName(const Type& type) {
+    if (fCPPMode) {
+        return type.name();
+    }
     switch (type.typeKind()) {
         case Type::TypeKind::kScalar:
             return get_scalar_type_name(fContext, type);
@@ -714,7 +760,8 @@ String DSLCPPCodeGenerator::getDSLModifiers(const Modifiers& modifiers) {
     } else if (modifiers.fFlags & Modifiers::kIn_Flag) {
         text += "kIn_Modifier | ";
     }
-    if (modifiers.fFlags & Modifiers::kConst_Flag) {
+    if ((modifiers.fFlags & Modifiers::kConst_Flag) ||
+        (modifiers.fLayout.fFlags & Layout::kKey_Flag)) {
         text += "kConst_Modifier | ";
     }
     if (modifiers.fFlags & Modifiers::kOut_Flag) {
@@ -738,6 +785,17 @@ String DSLCPPCodeGenerator::getDSLModifiers(const Modifiers& modifiers) {
     return text;
 }
 
+String DSLCPPCodeGenerator::getDefaultDSLValue(const Variable& var) {
+    // TODO: default_value returns half4(NaN) for colors, but DSL aborts if passed a literal NaN.
+    // Theoretically this really shouldn't matter.
+    switch (var.type().typeKind()) {
+        case Type::TypeKind::kScalar:
+        case Type::TypeKind::kVector: return this->getTypeName(var.type()) + "(0)";
+        case Type::TypeKind::kMatrix: return this->getTypeName(var.type()) + "(1)";
+        default: SK_ABORT("unsupported type: %s", var.type().description().c_str());
+    }
+}
+
 void DSLCPPCodeGenerator::writeStatement(const Statement& s) {
     switch (s.kind()) {
         case Statement::Kind::kBlock:
@@ -750,7 +808,7 @@ void DSLCPPCodeGenerator::writeStatement(const Statement& s) {
             this->writeReturnStatement(s.as<ReturnStatement>());
             break;
         case Statement::Kind::kVarDeclaration:
-            this->writeVarDeclaration(s.as<VarDeclaration>(), false);
+            this->writeVarDeclaration(s.as<VarDeclaration>(), /*global=*/false);
             break;
         case Statement::Kind::kIf:
             this->writeIfStatement(s.as<IfStatement>());
@@ -789,7 +847,7 @@ void DSLCPPCodeGenerator::writeFloatLiteral(const FloatLiteral& f) {
 }
 
 void DSLCPPCodeGenerator::writeSetting(const Setting& s) {
-    this->writef("sk_Caps.%s()", s.name().c_str());
+    this->writef("sk_Caps.%s", s.name().c_str());
 }
 
 bool DSLCPPCodeGenerator::writeSection(const char* name, const char* prefix) {
@@ -805,20 +863,23 @@ void DSLCPPCodeGenerator::writeProgramElement(const ProgramElement& p) {
     switch (p.kind()) {
         case ProgramElement::Kind::kSection:
             return;
+
         case ProgramElement::Kind::kGlobalVar: {
             const GlobalVarDeclaration& decl = p.as<GlobalVarDeclaration>();
             const Variable& var = decl.declaration()->as<VarDeclaration>().var();
+            // Don't write builtin uniforms.
             if (var.modifiers().fFlags & (Modifiers::kIn_Flag | Modifiers::kUniform_Flag) ||
                 -1 != var.modifiers().fLayout.fBuiltin) {
                 return;
             }
-            break;
-        }
-        case ProgramElement::Kind::kFunctionPrototype: {
-            // Function prototypes are handled at the C++ level (in writeEmitCode).
-            // We don't want prototypes to be emitted inside the FP's main() function.
+            this->writeVarDeclaration(decl.declaration()->as<VarDeclaration>(), /*global=*/true);
+            this->write(";\n");
             return;
         }
+        case ProgramElement::Kind::kFunctionPrototype:
+            SK_ABORT("not yet implemented: function prototypes in DSL");
+            return;
+
         default:
             break;
     }
@@ -829,16 +890,38 @@ void DSLCPPCodeGenerator::addUniform(const Variable& var) {
     if (!needs_uniform_var(var)) {
         return;
     }
+
+    const char* varCppName = this->getVariableCppName(var);
     if (var.modifiers().fLayout.fWhen.fLength) {
-        this->writef("        if (%s) {\n    ", String(var.modifiers().fLayout.fWhen).c_str());
+        // In cases where the `when` clause is true, we set up the Var normally.
+        this->writef(
+                "Var %s;\n"
+                "if (%.*s) {\n"
+                "    Var(",
+                varCppName,
+                (int)var.modifiers().fLayout.fWhen.size(), var.modifiers().fLayout.fWhen.data());
+        this->writeVarCtorExpression(var);
+        this->writef(").swap(%s);\n    ", varCppName);
+    } else {
+        this->writeVar(var);
     }
-    this->writeVar(var);
 
     this->writef("%.*sVar = VarUniformHandle(%s);\n",
                  (int)var.name().size(), var.name().data(), this->getVariableCppName(var));
 
     if (var.modifiers().fLayout.fWhen.fLength) {
-        this->write("        }\n");
+        this->writef("    DeclareGlobal(%s);\n", varCppName);
+        // In cases where the `when` is false, we declare the Var as a const with a default value.
+        this->writef("} else {\n"
+                     "    Var(kConst_Modifier, %s, \"%.*s\", %s).swap(%s);\n"
+                     "    Declare(%s);\n"
+                     "}\n",
+                     this->getDSLType(var.type()).c_str(),
+                     (int)var.name().size(), var.name().data(),
+                     this->getDefaultDSLValue(var).c_str(),
+                     varCppName, varCppName);
+    } else {
+        this->writef("DeclareGlobal(%s);\n", varCppName);
     }
 }
 
@@ -856,10 +939,10 @@ void DSLCPPCodeGenerator::writePrivateVars() {
                                   "fragmentProcessor variables must be declared 'in'");
                     return;
                 }
-                this->writef("%s %s = %s;\n",
+                this->writef("%s %.*s = %s;\n",
                              HCodeGenerator::FieldType(fContext, var.type(),
                                                        var.modifiers().fLayout).c_str(),
-                             this->getVariableCppName(var),
+                             (int)var.name().size(), var.name().data(),
                              default_value(var).c_str());
             } else if (var.modifiers().fLayout.fFlags & Layout::kTracked_Flag) {
                 // An auto-tracked uniform in variable, so add a field to hold onto the prior
@@ -889,11 +972,14 @@ void DSLCPPCodeGenerator::writePrivateVarValues() {
             const GlobalVarDeclaration& global = p->as<GlobalVarDeclaration>();
             const VarDeclaration& decl = global.declaration()->as<VarDeclaration>();
             if (is_private(decl.var()) && decl.value()) {
-                this->writef("%s = ", String(decl.var().name()).c_str());
+                // This function writes class member variables.
+                // We need to emit plain C++ names and types, not DSL.
                 fCPPMode = true;
+                this->write(decl.var().name());
+                this->write(" = ");
                 this->writeExpression(*decl.value(), Precedence::kAssignment);
-                fCPPMode = false;
                 this->write(";\n");
+                fCPPMode = false;
             }
         }
     }
@@ -907,8 +993,7 @@ static bool is_accessible(const Variable& var) {
 
 bool DSLCPPCodeGenerator::writeEmitCode(std::vector<const Variable*>& uniforms) {
     this->writef("    void emitCode(EmitArgs& args) override {\n"
-                 "        const %s& _outer = args.fFp.cast<%s>();\n"
-                 "        (void) _outer;\n"
+                 "        [[maybe_unused]] const %s& _outer = args.fFp.cast<%s>();\n"
                  "\n"
                  "        using namespace SkSL::dsl;\n"
                  "        StartFragmentProcessor(this, &args);\n",
@@ -922,24 +1007,15 @@ bool DSLCPPCodeGenerator::writeEmitCode(std::vector<const Variable*>& uniforms) 
                 continue;
             }
             if (SectionAndParameterHelper::IsParameter(var) && is_accessible(var)) {
-                // `formatRuntimeValue` generates a C++ format string (which we don't need, since
-                // we're not formatting anything at runtime) and a vector of the arguments within
-                // the variable (which we do need, to fill in the Var's initial value).
-                std::vector<String> argumentList;
-                (void) this->formatRuntimeValue(var.type(), var.modifiers().fLayout,
-                                                "_outer." + var.name(), &argumentList);
-
                 const char* varCppName = this->getVariableCppName(var);
-                this->writef("Var %s(kConst_Modifier, %s, \"%s\", %s(",
+                this->writef("[[maybe_unused]] const auto& %.*s = _outer.%.*s;\n"
+                             "Var %s(kConst_Modifier, %s, \"%.*s\", ",
+                             (int)var.name().size(), var.name().data(),
+                             (int)var.name().size(), var.name().data(),
                              varCppName, this->getDSLType(var.type()).c_str(),
-                             varCppName, this->getTypeName(var.type()).c_str());
-                const char* separator = "";
-                for (const String& arg : argumentList) {
-                    this->write(separator);
-                    this->write(arg);
-                    separator = ", ";
-                }
-                this->writef("));\n"
+                             (int)var.name().size(), var.name().data());
+                this->writeCppInitialValue(var);
+                this->writef(");\n"
                              "Declare(%s);\n", varCppName);
             }
         }
@@ -1061,12 +1137,9 @@ void DSLCPPCodeGenerator::writeSetData(std::vector<const Variable*>& uniforms) {
                 const Variable& variable = decl.var();
 
                 if (needs_uniform_var(variable)) {
-                    const char* varCppName = this->getVariableCppName(variable);
-
-                    this->writef("        UniformHandle& %s = %.*sVar;\n"
-                                 "        (void) %s;\n",
-                                 varCppName, (int)variable.name().size(),
-                                 variable.name().data(), varCppName);
+                    this->writef("        [[maybe_unused]] UniformHandle& %.*s = %.*sVar;\n",
+                                 (int)variable.name().size(), variable.name().data(),
+                                 (int)variable.name().size(), variable.name().data());
                 } else if (SectionAndParameterHelper::IsParameter(variable) &&
                            !variable.type().isFragmentProcessor()) {
                     if (!wroteProcessor) {
@@ -1076,12 +1149,9 @@ void DSLCPPCodeGenerator::writeSetData(std::vector<const Variable*>& uniforms) {
                     }
 
                     if (!variable.type().isFragmentProcessor()) {
-                        const char* varCppName = this->getVariableCppName(variable);
-
-                        this->writef("        auto %s = _outer.%.*s;\n"
-                                     "        (void) %s;\n",
-                                     varCppName, (int)variable.name().size(),
-                                     variable.name().data(), varCppName);
+                        this->writef("        [[maybe_unused]] const auto& %.*s = _outer.%.*s;\n",
+                                     (int)variable.name().size(), variable.name().data(),
+                                     (int)variable.name().size(), variable.name().data());
                     }
                 }
             }
@@ -1236,21 +1306,21 @@ void DSLCPPCodeGenerator::writeGetKey() {
                     fErrors.error(var.fOffset, "layout(key) may not be specified on uniforms");
                 }
                 if (is_private(var)) {
-                    this->writef("%s %s =",
+                    this->writef("%s %.*s = ",
                                  HCodeGenerator::FieldType(fContext, varType,
                                                            var.modifiers().fLayout).c_str(),
-                                 this->getVariableCppName(var));
+                                 (int)var.name().size(), var.name().data());
                     if (decl.value()) {
                         fCPPMode = true;
                         this->writeExpression(*decl.value(), Precedence::kAssignment);
                         fCPPMode = false;
                     } else {
-                        this->writef("%s", default_value(var).c_str());
+                        this->write(default_value(var));
                     }
                     this->write(";\n");
                 }
                 if (var.modifiers().fLayout.fWhen.fLength) {
-                    this->writef("if (%s) {", String(var.modifiers().fLayout.fWhen).c_str());
+                    this->writef("if (%s) {\n", String(var.modifiers().fLayout.fWhen).c_str());
                 }
                 if (varType == *fContext.fTypes.fHalf4) {
                     this->writef("    uint16_t red = SkFloatToHalf(%s.fR);\n",
@@ -1283,7 +1353,7 @@ void DSLCPPCodeGenerator::writeGetKey() {
                              varType.displayName().c_str());
                 }
                 if (var.modifiers().fLayout.fWhen.fLength) {
-                    this->write("}");
+                    this->write("}\n");
                 }
             }
         }
@@ -1337,10 +1407,6 @@ bool DSLCPPCodeGenerator::generateCode() {
                  "#include \"src/sksl/SkSLUtil.h\"\n"
                  "#include \"src/sksl/dsl/priv/DSLFPs.h\"\n"
                  "#include \"src/sksl/dsl/priv/DSLWriter.h\"\n"
-                 "\n"
-                 "#if defined(__clang__)\n"
-                 "#pragma clang diagnostic ignored \"-Wcomma\"\n"
-                 "#endif\n"
                  "\n"
                  "class GrGLSL%s : public GrGLSLFragmentProcessor {\n"
                  "public:\n"

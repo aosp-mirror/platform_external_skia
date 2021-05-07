@@ -34,17 +34,23 @@ namespace dsl {
 DSLWriter::DSLWriter(SkSL::Compiler* compiler, SkSL::ProgramKind kind)
     : fCompiler(compiler) {
     SkSL::ParsedModule module = fCompiler->moduleForProgramKind(kind);
+
+    fModifiersPool = std::make_unique<ModifiersPool>();
+    fOldModifiersPool = fCompiler->fContext->fModifiersPool;
+    fCompiler->fContext->fModifiersPool = fModifiersPool.get();
+
     fConfig = std::make_unique<ProgramConfig>();
     fConfig->fKind = kind;
-
-    SkSL::IRGenerator& ir = *fCompiler->fIRGenerator;
     fOldConfig = fCompiler->fContext->fConfig;
     fCompiler->fContext->fConfig = fConfig.get();
+
     if (compiler->context().fCaps.useNodePools()) {
         fPool = Pool::Create();
         fPool->attachToThread();
     }
-    ir.start(module, false, nullptr, &fProgramElements, &fSharedElements);
+
+    fCompiler->fIRGenerator->start(module, /*isBuiltinCode=*/false, /*externalFunctions=*/nullptr,
+                                   &fProgramElements, &fSharedElements);
 }
 
 DSLWriter::~DSLWriter() {
@@ -56,6 +62,7 @@ DSLWriter::~DSLWriter() {
         SkASSERT(fProgramElements.empty());
     }
     fCompiler->fContext->fConfig = fOldConfig;
+    fCompiler->fContext->fModifiersPool = fOldModifiersPool;
     if (fPool) {
         fPool->detachFromThread();
     }
@@ -77,10 +84,11 @@ void DSLWriter::Reset() {
     IRGenerator().popSymbolTable();
     IRGenerator().pushSymbolTable();
     ProgramElements().clear();
+    Instance().fModifiersPool->clear();
 }
 
-const SkSL::Modifiers* DSLWriter::Modifiers(SkSL::Modifiers modifiers) {
-    return IRGenerator().fModifiers->addToPool(modifiers);
+const SkSL::Modifiers* DSLWriter::Modifiers(const SkSL::Modifiers& modifiers) {
+    return Context().fModifiersPool->add(modifiers);
 }
 
 const char* DSLWriter::Name(const char* name) {
@@ -119,6 +127,13 @@ std::unique_ptr<SkSL::Expression> DSLWriter::Call(const FunctionDeclaration& fun
     // We can't call FunctionCall::Convert directly here, because intrinsic management is handled in
     // IRGenerator::call.
     return IRGenerator().call(/*offset=*/-1, function, std::move(arguments));
+}
+
+std::unique_ptr<SkSL::Expression> DSLWriter::Call(std::unique_ptr<SkSL::Expression> expr,
+                                                  ExpressionArray arguments) {
+    // We can't call FunctionCall::Convert directly here, because intrinsic management is handled in
+    // IRGenerator::call.
+    return IRGenerator().call(/*offset=*/-1, std::move(expr), std::move(arguments));
 }
 
 std::unique_ptr<SkSL::Expression> DSLWriter::Check(std::unique_ptr<SkSL::Expression> expr) {
@@ -172,7 +187,8 @@ std::unique_ptr<SkSL::Expression> DSLWriter::ConvertPrefix(Operator op,
 
 DSLPossibleStatement DSLWriter::ConvertSwitch(std::unique_ptr<Expression> value,
                                               ExpressionArray caseValues,
-                                              SkTArray<SkSL::StatementArray> caseStatements) {
+                                              SkTArray<SkSL::StatementArray> caseStatements,
+                                              bool isStatic) {
     StatementArray caseBlocks;
     caseBlocks.resize(caseStatements.count());
     for (int index = 0; index < caseStatements.count(); ++index) {
@@ -182,7 +198,7 @@ DSLPossibleStatement DSLWriter::ConvertSwitch(std::unique_ptr<Expression> value,
                                                           /*isScope=*/false);
     }
 
-    return SwitchStatement::Convert(Context(), /*offset=*/-1, /*isStatic=*/false, std::move(value),
+    return SwitchStatement::Convert(Context(), /*offset=*/-1, isStatic, std::move(value),
                                     std::move(caseValues), std::move(caseBlocks),
                                     IRGenerator().fSymbolTable);
 }
@@ -221,12 +237,17 @@ const SkSL::Variable& DSLWriter::Var(DSLVar& var) {
         var.fDeclaration = DSLWriter::IRGenerator().convertVarDeclaration(
                                                                        std::move(skslvar),
                                                                        var.fInitialValue.release());
-        if (var.fStorage == Variable::Storage::kGlobal) {
-            DSLWriter::ProgramElements().push_back(std::make_unique<SkSL::GlobalVarDeclaration>(
-                                                                      std::move(var.fDeclaration)));
-        }
     }
     return *var.fVar;
+}
+
+std::unique_ptr<SkSL::Variable> DSLWriter::ParameterVar(DSLVar& var) {
+    // This should only be called on undeclared parameter variables, but we allow the creation to go
+    // ahead regardless so we don't have to worry about null pointers potentially sneaking in and
+    // breaking things. DSLFunction is responsible for reporting errors for invalid parameters.
+    return DSLWriter::IRGenerator().convertVar(/*offset=*/-1, var.fModifiers.fModifiers,
+                                               &var.fType.skslType(), var.fName, /*isArray=*/false,
+                                               /*arraySize=*/nullptr, var.fStorage);
 }
 
 std::unique_ptr<SkSL::Statement> DSLWriter::Declaration(DSLVar& var) {
@@ -240,17 +261,18 @@ void DSLWriter::MarkDeclared(DSLVar& var) {
 }
 
 std::unique_ptr<SkSL::Program> DSLWriter::ReleaseProgram() {
+    DSLWriter& instance = Instance();
     SkSL::IRGenerator& ir = IRGenerator();
     IRGenerator::IRBundle bundle = ir.finish();
     Pool* pool = Instance().fPool.get();
     auto result = std::make_unique<SkSL::Program>(/*source=*/nullptr,
-                                                  std::move(DSLWriter::Instance().fConfig),
+                                                  std::move(instance.fConfig),
                                                   Compiler().fContext,
                                                   std::move(bundle.fElements),
                                                   std::move(bundle.fSharedElements),
-                                                  std::move(bundle.fModifiers),
+                                                  std::move(instance.fModifiersPool),
                                                   std::move(bundle.fSymbolTable),
-                                                  std::move(Instance().fPool),
+                                                  std::move(instance.fPool),
                                                   bundle.fInputs);
     if (pool) {
         pool->detachFromThread();

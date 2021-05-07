@@ -14,7 +14,6 @@
 #include "include/core/SkColorFilter.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
-#include "include/core/SkDrawable.h"
 #include "include/core/SkEncodedImageFormat.h"
 #include "include/core/SkFilterQuality.h"
 #include "include/core/SkImage.h"
@@ -35,7 +34,6 @@
 #include "include/core/SkString.h"
 #include "include/core/SkStrokeRec.h"
 #include "include/core/SkSurface.h"
-#include "include/core/SkSurfaceProps.h"
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
@@ -51,16 +49,11 @@
 #include "include/private/SkShadowFlags.h"
 #include "include/utils/SkParsePath.h"
 #include "include/utils/SkShadowUtils.h"
-#include "modules/skshaper/include/SkShaper.h"
-#include "src/core/SkFontMgrPriv.h"
-#include "src/core/SkImagePriv.h"
+#include "modules/skparagraph/include/Paragraph.h"
 #include "src/core/SkPathPriv.h"
 #include "src/core/SkResourceCache.h"
 #include "src/image/SkImage_Base.h"
 #include "src/sksl/SkSLCompiler.h"
-
-#include <iostream>
-#include <string>
 
 #include "modules/canvaskit/WasmCommon.h"
 #include <emscripten.h>
@@ -78,12 +71,9 @@
 
 #ifndef SK_NO_FONTS
 #include "include/core/SkFont.h"
+#include "include/core/SkFontMetrics.h"
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkFontTypes.h"
-#endif
-
-#ifdef SK_INCLUDE_PARAGRAPH
-#include "modules/skparagraph/include/Paragraph.h"
 #endif
 
 #ifdef SK_INCLUDE_PATHOPS
@@ -2045,4 +2035,6 @@ EMSCRIPTEN_BINDINGS(Skia) {
     constant("ShadowTransparentOccluder", (int)SkShadowFlags::kTransparentOccluder_ShadowFlag);
     constant("ShadowGeometricOnly", (int)SkShadowFlags::kGeometricOnly_ShadowFlag);
     constant("ShadowDirectionalLight", (int)SkShadowFlags::kDirectionalLight_ShadowFlag);
+
+    constant("_GlyphRunFlags_isWhiteSpace", (int)skia::textlayout::Paragraph::kWhiteSpace_VisitorFlag);
 }

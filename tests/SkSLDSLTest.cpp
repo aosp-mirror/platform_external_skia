@@ -114,6 +114,7 @@ static SkSL::String stringize(DSLStatement& stmt)          { return stmt.release
 static SkSL::String stringize(DSLPossibleStatement& stmt)  { return stmt.release()->description(); }
 static SkSL::String stringize(DSLExpression& expr)         { return expr.release()->description(); }
 static SkSL::String stringize(DSLPossibleExpression& expr) { return expr.release()->description(); }
+static SkSL::String stringize(DSLBlock& blck)              { return blck.release()->description(); }
 static SkSL::String stringize(SkSL::IRNode& node)  { return node.description(); }
 
 template <typename T>
@@ -161,6 +162,14 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFloat, r, ctxInfo) {
                 "float4(0.0, 1.0, 2.0, 3.0)");
     EXPECT_EQUAL(Float4(0, 1, 2, 3),
                 "float4(0.0, 1.0, 2.0, 3.0)");
+
+    DSLVar x(kFloat_Type, "x");
+    EXPECT_EQUAL(x = 1.0, "(x = 1.0)");
+    EXPECT_EQUAL(x = 1.0f, "(x = 1.0)");
+
+    DSLVar y(kFloat2_Type, "y");
+    EXPECT_EQUAL(y.x() = 1.0, "(y.x = 1.0)");
+    EXPECT_EQUAL(y.x() = 1.0f, "(y.x = 1.0)");
 
     {
         ExpectError error(r, "error: floating point value is infinite\n");
@@ -274,6 +283,43 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLInt, r, ctxInfo) {
     }
 }
 
+DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLUInt, r, ctxInfo) {
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
+
+    EXPECT_EQUAL(UInt(std::numeric_limits<uint32_t>::max()),
+                "4294967295");
+    EXPECT_EQUAL(UInt2(std::numeric_limits<uint32_t>::min()),
+                "uint2(0)");
+    EXPECT_EQUAL(UInt2(0, 1),
+                "uint2(0, 1)");
+    EXPECT_EQUAL(UInt3(0),
+                "uint3(0)");
+    EXPECT_EQUAL(UInt3(UInt2(0, 1), -2),
+                "uint3(0, 1, -2)");
+    EXPECT_EQUAL(UInt3(0, 1, 2),
+                "uint3(0, 1, 2)");
+    EXPECT_EQUAL(UInt4(0),
+                "uint4(0)");
+    EXPECT_EQUAL(UInt4(UInt2(0, 1), UInt2(2, 3)),
+                "uint4(0, 1, 2, 3)");
+    EXPECT_EQUAL(UInt4(0, 1, UInt2(2, 3)),
+                "uint4(0, 1, 2, 3)");
+    EXPECT_EQUAL(UInt4(0, 1, 2, 3),
+                "uint4(0, 1, 2, 3)");
+
+    {
+        ExpectError error(r, "error: invalid arguments to 'uint2' constructor (expected 2 scalars,"
+                             " but found 4)\n");
+        UInt2(UInt4(1)).release();
+    }
+
+    {
+        ExpectError error(r, "error: invalid arguments to 'uint4' constructor (expected 4 scalars,"
+                             " but found 3)\n");
+        UInt4(UInt3(1)).release();
+    }
+}
+
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLShort, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
 
@@ -311,6 +357,43 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLShort, r, ctxInfo) {
     }
 }
 
+DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLUShort, r, ctxInfo) {
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
+
+    EXPECT_EQUAL(UShort(std::numeric_limits<uint16_t>::max()),
+                "65535");
+    EXPECT_EQUAL(UShort2(std::numeric_limits<uint16_t>::min()),
+                "ushort2(0)");
+    EXPECT_EQUAL(UShort2(0, 1),
+                "ushort2(0, 1)");
+    EXPECT_EQUAL(UShort3(0),
+                "ushort3(0)");
+    EXPECT_EQUAL(UShort3(UShort2(0, 1), -2),
+                "ushort3(0, 1, -2)");
+    EXPECT_EQUAL(UShort3(0, 1, 2),
+                "ushort3(0, 1, 2)");
+    EXPECT_EQUAL(UShort4(0),
+                "ushort4(0)");
+    EXPECT_EQUAL(UShort4(UShort2(0, 1), UShort2(2, 3)),
+                "ushort4(0, 1, 2, 3)");
+    EXPECT_EQUAL(UShort4(0, 1, UShort2(2, 3)),
+                "ushort4(0, 1, 2, 3)");
+    EXPECT_EQUAL(UShort4(0, 1, 2, 3),
+                "ushort4(0, 1, 2, 3)");
+
+    {
+        ExpectError error(r, "error: invalid arguments to 'ushort2' constructor (expected 2 "
+                             "scalars, but found 4)\n");
+        UShort2(UShort4(1)).release();
+    }
+
+    {
+        ExpectError error(r, "error: invalid arguments to 'ushort4' constructor (expected 4 "
+                             "scalars, but found 3)\n");
+        UShort4(UShort3(1)).release();
+    }
+}
+
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBool, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
 
@@ -344,6 +427,98 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBool, r, ctxInfo) {
                              " but found 3)\n");
         Bool4(Bool3(true)).release();
     }
+}
+
+DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLType, r, ctxInfo) {
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
+    REPORTER_ASSERT(r,  DSLType(kBool_Type).isBoolean());
+    REPORTER_ASSERT(r, !DSLType(kBool_Type).isNumber());
+    REPORTER_ASSERT(r, !DSLType(kBool_Type).isFloat());
+    REPORTER_ASSERT(r, !DSLType(kBool_Type).isSigned());
+    REPORTER_ASSERT(r, !DSLType(kBool_Type).isUnsigned());
+    REPORTER_ASSERT(r, !DSLType(kBool_Type).isInteger());
+    REPORTER_ASSERT(r,  DSLType(kBool_Type).isScalar());
+    REPORTER_ASSERT(r, !DSLType(kBool_Type).isVector());
+    REPORTER_ASSERT(r, !DSLType(kBool_Type).isMatrix());
+    REPORTER_ASSERT(r, !DSLType(kBool_Type).isArray());
+    REPORTER_ASSERT(r, !DSLType(kBool_Type).isStruct());
+
+    REPORTER_ASSERT(r, !DSLType(kInt_Type).isBoolean());
+    REPORTER_ASSERT(r,  DSLType(kInt_Type).isNumber());
+    REPORTER_ASSERT(r, !DSLType(kInt_Type).isFloat());
+    REPORTER_ASSERT(r,  DSLType(kInt_Type).isSigned());
+    REPORTER_ASSERT(r, !DSLType(kInt_Type).isUnsigned());
+    REPORTER_ASSERT(r,  DSLType(kInt_Type).isInteger());
+    REPORTER_ASSERT(r,  DSLType(kInt_Type).isScalar());
+    REPORTER_ASSERT(r, !DSLType(kInt_Type).isVector());
+    REPORTER_ASSERT(r, !DSLType(kInt_Type).isMatrix());
+    REPORTER_ASSERT(r, !DSLType(kInt_Type).isArray());
+    REPORTER_ASSERT(r, !DSLType(kInt_Type).isStruct());
+
+    REPORTER_ASSERT(r, !DSLType(kUInt_Type).isBoolean());
+    REPORTER_ASSERT(r,  DSLType(kUInt_Type).isNumber());
+    REPORTER_ASSERT(r, !DSLType(kUInt_Type).isFloat());
+    REPORTER_ASSERT(r, !DSLType(kUInt_Type).isSigned());
+    REPORTER_ASSERT(r,  DSLType(kUInt_Type).isUnsigned());
+    REPORTER_ASSERT(r,  DSLType(kUInt_Type).isInteger());
+    REPORTER_ASSERT(r,  DSLType(kUInt_Type).isScalar());
+    REPORTER_ASSERT(r, !DSLType(kUInt_Type).isVector());
+    REPORTER_ASSERT(r, !DSLType(kUInt_Type).isMatrix());
+    REPORTER_ASSERT(r, !DSLType(kUInt_Type).isArray());
+    REPORTER_ASSERT(r, !DSLType(kUInt_Type).isStruct());
+
+    REPORTER_ASSERT(r, !DSLType(kFloat_Type).isBoolean());
+    REPORTER_ASSERT(r,  DSLType(kFloat_Type).isNumber());
+    REPORTER_ASSERT(r,  DSLType(kFloat_Type).isFloat());
+    REPORTER_ASSERT(r, !DSLType(kFloat_Type).isSigned());
+    REPORTER_ASSERT(r, !DSLType(kFloat_Type).isUnsigned());
+    REPORTER_ASSERT(r, !DSLType(kFloat_Type).isInteger());
+    REPORTER_ASSERT(r,  DSLType(kFloat_Type).isScalar());
+    REPORTER_ASSERT(r, !DSLType(kFloat_Type).isVector());
+    REPORTER_ASSERT(r, !DSLType(kFloat_Type).isMatrix());
+    REPORTER_ASSERT(r, !DSLType(kFloat_Type).isArray());
+    REPORTER_ASSERT(r, !DSLType(kFloat_Type).isStruct());
+
+    REPORTER_ASSERT(r, !DSLType(kFloat2_Type).isBoolean());
+    REPORTER_ASSERT(r, !DSLType(kFloat2_Type).isNumber());
+    REPORTER_ASSERT(r, !DSLType(kFloat2_Type).isFloat());
+    REPORTER_ASSERT(r, !DSLType(kFloat2_Type).isSigned());
+    REPORTER_ASSERT(r, !DSLType(kFloat2_Type).isUnsigned());
+    REPORTER_ASSERT(r, !DSLType(kFloat2_Type).isInteger());
+    REPORTER_ASSERT(r, !DSLType(kFloat2_Type).isScalar());
+    REPORTER_ASSERT(r,  DSLType(kFloat2_Type).isVector());
+    REPORTER_ASSERT(r, !DSLType(kFloat2_Type).isMatrix());
+    REPORTER_ASSERT(r, !DSLType(kFloat2_Type).isArray());
+    REPORTER_ASSERT(r, !DSLType(kFloat2_Type).isStruct());
+
+    REPORTER_ASSERT(r, !DSLType(kHalf2x2_Type).isBoolean());
+    REPORTER_ASSERT(r, !DSLType(kHalf2x2_Type).isNumber());
+    REPORTER_ASSERT(r, !DSLType(kHalf2x2_Type).isFloat());
+    REPORTER_ASSERT(r, !DSLType(kHalf2x2_Type).isSigned());
+    REPORTER_ASSERT(r, !DSLType(kHalf2x2_Type).isUnsigned());
+    REPORTER_ASSERT(r, !DSLType(kHalf2x2_Type).isInteger());
+    REPORTER_ASSERT(r, !DSLType(kHalf2x2_Type).isScalar());
+    REPORTER_ASSERT(r, !DSLType(kHalf2x2_Type).isVector());
+    REPORTER_ASSERT(r,  DSLType(kHalf2x2_Type).isMatrix());
+    REPORTER_ASSERT(r, !DSLType(kHalf2x2_Type).isArray());
+    REPORTER_ASSERT(r, !DSLType(kHalf2x2_Type).isStruct());
+
+    REPORTER_ASSERT(r, !DSLType(Array(kFloat_Type, 2)).isBoolean());
+    REPORTER_ASSERT(r, !DSLType(Array(kFloat_Type, 2)).isNumber());
+    REPORTER_ASSERT(r, !DSLType(Array(kFloat_Type, 2)).isFloat());
+    REPORTER_ASSERT(r, !DSLType(Array(kFloat_Type, 2)).isSigned());
+    REPORTER_ASSERT(r, !DSLType(Array(kFloat_Type, 2)).isUnsigned());
+    REPORTER_ASSERT(r, !DSLType(Array(kFloat_Type, 2)).isInteger());
+    REPORTER_ASSERT(r, !DSLType(Array(kFloat_Type, 2)).isScalar());
+    REPORTER_ASSERT(r, !DSLType(Array(kFloat_Type, 2)).isVector());
+    REPORTER_ASSERT(r, !DSLType(Array(kFloat_Type, 2)).isMatrix());
+    REPORTER_ASSERT(r,  DSLType(Array(kFloat_Type, 2)).isArray());
+    REPORTER_ASSERT(r, !DSLType(Array(kFloat_Type, 2)).isStruct());
+
+    Var x(kFloat_Type);
+    DSLExpression e = x + 1;
+    REPORTER_ASSERT(r, e.type().isFloat());
+    e.release();
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLMatrices, r, ctxInfo) {
@@ -1009,16 +1184,38 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLDecrement, r, ctxInfo) {
     }
 }
 
+DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLCall, r, ctxInfo) {
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
+    {
+        DSLExpression sqrt = DSLWriter::IRGenerator().convertIdentifier(/*offset=*/-1, "sqrt");
+        SkTArray<DSLWrapper<DSLExpression>> args;
+        args.emplace_back(1);
+        EXPECT_EQUAL(sqrt(std::move(args)), "sqrt(1.0)");
+    }
+
+    {
+        DSLExpression pow = DSLWriter::IRGenerator().convertIdentifier(/*offset=*/-1, "pow");
+        DSLVar a(kFloat_Type, "a");
+        DSLVar b(kFloat_Type, "b");
+        SkTArray<DSLWrapper<DSLExpression>> args;
+        args.emplace_back(a);
+        args.emplace_back(b);
+        EXPECT_EQUAL(pow(std::move(args)), "pow(a, b)");
+    }
+}
+
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBlock, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/false);
-    Statement x = Block();
-    EXPECT_EQUAL(x, "{ }");
+    EXPECT_EQUAL(Block(), "{ }");
     Var a(kInt_Type, "a", 1), b(kInt_Type, "b", 2);
-    Statement y = Block(Declare(a), Declare(b), a = b);
-    EXPECT_EQUAL(y, "{ int a = 1; int b = 2; (a = b); }");
+    EXPECT_EQUAL(Block(Declare(a), Declare(b), a = b), "{ int a = 1; int b = 2; (a = b); }");
 
-    Statement z = (If(a > 0, --a), ++b);
-    EXPECT_EQUAL(z, "if ((a > 0)) --a; ++b;");
+    EXPECT_EQUAL((If(a > 0, --a), ++b), "if ((a > 0)) --a; ++b;");
+
+    SkTArray<DSLStatement> statements;
+    statements.push_back(a = 0);
+    statements.push_back(++a);
+    EXPECT_EQUAL(Block(std::move(statements)), "{ (a = 0); ++a; }");
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBreak, r, ctxInfo) {
@@ -1081,6 +1278,23 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLDeclare, r, ctxInfo) {
         ExpectError error(r, "error: variable has already been declared\n");
         Declare(d).release();
     }
+
+    {
+        Var e(kUniform_Modifier, kInt_Type, "e");
+        ExpectError error(r, "error: this variable must be declared with DeclareGlobal\n");
+        Declare(e).release();
+    }
+}
+
+DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLDeclareGlobal, r, ctxInfo) {
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/false);
+    Var x(kInt_Type, "x", 0);
+    DeclareGlobal(x);
+    Var y(kUniform_Modifier, kFloat2_Type, "y");
+    DeclareGlobal(y);
+    REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 2);
+    EXPECT_EQUAL(*DSLWriter::ProgramElements()[0], "int x = 0;");
+    EXPECT_EQUAL(*DSLWriter::ProgramElements()[1], "uniform float2 y;");
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLDiscard, r, ctxInfo) {
@@ -1136,13 +1350,13 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFor, r, ctxInfo) {
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLFunction, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/false);
-    Var coords(kHalf2_Type, "coords");
+    Var coords(kFloat2_Type, "coords");
     DSLFunction(kVoid_Type, "main", coords).define(
         sk_FragColor() = Half4(coords, 0, 1)
     );
     REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 1);
     EXPECT_EQUAL(*DSLWriter::ProgramElements()[0],
-                 "void main(half2 coords) { (sk_FragColor = half4(coords, 0.0, 1.0)); }");
+                 "void main(float2 coords) { (sk_FragColor = half4(half2(coords), 0.0, 1.0)); }");
 
     {
         DSLWriter::Reset();
@@ -1264,6 +1478,9 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLIf, r, ctxInfo) {
     Statement y = If(a > b, a -= b, b -= a);
     EXPECT_EQUAL(y, "if ((a > b)) (a -= b); else (b -= a);");
 
+    Statement z = StaticIf(a > b, a -= b, b -= a);
+    EXPECT_EQUAL(z, "@if ((a > b)) (a -= b); else (b -= a);");
+
     {
         ExpectError error(r, "error: expected 'bool', but found 'float'\n");
         If(a + b, a -= b).release();
@@ -1302,14 +1519,32 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSwitch, r, ctxInfo) {
 
     Var a(kFloat_Type, "a"), b(kInt_Type, "b");
 
+    SkTArray<DSLStatement> caseStatements;
+    caseStatements.push_back(a = 1);
+    caseStatements.push_back(Continue());
     Statement x = Switch(b,
         Case(0, a = 0, Break()),
-        Case(1, a = 1, Continue()),
+        Case(1, std::move(caseStatements)),
         Case(2, a = 2  /*Fallthrough*/),
         Default(Discard())
     );
     EXPECT_EQUAL(x, R"(
         switch (b) {
+            case 0: (a = 0.0); break;
+            case 1: (a = 1.0); continue;
+            case 2: (a = 2.0);
+            default: discard;
+        }
+    )");
+
+    Statement y = StaticSwitch(b,
+        Case(0, a = 0, Break()),
+        Case(1, a = 1, Continue()),
+        Case(2, a = 2  /*Fallthrough*/),
+        Default(Discard())
+    );
+    EXPECT_EQUAL(y, R"(
+        @switch (b) {
             case 0: (a = 0.0); break;
             case 1: (a = 1.0); continue;
             case 2: (a = 2.0);
@@ -1435,6 +1670,8 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLBuiltins, r, ctxInfo) {
     EXPECT_EQUAL(Abs(a),                 "abs(a)");
     EXPECT_EQUAL(All(b4),                "all(b4)");
     EXPECT_EQUAL(Any(b4),                "any(b4)");
+    EXPECT_EQUAL(Atan(a),                "atan(a)");
+    EXPECT_EQUAL(Atan(a, b),             "atan(a, b)");
     EXPECT_EQUAL(Ceil(a),                "ceil(a)");
     EXPECT_EQUAL(Clamp(a, 0, 1),         "clamp(a, 0.0, 1.0)");
     EXPECT_EQUAL(Cos(a),                 "cos(a)");
@@ -1522,6 +1759,7 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLModifiers, r, ctxInfo) {
 
     Var v8(kUniform_Modifier, kInt_Type, "v8");
     REPORTER_ASSERT(r, DSLWriter::Var(v8).modifiers().fFlags == SkSL::Modifiers::kUniform_Flag);
+    DSLWriter::MarkDeclared(v8);
     // Uniforms do not need to be explicitly declared
 }
 
@@ -1531,11 +1769,8 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSampleFragmentProcessor, r, ctxInfo) {
     DSLVar child(kUniform_Modifier, kFragmentProcessor_Type, "child");
     EXPECT_EQUAL(Sample(child), "sample(child)");
     EXPECT_EQUAL(Sample(child, Float2(0, 0)), "sample(child, float2(0.0, 0.0))");
-    EXPECT_EQUAL(Sample(child, Float3x3(1.0)), "sample(child, float3x3(1.0))");
     EXPECT_EQUAL(Sample(child, Half4(1)), "sample(child, half4(1.0))");
     EXPECT_EQUAL(Sample(child, Float2(0), Half4(1)), "sample(child, float2(0.0), half4(1.0))");
-    EXPECT_EQUAL(Sample(child, Float3x3(1.0), Half4(1)),
-                 "sample(child, float3x3(1.0), half4(1.0))");
 
     {
         ExpectError error(r, "error: no match for sample(fragmentProcessor, bool)\n");
@@ -1545,11 +1780,9 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSampleFragmentProcessor, r, ctxInfo) {
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSampleShader, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/true,
-                           SkSL::ProgramKind::kRuntimeEffect);
+                           SkSL::ProgramKind::kRuntimeShader);
     DSLVar shader(kUniform_Modifier, kShader_Type, "shader");
-    EXPECT_EQUAL(Sample(shader), "sample(shader)");
     EXPECT_EQUAL(Sample(shader, Float2(0, 0)), "sample(shader, float2(0.0, 0.0))");
-    EXPECT_EQUAL(Sample(shader, Float3x3(1)), "sample(shader, float3x3(1.0))");
 
     {
         ExpectError error(r, "error: no match for sample(shader, half4)\n");
@@ -1587,4 +1820,17 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLStruct, r, ctxInfo) {
     REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 3);
     EXPECT_EQUAL(*DSLWriter::ProgramElements()[2],
                  "struct NestedStruct { int x; SimpleStruct simple; };");
+}
+
+DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLWrapper, r, ctxInfo) {
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
+    std::vector<Wrapper<DSLExpression>> exprs;
+    exprs.push_back(DSLExpression(1));
+    exprs.emplace_back(2.0);
+    EXPECT_EQUAL(std::move(*exprs[0]), "1");
+    EXPECT_EQUAL(std::move(*exprs[1]), "2.0");
+
+    std::vector<Wrapper<DSLVar>> vars;
+    vars.emplace_back(DSLVar(kInt_Type, "x"));
+    REPORTER_ASSERT(r, DSLWriter::Var(*vars[0]).name() == "x");
 }

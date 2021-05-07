@@ -53,18 +53,15 @@ Layout::CType HCodeGenerator::ParameterCType(const Context& context, const Type&
     if (type == *context.fTypes.fFloat || type == *context.fTypes.fHalf) {
         return Layout::CType::kFloat;
     } else if (type == *context.fTypes.fInt ||
-               type == *context.fTypes.fShort ||
-               type == *context.fTypes.fByte) {
+               type == *context.fTypes.fShort) {
         return Layout::CType::kInt32;
     } else if (type == *context.fTypes.fFloat2 || type == *context.fTypes.fHalf2) {
         return Layout::CType::kSkPoint;
     } else if (type == *context.fTypes.fInt2 ||
-               type == *context.fTypes.fShort2 ||
-               type == *context.fTypes.fByte2) {
+               type == *context.fTypes.fShort2) {
         return Layout::CType::kSkIPoint;
     } else if (type == *context.fTypes.fInt4 ||
-               type == *context.fTypes.fShort4 ||
-               type == *context.fTypes.fByte4) {
+               type == *context.fTypes.fShort4) {
         return Layout::CType::kSkIRect;
     } else if (type == *context.fTypes.fFloat4 || type == *context.fTypes.fHalf4) {
         return Layout::CType::kSkRect;
@@ -277,18 +274,7 @@ void HCodeGenerator::writeConstructor() {
             ++samplerCount;
         } else if (paramType.isFragmentProcessor()) {
             SampleUsage usage = Analysis::GetSampleUsage(fProgram, *param);
-
-            std::string perspExpression;
-            if (usage.hasUniformMatrix()) {
-                for (const Variable* p : fSectionAndParameterHelper.getParameters()) {
-                    if ((p->modifiers().fFlags & Modifiers::kIn_Flag) &&
-                        usage.fExpression == String(p->name())) {
-                        perspExpression = usage.fExpression + ".hasPerspective()";
-                        break;
-                    }
-                }
-            }
-            std::string usageArg = usage.constructor(std::move(perspExpression));
+            std::string usageArg = usage.constructor();
 
             this->writef("        this->registerChild(std::move(%s), %s);\n",
                          String(param->name()).c_str(),
