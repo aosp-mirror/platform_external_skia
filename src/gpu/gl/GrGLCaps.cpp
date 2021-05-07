@@ -3546,7 +3546,9 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
 #endif
 
     // https://b.corp.google.com/issues/143074513
-    if (kAdreno615_GrGLRenderer == ctxInfo.renderer()) {
+    // https://skbug.com/11152
+    if (kAdreno615_GrGLRenderer == ctxInfo.renderer() ||
+        kAdreno620_GrGLRenderer == ctxInfo.renderer()) {
         fMSFBOType = kNone_MSFBOType;
         fMSAAResolvesAutomatically = false;
     }
@@ -3794,6 +3796,11 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // for some intermediate values to get acceptable results.
     if (kMaliG_GrGLRenderer == ctxInfo.renderer()) {
         fShaderCaps->fColorSpaceMathNeedsFloat = true;
+    }
+
+    // On Mali 400 there is a bug using dFd* in the x direction. So we avoid using it when possible.
+    if (ctxInfo.renderer() == kMali4xx_GrGLRenderer) {
+        fShaderCaps->fAvoidDfDxForGradientsWhenPossible = true;
     }
 
 #ifdef SK_BUILD_FOR_WIN
