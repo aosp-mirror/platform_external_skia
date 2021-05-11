@@ -18,7 +18,7 @@ class TextRun {
   SkShaper::RunHandler::Buffer newRunBuffer();
   void commit();
 
-  SkScalar calculateWidth(Range glyphRange) const;
+  SkScalar calculateWidth(GlyphRange glyphRange) const;
 
   bool leftToRight() const { return fBidiLevel % 2 == 0; }
   uint8_t bidiLevel() const { return fBidiLevel; }
@@ -26,6 +26,7 @@ class TextRun {
  private:
   friend class Wrapper;
   friend class Processor;
+  friend class Shaper;
 
   SkFont fFont;
 
