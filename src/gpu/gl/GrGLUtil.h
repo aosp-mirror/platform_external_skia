@@ -135,7 +135,6 @@ enum class GrGLRenderer {
     kMaliG,
     /** T-6xx, T-7xx, or T-8xx */
     kMaliT,
-    kANGLE,
 
     kAMDRadeonHD7xxx,     // AMD Radeon HD 7000 Series
     kAMDRadeonR9M3xx,     // AMD Radeon R9 M300 Series
@@ -151,7 +150,6 @@ enum class GrGLDriver {
     kChromium,
     kNVIDIA,
     kIntel,
-    kANGLE,
     kSwiftShader,
     kQualcomm,
     kAndroidEmulator,
@@ -163,20 +161,6 @@ enum class GrGLANGLEBackend {
     kD3D9,
     kD3D11,
     kOpenGL
-};
-
-enum class GrGLANGLEVendor {
-    kUnknown,
-    kIntel,
-    kNVIDIA,
-    kAMD
-};
-
-enum class GrGLANGLERenderer {
-    kUnknown,
-    kSandyBridge,
-    kIvyBridge,
-    kSkylake
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -236,16 +220,19 @@ GrGLSLVersion GrGLGetVersion(const GrGLInterface*);
 GrGLSLVersion GrGLGetVersionFromString(const char*);
 
 struct GrGLDriverInfo {
-    GrGLStandard      fStandard       = kNone_GrGLStandard;
-    GrGLVersion       fVersion        = GR_GL_INVALID_VER;
-    GrGLSLVersion     fGLSLVersion    = GR_GLSL_INVALID_VER;
-    GrGLVendor        fVendor         = GrGLVendor::kOther;
-    GrGLRenderer      fRenderer       = GrGLRenderer::kOther;
-    GrGLDriver        fDriver         = GrGLDriver::kUnknown;
-    GrGLDriverVersion fDriverVersion  = GR_GL_DRIVER_UNKNOWN_VER;
-    GrGLANGLEBackend  fANGLEBackend   = GrGLANGLEBackend::kUnknown;
-    GrGLANGLEVendor   fANGLEVendor    = GrGLANGLEVendor::kUnknown;
-    GrGLANGLERenderer fANGLERenderer  = GrGLANGLERenderer::kUnknown;
+    GrGLStandard      fStandard      = kNone_GrGLStandard;
+    GrGLVersion       fVersion       = GR_GL_INVALID_VER;
+    GrGLSLVersion     fGLSLVersion   = GR_GLSL_INVALID_VER;
+    GrGLVendor        fVendor        = GrGLVendor::kOther;
+    GrGLRenderer      fRenderer      = GrGLRenderer::kOther;
+    GrGLDriver        fDriver        = GrGLDriver::kUnknown;
+    GrGLDriverVersion fDriverVersion = GR_GL_DRIVER_UNKNOWN_VER;
+
+    GrGLANGLEBackend  fANGLEBackend       = GrGLANGLEBackend::kUnknown;
+    GrGLVendor        fANGLEVendor        = GrGLVendor::kOther;
+    GrGLRenderer      fANGLERenderer      = GrGLRenderer::kOther;
+    GrGLDriver        fANGLEDriver        = GrGLDriver::kUnknown;
+    GrGLDriverVersion fANGLEDriverVersion = GR_GL_DRIVER_UNKNOWN_VER;
 };
 
 GrGLDriverInfo GrGLGetDriverInfo(const GrGLInterface*);
