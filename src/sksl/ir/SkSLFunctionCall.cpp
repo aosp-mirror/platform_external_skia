@@ -81,42 +81,93 @@ static std::unique_ptr<Expression> optimize_comparison(const Context& context,
     SkASSERT(arguments.size() == 2);
     const Expression* left = ConstantFolder::GetConstantValueForVariable(*arguments[0]);
     const Expression* right = ConstantFolder::GetConstantValueForVariable(*arguments[1]);
+    const Type& type = left->type().componentType();
 
-    if (left->type().componentType().isFloat()) {
+    if (type.isFloat()) {
         return optimize_comparison_of_type<FloatLiteral>(context, *left, *right, compare);
     }
-    if (left->type().componentType().isInteger()) {
+    if (type.isInteger()) {
         return optimize_comparison_of_type<IntLiteral>(context, *left, *right, compare);
     }
-    SkDEBUGFAILF("unsupported type %s", left->type().description().c_str());
+    SkDEBUGFAILF("unsupported type %s", type.description().c_str());
     return nullptr;
 }
 
-using Float1Fn = float (*)(float);
-static std::unique_ptr<Expression> evaluate_intrinsic_float1(const Context& context,
-                                                             const ExpressionArray& arguments,
-                                                             const Float1Fn& evaluate) {
-    SkASSERT(arguments.size() == 1);
-    const Expression* arg = ConstantFolder::GetConstantValueForVariable(*arguments.front());
+template <typename LITERAL, typename FN>
+static std::unique_ptr<Expression> evaluate_intrinsic_1_of_type(const Context& context,
+                                                                const Expression* arg,
+                                                                const FN& evaluate) {
     const Type& vecType = arg->type();
     const Type& type = vecType.componentType();
+    SkASSERT(type.isScalar());
 
-    if (type.isFloat()) {
-        ExpressionArray result;
-        result.reserve_back(vecType.columns());
+    ExpressionArray result;
+    result.reserve_back(vecType.columns());
 
-        for (int index = 0; index < vecType.columns(); ++index) {
-            const Expression* subexpr = arg->getConstantSubexpression(index);
-            SkASSERT(subexpr);
-            float value = evaluate(subexpr->as<FloatLiteral>().value());
-            result.push_back(FloatLiteral::Make(subexpr->fOffset, value, &type));
+    for (int index = 0; index < vecType.columns(); ++index) {
+        const Expression* subexpr = arg->getConstantSubexpression(index);
+        SkASSERT(subexpr);
+        auto value = evaluate(subexpr->as<LITERAL>().value());
+        if constexpr (std::is_floating_point<decltype(value)>::value) {
+            // If evaluation of the intrinsic yields a non-finite value, bail on optimization.
+            if (!isfinite(value)) {
+                return nullptr;
+            }
         }
-
-        return ConstructorCompound::Make(context, arg->fOffset, vecType, std::move(result));
+        result.push_back(LITERAL::Make(subexpr->fOffset, value, &type));
     }
 
+    return ConstructorCompound::Make(context, arg->fOffset, vecType, std::move(result));
+}
+
+template <typename FN,
+          bool kSupportsFloat = true,
+          bool kSupportsInt = true,
+          bool kSupportsBool = false>
+static std::unique_ptr<Expression> evaluate_intrinsic_generic1(const Context& context,
+                                                               const ExpressionArray& arguments,
+                                                               const FN& evaluate) {
+    SkASSERT(arguments.size() == 1);
+    const Expression* arg = ConstantFolder::GetConstantValueForVariable(*arguments.front());
+    const Type& type = arg->type().componentType();
+
+    if constexpr (kSupportsFloat) {
+        if (type.isFloat()) {
+            return evaluate_intrinsic_1_of_type<FloatLiteral>(context, arg, evaluate);
+        }
+    }
+    if constexpr (kSupportsInt) {
+        if (type.isInteger()) {
+            return evaluate_intrinsic_1_of_type<IntLiteral>(context, arg, evaluate);
+        }
+    }
+    if constexpr (kSupportsBool) {
+        if (type.isBoolean()) {
+            return evaluate_intrinsic_1_of_type<BoolLiteral>(context, arg, evaluate);
+        }
+    }
     SkDEBUGFAILF("unsupported type %s", type.description().c_str());
     return nullptr;
+}
+
+template <typename FN>
+static std::unique_ptr<Expression> evaluate_intrinsic_float1(const Context& context,
+                                                             const ExpressionArray& arguments,
+                                                             const FN& evaluate) {
+    return evaluate_intrinsic_generic1<FN,
+                                       /*kSupportsFloat=*/true,
+                                       /*kSupportsInt=*/false,
+                                       /*kSupportsBool=*/false>(context, arguments, evaluate);
+}
+
+template <typename FN>
+static std::unique_ptr<Expression> evaluate_intrinsic_bool1(const Context& context,
+                                                            const ExpressionArray& arguments,
+                                                            const FN& evaluate) {
+    return evaluate_intrinsic_generic1<FN,
+                                       /*kSupportsFloat=*/false,
+                                       /*kSupportsInt=*/false,
+                                       /*kSupportsBool=*/true>(context, arguments, evaluate);
 }
 
 static std::unique_ptr<Expression> optimize_intrinsic_call(const Context& context,
@@ -129,6 +180,9 @@ static std::unique_ptr<Expression> optimize_intrinsic_call(const Context& contex
         case k_any_IntrinsicKind:
             return coalesce_bool_vector(arguments, /*startingState=*/false,
                                         [](bool a, bool b) { return a || b; });
+        case k_not_IntrinsicKind:
+            return evaluate_intrinsic_bool1(context, arguments, [](bool a) { return !a; });
+
         case k_greaterThan_IntrinsicKind:
             return optimize_comparison(context, arguments, [](auto a, auto b) { return a > b; });
 
@@ -147,6 +201,12 @@ static std::unique_ptr<Expression> optimize_intrinsic_call(const Context& contex
         case k_notEqual_IntrinsicKind:
             return optimize_comparison(context, arguments, [](auto a, auto b) { return a != b; });
 
+        case k_abs_IntrinsicKind:
+            return evaluate_intrinsic_generic1(context, arguments, [](auto a) { return abs(a); });
+
+        case k_sign_IntrinsicKind:
+            return evaluate_intrinsic_generic1(context, arguments,
+                                               [](auto a) { return (a > 0) - (a < 0); });
         case k_sin_IntrinsicKind:
             return evaluate_intrinsic_float1(context, arguments, [](float a) { return sin(a); });
 
@@ -195,6 +255,22 @@ static std::unique_ptr<Expression> optimize_intrinsic_call(const Context& contex
         case k_log2_IntrinsicKind:
             return evaluate_intrinsic_float1(context, arguments, [](float a) { return log2(a); });
 
+        case k_saturate_IntrinsicKind:
+            return evaluate_intrinsic_float1(context, arguments,
+                                             [](float a) { return (a < 0) ? 0 : (a > 1) ? 1 : a; });
+        case k_round_IntrinsicKind:      // GLSL `round` documents its rounding mode as unspecified
+        case k_roundEven_IntrinsicKind:  // and is allowed to behave identically to `roundEven`.
+            return evaluate_intrinsic_float1(context, arguments,
+                                             [](float a) { return round(a / 2) * 2; });
+        case k_inversesqrt_IntrinsicKind:
+            return evaluate_intrinsic_float1(context, arguments,
+                                             [](float a) { return 1 / sqrt(a); });
+        case k_radians_IntrinsicKind:
+            return evaluate_intrinsic_float1(context, arguments,
+                                             [](float a) { return a * 0.0174532925; });
+        case k_degrees_IntrinsicKind:
+            return evaluate_intrinsic_float1(context, arguments,
+                                             [](float a) { return a * 57.2957795; });
         default:
             return nullptr;
     }

@@ -55,7 +55,7 @@ bool Processor::format(TextFormatStyle formatStyle) {
 bool Processor::decorate(SkTArray<DecorBlock, true> decorBlocks) {
 
     this->iterateByVisualOrder(decorBlocks,
-       [&](SkSize offset, SkScalar baseline, const TextRun* run, Range textRange, Range glyphRange, const DecorBlock& block) {
+       [&](SkSize offset, SkScalar baseline, const TextRun* run, TextRange textRange, GlyphRange glyphRange, const DecorBlock& block) {
         SkTextBlobBuilder builder;
         const auto& blobBuffer = builder.allocRunPos(run->fFont, SkToInt(glyphRange.width()));
         sk_careful_memcpy(blobBuffer.glyphs, run->fGlyphs.data() + glyphRange.fStart, glyphRange.width() * sizeof(SkGlyphID));
@@ -69,23 +69,35 @@ bool Processor::decorate(SkTArray<DecorBlock, true> decorBlocks) {
 }
 
 // All at once
-bool Processor::drawText(const char* text, SkCanvas* canvas, SkScalar x, SkScalar y) {
+bool Processor::drawText(std::u16string text, SkCanvas* canvas, SkScalar x, SkScalar y) {
 
-    return drawText(text, canvas, TextFormatStyle(TextAlign::kLeft, TextDirection::kLtr), SK_ColorBLACK, SK_ColorWHITE, SkString("Roboto"), 14, SkFontStyle::Normal(), x, y);
+    return drawText(std::move(text), canvas, TextFormatStyle(TextAlign::kLeft, TextDirection::kLtr), SK_ColorBLACK, SK_ColorWHITE, SkString("Roboto"), 14, SkFontStyle::Normal(), x, y);
 }
 
-bool Processor::drawText(const char* text, SkCanvas* canvas, TextFormatStyle textFormat, SkColor foreground, SkColor background, const SkString& fontFamily, SkScalar fontSize, SkFontStyle fontStyle, SkScalar x, SkScalar y) {
+bool Processor::drawText(std::u16string text, SkCanvas* canvas, SkScalar width) {
+    return drawText(std::move(text), canvas,
+                    TextFormatStyle(TextAlign::kLeft, TextDirection::kLtr), SK_ColorBLACK, SK_ColorWHITE, SkString("Roboto"), 14, SkFontStyle::Normal(),
+                    SkSize::Make(width, SK_ScalarInfinity), 0, 0);
+}
 
-    SkString str(text);
-    Range textRange(0, str.size());
-    Processor processor(str);
+bool Processor::drawText(std::u16string text, SkCanvas* canvas, TextFormatStyle textFormat, SkColor foreground, SkColor background, const SkString& fontFamily, SkScalar fontSize, SkFontStyle fontStyle, SkScalar x, SkScalar y) {
+    return drawText(std::move(text), canvas, textFormat, foreground, background, fontFamily, fontSize, fontStyle, SkSize::Make(SK_ScalarInfinity, SK_ScalarInfinity), x, y);
+}
+
+bool Processor::drawText(std::u16string text, SkCanvas* canvas,
+                         TextFormatStyle textFormat, SkColor foreground, SkColor background, const SkString& fontFamily, SkScalar fontSize, SkFontStyle fontStyle,
+                         SkSize reqSize, SkScalar x, SkScalar y) {
+
+    TextRange textRange(0, text.size());
+    Processor processor(std::move(text));
+
     if (!processor.computeCodeUnitProperties()) {
         return false;
     }
     if (!processor.shape({ textFormat.fDefaultTextDirection, SkFontMgr::RefDefault()}, {{{ fontFamily, fontSize, fontStyle, textRange }}})) {
         return false;
     }
-    if (!processor.wrap(SK_ScalarInfinity, SK_ScalarInfinity)) {
+    if (!processor.wrap(reqSize.fWidth, reqSize.fHeight)) {
         return false;
     }
     if (!processor.format(textFormat)) {
@@ -117,7 +129,7 @@ void Processor::sortDecorBlocks(SkTArray<DecorBlock, true>& decorBlocks) {
     SkPaint* foreground = new SkPaint();
     foreground->setColor(SK_ColorBLACK);
     std::stack<DecorBlock> defaultBlocks;
-    defaultBlocks.emplace(foreground, nullptr, Range(0, fText.size()));
+    defaultBlocks.emplace(foreground, nullptr, TextRange(0, fText.size()));
     size_t start = 0;
     for (auto& block : decorBlocks) {
         this->adjustLeft(&block.fRange.fStart);
@@ -151,6 +163,19 @@ bool Processor::computeCodeUnitProperties() {
         return false;
     }
 
+    // Create utf8 -> utf16 conversion table
+    auto text8 = fUnicode->convertUtf16ToUtf8(fText);
+    size_t utf16Index = 0;
+    fUTF16FromUTF8.push_back_n(text8.size() + 1, utf16Index);
+    fUnicode->forEachCodepoint(text8.c_str(), text8.size(),
+        [this, &utf16Index](SkUnichar unichar, int32_t start, int32_t end) {
+            for (auto i = start; i < end; ++i) {
+                fUTF16FromUTF8[i] = utf16Index;
+            }
+            ++utf16Index;
+       });
+    fUTF16FromUTF8[text8.size()] = utf16Index;
+
     // Get white spaces
     fUnicode->forEachCodepoint(fText.c_str(), fText.size(),
        [this](SkUnichar unichar, int32_t start, int32_t end) {
@@ -162,24 +187,18 @@ bool Processor::computeCodeUnitProperties() {
        });
 
     // Get line breaks
-    std::vector<SkUnicode::LineBreakBefore> lineBreaks;
-    if (!fUnicode->getLineBreaks(fText.c_str(), fText.size(), &lineBreaks)) {
-        return false;
-    }
-    for (auto& lineBreak : lineBreaks) {
-        fCodeUnitProperties[lineBreak.pos] |= lineBreak.breakType == SkUnicode::LineBreakType::kHardLineBreak
-                                           ? CodeUnitFlags::kHardLineBreakBefore
-                                           : CodeUnitFlags::kSoftLineBreakBefore;
-    }
+    fUnicode->forEachBreak(fText.c_str(), fText.size(), SkUnicode::BreakType::kLines,
+                           [&](SkBreakIterator::Position pos, SkBreakIterator::Status status){
+                                fCodeUnitProperties[pos] |= (status == (SkBreakIterator::Status)SkUnicode::LineBreakType::kHardLineBreak
+                                                               ? CodeUnitFlags::kHardLineBreakBefore
+                                                               : CodeUnitFlags::kSoftLineBreakBefore);
+                            });
 
     // Get graphemes
-    std::vector<SkUnicode::Position> graphemes;
-    if (!fUnicode->getGraphemes(fText.c_str(), fText.size(), &graphemes)) {
-        return false;
-    }
-    for (auto pos : graphemes) {
-        fCodeUnitProperties[pos] |= CodeUnitFlags::kGraphemeStart;
-    }
+    fUnicode->forEachBreak(fText.c_str(), fText.size(), SkUnicode::BreakType::kGraphemes,
+                           [&](SkBreakIterator::Position pos, SkBreakIterator::Status){
+                                fCodeUnitProperties[pos]|= CodeUnitFlags::kGraphemeStart;
+                            });
 
     return true;
 }
@@ -193,18 +212,6 @@ void Processor::markGlyphs() {
 }
 
 template<typename Visitor>
-void Processor::iterateByLogicalOrder(CodeUnitFlags units, Visitor visitor) {
-    Range range(0, 0);
-    for (size_t index = 0; index < fCodeUnitProperties.size(); ++index) {
-        if (this->hasProperty(index, units)) {
-            range.fEnd = index;
-            visitor(range, this->fCodeUnitProperties[index]);
-            range.fStart = index;
-        }
-    }
-}
-
-template<typename Visitor>
 void Processor::iterateByVisualOrder(CodeUnitFlags units, Visitor visitor) {
     SkSize offset = SkSize::MakeEmpty();
     for (auto& line : fLines) {
@@ -212,8 +219,8 @@ void Processor::iterateByVisualOrder(CodeUnitFlags units, Visitor visitor) {
         for (auto& runIndex : line.fRunsInVisualOrder) {
             auto& run = fRuns[runIndex];
 
-            auto startGlyph = runIndex == line.fTextStart.fRunIndex == runIndex ? line.fTextStart.fGlyphIndex : 0;
-            auto endGlyph = runIndex == line.fTextEnd.fRunIndex ? line.fTextEnd.fGlyphIndex : run.fGlyphs.size();
+            auto startGlyph = runIndex == line.fTextStart.runIndex() ? line.fTextStart.glyphIndex() : 0;
+            auto endGlyph = runIndex == line.fTextEnd.runIndex() ? line.fTextEnd.glyphIndex() : run.fGlyphs.size();
 
             Range textRange(run.fUtf8Range.begin(), run.fUtf8Range.end());
             Range glyphRange(startGlyph, endGlyph);
@@ -257,11 +264,11 @@ void Processor::iterateByVisualOrder(SkTArray<DecorBlock, true>& decorBlocks, Vi
             // "Cd": green
             // "ef": blue
             // green[d] blue[ef] green [C] red [BA]
-            auto startGlyph = runIndex == line.fTextStart.fRunIndex == runIndex ? line.fTextStart.fGlyphIndex : 0;
-            auto endGlyph = runIndex == line.fTextEnd.fRunIndex ? line.fTextEnd.fGlyphIndex : run.fGlyphs.size();
+            auto startGlyph = runIndex == line.fTextStart.runIndex() ? line.fTextStart.glyphIndex() : 0;
+            auto endGlyph = runIndex == line.fTextEnd.runIndex() ? line.fTextEnd.glyphIndex() : run.fGlyphs.size();
 
-            Range textRange(run.fUtf8Range.begin(), run.fUtf8Range.end());
-            Range glyphRange(startGlyph, endGlyph);
+            TextRange textRange(run.fClusters[startGlyph], run.fClusters[endGlyph]);
+            GlyphRange glyphRange(startGlyph, endGlyph);
 
             SkASSERT(currentBlock->fRange.fStart <= textRange.fStart);
             for (auto glyphIndex = startGlyph; glyphIndex <= endGlyph; ++glyphIndex) {
@@ -278,7 +285,8 @@ void Processor::iterateByVisualOrder(SkTArray<DecorBlock, true>& decorBlocks, Vi
                     textRange.fStart = textIndex;
                 }
                 glyphRange.fEnd = glyphIndex;
-                visitor(offset, line.fTextMetrics.baseline(), &run, textRange, glyphRange, *currentBlock);
+                SkSize shift = SkSize::Make(offset.fWidth - run.fPositions[startGlyph].fX, offset.fHeight);
+                visitor(shift, line.fTextMetrics.baseline(), &run, textRange, glyphRange, *currentBlock);
                 if (run.leftToRight()) {
                     textRange.fStart = textIndex;
                 } else {
@@ -287,6 +295,16 @@ void Processor::iterateByVisualOrder(SkTArray<DecorBlock, true>& decorBlocks, Vi
                 glyphRange.fStart = glyphIndex;
                 offset.fWidth += run.calculateWidth(glyphRange);
             }
+
+            // The last line
+            if (run.leftToRight()) {
+                textRange.fEnd = run.fClusters[endGlyph];
+            } else {
+                textRange.fStart = run.fClusters[endGlyph];
+            }
+            glyphRange.fEnd = endGlyph;
+            SkSize shift = SkSize::Make(offset.fWidth - run.fPositions[startGlyph].fX, offset.fHeight);
+            visitor(shift, line.fTextMetrics.baseline(), &run, textRange, glyphRange, *currentBlock);
         }
         offset.fHeight += line.fTextMetrics.height();
     }
