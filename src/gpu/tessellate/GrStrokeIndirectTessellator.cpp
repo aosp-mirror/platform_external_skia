@@ -13,9 +13,9 @@
 #include "src/gpu/GrVertexWriter.h"
 #include "src/gpu/GrVx.h"
 #include "src/gpu/geometry/GrPathUtils.h"
+#include "src/gpu/geometry/GrWangsFormula.h"
 #include "src/gpu/tessellate/GrStrokeIterator.h"
 #include "src/gpu/tessellate/GrStrokeTessellateShader.h"
-#include "src/gpu/tessellate/GrWangsFormula.h"
 
 namespace {
 
@@ -758,7 +758,7 @@ void GrStrokeIndirectTessellator::prepare(GrMeshDrawOp::Target* target,
     GrDrawIndirectWriter indirectWriter = target->makeDrawIndirectSpace(fChainedDrawIndirectCount,
                                                                         &fDrawIndirectBuffer,
                                                                         &fDrawIndirectOffset);
-    if (!indirectWriter.isValid()) {
+    if (!indirectWriter) {
         SkASSERT(!fDrawIndirectBuffer);
         return;
     }
