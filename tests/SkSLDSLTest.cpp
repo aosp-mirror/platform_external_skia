@@ -1787,7 +1787,7 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLModifiers, r, ctxInfo) {
 }
 
 DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLLayout, r, ctxInfo) {
-    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), /*markVarsDeclared=*/false);
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), kNoDeclareTestFlags);
     Var v1(DSLModifiers(DSLLayout().location(1).set(2).binding(3).offset(4).index(5).builtin(6)
                                    .inputAttachmentIndex(7),
                         kConst_Modifier), kInt_Type, "v1", 0);
