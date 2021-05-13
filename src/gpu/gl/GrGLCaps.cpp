@@ -643,6 +643,13 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         fUseClientSideIndirectBuffers = true;
         fDrawRangeElementsSupport = version >= GR_GL_VER(2,0);
     }
+    // We used to disable this as a correctness workaround (http://anglebug.com/4536). Now it is
+    // disabled because of poor performance (http://skbug.com/11998).
+    if (ctxInfo.angleBackend() == GrGLANGLEBackend::kD3D11) {
+        fBaseVertexBaseInstanceSupport = false;
+        fNativeDrawIndirectSupport = false;
+        fMultiDrawType = MultiDrawType::kNone;
+    }
 
     // We prefer GL sync objects but also support NV_fence_sync. The former can be
     // used to implements GrFence and GrSemaphore. The latter only implements GrFence.
@@ -948,9 +955,9 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
     }
 
     if (GR_IS_GR_GL(standard)) {
-        shaderCaps->fBitManipulationSupport = ctxInfo.glslGeneration() >= k400_GrGLSLGeneration;
+        shaderCaps->fFPManipulationSupport = ctxInfo.glslGeneration() >= k400_GrGLSLGeneration;
     } else if (GR_IS_GR_GL_ES(standard) || GR_IS_GR_WEBGL(standard)) {
-        shaderCaps->fBitManipulationSupport = ctxInfo.glslGeneration() >= k310es_GrGLSLGeneration;
+        shaderCaps->fFPManipulationSupport = ctxInfo.glslGeneration() >= k310es_GrGLSLGeneration;
     }
 
     shaderCaps->fFloatIs32Bits = is_float_fp32(ctxInfo, gli, GR_GL_HIGH_FLOAT);
@@ -3503,9 +3510,9 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         fTransferBufferType = TransferBufferType::kNone;
     }
 
-    // The TransferPixelsToTexture test fails on ANGLE.
-    // TODO: Limit this to D3D and perhaps more specifically than that.
-    if (ctxInfo.angleBackend() != GrGLANGLEBackend::kUnknown) {
+    // The TransferPixelsToTexture test fails on ANGLE D3D.
+    if (ctxInfo.angleBackend() == GrGLANGLEBackend::kD3D9 ||
+        ctxInfo.angleBackend() == GrGLANGLEBackend::kD3D11) {
         fTransferFromBufferToTextureSupport = false;
     }
 
