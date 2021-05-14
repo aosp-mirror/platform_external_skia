@@ -220,8 +220,13 @@ void GrD3DGpu::waitForQueueCompletion() {
 void GrD3DGpu::submit(GrOpsRenderPass* renderPass) {
     SkASSERT(fCachedOpsRenderPass.get() == renderPass);
 
-    // TODO: actually submit something here
+    fCachedOpsRenderPass->submit();
     fCachedOpsRenderPass.reset();
+}
+
+void GrD3DGpu::endRenderPass(GrRenderTarget* target, GrSurfaceOrigin origin,
+                             const SkIRect& bounds) {
+    this->didWriteToSurface(target, origin, &bounds);
 }
 
 void GrD3DGpu::addFinishedProc(GrGpuFinishedProc finishedProc,
@@ -514,6 +519,10 @@ void GrD3DGpu::copySurfaceAsResolve(GrSurface* dst, GrSurface* src, const SkIRec
     SkASSERT(srcRT);
 
     this->resolveTexture(dst, dstPoint.fX, dstPoint.fY, srcRT, srcRect);
+    SkIRect dstRect = SkIRect::MakeXYWH(dstPoint.fX, dstPoint.fY,
+                                        srcRect.width(), srcRect.height());
+    // The rect is already in device space so we pass in kTopLeft so no flip is done.
+    this->didWriteToSurface(dst, kTopLeft_GrSurfaceOrigin, &dstRect);
 }
 
 void GrD3DGpu::resolveTexture(GrSurface* dst, int32_t dstX, int32_t dstY,
@@ -875,6 +884,10 @@ sk_sp<GrRenderTarget> GrD3DGpu::onWrapBackendRenderTarget(const GrBackendRenderT
     return std::move(tgt);
 }
 
+static bool is_odd(int x) {
+    return x > 1 && SkToBool(x & 0x1);
+}
+
 bool GrD3DGpu::onRegenerateMipMapLevels(GrTexture * tex) {
     auto * d3dTex = static_cast<GrD3DTexture*>(tex);
     SkASSERT(tex->textureType() == GrTextureType::k2D);
@@ -924,7 +937,6 @@ bool GrD3DGpu::onRegenerateMipMapLevels(GrTexture * tex) {
     this->currentCommandList()->setComputeRootSignature(rootSig);
 
     // TODO: use linear vs. srgb shader based on texture format
-    // TODO: handle odd widths and heights with triangular filter
     sk_sp<GrD3DPipeline> pipeline = this->resourceProvider().findOrCreateMipmapPipeline();
     SkASSERT(pipeline);
     this->currentCommandList()->setPipelineState(std::move(pipeline));
@@ -951,15 +963,24 @@ bool GrD3DGpu::onRegenerateMipMapLevels(GrTexture * tex) {
     // Generate the miplevels
     for (unsigned int dstMip = 1; dstMip < levelCount; ++dstMip) {
         unsigned int srcMip = dstMip - 1;
-        // TODO: manage odd widths and heights
         width = std::max(1, width / 2);
         height = std::max(1, height / 2);
 
+        unsigned int sampleMode = 0;
+        if (is_odd(width) && is_odd(height)) {
+            sampleMode = 1;
+        } else if (is_odd(width)) {
+            sampleMode = 2;
+        } else if (is_odd(height)) {
+            sampleMode = 3;
+        }
+
         // set constants
         struct {
-            uint32_t mipLevel;
             SkSize inverseSize;
-        } constantData = { srcMip, {1.f / width, 1.f / height} };
+            uint32_t mipLevel;
+            uint32_t sampleMode;
+        } constantData = { {1.f / width, 1.f / height}, srcMip, sampleMode };
 
         D3D12_GPU_VIRTUAL_ADDRESS constantsAddress =
             fResourceProvider.uploadConstantData(&constantData, sizeof(constantData));

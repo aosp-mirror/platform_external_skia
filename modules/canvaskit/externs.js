@@ -146,6 +146,7 @@ var CanvasKit = {
   ParagraphBuilder: {
     Make: function() {},
     MakeFromFontProvider: function() {},
+    ShapeText: function() {},
     addText: function() {},
     build: function() {},
     pop: function() {},
@@ -159,6 +160,7 @@ var CanvasKit = {
     // private API
     _Make: function() {},
     _MakeFromFontProvider: function() {},
+    _ShapeText: function() {},
     _pushStyle: function() {},
     _pushPaintStyle: function() {},
     _addPlaceholder: function() {},
@@ -341,12 +343,14 @@ var CanvasKit = {
     getScaleX: function() {},
     getSize: function() {},
     getSkewX: function() {},
+    isEmbolden: function() {},
     getTypeface: function() {},
     setHinting: function() {},
     setLinearMetrics: function() {},
     setScaleX: function() {},
     setSize: function() {},
     setSkewX: function() {},
+    setEmbolden: function() {},
     setSubpixel: function() {},
     setTypeface: function() {},
 

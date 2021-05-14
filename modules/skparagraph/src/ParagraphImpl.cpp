@@ -4,6 +4,7 @@
 #include "include/core/SkFontMetrics.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPictureRecorder.h"
+#include "include/core/SkSpan.h"
 #include "include/core/SkTypeface.h"
 #include "include/private/SkTFitsIn.h"
 #include "include/private/SkTo.h"
@@ -16,7 +17,6 @@
 #include "modules/skparagraph/src/Run.h"
 #include "modules/skparagraph/src/TextLine.h"
 #include "modules/skparagraph/src/TextWrapper.h"
-#include "src/core/SkSpan.h"
 #include "src/utils/SkUTF.h"
 #include <math.h>
 #include <algorithm>
@@ -1053,6 +1053,7 @@ void ParagraphImpl::ensureUTF16Mapping() {
 void ParagraphImpl::visit(const Visitor& visitor) {
     int lineNumber = 0;
     for (auto& line : fLines) {
+        line.ensureTextBlobCachePopulated();
         for (auto& rec : line.fTextBlobCache) {
             SkTextBlob::Iter iter(*rec.fBlob);
             SkTextBlob::Iter::ExperimentalRun run;

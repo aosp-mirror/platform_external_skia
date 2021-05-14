@@ -19,8 +19,8 @@
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrSurfaceDrawContext.h"
-#include "src/gpu/tessellate/GrTessellatingStencilFillOp.h"
-#include "src/gpu/tessellate/GrWangsFormula.h"
+#include "src/gpu/geometry/GrWangsFormula.h"
+#include "src/gpu/tessellate/GrPathStencilFillOp.h"
 
 static float kConicWeight = .5;
 
@@ -90,8 +90,8 @@ void TessellatedWedge::onDrawContent(SkCanvas* canvas) {
         aa = GrAAType::kNone;
     }
 
-    sdc->addDrawOp(GrOp::Make<GrTessellatingStencilFillOp>(ctx, canvas->getTotalMatrix(), fPath,
-                                                           std::move(paint), aa, fOpFlags));
+    sdc->addDrawOp(GrOp::Make<GrPathStencilFillOp>(ctx, canvas->getTotalMatrix(), fPath,
+                                                   std::move(paint), aa, fOpFlags));
 
     // Draw the path points.
     SkPaint pointsPaint;
