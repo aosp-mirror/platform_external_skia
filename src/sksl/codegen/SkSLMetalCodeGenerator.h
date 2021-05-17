@@ -182,6 +182,8 @@ protected:
 
     void writeMatrixTimesEqualHelper(const Type& left, const Type& right, const Type& result);
 
+    void writeMatrixDivisionHelpers(const Type& type);
+
     void writeMatrixEqualityHelpers(const Type& left, const Type& right);
 
     void writeArrayEqualityHelpers(const Type& type);
@@ -218,6 +220,9 @@ protected:
     void writeFieldAccess(const FieldAccess& f);
 
     void writeSwizzle(const Swizzle& swizzle);
+
+    // Splats a scalar expression across a matrix of arbitrary size.
+    void writeNumberAsMatrix(const Expression& expr, const Type& matrixType);
 
     void writeBinaryExpression(const BinaryExpression& b, Precedence parentPrecedence);
 
