@@ -67,17 +67,19 @@ void GrPathIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const SkMa
 
     // Allocate a buffer to store the instance data.
     GrEagerDynamicVertexAllocator vertexAlloc(target, &fInstanceBuffer, &fBaseInstance);
-    SkPoint* instanceData = static_cast<SkPoint*>(vertexAlloc.lock(sizeof(SkPoint) * 4,
-                                                                   instanceLockCount));
-    if (!instanceData) {
+    GrVertexWriter instanceWriter = static_cast<SkPoint*>(vertexAlloc.lock(sizeof(SkPoint) * 4,
+                                                                           instanceLockCount));
+    if (!instanceWriter) {
         return;
     }
 
-    // Write out any triangles at the beginning of the cubic data.
+    // Write out any triangles at the beginning of the cubic data. Since this shader draws curves,
+    // output the triangles as conics with w=infinity (which is equivalent to a triangle).
     int numTrianglesAtBeginningOfData = 0;
     if (fDrawInnerFan) {
         numTrianglesAtBeginningOfData = GrMiddleOutPolygonTriangulator::WritePathInnerFan(
-                instanceData + numTrianglesAtBeginningOfData * 4, 4/*stride*/, path);
+                &instanceWriter,
+                GrMiddleOutPolygonTriangulator::OutputType::kConicsWithInfiniteWeight, path);
     }
     if (breadcrumbTriangleList) {
         SkDEBUGCODE(int count = 0;)
@@ -90,10 +92,9 @@ void GrPathIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const SkMa
                 // happen on axis-aligned edges.
                 continue;
             }
-            SkPoint* breadcrumbData = instanceData + numTrianglesAtBeginningOfData * 4;
-            memcpy(breadcrumbData, p, sizeof(SkPoint) * 3);
-            // Duplicate the final point since it will also be used by the convex hull shader.
-            breadcrumbData[3] = p[2];
+            instanceWriter.writeArray(p, 3);
+            // Mark this instance as a triangle by setting it to a conic with w=Inf.
+            instanceWriter.fill(GrVertexWriter::kIEEE_32_infinity, 2);
             ++numTrianglesAtBeginningOfData;
         }
         SkASSERT(count == breadcrumbTriangleList->count());
@@ -120,8 +121,8 @@ void GrPathIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const SkMa
 
     // Fill out the GrDrawIndexedIndirectCommand structs and determine the starting instance data
     // location at each resolve level.
-    SkPoint* instanceLocations[kMaxResolveLevel + 1];
-    int runningInstanceCount = 0;
+    GrVertexWriter instanceLocations[kMaxResolveLevel + 1];
+    int currentBaseInstance = fBaseInstance;
     if (numTrianglesAtBeginningOfData) {
         // The caller has already packed "triangleInstanceCount" triangles into 4-point instances
         // at the beginning of the instance buffer. Add a special-case indirect draw here that will
@@ -131,7 +132,7 @@ void GrPathIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const SkMa
                                                               numTrianglesAtBeginningOfData,
                                                               fBaseInstance);
         ++fIndirectDrawCount;
-        runningInstanceCount = numTrianglesAtBeginningOfData;
+        currentBaseInstance += numTrianglesAtBeginningOfData;
     }
     SkASSERT(fResolveLevelCounts[0] == 0);
     for (int resolveLevel = 1; resolveLevel <= kMaxResolveLevel; ++resolveLevel) {
@@ -140,32 +141,33 @@ void GrPathIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const SkMa
             SkDEBUGCODE(instanceLocations[resolveLevel] = nullptr;)
             continue;
         }
-        instanceLocations[resolveLevel] = instanceData + runningInstanceCount * 4;
+        instanceLocations[resolveLevel] = instanceWriter.makeOffset(0);
         SkASSERT(fIndirectDrawCount < indirectLockCnt);
         GrMiddleOutCubicShader::WriteDrawCubicsIndirectCmd(&indirectWriter, resolveLevel,
                                                            instanceCountAtCurrLevel,
-                                                           fBaseInstance + runningInstanceCount);
+                                                           currentBaseInstance);
         ++fIndirectDrawCount;
-        runningInstanceCount += instanceCountAtCurrLevel;
+        currentBaseInstance += instanceCountAtCurrLevel;
+        instanceWriter = instanceWriter.makeOffset(instanceCountAtCurrLevel * 4 * sizeof(SkPoint));
     }
 
     target->putBackIndirectDraws(indirectLockCnt - fIndirectDrawCount);
 
 #ifdef SK_DEBUG
-    SkASSERT(runningInstanceCount == numTrianglesAtBeginningOfData + fOuterCurveInstanceCount);
+    SkASSERT(currentBaseInstance ==
+             fBaseInstance + numTrianglesAtBeginningOfData + fOuterCurveInstanceCount);
 
-    SkPoint* endLocations[kMaxResolveLevel + 1];
+    GrVertexWriter endLocations[kMaxResolveLevel + 1];
     int lastResolveLevel = 0;
     for (int resolveLevel = 1; resolveLevel <= kMaxResolveLevel; ++resolveLevel) {
         if (!instanceLocations[resolveLevel]) {
             endLocations[resolveLevel] = nullptr;
             continue;
         }
-        endLocations[lastResolveLevel] = instanceLocations[resolveLevel];
+        endLocations[lastResolveLevel] = instanceLocations[resolveLevel].makeOffset(0);
         lastResolveLevel = resolveLevel;
     }
-    int totalInstanceCount = numTrianglesAtBeginningOfData + fOuterCurveInstanceCount;
-    endLocations[lastResolveLevel] = instanceData + totalInstanceCount * 4;
+    endLocations[lastResolveLevel] = instanceWriter.makeOffset(0);
 #endif
 
     fTotalInstanceCount = numTrianglesAtBeginningOfData;
@@ -195,18 +197,17 @@ void GrPathIndirectTessellator::prepare(GrMeshDrawOp::Target* target, const SkMa
             level = std::min(level, kMaxResolveLevel);
             switch (verb) {
                 case SkPathVerb::kQuad:
-                    GrPathUtils::convertQuadToCubic(pts, instanceLocations[level]);
+                    GrPathUtils::writeQuadAsCubic(pts, &instanceLocations[level]);
                     break;
                 case SkPathVerb::kCubic:
-                    memcpy(instanceLocations[level], pts, sizeof(SkPoint) * 4);
+                    instanceLocations[level].writeArray(pts, 4);
                     break;
                 case SkPathVerb::kConic:
-                    GrPathShader::WriteConicPatch(pts, *w, instanceLocations[level]);
+                    GrPathShader::WriteConicPatch(pts, *w, &instanceLocations[level]);
                     break;
                 default:
                     SkUNREACHABLE;
             }
-            instanceLocations[level] += 4;
             ++fTotalInstanceCount;
         }
     }

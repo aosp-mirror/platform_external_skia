@@ -2568,6 +2568,7 @@ cc_test {
         "tests/CompressedBackendAllocationTest.cpp",
         "tests/CopySurfaceTest.cpp",
         "tests/CubicMapTest.cpp",
+        "tests/CullTestTest.cpp",
         "tests/DSLFPTest.cpp",
         "tests/DashPathEffectTest.cpp",
         "tests/DataRefTest.cpp",
