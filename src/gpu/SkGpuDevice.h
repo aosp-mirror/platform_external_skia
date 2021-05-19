@@ -34,6 +34,10 @@ class SkVertices;
  */
 class SkGpuDevice : public SkBaseGpuDevice  {
 public:
+    GrSurfaceProxyView readSurfaceView() override {
+        return this->surfaceDrawContext()->readSurfaceView();
+    }
+
     enum InitContents {
         kClear_InitContents,
         kUninit_InitContents
@@ -61,6 +65,7 @@ public:
 
     GrRecordingContext* recordingContext() const override { return fContext.get(); }
     GrSurfaceDrawContext* surfaceDrawContext() override;
+    const GrSurfaceDrawContext* surfaceDrawContext() const;
 
     // set all pixels to 0
     void clearAll();

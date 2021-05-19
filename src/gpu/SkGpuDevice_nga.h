@@ -21,6 +21,8 @@ class SkGpuDevice_nga : public SkBaseGpuDevice  {
 public:
     ~SkGpuDevice_nga() override;
 
+    GrSurfaceProxyView readSurfaceView() override { return {}; }
+
     GrRecordingContext* recordingContext() const override { return fContext.get(); }
     GrSurfaceDrawContext* surfaceDrawContext() override { return nullptr; }
 

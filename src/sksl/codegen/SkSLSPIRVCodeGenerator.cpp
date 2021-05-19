@@ -205,7 +205,11 @@ void SPIRVCodeGenerator::writeOpCode(SpvOp_ opCode, int length, OutputStream& ou
         case SpvOpSwitch:      // fall through
         case SpvOpBranch:      // fall through
         case SpvOpBranchConditional:
-            SkASSERT(fCurrentBlock);
+            if (fCurrentBlock == 0) {
+                // We just encountered dead code--instructions that don't have an associated block.
+                // Synthesize a label if this happens; this is necessary to satisfy the validator.
+                this->writeLabel(this->nextId(nullptr), out);
+            }
             fCurrentBlock = 0;
             break;
         case SpvOpConstant:          // fall through
@@ -2528,6 +2532,10 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const Type& leftType, SpvId lhs,
             return this->writeBinaryOperation(resultType, *operandType, lhs, rhs, SpvOpFMul,
                                               SpvOpIMul, SpvOpIMul, SpvOpUndef, out);
         case Token::Kind::TK_SLASH:
+            if (leftType.isMatrix() && rightType.isMatrix()) {
+                SkASSERT(leftType == rightType);
+                return this->writeComponentwiseMatrixBinary(leftType, lhs, rhs, SpvOpFDiv, out);
+            }
             return this->writeBinaryOperation(resultType, *operandType, lhs, rhs, SpvOpFDiv,
                                               SpvOpSDiv, SpvOpUDiv, SpvOpUndef, out);
         case Token::Kind::TK_PERCENT:
@@ -3658,7 +3666,6 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
     write_stringstream(fNameBuffer, out);
     write_stringstream(fDecorationBuffer, out);
     write_stringstream(fConstantBuffer, out);
-    write_stringstream(fExternalFunctionsBuffer, out);
     write_stringstream(body, out);
 }
 

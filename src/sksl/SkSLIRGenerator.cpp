@@ -273,10 +273,6 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
             this->errorReporter().error(offset,
                                         "'when' is only permitted within fragment processors");
         }
-        if (modifiers.fLayout.fFlags & Layout::kTracked_Flag) {
-            this->errorReporter().error(offset,
-                                        "'tracked' is only permitted within fragment processors");
-        }
         if (modifiers.fLayout.fCType != Layout::CType::kDefault) {
             this->errorReporter().error(offset,
                                         "'ctype' is only permitted within fragment processors");
@@ -830,7 +826,6 @@ void IRGenerator::CheckModifiers(const Context& context,
     checkLayout(Layout::kOverrideCoverage_Flag,         "override_coverage");
     checkLayout(Layout::kPushConstant_Flag,             "push_constant");
     checkLayout(Layout::kBlendSupportAllEquations_Flag, "blend_support_all_equations");
-    checkLayout(Layout::kTracked_Flag,                  "tracked");
     checkLayout(Layout::kSRGBUnpremul_Flag,             "srgb_unpremul");
     checkLayout(Layout::kKey_Flag,                      "key");
     checkLayout(Layout::kLocation_Flag,                 "location");
@@ -1882,7 +1877,6 @@ void IRGenerator::findAndDeclareBuiltinVariables() {
 
 void IRGenerator::start(const ParsedModule& base,
                         bool isBuiltinCode,
-                        const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions,
                         std::vector<std::unique_ptr<ProgramElement>>* elements,
                         std::vector<const ProgramElement*>* sharedElements) {
     fProgramElements = elements;
@@ -1919,9 +1913,9 @@ void IRGenerator::start(const ParsedModule& base,
         fProgramElements->push_back(std::make_unique<GlobalVarDeclaration>(std::move(decl)));
     }
 
-    if (externalFunctions) {
+    if (this->settings().fExternalFunctions) {
         // Add any external values to the new symbol table, so they're only visible to this Program.
-        for (const std::unique_ptr<ExternalFunction>& ef : *externalFunctions) {
+        for (const std::unique_ptr<ExternalFunction>& ef : *this->settings().fExternalFunctions) {
             fSymbolTable->addWithoutOwnership(ef.get());
         }
     }
@@ -1929,8 +1923,8 @@ void IRGenerator::start(const ParsedModule& base,
     if (!fContext.fConfig->fSettings.fEnforceES2Restrictions &&
         (this->programKind() == ProgramKind::kRuntimeColorFilter ||
          this->programKind() == ProgramKind::kRuntimeShader)) {
-        // We're compiling a runtime effect, but we're not enforcing ES2 restrictions. Add the
-        // nonsquare matrix types to the symbol table to allow them to be tested.
+        // We're compiling a runtime effect, but we're not enforcing ES2 restrictions. Add various
+        // non-ES2  types to our symbol table to allow them to be tested.
         fSymbolTable->addAlias("mat2x2", fContext.fTypes.fFloat2x2.get());
         fSymbolTable->addAlias("mat2x3", fContext.fTypes.fFloat2x3.get());
         fSymbolTable->addAlias("mat2x4", fContext.fTypes.fFloat2x4.get());
@@ -1954,6 +1948,11 @@ void IRGenerator::start(const ParsedModule& base,
         fSymbolTable->addAlias("half3x4", fContext.fTypes.fHalf3x4.get());
         fSymbolTable->addAlias("half4x2", fContext.fTypes.fHalf4x2.get());
         fSymbolTable->addAlias("half4x3", fContext.fTypes.fHalf4x3.get());
+
+        fSymbolTable->addAlias("uint", fContext.fTypes.fUInt.get());
+        fSymbolTable->addAlias("uint2", fContext.fTypes.fUInt2.get());
+        fSymbolTable->addAlias("uint3", fContext.fTypes.fUInt3.get());
+        fSymbolTable->addAlias("uint4", fContext.fTypes.fUInt4.get());
     }
 }
 
@@ -2000,13 +1999,7 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
         const ParsedModule& base,
         bool isBuiltinCode,
         const char* text,
-        size_t length,
-        const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions) {
-    std::vector<std::unique_ptr<ProgramElement>> elements;
-    std::vector<const ProgramElement*> sharedElements;
-
-    this->start(base, isBuiltinCode, externalFunctions, &elements, &sharedElements);
-
+        size_t length) {
     Parser parser(text, length, *fSymbolTable, this->errorReporter());
     fFile = parser.compilationUnit();
     if (this->errorReporter().errorCount() == 0) {

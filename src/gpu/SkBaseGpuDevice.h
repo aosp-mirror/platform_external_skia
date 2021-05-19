@@ -8,6 +8,8 @@
 #ifndef SkBaseGpuDevice_DEFINED
 #define SkBaseGpuDevice_DEFINED
 
+#include "src/gpu/GrSurfaceProxyView.h"
+
 // NOTE: when not defined, SkGpuDevice extends SkBaseDevice directly and manages its clip stack
 // using GrClipStack. When false, SkGpuDevice continues to extend SkClipStackDevice and uses
 // SkClipStack and GrClipStackClip to manage the clip stack.
@@ -33,6 +35,10 @@ public:
     }
 
     // TODO: SkGpuDevice/SkGpuDevice_nga shared stuff goes here
+    virtual GrSurfaceProxyView readSurfaceView() = 0;
+    GrRenderTargetProxy* targetProxy() {
+        return this->readSurfaceView().asRenderTargetProxy();
+    }
 
 protected:
 
