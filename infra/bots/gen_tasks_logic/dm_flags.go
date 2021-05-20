@@ -401,16 +401,20 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("mtltestprecompile gm _ atlastext")
 			skip("mtltestprecompile gm _ circular_arcs_hairline")
 			skip("mtltestprecompile gm _ dftext")
+			skip("mtltestprecompile gm _ fontmgr_bounds")
 			skip("mtltestprecompile gm _ fontmgr_bounds_1_-0.25")
 			skip("mtltestprecompile gm _ glyph_pos_h_b")
 			skip("mtltestprecompile gm _ glyph_pos_h_f")
 			skip("mtltestprecompile gm _ glyph_pos_n_f")
+			skip("mtltestprecompile gm _ strokedlines")
 			skip("mtltestprecompile gm _ strokes3")
 			skip("mtltestprecompile gm _ texel_subset_linear_mipmap_nearest_down")
 			skip("mtltestprecompile gm _ texel_subset_linear_mipmap_linear_down")
+			skip("mtltestprecompile gm _ textblobmixedsizes_df")
 			skip("mtltestprecompile svg _ A_large_blank_world_map_with_oceans_marked_in_blue.svg")
 			skip("mtltestprecompile svg _ Chalkboard.svg")
 			skip("mtltestprecompile svg _ Ghostscript_Tiger.svg")
+			skip("mtltestprecompile svg _ Seal_of_Illinois.svg")
 		}
 		// Test reduced shader mode on iPhone 11 as representative iOS device
 		if b.model("iPhone11") && b.extraConfig("Metal") {
@@ -844,7 +848,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip("_", "tests", "_", "SkSLMatrixScalarSplat_GPU")  // skia:11308
 		skip("_", "tests", "_", "DSLFPTest_SwitchStatement")  // skia:11891
 		skip("_", "tests", "_", "SkSLStructsInFunctions_GPU") // skia:11929
-		skip("_", "tests", "_", "SkSLStaticSwitchInline_GPU") // skia:12012
 	}
 
 	match := []string{}
@@ -943,15 +946,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	if b.extraConfig("Metal") && b.gpu("PowerVRGX6450") && b.matchOs("iOS") {
 		// skbug.com/11885
 		match = append(match, "~flight_animated_image")
-	}
-
-	if b.extraConfig("Direct3D") {
-		// skia:9935
-		match = append(match, "~^DDLSkSurfaceFlush$")
-		match = append(match, "~^GrBackendTextureImageMipMappedTest$")
-		match = append(match, "~^GrTextureMipMapInvalidationTest$")
-		match = append(match, "~^SkImage_makeTextureImage$")
-		match = append(match, "~^TextureIdleStateTest$")
 	}
 
 	if b.extraConfig("ANGLE") {
