@@ -14,6 +14,7 @@
 
 #include "include/private/SkSLLayout.h"
 #include "include/private/SkTArray.h"
+#include "include/sksl/DSLCore.h"
 #include "src/core/SkScopeExit.h"
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLCompiler.h"
@@ -685,103 +686,56 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
                                                           std::move(main));
     invokeDecl->setDefinition(invokeDef.get());
     fProgramElements->push_back(std::move(invokeDef));
-    std::vector<std::unique_ptr<VarDeclaration>> variables;
-    const Variable* loopIdx = &(*fSymbolTable)["sk_InvocationID"]->as<Variable>();
-    auto test = BinaryExpression::Make(
-            fContext,
-            VariableReference::Make(/*offset=*/-1, loopIdx),
-            Token::Kind::TK_LT,
-            IntLiteral::Make(fContext, /*offset=*/-1, fInvocations));
-    auto next = PostfixExpression::Make(
-            fContext,
-            VariableReference::Make(/*offset=*/-1, loopIdx, VariableRefKind::kReadWrite),
-            Token::Kind::TK_PLUSPLUS);
-    ASTNode endPrimitiveID(&fFile->fNodes, -1, ASTNode::Kind::kIdentifier, "EndPrimitive");
-    std::unique_ptr<Expression> endPrimitive = this->convertExpression(endPrimitiveID);
+
+    using namespace SkSL::dsl;
+    DSLVar loopIdx = DSLVar("sk_InvocationID");
+    std::unique_ptr<Expression> endPrimitive = this->convertIdentifier(/*offset=*/-1,
+                                                                       "EndPrimitive");
     SkASSERT(endPrimitive);
 
-    StatementArray loopBody;
-    loopBody.reserve_back(2);
-    loopBody.push_back(ExpressionStatement::Make(fContext, this->call(/*offset=*/-1,
-                                                                      *invokeDecl,
-                                                                      ExpressionArray{})));
-    loopBody.push_back(ExpressionStatement::Make(fContext, this->call(/*offset=*/-1,
-                                                                      std::move(endPrimitive),
-                                                                      ExpressionArray{})));
-    auto assignment = BinaryExpression::Make(
-            fContext,
-            VariableReference::Make(/*offset=*/-1, loopIdx, VariableRefKind::kWrite),
-            Token::Kind::TK_EQ,
-            IntLiteral::Make(fContext, /*offset=*/-1, /*value=*/0));
-    auto initializer = ExpressionStatement::Make(fContext, std::move(assignment));
-    auto loop = ForStatement::Make(fContext, /*offset=*/-1,
-                                   std::move(initializer),
-                                   std::move(test),
-                                   std::move(next),
-                                   Block::Make(/*offset=*/-1, std::move(loopBody)),
-                                   fSymbolTable);
-    StatementArray children;
-    children.push_back(std::move(loop));
-    return Block::Make(/*offset=*/-1, std::move(children));
+    std::unique_ptr<Statement> block = DSLBlock(
+        For(loopIdx = 0, loopIdx < fInvocations, loopIdx++, DSLBlock(
+            DSLFunction(invokeDecl)(),
+            DSLExpression(std::move(endPrimitive))({})
+        ))
+    ).release();
+    return std::unique_ptr<Block>(&block.release()->as<Block>());
 }
 
 std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
+    using namespace SkSL::dsl;
+    using SkSL::dsl::Swizzle;  // disambiguate from SkSL::Swizzle
+
     const Variable* skPerVertex = nullptr;
     if (const ProgramElement* perVertexDecl = fIntrinsics->find(Compiler::PERVERTEX_NAME)) {
         SkASSERT(perVertexDecl->is<InterfaceBlock>());
         skPerVertex = &perVertexDecl->as<InterfaceBlock>().variable();
     }
 
-    // sk_Position = float4(sk_Position.xy * rtAdjust.xz + sk_Position.ww * rtAdjust.yw,
-    //                      0,
-    //                      sk_Position.w);
     SkASSERT(skPerVertex && fRTAdjust);
     auto Ref = [](const Variable* var) -> std::unique_ptr<Expression> {
-        return VariableReference::Make(/*offset=*/-1, var, VariableReference::RefKind::kRead);
-    };
-    auto WRef = [](const Variable* var) -> std::unique_ptr<Expression> {
-        return VariableReference::Make(/*offset=*/-1, var, VariableReference::RefKind::kWrite);
+        return VariableReference::Make(/*offset=*/-1, var);
     };
     auto Field = [&](const Variable* var, int idx) -> std::unique_ptr<Expression> {
         return FieldAccess::Make(fContext, Ref(var), idx,
                                  FieldAccess::OwnerKind::kAnonymousInterfaceBlock);
     };
-    auto Pos = [&]() -> std::unique_ptr<Expression> {
-        return FieldAccess::Make(fContext, WRef(skPerVertex), 0,
-                                 FieldAccess::OwnerKind::kAnonymousInterfaceBlock);
+    auto Pos = [&]() -> DSLExpression {
+        return DSLExpression(FieldAccess::Make(fContext, Ref(skPerVertex), /*fieldIndex=*/0,
+                                               FieldAccess::OwnerKind::kAnonymousInterfaceBlock));
     };
-    auto Adjust = [&]() -> std::unique_ptr<Expression> {
-        return fRTAdjustInterfaceBlock ? Field(fRTAdjustInterfaceBlock, fRTAdjustFieldIndex)
-                                       : Ref(fRTAdjust);
-    };
-    auto Swizzle = [&](std::unique_ptr<Expression> expr,
-                       const ComponentArray& comp) -> std::unique_ptr<Expression> {
-        return std::make_unique<SkSL::Swizzle>(fContext, std::move(expr), comp);
-    };
-    auto Op = [&](std::unique_ptr<Expression> left, Token::Kind op,
-                  std::unique_ptr<Expression> right) -> std::unique_ptr<Expression> {
-        return BinaryExpression::Make(fContext, std::move(left), op, std::move(right));
+    auto Adjust = [&]() -> DSLExpression {
+        return DSLExpression(fRTAdjustInterfaceBlock
+                                     ? Field(fRTAdjustInterfaceBlock, fRTAdjustFieldIndex)
+                                     : Ref(fRTAdjust));
     };
 
-    static const ComponentArray kXYIndices{0, 1};
-    static const ComponentArray kXZIndices{0, 2};
-    static const ComponentArray kYWIndices{1, 3};
-    static const ComponentArray kWWIndices{3, 3};
-    static const ComponentArray kWIndex{3};
-
-    ExpressionArray children;
-    children.reserve_back(3);
-    children.push_back(Op(
-            Op(Swizzle(Pos(), kXYIndices), Token::Kind::TK_STAR, Swizzle(Adjust(), kXZIndices)),
-            Token::Kind::TK_PLUS,
-            Op(Swizzle(Pos(), kWWIndices), Token::Kind::TK_STAR, Swizzle(Adjust(), kYWIndices))));
-    children.push_back(FloatLiteral::Make(fContext, /*offset=*/-1, /*value=*/0.0));
-    children.push_back(Swizzle(Pos(), kWIndex));
-    std::unique_ptr<Expression> result =
-            Op(Pos(), Token::Kind::TK_EQ,
-               Constructor::Convert(fContext, /*offset=*/-1, *fContext.fTypes.fFloat4,
-                                    std::move(children)));
-    return ExpressionStatement::Make(fContext, std::move(result));
+    return DSLStatement(
+        Pos() = Float4(Swizzle(Pos(), X, Y) * Swizzle(Adjust(), X, Z) +
+                       Swizzle(Pos(), W, W) * Swizzle(Adjust(), Y, W),
+                       0,
+                       Pos().w())
+    ).release();
 }
 
 void IRGenerator::CheckModifiers(const Context& context,
@@ -823,7 +777,6 @@ void IRGenerator::CheckModifiers(const Context& context,
     };
 
     checkLayout(Layout::kOriginUpperLeft_Flag,          "origin_upper_left");
-    checkLayout(Layout::kOverrideCoverage_Flag,         "override_coverage");
     checkLayout(Layout::kPushConstant_Flag,             "push_constant");
     checkLayout(Layout::kBlendSupportAllEquations_Flag, "blend_support_all_equations");
     checkLayout(Layout::kSRGBUnpremul_Flag,             "srgb_unpremul");
