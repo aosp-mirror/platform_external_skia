@@ -348,6 +348,7 @@ sksl_shared_tests = [
   "/sksl/shared/DeadIfStatement.sksl",
   "/sksl/shared/DeadLoopVariable.sksl",
   "/sksl/shared/DeadReturn.sksl",
+  "/sksl/shared/DeadReturnES3.sksl",
   "/sksl/shared/DeadStripFunctions.sksl",
   "/sksl/shared/DependentInitializers.sksl",
   "/sksl/shared/DerivativesUnused.sksl",
@@ -563,6 +564,7 @@ sksl_settings_tests = [
   "/sksl/workarounds/NegatedAtan.sksl",
   "/sksl/workarounds/PowWithConstantExponent.sksl",
   "/sksl/workarounds/RewriteDoWhileLoops.sksl",
+  "/sksl/workarounds/RewriteMatrix2x2Comparisons.sksl",
   "/sksl/workarounds/RewriteMatrixVectorMultiply.sksl",
   "/sksl/workarounds/TernaryShortCircuit.sksl",
 ]

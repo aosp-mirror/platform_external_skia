@@ -11,6 +11,7 @@ import android.app.Activity;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
+import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.widget.ImageView;
@@ -33,7 +34,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 
         // Bitmap
         Bitmap.Config conf = Bitmap.Config.ARGB_8888;
-        Bitmap bmp = Bitmap.createBitmap(200, 200, conf);
+        Bitmap bmp = Bitmap.createBitmap(400, 400, conf);
         Surface bitmapSurface = new Surface(bmp);
         Canvas canvas = bitmapSurface.getCanvas();
 
@@ -48,6 +49,18 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         canvas.concat(m);
         canvas.drawRect(0, 0, 100, 100, p);
         canvas.restore();
+
+        Image snapshot = bitmapSurface.makeImageSnapshot();
+        canvas.drawImage(snapshot, 0, 200);
+
+        try {
+            Image image = Image.fromStream(getResources().openRawResource(R.raw.brickwork_texture));
+            // TODO: Canvas.scale
+            canvas.concat(new Matrix().scale(10, 10));
+            canvas.drawImage(image, 20, 0, SamplingOptions.CATMULLROM());
+        } catch (Exception e) {
+            Log.e("AndroidKit Demo", "Could not load Image resource: " + R.raw.brickwork_texture);
+        }
 
         ImageView image = findViewById(R.id.image);
         image.setImageBitmap(bmp);
