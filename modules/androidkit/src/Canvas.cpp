@@ -8,6 +8,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkPaint.h"
+#include "modules/androidkit/src/Utils.h"
 
 #include <jni.h>
 
@@ -79,19 +80,32 @@ void Canvas_DrawRect(JNIEnv* env, jobject, jlong native_instance,
     }
 }
 
+void Canvas_DrawImage(JNIEnv* env, jobject, jlong native_instance, jlong native_image,
+                      jfloat x, jfloat y,
+                      jint sampling_desc, jfloat sampling_b, jfloat sampling_c) {
+    auto* canvas = reinterpret_cast<SkCanvas*>(native_instance);
+    auto*  image = reinterpret_cast<SkImage *>(native_image);
+
+    if (canvas && image) {
+        canvas->drawImage(image, x, y,
+            androidkit::utils::SamplingOptions(sampling_desc, sampling_b, sampling_c));
+    }
+}
+
 }  // namespace
 
 int register_androidkit_Canvas(JNIEnv* env) {
     static const JNINativeMethod methods[] = {
-        {"nGetWidth"        , "(J)I"     , reinterpret_cast<void*>(Canvas_GetWidth)      },
-        {"nGetHeight"       , "(J)I"     , reinterpret_cast<void*>(Canvas_GetHeight)     },
-        {"nSave"            , "(J)V"     , reinterpret_cast<void*>(Canvas_Save)          },
-        {"nRestore"         , "(J)V"     , reinterpret_cast<void*>(Canvas_Restore)       },
-        {"nGetLocalToDevice", "(J)J"     , reinterpret_cast<void*>(Canvas_LocalToDevice) },
-        {"nConcat"          , "(JJ)V"    , reinterpret_cast<void*>(Canvas_Concat)        },
-        {"nConcat16f"       , "(J[F)V"   , reinterpret_cast<void*>(Canvas_Concat16f)     },
-        {"nDrawColor"       , "(JFFFF)V" , reinterpret_cast<void*>(Canvas_DrawColor)     },
-        {"nDrawRect"        , "(JFFFFJ)V", reinterpret_cast<void*>(Canvas_DrawRect)      },
+        {"nGetWidth"        , "(J)I"      , reinterpret_cast<void*>(Canvas_GetWidth)      },
+        {"nGetHeight"       , "(J)I"      , reinterpret_cast<void*>(Canvas_GetHeight)     },
+        {"nSave"            , "(J)V"      , reinterpret_cast<void*>(Canvas_Save)          },
+        {"nRestore"         , "(J)V"      , reinterpret_cast<void*>(Canvas_Restore)       },
+        {"nGetLocalToDevice", "(J)J"      , reinterpret_cast<void*>(Canvas_LocalToDevice) },
+        {"nConcat"          , "(JJ)V"     , reinterpret_cast<void*>(Canvas_Concat)        },
+        {"nConcat16f"       , "(J[F)V"    , reinterpret_cast<void*>(Canvas_Concat16f)     },
+        {"nDrawColor"       , "(JFFFF)V"  , reinterpret_cast<void*>(Canvas_DrawColor)     },
+        {"nDrawRect"        , "(JFFFFJ)V" , reinterpret_cast<void*>(Canvas_DrawRect)      },
+        {"nDrawImage"       , "(JJFFIFF)V", reinterpret_cast<void*>(Canvas_DrawImage)     },
     };
 
     const auto clazz = env->FindClass("org/skia/androidkit/Canvas");

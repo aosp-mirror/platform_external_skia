@@ -54,13 +54,6 @@ public:
         CTYPE,
         SKPMCOLOR4F,
         SKV4,
-        SKRECT,
-        SKIRECT,
-        SKPMCOLOR,
-        SKM44,
-        BOOL,
-        INT,
-        FLOAT,
     };
 
     Parser(const char* text, size_t length, SymbolTable& symbols, ErrorReporter& errors);
@@ -158,6 +151,8 @@ private:
     ASTNode::ID enumDeclaration();
 
     ASTNode::ID declaration();
+
+    ASTNode::ID functionDeclarationEnd(Modifiers modifiers, ASTNode::ID type, const Token& name);
 
     struct VarDeclarationsPrefix {
         Modifiers modifiers;

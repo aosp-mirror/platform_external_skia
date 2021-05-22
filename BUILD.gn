@@ -2495,6 +2495,7 @@ if (skia_enable_tools) {
       sources = [
         "modules/androidkit/src/AndroidKit.cpp",
         "modules/androidkit/src/Canvas.cpp",
+        "modules/androidkit/src/Image.cpp",
         "modules/androidkit/src/Matrix.cpp",
         "modules/androidkit/src/Paint.cpp",
         "modules/androidkit/src/RuntimeShaderBuilder.cpp",
@@ -2504,6 +2505,7 @@ if (skia_enable_tools) {
         "modules/androidkit/src/Surface.h",
         "modules/androidkit/src/SurfaceThread.cpp",
         "modules/androidkit/src/SurfaceThread.h",
+        "modules/androidkit/src/Utils.cpp",
       ]
       libs = [
         "android",
