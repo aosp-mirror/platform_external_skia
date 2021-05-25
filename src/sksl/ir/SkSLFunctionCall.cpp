@@ -57,8 +57,8 @@ static std::unique_ptr<Expression> optimize_comparison_of_type(const Context& co
     SkASSERT(type.componentType().isNumber());
     SkASSERT(type == right.type());
 
-    ExpressionArray result;
-    result.reserve_back(type.columns());
+    ExpressionArray array;
+    array.reserve_back(type.columns());
 
     for (int index = 0; index < type.columns(); ++index) {
         const Expression* leftSubexpr = left.getConstantSubexpression(index);
@@ -67,11 +67,11 @@ static std::unique_ptr<Expression> optimize_comparison_of_type(const Context& co
         SkASSERT(rightSubexpr);
         bool value = compare(leftSubexpr->as<LITERAL>().value(),
                              rightSubexpr->as<LITERAL>().value());
-        result.push_back(BoolLiteral::Make(context, leftSubexpr->fOffset, value));
+        array.push_back(BoolLiteral::Make(context, leftSubexpr->fOffset, value));
     }
 
     const Type& bvecType = context.fTypes.fBool->toCompound(context, type.columns(), /*rows=*/1);
-    return ConstructorCompound::Make(context, left.fOffset, bvecType, std::move(result));
+    return ConstructorCompound::Make(context, left.fOffset, bvecType, std::move(array));
 }
 
 template <typename FN>
@@ -93,81 +93,182 @@ static std::unique_ptr<Expression> optimize_comparison(const Context& context,
     return nullptr;
 }
 
-template <typename LITERAL, typename FN>
-static std::unique_ptr<Expression> evaluate_intrinsic_1_of_type(const Context& context,
-                                                                const Expression* arg,
-                                                                const FN& evaluate) {
-    const Type& vecType = arg->type();
+template <typename T>
+static std::unique_ptr<Expression> evaluate_n_way_intrinsic_of_type(
+                                                            const Context& context,
+                                                            const Expression* arg0,
+                                                            const Expression* arg1,
+                                                            const Expression* arg2,
+                                                            const std::function<T(T, T, T)>& eval) {
+    // Takes up to three arguments and evaluates them in tandem, equivalent to constructing a new
+    // vector containing the results from:
+    //     eval(arg0.x, arg1.x, arg2.x),
+    //     eval(arg0.y, arg1.y, arg2.y),
+    //     eval(arg0.w, arg1.z, arg2.z),
+    //     eval(arg0.z, arg1.w, arg2.w)
+    //
+    // If an argument is null, zero is passed to the evaluation function. If the arguments are a mix
+    // of scalars and vectors, scalars are interpreted as a vector containing the same value for
+    // every component.
+    arg0 = ConstantFolder::GetConstantValueForVariable(*arg0);
+    SkASSERT(arg0);
+
+    const Type& vecType =          arg0->type().isVector()  ? arg0->type() :
+                          (arg1 && arg1->type().isVector()) ? arg1->type() :
+                          (arg2 && arg2->type().isVector()) ? arg2->type() :
+                                                              arg0->type();
     const Type& type = vecType.componentType();
-    SkASSERT(type.isScalar());
+    SkASSERT(arg0->type().componentType() == type);
 
-    ExpressionArray result;
-    result.reserve_back(vecType.columns());
+    if (arg1) {
+        arg1 = ConstantFolder::GetConstantValueForVariable(*arg1);
+        SkASSERT(arg1);
+        SkASSERT(arg1->type().componentType() == type);
+    }
 
+    if (arg2) {
+        arg2 = ConstantFolder::GetConstantValueForVariable(*arg2);
+        SkASSERT(arg2);
+        SkASSERT(arg2->type().componentType() == type);
+    }
+
+    ExpressionArray array;
+    array.reserve_back(vecType.columns());
+
+    int arg0Index = 0;
+    int arg1Index = 0;
+    int arg2Index = 0;
     for (int index = 0; index < vecType.columns(); ++index) {
-        const Expression* subexpr = arg->getConstantSubexpression(index);
-        SkASSERT(subexpr);
-        auto value = evaluate(subexpr->as<LITERAL>().value());
-        if constexpr (std::is_floating_point<decltype(value)>::value) {
-            // If evaluation of the intrinsic yields a non-finite value, bail on optimization.
+        const Expression* arg0Subexpr = arg0->getConstantSubexpression(arg0Index);
+        arg0Index += arg0->type().isVector() ? 1 : 0;
+        SkASSERT(arg0Subexpr);
+
+        const Expression* arg1Subexpr = nullptr;
+        if (arg1) {
+            arg1Subexpr = arg1->getConstantSubexpression(arg1Index);
+            arg1Index += arg1->type().isVector() ? 1 : 0;
+            SkASSERT(arg1Subexpr);
+        }
+
+        const Expression* arg2Subexpr = nullptr;
+        if (arg2) {
+            arg2Subexpr = arg2->getConstantSubexpression(arg2Index);
+            arg2Index += arg2->type().isVector() ? 1 : 0;
+            SkASSERT(arg2Subexpr);
+        }
+
+        T value = eval(arg0Subexpr->as<Literal<T>>().value(),
+                       arg1Subexpr ? arg1Subexpr->as<Literal<T>>().value() : T{},
+                       arg2Subexpr ? arg2Subexpr->as<Literal<T>>().value() : T{});
+
+        if constexpr (std::is_floating_point<T>::value) {
+            // If evaluation of the intrinsic yields a non-finite value, do not optimize.
             if (!isfinite(value)) {
                 return nullptr;
             }
         }
-        result.push_back(LITERAL::Make(subexpr->fOffset, value, &type));
+
+        array.push_back(Literal<T>::Make(arg0Subexpr->fOffset, value, &type));
     }
 
-    return ConstructorCompound::Make(context, arg->fOffset, vecType, std::move(result));
+    return ConstructorCompound::Make(context, arg0->fOffset, vecType, std::move(array));
 }
 
-template <typename FN,
-          bool kSupportsFloat = true,
-          bool kSupportsInt = true,
-          bool kSupportsBool = false>
-static std::unique_ptr<Expression> evaluate_intrinsic_generic1(const Context& context,
+template <typename FN>
+static std::unique_ptr<Expression> evaluate_intrinsic_numeric1(const Context& context,
                                                                const ExpressionArray& arguments,
-                                                               const FN& evaluate) {
+                                                               const FN& eval) {
     SkASSERT(arguments.size() == 1);
-    const Expression* arg = ConstantFolder::GetConstantValueForVariable(*arguments.front());
-    const Type& type = arg->type().componentType();
+    const Type& type = arguments.front()->type().componentType();
 
-    if constexpr (kSupportsFloat) {
-        if (type.isFloat()) {
-            return evaluate_intrinsic_1_of_type<FloatLiteral>(context, arg, evaluate);
-        }
+    if (type.isFloat()) {
+        return evaluate_n_way_intrinsic_of_type<float>(
+                context, arguments.front().get(), /*arg1=*/nullptr, /*arg2=*/nullptr,
+                [&eval](float a, float, float) { return eval(a); });
     }
-    if constexpr (kSupportsInt) {
-        if (type.isInteger()) {
-            return evaluate_intrinsic_1_of_type<IntLiteral>(context, arg, evaluate);
-        }
+    if (type.isInteger()) {
+        return evaluate_n_way_intrinsic_of_type<SKSL_INT>(
+                context, arguments.front().get(), /*arg1=*/nullptr, /*arg2=*/nullptr,
+                [&eval](SKSL_INT a, SKSL_INT, SKSL_INT) { return eval(a); });
     }
-    if constexpr (kSupportsBool) {
-        if (type.isBoolean()) {
-            return evaluate_intrinsic_1_of_type<BoolLiteral>(context, arg, evaluate);
-        }
+
+    SkDEBUGFAILF("unsupported type %s", type.description().c_str());
+    return nullptr;
+}
+
+static std::unique_ptr<Expression> evaluate_intrinsic_float1(
+                                                        const Context& context,
+                                                        const ExpressionArray& arguments,
+                                                        const std::function<float(float)>& eval) {
+    SkASSERT(arguments.size() == 1);
+
+    const Type& type = arguments.front()->type().componentType();
+    if (type.isFloat()) {
+        return evaluate_n_way_intrinsic_of_type<float>(
+                context, arguments.front().get(), /*arg1=*/nullptr, /*arg2=*/nullptr,
+                [&eval](float a, float, float) { return eval(a); });
     }
+
+    SkDEBUGFAILF("unsupported type %s", type.description().c_str());
+    return nullptr;
+}
+
+static std::unique_ptr<Expression> evaluate_intrinsic_bool1(const Context& context,
+                                                            const ExpressionArray& arguments,
+                                                            const std::function<bool(bool)>& eval) {
+    SkASSERT(arguments.size() == 1);
+
+    const Type& type = arguments.front()->type().componentType();
+    if (type.isBoolean()) {
+        return evaluate_n_way_intrinsic_of_type<bool>(
+                context, arguments.front().get(), /*arg1=*/nullptr, /*arg2=*/nullptr,
+                [&eval](bool a, bool, bool) { return eval(a); });
+    }
+
     SkDEBUGFAILF("unsupported type %s", type.description().c_str());
     return nullptr;
 }
 
 template <typename FN>
-static std::unique_ptr<Expression> evaluate_intrinsic_float1(const Context& context,
-                                                             const ExpressionArray& arguments,
-                                                             const FN& evaluate) {
-    return evaluate_intrinsic_generic1<FN,
-                                       /*kSupportsFloat=*/true,
-                                       /*kSupportsInt=*/false,
-                                       /*kSupportsBool=*/false>(context, arguments, evaluate);
+static std::unique_ptr<Expression> evaluate_pairwise_intrinsic(const Context& context,
+                                                               const ExpressionArray& arguments,
+                                                               const FN& eval) {
+    SkASSERT(arguments.size() == 2);
+    const Type& type = arguments.front()->type().componentType();
+
+    if (type.isFloat()) {
+        return evaluate_n_way_intrinsic_of_type<float>(
+                context, arguments[0].get(), arguments[1].get(), /*arg2=*/nullptr,
+                [&eval](float a, float b, float) { return eval(a, b); });
+    }
+    if (type.isInteger()) {
+        return evaluate_n_way_intrinsic_of_type<SKSL_INT>(
+                context, arguments[0].get(), arguments[1].get(), /*arg2=*/nullptr,
+                [&eval](SKSL_INT a, SKSL_INT b, SKSL_INT) { return eval(a, b); });
+    }
+
+    SkDEBUGFAILF("unsupported type %s", type.description().c_str());
+    return nullptr;
 }
 
 template <typename FN>
-static std::unique_ptr<Expression> evaluate_intrinsic_bool1(const Context& context,
+static std::unique_ptr<Expression> evaluate_3_way_intrinsic(const Context& context,
                                                             const ExpressionArray& arguments,
-                                                            const FN& evaluate) {
-    return evaluate_intrinsic_generic1<FN,
-                                       /*kSupportsFloat=*/false,
-                                       /*kSupportsInt=*/false,
-                                       /*kSupportsBool=*/true>(context, arguments, evaluate);
+                                                            const FN& eval) {
+    SkASSERT(arguments.size() == 3);
+    const Type& type = arguments.front()->type().componentType();
+
+    if (type.isFloat()) {
+        return evaluate_n_way_intrinsic_of_type<float>(
+                context, arguments[0].get(), arguments[1].get(), arguments[2].get(), eval);
+    }
+    if (type.isInteger()) {
+        return evaluate_n_way_intrinsic_of_type<SKSL_INT>(
+                context, arguments[0].get(), arguments[1].get(), arguments[2].get(), eval);
+    }
+
+    SkDEBUGFAILF("unsupported type %s", type.description().c_str());
+    return nullptr;
 }
 
 static std::unique_ptr<Expression> optimize_intrinsic_call(const Context& context,
@@ -202,10 +303,10 @@ static std::unique_ptr<Expression> optimize_intrinsic_call(const Context& contex
             return optimize_comparison(context, arguments, [](auto a, auto b) { return a != b; });
 
         case k_abs_IntrinsicKind:
-            return evaluate_intrinsic_generic1(context, arguments, [](auto a) { return abs(a); });
+            return evaluate_intrinsic_numeric1(context, arguments, [](auto a) { return abs(a); });
 
         case k_sign_IntrinsicKind:
-            return evaluate_intrinsic_generic1(context, arguments,
+            return evaluate_intrinsic_numeric1(context, arguments,
                                                [](auto a) { return (a > 0) - (a < 0); });
         case k_sin_IntrinsicKind:
             return evaluate_intrinsic_float1(context, arguments, [](float a) { return sin(a); });
@@ -274,6 +375,18 @@ static std::unique_ptr<Expression> optimize_intrinsic_call(const Context& contex
         case k_degrees_IntrinsicKind:
             return evaluate_intrinsic_float1(context, arguments,
                                              [](float a) { return a * 57.2957795; });
+        case k_min_IntrinsicKind:
+            return evaluate_pairwise_intrinsic(context, arguments,
+                                               [](auto a, auto b) { return (a < b) ? a : b; });
+        case k_max_IntrinsicKind:
+            return evaluate_pairwise_intrinsic(context, arguments,
+                                               [](auto a, auto b) { return (a > b) ? a : b; });
+        case k_clamp_IntrinsicKind:
+            return evaluate_3_way_intrinsic(context, arguments,
+                    [](auto x, auto l, auto h) { return (x < l) ? l : (x > h) ? h : x; });
+        case k_step_IntrinsicKind:
+            return evaluate_pairwise_intrinsic(context, arguments,
+                                               [](auto e, auto x) { return (x < e) ? 0 : 1; });
         default:
             return nullptr;
     }
