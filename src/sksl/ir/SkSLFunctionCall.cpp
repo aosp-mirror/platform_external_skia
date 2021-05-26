@@ -418,6 +418,9 @@ static std::unique_ptr<Expression> optimize_intrinsic_call(const Context& contex
         case k_mod_IntrinsicKind:
             return evaluate_pairwise_intrinsic(context, arguments,
                                                [](auto x, auto y) { return x - y * floor(x / y); });
+        case k_pow_IntrinsicKind:
+            return evaluate_pairwise_intrinsic(context, arguments,
+                                               [](auto x, auto y) { return pow(x, y); });
         case k_exp_IntrinsicKind:
             return evaluate_intrinsic<float>(context, arguments, [](float a) { return exp(a); });
 
@@ -490,6 +493,26 @@ static std::unique_ptr<Expression> optimize_intrinsic_call(const Context& contex
             auto I    = [&] { return DSLExpression{arguments[1]->clone()}; };
             auto NRef = [&] { return DSLExpression{arguments[2]->clone()}; };
             return (N() * Select(Dot(NRef(), I()) < 0, 1, -1)).release();
+        }
+        case k_reflect_IntrinsicKind: {
+            auto I    = [&] { return DSLExpression{arguments[0]->clone()}; };
+            auto N    = [&] { return DSLExpression{arguments[1]->clone()}; };
+            return (I() - 2.0 * Dot(N(), I()) * N()).release();
+        }
+        case k_refract_IntrinsicKind: {
+            auto I    = [&] { return DSLExpression{arguments[0]->clone()}; };
+            auto N    = [&] { return DSLExpression{arguments[1]->clone()}; };
+            auto Eta  = [&] { return DSLExpression{arguments[2]->clone()}; };
+
+            std::unique_ptr<Expression> k =
+                    (1 - Pow(Eta(), 2) * (1 - Pow(Dot(N(), I()), 2))).release();
+            if (!k->is<FloatLiteral>()) {
+                return nullptr;
+            }
+            float kValue = k->as<FloatLiteral>().value();
+            return ((kValue < 0) ?
+                        (0 * I()) :
+                        (Eta() * I() - (Eta() * Dot(N(), I()) + sqrt(kValue)) * N())).release();
         }
         default:
             return nullptr;
