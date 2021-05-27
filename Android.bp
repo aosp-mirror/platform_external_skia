@@ -2839,6 +2839,7 @@ cc_test {
         "tests/SkSLMetalTestbed.cpp",
         "tests/SkSLSPIRVTestbed.cpp",
         "tests/SkSLTest.cpp",
+        "tests/SkSLTypeTest.cpp",
         "tests/SkScalerCacheTest.cpp",
         "tests/SkShaperJSONWriterTest.cpp",
         "tests/SkSharedMutexTest.cpp",
