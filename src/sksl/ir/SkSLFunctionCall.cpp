@@ -394,6 +394,15 @@ static std::unique_ptr<Expression> optimize_intrinsic_call(const Context& contex
         case k_acos_IntrinsicKind:
             return evaluate_intrinsic<float>(context, arguments,
                                              [](float a) { return std::acos(a); });
+        case k_atan_IntrinsicKind:
+            if (arguments.size() == 1) {
+                return evaluate_intrinsic<float>(
+                        context, arguments, [](float a) { return std::atan(a); });
+            } else {
+                SkASSERT(arguments.size() == 2);
+                return evaluate_pairwise_intrinsic(
+                        context, arguments, [](auto a, auto b) { return std::atan2(a, b); });
+            }
         case k_sinh_IntrinsicKind:
             return evaluate_intrinsic<float>(context, arguments,
                                              [](float a) { return std::sinh(a); });
@@ -513,6 +522,18 @@ static std::unique_ptr<Expression> optimize_intrinsic_call(const Context& contex
             return ((kValue < 0) ?
                        (0 * I()) :
                        (Eta() * I() - (Eta() * Dot(N(), I()) + std::sqrt(kValue)) * N())).release();
+        }
+        case k_cross_IntrinsicKind: {
+            auto Value = [&](int a, int n) -> float {
+                return arguments[a]->getConstantSubexpression(n)->as<FloatLiteral>().value();
+            };
+            auto X = [&](int n) -> float { return Value(0, n); };
+            auto Y = [&](int n) -> float { return Value(1, n); };
+            SkASSERT(arguments[0]->type().columns() == 3);  // the vec2 form is not a real intrinsic
+            return DSLType::Construct(&arguments[0]->type(),
+                                      X(1) * Y(2) - Y(1) * X(2),
+                                      X(2) * Y(0) - Y(2) * X(0),
+                                      X(0) * Y(1) - Y(0) * X(1)).release();
         }
         case k_inverse_IntrinsicKind: {
             auto M = [&](int c, int r) -> float {
