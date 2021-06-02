@@ -14,7 +14,9 @@
 #include "src/gpu/geometry/GrWangsFormula.h"
 #include "src/gpu/mock/GrMockOpTarget.h"
 #include "src/gpu/tessellate/GrMiddleOutPolygonTriangulator.h"
-#include "src/gpu/tessellate/GrPathTessellator.h"
+#include "src/gpu/tessellate/GrPathCurveTessellator.h"
+#include "src/gpu/tessellate/GrPathIndirectTessellator.h"
+#include "src/gpu/tessellate/GrPathWedgeTessellator.h"
 #include "src/gpu/tessellate/GrStrokeFixedCountTessellator.h"
 #include "src/gpu/tessellate/GrStrokeHardwareTessellator.h"
 #include "tools/ToolUtils.h"
@@ -119,8 +121,8 @@ DEF_PATH_TESS_BENCH(GrPathIndirectTessellator, make_cubic_path(18), SkMatrix::I(
 
 DEF_PATH_TESS_BENCH(GrPathOuterCurveTessellator, make_cubic_path(8), SkMatrix::I()) {
     SkArenaAlloc arena(1024);
-    auto tess = GrPathOuterCurveTessellator::Make(&arena, fMatrix, SK_PMColor4fTRANSPARENT,
-                                                  GrPathTessellator::DrawInnerFan::kNo);
+    auto tess = GrPathCurveTessellator::Make(&arena, fMatrix, SK_PMColor4fTRANSPARENT,
+                                             GrPathTessellator::DrawInnerFan::kNo);
     tess->prepare(fTarget.get(), SkRectPriv::MakeLargest(), fPath, nullptr);
 }
 
@@ -159,13 +161,11 @@ DEF_PATH_TESS_BENCH(wangs_formula_cubic_log2_affine, make_cubic_path(18),
 }
 
 static void benchmark_wangs_formula_conic(const SkMatrix& matrix, const SkPath& path) {
-    // Conic version expects tolerance, not "precision"
-    constexpr float kTolerance = 4;
     int sum = 0;
     GrVectorXform xform(matrix);
     for (auto [verb, pts, w] : SkPathPriv::Iterate(path)) {
         if (verb == SkPathVerb::kConic) {
-            sum += GrWangsFormula::conic(kTolerance, pts, *w, xform);
+            sum += GrWangsFormula::conic(4, pts, *w, xform);
         }
     }
     // Don't let the compiler optimize away GrWangsFormula::conic.
@@ -175,13 +175,11 @@ static void benchmark_wangs_formula_conic(const SkMatrix& matrix, const SkPath& 
 }
 
 static void benchmark_wangs_formula_conic_log2(const SkMatrix& matrix, const SkPath& path) {
-    // Conic version expects tolerance, not "precision"
-    constexpr float kTolerance = 4;
     int sum = 0;
     GrVectorXform xform(matrix);
     for (auto [verb, pts, w] : SkPathPriv::Iterate(path)) {
         if (verb == SkPathVerb::kConic) {
-            sum += GrWangsFormula::conic_log2(kTolerance, pts, *w, xform);
+            sum += GrWangsFormula::conic_log2(4, pts, *w, xform);
         }
     }
     // Don't let the compiler optimize away GrWangsFormula::conic.
