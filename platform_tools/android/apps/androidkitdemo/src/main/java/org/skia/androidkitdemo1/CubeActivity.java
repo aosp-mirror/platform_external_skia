@@ -27,17 +27,35 @@ import org.skia.androidkit.Surface;
 import org.skia.androidkit.TileMode;
 import org.skia.androidkit.util.SurfaceRenderer;
 
+import org.skia.androidkitdemo1.samples.ImageShaderSample;
+import org.skia.androidkitdemo1.samples.RuntimeSample;
+import org.skia.androidkitdemo1.samples.Sample;
+import org.skia.androidkitdemo1.samples.SkottieSample;
+
 import static java.lang.Math.tan;
+
+// TODO: remove after all sides are migrated to something more interesting.
+class SolidColorSample implements Sample {
+    private Paint mPaint = new Paint();
+
+    public SolidColorSample(float r, float g, float b, float a) {
+        mPaint.setColor(r, g, b, a);
+    }
+
+    public void render(Canvas canvas, long t, float left, float top, float right, float bottom) {
+        canvas.drawRect(left, top, right, bottom, mPaint);
+    }
+}
 
 class Face {
     private float rotX;
     private float rotY;
-    public Paint paint;
+    public Sample sample;
 
-    Face(float rotX, float rotY, Paint paint) {
+    Face(float rotX, float rotY, Sample sample) {
         this.rotX = rotX;
         this.rotY = rotY;
-        this.paint = paint;
+        this.sample = sample;
     }
 
     Matrix asMatrix(float scale) {
@@ -135,53 +153,48 @@ class VSphereAnimator {
 
 class CubeRenderer extends SurfaceRenderer implements GestureDetector.OnGestureListener {
     private VSphereAnimator mVSphere;
+    private Matrix          mViewMatrix;
+    private float           mCubeSideLength;
+    private long            mPrevMS;
 
-    // TODO: make these relative to surface size
-    private float mCubeSideLength = 500;
-    private int DX = 200;
-    private int DY = 300;
-
-    private long mPrevMS;
-
-    private float fAngle = (float)Math.PI / 12;
-    private float eyeZ = (float)(1.0f/tan(fAngle/2) - 1);
-
-    private Matrix cam = Matrix.makeLookAt(0, 0, eyeZ, 0, 0, 0, 0, 1, 0);
-    private Matrix perspective = Matrix.makePerspective(0.05f, 4, fAngle);
-    private Matrix viewport;
-
-    private final float rot = (float) Math.PI;
     private Face[] faces;
 
     public CubeRenderer(Resources res) {
-        Paint brickPaint = new Paint();
-
-        try {
-            Image image = Image.fromStream(res.openRawResource(R.raw.brickwork_texture));
-            Shader shader =
-                image.makeShader(TileMode.REPEAT, TileMode.REPEAT,
-                                 new SamplingOptions(SamplingOptions.FilterMode.LINEAR));
-            brickPaint.setShader(shader);
-        } catch (Exception e) {}
-
+        final float rot = (float) Math.PI;
         faces = new Face[] {
-            new Face(0, -rot/2, brickPaint),
-            new Face(0, 0     , new Paint().setColor(new Color(1, 0, 0, 1))),
-            new Face(0, rot   , new Paint().setColor(new Color(0, 1, 0, 1))),
-            new Face(rot/2, 0 , new Paint().setColor(new Color(0, 0, 1, 1))),
-            new Face(-rot/2, 0, new Paint().setColor(new Color(1, 1, 0, 1))),
-            new Face(0, rot/2 , new Paint().setColor(new Color(0, 1, 1, 1))),
+            new Face(0, -rot/2, new ImageShaderSample(res, R.raw.brickwork_texture)),
+            new Face(0, 0     , new SkottieSample(res, R.raw.im_thirsty)),
+            new Face(0, rot   , new RuntimeSample(res, R.raw.runtime_shader1)),
+            new Face(rot/2, 0 , new SolidColorSample(0, 0, 1, 1)),
+            new Face(-rot/2, 0, new SolidColorSample(1, 1, 0, 1)),
+            new Face(0, rot/2 , new RuntimeSample(res, R.raw.runtime_shader2)),
         };
     }
 
     @Override
     protected void onSurfaceInitialized(Surface surface) {
-        float hw = surface.getWidth() / 2,
-              hh = surface.getHeight() / 2;
-        mVSphere = new VSphereAnimator(hw, hh, Math.min(hw, hh));
+        float cx = surface.getWidth()  / 2,
+              cy = surface.getHeight() / 2,
+              r  = Math.min(cx, cy);
 
-        viewport = new Matrix().translate(mCubeSideLength/2, mCubeSideLength/2, 0)
-                               .scale(mCubeSideLength/2, mCubeSideLength/2, surface.getWidth());
+        mVSphere = new VSphereAnimator(cx, cy, r);
+
+        // square viewport size fitting the given surface
+        float vsz = r * 2;
+
+        mCubeSideLength = vsz * 0.5f;
+
+        float viewAngle = (float)Math.PI / 4f,
+              viewDistance = (float)(r / tan(viewAngle/2));
+
+        mViewMatrix = new Matrix()
+                        // centered viewport
+                        .translate(cx, cy)
+                        // perspective
+                        .scale(vsz/2, vsz/2, 1)
+                        .preConcat(Matrix.makePerspective(0.05f, viewDistance, viewAngle))
+                        // camera
+                        .preConcat(Matrix.makeLookAt(0, 0, -viewDistance, 0, 0, 0, 0, 1, 0));
     }
 
     @Override
@@ -198,24 +211,20 @@ class CubeRenderer extends SurfaceRenderer implements GestureDetector.OnGestureL
         canvas.drawColor(0xffffffff);
 
         canvas.save();
-        canvas.concat(new Matrix().translate(DX, DY, 0));
-        canvas.concat(viewport.preConcat(perspective)
-                              .preConcat(cam)
-                              .preConcat(Matrix.makeInverse(viewport)));
+        canvas.concat(mViewMatrix);
+        canvas.concat(mVSphere.getMatrix());
 
         for (Face f : faces) {
             //TODO: auto restore
             canvas.save();
-            Matrix trans = new Matrix().translate(mCubeSideLength/2, mCubeSideLength/2, 0);
-            Matrix m = new Matrix().preConcat(mVSphere.getMatrix())
-                                   .preConcat(f.asMatrix(mCubeSideLength/2));
-
-            canvas.concat(trans);
-            Matrix localToWorld = m.preConcat(Matrix.makeInverse(trans));
-            canvas.concat(localToWorld);
+            canvas.concat(f.asMatrix(mCubeSideLength/2));
 
             if (front(canvas.getLocalToDevice())) {
-                canvas.drawRect(0, 0, mCubeSideLength, mCubeSideLength, f.paint);
+                f.sample.render(canvas, ms,
+                                -mCubeSideLength/2,
+                                -mCubeSideLength/2,
+                                 mCubeSideLength/2,
+                                 mCubeSideLength/2);
             }
             canvas.restore();
         }
@@ -224,7 +233,7 @@ class CubeRenderer extends SurfaceRenderer implements GestureDetector.OnGestureL
 
     @Override
     public boolean onFling(MotionEvent e1, MotionEvent e2, float dx, float dy) {
-        mVSphere.fling(dx, dy);
+        mVSphere.fling(dx, -dy);
         return true;
     }
 
