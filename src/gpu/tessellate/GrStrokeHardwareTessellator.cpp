@@ -369,7 +369,7 @@ private:
         if (w == 1) {
             GrPathUtils::convertQuadToCubic(p, asPatch);
         } else {
-            GrPathShader::WriteConicPatch(p, w, asPatch);
+            GrTessellationShader::WriteConicPatch(p, w, asPatch);
         }
 
         float numParametricSegments_pow4 = GrWangsFormula::quadratic_pow4(fParametricPrecision, p);
@@ -656,7 +656,7 @@ private:
     SkPoint fLastControlPoint;
 
     // Values for the current dynamic state (if any) that will get written out with each patch.
-    GrStrokeShader::DynamicStroke fDynamicStroke;
+    GrStrokeTessellationShader::DynamicStroke fDynamicStroke;
     GrVertexColor fDynamicColor;
 };
 
@@ -835,7 +835,7 @@ void GrStrokeHardwareTessellator::prepare(GrMeshDrawOp::Target* target, int tota
                     // case. Write it out directly.
                     prevJoinFitsInPatch = patchWriter.stroke180FitsInPatch_withJoin(
                             numParametricSegments_pow4);
-                    GrPathShader::WriteConicPatch(p, *w, scratchPts);
+                    GrTessellationShader::WriteConicPatch(p, *w, scratchPts);
                     patchPts = scratchPts;
                     endControlPoint = p[1];
                     break;

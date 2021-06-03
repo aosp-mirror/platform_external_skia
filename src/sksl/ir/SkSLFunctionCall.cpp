@@ -177,85 +177,84 @@ static std::unique_ptr<Expression> optimize_comparison(const Context& context,
     return nullptr;
 }
 
-template <typename T>
+template <typename T0, typename T1 = T0, typename T2 = T0>
 static std::unique_ptr<Expression> evaluate_n_way_intrinsic_of_type(
-                                                            const Context& context,
-                                                            const Expression* arg0,
-                                                            const Expression* arg1,
-                                                            const Expression* arg2,
-                                                            const std::function<T(T, T, T)>& eval) {
-    // Takes up to three arguments and evaluates them in tandem, equivalent to constructing a new
-    // vector containing the results from:
+        const Context& context,
+        const Expression* arg0,
+        const Expression* arg1,
+        const Expression* arg2,
+        const std::function<T0(T0, T1, T2)>& eval) {
+    // Takes up to three arguments and evaluates all of them, left-to-right, in tandem.
+    // Equivalent to constructing a new compound value containing the results from:
     //     eval(arg0.x, arg1.x, arg2.x),
     //     eval(arg0.y, arg1.y, arg2.y),
     //     eval(arg0.z, arg1.z, arg2.z),
     //     eval(arg0.w, arg1.w, arg2.w)
     //
     // If an argument is null, zero is passed to the evaluation function. If the arguments are a mix
-    // of scalars and vectors, scalars are interpreted as a vector containing the same value for
+    // of scalars and compounds, scalars are interpreted as a compound containing the same value for
     // every component.
     arg0 = ConstantFolder::GetConstantValueForVariable(*arg0);
     SkASSERT(arg0);
 
-    const Type& vecType =          arg0->type().isVector()  ? arg0->type() :
-                          (arg1 && arg1->type().isVector()) ? arg1->type() :
-                          (arg2 && arg2->type().isVector()) ? arg2->type() :
-                                                              arg0->type();
-    const Type& type = vecType.componentType();
+    const Type& compoundType =          !arg0->type().isScalar()  ? arg0->type() :
+                               (arg1 && !arg1->type().isScalar()) ? arg1->type() :
+                               (arg2 && !arg2->type().isScalar()) ? arg2->type() :
+                                                                    arg0->type();
+    const Type& type = compoundType.componentType();
     SkASSERT(arg0->type().componentType() == type);
 
     if (arg1) {
         arg1 = ConstantFolder::GetConstantValueForVariable(*arg1);
         SkASSERT(arg1);
-        SkASSERT(arg1->type().componentType() == type);
     }
 
     if (arg2) {
         arg2 = ConstantFolder::GetConstantValueForVariable(*arg2);
         SkASSERT(arg2);
-        SkASSERT(arg2->type().componentType() == type);
     }
 
     ExpressionArray array;
-    array.reserve_back(vecType.columns());
+    array.reserve_back(compoundType.columns());
 
     int arg0Index = 0;
     int arg1Index = 0;
     int arg2Index = 0;
-    for (int index = 0; index < vecType.columns(); ++index) {
+    int slots = compoundType.slotCount();
+    for (int index = 0; index < slots; ++index) {
         const Expression* arg0Subexpr = arg0->getConstantSubexpression(arg0Index);
-        arg0Index += arg0->type().isVector() ? 1 : 0;
+        arg0Index += arg0->type().isScalar() ? 0 : 1;
         SkASSERT(arg0Subexpr);
 
         const Expression* arg1Subexpr = nullptr;
         if (arg1) {
             arg1Subexpr = arg1->getConstantSubexpression(arg1Index);
-            arg1Index += arg1->type().isVector() ? 1 : 0;
+            arg1Index += arg1->type().isScalar() ? 0 : 1;
             SkASSERT(arg1Subexpr);
         }
 
         const Expression* arg2Subexpr = nullptr;
         if (arg2) {
             arg2Subexpr = arg2->getConstantSubexpression(arg2Index);
-            arg2Index += arg2->type().isVector() ? 1 : 0;
+            arg2Index += arg2->type().isScalar() ? 0 : 1;
             SkASSERT(arg2Subexpr);
         }
 
-        T value = eval(arg0Subexpr->as<Literal<T>>().value(),
-                       arg1Subexpr ? arg1Subexpr->as<Literal<T>>().value() : T{},
-                       arg2Subexpr ? arg2Subexpr->as<Literal<T>>().value() : T{});
+        T0 value = eval(arg0Subexpr->as<Literal<T0>>().value(),
+                        arg1Subexpr ? arg1Subexpr->as<Literal<T1>>().value() : T1{},
+                        arg2Subexpr ? arg2Subexpr->as<Literal<T2>>().value() : T2{});
 
-        if constexpr (std::is_floating_point<T>::value) {
+        if constexpr (std::is_floating_point<T0>::value) {
             // If evaluation of the intrinsic yields a non-finite value, do not optimize.
             if (!std::isfinite(value)) {
                 return nullptr;
             }
         }
 
-        array.push_back(Literal<T>::Make(arg0Subexpr->fOffset, value, &type));
+        array.push_back(Literal<T0>::Make(arg0Subexpr->fOffset, value, &type));
     }
 
-    return ConstructorCompound::Make(context, arg0->fOffset, vecType, std::move(array));
+    return ConstructorCompound::Make(context, arg0->fOffset, compoundType, std::move(array));
 }
 
 template <typename T>
@@ -274,7 +273,7 @@ static std::unique_ptr<Expression> evaluate_intrinsic(const Context& context,
         SkASSERT(arguments.front()->type().componentType().isInteger());
     }
 
-    return evaluate_n_way_intrinsic_of_type<T>(
+    return evaluate_n_way_intrinsic_of_type<T, T, T>(
             context, arguments.front().get(), /*arg1=*/nullptr, /*arg2=*/nullptr,
             [&eval](T a, T, T) { return eval(a); });
 }
@@ -305,12 +304,12 @@ static std::unique_ptr<Expression> evaluate_pairwise_intrinsic(const Context& co
     const Type& type = arguments.front()->type().componentType();
 
     if (type.isFloat()) {
-        return evaluate_n_way_intrinsic_of_type<float>(
+        return evaluate_n_way_intrinsic_of_type<float, float, float>(
                 context, arguments[0].get(), arguments[1].get(), /*arg2=*/nullptr,
                 [&eval](float a, float b, float) { return eval(a, b); });
     }
     if (type.isInteger()) {
-        return evaluate_n_way_intrinsic_of_type<SKSL_INT>(
+        return evaluate_n_way_intrinsic_of_type<SKSL_INT, SKSL_INT, SKSL_INT>(
                 context, arguments[0].get(), arguments[1].get(), /*arg2=*/nullptr,
                 [&eval](SKSL_INT a, SKSL_INT b, SKSL_INT) { return eval(a, b); });
     }
@@ -327,11 +326,11 @@ static std::unique_ptr<Expression> evaluate_3_way_intrinsic(const Context& conte
     const Type& type = arguments.front()->type().componentType();
 
     if (type.isFloat()) {
-        return evaluate_n_way_intrinsic_of_type<float>(
+        return evaluate_n_way_intrinsic_of_type<float, float, float>(
                 context, arguments[0].get(), arguments[1].get(), arguments[2].get(), eval);
     }
     if (type.isInteger()) {
-        return evaluate_n_way_intrinsic_of_type<SKSL_INT>(
+        return evaluate_n_way_intrinsic_of_type<SKSL_INT, SKSL_INT, SKSL_INT>(
                 context, arguments[0].get(), arguments[1].get(), arguments[2].get(), eval);
     }
 
@@ -431,16 +430,28 @@ static std::unique_ptr<Expression> optimize_intrinsic_call(const Context& contex
         case k_saturate_IntrinsicKind:
             return evaluate_intrinsic<float>(context, arguments,
                                              [](float a) { return (a < 0) ? 0 : (a > 1) ? 1 : a; });
-        /* TODO(skia:12034)
-            $genType mix($genType x, $genType y, $genType a);
-            $genType mix($genType x, $genType y, float a);
-            $genHType mix($genHType x, $genHType y, $genHType a);
-            $genHType mix($genHType x, $genHType y, half a);
-            $genType mix($genType x, $genType y, $genBType a);
-            $genHType mix($genHType x, $genHType y, $genBType a);
-            $genIType mix($genIType x, $genIType y, $genBType a);
-            $genBType mix($genBType x, $genBType y, $genBType a);
-        */
+        case k_mix_IntrinsicKind:
+            if (arguments[2]->type().componentType().isBoolean()) {
+                const SkSL::Type& numericType = arguments[0]->type().componentType();
+                const auto eval = [](auto x, auto y, bool a) { return a ? y : x; };
+
+                if (numericType.isFloat()) {
+                    return evaluate_n_way_intrinsic_of_type<float, float, bool>(
+                        context, arguments[0].get(), arguments[1].get(), arguments[2].get(), eval);
+                } else if (numericType.isInteger()) {
+                    return evaluate_n_way_intrinsic_of_type<SKSL_INT, SKSL_INT, bool>(
+                        context, arguments[0].get(), arguments[1].get(), arguments[2].get(), eval);
+                } else if (numericType.isBoolean()) {
+                    return evaluate_n_way_intrinsic_of_type<bool, bool, bool>(
+                        context, arguments[0].get(), arguments[1].get(), arguments[2].get(), eval);
+                }
+
+                SkDEBUGFAILF("unsupported type %s", numericType.description().c_str());
+                return nullptr;
+            } else {
+                return evaluate_3_way_intrinsic(context, arguments,
+                                        [](auto x, auto y, auto a) { return x * (1 - a) + y * a; });
+            }
         case k_step_IntrinsicKind:
             return evaluate_pairwise_intrinsic(context, arguments,
                                                [](auto e, auto x) { return (x < e) ? 0 : 1; });
@@ -510,10 +521,9 @@ static std::unique_ptr<Expression> optimize_intrinsic_call(const Context& contex
         }
 
         // 8.5 : Matrix Functions
-        /* TODO(skia:12034)
-            $squareMat  matrixCompMult($squareMat  x, $squareMat  y);
-            $squareHMat matrixCompMult($squareHMat x, $squareHMat y);
-        */
+        case k_matrixCompMult_IntrinsicKind:
+            return evaluate_pairwise_intrinsic(context, arguments,
+                                               [](auto x, auto y) { return x * y; });
 
         // Not supported until GLSL 1.40. Poly-filled by SkSL:
         case k_inverse_IntrinsicKind: {

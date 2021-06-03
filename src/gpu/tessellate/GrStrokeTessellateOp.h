@@ -10,19 +10,19 @@
 
 #include "include/core/SkStrokeRec.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
-#include "src/gpu/tessellate/GrPathShader.h"
 #include "src/gpu/tessellate/GrStrokeTessellator.h"
+#include "src/gpu/tessellate/shaders/GrTessellationShader.h"
 
 class GrRecordingContext;
 
 // Renders strokes by linearizing them into sorted "parametric" and "radial" edges. See
-// GrStrokeShader.
+// GrStrokeTessellationShader.
 class GrStrokeTessellateOp : public GrDrawOp {
 public:
     GrStrokeTessellateOp(GrAAType, const SkMatrix&, const SkPath&, const SkStrokeRec&, GrPaint&&);
 
 private:
-    using ShaderFlags = GrStrokeShader::ShaderFlags;
+    using ShaderFlags = GrStrokeTessellationShader::ShaderFlags;
     using PathStrokeList = GrStrokeTessellator::PathStrokeList;
     DEFINE_OP_CLASS_ID
 
@@ -55,7 +55,7 @@ private:
     CombineResult onCombineIfPossible(GrOp*, SkArenaAlloc*, const GrCaps&) override;
 
     // Creates the tessellator and the stencil/fill program(s) we will use with it.
-    void prePrepareTessellator(GrPathShader::ProgramArgs&&, GrAppliedClip&&);
+    void prePrepareTessellator(GrTessellationShader::ProgramArgs&&, GrAppliedClip&&);
 
     void onPrePrepare(GrRecordingContext*, const GrSurfaceProxyView&, GrAppliedClip*,
                       const GrXferProcessor::DstProxyView&, GrXferBarrierFlags,

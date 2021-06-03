@@ -15,11 +15,11 @@
 
 namespace {
 
-constexpr static float kMaxParametricSegments_pow4 = 48*48*48*48;  // 48^4
-constexpr static int8_t kMaxParametricSegments_log2 = 6;  // ceil(log2(48))
+constexpr static float kMaxParametricSegments_pow4 = 32*32*32*32;  // 32^4
+constexpr static int8_t kMaxParametricSegments_log2 = 5;  // log2(32)
 
 // Writes out strokes to the given instance chunk array, chopping if necessary so that all instances
-// require 48 parametric segments or less. (We don't consider radial segments here. The tessellator
+// require 32 parametric segments or less. (We don't consider radial segments here. The tessellator
 // will just add enough additional segments to handle a worst-case 180 degree stroke.)
 class InstanceWriter {
 public:
@@ -84,7 +84,7 @@ public:
             return;
         }
         SkPoint conic[4];
-        GrPathShader::WriteConicPatch(p, w, conic);
+        GrTessellationShader::WriteConicPatch(p, w, conic);
         SkPoint endControlPoint = conic[1];
         this->writeStroke(conic, endControlPoint);
         fMaxParametricSegments_pow4 = std::max(numParametricSegments_pow4,
@@ -217,13 +217,13 @@ private:
     bool fHasLastControlPoint = false;
 
     // Values for the current dynamic state (if any) that will get written out with each instance.
-    GrStrokeShader::DynamicStroke fDynamicStroke;
+    GrStrokeTessellationShader::DynamicStroke fDynamicStroke;
     GrVertexColor fDynamicColor;
 };
 
 // Returns the worst-case number of edges we will need in order to draw a join of the given type.
 static int worst_case_edges_in_join(SkPaint::Join joinType, float numRadialSegmentsPerRadian) {
-    int numEdges = GrStrokeShader::NumFixedEdgesInJoin(joinType);
+    int numEdges = GrStrokeTessellationShader::NumFixedEdgesInJoin(joinType);
     if (joinType == SkPaint::kRound_Join) {
         // For round joins we need to count the radial edges on our own. Account for a worst-case
         // join of 180 degrees (SK_ScalarPI radians).
@@ -239,7 +239,7 @@ GrStrokeFixedCountTessellator::GrStrokeFixedCountTessellator(ShaderFlags shaderF
                                                              PathStrokeList* pathStrokeList,
                                                              std::array<float,2> matrixMinMaxScales,
                                                              const SkRect& strokeCullBounds)
-        : GrStrokeTessellator(GrStrokeShader::Mode::kFixedCount, shaderFlags,
+        : GrStrokeTessellator(GrStrokeTessellationShader::Mode::kFixedCount, shaderFlags,
                               kMaxParametricSegments_log2, viewMatrix, pathStrokeList,
                               matrixMinMaxScales, strokeCullBounds) {
 }
