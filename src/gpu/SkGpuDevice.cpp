@@ -149,9 +149,9 @@ static bool force_aa_clip(const GrSurfaceDrawContext* sdc) {
 #endif
 
 SkGpuDevice::SkGpuDevice(std::unique_ptr<GrSurfaceDrawContext> surfaceDrawContext, unsigned flags)
-        : INHERITED(make_info(surfaceDrawContext.get(), SkToBool(flags & kIsOpaque_Flag)),
+        : INHERITED(sk_ref_sp(surfaceDrawContext->recordingContext()),
+                    make_info(surfaceDrawContext.get(), SkToBool(flags & kIsOpaque_Flag)),
                     surfaceDrawContext->surfaceProps())
-        , fContext(sk_ref_sp(surfaceDrawContext->recordingContext()))
         , fSurfaceDrawContext(std::move(surfaceDrawContext))
 #if !defined(SK_DISABLE_NEW_GR_CLIP_STACK)
         , fClip(SkIRect::MakeSize(fSurfaceDrawContext->dimensions()),
@@ -234,47 +234,6 @@ void SkGpuDevice::clearAll() {
 
     SkIRect rect = SkIRect::MakeWH(this->width(), this->height());
     fSurfaceDrawContext->clearAtLeast(rect, SK_PMColor4fTRANSPARENT);
-}
-
-void SkGpuDevice::replaceSurfaceDrawContext(std::unique_ptr<GrSurfaceDrawContext> sdc,
-                                            SkSurface::ContentChangeMode mode) {
-    SkASSERT(sdc->dimensions() == fSurfaceDrawContext->dimensions());
-    SkASSERT(sdc->numSamples() == fSurfaceDrawContext->numSamples());
-    SkASSERT(sdc->asSurfaceProxy()->priv().isExact());
-    if (mode == SkSurface::kRetain_ContentChangeMode) {
-        if (this->recordingContext()->abandoned()) {
-            return;
-        }
-
-        SkASSERT(fSurfaceDrawContext->asTextureProxy());
-        SkAssertResult(sdc->blitTexture(fSurfaceDrawContext->readSurfaceView(),
-                                        SkIRect::MakeWH(this->width(), this->height()),
-                                        SkIPoint::Make(0, 0)));
-    }
-
-    fSurfaceDrawContext = std::move(sdc);
-}
-
-void SkGpuDevice::replaceSurfaceDrawContext(SkSurface::ContentChangeMode mode) {
-    ASSERT_SINGLE_OWNER
-
-    SkBudgeted budgeted = fSurfaceDrawContext->isBudgeted();
-
-    // This entry point is used by SkSurface_Gpu::onCopyOnWrite so it must create a
-    // kExact-backed surface draw context
-    auto newSDC = MakeSurfaceDrawContext(this->recordingContext(),
-                                         budgeted,
-                                         this->imageInfo(),
-                                         SkBackingFit::kExact,
-                                         fSurfaceDrawContext->numSamples(),
-                                         fSurfaceDrawContext->mipmapped(),
-                                         GrProtected::kNo,
-                                         fSurfaceDrawContext->origin(),
-                                         this->surfaceProps());
-    if (!newSDC) {
-        return;
-    }
-    this->replaceSurfaceDrawContext(std::move(newSDC), mode);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1003,6 +962,36 @@ bool SkGpuDevice::wait(int numSemaphores, const GrBackendSemaphore* waitSemaphor
 
     return fSurfaceDrawContext->waitOnSemaphores(numSemaphores, waitSemaphores,
                                                  deleteSemaphoresAfterWait);
+}
+
+bool SkGpuDevice::replaceBackingProxy(SkSurface::ContentChangeMode mode,
+                                      sk_sp<GrRenderTargetProxy> newRTP,
+                                      GrColorType grColorType,
+                                      sk_sp<SkColorSpace> colorSpace,
+                                      GrSurfaceOrigin origin,
+                                      const SkSurfaceProps& props) {
+    auto sdc = GrSurfaceDrawContext::Make(fContext.get(), grColorType, std::move(newRTP),
+                                          std::move(colorSpace), origin, props);
+    if (!sdc) {
+        return false;
+    }
+
+    SkASSERT(sdc->dimensions() == fSurfaceDrawContext->dimensions());
+    SkASSERT(sdc->numSamples() == fSurfaceDrawContext->numSamples());
+    SkASSERT(sdc->asSurfaceProxy()->priv().isExact());
+    if (mode == SkSurface::kRetain_ContentChangeMode) {
+        if (fContext->abandoned()) {
+            return false;
+        }
+
+        SkASSERT(fSurfaceDrawContext->asTextureProxy());
+        SkAssertResult(sdc->blitTexture(fSurfaceDrawContext->readSurfaceView(),
+                                        SkIRect::MakeWH(this->width(), this->height()),
+                                        SkIPoint::Make(0, 0)));
+    }
+
+    fSurfaceDrawContext = std::move(sdc);
+    return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

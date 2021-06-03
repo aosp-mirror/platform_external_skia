@@ -25,11 +25,19 @@ public:
 
     bool wait(int numSemaphores,
               const GrBackendSemaphore* waitSemaphores,
-              bool deleteSemaphoresAfterWait) {
+              bool deleteSemaphoresAfterWait) override {
         return false;
     }
 
-    GrRecordingContext* recordingContext() const override { return fContext.get(); }
+    bool replaceBackingProxy(SkSurface::ContentChangeMode,
+                             sk_sp<GrRenderTargetProxy>,
+                             GrColorType,
+                             sk_sp<SkColorSpace>,
+                             GrSurfaceOrigin,
+                             const SkSurfaceProps&) override {
+        return false;
+    }
+
     GrSurfaceDrawContext* surfaceDrawContext() override { return nullptr; }
 
 protected:
@@ -95,13 +103,11 @@ protected:
     /* isNoPixelsDevice */
 
 private:
-    SkGpuDevice_nga(GrRecordingContext*, const SkImageInfo&, const SkSurfaceProps&);
+    SkGpuDevice_nga(sk_sp<GrRecordingContext>, const SkImageInfo&, const SkSurfaceProps&);
 
     /* replaceBitmapBackendForRasterSurface */
     bool forceConservativeRasterClip() const override;
     SkImageFilterCache* getImageFilterCache() override;
-
-    sk_sp<GrRecordingContext> fContext;
 
     using INHERITED = SkBaseGpuDevice;
 };

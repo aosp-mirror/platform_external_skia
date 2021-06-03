@@ -12,9 +12,9 @@
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
-#include "src/gpu/tessellate/GrPathTessellationShader.h"
 #include "src/gpu/tessellate/GrPathTessellator.h"
 #include "src/gpu/tessellate/GrTessellationPathRenderer.h"
+#include "src/gpu/tessellate/shaders/GrPathTessellationShader.h"
 
 using OpFlags = GrTessellationPathRenderer::OpFlags;
 
@@ -34,7 +34,7 @@ public:
     }
 
 private:
-    const char* name() const final { return "HullShader"; }
+    const char* name() const final { return "tessellate_HullShader"; }
     void getGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const final {}
     GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps&) const final;
 };
@@ -134,14 +134,16 @@ void GrPathInnerTriangulateOp::pushFanStencilProgram(const GrTessellationShader:
                                                      const GrPipeline* pipelineForStencils,
                                                      const GrUserStencilSettings* stencil) {
     SkASSERT(pipelineForStencils);
-    auto shader = args.fArena->make<GrTriangleShader>(fViewMatrix, SK_PMColor4fTRANSPARENT);
+    auto shader = GrPathTessellationShader::MakeSimpleTriangleShader(args.fArena, fViewMatrix,
+                                                                     SK_PMColor4fTRANSPARENT);
     fFanPrograms.push_back(GrTessellationShader::MakeProgram(args, shader, pipelineForStencils,
                                                              stencil)); }
 
 void GrPathInnerTriangulateOp::pushFanFillProgram(const GrTessellationShader::ProgramArgs& args,
                                                   const GrUserStencilSettings* stencil) {
     SkASSERT(fPipelineForFills);
-    auto* shader = args.fArena->make<GrTriangleShader>(fViewMatrix, fColor);
+    auto shader = GrPathTessellationShader::MakeSimpleTriangleShader(args.fArena, fViewMatrix,
+                                                                     fColor);
     fFanPrograms.push_back(GrTessellationShader::MakeProgram(args, shader, fPipelineForFills,
                                                              stencil));
 }
