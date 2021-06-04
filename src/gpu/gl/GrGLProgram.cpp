@@ -17,6 +17,7 @@
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
 #include "src/gpu/glsl/GrGLSLXferProcessor.h"
+#include "src/sksl/SkSLCompiler.h"
 
 #define GL_CALL(X) GR_GL_CALL(fGpu->glInterface(), X)
 #define GL_CALL_RET(R, X) GR_GL_CALL_RET(fGpu->glInterface(), R, X)
@@ -127,6 +128,7 @@ void GrGLProgram::updateUniforms(const GrRenderTarget* renderTarget,
 void GrGLProgram::bindTextures(const GrGeometryProcessor& geomProc,
                                const GrSurfaceProxy* const geomProcTextures[],
                                const GrPipeline& pipeline) {
+    // Bind textures from the geometry processor.
     for (int i = 0; i < geomProc.numTextureSamplers(); ++i) {
         SkASSERT(geomProcTextures[i]->asTextureProxy());
         auto* overrideTexture = static_cast<GrGLTexture*>(geomProcTextures[i]->peekTexture());
@@ -134,7 +136,13 @@ void GrGLProgram::bindTextures(const GrGeometryProcessor& geomProc,
                           geomProc.textureSampler(i).swizzle(), overrideTexture);
     }
     int nextTexSamplerIdx = geomProc.numTextureSamplers();
-
+    // Bind texture from the destination proxy view.
+    GrTexture* dstTexture = pipeline.peekDstTexture();
+    if (dstTexture) {
+        fGpu->bindTexture(nextTexSamplerIdx++, GrSamplerState::Filter::kNearest,
+                          pipeline.dstProxyView().swizzle(), static_cast<GrGLTexture*>(dstTexture));
+    }
+    // Bind textures from all of the fragment processors.
     pipeline.visitTextureEffects([&](const GrTextureEffect& te) {
         GrSamplerState samplerState = te.samplerState();
         GrSwizzle swizzle = te.view().swizzle();
@@ -142,12 +150,6 @@ void GrGLProgram::bindTextures(const GrGeometryProcessor& geomProc,
         fGpu->bindTexture(nextTexSamplerIdx++, samplerState, swizzle, texture);
     });
 
-    SkIPoint offset;
-    GrTexture* dstTexture = pipeline.peekDstTexture(&offset);
-    if (dstTexture) {
-        fGpu->bindTexture(nextTexSamplerIdx++, GrSamplerState::Filter::kNearest,
-                          pipeline.dstProxyView().swizzle(), static_cast<GrGLTexture*>(dstTexture));
-    }
     SkASSERT(nextTexSamplerIdx == fNumTextureSamplers);
 }
 
@@ -167,8 +169,12 @@ void GrGLProgram::setRenderTargetState(const GrRenderTarget* rt,
         fRenderTargetState.fRenderTargetSize = dimensions;
         fRenderTargetState.fRenderTargetOrigin = origin;
 
-        float rtAdjustmentVec[4];
-        fRenderTargetState.getRTAdjustmentVec(rtAdjustmentVec);
-        fProgramDataManager.set4fv(fBuiltinUniformHandles.fRTAdjustmentUni, 1, rtAdjustmentVec);
+        // The client will mark a swap buffer as kBottomLeft when making a SkSurface because
+        // GL's framebuffer space has (0, 0) at the bottom left. In NDC (-1, -1) is also the
+        // bottom left. However, Skia's device coords has (0, 0) at the top left, so a flip is
+        // required when the origin is kBottomLeft.
+        bool flip = (origin == kBottomLeft_GrSurfaceOrigin);
+        std::array<float, 4> v = SkSL::Compiler::GetRTAdjustVector(dimensions, flip);
+        fProgramDataManager.set4fv(fBuiltinUniformHandles.fRTAdjustmentUni, 1, v.data());
     }
 }
