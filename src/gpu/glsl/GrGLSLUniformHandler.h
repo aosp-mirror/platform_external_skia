@@ -26,6 +26,8 @@ struct GrGLSLBuiltinUniformHandles {
     // Render target height, used to implement u_skRTHeight and to calculate sk_FragCoord when
     // origin_upper_left is not supported.
     GrGLSLProgramDataManager::UniformHandle fRTHeightUni;
+    // Destination texture origin and scale, used when dest-texture readback is enabled.
+    GrGLSLProgramDataManager::UniformHandle fDstTextureCoordsUni;
 };
 
 class GrGLSLUniformHandler {

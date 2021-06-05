@@ -76,8 +76,7 @@ public:
         to have an identical processor key as the one that created this GrGLSLXferProcessor. This
         function calls onSetData on the subclass of GrGLSLXferProcessor
      */
-    void setData(const GrGLSLProgramDataManager& pdm, const GrXferProcessor& xp,
-                 const GrTexture* dstTexture, const SkIPoint& dstTextureOffset);
+    void setData(const GrGLSLProgramDataManager& pdm, const GrXferProcessor& xp);
 
 protected:
     static void DefaultCoverageModulation(GrGLSLXPFragmentBuilder* fragBuilder,
@@ -118,9 +117,6 @@ private:
                                   const char* outColor,
                                   const char* outColorSecondary) const;
 
-    virtual void onSetData(const GrGLSLProgramDataManager&, const GrXferProcessor&) = 0;
-
-    GrGLSLProgramDataManager::UniformHandle fDstTopLeftUni;
-    GrGLSLProgramDataManager::UniformHandle fDstScaleUni;
+    virtual void onSetData(const GrGLSLProgramDataManager&, const GrXferProcessor&) {}
 };
 #endif

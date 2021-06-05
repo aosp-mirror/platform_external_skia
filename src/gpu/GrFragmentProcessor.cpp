@@ -168,6 +168,11 @@ void GrFragmentProcessor::registerChild(std::unique_ptr<GrFragmentProcessor> chi
         child->addAndPushFlagToChildren(kNetTransformHasPerspective_Flag);
     }
 
+    // Propagate the "will read dest-color" flag up to parent FPs.
+    if (child->fFlags & kWillReadDstColor_Flag) {
+        fFlags |= kWillReadDstColor_Flag;
+    }
+
     // If the child is not sampled explicitly and not already accessing sample coords directly
     // (through reference or variable matrix expansion), then mark that this FP tree relies on
     // coordinates at a lower level. If the child is sampled with explicit coordinates and
@@ -488,6 +493,45 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::Compose(
             // Replace the entire composition with a constant color.
             return MakeColor(knownColor);
     }
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::DestColor() {
+    class DestColorProcessor : public GrFragmentProcessor {
+    public:
+        static std::unique_ptr<GrFragmentProcessor> Make() {
+            return std::unique_ptr<GrFragmentProcessor>(new DestColorProcessor());
+        }
+
+        std::unique_ptr<GrFragmentProcessor> clone() const override { return Make(); }
+
+        const char* name() const override { return "DestColor"; }
+
+    private:
+        std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override {
+            class GLFP : public GrGLSLFragmentProcessor {
+            public:
+                void emitCode(EmitArgs& args) override {
+                    const char* destColor = args.fFragBuilder->dstColor();
+                    args.fFragBuilder->codeAppendf("return %s;", destColor);
+                }
+            };
+            return std::make_unique<GLFP>();
+        }
+
+        DestColorProcessor() : INHERITED(kDestColorProcessor_ClassID, kNone_OptimizationFlags) {
+            fFlags |= kWillReadDstColor_Flag;
+        }
+
+        void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
+
+        bool onIsEqual(const GrFragmentProcessor&) const override { return true; }
+
+        using INHERITED = GrFragmentProcessor;
+    };
+
+    return DestColorProcessor::Make();
 }
 
 //////////////////////////////////////////////////////////////////////////////

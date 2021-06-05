@@ -112,6 +112,12 @@ public:
                                                         std::unique_ptr<GrFragmentProcessor> g);
 
     /**
+     * Returns a fragment processor that reads back the destination color; that is, sampling will
+     * return the color of the sample that is currently being painted over.
+     */
+    static std::unique_ptr<GrFragmentProcessor> DestColor();
+
+    /**
      * Makes a copy of this fragment processor that draws equivalently to the original.
      * If the processor has child processors they are cloned as well.
      */
@@ -167,6 +173,11 @@ public:
         return (SkToBool(fFlags & kUsesSampleCoordsDirectly_Flag) ||
                 SkToBool(fFlags & kUsesSampleCoordsIndirectly_Flag)) &&
                !SkToBool(fFlags & kSampledWithExplicitCoords_Flag);
+    }
+
+    /** Do any of the FPs in this tree read back the color from the destination surface? */
+    bool willReadDstColor() const {
+        return SkToBool(fFlags & kWillReadDstColor_Flag);
     }
 
    /**
@@ -415,7 +426,7 @@ private:
     enum PrivateFlags {
         kFirstPrivateFlag = kAll_OptimizationFlags + 1,
 
-        // Propagate up the FP tree to the root
+        // Propagates up the FP tree to the root
         kUsesSampleCoordsIndirectly_Flag = kFirstPrivateFlag,
 
         // Does not propagate at all
@@ -424,6 +435,9 @@ private:
         // Propagates down the FP to all its leaves
         kSampledWithExplicitCoords_Flag = kFirstPrivateFlag << 2,
         kNetTransformHasPerspective_Flag = kFirstPrivateFlag << 3,
+
+        // Propagates up the FP tree to the root
+        kWillReadDstColor_Flag = kFirstPrivateFlag << 4,
     };
     void addAndPushFlagToChildren(PrivateFlags flag);
 

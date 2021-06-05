@@ -30,7 +30,7 @@
 
 #if SK_SUPPORT_GPU
 
-SkSurface_Gpu::SkSurface_Gpu(sk_sp<SkGpuDevice> device)
+SkSurface_Gpu::SkSurface_Gpu(sk_sp<SkBaseGpuDevice> device)
     : INHERITED(device->width(), device->height(), &device->surfaceProps())
     , fDevice(std::move(device)) {
     SkASSERT(fDevice->targetProxy()->priv().isExact());
@@ -70,8 +70,7 @@ static GrRenderTarget* prepare_rt_for_external_access(SkSurface_Gpu* surface,
     dContext->priv().flushSurface(surface->getDevice()->targetProxy());
 
     // Grab the render target *after* firing notifications, as it may get switched if CoW kicks in.
-    GrSurfaceDrawContext* sdc = surface->getDevice()->surfaceDrawContext();
-    return sdc->accessRenderTarget();
+    return surface->getDevice()->targetProxy()->peekRenderTarget();
 }
 
 GrBackendTexture SkSurface_Gpu::onGetBackendTexture(BackendHandleAccess access) {
@@ -159,14 +158,12 @@ void SkSurface_Gpu::onAsyncRescaleAndReadPixels(const SkImageInfo& info,
                                                 RescaleMode rescaleMode,
                                                 ReadPixelsCallback callback,
                                                 ReadPixelsContext context) {
-    auto* sdc = this->fDevice->surfaceDrawContext();
-    // Context TODO: Elevate direct context requirement to public API.
-    auto dContext = sdc->recordingContext()->asDirectContext();
-    if (!dContext) {
-        return;
-    }
-    sdc->asyncRescaleAndReadPixels(dContext, info, srcRect, rescaleGamma, rescaleMode, callback,
-                                   context);
+    fDevice->asyncRescaleAndReadPixels(info,
+                                       srcRect,
+                                       rescaleGamma,
+                                       rescaleMode,
+                                       callback,
+                                       context);
 }
 
 void SkSurface_Gpu::onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSpace,
@@ -177,21 +174,14 @@ void SkSurface_Gpu::onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSp
                                                       RescaleMode rescaleMode,
                                                       ReadPixelsCallback callback,
                                                       ReadPixelsContext context) {
-    auto* sdc = this->fDevice->surfaceDrawContext();
-    // Context TODO: Elevate direct context requirement to public API.
-    auto dContext = sdc->recordingContext()->asDirectContext();
-    if (!dContext) {
-        return;
-    }
-    sdc->asyncRescaleAndReadPixelsYUV420(dContext,
-                                         yuvColorSpace,
-                                         std::move(dstColorSpace),
-                                         srcRect,
-                                         dstSize,
-                                         rescaleGamma,
-                                         rescaleMode,
-                                         callback,
-                                         context);
+    fDevice->asyncRescaleAndReadPixelsYUV420(yuvColorSpace,
+                                             std::move(dstColorSpace),
+                                             srcRect,
+                                             dstSize,
+                                             rescaleGamma,
+                                             rescaleMode,
+                                             callback,
+                                             context);
 }
 
 // Create a new render target and, if necessary, copy the contents of the old
@@ -212,7 +202,7 @@ void SkSurface_Gpu::onCopyOnWrite(ContentChangeMode mode) {
     }
 }
 
-void SkSurface_Gpu::onDiscard() { fDevice->surfaceDrawContext()->discard(); }
+void SkSurface_Gpu::onDiscard() { fDevice->discard(); }
 
 GrSemaphoresSubmitted SkSurface_Gpu::onFlush(BackendSurfaceAccess access, const GrFlushInfo& info,
                                              const GrBackendSurfaceMutableState* newState) {
@@ -473,10 +463,10 @@ sk_sp<SkSurface> SkSurface::MakeRenderTarget(GrRecordingContext* rContext, SkBud
         mipMapped = GrMipmapped::kNo;
     }
 
-    sk_sp<SkGpuDevice> device(SkGpuDevice::Make(rContext, budgeted, info, SkBackingFit::kExact,
-                                                sampleCount, mipMapped, GrProtected::kNo, origin,
-                                                SkSurfacePropsCopyOrDefault(props),
-                                                SkBaseGpuDevice::kClear_InitContents));
+    sk_sp<SkBaseGpuDevice> device(SkGpuDevice::Make(rContext, budgeted, info, SkBackingFit::kExact,
+                                                    sampleCount, mipMapped, GrProtected::kNo,
+                                                    origin, SkSurfacePropsCopyOrDefault(props),
+                                                    SkBaseGpuDevice::kClear_InitContents));
     if (!device) {
         return nullptr;
     }
