@@ -215,6 +215,7 @@ bool GrGLSLProgramBuilder::emitAndInstallDstTexture() {
 
     const GrSurfaceProxyView& dstView = this->pipeline().dstProxyView();
     if (this->pipeline().usesDstTexture()) {
+        // Set up a sampler handle for the destination texture.
         GrTextureProxy* dstTextureProxy = dstView.asTextureProxy();
         SkASSERT(dstTextureProxy);
         const GrSwizzle& swizzle = dstView.swizzle();
@@ -225,13 +226,47 @@ bool GrGLSLProgramBuilder::emitAndInstallDstTexture() {
         }
         fDstTextureOrigin = dstView.origin();
         SkASSERT(dstTextureProxy->textureType() != GrTextureType::kExternal);
+
+        // Declare a _dstColor global variable which samples from the dest-texture sampler at the
+        // top of the fragment shader.
+        const char* dstTextureCoordsName;
+        fUniformHandles.fDstTextureCoordsUni = this->uniformHandler()->addUniform(
+                /*owner=*/nullptr,
+                kFragment_GrShaderFlag,
+                kHalf4_GrSLType,
+                "DstTextureCoords",
+                &dstTextureCoordsName);
+        fFS.codeAppend("// Read color from copy of the destination\n");
+        fFS.codeAppendf("half2 _dstTexCoord = (half2(sk_FragCoord.xy) - %s.xy) * %s.zw;\n",
+                        dstTextureCoordsName, dstTextureCoordsName);
+        if (fDstTextureOrigin == kBottomLeft_GrSurfaceOrigin) {
+            fFS.codeAppend("_dstTexCoord.y = 1.0 - _dstTexCoord.y;\n");
+        }
+        const char* dstColor = fFS.dstColor();
+        SkString dstColorDecl = SkStringPrintf("half4 %s;", dstColor);
+        fFS.definitionAppend(dstColorDecl.c_str());
+        fFS.codeAppendf("%s = ", dstColor);
+        fFS.appendTextureLookup(fDstTextureSamplerHandle, "_dstTexCoord");
+        fFS.codeAppend(";\n");
     } else if (this->pipeline().usesInputAttachment()) {
+        // Set up an input attachment for the destination texture.
         const GrSwizzle& swizzle = dstView.swizzle();
         fDstTextureSamplerHandle = this->emitInputSampler(swizzle, "DstTextureInput");
         if (!fDstTextureSamplerHandle.isValid()) {
             return false;
         }
+
+        // Populate the _dstColor variable by loading from the input attachment at the top of the
+        // fragment shader.
+        fFS.codeAppend("// Read color from input attachment\n");
+        const char* dstColor = fFS.dstColor();
+        SkString dstColorDecl = SkStringPrintf("half4 %s;", dstColor);
+        fFS.definitionAppend(dstColorDecl.c_str());
+        fFS.codeAppendf("%s = ", dstColor);
+        fFS.appendInputLoad(fDstTextureSamplerHandle);
+        fFS.codeAppend(";\n");
     }
+
     return true;
 }
 
@@ -309,7 +344,7 @@ void GrGLSLProgramBuilder::verify(const GrGeometryProcessor& geomProc) {
 }
 
 void GrGLSLProgramBuilder::verify(const GrFragmentProcessor& fp) {
-    SkASSERT(!fFS.fHasReadDstColorThisStage_DebugOnly);
+    SkASSERT(fp.willReadDstColor() == fFS.fHasReadDstColorThisStage_DebugOnly);
     SkASSERT(fFS.fUsedProcessorFeaturesThisStage_DebugOnly == fp.requestedFeatures());
 }
 
