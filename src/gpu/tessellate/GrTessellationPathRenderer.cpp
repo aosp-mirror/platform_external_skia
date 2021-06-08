@@ -19,7 +19,7 @@
 #include "src/gpu/ops/GrFillRectOp.h"
 #include "src/gpu/tessellate/GrDrawAtlasPathOp.h"
 #include "src/gpu/tessellate/GrPathInnerTriangulateOp.h"
-#include "src/gpu/tessellate/GrPathStencilFillOp.h"
+#include "src/gpu/tessellate/GrPathStencilCoverOp.h"
 #include "src/gpu/tessellate/GrStrokeTessellateOp.h"
 
 constexpr static SkISize kAtlasInitialSize{512, 512};
@@ -82,7 +82,7 @@ GrPathRenderer::CanDrawPath GrTessellationPathRenderer::onCanDrawPath(
 }
 
 static GrOp::Owner make_op(GrRecordingContext* rContext, const GrSurfaceContext* surfaceContext,
-                           GrTessellationPathRenderer::OpFlags opFlags, GrAAType aaType,
+                           GrTessellationPathRenderer::PathFlags pathFlags, GrAAType aaType,
                            const SkRect& shapeDevBounds, const SkMatrix& viewMatrix,
                            const GrStyledShape& shape, GrPaint&& paint) {
     constexpr static auto kLinearizationPrecision =
@@ -157,12 +157,12 @@ static GrOp::Owner make_op(GrRecordingContext* rContext, const GrSurfaceContext*
             constexpr static float kMinNumPixelsToTriangulate = 256 * 256;
             if (cpuTessellationWork * kCpuWeight + kMinNumPixelsToTriangulate < gpuFragmentWork) {
                 return GrOp::Make<GrPathInnerTriangulateOp>(rContext, viewMatrix, path,
-                                                            std::move(paint), aaType, opFlags,
+                                                            std::move(paint), aaType, pathFlags,
                                                             devBounds);
             }
         }
-        return GrOp::Make<GrPathStencilFillOp>(rContext, viewMatrix, path, std::move(paint), aaType,
-                                               opFlags, devBounds);
+        return GrOp::Make<GrPathStencilCoverOp>(rContext, viewMatrix, path, std::move(paint),
+                                                aaType, pathFlags, devBounds);
     }
 }
 
@@ -193,7 +193,7 @@ bool GrTessellationPathRenderer::onDrawPath(const DrawPathArgs& args) {
         return true;
     }
 
-    if (auto op = make_op(args.fContext, surfaceDrawContext, OpFlags::kNone, args.fAAType,
+    if (auto op = make_op(args.fContext, surfaceDrawContext, PathFlags::kNone, args.fAAType,
                           devBounds, *args.fViewMatrix, *args.fShape, std::move(args.fPaint))) {
         surfaceDrawContext->addDrawOp(args.fClip, std::move(op));
     }
@@ -265,7 +265,7 @@ void GrTessellationPathRenderer::onStencilPath(const StencilPathArgs& args) {
     GrAAType aaType = (GrAA::kYes == args.fDoStencilMSAA) ? GrAAType::kMSAA : GrAAType::kNone;
     SkRect devBounds;
     args.fViewMatrix->mapRect(&devBounds, args.fShape->bounds());
-    if (auto op = make_op(args.fContext, surfaceDrawContext, OpFlags::kStencilOnly, aaType,
+    if (auto op = make_op(args.fContext, surfaceDrawContext, PathFlags::kStencilOnly, aaType,
                           devBounds, *args.fViewMatrix, *args.fShape, GrPaint())) {
         surfaceDrawContext->addDrawOp(args.fClip, std::move(op));
     }
@@ -317,10 +317,9 @@ void GrTessellationPathRenderer::renderAtlas(GrOnFlushResourceProvider* onFlushR
             }
             uberPath->setFillType(fillType);
             GrAAType aaType = (antialias) ? GrAAType::kMSAA : GrAAType::kNone;
-            auto op = GrOp::Make<GrPathStencilFillOp>(onFlushRP->recordingContext(), SkMatrix::I(),
-                                                      *uberPath, GrPaint(), aaType,
-                                                      OpFlags::kStencilOnly |
-                                                      OpFlags::kPreferWedges, atlasRect);
+            auto op = GrOp::Make<GrPathStencilCoverOp>(onFlushRP->recordingContext(), SkMatrix::I(),
+                                                       *uberPath, GrPaint(), aaType,
+                                                       PathFlags::kStencilOnly, atlasRect);
             rtc->addDrawOp(nullptr, std::move(op));
         }
     }

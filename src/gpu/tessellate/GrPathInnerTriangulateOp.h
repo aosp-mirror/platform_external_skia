@@ -15,7 +15,7 @@
 
 class GrPathTessellator;
 
-// This op is a 3-pass twist on the standard Redbook "stencil then fill" algorithm:
+// This op is a 3-pass twist on the standard Redbook "stencil then cover" algorithm:
 //
 // 1) Tessellate the path's outer curves into the stencil buffer.
 // 2) Triangulate the path's inner fan and fill it with a stencil test against the curves.
@@ -28,10 +28,10 @@ private:
     DEFINE_OP_CLASS_ID
 
     GrPathInnerTriangulateOp(const SkMatrix& viewMatrix, const SkPath& path, GrPaint&& paint,
-                       GrAAType aaType, GrTessellationPathRenderer::OpFlags opFlags,
+                       GrAAType aaType, GrTessellationPathRenderer::PathFlags pathFlags,
                        const SkRect& devBounds)
             : GrDrawOp(ClassID())
-            , fOpFlags(opFlags)
+            , fPathFlags(pathFlags)
             , fViewMatrix(viewMatrix)
             , fPath(path)
             , fAAType(aaType)
@@ -56,7 +56,7 @@ private:
     void onPrepare(GrOpFlushState*) override;
     void onExecute(GrOpFlushState*, const SkRect& chainBounds) override;
 
-    const GrTessellationPathRenderer::OpFlags fOpFlags;
+    const GrTessellationPathRenderer::PathFlags fPathFlags;
     const SkMatrix fViewMatrix;
     const SkPath fPath;
     const GrAAType fAAType;
@@ -82,7 +82,7 @@ private:
     SkSTArray<2, const GrProgramInfo*> fFanPrograms;
 
     // Pass 3: Draw convex hulls around each curve.
-    const GrProgramInfo* fFillHullsProgram = nullptr;
+    const GrProgramInfo* fCoverHullsProgram = nullptr;
 
     // This buffer gets created by fFanTriangulator during onPrepare.
     sk_sp<const GrBuffer> fFanBuffer;
