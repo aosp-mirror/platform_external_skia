@@ -2577,6 +2577,7 @@ cc_test {
         "tests/CopySurfaceTest.cpp",
         "tests/CubicMapTest.cpp",
         "tests/CullTestTest.cpp",
+        "tests/DMSAATest.cpp",
         "tests/DSLFPTest.cpp",
         "tests/DashPathEffectTest.cpp",
         "tests/DataRefTest.cpp",

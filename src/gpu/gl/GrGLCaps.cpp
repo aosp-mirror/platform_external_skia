@@ -58,6 +58,7 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fNeverDisableColorWrites = false;
     fMustSetAnyTexParameterToEnableMipmapping = false;
     fAllowBGRA8CopyTexSubImage = false;
+    fDisallowDynamicMSAA = false;
     fProgramBinarySupport = false;
     fProgramParameterSupport = false;
     fSamplerObjectSupport = false;
@@ -3496,6 +3497,12 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         fAllowBGRA8CopyTexSubImage = true;
     }
 
+    // anglebug.com/6030
+    if (fMSFBOType == kES_EXT_MsToTexture_MSFBOType &&
+        ctxInfo.angleBackend() == GrGLANGLEBackend::kD3D11) {
+        fDisallowDynamicMSAA = true;
+    }
+
 #if defined(__has_feature)
 #if defined(SK_BUILD_FOR_MAC) && __has_feature(thread_sanitizer)
     // See skbug.com/7058
@@ -4125,9 +4132,10 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         fReuseScratchTextures = false;
     }
 
-    // skbug.com/11935. Don't reorder on these GPUs in GL.
-    if (ctxInfo.renderer() == GrGLRenderer::kAdreno620 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno640) {
+    // skbug.com/11935. Don't reorder on these GPUs in GL on old drivers.
+    if ((ctxInfo.renderer() == GrGLRenderer::kAdreno620 ||
+        ctxInfo.renderer() == GrGLRenderer::kAdreno640) &&
+        ctxInfo.driverVersion() < GR_GL_DRIVER_VER(571, 0, 0)) {
         fAvoidReorderingRenderTasks = true;
     }
 
