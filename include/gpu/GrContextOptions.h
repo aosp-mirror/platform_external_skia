@@ -268,6 +268,12 @@ struct SK_API GrContextOptions {
     bool fEnableExperimentalHardwareTessellation = false;
 
     /**
+     * Experimental: Should the Ganesh' Next Generation Architecture be used instead of the
+     * old architecture?
+     */
+    Enable fUseNGA = Enable::kDefault;
+
+    /**
      * Uses a reduced variety of shaders. May perform less optimally in steady state but can reduce
      * jank due to shader compilations.
      */
@@ -315,9 +321,9 @@ struct SK_API GrContextOptions {
     bool fRandomGLOOM = false;
 
     /**
-     * Force off support for write pixels row bytes in caps.
+     * Force off support for write/transfer pixels row bytes in caps.
      */
-    bool fDisallowWritePixelRowBytes = false;
+    bool fDisallowWriteAndTransferPixelRowBytes = false;
 
     /**
      * Include or exclude specific GPU path renderers.
