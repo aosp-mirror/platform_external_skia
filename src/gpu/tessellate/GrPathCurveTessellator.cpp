@@ -137,27 +137,18 @@ private:
 
 GrPathTessellator* GrPathCurveTessellator::Make(SkArenaAlloc* arena, const SkMatrix& viewMatrix,
                                                 const SkPMColor4f& color, DrawInnerFan drawInnerFan,
-                                                int numPathVerbs, const GrCaps& caps) {
-    if (caps.shaderCaps()->tessellationSupport() &&
-        numPathVerbs >= caps.minPathVerbsForHwTessellation()) {
-        return Make(arena, viewMatrix, color, drawInnerFan, ShaderType::kHardwareTessellation);
-    } else {
-        return Make(arena, viewMatrix, color, drawInnerFan, ShaderType::kFixedCountMiddleOut);
-    }
-}
-
-GrPathTessellator* GrPathCurveTessellator::Make(SkArenaAlloc* arena, const SkMatrix& viewMatrix,
-                                                const SkPMColor4f& color, DrawInnerFan drawInnerFan,
-                                                ShaderType shaderType) {
+                                                int numPathVerbs, const GrPipeline& pipeline,
+                                                const GrCaps& caps) {
+    using PatchType = GrPathTessellationShader::PatchType;
     GrPathTessellationShader* shader;
-    switch (shaderType) {
-        case ShaderType::kFixedCountMiddleOut:
-            shader = GrPathTessellationShader::MakeMiddleOutInstancedShader(arena, viewMatrix,
-                                                                            color);
-            break;
-        case ShaderType::kHardwareTessellation:
-            shader = GrPathTessellationShader::MakeHardwareCurveShader(arena, viewMatrix, color);
-            break;
+    if (caps.shaderCaps()->tessellationSupport() &&
+        !pipeline.usesVaryingCoords() &&  // Our tessellation back door doesn't handle varyings.
+        numPathVerbs >= caps.minPathVerbsForHwTessellation()) {
+        shader = GrPathTessellationShader::MakeHardwareTessellationShader(arena, viewMatrix, color,
+                                                                          PatchType::kCurves);
+    } else {
+        shader = GrPathTessellationShader::MakeMiddleOutFixedCountShader(arena, viewMatrix, color,
+                                                                         PatchType::kCurves);
     }
     return arena->make([=](void* objStart) {
         return new(objStart) GrPathCurveTessellator(shader, drawInnerFan);
@@ -259,7 +250,7 @@ void GrPathCurveTessellator::prepare(GrMeshDrawOp::Target* target, const SkRect&
         // log2(n) == log16(n^4).
         int fixedResolveLevel = GrWangsFormula::nextlog16(curveWriter.numFixedSegments_pow4());
         fFixedVertexCount =
-                GrPathTessellationShader::NumTrianglesAtResolveLevel(fixedResolveLevel) * 3;
+                GrPathTessellationShader::NumCurveTrianglesAtResolveLevel(fixedResolveLevel) * 3;
     }
 }
 
