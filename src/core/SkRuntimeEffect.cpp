@@ -500,6 +500,7 @@ std::unique_ptr<SkFilterColorProgram> SkFilterColorProgram::Make(const SkRuntime
                                              /*device=*/zeroCoord,
                                              /*local=*/zeroCoord,
                                              inputColor,
+                                             inputColor,
                                              sampleChild);
 
     // Then store the result to the *third* arg ptr
@@ -649,9 +650,9 @@ public:
     }
 
     skvm::Color onProgram(skvm::Builder* p, skvm::Color c,
-                          SkColorSpace* dstCS,
+                          const SkColorInfo& dst,
                           skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const override {
-        sk_sp<SkData> inputs = get_xformed_uniforms(fEffect.get(), fUniforms, dstCS);
+        sk_sp<SkData> inputs = get_xformed_uniforms(fEffect.get(), fUniforms, dst.colorSpace());
         SkASSERT(inputs);
 
         // There should be no way for the color filter to use device coords, but we need to supply
@@ -660,7 +661,7 @@ public:
 
         auto sampleChild = [&](int ix, skvm::Coord /*coord*/, skvm::Color color) {
             if (fChildren[ix]) {
-                return as_CFB(fChildren[ix])->program(p, color, dstCS, uniforms, alloc);
+                return as_CFB(fChildren[ix])->program(p, color, dst, uniforms, alloc);
             } else {
                 return color;
             }
@@ -676,7 +677,7 @@ public:
         }
 
         return SkSL::ProgramToSkVM(*fEffect->fBaseProgram, fEffect->fMain, p, SkMakeSpan(uniform),
-                                   /*device=*/zeroCoord, /*local=*/zeroCoord, c, sampleChild);
+                                   /*device=*/zeroCoord, /*local=*/zeroCoord, c, c, sampleChild);
     }
 
     SkPMColor4f onFilterColor4f(const SkPMColor4f& color, SkColorSpace* dstCS) const override {
@@ -845,7 +846,7 @@ public:
         }
 
         return SkSL::ProgramToSkVM(*fEffect->fBaseProgram, fEffect->fMain, p, SkMakeSpan(uniform),
-                                   device, local, paint, sampleChild);
+                                   device, local, paint, paint, sampleChild);
     }
 
     void flatten(SkWriteBuffer& buffer) const override {
