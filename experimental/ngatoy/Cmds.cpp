@@ -12,19 +12,28 @@
 #include "include/effects/SkGradientShader.h"
 
 //------------------------------------------------------------------------------------------------
-RectCmd::RectCmd(int id,
-                 uint32_t paintersOrder,
+RectCmd::RectCmd(ID id,
+                 PaintersOrder paintersOrder,
                  SkIRect r,
                  const FakePaint& p,
                  sk_sp<FakeMCBlob> state)
-    : Cmd(id, p.toID(), std::move(state))
+    : Cmd(id)
     , fPaintersOrder(paintersOrder)
     , fRect(r)
-    , fPaint(p) {
+    , fPaint(p)
+    , fMCState(std::move(state)) {
+}
+
+uint32_t RectCmd::getSortZ() const {
+    return fPaintersOrder.toUInt();
+}
+
+uint32_t RectCmd::getDrawZ() const {
+    return fPaintersOrder.toUInt();
 }
 
 SortKey RectCmd::getKey() {
-    return SortKey(fPaint.isTransparent(), fMCState->id(), fPaintersOrder, fPaint.toID());
+    return SortKey(fPaint.isTransparent(), fMCState->id(), this->getSortZ(), fPaint.toID());
 }
 
 static void apply_diff(FakeCanvas* c, const FakeMCBlob& desired, const FakeMCBlob* prior) {
@@ -96,7 +105,9 @@ static bool is_opaque(SkColor c) {
     return 0xFF == SkColorGetA(c);
 }
 
-void RectCmd::rasterize(uint32_t zBuffer[256][256], SkBitmap* dstBM, unsigned int z) const {
+void RectCmd::rasterize(uint32_t zBuffer[256][256], SkBitmap* dstBM) const {
+
+    uint32_t z = this->getDrawZ();
 
     for (int y = fRect.fTop; y < fRect.fBottom; ++y) {
         for (int x = fRect.fLeft; x < fRect.fRight; ++x) {

@@ -83,15 +83,9 @@ protected:
     class GlobalStructVisitor;
     void visitGlobalStruct(GlobalStructVisitor* visitor);
 
-    void write(const char* s);
+    void write(skstd::string_view s);
 
-    void writeLine();
-
-    void writeLine(const char* s);
-
-    void write(const String& s);
-
-    void writeLine(const String& s);
+    void writeLine(skstd::string_view s = skstd::string_view());
 
     void finishLine();
 
@@ -149,7 +143,7 @@ protected:
 
     void writeVarInitializer(const Variable& var, const Expression& value);
 
-    void writeName(const String& name);
+    void writeName(skstd::string_view name);
 
     void writeVarDeclaration(const VarDeclaration& decl);
 
@@ -272,7 +266,7 @@ protected:
 
     int getUniformSet(const Modifiers& m);
 
-    std::unordered_set<String> fReservedWords;
+    std::unordered_set<skstd::string_view> fReservedWords;
     std::unordered_map<const Type::Field*, const InterfaceBlock*> fInterfaceBlockMap;
     std::unordered_map<const InterfaceBlock*, String> fInterfaceBlockNameMap;
     int fAnonInterfaceCount = 0;

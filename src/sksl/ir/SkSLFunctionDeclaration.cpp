@@ -69,10 +69,11 @@ static bool check_parameters(const Context& context,
         return type == *context.fTypes.fHalf4 || type == *context.fTypes.fFloat4;
     };
 
-    // Check modifiers on each function parameter.
+    // The first color parameter passed to main() is the input color; the second is the dest color.
     static constexpr int kBuiltinColorIDs[] = {SK_INPUT_COLOR_BUILTIN, SK_DEST_COLOR_BUILTIN};
     unsigned int builtinColorIndex = 0;
 
+    // Check modifiers on each function parameter.
     for (auto& param : parameters) {
         IRGenerator::CheckModifiers(context, param->fOffset, param->modifiers(),
                                     Modifiers::kConst_Flag | Modifiers::kIn_Flag |
@@ -98,9 +99,8 @@ static bool check_parameters(const Context& context,
             // a half4/float parameter is supposed to be the input or destination color:
             if (type == *context.fTypes.fFloat2) {
                 m.fLayout.fBuiltin = SK_MAIN_COORDS_BUILTIN;
-            } else if (typeIsValidForColor(type)) {
-                // The first color we encounter is the input color; the second is the dest color.
-                SkASSERT(builtinColorIndex < SK_ARRAY_COUNT(kBuiltinColorIDs));
+            } else if (typeIsValidForColor(type) &&
+                       builtinColorIndex < SK_ARRAY_COUNT(kBuiltinColorIDs)) {
                 m.fLayout.fBuiltin = kBuiltinColorIDs[builtinColorIndex++];
             }
             if (m.fLayout.fBuiltin) {
@@ -235,7 +235,7 @@ static bool check_main_signature(const Context& context, int offset, const Type&
  * (or null if none) on success, returns false on error.
  */
 static bool find_existing_declaration(const Context& context, SymbolTable& symbols, int offset,
-                                      StringFragment name,
+                                      skstd::string_view name,
                                       std::vector<std::unique_ptr<Variable>>& parameters,
                                       const Type* returnType, bool isBuiltin,
                                       const FunctionDeclaration** outExistingDecl) {
@@ -308,7 +308,7 @@ static bool find_existing_declaration(const Context& context, SymbolTable& symbo
 
 FunctionDeclaration::FunctionDeclaration(int offset,
                                          const Modifiers* modifiers,
-                                         StringFragment name,
+                                         skstd::string_view name,
                                          std::vector<const Variable*> parameters,
                                          const Type* returnType,
                                          bool builtin)
@@ -319,11 +319,11 @@ FunctionDeclaration::FunctionDeclaration(int offset,
         , fReturnType(returnType)
         , fBuiltin(builtin)
         , fIsMain(name == "main")
-        , fIntrinsicKind(builtin ? identify_intrinsic(name) : kNotIntrinsic) {}
+        , fIntrinsicKind(builtin ? identify_intrinsic(String(name)) : kNotIntrinsic) {}
 
 const FunctionDeclaration* FunctionDeclaration::Convert(const Context& context,
         SymbolTable& symbols, int offset, const Modifiers* modifiers,
-        StringFragment name, std::vector<std::unique_ptr<Variable>> parameters,
+        skstd::string_view name, std::vector<std::unique_ptr<Variable>> parameters,
         const Type* returnType, bool isBuiltin) {
     bool isMain = (name == "main");
 
@@ -353,10 +353,10 @@ const FunctionDeclaration* FunctionDeclaration::Convert(const Context& context,
 String FunctionDeclaration::mangledName() const {
     if ((this->isBuiltin() && !this->definition()) || this->isMain()) {
         // Builtins without a definition (like `sin` or `sqrt`) must use their real names.
-        return this->name();
+        return String(this->name());
     }
     // GLSL forbids two underscores in a row; add an extra character if necessary to avoid this.
-    const char* splitter = this->name().endsWith("_") ? "x_" : "_";
+    const char* splitter = this->name().ends_with("_") ? "x_" : "_";
     // Rename function to `funcname_returntypeparamtypes`.
     String result = this->name() + splitter + this->returnType().abbreviatedName();
     for (const Variable* p : this->parameters()) {
