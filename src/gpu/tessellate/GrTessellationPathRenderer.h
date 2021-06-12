@@ -22,17 +22,6 @@ public:
     // Don't allow linearized segments to be off by more than 1/4th of a pixel from the true curve.
     constexpr static float kLinearizationPrecision = 4;
 
-    // This is the maximum resolve level supported by our internal indirect draw shaders. (Indirect
-    // draws are an alternative to hardware tessellation, and we can use them when hardware support
-    // is lacking.)
-    //
-    // At a given resolveLevel, a curve gets linearized into 2^resolveLevel line segments. So the
-    // finest resolveLevel supported by our indirect draw shaders is 2^10 == 1024 line segments.
-    //
-    // 1024 line segments is enough resolution (with precision == 4) to guarantee we can render a
-    // 123575px x 123575px path. (See GrWangsFormula::worst_case_cubic.)
-    constexpr static int kMaxResolveLevel = 10;
-
     // We send these flags to the internal path filling Ops to control how a path gets rendered.
     enum class PathFlags {
         kNone = 0,
@@ -44,13 +33,13 @@ public:
 
     GrTessellationPathRenderer(GrRecordingContext*);
     const char* name() const final { return "GrTessellationPathRenderer"; }
-    StencilSupport onGetStencilSupport(const GrStyledShape& shape) const override {
-        // TODO: Single-pass (e.g., convex) paths can have full support.
-        return kStencilOnly_StencilSupport;
-    }
+
+    StencilSupport onGetStencilSupport(const GrStyledShape&) const override;
     CanDrawPath onCanDrawPath(const CanDrawPathArgs&) const override;
+
     bool onDrawPath(const DrawPathArgs&) override;
     void onStencilPath(const StencilPathArgs&) override;
+
     void preFlush(GrOnFlushResourceProvider*, SkSpan<const uint32_t> taskIDs) override;
 
 private:
@@ -59,9 +48,11 @@ private:
         idx |= (int)fillType & 1;
         return &fAtlasUberPaths[idx];
     }
-    // Allocates space in fAtlas if the path is small and simple enough, and if there is room.
-    bool tryAddPathToAtlas(const GrCaps&, const SkMatrix&, const GrStyledShape&,
-                           const SkRect& devBounds, GrAAType, SkIRect* devIBounds,
+    // Adds the filled path to fAtlas if the path is small enough, and if the atlas isn't full.
+    // Currently, "small enough" means 128*128 total pixels or less, and no larger than half the
+    // atlas size in either dimension.
+    bool tryAddPathToAtlas(const GrCaps&, const SkMatrix&, const SkPath&,
+                           const SkRect& pathDevBounds, GrAAType, SkIRect* devIBounds,
                            SkIPoint16* locationInAtlas, bool* transposedInAtlas);
     void renderAtlas(GrOnFlushResourceProvider*);
 

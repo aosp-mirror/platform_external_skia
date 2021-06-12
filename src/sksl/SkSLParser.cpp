@@ -263,8 +263,8 @@ bool Parser::expectIdentifier(Token* result) {
     return true;
 }
 
-StringFragment Parser::text(Token token) {
-    return StringFragment(fText.begin() + token.fOffset, token.fLength);
+skstd::string_view Parser::text(Token token) {
+    return skstd::string_view(fText.begin() + token.fOffset, token.fLength);
 }
 
 void Parser::error(Token token, String msg) {
@@ -275,7 +275,7 @@ void Parser::error(int offset, String msg) {
     fErrors.error(offset, msg);
 }
 
-bool Parser::isType(StringFragment name) {
+bool Parser::isType(skstd::string_view name) {
     const Symbol* s = fSymbols[name];
     return s && s->is<Type>();
 }
@@ -293,7 +293,7 @@ ASTNode::ID Parser::directive() {
     if (!this->expect(Token::Kind::TK_DIRECTIVE, "a directive", &start)) {
         return ASTNode::ID::Invalid();
     }
-    StringFragment text = this->text(start);
+    skstd::string_view text = this->text(start);
     if (text == "#extension") {
         Token name;
         if (!this->expectIdentifier(&name)) {
@@ -320,7 +320,7 @@ ASTNode::ID Parser::section() {
     if (!this->expect(Token::Kind::TK_SECTION, "a section token", &start)) {
         return ASTNode::ID::Invalid();
     }
-    StringFragment argument;
+    skstd::string_view argument;
     if (this->peek().fKind == Token::Kind::TK_LPAREN) {
         this->nextToken();
         Token argToken;
@@ -335,14 +335,14 @@ ASTNode::ID Parser::section() {
     if (!this->expect(Token::Kind::TK_LBRACE, "'{'")) {
         return ASTNode::ID::Invalid();
     }
-    StringFragment text;
     Token codeStart = this->nextRawToken();
     size_t startOffset = codeStart.fOffset;
     this->pushback(codeStart);
-    text.fChars = fText.begin() + startOffset;
     int level = 1;
-    for (;;) {
-        Token next = this->nextRawToken();
+    skstd::string_view text;
+    Token next;
+    while (level > 0) {
+        next = this->nextRawToken();
         switch (next.fKind) {
             case Token::Kind::TK_LBRACE:
                 ++level;
@@ -356,14 +356,10 @@ ASTNode::ID Parser::section() {
             default:
                 break;
         }
-        if (!level) {
-            text.fLength = next.fOffset - startOffset;
-            break;
-        }
     }
-    StringFragment name = this->text(start);
-    ++name.fChars;
-    --name.fLength;
+    text = skstd::string_view(fText.begin() + startOffset, next.fOffset - startOffset);
+    skstd::string_view name = this->text(start);
+    name.remove_prefix(1);
     return this->createNode(start.fOffset, ASTNode::Kind::kSection,
                             ASTNode::SectionData(name, argument, text));
 }
@@ -385,7 +381,7 @@ ASTNode::ID Parser::enumDeclaration() {
     if (!this->expect(Token::Kind::TK_LBRACE, "'{'")) {
         return ASTNode::ID::Invalid();
     }
-    fSymbols.add(Type::MakeEnumType(this->text(name)));
+    fSymbols.add(Type::MakeEnumType(String(this->text(name))));
     ASTNode::ID result = this->createNode(name.fOffset, ASTNode::Kind::kEnum, this->text(name));
     if (!this->checkNext(Token::Kind::TK_RBRACE)) {
         Token id;
@@ -587,7 +583,7 @@ ASTNode::ID Parser::structDeclaration() {
                         "modifier '" + desc + "' is not permitted on a struct field");
         }
 
-        const Symbol* symbol = fSymbols[(declsNode.begin() + 1)->getString()];
+        const Symbol* symbol = fSymbols[(declsNode.begin() + 1)->getStringView()];
         SkASSERT(symbol);
         const Type* type = &symbol->as<Type>();
         if (type->isOpaque()) {
@@ -629,7 +625,8 @@ ASTNode::ID Parser::structDeclaration() {
                     "struct '" + this->text(name) + "' must contain at least one field");
         return ASTNode::ID::Invalid();
     }
-    std::unique_ptr<Type> newType = Type::MakeStructType(name.fOffset, this->text(name), fields);
+    std::unique_ptr<Type> newType = Type::MakeStructType(name.fOffset, String(this->text(name)),
+                                                         fields);
     if (struct_is_too_deeply_nested(*newType, kMaxStructDepth)) {
         this->error(name.fOffset, "struct '" + this->text(name) + "' is too deeply nested");
         return ASTNode::ID::Invalid();
@@ -654,7 +651,7 @@ ASTNode::ID Parser::structVarDeclaration(Modifiers modifiers) {
 
 /* (LBRACKET expression? RBRACKET)* (EQ assignmentExpression)? (COMMA IDENTIFER
    (LBRACKET expression? RBRACKET)* (EQ assignmentExpression)?)* SEMICOLON */
-ASTNode::ID Parser::varDeclarationEnd(Modifiers mods, ASTNode::ID type, StringFragment name) {
+ASTNode::ID Parser::varDeclarationEnd(Modifiers mods, ASTNode::ID type, skstd::string_view name) {
     int offset = this->peek().fOffset;
     ASTNode::ID result = this->createNode(offset, ASTNode::Kind::kVarDeclarations);
     this->addChild(result, this->createNode(offset, ASTNode::Kind::kModifiers, mods));
@@ -754,7 +751,7 @@ ASTNode::ID Parser::parameter() {
         if (!this->expect(Token::Kind::TK_INT_LITERAL, "a positive integer", &sizeToken)) {
             return ASTNode::ID::Invalid();
         }
-        StringFragment arraySizeFrag = this->text(sizeToken);
+        skstd::string_view arraySizeFrag = this->text(sizeToken);
         SKSL_INT arraySize;
         if (!SkSL::stoi(arraySizeFrag, &arraySize)) {
             this->error(sizeToken, "array size is too large: " + arraySizeFrag);
@@ -779,7 +776,7 @@ int Parser::layoutInt() {
     if (!this->expect(Token::Kind::TK_INT_LITERAL, "a non-negative integer", &resultToken)) {
         return -1;
     }
-    StringFragment resultFrag = this->text(resultToken);
+    skstd::string_view resultFrag = this->text(resultToken);
     SKSL_INT resultValue;
     if (!SkSL::stoi(resultFrag, &resultValue)) {
         this->error(resultToken, "value in layout is too large: " + resultFrag);
@@ -789,27 +786,26 @@ int Parser::layoutInt() {
 }
 
 /** EQ IDENTIFIER */
-StringFragment Parser::layoutIdentifier() {
+skstd::string_view Parser::layoutIdentifier() {
     if (!this->expect(Token::Kind::TK_EQ, "'='")) {
-        return StringFragment();
+        return skstd::string_view();
     }
     Token resultToken;
     if (!this->expectIdentifier(&resultToken)) {
-        return StringFragment();
+        return skstd::string_view();
     }
     return this->text(resultToken);
 }
 
 
 /** EQ <any sequence of tokens with balanced parentheses and no top-level comma> */
-StringFragment Parser::layoutCode() {
+skstd::string_view Parser::layoutCode() {
     if (!this->expect(Token::Kind::TK_EQ, "'='")) {
         return "";
     }
     Token start = this->nextRawToken();
     this->pushback(start);
-    StringFragment code;
-    code.fChars = fText.begin() + start.fOffset;
+    skstd::string_view code;
     int level = 1;
     bool done = false;
     while (!done) {
@@ -836,7 +832,7 @@ StringFragment Parser::layoutCode() {
             done = true;
         }
         if (done) {
-            code.fLength = next.fOffset - start.fOffset;
+            code = skstd::string_view(fText.begin() + start.fOffset, next.fOffset - start.fOffset);
             this->pushback(std::move(next));
         }
     }
@@ -846,7 +842,7 @@ StringFragment Parser::layoutCode() {
 Layout::CType Parser::layoutCType() {
     if (this->expect(Token::Kind::TK_EQ, "'='")) {
         Token t = this->nextToken();
-        String text = this->text(t);
+        String text(this->text(t));
         auto found = layoutTokens->find(text);
         if (found != layoutTokens->end()) {
             switch (found->second) {
@@ -876,7 +872,7 @@ Layout Parser::layout() {
     Layout::Primitive primitive = Layout::kUnspecified_Primitive;
     int maxVertices = -1;
     int invocations = -1;
-    StringFragment when;
+    skstd::string_view when;
     Layout::CType ctype = Layout::CType::kDefault;
     if (this->checkNext(Token::Kind::TK_LAYOUT)) {
         if (!this->expect(Token::Kind::TK_LPAREN, "'('")) {
@@ -885,7 +881,7 @@ Layout Parser::layout() {
         }
         for (;;) {
             Token t = this->nextToken();
-            String text = this->text(t);
+            String text(this->text(t));
             auto setFlag = [&](Layout::Flag f) {
                 if (flags & f) {
                     this->error(t, "layout qualifier '" + text + "' appears more than once");
@@ -1135,7 +1131,7 @@ ASTNode::ID Parser::interfaceBlock(Modifiers mods) {
     }
     this->nextToken();
     std::vector<ASTNode> sizes;
-    StringFragment instanceName;
+    skstd::string_view instanceName;
     Token instanceNameToken;
     if (this->checkNext(Token::Kind::TK_IDENTIFIER, &instanceNameToken)) {
         id.fInstanceName = this->text(instanceNameToken);
@@ -1997,7 +1993,7 @@ ASTNode::ID Parser::suffix(ASTNode::ID base) {
         }
         case Token::Kind::TK_COLONCOLON: {
             int offset = this->peek().fOffset;
-            StringFragment text;
+            skstd::string_view text;
             if (this->identifier(&text)) {
                 ASTNode::ID result = this->createNode(offset, ASTNode::Kind::kScope,
                                                       std::move(text));
@@ -2008,7 +2004,7 @@ ASTNode::ID Parser::suffix(ASTNode::ID base) {
         }
         case Token::Kind::TK_DOT: {
             int offset = this->peek().fOffset;
-            StringFragment text;
+            skstd::string_view text;
             if (this->identifier(&text)) {
                 ASTNode::ID result = this->createNode(offset, ASTNode::Kind::kField,
                                                       std::move(text));
@@ -2020,12 +2016,11 @@ ASTNode::ID Parser::suffix(ASTNode::ID base) {
         case Token::Kind::TK_FLOAT_LITERAL: {
             // Swizzles that start with a constant number, e.g. '.000r', will be tokenized as
             // floating point literals, possibly followed by an identifier. Handle that here.
-            StringFragment field = this->text(next);
-            SkASSERT(field.fChars[0] == '.');
-            ++field.fChars;
-            --field.fLength;
-            for (size_t i = 0; i < field.fLength; ++i) {
-                if (field.fChars[i] != '0' && field.fChars[i] != '1') {
+            skstd::string_view field = this->text(next);
+            SkASSERT(field[0] == '.');
+            field.remove_prefix(1);
+            for (auto iter = field.begin(); iter != field.end(); ++iter) {
+                if (*iter != '0' && *iter != '1') {
                     this->error(next, "invalid swizzle");
                     return ASTNode::ID::Invalid();
                 }
@@ -2034,7 +2029,7 @@ ASTNode::ID Parser::suffix(ASTNode::ID base) {
             // identifiers that directly follow the float
             Token id = this->nextRawToken();
             if (id.fKind == Token::Kind::TK_IDENTIFIER) {
-                field.fLength += id.fLength;
+                field = skstd::string_view(field.data(), field.length() + id.fLength);
             } else {
                 this->pushback(id);
             }
@@ -2079,7 +2074,7 @@ ASTNode::ID Parser::term() {
     Token t = this->peek();
     switch (t.fKind) {
         case Token::Kind::TK_IDENTIFIER: {
-            StringFragment text;
+            skstd::string_view text;
             if (this->identifier(&text)) {
                 return this->createNode(t.fOffset, ASTNode::Kind::kIdentifier, std::move(text));
             }
@@ -2133,7 +2128,7 @@ bool Parser::intLiteral(SKSL_INT* dest) {
     if (!this->expect(Token::Kind::TK_INT_LITERAL, "integer literal", &t)) {
         return false;
     }
-    StringFragment s = this->text(t);
+    skstd::string_view s = this->text(t);
     if (!SkSL::stoi(s, dest)) {
         this->error(t, "integer is too large: " + s);
         return false;
@@ -2148,7 +2143,7 @@ bool Parser::floatLiteral(SKSL_FLOAT* dest) {
     if (!this->expect(Token::Kind::TK_FLOAT_LITERAL, "float literal", &t)) {
         return false;
     }
-    StringFragment s = this->text(t);
+    skstd::string_view s = this->text(t);
     if (!SkSL::stod(s, dest)) {
         this->error(t, "floating-point value is too large: " + s);
         return false;
@@ -2173,7 +2168,7 @@ bool Parser::boolLiteral(bool* dest) {
 }
 
 /* IDENTIFIER */
-bool Parser::identifier(StringFragment* dest) {
+bool Parser::identifier(skstd::string_view* dest) {
     Token t;
     if (this->expect(Token::Kind::TK_IDENTIFIER, "identifier", &t)) {
         *dest = this->text(t);

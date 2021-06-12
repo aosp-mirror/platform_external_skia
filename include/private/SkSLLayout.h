@@ -100,7 +100,7 @@ struct Layout {
 
     Layout(int flags, int location, int offset, int binding, int index, int set, int builtin,
            int inputAttachmentIndex, Primitive primitive, int maxVertices, int invocations,
-           StringFragment when, CType ctype)
+           skstd::string_view when, CType ctype)
     : fFlags(flags)
     , fLocation(location)
     , fOffset(offset)
@@ -208,7 +208,7 @@ struct Layout {
         if (fInvocations >= 0) {
             result += separator() + "invocations = " + to_string(fInvocations);
         }
-        if (fWhen.fLength) {
+        if (fWhen.length()) {
             result += separator() + "when = " + fWhen;
         }
         if (result.size() > 0) {
@@ -255,7 +255,7 @@ struct Layout {
     Primitive fPrimitive;
     int fMaxVertices;
     int fInvocations;
-    StringFragment fWhen;
+    skstd::string_view fWhen;
     CType fCType;
 };
 

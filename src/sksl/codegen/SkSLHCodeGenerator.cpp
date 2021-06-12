@@ -41,7 +41,7 @@ String HCodeGenerator::ParameterType(const Context& context, const Type& type,
     if (ctype != Layout::CType::kDefault) {
         return Layout::CTypeToStr(ctype);
     }
-    return type.name();
+    return String(type.name());
 }
 
 Layout::CType HCodeGenerator::ParameterCType(const Context& context, const Type& type,
@@ -122,7 +122,8 @@ void HCodeGenerator::writef(const char* s, ...) {
 bool HCodeGenerator::writeSection(const char* name, const char* prefix) {
     const Section* s = fSectionAndParameterHelper.getSection(name);
     if (s) {
-        this->writef("%s%.*s", prefix, (int)s->text().length(), s->text().data());
+        this->writef("%s", prefix);
+        this->writef("%.*s", (int)s->text().length(), s->text().data());
         return true;
     }
     return false;
@@ -134,7 +135,7 @@ void HCodeGenerator::writeExtraConstructorParams(const char* separator) {
     // this with something more robust if the need arises.
     const Section* section = fSectionAndParameterHelper.getSection(kConstructorParamsSection);
     if (section) {
-        StringFragment s = section->text();
+        skstd::string_view s = section->text();
         #define BUFFER_SIZE 64
         char lastIdentifier[BUFFER_SIZE];
         int lastIdentifierLength = 0;

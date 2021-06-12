@@ -24,8 +24,8 @@
 
 namespace SkSL {
 
-void GLSLCodeGenerator::write(const char* s) {
-    if (s[0] == 0) {
+void GLSLCodeGenerator::write(skstd::string_view s) {
+    if (!s.length()) {
         return;
     }
     if (fAtLineStart) {
@@ -33,37 +33,12 @@ void GLSLCodeGenerator::write(const char* s) {
             fOut->writeText("    ");
         }
     }
-    fOut->writeText(s);
+    fOut->write(s.data(), s.length());
     fAtLineStart = false;
 }
 
-void GLSLCodeGenerator::writeLine(const char* s) {
+void GLSLCodeGenerator::writeLine(skstd::string_view s) {
     this->write(s);
-    this->writeLine();
-}
-
-void GLSLCodeGenerator::write(const String& s) {
-    this->write(s.c_str());
-}
-
-void GLSLCodeGenerator::write(StringFragment s) {
-    if (!s.fLength) {
-        return;
-    }
-    if (fAtLineStart) {
-        for (int i = 0; i < fIndentation; i++) {
-            fOut->writeText("    ");
-        }
-    }
-    fOut->write(s.fChars, s.fLength);
-    fAtLineStart = false;
-}
-
-void GLSLCodeGenerator::writeLine(const String& s) {
-    this->writeLine(s.c_str());
-}
-
-void GLSLCodeGenerator::writeLine() {
     fOut->writeText(fLineEnding);
     fAtLineStart = true;
 }
@@ -74,13 +49,9 @@ void GLSLCodeGenerator::finishLine() {
     }
 }
 
-void GLSLCodeGenerator::writeExtension(const String& name) {
-    this->writeExtension(name, true);
-}
-
-void GLSLCodeGenerator::writeExtension(const String& name, bool require) {
+void GLSLCodeGenerator::writeExtension(skstd::string_view name, bool require) {
     fExtensions.writeText("#extension ");
-    fExtensions.write(name.c_str(), name.length());
+    fExtensions.write(name.data(), name.length());
     fExtensions.writeText(require ? " : require\n" : " : enable\n");
 }
 
@@ -145,14 +116,14 @@ String GLSLCodeGenerator::getTypeName(const Type& type) {
                 return "uint";
             }
             else {
-                return type.name();
+                return String(type.name());
             }
             break;
         }
         case Type::TypeKind::kEnum:
             return "int";
         default:
-            return type.name();
+            return String(type.name());
     }
 }
 
@@ -849,7 +820,7 @@ void GLSLCodeGenerator::writeFieldAccess(const FieldAccess& f) {
         this->write(".");
     }
     const Type& baseType = f.base()->type();
-    StringFragment name = baseType.fields()[f.fieldIndex()].fName;
+    skstd::string_view name = baseType.fields()[f.fieldIndex()].fName;
     if (name == "sk_Position") {
         this->write("gl_Position");
     } else if (name == "sk_PointSize") {
