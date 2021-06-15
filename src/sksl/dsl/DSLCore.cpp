@@ -53,6 +53,41 @@ void SetErrorHandler(ErrorHandler* errorHandler) {
 
 class DSLCore {
 public:
+    static std::unique_ptr<SkSL::Program> ReleaseProgram() {
+        DSLWriter& instance = DSLWriter::Instance();
+        SkSL::IRGenerator& ir = DSLWriter::IRGenerator();
+        IRGenerator::IRBundle bundle = ir.finish();
+        Pool* pool = DSLWriter::Instance().fPool.get();
+        auto result = std::make_unique<SkSL::Program>(/*source=*/nullptr,
+                                                      std::move(instance.fConfig),
+                                                      DSLWriter::Instance().fCompiler->fContext,
+                                                      std::move(bundle.fElements),
+                                                      std::move(bundle.fSharedElements),
+                                                      std::move(instance.fModifiersPool),
+                                                      std::move(bundle.fSymbolTable),
+                                                      std::move(instance.fPool),
+                                                      bundle.fInputs);
+        bool success = false;
+        if (DSLWriter::Compiler().errorCount() || DSLWriter::Instance().fEncounteredErrors) {
+            // Make sure that if we encountered any compiler errors, we reported them through the
+            // DSL error handling side of things.
+            SkASSERT(!DSLWriter::Compiler().errorCount() ||
+                     DSLWriter::Instance().fEncounteredErrors);
+            // Do not return programs that failed to compile.
+        } else if (!DSLWriter::Compiler().optimize(*result)) {
+            // Do not return programs that failed to optimize.
+        } else {
+            // We have a successful program!
+            success = true;
+        }
+        if (pool) {
+            pool->detachFromThread();
+        }
+        SkASSERT(DSLWriter::ProgramElements().empty());
+        SkASSERT(!DSLWriter::SymbolTable());
+        return success ? std::move(result) : nullptr;
+    }
+
     static DSLVar sk_FragColor() {
         return DSLVar("sk_FragColor");
     }
@@ -105,6 +140,14 @@ public:
         if (stmt) {
             DSLWriter::ProgramElements().push_back(std::make_unique<SkSL::GlobalVarDeclaration>(
                     std::move(stmt)));
+        } else if (var.fName && !strcmp(var.fName, SkSL::Compiler::FRAGCOLOR_NAME)) {
+            // sk_FragColor can end up with a null declaration despite no error occurring due to
+            // specific treatment in the compiler. Ignore the null and just grab the existing
+            // variable from the symbol table.
+            const Symbol* alreadyDeclared = (*DSLWriter::SymbolTable())[var.fName];
+            if (alreadyDeclared && alreadyDeclared->is<Variable>()) {
+                var.fVar = &alreadyDeclared->as<Variable>();
+            }
         }
     }
 
@@ -199,6 +242,10 @@ public:
                                           stmt.release(), DSLWriter::SymbolTable());
     }
 };
+
+std::unique_ptr<SkSL::Program> ReleaseProgram() {
+    return DSLCore::ReleaseProgram();
+}
 
 DSLVar sk_FragColor() {
     return DSLCore::sk_FragColor();
