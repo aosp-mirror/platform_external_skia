@@ -5,20 +5,14 @@
  * found in the LICENSE file.
  */
 
-in half3x3 gradientMatrix;
-
-@coordTransform {
-    gradientMatrix
-}
-
-void main() {
-    half t = half(length(sk_TransformedCoords2D[0]));
-    sk_OutColor = half4(t, 1, 0, 0); // y = 1 for always valid
+half4 main(float2 coord) {
+    return half4(half(length(coord)), 1, 0, 0); // y = 1 for always valid
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
 @header {
+    #include "src/gpu/effects/GrMatrixEffect.h"
     #include "src/gpu/gradients/GrGradientShader.h"
     #include "src/shaders/gradients/SkRadialGradient.h"
 }
@@ -37,11 +31,12 @@ void main() {
     std::unique_ptr<GrFragmentProcessor> GrRadialGradientLayout::Make(
             const SkRadialGradient& grad, const GrFPArgs& args) {
         SkMatrix matrix;
-        if (!grad.totalLocalMatrix(args.fPreLocalMatrix, args.fPostLocalMatrix)->invert(&matrix)) {
+        if (!grad.totalLocalMatrix(args.fPreLocalMatrix)->invert(&matrix)) {
             return nullptr;
         }
         matrix.postConcat(grad.getGradientMatrix());
-        return std::unique_ptr<GrFragmentProcessor>(new GrRadialGradientLayout(matrix));
+        return GrMatrixEffect::Make(
+                matrix, std::unique_ptr<GrFragmentProcessor>(new GrRadialGradientLayout()));
     }
 }
 
@@ -53,8 +48,9 @@ void main() {
     GrTest::TestAsFPArgs asFPArgs(d);
     do {
         GrGradientShader::RandomParams params(d->fRandom);
-        SkPoint center = {d->fRandom->nextRangeScalar(0.0f, scale),
-                          d->fRandom->nextRangeScalar(0.0f, scale)};
+        SkPoint center;
+        center.fX = d->fRandom->nextRangeScalar(0.0f, scale);
+        center.fY = d->fRandom->nextRangeScalar(0.0f, scale);
         SkScalar radius = d->fRandom->nextRangeScalar(0.0f, scale);
         sk_sp<SkShader> shader = params.fUseColors4f
                          ? SkGradientShader::MakeRadial(center, radius, params.fColors4f,

@@ -42,12 +42,15 @@ private:
     SkMatrix    fMatrix, fInverse;
     bool        fMatrixIsInvertible;
 
+    // For simplicity, assume fast bounds cannot be computed
+    bool computeFastBounds(SkRect*) const override { return false; }
+
     // illegal
     Sk2DPathEffect(const Sk2DPathEffect&);
     Sk2DPathEffect& operator=(const Sk2DPathEffect&);
 
     friend class Sk2DPathEffectBlitter;
-    typedef SkPathEffect INHERITED;
+    using INHERITED = SkPathEffect;
 };
 
 class SK_API SkLine2DPathEffect : public Sk2DPathEffect {
@@ -75,7 +78,7 @@ private:
 
     SkScalar fWidth;
 
-    typedef Sk2DPathEffect INHERITED;
+    using INHERITED = Sk2DPathEffect;
 };
 
 class SK_API SkPath2DPathEffect : public Sk2DPathEffect {
@@ -99,7 +102,7 @@ private:
 
     SkPath  fPath;
 
-    typedef Sk2DPathEffect INHERITED;
+    using INHERITED = Sk2DPathEffect;
 };
 
 #endif
