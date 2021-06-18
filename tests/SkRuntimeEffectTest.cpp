@@ -6,6 +6,7 @@
  */
 
 #include "include/core/SkBitmap.h"
+#include "include/core/SkBlender.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorFilter.h"
 #include "include/core/SkData.h"
@@ -138,7 +139,7 @@ DEF_TEST(SkRuntimeEffectForColorFilter, r) {
     test_invalid("uniform shader child;"
                  "half4 main(half4 c) { return sample(child, c); }",
                  "no match for sample(shader, half4)");
-    // Coords and color in a differet order
+    // Coords and color in a different order
     test_invalid("uniform shader child;"
                  "half4 main(half4 c) { return sample(child, c, c.rg); }",
                  "no match for sample(shader, half4, half2)");
@@ -166,6 +167,56 @@ DEF_TEST(SkRuntimeEffectForColorFilter, r) {
     test_invalid("uniform colorFilter child;"
                  "half4 main(half4 c) { return sample(child, c.rg, c); }",
                  "sample(colorFilter, half2, half4)");
+}
+
+DEF_TEST(SkRuntimeEffectForBlender, r) {
+    // Tests that the blender factory rejects or accepts certain SkSL constructs
+    auto test_valid = [r](const char* sksl) {
+        auto [effect, errorText] = SkRuntimeEffect::MakeForBlender(SkString(sksl));
+        REPORTER_ASSERT(r, effect, "%s", errorText.c_str());
+    };
+
+    auto test_invalid = [r](const char* sksl, const char* expected) {
+        auto [effect, errorText] = SkRuntimeEffect::MakeForBlender(SkString(sksl));
+        REPORTER_ASSERT(r, !effect);
+        REPORTER_ASSERT(r,
+                        errorText.contains(expected),
+                        "Expected error message to contain \"%s\". Actual message: \"%s\"",
+                        expected,
+                        errorText.c_str());
+    };
+
+    // Color filters must use the 'half4 main(half4, half4)' signature. Any mixture of
+    // float4/vec4/half4 is allowed.
+    test_valid("half4  main(half4  s, half4  d) { return s; }");
+    test_valid("float4 main(float4 s, float4 d) { return d; }");
+    test_valid("float4 main(half4  s, float4 d) { return s; }");
+    test_valid("half4  main(float4 s, half4  d) { return d; }");
+    test_valid("vec4   main(half4  s, half4  d) { return s; }");
+    test_valid("half4  main(vec4   s, vec4   d) { return d; }");
+    test_valid("vec4   main(vec4   s, vec4   d) { return s; }");
+
+    // Invalid return types
+    test_invalid("void  main(half4 s, half4 d) {}",                "'main' must return");
+    test_invalid("half3 main(half4 s, half4 d) { return s.rgb; }", "'main' must return");
+
+    // Invalid argument types (some are valid as shaders/color filters)
+    test_invalid("half4 main() { return half4(1); }",                    "'main' parameter");
+    test_invalid("half4 main(half4 c) { return c; }",                    "'main' parameter");
+    test_invalid("half4 main(float2 p) { return half4(1); }",            "'main' parameter");
+    test_invalid("half4 main(float2 p, half4 c) { return c; }",          "'main' parameter");
+    test_invalid("half4 main(float2 p, half4 a, half4 b) { return a; }", "'main' parameter");
+    test_invalid("half4 main(half4 a, half4 b, half4 c) { return a; }",  "'main' parameter");
+
+    // sk_FragCoord should not be available
+    test_invalid("half4 main(half4 s, half4 d) { return sk_FragCoord.xy01; }",
+                 "unknown identifier");
+
+    // Child shaders are currently unsupported in blends
+    test_invalid("uniform shader sh; half4 main(half4 s, half4 d) { return s; }",
+                 "'shader' is not allowed in runtime blend");
+    test_invalid("uniform shader sh; half4 main(half4 s, half4 d) { return sample(sh, s.rg); }",
+                 "unknown identifier 'sample'");
 }
 
 DEF_TEST(SkRuntimeEffectForShader, r) {
@@ -279,7 +330,7 @@ public:
 
     void test(GrColor TL, GrColor TR, GrColor BL, GrColor BR,
               PreTestFn preTestCallback = nullptr) {
-        auto shader = fBuilder->makeShader(nullptr, false);
+        auto shader = fBuilder->makeShader(/*localMatrix=*/nullptr, /*isOpaque=*/false);
         if (!shader) {
             REPORT_FAILURE(fReporter, "shader", SkString("Effect didn't produce a shader"));
             return;
@@ -449,10 +500,27 @@ DEF_TEST(SkRuntimeShaderBuilderReuse, r) {
     // Test passes if this sequence doesn't assert.  skbug.com/10667
     SkRuntimeShaderBuilder b(std::move(effect));
     b.uniform("x") = 0.0f;
-    auto shader_0 = b.makeShader(nullptr, false);
+    auto shader_0 = b.makeShader(/*localMatrix=*/nullptr, /*isOpaque=*/false);
 
     b.uniform("x") = 1.0f;
-    auto shader_1 = b.makeShader(nullptr, true);
+    auto shader_1 = b.makeShader(/*localMatrix=*/nullptr, /*isOpaque=*/true);
+}
+
+DEF_TEST(SkRuntimeBlendBuilderReuse, r) {
+    const char* kSource = R"(
+        uniform half x;
+        half4 main(half4 s, half4 d) { return half4(x); }
+    )";
+
+    sk_sp<SkRuntimeEffect> effect = SkRuntimeEffect::MakeForBlender(SkString(kSource)).effect;
+    REPORTER_ASSERT(r, effect);
+
+    // We should be able to construct multiple SkBlenders in a row without asserting.
+    SkRuntimeBlendBuilder b(std::move(effect));
+    for (float x = 0.0f; x <= 2.0f; x += 2.0f) {
+        b.uniform("x") = x;
+        sk_sp<SkBlender> blender = b.makeBlender();
+    }
 }
 
 DEF_TEST(SkRuntimeShaderBuilderSetUniforms, r) {
@@ -480,8 +548,7 @@ DEF_TEST(SkRuntimeShaderBuilderSetUniforms, r) {
     REPORTER_ASSERT(r, !b.uniform("offset").set<float>(origin, 3));
 #endif
 
-
-    auto shader = b.makeShader(nullptr, false);
+    auto shader = b.makeShader(/*localMatrix=*/nullptr, /*isOpaque=*/false);
 }
 
 DEF_TEST(SkRuntimeEffectThreaded, r) {
@@ -595,7 +662,8 @@ DEF_TEST(SkRuntimeShaderSampleCoords, r) {
         REPORTER_ASSERT(r, effect);
 
         auto child = GrFragmentProcessor::MakeColor({ 1, 1, 1, 1 });
-        auto fp = GrSkSLFP::Make(effect, "test_fp",  "child", std::move(child));
+        auto fp = GrSkSLFP::Make(effect, "test_fp", /*inputFP=*/nullptr, GrSkSLFP::OptFlags::kNone,
+                                 "child", std::move(child));
         REPORTER_ASSERT(r, fp);
 
         REPORTER_ASSERT(r, fp->childProcessor(0)->isSampledWithExplicitCoords() == expectExplicit);
@@ -648,8 +716,9 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSkSLFP_Specialized, r, ctxInfo) {
             half4 main(float2 xy) { return color; }
         )");
         FpAndKey result;
-        result.fp = GrSkSLFP::Make(
-                std::move(effect), "color_fp", "color", GrSkSLFP::SpecializeIf(specialize, color));
+        result.fp = GrSkSLFP::Make(std::move(effect), "color_fp", /*inputFP=*/nullptr,
+                                   GrSkSLFP::OptFlags::kNone,
+                                   "color", GrSkSLFP::SpecializeIf(specialize, color));
         GrProcessorKeyBuilder builder(&result.key);
         result.fp->getGLSLProcessorKey(*ctxInfo.directContext()->priv().caps()->shaderCaps(),
                                        &builder);

@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0] - 2021-06-17
+
 ### Added
  - `Surface.makeImageFromTexture` and `Surface.makeImageFromTextureSource` as easy ways to provide
    CanvasKit with a WebGL texture and interact with WebGL texture sources (e.g. &lt;video&gt;)
@@ -18,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - `Canvaskit.Path.MakeFromCmds` no longer accepts a 2D Array. Inputs must be flattened,
    but can be an array, a TypedArray, or a MallocObj.
  - `CanvasKit.*Builder` have all been removed. Clients should use Malloc instead.
+
+### Known Bugs
+ - On legacy (non-ANGLE) SwiftShader, certain paths that require tessellation may not be drawn
+   correctly when using a WebGL-backed surface. (skbug.com/11965)
 
 ## [0.27.0] - 2021-05-20
 

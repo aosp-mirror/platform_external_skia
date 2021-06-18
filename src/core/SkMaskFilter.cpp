@@ -20,6 +20,7 @@
 
 #if SK_SUPPORT_GPU
 #include "src/gpu/GrFragmentProcessor.h"
+#include "src/gpu/GrSurfaceProxyView.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/text/GrSDFMaskFilter.h"
 #endif
@@ -366,6 +367,12 @@ void SkMaskFilterBase::computeFastBounds(const SkRect& src, SkRect* dst) const {
     } else {
         dst->set(srcM.fBounds);
     }
+}
+
+SkRect SkMaskFilter::approximateFilteredBounds(const SkRect& src) const {
+    SkRect dst;
+    as_MFB(this)->computeFastBounds(src, &dst);
+    return dst;
 }
 
 void SkMaskFilter::RegisterFlattenables() {
