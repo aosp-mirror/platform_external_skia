@@ -294,9 +294,8 @@ DEF_TEST(Flattenable_EmptyDeserialze, reporter) {
     test(SkPathEffect);
     test(SkMaskFilter);
     test(SkShaderBase); // todo: make this just be shader!
-    test(SkColorFilter);
+    test(SkColorFilterBase);
     test(SkImageFilter);
-    test(SkDrawLooper);
     #undef test
 }
 

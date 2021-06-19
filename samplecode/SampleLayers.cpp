@@ -17,7 +17,6 @@
 #include "include/core/SkTypeface.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/utils/SkCamera.h"
-#include "include/utils/SkInterpolator.h"
 #include "samplecode/Sample.h"
 #include "src/core/SkClipOpPriv.h"
 #include "src/utils/SkUTF.h"
@@ -163,7 +162,7 @@ protected:
     }
 
 private:
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
 DEF_SAMPLE( return new LayersView; )
 
@@ -190,7 +189,7 @@ protected:
     SkString name() override { return SkString("Backdrop"); }
 
     void onDrawContent(SkCanvas* canvas) override {
-        canvas->drawImage(fImage.get(), 0, 0, nullptr);
+        canvas->drawImage(fImage.get(), 0, 0);
 
         const SkScalar w = 250;
         const SkScalar h = 150;
@@ -206,7 +205,7 @@ protected:
 
         SkPaint paint;
         paint.setAlpha(0xCC);
-        canvas->saveLayer({ &bounds, &paint, fFilter.get(), nullptr, nullptr, 0 });
+        canvas->saveLayer(SkCanvas::SaveLayerRec(&bounds, &paint, fFilter.get(), 0));
 
         canvas->restore();
     }
@@ -226,6 +225,6 @@ protected:
     }
 
 private:
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
 DEF_SAMPLE( return new BackdropView; )
