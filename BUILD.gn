@@ -2252,6 +2252,7 @@ if (skia_enable_tools) {
 
   test_app("skpinfo") {
     sources = [ "tools/skpinfo.cpp" ]
+    configs = [ ":our_vulkan_headers" ]
     deps = [
       ":flags",
       ":skia",
@@ -2522,6 +2523,7 @@ if (skia_enable_tools) {
       sources = [
         "modules/androidkit/src/AndroidKit.cpp",
         "modules/androidkit/src/Canvas.cpp",
+        "modules/androidkit/src/Gradients.cpp",
         "modules/androidkit/src/Image.cpp",
         "modules/androidkit/src/ImageFilter.cpp",
         "modules/androidkit/src/Matrix.cpp",
