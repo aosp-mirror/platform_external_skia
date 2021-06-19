@@ -17,14 +17,13 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrContext.h"
 #include "include/private/GrSharedEnums.h"
 #include "include/private/GrTypesPriv.h"
+#include "src/core/SkCanvasPriv.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrPaint.h"
-#include "src/gpu/GrRenderTargetContext.h"
-#include "src/gpu/GrRenderTargetContextPriv.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/effects/GrPorterDuffXferProcessor.h"
 #include "src/gpu/effects/GrRRectEffect.h"
 #include "src/gpu/ops/GrDrawOp.h"
@@ -80,10 +79,11 @@ protected:
     SkISize onISize() override { return SkISize::Make(kImageWidth, kImageHeight); }
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
-        GrRenderTargetContext* renderTargetContext =
-            canvas->internal_private_accessTopLayerRenderTargetContext();
-        GrContext* context = canvas->getGrContext();
-        if (kEffect_Type == fType && (!renderTargetContext || !context)) {
+        GrSurfaceDrawContext* surfaceDrawContext =
+                SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
+
+        auto context = canvas->recordingContext();
+        if (kEffect_Type == fType && (!surfaceDrawContext || !context)) {
             *errorMsg = kErrorMsg_DrawSkippedGpuOnly;
             return DrawResult::kSkip;
         }
@@ -119,20 +119,20 @@ protected:
                         SkRRect rrect = fRRects[curRRect];
                         rrect.offset(SkIntToScalar(x), SkIntToScalar(y));
                         GrClipEdgeType edgeType = (GrClipEdgeType) et;
-                        const auto& caps = *renderTargetContext->caps()->shaderCaps();
-                        auto fp = GrRRectEffect::Make(edgeType, rrect, caps);
-                        if (fp) {
+                        const auto& caps = *surfaceDrawContext->caps()->shaderCaps();
+                        auto [success, fp] = GrRRectEffect::Make(/*inputFP=*/nullptr,
+                                                                 edgeType, rrect, caps);
+                        if (success) {
                             GrPaint grPaint;
                             grPaint.setXPFactory(GrPorterDuffXPFactory::Get(SkBlendMode::kSrc));
-                            grPaint.addCoverageFragmentProcessor(std::move(fp));
+                            grPaint.setCoverageFragmentProcessor(std::move(fp));
                             grPaint.setColor4f({ 0, 0, 0, 1.f });
 
                             SkRect bounds = rrect.getBounds();
                             bounds.outset(2.f, 2.f);
 
-                            renderTargetContext->priv().testingOnly_addDrawOp(
-                                    GrFillRectOp::MakeNonAARect(context, std::move(grPaint),
-                                                                SkMatrix::I(), bounds));
+                            surfaceDrawContext->addDrawOp(GrFillRectOp::MakeNonAARect(
+                                    context, std::move(grPaint), SkMatrix::I(), bounds));
                         } else {
                             drew = false;
                         }
@@ -196,7 +196,7 @@ private:
     static constexpr int kNumRRects = kNumSimpleCases + kNumComplexCases;
     SkRRect fRRects[kNumRRects];
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 // Radii for the various test cases. Order is UL, UR, LR, LL
@@ -270,4 +270,4 @@ DEF_GM( return new RRectGM(RRectGM::kAA_Clip_Type); )
 DEF_GM( return new RRectGM(RRectGM::kBW_Clip_Type); )
 DEF_GM( return new RRectGM(RRectGM::kEffect_Type); )
 
-}
+}  // namespace skiagm

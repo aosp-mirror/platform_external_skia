@@ -1,4 +1,6 @@
 // Copyright 2019 Google LLC.
+#include <memory>
+
 #include "modules/skparagraph/include/ParagraphCache.h"
 #include "modules/skparagraph/src/ParagraphImpl.h"
 
@@ -15,7 +17,11 @@ namespace {
           return a;
         }
     }
-}
+
+    bool exactlyEqual(SkScalar x, SkScalar y) {
+        return x == y || (x != x && y != y);
+    }
+}  // namespace
 
 class ParagraphCacheKey {
 public:
@@ -35,13 +41,24 @@ class ParagraphCacheValue {
 public:
     ParagraphCacheValue(const ParagraphImpl* paragraph)
         : fKey(ParagraphCacheKey(paragraph))
-        , fRuns(paragraph->fRuns) { }
+        , fRuns(paragraph->fRuns)
+        , fCodeUnitProperties(paragraph->fCodeUnitProperties)
+        , fWords(paragraph->fWords)
+        , fBidiRegions(paragraph->fBidiRegions)
+        , fUTF8IndexForUTF16Index(paragraph->fUTF8IndexForUTF16Index)
+        , fUTF16IndexForUTF8Index(paragraph->fUTF16IndexForUTF8Index) { }
 
     // Input == key
     ParagraphCacheKey fKey;
 
     // Shaped results
     SkTArray<Run, false> fRuns;
+    // ICU results
+    SkTArray<CodeUnitFlags> fCodeUnitProperties;
+    std::vector<size_t> fWords;
+    std::vector<SkUnicode::BidiRegion> fBidiRegions;
+    SkTArray<TextIndex, true> fUTF8IndexForUTF16Index;
+    SkTArray<size_t, true> fUTF16IndexForUTF8Index;
 };
 
 uint32_t ParagraphCache::KeyHash::mix(uint32_t hash, uint32_t data) const {
@@ -123,7 +140,7 @@ bool operator==(const ParagraphCacheKey& a, const ParagraphCacheKey& b) {
     }
 
     // There is no need to compare default paragraph styles - they are included into fTextStyles
-    if (!nearlyEqual(a.fParagraphStyle.getHeight(), b.fParagraphStyle.getHeight())) {
+    if (!exactlyEqual(a.fParagraphStyle.getHeight(), b.fParagraphStyle.getHeight())) {
         return false;
     }
     if (a.fParagraphStyle.getTextDirection() != b.fParagraphStyle.getTextDirection()) {
@@ -180,6 +197,7 @@ ParagraphCache::ParagraphCache()
     : fChecker([](ParagraphImpl* impl, const char*, bool){ })
     , fLRUCacheMap(kMaxEntries)
     , fCacheIsOn(true)
+    , fLastCachedValue(nullptr)
 #ifdef PARAGRAPH_CACHE_STATS
     , fTotalRequests(0)
     , fCacheMisses(0)
@@ -189,22 +207,17 @@ ParagraphCache::ParagraphCache()
 
 ParagraphCache::~ParagraphCache() { }
 
-void ParagraphCache::updateFrom(const ParagraphImpl* paragraph, Entry* entry) {
-
-    for (size_t i = 0; i < paragraph->fRuns.size(); ++i) {
-        auto& run = paragraph->fRuns[i];
-        if (run.fSpaced) {
-            entry->fValue->fRuns[i] = run;
-        }
-    }
-}
-
 void ParagraphCache::updateTo(ParagraphImpl* paragraph, const Entry* entry) {
 
     paragraph->fRuns.reset();
     paragraph->fRuns = entry->fValue->fRuns;
+    paragraph->fCodeUnitProperties = entry->fValue->fCodeUnitProperties;
+    paragraph->fWords = entry->fValue->fWords;
+    paragraph->fBidiRegions = entry->fValue->fBidiRegions;
+    paragraph->fUTF8IndexForUTF16Index = entry->fValue->fUTF8IndexForUTF16Index;
+    paragraph->fUTF16IndexForUTF8Index = entry->fValue->fUTF16IndexForUTF8Index;
     for (auto& run : paragraph->fRuns) {
-        run.setMaster(paragraph);
+      run.setOwner(paragraph);
     }
 }
 
@@ -219,10 +232,6 @@ void ParagraphCache::printStatistics() {
 }
 
 void ParagraphCache::abandon() {
-    SkAutoMutexExclusive lock(fParagraphMutex);
-    fLRUCacheMap.foreach([](ParagraphCacheKey*, std::unique_ptr<Entry>* e) {
-    });
-
     this->reset();
 }
 
@@ -234,6 +243,7 @@ void ParagraphCache::reset() {
     fHashMisses = 0;
 #endif
     fLRUCacheMap.reset();
+    fLastCachedValue = nullptr;
 }
 
 bool ParagraphCache::findParagraph(ParagraphImpl* paragraph) {
@@ -268,18 +278,53 @@ bool ParagraphCache::updateParagraph(ParagraphImpl* paragraph) {
     ++fTotalRequests;
 #endif
     SkAutoMutexExclusive lock(fParagraphMutex);
+
     ParagraphCacheKey key(paragraph);
     std::unique_ptr<Entry>* entry = fLRUCacheMap.find(key);
     if (!entry) {
+        // isTooMuchMemoryWasted(paragraph) not needed for now
+        if (isPossiblyTextEditing(paragraph)) {
+            // Skip this paragraph
+            return false;
+        }
         ParagraphCacheValue* value = new ParagraphCacheValue(paragraph);
-        fLRUCacheMap.insert(key, std::unique_ptr<Entry>(new Entry(value)));
+        fLRUCacheMap.insert(key, std::make_unique<Entry>(value));
         fChecker(paragraph, "addedParagraph", true);
+        fLastCachedValue = value;
         return true;
     } else {
-        updateFrom(paragraph, entry->get());
-        fChecker(paragraph, "updatedParagraph", true);
+        // We do not have to update the paragraph
         return false;
     }
 }
+
+// Special situation: (very) long paragraph that is close to the last formatted paragraph
+#define NOCACHE_PREFIX_LENGTH 40
+bool ParagraphCache::isPossiblyTextEditing(ParagraphImpl* paragraph) {
+    if (fLastCachedValue == nullptr) {
+        return false;
+    }
+
+    auto& lastText = fLastCachedValue->fKey.fText;
+    auto& text = paragraph->fText;
+
+    if ((lastText.size() < NOCACHE_PREFIX_LENGTH) || (text.size() < NOCACHE_PREFIX_LENGTH)) {
+        // Either last text or the current are too short
+        return false;
+    }
+
+    if (std::strncmp(lastText.c_str(), text.c_str(), NOCACHE_PREFIX_LENGTH) == 0) {
+        // Texts have the same starts
+        return true;
+    }
+
+    if (std::strncmp(&lastText[lastText.size() - NOCACHE_PREFIX_LENGTH], &text[text.size() - NOCACHE_PREFIX_LENGTH], NOCACHE_PREFIX_LENGTH) == 0) {
+        // Texts have the same ends
+        return true;
+    }
+
+    // It does not look like editing the text
+    return false;
 }
-}
+}  // namespace textlayout
+}  // namespace skia
