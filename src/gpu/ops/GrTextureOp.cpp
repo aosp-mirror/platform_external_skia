@@ -30,7 +30,6 @@
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrBlendFragmentProcessor.h"
-#include "src/gpu/effects/generated/GrClampFragmentProcessor.h"
 #include "src/gpu/geometry/GrQuad.h"
 #include "src/gpu/geometry/GrQuadBuffer.h"
 #include "src/gpu/geometry/GrQuadUtils.h"
@@ -866,7 +865,7 @@ private:
     }
 
     // onPrePrepareDraws may or may not have been called at this point
-    void onPrepareDraws(Target* target) override {
+    void onPrepareDraws(GrMeshDrawTarget* target) override {
         TRACE_EVENT0("skia.gpu", TRACE_FUNC);
 
         SkDEBUGCODE(this->validate();)
@@ -1168,7 +1167,7 @@ GrOp::Owner GrTextureOp::Make(GrRecordingContext* context,
         fp = GrColorSpaceXformEffect::Make(std::move(fp), std::move(textureXform));
         fp = GrBlendFragmentProcessor::Make(std::move(fp), nullptr, SkBlendMode::kModulate);
         if (saturate == GrTextureOp::Saturate::kYes) {
-            fp = GrClampFragmentProcessor::Make(std::move(fp), /*clampToPremul=*/false);
+            fp = GrFragmentProcessor::ClampOutput(std::move(fp));
         }
         paint.setColorFragmentProcessor(std::move(fp));
         return GrFillRectOp::Make(context, std::move(paint), aaType, quad);

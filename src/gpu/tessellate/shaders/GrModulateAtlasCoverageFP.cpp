@@ -54,13 +54,14 @@ std::unique_ptr<GrGLSLFragmentProcessor> GrModulateAtlasCoverageFP::onMakeProgra
             SkString atlasCoverage = this->invokeChild(1, args, "sk_FragCoord.xy");
             f->codeAppendf("coverage = %s.a;", atlasCoverage.c_str());
             f->codeAppendf("}");
-            const char* coverageInvertName;
-            fCoverageInvertUniform = uniHandler->addUniform(&fp, kFragment_GrShaderFlag,
-                                                            kHalf2_GrSLType, "coverageInvert",
-                                                            &coverageInvertName);
-            // Return "inputColor * coverage" or "inputColor * (1 - coverage)".
-            f->codeAppendf("return %s * fma(coverage, %s.x, %s.y);",
-                           inputColor.c_str(), coverageInvertName, coverageInvertName);
+            const char* coverageMaybeInvertName;
+            fCoverageMaybeInvertUniform = uniHandler->addUniform(&fp, kFragment_GrShaderFlag,
+                                                                 kHalf2_GrSLType, "coverageInvert",
+                                                                 &coverageMaybeInvertName);
+            // Invert coverage, if needed.
+            f->codeAppendf("coverage = coverage * %s.x + %s.y;",
+                           coverageMaybeInvertName, coverageMaybeInvertName);
+            f->codeAppendf("return %s * coverage;", inputColor.c_str());
         }
         void onSetData(const GrGLSLProgramDataManager& pdman,
                        const GrFragmentProcessor& processor) override {
@@ -69,13 +70,13 @@ std::unique_ptr<GrGLSLFragmentProcessor> GrModulateAtlasCoverageFP::onMakeProgra
                 pdman.set4fv(fBoundsUniform, 1, SkRect::Make(fp.fBounds).asScalars());
             }
             if (fp.fFlags & Flags::kInvertCoverage) {
-                pdman.set2f(fCoverageInvertUniform, -1, 1);  // coverage * -1 + 1 == 1 - coverage.
+                pdman.set2f(fCoverageMaybeInvertUniform, -1, 1);  // -1*coverage + 1 = 1 - coverage.
             } else {
-                pdman.set2f(fCoverageInvertUniform, 1, 0);  // coverage * 1 + 0 == coverage.
+                pdman.set2f(fCoverageMaybeInvertUniform, 1, 0);  // 1*coverage + 0 = coverage.
             }
         }
         UniformHandle fBoundsUniform;
-        UniformHandle fCoverageInvertUniform;
+        UniformHandle fCoverageMaybeInvertUniform;
     };
     return std::make_unique<Impl>();
 }
