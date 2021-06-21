@@ -88,11 +88,10 @@ protected:
                     SkM44::Translate(-radius, -radius);          // center content
 
             canvas->save();
-            canvas->concat44(model);
+            canvas->concat(model);
 
             SkPaint fillPaint;
             fillPaint.setAntiAlias(true);
-            fillPaint.setFilterQuality(kLow_SkFilterQuality);
             fillPaint.setColor(faceColors[i]);
 
             // Leverages GrFillRectOp on GPU backend
@@ -101,7 +100,8 @@ protected:
             // Leverages GrTextureOp on GPU backend, to ensure sure both quad paths handle clipping
             canvas->drawImageRect(fCubeImage.get(),
                                   SkRect::MakeWH(fCubeImage->width(), fCubeImage->height()),
-                                  SkRect::MakeWH(viewportWidth, viewportWidth), &fillPaint,
+                                  SkRect::MakeWH(viewportWidth, viewportWidth),
+                                  SkSamplingOptions(SkFilterMode::kLinear), &fillPaint,
                                   SkCanvas::kFast_SrcRectConstraint);
 
             canvas->restore();
