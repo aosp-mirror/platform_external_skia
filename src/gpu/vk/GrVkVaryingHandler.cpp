@@ -25,21 +25,22 @@ static inline int grsltype_to_location_size(GrSLType type) {
         case kFloat4_GrSLType:
         case kHalf4_GrSLType:
             return 1;
-        case kUint2_GrSLType:
-            return 1;
         case kInt2_GrSLType:
+        case kUint2_GrSLType:
         case kShort2_GrSLType:
         case kUShort2_GrSLType:
         case kByte2_GrSLType:
         case kUByte2_GrSLType:
             return 1;
         case kInt3_GrSLType:
+        case kUint3_GrSLType:
         case kShort3_GrSLType:
         case kUShort3_GrSLType:
         case kByte3_GrSLType:
         case kUByte3_GrSLType:
             return 1;
         case kInt4_GrSLType:
+        case kUint4_GrSLType:
         case kShort4_GrSLType:
         case kUShort4_GrSLType:
         case kByte4_GrSLType:
@@ -57,12 +58,16 @@ static inline int grsltype_to_location_size(GrSLType type) {
         case kTexture2DSampler_GrSLType:
         case kSampler_GrSLType:
         case kTexture2D_GrSLType:
+        case kInput_GrSLType:
             return 0;
         case kTextureExternalSampler_GrSLType:
              return 0;
         case kTexture2DRectSampler_GrSLType:
              return 0;
         case kBool_GrSLType:
+        case kBool2_GrSLType:
+        case kBool3_GrSLType:
+        case kBool4_GrSLType:
              return 1;
         case kInt_GrSLType: // fall through
         case kShort_GrSLType:
@@ -78,8 +83,7 @@ static inline int grsltype_to_location_size(GrSLType type) {
 
 static void finalize_helper(GrVkVaryingHandler::VarArray& vars) {
     int locationIndex = 0;
-    for (int i = 0; i < vars.count(); ++i) {
-        GrShaderVar& var = vars[i];
+    for (GrShaderVar& var : vars.items()) {
         SkString location;
         location.appendf("location = %d", locationIndex);
         var.addLayoutQualifier(location.c_str());
