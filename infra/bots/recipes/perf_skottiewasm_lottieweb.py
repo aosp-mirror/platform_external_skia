@@ -26,14 +26,13 @@ DEPS = [
   'vars',
 ]
 
-LOTTIE_WEB_BLACKLIST = [
+LOTTIE_WEB_EXCLUDE = [
   # See https://bugs.chromium.org/p/skia/issues/detail?id=9187#c4
   'lottiefiles.com - Progress Success.json',
   # Fails with "val2 is not defined".
   'lottiefiles.com - VR.json',
   'vr_animation.json',
   # Times out.
-  'obama_caricature.json',
   'lottiefiles.com - Nudge.json',
   'lottiefiles.com - Retweet.json',
   # Trace file has majority main_frame_aborted terminations in it and < 25
@@ -44,7 +43,7 @@ LOTTIE_WEB_BLACKLIST = [
   'stacking.json',
 ]
 
-SKOTTIE_WASM_BLACKLIST = [
+SKOTTIE_WASM_EXCLUDE = [
   # Trace file has majority main_frame_aborted terminations in it and < 25
   # occurrences of submitted_frame + missed_frame.
   # Below descriptions are added from fmalita@'s comments in
@@ -73,7 +72,7 @@ SKOTTIE_WASM_BLACKLIST = [
 ]
 
 # These files work in SVG but not in Canvas.
-LOTTIE_WEB_CANVAS_BLACKLIST = LOTTIE_WEB_BLACKLIST + [
+LOTTIE_WEB_CANVAS_EXCLUDE = LOTTIE_WEB_EXCLUDE + [
   'Hello World.json',
   'interactive_menu.json',
   'Name.json',
@@ -82,7 +81,7 @@ LOTTIE_WEB_CANVAS_BLACKLIST = LOTTIE_WEB_BLACKLIST + [
 
 def RunSteps(api):
   api.vars.setup()
-  api.flavor.setup()
+  api.flavor.setup(None)
   checkout_root = api.path['start_dir']
   buildername = api.properties['buildername']
   node_path = api.path['start_dir'].join('node', 'node', 'bin', 'node')
@@ -104,7 +103,7 @@ def RunSteps(api):
         '--canvaskit_wasm', canvaskit_wasm_path,
     ]
     lottie_files = [x for x in lottie_files
-                    if api.path.basename(x) not in SKOTTIE_WASM_BLACKLIST]
+                    if api.path.basename(x) not in SKOTTIE_WASM_EXCLUDE]
   elif 'LottieWeb' in buildername:
     source_type = 'lottie-web'
     renderer = 'lottie-web'
@@ -112,11 +111,11 @@ def RunSteps(api):
       backend = 'canvas'
       lottie_files = [
           x for x in lottie_files
-          if api.path.basename(x) not in LOTTIE_WEB_CANVAS_BLACKLIST]
+          if api.path.basename(x) not in LOTTIE_WEB_CANVAS_EXCLUDE]
     else:
       backend = 'svg'
       lottie_files = [x for x in lottie_files
-                      if api.path.basename(x) not in LOTTIE_WEB_BLACKLIST]
+                      if api.path.basename(x) not in LOTTIE_WEB_EXCLUDE]
 
     perf_app_dir = checkout_root.join('skia', 'tools', 'lottie-web-perf')
     lottie_web_js_path = perf_app_dir.join('lottie-web-perf.js')
@@ -359,7 +358,7 @@ def GenTests(api):
   }
 
 
-  skottie_cpu_buildername = ('Perf-Debian9-EMCC-GCE-CPU-AVX2-wasm-Release-All-'
+  skottie_cpu_buildername = ('Perf-Debian10-EMCC-GCE-CPU-AVX2-wasm-Release-All-'
                              'SkottieWASM')
   yield (
       api.test('skottie_wasm_perf') +
@@ -399,7 +398,7 @@ def GenTests(api):
                     api.json.output(parse_trace_json))
   )
 
-  skottie_gpu_buildername = ('Perf-Debian9-EMCC-NUC7i5BNK-GPU-IntelIris640-'
+  skottie_gpu_buildername = ('Perf-Debian10-EMCC-NUC7i5BNK-GPU-IntelIris640-'
                              'wasm-Release-All-SkottieWASM')
   yield (
       api.test('skottie_wasm_perf_gpu') +
@@ -417,7 +416,7 @@ def GenTests(api):
                     api.json.output(parse_trace_json))
   )
 
-  lottieweb_cpu_buildername = ('Perf-Debian9-none-GCE-CPU-AVX2-x86_64-Release-'
+  lottieweb_cpu_buildername = ('Perf-Debian10-none-GCE-CPU-AVX2-x86_64-Release-'
                                'All-LottieWeb')
   yield (
       api.test('lottie_web_perf') +
@@ -458,7 +457,7 @@ def GenTests(api):
   )
 
   lottieweb_canvas_cpu_buildername = (
-      'Perf-Debian9-none-GCE-CPU-AVX2-x86_64-Release-All-LottieWeb_Canvas')
+      'Perf-Debian10-none-GCE-CPU-AVX2-x86_64-Release-All-LottieWeb_Canvas')
   yield (
       api.test('lottie_web_canvas_perf') +
       api.properties(buildername=lottieweb_canvas_cpu_buildername,
@@ -497,7 +496,7 @@ def GenTests(api):
                     api.json.output(parse_trace_json))
   )
 
-  unrecognized_buildername = ('Perf-Debian9-none-GCE-CPU-AVX2-x86_64-Release-'
+  unrecognized_buildername = ('Perf-Debian10-none-GCE-CPU-AVX2-x86_64-Release-'
                               'All-Unrecognized')
   yield (
       api.test('unrecognized_builder') +

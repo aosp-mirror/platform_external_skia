@@ -41,7 +41,7 @@ protected:
                   DrawType op,
                   uint32_t size,
                   SkCanvas* canvas,
-                  const SkMatrix& initialMatrix);
+                  const SkM44& initialMatrix);
 
     class AutoResetOpID {
     public:
@@ -57,7 +57,7 @@ protected:
     };
 
 private:
-    typedef SkNoncopyable INHERITED;
+    using INHERITED = SkNoncopyable;
 };
 
 #endif

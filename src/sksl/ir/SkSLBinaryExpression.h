@@ -8,58 +8,103 @@
 #ifndef SKSL_BINARYEXPRESSION
 #define SKSL_BINARYEXPRESSION
 
-#include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLIRGenerator.h"
 #include "src/sksl/SkSLLexer.h"
+#include "src/sksl/SkSLOperators.h"
 #include "src/sksl/ir/SkSLExpression.h"
-#include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLFieldAccess.h"
+#include "src/sksl/ir/SkSLIndexExpression.h"
+#include "src/sksl/ir/SkSLSwizzle.h"
+#include "src/sksl/ir/SkSLTernaryExpression.h"
+
+#include <memory>
 
 namespace SkSL {
 
 /**
  * A binary operation.
  */
-struct BinaryExpression : public Expression {
-    BinaryExpression(int offset, std::unique_ptr<Expression> left, Token::Kind op,
-                     std::unique_ptr<Expression> right, const Type& type)
-    : INHERITED(offset, kBinary_Kind, type)
-    , fLeft(std::move(left))
-    , fOperator(op)
-    , fRight(std::move(right)) {}
+class BinaryExpression final : public Expression {
+public:
+    static constexpr Kind kExpressionKind = Kind::kBinary;
 
-    std::unique_ptr<Expression> constantPropagate(const IRGenerator& irGenerator,
-                                                  const DefinitionMap& definitions) override {
-        return irGenerator.constantFold(*fLeft,
-                                        fOperator,
-                                        *fRight);
+    BinaryExpression(int offset, std::unique_ptr<Expression> left, Operator op,
+                     std::unique_ptr<Expression> right, const Type* type)
+        : INHERITED(offset, kExpressionKind, type)
+        , fLeft(std::move(left))
+        , fOperator(op)
+        , fRight(std::move(right)) {
+        // If we are assigning to a VariableReference, ensure that it is set to Write or ReadWrite.
+        SkASSERT(!op.isAssignment() || CheckRef(*this->left()));
+    }
+
+    // Creates a potentially-simplified form of the expression. Determines the result type
+    // programmatically. Typechecks and coerces input expressions; reports errors via ErrorReporter.
+    static std::unique_ptr<Expression> Convert(const Context& context,
+                                               std::unique_ptr<Expression> left,
+                                               Operator op,
+                                               std::unique_ptr<Expression> right);
+
+    // Creates a potentially-simplified form of the expression. Determines the result type
+    // programmatically. Asserts if the expressions do not typecheck or are otherwise invalid.
+    static std::unique_ptr<Expression> Make(const Context& context,
+                                            std::unique_ptr<Expression> left,
+                                            Operator op,
+                                            std::unique_ptr<Expression> right);
+
+    // Creates a potentially-simplified form of the expression. Result type is passed in.
+    // Asserts if the expressions do not typecheck or are otherwise invalid.
+    static std::unique_ptr<Expression> Make(const Context& context,
+                                            std::unique_ptr<Expression> left,
+                                            Operator op,
+                                            std::unique_ptr<Expression> right,
+                                            const Type* resultType);
+
+    std::unique_ptr<Expression>& left() {
+        return fLeft;
+    }
+
+    const std::unique_ptr<Expression>& left() const {
+        return fLeft;
+    }
+
+    std::unique_ptr<Expression>& right() {
+        return fRight;
+    }
+
+    const std::unique_ptr<Expression>& right() const {
+        return fRight;
+    }
+
+    Operator getOperator() const {
+        return fOperator;
+    }
+
+    bool isConstantOrUniform() const override {
+        return this->left()->isConstantOrUniform() && this->right()->isConstantOrUniform();
     }
 
     bool hasProperty(Property property) const override {
-        if (property == Property::kSideEffects && Compiler::IsAssignment(fOperator)) {
+        if (property == Property::kSideEffects && this->getOperator().isAssignment()) {
             return true;
         }
-        return fLeft->hasProperty(property) || fRight->hasProperty(property);
+        return this->left()->hasProperty(property) || this->right()->hasProperty(property);
     }
 
-    std::unique_ptr<Expression> clone() const override {
-        return std::unique_ptr<Expression>(new BinaryExpression(fOffset, fLeft->clone(), fOperator,
-                                                                fRight->clone(), fType));
-    }
+    std::unique_ptr<Expression> clone() const override;
 
-#ifdef SK_DEBUG
-    String description() const override {
-        return "(" + fLeft->description() + " " + Compiler::OperatorName(fOperator) + " " +
-               fRight->description() + ")";
-    }
-#endif
+    String description() const override;
+
+private:
+    static bool CheckRef(const Expression& expr);
 
     std::unique_ptr<Expression> fLeft;
-    const Token::Kind fOperator;
+    Operator fOperator;
     std::unique_ptr<Expression> fRight;
 
-    typedef Expression INHERITED;
+    using INHERITED = Expression;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif
