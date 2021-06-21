@@ -7,8 +7,8 @@
 
 #include "src/gpu/GrAuditTrail.h"
 #include "src/gpu/GrGpu.h"
-#include "src/gpu/GrRenderTargetContext.h"
-#include "src/gpu/geometry/GrShape.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
+#include "src/gpu/geometry/GrStyledShape.h"
 #include "src/gpu/ops/GrDashLinePathRenderer.h"
 #include "src/gpu/ops/GrDashOp.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
@@ -37,9 +37,15 @@ bool GrDashLinePathRenderer::onDrawPath(const DrawPathArgs& args) {
             aaMode = GrDashOp::AAMode::kNone;
             break;
         case GrAAType::kMSAA:
-            // In this mode we will use aa between dashes but the outer border uses MSAA. Otherwise,
-            // we can wind up with external edges antialiased and internal edges unantialiased.
-            aaMode = GrDashOp::AAMode::kCoverageWithMSAA;
+            if (args.fRenderTargetContext->canUseDynamicMSAA()) {
+                // In DMSAA we avoid using MSAA, in order to reduce the number of MSAA triggers.
+                aaMode = GrDashOp::AAMode::kCoverage;
+            } else {
+                // In this mode we will use aa between dashes but the outer border uses MSAA.
+                // Otherwise, we can wind up with external edges antialiased and internal edges
+                // unantialiased.
+                aaMode = GrDashOp::AAMode::kCoverageWithMSAA;
+            }
             break;
         case GrAAType::kCoverage:
             aaMode = GrDashOp::AAMode::kCoverage;
@@ -47,12 +53,12 @@ bool GrDashLinePathRenderer::onDrawPath(const DrawPathArgs& args) {
     }
     SkPoint pts[2];
     SkAssertResult(args.fShape->asLine(pts, nullptr));
-    std::unique_ptr<GrDrawOp> op =
+    GrOp::Owner op =
             GrDashOp::MakeDashLineOp(args.fContext, std::move(args.fPaint), *args.fViewMatrix, pts,
                                      aaMode, args.fShape->style(), args.fUserStencilSettings);
     if (!op) {
         return false;
     }
-    args.fRenderTargetContext->addDrawOp(*args.fClip, std::move(op));
+    args.fRenderTargetContext->addDrawOp(args.fClip, std::move(op));
     return true;
 }

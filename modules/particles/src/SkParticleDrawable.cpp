@@ -14,6 +14,7 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
+#include "include/private/SkTPin.h"
 #include "modules/particles/include/SkParticleData.h"
 #include "modules/skresources/include/SkResources.h"
 #include "src/core/SkAutoMalloc.h"
@@ -84,8 +85,10 @@ public:
         for (int i = 0; i < count; ++i) {
             arrays.fRects[i].setIWH(fImage->width(), fImage->height());
         }
-        canvas->drawAtlas(fImage, arrays.fXforms.get(), arrays.fRects.get(), arrays.fColors.get(),
-                          count, SkBlendMode::kModulate, nullptr, &paint);
+        SkSamplingOptions sampling(SkFilterMode::kLinear);
+        canvas->drawAtlas(fImage.get(), arrays.fXforms.get(), arrays.fRects.get(),
+                          arrays.fColors.get(), count, SkBlendMode::kModulate, sampling,
+                          nullptr, &paint);
     }
 
     void prepare(const skresources::ResourceProvider*) override {
@@ -135,8 +138,9 @@ public:
             int col = frame % cols;
             arrays.fRects[i] = baseRect.makeOffset(col * baseRect.width(), row * baseRect.height());
         }
-        canvas->drawAtlas(fImage, arrays.fXforms.get(), arrays.fRects.get(), arrays.fColors.get(),
-                          count, SkBlendMode::kModulate, nullptr, &paint);
+        canvas->drawAtlas(fImage.get(), arrays.fXforms.get(), arrays.fRects.get(),
+                          arrays.fColors.get(), count, SkBlendMode::kModulate,
+                          SkSamplingOptions(SkFilterMode::kLinear), nullptr, &paint);
     }
 
     void prepare(const skresources::ResourceProvider* resourceProvider) override {

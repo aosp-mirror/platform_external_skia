@@ -7,23 +7,27 @@
 
 // This is a GPU-backend specific test.
 
-#include "tests/Test.h"
-
 #include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrTexture.h"
-#include "src/gpu/GrContextPriv.h"
+#include "include/gpu/GrDirectContext.h"
+#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrGpu.h"
 #include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrRenderTargetPriv.h"
+#include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrRenderTargetProxy.h"
 #include "src/gpu/GrResourceProvider.h"
-#include "src/gpu/GrSurfacePriv.h"
+#include "src/gpu/GrSurface.h"
 #include "src/gpu/GrSurfaceProxyPriv.h"
+#include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/SkGr.h"
+#include "tests/Test.h"
+#include "tools/gpu/ManagedBackendTexture.h"
 #ifdef SK_GL
 #include "src/gpu/gl/GrGLDefines.h"
 #include "src/gpu/gl/GrGLUtil.h"
 #endif
+
+#include "tests/TestUtils.h"
 
 // Check that the surface proxy's member vars are set as expected
 static void check_surface(skiatest::Reporter* reporter,
@@ -68,7 +72,7 @@ static void check_rendertarget(skiatest::Reporter* reporter,
     REPORTER_ASSERT(reporter, rt->backendFormat() == rtProxy->backendFormat());
 
     REPORTER_ASSERT(reporter, rt->numSamples() == rtProxy->numSamples());
-    REPORTER_ASSERT(reporter, rt->surfacePriv().flags() == rtProxy->testingOnly_getFlags());
+    REPORTER_ASSERT(reporter, rt->flags() == rtProxy->testingOnly_getFlags());
 }
 
 static void check_texture(skiatest::Reporter* reporter,
@@ -107,9 +111,10 @@ static void check_texture(skiatest::Reporter* reporter,
 
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DeferredProxyTest, reporter, ctxInfo) {
-    GrProxyProvider* proxyProvider = ctxInfo.grContext()->priv().proxyProvider();
-    GrResourceProvider* resourceProvider = ctxInfo.grContext()->priv().resourceProvider();
-    const GrCaps& caps = *ctxInfo.grContext()->priv().caps();
+    auto direct = ctxInfo.directContext();
+    GrProxyProvider* proxyProvider = direct->priv().proxyProvider();
+    GrResourceProvider* resourceProvider = direct->priv().resourceProvider();
+    const GrCaps& caps = *direct->priv().caps();
 
     int attempt = 0; // useful for debugging
 
@@ -125,7 +130,6 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DeferredProxyTest, reporter, ctxInfo) {
                         if (!format.isValid()) {
                             continue;
                         }
-                        GrSwizzle swizzle = caps.getReadSwizzle(format, ct);
 
                         // Renderable
                         {
@@ -137,12 +141,12 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DeferredProxyTest, reporter, ctxInfo) {
                             } else {
                                 tex = resourceProvider->createTexture(
                                         dims, format, GrRenderable::kYes, numSamples,
-                                        GrMipMapped::kNo, budgeted, GrProtected::kNo);
+                                        GrMipmapped::kNo, budgeted, GrProtected::kNo);
                             }
 
                             sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(
-                                    format, dims, swizzle, GrRenderable::kYes, numSamples,
-                                    GrMipMapped::kNo, fit, budgeted, GrProtected::kNo);
+                                    format, dims, GrRenderable::kYes, numSamples, GrMipmapped::kNo,
+                                    fit, budgeted, GrProtected::kNo);
                             REPORTER_ASSERT(reporter, SkToBool(tex) == SkToBool(proxy));
                             if (proxy) {
                                 REPORTER_ASSERT(reporter, proxy->asRenderTargetProxy());
@@ -151,7 +155,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DeferredProxyTest, reporter, ctxInfo) {
                                 // instantiated, it checks that the instantiated size is <= to
                                 // the pre-computation. If the proxy never computed its
                                 // pre-instantiation size then the check is skipped.
-                                proxy->gpuMemorySize(caps);
+                                proxy->gpuMemorySize();
 
                                 check_surface(reporter, proxy.get(), widthHeight, widthHeight,
                                               budgeted);
@@ -173,12 +177,12 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DeferredProxyTest, reporter, ctxInfo) {
                             } else {
                                 tex = resourceProvider->createTexture(
                                         dims, format, GrRenderable::kNo, numSamples,
-                                        GrMipMapped::kNo, budgeted, GrProtected::kNo);
+                                        GrMipmapped::kNo, budgeted, GrProtected::kNo);
                             }
 
                             sk_sp<GrTextureProxy> proxy(proxyProvider->createProxy(
-                                    format, dims, swizzle, GrRenderable::kNo, numSamples,
-                                    GrMipMapped::kNo, fit, budgeted, GrProtected::kNo));
+                                    format, dims, GrRenderable::kNo, numSamples, GrMipmapped::kNo,
+                                    fit, budgeted, GrProtected::kNo));
                             REPORTER_ASSERT(reporter, SkToBool(tex) == SkToBool(proxy));
                             if (proxy) {
                                 // This forces the proxy to compute and cache its
@@ -186,7 +190,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DeferredProxyTest, reporter, ctxInfo) {
                                 // instantiated, it checks that the instantiated size is <= to
                                 // the pre-computation. If the proxy never computed its
                                 // pre-instantiation size then the check is skipped.
-                                proxy->gpuMemorySize(caps);
+                                proxy->gpuMemorySize();
 
                                 check_surface(reporter, proxy.get(), widthHeight, widthHeight,
                                               budgeted);
@@ -204,11 +208,11 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DeferredProxyTest, reporter, ctxInfo) {
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
-    GrProxyProvider* proxyProvider = ctxInfo.grContext()->priv().proxyProvider();
-    GrContext* context = ctxInfo.grContext();
-    GrResourceProvider* resourceProvider = context->priv().resourceProvider();
-    GrGpu* gpu = context->priv().getGpu();
-    const GrCaps& caps = *context->priv().caps();
+    auto direct = ctxInfo.directContext();
+    GrProxyProvider* proxyProvider = direct->priv().proxyProvider();
+    GrResourceProvider* resourceProvider = direct->priv().resourceProvider();
+    GrGpu* gpu = direct->priv().getGpu();
+    const GrCaps& caps = *direct->priv().caps();
 
     static const int kWidthHeight = 100;
 
@@ -220,11 +224,11 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
         // Tests wrapBackendRenderTarget with a GrBackendRenderTarget
         // Our test-only function that creates a backend render target doesn't currently support
         // sample counts :(.
-        if (ctxInfo.grContext()->colorTypeSupportedAsSurface(colorType)) {
+        if (direct->colorTypeSupportedAsSurface(colorType)) {
             GrBackendRenderTarget backendRT = gpu->createTestingOnlyBackendRenderTarget(
-                    kWidthHeight, kWidthHeight, grColorType);
-            sk_sp<GrSurfaceProxy> sProxy(proxyProvider->wrapBackendRenderTarget(
-                    backendRT, grColorType, nullptr, nullptr));
+                    {kWidthHeight, kWidthHeight}, grColorType);
+            sk_sp<GrSurfaceProxy> sProxy(
+                    proxyProvider->wrapBackendRenderTarget(backendRT, nullptr));
             check_surface(reporter, sProxy.get(), kWidthHeight, kWidthHeight, SkBudgeted::kNo);
             static constexpr int kExpectedNumSamples = 1;
             check_rendertarget(reporter, caps, resourceProvider, sProxy->asRenderTargetProxy(),
@@ -251,84 +255,75 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(WrappedProxyTest, reporter, ctxInfo) {
                 static constexpr int kStencilBits = 8;
                 GrBackendRenderTarget backendRT(kWidthHeight, kWidthHeight, numSamples,
                                                 kStencilBits, fboInfo);
-                sk_sp<GrSurfaceProxy> sProxy(proxyProvider->wrapBackendRenderTarget(
-                        backendRT, grColorType, nullptr, nullptr));
+                sk_sp<GrSurfaceProxy> sProxy(
+                        proxyProvider->wrapBackendRenderTarget(backendRT, nullptr));
                 check_surface(reporter, sProxy.get(), kWidthHeight, kWidthHeight, SkBudgeted::kNo);
                 check_rendertarget(reporter, caps, resourceProvider, sProxy->asRenderTargetProxy(),
                                    supportedNumSamples, SkBackingFit::kExact, 0);
             }
 #endif
 
-            // Tests wrapBackendRenderTarget with a GrBackendTexture
-            {
-                GrBackendTexture backendTex = context->createBackendTexture(
-                        kWidthHeight, kWidthHeight, colorType, SkColors::kTransparent,
-                        GrMipMapped::kNo, GrRenderable::kYes, GrProtected::kNo);
-                sk_sp<GrSurfaceProxy> sProxy = proxyProvider->wrapBackendTextureAsRenderTarget(
-                        backendTex, grColorType, supportedNumSamples);
-                if (!sProxy) {
-                    context->deleteBackendTexture(backendTex);
-                    continue;  // This can fail on Mesa
-                }
-
-                check_surface(reporter, sProxy.get(), kWidthHeight, kWidthHeight, SkBudgeted::kNo);
-                check_rendertarget(reporter, caps, resourceProvider, sProxy->asRenderTargetProxy(),
-                                   supportedNumSamples, SkBackingFit::kExact,
-                                   caps.maxWindowRectangles());
-
-                context->deleteBackendTexture(backendTex);
-            }
-
             // Tests wrapBackendTexture that is only renderable
             {
-                GrBackendTexture backendTex = context->createBackendTexture(
-                        kWidthHeight, kWidthHeight, colorType, SkColors::kTransparent,
-                        GrMipMapped::kNo, GrRenderable::kYes, GrProtected::kNo);
-
+                auto mbet = sk_gpu_test::ManagedBackendTexture::MakeWithoutData(direct,
+                                                                                kWidthHeight,
+                                                                                kWidthHeight,
+                                                                                colorType,
+                                                                                GrMipmapped::kNo,
+                                                                                GrRenderable::kYes);
+                if (!mbet) {
+                    ERRORF(reporter,
+                           "Could not create renderable backend texture of color type %d",
+                           colorType);
+                    continue;
+                }
                 sk_sp<GrSurfaceProxy> sProxy = proxyProvider->wrapRenderableBackendTexture(
-                        backendTex, supportedNumSamples, grColorType, kBorrow_GrWrapOwnership,
-                        GrWrapCacheable::kNo, nullptr, nullptr);
+                        mbet->texture(), supportedNumSamples, kBorrow_GrWrapOwnership,
+                        GrWrapCacheable::kNo, nullptr);
                 if (!sProxy) {
-                    context->deleteBackendTexture(backendTex);
-                    continue;  // This can fail on Mesa
+                    ERRORF(reporter, "wrapRenderableBackendTexture failed");
+                    continue;
                 }
 
                 check_surface(reporter, sProxy.get(), kWidthHeight, kWidthHeight, SkBudgeted::kNo);
                 check_rendertarget(reporter, caps, resourceProvider, sProxy->asRenderTargetProxy(),
                                    supportedNumSamples, SkBackingFit::kExact,
                                    caps.maxWindowRectangles());
-
-                context->deleteBackendTexture(backendTex);
             }
 
-            // Tests wrapBackendTexture that is only textureable
             {
-                // Internal offscreen texture
-                GrBackendTexture backendTex = context->createBackendTexture(
-                        kWidthHeight, kWidthHeight, colorType, SkColors::kTransparent,
-                        GrMipMapped::kNo, GrRenderable::kNo, GrProtected::kNo);
-
+                // Tests wrapBackendTexture that is only textureable
+                auto mbet = sk_gpu_test::ManagedBackendTexture::MakeWithoutData(direct,
+                                                                                kWidthHeight,
+                                                                                kWidthHeight,
+                                                                                colorType,
+                                                                                GrMipmapped::kNo,
+                                                                                GrRenderable::kNo);
+                if (!mbet) {
+                    ERRORF(reporter,
+                           "Could not create non-renderable backend texture of color type %d",
+                           colorType);
+                    continue;
+                }
                 sk_sp<GrSurfaceProxy> sProxy = proxyProvider->wrapBackendTexture(
-                        backendTex, grColorType, kBorrow_GrWrapOwnership, GrWrapCacheable::kNo,
-                        kRead_GrIOType);
+                        mbet->texture(), kBorrow_GrWrapOwnership, GrWrapCacheable::kNo,
+                        kRead_GrIOType, mbet->refCountedCallback());
                 if (!sProxy) {
-                    context->deleteBackendTexture(backendTex);
+                    ERRORF(reporter, "wrapBackendTexture failed");
                     continue;
                 }
 
                 check_surface(reporter, sProxy.get(), kWidthHeight, kWidthHeight, SkBudgeted::kNo);
                 check_texture(reporter, resourceProvider, sProxy->asTextureProxy(),
                               SkBackingFit::kExact);
-
-                context->deleteBackendTexture(backendTex);
             }
         }
     }
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ZeroSizedProxyTest, reporter, ctxInfo) {
-    GrContext* context = ctxInfo.grContext();
-    GrProxyProvider* provider = context->priv().proxyProvider();
+    auto direct = ctxInfo.directContext();
+    GrProxyProvider* provider = direct->priv().proxyProvider();
 
     for (auto renderable : {GrRenderable::kNo, GrRenderable::kYes}) {
         for (auto fit : { SkBackingFit::kExact, SkBackingFit::kApprox }) {
@@ -339,14 +334,12 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ZeroSizedProxyTest, reporter, ctxInfo) {
                     }
 
                     const GrBackendFormat format =
-                            context->priv().caps()->getDefaultBackendFormat(
+                            direct->priv().caps()->getDefaultBackendFormat(
                                 GrColorType::kRGBA_8888,
                                 renderable);
-                    GrSwizzle swizzle = context->priv().caps()->getReadSwizzle(
-                            format, GrColorType::kRGBA_8888);
 
                     sk_sp<GrTextureProxy> proxy = provider->createProxy(
-                            format, {width, height}, swizzle, renderable, 1, GrMipMapped::kNo, fit,
+                            format, {width, height}, renderable, 1, GrMipmapped::kNo, fit,
                             SkBudgeted::kNo, GrProtected::kNo);
                     REPORTER_ASSERT(reporter, !proxy);
                 }
