@@ -54,7 +54,7 @@ class VertBench : public Benchmark {
     void onDelayedSetup() override {
         auto img = GetResourceAsImage("images/mandrill_256.png");
         if (img) {
-            fShader = img->makeShader();
+            fShader = img->makeShader(SkSamplingOptions());
         }
     }
 
@@ -124,7 +124,7 @@ protected:
         }
     }
 private:
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 DEF_BENCH(return new VertBench(kTexture_VertFlag | kPersp_VertFlag);)
 DEF_BENCH(return new VertBench(kColors_VertFlag  | kPersp_VertFlag);)
@@ -209,12 +209,12 @@ protected:
             tiny_persp_effect(canvas);
         }
         for (int i = 0; i < loops; i++) {
-            canvas->drawAtlas(fAtlas, fXforms, fRects, colors, N, SkBlendMode::kModulate,
-                              cullRect, paintPtr);
+            canvas->drawAtlas(fAtlas.get(), fXforms, fRects, colors, N, SkBlendMode::kModulate,
+                              SkSamplingOptions(), cullRect, paintPtr);
         }
     }
 private:
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 //DEF_BENCH(return new AtlasBench(0);)
 //DEF_BENCH(return new AtlasBench(kColors_Flag);)
