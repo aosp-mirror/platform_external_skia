@@ -97,14 +97,16 @@ private:
         enum class Kind {
             kInputColor,  // eg sample(child) or sample(child, inputColor)
             kImmediate,   // eg sample(child, half4(1))
-            kPrevious     // eg sample(child1, sample(child2))
+            kPrevious,    // eg sample(child1, sample(child2))
+            kUniform,     // eg uniform half4 color; ... sample(child, color)
         };
 
         int  fChild;
         Kind fKind;
         union {
-            SkPMColor4f fImm;
-            int         fPrevious;
+            SkPMColor4f fImm;       // for kImmediate
+            int         fPrevious;  // for kPrevious
+            int         fOffset;    // for kUniform
         };
     };
 
@@ -115,6 +117,15 @@ private:
     skvm::Program           fProgram;
     std::vector<SampleCall> fSampleCalls;
     bool                    fAlphaUnchanged;
+};
+
+class SkRuntimeEffectPriv {
+public:
+    // Helper function when creating an effect for a GrSkSLFP that verifies an effect will
+    // implement the constant output for constant input optimization flag.
+    static bool SupportsConstantOutputForConstantInput(sk_sp<SkRuntimeEffect> effect) {
+        return effect->getFilterColorProgram();
+    }
 };
 
 #endif

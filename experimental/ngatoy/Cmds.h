@@ -131,6 +131,8 @@ public:
 
     SortKey getKey() override;
 
+    void onAboutToBePopped(PaintersOrder paintersOrderWhenPopped);
+
     void execute(FakeCanvas*) const override;
     void execute(SkCanvas*) const override;
     void rasterize(uint32_t zBuffer[256][256], SkBitmap* dstBM) const override;
@@ -141,11 +143,23 @@ public:
                  fRect.fLeft, fRect.fTop, fRect.fRight, fRect.fBottom);
     }
 
+    void mutate(SkIPoint trans) {
+        SkASSERT(!fHasBeenMutated);
+
+        fRect.offset(trans.fX, trans.fY);
+        fHasBeenMutated = true;
+    }
+
+    bool hasBeenMutated() const { return fHasBeenMutated; }
+    SkIRect rect() const { return fRect; }
+
 protected:
 
 private:
+    bool          fHasBeenMutated = false;
     SkIRect       fRect;
     PaintersOrder fPaintersOrderWhenAdded;
+    PaintersOrder fPaintersOrderWhenPopped;
 };
 
 //------------------------------------------------------------------------------------------------
