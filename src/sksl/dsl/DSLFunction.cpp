@@ -18,11 +18,11 @@ namespace SkSL {
 
 namespace dsl {
 
-void DSLFunction::init(const DSLType& returnType, const char* name,
+void DSLFunction::init(const DSLType& returnType, skstd::string_view name,
                        SkTArray<DSLVar*> params) {
     std::vector<std::unique_ptr<Variable>> paramVars;
     paramVars.reserve(params.size());
-    bool isMain = !strcmp(name, "main");
+    bool isMain = name == "main";
     auto typeIsValidForColor = [&](const SkSL::Type& type) {
         return type == *DSLWriter::Context().fTypes.fHalf4 ||
                type == *DSLWriter::Context().fTypes.fFloat4;
@@ -87,11 +87,7 @@ void DSLFunction::define(DSLBlock block) {
     DSLWriter::IRGenerator().finalizeFunction(*fDecl, body.get());
     auto function = std::make_unique<SkSL::FunctionDefinition>(/*offset=*/-1, fDecl,
                                                                /*builtin=*/false, std::move(body));
-    if (DSLWriter::Compiler().errorCount()) {
-        DSLWriter::ReportError(DSLWriter::Compiler().errorText(/*showCount=*/false).c_str());
-        DSLWriter::Compiler().setErrorCount(0);
-        SkASSERT(!DSLWriter::Compiler().errorCount());
-    }
+    DSLWriter::ReportErrors();
     fDecl->fDefinition = function.get();
     DSLWriter::ProgramElements().push_back(std::move(function));
 }
@@ -102,7 +98,7 @@ DSLExpression DSLFunction::call(SkTArray<DSLWrapper<DSLExpression>> args) {
     for (DSLWrapper<DSLExpression>& arg : args) {
         released.push_back(arg->release());
     }
-    return DSLWriter::Call(*fDecl, std::move(released));
+    return DSLExpression(DSLWriter::Call(*fDecl, std::move(released)));
 }
 
 } // namespace dsl
