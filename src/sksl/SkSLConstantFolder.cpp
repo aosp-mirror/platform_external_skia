@@ -14,6 +14,8 @@
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLConstructorCompound.h"
+#include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLFloatLiteral.h"
 #include "src/sksl/ir/SkSLIntLiteral.h"
@@ -97,12 +99,11 @@ static std::unique_ptr<Expression> simplify_vector(const Context& context,
         ExpressionArray args;
         args.reserve_back(type.columns());
         for (int i = 0; i < type.columns(); i++) {
-            U value = foldFn(left.getVecComponent<T>(i), right.getVecComponent<T>(i));
+            U value = foldFn(left.getConstantSubexpression(i)->as<Literal<T>>().value(),
+                             right.getConstantSubexpression(i)->as<Literal<T>>().value());
             args.push_back(Literal<T>::Make(left.fOffset, value, &componentType));
         }
-        auto foldedCtor = Constructor::Convert(context, left.fOffset, type, std::move(args));
-        SkASSERT(foldedCtor);
-        return foldedCtor;
+        return ConstructorCompound::Make(context, left.fOffset, type, std::move(args));
     };
 
     switch (op.kind()) {
@@ -126,14 +127,12 @@ static std::unique_ptr<Expression> cast_expression(const Context& context,
     return ctor;
 }
 
-static Constructor splat_scalar(const Expression& scalar, const Type& type) {
+static ConstructorSplat splat_scalar(const Expression& scalar, const Type& type) {
     SkASSERT(type.isVector());
     SkASSERT(type.componentType() == scalar.type());
 
-    // Use a Constructor to splat the scalar expression across a vector.
-    ExpressionArray arg;
-    arg.push_back(scalar.clone());
-    return Constructor{scalar.fOffset, type, std::move(arg)};
+    // Use a constructor to splat the scalar expression across a vector.
+    return ConstructorSplat{scalar.fOffset, type, scalar.clone()};
 }
 
 bool ConstantFolder::GetConstantInt(const Expression& value, SKSL_INT* out) {
@@ -161,8 +160,8 @@ static bool is_constant_scalar_value(const Expression& inExpr, float match) {
 }
 
 static bool contains_constant_zero(const Expression& expr) {
-    if (expr.is<Constructor>()) {
-        for (const auto& arg : expr.as<Constructor>().arguments()) {
+    if (expr.isAnyConstructor()) {
+        for (const auto& arg : expr.asAnyConstructor().argumentSpan()) {
             if (contains_constant_zero(*arg)) {
                 return true;
             }
@@ -176,8 +175,8 @@ static bool is_constant_value(const Expression& expr, float value) {
     // This check only supports scalars and vectors (and in particular, not matrices).
     SkASSERT(expr.type().isScalar() || expr.type().isVector());
 
-    if (expr.is<Constructor>()) {
-        for (const auto& arg : expr.as<Constructor>().arguments()) {
+    if (expr.isAnyConstructor()) {
+        for (const auto& arg : expr.asAnyConstructor().argumentSpan()) {
             if (!is_constant_value(*arg, value)) {
                 return false;
             }
@@ -218,7 +217,11 @@ const Expression* ConstantFolder::GetConstantValueForVariable(const Expression& 
             break;
         }
         expr = var.initialValue();
-        SkASSERT(expr);
+        if (!expr) {
+            SkDEBUGFAILF("found a const variable without an initial value (%s)",
+                         var.description().c_str());
+            break;
+        }
         if (expr->isCompileTimeConstant()) {
             return expr;
         }
@@ -228,6 +231,15 @@ const Expression* ConstantFolder::GetConstantValueForVariable(const Expression& 
     }
     // We didn't find a compile-time constant at the end. Return the expression as-is.
     return &inExpr;
+}
+
+std::unique_ptr<Expression> ConstantFolder::MakeConstantValueForVariable(
+        std::unique_ptr<Expression> expr) {
+    const Expression* constantExpr = GetConstantValueForVariable(*expr);
+    if (constantExpr != expr.get()) {
+        expr = constantExpr->clone();
+    }
+    return expr;
 }
 
 static std::unique_ptr<Expression> simplify_no_op_arithmetic(const Context& context,
@@ -406,9 +418,9 @@ std::unique_ptr<Expression> ConstantFolder::Simplify(const Context& context,
     // precision to calculate the results and hope the result makes sense.
     // TODO(skia:10932): detect and handle integer overflow properly.
     using SKSL_UINT = uint64_t;
-    #define RESULT(t, op) t ## Literal::Make(context, offset, leftVal op rightVal)
-    #define URESULT(t, op) t ## Literal::Make(context, offset, (SKSL_UINT) leftVal op \
-                                                               (SKSL_UINT) rightVal)
+    #define RESULT(t, op)   t ## Literal::Make(offset, leftVal op rightVal, &resultType)
+    #define URESULT(t, op)  t ## Literal::Make(offset, (SKSL_UINT)(leftVal) op \
+                                                       (SKSL_UINT)(rightVal), &resultType)
     if (left->is<IntLiteral>() && right->is<IntLiteral>()) {
         SKSL_INT leftVal  = left->as<IntLiteral>().value();
         SKSL_INT rightVal = right->as<IntLiteral>().value();
@@ -513,8 +525,9 @@ std::unique_ptr<Expression> ConstantFolder::Simplify(const Context& context,
         return nullptr;
     }
 
-    // Perform constant folding on pairs of matrices.
-    if (leftType.isMatrix() && rightType.isMatrix()) {
+    // Perform constant folding on pairs of matrices or arrays.
+    if ((leftType.isMatrix() && rightType.isMatrix()) ||
+        (leftType.isArray() && rightType.isArray())) {
         bool equality;
         switch (op.kind()) {
             case Token::Kind::TK_EQEQ:

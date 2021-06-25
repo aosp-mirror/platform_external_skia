@@ -3451,66 +3451,87 @@ protected:
     SkString name() override { return SkString("Paragraph59"); }
 
     void onDrawContent(SkCanvas* canvas) override {
-        canvas->drawColor(SK_ColorYELLOW);
 
         auto fontCollection = getFontCollection();
-        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
-        fontCollection->enableFontFallback();
-
-        SkPaint paint;
-        paint.setColor(SK_ColorBLUE);
-        canvas->drawRect(SkRect::MakeWH(300, 100), paint);
+        //fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        //fontCollection->enableFontFallback();
 
         ParagraphStyle paragraph_style;
         TextStyle text_style;
+        text_style.setColor(SK_ColorBLACK);
         text_style.setFontFamilies({SkString("Roboto")});
         ParagraphBuilderImpl builder(paragraph_style, fontCollection);
-        text_style.setFontSize(36);
-        text_style.setColor(SK_ColorBLACK);
-        paint.setColor(SK_ColorWHITE);
-        text_style.setBackgroundColor(paint);
+        text_style.setFontSize(14);
         builder.pushStyle(text_style);
-        builder.addText("aaa bbb ");
-        PlaceholderStyle placeholder_style;
-        placeholder_style.fHeight = 8;
-        placeholder_style.fWidth = 300;
-        placeholder_style.fBaseline = TextBaseline::kAlphabetic;
-        placeholder_style.fAlignment = PlaceholderAlignment::kBottom;
-        builder.pushStyle(text_style);
-        builder.addPlaceholder(placeholder_style);
-        placeholder_style.fHeight = 20;
-        builder.pushStyle(text_style);
-        builder.addPlaceholder(placeholder_style);
+        builder.addText("The quick brown fox ate a hamburgerfons and got sick.");
         auto paragraph = builder.Build();
-        paragraph->layout(290);
+        paragraph->layout(width());
+
         paragraph->paint(canvas, 0, 0);
 
-        auto placeholders = paragraph->getRectsForPlaceholders();
-        paint.setStyle(SkPaint::kStroke_Style);
-        paint.setColor(SK_ColorRED);
-        for (auto& p : placeholders) {
-            canvas->drawRect(p.rect, paint);
-            paint.setColor(SK_ColorGREEN);
-        }
-
-        if (this->isVerbose()) {
-            auto impl = static_cast<ParagraphImpl*>(paragraph.get());
-            for (auto& line : impl->lines()) {
-                SkDebugf("@%f +%f\n", line.offset().fY, line.height());
+        paragraph->visit([&](int, const skia::textlayout::Paragraph::VisitorInfo* info) {
+            if (!info) {
+                return;
             }
-        }
+            SkFontMetrics metrics;
+            info->font.getMetrics(&metrics);
+
+            auto first = info->positions[0]; first.offset(info->origin.fX, info->origin.fY);
+            SkRect rect = SkRect::MakeXYWH(first.fX,
+                                           first.fY + metrics.fAscent,
+                                           info->advanceX - first.fX,
+                                           metrics.fDescent - metrics.fAscent);
+            SkPaint paint;
+            paint.setColor(SK_ColorLTGRAY);
+            canvas->drawRect(rect, paint);
+        });
+
+        paragraph->paint(canvas, 0, 0);
     }
 
 private:
     using INHERITED = Sample;
 };
 
-/*
- *             WidgetSpan(child: Container(width: 300.0, height: 20.0, color: Colors.red)),
-            WidgetSpan(child: Container(width: 300.0, height: 8.0, color: Colors.green)),
-            TextSpan(text: 'Text', style: TextStyle(fontSize: 36.0)),
- */
+class ParagraphView60 : public ParagraphView_Base {
+protected:
+    SkString name() override { return SkString("ParagraphView60"); }
 
+    void onDrawContent(SkCanvas* canvas) override {
+
+        SkString text("");
+        canvas->drawColor(SK_ColorWHITE);
+
+        auto fontCollection = sk_make_sp<FontCollection>();
+        fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+        fontCollection->enableFontFallback();
+
+        TextStyle text_style;
+        text_style.setColor(SK_ColorBLACK);
+        text_style.setFontFamilies({SkString("Roboto")});
+        text_style.setFontSize(56.0f);
+        text_style.setHeight(3.0f);
+        text_style.setHeightOverride(true);
+        ParagraphStyle paragraph_style;
+        paragraph_style.setTextStyle(text_style);
+
+        auto draw = [&](const char* text) {
+            ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+            builder.pushStyle(text_style);
+            builder.addText(text);
+            auto paragraph = builder.Build();
+            paragraph->layout(width());
+            paragraph->paint(canvas, 0, 0);
+            SkDebugf("Height: %f\n", paragraph->getHeight());
+        };
+        draw("Something");
+        draw("\n");
+        draw("");
+    }
+
+private:
+    using INHERITED = Sample;
+};
 }  // namespace
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3571,3 +3592,4 @@ DEF_SAMPLE(return new ParagraphView56();)
 DEF_SAMPLE(return new ParagraphView57();)
 DEF_SAMPLE(return new ParagraphView58();)
 DEF_SAMPLE(return new ParagraphView59();)
+DEF_SAMPLE(return new ParagraphView60();)

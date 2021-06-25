@@ -9,6 +9,7 @@
 #define GrVkResourceProvider_DEFINED
 
 #include "include/gpu/vk/GrVkTypes.h"
+#include "include/private/SkMutex.h"
 #include "include/private/SkTArray.h"
 #include "src/core/SkLRUCache.h"
 #include "src/core/SkTDynamicHash.h"
@@ -25,9 +26,6 @@
 #include "src/gpu/vk/GrVkSampler.h"
 #include "src/gpu/vk/GrVkSamplerYcbcrConversion.h"
 #include "src/gpu/vk/GrVkUtil.h"
-
-#include <mutex>
-#include <thread>
 
 class GrVkCommandPool;
 class GrVkGpu;
@@ -70,7 +68,7 @@ public:
     // and returns. The caller can optionally pass in a pointer to a CompatibleRPHandle. If this is
     // non null it will be set to a handle that can be used in the furutre to quickly return a
     // compatible GrVkRenderPasses without the need inspecting a GrVkRenderTarget.
-    const GrVkRenderPass* findCompatibleRenderPass(const GrVkRenderTarget& target,
+    const GrVkRenderPass* findCompatibleRenderPass(GrVkRenderTarget* target,
                                                    CompatibleRPHandle* compatibleHandle,
                                                    bool withResolve,
                                                    bool withStencil,
@@ -152,7 +150,7 @@ public:
 
     sk_sp<const GrVkPipeline> findOrCreateMSAALoadPipeline(
             const GrVkRenderPass& renderPass,
-            const GrVkRenderTarget* dst,
+            int numSamples,
             VkPipelineShaderStageCreateInfo*,
             VkPipelineLayout);
 
@@ -209,6 +207,14 @@ public:
     // resource usages.
     void destroyResources();
 
+    // Currently we just release available command pools (which also releases their buffers). The
+    // command buffers and pools take up the most memory. Other objects (e.g. samples,
+    // ycbcr conversions, etc.) tend to be fairly light weight and not worth the effort to remove
+    // them and then possibly remake them. Additionally many of those objects have refs/handles that
+    // are held by other objects that aren't deleted here. Thus the memory wins for removing these
+    // objects from the cache are probably not worth the complexity of safely releasing them.
+    void releaseUnlockedBackendObjects();
+
     void backgroundReset(GrVkCommandPool* pool);
 
     void reset(GrVkCommandPool* pool);
@@ -218,7 +224,6 @@ public:
 #endif
 
 private:
-
     class PipelineStateCache : public GrThreadSafePipelineBuilder {
     public:
         PipelineStateCache(GrVkGpu* gpu);
@@ -233,19 +238,18 @@ private:
                                                      const GrProgramInfo& programInfo,
                                                      VkRenderPass compatibleRenderPass,
                                                      Stats::ProgramCacheResult* stat) {
-            return this->findOrCreatePipelineState(nullptr, desc, programInfo,
-                                                   compatibleRenderPass, false, stat);
+            return this->findOrCreatePipelineStateImpl(desc, programInfo, compatibleRenderPass,
+                                                       false, stat);
         }
 
     private:
         struct Entry;
 
-        GrVkPipelineState* findOrCreatePipelineState(GrRenderTarget*,
-                                                     const GrProgramDesc&,
-                                                     const GrProgramInfo&,
-                                                     VkRenderPass compatibleRenderPass,
-                                                     bool overrideSubpassForResolveLoad,
-                                                     Stats::ProgramCacheResult*);
+        GrVkPipelineState* findOrCreatePipelineStateImpl(const GrProgramDesc&,
+                                                         const GrProgramInfo&,
+                                                         VkRenderPass compatibleRenderPass,
+                                                         bool overrideSubpassForResolveLoad,
+                                                         Stats::ProgramCacheResult*);
 
         struct DescHash {
             uint32_t operator()(const GrProgramDesc& desc) const {
@@ -311,8 +315,10 @@ private:
     // Array of command pools that we are waiting on
     SkSTArray<4, GrVkCommandPool*, true> fActiveCommandPools;
 
+    SkMutex fBackgroundMutex;
+
     // Array of available command pools that are not in flight
-    SkSTArray<4, GrVkCommandPool*, true> fAvailableCommandPools;
+    SkSTArray<4, GrVkCommandPool*, true> fAvailableCommandPools SK_GUARDED_BY(fBackgroundMutex);
 
     // Stores GrVkSampler objects that we've already created so we can reuse them across multiple
     // GrVkPipelineStates
@@ -328,8 +334,6 @@ private:
 
     GrVkDescriptorSetManager::Handle fUniformDSHandle;
     GrVkDescriptorSetManager::Handle fInputDSHandle;
-
-    std::recursive_mutex fBackgroundMutex;
 };
 
 #endif

@@ -12,6 +12,11 @@
 #include "include/private/GrImageContext.h"
 #include "include/private/SkTArray.h"
 
+#if GR_GPU_STATS && GR_TEST_UTILS
+#include <map>
+#include <string>
+#endif
+
 class GrAuditTrail;
 class GrBackendFormat;
 class GrDrawingManager;
@@ -117,7 +122,7 @@ protected:
     // Like Arenas, but preserves ownership of the underlying pools.
     class OwnedArenas {
     public:
-        OwnedArenas();
+        OwnedArenas(bool ddlRecording);
         ~OwnedArenas();
 
         Arenas get();
@@ -125,11 +130,12 @@ protected:
         OwnedArenas& operator=(OwnedArenas&&);
 
     private:
+        bool fDDLRecording;
         std::unique_ptr<SkArenaAlloc> fRecordTimeAllocator;
         std::unique_ptr<GrSubRunAllocator> fRecordTimeSubRunAllocator;
     };
 
-    GrRecordingContext(sk_sp<GrContextThreadSafeProxy>);
+    GrRecordingContext(sk_sp<GrContextThreadSafeProxy>, bool ddlRecording);
 
     bool init() override;
 
@@ -227,6 +233,19 @@ protected:
 #endif
 #endif // GR_GPU_STATS
     } fStats;
+
+#if GR_GPU_STATS && GR_TEST_UTILS
+    struct DMSAAStats {
+        void dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values) const;
+        void dump() const;
+        void merge(const DMSAAStats&);
+        int fNumRenderPasses = 0;
+        int fNumMultisampleRenderPasses = 0;
+        std::map<std::string, int> fTriggerCounts;
+    };
+
+    DMSAAStats fDMSAAStats;
+#endif
 
     Stats* stats() { return &fStats; }
     const Stats* stats() const { return &fStats; }

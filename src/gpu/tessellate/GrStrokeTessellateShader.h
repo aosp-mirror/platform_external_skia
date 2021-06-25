@@ -27,9 +27,10 @@ class GrGLSLUniformHandler;
 class GrStrokeTessellateShader : public GrPathShader {
 public:
     // Are we using hardware tessellation or indirect draws?
-    enum class Mode : bool {
-        kTessellation,
-        kIndirect
+    enum class Mode {
+        kHardwareTessellation,
+        kLog2Indirect,
+        kFixedCount
     };
 
     enum class ShaderFlags {
@@ -42,94 +43,32 @@ public:
 
     GR_DECL_BITFIELD_CLASS_OPS_FRIENDS(ShaderFlags);
 
-    // When using indirect draws, we expect a fixed number of additional edges to be appended onto
-    // each instance in order to implement its preceding join. Specifically, each join emits:
+    // Returns the fixed number of edges that are always emitted with the given join type. If the
+    // join is round, the caller needs to account for the additional radial edges on their own.
+    // Specifically, each join always emits:
     //
-    //   * Two colocated edges at the beginning (a double-sided edge to seam with the preceding
-    //     stroke and a single-sided edge to seam with the join).
+    //   * Two colocated edges at the beginning (a full-width edge to seam with the preceding stroke
+    //     and a half-width edge to begin the join).
     //
-    //   * An extra edge in the middle for miter joins, or else a variable number for round joins
-    //     (counted in the resolveLevel).
+    //   * An extra edge in the middle for miter joins, or else a variable number of radial edges
+    //     for round joins (the caller is responsible for counting radial edges from round joins).
     //
-    //   * A single sided edge at the end of the join that is colocated with the first (double
-    //     sided) edge of the stroke
+    //   * A half-width edge at the end of the join that will be colocated with the first
+    //     (full-width) edge of the stroke.
     //
-    constexpr static int NumExtraEdgesInIndirectJoin(SkPaint::Join joinType) {
+    constexpr static int NumFixedEdgesInJoin(SkPaint::Join joinType) {
         switch (joinType) {
             case SkPaint::kMiter_Join:
                 return 4;
             case SkPaint::kRound_Join:
-                // The inner edges for round joins are counted in the stroke's resolveLevel.
+                // The caller is responsible for counting the variable number of middle, radial
+                // segments on round joins.
                 [[fallthrough]];
             case SkPaint::kBevel_Join:
                 return 3;
         }
         SkUNREACHABLE;
     }
-
-    // These tolerances decide the number of parametric and radial segments the tessellator will
-    // linearize curves into. These decisions are made in (pre-viewMatrix) local path space.
-    struct Tolerances {
-        // Decides the number of parametric segments the tessellator adds for each curve. (Uniform
-        // steps in parametric space.) The tessellator will add enough parametric segments so that,
-        // once transformed into device space, they never deviate by more than
-        // 1/GrTessellationPathRenderer::kLinearizationIntolerance pixels from the true curve.
-        constexpr static float CalcParametricIntolerance(float matrixMaxScale) {
-            return matrixMaxScale * GrTessellationPathRenderer::kLinearizationIntolerance;
-        }
-        // Decides the number of radial segments the tessellator adds for each curve. (Uniform steps
-        // in tangent angle.) The tessellator will add this number of radial segments for each
-        // radian of rotation in local path space.
-        static float CalcNumRadialSegmentsPerRadian(float parametricIntolerance,
-                                                    float strokeWidth) {
-            return .5f / acosf(std::max(1 - 2 / (parametricIntolerance * strokeWidth), -1.f));
-        }
-        template<int N> static grvx::vec<N> ApproxNumRadialSegmentsPerRadian(
-                float parametricIntolerance, grvx::vec<N> strokeWidths) {
-            grvx::vec<N> cosTheta = skvx::max(1 - 2 / (parametricIntolerance * strokeWidths), -1);
-            // Subtract GRVX_APPROX_ACOS_MAX_ERROR so we never account for too few segments.
-            return .5f / (grvx::approx_acos(cosTheta) - GRVX_APPROX_ACOS_MAX_ERROR);
-        }
-        // Returns the equivalent stroke width in (pre-viewMatrix) local path space that the
-        // tessellator will use when rendering this stroke. This only differs from the actual stroke
-        // width for hairlines.
-        static float GetLocalStrokeWidth(const float matrixMinMaxScales[2], float strokeWidth) {
-            SkASSERT(strokeWidth >= 0);
-            float localStrokeWidth = strokeWidth;
-            if (localStrokeWidth == 0) {  // Is the stroke a hairline?
-                float matrixMinScale = matrixMinMaxScales[0];
-                float matrixMaxScale = matrixMinMaxScales[1];
-                // If the stroke is hairline then the tessellator will operate in post-transform
-                // space instead. But for the sake of CPU methods that need to conservatively
-                // approximate the number of segments to emit, we use
-                // localStrokeWidth ~= 1/matrixMinScale.
-                float approxScale = matrixMinScale;
-                // If the matrix has strong skew, don't let the scale shoot off to infinity. (This
-                // does not affect the tessellator; only the CPU methods that approximate the number
-                // of segments to emit.)
-                approxScale = std::max(matrixMinScale, matrixMaxScale * .25f);
-                localStrokeWidth = 1/approxScale;
-                if (localStrokeWidth == 0) {
-                    // We just can't accidentally return zero from this method because zero means
-                    // "hairline". Otherwise return whatever we calculated above.
-                    localStrokeWidth = SK_ScalarNearlyZero;
-                }
-            }
-            return localStrokeWidth;
-        }
-        static Tolerances Make(const float matrixMinMaxScales[2], float strokeWidth) {
-            return MakeNonHairline(matrixMinMaxScales[1],
-                                   GetLocalStrokeWidth(matrixMinMaxScales, strokeWidth));
-        }
-        static Tolerances MakeNonHairline(float matrixMaxScale, float strokeWidth) {
-            SkASSERT(strokeWidth > 0);
-            float parametricIntolerance = CalcParametricIntolerance(matrixMaxScale);
-            return {parametricIntolerance,
-                    CalcNumRadialSegmentsPerRadian(parametricIntolerance, strokeWidth)};
-        }
-        float fParametricIntolerance;
-        float fNumRadialSegmentsPerRadian;
-    };
 
     // We encode all of a join's information in a single float value:
     //
@@ -160,40 +99,18 @@ public:
         float fJoinType;  // See GetJoinType().
     };
 
-    // Size in bytes of a tessellation patch with the given shader flags.
-    static size_t PatchStride(ShaderFlags shaderFlags) {
-        return sizeof(SkPoint) * 5 + DynamicStateStride(shaderFlags);
-    }
-
-    // Size in bytes of an indirect draw instance with the given shader flags.
-    static size_t IndirectInstanceStride(ShaderFlags shaderFlags) {
-        return sizeof(float) * 11 + DynamicStateStride(shaderFlags);
-    }
-
-    // Combined size in bytes of the dynamic state attribs enabled in the given shader flags.
-    static size_t DynamicStateStride(ShaderFlags shaderFlags) {
-        size_t stride = 0;
-        if (shaderFlags & ShaderFlags::kDynamicStroke) {
-            stride += sizeof(DynamicStroke);
-        }
-        if (shaderFlags & ShaderFlags::kDynamicColor) {
-            stride += (shaderFlags & ShaderFlags::kWideColor) ? sizeof(float) * 4 : 4;
-        }
-        return stride;
-    }
-
     // 'viewMatrix' is applied to the geometry post tessellation. It cannot have perspective.
     GrStrokeTessellateShader(Mode mode, ShaderFlags shaderFlags, const SkMatrix& viewMatrix,
                              const SkStrokeRec& stroke, SkPMColor4f color)
             : GrPathShader(kTessellate_GrStrokeTessellateShader_ClassID, viewMatrix,
-                           (mode == Mode::kTessellation) ?
+                           (mode == Mode::kHardwareTessellation) ?
                                    GrPrimitiveType::kPatches : GrPrimitiveType::kTriangleStrip,
-                           (mode == Mode::kTessellation) ? 1 : 0)
+                           (mode == Mode::kHardwareTessellation) ? 1 : 0)
             , fMode(mode)
             , fShaderFlags(shaderFlags)
             , fStroke(stroke)
             , fColor(color) {
-        if (fMode == Mode::kTessellation) {
+        if (fMode == Mode::kHardwareTessellation) {
             // A join calculates its starting angle using prevCtrlPtAttr.
             fAttribs.emplace_back("prevCtrlPtAttr", kFloat2_GrVertexAttribType, kFloat2_GrSLType);
             // pts 0..3 define the stroke as a cubic bezier. If p3.y is infinity, then it's a conic
@@ -217,15 +134,19 @@ public:
             // 180-degree point stroke.
             fAttribs.emplace_back("pts01Attr", kFloat4_GrVertexAttribType, kFloat4_GrSLType);
             fAttribs.emplace_back("pts23Attr", kFloat4_GrVertexAttribType, kFloat4_GrSLType);
-            // "lastControlPoint" and "numTotalEdges" are both packed into argsAttr.
-            //
-            // A join calculates its starting angle using "argsAttr.xy=lastControlPoint".
-            //
-            // "abs(argsAttr.z=numTotalEdges)" tells the shader the literal number of edges in the
-            // triangle strip being rendered (i.e., it should be vertexCount/2). If numTotalEdges is
-            // negative and the join type is "kRound", it also instructs the shader to only allocate
-            // one segment the preceding round join.
-            fAttribs.emplace_back("argsAttr", kFloat3_GrVertexAttribType, kFloat3_GrSLType);
+            if (fMode == Mode::kLog2Indirect) {
+                // argsAttr.xy contains the lastControlPoint for setting up the join.
+                //
+                // "argsAttr.z=numTotalEdges" tells the shader the literal number of edges in the
+                // triangle strip being rendered (i.e., it should be vertexCount/2). If
+                // numTotalEdges is negative and the join type is "kRound", it also instructs the
+                // shader to only allocate one segment the preceding round join.
+                fAttribs.emplace_back("argsAttr", kFloat3_GrVertexAttribType, kFloat3_GrSLType);
+            } else {
+                SkASSERT(fMode == Mode::kFixedCount);
+                // argsAttr contains the lastControlPoint for setting up the join.
+                fAttribs.emplace_back("argsAttr", kFloat2_GrVertexAttribType, kFloat2_GrSLType);
+            }
         }
         if (fShaderFlags & ShaderFlags::kDynamicStroke) {
             fAttribs.emplace_back("dynamicStrokeAttr", kFloat2_GrVertexAttribType,
@@ -238,12 +159,10 @@ public:
                                           : kUByte4_norm_GrVertexAttribType,
                                   kHalf4_GrSLType);
         }
-        if (fMode == Mode::kTessellation) {
+        if (fMode == Mode::kHardwareTessellation) {
             this->setVertexAttributes(fAttribs.data(), fAttribs.count());
-            SkASSERT(this->vertexStride() == PatchStride(fShaderFlags));
         } else {
             this->setInstanceAttributes(fAttribs.data(), fAttribs.count());
-            SkASSERT(this->instanceStride() == IndirectInstanceStride(fShaderFlags));
         }
         SkASSERT(fAttribs.count() <= kMaxAttribCount);
     }
@@ -252,19 +171,17 @@ public:
     bool hasDynamicStroke() const { return fShaderFlags & ShaderFlags::kDynamicStroke; }
     bool hasDynamicColor() const { return fShaderFlags & ShaderFlags::kDynamicColor; }
 
+    // Used by GrFixedCountTessellator to configure the uniform value that tells the shader how many
+    // total edges are in the triangle strip.
+    void setFixedCountNumTotalEdges(int value) {
+        SkASSERT(fMode == Mode::kFixedCount);
+        fFixedCountNumTotalEdges = value;
+    }
+
 private:
     const char* name() const override { return "GrStrokeTessellateShader"; }
     void getGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder* b) const override;
     GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps&) const final;
-
-    SkString getTessControlShaderGLSL(const GrGLSLGeometryProcessor*,
-                                      const char* versionAndExtensionDecls,
-                                      const GrGLSLUniformHandler&,
-                                      const GrShaderCaps&) const override;
-    SkString getTessEvaluationShaderGLSL(const GrGLSLGeometryProcessor*,
-                                         const char* versionAndExtensionDecls,
-                                         const GrGLSLUniformHandler&,
-                                         const GrShaderCaps&) const override;
 
     const Mode fMode;
     const ShaderFlags fShaderFlags;
@@ -274,8 +191,12 @@ private:
     constexpr static int kMaxAttribCount = 5;
     SkSTArray<kMaxAttribCount, Attribute> fAttribs;
 
+    // This is a uniform value used when fMode is kFixedCount that tells the shader how many total
+    // edges are in the triangle strip.
+    float fFixedCountNumTotalEdges = 0;
+
     class TessellationImpl;
-    class IndirectImpl;
+    class InstancedImpl;
 };
 
 GR_MAKE_BITFIELD_CLASS_OPS(GrStrokeTessellateShader::ShaderFlags);

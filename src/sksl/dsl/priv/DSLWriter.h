@@ -19,6 +19,7 @@
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
+#include <list>
 #include <stack>
 
 class AutoDSLContext;
@@ -43,7 +44,7 @@ class ErrorHandler;
  */
 class DSLWriter {
 public:
-    DSLWriter(SkSL::Compiler* compiler);
+    DSLWriter(SkSL::Compiler* compiler, SkSL::ProgramKind kind, int flags);
 
     ~DSLWriter();
 
@@ -82,12 +83,17 @@ public:
      * Returns the final pointer to a pooled Modifiers object that should be used to represent the
      * given modifiers.
      */
-    static const SkSL::Modifiers* Modifiers(SkSL::Modifiers modifiers);
+    static const SkSL::Modifiers* Modifiers(const SkSL::Modifiers& modifiers);
 
     /**
-     * Returns the SkSL variable corresponding to a DSLVar.
+     * Returns the SkSL variable corresponding to a (non-parameter) DSLVar.
      */
     static const SkSL::Variable& Var(DSLVar& var);
+
+    /**
+     * Creates an SkSL variable corresponding to a parameter DSLVar.
+     */
+    static std::unique_ptr<SkSL::Variable> ParameterVar(DSLVar& var);
 
     /**
      * Returns the SkSL declaration corresponding to a DSLVar.
@@ -140,9 +146,19 @@ public:
     static void EndFragmentProcessor();
 
     static GrGLSLUniformHandler::UniformHandle VarUniformHandle(const DSLVar& var);
+#else
+    static bool InFragmentProcessor() {
+        return false;
+    }
 #endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 
     static std::unique_ptr<SkSL::Expression> Call(const FunctionDeclaration& function,
+                                                  ExpressionArray arguments);
+
+    /**
+     * Invokes expr(arguments), where expr is a function or type reference.
+     */
+    static std::unique_ptr<SkSL::Expression> Call(std::unique_ptr<SkSL::Expression> expr,
                                                   ExpressionArray arguments);
 
     /**
@@ -153,7 +169,7 @@ public:
     static DSLPossibleExpression Coerce(std::unique_ptr<Expression> left, const SkSL::Type& type);
 
     static DSLPossibleExpression Construct(const SkSL::Type& type,
-                                           std::vector<DSLExpression> rawArgs);
+                                           SkTArray<DSLExpression> rawArgs);
 
     static std::unique_ptr<Expression> ConvertBinary(std::unique_ptr<Expression> left, Operator op,
                                                      std::unique_ptr<Expression> right);
@@ -171,7 +187,8 @@ public:
 
     static DSLPossibleStatement ConvertSwitch(std::unique_ptr<Expression> value,
                                               ExpressionArray caseValues,
-                                              SkTArray<SkSL::StatementArray> caseStatements);
+                                              SkTArray<SkSL::StatementArray> caseStatements,
+                                              bool isStatic);
 
     /**
      * Sets the ErrorHandler associated with the current thread. This object will be notified when
@@ -195,17 +212,21 @@ public:
         return Instance().fMangle;
     }
 
+    static std::unique_ptr<SkSL::Program> ReleaseProgram();
+
     static DSLWriter& Instance();
 
     static void SetInstance(std::unique_ptr<DSLWriter> instance);
 
 private:
-    SkSL::ProgramConfig fConfig;
+    std::unique_ptr<SkSL::ProgramConfig> fConfig;
+    std::unique_ptr<SkSL::ModifiersPool> fModifiersPool;
     SkSL::Compiler* fCompiler;
     std::unique_ptr<Pool> fPool;
-    std::shared_ptr<SkSL::SymbolTable> fOldSymbolTable;
     SkSL::ProgramConfig* fOldConfig;
+    SkSL::ModifiersPool* fOldModifiersPool;
     std::vector<std::unique_ptr<SkSL::ProgramElement>> fProgramElements;
+    std::vector<const SkSL::ProgramElement*> fSharedElements;
     ErrorHandler* fErrorHandler = nullptr;
     bool fMangle = true;
     bool fMarkVarsDeclared = false;
@@ -214,13 +235,13 @@ private:
     struct StackFrame {
         GrGLSLFragmentProcessor* fProcessor;
         GrGLSLFragmentProcessor::EmitArgs* fEmitArgs;
+        SkSL::StatementArray fSavedDeclarations;
     };
-    std::stack<StackFrame> fStack;
+    std::stack<StackFrame, std::list<StackFrame>> fStack;
 #endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 
     friend class DSLCore;
     friend class DSLVar;
-    friend class ::AutoDSLContext;
 };
 
 } // namespace dsl

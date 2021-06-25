@@ -1,7 +1,6 @@
 layout (
     origin_upper_left,
     override_coverage,
-    early_fragment_tests,
     push_constant,
     blend_support_all_equations,
     tracked,
@@ -16,13 +15,11 @@ layout (
     input_attachment_index = 1,
     max_vertices = 1,
     invocations = 1,
-    marker = one,
     when = one,
     ctype = int,
 
     origin_upper_left,
     override_coverage,
-    early_fragment_tests,
     push_constant,
     blend_support_all_equations,
     tracked,
@@ -37,7 +34,6 @@ layout (
     input_attachment_index = 2,
     max_vertices = 2,
     invocations = 2,
-    marker = two,
     when = two,
     ctype = float
 ) float x;

@@ -438,6 +438,7 @@ export interface CanvasKit {
     readonly FilterQuality: FilterQualityEnumValues;
     readonly FontEdging: FontEdgingEnumValues;
     readonly FontHinting: FontHintingEnumValues;
+    readonly GlyphRunFlags: GlyphRunFlagValues;
     readonly ImageFormat: ImageFormatEnumValues;
     readonly MipmapMode: MipmapModeEnumValues;
     readonly PaintStyle: PaintStyleEnumValues;
@@ -503,6 +504,7 @@ export interface CanvasKit {
     readonly TextAlign: TextAlignEnumValues;
     readonly TextBaseline: TextBaselineEnumValues;
     readonly TextDirection: TextDirectionEnumValues;
+    readonly TextHeightBehavior: TextHeightBehaviorEnumValues;
 
     // Paragraph Constants
     readonly NoDecoration: number;
@@ -646,6 +648,56 @@ export interface LineMetrics {
     baseline: number;
     /** Zero indexed line number. */
     lineNumber: number;
+}
+
+export interface Range {
+    first: number;
+    last:  number;
+}
+
+/**
+ * Information for a run of shaped text. See Paragraph.getShapedLines()
+ *
+ * Notes:
+ * positions is documented as Float32, but it holds twice as many as you expect, and they
+ * are treated logically as pairs of floats: {x0, y0}, {x1, y1}, ... for each glyph.
+ *
+ * positions and offsets arrays have 1 extra slot (actually 2 for positions)
+ * to describe the location "after" the last glyph in the glyphs array.
+ */
+export interface GlyphRun {
+    typeface: Typeface;     // currently set to null (temporary)
+    size: number;
+    fakeBold: Boolean;
+    fakeItalic: Boolean;
+
+    glyphs: Uint16Array;
+    positions: Float32Array;    // alternating x0, y0, x1, y1, ...
+    offsets: Uint32Array;
+    flags: number;              // see GlyphRunFlags
+}
+
+/**
+ * Information for a paragraph of text. See Paragraph.getShapedLines()
+ */
+ export interface ShapedLine {
+    textRange: Range;   // first and last character offsets for the line (derived from runs[])
+    top: number;        // top y-coordinate for the line
+    bottom: number;     // bottom y-coordinate for the line
+    baseline: number;   // baseline y-coordinate for the line
+    runs: GlyphRun[];   // array of GlyphRun objects for the line
+}
+
+/**
+ * Input to ShapeText(..., FontBlock[], ...);
+ */
+export interface FontBlock {
+    length: number;     // number of text codepoints this block is applied to
+
+    typeface: Typeface;
+    size: number;
+    fakeBold: Boolean;
+    fakeItalic: Boolean;
 }
 
 /**
@@ -806,6 +858,11 @@ export interface Paragraph extends EmbindObject<Paragraph> {
     getWordBoundary(offset: number): URange;
 
     /**
+     * Returns an array of ShapedLine objects, describing the paragraph.
+     */
+    getShapedLines(): ShapedLine[];
+
+    /**
      * Lays out the text in the paragraph so it is wrapped to the given width.
      * @param width
      */
@@ -867,6 +924,7 @@ export interface ParagraphStyle {
     strutStyle?: StrutStyle;
     textAlign?: TextAlign;
     textDirection?: TextDirection;
+    textHeightBehavior?: TextHeightBehavior;
     textStyle?: TextStyle;
 }
 
@@ -1058,7 +1116,7 @@ export interface Canvas extends EmbindObject<Canvas> {
      */
     drawAtlas(atlas: Image, srcRects: InputFlattenedRectangleArray,
               dstXforms: InputFlattenedRSXFormArray, paint: Paint,
-              blendMode?: BlendMode, colors?: ColorIntArray,
+              blendMode?: BlendMode | null, colors?: ColorIntArray | null,
               sampling?: CubicResampler | FilterOptions): void;
 
     /**
@@ -1102,6 +1160,20 @@ export interface Canvas extends EmbindObject<Canvas> {
      * @param paint
      */
     drawDRRect(outer: InputRRect, inner: InputRRect, paint: Paint): void;
+
+    /**
+     * Draws a run of glyphs, at corresponding positions, in a given font.
+     * @param glyphs the array of glyph IDs (Uint16TypedArray)
+     * @param positions the array of x,y floats to position each glyph
+     * @param x x-coordinate of the origin of the entire run
+     * @param y y-coordinate of the origin of the entire run
+     * @param font the font that contains the glyphs
+     * @param paint
+     */
+    drawGlyphs(glyphs: InputGlyphIDArray,
+               positions: InputFlattenedPointArray,
+               x: number, y: number,
+               font: Font, paint: Paint): void;
 
     /**
      * Draws the given image with its top-left corner at (left, top) using the current clip,
@@ -1242,6 +1314,21 @@ export interface Canvas extends EmbindObject<Canvas> {
      * @param paint
      */
     drawPath(path: Path, paint: Paint): void;
+
+    /**
+     * Draws a cubic patch defined by 12 control points [top, right, bottom, left] with optional
+     * colors and shader-coordinates [4] specifed for each corner [top-left, top-right, bottom-right, bottom-left]
+     * @param cubics 12 points : 4 connected cubics specifying the boundary of the patch
+     * @param colors optional colors interpolated across the patch
+     * @param texs optional shader coordinates interpolated across the patch
+     * @param mode Specifies how shader and colors blend (if both are specified)
+     * @param paint
+     */
+    drawPatch(cubics: InputFlattenedPointArray,
+              colors?: ColorIntArray | Color[] | null,
+              texs?: InputFlattenedPointArray | null,
+              mode?: BlendMode | null,
+              paint?: Paint): void;
 
     /**
      * Draws the given picture using the current clip, current matrix, and the provided paint.
@@ -1523,10 +1610,22 @@ export interface ContourMeasure extends EmbindObject<ContourMeasure> {
     length(): number;
 }
 
+export interface FontMetrics {
+    ascent: number;     // suggested space above the baseline. < 0
+    descent: number;    // suggested space below the baseline. > 0
+    leading: number;    // suggested spacing between descent of previous line and ascent of next line.
+    bounds?: Rect;      // smallest rect containing all glyphs (relative to 0,0)
+}
+
 /**
  * See SkFont.h for more on this class.
  */
 export interface Font extends EmbindObject<Font> {
+    /**
+     * Returns the FontMetrics for this font.
+     */
+    getMetrics(): FontMetrics;
+
     /**
      * Retrieves the bounds for each glyph in glyphs.
      * If paint is not null, its stroking, PathEffect, and MaskFilter fields are respected.
@@ -1576,6 +1675,11 @@ export interface Font extends EmbindObject<Font> {
     getSkewX(): number;
 
     /**
+     * Returns embolden effect for this font. Default value is false.
+     */
+    isEmbolden(): boolean;
+
+     /**
      * Returns the Typeface set for this font.
      */
     getTypeface(): Typeface | null;
@@ -1624,6 +1728,12 @@ export interface Font extends EmbindObject<Font> {
      * @param sx
      */
     setSkewX(sx: number): void;
+
+    /**
+     * Set embolden effect for this font.
+     * @param embolden
+     */
+    setEmbolden(embolden: boolean): void;
 
     /**
      * Requests, but does not require, that glyphs respect sub-pixel positioning.
@@ -1774,12 +1884,12 @@ export interface CubicResampler {
     B: number;  // 0..1
     C: number;  // 0..1
 }
-/**
 
+/**
  * Specifies sampling using filter and mipmap options
  */
 export interface FilterOptions {
-    filter:  FilterMode;
+    filter: FilterMode;
     mipmap?: MipmapMode;    // defaults to None if not specified
 }
 
@@ -2615,6 +2725,7 @@ export interface StrutStyle {
     fontStyle?: FontStyle;
     fontSize?: number;
     heightMultiplier?: number;
+    halfLeading?: boolean;
     leading?: number;
     forceStrutHeight?: boolean;
 }
@@ -2646,6 +2757,7 @@ export interface TextStyle {
     fontStyle?: FontStyle;
     foregroundColor?: InputColor;
     heightMultiplier?: number;
+    halfLeading?: boolean;
     letterSpacing?: number;
     locale?: string;
     shadows?: TextShadow[];
@@ -2927,6 +3039,11 @@ export interface ParagraphBuilderFactory {
      * @param fontSrc
      */
     MakeFromFontProvider(style: ParagraphStyle, fontSrc: TypefaceFontProvider): ParagraphBuilder;
+
+    /**
+     * Return a shaped array of lines
+     */
+    ShapeText(text: string, runs: FontBlock[], width?: number): ShapedLine[];
 }
 
 export interface ParagraphStyleConstructor {
@@ -3511,11 +3628,8 @@ export type FlattenedPointArray = Float32Array;
  * be the top, left, right, bottom point for each rectangle.
  */
 export type FlattenedRectangleArray = Float32Array;
-/**
- * Regardless of the format we use internally for GlyphID (16 bit unsigned atm), we expose them
- * as 32 bit unsigned.
- */
-export type GlyphIDArray = Uint32Array;
+
+export type GlyphIDArray = Uint16Array;
 /**
  * PathCommand contains a verb and then any arguments needed to fulfill that path verb.
  * Examples:
@@ -3644,6 +3758,7 @@ export type RectWidthStyle = EmbindEnumEntity;
 export type TextAlign = EmbindEnumEntity;
 export type TextBaseline = EmbindEnumEntity;
 export type TextDirection = EmbindEnumEntity;
+export type TextHeightBehavior = EmbindEnumEntity;
 
 export interface AffinityEnumValues extends EmbindEnum {
     Upstream: Affinity;
@@ -3799,6 +3914,13 @@ export interface FontWidthEnumValues extends EmbindEnum {
     UltraExpanded: FontWidth;
 }
 
+/*
+ *  These values can be OR'd together
+ */
+export interface GlyphRunFlagValues {
+    IsWhiteSpace: number;
+}
+
 export interface ImageFormatEnumValues extends EmbindEnum {
     // TODO(kjlubick) When these are compiled in depending on the availability of the codecs,
     //   be sure to make these nullable.
@@ -3847,6 +3969,7 @@ export interface RectHeightStyleEnumValues extends EmbindEnum {
     IncludeLineSpacingMiddle: RectHeightStyle;
     IncludeLineSpacingTop: RectHeightStyle;
     IncludeLineSpacingBottom: RectHeightStyle;
+    Strut: RectHeightStyle;
 }
 
 export interface RectWidthStyleEnumValues extends EmbindEnum {
@@ -3883,6 +4006,13 @@ export interface TextBaselineEnumValues extends EmbindEnum {
 export interface TextDirectionEnumValues extends EmbindEnum {
     LTR: TextDirection;
     RTL: TextDirection;
+}
+
+export interface TextHeightBehaviorEnumValues extends EmbindEnum {
+    All: TextHeightBehavior;
+    DisableFirstAscent: TextHeightBehavior;
+    DisableLastDescent: TextHeightBehavior;
+    DisableAll: TextHeightBehavior;
 }
 
 export interface TileModeEnumValues extends EmbindEnum {

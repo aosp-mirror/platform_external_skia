@@ -28,8 +28,7 @@
 #define SK_OUT_BUILTIN                 10007
 #define SK_LASTFRAGCOLOR_BUILTIN       10008
 #define SK_MAIN_COORDS_BUILTIN         10009
-#define SK_WIDTH_BUILTIN               10011
-#define SK_HEIGHT_BUILTIN              10012
+#define SK_INPUT_COLOR_BUILTIN         10010
 #define SK_FRAGCOORD_BUILTIN              15
 #define SK_CLOCKWISE_BUILTIN              17
 #define SK_VERTEXID_BUILTIN               42
@@ -98,6 +97,18 @@ public:
     Compiler& operator=(const Compiler&) = delete;
 
     /**
+     * Allows optimization settings to be unilaterally overridden. This is meant to allow tools like
+     * Viewer or Nanobench to override the compiler's ProgramSettings and ShaderCaps for debugging.
+     */
+    enum class OverrideFlag {
+        kDefault,
+        kOff,
+        kOn,
+    };
+    static void EnableOptimizer(OverrideFlag flag) { sOptimizer = flag; }
+    static void EnableInliner(OverrideFlag flag) { sInliner = flag; }
+
+    /**
      * If externalFunctions is supplied, those values are registered in the symbol table of the
      * Program, but ownership is *not* transferred. It is up to the caller to keep them alive.
      */
@@ -123,6 +134,8 @@ public:
 
 #if defined(SKSL_STANDALONE) || GR_TEST_UTILS
     bool toCPP(Program& program, String name, OutputStream& out);
+
+    bool toDSLCPP(Program& program, String name, OutputStream& out);
 
     bool toH(Program& program, String name, OutputStream& out);
 #endif
@@ -176,7 +189,8 @@ private:
     const ParsedModule& loadFPModule();
     const ParsedModule& loadGeometryModule();
     const ParsedModule& loadPublicModule();
-    const ParsedModule& loadRuntimeEffectModule();
+    const ParsedModule& loadRuntimeColorFilterModule();
+    const ParsedModule& loadRuntimeShaderModule();
 
     /** Verifies that @if and @switch statements were actually optimized away. */
     void verifyStaticTests(const Program& program);
@@ -201,28 +215,32 @@ private:
     std::shared_ptr<SymbolTable> fRootSymbolTable;
     std::shared_ptr<SymbolTable> fPrivateSymbolTable;
 
-    ParsedModule fRootModule;           // Core types
+    ParsedModule fRootModule;                // Core types
 
-    ParsedModule fPrivateModule;        // [Root] + Internal types
-    ParsedModule fGPUModule;            // [Private] + GPU intrinsics, helper functions
-    ParsedModule fVertexModule;         // [GPU] + Vertex stage decls
-    ParsedModule fFragmentModule;       // [GPU] + Fragment stage decls
-    ParsedModule fGeometryModule;       // [GPU] + Geometry stage decls
-    ParsedModule fFPModule;             // [GPU] + FP features
+    ParsedModule fPrivateModule;             // [Root] + Internal types
+    ParsedModule fGPUModule;                 // [Private] + GPU intrinsics, helper functions
+    ParsedModule fVertexModule;              // [GPU] + Vertex stage decls
+    ParsedModule fFragmentModule;            // [GPU] + Fragment stage decls
+    ParsedModule fGeometryModule;            // [GPU] + Geometry stage decls
+    ParsedModule fFPModule;                  // [GPU] + FP features
 
-    ParsedModule fPublicModule;         // [Root] + Public features
-    ParsedModule fRuntimeEffectModule;  // [Public] + Runtime effect decls
+    ParsedModule fPublicModule;              // [Root] + Public features
+    ParsedModule fRuntimeColorFilterModule;  // [Public] + Runtime shader decls
+    ParsedModule fRuntimeShaderModule;       // [Public] + Runtime color filter decls
 
     // holds ModifiersPools belonging to the core includes for lifetime purposes
-    std::vector<std::unique_ptr<ModifiersPool>> fModifiers;
+    ModifiersPool fCoreModifiers;
 
     Inliner fInliner;
     std::unique_ptr<IRGenerator> fIRGenerator;
 
-    const String* fSource;
-    int fErrorCount;
+    const String* fSource = nullptr;
+    int fErrorCount = 0;
     String fErrorText;
     std::vector<size_t> fErrorTextLength;
+
+    static OverrideFlag sOptimizer;
+    static OverrideFlag sInliner;
 
     friend class AutoSource;
     friend class ::SkSLCompileBench;

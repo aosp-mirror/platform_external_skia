@@ -51,16 +51,6 @@ public:
     const std::unique_ptr<Type> fUShort3;
     const std::unique_ptr<Type> fUShort4;
 
-    const std::unique_ptr<Type> fByte;
-    const std::unique_ptr<Type> fByte2;
-    const std::unique_ptr<Type> fByte3;
-    const std::unique_ptr<Type> fByte4;
-
-    const std::unique_ptr<Type> fUByte;
-    const std::unique_ptr<Type> fUByte2;
-    const std::unique_ptr<Type> fUByte3;
-    const std::unique_ptr<Type> fUByte4;
-
     const std::unique_ptr<Type> fBool;
     const std::unique_ptr<Type> fBool2;
     const std::unique_ptr<Type> fBool3;
@@ -138,6 +128,9 @@ public:
     const std::unique_ptr<Type> fSkCaps;
     const std::unique_ptr<Type> fFragmentProcessor;
 
+    const std::unique_ptr<Type> fColorFilter;
+    const std::unique_ptr<Type> fShader;
+
 private:
     static std::unique_ptr<Type> MakeScalarType(const char* name, const char* abbrev,
                                                 Type::NumberKind numberKind, int priority,
@@ -153,9 +146,8 @@ private:
                                                  bool isDepth, bool isArrayedTexture,
                                                  bool isMultisampled, bool isSampled);
     static std::unique_ptr<Type> MakeSamplerType(const char* name, const Type& textureType);
-    static std::unique_ptr<Type> MakeSeparateSamplerType(const char* name);
-    static std::unique_ptr<Type> MakeOtherType(const char* name);
-    static std::unique_ptr<Type> MakeVoidType(const char* name);
+    static std::unique_ptr<Type> MakeSpecialType(const char* name, const char* abbrev,
+                                                 Type::TypeKind typeKind);
 };
 
 }  // namespace SkSL

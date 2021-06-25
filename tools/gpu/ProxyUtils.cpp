@@ -52,7 +52,7 @@ GrTextureProxy* GetTextureImageProxy(SkImage* image, GrRecordingContext* rContex
 GrSurfaceProxyView MakeTextureProxyViewFromData(GrDirectContext* dContext,
                                                 GrRenderable renderable,
                                                 GrSurfaceOrigin origin,
-                                                GrPixmap pixmap) {
+                                                GrCPixmap pixmap) {
     if (dContext->abandoned()) {
         return {};
     }
@@ -107,8 +107,8 @@ GrProgramInfo* CreateProgramInfo(const GrCaps* caps,
 
     SkDEBUGCODE(auto analysis =) processors.finalize(analysisColor,
                                                      GrProcessorAnalysisCoverage::kSingleChannel,
-                                                     &appliedClip, stencilSettings, false,
-                                                     *caps, GrClampType::kAuto, &analysisColor);
+                                                     &appliedClip, stencilSettings, *caps,
+                                                     GrClampType::kAuto, &analysisColor);
     SkASSERT(!analysis.requiresDstTexture());
 
     return GrSimpleMeshDrawOpHelper::CreateProgramInfo(caps, arena, writeView,

@@ -31,11 +31,11 @@ sk_sp<GrVkSecondaryCBDrawContext> GrVkSecondaryCBDrawContext::Make(GrRecordingCo
         return nullptr;
     }
 
-    auto rtc = GrSurfaceDrawContext::MakeFromVulkanSecondaryCB(ctx, imageInfo, vkInfo, props);
+    auto rtc = GrSurfaceDrawContext::MakeFromVulkanSecondaryCB(ctx, imageInfo, vkInfo,
+                                                               SkSurfacePropsCopyOrDefault(props));
     SkASSERT(rtc->asSurfaceProxy()->isInstantiated());
 
-    sk_sp<SkGpuDevice> device(
-            SkGpuDevice::Make(ctx, std::move(rtc), SkGpuDevice::kUninit_InitContents));
+    auto device = SkGpuDevice::Make(std::move(rtc), SkGpuDevice::kUninit_InitContents);
     if (!device) {
         return nullptr;
     }

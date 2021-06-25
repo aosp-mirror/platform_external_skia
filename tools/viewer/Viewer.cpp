@@ -5,6 +5,8 @@
 * found in the LICENSE file.
 */
 
+#include "tools/viewer/Viewer.h"
+
 #include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
 #include "include/core/SkGraphics.h"
@@ -19,7 +21,9 @@
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkMD5.h"
 #include "src/core/SkOSFile.h"
+#include "src/core/SkReadBuffer.h"
 #include "src/core/SkScan.h"
+#include "src/core/SkSurfacePriv.h"
 #include "src/core/SkTSort.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/core/SkTextBlobPriv.h"
@@ -30,6 +34,7 @@
 #include "src/gpu/ccpr/GrCoverageCountingPathRenderer.h"
 #include "src/gpu/tessellate/GrTessellationPathRenderer.h"
 #include "src/image/SkImage_Base.h"
+#include "src/sksl/SkSLCompiler.h"
 #include "src/utils/SkJSONWriter.h"
 #include "src/utils/SkOSPath.h"
 #include "tools/Resources.h"
@@ -40,13 +45,13 @@
 #include "tools/viewer/BisectSlide.h"
 #include "tools/viewer/GMSlide.h"
 #include "tools/viewer/ImageSlide.h"
+#include "tools/viewer/MSKPSlide.h"
 #include "tools/viewer/ParticlesSlide.h"
 #include "tools/viewer/SKPSlide.h"
 #include "tools/viewer/SampleSlide.h"
 #include "tools/viewer/SkSLSlide.h"
 #include "tools/viewer/SlideDir.h"
 #include "tools/viewer/SvgSlide.h"
-#include "tools/viewer/Viewer.h"
 
 #include <cstdlib>
 #include <map>
@@ -64,11 +69,6 @@
 #if defined(SK_ENABLE_SKRIVE)
     #include "tools/viewer/SkRiveSlide.h"
 #endif
-
-namespace SkSL {
-extern bool gSkSLOptimizer;
-extern bool gSkSLInliner;
-}
 
 class CapturingShaderErrorHandler : public GrContextOptions::ShaderErrorHandler {
 public:
@@ -91,6 +91,8 @@ static CapturingShaderErrorHandler gShaderErrorHandler;
 GrContextOptions::ShaderErrorHandler* Viewer::ShaderErrorHandler() { return &gShaderErrorHandler; }
 
 using namespace sk_app;
+using SkSL::Compiler;
+using OverrideFlag = SkSL::Compiler::OverrideFlag;
 
 static std::map<GpuPathRenderers, std::string> gPathRendererNames;
 
@@ -150,18 +152,17 @@ static DEFINE_string2(match, m, nullptr,
                "it is skipped unless some list entry starts with ~");
 
 #if defined(SK_BUILD_FOR_ANDROID)
-    static DEFINE_string(jpgs, "/data/local/tmp/resources", "Directory to read jpgs from.");
-    static DEFINE_string(skps, "/data/local/tmp/skps", "Directory to read skps from.");
-    static DEFINE_string(lotties, "/data/local/tmp/lotties",
-                         "Directory to read (Bodymovin) jsons from.");
-    static DEFINE_string(rives, "/data/local/tmp/rives",
-                         "Directory to read Rive (Flare) files from.");
+#   define PATH_PREFIX "/data/local/tmp/"
 #else
-    static DEFINE_string(jpgs, "jpgs", "Directory to read jpgs from.");
-    static DEFINE_string(skps, "skps", "Directory to read skps from.");
-    static DEFINE_string(lotties, "lotties", "Directory to read (Bodymovin) jsons from.");
-    static DEFINE_string(rives, "rives", "Directory to read Rive (Flare) files from.");
+#   define PATH_PREFIX ""
 #endif
+
+static DEFINE_string(jpgs   , PATH_PREFIX "jpgs"   , "Directory to read jpgs from.");
+static DEFINE_string(skps   , PATH_PREFIX "skps"   , "Directory to read skps from.");
+static DEFINE_string(mskps  , PATH_PREFIX "mskps"  , "Directory to read mskps from.");
+static DEFINE_string(lotties, PATH_PREFIX "lotties", "Directory to read (Bodymovin) jsons from.");
+static DEFINE_string(rives  , PATH_PREFIX "rives"  , "Directory to read Rive (Flare) files from.");
+#undef PATH_PREFIX
 
 static DEFINE_string(svgs, "", "Directory to read SVGs from, or a single SVG file.");
 
@@ -375,10 +376,14 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     SetCtxOptionsFromCommonFlags(&displayParams.fGrContextOptions);
     displayParams.fGrContextOptions.fPersistentCache = &fPersistentCache;
     displayParams.fGrContextOptions.fShaderCacheStrategy =
-            GrContextOptions::ShaderCacheStrategy::kBackendSource;
+            GrContextOptions::ShaderCacheStrategy::kSkSL;
     displayParams.fGrContextOptions.fShaderErrorHandler = &gShaderErrorHandler;
     displayParams.fGrContextOptions.fSuppressPrints = true;
-    displayParams.fGrContextOptions.fAlwaysAntialias = FLAGS_dmsaa;
+    if (FLAGS_dmsaa) {
+        displayParams.fSurfaceProps = SkSurfaceProps(
+                displayParams.fSurfaceProps.flags() | kDMSAA_SkSurfacePropsPrivateFlag,
+                displayParams.fSurfaceProps.pixelGeometry());
+    }
     fWindow->setRequestedDisplayParams(displayParams);
     fDisplay = fWindow->getRequestedDisplayParams();
     fRefresh = FLAGS_redraw;
@@ -475,6 +480,13 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
         params.fGrContextOptions.fWireframeMode = !params.fGrContextOptions.fWireframeMode;
         fWindow->setRequestedDisplayParams(params);
         fWindow->inval();
+    });
+    fCommands.addCommand('w', "Modes", "Toggle reduced shaders", [this]() {
+      DisplayParams params = fWindow->getRequestedDisplayParams();
+      params.fGrContextOptions.fReducedShaderVariations =
+              !params.fGrContextOptions.fReducedShaderVariations;
+      fWindow->setRequestedDisplayParams(params);
+      fWindow->inval();
     });
     fCommands.addCommand(skui::Key::kRight, "Right", "Navigation", "Next slide", [this]() {
         this->setCurrentSlide(fCurrentSlide < fSlides.count() - 1 ? fCurrentSlide + 1 : 0);
@@ -724,6 +736,10 @@ void Viewer::initSlides() {
         const CommandLineFlags::StringArray&   fFlags;
         const SlideFactory                     fFactory;
     } gExternalSlidesInfo[] = {
+        { ".mskp", "mskp-dir", FLAGS_mskps,
+          [](const SkString& name, const SkString& path) -> sk_sp<Slide> {
+            return sk_make_sp<MSKPSlide>(name, path);}
+        },
         { ".skp", "skp-dir", FLAGS_skps,
             [](const SkString& name, const SkString& path) -> sk_sp<Slide> {
                 return sk_make_sp<SKPSlide>(name, path);}
@@ -1539,10 +1555,13 @@ void Viewer::drawSlide(SkSurface* surface) {
     }
 
     if (fShowSlideDimensions) {
+        SkCanvas* canvas = surface->getCanvas();
+        SkAutoCanvasRestore acr(canvas, true);
+        canvas->concat(this->computeMatrix());
         SkRect r = SkRect::Make(fSlides[fCurrentSlide]->getDimensions());
         SkPaint paint;
         paint.setColor(0x40FFFF00);
-        surface->getCanvas()->drawRect(r, paint);
+        canvas->drawRect(r, paint);
     }
 }
 
@@ -1830,6 +1849,11 @@ void Viewer::drawImGui() {
                     paramsChanged = true;
                 }
 
+                bool* reducedShaders = &params.fGrContextOptions.fReducedShaderVariations;
+                if (ctx && ImGui::Checkbox("Reduced shaders", reducedShaders)) {
+                    paramsChanged = true;
+                }
+
                 if (ctx) {
                     // Determine the context's max sample count for MSAA radio buttons.
                     int sampleCount = fWindow->sampleCount();
@@ -1908,7 +1932,7 @@ void Viewer::drawImGui() {
                     } else {
                         const auto* caps = ctx->priv().caps();
                         prButton(GpuPathRenderers::kDefault);
-                        if (fWindow->sampleCount() > 1 || caps->mixedSamplesSupport()) {
+                        if (fWindow->sampleCount() > 1 || FLAGS_dmsaa) {
                             if (GrTessellationPathRenderer::IsSupported(*caps)) {
                                 prButton(GpuPathRenderers::kTessellation);
                             }
@@ -2342,11 +2366,6 @@ void Viewer::drawImGui() {
                 bool sksl = params.fGrContextOptions.fShaderCacheStrategy ==
                             GrContextOptions::ShaderCacheStrategy::kSkSL;
 
-                int optLevel =                           sksl ? kShaderOptLevel_Source :
-                                           SkSL::gSkSLInliner ? kShaderOptLevel_Inline :
-                                         SkSL::gSkSLOptimizer ? kShaderOptLevel_Optimize :
-                                                                kShaderOptLevel_Compile;
-
 #if defined(SK_VULKAN)
                 const bool isVulkan = fBackendType == sk_app::Window::kVulkan_BackendType;
 #else
@@ -2401,7 +2420,7 @@ void Viewer::drawImGui() {
                 bool doApply     = ImGui::Button("Apply Changes"); ImGui::SameLine();
                 bool doDump      = ImGui::Button("Dump SkSL to resources/sksl/");
 
-                int newOptLevel = optLevel;
+                int newOptLevel = fOptLevel;
                 ImGui::RadioButton("SkSL", &newOptLevel, kShaderOptLevel_Source);
                 ImGui::SameLine();
                 ImGui::RadioButton("Compile", &newOptLevel, kShaderOptLevel_Compile);
@@ -2412,10 +2431,27 @@ void Viewer::drawImGui() {
 
                 // If we are changing the compile mode, we want to reset the cache and redo
                 // everything.
-                if (doDump || newOptLevel != optLevel) {
+                if (doDump || newOptLevel != fOptLevel) {
                     sksl = doDump || (newOptLevel == kShaderOptLevel_Source);
-                    SkSL::gSkSLOptimizer           = (newOptLevel >= kShaderOptLevel_Optimize);
-                    SkSL::gSkSLInliner             = (newOptLevel >= kShaderOptLevel_Inline);
+                    fOptLevel = (ShaderOptLevel)newOptLevel;
+                    switch (fOptLevel) {
+                        case kShaderOptLevel_Source:
+                            Compiler::EnableOptimizer(OverrideFlag::kDefault);
+                            Compiler::EnableInliner(OverrideFlag::kDefault);
+                            break;
+                        case kShaderOptLevel_Compile:
+                            Compiler::EnableOptimizer(OverrideFlag::kOff);
+                            Compiler::EnableInliner(OverrideFlag::kOff);
+                            break;
+                        case kShaderOptLevel_Optimize:
+                            Compiler::EnableOptimizer(OverrideFlag::kOn);
+                            Compiler::EnableInliner(OverrideFlag::kOff);
+                            break;
+                        case kShaderOptLevel_Inline:
+                            Compiler::EnableOptimizer(OverrideFlag::kOn);
+                            Compiler::EnableInliner(OverrideFlag::kOn);
+                            break;
+                    }
 
                     params.fGrContextOptions.fShaderCacheStrategy =
                             sksl ? GrContextOptions::ShaderCacheStrategy::kSkSL
@@ -2729,7 +2765,7 @@ void Viewer::updateUIState() {
             } else {
                 const auto* caps = ctx->priv().caps();
                 writer.appendString(gPathRendererNames[GpuPathRenderers::kDefault].c_str());
-                if (fWindow->sampleCount() > 1 || caps->mixedSamplesSupport()) {
+                if (fWindow->sampleCount() > 1 || FLAGS_dmsaa) {
                     if (GrTessellationPathRenderer::IsSupported(*caps)) {
                         writer.appendString(
                                 gPathRendererNames[GpuPathRenderers::kTessellation].c_str());

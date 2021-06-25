@@ -11,8 +11,8 @@
 #include "include/core/SkDeferredDisplayList.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
+#include "include/core/SkSpan.h"
 #include "include/core/SkSurfaceCharacterization.h"
-#include "src/core/SkSpan.h"
 
 class DDLPromiseImageHelper;
 class PromiseImageCallbackContext;
@@ -104,17 +104,12 @@ public:
                   int numXDivisions, int numYDivisions,
                   bool addRandomPaddingToDst);
 
-    // TODO: Move this to PromiseImageHelper and have one method that does all the work and
-    // returns the shared SkP.
-    void createSKP(sk_sp<GrContextThreadSafeProxy>,
-                   SkData* compressedPictureData,
-                   const DDLPromiseImageHelper&);
-
     void kickOffThreadedWork(SkTaskGroup* recordingTaskGroup,
                              SkTaskGroup* gpuTaskGroup,
-                             GrDirectContext*);
+                             GrDirectContext*,
+                             SkPicture*);
 
-    void createDDLsInParallel();
+    void createDDLsInParallel(SkPicture*);
 
     // Create the DDL that will compose all the tile images into a final result.
     void createComposeDDL();
@@ -125,11 +120,11 @@ public:
     // DDL creations and draws are interleaved to prevent starvation of the GPU.
     // Note: this is somewhat of a misuse/pessimistic-use of DDLs since they are supposed to
     // be created on a separate thread.
-    void interleaveDDLCreationAndDraw(GrDirectContext*);
+    void interleaveDDLCreationAndDraw(GrDirectContext*, SkPicture*);
 
     // This draws all the per-tile SKPs directly into all of the tiles w/o converting them to
     // DDLs first - all on a single thread.
-    void drawAllTilesDirectly(GrDirectContext*);
+    void drawAllTilesDirectly(GrDirectContext*, SkPicture*);
 
     void dropCallbackContexts();
     void resetAllTiles();
@@ -147,9 +142,6 @@ private:
     sk_sp<SkDeferredDisplayList>           fComposeDDL;
 
     const SkSurfaceCharacterization        fDstCharacterization;
-    sk_sp<SkPicture>                       fReconstitutedPicture;
-    SkTArray<sk_sp<SkImage>>               fPromiseImages; // All the promise images in the
-                                                           // reconstituted picture
 };
 
 #endif

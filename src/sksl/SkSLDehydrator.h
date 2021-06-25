@@ -10,6 +10,7 @@
 
 #ifdef SKSL_STANDALONE
 
+#include "include/core/SkSpan.h"
 #include "include/private/SkSLModifiers.h"
 #include "include/private/SkSLSymbol.h"
 #include "include/private/SkTHash.h"
@@ -22,6 +23,7 @@
 
 namespace SkSL {
 
+class AnyConstructor;
 class Expression;
 class ProgramElement;
 class Statement;
@@ -117,6 +119,8 @@ private:
     void write(const Statement* s);
 
     void write(const Symbol& s);
+
+    void writeExpressionSpan(const SkSpan<const std::unique_ptr<Expression>>& span);
 
     uint16_t fNextId = 1;
 

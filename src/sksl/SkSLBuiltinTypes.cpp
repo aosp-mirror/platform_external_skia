@@ -73,22 +73,13 @@ std::unique_ptr<Type> BuiltinTypes::MakeSamplerType(const char* name, const Type
     return std::unique_ptr<Type>(new Type(name, textureType));
 }
 
-/** Create a separate-sampler type. */
-std::unique_ptr<Type> BuiltinTypes::MakeSeparateSamplerType(const char* name) {
-    return std::unique_ptr<Type>(new Type(name, "ss", Type::TypeKind::kSeparateSampler));
-}
-
-/** Create a void type. */
-std::unique_ptr<Type> BuiltinTypes::MakeVoidType(const char* name) {
-    return std::unique_ptr<Type>(new Type(name, "v", Type::TypeKind::kVoid));
-}
-
 /**
- * Create an "other" (special) type with the given name. These types cannot be directly
- * referenced from user code.
+ * Create a "special" type with the given name, abbreviation, and TypeKind.
  */
-std::unique_ptr<Type> BuiltinTypes::MakeOtherType(const char* name) {
-    return std::unique_ptr<Type>(new Type(name));
+std::unique_ptr<Type> BuiltinTypes::MakeSpecialType(const char* name,
+                                                    const char* abbrev,
+                                                    Type::TypeKind typeKind) {
+    return std::unique_ptr<Type>(new Type(name, abbrev, typeKind));
 }
 
 /**
@@ -122,20 +113,12 @@ BuiltinTypes::BuiltinTypes()
         , fUShort2(MakeVectorType("ushort2", "S2", *fUShort, /*columns=*/2))
         , fUShort3(MakeVectorType("ushort3", "S3", *fUShort, /*columns=*/3))
         , fUShort4(MakeVectorType("ushort4", "S4", *fUShort, /*columns=*/4))
-        , fByte(MakeScalarType("byte", "c", Type::NumberKind::kSigned, /*priority=*/2))
-        , fByte2(MakeVectorType("byte2", "c2", *fByte, /*columns=*/2))
-        , fByte3(MakeVectorType("byte3", "c3", *fByte, /*columns=*/3))
-        , fByte4(MakeVectorType("byte4", "c4", *fByte, /*columns=*/4))
-        , fUByte(MakeScalarType("ubyte", "C", Type::NumberKind::kUnsigned, /*priority=*/1))
-        , fUByte2(MakeVectorType("ubyte2", "C2", *fUByte, /*columns=*/2))
-        , fUByte3(MakeVectorType("ubyte3", "C3", *fUByte, /*columns=*/3))
-        , fUByte4(MakeVectorType("ubyte4", "C4", *fUByte, /*columns=*/4))
         , fBool(MakeScalarType("bool", "b", Type::NumberKind::kBoolean, /*priority=*/0))
         , fBool2(MakeVectorType("bool2", "b2", *fBool, /*columns=*/2))
         , fBool3(MakeVectorType("bool3", "b3", *fBool, /*columns=*/3))
         , fBool4(MakeVectorType("bool4", "b4", *fBool, /*columns=*/4))
-        , fInvalid(MakeOtherType("<INVALID>"))
-        , fVoid(MakeVoidType("void"))
+        , fInvalid(MakeSpecialType("<INVALID>", "O", Type::TypeKind::kOther))
+        , fVoid(MakeSpecialType("void", "v", Type::TypeKind::kVoid))
         , fFloatLiteral(MakeLiteralType("$floatLiteral", *fFloat, /*priority=*/8))
         , fIntLiteral(MakeLiteralType("$intLiteral", *fInt, /*priority=*/5))
         , fFloat2x2(MakeMatrixType("float2x2", "f22", *fFloat, /*columns=*/2, /*rows=*/2))
@@ -206,7 +189,7 @@ BuiltinTypes::BuiltinTypes()
 
         , fISampler2D(MakeSamplerType("isampler2D", *fITexture2D))
 
-        , fSampler(MakeSeparateSamplerType("sampler"))
+        , fSampler(MakeSpecialType("sampler", "ss", Type::TypeKind::kSeparateSampler))
 
         , fSubpassInput(MakeTextureType("subpassInput",
                                         SpvDimSubpassData,
@@ -254,13 +237,12 @@ BuiltinTypes::BuiltinTypes()
                                 {fInvalid.get(), fShort2.get(), fShort3.get(), fShort4.get()}))
         , fUSVec(MakeGenericType("$usvec",
                                  {fInvalid.get(), fUShort2.get(), fUShort3.get(), fUShort4.get()}))
-        , fByteVec(MakeGenericType("$bytevec",
-                                   {fInvalid.get(), fByte2.get(), fByte3.get(), fByte4.get()}))
-        , fUByteVec(MakeGenericType("$ubytevec",
-                                    {fInvalid.get(), fUByte2.get(), fUByte3.get(), fUByte4.get()}))
         , fBVec(MakeGenericType("$bvec",
                                 {fInvalid.get(), fBool2.get(), fBool3.get(), fBool4.get()}))
-        , fSkCaps(MakeOtherType("$sk_Caps"))
-        , fFragmentProcessor(MakeOtherType("fragmentProcessor")) {}
+        , fSkCaps(MakeSpecialType("$sk_Caps", "O", Type::TypeKind::kOther))
+        , fFragmentProcessor(MakeSpecialType("fragmentProcessor", "fp",
+                                             Type::TypeKind::kFragmentProcessor))
+        , fColorFilter(MakeSpecialType("colorFilter", "CF", Type::TypeKind::kColorFilter))
+        , fShader(MakeSpecialType("shader", "SH", Type::TypeKind::kShader)) {}
 
 }  // namespace SkSL

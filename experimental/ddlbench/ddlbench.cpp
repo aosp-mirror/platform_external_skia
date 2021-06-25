@@ -3,21 +3,17 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkGraphics.h"
+#include "include/core/SkPicture.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/private/SkSLDefines.h"
-
 #include "src/core/SkOSFile.h"
-
+#include "src/gpu/GrCaps.h"
 #include "src/gpu/GrDirectContextPriv.h"
-
 #include "src/utils/SkOSPath.h"
-
 #include "tools/DDLPromiseImageHelper.h"
-#include "tools/DDLTileHelper.h"
 #include "tools/ToolUtils.h"
-
 #include "tools/flags/CommandLineFlags.h"
 #include "tools/gpu/GrContextFactory.h"
 #include "tools/gpu/TestContext.h"
@@ -285,14 +281,7 @@ static sk_sp<SkPicture> create_shared_skp(const char* src,
         exitf("failed to parse file %s", srcfile.c_str());
     }
 
-    sk_sp<SkData> compressedPictureData = promiseImageHelper->deflateSKP(skp.get());
-    if (!compressedPictureData) {
-        exitf("skp deflation failed %s", srcfile.c_str());
-    }
-
-    // TODO: use the new shared promise images to just create one skp here
-
-    return skp;
+    return promiseImageHelper->recreateSKP(dContext, skp.get());
 }
 
 static void check_params(GrDirectContext* dContext,
@@ -382,8 +371,6 @@ int main(int argc, char** argv) {
     int height = std::min(SkScalarCeilToInt(skp->cullRect().height()), 2048);
 
     check_params(mainContext->fDirectContext, width, height, ct, at, FLAGS_numSamples);
-
-    promiseImageHelper.createCallbackContexts(mainContext->fDirectContext);
 
     // TODO: do this later on a utility thread!
     promiseImageHelper.uploadAllToGPU(nullptr, mainContext->fDirectContext);

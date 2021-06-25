@@ -193,7 +193,7 @@ static std::unique_ptr<GrSurfaceContext> make_surface_context(Encoding contextEn
                                                               skiatest::Reporter* reporter) {
     auto surfaceContext = GrSurfaceDrawContext::Make(
             rContext, GrColorType::kRGBA_8888, encoding_as_color_space(contextEncoding),
-            SkBackingFit::kExact, {kW, kH}, 1, GrMipmapped::kNo, GrProtected::kNo,
+            SkBackingFit::kExact, {kW, kH}, SkSurfaceProps(), 1, GrMipmapped::kNo, GrProtected::kNo,
             kBottomLeft_GrSurfaceOrigin, SkBudgeted::kNo);
     if (!surfaceContext) {
         ERRORF(reporter, "Could not create %s surface context.", encoding_as_str(contextEncoding));
@@ -211,7 +211,7 @@ static void test_write_read(Encoding contextEncoding, Encoding writeEncoding, En
     auto writeII = SkImageInfo::Make(kW, kH, kRGBA_8888_SkColorType, kPremul_SkAlphaType,
                                      encoding_as_color_space(writeEncoding));
     auto data = make_data();
-    GrPixmap dataPM(writeII, data.get(), kW*sizeof(uint32_t));
+    GrCPixmap dataPM(writeII, data.get(), kW*sizeof(uint32_t));
     if (!surfaceContext->writePixels(dContext, dataPM, {0, 0})) {
         ERRORF(reporter, "Could not write %s to %s surface context.",
                encoding_as_str(writeEncoding), encoding_as_str(contextEncoding));

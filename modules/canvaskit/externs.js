@@ -134,6 +134,7 @@ var CanvasKit = {
     getMaxWidth: function() {},
     getMinIntrinsicWidth: function() {},
     getWordBoundary: function() {},
+    getShapedLines: function() {},
     layout: function() {},
 
     // private API
@@ -145,6 +146,7 @@ var CanvasKit = {
   ParagraphBuilder: {
     Make: function() {},
     MakeFromFontProvider: function() {},
+    ShapeText: function() {},
     addText: function() {},
     build: function() {},
     pop: function() {},
@@ -158,6 +160,7 @@ var CanvasKit = {
     // private API
     _Make: function() {},
     _MakeFromFontProvider: function() {},
+    _ShapeText: function() {},
     _pushStyle: function() {},
     _pushPaintStyle: function() {},
     _addPlaceholder: function() {},
@@ -236,12 +239,14 @@ var CanvasKit = {
       drawAtlas: function() {},
       drawColor: function() {},
       drawColorComponents: function() {},
-      drawDRRect:  function() {},
+      drawDRRect: function() {},
+      drawGlyphs: function() {},
       drawImageNine: function() {},
       drawImageRect: function() {},
       drawImageRectCubic: function() {},
       drawImageRectOptions: function() {},
       drawOval: function() {},
+      drawPatch: function() {},
       drawPoints: function() {},
       drawRect: function() {},
       drawRRect:  function() {},
@@ -265,11 +270,13 @@ var CanvasKit = {
     _drawAtlasCubic: function() {},
     _drawColor: function() {},
     _drawDRRect:  function() {},
+    _drawGlyphs: function() {},
     _drawImageNine: function() {},
     _drawImageRect: function() {},
     _drawImageRectCubic: function() {},
     _drawImageRectOptions: function() {},
     _drawOval: function() {},
+    _drawPatch: function() {},
     _drawPoints: function() {},
     _drawRect: function() {},
     _drawRRect:  function() {},
@@ -332,15 +339,18 @@ var CanvasKit = {
 
   Font: {
     // public API (from C++ bindings)
+    getMetrics: function() {},
     getScaleX: function() {},
     getSize: function() {},
     getSkewX: function() {},
+    isEmbolden: function() {},
     getTypeface: function() {},
     setHinting: function() {},
     setLinearMetrics: function() {},
     setScaleX: function() {},
     setSize: function() {},
     setSkewX: function() {},
+    setEmbolden: function() {},
     setSubpixel: function() {},
     setTypeface: function() {},
 
@@ -869,6 +879,10 @@ var CanvasKit = {
     UltraExpanded: {},
   },
 
+  GlyphRunFlags: {
+    IsWhiteSpace: {},
+  },
+
   ImageFormat: {
     PNG: {},
     JPEG: {},
@@ -899,6 +913,7 @@ var CanvasKit = {
     IncludeLineSpacingMiddle: {},
     IncludeLineSpacingTop: {},
     IncludeLineSpacingBottom: {},
+    Strut: {},
   },
 
   RectWidthStyle: {
@@ -930,6 +945,13 @@ var CanvasKit = {
   TextDirection: {
     LTR: {},
     RTL: {},
+  },
+
+  TextHeightBehavior: {
+    All: {},
+    DisableFirstAscent: {},
+    DisableLastDescent: {},
+    DisableAll: {},
   },
 
   DecorationStyle: {
@@ -1012,8 +1034,6 @@ var CanvasKit = {
 // unless they go on the prototype.
 CanvasKit.Paragraph.prototype.getRectsForRange = function() {};
 CanvasKit.Paragraph.prototype.getRectsForPlaceholders = function() {};
-
-CanvasKit.Picture.prototype.saveAsFile = function() {};
 
 CanvasKit.Surface.prototype.dispose = function() {};
 CanvasKit.Surface.prototype.flush = function() {};

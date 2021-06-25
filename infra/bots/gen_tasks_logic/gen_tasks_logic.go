@@ -227,14 +227,9 @@ var (
 		},
 	}
 
-	// Enable reduceOpsTaskSplitting option on these models
-	// skbug.com/10877#c27
-	REDUCE_OPS_TASK_SPLITTING_MODELS = []string{
-		"AndroidOne",
-		"GalaxyS20",
-		"Nexus5x",
-		"Nexus7",
-		"NUC7i5BNK",
+	// Set dontReduceOpsTaskSplitting option on these models
+	DONT_REDUCE_OPS_TASK_SPLITTING_MODELS = []string{
+		"NUC5PPYH",
 	}
 )
 
@@ -623,7 +618,7 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 				"ReleaseAndAbandonGpuContext", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI",
 				"NoGPUThreads", "ProcDump", "DDL1", "DDL3", "OOPRDDL", "T8888",
 				"DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "SkottieTracing", "SkottieWASM",
-				"GpuTess", "DMSAA", "Mskp", "Docker", "PDF", "SkVM", "Puppeteer",
+				"GpuTess", "DMSAA", "DMSAAStats", "Mskp", "Docker", "PDF", "SkVM", "Puppeteer",
 				"SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile", "WebGL2"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
@@ -641,10 +636,6 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 		} else if b.os("ChromeOS") {
 			ec = append([]string{"Chromebook", "GLES"}, ec...)
 			task_os = COMPILE_TASK_NAME_OS_LINUX
-			if b.model("Pixelbook") {
-				task_os = COMPILE_TASK_NAME_OS_LINUX_OLD
-				ec = append(ec, "Docker")
-			}
 		} else if b.os("iOS") {
 			ec = append([]string{task_os}, ec...)
 			task_os = "Mac"
@@ -890,6 +881,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				d["gpu"] = gpu
 			} else if b.matchOs("Mac") {
 				gpu, ok := map[string]string{
+					"AppleM1":       "AppleM1",
 					"IntelHD6000":   "8086:1626",
 					"IntelHD615":    "8086:591e",
 					"IntelIris5100": "8086:0a2e",
@@ -898,7 +890,12 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				if !ok {
 					log.Fatalf("Entry %q not found in Mac GPU mapping.", b.parts["cpu_or_gpu_value"])
 				}
-				d["gpu"] = gpu
+				if gpu == "AppleM1" {
+					// No GPU dimension yet, but we can constrain by CPU.
+					d["cpu"] = "arm64-64-Apple_M1"
+				} else {
+					d["gpu"] = gpu
+				}
 				// Yuck. We have two different types of MacMini7,1 with the same GPU but different CPUs.
 				if b.gpu("IntelIris5100") {
 					// Run all tasks on Golo machines for now.
@@ -906,12 +903,14 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				}
 			} else if b.os("ChromeOS") {
 				version, ok := map[string]string{
-					"MaliT604":           "10575.22.0",
-					"MaliT764":           "10575.22.0",
-					"MaliT860":           "10575.22.0",
-					"PowerVRGX6250":      "10575.22.0",
-					"TegraK1":            "10575.22.0",
-					"IntelHDGraphics615": "10575.22.0",
+					"MaliT604":            "10575.22.0",
+					"MaliT764":            "10575.22.0",
+					"MaliT860":            "10575.22.0",
+					"PowerVRGX6250":       "10575.22.0",
+					"TegraK1":             "10575.22.0",
+					"IntelHDGraphics615":  "10575.22.0",
+					"IntelUHDGraphics605": "13729.56.0",
+					"RadeonVega3":         "13729.56.0",
 				}[b.parts["cpu_or_gpu_value"]]
 				if !ok {
 					log.Fatalf("Entry %q not found in ChromeOS GPU mapping.", b.parts["cpu_or_gpu_value"])
@@ -1478,6 +1477,10 @@ func (b *jobBuilder) dm() {
 		} else if b.extraConfig("PathKit") {
 			cas = CAS_PATHKIT
 			recipe = "test_pathkit"
+			if b.doUpload() {
+				b.directUpload(b.cfg.GsBucketGm, b.cfg.ServiceAccountUploadGM)
+				directUpload = true
+			}
 		} else if b.extraConfig("CanvasKit") {
 			cas = CAS_CANVASKIT
 			recipe = "test_canvaskit"
@@ -1494,6 +1497,10 @@ func (b *jobBuilder) dm() {
 			// ToT.
 			cas = CAS_LOTTIE_CI
 			recipe = "test_lottie_web"
+			if b.doUpload() {
+				b.directUpload(b.cfg.GsBucketGm, b.cfg.ServiceAccountUploadGM)
+				directUpload = true
+			}
 		} else {
 			// Default recipe supports direct upload.
 			// TODO(http://skbug.com/11785): Windows jobs are unable to extract gsutil.

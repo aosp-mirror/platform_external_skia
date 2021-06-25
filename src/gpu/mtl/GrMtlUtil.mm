@@ -24,6 +24,8 @@
 #error This file must be compiled with Arc. Use -fobjc-arc flag
 #endif
 
+GR_NORETAIN_BEGIN
+
 NSError* GrCreateMtlError(NSString* description, GrMtlErrorCode errorCode) {
     NSDictionary* userInfo = [NSDictionary dictionaryWithObject:description
                                                          forKey:NSLocalizedDescriptionKey];
@@ -99,8 +101,11 @@ id<MTLLibrary> GrCompileMtlShaderLibrary(const GrMtlGpu* gpu,
                                                  encoding:NSUTF8StringEncoding
                                              freeWhenDone:NO];
     MTLCompileOptions* options = [[MTLCompileOptions alloc] init];
+    if (@available(macOS 10.13, iOS 11.0, *)) {
+        options.languageVersion = MTLLanguageVersion2_0;
+    }
     if (gpu->caps()->shaderCaps()->canUseFastMath()) {
-        options.fastMathEnabled = true;
+        options.fastMathEnabled = YES;
     }
 
     NSError* error = nil;
@@ -253,7 +258,7 @@ id<MTLTexture> GrGetMTLTextureFromSurface(GrSurface* surface) {
 // CPP Utils
 
 GrMTLPixelFormat GrGetMTLPixelFormatFromMtlTextureInfo(const GrMtlTextureInfo& info) {
-    id<MTLTexture> mtlTexture = GrGetMTLTexture(info.fTexture.get());
+    id<MTLTexture> GR_NORETAIN mtlTexture = GrGetMTLTexture(info.fTexture.get());
     return static_cast<GrMTLPixelFormat>(mtlTexture.pixelFormat);
 }
 
@@ -430,5 +435,4 @@ const char* GrMtlFormatToStr(GrMTLPixelFormat mtlFormat) {
 
 #endif
 
-
-
+GR_NORETAIN_END

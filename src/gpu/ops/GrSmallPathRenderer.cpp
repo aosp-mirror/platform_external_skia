@@ -66,13 +66,18 @@ GrPathRenderer::CanDrawPath GrSmallPathRenderer::onCanDrawPath(const CanDrawPath
         return CanDrawPath::kNo;
     }
 
-    // Only support paths with bounds within kMaxDim by kMaxDim,
-    // scaled to have bounds within kMaxSize by kMaxSize.
-    // The goal is to accelerate rendering of lots of small paths that may be scaling.
     SkScalar scaleFactors[2] = { 1, 1 };
+    // TODO: handle perspective distortion
     if (!args.fViewMatrix->hasPerspective() && !args.fViewMatrix->getMinMaxScales(scaleFactors)) {
         return CanDrawPath::kNo;
     }
+    // For affine transformations, too much shear can produce artifacts.
+    if (scaleFactors[1]/scaleFactors[0] > 4) {
+        return CanDrawPath::kNo;
+    }
+    // Only support paths with bounds within kMaxDim by kMaxDim,
+    // scaled to have bounds within kMaxSize by kMaxSize.
+    // The goal is to accelerate rendering of lots of small paths that may be scaling.
     SkRect bounds = args.fShape->styledBounds();
     SkScalar minDim = std::min(bounds.width(), bounds.height());
     SkScalar maxDim = std::max(bounds.width(), bounds.height());
@@ -138,12 +143,11 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
-    GrProcessorSet::Analysis finalize(
-            const GrCaps& caps, const GrAppliedClip* clip, bool hasMixedSampledCoverage,
-            GrClampType clampType) override {
-        return fHelper.finalizeProcessors(
-                caps, clip, hasMixedSampledCoverage, clampType,
-                GrProcessorAnalysisCoverage::kSingleChannel, &fShapes.front().fColor, &fWideColor);
+    GrProcessorSet::Analysis finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                      GrClampType clampType) override {
+        return fHelper.finalizeProcessors(caps, clip, clampType,
+                                          GrProcessorAnalysisCoverage::kSingleChannel,
+                                          &fShapes.front().fColor, &fWideColor);
     }
 
 private:
@@ -292,7 +296,9 @@ private:
                     SkScalar log = SkScalarCeilToScalar(SkScalarLog2(maxScale));
                     mipScale = SkScalarPow(2, log);
                 }
-                SkASSERT(maxScale <= mipScale);
+                // Log2 isn't very precise at values close to a power of 2,
+                // so add a little tolerance here. A little bit of scaling up is fine.
+                SkASSERT(maxScale <= mipScale + SK_ScalarNearlyZero);
 
                 SkScalar mipSize = mipScale*SkScalarAbs(maxDim);
                 // For sizes less than kIdealMinMIP we want to use as large a distance field as we can

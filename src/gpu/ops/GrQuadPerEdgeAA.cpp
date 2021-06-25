@@ -461,7 +461,7 @@ void IssueDraw(const GrCaps& caps, GrOpsRenderPass* renderPass, const VertexSpec
         int numIndicesToDraw = quadsInDraw * numIndicesPerQuad;
 
         int minVertex = runningQuadCount * numVertsPerQuad;
-        int maxVertex = (runningQuadCount + quadsInDraw) * numVertsPerQuad;
+        int maxVertex = (runningQuadCount + quadsInDraw) * numVertsPerQuad - 1; // inclusive
 
         renderPass->drawIndexed(numIndicesToDraw, baseIndex, minVertex, maxVertex,
                                 absVertBufferOffset);
@@ -599,6 +599,7 @@ public:
         class GLSLProcessor : public GrGLSLGeometryProcessor {
         public:
             void setData(const GrGLSLProgramDataManager& pdman,
+                         const GrShaderCaps&,
                          const GrGeometryProcessor& geomProc) override {
                 const auto& gp = geomProc.cast<QuadPerEdgeAAGeometryProcessor>();
                 fTextureColorSpaceXformHelper.setData(pdman, gp.fTextureColorSpaceXform.get());

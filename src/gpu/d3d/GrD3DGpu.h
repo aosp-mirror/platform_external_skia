@@ -53,8 +53,6 @@ public:
 
     bool protectedContext() const { return false; }
 
-    void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>* sampleLocations) override;
-
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override {}
 
     void deleteBackendTexture(const GrBackendTexture&) override;
@@ -78,9 +76,8 @@ public:
     }
 #endif
 
-    sk_sp<GrAttachment> makeStencilAttachmentForRenderTarget(const GrRenderTarget*,
-                                                             SkISize dimensions,
-                                                             int numStencilSamples) override;
+    sk_sp<GrAttachment> makeStencilAttachment(const GrBackendFormat& /*colorFormat*/,
+                                              SkISize dimensions, int numStencilSamples) override;
 
     GrBackendFormat getPreferredStencilFormat(const GrBackendFormat&) override {
         return GrBackendFormat::MakeDxgi(this->d3dCaps().preferredStencilFormat());
@@ -117,6 +114,8 @@ public:
     }
 
     void submit(GrOpsRenderPass* renderPass) override;
+    void endRenderPass(GrRenderTarget* target, GrSurfaceOrigin origin,
+                       const SkIRect& bounds);
 
     void checkFinishProcs() override { this->checkForFinishedCommandLists(); }
     void finishOutstandingGpuWork() override;
@@ -189,7 +188,7 @@ private:
     bool onCopySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
                        const SkIPoint& dstPoint) override;
 
-    bool onRegenerateMipMapLevels(GrTexture*) override { return true; }
+    bool onRegenerateMipMapLevels(GrTexture*) override;
 
     void onResolveRenderTarget(GrRenderTarget* target, const SkIRect&) override;
 
@@ -198,6 +197,7 @@ private:
     void addFinishedCallback(sk_sp<GrRefCntedCallback> finishedCallback);
 
     GrOpsRenderPass* onGetOpsRenderPass(GrRenderTarget*,
+                                        bool useMSAASurface,
                                         GrAttachment*,
                                         GrSurfaceOrigin,
                                         const SkIRect&,
@@ -219,9 +219,9 @@ private:
                                             GrMipmapped,
                                             GrProtected) override;
 
-    bool onUpdateBackendTexture(const GrBackendTexture&,
-                                sk_sp<GrRefCntedCallback> finishedCallback,
-                                const BackendTextureData*) override;
+    bool onClearBackendTexture(const GrBackendTexture&,
+                               sk_sp<GrRefCntedCallback> finishedCallback,
+                               std::array<float, 4> color) override;
 
     GrBackendTexture onCreateCompressedBackendTexture(SkISize dimensions,
                                                       const GrBackendFormat&,
@@ -230,7 +230,8 @@ private:
 
     bool onUpdateCompressedBackendTexture(const GrBackendTexture&,
                                           sk_sp<GrRefCntedCallback> finishedCallback,
-                                          const BackendTextureData*) override;
+                                          const void* data,
+                                          size_t size) override;
 
     bool submitDirectCommandList(SyncQueue sync);
 
@@ -280,6 +281,9 @@ private:
     uint64_t fCurrentFenceValue = 0;
 
     std::unique_ptr<GrD3DDirectCommandList> fCurrentDirectCommandList;
+    // One-off special-case descriptors created directly for the mipmap compute shader
+    // and hence aren't tracked by the normal path.
+    SkSTArray<32, GrD3DDescriptorHeap::CPUHandle> fMipmapCPUDescriptors;
 
     struct OutstandingCommandList {
         OutstandingCommandList(std::unique_ptr<GrD3DDirectCommandList> commandList,

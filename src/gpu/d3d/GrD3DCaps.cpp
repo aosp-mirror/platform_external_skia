@@ -66,6 +66,8 @@ bool GrD3DCaps::canCopyTexture(DXGI_FORMAT dstFormat, int dstSampleCnt,
         return false;
     }
 
+    // D3D allows us to copy within the same format family but doesn't do conversions
+    // so we require strict identity.
     return srcFormat == dstFormat;
 }
 
@@ -82,6 +84,8 @@ bool GrD3DCaps::canCopyAsResolve(DXGI_FORMAT dstFormat, int dstSampleCnt,
     }
 
     // Surfaces must have the same format.
+    // D3D12 can resolve between typeless and non-typeless formats, but we are not using
+    // typeless formats. It's not possible to resolve within the same format family otherwise.
     if (srcFormat != dstFormat) {
         return false;
     }
@@ -182,9 +186,6 @@ void GrD3DCaps::initGrCaps(const D3D12_FEATURE_DATA_D3D12_OPTIONS& optionsDesc,
         // We "disable" multisample by colocating all samples at pixel center.
         fMultisampleDisableSupport = true;
     }
-
-    // TODO: It's not clear if this is supported or not.
-    fMixedSamplesSupport = false;
 
     if (D3D12_CONSERVATIVE_RASTERIZATION_TIER_NOT_SUPPORTED !=
             optionsDesc.ConservativeRasterizationTier) {
@@ -701,6 +702,10 @@ void GrD3DCaps::FormatInfo::InitFormatFlags(const D3D12_FEATURE_DATA_FORMAT_SUPP
     if (SkToBool(D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RESOLVE & formatSupport.Support1)) {
         *flags = *flags | kResolve_Flag;
     }
+
+    if (SkToBool(D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW & formatSupport.Support1)) {
+        *flags = *flags | kUnorderedAccess_Flag;
+    }
 }
 
 static bool multisample_count_supported(ID3D12Device* device, DXGI_FORMAT format, int sampleCount) {
@@ -812,6 +817,11 @@ bool GrD3DCaps::isFormatRenderable(const GrBackendFormat& format, int sampleCoun
 
 bool GrD3DCaps::isFormatRenderable(DXGI_FORMAT format, int sampleCount) const {
     return sampleCount <= this->maxRenderTargetSampleCount(format);
+}
+
+bool GrD3DCaps::isFormatUnorderedAccessible(DXGI_FORMAT format) const {
+    const FormatInfo& info = this->getFormatInfo(format);
+    return SkToBool(FormatInfo::kUnorderedAccess_Flag & info.fFlags);
 }
 
 int GrD3DCaps::getRenderTargetSampleCount(int requestedCount,
@@ -1048,12 +1058,9 @@ GrProgramDesc GrD3DCaps::makeDesc(GrRenderTarget* rt,
 
     programInfo.pipeline().genKey(&b, *this);
     // The num samples is already added in the render target key so we don't need to add it here.
-    SkASSERT(programInfo.numRasterSamples() == rt->numSamples());
 
     // D3D requires the full primitive type as part of its key
     b.add32(programInfo.primitiveTypeKey());
-
-    SkASSERT(!this->mixedSamplesSupport());
 
     b.flush();
     return desc;

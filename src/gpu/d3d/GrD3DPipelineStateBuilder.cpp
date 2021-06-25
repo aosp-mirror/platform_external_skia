@@ -11,6 +11,7 @@
 
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/d3d/GrD3DTypes.h"
+#include "src/core/SkReadBuffer.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/GrAutoLocaleSetter.h"
 #include "src/gpu/GrDirectContextPriv.h"
@@ -19,6 +20,7 @@
 #include "src/gpu/GrShaderUtils.h"
 #include "src/gpu/GrStencilSettings.h"
 #include "src/gpu/d3d/GrD3DGpu.h"
+#include "src/gpu/d3d/GrD3DPipeline.h"
 #include "src/gpu/d3d/GrD3DRenderTarget.h"
 #include "src/gpu/d3d/GrD3DRootSignature.h"
 #include "src/gpu/d3d/GrD3DUtil.h"
@@ -26,9 +28,9 @@
 
 #include <d3dcompiler.h>
 
-sk_sp<GrD3DPipelineState> GrD3DPipelineStateBuilder::MakePipelineState(
+std::unique_ptr<GrD3DPipelineState> GrD3DPipelineStateBuilder::MakePipelineState(
         GrD3DGpu* gpu,
-        GrRenderTarget* renderTarget,
+        GrD3DRenderTarget* renderTarget,
         const GrProgramDesc& desc,
         const GrProgramInfo& programInfo) {
     // ensure that we use "." as a decimal separator when creating SkSL code
@@ -46,13 +48,14 @@ sk_sp<GrD3DPipelineState> GrD3DPipelineStateBuilder::MakePipelineState(
 }
 
 GrD3DPipelineStateBuilder::GrD3DPipelineStateBuilder(GrD3DGpu* gpu,
-                                                     GrRenderTarget* renderTarget,
+                                                     GrD3DRenderTarget* renderTarget,
                                                      const GrProgramDesc& desc,
                                                      const GrProgramInfo& programInfo)
-        : INHERITED(renderTarget, desc, programInfo)
+        : INHERITED(desc, programInfo)
         , fGpu(gpu)
         , fVaryingHandler(this)
-        , fUniformHandler(this) {}
+        , fUniformHandler(this)
+        , fRenderTarget(renderTarget) {}
 
 const GrCaps* GrD3DPipelineStateBuilder::caps() const {
     return fGpu->caps();
@@ -69,6 +72,10 @@ void GrD3DPipelineStateBuilder::finalizeFragmentOutputColor(GrShaderVar& outputC
 void GrD3DPipelineStateBuilder::finalizeFragmentSecondaryColor(GrShaderVar& outputColor) {
     outputColor.addLayoutQualifier("location = 0, index = 1");
 }
+
+// Print the source code for all shaders generated.
+static const bool gPrintSKSL = false;
+static const bool gPrintHLSL = false;
 
 static gr_cp<ID3DBlob> GrCompileHLSLShader(GrD3DGpu* gpu,
                                            const SkSL::String& hlsl,
@@ -137,19 +144,32 @@ gr_cp<ID3DBlob> GrD3DPipelineStateBuilder::compileD3DProgram(
         const SkSL::Program::Settings& settings,
         SkSL::Program::Inputs* outInputs,
         SkSL::String* outHLSL) {
-    auto errorHandler = fGpu->getContext()->priv().getShaderErrorHandler();
+#ifdef SK_DEBUG
+    SkSL::String src = GrShaderUtils::PrettyPrint(sksl);
+#else
+    const SkSL::String& src = sksl;
+#endif
+
     std::unique_ptr<SkSL::Program> program = fGpu->shaderCompiler()->convertProgram(
-            kind, sksl, settings);
-    if (!program) {
-        errorHandler->compileError(sksl.c_str(),
+            kind, src, settings);
+    if (!program || !fGpu->shaderCompiler()->toHLSL(*program, outHLSL)) {
+        auto errorHandler = fGpu->getContext()->priv().getShaderErrorHandler();
+        errorHandler->compileError(src.c_str(),
                                    fGpu->shaderCompiler()->errorText().c_str());
         return gr_cp<ID3DBlob>();
     }
     *outInputs = program->fInputs;
-    if (!fGpu->shaderCompiler()->toHLSL(*program, outHLSL)) {
-        errorHandler->compileError(sksl.c_str(),
-                                   fGpu->shaderCompiler()->errorText().c_str());
-        return gr_cp<ID3DBlob>();
+
+    if (gPrintSKSL || gPrintHLSL) {
+        GrShaderUtils::PrintShaderBanner(kind);
+        if (gPrintSKSL) {
+            SkDebugf("SKSL:\n");
+            GrShaderUtils::PrintLineByLine(GrShaderUtils::PrettyPrint(sksl));
+        }
+        if (gPrintHLSL) {
+            SkDebugf("HLSL:\n");
+            GrShaderUtils::PrintLineByLine(GrShaderUtils::PrettyPrint(*outHLSL));
+        }
     }
 
     if (program->fInputs.fRTHeight) {
@@ -523,8 +543,8 @@ gr_cp<ID3D12PipelineState> create_pipeline_state(
 
     psoDesc.DSVFormat = depthStencilFormat;
 
-    unsigned int numRasterSamples = programInfo.numRasterSamples();
-    psoDesc.SampleDesc = { numRasterSamples, sampleQualityPattern };
+    unsigned int numSamples = programInfo.numSamples();
+    psoDesc.SampleDesc = { numSamples, sampleQualityPattern };
 
     // Only used for multi-adapter systems.
     psoDesc.NodeMask = 0;
@@ -545,7 +565,7 @@ gr_cp<ID3D12PipelineState> create_pipeline_state(
 static constexpr SkFourByteTag kHLSL_Tag = SkSetFourByteTag('H', 'L', 'S', 'L');
 static constexpr SkFourByteTag kSKSL_Tag = SkSetFourByteTag('S', 'K', 'S', 'L');
 
-sk_sp<GrD3DPipelineState> GrD3DPipelineStateBuilder::finalize() {
+std::unique_ptr<GrD3DPipelineState> GrD3DPipelineStateBuilder::finalize() {
     TRACE_EVENT0("skia.shaders", TRACE_FUNC);
 
     // We need to enable the following extensions so that the compiler can correctly make spir-v
@@ -652,8 +672,10 @@ sk_sp<GrD3DPipelineState> GrD3DPipelineStateBuilder::finalize() {
             fGpu, fProgramInfo, rootSig, std::move(shaders[kVertex_GrShaderType]),
             std::move(shaders[kGeometry_GrShaderType]), std::move(shaders[kFragment_GrShaderType]),
             rt->dxgiFormat(), rt->stencilDxgiFormat(), rt->sampleQualityPattern());
+    sk_sp<GrD3DPipeline> pipeline = GrD3DPipeline::Make(std::move(pipelineState));
 
-    return sk_sp<GrD3DPipelineState>(new GrD3DPipelineState(std::move(pipelineState),
+    return std::unique_ptr<GrD3DPipelineState>(
+                                     new GrD3DPipelineState(std::move(pipeline),
                                                             std::move(rootSig),
                                                             fUniformHandles,
                                                             fUniformHandler.fUniforms,
@@ -665,3 +687,49 @@ sk_sp<GrD3DPipelineState> GrD3DPipelineStateBuilder::finalize() {
                                                             geomProc.vertexStride(),
                                                             geomProc.instanceStride()));
 }
+
+
+sk_sp<GrD3DPipeline> GrD3DPipelineStateBuilder::MakeComputePipeline(GrD3DGpu* gpu,
+                                                                    GrD3DRootSignature* rootSig,
+                                                                    const char* shader) {
+    D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+    psoDesc.pRootSignature = rootSig->rootSignature();
+
+    // compile shader
+    gr_cp<ID3DBlob> shaderBlob;
+    {
+        TRACE_EVENT0("skia.shaders", "driver_compile_shader");
+        uint32_t compileFlags = 0;
+#ifdef SK_DEBUG
+        // Enable better shader debugging with the graphics debugging tools.
+        compileFlags |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+#endif
+
+        gr_cp<ID3DBlob> errors;
+        HRESULT hr = D3DCompile(shader, strlen(shader), nullptr, nullptr, nullptr, "main",
+                                "cs_5_1", compileFlags, 0, &shaderBlob, &errors);
+        if (!SUCCEEDED(hr)) {
+            gpu->getContext()->priv().getShaderErrorHandler()->compileError(
+                shader, reinterpret_cast<char*>(errors->GetBufferPointer()));
+            return nullptr;
+        }
+        psoDesc.CS = { reinterpret_cast<UINT8*>(shaderBlob->GetBufferPointer()),
+                       shaderBlob->GetBufferSize() };
+    }
+
+    // Only used for multi-adapter systems.
+    psoDesc.NodeMask = 0;
+
+    psoDesc.CachedPSO = { nullptr, 0 };
+    psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+    gr_cp<ID3D12PipelineState> pipelineState;
+    {
+        TRACE_EVENT0("skia.shaders", "CreateComputePipelineState");
+        GR_D3D_CALL_ERRCHECK(
+            gpu->device()->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&pipelineState)));
+    }
+
+    return GrD3DPipeline::Make(std::move(pipelineState));
+}
+

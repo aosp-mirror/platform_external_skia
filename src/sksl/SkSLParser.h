@@ -38,7 +38,6 @@ public:
         INPUT_ATTACHMENT_INDEX,
         ORIGIN_UPPER_LEFT,
         OVERRIDE_COVERAGE,
-        EARLY_FRAGMENT_TESTS,
         BLEND_SUPPORT_ALL_EQUATIONS,
         PUSH_CONSTANT,
         POINTS,
@@ -50,7 +49,6 @@ public:
         TRIANGLES_ADJACENCY,
         MAX_VERTICES,
         INVOCATIONS,
-        MARKER,
         WHEN,
         KEY,
         TRACKED,
@@ -303,7 +301,7 @@ private:
 
     static std::unordered_map<String, LayoutToken>* layoutTokens;
 
-    const char* fText;
+    StringFragment fText;
     Lexer fLexer;
     // current parse depth, used to enforce a recursion limit to try to keep us from overflowing the
     // stack on pathological inputs

@@ -26,6 +26,8 @@
 #error This file must be compiled with Arc. Use -fobjc-arc flag
 #endif
 
+GR_NORETAIN_BEGIN
+
 GrMtlCaps::GrMtlCaps(const GrContextOptions& contextOptions, const id<MTLDevice> device,
                      MTLFeatureSet featureSet)
         : INHERITED(contextOptions) {
@@ -263,7 +265,7 @@ bool GrMtlCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy
                                   dst == src);
 }
 
-void GrMtlCaps::initGrCaps(const id<MTLDevice> device) {
+void GrMtlCaps::initGrCaps(id<MTLDevice> device) {
     // Max vertex attribs is the same on all devices
     fMaxVertexAttributes = 31;
 
@@ -340,7 +342,6 @@ void GrMtlCaps::initGrCaps(const id<MTLDevice> device) {
         }
     }
 
-    fMixedSamplesSupport = false;
     fGpuTracingSupport = false;
 
     fFenceSyncSupport = true;
@@ -471,6 +472,7 @@ void GrMtlCaps::initShaderCaps() {
     shaderCaps->fDstReadInShaderSupport = shaderCaps->fFBFetchSupport;
 
     shaderCaps->fIntegerSupport = true;
+    shaderCaps->fNonsquareMatrixSupport = true;
     shaderCaps->fVertexIDSupport = false;
 
     // Metal uses IEEE float and half floats so assuming those values here.
@@ -1103,7 +1105,7 @@ GrProgramDesc GrMtlCaps::makeDesc(GrRenderTarget* rt,
     // If ordering here is changed, update getStencilPixelFormat() below
     b.add32(programInfo.backendFormat().asMtlFormat());
 
-    b.add32(programInfo.numRasterSamples());
+    b.add32(programInfo.numSamples());
 
 #ifdef SK_DEBUG
     if (rt && programInfo.isStencilEnabled()) {
@@ -1212,3 +1214,5 @@ void GrMtlCaps::onDumpJSON(SkJSONWriter* writer) const {
 #else
 void GrMtlCaps::onDumpJSON(SkJSONWriter* writer) const { }
 #endif
+
+GR_NORETAIN_END

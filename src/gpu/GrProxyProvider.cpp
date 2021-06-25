@@ -324,7 +324,7 @@ sk_sp<GrTextureProxy> GrProxyProvider::createNonMippedProxyFromBitmap(const SkBi
     sk_sp<GrTextureProxy> proxy = this->createLazyProxy(
             [bitmap](GrResourceProvider* resourceProvider, const LazySurfaceDesc& desc) {
                 SkASSERT(desc.fMipmapped == GrMipmapped::kNo);
-                GrMipLevel mipLevel = { bitmap.getPixels(), bitmap.rowBytes() };
+                GrMipLevel mipLevel = {bitmap.getPixels(), bitmap.rowBytes(), nullptr};
                 auto colorType = SkColorTypeToGrColorType(bitmap.colorType());
                 return LazyCallbackResult(resourceProvider->createTexture(
                         desc.fDimensions, desc.fFormat, colorType, desc.fRenderable,
@@ -658,8 +658,8 @@ sk_sp<GrRenderTargetProxy> GrProxyProvider::wrapVulkanSecondaryCBAsRenderTarget(
 
     GrColorType colorType = SkColorTypeToGrColorType(imageInfo.colorType());
 
-    if (!this->caps()->isFormatAsColorTypeRenderable(colorType, rt->backendFormat(),
-                                                     rt->numSamples())) {
+    if (!this->caps()->isFormatAsColorTypeRenderable(
+            colorType, GrBackendFormat::MakeVk(vkInfo.fFormat), /*sampleCount=*/1)) {
         return nullptr;
     }
 

@@ -25,8 +25,10 @@ public:
     DEFINE_OP_CLASS_ID
 
     ~GrAtlasTextOp() override {
-        for (const Geometry* g = fHead; g != nullptr; g = g->fNext) {
+        for (const Geometry* g = fHead; g != nullptr;) {
+            const Geometry* next = g->fNext;
             g->~Geometry();
+            g = next;
         }
     }
 
@@ -60,13 +62,13 @@ public:
                 SkASSERT(SkToBool(fSubRunDtor) != SkToBool(fBlob));
         }
 
-        static Geometry* MakeForBlob(GrRecordingContext* rc,
-                                     const GrAtlasSubRun& subRun,
+        static Geometry* MakeForBlob(const GrAtlasSubRun& subRun,
                                      const SkMatrix& drawMatrix,
                                      SkPoint drawOrigin,
                                      SkIRect clipRect,
                                      sk_sp<GrTextBlob> blob,
-                                     const SkPMColor4f& color);
+                                     const SkPMColor4f& color,
+                                     SkArenaAlloc* alloc);
 
         void fillVertexData(void* dst, int offset, int count) const;
 
@@ -98,8 +100,7 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override;
 
-    GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*,
-                                      bool hasMixedSampledCoverage, GrClampType) override;
+    GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*, GrClampType) override;
 
     enum class MaskType : uint32_t {
         kGrayscaleCoverage,

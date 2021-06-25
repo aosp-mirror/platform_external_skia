@@ -14,7 +14,6 @@
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrSurfaceFillContext.h"
 #include "src/gpu/effects/GrBlendFragmentProcessor.h"
-#include "src/gpu/effects/generated/GrConstColorProcessor.h"
 #include "src/image/SkImage_Base.h"
 #include "tests/Test.h"
 #include "tests/TestUtils.h"
@@ -222,12 +221,13 @@ static void check_solid_pixmap(skiatest::Reporter* reporter,
 static SkColor4f get_expected_color(SkColor4f orig, GrColorType ct) {
     GrImageInfo ii(ct, kUnpremul_SkAlphaType, nullptr, {1, 1});
     std::unique_ptr<char[]> data(new char[ii.minRowBytes()]);
-    GrClearImage(ii, data.get(), ii.minRowBytes(), orig);
+    GrClearImage(ii, data.get(), ii.minRowBytes(), orig.array());
 
     // Read back to SkColor4f.
     SkColor4f result;
     GrImageInfo resultII(GrColorType::kRGBA_F32, kUnpremul_SkAlphaType, nullptr, {1, 1});
-    GrConvertPixels(resultII, &result.fR, sizeof(result), ii, data.get(), ii.minRowBytes());
+    GrConvertPixels(GrPixmap(resultII,  &result.fR,   sizeof(result)),
+                    GrPixmap(      ii,  data.get(), ii.minRowBytes()));
     return result;
 }
 
@@ -413,7 +413,7 @@ static void check_mipmaps(GrDirectContext* dContext,
         // Our swizzles for alpha color types currently produce (a, a, a, a) in the shader. Remove
         // this once they are correctly (0, 0, 0, a).
         if (GrColorTypeIsAlphaOnly(colorType)) {
-            auto black = GrConstColorProcessor::Make(SK_PMColor4fBLACK);
+            auto black = GrFragmentProcessor::MakeColor(SK_PMColor4fBLACK);
             fp = GrBlendFragmentProcessor::Make(std::move(fp),
                                                 std::move(black),
                                                 SkBlendMode::kModulate);
@@ -554,25 +554,10 @@ enum class VkLayout {
     kReadOnlyOptimal,
 };
 
-void check_vk_layout(const GrBackendTexture& backendTex, VkLayout layout) {
+void check_vk_tiling(const GrBackendTexture& backendTex) {
 #if defined(SK_VULKAN) && defined(SK_DEBUG)
-    VkImageLayout expected;
-
-    switch (layout) {
-        case VkLayout::kUndefined:
-            expected = VK_IMAGE_LAYOUT_UNDEFINED;
-            break;
-        case VkLayout::kReadOnlyOptimal:
-            expected = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            break;
-        default:
-            SkUNREACHABLE;
-    }
-
     GrVkImageInfo vkII;
-
     if (backendTex.getVkImageInfo(&vkII)) {
-        SkASSERT(expected == vkII.fImageLayout);
         SkASSERT(VK_IMAGE_TILING_OPTIMAL == vkII.fImageTiling);
     }
 #endif
@@ -656,7 +641,7 @@ void color_type_backend_allocation_test(const sk_gpu_test::ContextInfo& ctxInfo,
                                                                            mipmapped,
                                                                            renderable,
                                                                            GrProtected::kNo);
-                        check_vk_layout(mbet->texture(), VkLayout::kUndefined);
+                        check_vk_tiling(mbet->texture());
 #ifdef SK_DEBUG
                         {
                             GrBackendFormat format = dContext->defaultBackendFormat(colorType,
@@ -684,7 +669,7 @@ void color_type_backend_allocation_test(const sk_gpu_test::ContextInfo& ctxInfo,
                                                                         mipmapped,
                                                                         renderable,
                                                                         GrProtected::kNo);
-                        check_vk_layout(mbet->texture(), VkLayout::kReadOnlyOptimal);
+                        check_vk_tiling(mbet->texture());
 
 #ifdef SK_DEBUG
                         {
@@ -714,7 +699,7 @@ void color_type_backend_allocation_test(const sk_gpu_test::ContextInfo& ctxInfo,
                                                                         origin,
                                                                         renderable,
                                                                         GrProtected::kNo);
-                        check_vk_layout(mbet->texture(), VkLayout::kReadOnlyOptimal);
+                        check_vk_tiling(mbet->texture());
 #ifdef SK_DEBUG
                         {
                             auto format = dContext->defaultBackendFormat(srcData[0].colorType(),
@@ -1003,7 +988,7 @@ DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkBackendAllocationTest, reporter, ctxInfo) {
                                                                            mipMapped,
                                                                            renderable,
                                                                            GrProtected::kNo);
-                        check_vk_layout(mbet->texture(), VkLayout::kUndefined);
+                        check_vk_tiling(mbet->texture());
                         return mbet;
                     };
 
@@ -1056,7 +1041,7 @@ DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkBackendAllocationTest, reporter, ctxInfo) {
                                                                         mipMapped,
                                                                         renderable,
                                                                         GrProtected::kNo);
-                        check_vk_layout(mbet->texture(), VkLayout::kReadOnlyOptimal);
+                        check_vk_tiling(mbet->texture());
                         return mbet;
                     };
                     test_color_init(context, reporter, createWithColorMtd, combo.fColorType,

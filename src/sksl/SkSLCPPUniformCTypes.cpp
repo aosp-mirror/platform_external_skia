@@ -8,8 +8,8 @@
 #include "src/sksl/SkSLCPPUniformCTypes.h"
 
 #include "include/private/SkMutex.h"
-#include "src/sksl/SkSLHCodeGenerator.h"
 #include "src/sksl/SkSLStringStream.h"
+#include "src/sksl/codegen/SkSLHCodeGenerator.h"
 
 #include <map>
 #include <vector>
@@ -22,53 +22,29 @@ namespace SkSL {
 // Template evaluation //
 /////////////////////////
 
-static String eval_template(const String& format, const std::vector<String>& tokens,
-                            const std::vector<const String*>& values) {
-    StringStream stream;
+static String eval_template(const String& format,
+                            std::initializer_list<String> tokens,
+                            std::initializer_list<String> replacements) {
+    SkASSERT(tokens.size() == replacements.size());
+    String str = format;
 
-    int tokenNameStart = -1;
-    for (size_t i = 0; i < format.size(); i++) {
-        if (tokenNameStart >= 0) {
-            // Within a token name so check if it is the end
-            if (format[i] == '}') {
-                // Skip 2 extra characters at the beginning for the $ and {, which must exist since
-                // otherwise tokenNameStart < 0
-                String token(format.c_str() + tokenNameStart + 2, i - tokenNameStart - 2);
-                // Search for the token in supported list
-                bool found = false;
-                for (size_t j = 0; j < tokens.size(); j++) {
-                    if (token == tokens[j]) {
-                        // Found a match so append the value corresponding to j to the output
-                        stream.writeText(values[j]->c_str());
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found) {
-                    // Write out original characters as if we didn't consider it to be a token name
-                    stream.writeText("${");
-                    stream.writeText(token.c_str());
-                    stream.writeText("}");
-                }
-
-                // And end the token name state
-                tokenNameStart = -1;
+    // Replace every token with its replacement.
+    auto tokenIter = tokens.begin();
+    auto replacementIter = replacements.begin();
+    for (; tokenIter != tokens.end(); ++tokenIter, ++replacementIter) {
+        size_t position = 0;
+        for (;;) {
+            // Replace one instance of the current token with the requested replacement.
+            position = str.find(*tokenIter, position);
+            if (position == String::npos) {
+                break;
             }
-        } else {
-            // Outside of a token name, so check if this character starts a name:
-            // i == $ and i+1 == {
-            if (i < format.size() - 1 && format[i] == '$' && format[i + 1] == '{') {
-                // Begin parsing the token
-                tokenNameStart = i;
-            } else {
-                // Just a character so append it
-                stream.write8(format[i]);
-            }
+            str.replace(position, tokenIter->size(), *replacementIter);
+            position += replacementIter->size();
         }
     }
 
-    return stream.str();
+    return str;
 }
 
 static bool determine_inline_from_template(const String& uniformTemplate) {
@@ -91,28 +67,15 @@ static bool determine_inline_from_template(const String& uniformTemplate) {
 ///////////////////////////////////////
 
 String UniformCTypeMapper::dirtyExpression(const String& newVar, const String& oldVar) const {
-    if (fSupportsTracking) {
-        std::vector<String> tokens = { "newVar", "oldVar" };
-        std::vector<const String*> values = { &newVar, &oldVar };
-        return eval_template(fDirtyExpressionTemplate, tokens, values);
-    } else {
-        return "";
-    }
+    return eval_template(fDirtyExpressionTemplate, {"${newVar}", "${oldVar}"}, {newVar, oldVar});
 }
 
 String UniformCTypeMapper::saveState(const String& newVar, const String& oldVar) const {
-    if (fSupportsTracking) {
-        std::vector<String> tokens = { "newVar", "oldVar" };
-        std::vector<const String*> values = { &newVar, &oldVar };
-        return eval_template(fSaveStateTemplate, tokens, values);
-    } else {
-        return "";
-    }
+    return eval_template(fSaveStateTemplate, {"${newVar}", "${oldVar}"}, {newVar, oldVar});
 }
 
 String UniformCTypeMapper::setUniform(const String& pdman, const String& uniform,
                                       const String& var) const {
-    std::vector<String> tokens = { "pdman", "uniform", "var", "count" };
     String count;
     String finalVar;
     const String* activeTemplate;
@@ -125,14 +88,16 @@ String UniformCTypeMapper::setUniform(const String& pdman, const String& uniform
         finalVar = std::move(var);
         activeTemplate = &fUniformSingleTemplate;
     }
-    std::vector<const String*> values = { &pdman, &uniform, &finalVar, &count };
-    return eval_template(*activeTemplate, tokens, values);
+
+    return eval_template(*activeTemplate,
+                         {"${pdman}", "${uniform}", "${var}", "${count}"},
+                         {pdman, uniform, finalVar, count});
 }
 
 UniformCTypeMapper::UniformCTypeMapper(
         Layout::CType ctype, const std::vector<String>& skslTypes,
         const String& setUniformSingleFormat, const String& setUniformArrayFormat,
-        bool enableTracking, const String& defaultValue, const String& dirtyExpressionFormat,
+        const String& defaultValue, const String& dirtyExpressionFormat,
         const String& saveStateFormat)
     : fCType(ctype)
     , fSKSLTypes(skslTypes)
@@ -140,7 +105,6 @@ UniformCTypeMapper::UniformCTypeMapper(
     , fUniformArrayTemplate(setUniformArrayFormat)
     , fInlineValue(determine_inline_from_template(setUniformSingleFormat) &&
                    determine_inline_from_template(setUniformArrayFormat))
-    , fSupportsTracking(enableTracking)
     , fDefaultValue(defaultValue)
     , fDirtyExpressionTemplate(dirtyExpressionFormat)
     , fSaveStateTemplate(saveStateFormat) {}
@@ -194,7 +158,7 @@ static UniformCTypeMapper register_type(Layout::CType ctype, const std::vector<S
 //////////////////////////////
 
 static const std::vector<UniformCTypeMapper>& get_mappers() {
-    static const std::vector<UniformCTypeMapper> registeredMappers = {
+    static const auto& kRegisteredMappers = *new std::vector<UniformCTypeMapper>{
     register_type(Layout::CType::kSkRect, { "half4", "float4", "double4" },
         "${pdman}.set4fv(${uniform}, ${count}, reinterpret_cast<const float*>(&${var}))", // to gpu
         "SkRect::MakeEmpty()",                                                     // default value
@@ -229,12 +193,12 @@ static const std::vector<UniformCTypeMapper>& get_mappers() {
         "SkMatrix::Scale(SK_FloatNaN, SK_FloatNaN)",                               // default value
         "!${oldVar}.cheapEqualTo(${newVar})"),                                     // dirty check
 
-    register_type(Layout::CType::kSkM44,  { "half4x4", "float4x4", "double4x4" },
+    register_type(Layout::CType::kSkM44, { "half4x4", "float4x4", "double4x4" },
         "static_assert(${count} == 1); ${pdman}.setSkM44(${uniform}, ${var})",     // to gpu
         "SkM44(SkM44::kNaN_Constructor)",                                          // default value
         "${oldVar} != (${newVar})"),                                               // dirty check
 
-    register_array(Layout::CType::kFloat,  { "half", "float", "double" },
+    register_array(Layout::CType::kFloat, { "half", "float", "double" },
         "${pdman}.set1f(${uniform}, ${var})",                                      // single
         "${pdman}.set1fv(${uniform}, ${count}, &${var})",                          // array
         "SK_FloatNaN"),                                                            // default value
@@ -245,7 +209,7 @@ static const std::vector<UniformCTypeMapper>& get_mappers() {
         "SK_NaN32"),                                                               // default value
     };
 
-    return registeredMappers;
+    return kRegisteredMappers;
 }
 
 /////
@@ -266,24 +230,20 @@ const UniformCTypeMapper* UniformCTypeMapper::Get(const Context& context, const 
         ctype = HCodeGenerator::ParameterCType(context, type, layout);
     }
 
-    const String& skslType = type.name();
-
-    for (size_t i = 0; i < registeredMappers.size(); i++) {
-        if (registeredMappers[i].ctype() == ctype) {
-            // Check for sksl support, since some c types (e.g. SkMatrix) can be used in multiple
-            // uniform types and send data to the gpu differently in those conditions
-            const std::vector<String> supportedSKSL = registeredMappers[i].supportedTypeNames();
-            for (size_t j = 0; j < supportedSKSL.size(); j++) {
-                if (supportedSKSL[j] == skslType) {
-                    // Found a match, so return it or an explicitly untracked version if tracking is
-                    // disabled in the layout
-                    return &registeredMappers[i];
+    for (const UniformCTypeMapper& mapper : registeredMappers) {
+        if (mapper.ctype() == ctype) {
+            // Check for SkSL support, since some C types (e.g. SkMatrix) can be used in multiple
+            // uniform types and send data to the GPU differently depending on the uniform type.
+            for (const String& mapperSupportedType : mapper.supportedTypeNames()) {
+                if (mapperSupportedType == type.name()) {
+                    // Return the match that we found.
+                    return &mapper;
                 }
             }
         }
     }
 
-    // Didn't find a match
+    // Didn't find a match.
     return nullptr;
 }
 

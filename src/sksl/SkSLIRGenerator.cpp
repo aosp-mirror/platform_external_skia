@@ -80,8 +80,7 @@ public:
 };
 
 IRGenerator::IRGenerator(const Context* context)
-        : fContext(*context)
-        , fModifiers(new ModifiersPool()) {}
+        : fContext(*context) {}
 
 void IRGenerator::pushSymbolTable() {
     auto childSymTable = std::make_shared<SymbolTable>(std::move(fSymbolTable), fIsBuiltinCode);
@@ -133,12 +132,6 @@ std::unique_ptr<Extension> IRGenerator::convertExtension(int offset, StringFragm
     }
 
     return std::make_unique<Extension>(offset, name);
-}
-
-std::unique_ptr<ModifiersPool> IRGenerator::releaseModifiers() {
-    std::unique_ptr<ModifiersPool> result = std::move(fModifiers);
-    fModifiers = std::make_unique<ModifiersPool>();
-    return result;
 }
 
 std::unique_ptr<Statement> IRGenerator::convertStatement(const ASTNode& statement) {
@@ -293,33 +286,23 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
                                         "'key' is only permitted within fragment processors");
         }
     }
-    if (this->programKind() == ProgramKind::kRuntimeEffect) {
-        if ((modifiers.fFlags & Modifiers::kIn_Flag) &&
-            *baseType != *fContext.fTypes.fFragmentProcessor) {
-            this->errorReporter().error(offset,
-                                        "'in' variables not permitted in runtime effects");
+    if (this->programKind() == ProgramKind::kRuntimeColorFilter ||
+        this->programKind() == ProgramKind::kRuntimeShader) {
+        if (modifiers.fFlags & Modifiers::kIn_Flag) {
+            this->errorReporter().error(offset, "'in' variables not permitted in runtime effects");
         }
+    }
+    if (baseType->isEffectChild() && !(modifiers.fFlags & Modifiers::kUniform_Flag)) {
+        this->errorReporter().error(
+                offset, "variables of type '" + baseType->displayName() + "' must be uniform");
     }
     if ((modifiers.fLayout.fFlags & Layout::kKey_Flag) &&
         (modifiers.fFlags & Modifiers::kUniform_Flag)) {
         this->errorReporter().error(offset, "'key' is not permitted on 'uniform' variables");
     }
-    if (modifiers.fLayout.fMarker.fLength) {
-        if (this->programKind() != ProgramKind::kRuntimeEffect) {
-            this->errorReporter().error(offset,
-                                        "'marker' is only permitted in runtime effects");
-        }
-        if (!(modifiers.fFlags & Modifiers::kUniform_Flag)) {
-            this->errorReporter().error(offset,
-                                        "'marker' is only permitted on 'uniform' variables");
-        }
-        if (*baseType != *fContext.fTypes.fFloat4x4) {
-            this->errorReporter().error(offset,
-                                        "'marker' is only permitted on float4x4 variables");
-        }
-    }
     if (modifiers.fLayout.fFlags & Layout::kSRGBUnpremul_Flag) {
-        if (this->programKind() != ProgramKind::kRuntimeEffect) {
+        if (this->programKind() != ProgramKind::kRuntimeColorFilter &&
+            this->programKind() != ProgramKind::kRuntimeShader) {
             this->errorReporter().error(offset,
                                         "'srgb_unpremul' is only permitted in runtime effects");
         }
@@ -338,23 +321,13 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
                                         "float3, or float4 variables");
         }
     }
-    if (modifiers.fFlags & Modifiers::kVarying_Flag) {
-        if (this->programKind() != ProgramKind::kRuntimeEffect) {
-            this->errorReporter().error(offset, "'varying' is only permitted in runtime effects");
-        }
-        if (!baseType->isFloat() &&
-            !(baseType->isVector() && baseType->componentType().isFloat())) {
-            this->errorReporter().error(offset, "'varying' must be float scalar or vector");
-        }
-    }
     int permitted = Modifiers::kConst_Flag;
     if (storage == Variable::Storage::kGlobal) {
         permitted |= Modifiers::kIn_Flag | Modifiers::kOut_Flag | Modifiers::kUniform_Flag |
-                     Modifiers::kFlat_Flag | Modifiers::kVarying_Flag |
-                     Modifiers::kNoPerspective_Flag;
+                     Modifiers::kFlat_Flag | Modifiers::kNoPerspective_Flag;
     }
     // TODO(skbug.com/11301): Migrate above checks into building a mask of permitted layout flags
-    this->checkModifiers(offset, modifiers, permitted, /*permittedLayoutFlags=*/~0);
+    CheckModifiers(fContext, offset, modifiers, permitted, /*permittedLayoutFlags=*/~0);
 }
 
 std::unique_ptr<Variable> IRGenerator::convertVar(int offset, const Modifiers& modifiers,
@@ -378,8 +351,8 @@ std::unique_ptr<Variable> IRGenerator::convertVar(int offset, const Modifiers& m
         }
         type = fSymbolTable->addArrayDimension(type, arraySizeValue);
     }
-    return std::make_unique<Variable>(offset, fModifiers->addToPool(modifiers), name, type,
-                                      fIsBuiltinCode, storage);
+    return std::make_unique<Variable>(offset, this->modifiersPool().add(modifiers), name,
+                                      type, fIsBuiltinCode, storage);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertVarDeclaration(std::unique_ptr<Variable> var,
@@ -457,13 +430,13 @@ StatementArray IRGenerator::convertVarDeclarations(const ASTNode& decls,
                 arraySize = this->convertExpression(*iter++);
             } else {
                 this->errorReporter().error(decls.fOffset, "array must have a size");
-                return {};
+                continue;
             }
         }
         if (iter != varDecl.end()) {
             value = this->convertExpression(*iter);
             if (!value) {
-                return {};
+                continue;
             }
         }
         std::unique_ptr<Statement> varDeclStmt = this->convertVarDeclaration(varDecl.fOffset,
@@ -509,7 +482,7 @@ std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(c
         !this->caps().gsInvocationsSupport()) {
         modifiers.fLayout.fMaxVertices *= fInvocations;
     }
-    return std::make_unique<ModifiersDeclaration>(fModifiers->addToPool(modifiers));
+    return std::make_unique<ModifiersDeclaration>(this->modifiersPool().add(modifiers));
 }
 
 std::unique_ptr<Statement> IRGenerator::convertIf(const ASTNode& n) {
@@ -707,7 +680,7 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
     Modifiers invokeModifiers(invokeLayout, Modifiers::kHasSideEffects_Flag);
     const FunctionDeclaration* invokeDecl = fSymbolTable->add(std::make_unique<FunctionDeclaration>(
             /*offset=*/-1,
-            fModifiers->addToPool(invokeModifiers),
+            this->modifiersPool().add(invokeModifiers),
             "_invoke",
             std::vector<const Variable*>(),
             fContext.fTypes.fVoid.get(),
@@ -720,12 +693,12 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
     const Variable* loopIdx = &(*fSymbolTable)["sk_InvocationID"]->as<Variable>();
     auto test = BinaryExpression::Make(
             fContext,
-            std::make_unique<VariableReference>(/*offset=*/-1, loopIdx),
+            VariableReference::Make(/*offset=*/-1, loopIdx),
             Token::Kind::TK_LT,
             IntLiteral::Make(fContext, /*offset=*/-1, fInvocations));
     auto next = PostfixExpression::Make(
             fContext,
-            std::make_unique<VariableReference>(/*offset=*/-1, loopIdx,VariableRefKind::kReadWrite),
+            VariableReference::Make(/*offset=*/-1, loopIdx, VariableRefKind::kReadWrite),
             Token::Kind::TK_PLUSPLUS);
     ASTNode endPrimitiveID(&fFile->fNodes, -1, ASTNode::Kind::kIdentifier, "EndPrimitive");
     std::unique_ptr<Expression> endPrimitive = this->convertExpression(endPrimitiveID);
@@ -741,7 +714,7 @@ std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<
                                                                       ExpressionArray{})));
     auto assignment = BinaryExpression::Make(
             fContext,
-            std::make_unique<VariableReference>(/*offset=*/-1, loopIdx, VariableRefKind::kWrite),
+            VariableReference::Make(/*offset=*/-1, loopIdx, VariableRefKind::kWrite),
             Token::Kind::TK_EQ,
             IntLiteral::Make(fContext, /*offset=*/-1, /*value=*/0));
     auto initializer = ExpressionStatement::Make(fContext, std::move(assignment));
@@ -768,12 +741,10 @@ std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
     //                      sk_Position.w);
     SkASSERT(skPerVertex && fRTAdjust);
     auto Ref = [](const Variable* var) -> std::unique_ptr<Expression> {
-        return std::make_unique<VariableReference>(/*offset=*/-1, var,
-                                                   VariableReference::RefKind::kRead);
+        return VariableReference::Make(/*offset=*/-1, var, VariableReference::RefKind::kRead);
     };
     auto WRef = [](const Variable* var) -> std::unique_ptr<Expression> {
-        return std::make_unique<VariableReference>(/*offset=*/-1, var,
-                                                   VariableReference::RefKind::kWrite);
+        return VariableReference::Make(/*offset=*/-1, var, VariableReference::RefKind::kWrite);
     };
     auto Field = [&](const Variable* var, int idx) -> std::unique_ptr<Expression> {
         return FieldAccess::Make(fContext, Ref(var), idx,
@@ -817,15 +788,17 @@ std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
     return ExpressionStatement::Make(fContext, std::move(result));
 }
 
-void IRGenerator::checkModifiers(int offset,
+void IRGenerator::CheckModifiers(const Context& context,
+                                 int offset,
                                  const Modifiers& modifiers,
                                  int permittedModifierFlags,
                                  int permittedLayoutFlags) {
+    ErrorReporter& errorReporter = context.fErrors;
     int flags = modifiers.fFlags;
     auto checkModifier = [&](Modifiers::Flag flag, const char* name) {
         if (flags & flag) {
             if (!(permittedModifierFlags & flag)) {
-                this->errorReporter().error(offset, "'" + String(name) + "' is not permitted here");
+                errorReporter.error(offset, "'" + String(name) + "' is not permitted here");
             }
             flags &= ~flag;
         }
@@ -838,7 +811,6 @@ void IRGenerator::checkModifiers(int offset,
     checkModifier(Modifiers::kFlat_Flag,           "flat");
     checkModifier(Modifiers::kNoPerspective_Flag,  "noperspective");
     checkModifier(Modifiers::kHasSideEffects_Flag, "sk_has_side_effects");
-    checkModifier(Modifiers::kVarying_Flag,        "varying");
     checkModifier(Modifiers::kInline_Flag,         "inline");
     checkModifier(Modifiers::kNoInline_Flag,       "noinline");
     SkASSERT(flags == 0);
@@ -847,8 +819,8 @@ void IRGenerator::checkModifiers(int offset,
     auto checkLayout = [&](Layout::Flag flag, const char* name) {
         if (layoutFlags & flag) {
             if (!(permittedLayoutFlags & flag)) {
-                this->errorReporter().error(
-                        offset, "layout qualifier '" + String(name) + "' is not permitted here");
+                errorReporter.error(offset, "layout qualifier '" + String(name) +
+                                            "' is not permitted here");
             }
             layoutFlags &= ~flag;
         }
@@ -871,7 +843,6 @@ void IRGenerator::checkModifiers(int offset,
     checkLayout(Layout::kPrimitive_Flag,                "primitive-type");
     checkLayout(Layout::kMaxVertices_Flag,              "max_vertices");
     checkLayout(Layout::kInvocations_Flag,              "invocations");
-    checkLayout(Layout::kMarker_Flag,                   "marker");
     checkLayout(Layout::kWhen_Flag,                     "when");
     checkLayout(Layout::kCType_Flag,                    "ctype");
     SkASSERT(layoutFlags == 0);
@@ -993,45 +964,15 @@ void IRGenerator::convertFunction(const ASTNode& f) {
     if (returnType == nullptr) {
         return;
     }
-    if (returnType->isArray()) {
-        this->errorReporter().error(
-                f.fOffset, "functions may not return type '" + returnType->displayName() + "'");
-        return;
-    }
-    if (this->strictES2Mode() && returnType->isOrContainsArray()) {
-        this->errorReporter().error(f.fOffset,
-                                    "functions may not return structs containing arrays");
-        return;
-    }
-    if (!fIsBuiltinCode && !returnType->isVoid() && returnType->componentType().isOpaque()) {
-        this->errorReporter().error(
-                f.fOffset,
-                "functions may not return opaque type '" + returnType->displayName() + "'");
-        return;
-    }
     const ASTNode::FunctionData& funcData = f.getFunctionData();
     bool isMain = (funcData.fName == "main");
 
-    // Check function modifiers.
-    this->checkModifiers(
-            f.fOffset,
-            funcData.fModifiers,
-            Modifiers::kHasSideEffects_Flag | Modifiers::kInline_Flag | Modifiers::kNoInline_Flag,
-            /*permittedLayoutFlags=*/0);
-    if ((funcData.fModifiers.fFlags & Modifiers::kInline_Flag) &&
-        (funcData.fModifiers.fFlags & Modifiers::kNoInline_Flag)) {
-        this->errorReporter().error(f.fOffset, "functions cannot be both 'inline' and 'noinline'");
-    }
-
-    // Check modifiers on each function parameter.
-    std::vector<const Variable*> parameters;
+    std::vector<std::unique_ptr<Variable>> parameters;
+    parameters.reserve(funcData.fParameterCount);
     for (size_t i = 0; i < funcData.fParameterCount; ++i) {
         const ASTNode& param = *(iter++);
         SkASSERT(param.fKind == ASTNode::Kind::kParameter);
         const ASTNode::ParameterData& pd = param.getParameterData();
-        this->checkModifiers(param.fOffset, pd.fModifiers,
-                             Modifiers::kConst_Flag | Modifiers::kIn_Flag | Modifiers::kOut_Flag,
-                             /*permittedLayoutFlags=*/0);
         auto paramIter = param.begin();
         const Type* type = this->convertType(*(paramIter++));
         if (!type) {
@@ -1044,164 +985,39 @@ void IRGenerator::convertFunction(const ASTNode& f) {
             }
             type = fSymbolTable->addArrayDimension(type, arraySize);
         }
-        // Only the (builtin) declarations of 'sample' are allowed to have FP parameters.
-        // (You can pass other opaque types to functions safely; this restriction is
-        // fragment-processor specific.)
-        if (*type == *fContext.fTypes.fFragmentProcessor && !fIsBuiltinCode) {
-            this->errorReporter().error(
-                    param.fOffset, "parameters of type '" + type->displayName() + "' not allowed");
-            return;
-        }
 
-        Modifiers m = pd.fModifiers;
-        if (isMain && (this->programKind() == ProgramKind::kRuntimeEffect ||
-                       this->programKind() == ProgramKind::kFragmentProcessor)) {
-            if (i == 0) {
-                // We verify that the type is correct later, for now, if there is a parameter to
-                // a .fp or runtime-effect main(), it's supposed to be the coords:
-                m.fLayout.fBuiltin = SK_MAIN_COORDS_BUILTIN;
-            }
-        }
-
-        const Variable* var = fSymbolTable->takeOwnershipOfSymbol(
-                std::make_unique<Variable>(param.fOffset, fModifiers->addToPool(m), pd.fName, type,
-                                           fIsBuiltinCode, Variable::Storage::kParameter));
-        parameters.push_back(var);
+        parameters.push_back(std::make_unique<Variable>(param.fOffset,
+                                                        this->modifiersPool().add(pd.fModifiers),
+                                                        pd.fName,
+                                                        type,
+                                                        fIsBuiltinCode,
+                                                        Variable::Storage::kParameter));
     }
 
-    auto paramIsCoords = [&](int idx) {
-        return parameters[idx]->type() == *fContext.fTypes.fFloat2 &&
-               parameters[idx]->modifiers().fFlags == 0 &&
-               parameters[idx]->modifiers().fLayout.fBuiltin == SK_MAIN_COORDS_BUILTIN;
-    };
-
-    // Check the function signature of `main`.
-    if (isMain) {
-        switch (this->programKind()) {
-            case ProgramKind::kRuntimeEffect: {
-                // (half4|float4) main()  -or-  (half4|float4) main(float2)
-                if (*returnType != *fContext.fTypes.fHalf4 &&
-                    *returnType != *fContext.fTypes.fFloat4) {
-                    this->errorReporter().error(f.fOffset,
-                                                "'main' must return: 'vec4', 'float4', or 'half4'");
-                    return;
-                }
-                bool validParams = (parameters.size() == 0) ||
-                                   (parameters.size() == 1 && paramIsCoords(0));
-                if (!validParams) {
-                    this->errorReporter().error(
-                            f.fOffset, "'main' parameters must be: (), (vec2), or (float2)");
-                    return;
-                }
-                break;
-            }
-            case ProgramKind::kFragmentProcessor: {
-                if (*returnType != *fContext.fTypes.fHalf4) {
-                    this->errorReporter().error(f.fOffset, ".fp 'main' must return 'half4'");
-                    return;
-                }
-                bool validParams = (parameters.size() == 0) ||
-                                   (parameters.size() == 1 && paramIsCoords(0));
-                if (!validParams) {
-                    this->errorReporter().error(
-                            f.fOffset, ".fp 'main' must be declared main() or main(float2)");
-                    return;
-                }
-                break;
-            }
-            case ProgramKind::kGeneric:
-                break;
-            default:
-                if (parameters.size()) {
-                    this->errorReporter().error(f.fOffset,
-                                                "shader 'main' must have zero parameters");
-                }
-                break;
-        }
+    // Conservatively assume all user-defined functions have side effects.
+    Modifiers declModifiers = funcData.fModifiers;
+    if (!fIsBuiltinCode) {
+        declModifiers.fFlags |= Modifiers::kHasSideEffects_Flag;
     }
 
-    // Find existing declarations and report conflicts.
-    const FunctionDeclaration* decl = nullptr;
-    const Symbol* entry = (*fSymbolTable)[funcData.fName];
-    if (entry) {
-        std::vector<const FunctionDeclaration*> functions;
-        switch (entry->kind()) {
-            case Symbol::Kind::kUnresolvedFunction:
-                functions = entry->as<UnresolvedFunction>().functions();
-                break;
-            case Symbol::Kind::kFunctionDeclaration:
-                functions.push_back(&entry->as<FunctionDeclaration>());
-                break;
-            default:
-                this->errorReporter().error(f.fOffset,
-                                            "symbol '" + funcData.fName + "' was already defined");
-                return;
-        }
-        for (const FunctionDeclaration* other : functions) {
-            SkASSERT(other->name() == funcData.fName);
-            if (parameters.size() == other->parameters().size()) {
-                bool match = true;
-                for (size_t i = 0; i < parameters.size(); i++) {
-                    if (parameters[i]->type() != other->parameters()[i]->type()) {
-                        match = false;
-                        break;
-                    }
-                }
-                if (match) {
-                    if (*returnType != other->returnType()) {
-                        FunctionDeclaration newDecl(f.fOffset,
-                                                    fModifiers->addToPool(funcData.fModifiers),
-                                                    funcData.fName,
-                                                    parameters,
-                                                    returnType,
-                                                    fIsBuiltinCode);
-                        this->errorReporter().error(
-                                f.fOffset, "functions '" + newDecl.description() + "' and '" +
-                                           other->description() + "' differ only in return type");
-                        return;
-                    }
-                    decl = other;
-                    for (size_t i = 0; i < parameters.size(); i++) {
-                        if (parameters[i]->modifiers() != other->parameters()[i]->modifiers()) {
-                            this->errorReporter().error(
-                                    f.fOffset,
-                                    "modifiers on parameter " + to_string((uint64_t)i + 1) +
-                                            " differ between declaration and definition");
-                            return;
-                        }
-                    }
-                    if (other->definition() && !other->isBuiltin()) {
-                        this->errorReporter().error(
-                                f.fOffset, "duplicate definition of " + other->description());
-                        return;
-                    }
-                    break;
-                }
-            }
-        }
+    if (fContext.fConfig->fSettings.fForceNoInline) {
+        // Apply the `noinline` modifier to every function. This allows us to test Runtime
+        // Effects without any inlining, even when the code is later added to a paint.
+        declModifiers.fFlags &= ~Modifiers::kInline_Flag;
+        declModifiers.fFlags |= Modifiers::kNoInline_Flag;
     }
+
+    const FunctionDeclaration* decl = FunctionDeclaration::Convert(
+                                                           fContext,
+                                                           *fSymbolTable,
+                                                           f.fOffset,
+                                                           this->modifiersPool().add(declModifiers),
+                                                           funcData.fName,
+                                                           std::move(parameters),
+                                                           returnType,
+                                                           fIsBuiltinCode);
     if (!decl) {
-        // Conservatively assume all user-defined functions have side effects.
-        Modifiers declModifiers = funcData.fModifiers;
-        if (!fIsBuiltinCode) {
-            declModifiers.fFlags |= Modifiers::kHasSideEffects_Flag;
-        }
-
-        if (fContext.fConfig->fSettings.fForceNoInline) {
-            // Apply the `noinline` modifier to every function. This allows us to test Runtime
-            // Effects without any inlining, even when the code is later added to a paint.
-            declModifiers.fFlags &= ~Modifiers::kInline_Flag;
-            declModifiers.fFlags |= Modifiers::kNoInline_Flag;
-        }
-
-        // Create a new declaration.
-        decl = fSymbolTable->add(
-                std::make_unique<FunctionDeclaration>(f.fOffset,
-                                                      fModifiers->addToPool(declModifiers),
-                                                      funcData.fName,
-                                                      parameters,
-                                                      returnType,
-                                                      fIsBuiltinCode));
+        return;
     }
     if (iter == f.end()) {
         // If there's no body, we've found a prototype.
@@ -1317,7 +1133,7 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
     }
     const Variable* var = old->takeOwnershipOfSymbol(
             std::make_unique<Variable>(intf.fOffset,
-                                       fModifiers->addToPool(id.fModifiers),
+                                       this->modifiersPool().add(id.fModifiers),
                                        id.fInstanceName.fLength ? id.fInstanceName : id.fTypeName,
                                        type,
                                        fIsBuiltinCode,
@@ -1351,8 +1167,7 @@ void IRGenerator::convertGlobalVarDeclarations(const ASTNode& decl) {
                         std::make_unique<StructDefinition>(decl.fOffset, *type));
             }
         }
-        fProgramElements->push_back(std::make_unique<GlobalVarDeclaration>(decl.fOffset,
-                                                                           std::move(stmt)));
+        fProgramElements->push_back(std::make_unique<GlobalVarDeclaration>(std::move(stmt)));
     }
 }
 
@@ -1389,7 +1204,7 @@ void IRGenerator::convertEnum(const ASTNode& e) {
         }
         value = IntLiteral::Make(fContext, e.fOffset, currentValue);
         ++currentValue;
-        auto var = std::make_unique<Variable>(e.fOffset, fModifiers->addToPool(modifiers),
+        auto var = std::make_unique<Variable>(e.fOffset, this->modifiersPool().add(modifiers),
                                               child.getString(), type, fIsBuiltinCode,
                                               Variable::Storage::kGlobal);
         // enum variables aren't really 'declared', but we have to create a declaration to store
@@ -1504,12 +1319,6 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, StringFra
             const Variable* var = &result->as<Variable>();
             const Modifiers& modifiers = var->modifiers();
             switch (modifiers.fLayout.fBuiltin) {
-                case SK_WIDTH_BUILTIN:
-                    fInputs.fRTWidth = true;
-                    break;
-                case SK_HEIGHT_BUILTIN:
-                    fInputs.fRTHeight = true;
-                    break;
 #ifndef SKSL_STANDALONE
                 case SK_FRAGCOORD_BUILTIN:
                     fInputs.fFlipY = true;
@@ -1524,7 +1333,7 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, StringFra
                 !(modifiers.fFlags & Modifiers::kUniform_Flag) &&
                 !(modifiers.fLayout.fFlags & Layout::kKey_Flag) &&
                 modifiers.fLayout.fBuiltin == -1 &&
-                var->type() != *fContext.fTypes.fFragmentProcessor &&
+                !var->type().isFragmentProcessor() &&
                 var->type().typeKind() != Type::TypeKind::kSampler) {
                 bool valid = false;
                 for (const auto& decl : fFile->root()) {
@@ -1544,14 +1353,12 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, StringFra
                 }
             }
             // default to kRead_RefKind; this will be corrected later if the variable is written to
-            return std::make_unique<VariableReference>(offset,
-                                                       var,
-                                                       VariableReference::RefKind::kRead);
+            return VariableReference::Make(offset, var, VariableReference::RefKind::kRead);
         }
         case Symbol::Kind::kField: {
             const Field* field = &result->as<Field>();
-            auto base = std::make_unique<VariableReference>(offset, &field->owner(),
-                                                            VariableReference::RefKind::kRead);
+            auto base = VariableReference::Make(offset, &field->owner(),
+                                                VariableReference::RefKind::kRead);
             return FieldAccess::Make(fContext, std::move(base), field->fieldIndex(),
                                      FieldAccess::OwnerKind::kAnonymousInterfaceBlock);
         }
@@ -2048,6 +1855,7 @@ void IRGenerator::findAndDeclareBuiltinVariables() {
     };
 
     BuiltinVariableScanner scanner(this);
+    SkASSERT(fProgramElements);
     for (auto& e : *fProgramElements) {
         scanner.visitProgramElement(*e);
     }
@@ -2077,6 +1885,8 @@ void IRGenerator::start(const ParsedModule& base,
                         const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions,
                         std::vector<std::unique_ptr<ProgramElement>>* elements,
                         std::vector<const ProgramElement*>* sharedElements) {
+    fProgramElements = elements;
+    fSharedElements = sharedElements;
     fSymbolTable = base.fSymbols;
     fIntrinsics = base.fIntrinsics.get();
     if (fIntrinsics) {
@@ -2100,14 +1910,13 @@ void IRGenerator::start(const ParsedModule& base,
             m.fFlags = Modifiers::kIn_Flag;
             m.fLayout.fBuiltin = SK_INVOCATIONID_BUILTIN;
         }
-        auto var = std::make_unique<Variable>(/*offset=*/-1, fModifiers->addToPool(m),
+        auto var = std::make_unique<Variable>(/*offset=*/-1, this->modifiersPool().add(m),
                                               "sk_InvocationID", fContext.fTypes.fInt.get(),
                                               /*builtin=*/false, Variable::Storage::kGlobal);
         auto decl = VarDeclaration::Make(fContext, var.get(), fContext.fTypes.fInt.get(),
                                          /*arraySize=*/0, /*value=*/nullptr);
         fSymbolTable->add(std::move(var));
-        fProgramElements->push_back(
-                std::make_unique<GlobalVarDeclaration>(/*offset=*/-1, std::move(decl)));
+        fProgramElements->push_back(std::make_unique<GlobalVarDeclaration>(std::move(decl)));
     }
 
     if (externalFunctions) {
@@ -2151,10 +1960,10 @@ IRGenerator::IRBundle IRGenerator::finish() {
         }
     }
 
-    IRBundle result{std::move(*fProgramElements), std::move(*fSharedElements),
-                    this->releaseModifiers(), fSymbolTable, fInputs};
-    fSymbolTable = nullptr;
-    return result;
+    return IRBundle{std::move(*fProgramElements),
+                    std::move(*fSharedElements),
+                    std::move(fSymbolTable),
+                    fInputs};
 }
 
 IRGenerator::IRBundle IRGenerator::convertProgram(
@@ -2165,9 +1974,6 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
         const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions) {
     std::vector<std::unique_ptr<ProgramElement>> elements;
     std::vector<const ProgramElement*> sharedElements;
-
-    fProgramElements = &elements;
-    fSharedElements = &sharedElements;
 
     this->start(base, isBuiltinCode, externalFunctions, &elements, &sharedElements);
 

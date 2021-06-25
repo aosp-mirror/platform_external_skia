@@ -10,13 +10,11 @@
 #include "include/private/SkFloatingPoint.h"
 #include "src/core/SkGeometry.h"
 #include "src/gpu/geometry/GrPathUtils.h"
+#include "src/gpu/geometry/GrWangsFormula.h"
 #include "src/gpu/mock/GrMockOpTarget.h"
 #include "src/gpu/tessellate/GrStrokeIndirectTessellator.h"
 #include "src/gpu/tessellate/GrStrokeTessellateShader.h"
 #include "src/gpu/tessellate/GrTessellationPathRenderer.h"
-#include "src/gpu/tessellate/GrWangsFormula.h"
-
-using Tolerances = GrStrokeTessellateShader::Tolerances;
 
 static sk_sp<GrDirectContext> make_mock_context() {
     GrMockOptions mockOptions;
@@ -48,7 +46,7 @@ static void test_stroke(skiatest::Reporter* r, GrDirectContext* ctx, GrMockOpTar
                                                     matrix, &pathStrokeList, path.countVerbs(),
                                                     target->allocator());
             tessellator.verifyResolveLevels(r, target, matrix, path, stroke);
-            tessellator.prepare(target, matrix);
+            tessellator.prepare(target, path.countVerbs());
             tessellator.verifyBuffers(r, target, matrix, stroke);
         }
     }
@@ -272,7 +270,8 @@ void GrStrokeIndirectTessellator::verifyResolveLevels(skiatest::Reporter* r,
                                                       const SkMatrix& viewMatrix,
                                                       const SkPath& path,
                                                       const SkStrokeRec& stroke) {
-    auto tolerances = Tolerances::MakeNonHairline(viewMatrix.getMaxScale(), stroke.getWidth());
+    auto tolerances = GrStrokeTolerances::MakeNonHairline(viewMatrix.getMaxScale(),
+                                                          stroke.getWidth());
     int8_t resolveLevelForCircles = SkTPin<float>(
             sk_float_nextlog2(tolerances.fNumRadialSegmentsPerRadian * SK_ScalarPI),
             1, kMaxResolveLevel);
@@ -332,7 +331,7 @@ void GrStrokeIndirectTessellator::verifyResolveLevels(skiatest::Reporter* r,
                     }
                 }
                 float numParametricSegments = (hasCusp) ? 0 : GrWangsFormula::quadratic(
-                        tolerances.fParametricIntolerance, pts);
+                        tolerances.fParametricPrecision, pts);
                 float rotation = (hasCusp) ? 0 : SkMeasureQuadRotation(pts);
                 if (stroke.getJoin() == SkPaint::kRound_Join) {
                     SkVector controlPoint = (pts[0] == pts[1]) ? pts[2] : pts[1];
@@ -375,7 +374,7 @@ void GrStrokeIndirectTessellator::verifyResolveLevels(skiatest::Reporter* r,
                     // it matches the answer we got already.
                     SkPoint* p = chops + i*3;
                     float numParametricSegments =
-                            GrWangsFormula::cubic(tolerances.fParametricIntolerance, p);
+                            GrWangsFormula::cubic(tolerances.fParametricPrecision, p);
                     SkVector tan0 =
                             ((p[0] == p[1]) ? (p[1] == p[2]) ? p[3] : p[2] : p[1]) - p[0];
                     SkVector tan1 =
@@ -441,7 +440,8 @@ void GrStrokeIndirectTessellator::verifyBuffers(skiatest::Reporter* r, GrMockOpT
     };
     auto instance = static_cast<const IndirectInstance*>(target->peekStaticVertexData());
     auto* indirect = static_cast<const GrDrawIndirectCommand*>(target->peekStaticIndirectData());
-    auto tolerances = Tolerances::MakeNonHairline(viewMatrix.getMaxScale(), stroke.getWidth());
+    auto tolerances = GrStrokeTolerances::MakeNonHairline(viewMatrix.getMaxScale(),
+                                                          stroke.getWidth());
     float tolerance = test_tolerance(stroke.getJoin());
     for (int i = 0; i < fChainedDrawIndirectCount; ++i) {
         int numExtraEdgesInJoin = (stroke.getJoin() == SkPaint::kMiter_Join) ? 4 : 3;
@@ -454,8 +454,7 @@ void GrStrokeIndirectTessellator::verifyBuffers(skiatest::Reporter* r, GrMockOpT
         for (unsigned j = 0; j < indirect->fInstanceCount; ++j) {
             SkASSERT(fabsf(instance->fNumTotalEdges) == indirect->fVertexCount/2);
             const SkPoint* p = instance->fPts;
-            float numParametricSegments = GrWangsFormula::cubic(
-                    tolerances.fParametricIntolerance, p);
+            float numParametricSegments = GrWangsFormula::cubic(tolerances.fParametricPrecision, p);
             float alternateNumParametricSegments = numParametricSegments;
             if (p[0] == p[1] && p[2] == p[3]) {
                 // We articulate lines as "p0,p0,p1,p1". This one might actually expect 0 parametric

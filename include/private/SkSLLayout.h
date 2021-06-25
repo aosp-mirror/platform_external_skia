@@ -21,27 +21,25 @@ struct Layout {
     enum Flag {
         kOriginUpperLeft_Flag            = 1 <<  0,
         kOverrideCoverage_Flag           = 1 <<  1,
-        kEarlyFragmentTests_Flag         = 1 <<  2,
-        kPushConstant_Flag               = 1 <<  3,
-        kBlendSupportAllEquations_Flag   = 1 <<  4,
-        kTracked_Flag                    = 1 <<  5,
-        kSRGBUnpremul_Flag               = 1 <<  6,
-        kKey_Flag                        = 1 <<  7,
+        kPushConstant_Flag               = 1 <<  2,
+        kBlendSupportAllEquations_Flag   = 1 <<  3,
+        kTracked_Flag                    = 1 <<  4,
+        kSRGBUnpremul_Flag               = 1 <<  5,
+        kKey_Flag                        = 1 <<  6,
 
         // These flags indicate if the qualifier appeared, regardless of the accompanying value.
-        kLocation_Flag                   = 1 <<  8,
-        kOffset_Flag                     = 1 <<  9,
-        kBinding_Flag                    = 1 << 10,
-        kIndex_Flag                      = 1 << 11,
-        kSet_Flag                        = 1 << 12,
-        kBuiltin_Flag                    = 1 << 13,
-        kInputAttachmentIndex_Flag       = 1 << 14,
-        kPrimitive_Flag                  = 1 << 15,
-        kMaxVertices_Flag                = 1 << 16,
-        kInvocations_Flag                = 1 << 17,
-        kMarker_Flag                     = 1 << 18,
-        kWhen_Flag                       = 1 << 19,
-        kCType_Flag                      = 1 << 20,
+        kLocation_Flag                   = 1 <<  7,
+        kOffset_Flag                     = 1 <<  8,
+        kBinding_Flag                    = 1 <<  9,
+        kIndex_Flag                      = 1 << 10,
+        kSet_Flag                        = 1 << 11,
+        kBuiltin_Flag                    = 1 << 12,
+        kInputAttachmentIndex_Flag       = 1 << 13,
+        kPrimitive_Flag                  = 1 << 14,
+        kMaxVertices_Flag                = 1 << 15,
+        kInvocations_Flag                = 1 << 16,
+        kWhen_Flag                       = 1 << 17,
+        kCType_Flag                      = 1 << 18,
     };
 
     enum Primitive {
@@ -114,7 +112,7 @@ struct Layout {
 
     Layout(int flags, int location, int offset, int binding, int index, int set, int builtin,
            int inputAttachmentIndex, Primitive primitive, int maxVertices, int invocations,
-           StringFragment marker, StringFragment when, CType ctype)
+           StringFragment when, CType ctype)
     : fFlags(flags)
     , fLocation(location)
     , fOffset(offset)
@@ -126,7 +124,6 @@ struct Layout {
     , fPrimitive(primitive)
     , fMaxVertices(maxVertices)
     , fInvocations(invocations)
-    , fMarker(marker)
     , fWhen(when)
     , fCType(ctype) {}
 
@@ -186,9 +183,6 @@ struct Layout {
         if (fFlags & kOverrideCoverage_Flag) {
             result += separator() + "override_coverage";
         }
-        if (fFlags & kEarlyFragmentTests_Flag) {
-            result += separator() + "early_fragment_tests";
-        }
         if (fFlags & kBlendSupportAllEquations_Flag) {
             result += separator() + "blend_support_all_equations";
         }
@@ -232,9 +226,6 @@ struct Layout {
         if (fInvocations >= 0) {
             result += separator() + "invocations = " + to_string(fInvocations);
         }
-        if (fMarker.fLength) {
-            result += separator() + "marker = " + fMarker;
-        }
         if (fWhen.fLength) {
             result += separator() + "when = " + fWhen;
         }
@@ -259,7 +250,6 @@ struct Layout {
                fPrimitive            == other.fPrimitive &&
                fMaxVertices          == other.fMaxVertices &&
                fInvocations          == other.fInvocations &&
-               fMarker               == other.fMarker &&
                fWhen                 == other.fWhen &&
                fCType                == other.fCType;
     }
@@ -283,8 +273,6 @@ struct Layout {
     Primitive fPrimitive;
     int fMaxVertices;
     int fInvocations;
-    // marker refers to matrices tagged on the SkCanvas with markCTM
-    StringFragment fMarker;
     StringFragment fWhen;
     CType fCType;
 };

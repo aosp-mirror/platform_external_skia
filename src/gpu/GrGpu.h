@@ -9,17 +9,16 @@
 #define GrGpu_DEFINED
 
 #include "include/core/SkPath.h"
+#include "include/core/SkSpan.h"
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/SkTArray.h"
-#include "src/core/SkSpan.h"
 #include "src/core/SkTInternalLList.h"
 #include "src/gpu/GrAttachment.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrOpsRenderPass.h"
 #include "src/gpu/GrPixmap.h"
 #include "src/gpu/GrSwizzle.h"
-#include "src/gpu/GrTextureProducer.h"
 #include "src/gpu/GrXferProcessor.h"
 
 class GrAttachment;
@@ -278,7 +277,7 @@ public:
     bool writePixels(GrSurface* surface, int left, int top, int width, int height,
                      GrColorType surfaceColorType, GrColorType srcColorType, const void* buffer,
                      size_t rowBytes, bool prepForTexSampling = false) {
-        GrMipLevel mipLevel = {buffer, rowBytes};
+        GrMipLevel mipLevel = {buffer, rowBytes, nullptr};
         return this->writePixels(surface, left, top, width, height, surfaceColorType, srcColorType,
                                  &mipLevel, 1, prepForTexSampling);
     }
@@ -344,6 +343,7 @@ public:
     // provided but 'renderTarget' has a stencil buffer then that is a signal that the
     // render target's stencil buffer should be ignored.
     GrOpsRenderPass* getOpsRenderPass(GrRenderTarget* renderTarget,
+                                      bool useMSAASurface,
                                       GrAttachment* stencil,
                                       GrSurfaceOrigin,
                                       const SkIRect& bounds,
@@ -396,6 +396,14 @@ public:
      */
     virtual std::unique_ptr<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) = 0;
 
+    /**
+     * Frees any backend specific objects that are not currently in use by the GPU. This is called
+     * when the client is trying to free up as much GPU memory as possible. We will not release
+     * resources connected to programs/pipelines since the cost to recreate those is significantly
+     * higher that other resources.
+     */
+    virtual void releaseUnlockedBackendObjects() {}
+
     ///////////////////////////////////////////////////////////////////////////
     // Debugging and Stats
 
@@ -442,6 +450,9 @@ public:
         int renderPasses() const { return fRenderPasses; }
         void incRenderPasses() { fRenderPasses++; }
 
+        int numReorderedDAGsOverBudget() const { return fNumReorderedDAGsOverBudget; }
+        void incNumReorderedDAGsOverBudget() { fNumReorderedDAGsOverBudget++; }
+
 #if GR_TEST_UTILS
         void dump(SkString*);
         void dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values);
@@ -459,6 +470,7 @@ public:
         int fNumScratchTexturesReused = 0;
         int fNumScratchMSAAAttachmentsReused = 0;
         int fRenderPasses = 0;
+        int fNumReorderedDAGsOverBudget = 0;
 
 #else  // !GR_GPU_STATS
 
@@ -478,64 +490,13 @@ public:
         void incNumScratchTexturesReused() {}
         void incNumScratchMSAAAttachmentsReused() {}
         void incRenderPasses() {}
+        void incNumReorderedDAGsOverBudget() {}
 #endif
     };
 
     Stats* stats() { return &fStats; }
     void dumpJSON(SkJSONWriter*) const;
 
-    /** Used to initialize a backend texture with either a constant color, pixmaps or
-     *  compressed data.
-     */
-    class BackendTextureData {
-    public:
-        enum class Type { kColor, kPixmaps, kCompressed };
-        BackendTextureData() = default;
-        BackendTextureData(const SkColor4f& color) : fType(Type::kColor), fColor(color) {}
-        BackendTextureData(const GrPixmap pixmaps[]) : fType(Type::kPixmaps), fPixmaps(pixmaps) {
-            SkASSERT(pixmaps);
-        }
-        BackendTextureData(const void* data, size_t size) : fType(Type::kCompressed) {
-            SkASSERT(data);
-            fCompressed.fData = data;
-            fCompressed.fSize = size;
-        }
-
-        Type type() const { return fType; }
-        SkColor4f color() const {
-            SkASSERT(this->type() == Type::kColor);
-            return fColor;
-        }
-
-        const GrPixmap& pixmap(int i) const {
-            SkASSERT(this->type() == Type::kPixmaps);
-            return fPixmaps[i];
-        }
-        const GrPixmap* pixmaps() const {
-            SkASSERT(this->type() == Type::kPixmaps);
-            return fPixmaps;
-        }
-
-        const void* compressedData() const {
-            SkASSERT(this->type() == Type::kCompressed);
-            return fCompressed.fData;
-        }
-        size_t compressedSize() const {
-            SkASSERT(this->type() == Type::kCompressed);
-            return fCompressed.fSize;
-        }
-
-    private:
-        Type fType = Type::kColor;
-        union {
-            SkColor4f fColor = {0, 0, 0, 0};
-            const GrPixmap* fPixmaps;
-            struct {
-                const void*  fData;
-                size_t       fSize;
-            } fCompressed;
-        };
-    };
 
     /**
      * Creates a texture directly in the backend API without wrapping it in a GrTexture.
@@ -557,9 +518,9 @@ public:
                                           GrMipmapped,
                                           GrProtected);
 
-    bool updateBackendTexture(const GrBackendTexture&,
-                              sk_sp<GrRefCntedCallback> finishedCallback,
-                              const BackendTextureData*);
+    bool clearBackendTexture(const GrBackendTexture&,
+                             sk_sp<GrRefCntedCallback> finishedCallback,
+                             std::array<float, 4> color);
 
     /**
      * Same as the createBackendTexture case except compressed backend textures can
@@ -572,7 +533,8 @@ public:
 
     bool updateCompressedBackendTexture(const GrBackendTexture&,
                                         sk_sp<GrRefCntedCallback> finishedCallback,
-                                        const BackendTextureData*);
+                                        const void* data,
+                                        size_t length);
 
     virtual bool setBackendTextureState(const GrBackendTexture&,
                                         const GrBackendSurfaceMutableState&,
@@ -642,9 +604,9 @@ public:
     // width and height may be larger than rt (if underlying API allows it).
     // Returns nullptr if compatible sb could not be created, otherwise the caller owns the ref on
     // the GrAttachment.
-    virtual sk_sp<GrAttachment> makeStencilAttachmentForRenderTarget(const GrRenderTarget*,
-                                                                     SkISize dimensions,
-                                                                     int numStencilSamples) = 0;
+    virtual sk_sp<GrAttachment> makeStencilAttachment(const GrBackendFormat& colorFormat,
+                                                      SkISize dimensions,
+                                                      int numStencilSamples) = 0;
 
     virtual GrBackendFormat getPreferredStencilFormat(const GrBackendFormat&) = 0;
 
@@ -672,9 +634,11 @@ public:
     virtual void xferBarrier(GrRenderTarget*, GrXferBarrierType) = 0;
 
 protected:
-    static bool MipMapsAreCorrect(SkISize dimensions, GrMipmapped, const BackendTextureData*);
-    static bool CompressedDataIsCorrect(SkISize dimensions, SkImage::CompressionType,
-                                        GrMipmapped, const BackendTextureData*);
+    static bool CompressedDataIsCorrect(SkISize dimensions,
+                                        SkImage::CompressionType,
+                                        GrMipmapped,
+                                        const void* data,
+                                        size_t length);
 
     // Handles cases where a surface will be updated without a call to flushRenderTarget.
     void didWriteToSurface(GrSurface* surface, GrSurfaceOrigin origin, const SkIRect* bounds,
@@ -697,13 +661,14 @@ private:
     virtual GrBackendTexture onCreateCompressedBackendTexture(
             SkISize dimensions, const GrBackendFormat&, GrMipmapped, GrProtected) = 0;
 
-    virtual bool onUpdateBackendTexture(const GrBackendTexture&,
-                                        sk_sp<GrRefCntedCallback> finishedCallback,
-                                        const BackendTextureData*) = 0;
+    virtual bool onClearBackendTexture(const GrBackendTexture&,
+                                       sk_sp<GrRefCntedCallback> finishedCallback,
+                                       std::array<float, 4> color) = 0;
 
     virtual bool onUpdateCompressedBackendTexture(const GrBackendTexture&,
                                                   sk_sp<GrRefCntedCallback> finishedCallback,
-                                                  const BackendTextureData*) = 0;
+                                                  const void* data,
+                                                  size_t length) = 0;
 
     // called when the 3D context state is unknown. Subclass should emit any
     // assumed 3D context state and dirty any state cache.
@@ -711,10 +676,6 @@ private:
 
     // Implementation of resetTextureBindings.
     virtual void onResetTextureBindings() {}
-
-    // Queries the effective number of samples in use by the hardware for the given render target,
-    // and queries the individual sample locations.
-    virtual void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>*) = 0;
 
     // overridden by backend-specific derived class to create objects.
     // Texture size, renderablility, format support, sample count will have already been validated
@@ -788,6 +749,7 @@ private:
 
     virtual GrOpsRenderPass* onGetOpsRenderPass(
             GrRenderTarget* renderTarget,
+            bool useMSAASurface,
             GrAttachment* stencil,
             GrSurfaceOrigin,
             const SkIRect& bounds,

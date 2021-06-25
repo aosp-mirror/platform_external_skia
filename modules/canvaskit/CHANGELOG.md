@@ -6,9 +6,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] - 2021-04-23
+
+### Added
+ - Add 'isEmbolden, setEmbolden' to 'Font'
+ - Add 'drawGlyphs' to 'Canvas'
+ - Add `drawPatch` to `Canvas`.
+ - Add `Strut` as a `RectHeightStyle` enum.
+ - `CanvasKit.RuntimeEffect` now supports integer uniforms in the SkSL. These are still passed
+   to `RuntimeEffect.makeShader` as floats (like all other uniforms), and will be converted to
+   integers internally, to match the expectations of the shader.
+ - Add 'halfLeading' to `TextStyle` and `StrutStyle`.
+ - `ParagraphStyle` now accepts textHeightBehavior.
+
+### Removed
+ - `Picture.saveAsFile()`, in favor of `Picture.serialize()` where clients can control how to
+    store/encode the bytes.
+
+## [0.25.1] - 2021-03-30
+
 ### Added
  - Skottie accessors for dynamic text properties (text string, font size).
  - Optional sampling parameter to drawAtlas (paint filter-quality is ignored/deprecated)
+
+### Fixed
+ - Fonts should not be leaked https://bugs.chromium.org/p/skia/issues/detail?id=11778
 
 ## [0.25.0] - 2021-03-02
 

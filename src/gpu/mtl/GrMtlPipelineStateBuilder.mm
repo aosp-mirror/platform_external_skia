@@ -27,6 +27,8 @@
 #error This file must be compiled with Arc. Use -fobjc-arc flag
 #endif
 
+GR_NORETAIN_BEGIN
+
 GrMtlPipelineState* GrMtlPipelineStateBuilder::CreatePipelineState(
         GrMtlGpu* gpu, const GrProgramDesc& desc, const GrProgramInfo& programInfo,
         const GrMtlPrecompiledLibraries* precompiledLibs) {
@@ -42,7 +44,7 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::CreatePipelineState(
 GrMtlPipelineStateBuilder::GrMtlPipelineStateBuilder(GrMtlGpu* gpu,
                                                      const GrProgramDesc& desc,
                                                      const GrProgramInfo& programInfo)
-        : INHERITED(nullptr, desc, programInfo)
+        : INHERITED(desc, programInfo)
         , fGpu(gpu)
         , fUniformHandler(this)
         , fVaryingHandler(this) {
@@ -523,7 +525,7 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(
     pipelineDescriptor.colorAttachments[0] = create_color_attachment(pixelFormat,
                                                                      programInfo.pipeline(),
                                                                      writer.get());
-    pipelineDescriptor.sampleCount = programInfo.numRasterSamples();
+    pipelineDescriptor.sampleCount = programInfo.numSamples();
     GrMtlCaps* mtlCaps = (GrMtlCaps*)this->caps();
     pipelineDescriptor.stencilAttachmentPixelFormat = mtlCaps->getStencilPixelFormat(desc);
     if (writer) {
@@ -841,3 +843,5 @@ bool GrMtlPipelineStateBuilder::PrecompileShaders(GrMtlGpu* gpu, const SkData& c
     precompiledLibs->fRTHeight = inputs[kFragment_GrShaderType].fRTHeight;
     return true;
 }
+
+GR_NORETAIN_END

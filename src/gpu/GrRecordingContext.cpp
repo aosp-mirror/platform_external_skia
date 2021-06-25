@@ -38,9 +38,10 @@ GrRecordingContext::ProgramData::ProgramData(ProgramData&& other)
 
 GrRecordingContext::ProgramData::~ProgramData() = default;
 
-GrRecordingContext::GrRecordingContext(sk_sp<GrContextThreadSafeProxy> proxy)
+GrRecordingContext::GrRecordingContext(sk_sp<GrContextThreadSafeProxy> proxy, bool ddlRecording)
         : INHERITED(std::move(proxy))
-        , fAuditTrail(new GrAuditTrail()) {
+        , fAuditTrail(new GrAuditTrail())
+        , fArenas(ddlRecording) {
     fProxyProvider = std::make_unique<GrProxyProvider>(this);
 }
 
@@ -71,7 +72,9 @@ bool GrRecordingContext::init() {
     }
 
     bool reduceOpsTaskSplitting = false;
-    if (GrContextOptions::Enable::kYes == this->options().fReduceOpsTaskSplitting) {
+    if (this->caps()->avoidReorderingRenderTasks()) {
+        reduceOpsTaskSplitting = false;
+    } else if (GrContextOptions::Enable::kYes == this->options().fReduceOpsTaskSplitting) {
         reduceOpsTaskSplitting = true;
     } else if (GrContextOptions::Enable::kNo == this->options().fReduceOpsTaskSplitting) {
         reduceOpsTaskSplitting = false;
@@ -101,23 +104,23 @@ GrRecordingContext::Arenas::Arenas(SkArenaAlloc* recordTimeAllocator,
         : fRecordTimeAllocator(recordTimeAllocator)
         , fRecordTimeSubRunAllocator(subRunAllocator) {
     // OwnedArenas should instantiate these before passing the bare pointer off to this struct.
-    SkASSERT(recordTimeAllocator);
     SkASSERT(subRunAllocator);
 }
 
 // Must be defined here so that std::unique_ptr can see the sizes of the various pools, otherwise
 // it can't generate a default destructor for them.
-GrRecordingContext::OwnedArenas::OwnedArenas() {}
+GrRecordingContext::OwnedArenas::OwnedArenas(bool ddlRecording) : fDDLRecording(ddlRecording) {}
 GrRecordingContext::OwnedArenas::~OwnedArenas() {}
 
 GrRecordingContext::OwnedArenas& GrRecordingContext::OwnedArenas::operator=(OwnedArenas&& a) {
+    fDDLRecording = a.fDDLRecording;
     fRecordTimeAllocator = std::move(a.fRecordTimeAllocator);
     fRecordTimeSubRunAllocator = std::move(a.fRecordTimeSubRunAllocator);
     return *this;
 }
 
 GrRecordingContext::Arenas GrRecordingContext::OwnedArenas::get() {
-    if (!fRecordTimeAllocator) {
+    if (!fRecordTimeAllocator && fDDLRecording) {
         // TODO: empirically determine a better number for SkArenaAlloc's firstHeapAllocation param
         fRecordTimeAllocator = std::make_unique<SkArenaAlloc>(1024);
     }
@@ -210,6 +213,39 @@ void GrRecordingContext::Stats::dumpKeyValuePairs(SkTArray<SkString>* keys,
 
     keys->push_back(SkString("path_mask_cache_hits"));
     values->push_back(fNumPathMaskCacheHits);
+}
+
+void GrRecordingContext::DMSAAStats::dumpKeyValuePairs(SkTArray<SkString>* keys,
+                                                       SkTArray<double>* values) const {
+    keys->push_back(SkString("dmsaa_render_passes"));
+    values->push_back(fNumRenderPasses);
+
+    keys->push_back(SkString("dmsaa_multisample_render_passes"));
+    values->push_back(fNumMultisampleRenderPasses);
+
+    for (const auto& [name, count] : fTriggerCounts) {
+        keys->push_back(SkStringPrintf("dmsaa_trigger_%s", name.c_str()));
+        values->push_back(count);
+    }
+}
+
+void GrRecordingContext::DMSAAStats::dump() const {
+    SkDebugf("DMSAA Render Passes: %d\n", fNumRenderPasses);
+    SkDebugf("DMSAA Multisample Render Passes: %d\n", fNumMultisampleRenderPasses);
+    if (!fTriggerCounts.empty()) {
+        SkDebugf("DMSAA Triggers:\n");
+        for (const auto& [name, count] : fTriggerCounts) {
+            SkDebugf("    %s: %d\n", name.c_str(), count);
+        }
+    }
+}
+
+void GrRecordingContext::DMSAAStats::merge(const DMSAAStats& stats) {
+    fNumRenderPasses += stats.fNumRenderPasses;
+    fNumMultisampleRenderPasses += stats.fNumMultisampleRenderPasses;
+    for (const auto& [name, count] : stats.fTriggerCounts) {
+        fTriggerCounts[name] += count;
+    }
 }
 
 #endif // GR_GPU_STATS

@@ -128,6 +128,14 @@ function canvasTests(CK: CanvasKit, canvas?: Canvas, paint?: Paint, path?: Path,
     canvas.drawOval(someRect, paint);
     canvas.drawPaint(paint);
     canvas.drawParagraph(para, 10, 7);
+    const cubics = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6,
+        7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12];
+    const colors = [CK.RED, CK.BLUE, CK.GREEN, CK.WHITE];
+    const texs = [1, 1, 2, 2, 3, 3, 4, 4];
+    canvas.drawPatch(cubics, null, null, null, paint);
+    canvas.drawPatch(cubics, colors, null, CK.BlendMode.Clear, paint);
+    canvas.drawPatch(cubics, null, texs, null, paint);
+    canvas.drawPatch(cubics, colors, texs, CK.BlendMode.SrcOver, paint);
     canvas.drawPath(path, paint);
     canvas.drawPicture(skp);
     canvas.drawPoints(CK.PointMode.Lines, [1, 2, 3, 4, 5, 6], paint);
@@ -504,6 +512,7 @@ function paragraphTests(CK: CanvasKit, p?: Paragraph) {
     const l = p.getWordBoundary(10); // $ExpectType URange
     p.layout(300);
     const m = p.getLineMetrics(); // $ExpectType LineMetrics[]
+    const n = CK.GlyphRunFlags.IsWhiteSpace === 1;
 }
 
 function paragraphBuilderTests(CK: CanvasKit, fontMgr?: FontMgr, paint?: Paint) {
@@ -524,6 +533,10 @@ function paragraphBuilderTests(CK: CanvasKit, fontMgr?: FontMgr, paint?: Paint) 
             heightMultiplier: 1.5,
             forceStrutHeight: true,
         },
+        disableHinting: true,
+        heightMultiplier: 2.5,
+        textDirection: CK.TextDirection.LTR,
+        textHeightBehavior: CK.TextHeightBehavior.DisableFirstAscent
     });
     const blueText = new CK.TextStyle({ // $ExpectType TextStyle
         backgroundColor: CK.Color(234, 208, 232), // light pink

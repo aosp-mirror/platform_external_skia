@@ -31,6 +31,8 @@ public:
         const GrOpsRenderPass::StencilLoadAndStoreInfo&,
         const SkTArray<GrSurfaceProxy*, true>& sampledProxies);
 
+    void submit();
+
 private:
     GrGpu* gpu() override;
 
@@ -63,7 +65,7 @@ private:
 
     GrD3DGpu* fGpu;
 
-    sk_sp<GrD3DPipelineState> fCurrentPipelineState;
+    GrD3DPipelineState* fCurrentPipelineState = nullptr;
 
     SkIRect fBounds;
     SkIRect fCurrentPipelineBounds;

@@ -404,15 +404,13 @@ public:
 
     FixedFunctionFlags fixedFunctionFlags() const override { return fHelper.fixedFunctionFlags(); }
 
-    GrProcessorSet::Analysis finalize(
-            const GrCaps& caps, const GrAppliedClip* clip, bool hasMixedSampledCoverage,
-            GrClampType clampType) override {
+    GrProcessorSet::Analysis finalize(const GrCaps& caps, const GrAppliedClip* clip,
+                                      GrClampType clampType) override {
         GrProcessorAnalysisCoverage gpCoverage =
                 this->coverage() == 0xFF ? GrProcessorAnalysisCoverage::kNone
                                          : GrProcessorAnalysisCoverage::kSingleChannel;
         // This Op uses uniform (not vertex) color, so doesn't need to track wide color.
-        return fHelper.finalizeProcessors(
-                caps, clip, hasMixedSampledCoverage, clampType, gpCoverage, &fColor, nullptr);
+        return fHelper.finalizeProcessors(caps, clip, clampType, gpCoverage, &fColor, nullptr);
     }
 
 private:
@@ -702,7 +700,7 @@ GrDefaultPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
             args.fShape->style(), *args.fViewMatrix, nullptr);
     // If we aren't a single_pass_shape or hairline, we require stencil buffers.
     if (!(single_pass_shape(*args.fShape) || isHairline) &&
-        (args.fCaps->avoidStencilBuffers() || args.fTargetIsWrappedVkSecondaryCB)) {
+        !args.fProxy->canUseStencil(*args.fCaps)) {
         return CanDrawPath::kNo;
     }
     // If antialiasing is required, we only support MSAA.

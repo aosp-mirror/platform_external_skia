@@ -41,7 +41,6 @@ namespace dsl {
 }
 
 class ExternalFunction;
-class ExternalValue;
 class FunctionCall;
 class StructDefinition;
 struct ParsedModule;
@@ -110,7 +109,6 @@ public:
     struct IRBundle {
         std::vector<std::unique_ptr<ProgramElement>> fElements;
         std::vector<const ProgramElement*>           fSharedElements;
-        std::unique_ptr<ModifiersPool>               fModifiers;
         std::shared_ptr<SymbolTable>                 fSymbolTable;
         Program::Inputs                              fInputs;
     };
@@ -142,6 +140,14 @@ public:
     void pushSymbolTable();
     void popSymbolTable();
 
+    static void CheckModifiers(const Context& context,
+                               int offset,
+                               const Modifiers& modifiers,
+                               int permittedModifierFlags,
+                               int permittedLayoutFlags);
+
+    std::unique_ptr<Expression> convertIdentifier(int offset, StringFragment identifier);
+
     const Context& fContext;
 
 private:
@@ -153,15 +159,6 @@ private:
 
     IRGenerator::IRBundle finish();
 
-    /**
-     * Relinquishes ownership of the Modifiers that have been collected so far and returns them.
-     */
-    std::unique_ptr<ModifiersPool> releaseModifiers();
-
-    void checkModifiers(int offset,
-                        const Modifiers& modifiers,
-                        int permittedModifierFlags,
-                        int permittedLayoutFlags);
     void checkVarDeclaration(int offset,
                              const Modifiers& modifiers,
                              const Type* baseType,
@@ -211,7 +208,6 @@ private:
     std::unique_ptr<Expression> convertField(std::unique_ptr<Expression> base,
                                              StringFragment field);
     std::unique_ptr<Statement> convertFor(const ASTNode& f);
-    std::unique_ptr<Expression> convertIdentifier(int offset, StringFragment identifier);
     std::unique_ptr<Expression> convertIdentifier(const ASTNode& identifier);
     std::unique_ptr<Statement> convertIf(const ASTNode& s);
     std::unique_ptr<InterfaceBlock> convertInterfaceBlock(const ASTNode& s);
@@ -257,6 +253,10 @@ private:
         return fContext.fCaps;
     }
 
+    ModifiersPool& modifiersPool() const {
+        return *fContext.fModifiersPool;
+    }
+
     Program::Inputs fInputs;
 
     std::unique_ptr<ASTFile> fFile;
@@ -272,10 +272,8 @@ private:
     const Variable* fRTAdjust = nullptr;
     const Variable* fRTAdjustInterfaceBlock = nullptr;
     int fRTAdjustFieldIndex;
-    bool fCanInline = true;
     // true if we are currently processing one of the built-in SkSL include files
     bool fIsBuiltinCode = false;
-    std::unique_ptr<ModifiersPool> fModifiers;
 
     friend class AutoSymbolTable;
     friend class AutoLoopLevel;

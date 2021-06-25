@@ -19,7 +19,7 @@
 #include "src/core/SkVM.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLUtil.h"
-#include "src/sksl/SkSLVMGenerator.h"
+#include "src/sksl/codegen/SkSLVMCodeGenerator.h"
 
 // Cached state for a single program (either all Effect code, or all Particle code)
 struct SkParticleProgram {
@@ -186,7 +186,7 @@ void SkParticleEffectParams::prepare(const skresources::ResourceProvider* resour
             for (int i = 0; i < uniformInfo->fUniformSlotCount; ++i) {
                 uniformIDs.push_back(b.uniform32(skslUniformPtr, i * sizeof(int)).id);
             }
-            SkSL::ProgramToSkVM(*program, *fn, &b, uniformIDs);
+            SkSL::ProgramToSkVM(*program, *fn, &b, SkMakeSpan(uniformIDs));
             return b.done();
         };
 
