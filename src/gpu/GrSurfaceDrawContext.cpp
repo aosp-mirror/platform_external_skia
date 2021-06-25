@@ -725,7 +725,9 @@ void GrSurfaceDrawContext::drawRect(const GrClip* clip,
         return;
     } else if ((stroke.getStyle() == SkStrokeRec::kStroke_Style ||
                 stroke.getStyle() == SkStrokeRec::kHairline_Style) &&
-               (rect.width() && rect.height())) {
+               rect.width()                                        &&
+               rect.height()                                       &&
+               !this->caps()->reducedShaderMode()) {
         // Only use the StrokeRectOp for non-empty rectangles. Empty rectangles will be processed by
         // GrStyledShape to handle stroke caps and dashing properly.
         GrAAType aaType = (fCanUseDynamicMSAA) ? GrAAType::kCoverage : this->chooseAAType(aa);
@@ -1709,8 +1711,10 @@ bool GrSurfaceDrawContext::drawSimpleShape(const GrClip* clip, GrPaint* paint, G
             }
             this->drawRRect(clip, std::move(*paint), aa, viewMatrix, rrect, shape.style());
             return true;
-        } else if (GrAAType::kCoverage == aaType && shape.style().isSimpleFill() &&
-                   viewMatrix.rectStaysRect()) {
+        } else if (GrAAType::kCoverage == aaType &&
+                   shape.style().isSimpleFill()  &&
+                   viewMatrix.rectStaysRect()    &&
+                   !this->caps()->reducedShaderMode()) {
             // TODO: the rectStaysRect restriction could be lifted if we were willing to apply the
             // matrix to all the points individually rather than just to the rect
             SkRect rects[2];
@@ -1899,7 +1903,7 @@ void GrSurfaceDrawContext::addDrawOp(const GrClip* clip,
         } else {
             aaType = op->hasAABloat() ? GrAAType::kCoverage : GrAAType::kNone;
         }
-        skipDraw = clip->apply(fContext, this, aaType,
+        skipDraw = clip->apply(fContext, this, drawOp, aaType,
                                &appliedClip, &bounds) == GrClip::Effect::kClippedOut;
     } else {
         // No clipping, so just clip the bounds against the logical render target dimensions
