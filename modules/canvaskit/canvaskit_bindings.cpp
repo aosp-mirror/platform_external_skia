@@ -1866,7 +1866,24 @@ EMSCRIPTEN_BINDINGS(Skia) {
         }), allow_raw_pointers());
 
     class_<SkTypeface>("Typeface")
-        .smart_ptr<sk_sp<SkTypeface>>("sk_sp<Typeface>");
+        .smart_ptr<sk_sp<SkTypeface>>("sk_sp<Typeface>")
+        .class_function("_MakeFreeTypeFaceFromData", optional_override([](WASMPointerU8 fPtr,
+                                                int flen)->sk_sp<SkTypeface> {
+            uint8_t* font = reinterpret_cast<uint8_t*>(fPtr);
+            sk_sp<SkData> fontData = SkData::MakeFromMalloc(font, flen);
+
+            return SkFontMgr::RefDefault()->makeFromData(fontData);
+        }), allow_raw_pointers())
+        .function("_getGlyphIDs", optional_override([](SkTypeface& self, WASMPointerU8 sptr,
+                                                   size_t strLen, size_t expectedCodePoints,
+                                                   WASMPointerU16 iPtr) -> int {
+            char* str = reinterpret_cast<char*>(sptr);
+            SkGlyphID* glyphIDs = reinterpret_cast<SkGlyphID*>(iPtr);
+
+            int actualCodePoints = self.textToGlyphs(str, strLen, SkTextEncoding::kUTF8,
+                                                     glyphIDs, expectedCodePoints);
+            return actualCodePoints;
+        }));
 #endif
 
     class_<SkVertices>("Vertices")

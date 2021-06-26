@@ -691,6 +691,15 @@ var CanvasKit = {
     _MakeFromText: function() {},
   },
 
+  Typeface: {
+    MakeFreeTypeFaceFromData: function() {},
+    prototype: {
+      getGlyphIDs: function() {},
+    },
+    _MakeFreeTypeFaceFromData: function() {},
+    _getGlyphIDs: function() {},
+  },
+
   // These are defined in interface.js
   Vector: {
     add: function() {},

@@ -419,6 +419,7 @@ export interface CanvasKit {
     readonly RuntimeEffect: RuntimeEffectFactory;
     readonly Shader: ShaderFactory;
     readonly TextBlob: TextBlobFactory;
+    readonly Typeface: TypefaceFactory;
     readonly TypefaceFontProvider: TypefaceFontProviderFactory;
 
     // Misc
@@ -1639,14 +1640,15 @@ export interface Font extends EmbindObject<Font> {
                    output?: Float32Array): Float32Array;
 
     /**
-     * Retrieves the glyph ids for each code point in the provided string. Note that glyph IDs
-     * are font-dependent; different fonts may have different ids for the same code point.
+     * Retrieves the glyph ids for each code point in the provided string. This call is passed to
+     * the typeface of this font. Note that glyph IDs are typeface-dependent; different faces
+     * may have different ids for the same code point.
      * @param str
      * @param numCodePoints - the number of code points in the string. Defaults to str.length.
      * @param output - if provided, the results will be copied into this array.
      */
     getGlyphIDs(str: string, numCodePoints?: number,
-                output?: TypedArray): GlyphIDArray;
+                output?: GlyphIDArray): GlyphIDArray;
 
     /**
      * Retrieves the advanceX measurements for each glyph.
@@ -2679,7 +2681,17 @@ export type TextBlob = EmbindObject<TextBlob>;
 /**
  * See SkTypeface.h for more on this class. The objects are opaque.
  */
-export type Typeface = EmbindObject<Typeface>;
+export interface Typeface extends EmbindObject<Typeface> {
+    /**
+     * Retrieves the glyph ids for each code point in the provided string. Note that glyph IDs
+     * are typeface-dependent; different faces may have different ids for the same code point.
+     * @param str
+     * @param numCodePoints - the number of code points in the string. Defaults to str.length.
+     * @param output - if provided, the results will be copied into this array.
+     */
+    getGlyphIDs(str: string, numCodePoints?: number,
+                output?: GlyphIDArray): GlyphIDArray;
+}
 
 /**
  * See SkVertices.h for more on this class.
@@ -3521,6 +3533,15 @@ export interface TextStyleConstructor {
      * @param ts
      */
     new(ts: TextStyle): TextStyle;
+}
+
+export interface TypefaceFactory {
+    /**
+     * Create a typeface using Freetype from the specified bytes and return it. CanvasKit supports
+     * .ttf, .woff and .woff2 fonts. It returns null if the bytes cannot be decoded.
+     * @param fontData
+     */
+    MakeFreeTypeFaceFromData(fontData: ArrayBuffer): Typeface | null;
 }
 
 export interface TypefaceFontProviderFactory {

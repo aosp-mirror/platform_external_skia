@@ -23,7 +23,7 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fReuseScratchTextures = true;
     fReuseScratchBuffers = true;
     fGpuTracingSupport = false;
-    fOversizedAttachmentSupport = false;
+    fOversizedStencilSupport = false;
     fTextureBarrierSupport = false;
     fSampleLocationsSupport = false;
     fMultisampleDisableSupport = false;
@@ -202,7 +202,7 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Reuse Scratch Textures", fReuseScratchTextures);
     writer->appendBool("Reuse Scratch Buffers", fReuseScratchBuffers);
     writer->appendBool("Gpu Tracing Support", fGpuTracingSupport);
-    writer->appendBool("Oversized Attachment Support", fOversizedAttachmentSupport);
+    writer->appendBool("Oversized Stencil Support", fOversizedStencilSupport);
     writer->appendBool("Texture Barrier Support", fTextureBarrierSupport);
     writer->appendBool("Sample Locations Support", fSampleLocationsSupport);
     writer->appendBool("Multisample disable support", fMultisampleDisableSupport);
@@ -426,8 +426,8 @@ GrSwizzle GrCaps::getReadSwizzle(const GrBackendFormat& format, GrColorType colo
         if (colorType == GrColorType::kRGB_888x || colorType == GrColorType::kRGBA_8888) {
             return GrSwizzle::RGBA();
         }
-        SkDEBUGFAILF("Illegal color type (%d) and compressed format (%d) combination.", colorType,
-                     compression);
+        SkDEBUGFAILF("Illegal color type (%d) and compressed format (%d) combination.",
+                     (int)colorType, (int)compression);
         return {};
     }
 

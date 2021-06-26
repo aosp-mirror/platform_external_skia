@@ -35,6 +35,7 @@ template <typename T> struct GrFPUniformType {
 UNIFORM_TYPE(kFloat,    float);
 UNIFORM_TYPE(kFloat2,   SkV2);
 UNIFORM_TYPE(kFloat4,   SkPMColor4f);
+UNIFORM_TYPE(kFloat4,   SkRect);
 UNIFORM_TYPE(kFloat4,   SkV4);
 UNIFORM_TYPE(kFloat4,   skvx::Vec<4, float>);
 UNIFORM_TYPE(kFloat4x4, SkM44);
@@ -56,6 +57,13 @@ public:
     template <typename T>
     static GrSpecializedUniform<T> SpecializeIf(bool condition, const T& value) {
         return {condition, value};
+    }
+
+    struct GrIgnoreOptFlags {
+        std::unique_ptr<GrFragmentProcessor> child;
+    };
+    static GrIgnoreOptFlags IgnoreOptFlags(std::unique_ptr<GrFragmentProcessor> child) {
+        return {std::move(child)};
     }
 
     enum class OptFlags : uint32_t {
@@ -144,7 +152,7 @@ private:
     GrSkSLFP(sk_sp<SkRuntimeEffect> effect, const char* name, OptFlags optFlags);
     GrSkSLFP(const GrSkSLFP& other);
 
-    void addChild(std::unique_ptr<GrFragmentProcessor> child);
+    void addChild(std::unique_ptr<GrFragmentProcessor> child, bool mergeOptFlags);
     void setInput(std::unique_ptr<GrFragmentProcessor> input);
 
     std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override;
@@ -188,7 +196,19 @@ private:
                     Args&&... remainder) {
         // Child FP case -- register the child, then continue processing the remaining arguments.
         // Children aren't "uniforms" here, so the data & flags pointers don't advance.
-        this->addChild(std::move(child));
+        this->addChild(std::move(child), /*mergeOptFlags=*/true);
+        this->appendArgs(uniformDataPtr, uniformFlagsPtr, std::forward<Args>(remainder)...);
+    }
+    // As above, but we don't merge in the child's optimization flags
+    template <typename... Args>
+    void appendArgs(uint8_t* uniformDataPtr,
+                    UniformFlags* uniformFlagsPtr,
+                    const char* name,
+                    GrIgnoreOptFlags&& child,
+                    Args&&... remainder) {
+        // Child FP case -- register the child, then continue processing the remaining arguments.
+        // Children aren't "uniforms" here, so the data & flags pointers don't advance.
+        this->addChild(std::move(child.child), /*mergeOptFlags=*/false);
         this->appendArgs(uniformDataPtr, uniformFlagsPtr, std::forward<Args>(remainder)...);
     }
     template <typename T, typename... Args>
@@ -241,6 +261,23 @@ private:
                           child_iterator cEnd,
                           const char* name,
                           std::unique_ptr<GrFragmentProcessor>&& child,
+                          Args&&... remainder) {
+        // NOTE: This function (necessarily) gets an rvalue reference to child, but deliberately
+        // does not use it. We leave it intact, and our caller (Make) will pass another rvalue
+        // reference to appendArgs, which will then move it to call addChild.
+        SkASSERTF(cIter != cEnd, "Too many children, wasn't expecting '%s'", name);
+        SkASSERTF(cIter->name.equals(name),
+                  "Expected child '%s', got '%s' instead",
+                  cIter->name.c_str(), name);
+        checkArgs(uIter, uEnd, ++cIter, cEnd, std::forward<Args>(remainder)...);
+    }
+    template <typename... Args>
+    static void checkArgs(uniform_iterator uIter,
+                          uniform_iterator uEnd,
+                          child_iterator cIter,
+                          child_iterator cEnd,
+                          const char* name,
+                          GrIgnoreOptFlags&& child,
                           Args&&... remainder) {
         // NOTE: This function (necessarily) gets an rvalue reference to child, but deliberately
         // does not use it. We leave it intact, and our caller (Make) will pass another rvalue

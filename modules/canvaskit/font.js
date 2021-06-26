@@ -128,7 +128,7 @@ CanvasKit._extraInitializations.push(function() {
     return fm;
   };
 
-  // fontData should be an arrayBuffer
+  // TODO(kjlubick) Remove this deprecated API
   CanvasKit.FontMgr.prototype.MakeTypefaceFromData = function(fontData) {
     var data = new Uint8Array(fontData);
 
@@ -141,6 +141,52 @@ CanvasKit._extraInitializations.push(function() {
       return null;
     }
     return font;
+  };
+
+  CanvasKit.Typeface.MakeFreeTypeFaceFromData = function(fontData) {
+    var data = new Uint8Array(fontData);
+
+    var fptr = copy1dArray(data, 'HEAPU8');
+    var font = CanvasKit.Typeface._MakeFreeTypeFaceFromData(fptr, data.byteLength);
+    if (!font) {
+      Debug('Could not decode font data');
+      // We do not need to free the data since the C++ will do that for us
+      // when the font is deleted (or fails to decode);
+      return null;
+    }
+    return font;
+  };
+
+  CanvasKit.Typeface.prototype.getGlyphIDs = function(str, numGlyphIDs, optionalOutputArray) {
+    if (!numGlyphIDs) {
+      numGlyphIDs = str.length;
+    }
+    // lengthBytesUTF8 and stringToUTF8Array are defined in the emscripten
+    // JS.  See https://kripken.github.io/emscripten-site/docs/api_reference/preamble.js.html#stringToUTF8
+    // Add 1 for null terminator
+    var strBytes = lengthBytesUTF8(str) + 1;
+    var strPtr = CanvasKit._malloc(strBytes);
+    stringToUTF8(str, strPtr, strBytes); // This includes the null terminator
+
+    var bytesPerGlyph = 2;
+    var glyphPtr = CanvasKit._malloc(numGlyphIDs * bytesPerGlyph);
+    // We don't need to compute the id for the null terminator, so subtract 1.
+    var actualIDs = this._getGlyphIDs(strPtr, strBytes - 1, numGlyphIDs, glyphPtr);
+    CanvasKit._free(strPtr);
+    if (actualIDs < 0) {
+      Debug('Could not get glyphIDs');
+      CanvasKit._free(glyphPtr);
+      return null;
+    }
+    var glyphs = new Uint16Array(CanvasKit.HEAPU8.buffer, glyphPtr, actualIDs);
+    if (optionalOutputArray) {
+      optionalOutputArray.set(glyphs);
+      CanvasKit._free(glyphPtr);
+      return optionalOutputArray;
+    }
+    var rv = Uint16Array.from(glyphs);
+    CanvasKit._free(glyphPtr);
+    return rv;
   };
 
   CanvasKit.TextBlob.MakeOnPath = function(str, path, font, initialOffset) {
