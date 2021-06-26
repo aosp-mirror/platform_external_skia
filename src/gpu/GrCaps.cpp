@@ -23,7 +23,7 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fReuseScratchTextures = true;
     fReuseScratchBuffers = true;
     fGpuTracingSupport = false;
-    fOversizedStencilSupport = false;
+    fOversizedAttachmentSupport = false;
     fTextureBarrierSupport = false;
     fSampleLocationsSupport = false;
     fMultisampleDisableSupport = false;
@@ -133,12 +133,18 @@ void GrCaps::applyOptionsOverrides(const GrContextOptions& options) {
 
     fMaxTextureSize = std::min(fMaxTextureSize, options.fMaxTextureSizeOverride);
 #if GR_TEST_UTILS
+    if (options.fSuppressAdvancedBlendEquations) {
+        fBlendEquationSupport = kBasic_BlendEquationSupport;
+    }
     if (options.fClearAllTextures) {
         fShouldInitializeTextures = true;
     }
     if (options.fDisallowWriteAndTransferPixelRowBytes) {
         fWritePixelsRowBytesSupport = false;
         fTransferPixelsToRowBytesSupport = false;
+    }
+    if (options.fAlwaysPreferHardwareTessellation) {
+        fMinPathVerbsForHwTessellation = fMinStrokeVerbsForHwTessellation = 0;
     }
 #endif
     if (options.fSuppressMipmapSupport) {
@@ -152,12 +158,6 @@ void GrCaps::applyOptionsOverrides(const GrContextOptions& options) {
     }
 
     fInternalMultisampleCount = options.fInternalMultisampleCount;
-
-#if GR_TEST_UTILS
-    if (options.fAlwaysPreferHardwareTessellation) {
-        fMinPathVerbsForHwTessellation = fMinStrokeVerbsForHwTessellation = 0;
-    }
-#endif
 
     fAvoidStencilBuffers = options.fAvoidStencilBuffers;
 
@@ -202,7 +202,7 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Reuse Scratch Textures", fReuseScratchTextures);
     writer->appendBool("Reuse Scratch Buffers", fReuseScratchBuffers);
     writer->appendBool("Gpu Tracing Support", fGpuTracingSupport);
-    writer->appendBool("Oversized Stencil Support", fOversizedStencilSupport);
+    writer->appendBool("Oversized Attachment Support", fOversizedAttachmentSupport);
     writer->appendBool("Texture Barrier Support", fTextureBarrierSupport);
     writer->appendBool("Sample Locations Support", fSampleLocationsSupport);
     writer->appendBool("Multisample disable support", fMultisampleDisableSupport);
@@ -438,9 +438,10 @@ bool GrCaps::isFormatCompressed(const GrBackendFormat& format) const {
     return GrBackendFormatToCompressionType(format) != SkImage::CompressionType::kNone;
 }
 
-GrDstSampleFlags GrCaps::getDstSampleFlagsForProxy(const GrRenderTargetProxy* rt) const {
+GrDstSampleFlags GrCaps::getDstSampleFlagsForProxy(const GrRenderTargetProxy* rt,
+                                                   bool drawUsesMSAA) const {
     SkASSERT(rt);
-    if (this->textureBarrierSupport() && !rt->requiresManualMSAAResolve()) {
+    if (this->textureBarrierSupport() && (!drawUsesMSAA || this->msaaResolvesAutomatically())) {
         return this->onGetDstSampleFlagsForProxy(rt);
     }
     return GrDstSampleFlags::kNone;

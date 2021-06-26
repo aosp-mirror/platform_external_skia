@@ -600,18 +600,18 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         // ARB allows mixed size FBO attachments, EXT does not.
         if (version >= GR_GL_VER(3, 0) ||
             ctxInfo.hasExtension("GL_ARB_framebuffer_object")) {
-            fOversizedStencilSupport = true;
+            fOversizedAttachmentSupport = true;
         } else {
             SkASSERT(ctxInfo.hasExtension("GL_EXT_framebuffer_object"));
         }
     } else if (GR_IS_GR_GL_ES(standard)) {
         // ES 3.0 supports mixed size FBO attachments, 2.0 does not.
-        fOversizedStencilSupport = version >= GR_GL_VER(3, 0);
+        fOversizedAttachmentSupport = version >= GR_GL_VER(3, 0);
     } else if (GR_IS_GR_WEBGL(standard)) {
         // WebGL 1.0 has some constraints for FBO attachments:
         // https://www.khronos.org/registry/webgl/specs/1.0/index.html#6.6
         // These constraints "no longer apply in WebGL 2"
-        fOversizedStencilSupport = version >= GR_GL_VER(2, 0);
+        fOversizedAttachmentSupport = version >= GR_GL_VER(2, 0);
     }
 
     if (GR_IS_GR_GL(standard)) {
@@ -3463,6 +3463,16 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         ctxInfo.renderer() == GrGLRenderer::kAdreno4xx_other ||
         fDriverBugWorkarounds.disable_discard_framebuffer) {
         fInvalidateFBType = kNone_InvalidateFBType;
+    }
+
+    if (ctxInfo.renderer() == GrGLRenderer::kIntelCherryView) {
+        // When running DMSAA_dst_read_with_existing_barrier with DMSAA disabled on linux Intel
+        // HD405, the test fails when using texture barriers. Oddly the gpu doing the draw which
+        // uses the barrier correctly. It is the next draw, which does not use or need a barrier,
+        // that is blending with a dst as if the barrier draw didn't happen. Since this GPU is not
+        // that important to us and this driver bug could probably manifest itself in the wild, we
+        // are just disabling texture barrier support for the gpu.
+        fTextureBarrierSupport = false;
     }
 
     // glClearTexImage seems to have a bug in NVIDIA drivers that was fixed sometime between
