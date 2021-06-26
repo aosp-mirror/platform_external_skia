@@ -322,7 +322,7 @@ void GrMtlCaps::initGrCaps(id<MTLDevice> device) {
     // Buffers are always fully mapped.
     fMapBufferFlags =  kCanMap_MapFlag | kAsyncRead_MapFlag;
 
-    fOversizedAttachmentSupport = true;
+    fOversizedStencilSupport = true;
 
     fMipmapSupport = true;   // always available in Metal
     fNPOTTextureTileSupport = true;  // always available in Metal
@@ -1008,7 +1008,7 @@ GrSwizzle GrMtlCaps::onGetReadSwizzle(const GrBackendFormat& format, GrColorType
             return ctInfo.fReadSwizzle;
         }
     }
-    SkDEBUGFAILF("Illegal color type (%d) and format (%d) combination.", colorType,
+    SkDEBUGFAILF("Illegal color type (%d) and format (%d) combination.", (int)colorType,
                  static_cast<int>(mtlFormat));
     return {};
 }
@@ -1023,7 +1023,7 @@ GrSwizzle GrMtlCaps::getWriteSwizzle(const GrBackendFormat& format, GrColorType 
             return ctInfo.fWriteSwizzle;
         }
     }
-    SkDEBUGFAILF("Illegal color type (%d) and format (%d) combination.", colorType,
+    SkDEBUGFAILF("Illegal color type (%d) and format (%d) combination.", (int)colorType,
                  static_cast<int>(mtlFormat));
     return {};
 }

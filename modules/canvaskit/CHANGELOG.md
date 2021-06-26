@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+ - `Typeface.MakeFreeTypeFaceFromData` as a more convenient way to create a Typeface from the bytes
+   of a .ttf, .woff, or .woff2 file.
+ - `Typeface.getGlyphIDs` - provides the same functionality as `Font.getGlyphIDs`.
+
+### Changed
+ - ICU has been updated from v65 to v69.
+
+### Fixed
+ - We should no longer have to decode the same font multiple times (skbug.com/12112)
+ - `Font.getGlyphIDs` had the wrong type for the third argument. It is now correctly a Uint16Array.
+
+### Deprecated
+ - `FontMgr.MakeTypefaceFromData` will be removed in favor of `Typeface.MakeFreeTypeFaceFromData`
+ - `FontMgr.RefDefault` will be removed in an upcoming version. It's only real use was
+   for `FontMgr.MakeTypeface`.
+
 ## [0.28.0] - 2021-06-17
 
 ### Added
