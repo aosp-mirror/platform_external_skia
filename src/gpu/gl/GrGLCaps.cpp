@@ -231,8 +231,7 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         fDrawInstancedSupport =
                 version >= GR_GL_VER(3, 0) ||
                 (ctxInfo.hasExtension("GL_EXT_draw_instanced") &&
-                 ctxInfo.hasExtension("GL_EXT_instanced_arrays")) ||
-                ctxInfo.hasExtension("GL_ANGLE_instanced_arrays");
+                 ctxInfo.hasExtension("GL_EXT_instanced_arrays"));
     }  else if (GR_IS_GR_WEBGL(standard)) {
         // WebGL 2.0 has DrawArraysInstanced and drawElementsInstanced
         fDrawInstancedSupport = version >= GR_GL_VER(2, 0);
@@ -4610,6 +4609,23 @@ GrDstSampleFlags GrGLCaps::onGetDstSampleFlagsForProxy(const GrRenderTargetProxy
         return GrDstSampleFlags::kRequiresTextureBarrier;
     }
     return GrDstSampleFlags::kNone;
+}
+
+bool GrGLCaps::onSupportsDynamicMSAA(const GrRenderTargetProxy* rtProxy) const {
+    if (fDisallowDynamicMSAA) {
+        return false;
+    }
+    // We only allow DMSAA in two cases:
+    //
+    //   1) Desktop GL and EXT_multisample_compatibility: Here it's easy to use all our existing
+    //      coverage ops because we can just call glDisable(GL_MULTISAMPLE). So we only trigger
+    //      MSAA for paths and use the coverage ops for everything else with MSAA disabled.
+    //
+    //   2) EXT_multisampled_render_to_to_texture (86% adoption on Android): The assumption here
+    //      is that MSAA is almost free. So we just allow MSAA to be triggered often and don't
+    //      worry about it.
+    return fMultisampleDisableSupport ||
+           (fMSAAResolvesAutomatically && rtProxy->asTextureProxy());
 }
 
 uint64_t GrGLCaps::computeFormatKey(const GrBackendFormat& format) const {
