@@ -151,6 +151,7 @@ skia_sksl_sources = [
   "$_src/sksl/ir/SkSLInterfaceBlock.h",
   "$_src/sksl/ir/SkSLModifiersDeclaration.h",
   "$_src/sksl/ir/SkSLNop.h",
+  "$_src/sksl/ir/SkSLPoison.h",
   "$_src/sksl/ir/SkSLPostfixExpression.cpp",
   "$_src/sksl/ir/SkSLPostfixExpression.h",
   "$_src/sksl/ir/SkSLPrefixExpression.cpp",
@@ -212,7 +213,5 @@ skia_gpu_processor_sources = [
   "$_src/gpu/effects/GrDitherEffect.fp",
   "$_src/gpu/effects/GrRRectBlurEffect.fp",
   "$_src/gpu/effects/GrRectBlurEffect.fp",
-  "$_src/gpu/gradients/GrClampedGradientEffect.fp",
-  "$_src/gpu/gradients/GrTiledGradientEffect.fp",
   "$_src/gpu/gradients/GrUnrolledBinaryGradientColorizer.fp",
 ]
