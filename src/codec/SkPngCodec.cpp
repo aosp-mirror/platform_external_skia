@@ -24,6 +24,10 @@
 #include "png.h"
 #include <algorithm>
 
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    #include "SkAndroidFrameworkUtils.h"
+#endif
+
 // This warning triggers false postives way too often in here.
 #if defined(__GNUC__) && !defined(__clang__)
     #pragma GCC diagnostic ignored "-Wclobbered"
@@ -911,7 +915,7 @@ void AutoCleanPng::infoCallback(size_t idatLength) {
         SkEncodedInfo encodedInfo = SkEncodedInfo::Make(color, alpha, bitDepth);
         SkImageInfo imageInfo = encodedInfo.makeImageInfo(origWidth, origHeight, colorSpace);
 
-        if (SkEncodedInfo::kOpaque_Alpha == alpha) {
+        if (encodedColorType == PNG_COLOR_TYPE_RGB) {
             png_color_8p sigBits;
             if (png_get_sBIT(fPng_ptr, fInfo_ptr, &sigBits)) {
                 if (5 == sigBits->red && 6 == sigBits->green && 5 == sigBits->blue) {
@@ -920,6 +924,18 @@ void AutoCleanPng::infoCallback(size_t idatLength) {
                 }
             }
         }
+
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+        if (encodedColorType != PNG_COLOR_TYPE_GRAY_ALPHA
+            && SkEncodedInfo::kOpaque_Alpha == alpha) {
+            png_color_8p sigBits;
+            if (png_get_sBIT(fPng_ptr, fInfo_ptr, &sigBits)) {
+                if (5 == sigBits->red && 6 == sigBits->green && 5 == sigBits->blue) {
+                    SkAndroidFrameworkUtils::SafetyNetLog("190188264");
+                }
+            }
+        }
+#endif // SK_BUILD_FOR_ANDROID_FRAMEWORK
 
         if (1 == numberPasses) {
             *fOutCodec = new SkPngNormalDecoder(encodedInfo, imageInfo, fStream,
