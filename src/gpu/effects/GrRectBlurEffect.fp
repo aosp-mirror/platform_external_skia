@@ -18,20 +18,11 @@
 #include "src/gpu/GrShaderCaps.h"
 #include "src/gpu/GrThreadSafeCache.h"
 #include "src/gpu/SkGr.h"
+#include "src/gpu/effects/GrMatrixEffect.h"
 #include "src/gpu/effects/GrTextureEffect.h"
 }
 
-in fragmentProcessor inputFP;
-in float4 rect;
-
-layout(key) bool highPrecision = abs(rect.x) > 16000 || abs(rect.y) > 16000 ||
-                                 abs(rect.z) > 16000 || abs(rect.w) > 16000;
-
-layout(when= highPrecision) uniform float4 rectF;
-layout(when=!highPrecision) uniform half4  rectH;
-
-layout(key) in bool applyInvVM;
-layout(when=applyInvVM) in uniform float3x3 invVM;
+in uniform float4 rect;
 
 // Effect that is a LUT for integral of normal distribution. The value at x:[0,6*sigma] is the
 // integral from -inf to (3*sigma - x). I.e. x is mapped from [0, 6*sigma] to [3*sigma to -3*sigma].
@@ -43,7 +34,7 @@ in fragmentProcessor integral;
 layout(key) in bool isFast;
 
 @optimizationFlags {
-    ProcessorOptimizationFlags(inputFP.get()) & kCompatibleWithCoverageAsAlpha_OptimizationFlag
+    kCompatibleWithCoverageAsAlpha_OptimizationFlag
 }
 
 @class {
@@ -164,34 +155,26 @@ static std::unique_ptr<GrFragmentProcessor> MakeIntegralFP(GrRecordingContext* r
          // less than 6 sigma wide then things aren't so simple and we have to consider both the
          // left and right edge of the rectangle (and similar in y).
          bool isFast = insetRect.isSorted();
-         return std::unique_ptr<GrFragmentProcessor>(new GrRectBlurEffect(std::move(inputFP),
-                                                                          insetRect,
-                                                                          !invM.isIdentity(),
-                                                                          invM,
-                                                                          std::move(integral),
-                                                                          isFast));
+         std::unique_ptr<GrFragmentProcessor> fp(new GrRectBlurEffect(insetRect,
+                                                                      std::move(integral),
+                                                                      isFast));
+        if (!invM.isIdentity()) {
+            fp = GrMatrixEffect::Make(invM, std::move(fp));
+        }
+        fp = GrFragmentProcessor::DeviceSpace(std::move(fp));
+        return GrFragmentProcessor::MulInputByChildAlpha(std::move(fp));
      }
 }
 
-half4 main() {
+half4 main(float2 pos) {
     half xCoverage, yCoverage;
-    float2 pos = sk_FragCoord.xy;
-    @if (applyInvVM) {
-        // It'd be great if we could lift this to the VS.
-        pos = (invVM*float3(pos,1)).xy;
-    }
     @if (isFast) {
         // Get the smaller of the signed distance from the frag coord to the left and right
         // edges and similar for y.
         // The integral texture goes "backwards" (from 3*sigma to -3*sigma), So, the below
         // computations align the left edge of the integral texture with the inset rect's edge
         // extending outward 6 * sigma from the inset rect.
-        half2 xy;
-        @if (highPrecision) {
-            xy = max(half2(rectF.LT - pos), half2(pos - rectF.RB));
-       } else {
-            xy = max(half2(rectH.LT - pos), half2(pos - rectH.RB));
-        }
+        half2 xy = max(half2(rect.LT - pos), half2(pos - rect.RB));
         xCoverage = sample(integral, half2(xy.x, 0.5)).a;
         yCoverage = sample(integral, half2(xy.y, 0.5)).a;
     } else {
@@ -210,25 +193,13 @@ half4 main() {
         // in to the below calculations.
         // Also, our rect uniform was pre-inset by 3 sigma from the actual rect being blurred,
         // also factored in.
-        half4 rect;
-        @if (highPrecision) {
-            rect.LT = half2(rectF.LT - pos);
-            rect.RB = half2(pos - rectF.RB);
-        } else {
-            rect.LT = half2(rectH.LT - pos);
-            rect.RB = half2(pos - rectH.RB);
-        }
+        half4 rect = half4(half2(rect.LT - pos), half2(pos - rect.RB));
         xCoverage = 1 - sample(integral, half2(rect.L, 0.5)).a
                       - sample(integral, half2(rect.R, 0.5)).a;
         yCoverage = 1 - sample(integral, half2(rect.T, 0.5)).a
                       - sample(integral, half2(rect.B, 0.5)).a;
     }
-    return sample(inputFP) * xCoverage * yCoverage;
-}
-
-@setData(pdman) {
-    float r[] {rect.fLeft, rect.fTop, rect.fRight, rect.fBottom};
-    pdman.set4fv(highPrecision ? rectF : rectH, 1, r);
+    return half4(xCoverage * yCoverage);
 }
 
 @test(data) {
