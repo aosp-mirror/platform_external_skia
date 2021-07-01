@@ -15,6 +15,7 @@
 
 class SkPath;
 class GrMeshDrawTarget;
+class GrGpuBuffer;
 class GrOpFlushState;
 class GrPathTessellationShader;
 
@@ -23,13 +24,6 @@ class GrPathTessellationShader;
 class GrPathTessellator {
 public:
     using BreadcrumbTriangleList = GrInnerFanTriangulator::BreadcrumbTriangleList;
-
-    // Don't allow linearized segments to be off by more than 1/4th of a pixel from the true curve.
-    constexpr static float kLinearizationPrecision = 4;
-
-    // For fixed count tessellators, this is the largest number of segments we can stuff into a
-    // single instance before we need to chop.
-    constexpr static int kMaxFixedCountSegments = 32;
 
     const GrPathTessellationShader* shader() const { return fShader; }
 
@@ -42,11 +36,6 @@ public:
     // Issues draw calls for the tessellated geometry. The caller is responsible for binding its
     // desired pipeline ahead of time.
     virtual void draw(GrOpFlushState*) const = 0;
-
-    // Draws a 4-point instance for each curve. This method is used for drawing convex hulls over
-    // each cubic with GrFillCubicHullShader. The caller is responsible for binding its desired
-    // pipeline ahead of time. This method is not supported by every subclass.
-    virtual void drawHullInstances(GrOpFlushState*) const { SK_ABORT("Not supported."); }
 
     virtual ~GrPathTessellator() {}
 
