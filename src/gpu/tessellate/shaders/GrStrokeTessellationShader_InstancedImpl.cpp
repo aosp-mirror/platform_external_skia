@@ -11,7 +11,6 @@
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
-#include "src/gpu/tessellate/GrStrokeTessellator.h"
 
 void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     const auto& shader = args.fGeomProc.cast<GrStrokeTessellationShader>();
@@ -29,6 +28,7 @@ void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPA
     args.fVertBuilder->insertFunction(kMiterExtentFn);
     args.fVertBuilder->insertFunction(kUncheckedMixFn);
     args.fVertBuilder->insertFunction(GrWangsFormula::as_sksl().c_str());
+    args.fVertBuilder->insertFunction(SkSLPortable_isinf(*args.fShaderCaps));
 
     // Tessellation control uniforms and/or dynamic attributes.
     if (!shader.hasDynamicStroke()) {
@@ -91,7 +91,7 @@ void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPA
     float4x2 P = float4x2(pts01Attr, pts23Attr);
     float2 lastControlPoint = argsAttr.xy;
     float w = -1;  // w<0 means the curve is an integral cubic.
-    if (isinf(P[3].y)) {
+    if (isinf_portable(P[3].y)) {
         w = P[3].x;  // The curve is actually a conic.
         P[3] = P[2];  // Setting p3 equal to p2 works for the remaining rotational logic.
     })");
@@ -125,6 +125,15 @@ void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPA
         tan0 = float2(1,0);
         tan1 = float2(-1,0);
     })");
+
+    if (args.fShaderCaps->vertexIDSupport()) {
+        // If we don't have sk_VertexID support then "edgeID" already came in as a vertex attrib.
+        args.fVertBuilder->codeAppend(R"(
+        float edgeID = float(sk_VertexID >> 1);
+        if ((sk_VertexID & 1) != 0) {
+            edgeID = -edgeID;
+        })");
+    }
 
     // Potential optimization: (shader.hasDynamicStroke() && shader.hasRoundJoins())?
     if (shader.stroke().getJoin() == SkPaint::kRound_Join || shader.hasDynamicStroke()) {
@@ -167,7 +176,7 @@ void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPA
     // NOTE: Since the curve is not allowed to inflect, we can just check F'(.5) x F''(.5).
     // NOTE: F'(.5) x F''(.5) has the same sign as (P2 - P0) x (P3 - P1)
     float turn = cross(P[2] - P[0], P[3] - P[1]);
-    float combinedEdgeID = float(sk_VertexID >> 1) - numEdgesInJoin;
+    float combinedEdgeID = abs(edgeID) - numEdgesInJoin;
     if (combinedEdgeID < 0) {
         tan1 = tan0;
         // Don't let tan0 become zero. The code as-is isn't built to handle that case. tan0=0
@@ -188,7 +197,7 @@ void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPA
     }
 
     float numRadialSegments;
-    float strokeOutset = ((sk_VertexID & 1) == 0) ? +1 : -1;
+    float strokeOutset = sign(edgeID);
     if (combinedEdgeID < 0) {
         // We belong to the preceding join. The first and final edges get duplicated, so we only
         // have "numEdgesInJoin - 2" segments.
@@ -235,8 +244,8 @@ void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPA
 
     if (joinType == SkPaint::kMiter_Join || shader.hasDynamicStroke()) {
         args.fVertBuilder->codeAppendf(R"(
-        // Vertices #4 and #5 belong to the edge of the join that extends to the miter point.
-        if ((sk_VertexID | 1) == (4 | 5) && %s) {
+        // Edge #2 extends to the miter point.
+        if (abs(edgeID) == 2 && %s) {
             strokeOutset *= miter_extent(cosTheta, JOIN_TYPE/*miterLimit*/);
         })", shader.hasDynamicStroke() ? "JOIN_TYPE > 0/*Is the join a miter type?*/" : "true");
     }
@@ -244,4 +253,14 @@ void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPA
     this->emitTessellationCode(shader, &args.fVertBuilder->code(), gpArgs, *args.fShaderCaps);
 
     this->emitFragmentCode(shader, args);
+}
+
+void GrStrokeTessellationShader::InitializeVertexIDFallbackBuffer(GrVertexWriter vertexWriter,
+                                                                  size_t bufferSize) {
+    SkASSERT(bufferSize % (sizeof(float) * 2) == 0);
+    int edgeCount = bufferSize / (sizeof(float) * 2);
+    for (int i = 0; i < edgeCount; ++i) {
+        vertexWriter.write<float>(i);
+        vertexWriter.write<float>(-i);
+    }
 }
