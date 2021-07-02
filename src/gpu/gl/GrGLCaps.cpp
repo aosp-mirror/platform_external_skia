@@ -11,6 +11,7 @@
 
 #include "include/gpu/GrContextOptions.h"
 #include "src/core/SkCompressedDataUtils.h"
+#include "src/core/SkMathPriv.h"
 #include "src/core/SkTSearch.h"
 #include "src/gpu/GrBackendUtils.h"
 #include "src/gpu/GrProgramDesc.h"
@@ -968,6 +969,13 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
     } else if (GR_IS_GR_GL_ES(standard) || GR_IS_GR_WEBGL(standard)) {
         // Desktop GLSL 3.30 == ES GLSL 3.00.
         shaderCaps->fVertexIDSupport = ctxInfo.glslGeneration() >= k330_GrGLSLGeneration;
+    }
+
+    if (GR_IS_GR_GL(standard)) {
+        shaderCaps->fInfinitySupport = true;
+    } else if (GR_IS_GR_GL_ES(standard) || GR_IS_GR_WEBGL(standard)) {
+        // Desktop GLSL 3.30 == ES GLSL 3.00.
+        shaderCaps->fInfinitySupport = ctxInfo.glslGeneration() >= k330_GrGLSLGeneration;
     }
 
     if (GR_IS_GR_GL(standard)) {

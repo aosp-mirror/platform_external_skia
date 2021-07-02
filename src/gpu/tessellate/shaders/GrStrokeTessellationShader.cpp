@@ -13,6 +13,83 @@
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
 #include "src/gpu/tessellate/GrStrokeTessellator.h"
 
+GrStrokeTessellationShader::GrStrokeTessellationShader(const GrShaderCaps& shaderCaps, Mode mode,
+                                                       ShaderFlags shaderFlags,
+                                                       const SkMatrix& viewMatrix,
+                                                       const SkStrokeRec& stroke, SkPMColor4f color,
+                                                       int8_t maxParametricSegments_log2)
+        : GrTessellationShader(kTessellate_GrStrokeTessellationShader_ClassID,
+                               (mode == Mode::kHardwareTessellation)
+                                       ? GrPrimitiveType::kPatches
+                                       : GrPrimitiveType::kTriangleStrip,
+                               (mode == Mode::kHardwareTessellation) ? 1 : 0, viewMatrix, color)
+        , fMode(mode)
+        , fShaderFlags(shaderFlags)
+        , fStroke(stroke)
+        , fMaxParametricSegments_log2(maxParametricSegments_log2) {
+    if (fMode == Mode::kHardwareTessellation) {
+        // A join calculates its starting angle using prevCtrlPtAttr.
+        fAttribs.emplace_back("prevCtrlPtAttr", kFloat2_GrVertexAttribType, kFloat2_GrSLType);
+        // pts 0..3 define the stroke as a cubic bezier. If p3.y is infinity, then it's a conic
+        // with w=p3.x.
+        //
+        // If p0 == prevCtrlPtAttr, then no join is emitted.
+        //
+        // pts=[p0, p3, p3, p3] is a reserved pattern that means this patch is a join only,
+        // whose start and end tangents are (p0 - inputPrevCtrlPt) and (p3 - p0).
+        //
+        // pts=[p0, p0, p0, p3] is a reserved pattern that means this patch is a "bowtie", or
+        // double-sided round join, anchored on p0 and rotating from (p0 - prevCtrlPtAttr) to
+        // (p3 - p0).
+        fAttribs.emplace_back("pts01Attr", kFloat4_GrVertexAttribType, kFloat4_GrSLType);
+        fAttribs.emplace_back("pts23Attr", kFloat4_GrVertexAttribType, kFloat4_GrSLType);
+    } else {
+        // pts 0..3 define the stroke as a cubic bezier. If p3.y is infinity, then it's a conic
+        // with w=p3.x.
+        //
+        // An empty stroke (p0==p1==p2==p3) is a special case that denotes a circle, or
+        // 180-degree point stroke.
+        fAttribs.emplace_back("pts01Attr", kFloat4_GrVertexAttribType, kFloat4_GrSLType);
+        fAttribs.emplace_back("pts23Attr", kFloat4_GrVertexAttribType, kFloat4_GrSLType);
+        if (fMode == Mode::kLog2Indirect) {
+            // argsAttr.xy contains the lastControlPoint for setting up the join.
+            //
+            // "argsAttr.z=numTotalEdges" tells the shader the literal number of edges in the
+            // triangle strip being rendered (i.e., it should be vertexCount/2). If
+            // numTotalEdges is negative and the join type is "kRound", it also instructs the
+            // shader to only allocate one segment the preceding round join.
+            fAttribs.emplace_back("argsAttr", kFloat3_GrVertexAttribType, kFloat3_GrSLType);
+        } else {
+            SkASSERT(fMode == Mode::kFixedCount);
+            // argsAttr contains the lastControlPoint for setting up the join.
+            fAttribs.emplace_back("argsAttr", kFloat2_GrVertexAttribType, kFloat2_GrSLType);
+        }
+    }
+    if (fShaderFlags & ShaderFlags::kDynamicStroke) {
+        fAttribs.emplace_back("dynamicStrokeAttr", kFloat2_GrVertexAttribType,
+                              kFloat2_GrSLType);
+    }
+    if (fShaderFlags & ShaderFlags::kDynamicColor) {
+        fAttribs.emplace_back("dynamicColorAttr",
+                              (fShaderFlags & ShaderFlags::kWideColor)
+                                      ? kFloat4_GrVertexAttribType
+                                      : kUByte4_norm_GrVertexAttribType,
+                              kHalf4_GrSLType);
+    }
+    if (fMode == Mode::kHardwareTessellation) {
+        this->setVertexAttributes(fAttribs.data(), fAttribs.count());
+    } else {
+        this->setInstanceAttributes(fAttribs.data(), fAttribs.count());
+        if (!shaderCaps.vertexIDSupport()) {
+            constexpr static Attribute kVertexAttrib("edgeID", kFloat_GrVertexAttribType,
+                                                     kFloat_GrSLType);
+            this->setVertexAttributes(&kVertexAttrib, 1);
+        }
+    }
+    SkASSERT(fAttribs.count() <= kMaxAttribCount);
+}
+
+
 // The built-in atan() is undefined when x==0. This method relieves that restriction, but also can
 // return values larger than 2*PI. This shouldn't matter for our purposes.
 const char* GrStrokeTessellationShader::Impl::kAtan2Fn = R"(
@@ -72,7 +149,7 @@ void GrStrokeTessellationShader::Impl::emitTessellationCode(
     //     float unchecked_mix(float, float, float);
     //
     //     // Values provided by either uniforms or attribs.
-    //     float4x2 P;
+    //     float2 p0, p1, p2, p3;
     //     float w;
     //     float STROKE_RADIUS;
     //     float 2x2 AFFINE_MATRIX;
@@ -98,8 +175,8 @@ void GrStrokeTessellationShader::Impl::emitTessellationCode(
         //                                                 |T^2|
         //     Tangent_Direction(T) = dx,dy = |A  2B  C| * |T  |
         //                                    |.   .  .|   |1  |
-        float2 A, B, C = P[1] - P[0];
-        float2 D = P[3] - P[0];
+        float2 A, B, C = p1 - p0;
+        float2 D = p3 - p0;
         if (w >= 0.0) {
             // P0..P2 represent a conic and P3==P2. The derivative of a conic has a cumbersome
             // order-4 denominator. However, this isn't necessary if we are only interested in a
@@ -110,9 +187,9 @@ void GrStrokeTessellationShader::Impl::emitTessellationCode(
             C *= w;
             B = .5*D - C;
             A = (w - 1.0) * D;
-            P[1] *= w;
+            p1 *= w;
         } else {
-            float2 E = P[2] - P[1];
+            float2 E = p2 - p1;
             B = E - C;
             A = fma(float2(-3), E, D);
         }
@@ -142,7 +219,7 @@ void GrStrokeTessellationShader::Impl::emitTessellationCode(
         float maxRotation0 = (1.0 + combinedEdgeID) * abs(radsPerSegment);
         for (int exp = %i - 1; exp >= 0; --exp) {
             // Test the parametric edge at lastParametricEdgeID + 2^exp.
-            float testParametricID = lastParametricEdgeID + float(1 << exp);
+            float testParametricID = lastParametricEdgeID + exp2(float(exp));
             if (testParametricID <= maxParametricEdgeID) {
                 float2 testTan = fma(float2(testParametricID), A, B_);
                 testTan = fma(float2(testParametricID), testTan, C_);
@@ -178,8 +255,7 @@ void GrStrokeTessellationShader::Impl::emitTessellationCode(
         //     norm * |A  2B  C| * |T  | == 0
         //            |.   .  .|   |1  |
         //
-        float3 coeffs = norm * float3x2(A,B,C);
-        float a=coeffs.x, b_over_2=coeffs.y, c=coeffs.z;
+        float a=dot(norm,A), b_over_2=dot(norm,B), c=dot(norm,C);
         float discr_over_4 = max(b_over_2*b_over_2 - a*c, 0.0);
         float q = sqrt(discr_over_4);
         if (b_over_2 > 0.0) {
@@ -206,9 +282,9 @@ void GrStrokeTessellationShader::Impl::emitTessellationCode(
         float T = max(parametricT, radialT);
 
         // Evaluate the cubic at T. Use De Casteljau's for its accuracy and stability.
-        float2 ab = unchecked_mix(P[0], P[1], T);
-        float2 bc = unchecked_mix(P[1], P[2], T);
-        float2 cd = unchecked_mix(P[2], P[3], T);
+        float2 ab = unchecked_mix(p0, p1, T);
+        float2 bc = unchecked_mix(p1, p2, T);
+        float2 cd = unchecked_mix(p2, p3, T);
         float2 abc = unchecked_mix(ab, bc, T);
         float2 bcd = unchecked_mix(bc, cd, T);
         float2 abcd = unchecked_mix(abc, bcd, T);
@@ -230,7 +306,7 @@ void GrStrokeTessellationShader::Impl::emitTessellationCode(
         // Edges at the beginning and end of the strip use exact endpoints and tangents. This
         // ensures crack-free seaming between instances.
         tangent = (combinedEdgeID == 0) ? tan0 : tan1;
-        strokeCoord = (combinedEdgeID == 0) ? P[0] : P[3];
+        strokeCoord = (combinedEdgeID == 0) ? p0 : p3;
     })", shader.maxParametricSegments_log2() /* Parametric/radial sort loop count. */);
 
     code->append(R"(

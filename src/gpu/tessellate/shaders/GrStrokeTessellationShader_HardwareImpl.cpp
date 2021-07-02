@@ -57,6 +57,7 @@ void GrStrokeTessellationShader::HardwareImpl::onEmitCode(EmitArgs& args, GrGPAr
     v->insertFunction(kCosineBetweenVectorsFn);
     v->insertFunction(kMiterExtentFn);
     v->insertFunction(kUncheckedMixFn);
+    v->insertFunction(SkSLPortable_isinf(*args.fShaderCaps));
     if (shader.hasDynamicStroke()) {
         v->insertFunction(kNumRadialSegmentsPerRadianFn);
     }
@@ -113,7 +114,7 @@ void GrStrokeTessellationShader::HardwareImpl::onEmitCode(EmitArgs& args, GrGPAr
         // translate until the end; we just need to perform the scale and skew right now.
         v->codeAppend(R"(
         P = AFFINE_MATRIX * P;
-        if (isinf(pts23Attr.w)) {
+        if (isinf_portable(pts23Attr.w)) {
             // If y3 is infinity then x3 is a conic weight. Don't transform.
             P[3] = pts23Attr.zw;
         }
@@ -125,7 +126,7 @@ void GrStrokeTessellationShader::HardwareImpl::onEmitCode(EmitArgs& args, GrGPAr
     // (pre-chopping) input points or else the seams might crack.
     float2 prevJoinTangent = P[0] - prevControlPoint;
     float2 tan0 = ((P[1] == P[0]) ? P[2] : P[1]) - P[0];
-    float2 tan1 = (P[3] == P[2] || isinf(P[3].y)) ? P[2] - P[1] : P[3] - P[2];
+    float2 tan1 = (P[3] == P[2] || isinf_portable(P[3].y)) ? P[2] - P[1] : P[3] - P[2];
 
     if (tan0 == float2(0)) {
         // [p0, p0, p0, p3] is a reserved pattern that means this patch is a "bowtie".
@@ -266,7 +267,7 @@ void GrStrokeTessellationShader::HardwareImpl::onEmitCode(EmitArgs& args, GrGPAr
     }
 
     // If the curve is a straight line, point, or conic, don't chop it into sections after all.
-    if ((P[0] == P[1] && P[2] == P[3]) || isinf(P[3].y)) {
+    if ((P[0] == P[1] && P[2] == P[3]) || isinf_portable(P[3].y)) {
         chopT = float2(0);
         innerTangents = float2x2(tan0, tan0);
     }
@@ -274,7 +275,8 @@ void GrStrokeTessellationShader::HardwareImpl::onEmitCode(EmitArgs& args, GrGPAr
     // Chop the curve at chopT[0] and chopT[1].
     float4 ab = unchecked_mix(P[0].xyxy, P[1].xyxy, chopT.sstt);
     float4 bc = unchecked_mix(P[1].xyxy, P[2].xyxy, chopT.sstt);
-    float4 cd = isinf(P[3].y) ? P[2].xyxy : unchecked_mix(P[2].xyxy, P[3].xyxy, chopT.sstt);
+    float4 cd = isinf_portable(P[3].y) ? P[2].xyxy
+                                       : unchecked_mix(P[2].xyxy, P[3].xyxy, chopT.sstt);
     float4 abc = unchecked_mix(ab, bc, chopT.sstt);
     float4 bcd = unchecked_mix(bc, cd, chopT.sstt);
     float4 abcd = unchecked_mix(abc, bcd, chopT.sstt);
@@ -353,6 +355,7 @@ SkString GrStrokeTessellationShader::HardwareImpl::getTessControlShaderGLSL(
     code.append(kAtan2Fn);
     code.append(kCosineBetweenVectorsFn);
     code.append(kMiterExtentFn);
+    code.append(SkSLPortable_isinf(shaderCaps));
     code.append(R"(
     float cross2d(vec2 a, vec2 b) {
         return determinant(mat2(a,b));
@@ -428,12 +431,13 @@ SkString GrStrokeTessellationShader::HardwareImpl::getTessControlShaderGLSL(
 
         // Calculate the number of parametric segments. The final tessellated strip will be a
         // composition of these parametric segments as well as radial segments.
-        float w = isinf(P[3].y) ? P[3].x : -1.0; // w<0 means the curve is an integral cubic.
+        float w = isinf_portable(P[3].y) ? P[3].x : -1.0; // w<0 means integral cubic.
         float numParametricSegments;
         if (w < 0.0) {
-            numParametricSegments = wangs_formula_cubic(PARAMETRIC_PRECISION, P, mat2(1));
+            numParametricSegments = wangs_formula_cubic(PARAMETRIC_PRECISION, P[0], P[1], P[2],
+                                                        P[3], mat2(1));
         } else {
-            numParametricSegments = wangs_formula_conic(PARAMETRIC_PRECISION, mat3x2(P), w);
+            numParametricSegments = wangs_formula_conic(PARAMETRIC_PRECISION, P[0], P[1], P[2], w);
         }
         if (P[0] == P[1] && P[2] == P[3]) {
             // This is how the patch builder articulates lineTos but Wang's formula returns
@@ -452,8 +456,8 @@ SkString GrStrokeTessellationShader::HardwareImpl::getTessControlShaderGLSL(
         // Adjust sign of rotation to match the direction the curve turns.
         // NOTE: Since the curve is not allowed to inflect, we can just check F'(.5) x F''(.5).
         // NOTE: F'(.5) x F''(.5) has the same sign as (P2 - P0) x (P3 - P1)
-        float turn = isinf(P[3].y) ? cross2d(P[1] - P[0], P[2] - P[1])
-                                   : cross2d(P[2] - P[0], P[3] - P[1]);
+        float turn = isinf_portable(P[3].y) ? cross2d(P[1] - P[0], P[2] - P[1])
+                                            : cross2d(P[2] - P[0], P[3] - P[1]);
         if (turn == 0.0) {  // This is the case for joins and cusps where points are co-located.
             turn = determinant(tangents);
         }
@@ -561,6 +565,8 @@ SkString GrStrokeTessellationShader::HardwareImpl::getTessEvaluationShaderGLSL(
     code.appendf("uniform vec4 %s;\n", affineMatrixName);
     code.appendf("#define AFFINE_MATRIX mat2(%s)\n", affineMatrixName);
 
+    code.append(SkSLPortable_isinf(shaderCaps));
+
     code.append(R"(
     in vec4 tcsPts01[];
     in vec4 tcsPt2Tan0[];
@@ -599,30 +605,30 @@ SkString GrStrokeTessellationShader::HardwareImpl::getTessEvaluationShaderGLSL(
 
         // Furthermore, the vertex shader may have chopped the curve into 3 different sections.
         // Determine which section we belong to, and where we fall relative to its first edge.
-        mat4x2 P;
+        float2 p0, p1, p2, p3;
         vec2 tan0;
         vec3 tessellationArgs;
         if (combinedEdgeID < numSegmentsInJoin || numSegmentsInJoin == numTotalCombinedSegments) {
             // Our edge belongs to the join preceding the curve.
-            P = mat4x2(tcsPts01[0].xyxy, tcsPts01[0].xyxy);
+            p3 = p2 = p1 = p0 = tcsPts01[0].xy;
             tan0 = tcsJoinArgs0.zw;
             tessellationArgs = vec3(1, tcsJoinArgs1.xy);
             strokeOutset = clamp(strokeOutset, tcsJoinArgs1.z, tcsJoinArgs1.w);
             strokeOutset *= (combinedEdgeID == 1.0) ? tcsJoinArgs0.y : 1.0;
         } else if ((combinedEdgeID -= numSegmentsInJoin) < tcsTessArgs[0].x) {
             // Our edge belongs to the first curve section.
-            P = mat4x2(tcsPts01[0], tcsPt2Tan0[0].xy, tcsPts01[1].xy);
+            p0=tcsPts01[0].xy, p1=tcsPts01[0].zw, p2=tcsPt2Tan0[0].xy, p3=tcsPts01[1].xy;
             tan0 = tcsPt2Tan0[0].zw;
             tessellationArgs = tcsTessArgs[0].yzw;
         } else if ((combinedEdgeID -= tcsTessArgs[0].x) < tcsTessArgs[1].x) {
             // Our edge belongs to the second curve section.
-            P = mat4x2(tcsPts01[1], tcsPt2Tan0[1].xy, tcsPts01[2].xy);
+            p0=tcsPts01[1].xy, p1=tcsPts01[1].zw, p2=tcsPt2Tan0[1].xy, p3=tcsPts01[2].xy;
             tan0 = tcsPt2Tan0[1].zw;
             tessellationArgs = tcsTessArgs[1].yzw;
         } else {
             // Our edge belongs to the third curve section.
             combinedEdgeID -= tcsTessArgs[1].x;
-            P = mat4x2(tcsPts01[2], tcsPt2Tan0[2].xy, tcsEndPtEndTan.xy);
+            p0=tcsPts01[2].xy, p1=tcsPts01[2].zw, p2=tcsPt2Tan0[2].xy, p3=tcsEndPtEndTan.xy;
             tan0 = tcsPt2Tan0[2].zw;
             tessellationArgs = tcsTessArgs[2].yzw;
         }
@@ -632,9 +638,9 @@ SkString GrStrokeTessellationShader::HardwareImpl::getTessEvaluationShaderGLSL(
         float2 tan1 = tcsEndPtEndTan.zw;
         bool isFinalEdge = (gl_TessCoord.x == 1);
         float w = -1.0;  // w<0 means the curve is an integral cubic.
-        if (isinf(P[3].y)) {
-            w = P[3].x;  // The curve is actually a conic.
-            P[3] = P[2];  // Setting p3 equal to p2 works for the remaining rotational logic.
+        if (isinf_portable(p3.y)) {
+            w = p3.x;  // The curve is actually a conic.
+            p3 = p2;  // Setting p3 equal to p2 works for the remaining rotational logic.
         })");
 
     GrGPArgs gpArgs;

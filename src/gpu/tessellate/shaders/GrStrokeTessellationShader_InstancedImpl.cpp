@@ -11,7 +11,6 @@
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
-#include "src/gpu/tessellate/GrStrokeTessellator.h"
 
 void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     const auto& shader = args.fGeomProc.cast<GrStrokeTessellationShader>();
@@ -29,6 +28,7 @@ void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPA
     args.fVertBuilder->insertFunction(kMiterExtentFn);
     args.fVertBuilder->insertFunction(kUncheckedMixFn);
     args.fVertBuilder->insertFunction(GrWangsFormula::as_sksl().c_str());
+    args.fVertBuilder->insertFunction(SkSLPortable_isinf(*args.fShaderCaps));
 
     // Tessellation control uniforms and/or dynamic attributes.
     if (!shader.hasDynamicStroke()) {
@@ -88,18 +88,21 @@ void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPA
 
     // Tessellation code.
     args.fVertBuilder->codeAppend(R"(
-    float4x2 P = float4x2(pts01Attr, pts23Attr);
+    float2 p0=pts01Attr.xy, p1=pts01Attr.zw, p2=pts23Attr.xy, p3=pts23Attr.zw;
     float2 lastControlPoint = argsAttr.xy;
     float w = -1;  // w<0 means the curve is an integral cubic.
-    if (isinf(P[3].y)) {
-        w = P[3].x;  // The curve is actually a conic.
-        P[3] = P[2];  // Setting p3 equal to p2 works for the remaining rotational logic.
+    if (isinf_portable(p3.y)) {
+        w = p3.x;  // The curve is actually a conic.
+        p3 = p2;  // Setting p3 equal to p2 works for the remaining rotational logic.
     })");
     if (shader.stroke().isHairlineStyle()) {
         // Hairline case. Transform the points before tessellation. We can still hold off on the
         // translate until the end; we just need to perform the scale and skew right now.
         args.fVertBuilder->codeAppend(R"(
-        P = AFFINE_MATRIX * P;
+        p0 = AFFINE_MATRIX * p0;
+        p1 = AFFINE_MATRIX * p1;
+        p2 = AFFINE_MATRIX * p2;
+        p3 = AFFINE_MATRIX * p3;
         lastControlPoint = AFFINE_MATRIX * lastControlPoint;)");
     }
 
@@ -107,24 +110,34 @@ void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPA
     // Find how many parametric segments this stroke requires.
     float numParametricSegments;
     if (w < 0) {
-        numParametricSegments = wangs_formula_cubic(PARAMETRIC_PRECISION, P, float2x2(1));
+        numParametricSegments = wangs_formula_cubic(PARAMETRIC_PRECISION, p0, p1, p2, p3,
+                                                    float2x2(1));
     } else {
-        numParametricSegments = wangs_formula_conic(PARAMETRIC_PRECISION, float3x2(P), w);
+        numParametricSegments = wangs_formula_conic(PARAMETRIC_PRECISION, p0, p1, p2, w);
     }
-    if (P[0] == P[1] && P[2] == P[3]) {
+    if (p0 == p1 && p2 == p3) {
         // This is how we describe lines, but Wang's formula does not return 1 in this case.
         numParametricSegments = 1;
     }
 
     // Find the starting and ending tangents.
-    float2 tan0 = ((P[0] == P[1]) ? (P[1] == P[2]) ? P[3] : P[2] : P[1]) - P[0];
-    float2 tan1 = P[3] - ((P[3] == P[2]) ? (P[2] == P[1]) ? P[0] : P[1] : P[2]);
+    float2 tan0 = ((p0 == p1) ? (p1 == p2) ? p3 : p2 : p1) - p0;
+    float2 tan1 = p3 - ((p3 == p2) ? (p2 == p1) ? p0 : p1 : p2);
     if (tan0 == float2(0)) {
         // The stroke is a point. This special case tells us to draw a stroke-width circle as a
         // 180 degree point stroke instead.
         tan0 = float2(1,0);
         tan1 = float2(-1,0);
     })");
+
+    if (args.fShaderCaps->vertexIDSupport()) {
+        // If we don't have sk_VertexID support then "edgeID" already came in as a vertex attrib.
+        args.fVertBuilder->codeAppend(R"(
+        float edgeID = float(sk_VertexID >> 1);
+        if ((sk_VertexID & 1) != 0) {
+            edgeID = -edgeID;
+        })");
+    }
 
     // Potential optimization: (shader.hasDynamicStroke() && shader.hasRoundJoins())?
     if (shader.stroke().getJoin() == SkPaint::kRound_Join || shader.hasDynamicStroke()) {
@@ -133,7 +146,7 @@ void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPA
         // of the join twice: once full width and once restricted to half width. This guarantees
         // perfect seaming by matching the vertices from the join as well as from the strokes on
         // either side.
-        float joinRads = acos(cosine_between_vectors(P[0] - lastControlPoint, tan0));
+        float joinRads = acos(cosine_between_vectors(p0 - lastControlPoint, tan0));
         float numRadialSegmentsInJoin = max(ceil(joinRads * NUM_RADIAL_SEGMENTS_PER_RADIAN), 1);
         // +2 because we emit the beginning and ending edges twice (see above comment).
         float numEdgesInJoin = numRadialSegmentsInJoin + 2;
@@ -166,15 +179,15 @@ void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPA
     // Find which direction the curve turns.
     // NOTE: Since the curve is not allowed to inflect, we can just check F'(.5) x F''(.5).
     // NOTE: F'(.5) x F''(.5) has the same sign as (P2 - P0) x (P3 - P1)
-    float turn = cross(P[2] - P[0], P[3] - P[1]);
-    float combinedEdgeID = float(sk_VertexID >> 1) - numEdgesInJoin;
+    float turn = cross(p2 - p0, p3 - p1);
+    float combinedEdgeID = abs(edgeID) - numEdgesInJoin;
     if (combinedEdgeID < 0) {
         tan1 = tan0;
         // Don't let tan0 become zero. The code as-is isn't built to handle that case. tan0=0
         // means the join is disabled, and to disable it with the existing code we can leave
         // tan0 equal to tan1.
-        if (lastControlPoint != P[0]) {
-            tan0 = P[0] - lastControlPoint;
+        if (lastControlPoint != p0) {
+            tan0 = p0 - lastControlPoint;
         }
         turn = cross(tan0, tan1);
     }
@@ -188,13 +201,13 @@ void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPA
     }
 
     float numRadialSegments;
-    float strokeOutset = ((sk_VertexID & 1) == 0) ? +1 : -1;
+    float strokeOutset = sign(edgeID);
     if (combinedEdgeID < 0) {
         // We belong to the preceding join. The first and final edges get duplicated, so we only
         // have "numEdgesInJoin - 2" segments.
         numRadialSegments = numEdgesInJoin - 2;
         numParametricSegments = 1;  // Joins don't have parametric segments.
-        P = float4x2(P[0], P[0], P[0], P[0]);  // Colocate all points on the junction point.
+        p3 = p2 = p1 = p0;  // Colocate all points on the junction point.
         // Shift combinedEdgeID to the range [-1, numRadialSegments]. This duplicates the first
         // edge and lands one edge at the very end of the join. (The duplicated final edge will
         // actually come from the section of our strip that belongs to the stroke.)
@@ -235,8 +248,8 @@ void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPA
 
     if (joinType == SkPaint::kMiter_Join || shader.hasDynamicStroke()) {
         args.fVertBuilder->codeAppendf(R"(
-        // Vertices #4 and #5 belong to the edge of the join that extends to the miter point.
-        if ((sk_VertexID | 1) == (4 | 5) && %s) {
+        // Edge #2 extends to the miter point.
+        if (abs(edgeID) == 2 && %s) {
             strokeOutset *= miter_extent(cosTheta, JOIN_TYPE/*miterLimit*/);
         })", shader.hasDynamicStroke() ? "JOIN_TYPE > 0/*Is the join a miter type?*/" : "true");
     }
@@ -244,4 +257,14 @@ void GrStrokeTessellationShader::InstancedImpl::onEmitCode(EmitArgs& args, GrGPA
     this->emitTessellationCode(shader, &args.fVertBuilder->code(), gpArgs, *args.fShaderCaps);
 
     this->emitFragmentCode(shader, args);
+}
+
+void GrStrokeTessellationShader::InitializeVertexIDFallbackBuffer(GrVertexWriter vertexWriter,
+                                                                  size_t bufferSize) {
+    SkASSERT(bufferSize % (sizeof(float) * 2) == 0);
+    int edgeCount = bufferSize / (sizeof(float) * 2);
+    for (int i = 0; i < edgeCount; ++i) {
+        vertexWriter.write<float>(i);
+        vertexWriter.write<float>(-i);
+    }
 }
