@@ -7,6 +7,7 @@
 
 #include "src/gpu/tessellate/GrPathCurveTessellator.h"
 
+#include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/geometry/GrPathUtils.h"
 #include "src/gpu/geometry/GrWangsFormula.h"
 #include "src/gpu/tessellate/GrCullTest.h"
@@ -15,14 +16,16 @@
 
 namespace {
 
-constexpr static float kPrecision = GrPathTessellator::kLinearizationPrecision;
+constexpr static float kPrecision = GrTessellationShader::kLinearizationPrecision;
 
 // Writes out curve patches, chopping as necessary so none require more segments than are
 // supported by the hardware.
 class CurveWriter {
 public:
-    CurveWriter(const SkRect& cullBounds, const SkMatrix& viewMatrix, int maxSegments)
-            : fCullTest(cullBounds, viewMatrix)
+    CurveWriter(const GrShaderCaps& shaderCaps, const SkRect& cullBounds,
+                const SkMatrix& viewMatrix, int maxSegments)
+            : fShaderCaps(shaderCaps)
+            , fCullTest(cullBounds, viewMatrix)
             , fVectorXform(viewMatrix)
             , fMaxSegments_pow2(maxSegments * maxSegments)
             , fMaxSegments_pow4(fMaxSegments_pow2 * fMaxSegments_pow2) {
@@ -50,7 +53,7 @@ public:
         }
         if (numSegments_pow2 > 1) {
             if (GrVertexWriter vertexWriter = chunker->appendVertex()) {
-                GrTessellationShader::WriteConicPatch(p, w, &vertexWriter);
+                GrTessellationShader::WriteConicPatch(fShaderCaps, p, w, &vertexWriter);
             }
             fNumFixedSegments_pow4 = std::max(numSegments_pow2 * numSegments_pow2,
                                               fNumFixedSegments_pow4);
@@ -118,10 +121,11 @@ private:
         if (GrVertexWriter vertexWriter = chunker->appendVertex()) {
             vertexWriter.write(p0, p1, p2);
             // Mark this instance as a triangle by setting it to a conic with w=Inf.
-            vertexWriter.fill(GrVertexWriter::kIEEE_32_infinity, 2);
+            vertexWriter.fill(GrTessellationShader::PortableInfinityBits32(fShaderCaps), 2);
         }
     }
 
+    const GrShaderCaps& fShaderCaps;
     GrCullTest fCullTest;
     GrVectorXform fVectorXform;
     const float fMaxSegments_pow2;
@@ -135,10 +139,12 @@ private:
 }  // namespace
 
 
-GrPathTessellator* GrPathCurveTessellator::Make(SkArenaAlloc* arena, const SkMatrix& viewMatrix,
-                                                const SkPMColor4f& color, DrawInnerFan drawInnerFan,
-                                                int numPathVerbs, const GrPipeline& pipeline,
-                                                const GrCaps& caps) {
+GrPathCurveTessellator* GrPathCurveTessellator::Make(SkArenaAlloc* arena,
+                                                     const SkMatrix& viewMatrix,
+                                                     const SkPMColor4f& color,
+                                                     DrawInnerFan drawInnerFan, int numPathVerbs,
+                                                     const GrPipeline& pipeline,
+                                                     const GrCaps& caps) {
     using PatchType = GrPathTessellationShader::PatchType;
     GrPathTessellationShader* shader;
     if (caps.shaderCaps()->tessellationSupport() &&
@@ -155,10 +161,15 @@ GrPathTessellator* GrPathCurveTessellator::Make(SkArenaAlloc* arena, const SkMat
     });
 }
 
+GR_DECLARE_STATIC_UNIQUE_KEY(gFixedCountVertexBufferKey);
+GR_DECLARE_STATIC_UNIQUE_KEY(gFixedCountIndexBufferKey);
+
 void GrPathCurveTessellator::prepare(GrMeshDrawTarget* target, const SkRect& cullBounds,
                                      const SkPath& path,
                                      const BreadcrumbTriangleList* breadcrumbTriangleList) {
     SkASSERT(fVertexChunkArray.empty());
+
+    const GrShaderCaps& shaderCaps = *target->caps().shaderCaps();
 
     // Determine how many triangles to allocate.
     int maxTriangles = 0;
@@ -187,9 +198,10 @@ void GrPathCurveTessellator::prepare(GrMeshDrawTarget* target, const SkRect& cul
         }
         int numRemainingTriangles = maxTriangles;
         if (fDrawInnerFan) {
+            // Pad the triangles with 2 infinities. This produces conic patches with w=Inf.
             int numWritten = GrMiddleOutPolygonTriangulator::WritePathInnerFan(
-                    &vertexWriter,
-                    GrMiddleOutPolygonTriangulator::OutputType::kConicsWithInfiniteWeight, path);
+                    &vertexWriter, 2, GrPathTessellationShader::PortableInfinityBits32(shaderCaps),
+                    path);
             numRemainingTriangles -= numWritten;
         }
         if (breadcrumbTriangleList) {
@@ -210,7 +222,7 @@ void GrPathCurveTessellator::prepare(GrMeshDrawTarget* target, const SkRect& cul
                 }
                 vertexWriter.writeArray(tri->fPts, 3);
                 // Mark this instance as a triangle by setting it to a conic with w=Inf.
-                vertexWriter.fill(GrVertexWriter::kIEEE_32_infinity, 2);
+                vertexWriter.fill(GrTessellationShader::PortableInfinityBits32(shaderCaps), 2);
                 ++numWritten;
             }
             SkASSERT(count == breadcrumbTriangleList->count());
@@ -224,12 +236,12 @@ void GrPathCurveTessellator::prepare(GrMeshDrawTarget* target, const SkRect& cul
         // The curve shader tessellates T=0..(1/2) on the first side of the canonical triangle and
         // T=(1/2)..1 on the second side. This means we get double the max tessellation segments
         // for the range T=0..1.
-        maxSegments = target->caps().shaderCaps()->maxTessellationSegments() * 2;
+        maxSegments = shaderCaps.maxTessellationSegments() * 2;
     } else {
-        maxSegments = kMaxFixedCountSegments;
+        maxSegments = GrPathTessellationShader::kMaxFixedCountSegments;
     }
 
-    CurveWriter curveWriter(cullBounds, fShader->viewMatrix(), maxSegments);
+    CurveWriter curveWriter(shaderCaps, cullBounds, fShader->viewMatrix(), maxSegments);
     for (auto [verb, pts, w] : SkPathPriv::Iterate(path)) {
         switch (verb) {
             case SkPathVerb::kQuad:
@@ -249,8 +261,24 @@ void GrPathCurveTessellator::prepare(GrMeshDrawTarget* target, const SkRect& cul
     if (!fShader->willUseTessellationShaders()) {
         // log2(n) == log16(n^4).
         int fixedResolveLevel = GrWangsFormula::nextlog16(curveWriter.numFixedSegments_pow4());
-        fFixedVertexCount =
+        fFixedIndexCount =
                 GrPathTessellationShader::NumCurveTrianglesAtResolveLevel(fixedResolveLevel) * 3;
+
+        GR_DEFINE_STATIC_UNIQUE_KEY(gFixedCountVertexBufferKey);
+
+        fFixedCountVertexBuffer = target->resourceProvider()->findOrMakeStaticBuffer(
+                GrGpuBufferType::kVertex,
+                GrPathTessellationShader::SizeOfVertexBufferForMiddleOutCurves(),
+                gFixedCountVertexBufferKey,
+                GrPathTessellationShader::InitializeVertexBufferForMiddleOutCurves);
+
+        GR_DEFINE_STATIC_UNIQUE_KEY(gFixedCountIndexBufferKey);
+
+        fFixedCountIndexBuffer = target->resourceProvider()->findOrMakeStaticBuffer(
+                GrGpuBufferType::kIndex,
+                GrPathTessellationShader::SizeOfIndexBufferForMiddleOutCurves(),
+                gFixedCountIndexBufferKey,
+                GrPathTessellationShader::InitializeIndexBufferForMiddleOutCurves);
     }
 }
 
@@ -263,15 +291,16 @@ void GrPathCurveTessellator::draw(GrOpFlushState* flushState) const {
     } else {
         SkASSERT(fShader->hasInstanceAttributes());
         for (const GrVertexChunk& chunk : fVertexChunkArray) {
-            flushState->bindBuffers(nullptr, chunk.fBuffer, nullptr);
-            flushState->drawInstanced(chunk.fCount, chunk.fBase, fFixedVertexCount, 0);
+            flushState->bindBuffers(fFixedCountIndexBuffer, chunk.fBuffer, fFixedCountVertexBuffer);
+            flushState->drawIndexedInstanced(fFixedIndexCount, 0, chunk.fCount, chunk.fBase, 0);
         }
     }
 }
 
-void GrPathCurveTessellator::drawHullInstances(GrOpFlushState* flushState) const {
+void GrPathCurveTessellator::drawHullInstances(
+        GrOpFlushState* flushState, sk_sp<const GrGpuBuffer> vertexBufferIfNeeded) const {
     for (const GrVertexChunk& chunk : fVertexChunkArray) {
-        flushState->bindBuffers(nullptr, chunk.fBuffer, nullptr);
+        flushState->bindBuffers(nullptr, chunk.fBuffer, vertexBufferIfNeeded);
         flushState->drawInstanced(chunk.fCount, chunk.fBase, 4, 0);
     }
 }

@@ -12,6 +12,7 @@
 #include "src/gpu/tessellate/GrPathTessellator.h"
 
 class GrCaps;
+class GrGpuBuffer;
 class GrPipeline;
 
 // Draws an array of "outer curve" patches and, optionally, inner fan triangles for
@@ -27,14 +28,18 @@ public:
     };
 
     // Creates a curve tessellator with the shader type best suited for the given path description.
-    static GrPathTessellator* Make(SkArenaAlloc*, const SkMatrix& viewMatrix, const SkPMColor4f&,
-                                   DrawInnerFan, int numPathVerbs, const GrPipeline&,
-                                   const GrCaps&);
+    static GrPathCurveTessellator* Make(SkArenaAlloc*, const SkMatrix& viewMatrix,
+                                        const SkPMColor4f&, DrawInnerFan, int numPathVerbs,
+                                        const GrPipeline&, const GrCaps&);
 
     void prepare(GrMeshDrawTarget*, const SkRect& cullBounds, const SkPath&,
                  const BreadcrumbTriangleList*) override;
     void draw(GrOpFlushState*) const override;
-    void drawHullInstances(GrOpFlushState*) const override;
+
+    // Draws a 4-point instance for each curve. This method is used for drawing convex hulls over
+    // each cubic with GrFillCubicHullShader. The caller is responsible for binding its desired
+    // pipeline ahead of time.
+    void drawHullInstances(GrOpFlushState*, sk_sp<const GrGpuBuffer> vertexBufferIfNeeded) const;
 
 private:
     GrPathCurveTessellator(GrPathTessellationShader* shader, DrawInnerFan drawInnerFan)
@@ -45,7 +50,9 @@ private:
     GrVertexChunkArray fVertexChunkArray;
 
     // If using fixed count, this is the number of vertices we need to emit per instance.
-    int fFixedVertexCount;
+    int fFixedIndexCount;
+    sk_sp<const GrGpuBuffer> fFixedCountVertexBuffer;
+    sk_sp<const GrGpuBuffer> fFixedCountIndexBuffer;
 };
 
 #endif

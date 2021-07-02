@@ -10,11 +10,13 @@
 #include "include/private/GrTypesPriv.h"
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkConvertPixels.h"
+#include "src/core/SkMathPriv.h"
 #include "src/core/SkMipmap.h"
 #include "src/gpu/GrBackendUtils.h"
 #include "src/gpu/GrDataUtils.h"
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrRenderTarget.h"
+#include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrThreadSafePipelineBuilder.h"
 #include "src/gpu/mtl/GrMtlBuffer.h"
@@ -487,22 +489,25 @@ bool GrMtlGpu::clearTexture(GrMtlTexture* tex, size_t bpp, uint32_t levelMask) {
     }
     SkASSERT(combinedBufferSize > 0 && !individualMipOffsets.empty());
 
-    // TODO: Create GrMtlTransferBuffer
-    NSUInteger options = 0;
-    if (@available(macOS 10.11, iOS 9.0, *)) {
-        options |= MTLResourceStorageModePrivate;
-    }
-    id<MTLBuffer> transferBuffer = [fDevice newBufferWithLength: combinedBufferSize
-                                                        options: options];
-    if (nil == transferBuffer) {
+#ifdef SK_BUILD_FOR_MAC
+    static const size_t kMinAlignment = 4;
+#else
+    static const size_t kMinAlignment = 1;
+#endif
+    size_t alignment = std::max(bpp, kMinAlignment);
+    GrStagingBufferManager::Slice slice = fStagingBufferManager.allocateStagingBufferSlice(
+            combinedBufferSize, alignment);
+    if (!slice.fBuffer) {
         return false;
     }
+    GrMtlBuffer* mtlBuffer = static_cast<GrMtlBuffer*>(slice.fBuffer);
+    id<MTLBuffer> transferBuffer = mtlBuffer->mtlBuffer();
 
     auto cmdBuffer = this->commandBuffer();
     id<MTLBlitCommandEncoder> GR_NORETAIN blitCmdEncoder = cmdBuffer->getBlitCommandEncoder();
     // clear the buffer to transparent black
     NSRange clearRange;
-    clearRange.location = 0;
+    clearRange.location = slice.fOffset;
     clearRange.length = combinedBufferSize;
     [blitCmdEncoder fillBuffer: transferBuffer
                          range: clearRange
@@ -517,7 +522,7 @@ bool GrMtlGpu::clearTexture(GrMtlTexture* tex, size_t bpp, uint32_t levelMask) {
             const size_t rowBytes = currentWidth * bpp;
 
             [blitCmdEncoder copyFromBuffer: transferBuffer
-                              sourceOffset: individualMipOffsets[currentMipLevel]
+                              sourceOffset: slice.fOffset + individualMipOffsets[currentMipLevel]
                          sourceBytesPerRow: rowBytes
                        sourceBytesPerImage: rowBytes * currentHeight
                                 sourceSize: MTLSizeMake(currentWidth, currentHeight, 1)
@@ -529,6 +534,7 @@ bool GrMtlGpu::clearTexture(GrMtlTexture* tex, size_t bpp, uint32_t levelMask) {
         currentWidth = std::max(1, currentWidth/2);
         currentHeight = std::max(1, currentHeight/2);
     }
+    // Don't need didModifyRange: here because fillBuffer: happens on the GPU
 
     if (mipLevelCount < (int) tex->mtlTexture().mipmapLevelCount) {
         tex->markMipmapsDirty();
@@ -1507,10 +1513,9 @@ std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT GrMtlGpu::makeSemaphore(bool 
     return GrMtlSemaphore::Make(this);
 }
 
-std::unique_ptr<GrSemaphore> GrMtlGpu::wrapBackendSemaphore(
-        const GrBackendSemaphore& semaphore,
-        GrResourceProvider::SemaphoreWrapType wrapType,
-        GrWrapOwnership /*ownership*/) {
+std::unique_ptr<GrSemaphore> GrMtlGpu::wrapBackendSemaphore(const GrBackendSemaphore& semaphore,
+                                                            GrSemaphoreWrapType /* wrapType */,
+                                                            GrWrapOwnership /*ownership*/) {
     SkASSERT(this->caps()->semaphoreSupport());
     return GrMtlSemaphore::MakeWrapped(semaphore.mtlSemaphore(), semaphore.mtlValue());
 }

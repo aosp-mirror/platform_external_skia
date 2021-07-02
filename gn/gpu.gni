@@ -127,6 +127,7 @@ skia_gpu_sources = [
   "$_src/gpu/GrManagedResource.h",
   "$_src/gpu/GrMemoryPool.cpp",
   "$_src/gpu/GrMemoryPool.h",
+  "$_src/gpu/GrMeshDrawTarget.cpp",
   "$_src/gpu/GrMeshDrawTarget.h",
   "$_src/gpu/GrNativeRect.h",
   "$_src/gpu/GrNonAtomicRef.h",
@@ -308,16 +309,8 @@ skia_gpu_sources = [
   "$_src/gpu/effects/GrTextureEffect.h",
   "$_src/gpu/effects/GrYUVtoRGBEffect.cpp",
   "$_src/gpu/effects/GrYUVtoRGBEffect.h",
-  "$_src/gpu/effects/generated/GrCircleBlurFragmentProcessor.cpp",
-  "$_src/gpu/effects/generated/GrCircleBlurFragmentProcessor.h",
-  "$_src/gpu/effects/generated/GrConfigConversionEffect.cpp",
-  "$_src/gpu/effects/generated/GrConfigConversionEffect.h",
   "$_src/gpu/effects/generated/GrDitherEffect.cpp",
   "$_src/gpu/effects/generated/GrDitherEffect.h",
-  "$_src/gpu/effects/generated/GrRRectBlurEffect.cpp",
-  "$_src/gpu/effects/generated/GrRRectBlurEffect.h",
-  "$_src/gpu/effects/generated/GrRectBlurEffect.cpp",
-  "$_src/gpu/effects/generated/GrRectBlurEffect.h",
   "$_src/gpu/geometry/GrPathUtils.cpp",
   "$_src/gpu/geometry/GrPathUtils.h",
   "$_src/gpu/geometry/GrQuad.cpp",
@@ -558,13 +551,13 @@ skia_gl_gpu_sources = [
 
 skia_null_gpu_sources = [ "$_src/gpu/gl/GrGLMakeNativeInterface_none.cpp" ]
 
-skia_nga_sources = [
+skia_skgpu_v2_sources = [
   # Sk files
   "$_src/gpu/SkGpuDevice_nga.cpp",
   "$_src/gpu/SkGpuDevice_nga.h",
 ]
 
-skia_oga_sources = [
+skia_skgpu_v1_sources = [
   "$_src/gpu/GrClipStack.cpp",
   "$_src/gpu/GrClipStack.h",
   "$_src/gpu/GrClipStackClip.cpp",
@@ -606,7 +599,7 @@ skia_oga_sources = [
   "$_src/gpu/SkGpuDevice_drawTexture.cpp",
 ]
 
-skia_gpu_sources += skia_oga_sources
+skia_gpu_sources += skia_skgpu_v1_sources
 
 skia_vk_sources = [
   "$_include/gpu/vk/GrVkBackendContext.h",
