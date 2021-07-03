@@ -87,14 +87,20 @@ public:
         int      index;
     };
 
-    struct Options {
+    class Options {
+    public:
         // For testing purposes, completely disable the inliner. (Normally, Runtime Effects don't
         // run the inliner directly, but they still get an inlining pass once they are painted.)
         bool forceNoInline = false;
-        // For testing purposes only; only honored when GR_TEST_UTILS is enabled. This flag lifts
-        // the ES2 restrictions on Runtime Effects that are gated by the `strictES2Mode` check.
-        // Be aware that the software renderer and pipeline-stage effect are still largely
-        // ES3-unaware and can still fail or crash if post-ES2 features are used.
+
+    private:
+        friend class SkRuntimeEffect;
+        friend class SkRuntimeEffectPriv;
+
+        // This flag lifts the ES2 restrictions on Runtime Effects that are gated by the
+        // `strictES2Mode` check. Be aware that the software renderer and pipeline-stage effect are
+        // still largely ES3-unaware and can still fail or crash if post-ES2 features are used.
+        // This is only intended for use by tests and certain internally created effects.
         bool enforceES2Restrictions = true;
     };
 
@@ -214,10 +220,11 @@ public:
 
 private:
     enum Flags {
-        kUsesSampleCoords_Flag = 0x1,
-        kAllowColorFilter_Flag = 0x2,
-        kAllowShader_Flag      = 0x4,
-        kAllowBlender_Flag     = 0x8,
+        kUsesSampleCoords_Flag   = 0x1,
+        kAllowColorFilter_Flag   = 0x2,
+        kAllowShader_Flag        = 0x4,
+        kAllowBlender_Flag       = 0x8,
+        kSamplesOutsideMain_Flag = 0x10,
     };
 
     SkRuntimeEffect(std::unique_ptr<SkSL::Program> baseProgram,
@@ -237,10 +244,11 @@ private:
                        SkSL::ProgramKind kind);
 
     uint32_t hash() const { return fHash; }
-    bool usesSampleCoords() const { return (fFlags & kUsesSampleCoords_Flag); }
-    bool allowShader()      const { return (fFlags & kAllowShader_Flag);      }
-    bool allowColorFilter() const { return (fFlags & kAllowColorFilter_Flag); }
-    bool allowBlender()     const { return (fFlags & kAllowBlender_Flag);     }
+    bool usesSampleCoords()   const { return (fFlags & kUsesSampleCoords_Flag); }
+    bool allowShader()        const { return (fFlags & kAllowShader_Flag);      }
+    bool allowColorFilter()   const { return (fFlags & kAllowColorFilter_Flag); }
+    bool allowBlender()       const { return (fFlags & kAllowBlender_Flag);     }
+    bool samplesOutsideMain() const { return (fFlags & kSamplesOutsideMain_Flag); }
 
     const SkFilterColorProgram* getFilterColorProgram();
 
