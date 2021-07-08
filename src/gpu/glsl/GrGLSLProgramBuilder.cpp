@@ -14,6 +14,7 @@
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrShaderCaps.h"
 #include "src/gpu/GrTexture.h"
+#include "src/gpu/effects/GrTextureEffect.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
 #include "src/gpu/glsl/GrGLSLVarying.h"
@@ -381,12 +382,17 @@ void GrGLSLProgramBuilder::appendUniformDecls(GrShaderFlags visibility, SkString
     this->uniformHandler()->appendUniformDecls(visibility, out);
 }
 
-void GrGLSLProgramBuilder::addRTHeightUniform(const char* name) {
-    SkASSERT(!fUniformHandles.fRTHeightUni.isValid());
+void GrGLSLProgramBuilder::addRTFlipUniform(const char* name) {
+    SkASSERT(!fUniformHandles.fRTFlipUni.isValid());
     GrGLSLUniformHandler* uniformHandler = this->uniformHandler();
-    fUniformHandles.fRTHeightUni =
-            uniformHandler->internalAddUniformArray(nullptr, kFragment_GrShaderFlag, kHalf_GrSLType,
-                                                    name, false, 0, nullptr);
+    fUniformHandles.fRTFlipUni =
+            uniformHandler->internalAddUniformArray(nullptr,
+                                                    kFragment_GrShaderFlag,
+                                                    kHalf2_GrSLType,
+                                                    name,
+                                                    false,
+                                                    0,
+                                                    nullptr);
 }
 
 void GrGLSLProgramBuilder::finalizeShaders() {

@@ -11,7 +11,7 @@
 #include "include/core/SkSpan.h"
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/SkBaseGpuDevice.h"
+#include "src/gpu/BaseDevice.h"
 
 class GrAtlasManager;
 class GrBackendFormat;
@@ -105,8 +105,7 @@ public:
     bool validPMUPMConversionExists();
 
     /**
-     * These functions create premul <-> unpremul effects, using the specialized round-trip effects
-     * from GrConfigConversionEffect.
+     * These functions create premul <-> unpremul effects, using specialized round-trip effects.
      */
     std::unique_ptr<GrFragmentProcessor> createPMToUPMEffect(std::unique_ptr<GrFragmentProcessor>);
     std::unique_ptr<GrFragmentProcessor> createUPMToPMEffect(std::unique_ptr<GrFragmentProcessor>);
@@ -146,21 +145,21 @@ public:
         return fContext->fMappedBufferManager.get();
     }
 
-    sk_sp<SkBaseGpuDevice> createDevice(GrColorType,
-                                        sk_sp<GrSurfaceProxy>,
-                                        sk_sp<SkColorSpace>,
-                                        GrSurfaceOrigin,
-                                        const SkSurfaceProps&,
-                                        SkBaseGpuDevice::InitContents);
-    sk_sp<SkBaseGpuDevice> createDevice(SkBudgeted,
-                                        const SkImageInfo&,
-                                        SkBackingFit,
-                                        int sampleCount,
-                                        GrMipmapped,
-                                        GrProtected,
-                                        GrSurfaceOrigin,
-                                        const SkSurfaceProps&,
-                                        SkBaseGpuDevice::InitContents);
+    sk_sp<skgpu::BaseDevice> createDevice(GrColorType,
+                                          sk_sp<GrSurfaceProxy>,
+                                          sk_sp<SkColorSpace>,
+                                          GrSurfaceOrigin,
+                                          const SkSurfaceProps&,
+                                          skgpu::BaseDevice::InitContents);
+    sk_sp<skgpu::BaseDevice> createDevice(SkBudgeted,
+                                          const SkImageInfo&,
+                                          SkBackingFit,
+                                          int sampleCount,
+                                          GrMipmapped,
+                                          GrProtected,
+                                          GrSurfaceOrigin,
+                                          const SkSurfaceProps&,
+                                          skgpu::BaseDevice::InitContents);
 
 #if GR_TEST_UTILS
     /** Reset GPU stats */
