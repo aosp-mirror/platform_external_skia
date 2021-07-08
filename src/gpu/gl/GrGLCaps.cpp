@@ -232,12 +232,8 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         fDrawInstancedSupport =
                 version >= GR_GL_VER(3, 0) ||
                 (ctxInfo.hasExtension("GL_EXT_draw_instanced") &&
-                 ctxInfo.hasExtension("GL_EXT_instanced_arrays"));
-#ifndef GR_DISABLE_GL_ANGLE_instanced_arrays
-        fDrawInstancedSupport =
-                fDrawInstancedSupport ||
+                 ctxInfo.hasExtension("GL_EXT_instanced_arrays")) ||
                 ctxInfo.hasExtension("GL_ANGLE_instanced_arrays");
-#endif
     }  else if (GR_IS_GR_WEBGL(standard)) {
         // WebGL 2.0 has DrawArraysInstanced and drawElementsInstanced
         fDrawInstancedSupport = version >= GR_GL_VER(2, 0);
@@ -3792,6 +3788,11 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         fDrawArraysBaseVertexIsBroken = true;
     }
 
+    // https://b.corp.google.com/issues/188410972
+    if (ctxInfo.renderer() == GrGLRenderer::kVirgl) {
+        fDrawInstancedSupport = false;
+    }
+
     // http://anglebug.com/4538
     if (fBaseVertexBaseInstanceSupport && !fDrawInstancedSupport) {
         fBaseVertexBaseInstanceSupport = false;
@@ -4036,7 +4037,8 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         ctxInfo.renderer() == GrGLRenderer::kMaliT     ||  // Some curves appear flat on GalaxyS6.
         ctxInfo.renderer() == GrGLRenderer::kAdreno3xx ||
         ctxInfo.renderer() == GrGLRenderer::kAdreno430 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno4xx_other) {  // We get garbage on Adreno405.
+        ctxInfo.renderer() == GrGLRenderer::kAdreno4xx_other ||  // We get garbage on Adreno405.
+        ctxInfo.angleBackend() == GrGLANGLEBackend::kD3D9) {  // D3D9 conic strokes fail.
         fDisableTessellationPathRenderer = true;
     }
 

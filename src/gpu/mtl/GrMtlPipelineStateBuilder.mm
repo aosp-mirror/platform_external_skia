@@ -91,8 +91,8 @@ id<MTLLibrary> GrMtlPipelineStateBuilder::compileMtlShaderLibrary(
         const SkSL::String& shader, SkSL::Program::Inputs inputs,
         GrContextOptions::ShaderErrorHandler* errorHandler) {
     id<MTLLibrary> shaderLibrary = GrCompileMtlShaderLibrary(fGpu, shader, errorHandler);
-    if (shaderLibrary != nil && inputs.fRTHeight) {
-        this->addRTHeightUniform(SKSL_RTHEIGHT_NAME);
+    if (shaderLibrary != nil && inputs.fUseFlipRTUniform) {
+        this->addRTFlipUniform(SKSL_RTFLIP_NAME);
     }
     return shaderLibrary;
 }
@@ -400,6 +400,15 @@ static uint32_t buffer_size(uint32_t offset, uint32_t maxAlignment) {
 static MTLRenderPipelineDescriptor* read_pipeline_data(SkReadBuffer* reader) {
     auto pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
 
+#ifdef SK_ENABLE_MTL_DEBUG_INFO
+    // set label
+    {
+        SkString description;
+        reader->readString(&description);
+        pipelineDescriptor.label = @(description.c_str());
+    }
+#endif
+
     // set up vertex descriptor
     {
         auto vertexDescriptor = [[MTLVertexDescriptor alloc] init];
@@ -495,6 +504,16 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(
 
     // Ordering in how we set these matters. If it changes adjust read_pipeline_data, above.
     auto pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+#ifdef SK_ENABLE_MTL_DEBUG_INFO
+    SkString description = GrProgramDesc::Describe(programInfo, *fGpu->caps());
+    int split = description.find("\n");
+    description.resize(split);
+    pipelineDescriptor.label = @(description.c_str());
+    if (writer) {
+        writer->writeString(description.c_str());
+    }
+#endif
+
     pipelineDescriptor.vertexDescriptor = create_vertex_descriptor(programInfo.geomProc(),
                                                                    writer.get());
 
@@ -524,8 +543,8 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(
                 [precompiledLibs->fFragmentLibrary newFunctionWithName: @"fragmentMain"];
         SkASSERT(pipelineDescriptor.vertexFunction);
         SkASSERT(pipelineDescriptor.fragmentFunction);
-        if (precompiledLibs->fRTHeight) {
-            this->addRTHeightUniform(SKSL_RTHEIGHT_NAME);
+        if (precompiledLibs->fRTFlip) {
+            this->addRTFlipUniform(SKSL_RTFLIP_NAME);
         }
     } else {
         id<MTLLibrary> shaderLibraries[kGrShaderTypeCount];
@@ -538,7 +557,6 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(
         this->finalizeShaders();
 
         SkSL::Program::Settings settings;
-        settings.fFlipY = this->origin() != kTopLeft_GrSurfaceOrigin;
         settings.fSharpenTextures = fGpu->getContext()->priv().options().fSharpenMipmappedTextures;
         SkASSERT(!this->fragColorIsInOut());
 
@@ -685,6 +703,7 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(
         }
     }
 #endif
+
     id<MTLRenderPipelineState> pipelineState;
     {
         TRACE_EVENT0("skia.shaders", "newRenderPipelineStateWithDescriptor");
@@ -832,7 +851,7 @@ bool GrMtlPipelineStateBuilder::PrecompileShaders(GrMtlGpu* gpu, const SkData& c
                                           completionHandler: completionHandler];
     }
 
-    precompiledLibs->fRTHeight = inputs[kFragment_GrShaderType].fRTHeight;
+    precompiledLibs->fRTFlip = inputs[kFragment_GrShaderType].fUseFlipRTUniform;
     return true;
 }
 

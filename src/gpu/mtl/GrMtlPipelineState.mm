@@ -10,6 +10,7 @@
 #include "src/gpu/GrPipeline.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrTexture.h"
+#include "src/gpu/effects/GrTextureEffect.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
 #include "src/gpu/glsl/GrGLSLXferProcessor.h"
@@ -107,11 +108,9 @@ void GrMtlPipelineState::setTextures(const GrGeometryProcessor& geomProc,
 void GrMtlPipelineState::setDrawState(GrMtlRenderCommandEncoder* renderCmdEncoder,
                                       const GrSwizzle& writeSwizzle,
                                       const GrXferProcessor& xferProcessor) {
-    renderCmdEncoder->pushDebugGroup(@"setDrawState");
     this->bindUniforms(renderCmdEncoder);
     this->setBlendConstants(renderCmdEncoder, writeSwizzle, xferProcessor);
     this->setDepthStencilState(renderCmdEncoder);
-    renderCmdEncoder->popDebugGroup();
 }
 
 void GrMtlPipelineState::bindUniforms(GrMtlRenderCommandEncoder* renderCmdEncoder) {
@@ -127,13 +126,7 @@ void GrMtlPipelineState::bindTextures(GrMtlRenderCommandEncoder* renderCmdEncode
 }
 
 void GrMtlPipelineState::setRenderTargetState(const GrRenderTarget* rt, GrSurfaceOrigin origin) {
-    // Load the RT height uniform if it is needed to y-flip gl_FragCoord.
-    if (fBuiltinUniformHandles.fRTHeightUni.isValid() &&
-        fRenderTargetState.fRenderTargetSize.fHeight != rt->height()) {
-        fDataManager.set1f(fBuiltinUniformHandles.fRTHeightUni, SkIntToScalar(rt->height()));
-    }
-
-    // set RT adjustment
+    // Set RT adjustment and RT flip
     SkISize dimensions = rt->dimensions();
     SkASSERT(fBuiltinUniformHandles.fRTAdjustmentUni.isValid());
     if (fRenderTargetState.fRenderTargetOrigin != origin ||
@@ -147,6 +140,11 @@ void GrMtlPipelineState::setRenderTargetState(const GrRenderTarget* rt, GrSurfac
         bool flip = (origin == kTopLeft_GrSurfaceOrigin);
         std::array<float, 4> v = SkSL::Compiler::GetRTAdjustVector(dimensions, flip);
         fDataManager.set4fv(fBuiltinUniformHandles.fRTAdjustmentUni, 1, v.data());
+        if (fBuiltinUniformHandles.fRTFlipUni.isValid()) {
+            // Note above that framebuffer space has origin top left. So we need !flip here.
+            std::array<float, 2> d = SkSL::Compiler::GetRTFlipVector(rt->height(), !flip);
+            fDataManager.set2fv(fBuiltinUniformHandles.fRTFlipUni, 1, d.data());
+        }
     }
 }
 

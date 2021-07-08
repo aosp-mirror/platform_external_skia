@@ -15,6 +15,7 @@
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrVx.h"
+#include "src/gpu/effects/GrDisableColorXP.h"
 #include "src/gpu/geometry/GrStyledShape.h"
 #include "src/gpu/tessellate/GrAtlasRenderTask.h"
 #include "src/gpu/tessellate/GrDrawAtlasPathOp.h"
@@ -38,7 +39,9 @@ constexpr static int kAtlasMaxPathHeight = 128;
 bool GrTessellationPathRenderer::IsSupported(const GrCaps& caps) {
     return !caps.avoidStencilBuffers() &&
            caps.drawInstancedSupport() &&
+#ifdef GR_DISABLE_TESSELLATION_ON_ES2
            caps.shaderCaps()->integerSupport() &&
+#endif
            GrTessellationShader::SupportsPortableInfinity(*caps.shaderCaps()) &&
            !caps.disableTessellationPathRenderer();
 }
