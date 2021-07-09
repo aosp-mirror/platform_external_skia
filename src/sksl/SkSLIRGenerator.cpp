@@ -260,28 +260,11 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
                 offset,
                 "variables of type '" + baseType->displayName() + "' must be global");
     }
-    if (this->programKind() != ProgramKind::kFragmentProcessor) {
-        if ((modifiers.fFlags & Modifiers::kIn_Flag) && baseType->isMatrix()) {
-            this->errorReporter().error(offset, "'in' variables may not have matrix type");
-        }
-        if ((modifiers.fFlags & Modifiers::kIn_Flag) &&
-            (modifiers.fFlags & Modifiers::kUniform_Flag)) {
-            this->errorReporter().error(
-                    offset,
-                    "'in uniform' variables only permitted within fragment processors");
-        }
-        if (modifiers.fLayout.fWhen.length()) {
-            this->errorReporter().error(offset,
-                                        "'when' is only permitted within fragment processors");
-        }
-        if (modifiers.fLayout.fCType != Layout::CType::kDefault) {
-            this->errorReporter().error(offset,
-                                        "'ctype' is only permitted within fragment processors");
-        }
-        if (modifiers.fLayout.fFlags & Layout::kKey_Flag) {
-            this->errorReporter().error(offset,
-                                        "'key' is only permitted within fragment processors");
-        }
+    if ((modifiers.fFlags & Modifiers::kIn_Flag) && baseType->isMatrix()) {
+        this->errorReporter().error(offset, "'in' variables may not have matrix type");
+    }
+    if ((modifiers.fFlags & Modifiers::kIn_Flag) && (modifiers.fFlags & Modifiers::kUniform_Flag)) {
+        this->errorReporter().error(offset, "'in uniform' variables not permitted");
     }
     if (this->programKind() == ProgramKind::kRuntimeColorFilter ||
         this->programKind() == ProgramKind::kRuntimeShader) {
@@ -292,10 +275,6 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
     if (baseType->isEffectChild() && !(modifiers.fFlags & Modifiers::kUniform_Flag)) {
         this->errorReporter().error(
                 offset, "variables of type '" + baseType->displayName() + "' must be uniform");
-    }
-    if ((modifiers.fLayout.fFlags & Layout::kKey_Flag) &&
-        (modifiers.fFlags & Modifiers::kUniform_Flag)) {
-        this->errorReporter().error(offset, "'key' is not permitted on 'uniform' variables");
     }
     if (modifiers.fLayout.fFlags & Layout::kSRGBUnpremul_Flag) {
         if (this->programKind() != ProgramKind::kRuntimeColorFilter &&
@@ -663,8 +642,7 @@ std::unique_ptr<Statement> IRGenerator::convertContinue(const ASTNode& c) {
 
 std::unique_ptr<Statement> IRGenerator::convertDiscard(const ASTNode& d) {
     SkASSERT(d.fKind == ASTNode::Kind::kDiscard);
-    if (this->programKind() != ProgramKind::kFragment &&
-        this->programKind() != ProgramKind::kFragmentProcessor) {
+    if (this->programKind() != ProgramKind::kFragment) {
         this->errorReporter().error(d.fOffset,
                                     "discard statement is only permitted in fragment shaders");
         return nullptr;
@@ -708,8 +686,8 @@ std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
 
     const Variable* skPerVertex = nullptr;
     if (const ProgramElement* perVertexDecl = fIntrinsics->find(Compiler::PERVERTEX_NAME)) {
-        SkASSERT(perVertexDecl->is<InterfaceBlock>());
-        skPerVertex = &perVertexDecl->as<InterfaceBlock>().variable();
+        SkASSERT(perVertexDecl->is<SkSL::InterfaceBlock>());
+        skPerVertex = &perVertexDecl->as<SkSL::InterfaceBlock>().variable();
     }
 
     SkASSERT(skPerVertex && fRTAdjust);
@@ -780,7 +758,6 @@ void IRGenerator::CheckModifiers(const Context& context,
     checkLayout(Layout::kPushConstant_Flag,             "push_constant");
     checkLayout(Layout::kBlendSupportAllEquations_Flag, "blend_support_all_equations");
     checkLayout(Layout::kSRGBUnpremul_Flag,             "srgb_unpremul");
-    checkLayout(Layout::kKey_Flag,                      "key");
     checkLayout(Layout::kLocation_Flag,                 "location");
     checkLayout(Layout::kOffset_Flag,                   "offset");
     checkLayout(Layout::kBinding_Flag,                  "binding");
@@ -791,8 +768,6 @@ void IRGenerator::CheckModifiers(const Context& context,
     checkLayout(Layout::kPrimitive_Flag,                "primitive-type");
     checkLayout(Layout::kMaxVertices_Flag,              "max_vertices");
     checkLayout(Layout::kInvocations_Flag,              "invocations");
-    checkLayout(Layout::kWhen_Flag,                     "when");
-    checkLayout(Layout::kCType_Flag,                    "ctype");
     SkASSERT(layoutFlags == 0);
 }
 
@@ -1015,7 +990,7 @@ std::unique_ptr<StructDefinition> IRGenerator::convertStructDefinition(const AST
     return std::make_unique<StructDefinition>(node.fOffset, *type);
 }
 
-std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode& intf) {
+std::unique_ptr<SkSL::InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode& intf) {
     if (this->programKind() != ProgramKind::kFragment &&
         this->programKind() != ProgramKind::kVertex &&
         this->programKind() != ProgramKind::kGeometry) {
@@ -1097,12 +1072,12 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
             old->add(std::make_unique<Field>(intf.fOffset, var, (int)i));
         }
     }
-    return std::make_unique<InterfaceBlock>(intf.fOffset,
-                                            var,
-                                            String(id.fTypeName),
-                                            String(id.fInstanceName),
-                                            arraySize,
-                                            symbols);
+    return std::make_unique<SkSL::InterfaceBlock>(intf.fOffset,
+                                                  var,
+                                                  String(id.fTypeName),
+                                                  String(id.fInstanceName),
+                                                  arraySize,
+                                                  symbols);
 }
 
 void IRGenerator::convertGlobalVarDeclarations(const ASTNode& decl) {
@@ -1277,30 +1252,6 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, skstd::st
                     fInputs.fUseFlipRTUniform = true;
                     break;
             }
-            if (this->programKind() == ProgramKind::kFragmentProcessor &&
-                (modifiers.fFlags & Modifiers::kIn_Flag) &&
-                !(modifiers.fFlags & Modifiers::kUniform_Flag) &&
-                !(modifiers.fLayout.fFlags & Layout::kKey_Flag) &&
-                modifiers.fLayout.fBuiltin == -1 &&
-                !var->type().isFragmentProcessor() &&
-                var->type().typeKind() != Type::TypeKind::kSampler) {
-                bool valid = false;
-                for (const auto& decl : fFile->root()) {
-                    if (decl.fKind == ASTNode::Kind::kSection) {
-                        const ASTNode::SectionData& section = decl.getSectionData();
-                        if (section.fName == "setData") {
-                            valid = true;
-                            break;
-                        }
-                    }
-                }
-                if (!valid) {
-                    this->errorReporter().error(
-                            offset,
-                            "'in' variable must be either 'uniform' or 'layout(key)', or there "
-                            "must be a custom @setData function");
-                }
-            }
             // default to kRead_RefKind; this will be corrected later if the variable is written to
             return VariableReference::Make(offset, var, VariableReference::RefKind::kRead);
         }
@@ -1326,16 +1277,6 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, skstd::st
 
 std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identifier) {
     return this->convertIdentifier(identifier.fOffset, identifier.getStringView());
-}
-
-std::unique_ptr<Section> IRGenerator::convertSection(const ASTNode& s) {
-    if (this->programKind() != ProgramKind::kFragmentProcessor) {
-        this->errorReporter().error(s.fOffset, "syntax error");
-        return nullptr;
-    }
-
-    const ASTNode::SectionData& section = s.getSectionData();
-    return std::make_unique<Section>(s.fOffset, section.fName, section.fArgument, section.fText);
 }
 
 std::unique_ptr<Expression> IRGenerator::coerce(std::unique_ptr<Expression> expr,
@@ -1769,7 +1710,7 @@ void IRGenerator::findAndDeclareBuiltinVariables() {
             // If this is the *first* time we've seen this builtin, findAndInclude will return
             // the corresponding ProgramElement.
             if (const ProgramElement* decl = fGenerator->fIntrinsics->findAndInclude(name)) {
-                SkASSERT(decl->is<GlobalVarDeclaration>() || decl->is<InterfaceBlock>());
+                SkASSERT(decl->is<GlobalVarDeclaration>() || decl->is<SkSL::InterfaceBlock>());
                 fNewElements.push_back(decl);
             }
         }
@@ -1979,7 +1920,7 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
                     break;
                 }
                 case ASTNode::Kind::kInterfaceBlock: {
-                    std::unique_ptr<InterfaceBlock> i = this->convertInterfaceBlock(decl);
+                    std::unique_ptr<SkSL::InterfaceBlock> i = this->convertInterfaceBlock(decl);
                     if (i) {
                         fProgramElements->push_back(std::move(i));
                     }
@@ -1990,13 +1931,6 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
                                                                           decl.getStringView());
                     if (e) {
                         fProgramElements->push_back(std::move(e));
-                    }
-                    break;
-                }
-                case ASTNode::Kind::kSection: {
-                    std::unique_ptr<Section> s = this->convertSection(decl);
-                    if (s) {
-                        fProgramElements->push_back(std::move(s));
                     }
                     break;
                 }
