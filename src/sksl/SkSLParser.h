@@ -48,12 +48,7 @@ public:
         TRIANGLES_ADJACENCY,
         MAX_VERTICES,
         INVOCATIONS,
-        WHEN,
-        KEY,
         SRGB_UNPREMUL,
-        CTYPE,
-        SKPMCOLOR4F,
-        SKV4,
     };
 
     Parser(skstd::string_view text, SymbolTable& symbols, ErrorReporter& errors);
@@ -146,10 +141,6 @@ private:
 
     ASTNode::ID directive();
 
-    ASTNode::ID section();
-
-    ASTNode::ID enumDeclaration();
-
     ASTNode::ID declaration();
 
     ASTNode::ID functionDeclarationEnd(Modifiers modifiers, ASTNode::ID type, const Token& name);
@@ -177,10 +168,6 @@ private:
     int layoutInt();
 
     skstd::string_view layoutIdentifier();
-
-    skstd::string_view layoutCode();
-
-    Layout::CType layoutCType();
 
     Layout layout();
 

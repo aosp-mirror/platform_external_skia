@@ -90,9 +90,6 @@ String MetalCodeGenerator::typeName(const Type& type) {
         case Type::TypeKind::kSampler:
             return "texture2d<float>"; // FIXME - support other texture types
 
-        case Type::TypeKind::kEnum:
-            return "int";
-
         default:
             if (type == *fContext.fTypes.fHalf) {
                 // FIXME - Currently only supporting floats in MSL to avoid type coercion issues.
@@ -839,23 +836,23 @@ void MetalCodeGenerator::assembleMatrixFromMatrix(const Type& sourceMatrix, int 
     fExtraFunctions.writeText(")");
 }
 
-// Assembles a matrix of type floatRxC by concatenating an arbitrary mix of values, named `x0`,
-// `x1`, etc. An error is written if the expression list don't contain exactly R*C scalars.
+// Assembles a matrix of type floatCxR by concatenating an arbitrary mix of values, named `x0`,
+// `x1`, etc. An error is written if the expression list don't contain exactly C*R scalars.
 void MetalCodeGenerator::assembleMatrixFromExpressions(const AnyConstructor& ctor,
-                                                       int rows, int columns) {
+                                                       int columns, int rows) {
     size_t argIndex = 0;
     int argPosition = 0;
     auto args = ctor.argumentSpan();
 
-    const char* columnSeparator = "";
-    for (int c = 0; c < columns; ++c) {
-        fExtraFunctions.printf("%sfloat%d(", columnSeparator, rows);
-        columnSeparator = "), ";
+    const char* rowSeparator = "";
+    for (int r = 0; r < rows; ++r) {
+        fExtraFunctions.printf("%sfloat%d(", rowSeparator, rows);
+        rowSeparator = "), ";
 
-        const char* rowSeparator = "";
-        for (int r = 0; r < rows; ++r) {
-            fExtraFunctions.writeText(rowSeparator);
-            rowSeparator = ", ";
+        const char* columnSeparator = "";
+        for (int c = 0; c < columns; ++c) {
+            fExtraFunctions.writeText(columnSeparator);
+            columnSeparator = ", ";
 
             if (argIndex < args.size()) {
                 const Type& argType = args[argIndex]->type();
@@ -942,7 +939,7 @@ String MetalCodeGenerator::getMatrixConstructHelper(const AnyConstructor& c) {
     if (args.size() == 1 && args.front()->type().isMatrix()) {
         this->assembleMatrixFromMatrix(args.front()->type(), rows, columns);
     } else {
-        this->assembleMatrixFromExpressions(c, rows, columns);
+        this->assembleMatrixFromExpressions(c, columns, rows);
     }
 
     fExtraFunctions.writeText(");\n}\n");
@@ -1015,15 +1012,55 @@ void MetalCodeGenerator::writeConstructorMatrixResize(const ConstructorMatrixRes
 
 void MetalCodeGenerator::writeConstructorCompound(const ConstructorCompound& c,
                                                   Precedence parentPrecedence) {
-    if (c.type().isMatrix()) {
+    if (c.type().isVector()) {
+        this->writeConstructorCompoundVector(c, parentPrecedence);
+    } else if (c.type().isMatrix()) {
         this->writeConstructorCompoundMatrix(c, parentPrecedence);
     } else {
-        this->writeAnyConstructor(c, "(", ")", parentPrecedence);
+        fErrors.error(c.fOffset, "unsupported compound constructor");
     }
+}
+
+void MetalCodeGenerator::writeVectorFromMat2x2ConstructorHelper() {
+    static constexpr char kCode[] =
+R"(float4 float4_from_float2x2(float2x2 x) {
+    return float4(x[0].xy, x[1].xy);
+}
+)";
+
+    String name = "matrixCompMult";
+    if (fHelpers.find("float4_from_float2x2") == fHelpers.end()) {
+        fHelpers.insert("float4_from_float2x2");
+        fExtraFunctions.writeText(kCode);
+    }
+}
+
+void MetalCodeGenerator::writeConstructorCompoundVector(const ConstructorCompound& c,
+                                                        Precedence parentPrecedence) {
+    SkASSERT(c.type().isVector());
+
+    // Metal supports constructing vectors from a mix of scalars and vectors, but not matrices.
+    // GLSL supports vec4(mat2x2), so we detect that case here and emit a helper function.
+    if (c.type().columns() == 4 && c.argumentSpan().size() == 1) {
+        const Expression& expr = *c.argumentSpan().front();
+        if (expr.type().isMatrix()) {
+            SkASSERT(expr.type().rows() == 2);
+            SkASSERT(expr.type().columns() == 2);
+            this->writeVectorFromMat2x2ConstructorHelper();
+            this->write("float4_from_float2x2(");
+            this->writeExpression(expr, Precedence::kSequence);
+            this->write(")");
+            return;
+        }
+    }
+
+    this->writeAnyConstructor(c, "(", ")", parentPrecedence);
 }
 
 void MetalCodeGenerator::writeConstructorCompoundMatrix(const ConstructorCompound& c,
                                                         Precedence parentPrecedence) {
+    SkASSERT(c.type().isMatrix());
+
     // Emit and invoke a matrix-constructor helper method if one is necessary.
     if (this->matrixConstructHelperIsNeeded(c)) {
         this->write(this->getMatrixConstructHelper(c));
@@ -2330,8 +2367,6 @@ void MetalCodeGenerator::writeProgramElement(const ProgramElement& e) {
         case ProgramElement::Kind::kModifiers:
             this->writeModifiers(e.as<ModifiersDeclaration>().modifiers());
             this->writeLine(";");
-            break;
-        case ProgramElement::Kind::kEnum:
             break;
         default:
             SkDEBUGFAILF("unsupported program element: %s\n", e.description().c_str());

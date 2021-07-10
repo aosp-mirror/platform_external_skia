@@ -18,7 +18,6 @@
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/codegen/SkSLPipelineStageCodeGenerator.h"
 #include "src/sksl/codegen/SkSLVMCodeGenerator.h"
-#include "src/sksl/ir/SkSLEnum.h"
 #include "src/sksl/ir/SkSLUnresolvedFunction.h"
 
 #include "spirv-tools/libspirv.hpp"
@@ -278,8 +277,6 @@ ResultCode processCommand(std::vector<SkSL::String>& args) {
         kind = SkSL::ProgramKind::kFragment;
     } else if (inputPath.ends_with(".geom")) {
         kind = SkSL::ProgramKind::kGeometry;
-    } else if (inputPath.ends_with(".fp")) {
-        kind = SkSL::ProgramKind::kFragmentProcessor;
     } else if (inputPath.ends_with(".rtb")) {
         kind = SkSL::ProgramKind::kRuntimeBlender;
     } else if (inputPath.ends_with(".rtcf")) {
@@ -287,7 +284,7 @@ ResultCode processCommand(std::vector<SkSL::String>& args) {
     } else if (inputPath.ends_with(".rts")) {
         kind = SkSL::ProgramKind::kRuntimeShader;
     } else {
-        printf("input filename must end in '.vert', '.frag', '.geom', '.fp', '.rtb', '.rtcf', "
+        printf("input filename must end in '.vert', '.frag', '.geom', '.rtb', '.rtcf', "
                "'.rts', or '.sksl'\n");
         return ResultCode::kInputError;
     }
@@ -381,28 +378,6 @@ ResultCode processCommand(std::vector<SkSL::String>& args) {
         return compileProgram(
                 [](SkSL::Compiler& compiler, SkSL::Program& program, SkSL::OutputStream& out) {
                     return compiler.toMetal(program, out);
-                });
-    } else if (outputPath.ends_with(".h")) {
-        settings.fReplaceSettings = false;
-        settings.fPermitInvalidStaticTests = true;
-        return compileProgram(
-                [&](SkSL::Compiler& compiler, SkSL::Program& program, SkSL::OutputStream& out) {
-                    return compiler.toH(program, base_name(inputPath.c_str(), "Gr", ".fp"), out);
-                });
-    } else if (outputPath.ends_with(".dsl.cpp")) {
-        settings.fReplaceSettings = false;
-        settings.fPermitInvalidStaticTests = true;
-        return compileProgram(
-                [&](SkSL::Compiler& compiler, SkSL::Program& program, SkSL::OutputStream& out) {
-                    return compiler.toDSLCPP(program, base_name(inputPath.c_str(), "Gr", ".fp"),
-                                             out);
-                });
-    } else if (outputPath.ends_with(".cpp")) {
-        settings.fReplaceSettings = false;
-        settings.fPermitInvalidStaticTests = true;
-        return compileProgram(
-                [&](SkSL::Compiler& compiler, SkSL::Program& program, SkSL::OutputStream& out) {
-                    return compiler.toCPP(program, base_name(inputPath.c_str(), "Gr", ".fp"), out);
                 });
     } else if (outputPath.ends_with(".skvm")) {
         return compileProgram(

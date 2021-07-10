@@ -19,16 +19,12 @@
 #include "src/sksl/SkSLOperators.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLRehydrator.h"
-#include "src/sksl/codegen/SkSLCPPCodeGenerator.h"
-#include "src/sksl/codegen/SkSLDSLCPPCodeGenerator.h"
 #include "src/sksl/codegen/SkSLGLSLCodeGenerator.h"
-#include "src/sksl/codegen/SkSLHCodeGenerator.h"
 #include "src/sksl/codegen/SkSLMetalCodeGenerator.h"
 #include "src/sksl/codegen/SkSLSPIRVCodeGenerator.h"
 #include "src/sksl/codegen/SkSLSPIRVtoHLSL.h"
 #include "src/sksl/dsl/priv/DSLWriter.h"
 #include "src/sksl/dsl/priv/DSL_priv.h"
-#include "src/sksl/ir/SkSLEnum.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLFunctionCall.h"
@@ -61,7 +57,6 @@
 #else
 
 // At runtime, we load the dehydrated sksl data files. The data is a (pointer, size) pair.
-#include "src/sksl/generated/sksl_fp.dehydrated.sksl"
 #include "src/sksl/generated/sksl_frag.dehydrated.sksl"
 #include "src/sksl/generated/sksl_geom.dehydrated.sksl"
 #include "src/sksl/generated/sksl_gpu.dehydrated.sksl"
@@ -186,8 +181,6 @@ Compiler::Compiler(const ShaderCapsClass* caps)
 
         TYPE(Sampler),
         TYPE(Texture2D),
-
-        TYPE(FragmentProcessor),
     };
 
     for (const SkSL::Symbol* type : rootTypes) {
@@ -243,14 +236,6 @@ const ParsedModule& Compiler::loadGeometryModule() {
                                             this->loadGPUModule());
     }
     return fGeometryModule;
-}
-
-const ParsedModule& Compiler::loadFPModule() {
-    if (!fFPModule.fSymbols) {
-        fFPModule = this->parseModule(ProgramKind::kFragmentProcessor, MODULE_DATA(fp),
-                                      this->loadGPUModule());
-    }
-    return fFPModule;
 }
 
 const ParsedModule& Compiler::loadPublicModule() {
@@ -312,7 +297,6 @@ const ParsedModule& Compiler::moduleForProgramKind(ProgramKind kind) {
         case ProgramKind::kVertex:             return this->loadVertexModule();             break;
         case ProgramKind::kFragment:           return this->loadFragmentModule();           break;
         case ProgramKind::kGeometry:           return this->loadGeometryModule();           break;
-        case ProgramKind::kFragmentProcessor:  return this->loadFPModule();                 break;
         case ProgramKind::kRuntimeColorFilter: return this->loadRuntimeColorFilterModule(); break;
         case ProgramKind::kRuntimeShader:      return this->loadRuntimeShaderModule();      break;
         case ProgramKind::kRuntimeBlender:     return this->loadRuntimeBlenderModule();     break;
@@ -404,12 +388,6 @@ ParsedModule Compiler::parseModule(ProgramKind kind, ModuleData data, const Pars
             }
             case ProgramElement::Kind::kFunctionPrototype: {
                 // These are already in the symbol table.
-                break;
-            }
-            case ProgramElement::Kind::kEnum: {
-                const Enum& e = element->as<Enum>();
-                SkASSERT(e.isBuiltin());
-                intrinsics->insertOrDie(String(e.typeName()), std::move(element));
                 break;
             }
             case ProgramElement::Kind::kGlobalVar: {
@@ -878,9 +856,7 @@ bool Compiler::optimize(Program& program) {
         // Unreachable code can confuse some drivers, so it's worth removing. (skia:12012)
         this->removeUnreachableCode(program, usage);
 
-        if (program.fConfig->fKind != ProgramKind::kFragmentProcessor) {
-            this->removeDeadGlobalVariables(program, usage);
-        }
+        this->removeDeadGlobalVariables(program, usage);
     }
 
     if (fErrorCount == 0) {
@@ -992,29 +968,6 @@ bool Compiler::toMetal(Program& program, String* out) {
     }
     return result;
 }
-
-#if defined(SKSL_STANDALONE) || GR_TEST_UTILS
-bool Compiler::toCPP(Program& program, String name, OutputStream& out) {
-    AutoSource as(this, program.fSource.get());
-    CPPCodeGenerator cg(fContext.get(), &program, this, name, &out);
-    bool result = cg.generateCode();
-    return result;
-}
-
-bool Compiler::toDSLCPP(Program& program, String name, OutputStream& out) {
-    AutoSource as(this, program.fSource.get());
-    DSLCPPCodeGenerator cg(fContext.get(), &program, this, name, &out);
-    bool result = cg.generateCode();
-    return result;
-}
-
-bool Compiler::toH(Program& program, String name, OutputStream& out) {
-    AutoSource as(this, program.fSource.get());
-    HCodeGenerator cg(fContext.get(), &program, this, name, &out);
-    bool result = cg.generateCode();
-    return result;
-}
-#endif // defined(SKSL_STANDALONE) || GR_TEST_UTILS
 
 #endif // defined(SKSL_STANDALONE) || SK_SUPPORT_GPU
 

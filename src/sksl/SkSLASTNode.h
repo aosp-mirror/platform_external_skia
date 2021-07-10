@@ -67,10 +67,6 @@ struct ASTNode {
         kDiscard,
         // children: statement, test
         kDo,
-        // data: name(string_view), children: enumCases
-        kEnum,
-        // data: name(string_view), children: value?
-        kEnumCase,
         // data: name(string_view)
         kExtension,
         // data: field(string_view), children: base
@@ -104,10 +100,6 @@ struct ASTNode {
         kPrefix,
         // children: value
         kReturn,
-        // data: field(string_view), children: base
-        kScope,
-        // ...
-        kSection,
         // children: value, statement 1, statement 2...
         kSwitchCase,
         // children: value, case 1, case 2...
@@ -237,19 +229,6 @@ struct ASTNode {
         bool fIsArray;
     };
 
-    struct SectionData {
-        SectionData() {}
-
-        SectionData(skstd::string_view name, skstd::string_view argument, skstd::string_view text)
-            : fName(name)
-            , fArgument(argument)
-            , fText(text) {}
-
-        skstd::string_view fName;
-        skstd::string_view fArgument;
-        skstd::string_view fText;
-    };
-
     struct NodeData {
         // We use fBytes as a union which can hold any type of AST node, and use placement-new to
         // copy AST objects into fBytes. Note that none of the AST objects have interesting
@@ -263,8 +242,7 @@ struct ASTNode {
                               sizeof(FunctionData),
                               sizeof(ParameterData),
                               sizeof(VarData),
-                              sizeof(InterfaceBlockData),
-                              sizeof(SectionData)})];
+                              sizeof(InterfaceBlockData)})];
 
         enum class Kind {
             kOperator,
@@ -277,7 +255,6 @@ struct ASTNode {
             kParameterData,
             kVarData,
             kInterfaceBlockData,
-            kSectionData
         } fKind;
 
         NodeData() = default;
@@ -331,11 +308,6 @@ struct ASTNode {
             : fKind(Kind::kInterfaceBlockData) {
             new (fBytes) InterfaceBlockData(data);
         }
-
-        NodeData(const SectionData& data)
-            : fKind(Kind::kSectionData) {
-            new (fBytes) SectionData(data);
-        }
     };
 
     ASTNode()
@@ -360,12 +332,9 @@ struct ASTNode {
                 fData.fKind = NodeData::Kind::kBool;
                 break;
 
-            case Kind::kEnum:
-            case Kind::kEnumCase:
             case Kind::kExtension:
             case Kind::kField:
             case Kind::kIdentifier:
-            case Kind::kScope:
             case Kind::kType:
                 fData.fKind = NodeData::Kind::kStringView;
                 break;
@@ -445,12 +414,6 @@ struct ASTNode {
         , fOffset(offset)
         , fKind(kind) {}
 
-    ASTNode(std::vector<ASTNode>* nodes, int offset, Kind kind, SectionData s)
-        : fNodes(nodes)
-        , fData(s)
-        , fOffset(offset)
-        , fKind(kind) {}
-
     operator bool() const {
         return fKind != Kind::kNull;
     }
@@ -523,11 +486,6 @@ struct ASTNode {
 
     void setInterfaceBlockData(const ASTNode::InterfaceBlockData& id) {
         new (fData.fBytes) InterfaceBlockData(id);
-    }
-
-    const SectionData& getSectionData() const {
-        SkASSERT(fData.fKind == NodeData::Kind::kSectionData);
-        return *reinterpret_cast<const SectionData*>(fData.fBytes);
     }
 
     void addChild(ID id) {
