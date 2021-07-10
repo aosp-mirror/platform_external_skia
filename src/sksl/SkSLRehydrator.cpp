@@ -27,7 +27,6 @@
 #include "src/sksl/ir/SkSLContinueStatement.h"
 #include "src/sksl/ir/SkSLDiscardStatement.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
-#include "src/sksl/ir/SkSLEnum.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLField.h"
@@ -111,11 +110,9 @@ Layout Rehydrator::layout() {
             int primitive = this->readS8();
             int maxVertices = this->readS8();
             int invocations = this->readS8();
-            skstd::string_view when = this->readString();
-            int ctype = this->readS8();
             return Layout(flags, location, offset, binding, index, set, builtin,
                           inputAttachmentIndex, (Layout::Primitive)primitive, maxVertices,
-                          invocations, when, (Layout::CType)ctype);
+                          invocations);
         }
         default:
             SkASSERT(false);
@@ -158,14 +155,6 @@ const Symbol* Rehydrator::symbol() {
             }
             const Type* result = fSymbolTable->takeOwnershipOfSymbol(
                     Type::MakeArrayType(name, *componentType, count));
-            this->addSymbol(id, result);
-            return result;
-        }
-        case kEnumType_Command: {
-            uint16_t id = this->readU16();
-            skstd::string_view name = this->readString();
-            const Type* result =
-                    fSymbolTable->takeOwnershipOfSymbol(Type::MakeEnumType(String(name)));
             this->addSymbol(id, result);
             return result;
         }
@@ -289,23 +278,6 @@ std::vector<std::unique_ptr<ProgramElement>> Rehydrator::elements() {
 std::unique_ptr<ProgramElement> Rehydrator::element() {
     int kind = this->readU8();
     switch (kind) {
-        case Rehydrator::kEnum_Command: {
-            skstd::string_view typeName = this->readString();
-            std::shared_ptr<SymbolTable> symbols = this->symbolTable(/*inherit=*/false);
-            for (auto& s : symbols->fOwnedSymbols) {
-                SkASSERT(s->kind() == Symbol::Kind::kVariable);
-                Variable& v = (Variable&) *s;
-                int value = this->readS32();
-                // enum variables aren't really 'declared', but we have to create a declaration to
-                // store the value
-                auto valueLiteral = IntLiteral::Make(fContext, /*offset=*/-1, value);
-                auto declaration = VarDeclaration::Make(fContext, &v, &v.type(), /*arraySize=*/0,
-                                                        std::move(valueLiteral));
-                symbols->takeOwnershipOfIRNode(std::move(declaration));
-            }
-            return std::make_unique<Enum>(/*offset=*/-1, typeName, std::move(symbols),
-                                          /*isSharedWithCpp=*/true, /*isBuiltin=*/true);
-        }
         case Rehydrator::kFunctionDefinition_Command: {
             const FunctionDeclaration* decl = this->symbolRef<FunctionDeclaration>(
                                                                 Symbol::Kind::kFunctionDeclaration);

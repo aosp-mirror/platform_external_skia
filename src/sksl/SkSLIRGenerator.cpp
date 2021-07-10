@@ -29,7 +29,6 @@
 #include "src/sksl/ir/SkSLContinueStatement.h"
 #include "src/sksl/ir/SkSLDiscardStatement.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
-#include "src/sksl/ir/SkSLEnum.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLExternalFunctionCall.h"
 #include "src/sksl/ir/SkSLExternalFunctionReference.h"
@@ -260,28 +259,11 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
                 offset,
                 "variables of type '" + baseType->displayName() + "' must be global");
     }
-    if (this->programKind() != ProgramKind::kFragmentProcessor) {
-        if ((modifiers.fFlags & Modifiers::kIn_Flag) && baseType->isMatrix()) {
-            this->errorReporter().error(offset, "'in' variables may not have matrix type");
-        }
-        if ((modifiers.fFlags & Modifiers::kIn_Flag) &&
-            (modifiers.fFlags & Modifiers::kUniform_Flag)) {
-            this->errorReporter().error(
-                    offset,
-                    "'in uniform' variables only permitted within fragment processors");
-        }
-        if (modifiers.fLayout.fWhen.length()) {
-            this->errorReporter().error(offset,
-                                        "'when' is only permitted within fragment processors");
-        }
-        if (modifiers.fLayout.fCType != Layout::CType::kDefault) {
-            this->errorReporter().error(offset,
-                                        "'ctype' is only permitted within fragment processors");
-        }
-        if (modifiers.fLayout.fFlags & Layout::kKey_Flag) {
-            this->errorReporter().error(offset,
-                                        "'key' is only permitted within fragment processors");
-        }
+    if ((modifiers.fFlags & Modifiers::kIn_Flag) && baseType->isMatrix()) {
+        this->errorReporter().error(offset, "'in' variables may not have matrix type");
+    }
+    if ((modifiers.fFlags & Modifiers::kIn_Flag) && (modifiers.fFlags & Modifiers::kUniform_Flag)) {
+        this->errorReporter().error(offset, "'in uniform' variables not permitted");
     }
     if (this->programKind() == ProgramKind::kRuntimeColorFilter ||
         this->programKind() == ProgramKind::kRuntimeShader) {
@@ -292,10 +274,6 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
     if (baseType->isEffectChild() && !(modifiers.fFlags & Modifiers::kUniform_Flag)) {
         this->errorReporter().error(
                 offset, "variables of type '" + baseType->displayName() + "' must be uniform");
-    }
-    if ((modifiers.fLayout.fFlags & Layout::kKey_Flag) &&
-        (modifiers.fFlags & Modifiers::kUniform_Flag)) {
-        this->errorReporter().error(offset, "'key' is not permitted on 'uniform' variables");
     }
     if (modifiers.fLayout.fFlags & Layout::kSRGBUnpremul_Flag) {
         if (this->programKind() != ProgramKind::kRuntimeColorFilter &&
@@ -663,8 +641,7 @@ std::unique_ptr<Statement> IRGenerator::convertContinue(const ASTNode& c) {
 
 std::unique_ptr<Statement> IRGenerator::convertDiscard(const ASTNode& d) {
     SkASSERT(d.fKind == ASTNode::Kind::kDiscard);
-    if (this->programKind() != ProgramKind::kFragment &&
-        this->programKind() != ProgramKind::kFragmentProcessor) {
+    if (this->programKind() != ProgramKind::kFragment) {
         this->errorReporter().error(d.fOffset,
                                     "discard statement is only permitted in fragment shaders");
         return nullptr;
@@ -708,8 +685,8 @@ std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
 
     const Variable* skPerVertex = nullptr;
     if (const ProgramElement* perVertexDecl = fIntrinsics->find(Compiler::PERVERTEX_NAME)) {
-        SkASSERT(perVertexDecl->is<InterfaceBlock>());
-        skPerVertex = &perVertexDecl->as<InterfaceBlock>().variable();
+        SkASSERT(perVertexDecl->is<SkSL::InterfaceBlock>());
+        skPerVertex = &perVertexDecl->as<SkSL::InterfaceBlock>().variable();
     }
 
     SkASSERT(skPerVertex && fRTAdjust);
@@ -780,7 +757,6 @@ void IRGenerator::CheckModifiers(const Context& context,
     checkLayout(Layout::kPushConstant_Flag,             "push_constant");
     checkLayout(Layout::kBlendSupportAllEquations_Flag, "blend_support_all_equations");
     checkLayout(Layout::kSRGBUnpremul_Flag,             "srgb_unpremul");
-    checkLayout(Layout::kKey_Flag,                      "key");
     checkLayout(Layout::kLocation_Flag,                 "location");
     checkLayout(Layout::kOffset_Flag,                   "offset");
     checkLayout(Layout::kBinding_Flag,                  "binding");
@@ -791,8 +767,6 @@ void IRGenerator::CheckModifiers(const Context& context,
     checkLayout(Layout::kPrimitive_Flag,                "primitive-type");
     checkLayout(Layout::kMaxVertices_Flag,              "max_vertices");
     checkLayout(Layout::kInvocations_Flag,              "invocations");
-    checkLayout(Layout::kWhen_Flag,                     "when");
-    checkLayout(Layout::kCType_Flag,                    "ctype");
     SkASSERT(layoutFlags == 0);
 }
 
@@ -1015,7 +989,7 @@ std::unique_ptr<StructDefinition> IRGenerator::convertStructDefinition(const AST
     return std::make_unique<StructDefinition>(node.fOffset, *type);
 }
 
-std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode& intf) {
+std::unique_ptr<SkSL::InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode& intf) {
     if (this->programKind() != ProgramKind::kFragment &&
         this->programKind() != ProgramKind::kVertex &&
         this->programKind() != ProgramKind::kGeometry) {
@@ -1097,12 +1071,12 @@ std::unique_ptr<InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode
             old->add(std::make_unique<Field>(intf.fOffset, var, (int)i));
         }
     }
-    return std::make_unique<InterfaceBlock>(intf.fOffset,
-                                            var,
-                                            String(id.fTypeName),
-                                            String(id.fInstanceName),
-                                            arraySize,
-                                            symbols);
+    return std::make_unique<SkSL::InterfaceBlock>(intf.fOffset,
+                                                  var,
+                                                  String(id.fTypeName),
+                                                  String(id.fInstanceName),
+                                                  arraySize,
+                                                  symbols);
 }
 
 void IRGenerator::convertGlobalVarDeclarations(const ASTNode& decl) {
@@ -1118,57 +1092,6 @@ void IRGenerator::convertGlobalVarDeclarations(const ASTNode& decl) {
         }
         fProgramElements->push_back(std::make_unique<GlobalVarDeclaration>(std::move(stmt)));
     }
-}
-
-void IRGenerator::convertEnum(const ASTNode& e) {
-    if (this->strictES2Mode()) {
-        this->errorReporter().error(e.fOffset, "enum is not allowed here");
-        return;
-    }
-
-    SkASSERT(e.fKind == ASTNode::Kind::kEnum);
-    SKSL_INT currentValue = 0;
-    Layout layout;
-    ASTNode enumType(e.fNodes, e.fOffset, ASTNode::Kind::kType, e.getStringView());
-    const Type* type = this->convertType(enumType);
-    Modifiers modifiers(layout, Modifiers::kConst_Flag);
-    std::shared_ptr<SymbolTable> oldTable = fSymbolTable;
-    fSymbolTable = std::make_shared<SymbolTable>(fSymbolTable, fIsBuiltinCode);
-    for (auto iter = e.begin(); iter != e.end(); ++iter) {
-        const ASTNode& child = *iter;
-        SkASSERT(child.fKind == ASTNode::Kind::kEnumCase);
-        std::unique_ptr<Expression> value;
-        if (child.begin() != child.end()) {
-            value = this->convertExpression(*child.begin());
-            if (!value) {
-                fSymbolTable = oldTable;
-                return;
-            }
-            if (!ConstantFolder::GetConstantInt(*value, &currentValue)) {
-                this->errorReporter().error(value->fOffset,
-                                            "enum value must be a constant integer");
-                fSymbolTable = oldTable;
-                return;
-            }
-        }
-        value = IntLiteral::Make(fContext, e.fOffset, currentValue);
-        ++currentValue;
-        auto var = std::make_unique<Variable>(e.fOffset, this->modifiersPool().add(modifiers),
-                                              child.getStringView(), type, fIsBuiltinCode,
-                                              Variable::Storage::kGlobal);
-        // enum variables aren't really 'declared', but we have to create a declaration to store
-        // the value
-        auto declaration = VarDeclaration::Make(fContext, var.get(), &var->type(), /*arraySize=*/0,
-                                                std::move(value));
-        fSymbolTable->add(std::move(var));
-        fSymbolTable->takeOwnershipOfIRNode(std::move(declaration));
-    }
-    // Now we orphanize the Enum's symbol table, so that future lookups in it are strict
-    fSymbolTable->fParent = nullptr;
-    fProgramElements->push_back(std::make_unique<Enum>(e.fOffset, e.getStringView(), fSymbolTable,
-                                                       /*isSharedWithCpp=*/fIsBuiltinCode,
-                                                       /*isBuiltin=*/fIsBuiltinCode));
-    fSymbolTable = oldTable;
 }
 
 bool IRGenerator::typeContainsPrivateFields(const Type& type) {
@@ -1237,8 +1160,6 @@ std::unique_ptr<Expression> IRGenerator::convertExpression(const ASTNode& expr) 
             return this->convertPostfixExpression(expr);
         case ASTNode::Kind::kPrefix:
             return this->convertPrefixExpression(expr);
-        case ASTNode::Kind::kScope:
-            return this->convertScopeExpression(expr);
         case ASTNode::Kind::kTernary:
             return this->convertTernaryExpression(expr);
         default:
@@ -1277,30 +1198,6 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, skstd::st
                     fInputs.fUseFlipRTUniform = true;
                     break;
             }
-            if (this->programKind() == ProgramKind::kFragmentProcessor &&
-                (modifiers.fFlags & Modifiers::kIn_Flag) &&
-                !(modifiers.fFlags & Modifiers::kUniform_Flag) &&
-                !(modifiers.fLayout.fFlags & Layout::kKey_Flag) &&
-                modifiers.fLayout.fBuiltin == -1 &&
-                !var->type().isFragmentProcessor() &&
-                var->type().typeKind() != Type::TypeKind::kSampler) {
-                bool valid = false;
-                for (const auto& decl : fFile->root()) {
-                    if (decl.fKind == ASTNode::Kind::kSection) {
-                        const ASTNode::SectionData& section = decl.getSectionData();
-                        if (section.fName == "setData") {
-                            valid = true;
-                            break;
-                        }
-                    }
-                }
-                if (!valid) {
-                    this->errorReporter().error(
-                            offset,
-                            "'in' variable must be either 'uniform' or 'layout(key)', or there "
-                            "must be a custom @setData function");
-                }
-            }
             // default to kRead_RefKind; this will be corrected later if the variable is written to
             return VariableReference::Make(offset, var, VariableReference::RefKind::kRead);
         }
@@ -1326,16 +1223,6 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int offset, skstd::st
 
 std::unique_ptr<Expression> IRGenerator::convertIdentifier(const ASTNode& identifier) {
     return this->convertIdentifier(identifier.fOffset, identifier.getStringView());
-}
-
-std::unique_ptr<Section> IRGenerator::convertSection(const ASTNode& s) {
-    if (this->programKind() != ProgramKind::kFragmentProcessor) {
-        this->errorReporter().error(s.fOffset, "syntax error");
-        return nullptr;
-    }
-
-    const ASTNode::SectionData& section = s.getSectionData();
-    return std::make_unique<Section>(s.fOffset, section.fName, section.fArgument, section.fText);
 }
 
 std::unique_ptr<Expression> IRGenerator::coerce(std::unique_ptr<Expression> expr,
@@ -1602,55 +1489,6 @@ std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expressi
     return Swizzle::Convert(fContext, std::move(base), components);
 }
 
-std::unique_ptr<Expression> IRGenerator::convertTypeField(int offset, const Type& type,
-                                                          skstd::string_view field) {
-    const ProgramElement* enumElement = nullptr;
-    // Find the Enum element that this type refers to, start by searching our elements
-    for (const std::unique_ptr<ProgramElement>& e : *fProgramElements) {
-        if (e->is<Enum>() && type.name() == e->as<Enum>().typeName()) {
-            enumElement = e.get();
-            break;
-        }
-    }
-    // ... if that fails, look in our shared elements
-    if (!enumElement) {
-        for (const ProgramElement* e : *fSharedElements) {
-            if (e->is<Enum>() && type.name() == e->as<Enum>().typeName()) {
-                enumElement = e;
-                break;
-            }
-        }
-    }
-    // ... and if that fails, check the intrinsics, add it to our shared elements
-    if (!enumElement && !fIsBuiltinCode && fIntrinsics) {
-        if (const ProgramElement* found = fIntrinsics->findAndInclude(String(type.name()))) {
-            fSharedElements->push_back(found);
-            enumElement = found;
-        }
-    }
-    if (!enumElement) {
-        this->errorReporter().error(offset,
-                                    "type '" + type.displayName() + "' is not a known enum");
-        return nullptr;
-    }
-
-    // We found the Enum element. Look for 'field' as a member.
-    std::shared_ptr<SymbolTable> old = fSymbolTable;
-    fSymbolTable = enumElement->as<Enum>().symbols();
-    std::unique_ptr<Expression> result =
-            convertIdentifier(ASTNode(&fFile->fNodes, offset, ASTNode::Kind::kIdentifier, field));
-    if (result) {
-        const Variable& v = *result->as<VariableReference>().variable();
-        SkASSERT(v.initialValue());
-        result = IntLiteral::Make(offset, v.initialValue()->as<IntLiteral>().value(), &type);
-    } else {
-        this->errorReporter().error(
-                offset, "type '" + type.name() + "' does not contain enumerator '" + field + "'");
-    }
-    fSymbolTable = old;
-    return result;
-}
-
 std::unique_ptr<Expression> IRGenerator::convertIndexExpression(const ASTNode& index) {
     SkASSERT(index.fKind == ASTNode::Kind::kIndex);
     auto iter = index.begin();
@@ -1715,19 +1553,6 @@ std::unique_ptr<Expression> IRGenerator::convertFieldExpression(const ASTNode& f
     return this->convertSwizzle(std::move(base), field);
 }
 
-std::unique_ptr<Expression> IRGenerator::convertScopeExpression(const ASTNode& scopeNode) {
-    std::unique_ptr<Expression> base = this->convertExpression(*scopeNode.begin());
-    if (!base) {
-        return nullptr;
-    }
-    if (!base->is<TypeReference>()) {
-        this->errorReporter().error(scopeNode.fOffset, "'::' must follow a type name");
-        return nullptr;
-    }
-    const skstd::string_view& member = scopeNode.getStringView();
-    return this->convertTypeField(base->fOffset, base->as<TypeReference>().value(), member);
-}
-
 std::unique_ptr<Expression> IRGenerator::convertPostfixExpression(const ASTNode& expression) {
     SkASSERT(expression.fKind == ASTNode::Kind::kPostfix);
     std::unique_ptr<Expression> base = this->convertExpression(*expression.begin());
@@ -1769,7 +1594,7 @@ void IRGenerator::findAndDeclareBuiltinVariables() {
             // If this is the *first* time we've seen this builtin, findAndInclude will return
             // the corresponding ProgramElement.
             if (const ProgramElement* decl = fGenerator->fIntrinsics->findAndInclude(name)) {
-                SkASSERT(decl->is<GlobalVarDeclaration>() || decl->is<InterfaceBlock>());
+                SkASSERT(decl->is<GlobalVarDeclaration>() || decl->is<SkSL::InterfaceBlock>());
                 fNewElements.push_back(decl);
             }
         }
@@ -1962,10 +1787,6 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
                     this->convertGlobalVarDeclarations(decl);
                     break;
 
-                case ASTNode::Kind::kEnum:
-                    this->convertEnum(decl);
-                    break;
-
                 case ASTNode::Kind::kFunction:
                     this->convertFunction(decl);
                     break;
@@ -1979,7 +1800,7 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
                     break;
                 }
                 case ASTNode::Kind::kInterfaceBlock: {
-                    std::unique_ptr<InterfaceBlock> i = this->convertInterfaceBlock(decl);
+                    std::unique_ptr<SkSL::InterfaceBlock> i = this->convertInterfaceBlock(decl);
                     if (i) {
                         fProgramElements->push_back(std::move(i));
                     }
@@ -1990,13 +1811,6 @@ IRGenerator::IRBundle IRGenerator::convertProgram(
                                                                           decl.getStringView());
                     if (e) {
                         fProgramElements->push_back(std::move(e));
-                    }
-                    break;
-                }
-                case ASTNode::Kind::kSection: {
-                    std::unique_ptr<Section> s = this->convertSection(decl);
-                    if (s) {
-                        fProgramElements->push_back(std::move(s));
                     }
                     break;
                 }

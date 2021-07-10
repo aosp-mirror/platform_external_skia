@@ -17,11 +17,9 @@
 #include "src/sksl/ir/SkSLProgram.h"
 
 // ProgramElements
-#include "src/sksl/ir/SkSLEnum.h"
 #include "src/sksl/ir/SkSLExtension.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
-#include "src/sksl/ir/SkSLSection.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 
 // Statements
@@ -1326,12 +1324,10 @@ template <typename T> bool TProgramVisitor<T>::visitStatement(typename T::Statem
 
 template <typename T> bool TProgramVisitor<T>::visitProgramElement(typename T::ProgramElement& pe) {
     switch (pe.kind()) {
-        case ProgramElement::Kind::kEnum:
         case ProgramElement::Kind::kExtension:
         case ProgramElement::Kind::kFunctionPrototype:
         case ProgramElement::Kind::kInterfaceBlock:
         case ProgramElement::Kind::kModifiers:
-        case ProgramElement::Kind::kSection:
         case ProgramElement::Kind::kStructDefinition:
             // Leaf program elements just return false by default
             return false;
