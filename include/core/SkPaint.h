@@ -26,7 +26,9 @@ class SkPathEffect;
 class SkShader;
 
 // Move to clients when they are ready -- aid in deprecating the enum
+#ifndef SK_SUPPORT_LEGACY_SETFILTERQUALITY
 #define SK_SUPPORT_LEGACY_SETFILTERQUALITY
+#endif
 
 /** \class SkPaint
     SkPaint controls options applied when drawing. SkPaint collects all
@@ -485,7 +487,7 @@ public:
     skstd::optional<SkBlendMode> asBlendMode() const;
 
     /**
-     *  Queries the blender, and if it can be represented as a SkBendMode, return that mode,
+     *  Queries the blender, and if it can be represented as a SkBlendMode, return that mode,
      *  else return the defaultMode provided.
      */
     SkBlendMode getBlendMode_or(SkBlendMode defaultMode) const;
