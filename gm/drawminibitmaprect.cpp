@@ -123,7 +123,8 @@ protected:
                         // rect stays rect
                         break;
                 }
-                canvas->drawImageRect(fImage.get(), srcRect, dstRect, &paint,
+                canvas->drawImageRect(fImage.get(), SkRect::Make(srcRect), dstRect,
+                                      SkSamplingOptions(), &paint,
                                       SkCanvas::kFast_SrcRectConstraint);
                 canvas->restore();
 
@@ -145,7 +146,7 @@ private:
     sk_sp<SkImage>  fImage;
     SkString        fName;
 
-    typedef skiagm::GM INHERITED;
+    using INHERITED = skiagm::GM;
 };
 
 DEF_GM( return new DrawMiniBitmapRectGM(true); )

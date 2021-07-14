@@ -15,6 +15,7 @@
 #include "include/private/SkColorData.h"
 #include "include/private/SkMalloc.h"
 #include "include/private/SkMutex.h"
+#include "include/private/SkTPin.h"
 #include "include/private/SkTemplates.h"
 #include "include/private/SkTo.h"
 #include "src/core/SkAdvancedTypefaceMetrics.h"
@@ -31,6 +32,7 @@
 #include "src/utils/SkMatrix22.h"
 
 #include <memory>
+#include <tuple>
 
 #include <ft2build.h>
 #include FT_ADVANCES_H
@@ -102,6 +104,9 @@ static SkScalar SkFT_FixedToScalar(FT_Fixed x) {
   return SkFixedToScalar(x);
 }
 
+using SkUniqueFTFace =
+        std::unique_ptr<FT_FaceRec, SkFunctionWrapper<decltype(FT_Done_Face), FT_Done_Face>>;
+
 //////////////////////////////////////////////////////////////////////////
 
 using FT_Alloc_size_t = SkCallableTraits<FT_Alloc_Func>::argument<1>::type;
@@ -143,13 +148,16 @@ public:
         // *reinterpret_cast<void**>(&procPtr) = dlsym(self, "proc");
         // because clang has not implemented DR573. See http://clang.llvm.org/cxx_dr_status.html .
 
-        FT_Int major, minor, patch;
-        FT_Library_Version(fLibrary, &major, &minor, &patch);
+        using Version = std::tuple<FT_Int, FT_Int, FT_Int>;
+        Version version;
+        FT_Library_Version(fLibrary, &std::get<0>(version),
+                                     &std::get<1>(version),
+                                     &std::get<2>(version));
 
 #if SK_FREETYPE_MINIMUM_RUNTIME_VERSION >= 0x02070100
         fGetVarDesignCoordinates = FT_Get_Var_Design_Coordinates;
 #elif SK_FREETYPE_MINIMUM_RUNTIME_VERSION & SK_FREETYPE_DLOPEN
-        if (major > 2 || ((major == 2 && minor > 7) || (major == 2 && minor == 7 && patch >= 0))) {
+        if (Version(2,7,0) <= version) {
             //The FreeType library is already loaded, so symbols are available in process.
             void* self = dlopen(nullptr, RTLD_LAZY);
             if (self) {
@@ -162,7 +170,7 @@ public:
 #if SK_FREETYPE_MINIMUM_RUNTIME_VERSION >= 0x02070200
         FT_Set_Default_Properties(fLibrary);
 #elif SK_FREETYPE_MINIMUM_RUNTIME_VERSION & SK_FREETYPE_DLOPEN
-        if (major > 2 || ((major == 2 && minor > 7) || (major == 2 && minor == 7 && patch >= 1))) {
+        if (Version(2,7,1) <= version) {
             //The FreeType library is already loaded, so symbols are available in process.
             void* self = dlopen(nullptr, RTLD_LAZY);
             if (self) {
@@ -181,7 +189,7 @@ public:
 #if SK_FREETYPE_MINIMUM_RUNTIME_VERSION >= 0x02080000
         fLightHintingIsYOnly = true;
 #else
-        if (major > 2 || ((major == 2 && minor > 8) || (major == 2 && minor == 8 && patch >= 0))) {
+        if (Version(2,8,0) <= version) {
             fLightHintingIsYOnly = true;
         }
 #endif
@@ -190,7 +198,7 @@ public:
 #if SK_FREETYPE_MINIMUM_RUNTIME_VERSION >= 0x02080100
         fGetVarAxisFlags = FT_Get_Var_Axis_Flags;
 #elif SK_FREETYPE_MINIMUM_RUNTIME_VERSION & SK_FREETYPE_DLOPEN
-        if (major > 2 || ((major == 2 && minor > 7) || (major == 2 && minor == 7 && patch >= 0))) {
+        if (Version(2,7,0) <= version) {
             //The FreeType library is already loaded, so symbols are available in process.
             void* self = dlopen(nullptr, RTLD_LAZY);
             if (self) {
@@ -200,11 +208,18 @@ public:
         }
 #endif
 
-        // Setup LCD filtering. This reduces color fringes for LCD smoothed glyphs.
-        // The default has changed over time, so this doesn't mean the same thing to all users.
-        if (FT_Library_SetLcdFilter(fLibrary, FT_LCD_FILTER_DEFAULT) == 0) {
-            fIsLCDSupported = true;
-            fLCDExtra = 2; //Using a filter adds one full pixel to each side.
+        fIsLCDSupported =
+            // Subpixel anti-aliasing may be unfiltered until the LCD filter is set.
+            // Newer versions may still need this, so this test with side effects must come first.
+            // The default has changed over time, so this doesn't mean the same thing to all users.
+            (FT_Library_SetLcdFilter(fLibrary, FT_LCD_FILTER_DEFAULT) == 0) ||
+
+            // In 2.8.1 and later FreeType always provides some form of subpixel anti-aliasing.
+            ((SK_FREETYPE_MINIMUM_RUNTIME_VERSION) >= 0x02080100) ||
+            (Version(2,8,1) <= version);
+
+        if (fIsLCDSupported) {
+            fLCDExtra = 2; // Using a filter may require up to one full pixel to each side.
         }
     }
     ~FreeTypeLibrary() {
@@ -296,7 +311,7 @@ static void unref_ft_library() {
 
 struct SkFaceRec {
     SkFaceRec* fNext;
-    std::unique_ptr<FT_FaceRec, SkFunctionWrapper<decltype(FT_Done_Face), FT_Done_Face>> fFace;
+    SkUniqueFTFace fFace;
     FT_StreamRec fFTStream;
     std::unique_ptr<SkStreamAsset> fSkStream;
     uint32_t fRefCnt;
@@ -392,7 +407,7 @@ static void ft_face_setup_axes(SkFaceRec* rec, const SkFontData& data) {
 
 // Will return nullptr on failure
 // Caller must lock f_t_mutex() before calling this function.
-static SkFaceRec* ref_ft_face(const SkTypeface* typeface) {
+static SkFaceRec* ref_ft_face(const SkTypeface_FreeType* typeface) {
     f_t_mutex().assertHeld();
 
     const SkFontID fontID = typeface->uniqueID();
@@ -481,7 +496,7 @@ extern /*static*/ void unref_ft_face(SkFaceRec* faceRec) {
 
 class AutoFTAccess {
 public:
-    AutoFTAccess(const SkTypeface* tf) : fFaceRec(nullptr) {
+    AutoFTAccess(const SkTypeface_FreeType* tf) : fFaceRec(nullptr) {
         f_t_mutex().acquire();
         SkASSERT_RELEASE(ref_ft_library());
         fFaceRec = ref_ft_face(tf);
@@ -510,7 +525,7 @@ private:
 
 class SkScalerContext_FreeType : public SkScalerContext_FreeType_Base {
 public:
-    SkScalerContext_FreeType(sk_sp<SkTypeface>,
+    SkScalerContext_FreeType(sk_sp<SkTypeface_FreeType>,
                              const SkScalerContextEffects&,
                              const SkDescriptor* desc);
     ~SkScalerContext_FreeType() override;
@@ -520,7 +535,6 @@ public:
     }
 
 protected:
-    unsigned generateGlyphCount() override;
     bool generateAdvance(SkGlyph* glyph) override;
     void generateMetrics(SkGlyph* glyph) override;
     void generateImage(const SkGlyph& glyph) override;
@@ -598,7 +612,7 @@ std::unique_ptr<SkAdvancedTypefaceMetrics> SkTypeface_FreeType::onGetAdvancedMet
     info->fFontName = info->fPostScriptName;
 
     if (FT_HAS_MULTIPLE_MASTERS(face)) {
-        info->fFlags |= SkAdvancedTypefaceMetrics::kMultiMaster_FontFlag;
+        info->fFlags |= SkAdvancedTypefaceMetrics::kVariable_FontFlag;
     }
     if (!canEmbed(face)) {
         info->fFlags |= SkAdvancedTypefaceMetrics::kNotEmbeddable_FontFlag;
@@ -652,10 +666,14 @@ std::unique_ptr<SkAdvancedTypefaceMetrics> SkTypeface_FreeType::onGetAdvancedMet
 }
 
 void SkTypeface_FreeType::getGlyphToUnicodeMap(SkUnichar* dstArray) const {
-    SkASSERT(dstArray);
     AutoFTAccess fta(this);
     FT_Face face = fta.face();
+    if (!face) {
+        return;
+    }
+
     FT_Long numGlyphs = face->num_glyphs;
+    if (!dstArray) { SkASSERT(numGlyphs == 0); }
     sk_bzero(dstArray, sizeof(SkUnichar) * numGlyphs);
 
     FT_UInt glyphIndex;
@@ -671,16 +689,39 @@ void SkTypeface_FreeType::getGlyphToUnicodeMap(SkUnichar* dstArray) const {
 }
 
 void SkTypeface_FreeType::getPostScriptGlyphNames(SkString* dstArray) const {
-    SkASSERT(dstArray);
     AutoFTAccess fta(this);
     FT_Face face = fta.face();
-    if (face && FT_HAS_GLYPH_NAMES(face)) {
-        for (int gID = 0; gID < face->num_glyphs; gID++) {
+    if (!face) {
+        return;
+    }
+
+    FT_Long numGlyphs = face->num_glyphs;
+    if (!dstArray) { SkASSERT(numGlyphs == 0); }
+
+    if (FT_HAS_GLYPH_NAMES(face)) {
+        for (int gID = 0; gID < numGlyphs; ++gID) {
             char glyphName[128];  // PS limit for names is 127 bytes.
             FT_Get_Glyph_Name(face, gID, glyphName, 128);
             dstArray[gID] = glyphName;
         }
     }
+}
+
+bool SkTypeface_FreeType::onGetPostScriptName(SkString* skPostScriptName) const {
+    AutoFTAccess fta(this);
+    FT_Face face = fta.face();
+    if (!face) {
+        return false;
+    }
+
+    const char* ftPostScriptName = FT_Get_Postscript_Name(face);
+    if (!ftPostScriptName) {
+        return false;
+    }
+    if (skPostScriptName) {
+        *skPostScriptName = ftPostScriptName;
+    }
+    return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -696,34 +737,99 @@ static bool isAxisAligned(const SkScalerContextRec& rec) {
             bothZero(rec.fPost2x2[0][0], rec.fPost2x2[1][1]));
 }
 
-SkScalerContext* SkTypeface_FreeType::onCreateScalerContext(const SkScalerContextEffects& effects,
-                                                            const SkDescriptor* desc) const {
+std::unique_ptr<SkScalerContext> SkTypeface_FreeType::onCreateScalerContext(
+    const SkScalerContextEffects& effects, const SkDescriptor* desc) const
+{
     auto c = std::make_unique<SkScalerContext_FreeType>(
             sk_ref_sp(const_cast<SkTypeface_FreeType*>(this)), effects, desc);
-    if (!c->success()) {
-        return SkScalerContext::MakeEmptyContext(
-                sk_ref_sp(const_cast<SkTypeface_FreeType*>(this)), effects, desc);
+    if (c->success()) {
+        return std::move(c);
     }
-    return c.release();
+    return SkScalerContext::MakeEmpty(
+            sk_ref_sp(const_cast<SkTypeface_FreeType*>(this)), effects, desc);
 }
 
-std::unique_ptr<SkFontData> SkTypeface_FreeType::cloneFontData(
-                                                            const SkFontArguments& args) const {
-    SkString name;
+/** Copy the design variation coordinates into 'coordinates'.
+ *
+ *  @param coordinates the buffer into which to write the design variation coordinates.
+ *  @param coordinateCount the number of entries available through 'coordinates'.
+ *
+ *  @return The number of axes, or -1 if there is an error.
+ *  If 'coordinates != nullptr' and 'coordinateCount >= numAxes' then 'coordinates' will be
+ *  filled with the variation coordinates describing the position of this typeface in design
+ *  variation space. It is possible the number of axes can be retrieved but actual position
+ *  cannot.
+ */
+static int GetVariationDesignPosition(AutoFTAccess& fta,
+    SkFontArguments::VariationPosition::Coordinate coordinates[], int coordinateCount)
+{
+    FT_Face face = fta.face();
+    if (!face) {
+        return -1;
+    }
+
+    if (!(face->face_flags & FT_FACE_FLAG_MULTIPLE_MASTERS)) {
+        return 0;
+    }
+
+    FT_MM_Var* variations = nullptr;
+    if (FT_Get_MM_Var(face, &variations)) {
+        return -1;
+    }
+    SkAutoFree autoFreeVariations(variations);
+
+    if (!coordinates || coordinateCount < SkToInt(variations->num_axis)) {
+        return variations->num_axis;
+    }
+
+    SkAutoSTMalloc<4, FT_Fixed> coords(variations->num_axis);
+    // FT_Get_{MM,Var}_{Blend,Design}_Coordinates were added in FreeType 2.7.1.
+    if (gFTLibrary->fGetVarDesignCoordinates &&
+        !gFTLibrary->fGetVarDesignCoordinates(face, variations->num_axis, coords.get()))
+    {
+        for (FT_UInt i = 0; i < variations->num_axis; ++i) {
+            coordinates[i].axis = variations->axis[i].tag;
+            coordinates[i].value = SkFixedToScalar(coords[i]);
+        }
+    } else if (static_cast<FT_UInt>(fta.getAxesCount()) == variations->num_axis) {
+        for (FT_UInt i = 0; i < variations->num_axis; ++i) {
+            coordinates[i].axis = variations->axis[i].tag;
+            coordinates[i].value = SkFixedToScalar(fta.getAxes()[i]);
+        }
+    } else if (fta.isNamedVariationSpecified()) {
+        // The font has axes, they cannot be retrieved, and some named axis was specified.
+        return -1;
+    } else {
+        // The font has axes, they cannot be retrieved, but no named instance was specified.
+        return 0;
+    }
+
+    return variations->num_axis;
+}
+
+std::unique_ptr<SkFontData> SkTypeface_FreeType::cloneFontData(const SkFontArguments& args) const {
     AutoFTAccess fta(this);
     FT_Face face = fta.face();
-    Scanner::AxisDefinitions axisDefinitions;
+    if (!face) {
+        return nullptr;
+    }
 
+    Scanner::AxisDefinitions axisDefinitions;
     if (!Scanner::GetAxes(face, &axisDefinitions)) {
         return nullptr;
     }
-    SkAutoSTMalloc<4, SkFixed> axisValues(axisDefinitions.count());
-    Scanner::computeAxisValues(axisDefinitions, args.getVariationDesignPosition(),
-                               axisValues, name);
+    int axisCount = axisDefinitions.count();
+
+    SkAutoSTMalloc<4, SkFontArguments::VariationPosition::Coordinate> currentPosition(axisCount);
+    int currentAxisCount = GetVariationDesignPosition(fta, currentPosition, axisCount);
+
+    SkString name;
+    SkAutoSTMalloc<4, SkFixed> axisValues(axisCount);
+    Scanner::computeAxisValues(axisDefinitions, args.getVariationDesignPosition(), axisValues, name,
+                               currentAxisCount == axisCount ? currentPosition.get() : nullptr);
     int ttcIndex;
     std::unique_ptr<SkStreamAsset> stream = this->openStream(&ttcIndex);
-    return std::make_unique<SkFontData>(std::move(stream), ttcIndex, axisValues.get(),
-                                          axisDefinitions.count());
+    return std::make_unique<SkFontData>(std::move(stream), ttcIndex, axisValues.get(), axisCount);
 }
 
 void SkTypeface_FreeType::onFilterRec(SkScalerContextRec* rec) const {
@@ -768,9 +874,7 @@ void SkTypeface_FreeType::onFilterRec(SkScalerContextRec* rec) const {
 }
 
 int SkTypeface_FreeType::GetUnitsPerEm(FT_Face face) {
-    if (!face) {
-        return 0;
-    }
+    SkASSERT(face);
 
     SkScalar upem = SkIntToScalar(face->units_per_EM);
     // At least some versions of FreeType set face->units_per_EM to 0 for bitmap only fonts.
@@ -786,6 +890,9 @@ int SkTypeface_FreeType::GetUnitsPerEm(FT_Face face) {
 int SkTypeface_FreeType::onGetUPEM() const {
     AutoFTAccess fta(this);
     FT_Face face = fta.face();
+    if (!face) {
+        return 0;
+    }
     return GetUnitsPerEm(face);
 }
 
@@ -841,7 +948,7 @@ static FT_Int chooseBitmapStrike(FT_Face face, FT_F26Dot6 scaleY) {
     return chosenStrikeIndex;
 }
 
-SkScalerContext_FreeType::SkScalerContext_FreeType(sk_sp<SkTypeface> typeface,
+SkScalerContext_FreeType::SkScalerContext_FreeType(sk_sp<SkTypeface_FreeType> typeface,
                                                    const SkScalerContextEffects& effects,
                                                    const SkDescriptor* desc)
     : SkScalerContext_FreeType_Base(std::move(typeface), effects, desc)
@@ -852,7 +959,7 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(sk_sp<SkTypeface> typeface,
     SkAutoMutexExclusive  ac(f_t_mutex());
     SkASSERT_RELEASE(ref_ft_library());
 
-    fFaceRec.reset(ref_ft_face(this->getTypeface()));
+    fFaceRec.reset(ref_ft_face(static_cast<SkTypeface_FreeType*>(this->getTypeface())));
 
     // load the font file
     if (nullptr == fFaceRec) {
@@ -933,7 +1040,7 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(sk_sp<SkTypeface> typeface,
     }
 
     using DoneFTSize = SkFunctionWrapper<decltype(FT_Done_Size), FT_Done_Size>;
-    std::unique_ptr<skstd::remove_pointer_t<FT_Size>, DoneFTSize> ftSize([this]() -> FT_Size {
+    std::unique_ptr<std::remove_pointer_t<FT_Size>, DoneFTSize> ftSize([this]() -> FT_Size {
         FT_Size size;
         FT_Error err = FT_New_Size(fFaceRec->fFace.get(), &size);
         if (err != 0) {
@@ -1049,10 +1156,6 @@ FT_Error SkScalerContext_FreeType::setupSize() {
     }
     FT_Set_Transform(fFace, &fMatrix22, nullptr);
     return 0;
-}
-
-unsigned SkScalerContext_FreeType::generateGlyphCount() {
-    return fFace->num_glyphs;
 }
 
 bool SkScalerContext_FreeType::generateAdvance(SkGlyph* glyph) {
@@ -1195,27 +1298,92 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
         FT_LayerIterator layerIterator = { 0, 0, nullptr };
         FT_UInt layerGlyphIndex;
         FT_UInt layerColorIndex;
-        while (FT_Get_Color_Glyph_Layer(fFace, glyph->getGlyphID(),
-                                        &layerGlyphIndex, &layerColorIndex, &layerIterator))
-        {
-            haveLayers = true;
-            err = FT_Load_Glyph(fFace, layerGlyphIndex,
-                                fLoadGlyphFlags | FT_LOAD_BITMAP_METRICS_ONLY);
-            if (err != 0) {
-                glyph->zeroMetrics();
-                return;
-            }
-            emboldenIfNeeded(fFace, fFace->glyph, layerGlyphIndex);
 
-            if (0 < fFace->glyph->outline.n_contours) {
-                FT_BBox bbox;
-                getBBoxForCurrentGlyph(glyph, &bbox, true);
+#ifdef TT_SUPPORT_COLRV1
+        FT_OpaquePaint opaqueLayerPaint;
+        opaqueLayerPaint.p = nullptr;
+        if (FT_Get_Color_Glyph_Paint(fFace, glyph->getGlyphID(),
+                                     FT_COLOR_INCLUDE_ROOT_TRANSFORM, &opaqueLayerPaint)) {
+          haveLayers = true;
 
-                // Union
-                bounds.xMin = std::min(bbox.xMin, bounds.xMin);
-                bounds.yMin = std::min(bbox.yMin, bounds.yMin);
-                bounds.xMax = std::max(bbox.xMax, bounds.xMax);
-                bounds.yMax = std::max(bbox.yMax, bounds.yMax);
+          // COLRv1 glyphs define a placeholder glyph in the glyf table that
+          // defines the extrema of the glyph. If this placeholder glyph
+          // contains only two points and FreeType applies the transform first -
+          // as configured by setupSize() - then we get a transformed bounding
+          // box that is too small as it only needs to fit the two points. To
+          // fix that, create a temporary contour consisting of all four corners
+          // of an imaginary rectangle enclosing those two points, then
+          // transform that and perform the bounding box computations on this
+          // one.
+
+          FT_Set_Transform(fFace, nullptr, nullptr);
+
+          err = FT_Load_Glyph(fFace, glyph->getGlyphID(),
+                              fLoadGlyphFlags | FT_LOAD_BITMAP_METRICS_ONLY);
+          if (err != 0 || fFace->glyph->outline.n_contours == 0) {
+            glyph->zeroMetrics();
+            return;
+          }
+          emboldenIfNeeded(fFace, fFace->glyph, glyph->getGlyphID());
+
+          FT_BBox bbox_untransformed;
+          FT_Outline_Get_CBox(&fFace->glyph->outline, &bbox_untransformed);
+
+          FT_Outline bboxOutline;
+          err = FT_Outline_New(gFTLibrary->library(), 4, 0, &bboxOutline);
+          if (err != 0) {
+            glyph->zeroMetrics();
+            return;
+          }
+
+          // Compose a rectangle contour by setting the four corners.
+          bboxOutline.points[0].x = bbox_untransformed.xMin;
+          bboxOutline.points[0].y = bbox_untransformed.yMin;
+
+          bboxOutline.points[1].x = bbox_untransformed.xMin;
+          bboxOutline.points[1].y = bbox_untransformed.yMax;
+
+          bboxOutline.points[2].x = bbox_untransformed.xMax;
+          bboxOutline.points[2].y = bbox_untransformed.yMax;
+
+          bboxOutline.points[3].x = bbox_untransformed.xMax;
+          bboxOutline.points[3].y = bbox_untransformed.yMin;
+
+          FT_Outline_Transform(&bboxOutline, &fMatrix22);
+
+          FT_Outline faceOutline = fFace->glyph->outline;
+          fFace->glyph->outline = bboxOutline;
+          // Retrieve from temporarily replaced transformed rectangle outline.
+          getBBoxForCurrentGlyph(glyph, &bounds, true);
+          fFace->glyph->outline = faceOutline;
+          FT_Outline_Done(gFTLibrary->library(), &bboxOutline);
+
+        }
+#endif // #TT_SUPPORT_COLRV1
+
+        if (!haveLayers) {
+            // For COLRv0 compute the glyph bounding box from the union of layer bounding boxes.
+            while (FT_Get_Color_Glyph_Layer(fFace, glyph->getGlyphID(), &layerGlyphIndex,
+                                            &layerColorIndex, &layerIterator)) {
+                haveLayers = true;
+                err = FT_Load_Glyph(fFace, layerGlyphIndex,
+                                    fLoadGlyphFlags | FT_LOAD_BITMAP_METRICS_ONLY);
+                if (err != 0) {
+                    glyph->zeroMetrics();
+                    return;
+                }
+                emboldenIfNeeded(fFace, fFace->glyph, layerGlyphIndex);
+
+                if (0 < fFace->glyph->outline.n_contours) {
+                    FT_BBox bbox;
+                    getBBoxForCurrentGlyph(glyph, &bbox, true);
+
+                    // Union
+                    bounds.xMin = std::min(bbox.xMin, bounds.xMin);
+                    bounds.yMin = std::min(bbox.yMin, bounds.yMin);
+                    bounds.xMax = std::max(bbox.xMax, bounds.xMax);
+                    bounds.yMax = std::max(bbox.yMax, bounds.yMax);
+                }
             }
         }
 
@@ -1472,10 +1640,14 @@ void SkScalerContext_FreeType::generateFontMetrics(SkFontMetrics* metrics) {
         ascent = -SkIntToScalar(face->size->metrics.ascender) / (yppem * 64.0f);
         descent = -SkIntToScalar(face->size->metrics.descender) / (yppem * 64.0f);
         leading = (SkIntToScalar(face->size->metrics.height) / (yppem * 64.0f)) + ascent - descent;
+
         xmin = 0.0f;
         xmax = SkIntToScalar(face->available_sizes[fStrikeIndex].width) / xppem;
         ymin = descent;
         ymax = ascent;
+        // The actual bitmaps may be any size and placed at any offset.
+        metrics->fFlags |= SkFontMetrics::kBoundsInvalid_Flag;
+
         underlineThickness = 0;
         underlinePosition = 0;
         metrics->fFlags &= ~SkFontMetrics::kUnderlineThicknessIsValid_Flag;
@@ -1524,6 +1696,11 @@ void SkScalerContext_FreeType::generateFontMetrics(SkFontMetrics* metrics) {
     metrics->fUnderlinePosition = underlinePosition * fScale.y();
     metrics->fStrikeoutThickness = strikeoutThickness * fScale.y();
     metrics->fStrikeoutPosition = strikeoutPosition * fScale.y();
+
+    if (face->face_flags & FT_FACE_FLAG_MULTIPLE_MASTERS) {
+        // The bounds are only valid for the default variation.
+        metrics->fFlags |= SkFontMetrics::kBoundsInvalid_Flag;
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1637,48 +1814,7 @@ int SkTypeface_FreeType::onGetVariationDesignPosition(
     SkFontArguments::VariationPosition::Coordinate coordinates[], int coordinateCount) const
 {
     AutoFTAccess fta(this);
-    FT_Face face = fta.face();
-    if (!face) {
-        return -1;
-    }
-
-    if (!(face->face_flags & FT_FACE_FLAG_MULTIPLE_MASTERS)) {
-        return 0;
-    }
-
-    FT_MM_Var* variations = nullptr;
-    if (FT_Get_MM_Var(face, &variations)) {
-        return -1;
-    }
-    SkAutoFree autoFreeVariations(variations);
-
-    if (!coordinates || coordinateCount < SkToInt(variations->num_axis)) {
-        return variations->num_axis;
-    }
-
-    SkAutoSTMalloc<4, FT_Fixed> coords(variations->num_axis);
-    // FT_Get_{MM,Var}_{Blend,Design}_Coordinates were added in FreeType 2.7.1.
-    if (gFTLibrary->fGetVarDesignCoordinates &&
-        !gFTLibrary->fGetVarDesignCoordinates(face, variations->num_axis, coords.get()))
-    {
-        for (FT_UInt i = 0; i < variations->num_axis; ++i) {
-            coordinates[i].axis = variations->axis[i].tag;
-            coordinates[i].value = SkFixedToScalar(coords[i]);
-        }
-    } else if (static_cast<FT_UInt>(fta.getAxesCount()) == variations->num_axis) {
-        for (FT_UInt i = 0; i < variations->num_axis; ++i) {
-            coordinates[i].axis = variations->axis[i].tag;
-            coordinates[i].value = SkFixedToScalar(fta.getAxes()[i]);
-        }
-    } else if (fta.isNamedVariationSpecified()) {
-        // The font has axes, they cannot be retrieved, and some named axis was specified.
-        return -1;
-    } else {
-        // The font has axes, they cannot be retrieved, but no named instance was specified.
-        return 0;
-    }
-
-    return variations->num_axis;
+    return GetVariationDesignPosition(fta, coordinates, coordinateCount);
 }
 
 int SkTypeface_FreeType::onGetVariationDesignParameters(
@@ -1722,6 +1858,9 @@ int SkTypeface_FreeType::onGetVariationDesignParameters(
 int SkTypeface_FreeType::onGetTableTags(SkFontTableTag tags[]) const {
     AutoFTAccess fta(this);
     FT_Face face = fta.face();
+    if (!face) {
+        return 0;
+    }
 
     FT_ULong tableCount = 0;
     FT_Error error;
@@ -1751,6 +1890,9 @@ size_t SkTypeface_FreeType::onGetTableData(SkFontTableTag tag, size_t offset,
 {
     AutoFTAccess fta(this);
     FT_Face face = fta.face();
+    if (!face) {
+        return 0;
+    }
 
     FT_ULong tableLength = 0;
     FT_Error error;
@@ -1778,6 +1920,9 @@ size_t SkTypeface_FreeType::onGetTableData(SkFontTableTag tag, size_t offset,
 sk_sp<SkData> SkTypeface_FreeType::onCopyTableData(SkFontTableTag tag) const {
     AutoFTAccess fta(this);
     FT_Face face = fta.face();
+    if (!face) {
+        return nullptr;
+    }
 
     FT_ULong tableLength = 0;
     FT_Error error;
@@ -1799,6 +1944,10 @@ sk_sp<SkData> SkTypeface_FreeType::onCopyTableData(SkFontTableTag tag) const {
     return data;
 }
 
+std::unique_ptr<SkFontData> SkTypeface_FreeType::makeFontData() const {
+    return this->onMakeFontData();
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1817,7 +1966,7 @@ SkTypeface_FreeType::Scanner::~Scanner() {
 FT_Face SkTypeface_FreeType::Scanner::openFace(SkStreamAsset* stream, int ttcIndex,
                                                FT_Stream ftStream) const
 {
-    if (fLibrary == nullptr) {
+    if (fLibrary == nullptr || stream == nullptr) {
         return nullptr;
     }
 
@@ -1852,14 +2001,12 @@ bool SkTypeface_FreeType::Scanner::recognizedFont(SkStreamAsset* stream, int* nu
     SkAutoMutexExclusive libraryLock(fLibraryMutex);
 
     FT_StreamRec streamRec;
-    FT_Face face = this->openFace(stream, -1, &streamRec);
-    if (nullptr == face) {
+    SkUniqueFTFace face(this->openFace(stream, -1, &streamRec));
+    if (!face) {
         return false;
     }
 
     *numFaces = face->num_faces;
-
-    FT_Done_Face(face);
     return true;
 }
 
@@ -1871,8 +2018,8 @@ bool SkTypeface_FreeType::Scanner::scanFont(
     SkAutoMutexExclusive libraryLock(fLibraryMutex);
 
     FT_StreamRec streamRec;
-    FT_Face face = this->openFace(stream, ttcIndex, &streamRec);
-    if (nullptr == face) {
+    SkUniqueFTFace face(this->openFace(stream, ttcIndex, &streamRec));
+    if (!face) {
         return false;
     }
 
@@ -1887,7 +2034,7 @@ bool SkTypeface_FreeType::Scanner::scanFont(
     }
 
     PS_FontInfoRec psFontInfo;
-    TT_OS2* os2 = static_cast<TT_OS2*>(FT_Get_Sfnt_Table(face, ft_sfnt_os2));
+    TT_OS2* os2 = static_cast<TT_OS2*>(FT_Get_Sfnt_Table(face.get(), ft_sfnt_os2));
     if (os2 && os2->version != 0xffff) {
         weight = os2->usWeightClass;
         width = os2->usWidthClass;
@@ -1896,7 +2043,7 @@ bool SkTypeface_FreeType::Scanner::scanFont(
         if (SkToBool(os2->fsSelection & (1u << 9))) {
             slant = SkFontStyle::kOblique_Slant;
         }
-    } else if (0 == FT_Get_PS_Font_Info(face, &psFontInfo) && psFontInfo.weight) {
+    } else if (0 == FT_Get_PS_Font_Info(face.get(), &psFontInfo) && psFontInfo.weight) {
         static const struct {
             char const * const name;
             int const weight;
@@ -1937,23 +2084,25 @@ bool SkTypeface_FreeType::Scanner::scanFont(
         }
     }
 
-    if (name) {
+    if (name != nullptr) {
         name->set(face->family_name);
     }
-    if (style) {
+    if (style != nullptr) {
         *style = SkFontStyle(weight, width, slant);
     }
-    if (isFixedPitch) {
+    if (isFixedPitch != nullptr) {
         *isFixedPitch = FT_IS_FIXED_WIDTH(face);
     }
 
-    bool success = GetAxes(face, axes);
-    FT_Done_Face(face);
-    return success;
+    if (axes != nullptr && !GetAxes(face.get(), axes)) {
+        return false;
+    }
+    return true;
 }
 
 bool SkTypeface_FreeType::Scanner::GetAxes(FT_Face face, AxisDefinitions* axes) {
-    if (axes && face->face_flags & FT_FACE_FLAG_MULTIPLE_MASTERS) {
+    SkASSERT(face && axes);
+    if (face->face_flags & FT_FACE_FLAG_MULTIPLE_MASTERS) {
         FT_MM_Var* variations = nullptr;
         FT_Error err = FT_Get_MM_Var(face, &variations);
         if (err) {
@@ -1979,13 +2128,30 @@ bool SkTypeface_FreeType::Scanner::GetAxes(FT_Face face, AxisDefinitions* axes) 
     AxisDefinitions axisDefinitions,
     const SkFontArguments::VariationPosition position,
     SkFixed* axisValues,
-    const SkString& name)
+    const SkString& name,
+    const SkFontArguments::VariationPosition::Coordinate* current)
 {
     for (int i = 0; i < axisDefinitions.count(); ++i) {
         const Scanner::AxisDefinition& axisDefinition = axisDefinitions[i];
         const SkScalar axisMin = SkFixedToScalar(axisDefinition.fMinimum);
         const SkScalar axisMax = SkFixedToScalar(axisDefinition.fMaximum);
+
+        // Start with the default value.
         axisValues[i] = axisDefinition.fDefault;
+
+        // Then the current value.
+        if (current) {
+            for (int j = 0; j < axisDefinitions.count(); ++j) {
+                const auto& coordinate = current[j];
+                if (axisDefinition.fTag == coordinate.axis) {
+                    const SkScalar axisValue = SkTPin(coordinate.value, axisMin, axisMax);
+                    axisValues[i] = SkScalarToFixed(axisValue);
+                    break;
+                }
+            }
+        }
+
+        // Then the requested value.
         // The position may be over specified. If there are multiple values for a given axis,
         // use the last one since that's what css-fonts-4 requires.
         for (int j = position.coordinateCount; j --> 0;) {
