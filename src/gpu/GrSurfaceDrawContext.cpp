@@ -740,7 +740,14 @@ void GrSurfaceDrawContext::drawRect(const GrClip* clip,
                !this->caps()->reducedShaderMode()) {
         // Only use the StrokeRectOp for non-empty rectangles. Empty rectangles will be processed by
         // GrStyledShape to handle stroke caps and dashing properly.
-        GrAAType aaType = this->chooseAAType(aa);
+        //
+        // http://skbug.com/12206 -- there is a double-blend issue with the bevel version of
+        // AAStrokeRectOp, and if we increase the AA bloat for MSAA it becomes more pronounced.
+        // Don't use the bevel version with DMSAA.
+        GrAAType aaType = (fCanUseDynamicMSAA &&
+                           stroke.getJoin() == SkPaint::kMiter_Join &&
+                           stroke.getMiter() >= SK_ScalarSqrt2) ? GrAAType::kCoverage
+                                                                : this->chooseAAType(aa);
         GrOp::Owner op = GrStrokeRectOp::Make(
                 fContext, std::move(paint), aaType, viewMatrix, rect, stroke);
         // op may be null if the stroke is not supported or if using coverage aa and the view matrix
@@ -770,10 +777,39 @@ void GrSurfaceDrawContext::fillRectToRect(const GrClip* clip,
         aa == GrAA::kYes) {  // If aa is kNo when using dmsaa, the rect is axis aligned. Don't use
                              // GrFillRRectOp because it might require dual source blending.
                              // http://skbug.com/11756
+        QuadOptimization opt = this->attemptQuadOptimization(clip, nullptr/*stencil*/, &aa, &quad,
+                                                             &paint);
+        if (opt < QuadOptimization::kClipApplied) {
+            // The optimization was completely handled inside attempt().
+            return;
+        }
+
+        SkRect croppedRect, croppedLocal{};
+        const GrClip* optimizedClip = clip;
+        if (clip && viewMatrix.isScaleTranslate() && quad.fDevice.asRect(&croppedRect) &&
+            (!paint.usesVaryingCoords() || quad.fLocal.asRect(&croppedLocal))) {
+            // The cropped quad is still a rect, and our view matrix preserves rects. Map it back
+            // to pre-matrix space.
+            SkMatrix inverse;
+            if (!viewMatrix.invert(&inverse)) {
+                return;
+            }
+            SkASSERT(inverse.rectStaysRect());
+            inverse.mapRect(&croppedRect);
+            if (opt == QuadOptimization::kClipApplied) {
+                optimizedClip = nullptr;
+            }
+        } else {
+            // Even if attemptQuadOptimization gave us an optimized quad, GrFillRRectOp needs a rect
+            // in pre-matrix space, so use the original rect. Also preserve the original clip.
+            croppedRect = rectToDraw;
+            croppedLocal = localRect;
+        }
+
         if (auto op = GrFillRRectOp::Make(fContext, this->arenaAlloc(), std::move(paint),
-                                          viewMatrix, SkRRect::MakeRect(rectToDraw), localRect,
+                                          viewMatrix, SkRRect::MakeRect(croppedRect), croppedLocal,
                                           GrAA::kYes)) {
-            this->addDrawOp(clip, std::move(op));
+            this->addDrawOp(optimizedClip, std::move(op));
             return;
         }
     }
