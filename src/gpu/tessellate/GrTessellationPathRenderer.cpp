@@ -176,11 +176,13 @@ bool GrTessellationPathRenderer::onDrawPath(const DrawPathArgs& args) {
                             ? args.fClip->getConservativeBounds()
                             : args.fSurfaceDrawContext->asSurfaceProxy()->backingStoreBoundsIRect())
                     : devIBounds;
-            auto op = GrOp::Make<GrDrawAtlasPathOp>(
-                    args.fContext, args.fSurfaceDrawContext->arenaAlloc(), fillBounds,
-                    *args.fViewMatrix, std::move(args.fPaint), locationInAtlas, devIBounds,
-                    transposedInAtlas, fAtlasRenderTasks.back()->readView(caps),
-                    path.isInverseFillType(), surfaceDrawContext->numSamples());
+            auto op = GrOp::Make<GrDrawAtlasPathOp>(args.fContext,
+                                                    args.fSurfaceDrawContext->arenaAlloc(),
+                                                    fillBounds, *args.fViewMatrix,
+                                                    std::move(args.fPaint), locationInAtlas,
+                                                    devIBounds, transposedInAtlas,
+                                                    fAtlasRenderTasks.back()->readView(caps),
+                                                    path.isInverseFillType());
             surfaceDrawContext->addDrawOp(args.fClip, std::move(op));
             return true;
         }
@@ -401,7 +403,7 @@ bool GrTessellationPathRenderer::tryAddPathToAtlas(GrRecordingContext* rContext,
                 kAtlasAlpha8Type, GrDynamicAtlas::InternalMultisample::kYes,
                 SkISize{fAtlasInitialSize, fAtlasInitialSize}, fAtlasMaxSize,
                 *rContext->priv().caps(), kAtlasAlgorithm);
-        auto newAtlasTask = sk_make_sp<GrAtlasRenderTask>(rContext, rContext->priv().auditTrail(),
+        auto newAtlasTask = sk_make_sp<GrAtlasRenderTask>(rContext,
                                                           sk_make_sp<GrArenas>(),
                                                           std::move(dynamicAtlas));
         rContext->priv().drawingManager()->addAtlasTask(newAtlasTask, currentAtlasTask);

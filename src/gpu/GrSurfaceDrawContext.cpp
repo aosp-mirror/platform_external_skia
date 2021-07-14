@@ -28,7 +28,6 @@
 #include "src/core/SkSurfacePriv.h"
 #include "src/gpu/GrAppliedClip.h"
 #include "src/gpu/GrAttachment.h"
-#include "src/gpu/GrAuditTrail.h"
 #include "src/gpu/GrBlurUtils.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrClip.h"
@@ -480,7 +479,12 @@ GrSurfaceDrawContext::QuadOptimization GrSurfaceDrawContext::attemptQuadOptimiza
     if (!quad->fDevice.isFinite() || drawBounds.isEmpty() ||
         GrClip::IsOutsideClip(rtRect, drawBounds)) {
         return QuadOptimization::kDiscarded;
+    } else if (GrQuadUtils::WillUseHairline(quad->fDevice, GrAAType::kCoverage, quad->fEdgeFlags)) {
+        // Don't try to apply the clip early if we know rendering will use hairline methods, as this
+        // has an effect on the op bounds not otherwise taken into account in this function.
+        return QuadOptimization::kCropped;
     }
+
     auto conservativeCrop = [&]() {
         static constexpr int kLargeDrawLimit = 15000;
         // Crop the quad to the render target. This doesn't change the visual results of drawing but
@@ -523,6 +527,12 @@ GrSurfaceDrawContext::QuadOptimization GrSurfaceDrawContext::attemptQuadOptimiza
     SkASSERT(result.fEffect == GrClip::Effect::kClipped && result.fIsRRect);
     SkRect clippedBounds = result.fRRect.getBounds();
     clippedBounds.intersect(rtRect);
+    // Guard against the clipped draw turning into a hairline draw after intersection
+    SkAssertResult(drawBounds.intersect(clippedBounds));
+    if (drawBounds.width() < 1.f || drawBounds.height() < 1.f) {
+        return QuadOptimization::kCropped;
+    }
+
     if (result.fRRect.isRect()) {
         // No rounded corners, so we might be able to become a native clear or we might be able to
         // modify geometry and edge flags to represent intersected shape of clip and draw.
@@ -762,39 +772,10 @@ void GrSurfaceDrawContext::fillRectToRect(const GrClip* clip,
         aa == GrAA::kYes) {  // If aa is kNo when using dmsaa, the rect is axis aligned. Don't use
                              // GrFillRRectOp because it might require dual source blending.
                              // http://skbug.com/11756
-        QuadOptimization opt = this->attemptQuadOptimization(clip, nullptr/*stencil*/, &aa, &quad,
-                                                             &paint);
-        if (opt < QuadOptimization::kClipApplied) {
-            // The optimization was completely handled inside attempt().
-            return;
-        }
-
-        SkRect croppedRect, croppedLocal{};
-        const GrClip* optimizedClip = clip;
-        if (clip && viewMatrix.isScaleTranslate() && quad.fDevice.asRect(&croppedRect) &&
-            (!paint.usesVaryingCoords() || quad.fLocal.asRect(&croppedLocal))) {
-            // The cropped quad is still a rect, and our view matrix preserves rects. Map it back
-            // to pre-matrix space.
-            SkMatrix inverse;
-            if (!viewMatrix.invert(&inverse)) {
-                return;
-            }
-            SkASSERT(inverse.rectStaysRect());
-            inverse.mapRect(&croppedRect);
-            if (opt == QuadOptimization::kClipApplied) {
-                optimizedClip = nullptr;
-            }
-        } else {
-            // Even if attemptQuadOptimization gave us an optimized quad, GrFillRRectOp needs a rect
-            // in pre-matrix space, so use the original rect. Also preserve the original clip.
-            croppedRect = rectToDraw;
-            croppedLocal = localRect;
-        }
-
         if (auto op = GrFillRRectOp::Make(fContext, this->arenaAlloc(), std::move(paint),
-                                          viewMatrix, SkRRect::MakeRect(croppedRect), croppedLocal,
+                                          viewMatrix, SkRRect::MakeRect(rectToDraw), localRect,
                                           GrAA::kYes)) {
-            this->addDrawOp(optimizedClip, std::move(op));
+            this->addDrawOp(clip, std::move(op));
             return;
         }
     }
@@ -2108,4 +2089,3 @@ GrOpsTask* GrSurfaceDrawContext::replaceOpsTaskIfModifiesColor() {
     }
     return this->getOpsTask();
 }
-
