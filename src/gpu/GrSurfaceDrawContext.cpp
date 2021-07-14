@@ -25,7 +25,6 @@
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkMatrixProvider.h"
 #include "src/core/SkRRectPriv.h"
-#include "src/core/SkSurfacePriv.h"
 #include "src/gpu/GrAppliedClip.h"
 #include "src/gpu/GrAttachment.h"
 #include "src/gpu/GrBlurUtils.h"
@@ -271,7 +270,7 @@ GrSurfaceDrawContext::GrSurfaceDrawContext(GrRecordingContext* context,
                                flushTimeOpsTask)
         , fSurfaceProps(surfaceProps)
         , fCanUseDynamicMSAA(
-                (fSurfaceProps.flags() & kDMSAA_SkSurfacePropsPrivateFlag) &&
+                (fSurfaceProps.flags() & SkSurfaceProps::kDynamicMSAA_Flag) &&
                 context->priv().caps()->supportsDynamicMSAA(this->asRenderTargetProxy()))
         , fGlyphPainter(*this) {
     SkDEBUGCODE(this->validate();)
@@ -299,10 +298,9 @@ void GrSurfaceDrawContext::willReplaceOpsTask(GrOpsTask* prevTask, GrOpsTask* ne
 
 inline GrAAType GrSurfaceDrawContext::chooseAAType(GrAA aa) {
     if (fCanUseDynamicMSAA) {
-        // Use coverage AA if we can disable multisample. Otherwise always trigger dmsaa. The few
-        // coverage ops we have that know how to handle both single and multisample targets without
-        // popping will do so without calling chooseAAType.
-        return this->caps()->multisampleDisableSupport() ? GrAAType::kCoverage : GrAAType::kMSAA;
+        // Always trigger DMSAA when it's available. The coverage ops that know how to handle both
+        // single and multisample targets without popping will do so without calling chooseAAType.
+        return GrAAType::kMSAA;
     }
     if (GrAA::kNo == aa) {
         // On some devices we cannot disable MSAA if it is enabled so we make the AA type reflect
@@ -1034,26 +1032,23 @@ void GrSurfaceDrawContext::drawRRect(const GrClip* origClip,
     GrAAType aaType = this->chooseAAType(aa);
 
     GrOp::Owner op;
-    if (aaType == GrAAType::kCoverage) {
-        bool preferFillRRectOverCircle = this->caps()->drawInstancedSupport() &&
-                                         (fCanUseDynamicMSAA || this->caps()->reducedShaderMode());
-        if (!preferFillRRectOverCircle                             &&
-            rrect.isSimple()                                       &&
-            rrect.getSimpleRadii().fX == rrect.getSimpleRadii().fY &&
-            viewMatrix.rectStaysRect() && viewMatrix.isSimilarity()) {
-            // In coverage mode, we draw axis-aligned circular roundrects with the GrOvalOpFactory
-            // to avoid perf regressions on some platforms.
-            assert_alive(paint);
-            op = GrOvalOpFactory::MakeCircularRRectOp(fContext, std::move(paint), viewMatrix, rrect,
-                                                      stroke, this->caps()->shaderCaps());
-        }
+    if (aaType == GrAAType::kCoverage                          &&
+        !fCanUseDynamicMSAA                                    &&
+        !this->caps()->reducedShaderMode()                     &&
+        rrect.isSimple()                                       &&
+        rrect.getSimpleRadii().fX == rrect.getSimpleRadii().fY &&
+        viewMatrix.rectStaysRect() && viewMatrix.isSimilarity()) {
+        // In specific cases we use a dedicated circular round rect op to try and get better perf.
+        assert_alive(paint);
+        op = GrOvalOpFactory::MakeCircularRRectOp(fContext, std::move(paint), viewMatrix, rrect,
+                                                  stroke, this->caps()->shaderCaps());
     }
     if (!op && style.isSimpleFill()) {
         assert_alive(paint);
         op = GrFillRRectOp::Make(fContext, this->arenaAlloc(), std::move(paint), viewMatrix, rrect,
                                  rrect.rect(), GrAA(aaType != GrAAType::kNone));
     }
-    if (!op && aaType == GrAAType::kCoverage) {
+    if (!op && (aaType == GrAAType::kCoverage || fCanUseDynamicMSAA)) {
         assert_alive(paint);
         op = GrOvalOpFactory::MakeRRectOp(
                 fContext, std::move(paint), viewMatrix, rrect, stroke, this->caps()->shaderCaps());
@@ -1343,19 +1338,16 @@ void GrSurfaceDrawContext::drawOval(const GrClip* clip,
     GrAAType aaType = this->chooseAAType(aa);
 
     GrOp::Owner op;
-    if (aaType == GrAAType::kCoverage) {
-        bool preferFillRRectOverCircle = this->caps()->drawInstancedSupport() &&
-                                         (fCanUseDynamicMSAA || this->caps()->reducedShaderMode());
-        if (!preferFillRRectOverCircle         &&
-            oval.width() > SK_ScalarNearlyZero &&
-            oval.width() == oval.height()      &&
-            viewMatrix.isSimilarity()) {
-            // We don't draw true circles as round rects in coverage mode, because it can
-            // cause perf regressions on some platforms as compared to the dedicated circle Op.
-            assert_alive(paint);
-            op = GrOvalOpFactory::MakeCircleOp(fContext, std::move(paint), viewMatrix, oval, style,
-                                               this->caps()->shaderCaps());
-        }
+    if (aaType == GrAAType::kCoverage      &&
+        !fCanUseDynamicMSAA                &&
+        !this->caps()->reducedShaderMode() &&
+        oval.width() > SK_ScalarNearlyZero &&
+        oval.width() == oval.height()      &&
+        viewMatrix.isSimilarity()) {
+        // In specific cases we use a dedicated circle op to try and get better perf.
+        assert_alive(paint);
+        op = GrOvalOpFactory::MakeCircleOp(fContext, std::move(paint), viewMatrix, oval, style,
+                                           this->caps()->shaderCaps());
     }
     if (!op && style.isSimpleFill()) {
         // GrFillRRectOp has special geometry and a fragment-shader branch to conditionally evaluate
@@ -1367,7 +1359,7 @@ void GrSurfaceDrawContext::drawOval(const GrClip* clip,
         op = GrFillRRectOp::Make(fContext, this->arenaAlloc(), std::move(paint), viewMatrix,
                                  SkRRect::MakeOval(oval), oval, GrAA(aaType != GrAAType::kNone));
     }
-    if (!op && aaType == GrAAType::kCoverage) {
+    if (!op && (aaType == GrAAType::kCoverage || fCanUseDynamicMSAA)) {
         assert_alive(paint);
         op = GrOvalOpFactory::MakeOvalOp(fContext, std::move(paint), viewMatrix, oval, style,
                                          this->caps()->shaderCaps());
