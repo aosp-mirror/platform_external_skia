@@ -73,9 +73,9 @@ public:
     }
 
 protected:
-    virtual SkString name() { return SkString("XfermodesBlur"); }
+    SkString name() override { return SkString("XfermodesBlur"); }
 
-    virtual void onDrawContent(SkCanvas* canvas) {
+    void onDrawContent(SkCanvas* canvas) override {
         canvas->translate(SkIntToScalar(10), SkIntToScalar(20));
 
         const SkBlendMode gModes[] = {
@@ -98,7 +98,7 @@ protected:
         const SkScalar h = SkIntToScalar(H);
         SkMatrix m;
         m.setScale(SkIntToScalar(6), SkIntToScalar(6));
-        auto s = fBG.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, &m);
+        auto s = fBG.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, SkSamplingOptions(), m);
 
         SkFont font;
         font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
@@ -141,7 +141,7 @@ protected:
     }
 
 private:
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
 
 //////////////////////////////////////////////////////////////////////////////
