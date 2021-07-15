@@ -9,10 +9,8 @@
 #define GrStrikeCache_DEFINED
 
 #include "include/private/SkTHash.h"
-#include "src/codec/SkMasks.h"
+#include "src/core/SkArenaAlloc.h"
 #include "src/core/SkDescriptor.h"
-#include "src/core/SkTDynamicHash.h"
-#include "src/gpu/GrDrawOpAtlas.h"
 #include "src/gpu/GrGlyph.h"
 
 class GrAtlasManager;
@@ -31,32 +29,7 @@ class GrTextStrike : public SkNVRefCnt<GrTextStrike> {
 public:
     GrTextStrike(const SkDescriptor& fontScalerKey);
 
-    GrGlyph* getGlyph(const SkGlyph& skGlyph);
-
-    // This variant of the above function is called by GrAtlasTextOp. At this point, it is possible
-    // that the maskformat of the glyph differs from what we expect.  In these cases we will just
-    // draw a clear square.
-    // skbug:4143 crbug:510931
-    GrGlyph* getGlyph(SkPackedGlyphID packed, SkBulkGlyphMetricsAndImages* metricsAndImages);
-
-    // returns true if glyph successfully added to texture atlas, false otherwise.  If the glyph's
-    // mask format has changed, then addGlyphToAtlas will draw a clear box.  This will almost never
-    // happen.
-    // TODO we can handle some of these cases if we really want to, but the long term solution is to
-    // get the actual glyph image itself when we get the glyph metrics.
-    GrDrawOpAtlas::ErrorCode addGlyphToAtlas(const SkGlyph&,
-                                             GrMaskFormat expectedMaskFormat,
-                                             bool isScaledGlyph,
-                                             GrResourceProvider*,
-                                             GrDeferredUploadTarget*,
-                                             GrAtlasManager*,
-                                             GrGlyph*);
-
-    // testing
-    int countGlyphs() const { return fCache.count(); }
-
-    // remove any references to this plot
-    void removeID(GrDrawOpAtlas::PlotLocator);
+    GrGlyph* getGlyph(SkPackedGlyphID);
 
 private:
     struct HashTraits {
@@ -73,8 +46,6 @@ private:
     SkAutoDescriptor fFontScalerKey;
     SkArenaAlloc fAlloc{512};
 
-    int fAtlasedGlyphs{0};
-
     friend class GrStrikeCache;
 };
 
@@ -90,7 +61,7 @@ public:
     // another client of the cache may cause the strike to be purged while it is still reffed.
     // Therefore, the caller must check GrTextStrike::isAbandoned() if there are other
     // interactions with the cache since the strike was received.
-    sk_sp<GrTextStrike> getStrike(const SkDescriptor& desc) {
+    sk_sp<GrTextStrike> findOrCreateStrike(const SkDescriptor& desc) {
         if (sk_sp<GrTextStrike>* cached = fCache.find(desc)) {
             return *cached;
         }
