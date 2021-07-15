@@ -11,7 +11,7 @@ vars = {
 
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@2534ee4c5b9da63cfc7a60b14ecd925116105ed4",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@db54b8dd65edaf50c79a81a8d3eeeeb9dc20ecab",
   "third_party/externals/brotli"          : "https://skia.googlesource.com/external/github.com/google/brotli.git@e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, and tint for SPIRV compilation.
@@ -45,7 +45,7 @@ deps = {
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@c876c8f87101c5a75f6014b0f832499afeb65b73",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@378115c18d5cc90e2095c5fc0f54d199807c9e3c",
+    "url": "https://chromium.googlesource.com/chromium/src.git@17781a5cd82e61a304559e9adb7d5a9c78dbbd59",
     "condition": "checkout_chromium",
   },
 
