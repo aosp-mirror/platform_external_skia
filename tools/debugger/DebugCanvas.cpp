@@ -5,21 +5,24 @@
  * found in the LICENSE file.
  */
 
+#include "tools/debugger/DebugCanvas.h"
+
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
 #include "include/core/SkPicture.h"
+#include "include/core/SkPoint.h"
 #include "include/core/SkTextBlob.h"
+#include "include/gpu/GrDirectContext.h"
 #include "include/utils/SkPaintFilterCanvas.h"
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkClipOpPriv.h"
 #include "src/core/SkRectPriv.h"
+#include "src/gpu/GrAuditTrail.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/utils/SkJSONWriter.h"
-#include "tools/debugger/DebugCanvas.h"
 #include "tools/debugger/DebugLayerManager.h"
 #include "tools/debugger/DrawCommand.h"
-
-#include "include/gpu/GrContext.h"
-#include "src/gpu/GrAuditTrail.h"
-#include "src/gpu/GrContextPriv.h"
-#include "src/gpu/GrRenderTargetContext.h"
 
 #include <string>
 
@@ -33,6 +36,26 @@ namespace {
     static constexpr char kOffscreenLayerDraw[] = "OffscreenLayerDraw";
     static constexpr char kSurfaceID[] = "SurfaceID";
     static constexpr char kAndroidClip[] = "AndroidDeviceClipRestriction";
+
+    static SkPath arrowHead = SkPath::Polygon({
+        { 0,   0},
+        { 6, -15},
+        { 0,  -12},
+        {-6, -15},
+    }, true);
+
+    void drawArrow(SkCanvas* canvas, const SkPoint& a, const SkPoint& b, const SkPaint& paint) {
+        canvas->translate(0.5, 0.5);
+        canvas->drawLine(a, b, paint);
+        canvas->save();
+        canvas->translate(b.fX, b.fY);
+        SkScalar angle = SkScalarATan2((b.fY - a.fY), b.fX - a.fX);
+        canvas->rotate(angle * 180 / SK_ScalarPI - 90);
+        // arrow head
+        canvas->drawPath(arrowHead, paint);
+        canvas->restore();
+        canvas->restore();
+    }
 } // namespace
 
 class DebugPaintFilterCanvas : public SkPaintFilterCanvas {
@@ -56,7 +79,7 @@ protected:
 
 private:
 
-    typedef SkPaintFilterCanvas INHERITED;
+    using INHERITED = SkPaintFilterCanvas;
 };
 
 DebugCanvas::DebugCanvas(int width, int height)
@@ -65,6 +88,7 @@ DebugCanvas::DebugCanvas(int width, int height)
         , fClipVizColor(SK_ColorTRANSPARENT)
         , fDrawGpuOpBounds(false)
         , fShowAndroidClip(false)
+        , fShowOrigin(false)
         , fnextDrawPictureLayerId(-1)
         , fnextDrawImageRectLayerId(-1)
         , fAndroidClip(SkRect::MakeEmpty()) {
@@ -84,12 +108,11 @@ DebugCanvas::DebugCanvas(int width, int height)
     SkASSERT(!large.roundOut().isEmpty());
 #endif
     // call the base class' version to avoid adding a draw command
-    this->INHERITED::onClipRect(large, kReplace_SkClipOp, kHard_ClipEdgeStyle);
+    this->INHERITED::onClipRect(large, SkClipOp::kIntersect, kHard_ClipEdgeStyle);
 }
 
-DebugCanvas::DebugCanvas(SkIRect bounds) {
-    DebugCanvas(bounds.width(), bounds.height());
-}
+DebugCanvas::DebugCanvas(SkIRect bounds)
+        : DebugCanvas(bounds.width(), bounds.height()) {}
 
 DebugCanvas::~DebugCanvas() { fCommandVector.deleteAll(); }
 
@@ -118,6 +141,8 @@ void DebugCanvas::drawTo(SkCanvas* originalCanvas, int index, int m) {
     DebugPaintFilterCanvas filterCanvas(originalCanvas);
     SkCanvas* finalCanvas = fOverdrawViz ? &filterCanvas : originalCanvas;
 
+    auto dContext = GrAsDirectContext(finalCanvas->recordingContext());
+
     // If we have a GPU backend we can also visualize the op information
     GrAuditTrail* at = nullptr;
     if (fDrawGpuOpBounds || m != -1) {
@@ -131,7 +156,9 @@ void DebugCanvas::drawTo(SkCanvas* originalCanvas, int index, int m) {
             // We need to flush any pending operations, or they might combine with commands below.
             // Previous operations were not registered with the audit trail when they were
             // created, so if we allow them to combine, the audit trail will fail to find them.
-            finalCanvas->flush();
+            if (dContext) {
+                dContext->flush();
+            }
             acb = new GrAuditTrail::AutoCollectOps(at, i);
         }
         if (fCommandVector[i]->isVisible()) {
@@ -150,8 +177,16 @@ void DebugCanvas::drawTo(SkCanvas* originalCanvas, int index, int m) {
         finalCanvas->restore();
     }
 
-    fMatrix = finalCanvas->getTotalMatrix();
+    fMatrix = finalCanvas->getLocalToDevice();
     fClip   = finalCanvas->getDeviceClipBounds();
+    if (fShowOrigin) {
+        const SkPaint originXPaint = SkPaint({1.0, 0, 0, 1.0});
+        const SkPaint originYPaint = SkPaint({0, 1.0, 0, 1.0});
+        // Draw an origin cross at the origin before restoring to assist in visualizing the
+        // current matrix.
+        drawArrow(finalCanvas, {-50, 0}, {50, 0}, originXPaint);
+        drawArrow(finalCanvas, {0, -50}, {0, 50}, originYPaint);
+    }
     finalCanvas->restoreToCount(saveCount);
 
     if (fShowAndroidClip) {
@@ -166,7 +201,9 @@ void DebugCanvas::drawTo(SkCanvas* originalCanvas, int index, int m) {
         // just in case there is global reordering, we flush the canvas before querying
         // GrAuditTrail
         GrAuditTrail::AutoEnable ae(at);
-        finalCanvas->flush();
+        if (dContext) {
+            dContext->flush();
+        }
 
         // we pick three colorblind-safe colors, 75% alpha
         static const SkColor kTotalBounds     = SkColorSetARGB(0xC0, 0x6A, 0x3D, 0x9A);
@@ -175,9 +212,8 @@ void DebugCanvas::drawTo(SkCanvas* originalCanvas, int index, int m) {
 
         // get the render target of the top device (from the original canvas) so we can ignore ops
         // drawn offscreen
-        GrRenderTargetContext* rtc =
-                originalCanvas->internal_private_accessTopLayerRenderTargetContext();
-        GrSurfaceProxy::UniqueID proxyID = rtc->asSurfaceProxy()->uniqueID();
+        GrSurfaceDrawContext* sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(originalCanvas);
+        GrSurfaceProxy::UniqueID proxyID = sdc->asSurfaceProxy()->uniqueID();
 
         // get the bounding boxes to draw
         SkTArray<GrAuditTrail::OpInfo> childrenBounds;
@@ -221,14 +257,14 @@ void DebugCanvas::deleteDrawCommandAt(int index) {
     fCommandVector.remove(index);
 }
 
-DrawCommand* DebugCanvas::getDrawCommandAt(int index) {
+DrawCommand* DebugCanvas::getDrawCommandAt(int index) const {
     SkASSERT(index < fCommandVector.count());
     return fCommandVector[index];
 }
 
 GrAuditTrail* DebugCanvas::getAuditTrail(SkCanvas* canvas) {
     GrAuditTrail* at  = nullptr;
-    GrContext*    ctx = canvas->getGrContext();
+    auto ctx = canvas->recordingContext();
     if (ctx) {
         at = ctx->priv().auditTrail();
     }
@@ -248,7 +284,11 @@ void DebugCanvas::drawAndCollectOps(SkCanvas* canvas) {
         // in case there is some kind of global reordering
         {
             GrAuditTrail::AutoEnable ae(at);
-            canvas->flush();
+
+            auto dContext = GrAsDirectContext(canvas->recordingContext());
+            if (dContext) {
+                dContext->flush();
+            }
         }
     }
 }
@@ -318,22 +358,21 @@ void DebugCanvas::onClipRegion(const SkRegion& region, SkClipOp op) {
     this->addDrawCommand(new ClipRegionCommand(region, op));
 }
 
-void DebugCanvas::didConcat44(const SkScalar m[16]) {
-    // TODO
+void DebugCanvas::onClipShader(sk_sp<SkShader> cs, SkClipOp op) {
+    this->addDrawCommand(new ClipShaderCommand(std::move(cs), op));
+}
+
+void DebugCanvas::didConcat44(const SkM44& m) {
+    this->addDrawCommand(new Concat44Command(m));
     this->INHERITED::didConcat44(m);
 }
 
 void DebugCanvas::didScale(SkScalar x, SkScalar y) {
-    this->didConcat(SkMatrix::MakeScale(x, y));
+    this->didConcat44(SkM44::Scale(x, y));
 }
 
 void DebugCanvas::didTranslate(SkScalar x, SkScalar y) {
-    this->didConcat(SkMatrix::MakeTrans(x, y));
-}
-
-void DebugCanvas::didConcat(const SkMatrix& matrix) {
-    this->addDrawCommand(new ConcatCommand(matrix));
-    this->INHERITED::didConcat(matrix);
+    this->didConcat44(SkM44::Translate(x, y));
 }
 
 void DebugCanvas::onDrawAnnotation(const SkRect& rect, const char key[], SkData* value) {
@@ -343,8 +382,8 @@ void DebugCanvas::onDrawAnnotation(const SkRect& rect, const char key[], SkData*
     SkStrSplit(key, "|", kStrict_SkStrSplitMode, &tokens);
     if (tokens.size() == 2) {
         if (tokens[0].equals(kOffscreenLayerDraw)) {
-            // Indicates that the next drawPicture command contains the SkPicture to render the node
-            // at this id in an offscreen buffer.
+            // Indicates that the next drawPicture command contains the SkPicture to render the
+            // node at this id in an offscreen buffer.
             fnextDrawPictureLayerId = std::stoi(tokens[1].c_str());
             fnextDrawPictureDirtyRect = rect.roundOut();
             return; // don't record it
@@ -363,55 +402,28 @@ void DebugCanvas::onDrawAnnotation(const SkRect& rect, const char key[], SkData*
     this->addDrawCommand(new DrawAnnotationCommand(rect, key, sk_ref_sp(value)));
 }
 
-void DebugCanvas::onDrawBitmap(const SkBitmap& bitmap,
-                               SkScalar        left,
-                               SkScalar        top,
-                               const SkPaint*  paint) {
-    this->addDrawCommand(new DrawBitmapCommand(bitmap, left, top, paint));
+void DebugCanvas::onDrawImage2(const SkImage*           image,
+                               SkScalar                 left,
+                               SkScalar                 top,
+                               const SkSamplingOptions& sampling,
+                               const SkPaint*           paint) {
+    this->addDrawCommand(new DrawImageCommand(image, left, top, sampling, paint));
 }
 
-void DebugCanvas::onDrawBitmapLattice(const SkBitmap& bitmap,
-                                      const Lattice&  lattice,
-                                      const SkRect&   dst,
-                                      const SkPaint*  paint) {
-    this->addDrawCommand(new DrawBitmapLatticeCommand(bitmap, lattice, dst, paint));
+void DebugCanvas::onDrawImageLattice2(const SkImage* image,
+                                      const Lattice& lattice,
+                                      const SkRect&  dst,
+                                      SkFilterMode filter,   // todo
+                                      const SkPaint* paint) {
+    this->addDrawCommand(new DrawImageLatticeCommand(image, lattice, dst, filter, paint));
 }
 
-void DebugCanvas::onDrawBitmapRect(const SkBitmap&   bitmap,
-                                   const SkRect*     src,
-                                   const SkRect&     dst,
-                                   const SkPaint*    paint,
-                                   SrcRectConstraint constraint) {
-    this->addDrawCommand(
-            new DrawBitmapRectCommand(bitmap, src, dst, paint, (SrcRectConstraint)constraint));
-}
-
-void DebugCanvas::onDrawBitmapNine(const SkBitmap& bitmap,
-                                   const SkIRect&  center,
-                                   const SkRect&   dst,
-                                   const SkPaint*  paint) {
-    this->addDrawCommand(new DrawBitmapNineCommand(bitmap, center, dst, paint));
-}
-
-void DebugCanvas::onDrawImage(const SkImage* image,
-                              SkScalar       left,
-                              SkScalar       top,
-                              const SkPaint* paint) {
-    this->addDrawCommand(new DrawImageCommand(image, left, top, paint));
-}
-
-void DebugCanvas::onDrawImageLattice(const SkImage* image,
-                                     const Lattice& lattice,
-                                     const SkRect&  dst,
-                                     const SkPaint* paint) {
-    this->addDrawCommand(new DrawImageLatticeCommand(image, lattice, dst, paint));
-}
-
-void DebugCanvas::onDrawImageRect(const SkImage*    image,
-                                  const SkRect*     src,
-                                  const SkRect&     dst,
-                                  const SkPaint*    paint,
-                                  SrcRectConstraint constraint) {
+void DebugCanvas::onDrawImageRect2(const SkImage*           image,
+                                   const SkRect&            src,
+                                   const SkRect&            dst,
+                                   const SkSamplingOptions& sampling,
+                                   const SkPaint*           paint,
+                                   SrcRectConstraint        constraint) {
     if (fnextDrawImageRectLayerId != -1 && fLayerManager) {
         // This drawImageRect command would have drawn the offscreen buffer for a layer.
         // On Android, we recorded an SkPicture of the commands that drew to the layer.
@@ -422,19 +434,13 @@ void DebugCanvas::onDrawImageRect(const SkImage*    image,
         // Instead of adding a DrawImageRectCommand, we need a deferred command, that when
         // executed, will call drawImageRect(fLayerManager->getLayerAsImage())
         this->addDrawCommand(new DrawImageRectLayerCommand(
-            fLayerManager, fnextDrawImageRectLayerId, fFrame, src, dst, paint, constraint));
+            fLayerManager, fnextDrawImageRectLayerId, fFrame, src, dst, sampling,
+                                                           paint, constraint));
     } else {
-        this->addDrawCommand(new DrawImageRectCommand(image, src, dst, paint, constraint));
+        this->addDrawCommand(new DrawImageRectCommand(image, src, dst, sampling, paint, constraint));
     }
     // Reset expectation so next drawImageRect is not special.
     fnextDrawImageRectLayerId = -1;
-}
-
-void DebugCanvas::onDrawImageNine(const SkImage* image,
-                                  const SkIRect& center,
-                                  const SkRect&  dst,
-                                  const SkPaint* paint) {
-    this->addDrawCommand(new DrawImageNineCommand(image, center, dst, paint));
 }
 
 void DebugCanvas::onDrawOval(const SkRect& oval, const SkPaint& paint) {
@@ -517,25 +523,23 @@ void DebugCanvas::onDrawPatch(const SkPoint  cubics[12],
 }
 
 void DebugCanvas::onDrawVerticesObject(const SkVertices*      vertices,
-                                       const SkVertices::Bone bones[],
-                                       int                    boneCount,
                                        SkBlendMode            bmode,
                                        const SkPaint&         paint) {
-    // TODO: ANIMATION NOT LOGGED
     this->addDrawCommand(
             new DrawVerticesCommand(sk_ref_sp(const_cast<SkVertices*>(vertices)), bmode, paint));
 }
 
-void DebugCanvas::onDrawAtlas(const SkImage*  image,
-                              const SkRSXform xform[],
-                              const SkRect    tex[],
-                              const SkColor   colors[],
-                              int             count,
-                              SkBlendMode     bmode,
-                              const SkRect*   cull,
-                              const SkPaint*  paint) {
+void DebugCanvas::onDrawAtlas2(const SkImage*           image,
+                               const SkRSXform          xform[],
+                               const SkRect             tex[],
+                               const SkColor            colors[],
+                               int                      count,
+                               SkBlendMode              bmode,
+                               const SkSamplingOptions& sampling,
+                               const SkRect*            cull,
+                               const SkPaint*           paint) {
     this->addDrawCommand(
-            new DrawAtlasCommand(image, xform, tex, colors, count, bmode, cull, paint));
+            new DrawAtlasCommand(image, xform, tex, colors, count, bmode, sampling, cull, paint));
 }
 
 void DebugCanvas::onDrawShadowRec(const SkPath& path, const SkDrawShadowRec& rec) {
@@ -554,14 +558,15 @@ void DebugCanvas::onDrawEdgeAAQuad(const SkRect&    rect,
     this->addDrawCommand(new DrawEdgeAAQuadCommand(rect, clip, aa, color, mode));
 }
 
-void DebugCanvas::onDrawEdgeAAImageSet(const ImageSetEntry set[],
-                                       int                 count,
-                                       const SkPoint       dstClips[],
-                                       const SkMatrix      preViewMatrices[],
-                                       const SkPaint*      paint,
-                                       SrcRectConstraint   constraint) {
+void DebugCanvas::onDrawEdgeAAImageSet2(const ImageSetEntry set[],
+                                        int                 count,
+                                        const SkPoint       dstClips[],
+                                        const SkMatrix      preViewMatrices[],
+                                        const SkSamplingOptions& sampling,
+                                        const SkPaint*      paint,
+                                        SrcRectConstraint   constraint) {
     this->addDrawCommand(new DrawEdgeAAImageSetCommand(
-            set, count, dstClips, preViewMatrices, paint, constraint));
+            set, count, dstClips, preViewMatrices, sampling, paint, constraint));
 }
 
 void DebugCanvas::willRestore() {
@@ -586,12 +591,42 @@ bool DebugCanvas::onDoSaveBehind(const SkRect* subset) {
     return false;
 }
 
-void DebugCanvas::didSetMatrix(const SkMatrix& matrix) {
-    this->addDrawCommand(new SetMatrixCommand(matrix));
-    this->INHERITED::didSetMatrix(matrix);
+void DebugCanvas::didSetM44(const SkM44& matrix) {
+    this->addDrawCommand(new SetM44Command(matrix));
+    this->INHERITED::didSetM44(matrix);
 }
 
 void DebugCanvas::toggleCommand(int index, bool toggle) {
     SkASSERT(index < fCommandVector.count());
     fCommandVector[index]->setVisible(toggle);
+}
+
+std::map<int, std::vector<int>> DebugCanvas::getImageIdToCommandMap(UrlDataManager& udm) const {
+    // map from image ids to list of commands that reference them.
+    std::map<int, std::vector<int>> m;
+
+    for (int i = 0; i < this->getSize(); i++) {
+        const DrawCommand* command = this->getDrawCommandAt(i);
+        int imageIndex = -1;
+        // this is not an exaustive list of where images can be used, they show up in paints too.
+        switch (command->getOpType()) {
+            case DrawCommand::OpType::kDrawImage_OpType: {
+                imageIndex = static_cast<const DrawImageCommand*>(command)->imageId(udm);
+                break;
+            }
+            case DrawCommand::OpType::kDrawImageRect_OpType: {
+                imageIndex = static_cast<const DrawImageRectCommand*>(command)->imageId(udm);
+                break;
+            }
+            case DrawCommand::OpType::kDrawImageLattice_OpType: {
+                imageIndex = static_cast<const DrawImageLatticeCommand*>(command)->imageId(udm);
+                break;
+            }
+            default: break;
+        }
+        if (imageIndex >= 0) {
+            m[imageIndex].push_back(i);
+        }
+    }
+    return m;
 }
