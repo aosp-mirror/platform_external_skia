@@ -2756,7 +2756,6 @@ cc_test {
         "tests/ResourceAllocatorTest.cpp",
         "tests/ResourceCacheTest.cpp",
         "tests/RoundRectTest.cpp",
-        "tests/RuntimeBlendTest.cpp",
         "tests/SRGBReadWritePixelsTest.cpp",
         "tests/SRGBTest.cpp",
         "tests/SVGDeviceTest.cpp",
