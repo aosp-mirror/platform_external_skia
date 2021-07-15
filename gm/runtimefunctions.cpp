@@ -9,6 +9,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkShader.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/effects/SkRuntimeEffect.h"
@@ -17,16 +18,16 @@ static const char* RUNTIME_FUNCTIONS_SRC = R"(
     uniform half4 gColor;
 
     half scale(float x) {
-        return half(x) / 255;
+        return x / 255;
     }
 
     half4 blackAndWhite(half4 raw) {
         half value = raw.r * 0.22 + raw.g * 0.67 + raw.b * 0.11;
-        return half4(half3(value), raw.a);
+        return half4(value.xxx, raw.a);
     }
 
-    void main(float2 p, inout half4 color) {
-        color = blackAndWhite(half4(scale(p.x), scale(p.y), gColor.b, 1));
+    half4 main(float2 p) {
+        return blackAndWhite(half4(scale(p.x), scale(p.y), gColor.b, 1));
     }
 )";
 
@@ -39,7 +40,7 @@ class RuntimeFunctions : public skiagm::GM {
 
     void onDraw(SkCanvas* canvas) override {
         sk_sp<SkRuntimeEffect> gEffect =
-                std::get<0>(SkRuntimeEffect::Make(SkString(RUNTIME_FUNCTIONS_SRC)));
+                SkRuntimeEffect::MakeForShader(SkString(RUNTIME_FUNCTIONS_SRC)).effect;
         SkASSERT(gEffect);
 
         SkMatrix localM;
