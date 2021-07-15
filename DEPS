@@ -6,12 +6,12 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling different
   # dependencies without interference from each other.
-  'sk_tool_revision': 'git_revision:431aedb0c26df232898221cb6328e31e1305f41b',
+  'sk_tool_revision': 'git_revision:af23468c7173e1f17987a6aa12c41bf6b1730c60',
 }
 
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@a8e98a2385216771a14e67e03e4ae78e73a6f64a",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@2534ee4c5b9da63cfc7a60b14ecd925116105ed4",
   "third_party/externals/brotli"          : "https://skia.googlesource.com/external/github.com/google/brotli.git@e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, and tint for SPIRV compilation.
@@ -39,13 +39,13 @@ deps = {
   "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@bdbef7b1f3982fe99a62d076043036abe6dd6d80",
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@bcf55210f13a4fa3c3d0963b509ff1070e434c79",
   "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@dc72924cb31cd9f3dbc3eb47e9d926cf641e3a07",
-  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@4716eec90fcbb105b4694807121c7a57d7cf8fd9",
+  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@ba18c78e46968726769813b68adb19466e092812",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
   "third_party/externals/wuffs"           : "https://skia.googlesource.com/external/github.com/google/wuffs.git@f49c38202914c289621f547ff016e5f02c994dda",
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@c876c8f87101c5a75f6014b0f832499afeb65b73",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@3572711a2c6af39177d5a6f2da8090960b402a85",
+    "url": "https://chromium.googlesource.com/chromium/src.git@378115c18d5cc90e2095c5fc0f54d199807c9e3c",
     "condition": "checkout_chromium",
   },
 

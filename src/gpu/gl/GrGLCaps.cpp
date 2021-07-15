@@ -216,10 +216,16 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     }
 
     if (GR_IS_GR_GL(standard)) {
-        fMultisampleDisableSupport = true;
+        fClientCanDisableMultisample = true;
     } else if (GR_IS_GR_GL_ES(standard)) {
-        fMultisampleDisableSupport = ctxInfo.hasExtension("GL_EXT_multisample_compatibility");
+        fClientCanDisableMultisample = ctxInfo.hasExtension("GL_EXT_multisample_compatibility");
     } // no WebGL support
+
+#ifdef SK_BUILD_FOR_MAC
+    fMultisampleDisableSupport = false;
+#else
+    fMultisampleDisableSupport = fClientCanDisableMultisample;
+#endif
 
     if (GR_IS_GR_GL(standard)) {
         // 3.1 has draw_instanced but not instanced_arrays, for the time being we only care about
@@ -4209,11 +4215,14 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     }
 
     // http://crbug.com/1197152
-#ifndef SK_BUILD_FOR_IOS
-    if (ctxInfo.renderer() == GrGLRenderer::kPowerVRRogue) {
+    // http://b/187364475
+    // We could limit this < 1.13 on ChromeOS but we don't really have a good way to detect
+    // ChromeOS from here.
+    if (ctxInfo.renderer()      == GrGLRenderer::kPowerVRRogue &&
+        ctxInfo.driver()        == GrGLDriver::kImagination    &&
+        ctxInfo.driverVersion() <  GR_GL_DRIVER_VER(1, 16, 0)) {
         fShaderCaps->fShaderDerivativeSupport = false;
     }
-#endif
 
     if (ctxInfo.driver() == GrGLDriver::kFreedreno) {
         formatWorkarounds->fDisallowUnorm16Transfers = true;
@@ -4636,20 +4645,7 @@ GrDstSampleFlags GrGLCaps::onGetDstSampleFlagsForProxy(const GrRenderTargetProxy
 }
 
 bool GrGLCaps::onSupportsDynamicMSAA(const GrRenderTargetProxy* rtProxy) const {
-    if (fDisallowDynamicMSAA) {
-        return false;
-    }
-    // We only allow DMSAA in two cases:
-    //
-    //   1) Desktop GL and EXT_multisample_compatibility: Here it's easy to use all our existing
-    //      coverage ops because we can just call glDisable(GL_MULTISAMPLE). So we only trigger
-    //      MSAA for paths and use the coverage ops for everything else with MSAA disabled.
-    //
-    //   2) EXT_multisampled_render_to_to_texture (86% adoption on Android): The assumption here
-    //      is that MSAA is almost free. So we just allow MSAA to be triggered often and don't
-    //      worry about it.
-    return fMultisampleDisableSupport ||
-           (fMSAAResolvesAutomatically && rtProxy->asTextureProxy());
+    return !fDisallowDynamicMSAA;
 }
 
 uint64_t GrGLCaps::computeFormatKey(const GrBackendFormat& format) const {
