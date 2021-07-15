@@ -9,14 +9,18 @@
 #define SkRasterClip_DEFINED
 
 #include "include/core/SkRegion.h"
+#include "include/core/SkShader.h"
 #include "include/private/SkMacros.h"
 #include "src/core/SkAAClip.h"
 
 class SkRRect;
 
 class SkConservativeClip {
-    SkIRect         fBounds;
-    const SkIRect*  fClipRestrictionRect;
+    SkIRect         fBounds = SkIRect::MakeEmpty();
+    bool            fIsRect = true;
+    bool            fAA = false;
+
+    const SkIRect*  fClipRestrictionRect = nullptr;
 
     inline void applyClipRestriction(SkRegion::Op op, SkIRect* bounds) {
         if (op >= SkRegion::kUnion_Op && fClipRestrictionRect
@@ -27,19 +31,33 @@ class SkConservativeClip {
         }
     }
 
-public:
-    SkConservativeClip() : fBounds(SkIRect::MakeEmpty()), fClipRestrictionRect(nullptr) {}
+    enum class ClipAA : bool { kNo = false, kYes = true };
+    enum class IsRect : bool { kNo = false, kYes = true };
 
+    inline void applyOpParams(SkRegion::Op op, ClipAA aa, IsRect rect) {
+        fAA |= (bool) aa;
+        fIsRect &= (op == SkRegion::kIntersect_Op && (bool) rect);
+    }
+
+public:
     bool isEmpty() const { return fBounds.isEmpty(); }
-    bool isRect() const { return true; }
+    bool isRect() const { return fIsRect; }
+    bool isAA() const { return fAA; }
     const SkIRect& getBounds() const { return fBounds; }
 
-    void setEmpty() { fBounds.setEmpty(); }
-    void setRect(const SkIRect& r) { fBounds = r; }
+    void setEmpty() { this->setRect(SkIRect::MakeEmpty()); }
+    void setRect(const SkIRect& r) {
+        fBounds = r;
+        fIsRect = true;
+        fAA = false;
+    }
     void setDeviceClipRestriction(const SkIRect* rect) {
         fClipRestrictionRect = rect;
     }
 
+    void opShader(sk_sp<SkShader>) {
+        fIsRect = false;
+    }
     void opRect(const SkRect&, const SkMatrix&, const SkIRect& limit, SkRegion::Op, bool isAA);
     void opRRect(const SkRRect&, const SkMatrix&, const SkIRect& limit, SkRegion::Op, bool isAA);
     void opPath(const SkPath&, const SkMatrix&, const SkIRect& limit, SkRegion::Op, bool isAA);
@@ -62,6 +80,7 @@ public:
     SkRasterClip(const SkIRect&);
     SkRasterClip(const SkRegion&);
     SkRasterClip(const SkRasterClip&);
+    SkRasterClip& operator=(const SkRasterClip&);
     ~SkRasterClip();
 
     // Only compares the current state. Does not compare isForceConservativeRects(), so that field
@@ -97,6 +116,7 @@ public:
     bool op(const SkRect&, const SkMatrix& matrix, const SkIRect&, SkRegion::Op, bool doAA);
     bool op(const SkRRect&, const SkMatrix& matrix, const SkIRect&, SkRegion::Op, bool doAA);
     bool op(const SkPath&, const SkMatrix& matrix, const SkIRect&, SkRegion::Op, bool doAA);
+    bool op(sk_sp<SkShader>);
 
     void translate(int dx, int dy, SkRasterClip* dst) const;
     void translate(int dx, int dy) {
@@ -130,6 +150,8 @@ public:
         fClipRestrictionRect = rect;
     }
 
+    sk_sp<SkShader> clipShader() const { return fShader; }
+
 private:
     SkRegion    fBW;
     SkAAClip    fAA;
@@ -138,6 +160,8 @@ private:
     bool        fIsEmpty;
     bool        fIsRect;
     const SkIRect*    fClipRestrictionRect = nullptr;
+    // if present, this augments the clip, not replaces it
+    sk_sp<SkShader> fShader;
 
     bool computeIsEmpty() const {
         return fIsBW ? fBW.isEmpty() : fAA.isEmpty();
@@ -153,7 +177,7 @@ private:
         // detect that our computed AA is really just a (hard-edged) rect
         if (detectAARect && !fIsEmpty && !fIsBW && fAA.isRect()) {
             fBW.setRect(fAA.getBounds());
-            fAA.setEmpty(); // don't need this guy anymore
+            fAA.setEmpty(); // don't need this anymore
             fIsBW = true;
         }
 
@@ -198,7 +222,6 @@ public:
 private:
     const SkRasterClip& fRC;
 };
-#define SkAutoRasterClipValidate(...) SK_REQUIRE_LOCAL_VAR(SkAutoRasterClipValidate)
 
 #ifdef SK_DEBUG
     #define AUTO_RASTERCLIP_VALIDATE(rc)    SkAutoRasterClipValidate arcv(rc)
@@ -214,7 +237,7 @@ private:
  *  not, they return the raw blitter and (bw) clip region.
  *
  *  We need to keep the constructor/destructor cost as small as possible, so we
- *  can freely put this guy on the stack, and not pay too much for the case when
+ *  can freely put this on the stack, and not pay too much for the case when
  *  we're really BW anyways.
  */
 class SkAAClipBlitterWrapper {
