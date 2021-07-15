@@ -42,12 +42,14 @@ protected:
 private:
     SK_FLATTENABLE_HOOKS(SkDiscretePathEffect)
 
+    bool computeFastBounds(SkRect* bounds) const override;
+
     SkScalar fSegLength, fPerterb;
 
     /* Caller-supplied 32 bit seed assist */
     uint32_t fSeedAssist;
 
-    typedef SkPathEffect INHERITED;
+    using INHERITED = SkPathEffect;
 };
 
 #endif
