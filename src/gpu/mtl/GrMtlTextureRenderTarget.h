@@ -45,48 +45,20 @@ private:
     GrMtlTextureRenderTarget(GrMtlGpu* gpu,
                              SkBudgeted budgeted,
                              SkISize,
-                             int sampleCnt,
                              sk_sp<GrMtlAttachment> texture,
-                             id<MTLTexture> colorTexture,
-                             id<MTLTexture> resolveTexture,
-                             GrMipmapStatus);
-
-    // TODO: remove
-    GrMtlTextureRenderTarget(GrMtlGpu* gpu,
-                             SkBudgeted budgeted,
-                             SkISize,
-                             sk_sp<GrMtlAttachment> texture,
-                             id<MTLTexture> colorTexture,
+                             sk_sp<GrMtlAttachment> colorAttachment,
+                             sk_sp<GrMtlAttachment> resolveAttachment,
                              GrMipmapStatus);
 
     GrMtlTextureRenderTarget(GrMtlGpu* gpu,
                              SkISize,
-                             int sampleCnt,
                              sk_sp<GrMtlAttachment> texture,
-                             id<MTLTexture> colorTexture,
-                             id<MTLTexture> resolveTexture,
+                             sk_sp<GrMtlAttachment> colorAttachment,
+                             sk_sp<GrMtlAttachment> resolveAttachment,
                              GrMipmapStatus,
                              GrWrapCacheable cacheable);
 
-    // TODO: remove
-    GrMtlTextureRenderTarget(GrMtlGpu* gpu,
-                             SkISize,
-                             sk_sp<GrMtlAttachment> texture,
-                             id<MTLTexture> colorTexture,
-                             GrMipmapStatus,
-                             GrWrapCacheable cacheable);
-
-    size_t onGpuMemorySize() const override {
-        // TODO: When used as render targets certain formats may actually have a larger size than
-        // the base format size. Check to make sure we are reporting the correct value here.
-        // The plus 1 is to account for the resolve texture or if not using msaa the RT itself
-        int numColorSamples = this->numSamples();
-        if (numColorSamples > 1) {
-            ++numColorSamples;
-        }
-        return GrSurface::ComputeSize(this->backendFormat(), this->dimensions(),
-                                      numColorSamples, GrMipmapped::kNo);
-    }
+    size_t onGpuMemorySize() const override;
 };
 
 #endif

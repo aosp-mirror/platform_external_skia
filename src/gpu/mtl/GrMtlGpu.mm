@@ -563,6 +563,19 @@ sk_sp<GrAttachment> GrMtlGpu::makeStencilAttachment(const GrBackendFormat& /*col
     return GrMtlAttachment::GrMtlAttachment::MakeStencil(this, dimensions, numStencilSamples, sFmt);
 }
 
+sk_sp<GrAttachment> GrMtlGpu::makeMSAAAttachment(SkISize dimensions,
+                                                 const GrBackendFormat& format,
+                                                 int numSamples,
+                                                 GrProtected /*isProtected*/) {
+    MTLPixelFormat pixelFormat = (MTLPixelFormat) format.asMtlFormat();
+    SkASSERT(pixelFormat != MTLPixelFormatInvalid);
+    SkASSERT(!GrMtlFormatIsCompressed(pixelFormat));
+    SkASSERT(this->mtlCaps().isFormatRenderable(pixelFormat, numSamples));
+
+    fStats.incMSAAAttachmentCreates();
+    return GrMtlAttachment::MakeMSAA(this, dimensions, numSamples, pixelFormat);
+}
+
 sk_sp<GrTexture> GrMtlGpu::onCreateTexture(SkISize dimensions,
                                            const GrBackendFormat& format,
                                            GrRenderable renderable,
@@ -1210,13 +1223,13 @@ void GrMtlGpu::copySurfaceAsResolve(GrSurface* dst, GrSurface* src) {
     id<MTLTexture> dstTexture;
     if (dstRT) {
         GrMtlRenderTarget* mtlRT = static_cast<GrMtlRenderTarget*>(dstRT);
-        dstTexture = mtlRT->mtlColorTexture();
+        dstTexture = mtlRT->colorMTLTexture();
     } else {
         SkASSERT(dst->asTexture());
         dstTexture = static_cast<GrMtlTexture*>(dst->asTexture())->mtlTexture();
     }
 
-    this->resolveTexture(dstTexture, srcRT->mtlColorTexture());
+    this->resolveTexture(dstTexture, srcRT->colorMTLTexture());
 }
 
 void GrMtlGpu::copySurfaceAsBlit(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
@@ -1453,10 +1466,10 @@ bool GrMtlGpu::readOrTransferPixels(GrSurface* surface,
     if (GrMtlRenderTarget* rt = static_cast<GrMtlRenderTarget*>(surface->asRenderTarget())) {
         if (rt->numSamples() > 1) {
             SkASSERT(rt->requiresManualMSAAResolve());  // msaa-render-to-texture not yet supported.
-            mtlTexture = rt->mtlResolveTexture();
+            mtlTexture = rt->resolveMTLTexture();
         } else {
             SkASSERT(!rt->requiresManualMSAAResolve());
-            mtlTexture = rt->mtlColorTexture();
+            mtlTexture = rt->colorMTLTexture();
         }
     } else if (GrMtlTexture* texture = static_cast<GrMtlTexture*>(surface->asTexture())) {
         mtlTexture = texture->mtlTexture();
@@ -1549,8 +1562,8 @@ void GrMtlGpu::waitSemaphore(GrSemaphore* semaphore) {
 }
 
 void GrMtlGpu::onResolveRenderTarget(GrRenderTarget* target, const SkIRect&) {
-    this->resolveTexture(static_cast<GrMtlRenderTarget*>(target)->mtlResolveTexture(),
-                         static_cast<GrMtlRenderTarget*>(target)->mtlColorTexture());
+    this->resolveTexture(static_cast<GrMtlRenderTarget*>(target)->resolveMTLTexture(),
+                         static_cast<GrMtlRenderTarget*>(target)->colorMTLTexture());
 }
 
 void GrMtlGpu::resolveTexture(id<MTLTexture> resolveTexture, id<MTLTexture> colorTexture) {

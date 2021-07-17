@@ -2808,6 +2808,7 @@ cc_test {
         "tests/SkUTFTest.cpp",
         "tests/SkVMTest.cpp",
         "tests/SkVxTest.cpp",
+        "tests/Skbug12214.cpp",
         "tests/Skbug5221.cpp",
         "tests/Skbug6389.cpp",
         "tests/Skbug6653.cpp",
