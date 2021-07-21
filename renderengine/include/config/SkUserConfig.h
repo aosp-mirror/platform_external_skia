@@ -3,6 +3,10 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
+#ifndef SK_ENABLE_SKSL
+#define SK_ENABLE_SKSL
+#endif
+
 #ifndef SK_ENCODE_PNG
 #define SK_ENCODE_PNG
 #endif
