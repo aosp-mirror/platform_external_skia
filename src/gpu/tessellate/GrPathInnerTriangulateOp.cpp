@@ -7,6 +7,7 @@
 
 #include "src/gpu/tessellate/GrPathInnerTriangulateOp.h"
 
+#include "src/gpu/GrDefaultGeoProcFactory.h"
 #include "src/gpu/GrEagerVertexAllocator.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrInnerFanTriangulator.h"
@@ -29,10 +30,17 @@ public:
     HullShader(const SkMatrix& viewMatrix, SkPMColor4f color, const GrShaderCaps& shaderCaps)
             : GrPathTessellationShader(kTessellate_HullShader_ClassID,
                                        GrPrimitiveType::kTriangleStrip, 0, viewMatrix, color) {
-        constexpr static Attribute kPtsAttribs[] = {
-                {"p01", kFloat4_GrVertexAttribType, kFloat4_GrSLType},
-                {"p23", kFloat4_GrVertexAttribType, kFloat4_GrSLType}};
-        this->setInstanceAttributes(kPtsAttribs, SK_ARRAY_COUNT(kPtsAttribs));
+        fInstanceAttribs.emplace_back("p01", kFloat4_GrVertexAttribType, kFloat4_GrSLType);
+        fInstanceAttribs.emplace_back("p23", kFloat4_GrVertexAttribType, kFloat4_GrSLType);
+        if (!shaderCaps.infinitySupport()) {
+            // A conic curve is written out with p3=[w,Infinity], but GPUs that don't support
+            // infinity can't detect this. On these platforms we also write out an extra float with
+            // each patch that explicitly tells the shader what type of curve it is.
+            fInstanceAttribs.emplace_back("curveType", kFloat_GrVertexAttribType, kFloat_GrSLType);
+        }
+        this->setInstanceAttributes(fInstanceAttribs.data(), fInstanceAttribs.count());
+        SkASSERT(fInstanceAttribs.count() <= kMaxInstanceAttribCount);
+
         if (!shaderCaps.vertexIDSupport()) {
             constexpr static Attribute kVertexIdxAttrib("vertexidx", kFloat_GrVertexAttribType,
                                                         kFloat_GrSLType);
@@ -44,20 +52,39 @@ private:
     const char* name() const final { return "tessellate_HullShader"; }
     void getGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const final {}
     GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps&) const final;
+
+    constexpr static int kMaxInstanceAttribCount = 3;
+    SkSTArray<kMaxInstanceAttribCount, Attribute> fInstanceAttribs;
 };
 
 GrGLSLGeometryProcessor* HullShader::createGLSLInstance(const GrShaderCaps&) const {
     class Impl : public GrPathTessellationShader::Impl {
         void emitVertexCode(const GrShaderCaps& shaderCaps, const GrPathTessellationShader&,
                             GrGLSLVertexBuilder* v, GrGPArgs* gpArgs) override {
+            if (shaderCaps.infinitySupport()) {
+                v->insertFunction(R"(
+                bool is_conic_curve() { return isinf(p23.w); }
+                bool is_non_triangular_conic_curve() {
+                    // We consider a conic non-triangular as long as its weight isn't infinity.
+                    // NOTE: "isinf == false" works on Mac Radeon GLSL; "!isinf" can get the wrong
+                    // answer.
+                    return isinf(p23.z) == false;
+                })");
+            } else {
+                v->insertFunction(SkStringPrintf(R"(
+                bool is_conic_curve() { return curveType != %g; })", kCubicCurveType).c_str());
+                v->insertFunction(SkStringPrintf(R"(
+                bool is_non_triangular_conic_curve() {
+                    return curveType == %g;
+                })", kConicCurveType).c_str());
+            }
             v->codeAppend(R"(
             float2 p0=p01.xy, p1=p01.zw, p2=p23.xy, p3=p23.zw;
-            if (isinf(p3.y)) {  // Is the curve a conic?
+            if (is_conic_curve()) {
+                // Conics are 3 points, with the weight in p3.
                 float w = p3.x;
-                p3 = p2;
-                // A conic with w=Inf is an exact triangle.
-                // NOTE: "isinf == false" works on Mac Radeon GLSL. "!isinf" gets the wrong answer.
-                if (isinf(w) == false) {
+                p3 = p2;  // Duplicate the endpoint for shared code that also runs on cubics.
+                if (is_non_triangular_conic_curve()) {
                     // Convert the points to a trapeziodal hull that circumcscribes the conic.
                     float2 p1w = p1 * w;
                     float T = .51;  // Bias outward a bit to ensure we cover the outermost samples.
@@ -158,22 +185,24 @@ GrProcessorSet::Analysis GrPathInnerTriangulateOp::finalize(const GrCaps& caps,
                                 clampType, &fColor);
 }
 
-void GrPathInnerTriangulateOp::pushFanStencilProgram(const GrTessellationShader::ProgramArgs& args,
-                                                     const GrPipeline* pipelineForStencils,
-                                                     const GrUserStencilSettings* stencil) {
-    SkASSERT(pipelineForStencils);
-    auto shader = GrPathTessellationShader::MakeSimpleTriangleShader(args.fArena, fViewMatrix,
-                                                                     SK_PMColor4fTRANSPARENT);
-    fFanPrograms.push_back(GrTessellationShader::MakeProgram(args, shader, pipelineForStencils,
-                                                             stencil)); }
-
-void GrPathInnerTriangulateOp::pushFanFillProgram(const GrTessellationShader::ProgramArgs& args,
-                                                  const GrUserStencilSettings* stencil) {
-    SkASSERT(fPipelineForFills);
-    auto shader = GrPathTessellationShader::MakeSimpleTriangleShader(args.fArena, fViewMatrix,
-                                                                     fColor);
-    fFanPrograms.push_back(GrTessellationShader::MakeProgram(args, shader, fPipelineForFills,
-                                                             stencil));
+void GrPathInnerTriangulateOp::pushFanProgram(const GrTessellationShader::ProgramArgs& args,
+                                              const GrPipeline* pipeline,
+                                              const SkPMColor4f& color,
+                                              const GrUserStencilSettings* stencil) {
+    auto triangleGP = GrDefaultGeoProcFactory::Make(
+            args.fArena,
+            GrDefaultGeoProcFactory::Color(color),
+            GrDefaultGeoProcFactory::Coverage::kSolid_Type,
+            GrDefaultGeoProcFactory::LocalCoords::kUsePosition_Type,
+            fViewMatrix);
+    fFanPrograms.push_back(GrSimpleMeshDrawOpHelper::CreateProgramInfo(args.fArena,
+                                                                       pipeline,
+                                                                       args.fWriteView,
+                                                                       triangleGP,
+                                                                       GrPrimitiveType::kTriangles,
+                                                                       args.fXferBarrierFlags,
+                                                                       args.fColorLoadOp,
+                                                                       stencil));
 }
 
 void GrPathInnerTriangulateOp::prePreparePrograms(const GrTessellationShader::ProgramArgs& args,
@@ -234,15 +263,16 @@ void GrPathInnerTriangulateOp::prePreparePrograms(const GrTessellationShader::Pr
             // stencil buffer to fill the fan directly.
             const GrUserStencilSettings* stencilPathSettings =
                     GrPathTessellationShader::StencilPathSettings(GrFillRuleForSkPath(fPath));
-            this->pushFanStencilProgram(args, pipelineForStencils, stencilPathSettings);
+            this->pushFanProgram(args, pipelineForStencils, SK_PMColor4fTRANSPARENT,
+                                 stencilPathSettings);
             if (doFill) {
-                this->pushFanFillProgram(args,
-                                         GrPathTessellationShader::TestAndResetStencilSettings());
+                this->pushFanProgram(args, fPipelineForFills, fColor,
+                                     GrPathTessellationShader::TestAndResetStencilSettings());
             }
         } else if (isLinear) {
             // There are no outer curves! Ignore stencil and fill the path directly.
             SkASSERT(!pipelineForStencils);
-            this->pushFanFillProgram(args, &GrUserStencilSettings::kUnused);
+            this->pushFanProgram(args, fPipelineForFills, fColor, &GrUserStencilSettings::kUnused);
         } else if (!fPipelineForFills->hasStencilClip()) {
             // These are a twist on the standard Redbook stencil settings that allow us to fill the
             // inner polygon directly to the final render target. By the time these programs
@@ -272,7 +302,7 @@ void GrPathInnerTriangulateOp::prePreparePrograms(const GrTessellationShader::Pr
             auto* stencil = (fPath.getFillType() == SkPathFillType::kWinding)
                     ? &kFillOrIncrDecrStencil
                     : &kFillOrInvertStencil;
-            this->pushFanFillProgram(args, stencil);
+            this->pushFanProgram(args, fPipelineForFills, fColor, stencil);
         } else {
             // This is the same idea as above, but we use two passes instead of one because there is
             // a stencil clip. The stencil test isn't expressive enough to do the above tests and
@@ -310,13 +340,13 @@ void GrPathInnerTriangulateOp::prePreparePrograms(const GrTessellationShader::Pr
                     0xffff>());
 
             // Pass 2a: Directly fill fan samples whose stencil values (from curves) are zero.
-            this->pushFanFillProgram(args, &kFillIfZeroAndInClip);
+            this->pushFanProgram(args, fPipelineForFills, fColor, &kFillIfZeroAndInClip);
 
             // Pass 2b: Redbook counting on fan samples whose stencil values (from curves) != 0.
             auto* stencil = (fPath.getFillType() == SkPathFillType::kWinding)
                     ? &kIncrDecrStencilIfNonzero
                     : &kInvertStencilIfNonZero;
-            this->pushFanStencilProgram(args, pipelineForStencils, stencil);
+            this->pushFanProgram(args, pipelineForStencils, SK_PMColor4fTRANSPARENT, stencil);
         }
     }
 

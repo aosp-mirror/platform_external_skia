@@ -15,11 +15,6 @@
 // This is the base class for shaders in the GPU tessellator that fill paths.
 class GrPathTessellationShader : public GrTessellationShader {
 public:
-    // Draws a simple array of triangles.
-    static GrPathTessellationShader* MakeSimpleTriangleShader(SkArenaAlloc*,
-                                                              const SkMatrix& viewMatrix,
-                                                              const SkPMColor4f&);
-
     // How many triangles are in a curve with 2^resolveLevel line segments?
     constexpr static int NumCurveTrianglesAtResolveLevel(int resolveLevel) {
         // resolveLevel=0 -> 0 line segments -> 0 triangles
@@ -50,7 +45,8 @@ public:
     // smoothly, and emits empty triangles at any vertices whose sk_VertexIDs are higher than
     // necessary. It is the caller's responsibility to draw enough vertices per instance for the
     // most complex curve in the batch to render smoothly (i.e., NumTrianglesAtResolveLevel() * 3).
-    static GrPathTessellationShader* MakeMiddleOutFixedCountShader(SkArenaAlloc*,
+    static GrPathTessellationShader* MakeMiddleOutFixedCountShader(const GrShaderCaps&,
+                                                                   SkArenaAlloc*,
                                                                    const SkMatrix& viewMatrix,
                                                                    const SkPMColor4f&, PatchType);
 

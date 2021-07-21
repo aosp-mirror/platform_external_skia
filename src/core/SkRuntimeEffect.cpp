@@ -44,6 +44,8 @@
 
 #include <algorithm>
 
+#ifdef SK_ENABLE_SKSL
+
 namespace SkSL {
 class SharedCompiler {
 public:
@@ -692,8 +694,12 @@ static GrFPResult make_effect_fp(sk_sp<SkRuntimeEffect> effect,
             childFPs.push_back(nullptr);
         }
     }
-    auto fp = GrSkSLFP::MakeWithData(
-            std::move(effect), name, std::move(inputFP), std::move(uniforms), SkMakeSpan(childFPs));
+    auto fp = GrSkSLFP::MakeWithData(std::move(effect),
+                                     name,
+                                     std::move(inputFP),
+                                     /*destColorFP=*/nullptr,
+                                     std::move(uniforms),
+                                     SkMakeSpan(childFPs));
     SkASSERT(fp);
     return GrFPSuccess(std::move(fp));
 }
@@ -1064,13 +1070,19 @@ public:
 
 #if SK_SUPPORT_GPU
     std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(
-            std::unique_ptr<GrFragmentProcessor> inputFP, const GrFPArgs& args) const override {
+            std::unique_ptr<GrFragmentProcessor> srcFP,
+            std::unique_ptr<GrFragmentProcessor> dstFP,
+            const GrFPArgs& args) const override {
         sk_sp<SkData> uniforms = get_xformed_uniforms(fEffect.get(), fUniforms,
                                                       args.fDstColorInfo->colorSpace());
         SkASSERT(uniforms);
 
-        return GrSkSLFP::MakeWithData(fEffect, "runtime_blender", std::move(inputFP),
-                                      std::move(uniforms), /*childFPs=*/{});
+        return GrSkSLFP::MakeWithData(fEffect,
+                                      "runtime_blender",
+                                      std::move(srcFP),
+                                      std::move(dstFP),
+                                      std::move(uniforms),
+                                      /*childFPs=*/{});
     }
 #endif
 
@@ -1183,6 +1195,7 @@ sk_sp<SkImage> SkRuntimeEffect::makeImage(GrRecordingContext* recordingContext,
         auto fp = GrSkSLFP::MakeWithData(sk_ref_sp(this),
                                          "runtime_image",
                                          /*inputFP=*/nullptr,
+                                         /*destColorFP=*/nullptr,
                                          std::move(uniforms),
                                          SkMakeSpan(childFPs));
 
@@ -1327,3 +1340,5 @@ SkRuntimeBlendBuilder::~SkRuntimeBlendBuilder() = default;
 sk_sp<SkBlender> SkRuntimeBlendBuilder::makeBlender() {
     return this->effect()->makeBlender(this->uniforms());
 }
+
+#endif  // SK_ENABLE_SKSL
