@@ -6,12 +6,12 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling different
   # dependencies without interference from each other.
-  'sk_tool_revision': 'git_revision:82a43529dda7c5489b5cb95d3f3bf2e42bf1c0ac',
+  'sk_tool_revision': 'git_revision:83d167c8dec86a687170a81c1cd19ffc6eeab705',
 }
 
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@6a86d2079fd372377c27073fc7a0c875bef54634",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@0e1c90cf4f1737acbf3f5279a63248824da02c26",
   "third_party/externals/brotli"          : "https://skia.googlesource.com/external/github.com/google/brotli.git@e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, and tint for SPIRV compilation.
