@@ -161,6 +161,25 @@ static bool verify_child_effects(const std::vector<SkRuntimeEffect::Child>& refl
     return true;
 }
 
+static std::vector<skvm::Val> make_skvm_uniforms(skvm::Builder* p,
+                                                 skvm::Uniforms* uniforms,
+                                                 size_t inputSize,
+                                                 const SkData& inputs) {
+    SkASSERTF(!(inputSize & 3), "inputSize was %zu, expected a multiple of 4", inputSize);
+
+    const int32_t* data = reinterpret_cast<const int32_t*>(inputs.data());
+    const size_t uniformCount = inputSize / sizeof(int32_t);
+    std::vector<skvm::Val> uniform;
+    uniform.reserve(uniformCount);
+    for (size_t index = 0; index < uniformCount; ++index) {
+        int32_t bits;
+        memcpy(&bits, data + index, sizeof(int32_t));
+        uniform.push_back(p->uniform32(uniforms->push(bits)).id);
+    }
+
+    return uniform;
+}
+
 // TODO: Many errors aren't caught until we process the generated Program here. Catching those
 // in the IR generator would provide better errors messages (with locations).
 #define RETURN_FAILURE(...) return Result{nullptr, SkStringPrintf(__VA_ARGS__)}
@@ -264,12 +283,6 @@ SkRuntimeEffect::Result SkRuntimeEffect::MakeInternal(std::unique_ptr<SkSL::Prog
 
             // Child effects that can be sampled ('shader' or 'colorFilter')
             if (varType.isEffectChild()) {
-                // Runtime blends currently don't support child effects.
-                if (kind == SkSL::ProgramKind::kRuntimeBlender) {
-                    RETURN_FAILURE("'%s' is not allowed in runtime blend",
-                                   varType.displayName().c_str());
-                }
-
                 Child c;
                 c.name  = SkString(var.name());
                 c.type  = child_type(varType);
@@ -573,7 +586,7 @@ std::unique_ptr<SkFilterColorProgram> SkFilterColorProgram::Make(const SkRuntime
         return x.r.id == y.r.id && x.g.id == y.g.id && x.b.id == y.b.id && x.a.id == y.a.id;
     };
     bool allSampleCallsSupported = true;
-    auto sampleChild = [&](int ix, skvm::Coord, skvm::Color c) {
+    auto sampleColorFilter = [&](int ix, skvm::Color c) {
         skvm::Color result = p.uniformColor(/*placeholder*/ SkColors::kWhite, &childColorUniforms);
         SkFilterColorProgram::SampleCall call;
         call.fChild = ix;
@@ -610,7 +623,9 @@ std::unique_ptr<SkFilterColorProgram> SkFilterColorProgram::Make(const SkRuntime
                                              /*local=*/zeroCoord,
                                              inputColor,
                                              inputColor,
-                                             sampleChild);
+                                             /*sampleShader=*/nullptr,
+                                             sampleColorFilter,
+                                             /*sampleBlender=*/nullptr);
 
     // Then store the result to the *third* arg ptr
     p.store({skvm::PixelFormat::FLOAT, 32, 32, 32, 32, 0, 32, 64, 96}, p.arg(16), result);
@@ -722,6 +737,7 @@ static GrFPResult make_effect_fp(sk_sp<SkRuntimeEffect> effect,
                                  const char* name,
                                  sk_sp<SkData> uniforms,
                                  std::unique_ptr<GrFragmentProcessor> inputFP,
+                                 std::unique_ptr<GrFragmentProcessor> destColorFP,
                                  SkSpan<const SkRuntimeEffect::ChildPtr> children,
                                  const GrFPArgs& childArgs) {
     SkSTArray<8, std::unique_ptr<GrFragmentProcessor>> childFPs;
@@ -748,7 +764,7 @@ static GrFPResult make_effect_fp(sk_sp<SkRuntimeEffect> effect,
     auto fp = GrSkSLFP::MakeWithData(std::move(effect),
                                      name,
                                      std::move(inputFP),
-                                     /*destColorFP=*/nullptr,
+                                     std::move(destColorFP),
                                      std::move(uniforms),
                                      SkMakeSpan(childFPs));
     SkASSERT(fp);
@@ -778,6 +794,7 @@ public:
                               "runtime_color_filter",
                               std::move(uniforms),
                               std::move(inputFP),
+                              /*destColorFP=*/nullptr,
                               SkMakeSpan(fChildren),
                               childArgs);
     }
@@ -793,33 +810,34 @@ public:
         sk_sp<SkData> inputs = get_xformed_uniforms(fEffect.get(), fUniforms, dst.colorSpace());
         SkASSERT(inputs);
 
+        auto sampleShader = [&](int ix, skvm::Coord coord) {
+            if (SkShader* shader = fChildren[ix].shader.get()) {
+                SkSimpleMatrixProvider mats{SkMatrix::I()};
+                return as_SB(shader)->program(p, coord, coord, c, mats, /*localM=*/nullptr,
+                                              dst, uniforms, alloc);
+            }
+            return c;
+        };
+        auto sampleColorFilter = [&](int ix, skvm::Color color) {
+            if (SkColorFilter* colorFilter = fChildren[ix].colorFilter.get()) {
+                return as_CFB(colorFilter)->program(p, color, dst, uniforms, alloc);
+            }
+            return color;
+        };
+        auto sampleBlender = [&](int ix, skvm::Color src, skvm::Color dst) {
+            // TODO(skia:12257): implement sample(blender, src, dst)
+            return src;
+        };
+
+        std::vector<skvm::Val> uniform = make_skvm_uniforms(p, uniforms, fEffect->uniformSize(),
+                                                            *inputs);
+
         // There should be no way for the color filter to use device coords, but we need to supply
         // something. (Uninitialized values can trigger asserts in skvm::Builder).
         skvm::Coord zeroCoord = { p->splat(0.0f), p->splat(0.0f) };
-
-        auto sampleChild = [&](int ix, skvm::Coord coord, skvm::Color color) {
-            if (fChildren[ix].shader) {
-                SkSimpleMatrixProvider mats{SkMatrix::I()};
-                return as_SB(fChildren[ix].shader)
-                        ->program(p, coord, coord, color, mats, nullptr, dst, uniforms, alloc);
-            } else if (fChildren[ix].colorFilter) {
-                return as_CFB(fChildren[ix].colorFilter)->program(p, color, dst, uniforms, alloc);
-            } else {
-                return color;
-            }
-        };
-
-        const size_t uniformCount = fEffect->uniformSize() / 4;
-        std::vector<skvm::Val> uniform;
-        uniform.reserve(uniformCount);
-        for (size_t i = 0; i < uniformCount; i++) {
-            int bits;
-            memcpy(&bits, (const char*)inputs->data() + 4*i, 4);
-            uniform.push_back(p->uniform32(uniforms->push(bits)).id);
-        }
-
         return SkSL::ProgramToSkVM(*fEffect->fBaseProgram, fEffect->fMain, p, SkMakeSpan(uniform),
-                                   /*device=*/zeroCoord, /*local=*/zeroCoord, c, c, sampleChild);
+                                   /*device=*/zeroCoord, /*local=*/zeroCoord, c, c, sampleShader,
+                                   sampleColorFilter, sampleBlender);
     }
 
     SkPMColor4f onFilterColor4f(const SkPMColor4f& color, SkColorSpace* dstCS) const override {
@@ -938,6 +956,7 @@ public:
                                             "runtime_shader",
                                             std::move(uniforms),
                                             /*inputFP=*/nullptr,
+                                            /*destColorFP=*/nullptr,
                                             SkMakeSpan(fChildren),
                                             childArgs);
         if (!success) {
@@ -983,29 +1002,31 @@ public:
         }
         local = SkShaderBase::ApplyMatrix(p,inv,local,uniforms);
 
-        auto sampleChild = [&](int ix, skvm::Coord coord, skvm::Color color) {
-            if (fChildren[ix].shader) {
+        auto sampleShader = [&](int ix, skvm::Coord coord) {
+            if (SkShader* shader = fChildren[ix].shader.get()) {
                 SkOverrideDeviceMatrixProvider mats{matrices, SkMatrix::I()};
-                return as_SB(fChildren[ix].shader)
-                        ->program(p, device, coord, color, mats, nullptr, dst, uniforms, alloc);
-            } else if (fChildren[ix].colorFilter) {
-                return as_CFB(fChildren[ix].colorFilter)->program(p, color, dst, uniforms, alloc);
-            } else {
-                return color;
+                return as_SB(shader)->program(p, device, coord, paint, mats, /*localM=*/nullptr,
+                                              dst, uniforms, alloc);
             }
+            return paint;
+        };
+        auto sampleColorFilter = [&](int ix, skvm::Color color) {
+            if (SkColorFilter* colorFilter = fChildren[ix].colorFilter.get()) {
+                return as_CFB(colorFilter)->program(p, color, dst, uniforms, alloc);
+            }
+            return color;
+        };
+        auto sampleBlender = [&](int ix, skvm::Color src, skvm::Color dst) {
+            // TODO(skia:12257): implement sample(blender, src, dst)
+            return src;
         };
 
-        const size_t uniformCount = fEffect->uniformSize() / 4;
-        std::vector<skvm::Val> uniform;
-        uniform.reserve(uniformCount);
-        for (size_t i = 0; i < uniformCount; i++) {
-            int bits;
-            memcpy(&bits, (const char*)inputs->data() + 4*i, 4);
-            uniform.push_back(p->uniform32(uniforms->push(bits)).id);
-        }
+        std::vector<skvm::Val> uniform = make_skvm_uniforms(p, uniforms, fEffect->uniformSize(),
+                                                            *inputs);
 
         return SkSL::ProgramToSkVM(*fEffect->fBaseProgram, fEffect->fMain, p, SkMakeSpan(uniform),
-                                   device, local, paint, paint, sampleChild);
+                                   device, local, paint, paint, sampleShader, sampleColorFilter,
+                                   sampleBlender);
     }
 
     void flatten(SkWriteBuffer& buffer) const override {
@@ -1090,9 +1111,12 @@ sk_sp<SkFlattenable> SkRTShader::CreateProc(SkReadBuffer& buffer) {
 
 class SkRuntimeBlender : public SkBlenderBase {
 public:
-    SkRuntimeBlender(sk_sp<SkRuntimeEffect> effect, sk_sp<SkData> uniforms)
+    SkRuntimeBlender(sk_sp<SkRuntimeEffect> effect,
+                     sk_sp<SkData> uniforms,
+                     SkSpan<SkRuntimeEffect::ChildPtr> children)
             : fEffect(std::move(effect))
-            , fUniforms(std::move(uniforms)) {}
+            , fUniforms(std::move(uniforms))
+            , fChildren(children.begin(), children.end()) {}
 
     SkRuntimeEffect* asRuntimeEffect() const override { return fEffect.get(); }
 
@@ -1103,20 +1127,33 @@ public:
                                                     colorInfo.colorSpace());
         SkASSERT(inputs);
 
-        const size_t uniformCount = fEffect->uniformSize() / 4;
-        std::vector<skvm::Val> uniform;
-        uniform.reserve(uniformCount);
-        for (size_t i = 0; i < uniformCount; i++) {
-            int bits;
-            memcpy(&bits, (const char*)inputs->data() + 4*i, 4);
-            uniform.push_back(p->uniform32(uniforms->push(bits)).id);
-        }
+        auto sampleShader = [&](int ix, skvm::Coord coord) {
+            if (SkShader* shader = fChildren[ix].shader.get()) {
+                SkSimpleMatrixProvider mats{SkMatrix::I()};
+                return as_SB(shader)->program(p, coord, coord, src, mats, /*localM=*/nullptr,
+                                              colorInfo, uniforms, alloc);
+            }
+            return src;
+        };
+        auto sampleColorFilter = [&](int ix, skvm::Color color) {
+            if (SkColorFilter* colorFilter = fChildren[ix].colorFilter.get()) {
+                return as_CFB(colorFilter)->program(p, color, colorInfo, uniforms, alloc);
+            }
+            return color;
+        };
+        auto sampleBlender = [&](int ix, skvm::Color src, skvm::Color dst) {
+            // TODO(skia:12257): implement sample(blender, src, dst)
+            return src;
+        };
+
+        std::vector<skvm::Val> uniform = make_skvm_uniforms(p, uniforms, fEffect->uniformSize(),
+                                                            *inputs);
 
         // Emit the blend function as an SkVM program.
         skvm::Coord zeroCoord = {p->splat(0.0f), p->splat(0.0f)};
         return SkSL::ProgramToSkVM(*fEffect->fBaseProgram, fEffect->fMain, p, SkMakeSpan(uniform),
-                                   /*device=*/zeroCoord, /*local=*/zeroCoord,
-                                   src, dst, /*sampleChild=*/nullptr);
+                                  /*device=*/zeroCoord, /*local=*/zeroCoord, src, dst,
+                                  sampleShader, sampleColorFilter, sampleBlender);
     }
 
 #if SK_SUPPORT_GPU
@@ -1127,13 +1164,15 @@ public:
         sk_sp<SkData> uniforms = get_xformed_uniforms(fEffect.get(), fUniforms,
                                                       args.fDstColorInfo->colorSpace());
         SkASSERT(uniforms);
+        auto [success, fp] = make_effect_fp(fEffect,
+                                            "runtime_blender",
+                                            std::move(uniforms),
+                                            std::move(srcFP),
+                                            std::move(dstFP),
+                                            SkMakeSpan(fChildren),
+                                            args);
 
-        return GrSkSLFP::MakeWithData(fEffect,
-                                      "runtime_blender",
-                                      std::move(srcFP),
-                                      std::move(dstFP),
-                                      std::move(uniforms),
-                                      /*childFPs=*/{});
+        return success ? std::move(fp) : nullptr;
     }
 #endif
 
@@ -1149,6 +1188,7 @@ private:
 
     sk_sp<SkRuntimeEffect> fEffect;
     sk_sp<SkData> fUniforms;
+    std::vector<SkRuntimeEffect::ChildPtr> fChildren;
 };
 
 sk_sp<SkFlattenable> SkRuntimeBlender::CreateProc(SkReadBuffer& buffer) {
@@ -1312,17 +1352,21 @@ sk_sp<SkColorFilter> SkRuntimeEffect::makeColorFilter(sk_sp<SkData> uniforms) co
     return this->makeColorFilter(std::move(uniforms), /*children=*/{});
 }
 
-sk_sp<SkBlender> SkRuntimeEffect::makeBlender(sk_sp<SkData> uniforms) const {
+sk_sp<SkBlender> SkRuntimeEffect::makeBlender(sk_sp<SkData> uniforms,
+                                              SkSpan<ChildPtr> children) const {
     if (!this->allowBlender()) {
+        return nullptr;
+    }
+    if (!verify_child_effects(fChildren, children)) {
         return nullptr;
     }
     if (!uniforms) {
         uniforms = SkData::MakeEmpty();
     }
-    if (uniforms->size() != this->uniformSize() || !fChildren.empty()) {
+    if (uniforms->size() != this->uniformSize()) {
         return nullptr;
     }
-    return sk_sp<SkBlender>(new SkRuntimeBlender(sk_ref_sp(this), std::move(uniforms)));
+    return sk_sp<SkBlender>(new SkRuntimeBlender(sk_ref_sp(this), std::move(uniforms), children));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1363,7 +1407,8 @@ SkRuntimeBlendBuilder::SkRuntimeBlendBuilder(sk_sp<SkRuntimeEffect> effect)
 SkRuntimeBlendBuilder::~SkRuntimeBlendBuilder() = default;
 
 sk_sp<SkBlender> SkRuntimeBlendBuilder::makeBlender() {
-    return this->effect()->makeBlender(this->uniforms());
+    return this->effect()->makeBlender(this->uniforms(),
+                                       SkMakeSpan(this->children(), this->numChildren()));
 }
 
 #endif  // SK_ENABLE_SKSL
