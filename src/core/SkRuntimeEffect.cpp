@@ -130,6 +130,7 @@ static bool init_uniform_type(const SkSL::Context& ctx,
 
 static SkRuntimeEffect::Child::Type child_type(const SkSL::Type& type) {
     switch (type.typeKind()) {
+        // TODO(skia:12257): add support for kBlender
         case SkSL::Type::TypeKind::kColorFilter: return SkRuntimeEffect::Child::Type::kColorFilter;
         case SkSL::Type::TypeKind::kShader:      return SkRuntimeEffect::Child::Type::kShader;
         default: SkUNREACHABLE;
@@ -281,7 +282,7 @@ SkRuntimeEffect::Result SkRuntimeEffect::MakeInternal(std::unique_ptr<SkSL::Prog
             const SkSL::Variable& var = varDecl.var();
             const SkSL::Type& varType = var.type();
 
-            // Child effects that can be sampled ('shader' or 'colorFilter')
+            // Child effects that can be sampled ('shader', 'colorFilter', 'blender')
             if (varType.isEffectChild()) {
                 Child c;
                 c.name  = SkString(var.name());
@@ -805,22 +806,23 @@ public:
     }
 
     skvm::Color onProgram(skvm::Builder* p, skvm::Color c,
-                          const SkColorInfo& dst,
+                          const SkColorInfo& colorInfo,
                           skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const override {
-        sk_sp<SkData> inputs = get_xformed_uniforms(fEffect.get(), fUniforms, dst.colorSpace());
+        sk_sp<SkData> inputs =
+                get_xformed_uniforms(fEffect.get(), fUniforms, colorInfo.colorSpace());
         SkASSERT(inputs);
 
         auto sampleShader = [&](int ix, skvm::Coord coord) {
             if (SkShader* shader = fChildren[ix].shader.get()) {
                 SkSimpleMatrixProvider mats{SkMatrix::I()};
                 return as_SB(shader)->program(p, coord, coord, c, mats, /*localM=*/nullptr,
-                                              dst, uniforms, alloc);
+                                              colorInfo, uniforms, alloc);
             }
             return c;
         };
         auto sampleColorFilter = [&](int ix, skvm::Color color) {
             if (SkColorFilter* colorFilter = fChildren[ix].colorFilter.get()) {
-                return as_CFB(colorFilter)->program(p, color, dst, uniforms, alloc);
+                return as_CFB(colorFilter)->program(p, color, colorInfo, uniforms, alloc);
             }
             return color;
         };
@@ -991,9 +993,10 @@ public:
     skvm::Color onProgram(skvm::Builder* p,
                           skvm::Coord device, skvm::Coord local, skvm::Color paint,
                           const SkMatrixProvider& matrices, const SkMatrix* localM,
-                          const SkColorInfo& dst,
+                          const SkColorInfo& colorInfo,
                           skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const override {
-        sk_sp<SkData> inputs = get_xformed_uniforms(fEffect.get(), fUniforms, dst.colorSpace());
+        sk_sp<SkData> inputs =
+                get_xformed_uniforms(fEffect.get(), fUniforms, colorInfo.colorSpace());
         SkASSERT(inputs);
 
         SkMatrix inv;
@@ -1006,13 +1009,13 @@ public:
             if (SkShader* shader = fChildren[ix].shader.get()) {
                 SkOverrideDeviceMatrixProvider mats{matrices, SkMatrix::I()};
                 return as_SB(shader)->program(p, device, coord, paint, mats, /*localM=*/nullptr,
-                                              dst, uniforms, alloc);
+                                              colorInfo, uniforms, alloc);
             }
             return paint;
         };
         auto sampleColorFilter = [&](int ix, skvm::Color color) {
             if (SkColorFilter* colorFilter = fChildren[ix].colorFilter.get()) {
-                return as_CFB(colorFilter)->program(p, color, dst, uniforms, alloc);
+                return as_CFB(colorFilter)->program(p, color, colorInfo, uniforms, alloc);
             }
             return color;
         };
