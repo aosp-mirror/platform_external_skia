@@ -14,7 +14,8 @@
 #include "src/gpu/GrWindowRectangles.h"
 
 class GrRecordingContext;
-class GrSurfaceDrawContext;
+namespace skgpu { namespace v1 { class SurfaceDrawContext; }}
+class SkMatrixProvider;
 
 /**
  * This class takes a clip stack and produces a reduced set of elements that are equivalent to
@@ -88,8 +89,8 @@ public:
      */
     bool maskRequiresAA() const { SkASSERT(!fMaskElements.isEmpty()); return fMaskRequiresAA; }
 
-    bool drawAlphaClipMask(GrSurfaceDrawContext*) const;
-    bool drawStencilClipMask(GrRecordingContext*, GrSurfaceDrawContext*) const;
+    bool drawAlphaClipMask(skgpu::v1::SurfaceDrawContext*) const;
+    bool drawStencilClipMask(GrRecordingContext*, skgpu::v1::SurfaceDrawContext*) const;
 
     int numAnalyticElements() const;
 

@@ -439,6 +439,7 @@ namespace skvm {
         M(index)                                                     \
         M(gather8)  M(gather16)  M(gather32)                         \
                                  M(uniform32)                        \
+                                 M(array32)                          \
         M(splat)                                                     \
         M(add_f32) M(add_i32)                                        \
         M(sub_f32) M(sub_i32)                                        \
@@ -543,6 +544,14 @@ namespace skvm {
             }
             return {base, (int)( sizeof(int)*(buf.size() - SK_ARRAY_COUNT(ints)) )};
         }
+
+        Uniform pushArray(int32_t a[]) {
+            return this->pushPtr(a);
+        }
+
+        Uniform pushArrayF(float a[]) {
+            return this->pushPtr(a);
+        }
     };
 
     struct PixelFormat {
@@ -554,9 +563,9 @@ namespace skvm {
 
     SK_BEGIN_REQUIRE_DENSE
     struct Instruction {
-        Op  op;         // v* = op(x,y,z,w,immA,immB), where * == index of this Instruction.
-        Val x,y,z,w;    // Enough arguments for Op::store128.
-        int immA,immB;  // Immediate bit pattern, shift count, pointer index, byte offset, etc.
+        Op  op;              // v* = op(x,y,z,w,immA,immB), where * == index of this Instruction.
+        Val x,y,z,w;         // Enough arguments for Op::store128.
+        int immA,immB,immC;  // Immediate bit pattern, shift count, pointer index, byte offset, etc.
     };
     SK_END_REQUIRE_DENSE
 
@@ -568,7 +577,7 @@ namespace skvm {
     struct OptimizedInstruction {
         Op op;
         Val x,y,z,w;
-        int immA,immB;
+        int immA,immB,immC;
 
         Val  death;
         bool can_hoist;
@@ -632,6 +641,13 @@ namespace skvm {
         I32 uniform32(Ptr ptr, int offset);
         F32 uniformF (Ptr ptr, int offset) { return pun_to_F32(uniform32(ptr,offset)); }
 
+        // Load i32/f32 uniform with byte-count offset and an c-style array index. The address of
+        // the element is (*(ptr + byte-count offset))[index].
+        I32 array32  (Ptr ptr, int offset, int index);
+        F32 arrayF   (Ptr ptr, int offset, int index) {
+            return pun_to_F32(array32(ptr, offset, index));
+        }
+
         // Push and load this color as a uniform.
         Color uniformColor(SkColor4f, Uniforms*);
 
@@ -650,6 +666,11 @@ namespace skvm {
         I32 gather16 (Uniform u, I32 index) { return this->gather16 (u.ptr, u.offset, index); }
         I32 gather32 (Uniform u, I32 index) { return this->gather32 (u.ptr, u.offset, index); }
         F32 gatherF  (Uniform u, I32 index) { return this->gatherF  (u.ptr, u.offset, index); }
+
+        // Convenience methods for working with array pointers in skvm::Uniforms. Index is an
+        // array index and not a byte offset. The array pointer is stored at u.
+        I32 array32  (Uniform a, int index) { return this->array32  (a.ptr, a.offset, index); }
+        F32 arrayF   (Uniform a, int index) { return this->arrayF   (a.ptr, a.offset, index); }
 
         // Load an immediate constant.
         I32 splat(int      n);
@@ -936,8 +957,9 @@ namespace skvm {
         }
 
     private:
-        Val push(Op op, Val x=NA, Val y=NA, Val z=NA, Val w=NA, int immA=0, int immB=0) {
-            return this->push(Instruction{op, x,y,z,w, immA,immB});
+        Val push(
+                Op op, Val x=NA, Val y=NA, Val z=NA, Val w=NA, int immA=0, int immB=0, int immC=0) {
+            return this->push(Instruction{op, x,y,z,w, immA,immB,immC});
         }
 
         template <typename T>
@@ -963,7 +985,7 @@ namespace skvm {
     struct InterpreterInstruction {
         Op  op;
         Reg d,x,y,z,w;
-        int immA,immB;
+        int immA,immB,immC;
     };
 
     class Program {

@@ -8,6 +8,10 @@
 #ifndef GrAtlasPathRenderer_DEFINED
 #define GrAtlasPathRenderer_DEFINED
 
+#include "include/gpu/GrTypes.h"
+
+#if SK_GPU_V1
+
 #include "include/private/SkTHash.h"
 #include "src/core/SkIPoint16.h"
 #include "src/gpu/GrDynamicAtlas.h"
@@ -42,10 +46,11 @@ public:
     //
     // Returns 'inputFP' wrapped in GrFPFailure() if the path was too large, or if the current atlas
     // is full and already used by either opBeingClipped or inputFP. (Currently, "too large" means
-    // more than 128*128 total pixels, or larger than the atlas size in either dimension.)
+    // larger than fMaxAtlasSize in either dimension, more than 256^2 total pixels, or more than
+    // 128^2 total pixels if the surfaceDrawContext supports MSAA or DMSAA.)
     //
     // Also returns GrFPFailure() if the view matrix has perspective.
-    GrFPResult makeAtlasClipEffect(GrRecordingContext*,
+    GrFPResult makeAtlasClipEffect(const skgpu::v1::SurfaceDrawContext*,
                                    const GrOp* opBeingClipped,
                                    std::unique_ptr<GrFragmentProcessor> inputFP,
                                    const SkIRect& drawBounds,
@@ -56,9 +61,11 @@ private:
     // The atlas is not compatible with DDL. We can only use it on direct contexts.
     GrAtlasPathRenderer(GrDirectContext*);
 
-    // Returns true if the given device-space path bounds are no larger than 128*128 total pixels
-    // and no larger than the max atlas size in either dimension.
-    bool pathFitsInAtlas(const SkRect& pathDevBounds) const;
+    // Returns true if the given device-space path bounds are small enough to fit in an atlas and to
+    // benefit from atlasing. (Currently, "small enough" means no larger than fMaxAtlasSize in
+    // either dimension, no more than 256^2 total pixels, or no more than 128^2 total pixels if the
+    // fallbackAAType is kMSAA.)
+    bool pathFitsInAtlas(const SkRect& pathDevBounds, GrAAType fallbackAAType) const;
 
     // Returns true if the draw being set up already uses the given atlasProxy.
     using DrawRefsAtlasCallback = std::function<bool(const GrSurfaceProxy* atlasProxy)>;
@@ -105,4 +112,13 @@ private:
     SkTHashMap<AtlasPathKey, SkIPoint16> fAtlasPathCache;
 };
 
-#endif
+#else // SK_GPU_V1
+
+class GrAtlasPathRenderer {
+public:
+    static bool IsSupported(GrRecordingContext*) { return false; }
+};
+
+#endif // SK_GPU_V1
+
+#endif // GrAtlasPathRenderer_DEFINED
