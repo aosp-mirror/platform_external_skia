@@ -13,10 +13,10 @@
 
 #include "src/core/SkCanvasPriv.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/tessellate/GrPathCurveTessellator.h"
 #include "src/gpu/tessellate/GrPathWedgeTessellator.h"
 #include "src/gpu/tessellate/shaders/GrPathTessellationShader.h"
+#include "src/gpu/v1/SurfaceDrawContext_v1.h"
 
 namespace {
 
@@ -103,7 +103,7 @@ private:
                                                             caps);
                 break;
         }
-        fTessellator->prepare(flushState, this->bounds(), pathMatrix, fPath);
+        fTessellator->prepare(flushState, this->bounds(), {pathMatrix, fPath}, fPath.countVerbs());
         fProgram = GrTessellationShader::MakeProgram({alloc, flushState->writeView(),
                                                      &flushState->dstProxyView(),
                                                      flushState->renderPassBarriers(),
@@ -174,7 +174,7 @@ void SamplePathTessellators::onDrawContent(SkCanvas* canvas) {
     canvas->clear(SK_ColorBLACK);
 
     auto ctx = canvas->recordingContext();
-    GrSurfaceDrawContext* sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
+    auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
 
     SkString error;
     if (!sdc || !ctx) {
