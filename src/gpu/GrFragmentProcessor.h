@@ -94,6 +94,14 @@ public:
                                                               bool useUniform = true);
 
     /**
+     *  Returns a fragment processor which samples the passed-in fragment processor using
+     *  `args.fDestColor` as its input color. Pass a null FP to access `args.fDestColor` directly.
+     *  (This is only meaningful in contexts like blenders, which use a source and dest color.)
+     */
+    static std::unique_ptr<GrFragmentProcessor> UseDestColorAsInput(
+            std::unique_ptr<GrFragmentProcessor>);
+
+    /**
      *  Returns a parent fragment processor that adopts the passed fragment processor as a child.
      *  The parent will unpremul its input color, make it opaque, and pass that as the input to
      *  the child. Then the original input alpha is applied to the result of the child.
@@ -141,10 +149,10 @@ public:
             bool premulOutput);
 
     /**
-     * Returns a fragment processor that reads back the destination color; that is, sampling will
-     * return the color of the sample that is currently being painted over.
+     * Returns a fragment processor that reads back the color on the surface being painted; that is,
+     * sampling this will return the color of the pixel that is currently being painted over.
      */
-    static std::unique_ptr<GrFragmentProcessor> DestColor();
+    static std::unique_ptr<GrFragmentProcessor> SurfaceColor();
 
     /**
      * Returns a fragment processor that calls the passed in fragment processor, but evaluates it
@@ -239,6 +247,11 @@ public:
     /** Do any of the FPs in this tree read back the color from the destination surface? */
     bool willReadDstColor() const {
         return SkToBool(fFlags & kWillReadDstColor_Flag);
+    }
+
+    /** Does the SkSL for this FP take two colors as its input arguments? */
+    bool isBlendFunction() const {
+        return SkToBool(fFlags & kIsBlendFunction_Flag);
     }
 
    /**
@@ -465,6 +478,12 @@ protected:
         fFlags |= kWillReadDstColor_Flag;
     }
 
+    // FP implementations must set this flag if their GrGLSLFragmentProcessor's emitCode() function
+    // emits a blend function (taking two color inputs instead of just one).
+    void setIsBlendFunction() {
+        fFlags |= kIsBlendFunction_Flag;
+    }
+
     void mergeOptimizationFlags(OptimizationFlags flags) {
         SkASSERT((flags & ~kAll_OptimizationFlags) == 0);
         fFlags &= (flags | ~kAll_OptimizationFlags);
@@ -498,13 +517,14 @@ private:
 
         // Does not propagate at all
         kUsesSampleCoordsDirectly_Flag = kFirstPrivateFlag << 1,
+        kIsBlendFunction_Flag = kFirstPrivateFlag << 2,
 
         // Propagates down the FP to all its leaves
-        kSampledWithExplicitCoords_Flag = kFirstPrivateFlag << 2,
-        kNetTransformHasPerspective_Flag = kFirstPrivateFlag << 3,
+        kSampledWithExplicitCoords_Flag = kFirstPrivateFlag << 3,
+        kNetTransformHasPerspective_Flag = kFirstPrivateFlag << 4,
 
         // Propagates up the FP tree to the root
-        kWillReadDstColor_Flag = kFirstPrivateFlag << 4,
+        kWillReadDstColor_Flag = kFirstPrivateFlag << 5,
     };
     void addAndPushFlagToChildren(PrivateFlags flag);
 

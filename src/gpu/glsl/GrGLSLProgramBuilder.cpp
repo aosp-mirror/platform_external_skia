@@ -160,6 +160,7 @@ SkString GrGLSLProgramBuilder::emitFragProc(const GrFragmentProcessor& fp,
                                             const SkString& input,
                                             SkString output) {
     SkASSERT(input.size());
+
     // Program builders have a bit of state we need to clear with each effect
     AutoStageAdvance adv(this);
     this->nameExpression(&output, "output");
@@ -185,10 +186,16 @@ SkString GrGLSLProgramBuilder::emitFragProc(const GrFragmentProcessor& fp,
                                            this->uniformHandler(),
                                            this->shaderCaps(),
                                            fp,
-                                           "_input",
+                                           fp.isBlendFunction() ? "_src" : "_input",
+                                           "_dst",
                                            "_coords");
-    auto name = fFS.writeProcessorFunction(&glslFP, args);
-    fFS.codeAppendf("%s = %s(%s);", output.c_str(), name.c_str(), input.c_str());
+    fFS.writeProcessorFunction(&glslFP, args);
+    if (fp.isBlendFunction()) {
+        fFS.codeAppendf(
+                "%s = %s(%s, half4(1));", output.c_str(), glslFP.functionName(), input.c_str());
+    } else {
+        fFS.codeAppendf("%s = %s(%s);", output.c_str(), glslFP.functionName(), input.c_str());
+    }
 
     // We have to check that effects and the code they emit are consistent, ie if an effect asks
     // for dst color, then the emit code needs to follow suit

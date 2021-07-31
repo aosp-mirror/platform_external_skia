@@ -15,8 +15,8 @@
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrImageInfo.h"
 #include "src/gpu/GrSurfaceContext.h"
+#include "src/gpu/GrSurfaceFillContext.h"
 #include "src/gpu/effects/GrTextureEffect.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
 #include "tests/Test.h"
 #include "tests/TestUtils.h"
 #include "tools/ToolUtils.h"
@@ -1178,13 +1178,11 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceContextWritePixelsMipped, reporter, ct
 
                     // TODO: Update this when read pixels supports reading back levels to read
                     // directly rather than using minimizing draws.
-                    auto dst = skgpu::v1::SurfaceDrawContext::Make(direct,
-                                                                   info.colorType(),
-                                                                   info.refColorSpace(),
-                                                                   SkBackingFit::kExact,
-                                                                   info.dimensions(),
-                                                                   SkSurfaceProps());
-                    SkASSERT(dst);
+                    auto dstSC = GrSurfaceContext::Make(direct, info,
+                                                        SkBackingFit::kExact,
+                                                        kBottomLeft_GrSurfaceOrigin,
+                                                        GrRenderable::kYes);
+                    SkASSERT(dstSC);
                     GrSamplerState sampler(SkFilterMode::kNearest, SkMipmapMode::kNearest);
                     for (int i = 1; i <= 1; ++i) {
                         auto te = GrTextureEffect::Make(sc->readSurfaceView(),
@@ -1192,13 +1190,14 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceContextWritePixelsMipped, reporter, ct
                                                         SkMatrix::I(),
                                                         sampler,
                                                         *direct->priv().caps());
-                        dst->fillRectToRectWithFP(SkIRect::MakeSize(sc->dimensions()),
-                                                  SkIRect::MakeSize(levels[i].dimensions()),
-                                                  std::move(te));
+                        dstSC->asFillContext()->fillRectToRectWithFP(
+                                SkIRect::MakeSize(sc->dimensions()),
+                                SkIRect::MakeSize(levels[i].dimensions()),
+                                std::move(te));
                         GrImageInfo readInfo =
-                                dst->imageInfo().makeDimensions(levels[i].dimensions());
+                                dstSC->imageInfo().makeDimensions(levels[i].dimensions());
                         GrPixmap read = GrPixmap::Allocate(readInfo);
-                        if (!dst->readPixels(direct, read, {0, 0})) {
+                        if (!dstSC->readPixels(direct, read, {0, 0})) {
                             continue;
                         }
 
@@ -1239,4 +1238,60 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceContextWritePixelsMipped, reporter, ct
             }
         }
     }
+}
+
+// Tests a bug found in OOP-R canvas2d in Chrome. The GPU backend would incorrectly not bind
+// buffer 0 to GL_PIXEL_PACK_BUFFER before a glReadPixels() that was supposed to read into
+// client memory if a GrDirectContext::resetContext() occurred.
+DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(GLReadPixelsUnbindPBO, reporter, ctxInfo) {
+    // Start with a async read so that we bind to GL_PIXEL_PACK_BUFFER.
+    auto info = SkImageInfo::Make(16, 16, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
+    SkAutoPixmapStorage pmap = make_ref_data(info, /*forceOpaque=*/false);
+    auto image = SkImage::MakeFromRaster(pmap, nullptr, nullptr);
+    image = image->makeTextureImage(ctxInfo.directContext());
+    if (!image) {
+        ERRORF(reporter, "Couldn't make texture image.");
+        return;
+    }
+
+    AsyncContext asyncContext;
+    image->asyncRescaleAndReadPixels(info,
+                                     SkIRect::MakeSize(info.dimensions()),
+                                     SkImage::RescaleGamma::kSrc,
+                                     SkImage::RescaleMode::kNearest,
+                                     async_callback,
+                                     &asyncContext);
+
+    // This will force the async readback to finish.
+    ctxInfo.directContext()->flushAndSubmit(true);
+    if (!asyncContext.fCalled) {
+        ERRORF(reporter, "async_callback not called.");
+    }
+    if (!asyncContext.fResult) {
+        ERRORF(reporter, "async read failed.");
+    }
+
+    SkPixmap asyncResult(info, asyncContext.fResult->data(0), asyncContext.fResult->rowBytes(0));
+
+    // Bug was that this would cause GrGLGpu to think no buffer was left bound to
+    // GL_PIXEL_PACK_BUFFER even though async transfer did leave one bound. So the sync read
+    // wouldn't bind buffer 0.
+    ctxInfo.directContext()->resetContext();
+
+    SkBitmap syncResult;
+    syncResult.allocPixels(info);
+    syncResult.eraseARGB(0xFF, 0xFF, 0xFF, 0xFF);
+
+    image->readPixels(ctxInfo.directContext(), syncResult.pixmap(), 0, 0);
+
+    float tol[4] = {};  // expect exactly same pixels, no conversions.
+    auto error = std::function<ComparePixmapsErrorReporter>([&](int x, int y,
+                                                                const float diffs[4]) {
+      SkASSERT(x >= 0 && y >= 0);
+      ERRORF(reporter, "Expect sync and async read to be the same. "
+             "Error at %d, %d. Diff in floats: (%f, %f, %f, %f)",
+             x, y, diffs[0], diffs[1], diffs[2], diffs[3]);
+    });
+
+    ComparePixels(syncResult.pixmap(), asyncResult, tol, error);
 }

@@ -29,14 +29,6 @@ public:
         const GrSkSLFP& fp            = args.fFp.cast<GrSkSLFP>();
         const SkSL::Program& program  = *fp.fEffect->fBaseProgram;
 
-        // We need to ensure that we emit each child's helper function at least once.
-        // Any child FP that isn't sampled won't trigger a call otherwise, leading to asserts later.
-        for (int i = 0; i < this->numChildProcessors(); ++i) {
-            if (this->childProcessor(i)) {
-                this->emitChildFunction(i, args);
-            }
-        }
-
         class FPCallbacks : public SkSL::PipelineStage::Callbacks {
         public:
             FPCallbacks(GrGLSLSkSLFP* self,
@@ -154,8 +146,10 @@ public:
             }
 
             String sampleBlender(int index, String src, String dst) override {
-                // TODO(skia:12257): invokeChild does not yet allow sampling from a blender
-                return "half4(1)";
+                if (!fSelf->childProcessor(index)) {
+                    return String::printf("blend_src_over(%s, %s)", src.c_str(), dst.c_str());
+                }
+                return String(fSelf->invokeChild(index, src.c_str(), dst.c_str(), fArgs).c_str());
             }
 
             GrGLSLSkSLFP*                 fSelf;
@@ -173,6 +167,20 @@ public:
             args.fFragBuilder->codeAppendf("%s = %s;\n",
                                            args.fInputColor,
                                            this->invokeChild(fp.fInputChildIndex, args).c_str());
+        }
+
+        if (fp.fEffect->allowBlender()) {
+            // If we have an dest-color child, we invoke it now, and make the result of that be the
+            // "dest color" for all other purposes later.
+            if (fp.fDestColorChildIndex >= 0) {
+                args.fFragBuilder->codeAppendf(
+                        "%s = %s;\n",
+                        args.fDestColor,
+                        this->invokeChild(fp.fDestColorChildIndex, args.fDestColor, args).c_str());
+            }
+        } else {
+            // We're not making a blender, so we don't expect a dest-color child FP to exist.
+            SkASSERT(fp.fDestColorChildIndex < 0);
         }
 
         // Snap off a global copy of the input color at the start of main. We need this when
@@ -202,17 +210,6 @@ public:
             args.fFragBuilder->codeAppendf("float2 %s = %s;\n", coords, args.fSampleCoord);
         }
 
-        // For runtime blends, the destination color is stored as a child FP.
-        // Invoke that FP here and store it in a local variable.
-        const char* destColor = "half4(1)";
-        SkString destColorVarName;
-        if (fp.fDestColorChildIndex >= 0) {
-            destColorVarName = args.fFragBuilder->newTmpVarName("destColor");
-            destColor = destColorVarName.c_str();
-            SkString childFP = this->invokeChild(fp.fDestColorChildIndex, args);
-            args.fFragBuilder->codeAppendf("half4 %s = %s;", destColor, childFP.c_str());
-        }
-
         FPCallbacks callbacks(this,
                               args,
                               inputColorName.c_str(),
@@ -220,7 +217,7 @@ public:
                               fp.uniformData(),
                               fp.uniformFlags());
         SkSL::PipelineStage::ConvertProgram(
-                program, coords, args.fInputColor, destColor, &callbacks);
+                program, coords, args.fInputColor, args.fDestColor, &callbacks);
     }
 
     void onSetData(const GrGLSLProgramDataManager& pdman,
@@ -302,6 +299,9 @@ GrSkSLFP::GrSkSLFP(sk_sp<SkRuntimeEffect> effect, const char* name, OptFlags opt
     if (fEffect->usesSampleCoords()) {
         this->setUsesSampleCoordsDirectly();
     }
+    if (fEffect->allowBlender()) {
+        this->setIsBlendFunction();
+    }
 }
 
 GrSkSLFP::GrSkSLFP(const GrSkSLFP& other)
@@ -317,6 +317,9 @@ GrSkSLFP::GrSkSLFP(const GrSkSLFP& other)
 
     if (fEffect->usesSampleCoords()) {
         this->setUsesSampleCoordsDirectly();
+    }
+    if (fEffect->allowBlender()) {
+        this->setIsBlendFunction();
     }
 
     this->cloneAndRegisterAllChildProcessors(other);
