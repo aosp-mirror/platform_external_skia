@@ -29,14 +29,6 @@ public:
         const GrSkSLFP& fp            = args.fFp.cast<GrSkSLFP>();
         const SkSL::Program& program  = *fp.fEffect->fBaseProgram;
 
-        // We need to ensure that we emit each child's helper function at least once.
-        // Any child FP that isn't sampled won't trigger a call otherwise, leading to asserts later.
-        for (int i = 0; i < this->numChildProcessors(); ++i) {
-            if (this->childProcessor(i)) {
-                this->emitChildFunction(i, args);
-            }
-        }
-
         class FPCallbacks : public SkSL::PipelineStage::Callbacks {
         public:
             FPCallbacks(GrGLSLSkSLFP* self,
@@ -154,8 +146,10 @@ public:
             }
 
             String sampleBlender(int index, String src, String dst) override {
-                // TODO(skia:12257): invokeChild does not yet allow sampling from a blender
-                return "half4(1)";
+                if (!fSelf->childProcessor(index)) {
+                    return String::printf("blend_src_over(%s, %s)", src.c_str(), dst.c_str());
+                }
+                return String(fSelf->invokeChild(index, src.c_str(), dst.c_str(), fArgs).c_str());
             }
 
             GrGLSLSkSLFP*                 fSelf;
@@ -288,7 +282,6 @@ std::unique_ptr<GrSkSLFP> GrSkSLFP::MakeWithData(
     }
     if (destColorFP) {
         fp->setDestColorFP(std::move(destColorFP));
-        fp->setIsBlendFunction();
     }
     return fp;
 }
@@ -306,6 +299,9 @@ GrSkSLFP::GrSkSLFP(sk_sp<SkRuntimeEffect> effect, const char* name, OptFlags opt
     if (fEffect->usesSampleCoords()) {
         this->setUsesSampleCoordsDirectly();
     }
+    if (fEffect->allowBlender()) {
+        this->setIsBlendFunction();
+    }
 }
 
 GrSkSLFP::GrSkSLFP(const GrSkSLFP& other)
@@ -321,6 +317,9 @@ GrSkSLFP::GrSkSLFP(const GrSkSLFP& other)
 
     if (fEffect->usesSampleCoords()) {
         this->setUsesSampleCoordsDirectly();
+    }
+    if (fEffect->allowBlender()) {
+        this->setIsBlendFunction();
     }
 
     this->cloneAndRegisterAllChildProcessors(other);

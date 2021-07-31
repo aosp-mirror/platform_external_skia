@@ -44,6 +44,8 @@
 
 #include <algorithm>
 
+using ChildType = SkRuntimeEffect::ChildType;
+
 #ifdef SK_ENABLE_SKSL
 
 namespace SkSL {
@@ -128,11 +130,11 @@ static bool init_uniform_type(const SkSL::Context& ctx,
     return false;
 }
 
-static SkRuntimeEffect::Child::Type child_type(const SkSL::Type& type) {
+static ChildType child_type(const SkSL::Type& type) {
     switch (type.typeKind()) {
-        // TODO(skia:12257): add support for kBlender
-        case SkSL::Type::TypeKind::kColorFilter: return SkRuntimeEffect::Child::Type::kColorFilter;
-        case SkSL::Type::TypeKind::kShader:      return SkRuntimeEffect::Child::Type::kShader;
+        case SkSL::Type::TypeKind::kBlender:     return ChildType::kBlender;
+        case SkSL::Type::TypeKind::kColorFilter: return ChildType::kColorFilter;
+        case SkSL::Type::TypeKind::kShader:      return ChildType::kShader;
         default: SkUNREACHABLE;
     }
 }
@@ -143,23 +145,49 @@ static bool verify_child_effects(const std::vector<SkRuntimeEffect::Child>& refl
     if (reflected.size() != effectPtrs.size()) {
         return false;
     }
+
     // Verify that each child object's type matches its declared type in the SkSL.
     for (size_t i = 0; i < effectPtrs.size(); ++i) {
-        switch (reflected[i].type) {
-            case SkRuntimeEffect::Child::Type::kShader:
-                if (effectPtrs[i].colorFilter) {
-                    return false;
-                }
-                continue;
-            case SkRuntimeEffect::Child::Type::kColorFilter:
-                if (effectPtrs[i].shader) {
-                    return false;
-                }
-                continue;
+        skstd::optional<ChildType> effectType = effectPtrs[i].type();
+        if (effectType && effectType != reflected[i].type) {
+            return false;
         }
-        SkDEBUGFAILF("unrecognized SkSL child type %d", (int)reflected[i].type);
     }
     return true;
+}
+
+static bool read_child_effects(SkReadBuffer& buffer,
+                               const SkRuntimeEffect* effect,
+                               SkTArray<SkRuntimeEffect::ChildPtr>* children) {
+    size_t childCount = buffer.read32();
+    if (!buffer.validate(childCount == effect->children().count())) {
+        return false;
+    }
+
+    children->reset();
+    children->reserve_back(childCount);
+
+    for (const auto& child : effect->children()) {
+        if (child.type == ChildType::kShader) {
+            children->emplace_back(buffer.readShader());
+        } else if (child.type == ChildType::kColorFilter) {
+            children->emplace_back(buffer.readColorFilter());
+        } else if (child.type == ChildType::kBlender) {
+            children->emplace_back(buffer.readBlender());
+        } else {
+            return false;
+        }
+    }
+
+    return buffer.isValid();
+}
+
+static void write_child_effects(SkWriteBuffer& buffer,
+                                const std::vector<SkRuntimeEffect::ChildPtr>& children) {
+    buffer.write32(children.size());
+    for (const auto& child : children) {
+        buffer.writeFlattenable(child.flattenable());
+    }
 }
 
 static std::vector<skvm::Val> make_skvm_uniforms(skvm::Builder* p,
@@ -536,13 +564,14 @@ std::unique_ptr<SkFilterColorProgram> SkFilterColorProgram::Make(const SkRuntime
     // of those, we are unable to use this per-effect program, and callers will need to fall back
     // to another (slower) implementation.
 
-    // We also require that any children are *also* color filters (not shaders). In theory we could
-    // detect the coords being passed to shader children, and replicate those calls, but that's
-    // very complicated, and has diminishing returns. (eg, for table lookup color filters).
+    // We also require that any children are *also* color filters (not shaders or blenders). In
+    // theory we could detect the coords being passed to shader children, and replicate those calls,
+    // but that's very complicated, and has diminishing returns. (eg, for table lookup color
+    // filters).
     if (!std::all_of(effect->fChildren.begin(),
                      effect->fChildren.end(),
                      [](const SkRuntimeEffect::Child& c) {
-                         return c.type == SkRuntimeEffect::Child::Type::kColorFilter;
+                         return c.type == ChildType::kColorFilter;
                      })) {
         return nullptr;
     }
@@ -743,14 +772,17 @@ static GrFPResult make_effect_fp(sk_sp<SkRuntimeEffect> effect,
                                  const GrFPArgs& childArgs) {
     SkSTArray<8, std::unique_ptr<GrFragmentProcessor>> childFPs;
     for (const auto& child : children) {
-        if (child.shader) {
-            auto childFP = as_SB(child.shader)->asFragmentProcessor(childArgs);
+        skstd::optional<ChildType> type = child.type();
+        if (type == ChildType::kShader) {
+            // Convert a SkShader into a child FP.
+            auto childFP = as_SB(child.shader())->asFragmentProcessor(childArgs);
             if (!childFP) {
                 return GrFPFailure(std::move(inputFP));
             }
             childFPs.push_back(std::move(childFP));
-        } else if (child.colorFilter) {
-            auto [success, childFP] = as_CFB(child.colorFilter)
+        } else if (type == ChildType::kColorFilter) {
+            // Convert a SkColorFilter into a child FP.
+            auto [success, childFP] = as_CFB(child.colorFilter())
                                               ->asFragmentProcessor(/*inputFP=*/nullptr,
                                                                     childArgs.fContext,
                                                                     *childArgs.fDstColorInfo);
@@ -758,7 +790,17 @@ static GrFPResult make_effect_fp(sk_sp<SkRuntimeEffect> effect,
                 return GrFPFailure(std::move(inputFP));
             }
             childFPs.push_back(std::move(childFP));
+        } else if (type == ChildType::kBlender) {
+            // Convert a SkBlender into a child FP.
+            auto childFP = as_BB(child.blender())->asFragmentProcessor(/*srcFP=*/nullptr,
+                                                                       /*dstFP=*/nullptr,
+                                                                       childArgs);
+            if (!childFP) {
+                return GrFPFailure(std::move(inputFP));
+            }
+            childFPs.push_back(std::move(childFP));
         } else {
+            // We have a null child effect.
             childFPs.push_back(nullptr);
         }
     }
@@ -813,7 +855,7 @@ public:
         SkASSERT(inputs);
 
         auto sampleShader = [&](int ix, skvm::Coord coord) {
-            if (SkShader* shader = fChildren[ix].shader.get()) {
+            if (SkShader* shader = fChildren[ix].shader()) {
                 SkSimpleMatrixProvider mats{SkMatrix::I()};
                 return as_SB(shader)->program(p, coord, coord, c, mats, /*localM=*/nullptr,
                                               colorInfo, uniforms, alloc);
@@ -821,14 +863,16 @@ public:
             return c;
         };
         auto sampleColorFilter = [&](int ix, skvm::Color color) {
-            if (SkColorFilter* colorFilter = fChildren[ix].colorFilter.get()) {
+            if (SkColorFilter* colorFilter = fChildren[ix].colorFilter()) {
                 return as_CFB(colorFilter)->program(p, color, colorInfo, uniforms, alloc);
             }
             return color;
         };
         auto sampleBlender = [&](int ix, skvm::Color src, skvm::Color dst) {
-            // TODO(skia:12257): implement sample(blender, src, dst)
-            return src;
+            if (SkBlender* blender = fChildren[ix].blender()) {
+                return as_BB(blender)->program(p, src, dst, colorInfo, uniforms, alloc);
+            }
+            return blend(SkBlendMode::kSrcOver, src, dst);
         };
 
         std::vector<skvm::Val> uniform = make_skvm_uniforms(p, uniforms, fEffect->uniformSize(),
@@ -858,10 +902,13 @@ public:
         auto evalChild = [&](int index, SkPMColor4f inColor) {
             const auto& child = fChildren[index];
 
-            // Guaranteed by initFilterColorInfo
-            SkASSERT(!child.shader);
-            return child.colorFilter ? as_CFB(child.colorFilter)->onFilterColor4f(inColor, dstCS)
-                                     : inColor;
+            // SkFilterColorProgram::Make has guaranteed that any children will be color filters.
+            SkASSERT(!child.shader());
+            SkASSERT(!child.blender());
+            if (SkColorFilter* colorFilter = child.colorFilter()) {
+                return as_CFB(colorFilter)->onFilterColor4f(inColor, dstCS);
+            }
+            return inColor;
         };
 
         return program->eval(color, inputs->data(), evalChild);
@@ -875,11 +922,7 @@ public:
     void flatten(SkWriteBuffer& buffer) const override {
         buffer.writeString(fEffect->source().c_str());
         buffer.writeDataAsByteArray(fUniforms.get());
-        buffer.write32(fChildren.size());
-        for (const auto& child : fChildren) {
-            buffer.writeFlattenable(child.shader ? (const SkFlattenable*)child.shader.get()
-                                                 : child.colorFilter.get());
-        }
+        write_child_effects(buffer, fChildren);
     }
 
     SK_FLATTENABLE_HOOKS(SkRuntimeColorFilter)
@@ -900,21 +943,8 @@ sk_sp<SkFlattenable> SkRuntimeColorFilter::CreateProc(SkReadBuffer& buffer) {
         return nullptr;
     }
 
-    size_t childCount = buffer.read32();
-    if (!buffer.validate(childCount == effect->children().count())) {
-        return nullptr;
-    }
-
-    SkSTArray<4, SkRuntimeEffect::ChildPtr> children(childCount);
-    for (const auto& child : effect->children()) {
-        if (child.type == SkRuntimeEffect::Child::Type::kShader) {
-            children.emplace_back(buffer.readShader());
-        } else {
-            SkASSERT(child.type == SkRuntimeEffect::Child::Type::kColorFilter);
-            children.emplace_back(buffer.readColorFilter());
-        }
-    }
-    if (!buffer.isValid()) {
+    SkSTArray<4, SkRuntimeEffect::ChildPtr> children;
+    if (!read_child_effects(buffer, effect.get(), &children)) {
         return nullptr;
     }
 
@@ -1006,7 +1036,7 @@ public:
         local = SkShaderBase::ApplyMatrix(p,inv,local,uniforms);
 
         auto sampleShader = [&](int ix, skvm::Coord coord) {
-            if (SkShader* shader = fChildren[ix].shader.get()) {
+            if (SkShader* shader = fChildren[ix].shader()) {
                 SkOverrideDeviceMatrixProvider mats{matrices, SkMatrix::I()};
                 return as_SB(shader)->program(p, device, coord, paint, mats, /*localM=*/nullptr,
                                               colorInfo, uniforms, alloc);
@@ -1014,14 +1044,16 @@ public:
             return paint;
         };
         auto sampleColorFilter = [&](int ix, skvm::Color color) {
-            if (SkColorFilter* colorFilter = fChildren[ix].colorFilter.get()) {
+            if (SkColorFilter* colorFilter = fChildren[ix].colorFilter()) {
                 return as_CFB(colorFilter)->program(p, color, colorInfo, uniforms, alloc);
             }
             return color;
         };
         auto sampleBlender = [&](int ix, skvm::Color src, skvm::Color dst) {
-            // TODO(skia:12257): implement sample(blender, src, dst)
-            return src;
+            if (SkBlender* blender = fChildren[ix].blender()) {
+                return as_BB(blender)->program(p, src, dst, colorInfo, uniforms, alloc);
+            }
+            return blend(SkBlendMode::kSrcOver, src, dst);
         };
 
         std::vector<skvm::Val> uniform = make_skvm_uniforms(p, uniforms, fEffect->uniformSize(),
@@ -1047,11 +1079,7 @@ public:
         if (flags & kHasLocalMatrix_Flag) {
             buffer.writeMatrix(this->getLocalMatrix());
         }
-        buffer.write32(fChildren.size());
-        for (const auto& child : fChildren) {
-            buffer.writeFlattenable(child.shader ? (const SkFlattenable*)child.shader.get()
-                                                 : child.colorFilter.get());
-        }
+        write_child_effects(buffer, fChildren);
     }
 
     SkRuntimeEffect* asRuntimeEffect() const override { return fEffect.get(); }
@@ -1089,21 +1117,8 @@ sk_sp<SkFlattenable> SkRTShader::CreateProc(SkReadBuffer& buffer) {
         return nullptr;
     }
 
-    size_t childCount = buffer.read32();
-    if (!buffer.validate(childCount == effect->children().count())) {
-        return nullptr;
-    }
-
-    SkSTArray<4, SkRuntimeEffect::ChildPtr> children(childCount);
-    for (const auto& child : effect->children()) {
-        if (child.type == SkRuntimeEffect::Child::Type::kShader) {
-            children.emplace_back(buffer.readShader());
-        } else {
-            SkASSERT(child.type == SkRuntimeEffect::Child::Type::kColorFilter);
-            children.emplace_back(buffer.readColorFilter());
-        }
-    }
-    if (!buffer.isValid()) {
+    SkSTArray<4, SkRuntimeEffect::ChildPtr> children;
+    if (!read_child_effects(buffer, effect.get(), &children)) {
         return nullptr;
     }
 
@@ -1131,7 +1146,7 @@ public:
         SkASSERT(inputs);
 
         auto sampleShader = [&](int ix, skvm::Coord coord) {
-            if (SkShader* shader = fChildren[ix].shader.get()) {
+            if (SkShader* shader = fChildren[ix].shader()) {
                 SkSimpleMatrixProvider mats{SkMatrix::I()};
                 return as_SB(shader)->program(p, coord, coord, src, mats, /*localM=*/nullptr,
                                               colorInfo, uniforms, alloc);
@@ -1139,14 +1154,16 @@ public:
             return src;
         };
         auto sampleColorFilter = [&](int ix, skvm::Color color) {
-            if (SkColorFilter* colorFilter = fChildren[ix].colorFilter.get()) {
+            if (SkColorFilter* colorFilter = fChildren[ix].colorFilter()) {
                 return as_CFB(colorFilter)->program(p, color, colorInfo, uniforms, alloc);
             }
             return color;
         };
         auto sampleBlender = [&](int ix, skvm::Color src, skvm::Color dst) {
-            // TODO(skia:12257): implement sample(blender, src, dst)
-            return src;
+            if (SkBlender* blender = fChildren[ix].blender()) {
+                return as_BB(blender)->program(p, src, dst, colorInfo, uniforms, alloc);
+            }
+            return blend(SkBlendMode::kSrcOver, src, dst);
         };
 
         std::vector<skvm::Val> uniform = make_skvm_uniforms(p, uniforms, fEffect->uniformSize(),
@@ -1182,6 +1199,7 @@ public:
     void flatten(SkWriteBuffer& buffer) const override {
         buffer.writeString(fEffect->source().c_str());
         buffer.writeDataAsByteArray(fUniforms.get());
+        write_child_effects(buffer, fChildren);
     }
 
     SK_FLATTENABLE_HOOKS(SkRuntimeBlender)
@@ -1204,7 +1222,12 @@ sk_sp<SkFlattenable> SkRuntimeBlender::CreateProc(SkReadBuffer& buffer) {
         return nullptr;
     }
 
-    return effect->makeBlender(std::move(uniforms));
+    SkSTArray<4, SkRuntimeEffect::ChildPtr> children;
+    if (!read_child_effects(buffer, effect.get(), &children)) {
+        return nullptr;
+    }
+
+    return effect->makeBlender(std::move(uniforms), SkMakeSpan(children));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1269,10 +1292,11 @@ sk_sp<SkImage> SkRuntimeEffect::makeImage(GrRecordingContext* recordingContext,
         SkSTArray<8, std::unique_ptr<GrFragmentProcessor>> childFPs;
         for (size_t i = 0; i < children.size(); ++i) {
             // TODO: add support for other types of child effects
-            if (!children[i].shader) {
+            if (SkShader* shader = children[i].shader()) {
+                childFPs.push_back(as_SB(shader)->asFragmentProcessor(args));
+            } else {
                 return nullptr;
             }
-            childFPs.push_back(as_SB(children[i].shader)->asFragmentProcessor(args));
         }
         auto fp = GrSkSLFP::MakeWithData(sk_ref_sp(this),
                                          "runtime_image",
@@ -1370,6 +1394,42 @@ sk_sp<SkBlender> SkRuntimeEffect::makeBlender(sk_sp<SkData> uniforms,
         return nullptr;
     }
     return sk_sp<SkBlender>(new SkRuntimeBlender(sk_ref_sp(this), std::move(uniforms), children));
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+skstd::optional<ChildType> SkRuntimeEffect::ChildPtr::type() const {
+    if (fChild) {
+        switch (fChild->getFlattenableType()) {
+            case SkFlattenable::kSkShader_Type:
+                return ChildType::kShader;
+            case SkFlattenable::kSkColorFilter_Type:
+                return ChildType::kColorFilter;
+            case SkFlattenable::kSkBlender_Type:
+                return ChildType::kBlender;
+            default:
+                break;
+        }
+    }
+    return skstd::nullopt;
+}
+
+SkShader* SkRuntimeEffect::ChildPtr::shader() const {
+    return (fChild && fChild->getFlattenableType() == SkFlattenable::kSkShader_Type)
+                   ? static_cast<SkShader*>(fChild.get())
+                   : nullptr;
+}
+
+SkColorFilter* SkRuntimeEffect::ChildPtr::colorFilter() const {
+    return (fChild && fChild->getFlattenableType() == SkFlattenable::kSkColorFilter_Type)
+                   ? static_cast<SkColorFilter*>(fChild.get())
+                   : nullptr;
+}
+
+SkBlender* SkRuntimeEffect::ChildPtr::blender() const {
+    return (fChild && fChild->getFlattenableType() == SkFlattenable::kSkBlender_Type)
+                   ? static_cast<SkBlender*>(fChild.get())
+                   : nullptr;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
