@@ -13,6 +13,7 @@
 #include "src/gpu/GrShaderCaps.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
+#include "src/gpu/glsl/GrGLSLVarying.h"
 
 #include <unordered_map>
 
@@ -31,9 +32,15 @@ class GrShaderCaps;
  */
 class GrGLSLGeometryProcessor {
 public:
-    using UniformHandle         = GrGLSLProgramDataManager::UniformHandle;
-    using SamplerHandle         = GrGLSLUniformHandler::SamplerHandle;
-    using FPToVaryingCoordsMap  = std::unordered_map<const GrFragmentProcessor*, GrShaderVar>;
+    using UniformHandle = GrGLSLProgramDataManager::UniformHandle;
+    using SamplerHandle = GrGLSLUniformHandler::SamplerHandle;
+    /**
+     * Struct of optional varying that replaces the input coords and bool indicating whether the FP
+     * should take a coord param as an argument. The latter may be false if the coords are simply
+     * unused or if the GP has lifted their computation to a varying emitted by the VS.
+     */
+    struct FPCoords {GrShaderVar coordsVarying; bool hasCoordsParam;};
+    using FPCoordsMap = std::unordered_map<const GrFragmentProcessor*, FPCoords>;
 
     virtual ~GrGLSLGeometryProcessor() {}
 
@@ -72,11 +79,11 @@ public:
     };
 
     /**
-     * Emits the code from this geometry processor into the shaders. For any FP that has its input
-     * coords implemented by the GP as a varying, the varying will be accessible in the returned
-     * map and should be used when the FP code is emitted.
+     * Emits the code from this geometry processor into the shaders. For any FP in the pipeline that
+     * has its input coords implemented by the GP as a varying, the varying will be accessible in
+     * the returned map and should be used when the FP code is emitted.
      **/
-    FPToVaryingCoordsMap emitCode(EmitArgs&, GrFragmentProcessor::CIter);
+    FPCoordsMap emitCode(EmitArgs&, const GrPipeline& pipeline);
 
     /**
      * Called after all effect emitCode() functions, to give the processor a chance to write out
@@ -210,23 +217,25 @@ private:
     // This must happen before FP code emission so that the FPs can find the appropriate varying
     // handles they use in place of explicit coord sampling; it is automatically called after
     // onEmitCode() returns using the value stored in GpArgs::fLocalCoordVar.
-    FPToVaryingCoordsMap collectTransforms(GrGLSLVertexBuilder* vb,
-                                           GrGLSLVaryingHandler* varyingHandler,
-                                           GrGLSLUniformHandler* uniformHandler,
-                                           const GrShaderVar& localCoordsVar,
-                                           GrFragmentProcessor::CIter);
+    FPCoordsMap collectTransforms(GrGLSLVertexBuilder* vb,
+                                  GrGLSLVaryingHandler* varyingHandler,
+                                  GrGLSLUniformHandler* uniformHandler,
+                                  const GrShaderVar& localCoordsVar,
+                                  const GrPipeline& pipeline);
 
     struct TransformInfo {
-        // The vertex-shader output variable to assign the transformed coordinates to
-        GrShaderVar                fOutputCoords;
-        // The coordinate to be transformed
-        GrShaderVar                fLocalCoords;
-        // The leaf FP of a transform hierarchy to be evaluated in the vertex shader;
-        // this FP will be const-uniform sampled, and all of its parents will have a sample matrix
-        // type of none or const-uniform.
-        const GrFragmentProcessor* fFP;
+        // The varying that conveys the coordinates to one or more FPs in the FS.
+        GrGLSLVarying varying;
+        // The coordinate to be transformed. varying is computed from this.
+        GrShaderVar   localCoords;
+        // Used to sort so that ancestor FP varyings are initialized before descendant FP varyings.
+        int           traversalOrder;
     };
-    SkTArray<TransformInfo> fTransformInfos;
+    // Populated by collectTransforms() for use in emitTransformCode(). When we lift the computation
+    // of a FP's input coord to a varying we propagate that varying up the FP tree to the highest
+    // node that shares the same coordinates. This allows multiple FPs in a subtree to share a
+    // varying.
+    std::unordered_map<const GrFragmentProcessor*, TransformInfo> fTransformVaryingsMap;
 };
 
 #endif

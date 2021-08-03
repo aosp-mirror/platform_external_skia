@@ -950,6 +950,10 @@ bool GrGLGpu::onTransferPixelsFrom(GrSurface* surface,
 }
 
 void GrGLGpu::unbindXferBuffer(GrGpuBufferType type) {
+    if (this->glCaps().transferBufferType() != GrGLCaps::TransferBufferType::kARB_PBO &&
+        this->glCaps().transferBufferType() != GrGLCaps::TransferBufferType::kNV_PBO) {
+        return;
+    }
     SkASSERT(type == GrGpuBufferType::kXferCpuToGpu || type == GrGpuBufferType::kXferGpuToCpu);
     auto* xferBufferState = this->hwBufferState(type);
     if (!xferBufferState->fBufferZeroKnownBound) {

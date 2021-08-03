@@ -53,7 +53,6 @@
 #include "src/gpu/geometry/GrQuad.h"
 #include "src/gpu/geometry/GrQuadUtils.h"
 #include "src/gpu/geometry/GrStyledShape.h"
-#include "src/gpu/ops/GrAtlasTextOp.h"
 #include "src/gpu/ops/GrClearOp.h"
 #include "src/gpu/ops/GrDrawAtlasOp.h"
 #include "src/gpu/ops/GrDrawOp.h"
@@ -823,7 +822,7 @@ void SurfaceDrawContext::fillRectToRect(const GrClip* clip,
         SkRect croppedRect, croppedLocal{};
         const GrClip* optimizedClip = clip;
         if (clip && viewMatrix.isScaleTranslate() && quad.fDevice.asRect(&croppedRect) &&
-            (!paint.usesVaryingCoords() || quad.fLocal.asRect(&croppedLocal))) {
+            (!paint.usesLocalCoords() || quad.fLocal.asRect(&croppedLocal))) {
             // The cropped quad is still a rect, and our view matrix preserves rects. Map it back
             // to pre-matrix space.
             SkMatrix inverse;

@@ -393,7 +393,7 @@ bool log_texture_view(GrDirectContext* dContext, GrSurfaceProxyView src, SkStrin
     SkImageInfo ii = SkImageInfo::Make(src.proxy()->dimensions(), kRGBA_8888_SkColorType,
                                        kLogAlphaType);
 
-    auto sContext = GrSurfaceContext::Make(dContext, std::move(src), ii.colorInfo());
+    auto sContext = dContext->priv().makeSC(std::move(src), ii.colorInfo());
     SkBitmap bm;
     SkAssertResult(bm.tryAllocPixels(ii));
     SkAssertResult(sContext->readPixels(dContext, bm.pixmap(), {0, 0}));
@@ -806,9 +806,9 @@ static void assert_processor_equality(skiatest::Reporter* reporter,
                               "\n%s", fp.dumpTreeInfo().c_str());
     REPORTER_ASSERT(reporter, fp.numChildProcessors() == clone.numChildProcessors(),
                               "\n%s", fp.dumpTreeInfo().c_str());
-    REPORTER_ASSERT(reporter, fp.usesVaryingCoords() == clone.usesVaryingCoords(),
+    REPORTER_ASSERT(reporter, fp.sampleUsage() == clone.sampleUsage(),
                               "\n%s", fp.dumpTreeInfo().c_str());
-    REPORTER_ASSERT(reporter, fp.referencesSampleCoords() == clone.referencesSampleCoords(),
+    REPORTER_ASSERT(reporter, fp.usesSampleCoords() == clone.usesSampleCoords(),
                               "\n%s", fp.dumpTreeInfo().c_str());
 }
 
