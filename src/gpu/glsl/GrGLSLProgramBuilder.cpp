@@ -127,8 +127,7 @@ bool GrGLSLProgramBuilder::emitAndInstallPrimProc(SkString* outputColor, SkStrin
                                            outputColor->c_str(),
                                            outputCoverage->c_str(),
                                            texSamplers.get());
-    GrFragmentProcessor::CIter fpIter(this->pipeline());
-    fFPCoordVaryings = fGeometryProcessor->emitCode(args, std::move(fpIter));
+    fFPCoordsMap = fGeometryProcessor->emitCode(args, this->pipeline());
 
     // We have to check that effects and the code they emit are consistent, ie if an effect
     // asks for dst color, then the emit code needs to follow suit
@@ -389,8 +388,11 @@ void GrGLSLProgramBuilder::addRTFlipUniform(const char* name) {
 }
 
 GrShaderVar GrGLSLProgramBuilder::varyingCoordsForFragmentProcessor(const GrFragmentProcessor* fp) {
-    auto iter = fFPCoordVaryings.find(fp);
-    return iter == fFPCoordVaryings.end() ? GrShaderVar() : iter->second;
+    return fFPCoordsMap[fp].coordsVarying;
+}
+
+bool GrGLSLProgramBuilder::fragmentProcessorHasCoordsParam(const GrFragmentProcessor* fp) {
+    return fFPCoordsMap[fp].hasCoordsParam;
 }
 
 void GrGLSLProgramBuilder::finalizeShaders() {

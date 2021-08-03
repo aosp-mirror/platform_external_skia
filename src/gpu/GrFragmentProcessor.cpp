@@ -21,7 +21,7 @@ bool GrFragmentProcessor::isEqual(const GrFragmentProcessor& that) const {
     if (this->classID() != that.classID()) {
         return false;
     }
-    if (this->usesVaryingCoordsDirectly() != that.usesVaryingCoordsDirectly()) {
+    if (this->sampleUsage() != that.sampleUsage()) {
         return false;
     }
     if (!this->onIsEqual(that)) {
@@ -153,36 +153,21 @@ void GrFragmentProcessor::registerChild(std::unique_ptr<GrFragmentProcessor> chi
 
     // The child should not have been attached to another FP already and not had any sampling
     // strategy set on it.
-    SkASSERT(!child->fParent && !child->sampleUsage().isSampled() &&
-             !child->isSampledWithExplicitCoords() && !child->hasPerspectiveTransform());
+    SkASSERT(!child->fParent && !child->sampleUsage().isSampled());
 
     // Configure child's sampling state first
     child->fUsage = sampleUsage;
-
-    if (sampleUsage.isExplicit()) {
-        child->addAndPushFlagToChildren(kSampledWithExplicitCoords_Flag);
-    }
-
-    // Push perspective matrix type to children
-    if (sampleUsage.fHasPerspective) {
-        child->addAndPushFlagToChildren(kNetTransformHasPerspective_Flag);
-    }
 
     // Propagate the "will read dest-color" flag up to parent FPs.
     if (child->willReadDstColor()) {
         this->setWillReadDstColor();
     }
 
-    // If the child is not sampled explicitly and not already accessing sample coords directly
-    // (through reference or variable matrix expansion), then mark that this FP tree relies on
-    // coordinates at a lower level. If the child is sampled with explicit coordinates and
-    // there isn't any other direct reference to the sample coords, we halt the upwards propagation
-    // because it means this FP is determining coordinates on its own.
-    if (!child->isSampledWithExplicitCoords()) {
-        if ((child->fFlags & kUsesSampleCoordsDirectly_Flag ||
-             child->fFlags & kUsesSampleCoordsIndirectly_Flag)) {
-            fFlags |= kUsesSampleCoordsIndirectly_Flag;
-        }
+    // If this child receives passthrough or matrix transformed coords from its parent then note
+    // that the parent's coords are used indirectly to ensure that they aren't omitted.
+    if ((sampleUsage.isPassThrough() || sampleUsage.isUniformMatrix()) &&
+        child->usesSampleCoords()) {
+        fFlags |= kUsesSampleCoordsIndirectly_Flag;
     }
 
     fRequestedFeatures |= child->fRequestedFeatures;
@@ -193,8 +178,7 @@ void GrFragmentProcessor::registerChild(std::unique_ptr<GrFragmentProcessor> chi
     fChildProcessors.push_back(std::move(child));
 
     // Validate: our sample strategy comes from a parent we shouldn't have yet.
-    SkASSERT(!this->isSampledWithExplicitCoords() && !this->hasPerspectiveTransform() &&
-             !fUsage.isSampled() && !fParent);
+    SkASSERT(!fUsage.isSampled() && !fParent);
 }
 
 void GrFragmentProcessor::cloneAndRegisterAllChildProcessors(const GrFragmentProcessor& src) {
@@ -655,14 +639,51 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::SurfaceColor() {
 
 std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::DeviceSpace(
         std::unique_ptr<GrFragmentProcessor> fp) {
-    static auto effect = SkMakeRuntimeEffect(SkRuntimeEffect::MakeForShader, R"(
-        uniform shader fp;
-        half4 main(float2 xy) {
-            return sample(fp, sk_FragCoord.xy);
+    if (!fp) {
+        return nullptr;
+    }
+
+    class DeviceSpace : GrFragmentProcessor {
+    public:
+        static std::unique_ptr<GrFragmentProcessor> Make(std::unique_ptr<GrFragmentProcessor> fp) {
+            return std::unique_ptr<GrFragmentProcessor>(new DeviceSpace(std::move(fp)));
         }
-    )");
-    return GrSkSLFP::Make(effect, "DeviceSpace", /*inputFP=*/nullptr, GrSkSLFP::OptFlags::kAll,
-                          "fp", std::move(fp));
+
+    private:
+        DeviceSpace(std::unique_ptr<GrFragmentProcessor> fp)
+                : GrFragmentProcessor(kDeviceSpace_ClassID, fp->optimizationFlags()) {
+            this->registerChild(std::move(fp), SkSL::SampleUsage::Explicit());
+        }
+
+        std::unique_ptr<GrFragmentProcessor> clone() const override {
+            auto child = this->childProcessor(0)->clone();
+            return std::unique_ptr<GrFragmentProcessor>(new DeviceSpace(std::move(child)));
+        }
+
+        SkPMColor4f constantOutputForConstantInput(const SkPMColor4f& f) const override {
+            return this->childProcessor(0)->constantOutputForConstantInput(f);
+        }
+
+        std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override {
+            class Impl : public GrGLSLFragmentProcessor {
+            public:
+                Impl() = default;
+                void emitCode(GrGLSLFragmentProcessor::EmitArgs& args) override {
+                    auto child = this->invokeChild(0, args.fInputColor, args, "sk_FragCoord.xy");
+                    args.fFragBuilder->codeAppendf("return %s;", child.c_str());
+                }
+            };
+            return std::make_unique<Impl>();
+        }
+
+        void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
+
+        bool onIsEqual(const GrFragmentProcessor& processor) const override { return true; }
+
+        const char* name() const override { return "DeviceSpace"; }
+    };
+
+    return DeviceSpace::Make(std::move(fp));
 }
 
 //////////////////////////////////////////////////////////////////////////////
