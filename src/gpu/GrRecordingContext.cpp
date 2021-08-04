@@ -22,7 +22,6 @@
 #include "src/gpu/effects/GrSkSLFP.h"
 #include "src/gpu/text/GrTextBlob.h"
 #include "src/gpu/text/GrTextBlobCache.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
 
 #if SK_GPU_V1
 #include "src/gpu/ops/GrAtlasTextOp.h"
@@ -179,15 +178,6 @@ bool GrRecordingContext::colorTypeSupportedAsImage(SkColorType colorType) const 
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-sk_sp<const GrCaps> GrRecordingContextPriv::refCaps() const {
-    return fContext->refCaps();
-}
-
-void GrRecordingContextPriv::addOnFlushCallbackObject(GrOnFlushCallbackObject* onFlushCBObject) {
-    fContext->addOnFlushCallbackObject(onFlushCBObject);
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef SK_ENABLE_DUMP_GPU
 #include "src/utils/SkJSONWriter.h"
@@ -210,13 +200,13 @@ void GrRecordingContext::dumpJSON(SkJSONWriter*) const { }
 
 #if GR_GPU_STATS
 
-void GrRecordingContext::Stats::dump(SkString* out) {
+void GrRecordingContext::Stats::dump(SkString* out) const {
     out->appendf("Num Path Masks Generated: %d\n", fNumPathMasksGenerated);
     out->appendf("Num Path Mask Cache Hits: %d\n", fNumPathMaskCacheHits);
 }
 
 void GrRecordingContext::Stats::dumpKeyValuePairs(SkTArray<SkString>* keys,
-                                                  SkTArray<double>* values) {
+                                                  SkTArray<double>* values) const {
     keys->push_back(SkString("path_masks_generated"));
     values->push_back(fNumPathMasksGenerated);
 
