@@ -599,7 +599,7 @@ skia_skgpu_v1_sources = [
   "$_src/gpu/v1/Device_v1.h",
   "$_src/gpu/v1/SurfaceDrawContext.cpp",
   "$_src/gpu/v1/SurfaceDrawContext_v1.h",
-  "$_src/gpu/v1/SurfaceFillContext.cpp",
+  "$_src/gpu/v1/SurfaceFillContext_v1.cpp",
   "$_src/gpu/v1/SurfaceFillContext_v1.h",
 ]
 

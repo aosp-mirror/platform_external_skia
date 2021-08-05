@@ -294,7 +294,8 @@ void IRGenerator::checkVarDeclaration(int offset, const Modifiers& modifiers, co
                                         "float3, or float4 variables");
         }
     }
-    int permitted = Modifiers::kConst_Flag;
+    int permitted = Modifiers::kConst_Flag | Modifiers::kHighp_Flag | Modifiers::kMediump_Flag |
+                    Modifiers::kLowp_Flag;
     if (storage == Variable::Storage::kGlobal) {
         permitted |= Modifiers::kIn_Flag | Modifiers::kOut_Flag | Modifiers::kUniform_Flag |
                      Modifiers::kFlat_Flag | Modifiers::kNoPerspective_Flag;
@@ -390,6 +391,11 @@ StatementArray IRGenerator::convertVarDeclarations(const ASTNode& decls,
     const Modifiers& modifiers = declarationsIter++->getModifiers();
     const ASTNode& rawType = *(declarationsIter++);
     const Type* baseType = this->convertType(rawType);
+    if (!baseType) {
+        return {};
+    }
+    baseType = baseType->applyPrecisionQualifiers(fContext, modifiers, fSymbolTable.get(),
+                                                  decls.fOffset);
     if (!baseType) {
         return {};
     }
@@ -743,6 +749,9 @@ void IRGenerator::CheckModifiers(const Context& context,
     checkModifier(Modifiers::kHasSideEffects_Flag, "sk_has_side_effects");
     checkModifier(Modifiers::kInline_Flag,         "inline");
     checkModifier(Modifiers::kNoInline_Flag,       "noinline");
+    checkModifier(Modifiers::kHighp_Flag,          "highp");
+    checkModifier(Modifiers::kMediump_Flag,        "mediump");
+    checkModifier(Modifiers::kLowp_Flag,           "lowp");
     SkASSERT(flags == 0);
 
     int layoutFlags = modifiers.fLayout.fFlags;
