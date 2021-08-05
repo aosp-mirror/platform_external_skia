@@ -182,6 +182,7 @@ sksl_spirv_tests = [
   "/sksl/spirv/LayoutOutOfOrder.sksl",
   "/sksl/spirv/OpaqueTypeInArray.sksl",
   "/sksl/workarounds/RewriteMatrixVectorMultiply.sksl",
+  "/sksl/errors/Ossfuzz36850.sksl",
   "/sksl/errors/UndefinedFunction.sksl",
   "/sksl/errors/UnusedInterfaceBlock.sksl",
 ]
@@ -343,6 +344,7 @@ sksl_shared_tests = [
   "/sksl/shared/Ossfuzz29494.sksl",
   "/sksl/shared/Ossfuzz36655.sksl",
   "/sksl/shared/Ossfuzz36770.sksl",
+  "/sksl/shared/Ossfuzz36852.sksl",
   "/sksl/shared/OutParams.sksl",
   "/sksl/shared/OutParamsNoInline.sksl",
   "/sksl/shared/OutParamsTricky.sksl",
