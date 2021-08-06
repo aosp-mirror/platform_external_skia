@@ -304,7 +304,7 @@ private:
 // If a caller doesn't care about errors, we can use this trivial reporter that just counts up.
 class TrivialErrorReporter : public ErrorReporter {
 public:
-    void error(int offset, String) override { ++fErrorCount; }
+    void handleError(const char*, dsl::PositionInfo*) override { ++fErrorCount; }
     int errorCount() override { return fErrorCount; }
     void setErrorCount(int c) override { fErrorCount = c; }
 
@@ -522,10 +522,10 @@ public:
                 const SwitchStatement& s = stmt.as<SwitchStatement>();
                 bool foundDefault = false;
                 bool fellThrough = false;
-                for (const std::unique_ptr<Statement>& stmt : s.cases()) {
+                for (const std::unique_ptr<Statement>& switchStmt : s.cases()) {
                     // The default case is indicated by a null value. A switch without a default
                     // case cannot definitively return, as its value might not be in the cases list.
-                    const SwitchCase& sc = stmt->as<SwitchCase>();
+                    const SwitchCase& sc = switchStmt->as<SwitchCase>();
                     if (!sc.value()) {
                         foundDefault = true;
                     }
@@ -684,26 +684,30 @@ bool Analysis::DetectStaticRecursion(SkSpan<std::unique_ptr<ProgramElement>> pro
     private:
         bool dfsHelper(Function* fn) {
             SkASSERT(std::find(fStack.begin(), fStack.end(), fn) == fStack.end());
-            fStack.push_back(fn);
 
-            const CallSet& calls = (*fCallGraph)[fn];
-            for (Function* calledFn : calls) {
-                auto it = std::find(fStack.begin(), fStack.end(), calledFn);
-                if (it != fStack.end()) {
-                    // Cycle detected. It includes the functions from 'it' to the end of fStack
-                    fStack.erase(fStack.begin(), it);
-                    return true;
+            auto iter = fCallGraph->find(fn);
+            if (iter != fCallGraph->end()) {
+                fStack.push_back(fn);
+
+                for (Function* calledFn : iter->second) {
+                    auto it = std::find(fStack.begin(), fStack.end(), calledFn);
+                    if (it != fStack.end()) {
+                        // Cycle detected. It includes the functions from 'it' to the end of fStack
+                        fStack.erase(fStack.begin(), it);
+                        return true;
+                    }
+                    if (this->dfsHelper(calledFn)) {
+                        return true;
+                    }
                 }
-                if (this->dfsHelper(calledFn)) {
-                    return true;
-                }
+
+                fStack.pop_back();
             }
 
-            fStack.pop_back();
             return false;
         }
 
-        CallGraph*             fCallGraph;
+        const CallGraph*       fCallGraph;
         std::vector<Function*> fStack;
     };
 

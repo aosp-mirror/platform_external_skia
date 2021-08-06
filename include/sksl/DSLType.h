@@ -86,6 +86,8 @@ public:
 
     DSLType(skstd::string_view name);
 
+    DSLType(skstd::string_view name, const DSLModifiers& modifiers);
+
     /**
      * Returns true if this type is a bool.
      */
@@ -227,7 +229,7 @@ public:
     DSLField(const DSLType type, skstd::string_view name)
         : DSLField(DSLModifiers(), type, name) {}
 
-    DSLField(DSLModifiers modifiers, const DSLType type, skstd::string_view name)
+    DSLField(const DSLModifiers& modifiers, const DSLType type, skstd::string_view name)
         : fModifiers(modifiers)
         , fType(type)
         , fName(name) {}

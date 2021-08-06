@@ -33,6 +33,9 @@ static int parse_modifier_token(Token::Kind token) {
         case Token::Kind::TK_HASSIDEEFFECTS: return Modifiers::kHasSideEffects_Flag;
         case Token::Kind::TK_INLINE:         return Modifiers::kInline_Flag;
         case Token::Kind::TK_NOINLINE:       return Modifiers::kNoInline_Flag;
+        case Token::Kind::TK_HIGHP:          return Modifiers::kHighp_Flag;
+        case Token::Kind::TK_MEDIUMP:        return Modifiers::kMediump_Flag;
+        case Token::Kind::TK_LOWP:           return Modifiers::kLowp_Flag;
         default:                             return 0;
     }
 }
@@ -280,7 +283,7 @@ bool DSLParser::declaration() {
         Declare(result);
         return true;
     }
-    skstd::optional<DSLType> type = this->type();
+    skstd::optional<DSLType> type = this->type(modifiers);
     if (!type) {
         return false;
     }
@@ -299,7 +302,9 @@ bool DSLParser::declaration() {
 }
 
 /* (RPAREN | VOID RPAREN | parameter (COMMA parameter)* RPAREN) (block | SEMICOLON) */
-bool DSLParser::functionDeclarationEnd(DSLModifiers modifiers, DSLType type, const Token& name) {
+bool DSLParser::functionDeclarationEnd(const DSLModifiers& modifiers,
+                                       DSLType type,
+                                       const Token& name) {
     SkTArray<DSLWrapper<DSLParameter>> parameters;
     Token lookahead = this->peek();
     if (lookahead.fKind == Token::Kind::TK_RPAREN) {
@@ -350,7 +355,7 @@ static skstd::optional<DSLStatement> declaration_statements(SkTArray<DSLVar> var
 }
 
 template<class T>
-SkTArray<T> DSLParser::varDeclarationEnd(dsl::DSLModifiers mods, dsl::DSLType baseType,
+SkTArray<T> DSLParser::varDeclarationEnd(const dsl::DSLModifiers& mods, dsl::DSLType baseType,
                                          skstd::string_view name) {
     using namespace dsl;
     SkTArray<T> result;
@@ -428,7 +433,10 @@ skstd::optional<DSLStatement> DSLParser::varDeclarationsOrExpressionStatement() 
         return this->varDeclarations();
     }
 
-    if (IsType(this->text(nextToken))) {
+    if (nextToken.fKind == Token::Kind::TK_HIGHP ||
+        nextToken.fKind == Token::Kind::TK_MEDIUMP ||
+        nextToken.fKind == Token::Kind::TK_LOWP ||
+        IsType(this->text(nextToken))) {
         // Statements that begin with a typename are most often variable declarations, but
         // occasionally the type is part of a constructor, and these are actually expression-
         // statements in disguise. First, attempt the common case: parse it as a vardecl.
@@ -453,7 +461,7 @@ skstd::optional<DSLStatement> DSLParser::varDeclarationsOrExpressionStatement() 
 // statement is a variable-declaration statement, not an expression-statement.
 bool DSLParser::varDeclarationsPrefix(VarDeclarationsPrefix* prefixData) {
     prefixData->modifiers = this->modifiers();
-    skstd::optional<DSLType> type = this->type();
+    skstd::optional<DSLType> type = this->type(prefixData->modifiers);
     if (!type) {
         return false;
     }
@@ -496,7 +504,7 @@ skstd::optional<DSLType> DSLParser::structDeclaration() {
     while (!this->checkNext(Token::Kind::TK_RBRACE)) {
         DSLModifiers modifiers = this->modifiers();
 
-        skstd::optional<DSLType> type = this->type();
+        skstd::optional<DSLType> type = this->type(modifiers);
         if (!type) {
             return skstd::nullopt;
         }
@@ -539,7 +547,7 @@ skstd::optional<DSLType> DSLParser::structDeclaration() {
 }
 
 /* structDeclaration ((IDENTIFIER varDeclarationEnd) | SEMICOLON) */
-SkTArray<dsl::DSLGlobalVar> DSLParser::structVarDeclaration(DSLModifiers modifiers) {
+SkTArray<dsl::DSLGlobalVar> DSLParser::structVarDeclaration(const DSLModifiers& modifiers) {
     skstd::optional<DSLType> type = this->structDeclaration();
     if (!type) {
         return {};
@@ -555,7 +563,7 @@ SkTArray<dsl::DSLGlobalVar> DSLParser::structVarDeclaration(DSLModifiers modifie
 /* modifiers type IDENTIFIER (LBRACKET INT_LITERAL RBRACKET)? */
 skstd::optional<DSLWrapper<DSLParameter>> DSLParser::parameter() {
     DSLModifiers modifiers = this->modifiersWithDefaults(0);
-    skstd::optional<DSLType> type = this->type();
+    skstd::optional<DSLType> type = this->type(modifiers);
     if (!type) {
         return skstd::nullopt;
     }
@@ -742,6 +750,9 @@ skstd::optional<DSLStatement> DSLParser::statement() {
         case Token::Kind::TK_SEMICOLON:
             this->nextToken();
             return dsl::Block();
+        case Token::Kind::TK_HIGHP:
+        case Token::Kind::TK_MEDIUMP:
+        case Token::Kind::TK_LOWP:
         case Token::Kind::TK_CONST:
         case Token::Kind::TK_IDENTIFIER:
             return this->varDeclarationsOrExpressionStatement();
@@ -751,7 +762,7 @@ skstd::optional<DSLStatement> DSLParser::statement() {
 }
 
 /* IDENTIFIER(type) (LBRACKET intLiteral? RBRACKET)* QUESTION? */
-skstd::optional<DSLType> DSLParser::type() {
+skstd::optional<DSLType> DSLParser::type(const DSLModifiers& modifiers) {
     Token type;
     if (!this->expect(Token::Kind::TK_IDENTIFIER, "a type", &type)) {
         return skstd::nullopt;
@@ -760,7 +771,7 @@ skstd::optional<DSLType> DSLParser::type() {
         this->error(type, ("no type named '" + this->text(type) + "'").c_str());
         return skstd::nullopt;
     }
-    DSLType result(this->text(type));
+    DSLType result(this->text(type), modifiers);
     while (this->checkNext(Token::Kind::TK_LBRACKET)) {
         if (result.isArray()) {
             this->error(this->peek(), "multi-dimensional arrays are not supported");
@@ -784,7 +795,7 @@ skstd::optional<DSLType> DSLParser::type() {
 /* IDENTIFIER LBRACE
      varDeclaration+
    RBRACE (IDENTIFIER (LBRACKET expression? RBRACKET)*)? SEMICOLON */
-bool DSLParser::interfaceBlock(dsl::DSLModifiers modifiers) {
+bool DSLParser::interfaceBlock(const dsl::DSLModifiers& modifiers) {
     Token typeName;
     if (!this->expectIdentifier(&typeName)) {
         return false;
@@ -800,7 +811,7 @@ bool DSLParser::interfaceBlock(dsl::DSLModifiers modifiers) {
     SkTArray<dsl::Field> fields;
     while (!this->checkNext(Token::Kind::TK_RBRACE)) {
         DSLModifiers modifiers = this->modifiers();
-        skstd::optional<dsl::DSLType> type = this->type();
+        skstd::optional<dsl::DSLType> type = this->type(modifiers);
         if (!type) {
             return false;
         }
