@@ -342,7 +342,6 @@ sksl_shared_tests = [
   "/sksl/shared/Ossfuzz28904.sksl",
   "/sksl/shared/Ossfuzz29085.sksl",
   "/sksl/shared/Ossfuzz29494.sksl",
-  "/sksl/shared/Ossfuzz36655.sksl",
   "/sksl/shared/Ossfuzz36770.sksl",
   "/sksl/shared/Ossfuzz36852.sksl",
   "/sksl/shared/OutParams.sksl",
@@ -519,6 +518,7 @@ sksl_settings_tests = [
 sksl_rte_tests = [
   "/sksl/runtime/AllowNarrowingConversions.rts",
   "/sksl/runtime/ArrayIndexing.rts",
+  "/sksl/runtime/ArrayNarrowingConversions.rts",
   "/sksl/runtime/Blend.rtb",
   "/sksl/runtime/ConstPreservation.rts",
   "/sksl/runtime/ConversionConstructors.rts",
@@ -550,6 +550,7 @@ sksl_rte_error_tests = [
   "/sksl/runtime_errors/LoopExpressionErrors.rts",
   "/sksl/runtime_errors/LoopInitializerErrors.rts",
   "/sksl/runtime_errors/LoopStructureErrors.rts",
+  "/sksl/runtime_errors/Ossfuzz36655.rts",
   "/sksl/runtime_errors/UnsupportedTypeFragmentProcessor.rts",
   "/sksl/runtime_errors/UnsupportedTypeSampler.rts",
   "/sksl/runtime_errors/UnsupportedTypeTexture.rts",
