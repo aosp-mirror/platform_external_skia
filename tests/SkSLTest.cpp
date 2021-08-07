@@ -221,6 +221,8 @@ SKSL_TEST_CPU(SkSLIntrinsicMixFloat,           "intrinsics/MixFloat.sksl")
 SKSL_TEST(SkSLIntrinsicSignFloat,              "intrinsics/SignFloat.sksl")
 SKSL_TEST(SkSLIntrinsicStep,                   "intrinsics/Step.sksl")
 
+SKSL_TEST_ES3(SkSLArrayNarrowingConversions,   "runtime/ArrayNarrowingConversions.rts")
+
 SKSL_TEST_ES3(SkSLArrayComparison,             "shared/ArrayComparison.sksl")
 SKSL_TEST_ES3(SkSLArrayConstructors,           "shared/ArrayConstructors.sksl")
 SKSL_TEST(SkSLArrayTypes,                      "shared/ArrayTypes.sksl")
@@ -259,6 +261,7 @@ SKSL_TEST(SkSLNegatedVectorLiteral,            "shared/NegatedVectorLiteral.sksl
 SKSL_TEST(SkSLNumberCasts,                     "shared/NumberCasts.sksl")
 SKSL_TEST(SkSLOperatorsES2,                    "shared/OperatorsES2.sksl")
 SKSL_TEST_ES3(SkSLOperatorsES3,                "shared/OperatorsES3.sksl")
+SKSL_TEST(SkSLOssfuzz36852,                    "shared/Ossfuzz36852.sksl")
 
 // skbug.com/11919: Fails on Adreno + Vulkan
 SKSL_TEST_CPU(SkSLOutParams,                   "shared/OutParams.sksl")
@@ -296,8 +299,6 @@ SKSL_TEST_ES3(SkSLWhileLoopControlFlow,        "shared/WhileLoopControlFlow.sksl
 TODO(skia:11209): enable these tests when Runtime Effects have support for ES3
 
 SKSL_TEST(SkSLMatrixFoldingES3,                "folding/MatrixFoldingES3.sksl")
-
-SKSL_TEST(SkSLEnumsCanBeInlinedSafely,         "inliner/EnumsCanBeInlinedSafely.sksl")
 
 SKSL_TEST(SkSLIntrinsicAbsInt,                 "intrinsics/AbsInt.sksl")
 SKSL_TEST(SkSLIntrinsicClampInt,               "intrinsics/ClampInt.sksl")

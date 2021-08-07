@@ -303,6 +303,10 @@ public:
 
     void visitTextureEffects(const std::function<void(const GrTextureEffect&)>&) const;
 
+    void visitWithImpls(
+            const std::function<void(const GrFragmentProcessor&, GrGLSLFragmentProcessor&)>&,
+            GrGLSLFragmentProcessor&) const;
+
     GrTextureEffect* asTextureEffect();
     const GrTextureEffect* asTextureEffect() const;
 
@@ -311,38 +315,6 @@ public:
     // processor and its children.
     SkString dumpTreeInfo() const;
 #endif
-
-    // A pre-order traversal iterator over a hierarchy of FPs. It can also iterate over all the FP
-    // hierarchies rooted in a GrPaint, GrProcessorSet, or GrPipeline. For these collections it
-    // iterates the tree rooted at each color FP and then each coverage FP.
-    //
-    // An iterator is constructed from one of the srcs and used like this:
-    //   for (GrFragmentProcessor::Iter iter(pipeline); iter; ++iter) {
-    //       GrFragmentProcessor& fp = *iter;
-    //   }
-    // The exit test for the loop is using CIter's operator bool().
-    // To use a range-for loop instead see CIterRange below.
-    class CIter;
-
-    // Used to implement a range-for loop using CIter. Src is one of GrFragmentProcessor,
-    // GrPaint, GrProcessorSet, or GrPipeline. Type aliases for these defined below.
-    // Example usage:
-    //   for (const auto& fp : GrFragmentProcessor::PaintRange(paint)) {
-    //       if (fp.usesLocalCoords()) {
-    //       ...
-    //       }
-    //   }
-    template <typename Src> class CIterRange;
-
-    // We would use template deduction guides for CIter but for:
-    // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=79501
-    // Instead we use these specialized type aliases to make it prettier
-    // to construct CIters for particular sources of FPs.
-    using FPRange = CIterRange<GrFragmentProcessor>;
-    using PaintRange = CIterRange<GrPaint>;
-
-    // Sentinel type for range-for using CIter.
-    class EndCIter {};
 
 protected:
     enum OptimizationFlags : uint32_t {
@@ -493,7 +465,6 @@ private:
         // Propagates up the FP tree to the root.
         kWillReadDstColor_Flag = kFirstPrivateFlag << 3,
     };
-    void addAndPushFlagToChildren(PrivateFlags flag);
 
     SkSTArray<1, std::unique_ptr<GrFragmentProcessor>, true> fChildProcessors;
     const GrFragmentProcessor* fParent = nullptr;
@@ -506,51 +477,6 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 
 GR_MAKE_BITFIELD_OPS(GrFragmentProcessor::OptimizationFlags)
-
-//////////////////////////////////////////////////////////////////////////////
-
-class GrFragmentProcessor::CIter {
-public:
-    explicit CIter(const GrFragmentProcessor& fp) { fFPStack.push_back(&fp); }
-    explicit CIter(const GrPaint&);
-    explicit CIter(const GrPipeline&);
-
-    const GrFragmentProcessor& operator*() const  { return *fFPStack.back(); }
-    const GrFragmentProcessor* operator->() const { return fFPStack.back(); }
-
-    CIter& operator++();
-
-    operator bool() const { return !fFPStack.empty(); }
-
-    bool operator!=(const EndCIter&) { return (bool)*this; }
-
-    // Hopefully this does not actually get called because of RVO.
-    CIter(const CIter&) = default;
-
-    CIter(CIter&&) = default;
-
-    // Because each iterator carries a stack we want to avoid copies.
-    CIter& operator=(const CIter&) = delete;
-
-    CIter& operator=(CIter&&) = default;
-
-protected:
-    CIter() = delete;
-
-    SkSTArray<4, const GrFragmentProcessor*, true> fFPStack;
-};
-
-//////////////////////////////////////////////////////////////////////////////
-
-template <typename Src> class GrFragmentProcessor::CIterRange {
-public:
-    explicit CIterRange(const Src& t) : fT(t) {}
-    CIter begin() const { return CIter(fT); }
-    EndCIter end() const { return EndCIter(); }
-
-private:
-    const Src& fT;
-};
 
 static inline GrFPResult GrFPFailure(std::unique_ptr<GrFragmentProcessor> fp) {
     return {false, std::move(fp)};

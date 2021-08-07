@@ -18,6 +18,7 @@
 #include "src/sksl/ir/SkSLBreakStatement.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLConstructorArray.h"
+#include "src/sksl/ir/SkSLConstructorArrayCast.h"
 #include "src/sksl/ir/SkSLConstructorCompound.h"
 #include "src/sksl/ir/SkSLConstructorCompoundCast.h"
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
@@ -316,6 +317,12 @@ std::unique_ptr<Expression> Inliner::inlineExpression(int offset,
                                           *ctor.type().clone(symbolTableForExpression),
                                           argList(ctor.arguments()));
         }
+        case Expression::Kind::kConstructorArrayCast: {
+            const ConstructorArrayCast& ctor = expression.as<ConstructorArrayCast>();
+            return ConstructorArrayCast::Make(*fContext, offset,
+                                              *ctor.type().clone(symbolTableForExpression),
+                                              expr(ctor.argument()));
+        }
         case Expression::Kind::kConstructorCompound: {
             const ConstructorCompound& ctor = expression.as<ConstructorCompound>();
             return ConstructorCompound::Make(*fContext, offset,
@@ -523,8 +530,8 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int offset,
             const SwitchStatement& ss = statement.as<SwitchStatement>();
             StatementArray cases;
             cases.reserve_back(ss.cases().size());
-            for (const std::unique_ptr<Statement>& statement : ss.cases()) {
-                const SwitchCase& sc = statement->as<SwitchCase>();
+            for (const std::unique_ptr<Statement>& switchCaseStmt : ss.cases()) {
+                const SwitchCase& sc = switchCaseStmt->as<SwitchCase>();
                 cases.push_back(std::make_unique<SwitchCase>(offset, expr(sc.value()),
                                                              stmt(sc.statement())));
             }
@@ -821,8 +828,8 @@ public:
                     fSymbolTableStack.push_back(block.symbolTable());
                 }
 
-                for (std::unique_ptr<Statement>& stmt : block.children()) {
-                    this->visitStatement(&stmt);
+                for (std::unique_ptr<Statement>& blockStmt : block.children()) {
+                    this->visitStatement(&blockStmt);
                 }
                 break;
             }
@@ -952,6 +959,7 @@ public:
                 break;
             }
             case Expression::Kind::kConstructorArray:
+            case Expression::Kind::kConstructorArrayCast:
             case Expression::Kind::kConstructorCompound:
             case Expression::Kind::kConstructorCompoundCast:
             case Expression::Kind::kConstructorDiagonalMatrix:

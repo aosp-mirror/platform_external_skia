@@ -59,6 +59,12 @@ void End();
 std::unique_ptr<SkSL::Program> ReleaseProgram(std::unique_ptr<SkSL::String> source = nullptr);
 
 /**
+ * Returns the ErrorHandler which will be notified of any errors that occur during DSL calls. The
+ * default error handler is null, which means any errors encountered will be fatal.
+ */
+ErrorHandler* GetErrorHandler();
+
+/**
  * Installs an ErrorHandler which will be notified of any errors that occur during DSL calls. If
  * no ErrorHandler is installed, any errors will be fatal.
  */
@@ -130,7 +136,7 @@ DSLStatement For(DSLStatement initializer, DSLExpression test, DSLExpression nex
 DSLStatement If(DSLExpression test, DSLStatement ifTrue, DSLStatement ifFalse = DSLStatement(),
                 PositionInfo pos = PositionInfo());
 
-DSLGlobalVar InterfaceBlock(DSLModifiers modifiers,  skstd::string_view typeName,
+DSLGlobalVar InterfaceBlock(const DSLModifiers& modifiers,  skstd::string_view typeName,
                             SkTArray<DSLField> fields, skstd::string_view varName = "",
                             int arraySize = 0, PositionInfo pos = PositionInfo());
 

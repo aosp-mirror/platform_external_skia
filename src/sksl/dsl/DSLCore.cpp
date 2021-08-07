@@ -51,6 +51,10 @@ void End() {
     DSLWriter::SetInstance(nullptr);
 }
 
+ErrorHandler* GetErrorHandler() {
+    return DSLWriter::GetErrorHandler();
+}
+
 void SetErrorHandler(ErrorHandler* errorHandler) {
     DSLWriter::SetErrorHandler(errorHandler);
 }
@@ -131,7 +135,7 @@ public:
 
     static DSLStatement Declare(DSLVar& var, PositionInfo pos) {
         if (var.fDeclared) {
-            DSLWriter::ReportError("error: variable has already been declared\n", &pos);
+            DSLWriter::ReportError("error: variable has already been declared\n", pos);
         }
         var.fDeclared = true;
         return DSLWriter::Declaration(var);
@@ -147,7 +151,7 @@ public:
 
     static void Declare(DSLGlobalVar& var, PositionInfo pos) {
         if (var.fDeclared) {
-            DSLWriter::ReportError("error: variable has already been declared\n", &pos);
+            DSLWriter::ReportError("error: variable has already been declared\n", pos);
         }
         var.fDeclared = true;
         std::unique_ptr<SkSL::Statement> stmt = DSLWriter::Declaration(var);
@@ -195,9 +199,9 @@ public:
                                     ifTrue.release(), ifFalse.releaseIfValid());
     }
 
-    static DSLGlobalVar InterfaceBlock(DSLModifiers modifiers, skstd::string_view typeName,
-                                 SkTArray<DSLField> fields, skstd::string_view varName,
-                                 int arraySize, PositionInfo pos) {
+    static DSLGlobalVar InterfaceBlock(const DSLModifiers& modifiers, skstd::string_view typeName,
+                                       SkTArray<DSLField> fields, skstd::string_view varName,
+                                       int arraySize, PositionInfo pos) {
         // We need to create a new struct type for the interface block, but we don't want it in the
         // symbol table. Since dsl::Struct automatically sticks it in the symbol table, we create it
         // the old fashioned way with MakeStructType.
@@ -219,9 +223,9 @@ public:
         DSLWriter::ProgramElements().push_back(std::make_unique<SkSL::InterfaceBlock>(/*offset=*/-1,
                 DSLWriter::Var(var), typeName, varName, arraySize, DSLWriter::SymbolTable()));
         if (varName.empty()) {
-            const std::vector<SkSL::Type::Field>& fields = structType->fields();
+            const std::vector<SkSL::Type::Field>& structFields = structType->fields();
             const SkSL::Variable* skslVar = DSLWriter::Var(var);
-            for (size_t i = 0; i < fields.size(); ++i) {
+            for (size_t i = 0; i < structFields.size(); ++i) {
                 DSLWriter::SymbolTable()->add(std::make_unique<SkSL::Field>(/*offset=*/-1,
                                                                             skslVar,
                                                                             i));
@@ -375,7 +379,7 @@ DSLStatement If(DSLExpression test, DSLStatement ifTrue, DSLStatement ifFalse, P
                         pos);
 }
 
-DSLGlobalVar InterfaceBlock(DSLModifiers modifiers,  skstd::string_view typeName,
+DSLGlobalVar InterfaceBlock(const DSLModifiers& modifiers,  skstd::string_view typeName,
                             SkTArray<DSLField> fields, skstd::string_view varName, int arraySize,
                             PositionInfo pos) {
     return DSLCore::InterfaceBlock(modifiers, typeName, std::move(fields), varName, arraySize, pos);

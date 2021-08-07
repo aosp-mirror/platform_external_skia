@@ -64,7 +64,7 @@ public:
         SetErrorHandler(nullptr);
     }
 
-    void handleError(const char* msg, PositionInfo* pos) override {
+    void handleError(const char* msg, PositionInfo pos) override {
         REPORTER_ASSERT(fReporter, !strcmp(msg, fMsg),
                         "Error mismatch: expected:\n%sbut received:\n%s", fMsg, msg);
         fMsg = nullptr;
@@ -1671,8 +1671,8 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSwitch, r, ctxInfo) {
 
     {
         ExpectError error(r, "error: case value must be a constant integer\n");
-        Var b(kInt_Type);
-        DSLStatement(Switch(0, Case(b))).release();
+        Var c(kInt_Type);
+        DSLStatement(Switch(0, Case(c))).release();
     }
 }
 
