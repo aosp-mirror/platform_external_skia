@@ -15,7 +15,6 @@
 #include "include/core/SkRegion.h"
 #include "include/core/SkShader.h"
 #include "include/private/SkDeque.h"
-#include "src/core/SkClipOpPriv.h"
 #include "src/core/SkMessageBus.h"
 #include "src/core/SkTLazy.h"
 
@@ -68,7 +67,7 @@ public:
         static const int kTypeCnt = (int)DeviceSpaceType::kLastType + 1;
 
         Element() {
-            this->initCommon(0, kReplace_SkClipOp, false);
+            this->initCommon(0, SkClipOp::kIntersect, false);
             this->setEmpty();
         }
 
@@ -88,6 +87,10 @@ public:
 
         Element(sk_sp<SkShader> shader) {
             this->initShader(0, std::move(shader));
+        }
+
+        Element(const SkRect& rect, bool doAA) {
+            this->initReplaceRect(0, rect, doAA);
         }
 
         ~Element();
@@ -131,6 +134,12 @@ public:
         //!< Call if getDeviceSpaceType() is not kEmpty to get the set operation used to combine
         //!< this element.
         SkClipOp getOp() const { return fOp; }
+        // Augments getOps()'s behavior by requiring a clip reset before the op is applied.
+        bool isReplaceOp() const { return fIsReplace; }
+
+        SkRegion::Op getRegionOp() const {
+            return this->isReplaceOp() ? SkRegion::kReplace_Op : (SkRegion::Op) fOp;
+        }
 
         //!< Call to get the element as a path, regardless of its type.
         void asDeviceSpacePath(SkPath* path) const;
@@ -149,7 +158,16 @@ public:
         void invertShapeFillType();
 
         //!< Sets the set operation represented by the element.
-        void setOp(SkClipOp op) { fOp = op; }
+        void setOp(SkClipOp op) {
+            fOp = op;
+            fIsReplace = false;
+        }
+        // TODO: This is only used by GrReducedClip, which will be deletable soon, so then this
+        // can also be cleaned up.
+        void setReplaceOp() {
+            fOp = SkClipOp::kIntersect;
+            fIsReplace = true;
+        }
 
         /** The GenID can be used by clip stack clients to cache representations of the clip. The
             ID corresponds to the set of clip elements up to and including this element within the
@@ -215,6 +233,7 @@ public:
         SkClipOp fOp;
         DeviceSpaceType fDeviceSpaceType;
         bool fDoAA;
+        bool fIsReplace;
 
         /* fFiniteBoundType and fFiniteBound are used to incrementally update the clip stack's
            bound. When fFiniteBoundType is kNormal_BoundsType, fFiniteBound represents the
@@ -239,7 +258,7 @@ public:
         mutable SkTArray<GrUniqueKey> fKeysToInvalidate;
 #endif
         Element(int saveCount) {
-            this->initCommon(saveCount, kReplace_SkClipOp, false);
+            this->initCommon(saveCount, SkClipOp::kIntersect, false);
             this->setEmpty();
         }
 
@@ -259,12 +278,17 @@ public:
             this->initShader(saveCount, std::move(shader));
         }
 
+        Element(int saveCount, const SkRect& rect, bool doAA) {
+            this->initReplaceRect(saveCount, rect, doAA);
+        }
+
         void initCommon(int saveCount, SkClipOp op, bool doAA);
         void initRect(int saveCount, const SkRect&, const SkMatrix&, SkClipOp, bool doAA);
         void initRRect(int saveCount, const SkRRect&, const SkMatrix&, SkClipOp, bool doAA);
         void initPath(int saveCount, const SkPath&, const SkMatrix&, SkClipOp, bool doAA);
         void initAsPath(int saveCount, const SkPath&, const SkMatrix&, SkClipOp, bool doAA);
         void initShader(int saveCount, sk_sp<SkShader>);
+        void initReplaceRect(int saveCount, const SkRect&, bool doAA);
 
         void setEmpty();
 
@@ -287,10 +311,7 @@ public:
         };
         // per-set operation functions used by updateBoundAndGenID().
         inline void combineBoundsDiff(FillCombo combination, const SkRect& prevFinite);
-        inline void combineBoundsXOR(int combination, const SkRect& prevFinite);
-        inline void combineBoundsUnion(int combination, const SkRect& prevFinite);
         inline void combineBoundsIntersection(int combination, const SkRect& prevFinite);
-        inline void combineBoundsRevDiff(int combination, const SkRect& prevFinite);
     };
 
     SkClipStack();
@@ -372,6 +393,8 @@ public:
     void setDeviceClipRestriction(const SkIRect& rect) {
         fClipRestrictionRect = SkRect::Make(rect);
     }
+
+    void replaceClip(const SkRect& devRect, bool doAA);
 
     /**
      * isWideOpen returns true if the clip state corresponds to the infinite
@@ -523,10 +546,6 @@ private:
      * Restore the stack back to the specified save count.
      */
     void restoreTo(int saveCount);
-
-    inline bool hasClipRestriction(SkClipOp op) {
-        return op >= kUnion_SkClipOp && !fClipRestrictionRect.isEmpty();
-    }
 
     /**
      * Return the next unique generation ID.

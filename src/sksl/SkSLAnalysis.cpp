@@ -304,7 +304,7 @@ private:
 // If a caller doesn't care about errors, we can use this trivial reporter that just counts up.
 class TrivialErrorReporter : public ErrorReporter {
 public:
-    void handleError(const char*, dsl::PositionInfo*) override { ++fErrorCount; }
+    void handleError(const char*, dsl::PositionInfo) override { ++fErrorCount; }
     int errorCount() override { return fErrorCount; }
     void setErrorCount(int c) override { fErrorCount = c; }
 
@@ -904,6 +904,7 @@ bool Analysis::IsSameExpressionTree(const Expression& left, const Expression& ri
             return left.as<BoolLiteral>().value() == right.as<BoolLiteral>().value();
 
         case Expression::Kind::kConstructorArray:
+        case Expression::Kind::kConstructorArrayCast:
         case Expression::Kind::kConstructorCompound:
         case Expression::Kind::kConstructorCompoundCast:
         case Expression::Kind::kConstructorDiagonalMatrix:
@@ -1184,6 +1185,7 @@ public:
             // ... expressions composed of both of the above
             case Expression::Kind::kBinary:
             case Expression::Kind::kConstructorArray:
+            case Expression::Kind::kConstructorArrayCast:
             case Expression::Kind::kConstructorCompound:
             case Expression::Kind::kConstructorCompoundCast:
             case Expression::Kind::kConstructorDiagonalMatrix:
@@ -1315,6 +1317,7 @@ template <typename T> bool TProgramVisitor<T>::visitExpression(typename T::Expre
                    (b.right() && this->visitExpressionPtr(b.right()));
         }
         case Expression::Kind::kConstructorArray:
+        case Expression::Kind::kConstructorArrayCast:
         case Expression::Kind::kConstructorCompound:
         case Expression::Kind::kConstructorCompoundCast:
         case Expression::Kind::kConstructorDiagonalMatrix:
