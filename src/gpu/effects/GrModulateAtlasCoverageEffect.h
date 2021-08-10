@@ -30,7 +30,7 @@ public:
     const char* name() const override {
         return "GrModulateAtlasCoverageFP";
     }
-    void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder* b) const override {
+    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder* b) const override {
         b->add32(fFlags & Flags::kCheckBounds);
     }
     std::unique_ptr<GrFragmentProcessor> clone() const override {
@@ -40,7 +40,7 @@ public:
         auto fp = that.cast<GrModulateAtlasCoverageEffect>();
         return fFlags == fp.fFlags && fBounds == fp.fBounds;
     }
-    std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override;
+    std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override;
 
 private:
     const Flags fFlags;

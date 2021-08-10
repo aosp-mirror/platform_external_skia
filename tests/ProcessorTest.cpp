@@ -98,7 +98,7 @@ public:
 
     const char* name() const override { return "test"; }
 
-    void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder* b) const override {
+    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder* b) const override {
         static std::atomic<int32_t> nextKey{0};
         b->add32(nextKey++);
     }
@@ -124,8 +124,8 @@ private:
         this->cloneAndRegisterAllChildProcessors(that);
     }
 
-    std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override {
-        class TestGLSLFP : public GrGLSLFragmentProcessor {
+    std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override {
+        class TestGLSLFP : public ProgramImpl {
         public:
             TestGLSLFP() {}
             void emitCode(EmitArgs& args) override {

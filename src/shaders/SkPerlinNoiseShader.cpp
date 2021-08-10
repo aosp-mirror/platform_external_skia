@@ -569,7 +569,7 @@ void SkPerlinNoiseShaderImpl::PerlinNoiseShaderContext::shadeSpan(
 
 #if SK_SUPPORT_GPU
 
-class GrGLPerlinNoise : public GrGLSLFragmentProcessor {
+class GrGLPerlinNoise : public GrFragmentProcessor::ProgramImpl {
 public:
     void emitCode(EmitArgs&) override;
 
@@ -582,7 +582,7 @@ private:
     GrGLSLProgramDataManager::UniformHandle fStitchDataUni;
     GrGLSLProgramDataManager::UniformHandle fBaseFrequencyUni;
 
-    using INHERITED = GrGLSLFragmentProcessor;
+    using INHERITED = GrFragmentProcessor::ProgramImpl;
 };
 
 /////////////////////////////////////////////////////////////////////
@@ -626,11 +626,11 @@ public:
     int numOctaves() const { return fNumOctaves; }
 
 private:
-    std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override {
+    std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override {
         return std::make_unique<GrGLPerlinNoise>();
     }
 
-    void onGetGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override {
+    void onAddToKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override {
         GrGLPerlinNoise::GenKey(*this, caps, b);
     }
 
