@@ -177,9 +177,9 @@ private:
 
     explicit GrDisplacementMapEffect(const GrDisplacementMapEffect&);
 
-    std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override;
+    std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override;
 
-    void onGetGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override;
+    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
 
     bool onIsEqual(const GrFragmentProcessor&) const override;
 
@@ -402,7 +402,7 @@ SkIRect SkDisplacementMapImageFilter::onFilterBounds(
 ///////////////////////////////////////////////////////////////////////////////
 
 #if SK_SUPPORT_GPU
-class GrDisplacementMapEffect::Impl : public GrGLSLFragmentProcessor {
+class GrDisplacementMapEffect::Impl : public GrFragmentProcessor::ProgramImpl {
 public:
     void emitCode(EmitArgs&) override;
 
@@ -416,7 +416,7 @@ private:
 
     UniformHandle fScaleUni;
 
-    using INHERITED = GrGLSLFragmentProcessor;
+    using INHERITED = ProgramImpl;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -453,12 +453,12 @@ std::unique_ptr<GrFragmentProcessor> GrDisplacementMapEffect::Make(SkColorChanne
                                         std::move(colorEffect)));
 }
 
-std::unique_ptr<GrGLSLFragmentProcessor> GrDisplacementMapEffect::onMakeProgramImpl() const {
+std::unique_ptr<GrFragmentProcessor::ProgramImpl>
+GrDisplacementMapEffect::onMakeProgramImpl() const {
     return std::make_unique<Impl>();
 }
 
-void GrDisplacementMapEffect::onGetGLSLProcessorKey(const GrShaderCaps& caps,
-                                                    GrProcessorKeyBuilder* b) const {
+void GrDisplacementMapEffect::onAddToKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const {
     Impl::GenKey(*this, caps, b);
 }
 
