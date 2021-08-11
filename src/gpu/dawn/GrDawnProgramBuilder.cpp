@@ -279,8 +279,8 @@ sk_sp<GrDawnProgram> GrDawnProgramBuilder::Build(GrDawnGpu* gpu,
     GrSPIRVUniformHandler::UniformInfoArray& uniforms = builder.fUniformHandler.fUniforms;
     uint32_t uniformBufferSize = builder.fUniformHandler.fCurrentUBOOffset;
     sk_sp<GrDawnProgram> result(new GrDawnProgram(uniforms, uniformBufferSize));
-    result->fGeometryProcessor = std::move(builder.fGeometryProcessor);
-    result->fXferProcessor = std::move(builder.fXferProcessor);
+    result->fGPImpl = std::move(builder.fGPImpl);
+    result->fXPImpl = std::move(builder.fXPImpl);
     result->fFPImpls = std::move(builder.fFPImpls);
     std::vector<wgpu::BindGroupLayoutEntry> uniformLayoutEntries;
     if (0 != uniformBufferSize) {
@@ -502,7 +502,7 @@ wgpu::BindGroup GrDawnProgram::setUniformData(GrDawnGpu* gpu, const GrRenderTarg
     this->setRenderTargetState(renderTarget, programInfo.origin());
     const GrPipeline& pipeline = programInfo.pipeline();
     const GrGeometryProcessor& geomProc = programInfo.geomProc();
-    fGeometryProcessor->setData(fDataManager, *gpu->caps()->shaderCaps(), geomProc);
+    fGPImpl->setData(fDataManager, *gpu->caps()->shaderCaps(), geomProc);
 
     for (int i = 0; i < programInfo.pipeline().numFragmentProcessors(); ++i) {
         const auto& fp = programInfo.pipeline().getFragmentProcessor(i);
@@ -513,7 +513,7 @@ wgpu::BindGroup GrDawnProgram::setUniformData(GrDawnGpu* gpu, const GrRenderTarg
     }
 
     programInfo.pipeline().setDstTextureUniforms(fDataManager, &fBuiltinUniformHandles);
-    fXferProcessor->setData(fDataManager, pipeline.getXferProcessor());
+    fXPImpl->setData(fDataManager, pipeline.getXferProcessor());
 
     return fDataManager.uploadUniformBuffers(gpu, fBindGroupLayouts[0]);
 }

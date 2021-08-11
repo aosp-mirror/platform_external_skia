@@ -92,12 +92,17 @@ String MetalCodeGenerator::typeName(const Type& type) {
             return "texture2d<float>"; // FIXME - support other texture types
 
         default:
+            // We currently only support full-precision types in MSL to avoid type coercion issues.
             if (type == *fContext.fTypes.fHalf) {
-                // FIXME - Currently only supporting floats in MSL to avoid type coercion issues.
-                return String(fContext.fTypes.fFloat->name());
-            } else {
-                return String(type.name());
+                return "float";
             }
+            if (type == *fContext.fTypes.fShort) {
+                return "int";
+            }
+            if (type == *fContext.fTypes.fUShort) {
+                return "uint";
+            }
+            return String(type.name());
     }
 }
 
@@ -1345,7 +1350,7 @@ void MetalCodeGenerator::writeArrayEqualityHelpers(const Type& type) {
 template <typename T1, typename T2, size_t N>
 bool operator==(thread const array<T1, N>& left, thread const array<T2, N>& right) {
     for (size_t index = 0; index < N; ++index) {
-        if (!(left[index] == right[index])) {
+        if (!all(left[index] == right[index])) {
             return false;
         }
     }
