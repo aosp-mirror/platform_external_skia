@@ -32,8 +32,6 @@ GrGLSLProgramBuilder::GrGLSLProgramBuilder(const GrProgramDesc& desc,
         , fStageIndex(-1)
         , fDesc(desc)
         , fProgramInfo(programInfo)
-        , fGeometryProcessor(nullptr)
-        , fXferProcessor(nullptr)
         , fNumFragmentSamplers(0) {}
 
 GrGLSLProgramBuilder::~GrGLSLProgramBuilder() = default;
@@ -55,7 +53,7 @@ void GrGLSLProgramBuilder::addFeature(GrShaderFlags shaders,
 
 bool GrGLSLProgramBuilder::emitAndInstallProcs() {
     // First we loop over all of the installed processors and collect coord transforms.  These will
-    // be sent to the GrGLSLGeometryProcessor in its emitCode function
+    // be sent to the ProgramImpl in its emitCode function
     SkSL::dsl::Start(this->shaderCompiler());
     SkString inputColor;
     SkString inputCoverage;
@@ -71,7 +69,7 @@ bool GrGLSLProgramBuilder::emitAndInstallProcs() {
     if (!this->emitAndInstallXferProc(inputColor, inputCoverage)) {
         return false;
     }
-    fGeometryProcessor->emitTransformCode(&fVS, this->uniformHandler());
+    fGPImpl->emitTransformCode(&fVS, this->uniformHandler());
     SkSL::dsl::End();
 
     return this->checkSamplerCounts();
@@ -100,8 +98,8 @@ bool GrGLSLProgramBuilder::emitAndInstallPrimProc(SkString* outputColor, SkStrin
     fFS.codeAppendf("// Stage %d, %s\n", fStageIndex, geomProc.name());
     fVS.codeAppendf("// Primitive Processor %s\n", geomProc.name());
 
-    SkASSERT(!fGeometryProcessor);
-    fGeometryProcessor.reset(geomProc.createGLSLInstance(*this->shaderCaps()));
+    SkASSERT(!fGPImpl);
+    fGPImpl = geomProc.makeProgramImpl(*this->shaderCaps());
 
     SkAutoSTArray<4, SamplerHandle> texSamplers(geomProc.numTextureSamplers());
     for (int i = 0; i < geomProc.numTextureSamplers(); ++i) {
@@ -117,17 +115,17 @@ bool GrGLSLProgramBuilder::emitAndInstallPrimProc(SkString* outputColor, SkStrin
         }
     }
 
-    GrGLSLGeometryProcessor::EmitArgs args(&fVS,
-                                           geomProc.willUseGeoShader() ? &fGS : nullptr,
-                                           &fFS,
-                                           this->varyingHandler(),
-                                           this->uniformHandler(),
-                                           this->shaderCaps(),
-                                           geomProc,
-                                           outputColor->c_str(),
-                                           outputCoverage->c_str(),
-                                           texSamplers.get());
-    fFPCoordsMap = fGeometryProcessor->emitCode(args, this->pipeline());
+    GrGeometryProcessor::ProgramImpl::EmitArgs args(&fVS,
+                                                    geomProc.willUseGeoShader() ? &fGS : nullptr,
+                                                    &fFS,
+                                                    this->varyingHandler(),
+                                                    this->uniformHandler(),
+                                                    this->shaderCaps(),
+                                                    geomProc,
+                                                    outputColor->c_str(),
+                                                    outputCoverage->c_str(),
+                                                    texSamplers.get());
+    fFPCoordsMap = fGPImpl->emitCode(args, this->pipeline());
 
     // We have to check that effects and the code they emit are consistent, ie if an effect
     // asks for dst color, then the emit code needs to follow suit
@@ -273,9 +271,9 @@ bool GrGLSLProgramBuilder::emitAndInstallXferProc(const SkString& colorIn,
     // Program builders have a bit of state we need to clear with each effect
     AutoStageAdvance adv(this);
 
-    SkASSERT(!fXferProcessor);
+    SkASSERT(!fXPImpl);
     const GrXferProcessor& xp = this->pipeline().getXferProcessor();
-    fXferProcessor.reset(xp.createGLSLInstance());
+    fXPImpl = xp.makeProgramImpl();
 
     // Enable dual source secondary output if we have one
     if (xp.hasSecondaryOutput()) {
@@ -292,18 +290,19 @@ bool GrGLSLProgramBuilder::emitAndInstallXferProc(const SkString& colorIn,
 
     SkString finalInColor = colorIn.size() ? colorIn : SkString("float4(1)");
 
-    GrGLSLXferProcessor::EmitArgs args(&fFS,
-                                       this->uniformHandler(),
-                                       this->shaderCaps(),
-                                       xp,
-                                       finalInColor.c_str(),
-                                       coverageIn.size() ? coverageIn.c_str() : "float4(1)",
-                                       fFS.getPrimaryColorOutputName(),
-                                       fFS.getSecondaryColorOutputName(),
-                                       fDstTextureSamplerHandle,
-                                       fDstTextureOrigin,
-                                       this->pipeline().writeSwizzle());
-    fXferProcessor->emitCode(args);
+    GrXferProcessor::ProgramImpl::EmitArgs args(
+            &fFS,
+            this->uniformHandler(),
+            this->shaderCaps(),
+            xp,
+            finalInColor.c_str(),
+            coverageIn.size() ? coverageIn.c_str() : "float4(1)",
+            fFS.getPrimaryColorOutputName(),
+            fFS.getSecondaryColorOutputName(),
+            fDstTextureSamplerHandle,
+            fDstTextureOrigin,
+            this->pipeline().writeSwizzle());
+    fXPImpl->emitCode(args);
 
     // We have to check that effects and the code they emit are consistent, ie if an effect
     // asks for dst color, then the emit code needs to follow suit

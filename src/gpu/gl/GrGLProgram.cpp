@@ -31,8 +31,8 @@ sk_sp<GrGLProgram> GrGLProgram::Make(
         GrGLuint programID,
         const UniformInfoArray& uniforms,
         const UniformInfoArray& textureSamplers,
-        std::unique_ptr<GrGLSLGeometryProcessor> geometryProcessor,
-        std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
+        std::unique_ptr<GrGeometryProcessor::ProgramImpl> gpImpl,
+        std::unique_ptr<GrXferProcessor::ProgramImpl> xpImpl,
         std::vector<std::unique_ptr<GrFragmentProcessor::ProgramImpl>> fpImpls,
         std::unique_ptr<Attribute[]> attributes,
         int vertexAttributeCnt,
@@ -44,8 +44,8 @@ sk_sp<GrGLProgram> GrGLProgram::Make(
                                                programID,
                                                uniforms,
                                                textureSamplers,
-                                               std::move(geometryProcessor),
-                                               std::move(xferProcessor),
+                                               std::move(gpImpl),
+                                               std::move(xpImpl),
                                                std::move(fpImpls),
                                                std::move(attributes),
                                                vertexAttributeCnt,
@@ -63,8 +63,8 @@ GrGLProgram::GrGLProgram(GrGLGpu* gpu,
                          GrGLuint programID,
                          const UniformInfoArray& uniforms,
                          const UniformInfoArray& textureSamplers,
-                         std::unique_ptr<GrGLSLGeometryProcessor> geometryProcessor,
-                         std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
+                         std::unique_ptr<GrGeometryProcessor::ProgramImpl> gpImpl,
+                         std::unique_ptr<GrXferProcessor::ProgramImpl> xpImpl,
                          std::vector<std::unique_ptr<GrFragmentProcessor::ProgramImpl>> fpImpls,
                          std::unique_ptr<Attribute[]> attributes,
                          int vertexAttributeCnt,
@@ -73,8 +73,8 @@ GrGLProgram::GrGLProgram(GrGLGpu* gpu,
                          int instanceStride)
         : fBuiltinUniformHandles(builtinUniforms)
         , fProgramID(programID)
-        , fGeometryProcessor(std::move(geometryProcessor))
-        , fXferProcessor(std::move(xferProcessor))
+        , fGPImpl(std::move(gpImpl))
+        , fXPImpl(std::move(xpImpl))
         , fFPImpls(std::move(fpImpls))
         , fAttributes(std::move(attributes))
         , fVertexAttributeCnt(vertexAttributeCnt)
@@ -83,8 +83,7 @@ GrGLProgram::GrGLProgram(GrGLGpu* gpu,
         , fInstanceStride(instanceStride)
         , fGpu(gpu)
         , fProgramDataManager(gpu, uniforms)
-        , fNumTextureSamplers(textureSamplers.count()) {
-}
+        , fNumTextureSamplers(textureSamplers.count()) {}
 
 GrGLProgram::~GrGLProgram() {
     if (fProgramID) {
@@ -108,9 +107,7 @@ void GrGLProgram::updateUniforms(const GrRenderTarget* renderTarget,
     // We must bind to texture units in the same order in which we set the uniforms in
     // GrGLProgramDataManager. That is, we bind textures for processors in this order:
     // primProc, fragProcs, XP.
-    fGeometryProcessor->setData(fProgramDataManager,
-                                *fGpu->caps()->shaderCaps(),
-                                programInfo.geomProc());
+    fGPImpl->setData(fProgramDataManager, *fGpu->caps()->shaderCaps(), programInfo.geomProc());
 
     for (int i = 0; i < programInfo.pipeline().numFragmentProcessors(); ++i) {
         const auto& fp = programInfo.pipeline().getFragmentProcessor(i);
@@ -121,7 +118,7 @@ void GrGLProgram::updateUniforms(const GrRenderTarget* renderTarget,
     }
 
     programInfo.pipeline().setDstTextureUniforms(fProgramDataManager, &fBuiltinUniformHandles);
-    fXferProcessor->setData(fProgramDataManager, programInfo.pipeline().getXferProcessor());
+    fXPImpl->setData(fProgramDataManager, programInfo.pipeline().getXferProcessor());
 }
 
 void GrGLProgram::bindTextures(const GrGeometryProcessor& geomProc,
