@@ -729,56 +729,59 @@ void IRGenerator::CheckModifiers(const Context& context,
                                  const Modifiers& modifiers,
                                  int permittedModifierFlags,
                                  int permittedLayoutFlags) {
-    ErrorReporter& errorReporter = context.fErrors;
-    int flags = modifiers.fFlags;
-    auto checkModifier = [&](Modifiers::Flag flag, const char* name) {
-        if (flags & flag) {
-            if (!(permittedModifierFlags & flag)) {
-                errorReporter.error(offset, "'" + String(name) + "' is not permitted here");
-            }
-            flags &= ~flag;
-        }
+    static constexpr struct { Modifiers::Flag flag; const char* name; } kModifierFlags[] = {
+        { Modifiers::kConst_Flag,          "const" },
+        { Modifiers::kIn_Flag,             "in" },
+        { Modifiers::kOut_Flag,            "out" },
+        { Modifiers::kUniform_Flag,        "uniform" },
+        { Modifiers::kFlat_Flag,           "flat" },
+        { Modifiers::kNoPerspective_Flag,  "noperspective" },
+        { Modifiers::kHasSideEffects_Flag, "sk_has_side_effects" },
+        { Modifiers::kInline_Flag,         "inline" },
+        { Modifiers::kNoInline_Flag,       "noinline" },
+        { Modifiers::kHighp_Flag,          "highp" },
+        { Modifiers::kMediump_Flag,        "mediump" },
+        { Modifiers::kLowp_Flag,           "lowp" },
     };
 
-    checkModifier(Modifiers::kConst_Flag,          "const");
-    checkModifier(Modifiers::kIn_Flag,             "in");
-    checkModifier(Modifiers::kOut_Flag,            "out");
-    checkModifier(Modifiers::kUniform_Flag,        "uniform");
-    checkModifier(Modifiers::kFlat_Flag,           "flat");
-    checkModifier(Modifiers::kNoPerspective_Flag,  "noperspective");
-    checkModifier(Modifiers::kHasSideEffects_Flag, "sk_has_side_effects");
-    checkModifier(Modifiers::kInline_Flag,         "inline");
-    checkModifier(Modifiers::kNoInline_Flag,       "noinline");
-    checkModifier(Modifiers::kHighp_Flag,          "highp");
-    checkModifier(Modifiers::kMediump_Flag,        "mediump");
-    checkModifier(Modifiers::kLowp_Flag,           "lowp");
-    SkASSERT(flags == 0);
+    int modifierFlags = modifiers.fFlags;
+    for (const auto& f : kModifierFlags) {
+        if (modifierFlags & f.flag) {
+            if (!(permittedModifierFlags & f.flag)) {
+                context.errors().error(offset, "'" + String(f.name) + "' is not permitted here");
+            }
+            modifierFlags &= ~f.flag;
+        }
+    }
+    SkASSERT(modifierFlags == 0);
+
+    static constexpr struct { Layout::Flag flag; const char* name; } kLayoutFlags[] = {
+        { Layout::kOriginUpperLeft_Flag,          "origin_upper_left"},
+        { Layout::kPushConstant_Flag,             "push_constant"},
+        { Layout::kBlendSupportAllEquations_Flag, "blend_support_all_equations"},
+        { Layout::kSRGBUnpremul_Flag,             "srgb_unpremul"},
+        { Layout::kLocation_Flag,                 "location"},
+        { Layout::kOffset_Flag,                   "offset"},
+        { Layout::kBinding_Flag,                  "binding"},
+        { Layout::kIndex_Flag,                    "index"},
+        { Layout::kSet_Flag,                      "set"},
+        { Layout::kBuiltin_Flag,                  "builtin"},
+        { Layout::kInputAttachmentIndex_Flag,     "input_attachment_index"},
+        { Layout::kPrimitive_Flag,                "primitive-type"},
+        { Layout::kMaxVertices_Flag,              "max_vertices"},
+        { Layout::kInvocations_Flag,              "invocations"},
+    };
 
     int layoutFlags = modifiers.fLayout.fFlags;
-    auto checkLayout = [&](Layout::Flag flag, const char* name) {
-        if (layoutFlags & flag) {
-            if (!(permittedLayoutFlags & flag)) {
-                errorReporter.error(offset, "layout qualifier '" + String(name) +
-                                            "' is not permitted here");
+    for (const auto& lf : kLayoutFlags) {
+        if (layoutFlags & lf.flag) {
+            if (!(permittedLayoutFlags & lf.flag)) {
+                context.errors().error(
+                        offset, "layout qualifier '" + String(lf.name) + "' is not permitted here");
             }
-            layoutFlags &= ~flag;
+            layoutFlags &= ~lf.flag;
         }
-    };
-
-    checkLayout(Layout::kOriginUpperLeft_Flag,          "origin_upper_left");
-    checkLayout(Layout::kPushConstant_Flag,             "push_constant");
-    checkLayout(Layout::kBlendSupportAllEquations_Flag, "blend_support_all_equations");
-    checkLayout(Layout::kSRGBUnpremul_Flag,             "srgb_unpremul");
-    checkLayout(Layout::kLocation_Flag,                 "location");
-    checkLayout(Layout::kOffset_Flag,                   "offset");
-    checkLayout(Layout::kBinding_Flag,                  "binding");
-    checkLayout(Layout::kIndex_Flag,                    "index");
-    checkLayout(Layout::kSet_Flag,                      "set");
-    checkLayout(Layout::kBuiltin_Flag,                  "builtin");
-    checkLayout(Layout::kInputAttachmentIndex_Flag,     "input_attachment_index");
-    checkLayout(Layout::kPrimitive_Flag,                "primitive-type");
-    checkLayout(Layout::kMaxVertices_Flag,              "max_vertices");
-    checkLayout(Layout::kInvocations_Flag,              "invocations");
+    }
     SkASSERT(layoutFlags == 0);
 }
 
@@ -1656,6 +1659,16 @@ void IRGenerator::start(const ParsedModule& base,
         fSymbolTable->addAlias("uint2", fContext.fTypes.fUInt2.get());
         fSymbolTable->addAlias("uint3", fContext.fTypes.fUInt3.get());
         fSymbolTable->addAlias("uint4", fContext.fTypes.fUInt4.get());
+
+        fSymbolTable->addAlias("short", fContext.fTypes.fShort.get());
+        fSymbolTable->addAlias("short2", fContext.fTypes.fShort2.get());
+        fSymbolTable->addAlias("short3", fContext.fTypes.fShort3.get());
+        fSymbolTable->addAlias("short4", fContext.fTypes.fShort4.get());
+
+        fSymbolTable->addAlias("ushort", fContext.fTypes.fUShort.get());
+        fSymbolTable->addAlias("ushort2", fContext.fTypes.fUShort2.get());
+        fSymbolTable->addAlias("ushort3", fContext.fTypes.fUShort3.get());
+        fSymbolTable->addAlias("ushort4", fContext.fTypes.fUShort4.get());
     }
 }
 

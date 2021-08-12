@@ -18,9 +18,9 @@
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrResourceProvider.h"
-#include "src/gpu/GrSurfaceContext.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/SkGr.h"
+#include "src/gpu/SurfaceContext.h"
 #include "tests/Test.h"
 #include "tests/TestUtils.h"
 #include "tools/gpu/BackendTextureImageFactory.h"
@@ -188,11 +188,11 @@ DEF_GPUTEST(InitialTextureClear, reporter, baseOptions) {
     static constexpr int kSize = 100;
     static constexpr SkColor kClearColor = 0xABABABAB;
 
-    const SkImageInfo info = SkImageInfo::Make(kSize, kSize, kRGBA_8888_SkColorType,
-                                               kPremul_SkAlphaType);
+    const SkImageInfo imageInfo = SkImageInfo::Make(kSize, kSize, kRGBA_8888_SkColorType,
+                                                    kPremul_SkAlphaType);
 
     SkAutoPixmapStorage readback;
-    readback.alloc(info);
+    readback.alloc(imageInfo);
 
     SkISize desc;
     desc.fWidth = desc.fHeight = kSize;
@@ -293,12 +293,12 @@ DEF_GPUTEST(InitialTextureClear, reporter, baseOptions) {
                                          nullptr,
                                          {desc.fHeight, desc.fHeight});
 
-                        auto sc = GrSurfaceContext::Make(dContext,
-                                                         info,
-                                                         combo.fFormat,
-                                                         fit,
-                                                         kTopLeft_GrSurfaceOrigin,
-                                                         renderable);
+                        auto sc = skgpu::SurfaceContext::Make(dContext,
+                                                              info,
+                                                              combo.fFormat,
+                                                              fit,
+                                                              kTopLeft_GrSurfaceOrigin,
+                                                              renderable);
                         if (!sc) {
                             continue;
                         }

@@ -5,15 +5,17 @@
 * found in the LICENSE file.
 */
 
-#include "src/core/SkRuntimeEffectPriv.h"
 #include "src/gpu/GrFragmentProcessor.h"
+
+#include "src/core/SkRuntimeEffectPriv.h"
 #include "src/gpu/GrPipeline.h"
 #include "src/gpu/GrProcessorAnalysis.h"
+#include "src/gpu/GrShaderCaps.h"
 #include "src/gpu/effects/GrBlendFragmentProcessor.h"
 #include "src/gpu/effects/GrSkSLFP.h"
 #include "src/gpu/effects/GrTextureEffect.h"
-#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLProgramBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
 
@@ -272,7 +274,6 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::SwizzleOutput(
         }
 
         const char* name() const override { return "Swizzle"; }
-        const GrSwizzle& swizzle() const { return fSwizzle; }
 
         std::unique_ptr<GrFragmentProcessor> clone() const override {
             return Make(this->childProcessor(0)->clone(), fSwizzle);
@@ -286,20 +287,20 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::SwizzleOutput(
         }
 
         std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override {
-            class GLFP : public ProgramImpl {
+            class Impl : public ProgramImpl {
             public:
                 void emitCode(EmitArgs& args) override {
                     SkString childColor = this->invokeChild(0, args);
 
                     const SwizzleFragmentProcessor& sfp = args.fFp.cast<SwizzleFragmentProcessor>();
-                    const GrSwizzle& swizzle = sfp.swizzle();
+                    const GrSwizzle& swizzle = sfp.fSwizzle;
                     GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
 
                     fragBuilder->codeAppendf("return %s.%s;",
                                              childColor.c_str(), swizzle.asString().c_str());
                 }
             };
-            return std::make_unique<GLFP>();
+            return std::make_unique<Impl>();
         }
 
         void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder* b) const override {
@@ -352,7 +353,7 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::MakeInputPremulAndMulB
         }
 
         std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override {
-            class GLFP : public ProgramImpl {
+            class Impl : public ProgramImpl {
             public:
                 void emitCode(EmitArgs& args) override {
                     GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
@@ -362,7 +363,7 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::MakeInputPremulAndMulB
                     fragBuilder->codeAppendf("return color * %s.a;", args.fInputColor);
                 }
             };
-            return std::make_unique<GLFP>();
+            return std::make_unique<Impl>();
         }
 
         void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
@@ -471,7 +472,7 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::Compose(
 
     private:
         std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override {
-            class GLFP : public ProgramImpl {
+            class Impl : public ProgramImpl {
             public:
                 void emitCode(EmitArgs& args) override {
                     SkString result = this->invokeChild(1, args);         // g(x)
@@ -479,7 +480,7 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::Compose(
                     args.fFragBuilder->codeAppendf("return %s;", result.c_str());
                 }
             };
-            return std::make_unique<GLFP>();
+            return std::make_unique<Impl>();
         }
 
         ComposeProcessor(std::unique_ptr<GrFragmentProcessor> f,
@@ -601,14 +602,14 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::SurfaceColor() {
 
     private:
         std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override {
-            class GLFP : public ProgramImpl {
+            class Impl : public ProgramImpl {
             public:
                 void emitCode(EmitArgs& args) override {
                     const char* dstColor = args.fFragBuilder->dstColor();
                     args.fFragBuilder->codeAppendf("return %s;", dstColor);
                 }
             };
-            return std::make_unique<GLFP>();
+            return std::make_unique<Impl>();
         }
 
         SurfaceColorProcessor()
@@ -902,7 +903,7 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::HighPrecision(
         }
 
         std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override {
-            class GLFP : public ProgramImpl {
+            class Impl : public ProgramImpl {
             public:
                 void emitCode(EmitArgs& args) override {
                     SkString childColor = this->invokeChild(0, args);
@@ -911,7 +912,7 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::HighPrecision(
                     args.fFragBuilder->codeAppendf("return %s;", childColor.c_str());
                 }
             };
-            return std::make_unique<GLFP>();
+            return std::make_unique<Impl>();
         }
 
         void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
@@ -925,4 +926,133 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::HighPrecision(
     };
 
     return HighPrecisionFragmentProcessor::Make(std::move(fp));
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+using ProgramImpl = GrFragmentProcessor::ProgramImpl;
+
+void ProgramImpl::setData(const GrGLSLProgramDataManager& pdman,
+                          const GrFragmentProcessor& processor) {
+    this->onSetData(pdman, processor);
+}
+
+void ProgramImpl::emitChildFunctions(EmitArgs& args) {
+    for (int i = 0; i < this->numChildProcessors(); ++i) {
+        ProgramImpl* childGLSLFP = this->childProcessor(i);
+        if (!childGLSLFP) {
+            continue;
+        }
+
+        const GrFragmentProcessor* childFP = args.fFp.childProcessor(i);
+        SkASSERT(childFP);
+
+        EmitArgs childArgs(args.fFragBuilder,
+                           args.fUniformHandler,
+                           args.fShaderCaps,
+                           *childFP,
+                           childFP->isBlendFunction() ? "_src" : "_input",
+                           "_dst",
+                           "_coords");
+        args.fFragBuilder->writeProcessorFunction(childGLSLFP, childArgs);
+    }
+}
+
+SkString ProgramImpl::invokeChild(int childIndex,
+                                  const char* inputColor,
+                                  const char* destColor,
+                                  EmitArgs& args,
+                                  SkSL::String skslCoords) {
+    SkASSERT(childIndex >= 0);
+
+    if (!inputColor) {
+        inputColor = args.fInputColor;
+    }
+
+    const GrFragmentProcessor* childProc = args.fFp.childProcessor(childIndex);
+    if (!childProc) {
+        // If no child processor is provided, return the input color as-is.
+        return SkString(inputColor);
+    }
+
+    auto invocation = SkStringPrintf("%s(%s", this->childProcessor(childIndex)->functionName(),
+                                     inputColor);
+
+    if (childProc->isBlendFunction()) {
+        if (!destColor) {
+            destColor = args.fFp.isBlendFunction() ? args.fDestColor : "half4(1)";
+        }
+        invocation.appendf(", %s", destColor);
+    }
+
+    // Assert that the child has no sample matrix. A uniform matrix sample call would go through
+    // invokeChildWithMatrix, not here.
+    SkASSERT(!childProc->sampleUsage().isUniformMatrix());
+
+    if (args.fFragBuilder->getProgramBuilder()->fragmentProcessorHasCoordsParam(childProc)) {
+        SkASSERT(!childProc->sampleUsage().isFragCoord() || skslCoords == "sk_FragCoord.xy");
+        // The child's function takes a half4 color and a float2 coordinate
+        invocation.appendf(", %s", skslCoords.empty() ? args.fSampleCoord : skslCoords.c_str());
+    }
+
+    invocation.append(")");
+    return invocation;
+}
+
+SkString ProgramImpl::invokeChildWithMatrix(int childIndex,
+                                            const char* inputColor,
+                                            const char* destColor,
+                                            EmitArgs& args) {
+    SkASSERT(childIndex >= 0);
+
+    if (!inputColor) {
+        inputColor = args.fInputColor;
+    }
+
+    const GrFragmentProcessor* childProc = args.fFp.childProcessor(childIndex);
+    if (!childProc) {
+        // If no child processor is provided, return the input color as-is.
+        return SkString(inputColor);
+    }
+
+    SkASSERT(childProc->sampleUsage().isUniformMatrix());
+
+    // Every uniform matrix has the same (initial) name. Resolve that into the mangled name:
+    GrShaderVar uniform = args.fUniformHandler->getUniformMapping(
+            args.fFp, SkString(SkSL::SampleUsage::MatrixUniformName()));
+    SkASSERT(uniform.getType() == kFloat3x3_GrSLType);
+    const SkString& matrixName(uniform.getName());
+
+    auto invocation = SkStringPrintf("%s(%s", this->childProcessor(childIndex)->functionName(),
+                                     inputColor);
+
+    if (childProc->isBlendFunction()) {
+        if (!destColor) {
+            destColor = args.fFp.isBlendFunction() ? args.fDestColor : "half4(1)";
+        }
+        invocation.appendf(", %s", destColor);
+    }
+
+    // Produce a string containing the call to the helper function. We have a uniform variable
+    // containing our transform (matrixName). If the parent coords were produced by uniform
+    // transforms, then the entire expression (matrixName * coords) is lifted to a vertex shader
+    // and is stored in a varying. In that case, childProc will not be sampled explicitly, so its
+    // function signature will not take in coords.
+    //
+    // In all other cases, we need to insert sksl to compute matrix * parent coords and then invoke
+    // the function.
+    if (args.fFragBuilder->getProgramBuilder()->fragmentProcessorHasCoordsParam(childProc)) {
+        // Only check perspective for this specific matrix transform, not the aggregate FP property.
+        // Any parent perspective will have already been applied when evaluated in the FS.
+        if (childProc->sampleUsage().hasPerspective()) {
+            invocation.appendf(", proj((%s) * %s.xy1)", matrixName.c_str(), args.fSampleCoord);
+        } else if (args.fShaderCaps->nonsquareMatrixSupport()) {
+            invocation.appendf(", float3x2(%s) * %s.xy1", matrixName.c_str(), args.fSampleCoord);
+        } else {
+            invocation.appendf(", ((%s) * %s.xy1).xy", matrixName.c_str(), args.fSampleCoord);
+        }
+    }
+
+    invocation.append(")");
+    return invocation;
 }

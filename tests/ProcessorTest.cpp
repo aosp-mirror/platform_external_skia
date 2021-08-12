@@ -10,6 +10,7 @@
 #include "include/gpu/GrDirectContext.h"
 #include "src/gpu/GrClip.h"
 #include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrGpuResource.h"
 #include "src/gpu/GrImageInfo.h"
 #include "src/gpu/GrMemoryPool.h"
@@ -17,7 +18,6 @@
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrTextureEffect.h"
-#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
 #include "src/gpu/v1/SurfaceDrawContext_v1.h"
@@ -123,16 +123,15 @@ private:
     explicit TestFP(const TestFP& that) : INHERITED(that) {}
 
     std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override {
-        class TestGLSLFP : public ProgramImpl {
+        class Impl : public ProgramImpl {
         public:
-            TestGLSLFP() {}
             void emitCode(EmitArgs& args) override {
                 args.fFragBuilder->codeAppendf("return half4(1);");
             }
 
         private:
         };
-        return std::make_unique<TestGLSLFP>();
+        return std::make_unique<Impl>();
     }
 
     bool onIsEqual(const GrFragmentProcessor&) const override { return false; }

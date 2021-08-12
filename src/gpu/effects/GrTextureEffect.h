@@ -12,7 +12,6 @@
 #include "include/core/SkMatrix.h"
 #include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrSurfaceProxyView.h"
-#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 
 class GrTextureEffect : public GrFragmentProcessor {
@@ -113,13 +112,14 @@ public:
     class Impl : public ProgramImpl {
     public:
         void emitCode(EmitArgs&) override;
-        void onSetData(const GrGLSLProgramDataManager&, const GrFragmentProcessor&) override;
 
         void setSamplerHandle(GrGLSLShaderBuilder::SamplerHandle handle) {
             fSamplerHandle = handle;
         }
 
     private:
+        void onSetData(const GrGLSLProgramDataManager&, const GrFragmentProcessor&) override;
+
         UniformHandle fSubsetUni;
         UniformHandle fClampUni;
         UniformHandle fIDimsUni;
