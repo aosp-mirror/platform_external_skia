@@ -30,7 +30,7 @@
 #if SK_GPU_V1
 #include "src/gpu/v1/SurfaceDrawContext_v1.h"
 #else
-#include "src/gpu/GrSurfaceContext.h"
+#include "src/gpu/SurfaceContext.h"
 #endif
 
 namespace {
@@ -78,7 +78,7 @@ GrAtlasTextOp::MaskType op_mask_type(GrMaskFormat grMaskFormat) {
     SkUNREACHABLE;
 }
 
-SkPMColor4f calculate_colors(GrSurfaceContext* sc,
+SkPMColor4f calculate_colors(skgpu::SurfaceContext* sc,
                              const SkPaint& paint,
                              const SkMatrixProvider& matrix,
                              GrMaskFormat grMaskFormat,
@@ -180,11 +180,11 @@ public:
                std::unique_ptr<PathGlyph[], GrSubRunAllocator::ArrayDestroyer> pathData);
 
 #if SK_GPU_V1
-    void draw(const GrClip* clip,
+    void draw(const GrClip*,
               const SkMatrixProvider& viewMatrix,
-              const SkGlyphRunList& glyphRunList,
-              const SkPaint& paint,
-              skgpu::v1::SurfaceDrawContext* sdc) const override;
+              const SkGlyphRunList&,
+              const SkPaint&,
+              skgpu::v1::SurfaceDrawContext*) const override;
 #endif
 
     bool canReuse(const SkPaint& paint, const SkMatrix& drawMatrix) const override;

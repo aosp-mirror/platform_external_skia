@@ -150,8 +150,7 @@ DSLPossibleExpression DSLWriter::Coerce(std::unique_ptr<Expression> expr, const 
     return IRGenerator().coerce(std::move(expr), type);
 }
 
-DSLPossibleExpression DSLWriter::Construct(const SkSL::Type& type,
-                                           SkTArray<DSLExpression> rawArgs) {
+DSLPossibleExpression DSLWriter::Construct(const SkSL::Type& type, SkSpan<DSLExpression> rawArgs) {
     SkSL::ExpressionArray args;
     args.reserve_back(rawArgs.size());
 
@@ -282,7 +281,7 @@ void DSLWriter::MarkDeclared(DSLVarBase& var) {
 void DSLWriter::ReportErrors(PositionInfo pos) {
     if (Compiler().errorCount()) {
         ReportError(DSLWriter::Compiler().errorText(/*showCount=*/false).c_str(), pos);
-        Compiler().setErrorCount(0);
+        Compiler().resetErrors();
     }
 }
 

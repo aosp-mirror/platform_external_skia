@@ -108,7 +108,6 @@ sk_sp<SkFlattenable> SkTable_ColorFilter::CreateProc(SkReadBuffer& buffer) {
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrTextureEffect.h"
-#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 
 class ColorTableEffect : public GrFragmentProcessor {
@@ -173,6 +172,7 @@ std::unique_ptr<GrFragmentProcessor::ProgramImpl> ColorTableEffect::onMakeProgra
                     inputColor.c_str(), r.c_str(), g.c_str(), b.c_str(), a.c_str());
         }
     };
+
     return std::make_unique<Impl>();
 }
 

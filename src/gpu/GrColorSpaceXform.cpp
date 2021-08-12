@@ -11,7 +11,6 @@
 #include "src/core/SkColorSpacePriv.h"
 #include "src/gpu/GrColorInfo.h"
 #include "src/gpu/glsl/GrGLSLColorSpaceXformHelper.h"
-#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 
 sk_sp<GrColorSpaceXform> GrColorSpaceXform::Make(SkColorSpace* src, SkAlphaType srcAT,
@@ -63,36 +62,6 @@ SkColor4f GrColorSpaceXform::apply(const SkColor4f& srcColor) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-class GrGLColorSpaceXformEffect : public GrFragmentProcessor::ProgramImpl {
-public:
-    void emitCode(EmitArgs& args) override {
-        const GrColorSpaceXformEffect& proc = args.fFp.cast<GrColorSpaceXformEffect>();
-        GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
-        GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
-
-        fColorSpaceHelper.emitCode(uniformHandler, proc.colorXform());
-
-        SkString childColor = this->invokeChild(0, args);
-
-        SkString xformedColor;
-        fragBuilder->appendColorGamutXform(&xformedColor, childColor.c_str(), &fColorSpaceHelper);
-        fragBuilder->codeAppendf("return %s;", xformedColor.c_str());
-    }
-
-private:
-    void onSetData(const GrGLSLProgramDataManager& pdman,
-                   const GrFragmentProcessor& fp) override {
-        const GrColorSpaceXformEffect& proc = fp.cast<GrColorSpaceXformEffect>();
-        fColorSpaceHelper.setData(pdman, proc.colorXform());
-    }
-
-    GrGLSLColorSpaceXformHelper fColorSpaceHelper;
-
-    using INHERITED = ProgramImpl;
-};
-
-//////////////////////////////////////////////////////////////////////////////
-
 GrColorSpaceXformEffect::GrColorSpaceXformEffect(std::unique_ptr<GrFragmentProcessor> child,
                                                  sk_sp<GrColorSpaceXform> colorXform)
         : INHERITED(kGrColorSpaceXformEffect_ClassID, OptFlags(child.get()))
@@ -119,7 +88,34 @@ void GrColorSpaceXformEffect::onAddToKey(const GrShaderCaps&, GrProcessorKeyBuil
 
 std::unique_ptr<GrFragmentProcessor::ProgramImpl>
 GrColorSpaceXformEffect::onMakeProgramImpl() const {
-    return std::make_unique<GrGLColorSpaceXformEffect>();
+    class Impl : public ProgramImpl {
+    public:
+        void emitCode(EmitArgs& args) override {
+            const GrColorSpaceXformEffect& proc = args.fFp.cast<GrColorSpaceXformEffect>();
+            GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
+            GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
+
+            fColorSpaceHelper.emitCode(uniformHandler, proc.colorXform());
+
+            SkString childColor = this->invokeChild(0, args);
+
+            SkString xformedColor;
+            fragBuilder->appendColorGamutXform(
+                    &xformedColor, childColor.c_str(), &fColorSpaceHelper);
+            fragBuilder->codeAppendf("return %s;", xformedColor.c_str());
+        }
+
+    private:
+        void onSetData(const GrGLSLProgramDataManager& pdman,
+                       const GrFragmentProcessor& fp) override {
+            const GrColorSpaceXformEffect& proc = fp.cast<GrColorSpaceXformEffect>();
+            fColorSpaceHelper.setData(pdman, proc.colorXform());
+        }
+
+        GrGLSLColorSpaceXformHelper fColorSpaceHelper;
+    };
+
+    return std::make_unique<Impl>();
 }
 
 GrFragmentProcessor::OptimizationFlags GrColorSpaceXformEffect::OptFlags(

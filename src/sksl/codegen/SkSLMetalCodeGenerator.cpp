@@ -92,12 +92,17 @@ String MetalCodeGenerator::typeName(const Type& type) {
             return "texture2d<float>"; // FIXME - support other texture types
 
         default:
+            // We currently only support full-precision types in MSL to avoid type coercion issues.
             if (type == *fContext.fTypes.fHalf) {
-                // FIXME - Currently only supporting floats in MSL to avoid type coercion issues.
-                return String(fContext.fTypes.fFloat->name());
-            } else {
-                return String(type.name());
+                return "float";
             }
+            if (type == *fContext.fTypes.fShort) {
+                return "int";
+            }
+            if (type == *fContext.fTypes.fUShort) {
+                return "uint";
+            }
+            return String(type.name());
     }
 }
 
@@ -1282,6 +1287,15 @@ void MetalCodeGenerator::writeMatrixEqualityHelpers(const Type& left, const Type
 
     auto [iter, wasInserted] = fHelpers.insert(key);
     if (wasInserted) {
+        fExtraFunctionPrototypes.printf(R"(
+thread bool operator==(const %s left, const %s right);
+thread bool operator!=(const %s left, const %s right);
+)",
+                                        this->typeName(left).c_str(),
+                                        this->typeName(right).c_str(),
+                                        this->typeName(left).c_str(),
+                                        this->typeName(right).c_str());
+
         fExtraFunctions.printf(
                 "thread bool operator==(const %s left, const %s right) {\n"
                 "    return ",
@@ -1341,11 +1355,17 @@ void MetalCodeGenerator::writeArrayEqualityHelpers(const Type& type) {
 
     auto [iter, wasInserted] = fHelpers.insert("ArrayEquality []");
     if (wasInserted) {
+        fExtraFunctionPrototypes.writeText(R"(
+template <typename T1, typename T2, size_t N>
+bool operator==(thread const array<T1, N>& left, thread const array<T2, N>& right);
+template <typename T1, typename T2, size_t N>
+bool operator!=(thread const array<T1, N>& left, thread const array<T2, N>& right);
+)");
         fExtraFunctions.writeText(R"(
 template <typename T1, typename T2, size_t N>
 bool operator==(thread const array<T1, N>& left, thread const array<T2, N>& right) {
     for (size_t index = 0; index < N; ++index) {
-        if (!(left[index] == right[index])) {
+        if (!all(left[index] == right[index])) {
             return false;
         }
     }
@@ -1373,6 +1393,15 @@ void MetalCodeGenerator::writeStructEqualityHelpers(const Type& type) {
 
         // Write operator== and operator!= for this struct, since those are assumed to exist in SkSL
         // and GLSL but do not exist by default in Metal.
+        fExtraFunctionPrototypes.printf(R"(
+thread bool operator==(thread const %s& left, thread const %s& right);
+thread bool operator!=(thread const %s& left, thread const %s& right);
+)",
+                                        this->typeName(type).c_str(),
+                                        this->typeName(type).c_str(),
+                                        this->typeName(type).c_str(),
+                                        this->typeName(type).c_str());
+
         fExtraFunctions.printf(
                 "thread bool operator==(thread const %s& left, thread const %s& right) {\n"
                 "    return ",
@@ -2568,6 +2597,7 @@ bool MetalCodeGenerator::generateCode() {
         }
     }
     write_stringstream(header, *fOut);
+    write_stringstream(fExtraFunctionPrototypes, *fOut);
     write_stringstream(fExtraFunctions, *fOut);
     write_stringstream(body, *fOut);
     return 0 == fErrors.errorCount();

@@ -16,12 +16,12 @@
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrDrawOpTest.h"
 #include "src/gpu/GrDrawingManager.h"
+#include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrPipeline.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrXferProcessor.h"
 #include "src/gpu/effects/GrBlendFragmentProcessor.h"
 #include "src/gpu/effects/GrPorterDuffXferProcessor.h"
-#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramBuilder.h"
 #include "src/gpu/ops/GrDrawOp.h"
@@ -39,22 +39,7 @@
  */
 static const uint32_t kMaxKeySize = 1024;
 
-class GLBigKeyProcessor : public GrFragmentProcessor::ProgramImpl {
-public:
-    void emitCode(EmitArgs& args) override {
-        args.fFragBuilder->codeAppendf("return half4(1);\n");
-    }
-
-    static void GenKey(const GrProcessor&, const GrShaderCaps&, GrProcessorKeyBuilder* b) {
-        for (uint32_t i = 0; i < kMaxKeySize; i++) {
-            b->add32(i);
-        }
-    }
-
-private:
-    using INHERITED = ProgramImpl;
-};
-
+namespace {
 class BigKeyProcessor : public GrFragmentProcessor {
 public:
     static std::unique_ptr<GrFragmentProcessor> Make() {
@@ -64,15 +49,24 @@ public:
     const char* name() const override { return "Big_Ole_Key"; }
 
     std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override {
-        return std::make_unique<GLBigKeyProcessor>();
+        class Impl : public ProgramImpl {
+        public:
+            void emitCode(EmitArgs& args) override {
+                args.fFragBuilder->codeAppendf("return half4(1);\n");
+            }
+        };
+
+        return std::make_unique<Impl>();
     }
 
     std::unique_ptr<GrFragmentProcessor> clone() const override { return Make(); }
 
 private:
-    BigKeyProcessor() : INHERITED(kBigKeyProcessor_ClassID, kNone_OptimizationFlags) { }
+    BigKeyProcessor() : INHERITED(kBigKeyProcessor_ClassID, kNone_OptimizationFlags) {}
     void onAddToKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override {
-        GLBigKeyProcessor::GenKey(*this, caps, b);
+        for (uint32_t i = 0; i < kMaxKeySize; i++) {
+            b->add32(i);
+        }
     }
     bool onIsEqual(const GrFragmentProcessor&) const override { return true; }
 
@@ -80,6 +74,7 @@ private:
 
     using INHERITED = GrFragmentProcessor;
 };
+}  // anonymous namespace
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(BigKeyProcessor);
 

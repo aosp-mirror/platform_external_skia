@@ -18,13 +18,13 @@
 #if SK_SUPPORT_GPU
 #include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/SurfaceFillContext.h"
 #include "src/gpu/effects/GrTextureEffect.h"
-#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
@@ -271,7 +271,7 @@ std::unique_ptr<GrFragmentProcessor::ProgramImpl> GrMorphologyEffect::onMakeProg
             fragBuilder->codeAppendf("return color * %s;", inputColor.c_str());
         }
 
-    protected:
+    private:
         void onSetData(const GrGLSLProgramDataManager& pdman,
                        const GrFragmentProcessor& proc) override {
             const GrMorphologyEffect& m = proc.cast<GrMorphologyEffect>();
@@ -280,9 +280,9 @@ std::unique_ptr<GrFragmentProcessor::ProgramImpl> GrMorphologyEffect::onMakeProg
             }
         }
 
-    private:
         GrGLSLProgramDataManager::UniformHandle fRangeUni;
     };
+
     return std::make_unique<Impl>();
 }
 
