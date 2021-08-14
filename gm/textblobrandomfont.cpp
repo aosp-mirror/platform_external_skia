@@ -23,14 +23,15 @@
 #include "include/core/SkSurfaceProps.h"
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
-#include "include/gpu/GrContext.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "tools/ToolUtils.h"
 #include "tools/fonts/RandomScalerContext.h"
 
 #include <string.h>
 #include <utility>
 
-class GrRenderTargetContext;
+class GrSurfaceDrawContext;
 
 namespace skiagm {
 class TextBlobRandomFont : public GpuGM {
@@ -106,7 +107,8 @@ protected:
         return SkISize::Make(kWidth, kHeight);
     }
 
-    DrawResult onDraw(GrContext* context, GrRenderTargetContext*, SkCanvas* canvas,
+    DrawResult onDraw(GrRecordingContext* context,
+                      GrSurfaceDrawContext*, SkCanvas* canvas,
                       SkString* errorMsg) override {
         // This GM exists to test a specific feature of the GPU backend.
         // This GM uses ToolUtils::makeSurface which doesn't work well with vias.
@@ -144,11 +146,13 @@ protected:
         // Rotate in the surface canvas, not the final canvas, to avoid aliasing
         surfaceCanvas->rotate(-0.05f);
         surfaceCanvas->drawTextBlob(fBlob, 10, yOffset, paint);
-        surface->draw(canvas, 0, 0, nullptr);
+        surface->draw(canvas, 0, 0);
         yOffset += stride;
 
-        // free gpu resources and verify
-        context->freeGpuResources();
+        if (auto direct = context->asDirectContext()) {
+            // free gpu resources and verify
+            direct->freeGpuResources();
+        }
 
         canvas->rotate(-0.05f);
         canvas->drawTextBlob(fBlob, 10, yOffset, paint);
@@ -162,10 +166,10 @@ private:
     static constexpr int kWidth = 2000;
     static constexpr int kHeight = 1600;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new TextBlobRandomFont;)
-}
+}  // namespace skiagm

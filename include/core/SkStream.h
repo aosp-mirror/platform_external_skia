@@ -366,7 +366,7 @@ private:
     size_t fStart;
     size_t fCurrent;
 
-    typedef SkStreamAsset INHERITED;
+    using INHERITED = SkStreamAsset;
 };
 
 class SK_API SkMemoryStream : public SkStreamMemory {
@@ -439,7 +439,7 @@ private:
     sk_sp<SkData>   fData;
     size_t          fOffset;
 
-    typedef SkStreamMemory INHERITED;
+    using INHERITED = SkStreamMemory;
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -461,7 +461,7 @@ public:
 private:
     FILE* fFILE;
 
-    typedef SkWStream INHERITED;
+    using INHERITED = SkWStream;
 };
 
 class SK_API SkDynamicMemoryWStream : public SkWStream {
@@ -518,7 +518,7 @@ private:
     friend class SkBlockMemoryStream;
     friend class SkBlockMemoryRefCnt;
 
-    typedef SkWStream INHERITED;
+    using INHERITED = SkWStream;
 };
 
 #endif
