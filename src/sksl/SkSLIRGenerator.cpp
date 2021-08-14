@@ -742,6 +742,7 @@ void IRGenerator::CheckModifiers(const Context& context,
         { Modifiers::kHighp_Flag,          "highp" },
         { Modifiers::kMediump_Flag,        "mediump" },
         { Modifiers::kLowp_Flag,           "lowp" },
+        { Modifiers::kES3_Flag,            "$es3" },
     };
 
     int modifierFlags = modifiers.fFlags;
@@ -1035,7 +1036,7 @@ std::unique_ptr<SkSL::InterfaceBlock> IRGenerator::convertInterfaceBlock(const A
                 if (vd.var().type().isOpaque()) {
                     this->errorReporter().error(decl->fOffset,
                                                 "opaque type '" + vd.var().type().name() +
-                                                        "' is not permitted in an interface block");
+                                                "' is not permitted in an interface block");
                 }
                 if (&vd.var() == fRTAdjust) {
                     foundRTAdjust = true;
@@ -1335,6 +1336,9 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
  */
 CoercionCost IRGenerator::callCost(const FunctionDeclaration& function,
                                    const ExpressionArray& arguments) {
+    if (this->strictES2Mode() && (function.modifiers().fFlags & Modifiers::kES3_Flag)) {
+        return CoercionCost::Impossible();
+    }
     if (function.parameters().size() != arguments.size()) {
         return CoercionCost::Impossible();
     }

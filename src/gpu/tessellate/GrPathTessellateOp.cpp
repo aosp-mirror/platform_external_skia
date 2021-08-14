@@ -68,5 +68,6 @@ void GrPathTessellateOp::onExecute(GrOpFlushState* flushState, const SkRect& cha
     flushState->bindPipelineAndScissorClip(*fTessellationProgram, this->bounds());
     flushState->bindTextures(fTessellationProgram->geomProc(), nullptr,
                              fTessellationProgram->pipeline());
+
     fTessellator->draw(flushState);
 }
