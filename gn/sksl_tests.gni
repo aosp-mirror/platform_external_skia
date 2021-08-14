@@ -76,6 +76,7 @@ sksl_error_tests = [
   "/sksl/errors/MatrixToVectorCastTooSmall.sksl",
   "/sksl/errors/MismatchedNumbers.sksl",
   "/sksl/errors/ModifiersInStruct.sksl",
+  "/sksl/errors/NoES3ModifierInUserCode.sksl",
   "/sksl/errors/OpaqueTypeAssignment.sksl",
   "/sksl/errors/OpaqueTypeConstruction.sksl",
   "/sksl/errors/OpaqueTypeInArray.sksl",
@@ -533,6 +534,7 @@ sksl_rte_tests = [
 ]
 
 sksl_rte_error_tests = [
+  "/sksl/runtime_errors/DerivativesES2.rts",
   "/sksl/runtime_errors/FirstClassArrays.rts",
   "/sksl/runtime_errors/IllegalArrayOps.rts",
   "/sksl/runtime_errors/IllegalIndexing.rts",

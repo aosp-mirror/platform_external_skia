@@ -84,12 +84,12 @@ class AutoSource {
 public:
     AutoSource(Compiler* compiler, const char* source)
             : fCompiler(compiler) {
-        SkASSERT(!fCompiler->fSource);
-        fCompiler->fSource = source;
+        SkASSERT(!fCompiler->errorReporter().source());
+        fCompiler->errorReporter().setSource(source);
     }
 
     ~AutoSource() {
-        fCompiler->fSource = nullptr;
+        fCompiler->errorReporter().setSource(nullptr);
     }
 
     Compiler* fCompiler;
@@ -98,16 +98,17 @@ public:
 class AutoProgramConfig {
 public:
     AutoProgramConfig(std::shared_ptr<Context>& context, ProgramConfig* config)
-            : fContext(context.get()) {
-        SkASSERT(!fContext->fConfig);
+            : fContext(context.get())
+            , fOldConfig(fContext->fConfig) {
         fContext->fConfig = config;
     }
 
     ~AutoProgramConfig() {
-        fContext->fConfig = nullptr;
+        fContext->fConfig = fOldConfig;
     }
 
     Context* fContext;
+    ProgramConfig* fOldConfig;
 };
 
 class AutoModifiersPool {
@@ -126,14 +127,21 @@ public:
 };
 
 Compiler::Compiler(const ShaderCapsClass* caps)
-        : fContext(std::make_shared<Context>(/*errors=*/*this, *caps))
+        : fErrorReporter(this)
+        , fContext(std::make_shared<Context>(fErrorReporter, *caps))
         , fInliner(fContext.get()) {
     SkASSERT(caps);
-    fRootSymbolTable = std::make_shared<SymbolTable>(this, /*builtin=*/true);
-    fPrivateSymbolTable = std::make_shared<SymbolTable>(fRootSymbolTable, /*builtin=*/true);
+    fRootModule.fSymbols = this->makeRootSymbolTable();
+    fPrivateModule.fSymbols = this->makePrivateSymbolTable(fRootModule.fSymbols);
     fIRGenerator = std::make_unique<IRGenerator>(fContext.get());
+}
+
+Compiler::~Compiler() {}
 
 #define TYPE(t) fContext->fTypes.f ## t .get()
+
+std::shared_ptr<SymbolTable> Compiler::makeRootSymbolTable() {
+    auto rootSymbolTable = std::make_shared<SymbolTable>(&this->errorReporter(), /*builtin=*/true);
 
     const SkSL::Symbol* rootTypes[] = {
         TYPE(Void),
@@ -156,13 +164,23 @@ Compiler::Compiler(const ShaderCapsClass* caps)
         TYPE(Blender),
     };
 
+    for (const SkSL::Symbol* type : rootTypes) {
+        rootSymbolTable->addWithoutOwnership(type);
+    }
+
+    return rootSymbolTable;
+}
+
+std::shared_ptr<SymbolTable> Compiler::makePrivateSymbolTable(std::shared_ptr<SymbolTable> parent) {
+    auto privateSymbolTable = std::make_shared<SymbolTable>(parent, /*builtin=*/true);
+
     const SkSL::Symbol* privateTypes[] = {
         TYPE(  UInt), TYPE(  UInt2), TYPE(  UInt3), TYPE(  UInt4),
         TYPE( Short), TYPE( Short2), TYPE( Short3), TYPE( Short4),
         TYPE(UShort), TYPE(UShort2), TYPE(UShort3), TYPE(UShort4),
 
         TYPE(GenUType), TYPE(UVec),
-        TYPE(SVec), TYPE(USVec),
+        TYPE(SVec),     TYPE(USVec),
 
         TYPE(Float2x3), TYPE(Float2x4),
         TYPE(Float3x2), TYPE(Float3x4),
@@ -185,29 +203,23 @@ Compiler::Compiler(const ShaderCapsClass* caps)
         TYPE(Texture2D),
     };
 
-    for (const SkSL::Symbol* type : rootTypes) {
-        fRootSymbolTable->addWithoutOwnership(type);
-    }
     for (const SkSL::Symbol* type : privateTypes) {
-        fPrivateSymbolTable->addWithoutOwnership(type);
+        privateSymbolTable->addWithoutOwnership(type);
     }
-
-#undef TYPE
 
     // sk_Caps is "builtin", but all references to it are resolved to Settings, so we don't need to
     // treat it as builtin (ie, no need to clone it into the Program).
-    fPrivateSymbolTable->add(std::make_unique<Variable>(/*offset=*/-1,
-                                                        fCoreModifiers.add(Modifiers{}),
-                                                        "sk_Caps",
-                                                        fContext->fTypes.fSkCaps.get(),
-                                                        /*builtin=*/false,
-                                                        Variable::Storage::kGlobal));
+    privateSymbolTable->add(std::make_unique<Variable>(/*offset=*/-1,
+                                                       fCoreModifiers.add(Modifiers{}),
+                                                       "sk_Caps",
+                                                       fContext->fTypes.fSkCaps.get(),
+                                                       /*builtin=*/false,
+                                                       Variable::Storage::kGlobal));
 
-    fRootModule = {fRootSymbolTable, /*fIntrinsics=*/nullptr};
-    fPrivateModule = {fPrivateSymbolTable, /*fIntrinsics=*/nullptr};
+    return privateSymbolTable;
 }
 
-Compiler::~Compiler() {}
+#undef TYPE
 
 const ParsedModule& Compiler::loadGPUModule() {
     if (!fGPUModule.fSymbols) {
@@ -318,7 +330,7 @@ LoadedModule Compiler::loadModule(ProgramKind kind,
         // contain the union of all known types, so this is safe. If we ever have types that only
         // exist in 'Public' (for example), this logic needs to be smarter (by choosing the correct
         // base for the module we're compiling).
-        base = fPrivateSymbolTable;
+        base = fPrivateModule.fSymbols;
     }
     SkASSERT(base);
 
@@ -330,6 +342,7 @@ LoadedModule Compiler::loadModule(ProgramKind kind,
     settings.fReplaceSettings = !dehydrate;
 
 #if defined(SKSL_STANDALONE)
+    SkASSERT(this->errorCount() == 0);
     SkASSERT(data.fPath);
     std::ifstream in(data.fPath);
     String text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
@@ -337,22 +350,23 @@ LoadedModule Compiler::loadModule(ProgramKind kind,
         printf("error reading %s\n", data.fPath);
         abort();
     }
-    const String* source = fRootSymbolTable->takeOwnershipOfString(std::move(text));
+    const String* source = fRootModule.fSymbols->takeOwnershipOfString(std::move(text));
 
     ParsedModule baseModule = {base, /*fIntrinsics=*/nullptr};
     std::vector<std::unique_ptr<ProgramElement>> elements;
     std::vector<const ProgramElement*> sharedElements;
     dsl::StartModule(this, kind, settings, baseModule);
+    dsl::SetErrorReporter(&this->errorReporter());
     AutoSource as(this, source->c_str());
     IRGenerator::IRBundle ir = fIRGenerator->convertProgram(baseModule, /*isBuiltinCode=*/true,
                                                             *source);
     SkASSERT(ir.fSharedElements.empty());
     LoadedModule module = { kind, std::move(ir.fSymbolTable), std::move(ir.fElements) };
-    dsl::End();
-    if (this->fErrorCount) {
+    if (this->errorCount()) {
         printf("Unexpected errors: %s\n", this->fErrorText.c_str());
         SkDEBUGFAILF("%s %s\n", data.fPath, this->fErrorText.c_str());
     }
+    dsl::End();
 #else
     ProgramConfig config;
     config.fKind = kind;
@@ -464,8 +478,7 @@ std::unique_ptr<Program> Compiler::convertProgram(
         settings.fAllowNarrowingConversions = true;
     }
 
-    fErrorText = "";
-    fErrorCount = 0;
+    this->resetErrors();
     fInliner.reset();
 
 #if SKSL_DSL_PARSER
@@ -476,7 +489,7 @@ std::unique_ptr<Program> Compiler::convertProgram(
     AutoSource as(this, textPtr->c_str());
 
     dsl::Start(this, kind, settings);
-    dsl::SetErrorHandler(this);
+    dsl::SetErrorReporter(&fErrorReporter);
     IRGenerator::IRBundle ir = fIRGenerator->convertProgram(baseModule, /*isBuiltinCode=*/false,
                                                             *textPtr);
     // Ideally, we would just use dsl::ReleaseProgram and not have to do any manual mucking about
@@ -491,8 +504,9 @@ std::unique_ptr<Program> Compiler::convertProgram(
                                              std::move(ir.fSymbolTable),
                                              std::move(dsl::DSLWriter::MemoryPool()),
                                              ir.fInputs);
+    this->errorReporter().reportPendingErrors(PositionInfo());
     bool success = false;
-    if (fErrorCount) {
+    if (this->errorCount()) {
         // Do not return programs that failed to compile.
     } else if (!this->optimize(*program)) {
         // Do not return programs that failed to optimize.
@@ -551,7 +565,7 @@ void Compiler::verifyStaticTests(const Program& program) {
     }
 
     // Check all of the program's owned elements. (Built-in elements are assumed to be valid.)
-    StaticTestVerifier visitor{this};
+    StaticTestVerifier visitor{&this->errorReporter()};
     for (const std::unique_ptr<ProgramElement>& element : program.ownedElements()) {
         if (element->is<FunctionDefinition>()) {
             visitor.visitProgramElement(*element);
@@ -560,7 +574,7 @@ void Compiler::verifyStaticTests(const Program& program) {
 }
 
 bool Compiler::optimize(LoadedModule& module) {
-    SkASSERT(!fErrorCount);
+    SkASSERT(!this->errorCount());
 
     // Create a temporary program configuration with default settings.
     ProgramConfig config;
@@ -572,13 +586,13 @@ bool Compiler::optimize(LoadedModule& module) {
 
     std::unique_ptr<ProgramUsage> usage = Analysis::GetUsage(module);
 
-    while (fErrorCount == 0) {
+    while (this->errorCount() == 0) {
         // Perform inline-candidate analysis and inline any functions deemed suitable.
         if (!fInliner.analyze(module.fElements, module.fSymbols, usage.get())) {
             break;
         }
     }
-    return fErrorCount == 0;
+    return this->errorCount() == 0;
 }
 
 bool Compiler::removeDeadFunctions(Program& program, ProgramUsage* usage) {
@@ -854,10 +868,10 @@ bool Compiler::optimize(Program& program) {
         return true;
     }
 
-    SkASSERT(!fErrorCount);
+    SkASSERT(!this->errorCount());
     ProgramUsage* usage = program.fUsage.get();
 
-    if (fErrorCount == 0) {
+    if (this->errorCount() == 0) {
         // Run the inliner only once; it is expensive! Multiple passes can occasionally shake out
         // more wins, but it's diminishing returns.
         fInliner.analyze(program.ownedElements(), program.fSymbols, usage);
@@ -874,11 +888,11 @@ bool Compiler::optimize(Program& program) {
         this->removeDeadGlobalVariables(program, usage);
     }
 
-    if (fErrorCount == 0) {
+    if (this->errorCount() == 0) {
         this->verifyStaticTests(program);
     }
 
-    return fErrorCount == 0;
+    return this->errorCount() == 0;
 }
 
 #if defined(SKSL_STANDALONE) || SK_SUPPORT_GPU
@@ -889,10 +903,11 @@ bool Compiler::toSPIRV(Program& program, OutputStream& out) {
     ProgramSettings settings;
     settings.fDSLUseMemoryPool = false;
     dsl::Start(this, program.fConfig->fKind, settings);
+    dsl::SetErrorReporter(&fErrorReporter);
     dsl::DSLWriter::IRGenerator().fSymbolTable = program.fSymbols;
 #ifdef SK_ENABLE_SPIRV_VALIDATION
     StringStream buffer;
-    SPIRVCodeGenerator cg(fContext.get(), &program, this, &buffer);
+    SPIRVCodeGenerator cg(fContext.get(), &program, &buffer);
     bool result = cg.generateCode();
     if (result && program.fConfig->fSettings.fValidateSPIRV) {
         spvtools::SpirvTools tools(SPV_ENV_VULKAN_1_0);
@@ -917,7 +932,7 @@ bool Compiler::toSPIRV(Program& program, OutputStream& out) {
             if (tools.Disassemble((const uint32_t*)data.data(), data.size() / 4, &disassembly)) {
                 errors.append(disassembly);
             }
-            this->error(-1, errors);
+            this->errorReporter().error(-1, errors);
 #else
             SkDEBUGFAILF("%s", errors.c_str());
 #endif
@@ -925,7 +940,7 @@ bool Compiler::toSPIRV(Program& program, OutputStream& out) {
         out.write(data.c_str(), data.size());
     }
 #else
-    SPIRVCodeGenerator cg(fContext.get(), &program, this, &out);
+    SPIRVCodeGenerator cg(fContext.get(), &program, &out);
     bool result = cg.generateCode();
 #endif
     dsl::End();
@@ -944,7 +959,7 @@ bool Compiler::toSPIRV(Program& program, String* out) {
 bool Compiler::toGLSL(Program& program, OutputStream& out) {
     TRACE_EVENT0("skia.shaders", "SkSL::Compiler::toGLSL");
     AutoSource as(this, program.fSource->c_str());
-    GLSLCodeGenerator cg(fContext.get(), &program, this, &out);
+    GLSLCodeGenerator cg(fContext.get(), &program, &out);
     bool result = cg.generateCode();
     return result;
 }
@@ -970,7 +985,7 @@ bool Compiler::toHLSL(Program& program, String* out) {
 bool Compiler::toMetal(Program& program, OutputStream& out) {
     TRACE_EVENT0("skia.shaders", "SkSL::Compiler::toMetal");
     AutoSource as(this, program.fSource->c_str());
-    MetalCodeGenerator cg(fContext.get(), &program, this, &out);
+    MetalCodeGenerator cg(fContext.get(), &program, &out);
     bool result = cg.generateCode();
     return result;
 }
@@ -986,29 +1001,29 @@ bool Compiler::toMetal(Program& program, String* out) {
 
 #endif // defined(SKSL_STANDALONE) || SK_SUPPORT_GPU
 
-void Compiler::handleError(const char* msg, dsl::PositionInfo pos) {
+void Compiler::handleError(const char* msg, PositionInfo pos) {
     if (strstr(msg, POISON_TAG)) {
         // don't report errors on poison values
         return;
     }
-    fErrorCount++;
     fErrorText += "error: " + (pos.line() >= 1 ? to_string(pos.line()) + ": " : "") + msg + "\n";
 }
 
 String Compiler::errorText(bool showCount) {
+    this->errorReporter().reportPendingErrors(PositionInfo());
     if (showCount) {
         this->writeErrorCount();
     }
-    fErrorCount = 0;
     String result = fErrorText;
-    fErrorText = "";
+    this->resetErrors();
     return result;
 }
 
 void Compiler::writeErrorCount() {
-    if (fErrorCount) {
-        fErrorText += to_string(fErrorCount) + " error";
-        if (fErrorCount > 1) {
+    int count = this->errorCount();
+    if (count) {
+        fErrorText += to_string(count) + " error";
+        if (count > 1) {
             fErrorText += "s";
         }
         fErrorText += "\n";

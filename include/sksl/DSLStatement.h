@@ -11,7 +11,7 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
 #include "include/private/SkSLStatement.h"
-#include "include/sksl/DSLErrorHandling.h"
+#include "include/sksl/SkSLErrorReporter.h"
 
 #include <memory>
 
@@ -36,9 +36,9 @@ public:
 
     DSLStatement(DSLExpression expr);
 
-    DSLStatement(DSLPossibleExpression expr, PositionInfo pos = PositionInfo());
+    DSLStatement(DSLPossibleExpression expr, PositionInfo pos = PositionInfo::Capture());
 
-    DSLStatement(DSLPossibleStatement stmt, PositionInfo pos = PositionInfo());
+    DSLStatement(DSLPossibleStatement stmt, PositionInfo pos = PositionInfo::Capture());
 
     DSLStatement(DSLBlock block);
 
