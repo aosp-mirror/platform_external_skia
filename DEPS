@@ -11,7 +11,7 @@ vars = {
 
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@d20afde45f071e0d45c4730f94a7a6361fc4d5ce",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@a835912f83aa6a7a8c66cd70654fc1b1f41cdeb4",
   "third_party/externals/brotli"          : "https://skia.googlesource.com/external/github.com/google/brotli.git@e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, and tint for SPIRV compilation.
@@ -30,7 +30,7 @@ deps = {
   "third_party/externals/libgifcodec"     : "https://skia.googlesource.com/libgifcodec@fd59fa92a0c86788dcdd84d091e1ce81eda06a77",
   "third_party/externals/libjpeg-turbo"   : "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo.git@24e310554f07c0fdb8ee52e3e708e4f3e9eb6e20",
   "third_party/externals/libpng"          : "https://skia.googlesource.com/third_party/libpng.git@386707c6d19b974ca2e3db7f5c61873813c6fe44",
-  "third_party/externals/libwebp"         : "https://chromium.googlesource.com/webm/libwebp.git@fedac6cc69cda3e9e04b780d324cf03921fb3ff4",
+  "third_party/externals/libwebp"         : "https://chromium.googlesource.com/webm/libwebp.git@9ce5843dbabcfd3f7c39ec7ceba9cbeb213cbfdf",
   "third_party/externals/microhttpd"      : "https://android.googlesource.com/platform/external/libmicrohttpd@748945ec6f1c67b7efc934ab0808e1d32f2fb98d",
   "third_party/externals/oboe"            : "https://chromium.googlesource.com/external/github.com/google/oboe.git@b02a12d1dd821118763debec6b83d00a8a0ee419",
   "third_party/externals/opengl-registry" : "https://skia.googlesource.com/external/github.com/KhronosGroup/OpenGL-Registry@14b80ebeab022b2c78f84a573f01028c96075553",
