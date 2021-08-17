@@ -36,66 +36,6 @@
 
 namespace skgpu {
 
-std::unique_ptr<SurfaceContext> SurfaceContext::Make(GrRecordingContext* rContext,
-                                                     const GrImageInfo& info,
-                                                     const GrBackendFormat& format,
-                                                     SkBackingFit fit,
-                                                     GrSurfaceOrigin origin,
-                                                     GrRenderable renderable,
-                                                     int sampleCount,
-                                                     GrMipmapped mipmapped,
-                                                     GrProtected isProtected,
-                                                     SkBudgeted budgeted) {
-    SkASSERT(rContext);
-    SkASSERT(renderable == GrRenderable::kYes || sampleCount == 1);
-    if (rContext->abandoned()) {
-        return nullptr;
-    }
-    sk_sp<GrTextureProxy> proxy = rContext->priv().proxyProvider()->createProxy(format,
-                                                                                info.dimensions(),
-                                                                                renderable,
-                                                                                sampleCount,
-                                                                                mipmapped,
-                                                                                fit,
-                                                                                budgeted,
-                                                                                isProtected);
-    if (!proxy) {
-        return nullptr;
-    }
-
-    GrSwizzle swizzle;
-    if (info.colorType() != GrColorType::kUnknown &&
-        !rContext->priv().caps()->isFormatCompressed(format)) {
-        swizzle = rContext->priv().caps()->getReadSwizzle(format, info.colorType());
-    }
-
-    GrSurfaceProxyView view(std::move(proxy), origin, swizzle);
-    return rContext->priv().makeSC(std::move(view), info.colorInfo());
-}
-
-std::unique_ptr<SurfaceContext> SurfaceContext::Make(GrRecordingContext* rContext,
-                                                     const GrImageInfo& info,
-                                                     SkBackingFit fit,
-                                                     GrSurfaceOrigin origin,
-                                                     GrRenderable renderable,
-                                                     int sampleCount,
-                                                     GrMipmapped mipmapped,
-                                                     GrProtected isProtected,
-                                                     SkBudgeted budgeted) {
-    GrBackendFormat format = rContext->priv().caps()->getDefaultBackendFormat(info.colorType(),
-                                                                              renderable);
-    return Make(rContext,
-                info,
-                format,
-                fit,
-                origin,
-                renderable,
-                sampleCount,
-                mipmapped,
-                isProtected,
-                budgeted);
-}
-
 SurfaceContext::SurfaceContext(GrRecordingContext* context,
                                GrSurfaceProxyView readView,
                                const GrColorInfo& info)
@@ -187,6 +127,11 @@ bool SurfaceContext::readPixels(GrDirectContext* dContext, GrPixmap dst, SkIPoin
                              srcColorType == GrColorType::kBGRA_8888) &&
                             defaultRGBAFormat.isValid() &&
                             dContext->priv().validPMUPMConversionExists();
+
+    // Since the validPMUPMConversionExists function actually submits work to the gpu to do its
+    // tests, it is possible that during that call we have abanoned the context. Thus we do
+    // another abanoned check here to make sure we are still valid.
+    RETURN_FALSE_IF_ABANDONED
 
     auto readFlag = caps->surfaceSupportsReadPixels(srcSurface);
     if (readFlag == GrCaps::SurfaceReadPixelsSupport::kUnsupported) {
@@ -439,6 +384,12 @@ bool SurfaceContext::internalWritePixels(GrDirectContext* dContext,
                              dstColorType == GrColorType::kBGRA_8888) &&
                             rgbaDefaultFormat.isValid() &&
                             dContext->priv().validPMUPMConversionExists();
+
+    // Since the validPMUPMConversionExists function actually submits work to the gpu to do its
+    // tests, it is possible that during that call we have abanoned the context. Thus we do an
+    // abanoned check here to make sure we are still valid.
+    RETURN_FALSE_IF_ABANDONED
+
     // Drawing code path doesn't support writing to levels and doesn't support inserting layout
     // transitions.
     if ((!caps->surfaceSupportsWritePixels(dstSurface) || canvas2DFastPath) && numLevels == 1) {
