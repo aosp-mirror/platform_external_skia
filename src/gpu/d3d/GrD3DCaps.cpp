@@ -245,6 +245,9 @@ void GrD3DCaps::initShaderCaps(int vendorID, const D3D12_FEATURE_DATA_D3D12_OPTI
     shaderCaps->fDualSourceBlendingSupport = true;
 
     shaderCaps->fIntegerSupport = true;
+    shaderCaps->fNonsquareMatrixSupport = true;
+    // TODO(skia:12352) HLSL does not expose asinh/acosh/atanh
+    shaderCaps->fInverseHyperbolicSupport = false;
     shaderCaps->fVertexIDSupport = true;
     shaderCaps->fInfinitySupport = true;
     shaderCaps->fBitManipulationSupport = true;
