@@ -46,10 +46,12 @@ public:
     bool gsInvocationsSupport() const { return fGSInvocationsSupport; }
     bool dstReadInShaderSupport() const { return fDstReadInShaderSupport; }
     bool dualSourceBlendingSupport() const { return fDualSourceBlendingSupport; }
-    bool integerSupport() const { return fIntegerSupport; }
     bool nonsquareMatrixSupport() const { return fNonsquareMatrixSupport; }
 
-    // asinh(), acosh(), atanh()
+    /** Indicates true 32-bit integer support, with unsigned types and bitwise operations */
+    bool integerSupport() const { return fIntegerSupport; }
+
+    /** asinh(), acosh(), atanh() */
     bool inverseHyperbolicSupport() const { return fInverseHyperbolicSupport; }
 
     /**
@@ -94,6 +96,13 @@ public:
     // Use a reduced set of rendering algorithms or less optimal effects in order to
     // reduce the number of unique shaders generated.
     bool reducedShaderMode() const { return fReducedShaderMode; }
+
+    /**
+     * SkSL ES3 requires support for derivatives, nonsquare matrices and bitwise integer operations.
+     */
+    bool supportsSkSLES3() const {
+        return fShaderDerivativeSupport && fNonsquareMatrixSupport && fIntegerSupport;
+    }
 
     // SkSL only.
     bool builtinFMASupport() const { return fBuiltinFMASupport; }
