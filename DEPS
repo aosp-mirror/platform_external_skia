@@ -11,12 +11,12 @@ vars = {
 
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@7e040640ef1ce4dcc2c7b17c851b2536129405e1",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@8ffb4602b3f42c0409f9fd686bfeb896d5d74914",
   "third_party/externals/brotli"          : "https://skia.googlesource.com/external/github.com/google/brotli.git@e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, and tint for SPIRV compilation.
   # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
-  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@71d7c2e6707e76fbdd96087c57d34657b0103b52",
+  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@41e3931b04b694dec2b5e0952e7837d9db227ea1",
   "third_party/externals/jinja2"          : "https://chromium.googlesource.com/chromium/src/third_party/jinja2@a82a4944a7f2496639f34a89c9923be5908b80aa",
   "third_party/externals/markupsafe"      : "https://chromium.googlesource.com/chromium/src/third_party/markupsafe@0944e71f4b2cb9a871bcbe353f95e889b64a611a",
   "third_party/externals/tint"            : "https://dawn.googlesource.com/tint@d47a7ef0cf0c39caa4a4cbe14db9576f4b861f65",
@@ -39,7 +39,7 @@ deps = {
   "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@bdbef7b1f3982fe99a62d076043036abe6dd6d80",
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@cf653e4ca4858583802b0d1656bc934edff6bd7f",
   "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@11cd875ed88484f93943071083b4821b4c3d2193",
-  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@803ceb58c92cc4c817685efa896c8e7421a86cc2",
+  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@15941846e006c7f748aa78e8bfb2a971da1c34e6",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
   "third_party/externals/wuffs"           : "https://skia.googlesource.com/external/github.com/google/wuffs-mirror-release-c.git@600cd96cf47788ee3a74b40a6028b035c9fd6a61",
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@c876c8f87101c5a75f6014b0f832499afeb65b73",
