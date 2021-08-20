@@ -5,18 +5,20 @@
  * found in the LICENSE file.
  */
 
-#ifndef GrPathRendererChain_DEFINED
-#define GrPathRendererChain_DEFINED
+#ifndef PathRendererChain_DEFINED
+#define PathRendererChain_DEFINED
 
-#include "src/gpu/GrPathRenderer.h"
+#include "src/gpu/v1/PathRenderer.h"
 
 #include "include/core/SkTypes.h"
 #include "include/private/GrTypesPriv.h"
 #include "include/private/SkNoncopyable.h"
 #include "include/private/SkTArray.h"
 
-class GrAtlasPathRenderer;
+namespace skgpu { namespace v1 { class AtlasPathRenderer; }}
 class GrTessellationPathRenderer;
+
+namespace skgpu::v1 {
 
 /**
  * Keeps track of an ordered list of path renderers. When a path needs to be
@@ -24,13 +26,13 @@ class GrTessellationPathRenderer;
  * path renderer to the list implement the GrPathRenderer::AddPathRenderers
  * function.
  */
-class GrPathRendererChain : public SkNoncopyable {
+class PathRendererChain : public SkNoncopyable {
 public:
     struct Options {
         bool fAllowPathMaskCaching = false;
         GpuPathRenderers fGpuPathRenderers = GpuPathRenderers::kDefault;
     };
-    GrPathRendererChain(GrRecordingContext* context, const Options&);
+    PathRendererChain(GrRecordingContext*, const Options&);
 
     /** Documents how the caller plans to use a GrPathRenderer to draw a path. It affects the PR
         returned by getPathRenderer */
@@ -44,19 +46,19 @@ public:
         is drawing the path to the stencil buffer then stencilSupport can be used to determine
         whether the path can be rendered with arbitrary stencil rules or not. See comments on
         StencilSupport in GrPathRenderer.h. */
-    GrPathRenderer* getPathRenderer(const GrPathRenderer::CanDrawPathArgs& args,
-                                    DrawType drawType,
-                                    GrPathRenderer::StencilSupport* stencilSupport);
+    PathRenderer* getPathRenderer(const PathRenderer::CanDrawPathArgs&,
+                                  DrawType,
+                                  PathRenderer::StencilSupport*);
 
     /** Returns a direct pointer to the atlas path renderer, or null if it is not in the
         chain. */
-    GrAtlasPathRenderer* getAtlasPathRenderer() {
+    skgpu::v1::AtlasPathRenderer* getAtlasPathRenderer() {
         return fAtlasPathRenderer;
     }
 
     /** Returns a direct pointer to the tessellation path renderer, or null if it is not in the
         chain. */
-    GrTessellationPathRenderer* getTessellationPathRenderer() {
+    PathRenderer* getTessellationPathRenderer() {
         return fTessellationPathRenderer;
     }
 
@@ -64,9 +66,11 @@ private:
     enum {
         kPreAllocCount = 8,
     };
-    SkSTArray<kPreAllocCount, sk_sp<GrPathRenderer>>    fChain;
-    GrAtlasPathRenderer*                                fAtlasPathRenderer = nullptr;
-    GrTessellationPathRenderer*                         fTessellationPathRenderer = nullptr;
+    SkSTArray<kPreAllocCount, sk_sp<PathRenderer>> fChain;
+    AtlasPathRenderer*                             fAtlasPathRenderer = nullptr;
+    PathRenderer*                                  fTessellationPathRenderer = nullptr;
 };
 
-#endif
+} // namespace skgpu::v1
+
+#endif // PathRendererChain_DEFINED

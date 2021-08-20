@@ -27,6 +27,7 @@
 #include "src/gpu/geometry/GrPathUtils.h"
 #include "src/gpu/geometry/GrStyledShape.h"
 #include "src/gpu/ops/GrMeshDrawOp.h"
+#include "src/gpu/ops/GrPathStencilSettings.h"
 #include "src/gpu/ops/GrSimpleMeshDrawOpHelperWithStencil.h"
 #include "src/gpu/v1/SurfaceDrawContext_v1.h"
 
@@ -598,7 +599,7 @@ GR_DRAW_OP_TEST_DEFINE(DefaultPathOp) {
     SkScalar srcSpaceTol = GrPathUtils::scaleToleranceToSrc(tol, viewMatrix, bounds);
 
     viewMatrix.mapRect(&bounds);
-    uint8_t coverage = GrRandomCoverage(random);
+    uint8_t coverage = GrTest::RandomCoverage(random);
     GrAAType aaType = GrAAType::kNone;
     if (numSamples > 1 && random->nextBool()) {
         aaType = GrAAType::kMSAA;
@@ -759,16 +760,16 @@ bool DefaultPathRenderer::internalDrawPath(skgpu::v1::SurfaceDrawContext* sdc,
 }
 
 
-GrPathRenderer::StencilSupport
+PathRenderer::StencilSupport
 DefaultPathRenderer::onGetStencilSupport(const GrStyledShape& shape) const {
     if (single_pass_shape(shape)) {
-        return GrPathRenderer::kNoRestriction_StencilSupport;
+        return kNoRestriction_StencilSupport;
     } else {
-        return GrPathRenderer::kStencilOnly_StencilSupport;
+        return kStencilOnly_StencilSupport;
     }
 }
 
-GrPathRenderer::CanDrawPath DefaultPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
+PathRenderer::CanDrawPath DefaultPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
     bool isHairline = GrIsStrokeHairlineOrEquivalent(
             args.fShape->style(), *args.fViewMatrix, nullptr);
     // If we aren't a single_pass_shape or hairline, we require stencil buffers.

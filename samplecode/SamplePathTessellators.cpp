@@ -16,6 +16,7 @@
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/ops/GrDrawOp.h"
 #include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
+#include "src/gpu/ops/TessellationPathRenderer.h"
 #include "src/gpu/tessellate/GrPathCurveTessellator.h"
 #include "src/gpu/tessellate/GrPathWedgeTessellator.h"
 #include "src/gpu/tessellate/shaders/GrPathTessellationShader.h"
@@ -164,8 +165,7 @@ private:
     SkString name() override { return SkString("PathTessellators"); }
 
     SkPath fPath;
-    GrPipeline::InputFlags fPipelineFlags = GrPipeline::InputFlags::kHWAntialias |
-                                            GrPipeline::InputFlags::kWireframe;
+    GrPipeline::InputFlags fPipelineFlags = GrPipeline::InputFlags::kWireframe;
     Mode fMode = Mode::kWedgeMiddleOut;
 
     float fConicWeight = .5;

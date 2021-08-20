@@ -162,6 +162,7 @@ bool GrMtlCaps::getGPUFamily(id<MTLDevice> device, GPUFamily* gpuFamily, int* gr
             return true;
         }
 #endif
+#ifdef SK_BUILD_FOR_IOS
         if ([device supportsFamily:MTLGPUFamilyApple6]) {
             *gpuFamily = GPUFamily::kApple;
             *group = 6;
@@ -192,6 +193,7 @@ bool GrMtlCaps::getGPUFamily(id<MTLDevice> device, GPUFamily* gpuFamily, int* gr
             *group = 1;
             return true;
         }
+#endif
 
         // Older Macs
         // At the moment MacCatalyst families have the same features as Mac,
@@ -216,8 +218,16 @@ bool GrMtlCaps::getGPUFamily(id<MTLDevice> device, GPUFamily* gpuFamily, int* gr
 }
 
 void GrMtlCaps::initGPUFamily(id<MTLDevice> device) {
-    if (!this->getGPUFamily(device, &fGPUFamily, &fFamilyGroup)) {
-        SkAssertResult(this->getGPUFamilyFromFeatureSet(device, &fGPUFamily, &fFamilyGroup));
+    if (!this->getGPUFamily(device, &fGPUFamily, &fFamilyGroup) &&
+        !this->getGPUFamilyFromFeatureSet(device, &fGPUFamily, &fFamilyGroup)) {
+        // We don't know what this is, fall back to minimum defaults
+#ifdef SK_BUILD_FOR_MAC
+        fGPUFamily = GPUFamily::kMac;
+        fFamilyGroup = 1;
+#else
+        fGPUFamily = GPUFamily::kApple;
+        fFamilyGroup = 1;
+#endif
     }
 }
 
@@ -411,7 +421,6 @@ void GrMtlCaps::initGrCaps(id<MTLDevice> device) {
     fTextureBarrierSupport = false; // Need to figure out if we can do this
 
     fSampleLocationsSupport = false;
-    fMultisampleDisableSupport = false;
 
     if (@available(macOS 10.11, iOS 9.0, *)) {
         if (this->isMac() || fFamilyGroup >= 3) {
