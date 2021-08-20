@@ -346,11 +346,6 @@ private:
             return;
         }
 
-        auto pipelineFlags = GrPipeline::InputFlags::kNone;
-        if (AAMode::kCoverageWithMSAA == fAAMode) {
-            pipelineFlags |= GrPipeline::InputFlags::kHWAntialias;
-        }
-
         fProgramInfo = GrSimpleMeshDrawOpHelper::CreateProgramInfo(caps,
                                                                    arena,
                                                                    writeView,
@@ -361,7 +356,7 @@ private:
                                                                    GrPrimitiveType::kTriangles,
                                                                    renderPassXferBarriers,
                                                                    colorLoadOp,
-                                                                   pipelineFlags,
+                                                                   GrPipeline::InputFlags::kNone,
                                                                    fStencilSettings);
     }
 
@@ -979,7 +974,7 @@ GR_DEFINE_GEOMETRY_PROCESSOR_TEST(DashingCircleEffect);
 #if GR_TEST_UTILS
 GrGeometryProcessor* DashingCircleEffect::TestCreate(GrProcessorTestData* d) {
     AAMode aaMode = static_cast<AAMode>(d->fRandom->nextULessThan(GrDashOp::kAAModeCnt));
-    GrColor color = GrRandomColor(d->fRandom);
+    GrColor color = GrTest::RandomColor(d->fRandom);
     SkMatrix matrix = GrTest::TestMatrix(d->fRandom);
     return DashingCircleEffect::Make(d->allocator(),
                                      SkPMColor4f::FromBytes_RGBA(color),
@@ -1195,7 +1190,7 @@ GR_DEFINE_GEOMETRY_PROCESSOR_TEST(DashingLineEffect);
 #if GR_TEST_UTILS
 GrGeometryProcessor* DashingLineEffect::TestCreate(GrProcessorTestData* d) {
     AAMode aaMode = static_cast<AAMode>(d->fRandom->nextULessThan(GrDashOp::kAAModeCnt));
-    GrColor color = GrRandomColor(d->fRandom);
+    GrColor color = GrTest::RandomColor(d->fRandom);
     SkMatrix matrix = GrTest::TestMatrix(d->fRandom);
     return DashingLineEffect::Make(d->allocator(),
                                    SkPMColor4f::FromBytes_RGBA(color),

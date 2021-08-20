@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/tessellate/GrPathStencilCoverOp.h"
+#include "src/gpu/ops/PathStencilCoverOp.h"
 
 #include "src/gpu/GrEagerVertexAllocator.h"
 #include "src/gpu/GrGpu.h"
@@ -19,10 +19,9 @@
 #include "src/gpu/tessellate/GrMiddleOutPolygonTriangulator.h"
 #include "src/gpu/tessellate/GrPathCurveTessellator.h"
 #include "src/gpu/tessellate/GrPathWedgeTessellator.h"
-#include "src/gpu/tessellate/GrTessellationPathRenderer.h"
 #include "src/gpu/tessellate/shaders/GrPathTessellationShader.h"
 
-using PathFlags = GrTessellationPathRenderer::PathFlags;
+using PathFlags = GrTessellationPathFlags;
 
 namespace {
 

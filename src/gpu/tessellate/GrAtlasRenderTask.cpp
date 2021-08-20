@@ -13,7 +13,7 @@
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrOpsTypes.h"
 #include "src/gpu/ops/GrFillRectOp.h"
-#include "src/gpu/tessellate/GrPathStencilCoverOp.h"
+#include "src/gpu/ops/PathStencilCoverOp.h"
 
 GrAtlasRenderTask::GrAtlasRenderTask(GrRecordingContext* rContext,
                                      sk_sp<GrArenas> arenas,
@@ -99,7 +99,7 @@ GrRenderTask::ExpectedOutcome GrAtlasRenderTask::onMakeClosed(GrRecordingContext
                     pathList->pathCount(),
                     GrPaint(),
                     GrAAType::kMSAA,
-                    GrTessellationPathRenderer::PathFlags::kStencilOnly,
+                    GrTessellationPathFlags::kStencilOnly,
                     drawRect);
             this->addAtlasDrawOp(std::move(op), caps);
         }

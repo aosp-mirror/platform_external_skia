@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/tessellate/GrTessellationPathRenderer.h"
+#include "src/gpu/ops/TessellationPathRenderer.h"
 
 #include "include/private/SkVx.h"
 #include "src/core/SkPathPriv.h"
@@ -15,10 +15,10 @@
 #include "src/gpu/GrVx.h"
 #include "src/gpu/effects/GrDisableColorXP.h"
 #include "src/gpu/geometry/GrStyledShape.h"
-#include "src/gpu/tessellate/GrPathInnerTriangulateOp.h"
-#include "src/gpu/tessellate/GrPathStencilCoverOp.h"
-#include "src/gpu/tessellate/GrPathTessellateOp.h"
-#include "src/gpu/tessellate/GrStrokeTessellateOp.h"
+#include "src/gpu/ops/PathInnerTriangulateOp.h"
+#include "src/gpu/ops/PathStencilCoverOp.h"
+#include "src/gpu/ops/PathTessellateOp.h"
+#include "src/gpu/ops/StrokeTessellateOp.h"
 #include "src/gpu/v1/SurfaceDrawContext_v1.h"
 
 bool GrTessellationPathRenderer::IsSupported(const GrCaps& caps) {
@@ -27,7 +27,7 @@ bool GrTessellationPathRenderer::IsSupported(const GrCaps& caps) {
            !caps.disableTessellationPathRenderer();
 }
 
-GrPathRenderer::StencilSupport GrTessellationPathRenderer::onGetStencilSupport(
+skgpu::v1::PathRenderer::StencilSupport GrTessellationPathRenderer::onGetStencilSupport(
         const GrStyledShape& shape) const {
     if (!shape.style().isSimpleFill() || shape.inverseFilled()) {
         // Don't bother with stroke stencilling or inverse fills yet. The Skia API doesn't support
@@ -37,7 +37,7 @@ GrPathRenderer::StencilSupport GrTessellationPathRenderer::onGetStencilSupport(
     return shape.knownToBeConvex() ? kNoRestriction_StencilSupport : kStencilOnly_StencilSupport;
 }
 
-GrPathRenderer::CanDrawPath GrTessellationPathRenderer::onCanDrawPath(
+skgpu::v1::PathRenderer::CanDrawPath GrTessellationPathRenderer::onCanDrawPath(
         const CanDrawPathArgs& args) const {
     const GrStyledShape& shape = *args.fShape;
     if (args.fAAType == GrAAType::kCoverage ||
@@ -64,7 +64,7 @@ GrPathRenderer::CanDrawPath GrTessellationPathRenderer::onCanDrawPath(
 
 static GrOp::Owner make_non_convex_fill_op(GrRecordingContext* rContext,
                                            SkArenaAlloc* arena,
-                                           GrTessellationPathRenderer::PathFlags pathFlags,
+                                           GrTessellationPathFlags pathFlags,
                                            GrAAType aaType,
                                            const SkRect& drawBounds,
                                            const SkMatrix& viewMatrix,
@@ -144,7 +144,7 @@ bool GrTessellationPathRenderer::onDrawPath(const DrawPathArgs& args) {
             : pathDevBounds;
     auto op = make_non_convex_fill_op(args.fContext,
                                       args.fSurfaceDrawContext->arenaAlloc(),
-                                      PathFlags::kNone,
+                                      GrTessellationPathFlags::kNone,
                                       args.fAAType,
                                       drawBounds,
                                       *args.fViewMatrix,
@@ -188,7 +188,7 @@ void GrTessellationPathRenderer::onStencilPath(const StencilPathArgs& args) {
 
     auto op = make_non_convex_fill_op(args.fContext,
                                       args.fSurfaceDrawContext->arenaAlloc(),
-                                      PathFlags::kStencilOnly,
+                                      GrTessellationPathFlags::kStencilOnly,
                                       aaType,
                                       pathDevBounds,
                                       *args.fViewMatrix,
