@@ -123,7 +123,7 @@ public:
     const Program::Settings& settings() const { return fContext.fConfig->fSettings; }
     ProgramKind programKind() const { return fContext.fConfig->fKind; }
 
-    ErrorReporter& errorReporter() const { return fContext.errors(); }
+    ErrorReporter& errorReporter() const { return *fContext.fErrors; }
 
     std::shared_ptr<SymbolTable>& symbolTable() {
         return fSymbolTable;
@@ -189,7 +189,6 @@ private:
     std::unique_ptr<Expression> coerce(std::unique_ptr<Expression> expr, const Type& type);
     CoercionCost coercionCost(const Expression& expr, const Type& type);
     int convertArraySize(const Type& type, int offset, const ASTNode& s);
-    int convertArraySize(const Type& type, std::unique_ptr<Expression> s);
     bool containsConstantZero(Expression& expr);
     bool dividesByZero(Operator op, Expression& right);
     std::unique_ptr<Block> convertBlock(const ASTNode& block);

@@ -32,9 +32,6 @@ public:
         SkASSERT(!Pool::IsAttached());
     }
 
-    // Returns the current error reporter
-    ErrorReporter& errors() const;
-
     // The Context holds all of the built-in types.
     BuiltinTypes fTypes;
 
@@ -47,10 +44,8 @@ public:
     // The Context holds a pointer to the configuration of the program being compiled.
     ProgramConfig* fConfig = nullptr;
 
-private:
-    // The default error reporter to use outside of DSL code (between Start() and End(), the DSL
-    // error reporter is used instead)
-    ErrorReporter& fErrors;
+    // The Context holds a reference to our error reporter.
+    ErrorReporter* fErrors;
 };
 
 }  // namespace SkSL
