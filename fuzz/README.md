@@ -21,7 +21,8 @@ it finds issues.
 
 There is a [Skia folder](https://github.com/google/oss-fuzz/tree/master/projects/skia)
 in the OSS-Fuzz repo that we make changes to when we want to add/remove/change the fuzzers that
-are automatically run.
+are automatically run. [This](https://google.github.io/oss-fuzz/advanced-topics/code-coverage/)
+describes how to use Docker to test the oss-fuzz build and fuzzers locally.
 
 When enabling a fuzzer in oss-fuzz, we typically need to follow these steps:
   1. *Add a seed corpus to `gs://skia-fuzzer/oss-fuzz/` (in the
@@ -47,6 +48,18 @@ set up for the [skcms repo](https://skia.googlesource.com/skcms/). The build pro
 except instead of compiling using GN targets, the build.sh script compiles the fuzz executables
 directly.
 
+### OSS-Fuzz dashboard
+<https://oss-fuzz.com/fuzzer-stats> is useful to see metrics on how our fuzzers are running. It
+shows things like executions per second (higher is better), edge coverage percent per fuzzer,
+what percent of fuzzing runs end in OOM/timeout/crash, the entire corpus of fuzzed inputs
+(corpus_backup), etc. Contact aarya@ to get permission to view this dashboard if necessary.
+
+[Per Fuzzer summary for all Skia fuzzers driven by libFuzzer](https://oss-fuzz.com/fuzzer-stats?group_by=by-fuzzer&date_start=2021-08-16&date_end=2021-08-22&fuzzer=libFuzzer&job=libfuzzer_asan_skia&project=skia)
+[Five day summary of sksl2glsl driven by afl-fuzz](https://oss-fuzz.com/fuzzer-stats?group_by=by-day&date_start=2021-08-16&date_end=2021-08-22&fuzzer=afl_skia_sksl2glsl&job=afl_asan_skia&project=skia)
+
+That dashboard also has a Coverage Report. Even though it appears the Coverage report is per fuzzer,
+the reports always show the aggregated coverage from all fuzzers.
+[Example coverage report from 2021 Aug 22](https://storage.googleapis.com/oss-fuzz-coverage/skia/reports/20210822/linux/report.html)
 
 ## See Also
   - [Creating a binary fuzzer](https://docs.google.com/document/d/1QDX0o8yDdmhbjoudNsXc66iuRXRF5XNNqGnzDzX7c2I/edit)
