@@ -31,7 +31,7 @@ namespace skgpu::v1 {
 class SurfaceDrawContext;
 
 /**
- *  Base class for drawing paths into a GrOpsTask.
+ *  Base class for drawing paths into a OpsTask.
  */
 class PathRenderer : public SkRefCnt {
 public:
@@ -90,7 +90,7 @@ public:
         const SkSurfaceProps*       fSurfaceProps;
         GrAAType                    fAAType;
 
-        // This is only used by GrTessellationPathRenderer
+        // This is only used by TessellationPathRenderer
         bool                        fHasUserStencilSettings;
 
 #ifdef SK_DEBUG

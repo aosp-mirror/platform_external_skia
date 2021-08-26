@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/tessellate/GrAtlasRenderTask.h"
+#include "src/gpu/ops/AtlasRenderTask.h"
 
 #include "src/core/SkBlendModePriv.h"
 #include "src/core/SkIPoint16.h"
@@ -15,19 +15,21 @@
 #include "src/gpu/ops/GrFillRectOp.h"
 #include "src/gpu/ops/PathStencilCoverOp.h"
 
-GrAtlasRenderTask::GrAtlasRenderTask(GrRecordingContext* rContext,
-                                     sk_sp<GrArenas> arenas,
-                                     std::unique_ptr<GrDynamicAtlas> dynamicAtlas)
-        : GrOpsTask(rContext->priv().drawingManager(),
-                    dynamicAtlas->writeView(*rContext->priv().caps()),
-                    rContext->priv().auditTrail(),
-                    std::move(arenas))
+namespace skgpu::v1 {
+
+AtlasRenderTask::AtlasRenderTask(GrRecordingContext* rContext,
+                                 sk_sp<GrArenas> arenas,
+                                 std::unique_ptr<GrDynamicAtlas> dynamicAtlas)
+        : OpsTask(rContext->priv().drawingManager(),
+                  dynamicAtlas->writeView(*rContext->priv().caps()),
+                  rContext->priv().auditTrail(),
+                  std::move(arenas))
         , fDynamicAtlas(std::move(dynamicAtlas)) {
 }
 
-bool GrAtlasRenderTask::addPath(const SkMatrix& viewMatrix, const SkPath& path,
-                                SkIPoint pathDevTopLeft, int widthInAtlas, int heightInAtlas,
-                                bool transposedInAtlas, SkIPoint16* locationInAtlas) {
+bool AtlasRenderTask::addPath(const SkMatrix& viewMatrix, const SkPath& path,
+                              SkIPoint pathDevTopLeft, int widthInAtlas, int heightInAtlas,
+                              bool transposedInAtlas, SkIPoint16* locationInAtlas) {
     SkASSERT(!this->isClosed());
     SkASSERT(this->isEmpty());
     SkASSERT(!fDynamicAtlas->isInstantiated());  // Paths can't be added after instantiate().
@@ -56,15 +58,15 @@ bool GrAtlasRenderTask::addPath(const SkMatrix& viewMatrix, const SkPath& path,
     return true;
 }
 
-GrRenderTask::ExpectedOutcome GrAtlasRenderTask::onMakeClosed(GrRecordingContext* rContext,
-                                                              SkIRect* targetUpdateBounds) {
+GrRenderTask::ExpectedOutcome AtlasRenderTask::onMakeClosed(GrRecordingContext* rContext,
+                                                            SkIRect* targetUpdateBounds) {
     // We don't add our ops until now, at which point we know the atlas is done being built.
     SkASSERT(this->isEmpty());
     SkASSERT(!fDynamicAtlas->isInstantiated());  // Instantiation happens after makeClosed().
 
     const GrCaps& caps = *rContext->priv().caps();
 
-    // Set our dimensions now. GrOpsTask will need them when we add our ops.
+    // Set our dimensions now. OpsTask will need them when we add our ops.
     this->target(0)->priv().setLazyDimensions(fDynamicAtlas->drawBounds());
     this->target(0)->asRenderTargetProxy()->setNeedsStencil();
     SkRect drawRect = target(0)->getBoundsRect();
@@ -72,7 +74,7 @@ GrRenderTask::ExpectedOutcome GrAtlasRenderTask::onMakeClosed(GrRecordingContext
     // Clear the atlas.
     if (caps.performColorClearsAsDraws() || caps.performStencilClearsAsDraws()) {
         this->setColorLoadOp(GrLoadOp::kDiscard);
-        this->setInitialStencilContent(GrOpsTask::StencilContent::kDontCare);
+        this->setInitialStencilContent(StencilContent::kDontCare);
 
         constexpr static GrUserStencilSettings kClearStencil(
             GrUserStencilSettings::StaticInit<
@@ -86,7 +88,7 @@ GrRenderTask::ExpectedOutcome GrAtlasRenderTask::onMakeClosed(GrRecordingContext
         this->stencilAtlasRect(rContext, drawRect, SK_PMColor4fTRANSPARENT, &kClearStencil);
     } else {
         this->setColorLoadOp(GrLoadOp::kClear);
-        this->setInitialStencilContent(GrOpsTask::StencilContent::kUserBitsCleared);
+        this->setInitialStencilContent(StencilContent::kUserBitsCleared);
     }
 
     // Add ops to stencil the atlas paths.
@@ -137,16 +139,16 @@ GrRenderTask::ExpectedOutcome GrAtlasRenderTask::onMakeClosed(GrRecordingContext
     }
     this->stencilAtlasRect(rContext, drawRect, SK_PMColor4fWHITE, stencil);
 
-    this->GrOpsTask::onMakeClosed(rContext, targetUpdateBounds);
+    this->OpsTask::onMakeClosed(rContext, targetUpdateBounds);
 
     // Don't mark msaa dirty. Since this op defers being closed, the drawing manager's dirty
     // tracking doesn't work anyway. We will just resolve msaa manually during onExecute.
     return ExpectedOutcome::kTargetUnchanged;
 }
 
-void GrAtlasRenderTask::stencilAtlasRect(GrRecordingContext* rContext, const SkRect& rect,
-                                         const SkPMColor4f& color,
-                                         const GrUserStencilSettings* stencil) {
+void AtlasRenderTask::stencilAtlasRect(GrRecordingContext* rContext, const SkRect& rect,
+                                       const SkPMColor4f& color,
+                                       const GrUserStencilSettings* stencil) {
     GrPaint paint;
     paint.setColor4f(color);
     paint.setXPFactory(SkBlendMode_AsXPFactory(SkBlendMode::kSrc));
@@ -156,7 +158,7 @@ void GrAtlasRenderTask::stencilAtlasRect(GrRecordingContext* rContext, const SkR
     this->addAtlasDrawOp(std::move(op), *rContext->priv().caps());
 }
 
-void GrAtlasRenderTask::addAtlasDrawOp(GrOp::Owner op, const GrCaps& caps) {
+void AtlasRenderTask::addAtlasDrawOp(GrOp::Owner op, const GrCaps& caps) {
     SkASSERT(!this->isClosed());
 
     auto drawOp = static_cast<GrDrawOp*>(op.get());
@@ -171,8 +173,8 @@ void GrAtlasRenderTask::addAtlasDrawOp(GrOp::Owner op, const GrCaps& caps) {
     this->recordOp(std::move(op), true/*usesMSAA*/, processorAnalysis, nullptr, nullptr, caps);
 }
 
-bool GrAtlasRenderTask::onExecute(GrOpFlushState* flushState) {
-    if (!this->GrOpsTask::onExecute(flushState)) {
+bool AtlasRenderTask::onExecute(GrOpFlushState* flushState) {
+    if (!this->OpsTask::onExecute(flushState)) {
         return false;
     }
     if (this->target(0)->requiresManualMSAAResolve()) {
@@ -186,3 +188,5 @@ bool GrAtlasRenderTask::onExecute(GrOpFlushState* flushState) {
     }
     return true;
 }
+
+} // namespace skgpu::v1

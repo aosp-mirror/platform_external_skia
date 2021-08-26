@@ -192,13 +192,6 @@ GrVkPipelineState* GrVkPipelineStateBuilder::finalize(const GrProgramDesc& desc,
 
     dsLayout[GrVkUniformHandler::kInputDescSet] = resourceProvider.getInputDSLayout();
 
-    // We need to enable the following extensions so that the compiler can correctly make spir-v
-    // from our glsl shaders.
-    fVS.extensions().appendf("#extension GL_ARB_separate_shader_objects : enable\n");
-    fFS.extensions().appendf("#extension GL_ARB_separate_shader_objects : enable\n");
-    fVS.extensions().appendf("#extension GL_ARB_shading_language_420pack : enable\n");
-    fFS.extensions().appendf("#extension GL_ARB_shading_language_420pack : enable\n");
-
     this->finalizeShaders();
 
     bool usePushConstants = fUniformHandler.usePushConstants();
@@ -348,8 +341,7 @@ GrVkPipelineState* GrVkPipelineStateBuilder::finalize(const GrProgramDesc& desc,
     uint32_t subpass = 0;
     if (overrideSubpassForResolveLoad ||
         (fProgramInfo.colorLoadOp() == GrLoadOp::kLoad &&
-         fProgramInfo.targetSupportsVkResolveLoad() &&
-         fGpu->vkCaps().preferDiscardableMSAAAttachment())) {
+         fGpu->vkCaps().programInfoWillUseDiscardableMSAA(fProgramInfo))) {
         subpass = 1;
     }
     sk_sp<const GrVkPipeline> pipeline = resourceProvider.makePipeline(
