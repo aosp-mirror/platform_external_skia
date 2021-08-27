@@ -14,6 +14,8 @@
 #error This file must be compiled with Arc. Use -fobjc-arc flag
 #endif
 
+GR_NORETAIN_BEGIN
+
 // Called for wrapped non-texture render targets.
 GrMtlRenderTarget::GrMtlRenderTarget(GrMtlGpu* gpu,
                                      SkISize dimensions,
@@ -71,32 +73,39 @@ sk_sp<GrMtlRenderTarget> GrMtlRenderTarget::MakeWrappedRenderTarget(GrMtlGpu* gp
 
     GrMtlRenderTarget* mtlRT;
     if (sampleCnt > 1) {
-        MTLPixelFormat format = texture.pixelFormat;
-        if (!gpu->mtlCaps().isFormatRenderable(format, sampleCnt)) {
-            return nullptr;
-        }
-        MTLTextureDescriptor* texDesc = [[MTLTextureDescriptor alloc] init];
-        texDesc.textureType = MTLTextureType2DMultisample;
-        texDesc.pixelFormat = format;
-        texDesc.width = dimensions.fWidth;
-        texDesc.height = dimensions.fHeight;
-        texDesc.depth = 1;
-        texDesc.mipmapLevelCount = 1;
-        texDesc.sampleCount = sampleCnt;
-        texDesc.arrayLength = 1;
-        if (@available(macOS 10.11, iOS 9.0, *)) {
-            texDesc.storageMode = MTLStorageModePrivate;
-            texDesc.usage = MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
-        }
+        if ([texture sampleCount] == 1) {
+            MTLPixelFormat format = texture.pixelFormat;
+            if (!gpu->mtlCaps().isFormatRenderable(format, sampleCnt)) {
+                return nullptr;
+            }
+            MTLTextureDescriptor* texDesc = [[MTLTextureDescriptor alloc] init];
+            texDesc.textureType = MTLTextureType2DMultisample;
+            texDesc.pixelFormat = format;
+            texDesc.width = dimensions.fWidth;
+            texDesc.height = dimensions.fHeight;
+            texDesc.depth = 1;
+            texDesc.mipmapLevelCount = 1;
+            texDesc.sampleCount = sampleCnt;
+            texDesc.arrayLength = 1;
+            if (@available(macOS 10.11, iOS 9.0, *)) {
+                texDesc.storageMode = MTLStorageModePrivate;
+                texDesc.usage = MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
+            }
 
-        id<MTLTexture> colorTexture = [gpu->device() newTextureWithDescriptor:texDesc];
-        if (!colorTexture) {
-            return nullptr;
+            id<MTLTexture> colorTexture = [gpu->device() newTextureWithDescriptor:texDesc];
+            if (!colorTexture) {
+                return nullptr;
+            }
+            if (@available(macOS 10.11, iOS 9.0, *)) {
+                SkASSERT((MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget) &
+                         colorTexture.usage);
+            }
+            mtlRT = new GrMtlRenderTarget(
+                    gpu, dimensions, sampleCnt, colorTexture, texture, kWrapped);
+        } else {
+            SkASSERT(sampleCnt == static_cast<int>([texture sampleCount]));
+            mtlRT = new GrMtlRenderTarget(gpu, dimensions, sampleCnt, texture, nil, kWrapped);
         }
-        if (@available(macOS 10.11, iOS 9.0, *)) {
-            SkASSERT((MTLTextureUsageShaderRead|MTLTextureUsageRenderTarget) & colorTexture.usage);
-        }
-        mtlRT = new GrMtlRenderTarget(gpu, dimensions, sampleCnt, colorTexture, texture, kWrapped);
     } else {
         mtlRT = new GrMtlRenderTarget(gpu, dimensions, texture, kWrapped);
     }
@@ -112,7 +121,7 @@ GrMtlRenderTarget::~GrMtlRenderTarget() {
 GrBackendRenderTarget GrMtlRenderTarget::getBackendRenderTarget() const {
     GrMtlTextureInfo info;
     info.fTexture.reset(GrRetainPtrFromId(fColorTexture));
-    return GrBackendRenderTarget(this->width(), this->height(), fColorTexture.sampleCount, info);
+    return GrBackendRenderTarget(this->width(), this->height(), info);
 }
 
 GrBackendFormat GrMtlRenderTarget::backendFormat() const {
@@ -136,7 +145,9 @@ void GrMtlRenderTarget::onRelease() {
     INHERITED::onRelease();
 }
 
-bool GrMtlRenderTarget::completeStencilAttachment() {
+bool GrMtlRenderTarget::completeStencilAttachment(GrAttachment* stencil, bool useMSAASurface) {
+    SkASSERT(useMSAASurface == (this->numSamples() > 1));
     return true;
 }
 
+GR_NORETAIN_END

@@ -16,22 +16,21 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
-#include "include/effects/SkGradientShader.h"
-#include "include/private/GrTypesPriv.h"
 #include "include/private/SkTArray.h"
-#include "src/gpu/GrBitmapTextureMaker.h"
-#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrRenderTargetContext.h"
-#include "src/gpu/GrRenderTargetContextPriv.h"
 #include "src/gpu/GrSamplerState.h"
-#include "src/gpu/GrTextureProxy.h"
-#include "src/gpu/effects/generated/GrConstColorProcessor.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
+#include "src/gpu/SkGr.h"
 #include "tools/Resources.h"
 #include "tools/gpu/TestOps.h"
 
 #include <memory>
 #include <utility>
+
+using MipmapMode = GrSamplerState::MipmapMode;
+using Filter     = GrSamplerState::Filter;
+using Wrap       = GrSamplerState::WrapMode;
 
 namespace skiagm {
 /**
@@ -39,7 +38,8 @@ namespace skiagm {
  */
 class TexelSubset : public GpuGM {
 public:
-    TexelSubset(GrSamplerState::Filter filter, bool upscale) : fFilter(filter), fUpscale(upscale) {
+    TexelSubset(Filter filter, MipmapMode mm, bool upscale)
+            : fFilter(filter), fMipmapMode(mm), fUpscale(upscale) {
         this->setBGColor(0xFFFFFFFF);
     }
 
@@ -47,14 +47,21 @@ protected:
     SkString onShortName() override {
         SkString name("texel_subset");
         switch (fFilter) {
-            case GrSamplerState::Filter::kNearest:
+            case Filter::kNearest:
                 name.append("_nearest");
                 break;
-            case GrSamplerState::Filter::kBilerp:
-                name.append("_bilerp");
+            case Filter::kLinear:
+                name.append("_linear");
                 break;
-            case GrSamplerState::Filter::kMipMap:
-                name.append("_mip_map");
+        }
+        switch (fMipmapMode) {
+            case MipmapMode::kNone:
+                break;
+            case MipmapMode::kNearest:
+                name.append("_mipmap_nearest");
+                break;
+            case MipmapMode::kLinear:
+                name.append("_mipmap_linear");
                 break;
         }
         name.append(fUpscale ? "_up" : "_down");
@@ -75,14 +82,15 @@ protected:
         SkASSERT(fBitmap.dimensions() == kImageSize);
     }
 
-    DrawResult onDraw(GrContext* context, GrRenderTargetContext* renderTargetContext,
+    DrawResult onDraw(GrRecordingContext* context, GrSurfaceDrawContext* surfaceDrawContext,
                       SkCanvas* canvas, SkString* errorMsg) override {
-        GrMipMapped mipMapped = fFilter == GrSamplerState::Filter::kMipMap &&
-                                context->priv().caps()->mipMapSupport()
-                ? GrMipMapped::kYes : GrMipMapped::kNo;
-        GrBitmapTextureMaker maker(context, fBitmap);
-        auto[view, grCT] = maker.view(mipMapped);
-        if (!view.proxy()) {
+        GrMipmapped mipmapped = (fMipmapMode != MipmapMode::kNone) ? GrMipmapped::kYes
+                                                                   : GrMipmapped::kNo;
+        if (mipmapped == GrMipmapped::kYes && !context->priv().caps()->mipmapSupport()) {
+            return DrawResult::kSkip;
+        }
+        auto view = std::get<0>(GrMakeCachedBitmapProxyView(context, fBitmap, mipmapped));
+        if (!view) {
             *errorMsg = "Failed to create proxy.";
             return DrawResult::kFail;
         }
@@ -103,19 +111,18 @@ protected:
         SkRect a = SkRect::Make(texelSubset);
         SkRect b = fUpscale ? a.makeInset (.31f * a.width(), .31f * a.height())
                             : a.makeOutset(.25f * a.width(), .25f * a.height());
-        textureMatrices.push_back().setRectToRect(a, b, SkMatrix::kFill_ScaleToFit);
+        textureMatrices.push_back() = SkMatrix::RectToRect(a, b);
 
         b = fUpscale ? a.makeInset (.25f * a.width(), .35f * a.height())
                      : a.makeOutset(.20f * a.width(), .35f * a.height());
-        textureMatrices.push_back().setRectToRect(a, b, SkMatrix::kFill_ScaleToFit);
+        textureMatrices.push_back() = SkMatrix::RectToRect(a, b);
         textureMatrices.back().preRotate(45.f, a.centerX(), a.centerY());
         textureMatrices.back().postSkew(.05f, -.05f);
 
         SkBitmap subsetBmp;
         fBitmap.extractSubset(&subsetBmp, texelSubset);
         subsetBmp.setImmutable();
-        GrBitmapTextureMaker subsetMaker(context, subsetBmp);
-        auto[subsetView, subsetCT] = subsetMaker.view(mipMapped);
+        auto subsetView = std::get<0>(GrMakeCachedBitmapProxyView(context, subsetBmp, mipmapped));
 
         SkRect localRect = SkRect::Make(fBitmap.bounds()).makeOutset(kDrawPad, kDrawPad);
 
@@ -126,13 +133,13 @@ protected:
         for (int tm = 0; tm < textureMatrices.count(); ++tm) {
             for (int my = 0; my < GrSamplerState::kWrapModeCount; ++my) {
                 SkScalar x = kDrawPad + kTestPad;
-                auto wmy = static_cast<GrSamplerState::WrapMode>(my);
+                auto wmy = static_cast<Wrap>(my);
                 for (int mx = 0; mx < GrSamplerState::kWrapModeCount; ++mx) {
-                    auto wmx = static_cast<GrSamplerState::WrapMode>(mx);
+                    auto wmx = static_cast<Wrap>(mx);
 
                     const auto& caps = *context->priv().caps();
 
-                    GrSamplerState sampler(wmx, wmy, fFilter);
+                    GrSamplerState sampler(wmx, wmy, fFilter, fMipmapMode);
 
                     drawRect = localRect.makeOffset(x, y);
 
@@ -154,8 +161,8 @@ protected:
                                                                   std::move(fp1),
                                                                   drawRect,
                                                                   localRect.makeOffset(kT),
-                                                                  SkMatrix::MakeTrans(-kT))) {
-                        renderTargetContext->priv().testingOnly_addDrawOp(std::move(op));
+                                                                  SkMatrix::Translate(-kT))) {
+                        surfaceDrawContext->addDrawOp(std::move(op));
                     }
 
                     x += localRect.width() + kTestPad;
@@ -164,14 +171,16 @@ protected:
                     // rather than a texture subset as a comparison.
                     drawRect = localRect.makeOffset(x, y);
                     SkMatrix subsetTextureMatrix = SkMatrix::Concat(
-                            SkMatrix::MakeTrans(-texelSubset.topLeft()), textureMatrices[tm]);
+                            SkMatrix::Translate(-texelSubset.topLeft()), textureMatrices[tm]);
 
-                    auto fp2 = GrTextureEffect::Make(subsetView, fBitmap.alphaType(),
+                    auto fp2 = GrTextureEffect::Make(subsetView,
+                                                     fBitmap.alphaType(),
                                                      subsetTextureMatrix,
-                                                     GrSamplerState(wmx, wmy, fFilter), caps);
+                                                     sampler,
+                                                     caps);
                     if (auto op = sk_gpu_test::test_ops::MakeRect(context, std::move(fp2), drawRect,
                                                                   localRect)) {
-                        renderTargetContext->priv().testingOnly_addDrawOp(std::move(op));
+                        surfaceDrawContext->addDrawOp(std::move(op));
                     }
 
                     if (mx < GrSamplerState::kWrapModeCount - 1) {
@@ -202,17 +211,21 @@ private:
     static constexpr SkScalar kDrawPad = 10.f;
     static constexpr SkScalar kTestPad = 10.f;
     SkBitmap fBitmap;
-    GrSamplerState::Filter fFilter;
+    Filter fFilter;
+    MipmapMode fMipmapMode;
     bool fUpscale;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
-DEF_GM(return new TexelSubset(GrSamplerState::Filter::kNearest, false);)
-DEF_GM(return new TexelSubset(GrSamplerState::Filter::kNearest, true);)
-DEF_GM(return new TexelSubset(GrSamplerState::Filter::kBilerp , false);)
-DEF_GM(return new TexelSubset(GrSamplerState::Filter::kBilerp , true);)
+DEF_GM(return new TexelSubset(Filter::kNearest, MipmapMode::kNone   , false);)
+DEF_GM(return new TexelSubset(Filter::kNearest, MipmapMode::kNone   , true );)
+DEF_GM(return new TexelSubset(Filter::kLinear , MipmapMode::kNone   , false);)
+DEF_GM(return new TexelSubset(Filter::kLinear , MipmapMode::kNone   , true );)
 // It doesn't make sense to have upscaling MIP map.
-DEF_GM(return new TexelSubset(GrSamplerState::Filter::kMipMap,  false);)
+DEF_GM(return new TexelSubset(Filter::kNearest, MipmapMode::kNearest, false);)
+DEF_GM(return new TexelSubset(Filter::kLinear , MipmapMode::kNearest, false);)
+DEF_GM(return new TexelSubset(Filter::kNearest, MipmapMode::kLinear , false);)
+DEF_GM(return new TexelSubset(Filter::kLinear , MipmapMode::kLinear , false);)
 
-}
+}  // namespace skiagm

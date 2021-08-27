@@ -12,7 +12,10 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkTime.h"
+#include "include/private/SkTPin.h"
+#include "modules/audioplayer/SkAudioPlayer.h"
 #include "modules/skottie/include/Skottie.h"
+#include "modules/skottie/utils/SkottieUtils.h"
 #include "modules/skresources/include/SkResources.h"
 #include "src/utils/SkOSPath.h"
 #include "tools/timer/TimeUtils.h"
@@ -20,6 +23,58 @@
 #include <cmath>
 
 #include "imgui.h"
+
+namespace {
+
+class Track final : public skresources::ExternalTrackAsset {
+public:
+    explicit Track(std::unique_ptr<SkAudioPlayer> player) : fPlayer(std::move(player)) {}
+
+private:
+    void seek(float t) override {
+        if (fPlayer->isStopped() && t >=0) {
+            fPlayer->play();
+        }
+
+        if (fPlayer->isPlaying()) {
+            if (t < 0) {
+                fPlayer->stop();
+            } else {
+                static constexpr float kTolerance = 0.075f;
+                const auto player_pos = fPlayer->time();
+
+                if (std::abs(player_pos - t) > kTolerance) {
+                    fPlayer->setTime(t);
+                }
+            }
+        }
+    }
+
+    const std::unique_ptr<SkAudioPlayer> fPlayer;
+};
+
+class AudioProviderProxy final : public skresources::ResourceProviderProxyBase {
+public:
+    explicit AudioProviderProxy(sk_sp<skresources::ResourceProvider> rp)
+        : INHERITED(std::move(rp)) {}
+
+private:
+    sk_sp<skresources::ExternalTrackAsset> loadAudioAsset(const char path[],
+                                                          const char name[],
+                                                          const char[] /*id*/) override {
+        if (auto data = this->load(path, name)) {
+            if (auto player = SkAudioPlayer::Make(std::move(data))) {
+                return sk_make_sp<Track>(std::move(player));
+            }
+        }
+
+        return nullptr;
+    }
+
+    using INHERITED = skresources::ResourceProviderProxyBase;
+};
+
+} // namespace
 
 static void draw_stats_box(SkCanvas* canvas, const skottie::Animation::Builder::Stats& stats) {
     static constexpr SkRect kR = { 10, 10, 280, 120 };
@@ -35,10 +90,10 @@ static void draw_stats_box(SkCanvas* canvas, const skottie::Animation::Builder::
 
     paint.setColor(SK_ColorBLACK);
 
-    const auto json_size = SkStringPrintf("Json size: %lu bytes",
+    const auto json_size = SkStringPrintf("Json size: %zu bytes",
                                           stats.fJsonSize);
     canvas->drawString(json_size, kR.x() + 10, kR.y() + kTextSize * 1, font, paint);
-    const auto animator_count = SkStringPrintf("Animator count: %lu",
+    const auto animator_count = SkStringPrintf("Animator count: %zu",
                                                stats.fAnimatorCount);
     canvas->drawString(animator_count, kR.x() + 10, kR.y() + kTextSize * 2, font, paint);
     const auto json_parse_time = SkStringPrintf("Json parse time: %.3f ms",
@@ -95,15 +150,28 @@ void SkottieSlide::load(SkScalar w, SkScalar h) {
     };
 
     auto logger = sk_make_sp<Logger>();
-    skottie::Animation::Builder builder;
 
+    uint32_t flags = 0;
+    if (fPreferGlyphPaths) {
+        flags |= skottie::Animation::Builder::kPreferEmbeddedFonts;
+    }
+    skottie::Animation::Builder builder(flags);
+
+    auto resource_provider =
+        sk_make_sp<AudioProviderProxy>(
+            skresources::DataURIResourceProviderProxy::Make(
+                skresources::FileResourceProvider::Make(SkOSPath::Dirname(fPath.c_str()),
+                                                        /*predecode=*/true),
+                /*predecode=*/true));
+
+    static constexpr char kInterceptPrefix[] = "__";
+    auto precomp_interceptor =
+            sk_make_sp<skottie_utils::ExternalAnimationPrecompInterceptor>(resource_provider,
+                                                                           kInterceptPrefix);
     fAnimation      = builder
             .setLogger(logger)
-            .setResourceProvider(
-                skresources::DataURIResourceProviderProxy::Make(
-                    skresources::FileResourceProvider::Make(SkOSPath::Dirname(fPath.c_str()),
-                                                              /*predecode=*/true),
-                    /*predecode=*/true))
+            .setResourceProvider(std::move(resource_provider))
+            .setPrecompInterceptor(std::move(precomp_interceptor))
             .makeFromFile(fPath.c_str());
     fAnimationStats = builder.getStats();
     fWinSize        = SkSize::Make(w, h);
@@ -153,9 +221,8 @@ void SkottieSlide::draw(SkCanvas* canvas) {
             draw_stats_box(canvas, fAnimationStats);
         }
         if (fShowAnimationInval) {
-            const auto t = SkMatrix::MakeRectToRect(SkRect::MakeSize(fAnimation->size()),
-                                                    dstR,
-                                                    SkMatrix::kCenter_ScaleToFit);
+            const auto t = SkMatrix::RectToRect(SkRect::MakeSize(fAnimation->size()), dstR,
+                                                SkMatrix::kCenter_ScaleToFit);
             SkPaint fill, stroke;
             fill.setAntiAlias(true);
             fill.setColor(0x40ff0000);
@@ -204,7 +271,8 @@ bool SkottieSlide::animate(double nanos) {
             fCurrentFrame = std::trunc(fCurrentFrame * fps_scale) / fps_scale;
         }
 
-        fAnimation->seekFrame(fCurrentFrame);
+        fAnimation->seekFrame(fCurrentFrame, fShowAnimationInval ? &fInvalController
+                                                                 : nullptr);
     }
     return true;
 }
@@ -213,9 +281,11 @@ bool SkottieSlide::onChar(SkUnichar c) {
     switch (c) {
     case 'I':
         fShowAnimationStats = !fShowAnimationStats;
-        break;
-    default:
-        break;
+        return true;
+    case 'G':
+        fPreferGlyphPaths = !fPreferGlyphPaths;
+        this->load(fWinSize.width(), fWinSize.height());
+        return true;
     }
 
     return INHERITED::onChar(c);

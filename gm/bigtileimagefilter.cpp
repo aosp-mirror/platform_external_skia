@@ -98,7 +98,7 @@ protected:
             SkRect bound3 = SkRect::MakeXYWH(320, 320,
                                              SkIntToScalar(kBitmapSize),
                                              SkIntToScalar(kBitmapSize));
-            canvas->drawImageRect(fGreenImage.get(), bound2, bound3, nullptr,
+            canvas->drawImageRect(fGreenImage.get(), bound2, bound3, SkSamplingOptions(), nullptr,
                                   SkCanvas::kStrict_SrcRectConstraint);
             canvas->restore();
         }
@@ -112,10 +112,10 @@ private:
     sk_sp<SkImage> fRedImage;
     sk_sp<SkImage> fGreenImage;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new BigTileImageFilterGM;)
-}
+}  // namespace skiagm

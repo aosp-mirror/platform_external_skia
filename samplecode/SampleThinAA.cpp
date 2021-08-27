@@ -21,8 +21,6 @@ public:
     static constexpr SkScalar kTileWidth = 20.f;
     static constexpr SkScalar kTileHeight = 20.f;
 
-    virtual ~ShapeRenderer() {}
-
     // Draw the shape, limited to kTileWidth x kTileHeight. It must apply the local subpixel (tx,
     // ty) translation and rotation by angle. Prior to these transform adjustments, the SkCanvas
     // will only have pixel aligned translations (these are separated to make super-sampling
@@ -66,7 +64,7 @@ public:
 private:
     RectRenderer() {}
 
-    typedef ShapeRenderer INHERITED;
+    using INHERITED = ShapeRenderer;
 };
 
 class PathRenderer : public ShapeRenderer {
@@ -133,7 +131,7 @@ public:
 
         // Adding round caps forces Ganesh to use the path renderer for lines instead of converting
         // them to rectangles (which are already explicitly tested). However, when not curved, the
-        // GrShape will still find a way to turn it into a rrect draw so it doesn't hit the
+        // GrStyledShape will still find a way to turn it into a rrect draw so it doesn't hit the
         // path renderer in that condition.
         paint->setStrokeCap(SkPaint::kRound_Cap);
         paint->setStrokeJoin(SkPaint::kMiter_Join);
@@ -151,7 +149,7 @@ private:
             : fDepth(depth)
             , fHairline(hairline) {}
 
-    typedef ShapeRenderer INHERITED;
+    using INHERITED = ShapeRenderer;
 };
 
 class OffscreenShapeRenderer : public ShapeRenderer {
@@ -210,7 +208,6 @@ public:
         // Use medium quality filter to get mipmaps when drawing smaller, or use nearest filtering
         // when upscaling
         SkPaint blit;
-        blit.setFilterQuality(scale > 1.f ? kNone_SkFilterQuality : kMedium_SkFilterQuality);
         if (debugMode) {
             // Makes anything that's > 1/255 alpha fully opaque and sets color to medium green.
             static constexpr float kFilter[] = {
@@ -224,7 +221,13 @@ public:
         }
 
         canvas->scale(scale, scale);
-        canvas->drawImageRect(fLastRendered, SkRect::MakeWH(kTileWidth, kTileHeight), &blit);
+        canvas->drawImageRect(fLastRendered.get(),
+                              SkRect::MakeWH(kTileWidth, kTileHeight),
+                              SkRect::MakeWH(kTileWidth, kTileHeight),
+                              SkSamplingOptions(scale > 1.f ? kNone_SkFilterQuality
+                                                            : kMedium_SkFilterQuality),
+                              &blit,
+                              SkCanvas::kFast_SrcRectConstraint);
     }
 
 private:
@@ -239,7 +242,7 @@ private:
             , fRenderer(std::move(renderer))
             , fSupersampleFactor(supersample) { }
 
-    typedef ShapeRenderer INHERITED;
+    using INHERITED = ShapeRenderer;
 };
 
 class ThinAASample : public Sample {
@@ -537,11 +540,11 @@ private:
         canvas->translate(0.f, 8.f * ShapeRenderer::kTileHeight + 20.f);
     }
 
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_SAMPLE( return new ThinAASample; )
 
-}
+}  // namespace skiagm
