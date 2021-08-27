@@ -493,8 +493,6 @@ skia_skgpu_v1_sources = [
   "$_src/gpu/GrBlurUtils.h",
   "$_src/gpu/GrDrawOpTest.cpp",
   "$_src/gpu/GrDrawOpTest.h",
-  "$_src/gpu/GrOpsTask.cpp",
-  "$_src/gpu/GrOpsTask.h",
 
   # Ops
   "$_src/gpu/ops/AAConvexPathRenderer.cpp",
@@ -505,6 +503,8 @@ skia_skgpu_v1_sources = [
   "$_src/gpu/ops/AALinearizingConvexPathRenderer.h",
   "$_src/gpu/ops/AtlasPathRenderer.cpp",
   "$_src/gpu/ops/AtlasPathRenderer.h",
+  "$_src/gpu/ops/AtlasRenderTask.cpp",
+  "$_src/gpu/ops/AtlasRenderTask.h",
   "$_src/gpu/ops/DashLinePathRenderer.cpp",
   "$_src/gpu/ops/DashLinePathRenderer.h",
   "$_src/gpu/ops/DefaultPathRenderer.cpp",
@@ -556,6 +556,8 @@ skia_skgpu_v1_sources = [
   "$_src/gpu/ops/GrStrokeRectOp.h",
   "$_src/gpu/ops/GrTextureOp.cpp",
   "$_src/gpu/ops/GrTextureOp.h",
+  "$_src/gpu/ops/OpsTask.cpp",
+  "$_src/gpu/ops/OpsTask.h",
   "$_src/gpu/ops/PathInnerTriangulateOp.cpp",
   "$_src/gpu/ops/PathInnerTriangulateOp.h",
   "$_src/gpu/ops/PathStencilCoverOp.cpp",
@@ -572,10 +574,6 @@ skia_skgpu_v1_sources = [
   "$_src/gpu/ops/TessellationPathRenderer.h",
   "$_src/gpu/ops/TriangulatingPathRenderer.cpp",
   "$_src/gpu/ops/TriangulatingPathRenderer.h",
-
-  # tessellate
-  "$_src/gpu/tessellate/GrAtlasRenderTask.cpp",
-  "$_src/gpu/tessellate/GrAtlasRenderTask.h",
 
   # v1
   "$_src/gpu/v1/ClipStack.cpp",

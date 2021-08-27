@@ -5,16 +5,18 @@
  * found in the LICENSE file.
  */
 
-#ifndef GrAtlasRenderTask_DEFINED
-#define GrAtlasRenderTask_DEFINED
+#ifndef AtlasRenderTask_DEFINED
+#define AtlasRenderTask_DEFINED
 
 #include "include/core/SkPath.h"
 #include "src/core/SkTBlockList.h"
 #include "src/gpu/GrDynamicAtlas.h"
-#include "src/gpu/GrOpsTask.h"
+#include "src/gpu/ops/OpsTask.h"
 #include "src/gpu/tessellate/GrPathTessellator.h"
 
 struct SkIPoint16;
+
+namespace skgpu::v1 {
 
 // Represents a GrRenderTask that draws paths into an atlas. This task gets added the DAG and left
 // open, lays out its atlas while future tasks call addPath(), and finally adds its internal draw
@@ -22,11 +24,11 @@ struct SkIPoint16;
 //
 // The atlas texture does not get instantiated automatically. It is the creator's responsibility to
 // call instantiate() at flush time.
-class GrAtlasRenderTask : public GrOpsTask {
+class AtlasRenderTask : public OpsTask {
 public:
-    GrAtlasRenderTask(GrRecordingContext*,
-                      sk_sp<GrArenas>,
-                      std::unique_ptr<GrDynamicAtlas>);
+    AtlasRenderTask(GrRecordingContext*,
+                    sk_sp<GrArenas>,
+                    std::unique_ptr<GrDynamicAtlas>);
 
     const GrTextureProxy* atlasProxy() const { return fDynamicAtlas->textureProxy(); }
     GrSurfaceProxyView readView(const GrCaps& caps) const { return fDynamicAtlas->readView(caps); }
@@ -46,14 +48,14 @@ public:
     }
 
 private:
-    // Adds internal ops to render the atlas before deferring to GrOpsTask::onMakeClosed.
+    // Adds internal ops to render the atlas before deferring to OpsTask::onMakeClosed.
     ExpectedOutcome onMakeClosed(GrRecordingContext*, SkIRect* targetUpdateBounds) override;
 
     void stencilAtlasRect(GrRecordingContext*, const SkRect&, const SkPMColor4f&,
                           const GrUserStencilSettings*);
     void addAtlasDrawOp(GrOp::Owner, const GrCaps&);
 
-    // Executes the GrOpsTask and resolves msaa if needed.
+    // Executes the OpsTask and resolves msaa if needed.
     bool onExecute(GrOpFlushState* flushState) override;
 
     const std::unique_ptr<GrDynamicAtlas> fDynamicAtlas;
@@ -87,4 +89,6 @@ private:
     AtlasPathList fEvenOddPathList;
 };
 
-#endif
+} // namespace skgpu::v1
+
+#endif // AtlasRenderTask_DEFINED

@@ -442,6 +442,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("mtltestprecompile svg _ Seal_of_American_Samoa.svg")
 			skip("mtltestprecompile svg _ Seal_of_Illinois.svg")
 			skip("mtltestprecompile svg _ tiger-8.svg")
+			skip("mtltestprecompile svg _ desk_motionmark_paths.svg")
 		}
 		// Test reduced shader mode on iPhone 11 as representative iOS device
 		if b.model("iPhone11") && b.extraConfig("Metal") {
@@ -866,11 +867,18 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	}
 
 	if b.matchGpu("Adreno[3456][0-9][0-9]") { // disable broken tests on Adreno 3/4/5/6xx
+		skip("_", "tests", "_", "SkSLArrayCast_GPU")       // skia:12332
+		skip("_", "tests", "_", "SkSLArrayComparison_GPU") // skia:12332
+	}
+
+	if b.matchGpu("Adreno[3456][0-9][0-9]") && !b.extraConfig("Vulkan") { // disable broken tests on Adreno 3/4/5/6xx GLSL
 		skip("_", "tests", "_", "DSLFPTest_SwitchStatement")  // skia:11891
-		skip("_", "tests", "_", "SkSLArrayCast_GPU")          // skia:12332
-		skip("_", "tests", "_", "SkSLArrayComparison_GPU")    // skia:12332
 		skip("_", "tests", "_", "SkSLMatrixToVectorCast_GPU") // skia:12192
 		skip("_", "tests", "_", "SkSLStructsInFunctions_GPU") // skia:11929
+	}
+
+	if b.matchGpu("Adreno6[0-9][0-9]") && !b.extraConfig("Vulkan") { // disable broken tests on Adreno 6xx GLSL
+		skip("_", "tests", "_", "SkSLIntrinsicIsInf_GPU") // skia:12377
 	}
 
 	if b.gpu("IntelIris6100", "IntelHD4400") && b.matchOs("Win") && !b.extraConfig("Vulkan") {
