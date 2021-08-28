@@ -137,7 +137,7 @@ public:
             , fBoolFalse(0)
             , fSetupFragPosition(false)
             , fCurrentBlock(0)
-            , fSynthetics(fContext.fErrors, /*builtin=*/true) {
+            , fSynthetics(fContext, /*builtin=*/true) {
         this->setupIntrinsics();
     }
 
@@ -439,8 +439,6 @@ private:
     void writeInstruction(SpvOp_ opCode, int32_t word1, int32_t word2, int32_t word3, int32_t word4,
                           int32_t word5, int32_t word6, int32_t word7, int32_t word8,
                           OutputStream& out);
-
-    void writeGeometryShaderExecutionMode(SpvId entryPoint, OutputStream& out);
 
     bool isDead(const Variable& var) const;
 
