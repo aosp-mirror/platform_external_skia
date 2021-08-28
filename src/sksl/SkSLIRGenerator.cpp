@@ -125,8 +125,7 @@ bool IRGenerator::detectVarDeclarationWithoutScope(const Statement& stmt) {
 
 std::unique_ptr<Extension> IRGenerator::convertExtension(int offset, skstd::string_view name) {
     if (this->programKind() != ProgramKind::kFragment &&
-        this->programKind() != ProgramKind::kVertex &&
-        this->programKind() != ProgramKind::kGeometry) {
+        this->programKind() != ProgramKind::kVertex) {
         this->errorReporter().error(offset, "extensions are not allowed here");
         return nullptr;
     }
@@ -163,23 +162,7 @@ std::unique_ptr<Statement> IRGenerator::convertStatement(const ASTNode& statemen
             return nullptr;
         default:
             // it's an expression
-            std::unique_ptr<Statement> result = this->convertExpressionStatement(statement);
-            if (fRTAdjust && this->programKind() == ProgramKind::kGeometry) {
-                SkASSERT(result->is<ExpressionStatement>());
-                Expression& expr = *result->as<ExpressionStatement>().expression();
-                if (expr.is<FunctionCall>()) {
-                    FunctionCall& fc = expr.as<FunctionCall>();
-                    if (fc.function().isBuiltin() && fc.function().name() == "EmitVertex") {
-                        StatementArray statements;
-                        statements.reserve_back(2);
-                        statements.push_back(getNormalizeSkPositionCode());
-                        statements.push_back(std::move(result));
-                        return Block::Make(statement.fOffset, std::move(statements),
-                                           fSymbolTable, /*isScope=*/true);
-                    }
-                }
-            }
-            return result;
+            return this->convertExpressionStatement(statement);
     }
 }
 
@@ -412,32 +395,13 @@ StatementArray IRGenerator::convertVarDeclarations(const ASTNode& decls,
 
 std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(const ASTNode& m) {
     if (this->programKind() != ProgramKind::kFragment &&
-        this->programKind() != ProgramKind::kVertex &&
-        this->programKind() != ProgramKind::kGeometry) {
+        this->programKind() != ProgramKind::kVertex) {
         this->errorReporter().error(m.fOffset, "layout qualifiers are not allowed here");
         return nullptr;
     }
 
     SkASSERT(m.fKind == ASTNode::Kind::kModifiers);
     Modifiers modifiers = m.getModifiers();
-    if (modifiers.fLayout.fInvocations != -1) {
-        if (this->programKind() != ProgramKind::kGeometry) {
-            this->errorReporter().error(m.fOffset,
-                                        "'invocations' is only legal in geometry shaders");
-            return nullptr;
-        }
-        fInvocations = modifiers.fLayout.fInvocations;
-        if (!this->caps().gsInvocationsSupport()) {
-            modifiers.fLayout.fInvocations = -1;
-            if (modifiers.fLayout.description() == "") {
-                return nullptr;
-            }
-        }
-    }
-    if (modifiers.fLayout.fMaxVertices != -1 && fInvocations > 0 &&
-        !this->caps().gsInvocationsSupport()) {
-        modifiers.fLayout.fMaxVertices *= fInvocations;
-    }
     return std::make_unique<ModifiersDeclaration>(this->modifiersPool().add(modifiers));
 }
 
@@ -630,36 +594,6 @@ std::unique_ptr<Statement> IRGenerator::convertDiscard(const ASTNode& d) {
     return DiscardStatement::Make(d.fOffset);
 }
 
-std::unique_ptr<Block> IRGenerator::applyInvocationIDWorkaround(std::unique_ptr<Block> main) {
-    Layout invokeLayout;
-    Modifiers invokeModifiers(invokeLayout, Modifiers::kHasSideEffects_Flag);
-    const FunctionDeclaration* invokeDecl = fSymbolTable->add(std::make_unique<FunctionDeclaration>(
-            /*offset=*/-1,
-            this->modifiersPool().add(invokeModifiers),
-            "_invoke",
-            std::vector<const Variable*>(),
-            fContext.fTypes.fVoid.get(),
-            fIsBuiltinCode));
-    auto invokeDef = std::make_unique<FunctionDefinition>(/*offset=*/-1, invokeDecl, fIsBuiltinCode,
-                                                          std::move(main));
-    invokeDecl->setDefinition(invokeDef.get());
-    fProgramElements->push_back(std::move(invokeDef));
-
-    using namespace SkSL::dsl;
-    DSLGlobalVar loopIdx("sk_InvocationID");
-    std::unique_ptr<Expression> endPrimitive = this->convertIdentifier(/*offset=*/-1,
-                                                                       "EndPrimitive");
-    SkASSERT(endPrimitive);
-
-    std::unique_ptr<Statement> block = DSLBlock(
-        For(loopIdx = 0, loopIdx < fInvocations, loopIdx++, DSLBlock(
-            DSLFunction(invokeDecl)(),
-            DSLExpression(std::move(endPrimitive))({})
-        ))
-    ).release();
-    return std::unique_ptr<Block>(&block.release()->as<Block>());
-}
-
 std::unique_ptr<Statement> IRGenerator::getNormalizeSkPositionCode() {
     using namespace SkSL::dsl;
     using SkSL::dsl::Swizzle;  // disambiguate from SkSL::Swizzle
@@ -740,9 +674,6 @@ void IRGenerator::CheckModifiers(const Context& context,
         { Layout::kSet_Flag,                      "set"},
         { Layout::kBuiltin_Flag,                  "builtin"},
         { Layout::kInputAttachmentIndex_Flag,     "input_attachment_index"},
-        { Layout::kPrimitive_Flag,                "primitive-type"},
-        { Layout::kMaxVertices_Flag,              "max_vertices"},
-        { Layout::kInvocations_Flag,              "invocations"},
     };
 
     int layoutFlags = modifiers.fLayout.fFlags;
@@ -759,128 +690,18 @@ void IRGenerator::CheckModifiers(const Context& context,
 }
 
 std::unique_ptr<Block> IRGenerator::finalizeFunction(const FunctionDeclaration& funcDecl,
-                                                     std::unique_ptr<Block> body) {
-    class Finalizer : public ProgramWriter {
-    public:
-        Finalizer(IRGenerator* irGenerator, const FunctionDeclaration* function)
-            : fIRGenerator(irGenerator)
-            , fFunction(function) {}
-
-        ~Finalizer() override {
-            SkASSERT(!fBreakableLevel);
-            SkASSERT(!fContinuableLevel);
-        }
-
-        bool functionReturnsValue() const {
-            return !fFunction->returnType().isVoid();
-        }
-
-        bool visitExpression(Expression& expr) override {
-            // Do not recurse into expressions.
-            return false;
-        }
-
-        bool visitStatement(Statement& stmt) override {
-            switch (stmt.kind()) {
-                case Statement::Kind::kReturn: {
-                    // early returns from a vertex main function will bypass the sk_Position
-                    // normalization, so SkASSERT that we aren't doing that. It is of course
-                    // possible to fix this by adding a normalization before each return, but it
-                    // will probably never actually be necessary.
-                    SkASSERT(fIRGenerator->programKind() != ProgramKind::kVertex ||
-                             !fIRGenerator->fRTAdjust ||
-                             !fFunction->isMain());
-
-                    // Verify that the return statement matches the function's return type.
-                    ReturnStatement& returnStmt = stmt.as<ReturnStatement>();
-                    const Type& returnType = fFunction->returnType();
-                    if (returnStmt.expression()) {
-                        if (this->functionReturnsValue()) {
-                            // Coerce return expression to the function's return type.
-                            returnStmt.setExpression(fIRGenerator->coerce(
-                                    std::move(returnStmt.expression()), returnType));
-                        } else {
-                            // Returning something from a function with a void return type.
-                            fIRGenerator->errorReporter().error(returnStmt.fOffset,
-                                                     "may not return a value from a void function");
-                        }
-                    } else {
-                        if (this->functionReturnsValue()) {
-                            // Returning nothing from a function with a non-void return type.
-                            fIRGenerator->errorReporter().error(returnStmt.fOffset,
-                                  "expected function to return '" + returnType.displayName() + "'");
-                        }
-                    }
-                    break;
-                }
-                case Statement::Kind::kDo:
-                case Statement::Kind::kFor: {
-                    ++fBreakableLevel;
-                    ++fContinuableLevel;
-                    bool result = INHERITED::visitStatement(stmt);
-                    --fContinuableLevel;
-                    --fBreakableLevel;
-                    return result;
-                }
-                case Statement::Kind::kSwitch: {
-                    ++fBreakableLevel;
-                    bool result = INHERITED::visitStatement(stmt);
-                    --fBreakableLevel;
-                    return result;
-                }
-                case Statement::Kind::kBreak:
-                    if (!fBreakableLevel) {
-                        fIRGenerator->errorReporter().error(stmt.fOffset,
-                                                 "break statement must be inside a loop or switch");
-                    }
-                    break;
-                case Statement::Kind::kContinue:
-                    if (!fContinuableLevel) {
-                        fIRGenerator->errorReporter().error(stmt.fOffset,
-                                                        "continue statement must be inside a loop");
-                    }
-                    break;
-                default:
-                    break;
-            }
-            return INHERITED::visitStatement(stmt);
-        }
-
-    private:
-        IRGenerator* fIRGenerator;
-        const FunctionDeclaration* fFunction;
-        // how deeply nested we are in breakable constructs (for, do, switch).
-        int fBreakableLevel = 0;
-        // how deeply nested we are in continuable constructs (for, do).
-        int fContinuableLevel = 0;
-
-        using INHERITED = ProgramWriter;
-    };
-
+                                                     std::unique_ptr<Block> body,
+                                                     IntrinsicSet* referencedIntrinsics) {
     bool isMain = funcDecl.isMain();
-    bool needInvocationIDWorkaround = fInvocations != -1 && isMain &&
-                                      !this->caps().gsInvocationsSupport();
-    if (needInvocationIDWorkaround) {
-        body = this->applyInvocationIDWorkaround(std::move(body));
-    }
     if (ProgramKind::kVertex == this->programKind() && isMain && fRTAdjust) {
         body->children().push_back(this->getNormalizeSkPositionCode());
     }
 
-    Finalizer finalizer{this, &funcDecl};
-    finalizer.visitStatement(*body);
-
-    if (Analysis::CanExitWithoutReturningValue(funcDecl, *body)) {
-        this->errorReporter().error(funcDecl.fOffset, "function '" + funcDecl.name() +
-                                                      "' can exit without returning a value");
-    }
+    FunctionDefinition::FinalizeFunctionBody(fContext, funcDecl, body.get(), referencedIntrinsics);
     return body;
 }
 
 void IRGenerator::convertFunction(const ASTNode& f) {
-    SkASSERT(fReferencedIntrinsics.empty());
-    SK_AT_SCOPE_EXIT(fReferencedIntrinsics.clear());
-
     auto iter = f.begin();
     const Type* returnType = this->convertType(*(iter++), /*allowVoid=*/true);
     if (returnType == nullptr) {
@@ -953,9 +774,10 @@ void IRGenerator::convertFunction(const ASTNode& f) {
         if (!body) {
             return;
         }
-        body = this->finalizeFunction(*decl, std::move(body));
+        IntrinsicSet referencedIntrinsics;
+        body = this->finalizeFunction(*decl, std::move(body), &referencedIntrinsics);
         auto result = std::make_unique<FunctionDefinition>(
-                f.fOffset, decl, fIsBuiltinCode, std::move(body), std::move(fReferencedIntrinsics));
+                f.fOffset, decl, fIsBuiltinCode, std::move(body), std::move(referencedIntrinsics));
         decl->setDefinition(result.get());
         result->setSource(&f);
         fProgramElements->push_back(std::move(result));
@@ -981,8 +803,7 @@ std::unique_ptr<StructDefinition> IRGenerator::convertStructDefinition(const AST
 
 std::unique_ptr<SkSL::InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode& intf) {
     if (this->programKind() != ProgramKind::kFragment &&
-        this->programKind() != ProgramKind::kVertex &&
-        this->programKind() != ProgramKind::kGeometry) {
+        this->programKind() != ProgramKind::kVertex) {
         this->errorReporter().error(intf.fOffset, "interface block is not allowed here");
         return nullptr;
     }
@@ -1286,9 +1107,6 @@ std::unique_ptr<Expression> IRGenerator::call(int offset,
         if (function.intrinsicKind() == k_dFdy_IntrinsicKind) {
             fInputs.fUseFlipRTUniform = true;
         }
-        if (function.definition()) {
-            fReferencedIntrinsics.insert(&function);
-        }
         if (!fIsBuiltinCode && fIntrinsics) {
             this->copyIntrinsicIfNeeded(function);
         }
@@ -1420,8 +1238,7 @@ std::unique_ptr<Expression> IRGenerator::convertIndexExpression(const ASTNode& i
     if (!converted) {
         return nullptr;
     }
-    return IndexExpression::Convert(fContext, *fSymbolTable, std::move(base),
-                                    std::move(converted));
+    return IndexExpression::Convert(fContext, *fSymbolTable, std::move(base), std::move(converted));
 }
 
 std::unique_ptr<Expression> IRGenerator::convertCallExpression(const ASTNode& callNode) {
@@ -1474,6 +1291,7 @@ void IRGenerator::checkValid(const Expression& expr) {
             }
             break;
         }
+        case Expression::Kind::kExternalFunctionReference:
         case Expression::Kind::kFunctionReference:
         case Expression::Kind::kTypeReference:
             SkDEBUGFAIL("invalid reference-expression, should have been reported by coerce()");
@@ -1569,29 +1387,10 @@ void IRGenerator::start(const ParsedModule& base,
     fIsBuiltinCode = isBuiltinCode;
 
     fInputs = {};
-    fInvocations = -1;
     fRTAdjust = nullptr;
     fRTAdjustInterfaceBlock = nullptr;
     fDefinedStructs.clear();
     this->pushSymbolTable();
-
-    if (this->programKind() == ProgramKind::kGeometry && !fIsBuiltinCode) {
-        // Declare sk_InvocationID programmatically. With invocations support, it's an 'in' builtin.
-        // If we're applying the workaround, then it's a plain global.
-        bool workaround = !this->caps().gsInvocationsSupport();
-        Modifiers m;
-        if (!workaround) {
-            m.fFlags = Modifiers::kIn_Flag;
-            m.fLayout.fBuiltin = SK_INVOCATIONID_BUILTIN;
-        }
-        auto var = std::make_unique<Variable>(/*offset=*/-1, this->modifiersPool().add(m),
-                                              "sk_InvocationID", fContext.fTypes.fInt.get(),
-                                              /*builtin=*/false, Variable::Storage::kGlobal);
-        auto decl = VarDeclaration::Make(fContext, var.get(), fContext.fTypes.fInt.get(),
-                                         /*arraySize=*/0, /*value=*/nullptr);
-        fSymbolTable->add(std::move(var));
-        fProgramElements->push_back(std::make_unique<GlobalVarDeclaration>(std::move(decl)));
-    }
 
     if (this->settings().fExternalFunctions) {
         // Add any external values to the new symbol table, so they're only visible to this Program.

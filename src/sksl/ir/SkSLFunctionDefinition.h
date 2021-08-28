@@ -16,6 +16,8 @@ namespace SkSL {
 
 struct ASTNode;
 
+using IntrinsicSet = std::unordered_set<const FunctionDeclaration*>;
+
 /**
  * A function definition (a declaration plus an associated block of code).
  */
@@ -23,16 +25,26 @@ class FunctionDefinition final : public ProgramElement {
 public:
     static constexpr Kind kProgramElementKind = Kind::kFunction;
 
-    FunctionDefinition(int offset,
-                       const FunctionDeclaration* declaration, bool builtin,
-                       std::unique_ptr<Statement> body,
-                       std::unordered_set<const FunctionDeclaration*> referencedIntrinsics = {})
+    FunctionDefinition(int offset, const FunctionDeclaration* declaration, bool builtin,
+                       std::unique_ptr<Statement> body, IntrinsicSet referencedIntrinsics)
         : INHERITED(offset, kProgramElementKind)
         , fDeclaration(declaration)
         , fBuiltin(builtin)
         , fBody(std::move(body))
         , fReferencedIntrinsics(std::move(referencedIntrinsics))
         , fSource(nullptr) {}
+
+    /**
+     * Coerces `return` statements to the return type of the function, and reports errors in the
+     * function that can't be detected at the individual statement level:
+     *     - `break` and `continue` statements must be in reasonable places.
+     *     - non-void functions are required to return a value on all paths.
+     *     - vertex main() functions don't allow early returns.
+     */
+    static void FinalizeFunctionBody(const Context& context,
+                                     const FunctionDeclaration& function,
+                                     Statement* body,
+                                     IntrinsicSet* referencedIntrinsics);
 
     const FunctionDeclaration& declaration() const {
         return *fDeclaration;

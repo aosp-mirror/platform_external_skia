@@ -107,12 +107,8 @@ Layout Rehydrator::layout() {
             int set = this->readS8();
             int builtin = this->readS16();
             int inputAttachmentIndex = this->readS8();
-            int primitive = this->readS8();
-            int maxVertices = this->readS8();
-            int invocations = this->readS8();
-            return Layout(flags, location, offset, binding, index, set, builtin,
-                          inputAttachmentIndex, (Layout::Primitive)primitive, maxVertices,
-                          invocations);
+            return Layout(
+                    flags, location, offset, binding, index, set, builtin, inputAttachmentIndex);
         }
         default:
             SkASSERT(false);
@@ -279,7 +275,7 @@ std::unique_ptr<ProgramElement> Rehydrator::element() {
             const FunctionDeclaration* decl = this->symbolRef<FunctionDeclaration>(
                                                                 Symbol::Kind::kFunctionDeclaration);
             std::unique_ptr<Statement> body = this->statement();
-            std::unordered_set<const FunctionDeclaration*> refs;
+            IntrinsicSet refs;
             uint8_t refCount = this->readU8();
             for (int i = 0; i < refCount; ++i) {
                 refs.insert(this->symbolRef<FunctionDeclaration>(
@@ -556,7 +552,7 @@ std::shared_ptr<SymbolTable> Rehydrator::symbolTable(bool inherit) {
     std::shared_ptr<SymbolTable> oldTable = fSymbolTable;
     std::shared_ptr<SymbolTable> result =
             inherit ? std::make_shared<SymbolTable>(fSymbolTable, /*builtin=*/true)
-                    : std::make_shared<SymbolTable>(this->errorReporter(), /*builtin=*/true);
+                    : std::make_shared<SymbolTable>(fContext, /*builtin=*/true);
     fSymbolTable = result;
     std::vector<const Symbol*> ownedSymbols;
     ownedSymbols.reserve(ownedCount);
