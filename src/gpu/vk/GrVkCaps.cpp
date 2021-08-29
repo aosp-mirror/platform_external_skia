@@ -515,6 +515,7 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
     // feature for those devices.
     if (properties.vendorID == kQualcomm_VkVendor && androidAPIVersion <= 28) {
         fPreferDiscardableMSAAAttachment = false;
+        fSupportsDiscardableMSAAForDMSAA = false;
     }
 
     // On Mali G series GPUs, applying transfer functions in the fragment shader with half-floats
@@ -1627,17 +1628,12 @@ GrBackendFormat GrVkCaps::onGetDefaultBackendFormat(GrColorType ct) const {
 }
 
 bool GrVkCaps::onSupportsDynamicMSAA(const GrRenderTargetProxy* rtProxy) const {
-    // TODO: Once we fix up GrProgramInfo to store the actual numSamples for the draw instead of the
-    // render targets sample count, we can enable DMSAA for vulkan here.
-    return false;
-#if 0
     // We must be able to use the rtProxy as an input attachment to load into the discardable msaa
     // attachment. Also the rtProxy should have a sample count of 1 so that it can be used as a
     // resolve attachment.
     return this->supportsDiscardableMSAAForDMSAA() &&
            rtProxy->supportsVkInputAttachment() &&
            rtProxy->numSamples() == 1;
-#endif
 }
 
 bool GrVkCaps::renderTargetSupportsDiscardableMSAA(const GrVkRenderTarget* rt) const {
