@@ -200,7 +200,6 @@ cc_defaults {
         "libwebp-decode",
         "libwebp-encode",
     ],
-    group_static_libs: true,
     target: {
       android: {
         shared_libs: [
