@@ -270,7 +270,6 @@ cc_defaults {
     static_libs: [
         "libarect",
     ],
-    group_static_libs: true,
     target: {
       android: {
         shared_libs: [
