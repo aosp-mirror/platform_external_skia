@@ -205,14 +205,8 @@ DSLExpression DSLType::Construct(DSLType type, SkSpan<DSLExpression> argArray) {
 }
 
 DSLType Array(const DSLType& base, int count, PositionInfo pos) {
-    if (count <= 0) {
-        DSLWriter::ReportError("array size must be positive", pos);
-        return base;
-    }
-    if (base.isArray()) {
-        DSLWriter::ReportError("multi-dimensional arrays are not supported", pos);
-        return kPoison_Type;
-    }
+    count = base.skslType().convertArraySize(DSLWriter::Context(), DSLExpression(count).release());
+    DSLWriter::ReportErrors(pos);
     return DSLWriter::SymbolTable()->addArrayDimension(&base.skslType(), count);
 }
 
@@ -220,10 +214,17 @@ DSLType Struct(skstd::string_view name, SkSpan<DSLField> fields, PositionInfo po
     std::vector<SkSL::Type::Field> skslFields;
     skslFields.reserve(fields.size());
     for (const DSLField& field : fields) {
+        if (field.fModifiers.fModifiers.fFlags != Modifiers::kNo_Flag) {
+            String desc = field.fModifiers.fModifiers.description();
+            desc.pop_back();  // remove trailing space
+            DSLWriter::ReportError(("modifier '" + desc +
+                    "' is not permitted on a struct field").c_str(), field.fPosition);
+        }
+
         const SkSL::Type& type = field.fType.skslType();
         if (type.isOpaque()) {
             DSLWriter::ReportError(("opaque type '" + type.displayName() +
-                                    "' is not permitted in a struct").c_str(), pos);
+                                    "' is not permitted in a struct").c_str(), field.fPosition);
         }
         skslFields.emplace_back(field.fModifiers.fModifiers, field.fName, &type);
     }
