@@ -533,7 +533,6 @@ skstd::optional<DSLType> DSLParser::structDeclaration() {
     if (fields.empty()) {
         this->error(name.fOffset,
                     "struct '" + this->text(name) + "' must contain at least one field");
-        return skstd::nullopt;
     }
     return dsl::Struct(this->text(name), SkMakeSpan(fields), this->position(name));
 }
@@ -628,37 +627,37 @@ DSLLayout DSLParser::layout() {
             if (found != layoutTokens->end()) {
                 switch (found->second) {
                     case LayoutToken::ORIGIN_UPPER_LEFT:
-                        result.originUpperLeft();
+                        result.originUpperLeft(this->position(t));
                         break;
                     case LayoutToken::PUSH_CONSTANT:
-                        result.pushConstant();
+                        result.pushConstant(this->position(t));
                         break;
                     case LayoutToken::BLEND_SUPPORT_ALL_EQUATIONS:
-                        result.blendSupportAllEquations();
+                        result.blendSupportAllEquations(this->position(t));
                         break;
                     case LayoutToken::SRGB_UNPREMUL:
-                        result.srgbUnpremul();
+                        result.srgbUnpremul(this->position(t));
                         break;
                     case LayoutToken::LOCATION:
-                        result.location(this->layoutInt());
+                        result.location(this->layoutInt(), this->position(t));
                         break;
                     case LayoutToken::OFFSET:
-                        result.offset(this->layoutInt());
+                        result.offset(this->layoutInt(), this->position(t));
                         break;
                     case LayoutToken::BINDING:
-                        result.binding(this->layoutInt());
+                        result.binding(this->layoutInt(), this->position(t));
                         break;
                     case LayoutToken::INDEX:
-                        result.index(this->layoutInt());
+                        result.index(this->layoutInt(), this->position(t));
                         break;
                     case LayoutToken::SET:
-                        result.set(this->layoutInt());
+                        result.set(this->layoutInt(), this->position(t));
                         break;
                     case LayoutToken::BUILTIN:
-                        result.builtin(this->layoutInt());
+                        result.builtin(this->layoutInt(), this->position(t));
                         break;
                     case LayoutToken::INPUT_ATTACHMENT_INDEX:
-                        result.inputAttachmentIndex(this->layoutInt());
+                        result.inputAttachmentIndex(this->layoutInt(), this->position(t));
                         break;
                     default:
                         this->error(t, "'" + text + "' is not a valid layout qualifier");
@@ -815,14 +814,14 @@ bool DSLParser::interfaceBlock(const dsl::DSLModifiers& modifiers) {
             if (!this->expect(Token::Kind::TK_SEMICOLON, "';'")) {
                 return false;
             }
-            fields.push_back(dsl::Field(modifiers, std::move(actualType), this->text(fieldName)));
+            fields.push_back(dsl::Field(fieldModifiers, std::move(actualType),
+                    this->text(fieldName), this->position(fieldName)));
         }
         while (this->checkNext(Token::Kind::TK_COMMA));
     }
     if (fields.empty()) {
         this->error(typeName, "interface block '" + this->text(typeName) +
                           "' must contain at least one member");
-        return false;
     }
     skstd::string_view instanceName;
     Token instanceNameToken;
@@ -834,9 +833,7 @@ bool DSLParser::interfaceBlock(const dsl::DSLModifiers& modifiers) {
             this->expect(Token::Kind::TK_RBRACKET, "']'");
         }
     }
-    if (!this->expect(Token::Kind::TK_SEMICOLON, "';'")) {
-        return false;
-    }
+    this->expect(Token::Kind::TK_SEMICOLON, "';'");
     dsl::InterfaceBlock(modifiers, this->text(typeName), std::move(fields), instanceName,
                         arraySize);
     return true;
