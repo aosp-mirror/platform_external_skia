@@ -121,12 +121,12 @@ public:
         return ir.call(/*offset=*/-1, ir.convertIdentifier(-1, name), std::move(argArray));
     }
 
-    static DSLStatement Break() {
-        return SkSL::BreakStatement::Make(/*offset=*/-1);
+    static DSLStatement Break(PositionInfo pos) {
+        return SkSL::BreakStatement::Make(pos.offset());
     }
 
-    static DSLStatement Continue() {
-        return SkSL::ContinueStatement::Make(/*offset=*/-1);
+    static DSLStatement Continue(PositionInfo pos) {
+        return SkSL::ContinueStatement::Make(pos.offset());
     }
 
     static DSLStatement Declare(DSLVar& var, PositionInfo pos) {
@@ -185,15 +185,15 @@ public:
     static DSLPossibleStatement For(DSLStatement initializer, DSLExpression test,
                                     DSLExpression next, DSLStatement stmt, PositionInfo pos) {
         return ForStatement::Convert(DSLWriter::Context(), /*offset=*/-1,
-                                     initializer.releaseIfValid(), test.releaseIfValid(),
-                                     next.releaseIfValid(), stmt.release(),
+                                     initializer.releaseIfPossible(), test.releaseIfPossible(),
+                                     next.releaseIfPossible(), stmt.release(),
                                      DSLWriter::SymbolTable());
     }
 
     static DSLPossibleStatement If(DSLExpression test, DSLStatement ifTrue, DSLStatement ifFalse,
                                    bool isStatic) {
         return IfStatement::Convert(DSLWriter::Context(), /*offset=*/-1, isStatic, test.release(),
-                                    ifTrue.release(), ifFalse.releaseIfValid());
+                                    ifTrue.release(), ifFalse.releaseIfPossible());
     }
 
     static DSLGlobalVar InterfaceBlock(const DSLModifiers& modifiers, skstd::string_view typeName,
@@ -205,6 +205,13 @@ public:
         std::vector<SkSL::Type::Field> skslFields;
         skslFields.reserve(fields.count());
         for (const DSLField& field : fields) {
+            const SkSL::Type* baseType = &field.fType.skslType();
+            if (baseType->isArray()) {
+                baseType = &baseType->componentType();
+            }
+            DSLWriter::IRGenerator().checkVarDeclaration(/*offset=*/-1, field.fModifiers.fModifiers,
+                    baseType, Variable::Storage::kInterfaceBlock);
+            GetErrorReporter().reportPendingErrors(field.fPosition);
             skslFields.push_back(SkSL::Type::Field(field.fModifiers.fModifiers, field.fName,
                                                    &field.fType.skslType()));
         }
@@ -240,8 +247,8 @@ public:
         // Note that because Return is called before the function in which it resides exists, at
         // this point we do not know the function's return type. We therefore do not check for
         // errors, or coerce the value to the correct type, until the return statement is actually
-        // added to a function. (This is done in IRGenerator::finalizeFunction.)
-        return SkSL::ReturnStatement::Make(/*offset=*/-1, value.releaseIfValid());
+        // added to a function. (This is done in FunctionDefinition::Convert.)
+        return SkSL::ReturnStatement::Make(/*offset=*/-1, value.releaseIfPossible());
     }
 
     static DSLExpression Swizzle(DSLExpression base, SkSL::SwizzleComponent::Type a,
@@ -294,7 +301,7 @@ public:
         SkTArray<StatementArray> statements;
         statements.reserve_back(cases.count());
         for (DSLCase& c : cases) {
-            values.push_back(c.fValue.releaseIfValid());
+            values.push_back(c.fValue.releaseIfPossible());
             statements.push_back(std::move(c.fStatements));
         }
         return DSLWriter::ConvertSwitch(value.release(), std::move(values), std::move(statements),
@@ -323,12 +330,12 @@ DSLExpression sk_Position() {
     return DSLCore::sk_Position();
 }
 
-DSLStatement Break() {
-    return DSLCore::Break();
+DSLStatement Break(PositionInfo pos) {
+    return DSLCore::Break(pos);
 }
 
-DSLStatement Continue() {
-    return DSLCore::Continue();
+DSLStatement Continue(PositionInfo pos) {
+    return DSLCore::Continue(pos);
 }
 
 // Logically, we'd want the variable's initial value to appear on here in Declare, since that

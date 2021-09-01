@@ -136,17 +136,19 @@ GrGLSLUniformHandler::UniformHandle DSLWriter::VarUniformHandle(const DSLGlobalV
 #endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 
 std::unique_ptr<SkSL::Expression> DSLWriter::Call(const FunctionDeclaration& function,
-                                                  ExpressionArray arguments) {
+                                                  ExpressionArray arguments,
+                                                  PositionInfo pos) {
     // We can't call FunctionCall::Convert directly here, because intrinsic management is handled in
     // IRGenerator::call.
-    return IRGenerator().call(/*offset=*/-1, function, std::move(arguments));
+    return IRGenerator().call(pos.offset(), function, std::move(arguments));
 }
 
 std::unique_ptr<SkSL::Expression> DSLWriter::Call(std::unique_ptr<SkSL::Expression> expr,
-                                                  ExpressionArray arguments) {
+                                                  ExpressionArray arguments,
+                                                  PositionInfo pos) {
     // We can't call FunctionCall::Convert directly here, because intrinsic management is handled in
     // IRGenerator::call.
-    return IRGenerator().call(/*offset=*/-1, std::move(expr), std::move(arguments));
+    return IRGenerator().call(pos.offset(), std::move(expr), std::move(arguments));
 }
 
 DSLPossibleExpression DSLWriter::Coerce(std::unique_ptr<Expression> expr, const SkSL::Type& type) {
@@ -158,7 +160,7 @@ DSLPossibleExpression DSLWriter::Construct(const SkSL::Type& type, SkSpan<DSLExp
     args.reserve_back(rawArgs.size());
 
     for (DSLExpression& arg : rawArgs) {
-        if (!arg.valid()) {
+        if (!arg.hasValue()) {
             return DSLPossibleExpression(nullptr);
         }
         args.push_back(arg.release());
@@ -239,13 +241,17 @@ const SkSL::Variable* DSLWriter::Var(DSLVarBase& var) {
         SkASSERT(!var.fVar);
         var.fInitialized = true;
         if (var.storage() != SkSL::VariableStorage::kParameter) {
-            DSLWriter::IRGenerator().checkVarDeclaration(/*offset=*/-1,
+            const SkSL::Type* baseType = &var.fType.skslType();
+            if (baseType->isArray()) {
+                baseType = &baseType->componentType();
+            }
+            DSLWriter::IRGenerator().checkVarDeclaration(var.fPosition.offset(),
                                                          var.fModifiers.fModifiers,
-                                                         &var.fType.skslType(),
+                                                         baseType,
                                                          var.storage());
         }
         std::unique_ptr<SkSL::Variable> skslvar = DSLWriter::IRGenerator().convertVar(
-                                                                          /*offset=*/-1,
+                                                                          var.fPosition.offset(),
                                                                           var.fModifiers.fModifiers,
                                                                           &var.fType.skslType(),
                                                                           var.fName,
@@ -262,7 +268,7 @@ const SkSL::Variable* DSLWriter::Var(DSLVarBase& var) {
             // of DSLParser we don't even need DSL variables to show up in the symbol table in the
             // first place.
             var.fDeclaration = DSLWriter::IRGenerator().convertVarDeclaration(
-                    std::move(skslvar), var.fInitialValue.releaseIfValid(),
+                    std::move(skslvar), var.fInitialValue.releaseIfPossible(),
                     /*addToSymbolTable=*/false);
             if (var.fDeclaration) {
                 var.fVar = varPtr;
@@ -278,7 +284,7 @@ std::unique_ptr<SkSL::Variable> DSLWriter::CreateParameterVar(DSLParameter& var)
     // This should only be called on undeclared parameter variables, but we allow the creation to go
     // ahead regardless so we don't have to worry about null pointers potentially sneaking in and
     // breaking things. DSLFunction is responsible for reporting errors for invalid parameters.
-    return DSLWriter::IRGenerator().convertVar(/*offset=*/-1, var.fModifiers.fModifiers,
+    return DSLWriter::IRGenerator().convertVar(var.fPosition.offset(), var.fModifiers.fModifiers,
                                                &var.fType.skslType(), var.fName, /*isArray=*/false,
                                                /*arraySize=*/nullptr, var.storage());
 }
@@ -288,7 +294,7 @@ std::unique_ptr<SkSL::Statement> DSLWriter::Declaration(DSLVarBase& var) {
     if (!var.fDeclaration) {
         // We should have already reported an error before ending up here, just clean up the
         // initial value so it doesn't assert and return a nop.
-        var.fInitialValue.releaseIfValid();
+        var.fInitialValue.releaseIfPossible();
         return SkSL::Nop::Make();
     }
     return std::move(var.fDeclaration);
