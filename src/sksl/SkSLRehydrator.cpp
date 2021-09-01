@@ -275,15 +275,8 @@ std::unique_ptr<ProgramElement> Rehydrator::element() {
             const FunctionDeclaration* decl = this->symbolRef<FunctionDeclaration>(
                                                                 Symbol::Kind::kFunctionDeclaration);
             std::unique_ptr<Statement> body = this->statement();
-            IntrinsicSet refs;
-            uint8_t refCount = this->readU8();
-            for (int i = 0; i < refCount; ++i) {
-                refs.insert(this->symbolRef<FunctionDeclaration>(
-                                                               Symbol::Kind::kFunctionDeclaration));
-            }
-            auto result = std::make_unique<FunctionDefinition>(/*offset=*/-1, decl,
-                                                               /*builtin=*/true, std::move(body),
-                                                               std::move(refs));
+            auto result = FunctionDefinition::Convert(fContext, /*offset=*/-1, *decl,
+                                                      std::move(body), /*builtin=*/true);
             decl->setDefinition(result.get());
             return std::move(result);
         }
@@ -350,7 +343,7 @@ std::unique_ptr<Statement> Rehydrator::statement() {
             std::shared_ptr<SymbolTable> symbols = this->symbolTable();
             return ForStatement::Make(fContext, /*offset=*/-1, std::move(initializer),
                                       std::move(test), std::move(next), std::move(body),
-                                      std::move(symbols));
+                                      /*unrollInfo=*/nullptr, std::move(symbols));
         }
         case Rehydrator::kIf_Command: {
             bool isStatic = this->readU8();

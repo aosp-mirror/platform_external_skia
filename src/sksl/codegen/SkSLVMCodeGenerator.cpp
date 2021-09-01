@@ -1459,10 +1459,8 @@ void SkVMGenerator::writeContinueStatement() {
 
 void SkVMGenerator::writeForStatement(const ForStatement& f) {
     // We require that all loops be ES2-compliant (unrollable), and actually unroll them here
-    Analysis::UnrollableLoopInfo loop;
-    SkAssertResult(Analysis::ForLoopIsValidForES2(f.fOffset, f.initializer().get(), f.test().get(),
-                                                  f.next().get(), f.statement().get(), &loop,
-                                                  /*errors=*/nullptr));
+    SkASSERT(f.unrollInfo());
+    const LoopUnrollInfo& loop = *f.unrollInfo();
     SkASSERT(loop.fIndex->type().slotCount() == 1);
 
     size_t indexSlot = this->getSlot(*loop.fIndex);
@@ -1650,12 +1648,31 @@ bool ProgramToSkVM(const Program& program,
         returnVals.push_back(b->splat(0.0f).id);
     }
 
+    bool sampledChildEffects = false;
+    auto sampleShader = [&](int, skvm::Coord) {
+        sampledChildEffects = true;
+        return skvm::Color{};
+    };
+    auto sampleColorFilter = [&](int, skvm::Color) {
+        sampledChildEffects = true;
+        return skvm::Color{};
+    };
+    auto sampleBlender = [&](int, skvm::Color, skvm::Color) {
+        sampledChildEffects = true;
+        return skvm::Color{};
+    };
+
     skvm::F32 zero = b->splat(0.0f);
     skvm::Coord zeroCoord = {zero, zero};
     SkVMGenerator generator(program, b, uniforms, /*device=*/zeroCoord, /*local=*/zeroCoord,
-                            /*sampleShader=*/nullptr, /*sampleColorFilter=*/nullptr,
-                            /*sampleBlender=*/nullptr);
+                            sampleShader, sampleColorFilter, sampleBlender);
     generator.writeFunction(function, SkMakeSpan(argVals), SkMakeSpan(returnVals));
+
+    // If the SkSL tried to use any shader, colorFilter, or blender objects - we don't have a
+    // mechanism (yet) for binding to those.
+    if (sampledChildEffects) {
+        return false;
+    }
 
     // generateCode has updated the contents of 'argVals' for any 'out' or 'inout' parameters.
     // Propagate those changes back to our varying buffers:

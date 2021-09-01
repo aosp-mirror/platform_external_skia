@@ -20,7 +20,7 @@ namespace SkSL {
 namespace dsl {
 
 void DSLFunction::init(DSLModifiers modifiers, const DSLType& returnType, skstd::string_view name,
-                       SkTArray<DSLParameter*> params) {
+                       SkTArray<DSLParameter*> params, PositionInfo pos) {
     // Conservatively assume all user-defined functions have side effects.
     if (!DSLWriter::IsModule()) {
         modifiers.fModifiers.fFlags |= Modifiers::kHasSideEffects_Flag;
@@ -51,7 +51,7 @@ void DSLFunction::init(DSLModifiers modifiers, const DSLType& returnType, skstd:
     SkASSERT(paramVars.size() == params.size());
     fDecl = SkSL::FunctionDeclaration::Convert(DSLWriter::Context(),
                                                *DSLWriter::SymbolTable(),
-                                               /*offset=*/-1,
+                                               pos.offset(),
                                                DSLWriter::Modifiers(modifiers.fModifiers),
                                                name == "main" ? name : DSLWriter::Name(name),
                                                std::move(paramVars), &returnType.skslType(),
@@ -66,15 +66,15 @@ void DSLFunction::init(DSLModifiers modifiers, const DSLType& returnType, skstd:
         // case the definition is delayed. If we end up defining the function immediately, we'll
         // remove the prototype in define().
         DSLWriter::ProgramElements().push_back(std::make_unique<SkSL::FunctionPrototype>(
-                /*offset=*/-1, fDecl, DSLWriter::IsModule()));
+                pos.offset(), fDecl, DSLWriter::IsModule()));
     }
 }
 
 void DSLFunction::define(DSLBlock block) {
+    std::unique_ptr<SkSL::Block> body = block.release();
     if (!fDecl) {
         // Evidently we failed to create the declaration; error should already have been reported.
         // Release the block so we don't fail its destructor assert.
-        block.release();
         return;
     }
     if (!DSLWriter::ProgramElements().empty()) {
@@ -89,13 +89,14 @@ void DSLFunction::define(DSLBlock block) {
         }
     }
     SkASSERTF(!fDecl->definition(), "function '%s' already defined", fDecl->description().c_str());
-    std::unique_ptr<Block> body = block.release();
-    IntrinsicSet referencedIntrinsics;
-    body = DSLWriter::IRGenerator().finalizeFunction(*fDecl, std::move(body),
-                                                     &referencedIntrinsics);
-    auto function = std::make_unique<SkSL::FunctionDefinition>(/*offset=*/-1, fDecl,
-                                                               /*builtin=*/false, std::move(body),
-                                                               std::move(referencedIntrinsics));
+
+    // Append sk_Position fixup to the bottom of main() if this is a vertex program.
+    DSLWriter::IRGenerator().appendRTAdjustFixupToVertexMain(*fDecl, body.get());
+    std::unique_ptr<FunctionDefinition> function = FunctionDefinition::Convert(DSLWriter::Context(),
+                                                                               /*offset=*/-1,
+                                                                               *fDecl,
+                                                                               std::move(body),
+                                                                               /*builtin=*/false);
     DSLWriter::ReportErrors();
     fDecl->fDefinition = function.get();
     DSLWriter::ProgramElements().push_back(std::move(function));
