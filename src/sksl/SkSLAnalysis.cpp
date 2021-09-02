@@ -603,126 +603,6 @@ bool Analysis::CallsSampleOutsideMain(const Program& program) {
     return visitor.visit(program);
 }
 
-bool Analysis::DetectStaticRecursion(SkSpan<std::unique_ptr<ProgramElement>> programElements,
-                                     ErrorReporter& errors) {
-    using Function = const FunctionDeclaration;
-    using CallSet = std::unordered_set<Function*>;
-    using CallGraph = std::unordered_map<Function*, CallSet>;
-
-    class CallGraphVisitor : public ProgramVisitor {
-    public:
-        CallGraphVisitor(CallGraph* calls) : fCallGraph(calls), fCurrentFunctionCalls(nullptr) {}
-
-        bool visitExpression(const Expression& e) override {
-            if (e.is<FunctionCall>()) {
-                fCurrentFunctionCalls->insert(&e.as<FunctionCall>().function());
-            }
-            return INHERITED::visitExpression(e);
-        }
-
-        bool visitProgramElement(const ProgramElement& p) override {
-            if (p.is<FunctionDefinition>()) {
-                Function* fn = &p.as<FunctionDefinition>().declaration();
-                SkASSERT(fCallGraph->count(fn) == 0);
-
-                SkASSERT(fCurrentFunctionCalls == nullptr);
-                CallSet currentFunctionCalls;
-                fCurrentFunctionCalls = &currentFunctionCalls;
-
-                INHERITED::visitProgramElement(p);
-
-                fCurrentFunctionCalls = nullptr;
-                fCallGraph->insert({fn, std::move(currentFunctionCalls)});
-            }
-            return false;
-        }
-
-        CallGraph* fCallGraph;
-        CallSet*   fCurrentFunctionCalls;
-
-        using INHERITED = ProgramVisitor;
-    };
-
-    CallGraph callGraph;
-    CallGraphVisitor visitor{&callGraph};
-    for (const auto& pe : programElements) {
-        visitor.visitProgramElement(*pe);
-    }
-
-    class CycleFinder {
-    public:
-        CycleFinder(CallGraph* calls) : fCallGraph(calls) {}
-
-        bool containsCycle() {
-            for (const auto& [caller, callees] : *fCallGraph) {
-                SkASSERT(fStack.empty());
-                if (this->dfsHelper(caller)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        const std::vector<Function*>& cycle() const { return fStack; }
-
-    private:
-        bool dfsHelper(Function* fn) {
-            SkASSERT(std::find(fStack.begin(), fStack.end(), fn) == fStack.end());
-
-            auto iter = fCallGraph->find(fn);
-            if (iter != fCallGraph->end()) {
-                fStack.push_back(fn);
-
-                for (Function* calledFn : iter->second) {
-                    auto it = std::find(fStack.begin(), fStack.end(), calledFn);
-                    if (it != fStack.end()) {
-                        // Cycle detected. It includes the functions from 'it' to the end of fStack
-                        fStack.erase(fStack.begin(), it);
-                        return true;
-                    }
-                    if (this->dfsHelper(calledFn)) {
-                        return true;
-                    }
-                }
-
-                fStack.pop_back();
-            }
-
-            return false;
-        }
-
-        const CallGraph*       fCallGraph;
-        std::vector<Function*> fStack;
-    };
-
-    CycleFinder cycleFinder{&callGraph};
-    if (cycleFinder.containsCycle()) {
-        // Get the description of each function participating in the cycle
-        std::vector<String> fnNames;
-        for (Function* fn : cycleFinder.cycle()) {
-            fnNames.push_back(fn->description());
-        }
-
-        // Find the lexicographically first function description, so we generate stable errors
-        std::vector<String>::iterator cycleStart = std::min_element(fnNames.begin(), fnNames.end());
-        ptrdiff_t startIndex = std::distance(fnNames.begin(), cycleStart);
-
-        // Construct a list of the functions participating in the cycle (including the "start"
-        // at both the beginning and end):
-        String cycleDescription;
-        for (size_t i = 0; i <= fnNames.size(); ++i) {
-            cycleDescription += "\n\t" + fnNames[(i + startIndex) % fnNames.size()];
-        }
-
-        // Go back to the original data to find the offset of the cycle start's declaration
-        Function* cycleStartFn = cycleFinder.cycle()[startIndex];
-        errors.error(cycleStartFn->fOffset,
-                     "potential recursion (function call cycle) not allowed:" + cycleDescription);
-        return true;
-    }
-    return false;
-}
-
 bool Analysis::CheckProgramUnrolledSize(const Program& program) {
     // We check the size of strict-ES2 programs since SkVM will completely unroll them.
     // Note that we *cannot* safely check the program size of non-ES2 code at this time, as it is
@@ -741,12 +621,55 @@ bool Analysis::CheckProgramUnrolledSize(const Program& program) {
 
     class ProgramSizeVisitor : public ProgramVisitor {
     public:
-        ProgramSizeVisitor() {}
+        ProgramSizeVisitor(const Context& c) : fContext(c) {}
 
         using ProgramVisitor::visitProgramElement;
 
-        int programSize() const {
-            return fProgramSize;
+        int functionSize() const {
+            return fFunctionSize;
+        }
+
+        bool visitProgramElement(const ProgramElement& pe) override {
+            if (pe.is<FunctionDefinition>()) {
+                // Check the function-size cache map first. We don't need to visit this function if
+                // we already processed it before.
+                const FunctionDeclaration* decl = &pe.as<FunctionDefinition>().declaration();
+                auto [iter, wasInserted] = fFunctionCostMap.insert({decl, kUnknownCost});
+                if (!wasInserted) {
+                    // We already have this function in our map. We don't need to check it again.
+                    if (iter->second == kUnknownCost) {
+                        // If the function is present in the map with an unknown cost, we're
+                        // recursively processing it--in other words, we found a cycle in the code.
+                        // Unwind our stack into a string.
+                        String msg = "\n\t" + decl->description();
+                        for (auto unwind = fStack.rbegin(); unwind != fStack.rend(); ++unwind) {
+                            msg = "\n\t" + (*unwind)->description() + msg;
+                            if (*unwind == decl) {
+                                break;
+                            }
+                        }
+                        msg = "potential recursion (function call cycle) not allowed:" + msg;
+                        fContext.fErrors->error(pe.fOffset, std::move(msg));
+                        fFunctionSize = iter->second = 0;
+                        return true;
+                    }
+                    // Set the size to its known value.
+                    fFunctionSize = iter->second;
+                    return false;
+                }
+
+                // Calculate the function cost and store it in our cache.
+                fStack.push_back(decl);
+                fFunctionSize = 0;
+                fUnrollFactor = 1;
+                bool result = INHERITED::visitProgramElement(pe);
+                iter->second = fFunctionSize;
+                fStack.pop_back();
+
+                return result;
+            }
+
+            return INHERITED::visitProgramElement(pe);
         }
 
         bool visitStatement(const Statement& stmt) override {
@@ -792,7 +715,7 @@ bool Analysis::CheckProgramUnrolledSize(const Program& program) {
                     break;
 
                 default:
-                    fProgramSize += fUnrollFactor * kStatementCost;
+                    fFunctionSize += fUnrollFactor * kStatementCost;
                     break;
             }
 
@@ -801,67 +724,55 @@ bool Analysis::CheckProgramUnrolledSize(const Program& program) {
 
         bool visitExpression(const Expression& expr) override {
             // Other than function calls, all expressions are assumed to have a fixed unit cost.
+            bool earlyExit = false;
             int expressionCost = kExpressionCost;
 
             if (expr.is<FunctionCall>()) {
-                // Calculate the cost of this function call and cache it.
+                // Visit this function call to calculate its size. If we've already sized it, this
+                // will retrieve the size from our cache.
                 const FunctionCall& call = expr.as<FunctionCall>();
                 const FunctionDeclaration* decl = &call.function();
-
                 if (decl->definition() && !decl->isIntrinsic()) {
-                    auto [iter, wasInserted] = fFunctionCostMap.insert({decl, kUnknownCost});
-                    if (wasInserted) {
-                        // Calculate the cost of the called function in isolation.
-                        int originalProgramSize = fProgramSize;
-                        int originalUnrollFactor = fUnrollFactor;
+                    int originalFunctionSize = fFunctionSize;
+                    int originalUnrollFactor = fUnrollFactor;
 
-                        fProgramSize = 0;
-                        fUnrollFactor = 1;
-                        this->visitProgramElement(*decl->definition());
-                        iter->second = expressionCost = fProgramSize;
+                    earlyExit = this->visitProgramElement(*decl->definition());
+                    expressionCost = fFunctionSize;
 
-                        fProgramSize = originalProgramSize;
-                        fUnrollFactor = originalUnrollFactor;
-                    } else {
-                        if (iter->second != kUnknownCost) {
-                            expressionCost = iter->second;
-                        } else {
-                            // The function is present in the map but doesn't have a cost assigned
-                            // yet. That indicates that we found a cycle. This should've caused the
-                            // program to be rejected by Analysis::DetectStaticRecursion during
-                            // IRGenerator::finish.
-                            SkDEBUGFAIL("cycle detected in CheckProgramUnrolledSize");
-                        }
-                    }
+                    fFunctionSize = originalFunctionSize;
+                    fUnrollFactor = originalUnrollFactor;
                 }
             }
 
-            fProgramSize += fUnrollFactor * expressionCost;
-            return INHERITED::visitExpression(expr);
+            fFunctionSize += fUnrollFactor * expressionCost;
+            return earlyExit || INHERITED::visitExpression(expr);
         }
 
     private:
         using INHERITED = ProgramVisitor;
 
-        int fProgramSize = 0;
-        int fUnrollFactor = 1;
+        [[maybe_unused]] const Context& fContext;
+        int fFunctionSize;
+        int fUnrollFactor;
         std::unordered_map<const FunctionDeclaration*, int> fFunctionCostMap;
+        std::vector<const FunctionDeclaration*> fStack;
     };
 
-    ProgramSizeVisitor visitor;
+    // Process every function in our program.
+    ProgramSizeVisitor visitor{context};
     for (const std::unique_ptr<ProgramElement>& element : program.ownedElements()) {
-        if (element->is<FunctionDefinition>() &&
-            element->as<FunctionDefinition>().declaration().isMain()) {
-            // Determine the size of main(). Functions not referenced by main() don't cost anything.
+        if (element->is<FunctionDefinition>()) {
+            // Visit every function--we want to detect static recursion and report it as an error,
+            // even in unreferenced functions.
             visitor.visitProgramElement(*element);
-            break;
+            // Report an error when main()'s flattened size is larger than our program limit.
+            if (visitor.functionSize() > kProgramSizeLimit &&
+                element->as<FunctionDefinition>().declaration().isMain()) {
+                context.fErrors->error(/*offset=*/-1, "program is too large");
+            }
         }
     }
 
-    if (visitor.programSize() > kProgramSizeLimit) {
-        context.fErrors->error(/*offset=*/-1, "program is too large");
-        return false;
-    }
     return true;
 }
 
