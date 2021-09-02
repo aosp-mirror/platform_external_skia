@@ -35,8 +35,9 @@ DSLExpression::DSLExpression(DSLExpression&& other)
 
 DSLExpression::DSLExpression(std::unique_ptr<SkSL::Expression> expression)
     : fExpression(std::move(expression)) {
-    SkASSERT(this->valid());
-    DSLWriter::ReportErrors();
+    SkASSERT(this->hasValue());
+    DSLWriter::ReportErrors(PositionInfo::Offset(nullptr, GetErrorReporter().source(),
+            fExpression->fOffset));
 }
 
 DSLExpression::DSLExpression(float value, PositionInfo pos)
@@ -106,21 +107,25 @@ DSLExpression::~DSLExpression() {
               "ProgramSettings::fAssertDSLObjectsReleased)");
 }
 
+bool DSLExpression::isValid() const {
+    return this->hasValue() && !fExpression->is<SkSL::Poison>();
+}
+
 void DSLExpression::swap(DSLExpression& other) {
     std::swap(fExpression, other.fExpression);
 }
 
 std::unique_ptr<SkSL::Expression> DSLExpression::release() {
-    SkASSERT(this->valid());
+    SkASSERT(this->hasValue());
     return std::move(fExpression);
 }
 
-std::unique_ptr<SkSL::Expression> DSLExpression::releaseIfValid() {
+std::unique_ptr<SkSL::Expression> DSLExpression::releaseIfPossible() {
     return std::move(fExpression);
 }
 
 DSLType DSLExpression::type() {
-    if (!this->valid()) {
+    if (!this->hasValue()) {
         return kVoid_Type;
     }
     return &fExpression->type();
