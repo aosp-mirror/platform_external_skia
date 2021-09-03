@@ -54,11 +54,25 @@ struct Analysis {
 
     static bool CallsSampleOutsideMain(const Program& program);
 
-    /*
+    /**
      * Does the function call graph of the program include any cycles? If so, emits an error.
      */
     static bool DetectStaticRecursion(SkSpan<std::unique_ptr<ProgramElement>> programElements,
                                       ErrorReporter& errors);
+    /**
+     * Computes the size of the program in a completely flattened state--loops fully unrolled,
+     * function calls inlined--and rejects programs that exceed an arbitrary upper bound. This is
+     * intended to prevent absurdly large programs from overwhemling SkVM. Only strict-ES2 mode is
+     * supported; complex control flow is not SkVM-compatible (and this becomes the halting problem)
+     */
+    static bool CheckProgramUnrolledSize(const Program& program);
+
+    /**
+     * Detect an orphaned variable declaration outside of a scope, e.g. if (true) int a;. Returns
+     * true if an error was reported.
+     */
+    static bool DetectVarDeclarationWithoutScope(const Statement& stmt,
+                                                 ErrorReporter* errors = nullptr);
 
     static int NodeCountUpToLimit(const FunctionDefinition& function, int limit);
 
@@ -151,9 +165,9 @@ struct Analysis {
     static bool CanExitWithoutReturningValue(const FunctionDeclaration& funcDecl,
                                              const Statement& body);
 
-    // Reports leftover @if and @switch statements in a program as errors. These should have been
-    // optimized away during compilation, as their tests should be constant-evaluatable.
-    static void VerifyStaticTests(const Program& program);
+    // Searches for @if/@switch statements that didn't optimize away, or dangling
+    // FunctionReference or TypeReference expressions, and reports them as errors.
+    static void VerifyStaticTestsAndExpressions(const Program& program);
 };
 
 /**

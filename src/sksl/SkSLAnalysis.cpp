@@ -12,6 +12,7 @@
 #include "include/private/SkSLSampleUsage.h"
 #include "include/private/SkSLStatement.h"
 #include "include/sksl/SkSLErrorReporter.h"
+#include "src/core/SkSafeMath.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLProgram.h"
@@ -722,6 +723,180 @@ bool Analysis::DetectStaticRecursion(SkSpan<std::unique_ptr<ProgramElement>> pro
     return false;
 }
 
+bool Analysis::CheckProgramUnrolledSize(const Program& program) {
+    // We check the size of strict-ES2 programs since SkVM will completely unroll them.
+    // Note that we *cannot* safely check the program size of non-ES2 code at this time, as it is
+    // allowed to do things we can't measure (e.g. the program can contain a recursive cycle). We
+    // could, at best, compute a lower bound.
+    const Context& context = *program.fContext;
+    SkASSERT(context.fConfig->strictES2Mode());
+
+    // If we decide that expressions are cheaper than statements, or that certain statements are
+    // more expensive than others, etc., we can always tweak these ratios as needed. A very rough
+    // ballpark estimate is currently good enough for our purposes.
+    static constexpr int kExpressionCost = 1;
+    static constexpr int kStatementCost = 1;
+    static constexpr int kUnknownCost = -1;
+    static constexpr int kProgramSizeLimit = 100000;
+
+    class ProgramSizeVisitor : public ProgramVisitor {
+    public:
+        ProgramSizeVisitor() {}
+
+        using ProgramVisitor::visitProgramElement;
+
+        int programSize() const {
+            return fProgramSize;
+        }
+
+        bool visitStatement(const Statement& stmt) override {
+            switch (stmt.kind()) {
+                case Statement::Kind::kFor: {
+                    // We count a for-loop's unrolled size here. We expect that the init statement
+                    // will be emitted once, and the next-expr and statement will be repeated in the
+                    // output for every iteration of the loop. The test-expr is optimized away
+                    // during the unroll and is not counted at all.
+                    const ForStatement& forStmt = stmt.as<ForStatement>();
+                    bool result = INHERITED::visitStatement(*forStmt.initializer());
+
+                    int originalUnrollFactor = fUnrollFactor;
+
+                    if (const LoopUnrollInfo* unrollInfo = forStmt.unrollInfo()) {
+                        fUnrollFactor = SkSafeMath::Mul(fUnrollFactor, unrollInfo->fCount);
+                    } else {
+                        SkDEBUGFAIL("for-loops should always have unroll info in an ES2 program");
+                    }
+
+                    result = INHERITED::visitExpression(*forStmt.next()) ||
+                             INHERITED::visitStatement(*forStmt.statement()) || result;
+
+                    fUnrollFactor = originalUnrollFactor;
+                    return result;
+                }
+
+                case Statement::Kind::kExpression:
+                    // The cost of an expression-statement is counted in visitExpression. It would
+                    // be double-dipping to count it here too.
+                    break;
+
+                case Statement::Kind::kInlineMarker:
+                case Statement::Kind::kNop:
+                case Statement::Kind::kVarDeclaration:
+                    // These statements don't directly consume any space in a compiled program.
+                    break;
+
+                case Statement::Kind::kDo:
+                case Statement::Kind::kSwitch:
+                case Statement::Kind::kSwitchCase:
+                    SkDEBUGFAIL("encountered a statement that shouldn't exist in an ES2 program");
+                    break;
+
+                default:
+                    fProgramSize += fUnrollFactor * kStatementCost;
+                    break;
+            }
+
+            return INHERITED::visitStatement(stmt);
+        }
+
+        bool visitExpression(const Expression& expr) override {
+            // Other than function calls, all expressions are assumed to have a fixed unit cost.
+            int expressionCost = kExpressionCost;
+
+            if (expr.is<FunctionCall>()) {
+                // Calculate the cost of this function call and cache it.
+                const FunctionCall& call = expr.as<FunctionCall>();
+                const FunctionDeclaration* decl = &call.function();
+
+                if (decl->definition() && !decl->isIntrinsic()) {
+                    auto [iter, wasInserted] = fFunctionCostMap.insert({decl, kUnknownCost});
+                    if (wasInserted) {
+                        // Calculate the cost of the called function in isolation.
+                        int originalProgramSize = fProgramSize;
+                        int originalUnrollFactor = fUnrollFactor;
+
+                        fProgramSize = 0;
+                        fUnrollFactor = 1;
+                        this->visitProgramElement(*decl->definition());
+                        iter->second = expressionCost = fProgramSize;
+
+                        fProgramSize = originalProgramSize;
+                        fUnrollFactor = originalUnrollFactor;
+                    } else {
+                        if (iter->second != kUnknownCost) {
+                            expressionCost = iter->second;
+                        } else {
+                            // The function is present in the map but doesn't have a cost assigned
+                            // yet. That indicates that we found a cycle. This should've caused the
+                            // program to be rejected by Analysis::DetectStaticRecursion during
+                            // IRGenerator::finish.
+                            SkDEBUGFAIL("cycle detected in CheckProgramUnrolledSize");
+                        }
+                    }
+                }
+            }
+
+            fProgramSize += fUnrollFactor * expressionCost;
+            return INHERITED::visitExpression(expr);
+        }
+
+    private:
+        using INHERITED = ProgramVisitor;
+
+        int fProgramSize = 0;
+        int fUnrollFactor = 1;
+        std::unordered_map<const FunctionDeclaration*, int> fFunctionCostMap;
+    };
+
+    ProgramSizeVisitor visitor;
+    for (const std::unique_ptr<ProgramElement>& element : program.ownedElements()) {
+        if (element->is<FunctionDefinition>() &&
+            element->as<FunctionDefinition>().declaration().isMain()) {
+            // Determine the size of main(). Functions not referenced by main() don't cost anything.
+            visitor.visitProgramElement(*element);
+            break;
+        }
+    }
+
+    if (visitor.programSize() > kProgramSizeLimit) {
+        context.fErrors->error(/*offset=*/-1, "program is too large");
+        return false;
+    }
+    return true;
+}
+
+bool Analysis::DetectVarDeclarationWithoutScope(const Statement& stmt, ErrorReporter* errors) {
+    // A variable declaration can create either a lone VarDeclaration or an unscoped Block
+    // containing multiple VarDeclaration statements. We need to detect either case.
+    const Variable* var;
+    if (stmt.is<VarDeclaration>()) {
+        // The single-variable case. No blocks at all.
+        var = &stmt.as<VarDeclaration>().var();
+    } else if (stmt.is<Block>()) {
+        // The multiple-variable case: an unscoped, non-empty block...
+        const Block& block = stmt.as<Block>();
+        if (block.isScope() || block.children().empty()) {
+            return false;
+        }
+        // ... holding a variable declaration.
+        const Statement& innerStmt = *block.children().front();
+        if (!innerStmt.is<VarDeclaration>()) {
+            return false;
+        }
+        var = &innerStmt.as<VarDeclaration>().var();
+    } else {
+        // This statement wasn't a variable declaration. No problem.
+        return false;
+    }
+
+    // Report an error.
+    SkASSERT(var);
+    if (errors) {
+        errors->error(stmt.fOffset, "variable '" + var->name() + "' must be created in a scope");
+    }
+    return true;
+}
+
 int Analysis::NodeCountUpToLimit(const FunctionDefinition& function, int limit) {
     return NodeCountVisitor{limit}.visit(*function.body());
 }
@@ -1251,54 +1426,70 @@ bool Analysis::CanExitWithoutReturningValue(const FunctionDeclaration& funcDecl,
     return !visitor.fFoundReturn;
 }
 
-void Analysis::VerifyStaticTests(const Program& program) {
-    class StaticTestVerifier : public ProgramVisitor {
+void Analysis::VerifyStaticTestsAndExpressions(const Program& program) {
+    class TestsAndExpressions : public ProgramVisitor {
     public:
-        StaticTestVerifier(ErrorReporter* r) : fReporter(r) {}
+        TestsAndExpressions(const Context& ctx) : fContext(ctx) {}
 
         using ProgramVisitor::visitProgramElement;
 
         bool visitStatement(const Statement& stmt) override {
-            switch (stmt.kind()) {
-                case Statement::Kind::kIf:
-                    if (stmt.as<IfStatement>().isStatic()) {
-                        fReporter->error(stmt.fOffset, "static if has non-static test");
-                    }
-                    break;
+            if (!fContext.fConfig->fSettings.fPermitInvalidStaticTests) {
+                switch (stmt.kind()) {
+                    case Statement::Kind::kIf:
+                        if (stmt.as<IfStatement>().isStatic()) {
+                            fContext.fErrors->error(stmt.fOffset, "static if has non-static test");
+                        }
+                        break;
 
-                case Statement::Kind::kSwitch:
-                    if (stmt.as<SwitchStatement>().isStatic()) {
-                        fReporter->error(stmt.fOffset, "static switch has non-static test");
-                    }
-                    break;
+                    case Statement::Kind::kSwitch:
+                        if (stmt.as<SwitchStatement>().isStatic()) {
+                            fContext.fErrors->error(stmt.fOffset,
+                                                    "static switch has non-static test");
+                        }
+                        break;
 
-                default:
-                    break;
+                    default:
+                        break;
+                }
             }
             return INHERITED::visitStatement(stmt);
         }
 
-        bool visitExpression(const Expression&) override {
-            // We aren't looking for anything inside an Expression, so skip them entirely.
-            return false;
+        bool visitExpression(const Expression& expr) override {
+            switch (expr.kind()) {
+                case Expression::Kind::kFunctionCall: {
+                    const FunctionDeclaration& decl = expr.as<FunctionCall>().function();
+                    if (!decl.isBuiltin() && !decl.definition()) {
+                        fContext.fErrors->error(expr.fOffset, "function '" + decl.description() +
+                                                              "' is not defined");
+                    }
+                    break;
+                }
+                case Expression::Kind::kExternalFunctionReference:
+                case Expression::Kind::kFunctionReference:
+                case Expression::Kind::kTypeReference:
+                    SkDEBUGFAIL("invalid reference-expr, should have been reported by coerce()");
+                    fContext.fErrors->error(expr.fOffset, "invalid expression");
+                    break;
+                default:
+                    if (expr.type() == *fContext.fTypes.fInvalid) {
+                        fContext.fErrors->error(expr.fOffset, "invalid expression");
+                    }
+                    break;
+            }
+            return INHERITED::visitExpression(expr);
         }
 
     private:
         using INHERITED = ProgramVisitor;
-        ErrorReporter* fReporter;
+        const Context& fContext;
     };
 
-    // If invalid static tests are permitted, we don't need to check anything.
-    if (program.fContext->fConfig->fSettings.fPermitInvalidStaticTests) {
-        return;
-    }
-
     // Check all of the program's owned elements. (Built-in elements are assumed to be valid.)
-    StaticTestVerifier visitor{program.fContext->fErrors};
+    TestsAndExpressions visitor{*program.fContext};
     for (const std::unique_ptr<ProgramElement>& element : program.ownedElements()) {
-        if (element->is<FunctionDefinition>()) {
-            visitor.visitProgramElement(*element);
-        }
+        visitor.visitProgramElement(*element);
     }
 }
 
