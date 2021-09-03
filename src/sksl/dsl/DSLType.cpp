@@ -27,25 +27,37 @@ static const Type* find_type(skstd::string_view name) {
                                               (int)name.length(), name.data()).c_str());
         return nullptr;
     }
-    return &symbol->as<Type>();
+    const Type& result = symbol->as<Type>();
+    if (!DSLWriter::IsModule()) {
+        if (result.containsPrivateFields()) {
+            DSLWriter::ReportError(("type '" + String(name) + "' is private").c_str());
+            return nullptr;
+        }
+        if (DSLWriter::Context().fConfig->strictES2Mode() && !result.allowedInES2()) {
+            DSLWriter::ReportError(("type '" + String(name) + "' is not supported").c_str());
+            return nullptr;
+        }
+    }
+    return &result;
 }
 
-static const Type* find_type(skstd::string_view name, const Modifiers& modifiers) {
+static const Type* find_type(skstd::string_view name, const Modifiers& modifiers,
+        PositionInfo pos) {
     const Type* type = find_type(name);
     if (!type) {
         return nullptr;
     }
-    return type->applyPrecisionQualifiers(DSLWriter::Context(),
-                                          modifiers,
-                                          DSLWriter::SymbolTable().get(),
-                                          /*offset=*/-1);
+    const Type* result = type->applyPrecisionQualifiers(DSLWriter::Context(), modifiers,
+            DSLWriter::SymbolTable().get(), /*offset=*/-1);
+    DSLWriter::ReportErrors(pos);
+    return result;
 }
 
 DSLType::DSLType(skstd::string_view name)
         : fSkSLType(find_type(name)) {}
 
-DSLType::DSLType(skstd::string_view name, const DSLModifiers& modifiers)
-        : fSkSLType(find_type(name, modifiers.fModifiers)) {}
+DSLType::DSLType(skstd::string_view name, const DSLModifiers& modifiers, PositionInfo position)
+        : fSkSLType(find_type(name, modifiers.fModifiers, position)) {}
 
 bool DSLType::isBoolean() const {
     return this->skslType().isBoolean();
@@ -234,6 +246,9 @@ DSLType Struct(skstd::string_view name, SkSpan<DSLField> fields, PositionInfo po
     const SkSL::Type* result = DSLWriter::SymbolTable()->add(Type::MakeStructType(pos.offset(),
                                                                                   name,
                                                                                   skslFields));
+    if (result->isTooDeeplyNested()) {
+        DSLWriter::ReportError(("struct '" + String(name) + "' is too deeply nested").c_str(), pos);
+    }
     DSLWriter::ProgramElements().push_back(std::make_unique<SkSL::StructDefinition>(/*offset=*/-1,
                                                                                     *result));
     return result;

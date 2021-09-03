@@ -21,6 +21,8 @@
 
 namespace SkSL {
 
+static constexpr int kMaxStructDepth = 8;
+
 class ArrayType final : public Type {
 public:
     static constexpr TypeKind kTypeKind = TypeKind::kArray;
@@ -747,6 +749,41 @@ bool Type::isOrContainsArray() const {
     }
 
     return this->isArray();
+}
+
+
+bool Type::containsPrivateFields() const {
+    if (this->isPrivate()) {
+        return true;
+    }
+    if (this->isStruct()) {
+        for (const auto& f : this->fields()) {
+            if (f.fType->containsPrivateFields()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool Type::isTooDeeplyNested(int limit) const {
+    if (limit < 0) {
+        return true;
+    }
+
+    if (this->isStruct()) {
+        for (const Type::Field& f : this->fields()) {
+            if (f.fType->isTooDeeplyNested(limit - 1)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool Type::isTooDeeplyNested() const {
+    return this->isTooDeeplyNested(kMaxStructDepth);
 }
 
 bool Type::checkForOutOfRangeLiteral(const Context& context, const Expression& expr) const {
