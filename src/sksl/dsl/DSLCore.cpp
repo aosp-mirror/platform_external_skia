@@ -130,6 +130,11 @@ public:
         return SkSL::ContinueStatement::Make(pos.offset());
     }
 
+    static void Declare(const DSLModifiers& modifiers) {
+        DSLWriter::ProgramElements().push_back(std::make_unique<SkSL::ModifiersDeclaration>(
+                DSLWriter::Modifiers(modifiers.fModifiers)));
+    }
+
     static DSLStatement Declare(DSLVar& var, PositionInfo pos) {
         if (var.fDeclared) {
             DSLWriter::ReportError("variable has already been declared", pos);
@@ -175,8 +180,8 @@ public:
         }
     }
 
-    static DSLStatement Discard() {
-        return SkSL::DiscardStatement::Make(/*offset=*/-1);
+    static DSLStatement Discard(PositionInfo pos) {
+        return SkSL::DiscardStatement::Make(pos.offset());
     }
 
     static DSLPossibleStatement Do(DSLStatement stmt, DSLExpression test) {
@@ -296,7 +301,7 @@ public:
     }
 
     static DSLPossibleStatement Switch(DSLExpression value, SkTArray<DSLCase> cases,
-                                       bool isStatic) {
+                                       bool isStatic, PositionInfo pos) {
         ExpressionArray values;
         values.reserve_back(cases.count());
         SkTArray<StatementArray> statements;
@@ -306,7 +311,7 @@ public:
             statements.push_back(std::move(c.fStatements));
         }
         return DSLWriter::ConvertSwitch(value.release(), std::move(values), std::move(statements),
-                                        isStatic);
+                                        isStatic, pos);
     }
 
     static DSLPossibleStatement While(DSLExpression test, DSLStatement stmt) {
@@ -331,12 +336,27 @@ DSLExpression sk_Position() {
     return DSLCore::sk_Position();
 }
 
+void AddExtension(skstd::string_view name, PositionInfo pos) {
+    DSLWriter::ProgramElements().push_back(std::make_unique<SkSL::Extension>(pos.offset(), name));
+    DSLWriter::ReportErrors(pos);
+}
+
 DSLStatement Break(PositionInfo pos) {
     return DSLCore::Break(pos);
 }
 
 DSLStatement Continue(PositionInfo pos) {
     return DSLCore::Continue(pos);
+}
+
+void Declare(const DSLModifiers& modifiers, PositionInfo pos) {
+    SkSL::ProgramKind kind = DSLWriter::GetProgramConfig()->fKind;
+    if (kind != ProgramKind::kFragment &&
+        kind != ProgramKind::kVertex) {
+        DSLWriter::ReportError("layout qualifiers are not allowed in this kind of program", pos);
+        return;
+    }
+    DSLCore::Declare(modifiers);
 }
 
 // Logically, we'd want the variable's initial value to appear on here in Declare, since that
@@ -367,8 +387,8 @@ void Declare(SkTArray<DSLGlobalVar>& vars, PositionInfo pos) {
     DSLCore::Declare(vars, pos);
 }
 
-DSLStatement Discard() {
-    return DSLCore::Discard();
+DSLStatement Discard(PositionInfo pos) {
+    return DSLCore::Discard(pos);
 }
 
 DSLStatement Do(DSLStatement stmt, DSLExpression test, PositionInfo pos) {
@@ -410,12 +430,12 @@ DSLStatement StaticIf(DSLExpression test, DSLStatement ifTrue, DSLStatement ifFa
                          pos);
 }
 
-DSLPossibleStatement StaticSwitch(DSLExpression value, SkTArray<DSLCase> cases) {
-    return DSLCore::Switch(std::move(value), std::move(cases), /*isStatic=*/true);
+DSLPossibleStatement StaticSwitch(DSLExpression value, SkTArray<DSLCase> cases, PositionInfo pos) {
+    return DSLCore::Switch(std::move(value), std::move(cases), /*isStatic=*/true, pos);
 }
 
-DSLPossibleStatement Switch(DSLExpression value, SkTArray<DSLCase> cases) {
-    return DSLCore::Switch(std::move(value), std::move(cases), /*isStatic=*/false);
+DSLPossibleStatement Switch(DSLExpression value, SkTArray<DSLCase> cases, PositionInfo pos) {
+    return DSLCore::Switch(std::move(value), std::move(cases), /*isStatic=*/false, pos);
 }
 
 DSLStatement While(DSLExpression test, DSLStatement stmt, PositionInfo pos) {

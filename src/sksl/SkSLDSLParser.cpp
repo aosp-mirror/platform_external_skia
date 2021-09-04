@@ -221,6 +221,9 @@ std::unique_ptr<Program> DSLParser::program() {
                     result = dsl::ReleaseProgram(std::move(fText));
                 }
                 break;
+            case Token::Kind::TK_DIRECTIVE:
+                this->directive();
+                break;
             case Token::Kind::TK_INVALID: {
                 this->nextToken();
                 this->error(this->peek(), String("invalid token"));
@@ -235,6 +238,39 @@ std::unique_ptr<Program> DSLParser::program() {
     End();
     errorReporter->setSource(nullptr);
     return result;
+}
+
+/* DIRECTIVE(#extension) IDENTIFIER COLON IDENTIFIER */
+void DSLParser::directive() {
+    Token start;
+    if (!this->expect(Token::Kind::TK_DIRECTIVE, "a directive", &start)) {
+        return;
+    }
+    skstd::string_view text = this->text(start);
+    if (text == "#extension") {
+        Token name;
+        if (!this->expectIdentifier(&name)) {
+            return;
+        }
+        if (!this->expect(Token::Kind::TK_COLON, "':'")) {
+            return;
+        }
+        Token behavior;
+        if (!this->expect(Token::Kind::TK_IDENTIFIER, "an identifier", &behavior)) {
+            return;
+        }
+        skstd::string_view behaviorText = this->text(behavior);
+        if (behaviorText == "disable") {
+            return;
+        }
+        if (behaviorText != "require" && behaviorText != "enable" && behaviorText != "warn") {
+            this->error(behavior, "expected 'require', 'enable', 'warn', or 'disable'");
+        }
+        // We don't currently do anything different between require, enable, and warn
+        dsl::AddExtension(this->text(name));
+    } else {
+        this->error(start, "unsupported directive '" + this->text(start) + "'");
+    }
 }
 
 /* modifiers (structVarDeclaration | type IDENTIFIER ((LPAREN parameter (COMMA parameter)* RPAREN
@@ -256,7 +292,9 @@ bool DSLParser::declaration() {
         return this->interfaceBlock(modifiers);
     }
     if (lookahead.fKind == Token::Kind::TK_SEMICOLON) {
-        this->error(lookahead, "modifiers declarations are not yet supported");
+        this->nextToken();
+        Declare(modifiers, position(lookahead));
+        return true;
     }
     if (lookahead.fKind == Token::Kind::TK_STRUCT) {
         SkTArray<DSLGlobalVar> result = this->structVarDeclaration(modifiers);
@@ -416,10 +454,11 @@ SkTArray<T> DSLParser::varDeclarationEnd(PositionInfo pos, const dsl::DSLModifie
         if (!parseArrayDimensions(&type)) {
             return result;
         }
-        if (!parseInitializer(&initializer)) {
+        DSLExpression anotherInitializer;
+        if (!parseInitializer(&anotherInitializer)) {
             return result;
         }
-        result.push_back(T(mods, type, this->text(identifierName), std::move(initializer)));
+        result.push_back(T(mods, type, this->text(identifierName), std::move(anotherInitializer)));
         AddToSymbolTable(result.back());
     }
     this->expect(Token::Kind::TK_SEMICOLON, "';'");
@@ -902,7 +941,7 @@ skstd::optional<DSLStatement> DSLParser::doStatement() {
     if (!this->expect(Token::Kind::TK_SEMICOLON, "';'")) {
         return skstd::nullopt;
     }
-    return Do(std::move(*statement), std::move(**test));
+    return Do(std::move(*statement), std::move(**test), this->position(start));
 }
 
 /* WHILE LPAREN expression RPAREN STATEMENT */
@@ -925,7 +964,7 @@ skstd::optional<DSLStatement> DSLParser::whileStatement() {
     if (!statement) {
         return skstd::nullopt;
     }
-    return While(std::move(**test), std::move(*statement));
+    return While(std::move(**test), std::move(*statement), this->position(start));
 }
 
 /* CASE expression COLON statement* */
@@ -998,15 +1037,15 @@ skstd::optional<DSLStatement> DSLParser::switchStatement() {
             }
             statements.push_back(std::move(*s));
         }
-        cases.push_back(DSLCase(DSLExpression(), std::move(statements)));
+        cases.push_back(DSLCase(DSLExpression(), std::move(statements), this->position(start)));
     }
     if (!this->expect(Token::Kind::TK_RBRACE, "'}'")) {
         return skstd::nullopt;
     }
     if (isStatic) {
-        return StaticSwitch(std::move(**value), std::move(cases));
+        return StaticSwitch(std::move(**value), std::move(cases), this->position(start));
     } else {
-        return Switch(std::move(**value), std::move(cases));
+        return Switch(std::move(**value), std::move(cases), this->position(start));
     }
 }
 
@@ -1060,7 +1099,8 @@ skstd::optional<dsl::DSLStatement> DSLParser::forStatement() {
     return For(initializer ? std::move(*initializer) : DSLStatement(),
                test ? std::move(**test) : DSLExpression(),
                next ? std::move(**next) : DSLExpression(),
-               std::move(*statement));
+               std::move(*statement),
+               this->position(start));
 }
 
 /* RETURN expression? SEMICOLON */
@@ -1079,7 +1119,7 @@ skstd::optional<DSLStatement> DSLParser::returnStatement() {
     if (!this->expect(Token::Kind::TK_SEMICOLON, "';'")) {
         return skstd::nullopt;
     }
-    return Return(expression ? std::move(**expression) : DSLExpression());
+    return Return(expression ? std::move(**expression) : DSLExpression(), this->position(start));
 }
 
 /* BREAK SEMICOLON */
@@ -1115,7 +1155,7 @@ skstd::optional<DSLStatement> DSLParser::discardStatement() {
     if (!this->expect(Token::Kind::TK_SEMICOLON, "';'")) {
         return skstd::nullopt;
     }
-    return Discard();
+    return Discard(this->position(start));
 }
 
 /* LBRACE statement* RBRACE */
@@ -1504,22 +1544,22 @@ skstd::optional<DSLWrapper<DSLExpression>> DSLParser::swizzle(int offset, DSLExp
         switch (swizzleMask[i]) {
             case '0': components[i] = SwizzleComponent::ZERO; break;
             case '1': components[i] = SwizzleComponent::ONE;  break;
-            case 'r':
-            case 'x':
-            case 's':
-            case 'L': components[i] = SwizzleComponent::R;    break;
-            case 'g':
-            case 'y':
-            case 't':
-            case 'T': components[i] = SwizzleComponent::G;    break;
-            case 'b':
-            case 'z':
-            case 'p':
-            case 'R': components[i] = SwizzleComponent::B;    break;
-            case 'a':
-            case 'w':
-            case 'q':
-            case 'B': components[i] = SwizzleComponent::A;    break;
+            case 'r': components[i] = SwizzleComponent::R;    break;
+            case 'x': components[i] = SwizzleComponent::X;    break;
+            case 's': components[i] = SwizzleComponent::S;    break;
+            case 'L': components[i] = SwizzleComponent::UL;   break;
+            case 'g': components[i] = SwizzleComponent::G;    break;
+            case 'y': components[i] = SwizzleComponent::Y;    break;
+            case 't': components[i] = SwizzleComponent::T;    break;
+            case 'T': components[i] = SwizzleComponent::UT;   break;
+            case 'b': components[i] = SwizzleComponent::B;    break;
+            case 'z': components[i] = SwizzleComponent::Z;    break;
+            case 'p': components[i] = SwizzleComponent::P;    break;
+            case 'R': components[i] = SwizzleComponent::UR;   break;
+            case 'a': components[i] = SwizzleComponent::A;    break;
+            case 'w': components[i] = SwizzleComponent::W;    break;
+            case 'q': components[i] = SwizzleComponent::Q;    break;
+            case 'B': components[i] = SwizzleComponent::UB;   break;
             default:
                 this->error(offset,
                         String::printf("invalid swizzle component '%c'", swizzleMask[i]).c_str());

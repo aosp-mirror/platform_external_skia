@@ -618,6 +618,7 @@ bool Analysis::CheckProgramUnrolledSize(const Program& program) {
     static constexpr int kStatementCost = 1;
     static constexpr int kUnknownCost = -1;
     static constexpr int kProgramSizeLimit = 100000;
+    static constexpr int kProgramStackDepthLimit = 50;
 
     class ProgramSizeVisitor : public ProgramVisitor {
     public:
@@ -656,6 +657,18 @@ bool Analysis::CheckProgramUnrolledSize(const Program& program) {
                     // Set the size to its known value.
                     fFunctionSize = iter->second;
                     return false;
+                }
+
+                // If the function-call stack has gotten too deep, stop the analysis.
+                if (fStack.size() >= kProgramStackDepthLimit) {
+                    String msg = "exceeded max function call depth:";
+                    for (auto unwind = fStack.begin(); unwind != fStack.end(); ++unwind) {
+                        msg += "\n\t" + (*unwind)->description();
+                    }
+                    msg += "\n\t" + decl->description();
+                    fContext.fErrors->error(pe.fOffset, std::move(msg));
+                    fFunctionSize = iter->second = 0;
+                    return true;
                 }
 
                 // Calculate the function cost and store it in our cache.
@@ -751,9 +764,9 @@ bool Analysis::CheckProgramUnrolledSize(const Program& program) {
     private:
         using INHERITED = ProgramVisitor;
 
-        [[maybe_unused]] const Context& fContext;
-        int fFunctionSize;
-        int fUnrollFactor;
+        const Context& fContext;
+        int fFunctionSize = 0;
+        int fUnrollFactor = 1;
         std::unordered_map<const FunctionDeclaration*, int> fFunctionCostMap;
         std::vector<const FunctionDeclaration*> fStack;
     };
@@ -1263,6 +1276,7 @@ public:
             case Expression::Kind::kPoison:
             case Expression::Kind::kFunctionReference:
             case Expression::Kind::kExternalFunctionReference:
+            case Expression::Kind::kMethodReference:
             case Expression::Kind::kTypeReference:
             case Expression::Kind::kCodeString:
                 return true;
@@ -1379,6 +1393,7 @@ void Analysis::VerifyStaticTestsAndExpressions(const Program& program) {
                 }
                 case Expression::Kind::kExternalFunctionReference:
                 case Expression::Kind::kFunctionReference:
+                case Expression::Kind::kMethodReference:
                 case Expression::Kind::kTypeReference:
                     SkDEBUGFAIL("invalid reference-expr, should have been reported by coerce()");
                     fContext.fErrors->error(expr.fOffset, "invalid expression");
@@ -1423,6 +1438,7 @@ template <typename T> bool TProgramVisitor<T>::visitExpression(typename T::Expre
         case Expression::Kind::kFloatLiteral:
         case Expression::Kind::kFunctionReference:
         case Expression::Kind::kIntLiteral:
+        case Expression::Kind::kMethodReference:
         case Expression::Kind::kPoison:
         case Expression::Kind::kSetting:
         case Expression::Kind::kTypeReference:

@@ -1948,7 +1948,7 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLSampleShader, r, ctxInfo) {
     AutoDSLContext context(ctxInfo.directContext()->priv().getGpu(), default_settings(),
                            SkSL::ProgramKind::kRuntimeShader);
     DSLGlobalVar shader(kUniform_Modifier, kShader_Type, "child");
-    EXPECT_EQUAL(Sample(shader, Float2(0, 0)), "shade(child, float2(0.0, 0.0))");
+    EXPECT_EQUAL(Sample(shader, Float2(0, 0)), "child.eval(float2(0.0, 0.0))");
 
     {
         ExpectError error(r, "no match for sample(shader, half4)");
@@ -2122,4 +2122,18 @@ DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLPrototypes, r, ctxInfo) {
             "25.0;"
             "}");
     }
+}
+
+DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLExtension, r, ctxInfo) {
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
+    AddExtension("test_extension");
+    REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 1);
+    EXPECT_EQUAL(*DSLWriter::ProgramElements()[0], "#extension test_extension : enable");
+}
+
+DEF_GPUTEST_FOR_MOCK_CONTEXT(DSLModifiersDeclaration, r, ctxInfo) {
+    AutoDSLContext context(ctxInfo.directContext()->priv().getGpu());
+    Declare(Modifiers(Layout().blendSupportAllEquations(), kOut_Modifier));
+    REPORTER_ASSERT(r, DSLWriter::ProgramElements().size() == 1);
+    EXPECT_EQUAL(*DSLWriter::ProgramElements()[0], "layout(blend_support_all_equations) out;");
 }
