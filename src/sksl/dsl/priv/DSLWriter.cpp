@@ -176,7 +176,7 @@ std::unique_ptr<SkSL::Expression> DSLWriter::ConvertBinary(std::unique_ptr<Expre
 
 std::unique_ptr<SkSL::Expression> DSLWriter::ConvertField(std::unique_ptr<Expression> base,
                                                           skstd::string_view name) {
-    return FieldAccess::Convert(Context(), std::move(base), name);
+    return FieldAccess::Convert(Context(), *SymbolTable(), std::move(base), name);
 }
 
 std::unique_ptr<SkSL::Expression> DSLWriter::ConvertIndex(std::unique_ptr<Expression> base,
@@ -197,17 +197,18 @@ std::unique_ptr<SkSL::Expression> DSLWriter::ConvertPrefix(Operator op,
 DSLPossibleStatement DSLWriter::ConvertSwitch(std::unique_ptr<Expression> value,
                                               ExpressionArray caseValues,
                                               SkTArray<SkSL::StatementArray> caseStatements,
-                                              bool isStatic) {
+                                              bool isStatic,
+                                              PositionInfo pos) {
     StatementArray caseBlocks;
     caseBlocks.resize(caseStatements.count());
     for (int index = 0; index < caseStatements.count(); ++index) {
-        caseBlocks[index] = std::make_unique<SkSL::Block>(/*offset=*/-1,
+        caseBlocks[index] = std::make_unique<SkSL::Block>(pos.offset(),
                                                           std::move(caseStatements[index]),
                                                           /*symbols=*/nullptr,
                                                           /*isScope=*/false);
     }
 
-    return SwitchStatement::Convert(Context(), /*offset=*/-1, isStatic, std::move(value),
+    return SwitchStatement::Convert(Context(), pos.offset(), isStatic, std::move(value),
                                     std::move(caseValues), std::move(caseBlocks),
                                     IRGenerator().fSymbolTable);
 }

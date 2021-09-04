@@ -37,7 +37,7 @@ enum class VariableRefKind : int8_t;
 struct Analysis {
     /**
      * Determines how `program` samples `child`. By default, assumes that the sample coords
-     * (SK_MAIN_COORDS_BUILTIN) might be modified, so `shade(fp, sampleCoords)` is treated as
+     * (SK_MAIN_COORDS_BUILTIN) might be modified, so `child.eval(sampleCoords)` is treated as
      * Explicit. If writesToSampleCoords is false, treats that as PassThrough, instead.
      * If elidedSampleCoordCount is provided, the pointed to value will be incremented by the
      * number of sample calls where the above rewrite was performed.
@@ -54,11 +54,6 @@ struct Analysis {
 
     static bool CallsSampleOutsideMain(const Program& program);
 
-    /**
-     * Does the function call graph of the program include any cycles? If so, emits an error.
-     */
-    static bool DetectStaticRecursion(SkSpan<std::unique_ptr<ProgramElement>> programElements,
-                                      ErrorReporter& errors);
     /**
      * Computes the size of the program in a completely flattened state--loops fully unrolled,
      * function calls inlined--and rejects programs that exceed an arbitrary upper bound. This is

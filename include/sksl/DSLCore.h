@@ -20,7 +20,7 @@
 #include "include/sksl/DSLWrapper.h"
 #include "include/sksl/SkSLErrorReporter.h"
 
-#define SKSL_DSL_PARSER 0
+#define SKSL_DSL_PARSER 1
 
 namespace SkSL {
 
@@ -76,6 +76,11 @@ DSLGlobalVar sk_FragCoord();
 DSLExpression sk_Position();
 
 /**
+ * #extension <name> : enable
+ */
+void AddExtension(skstd::string_view name, PositionInfo pos = PositionInfo::Capture());
+
+/**
  * break;
  */
 DSLStatement Break(PositionInfo pos = PositionInfo::Capture());
@@ -84,6 +89,11 @@ DSLStatement Break(PositionInfo pos = PositionInfo::Capture());
  * continue;
  */
 DSLStatement Continue(PositionInfo pos = PositionInfo::Capture());
+
+/**
+ * Adds a modifiers declaration to the current program.
+ */
+void Declare(const DSLModifiers& modifiers, PositionInfo pos = PositionInfo::Capture());
 
 /**
  * Creates a local variable declaration statement.
@@ -116,7 +126,7 @@ DSLCase Default(Statements... statements) {
 /**
  * discard;
  */
-DSLStatement Discard();
+DSLStatement Discard(PositionInfo pos = PositionInfo::Capture());
 
 /**
  * do stmt; while (test);
@@ -155,7 +165,8 @@ DSLStatement StaticIf(DSLExpression test, DSLStatement ifTrue,
                       DSLStatement ifFalse = DSLStatement(),
                       PositionInfo pos = PositionInfo::Capture());
 
-DSLPossibleStatement StaticSwitch(DSLExpression value, SkTArray<DSLCase> cases);
+DSLPossibleStatement StaticSwitch(DSLExpression value, SkTArray<DSLCase> cases,
+                                  PositionInfo info = PositionInfo::Capture());
 
 /**
  * @switch (value) { cases }
@@ -168,7 +179,8 @@ DSLPossibleStatement StaticSwitch(DSLExpression value, Cases... cases) {
     return StaticSwitch(std::move(value), std::move(caseArray));
 }
 
-DSLPossibleStatement Switch(DSLExpression value, SkTArray<DSLCase> cases);
+DSLPossibleStatement Switch(DSLExpression value, SkTArray<DSLCase> cases,
+                            PositionInfo info = PositionInfo::Capture());
 
 /**
  * switch (value) { cases }
