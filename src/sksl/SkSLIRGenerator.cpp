@@ -47,6 +47,7 @@
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
 #include "src/sksl/ir/SkSLMethodReference.h"
 #include "src/sksl/ir/SkSLNop.h"
+#include "src/sksl/ir/SkSLPoison.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
@@ -95,7 +96,7 @@ void IRGenerator::popSymbolTable() {
 std::unique_ptr<Extension> IRGenerator::convertExtension(int offset, skstd::string_view name) {
     if (this->programKind() != ProgramKind::kFragment &&
         this->programKind() != ProgramKind::kVertex) {
-        this->errorReporter().error(offset, "extensions are not allowed here");
+        this->errorReporter().error(offset, "extensions are not allowed in this kind of program");
         return nullptr;
     }
 
@@ -141,10 +142,9 @@ std::unique_ptr<Block> IRGenerator::convertBlock(const ASTNode& block) {
     StatementArray statements;
     for (const auto& child : block) {
         std::unique_ptr<Statement> statement = this->convertStatement(child);
-        if (!statement) {
-            return nullptr;
+        if (statement) {
+            statements.push_back(std::move(statement));
         }
-        statements.push_back(std::move(statement));
     }
     return Block::Make(block.fOffset, std::move(statements), fSymbolTable);
 }
@@ -365,7 +365,8 @@ StatementArray IRGenerator::convertVarDeclarations(const ASTNode& decls,
 std::unique_ptr<ModifiersDeclaration> IRGenerator::convertModifiersDeclaration(const ASTNode& m) {
     if (this->programKind() != ProgramKind::kFragment &&
         this->programKind() != ProgramKind::kVertex) {
-        this->errorReporter().error(m.fOffset, "layout qualifiers are not allowed here");
+        this->errorReporter().error(m.fOffset,
+                "layout qualifiers are not allowed in this kind of program");
         return nullptr;
     }
 
@@ -518,14 +519,14 @@ std::unique_ptr<Statement> IRGenerator::convertReturn(int offset,
 std::unique_ptr<Statement> IRGenerator::convertReturn(const ASTNode& r) {
     SkASSERT(r.fKind == ASTNode::Kind::kReturn);
     if (r.begin() != r.end()) {
-        std::unique_ptr<Expression> value = this->convertExpression(*r.begin());
-        if (!value) {
-            return nullptr;
+        if (std::unique_ptr<Expression> value = this->convertExpression(*r.begin())) {
+            return this->convertReturn(r.fOffset, std::move(value));
+        } else {
+            return this->convertReturn(r.fOffset, Poison::Make(r.fOffset, fContext));
         }
-        return this->convertReturn(r.fOffset, std::move(value));
-    } else {
-        return this->convertReturn(r.fOffset, /*result=*/nullptr);
     }
+
+    return this->convertReturn(r.fOffset, /*result=*/nullptr);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertBreak(const ASTNode& b) {
@@ -767,7 +768,8 @@ void IRGenerator::scanInterfaceBlock(SkSL::InterfaceBlock& intf) {
 std::unique_ptr<SkSL::InterfaceBlock> IRGenerator::convertInterfaceBlock(const ASTNode& intf) {
     if (this->programKind() != ProgramKind::kFragment &&
         this->programKind() != ProgramKind::kVertex) {
-        this->errorReporter().error(intf.fOffset, "interface block is not allowed here");
+        this->errorReporter().error(intf.fOffset,
+                "interface blocks are not allowed in this kind of program");
         return nullptr;
     }
 

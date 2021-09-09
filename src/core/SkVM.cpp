@@ -441,21 +441,13 @@ namespace skvm {
     std::vector<Instruction> eliminate_dead_code(std::vector<Instruction> program) {
         // Determine which Instructions are live by working back from side effects.
         std::vector<bool> live(program.size(), false);
-        std::vector<Val> worklist;
-        for (Val v = 0; v < (Val)program.size(); v++) {
-            if (has_side_effect(program[v].op)) {
-                worklist.push_back(v);
-                do {
-                    Val id = worklist.back();
-                    worklist.pop_back();
-                    if (live[id] == false) {
-                        live[id] =  true;
-                        const Instruction& inst = program[id];
-                        for (Val arg : {inst.x, inst.y, inst.z, inst.w}) {
-                            if (arg != NA) { worklist.push_back(arg); }
-                        }
-                    }
-                } while (!worklist.empty());
+        for (Val id = program.size(); id--;) {
+            if (live[id] || has_side_effect(program[id].op)) {
+                live[id] = true;
+                const Instruction& inst = program[id];
+                for (Val arg : {inst.x, inst.y, inst.z, inst.w}) {
+                    if (arg != NA) { live[arg] = true; }
+                }
             }
         }
 
@@ -883,17 +875,20 @@ namespace skvm {
         return {this, this->push(Op::max_f32, x.id, y.id)};
     }
 
+    SK_ATTRIBUTE(no_sanitize("signed-integer-overflow"))
     I32 Builder::add(I32 x, I32 y) {
         if (int X,Y; this->allImm(x.id,&X, y.id,&Y)) { return splat(X+Y); }
         if (this->isImm(x.id, 0)) { return y; }
         if (this->isImm(y.id, 0)) { return x; }
         return {this, this->push(Op::add_i32, x.id, y.id)};
     }
+    SK_ATTRIBUTE(no_sanitize("signed-integer-overflow"))
     I32 Builder::sub(I32 x, I32 y) {
         if (int X,Y; this->allImm(x.id,&X, y.id,&Y)) { return splat(X-Y); }
         if (this->isImm(y.id, 0)) { return x; }
         return {this, this->push(Op::sub_i32, x.id, y.id)};
     }
+    SK_ATTRIBUTE(no_sanitize("signed-integer-overflow"))
     I32 Builder::mul(I32 x, I32 y) {
         if (int X,Y; this->allImm(x.id,&X, y.id,&Y)) { return splat(X*Y); }
         if (this->isImm(x.id, 0)) { return splat(0); }
@@ -903,6 +898,7 @@ namespace skvm {
         return {this, this->push(Op::mul_i32, x.id, y.id)};
     }
 
+    SK_ATTRIBUTE(no_sanitize("shift"))
     I32 Builder::shl(I32 x, int bits) {
         if (bits == 0) { return x; }
         if (int X; this->allImm(x.id,&X)) { return splat(X << bits); }

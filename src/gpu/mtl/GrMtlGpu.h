@@ -79,8 +79,9 @@ public:
 
     void copySurfaceAsResolve(GrSurface* dst, GrSurface* src);
 
-    void copySurfaceAsBlit(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
-                           const SkIPoint& dstPoint);
+    void copySurfaceAsBlit(GrSurface* dst, GrSurface* src,
+                           GrMtlAttachment* dstAttachment, GrMtlAttachment* srcAttachment,
+                           const SkIRect& srcRect, const SkIPoint& dstPoint);
 
     bool onCopySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
                        const SkIPoint& dstPoint) override;
@@ -106,6 +107,10 @@ public:
     void checkFinishProcs() override { this->checkForFinishedCommandBuffers(); }
     void finishOutstandingGpuWork() override;
     std::unique_ptr<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override;
+
+    bool loadMSAAFromResolve(GrAttachment* dst,
+                             GrMtlAttachment* src,
+                             const SkIRect& srcRect);
 
     // When the Metal backend actually uses indirect command buffers, this function will actually do
     // what it says. For now, every command is encoded directly into the primary command buffer, so
