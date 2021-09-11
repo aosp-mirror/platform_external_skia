@@ -348,6 +348,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		if b.extraConfig("CommandBuffer") {
 			// skbug.com/10412
 			skip("_ test _ GLBackendAllocationTest")
+			skip("_ test _ InitialTextureClear")
+			// skbug.com/12437
+			skip("_ test _ GrDDLImage_MakeSubset")
+                        skip("_ test _ GrContext_oomed")
 		}
 
 		// skbug.com/9043 - these devices render this test incorrectly
@@ -445,8 +449,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("mtltestprecompile svg _ Ghostscript_Tiger.svg")
 			skip("mtltestprecompile svg _ Seal_of_American_Samoa.svg")
 			skip("mtltestprecompile svg _ Seal_of_Illinois.svg")
-			skip("mtltestprecompile svg _ tiger-8.svg")
 			skip("mtltestprecompile svg _ desk_motionmark_paths.svg")
+			skip("mtltestprecompile svg _ rg1024_green_grapes.svg")
+			skip("mtltestprecompile svg _ shapes-intro-02-f.svg")
+			skip("mtltestprecompile svg _ tiger-8.svg")
 		}
 		// Test reduced shader mode on iPhone 11 as representative iOS device
 		if b.model("iPhone11") && b.extraConfig("Metal") {
