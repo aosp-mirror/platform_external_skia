@@ -233,6 +233,7 @@ std::unique_ptr<Program> DSLParser::program() {
             default:
                 this->declaration();
                 done = fEncounteredFatalError;
+                break;
         }
     }
     End();
@@ -1169,7 +1170,7 @@ skstd::optional<DSLBlock> DSLParser::block() {
         return skstd::nullopt;
     }
     AutoDSLSymbolTable symbols;
-    SkTArray<DSLStatement> statements;
+    StatementArray statements;
     for (;;) {
         switch (this->peek().fKind) {
             case Token::Kind::TK_RBRACE:
@@ -1183,7 +1184,8 @@ skstd::optional<DSLBlock> DSLParser::block() {
                 if (!statement) {
                     return skstd::nullopt;
                 }
-                statements.push_back(std::move(*statement));
+                statements.push_back(statement->release());
+                break;
             }
         }
     }
@@ -1577,7 +1579,7 @@ skstd::optional<DSLWrapper<DSLExpression>> DSLParser::swizzle(int offset, DSLExp
 }
 
 skstd::optional<dsl::Wrapper<dsl::DSLExpression>> DSLParser::call(int offset,
-        dsl::DSLExpression base, SkTArray<Wrapper<DSLExpression>> args) {
+        dsl::DSLExpression base, ExpressionArray args) {
     return {{DSLExpression(base(std::move(args), this->position(offset)), this->position(offset))}};
 }
 
@@ -1633,14 +1635,14 @@ skstd::optional<DSLWrapper<DSLExpression>> DSLParser::suffix(DSLExpression base)
             return this->swizzle(next.fOffset, std::move(base), field);
         }
         case Token::Kind::TK_LPAREN: {
-            SkTArray<Wrapper<DSLExpression>> args;
+            ExpressionArray args;
             if (this->peek().fKind != Token::Kind::TK_RPAREN) {
                 for (;;) {
                     skstd::optional<DSLWrapper<DSLExpression>> expr = this->assignmentExpression();
                     if (!expr) {
                         return skstd::nullopt;
                     }
-                    args.push_back(std::move(*expr));
+                    args.push_back((**expr).release());
                     if (!this->checkNext(Token::Kind::TK_COMMA)) {
                         break;
                     }
