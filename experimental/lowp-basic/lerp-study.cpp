@@ -59,33 +59,29 @@ static int16_t ssse3_lerp(float t, int16_t a, int16_t b) {
     return (answer[0] + half) >> logPixelScale;
 }
 
+// Change of parameters on t from [0, 1) to [-1, 1). This cuts the number if differences in half.
+template <int logPixelScale>
+static int16_t balanced_lerp(float t, int16_t a, int16_t b) {
+    const int16_t half = 1 << logPixelScale;
+    // t on [-1, 1).
+    Q15 qt (floor(t * 65536.0f - 32768.0f + 0.5f));
+    // need to pick logPixelScale to scale by addition 1/2.
+    Q15 qw ((b - a) << logPixelScale);
+    Q15 qm ((a + b) << logPixelScale);
+    Q15 answer = simulate_ssse3_mm_mulhrs_epi16(qt, qw) + qm;
+    // Extra shift to divide by 2.
+    return (answer[0] + half) >> (logPixelScale + 1);
+}
+
 template <typename Lerp>
 static Stats check_lerp(Lerp lerp) {
     Stats stats;
-    for (float t = 0; t < 1.0f; t += 1.0f/32768.0f)
+    for (float t = 0; t < 1.0f - 1.0f / 65536.0f ; t += 1.0f/65536.0f)
     for (int a = 255; a >= 0; a--)
     for (int b = 255; b >= 0; b--) {
         float l = golden_lerp(t, a, b);
         int16_t golden = floor(l + 0.5f);
         int16_t candidate = lerp(t, a, b);
-        stats.log(golden, candidate);
-    }
-    return stats;
-}
-
-// Simulate a scaled intermediate value for bilerp.
-template <typename Lerp>
-static Stats check_scaled_lerp(Lerp lerp) {
-    Stats stats;
-    for (float t = 0; t < 1.0f; t += 1.0f/32768.0f)
-    for (int a = 255; a >= 0; a--)
-    for (int b = 255; b >= 0; b--) {
-        int16_t scaledA = a << 6,
-                scaledB = b << 6;
-
-        float l = golden_lerp(t, scaledA, scaledB);
-        int16_t golden = floor(l + 0.5f);
-        int16_t candidate = lerp(t, scaledA, scaledB);
         stats.log(golden, candidate);
     }
     return stats;
@@ -102,14 +98,8 @@ int main() {
     stats = check_lerp(ssse3_lerp<7>);
     stats.print();
 
-    printf("\nScaled using vqrdmulhq_s16...\n");
-    // Need one bit for rounding.
-    stats = check_scaled_lerp(saturating_lerp<1>);
-    stats.print();
-
-    printf("\nScaled using mm_mulhrs_epi16...\n");
-    // Need one bit for rounding.
-    stats = check_scaled_lerp(ssse3_lerp<1>);
+    printf("\nInterval [-1, 1) mm_mulhrs_epi16...\n");
+    stats = check_lerp(balanced_lerp<7>);
     stats.print();
 
     printf("Done.");
