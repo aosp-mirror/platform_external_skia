@@ -601,20 +601,6 @@ DSLExpression Round(DSLExpression x, PositionInfo pos) {
     return DSLExpression(DSLCore::Call("round", std::move(x)), pos);
 }
 
-DSLExpression Sample(DSLExpression target, PositionInfo pos) {
-    return DSLExpression(DSLCore::Call("sample", std::move(target)), pos);
-}
-
-
-DSLExpression Sample(DSLExpression target, DSLExpression x, PositionInfo pos) {
-    return DSLExpression(DSLCore::Call("sample", std::move(target), std::move(x)), pos);
-}
-
-DSLExpression Sample(DSLExpression target, DSLExpression x, DSLExpression y, PositionInfo pos) {
-    return DSLExpression(DSLCore::Call("sample", std::move(target), std::move(x), std::move(y)),
-                         pos);
-}
-
 DSLExpression Saturate(DSLExpression x, PositionInfo pos) {
     return DSLExpression(DSLCore::Call("saturate", std::move(x)), pos);
 }

@@ -15,7 +15,6 @@
 #include "src/sksl/codegen/SkSLVMCodeGenerator.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBlock.h"
-#include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLBreakStatement.h"
 #include "src/sksl/ir/SkSLChildCall.h"
 #include "src/sksl/ir/SkSLConstructor.h"
@@ -31,14 +30,13 @@
 #include "src/sksl/ir/SkSLExternalFunctionCall.h"
 #include "src/sksl/ir/SkSLExternalFunctionReference.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
-#include "src/sksl/ir/SkSLFloatLiteral.h"
 #include "src/sksl/ir/SkSLForStatement.h"
 #include "src/sksl/ir/SkSLFunctionCall.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLIfStatement.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
-#include "src/sksl/ir/SkSLIntLiteral.h"
+#include "src/sksl/ir/SkSLLiteral.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
@@ -190,6 +188,7 @@ private:
     Value writeFunctionCall(const FunctionCall& c);
     Value writeExternalFunctionCall(const ExternalFunctionCall& c);
     Value writeFieldAccess(const FieldAccess& expr);
+    Value writeLiteral(const Literal& l);
     Value writeIndexExpression(const IndexExpression& expr);
     Value writeIntrinsicCall(const FunctionCall& c);
     Value writePostfixExpression(const PostfixExpression& p);
@@ -468,9 +467,10 @@ Value SkVMGenerator::writeBinaryExpression(const BinaryExpression& b) {
         SkASSERT(b.type().slotCount() == static_cast<size_t>(lRows * rCols));
         Value result(lRows * rCols);
         size_t resultIdx = 0;
+        const skvm::F32 zero = fBuilder->splat(0.0f);
         for (int c = 0; c < rCols; ++c)
         for (int r = 0; r < lRows; ++r) {
-            skvm::F32 sum = fBuilder->splat(0.0f);
+            skvm::F32 sum = zero;
             for (int j = 0; j < lCols; ++j) {
                 sum += f32(lVal[j*lRows + r]) * f32(rVal[c*rRows + j]);
             }
@@ -692,9 +692,10 @@ Value SkVMGenerator::writeConstructorDiagonalMatrix(const ConstructorDiagonalMat
     size_t dstIndex = 0;
 
     // Matrix-from-scalar builds a diagonal scale matrix
+    const skvm::F32 zero = fBuilder->splat(0.0f);
     for (int c = 0; c < dstType.columns(); ++c) {
         for (int r = 0; r < dstType.rows(); ++r) {
-            dst[dstIndex++] = (c == r ? f32(src) : fBuilder->splat(0.0f));
+            dst[dstIndex++] = (c == r ? f32(src) : zero);
         }
     }
 
@@ -1157,10 +1158,11 @@ Value SkVMGenerator::writeFunctionCall(const FunctionCall& f) {
     }
 
     // Create storage for the return value
+    const skvm::F32 zero = fBuilder->splat(0.0f);
     size_t nslots = f.type().slotCount();
     Value result(nslots);
     for (size_t i = 0; i < nslots; ++i) {
-        result[i] = fBuilder->splat(0.0f);
+        result[i] = zero;
     }
 
     {
@@ -1215,6 +1217,17 @@ Value SkVMGenerator::writeExternalFunctionCall(const ExternalFunctionCall& c) {
     }
 
     return resultVal;
+}
+
+Value SkVMGenerator::writeLiteral(const Literal& l) {
+    if (l.type().isFloat()) {
+        return fBuilder->splat(l.as<Literal>().floatValue());
+    }
+    if (l.type().isInteger()) {
+        return fBuilder->splat(static_cast<int>(l.as<Literal>().intValue()));
+    }
+    SkASSERT(l.type().isBoolean());
+    return fBuilder->splat(l.as<Literal>().boolValue() ? ~0 : 0);
 }
 
 Value SkVMGenerator::writePrefixExpression(const PrefixExpression& p) {
@@ -1323,8 +1336,6 @@ Value SkVMGenerator::writeExpression(const Expression& e) {
     switch (e.kind()) {
         case Expression::Kind::kBinary:
             return this->writeBinaryExpression(e.as<BinaryExpression>());
-        case Expression::Kind::kBoolLiteral:
-            return fBuilder->splat(e.as<BoolLiteral>().value() ? ~0 : 0);
         case Expression::Kind::kChildCall:
             return this->writeChildCall(e.as<ChildCall>());
         case Expression::Kind::kConstructorArray:
@@ -1348,14 +1359,12 @@ Value SkVMGenerator::writeExpression(const Expression& e) {
             return this->writeIndexExpression(e.as<IndexExpression>());
         case Expression::Kind::kVariableReference:
             return this->writeVariableExpression(e.as<VariableReference>());
-        case Expression::Kind::kFloatLiteral:
-            return fBuilder->splat(e.as<FloatLiteral>().value());
+        case Expression::Kind::kLiteral:
+            return this->writeLiteral(e.as<Literal>());
         case Expression::Kind::kFunctionCall:
             return this->writeFunctionCall(e.as<FunctionCall>());
         case Expression::Kind::kExternalFunctionCall:
             return this->writeExternalFunctionCall(e.as<ExternalFunctionCall>());
-        case Expression::Kind::kIntLiteral:
-            return fBuilder->splat(static_cast<int>(e.as<IntLiteral>().value()));
         case Expression::Kind::kPrefix:
             return this->writePrefixExpression(e.as<PrefixExpression>());
         case Expression::Kind::kPostfix:
@@ -1466,6 +1475,7 @@ void SkVMGenerator::writeForStatement(const ForStatement& f) {
     size_t indexSlot = this->getSlot(*loop.fIndex);
     double val = loop.fStart;
 
+    const skvm::I32 zero      = fBuilder->splat(0);
     skvm::I32 oldLoopMask     = fLoopMask,
               oldContinueMask = fContinueMask;
 
@@ -1474,7 +1484,7 @@ void SkVMGenerator::writeForStatement(const ForStatement& f) {
                                     ? fBuilder->splat(static_cast<int>(val)).id
                                     : fBuilder->splat(static_cast<float>(val)).id;
 
-        fContinueMask = fBuilder->splat(0);
+        fContinueMask = zero;
         this->writeStatement(*f.statement());
         fLoopMask |= fContinueMask;
 

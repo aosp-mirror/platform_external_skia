@@ -6,20 +6,20 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling different
   # dependencies without interference from each other.
-  'sk_tool_revision': 'git_revision:a369a738f282c9a7931692220c7244151e4d7b03',
+  'sk_tool_revision': 'git_revision:c92e3a3bedee6adb134f6f27d62b14a80a24484d',
 }
 
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/buildtools.git@505de88083136eefd056e5ee4ca0f01fe9b33de8",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@8b2fd983e61aa3993a8272291c398247d7c279e0",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@371542cd1696f142031e152a9772bc4d3cc8c46d",
   "third_party/externals/brotli"          : "https://skia.googlesource.com/external/github.com/google/brotli.git@e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, and tint for SPIRV compilation.
   # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
-  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@42448dafb4846f0739df304bbba5bc8a542a3262",
+  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@96ac969a33de78c673e767e0504e93b1d89a2db3",
   "third_party/externals/jinja2"          : "https://chromium.googlesource.com/chromium/src/third_party/jinja2@a82a4944a7f2496639f34a89c9923be5908b80aa",
   "third_party/externals/markupsafe"      : "https://chromium.googlesource.com/chromium/src/third_party/markupsafe@0944e71f4b2cb9a871bcbe353f95e889b64a611a",
-  "third_party/externals/tint"            : "https://dawn.googlesource.com/tint@2ebcb93cb36c767b0fb65fbb290e6efb4cb10516",
+  "third_party/externals/tint"            : "https://dawn.googlesource.com/tint@7f4d02c7aba7d9c39eead4c1dc4bde5431d5e4fa",
   "third_party/externals/dng_sdk"         : "https://android.googlesource.com/platform/external/dng_sdk.git@c8d0c9b1d16bfda56f15165d39e0ffa360a11123",
   "third_party/externals/egl-registry"    : "https://skia.googlesource.com/external/github.com/KhronosGroup/EGL-Registry@a0bca08de07c7d7651047bedc0b653cfaaa4f2ae",
   "third_party/externals/expat"           : "https://chromium.googlesource.com/external/github.com/libexpat/libexpat.git@a28238bdeebc087071777001245df1876a11f5ee",
@@ -39,13 +39,13 @@ deps = {
   "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@0e2880ab990e79ce6cc8c79c219feda42d98b1e8",
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@cf653e4ca4858583802b0d1656bc934edff6bd7f",
   "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@11cd875ed88484f93943071083b4821b4c3d2193",
-  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@7f2c7d18de0c916a326d5bf4d3c2d301eff2f4ee",
+  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@0fa19bd6c285e8ad3459a3f58ca903ceb2d7ab00",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
   "third_party/externals/wuffs"           : "https://skia.googlesource.com/external/github.com/google/wuffs-mirror-release-c.git@600cd96cf47788ee3a74b40a6028b035c9fd6a61",
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@c876c8f87101c5a75f6014b0f832499afeb65b73",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@74365f58496261b3a25075247aa569b11c47a504",
+    "url": "https://chromium.googlesource.com/chromium/src.git@1678eb6a6df9df0877f07f56fd8cdb1a2e7fc52a",
     "condition": "checkout_chromium",
   },
 
