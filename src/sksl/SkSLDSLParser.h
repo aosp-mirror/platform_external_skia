@@ -155,22 +155,23 @@ private:
 
     bool varDeclarationsPrefix(VarDeclarationsPrefix* prefixData);
 
-    skstd::optional<dsl::DSLStatement> varDeclarationsOrExpressionStatement();
+    dsl::DSLStatement varDeclarationsOrExpressionStatement();
 
-    skstd::optional<dsl::DSLStatement> varDeclarations();
+    dsl::DSLStatement varDeclarations();
 
     skstd::optional<dsl::DSLType> structDeclaration();
 
     SkTArray<dsl::DSLGlobalVar> structVarDeclaration(const dsl::DSLModifiers& modifiers);
 
-    /* (LBRACKET expression? RBRACKET)* (EQ assignmentExpression)? (COMMA IDENTIFER
-       (LBRACKET expression? RBRACKET)* (EQ assignmentExpression)?)* SEMICOLON */
-    template<class T>
-    SkTArray<T> varDeclarationEnd(PositionInfo position, const dsl::DSLModifiers& mods,
-                                  dsl::DSLType baseType, skstd::string_view name);
+    bool parseArrayDimensions(int offset, dsl::DSLType* type);
 
-    SkTArray<dsl::DSLGlobalVar> globalVarDeclarationEnd(const dsl::DSLModifiers& modifiers,
-                                                        dsl::DSLType type, skstd::string_view name);
+    bool parseInitializer(int offset, dsl::DSLExpression* initializer);
+
+    void globalVarDeclarationEnd(PositionInfo position, const dsl::DSLModifiers& mods,
+            dsl::DSLType baseType, skstd::string_view name);
+
+    dsl::DSLStatement localVarDeclarationEnd(PositionInfo position, const dsl::DSLModifiers& mods,
+            dsl::DSLType baseType, skstd::string_view name);
 
     skstd::optional<dsl::DSLWrapper<dsl::DSLParameter>> parameter();
 
@@ -184,77 +185,75 @@ private:
 
     dsl::DSLModifiers modifiersWithDefaults(int defaultFlags);
 
-    skstd::optional<dsl::DSLStatement> statement();
+    dsl::DSLStatement statement();
 
     skstd::optional<dsl::DSLType> type(const dsl::DSLModifiers& modifiers);
 
     bool interfaceBlock(const dsl::DSLModifiers& mods);
 
-    skstd::optional<dsl::DSLStatement> ifStatement();
+    dsl::DSLStatement ifStatement();
 
-    skstd::optional<dsl::DSLStatement> doStatement();
+    dsl::DSLStatement doStatement();
 
-    skstd::optional<dsl::DSLStatement> whileStatement();
+    dsl::DSLStatement whileStatement();
 
-    skstd::optional<dsl::DSLStatement> forStatement();
+    dsl::DSLStatement forStatement();
 
     skstd::optional<dsl::DSLCase> switchCase();
 
-    skstd::optional<dsl::DSLStatement> switchStatement();
+    dsl::DSLStatement switchStatement();
 
-    skstd::optional<dsl::DSLStatement> returnStatement();
+    dsl::DSLStatement returnStatement();
 
-    skstd::optional<dsl::DSLStatement> breakStatement();
+    dsl::DSLStatement breakStatement();
 
-    skstd::optional<dsl::DSLStatement> continueStatement();
+    dsl::DSLStatement continueStatement();
 
-    skstd::optional<dsl::DSLStatement> discardStatement();
+    dsl::DSLStatement discardStatement();
 
     skstd::optional<dsl::DSLBlock> block();
 
-    skstd::optional<dsl::DSLStatement> expressionStatement();
+    dsl::DSLStatement expressionStatement();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> expression();
+    dsl::DSLExpression expression();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> assignmentExpression();
+    dsl::DSLExpression assignmentExpression();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> ternaryExpression();
+    dsl::DSLExpression ternaryExpression();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> logicalOrExpression();
+    dsl::DSLExpression logicalOrExpression();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> logicalXorExpression();
+    dsl::DSLExpression logicalXorExpression();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> logicalAndExpression();
+    dsl::DSLExpression logicalAndExpression();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> bitwiseOrExpression();
+    dsl::DSLExpression bitwiseOrExpression();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> bitwiseXorExpression();
+    dsl::DSLExpression bitwiseXorExpression();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> bitwiseAndExpression();
+    dsl::DSLExpression bitwiseAndExpression();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> equalityExpression();
+    dsl::DSLExpression equalityExpression();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> relationalExpression();
+    dsl::DSLExpression relationalExpression();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> shiftExpression();
+    dsl::DSLExpression shiftExpression();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> additiveExpression();
+    dsl::DSLExpression additiveExpression();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> multiplicativeExpression();
+    dsl::DSLExpression multiplicativeExpression();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> unaryExpression();
+    dsl::DSLExpression unaryExpression();
 
-    skstd::optional<dsl::DSLWrapper<dsl::DSLExpression>> postfixExpression();
+    dsl::DSLExpression postfixExpression();
 
-    skstd::optional<dsl::Wrapper<dsl::DSLExpression>> swizzle(int offset, dsl::DSLExpression base,
-            skstd::string_view swizzleMask);
+    dsl::DSLExpression swizzle(int offset, dsl::DSLExpression base, skstd::string_view swizzleMask);
 
-    skstd::optional<dsl::Wrapper<dsl::DSLExpression>> call(int offset, dsl::DSLExpression base,
-            ExpressionArray args);
+    dsl::DSLExpression call(int offset, dsl::DSLExpression base, ExpressionArray args);
 
-    skstd::optional<dsl::Wrapper<dsl::DSLExpression>> suffix(dsl::DSLExpression base);
+    dsl::DSLExpression suffix(dsl::DSLExpression base);
 
-    skstd::optional<dsl::Wrapper<dsl::DSLExpression>> term();
+    dsl::DSLExpression term();
 
     bool intLiteral(SKSL_INT* dest);
 
