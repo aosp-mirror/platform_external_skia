@@ -135,10 +135,13 @@ void GrD3DCommandList::aliasingBarrier(sk_sp<GrManagedResource> beforeManagedRes
     newBarrier.Aliasing.pResourceAfter = afterResource;
 
     fHasWork = true;
-    // Aliasing barriers can accept a null pointer for one of the resources,
+    if (beforeResource) {
+        SkASSERT(beforeManagedResource);
+        this->addResource(std::move(beforeManagedResource));
+    }
+    // Aliasing barriers can accept a null pointer for the second resource,
     // but at this point we're not using that feature.
-    SkASSERT(beforeManagedResource);
-    this->addResource(std::move(beforeManagedResource));
+    SkASSERT(afterResource);
     SkASSERT(afterManagedResource);
     this->addResource(std::move(afterManagedResource));
 }
@@ -569,9 +572,9 @@ void GrD3DDirectCommandList::setComputeRootDescriptorTable(
     }
 }
 
-// We don't need to add these resources to the command list.
-// They're added when we first allocate from a heap in a given submit.
-void GrD3DDirectCommandList::setDescriptorHeaps(ID3D12DescriptorHeap* srvCrvDescriptorHeap,
+void GrD3DDirectCommandList::setDescriptorHeaps(sk_sp<GrRecycledResource> srvCrvHeapResource,
+                                                ID3D12DescriptorHeap* srvCrvDescriptorHeap,
+                                                sk_sp<GrRecycledResource> samplerHeapResource,
                                                 ID3D12DescriptorHeap* samplerDescriptorHeap) {
     if (srvCrvDescriptorHeap != fCurrentSRVCRVDescriptorHeap ||
         samplerDescriptorHeap != fCurrentSamplerDescriptorHeap) {
@@ -581,6 +584,8 @@ void GrD3DDirectCommandList::setDescriptorHeaps(ID3D12DescriptorHeap* srvCrvDesc
         };
 
         fCommandList->SetDescriptorHeaps(2, heaps);
+        this->addRecycledResource(std::move(srvCrvHeapResource));
+        this->addRecycledResource(std::move(samplerHeapResource));
         fCurrentSRVCRVDescriptorHeap = srvCrvDescriptorHeap;
         fCurrentSamplerDescriptorHeap = samplerDescriptorHeap;
     }
