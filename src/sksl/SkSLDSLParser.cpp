@@ -106,6 +106,8 @@ DSLParser::DSLParser(Compiler* compiler, const ProgramSettings& settings, Progra
     // We don't want to have to worry about manually releasing all of the objects in the event that
     // an error occurs
     fSettings.fAssertDSLObjectsReleased = false;
+    // We manage our symbol tables manually, so no need for name mangling
+    fSettings.fDSLMangling = false;
     fLexer.start(*fText);
     static const bool layoutMapInitialized = []{ InitLayoutMap(); return true; }();
     (void) layoutMapInitialized;
@@ -606,8 +608,9 @@ SkTArray<dsl::DSLGlobalVar> DSLParser::structVarDeclaration(const DSLModifiers& 
     if (this->checkNext(Token::Kind::TK_IDENTIFIER, &name)) {
         this->globalVarDeclarationEnd(this->position(name), modifiers, std::move(*type),
                 this->text(name));
+    } else {
+        this->expect(Token::Kind::TK_SEMICOLON, "';'");
     }
-    this->expect(Token::Kind::TK_SEMICOLON, "';'");
     return {};
 }
 
@@ -876,10 +879,6 @@ bool DSLParser::interfaceBlock(const dsl::DSLModifiers& modifiers) {
         }
         while (this->checkNext(Token::Kind::TK_COMMA));
     }
-    if (fields.empty()) {
-        this->error(typeName, "interface block '" + this->text(typeName) +
-                          "' must contain at least one member");
-    }
     skstd::string_view instanceName;
     Token instanceNameToken;
     SKSL_INT arraySize = 0;
@@ -891,8 +890,13 @@ bool DSLParser::interfaceBlock(const dsl::DSLModifiers& modifiers) {
         }
     }
     this->expect(Token::Kind::TK_SEMICOLON, "';'");
-    dsl::InterfaceBlock(modifiers, this->text(typeName), std::move(fields), instanceName,
-                        arraySize, this->position(typeName));
+    if (fields.empty()) {
+        this->error(typeName, "interface block '" + this->text(typeName) +
+                              "' must contain at least one member");
+    } else {
+        dsl::InterfaceBlock(modifiers, this->text(typeName), std::move(fields), instanceName,
+                            arraySize, this->position(typeName));
+    }
     return true;
 }
 
@@ -1500,17 +1504,17 @@ DSLExpression DSLParser::unaryExpression() {
                 return {};
             }
             this->nextToken();
-            skstd::optional<DSLWrapper<DSLExpression>> expr = this->unaryExpression();
-            if (!expr) {
+            DSLExpression expr = this->unaryExpression();
+            if (!expr.hasValue()) {
                 return {};
             }
             switch (next.fKind) {
-                case Token::Kind::TK_PLUS:       return {{ +std::move(**expr)}};
-                case Token::Kind::TK_MINUS:      return {{ -std::move(**expr)}};
-                case Token::Kind::TK_LOGICALNOT: return {{ !std::move(**expr)}};
-                case Token::Kind::TK_BITWISENOT: return {{ ~std::move(**expr)}};
-                case Token::Kind::TK_PLUSPLUS:   return {{++std::move(**expr)}};
-                case Token::Kind::TK_MINUSMINUS: return {{--std::move(**expr)}};
+                case Token::Kind::TK_PLUS:       return {{ +std::move(expr)}};
+                case Token::Kind::TK_MINUS:      return {{ -std::move(expr)}};
+                case Token::Kind::TK_LOGICALNOT: return {{ !std::move(expr)}};
+                case Token::Kind::TK_BITWISENOT: return {{ ~std::move(expr)}};
+                case Token::Kind::TK_PLUSPLUS:   return {{++std::move(expr)}};
+                case Token::Kind::TK_MINUSMINUS: return {{--std::move(expr)}};
                 default: SkUNREACHABLE;
             }
         }

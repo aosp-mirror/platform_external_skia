@@ -254,7 +254,7 @@ public:
         // this point we do not know the function's return type. We therefore do not check for
         // errors, or coerce the value to the correct type, until the return statement is actually
         // added to a function. (This is done in FunctionDefinition::Convert.)
-        return SkSL::ReturnStatement::Make(/*offset=*/-1, value.releaseIfPossible());
+        return SkSL::ReturnStatement::Make(pos.offset(), value.releaseIfPossible());
     }
 
     static DSLExpression Swizzle(DSLExpression base, SkSL::SwizzleComponent::Type a,
@@ -388,6 +388,9 @@ void Declare(SkTArray<DSLGlobalVar>& vars, PositionInfo pos) {
 }
 
 DSLStatement Discard(PositionInfo pos) {
+    if (DSLWriter::GetProgramConfig()->fKind != ProgramKind::kFragment) {
+        DSLWriter::ReportError("discard statement is only permitted in fragment shaders", pos);
+    }
     return DSLCore::Discard(pos);
 }
 
