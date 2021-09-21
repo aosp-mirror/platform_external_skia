@@ -450,7 +450,7 @@ void DSLParser::globalVarDeclarationEnd(PositionInfo pos, const dsl::DSLModifier
         }
         DSLGlobalVar next(mods, type, this->text(identifierName), std::move(anotherInitializer));
         Declare(next);
-        AddToSymbolTable(next);
+        AddToSymbolTable(next, this->position(identifierName));
     }
     this->expect(Token::Kind::TK_SEMICOLON, "';'");
 }
@@ -486,7 +486,7 @@ DSLStatement DSLParser::localVarDeclarationEnd(PositionInfo pos, const dsl::DSLM
         }
         DSLVar next(mods, type, this->text(identifierName), std::move(anotherInitializer));
         DSLWriter::AddVarDeclaration(result, next);
-        AddToSymbolTable(next);
+        AddToSymbolTable(next, this->position(identifierName));
     }
     this->expect(Token::Kind::TK_SEMICOLON, "';'");
     return result;
@@ -1666,11 +1666,11 @@ DSLExpression DSLParser::suffix(DSLExpression base) {
             ExpressionArray args;
             if (this->peek().fKind != Token::Kind::TK_RPAREN) {
                 for (;;) {
-                    skstd::optional<DSLWrapper<DSLExpression>> expr = this->assignmentExpression();
-                    if (!expr) {
+                    DSLExpression expr = this->assignmentExpression();
+                    if (!expr.hasValue()) {
                         return {};
                     }
-                    args.push_back((**expr).release());
+                    args.push_back(expr.release());
                     if (!this->checkNext(Token::Kind::TK_COMMA)) {
                         break;
                     }

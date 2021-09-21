@@ -263,8 +263,6 @@ sk_sp<GrDawnProgram> GrDawnProgramBuilder::Build(GrDawnGpu* gpu,
         return nullptr;
     }
 
-    GrUniformDataManager::ProgramUniforms uniforms =
-            builder.fUniformHandler.getNewProgramUniforms(builder.fUniformAggregator);
     builder.finalizeShaders();
 
     SkSL::Program::Inputs vertInputs, fragInputs;
@@ -273,11 +271,9 @@ sk_sp<GrDawnProgram> GrDawnProgramBuilder::Build(GrDawnGpu* gpu,
                                                &vertInputs);
     auto fsModule = builder.createShaderModule(builder.fFS, SkSL::ProgramKind::kFragment, flipY,
                                                &fragInputs);
-    GrSPIRVUniformHandler::UniformInfoArray& legacyUniforms = builder.fUniformHandler.fUniforms;
+    GrSPIRVUniformHandler::UniformInfoArray& uniforms = builder.fUniformHandler.fUniforms;
     uint32_t uniformBufferSize = builder.fUniformHandler.fCurrentUBOOffset;
-    sk_sp<GrDawnProgram> result(new GrDawnProgram(std::move(uniforms),
-                                                  legacyUniforms,
-                                                  uniformBufferSize));
+    sk_sp<GrDawnProgram> result(new GrDawnProgram(uniforms, uniformBufferSize));
     result->fGPImpl = std::move(builder.fGPImpl);
     result->fXPImpl = std::move(builder.fXPImpl);
     result->fFPImpls = std::move(builder.fFPImpls);
@@ -487,8 +483,11 @@ static void set_texture(GrDawnGpu* gpu, GrSamplerState state, GrTexture* texture
     bindings->push_back(make_bind_group_entry((*binding)++, sampler));
     GrDawnTexture* tex = static_cast<GrDawnTexture*>(texture);
     wgpu::TextureViewDescriptor viewDesc;
-    // Note that a mipLevelCount of zero here means to expose all available levels.
-    viewDesc.mipLevelCount = GrSamplerState::MipmapMode::kNone == state.mipmapMode() ? 1 : 0;
+    // Note that a mipLevelCount == WGPU_MIP_LEVEL_COUNT_UNDEFINED here means to expose all
+    // available levels.
+    viewDesc.mipLevelCount = GrSamplerState::MipmapMode::kNone == state.mipmapMode()
+                                     ? 1
+                                     : WGPU_MIP_LEVEL_COUNT_UNDEFINED;
     wgpu::TextureView textureView = tex->texture().CreateView(&viewDesc);
     bindings->push_back(make_bind_group_entry((*binding)++, textureView));
 }
@@ -498,7 +497,6 @@ wgpu::BindGroup GrDawnProgram::setUniformData(GrDawnGpu* gpu, const GrRenderTarg
     if (0 == fDataManager.uniformBufferSize()) {
         return nullptr;
     }
-    fDataManager.setUniforms(programInfo);
     this->setRenderTargetState(renderTarget, programInfo.origin());
     const GrPipeline& pipeline = programInfo.pipeline();
     const GrGeometryProcessor& geomProc = programInfo.geomProc();

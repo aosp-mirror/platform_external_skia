@@ -23,7 +23,6 @@
 GrD3DPipelineState::GrD3DPipelineState(
         sk_sp<GrD3DPipeline> pipeline,
         sk_sp<GrD3DRootSignature> rootSignature,
-        GrUniformDataManager::ProgramUniforms programUniforms,
         const GrGLSLBuiltinUniformHandles& builtinUniformHandles,
         const UniformInfoArray& uniforms,
         uint32_t uniformSize,
@@ -39,7 +38,7 @@ GrD3DPipelineState::GrD3DPipelineState(
         , fGPImpl(std::move(gpImpl))
         , fXPImpl(std::move(xpImpl))
         , fFPImpls(std::move(fpImpls))
-        , fDataManager(std::move(programUniforms), uniforms, uniformSize)
+        , fDataManager(uniforms, uniformSize)
         , fNumSamplers(numSamplers)
         , fVertexStride(vertexStride)
         , fInstanceStride(instanceStride) {}
@@ -47,8 +46,6 @@ GrD3DPipelineState::GrD3DPipelineState(
 void GrD3DPipelineState::setAndBindConstants(GrD3DGpu* gpu,
                                              const GrRenderTarget* renderTarget,
                                              const GrProgramInfo& programInfo) {
-    fDataManager.setUniforms(programInfo);
-
     this->setRenderTargetState(renderTarget, programInfo.origin());
 
     fGPImpl->setData(fDataManager, *gpu->caps()->shaderCaps(), programInfo.geomProc());
@@ -134,16 +131,19 @@ void GrD3DPipelineState::setAndBindTextures(GrD3DGpu* gpu,
 
     // fill in descriptor tables and bind to root signature
     if (fNumSamplers > 0) {
-        // set up and bind shader resource view table
+        // set up descriptor tables and bind heaps
         sk_sp<GrD3DDescriptorTable> srvTable =
                 gpu->resourceProvider().findOrCreateShaderViewTable(shaderResourceViews);
+        sk_sp<GrD3DDescriptorTable> samplerTable =
+            gpu->resourceProvider().findOrCreateSamplerTable(samplers);
+        gpu->currentCommandList()->setDescriptorHeaps(srvTable->heap(), samplerTable->heap());
+
+        // bind shader resource view table
         gpu->currentCommandList()->setGraphicsRootDescriptorTable(
                 (unsigned int)GrD3DRootSignature::ParamIndex::kShaderViewDescriptorTable,
                 srvTable->baseGpuDescriptor());
 
-        // set up and bind sampler table
-        sk_sp<GrD3DDescriptorTable> samplerTable =
-                gpu->resourceProvider().findOrCreateSamplerTable(samplers);
+        // bind sampler table
         gpu->currentCommandList()->setGraphicsRootDescriptorTable(
                 (unsigned int)GrD3DRootSignature::ParamIndex::kSamplerDescriptorTable,
                 samplerTable->baseGpuDescriptor());
