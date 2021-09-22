@@ -109,6 +109,7 @@ sksl_error_tests = [
   "/sksl/errors/Ossfuzz38560.sksl",
   "/sksl/errors/Ossfuzz38865.sksl",
   "/sksl/errors/Ossfuzz38944.sksl",
+  "/sksl/errors/Ossfuzz39000.sksl",
   "/sksl/errors/OverflowFloatLiteral.sksl",
   "/sksl/errors/OverflowIntLiteral.sksl",
   "/sksl/errors/OverflowInt64Literal.sksl",
@@ -396,7 +397,7 @@ sksl_shared_tests = [
   "/sksl/shared/StructsInFunctions.sksl",
   "/sksl/shared/StructMaxDepth.sksl",
   "/sksl/shared/Switch.sksl",
-  "/sksl/shared/SwitchContainingDeadCode.sksl",
+  "/sksl/shared/SwitchDefaultOnly.sksl",
   "/sksl/shared/SwitchWithFallthrough.sksl",
   "/sksl/shared/SwizzleBoolConstants.sksl",
   "/sksl/shared/SwizzleByConstantIndex.sksl",
@@ -556,6 +557,7 @@ sksl_rte_tests = [
   "/sksl/runtime/LoopFloat.rts",
   "/sksl/runtime/PrecisionQualifiers.rts",
   "/sksl/runtime/SampleWithExplicitCoord.rts",
+  "/sksl/runtime/Switch.rts",
   "/sksl/runtime/VectorIndexing.rts",
 ]
 
