@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#ifndef Device_DEFINED
-#define Device_DEFINED
+#ifndef skgpu_Device_DEFINED
+#define skgpu_Device_DEFINED
 
 #include "src/core/SkDevice.h"
 
-namespace sktbd {
+namespace skgpu {
 
 class Device final : public SkBaseDevice  {
 public:
@@ -43,6 +43,6 @@ protected:
 private:
 };
 
-} // namespace sktbd
+} // namespace skgpu
 
-#endif // Device_DEFINED
+#endif // skgpu_Device_DEFINED
