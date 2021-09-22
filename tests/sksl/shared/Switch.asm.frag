@@ -10,6 +10,7 @@ OpMemberName %_UniformBuffer 0 "colorGreen"
 OpMemberName %_UniformBuffer 1 "colorRed"
 OpName %_entrypoint_v "_entrypoint_v"
 OpName %main "main"
+OpName %color "color"
 OpDecorate %sk_FragColor RelaxedPrecision
 OpDecorate %sk_FragColor Location 0
 OpDecorate %sk_FragColor Index 0
@@ -21,11 +22,13 @@ OpMemberDecorate %_UniformBuffer 1 RelaxedPrecision
 OpDecorate %_UniformBuffer Block
 OpDecorate %10 Binding 0
 OpDecorate %10 DescriptorSet 0
-OpDecorate %30 RelaxedPrecision
-OpDecorate %31 RelaxedPrecision
-OpDecorate %39 RelaxedPrecision
+OpDecorate %color RelaxedPrecision
+OpDecorate %32 RelaxedPrecision
+OpDecorate %33 RelaxedPrecision
 OpDecorate %41 RelaxedPrecision
 OpDecorate %43 RelaxedPrecision
+OpDecorate %45 RelaxedPrecision
+OpDecorate %46 RelaxedPrecision
 %float = OpTypeFloat 32
 %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
@@ -43,6 +46,7 @@ OpDecorate %43 RelaxedPrecision
 %19 = OpConstantComposite %v2float %float_0 %float_0
 %_ptr_Function_v2float = OpTypePointer Function %v2float
 %23 = OpTypeFunction %v4float %_ptr_Function_v2float
+%_ptr_Function_v4float = OpTypePointer Function %v4float
 %_ptr_Uniform_v4float = OpTypePointer Uniform %v4float
 %int = OpTypeInt 32 1
 %int_0 = OpConstant %int 0
@@ -58,24 +62,29 @@ OpFunctionEnd
 %main = OpFunction %v4float None %23
 %24 = OpFunctionParameter %_ptr_Function_v2float
 %25 = OpLabel
-%26 = OpAccessChain %_ptr_Uniform_v4float %10 %int_0
-%30 = OpLoad %v4float %26
-%31 = OpCompositeExtract %float %30 1
-%32 = OpConvertFToS %int %31
-OpSelectionMerge %33 None
-OpSwitch %32 %36 0 %34 1 %35
-%34 = OpLabel
-%37 = OpAccessChain %_ptr_Uniform_v4float %10 %int_1
-%39 = OpLoad %v4float %37
-OpReturnValue %39
-%35 = OpLabel
-%40 = OpAccessChain %_ptr_Uniform_v4float %10 %int_0
-%41 = OpLoad %v4float %40
-OpReturnValue %41
+%color = OpVariable %_ptr_Function_v4float Function
+%28 = OpAccessChain %_ptr_Uniform_v4float %10 %int_0
+%32 = OpLoad %v4float %28
+%33 = OpCompositeExtract %float %32 1
+%34 = OpConvertFToS %int %33
+OpSelectionMerge %35 None
+OpSwitch %34 %38 0 %36 1 %37
 %36 = OpLabel
-%42 = OpAccessChain %_ptr_Uniform_v4float %10 %int_1
+%39 = OpAccessChain %_ptr_Uniform_v4float %10 %int_1
+%41 = OpLoad %v4float %39
+OpStore %color %41
+OpBranch %35
+%37 = OpLabel
+%42 = OpAccessChain %_ptr_Uniform_v4float %10 %int_0
 %43 = OpLoad %v4float %42
-OpReturnValue %43
-%33 = OpLabel
-OpUnreachable
+OpStore %color %43
+OpBranch %35
+%38 = OpLabel
+%44 = OpAccessChain %_ptr_Uniform_v4float %10 %int_1
+%45 = OpLoad %v4float %44
+OpStore %color %45
+OpBranch %35
+%35 = OpLabel
+%46 = OpLoad %v4float %color
+OpReturnValue %46
 OpFunctionEnd

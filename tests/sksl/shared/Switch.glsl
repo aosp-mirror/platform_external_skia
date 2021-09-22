@@ -3,12 +3,17 @@ out vec4 sk_FragColor;
 uniform vec4 colorGreen;
 uniform vec4 colorRed;
 vec4 main() {
+    vec4 color;
     switch (int(colorGreen.y)) {
         case 0:
-            return colorRed;
+            color = colorRed;
+            break;
         case 1:
-            return colorGreen;
+            color = colorGreen;
+            break;
         default:
-            return colorRed;
+            color = colorRed;
+            break;
     }
+    return color;
 }
