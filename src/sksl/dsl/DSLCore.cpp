@@ -34,15 +34,24 @@ void Start(SkSL::Compiler* compiler, ProgramKind kind) {
 }
 
 void Start(SkSL::Compiler* compiler, ProgramKind kind, const ProgramSettings& settings) {
-    DSLWriter::SetInstance(std::make_unique<DSLWriter>(compiler, kind, settings,
+    DSLWriter::SetInstance(std::make_unique<DSLWriter>(&compiler->context(), compiler,
+                                                       &compiler->irGenerator(), kind, settings,
                                                        compiler->moduleForProgramKind(kind),
+                                                       /*isModule=*/false));
+}
+
+void Start(SkSL::Context* context, ProgramKind kind, const ProgramSettings& settings) {
+    DSLWriter::SetInstance(std::make_unique<DSLWriter>(context, /*compiler=*/nullptr,
+                                                       /*irGenerator=*/nullptr, kind, settings,
+                                                       /*module=*/skstd::nullopt,
                                                        /*isModule=*/false));
 }
 
 void StartModule(SkSL::Compiler* compiler, ProgramKind kind, const ProgramSettings& settings,
                  SkSL::ParsedModule module) {
-    DSLWriter::SetInstance(std::make_unique<DSLWriter>(compiler, kind, settings, module,
-                                                       /*isModule=*/true));
+    DSLWriter::SetInstance(std::make_unique<DSLWriter>(&compiler->context(), compiler,
+                                                       &compiler->irGenerator(), kind, settings,
+                                                       module, /*isModule=*/true));
 }
 
 void End() {
@@ -65,11 +74,12 @@ public:
     static std::unique_ptr<SkSL::Program> ReleaseProgram(std::unique_ptr<String> source) {
         DSLWriter& instance = DSLWriter::Instance();
         SkSL::IRGenerator& ir = DSLWriter::IRGenerator();
+        SkSL::Compiler& compiler = DSLWriter::Compiler();
         IRGenerator::IRBundle bundle = ir.finish();
         Pool* pool = DSLWriter::Instance().fPool.get();
         auto result = std::make_unique<SkSL::Program>(std::move(source),
                                                       std::move(instance.fConfig),
-                                                      DSLWriter::Instance().fCompiler->fContext,
+                                                      compiler.fContext,
                                                       std::move(bundle.fElements),
                                                       std::move(bundle.fSharedElements),
                                                       std::move(instance.fModifiersPool),
@@ -77,9 +87,9 @@ public:
                                                       std::move(instance.fPool),
                                                       bundle.fInputs);
         bool success = false;
-        if (!DSLWriter::Compiler().finalize(*result)) {
+        if (!compiler.finalize(*result)) {
             // Do not return programs that failed to compile.
-        } else if (!DSLWriter::Compiler().optimize(*result)) {
+        } else if (!compiler.optimize(*result)) {
             // Do not return programs that failed to optimize.
         } else {
             // We have a successful program!
@@ -303,7 +313,7 @@ public:
     }
 
     static DSLPossibleStatement Switch(DSLExpression value, SkTArray<DSLCase> cases,
-                                       bool isStatic, PositionInfo pos) {
+                                       bool isStatic) {
         ExpressionArray values;
         values.reserve_back(cases.count());
         SkTArray<StatementArray> statements;
@@ -313,7 +323,7 @@ public:
             statements.push_back(std::move(c.fStatements));
         }
         return DSLWriter::ConvertSwitch(value.release(), std::move(values), std::move(statements),
-                                        isStatic, pos);
+                                        isStatic);
     }
 
     static DSLPossibleStatement While(DSLExpression test, DSLStatement stmt) {
@@ -441,12 +451,20 @@ DSLStatement StaticIf(DSLExpression test, DSLStatement ifTrue, DSLStatement ifFa
                          pos);
 }
 
-DSLPossibleStatement StaticSwitch(DSLExpression value, SkTArray<DSLCase> cases, PositionInfo pos) {
-    return DSLCore::Switch(std::move(value), std::move(cases), /*isStatic=*/true, pos);
+DSLPossibleStatement PossibleStaticSwitch(DSLExpression value, SkTArray<DSLCase> cases) {
+    return DSLCore::Switch(std::move(value), std::move(cases), /*isStatic=*/true);
 }
 
-DSLPossibleStatement Switch(DSLExpression value, SkTArray<DSLCase> cases, PositionInfo pos) {
-    return DSLCore::Switch(std::move(value), std::move(cases), /*isStatic=*/false, pos);
+DSLStatement StaticSwitch(DSLExpression value, SkTArray<DSLCase> cases, PositionInfo pos) {
+    return DSLStatement(PossibleStaticSwitch(std::move(value), std::move(cases)), pos);
+}
+
+DSLPossibleStatement PossibleSwitch(DSLExpression value, SkTArray<DSLCase> cases) {
+    return DSLCore::Switch(std::move(value), std::move(cases), /*isStatic=*/false);
+}
+
+DSLStatement Switch(DSLExpression value, SkTArray<DSLCase> cases, PositionInfo pos) {
+    return DSLStatement(PossibleSwitch(std::move(value), std::move(cases)), pos);
 }
 
 DSLStatement While(DSLExpression test, DSLStatement stmt, PositionInfo pos) {
