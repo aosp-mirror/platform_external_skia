@@ -123,8 +123,10 @@
   {"name": "Build-Mac-Clang-x86_64-Release-TSAN_Metal"},
   {"name": "Build-Win-Clang-arm64-Debug"},
   {"name": "Build-Win-Clang-arm64-Debug-ANGLE"},
+  {"name": "Build-Mac-Clang-arm64-Debug-Graphite"},
   {"name": "Build-Win-Clang-arm64-Release"},
   {"name": "Build-Win-Clang-arm64-Release-ANGLE"},
+  {"name": "Build-Mac-Clang-arm64-Release-Graphite"},
   {"name": "Build-Win-Clang-arm64-Release-Android"},
   {"name": "Build-Win-Clang-x86-Debug",
    "cq_config": {}
@@ -274,6 +276,7 @@
   {"name": "Perf-Debian10-Clang-GCE-CPU-AVX2-x86_64-Release-All-SkottieTracing"},
   {"name": "Perf-Debian10-Clang-GCE-CPU-AVX2-x86_64-Release-All-Wuffs"},
   {"name": "Perf-Debian10-Clang-GCE-CPU-AVX512-x86_64-Release-All"},
+  {"name": "Perf-Debian10-Clang-GCE-GPU-SwiftShader-x86_64-Release-All-SwiftShader"},
   {"name": "Perf-Debian10-Clang-NUC5PPYH-GPU-IntelHD405-x86_64-Release-All"},
   {"name": "Perf-Debian10-Clang-NUC5PPYH-GPU-IntelHD405-x86_64-Release-All-Vulkan"},
   {"name": "Perf-Debian10-Clang-NUC7i5BNK-GPU-IntelIris640-x86_64-Debug-All-ASAN_Vulkan"},
