@@ -5,16 +5,18 @@
  * found in the LICENSE file.
  */
 
-#ifndef Device_DEFINED
-#define Device_DEFINED
+#ifndef skgpu_Device_DEFINED
+#define skgpu_Device_DEFINED
 
 #include "src/core/SkDevice.h"
 
-namespace sktbd {
+namespace skgpu {
+
+class SurfaceDrawContext;
 
 class Device final : public SkBaseDevice  {
 public:
-    Device(const SkImageInfo&);
+    static sk_sp<Device> Make(const SkImageInfo&);
 
 protected:
     bool onClipIsAA() const override { return false; }
@@ -41,8 +43,11 @@ protected:
     void onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) override {}
 
 private:
+    Device(sk_sp<SurfaceDrawContext>);
+
+    sk_sp<SurfaceDrawContext> fSDC;
 };
 
-} // namespace sktbd
+} // namespace skgpu
 
-#endif // Device_DEFINED
+#endif // skgpu_Device_DEFINED

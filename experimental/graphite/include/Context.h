@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#ifndef Context_DEFINED
-#define Context_DEFINED
+#ifndef skgpu_Context_DEFINED
+#define skgpu_Context_DEFINED
 
-namespace sktbd {
+namespace skgpu {
 
 class Context {
 public:
@@ -16,7 +16,7 @@ public:
 private:
 };
 
-} // namespace sktbd
+} // namespace skgpu
 
-#endif // Context_DEFINED
+#endif // skgpu_Context_DEFINED
 
