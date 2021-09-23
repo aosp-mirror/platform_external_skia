@@ -5,10 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "experimental/sktbd/include/Context.h"
+#include "experimental/graphite/src/Task.h"
 
-namespace sktbd {
+namespace skgpu {
 
-Context::Context() {}
+Task::Task() {}
+Task::~Task() {}
 
-} // namespace sktbd
+} // namespace skgpu

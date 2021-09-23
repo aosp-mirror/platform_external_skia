@@ -1025,11 +1025,11 @@ optional("ndk_images") {
   libs = [ "jnigraphics" ]
 }
 
-optional("tbd") {
-  enabled = skia_enable_tbd
-  public_defines = [ "SK_TBD_ENABLED" ]
-  public = skia_tbd_public
-  sources = skia_tbd_sources
+optional("graphite") {
+  enabled = skia_enable_graphite
+  public_defines = [ "SK_GRAPHITE_ENABLED" ]
+  public = skia_graphite_public
+  sources = skia_graphite_sources
 }
 
 optional("pdf") {
@@ -1211,9 +1211,9 @@ skia_component("skia") {
     ":fontmgr_win",
     ":fontmgr_win_gdi",
     ":gpu",
+    ":graphite",
     ":pdf",
     ":skcms",
-    ":tbd",
     ":xps",
   ]
 
@@ -1475,6 +1475,10 @@ group("modules") {
     "modules/skshaper",
     "modules/svg",
   ]
+}
+
+group("experimental") {
+  deps = [ "experimental/sktext" ]
 }
 
 config("our_vulkan_headers") {
@@ -1985,6 +1989,7 @@ if (skia_enable_tools) {
       ":test",
       ":tool_utils",
       "experimental/skrive:tests",
+      "experimental/sktext:tests",
       "modules/skottie:tests",
       "modules/skparagraph:tests",
       "modules/sksg:tests",
@@ -2049,6 +2054,7 @@ if (skia_enable_tools) {
       ":flags",
       ":gpu_tool_utils",
       ":xml",
+      "experimental/sktext:samples",
       "modules/audioplayer",
       "modules/skparagraph:samples",
       "modules/skshaper",
@@ -2488,6 +2494,7 @@ if (skia_enable_tools) {
       deps = [
         ":sk_app",
         ":skia",
+        "experimental/sktext:sktext",
         "modules/skottie:skottie",
       ]
     }
@@ -2744,6 +2751,7 @@ if (skia_enable_tools) {
         ":tool_utils",
         ":trace",
         "experimental/skrive",
+        "experimental/sktext",
         "modules/audioplayer",
         "modules/particles",
         "modules/skottie",
@@ -2862,6 +2870,10 @@ if (skia_enable_tools) {
     test_app("editor") {
       is_shared_library = is_android
       deps = [ "modules/skplaintexteditor:editor_app" ]
+    }
+    test_app("text_editor") {
+      is_shared_library = is_android
+      deps = [ "experimental/sktext:text_editor" ]
     }
   }
 
