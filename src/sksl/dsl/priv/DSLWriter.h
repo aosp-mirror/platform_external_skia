@@ -12,6 +12,7 @@
 #include "include/core/SkStringView.h"
 #include "include/private/SkSLModifiers.h"
 #include "include/private/SkSLStatement.h"
+#include "include/private/SkTOptional.h"
 #include "include/sksl/DSLExpression.h"
 #include "include/sksl/DSLStatement.h"
 #include "src/sksl/SkSLMangler.h"
@@ -49,8 +50,9 @@ class DSLVar;
  */
 class DSLWriter {
 public:
-    DSLWriter(SkSL::Compiler* compiler, SkSL::ProgramKind kind,
-              const SkSL::ProgramSettings& settings, SkSL::ParsedModule module, bool isModule);
+    DSLWriter(SkSL::Context* context, SkSL::Compiler* compiler, SkSL::IRGenerator* irGenerator,
+              SkSL::ProgramKind kind, const SkSL::ProgramSettings& settings,
+              skstd::optional<SkSL::ParsedModule> module, bool isModule);
 
     ~DSLWriter();
 
@@ -62,9 +64,7 @@ public:
     /**
      * Returns the Compiler used by DSL operations in the current thread.
      */
-    static SkSL::Compiler& Compiler() {
-        return *Instance().fCompiler;
-    }
+    static SkSL::Compiler& Compiler();
 
     /**
      * Returns the IRGenerator used by DSL operations in the current thread.
@@ -74,7 +74,7 @@ public:
     /**
      * Returns the Context used by DSL operations in the current thread.
      */
-    static const SkSL::Context& Context();
+    static SkSL::Context& Context();
 
     /**
      * Returns the Settings used by DSL operations in the current thread.
@@ -229,8 +229,7 @@ public:
     static DSLPossibleStatement ConvertSwitch(std::unique_ptr<Expression> value,
                                               ExpressionArray caseValues,
                                               SkTArray<SkSL::StatementArray> caseStatements,
-                                              bool isStatic,
-                                              PositionInfo pos);
+                                              bool isStatic);
 
     /**
      * Returns the ErrorReporter associated with the current thread. This object will be notified
@@ -279,7 +278,7 @@ public:
     }
 
     /**
-     * Forwards any pending Compiler errors to the DSL ErrorReporter.
+     * Forwards any pending errors to the DSL ErrorReporter.
      */
     static void ReportErrors(PositionInfo pos);
 
@@ -294,7 +293,9 @@ private:
 
     std::unique_ptr<SkSL::ProgramConfig> fConfig;
     std::unique_ptr<SkSL::ModifiersPool> fModifiersPool;
+    SkSL::Context* fContext;
     SkSL::Compiler* fCompiler;
+    SkSL::IRGenerator* fIRGenerator;
     std::unique_ptr<Pool> fPool;
     SkSL::ProgramConfig* fOldConfig;
     SkSL::ModifiersPool* fOldModifiersPool;

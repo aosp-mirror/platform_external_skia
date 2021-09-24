@@ -44,6 +44,9 @@ void Start(SkSL::Compiler* compiler, SkSL::ProgramKind kind = SkSL::ProgramKind:
 
 void Start(SkSL::Compiler* compiler, SkSL::ProgramKind kind, const SkSL::ProgramSettings& settings);
 
+/** Allows lightweight DSL use, but no declaring variables or making function calls. */
+void Start(SkSL::Context* context, ProgramKind kind, const ProgramSettings& settings);
+
 /**
  * Signals the end of DSL output. This must be called sometime between a call to Start() and the
  * termination of the thread.
@@ -165,8 +168,11 @@ DSLStatement StaticIf(DSLExpression test, DSLStatement ifTrue,
                       DSLStatement ifFalse = DSLStatement(),
                       PositionInfo pos = PositionInfo::Capture());
 
-DSLPossibleStatement StaticSwitch(DSLExpression value, SkTArray<DSLCase> cases,
-                                  PositionInfo info = PositionInfo::Capture());
+// Internal use only
+DSLPossibleStatement PossibleStaticSwitch(DSLExpression value, SkTArray<DSLCase> cases);
+
+DSLStatement StaticSwitch(DSLExpression value, SkTArray<DSLCase> cases,
+                          PositionInfo info = PositionInfo::Capture());
 
 /**
  * @switch (value) { cases }
@@ -176,11 +182,14 @@ DSLPossibleStatement StaticSwitch(DSLExpression value, Cases... cases) {
     SkTArray<DSLCase> caseArray;
     caseArray.reserve_back(sizeof...(cases));
     (caseArray.push_back(std::move(cases)), ...);
-    return StaticSwitch(std::move(value), std::move(caseArray));
+    return PossibleStaticSwitch(std::move(value), std::move(caseArray));
 }
 
-DSLPossibleStatement Switch(DSLExpression value, SkTArray<DSLCase> cases,
-                            PositionInfo info = PositionInfo::Capture());
+// Internal use only
+DSLPossibleStatement PossibleSwitch(DSLExpression value, SkTArray<DSLCase> cases);
+
+DSLStatement Switch(DSLExpression value, SkTArray<DSLCase> cases,
+                    PositionInfo info = PositionInfo::Capture());
 
 /**
  * switch (value) { cases }
@@ -190,7 +199,7 @@ DSLPossibleStatement Switch(DSLExpression value, Cases... cases) {
     SkTArray<DSLCase> caseArray;
     caseArray.reserve_back(sizeof...(cases));
     (caseArray.push_back(std::move(cases)), ...);
-    return Switch(std::move(value), std::move(caseArray));
+    return PossibleSwitch(std::move(value), std::move(caseArray));
 }
 
 /**
