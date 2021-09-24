@@ -780,7 +780,7 @@ void GLSLCodeGenerator::writeVariableReference(const VariableReference& ref) {
             if (this->caps().fbFetchSupport()) {
                 this->write(this->caps().fbFetchColorName());
             } else {
-                fContext.fErrors->error(ref.fOffset,
+                fContext.fErrors->error(ref.fLine,
                                         "sk_LastFragColor requires framebuffer fetch support");
             }
             break;
@@ -909,12 +909,12 @@ void GLSLCodeGenerator::writeShortCircuitWorkaroundExpression(const BinaryExpres
     if (b.getOperator().kind() == Token::Kind::TK_LOGICALAND) {
         this->writeExpression(*b.right(), Precedence::kTernary);
     } else {
-        Literal boolTrue(/*offset=*/-1, /*value=*/1, fContext.fTypes.fBool.get());
+        Literal boolTrue(/*line=*/-1, /*value=*/1, fContext.fTypes.fBool.get());
         this->writeLiteral(boolTrue);
     }
     this->write(" : ");
     if (b.getOperator().kind() == Token::Kind::TK_LOGICALAND) {
-        Literal boolFalse(/*offset=*/-1, /*value=*/0, fContext.fTypes.fBool.get());
+        Literal boolFalse(/*line=*/-1, /*value=*/0, fContext.fTypes.fBool.get());
         this->writeLiteral(boolFalse);
     } else {
         this->writeExpression(*b.right(), Precedence::kTernary);
@@ -1284,8 +1284,8 @@ void GLSLCodeGenerator::writeForStatement(const ForStatement& f) {
     if (f.test()) {
         if (this->caps().addAndTrueToLoopCondition()) {
             std::unique_ptr<Expression> and_true(new BinaryExpression(
-                    /*offset=*/-1, f.test()->clone(), Token::Kind::TK_LOGICALAND,
-                    Literal::MakeBool(fContext, /*offset=*/-1, /*value=*/true),
+                    /*line=*/-1, f.test()->clone(), Token::Kind::TK_LOGICALAND,
+                    Literal::MakeBool(fContext, /*line=*/-1, /*value=*/true),
                     fContext.fTypes.fBool.get()));
             this->writeExpression(*and_true, Precedence::kTopLevel);
         } else {
@@ -1355,66 +1355,8 @@ void GLSLCodeGenerator::writeDoStatement(const DoStatement& d) {
 
 void GLSLCodeGenerator::writeSwitchStatement(const SwitchStatement& s) {
     if (fProgram.fConfig->strictES2Mode()) {
-        String fallthroughVar = "_tmpSwitchFallthrough" + to_string(fVarCount++);
-        String valueVar = "_tmpSwitchValue" + to_string(fVarCount++);
-        String loopVar = "_tmpSwitchLoop" + to_string(fVarCount++);
-        this->write("int ");
-        this->write(valueVar);
-        this->write(" = ");
-        this->writeExpression(*s.value(), Precedence::kAssignment);
-        this->write(", ");
-        this->write(fallthroughVar);
-        this->writeLine(" = 0; ");
-        this->write("for (int ");
-        this->write(loopVar);
-        this->write(" = 0; ");
-        this->write(loopVar);
-        this->write(" < 1; ");
-        this->write(loopVar);
-        this->writeLine("++) {");
-        fIndentation++;
-
-        bool firstCase = true;
-        for (const std::unique_ptr<Statement>& stmt : s.cases()) {
-            const SwitchCase& c = stmt->as<SwitchCase>();
-            if (c.value()) {
-                this->write("if ((");
-                if (firstCase) {
-                    firstCase = false;
-                } else {
-                    this->write(fallthroughVar);
-                    this->write(" > 0) || (");
-                }
-                this->write(valueVar);
-                this->write(" == ");
-                this->writeExpression(*c.value(), Precedence::kEquality);
-                this->writeLine(")) {");
-                fIndentation++;
-
-                // We write the entire case-block statement here, and then set `switchFallthrough`
-                // to 1. If the case-block had a break statement in it, we break out of the outer
-                // for-loop entirely, meaning the `switchFallthrough` assignment never occurs, nor
-                // does any code after it inside the switch. We've forbidden `continue` statements
-                // inside switch case-blocks entirely, so we don't need to consider their effect on
-                // control flow; see the Finalizer in FunctionDefinition::Convert.
-                this->writeStatement(*c.statement());
-                this->finishLine();
-                this->write(fallthroughVar);
-                this->write(" = 1;");
-                this->writeLine();
-
-                fIndentation--;
-                this->writeLine("}");
-            } else {
-                // This is the default case. Since it's always last, we can just dump in the code.
-                this->writeStatement(*c.statement());
-                this->finishLine();
-            }
-        }
-
-        fIndentation--;
-        this->writeLine("}");
-        return;
+        // TODO(skia:12450): write switch compatibility code
+        fContext.fErrors->error(s.fLine, "switch statements are not supported");
     }
 
     this->write("switch (");
