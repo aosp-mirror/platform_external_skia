@@ -53,9 +53,9 @@ DSLWriter::DSLWriter(SkSL::Compiler* compiler, SkSL::ProgramKind kind,
     fConfig->fKind = kind;
     fConfig->fSettings = settings;
     fCompiler->fContext->fConfig = fConfig.get();
+    fCompiler->fContext->fErrors = &fDefaultErrorReporter;
 
     fCompiler->fIRGenerator->start(module, isModule, &fProgramElements, &fSharedElements);
-    fCompiler->fContext->fErrors = &fDefaultErrorReporter;
 }
 
 DSLWriter::~DSLWriter() {
@@ -74,11 +74,12 @@ DSLWriter::~DSLWriter() {
     }
 }
 
+
 SkSL::IRGenerator& DSLWriter::IRGenerator() {
     return *Compiler().fIRGenerator;
 }
 
-const SkSL::Context& DSLWriter::Context() {
+SkSL::Context& DSLWriter::Context() {
     return Compiler().context();
 }
 
@@ -94,7 +95,7 @@ void DSLWriter::Reset() {
     dsl::PopSymbolTable();
     dsl::PushSymbolTable();
     ProgramElements().clear();
-    Instance().fModifiersPool->clear();
+    GetModifiersPool()->clear();
 }
 
 const SkSL::Modifiers* DSLWriter::Modifiers(const SkSL::Modifiers& modifiers) {
@@ -209,25 +210,24 @@ std::unique_ptr<SkSL::Expression> DSLWriter::ConvertPrefix(Operator op,
 DSLPossibleStatement DSLWriter::ConvertSwitch(std::unique_ptr<Expression> value,
                                               ExpressionArray caseValues,
                                               SkTArray<SkSL::StatementArray> caseStatements,
-                                              bool isStatic,
-                                              PositionInfo pos) {
+                                              bool isStatic) {
     StatementArray caseBlocks;
     caseBlocks.resize(caseStatements.count());
     for (int index = 0; index < caseStatements.count(); ++index) {
-        caseBlocks[index] = std::make_unique<SkSL::Block>(pos.offset(),
+        caseBlocks[index] = std::make_unique<SkSL::Block>(/*offset=*/-1,
                                                           std::move(caseStatements[index]),
                                                           /*symbols=*/nullptr,
                                                           /*isScope=*/false);
     }
 
-    return SwitchStatement::Convert(Context(), pos.offset(), isStatic, std::move(value),
+    return SwitchStatement::Convert(Context(), /*offset=*/-1, isStatic, std::move(value),
                                     std::move(caseValues), std::move(caseBlocks),
                                     IRGenerator().fSymbolTable);
 }
 
 void DSLWriter::SetErrorReporter(ErrorReporter* errorReporter) {
     SkASSERT(errorReporter);
-    Compiler().fContext->fErrors = errorReporter;
+    Context().fErrors = errorReporter;
 }
 
 void DSLWriter::ReportError(skstd::string_view msg, PositionInfo info) {
