@@ -160,6 +160,9 @@ func (b *taskBuilder) nanobenchFlags(doUpload bool) {
 			// Just run GLES for now - maybe add gles_msaa4 in the future
 			configs = []string{"gles"}
 		}
+		if b.extraConfig("SwiftShader") {
+			configs = []string{"gles", "glesdmsaa"}
+		}
 	}
 
 	args = append(args, "--config")
