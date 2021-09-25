@@ -1354,7 +1354,7 @@ void GLSLCodeGenerator::writeDoStatement(const DoStatement& d) {
 }
 
 void GLSLCodeGenerator::writeSwitchStatement(const SwitchStatement& s) {
-    if (fProgram.fConfig->strictES2Mode()) {
+    if (this->caps().rewriteSwitchStatements()) {
         String fallthroughVar = "_tmpSwitchFallthrough" + to_string(fVarCount++);
         String valueVar = "_tmpSwitchValue" + to_string(fVarCount++);
         String loopVar = "_tmpSwitchLoop" + to_string(fVarCount++);
@@ -1364,7 +1364,7 @@ void GLSLCodeGenerator::writeSwitchStatement(const SwitchStatement& s) {
         this->writeExpression(*s.value(), Precedence::kAssignment);
         this->write(", ");
         this->write(fallthroughVar);
-        this->writeLine(" = 0; ");
+        this->writeLine(" = 0;");
         this->write("for (int ");
         this->write(loopVar);
         this->write(" = 0; ");
