@@ -1918,6 +1918,7 @@ cc_test {
         "experimental/sktext/src/Paint.cpp",
         "experimental/sktext/src/Text.cpp",
         "experimental/sktext/src/VisualRun.cpp",
+        "experimental/sktext/tests/FontResolvedText.cpp",
         "experimental/sktext/tests/SelectableText.cpp",
         "experimental/sktext/tests/ShapedText.cpp",
         "experimental/sktext/tests/UnicodeText.cpp",
