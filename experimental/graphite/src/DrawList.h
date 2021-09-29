@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#ifndef skgpu_DrawCommandList_DEFINED
-#define skgpu_DrawCommandList_DEFINED
+#ifndef skgpu_DrawList_DEFINED
+#define skgpu_DrawList_DEFINED
 
 #include "include/core/SkColor.h"
 #include "include/core/SkPaint.h"
@@ -26,7 +26,7 @@ struct PaintParams;
 struct StrokeParams;
 
 /**
- * DrawCommandList represents a collection of drawing commands (and related clip/shading state) in
+ * A DrawList represents a collection of drawing commands (and related clip/shading state) in
  * a form that closely mirrors what can be rendered efficiently and directly by the GPU backend
  * (while balancing how much pre-processing to do for draws that might get eliminated later due to
  * occlusion culling).
@@ -41,9 +41,10 @@ struct StrokeParams;
  *
  * Commands are accumulated in an arbitrary order and then sorted by increasing sort z when the list
  * is prepared into an actual command buffer. The result of a draw command is the rasterization of
- * the transformed shape, restricted by its primitive clip (e.g. a scissor rect) and a GEQUAL
- * depth test vs. its write/test z. If the command has a shading description, the color buffer will
- * be modified; if not, it will be a depth-only draw.
+ * the transformed shape, restricted by its primitive clip (e.g. a scissor rect) and a depth test
+ * of "GREATER" vs. its write/test z. (A test of GREATER, as opposed to GEQUAL, avoids double hits
+ * for draws that may have overlapping geometry, e.g. stroking.) If the command has a shading
+ * description, the color buffer will be modified; if not, it will be a depth-only draw.
  *
  * In addition to sorting the collected commands, the command list can be optimized during
  * preparation. Commands that are fully occluded by later operations can be skipped entirely without
@@ -128,4 +129,4 @@ struct StrokeParams {
 
 } // namespace skgpu
 
-#endif // skgpu_DrawCommandList_DEFINED
+#endif // skgpu_DrawList_DEFINED
