@@ -69,9 +69,10 @@ private:
 
     String functionName(const FunctionDeclaration& decl);
     void writeFunction(const FunctionDefinition& f);
-    void writeFunctionPrototype(const FunctionPrototype& f);
+    void writeFunctionDeclaration(const FunctionDeclaration& decl);
 
     String modifierString(const Modifiers& modifiers);
+    String functionDeclaration(const FunctionDeclaration& decl);
 
     // Handles arrays correctly, eg: `float x[2]`
     String typedVariable(const Type& type, skstd::string_view name);
@@ -101,7 +102,8 @@ private:
     void writeReturnStatement(const ReturnStatement& r);
     void writeSwitchStatement(const SwitchStatement& s);
 
-    void writeProgramElement(const ProgramElement& e);
+    void writeProgramElementFirstPass(const ProgramElement& e);
+    void writeProgramElementSecondPass(const ProgramElement& e);
 
     struct AutoOutputBuffer {
         AutoOutputBuffer(PipelineStageCodeGenerator* generator) : fGenerator(generator) {
@@ -338,6 +340,12 @@ void PipelineStageCodeGenerator::writeFunction(const FunctionDefinition& f) {
         fCastReturnsToHalf = false;
     }
 
+    fCallbacks->defineFunction(this->functionDeclaration(decl).c_str(),
+                               body.fBuffer.str().c_str(),
+                               decl.isMain());
+}
+
+String PipelineStageCodeGenerator::functionDeclaration(const FunctionDeclaration& decl) {
     // This is similar to decl.description(), but substitutes a mangled name, and handles modifiers
     // on the function (e.g. `inline`) and its parameters (e.g. `inout`).
     String declString =
@@ -348,22 +356,19 @@ void PipelineStageCodeGenerator::writeFunction(const FunctionDefinition& f) {
                            this->functionName(decl).c_str());
     const char* separator = "";
     for (const Variable* p : decl.parameters()) {
-        // TODO: Handle arrays
-        declString.appendf("%s%s%s %s",
-                           separator,
-                           this->modifierString(p->modifiers()).c_str(),
-                           this->typeName(p->type()).c_str(),
-                           String(p->name()).c_str());
+        declString.append(separator);
+        declString.append(this->modifierString(p->modifiers()));
+        declString.append(this->typedVariable(p->type(), p->name()).c_str());
         separator = ", ";
     }
-    declString.append(")");
 
-    fCallbacks->defineFunction(declString.c_str(), body.fBuffer.str().c_str(), decl.isMain());
+    return declString + ")";
 }
 
-void PipelineStageCodeGenerator::writeFunctionPrototype(const FunctionPrototype& f) {
-    const FunctionDeclaration& decl = f.declaration();
-    (void)this->functionName(decl);
+void PipelineStageCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& decl) {
+    if (!decl.isMain()) {
+        fCallbacks->declareFunction(this->functionDeclaration(decl).c_str());
+    }
 }
 
 void PipelineStageCodeGenerator::writeGlobalVarDeclaration(const GlobalVarDeclaration& g) {
@@ -404,16 +409,17 @@ void PipelineStageCodeGenerator::writeStructDefinition(const StructDefinition& s
     fCallbacks->defineStruct(definition.c_str());
 }
 
-void PipelineStageCodeGenerator::writeProgramElement(const ProgramElement& e) {
+void PipelineStageCodeGenerator::writeProgramElementFirstPass(const ProgramElement& e) {
     switch (e.kind()) {
         case ProgramElement::Kind::kGlobalVar:
             this->writeGlobalVarDeclaration(e.as<GlobalVarDeclaration>());
             break;
         case ProgramElement::Kind::kFunction:
-            this->writeFunction(e.as<FunctionDefinition>());
+            this->writeFunctionDeclaration(e.as<FunctionDefinition>().declaration());
             break;
         case ProgramElement::Kind::kFunctionPrototype:
-            this->writeFunctionPrototype(e.as<FunctionPrototype>());
+            // Skip this; we're already emitting prototypes for every FunctionDefinition.
+            // (See case kFunction, directly above.)
             break;
         case ProgramElement::Kind::kStructDefinition:
             this->writeStructDefinition(e.as<StructDefinition>());
@@ -425,6 +431,12 @@ void PipelineStageCodeGenerator::writeProgramElement(const ProgramElement& e) {
         default:
             SkDEBUGFAILF("unsupported program element %s\n", e.description().c_str());
             break;
+    }
+}
+
+void PipelineStageCodeGenerator::writeProgramElementSecondPass(const ProgramElement& e) {
+    if (e.is<FunctionDefinition>()) {
+        this->writeFunction(e.as<FunctionDefinition>());
     }
 }
 
@@ -735,20 +747,16 @@ void PipelineStageCodeGenerator::writeForStatement(const ForStatement& f) {
 }
 
 void PipelineStageCodeGenerator::generateCode() {
-    // Write all the program elements except for functions.
+    // Write all the program elements except for functions; prototype all the functions.
     for (const ProgramElement* e : fProgram.elements()) {
-        if (!e->is<FunctionDefinition>()) {
-            this->writeProgramElement(*e);
-        }
+        this->writeProgramElementFirstPass(*e);
     }
 
     // We always place FunctionDefinition elements last, because the inliner likes to move function
     // bodies around. After inlining, code can inadvertently move upwards, above ProgramElements
     // that the code relies on.
     for (const ProgramElement* e : fProgram.elements()) {
-        if (e->is<FunctionDefinition>()) {
-            this->writeProgramElement(*e);
-        }
+        this->writeProgramElementSecondPass(*e);
     }
 }
 
