@@ -15,33 +15,22 @@ namespace SkSL {
 
 namespace dsl {
 
-static const Type* find_type(skstd::string_view name, PositionInfo pos) {
+static const SkSL::Type* find_type(skstd::string_view name, PositionInfo pos) {
     const Symbol* symbol = (*DSLWriter::SymbolTable())[name];
     if (!symbol) {
         DSLWriter::ReportError(String::printf("no symbol named '%.*s'", (int)name.length(),
                 name.data()), pos);
         return nullptr;
     }
-    if (!symbol->is<Type>()) {
+    if (!symbol->is<SkSL::Type>()) {
         DSLWriter::ReportError(String::printf("symbol '%.*s' is not a type", (int)name.length(),
                 name.data()), pos);
         return nullptr;
     }
-    const Type& result = symbol->as<Type>();
-    if (!DSLWriter::IsModule()) {
-        if (result.containsPrivateFields()) {
-            DSLWriter::ReportError("type '" + String(name) + "' is private", pos);
-            return nullptr;
-        }
-        if (DSLWriter::Context().fConfig->strictES2Mode() && !result.allowedInES2()) {
-            DSLWriter::ReportError("type '" + String(name) + "' is not supported", pos);
-            return nullptr;
-        }
-    }
-    return &result;
+    return &symbol->as<SkSL::Type>();
 }
 
-static const Type* find_type(skstd::string_view name, Modifiers* modifiers,
+static const SkSL::Type* find_type(skstd::string_view name, Modifiers* modifiers,
         PositionInfo pos) {
     const Type* type = find_type(name, pos);
     if (!type) {
@@ -216,8 +205,39 @@ const SkSL::Type& DSLType::skslType() const {
     }
 }
 
-DSLExpression DSLType::Construct(DSLType type, SkSpan<DSLExpression> argArray) {
-    return DSLWriter::Construct(type.skslType(), std::move(argArray));
+bool DSLType::reportIllegalTypes(PositionInfo pos) const {
+    if (!DSLWriter::IsModule()) {
+        const SkSL::Type* type = &this->skslType();
+        if (type->isPrivate()) {
+            DSLWriter::ReportError("type '" + String(type->name()) + "' is private", pos);
+            return true;
+        }
+        if (DSLWriter::Context().fConfig->strictES2Mode() && !type->allowedInES2()) {
+            DSLWriter::ReportError("type '" + String(type->name()) + "' is not supported", pos);
+            return true;
+        }
+    }
+    return false;
+}
+
+DSLPossibleExpression DSLType::Construct(DSLType type, SkSpan<DSLExpression> argArray) {
+    SkSL::ExpressionArray skslArgs;
+    skslArgs.reserve_back(argArray.size());
+
+    if (type.reportIllegalTypes(PositionInfo())) {
+        for (DSLExpression& arg : argArray) {
+            arg.releaseIfPossible();
+        }
+        return DSLPossibleExpression(nullptr);
+    }
+    for (DSLExpression& arg : argArray) {
+        if (!arg.hasValue()) {
+            return DSLPossibleExpression(nullptr);
+        }
+        skslArgs.push_back(arg.release());
+    }
+    return SkSL::Constructor::Convert(DSLWriter::Context(), /*line=*/-1, type.skslType(),
+            std::move(skslArgs));
 }
 
 DSLType Array(const DSLType& base, int count, PositionInfo pos) {

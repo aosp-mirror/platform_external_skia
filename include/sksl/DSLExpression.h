@@ -159,12 +159,6 @@ private:
      */
     std::unique_ptr<SkSL::Expression> releaseIfPossible();
 
-    /**
-     * Invalidates this object and returns the SkSL expression it represents coerced to the
-     * specified type. If the expression cannot be coerced, reports an error and returns null.
-     */
-    std::unique_ptr<SkSL::Expression> coerceAndRelease(const SkSL::Type& type);
-
     std::unique_ptr<SkSL::Expression> fExpression;
 
     friend DSLExpression SampleChild(int index, DSLExpression coords);
@@ -172,6 +166,7 @@ private:
     friend class DSLCore;
     friend class DSLFunction;
     friend class DSLPossibleExpression;
+    friend class DSLType;
     friend class DSLVarBase;
     friend class DSLWriter;
     template<typename T> friend class DSLWrapper;

@@ -31,7 +31,9 @@ namespace SkSL {
 
 namespace dsl {
     class DSLCore;
+    class DSLExpression;
     class DSLFunction;
+    class DSLGlobalVar;
     class DSLVar;
     class DSLWriter;
 }
@@ -95,7 +97,6 @@ public:
 
 private:
     void start(const ParsedModule& base,
-               bool isBuiltinCode,
                std::vector<std::unique_ptr<ProgramElement>>* elements,
                std::vector<const ProgramElement*>* sharedElements);
 
@@ -130,21 +131,10 @@ private:
     const FunctionDeclaration* findBestFunctionForCall(
             const std::vector<const FunctionDeclaration*>& functions,
             const ExpressionArray& arguments) const;
-    CoercionCost coercionCost(const Expression& expr, const Type& type);
-    bool containsConstantZero(Expression& expr);
-    bool dividesByZero(Operator op, Expression& right);
-    std::unique_ptr<Extension> convertExtension(int line, skstd::string_view name);
-    std::unique_ptr<Expression> convertField(std::unique_ptr<Expression> base,
-                                             skstd::string_view field);
     void scanInterfaceBlock(SkSL::InterfaceBlock& intf);
-    Modifiers convertModifiers(const Modifiers& m);
-    std::unique_ptr<Statement> convertReturn(int line, std::unique_ptr<Expression> result);
-    std::unique_ptr<Expression> convertSwizzle(std::unique_ptr<Expression> base,
-                                               skstd::string_view fields);
     /** Appends sk_Position fixup to the bottom of main() if this is a vertex program. */
     void appendRTAdjustFixupToVertexMain(const FunctionDeclaration& decl, Block* body);
 
-    bool setRefKind(Expression& expr, VariableReference::RefKind kind);
     void copyIntrinsicIfNeeded(const FunctionDeclaration& function);
 
     // Runtime effects (and the interpreter, which uses the same CPU runtime) require adherence to
@@ -174,8 +164,6 @@ private:
     const Variable* fRTAdjust = nullptr;
     const Variable* fRTAdjustInterfaceBlock = nullptr;
     int fRTAdjustFieldIndex;
-    // true if we are currently processing one of the built-in SkSL include files
-    bool fIsBuiltinCode = false;
 
     friend class AutoSymbolTable;
     friend class AutoLoopLevel;
@@ -184,7 +172,9 @@ private:
     friend class Compiler;
     friend class DSLParser;
     friend class dsl::DSLCore;
+    friend class dsl::DSLExpression;
     friend class dsl::DSLFunction;
+    friend class dsl::DSLGlobalVar;
     friend class dsl::DSLVar;
     friend class dsl::DSLWriter;
 };
