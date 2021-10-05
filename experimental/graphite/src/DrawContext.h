@@ -5,11 +5,13 @@
  * found in the LICENSE file.
  */
 
-#ifndef skgpu_SurfaceDrawContext_DEFINED
-#define skgpu_SurfaceDrawContext_DEFINED
+#ifndef skgpu_DrawContext_DEFINED
+#define skgpu_DrawContext_DEFINED
 
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkRefCnt.h"
+
+#include "experimental/graphite/include/GraphiteTypes.h"
 
 #include <vector>
 
@@ -27,32 +29,40 @@ struct PaintParams;
 struct StrokeParams;
 
 /**
- * SurfaceDrawContext records draw commands into a specific Surface, via a general task graph
+ * DrawContext records draw commands into a specific Surface, via a general task graph
  * representing GPU work and their inter-dependencies.
  */
-class SurfaceDrawContext final : public SkRefCnt {
+class DrawContext final : public SkRefCnt {
 public:
-    static sk_sp<SurfaceDrawContext> Make(const SkImageInfo&);
+    static sk_sp<DrawContext> Make(const SkImageInfo&);
 
-    ~SurfaceDrawContext() override;
+    ~DrawContext() override;
 
     const SkImageInfo& imageInfo() { return fImageInfo; }
 
     // TODO: need color/depth clearing functions (so DCL will probably need those too)
 
-    void fillPath(const SkM44& localToDevice,
-                  const SkPath& path,
-                  const SkIRect& scissor,
-                  uint16_t sortZ,
-                  uint16_t testZ,
-                  const PaintParams* paint);
+    void stencilAndFillPath(const SkM44& localToDevice,
+                            const SkPath& path,
+                            const SkIRect& scissor,
+                            CompressedPaintersOrder colorDepthOrder,
+                            CompressedPaintersOrder stencilOrder,
+                            uint16_t depth,
+                            const PaintParams* paint);
+
+    void fillConvexPath(const SkM44& localToDevice,
+                        const SkPath& path,
+                        const SkIRect& scissor,
+                        CompressedPaintersOrder colorDepthOrder,
+                        uint16_t depth,
+                        const PaintParams* paint);
 
     void strokePath(const SkM44& localToDevice,
                     const SkPath& path,
                     const StrokeParams& stroke,
                     const SkIRect& scissor,
-                    uint16_t sortZ,
-                    uint16_t testZ,
+                    CompressedPaintersOrder colorDepthOrder,
+                    uint16_t depth,
                     const PaintParams* paint);
 
     // Ends the current DrawList being accumulated by the SDC, converting it into an optimized and
@@ -78,7 +88,7 @@ public:
     sk_sp<Task> snapRenderPassTask(const BoundsManager* occlusionCuller);
 
 private:
-    SurfaceDrawContext(const SkImageInfo&);
+    DrawContext(const SkImageInfo&);
 
     SkImageInfo fImageInfo;
 
@@ -102,4 +112,4 @@ private:
 
 } // namespace skgpu
 
-#endif // skgpu_SurfaceDrawContext_DEFINED
+#endif // skgpu_DrawContext_DEFINED

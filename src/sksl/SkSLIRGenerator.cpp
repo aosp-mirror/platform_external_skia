@@ -65,16 +65,6 @@ namespace SkSL {
 IRGenerator::IRGenerator(const Context* context)
         : fContext(*context) {}
 
-std::unique_ptr<Extension> IRGenerator::convertExtension(int line, skstd::string_view name) {
-    if (this->programKind() != ProgramKind::kFragment &&
-        this->programKind() != ProgramKind::kVertex) {
-        this->errorReporter().error(line, "extensions are not allowed in this kind of program");
-        return nullptr;
-    }
-
-    return std::make_unique<Extension>(line, name);
-}
-
 void IRGenerator::checkVarDeclaration(int line, const Modifiers& modifiers, const Type* baseType,
                                       Variable::Storage storage) {
     if (this->strictES2Mode() && baseType->isArray()) {
@@ -153,7 +143,7 @@ std::unique_ptr<Variable> IRGenerator::convertVar(int line, const Modifiers& mod
         type = fSymbolTable->addArrayDimension(type, arraySizeValue);
     }
     return std::make_unique<Variable>(line, this->modifiersPool().add(modifiers), name,
-                                      type, fIsBuiltinCode, storage);
+                                      type, fContext.fConfig->fIsBuiltinCode, storage);
 }
 
 std::unique_ptr<Statement> IRGenerator::convertVarDeclaration(std::unique_ptr<Variable> var,
@@ -209,11 +199,6 @@ std::unique_ptr<Statement> IRGenerator::convertVarDeclaration(int line,
         return nullptr;
     }
     return this->convertVarDeclaration(std::move(var), std::move(value));
-}
-
-std::unique_ptr<Statement> IRGenerator::convertReturn(int line,
-                                                      std::unique_ptr<Expression> result) {
-    return ReturnStatement::Make(line, std::move(result));
 }
 
 void IRGenerator::appendRTAdjustFixupToVertexMain(const FunctionDeclaration& decl, Block* body) {
@@ -375,8 +360,7 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int line, skstd::stri
                                      FieldAccess::OwnerKind::kAnonymousInterfaceBlock);
         }
         case Symbol::Kind::kType: {
-            const Type* t = &result->as<Type>();
-            return std::make_unique<TypeReference>(fContext, line, t);
+            return TypeReference::Convert(fContext, line, &result->as<Type>());
         }
         case Symbol::Kind::kExternal: {
             const ExternalFunction* r = &result->as<ExternalFunction>();
@@ -424,7 +408,7 @@ std::unique_ptr<Expression> IRGenerator::call(int line,
         if (function.intrinsicKind() == k_dFdy_IntrinsicKind) {
             fInputs.fUseFlipRTUniform = true;
         }
-        if (!fIsBuiltinCode && fContext.fIntrinsics) {
+        if (!fContext.fConfig->fIsBuiltinCode && fContext.fIntrinsics) {
             this->copyIntrinsicIfNeeded(function);
         }
     }
@@ -552,25 +536,18 @@ std::unique_ptr<Expression> IRGenerator::call(int line,
     }
 }
 
-std::unique_ptr<Expression> IRGenerator::convertSwizzle(std::unique_ptr<Expression> base,
-                                                        skstd::string_view fields) {
-    return Swizzle::Convert(fContext, std::move(base), fields);
-}
-
 void IRGenerator::start(const ParsedModule& base,
-                        bool isBuiltinCode,
                         std::vector<std::unique_ptr<ProgramElement>>* elements,
                         std::vector<const ProgramElement*>* sharedElements) {
     fProgramElements = elements;
     fSharedElements = sharedElements;
     fSymbolTable = base.fSymbols;
-    fIsBuiltinCode = isBuiltinCode;
 
     fInputs = {};
     fRTAdjust = nullptr;
     fRTAdjustInterfaceBlock = nullptr;
     fDefinedStructs.clear();
-    SymbolTable::Push(&fSymbolTable, fIsBuiltinCode);
+    SymbolTable::Push(&fSymbolTable, fContext.fConfig->fIsBuiltinCode);
 
     if (this->settings().fExternalFunctions) {
         // Add any external values to the new symbol table, so they're only visible to this Program.

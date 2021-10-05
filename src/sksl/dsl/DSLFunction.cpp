@@ -55,8 +55,7 @@ void DSLFunction::init(DSLModifiers modifiers, const DSLType& returnType, skstd:
                                                pos.line(),
                                                DSLWriter::Modifiers(modifiers.fModifiers),
                                                name == "main" ? name : DSLWriter::Name(name),
-                                               std::move(paramVars), &returnType.skslType(),
-                                               DSLWriter::IsModule());
+                                               std::move(paramVars), &returnType.skslType());
     DSLWriter::ReportErrors(pos);
     if (fDecl) {
         for (size_t i = 0; i < params.size(); ++i) {
@@ -107,7 +106,7 @@ void DSLFunction::define(DSLBlock block, PositionInfo pos) {
     DSLWriter::ProgramElements().push_back(std::move(function));
 }
 
-DSLExpression DSLFunction::call(SkTArray<DSLWrapper<DSLExpression>> args) {
+DSLExpression DSLFunction::call(SkTArray<DSLWrapper<DSLExpression>> args, PositionInfo pos) {
     ExpressionArray released;
     released.reserve_back(args.size());
     for (DSLWrapper<DSLExpression>& arg : args) {
@@ -116,9 +115,12 @@ DSLExpression DSLFunction::call(SkTArray<DSLWrapper<DSLExpression>> args) {
     return this->call(std::move(released));
 }
 
-DSLExpression DSLFunction::call(ExpressionArray args) {
-    std::unique_ptr<SkSL::Expression> result = DSLWriter::Call(*fDecl, std::move(args));
-    return result ? DSLExpression(std::move(result)) : DSLExpression();
+DSLExpression DSLFunction::call(ExpressionArray args, PositionInfo pos) {
+    // We can't call FunctionCall::Convert directly here, because intrinsic management is handled in
+    // IRGenerator::call. skbug.com/12500
+    std::unique_ptr<SkSL::Expression> result = DSLWriter::IRGenerator().call(pos.line(), *fDecl,
+            std::move(args));
+    return DSLExpression(std::move(result), pos);
 }
 
 } // namespace dsl

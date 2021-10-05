@@ -22,6 +22,7 @@
 #include "src/sksl/ir/SkSLIfStatement.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
 #include "src/sksl/ir/SkSLStructDefinition.h"
+#include "src/sksl/ir/SkSLSwitchStatement.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
 #include "src/sksl/ir/SkSLTernaryExpression.h"
 #include "src/sksl/transform/SkSLTransform.h"
@@ -67,8 +68,9 @@ public:
         DSLWriter& instance = DSLWriter::Instance();
         SkSL::IRGenerator& ir = DSLWriter::IRGenerator();
         SkSL::Compiler& compiler = DSLWriter::Compiler();
+        const SkSL::Context& context = DSLWriter::Context();
         // Variables defined in the pre-includes need their declaring elements added to the program
-        if (!ir.fIsBuiltinCode && compiler.context().fIntrinsics) {
+        if (!context.fConfig->fIsBuiltinCode && context.fIntrinsics) {
             Transform::FindAndDeclareBuiltinVariables(DSLWriter::Context(),
                     DSLWriter::GetProgramConfig()->fKind, DSLWriter::SharedElements());
         }
@@ -231,7 +233,8 @@ public:
         const SkSL::Type* structType = DSLWriter::SymbolTable()->takeOwnershipOfSymbol(
                 SkSL::Type::MakeStructType(pos.line(), typeName, std::move(skslFields)));
         DSLType varType = arraySize > 0 ? Array(structType, arraySize) : DSLType(structType);
-        DSLGlobalVar var(modifiers, varType, !varName.empty() ? varName : typeName);
+        DSLGlobalVar var(modifiers, varType, !varName.empty() ? varName : typeName, DSLExpression(),
+                pos);
         // Interface blocks can't be declared, so we always need to mark the var declared ourselves.
         // We do this only when fDSLMarkVarDeclared is false, so we don't double-declare it.
         if (!DSLWriter::Settings().fDSLMarkVarsDeclared) {
@@ -313,14 +316,16 @@ public:
                                        bool isStatic) {
         ExpressionArray values;
         values.reserve_back(cases.count());
-        SkTArray<StatementArray> statements;
-        statements.reserve_back(cases.count());
+        StatementArray caseBlocks;
+        caseBlocks.reserve_back(cases.count());
         for (DSLCase& c : cases) {
             values.push_back(c.fValue.releaseIfPossible());
-            statements.push_back(std::move(c.fStatements));
+            caseBlocks.push_back(SkSL::Block::Make(/*line=*/-1,
+                    std::move(c.fStatements), /*symbols=*/nullptr, /*isScope=*/false));
         }
-        return DSLWriter::ConvertSwitch(value.release(), std::move(values), std::move(statements),
-                                        isStatic);
+        return SwitchStatement::Convert(DSLWriter::Context(), /*line=*/-1, isStatic,
+                value.release(), std::move(values), std::move(caseBlocks),
+                DSLWriter::SymbolTable());
     }
 
     static DSLPossibleStatement While(DSLExpression test, DSLStatement stmt) {
