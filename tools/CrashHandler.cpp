@@ -12,6 +12,10 @@
 #include <stdlib.h>
 
 #if defined(SK_BUILD_FOR_GOOGLE3)
+    #include "base/config.h"   // May define GOOGLE_ENABLE_SIGNAL_HANDLERS.
+#endif
+
+#if defined(GOOGLE_ENABLE_SIGNAL_HANDLERS)
     #include "base/process_state.h"
     void SetupCrashHandler() { InstallSignalHandlers(); }
 
@@ -201,6 +205,7 @@
             const DWORD machineType = IMAGE_FILE_MACHINE_ARM64;
         #endif
 
+        #if !defined(SK_WINUWP)
             while (StackWalk64(machineType,
                                GetCurrentProcess(),
                                GetCurrentThread(),
@@ -227,6 +232,7 @@
 
                 SkDebugf("%s +%x\n", symbol->Name, offset);
             }
+        #endif //SK_WINUWP
 
             // Exit NOW.  Don't notify other threads, don't call anything registered with atexit().
             _exit(1);
