@@ -5,11 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "experimental/graphite/src/mtl/MtlPipeline.h"
+#ifndef skgpu_MtlUtils_DEFINED
+#define skgpu_MtlUtils_DEFINED
+
+#import <Metal/Metal.h>
 
 namespace skgpu::mtl {
 
-Pipeline::Pipeline() {
-}
+bool FormatIsDepthOrStencil(MTLPixelFormat);
 
 } // namespace skgpu::mtl
+
+#endif // skgpu_MtlUtils_DEFINED
