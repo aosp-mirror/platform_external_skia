@@ -13,7 +13,6 @@
 #include "include/private/SkSLSampleUsage.h"
 #include "include/private/SkSLStatement.h"
 #include "include/sksl/SkSLErrorReporter.h"
-#include "src/core/SkSafeMath.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/analysis/SkSLProgramVisitor.h"
@@ -61,8 +60,6 @@
 #include "src/sksl/ir/SkSLTernaryExpression.h"
 #include "src/sksl/ir/SkSLTypeReference.h"
 #include "src/sksl/ir/SkSLVariableReference.h"
-
-#include <stack>
 
 namespace SkSL {
 
@@ -194,74 +191,6 @@ private:
     using INHERITED = ProgramVisitor;
 };
 
-class ProgramUsageVisitor : public ProgramVisitor {
-public:
-    ProgramUsageVisitor(ProgramUsage* usage, int delta) : fUsage(usage), fDelta(delta) {}
-
-    bool visitProgramElement(const ProgramElement& pe) override {
-        if (pe.is<FunctionDefinition>()) {
-            for (const Variable* param : pe.as<FunctionDefinition>().declaration().parameters()) {
-                // Ensure function-parameter variables exist in the variable usage map. They aren't
-                // otherwise declared, but ProgramUsage::get() should be able to find them, even if
-                // they are unread and unwritten.
-                fUsage->fVariableCounts[param];
-            }
-        } else if (pe.is<InterfaceBlock>()) {
-            // Ensure interface-block variables exist in the variable usage map.
-            fUsage->fVariableCounts[&pe.as<InterfaceBlock>().variable()];
-        }
-        return INHERITED::visitProgramElement(pe);
-    }
-
-    bool visitStatement(const Statement& s) override {
-        if (s.is<VarDeclaration>()) {
-            // Add all declared variables to the usage map (even if never otherwise accessed).
-            const VarDeclaration& vd = s.as<VarDeclaration>();
-            ProgramUsage::VariableCounts& counts = fUsage->fVariableCounts[&vd.var()];
-            counts.fDeclared += fDelta;
-            SkASSERT(counts.fDeclared >= 0);
-            if (vd.value()) {
-                // The initial-value expression, when present, counts as a write.
-                counts.fWrite += fDelta;
-            }
-        }
-        return INHERITED::visitStatement(s);
-    }
-
-    bool visitExpression(const Expression& e) override {
-        if (e.is<FunctionCall>()) {
-            const FunctionDeclaration* f = &e.as<FunctionCall>().function();
-            fUsage->fCallCounts[f] += fDelta;
-            SkASSERT(fUsage->fCallCounts[f] >= 0);
-        } else if (e.is<VariableReference>()) {
-            const VariableReference& ref = e.as<VariableReference>();
-            ProgramUsage::VariableCounts& counts = fUsage->fVariableCounts[ref.variable()];
-            switch (ref.refKind()) {
-                case VariableRefKind::kRead:
-                    counts.fRead += fDelta;
-                    break;
-                case VariableRefKind::kWrite:
-                    counts.fWrite += fDelta;
-                    break;
-                case VariableRefKind::kReadWrite:
-                case VariableRefKind::kPointer:
-                    counts.fRead += fDelta;
-                    counts.fWrite += fDelta;
-                    break;
-            }
-            SkASSERT(counts.fRead >= 0 && counts.fWrite >= 0);
-        }
-        return INHERITED::visitExpression(e);
-    }
-
-    using ProgramVisitor::visitProgramElement;
-    using ProgramVisitor::visitStatement;
-
-    ProgramUsage* fUsage;
-    int fDelta;
-    using INHERITED = ProgramVisitor;
-};
-
 class VariableWriteVisitor : public ProgramVisitor {
 public:
     VariableWriteVisitor(const Variable* var)
@@ -368,69 +297,6 @@ private:
     ErrorReporter* fErrors;
     VariableReference* fAssignedVar = nullptr;
 
-    using INHERITED = ProgramVisitor;
-};
-
-class SwitchCaseContainsExit : public ProgramVisitor {
-public:
-    SwitchCaseContainsExit(bool conditionalExits) : fConditionalExits(conditionalExits) {}
-
-    bool visitStatement(const Statement& stmt) override {
-        switch (stmt.kind()) {
-            case Statement::Kind::kBlock:
-            case Statement::Kind::kSwitchCase:
-                return INHERITED::visitStatement(stmt);
-
-            case Statement::Kind::kReturn:
-                // Returns are an early exit regardless of the surrounding control structures.
-                return fConditionalExits ? fInConditional : !fInConditional;
-
-            case Statement::Kind::kContinue:
-                // Continues are an early exit from switches, but not loops.
-                return !fInLoop &&
-                       (fConditionalExits ? fInConditional : !fInConditional);
-
-            case Statement::Kind::kBreak:
-                // Breaks cannot escape from switches or loops.
-                return !fInLoop && !fInSwitch &&
-                       (fConditionalExits ? fInConditional : !fInConditional);
-
-            case Statement::Kind::kIf: {
-                ++fInConditional;
-                bool result = INHERITED::visitStatement(stmt);
-                --fInConditional;
-                return result;
-            }
-
-            case Statement::Kind::kFor:
-            case Statement::Kind::kDo: {
-                // Loops are treated as conditionals because a loop could potentially execute zero
-                // times. We don't have a straightforward way to determine that a loop definitely
-                // executes at least once.
-                ++fInConditional;
-                ++fInLoop;
-                bool result = INHERITED::visitStatement(stmt);
-                --fInLoop;
-                --fInConditional;
-                return result;
-            }
-
-            case Statement::Kind::kSwitch: {
-                ++fInSwitch;
-                bool result = INHERITED::visitStatement(stmt);
-                --fInSwitch;
-                return result;
-            }
-
-            default:
-                return false;
-        }
-    }
-
-    bool fConditionalExits = false;
-    int fInConditional = 0;
-    int fInLoop = 0;
-    int fInSwitch = 0;
     using INHERITED = ProgramVisitor;
 };
 
@@ -607,189 +473,6 @@ bool Analysis::CallsSampleOutsideMain(const Program& program) {
     return visitor.visit(program);
 }
 
-bool Analysis::CheckProgramUnrolledSize(const Program& program) {
-    // We check the size of strict-ES2 programs since SkVM will completely unroll them.
-    // Note that we *cannot* safely check the program size of non-ES2 code at this time, as it is
-    // allowed to do things we can't measure (e.g. the program can contain a recursive cycle). We
-    // could, at best, compute a lower bound.
-    const Context& context = *program.fContext;
-    SkASSERT(context.fConfig->strictES2Mode());
-
-    // If we decide that expressions are cheaper than statements, or that certain statements are
-    // more expensive than others, etc., we can always tweak these ratios as needed. A very rough
-    // ballpark estimate is currently good enough for our purposes.
-    static constexpr size_t kExpressionCost = 1;
-    static constexpr size_t kStatementCost = 1;
-    static constexpr size_t kUnknownCost = -1;
-    static constexpr size_t kProgramSizeLimit = 100000;
-    static constexpr size_t kProgramStackDepthLimit = 50;
-
-    class ProgramSizeVisitor : public ProgramVisitor {
-    public:
-        ProgramSizeVisitor(const Context& c) : fContext(c) {}
-
-        using ProgramVisitor::visitProgramElement;
-
-        size_t functionSize() const {
-            return fFunctionSize;
-        }
-
-        bool visitProgramElement(const ProgramElement& pe) override {
-            if (pe.is<FunctionDefinition>()) {
-                // Check the function-size cache map first. We don't need to visit this function if
-                // we already processed it before.
-                const FunctionDeclaration* decl = &pe.as<FunctionDefinition>().declaration();
-                auto [iter, wasInserted] = fFunctionCostMap.insert({decl, kUnknownCost});
-                if (!wasInserted) {
-                    // We already have this function in our map. We don't need to check it again.
-                    if (iter->second == kUnknownCost) {
-                        // If the function is present in the map with an unknown cost, we're
-                        // recursively processing it--in other words, we found a cycle in the code.
-                        // Unwind our stack into a string.
-                        String msg = "\n\t" + decl->description();
-                        for (auto unwind = fStack.rbegin(); unwind != fStack.rend(); ++unwind) {
-                            msg = "\n\t" + (*unwind)->description() + msg;
-                            if (*unwind == decl) {
-                                break;
-                            }
-                        }
-                        msg = "potential recursion (function call cycle) not allowed:" + msg;
-                        fContext.fErrors->error(pe.fLine, std::move(msg));
-                        fFunctionSize = iter->second = 0;
-                        return true;
-                    }
-                    // Set the size to its known value.
-                    fFunctionSize = iter->second;
-                    return false;
-                }
-
-                // If the function-call stack has gotten too deep, stop the analysis.
-                if (fStack.size() >= kProgramStackDepthLimit) {
-                    String msg = "exceeded max function call depth:";
-                    for (auto unwind = fStack.begin(); unwind != fStack.end(); ++unwind) {
-                        msg += "\n\t" + (*unwind)->description();
-                    }
-                    msg += "\n\t" + decl->description();
-                    fContext.fErrors->error(pe.fLine, std::move(msg));
-                    fFunctionSize = iter->second = 0;
-                    return true;
-                }
-
-                // Calculate the function cost and store it in our cache.
-                fStack.push_back(decl);
-                fFunctionSize = 0;
-                bool result = INHERITED::visitProgramElement(pe);
-                iter->second = fFunctionSize;
-                fStack.pop_back();
-
-                return result;
-            }
-
-            return INHERITED::visitProgramElement(pe);
-        }
-
-        bool visitStatement(const Statement& stmt) override {
-            switch (stmt.kind()) {
-                case Statement::Kind::kFor: {
-                    // We count a for-loop's unrolled size here. We expect that the init statement
-                    // will be emitted once, and the next-expr and statement will be repeated in the
-                    // output for every iteration of the loop. The test-expr is optimized away
-                    // during the unroll and is not counted at all.
-                    const ForStatement& forStmt = stmt.as<ForStatement>();
-                    bool result = this->visitStatement(*forStmt.initializer());
-
-                    size_t originalFunctionSize = fFunctionSize;
-                    fFunctionSize = 0;
-
-                    result = this->visitExpression(*forStmt.next()) ||
-                             this->visitStatement(*forStmt.statement()) || result;
-
-                    if (const LoopUnrollInfo* unrollInfo = forStmt.unrollInfo()) {
-                        fFunctionSize = SkSafeMath::Mul(fFunctionSize, unrollInfo->fCount);
-                    } else {
-                        SkDEBUGFAIL("for-loops should always have unroll info in an ES2 program");
-                    }
-
-                    fFunctionSize = SkSafeMath::Add(fFunctionSize, originalFunctionSize);
-                    return result;
-                }
-
-                case Statement::Kind::kExpression:
-                    // The cost of an expression-statement is counted in visitExpression. It would
-                    // be double-dipping to count it here too.
-                    break;
-
-                case Statement::Kind::kInlineMarker:
-                case Statement::Kind::kNop:
-                case Statement::Kind::kVarDeclaration:
-                    // These statements don't directly consume any space in a compiled program.
-                    break;
-
-                case Statement::Kind::kDo:
-                    SkDEBUGFAIL("encountered a statement that shouldn't exist in an ES2 program");
-                    break;
-
-                default:
-                    fFunctionSize = SkSafeMath::Add(fFunctionSize, kStatementCost);
-                    break;
-            }
-
-            bool earlyExit = fFunctionSize > kProgramSizeLimit;
-            return earlyExit || INHERITED::visitStatement(stmt);
-        }
-
-        bool visitExpression(const Expression& expr) override {
-            // Other than function calls, all expressions are assumed to have a fixed unit cost.
-            bool earlyExit = false;
-            size_t expressionCost = kExpressionCost;
-
-            if (expr.is<FunctionCall>()) {
-                // Visit this function call to calculate its size. If we've already sized it, this
-                // will retrieve the size from our cache.
-                const FunctionCall& call = expr.as<FunctionCall>();
-                const FunctionDeclaration* decl = &call.function();
-                if (decl->definition() && !decl->isIntrinsic()) {
-                    size_t originalFunctionSize = fFunctionSize;
-                    fFunctionSize = 0;
-
-                    earlyExit = this->visitProgramElement(*decl->definition());
-                    expressionCost = fFunctionSize;
-
-                    fFunctionSize = originalFunctionSize;
-                }
-            }
-
-            fFunctionSize = SkSafeMath::Add(fFunctionSize, expressionCost);
-            return earlyExit || INHERITED::visitExpression(expr);
-        }
-
-    private:
-        using INHERITED = ProgramVisitor;
-
-        const Context& fContext;
-        size_t fFunctionSize = 0;
-        std::unordered_map<const FunctionDeclaration*, size_t> fFunctionCostMap;
-        std::vector<const FunctionDeclaration*> fStack;
-    };
-
-    // Process every function in our program.
-    ProgramSizeVisitor visitor{context};
-    for (const std::unique_ptr<ProgramElement>& element : program.ownedElements()) {
-        if (element->is<FunctionDefinition>()) {
-            // Visit every function--we want to detect static recursion and report it as an error,
-            // even in unreferenced functions.
-            visitor.visitProgramElement(*element);
-            // Report an error when main()'s flattened size is larger than our program limit.
-            if (visitor.functionSize() > kProgramSizeLimit &&
-                element->as<FunctionDefinition>().declaration().isMain()) {
-                context.fErrors->error(/*line=*/-1, "program is too large");
-            }
-        }
-    }
-
-    return true;
-}
-
 bool Analysis::DetectVarDeclarationWithoutScope(const Statement& stmt, ErrorReporter* errors) {
     // A variable declaration can create either a lone VarDeclaration or an unscoped Block
     // containing multiple VarDeclaration statements. We need to detect either case.
@@ -824,83 +507,6 @@ bool Analysis::DetectVarDeclarationWithoutScope(const Statement& stmt, ErrorRepo
 
 int Analysis::NodeCountUpToLimit(const FunctionDefinition& function, int limit) {
     return NodeCountVisitor{limit}.visit(*function.body());
-}
-
-bool Analysis::SwitchCaseContainsUnconditionalExit(Statement& stmt) {
-    return SwitchCaseContainsExit{/*conditionalExits=*/false}.visitStatement(stmt);
-}
-
-bool Analysis::SwitchCaseContainsConditionalExit(Statement& stmt) {
-    return SwitchCaseContainsExit{/*conditionalExits=*/true}.visitStatement(stmt);
-}
-
-std::unique_ptr<ProgramUsage> Analysis::GetUsage(const Program& program) {
-    auto usage = std::make_unique<ProgramUsage>();
-    ProgramUsageVisitor addRefs(usage.get(), /*delta=*/+1);
-    addRefs.visit(program);
-    return usage;
-}
-
-std::unique_ptr<ProgramUsage> Analysis::GetUsage(const LoadedModule& module) {
-    auto usage = std::make_unique<ProgramUsage>();
-    ProgramUsageVisitor addRefs(usage.get(), /*delta=*/+1);
-    for (const auto& element : module.fElements) {
-        addRefs.visitProgramElement(*element);
-    }
-    return usage;
-}
-
-ProgramUsage::VariableCounts ProgramUsage::get(const Variable& v) const {
-    const VariableCounts* counts = fVariableCounts.find(&v);
-    SkASSERT(counts);
-    return *counts;
-}
-
-bool ProgramUsage::isDead(const Variable& v) const {
-    const Modifiers& modifiers = v.modifiers();
-    VariableCounts counts = this->get(v);
-    if ((v.storage() != Variable::Storage::kLocal && counts.fRead) ||
-        (modifiers.fFlags &
-         (Modifiers::kIn_Flag | Modifiers::kOut_Flag | Modifiers::kUniform_Flag))) {
-        return false;
-    }
-    // Consider the variable dead if it's never read and never written (besides the initial-value).
-    return !counts.fRead && (counts.fWrite <= (v.initialValue() ? 1 : 0));
-}
-
-int ProgramUsage::get(const FunctionDeclaration& f) const {
-    const int* count = fCallCounts.find(&f);
-    return count ? *count : 0;
-}
-
-void ProgramUsage::add(const Expression* expr) {
-    ProgramUsageVisitor addRefs(this, /*delta=*/+1);
-    addRefs.visitExpression(*expr);
-}
-
-void ProgramUsage::add(const Statement* stmt) {
-    ProgramUsageVisitor addRefs(this, /*delta=*/+1);
-    addRefs.visitStatement(*stmt);
-}
-
-void ProgramUsage::add(const ProgramElement& element) {
-    ProgramUsageVisitor addRefs(this, /*delta=*/+1);
-    addRefs.visitProgramElement(element);
-}
-
-void ProgramUsage::remove(const Expression* expr) {
-    ProgramUsageVisitor subRefs(this, /*delta=*/-1);
-    subRefs.visitExpression(*expr);
-}
-
-void ProgramUsage::remove(const Statement* stmt) {
-    ProgramUsageVisitor subRefs(this, /*delta=*/-1);
-    subRefs.visitStatement(*stmt);
-}
-
-void ProgramUsage::remove(const ProgramElement& element) {
-    ProgramUsageVisitor subRefs(this, /*delta=*/-1);
-    subRefs.visitProgramElement(element);
 }
 
 bool Analysis::StatementWritesToVariable(const Statement& stmt, const Variable& var) {
@@ -1445,125 +1051,6 @@ void Analysis::VerifyStaticTestsAndExpressions(const Program& program) {
     }
 }
 
-void Analysis::EliminateUnreachableCode(std::unique_ptr<Statement>& stmt, ProgramUsage* usage) {
-    class UnreachableCodeEliminator : public ProgramWriter {
-    public:
-        UnreachableCodeEliminator(ProgramUsage* usage)
-                : fUsage(usage) {
-            fFoundFunctionExit.push(false);
-            fFoundLoopExit.push(false);
-        }
-
-        bool visitExpressionPtr(std::unique_ptr<Expression>& expr) override {
-            // We don't need to look inside expressions at all.
-            return false;
-        }
-
-        bool visitStatementPtr(std::unique_ptr<Statement>& stmt) override {
-            if (fFoundFunctionExit.top() || fFoundLoopExit.top()) {
-                // If we already found an exit in this section, anything beyond it is dead code.
-                if (!stmt->is<Nop>()) {
-                    // Eliminate the dead statement by substituting a Nop.
-                    if (fUsage) {
-                        fUsage->remove(stmt.get());
-                    }
-                    stmt = std::make_unique<Nop>();
-                }
-                return false;
-            }
-
-            switch (stmt->kind()) {
-                case Statement::Kind::kReturn:
-                case Statement::Kind::kDiscard:
-                    // We found a function exit on this path.
-                    fFoundFunctionExit.top() = true;
-                    break;
-
-                case Statement::Kind::kBreak:
-                case Statement::Kind::kContinue:
-                    // We found a loop exit on this path. Note that we skip over switch statements
-                    // completely when eliminating code, so any `break` statement would be breaking
-                    // out of a loop, not out of a switch.
-                    fFoundLoopExit.top() = true;
-                    break;
-
-                case Statement::Kind::kExpression:
-                case Statement::Kind::kInlineMarker:
-                case Statement::Kind::kNop:
-                case Statement::Kind::kVarDeclaration:
-                    // These statements don't affect control flow.
-                    break;
-
-                case Statement::Kind::kBlock:
-                    // Blocks are on the straight-line path and don't affect control flow.
-                    return INHERITED::visitStatementPtr(stmt);
-
-                case Statement::Kind::kDo: {
-                    // Function-exits are allowed to propagate outside of a do-loop, because it
-                    // always executes its body at least once.
-                    fFoundLoopExit.push(false);
-                    bool result = INHERITED::visitStatementPtr(stmt);
-                    fFoundLoopExit.pop();
-                    return result;
-                }
-                case Statement::Kind::kFor: {
-                    // Function-exits are not allowed to propagate out, because a for-loop or while-
-                    // loop could potentially run zero times.
-                    fFoundFunctionExit.push(false);
-                    fFoundLoopExit.push(false);
-                    bool result = INHERITED::visitStatementPtr(stmt);
-                    fFoundLoopExit.pop();
-                    fFoundFunctionExit.pop();
-                    return result;
-                }
-                case Statement::Kind::kIf: {
-                    // This statement is conditional and encloses two inner sections of code.
-                    // If both sides contain a function-exit or loop-exit, that exit is allowed to
-                    // propagate out.
-                    IfStatement& ifStmt = stmt->as<IfStatement>();
-
-                    fFoundFunctionExit.push(false);
-                    fFoundLoopExit.push(false);
-                    bool result = (ifStmt.ifTrue() && this->visitStatementPtr(ifStmt.ifTrue()));
-                    bool foundFunctionExitOnTrue = fFoundFunctionExit.top();
-                    bool foundLoopExitOnTrue = fFoundLoopExit.top();
-                    fFoundFunctionExit.pop();
-                    fFoundLoopExit.pop();
-
-                    fFoundFunctionExit.push(false);
-                    fFoundLoopExit.push(false);
-                    result |= (ifStmt.ifFalse() && this->visitStatementPtr(ifStmt.ifFalse()));
-                    bool foundFunctionExitOnFalse = fFoundFunctionExit.top();
-                    bool foundLoopExitOnFalse = fFoundLoopExit.top();
-                    fFoundFunctionExit.pop();
-                    fFoundLoopExit.pop();
-
-                    fFoundFunctionExit.top() |= foundFunctionExitOnTrue && foundFunctionExitOnFalse;
-                    fFoundLoopExit.top() |= foundLoopExitOnTrue && foundLoopExitOnFalse;
-                    return result;
-                }
-                case Statement::Kind::kSwitch:
-                case Statement::Kind::kSwitchCase:
-                    // We skip past switch statements entirely when scanning for dead code. Their
-                    // control flow is quite complex and we already do a good job of flattening out
-                    // switches on constant values.
-                    break;
-            }
-
-            return false;
-        }
-
-        ProgramUsage* fUsage;
-        std::stack<bool> fFoundFunctionExit;
-        std::stack<bool> fFoundLoopExit;
-
-        using INHERITED = ProgramWriter;
-    };
-
-    UnreachableCodeEliminator visitor{usage};
-    visitor.visitStatementPtr(stmt);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // ProgramVisitor
 
@@ -1578,6 +1065,7 @@ bool ProgramVisitor::visit(const Program& program) {
 
 template <typename T> bool TProgramVisitor<T>::visitExpression(typename T::Expression& e) {
     switch (e.kind()) {
+        case Expression::Kind::kCodeString:
         case Expression::Kind::kExternalFunctionReference:
         case Expression::Kind::kFunctionReference:
         case Expression::Kind::kLiteral:
