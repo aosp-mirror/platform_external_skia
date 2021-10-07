@@ -19,6 +19,7 @@
 #include "src/sksl/SkSLOperators.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLRehydrator.h"
+#include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/codegen/SkSLGLSLCodeGenerator.h"
 #include "src/sksl/codegen/SkSLMetalCodeGenerator.h"
 #include "src/sksl/codegen/SkSLSPIRVCodeGenerator.h"
@@ -460,76 +461,6 @@ bool Compiler::optimize(LoadedModule& module) {
     return this->errorCount() == 0;
 }
 
-bool Compiler::removeDeadFunctions(Program& program, ProgramUsage* usage) {
-    bool madeChanges = false;
-
-    if (program.fConfig->fSettings.fRemoveDeadFunctions) {
-        auto isDeadFunction = [&](const ProgramElement* element) {
-            if (!element->is<FunctionDefinition>()) {
-                return false;
-            }
-            const FunctionDefinition& fn = element->as<FunctionDefinition>();
-            if (fn.declaration().isMain() || usage->get(fn.declaration()) > 0) {
-                return false;
-            }
-            usage->remove(*element);
-            madeChanges = true;
-            return true;
-        };
-
-        program.fElements.erase(std::remove_if(program.fElements.begin(),
-                                               program.fElements.end(),
-                                               [&](const std::unique_ptr<ProgramElement>& element) {
-                                                   return isDeadFunction(element.get());
-                                               }),
-                                program.fElements.end());
-        program.fSharedElements.erase(std::remove_if(program.fSharedElements.begin(),
-                                                     program.fSharedElements.end(),
-                                                     isDeadFunction),
-                                      program.fSharedElements.end());
-    }
-    return madeChanges;
-}
-
-bool Compiler::removeDeadGlobalVariables(Program& program, ProgramUsage* usage) {
-    bool madeChanges = false;
-
-    if (program.fConfig->fSettings.fRemoveDeadVariables) {
-        auto isDeadVariable = [&](const ProgramElement* element) {
-            if (!element->is<GlobalVarDeclaration>()) {
-                return false;
-            }
-            const GlobalVarDeclaration& global = element->as<GlobalVarDeclaration>();
-            const VarDeclaration& varDecl = global.declaration()->as<VarDeclaration>();
-            if (!usage->isDead(varDecl.var())) {
-                return false;
-            }
-            madeChanges = true;
-            return true;
-        };
-
-        program.fElements.erase(std::remove_if(program.fElements.begin(),
-                                               program.fElements.end(),
-                                               [&](const std::unique_ptr<ProgramElement>& element) {
-                                                   return isDeadVariable(element.get());
-                                               }),
-                                program.fElements.end());
-        program.fSharedElements.erase(std::remove_if(program.fSharedElements.begin(),
-                                                     program.fSharedElements.end(),
-                                                     isDeadVariable),
-                                      program.fSharedElements.end());
-    }
-    return madeChanges;
-}
-
-void Compiler::removeUnreachableCode(Program& program, ProgramUsage* usage) {
-    for (std::unique_ptr<ProgramElement>& pe : program.ownedElements()) {
-        if (pe->is<FunctionDefinition>()) {
-            Transform::EliminateUnreachableCode(pe->as<FunctionDefinition>().body(), usage);
-        }
-    }
-}
-
 bool Compiler::optimize(Program& program) {
     // The optimizer only needs to run when it is enabled.
     if (!program.fConfig->fSettings.fOptimize) {
@@ -542,19 +473,19 @@ bool Compiler::optimize(Program& program) {
     if (this->errorCount() == 0) {
         // Run the inliner only once; it is expensive! Multiple passes can occasionally shake out
         // more wins, but it's diminishing returns.
-        this->runInliner(program.ownedElements(), program.fSymbols, usage);
+        this->runInliner(program.fOwnedElements, program.fSymbols, usage);
 
         // Unreachable code can confuse some drivers, so it's worth removing. (skia:12012)
-        this->removeUnreachableCode(program, usage);
+        Transform::EliminateUnreachableCode(program, usage);
 
-        while (this->removeDeadFunctions(program, usage)) {
+        while (Transform::EliminateDeadFunctions(program, usage)) {
             // Removing dead functions may cause more functions to become unreferenced. Try again.
         }
         while (Transform::EliminateDeadLocalVariables(program, usage)) {
             // Removing dead variables may cause more variables to become unreferenced. Try again.
         }
 
-        this->removeDeadGlobalVariables(program, usage);
+        Transform::EliminateDeadGlobalVariables(program, usage);
     }
 
     return this->errorCount() == 0;
@@ -589,7 +520,7 @@ bool Compiler::finalize(Program& program) {
     if (fContext->fConfig->strictES2Mode() && this->errorCount() == 0) {
         // Enforce Appendix A, Section 5 of the GLSL ES 1.00 spec -- Indexing. This logic assumes
         // that all loops meet the criteria of Section 4, and if they don't, could crash.
-        for (const auto& pe : program.ownedElements()) {
+        for (const auto& pe : program.fOwnedElements) {
             Analysis::ValidateIndexingForES2(*pe, this->errorReporter());
         }
         // Verify that the program size is reasonable after unrolling and inlining. This also
@@ -609,7 +540,7 @@ bool Compiler::toSPIRV(Program& program, OutputStream& out) {
     settings.fDSLUseMemoryPool = false;
     dsl::Start(this, program.fConfig->fKind, settings);
     dsl::SetErrorReporter(&fErrorReporter);
-    dsl::DSLWriter::IRGenerator().fSymbolTable = program.fSymbols;
+    ThreadContext::IRGenerator().fSymbolTable = program.fSymbols;
 #ifdef SK_ENABLE_SPIRV_VALIDATION
     StringStream buffer;
     SPIRVCodeGenerator cg(fContext.get(), &program, &buffer);
