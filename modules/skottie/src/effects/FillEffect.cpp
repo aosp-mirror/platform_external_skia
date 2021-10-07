@@ -7,6 +7,7 @@
 
 #include "modules/skottie/src/effects/Effects.h"
 
+#include "include/private/SkTPin.h"
 #include "modules/skottie/src/Adapter.h"
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/sksg/include/SkSGColorFilter.h"
@@ -54,7 +55,7 @@ private:
     }
 
     void onSync() override {
-        const auto c = ValueTraits<VectorValue>::As<SkColor>(fColor);
+        const auto c = static_cast<SkColor>(fColor);
         const auto a =
                 sk_float_round2int_no_saturate(SkColorGetA(c) * SkTPin(fOpacity, 0.0f, 1.0f));
         fColorNode->setColor(SkColorSetA(c, a));
