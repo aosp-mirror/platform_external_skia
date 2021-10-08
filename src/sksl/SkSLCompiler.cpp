@@ -19,6 +19,7 @@
 #include "src/sksl/SkSLOperators.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLRehydrator.h"
+#include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/codegen/SkSLGLSLCodeGenerator.h"
 #include "src/sksl/codegen/SkSLMetalCodeGenerator.h"
 #include "src/sksl/codegen/SkSLSPIRVCodeGenerator.h"
@@ -36,6 +37,7 @@
 #include "src/sksl/ir/SkSLUnresolvedFunction.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/transform/SkSLProgramWriter.h"
+#include "src/sksl/transform/SkSLTransform.h"
 #include "src/utils/SkBitSet.h"
 
 #include <fstream>
@@ -459,156 +461,6 @@ bool Compiler::optimize(LoadedModule& module) {
     return this->errorCount() == 0;
 }
 
-bool Compiler::removeDeadFunctions(Program& program, ProgramUsage* usage) {
-    bool madeChanges = false;
-
-    if (program.fConfig->fSettings.fRemoveDeadFunctions) {
-        auto isDeadFunction = [&](const ProgramElement* element) {
-            if (!element->is<FunctionDefinition>()) {
-                return false;
-            }
-            const FunctionDefinition& fn = element->as<FunctionDefinition>();
-            if (fn.declaration().isMain() || usage->get(fn.declaration()) > 0) {
-                return false;
-            }
-            usage->remove(*element);
-            madeChanges = true;
-            return true;
-        };
-
-        program.fElements.erase(std::remove_if(program.fElements.begin(),
-                                               program.fElements.end(),
-                                               [&](const std::unique_ptr<ProgramElement>& element) {
-                                                   return isDeadFunction(element.get());
-                                               }),
-                                program.fElements.end());
-        program.fSharedElements.erase(std::remove_if(program.fSharedElements.begin(),
-                                                     program.fSharedElements.end(),
-                                                     isDeadFunction),
-                                      program.fSharedElements.end());
-    }
-    return madeChanges;
-}
-
-bool Compiler::removeDeadGlobalVariables(Program& program, ProgramUsage* usage) {
-    bool madeChanges = false;
-
-    if (program.fConfig->fSettings.fRemoveDeadVariables) {
-        auto isDeadVariable = [&](const ProgramElement* element) {
-            if (!element->is<GlobalVarDeclaration>()) {
-                return false;
-            }
-            const GlobalVarDeclaration& global = element->as<GlobalVarDeclaration>();
-            const VarDeclaration& varDecl = global.declaration()->as<VarDeclaration>();
-            if (!usage->isDead(varDecl.var())) {
-                return false;
-            }
-            madeChanges = true;
-            return true;
-        };
-
-        program.fElements.erase(std::remove_if(program.fElements.begin(),
-                                               program.fElements.end(),
-                                               [&](const std::unique_ptr<ProgramElement>& element) {
-                                                   return isDeadVariable(element.get());
-                                               }),
-                                program.fElements.end());
-        program.fSharedElements.erase(std::remove_if(program.fSharedElements.begin(),
-                                                     program.fSharedElements.end(),
-                                                     isDeadVariable),
-                                      program.fSharedElements.end());
-    }
-    return madeChanges;
-}
-
-bool Compiler::removeDeadLocalVariables(Program& program, ProgramUsage* usage) {
-    class DeadLocalVariableEliminator : public ProgramWriter {
-    public:
-        DeadLocalVariableEliminator(const Context& context, ProgramUsage* usage)
-                : fContext(context)
-                , fUsage(usage) {}
-
-        using ProgramWriter::visitProgramElement;
-
-        bool visitExpressionPtr(std::unique_ptr<Expression>& expr) override {
-            // We don't need to look inside expressions at all.
-            return false;
-        }
-
-        bool visitStatementPtr(std::unique_ptr<Statement>& stmt) override {
-            if (stmt->is<VarDeclaration>()) {
-                VarDeclaration& varDecl = stmt->as<VarDeclaration>();
-                const Variable* var = &varDecl.var();
-                ProgramUsage::VariableCounts* counts = fUsage->fVariableCounts.find(var);
-                SkASSERT(counts);
-                SkASSERT(counts->fDeclared);
-                if (CanEliminate(var, *counts)) {
-                    if (var->initialValue()) {
-                        // The variable has an initial-value expression, which might have side
-                        // effects. ExpressionStatement::Make will preserve side effects, but
-                        // replaces pure expressions with Nop.
-                        fUsage->remove(stmt.get());
-                        stmt = ExpressionStatement::Make(fContext, std::move(varDecl.value()));
-                        fUsage->add(stmt.get());
-                    } else {
-                        // The variable has no initial-value and can be cleanly eliminated.
-                        fUsage->remove(stmt.get());
-                        stmt = std::make_unique<Nop>();
-                    }
-                    fMadeChanges = true;
-                }
-                return false;
-            }
-            return INHERITED::visitStatementPtr(stmt);
-        }
-
-        static bool CanEliminate(const Variable* var, const ProgramUsage::VariableCounts& counts) {
-            if (!counts.fDeclared || counts.fRead || var->storage() != VariableStorage::kLocal) {
-                return false;
-            }
-            if (var->initialValue()) {
-                SkASSERT(counts.fWrite >= 1);
-                return counts.fWrite == 1;
-            } else {
-                return counts.fWrite == 0;
-            }
-        }
-
-        bool fMadeChanges = false;
-        const Context& fContext;
-        ProgramUsage* fUsage;
-
-        using INHERITED = ProgramWriter;
-    };
-
-    DeadLocalVariableEliminator visitor{*fContext, usage};
-
-    if (program.fConfig->fSettings.fRemoveDeadVariables) {
-        for (auto& [var, counts] : usage->fVariableCounts) {
-            if (DeadLocalVariableEliminator::CanEliminate(var, counts)) {
-                // This program contains at least one dead local variable.
-                // Scan the program for any dead local variables and eliminate them all.
-                for (std::unique_ptr<ProgramElement>& pe : program.ownedElements()) {
-                    if (pe->is<FunctionDefinition>()) {
-                        visitor.visitProgramElement(*pe);
-                    }
-                }
-                break;
-            }
-        }
-    }
-
-    return visitor.fMadeChanges;
-}
-
-void Compiler::removeUnreachableCode(Program& program, ProgramUsage* usage) {
-    for (std::unique_ptr<ProgramElement>& pe : program.ownedElements()) {
-        if (pe->is<FunctionDefinition>()) {
-            Analysis::EliminateUnreachableCode(pe->as<FunctionDefinition>().body(), usage);
-        }
-    }
-}
-
 bool Compiler::optimize(Program& program) {
     // The optimizer only needs to run when it is enabled.
     if (!program.fConfig->fSettings.fOptimize) {
@@ -621,19 +473,19 @@ bool Compiler::optimize(Program& program) {
     if (this->errorCount() == 0) {
         // Run the inliner only once; it is expensive! Multiple passes can occasionally shake out
         // more wins, but it's diminishing returns.
-        this->runInliner(program.ownedElements(), program.fSymbols, usage);
+        this->runInliner(program.fOwnedElements, program.fSymbols, usage);
 
         // Unreachable code can confuse some drivers, so it's worth removing. (skia:12012)
-        this->removeUnreachableCode(program, usage);
+        Transform::EliminateUnreachableCode(program, usage);
 
-        while (this->removeDeadFunctions(program, usage)) {
+        while (Transform::EliminateDeadFunctions(program, usage)) {
             // Removing dead functions may cause more functions to become unreferenced. Try again.
         }
-        while (this->removeDeadLocalVariables(program, usage)) {
+        while (Transform::EliminateDeadLocalVariables(program, usage)) {
             // Removing dead variables may cause more variables to become unreferenced. Try again.
         }
 
-        this->removeDeadGlobalVariables(program, usage);
+        Transform::EliminateDeadGlobalVariables(program, usage);
     }
 
     return this->errorCount() == 0;
@@ -668,7 +520,7 @@ bool Compiler::finalize(Program& program) {
     if (fContext->fConfig->strictES2Mode() && this->errorCount() == 0) {
         // Enforce Appendix A, Section 5 of the GLSL ES 1.00 spec -- Indexing. This logic assumes
         // that all loops meet the criteria of Section 4, and if they don't, could crash.
-        for (const auto& pe : program.ownedElements()) {
+        for (const auto& pe : program.fOwnedElements) {
             Analysis::ValidateIndexingForES2(*pe, this->errorReporter());
         }
         // Verify that the program size is reasonable after unrolling and inlining. This also
@@ -688,7 +540,7 @@ bool Compiler::toSPIRV(Program& program, OutputStream& out) {
     settings.fDSLUseMemoryPool = false;
     dsl::Start(this, program.fConfig->fKind, settings);
     dsl::SetErrorReporter(&fErrorReporter);
-    dsl::DSLWriter::IRGenerator().fSymbolTable = program.fSymbols;
+    ThreadContext::IRGenerator().fSymbolTable = program.fSymbols;
 #ifdef SK_ENABLE_SPIRV_VALIDATION
     StringStream buffer;
     SPIRVCodeGenerator cg(fContext.get(), &program, &buffer);
