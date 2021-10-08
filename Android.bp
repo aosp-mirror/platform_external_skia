@@ -2903,6 +2903,7 @@ cc_test {
         "tests/Writer32Test.cpp",
         "tests/YUVCacheTest.cpp",
         "tests/YUVTest.cpp",
+        "tests/graphite/MaskTest.cpp",
         "third_party/etc1/etc1.cpp",
         "tools/AndroidSkDebugToStdOut.cpp",
         "tools/CrashHandler.cpp",
