@@ -54,67 +54,131 @@ namespace skvx {
 
 // All Vec have the same simple memory layout, the same as `T vec[N]`.
 template <int N, typename T>
-struct alignas(N*sizeof(T)) Vec {
+struct alignas(N*sizeof(T)) Vec;
+
+template <int... Ix, int N, typename T>
+SI Vec<sizeof...(Ix),T> shuffle(const Vec<N,T>&);
+
+template <int N, typename T>
+struct alignas(N*sizeof(T)) VecCommon {
     static_assert((N & (N-1)) == 0,        "N must be a power of 2.");
-    static_assert(sizeof(T) >= alignof(T), "What kind of crazy T is this?");
+    static_assert(sizeof(T) >= alignof(T), "Very unexpected type traits: sizeof(T) < alignof(T)");
 
-    Vec<N/2,T> lo, hi;
-
-    // Methods belong here in the class declaration of Vec only if:
-    //   - they must be here, like constructors or operator[];
+    // Methods on vectors belong in the actual class only if:
+    //   - they must be here, like constructors.
     //   - they'll definitely never want a specialized implementation.
-    // Other operations on Vec should be defined outside the type.
+    // Other operations on vectors should be defined outside the type.
 
-    SKVX_ALWAYS_INLINE Vec() = default;
+    SKVX_ALWAYS_INLINE VecCommon() = default;
 
-    template <typename U, typename=std::enable_if_t<std::is_convertible<U,T>::value>>
-    SKVX_ALWAYS_INLINE
-    Vec(U x) : lo(x), hi(x) {}
-
-    SKVX_ALWAYS_INLINE Vec(std::initializer_list<T> xs) {
-        T vals[N] = {0};
-        memcpy(vals, xs.begin(), std::min(xs.size(), (size_t)N)*sizeof(T));
-
-        lo = Vec<N/2,T>::Load(vals +   0);
-        hi = Vec<N/2,T>::Load(vals + N/2);
+    SKVX_ALWAYS_INLINE VecCommon(std::initializer_list<T> l) {
+        static_assert(sizeof(Vec<N,T>) == N*sizeof(T),  "Vec must be tightly packed.");
+        static_assert(alignof(Vec<N,T>) == N*sizeof(T), "Vec alignment must support fast loads.");
+        if (l.size() >= N) {
+            memcpy(this, l.begin(), N*sizeof(T));
+        } else {
+            memcpy(this, l.begin(), l.size()*sizeof(T));
+            memset((char*)this + l.size()*sizeof(T), 0, (N - l.size())*sizeof(T));
+        }
     }
 
-    SKVX_ALWAYS_INLINE T  operator[](int i) const { return i < N/2 ? lo[i] : hi[i-N/2]; }
-    SKVX_ALWAYS_INLINE T& operator[](int i)       { return i < N/2 ? lo[i] : hi[i-N/2]; }
-
-    SKVX_ALWAYS_INLINE static Vec Load(const void* ptr) {
-        Vec v;
-        memcpy(&v, ptr, sizeof(Vec));
-        return v;
+    SKVX_ALWAYS_INLINE T operator[](int i) const {
+        auto vec = static_cast<const Vec<N,T>*>(this);
+        if constexpr (N > 1) {
+            return i < N/2 ? vec->lo[i] : vec->hi[i-N/2];
+        } else {
+            return vec->val;
+        }
     }
+
+    SKVX_ALWAYS_INLINE T& operator[](int i) {
+        auto vec = static_cast<Vec<N,T>*>(this);
+        if constexpr (N > 1) {
+            return i < N/2 ? vec->lo[i] : vec->hi[i-N/2];
+        } else {
+            return vec->val;
+        }
+    }
+
     SKVX_ALWAYS_INLINE void store(void* ptr) const {
-        memcpy(ptr, this, sizeof(Vec));
+        memcpy(ptr, this, N*sizeof(T));
+    }
+
+    SKVX_ALWAYS_INLINE static Vec<N,T> Load(const void* ptr) {
+        Vec<N,T> v;
+        memcpy(&v, ptr, N*sizeof(T));
+        return v;
     }
 };
 
-template <typename T>
-struct Vec<1,T> {
-    T val;
-
+template <int N, typename T>
+struct Vec : public VecCommon<N,T> {
     SKVX_ALWAYS_INLINE Vec() = default;
+    SKVX_ALWAYS_INLINE Vec(T s) : lo(s), hi(s) {}
+    SKVX_ALWAYS_INLINE Vec(std::initializer_list<T> l) : VecCommon<N,T>(l) {}
 
-    template <typename U, typename=std::enable_if_t<std::is_convertible<U,T>::value>>
-    SKVX_ALWAYS_INLINE
-    Vec(U x) : val(x) {}
+    Vec<N/2,T> lo, hi;
+};
 
-    SKVX_ALWAYS_INLINE Vec(std::initializer_list<T> xs) : val(xs.size() ? *xs.begin() : 0) {}
+template <typename T>
+struct Vec<4,T> : public VecCommon<4,T> {
+    SKVX_ALWAYS_INLINE Vec() = default;
+    SKVX_ALWAYS_INLINE Vec(T s) : lo(s), hi(s) {}
+    SKVX_ALWAYS_INLINE Vec(std::initializer_list<T> l) : VecCommon<4,T>(l) {}
+    SKVX_ALWAYS_INLINE Vec(T x, T y, T z, T w) : lo(x,y), hi(z, w) {}
+    SKVX_ALWAYS_INLINE Vec(Vec<2,T> xy, T z, T w) : lo(xy), hi(z,w) {}
+    SKVX_ALWAYS_INLINE Vec(T x, T y, Vec<2,T> zw) : lo(x,y), hi(zw) {}
+    SKVX_ALWAYS_INLINE Vec(Vec<2,T> xy, Vec<2,T> zw) : lo(xy), hi(zw) {}
 
-    SKVX_ALWAYS_INLINE T  operator[](int) const { return val; }
-    SKVX_ALWAYS_INLINE T& operator[](int)       { return val; }
+    SKVX_ALWAYS_INLINE Vec<2,T>& xy() { return lo; }
+    SKVX_ALWAYS_INLINE Vec<2,T>& zw() { return hi; }
+    SKVX_ALWAYS_INLINE T& x() { return lo.lo.val; }
+    SKVX_ALWAYS_INLINE T& y() { return lo.hi.val; }
+    SKVX_ALWAYS_INLINE T& z() { return hi.lo.val; }
+    SKVX_ALWAYS_INLINE T& w() { return hi.hi.val; }
 
-    SKVX_ALWAYS_INLINE static Vec Load(const void* ptr) {
-        Vec v;
-        memcpy(&v, ptr, sizeof(Vec));
-        return v;
-    }
-    SKVX_ALWAYS_INLINE void store(void* ptr) const {
-        memcpy(ptr, this, sizeof(Vec));
-    }
+    SKVX_ALWAYS_INLINE Vec<2,T> xy() const { return lo; }
+    SKVX_ALWAYS_INLINE Vec<2,T> zw() const { return hi; }
+    SKVX_ALWAYS_INLINE T x() const { return lo.lo.val; }
+    SKVX_ALWAYS_INLINE T y() const { return lo.hi.val; }
+    SKVX_ALWAYS_INLINE T z() const { return hi.lo.val; }
+    SKVX_ALWAYS_INLINE T w() const { return hi.hi.val; }
+
+    // Exchange-based swizzles. These should take 1 cycle on NEON and 3 (pipelined) cycles on SSE.
+    SKVX_ALWAYS_INLINE Vec<4,T> yxwz() const { return shuffle<1,0,3,2>(*this); }
+    SKVX_ALWAYS_INLINE Vec<4,T> zwxy() const { return shuffle<2,3,0,1>(*this); }
+
+    Vec<2,T> lo, hi;
+};
+
+template <typename T>
+struct Vec<2,T> : public VecCommon<2,T> {
+    SKVX_ALWAYS_INLINE Vec() = default;
+    SKVX_ALWAYS_INLINE Vec(T s) : lo(s), hi(s) {}
+    SKVX_ALWAYS_INLINE Vec(std::initializer_list<T> l) : VecCommon<2,T>(l) {}
+    SKVX_ALWAYS_INLINE Vec(T x, T y) : lo(x), hi(y) {}
+
+    SKVX_ALWAYS_INLINE T& x() { return lo.val; }
+    SKVX_ALWAYS_INLINE T& y() { return hi.val; }
+
+    SKVX_ALWAYS_INLINE T x() const { return lo.val; }
+    SKVX_ALWAYS_INLINE T y() const { return hi.val; }
+
+    // This exchange-based swizzle should take 1 cycle on NEON and 3 (pipelined) cycles on SSE.
+    SKVX_ALWAYS_INLINE Vec<2,T> yx() const { return shuffle<1,0>(*this); }
+
+    SKVX_ALWAYS_INLINE Vec<4,T> xyxy() const { return Vec<4,T>(*this, *this); }
+
+    Vec<1,T> lo, hi;
+};
+
+template <typename T>
+struct Vec<1,T> : public VecCommon<1,T> {
+    SKVX_ALWAYS_INLINE Vec() = default;
+    SKVX_ALWAYS_INLINE Vec(T s) : val(s) {}
+    SKVX_ALWAYS_INLINE Vec(std::initializer_list<T> l) : VecCommon<1,T>(l) {}
+
+    T val;
 };
 
 // Ideally we'd only use bit_pun(), but until this file is always built as C++17 with constexpr if,
@@ -667,6 +731,142 @@ SIN Vec<N,uint8_t> approx_scale(const Vec<N,uint8_t>& x, const Vec<N,uint8_t>& y
         return cast<uint16_t>(x)
              * cast<uint16_t>(y);
     }
+#endif
+
+// Approximates the inverse cosine of x within 0.96 degrees using the rational polynomial:
+//
+//     acos(x) ~= (bx^3 + ax) / (dx^4 + cx^2 + 1) + pi/2
+//
+// See: https://stackoverflow.com/a/36387954
+//
+// For a proof of max error, see the "SkVx_approx_acos" unit test.
+//
+// NOTE: This function deviates immediately from pi and 0 outside -1 and 1. (The derivatives are
+// infinite at -1 and 1). So the input must still be clamped between -1 and 1.
+#define SKVX_APPROX_ACOS_MAX_ERROR SkDegreesToRadians(.96f)
+SIN Vec<N,float> approx_acos(Vec<N,float> x) {
+    constexpr static float a = -0.939115566365855f;
+    constexpr static float b =  0.9217841528914573f;
+    constexpr static float c = -1.2845906244690837f;
+    constexpr static float d =  0.295624144969963174f;
+    constexpr static float pi_over_2 = 1.5707963267948966f;
+    auto xx = x*x;
+    auto numer = b*xx + a;
+    auto denom = xx*(d*xx + c) + 1;
+    return x * (numer/denom) + pi_over_2;
+}
+
+// De-interleaving load of 4 vectors.
+//
+// WARNING: These are really only supported well on NEON. Consider restructuring your data before
+// resorting to these methods.
+SIT void strided_load4(const T* v,
+                       skvx::Vec<1,T>& a,
+                       skvx::Vec<1,T>& b,
+                       skvx::Vec<1,T>& c,
+                       skvx::Vec<1,T>& d) {
+    a.val = v[0];
+    b.val = v[1];
+    c.val = v[2];
+    d.val = v[3];
+}
+SINT void strided_load4(const T* v,
+                        skvx::Vec<N,T>& a,
+                        skvx::Vec<N,T>& b,
+                        skvx::Vec<N,T>& c,
+                        skvx::Vec<N,T>& d) {
+    strided_load4(v, a.lo, b.lo, c.lo, d.lo);
+    strided_load4(v + 4*(N/2), a.hi, b.hi, c.hi, d.hi);
+}
+#if !defined(SKNX_NO_SIMD)
+#if defined(__ARM_NEON)
+#define IMPL_LOAD4_TRANSPOSED(N, T, VLD) \
+SI void strided_load4(const T* v, \
+                      skvx::Vec<N,T>& a, \
+                      skvx::Vec<N,T>& b, \
+                      skvx::Vec<N,T>& c, \
+                      skvx::Vec<N,T>& d) { \
+    auto mat = VLD(v); \
+    a = skvx::bit_pun<skvx::Vec<N,T>>(mat.val[0]); \
+    b = skvx::bit_pun<skvx::Vec<N,T>>(mat.val[1]); \
+    c = skvx::bit_pun<skvx::Vec<N,T>>(mat.val[2]); \
+    d = skvx::bit_pun<skvx::Vec<N,T>>(mat.val[3]); \
+}
+IMPL_LOAD4_TRANSPOSED(2, uint32_t, vld4_u32);
+IMPL_LOAD4_TRANSPOSED(4, uint16_t, vld4_u16);
+IMPL_LOAD4_TRANSPOSED(8, uint8_t, vld4_u8);
+IMPL_LOAD4_TRANSPOSED(2, int32_t, vld4_s32);
+IMPL_LOAD4_TRANSPOSED(4, int16_t, vld4_s16);
+IMPL_LOAD4_TRANSPOSED(8, int8_t, vld4_s8);
+IMPL_LOAD4_TRANSPOSED(2, float, vld4_f32);
+IMPL_LOAD4_TRANSPOSED(4, uint32_t, vld4q_u32);
+IMPL_LOAD4_TRANSPOSED(8, uint16_t, vld4q_u16);
+IMPL_LOAD4_TRANSPOSED(16, uint8_t, vld4q_u8);
+IMPL_LOAD4_TRANSPOSED(4, int32_t, vld4q_s32);
+IMPL_LOAD4_TRANSPOSED(8, int16_t, vld4q_s16);
+IMPL_LOAD4_TRANSPOSED(16, int8_t, vld4q_s8);
+IMPL_LOAD4_TRANSPOSED(4, float, vld4q_f32);
+#undef IMPL_LOAD4_TRANSPOSED
+#elif defined(__SSE__)
+SI void strided_load4(const float* v,
+                      Vec<4,float>& a,
+                      Vec<4,float>& b,
+                      Vec<4,float>& c,
+                      Vec<4,float>& d) {
+    using skvx::bit_pun;
+    __m128 a_ = _mm_loadu_ps(v);
+    __m128 b_ = _mm_loadu_ps(v+4);
+    __m128 c_ = _mm_loadu_ps(v+8);
+    __m128 d_ = _mm_loadu_ps(v+12);
+    _MM_TRANSPOSE4_PS(a_, b_, c_, d_);
+    a = bit_pun<Vec<4,float>>(a_);
+    b = bit_pun<Vec<4,float>>(b_);
+    c = bit_pun<Vec<4,float>>(c_);
+    d = bit_pun<Vec<4,float>>(d_);
+}
+#endif
+#endif
+
+// De-interleaving load of 2 vectors.
+//
+// WARNING: These are really only supported well on NEON. Consider restructuring your data before
+// resorting to these methods.
+SIT void strided_load2(const T* v, skvx::Vec<1,T>& a, skvx::Vec<1,T>& b) {
+    a.val = v[0];
+    b.val = v[1];
+}
+SINT void strided_load2(const T* v, skvx::Vec<N,T>& a, skvx::Vec<N,T>& b) {
+    strided_load2(v, a.lo, b.lo);
+    strided_load2(v + 2*(N/2), a.hi, b.hi);
+}
+#if !defined(SKNX_NO_SIMD)
+#if defined(__ARM_NEON)
+#define IMPL_LOAD2_TRANSPOSED(N, T, VLD) \
+SI void strided_load2(const T* v, skvx::Vec<N,T>& a, skvx::Vec<N,T>& b) { \
+    auto mat = VLD(v); \
+    a = skvx::bit_pun<skvx::Vec<N,T>>(mat.val[0]); \
+    b = skvx::bit_pun<skvx::Vec<N,T>>(mat.val[1]); \
+}
+IMPL_LOAD2_TRANSPOSED(2, uint32_t, vld2_u32);
+IMPL_LOAD2_TRANSPOSED(4, uint16_t, vld2_u16);
+IMPL_LOAD2_TRANSPOSED(8, uint8_t, vld2_u8);
+IMPL_LOAD2_TRANSPOSED(2, int32_t, vld2_s32);
+IMPL_LOAD2_TRANSPOSED(4, int16_t, vld2_s16);
+IMPL_LOAD2_TRANSPOSED(8, int8_t, vld2_s8);
+IMPL_LOAD2_TRANSPOSED(2, float, vld2_f32);
+IMPL_LOAD2_TRANSPOSED(4, uint32_t, vld2q_u32);
+IMPL_LOAD2_TRANSPOSED(8, uint16_t, vld2q_u16);
+IMPL_LOAD2_TRANSPOSED(16, uint8_t, vld2q_u8);
+IMPL_LOAD2_TRANSPOSED(4, int32_t, vld2q_s32);
+IMPL_LOAD2_TRANSPOSED(8, int16_t, vld2q_s16);
+IMPL_LOAD2_TRANSPOSED(16, int8_t, vld2q_s8);
+IMPL_LOAD2_TRANSPOSED(4, float, vld2q_f32);
+#undef IMPL_LOAD2_TRANSPOSED
+#endif
+#endif
+
+#if defined(__clang__)
+    #pragma STDC FP_CONTRACT DEFAULT
 #endif
 
 }  // namespace skvx
