@@ -43,10 +43,11 @@ static void paint_rgn(SkCanvas* canvas, const SkAAClip& clip,
 
     ToolUtils::copy_to(&bm2, bm.colorType(), bm);
 
-    canvas->drawBitmap(bm2,
-                       SK_Scalar1 * mask.fBounds.fLeft,
-                       SK_Scalar1 * mask.fBounds.fTop,
-                       &paint);
+    canvas->drawImage(bm2.asImage(),
+                      SK_Scalar1 * mask.fBounds.fLeft,
+                      SK_Scalar1 * mask.fBounds.fTop,
+                      SkSamplingOptions(),
+                      &paint);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -151,7 +152,7 @@ protected:
     }
 
     SkISize onISize() override {
-        return SkISize::Make(640, 480);
+        return SkISize::Make(500, 240);
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -163,10 +164,6 @@ protected:
         } gOps[] = {
                 {SK_ColorBLACK, "Difference", kDifference_SkClipOp},
                 {SK_ColorRED, "Intersect", kIntersect_SkClipOp},
-                {ToolUtils::color_to_565(0xFF008800), "Union", kUnion_SkClipOp},
-                {SK_ColorGREEN, "Rev Diff", kReverseDifference_SkClipOp},
-                {SK_ColorYELLOW, "Replace", kReplace_SkClipOp},
-                {SK_ColorBLUE, "XOR", kXOR_SkClipOp},
         };
 
         SkPaint textPaint;
@@ -201,7 +198,7 @@ private:
     SkPath fBasePath;       // fBase as a round rect
     SkPath fRectPath;       // fRect as a round rect
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -211,4 +208,4 @@ DEF_GM( return new SimpleClipGM(SimpleClipGM::kRect_GeomType); )
 DEF_GM( return new SimpleClipGM(SimpleClipGM::kPath_GeomType); )
 DEF_GM( return new SimpleClipGM(SimpleClipGM::kAAClip_GeomType); )
 
-}
+}  // namespace skiagm

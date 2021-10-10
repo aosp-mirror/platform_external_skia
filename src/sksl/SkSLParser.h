@@ -12,15 +12,11 @@
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
+#include "include/private/SkSLLayout.h"
 #include "src/sksl/SkSLASTFile.h"
 #include "src/sksl/SkSLASTNode.h"
 #include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/SkSLLexer.h"
-#include "src/sksl/ir/SkSLLayout.h"
-
-struct yy_buffer_state;
-#define YY_TYPEDEF_YY_BUFFER_STATE
-typedef struct yy_buffer_state *YY_BUFFER_STATE;
 
 namespace SkSL {
 
@@ -43,21 +39,6 @@ public:
         ORIGIN_UPPER_LEFT,
         OVERRIDE_COVERAGE,
         BLEND_SUPPORT_ALL_EQUATIONS,
-        BLEND_SUPPORT_MULTIPLY,
-        BLEND_SUPPORT_SCREEN,
-        BLEND_SUPPORT_OVERLAY,
-        BLEND_SUPPORT_DARKEN,
-        BLEND_SUPPORT_LIGHTEN,
-        BLEND_SUPPORT_COLORDODGE,
-        BLEND_SUPPORT_COLORBURN,
-        BLEND_SUPPORT_HARDLIGHT,
-        BLEND_SUPPORT_SOFTLIGHT,
-        BLEND_SUPPORT_DIFFERENCE,
-        BLEND_SUPPORT_EXCLUSION,
-        BLEND_SUPPORT_HSL_HUE,
-        BLEND_SUPPORT_HSL_SATURATION,
-        BLEND_SUPPORT_HSL_COLOR,
-        BLEND_SUPPORT_HSL_LUMINOSITY,
         PUSH_CONSTANT,
         POINTS,
         LINES,
@@ -71,6 +52,7 @@ public:
         WHEN,
         KEY,
         TRACKED,
+        SRGB_UNPREMUL,
         CTYPE,
         SKPMCOLOR4F,
         SKV4,
@@ -83,13 +65,13 @@ public:
         FLOAT,
     };
 
-    Parser(const char* text, size_t length, SymbolTable& types, ErrorReporter& errors);
+    Parser(const char* text, size_t length, SymbolTable& symbols, ErrorReporter& errors);
 
     /**
      * Consumes a complete .sksl file and returns the parse tree. Errors are reported via the
      * ErrorReporter; the return value may contain some declarations even when errors have occurred.
      */
-    std::unique_ptr<ASTFile> file();
+    std::unique_ptr<ASTFile> compilationUnit();
 
     StringFragment text(Token token);
 
@@ -138,6 +120,14 @@ private:
     bool expect(Token::Kind kind, const char* expected, Token* result = nullptr);
     bool expect(Token::Kind kind, String expected, Token* result = nullptr);
 
+    /**
+     * Behaves like expect(TK_IDENTIFIER), but also verifies that identifier is not a type.
+     * If the token was actually a type, generates an error message of the form:
+     *
+     * "expected an identifier, but found type 'float2'"
+     */
+    bool expectIdentifier(Token* result);
+
     void error(Token token, String msg);
     void error(int offset, String msg);
     /**
@@ -145,6 +135,11 @@ private:
      * always return true.
      */
     bool isType(StringFragment name);
+
+    /**
+     * Returns true if the passed-in ASTNode is an array type, or false if it is a non-arrayed type.
+     */
+    bool isArrayType(ASTNode::ID type);
 
     // The pointer to the node may be invalidated by modifying the fNodes vector
     ASTNode& getNode(ASTNode::ID id) {
@@ -166,6 +161,16 @@ private:
 
     ASTNode::ID declaration();
 
+    struct VarDeclarationsPrefix {
+        Modifiers modifiers;
+        ASTNode::ID type;
+        Token name;
+    };
+
+    bool varDeclarationsPrefix(VarDeclarationsPrefix* prefixData);
+
+    ASTNode::ID varDeclarationsOrExpressionStatement();
+
     ASTNode::ID varDeclarations();
 
     ASTNode::ID structDeclaration();
@@ -181,8 +186,6 @@ private:
     StringFragment layoutIdentifier();
 
     StringFragment layoutCode();
-
-    Layout::Key layoutKey();
 
     Layout::CType layoutCType();
 
@@ -266,16 +269,45 @@ private:
 
     bool identifier(StringFragment* dest);
 
+    template <typename... Args> ASTNode::ID createNode(Args&&... args);
+
+    ASTNode::ID addChild(ASTNode::ID target, ASTNode::ID child);
+
+    void createEmptyChild(ASTNode::ID target);
+
+    class Checkpoint {
+    public:
+        Checkpoint(Parser* p) : fParser(p) {
+            fPushbackCheckpoint = fParser->fPushback;
+            fLexerCheckpoint = fParser->fLexer.getCheckpoint();
+            fASTCheckpoint = fParser->fFile->fNodes.size();
+            fErrorCount = fParser->fErrors.errorCount();
+        }
+
+        void rewind() {
+            fParser->fPushback = fPushbackCheckpoint;
+            fParser->fLexer.rewindToCheckpoint(fLexerCheckpoint);
+            fParser->fFile->fNodes.resize(fASTCheckpoint);
+            fParser->fErrors.setErrorCount(fErrorCount);
+        }
+
+    private:
+        Parser* fParser;
+        Token fPushbackCheckpoint;
+        int32_t fLexerCheckpoint;
+        size_t fASTCheckpoint;
+        int fErrorCount;
+    };
+
     static std::unordered_map<String, LayoutToken>* layoutTokens;
 
-    const char* fText;
+    StringFragment fText;
     Lexer fLexer;
-    YY_BUFFER_STATE fBuffer;
     // current parse depth, used to enforce a recursion limit to try to keep us from overflowing the
     // stack on pathological inputs
     int fDepth = 0;
     Token fPushback;
-    SymbolTable& fTypes;
+    SymbolTable& fSymbols;
     ErrorReporter& fErrors;
 
     std::unique_ptr<ASTFile> fFile;
@@ -284,6 +316,6 @@ private:
     friend class HCodeGenerator;
 };
 
-} // namespace
+}  // namespace SkSL
 
 #endif
