@@ -19,6 +19,9 @@
 #include "tools/debugger/DebugLayerManager.h"
 #include "tools/debugger/DrawCommand.h"
 
+#include <map>
+#include <vector>
+
 class GrAuditTrail;
 class SkNWayCanvas;
 class SkPicture;
@@ -59,7 +62,9 @@ public:
      */
     void setClipVizColor(SkColor clipVizColor) { this->fClipVizColor = clipVizColor; }
 
-    void setAndroidClipViz(bool enable) {this->fShowAndroidClip = enable; }
+    void setAndroidClipViz(bool enable) { this->fShowAndroidClip = enable; }
+
+    void setOriginVisible(bool enable) { this->fShowOrigin = enable; }
 
     void setDrawGpuOpBounds(bool drawGpuOpBounds) { fDrawGpuOpBounds = drawGpuOpBounds; }
 
@@ -84,7 +89,7 @@ public:
     /**
         Returns the most recently calculated transformation matrix
      */
-    const SkMatrix& getCurrentMatrix() { return fMatrix; }
+    const SkM44& getCurrentMatrix() { return fMatrix; }
 
     /**
         Returns the most recently calculated clip
@@ -101,7 +106,7 @@ public:
         Returns the draw command at the given index.
         @param index  The index of the command
      */
-    DrawCommand* getDrawCommandAt(int index);
+    DrawCommand* getDrawCommandAt(int index) const;
 
     /**
         Returns length of draw command vector.
@@ -125,15 +130,19 @@ public:
 
     void detachCommands(SkTDArray<DrawCommand*>* dst) { fCommandVector.swap(*dst); }
 
+    /**
+        Returns a map from image IDs to command indices where they are used.
+     */
+    std::map<int, std::vector<int>> getImageIdToCommandMap(UrlDataManager& udm) const;
+
 protected:
     void              willSave() override;
     SaveLayerStrategy getSaveLayerStrategy(const SaveLayerRec&) override;
     bool              onDoSaveBehind(const SkRect*) override;
     void              willRestore() override;
 
-    void didConcat44(const SkScalar[16]) override;
-    void didConcat(const SkMatrix&) override;
-    void didSetMatrix(const SkMatrix&) override;
+    void didConcat44(const SkM44&) override;
+    void didSetM44(const SkM44&) override;
     void didScale(SkScalar, SkScalar) override;
     void didTranslate(SkScalar, SkScalar) override;
 
@@ -157,52 +166,23 @@ protected:
     void onDrawArc(const SkRect&, SkScalar, SkScalar, bool, const SkPaint&) override;
     void onDrawRRect(const SkRRect&, const SkPaint&) override;
     void onDrawPoints(PointMode, size_t count, const SkPoint pts[], const SkPaint&) override;
-    void onDrawVerticesObject(const SkVertices*,
-                              const SkVertices::Bone bones[],
-                              int                    boneCount,
-                              SkBlendMode,
-                              const SkPaint&) override;
+    void onDrawVerticesObject(const SkVertices*, SkBlendMode, const SkPaint&) override;
     void onDrawPath(const SkPath&, const SkPaint&) override;
     void onDrawRegion(const SkRegion&, const SkPaint&) override;
-    void onDrawBitmap(const SkBitmap&, SkScalar left, SkScalar top, const SkPaint*) override;
-    void onDrawBitmapLattice(const SkBitmap&,
-                             const Lattice&,
-                             const SkRect&,
+
+    void onDrawImage2(const SkImage*, SkScalar, SkScalar, const SkSamplingOptions&,
+                      const SkPaint*) override;
+    void onDrawImageRect2(const SkImage*, const SkRect&, const SkRect&, const SkSamplingOptions&,
+                          const SkPaint*, SrcRectConstraint) override;
+    void onDrawImageLattice2(const SkImage*, const Lattice&, const SkRect&, SkFilterMode,
                              const SkPaint*) override;
-    void onDrawBitmapRect(const SkBitmap&,
-                          const SkRect* src,
-                          const SkRect& dst,
-                          const SkPaint*,
-                          SrcRectConstraint) override;
-    void onDrawImage(const SkImage*, SkScalar left, SkScalar top, const SkPaint*) override;
-    void onDrawImageLattice(const SkImage* image,
-                            const Lattice& lattice,
-                            const SkRect&  dst,
-                            const SkPaint* paint) override;
-    void onDrawImageRect(const SkImage*,
-                         const SkRect* src,
-                         const SkRect& dst,
-                         const SkPaint*,
-                         SrcRectConstraint) override;
-    void onDrawBitmapNine(const SkBitmap&,
-                          const SkIRect& center,
-                          const SkRect&  dst,
-                          const SkPaint*) override;
-    void onDrawImageNine(const SkImage*,
-                         const SkIRect& center,
-                         const SkRect&  dst,
-                         const SkPaint*) override;
-    void onDrawAtlas(const SkImage*,
-                     const SkRSXform[],
-                     const SkRect[],
-                     const SkColor[],
-                     int,
-                     SkBlendMode,
-                     const SkRect*,
-                     const SkPaint*) override;
+    void onDrawAtlas2(const SkImage*, const SkRSXform[], const SkRect[], const SkColor[], int,
+                     SkBlendMode, const SkSamplingOptions&, const SkRect*, const SkPaint*) override;
+
     void onClipRect(const SkRect&, SkClipOp, ClipEdgeStyle) override;
     void onClipRRect(const SkRRect&, SkClipOp, ClipEdgeStyle) override;
     void onClipPath(const SkPath&, SkClipOp, ClipEdgeStyle) override;
+    void onClipShader(sk_sp<SkShader>, SkClipOp) override;
     void onClipRegion(const SkRegion& region, SkClipOp) override;
     void onDrawShadowRec(const SkPath&, const SkDrawShadowRec&) override;
 
@@ -214,22 +194,24 @@ protected:
                           QuadAAFlags,
                           const SkColor4f&,
                           SkBlendMode) override;
-    void onDrawEdgeAAImageSet(const ImageSetEntry[],
-                              int count,
-                              const SkPoint[],
-                              const SkMatrix[],
-                              const SkPaint*,
-                              SrcRectConstraint) override;
+    void onDrawEdgeAAImageSet2(const ImageSetEntry[],
+                               int count,
+                               const SkPoint[],
+                               const SkMatrix[],
+                               const SkSamplingOptions&,
+                               const SkPaint*,
+                               SrcRectConstraint) override;
 
 private:
     SkTDArray<DrawCommand*> fCommandVector;
-    SkMatrix                fMatrix;
+    SkM44                   fMatrix;
     SkIRect                 fClip;
 
     bool    fOverdrawViz = false;
     SkColor fClipVizColor;
     bool    fDrawGpuOpBounds = false;
     bool    fShowAndroidClip = false;
+    bool    fShowOrigin = false;
 
     // When not negative, indicates the render node id of the layer represented by the next
     // drawPicture call.
@@ -254,7 +236,7 @@ private:
     void drawAndCollectOps(SkCanvas*);
     void cleanupAuditTrail(SkCanvas*);
 
-    typedef SkCanvasVirtualEnforcer<SkCanvas> INHERITED;
+    using INHERITED = SkCanvasVirtualEnforcer<SkCanvas>;
 };
 
 #endif
