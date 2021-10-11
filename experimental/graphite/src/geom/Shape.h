@@ -24,10 +24,11 @@ namespace skgpu::geom {
  * point containment, or iteration.
  */
 class Shape {
+public:
     enum class Type : uint8_t {
         kEmpty, kRect, kRRect, kPath
     };
-    static constexpr int kTypeCount = static_cast<int>(Type::kPath) + 1;
+    inline static constexpr int kTypeCount = static_cast<int>(Type::kPath) + 1;
 
     Shape() {}
     Shape(const Shape& shape)            { *this = shape; }
