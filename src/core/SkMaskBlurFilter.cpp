@@ -10,6 +10,7 @@
 #include "include/core/SkColorPriv.h"
 #include "include/private/SkMalloc.h"
 #include "include/private/SkNx.h"
+#include "include/private/SkTPin.h"
 #include "include/private/SkTemplates.h"
 #include "include/private/SkTo.h"
 #include "src/core/SkArenaAlloc.h"
@@ -991,6 +992,10 @@ SkIPoint SkMaskBlurFilter::blur(const SkMask& src, SkMask* dst) const {
     int tmpW = srcH,
         tmpH = dstW;
 
+    // Make sure not to overflow the multiply for the tmp buffer size.
+    if (tmpH > std::numeric_limits<int>::max() / tmpW) {
+        return {0, 0};
+    }
     auto tmp = alloc.makeArrayDefault<uint8_t>(tmpW * tmpH);
 
     // Blur horizontally, and transpose.

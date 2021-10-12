@@ -27,6 +27,7 @@
 #include "include/private/SkTArray.h"
 #include "include/private/SkTDArray.h"
 #include "include/utils/SkRandom.h"
+#include "src/core/SkTInternalLList.h"
 
 class SkBitmap;
 class SkCanvas;
@@ -61,6 +62,9 @@ sk_sp<SkTypeface> emoji_typeface();
 
 /** Sample text for the emoji_typeface font. */
 const char* emoji_sample_text();
+
+/** A simple SkUserTypeface for testing. */
+sk_sp<SkTypeface> sample_user_typeface();
 
 /**
  * Returns a platform-independent text renderer.
@@ -103,12 +107,15 @@ void draw_checkerboard(SkCanvas* canvas, SkColor color1, SkColor color2, int che
 /** Make it easier to create a bitmap-based checkerboard */
 SkBitmap create_checkerboard_bitmap(int w, int h, SkColor c1, SkColor c2, int checkSize);
 
+sk_sp<SkImage> create_checkerboard_image(int w, int h, SkColor c1, SkColor c2, int checkSize);
+
 /** A default checkerboard. */
 inline void draw_checkerboard(SkCanvas* canvas) {
     ToolUtils::draw_checkerboard(canvas, 0xFF999999, 0xFF666666, 8);
 }
 
 SkBitmap create_string_bitmap(int w, int h, SkColor c, int x, int y, int textSize, const char* str);
+sk_sp<SkImage> create_string_image(int w, int h, SkColor c, int x, int y, int textSize, const char* str);
 
 // If the canvas does't make a surface (e.g. recording), make a raster surface
 sk_sp<SkSurface> makeSurface(SkCanvas*, const SkImageInfo&, const SkSurfaceProps* = nullptr);
@@ -142,30 +149,36 @@ void create_frustum_normal_map(SkBitmap* bm, const SkIRect& dst);
 
 void create_tetra_normal_map(SkBitmap* bm, const SkIRect& dst);
 
-void make_big_path(SkPath& path);
-
-void set_path_pt(int index, const SkPoint&, SkPath* path);
+SkPath make_big_path();
 
 // A helper object to test the topological sorting code (TopoSortBench.cpp & TopoSortTest.cpp)
 class TopoTestNode : public SkRefCnt {
 public:
-    TopoTestNode(int id) : fID(id), fOutputPos(-1), fTempMark(false) {}
+    TopoTestNode(int id) : fID(id) {}
 
     void dependsOn(TopoTestNode* src) { *fDependencies.append() = src; }
+    void targets(uint32_t target) { *fTargets.append() = target; }
 
     int  id() const { return fID; }
-    void reset() { fOutputPos = -1; }
+    void reset() {
+        fOutputPos = 0;
+        fTempMark = false;
+        fWasOutput = false;
+    }
 
-    int outputPos() const { return fOutputPos; }
+    uint32_t outputPos() const {
+        SkASSERT(fWasOutput);
+        return fOutputPos;
+    }
 
     // check that the topological sort is valid for this node
     bool check() {
-        if (-1 == fOutputPos) {
+        if (!fWasOutput) {
             return false;
         }
 
         for (int i = 0; i < fDependencies.count(); ++i) {
-            if (-1 == fDependencies[i]->outputPos()) {
+            if (!fDependencies[i]->fWasOutput) {
                 return false;
             }
             // This node should've been output after all the nodes on which it depends
@@ -181,19 +194,24 @@ public:
     static void SetTempMark(TopoTestNode* node) { node->fTempMark = true; }
     static void ResetTempMark(TopoTestNode* node) { node->fTempMark = false; }
     static bool IsTempMarked(TopoTestNode* node) { return node->fTempMark; }
-    static void Output(TopoTestNode* node, int outputPos) {
-        SkASSERT(-1 != outputPos);
+    static void Output(TopoTestNode* node, uint32_t outputPos) {
+        SkASSERT(!node->fWasOutput);
         node->fOutputPos = outputPos;
+        node->fWasOutput = true;
     }
-    static bool          WasOutput(TopoTestNode* node) { return (-1 != node->fOutputPos); }
+    static bool          WasOutput(TopoTestNode* node) { return node->fWasOutput; }
+    static uint32_t      GetIndex(TopoTestNode* node) { return node->outputPos(); }
     static int           NumDependencies(TopoTestNode* node) { return node->fDependencies.count(); }
     static TopoTestNode* Dependency(TopoTestNode* node, int index) {
         return node->fDependencies[index];
     }
+    static int           NumTargets(TopoTestNode* node) { return node->fTargets.count(); }
+    static uint32_t      GetTarget(TopoTestNode* node, int i) { return node->fTargets[i]; }
+    static uint32_t      GetID(TopoTestNode* node) { return node->id(); }
 
     // Helper functions for TopoSortBench & TopoSortTest
     static void AllocNodes(SkTArray<sk_sp<ToolUtils::TopoTestNode>>* graph, int num) {
-        graph->reserve(num);
+        graph->reserve_back(num);
 
         for (int i = 0; i < num; ++i) {
             graph->push_back(sk_sp<TopoTestNode>(new TopoTestNode(i)));
@@ -218,12 +236,16 @@ public:
         }
     }
 
+    SK_DECLARE_INTERNAL_LLIST_INTERFACE(TopoTestNode);
+
 private:
-    int  fID;
-    int  fOutputPos;
-    bool fTempMark;
+    int      fID;
+    uint32_t fOutputPos = 0;
+    bool     fTempMark = false;
+    bool     fWasOutput = false;
 
     SkTDArray<TopoTestNode*> fDependencies;
+    SkTDArray<uint32_t>      fTargets;
 };
 
 template <typename T>
