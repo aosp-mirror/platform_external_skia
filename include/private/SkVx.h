@@ -52,13 +52,80 @@
 
 namespace skvx {
 
+template <int N, typename T>
+struct alignas(N*sizeof(T)) Vec;
+
+template <int... Ix, int N, typename T>
+SI Vec<sizeof...(Ix),T> shuffle(const Vec<N,T>&);
+
+template <typename D, typename S>
+SI D bit_pun(const S&);
+
 // All Vec have the same simple memory layout, the same as `T vec[N]`.
 template <int N, typename T>
-struct alignas(N*sizeof(T)) Vec {
-    static_assert((N & (N-1)) == 0,        "N must be a power of 2.");
-    static_assert(sizeof(T) >= alignof(T), "What kind of crazy T is this?");
+struct alignas(N*sizeof(T)) VecStorage {
+    SKVX_ALWAYS_INLINE VecStorage() = default;
+    SKVX_ALWAYS_INLINE VecStorage(T s) : lo(s), hi(s) {}
 
     Vec<N/2,T> lo, hi;
+};
+
+template <typename T>
+struct VecStorage<4,T> {
+    SKVX_ALWAYS_INLINE VecStorage() = default;
+    SKVX_ALWAYS_INLINE VecStorage(T s) : lo(s), hi(s) {}
+    SKVX_ALWAYS_INLINE VecStorage(T x, T y, T z, T w) : lo(x,y), hi(z, w) {}
+    SKVX_ALWAYS_INLINE VecStorage(Vec<2,T> xy, T z, T w) : lo(xy), hi(z,w) {}
+    SKVX_ALWAYS_INLINE VecStorage(T x, T y, Vec<2,T> zw) : lo(x,y), hi(zw) {}
+    SKVX_ALWAYS_INLINE VecStorage(Vec<2,T> xy, Vec<2,T> zw) : lo(xy), hi(zw) {}
+
+    SKVX_ALWAYS_INLINE Vec<2,T>& xy() { return lo; }
+    SKVX_ALWAYS_INLINE Vec<2,T>& zw() { return hi; }
+    SKVX_ALWAYS_INLINE T& x() { return lo.lo.val; }
+    SKVX_ALWAYS_INLINE T& y() { return lo.hi.val; }
+    SKVX_ALWAYS_INLINE T& z() { return hi.lo.val; }
+    SKVX_ALWAYS_INLINE T& w() { return hi.hi.val; }
+
+    SKVX_ALWAYS_INLINE Vec<2,T> xy() const { return lo; }
+    SKVX_ALWAYS_INLINE Vec<2,T> zw() const { return hi; }
+    SKVX_ALWAYS_INLINE T x() const { return lo.lo.val; }
+    SKVX_ALWAYS_INLINE T y() const { return lo.hi.val; }
+    SKVX_ALWAYS_INLINE T z() const { return hi.lo.val; }
+    SKVX_ALWAYS_INLINE T w() const { return hi.hi.val; }
+
+    // Exchange-based swizzles. These should take 1 cycle on NEON and 3 (pipelined) cycles on SSE.
+    SKVX_ALWAYS_INLINE Vec<4,T> yxwz() const { return shuffle<1,0,3,2>(bit_pun<Vec<4,T>>(*this)); }
+    SKVX_ALWAYS_INLINE Vec<4,T> zwxy() const { return shuffle<2,3,0,1>(bit_pun<Vec<4,T>>(*this)); }
+
+    Vec<2,T> lo, hi;
+};
+
+template <typename T>
+struct VecStorage<2,T> {
+    SKVX_ALWAYS_INLINE VecStorage() = default;
+    SKVX_ALWAYS_INLINE VecStorage(T s) : lo(s), hi(s) {}
+    SKVX_ALWAYS_INLINE VecStorage(T x, T y) : lo(x), hi(y) {}
+
+    SKVX_ALWAYS_INLINE T& x() { return lo.val; }
+    SKVX_ALWAYS_INLINE T& y() { return hi.val; }
+
+    SKVX_ALWAYS_INLINE T x() const { return lo.val; }
+    SKVX_ALWAYS_INLINE T y() const { return hi.val; }
+
+    // This exchange-based swizzle should take 1 cycle on NEON and 3 (pipelined) cycles on SSE.
+    SKVX_ALWAYS_INLINE Vec<2,T> yx() const { return shuffle<1,0>(bit_pun<Vec<2,T>>(*this)); }
+
+    SKVX_ALWAYS_INLINE Vec<4,T> xyxy() const {
+        return Vec<4,T>(bit_pun<Vec<2,T>>(*this), bit_pun<Vec<2,T>>(*this));
+    }
+
+    Vec<1,T> lo, hi;
+};
+
+template <int N, typename T>
+struct alignas(N*sizeof(T)) Vec : public VecStorage<N,T> {
+    static_assert((N & (N-1)) == 0,        "N must be a power of 2.");
+    static_assert(sizeof(T) >= alignof(T), "What kind of unusual T is this?");
 
     // Methods belong here in the class declaration of Vec only if:
     //   - they must be here, like constructors or operator[];
@@ -67,20 +134,18 @@ struct alignas(N*sizeof(T)) Vec {
 
     SKVX_ALWAYS_INLINE Vec() = default;
 
-    template <typename U, typename=std::enable_if_t<std::is_convertible<U,T>::value>>
-    SKVX_ALWAYS_INLINE
-    Vec(U x) : lo(x), hi(x) {}
+    using VecStorage<N,T>::VecStorage;
 
     SKVX_ALWAYS_INLINE Vec(std::initializer_list<T> xs) {
         T vals[N] = {0};
         memcpy(vals, xs.begin(), std::min(xs.size(), (size_t)N)*sizeof(T));
 
-        lo = Vec<N/2,T>::Load(vals +   0);
-        hi = Vec<N/2,T>::Load(vals + N/2);
+        this->lo = Vec<N/2,T>::Load(vals +   0);
+        this->hi = Vec<N/2,T>::Load(vals + N/2);
     }
 
-    SKVX_ALWAYS_INLINE T  operator[](int i) const { return i < N/2 ? lo[i] : hi[i-N/2]; }
-    SKVX_ALWAYS_INLINE T& operator[](int i)       { return i < N/2 ? lo[i] : hi[i-N/2]; }
+    SKVX_ALWAYS_INLINE T  operator[](int i) const { return i<N/2 ? this->lo[i] : this->hi[i-N/2]; }
+    SKVX_ALWAYS_INLINE T& operator[](int i)       { return i<N/2 ? this->lo[i] : this->hi[i-N/2]; }
 
     SKVX_ALWAYS_INLINE static Vec Load(const void* ptr) {
         Vec v;
@@ -98,9 +163,7 @@ struct Vec<1,T> {
 
     SKVX_ALWAYS_INLINE Vec() = default;
 
-    template <typename U, typename=std::enable_if_t<std::is_convertible<U,T>::value>>
-    SKVX_ALWAYS_INLINE
-    Vec(U x) : val(x) {}
+    Vec(T s) : val(s) {}
 
     SKVX_ALWAYS_INLINE Vec(std::initializer_list<T> xs) : val(xs.size() ? *xs.begin() : 0) {}
 
@@ -669,6 +732,12 @@ SIN Vec<N,uint8_t> approx_scale(const Vec<N,uint8_t>& x, const Vec<N,uint8_t>& y
     }
 #endif
 
+// Allow floating point contraction. e.g., allow a*x + y to be compiled to a single FMA even though
+// it introduces LSB differences on platforms that don't have an FMA instruction.
+#if defined(__clang__)
+#pragma STDC FP_CONTRACT ON
+#endif
+
 // Approximates the inverse cosine of x within 0.96 degrees using the rational polynomial:
 //
 //     acos(x) ~= (bx^3 + ax) / (dx^4 + cx^2 + 1) + pi/2
@@ -691,6 +760,10 @@ SIN Vec<N,float> approx_acos(Vec<N,float> x) {
     auto denom = xx*(d*xx + c) + 1;
     return x * (numer/denom) + pi_over_2;
 }
+
+#if defined(__clang__)
+#pragma STDC FP_CONTRACT DEFAULT
+#endif
 
 // De-interleaving load of 4 vectors.
 //
@@ -799,10 +872,6 @@ IMPL_LOAD2_TRANSPOSED(16, int8_t, vld2q_s8);
 IMPL_LOAD2_TRANSPOSED(4, float, vld2q_f32);
 #undef IMPL_LOAD2_TRANSPOSED
 #endif
-#endif
-
-#if defined(__clang__)
-    #pragma STDC FP_CONTRACT DEFAULT
 #endif
 
 }  // namespace skvx
