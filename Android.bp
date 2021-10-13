@@ -71,7 +71,7 @@ cc_defaults {
     ],
 
     cppflags:[
-        
+        "-Wno-c++17-extensions",
     ],
 
     export_include_dirs: [
@@ -2908,6 +2908,7 @@ cc_test {
         "tests/YUVCacheTest.cpp",
         "tests/YUVTest.cpp",
         "tests/graphite/MaskTest.cpp",
+        "tests/graphite/RectTest.cpp",
         "third_party/etc1/etc1.cpp",
         "tools/AndroidSkDebugToStdOut.cpp",
         "tools/CrashHandler.cpp",
