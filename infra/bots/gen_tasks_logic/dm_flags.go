@@ -292,6 +292,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 		// Graphite bot *only* runs the grmtl config
 		if b.extraConfig("Graphite") {
+			args = append(args, "--nogpu")  // disable non-Graphite tests
+
 			// TODO: re-enable - currently fails with "Failed to make lazy image"
 			skip("_", "gm", "_", "image_subset")
 
@@ -450,6 +452,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			// avoid tests that can generate slightly different pixels per run
 			skip("mtltestprecompile gm _ atlastext")
 			skip("mtltestprecompile gm _ circular_arcs_hairline")
+			skip("mtltestprecompile gm _ dashcircle")
 			skip("mtltestprecompile gm _ dftext")
 			skip("mtltestprecompile gm _ fontmgr_bounds")
 			skip("mtltestprecompile gm _ fontmgr_bounds_1_-0.25")

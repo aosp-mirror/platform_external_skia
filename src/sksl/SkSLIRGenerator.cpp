@@ -21,6 +21,7 @@
 #include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/SkSLIntrinsicMap.h"
 #include "src/sksl/SkSLOperators.h"
+#include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBreakStatement.h"
@@ -65,149 +66,14 @@ namespace SkSL {
 IRGenerator::IRGenerator(const Context* context)
         : fContext(*context) {}
 
-void IRGenerator::checkVarDeclaration(int line, const Modifiers& modifiers, const Type* baseType,
-                                      Variable::Storage storage) {
-    if (this->strictES2Mode() && baseType->isArray()) {
-        this->errorReporter().error(line, "array size must appear after variable name");
-    }
-
-    if (baseType->componentType().isOpaque() && storage != Variable::Storage::kGlobal) {
-        this->errorReporter().error(
-                line,
-                "variables of type '" + baseType->displayName() + "' must be global");
-    }
-    if ((modifiers.fFlags & Modifiers::kIn_Flag) && baseType->isMatrix()) {
-        this->errorReporter().error(line, "'in' variables may not have matrix type");
-    }
-    if ((modifiers.fFlags & Modifiers::kIn_Flag) && (modifiers.fFlags & Modifiers::kUniform_Flag)) {
-        this->errorReporter().error(line, "'in uniform' variables not permitted");
-    }
-    if (this->isRuntimeEffect()) {
-        if (modifiers.fFlags & Modifiers::kIn_Flag) {
-            this->errorReporter().error(line, "'in' variables not permitted in runtime effects");
-        }
-    }
-    if (baseType->isEffectChild() && !(modifiers.fFlags & Modifiers::kUniform_Flag)) {
-        this->errorReporter().error(
-                line, "variables of type '" + baseType->displayName() + "' must be uniform");
-    }
-    if (modifiers.fLayout.fFlags & Layout::kSRGBUnpremul_Flag) {
-        if (!this->isRuntimeEffect()) {
-            this->errorReporter().error(line,
-                                        "'srgb_unpremul' is only permitted in runtime effects");
-        }
-        if (!(modifiers.fFlags & Modifiers::kUniform_Flag)) {
-            this->errorReporter().error(line,
-                                        "'srgb_unpremul' is only permitted on 'uniform' variables");
-        }
-        auto validColorXformType = [](const Type& t) {
-            return t.isVector() && t.componentType().isFloat() &&
-                   (t.columns() == 3 || t.columns() == 4);
-        };
-        if (!validColorXformType(*baseType) && !(baseType->isArray() &&
-                                                 validColorXformType(baseType->componentType()))) {
-            this->errorReporter().error(line,
-                                        "'srgb_unpremul' is only permitted on half3, half4, "
-                                        "float3, or float4 variables");
-        }
-    }
-    int permitted = Modifiers::kConst_Flag | Modifiers::kHighp_Flag | Modifiers::kMediump_Flag |
-                    Modifiers::kLowp_Flag;
-    if (storage == Variable::Storage::kGlobal) {
-        permitted |= Modifiers::kIn_Flag | Modifiers::kOut_Flag | Modifiers::kUniform_Flag |
-                     Modifiers::kFlat_Flag | Modifiers::kNoPerspective_Flag;
-    }
-    // TODO(skbug.com/11301): Migrate above checks into building a mask of permitted layout flags
-    CheckModifiers(fContext, line, modifiers, permitted, /*permittedLayoutFlags=*/~0);
-}
-
-std::unique_ptr<Variable> IRGenerator::convertVar(int line, const Modifiers& modifiers,
-                                                  const Type* baseType, skstd::string_view name,
-                                                  bool isArray,
-                                                  std::unique_ptr<Expression> arraySize,
-                                                  Variable::Storage storage) {
-    if (modifiers.fLayout.fLocation == 0 && modifiers.fLayout.fIndex == 0 &&
-        (modifiers.fFlags & Modifiers::kOut_Flag) &&
-        this->programKind() == ProgramKind::kFragment && name != Compiler::FRAGCOLOR_NAME) {
-        this->errorReporter().error(line,
-                                    "out location=0, index=0 is reserved for sk_FragColor");
-    }
-    const Type* type = baseType;
-    int arraySizeValue = 0;
-    if (isArray) {
-        SkASSERT(arraySize);
-        arraySizeValue = type->convertArraySize(fContext, std::move(arraySize));
-        if (!arraySizeValue) {
-            return {};
-        }
-        type = fSymbolTable->addArrayDimension(type, arraySizeValue);
-    }
-    return std::make_unique<Variable>(line, this->modifiersPool().add(modifiers), name,
-                                      type, fContext.fConfig->fIsBuiltinCode, storage);
-}
-
-std::unique_ptr<Statement> IRGenerator::convertVarDeclaration(std::unique_ptr<Variable> var,
-                                                              std::unique_ptr<Expression> value,
-                                                              bool addToSymbolTable) {
-    std::unique_ptr<Statement> varDecl = VarDeclaration::Convert(fContext, var.get(),
-                                                                 std::move(value));
-    if (!varDecl) {
-        return nullptr;
-    }
-
-    // Detect the declaration of magical variables.
-    if ((var->storage() == Variable::Storage::kGlobal) && var->name() == Compiler::FRAGCOLOR_NAME) {
-        // Silently ignore duplicate definitions of `sk_FragColor`.
-        const Symbol* symbol = (*fSymbolTable)[var->name()];
-        if (symbol) {
-            return nullptr;
-        }
-    } else if ((var->storage() == Variable::Storage::kGlobal ||
-                var->storage() == Variable::Storage::kInterfaceBlock) &&
-               var->name() == Compiler::RTADJUST_NAME) {
-        // `sk_RTAdjust` is special, and makes the IR generator emit position-fixup expressions.
-        if (fRTAdjust) {
-            this->errorReporter().error(var->fLine, "duplicate definition of 'sk_RTAdjust'");
-            return nullptr;
-        }
-        if (var->type() != *fContext.fTypes.fFloat4) {
-            this->errorReporter().error(var->fLine, "sk_RTAdjust must have type 'float4'");
-            return nullptr;
-        }
-        fRTAdjust = var.get();
-    }
-
-    if (addToSymbolTable) {
-        fSymbolTable->add(std::move(var));
-    } else {
-        fSymbolTable->takeOwnershipOfSymbol(std::move(var));
-    }
-    return varDecl;
-}
-
-std::unique_ptr<Statement> IRGenerator::convertVarDeclaration(int line,
-                                                              const Modifiers& modifiers,
-                                                              const Type* baseType,
-                                                              skstd::string_view name,
-                                                              bool isArray,
-                                                              std::unique_ptr<Expression> arraySize,
-                                                              std::unique_ptr<Expression> value,
-                                                              Variable::Storage storage) {
-    std::unique_ptr<Variable> var = this->convertVar(line, modifiers, baseType, name, isArray,
-                                                     std::move(arraySize), storage);
-    if (!var) {
-        return nullptr;
-    }
-    return this->convertVarDeclaration(std::move(var), std::move(value));
-}
-
 void IRGenerator::appendRTAdjustFixupToVertexMain(const FunctionDeclaration& decl, Block* body) {
     using namespace SkSL::dsl;
     using SkSL::dsl::Swizzle;  // disambiguate from SkSL::Swizzle
     using OwnerKind = SkSL::FieldAccess::OwnerKind;
 
     // If this is a vertex program that uses RTAdjust, and this is main()...
-    if ((fRTAdjust || fRTAdjustInterfaceBlock) && decl.isMain() &&
+    ThreadContext::RTAdjustData& rtAdjust = ThreadContext::RTAdjustState();
+    if ((rtAdjust.fVar || rtAdjust.fInterfaceBlock) && decl.isMain() &&
         ProgramKind::kVertex == this->programKind()) {
         // ... append a line to the end of the function body which fixes up sk_Position.
         const Variable* skPerVertex = nullptr;
@@ -229,9 +95,9 @@ void IRGenerator::appendRTAdjustFixupToVertexMain(const FunctionDeclaration& dec
                                                    OwnerKind::kAnonymousInterfaceBlock));
         };
         auto Adjust = [&]() -> DSLExpression {
-            return DSLExpression(fRTAdjustInterfaceBlock
-                                         ? Field(fRTAdjustInterfaceBlock, fRTAdjustFieldIndex)
-                                         : Ref(fRTAdjust));
+            return DSLExpression(rtAdjust.fInterfaceBlock
+                                         ? Field(rtAdjust.fInterfaceBlock, rtAdjust.fFieldIndex)
+                                         : Ref(rtAdjust.fVar));
         };
 
         auto fixupStmt = DSLStatement(
@@ -304,21 +170,6 @@ void IRGenerator::CheckModifiers(const Context& context,
     SkASSERT(layoutFlags == 0);
 }
 
-void IRGenerator::scanInterfaceBlock(SkSL::InterfaceBlock& intf) {
-    const std::vector<Type::Field>& fields = intf.variable().type().componentType().fields();
-    for (size_t i = 0; i < fields.size(); ++i) {
-        const Type::Field& f = fields[i];
-        if (f.fName == Compiler::RTADJUST_NAME) {
-            if (*f.fType == *fContext.fTypes.fFloat4) {
-                fRTAdjustInterfaceBlock = &intf.variable();
-                fRTAdjustFieldIndex = i;
-            } else {
-                this->errorReporter().error(intf.fLine, "sk_RTAdjust must have type 'float4'");
-            }
-        }
-    }
-}
-
 std::unique_ptr<Expression> IRGenerator::convertIdentifier(int line, skstd::string_view name) {
     const Symbol* result = (*fSymbolTable)[name];
     if (!result) {
@@ -379,8 +230,6 @@ void IRGenerator::start(const ParsedModule& base,
     fSymbolTable = base.fSymbols;
 
     fInputs = {};
-    fRTAdjust = nullptr;
-    fRTAdjustInterfaceBlock = nullptr;
     fDefinedStructs.clear();
     SymbolTable::Push(&fSymbolTable, fContext.fConfig->fIsBuiltinCode);
 
