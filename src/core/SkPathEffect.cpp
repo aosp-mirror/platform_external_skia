@@ -159,9 +159,10 @@ protected:
 
     bool onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec* rec,
                       const SkRect* cullRect) const override {
-        // use bit-or so that we always call both, even if the first one succeeds
-        return fPE0->filterPath(dst, src, rec, cullRect) |
-               fPE1->filterPath(dst, src, rec, cullRect);
+        // always call both, even if the first one succeeds
+        bool filteredFirst = fPE0->filterPath(dst, src, rec, cullRect);
+        bool filteredSecond = fPE1->filterPath(dst, src, rec, cullRect);
+        return filteredFirst || filteredSecond;
     }
 
 private:
