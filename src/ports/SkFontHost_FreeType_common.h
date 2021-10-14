@@ -50,7 +50,7 @@ protected:
     bool generateGlyphPath(FT_Face face, SkPath* path);
     bool generateFacePath(FT_Face face, SkGlyphID glyphID, SkPath* path);
 private:
-    typedef SkScalerContext INHERITED;
+    using INHERITED = SkScalerContext;
 };
 
 class SkTypeface_FreeType : public SkTypeface {
@@ -77,7 +77,8 @@ public:
             AxisDefinitions axisDefinitions,
             const SkFontArguments::VariationPosition position,
             SkFixed* axisValues,
-            const SkString& name);
+            const SkString& name,
+            const SkFontArguments::VariationPosition::Coordinate* currentPosition = nullptr);
         static bool GetAxes(FT_Face face, AxisDefinitions* axes);
 
     private:
@@ -88,18 +89,25 @@ public:
 
     /** Fetch units/EM from "head" table if needed (ie for bitmap fonts) */
     static int GetUnitsPerEm(FT_Face face);
+
+    /**
+     *  Return the font data, or nullptr on failure.
+     */
+    std::unique_ptr<SkFontData> makeFontData() const;
+
 protected:
     SkTypeface_FreeType(const SkFontStyle& style, bool isFixedPitch)
         : INHERITED(style, isFixedPitch)
     {}
 
     std::unique_ptr<SkFontData> cloneFontData(const SkFontArguments&) const;
-    virtual SkScalerContext* onCreateScalerContext(const SkScalerContextEffects&,
-                                                   const SkDescriptor*) const override;
+    std::unique_ptr<SkScalerContext> onCreateScalerContext(const SkScalerContextEffects&,
+                                                           const SkDescriptor*) const override;
     void onFilterRec(SkScalerContextRec*) const override;
     void getGlyphToUnicodeMap(SkUnichar*) const override;
     std::unique_ptr<SkAdvancedTypefaceMetrics> onGetAdvancedMetrics() const override;
     void getPostScriptGlyphNames(SkString* dstArray) const override;
+    bool onGetPostScriptName(SkString*) const override;
     int onGetUPEM() const override;
     bool onGetKerningPairAdjustments(const uint16_t glyphs[], int count,
                                      int32_t adjustments[]) const override;
@@ -117,11 +125,13 @@ protected:
                           size_t length, void* data) const override;
     sk_sp<SkData> onCopyTableData(SkFontTableTag) const override;
 
+    virtual std::unique_ptr<SkFontData> onMakeFontData() const = 0;
+
 private:
     mutable SkMutex fC2GCacheMutex;
     mutable SkCharToGlyphCache fC2GCache;
 
-    typedef SkTypeface INHERITED;
+    using INHERITED = SkTypeface;
 };
 
 #endif // SKFONTHOST_FREETYPE_COMMON_H_

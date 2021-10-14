@@ -14,18 +14,18 @@
 
 class GrCaps;
 class GrClip;
-class GrFixedClip;
 class GrHardClip;
 class GrPaint;
 class GrRecordingContext;
-class GrRenderTargetContext;
+class GrSurfaceDrawContext;
 class GrRenderTargetProxy;
-class GrShape;
+class GrStyledShape;
 class GrStyle;
 struct GrUserStencilSettings;
 struct SkIRect;
 class SkMatrix;
 class SkPath;
+class SkSurfaceProps;
 
 /**
  *  Base class for drawing paths into a GrOpsTask.
@@ -33,6 +33,8 @@ class SkPath;
 class GrPathRenderer : public SkRefCnt {
 public:
     GrPathRenderer();
+
+    virtual const char* name() const = 0;
 
     /**
      * A caller may wish to use a path renderer to draw a path into the stencil buffer. However,
@@ -65,7 +67,7 @@ public:
      * @param shape   the shape that will be drawn. Must be simple fill styled and non-inverse
      *                filled.
      */
-    StencilSupport getStencilSupport(const GrShape& shape) const;
+    StencilSupport getStencilSupport(const GrStyledShape& shape) const;
 
     enum class CanDrawPath {
         kNo,
@@ -80,11 +82,12 @@ public:
         const GrRenderTargetProxy*  fProxy;
         const SkIRect*              fClipConservativeBounds;
         const SkMatrix*             fViewMatrix;
-        const GrShape*              fShape;
+        const GrStyledShape*        fShape;
+        const GrPaint*              fPaint;
+        const SkSurfaceProps*       fSurfaceProps;
         GrAAType                    fAAType;
-        bool                        fTargetIsWrappedVkSecondaryCB;
 
-        // This is only used by GrStencilAndCoverPathRenderer
+        // This is only used by GrTessellationPathRenderer
         bool                        fHasUserStencilSettings;
 
 #ifdef SK_DEBUG
@@ -94,6 +97,7 @@ public:
             SkASSERT(fClipConservativeBounds);
             SkASSERT(fViewMatrix);
             SkASSERT(fShape);
+            SkASSERT(fSurfaceProps);
         }
 #endif
     };
@@ -112,11 +116,11 @@ public:
         GrRecordingContext*          fContext;
         GrPaint&&                    fPaint;
         const GrUserStencilSettings* fUserStencilSettings;
-        GrRenderTargetContext*       fRenderTargetContext;
+        GrSurfaceDrawContext*        fRenderTargetContext;
         const GrClip*                fClip;
         const SkIRect*               fClipConservativeBounds;
         const SkMatrix*              fViewMatrix;
-        const GrShape*               fShape;
+        const GrStyledShape*         fShape;
         GrAAType                     fAAType;
         bool                         fGammaCorrect;
 #ifdef SK_DEBUG
@@ -124,7 +128,6 @@ public:
             SkASSERT(fContext);
             SkASSERT(fUserStencilSettings);
             SkASSERT(fRenderTargetContext);
-            SkASSERT(fClip);
             SkASSERT(fClipConservativeBounds);
             SkASSERT(fViewMatrix);
             SkASSERT(fShape);
@@ -144,11 +147,11 @@ public:
         SkDEBUGCODE(StencilPathArgs() { memset(this, 0, sizeof(*this)); }) // For validation.
 
         GrRecordingContext*    fContext;
-        GrRenderTargetContext* fRenderTargetContext;
+        GrSurfaceDrawContext*  fRenderTargetContext;
         const GrHardClip*      fClip;
         const SkIRect*         fClipConservativeBounds;
         const SkMatrix*        fViewMatrix;
-        const GrShape*         fShape;
+        const GrStyledShape*   fShape;
         GrAA                   fDoStencilMSAA;
 
         SkDEBUGCODE(void validate() const);
@@ -181,7 +184,7 @@ private:
     /**
      * Subclass overrides if it has any limitations of stenciling support.
      */
-    virtual StencilSupport onGetStencilSupport(const GrShape&) const {
+    virtual StencilSupport onGetStencilSupport(const GrStyledShape&) const {
         return kNoRestriction_StencilSupport;
     }
 
@@ -201,7 +204,7 @@ private:
      */
     virtual void onStencilPath(const StencilPathArgs&);
 
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 };
 
 #endif
