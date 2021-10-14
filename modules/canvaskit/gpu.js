@@ -54,6 +54,57 @@
         GL.deleteContext(handle);
       };
 
+      CanvasKit._setTextureCleanup({
+        "deleteTexture": function(webglHandle, texHandle) {
+          var tex = GL.textures[texHandle];
+          if (tex) {
+            GL.getContext(webglHandle).GLctx.deleteTexture(tex);
+          }
+          GL.textures[texHandle] = null;
+        },
+      });
+
+      CanvasKit.MakeGrContext = function(ctx) {
+        // Make sure we are pointing at the right WebGL context.
+        if (!this.setCurrentContext(ctx)) {
+          return null;
+        }
+        var grCtx = this._MakeGrContext();
+        if (!grCtx) {
+          return null;
+        }
+        // This context is an index into the emscripten-provided GL wrapper.
+        grCtx._context = ctx;
+        return grCtx;
+      }
+
+      CanvasKit.MakeOnScreenGLSurface = function(grCtx, w, h, colorspace) {
+        var surface = this._MakeOnScreenGLSurface(grCtx, w, h, colorspace);
+        if (!surface) {
+          return null;
+        }
+        surface._context = grCtx._context;
+        return surface;
+      }
+
+      CanvasKit.MakeRenderTarget = function(grCtx, w, h) {
+        var surface = this._MakeRenderTargetWH(grCtx, w, h);
+        if (!surface) {
+          return null;
+        }
+        surface._context = grCtx._context;
+        return surface;
+      }
+
+      CanvasKit.MakeRenderTarget = function(grCtx, imageInfo) {
+        var surface = this._MakeRenderTargetII(grCtx, imageInfo);
+        if (!surface) {
+          return null;
+        }
+        surface._context = grCtx._context;
+        return surface;
+      }
+
       // idOrElement can be of types:
       //  - String - in which case it is interpreted as an id of a
       //          canvas element.
@@ -98,12 +149,60 @@
 
           return CanvasKit.MakeSWCanvasSurface(newCanvas);
         }
-        surface._context = ctx;
-        surface.grContext = grcontext;
-        surface.openGLversion = canvas.GLctxObject.version;
         return surface;
       };
       // Default to trying WebGL first.
       CanvasKit.MakeCanvasSurface = CanvasKit.MakeWebGLCanvasSurface;
+
+      CanvasKit.Surface.prototype.makeImageFromTexture = function(tex, info) {
+        if (!info['colorSpace']) {
+          info['colorSpace'] = CanvasKit.ColorSpace.SRGB;
+        }
+        // GL is an emscripten object that holds onto WebGL state. One item in that state is
+        // an array of textures, of which the index is the handle/id.
+        var texHandle = GL.textures.length;
+        if (!texHandle) {
+          // If our texture handle is 0, Skia interprets that as an invalid texture id.
+          // As a special case, we push a null texture there so the first texture has id 1.
+          GL.textures.push(null);
+          texHandle = 1;
+        }
+        GL.textures.push(tex);
+        return this._makeImageFromTexture(GL.currentContext.handle, texHandle, info);
+      };
+
+      CanvasKit.Surface.prototype.makeImageFromTextureSource = function(src, w, h) {
+        // If the user specified a height or width in the image info, we use that. Otherwise,
+        // we try to find the natural media type (for <img> and <video>) and then fall back to
+        // the height and width (to cover <canvas>, ImageBitmap or ImageData).
+        var height = h || src.naturalHeight || src.videoHeight || src.height;
+        var width = w || src.naturalWidth || src.videoWidth || src.width;
+        // We want to be pointing at the context associated with this surface.
+        CanvasKit.setCurrentContext(this._context);
+        var glCtx = GL.currentContext.GLctx;
+        var newTex = glCtx.createTexture();
+        glCtx.bindTexture(glCtx.TEXTURE_2D, newTex);
+        if (GL.currentContext.version === 2) {
+          glCtx.texImage2D(glCtx.TEXTURE_2D, 0, glCtx.RGBA, width, height, 0, glCtx.RGBA, glCtx.UNSIGNED_BYTE, src);
+        } else {
+          glCtx.texImage2D(glCtx.TEXTURE_2D, 0, glCtx.RGBA, glCtx.RGBA, glCtx.UNSIGNED_BYTE, src);
+        }
+        glCtx.bindTexture(glCtx.TEXTURE_2D, null);
+        var info = {
+          'height': height,
+          'width': width,
+          'colorType': CanvasKit.ColorType.RGBA_8888,
+          'alphaType': CanvasKit.AlphaType.Unpremul,
+          'colorSpace': CanvasKit.ColorSpace.SRGB,
+        };
+        return this.makeImageFromTexture(newTex, info);
+      };
+
+      CanvasKit.setCurrentContext = function(ctx) {
+        if (!ctx) {
+          return false;
+        }
+        return GL.makeContextCurrent(ctx);
+      };
     });
 }(Module)); // When this file is loaded in, the high level object is "Module";

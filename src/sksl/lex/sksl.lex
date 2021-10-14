@@ -39,11 +39,13 @@ NOINLINE       = "noinline"
 HASSIDEEFFECTS = "sk_has_side_effects"
 STRUCT         = "struct"
 LAYOUT         = "layout"
-ENUM           = "enum"
-CLASS          = "class"
-IDENTIFIER     = [a-zA-Z_$]([0-9]|[a-zA-Z_$])*
-DIRECTIVE      = #[a-zA-Z_$]([0-9]|[a-zA-Z_$])*
-SECTION        = @[a-zA-Z_$]([0-9]|[a-zA-Z_$])*
+HIGHP          = "highp"
+MEDIUMP        = "mediump"
+LOWP           = "lowp"
+ES3            = "$es3"
+RESERVED       = asm|class|union|enum|typedef|template|this|packed|goto|volatile|public|static|extern|external|interface|long|double|fixed|unsigned|superp|input|output|hvec[234]|dvec[234]|fvec[234]|sampler[12]DShadow|sampler3DRect|sampler2DRectShadow|sizeof|cast|namespace|using
+IDENTIFIER     = [a-zA-Z_$][0-9a-zA-Z_$]*
+DIRECTIVE      = #[a-zA-Z_$][0-9a-zA-Z_$]*
 LPAREN         = "("
 RPAREN         = ")"
 LBRACE         = "{"
@@ -70,7 +72,6 @@ LOGICALXOR     = "^^"
 LOGICALAND     = "&&"
 LOGICALNOT     = "!"
 QUESTION       = "?"
-COLONCOLON     = "::"
 COLON          = ":"
 EQ             = "="
 EQEQ           = "=="

@@ -15,9 +15,9 @@
 class GrBackendSemaphore;
 class GrRecordingContext;
 struct GrVkDrawableInfo;
+namespace skgpu { class BaseDevice; }
 class SkCanvas;
 class SkDeferredDisplayList;
-class SkGpuDevice;
 struct SkImageInfo;
 class SkSurfaceCharacterization;
 class SkSurfaceProps;
@@ -57,7 +57,8 @@ class SkSurfaceProps;
  */
 class SK_SPI GrVkSecondaryCBDrawContext : public SkRefCnt {
 public:
-    static sk_sp<GrVkSecondaryCBDrawContext> Make(GrRecordingContext*, const SkImageInfo&,
+    static sk_sp<GrVkSecondaryCBDrawContext> Make(GrRecordingContext*,
+                                                  const SkImageInfo&,
                                                   const GrVkDrawableInfo&,
                                                   const SkSurfaceProps* props);
 
@@ -87,8 +88,9 @@ public:
         @paramm deleteSemaphoresAfterWait  who owns and should delete the semaphores
         @return                            true if GPU is waiting on semaphores
     */
-    bool wait(int numSemaphores, const GrBackendSemaphore waitSemaphores[],
-                     bool deleteSemaphoresAfterWait = true);
+    bool wait(int numSemaphores,
+              const GrBackendSemaphore waitSemaphores[],
+              bool deleteSemaphoresAfterWait = true);
 
     // This call will release all resources held by the draw context. The client must call
     // releaseResources() before deleting the drawing context. However, the resources also include
@@ -112,9 +114,9 @@ public:
     bool isCompatible(const SkSurfaceCharacterization& characterization) const;
 
 private:
-    explicit GrVkSecondaryCBDrawContext(sk_sp<SkGpuDevice>, const SkSurfaceProps*);
+    explicit GrVkSecondaryCBDrawContext(sk_sp<skgpu::BaseDevice>, const SkSurfaceProps*);
 
-    sk_sp<SkGpuDevice>        fDevice;
+    sk_sp<skgpu::BaseDevice>  fDevice;
     std::unique_ptr<SkCanvas> fCachedCanvas;
     const SkSurfaceProps      fProps;
 

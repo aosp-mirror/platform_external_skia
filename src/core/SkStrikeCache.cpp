@@ -21,12 +21,10 @@
 bool gSkUseThreadLocalStrikeCaches_IAcknowledgeThisIsIncrediblyExperimental = false;
 
 SkStrikeCache* SkStrikeCache::GlobalStrikeCache() {
-#if !defined(SK_BUILD_FOR_IOS)
     if (gSkUseThreadLocalStrikeCaches_IAcknowledgeThisIsIncrediblyExperimental) {
         static thread_local auto* cache = new SkStrikeCache;
         return cache;
     }
-#endif
     static auto* cache = new SkStrikeCache;
     return cache;
 }
@@ -58,7 +56,7 @@ void SkStrikeCache::Dump() {
     SkDebugf("GlyphCache [     used    budget ]\n");
     SkDebugf("    bytes  [ %8zu  %8zu ]\n",
              SkGraphics::GetFontCacheUsed(), SkGraphics::GetFontCacheLimit());
-    SkDebugf("    count  [ %8zu  %8zu ]\n",
+    SkDebugf("    count  [ %8d  %8d ]\n",
              SkGraphics::GetFontCacheCountUsed(), SkGraphics::GetFontCacheCountLimit());
 
     int counter = 0;
@@ -342,7 +340,7 @@ void SkStrikeCache::validate() const {
         SK_ABORT("fCacheCount != computedCount");
     }
     if (fTotalMemoryUsed != computedBytes) {
-        SkDebugf("fTotalMemoryUsed: %d, computedBytes: %d", fTotalMemoryUsed, computedBytes);
+        SkDebugf("fTotalMemoryUsed: %zu, computedBytes: %zu", fTotalMemoryUsed, computedBytes);
         SK_ABORT("fTotalMemoryUsed == computedBytes");
     }
 #endif

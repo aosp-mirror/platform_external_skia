@@ -71,6 +71,63 @@ static constexpr uint32_t GrGLFormatChannels(GrGLFormat format) {
     SkUNREACHABLE;
 }
 
+static constexpr GrColorFormatDesc GrGLFormatDesc(GrGLFormat format) {
+    switch (format) {
+        case GrGLFormat::kUnknown: return GrColorFormatDesc::MakeInvalid();
+
+        case GrGLFormat::kRGBA8:
+            return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kUnorm);
+        case GrGLFormat::kR8:
+            return GrColorFormatDesc::MakeR(8, GrColorTypeEncoding::kUnorm);
+        case GrGLFormat::kALPHA8:
+            return GrColorFormatDesc::MakeAlpha(8, GrColorTypeEncoding::kUnorm);
+        case GrGLFormat::kLUMINANCE8:
+            return GrColorFormatDesc::MakeGray(8, GrColorTypeEncoding::kUnorm);
+        case GrGLFormat::kLUMINANCE8_ALPHA8:
+            return GrColorFormatDesc::MakeGrayAlpha(8, GrColorTypeEncoding::kUnorm);
+        case GrGLFormat::kBGRA8:
+            return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kUnorm);
+        case GrGLFormat::kRGB565:
+            return GrColorFormatDesc::MakeRGB(5, 6, 5, GrColorTypeEncoding::kUnorm);
+        case GrGLFormat::kRGBA16F:
+            return GrColorFormatDesc::MakeRGBA(16, GrColorTypeEncoding::kFloat);
+        case GrGLFormat::kR16F:
+            return GrColorFormatDesc::MakeR(16, GrColorTypeEncoding::kFloat);
+        case GrGLFormat::kRGB8:
+            return GrColorFormatDesc::MakeRGB(8, GrColorTypeEncoding::kUnorm);
+        case GrGLFormat::kRG8:
+            return GrColorFormatDesc::MakeRG(8, GrColorTypeEncoding::kUnorm);
+        case GrGLFormat::kRGB10_A2:
+            return GrColorFormatDesc::MakeRGBA(10, 2, GrColorTypeEncoding::kUnorm);
+        case GrGLFormat::kRGBA4:
+            return GrColorFormatDesc::MakeRGBA(4, GrColorTypeEncoding::kUnorm);
+        case GrGLFormat::kSRGB8_ALPHA8:
+            return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kSRGBUnorm);
+        case GrGLFormat::kR16:
+            return GrColorFormatDesc::MakeR(16, GrColorTypeEncoding::kUnorm);
+        case GrGLFormat::kRG16:
+            return GrColorFormatDesc::MakeRG(16, GrColorTypeEncoding::kUnorm);
+        case GrGLFormat::kRGBA16:
+            return GrColorFormatDesc::MakeRGBA(16, GrColorTypeEncoding::kUnorm);
+        case GrGLFormat::kRG16F:
+            return GrColorFormatDesc::MakeRG(16, GrColorTypeEncoding::kFloat);
+        case GrGLFormat::kLUMINANCE16F:
+            return GrColorFormatDesc::MakeGray(16, GrColorTypeEncoding::kFloat);
+
+        // Compressed texture formats are not expected to have a description.
+        case GrGLFormat::kCOMPRESSED_ETC1_RGB8: return GrColorFormatDesc::MakeInvalid();
+        case GrGLFormat::kCOMPRESSED_RGB8_ETC2: return GrColorFormatDesc::MakeInvalid();
+        case GrGLFormat::kCOMPRESSED_RGB8_BC1:  return GrColorFormatDesc::MakeInvalid();
+        case GrGLFormat::kCOMPRESSED_RGBA8_BC1: return GrColorFormatDesc::MakeInvalid();
+
+        // This type only describes color channels.
+        case GrGLFormat::kSTENCIL_INDEX8:   return GrColorFormatDesc::MakeInvalid();
+        case GrGLFormat::kSTENCIL_INDEX16:  return GrColorFormatDesc::MakeInvalid();
+        case GrGLFormat::kDEPTH24_STENCIL8: return GrColorFormatDesc::MakeInvalid();
+    }
+    SkUNREACHABLE;
+}
+
 /**
  * The Vendor and Renderer enum values are lazily updated as required.
  */
@@ -102,6 +159,7 @@ enum class GrGLRenderer {
     kAdreno620,  // Pixel5
     kAdreno630,  // Pixel3
     kAdreno640,  // Pixel4
+    kAdreno6xx_other,
 
     kGoogleSwiftShader,
 
@@ -130,6 +188,8 @@ enum class GrGLRenderer {
 
     kGalliumLLVM,
 
+    kVirgl,
+
     kMali4xx,
     /** G-3x, G-5x, or G-7x */
     kMaliG,
@@ -147,12 +207,13 @@ enum class GrGLRenderer {
 
 enum class GrGLDriver {
     kMesa,
-    kChromium,
     kNVIDIA,
     kIntel,
     kSwiftShader,
     kQualcomm,
+    kFreedreno,
     kAndroidEmulator,
+    kImagination,
     kUnknown
 };
 
@@ -233,6 +294,9 @@ struct GrGLDriverInfo {
     GrGLRenderer      fANGLERenderer      = GrGLRenderer::kOther;
     GrGLDriver        fANGLEDriver        = GrGLDriver::kUnknown;
     GrGLDriverVersion fANGLEDriverVersion = GR_GL_DRIVER_UNKNOWN_VER;
+
+    // Are we running over the Chrome interprocess command buffer?
+    bool fIsOverCommandBuffer = false;
 };
 
 GrGLDriverInfo GrGLGetDriverInfo(const GrGLInterface*);

@@ -16,8 +16,8 @@ namespace SkSL {
 
 namespace dsl {
 
-void StartFragmentProcessor(GrGLSLFragmentProcessor* processor,
-                            GrGLSLFragmentProcessor::EmitArgs* emitArgs) {
+void StartFragmentProcessor(GrFragmentProcessor::ProgramImpl* processor,
+                            GrFragmentProcessor::ProgramImpl::EmitArgs* emitArgs) {
     DSLWriter::StartFragmentProcessor(processor, emitArgs);
 }
 
@@ -25,19 +25,19 @@ void EndFragmentProcessor() {
     DSLWriter::EndFragmentProcessor();
 }
 
-DSLVar sk_SampleCoord() {
-    return DSLVar("sk_SampleCoord");
+DSLGlobalVar sk_SampleCoord() {
+    return DSLGlobalVar("sk_SampleCoord");
 }
 
 DSLExpression SampleChild(int index, DSLExpression sampleExpr) {
-    std::unique_ptr<SkSL::Expression> expr = sampleExpr.release();
+    std::unique_ptr<SkSL::Expression> expr = sampleExpr.releaseIfPossible();
     if (expr) {
         SkASSERT(expr->type().isVector());
         SkASSERT(expr->type().componentType().isFloat());
     }
 
-    GrGLSLFragmentProcessor* proc = DSLWriter::CurrentProcessor();
-    GrGLSLFragmentProcessor::EmitArgs& emitArgs = *DSLWriter::CurrentEmitArgs();
+    GrFragmentProcessor::ProgramImpl* proc = DSLWriter::CurrentProcessor();
+    GrFragmentProcessor::ProgramImpl::EmitArgs& emitArgs = *DSLWriter::CurrentEmitArgs();
     SkString code;
     switch (expr ? expr->type().columns() : 0) {
         default:
@@ -58,7 +58,7 @@ DSLExpression SampleChild(int index, DSLExpression sampleExpr) {
             code.c_str(), DSLWriter::Context().fTypes.fHalf4.get()));
 }
 
-GrGLSLUniformHandler::UniformHandle VarUniformHandle(const DSLVar& var) {
+GrGLSLUniformHandler::UniformHandle VarUniformHandle(const DSLGlobalVar& var) {
     return DSLWriter::VarUniformHandle(var);
 }
 

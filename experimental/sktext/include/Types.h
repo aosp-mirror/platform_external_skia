@@ -4,6 +4,9 @@
 
 #include <algorithm>
 #include <cstddef>
+#include "include/core/SkFont.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkSpan.h"
 #include "include/private/SkBitmaskEnum.h"
 #include "include/private/SkTo.h"
 
@@ -16,6 +19,7 @@ enum class TextAlign {
     kJustify,
     kStart,
     kEnd,
+    kNothing,
 };
 
 enum class TextDirection {
@@ -23,25 +27,48 @@ enum class TextDirection {
     kLtr,
 };
 
+// This enum lists all possible ways to query output positioning
+enum class PositionType {
+    kRandomText,
+    kGraphemeCluster, // Both the edge of the glyph cluster and the text grapheme
+    kGlyphCluster,
+    kGlyph,
+    kGlyphPart
+};
+
 enum class LineBreakType {
   kSortLineBreakBefore,
   kHardLineBreakBefore,
 };
 
-enum CodeUnitFlags : uint32_t {
-    kNoCodeUnitFlag = 0x000,
-    kPartOfWhiteSpace = 0x001,
-    kGraphemeStart = 0x002,
-    kSoftLineBreakBefore = 0x004,
-    kHardLineBreakBefore = 0x008,
-    // This information we get from SkShaper
-    kGlyphStart = 0x010,
-    kGlyphClusterStart = 0x020,
-    kNonExistingFlag = 0x040,
+enum class LogicalRunType {
+    kText,
+    kLineBreak
+};
+
+enum class CodeUnitFlags : uint8_t {
+    kNoCodeUnitFlag = (1 << 0),
+    kPartOfWhiteSpace = (1 << 1),
+    kGraphemeStart = (1 << 2),
+    kSoftLineBreakBefore = (1 << 3),
+    kHardLineBreakBefore = (1 << 4),
+    kAllCodeUnitFlags = ((1 << 5) - 1),
+};
+
+enum class GlyphUnitFlags : uint8_t {
+    kNoGlyphUnitFlag = (1 << 0),
+    //kPartOfWhiteSpace = (1 << 1),
+    //kGraphemeStart = (1 << 2),
+    //kSoftLineBreakBefore = (1 << 3),
+    //kHardLineBreakBefore = (1 << 4),
+    kGlyphClusterStart = (1 << 5),
+    kGraphemeClusterStart = (1 << 6),
 };
 
 typedef size_t TextIndex;
 typedef size_t GlyphIndex;
+typedef size_t RunIndex;
+typedef size_t LineIndex;
 const size_t EMPTY_INDEX = std::numeric_limits<size_t>::max();
 
 template <typename T>
@@ -50,8 +77,36 @@ public:
     Range() : fStart(0), fEnd(0) { }
     Range(T start, T end) : fStart(start) , fEnd(end) { }
 
+    bool operator==(Range<T> other) {
+        return fStart == other.fStart && fEnd == other.fEnd;
+    }
+
     bool leftToRight() const {
         return fEnd >= fStart;
+    }
+
+    bool before(T index) const {
+        if (leftToRight()) {
+            return index >= fEnd;
+        } else {
+            return index >= fStart;
+        }
+    }
+
+    bool contains(T index) const {
+        if (leftToRight()) {
+            return index >= fStart && index < fEnd;
+        } else {
+            return index < fStart && index >= fEnd;
+        }
+    }
+
+    bool contains(Range<T> range) const {
+        if (leftToRight()) {
+            return range.fStart >= fStart && range.fEnd < fEnd;
+        } else {
+            return range.fStart < fStart && range.fEnd >= fEnd;
+        }
     }
 
     void normalize() {
@@ -123,13 +178,68 @@ public:
 
 typedef Range<TextIndex> TextRange;
 typedef Range<GlyphIndex> GlyphRange;
-const Range EMPTY_RANGE = Range(EMPTY_INDEX, EMPTY_INDEX);
+const Range<size_t> EMPTY_RANGE = Range<size_t>(EMPTY_INDEX, EMPTY_INDEX);
+
+// Blocks
+enum BlockType {
+    kFontChain,
+    kPlaceholder,
+};
+
+struct Placeholder {
+    SkSize  dimensions;
+    float   yOffsetFromBaseline;
+};
+
+class FontChain : public SkRefCnt {
+public:
+    // Returns the number of faces in the chain. Always >= 1
+    virtual size_t count() const = 0;
+    virtual sk_sp<SkTypeface> operator[](size_t index) const = 0;
+    virtual float fontSize() const = 0;
+    virtual SkString locale() const = 0;
+};
+
+struct FontBlock {
+    FontBlock(uint32_t count, sk_sp<FontChain> fontChain)
+        : type(BlockType::kFontChain)
+        , charCount(count)
+        , chain(fontChain) { }
+    FontBlock() : FontBlock(0, nullptr) { }
+    FontBlock(FontBlock& block) {
+        this->type = block.type;
+        this->charCount = block.charCount;
+        this->chain = block.chain;
+    }
+    ~FontBlock() { }
+
+    BlockType  type;
+    uint32_t   charCount;
+    union {
+        sk_sp<FontChain>  chain;
+        Placeholder placeholder;
+    };
+};
+
+struct ResolvedFontBlock {
+    ResolvedFontBlock(TextRange textRange, sk_sp<SkTypeface> typeface, SkScalar size, SkFontStyle fontStyle)
+        : textRange(textRange)
+        , typeface(typeface)
+        , size(size)
+        , style(fontStyle) { }
+
+    TextRange textRange;
+    sk_sp<SkTypeface> typeface;
+    float size;
+    SkFontStyle style;
+};
 
 }  // namespace text
 }  // namespace skia
 
 namespace sknonstd {
 template <> struct is_bitmask_enum<skia::text::CodeUnitFlags> : std::true_type {};
+template <> struct is_bitmask_enum<skia::text::GlyphUnitFlags> : std::true_type {};
 }
 
 #endif

@@ -37,6 +37,7 @@ void writeH(const DFA& dfa, const char* lexer, const char* token,
     out << HEADER;
     out << "#ifndef SKSL_" << lexer << "\n";
     out << "#define SKSL_" << lexer << "\n";
+    out << "#include \"include/core/SkStringView.h\"\n";
     out << "#include <cstddef>\n";
     out << "#include <cstdint>\n";
     out << "namespace SkSL {\n";
@@ -50,43 +51,48 @@ void writeH(const DFA& dfa, const char* lexer, const char* token,
     out << R"(
     };
 
-    )" << token << R"(()
-    : fKind(Kind::TK_NONE)
-    , fOffset(-1)
-    , fLength(-1) {}
+    )" << token << "() {}";
 
-    )" << token << R"((Kind kind, int32_t offset, int32_t length)
+    out << token << R"((Kind kind, int32_t offset, int32_t length, int32_t line)
     : fKind(kind)
     , fOffset(offset)
-    , fLength(length) {}
+    , fLength(length)
+    , fLine(line) {}
 
-    Kind fKind;
-    int fOffset;
-    int fLength;
+    Kind fKind      = Kind::TK_NONE;
+    int32_t fOffset = -1;
+    int32_t fLength = -1;
+    int32_t fLine   = -1;
 };
 
 class )" << lexer << R"( {
 public:
-    void start(const char* text, int32_t length) {
+    void start(skstd::string_view text) {
         fText = text;
-        fLength = length;
         fOffset = 0;
+        fLine = 1;
     }
 
     )" << token << R"( next();
 
-    int32_t getCheckpoint() const {
-        return fOffset;
+    struct Checkpoint {
+        int32_t fOffset;
+        int32_t fLine;
+    };
+
+    Checkpoint getCheckpoint() const {
+        return {fOffset, fLine};
     }
 
-    void rewindToCheckpoint(int32_t checkpoint) {
-        fOffset = checkpoint;
+    void rewindToCheckpoint(Checkpoint checkpoint) {
+        fOffset = checkpoint.fOffset;
+        fLine = checkpoint.fLine;
     }
 
 private:
-    const char* fText;
-    int32_t fLength;
+    skstd::string_view fText;
     int32_t fOffset;
+    int32_t fLine;
 };
 
 } // namespace
@@ -112,14 +118,15 @@ void writeCPP(const DFA& dfa, const char* lexer, const char* token, const char* 
     // arbitrarily-chosen character which is greater than START_CHAR and should not appear in actual
     // input
     out << "static const uint8_t INVALID_CHAR = 18;";
-    out << "static int8_t mappings[" << dfa.fCharMappings.size() << "] = {\n    ";
+    out << "static const int8_t kMappings[" << dfa.fCharMappings.size() << "] = {\n    ";
     const char* separator = "";
     for (int m : dfa.fCharMappings) {
         out << separator << std::to_string(m);
         separator = ", ";
     }
     out << "\n};\n";
-    out << "static State transitions[" << dfa.fTransitions.size() << "][" << states << "] = {\n";
+    out << "static const State kTransitions[" << dfa.fTransitions.size() << "]["
+                                              << states << "] = {\n";
     for (size_t c = 0; c < dfa.fTransitions.size(); ++c) {
         out << "    {";
         for (size_t j = 0; j < states; ++j) {
@@ -134,7 +141,7 @@ void writeCPP(const DFA& dfa, const char* lexer, const char* token, const char* 
     out << "};\n";
     out << "\n";
 
-    out << "static int8_t accepts[" << states << "] = {";
+    out << "static const int8_t kAccepts[" << states << "] = {";
     for (size_t i = 0; i < states; ++i) {
         if (i < dfa.fAccepts.size()) {
             out << " " << dfa.fAccepts[i] << ",";
@@ -153,14 +160,14 @@ void writeCPP(const DFA& dfa, const char* lexer, const char* token, const char* 
     // tokens. Our grammar doesn't have this property, so we can simplify the logic
     // a bit.
     int32_t startOffset = fOffset;
-    if (startOffset == fLength) {
-        return )" << token << "(" << token << R"(::Kind::TK_END_OF_FILE, startOffset, 0);
+    if (startOffset == (int32_t)fText.length()) {
+        return )" << token << "(" << token << R"(::Kind::TK_END_OF_FILE, startOffset, 0, fLine);
     }
     State state = 1;
     for (;;) {
-        if (fOffset >= fLength) {
-            if (accepts[state] == -1) {
-                return Token(Token::Kind::TK_END_OF_FILE, startOffset, 0);
+        if (fOffset >= (int32_t)fText.length()) {
+            if (kAccepts[state] == -1) {
+                return Token(Token::Kind::TK_END_OF_FILE, startOffset, 0, fLine);
             }
             break;
         }
@@ -168,15 +175,18 @@ void writeCPP(const DFA& dfa, const char* lexer, const char* token, const char* 
         if (c <= 8 || c >= )" << dfa.fCharMappings.size() << R"() {
             c = INVALID_CHAR;
         }
-        State newState = transitions[mappings[c]][state];
+        State newState = kTransitions[kMappings[c]][state];
         if (!newState) {
             break;
         }
         state = newState;
         ++fOffset;
+        if (c == '\n') {
+            ++fLine;
+        }
     }
-    Token::Kind kind = ()" << token << R"(::Kind) accepts[state];
-    return )" << token << R"((kind, startOffset, fOffset - startOffset);
+    Token::Kind kind = ()" << token << R"(::Kind) kAccepts[state];
+    return )" << token << R"((kind, startOffset, fOffset - startOffset, fLine);
 }
 
 } // namespace

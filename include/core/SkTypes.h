@@ -236,7 +236,11 @@
 #  define SK_SUPPORT_GPU 1
 #endif
 
-#if !SK_SUPPORT_GPU
+#if SK_SUPPORT_GPU
+#  if !defined(SK_ENABLE_SKSL)
+#    define SK_ENABLE_SKSL
+#  endif
+#else
 #  undef SK_GL
 #  undef SK_VULKAN
 #  undef SK_METAL
@@ -396,6 +400,14 @@
 #  define GR_TEST_UTILS 0
 #endif
 
+#ifndef SK_GPU_V2
+#  define SK_GPU_V2 0
+#endif
+
+#ifndef SK_GPU_V1
+#  define SK_GPU_V1 1
+#endif
+
 #if defined(SK_HISTOGRAM_ENUMERATION)  || \
     defined(SK_HISTOGRAM_BOOLEAN)      || \
     defined(SK_HISTOGRAM_EXACT_LINEAR) || \
@@ -445,10 +457,7 @@
 [[noreturn]] SK_API extern void sk_abort_no_print(void);
 
 #ifndef SkDebugf
-    SK_API void SkDebugf(const char format[], ...);
-#endif
-#if defined(SK_BUILD_FOR_LIBFUZZER)
-    SK_API inline void SkDebugf(const char format[], ...) {}
+    SK_API void SkDebugf(const char format[], ...) SK_PRINTF_LIKE(1, 2);
 #endif
 
 // SkASSERT, SkASSERTF and SkASSERT_RELEASE can be used as stand alone assertion expressions, e.g.

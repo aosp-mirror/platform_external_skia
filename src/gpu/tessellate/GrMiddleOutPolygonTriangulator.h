@@ -13,6 +13,8 @@
 #include "include/private/SkTemplates.h"
 #include "src/core/SkMathPriv.h"
 #include "src/core/SkPathPriv.h"
+#include "src/gpu/GrVertexWriter.h"
+#include "src/gpu/tessellate/GrPathXform.h"
 
 // This class emits a polygon triangulation with a "middle-out" topology. Conceptually, middle-out
 // emits one large triangle with vertices on both endpoints and a middle point, then recurses on
@@ -42,10 +44,14 @@
 // recursion, we manipulate an O(log N) stack to determine the correct middle-out triangulation.
 class GrMiddleOutPolygonTriangulator {
 public:
-    GrMiddleOutPolygonTriangulator(SkPoint* vertexData, int perTriangleVertexAdvance,
-                                   int maxPushVertexCalls)
-            : fVertexData(vertexData)
-            , fPerTriangleVertexAdvance(perTriangleVertexAdvance) {
+    // Writes out 3 SkPoints per triangle to "vertexWriter". Additionally writes out "pad32Count"
+    // repetitions of "pad32Value" after each triangle. Set pad32Count to 0 if the triangles are
+    // to be tightly packed.
+    GrMiddleOutPolygonTriangulator(GrVertexWriter&& vertexWriter, int pad32Count,
+                                   uint32_t pad32Value, int maxPushVertexCalls)
+            : fVertexWriter(std::move(vertexWriter))
+            , fPad32Count(pad32Count)
+            , fPad32Value(pad32Value) {
         // Determine the deepest our stack can ever go.
         int maxStackDepth = SkNextLog2(maxPushVertexCalls) + 1;
         if (maxStackDepth > kStackPreallocCount) {
@@ -117,26 +123,37 @@ public:
         SkASSERT(fTop->fVertexIdxDelta == 0);  // Ensure we are in the initial stack state.
     }
 
-    static int WritePathInnerFan(SkPoint* vertexData, int perTriangleVertexAdvance,
-                                 const SkPath& path) {
-        GrMiddleOutPolygonTriangulator middleOut(vertexData, perTriangleVertexAdvance,
+    GrVertexWriter detachVertexWriter() { return std::move(fVertexWriter); }
+
+    static GrVertexWriter WritePathInnerFan(GrVertexWriter&& vertexWriter,
+                                            int pad32Count,
+                                            uint32_t pad32Value,
+                                            const GrPathXform& pathXform,
+                                            const SkPath& path,
+                                            int* numTrianglesWritten) {
+        GrMiddleOutPolygonTriangulator middleOut(std::move(vertexWriter),
+                                                 pad32Count,
+                                                 pad32Value,
                                                  path.countVerbs());
         for (auto [verb, pts, w] : SkPathPriv::Iterate(path)) {
             switch (verb) {
+                SkPoint pt;
                 case SkPathVerb::kMove:
-                    middleOut.closeAndMove(pts[0]);
+                    middleOut.closeAndMove(pathXform.mapPoint(pts[0]));
                     break;
                 case SkPathVerb::kLine:
                 case SkPathVerb::kQuad:
                 case SkPathVerb::kConic:
                 case SkPathVerb::kCubic:
-                    middleOut.pushVertex(pts[SkPathPriv::PtsInIter((unsigned)verb) - 1]);
+                    pt = pts[SkPathPriv::PtsInIter((unsigned)verb) - 1];
+                    middleOut.pushVertex(pathXform.mapPoint(pt));
                     break;
                 case SkPathVerb::kClose:
                     break;
             }
         }
-        return middleOut.close();
+        *numTrianglesWritten = middleOut.close();
+        return middleOut.detachVertexWriter();
     }
 
 private:
@@ -163,18 +180,20 @@ private:
     void popTopTriangle(const SkPoint& lastPt) {
         SkASSERT(fTop > fVertexStack);  // We should never pop the starting point.
         --fTop;
-        fVertexData[0] = fTop[0].fPoint;
-        fVertexData[1] = fTop[1].fPoint;
-        fVertexData[2] = lastPt;
-        fVertexData += fPerTriangleVertexAdvance;
+        fVertexWriter.write(fTop[0].fPoint, fTop[1].fPoint, lastPt);
+        if (fPad32Count) {
+            // Output a 4-point conic with w=Inf.
+            fVertexWriter.fill(fPad32Value, fPad32Count);
+        }
     }
 
     constexpr static int kStackPreallocCount = 32;
+    GrVertexWriter fVertexWriter;
+    const int fPad32Count;
+    const uint32_t fPad32Value;
     SkAutoSTMalloc<kStackPreallocCount, StackVertex> fVertexStack;
     SkDEBUGCODE(int fStackAllocCount;)
     StackVertex* fTop;
-    SkPoint* fVertexData;
-    int fPerTriangleVertexAdvance;
     int fTotalClosedTriangleCount = 0;
 };
 

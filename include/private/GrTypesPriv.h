@@ -14,11 +14,11 @@
 #include "include/core/SkPath.h"
 #include "include/core/SkRefCnt.h"
 #include "include/gpu/GrTypes.h"
-#include "include/private/GrSharedEnums.h"
 #include "include/private/SkImageInfoPriv.h"
 
 class GrBackendFormat;
 class GrCaps;
+class GrSurfaceProxy;
 
 // The old libstdc++ uses the draft name "monotonic_clock" rather than "steady_clock". This might
 // not actually be monotonic, depending on how libstdc++ was built. However, this is only currently
@@ -147,17 +147,23 @@ enum class GrBudgetedType : uint8_t {
     kUnbudgetedCacheable,
 };
 
-/**
- * Clips are composed from these objects.
- */
-enum GrClipType {
-    kRect_ClipType,
-    kPath_ClipType
-};
-
 enum class GrScissorTest : bool {
     kDisabled = false,
     kEnabled = true
+};
+
+/*
+ * Used to say whether texture is backed by memory.
+ */
+enum class GrMemoryless : bool {
+    /**
+     * The texture will be allocated normally and will affect memory budgets.
+     */
+    kNo = false,
+    /**
+     * The texture will be not use GPU memory and will not affect memory budgets.
+     */
+    kYes = true
 };
 
 struct GrMipLevel {
@@ -167,8 +173,13 @@ struct GrMipLevel {
     sk_sp<SkData> fOptionalStorage;
 };
 
+enum class GrSemaphoreWrapType {
+    kWillSignal,
+    kWillWait,
+};
+
 /**
- * This enum is used to specify the load operation to be used when an GrOpsTask/GrOpsRenderPass
+ * This enum is used to specify the load operation to be used when an OpsTask/GrOpsRenderPass
  * begins execution.
  */
 enum class GrLoadOp {
@@ -178,7 +189,7 @@ enum class GrLoadOp {
 };
 
 /**
- * This enum is used to specify the store operation to be used when an GrOpsTask/GrOpsRenderPass
+ * This enum is used to specify the store operation to be used when an OpsTask/GrOpsRenderPass
  * ends execution.
  */
 enum class GrStoreOp {
@@ -199,8 +210,8 @@ enum class GrFillRule : bool {
     kEvenOdd
 };
 
-inline GrFillRule GrFillRuleForSkPath(const SkPath& path) {
-    switch (path.getFillType()) {
+inline GrFillRule GrFillRuleForPathFillType(SkPathFillType fillType) {
+    switch (fillType) {
         case SkPathFillType::kWinding:
         case SkPathFillType::kInverseWinding:
             return GrFillRule::kNonzero;
@@ -209,6 +220,10 @@ inline GrFillRule GrFillRuleForSkPath(const SkPath& path) {
             return GrFillRule::kEvenOdd;
     }
     SkUNREACHABLE;
+}
+
+inline GrFillRule GrFillRuleForSkPath(const SkPath& path) {
+    return GrFillRuleForPathFillType(path.getFillType());
 }
 
 /** This enum indicates the type of antialiasing to be performed. */
@@ -353,7 +368,6 @@ enum class GrTextureType {
 
 enum GrShaderType {
     kVertex_GrShaderType,
-    kGeometry_GrShaderType,
     kFragment_GrShaderType,
 
     kLastkFragment_GrShaderType = kFragment_GrShaderType
@@ -361,12 +375,11 @@ enum GrShaderType {
 static const int kGrShaderTypeCount = kLastkFragment_GrShaderType + 1;
 
 enum GrShaderFlags {
-    kNone_GrShaderFlags = 0,
-    kVertex_GrShaderFlag = 1,
-    kTessControl_GrShaderFlag = 1 << 2,
+    kNone_GrShaderFlags          = 0,
+    kVertex_GrShaderFlag         = 1 << 0,
+    kTessControl_GrShaderFlag    = 1 << 1,
     kTessEvaluation_GrShaderFlag = 1 << 2,
-    kGeometry_GrShaderFlag = 1 << 3,
-    kFragment_GrShaderFlag = 1 << 4
+    kFragment_GrShaderFlag       = 1 << 3
 };
 GR_MAKE_BITFIELD_OPS(GrShaderFlags)
 
@@ -697,23 +710,36 @@ static const int kGrVertexAttribTypeCount = kLast_GrVertexAttribType + 1;
 
 //////////////////////////////////////////////////////////////////////////////
 
+/**
+ * We have coverage effects that clip rendering to the edge of some geometric primitive.
+ * This enum specifies how that clipping is performed. Not all factories that take a
+ * GrClipEdgeType will succeed with all values and it is up to the caller to verify success.
+ */
+enum class GrClipEdgeType {
+    kFillBW,
+    kFillAA,
+    kInverseFillBW,
+    kInverseFillAA,
+
+    kLast = kInverseFillAA
+};
 static const int kGrClipEdgeTypeCnt = (int) GrClipEdgeType::kLast + 1;
 
-static constexpr bool GrProcessorEdgeTypeIsFill(const GrClipEdgeType edgeType) {
+static constexpr bool GrClipEdgeTypeIsFill(const GrClipEdgeType edgeType) {
     return (GrClipEdgeType::kFillAA == edgeType || GrClipEdgeType::kFillBW == edgeType);
 }
 
-static constexpr bool GrProcessorEdgeTypeIsInverseFill(const GrClipEdgeType edgeType) {
+static constexpr bool GrClipEdgeTypeIsInverseFill(const GrClipEdgeType edgeType) {
     return (GrClipEdgeType::kInverseFillAA == edgeType ||
             GrClipEdgeType::kInverseFillBW == edgeType);
 }
 
-static constexpr bool GrProcessorEdgeTypeIsAA(const GrClipEdgeType edgeType) {
+static constexpr bool GrClipEdgeTypeIsAA(const GrClipEdgeType edgeType) {
     return (GrClipEdgeType::kFillBW != edgeType &&
             GrClipEdgeType::kInverseFillBW != edgeType);
 }
 
-static inline GrClipEdgeType GrInvertProcessorEdgeType(const GrClipEdgeType edgeType) {
+static inline GrClipEdgeType GrInvertClipEdgeType(const GrClipEdgeType edgeType) {
     switch (edgeType) {
         case GrClipEdgeType::kFillBW:
             return GrClipEdgeType::kInverseFillBW;
@@ -840,16 +866,17 @@ typedef uint64_t GrFence;
  * Used to include or exclude specific GPU path renderers for testing purposes.
  */
 enum class GpuPathRenderers {
-    kNone              =   0,  // Always use software masks and/or GrDefaultPathRenderer.
+    kNone              =   0,  // Always use software masks and/or DefaultPathRenderer.
     kDashLine          =   1 << 0,
-    kTessellation      =   1 << 1,
-    kCoverageCounting  =   1 << 2,
-    kAAHairline        =   1 << 3,
-    kAAConvex          =   1 << 4,
-    kAALinearizing     =   1 << 5,
-    kSmall             =   1 << 6,
-    kTriangulating     =   1 << 7,
-    kDefault           = ((1 << 8) - 1)  // All path renderers.
+    kAtlas             =   1 << 1,
+    kTessellation      =   1 << 2,
+    kCoverageCounting  =   1 << 3,
+    kAAHairline        =   1 << 4,
+    kAAConvex          =   1 << 5,
+    kAALinearizing     =   1 << 6,
+    kSmall             =   1 << 7,
+    kTriangulating     =   1 << 8,
+    kDefault           = ((1 << 9) - 1)  // All path renderers.
 };
 
 /**
@@ -925,8 +952,7 @@ static constexpr SkColorType GrColorTypeToSkColorType(GrColorType ct) {
         case GrColorType::kBGR_565:          return kRGB_565_SkColorType;
         case GrColorType::kABGR_4444:        return kARGB_4444_SkColorType;
         case GrColorType::kRGBA_8888:        return kRGBA_8888_SkColorType;
-        // Once we add kRGBA_8888_SRGB_SkColorType we should return that here.
-        case GrColorType::kRGBA_8888_SRGB:   return kRGBA_8888_SkColorType;
+        case GrColorType::kRGBA_8888_SRGB:   return kSRGBA_8888_SkColorType;
         case GrColorType::kRGB_888x:         return kRGB_888x_SkColorType;
         case GrColorType::kRG_88:            return kR8G8_unorm_SkColorType;
         case GrColorType::kBGRA_8888:        return kBGRA_8888_SkColorType;
@@ -963,6 +989,7 @@ static constexpr GrColorType SkColorTypeToGrColorType(SkColorType ct) {
         case kRGB_565_SkColorType:            return GrColorType::kBGR_565;
         case kARGB_4444_SkColorType:          return GrColorType::kABGR_4444;
         case kRGBA_8888_SkColorType:          return GrColorType::kRGBA_8888;
+        case kSRGBA_8888_SkColorType:         return GrColorType::kRGBA_8888_SRGB;
         case kRGB_888x_SkColorType:           return GrColorType::kRGB_888x;
         case kBGRA_8888_SkColorType:          return GrColorType::kBGRA_8888;
         case kGray_8_SkColorType:             return GrColorType::kGray_8;
@@ -982,12 +1009,6 @@ static constexpr GrColorType SkColorTypeToGrColorType(SkColorType ct) {
     }
     SkUNREACHABLE;
 }
-
-// This is a temporary means of mapping an SkColorType and format to a
-// GrColorType::kRGBA_8888_SRGB. Once we have an SRGB SkColorType this can go away.
-GrColorType SkColorTypeAndFormatToGrColorType(const GrCaps* caps,
-                                              SkColorType skCT,
-                                              const GrBackendFormat& format);
 
 static constexpr uint32_t GrColorTypeChannelFlags(GrColorType ct) {
     switch (ct) {
@@ -1043,45 +1064,45 @@ enum class GrColorTypeEncoding {
  * encoded. Currently all the non-zero channels share a single GrColorTypeEncoding. This could be
  * expanded to store separate encodings and to indicate which bits belong to which components.
  */
-struct GrColorTypeDesc {
+class GrColorFormatDesc {
 public:
-    static constexpr GrColorTypeDesc MakeRGBA(int rgba, GrColorTypeEncoding e) {
+    static constexpr GrColorFormatDesc MakeRGBA(int rgba, GrColorTypeEncoding e) {
         return {rgba, rgba, rgba, rgba, 0, e};
     }
 
-    static constexpr GrColorTypeDesc MakeRGBA(int rgb, int a, GrColorTypeEncoding e) {
+    static constexpr GrColorFormatDesc MakeRGBA(int rgb, int a, GrColorTypeEncoding e) {
         return {rgb, rgb, rgb, a, 0, e};
     }
 
-    static constexpr GrColorTypeDesc MakeRGB(int rgb, GrColorTypeEncoding e) {
+    static constexpr GrColorFormatDesc MakeRGB(int rgb, GrColorTypeEncoding e) {
         return {rgb, rgb, rgb, 0, 0, e};
     }
 
-    static constexpr GrColorTypeDesc MakeRGB(int r, int g, int b, GrColorTypeEncoding e) {
+    static constexpr GrColorFormatDesc MakeRGB(int r, int g, int b, GrColorTypeEncoding e) {
         return {r, g, b, 0, 0, e};
     }
 
-    static constexpr GrColorTypeDesc MakeAlpha(int a, GrColorTypeEncoding e) {
+    static constexpr GrColorFormatDesc MakeAlpha(int a, GrColorTypeEncoding e) {
         return {0, 0, 0, a, 0, e};
     }
 
-    static constexpr GrColorTypeDesc MakeR(int r, GrColorTypeEncoding e) {
+    static constexpr GrColorFormatDesc MakeR(int r, GrColorTypeEncoding e) {
         return {r, 0, 0, 0, 0, e};
     }
 
-    static constexpr GrColorTypeDesc MakeRG(int rg, GrColorTypeEncoding e) {
+    static constexpr GrColorFormatDesc MakeRG(int rg, GrColorTypeEncoding e) {
         return {rg, rg, 0, 0, 0, e};
     }
 
-    static constexpr GrColorTypeDesc MakeGray(int grayBits, GrColorTypeEncoding e) {
+    static constexpr GrColorFormatDesc MakeGray(int grayBits, GrColorTypeEncoding e) {
         return {0, 0, 0, 0, grayBits, e};
     }
 
-    static constexpr GrColorTypeDesc MakeGrayAlpha(int grayAlpha, GrColorTypeEncoding e) {
+    static constexpr GrColorFormatDesc MakeGrayAlpha(int grayAlpha, GrColorTypeEncoding e) {
         return {0, 0, 0, 0, grayAlpha, e};
     }
 
-    static constexpr GrColorTypeDesc MakeInvalid() { return {}; }
+    static constexpr GrColorFormatDesc MakeInvalid() { return {}; }
 
     constexpr int r() const { return fRBits; }
     constexpr int g() const { return fGBits; }
@@ -1109,9 +1130,9 @@ private:
     int fGrayBits = 0;
     GrColorTypeEncoding fEncoding = GrColorTypeEncoding::kUnorm;
 
-    constexpr GrColorTypeDesc() = default;
+    constexpr GrColorFormatDesc() = default;
 
-    constexpr GrColorTypeDesc(int r, int g, int b, int a, int gray, GrColorTypeEncoding encoding)
+    constexpr GrColorFormatDesc(int r, int g, int b, int a, int gray, GrColorTypeEncoding encoding)
             : fRBits(r), fGBits(g), fBBits(b), fABits(a), fGrayBits(gray), fEncoding(encoding) {
         SkASSERT(r >= 0 && g >= 0 && b >= 0 && a >= 0 && gray >= 0);
         SkASSERT(!gray || (!r && !g && !b));
@@ -1119,70 +1140,70 @@ private:
     }
 };
 
-static constexpr GrColorTypeDesc GrGetColorTypeDesc(GrColorType ct) {
+static constexpr GrColorFormatDesc GrGetColorTypeDesc(GrColorType ct) {
     switch (ct) {
         case GrColorType::kUnknown:
-            return GrColorTypeDesc::MakeInvalid();
+            return GrColorFormatDesc::MakeInvalid();
         case GrColorType::kAlpha_8:
-            return GrColorTypeDesc::MakeAlpha(8, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeAlpha(8, GrColorTypeEncoding::kUnorm);
         case GrColorType::kBGR_565:
-            return GrColorTypeDesc::MakeRGB(5, 6, 5, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeRGB(5, 6, 5, GrColorTypeEncoding::kUnorm);
         case GrColorType::kABGR_4444:
-            return GrColorTypeDesc::MakeRGBA(4, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeRGBA(4, GrColorTypeEncoding::kUnorm);
         case GrColorType::kRGBA_8888:
-            return GrColorTypeDesc::MakeRGBA(8, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kUnorm);
         case GrColorType::kRGBA_8888_SRGB:
-            return GrColorTypeDesc::MakeRGBA(8, GrColorTypeEncoding::kSRGBUnorm);
+            return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kSRGBUnorm);
         case GrColorType::kRGB_888x:
-            return GrColorTypeDesc::MakeRGB(8, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeRGB(8, GrColorTypeEncoding::kUnorm);
         case GrColorType::kRG_88:
-            return GrColorTypeDesc::MakeRG(8, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeRG(8, GrColorTypeEncoding::kUnorm);
         case GrColorType::kBGRA_8888:
-            return GrColorTypeDesc::MakeRGBA(8, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kUnorm);
         case GrColorType::kRGBA_1010102:
-            return GrColorTypeDesc::MakeRGBA(10, 2, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeRGBA(10, 2, GrColorTypeEncoding::kUnorm);
         case GrColorType::kBGRA_1010102:
-            return GrColorTypeDesc::MakeRGBA(10, 2, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeRGBA(10, 2, GrColorTypeEncoding::kUnorm);
         case GrColorType::kGray_8:
-            return GrColorTypeDesc::MakeGray(8, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeGray(8, GrColorTypeEncoding::kUnorm);
         case GrColorType::kGrayAlpha_88:
-            return GrColorTypeDesc::MakeGrayAlpha(8, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeGrayAlpha(8, GrColorTypeEncoding::kUnorm);
         case GrColorType::kAlpha_F16:
-            return GrColorTypeDesc::MakeAlpha(16, GrColorTypeEncoding::kFloat);
+            return GrColorFormatDesc::MakeAlpha(16, GrColorTypeEncoding::kFloat);
         case GrColorType::kRGBA_F16:
-            return GrColorTypeDesc::MakeRGBA(16, GrColorTypeEncoding::kFloat);
+            return GrColorFormatDesc::MakeRGBA(16, GrColorTypeEncoding::kFloat);
         case GrColorType::kRGBA_F16_Clamped:
-            return GrColorTypeDesc::MakeRGBA(16, GrColorTypeEncoding::kFloat);
+            return GrColorFormatDesc::MakeRGBA(16, GrColorTypeEncoding::kFloat);
         case GrColorType::kRGBA_F32:
-            return GrColorTypeDesc::MakeRGBA(32, GrColorTypeEncoding::kFloat);
+            return GrColorFormatDesc::MakeRGBA(32, GrColorTypeEncoding::kFloat);
         case GrColorType::kAlpha_8xxx:
-            return GrColorTypeDesc::MakeAlpha(8, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeAlpha(8, GrColorTypeEncoding::kUnorm);
         case GrColorType::kAlpha_F32xxx:
-            return GrColorTypeDesc::MakeAlpha(32, GrColorTypeEncoding::kFloat);
+            return GrColorFormatDesc::MakeAlpha(32, GrColorTypeEncoding::kFloat);
         case GrColorType::kGray_8xxx:
-            return GrColorTypeDesc::MakeGray(8, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeGray(8, GrColorTypeEncoding::kUnorm);
         case GrColorType::kAlpha_16:
-            return GrColorTypeDesc::MakeAlpha(16, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeAlpha(16, GrColorTypeEncoding::kUnorm);
         case GrColorType::kRG_1616:
-            return GrColorTypeDesc::MakeRG(16, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeRG(16, GrColorTypeEncoding::kUnorm);
         case GrColorType::kRGBA_16161616:
-            return GrColorTypeDesc::MakeRGBA(16, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeRGBA(16, GrColorTypeEncoding::kUnorm);
         case GrColorType::kRG_F16:
-            return GrColorTypeDesc::MakeRG(16, GrColorTypeEncoding::kFloat);
+            return GrColorFormatDesc::MakeRG(16, GrColorTypeEncoding::kFloat);
         case GrColorType::kRGB_888:
-            return GrColorTypeDesc::MakeRGB(8, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeRGB(8, GrColorTypeEncoding::kUnorm);
         case GrColorType::kR_8:
-            return GrColorTypeDesc::MakeR(8, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeR(8, GrColorTypeEncoding::kUnorm);
         case GrColorType::kR_16:
-            return GrColorTypeDesc::MakeR(16, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeR(16, GrColorTypeEncoding::kUnorm);
         case GrColorType::kR_F16:
-            return GrColorTypeDesc::MakeR(16, GrColorTypeEncoding::kFloat);
+            return GrColorFormatDesc::MakeR(16, GrColorTypeEncoding::kFloat);
         case GrColorType::kGray_F16:
-            return GrColorTypeDesc::MakeGray(16, GrColorTypeEncoding::kFloat);
+            return GrColorFormatDesc::MakeGray(16, GrColorTypeEncoding::kFloat);
         case GrColorType::kARGB_4444:
-            return GrColorTypeDesc::MakeRGBA(4, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeRGBA(4, GrColorTypeEncoding::kUnorm);
         case GrColorType::kBGRA_4444:
-            return GrColorTypeDesc::MakeRGBA(4, GrColorTypeEncoding::kUnorm);
+            return GrColorFormatDesc::MakeRGBA(4, GrColorTypeEncoding::kUnorm);
     }
     SkUNREACHABLE;
 }
@@ -1307,39 +1328,14 @@ private:
     Context fReleaseCtx;
 };
 
-enum class GrDstSampleType {
-    kNone, // The dst value will not be sampled in the shader
-    kAsTextureCopy, // The dst value will be sampled from a copy of the dst
-    // The types below require a texture barrier
-    kAsSelfTexture, // The dst value is sampled directly from the dst itself as a texture.
-    kAsInputAttachment, // The dst value is sampled directly from the dst as an input attachment.
+enum class GrDstSampleFlags {
+    kNone = 0,
+    kRequiresTextureBarrier =   1 << 0,
+    kAsInputAttachment = 1 << 1,
 };
+GR_MAKE_BITFIELD_CLASS_OPS(GrDstSampleFlags)
 
-// Returns true if the sampling of the dst color in the shader is done by reading the dst directly.
-// Anything that directly reads the dst will need a barrier between draws.
-static constexpr bool GrDstSampleTypeDirectlySamplesDst(GrDstSampleType type) {
-    switch (type) {
-        case GrDstSampleType::kAsSelfTexture:  // fall through
-        case GrDstSampleType::kAsInputAttachment:
-            return true;
-        case GrDstSampleType::kNone:  // fall through
-        case GrDstSampleType::kAsTextureCopy:
-            return false;
-    }
-    SkUNREACHABLE;
-}
-
-static constexpr bool GrDstSampleTypeUsesTexture(GrDstSampleType type) {
-    switch (type) {
-        case GrDstSampleType::kAsSelfTexture:  // fall through
-        case GrDstSampleType::kAsTextureCopy:
-            return true;
-        case GrDstSampleType::kNone:  // fall through
-        case GrDstSampleType::kAsInputAttachment:
-            return false;
-    }
-    SkUNREACHABLE;
-}
+using GrVisitProxyFunc = std::function<void(GrSurfaceProxy*, GrMipmapped)>;
 
 #if defined(SK_DEBUG) || GR_TEST_UTILS || defined(SK_ENABLE_DUMP_GPU)
 static constexpr const char* GrBackendApiToStr(GrBackendApi api) {

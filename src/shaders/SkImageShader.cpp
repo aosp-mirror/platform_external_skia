@@ -23,6 +23,7 @@
 #include "src/image/SkImage_Base.h"
 #include "src/shaders/SkBitmapProcShader.h"
 #include "src/shaders/SkEmptyShader.h"
+#include "src/shaders/SkTransformShader.h"
 
 SkM44 SkImageShader::CubicResamplerMatrix(float B, float C) {
 #if 0
@@ -59,7 +60,9 @@ static SkTileMode optimize(SkTileMode tm, int dimension) {
     // for transforming to clamp.
     return tm;
 #else
-    return dimension == 1 ? SkTileMode::kClamp : tm;
+    // mirror and repeat on a 1px axis are the same as clamping, but decal will still transition to
+    // transparent black.
+    return (tm != SkTileMode::kDecal && dimension == 1) ? SkTileMode::kClamp : tm;
 #endif
 }
 
@@ -92,56 +95,10 @@ enum class LegacyFilterEnum {
     kLast = kUseCubicResampler,
 };
 
-sk_sp<SkFlattenable> SkImageShader::PreSamplingCreate(SkReadBuffer& buffer) {
-    SkASSERT(buffer.isVersionLT(SkPicturePriv::kSamplingInImageShader_Version));
-
-    auto tmx = buffer.read32LE<SkTileMode>(SkTileMode::kLastTileMode);
-    auto tmy = buffer.read32LE<SkTileMode>(SkTileMode::kLastTileMode);
-
-    LegacyFilterEnum fe = LegacyFilterEnum::kInheritFromPaint;
-    if (!buffer.isVersionLT(SkPicturePriv::kFilterEnumInImageShader_Version)) {
-        fe = buffer.read32LE<LegacyFilterEnum>(LegacyFilterEnum::kLast);
-    }
-
-    SkSamplingOptions op;
-
-    if (buffer.isVersionLT(SkPicturePriv::kCubicResamplerImageShader_Version)) {
-        if (!buffer.isVersionLT(SkPicturePriv::kFilterOptionsInImageShader_Version)) {
-            auto filter = buffer.read32LE<SkFilterMode>(SkFilterMode::kLinear);
-            auto mipmap = buffer.read32LE<SkMipmapMode>(SkMipmapMode::kLinear);
-            op = SkSamplingOptions(filter, mipmap);
-        }
-    } else {
-        switch (fe) {
-            case LegacyFilterEnum::kUseFilterOptions: {
-                auto filter = buffer.read32LE<SkFilterMode>(SkFilterMode::kLinear);
-                auto mipmap = buffer.read32LE<SkMipmapMode>(SkMipmapMode::kLinear);
-                op = SkSamplingOptions(filter, mipmap);
-            } break;
-            case LegacyFilterEnum::kUseCubicResampler: {
-                SkScalar B = buffer.readScalar(),
-                         C = buffer.readScalar();
-                op = SkSamplingOptions({B,C});
-            } break;
-            default:
-                break;
-        }
-    }
-
-    SkMatrix localMatrix;
-    buffer.readMatrix(&localMatrix);
-    sk_sp<SkImage> img = buffer.readImage();
-    return img ? SkImageShader::Make(std::move(img), tmx, tmy, op, &localMatrix) : nullptr;
-}
-
 // fClampAsIfUnpremul is always false when constructed through public APIs,
 // so there's no need to read or write it here.
 
 sk_sp<SkFlattenable> SkImageShader::CreateProc(SkReadBuffer& buffer) {
-    if (buffer.isVersionLT(SkPicturePriv::kSamplingInImageShader_Version)) {
-        return PreSamplingCreate(buffer);
-    }
-
     auto tmx = buffer.read32LE<SkTileMode>(SkTileMode::kLastTileMode);
     auto tmy = buffer.read32LE<SkTileMode>(SkTileMode::kLastTileMode);
 
@@ -342,8 +299,11 @@ std::unique_ptr<GrFragmentProcessor> SkImageShader::asFragmentProcessor(
     if (fImage->isAlphaOnly()) {
         return GrBlendFragmentProcessor::Make(std::move(fp), nullptr, SkBlendMode::kDstIn);
     } else if (args.fInputColorIsOpaque) {
-        // This special case isn't needed for correctness. It just avoids a multiplication by
-        // a vertex attribute alpha that is known to be 1 if we take the kSrcIn path.
+        // If the input alpha is known to be 1, we don't need to take the kSrcIn path. This is
+        // just an optimization. However, we can't just return 'fp' here. We need to actually
+        // inhibit the coverage-as-alpha optimization, or we'll fail to incorporate AA correctly.
+        // The OverrideInput FP happens to do that, so wrap our fp in one of those. The texture FP
+        // doesn't actually use the input color at all, so the overridden input is irrelevant.
         return GrFragmentProcessor::OverrideInput(std::move(fp), SK_PMColor4fWHITE, false);
     }
     return GrBlendFragmentProcessor::Make(std::move(fp), nullptr, SkBlendMode::kSrcIn);
@@ -402,9 +362,10 @@ public:
         }
     }
 
-    bool update(const SkMatrix& ctm, const SkMatrix* localM) override {
+    bool update(const SkMatrix& ctm) override {
         SkMatrix matrix;
-        if (fShader->computeTotalInverse(ctm, localM, &matrix)) {
+        // TODO: We may have lost the original local matrix?
+        if (fShader->computeTotalInverse(ctm, nullptr, &matrix)) {
             if (fUsePersp) {
                 matrix.get9(fMatrixStorage);
             } else {
@@ -580,6 +541,11 @@ bool SkImageShader::doStages(const SkStageRec& rec, SkImageStageUpdater* updater
             case kBGRA_8888_SkColorType:    p->append(SkRasterPipeline::gather_8888,    ctx);
                                             p->append(SkRasterPipeline::swap_rb            ); break;
 
+            case kSRGBA_8888_SkColorType:
+                p->append(SkRasterPipeline::gather_8888, ctx);
+                p->append_transfer_function(*skcms_sRGB_TransferFunction());
+                break;
+
             case kUnknown_SkColorType: SkASSERT(false);
         }
         if (decal_ctx) {
@@ -733,11 +699,43 @@ SkStageUpdater* SkImageShader::onAppendUpdatableStages(const SkStageRec& rec) co
     return this->doStages(rec, updater) ? updater : nullptr;
 }
 
-skvm::Color SkImageShader::onProgram(skvm::Builder* p,
+class SkImageShader::TransformShader : public SkTransformShader {
+public:
+    explicit TransformShader(const SkImageShader& shader)
+        : SkTransformShader{shader}
+        , fImageShader{shader} {}
+
+    skvm::Color onProgram(skvm::Builder* b,
+                          skvm::Coord device, skvm::Coord local, skvm::Color color,
+                          const SkMatrixProvider& matrices, const SkMatrix* localM,
+                          const SkColorInfo& dst,
+                          skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const override {
+        return fImageShader.makeProgram(
+                b, device, local, color, matrices, localM, dst, uniforms, this, alloc);
+    }
+
+private:
+    const SkImageShader& fImageShader;
+};
+
+SkUpdatableShader* SkImageShader::onUpdatableShader(SkArenaAlloc* alloc) const {
+    return alloc->make<TransformShader>(*this);
+}
+
+skvm::Color SkImageShader::onProgram(skvm::Builder* b,
                                      skvm::Coord device, skvm::Coord origLocal, skvm::Color paint,
                                      const SkMatrixProvider& matrices, const SkMatrix* localM,
                                      const SkColorInfo& dst,
                                      skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const {
+    return this->makeProgram(
+            b, device, origLocal, paint, matrices, localM, dst, uniforms, nullptr, alloc);
+}
+
+skvm::Color SkImageShader::makeProgram(
+        skvm::Builder* p, skvm::Coord device, skvm::Coord origLocal, skvm::Color paint,
+        const SkMatrixProvider& matrices, const SkMatrix* localM, const SkColorInfo& dst,
+        skvm::Uniforms* uniforms, const TransformShader* coordShader, SkArenaAlloc* alloc) const {
+
     SkMatrix baseInv;
     if (!this->computeTotalInverse(matrices.localToDevice(), localM, &baseInv)) {
         return {};
@@ -750,7 +748,8 @@ skvm::Color SkImageShader::onProgram(skvm::Builder* p,
         return {};
     }
     auto [upper, upperInv] = access->level();
-    if (!sampling.useCubic) {
+    // If we are using a coordShader, then we can't make guesses about the state of the matrix.
+    if (!sampling.useCubic && !coordShader) {
         // TODO: can tweak_sampling sometimes for cubic too when B=0
         if (matrices.localToDeviceHitsPixelCenters()) {
             sampling = tweak_sampling(sampling, upperInv);
@@ -767,7 +766,12 @@ skvm::Color SkImageShader::onProgram(skvm::Builder* p,
         lower = &lowerPixmap;
     }
 
-    skvm::Coord upperLocal = SkShaderBase::ApplyMatrix(p, upperInv, origLocal, uniforms);
+    skvm::Coord upperLocal;
+    if (coordShader != nullptr) {
+        upperLocal = coordShader->applyMatrix(p, upperInv, origLocal, uniforms);
+    } else {
+        upperLocal = SkShaderBase::ApplyMatrix(p, upperInv, origLocal, uniforms);
+    }
 
     // We can exploit image opacity to skip work unpacking alpha channels.
     const bool input_is_opaque = SkAlphaTypeIsOpaque(upper.alphaType())

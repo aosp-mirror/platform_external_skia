@@ -19,16 +19,18 @@
 #include "src/core/SkOpts.h"
 #include "src/core/SkRectPriv.h"
 #include "src/core/SkStrikeSpec.h"
+#include "src/core/SkTInternalLList.h"
 #include "src/core/SkTLazy.h"
 #include "src/gpu/GrColor.h"
 #include "src/gpu/GrSubRunAllocator.h"
-#include "src/gpu/ops/GrMeshDrawOp.h"
+#if SK_GPU_V1
 #include "src/gpu/ops/GrOp.h"
+#endif
 
 class GrAtlasManager;
-class GrAtlasTextOp;
 class GrDeferredUploadTarget;
 class GrGlyph;
+class GrMeshDrawTarget;
 class GrStrikeCache;
 class GrSubRun;
 
@@ -37,9 +39,10 @@ class SkSurfaceProps;
 class SkTextBlob;
 class SkTextBlobRunIterator;
 
+namespace skgpu { namespace v1 { class SurfaceDrawContext; }}
 
 // -- GrAtlasSubRun --------------------------------------------------------------------------------
-// GrAtlasSubRun is the API that GrAtlasTextOp uses to generate vertex data for drawing.
+// GrAtlasSubRun is the API that AtlasTextOp uses to generate vertex data for drawing.
 //     There are three different ways GrAtlasSubRun is specialized.
 //      * DirectMaskSubRun - this is by far the most common type of SubRun. The mask pixels are
 //        in 1:1 correspondence with the pixels on the device. The destination rectangles in this
@@ -62,14 +65,17 @@ public:
     virtual size_t vertexStride(const SkMatrix& drawMatrix) const = 0;
     virtual int glyphCount() const = 0;
 
+#if SK_GPU_V1
     virtual std::tuple<const GrClip*, GrOp::Owner>
     makeAtlasTextOp(
-            const GrClip* clip,
+            const GrClip*,
             const SkMatrixProvider& viewMatrix,
-            const SkGlyphRunList& glyphRunList,
-            const SkPaint& paint,
-            GrSurfaceDrawContext* rtc,
+            const SkGlyphRunList&,
+            const SkPaint&,
+            skgpu::v1::SurfaceDrawContext*,
             GrAtlasSubRunOwner subRun) const = 0;
+#endif
+
     virtual void fillVertexData(
             void* vertexDst, int offset, int count,
             GrColor color, const SkMatrix& positionMatrix,
@@ -80,7 +86,7 @@ public:
     // This call is not thread safe. It should only be called from GrDrawOp::onPrepare which
     // is single threaded.
     virtual std::tuple<bool, int> regenerateAtlas(
-            int begin, int end, GrMeshDrawOp::Target* target) const = 0;
+            int begin, int end, GrMeshDrawTarget* target) const = 0;
 };
 
 // -- GrSubRun -------------------------------------------------------------------------------------
@@ -98,12 +104,14 @@ class GrSubRun {
 public:
     virtual ~GrSubRun() = default;
 
+#if SK_GPU_V1
     // Produce GPU ops for this subRun.
-    virtual void draw(const GrClip* clip,
+    virtual void draw(const GrClip*,
                       const SkMatrixProvider& viewMatrix,
-                      const SkGlyphRunList& glyphRunList,
-                      const SkPaint& paint,
-                      GrSurfaceDrawContext* rtc) const = 0;
+                      const SkGlyphRunList&,
+                      const SkPaint&,
+                      skgpu::v1::SurfaceDrawContext*) const = 0;
+#endif
 
     // Given an already cached subRun, can this subRun handle this combination paint, matrix, and
     // position.
@@ -245,6 +253,7 @@ private:
             const SkZip<SkGlyphVariant, SkPoint>& drawables,
             const SkStrikeSpec& strikeSpec);
 
+#if SK_GPU_V1
     // Methods to satisfy SkGlyphRunPainterInterface
     void processDeviceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                             const SkStrikeSpec& strikeSpec) override;
@@ -258,6 +267,7 @@ private:
                            SkScalar maxScale) override;
     void processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                             const SkStrikeSpec& strikeSpec) override;
+#endif // SK_GPU_V1
 
     // The allocator must come first because it needs to be destroyed last. Other fields of this
     // structure may have pointers into it.
@@ -286,14 +296,15 @@ private:
     bool fSomeGlyphsExcluded{false};
 };
 
+#if SK_GPU_V1
 class GrSubRunNoCachePainter : public SkGlyphRunPainterInterface {
 public:
-    GrSubRunNoCachePainter(GrSurfaceDrawContext* sdc,
-                           GrSubRunAllocator* alloc,
-                           const GrClip* clip,
+    GrSubRunNoCachePainter(skgpu::v1::SurfaceDrawContext*,
+                           GrSubRunAllocator*,
+                           const GrClip*,
                            const SkMatrixProvider& viewMatrix,
-                           const SkGlyphRunList& glyphRunList,
-                           const SkPaint& paint);
+                           const SkGlyphRunList&,
+                           const SkPaint&);
     void processDeviceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                             const SkStrikeSpec& strikeSpec) override;
     void processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
@@ -303,16 +314,19 @@ public:
     void processSourceSDFT(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                            const SkStrikeSpec& strikeSpec, const SkFont& runFont,
                            SkScalar minScale, SkScalar maxScale) override;
+
 private:
+
     // Draw passes ownership of the sub run to the op.
     void draw(GrAtlasSubRunOwner subRun);
 
-    GrSurfaceDrawContext* const fSDC;
+    skgpu::v1::SurfaceDrawContext* const fSDC;
     GrSubRunAllocator* const fAlloc;
     const GrClip* const fClip;
     const SkMatrixProvider& fViewMatrix;
     const SkGlyphRunList& fGlyphRunList;
     const SkPaint& fPaint;
 };
+#endif // SK_GPU_V1
 
 #endif  // GrTextBlob_DEFINED

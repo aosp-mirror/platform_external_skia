@@ -15,18 +15,21 @@
 // instance are emitted as degenerate triangles.
 class GrStrokeFixedCountTessellator : public GrStrokeTessellator {
 public:
-    GrStrokeFixedCountTessellator(ShaderFlags shaderFlags, const SkMatrix& viewMatrix,
-                                  PathStrokeList* pathStrokeList)
-            : GrStrokeTessellator(GrStrokeTessellateShader::Mode::kFixedCount, shaderFlags,
-                                  viewMatrix, pathStrokeList) {
-    }
+    GrStrokeFixedCountTessellator(const GrShaderCaps&, ShaderFlags, const SkMatrix&,
+                                  PathStrokeList*, std::array<float, 2> matrixMinMaxScales,
+                                  const SkRect& strokeCullBounds);
 
-    void prepare(GrMeshDrawOp::Target*, int totalCombinedVerbCnt) override;
+    void prepare(GrMeshDrawTarget*, int totalCombinedVerbCnt) override;
+#if SK_GPU_V1
     void draw(GrOpFlushState*) const override;
+#endif
 
 private:
     GrVertexChunkArray fInstanceChunks;
     int fFixedVertexCount = 0;
+
+    // Only used if sk_VertexID is not supported.
+    sk_sp<const GrGpuBuffer> fVertexBufferIfNoIDSupport;
 };
 
 #endif

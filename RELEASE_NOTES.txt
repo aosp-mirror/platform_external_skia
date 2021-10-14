@@ -2,6 +2,57 @@ Skia Graphics Release Notes
 
 This file includes a list of high level updates for each milestone release.
 
+Milestone 95
+------------
+  * Minimum supported iOS raised from 8 to 11. Skia may build back to iOS 9 but versions older
+    than 11 are not tested. Community contributions to support versions 9 and 10 of iOS may be
+    considered, but they may not be complex as they cannot be tested.
+
+* * *
+
+Milestone 94
+------------
+  * Metal backend has been changed to track command buffer resources manually
+    rather than using retained resources.
+    https://review.skia.org/432878
+
+  * Added virtual onResetClip() to SkCanvas for Android Framework, to emulate the soon-to-be-removed
+    expanding clip ops guarded by SK_SUPPORT_DEPRECATED_CLIPOPS.
+    https://review.skia.org/430897
+
+  * Removed SK_SUPPORT_DEPRECATED_CLIPOPS build flag. Clips can only be intersect and difference.
+    https://review.skia.org/436565
+
+  * There is a new syntax for invoking (sampling) child effects in SkSL. Previously, children
+    (shaders, colorFilters, blenders) were invoked using different overloads of `sample`. That
+    syntax is deprecated (but still supported). Now, the child behaves like an object, with a method
+    name `eval`. The arguments to these `eval` methods are the same as the arguments in the old
+    `sample` intrinsics. For example:
+      // Old syntax:
+        sample(shader, xy)
+        sample(colorFilter, color)
+        sample(blender, srcColor, dstColor)
+      // New syntax:
+        shader.eval(xy)
+        colorFilter.eval(color)
+        blender.eval(srcColor, dstColor)
+    https://review.skia.org/444735
+
+* * *
+
+Milestone 93
+------------
+  * Removed SkPaint::getHash
+    https://review.skia.org/419336
+
+  * Removed SkShaders::Lerp. It was unused (and easy to replicate with SkRuntimeEffect).
+    https://review.skia.org/419796
+
+  * The default value of GrContextOptions::fReduceOpsTaskSplitting is now enabled.
+    https://review.skia.org/419836
+
+  * Removed SkMatrix44
+
 * * *
 
 Milestone 92

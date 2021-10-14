@@ -95,7 +95,7 @@ public:
                 }
             }
         }
-#ifdef SK_XML
+#if defined(SK_ENABLE_SVG)
         fFamilies.emplace_back(sk_make_sp<FontStyleSet>("Emoji"));
         fFamilies.back()->fTypefaces.emplace_back(
                 TestSVGTypeface::Default(), SkFontStyle::Normal(), "Normal");
@@ -164,9 +164,6 @@ public:
     }
     sk_sp<SkTypeface> onMakeFromStreamArgs(std::unique_ptr<SkStreamAsset>,
                                            const SkFontArguments&) const override {
-        return nullptr;
-    }
-    sk_sp<SkTypeface> onMakeFromFontData(std::unique_ptr<SkFontData>) const override {
         return nullptr;
     }
     sk_sp<SkTypeface> onMakeFromFile(const char path[], int ttcIndex) const override {

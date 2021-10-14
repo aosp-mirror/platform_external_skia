@@ -10,7 +10,6 @@
 #include "include/core/SkBlurTypes.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
-#include "include/core/SkFilterQuality.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkMaskFilter.h"
@@ -238,9 +237,8 @@ protected:
         // Align the next set with the middle of the previous in y, translated to the right in x.
         SkPoint corners[] = {{0, 0}, {0, kBottom}, {kWidth, kBottom}, {kWidth, 0}};
         matrices.back().mapPoints(corners, 4);
-        SkScalar y = (corners[0].fY + corners[1].fY + corners[2].fY + corners[3].fY) / 4;
-        SkScalar x = std::max({corners[0].fX, corners[1].fX, corners[2].fX, corners[3].fX});
-        m.setTranslate(x, y);
+        m.setTranslate(std::max({corners[0].fX, corners[1].fX, corners[2].fX, corners[3].fX}),
+                       (corners[0].fY + corners[1].fY + corners[2].fY + corners[3].fY) / 4);
         m.preScale(0.2f, 0.2f);
         matrices.push_back(m);
 

@@ -8,24 +8,32 @@
 #include "src/gpu/tessellate/GrStrokeFixedCountTessellator.h"
 
 #include "src/core/SkGeometry.h"
+#include "src/gpu/GrMeshDrawTarget.h"
+#include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/geometry/GrPathUtils.h"
 #include "src/gpu/geometry/GrWangsFormula.h"
+#include "src/gpu/tessellate/GrCullTest.h"
 #include "src/gpu/tessellate/GrStrokeIterator.h"
 
 namespace {
 
-constexpr static float kMaxParametricSegments_pow4 = 48*48*48*48;  // 48^4
+constexpr static float kMaxParametricSegments_pow4 = 32*32*32*32;  // 32^4
+constexpr static int8_t kMaxParametricSegments_log2 = 5;  // log2(32)
 
 // Writes out strokes to the given instance chunk array, chopping if necessary so that all instances
-// require 48 parametric segments or less. (We don't consider radial segments here. The tessellator
+// require 32 parametric segments or less. (We don't consider radial segments here. The tessellator
 // will just add enough additional segments to handle a worst-case 180 degree stroke.)
 class InstanceWriter {
 public:
     using ShaderFlags = GrStrokeTessellator::ShaderFlags;
 
-    InstanceWriter(ShaderFlags shaderFlags, GrMeshDrawOp::Target* target, float matrixMaxScale,
-                   GrVertexChunkArray* patchChunks, size_t instanceStride, int minInstancesPerChunk)
-            : fShaderFlags(shaderFlags)
+    InstanceWriter(const GrShaderCaps* shaderCaps, ShaderFlags shaderFlags,
+                   GrMeshDrawTarget* target, float matrixMaxScale, const SkRect& strokeCullBounds,
+                   const SkMatrix& viewMatrix, GrVertexChunkArray* patchChunks,
+                   size_t instanceStride, int minInstancesPerChunk)
+            : fShaderCaps(shaderCaps)
+            , fShaderFlags(shaderFlags)
+            , fCullTest(strokeCullBounds, viewMatrix)
             , fChunkBuilder(target, patchChunks, instanceStride, minInstancesPerChunk)
             , fParametricPrecision(GrStrokeTolerances::CalcParametricPrecision(matrixMaxScale)) {
     }
@@ -52,59 +60,49 @@ public:
         fDynamicColor.set(color, wideColor);
     }
 
-    void lineTo(SkPoint start, SkPoint end) {
+    SK_ALWAYS_INLINE void lineTo(SkPoint start, SkPoint end) {
         SkPoint cubic[] = {start, start, end, end};
         SkPoint endControlPoint = start;
-        this->writeStroke(cubic, endControlPoint);
+        this->writeStroke(cubic, endControlPoint, GrTessellationShader::kCubicCurveType);
     }
 
-    void quadraticTo(const SkPoint p[3]) {
+    SK_ALWAYS_INLINE void quadraticTo(const SkPoint p[3]) {
         float numParametricSegments_pow4 = GrWangsFormula::quadratic_pow4(fParametricPrecision, p);
         if (numParametricSegments_pow4 > kMaxParametricSegments_pow4) {
-            SkPoint chops[5];
-            SkChopQuadAtHalf(p, chops);
-            this->quadraticTo(chops);
-            this->quadraticTo(chops + 2);
+            this->chopQuadraticTo(p);
             return;
         }
         SkPoint cubic[4];
         GrPathUtils::convertQuadToCubic(p, cubic);
         SkPoint endControlPoint = cubic[2];
-        this->writeStroke(cubic, endControlPoint);
+        this->writeStroke(cubic, endControlPoint, GrTessellationShader::kCubicCurveType);
         fMaxParametricSegments_pow4 = std::max(numParametricSegments_pow4,
                                                fMaxParametricSegments_pow4);
     }
 
-    void conicTo(const SkPoint p[3], float w) {
-        float numParametricSegments_pow2 = GrWangsFormula::conic_pow2(1/fParametricPrecision, p, w);
-        float numParametricSegments_pow4 = numParametricSegments_pow2 * numParametricSegments_pow2;
+    SK_ALWAYS_INLINE void conicTo(const SkPoint p[3], float w) {
+        float n = GrWangsFormula::conic_pow2(fParametricPrecision, p, w);
+        float numParametricSegments_pow4 = n*n;
         if (numParametricSegments_pow4 > kMaxParametricSegments_pow4) {
-            SkConic chops[2];
-            if (SkConic(p, w).chopAt(.5f, chops)) {
-                this->conicTo(chops[0].fPts, chops[0].fW);
-                this->conicTo(chops[1].fPts, chops[1].fW);
-                return;
-            }
+            this->chopConicTo({p, w});
+            return;
         }
         SkPoint conic[4];
-        GrPathShader::WriteConicPatch(p, w, conic);
+        GrTessellationShader::WriteConicPatch(p, w, conic);
         SkPoint endControlPoint = conic[1];
-        this->writeStroke(conic, endControlPoint);
+        this->writeStroke(conic, endControlPoint, GrTessellationShader::kConicCurveType);
         fMaxParametricSegments_pow4 = std::max(numParametricSegments_pow4,
                                                fMaxParametricSegments_pow4);
     }
 
-    void cubicConvex180To(const SkPoint p[4]) {
+    SK_ALWAYS_INLINE void cubicConvex180To(const SkPoint p[4]) {
         float numParametricSegments_pow4 = GrWangsFormula::cubic_pow4(fParametricPrecision, p);
         if (numParametricSegments_pow4 > kMaxParametricSegments_pow4) {
-            SkPoint chops[7];
-            SkChopCubicAtHalf(p, chops);
-            this->cubicConvex180To(chops);
-            this->cubicConvex180To(chops + 3);
+            this->chopCubicConvex180To(p);
             return;
         }
         SkPoint endControlPoint = (p[3] != p[2]) ? p[2] : (p[2] != p[1]) ? p[1] : p[0];
-        this->writeStroke(p, endControlPoint);
+        this->writeStroke(p, endControlPoint, GrTessellationShader::kCubicCurveType);
         fMaxParametricSegments_pow4 = std::max(numParametricSegments_pow4,
                                                fMaxParametricSegments_pow4);
     }
@@ -123,6 +121,8 @@ public:
             // The shader interprets an empty stroke + empty join as a special case that denotes a
             // circle, or 180-degree point stroke.
             writer.fill(location, 5);
+            writer.write(GrVertexWriter::If(!fShaderCaps->infinitySupport(),
+                                            GrTessellationShader::kCubicCurveType));
             this->writeDynamicAttribs(&writer);
         }
     }
@@ -132,29 +132,74 @@ public:
             // We deferred the first stroke because we didn't know the previous control point to use
             // for its join. We write it out now.
             SkASSERT(fHasLastControlPoint);
-            this->writeStroke(fDeferredFirstStroke, SkPoint());
+            this->writeStroke(fDeferredFirstStroke, SkPoint(),
+                              fDeferredCurveTypeIfUnsupportedInfinity);
             fHasDeferredFirstStroke = false;
         }
         fHasLastControlPoint = false;
     }
 
 private:
-    void writeStroke(const SkPoint p[4], SkPoint endControlPoint) {
+    void chopQuadraticTo(const SkPoint p[3]) {
+        SkPoint chops[5];
+        SkChopQuadAtHalf(p, chops);
+        for (int i = 0; i < 2; ++i) {
+            const SkPoint* q = chops + i*2;
+            if (fCullTest.areVisible3(q)) {
+                this->quadraticTo(q);
+            } else {
+                this->discardStroke(q, 3);
+            }
+        }
+    }
+
+    void chopConicTo(const SkConic& conic) {
+        SkConic chops[2];
+        if (!conic.chopAt(.5f, chops)) {
+            return;
+        }
+        for (int i = 0; i < 2; ++i) {
+            if (fCullTest.areVisible3(chops[i].fPts)) {
+                this->conicTo(chops[i].fPts, chops[i].fW);
+            } else {
+                this->discardStroke(chops[i].fPts, 3);
+            }
+        }
+    }
+
+    void chopCubicConvex180To(const SkPoint p[4]) {
+        SkPoint chops[7];
+        SkChopCubicAtHalf(p, chops);
+        for (int i = 0; i < 2; ++i) {
+            const SkPoint* c = chops + i*3;
+            if (fCullTest.areVisible4(c)) {
+                this->cubicConvex180To(c);
+            } else {
+                this->discardStroke(c, 4);
+            }
+        }
+    }
+
+    SK_ALWAYS_INLINE void writeStroke(const SkPoint p[4], SkPoint endControlPoint,
+                                      float curveTypeIfUnsupportedInfinity) {
         if (!fHasLastControlPoint) {
             // We don't know the previous control point yet to use for the join. Defer writing out
             // this stroke until the end.
             memcpy(fDeferredFirstStroke, p, sizeof(fDeferredFirstStroke));
+            fDeferredCurveTypeIfUnsupportedInfinity = curveTypeIfUnsupportedInfinity;
             fHasDeferredFirstStroke = true;
             fHasLastControlPoint = true;
         } else if (GrVertexWriter writer = fChunkBuilder.appendVertex()) {
             writer.writeArray(p, 4);
             writer.write(fLastControlPoint);
+            writer.write(GrVertexWriter::If(!fShaderCaps->infinitySupport(),
+                                            curveTypeIfUnsupportedInfinity));
             this->writeDynamicAttribs(&writer);
         }
         fLastControlPoint = endControlPoint;
     }
 
-    void writeDynamicAttribs(GrVertexWriter* writer) {
+    SK_ALWAYS_INLINE void writeDynamicAttribs(GrVertexWriter* writer) {
         if (fShaderFlags & ShaderFlags::kDynamicStroke) {
             writer->write(fDynamicStroke);
         }
@@ -163,25 +208,35 @@ private:
         }
     }
 
+    void discardStroke(const SkPoint p[], int numPts) {
+        // Set fLastControlPoint to the next stroke's p0 (which will be equal to the final point of
+        // this stroke). This has the effect of disabling the next stroke's join.
+        fLastControlPoint = p[numPts - 1];
+        fHasLastControlPoint = true;
+    }
+
+    const GrShaderCaps* fShaderCaps;
     const ShaderFlags fShaderFlags;
+    const GrCullTest fCullTest;
     GrVertexChunkBuilder fChunkBuilder;
     const float fParametricPrecision;
     float fMaxParametricSegments_pow4 = 1;
 
     // We can't write out the first stroke until we know the previous control point for its join.
     SkPoint fDeferredFirstStroke[4];
+    float fDeferredCurveTypeIfUnsupportedInfinity;
     SkPoint fLastControlPoint;  // Used to configure the joins in the instance data.
     bool fHasDeferredFirstStroke = false;
     bool fHasLastControlPoint = false;
 
     // Values for the current dynamic state (if any) that will get written out with each instance.
-    GrStrokeTessellateShader::DynamicStroke fDynamicStroke;
+    GrStrokeTessellationShader::DynamicStroke fDynamicStroke;
     GrVertexColor fDynamicColor;
 };
 
 // Returns the worst-case number of edges we will need in order to draw a join of the given type.
 static int worst_case_edges_in_join(SkPaint::Join joinType, float numRadialSegmentsPerRadian) {
-    int numEdges = GrStrokeTessellateShader::NumFixedEdgesInJoin(joinType);
+    int numEdges = GrStrokeTessellationShader::NumFixedEdgesInJoin(joinType);
     if (joinType == SkPaint::kRound_Join) {
         // For round joins we need to count the radial edges on our own. Account for a worst-case
         // join of 180 degrees (SK_ScalarPI radians).
@@ -192,15 +247,23 @@ static int worst_case_edges_in_join(SkPaint::Join joinType, float numRadialSegme
 
 }  // namespace
 
-void GrStrokeFixedCountTessellator::prepare(GrMeshDrawOp::Target* target,
+GrStrokeFixedCountTessellator::GrStrokeFixedCountTessellator(const GrShaderCaps& shaderCaps,
+                                                             ShaderFlags shaderFlags,
+                                                             const SkMatrix& viewMatrix,
+                                                             PathStrokeList* pathStrokeList,
+                                                             std::array<float,2> matrixMinMaxScales,
+                                                             const SkRect& strokeCullBounds)
+        : GrStrokeTessellator(shaderCaps, GrStrokeTessellationShader::Mode::kFixedCount,
+                              shaderFlags, kMaxParametricSegments_log2, viewMatrix,
+                              pathStrokeList, matrixMinMaxScales, strokeCullBounds) {
+}
+
+GR_DECLARE_STATIC_UNIQUE_KEY(gVertexIDFallbackBufferKey);
+
+void GrStrokeFixedCountTessellator::prepare(GrMeshDrawTarget* target,
                                             int totalCombinedVerbCnt) {
     int maxEdgesInJoin = 0;
     float maxRadialSegmentsPerRadian = 0;
-
-    std::array<float, 2> matrixMinMaxScales;
-    if (!fShader.viewMatrix().getMinMaxScales(matrixMinMaxScales.data())) {
-        matrixMinMaxScales.fill(1);
-    }
 
     // Over-allocate enough patches for each stroke to chop once, and for 8 extra caps. Since we
     // have to chop at inflections, points of 180 degree rotation, and anywhere a stroke requires
@@ -208,13 +271,14 @@ void GrStrokeFixedCountTessellator::prepare(GrMeshDrawOp::Target* target,
     int strokePreallocCount = totalCombinedVerbCnt * 2;
     int capPreallocCount = 8;
     int minInstancesPerChunk = strokePreallocCount + capPreallocCount;
-    InstanceWriter instanceWriter(fShaderFlags, target, matrixMinMaxScales[1], &fInstanceChunks,
-                                  fShader.instanceStride(), minInstancesPerChunk);
+    InstanceWriter instanceWriter(target->caps().shaderCaps(), fShader.flags(), target,
+                                  fMatrixMinMaxScales[1], fStrokeCullBounds, fShader.viewMatrix(),
+                                  &fInstanceChunks, fShader.instanceStride(), minInstancesPerChunk);
 
-    if (!(fShaderFlags & ShaderFlags::kDynamicStroke)) {
+    if (!fShader.hasDynamicStroke()) {
         // Strokes are static. Calculate tolerances once.
         const SkStrokeRec& stroke = fPathStrokeList->fStroke;
-        float localStrokeWidth = GrStrokeTolerances::GetLocalStrokeWidth(matrixMinMaxScales.data(),
+        float localStrokeWidth = GrStrokeTolerances::GetLocalStrokeWidth(fMatrixMinMaxScales.data(),
                                                                          stroke.getWidth());
         float numRadialSegmentsPerRadian = GrStrokeTolerances::CalcNumRadialSegmentsPerRadian(
                 instanceWriter.parametricPrecision(), localStrokeWidth);
@@ -228,7 +292,7 @@ void GrStrokeFixedCountTessellator::prepare(GrMeshDrawOp::Target* target,
 
     for (PathStrokeList* pathStroke = fPathStrokeList; pathStroke; pathStroke = pathStroke->fNext) {
         const SkStrokeRec& stroke = pathStroke->fStroke;
-        if (fShaderFlags & ShaderFlags::kDynamicStroke) {
+        if (fShader.hasDynamicStroke()) {
             // Strokes are dynamic. Calculate tolerances every time.
             float numRadialSegmentsPerRadian =
                     toleranceBuffer.fetchRadialSegmentsPerRadian(pathStroke);
@@ -239,7 +303,7 @@ void GrStrokeFixedCountTessellator::prepare(GrMeshDrawOp::Target* target,
                                                   maxRadialSegmentsPerRadian);
             instanceWriter.updateDynamicStroke(stroke);
         }
-        if (fShaderFlags & ShaderFlags::kDynamicColor) {
+        if (fShader.hasDynamicColor()) {
             instanceWriter.updateDynamicColor(pathStroke->fColor);
         }
         GrStrokeIterator strokeIter(pathStroke->fPath, &pathStroke->fStroke, &fShader.viewMatrix());
@@ -356,16 +420,40 @@ void GrStrokeFixedCountTessellator::prepare(GrMeshDrawOp::Target* target,
     // emit both because the join's edge is half-width and the stroke's is full-width.
     int fixedEdgeCount = maxEdgesInJoin + maxEdgesInStroke;
 
+    // Don't draw more vertices than can be indexed by a signed short. We just have to draw the line
+    // somewhere and this seems reasonable enough. (There are two vertices per edge, so 2^14 edges
+    // make 2^15 vertices.)
+    fixedEdgeCount = std::min(fixedEdgeCount, (1 << 14) - 1);
+
+    if (!target->caps().shaderCaps()->vertexIDSupport()) {
+        // Our shader won't be able to use sk_VertexID. Bind a fallback vertex buffer with the IDs
+        // in it instead.
+        constexpr static int kMaxVerticesInFallbackBuffer = 2048;
+        fixedEdgeCount = std::min(fixedEdgeCount, kMaxVerticesInFallbackBuffer/2);
+
+        GR_DEFINE_STATIC_UNIQUE_KEY(gVertexIDFallbackBufferKey);
+
+        fVertexBufferIfNoIDSupport = target->resourceProvider()->findOrMakeStaticBuffer(
+                GrGpuBufferType::kVertex,
+                kMaxVerticesInFallbackBuffer * sizeof(float),
+                gVertexIDFallbackBufferKey,
+                GrStrokeTessellationShader::InitializeVertexIDFallbackBuffer);
+    }
+
     fShader.setFixedCountNumTotalEdges(fixedEdgeCount);
     fFixedVertexCount = fixedEdgeCount * 2;
 }
+
+#if SK_GPU_V1
+#include "src/gpu/GrOpFlushState.h"
 
 void GrStrokeFixedCountTessellator::draw(GrOpFlushState* flushState) const {
     if (fInstanceChunks.empty() || fFixedVertexCount <= 0) {
         return;
     }
     for (const auto& instanceChunk : fInstanceChunks) {
-        flushState->bindBuffers(nullptr, instanceChunk.fBuffer, nullptr);
+        flushState->bindBuffers(nullptr, instanceChunk.fBuffer, fVertexBufferIfNoIDSupport);
         flushState->drawInstanced(instanceChunk.fCount, instanceChunk.fBase, fFixedVertexCount, 0);
     }
 }
+#endif

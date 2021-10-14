@@ -17,18 +17,16 @@
 #include "include/private/SkTHash.h"
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLProgramSettings.h"
-#include "src/sksl/ir/SkSLBoolLiteral.h"
 #include "src/sksl/ir/SkSLExpression.h"
-#include "src/sksl/ir/SkSLFloatLiteral.h"
-#include "src/sksl/ir/SkSLIntLiteral.h"
+#include "src/sksl/ir/SkSLLiteral.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
 
 #ifdef SK_VULKAN
 #include "src/gpu/vk/GrVkCaps.h"
 #endif
 
-// name of the render target height uniform
-#define SKSL_RTHEIGHT_NAME "u_skRTHeight"
+// name of the uniform used to handle features that are sensitive to whether Y is flipped.
+#define SKSL_RTFLIP_NAME "u_skRTFlip"
 
 namespace SkSL {
 
@@ -50,8 +48,9 @@ public:
 
     int get(const FunctionDeclaration&) const;
 
-    void replace(const Expression* oldExpr, const Expression* newExpr);
+    void add(const Expression* expr);
     void add(const Statement* stmt);
+    void add(const ProgramElement& element);
     void remove(const Expression* expr);
     void remove(const Statement* stmt);
     void remove(const ProgramElement& element);
@@ -67,21 +66,11 @@ struct Program {
     using Settings = ProgramSettings;
 
     struct Inputs {
-        // if true, this program requires the render target height uniform to be defined
-        bool fRTHeight;
-
-        // if true, this program must be recompiled if the flipY setting changes. If false, the
-        // program will compile to the same code regardless of the flipY setting.
-        bool fFlipY;
-
-        void reset() {
-            fRTHeight = false;
-            fFlipY = false;
+        bool fUseFlipRTUniform = false;
+        bool operator==(const Inputs& that) const {
+            return fUseFlipRTUniform == that.fUseFlipRTUniform;
         }
-
-        bool isEmpty() {
-            return !fRTHeight && !fFlipY;
-        }
+        bool operator!=(const Inputs& that) const { return !(*this == that); }
     };
 
     Program(std::unique_ptr<String> source,
@@ -109,16 +98,12 @@ struct Program {
         // Some or all of the program elements are in the pool. To free them safely, we must attach
         // the pool before destroying any program elements. (Otherwise, we may accidentally call
         // delete on a pooled node.)
-        if (fPool) {
-            fPool->attachToThread();
-        }
+        AutoAttachPoolToThread attach(fPool.get());
+
         fElements.clear();
         fContext.reset();
         fSymbols.reset();
         fModifiers.reset();
-        if (fPool) {
-            fPool->detachFromThread();
-        }
     }
 
     class ElementsCollection {
@@ -193,7 +178,7 @@ struct Program {
 
     String description() const {
         String result;
-        for (const auto& e : this->elements()) {
+        for (const ProgramElement* e : this->elements()) {
             result += e->description();
         }
         return result;

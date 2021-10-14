@@ -25,7 +25,7 @@ GrGLSLShaderBuilder::GrGLSLShaderBuilder(GrGLSLProgramBuilder* program)
     , fCodeIndex(kCode)
     , fFinalized(false)
     , fTmpVariableCounter(0) {
-    // We push back some dummy pointers which will later become our header
+    // We push back some placeholder pointers which will later become our header
     for (int i = 0; i <= kCode; i++) {
         fShaderStrings.push_back();
     }
@@ -83,6 +83,10 @@ void GrGLSLShaderBuilder::emitFunctionPrototype(GrSLType returnType,
                                                 SkSpan<const GrShaderVar> args) {
     this->appendFunctionDecl(returnType, mangledName, args);
     this->functions().append(";\n");
+}
+
+void GrGLSLShaderBuilder::emitFunctionPrototype(const char* declaration) {
+    this->functions().appendf("%s;\n", declaration);
 }
 
 void GrGLSLShaderBuilder::codeAppend(std::unique_ptr<SkSL::Statement> stmt) {

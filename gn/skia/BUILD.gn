@@ -447,10 +447,11 @@ config("warnings") {
       "-Wno-missing-variable-declarations",
       "-Wno-pedantic",
       "-Wno-reserved-id-macro",
-      "-Wno-shadow",
+      "-Wno-reserved-identifier",
       "-Wno-shift-sign-overflow",
       "-Wno-signed-enum-bitfield",
       "-Wno-switch-enum",
+      "-Wno-thread-safety-negative",
       "-Wno-undef",
       "-Wno-unreachable-code",
       "-Wno-unreachable-code-break",
@@ -459,7 +460,6 @@ config("warnings") {
       "-Wno-unused-member-function",
       "-Wno-unused-template",
       "-Wno-zero-as-null-pointer-constant",
-      "-Wno-thread-safety-negative",
       "-Wno-non-c-typedef-for-linkage",  # Dawn, not Skia per se.
     ]
     cflags_cc += [
@@ -473,8 +473,10 @@ config("warnings") {
       "-Wno-deprecated",
       "-Wno-missing-noreturn",
       "-Wno-old-style-cast",
-      "-Wno-padded",
       "-Wno-newline-eof",
+      "-Wno-padded",
+      "-Wno-shadow-field-in-constructor",
+      "-Wno-shadow-uncaptured-local",
 
       # https://quuxplusone.github.io/blog/2020/08/26/wrange-loop-analysis/
       # https://bugzilla.mozilla.org/show_bug.cgi?id=1683213

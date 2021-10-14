@@ -32,7 +32,7 @@ public:
                    const Type* baseType,
                    int arraySize,
                    std::unique_ptr<Expression> value)
-            : INHERITED(var->fOffset, kStatementKind)
+            : INHERITED(var->fLine, kStatementKind)
             , fVar(var)
             , fBaseType(*baseType)
             , fArraySize(arraySize)
@@ -89,7 +89,7 @@ public:
 private:
     const Variable* fVar;
     const Type& fBaseType;
-    int fArraySize;  // zero means "not an array", Type::kUnsizedArray means var[]
+    int fArraySize;  // zero means "not an array"
     std::unique_ptr<Expression> fValue;
 
     friend class IRGenerator;
@@ -106,7 +106,7 @@ public:
     static constexpr Kind kProgramElementKind = Kind::kGlobalVar;
 
     GlobalVarDeclaration(std::unique_ptr<Statement> decl)
-            : INHERITED(decl->fOffset, kProgramElementKind)
+            : INHERITED(decl->fLine, kProgramElementKind)
             , fDeclaration(std::move(decl)) {
         SkASSERT(this->declaration()->is<VarDeclaration>());
     }

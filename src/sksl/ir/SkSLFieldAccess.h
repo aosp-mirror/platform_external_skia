@@ -31,15 +31,16 @@ public:
 
     FieldAccess(std::unique_ptr<Expression> base, int fieldIndex,
                 OwnerKind ownerKind = OwnerKind::kDefault)
-    : INHERITED(base->fOffset, kExpressionKind, base->type().fields()[fieldIndex].fType)
+    : INHERITED(base->fLine, kExpressionKind, base->type().fields()[fieldIndex].fType)
     , fFieldIndex(fieldIndex)
     , fOwnerKind(ownerKind)
     , fBase(std::move(base)) {}
 
     // Returns a field-access expression; reports errors via the ErrorReporter.
     static std::unique_ptr<Expression> Convert(const Context& context,
+                                               SymbolTable& symbolTable,
                                                std::unique_ptr<Expression> base,
-                                               StringFragment field);
+                                               skstd::string_view field);
 
     // Returns a field-access expression; reports errors via ASSERT.
     static std::unique_ptr<Expression> Make(const Context& context,

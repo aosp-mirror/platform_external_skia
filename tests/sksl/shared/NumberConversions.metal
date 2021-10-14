@@ -1,28 +1,31 @@
 #include <metal_stdlib>
 #include <simd/simd.h>
 using namespace metal;
+struct Uniforms {
+    float unknownInput;
+};
 struct Inputs {
 };
 struct Outputs {
     float4 sk_FragColor [[color(0)]];
 };
-fragment Outputs fragmentMain(Inputs _in [[stage_in]], bool _frontFacing [[front_facing]], float4 _fragCoord [[position]]) {
+fragment Outputs fragmentMain(Inputs _in [[stage_in]], constant Uniforms& _uniforms [[buffer(0)]], bool _frontFacing [[front_facing]], float4 _fragCoord [[position]]) {
     Outputs _out;
     (void)_out;
     bool b = true;
-    short s = short(sqrt(1.0));
-    int i = int(sqrt(1.0));
-    ushort us = ushort(sqrt(1.0));
-    uint ui = uint(sqrt(1.0));
-    float h = sqrt(1.0);
-    float f = sqrt(1.0);
-    short s2s = s;
-    short i2s = short(i);
-    short us2s = short(us);
-    short ui2s = short(ui);
-    short h2s = short(h);
-    short f2s = short(f);
-    short b2s = short(b);
+    int s = int(_uniforms.unknownInput);
+    int i = int(_uniforms.unknownInput);
+    uint us = uint(_uniforms.unknownInput);
+    uint ui = uint(_uniforms.unknownInput);
+    float h = _uniforms.unknownInput;
+    float f = _uniforms.unknownInput;
+    int s2s = s;
+    int i2s = int(i);
+    int us2s = int(us);
+    int ui2s = int(ui);
+    int h2s = int(h);
+    int f2s = int(f);
+    int b2s = int(b);
     int s2i = int(s);
     int i2i = i;
     int us2i = int(us);
@@ -30,13 +33,13 @@ fragment Outputs fragmentMain(Inputs _in [[stage_in]], bool _frontFacing [[front
     int h2i = int(h);
     int f2i = int(f);
     int b2i = int(b);
-    ushort s2us = ushort(s);
-    ushort i2us = ushort(i);
-    ushort us2us = us;
-    ushort ui2us = ushort(ui);
-    ushort h2us = ushort(h);
-    ushort f2us = ushort(f);
-    ushort b2us = ushort(b);
+    uint s2us = uint(s);
+    uint i2us = uint(i);
+    uint us2us = us;
+    uint ui2us = uint(ui);
+    uint h2us = uint(h);
+    uint f2us = uint(f);
+    uint b2us = uint(b);
     uint s2ui = uint(s);
     uint i2ui = uint(i);
     uint us2ui = uint(us);

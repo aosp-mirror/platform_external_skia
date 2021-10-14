@@ -45,6 +45,13 @@ public:
     int height() const { return this->proxy()->height(); }
     SkISize dimensions() const { return this->proxy()->dimensions(); }
 
+    GrMipmapped mipmapped() const {
+        if (const GrTextureProxy* proxy = this->asTextureProxy()) {
+            return proxy->mipmapped();
+        }
+        return GrMipmapped::kNo;
+    }
+
     GrSurfaceProxy* proxy() const { return fProxy.get(); }
     sk_sp<GrSurfaceProxy> refProxy() const { return fProxy; }
 
@@ -104,12 +111,12 @@ public:
         return {std::move(copy), src.origin(), src.swizzle()};
     }
 
-    static GrSurfaceProxyView Copy(GrRecordingContext* context,
+    static GrSurfaceProxyView Copy(GrRecordingContext* rContext,
                                    GrSurfaceProxyView src,
                                    GrMipmapped mipMapped,
                                    SkBackingFit fit,
                                    SkBudgeted budgeted) {
-        auto copy = GrSurfaceProxy::Copy(context,
+        auto copy = GrSurfaceProxy::Copy(rContext,
                                          src.refProxy(),
                                          src.origin(),
                                          mipMapped,

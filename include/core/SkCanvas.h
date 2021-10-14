@@ -39,7 +39,6 @@
 
 class GrBackendRenderTarget;
 class GrRecordingContext;
-class GrSurfaceDrawContext;
 class SkBaseDevice;
 class SkBitmap;
 class SkData;
@@ -58,6 +57,7 @@ class SkPixmap;
 class SkRegion;
 class SkRRect;
 struct SkRSXform;
+class SkSpecialImage;
 class SkSurface;
 class SkSurface_Base;
 class SkTextBlob;
@@ -2019,7 +2019,7 @@ public:
         to draw, if present. For each entry in the array, SkRect tex locates sprite in
         atlas, and SkRSXform xform transforms it into destination space.
 
-        xform, text, and colors if present, must contain count entries.
+        xform, tex, and colors if present, must contain count entries.
         Optional colors are applied for each sprite using SkBlendMode mode, treating
         sprite as source and colors as destination.
         Optional cullRect is a conservative bounds of all transformed sprites.
@@ -2261,20 +2261,11 @@ protected:
     virtual void onClipPath(const SkPath& path, SkClipOp op, ClipEdgeStyle edgeStyle);
     virtual void onClipShader(sk_sp<SkShader>, SkClipOp);
     virtual void onClipRegion(const SkRegion& deviceRgn, SkClipOp op);
+    virtual void onResetClip();
 
     virtual void onDiscard();
 
-    // Clip rectangle bounds. Called internally by saveLayer.
-    // returns false if the entire rectangle is entirely clipped out
-    // If non-NULL, The imageFilter parameter will be used to expand the clip
-    // and offscreen bounds for any margin required by the filter DAG.
-    bool clipRectBounds(const SkRect* bounds, SkIRect* intersection,
-                        const SkImageFilter* imageFilter = nullptr);
-
 private:
-    static void DrawDeviceWithFilter(SkBaseDevice* src, const SkImageFilter* filter,
-                                     SkBaseDevice* dst, const SkIPoint& dstOrigin,
-                                     const SkMatrix& ctm);
 
     enum ShaderOverrideOpacity {
         kNone_ShaderOverrideOpacity,        //!< there is no overriding shader (bitmap or image)
@@ -2297,9 +2288,50 @@ private:
     // The top-most device in the stack, will change within saveLayer()'s. All drawing and clipping
     // operations should route to this device.
     SkBaseDevice* topDevice() const;
-    virtual GrSurfaceDrawContext* topDeviceSurfaceDrawContext();
 
-    class MCRec;
+    // Canvases maintain a sparse stack of layers, where the top-most layer receives the drawing,
+    // clip, and matrix commands. There is a layer per call to saveLayer() using the
+    // kFullLayer_SaveLayerStrategy.
+    struct Layer {
+        sk_sp<SkBaseDevice>  fDevice;
+        sk_sp<SkImageFilter> fImageFilter; // applied to layer *before* being drawn by paint
+        SkPaint              fPaint;
+        bool                 fDiscard;
+
+        Layer(sk_sp<SkBaseDevice> device, sk_sp<SkImageFilter> imageFilter, const SkPaint& paint);
+    };
+
+    // Encapsulate state needed to restore from saveBehind()
+    struct BackImage {
+        sk_sp<SkSpecialImage> fImage;
+        SkIPoint              fLoc;
+    };
+
+    class MCRec {
+    public:
+        // If not null, this MCRec corresponds with the saveLayer() record that made the layer.
+        // The base "layer" is not stored here, since it is stored inline in SkCanvas and has no
+        // restoration behavior.
+        std::unique_ptr<Layer> fLayer;
+
+        // This points to the device of the top-most layer (which may be lower in the stack), or
+        // to the canvas's fBaseDevice. The MCRec does not own the device.
+        SkBaseDevice* fDevice;
+
+        std::unique_ptr<BackImage> fBackImage;
+        SkM44 fMatrix;
+        int fDeferredSaveCount = 0;
+
+        MCRec(SkBaseDevice* device);
+        MCRec(const MCRec* prev);
+        ~MCRec();
+
+        void newLayer(sk_sp<SkBaseDevice> layerDevice,
+                      sk_sp<SkImageFilter> filter,
+                      const SkPaint& restorePaint);
+
+        void reset(SkBaseDevice* device);
+    };
 
     SkDeque     fMCStack;
     // points to top of stack
@@ -2330,6 +2362,7 @@ private:
     friend class SkSurface_Gpu;
 
     SkIRect fClipRestrictionRect = SkIRect::MakeEmpty();
+    int fClipRestrictionSaveCount = -1;
 
     void doSave();
     void checkForDeferredSave();
@@ -2387,13 +2420,30 @@ private:
     void internalDrawPaint(const SkPaint& paint);
     void internalSaveLayer(const SaveLayerRec&, SaveLayerStrategy);
     void internalSaveBehind(const SkRect*);
-    void internalDrawDevice(SkBaseDevice*, const SkSamplingOptions&, const SkPaint*);
 
     void internalConcat44(const SkM44&);
 
     // shared by save() and saveLayer()
     void internalSave();
     void internalRestore();
+
+    enum class DeviceCompatibleWithFilter : bool {
+        // Check the src device's local-to-device matrix for compatibility with the filter, and if
+        // it is not compatible, introduce an intermediate image and transformation that allows the
+        // filter to be evaluated on the modified src content.
+        kUnknown = false,
+        // Assume that the src device's local-to-device matrix is compatible with the filter.
+        kYes     = true
+    };
+    /**
+     * Filters the contents of 'src' and draws the result into 'dst'. The filter is evaluated
+     * relative to the current canvas matrix, and src is drawn to dst using their relative transform
+     * 'paint' is applied after the filter and must not have a mask or image filter of its own.
+     * A null 'filter' behaves as if the identity filter were used.
+     */
+    void internalDrawDeviceWithFilter(SkBaseDevice* src, SkBaseDevice* dst,
+                                      const SkImageFilter* filter, const SkPaint& paint,
+                                      DeviceCompatibleWithFilter compat);
 
     /*
      *  Returns true if drawing the specified rect (or all if it is null) with the specified
@@ -2415,11 +2465,11 @@ private:
     bool androidFramework_isClipAA() const;
 
     /**
-     * Reset the clip to be just the intersection with the global-space 'rect'. This operates within
-     * the save/restore stack of the canvas, so restore() will bring back any saved clip. However,
-     * since 'rect' is already in global space, it is not modified by the canvas matrix.
+     * Reset the clip to be wide-open (modulo any separately specified device clip restriction).
+     * This operate within the save/restore clip stack so it can be undone by restoring to an
+     * earlier save point.
      */
-    void androidFramework_replaceClip(const SkIRect& rect);
+    void internal_private_resetClip();
 
     virtual SkPaintFilterCanvas* internal_private_asPaintFilterCanvas() const { return nullptr; }
 

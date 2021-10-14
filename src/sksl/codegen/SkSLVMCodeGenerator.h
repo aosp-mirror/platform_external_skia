@@ -20,9 +20,11 @@ namespace SkSL {
 class FunctionDefinition;
 struct Program;
 
-using SampleChildFn = std::function<skvm::Color(int, skvm::Coord, skvm::Color)>;
+using SampleShaderFn = std::function<skvm::Color(int, skvm::Coord)>;
+using SampleColorFilterFn = std::function<skvm::Color(int, skvm::Color)>;
+using SampleBlenderFn = std::function<skvm::Color(int, skvm::Color, skvm::Color)>;
 
-// Convert 'function' to skvm instructions in 'builder', for use by shaders and color filters
+// Convert 'function' to skvm instructions in 'builder', for use by blends, shaders, & color filters
 skvm::Color ProgramToSkVM(const Program& program,
                           const FunctionDefinition& function,
                           skvm::Builder* builder,
@@ -30,7 +32,10 @@ skvm::Color ProgramToSkVM(const Program& program,
                           skvm::Coord device,
                           skvm::Coord local,
                           skvm::Color inputColor,
-                          SampleChildFn sampleChild);
+                          skvm::Color destColor,
+                          SampleShaderFn sampleShader,
+                          SampleColorFilterFn sampleColorFilter,
+                          SampleBlenderFn sampleBlender);
 
 struct SkVMSignature {
     size_t fParameterSlots = 0;

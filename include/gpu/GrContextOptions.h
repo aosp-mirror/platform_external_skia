@@ -196,7 +196,10 @@ struct SK_API GrContextOptions {
     Enable fUseDrawInsteadOfClear = Enable::kDefault;
 
     /**
-     * Experimental: Allow Ganesh to more aggressively reorder operations.
+     * Allow Ganesh to more aggressively reorder operations to reduce the number of render passes.
+     * Offscreen draws will be done upfront instead of interrupting the main render pass when
+     * possible. May increase VRAM usage, but still observes the resource cache limit.
+     * Enabled by default.
      */
     Enable fReduceOpsTaskSplitting = Enable::kDefault;
 
@@ -279,14 +282,25 @@ struct SK_API GrContextOptions {
      */
 
     /**
+     * Experimental: Should the new version of the GPU backend be used?
+     */
+    Enable fUseSkGpuV2 = Enable::kDefault;
+
+    /**
      * Prevents use of dual source blending, to test that all xfer modes work correctly without it.
      */
     bool fSuppressDualSourceBlending = false;
 
     /**
-     * If true, the caps will never support geometry shaders.
+     * Prevents the use of non-coefficient-based blend equations, for testing dst reads, barriers,
+     * and in-shader blending.
      */
-    bool fSuppressGeometryShaders = false;
+    bool fSuppressAdvancedBlendEquations = false;
+
+    /**
+     * Prevents the use of framebuffer fetches, for testing dst reads and texture barriers.
+     */
+    bool fSuppressFramebufferFetch = false;
 
     /**
      * If greater than zero and less than the actual hardware limit, overrides the maximum number of
@@ -315,9 +329,9 @@ struct SK_API GrContextOptions {
     bool fRandomGLOOM = false;
 
     /**
-     * Force off support for write pixels row bytes in caps.
+     * Force off support for write/transfer pixels row bytes in caps.
      */
-    bool fDisallowWritePixelRowBytes = false;
+    bool fDisallowWriteAndTransferPixelRowBytes = false;
 
     /**
      * Include or exclude specific GPU path renderers.
@@ -331,6 +345,16 @@ struct SK_API GrContextOptions {
      * A value of -1 means use the default limit value.
      */
     int fResourceCacheLimitOverride = -1;
+
+    /**
+     * If true, then always try to use hardware tessellation, regardless of how small a path may be.
+     */
+    bool fAlwaysPreferHardwareTessellation = false;
+
+    /**
+     * Maximum width and height of internal texture atlases.
+     */
+    int  fMaxTextureAtlasSize = 2048;
 #endif
 
     GrDriverBugWorkarounds fDriverBugWorkarounds;

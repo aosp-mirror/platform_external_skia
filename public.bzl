@@ -223,7 +223,6 @@ BASE_SRCS_ALL = struct(
         "src/utils/win/**/*",
 
         # Exclude multiple definitions.
-        "src/gpu/ccpr/GrCoverageCountingPathRenderer_none.cpp",
         "src/gpu/gl/GrGLMakeNativeInterface_none.cpp",
         "src/pdf/SkDocument_PDF_None.cpp",  # We use src/pdf/SkPDFDocument.cpp.
 
@@ -576,20 +575,6 @@ DM_SRCS_ALL = struct(
         "src/xml/*.cpp",
         "tests/*.cpp",
         "tests/*.h",
-        "tests/sksl/dslfp/GrDSLFPTest_DoStatement.dsl.cpp",
-        "tests/sksl/dslfp/GrDSLFPTest_DoStatement.h",
-        "tests/sksl/dslfp/GrDSLFPTest_ForStatement.dsl.cpp",
-        "tests/sksl/dslfp/GrDSLFPTest_ForStatement.h",
-        "tests/sksl/dslfp/GrDSLFPTest_IfStatement.dsl.cpp",
-        "tests/sksl/dslfp/GrDSLFPTest_IfStatement.h",
-        "tests/sksl/dslfp/GrDSLFPTest_SwitchStatement.dsl.cpp",
-        "tests/sksl/dslfp/GrDSLFPTest_SwitchStatement.h",
-        "tests/sksl/dslfp/GrDSLFPTest_Swizzle.dsl.cpp",
-        "tests/sksl/dslfp/GrDSLFPTest_Swizzle.h",
-        "tests/sksl/dslfp/GrDSLFPTest_Ternary.dsl.cpp",
-        "tests/sksl/dslfp/GrDSLFPTest_Ternary.h",
-        "tests/sksl/dslfp/GrDSLFPTest_WhileStatement.dsl.cpp",
-        "tests/sksl/dslfp/GrDSLFPTest_WhileStatement.h",
         "tools/AutoreleasePool.h",
         "tools/BigPathBench.inc",
         "tools/BinaryAsset.h",
@@ -607,6 +592,8 @@ DM_SRCS_ALL = struct(
         "tools/ResourceFactory.h",
         "tools/Resources.cpp",
         "tools/Resources.h",
+        "tools/RuntimeBlendUtils.cpp",
+        "tools/RuntimeBlendUtils.h",
         "tools/SkMetaData.cpp",
         "tools/SkMetaData.h",
         "tools/SkSharingProc.cpp",
@@ -953,13 +940,26 @@ SKOTTIE_TOOL_SRCS = [
 ## SkShaper
 ################################################################################
 
+# Stubs, pending SkUnicode fission
+SKUNICODE_ICU_BUILTIN_SRCS = [
+    "modules/skunicode/include/SkUnicode.h",
+    "modules/skunicode/src/SkUnicode_icu.cpp",
+    "modules/skunicode/src/SkUnicode_icu.h",
+    "modules/skunicode/src/SkUnicode_icu_builtin.cpp",
+]
+
+SKUNICODE_ICU_RUNTIME_SRCS = [
+    "modules/skunicode/include/SkUnicode.h",
+    "modules/skunicode/src/SkUnicode_icu.cpp",
+    "modules/skunicode/src/SkUnicode_icu.h",
+    "modules/skunicode/src/SkUnicode_icu_runtime.cpp",
+]
+
 SKSHAPER_HARFBUZZ_SRCS = [
     "modules/skshaper/include/SkShaper.h",
     "modules/skshaper/src/SkShaper.cpp",
     "modules/skshaper/src/SkShaper_harfbuzz.cpp",
     "modules/skshaper/src/SkShaper_primitive.cpp",
-    "modules/skshaper/src/SkUnicode.h",
-    "modules/skshaper/src/SkUnicode_icu.cpp",
 ]
 
 SKSHAPER_PRIMITIVE_SRCS = [

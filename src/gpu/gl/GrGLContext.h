@@ -23,8 +23,8 @@ struct GrContextOptions;
  */
 class GrGLContextInfo {
 public:
-    GrGLContextInfo(const GrGLContextInfo&) = delete;
-    GrGLContextInfo& operator=(const GrGLContextInfo&) = delete;
+    GrGLContextInfo(GrGLContextInfo&&) = default;
+    GrGLContextInfo& operator=(GrGLContextInfo&&) = default;
 
     virtual ~GrGLContextInfo() {}
 
@@ -40,15 +40,28 @@ public:
         (e.g. Intel GPU being driven by Mesa) */
     GrGLDriver driver() const { return fDriverInfo.fDriver; }
     GrGLDriverVersion driverVersion() const { return fDriverInfo.fDriverVersion; }
+    bool isOverCommandBuffer() const { return fDriverInfo.fIsOverCommandBuffer; }
+
     const GrGLCaps* caps() const { return fGLCaps.get(); }
     GrGLCaps* caps() { return fGLCaps.get(); }
+
     bool hasExtension(const char* ext) const {
         return fInterface->hasExtension(ext);
     }
 
     const GrGLExtensions& extensions() const { return fInterface->fExtensions; }
 
+    /**
+     * Makes a version of this context info that strips the "angle-ness". It will report kUnknown
+     * for angleBackend() and report this info's angleRenderer() as renderer() and similiar for
+     * driver(), driverVersion(), and vendor().
+     */
+    GrGLContextInfo makeNonAngle() const;
+
 protected:
+    GrGLContextInfo& operator=(const GrGLContextInfo&) = default;
+    GrGLContextInfo(const GrGLContextInfo&) = default;
+
     struct ConstructorArgs {
         sk_sp<const GrGLInterface>          fInterface;
         GrGLDriverInfo                      fDriverInfo;

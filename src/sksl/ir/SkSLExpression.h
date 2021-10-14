@@ -28,9 +28,10 @@ class Expression : public IRNode {
 public:
     enum class Kind {
         kBinary = (int) Statement::Kind::kLast + 1,
-        kBoolLiteral,
+        kChildCall,
         kCodeString,
         kConstructorArray,
+        kConstructorArrayCast,
         kConstructorCompound,
         kConstructorCompoundCast,
         kConstructorDiagonalMatrix,
@@ -40,14 +41,15 @@ public:
         kConstructorStruct,
         kExternalFunctionCall,
         kExternalFunctionReference,
-        kIntLiteral,
         kFieldAccess,
-        kFloatLiteral,
         kFunctionReference,
         kFunctionCall,
         kIndex,
-        kPrefix,
+        kLiteral,
+        kMethodReference,
+        kPoison,
         kPostfix,
+        kPrefix,
         kSetting,
         kSwizzle,
         kTernary,
@@ -63,8 +65,8 @@ public:
         kContainsRTAdjust
     };
 
-    Expression(int offset, Kind kind, const Type* type)
-        : INHERITED(offset, (int) kind)
+    Expression(int line, Kind kind, const Type* type)
+        : INHERITED(line, (int) kind)
         , fType(type) {
         SkASSERT(kind >= Kind::kFirst && kind <= Kind::kLast);
     }
@@ -79,7 +81,7 @@ public:
 
     /**
      *  Use is<T> to check the type of an expression.
-     *  e.g. replace `e.kind() == Expression::Kind::kIntLiteral` with `e.is<IntLiteral>()`.
+     *  e.g. replace `e.kind() == Expression::Kind::kLiteral` with `e.is<Literal>()`.
      */
     template <typename T>
     bool is() const {
@@ -92,8 +94,20 @@ public:
         return this->kind() >= Kind::kConstructorArray && this->kind() <= Kind::kConstructorStruct;
     }
 
+    bool isIntLiteral() const {
+        return this->kind() == Kind::kLiteral && this->type().isInteger();
+    }
+
+    bool isFloatLiteral() const {
+        return this->kind() == Kind::kLiteral && this->type().isFloat();
+    }
+
+    bool isBoolLiteral() const {
+        return this->kind() == Kind::kLiteral && this->type().isBoolean();
+    }
+
     /**
-     *  Use as<T> to downcast expressions: e.g. replace `(IntLiteral&) i` with `i.as<IntLiteral>()`.
+     *  Use as<T> to downcast expressions: e.g. replace `(Literal&) i` with `i.as<Literal>()`.
      */
     template <typename T>
     const T& as() const {
@@ -156,14 +170,29 @@ public:
     }
 
     /**
+     * Returns true if this expression type supports `getConstantSubexpression`. (This particular
+     * expression may or may not actually contain a constant value.) It's harmless to call
+     * `getConstantSubexpression` on expressions which don't allow constant subexpressions or don't
+     * contain any constant values, but if `allowsConstantSubexpressions` returns false, you can
+     * assume that `getConstantSubexpression` will return null for every slot of this expression.
+     * This allows for early-out opportunities in some cases. (Some expressions have tons of slots
+     * but never have a constant subexpression; e.g. a variable holding a very large array.)
+     */
+    virtual bool allowsConstantSubexpressions() const {
+        return false;
+    }
+
+    /**
      * Returns the n'th compile-time constant expression within a literal or constructor.
      * Use Type::slotCount to determine the number of subexpressions within an expression.
      * Subexpressions which are not compile-time constants will return null.
      * `vec4(1, vec2(2), 3)` contains four subexpressions: (1, 2, 2, 3)
      * `mat2(f)` contains four subexpressions: (null, 0,
      *                                          0, null)
+     * All classes which override this function must also implement `allowsConstantSubexpression`.
      */
     virtual const Expression* getConstantSubexpression(int n) const {
+        SkASSERT(!this->allowsConstantSubexpressions());
         return nullptr;
     }
 

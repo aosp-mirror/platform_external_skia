@@ -895,16 +895,10 @@ int get_glyph_run_intercepts(const SkGlyphRun& glyphRun,
     SkStrikeSpec strikeSpec = SkStrikeSpec::MakeWithNoDevice(interceptFont, &interceptPaint);
     SkBulkGlyphMetricsAndPaths metricsAndPaths{strikeSpec};
 
-    SkScalar xOffset = 0;
-    SkScalar xPos = xOffset;
-    SkScalar prevAdvance = 0;
-
     const SkPoint* posCursor = glyphRun.positions().begin();
     for (const SkGlyph* glyph : metricsAndPaths.glyphs(glyphRun.glyphsIDs())) {
         SkPoint pos = *posCursor++;
 
-        xPos += prevAdvance * scale;
-        prevAdvance = glyph->advanceX();
         if (glyph->path() != nullptr) {
             // The typeface is scaled, so un-scale the bounds to be in the space of the typeface.
             // Also ensure the bounds are properly offset by the vertical positioning of the glyph.
@@ -922,7 +916,6 @@ int get_glyph_run_intercepts(const SkGlyphRun& glyphRun,
 
 int SkTextBlob::getIntercepts(const SkScalar bounds[2], SkScalar intervals[],
                               const SkPaint* paint) const {
-
     SkTLazy<SkPaint> defaultPaint;
     if (paint == nullptr) {
         defaultPaint.init();
@@ -942,6 +935,28 @@ int SkTextBlob::getIntercepts(const SkScalar bounds[2], SkScalar intervals[],
     }
 
     return intervalCount;
+}
+
+std::vector<SkScalar> SkFont::getIntercepts(const SkGlyphID glyphs[], int count,
+                                            const SkPoint positions[],
+                                            SkScalar top, SkScalar bottom,
+                                            const SkPaint* paintPtr) const {
+    if (count <= 0) {
+        return std::vector<SkScalar>();
+    }
+
+    const SkPaint paint(paintPtr ? *paintPtr : SkPaint());
+    const SkScalar bounds[] = {top, bottom};
+    const SkGlyphRun run(*this,
+                         {positions, size_t(count)}, {glyphs, size_t(count)},
+                         {nullptr, 0}, {nullptr, 0}, {nullptr, 0});
+
+    std::vector<SkScalar> result;
+    result.resize(count * 2);   // worst case allocation
+    int intervalCount = 0;
+    intervalCount = get_glyph_run_intercepts(run, paint, bounds, result.data(), &intervalCount);
+    result.resize(intervalCount);
+    return result;
 }
 
 ////////

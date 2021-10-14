@@ -9,82 +9,83 @@ package org.skia.androidkitdemo1;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import org.skia.androidkit.*;
+import org.skia.androidkit.util.*;
 
-class RenderThread extends Thread {
-    private android.view.Surface mAndroidSurface;
-    private Surface              mSurface;
-    private boolean              mRunning;
+class AnimationRenderer extends SurfaceRenderer {
+    private Shader mLinearGradient,
+                   mRadialGradient,
+                   mConicalGradient,
+                   mSweepGradient;
+    private ColorFilter mColorFilter = new MatrixColorFilter(new float[]{
+        0.75f, 0, 0, 0,    0,
+            0, 1, 0, 0, 0.5f,
+            0, 0, 1, 0,    0,
+            0, 0, 0, 1,    0,
+    });
 
-    private static final String TAG = "*** AK RenderThread";
+    @Override
+    protected void onSurfaceInitialized(Surface surface) {
+        float sw = surface.getWidth(),
+              sh = surface.getHeight();
 
-    public RenderThread(android.view.Surface surface) {
-        mAndroidSurface = surface;
-    }
+        float[] colors1 = {
+                            1,0,0,1,
+                            0,1,0,1,
+                            0,0,1,1
+                          };
+        int[]   colors2 = {
+                            0xffffff00,
+                            0xff00ffff,
+                            0xffff00ff
+                          };
 
-    public void finish() {
-        mRunning = false;
+        float[] pos = {0, 0.5f, 1};
+
+        mLinearGradient = new LinearGradient(0, 0, sw/4, 0,
+                                             colors1, pos, TileMode.REPEAT);
+        mRadialGradient = new RadialGradient(sw/2, sh/4, Math.min(sw, sh)/2,
+                                             colors2, pos, TileMode.REPEAT);
+        mConicalGradient = new TwoPointConicalGradient(sw/4, sh/2, sw/4,
+                                                       sw/2, sh/2, sw/2,
+                                                       colors1, pos, TileMode.MIRROR);
+        mSweepGradient = new SweepGradient(sw/2, sh/4, 0, 90, colors2, pos, TileMode.REPEAT);
     }
 
     @Override
-    public void run() {
-        mRunning = true;
-
-        Log.d(TAG, "start");
-
-        long time_base = java.lang.System.currentTimeMillis();
-
-        // TODO: convert to native AK surface.
-        while (mRunning) {
-            android.graphics.Canvas android_canvas = mAndroidSurface.lockHardwareCanvas();
-
-            int w = android_canvas.getWidth(),
-                h = android_canvas.getHeight();
-
-            android.graphics.Bitmap bm =
-                    android.graphics.Bitmap.createBitmap(w, h,
-                                                         android.graphics.Bitmap.Config.ARGB_8888,
-                                                         true);
-            Surface surface = new Surface(bm);
-            renderFrame(surface.getCanvas(),
-                        (double)(java.lang.System.currentTimeMillis() - time_base) / 1000,
-                        w, h);
-            surface.flushAndSubmit();
-            surface.release();
-
-            android_canvas.drawBitmap(bm, 0, 0, new android.graphics.Paint());
-
-            mAndroidSurface.unlockCanvasAndPost(android_canvas);
-        }
-
-        Log.d(TAG, "finish");
-    }
-
-    private void renderFrame(Canvas canvas, double t, int canvas_width, int canvas_height) {
+    protected void onRenderFrame(Canvas canvas, long ms) {
         final float kWidth  = 400,
                     kHeight = 200,
                     kSpeed  = 4;
 
         canvas.drawColor(0xffffffe0);
 
-        Paint p = new Paint();
-        p.setColor(new Color(0, 1, 0, 1));
+        float cw = canvas.getWidth(),
+              ch = canvas.getHeight(),
+            osc1 = (float)(java.lang.Math.cos(ms * kSpeed / 1000)),
+            osc2 = (float)(java.lang.Math.sin(ms * kSpeed / 1000));
 
-        float x = (float)(java.lang.Math.cos(t * kSpeed) + 1) * canvas_width/2;
-        canvas.drawRect(x - kWidth/2, (canvas_height - kHeight)/2,
-                        x + kWidth/2, (canvas_height + kHeight)/2, p);
+        drawRect(canvas, (1 + osc1)*cw/2, ch/2, mLinearGradient);
+        drawRect(canvas, (1 - osc1)*cw/2, ch/2, mConicalGradient);
+        drawRect(canvas, cw/2, (1 + osc2)*ch/2, mRadialGradient);
+        drawRect(canvas, cw/2, (1 - osc2)*ch/2, mSweepGradient);
+    }
+
+    private void drawRect(Canvas canvas, float cx, float cy, Shader shader) {
+        final float kWidth  = 400,
+                    kHeight = 200;
+
+        canvas.drawRect(cx - kWidth/2, cy - kHeight/2, cx + kWidth/2, cy + kHeight/2,
+                        new Paint().setShader(shader).setColorFilter(mColorFilter));
     }
 }
 
-public class AnimationActivity extends Activity implements SurfaceHolder.Callback {
+public class AnimationActivity extends Activity {
     static {
         System.loadLibrary("androidkit");
     }
-
-    private RenderThread mRenderThread;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -92,33 +93,6 @@ public class AnimationActivity extends Activity implements SurfaceHolder.Callbac
         setContentView(R.layout.activity_animation);
 
         SurfaceView sv = findViewById(R.id.surfaceView);
-        sv.getHolder().addCallback(this);
-    }
-
-    @Override
-    public void surfaceCreated(SurfaceHolder holder) {
-    }
-
-    @Override
-    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-        if (mRenderThread != null) {
-            mRenderThread.finish();
-            try {
-                mRenderThread.join();
-            } catch (InterruptedException e) {}
-        }
-
-        mRenderThread = new RenderThread(holder.getSurface());;
-        mRenderThread.start();
-    }
-
-    @Override
-    public void surfaceDestroyed(SurfaceHolder holder) {
-        if (mRenderThread != null) {
-            mRenderThread.finish();
-            try {
-                mRenderThread.join();
-            } catch (InterruptedException e) {}
-        }
+        sv.getHolder().addCallback(new AnimationRenderer());
     }
 }

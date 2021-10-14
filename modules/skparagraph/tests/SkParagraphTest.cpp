@@ -69,6 +69,25 @@ bool equal(const char* base, TextRange a, const char* b) {
     return std::strncmp(b, base + a.start, a.width()) == 0;
 }
 
+std::u16string mirror(const std::string& text) {
+    std::u16string result;
+    result += u"\u202E";
+    for (auto i = text.size(); i > 0; --i) {
+        result += text[i - 1];
+    }
+    //result += u"\u202C";
+    return result;
+}
+
+std::u16string straight(const std::string& text) {
+    std::u16string result;
+    result += u"\u202D";
+    for (auto ch : text) {
+        result += ch;
+    }
+    return result;
+}
+
 class ResourceFontCollection : public FontCollection {
 public:
     ResourceFontCollection(bool testOnly = false)
@@ -5993,6 +6012,22 @@ DEF_TEST(SkParagraph_PositionInsideEmoji, reporter) {
     paragraph->layout(TestCanvasWidth);
     paragraph->paint(canvas.get(), 0, 0);
 
+    // UTF8       UTF16
+    // 4          [0:2)
+    // 3 + 4      [2:5)
+    // 3 + 4      [5:8)
+    // 3 + 4      [8:11)
+    // 4          [11:13)
+    // 4          [13:15)
+    // 4          [15:17)
+    // 4          [17:19)
+
+    auto family = paragraph->getRectsForRange(0, 11, RectHeightStyle::kTight, RectWidthStyle::kTight);  // 00.0000000 + 17.4699993
+    auto face01 = paragraph->getRectsForRange(11, 13, RectHeightStyle::kTight, RectWidthStyle::kTight); // 17.4699993 + 17.4699993
+    auto face02 = paragraph->getRectsForRange(13, 15, RectHeightStyle::kTight, RectWidthStyle::kTight); // 34.9399986 + 17.4699993
+    auto face03 = paragraph->getRectsForRange(15, 17, RectHeightStyle::kTight, RectWidthStyle::kTight); // 52.4099998 + 17.4699993
+    auto face04 = paragraph->getRectsForRange(17, 19, RectHeightStyle::kTight, RectWidthStyle::kTight); // 69.8799973 + 17.4699993
+
     int32_t words[] = { 11, 13, 15, 17, 19, 21};
     auto j = 0;
     for (auto i :  words) {
@@ -6000,11 +6035,13 @@ DEF_TEST(SkParagraph_PositionInsideEmoji, reporter) {
         if (rects.empty()) {
             continue;
         }
-        auto X = rects[0].rect.fRight;
-        auto Y = rects[0].rect.fTop;
-        auto res = paragraph->getGlyphPositionAtCoordinate(X, Y);
-        //SkDebugf("[%d:%d) @%f,%f: %d %s\n", j, i, X, Y, res.position, res.affinity == Affinity::kDownstream ? "D" : "U");
-        REPORTER_ASSERT(reporter, i == res.position);
+        auto X = rects[0].rect.centerX();
+        auto Y = rects[0].rect.centerY();
+        auto res1 = paragraph->getGlyphPositionAtCoordinate(X - 5, Y);
+        //SkDebugf("[%d:%d) @%f,%f: %d %s\n", j, i, X - 5, Y, res1.position, res1.affinity == Affinity::kDownstream ? "D" : "U");
+        auto res2 = paragraph->getGlyphPositionAtCoordinate(X + 5, Y);
+        //SkDebugf("[%d:%d) @%f,%f: %d %s\n\n", j, i, X + 5, Y, res2.position, res2.affinity == Affinity::kDownstream ? "D" : "U");
+        REPORTER_ASSERT(reporter, i == res2.position && res1.position == j);
         j = i;
     }
 }
@@ -6200,6 +6237,7 @@ DEF_TEST(SkParagraph_RTLGlyphPositionsInEmptyLines, reporter) {
     text_style.setFontSize(20);
     text_style.setColor(SK_ColorBLACK);
     builder.pushStyle(text_style);
+    //builder.addText("בבבב\n\nאאאא");
     builder.addText("בבבב\n\nאאאא");
     builder.pop();
     auto paragraph = builder.Build();
@@ -6208,9 +6246,322 @@ DEF_TEST(SkParagraph_RTLGlyphPositionsInEmptyLines, reporter) {
 
     auto height = paragraph->getHeight();
     auto res1 = paragraph->getGlyphPositionAtCoordinate(0, 0);
-    REPORTER_ASSERT(reporter, res1.position == 5 && res1.affinity == Affinity::kUpstream);
+    REPORTER_ASSERT(reporter, res1.position == 4 && res1.affinity == Affinity::kUpstream);
     auto res2 = paragraph->getGlyphPositionAtCoordinate(0, height / 2);
     REPORTER_ASSERT(reporter, res2.position == 5 && res2.affinity == Affinity::kDownstream);
     auto res3 = paragraph->getGlyphPositionAtCoordinate(0, height);
     REPORTER_ASSERT(reporter, res3.position == 10 && res3.affinity == Affinity::kUpstream);
+}
+
+DEF_TEST(SkParagraph_LTRGlyphPositionsForTrailingSpaces, reporter) {
+
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
+    if (!fontCollection->fontsFound()) return;
+
+    TestCanvas canvas("SkParagraph_LTRGlyphPositionsForTrailingSpaces");
+
+    ParagraphStyle paragraph_style;
+    TextStyle text_style;
+    text_style.setFontFamilies({SkString("Ahem") });
+    text_style.setFontSize(10);
+    text_style.setColor(SK_ColorBLACK);
+
+    auto test = [&](const char* text) {
+        auto str = straight(text);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        builder.pushStyle(text_style);
+        builder.addText(str);
+        builder.pop();
+        SkPaint gray; gray.setColor(SK_ColorGRAY);
+        auto paragraph = builder.Build();
+        paragraph->layout(100);
+        canvas.get()->translate(0, 20);
+        canvas.get()->drawRect(SkRect::MakeXYWH(0, 0, paragraph->getMaxIntrinsicWidth(), paragraph->getHeight()), gray);
+        paragraph->paint(canvas.get(), 0, 0);
+        canvas.get()->translate(0, paragraph->getHeight());
+
+        for (size_t i = 0; i < str.size(); ++i) {
+            auto res = paragraph->getGlyphPositionAtCoordinate(i * 10, 2);
+            //SkDebugf("@%f[%d]: %d %s\n", i * 10.0f, i, res.position, res.affinity == Affinity::kDownstream ? "D" : "U");
+            // There is a hidden codepoint at the beginning (to make it symmetric to RTL)
+            REPORTER_ASSERT(reporter, res.position == (SkToInt(i) + 1));
+            // The ending looks slightly different...
+            REPORTER_ASSERT(reporter, res.affinity == (res.position == SkToInt(str.size()) ? Affinity::kUpstream : Affinity::kDownstream));
+        }
+    };
+
+    test("    ");
+    test("hello               ");
+}
+
+DEF_TEST(SkParagraph_RTLGlyphPositionsForTrailingSpaces, reporter) {
+
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
+    if (!fontCollection->fontsFound()) return;
+
+    TestCanvas canvas("SkParagraph_RTLGlyphPositionsForTrailingSpaces");
+
+    ParagraphStyle paragraph_style;
+    paragraph_style.setTextDirection(TextDirection::kRtl);
+    paragraph_style.setTextAlign(TextAlign::kRight);
+    TextStyle text_style;
+    text_style.setFontFamilies({SkString("Ahem") });
+    text_style.setFontSize(10);
+    text_style.setColor(SK_ColorBLACK);
+    canvas.get()->translate(200, 0);
+
+    auto test = [&](const char* text, int whitespaces) {
+        auto str = mirror(text);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+        builder.pushStyle(text_style);
+        builder.addText(str);
+        builder.pop();
+        SkPaint gray; gray.setColor(SK_ColorGRAY);
+        auto paragraph = builder.Build();
+        paragraph->layout(100);
+        canvas.get()->translate(0, 20);
+        auto res = paragraph->getRectsForRange(0, str.size(), RectHeightStyle::kTight, RectWidthStyle::kTight);
+        bool even = true;
+        for (auto& r : res) {
+            if (even) {
+                gray.setColor(SK_ColorGRAY);
+            } else {
+                gray.setColor(SK_ColorLTGRAY);
+            }
+            even = !even;
+            canvas.get()->drawRect(r.rect, gray);
+        }
+        gray.setColor(SK_ColorRED);
+        canvas.get()->drawRect(SkRect::MakeXYWH(0, 0, 1, paragraph->getHeight()), gray);
+        paragraph->paint(canvas.get(), 0, 0);
+        canvas.get()->translate(0, paragraph->getHeight());
+
+        for (int i = 0; i < SkToInt(str.size()); ++i) {
+            auto pointX = (whitespaces + i) * 10.0f;
+            auto pos = paragraph->getGlyphPositionAtCoordinate(pointX, 2);
+            //SkDebugf("@%f[%d]: %d %s\n", pointX, i, res.position, res.affinity == Affinity::kDownstream ? "D" : "U");
+            // At the beginning there is a control codepoint that makes the string RTL
+            REPORTER_ASSERT(reporter, (pos.position + i) == SkToInt(str.size() - (pos.position > 0 ? 0 : 1)));
+            // The ending looks slightly different...
+            REPORTER_ASSERT(reporter, pos.affinity == (i == 0 ? Affinity::kUpstream : Affinity::kDownstream));
+        }
+    };
+
+    test("    ", 6);
+    test("               hello", -10);
+}
+
+DEF_TEST(SkParagraph_LTRLineMetricsDoesNotIncludeNewLine, reporter) {
+
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
+    if (!fontCollection->fontsFound()) return;
+
+    TestCanvas canvas("SkParagraph_LTRLineMetricsDoesNotIncludeNewLine");
+
+    ParagraphStyle paragraph_style;
+    paragraph_style.setTextDirection(TextDirection::kRtl);
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+    TextStyle text_style;
+    text_style.setFontFamilies({SkString("Roboto") });
+    text_style.setFontSize(20);
+    text_style.setColor(SK_ColorBLACK);
+    builder.pushStyle(text_style);
+    builder.addText("one two\n\nthree four\nwith spaces     \n    \n______________________");
+    builder.pop();
+    auto paragraph = builder.Build();
+    paragraph->layout(190);
+    paragraph->paint(canvas.get(), 0, 0);
+
+    std::vector<std::tuple<size_t, size_t, size_t, size_t>> expected = {
+            { 0, 7, 7, 8 },             // one two\n
+            { 8, 8, 8, 9 },             // \n
+            { 9, 19, 19, 20 },          // three four\n
+            { 20, 31, 36, 37 },         // with spaces    \n
+            { 37, 37, 41, 42 },         //      { just spaces }\n
+            { 42, 63, 63, 63 },         // _____________________
+            { 63, 64, 64, 64 },         // _
+    };
+    std::vector<LineMetrics> metrics;
+    paragraph->getLineMetrics(metrics);
+    for (auto& metric : metrics) {
+        //SkDebugf("Line[%d:%d <= %d <=%d)\n", metric.fStartIndex, metric.fEndExcludingWhitespaces, metric.fEndIndex, metric.fEndIncludingNewline);
+        auto result = expected[metric.fLineNumber];
+        REPORTER_ASSERT(reporter, metric.fStartIndex ==std::get<0>(result));
+        REPORTER_ASSERT(reporter, metric.fEndExcludingWhitespaces == std::get<1>(result));
+        REPORTER_ASSERT(reporter, metric.fEndIndex == std::get<2>(result));
+        REPORTER_ASSERT(reporter, metric.fEndIncludingNewline == std::get<3>(result));
+    }
+}
+
+DEF_TEST(SkParagraph_RTLLineMetricsDoesNotIncludeNewLine, reporter) {
+
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
+    if (!fontCollection->fontsFound()) return;
+
+    TestCanvas canvas("SkParagraph_RTLLineMetricsDoesNotIncludeNewLine");
+    canvas.get()->translate(100, 100);
+
+    ParagraphStyle paragraph_style;
+    paragraph_style.setTextDirection(TextDirection::kRtl);
+    paragraph_style.setTextAlign(TextAlign::kRight);
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+    TextStyle text_style;
+    text_style.setFontFamilies({SkString("Roboto") });
+    text_style.setFontSize(20);
+    text_style.setColor(SK_ColorBLACK);
+    builder.pushStyle(text_style);
+    builder.addText(mirror("______________________\none two\n\nthree four\nwith spaces     \n    "));
+    builder.pop();
+    auto paragraph = builder.Build();
+    paragraph->layout(190);
+    paragraph->paint(canvas.get(), 0, 0);
+    //auto impl = static_cast<ParagraphImpl*>(paragraph.get());
+
+    SkPaint gray;
+    gray.setColor(SK_ColorGRAY);
+    gray.setStyle(SkPaint::kStroke_Style);
+    gray.setAntiAlias(true);
+    gray.setStrokeWidth(1);
+    canvas.get()->drawRect(SkRect::MakeXYWH(0, 0, paragraph->getMaxWidth(), paragraph->getHeight()), gray);
+
+    SkPaint red;
+    red.setColor(SK_ColorRED);
+    red.setStyle(SkPaint::kStroke_Style);
+    red.setAntiAlias(true);
+    red.setStrokeWidth(1);
+
+    SkPaint blue;
+    blue.setColor(SK_ColorRED);
+    blue.setStyle(SkPaint::kStroke_Style);
+    blue.setAntiAlias(true);
+    blue.setStrokeWidth(1);
+
+    auto boxes = paragraph->getRectsForRange(0, 100, RectHeightStyle::kTight, RectWidthStyle::kTight);
+    bool even = false;
+    for (auto& box : boxes) {
+        canvas.get()->drawRect(box.rect, even ? red : blue);
+        even = !even;
+    }
+
+    // RTL codepoint u"\u202E" messes everything up
+    // (adds one invisible codepoint to the first line
+    // and shift all the indexes by 1 right)
+    std::vector<std::tuple<int, int, int, int>> expected = {
+            { 0, 1, 5, 6 },                 //      { just spaces; the end of the text considered as a new line in libtxt?!? }
+            { 6, 22, 22, 23  },             // with spaces    \n
+            { 23, 33, 33, 34 },             // three four\n
+            { 34, 34, 34, 35 },             // \n
+            { 35, 42, 42, 43 },             // one two\n
+            { 43, 64, 64, 64 },             // _____________________
+            { 64, 65, 65, 65 }              // _
+    };
+
+    std::vector<LineMetrics> metrics;
+    paragraph->getLineMetrics(metrics);
+    for (auto& metric : metrics) {
+        //SkDebugf("Line[%d:%d <= %d <=%d]\n", metric.fStartIndex, metric.fEndExcludingWhitespaces, metric.fEndIndex, metric.fEndIncludingNewline);
+        auto result = expected[metric.fLineNumber];
+        REPORTER_ASSERT(reporter, metric.fStartIndex == SkToU32(std::get<0>(result)));
+        REPORTER_ASSERT(reporter, metric.fEndExcludingWhitespaces == SkToU32(std::get<1>(result)));
+        REPORTER_ASSERT(reporter, metric.fEndIndex == SkToU32(std::get<2>(result)));
+        REPORTER_ASSERT(reporter, metric.fEndIncludingNewline == SkToU32(std::get<3>(result)));
+    }
+}
+
+DEF_TEST(SkParagraph_PlaceholderPosition, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
+    if (!fontCollection->fontsFound()) return;
+
+    TestCanvas canvas("SkParagraph_PlaceholderPosition.png");
+    canvas.get()->translate(100, 100);
+
+    TextStyle text_style;
+    text_style.setColor(SK_ColorBLACK);
+    text_style.setFontFamilies({SkString("Ahem")});
+    text_style.setFontSize(10.0f);
+    ParagraphStyle paragraph_style;
+    paragraph_style.setTextStyle(text_style);
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+    builder.pushStyle(text_style);
+    builder.addText("abcd");
+
+    PlaceholderStyle placeholder_style;
+    placeholder_style.fHeight = 10;
+    placeholder_style.fWidth = 10;
+    placeholder_style.fBaseline = TextBaseline::kAlphabetic;
+    placeholder_style.fAlignment = PlaceholderAlignment::kBottom;
+    builder.addPlaceholder(placeholder_style);
+
+    auto paragraph = builder.Build();
+    paragraph->layout(500);
+    paragraph->paint(canvas.get(), 0, 0);
+
+    auto result = paragraph->getGlyphPositionAtCoordinate(41.0f, 0.0f);
+    REPORTER_ASSERT(reporter, result.position == 4 && result.affinity == Affinity::kDownstream);
+}
+
+DEF_TEST(SkParagraph_LineEnd, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
+    if (!fontCollection->fontsFound()) return;
+
+    TestCanvas canvas("SkParagraph_LineEnd.png");
+    canvas.get()->translate(100, 100);
+
+    TextStyle text_style;
+    text_style.setColor(SK_ColorBLACK);
+    text_style.setFontFamilies({SkString("Ahem")});
+    text_style.setFontSize(10.0f);
+    ParagraphStyle paragraph_style;
+    paragraph_style.setTextStyle(text_style);
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+    builder.pushStyle(text_style);
+    builder.addText("Hello ");
+    builder.addText("hello   ");
+    builder.addText("hello\n");
+    builder.addText("hello   \n");
+    builder.addText("world");
+
+    auto paragraph = builder.Build();
+    paragraph->layout(60.0f);
+    paragraph->paint(canvas.get(), 0, 0);
+
+    std::vector<LineMetrics> lm;
+    paragraph->getLineMetrics(lm);
+    /*
+    for (auto& lm : lm) {
+        SkDebugf("%d %d %d\n", (int)lm.fEndExcludingWhitespaces, (int)lm.fEndIndex, (int)lm.fEndIncludingNewline);
+    }
+    */
+    REPORTER_ASSERT(reporter, lm[0].fEndExcludingWhitespaces == 05 && lm[0].fEndIndex == 06 && lm[0].fEndIncludingNewline == 06);
+    REPORTER_ASSERT(reporter, lm[1].fEndExcludingWhitespaces == 11 && lm[1].fEndIndex == 14 && lm[1].fEndIncludingNewline == 14);
+    REPORTER_ASSERT(reporter, lm[2].fEndExcludingWhitespaces == 19 && lm[2].fEndIndex == 19 && lm[2].fEndIncludingNewline == 20);
+    REPORTER_ASSERT(reporter, lm[3].fEndExcludingWhitespaces == 25 && lm[3].fEndIndex == 28 && lm[3].fEndIncludingNewline == 29);
+}
+
+DEF_TEST(SkParagraph_Utf16Indexes, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
+    if (!fontCollection->fontsFound()) return;
+
+    TestCanvas canvas("SkParagraph_Utf16Indexes.png");
+    canvas.get()->translate(100, 100);
+
+    TextStyle text_style;
+    text_style.setColor(SK_ColorBLACK);
+    text_style.setFontFamilies({SkString("Ahem")});
+    text_style.setFontSize(10.0f);
+    ParagraphStyle paragraph_style;
+    paragraph_style.setTextStyle(text_style);
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+    builder.pushStyle(text_style);
+    builder.addText("áéíóú\nxxxx");
+    auto paragraph = builder.Build();
+    paragraph->layout(60.0f);
+    paragraph->paint(canvas.get(), 0, 0);
+    std::vector<LineMetrics> lm;
+    paragraph->getLineMetrics(lm);
+    //for (auto& lm : lm) {
+    //    SkDebugf("%d %d %d\n", (int)lm.fEndExcludingWhitespaces, (int)lm.fEndIndex, (int)lm.fEndIncludingNewline);
+    //}
+    REPORTER_ASSERT(reporter, lm[0].fEndExcludingWhitespaces == 05 && lm[0].fEndIndex == 05 && lm[0].fEndIncludingNewline == 06);
+    REPORTER_ASSERT(reporter, lm[1].fEndExcludingWhitespaces == 10 && lm[1].fEndIndex == 10 && lm[1].fEndIncludingNewline == 10);
 }

@@ -527,7 +527,7 @@ DEF_TEST(SkSLInterpreterCompound, r) {
 
     auto build = [&](const SkSL::FunctionDefinition* fn) {
         skvm::Builder b;
-        skvm::Ptr uniformPtr = b.uniform();
+        skvm::UPtr uniformPtr = b.uniform();
         skvm::Val uniforms[16];
         for (int i = 0; i < 16; ++i) {
             uniforms[i] = b.uniform32(uniformPtr, i * sizeof(int)).id;
@@ -635,14 +635,6 @@ DEF_TEST(SkSLInterpreterRestrictLoops, r) {
     // while and do-while loops are not allowed
     expect_failure(r, "void main(inout float x) { while (x < 1) { x++; } }");
     expect_failure(r, "void main(inout float x) { do { x++; } while (x < 1); }");
-}
-
-DEF_TEST(SkSLInterpreterRestrictFunctionCalls, r) {
-    // Ensure that simple recursion is not allowed
-    expect_failure(r, "float main() { return main() + 1; }");
-
-    // Ensure that calls to undefined functions are not allowed (to prevent mutual recursion)
-    expect_failure(r, "float foo(); float bar() { return foo(); } float foo() { return bar(); }");
 }
 
 DEF_TEST(SkSLInterpreterReturnThenCall, r) {
@@ -902,11 +894,12 @@ DEF_TEST(SkSLInterpreterExternalFunction, r) {
     GrShaderCaps caps(GrContextOptions{});
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
-    const char* src = "float main() { return external(25); }";
+    const char* src = "float main() { return externalSqrt(25); }";
     std::vector<std::unique_ptr<SkSL::ExternalFunction>> externalFunctions;
-    externalFunctions.push_back(std::make_unique<ExternalSqrt>("external", compiler));
+    externalFunctions.push_back(std::make_unique<ExternalSqrt>("externalSqrt", compiler));
+    settings.fExternalFunctions = &externalFunctions;
     std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
-            SkSL::ProgramKind::kGeneric, SkSL::String(src), settings, &externalFunctions);
+            SkSL::ProgramKind::kGeneric, SkSL::String(src), settings);
     REPORTER_ASSERT(r, program);
 
     const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
@@ -963,8 +956,9 @@ DEF_TEST(SkSLInterpreterExternalTable, r) {
     skvm::Uniforms u(b.uniform(), 0);
 
     externalFunctions.push_back(std::make_unique<ExternalTable>("table", compiler, &u));
+    settings.fExternalFunctions = &externalFunctions;
     std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
-            SkSL::ProgramKind::kGeneric, SkSL::String(src), settings, &externalFunctions);
+            SkSL::ProgramKind::kGeneric, SkSL::String(src), settings);
     REPORTER_ASSERT(r, program);
 
     const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");

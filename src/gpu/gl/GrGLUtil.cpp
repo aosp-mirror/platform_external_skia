@@ -210,17 +210,20 @@ static GrGLRenderer get_renderer(const char* rendererString, const GrGLExtension
                 return adrenoNumber == 530 ? GrGLRenderer::kAdreno530
                                            : GrGLRenderer::kAdreno5xx_other;
             }
-            if (adrenoNumber == 615) {
-                return GrGLRenderer::kAdreno615;
-            }
-            if (adrenoNumber == 620) {
-                return GrGLRenderer::kAdreno620;
-            }
-            if (adrenoNumber == 630) {
-                return GrGLRenderer::kAdreno630;
-            }
-            if (adrenoNumber == 640) {
-                return GrGLRenderer::kAdreno640;
+            if (adrenoNumber < 700) {
+                if (adrenoNumber == 615) {
+                    return GrGLRenderer::kAdreno615;
+                }
+                if (adrenoNumber == 620) {
+                    return GrGLRenderer::kAdreno620;
+                }
+                if (adrenoNumber == 630) {
+                    return GrGLRenderer::kAdreno630;
+                }
+                if (adrenoNumber == 640) {
+                    return GrGLRenderer::kAdreno640;
+                }
+                return GrGLRenderer::kAdreno6xx_other;
             }
         }
     }
@@ -336,6 +339,9 @@ static GrGLRenderer get_renderer(const char* rendererString, const GrGLExtension
     if (strstr(rendererString, "llvmpipe")) {
         return GrGLRenderer::kGalliumLLVM;
     }
+    if (strstr(rendererString, "virgl")) {
+        return GrGLRenderer::kVirgl;
+    }
     static const char kMaliGStr[] = "Mali-G";
     if (0 == strncmp(rendererString, kMaliGStr, SK_ARRAY_COUNT(kMaliGStr) - 1)) {
         return GrGLRenderer::kMaliG;
@@ -352,10 +358,23 @@ static GrGLRenderer get_renderer(const char* rendererString, const GrGLExtension
     return GrGLRenderer::kOther;
 }
 
-std::tuple<GrGLDriver, GrGLDriverVersion> get_driver_and_version(GrGLStandard standard,
-                                                                 GrGLVendor vendor,
-                                                                 const char* rendererString,
-                                                                 const char* versionString) {
+static bool is_commamd_buffer(const char* rendererString, const char* versionString) {
+    SkASSERT(rendererString);
+    SkASSERT(versionString);
+
+    int major, minor;
+    static const char kChromium[] = "Chromium";
+    char suffix[SK_ARRAY_COUNT(kChromium)] = {0};
+    return (0 == strcmp(rendererString, kChromium) ||
+           (3 == sscanf(versionString, "OpenGL ES %d.%d %8s", &major, &minor, suffix) &&
+            0 == strcmp(kChromium, suffix)));
+}
+
+static std::tuple<GrGLDriver, GrGLDriverVersion> get_driver_and_version(GrGLStandard standard,
+                                                                        GrGLVendor vendor,
+                                                                        const char* vendorString,
+                                                                        const char* rendererString,
+                                                                        const char* versionString) {
     SkASSERT(rendererString);
     SkASSERT(versionString);
 
@@ -363,12 +382,9 @@ std::tuple<GrGLDriver, GrGLDriverVersion> get_driver_and_version(GrGLStandard st
     GrGLDriverVersion driverVersion = GR_GL_DRIVER_UNKNOWN_VER;
 
     int major, minor, rev, driverMajor, driverMinor, driverPoint;
-    static const char kChromium[] = "Chromium";
-    char suffix[SK_ARRAY_COUNT(kChromium)] = {0};
-    if (0 == strcmp(rendererString, kChromium) ||
-        (3 == sscanf(versionString, "OpenGL ES %d.%d %8s", &major, &minor, suffix) &&
-         0 == strcmp(kChromium, suffix))) {
-        driver = GrGLDriver::kChromium;
+    // This is the same on ES and regular GL.
+    if (!strcmp(vendorString, "freedreno")) {
+        driver = GrGLDriver::kFreedreno;
     } else if (GR_IS_GR_GL(standard)) {
         if (vendor == GrGLVendor::kNVIDIA) {
             driver = GrGLDriver::kNVIDIA;
@@ -403,7 +419,7 @@ std::tuple<GrGLDriver, GrGLDriverVersion> get_driver_and_version(GrGLStandard st
                 driverVersion = GR_GL_DRIVER_VER(driverMajor, driverMinor, 0);
             }
         }
-    } else if (standard) {
+    } else if (standard == kGLES_GrGLStandard) {
         if (vendor == GrGLVendor::kNVIDIA) {
             driver = GrGLDriver::kNVIDIA;
             int n = sscanf(versionString,
@@ -414,6 +430,19 @@ std::tuple<GrGLDriver, GrGLDriverVersion> get_driver_and_version(GrGLStandard st
                            &driverMinor);
             // Some older NVIDIA drivers don't report the driver version.
             if (n == 4) {
+                driverVersion = GR_GL_DRIVER_VER(driverMajor, driverMinor, 0);
+            }
+        } else if (vendor == GrGLVendor::kImagination) {
+            int revision;
+            int n = sscanf(versionString,
+                           "OpenGL ES %d.%d build %d.%d@%d",
+                           &major,
+                           &minor,
+                           &driverMajor,
+                           &driverMinor,
+                           &revision);
+            if (n == 5) {
+                driver = GrGLDriver::kImagination;
                 driverVersion = GR_GL_DRIVER_VER(driverMajor, driverMinor, 0);
             }
         } else {
@@ -523,7 +552,7 @@ static std::tuple<GrGLANGLEBackend, SkString> get_angle_backend(const char* rend
     return {GrGLANGLEBackend::kUnknown, {}};
 }
 
-std::tuple<GrGLVendor, GrGLRenderer, GrGLDriver, GrGLDriverVersion>
+static std::tuple<GrGLVendor, GrGLRenderer, GrGLDriver, GrGLDriverVersion>
 get_angle_gl_vendor_and_renderer(
         const char* innerString,
         const GrGLExtensions& extensions) {
@@ -545,6 +574,7 @@ get_angle_gl_vendor_and_renderer(
 
     auto [angleDriver, angleDriverVersion] = get_driver_and_version(kGLES_GrGLStandard,
                                                                     angleVendor,
+                                                                    angleVendorString,
                                                                     angleRendererString,
                                                                     angleVersionString);
 
@@ -553,7 +583,7 @@ get_angle_gl_vendor_and_renderer(
     return {angleVendor, angleRenderer, angleDriver, angleDriverVersion};
 }
 
-std::tuple<GrGLVendor, GrGLRenderer, GrGLDriver, GrGLDriverVersion>
+static std::tuple<GrGLVendor, GrGLRenderer, GrGLDriver, GrGLDriverVersion>
 get_angle_d3d_vendor_and_renderer(const char* innerString) {
     auto vendor   = GrGLVendor::kOther;
     auto renderer = GrGLRenderer::kOther;
@@ -620,10 +650,10 @@ GrGLDriverInfo GrGLGetDriverInfo(const GrGLInterface* interface) {
         return reinterpret_cast<const char*>(bytes);
     };
 
-    const char* const version    = getString(GR_GL_VERSION);
-    const char* const slversion  = getString(GR_GL_SHADING_LANGUAGE_VERSION);
-    const char* const renderer   = getString(GR_GL_RENDERER);
-    const char* const vendor     = getString(GR_GL_VENDOR);
+    const char* const version   = getString(GR_GL_VERSION);
+    const char* const slversion = getString(GR_GL_SHADING_LANGUAGE_VERSION);
+    const char* const renderer  = getString(GR_GL_RENDERER);
+    const char* const vendor    = getString(GR_GL_VENDOR);
 
     info.fVersion     = GrGLGetVersionFromString(version);
     info.fGLSLVersion = get_glsl_version(slversion);
@@ -632,6 +662,7 @@ GrGLDriverInfo GrGLGetDriverInfo(const GrGLInterface* interface) {
 
     std::tie(info.fDriver, info.fDriverVersion) = get_driver_and_version(interface->fStandard,
                                                                          info.fVendor,
+                                                                         vendor,
                                                                          renderer,
                                                                          version);
 
@@ -653,6 +684,8 @@ GrGLDriverInfo GrGLGetDriverInfo(const GrGLInterface* interface) {
                 get_angle_gl_vendor_and_renderer(innerAngleRendererString.c_str(),
                                                  interface->fExtensions);
     }
+
+    info.fIsOverCommandBuffer = is_commamd_buffer(renderer, version);
 
     return info;
 }

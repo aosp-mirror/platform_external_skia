@@ -23,6 +23,8 @@
  * thereof.
  */
 struct GrVertexWriter {
+    constexpr static uint32_t kIEEE_32_infinity = 0x7f800000;
+
     void* fPtr;
 
     GrVertexWriter() = default;
@@ -40,7 +42,7 @@ struct GrVertexWriter {
     bool operator==(const GrVertexWriter& that) const { return fPtr == that.fPtr; }
     operator bool() const { return fPtr != nullptr; }
 
-    GrVertexWriter makeOffset(size_t offsetInBytes) const {
+    GrVertexWriter makeOffset(ptrdiff_t offsetInBytes) const {
         return {SkTAddOffset<void>(fPtr, offsetInBytes)};
     }
 
@@ -67,10 +69,6 @@ struct GrVertexWriter {
     template <typename T, typename... Args>
     void write(const T& val, const Args&... remainder) {
         static_assert(std::is_pod<T>::value, "");
-        // This assert is barely related to what we're trying to check - that our vertex data
-        // matches our attribute layouts, where each attribute is aligned to four bytes. If this
-        // becomes a problem, just remove it.
-        static_assert(alignof(T) <= 4, "");
         memcpy(fPtr, &val, sizeof(T));
         fPtr = SkTAddOffset<void>(fPtr, sizeof(T));
         this->write(remainder...);
@@ -79,7 +77,6 @@ struct GrVertexWriter {
     template <typename T, size_t N, typename... Args>
     void write(const T(&val)[N], const Args&... remainder) {
         static_assert(std::is_pod<T>::value, "");
-        static_assert(alignof(T) <= 4, "");
         memcpy(fPtr, val, N * sizeof(T));
         fPtr = SkTAddOffset<void>(fPtr, N * sizeof(T));
         this->write(remainder...);
@@ -121,7 +118,6 @@ struct GrVertexWriter {
     template <typename T>
     void writeArray(const T* array, int count) {
         static_assert(std::is_pod<T>::value, "");
-        static_assert(alignof(T) <= 4, "");
         memcpy(fPtr, array, count * sizeof(T));
         fPtr = SkTAddOffset<void>(fPtr, count * sizeof(T));
     }

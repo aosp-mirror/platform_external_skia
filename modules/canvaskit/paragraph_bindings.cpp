@@ -28,7 +28,7 @@ using namespace emscripten;
 
 namespace para = skia::textlayout;
 
-SkColor4f toSkColor4f(uintptr_t /* float* */ cPtr) {
+SkColor4f toSkColor4f(WASMPointerF32 cPtr) {
     float* fourFloats = reinterpret_cast<float*>(cPtr);
     SkColor4f color = {fourFloats[0], fourFloats[1], fourFloats[2], fourFloats[3]};
     return color;
@@ -41,12 +41,12 @@ struct SimpleFontStyle {
 };
 
 struct SimpleTextStyle {
-    uintptr_t /* float* */ colorPtr;
-    uintptr_t /* float* */ foregroundColorPtr;
-    uintptr_t /* float* */ backgroundColorPtr;
+    WASMPointerF32 colorPtr;
+    WASMPointerF32 foregroundColorPtr;
+    WASMPointerF32 backgroundColorPtr;
     uint8_t decoration;
     SkScalar decorationThickness;
-    uintptr_t /* float* */ decorationColorPtr;
+    WASMPointerF32 decorationColorPtr;
     para::TextDecorationStyle decorationStyle;
     para::TextBaseline textBaseline;
     SkScalar fontSize;
@@ -54,25 +54,25 @@ struct SimpleTextStyle {
     SkScalar wordSpacing;
     SkScalar heightMultiplier;
     bool halfLeading;
-    uintptr_t /* const char* */ localePtr;
+    WASMPointerU8 localePtr;
     int localeLen;
     SimpleFontStyle fontStyle;
 
-    uintptr_t /* const char** */ fontFamiliesPtr;
+    WASMPointerU8 fontFamiliesPtr;
     int fontFamiliesLen;
 
     int shadowLen;
-    uintptr_t /* SkColor4f* */ shadowColorsPtr;
-    uintptr_t /* SkPoint* */ shadowOffsetsPtr;
-    uintptr_t /* float* */ shadowBlurRadiiPtr;
+    WASMPointerF32 shadowColorsPtr;
+    WASMPointerF32 shadowOffsetsPtr;
+    WASMPointerF32 shadowBlurRadiiPtr;
 
     int fontFeatureLen;
-    uintptr_t /* float* */ fontFeatureNamesPtr;
-    uintptr_t /* float* */ fontFeatureValuesPtr;
+    WASMPointerF32 fontFeatureNamesPtr;
+    WASMPointerF32 fontFeatureValuesPtr;
 };
 
 struct SimpleStrutStyle {
-    uintptr_t /* const char** */ fontFamiliesPtr;
+    WASMPointerU32 fontFamiliesPtr;
     int fontFamiliesLen;
     SimpleFontStyle fontStyle;
     SkScalar fontSize;
@@ -209,7 +209,7 @@ para::TextStyle toTextStyle(const SimpleTextStyle& s) {
 
 struct SimpleParagraphStyle {
     bool disableHinting;
-    uintptr_t /* const char* */ ellipsisPtr;
+    WASMPointerU8 ellipsisPtr;
     size_t ellipsisLen;
     SkScalar heightMultiplier;
     size_t maxLines;
@@ -358,7 +358,7 @@ JSArray GetShapedLines(para::Paragraph& self) {
             accum.reset(lineNumber);
             jruns = emscripten::val::array();
 
-            jline = emscripten::val::array();
+            jline = emscripten::val::object();
             jline.set("runs", jruns);
             // will assign textRange and metrics on end-of-line signal
 
@@ -381,8 +381,8 @@ JSArray GetShapedLines(para::Paragraph& self) {
             jrun.set("scaleX",  info->font.getScaleX());
         }
 
-        jrun.set("glyphs",   MakeTypedArray(N,  info->glyphs,     "Uint16Array"));
-        jrun.set("offsets",  MakeTypedArray(N1, info->utf8Starts, "Uint32Array"));
+        jrun.set("glyphs",   MakeTypedArray(N,  info->glyphs));
+        jrun.set("offsets",  MakeTypedArray(N1, info->utf8Starts));
 
         // we need to modify the positions, so make a temp copy
         SkAutoSTMalloc<32, SkPoint> positions(N1);
@@ -390,7 +390,7 @@ JSArray GetShapedLines(para::Paragraph& self) {
             positions.get()[i] = info->positions[i] + info->origin;
         }
         positions.get()[N] = { info->advanceX, positions.get()[N - 1].fY };
-        jrun.set("positions", MakeTypedArray(N1*2, (const float*)positions.get(), "Float32Array"));
+        jrun.set("positions", MakeTypedArray(N1*2, (const float*)positions.get()));
 
         jruns.call<void>("push", jrun);
 
@@ -488,13 +488,6 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
                     para::TextStyle style;
                     style.setTypeface(r["typeface"].as< sk_sp<SkTypeface> >());
                     style.setFontSize(r["size"].as<float>());
-                    style.setFontStyle({
-                        r["fakeBold"].as<bool>() ? SkFontStyle::kBold_Weight
-                                                 : SkFontStyle::kNormal_Weight,
-                        SkFontStyle::kNormal_Width,
-                        r["fakeItalic"].as<bool>() ? SkFontStyle::kItalic_Slant
-                                                   : SkFontStyle::kUpright_Slant,
-                    });
 
                     const size_t subTextCount = r["length"].as<size_t>();
                     if (subTextCount > textCount) {
@@ -564,7 +557,7 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
       }))
       .function("_registerFont", optional_override([](para::TypefaceFontProvider& self,
                                                       sk_sp<SkTypeface> typeface,
-                                                      uintptr_t familyPtr) {
+                                                      WASMPointerU8 familyPtr) {
           const char* fPtr = reinterpret_cast<const char*>(familyPtr);
           SkString fStr(fPtr);
           self.registerTypeface(typeface, fStr);

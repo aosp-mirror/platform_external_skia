@@ -19,8 +19,8 @@ namespace SkSL {
  */
 class AnyConstructor : public Expression {
 public:
-    AnyConstructor(int offset, Kind kind, const Type* type)
-            : INHERITED(offset, kind, type) {}
+    AnyConstructor(int line, Kind kind, const Type* type)
+            : INHERITED(line, kind, type) {}
 
     virtual SkSpan<std::unique_ptr<Expression>> argumentSpan() = 0;
     virtual SkSpan<const std::unique_ptr<Expression>> argumentSpan() const = 0;
@@ -68,6 +68,7 @@ public:
         return true;
     }
 
+    bool allowsConstantSubexpressions() const override { return true; }
     const Expression* getConstantSubexpression(int n) const override;
 
     ComparisonResult compareConstant(const Expression& other) const override;
@@ -83,9 +84,9 @@ private:
  */
 class SingleArgumentConstructor : public AnyConstructor {
 public:
-    SingleArgumentConstructor(int offset, Kind kind, const Type* type,
+    SingleArgumentConstructor(int line, Kind kind, const Type* type,
                               std::unique_ptr<Expression> argument)
-            : INHERITED(offset, kind, type)
+            : INHERITED(line, kind, type)
             , fArgument(std::move(argument)) {}
 
     std::unique_ptr<Expression>& argument() {
@@ -115,8 +116,8 @@ private:
  */
 class MultiArgumentConstructor : public AnyConstructor {
 public:
-    MultiArgumentConstructor(int offset, Kind kind, const Type* type, ExpressionArray arguments)
-            : INHERITED(offset, kind, type)
+    MultiArgumentConstructor(int line, Kind kind, const Type* type, ExpressionArray arguments)
+            : INHERITED(line, kind, type)
             , fArguments(std::move(arguments)) {}
 
     ExpressionArray& arguments() {
@@ -168,7 +169,7 @@ namespace Constructor {
     // Constructor expression types; this class chooses the proper one based on context, e.g.
     // `ConstructorCompound`, `ConstructorScalarCast`, or `ConstructorMatrixResize`.
     std::unique_ptr<Expression> Convert(const Context& context,
-                                        int offset,
+                                        int line,
                                         const Type& type,
                                         ExpressionArray args);
 };

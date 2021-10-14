@@ -13,8 +13,9 @@
 
 #include <utility>
 
-#ifdef SK_XML
+#if defined(SK_ENABLE_SVG)
 #include "modules/svg/include/SkSVGDOM.h"
+#include "modules/svg/include/SkSVGNode.h"
 #include "src/xml/SkDOM.h"
 #endif
 
@@ -27,7 +28,7 @@ sk_sp<BisectSlide> BisectSlide::Create(const char filepath[]) {
 
     sk_sp<BisectSlide> bisect(new BisectSlide(filepath));
     if (bisect->fFilePath.endsWith(".svg")) {
-#ifdef SK_XML
+#if defined(SK_ENABLE_SVG)
         sk_sp<SkSVGDOM> svg = SkSVGDOM::MakeFromStream(stream);
         if (!svg) {
             SkDebugf("BISECT: couldn't load svg at \"%s\"\n", filepath);
@@ -128,7 +129,7 @@ void BisectSlide::draw(SkCanvas* canvas) {
     canvas->translate(-fDrawBounds.left(), -fDrawBounds.top());
 
     for (const FoundPath& path : fFoundPaths) {
-        SkAutoCanvasRestore acr(canvas, true);
+        SkAutoCanvasRestore acr2(canvas, true);
         canvas->concat(path.fViewMatrix);
         canvas->drawPath(path.fPath, path.fPaint);
     }

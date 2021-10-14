@@ -7,21 +7,24 @@
 
 #include "src/sksl/SkSLAnalysis.h"
 
+#include "include/private/SkFloatingPoint.h"
 #include "include/private/SkSLModifiers.h"
 #include "include/private/SkSLProgramElement.h"
 #include "include/private/SkSLSampleUsage.h"
 #include "include/private/SkSLStatement.h"
+#include "include/sksl/SkSLErrorReporter.h"
+#include "src/core/SkSafeMath.h"
 #include "src/sksl/SkSLCompiler.h"
-#include "src/sksl/SkSLErrorReporter.h"
+#include "src/sksl/SkSLConstantFolder.h"
+#include "src/sksl/analysis/SkSLProgramVisitor.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLProgram.h"
+#include "src/sksl/transform/SkSLProgramWriter.h"
 
 // ProgramElements
-#include "src/sksl/ir/SkSLEnum.h"
 #include "src/sksl/ir/SkSLExtension.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
-#include "src/sksl/ir/SkSLSection.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 
 // Statements
@@ -39,19 +42,18 @@
 
 // Expressions
 #include "src/sksl/ir/SkSLBinaryExpression.h"
-#include "src/sksl/ir/SkSLBoolLiteral.h"
+#include "src/sksl/ir/SkSLChildCall.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 #include "src/sksl/ir/SkSLConstructorMatrixResize.h"
 #include "src/sksl/ir/SkSLExternalFunctionCall.h"
 #include "src/sksl/ir/SkSLExternalFunctionReference.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
-#include "src/sksl/ir/SkSLFloatLiteral.h"
 #include "src/sksl/ir/SkSLFunctionCall.h"
 #include "src/sksl/ir/SkSLFunctionReference.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
 #include "src/sksl/ir/SkSLInlineMarker.h"
-#include "src/sksl/ir/SkSLIntLiteral.h"
+#include "src/sksl/ir/SkSLLiteral.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLSetting.h"
@@ -60,22 +62,19 @@
 #include "src/sksl/ir/SkSLTypeReference.h"
 #include "src/sksl/ir/SkSLVariableReference.h"
 
+#include <stack>
+
 namespace SkSL {
 
 namespace {
 
-static bool is_sample_call_to_fp(const FunctionCall& fc, const Variable& fp) {
-    const FunctionDeclaration& f = fc.function();
-    return f.isBuiltin() && f.name() == "sample" && fc.arguments().size() >= 1 &&
-           fc.arguments()[0]->is<VariableReference>() &&
-           fc.arguments()[0]->as<VariableReference>().variable() == &fp;
-}
-
-// Visitor that determines the merged SampleUsage for a given child 'fp' in the program.
+// Visitor that determines the merged SampleUsage for a given child in the program.
 class MergeSampleUsageVisitor : public ProgramVisitor {
 public:
-    MergeSampleUsageVisitor(const Context& context, const Variable& fp, bool writesToSampleCoords)
-            : fContext(context), fFP(fp), fWritesToSampleCoords(writesToSampleCoords) {}
+    MergeSampleUsageVisitor(const Context& context,
+                            const Variable& child,
+                            bool writesToSampleCoords)
+            : fContext(context), fChild(child), fWritesToSampleCoords(writesToSampleCoords) {}
 
     SampleUsage visit(const Program& program) {
         fUsage = SampleUsage(); // reset to none
@@ -83,43 +82,38 @@ public:
         return fUsage;
     }
 
+    int elidedSampleCoordCount() const { return fElidedSampleCoordCount; }
+
 protected:
     const Context& fContext;
-    const Variable& fFP;
+    const Variable& fChild;
     const bool fWritesToSampleCoords;
     SampleUsage fUsage;
+    int fElidedSampleCoordCount = 0;
 
     bool visitExpression(const Expression& e) override {
-        // Looking for sample(fp, ...)
-        if (e.is<FunctionCall>()) {
-            const FunctionCall& fc = e.as<FunctionCall>();
-            if (is_sample_call_to_fp(fc, fFP)) {
-                // Determine the type of call at this site, and merge it with the accumulated state
-                if (fc.arguments().size() >= 2) {
-                    const Expression* coords = fc.arguments()[1].get();
-                    if (coords->type() == *fContext.fTypes.fFloat2) {
-                        // If the coords are a direct reference to the program's sample-coords,
-                        // and those coords are never modified, we can conservatively turn this
-                        // into PassThrough sampling. In all other cases, we consider it Explicit.
-                        if (!fWritesToSampleCoords && coords->is<VariableReference>() &&
-                            coords->as<VariableReference>()
-                                            .variable()
-                                            ->modifiers()
-                                            .fLayout.fBuiltin == SK_MAIN_COORDS_BUILTIN) {
-                            fUsage.merge(SampleUsage::PassThrough());
-                        } else {
-                            fUsage.merge(SampleUsage::Explicit());
-                        }
-                    } else {
-                        // sample(fp, half4 inputColor) -> PassThrough
-                        fUsage.merge(SampleUsage::PassThrough());
-                    }
-                } else {
-                    // sample(fp) -> PassThrough
+        // Looking for child(...)
+        if (e.is<ChildCall>() && &e.as<ChildCall>().child() == &fChild) {
+            // Determine the type of call at this site, and merge it with the accumulated state
+            const ExpressionArray& arguments = e.as<ChildCall>().arguments();
+            SkASSERT(arguments.size() >= 1);
+
+            const Expression* maybeCoords = arguments[0].get();
+            if (maybeCoords->type() == *fContext.fTypes.fFloat2) {
+                // If the coords are a direct reference to the program's sample-coords, and those
+                // coords are never modified, we can conservatively turn this into PassThrough
+                // sampling. In all other cases, we consider it Explicit.
+                if (!fWritesToSampleCoords && maybeCoords->is<VariableReference>() &&
+                    maybeCoords->as<VariableReference>().variable()->modifiers().fLayout.fBuiltin ==
+                            SK_MAIN_COORDS_BUILTIN) {
                     fUsage.merge(SampleUsage::PassThrough());
+                    ++fElidedSampleCoordCount;
+                } else {
+                    fUsage.merge(SampleUsage::Explicit());
                 }
-                // NOTE: we don't return true here just because we found a sample call. We need to
-                // process the entire program and merge across all encountered calls.
+            } else {
+                // child(inputColor) or child(srcColor, dstColor) -> PassThrough
+                fUsage.merge(SampleUsage::PassThrough());
             }
         }
 
@@ -143,6 +137,27 @@ public:
     }
 
     int fBuiltin;
+
+    using INHERITED = ProgramVisitor;
+};
+
+// Visitor that searches for child calls from a function other than main()
+class SampleOutsideMainVisitor : public ProgramVisitor {
+public:
+    SampleOutsideMainVisitor() {}
+
+    bool visitExpression(const Expression& e) override {
+        if (e.is<ChildCall>()) {
+            return true;
+        }
+        return INHERITED::visitExpression(e);
+    }
+
+    bool visitProgramElement(const ProgramElement& p) override {
+        return p.is<FunctionDefinition>() &&
+               !p.as<FunctionDefinition>().declaration().isMain() &&
+               INHERITED::visitProgramElement(p);
+    }
 
     using INHERITED = ProgramVisitor;
 };
@@ -278,12 +293,8 @@ private:
 // If a caller doesn't care about errors, we can use this trivial reporter that just counts up.
 class TrivialErrorReporter : public ErrorReporter {
 public:
-    void error(int offset, String) override { ++fErrorCount; }
-    int errorCount() override { return fErrorCount; }
-    void setErrorCount(int c) override { fErrorCount = c; }
-
-private:
-    int fErrorCount = 0;
+    ~TrivialErrorReporter() override { this->reportPendingErrors({}); }
+    void handleError(skstd::string_view, PositionInfo) override {}
 };
 
 // This isn't actually using ProgramVisitor, because it only considers a subset of the fields for
@@ -308,7 +319,7 @@ public:
                 VariableReference& varRef = expr.as<VariableReference>();
                 const Variable* var = varRef.variable();
                 if (var->modifiers().fFlags & (Modifiers::kConst_Flag | Modifiers::kUniform_Flag)) {
-                    fErrors->error(expr.fOffset,
+                    fErrors->error(expr.fLine,
                                    "cannot modify immutable variable '" + var->name() + "'");
                 } else {
                     SkASSERT(fAssignedVar == nullptr);
@@ -330,8 +341,11 @@ public:
                 this->visitExpression(*expr.as<IndexExpression>().base());
                 break;
 
+            case Expression::Kind::kPoison:
+                break;
+
             default:
-                fErrors->error(expr.fOffset, "cannot assign to this expression");
+                fErrors->error(expr.fLine, "cannot assign to this expression");
                 break;
         }
     }
@@ -343,7 +357,7 @@ private:
             SkASSERT(idx >= SwizzleComponent::X && idx <= SwizzleComponent::W);
             int bit = 1 << idx;
             if (bits & bit) {
-                fErrors->error(swizzle.fOffset,
+                fErrors->error(swizzle.fLine,
                                "cannot write to the same swizzle field more than once");
                 break;
             }
@@ -496,10 +510,10 @@ public:
                 const SwitchStatement& s = stmt.as<SwitchStatement>();
                 bool foundDefault = false;
                 bool fellThrough = false;
-                for (const std::unique_ptr<Statement>& stmt : s.cases()) {
+                for (const std::unique_ptr<Statement>& switchStmt : s.cases()) {
                     // The default case is indicated by a null value. A switch without a default
                     // case cannot definitively return, as its value might not be in the cases list.
-                    const SwitchCase& sc = stmt->as<SwitchCase>();
+                    const SwitchCase& sc = switchStmt->as<SwitchCase>();
                     if (!sc.value()) {
                         foundDefault = true;
                     }
@@ -564,10 +578,15 @@ public:
 // Analysis
 
 SampleUsage Analysis::GetSampleUsage(const Program& program,
-                                     const Variable& fp,
-                                     bool writesToSampleCoords) {
-    MergeSampleUsageVisitor visitor(*program.fContext, fp, writesToSampleCoords);
-    return visitor.visit(program);
+                                     const Variable& child,
+                                     bool writesToSampleCoords,
+                                     int* elidedSampleCoordCount) {
+    MergeSampleUsageVisitor visitor(*program.fContext, child, writesToSampleCoords);
+    SampleUsage result = visitor.visit(program);
+    if (elidedSampleCoordCount) {
+        *elidedSampleCoordCount += visitor.elidedSampleCoordCount();
+    }
+    return result;
 }
 
 bool Analysis::ReferencesBuiltin(const Program& program, int builtin) {
@@ -581,6 +600,226 @@ bool Analysis::ReferencesSampleCoords(const Program& program) {
 
 bool Analysis::ReferencesFragCoords(const Program& program) {
     return Analysis::ReferencesBuiltin(program, SK_FRAGCOORD_BUILTIN);
+}
+
+bool Analysis::CallsSampleOutsideMain(const Program& program) {
+    SampleOutsideMainVisitor visitor;
+    return visitor.visit(program);
+}
+
+bool Analysis::CheckProgramUnrolledSize(const Program& program) {
+    // We check the size of strict-ES2 programs since SkVM will completely unroll them.
+    // Note that we *cannot* safely check the program size of non-ES2 code at this time, as it is
+    // allowed to do things we can't measure (e.g. the program can contain a recursive cycle). We
+    // could, at best, compute a lower bound.
+    const Context& context = *program.fContext;
+    SkASSERT(context.fConfig->strictES2Mode());
+
+    // If we decide that expressions are cheaper than statements, or that certain statements are
+    // more expensive than others, etc., we can always tweak these ratios as needed. A very rough
+    // ballpark estimate is currently good enough for our purposes.
+    static constexpr size_t kExpressionCost = 1;
+    static constexpr size_t kStatementCost = 1;
+    static constexpr size_t kUnknownCost = -1;
+    static constexpr size_t kProgramSizeLimit = 100000;
+    static constexpr size_t kProgramStackDepthLimit = 50;
+
+    class ProgramSizeVisitor : public ProgramVisitor {
+    public:
+        ProgramSizeVisitor(const Context& c) : fContext(c) {}
+
+        using ProgramVisitor::visitProgramElement;
+
+        size_t functionSize() const {
+            return fFunctionSize;
+        }
+
+        bool visitProgramElement(const ProgramElement& pe) override {
+            if (pe.is<FunctionDefinition>()) {
+                // Check the function-size cache map first. We don't need to visit this function if
+                // we already processed it before.
+                const FunctionDeclaration* decl = &pe.as<FunctionDefinition>().declaration();
+                auto [iter, wasInserted] = fFunctionCostMap.insert({decl, kUnknownCost});
+                if (!wasInserted) {
+                    // We already have this function in our map. We don't need to check it again.
+                    if (iter->second == kUnknownCost) {
+                        // If the function is present in the map with an unknown cost, we're
+                        // recursively processing it--in other words, we found a cycle in the code.
+                        // Unwind our stack into a string.
+                        String msg = "\n\t" + decl->description();
+                        for (auto unwind = fStack.rbegin(); unwind != fStack.rend(); ++unwind) {
+                            msg = "\n\t" + (*unwind)->description() + msg;
+                            if (*unwind == decl) {
+                                break;
+                            }
+                        }
+                        msg = "potential recursion (function call cycle) not allowed:" + msg;
+                        fContext.fErrors->error(pe.fLine, std::move(msg));
+                        fFunctionSize = iter->second = 0;
+                        return true;
+                    }
+                    // Set the size to its known value.
+                    fFunctionSize = iter->second;
+                    return false;
+                }
+
+                // If the function-call stack has gotten too deep, stop the analysis.
+                if (fStack.size() >= kProgramStackDepthLimit) {
+                    String msg = "exceeded max function call depth:";
+                    for (auto unwind = fStack.begin(); unwind != fStack.end(); ++unwind) {
+                        msg += "\n\t" + (*unwind)->description();
+                    }
+                    msg += "\n\t" + decl->description();
+                    fContext.fErrors->error(pe.fLine, std::move(msg));
+                    fFunctionSize = iter->second = 0;
+                    return true;
+                }
+
+                // Calculate the function cost and store it in our cache.
+                fStack.push_back(decl);
+                fFunctionSize = 0;
+                bool result = INHERITED::visitProgramElement(pe);
+                iter->second = fFunctionSize;
+                fStack.pop_back();
+
+                return result;
+            }
+
+            return INHERITED::visitProgramElement(pe);
+        }
+
+        bool visitStatement(const Statement& stmt) override {
+            switch (stmt.kind()) {
+                case Statement::Kind::kFor: {
+                    // We count a for-loop's unrolled size here. We expect that the init statement
+                    // will be emitted once, and the next-expr and statement will be repeated in the
+                    // output for every iteration of the loop. The test-expr is optimized away
+                    // during the unroll and is not counted at all.
+                    const ForStatement& forStmt = stmt.as<ForStatement>();
+                    bool result = this->visitStatement(*forStmt.initializer());
+
+                    size_t originalFunctionSize = fFunctionSize;
+                    fFunctionSize = 0;
+
+                    result = this->visitExpression(*forStmt.next()) ||
+                             this->visitStatement(*forStmt.statement()) || result;
+
+                    if (const LoopUnrollInfo* unrollInfo = forStmt.unrollInfo()) {
+                        fFunctionSize = SkSafeMath::Mul(fFunctionSize, unrollInfo->fCount);
+                    } else {
+                        SkDEBUGFAIL("for-loops should always have unroll info in an ES2 program");
+                    }
+
+                    fFunctionSize = SkSafeMath::Add(fFunctionSize, originalFunctionSize);
+                    return result;
+                }
+
+                case Statement::Kind::kExpression:
+                    // The cost of an expression-statement is counted in visitExpression. It would
+                    // be double-dipping to count it here too.
+                    break;
+
+                case Statement::Kind::kInlineMarker:
+                case Statement::Kind::kNop:
+                case Statement::Kind::kVarDeclaration:
+                    // These statements don't directly consume any space in a compiled program.
+                    break;
+
+                case Statement::Kind::kDo:
+                    SkDEBUGFAIL("encountered a statement that shouldn't exist in an ES2 program");
+                    break;
+
+                default:
+                    fFunctionSize = SkSafeMath::Add(fFunctionSize, kStatementCost);
+                    break;
+            }
+
+            bool earlyExit = fFunctionSize > kProgramSizeLimit;
+            return earlyExit || INHERITED::visitStatement(stmt);
+        }
+
+        bool visitExpression(const Expression& expr) override {
+            // Other than function calls, all expressions are assumed to have a fixed unit cost.
+            bool earlyExit = false;
+            size_t expressionCost = kExpressionCost;
+
+            if (expr.is<FunctionCall>()) {
+                // Visit this function call to calculate its size. If we've already sized it, this
+                // will retrieve the size from our cache.
+                const FunctionCall& call = expr.as<FunctionCall>();
+                const FunctionDeclaration* decl = &call.function();
+                if (decl->definition() && !decl->isIntrinsic()) {
+                    size_t originalFunctionSize = fFunctionSize;
+                    fFunctionSize = 0;
+
+                    earlyExit = this->visitProgramElement(*decl->definition());
+                    expressionCost = fFunctionSize;
+
+                    fFunctionSize = originalFunctionSize;
+                }
+            }
+
+            fFunctionSize = SkSafeMath::Add(fFunctionSize, expressionCost);
+            return earlyExit || INHERITED::visitExpression(expr);
+        }
+
+    private:
+        using INHERITED = ProgramVisitor;
+
+        const Context& fContext;
+        size_t fFunctionSize = 0;
+        std::unordered_map<const FunctionDeclaration*, size_t> fFunctionCostMap;
+        std::vector<const FunctionDeclaration*> fStack;
+    };
+
+    // Process every function in our program.
+    ProgramSizeVisitor visitor{context};
+    for (const std::unique_ptr<ProgramElement>& element : program.ownedElements()) {
+        if (element->is<FunctionDefinition>()) {
+            // Visit every function--we want to detect static recursion and report it as an error,
+            // even in unreferenced functions.
+            visitor.visitProgramElement(*element);
+            // Report an error when main()'s flattened size is larger than our program limit.
+            if (visitor.functionSize() > kProgramSizeLimit &&
+                element->as<FunctionDefinition>().declaration().isMain()) {
+                context.fErrors->error(/*line=*/-1, "program is too large");
+            }
+        }
+    }
+
+    return true;
+}
+
+bool Analysis::DetectVarDeclarationWithoutScope(const Statement& stmt, ErrorReporter* errors) {
+    // A variable declaration can create either a lone VarDeclaration or an unscoped Block
+    // containing multiple VarDeclaration statements. We need to detect either case.
+    const Variable* var;
+    if (stmt.is<VarDeclaration>()) {
+        // The single-variable case. No blocks at all.
+        var = &stmt.as<VarDeclaration>().var();
+    } else if (stmt.is<Block>()) {
+        // The multiple-variable case: an unscoped, non-empty block...
+        const Block& block = stmt.as<Block>();
+        if (block.isScope() || block.children().empty()) {
+            return false;
+        }
+        // ... holding a variable declaration.
+        const Statement& innerStmt = *block.children().front();
+        if (!innerStmt.is<VarDeclaration>()) {
+            return false;
+        }
+        var = &innerStmt.as<VarDeclaration>().var();
+    } else {
+        // This statement wasn't a variable declaration. No problem.
+        return false;
+    }
+
+    // Report an error.
+    SkASSERT(var);
+    if (errors) {
+        errors->error(stmt.fLine, "variable '" + var->name() + "' must be created in a scope");
+    }
+    return true;
 }
 
 int Analysis::NodeCountUpToLimit(const FunctionDefinition& function, int limit) {
@@ -634,20 +873,19 @@ int ProgramUsage::get(const FunctionDeclaration& f) const {
     return count ? *count : 0;
 }
 
-void ProgramUsage::replace(const Expression* oldExpr, const Expression* newExpr) {
-    if (oldExpr) {
-        ProgramUsageVisitor subRefs(this, /*delta=*/-1);
-        subRefs.visitExpression(*oldExpr);
-    }
-    if (newExpr) {
-        ProgramUsageVisitor addRefs(this, /*delta=*/+1);
-        addRefs.visitExpression(*newExpr);
-    }
+void ProgramUsage::add(const Expression* expr) {
+    ProgramUsageVisitor addRefs(this, /*delta=*/+1);
+    addRefs.visitExpression(*expr);
 }
 
 void ProgramUsage::add(const Statement* stmt) {
     ProgramUsageVisitor addRefs(this, /*delta=*/+1);
     addRefs.visitStatement(*stmt);
+}
+
+void ProgramUsage::add(const ProgramElement& element) {
+    ProgramUsageVisitor addRefs(this, /*delta=*/+1);
+    addRefs.visitProgramElement(element);
 }
 
 void ProgramUsage::remove(const Expression* expr) {
@@ -674,36 +912,17 @@ bool Analysis::IsAssignable(Expression& expr, AssignmentInfo* info, ErrorReporte
     return IsAssignableVisitor{errors ? errors : &trivialErrors}.visit(expr, info);
 }
 
-void Analysis::UpdateRefKind(Expression* expr, VariableRefKind refKind) {
-    class RefKindWriter : public ProgramWriter {
-    public:
-        RefKindWriter(VariableReference::RefKind refKind) : fRefKind(refKind) {}
-
-        bool visitExpression(Expression& expr) override {
-            if (expr.is<VariableReference>()) {
-                expr.as<VariableReference>().setRefKind(fRefKind);
-            }
-            return INHERITED::visitExpression(expr);
-        }
-
-    private:
-        VariableReference::RefKind fRefKind;
-
-        using INHERITED = ProgramWriter;
-    };
-
-    RefKindWriter{refKind}.visitExpression(*expr);
-}
-
-bool Analysis::MakeAssignmentExpr(Expression* expr,
-                                  VariableReference::RefKind kind,
-                                  ErrorReporter* errors) {
+bool Analysis::UpdateVariableRefKind(Expression* expr,
+                                     VariableReference::RefKind kind,
+                                     ErrorReporter* errors) {
     Analysis::AssignmentInfo info;
     if (!Analysis::IsAssignable(*expr, &info, errors)) {
         return false;
     }
     if (!info.fAssignedVar) {
-        errors->error(expr->fOffset, "can't assign to expression '" + expr->description() + "'");
+        if (errors) {
+            errors->error(expr->fLine, "can't assign to expression '" + expr->description() + "'");
+        }
         return false;
     }
     info.fAssignedVar->setRefKind(kind);
@@ -711,9 +930,7 @@ bool Analysis::MakeAssignmentExpr(Expression* expr,
 }
 
 bool Analysis::IsTrivialExpression(const Expression& expr) {
-    return expr.is<IntLiteral>() ||
-           expr.is<FloatLiteral>() ||
-           expr.is<BoolLiteral>() ||
+    return expr.is<Literal>() ||
            expr.is<VariableReference>() ||
            (expr.is<Swizzle>() &&
             IsTrivialExpression(*expr.as<Swizzle>().base())) ||
@@ -725,7 +942,7 @@ bool Analysis::IsTrivialExpression(const Expression& expr) {
            (expr.isAnyConstructor() &&
             expr.isConstantOrUniform()) ||
            (expr.is<IndexExpression>() &&
-            expr.as<IndexExpression>().index()->is<IntLiteral>() &&
+            expr.as<IndexExpression>().index()->isIntLiteral() &&
             IsTrivialExpression(*expr.as<IndexExpression>().base()));
 }
 
@@ -739,16 +956,11 @@ bool Analysis::IsSameExpressionTree(const Expression& left, const Expression& ri
     // Since this is intended to be used for optimization purposes, handling the common cases is
     // sufficient.
     switch (left.kind()) {
-        case Expression::Kind::kIntLiteral:
-            return left.as<IntLiteral>().value() == right.as<IntLiteral>().value();
-
-        case Expression::Kind::kFloatLiteral:
-            return left.as<FloatLiteral>().value() == right.as<FloatLiteral>().value();
-
-        case Expression::Kind::kBoolLiteral:
-            return left.as<BoolLiteral>().value() == right.as<BoolLiteral>().value();
+        case Expression::Kind::kLiteral:
+            return left.as<Literal>().value() == right.as<Literal>().value();
 
         case Expression::Kind::kConstructorArray:
+        case Expression::Kind::kConstructorArrayCast:
         case Expression::Kind::kConstructorCompound:
         case Expression::Kind::kConstructorCompoundCast:
         case Expression::Kind::kConstructorDiagonalMatrix:
@@ -797,29 +1009,12 @@ bool Analysis::IsSameExpressionTree(const Expression& left, const Expression& ri
     }
 }
 
-static bool get_constant_value(const Expression& expr, double* val) {
-    const Expression* valExpr = expr.getConstantSubexpression(0);
-    if (!valExpr) {
-        return false;
-    }
-    if (valExpr->is<IntLiteral>()) {
-        *val = static_cast<double>(valExpr->as<IntLiteral>().value());
-        return true;
-    }
-    if (valExpr->is<FloatLiteral>()) {
-        *val = static_cast<double>(valExpr->as<FloatLiteral>().value());
-        return true;
-    }
-    SkDEBUGFAILF("unexpected constant type (%s)", expr.type().description().c_str());
-    return false;
-}
-
-static const char* invalid_for_ES2(int offset,
+static const char* invalid_for_ES2(int line,
                                    const Statement* loopInitializer,
                                    const Expression* loopTest,
                                    const Expression* loopNext,
                                    const Statement* loopStatement,
-                                   Analysis::UnrollableLoopInfo& loopInfo) {
+                                   LoopUnrollInfo& loopInfo) {
     //
     // init_declaration has the form: type_specifier identifier = constant_expression
     //
@@ -839,7 +1034,7 @@ static const char* invalid_for_ES2(int offset,
     if (!initDecl.value()) {
         return "missing loop index initializer";
     }
-    if (!get_constant_value(*initDecl.value(), &loopInfo.fStart)) {
+    if (!ConstantFolder::GetConstantValue(*initDecl.value(), &loopInfo.fStart)) {
         return "loop index initializer must be a constant expression";
     }
 
@@ -876,7 +1071,7 @@ static const char* invalid_for_ES2(int offset,
             return "invalid relational operator";
     }
     double loopEnd = 0;
-    if (!get_constant_value(*cond.right(), &loopEnd)) {
+    if (!ConstantFolder::GetConstantValue(*cond.right(), &loopEnd)) {
         return "loop index must be compared with a constant expression";
     }
 
@@ -898,7 +1093,7 @@ static const char* invalid_for_ES2(int offset,
             if (!is_loop_index(next.left())) {
                 return "expected loop index in loop expression";
             }
-            if (!get_constant_value(*next.right(), &loopInfo.fDelta)) {
+            if (!ConstantFolder::GetConstantValue(*next.right(), &loopInfo.fDelta)) {
                 return "loop index must be modified by a constant expression";
             }
             switch (next.getOperator().kind()) {
@@ -945,53 +1140,104 @@ static const char* invalid_for_ES2(int offset,
     }
 
     // Finally, compute the iteration count, based on the bounds, and the termination operator.
-    constexpr int kMaxUnrollableLoopLength = 128;
+    static constexpr int kLoopTerminationLimit = 100000;
     loopInfo.fCount = 0;
 
-    double val = loopInfo.fStart;
-    auto evalCond = [&]() {
-        switch (cond.getOperator().kind()) {
-            case Token::Kind::TK_GT:   return val >  loopEnd;
-            case Token::Kind::TK_GTEQ: return val >= loopEnd;
-            case Token::Kind::TK_LT:   return val <  loopEnd;
-            case Token::Kind::TK_LTEQ: return val <= loopEnd;
-            case Token::Kind::TK_EQEQ: return val == loopEnd;
-            case Token::Kind::TK_NEQ:  return val != loopEnd;
-            default: SkUNREACHABLE;
+    auto calculateCount = [](double start, double end, double delta,
+                             bool forwards, bool inclusive) -> int {
+        if (forwards != (start < end)) {
+            // The loop starts in a completed state (the start has already advanced past the end).
+            return 0;
         }
+        if ((delta == 0.0) || forwards != (delta > 0.0)) {
+            // The loop does not progress toward a completed state, and will never terminate.
+            return kLoopTerminationLimit;
+        }
+        double iterations = sk_ieee_double_divide(end - start, delta);
+        double count = std::ceil(iterations);
+        if (inclusive && (count == iterations)) {
+            count += 1.0;
+        }
+        if (count > kLoopTerminationLimit || !std::isfinite(count)) {
+            // The loop runs for more iterations than we can safely unroll.
+            return kLoopTerminationLimit;
+        }
+        return (int)count;
     };
 
-    for (loopInfo.fCount = 0; loopInfo.fCount <= kMaxUnrollableLoopLength; ++loopInfo.fCount) {
-        if (!evalCond()) {
+    switch (cond.getOperator().kind()) {
+        case Token::Kind::TK_LT:
+            loopInfo.fCount = calculateCount(loopInfo.fStart, loopEnd, loopInfo.fDelta,
+                                             /*forwards=*/true, /*inclusive=*/false);
+            break;
+
+        case Token::Kind::TK_GT:
+            loopInfo.fCount = calculateCount(loopInfo.fStart, loopEnd, loopInfo.fDelta,
+                                             /*forwards=*/false, /*inclusive=*/false);
+            break;
+
+        case Token::Kind::TK_LTEQ:
+            loopInfo.fCount = calculateCount(loopInfo.fStart, loopEnd, loopInfo.fDelta,
+                                             /*forwards=*/true, /*inclusive=*/true);
+            break;
+
+        case Token::Kind::TK_GTEQ:
+            loopInfo.fCount = calculateCount(loopInfo.fStart, loopEnd, loopInfo.fDelta,
+                                             /*forwards=*/false, /*inclusive=*/true);
+            break;
+
+        case Token::Kind::TK_NEQ: {
+            float iterations = sk_ieee_double_divide(loopEnd - loopInfo.fStart, loopInfo.fDelta);
+            loopInfo.fCount = std::ceil(iterations);
+            if (loopInfo.fCount < 0 || loopInfo.fCount != iterations ||
+                !std::isfinite(iterations)) {
+                // The loop doesn't reach the exact endpoint and so will never terminate.
+                loopInfo.fCount = kLoopTerminationLimit;
+            }
             break;
         }
-        val += loopInfo.fDelta;
+        case Token::Kind::TK_EQEQ: {
+            if (loopInfo.fStart == loopEnd) {
+                // Start and end begin in the same place, so we can run one iteration...
+                if (loopInfo.fDelta) {
+                    // ... and then they diverge, so the loop terminates.
+                    loopInfo.fCount = 1;
+                } else {
+                    // ... but they never diverge, so the loop runs forever.
+                    loopInfo.fCount = kLoopTerminationLimit;
+                }
+            } else {
+                // Start never equals end, so the loop will not run a single iteration.
+                loopInfo.fCount = 0;
+            }
+            break;
+        }
+        default: SkUNREACHABLE;
     }
 
-    if (loopInfo.fCount > kMaxUnrollableLoopLength) {
+    SkASSERT(loopInfo.fCount >= 0);
+    if (loopInfo.fCount >= kLoopTerminationLimit) {
         return "loop must guarantee termination in fewer iterations";
     }
 
     return nullptr;  // All checks pass
 }
 
-bool Analysis::ForLoopIsValidForES2(int offset,
-                                    const Statement* loopInitializer,
-                                    const Expression* loopTest,
-                                    const Expression* loopNext,
-                                    const Statement* loopStatement,
-                                    Analysis::UnrollableLoopInfo* outLoopInfo,
-                                    ErrorReporter* errors) {
-    UnrollableLoopInfo ignored,
-                       *loopInfo = outLoopInfo ? outLoopInfo : &ignored;
-    if (const char* msg = invalid_for_ES2(
-                offset, loopInitializer, loopTest, loopNext, loopStatement, *loopInfo)) {
+std::unique_ptr<LoopUnrollInfo> Analysis::GetLoopUnrollInfo(int line,
+                                                            const Statement* loopInitializer,
+                                                            const Expression* loopTest,
+                                                            const Expression* loopNext,
+                                                            const Statement* loopStatement,
+                                                            ErrorReporter* errors) {
+    auto result = std::make_unique<LoopUnrollInfo>();
+    if (const char* msg = invalid_for_ES2(line, loopInitializer, loopTest, loopNext,
+                                          loopStatement, *result)) {
+        result = nullptr;
         if (errors) {
-            errors->error(offset, msg);
+            errors->error(line, msg);
         }
-        return false;
     }
-    return true;
+    return result;
 }
 
 // Checks for ES2 constant-expression rules, and (optionally) constant-index-expression rules
@@ -1005,9 +1251,7 @@ public:
         // A constant-(index)-expression is one of...
         switch (e.kind()) {
             // ... a literal value
-            case Expression::Kind::kBoolLiteral:
-            case Expression::Kind::kIntLiteral:
-            case Expression::Kind::kFloatLiteral:
+            case Expression::Kind::kLiteral:
                 return false;
 
             // ... settings can appear in fragment processors; they will resolve when compiled
@@ -1029,6 +1273,7 @@ public:
             // ... expressions composed of both of the above
             case Expression::Kind::kBinary:
             case Expression::Kind::kConstructorArray:
+            case Expression::Kind::kConstructorArrayCast:
             case Expression::Kind::kConstructorCompound:
             case Expression::Kind::kConstructorCompoundCast:
             case Expression::Kind::kConstructorDiagonalMatrix:
@@ -1044,17 +1289,24 @@ public:
             case Expression::Kind::kTernary:
                 return INHERITED::visitExpression(e);
 
-            // These are completely disallowed in SkSL constant-(index)-expressions. GLSL allows
-            // calls to built-in functions where the arguments are all constant-expressions, but
-            // we don't guarantee that behavior. (skbug.com/10835)
-            case Expression::Kind::kExternalFunctionCall:
+            // Function calls are completely disallowed in SkSL constant-(index)-expressions.
+            // GLSL does mandate that calling a built-in function where the arguments are all
+            // constant-expressions should result in a constant-expression. SkSL handles this by
+            // optimizing fully-constant function calls into literals in FunctionCall::Make.
             case Expression::Kind::kFunctionCall:
+            case Expression::Kind::kExternalFunctionCall:
+            case Expression::Kind::kChildCall:
+
+            // These shouldn't appear in a valid program at all, and definitely aren't
+            // constant-index-expressions.
+            case Expression::Kind::kPoison:
+            case Expression::Kind::kFunctionReference:
+            case Expression::Kind::kExternalFunctionReference:
+            case Expression::Kind::kMethodReference:
+            case Expression::Kind::kTypeReference:
+            case Expression::Kind::kCodeString:
                 return true;
 
-            // These should never appear in final IR
-            case Expression::Kind::kExternalFunctionReference:
-            case Expression::Kind::kFunctionReference:
-            case Expression::Kind::kTypeReference:
             default:
                 SkDEBUGFAIL("Unexpected expression type");
                 return true;
@@ -1089,7 +1341,7 @@ public:
             const IndexExpression& i = e.as<IndexExpression>();
             ConstantExpressionVisitor indexerInvalid(&fLoopIndices);
             if (indexerInvalid.visitExpression(*i.index())) {
-                fErrors.error(i.fOffset, "index expression must be constant");
+                fErrors.error(i.fLine, "index expression must be constant");
                 return true;
             }
         }
@@ -1125,6 +1377,193 @@ bool Analysis::CanExitWithoutReturningValue(const FunctionDeclaration& funcDecl,
     return !visitor.fFoundReturn;
 }
 
+void Analysis::VerifyStaticTestsAndExpressions(const Program& program) {
+    class TestsAndExpressions : public ProgramVisitor {
+    public:
+        TestsAndExpressions(const Context& ctx) : fContext(ctx) {}
+
+        using ProgramVisitor::visitProgramElement;
+
+        bool visitStatement(const Statement& stmt) override {
+            if (!fContext.fConfig->fSettings.fPermitInvalidStaticTests) {
+                switch (stmt.kind()) {
+                    case Statement::Kind::kIf:
+                        if (stmt.as<IfStatement>().isStatic()) {
+                            fContext.fErrors->error(stmt.fLine, "static if has non-static test");
+                        }
+                        break;
+
+                    case Statement::Kind::kSwitch:
+                        if (stmt.as<SwitchStatement>().isStatic()) {
+                            fContext.fErrors->error(stmt.fLine,
+                                                    "static switch has non-static test");
+                        }
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+            return INHERITED::visitStatement(stmt);
+        }
+
+        bool visitExpression(const Expression& expr) override {
+            switch (expr.kind()) {
+                case Expression::Kind::kFunctionCall: {
+                    const FunctionDeclaration& decl = expr.as<FunctionCall>().function();
+                    if (!decl.isBuiltin() && !decl.definition()) {
+                        fContext.fErrors->error(expr.fLine, "function '" + decl.description() +
+                                                            "' is not defined");
+                    }
+                    break;
+                }
+                case Expression::Kind::kExternalFunctionReference:
+                case Expression::Kind::kFunctionReference:
+                case Expression::Kind::kMethodReference:
+                case Expression::Kind::kTypeReference:
+                    SkDEBUGFAIL("invalid reference-expr, should have been reported by coerce()");
+                    fContext.fErrors->error(expr.fLine, "invalid expression");
+                    break;
+                default:
+                    if (expr.type() == *fContext.fTypes.fInvalid) {
+                        fContext.fErrors->error(expr.fLine, "invalid expression");
+                    }
+                    break;
+            }
+            return INHERITED::visitExpression(expr);
+        }
+
+    private:
+        using INHERITED = ProgramVisitor;
+        const Context& fContext;
+    };
+
+    // Check all of the program's owned elements. (Built-in elements are assumed to be valid.)
+    TestsAndExpressions visitor{*program.fContext};
+    for (const std::unique_ptr<ProgramElement>& element : program.ownedElements()) {
+        visitor.visitProgramElement(*element);
+    }
+}
+
+void Analysis::EliminateUnreachableCode(std::unique_ptr<Statement>& stmt, ProgramUsage* usage) {
+    class UnreachableCodeEliminator : public ProgramWriter {
+    public:
+        UnreachableCodeEliminator(ProgramUsage* usage)
+                : fUsage(usage) {
+            fFoundFunctionExit.push(false);
+            fFoundLoopExit.push(false);
+        }
+
+        bool visitExpressionPtr(std::unique_ptr<Expression>& expr) override {
+            // We don't need to look inside expressions at all.
+            return false;
+        }
+
+        bool visitStatementPtr(std::unique_ptr<Statement>& stmt) override {
+            if (fFoundFunctionExit.top() || fFoundLoopExit.top()) {
+                // If we already found an exit in this section, anything beyond it is dead code.
+                if (!stmt->is<Nop>()) {
+                    // Eliminate the dead statement by substituting a Nop.
+                    if (fUsage) {
+                        fUsage->remove(stmt.get());
+                    }
+                    stmt = std::make_unique<Nop>();
+                }
+                return false;
+            }
+
+            switch (stmt->kind()) {
+                case Statement::Kind::kReturn:
+                case Statement::Kind::kDiscard:
+                    // We found a function exit on this path.
+                    fFoundFunctionExit.top() = true;
+                    break;
+
+                case Statement::Kind::kBreak:
+                case Statement::Kind::kContinue:
+                    // We found a loop exit on this path. Note that we skip over switch statements
+                    // completely when eliminating code, so any `break` statement would be breaking
+                    // out of a loop, not out of a switch.
+                    fFoundLoopExit.top() = true;
+                    break;
+
+                case Statement::Kind::kExpression:
+                case Statement::Kind::kInlineMarker:
+                case Statement::Kind::kNop:
+                case Statement::Kind::kVarDeclaration:
+                    // These statements don't affect control flow.
+                    break;
+
+                case Statement::Kind::kBlock:
+                    // Blocks are on the straight-line path and don't affect control flow.
+                    return INHERITED::visitStatementPtr(stmt);
+
+                case Statement::Kind::kDo: {
+                    // Function-exits are allowed to propagate outside of a do-loop, because it
+                    // always executes its body at least once.
+                    fFoundLoopExit.push(false);
+                    bool result = INHERITED::visitStatementPtr(stmt);
+                    fFoundLoopExit.pop();
+                    return result;
+                }
+                case Statement::Kind::kFor: {
+                    // Function-exits are not allowed to propagate out, because a for-loop or while-
+                    // loop could potentially run zero times.
+                    fFoundFunctionExit.push(false);
+                    fFoundLoopExit.push(false);
+                    bool result = INHERITED::visitStatementPtr(stmt);
+                    fFoundLoopExit.pop();
+                    fFoundFunctionExit.pop();
+                    return result;
+                }
+                case Statement::Kind::kIf: {
+                    // This statement is conditional and encloses two inner sections of code.
+                    // If both sides contain a function-exit or loop-exit, that exit is allowed to
+                    // propagate out.
+                    IfStatement& ifStmt = stmt->as<IfStatement>();
+
+                    fFoundFunctionExit.push(false);
+                    fFoundLoopExit.push(false);
+                    bool result = (ifStmt.ifTrue() && this->visitStatementPtr(ifStmt.ifTrue()));
+                    bool foundFunctionExitOnTrue = fFoundFunctionExit.top();
+                    bool foundLoopExitOnTrue = fFoundLoopExit.top();
+                    fFoundFunctionExit.pop();
+                    fFoundLoopExit.pop();
+
+                    fFoundFunctionExit.push(false);
+                    fFoundLoopExit.push(false);
+                    result |= (ifStmt.ifFalse() && this->visitStatementPtr(ifStmt.ifFalse()));
+                    bool foundFunctionExitOnFalse = fFoundFunctionExit.top();
+                    bool foundLoopExitOnFalse = fFoundLoopExit.top();
+                    fFoundFunctionExit.pop();
+                    fFoundLoopExit.pop();
+
+                    fFoundFunctionExit.top() |= foundFunctionExitOnTrue && foundFunctionExitOnFalse;
+                    fFoundLoopExit.top() |= foundLoopExitOnTrue && foundLoopExitOnFalse;
+                    return result;
+                }
+                case Statement::Kind::kSwitch:
+                case Statement::Kind::kSwitchCase:
+                    // We skip past switch statements entirely when scanning for dead code. Their
+                    // control flow is quite complex and we already do a good job of flattening out
+                    // switches on constant values.
+                    break;
+            }
+
+            return false;
+        }
+
+        ProgramUsage* fUsage;
+        std::stack<bool> fFoundFunctionExit;
+        std::stack<bool> fFoundLoopExit;
+
+        using INHERITED = ProgramWriter;
+    };
+
+    UnreachableCodeEliminator visitor{usage};
+    visitor.visitStatementPtr(stmt);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // ProgramVisitor
 
@@ -1139,11 +1578,11 @@ bool ProgramVisitor::visit(const Program& program) {
 
 template <typename T> bool TProgramVisitor<T>::visitExpression(typename T::Expression& e) {
     switch (e.kind()) {
-        case Expression::Kind::kBoolLiteral:
         case Expression::Kind::kExternalFunctionReference:
-        case Expression::Kind::kFloatLiteral:
         case Expression::Kind::kFunctionReference:
-        case Expression::Kind::kIntLiteral:
+        case Expression::Kind::kLiteral:
+        case Expression::Kind::kMethodReference:
+        case Expression::Kind::kPoison:
         case Expression::Kind::kSetting:
         case Expression::Kind::kTypeReference:
         case Expression::Kind::kVariableReference:
@@ -1155,7 +1594,16 @@ template <typename T> bool TProgramVisitor<T>::visitExpression(typename T::Expre
             return (b.left() && this->visitExpressionPtr(b.left())) ||
                    (b.right() && this->visitExpressionPtr(b.right()));
         }
+        case Expression::Kind::kChildCall: {
+            // We don't visit the child variable itself, just the arguments
+            auto& c = e.template as<ChildCall>();
+            for (auto& arg : c.arguments()) {
+                if (arg && this->visitExpressionPtr(arg)) { return true; }
+            }
+            return false;
+        }
         case Expression::Kind::kConstructorArray:
+        case Expression::Kind::kConstructorArrayCast:
         case Expression::Kind::kConstructorCompound:
         case Expression::Kind::kConstructorCompoundCast:
         case Expression::Kind::kConstructorDiagonalMatrix:
@@ -1284,12 +1732,10 @@ template <typename T> bool TProgramVisitor<T>::visitStatement(typename T::Statem
 
 template <typename T> bool TProgramVisitor<T>::visitProgramElement(typename T::ProgramElement& pe) {
     switch (pe.kind()) {
-        case ProgramElement::Kind::kEnum:
         case ProgramElement::Kind::kExtension:
         case ProgramElement::Kind::kFunctionPrototype:
         case ProgramElement::Kind::kInterfaceBlock:
         case ProgramElement::Kind::kModifiers:
-        case ProgramElement::Kind::kSection:
         case ProgramElement::Kind::kStructDefinition:
             // Leaf program elements just return false by default
             return false;
