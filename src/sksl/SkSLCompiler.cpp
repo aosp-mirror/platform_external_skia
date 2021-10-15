@@ -137,49 +137,65 @@ Compiler::Compiler(const ShaderCapsClass* caps)
 
 Compiler::~Compiler() {}
 
-#define TYPE(t) fContext->fTypes.f ## t .get()
+#define TYPE(t) &BuiltinTypes::f ## t
+
+using BuiltinTypePtr = const std::unique_ptr<Type> BuiltinTypes::*;
+
+inline static constexpr BuiltinTypePtr kRootTypes[] = {
+    TYPE(Void),
+
+    TYPE( Float), TYPE( Float2), TYPE( Float3), TYPE( Float4),
+    TYPE(  Half), TYPE(  Half2), TYPE(  Half3), TYPE(  Half4),
+    TYPE(   Int), TYPE(   Int2), TYPE(   Int3), TYPE(   Int4),
+    TYPE(  UInt), TYPE(  UInt2), TYPE(  UInt3), TYPE(  UInt4),
+    TYPE( Short), TYPE( Short2), TYPE( Short3), TYPE( Short4),
+    TYPE(UShort), TYPE(UShort2), TYPE(UShort3), TYPE(UShort4),
+    TYPE(  Bool), TYPE(  Bool2), TYPE(  Bool3), TYPE(  Bool4),
+
+    TYPE(Float2x2), TYPE(Float2x3), TYPE(Float2x4),
+    TYPE(Float3x2), TYPE(Float3x3), TYPE(Float3x4),
+    TYPE(Float4x2), TYPE(Float4x3), TYPE(Float4x4),
+
+    TYPE(Half2x2),  TYPE(Half2x3),  TYPE(Half2x4),
+    TYPE(Half3x2),  TYPE(Half3x3),  TYPE(Half3x4),
+    TYPE(Half4x2),  TYPE(Half4x3),  TYPE(Half4x4),
+
+    TYPE(SquareMat), TYPE(SquareHMat),
+    TYPE(Mat),       TYPE(HMat),
+
+    // TODO(skia:12349): generic short/ushort
+    TYPE(GenType),   TYPE(GenIType), TYPE(GenUType),
+    TYPE(GenHType),   /* (GenSType)      (GenUSType) */
+    TYPE(GenBType),
+
+    TYPE(Vec),     TYPE(IVec),     TYPE(UVec),
+    TYPE(HVec),    TYPE(SVec),     TYPE(USVec),
+    TYPE(BVec),
+
+    TYPE(ColorFilter),
+    TYPE(Shader),
+    TYPE(Blender),
+};
+
+inline static constexpr BuiltinTypePtr kPrivateTypes[] = {
+    TYPE(Sampler1D), TYPE(Sampler2D), TYPE(Sampler3D),
+    TYPE(SamplerExternalOES),
+    TYPE(Sampler2DRect),
+
+    TYPE(ISampler2D),
+    TYPE(SubpassInput), TYPE(SubpassInputMS),
+
+    TYPE(Sampler),
+    TYPE(Texture2D),
+};
+
+#undef TYPE
 
 std::shared_ptr<SymbolTable> Compiler::makeRootSymbolTable() {
     auto rootSymbolTable = std::make_shared<SymbolTable>(*fContext, /*builtin=*/true);
 
-    const SkSL::Symbol* rootTypes[] = {
-        TYPE(Void),
-
-        TYPE( Float), TYPE( Float2), TYPE( Float3), TYPE( Float4),
-        TYPE(  Half), TYPE(  Half2), TYPE(  Half3), TYPE(  Half4),
-        TYPE(   Int), TYPE(   Int2), TYPE(   Int3), TYPE(   Int4),
-        TYPE(  UInt), TYPE(  UInt2), TYPE(  UInt3), TYPE(  UInt4),
-        TYPE( Short), TYPE( Short2), TYPE( Short3), TYPE( Short4),
-        TYPE(UShort), TYPE(UShort2), TYPE(UShort3), TYPE(UShort4),
-        TYPE(  Bool), TYPE(  Bool2), TYPE(  Bool3), TYPE(  Bool4),
-
-        TYPE(Float2x2), TYPE(Float2x3), TYPE(Float2x4),
-        TYPE(Float3x2), TYPE(Float3x3), TYPE(Float3x4),
-        TYPE(Float4x2), TYPE(Float4x3), TYPE(Float4x4),
-
-        TYPE(Half2x2),  TYPE(Half2x3),  TYPE(Half2x4),
-        TYPE(Half3x2),  TYPE(Half3x3),  TYPE(Half3x4),
-        TYPE(Half4x2),  TYPE(Half4x3),  TYPE(Half4x4),
-
-        TYPE(SquareMat), TYPE(SquareHMat),
-        TYPE(Mat),       TYPE(HMat),
-
-        // TODO(skia:12349): generic short/ushort
-        TYPE(GenType),   TYPE(GenIType), TYPE(GenUType),
-        TYPE(GenHType),   /* (GenSType)      (GenUSType) */
-        TYPE(GenBType),
-
-        TYPE(Vec),     TYPE(IVec),     TYPE(UVec),
-        TYPE(HVec),    TYPE(SVec),     TYPE(USVec),
-        TYPE(BVec),
-
-        TYPE(ColorFilter),
-        TYPE(Shader),
-        TYPE(Blender),
-    };
-
-    for (const SkSL::Symbol* type : rootTypes) {
-        rootSymbolTable->addWithoutOwnership(type);
+    for (BuiltinTypePtr rootType : kRootTypes) {
+        rootSymbolTable->addWithoutOwnership((fContext->fTypes.*rootType).get());
     }
 
     return rootSymbolTable;
@@ -188,20 +204,8 @@ std::shared_ptr<SymbolTable> Compiler::makeRootSymbolTable() {
 std::shared_ptr<SymbolTable> Compiler::makePrivateSymbolTable(std::shared_ptr<SymbolTable> parent) {
     auto privateSymbolTable = std::make_shared<SymbolTable>(parent, /*builtin=*/true);
 
-    const SkSL::Symbol* privateTypes[] = {
-        TYPE(Sampler1D), TYPE(Sampler2D), TYPE(Sampler3D),
-        TYPE(SamplerExternalOES),
-        TYPE(Sampler2DRect),
-
-        TYPE(ISampler2D),
-        TYPE(SubpassInput), TYPE(SubpassInputMS),
-
-        TYPE(Sampler),
-        TYPE(Texture2D),
-    };
-
-    for (const SkSL::Symbol* type : privateTypes) {
-        privateSymbolTable->addWithoutOwnership(type);
+    for (BuiltinTypePtr privateType : kPrivateTypes) {
+        privateSymbolTable->addWithoutOwnership((fContext->fTypes.*privateType).get());
     }
 
     // sk_Caps is "builtin", but all references to it are resolved to Settings, so we don't need to
@@ -212,11 +216,8 @@ std::shared_ptr<SymbolTable> Compiler::makePrivateSymbolTable(std::shared_ptr<Sy
                                                        fContext->fTypes.fSkCaps.get(),
                                                        /*builtin=*/false,
                                                        Variable::Storage::kGlobal));
-
     return privateSymbolTable;
 }
-
-#undef TYPE
 
 const ParsedModule& Compiler::loadGPUModule() {
     if (!fGPUModule.fSymbols) {
@@ -242,7 +243,7 @@ const ParsedModule& Compiler::loadVertexModule() {
 }
 
 static void add_glsl_type_aliases(SkSL::SymbolTable* symbols, const SkSL::BuiltinTypes& types) {
-    // Add some aliases to the runtime effect modules so that it's friendlier, and more like GLSL
+    // Add some aliases to the runtime effect modules so that it's friendlier, and more like GLSL.
     symbols->addAlias("vec2", types.fFloat2.get());
     symbols->addAlias("vec3", types.fFloat3.get());
     symbols->addAlias("vec4", types.fFloat4.get());
@@ -258,6 +259,12 @@ static void add_glsl_type_aliases(SkSL::SymbolTable* symbols, const SkSL::Builti
     symbols->addAlias("mat2", types.fFloat2x2.get());
     symbols->addAlias("mat3", types.fFloat3x3.get());
     symbols->addAlias("mat4", types.fFloat4x4.get());
+
+    // Alias every private type to "invalid". This will prevent code from using built-in names like
+    // `sampler2D` as variable names.
+    for (BuiltinTypePtr privateType : kPrivateTypes) {
+        symbols->addAlias((types.*privateType)->name(), types.fInvalid.get());
+    }
 }
 
 const ParsedModule& Compiler::loadPublicModule() {

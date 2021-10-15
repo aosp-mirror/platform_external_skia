@@ -59,6 +59,10 @@ public:
         Program::Inputs                              fInputs;
     };
 
+    void start(const ParsedModule& base,
+               std::vector<std::unique_ptr<ProgramElement>>* elements,
+               std::vector<const ProgramElement*>* sharedElements);
+
     /**
      * If externalFunctions is supplied, those values are registered in the symbol table of the
      * Program, but ownership is *not* transferred. It is up to the caller to keep them alive.
@@ -89,37 +93,11 @@ public:
 
     std::unique_ptr<Expression> convertIdentifier(int line, skstd::string_view identifier);
 
-    bool haveRTAdjustInterfaceBlock() { return fRTAdjustInterfaceBlock != nullptr; }
-
-    int getRTAdjustFieldIndex() { return fRTAdjustFieldIndex; }
-
     const Context& fContext;
 
 private:
-    void start(const ParsedModule& base,
-               std::vector<std::unique_ptr<ProgramElement>>* elements,
-               std::vector<const ProgramElement*>* sharedElements);
-
     IRGenerator::IRBundle finish();
 
-    void checkVarDeclaration(int line,
-                             const Modifiers& modifiers,
-                             const Type* baseType,
-                             Variable::Storage storage);
-    std::unique_ptr<Variable> convertVar(int line, const Modifiers& modifiers,
-                                         const Type* baseType, skstd::string_view name,
-                                         bool isArray, std::unique_ptr<Expression> arraySize,
-                                         Variable::Storage storage);
-    std::unique_ptr<Statement> convertVarDeclaration(std::unique_ptr<Variable> var,
-                                                     std::unique_ptr<Expression> value,
-                                                     bool addToSymbolTable = true);
-    std::unique_ptr<Statement> convertVarDeclaration(int line, const Modifiers& modifiers,
-                                                     const Type* baseType, skstd::string_view name,
-                                                     bool isArray,
-                                                     std::unique_ptr<Expression> arraySize,
-                                                     std::unique_ptr<Expression> value,
-                                                     Variable::Storage storage);
-    void scanInterfaceBlock(SkSL::InterfaceBlock& intf);
     /** Appends sk_Position fixup to the bottom of main() if this is a vertex program. */
     void appendRTAdjustFixupToVertexMain(const FunctionDeclaration& decl, Block* body);
 
@@ -147,9 +125,6 @@ private:
     std::unordered_set<const Type*> fDefinedStructs;
     std::vector<std::unique_ptr<ProgramElement>>* fProgramElements = nullptr;
     std::vector<const ProgramElement*>*           fSharedElements = nullptr;
-    const Variable* fRTAdjust = nullptr;
-    const Variable* fRTAdjustInterfaceBlock = nullptr;
-    int fRTAdjustFieldIndex;
 
     friend class AutoSymbolTable;
     friend class AutoLoopLevel;
