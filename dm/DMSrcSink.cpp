@@ -2117,20 +2117,48 @@ Result RasterSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString*) co
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-GraphiteSink::GraphiteSink() {}
-
 #ifdef SK_GRAPHITE_ENABLED
+
+namespace {
+
+// For the sprint Graphite only handles:
+//    solid colors with src or srcOver
+//    repeated or clamped linear gradients with src or srcOver
+void precompile(skgpu::Context* context) {
+    using ShaderType = skgpu::ShaderCombo::ShaderType;
+
+    skgpu::PaintCombo c1 { { skgpu::ShaderCombo({ ShaderType::kNone },
+                                                { SkTileMode::kRepeat }) },
+                           { SkBlendMode::kSrcOver, SkBlendMode::kSrc } };
+    context->preCompile(c1);
+
+    skgpu::PaintCombo c2 { { skgpu::ShaderCombo({ ShaderType::kLinearGradient },
+                                                { SkTileMode::kRepeat, SkTileMode::kClamp }) },
+                           { SkBlendMode::kSrcOver, SkBlendMode::kSrc } };
+    context->preCompile(c2);
+}
+
+} // anonymous namespace
+
+GraphiteSink::GraphiteSink(const SkCommandLineConfigGraphite* config)
+        : fContextType(config->getContextType())
+        , fColorType(config->getColorType())
+        , fAlphaType(config->getAlphaType())
+        , fTestPrecompile(config->getTestPrecompile()) {
+}
 
 Result GraphiteSink::draw(const Src& src,
                           SkBitmap* dst,
                           SkWStream* dstStream,
                           SkString* log) const {
-    using ContextType = skiatest::graphite::ContextFactory::ContextType;
-
-    SkImageInfo ii = SkImageInfo::Make(src.size(), kRGBA_8888_SkColorType, kPremul_SkAlphaType);
+    SkImageInfo ii = SkImageInfo::Make(src.size(), fColorType, fAlphaType);
 
     skiatest::graphite::ContextFactory factory;
-    auto [_, context] = factory.getContextInfo(ContextType::kMetal);
+    auto [_, context] = factory.getContextInfo(fContextType);
+
+    if (fTestPrecompile) {
+        precompile(context.get());
+    }
 
     sk_sp<SkSurface> surface = MakeGraphite(std::move(context), ii);
     if (!surface) {
@@ -2148,10 +2176,6 @@ Result GraphiteSink::draw(const Src& src,
     }
 
     return Result::Ok();
-}
-#else
-Result GraphiteSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const {
-    return Result::Fatal("Graphite not enabled.");
 }
 #endif
 
