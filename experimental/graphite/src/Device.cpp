@@ -7,11 +7,12 @@
 
 #include "experimental/graphite/src/Device.h"
 
-#include "experimental/graphite/include/Context.h"
 #include "experimental/graphite/include/SkStuff.h"
 #include "experimental/graphite/src/DrawContext.h"
 #include "experimental/graphite/src/DrawList.h"
+#include "experimental/graphite/src/Recorder.h"
 #include "experimental/graphite/src/geom/Shape.h"
+#include "experimental/graphite/src/geom/Transform_graphite.h"
 
 #include "include/core/SkPath.h"
 #include "include/core/SkPathEffect.h"
@@ -29,18 +30,18 @@ static const SkStrokeRec kFillStyle(SkStrokeRec::kFill_InitStyle);
 
 } // anonymous namespace
 
-sk_sp<Device> Device::Make(sk_sp<Context> context, const SkImageInfo& ii) {
+sk_sp<Device> Device::Make(sk_sp<Recorder> recorder, const SkImageInfo& ii) {
     sk_sp<DrawContext> dc = DrawContext::Make(ii);
     if (!dc) {
         return nullptr;
     }
 
-    return sk_sp<Device>(new Device(std::move(context), std::move(dc)));
+    return sk_sp<Device>(new Device(std::move(recorder), std::move(dc)));
 }
 
-Device::Device(sk_sp<Context> context, sk_sp<DrawContext> dc)
+Device::Device(sk_sp<Recorder> recorder, sk_sp<DrawContext> dc)
         : SkBaseDevice(dc->imageInfo(), SkSurfaceProps())
-        , fContext(std::move(context))
+        , fRecorder(std::move(recorder))
         , fDC(std::move(dc)) {
     SkASSERT(SkToBool(fDC));
 }
@@ -49,11 +50,11 @@ SkBaseDevice* Device::onCreateDevice(const CreateInfo& info, const SkPaint*) {
     // TODO: Inspect the paint and create info to determine if there's anything that has to be
     // modified to support inline subpasses.
     // TODO: onCreateDevice really should return sk_sp<SkBaseDevice>...
-    return Make(fContext, info.fInfo).release();
+    return Make(fRecorder, info.fInfo).release();
 }
 
 sk_sp<SkSurface> Device::makeSurface(const SkImageInfo& ii, const SkSurfaceProps& /* props */) {
-    return MakeGraphite(fContext, ii);
+    return MakeGraphite(fRecorder, ii);
 }
 
 bool Device::onReadPixels(const SkPixmap& pm, int x, int y) {
@@ -131,6 +132,16 @@ void Device::drawShape(const Shape& shape,
                        const SkPaint& paint,
                        const SkStrokeRec& style,
                        Mask<DrawFlags> flags) {
+    // TODO: Device will cache the Transform or otherwise ensure it's computed once per change to
+    // its local-to-device matrix, but that requires updating SkDevice's virtuals. Right now we
+    // re-compute the Transform every draw, as well as any time we recurse on drawShape(), but that
+    // goes away with the caching.
+    Transform localToDevice(this->localToDevice44());
+    if (!localToDevice.valid()) {
+        // If the transform is not invertible or not finite then drawing isn't well defined.
+        return;
+    }
+
     // Heavy weight paint options like path effects, mask filters, and stroke-and-fill style are
     // applied on the CPU by generating a new shape and recursing on drawShape() with updated flags
     if (!(flags & DrawFlags::kIgnorePathEffect) && paint.getPathEffect()) {
@@ -138,11 +149,10 @@ void Device::drawShape(const Shape& shape,
         // TODO: If asADash() returns true and the base path matches the dashing fast path, then
         // that should be detected now as well. Maybe add dashPath to Device so canvas can handle it
         SkStrokeRec newStyle = style;
-        // FIXME: use matrix cache to get res scale for free
-        newStyle.setResScale(SkPaintPriv::ComputeResScaleForStroking(this->localToDevice()));
+        newStyle.setResScale(localToDevice.maxScaleFactor());
         SkPath dst;
         if (paint.getPathEffect()->filterPath(&dst, shape.asPath(), &newStyle,
-                                              nullptr, this->localToDevice())) {
+                                              nullptr, localToDevice)) {
             // Recurse using the path and new style, while disabling downstream path effect handling
             this->drawShape(Shape(dst), paint, newStyle, flags | DrawFlags::kIgnorePathEffect);
             return;
@@ -168,8 +178,6 @@ void Device::drawShape(const Shape& shape,
     SkASSERT(!SkToBool(paint.getPathEffect()) || (flags & DrawFlags::kIgnorePathEffect));
     SkASSERT(!SkToBool(paint.getMaskFilter()) || (flags & DrawFlags::kIgnoreMaskFilter));
 
-    // TODO: This will actually be a query to the matrix cache
-    const SkM44& localToDevice = this->localToDevice44();
     // TODO: Need to track actual z value for painters order in addition to the compressed index,
     // that might be done here, or as part of the applyClipToDraw() function.
     auto [colorDepthOrder, scissor] = this->applyClipToDraw(localToDevice, shape, style);
@@ -204,7 +212,7 @@ void Device::drawShape(const Shape& shape,
 }
 
 std::pair<CompressedPaintersOrder, SkIRect>
-Device::applyClipToDraw(const SkM44& localToDevice,
+Device::applyClipToDraw(const Transform& localToDevice,
                         const Shape& shape,
                         const SkStrokeRec& style) {
     // TODO: actually implement this
