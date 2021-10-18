@@ -53,15 +53,11 @@ public:
     IRGenerator(const Context* context);
 
     struct IRBundle {
-        std::vector<std::unique_ptr<ProgramElement>> fElements;
-        std::vector<const ProgramElement*>           fSharedElements;
         std::shared_ptr<SymbolTable>                 fSymbolTable;
         Program::Inputs                              fInputs;
     };
 
-    void start(const ParsedModule& base,
-               std::vector<std::unique_ptr<ProgramElement>>* elements,
-               std::vector<const ProgramElement*>* sharedElements);
+    void start(const ParsedModule& base);
 
     /**
      * If externalFunctions is supplied, those values are registered in the symbol table of the
@@ -85,21 +81,12 @@ public:
         fSymbolTable = symbolTable;
     }
 
-    static void CheckModifiers(const Context& context,
-                               int line,
-                               const Modifiers& modifiers,
-                               int permittedModifierFlags,
-                               int permittedLayoutFlags);
-
     std::unique_ptr<Expression> convertIdentifier(int line, skstd::string_view identifier);
 
     const Context& fContext;
 
 private:
     IRGenerator::IRBundle finish();
-
-    /** Appends sk_Position fixup to the bottom of main() if this is a vertex program. */
-    void appendRTAdjustFixupToVertexMain(const FunctionDeclaration& decl, Block* body);
 
     // Runtime effects (and the interpreter, which uses the same CPU runtime) require adherence to
     // the strict rules from The OpenGL ES Shading Language Version 1.00. (Including Appendix A).
@@ -123,8 +110,6 @@ private:
 
     std::shared_ptr<SymbolTable> fSymbolTable = nullptr;
     std::unordered_set<const Type*> fDefinedStructs;
-    std::vector<std::unique_ptr<ProgramElement>>* fProgramElements = nullptr;
-    std::vector<const ProgramElement*>*           fSharedElements = nullptr;
 
     friend class AutoSymbolTable;
     friend class AutoLoopLevel;

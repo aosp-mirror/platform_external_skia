@@ -66,110 +66,6 @@ namespace SkSL {
 IRGenerator::IRGenerator(const Context* context)
         : fContext(*context) {}
 
-void IRGenerator::appendRTAdjustFixupToVertexMain(const FunctionDeclaration& decl, Block* body) {
-    using namespace SkSL::dsl;
-    using SkSL::dsl::Swizzle;  // disambiguate from SkSL::Swizzle
-    using OwnerKind = SkSL::FieldAccess::OwnerKind;
-
-    // If this is a vertex program that uses RTAdjust, and this is main()...
-    ThreadContext::RTAdjustData& rtAdjust = ThreadContext::RTAdjustState();
-    if ((rtAdjust.fVar || rtAdjust.fInterfaceBlock) && decl.isMain() &&
-        ProgramKind::kVertex == this->programKind()) {
-        // ... append a line to the end of the function body which fixes up sk_Position.
-        const Variable* skPerVertex = nullptr;
-        if (const ProgramElement* perVertexDecl =
-                fContext.fIntrinsics->find(Compiler::PERVERTEX_NAME)) {
-            SkASSERT(perVertexDecl->is<SkSL::InterfaceBlock>());
-            skPerVertex = &perVertexDecl->as<SkSL::InterfaceBlock>().variable();
-        }
-
-        SkASSERT(skPerVertex);
-        auto Ref = [](const Variable* var) -> std::unique_ptr<Expression> {
-            return VariableReference::Make(/*line=*/-1, var);
-        };
-        auto Field = [&](const Variable* var, int idx) -> std::unique_ptr<Expression> {
-            return FieldAccess::Make(fContext, Ref(var), idx, OwnerKind::kAnonymousInterfaceBlock);
-        };
-        auto Pos = [&]() -> DSLExpression {
-            return DSLExpression(FieldAccess::Make(fContext, Ref(skPerVertex), /*fieldIndex=*/0,
-                                                   OwnerKind::kAnonymousInterfaceBlock));
-        };
-        auto Adjust = [&]() -> DSLExpression {
-            return DSLExpression(rtAdjust.fInterfaceBlock
-                                         ? Field(rtAdjust.fInterfaceBlock, rtAdjust.fFieldIndex)
-                                         : Ref(rtAdjust.fVar));
-        };
-
-        auto fixupStmt = DSLStatement(
-            Pos() = Float4(Swizzle(Pos(), X, Y) * Swizzle(Adjust(), X, Z) +
-                           Swizzle(Pos(), W, W) * Swizzle(Adjust(), Y, W),
-                           0,
-                           Pos().w())
-        );
-
-        body->children().push_back(fixupStmt.release());
-    }
-}
-
-void IRGenerator::CheckModifiers(const Context& context,
-                                 int line,
-                                 const Modifiers& modifiers,
-                                 int permittedModifierFlags,
-                                 int permittedLayoutFlags) {
-    static constexpr struct { Modifiers::Flag flag; const char* name; } kModifierFlags[] = {
-        { Modifiers::kConst_Flag,          "const" },
-        { Modifiers::kIn_Flag,             "in" },
-        { Modifiers::kOut_Flag,            "out" },
-        { Modifiers::kUniform_Flag,        "uniform" },
-        { Modifiers::kFlat_Flag,           "flat" },
-        { Modifiers::kNoPerspective_Flag,  "noperspective" },
-        { Modifiers::kHasSideEffects_Flag, "sk_has_side_effects" },
-        { Modifiers::kInline_Flag,         "inline" },
-        { Modifiers::kNoInline_Flag,       "noinline" },
-        { Modifiers::kHighp_Flag,          "highp" },
-        { Modifiers::kMediump_Flag,        "mediump" },
-        { Modifiers::kLowp_Flag,           "lowp" },
-        { Modifiers::kES3_Flag,            "$es3" },
-    };
-
-    int modifierFlags = modifiers.fFlags;
-    for (const auto& f : kModifierFlags) {
-        if (modifierFlags & f.flag) {
-            if (!(permittedModifierFlags & f.flag)) {
-                context.fErrors->error(line, "'" + String(f.name) + "' is not permitted here");
-            }
-            modifierFlags &= ~f.flag;
-        }
-    }
-    SkASSERT(modifierFlags == 0);
-
-    static constexpr struct { Layout::Flag flag; const char* name; } kLayoutFlags[] = {
-        { Layout::kOriginUpperLeft_Flag,          "origin_upper_left"},
-        { Layout::kPushConstant_Flag,             "push_constant"},
-        { Layout::kBlendSupportAllEquations_Flag, "blend_support_all_equations"},
-        { Layout::kSRGBUnpremul_Flag,             "srgb_unpremul"},
-        { Layout::kLocation_Flag,                 "location"},
-        { Layout::kOffset_Flag,                   "offset"},
-        { Layout::kBinding_Flag,                  "binding"},
-        { Layout::kIndex_Flag,                    "index"},
-        { Layout::kSet_Flag,                      "set"},
-        { Layout::kBuiltin_Flag,                  "builtin"},
-        { Layout::kInputAttachmentIndex_Flag,     "input_attachment_index"},
-    };
-
-    int layoutFlags = modifiers.fLayout.fFlags;
-    for (const auto& lf : kLayoutFlags) {
-        if (layoutFlags & lf.flag) {
-            if (!(permittedLayoutFlags & lf.flag)) {
-                context.fErrors->error(
-                        line, "layout qualifier '" + String(lf.name) + "' is not permitted here");
-            }
-            layoutFlags &= ~lf.flag;
-        }
-    }
-    SkASSERT(layoutFlags == 0);
-}
-
 std::unique_ptr<Expression> IRGenerator::convertIdentifier(int line, skstd::string_view name) {
     const Symbol* result = (*fSymbolTable)[name];
     if (!result) {
@@ -222,11 +118,7 @@ std::unique_ptr<Expression> IRGenerator::convertIdentifier(int line, skstd::stri
     }
 }
 
-void IRGenerator::start(const ParsedModule& base,
-                        std::vector<std::unique_ptr<ProgramElement>>* elements,
-                        std::vector<const ProgramElement*>* sharedElements) {
-    fProgramElements = elements;
-    fSharedElements = sharedElements;
+void IRGenerator::start(const ParsedModule& base) {
     fSymbolTable = base.fSymbols;
 
     fInputs = {};
@@ -285,9 +177,7 @@ void IRGenerator::start(const ParsedModule& base,
 }
 
 IRGenerator::IRBundle IRGenerator::finish() {
-    return IRBundle{std::move(*fProgramElements),
-                    std::move(*fSharedElements),
-                    std::move(fSymbolTable),
+    return IRBundle{std::move(fSymbolTable),
                     fInputs};
 }
 
