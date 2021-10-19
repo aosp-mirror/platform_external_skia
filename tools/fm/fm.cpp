@@ -392,11 +392,11 @@ int main(int argc, char** argv) {
     gSkVMJITViaDylib = FLAGS_dylib;
 
     initializeEventTracingForTools();
-    ToolUtils::SetDefaultFontMgr();
-    SetAnalyticAAFromCommonFlags();
+    CommonFlags::SetDefaultFontMgr();
+    CommonFlags::SetAnalyticAA();
 
     GrContextOptions baseOptions;
-    SetCtxOptionsFromCommonFlags(&baseOptions);
+    CommonFlags::SetCtxOptions(&baseOptions);
     baseOptions.fReducedShaderVariations = FLAGS_reducedshaders;
 
     sk_gpu_test::MemoryCache memoryCache;

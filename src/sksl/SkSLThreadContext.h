@@ -74,7 +74,7 @@ public:
     /**
      * Returns the Program::Inputs used by the current thread.
      */
-    static SkSL::Program::Inputs& Inputs();
+    static SkSL::Program::Inputs& Inputs() { return Instance().fInputs; }
 
     /**
      * Returns the collection to which DSL program elements in this thread should be appended.
@@ -88,9 +88,9 @@ public:
     }
 
     /**
-     * Returns the SymbolTable of the current thread's IRGenerator.
+     * Returns the current SymbolTable.
      */
-    static const std::shared_ptr<SkSL::SymbolTable>& SymbolTable();
+    static std::shared_ptr<SkSL::SymbolTable>& SymbolTable();
 
     /**
      * Returns the current memory pool.
@@ -210,6 +210,8 @@ private:
     ProgramSettings fSettings;
     Mangler fMangler;
     RTAdjustData fRTAdjust;
+    Program::Inputs fInputs;
+
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
     struct StackFrame {
         GrFragmentProcessor::ProgramImpl* fProcessor;
