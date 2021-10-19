@@ -18,16 +18,18 @@ namespace skgpu {
 
 class Context;
 class DrawContext;
+class Recorder;
 class Shape;
+class Transform;
 
 struct PaintParams;
 struct StrokeParams;
 
 class Device final : public SkBaseDevice  {
 public:
-    static sk_sp<Device> Make(sk_sp<Context>, const SkImageInfo&);
+    static sk_sp<Device> Make(sk_sp<Recorder>, const SkImageInfo&);
 
-    sk_sp<Context> refContext() { return fContext; }
+    sk_sp<Recorder> refRecorder() { return fRecorder; }
 
 protected:
     // Clipping
@@ -124,7 +126,7 @@ private:
     };
     SKGPU_DECL_MASK_OPS_FRIENDS(DrawFlags);
 
-    Device(sk_sp<Context>, sk_sp<DrawContext>);
+    Device(sk_sp<Recorder>, sk_sp<DrawContext>);
 
     // Handles applying path effects, mask filters, stroke-and-fill styles, and hairlines.
     // Ignores geometric style on the paint in favor of explicitly provided SkStrokeRec and flags.
@@ -139,9 +141,9 @@ private:
     // recorded when popped off the stack. Returns the scissor and minimum compressed painter's
     // order for the draw to be rendered/clipped correctly.
     std::pair<CompressedPaintersOrder, SkIRect>
-    applyClipToDraw(const SkM44&, const Shape&, const SkStrokeRec&);
+    applyClipToDraw(const Transform&, const Shape&, const SkStrokeRec&);
 
-    sk_sp<Context> fContext;
+    sk_sp<Recorder> fRecorder;
     sk_sp<DrawContext> fDC;
 };
 

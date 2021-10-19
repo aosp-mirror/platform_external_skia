@@ -11,6 +11,8 @@
 #include "include/core/SkRefCnt.h"
 #include "include/private/SkDeque.h"
 
+#include "experimental/graphite/include/GraphiteTypes.h"
+
 namespace skgpu {
 
 class Caps;
@@ -26,19 +28,17 @@ public:
      * Gets the capabilities of the draw target.
      */
     const Caps* caps() const { return fCaps.get(); }
-    sk_sp<const Caps> refCaps() const { return fCaps; }
+    sk_sp<const Caps> refCaps() const;
 
     ResourceProvider* resourceProvider() const { return fResourceProvider.get(); }
 
-    /**
-     * Submit command buffer to GPU and track completion
-     */
-    enum class SyncToCpu : bool {
-        kYes = true,
-        kNo = false
-    };
     bool submit(sk_sp<CommandBuffer>);
     void checkForFinishedWork(SyncToCpu);
+
+#if GRAPHITE_TEST_UTILS
+    virtual void testingOnly_startCapture() {}
+    virtual void testingOnly_endCapture() {}
+#endif
 
 protected:
     Gpu(sk_sp<const Caps>);

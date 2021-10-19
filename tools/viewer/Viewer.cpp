@@ -374,7 +374,7 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     gSkVMAllowJIT = FLAGS_jit;
     gSkVMJITViaDylib = FLAGS_dylib;
 
-    ToolUtils::SetDefaultFontMgr();
+    CommonFlags::SetDefaultFontMgr();
 
     initializeEventTracingForTools();
     static SkTaskGroup::Enabler kTaskGroupEnabler(FLAGS_threads);
@@ -385,7 +385,7 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     DisplayParams displayParams;
     displayParams.fMSAASampleCount = FLAGS_msaa;
     displayParams.fEnableBinaryArchive = FLAGS_binaryarchive;
-    SetCtxOptionsFromCommonFlags(&displayParams.fGrContextOptions);
+    CommonFlags::SetCtxOptions(&displayParams.fGrContextOptions);
     displayParams.fGrContextOptions.fPersistentCache = &fPersistentCache;
     displayParams.fGrContextOptions.fShaderCacheStrategy =
             GrContextOptions::ShaderCacheStrategy::kSkSL;
