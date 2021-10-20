@@ -50,6 +50,9 @@ public:
     AI bool operator==(Rect rect) const { return all(fVals == rect.fVals); }
     AI bool operator!=(Rect rect) const { return any(fVals != rect.fVals); }
 
+    AI const float4& vals() const { return fVals; }  // [left, top, -right, -bot].
+    AI float4& vals() { return fVals; }  // [left, top, -right, -bot].
+
     AI float x() const { return fVals.x(); }
     AI float y() const { return fVals.y(); }
     AI float left() const { return fVals.x(); }
@@ -59,10 +62,17 @@ public:
     AI float2 topLeft() const { return fVals.xy(); }
     AI float2 botRight() const { return -fVals.zw(); }
     AI float4 ltrb() const { return NegateBotRight(fVals); }
-    AI float4 vals() const { return fVals; }  // [left, top, -right, -bot].
 
-    AI bool isEmptyOrNegative() const {
-        return any(fVals.xy() + fVals.zw() >= 0);  // == ([l-r, r-b] >= 0) == ([w, h] <= 0)
+    AI void setLeft(float left) { fVals.x() = left; }
+    AI void setTop(float top) { fVals.y() = top; }
+    AI void setRight(float right) { fVals.z() = -right; }
+    AI void setBot(float bot) { fVals.w() = -bot; }
+    AI void setTopLeft(float2 topLeft) { fVals.xy() = topLeft; }
+    AI void setBotRight(float2 botRight) { fVals.zw() = -botRight; }
+
+    AI bool isEmptyNegativeOrNaN() const {
+        return !all(fVals.xy() + fVals.zw() < 0);  // !([l-r, r-b] < 0) == ([w, h] <= 0)
+                                                   // Use "!(-size < 0)" in order to detect NaN.
     }
 
     AI float2 size() const { return -(fVals.xy() + fVals.zw()); }  // == [-(l-r), -(t-b)] == [w, h]

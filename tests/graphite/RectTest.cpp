@@ -52,6 +52,27 @@ DEF_GRAPHITE_TEST(skgpu_Rect, reporter) {
         CHECK(all(rect2.ltrb() == float4(l,t,r,b)));
         CHECK(all(rect2.vals() == float4(l,t,-r,-b)));
 
+        Rect setTest(-99,-99,99,99);
+        CHECK(setTest != rect2);
+        setTest.setLeft(l);
+        setTest.setTop(t);
+        setTest.setRight(r);
+        setTest.setBot(b);
+        CHECK(setTest == rect2);
+
+        setTest = Rect(-99,-99,99,99);
+        CHECK(setTest != rect2);
+        setTest.setTopLeft({l,t});
+        setTest.setBotRight({r,b});
+        CHECK(setTest == rect2);
+
+        for (int i = 0; i < 4; ++i) {
+            Rect rnan = rect2;
+            CHECK(!rnan.isEmptyNegativeOrNaN());
+            rnan.vals()[i] = std::numeric_limits<float>::quiet_NaN();
+            CHECK(rnan.isEmptyNegativeOrNaN());
+        }
+
         CHECK(all(rect2.size() == float2(skRect2.width(), skRect2.height())));
         CHECK(all(rect2.center() == float2(skRect2.centerX(), skRect2.centerY())));
         CHECK(rect2.area() == skRect2.height() * skRect2.width());
@@ -74,7 +95,7 @@ DEF_GRAPHITE_TEST(skgpu_Rect, reporter) {
         CHECK(rect.makeJoin(rect2) == skJoin);
         CHECK(rect.makeJoin(rect2) == rect2.makeJoin(rect));
 
-        CHECK(rect.intersects(rect2) == !rect.makeIntersect(rect2).isEmptyOrNegative());
+        CHECK(rect.intersects(rect2) == !rect.makeIntersect(rect2).isEmptyNegativeOrNaN());
         CHECK(rect.makeIntersect(rect2) == rect2.makeIntersect(rect));
         if (rect.intersects(rect2)) {
             CHECK(skRect.intersects(skRect2));
