@@ -21,7 +21,7 @@
 #include "src/gpu/GrOpFlushState.h"
 #endif
 
-namespace skgpu::tess {
+namespace skgpu {
 
 namespace {
 
@@ -158,7 +158,7 @@ private:
     }
 
     CullTest fCullTest;
-    VectorXform fTotalVectorXform;
+    wangs_formula::VectorXform fTotalVectorXform;
     PathXform fPathXform;
     const float fMaxSegments_pow2;
     const float fMaxSegments_pow4;
@@ -375,4 +375,4 @@ void PathCurveTessellator::drawHullInstances(GrOpFlushState* flushState,
 }
 #endif
 
-}  // namespace skgpu::tess
+}  // namespace skgpu
