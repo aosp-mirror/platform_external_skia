@@ -72,7 +72,7 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fSRGBWriteControl = false;
     fSkipErrorChecks = false;
 
-    fShaderCaps.reset(new GrShaderCaps(contextOptions));
+    fShaderCaps = std::make_unique<GrShaderCaps>();
 
     // All of Skia's automated testing of ANGLE and all related tuning of performance and driver
     // workarounds is oriented around the D3D backends of ANGLE. Chrome has started using Skia
@@ -3884,14 +3884,6 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         shaderCaps->fMustGuardDivisionEvenAfterExplicitZeroCheck = true;
     }
 #endif
-
-    if (ctxInfo.renderer() == GrGLRenderer::kAdreno615 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno620 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno630 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno640 ||
-        ctxInfo.renderer() == GrGLRenderer::kAdreno6xx_other) {
-        shaderCaps->fInBlendModesFailRandomlyForAllZeroVec = true;
-    }
 
     // The Adreno 5xx and 6xx produce incorrect results when comparing a pair of matrices.
     if (ctxInfo.renderer() == GrGLRenderer::kAdreno530 ||

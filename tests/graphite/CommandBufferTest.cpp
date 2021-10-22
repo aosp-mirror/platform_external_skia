@@ -37,7 +37,6 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
     auto commandBuffer = gpu->resourceProvider()->createCommandBuffer();
 
     SkISize textureSize = { 1024, 768 };
-    TextureInfo textureInfo;
 #ifdef SK_METAL
     skgpu::mtl::TextureInfo mtlTextureInfo = {
         1,
@@ -46,7 +45,9 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
         0x0005, // MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead
         2,      // MTLStorageModePrivate
     };
-    textureInfo = TextureInfo(mtlTextureInfo);
+    TextureInfo textureInfo(mtlTextureInfo);
+#else
+    TextureInfo textureInfo;
 #endif
 
     sk_sp<Texture> texture = gpu->resourceProvider()->findOrCreateTexture(textureSize,
@@ -59,7 +60,10 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
 
     commandBuffer->beginRenderPass(renderPassDesc);
 
-    // add test commands here
+    RenderPipelineDesc pipelineDesc;
+    auto renderPipeline = gpu->resourceProvider()->findOrCreateRenderPipeline(pipelineDesc);
+    commandBuffer->setRenderPipeline(std::move(renderPipeline));
+    commandBuffer->draw(PrimitiveType::kTriangleStrip, 0, 4);
 
     commandBuffer->endRenderPass();
 

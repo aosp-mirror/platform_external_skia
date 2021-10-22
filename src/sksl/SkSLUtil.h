@@ -134,11 +134,6 @@ public:
         return fMustGuardDivisionEvenAfterExplicitZeroCheck;
     }
 
-    bool fInBlendModesFailRandomlyForAllZeroVec = false;
-    bool inBlendModesFailRandomlyForAllZeroVec() const {
-        return fInBlendModesFailRandomlyForAllZeroVec;
-    }
-
     bool fMustEnableAdvBlendEqs = false;
     bool mustEnableAdvBlendEqs() const {
         return fMustEnableAdvBlendEqs;
@@ -284,13 +279,12 @@ public:
 };
 
 using ShaderCapsClass = StandaloneShaderCaps;
-using ShaderCapsPointer = std::shared_ptr<StandaloneShaderCaps>;
-extern StandaloneShaderCaps standaloneCaps;
+using ShaderCapsPointer = std::unique_ptr<StandaloneShaderCaps>;
 
 #else
 
 using ShaderCapsClass = GrShaderCaps;
-using ShaderCapsPointer = sk_sp<GrShaderCaps>;
+using ShaderCapsPointer = std::unique_ptr<GrShaderCaps>;
 
 #endif  // defined(SKSL_STANDALONE) || !SK_SUPPORT_GPU
 
@@ -314,12 +308,6 @@ public:
         ShaderCapsPointer result = MakeShaderCaps();
         result->fVersionDeclString = "#version 400";
         result->fAddAndTrueToLoopCondition = true;
-        return result;
-    }
-
-    static ShaderCapsPointer BlendModesFailRandomlyForAllZeroVec() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fInBlendModesFailRandomlyForAllZeroVec = true;
         return result;
     }
 
