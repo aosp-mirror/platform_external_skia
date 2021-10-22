@@ -9,8 +9,6 @@
 #define GrShaderCaps_DEFINED
 
 #include "include/core/SkRefCnt.h"
-#include "include/private/GrTypesPriv.h"
-#include "src/gpu/GrSwizzle.h"
 #include "src/gpu/glsl/GrGLSL.h"
 
 namespace SkSL {
@@ -21,7 +19,7 @@ class SharedCompiler;
 struct GrContextOptions;
 class SkJSONWriter;
 
-class GrShaderCaps : public SkRefCnt {
+class GrShaderCaps {
 public:
     /**
      * Indicates how GLSL must interact with advanced blend equations. The KHR extension requires
@@ -35,7 +33,7 @@ public:
         kLast_AdvBlendEqInteraction = kGeneralEnable_AdvBlendEqInteraction
     };
 
-    GrShaderCaps(const GrContextOptions&);
+    GrShaderCaps();
 
     void dumpJSON(SkJSONWriter*) const;
 
@@ -180,13 +178,6 @@ public:
         return fMustGuardDivisionEvenAfterExplicitZeroCheck;
     }
 
-    // On Pixel 3, 3a, and 4 devices we've noticed that the simple function:
-    // half4 blend(half4 a, half4 b) { return a.a * b; }
-    // may return (0, 0, 0, 1) when b is (0, 0, 0, 0).
-    bool inBlendModesFailRandomlyForAllZeroVec() const {
-        return fInBlendModesFailRandomlyForAllZeroVec;
-    }
-
     // On Nexus 6, the GL context can get lost if a shader does not write a value to gl_FragColor.
     // https://bugs.chromium.org/p/chromium/issues/detail?id=445377
     bool mustWriteToFragColor() const { return fMustWriteToFragColor; }
@@ -317,7 +308,6 @@ private:
     bool fRequiresLocalOutputColorForFBFetch          : 1;
     bool fMustObfuscateUniformColor                   : 1;
     bool fMustGuardDivisionEvenAfterExplicitZeroCheck : 1;
-    bool fInBlendModesFailRandomlyForAllZeroVec       : 1;
     bool fCanUseFragCoord                             : 1;
     bool fIncompleteShortIntPrecision                 : 1;
     bool fAddAndTrueToLoopCondition                   : 1;
