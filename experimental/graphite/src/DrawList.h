@@ -12,9 +12,9 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkShader.h"
 
-#include "experimental/graphite/include/GraphiteTypes.h"
+#include "experimental/graphite/src/DrawOrder.h"
 
-#include <cstdint>
+#include <limits>
 
 class SkPath;
 struct SkIRect;
@@ -61,11 +61,13 @@ struct StrokeParams;
  */
 class DrawList {
 public:
-    // TBD: Do we always need the inverse deviceToLocal matrix? If not the entire matrix, do we need
-    // some other matrix-dependent value (e.g. scale factor) frequently? Since the localToDevice
-    // transform from the Device changes at the same or slower rate as draw commands, it may make
-    // sense for it to compute these dependent values and provide them here. Storing the scale
-    // factor per draw command is low overhead, but unsure about storing 2 matrices per command.
+    // The maximum number of draw calls that can be recorded into a DrawList before it must be
+    // converted to a DrawPass. The true fundamental limit is imposed by the limits of the depth
+    // attachment and precision of CompressedPaintersOrder and PaintDepth. These values can be
+    // shared by multiple draw calls so it's more difficult to reason about how much room is left
+    // in a DrawList. Limiting it to this keeps tracking simple and ensures that the sequences in
+    // DrawOrder cannot overflow since they are always less than or equal to the number of draws.
+    static constexpr int kMaxDraws = std::numeric_limits<uint16_t>::max();
 
     // NOTE: All path rendering functions, e.g. [fill|stroke|...]Path() that take a Shape
     // draw using the same underlying techniques regardless of the shape's type. If a Shape has
@@ -78,9 +80,7 @@ public:
     void stencilAndFillPath(const Transform& localToDevice,
                             const Shape& shape,
                             const SkIRect& scissor, // TBD: expand this to one xformed rrect clip?
-                            CompressedPaintersOrder colorDepthOrder,
-                            CompressedPaintersOrder stencilOrder,
-                            uint16_t depth,
+                            DrawOrder ordering,
                             const PaintParams* paint) {
         // TODO: Implement this and assert localToDevice.valid()
     }
@@ -88,8 +88,7 @@ public:
     void fillConvexPath(const Transform& localToDevice,
                         const Shape& shape,
                         const SkIRect& scissor,
-                        CompressedPaintersOrder colorDepthOrder,
-                        uint16_t depth,
+                        DrawOrder ordering,
                         const PaintParams* paint) {
         // TODO: Implement this and assert localToDevice.valid()
     }
@@ -98,8 +97,7 @@ public:
                     const Shape& shape,
                     const StrokeParams& stroke,
                     const SkIRect& scissor,
-                    CompressedPaintersOrder colorDepthOrder,
-                    uint16_t depth,
+                    DrawOrder ordering,
                     const PaintParams* paint) {
         // TODO: Implement this and assert localToDevice.valid()
     }
@@ -111,17 +109,6 @@ public:
     //       dashLine(only if general or rrect version aren't viable)
 
     int count() const { return 0; }
-
-    // TBD: Figure out preparation/flush APIs and/or how to iterate the draw commands. These will
-    // be responsible for sorting by sort z and shading state, doing occlusion culling, and possibly
-    // merging compatible, consecutive remaining commands. It can also easily track if there are
-    // remaining depth-only draws or complex path draws that would trigger DMSAA. I[ml] can see this
-    // all being internal to DrawCommandList, or being supported by accessors and iterators with the
-    // rest of the logic stored in SDC. It is also unknown at this time how much conversion the
-    // PaintParams will need to go through (vs. just building a key) in order to do state sorting.
-
-    // TBD: Any value in de-duplicating paint params/programs during accumulation or being able
-    // to query the set of required programs for a given command list? Any time query or flush time?
 
 private:
     // TODO: actually implement this, probably stl for now but will likely need something that

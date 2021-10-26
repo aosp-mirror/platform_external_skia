@@ -50,8 +50,8 @@ Device::Device(sk_sp<Recorder> recorder, sk_sp<DrawContext> dc)
         , fRecorder(std::move(recorder))
         , fDC(std::move(dc))
         , fColorDepthBoundsManager(std::make_unique<NaiveBoundsManager>())
-        , fMaxPaintOrder(0)
-        , fMaxZ(0)
+        , fCurrentDepth(DrawOrder::kClearDepth)
+        , fMaxStencilIndex(DrawOrder::kUnassigned)
         , fDrawsOverlap(false) {
     SkASSERT(SkToBool(fDC) && SkToBool(fRecorder));
 }
@@ -70,9 +70,7 @@ sk_sp<SkSurface> Device::makeSurface(const SkImageInfo& ii, const SkSurfaceProps
 }
 
 bool Device::onReadPixels(const SkPixmap& pm, int x, int y) {
-    // TODO: If we're reading back pixels we need to push deferred clip draws and snap off the draw
-    // task so we can have a read back task added to the graph, the same as will be done if the
-    // Device has a snapped special image or is drawn into another device directly.
+    this->flushPendingWorkToRecorder();
     // TODO: actually do a read back
     pm.erase(SK_ColorGREEN);
     return true;
@@ -151,6 +149,8 @@ void Device::drawShape(const Shape& shape,
     Transform localToDevice(this->localToDevice44());
     if (!localToDevice.valid()) {
         // If the transform is not invertible or not finite then drawing isn't well defined.
+        // TBD: This warning should go through the general purpose graphite logging system
+        SkDebugf("[graphite] WARNING - Skipping draw with non-invertible/non-finite transform.\n");
         return;
     }
 
@@ -190,61 +190,77 @@ void Device::drawShape(const Shape& shape,
     SkASSERT(!SkToBool(paint.getPathEffect()) || (flags & DrawFlags::kIgnorePathEffect));
     SkASSERT(!SkToBool(paint.getMaskFilter()) || (flags & DrawFlags::kIgnoreMaskFilter));
 
-    uint16_t drawZ = fMaxZ + 1;
-    ClipResult clip = this->applyClipToDraw(localToDevice, shape, style, drawZ);
+    // Check if we have room to record into the current list before determining clipping and order
+    const SkStrokeRec::Style styleType = style.getStyle();
+    if (this->needsFlushBeforeDraw(styleType == SkStrokeRec::kStrokeAndFill_Style ? 2 : 1)) {
+        this->flushPendingWorkToRecorder();
+    }
+
+    DrawOrder order(fCurrentDepth.next());
+    ClipResult clip = this->applyClipToDraw(localToDevice, shape, style, order.depth());
     if (clip.fDrawBounds.isEmptyNegativeOrNaN()) {
         // Clipped out, so don't record anything
         return;
     }
+
+    // A draw's order always depends on the clips that must be drawn before it
+    order.dependsOnPaintersOrder(clip.fOrder);
 
     auto blendMode = paint.asBlendMode();
     PaintParams shading{paint.getColor4f(),
                         blendMode.has_value() ? *blendMode : SkBlendMode::kSrcOver,
                         paint.refShader()};
 
-    // If a draw is opaque, its ordering only depends on clipping; otherwise it must be drawn after
-    // the most recent draw it intersects with, in order to blend correctly.
+    // If a draw is not opaque, it must be drawn after the most recent draw it intersects with in
+    // order to blend correctly. We always query the most recent draw (even when opaque) because it
+    // also lets Device easily track whether or not there are any overlapping draws.
     const bool opaque = is_opaque(shading);
-    CompressedPaintersOrder prevDrawOrder =
+    CompressedPaintersOrder prevDraw =
             fColorDepthBoundsManager->getMostRecentDraw(clip.fDrawBounds);
-    CompressedPaintersOrder drawOrder =
-            1 + (opaque ? clip.fOrder : std::max(clip.fOrder, prevDrawOrder));
+    if (!opaque) {
+        order.dependsOnPaintersOrder(prevDraw);
+    }
 
-    SkStrokeRec::Style styleType = style.getStyle();
     if (styleType == SkStrokeRec::kStroke_Style ||
         styleType == SkStrokeRec::kHairline_Style ||
         styleType == SkStrokeRec::kStrokeAndFill_Style) {
         // TODO: If DC supports stroked primitives, Device could choose one of those based on shape
         StrokeParams stroke(style.getWidth(), style.getMiter(), style.getJoin(), style.getCap());
-        fDC->strokePath(localToDevice, shape, stroke, clip.fScissor,
-                        drawOrder, drawZ, &shading);
+        fDC->strokePath(localToDevice, shape, stroke, clip.fScissor, order, &shading);
     }
     if (styleType == SkStrokeRec::kFill_Style ||
         styleType == SkStrokeRec::kStrokeAndFill_Style) {
         // TODO: If DC supports filled primitives, Device could choose one of those based on shape
-        if (shape.convex()) {
-            fDC->fillConvexPath(localToDevice, shape, clip.fScissor,
-                                drawOrder, drawZ, &shading);
-        } else {
-            // FIXME must determine stencil order; a separate bounds manager? a rect tree? defer?
-            fDC->stencilAndFillPath(localToDevice, shape, clip.fScissor,
-                                    drawOrder, 0, drawZ, &shading);
-        }
+
+        // TODO: Route all filled shapes to stencil-and-cover for the sprint; convex will draw
+        // correctly but uses an unnecessary stencil step.
+        // if (shape.convex()) {
+        //     fDC->fillConvexPath(localToDevice, shape, clip.fScissor, order, &shading);
+        // } else {
+            order.dependsOnStencil(fMaxStencilIndex.next());
+            fDC->stencilAndFillPath(localToDevice, shape, clip.fScissor, order, &shading);
+        // }
     }
 
-    // Record the painters order and Z used for this draw
+    // Record the painters order and depth used for this draw
     const bool fullyOpaque = opaque && shape.isRect() &&
                              localToDevice.type() <= Transform::Type::kRectStaysRect;
-    fColorDepthBoundsManager->recordDraw(shape.bounds(), drawOrder, drawZ, fullyOpaque);
-    fMaxPaintOrder = std::max(fMaxPaintOrder, drawOrder);
-    fMaxZ = drawZ;
-    fDrawsOverlap |= (prevDrawOrder != 0);
+    fColorDepthBoundsManager->recordDraw(shape.bounds(),
+                                         order.paintOrder(),
+                                         order.depth(),
+                                         fullyOpaque);
+
+    fCurrentDepth = order.depth();
+    if (order.stencilIndex() != DrawOrder::kUnassigned) {
+        fMaxStencilIndex = std::max(fMaxStencilIndex, order.stencilIndex());
+    }
+    fDrawsOverlap |= (prevDraw != DrawOrder::kNoIntersection);
 }
 
 Device::ClipResult Device::applyClipToDraw(const Transform& localToDevice,
                                            const Shape& shape,
                                            const SkStrokeRec& style,
-                                           uint16_t z) {
+                                           PaintersDepth z) {
     SkIRect scissor = this->devClipBounds();
 
     Rect drawBounds = shape.bounds();
@@ -262,11 +278,30 @@ Device::ClipResult Device::applyClipToDraw(const Transform& localToDevice,
     drawBounds.intersect(SkRect::Make(scissor));
     if (drawBounds.isEmptyNegativeOrNaN()) {
         // Trivially clipped out, so return now
-        return {scissor, drawBounds, 0};
+        return {scissor, drawBounds, DrawOrder::kNoIntersection};
     }
 
     // TODO: iterate the clip stack and accumulate draw bounds into clip usage
-    return {scissor, drawBounds, 0};
+    return {scissor, drawBounds, DrawOrder::kNoIntersection};
+}
+
+void Device::flushPendingWorkToRecorder() {
+    // TODO: we may need to further split this function up since device->device drawList and
+    // DrawPass stealing will need to share some of the same logic w/o becoming a Task.
+
+    // TODO: iterate the clip stack and issue a depth-only draw for every clip element that has
+    // a non-empty usage bounds, using that bounds as the scissor.
+    auto drawTask = fDC->snapRenderPassTask(fColorDepthBoundsManager.get());
+    if (drawTask) {
+        fRecorder->add(std::move(drawTask));
+    }
+}
+
+bool Device::needsFlushBeforeDraw(int numNewDraws) const {
+    // TODO: iterate the clip stack and count the number of clip elements (both w/ and w/o usage
+    // since we want to know the max # of clip shapes that flushing might add as draws).
+    // numNewDraws += clip element count...
+    return (DrawList::kMaxDraws - fDC->pendingDrawCount()) < numNewDraws;
 }
 
 sk_sp<SkSpecialImage> Device::makeSpecial(const SkBitmap&) {
@@ -278,6 +313,7 @@ sk_sp<SkSpecialImage> Device::makeSpecial(const SkImage*) {
 }
 
 sk_sp<SkSpecialImage> Device::snapSpecial(const SkIRect& subset, bool forceCopy) {
+    this->flushPendingWorkToRecorder();
     return nullptr;
 }
 

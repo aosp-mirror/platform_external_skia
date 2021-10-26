@@ -11,7 +11,8 @@
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkRefCnt.h"
 
-#include "experimental/graphite/include/GraphiteTypes.h"
+#include "experimental/graphite/src/DrawList.h"
+#include "experimental/graphite/src/DrawOrder.h"
 
 #include <vector>
 
@@ -25,9 +26,6 @@ class DrawList;
 class DrawPass;
 class Task;
 
-struct PaintParams;
-struct StrokeParams;
-
 /**
  * DrawContext records draw commands into a specific Surface, via a general task graph
  * representing GPU work and their inter-dependencies.
@@ -40,29 +38,27 @@ public:
 
     const SkImageInfo& imageInfo() { return fImageInfo; }
 
+    int pendingDrawCount() const { return fPendingDraws->count(); }
+
     // TODO: need color/depth clearing functions (so DCL will probably need those too)
 
     void stencilAndFillPath(const Transform& localToDevice,
                             const Shape& shape,
                             const SkIRect& scissor,
-                            CompressedPaintersOrder colorDepthOrder,
-                            CompressedPaintersOrder stencilOrder,
-                            uint16_t depth,
+                            DrawOrder order,
                             const PaintParams* paint);
 
     void fillConvexPath(const Transform& localToDevice,
                         const Shape& shape,
                         const SkIRect& scissor,
-                        CompressedPaintersOrder colorDepthOrder,
-                        uint16_t depth,
+                        DrawOrder order,
                         const PaintParams* paint);
 
     void strokePath(const Transform& localToDevice,
                     const Shape& shape,
                     const StrokeParams& stroke,
                     const SkIRect& scissor,
-                    CompressedPaintersOrder colorDepthOrder,
-                    uint16_t depth,
+                    DrawOrder order,
                     const PaintParams* paint);
 
     // Ends the current DrawList being accumulated by the SDC, converting it into an optimized and
