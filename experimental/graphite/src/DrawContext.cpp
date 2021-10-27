@@ -21,8 +21,7 @@ sk_sp<DrawContext> DrawContext::Make(const SkImageInfo& ii) {
 
 DrawContext::DrawContext(const SkImageInfo& ii)
         : fImageInfo(ii)
-        , fPendingDraws(std::make_unique<DrawList>())
-        , fTail(nullptr) {
+        , fPendingDraws(std::make_unique<DrawList>()) {
     // TBD - Will probably want DrawLists (and its internal commands) to come from an arena
     // that the SDC manages.
 }
@@ -37,31 +36,26 @@ DrawContext::~DrawContext() {
 void DrawContext::stencilAndFillPath(const Transform& localToDevice,
                                      const Shape& shape,
                                      const SkIRect& scissor,
-                                     CompressedPaintersOrder colorDepthOrder,
-                                     CompressedPaintersOrder stencilOrder,
-                                     uint16_t depth,
+                                     DrawOrder order,
                                      const PaintParams* paint)  {
-    fPendingDraws->stencilAndFillPath(localToDevice, shape, scissor, colorDepthOrder, stencilOrder,
-                                      depth, paint);
+    fPendingDraws->stencilAndFillPath(localToDevice, shape, scissor, order,paint);
 }
 
 void DrawContext::fillConvexPath(const Transform& localToDevice,
                                  const Shape& shape,
                                  const SkIRect& scissor,
-                                 CompressedPaintersOrder colorDepthOrder,
-                                 uint16_t depth,
+                                 DrawOrder order,
                                  const PaintParams* paint) {
-    fPendingDraws->fillConvexPath(localToDevice, shape, scissor, colorDepthOrder, depth, paint);
+    fPendingDraws->fillConvexPath(localToDevice, shape, scissor, order, paint);
 }
 
 void DrawContext::strokePath(const Transform& localToDevice,
                              const Shape& shape,
                              const StrokeParams& stroke,
                              const SkIRect& scissor,
-                             CompressedPaintersOrder colorDepthOrder,
-                             uint16_t depth,
+                             DrawOrder order,
                              const PaintParams* paint) {
-    fPendingDraws->strokePath(localToDevice, shape, stroke, scissor, colorDepthOrder, depth, paint);
+    fPendingDraws->strokePath(localToDevice, shape, stroke, scissor, order, paint);
 }
 
 void DrawContext::snapDrawPass(const BoundsManager* occlusionCuller) {
@@ -83,11 +77,7 @@ sk_sp<Task> DrawContext::snapRenderPassTask(const BoundsManager* occlusionCuller
         return nullptr;
     }
 
-    // TBD: Record automatically into task graph? If so, why return a value? If not, then caller
-    // will need to actually record the task.
-    auto task = RenderPassTask::Make(std::move(fTail), std::move(fDrawPasses));
-    fTail = task;
-    return std::move(task);
+    return RenderPassTask::Make(std::move(fDrawPasses));
 }
 
 } // namespace skgpu

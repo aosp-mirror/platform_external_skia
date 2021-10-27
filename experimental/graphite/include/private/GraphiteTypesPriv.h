@@ -79,14 +79,6 @@ enum class SLType {
     kBool2,
     kBool3,
     kBool4,
-    kByte,
-    kByte2,
-    kByte3,
-    kByte4,
-    kUByte,
-    kUByte2,
-    kUByte3,
-    kUByte4,
     kShort,
     kShort2,
     kShort3,
@@ -126,6 +118,7 @@ enum class SLType {
 
     kLast = kInput
 };
+static const int kSLTypeCount = static_cast<int>(SLType::kLast) + 1;
 
 enum class CType : unsigned {
     // Any float/half, vector of floats/half, or matrices of floats/halfs are a tightly
