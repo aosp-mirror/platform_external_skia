@@ -36,9 +36,15 @@ void CommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc) {
     }
 }
 
-void CommandBuffer::setRenderPipeline(sk_sp<RenderPipeline> renderPipeline) {
-    this->onSetRenderPipeline(renderPipeline);
+void CommandBuffer::bindRenderPipeline(sk_sp<RenderPipeline> renderPipeline) {
+    this->onBindRenderPipeline(renderPipeline.get());
     this->trackResource(std::move(renderPipeline));
+    fHasWork = true;
+}
+
+void CommandBuffer::bindUniformBuffer(sk_sp<Buffer> uniformBuffer, size_t offset) {
+    this->onBindUniformBuffer(uniformBuffer.get(), offset);
+    this->trackResource(std::move(uniformBuffer));
     fHasWork = true;
 }
 
@@ -59,7 +65,7 @@ void CommandBuffer::copyTextureToBuffer(sk_sp<skgpu::Texture> texture,
         return;
     }
 
-    this->onCopyTextureToBuffer(texture, srcRect, buffer, bufferOffset, bufferRowBytes);
+    this->onCopyTextureToBuffer(texture.get(), srcRect, buffer.get(), bufferOffset, bufferRowBytes);
 
     this->trackResource(std::move(texture));
     this->trackResource(std::move(buffer));

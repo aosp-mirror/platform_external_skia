@@ -11,7 +11,8 @@
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkRefCnt.h"
 
-#include "experimental/graphite/include/GraphiteTypes.h"
+#include "experimental/graphite/src/DrawList.h"
+#include "experimental/graphite/src/DrawOrder.h"
 
 #include <vector>
 
@@ -25,9 +26,6 @@ class DrawList;
 class DrawPass;
 class Task;
 
-struct PaintParams;
-struct StrokeParams;
-
 /**
  * DrawContext records draw commands into a specific Surface, via a general task graph
  * representing GPU work and their inter-dependencies.
@@ -40,29 +38,27 @@ public:
 
     const SkImageInfo& imageInfo() { return fImageInfo; }
 
+    int pendingDrawCount() const { return fPendingDraws->count(); }
+
     // TODO: need color/depth clearing functions (so DCL will probably need those too)
 
     void stencilAndFillPath(const Transform& localToDevice,
                             const Shape& shape,
                             const SkIRect& scissor,
-                            CompressedPaintersOrder colorDepthOrder,
-                            CompressedPaintersOrder stencilOrder,
-                            uint16_t depth,
+                            DrawOrder order,
                             const PaintParams* paint);
 
     void fillConvexPath(const Transform& localToDevice,
                         const Shape& shape,
                         const SkIRect& scissor,
-                        CompressedPaintersOrder colorDepthOrder,
-                        uint16_t depth,
+                        DrawOrder order,
                         const PaintParams* paint);
 
     void strokePath(const Transform& localToDevice,
                     const Shape& shape,
                     const StrokeParams& stroke,
                     const SkIRect& scissor,
-                    CompressedPaintersOrder colorDepthOrder,
-                    uint16_t depth,
+                    DrawOrder order,
                     const PaintParams* paint);
 
     // Ends the current DrawList being accumulated by the SDC, converting it into an optimized and
@@ -82,7 +78,7 @@ public:
 
     // Ends the current DrawList if needed, as in 'snapDrawPass', and moves the new DrawPass and all
     // prior accumulated DrawPasses into a RenderPassTask that can be drawn and depended on. The
-    // returned task will automatically depend on any previous snapped task of the SDC.
+    // caller is responsible for configuring the returned Tasks's dependencies.
     //
     // Returns null if there are no pending commands or draw passes to move into a task.
     sk_sp<Task> snapRenderPassTask(const BoundsManager* occlusionCuller);
@@ -102,12 +98,6 @@ private:
     // that requires it to be resolved as its own render pass (vs. inlining the SDC's passes into a
     // parent's render pass).
     std::vector<std::unique_ptr<DrawPass>> fDrawPasses;
-
-    // TBD - Does the SDC even need to hold on to its tail task? Or when it finalizes its list of
-    // passes into a RenderPassTask it can send that back to the Recorder as part of a larger task
-    // graph? The only question then would be how to track the dependencies of that RenderPassTask
-    // since it would depend on the prior RenderPassTask and the SDC's of the DrawPasses.
-    sk_sp<Task> fTail;
 };
 
 } // namespace skgpu

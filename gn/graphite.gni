@@ -33,6 +33,7 @@ skia_graphite_sources = [
   "$_src/DrawContext.cpp",
   "$_src/DrawContext.h",
   "$_src/DrawList.h",
+  "$_src/DrawOrder.h",
   "$_src/DrawPass.cpp",
   "$_src/DrawPass.h",
   "$_src/Gpu.cpp",
@@ -50,6 +51,7 @@ skia_graphite_sources = [
   "$_src/RenderPipeline.h",
   "$_src/RenderPipelineDesc.cpp",
   "$_src/RenderPipelineDesc.h",
+  "$_src/Renderer.h",
   "$_src/ResourceProvider.cpp",
   "$_src/ResourceProvider.h",
   "$_src/SkStuff.cpp",
@@ -64,8 +66,9 @@ skia_graphite_sources = [
   "$_src/TextureInfo.cpp",
   "$_src/TextureProxy.cpp",
   "$_src/TextureProxy.h",
-  "$_src/UniformDataManager.cpp",
-  "$_src/UniformDataManager.h",
+  "$_src/Uniform.h",
+  "$_src/UniformManager.cpp",
+  "$_src/UniformManager.h",
   "$_src/geom/BoundsManager.h",
   "$_src/geom/IntersectionTree.cpp",
   "$_src/geom/IntersectionTree.h",
@@ -74,6 +77,7 @@ skia_graphite_sources = [
   "$_src/geom/Shape.h",
   "$_src/geom/Transform.cpp",
   "$_src/geom/Transform_graphite.h",
+  "$_src/render/StencilAndFillPathRenderer.cpp",
 ]
 
 skia_graphite_mtl_sources = [
