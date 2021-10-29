@@ -112,7 +112,7 @@ bool SkSurface_Base::outstandingImageSnapshot() const {
     return fCachedImage && !fCachedImage->unique();
 }
 
-void SkSurface_Base::aboutToDraw(ContentChangeMode mode) {
+bool SkSurface_Base::aboutToDraw(ContentChangeMode mode) {
     this->dirtyGenerationID();
 
     SkASSERT(!fCachedCanvas || fCachedCanvas->getSurfaceBase() == this);
@@ -123,7 +123,13 @@ void SkSurface_Base::aboutToDraw(ContentChangeMode mode) {
         // on the image (besides us).
         bool unique = fCachedImage->unique();
         if (!unique) {
+#ifdef SK_SURFACE_COPY_ON_WRITE_CRASHES
             this->onCopyOnWrite(mode);
+#else
+            if (!this->onCopyOnWrite(mode)) {
+                return false;
+            }
+#endif
         }
 
         // regardless of copy-on-write, we must drop our cached image now, so
@@ -139,6 +145,7 @@ void SkSurface_Base::aboutToDraw(ContentChangeMode mode) {
     } else if (kDiscard_ContentChangeMode == mode) {
         this->onDiscard();
     }
+    return true;
 }
 
 uint32_t SkSurface_Base::newGenerationID() {
@@ -186,7 +193,7 @@ uint32_t SkSurface::generationID() {
 }
 
 void SkSurface::notifyContentWillChange(ContentChangeMode mode) {
-    asSB(this)->aboutToDraw(mode);
+    sk_ignore_unused_variable(asSB(this)->aboutToDraw(mode));
 }
 
 SkCanvas* SkSurface::getCanvas() {
@@ -292,7 +299,9 @@ void SkSurface::writePixels(const SkPixmap& pmap, int x, int y) {
         if (srcR.contains(dstR)) {
             mode = kDiscard_ContentChangeMode;
         }
-        asSB(this)->aboutToDraw(mode);
+        if (!asSB(this)->aboutToDraw(mode)) {
+            return;
+        }
         asSB(this)->onWritePixels(pmap, x, y);
     }
 }
@@ -371,7 +380,11 @@ protected:
     sk_sp<SkImage> onNewImageSnapshot(const SkIRect* subsetOrNull) override { return nullptr; }
     void onWritePixels(const SkPixmap&, int x, int y) override {}
     void onDraw(SkCanvas*, SkScalar, SkScalar, const SkSamplingOptions&, const SkPaint*) override {}
+#ifdef SK_SURFACE_COPY_ON_WRITE_CRASHES
     void onCopyOnWrite(ContentChangeMode) override {}
+#else
+    bool onCopyOnWrite(ContentChangeMode) override { return true; }
+#endif
 };
 
 sk_sp<SkSurface> SkSurface::MakeNull(int width, int height) {
