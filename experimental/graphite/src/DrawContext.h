@@ -19,6 +19,7 @@
 namespace skgpu {
 
 class BoundsManager;
+class Recorder;
 class Shape;
 class Transform;
 
@@ -40,6 +41,7 @@ public:
     ~DrawContext() override;
 
     const SkImageInfo&  imageInfo() const { return fImageInfo;    }
+    TextureProxy* target()                { return fTarget.get(); }
     const TextureProxy* target()    const { return fTarget.get(); }
 
     int pendingDrawCount() const { return fPendingDraws->drawCount(); }
@@ -74,7 +76,7 @@ public:
     // DrawPass.
     // TBD - should this also return the task so the caller can point to it with its own
     // dependencies? Or will that be mostly automatic based on draws and proxy refs?
-    void snapDrawPass(const BoundsManager* occlusionCuller);
+    void snapDrawPass(Recorder*, const BoundsManager* occlusionCuller);
 
     // TBD: snapRenderPassTask() might not need to be public, and could be spec'ed to require that
     // snapDrawPass() must have been called first. A lot of it will depend on how the task graph is
@@ -85,7 +87,7 @@ public:
     // caller is responsible for configuring the returned Tasks's dependencies.
     //
     // Returns null if there are no pending commands or draw passes to move into a task.
-    sk_sp<Task> snapRenderPassTask(const BoundsManager* occlusionCuller);
+    sk_sp<Task> snapRenderPassTask(Recorder*, const BoundsManager* occlusionCuller);
 
 private:
     DrawContext(sk_sp<TextureProxy>, const SkImageInfo&);
