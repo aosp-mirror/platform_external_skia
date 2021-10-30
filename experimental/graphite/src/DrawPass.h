@@ -16,7 +16,9 @@
 namespace skgpu {
 
 class BoundsManager;
+class CommandBuffer;
 class DrawList;
+class Recorder;
 class TextureProxy;
 
 /**
@@ -36,7 +38,9 @@ public:
     ~DrawPass();
 
     // TODO: Replace SDC with the SDC's surface proxy view
-    static std::unique_ptr<DrawPass> Make(std::unique_ptr<DrawList>, sk_sp<TextureProxy>,
+    static std::unique_ptr<DrawPass> Make(Recorder*,
+                                          std::unique_ptr<DrawList>,
+                                          sk_sp<TextureProxy>,
                                           const BoundsManager* occlusionCuller);
 
     // Defined relative to the top-left corner of the surface the DrawPass renders to, and is
@@ -57,6 +61,10 @@ public:
     // it iterates over the DrawPass contents.
     void samplers() const {}
     void programs() const {}
+
+    // Transform this DrawPass into commands issued to the CommandBuffer. Assumes that the buffer
+    // has already begun a correctly configured render pass matching this pass's target.
+    void execute(CommandBuffer* buffer) const;
 
 private:
     class SortKey;
