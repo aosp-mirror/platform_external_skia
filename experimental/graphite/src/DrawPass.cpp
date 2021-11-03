@@ -247,10 +247,12 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
         size_t indexSize = draw.requiredIndexSpace(renderStep);
         auto [vertexWriter, vertexInfo] = bufferMgr->getVertexWriter(vertexSize);
         auto [indexWriter, indexInfo] = bufferMgr->getIndexWriter(indexSize);
+        // TODO: handle the case where we fail to get a vertex or index writer besides asserting
+        SkASSERT(!vertexSize || (vertexWriter && vertexInfo.fBuffer));
+        SkASSERT(!indexSize || (indexWriter && indexInfo.fBuffer));
         draw.writeVertices(std::move(vertexWriter), std::move(indexWriter), renderStep);
 
         if (vertexSize) {
-            SkASSERT(vertexWriter);
             if (lastBoundVertexBuffer != vertexInfo.fBuffer) {
                 // TODO: Record a vertex bind call that stores the vertexInfo.fBuffer.
             }
@@ -258,7 +260,6 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
             // executes.
         }
         if (indexSize) {
-            SkASSERT(indexWriter);
             if (lastBoundIndexBuffer != indexInfo.fBuffer) {
                 // TODO: Record a vertex bind call that stores the vertexInfo.fBuffer.
             }
