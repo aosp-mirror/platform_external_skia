@@ -473,19 +473,15 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
 #else
             float paintAlpha = skPaint.getColor4f().fA;
             if (paintAlpha != 1.0f) {
-                // TODO (skbug.com/11942): Can we instead make a single FP that does:
-                //   uniform colorFilter fp;
-                //   half4 main(half4 inColor) {
-                //     return fp.eval(inColor.rgb1) * inColor.a;
-                //   }
-                // That's slightly different - we're relying on the input color being the paint
-                // color, but it would avoid the uniform (so might restore batching)?
-                SkPMColor4f shaderInput = origColor.makeOpaque().premul();
-                paintFP = GrFragmentProcessor::OverrideInput(std::move(paintFP), shaderInput);
-
-                paintFP = GrFragmentProcessor::ModulateRGBA(
-                        std::move(paintFP), {paintAlpha, paintAlpha, paintAlpha, paintAlpha});
-                grPaint->setColor4f(shaderInput);
+                // This invokes the shader's FP tree with an opaque version of the paint color,
+                // then multiplies the final result by the incoming (paint) alpha.
+                // We're actually putting the *unpremul* paint color on the GrPaint. This is okay,
+                // because the shader is supposed to see the original (opaque) RGB from the paint.
+                // ApplyPaintAlpha then creates a valid premul color by applying the paint alpha.
+                // Think of this as equivalent to (but faster than) putting origColor.premul() on
+                // the GrPaint, and ApplyPaintAlpha unpremuling it before passing it to the child.
+                paintFP = GrFragmentProcessor::ApplyPaintAlpha(std::move(paintFP));
+                grPaint->setColor4f({origColor.fR, origColor.fG, origColor.fB, origColor.fA});
             } else {
                 grPaint->setColor4f(origColor.premul());
             }
