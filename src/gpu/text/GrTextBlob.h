@@ -23,9 +23,7 @@
 #include "src/core/SkTLazy.h"
 #include "src/gpu/GrColor.h"
 #include "src/gpu/GrSubRunAllocator.h"
-#if SK_GPU_V1
 #include "src/gpu/ops/GrOp.h"
-#endif
 
 class GrAtlasManager;
 class GrDeferredUploadTarget;
@@ -75,7 +73,6 @@ public:
     virtual size_t vertexStride(const SkMatrix& drawMatrix) const = 0;
     virtual int glyphCount() const = 0;
 
-#if SK_GPU_V1
     virtual std::tuple<const GrClip*, GrOp::Owner>
     makeAtlasTextOp(
             const GrClip*,
@@ -84,7 +81,6 @@ public:
             const SkPaint&,
             skgpu::v1::SurfaceDrawContext*,
             GrAtlasSubRunOwner subRun) const = 0;
-#endif
 
     virtual void fillVertexData(
             void* vertexDst, int offset, int count,
@@ -113,14 +109,12 @@ class GrSubRun {
 public:
     virtual ~GrSubRun() = default;
 
-#if SK_GPU_V1
     // Produce GPU ops for this subRun.
     virtual void draw(const GrClip*,
                       const SkMatrixProvider& viewMatrix,
                       const SkGlyphRunList&,
                       const SkPaint&,
                       skgpu::v1::SurfaceDrawContext*) const = 0;
-#endif
 
     // Given an already cached subRun, can this subRun handle this combination paint, matrix, and
     // position.
@@ -257,13 +251,13 @@ private:
             const SkZip<SkGlyphVariant, SkPoint>& drawables,
             const SkStrikeSpec& strikeSpec);
 
-#if SK_GPU_V1
     // Methods to satisfy SkGlyphRunPainterInterface
     void processDeviceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                             const SkStrikeSpec& strikeSpec) override;
     void processSourcePaths(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                             const SkFont& runFont,
-                            const SkStrikeSpec& strikeSpec) override;
+                            const SkStrikeSpec& strikeSpec,
+                            SkScalar strikeToSourceScale) override;
     void processSourceSDFT(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                            const SkStrikeSpec& strikeSpec,
                            const SkFont& runFont,
@@ -271,7 +265,6 @@ private:
                            SkScalar maxScale) override;
     void processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                             const SkStrikeSpec& strikeSpec) override;
-#endif // SK_GPU_V1
 
     // The allocator must come first because it needs to be destroyed last. Other fields of this
     // structure may have pointers into it.
@@ -300,7 +293,6 @@ private:
     bool fSomeGlyphsExcluded{false};
 };
 
-#if SK_GPU_V1
 class GrSubRunNoCachePainter : public SkGlyphRunPainterInterface {
 public:
     GrSubRunNoCachePainter(skgpu::v1::SurfaceDrawContext*,
@@ -314,7 +306,8 @@ public:
     void processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                             const SkStrikeSpec& strikeSpec) override;
     void processSourcePaths(const SkZip<SkGlyphVariant, SkPoint>& drawables,
-                            const SkFont& runFont, const SkStrikeSpec& strikeSpec) override;
+                            const SkFont& runFont, const SkStrikeSpec& strikeSpec,
+                            SkScalar strikeToSourceScale) override;
     void processSourceSDFT(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                            const SkStrikeSpec& strikeSpec, const SkFont& runFont,
                            SkScalar minScale, SkScalar maxScale) override;
@@ -331,6 +324,5 @@ private:
     const SkGlyphRunList& fGlyphRunList;
     const SkPaint& fPaint;
 };
-#endif // SK_GPU_V1
 
 #endif  // GrTextBlob_DEFINED

@@ -27,6 +27,7 @@
 #include "src/core/SkTSort.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/core/SkTextBlobPriv.h"
+#include "src/core/SkVMBlitter.h"
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrPersistentCacheUtils.h"
@@ -1852,6 +1853,29 @@ static SkSL::String build_glsl_highlight_shader(const GrShaderCaps& shaderCaps) 
     return highlight;
 }
 
+static skvm::Program build_skvm_highlight_program(SkColorType ct, int nargs) {
+    // Code here is heavily tied to (and inspired by) SkVMBlitter::BuildProgram
+    skvm::Builder b;
+
+    // All VM blitters start with two arguments (uniforms, dst surface)
+    SkASSERT(nargs >= 2);
+    (void)b.uniform();
+    skvm::Ptr dst_ptr = b.varying(SkColorTypeBytesPerPixel(ct));
+
+    // Depending on coverage and shader, there can be additional arguments.
+    // Make sure that we append the right number, so that we don't assert when
+    // the CPU backend tries to run this program.
+    for (int i = 2; i < nargs; ++i) {
+        (void)b.uniform();
+    }
+
+    skvm::Color magenta = {b.splat(1.0f), b.splat(0.0f), b.splat(1.0f), b.splat(0.5f)};
+    skvm::PixelFormat dstFormat = skvm::SkColorType_to_PixelFormat(ct);
+    store(dstFormat, dst_ptr, magenta);
+
+    return b.done();
+}
+
 void Viewer::drawImGui() {
     // Support drawing the ImGui demo window. Superfluous, but gives a good idea of what's possible
     if (fShowImGuiTestWindow) {
@@ -2611,6 +2635,63 @@ void Viewer::drawImGui() {
                         entry.fShader[kFragment_GrShaderType] = backup;
                     }
                 }
+            }
+
+            if (ImGui::CollapsingHeader("SkVM")) {
+                auto* cache = SkVMBlitter::TryAcquireProgramCache();
+                SkASSERT(cache);
+
+                if (ImGui::Button("Clear")) {
+                    cache->reset();
+                }
+
+                // First, go through the cache and restore the original program if we were hovering
+                if (!fHoveredProgram.empty()) {
+                    auto restoreHoveredProgram = [this](const SkVMBlitter::Key* key,
+                                                        skvm::Program* program) {
+                        if (*key == fHoveredKey) {
+                            *program = std::move(fHoveredProgram);
+                            fHoveredProgram = {};
+                        }
+                    };
+                    cache->foreach(restoreHoveredProgram);
+                }
+
+                // Now iterate again, and dump any expanded program. If any program is hovered,
+                // patch it, and remember the original (so it can be restored next frame).
+                auto showVMEntry = [this](const SkVMBlitter::Key* key, skvm::Program* program) {
+                    SkString keyString = SkVMBlitter::DebugName(*key);
+                    bool inTreeNode = ImGui::TreeNode(keyString.c_str());
+                    bool hovered = ImGui::IsItemHovered();
+
+                    if (inTreeNode) {
+                        SkDynamicMemoryWStream stream;
+                        program->dump(&stream);
+                        auto dumpData = stream.detachAsData();
+
+                        auto stringBox = [](const char* label, std::string* str) {
+                            int lines = std::count(str->begin(), str->end(), '\n') + 2;
+                            ImVec2 boxSize(-1.0f, ImGui::GetTextLineHeight() * std::min(lines, 30));
+                            ImGui::InputTextMultiline(label, str, boxSize);
+                        };
+                        std::string dumpString((const char*)dumpData->data(), dumpData->size());
+                        stringBox("##VM", &dumpString);
+
+                        ImGui::TreePop();
+                    }
+                    if (hovered) {
+                        // Generate a new blitter that just draws magenta
+                        skvm::Program highlightProgram = build_skvm_highlight_program(
+                                static_cast<SkColorType>(key->colorType), program->nargs());
+
+                        fHoveredKey = *key;
+                        fHoveredProgram = std::move(*program);
+                        *program = std::move(highlightProgram);
+                    }
+                };
+                cache->foreach(showVMEntry);
+
+                SkVMBlitter::ReleaseProgramCache();
             }
         }
         if (displayParamsChanged || uiParamsChanged) {
