@@ -323,12 +323,14 @@ skia_gpu_sources = [
   "$_src/gpu/gradients/GrGradientShader.h",
 
   # tessellate
+  "$_src/gpu/tessellate/AffineMatrix.h",
+  "$_src/gpu/tessellate/PatchWriter.cpp",
+  "$_src/gpu/tessellate/PatchWriter.h",
   "$_src/gpu/tessellate/PathCurveTessellator.cpp",
   "$_src/gpu/tessellate/PathCurveTessellator.h",
   "$_src/gpu/tessellate/PathTessellator.h",
   "$_src/gpu/tessellate/PathWedgeTessellator.cpp",
   "$_src/gpu/tessellate/PathWedgeTessellator.h",
-  "$_src/gpu/tessellate/PathXform.h",
   "$_src/gpu/tessellate/StrokeFixedCountTessellator.cpp",
   "$_src/gpu/tessellate/StrokeFixedCountTessellator.h",
   "$_src/gpu/tessellate/StrokeHardwareTessellator.cpp",
