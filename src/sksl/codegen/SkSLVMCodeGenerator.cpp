@@ -146,11 +146,22 @@ private:
      */
 
     /**
+     * Adds sufficient slots to the end of fSlot to hold the passed-in type.
+     * All new slots will be initialized to `initialValue`.
+     */
+    void addSlotsForType(const Type& type, skvm::Val initialValue);
+
+    /**
      * Returns the slot holding v's Val(s). Allocates storage if this is first time 'v' is
      * referenced. Compound variables (e.g. vectors) will consume more than one slot, with
      * getSlot returning the start of the contiguous chunk of slots.
      */
     size_t getSlot(const Variable& v);
+
+    /**
+     * Writes a value to a slot previously created by getSlot.
+     */
+    void writeToSlot(int slot, skvm::Val value);
 
     /** Initializes uniforms and global variables at the start of main(). */
     void setupGlobals(SkSpan<skvm::Val> uniforms, skvm::Coord device);
@@ -235,9 +246,13 @@ private:
     const SampleColorFilterFn fSampleColorFilter;
     const SampleBlenderFn fSampleBlender;
 
-    // [Variable, first slot in fSlots]
-    std::unordered_map<const Variable*, size_t> fVariableMap;
-    std::vector<skvm::Val> fSlots;
+    struct Slot {
+        skvm::Val         val;
+        Type::NumberKind  kind;
+    };
+    std::vector<Slot> fSlots;
+
+    std::unordered_map<const Variable*, size_t> fVariableMap;  // [Variable, first slot in fSlots]
 
     // Conditional execution mask (managed by ScopedCondition, and tied to control-flow scopes)
     skvm::I32 fConditionMask;
@@ -341,10 +356,10 @@ void SkVMGenerator::setupGlobals(SkSpan<skvm::Val> uniforms, skvm::Coord device)
                 switch (builtin) {
                     case SK_FRAGCOORD_BUILTIN:
                         SkASSERT(nslots == 4);
-                        fSlots[slot + 0] = device.x.id;
-                        fSlots[slot + 1] = device.y.id;
-                        fSlots[slot + 2] = fBuilder->splat(0.0f).id;
-                        fSlots[slot + 3] = fBuilder->splat(1.0f).id;
+                        this->writeToSlot(slot + 0, device.x.id);
+                        this->writeToSlot(slot + 1, device.y.id);
+                        this->writeToSlot(slot + 2, fBuilder->splat(0.0f).id);
+                        this->writeToSlot(slot + 3, fBuilder->splat(1.0f).id);
                         break;
                     default:
                         SkDEBUGFAILF("Unsupported builtin %d", builtin);
@@ -355,7 +370,9 @@ void SkVMGenerator::setupGlobals(SkSpan<skvm::Val> uniforms, skvm::Coord device)
             // For uniforms, copy the supplied IDs over
             if (is_uniform(var)) {
                 SkASSERT(uniformIter + nslots <= uniforms.end());
-                std::copy(uniformIter, uniformIter + nslots, fSlots.begin() + slot);
+                for (size_t i = 0; i < nslots; ++i) {
+                    this->writeToSlot(slot + i, uniformIter[i]);
+                }
                 uniformIter += nslots;
                 continue;
             }
@@ -364,7 +381,7 @@ void SkVMGenerator::setupGlobals(SkSpan<skvm::Val> uniforms, skvm::Coord device)
             if (decl.value()) {
                 Value val = this->writeExpression(*decl.value());
                 for (size_t i = 0; i < nslots; ++i) {
-                    fSlots[slot + i] = val[i];
+                    this->writeToSlot(slot + i, val[i]);
                 }
             }
         }
@@ -387,7 +404,7 @@ void SkVMGenerator::writeFunction(const FunctionDefinition& function,
                nslots    = p->type().slotCount();
 
         for (size_t i = 0; i < nslots; ++i) {
-            fSlots[paramSlot + i] = arguments[argIdx + i];
+            this->writeToSlot(paramSlot + i, arguments[argIdx + i]);
         }
         argIdx += nslots;
     }
@@ -403,7 +420,7 @@ void SkVMGenerator::writeFunction(const FunctionDefinition& function,
         if (p->modifiers().fFlags & Modifiers::kOut_Flag) {
             size_t paramSlot = this->getSlot(*p);
             for (size_t i = 0; i < nslots; ++i) {
-                arguments[argIdx + i] = fSlots[paramSlot + i];
+                arguments[argIdx + i] = fSlots[paramSlot + i].val;
             }
         }
         argIdx += nslots;
@@ -411,6 +428,43 @@ void SkVMGenerator::writeFunction(const FunctionDefinition& function,
     SkASSERT(argIdx == arguments.size());
 
     fFunctionStack.pop_back();
+}
+
+void SkVMGenerator::writeToSlot(int slot, skvm::Val value) {
+    fSlots[slot].val = value;
+}
+
+void SkVMGenerator::addSlotsForType(const Type& type, skvm::Val initialValue) {
+    switch (type.typeKind()) {
+        case Type::TypeKind::kArray: {
+            int nslots = type.columns();
+            const Type& elemType = type.componentType();
+            for (int slot = 0; slot < nslots; ++slot) {
+                this->addSlotsForType(elemType, initialValue);
+            }
+            break;
+        }
+        case Type::TypeKind::kStruct: {
+            for (const Type::Field& field : type.fields()) {
+                this->addSlotsForType(*field.fType, initialValue);
+            }
+            break;
+        }
+        default:
+            SkASSERTF(0, "unsupported slot type %d", (int)type.typeKind());
+            [[fallthrough]];
+
+        case Type::TypeKind::kScalar:
+        case Type::TypeKind::kVector:
+        case Type::TypeKind::kMatrix: {
+            Type::NumberKind numberKind = type.componentType().numberKind();
+            int nslots = type.slotCount();
+            for (int slot = 0; slot < nslots; ++slot) {
+                fSlots.push_back(Slot{initialValue, numberKind});
+            }
+            break;
+        }
+    }
 }
 
 size_t SkVMGenerator::getSlot(const Variable& v) {
@@ -421,7 +475,11 @@ size_t SkVMGenerator::getSlot(const Variable& v) {
 
     size_t slot   = fSlots.size(),
            nslots = v.type().slotCount();
-    fSlots.resize(slot + nslots, fBuilder->splat(0.0f).id);
+    fSlots.reserve(slot + nslots);
+    this->addSlotsForType(v.type(), fBuilder->splat(0.0f).id);
+    SkASSERTF(fSlots.size() == slot + nslots,
+              "addSlotsForType wrong for %s", v.type().description().c_str());
+
     fVariableMap[&v] = slot;
     return slot;
 }
@@ -794,7 +852,7 @@ Value SkVMGenerator::writeVariableExpression(const VariableReference& expr) {
     size_t slot = this->getSlot(*expr.variable());
     Value val(expr.type().slotCount());
     for (size_t i = 0; i < val.slots(); ++i) {
-        val[i] = fSlots[slot + i];
+        val[i] = fSlots[slot + i].val;
     }
     return val;
 }
@@ -1468,8 +1526,9 @@ Value SkVMGenerator::writeStore(const Expression& lhs, const Value& rhs) {
     // `slots` are now absolute indices into `fSlots`.
     skvm::I32 mask = this->mask();
     for (size_t i = 0; i < rhs.slots(); ++i) {
-        skvm::Val& slotVal = fSlots[slots[i]];
-        slotVal = this->writeConditionalStore(slotVal, rhs[i], mask);
+        int slotNum = slots[i];
+        skvm::Val conditionalStore = this->writeConditionalStore(fSlots[slotNum].val, rhs[i], mask);
+        this->writeToSlot(slotNum, conditionalStore);
     }
 
     return rhs;
@@ -1512,9 +1571,9 @@ void SkVMGenerator::writeForStatement(const ForStatement& f) {
               oldContinueMask = fContinueMask;
 
     for (int i = 0; i < loop.fCount; ++i) {
-        fSlots[indexSlot] = loop.fIndex->type().isInteger()
-                                    ? fBuilder->splat(static_cast<int>(val)).id
-                                    : fBuilder->splat(static_cast<float>(val)).id;
+        this->writeToSlot(indexSlot, (fSlots[indexSlot].kind == Type::NumberKind::kFloat)
+                                        ? fBuilder->splat(static_cast<float>(val)).id
+                                        : fBuilder->splat(static_cast<int>(val)).id);
 
         fContinueMask = zero;
         this->writeStatement(*f.statement());
@@ -1599,7 +1658,7 @@ void SkVMGenerator::writeVarDeclaration(const VarDeclaration& decl) {
 
     Value val = decl.value() ? this->writeExpression(*decl.value()) : Value{};
     for (size_t i = 0; i < nslots; ++i) {
-        fSlots[slot + i] = val ? val[i] : fBuilder->splat(0.0f).id;
+        this->writeToSlot(slot + i, val ? val[i] : fBuilder->splat(0.0f).id);
     }
 }
 
