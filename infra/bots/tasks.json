@@ -18284,9 +18284,12 @@
         "cache/git",
         "--checkout_root",
         "cache/work",
+        "--dm_path",
+        "build/dm",
         "--dry_run"
       ],
       "dependencies": [
+        "Build-Debian10-Clang-x86_64-Release",
         "Housekeeper-PerCommit-BuildTaskDrivers_linux_amd64"
       ],
       "dimensions": [
@@ -19766,9 +19769,12 @@
         "--git_cache",
         "cache/git",
         "--checkout_root",
-        "cache/work"
+        "cache/work",
+        "--dm_path",
+        "build/dm"
       ],
       "dependencies": [
+        "Build-Debian10-Clang-x86_64-Release",
         "Housekeeper-PerCommit-BuildTaskDrivers_linux_amd64"
       ],
       "dimensions": [
@@ -83403,7 +83409,7 @@
     "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All": {},
     "Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Dawn": {},
     "Test-Win10-Clang-NUC6i5SYK-GPU-IntelIris540-x86_64-Debug-All": {},
-    "Test-Win10-Clang-ShuttleA-GPU-RadeonHD7770-x86_64-Release-All-Direct3D": {},
+    "Test-Win10-MSVC-Golo-GPU-QuadroP400-x86_64-Release-All-Direct3D": {},
     "Test-Win2019-Clang-GCE-CPU-AVX2-x86_64-Release-All": {}
   }
 }
