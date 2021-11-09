@@ -427,7 +427,6 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
     // of per-vertex colors.
     std::unique_ptr<GrFragmentProcessor> paintFP;
     if (!primColorMode || blend_requires_shader(*primColorMode)) {
-        fpArgs.fInputColorIsOpaque = origColor.isOpaque();
         if (shaderProcessor) {
             paintFP = std::move(*shaderProcessor);
         } else {
@@ -468,9 +467,6 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
                         std::move(paintFP), {paintAlpha, paintAlpha, paintAlpha, paintAlpha});
             }
         } else {
-#if defined(SK_SUPPORT_LEGACY_PAINT_ALPHA_MODULATION)
-            grPaint->setColor4f(origColor.premul());
-#else
             float paintAlpha = skPaint.getColor4f().fA;
             if (paintAlpha != 1.0f) {
                 // This invokes the shader's FP tree with an opaque version of the paint color,
@@ -485,7 +481,6 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
             } else {
                 grPaint->setColor4f(origColor.premul());
             }
-#endif
         }
     } else {
         if (primColorMode) {
@@ -536,8 +531,6 @@ static inline bool skpaint_to_grpaint_impl(GrRecordingContext* context,
 
     SkMaskFilterBase* maskFilter = as_MFB(skPaint.getMaskFilter());
     if (maskFilter) {
-        // We may have set this before passing to the SkShader.
-        fpArgs.fInputColorIsOpaque = false;
         if (auto mfFP = maskFilter->asFragmentProcessor(fpArgs)) {
             grPaint->setCoverageFragmentProcessor(std::move(mfFP));
         }
