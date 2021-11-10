@@ -163,6 +163,12 @@ private:
      */
     void writeToSlot(int slot, skvm::Val value);
 
+    /**
+     * Emits an trace_line opcode. writeStatement already does this, but statements that alter
+     * control flow may need to explicitly add additional traces.
+     */
+    void emitTraceLine(int line);
+
     /** Initializes uniforms and global variables at the start of main(). */
     void setupGlobals(SkSpan<skvm::Val> uniforms, skvm::Coord device);
 
@@ -188,10 +194,15 @@ private:
     }
 
     skvm::I32 mask() {
-        // As we encounter (possibly conditional) return statements, fReturned is updated to store
-        // the lanes that have already returned. For the remainder of the current function, those
-        // lanes should be disabled.
-        return fConditionMask & fLoopMask & ~currentFunction().fReturned;
+        // Mask off execution if we have encountered `break` or `continue` on this path.
+        skvm::I32 result = fConditionMask & fLoopMask;
+        if (!fFunctionStack.empty()) {
+            // As we encounter (possibly conditional) return statements, fReturned is updated to
+            // store the lanes that have already returned. For the remainder of the current
+            // function, those lanes should be disabled.
+            result = result & ~currentFunction().fReturned;
+        }
+        return result;
     }
 
     size_t fieldSlotOffset(const FieldAccess& expr);
@@ -395,6 +406,10 @@ void SkVMGenerator::writeFunction(const FunctionDefinition& function,
     const FunctionDeclaration& decl = function.declaration();
     SkASSERT(decl.returnType().slotCount() == outReturn.size());
 
+    if (fProgram.fConfig->fSettings.fSkVMDebugTrace) {
+        fBuilder->trace_call_enter(this->mask(), function.fLine);
+    }
+
     fFunctionStack.push_back({outReturn, /*returned=*/fBuilder->splat(0)});
 
     // For all parameters, copy incoming argument IDs to our vector of (all) variable IDs
@@ -428,9 +443,23 @@ void SkVMGenerator::writeFunction(const FunctionDefinition& function,
     SkASSERT(argIdx == arguments.size());
 
     fFunctionStack.pop_back();
+
+    if (fProgram.fConfig->fSettings.fSkVMDebugTrace) {
+        fBuilder->trace_call_exit(this->mask(), function.fLine);
+    }
 }
 
 void SkVMGenerator::writeToSlot(int slot, skvm::Val value) {
+    if (fProgram.fConfig->fSettings.fSkVMDebugTrace && fSlots[slot].val != value) {
+        if (fSlots[slot].kind == Type::NumberKind::kFloat) {
+            fBuilder->trace_var(this->mask(), slot, f32(value));
+        } else if (fSlots[slot].kind == Type::NumberKind::kBoolean) {
+            fBuilder->trace_var(this->mask(), slot, bool(value));
+        } else {
+            fBuilder->trace_var(this->mask(), slot, i32(value));
+        }
+    }
+
     fSlots[slot].val = value;
 }
 
@@ -1579,6 +1608,7 @@ void SkVMGenerator::writeForStatement(const ForStatement& f) {
         this->writeStatement(*f.statement());
         fLoopMask |= fContinueMask;
 
+        this->emitTraceLine(f.test() ? f.test()->fLine : f.fLine);
         val += loop.fDelta;
     }
 
@@ -1662,10 +1692,15 @@ void SkVMGenerator::writeVarDeclaration(const VarDeclaration& decl) {
     }
 }
 
-void SkVMGenerator::writeStatement(const Statement& s) {
-    if (fProgram.fConfig->fSettings.fSkVMDebugTrace && s.fLine > 0) {
-        fBuilder->trace_line(this->mask(), s.fLine);
+void SkVMGenerator::emitTraceLine(int line) {
+    if (fProgram.fConfig->fSettings.fSkVMDebugTrace && line > 0) {
+        fBuilder->trace_line(this->mask(), line);
     }
+}
+
+void SkVMGenerator::writeStatement(const Statement& s) {
+    this->emitTraceLine(s.fLine);
+
     switch (s.kind()) {
         case Statement::Kind::kBlock:
             this->writeBlock(s.as<Block>());
