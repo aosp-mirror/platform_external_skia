@@ -16,7 +16,7 @@ deps = {
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, tint for SPIRV compilation, and abseil for string formatting.
   # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
-  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@c2bd88fc32534cb2a1a7a3ef03daf86af58af50b",
+  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@e9c84c071ff89408ec587fdeb9c6e7d9d4236aed",
   "third_party/externals/jinja2"          : "https://chromium.googlesource.com/chromium/src/third_party/jinja2@ee69aa00ee8536f61db6a451f3858745cf587de6",
   "third_party/externals/markupsafe"      : "https://chromium.googlesource.com/chromium/src/third_party/markupsafe@0944e71f4b2cb9a871bcbe353f95e889b64a611a",
   "third_party/externals/tint"            : "https://dawn.googlesource.com/tint@2423df3e048507cd6352a2297d1eaa36087e7e7e",
@@ -40,13 +40,13 @@ deps = {
   "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@0e2880ab990e79ce6cc8c79c219feda42d98b1e8",
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@cf653e4ca4858583802b0d1656bc934edff6bd7f",
   "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@11cd875ed88484f93943071083b4821b4c3d2193",
-  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@82d932bdfc41644007d5a51701d5fbb6d60c1605",
+  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@73a6940a2d144622a6ef4d028f4a989275c8a56d",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
   "third_party/externals/wuffs"           : "https://skia.googlesource.com/external/github.com/google/wuffs-mirror-release-c.git@600cd96cf47788ee3a74b40a6028b035c9fd6a61",
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@c876c8f87101c5a75f6014b0f832499afeb65b73",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@2bf6013115a2bbb0723b62f8683ff39ac78aa885",
+    "url": "https://chromium.googlesource.com/chromium/src.git@b720fbc74d97490f3d11e389ab2742f28daf6a6b",
     "condition": "checkout_chromium",
   },
 
