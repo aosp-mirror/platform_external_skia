@@ -23,14 +23,30 @@ struct VertexWriter;
 // Don't allow linearized segments to be off by more than 1/4th of a pixel from the true curve.
 SK_MAYBE_UNUSED constexpr static float kTessellationPrecision = 4;
 
-// Optional attribs that are included in tessellation patches, following the control points.
+// Optional attribs that are included in tessellation patches, following the control points and in
+// the same order as they appear here.
 enum class PatchAttribs {
+    // Attribs.
     kNone = 0,
-    kFanPoint = 1,  // Used by wedges. This is the center point the wedges fan around.
-    kExplicitCurveType = 1 << 1,  // Used when the GPU can't infer curve type based on infinity.
+    kFanPoint = 1 << 0,  // [float2] Used by wedges. This is the center point the wedges fan around.
+    kColor = 1 << 1,  // [ubyte4 or float4] Used by direct-rendered convex paths.
+    kExplicitCurveType = 1 << 2,  // [float] Used when GPU can't infer curve type based on infinity.
+
+    // Extra flags.
+    kWideColorIfEnabled = 1 << 3,  // If kColor is set, specifies it to be float4 wide color.
 };
 
 GR_MAKE_BITFIELD_CLASS_OPS(PatchAttribs)
+
+// Returns the packed size in bytes of a tessellation patch (or instance) in GPU buffers.
+constexpr size_t PatchStride(PatchAttribs attribs) {
+    return sizeof(float) * 8 +  // 4 control points
+           (attribs & PatchAttribs::kFanPoint ? sizeof(float) * 2 : 0) +
+           (attribs & PatchAttribs::kColor
+                    ? (attribs & PatchAttribs::kWideColorIfEnabled ? sizeof(float)
+                                                                   : sizeof(uint8_t)) * 4 : 0) +
+           (attribs & PatchAttribs::kExplicitCurveType ? sizeof(float) : 0);
+}
 
 // Use familiar type names from SkSL.
 template<int N> using vec = skvx::Vec<N, float>;
