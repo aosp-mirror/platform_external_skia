@@ -9,6 +9,7 @@
 #define skgpu_CommandBuffer_DEFINED
 
 #include "experimental/graphite/include/private/GraphiteTypesPriv.h"
+#include "include/core/SkColor.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/private/SkTArray.h"
@@ -20,9 +21,10 @@ class Buffer;
 class Gpu;
 class GraphicsPipeline;
 class Texture;
+class TextureProxy;
 
 struct AttachmentDesc {
-    sk_sp<Texture> fTexture; // the ref on this will be taken by the command buffer
+    sk_sp<TextureProxy> fTextureProxy;
     LoadOp fLoadOp;
     StoreOp fStoreOp;
 };

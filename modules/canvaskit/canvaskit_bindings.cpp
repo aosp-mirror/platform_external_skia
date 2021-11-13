@@ -49,7 +49,6 @@
 #include "include/private/SkShadowFlags.h"
 #include "include/utils/SkParsePath.h"
 #include "include/utils/SkShadowUtils.h"
-#include "modules/skparagraph/include/Paragraph.h"
 #include "src/core/SkPathPriv.h"
 #include "src/core/SkResourceCache.h"
 #include "src/image/SkImage_Base.h"
@@ -77,6 +76,7 @@
 #include "include/core/SkFontMetrics.h"
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkFontTypes.h"
+#include "modules/skparagraph/include/Paragraph.h"
 #endif
 
 #ifdef SK_INCLUDE_PATHOPS
@@ -723,12 +723,12 @@ void deleteJSTexture(SkImage::ReleaseContext rc) {
 
 class WebGLTextureImageGenerator : public SkImageGenerator {
 public:
-    WebGLTextureImageGenerator(int width, int height, JSObject callbackObj):
-            SkImageGenerator(SkImageInfo::MakeN32Premul(width, height)),
+    WebGLTextureImageGenerator(SkImageInfo ii, JSObject callbackObj):
+            SkImageGenerator(ii),
             fCallback(callbackObj) {}
 
     ~WebGLTextureImageGenerator() {
-        // This cleans up the associated TextureSource at is used to make the texture
+        // This cleans up the associated TextureSource that is used to make the texture
         // (i.e. "makeTexture" below). We expect this destructor to be called when the
         // SkImage that this Generator belongs to is destroyed.
         fCallback.call<void>("freeSrc");
@@ -785,8 +785,8 @@ private:
 // callbackObj has two functions in it, one to create a texture "makeTexture" and one to clean up
 // the underlying texture source "freeSrc". This way, we can create WebGL textures for each
 // surface/WebGLContext that the image is used on (we cannot share WebGLTextures across contexts).
-sk_sp<SkImage> MakeImageFromGenerator(int width, int height, JSObject callbackObj) {
-    auto gen = std::make_unique<WebGLTextureImageGenerator>(width, height, callbackObj);
+sk_sp<SkImage> MakeImageFromGenerator(SimpleImageInfo ii, JSObject callbackObj) {
+    auto gen = std::make_unique<WebGLTextureImageGenerator>(toSkImageInfo(ii), callbackObj);
     return SkImage::MakeFromGenerator(std::move(gen));
 }
 #endif // SK_GL
@@ -2149,5 +2149,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
     constant("ShadowGeometricOnly", (int)SkShadowFlags::kGeometricOnly_ShadowFlag);
     constant("ShadowDirectionalLight", (int)SkShadowFlags::kDirectionalLight_ShadowFlag);
 
+#ifndef SK_NO_FONTS
     constant("_GlyphRunFlags_isWhiteSpace", (int)skia::textlayout::Paragraph::kWhiteSpace_VisitorFlag);
+#endif
 }
