@@ -77,7 +77,7 @@ public:
     makeAtlasTextOp(
             const GrClip*,
             const SkMatrixProvider& viewMatrix,
-            const SkGlyphRunList&,
+            SkPoint drawOrigin,
             const SkPaint&,
             skgpu::v1::SurfaceDrawContext*,
             GrAtlasSubRunOwner subRun) const = 0;
@@ -178,7 +178,7 @@ struct GrSubRunList {
 //                    with.
 //
 //
-class GrTextBlob final : public SkNVRefCnt<GrTextBlob>, public SkGlyphRunPainterInterface {
+class GrTextBlob final : public SkRefCnt, public SkGlyphRunPainterInterface {
 public:
 
     // Key is not used as part of a hash map, so the hash is never taken. It's only used in a
