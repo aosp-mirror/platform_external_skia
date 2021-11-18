@@ -15,6 +15,7 @@
 #include "src/core/SkCpu.h"
 #include "src/core/SkEnumerate.h"
 #include "src/core/SkOpts.h"
+#include "src/core/SkStreamPriv.h"
 #include "src/core/SkVM.h"
 #include <algorithm>
 #include <atomic>
@@ -173,20 +174,6 @@ namespace skvm {
     // Debugging tools, mostly for printing various data structures out to a stream.
 
     namespace {
-        class SkDebugfStream final : public SkWStream {
-            size_t fBytesWritten = 0;
-
-            bool write(const void* buffer, size_t size) override {
-                SkDebugf("%.*s", (int)size, (const char*)buffer);
-                fBytesWritten += size;
-                return true;
-            }
-
-            size_t bytesWritten() const override {
-                return fBytesWritten;
-            }
-        };
-
         struct V { Val id; };
         struct R { Reg id; };
         struct Shift { int bits; };
@@ -2691,8 +2678,8 @@ namespace skvm {
                 case Op::trace_line:
                 case Op::trace_var:
                 case Op::trace_call:
-                    /* Only supported in the interpreter. */
-                    break;
+                    /* Force this program to run in the interpreter. */
+                    return false;
 
                 case Op::index:
                     if (I32->isVectorTy()) {
@@ -3621,8 +3608,8 @@ namespace skvm {
                 case Op::trace_line:
                 case Op::trace_var:
                 case Op::trace_call:
-                    /* Only supported in the interpreter. */
-                    break;
+                    /* Force this program to run in the interpreter. */
+                    return false;
 
                 case Op::store8:
                     if (scalar) {
@@ -3991,8 +3978,8 @@ namespace skvm {
                 case Op::trace_line:
                 case Op::trace_var:
                 case Op::trace_call:
-                    /* Only supported in the interpreter. */
-                    break;
+                    /* Force this program to run in the interpreter. */
+                    return false;
 
                 case Op::index: {
                     A::V tmp = alloc_tmp();
