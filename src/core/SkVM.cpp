@@ -15,6 +15,7 @@
 #include "src/core/SkCpu.h"
 #include "src/core/SkEnumerate.h"
 #include "src/core/SkOpts.h"
+#include "src/core/SkStreamPriv.h"
 #include "src/core/SkVM.h"
 #include <algorithm>
 #include <atomic>
@@ -158,6 +159,7 @@ namespace skvm {
         int regs = 0;
         int loop = 0;
         std::vector<int> strides;
+        TraceHook* traceHook = nullptr;
 
         std::atomic<void*> jit_entry{nullptr};   // TODO: minimal std::memory_orders
         size_t jit_size = 0;
@@ -173,26 +175,12 @@ namespace skvm {
     // Debugging tools, mostly for printing various data structures out to a stream.
 
     namespace {
-        class SkDebugfStream final : public SkWStream {
-            size_t fBytesWritten = 0;
-
-            bool write(const void* buffer, size_t size) override {
-                SkDebugf("%.*s", (int)size, (const char*)buffer);
-                fBytesWritten += size;
-                return true;
-            }
-
-            size_t bytesWritten() const override {
-                return fBytesWritten;
-            }
-        };
-
         struct V { Val id; };
         struct R { Reg id; };
         struct Shift { int bits; };
         struct Splat { int bits; };
         struct Hex   { int bits; };
-        // For op `trace_line` or `trace_call`
+        // For op `trace_line`
         struct Line  { int bits; };
         // For op `trace_var`
         struct VarSlot { int bits; };
@@ -201,6 +189,7 @@ namespace skvm {
         static constexpr VarType kVarTypeFloat{1};
         static constexpr VarType kVarTypeBool{2};
         // For op `trace_call`
+        struct FnIdx { int bits; };
         struct CallType { int bits; };
         static constexpr CallType kCallTypeEnter{1};
         static constexpr CallType kCallTypeExit{0};
@@ -266,6 +255,10 @@ namespace skvm {
                 write(o, "???");
             }
         }
+        static void write(SkWStream* o, FnIdx s) {
+            write(o, "F");
+            o->writeDecAsText(s.bits);
+        }
         static void write(SkWStream* o, CallType n) {
             if (n.bits == kCallTypeEnter.bits) {
                 write(o, "(enter)");
@@ -298,7 +291,7 @@ namespace skvm {
 
             case Op::trace_line: write(o, op, V{x}, Line{immA}); break;
             case Op::trace_var:  write(o, op, V{x}, VarSlot{immA}, "=", V{y}, VarType{immB}); break;
-            case Op::trace_call: write(o, op, V{x}, Line{immA}, CallType{immB}); break;
+            case Op::trace_call: write(o, op, V{x}, FnIdx{immA}, CallType{immB}); break;
 
             case Op::store8:   write(o, op, Ptr{immA}, V{x}               ); break;
             case Op::store16:  write(o, op, Ptr{immA}, V{x}               ); break;
@@ -418,7 +411,7 @@ namespace skvm {
                 case Op::trace_line: write(o, op, R{x}, Line{immA}); break;
                 case Op::trace_var: write(o, op, R{x}, VarSlot{immA}, "=", R{y}, VarType{immB});
                                     break;
-                case Op::trace_call: write(o, op, R{x}, Line{immA}, CallType{immB}); break;
+                case Op::trace_call: write(o, op, R{x}, FnIdx{immA}, CallType{immB}); break;
 
                 case Op::store8:   write(o, op, Ptr{immA}, R{x}                  ); break;
                 case Op::store16:  write(o, op, Ptr{immA}, R{x}                  ); break;
@@ -692,13 +685,13 @@ namespace skvm {
         I32 val = b ? this->splat(1) : this->splat(0);
         (void)push(Op::trace_var, mask.id,val.id,NA,NA, slot, kVarTypeBool.bits);
     }
-    void Builder::trace_call_enter(I32 mask, int line) {
+    void Builder::trace_call_enter(I32 mask, int fnIdx) {
         if (this->isImm(mask.id, 0)) { return; }
-        (void)push(Op::trace_call, mask.id,NA,NA,NA, line, kCallTypeEnter.bits);
+        (void)push(Op::trace_call, mask.id,NA,NA,NA, fnIdx, kCallTypeEnter.bits);
     }
-    void Builder::trace_call_exit(I32 mask, int line) {
+    void Builder::trace_call_exit(I32 mask, int fnIdx) {
         if (this->isImm(mask.id, 0)) { return; }
-        (void)push(Op::trace_call, mask.id,NA,NA,NA, line, kCallTypeExit.bits);
+        (void)push(Op::trace_call, mask.id,NA,NA,NA, fnIdx, kCallTypeExit.bits);
     }
 
     void Builder::store8 (Ptr ptr, I32 val) { (void)push(Op::store8 , val.id,NA,NA,NA, ptr.ix); }
@@ -2610,8 +2603,8 @@ namespace skvm {
 
         // So we'll sometimes use the interpreter here even if later calls will use the JIT.
         SkOpts::interpret_skvm(fImpl->instructions.data(), (int)fImpl->instructions.size(),
-                               this->nregs(), this->loop(), fImpl->strides.data(), this->nargs(),
-                               n, args);
+                               this->nregs(), this->loop(), fImpl->strides.data(), fImpl->traceHook,
+                               this->nargs(), n, args);
     }
 
     #if defined(SKVM_LLVM)
@@ -2686,8 +2679,8 @@ namespace skvm {
                 case Op::trace_line:
                 case Op::trace_var:
                 case Op::trace_call:
-                    /* Only supported in the interpreter. */
-                    break;
+                    /* Force this program to run in the interpreter. */
+                    return false;
 
                 case Op::index:
                     if (I32->isVectorTy()) {
@@ -3096,6 +3089,8 @@ namespace skvm {
         // Might as well do this after setupLLVM() to get a little more time to compile.
         this->setupInterpreter(instructions);
     }
+
+    void Program::attachTraceHook(TraceHook* hook) const { fImpl->traceHook = hook; }
 
     std::vector<InterpreterInstruction> Program::instructions() const { return fImpl->instructions; }
     int  Program::nargs() const { return (int)fImpl->strides.size(); }
@@ -3616,8 +3611,8 @@ namespace skvm {
                 case Op::trace_line:
                 case Op::trace_var:
                 case Op::trace_call:
-                    /* Only supported in the interpreter. */
-                    break;
+                    /* Force this program to run in the interpreter. */
+                    return false;
 
                 case Op::store8:
                     if (scalar) {
@@ -3986,8 +3981,8 @@ namespace skvm {
                 case Op::trace_line:
                 case Op::trace_var:
                 case Op::trace_call:
-                    /* Only supported in the interpreter. */
-                    break;
+                    /* Force this program to run in the interpreter. */
+                    return false;
 
                 case Op::index: {
                     A::V tmp = alloc_tmp();
