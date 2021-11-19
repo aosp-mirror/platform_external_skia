@@ -636,8 +636,8 @@ namespace skvm {
         void trace_var(I32 mask, int slot, I32 val);
         void trace_var(I32 mask, int slot, F32 val);
         void trace_var(I32 mask, int slot, bool b);
-        void trace_call_enter(I32 mask, int line);
-        void trace_call_exit(I32 mask, int line);
+        void trace_call_enter(I32 mask, int fnIdx);
+        void trace_call_exit(I32 mask, int fnIdx);
 
         // Store {8,16,32,64,128}-bit varying.
         void store8  (Ptr ptr, I32 val);
@@ -1012,6 +1012,14 @@ namespace skvm {
         int immA,immB,immC;
     };
 
+    class TraceHook {
+    public:
+        virtual ~TraceHook() = default;
+        virtual void line(int lineNum) = 0;
+        virtual void var(int slot, int32_t val) = 0;
+        virtual void call(int fnIdx, bool enter) = 0;
+    };
+
     class Program {
     public:
         Program(const std::vector<OptimizedInstruction>& instructions,
@@ -1026,6 +1034,8 @@ namespace skvm {
 
         Program(const Program&) = delete;
         Program& operator=(const Program&) = delete;
+
+        void attachTraceHook(TraceHook*) const;
 
         void eval(int n, void* args[]) const;
 

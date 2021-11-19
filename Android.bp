@@ -2780,6 +2780,7 @@ cc_test {
         "tests/Point3Test.cpp",
         "tests/PointTest.cpp",
         "tests/PolyUtilsTest.cpp",
+        "tests/PreChopPathCurvesTest.cpp",
         "tests/PremulAlphaRoundTripTest.cpp",
         "tests/PrimitiveProcessorTest.cpp",
         "tests/ProcessorTest.cpp",
