@@ -8,15 +8,16 @@
 #ifndef tessellate_PatchWriter_DEFINED
 #define tessellate_PatchWriter_DEFINED
 
+#include "include/private/SkColorData.h"
 #include "src/gpu/GrVertexChunkArray.h"
 #include "src/gpu/tessellate/MiddleOutPolygonTriangulator.h"
 #include "src/gpu/tessellate/Tessellation.h"
-#include "src/gpu/tessellate/shaders/GrTessellationShader.h"
 
 namespace skgpu {
 
 #if SK_GPU_V1
 class PathTessellator;
+class StrokeTessellator;
 #endif
 
 // Writes out tessellation patches, formatted with their specific attribs, to a GPU buffer.
@@ -27,29 +28,39 @@ public:
                 PatchAttribs attribs,
                 size_t patchStride,
                 int initialAllocCount)
-            : fPatchAttribs(attribs)
+            : fAttribs(attribs)
             , fChunker(target, vertexChunkArray, patchStride, initialAllocCount) {
     }
 
 #if SK_GPU_V1
-    // Creates a PatchWriter that writes directly to the GrVertexChunkArray stored on the provided
-    // PathTessellator.
-    PatchWriter(GrMeshDrawTarget*, PathTessellator* tessellator, int initialPatchAllocCount);
+    // Create PatchWriters that write directly to the GrVertexChunkArrays stored on the provided
+    // tessellators.
+    PatchWriter(GrMeshDrawTarget*, PathTessellator*, int initialPatchAllocCount);
+    PatchWriter(GrMeshDrawTarget*, StrokeTessellator*, int initialPatchAllocCount);
 #endif
+
+    PatchAttribs attribs() const { return fAttribs; }
 
     // Updates the fan point that will be written out with each patch (i.e., the point that wedges
     // fan around).
     // PathPatchAttrib::kFanPoint must be enabled.
     void updateFanPointAttrib(SkPoint fanPoint) {
-        SkASSERT(fPatchAttribs & PatchAttribs::kFanPoint);
+        SkASSERT(fAttribs & PatchAttribs::kFanPoint);
         fFanPointAttrib = fanPoint;
+    }
+
+    // Updates the stroke params that are written out with each patch.
+    // PathPatchAttrib::kStrokeParams must be enabled.
+    void updateStrokeParamsAttrib(StrokeParams strokeParams) {
+        SkASSERT(fAttribs & PatchAttribs::kStrokeParams);
+        fStrokeParamsAttrib = strokeParams;
     }
 
     // Updates the color that will be written out with each patch.
     // PathPatchAttrib::kColor must be enabled.
     void updateColorAttrib(const SkPMColor4f& color) {
-        SkASSERT(fPatchAttribs & PatchAttribs::kColor);
-        fColorAttrib.set(color, fPatchAttribs & PatchAttribs::kWideColorIfEnabled);
+        SkASSERT(fAttribs & PatchAttribs::kColor);
+        fColorAttrib.set(color, fAttribs & PatchAttribs::kWideColorIfEnabled);
     }
 
     // RAII. Appends a patch during construction and writes the attribs during destruction.
@@ -62,7 +73,7 @@ public:
                 , fVertexWriter(w.appendPatch())
                 , fExplicitCurveType(explicitCurveType) {}
         ~Patch() {
-            fPatchWriter.outputPatchAttribs(std::move(fVertexWriter), fExplicitCurveType);
+            fPatchWriter.emitPatchAttribs(std::move(fVertexWriter), fExplicitCurveType);
         }
         operator VertexWriter&() { return fVertexWriter; }
         PatchWriter& fPatchWriter;
@@ -76,7 +87,7 @@ public:
     //    CubicPatch(patchWriter) << p0 << p1 << p2 << p3;
     //
     struct CubicPatch : public Patch {
-        CubicPatch(PatchWriter& w) : Patch(w, GrTessellationShader::kCubicCurveType) {}
+        CubicPatch(PatchWriter& w) : Patch(w, kCubicCurveType) {}
     };
 
     // RAII. Appends a patch during construction and writes the remaining data for a conic during
@@ -85,7 +96,7 @@ public:
     //     ConicPatch(patchWriter) << p0 << p1 << p2 << w;
     //
     struct ConicPatch : public Patch {
-        ConicPatch(PatchWriter& w) : Patch(w, GrTessellationShader::kConicCurveType) {}
+        ConicPatch(PatchWriter& w) : Patch(w, kConicCurveType) {}
         ~ConicPatch() {
             fVertexWriter << VertexWriter::kIEEE_32_infinity;  // p3.y=Inf indicates a conic.
         }
@@ -97,10 +108,10 @@ public:
     //     TrianglePatch(patchWriter) << p0 << p1 << p2;
     //
     struct TrianglePatch : public Patch {
-        TrianglePatch(PatchWriter& w) : Patch(w, GrTessellationShader::kTriangularConicCurveType) {}
+        TrianglePatch(PatchWriter& w) : Patch(w, kTriangularConicCurveType) {}
         ~TrianglePatch() {
             // Mark this patch as a triangle by setting it to a conic with w=Inf.
-            fVertexWriter.fill(VertexWriter::kIEEE_32_infinity, 2);
+            fVertexWriter << VertexWriter::Repeat<2>(VertexWriter::kIEEE_32_infinity);
         }
     };
 
@@ -139,15 +150,17 @@ private:
     template <typename T>
     static VertexWriter::Conditional<T> If(bool c, const T& v) { return VertexWriter::If(c,v); }
 
-    void outputPatchAttribs(VertexWriter vertexWriter, float explicitCurveType) {
-        vertexWriter << If((fPatchAttribs & PatchAttribs::kFanPoint), fFanPointAttrib)
-                     << If((fPatchAttribs & PatchAttribs::kColor), fColorAttrib)
-                     << If((fPatchAttribs & PatchAttribs::kExplicitCurveType), explicitCurveType);
+    void emitPatchAttribs(VertexWriter vertexWriter, float explicitCurveType) {
+        vertexWriter << If((fAttribs & PatchAttribs::kFanPoint), fFanPointAttrib)
+                     << If((fAttribs & PatchAttribs::kStrokeParams), fStrokeParamsAttrib)
+                     << If((fAttribs & PatchAttribs::kColor), fColorAttrib)
+                     << If((fAttribs & PatchAttribs::kExplicitCurveType), explicitCurveType);
     }
 
-    const PatchAttribs fPatchAttribs;
+    const PatchAttribs fAttribs;
     SkPoint fFanPointAttrib;
-    GrVertexColor fColorAttrib;
+    StrokeParams fStrokeParamsAttrib;
+    VertexColor fColorAttrib;
 
     GrVertexChunkBuilder fChunker;
 
@@ -169,6 +182,9 @@ SK_MAYBE_UNUSED SK_ALWAYS_INLINE VertexWriter& operator<<(VertexWriter& vertexWr
 
 // Converts a quadratic to a cubic when being output via '<<' to a VertexWriter.
 struct QuadToCubic {
+    QuadToCubic(float2 p0, float2 p1, float2 p2) : fP0(p0), fP1(p1), fP2(p2) {}
+    QuadToCubic(const SkPoint p[3])
+            : QuadToCubic(float2::Load(p), float2::Load(p+1), float2::Load(p+2)) {}
     float2 fP0, fP1, fP2;
 };
 
@@ -176,6 +192,11 @@ SK_MAYBE_UNUSED SK_ALWAYS_INLINE VertexWriter& operator<<(VertexWriter& vertexWr
                                                           const QuadToCubic& quadratic) {
     auto [p0, p1, p2] = quadratic;
     return vertexWriter << p0 << mix(float4(p0,p2), p1.xyxy(), 2/3.f) << p2;
+}
+
+SK_MAYBE_UNUSED SK_ALWAYS_INLINE VertexWriter& operator<<(VertexWriter&& vertexWriter,
+                                                          const QuadToCubic& quadratic) {
+    return vertexWriter << quadratic;
 }
 
 SK_MAYBE_UNUSED SK_ALWAYS_INLINE void operator<<(
