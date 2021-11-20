@@ -34,7 +34,7 @@ struct ProgramBuilder {
     operator bool() const { return fProgram != nullptr; }
     SkSL::Program& operator*() { return *fProgram; }
 
-    GrShaderCaps fCaps;
+    SkSL::ShaderCaps fCaps;
     SkSL::Compiler fCompiler;
     std::unique_ptr<SkSL::Program> fProgram;
 };
@@ -624,7 +624,7 @@ DEF_TEST(SkSLInterpreterCompound, r) {
 }
 
 static void expect_failure(skiatest::Reporter* r, const char* src) {
-    GrShaderCaps caps;
+    SkSL::ShaderCaps caps;
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
     auto program = compiler.convertProgram(SkSL::ProgramKind::kGeneric,
@@ -892,7 +892,7 @@ private:
 };
 
 DEF_TEST(SkSLInterpreterExternalFunction, r) {
-    GrShaderCaps caps;
+    SkSL::ShaderCaps caps;
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
     const char* src = "float main() { return externalSqrt(25); }";
@@ -946,7 +946,7 @@ private:
 };
 
 DEF_TEST(SkSLInterpreterExternalTable, r) {
-    GrShaderCaps caps;
+    SkSL::ShaderCaps caps;
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
     const char* src =
@@ -976,7 +976,7 @@ DEF_TEST(SkSLInterpreterExternalTable, r) {
 }
 
 DEF_TEST(SkSLInterpreterTrace, r) {
-    GrShaderCaps caps;
+    SkSL::ShaderCaps caps;
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
     settings.fOptimize = false;
@@ -984,7 +984,11 @@ DEF_TEST(SkSLInterpreterTrace, r) {
     constexpr const char kSrc[] =
 R"(bool less_than(int left, int right) {
     bool comparison = left < right;
-    return comparison;
+    if (comparison) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 int main() {
@@ -1034,37 +1038,44 @@ int main() {
     REPORTER_ASSERT(r, result == 40);
     REPORTER_ASSERT(r, hook.fTrace ==
 R"(enter int main()
-line 7
+line 11
 loop = 10
-line 8
+line 12
 enter bool less_than(int left, int right)
 left = 10
 right = 20
 line 2
 comparison = 1
 line 3
+line 4
 exit bool less_than(int left, int right)
 function_result = 1
-line 7
+line 11
 loop = 20
-line 8
+line 12
 enter bool less_than(int left, int right)
 left = 20
+right = 20
 line 2
 comparison = 0
 line 3
+line 6
 exit bool less_than(int left, int right)
 function_result = 0
-line 7
+line 11
 loop = 30
-line 8
+line 12
 enter bool less_than(int left, int right)
 left = 30
+right = 20
 line 2
+comparison = 0
 line 3
+line 6
 exit bool less_than(int left, int right)
-line 7
-line 10
+function_result = 0
+line 11
+line 14
 exit int main()
 )", "Trace output does not match expectation:\n%s\n", hook.fTrace.c_str());
 }
