@@ -7,7 +7,6 @@
 
 #include "src/gpu/tessellate/PathCurveTessellator.h"
 
-#include "src/gpu/geometry/GrPathUtils.h"
 #include "src/gpu/tessellate/AffineMatrix.h"
 #include "src/gpu/tessellate/MiddleOutPolygonTriangulator.h"
 #include "src/gpu/tessellate/PatchWriter.h"
@@ -215,7 +214,7 @@ void PathCurveTessellator::WriteFixedIndexBufferBaseIndex(VertexWriter vertexWri
     SkASSERT(indexData.count() == triangleCount);
     SkASSERT(nextIndex == baseIndex + triangleCount + 2);
 
-    vertexWriter.writeArray(indexData.data(), indexData.count());
+    vertexWriter << VertexWriter::Array(indexData.data(), indexData.count());
 }
 
 #if SK_GPU_V1

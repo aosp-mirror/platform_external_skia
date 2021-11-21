@@ -100,17 +100,27 @@ static float GetJoinType(const SkStrokeRec& stroke) {
 
 // This float2 gets written out with each patch/instance if PatchAttribs::kStrokeParams is enabled.
 struct StrokeParams {
-    static bool StrokesHaveEqualParams(const SkStrokeRec& a, const SkStrokeRec& b) {
-        return a.getWidth() == b.getWidth() && a.getJoin() == b.getJoin() &&
-               (a.getJoin() != SkPaint::kMiter_Join || a.getMiter() == b.getMiter());
+    StrokeParams() = default;
+    StrokeParams(const SkStrokeRec& stroke) {
+        this->set(stroke);
     }
     void set(const SkStrokeRec& stroke) {
         fRadius = stroke.getWidth() * .5f;
         fJoinType = GetJoinType(stroke);
     }
+    static bool StrokesHaveEqualParams(const SkStrokeRec& a, const SkStrokeRec& b) {
+        return a.getWidth() == b.getWidth() && a.getJoin() == b.getJoin() &&
+               (a.getJoin() != SkPaint::kMiter_Join || a.getMiter() == b.getMiter());
+    }
     float fRadius;
     float fJoinType;  // See GetJoinType().
 };
+
+// When PatchAttribs::kExplicitCurveType is set, these are the values that tell the GPU what type of
+// curve is being drawn.
+constexpr static float kCubicCurveType SK_MAYBE_UNUSED = 0;
+constexpr static float kConicCurveType SK_MAYBE_UNUSED = 1;
+constexpr static float kTriangularConicCurveType SK_MAYBE_UNUSED = 2;  // Conic curve with w=Inf.
 
 // Returns the packed size in bytes of the attribs portion of tessellation patches (or instances) in
 // GPU buffers.
@@ -135,6 +145,28 @@ SkPath PreChopPathCurves(float tessellationPrecision,
                          const SkPath&,
                          const SkMatrix&,
                          const SkRect& viewport);
+
+// Finds 0, 1, or 2 T values at which to chop the given curve in order to guarantee the resulting
+// cubics are convex and rotate no more than 180 degrees.
+//
+//   - If the cubic is "serpentine", then the T values are any inflection points in [0 < T < 1].
+//   - If the cubic is linear, then the T values are any 180-degree cusp points in [0 < T < 1].
+//   - Otherwise the T value is the point at which rotation reaches 180 degrees, iff in [0 < T < 1].
+//
+// 'areCusps' is set to true if the chop point occurred at a cusp (within tolerance), or if the chop
+// point(s) occurred at 180-degree turnaround points on a degenerate flat line.
+int FindCubicConvex180Chops(const SkPoint[], float T[2], bool* areCusps);
+
+// Returns true if the given conic (or quadratic) has a cusp point. The w value is not necessary in
+// determining this. If there is a cusp, it can be found at the midtangent.
+inline bool ConicHasCusp(const SkPoint p[3]) {
+    SkVector a = p[1] - p[0];
+    SkVector b = p[2] - p[1];
+    // A conic of any class can only have a cusp if it is a degenerate flat line with a 180 degree
+    // turnarund. To detect this, the beginning and ending tangents must be parallel
+    // (a.cross(b) == 0) and pointing in opposite directions (a.dot(b) < 0).
+    return a.cross(b) == 0 && a.dot(b) < 0;
+}
 
 }  // namespace skgpu
 
