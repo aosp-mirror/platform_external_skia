@@ -2677,6 +2677,7 @@ cc_test {
         "tests/LListTest.cpp",
         "tests/LRUCacheTest.cpp",
         "tests/LazyProxyTest.cpp",
+        "tests/LazyStencilAttachmentTest.cpp",
         "tests/M44Test.cpp",
         "tests/MD5Test.cpp",
         "tests/MallocPixelRefTest.cpp",
