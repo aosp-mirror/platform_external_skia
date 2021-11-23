@@ -93,12 +93,12 @@ SkPMColor4f calculate_colors(skgpu::SurfaceContext* sc,
     GrRecordingContext* rContext = sc->recordingContext();
     const GrColorInfo& colorInfo = sc->colorInfo();
     if (grMaskFormat == kARGB_GrMaskFormat) {
-        SkPaintToGrPaintWithPrimitiveColor(rContext, colorInfo, paint, matrix, grPaint);
-        return SK_PMColor4fWHITE;
-    } else {
-        SkPaintToGrPaint(rContext, colorInfo, paint, matrix, grPaint);
-        return grPaint->getColor4f();
+        SkPaintToGrPaintReplaceShader(rContext, colorInfo, paint, matrix, nullptr, grPaint);
+        float a = grPaint->getColor4f().fA;
+        return {a, a, a, a};
     }
+    SkPaintToGrPaint(rContext, colorInfo, paint, matrix, grPaint);
+    return grPaint->getColor4f();
 }
 
 template<typename Quad, typename VertexData>
@@ -180,14 +180,13 @@ class PathSubRun final : public GrSubRun {
 public:
     PathSubRun(bool isAntiAliased,
                SkScalar strikeToSourceScale,
-               const GrTextBlob& blob,
                SkSpan<PathGlyph> paths,
                std::unique_ptr<PathGlyph[], GrSubRunAllocator::ArrayDestroyer> pathData);
 
     void draw(const GrClip*,
               const SkMatrixProvider& viewMatrix,
-              const SkGlyphRunList&,
-              const SkPaint&,
+              SkPoint drawOrigin,
+              const SkPaint& paint,
               skgpu::v1::SurfaceDrawContext*) const override;
 
     bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const override;
@@ -197,7 +196,6 @@ public:
     static GrSubRunOwner Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                               bool isAntiAliased,
                               SkScalar strikeToSourceScale,
-                              const GrTextBlob& blob,
                               GrSubRunAllocator* alloc);
 
 private:
@@ -215,7 +213,6 @@ private:
 
 PathSubRun::PathSubRun(bool isAntiAliased,
                        SkScalar strikeToSourceScale,
-                       const GrTextBlob& blob,
                        SkSpan<PathGlyph> paths,
                        std::unique_ptr<PathGlyph[], GrSubRunAllocator::ArrayDestroyer> pathData)
     : fIsAntiAliased{isAntiAliased}
@@ -225,11 +222,10 @@ PathSubRun::PathSubRun(bool isAntiAliased,
 
 void PathSubRun::draw(const GrClip* clip,
                       const SkMatrixProvider& viewMatrix,
-                      const SkGlyphRunList& glyphRunList,
+                      SkPoint drawOrigin,
                       const SkPaint& paint,
                       skgpu::v1::SurfaceDrawContext* sdc) const {
     SkASSERT(!fPaths.empty());
-    SkPoint drawOrigin = glyphRunList.origin();
     SkPaint runPaint{paint};
     runPaint.setAntiAlias(fIsAntiAliased);
     // If there are shaders, blurs or styles, the path must be scaled into source
@@ -284,7 +280,6 @@ bool PathSubRun::canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) 
 GrSubRunOwner PathSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
                                bool isAntiAliased,
                                SkScalar strikeToSourceScale,
-                               const GrTextBlob& blob,
                                GrSubRunAllocator* alloc) {
     auto pathData = alloc->makeUniqueArray<PathGlyph>(
             drawables.size(),
@@ -295,7 +290,7 @@ GrSubRunOwner PathSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
     SkSpan<PathGlyph> paths{pathData.get(), drawables.size()};
 
     return alloc->makeUnique<PathSubRun>(
-            isAntiAliased, strikeToSourceScale, blob, paths, std::move(pathData));
+            isAntiAliased, strikeToSourceScale, paths, std::move(pathData));
 }
 
 GrAtlasSubRun* PathSubRun::testingOnly_atlasSubRun() {
@@ -470,8 +465,8 @@ public:
 
     void draw(const GrClip*,
               const SkMatrixProvider& viewMatrix,
-              const SkGlyphRunList&,
-              const SkPaint&,
+              SkPoint drawOrigin,
+              const SkPaint& paint,
               skgpu::v1::SurfaceDrawContext*) const override;
 
     std::tuple<const GrClip*, GrOp::Owner>
@@ -601,11 +596,11 @@ int DirectMaskSubRun::glyphCount() const {
 
 void DirectMaskSubRun::draw(const GrClip* clip,
                             const SkMatrixProvider& viewMatrix,
-                            const SkGlyphRunList& glyphRunList,
+                            SkPoint drawOrigin,
                             const SkPaint& paint,
                             skgpu::v1::SurfaceDrawContext* sdc) const{
     auto[drawingClip, op] = this->makeAtlasTextOp(
-            clip, viewMatrix, glyphRunList.origin(), paint, sdc, nullptr);
+            clip, viewMatrix, drawOrigin, paint, sdc, nullptr);
     if (op != nullptr) {
         sdc->addDrawOp(drawingClip, std::move(op));
     }
@@ -869,8 +864,8 @@ public:
 
     void draw(const GrClip*,
               const SkMatrixProvider& viewMatrix,
-              const SkGlyphRunList&,
-              const SkPaint&,
+              SkPoint drawOrigin,
+              const SkPaint& paint,
               skgpu::v1::SurfaceDrawContext*) const override;
 
     std::tuple<const GrClip*, GrOp::Owner>
@@ -961,11 +956,11 @@ GrSubRunOwner TransformedMaskSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& 
 
 void TransformedMaskSubRun::draw(const GrClip* clip,
                                  const SkMatrixProvider& viewMatrix,
-                                 const SkGlyphRunList& glyphRunList,
+                                 SkPoint drawOrigin,
                                  const SkPaint& paint,
                                  skgpu::v1::SurfaceDrawContext* sdc) const {
     auto[drawingClip, op] = this->makeAtlasTextOp(
-            clip, viewMatrix, glyphRunList.origin(), paint, sdc, nullptr);
+            clip, viewMatrix, drawOrigin, paint, sdc, nullptr);
     if (op != nullptr) {
         sdc->addDrawOp(drawingClip, std::move(op));
     }
@@ -1132,7 +1127,7 @@ public:
 
     void draw(const GrClip*,
               const SkMatrixProvider& viewMatrix,
-              const SkGlyphRunList&,
+              SkPoint drawOrigin,
               const SkPaint&,
               skgpu::v1::SurfaceDrawContext*) const override;
 
@@ -1242,11 +1237,11 @@ GrSubRunOwner SDFTSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
 
 void SDFTSubRun::draw(const GrClip* clip,
                       const SkMatrixProvider& viewMatrix,
-                      const SkGlyphRunList& glyphRunList,
+                      SkPoint drawOrigin,
                       const SkPaint& paint,
                       skgpu::v1::SurfaceDrawContext* sdc) const {
     auto[drawingClip, op] = this->makeAtlasTextOp(
-            clip, viewMatrix, glyphRunList.origin(), paint, sdc, nullptr);
+            clip, viewMatrix, drawOrigin, paint, sdc, nullptr);
     if (op != nullptr) {
         sdc->addDrawOp(drawingClip, std::move(op));
     }
@@ -1658,7 +1653,6 @@ void GrTextBlob::processSourcePaths(const SkZip<SkGlyphVariant, SkPoint>& drawab
     fSubRunList.append(PathSubRun::Make(drawables,
                                         has_some_antialiasing(runFont),
                                         strikeToSourceScale,
-                                        *this,
                                         &fAlloc));
 }
 
