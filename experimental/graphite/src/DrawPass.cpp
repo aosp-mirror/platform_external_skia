@@ -20,6 +20,7 @@
 #include "experimental/graphite/src/Renderer.h"
 #include "experimental/graphite/src/TextureProxy.h"
 #include "experimental/graphite/src/UniformCache.h"
+#include "experimental/graphite/src/UniformManager.h"
 #include "experimental/graphite/src/geom/BoundsManager.h"
 
 #include "src/core/SkMathPriv.h"
@@ -34,10 +35,10 @@ namespace {
 std::tuple<uint32_t, uint32_t> get_ids_from_paint(skgpu::Recorder* recorder,
                                                   skgpu::PaintParams params) {
     // TODO: perhaps just return the ids here rather than the sk_sps?
-    auto [ combo, uniformData] = ExtractCombo(recorder->uniformCache(), params);
+    auto [ combo, uniformData] = ExtractCombo(params);
     auto programInfo = recorder->programCache()->findOrCreateProgram(combo);
-
-    return { programInfo->id(), uniformData->id() };
+    auto uniformID = recorder->uniformCache()->insert(std::move(uniformData));
+    return { programInfo->id(), uniformID };
 }
 
 } // anonymous namespace
@@ -209,6 +210,10 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
     bool requiresMSAA = false;
     Rect passBounds = Rect::InfiniteInverted();
 
+    DrawBufferManager* bufferMgr = recorder->drawBufferManager();
+    UniformCache geometryUniforms;
+    std::unordered_map<uint32_t, BindBufferInfo> geometryUniformBindings;
+
     std::vector<SortKey> keys;
     keys.reserve(draws->renderStepCount()); // will not exceed but may use less with occluded draws
 
@@ -222,7 +227,7 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
         // bound independently of those used by the rest of the RenderStep, then we can upload now
         // and remember the location for re-use on any RenderStep that does shading.
         uint32_t programID = ProgramCache::kInvalidProgramID;
-        uint32_t shadingUniformID = UniformData::kInvalidUniformID;
+        uint32_t shadingUniformID = UniformCache::kInvalidUniformID;
         if (draw.fPaintParams.has_value()) {
             std::tie(programID, shadingUniformID) = get_ids_from_paint(recorder,
                                                                        draw.fPaintParams.value());
@@ -234,11 +239,22 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
             // TODO ask step to generate a pipeline description based on the above shading code, and
             // have pipelineIndex point to that description in the accumulated list of descs
             uint32_t pipelineIndex = 0;
-            // TODO step writes out geometry uniforms and have geomIndex point to that buffer data,
-            // providing shape, transform, scissor, and paint depth to RenderStep
-            uint32_t geometryIndex = 0;
 
-            uint32_t shadingIndex = UniformData::kInvalidUniformID;
+            uint32_t geometryIndex = UniformCache::kInvalidUniformID;
+            if (step->numUniforms() > 0) {
+                // TODO: Get layout from the GPU
+                sk_sp<UniformData> uniforms = step->writeUniforms(Layout::kMetal, draw.fShape);
+                geometryIndex = geometryUniforms.insert(uniforms);
+
+                // Upload the data to the GPU if it's the first time encountered
+                if (geometryUniformBindings.find(geometryIndex) == geometryUniformBindings.end()) {
+                    auto [writer, bufferInfo] = bufferMgr->getUniformWriter(uniforms->dataSize());
+                    writer.write(uniforms->data(), uniforms->dataSize());
+                    geometryUniformBindings.insert({geometryIndex, bufferInfo});
+                }
+            }
+
+            uint32_t shadingIndex = UniformCache::kInvalidUniformID;
 
             const bool performsShading = draw.fPaintParams.has_value() && step->performsShading();
             if (performsShading) {
@@ -267,16 +283,14 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
     // bugs in the DrawOrder determination code?
     std::sort(keys.begin(), keys.end());
 
-    DrawBufferManager* bufferMgr = recorder->drawBufferManager();
-
     // Used to record vertex/instance data, buffer binds, and draw calls
     Drawer drawer;
     DrawWriter drawWriter(&drawer, bufferMgr);
 
     // Used to track when a new pipeline or dynamic state needs recording between draw steps
     uint32_t lastPipeline = 0;
-    uint32_t lastShadingUniforms = UniformData::kInvalidUniformID;
-    uint32_t lastGeometryUniforms = 0;
+    uint32_t lastShadingUniforms = UniformCache::kInvalidUniformID;
+    uint32_t lastGeometryUniforms = UniformCache::kInvalidUniformID;
     SkIRect lastScissor = SkIRect::MakeSize(target->dimensions());
 
     for (const SortKey& key : keys) {
@@ -302,15 +316,22 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
         if (pipelineChange) {
             // TODO: Look up pipeline description from key's index and record binding it
             lastPipeline = key.pipeline();
-            lastShadingUniforms = UniformData::kInvalidUniformID;
-            lastGeometryUniforms = 0;
+            lastShadingUniforms = UniformCache::kInvalidUniformID;
+            lastGeometryUniforms = UniformCache::kInvalidUniformID;
         }
         if (stateChange) {
             if (key.geometryUniforms() != lastGeometryUniforms) {
-                // TODO: Look up uniform buffer binding info corresponding to key's index and record
+                if (key.geometryUniforms() != UniformCache::kInvalidUniformID) {
+                    auto binding = geometryUniformBindings.find(key.geometryUniforms())->second;
+                    // TODO: Record bind 'binding' buffer + offset to kRenderStep slot
+                    (void) binding;
+                }
                 lastGeometryUniforms = key.geometryUniforms();
             }
             if (key.shadingUniforms() != lastShadingUniforms) {
+                // TODO: We should not re-upload the uniforms for every draw that referenced them,
+                // they should be uploaded first time seen in the earlier loop of DrawPass::Make and
+                // then this can lookup the cached BindBufferInfo, similar to geometryUniformBinding
                 auto ud = lookup(recorder, key.shadingUniforms());
 
                 auto [writer, bufferInfo] = bufferMgr->getUniformWriter(ud->dataSize());

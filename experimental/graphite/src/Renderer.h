@@ -11,6 +11,7 @@
 #include "experimental/graphite/src/Attribute.h"
 #include "experimental/graphite/src/DrawTypes.h"
 #include "experimental/graphite/src/EnumBitMask.h"
+#include "experimental/graphite/src/Uniform.h"
 
 #include "include/core/SkSpan.h"
 #include "include/core/SkString.h"
@@ -25,7 +26,9 @@ namespace skgpu {
 class DrawWriter;
 class ResourceProvider;
 class Shape;
-class Uniform;
+class UniformData;
+
+enum class Layout;
 
 class RenderStep {
 public:
@@ -36,7 +39,35 @@ public:
     // this RenderStep.
     virtual void writeVertices(DrawWriter*, const Shape&) const = 0;
 
+    // Write out the uniform values (aligned for the layout). These values will be de-duplicated
+    // across all draws using the RenderStep before uploading to the GPU, but it can be assumed the
+    // uniforms will be bound before the draws recorded in 'writeVertices' are executed.
+    // TODO: We definitely want this to return CPU memory since it's better for the caller to handle
+    // the de-duplication and GPU upload/binding (DrawPass tracks all this). However, a RenderStep's
+    // uniforms aren't going to change, and the Layout won't change during a process, so it would be
+    // nice if we could remember the offsets for the layout/gpu and reuse them across draws.
+    // Similarly, it would be nice if this could write into reusable storage and then DrawPass or
+    // UniformCache handles making an sk_sp if we need to assign a new unique ID to the uniform data
+    virtual sk_sp<UniformData> writeUniforms(Layout layout, const Shape&) const = 0;
+
     virtual const char* name()      const = 0;
+
+    // TODO: This is only temporary. Eventually the RenderStep will define its logic in SkSL and
+    // be able to have code operate in both the vertex and fragment shaders. Ideally the RenderStep
+    // will provide two functions that fit some ABI for integrating with the common and paint SkSL,
+    // although we could go as far as allowing RenderStep to handle composing the final SkSL if
+    // given the paint combination's SkSL.
+
+    // Returns the body of a vertex function, which must include writing to a float4 "out.position".
+    // It has access to a "vtx" variable equivalent to the struct defined by
+    // vertexAttributes() and instanceAttributes() joined together, and a "uniforms" instance
+    // equivalent to the struct defined by uniforms(). If these structs would be empty, the
+    // variables are unavailable. Additionally "vertexID" and "instanceID" are always available.
+    //
+    // NOTE: The above contract is mainly so that the entire MSL program can be created by just str
+    // concatenating struct definitions generated from the RenderStep and paint Combination, some
+    // hardcoded MSL prefixes and suffices, and then including the function bodies returned here.
+    virtual const char* vertexMSL() const = 0;
 
     bool          requiresStencil() const { return fFlags & Flags::kRequiresStencil; }
     bool          requiresMSAA()    const { return fFlags & Flags::kRequiresMSAA;    }
@@ -46,16 +77,18 @@ public:
     size_t        vertexStride()    const { return fVertexStride;   }
     size_t        instanceStride()  const { return fInstanceStride; }
 
+    size_t numUniforms()            const { return fUniforms.size();      }
     size_t numVertexAttributes()    const { return fVertexAttrs.size();   }
     size_t numInstanceAttributes()  const { return fInstanceAttrs.size(); }
 
+    // The uniforms of a RenderStep are bound to the kRenderStep slot, the rest of the pipeline
+    // may still use uniforms bound to other slots.
+    SkSpan<const Uniform>   uniforms()           const { return SkMakeSpan(fUniforms);      }
     SkSpan<const Attribute> vertexAttributes()   const { return SkMakeSpan(fVertexAttrs);   }
     SkSpan<const Attribute> instanceAttributes() const { return SkMakeSpan(fInstanceAttrs); }
 
     // TODO: Actual API to do things
     // 1. Provide stencil settings
-    // 2. Provide shader key or MSL(?) for the vertex stage
-    // 4. Write uniform data given a Shape/Transform/Stroke info
     // 6. Some Renderers benefit from being able to share vertices between RenderSteps. Must find a
     //    way to support that. It may mean that RenderSteps get state per draw.
     //    - Does Renderer make RenderStepFactories that create steps for each DrawList::Draw?
@@ -74,11 +107,14 @@ protected:
     // While RenderStep does not define the full program that's run for a draw, it defines the
     // entire vertex layout of the pipeline. This is not allowed to change, so can be provided to
     // the RenderStep constructor by subclasses.
-    RenderStep(Mask<Flags> flags, PrimitiveType primitiveType,
+    RenderStep(Mask<Flags> flags,
+               std::initializer_list<Uniform> uniforms,
+               PrimitiveType primitiveType,
                std::initializer_list<Attribute> vertexAttrs,
                std::initializer_list<Attribute> instanceAttrs)
             : fFlags(flags)
             , fPrimitiveType(primitiveType)
+            , fUniforms(uniforms)
             , fVertexAttrs(vertexAttrs)
             , fInstanceAttrs(instanceAttrs)
             , fVertexStride(0)
@@ -105,6 +141,7 @@ private:
     // could just have this be std::array and keep all attributes inline with the RenderStep memory.
     // On the other hand, the attributes are only needed when creating a new pipeline so it's not
     // that performance sensitive.
+    std::vector<Uniform>   fUniforms;
     std::vector<Attribute> fVertexAttrs;
     std::vector<Attribute> fInstanceAttrs;
 
