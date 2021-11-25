@@ -7,7 +7,9 @@
 
 #include "experimental/graphite/src/Renderer.h"
 
+#include "experimental/graphite/src/ContextUtils.h"
 #include "experimental/graphite/src/DrawWriter.h"
+#include "experimental/graphite/src/UniformManager.h"
 #include "experimental/graphite/src/geom/Shape.h"
 #include "src/gpu/BufferWriter.h"
 
@@ -58,13 +60,23 @@ public:
     // TODO: Will need to add kRequiresStencil when we support specifying stencil settings and
     // the Renderer includes the stenciling step first.
     FillBoundsRenderStep()
-            : RenderStep(Flags::kPerformsShading, PrimitiveType::kTriangleStrip,
+            : RenderStep(Flags::kPerformsShading,
+                         /*uniforms=*/{},
+                         PrimitiveType::kTriangleStrip,
                          /*vertexAttrs=*/{{"position", VertexAttribType::kFloat2, SLType::kFloat2}},
                          /*instanceAttrs=*/{}) {}
 
     ~FillBoundsRenderStep() override {}
 
     const char* name() const override { return "fill-bounds"; }
+
+    const char* vertexMSL() const override {
+        // TODO: apply transform matrix from uniform data
+        // TODO: RenderSteps should not worry about RTAdjust, but currently the mtl pipeline does
+        // account for it, so this geometry won't be in the right coordinate system yet.
+        return "out.position.xy = vtx.position;\n"
+               "out.position.zw = float2(0.0, 1.0);\n";
+    }
 
     void writeVertices(DrawWriter* writer, const Shape& shape) const override {
         // TODO: Need to account for the transform eventually, but that requires more plumbing
@@ -76,6 +88,13 @@ public:
         // data so that vertices are still clustered appripriately. But that would require updating
         // the DrawWriter to support appending both vertex and instance data simultaneously, which
         // would need to return 2 vertex writers?
+    }
+
+    sk_sp<UniformData> writeUniforms(Layout layout, const Shape&) const override {
+        // TODO: Return the uniform data that is needed for this draw, but since there are no
+        // declared uniforms right now, just return nullptr. Eventually, the uniforms should include
+        // the draw's transform (at least until we use storage buffers).
+        return nullptr;
     }
 };
 
