@@ -8,6 +8,7 @@
 #include "experimental/graphite/src/DrawPass.h"
 
 #include "experimental/graphite/include/GraphiteTypes.h"
+#include "experimental/graphite/include/Recorder.h"
 #include "experimental/graphite/src/Buffer.h"
 #include "experimental/graphite/src/ContextPriv.h"
 #include "experimental/graphite/src/ContextUtils.h"
@@ -17,7 +18,6 @@
 #include "experimental/graphite/src/DrawWriter.h"
 #include "experimental/graphite/src/GraphicsPipeline.h"
 #include "experimental/graphite/src/GraphicsPipelineDesc.h"
-#include "experimental/graphite/src/Recorder.h"
 #include "experimental/graphite/src/Renderer.h"
 #include "experimental/graphite/src/ResourceProvider.h"
 #include "experimental/graphite/src/TextureProxy.h"
@@ -415,6 +415,11 @@ void DrawPass::addCommands(CommandBuffer* buffer, ResourceProvider* resourceProv
     for (const GraphicsPipelineDesc& desc : fPipelineDescs.items()) {
         fullPipelines.push_back(resourceProvider->findOrCreateGraphicsPipeline(desc));
     }
+
+    // Set viewport to the entire texture for now (eventually, we may have logically smaller bounds
+    // within an approx-sized texture). It is assumed that this also configures the sk_rtAdjust
+    // intrinsic for programs (however the backend chooses to do so).
+    buffer->setViewport(0, 0, fTarget->dimensions().width(), fTarget->dimensions().height());
 
     for (const Command& c : fCommands.items()) {
         switch(c.fType) {
