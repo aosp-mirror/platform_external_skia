@@ -8,6 +8,7 @@
 #ifndef skgpu_CommandBuffer_DEFINED
 #define skgpu_CommandBuffer_DEFINED
 
+#include "experimental/graphite/include/TextureInfo.h"
 #include "experimental/graphite/src/DrawTypes.h"
 #include "experimental/graphite/src/DrawWriter.h"
 #include "include/core/SkColor.h"
@@ -35,7 +36,7 @@ enum class UniformSlot {
 };
 
 struct AttachmentDesc {
-    sk_sp<TextureProxy> fTextureProxy;
+    TextureInfo fTextureInfo;
     LoadOp fLoadOp;
     StoreOp fStoreOp;
 };
@@ -45,9 +46,9 @@ struct RenderPassDesc {
     std::array<float, 4> fClearColor;
     AttachmentDesc fColorResolveAttachment;
 
-    AttachmentDesc fStencilDepthAttachment;
-    uint32_t fClearStencil;
+    AttachmentDesc fDepthStencilAttachment;
     float fClearDepth;
+    uint32_t fClearStencil;
 
     // TODO:
     // * bounds (TBD whether exact bounds vs. granular)
@@ -60,13 +61,18 @@ public:
         this->releaseResources();
     }
 
+#ifdef SK_DEBUG
     bool hasWork() { return fHasWork; }
+#endif
 
     void trackResource(sk_sp<SkRefCnt> resource) {
         fTrackedResources.push_back(std::move(resource));
     }
 
-    void beginRenderPass(const RenderPassDesc&);
+    void beginRenderPass(const RenderPassDesc&,
+                         sk_sp<Texture> colorTexture,
+                         sk_sp<Texture> resolveTexture,
+                         sk_sp<Texture> depthStencilTexture);
     virtual void endRenderPass() = 0;
 
     //---------------------------------------------------------------
@@ -82,46 +88,42 @@ public:
     // TODO: do we want to handle multiple scissor rects and viewports?
     void setScissor(unsigned int left, unsigned int top, unsigned int width, unsigned int height) {
         this->onSetScissor(left, top, width, height);
-        fHasWork = true;
     }
 
     void setViewport(float x, float y, float width, float height,
                      float minDepth = 0, float maxDepth = 1) {
         this->onSetViewport(x, y, width, height, minDepth, maxDepth);
-        fHasWork = true;
     }
 
     // TODO: do we want to support front and back reference values for platforms that support it?
     void setStencilReference(unsigned int referenceValue) {
         this->onSetStencilReference(referenceValue);
-        fHasWork = true;
     }
 
     void setBlendConstants(std::array<float, 4> blendConstants) {
         this->onSetBlendConstants(blendConstants);
-        fHasWork = true;
     }
 
     void draw(PrimitiveType type, unsigned int baseVertex, unsigned int vertexCount) final {
         this->onDraw(type, baseVertex, vertexCount);
-        fHasWork = true;
+        SkDEBUGCODE(fHasWork = true;)
     }
     void drawIndexed(PrimitiveType type, unsigned int baseIndex, unsigned int indexCount,
                      unsigned int baseVertex) final {
         this->onDrawIndexed(type, baseIndex, indexCount, baseVertex);
-        fHasWork = true;
+        SkDEBUGCODE(fHasWork = true;)
     }
     void drawInstanced(PrimitiveType type, unsigned int baseVertex, unsigned int vertexCount,
                        unsigned int baseInstance, unsigned int instanceCount) final {
         this->onDrawInstanced(type, baseVertex, vertexCount, baseInstance, instanceCount);
-        fHasWork = true;
+        SkDEBUGCODE(fHasWork = true;)
     }
     void drawIndexedInstanced(PrimitiveType type, unsigned int baseIndex, unsigned int indexCount,
                               unsigned int baseVertex, unsigned int baseInstance,
                               unsigned int instanceCount) final {
         this->onDrawIndexedInstanced(type, baseIndex, indexCount, baseVertex, baseInstance,
                                      instanceCount);
-        fHasWork = true;
+        SkDEBUGCODE(fHasWork = true;)
     }
 
     // When using a DrawWriter dispatching directly to a CommandBuffer, binding of pipelines and
@@ -151,7 +153,10 @@ private:
                            sk_sp<Buffer> instanceBuffer, size_t instanceOffset);
     void bindIndexBuffer(sk_sp<Buffer> indexBuffer, size_t bufferOffset);
 
-    virtual void onBeginRenderPass(const RenderPassDesc&) = 0;
+    virtual void onBeginRenderPass(const RenderPassDesc&,
+                                   const Texture* colorTexture,
+                                   const Texture* resolveTexture,
+                                   const Texture* depthStencilTexture) = 0;
 
     virtual void onBindGraphicsPipeline(const GraphicsPipeline*) = 0;
     virtual void onBindUniformBuffer(UniformSlot, const Buffer*, size_t bufferOffset) = 0;
@@ -182,7 +187,9 @@ private:
                                        size_t bufferOffset,
                                        size_t bufferRowBytes) = 0;
 
+#ifdef SK_DEBUG
     bool fHasWork = false;
+#endif
 
     inline static constexpr int kInitialTrackedResourcesCount = 32;
     SkSTArray<kInitialTrackedResourcesCount, sk_sp<SkRefCnt>> fTrackedResources;
