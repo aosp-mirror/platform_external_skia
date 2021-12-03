@@ -24,6 +24,7 @@
 #include "experimental/graphite/src/TextureProxy.h"
 #include "experimental/graphite/src/UniformManager.h"
 #include "experimental/graphite/src/geom/Shape.h"
+#include "experimental/graphite/src/geom/Transform_graphite.h"
 
 #if GRAPHITE_TEST_UTILS
 // set to 1 if you want to do GPU capture of the commandBuffer
@@ -33,40 +34,6 @@
 using namespace skgpu;
 
 namespace {
-
-class FullscreenRectDraw final : public RenderStep {
-public:
-    ~FullscreenRectDraw() override {}
-
-    static const RenderStep* Singleton() {
-        static const FullscreenRectDraw kSingleton;
-        return &kSingleton;
-    }
-
-    const char* name() const override { return "fullscreen-rect"; }
-
-    const char* vertexMSL() const override {
-        return "float2 position = float2(float(vertexID >> 1), float(vertexID & 1));\n"
-               "out.position.xy = position * 2 - 1;\n"
-               "out.position.zw = float2(0.0, 1.0);\n";
-    }
-
-    void writeVertices(DrawWriter* writer, const Shape&) const override {
-        // This RenderStep ignores shape and just needs to draw 4 data-less vertices
-        writer->draw({}, {}, 4);
-    }
-
-    sk_sp<UniformData> writeUniforms(Layout, const Shape&) const override {
-        return nullptr;
-    }
-
-private:
-    FullscreenRectDraw() : RenderStep(Flags::kPerformsShading,
-                                      /*uniforms=*/{},
-                                      PrimitiveType::kTriangleStrip,
-                                      /*vertexAttrs=*/{},
-                                      /*instanceAttrs=*/{}) {}
-};
 
 class UniformRectDraw final : public RenderStep {
 public:
@@ -85,12 +52,14 @@ public:
                "out.position.zw = float2(0.0, 1.0);\n";
     }
 
-    void writeVertices(DrawWriter* writer, const Shape&) const override {
+    void writeVertices(DrawWriter* writer, const Transform&, const Shape&) const override {
         // The shape is upload via uniforms, so this just needs to record 4 data-less vertices
         writer->draw({}, {}, 4);
     }
 
-    sk_sp<UniformData> writeUniforms(Layout layout, const Shape& shape) const override {
+    sk_sp<UniformData> writeUniforms(Layout layout,
+                                     const Transform&,
+                                     const Shape& shape) const override {
         SkASSERT(shape.isRect());
         // TODO: A << API for uniforms would be nice, particularly if it could take pre-computed
         // offsets for each uniform.
@@ -129,7 +98,7 @@ public:
                "out.position.zw = float2(0.0, 1.0);\n";
     }
 
-    void writeVertices(DrawWriter* writer, const Shape& shape) const override {
+    void writeVertices(DrawWriter* writer, const Transform&, const Shape& shape) const override {
         DrawBufferManager* bufferMgr = writer->bufferManager();
         auto [vertexWriter, vertices] = bufferMgr->getVertexWriter(4 * this->vertexStride());
         vertexWriter << 0.5f * (shape.rect().left() + 1.f)  << 0.5f * (shape.rect().top() + 1.f)
@@ -145,7 +114,7 @@ public:
         writer->draw(vertices, indices, 6);
     }
 
-    sk_sp<UniformData> writeUniforms(Layout layout, const Shape&) const override {
+    sk_sp<UniformData> writeUniforms(Layout layout, const Transform&, const Shape&) const override {
         auto uniforms = UniformData::Make(this->numUniforms(), this->uniforms().data(),
                                           sizeof(float) * 4);
         float data[4] = {2.f, 2.f, -1.f, -1.f};
@@ -180,7 +149,7 @@ public:
                "out.position.zw = float2(0.0, 1.0);\n";
     }
 
-    void writeVertices(DrawWriter* writer, const Shape& shape) const override {
+    void writeVertices(DrawWriter* writer, const Transform&, const Shape& shape) const override {
         SkASSERT(shape.isRect());
 
         DrawBufferManager* bufferMgr = writer->bufferManager();
@@ -196,7 +165,7 @@ public:
         instanceWriter << shape.rect().topLeft() << shape.rect().size();
     }
 
-    sk_sp<UniformData> writeUniforms(Layout, const Shape&) const override {
+    sk_sp<UniformData> writeUniforms(Layout, const Transform&, const Shape&) const override {
         return nullptr;
     }
 
@@ -257,6 +226,9 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
     DrawBufferManager bufferMgr(gpu->resourceProvider(), 4);
 
     commandBuffer->beginRenderPass(renderPassDesc, target->refTexture(), nullptr, nullptr);
+
+    commandBuffer->setViewport(0.f, 0.f, kTextureWidth, kTextureHeight);
+
     DrawWriter drawWriter(commandBuffer->asDrawDispatcher(), &bufferMgr);
 
     struct RectAndColor {
@@ -274,11 +246,14 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
         auto pipeline = gpu->resourceProvider()->findOrCreateGraphicsPipeline(pipelineDesc);
         commandBuffer->bindGraphicsPipeline(std::move(pipeline));
 
+        // All of the test RenderSteps ignore the transform, so just use the identity
+        static const Transform kIdentity{SkM44()};
+
         for (auto d : draws) {
             drawWriter.newDynamicState();
             Shape shape(d.fRect);
 
-            auto renderStepUniforms = step->writeUniforms(Layout::kMetal, shape);
+            auto renderStepUniforms = step->writeUniforms(Layout::kMetal, kIdentity, shape);
             if (renderStepUniforms) {
                 auto [writer, bindInfo] =
                         bufferMgr.getUniformWriter(renderStepUniforms->dataSize());
@@ -295,22 +270,28 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
                                              sk_ref_sp(bindInfo.fBuffer),
                                              bindInfo.fOffset);
 
-            step->writeVertices(&drawWriter, shape);
+            step->writeVertices(&drawWriter, kIdentity, shape);
         }
     };
 
+    SkRect fullRect = SkRect::MakeIWH(kTextureWidth, kTextureHeight);
     // Draw blue rectangle over entire rendertarget (which was red)
-    draw(FullscreenRectDraw::Singleton(), {{SkRect::MakeEmpty(), SkColors::kBlue}});
+    draw(UniformRectDraw::Singleton(), {{fullRect, SkColors::kBlue}});
 
     // Draw inset yellow rectangle using uniforms
-    draw(UniformRectDraw::Singleton(), {{{-0.9f, -0.9f, 0.9f, 0.9f}, SkColors::kYellow}});
+    draw(UniformRectDraw::Singleton(),
+         {{fullRect.makeInset(kTextureWidth/20.f, kTextureHeight/20.f), SkColors::kYellow}});
 
     // Draw inset magenta rectangle with triangles in vertex buffer
-    draw(TriangleRectDraw::Singleton(), {{{-.5f, -.5f, .5f, .5f}, SkColors::kMagenta}});
+    draw(TriangleRectDraw::Singleton(),
+         {{fullRect.makeInset(kTextureWidth/4.f, kTextureHeight/4.f), SkColors::kMagenta}});
 
     // Draw green and cyan rects using instance buffer
-    draw(InstanceRectDraw::Singleton(), { {{-0.4f, -0.4f, 0.0f, 0.0f}, SkColors::kGreen},
-                                          {{0.f, 0.f, 0.25f, 0.25f},   SkColors::kCyan} });
+    draw(InstanceRectDraw::Singleton(),
+         { {{kTextureWidth/3.f, kTextureHeight/3.f,
+             kTextureWidth/2.f, kTextureHeight/2.f}, SkColors::kGreen},
+           {{kTextureWidth/2.f, kTextureHeight/2.f,
+             5.f*kTextureWidth/8.f, 5.f*kTextureHeight/8.f}, SkColors::kCyan} });
 
     drawWriter.flush();
     bufferMgr.transferToCommandBuffer(commandBuffer.get());
