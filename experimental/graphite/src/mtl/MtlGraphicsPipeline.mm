@@ -36,6 +36,9 @@ SkSL::String emit_MSL_uniform_struct(const char* structName, SkSpan<const Unifor
             case SLType::kFloat:
                 result.append("float");
                 break;
+            case SLType::kFloat4x4:
+                result.append("float4x4");
+                break;
             case SLType::kHalf4:
                 result.append("half4");
                 break;
@@ -119,6 +122,9 @@ SkSL::String get_msl(const GraphicsPipelineDesc& desc) {
             "using namespace metal;\n"
             "\n"
             "typedef struct {\n"
+            "    float4 rtAdjust;\n"
+            "} Intrinsics;\n"
+            "typedef struct {\n"
             "    float4 position [[position]];\n"
             "} VertexOutput;\n"
             "typedef struct {\n"
@@ -138,18 +144,20 @@ SkSL::String get_msl(const GraphicsPipelineDesc& desc) {
 
     // Vertex shader function declaration
     msl += "vertex VertexOutput vertexMain(uint vertexID [[vertex_id]],\n"
-           "                               uint instanceID [[instance_id]]";
+           "                               uint instanceID [[instance_id]],\n"
+           "                               constant Intrinsics& intrinsics [[buffer(0)]]";
     if (step->numVertexAttributes() > 0 || step->numInstanceAttributes() > 0) {
         msl += ",\n                        VertexAttrs vtx [[stage_in]]";
     }
     if (step->numUniforms() > 0) {
-        msl += ",\n                        constant StepUniforms& uniforms [[buffer(0)]]";
+        msl += ",\n                        constant StepUniforms& uniforms [[buffer(1)]]";
     }
     msl += ") {\n";
 
     // Vertex shader body
     msl += "    VertexOutput out;\n";
     msl += step->vertexMSL();
+    msl += "    out.position.xy = out.position.xy * intrinsics.rtAdjust.xy + intrinsics.rtAdjust.zw;\n";
     msl += "    return out;\n"
            "}\n";
 
@@ -160,7 +168,7 @@ SkSL::String get_msl(const GraphicsPipelineDesc& desc) {
     }
 
     msl += "fragment FragmentOutput fragmentMain(VertexOutput interpolated [[stage_in]],\n"
-           "                                     constant FragUniforms& uniforms [[buffer(1)]]) {\n"
+           "                                     constant FragUniforms& uniforms [[buffer(2)]]) {\n"
            "    FragmentOutput out;\n";
     msl += GetShaderMSL(desc.shaderCombo().fShaderType);
     msl += "    return out;\n"
