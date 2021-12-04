@@ -1009,95 +1009,70 @@ int main() {
     skvm::Program p = b.done();
     REPORTER_ASSERT(r, p.nargs() == 1);
 
-    class TestTraceHook : public skvm::TraceHook {
-    public:
-        void line(int lineNum) override {
-            fTrace.appendf("line %d\n", lineNum);
-        }
-        void var(int slot, int32_t val) override {
-            fTrace += fDebugInfo->fSlotInfo[slot].name.c_str();
-            switch (fDebugInfo->fSlotInfo[slot].numberKind) {
-                case SkSL::Type::NumberKind::kSigned:
-                case SkSL::Type::NumberKind::kUnsigned:
-                default:
-                    fTrace.appendf(" = %d\n", val);
-                    break;
-                case SkSL::Type::NumberKind::kBoolean:
-                    fTrace.appendf(" = %s\n", val ? "true" : "false");
-                    break;
-                case SkSL::Type::NumberKind::kFloat: {
-                    float floatVal;
-                    static_assert(sizeof(floatVal) == sizeof(val));
-                    memcpy(&floatVal, &val, sizeof(floatVal));
-                    fTrace.appendf(" = %g\n", floatVal);
-                    break;
-                }
-            }
-
-        }
-        void enter(int fnIdx) override {
-            fTrace.appendf("enter %s\n", fDebugInfo->fFuncInfo[fnIdx].name.c_str());
-        }
-        void exit(int fnIdx) override {
-            fTrace.appendf("exit %s\n", fDebugInfo->fFuncInfo[fnIdx].name.c_str());
-        }
-
-        const SkSL::SkVMDebugInfo* fDebugInfo;
-        SkSL::String fTrace;
-    };
-
-    TestTraceHook hook;
-    hook.fDebugInfo = &debugInfo;
-    p.attachTraceHook(&hook);
-
     int result;
     p.eval(1, &result);
 
+    SkDynamicMemoryWStream streamDump;
+    debugInfo.dump(&streamDump);
+
+    sk_sp<SkData> dataDump = streamDump.detachAsData();
+    skstd::string_view trace{static_cast<const char*>(dataDump->data()), dataDump->size()};
+
     REPORTER_ASSERT(r, result == 40);
-    REPORTER_ASSERT(r, hook.fTrace ==
-R"(enter int main()
-line 11
-loop = 10
-line 12
-enter bool less_than(float left, int right)
-left = 10
-right = 20
-line 2
-comparison = true
-line 3
-line 4
-[less_than].result = true
-exit bool less_than(float left, int right)
-function_result = true
-line 11
-loop = 20
-line 12
-enter bool less_than(float left, int right)
-left = 20
-right = 20
-line 2
-comparison = false
-line 3
-line 6
-[less_than].result = false
-exit bool less_than(float left, int right)
-function_result = false
-line 11
-loop = 30
-line 12
-enter bool less_than(float left, int right)
-left = 30
-right = 20
-line 2
-comparison = false
-line 3
-line 6
-[less_than].result = false
-exit bool less_than(float left, int right)
-function_result = false
-line 11
-line 14
-[main].result = 40
+    REPORTER_ASSERT(r, trace ==
+R"($0 = [main].result (int, L10)
+$1 = loop (float, L11)
+$2 = function_result (bool, L12)
+$3 = [less_than].result (bool, L1)
+$4 = left (float, L1)
+$5 = right (int, L1)
+$6 = comparison (bool, L2)
+F0 = int main()
+F1 = bool less_than(float left, int right)
+
+enter int main()
+  line 11
+  loop = 10
+  line 12
+  enter bool less_than(float left, int right)
+    left = 10
+    right = 20
+    line 2
+    comparison = true
+    line 3
+    line 4
+    [less_than].result = true
+  exit bool less_than(float left, int right)
+  function_result = true
+  line 11
+  loop = 20
+  line 12
+  enter bool less_than(float left, int right)
+    left = 20
+    right = 20
+    line 2
+    comparison = false
+    line 3
+    line 6
+    [less_than].result = false
+  exit bool less_than(float left, int right)
+  function_result = false
+  line 11
+  loop = 30
+  line 12
+  enter bool less_than(float left, int right)
+    left = 30
+    right = 20
+    line 2
+    comparison = false
+    line 3
+    line 6
+    [less_than].result = false
+  exit bool less_than(float left, int right)
+  function_result = false
+  line 11
+  line 14
+  [main].result = 40
 exit int main()
-)", "Trace output does not match expectation:\n%s\n", hook.fTrace.c_str());
+)", "Trace output does not match expectation:\n%.*s\n", (int)trace.size(), trace.data());
 }
