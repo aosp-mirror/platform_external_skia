@@ -2649,6 +2649,7 @@ cc_test {
         "tests/GrQuadBufferTest.cpp",
         "tests/GrQuadCropTest.cpp",
         "tests/GrRenderTaskClusterTest.cpp",
+        "tests/GrSlugTest.cpp",
         "tests/GrStyledShapeTest.cpp",
         "tests/GrSubmittedFlushTest.cpp",
         "tests/GrSurfaceTest.cpp",
