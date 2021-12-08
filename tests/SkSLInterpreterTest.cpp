@@ -8,7 +8,7 @@
 #include "include/core/SkM44.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/codegen/SkSLVMCodeGenerator.h"
-#include "src/sksl/codegen/SkVMDebugInfo.h"
+#include "src/sksl/codegen/SkVMDebugTrace.h"
 #include "src/sksl/ir/SkSLExternalFunction.h"
 #include "src/utils/SkJSON.h"
 
@@ -89,7 +89,7 @@ void test(skiatest::Reporter* r, const char* src, float* in, const float* expect
 
     skvm::Builder b;
     SkSL::SkVMSignature sig;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugInfo=*/nullptr, /*uniforms=*/{}, &sig);
+    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{}, &sig);
     skvm::Program p = b.done();
 
     REPORTER_ASSERT(r, p.nargs() == (int)(sig.fParameterSlots + sig.fReturnSlots));
@@ -119,7 +119,7 @@ void test(skiatest::Reporter* r, const char* src,
     REPORTER_ASSERT(r, main);
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugInfo=*/nullptr, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     // TODO: Test with and without JIT?
@@ -533,7 +533,7 @@ DEF_TEST(SkSLInterpreterCompound, r) {
         for (int i = 0; i < 16; ++i) {
             uniforms[i] = b.uniform32(uniformPtr, i * sizeof(int)).id;
         }
-        SkSL::ProgramToSkVM(*program, *fn, &b, /*debugInfo=*/nullptr, SkMakeSpan(uniforms));
+        SkSL::ProgramToSkVM(*program, *fn, &b, /*debugTrace=*/nullptr, SkMakeSpan(uniforms));
         return b.done();
     };
 
@@ -652,7 +652,7 @@ DEF_TEST(SkSLInterpreterReturnThenCall, r) {
     REPORTER_ASSERT(r, main);
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugInfo=*/nullptr, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float xs[] = { -2.0f, 0.0f, 3.0f, -1.0f };
@@ -674,7 +674,7 @@ DEF_TEST(SkSLInterpreterEarlyReturn, r) {
     REPORTER_ASSERT(r, main);
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugInfo=*/nullptr, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float xs[] = { 1.0f, 3.0f },
@@ -716,7 +716,7 @@ DEF_TEST(SkSLInterpreterFunctions, r) {
 
     auto test_fn = [&](const SkSL::FunctionDefinition* fn, float in, float expected) {
         skvm::Builder b;
-        SkSL::ProgramToSkVM(*program, *fn, &b, /*debugInfo=*/nullptr, /*uniforms=*/{});
+        SkSL::ProgramToSkVM(*program, *fn, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
         skvm::Program p = b.done();
 
         float out = 0.0f;
@@ -906,7 +906,7 @@ DEF_TEST(SkSLInterpreterExternalFunction, r) {
     const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugInfo=*/nullptr, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float out;
@@ -964,7 +964,7 @@ DEF_TEST(SkSLInterpreterExternalTable, r) {
 
     const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
 
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugInfo=*/nullptr, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float out[4];
@@ -992,7 +992,11 @@ R"(bool less_than(float left, int right) {
 }
 
 int main() {
+    float2 a[2];
     for (float loop = 10; loop <= 30; loop += 10) {
+        half4 v = half4(loop, loop+1, loop+2, loop+3);
+        float2x2 m = float2x2(v);
+        a[0] = float2(loop, loop+1); a[1] = float2(loop+2, loop+3);
         bool function_result = less_than(loop, 20);
     }
     return 40;
@@ -1004,8 +1008,8 @@ int main() {
     REPORTER_ASSERT(r, program);
 
     const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
-    SkSL::SkVMDebugInfo debugInfo;
-    SkSL::ProgramToSkVM(*program, *main, &b, &debugInfo, /*uniforms=*/{});
+    SkSL::SkVMDebugTrace debugTrace;
+    SkSL::ProgramToSkVM(*program, *main, &b, &debugTrace, /*uniforms=*/{});
     skvm::Program p = b.done();
     REPORTER_ASSERT(r, p.nargs() == 1);
 
@@ -1013,7 +1017,7 @@ int main() {
     p.eval(1, &result);
 
     SkDynamicMemoryWStream streamDump;
-    debugInfo.dump(&streamDump);
+    debugTrace.dump(&streamDump);
 
     sk_sp<SkData> dataDump = streamDump.detachAsData();
     skstd::string_view trace{static_cast<const char*>(dataDump->data()), dataDump->size()};
@@ -1021,19 +1025,52 @@ int main() {
     REPORTER_ASSERT(r, result == 40);
     REPORTER_ASSERT(r, trace ==
 R"($0 = [main].result (int, L10)
-$1 = loop (float, L11)
-$2 = function_result (bool, L12)
-$3 = [less_than].result (bool, L1)
-$4 = left (float, L1)
-$5 = right (int, L1)
-$6 = comparison (bool, L2)
+$1 = a[0] (float2 : slot 1/2, L11)
+$2 = a[0] (float2 : slot 2/2, L11)
+$3 = a[1] (float2 : slot 1/2, L11)
+$4 = a[1] (float2 : slot 2/2, L11)
+$5 = loop (float, L12)
+$6 = v (float4 : slot 1/4, L13)
+$7 = v (float4 : slot 2/4, L13)
+$8 = v (float4 : slot 3/4, L13)
+$9 = v (float4 : slot 4/4, L13)
+$10 = m (float2x2 : slot 1/4, L14)
+$11 = m (float2x2 : slot 2/4, L14)
+$12 = m (float2x2 : slot 3/4, L14)
+$13 = m (float2x2 : slot 4/4, L14)
+$14 = function_result (bool, L16)
+$15 = [less_than].result (bool, L1)
+$16 = left (float, L1)
+$17 = right (int, L1)
+$18 = comparison (bool, L2)
 F0 = int main()
 F1 = bool less_than(float left, int right)
 
 enter int main()
   line 11
-  loop = 10
+  a[0].x = 0
+  a[0].y = 0
+  a[1].x = 0
+  a[1].y = 0
   line 12
+  loop = 10
+  line 13
+  v.x = 10
+  v.y = 11
+  v.z = 12
+  v.w = 13
+  line 14
+  m[0][0] = 10
+  m[0][1] = 11
+  m[1][0] = 12
+  m[1][1] = 13
+  line 15
+  a[0].x = 10
+  a[0].y = 11
+  line 15
+  a[1].x = 12
+  a[1].y = 13
+  line 16
   enter bool less_than(float left, int right)
     left = 10
     right = 20
@@ -1041,12 +1078,28 @@ enter int main()
     comparison = true
     line 3
     line 4
-    [less_than].result = true
   exit bool less_than(float left, int right)
+  [less_than].result = true
   function_result = true
-  line 11
-  loop = 20
   line 12
+  loop = 20
+  line 13
+  v.x = 20
+  v.y = 21
+  v.z = 22
+  v.w = 23
+  line 14
+  m[0][0] = 20
+  m[0][1] = 21
+  m[1][0] = 22
+  m[1][1] = 23
+  line 15
+  a[0].x = 20
+  a[0].y = 21
+  line 15
+  a[1].x = 22
+  a[1].y = 23
+  line 16
   enter bool less_than(float left, int right)
     left = 20
     right = 20
@@ -1054,12 +1107,28 @@ enter int main()
     comparison = false
     line 3
     line 6
-    [less_than].result = false
   exit bool less_than(float left, int right)
+  [less_than].result = false
   function_result = false
-  line 11
-  loop = 30
   line 12
+  loop = 30
+  line 13
+  v.x = 30
+  v.y = 31
+  v.z = 32
+  v.w = 33
+  line 14
+  m[0][0] = 30
+  m[0][1] = 31
+  m[1][0] = 32
+  m[1][1] = 33
+  line 15
+  a[0].x = 30
+  a[0].y = 31
+  line 15
+  a[1].x = 32
+  a[1].y = 33
+  line 16
   enter bool less_than(float left, int right)
     left = 30
     right = 20
@@ -1067,12 +1136,12 @@ enter int main()
     comparison = false
     line 3
     line 6
-    [less_than].result = false
   exit bool less_than(float left, int right)
+  [less_than].result = false
   function_result = false
-  line 11
-  line 14
-  [main].result = 40
+  line 12
+  line 18
 exit int main()
+[main].result = 40
 )", "Trace output does not match expectation:\n%.*s\n", (int)trace.size(), trace.data());
 }
