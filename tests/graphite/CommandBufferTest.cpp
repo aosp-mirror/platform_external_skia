@@ -12,6 +12,7 @@
 
 #include "experimental/graphite/include/mtl/MtlTypes.h"
 #include "experimental/graphite/src/Buffer.h"
+#include "experimental/graphite/src/Caps.h"
 #include "experimental/graphite/src/CommandBuffer.h"
 #include "experimental/graphite/src/ContextUtils.h"
 #include "experimental/graphite/src/DrawBufferManager.h"
@@ -35,6 +36,16 @@ using namespace skgpu;
 
 namespace {
 
+const DepthStencilSettings kTestDepthStencilSettings = {
+    {},
+    {},
+    0,
+    CompareOp::kAlways,
+    true,
+    true,
+    false,
+};
+
 class UniformRectDraw final : public RenderStep {
 public:
     ~UniformRectDraw() override {}
@@ -46,10 +57,9 @@ public:
 
     const char* name() const override { return "uniform-rect"; }
 
-    const char* vertexMSL() const override {
-        return "float2 position = float2(float(vertexID >> 1), float(vertexID & 1));\n"
-               "out.position.xy = position * uniforms.scale + uniforms.translate;\n"
-               "out.position.zw = float2(0.0, 1.0);\n";
+    const char* vertexSkSL() const override {
+        return "float2 tmpPosition = float2(float(sk_VertexID >> 1), float(sk_VertexID & 1));\n"
+               "float4 devPosition = float4(tmpPosition * scale + translate, 0.0, 1.0);\n";
     }
 
     void writeVertices(DrawWriter* writer, const Transform&, const Shape&) const override {
@@ -77,6 +87,7 @@ private:
                                    /*uniforms=*/{{"scale",     SLType::kFloat2},
                                                  {"translate", SLType::kFloat2}},
                                    PrimitiveType::kTriangleStrip,
+                                   kTestDepthStencilSettings,
                                    /*vertexAttrs=*/{},
                                    /*instanceAttrs=*/{}) {}
 };
@@ -92,10 +103,8 @@ public:
 
     const char* name() const override { return "triangle-rect"; }
 
-    const char* vertexMSL() const override {
-        return "float2 position = vtx.position;\n"
-               "out.position.xy = position * uniforms.scale + uniforms.translate;\n"
-               "out.position.zw = float2(0.0, 1.0);\n";
+    const char* vertexSkSL() const override {
+        return "float4 devPosition = float4(position * scale + translate, 0.0, 1.0);\n";
     }
 
     void writeVertices(DrawWriter* writer, const Transform&, const Shape& shape) const override {
@@ -128,6 +137,7 @@ private:
                          /*uniforms=*/{{"scale",     SLType::kFloat2},
                                        {"translate", SLType::kFloat2}},
                          PrimitiveType::kTriangles,
+                         kTestDepthStencilSettings,
                          /*vertexAttrs=*/{{"position", VertexAttribType::kFloat2, SLType::kFloat2}},
                          /*instanceAttrs=*/{}) {}
 };
@@ -143,10 +153,9 @@ public:
 
     const char* name() const override { return "instance-rect"; }
 
-    const char* vertexMSL() const override {
-        return "float2 position = float2(float(vertexID >> 1), float(vertexID & 1));\n"
-               "out.position.xy = position * vtx.dims + vtx.position;\n"
-               "out.position.zw = float2(0.0, 1.0);\n";
+    const char* vertexSkSL() const override {
+        return "float2 tmpPosition = float2(float(sk_VertexID >> 1), float(sk_VertexID & 1));\n"
+               "float4 devPosition = float4(tmpPosition * dims + position, 0.0, 1.0);\n";
     }
 
     void writeVertices(DrawWriter* writer, const Transform&, const Shape& shape) const override {
@@ -174,6 +183,7 @@ private:
             : RenderStep(Flags::kPerformsShading,
                          /*uniforms=*/{},
                          PrimitiveType::kTriangles,
+                         kTestDepthStencilSettings,
                          /*vertexAttrs=*/{},
                          /*instanceAttrs=*/ {
                                 { "position", VertexAttribType::kFloat2, SLType::kFloat2 },
@@ -225,7 +235,18 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
     target->instantiate(gpu->resourceProvider());
     DrawBufferManager bufferMgr(gpu->resourceProvider(), 4);
 
-    commandBuffer->beginRenderPass(renderPassDesc, target->refTexture(), nullptr, nullptr);
+    TextureInfo depthStencilInfo =
+            gpu->caps()->getDefaultDepthStencilTextureInfo(DepthStencilFlags::kDepthStencil,
+                                                           1,
+                                                           Protected::kNo);
+    renderPassDesc.fDepthStencilAttachment.fTextureInfo = depthStencilInfo;
+    renderPassDesc.fDepthStencilAttachment.fLoadOp = LoadOp::kDiscard;
+    renderPassDesc.fDepthStencilAttachment.fStoreOp = StoreOp::kDiscard;
+    sk_sp<Texture> depthStencilTexture =
+            gpu->resourceProvider()->findOrCreateTexture(textureSize, depthStencilInfo);
+
+    commandBuffer->beginRenderPass(renderPassDesc, target->refTexture(), nullptr,
+                                   depthStencilTexture);
 
     commandBuffer->setViewport(0.f, 0.f, kTextureWidth, kTextureHeight);
 

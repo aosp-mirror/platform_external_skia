@@ -51,7 +51,6 @@ class SkGlyphRunBuilder;
 class SkGlyphRunList;
 class SkImage;
 class SkImageFilter;
-class SkMarkerStack;
 class SkPaintFilterCanvas;
 class SkPath;
 class SkPicture;
@@ -857,20 +856,6 @@ public:
     */
     void concat(const SkMatrix& matrix);
     void concat(const SkM44&);
-
-    /**
-     *  Record a marker (provided by caller) for the current CTM. This does not change anything
-     *  about the ctm or clip, but does "name" this matrix value, so it can be referenced by
-     *  custom effects (who access it by specifying the same name).
-     *
-     *  Within a save frame, marking with the same name more than once just replaces the previous
-     *  value. However, between save frames, marking with the same name does not lose the marker
-     *  in the previous save frame. It is "visible" when the current save() is balanced with
-     *  a restore().
-     */
-    void markCTM(const char* name);
-
-    bool findMarkedCTM(const char* name, SkM44*) const;
 
     /** Replaces SkMatrix with matrix.
         Unlike concat(), any prior matrix state is overwritten.
@@ -1927,14 +1912,17 @@ public:
         If paint contains an SkShader and vertices does not contain texCoords, the shader
         is mapped using the vertices' positions.
 
-        If vertices colors are defined in vertices, and SkPaint paint contains SkShader,
-        SkBlendMode mode combines vertices colors with SkShader.
+        SkBlendMode is ignored if SkVertices does not have colors. Otherwise, it combines
+           - the SkShader if SkPaint contains SkShader
+           - or the opaque SkPaint color if SkPaint does not contain SkShader
+        as the src of the blend and the interpolated vertex colors as the dst.
 
-        SkMaskFilter and SkPathEffect on paint are ignored.
+        SkMaskFilter, SkPathEffect, and antialiasing on SkPaint are ignored.
 
         @param vertices  triangle mesh to draw
-        @param mode      combines vertices colors with SkShader, if both are present
-        @param paint     specifies the SkShader, used as SkVertices texture; may be nullptr
+        @param mode      combines vertices' colors with SkShader if present or SkPaint opaque color
+                         if not. Ignored if the vertices do not contain color.
+        @param paint     specifies the SkShader, used as SkVertices texture, and SkColorFilter.
 
         example: https://fiddle.skia.org/c/@Canvas_drawVertices
     */
@@ -1944,13 +1932,16 @@ public:
         If paint contains an SkShader and vertices does not contain texCoords, the shader
         is mapped using the vertices' positions.
 
-        If vertices colors are defined in vertices, and SkPaint paint contains SkShader,
-        SkBlendMode mode combines vertices colors with SkShader.
+        SkBlendMode is ignored if SkVertices does not have colors. Otherwise, it combines
+           - the SkShader if SkPaint contains SkShader
+           - or the opaque SkPaint color if SkPaint does not contain SkShader
+        as the src of the blend and the interpolated vertex colors as the dst.
 
-        SkMaskFilter and SkPathEffect on paint are ignored.
+        SkMaskFilter, SkPathEffect, and antialiasing on SkPaint are ignored.
 
         @param vertices  triangle mesh to draw
-        @param mode      combines vertices colors with SkShader, if both are present
+        @param mode      combines vertices' colors with SkShader if present or SkPaint opaque color
+                         if not. Ignored if the vertices do not contain color.
         @param paint     specifies the SkShader, used as SkVertices texture, may be nullptr
 
         example: https://fiddle.skia.org/c/@Canvas_drawVertices_2
@@ -1959,11 +1950,6 @@ public:
 
     /** Draws a Coons patch: the interpolation of four cubics with shared corners,
         associating a color, and optionally a texture SkPoint, with each corner.
-
-        Coons patch uses clip and SkMatrix, paint SkShader, SkColorFilter,
-        alpha, SkImageFilter, and SkBlendMode. If SkShader is provided it is treated
-        as Coons patch texture; SkBlendMode mode combines color colors and SkShader if
-        both are provided.
 
         SkPoint array cubics specifies four SkPath cubic starting at the top-left corner,
         in clockwise order, sharing every fourth point. The last SkPath cubic ends at the
@@ -1976,13 +1962,19 @@ public:
         corners in top-left, top-right, bottom-right, bottom-left order. If texCoords is
         nullptr, SkShader is mapped using positions (derived from cubics).
 
-        SkMaskFilter and SkPathEffect on paint are ignored.
+        SkBlendMode is ignored if colors is null. Otherwise, it combines
+            - the SkShader if SkPaint contains SkShader
+            - or the opaque SkPaint color if SkPaint does not contain SkShader
+        as the src of the blend and the interpolated patch colors as the dst.
+
+        SkMaskFilter, SkPathEffect, and antialiasing on SkPaint are ignored.
 
         @param cubics     SkPath cubic array, sharing common points
         @param colors     color array, one for each corner
         @param texCoords  SkPoint array of texture coordinates, mapping SkShader to corners;
                           may be nullptr
-        @param mode       SkBlendMode for colors, and for SkShader if paint has one
+        @param mode       combines patch's colors with SkShader if present or SkPaint opaque color
+                          if not. Ignored if colors is null.
         @param paint      SkShader, SkColorFilter, SkBlendMode, used to draw
     */
     void drawPatch(const SkPoint cubics[12], const SkColor colors[4],
@@ -2170,7 +2162,6 @@ protected:
     virtual void willRestore() {}
     virtual void didRestore() {}
 
-    virtual void onMarkCTM(const char*) {}
     virtual void didConcat44(const SkM44&) {}
     virtual void didSetM44(const SkM44&) {}
     virtual void didTranslate(SkScalar, SkScalar) {}
@@ -2336,8 +2327,6 @@ private:
     SkDeque     fMCStack;
     // points to top of stack
     MCRec*      fMCRec;
-
-    sk_sp<SkMarkerStack> fMarkerStack;
 
     // the first N recs that can fit here mean we won't call malloc
     static constexpr int kMCRecSize      = 96; // most recent measurement
