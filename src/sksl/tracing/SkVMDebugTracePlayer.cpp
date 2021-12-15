@@ -15,13 +15,24 @@ void SkVMDebugTracePlayer::reset(sk_sp<SkVMDebugTrace> debugTrace) {
     fCursor = 0;
     fSlots.clear();
     fSlots.resize(nslots);
+    fWriteTime.clear();
+    fWriteTime.resize(nslots);
     fStack.clear();
     fStack.push_back({/*fFunction=*/-1,
                       /*fLine=*/-1,
                       /*fDisplayMask=*/SkBitSet(nslots)});
+    fDirtyMask.emplace(nslots);
+    fReturnValues.emplace(nslots);
+
+    for (size_t slotIdx = 0; slotIdx < nslots; ++slotIdx) {
+        if (fDebugTrace->fSlotInfo[slotIdx].fnReturnValue >= 0) {
+            fReturnValues->set(slotIdx);
+        }
+    }
 }
 
 void SkVMDebugTracePlayer::step() {
+    this->tidy();
     while (!this->traceHasCompleted()) {
         if (this->execute(fCursor++)) {
             break;
@@ -30,6 +41,7 @@ void SkVMDebugTracePlayer::step() {
 }
 
 void SkVMDebugTracePlayer::stepOver() {
+    this->tidy();
     size_t initialStackDepth = fStack.size();
     while (!this->traceHasCompleted()) {
         bool canEscapeFromThisStackDepth = (fStack.size() <= initialStackDepth);
@@ -37,6 +49,26 @@ void SkVMDebugTracePlayer::stepOver() {
             break;
         }
     }
+}
+
+void SkVMDebugTracePlayer::stepOut() {
+    this->tidy();
+    size_t initialStackDepth = fStack.size();
+    while (!this->traceHasCompleted()) {
+        if (this->execute(fCursor++) && (fStack.size() < initialStackDepth)) {
+            break;
+        }
+    }
+}
+
+void SkVMDebugTracePlayer::tidy() {
+    fDirtyMask->reset();
+
+    // Conceptually this is `fStack.back().fDisplayMask &= ~fReturnValues`, but SkBitSet doesn't
+    // support masking one set of bits against another.
+    fReturnValues->forEachSetIndex([&](int slot) {
+        fStack.back().fDisplayMask.reset(slot);
+    });
 }
 
 bool SkVMDebugTracePlayer::traceHasCompleted() const {
@@ -69,7 +101,11 @@ std::vector<SkVMDebugTracePlayer::VariableData> SkVMDebugTracePlayer::getVariabl
 
     std::vector<VariableData> vars;
     bits.forEachSetIndex([&](int slot) {
-        vars.push_back({slot, fSlots[slot]});
+        vars.push_back({slot, fDirtyMask->test(slot), fSlots[slot]});
+    });
+    // Order the variable list so that the most recently-written variables are shown at the top.
+    std::stable_sort(vars.begin(), vars.end(), [&](const VariableData& a, const VariableData& b) {
+        return fWriteTime[a.fSlotIndex] > fWriteTime[b.fSlotIndex];
     });
     return vars;
 }
@@ -91,6 +127,19 @@ std::vector<SkVMDebugTracePlayer::VariableData> SkVMDebugTracePlayer::getGlobalV
         return {};
     }
     return this->getVariablesForDisplayMask(fStack.front().fDisplayMask);
+}
+
+void SkVMDebugTracePlayer::updateVariableWriteTime(int slotIdx, size_t cursor) {
+    // The slotIdx could point to any slot within a variable.
+    // We want to update the write time on EVERY slot associated with this variable.
+    // The SlotInfo gives us enough information to find the affected range.
+    const SkSL::SkVMSlotInfo& changedSlot = fDebugTrace->fSlotInfo[slotIdx];
+    slotIdx -= changedSlot.componentIndex;
+    int lastSlotIdx = slotIdx + (changedSlot.columns * changedSlot.rows);
+
+    for (; slotIdx < lastSlotIdx; ++slotIdx) {
+        fWriteTime[slotIdx] = cursor;
+    }
 }
 
 bool SkVMDebugTracePlayer::execute(size_t position) {
@@ -115,6 +164,7 @@ bool SkVMDebugTracePlayer::execute(size_t position) {
             SkASSERT(slot >= 0);
             SkASSERT((size_t)slot < fDebugTrace->fSlotInfo.size());
             fSlots[slot] = value;
+            this->updateVariableWriteTime(slot, position);
             if (fDebugTrace->fSlotInfo[slot].fnReturnValue < 0) {
                 // Normal variables are associated with the current function.
                 SkASSERT(fStack.size() > 0);
@@ -125,6 +175,7 @@ bool SkVMDebugTracePlayer::execute(size_t position) {
                 SkASSERT(fStack.size() > 1);
                 fStack.rbegin()[1].fDisplayMask.set(slot);
             }
+            fDirtyMask->set(slot);
             break;
         }
         case SkVMTraceInfo::Op::kEnter: { // data: function index, (unused)
