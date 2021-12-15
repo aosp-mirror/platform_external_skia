@@ -70,34 +70,11 @@ static std::string make_vars_string(
         }
 
         const SkSL::SkVMSlotInfo& slot = trace.fSlotInfo[var.fSlotIndex];
+        text += var.fDirty ? "##": "";
         text += slot.name;
-        text += ":";
-        text += std::to_string(slot.componentIndex);
+        text += trace.getSlotComponentSuffix(var.fSlotIndex);
         text += " = ";
-
-        switch (slot.numberKind) {
-            default:
-                text += "???";
-                break;
-            case SkSL::Type::NumberKind::kSigned:
-                text += std::to_string(var.fValue);
-                break;
-            case SkSL::Type::NumberKind::kBoolean:
-                text += var.fValue ? "true" : "false";
-                break;
-            case SkSL::Type::NumberKind::kUnsigned: {
-                uint32_t uintValue;
-                memcpy(&uintValue, &var.fValue, sizeof(uint32_t));
-                text += std::to_string(uintValue);
-                break;
-            }
-            case SkSL::Type::NumberKind::kFloat: {
-                float floatValue;
-                memcpy(&floatValue, &var.fValue, sizeof(float));
-                text += std::to_string(floatValue);
-                break;
-            }
-        }
+        text += trace.getSlotValue(var.fSlotIndex, var.fValue);
     }
 
     return text;
@@ -151,7 +128,7 @@ int main() {       // Line 2
     REPORTER_ASSERT(r, player.traceHasCompleted());
     REPORTER_ASSERT(r, player.getCurrentLine() == -1);
     REPORTER_ASSERT(r, player.getCallStack().empty());
-    REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "[main].result:0 = 4");
+    REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "##[main].result = 4");
 }
 
 DEF_TEST(SkSLTracePlayerReset, r) {
@@ -228,7 +205,7 @@ int main() {                    // Line 8
     REPORTER_ASSERT(r, player.traceHasCompleted());
     REPORTER_ASSERT(r, player.getCurrentLine() == -1);
     REPORTER_ASSERT(r, player.getCallStack().empty());
-    REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "[main].result:0 = 4");
+    REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "##[main].result = 4");
 
     // Watch the stack grow and shrink as single-step.
     player.reset(trace);
@@ -250,25 +227,25 @@ int main() {                    // Line 8
     player.step();
 
     REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main() -> int fnA()");
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "[fnB].result:0 = 4");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##[fnB].result = 4");
     REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "");
     player.step();
 
     REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main()");
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "[fnA].result:0 = 4");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##[fnA].result = 4");
     REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "");
 
     player.step();
     REPORTER_ASSERT(r, player.traceHasCompleted());
-    REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "[main].result:0 = 4");
+    REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "##[main].result = 4");
 }
 
 DEF_TEST(SkSLTracePlayerVariables, r) {
     sk_sp<SkSL::SkVMDebugTrace> trace = make_trace(r,
 R"(                                   // Line 1
-void func() {                         // Line 2
-    int z = 456;                      // Line 3
-    return;                           // Line 4
+float func() {                        // Line 2
+    float z = 456;                    // Line 3
+    return z;                         // Line 4
 }                                     // Line 5
 int main() {                          // Line 6
     int a = 123;                      // Line 7
@@ -291,53 +268,54 @@ int main() {                          // Line 6
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 8);
     REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main()");
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "a:0 = 123");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##a = 123");
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 9);
     REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main()");
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "a:0 = 123, b:0 = true");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##b = true, a = 123");
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 3);
-    REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main() -> void func()");
+    REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main() -> float func()");
     REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "");
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 4);
-    REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main() -> void func()");
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "z:0 = 456");
+    REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main() -> float func()");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##z = 456");
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 9);
     REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main()");
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "a:0 = 123, b:0 = true");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) ==
+                       "##[func].result = 456, b = true, a = 123");
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 10);
     REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main()");
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "a:0 = 123, b:0 = true");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "b = true, a = 123");
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 11);
     REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main()");
     REPORTER_ASSERT(r, make_local_vars_string(*trace, player) ==
-                    "a:0 = 123, b:0 = true, c:0 = 0.000000, c:1 = 0.500000, "
-                    "c:2 = 1.000000, c:3 = -1.000000");
+                       "##c.x = 0, ##c.y = 0.5, ##c.z = 1, ##c.w = -1, b = true, a = 123");
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 12);
     REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main()");
     REPORTER_ASSERT(r, make_local_vars_string(*trace, player) ==
-                    "a:0 = 123, b:0 = true, c:0 = 0.000000, c:1 = 0.500000, c:2 = "
-                    "1.000000, c:3 = -1.000000, d:0 = 2.000000, d:1 = 0.000000, d:2 = "
-                    "0.000000, d:3 = 0.000000, d:4 = 2.000000, d:5 = 0.000000, d:6 = "
-                    "0.000000, d:7 = 0.000000, d:8 = 2.000000");
+                       "##d[0][0] = 2, ##d[0][1] = 0, ##d[0][2] = 0, "
+                       "##d[1][0] = 0, ##d[1][1] = 2, ##d[1][2] = 0, "
+                       "##d[2][0] = 0, ##d[2][1] = 0, ##d[2][2] = 2, "
+                       "c.x = 0, c.y = 0.5, c.z = 1, c.w = -1, b = true, a = 123");
+
 
     player.step();
     REPORTER_ASSERT(r, player.traceHasCompleted());
     REPORTER_ASSERT(r, make_stack_string(*trace, player) == "");
-    REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "[main].result:0 = 123");
+    REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "##[main].result = 123");
 }
 
 DEF_TEST(SkSLTracePlayerIfStatement, r) {
@@ -368,29 +346,29 @@ int main() {      // Line 2
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 4);
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val:0 = 0");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##val = 0");
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 5);
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val:0 = 0");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val = 0");
     player.step();
 
     // We skip over the false-branch.
     REPORTER_ASSERT(r, player.getCurrentLine() == 9);
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val:0 = 1");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##val = 1");
     player.step();
 
     // We skip over the true-branch.
     REPORTER_ASSERT(r, player.getCurrentLine() == 12);
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val:0 = 1");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val = 1");
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 14);
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val:0 = 4");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##val = 4");
     player.step();
 
     REPORTER_ASSERT(r, player.traceHasCompleted());
-    REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "[main].result:0 = 4");
+    REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "##[main].result = 4");
 }
 
 DEF_TEST(SkSLTracePlayerForLoop, r) {
@@ -414,29 +392,78 @@ int main() {                       // Line 2
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 4);
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val:0 = 0");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##val = 0");
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 5);
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val:0 = 0, x:0 = 1");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##x = 1, val = 0");
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 4);
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val:0 = 1, x:0 = 1");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##val = 1, x = 1");
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 5);
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val:0 = 1, x:0 = 2");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##x = 2, val = 1");
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 4);
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val:0 = 2, x:0 = 2");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##val = 2, x = 2");
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 7);
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val:0 = 2, x:0 = 2");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val = 2, x = 2");
     player.step();
 
     REPORTER_ASSERT(r, player.traceHasCompleted());
-    REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "[main].result:0 = 2");
+    REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "##[main].result = 2");
+}
+
+DEF_TEST(SkSLTracePlayerStepOut, r) {
+    sk_sp<SkSL::SkVMDebugTrace> trace = make_trace(r,
+R"(               // Line 1
+int fn() {        // Line 2
+    int a = 11;   // Line 3
+    int b = 22;   // Line 4
+    int c = 33;   // Line 5
+    int d = 44;   // Line 6
+    return d;     // Line 7
+}                 // Line 8
+int main() {      // Line 9
+    return fn();  // Line 10
+}                 // Line 11
+)");
+    SkSL::SkVMDebugTracePlayer player;
+    player.reset(trace);
+    player.step();
+
+    // We should now be inside main.
+    REPORTER_ASSERT(r, player.getCurrentLine() == 10);
+    REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main()");
+    player.step();
+
+    // We should now be inside fn.
+    REPORTER_ASSERT(r, player.getCurrentLine() == 3);
+    REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main() -> int fn()");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "");
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 4);
+    REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main() -> int fn()");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##a = 11");
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 5);
+    REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main() -> int fn()");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##b = 22, a = 11");
+    player.stepOut();
+
+    // We should now be back inside main(), right where we left off.
+    REPORTER_ASSERT(r, player.getCurrentLine() == 10);
+    REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main()");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##[fn].result = 44");
+    player.stepOut();
+
+    REPORTER_ASSERT(r, player.traceHasCompleted());
+    REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "##[main].result = 44");
 }

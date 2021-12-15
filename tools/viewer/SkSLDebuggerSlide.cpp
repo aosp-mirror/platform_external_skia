@@ -1,9 +1,9 @@
 /*
-* Copyright 2021 Google LLC
-*
-* Use of this source code is governed by a BSD-style license that can be
-* found in the LICENSE file.
-*/
+ * Copyright 2021 Google LLC
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 
 #include "tools/viewer/SkSLDebuggerSlide.h"
 
@@ -44,6 +44,7 @@ void SkSLDebuggerSlide::showLoadTraceGUI() {
             // Trace loaded successfully. On the next refresh, the user will see the debug UI.
             fPlayer.reset(fTrace);
             fPlayer.step();
+            fRefresh = true;
             return;
         }
     }
@@ -70,18 +71,152 @@ void SkSLDebuggerSlide::showLoadTraceGUI() {
 void SkSLDebuggerSlide::showDebuggerGUI() {
     if (ImGui::Button("Step")) {
         fPlayer.step();
+        fRefresh = true;
     }
     ImGui::SameLine();
     if (ImGui::Button("Step Over")) {
         fPlayer.stepOver();
+        fRefresh = true;
     }
-    for (size_t line = 0; line < fTrace->fSource.size(); ++line) {
-        size_t humanReadableLine = line + 1;
-        bool isCurrentLine = (fPlayer.getCurrentLine() == (int)humanReadableLine);
-        ImGui::Text("%s%03zu %s",
-                    isCurrentLine ? "-> " : "   ",
-                    humanReadableLine,
-                    fTrace->fSource[line].c_str());
+    ImGui::SameLine();
+    if (ImGui::Button("Step Out")) {
+        fPlayer.stepOut();
+        fRefresh = true;
+    }
+
+    this->showStackTraceTable();
+    this->showVariableTable();
+    this->showCodeTable();
+}
+
+void SkSLDebuggerSlide::showCodeTable() {
+    constexpr ImGuiTableFlags kTableFlags =
+            ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
+            ImGuiTableFlags_BordersV;
+    constexpr ImGuiTableColumnFlags kColumnFlags =
+            ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_NoReorder |
+            ImGuiTableColumnFlags_NoHide | ImGuiTableColumnFlags_NoSort |
+            ImGuiTableColumnFlags_NoHeaderLabel;
+
+    ImVec2 contentRect = ImGui::GetContentRegionAvail();
+    ImVec2 codeViewSize = ImVec2(0.0f, contentRect.y);
+    if (ImGui::BeginTable("Code View", /*column=*/2, kTableFlags, codeViewSize)) {
+        ImGui::TableSetupColumn("", kColumnFlags | ImGuiTableColumnFlags_WidthFixed);
+        ImGui::TableSetupColumn("Code", kColumnFlags | ImGuiTableColumnFlags_WidthStretch);
+
+        ImGuiListClipper clipper;
+        clipper.Begin(fTrace->fSource.size());
+        while (clipper.Step()) {
+            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
+                size_t humanReadableLine = row + 1;
+
+                ImGui::TableNextRow();
+                if (fPlayer.getCurrentLine() == (int)humanReadableLine) {
+                    ImGui::TableSetBgColor(
+                            ImGuiTableBgTarget_RowBg1,
+                            ImGui::GetColorU32(ImGui::GetStyleColorVec4(ImGuiCol_TextSelectedBg)));
+                }
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Text("%03zu ", humanReadableLine);
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text("%s", fTrace->fSource[row].c_str());
+            }
+        }
+
+        if (fRefresh) {
+            int linesVisible = contentRect.y / ImGui::GetTextLineHeightWithSpacing();
+            int centerLine = (fPlayer.getCurrentLine() - 1) - (linesVisible / 2);
+            centerLine = std::max(0, centerLine);
+            ImGui::SetScrollY(clipper.ItemsHeight * centerLine);
+            fRefresh = false;
+        }
+
+        ImGui::EndTable();
+    }
+}
+
+void SkSLDebuggerSlide::showStackTraceTable() {
+    constexpr ImGuiTableFlags kTableFlags =
+            ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
+            ImGuiTableFlags_BordersV | ImGuiTableFlags_NoHostExtendX;
+    constexpr ImGuiTableColumnFlags kColumnFlags =
+            ImGuiTableColumnFlags_NoReorder | ImGuiTableColumnFlags_NoHide |
+            ImGuiTableColumnFlags_NoSort;
+
+    std::vector<int> callStack = fPlayer.getCallStack();
+
+    ImVec2 contentRect = ImGui::GetContentRegionAvail();
+    ImVec2 stackViewSize = ImVec2(contentRect.x / 3.0f,
+                                  ImGui::GetTextLineHeightWithSpacing() * kNumTopRows);
+    if (ImGui::BeginTable("Call Stack", /*column=*/1, kTableFlags, stackViewSize)) {
+        ImGui::TableSetupColumn("Stack", kColumnFlags);
+        ImGui::TableHeadersRow();
+
+        ImGuiListClipper clipper;
+        clipper.Begin(callStack.size());
+        while (clipper.Step()) {
+            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
+                int funcIdx = callStack.rbegin()[row];
+                SkASSERT(funcIdx >= 0 && (size_t)funcIdx < fTrace->fFuncInfo.size());
+                const SkSL::SkVMFunctionInfo& funcInfo = fTrace->fFuncInfo[funcIdx];
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Text("%s", funcInfo.name.c_str());
+            }
+        }
+        ImGui::EndTable();
+    }
+
+    ImGui::SameLine();
+}
+
+void SkSLDebuggerSlide::showVariableTable() {
+    constexpr ImGuiTableFlags kTableFlags =
+            ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter |
+            ImGuiTableFlags_BordersV | ImGuiTableFlags_Resizable;
+    constexpr ImGuiTableColumnFlags kColumnFlags =
+            ImGuiTableColumnFlags_NoReorder | ImGuiTableColumnFlags_NoHide |
+            ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_WidthStretch;
+
+    int frame = fPlayer.getStackDepth() - 1;
+    std::vector<SkSL::SkVMDebugTracePlayer::VariableData> vars;
+    if (frame >= 0) {
+        vars = fPlayer.getLocalVariables(frame);
+    } else {
+        vars = fPlayer.getGlobalVariables();
+    }
+    if (vars.empty()) {
+        return;
+    }
+    ImVec2 varViewSize = ImVec2(0.0f, ImGui::GetTextLineHeightWithSpacing() * kNumTopRows);
+    if (ImGui::BeginTable("Variables", /*column=*/2, kTableFlags, varViewSize)) {
+        ImGui::TableSetupColumn("Variable", kColumnFlags);
+        ImGui::TableSetupColumn("Value", kColumnFlags);
+        ImGui::TableHeadersRow();
+
+        ImGuiListClipper clipper;
+        clipper.Begin(vars.size());
+        while (clipper.Step()) {
+            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
+                const SkSL::SkVMDebugTracePlayer::VariableData& var = vars.at(row);
+                SkASSERT(var.fSlotIndex >= 0 && (size_t)var.fSlotIndex < fTrace->fSlotInfo.size());
+                const SkSL::SkVMSlotInfo& slotInfo = fTrace->fSlotInfo[var.fSlotIndex];
+
+                ImGui::TableNextRow();
+                if (var.fDirty) {
+                    // Highlight recently-changed variables.
+                    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1,
+                                           ImGui::GetColorU32(ImVec4{0.0f, 1.0f, 0.0f, 0.20f}));
+                }
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Text("%s%s", slotInfo.name.c_str(),
+                                    fTrace->getSlotComponentSuffix(var.fSlotIndex).c_str());
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text("%s", fTrace->getSlotValue(var.fSlotIndex, var.fValue).c_str());
+            }
+        }
+        ImGui::EndTable();
     }
 }
 
