@@ -110,6 +110,7 @@ int main() {       // Line 2
     REPORTER_ASSERT(r, !player.traceHasCompleted());
     REPORTER_ASSERT(r, player.getCallStack().empty());
     REPORTER_ASSERT(r, player.getGlobalVariables().empty());
+    REPORTER_ASSERT(r, player.getLineNumbersReached() == std::unordered_set<int>{3});
 
     player.step();
 
@@ -189,6 +190,7 @@ int main() {                    // Line 8
     REPORTER_ASSERT(r, !player.traceHasCompleted());
     REPORTER_ASSERT(r, player.getCallStack().empty());
     REPORTER_ASSERT(r, player.getGlobalVariables().empty());
+    REPORTER_ASSERT(r, (player.getLineNumbersReached() == std::unordered_set<int>{3, 6, 9}));
 
     player.step();
 
@@ -259,6 +261,8 @@ int main() {                          // Line 6
     SkSL::SkVMDebugTracePlayer player;
     player.reset(trace);
 
+    REPORTER_ASSERT(r, (player.getLineNumbersReached() ==
+                            std::unordered_set<int>{3, 4, 7, 8, 9, 10, 11, 12}));
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 7);
@@ -320,25 +324,29 @@ int main() {                          // Line 6
 
 DEF_TEST(SkSLTracePlayerIfStatement, r) {
     sk_sp<SkSL::SkVMDebugTrace> trace = make_trace(r,
-R"(               // Line 1
-int main() {      // Line 2
-    int val;      // Line 3
-    if (true) {   // Line 4
-        val = 1;  // Line 5
-    } else {      // Line 6
-        val = 2;  // Line 7
-    }             // Line 8
-    if (false) {  // Line 9
-        val = 3;  // Line 10
-    } else {      // Line 11
-        val = 4;  // Line 12
-    }             // Line 13
-    return val;   // Line 14
-}                 // Line 15
+R"(                   // Line 1
+int main() {          // Line 2
+    int val;          // Line 3
+    if (true) {       // Line 4
+        int temp = 1; // Line 5
+        val = temp;   // Line 6
+    } else {          // Line 7
+        val = 2;      // Line 8
+    }                 // Line 9
+    if (false) {      // Line 10
+        int temp = 3; // Line 11
+        val = temp;   // Line 12
+    } else {          // Line 13
+        val = 4;      // Line 14
+    }                 // Line 15
+    return val;       // Line 16
+}                     // Line 17
 )");
     SkSL::SkVMDebugTracePlayer player;
     player.reset(trace);
 
+    REPORTER_ASSERT(r, (player.getLineNumbersReached() ==
+                            std::unordered_set<int>{3, 4, 5, 6, 10, 14, 16}));
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 3);
@@ -353,17 +361,21 @@ int main() {      // Line 2
     REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val = 0");
     player.step();
 
+    REPORTER_ASSERT(r, player.getCurrentLine() == 6);
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##temp = 1, val = 0");
+    player.step();
+
     // We skip over the false-branch.
-    REPORTER_ASSERT(r, player.getCurrentLine() == 9);
+    REPORTER_ASSERT(r, player.getCurrentLine() == 10);
     REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##val = 1");
     player.step();
 
     // We skip over the true-branch.
-    REPORTER_ASSERT(r, player.getCurrentLine() == 12);
+    REPORTER_ASSERT(r, player.getCurrentLine() == 14);
     REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val = 1");
     player.step();
 
-    REPORTER_ASSERT(r, player.getCurrentLine() == 14);
+    REPORTER_ASSERT(r, player.getCurrentLine() == 16);
     REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##val = 4");
     player.step();
 
@@ -385,6 +397,7 @@ int main() {                       // Line 2
     SkSL::SkVMDebugTracePlayer player;
     player.reset(trace);
 
+    REPORTER_ASSERT(r, (player.getLineNumbersReached() == std::unordered_set<int>{3, 4, 5, 7}));
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 3);
@@ -412,7 +425,7 @@ int main() {                       // Line 2
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 7);
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val = 2, x = 2");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "val = 2");
     player.step();
 
     REPORTER_ASSERT(r, player.traceHasCompleted());
@@ -435,6 +448,8 @@ int main() {      // Line 9
 )");
     SkSL::SkVMDebugTracePlayer player;
     player.reset(trace);
+    REPORTER_ASSERT(r, (player.getLineNumbersReached() ==
+                            std::unordered_set<int>{3, 4, 5, 6, 7, 10}));
     player.step();
 
     // We should now be inside main.
@@ -466,4 +481,79 @@ int main() {      // Line 9
 
     REPORTER_ASSERT(r, player.traceHasCompleted());
     REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "##[main].result = 44");
+}
+
+
+DEF_TEST(SkSLTracePlayerVariableScope, r) {
+    sk_sp<SkSL::SkVMDebugTrace> trace = make_trace(r,
+R"(                         // Line 1
+int main() {                // Line 2
+    int a = 1;              // Line 3
+    {                       // Line 4
+        int b = 2;          // Line 5
+        {                   // Line 6
+            int c = 3;      // Line 7
+        }                   // Line 8
+        int d = 4;          // Line 9
+    }                       // Line 10
+    int e = 5;              // Line 11
+    {                       // Line 12
+        int f = 6;          // Line 13
+        {                   // Line 14
+            int g = 7;      // Line 15
+        }                   // Line 16
+        int h = 8;          // Line 17
+    }                       // Line 18
+    int i = 9;              // Line 19
+    return 0;               // Line 20
+}
+)");
+    SkSL::SkVMDebugTracePlayer player;
+    player.reset(trace);
+    REPORTER_ASSERT(r, (player.getLineNumbersReached() ==
+                            std::unordered_set<int>{3, 5, 7, 9, 11, 13, 15, 17, 19, 20}));
+    player.step();
+
+    // We should now be inside main.
+    REPORTER_ASSERT(r, player.getCurrentLine() == 3);
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "");
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 5);
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##a = 1");
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 7);
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##b = 2, a = 1");
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 9);
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "b = 2, a = 1");
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 11);
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "a = 1");
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 13);
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##e = 5, a = 1");
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 15);
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##f = 6, e = 5, a = 1");
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 17);
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "f = 6, e = 5, a = 1");
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 19);
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "e = 5, a = 1");
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 20);
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##i = 9, e = 5, a = 1");
+    player.step();
+
+    REPORTER_ASSERT(r, player.traceHasCompleted());
 }

@@ -117,7 +117,11 @@ void SkSLDebuggerSlide::showCodeTable() {
                             ImGui::GetColorU32(ImGui::GetStyleColorVec4(ImGuiCol_TextSelectedBg)));
                 }
                 ImGui::TableSetColumnIndex(0);
-                ImGui::Text("%03zu ", humanReadableLine);
+                ImVec4 color = ImVec4(1.0f, 1.0f, 1.0f, 0.75f);
+                if (!fPlayer.getLineNumbersReached().count(humanReadableLine)) {
+                    color.w = 0.25f;
+                }
+                ImGui::TextColored(color, "%03zu ", humanReadableLine);
                 ImGui::TableSetColumnIndex(1);
                 ImGui::Text("%s", fTrace->fSource[row].c_str());
             }
@@ -186,34 +190,33 @@ void SkSLDebuggerSlide::showVariableTable() {
     } else {
         vars = fPlayer.getGlobalVariables();
     }
-    if (vars.empty()) {
-        return;
-    }
     ImVec2 varViewSize = ImVec2(0.0f, ImGui::GetTextLineHeightWithSpacing() * kNumTopRows);
     if (ImGui::BeginTable("Variables", /*column=*/2, kTableFlags, varViewSize)) {
         ImGui::TableSetupColumn("Variable", kColumnFlags);
         ImGui::TableSetupColumn("Value", kColumnFlags);
         ImGui::TableHeadersRow();
+        if (!vars.empty()) {
+            ImGuiListClipper clipper;
+            clipper.Begin(vars.size());
+            while (clipper.Step()) {
+                for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
+                    const SkSL::SkVMDebugTracePlayer::VariableData& var = vars.at(row);
+                    SkASSERT(var.fSlotIndex >= 0);
+                    SkASSERT((size_t)var.fSlotIndex < fTrace->fSlotInfo.size());
+                    const SkSL::SkVMSlotInfo& slotInfo = fTrace->fSlotInfo[var.fSlotIndex];
 
-        ImGuiListClipper clipper;
-        clipper.Begin(vars.size());
-        while (clipper.Step()) {
-            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
-                const SkSL::SkVMDebugTracePlayer::VariableData& var = vars.at(row);
-                SkASSERT(var.fSlotIndex >= 0 && (size_t)var.fSlotIndex < fTrace->fSlotInfo.size());
-                const SkSL::SkVMSlotInfo& slotInfo = fTrace->fSlotInfo[var.fSlotIndex];
-
-                ImGui::TableNextRow();
-                if (var.fDirty) {
-                    // Highlight recently-changed variables.
-                    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1,
-                                           ImGui::GetColorU32(ImVec4{0.0f, 1.0f, 0.0f, 0.20f}));
+                    ImGui::TableNextRow();
+                    if (var.fDirty) {
+                        // Highlight recently-changed variables.
+                        ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1,
+                                               ImGui::GetColorU32(ImVec4{0.0f, 1.0f, 0.0f, 0.20f}));
+                    }
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::Text("%s%s", slotInfo.name.c_str(),
+                                        fTrace->getSlotComponentSuffix(var.fSlotIndex).c_str());
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::Text("%s", fTrace->getSlotValue(var.fSlotIndex, var.fValue).c_str());
                 }
-                ImGui::TableSetColumnIndex(0);
-                ImGui::Text("%s%s", slotInfo.name.c_str(),
-                                    fTrace->getSlotComponentSuffix(var.fSlotIndex).c_str());
-                ImGui::TableSetColumnIndex(1);
-                ImGui::Text("%s", fTrace->getSlotValue(var.fSlotIndex, var.fValue).c_str());
             }
         }
         ImGui::EndTable();
