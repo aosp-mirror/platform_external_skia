@@ -11,12 +11,12 @@ vars = {
 
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/src/buildtools.git@b138e6ce86ae843c42a1a08f37903207bebcca75",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@bfc7f09ae9e745f339c7a6fbfbef93efe849849d",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@6706799186683dd3733c4610de09d84721aa08c8",
   "third_party/externals/brotli"          : "https://skia.googlesource.com/external/github.com/google/brotli.git@e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, tint for SPIRV compilation, and abseil for string formatting.
   # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
-  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@f7b0c28f171db545341bbc93b070cd91008c0722",
+  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@874c6cfd7e56b3ab13254a6c713669f8f7e95ab3",
   "third_party/externals/jinja2"          : "https://chromium.googlesource.com/chromium/src/third_party/jinja2@ee69aa00ee8536f61db6a451f3858745cf587de6",
   "third_party/externals/markupsafe"      : "https://chromium.googlesource.com/chromium/src/third_party/markupsafe@0944e71f4b2cb9a871bcbe353f95e889b64a611a",
   "third_party/externals/tint"            : "https://dawn.googlesource.com/tint@9360046a86f67db1794f05ad33655e3305bfa695",
@@ -46,7 +46,7 @@ deps = {
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@c876c8f87101c5a75f6014b0f832499afeb65b73",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@c44d568ff2c8bf46a41d3321558d94bacb4a0a50",
+    "url": "https://chromium.googlesource.com/chromium/src.git@7eb19998e7ab6a6c6a9f07398d9216f6ec41d6d0",
     "condition": "checkout_chromium",
   },
 
