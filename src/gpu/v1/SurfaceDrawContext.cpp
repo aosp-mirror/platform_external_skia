@@ -18,6 +18,7 @@
 #include "include/utils/SkShadowUtils.h"
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkConvertPixels.h"
+#include "src/core/SkCustomMeshPriv.h"
 #include "src/core/SkDrawProcs.h"
 #include "src/core/SkDrawShadowInfo.h"
 #include "src/core/SkGlyphRunPainter.h"
@@ -30,6 +31,7 @@
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrClip.h"
 #include "src/gpu/GrColor.h"
+#include "src/gpu/GrColorSpaceXform.h"
 #include "src/gpu/GrDataUtils.h"
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrDrawingManager.h"
@@ -55,6 +57,7 @@
 #include "src/gpu/geometry/GrStyledShape.h"
 #include "src/gpu/ops/ClearOp.h"
 #include "src/gpu/ops/DrawAtlasOp.h"
+#include "src/gpu/ops/DrawCustomMeshOp.h"
 #include "src/gpu/ops/DrawVerticesOp.h"
 #include "src/gpu/ops/DrawableOp.h"
 #include "src/gpu/ops/FillRRectOp.h"
@@ -949,6 +952,33 @@ void SurfaceDrawContext::drawVertices(const GrClip* clip,
                                           aaType,
                                           this->colorInfo().refColorSpaceXformFromSRGB(),
                                           overridePrimType);
+    this->addDrawOp(clip, std::move(op));
+}
+
+void SurfaceDrawContext::drawCustomMesh(const GrClip* clip,
+                                        GrPaint&& paint,
+                                        const SkMatrixProvider& matrixProvider,
+                                        SkCustomMesh cm) {
+    ASSERT_SINGLE_OWNER
+    RETURN_IF_ABANDONED
+    SkDEBUGCODE(this->validate();)
+    GR_CREATE_TRACE_MARKER_CONTEXT("SurfaceDrawContext", "drawVertices", fContext);
+
+    AutoCheckFlush acf(this->drawingManager());
+
+    SkASSERT(SkValidateCustomMesh(cm));
+
+    auto xform = GrColorSpaceXform::Make(SkCustomMeshSpecificationPriv::ColorSpace(*cm.spec),
+                                         SkCustomMeshSpecificationPriv::AlphaType(*cm.spec),
+                                         this->colorInfo().colorSpace(),
+                                         this->colorInfo().alphaType());
+    GrAAType aaType = fCanUseDynamicMSAA ? GrAAType::kMSAA : this->chooseAAType(GrAA::kNo);
+    GrOp::Owner op = DrawCustomMeshOp::Make(fContext,
+                                            std::move(paint),
+                                            std::move(cm),
+                                            matrixProvider,
+                                            aaType,
+                                            std::move(xform));
     this->addDrawOp(clip, std::move(op));
 }
 
