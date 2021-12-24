@@ -101,7 +101,6 @@ cc_defaults {
     local_include_dirs: [
         "",
         "include/third_party/skcms",
-        "third_party/libgifcodec/",
     ],
 
     arch: {
@@ -967,6 +966,7 @@ cc_library_static {
         "src/codec/SkSwizzler.cpp",
         "src/codec/SkWbmpCodec.cpp",
         "src/codec/SkWebpCodec.cpp",
+        "src/codec/SkWuffsCodec.cpp",
         "src/core/SkAAClip.cpp",
         "src/core/SkATrace.cpp",
         "src/core/SkAlphaRuns.cpp",
@@ -1435,8 +1435,6 @@ cc_library_static {
         "src/xml/SkDOM.cpp",
         "src/xml/SkXMLParser.cpp",
         "src/xml/SkXMLWriter.cpp",
-        "third_party/libgifcodec/SkGifImageReader.cpp",
-        "third_party/libgifcodec/SkLibGifCodec.cpp",
         "third_party/skcms/skcms.cc",
     ],
 
@@ -1870,6 +1868,7 @@ cc_defaults {
         "libwebp-decode",
         "libwebp-encode",
         "libsfntly",
+        "libwuffs_mirror_release_c",
     ],
     target: {
       android: {
@@ -1937,7 +1936,6 @@ cc_test {
         "modules/skottie/include/",
         "modules/skottie/utils/",
         "modules/svg/include/",
-        "third_party/libgifcodec/",
     ],
 
     srcs: [
@@ -3021,7 +3019,6 @@ cc_test {
         "modules/skparagraph/utils/",
         "modules/skshaper/include/",
         "modules/svg/include/",
-        "third_party/libgifcodec/",
     ],
 
     srcs: [

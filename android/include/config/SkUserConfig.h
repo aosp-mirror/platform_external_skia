@@ -63,12 +63,12 @@
 #define SK_HAS_HEIF_LIBRARY
 #endif
 
-#ifndef SK_SUPPORT_PDF
-#define SK_SUPPORT_PDF
+#ifndef SK_HAS_WUFFS_LIBRARY
+#define SK_HAS_WUFFS_LIBRARY
 #endif
 
-#ifndef SK_USE_LIBGIFCODEC
-#define SK_USE_LIBGIFCODEC
+#ifndef SK_SUPPORT_PDF
+#define SK_SUPPORT_PDF
 #endif
 
 #ifndef SK_USE_VMA
