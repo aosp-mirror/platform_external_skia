@@ -23,6 +23,10 @@
 #define SK_HAS_ANDROID_CODEC
 #endif
 
+#ifndef SK_IN_RENDERENGINE
+#define SK_IN_RENDERENGINE
+#endif
+
 #ifndef SK_USE_VMA
 #define SK_USE_VMA
 #endif
