@@ -39,22 +39,35 @@ static bool has_main(const SkSL::Program& p) {
     return false;
 }
 
-static SkCustomMeshSpecificationPriv::ColorType color_type(const SkSL::Program& fsProgram) {
+using ColorType = SkCustomMeshSpecificationPriv::ColorType;
+
+static std::tuple<ColorType, bool>
+get_fs_color_type_and_local_coords(const SkSL::Program& fsProgram) {
     for (const SkSL::ProgramElement* elem : fsProgram.elements()) {
         if (elem->is<SkSL::FunctionDefinition>()) {
             const SkSL::FunctionDefinition& defn = elem->as<SkSL::FunctionDefinition>();
             const SkSL::FunctionDeclaration& decl = defn.declaration();
             if (decl.isMain()) {
+
+                SkCustomMeshSpecificationPriv::ColorType ct;
                 SkASSERT(decl.parameters().size() == 1 || decl.parameters().size() == 2);
                 if (decl.parameters().size() == 1) {
-                    return SkCustomMeshSpecificationPriv::ColorType::kNone;
+                    ct = ColorType::kNone;
+                } else {
+                    const SkSL::Type& paramType = decl.parameters()[1]->type();
+                    SkASSERT(paramType.matches(*fsProgram.fContext->fTypes.fHalf4) ||
+                             paramType.matches(*fsProgram.fContext->fTypes.fFloat4));
+                    ct = paramType.matches(*fsProgram.fContext->fTypes.fHalf4)
+                                 ? ColorType::kHalf4
+                                 : ColorType::kFloat4;
                 }
-                const SkSL::Type& type = decl.parameters()[1]->type();
-                SkASSERT(type == *fsProgram.fContext->fTypes.fHalf4 ||
-                         type == *fsProgram.fContext->fTypes.fFloat4);
-                return type == *fsProgram.fContext->fTypes.fHalf4
-                               ? SkCustomMeshSpecificationPriv::ColorType::kHalf4
-                               : SkCustomMeshSpecificationPriv::ColorType::kFloat4;
+
+                const SkSL::Type& returnType = decl.returnType();
+                SkASSERT(returnType.matches(*fsProgram.fContext->fTypes.fVoid) ||
+                         returnType.matches(*fsProgram.fContext->fTypes.fFloat2));
+                bool hasLocalCoords = returnType.matches(*fsProgram.fContext->fTypes.fFloat2);
+
+                return std::make_tuple(ct, hasLocalCoords);
             }
         }
     }
@@ -122,8 +135,9 @@ check_vertex_offsets_and_stride(SkSpan<const Attribute> attributes,
     // Four bytes alignment is required by Metal.
     static_assert(SkCustomMeshSpecification::kStrideAlignment >= 4);
     static_assert(SkCustomMeshSpecification::kOffsetAlignment >= 4);
-    // ES2 has a minimum maximum of 8. We may need one for a broken gl_FragCoord workaround.
-    static_assert(SkCustomMeshSpecification::kMaxVaryings     <= 7);
+    // ES2 has a minimum maximum of 8. We may need one for a broken gl_FragCoord workaround and
+    // one for local coords.
+    static_assert(SkCustomMeshSpecification::kMaxVaryings     <= 6);
 
     if (attributes.empty()) {
         RETURN_ERROR("At least 1 attribute is required.");
@@ -224,45 +238,39 @@ SkCustomMeshSpecification::Result SkCustomMeshSpecification::MakeFromSourceWithS
         }
     }
 
-    std::unique_ptr<SkSL::Program> vsProgram;
-    std::unique_ptr<SkSL::Program> fsProgram;
-    {
-        // We keep this SharedCompiler in a separate scope to make sure it's destroyed before
-        // calling the Make overload at the end, which creates its own (non-reentrant)
-        // SharedCompiler instance
-        SkSL::SharedCompiler compiler;
-        SkSL::Program::Settings settings;
-        settings.fInlineThreshold = 0;
-        settings.fForceNoInline = true;
-        settings.fEnforceES2Restrictions = true;
-        vsProgram = compiler->convertProgram(SkSL::ProgramKind::kCustomMeshVertex,
-                                             SkSL::String(vs.c_str()),
-                                             settings);
-        if (!vsProgram) {
-            RETURN_FAILURE("VS: %s", compiler->errorText().c_str());
-        }
-        if (!has_main(*vsProgram)) {
-            RETURN_FAILURE("Vertex shader must have main function.");
-        }
-        if (SkSL::Analysis::CallsColorTransformIntrinsics(*vsProgram)) {
-            RETURN_FAILURE("Color transform intrinsics are not permitted in custom mesh shaders");
-        }
-
-        fsProgram = compiler->convertProgram(SkSL::ProgramKind::kCustomMeshFragment,
-                                             SkSL::String(fs.c_str()),
-                                             settings);
-        if (!fsProgram) {
-            RETURN_FAILURE("FS: %s", compiler->errorText().c_str());
-        }
-        if (!has_main(*fsProgram)) {
-            RETURN_FAILURE("Fragment shader must have main function.");
-        }
-        if (SkSL::Analysis::CallsColorTransformIntrinsics(*fsProgram)) {
-            RETURN_FAILURE("Color transform intrinsics are not permitted in custom mesh shaders");
-        }
+    SkSL::SharedCompiler compiler;
+    SkSL::Program::Settings settings;
+    settings.fEnforceES2Restrictions = true;
+    std::unique_ptr<SkSL::Program> vsProgram = compiler->convertProgram(
+            SkSL::ProgramKind::kCustomMeshVertex,
+            SkSL::String(vs.c_str()),
+            settings);
+    if (!vsProgram) {
+        RETURN_FAILURE("VS: %s", compiler->errorText().c_str());
+    }
+    if (!has_main(*vsProgram)) {
+        RETURN_FAILURE("Vertex shader must have main function.");
+    }
+    if (SkSL::Analysis::CallsColorTransformIntrinsics(*vsProgram)) {
+        RETURN_FAILURE("Color transform intrinsics are not permitted in custom mesh shaders");
     }
 
-    ColorType ct = color_type(*fsProgram);
+    std::unique_ptr<SkSL::Program> fsProgram = compiler->convertProgram(
+            SkSL::ProgramKind::kCustomMeshFragment,
+            SkSL::String(fs.c_str()),
+            settings);
+
+    if (!fsProgram) {
+        RETURN_FAILURE("FS: %s", compiler->errorText().c_str());
+    }
+    if (!has_main(*fsProgram)) {
+        RETURN_FAILURE("Fragment shader must have main function.");
+    }
+    if (SkSL::Analysis::CallsColorTransformIntrinsics(*fsProgram)) {
+        RETURN_FAILURE("Color transform intrinsics are not permitted in custom mesh shaders");
+    }
+
+    auto [ct, hasLocalCoords] = get_fs_color_type_and_local_coords(*fsProgram);
 
     if (ct == ColorType::kNone) {
         cs = nullptr;
@@ -282,6 +290,7 @@ SkCustomMeshSpecification::Result SkCustomMeshSpecification::MakeFromSourceWithS
                                                                            std::move(vsProgram),
                                                                            std::move(fsProgram),
                                                                            ct,
+                                                                           hasLocalCoords,
                                                                            std::move(cs),
                                                                            at)),
             /*error=*/ {}};
@@ -295,6 +304,7 @@ SkCustomMeshSpecification::SkCustomMeshSpecification(SkSpan<const Attribute>    
                                                      std::unique_ptr<SkSL::Program> vs,
                                                      std::unique_ptr<SkSL::Program> fs,
                                                      ColorType                      ct,
+                                                     bool                           hasLocalCoords,
                                                      sk_sp<SkColorSpace>            cs,
                                                      SkAlphaType                    at)
         : fAttributes(attributes.begin(), attributes.end())
@@ -303,6 +313,7 @@ SkCustomMeshSpecification::SkCustomMeshSpecification(SkSpan<const Attribute>    
         , fFS(std::move(fs))
         , fStride(stride)
         , fColorType(ct)
+        , fHasLocalCoords(hasLocalCoords)
         , fColorSpace(std::move(cs))
         , fAlphaType(at) {
     fHash = SkOpts::hash_fn(fVS->fSource->c_str(), fVS->fSource->size(), 0);
