@@ -11,7 +11,7 @@ vars = {
 
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/src/buildtools.git@b138e6ce86ae843c42a1a08f37903207bebcca75",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@fd0142714ee502017dddfce6f59c57db2516e432",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@2ebdd23b6040c122b8e700458b8a21f53496b8cf",
   "third_party/externals/brotli"          : "https://skia.googlesource.com/external/github.com/google/brotli.git@e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, tint for SPIRV compilation, and abseil for string formatting.
@@ -28,7 +28,6 @@ deps = {
   "third_party/externals/harfbuzz"        : "https://chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz.git@3160789701463bcd822c26010da4de33c92c85d9",
   "third_party/externals/icu"             : "https://chromium.googlesource.com/chromium/deps/icu.git@a0718d4f121727e30b8d52c7a189ebf5ab52421f",
   "third_party/externals/imgui"           : "https://skia.googlesource.com/external/github.com/ocornut/imgui.git@55d35d8387c15bf0cfd71861df67af8cfbda7456",
-  "third_party/externals/ImGuiColorTextEdit" : "https://skia.googlesource.com/external/github.com/BalazsJako/ImGuiColorTextEdit.git@0a88824f7de8d0bd11d8419066caa7d3469395c4",
   "third_party/externals/libgifcodec"     : "https://skia.googlesource.com/libgifcodec@fd59fa92a0c86788dcdd84d091e1ce81eda06a77",
   "third_party/externals/libjpeg-turbo"   : "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo.git@24e310554f07c0fdb8ee52e3e708e4f3e9eb6e20",
   "third_party/externals/libpng"          : "https://skia.googlesource.com/third_party/libpng.git@386707c6d19b974ca2e3db7f5c61873813c6fe44",
@@ -47,7 +46,7 @@ deps = {
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@c876c8f87101c5a75f6014b0f832499afeb65b73",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@1e7fbc0c46889556f5d47486b4a15eb2a3189529",
+    "url": "https://chromium.googlesource.com/chromium/src.git@8b42868cac51f3a2da8ba852b2d2f3e1b444cacd",
     "condition": "checkout_chromium",
   },
 
