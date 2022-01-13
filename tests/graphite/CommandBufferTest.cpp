@@ -21,12 +21,13 @@
 #include "experimental/graphite/src/GraphicsPipeline.h"
 #include "experimental/graphite/src/Renderer.h"
 #include "experimental/graphite/src/ResourceProvider.h"
-#include "experimental/graphite/src/ShaderCodeDictionary.h"
 #include "experimental/graphite/src/Texture.h"
 #include "experimental/graphite/src/TextureProxy.h"
 #include "experimental/graphite/src/UniformManager.h"
 #include "experimental/graphite/src/geom/Shape.h"
 #include "experimental/graphite/src/geom/Transform_graphite.h"
+#include "include/private/SkShaderCodeDictionary.h"
+#include "src/core/SkKeyHelpers.h"
 
 #if GRAPHITE_TEST_UTILS
 // set to 1 if you want to do GPU capture of the commandBuffer
@@ -94,7 +95,13 @@ private:
                                    /*uniforms=*/{{"scale",     SLType::kFloat2},
                                                  {"translate", SLType::kFloat2}},
                                    PrimitiveType::kTriangleStrip,
-                                   kTestDepthStencilSettings,
+                                   {{},
+                                    {},
+                                    0,
+                                    true,
+                                    CompareOp::kAlways,
+                                    false,
+                                    false},
                                    /*vertexAttrs=*/{},
                                    /*instanceAttrs=*/{}) {}
 };
@@ -242,8 +249,11 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
     TextureInfo textureInfo;
 #endif
 
-    Combination shader{ShaderCombo::ShaderType::kSolidColor};
-    auto entry = context->priv().shaderCodeDictionary()->findOrCreate(shader);
+    SkPaintParamsKey key = CreateKey(ShaderCombo::ShaderType::kSolidColor,
+                                     SkTileMode::kClamp,
+                                     SkBlendMode::kSrc);
+
+    auto entry = context->priv().shaderCodeDictionary()->findOrCreate(key);
 
     auto target = sk_sp<TextureProxy>(new TextureProxy(textureSize, textureInfo));
     REPORTER_ASSERT(reporter, target);
@@ -286,7 +296,8 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
                                     step->vertexStride(),
                                     step->instanceStride());
         auto pipeline = gpu->resourceProvider()->findOrCreateGraphicsPipeline(context,
-                                                                              pipelineDesc);
+                                                                              pipelineDesc,
+                                                                              renderPassDesc);
         commandBuffer->bindGraphicsPipeline(std::move(pipeline));
 
         // All of the test RenderSteps ignore the transform, so just use the identity

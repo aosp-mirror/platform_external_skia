@@ -284,12 +284,12 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
         // If we have two different descriptors, such that the uniforms from the PaintParams can be
         // bound independently of those used by the rest of the RenderStep, then we can upload now
         // and remember the location for re-use on any RenderStep that does shading.
-        UniquePaintParamsID shaderID;
+        SkUniquePaintParamsID shaderID;
         sk_sp<UniformData> shadingUniforms = nullptr;
         uint32_t shadingIndex = UniformCache::kInvalidUniformID;
         if (draw.fPaintParams.has_value()) {
-            std::tie(shaderID, shadingUniforms) = ExtractCombo(recorder->context(),
-                                                               draw.fPaintParams.value());
+            std::tie(shaderID, shadingUniforms) = ExtractPaintData(recorder->context(),
+                                                                   draw.fPaintParams.value());
             shadingIndex = shadingUniformBindings.addUniforms(shadingUniforms);
         } // else depth-only
 
@@ -297,7 +297,7 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
             const RenderStep* const step = draw.fRenderer.steps()[stepIndex];
             const bool performsShading = draw.fPaintParams.has_value() && step->performsShading();
 
-            UniquePaintParamsID stepShaderID;
+            SkUniquePaintParamsID stepShaderID;
             uint32_t stepShadingIndex = UniformCache::kInvalidUniformID;
             if (performsShading) {
                 stepShaderID = shaderID;
@@ -416,7 +416,8 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
     return drawPass;
 }
 
-void DrawPass::addCommands(Context* context, CommandBuffer* buffer) const {
+void DrawPass::addCommands(Context* context, CommandBuffer* buffer,
+                           const RenderPassDesc& renderPassDesc) const {
     auto resourceProvider = context->priv().resourceProvider();
 
     // TODO: Validate RenderPass state against DrawPass's target and requirements?
@@ -426,8 +427,9 @@ void DrawPass::addCommands(Context* context, CommandBuffer* buffer) const {
     // Use a vector instead of SkTBlockList for the full pipelines so that random access is fast.
     std::vector<sk_sp<GraphicsPipeline>> fullPipelines;
     fullPipelines.reserve(fPipelineDescs.count());
-    for (const GraphicsPipelineDesc& desc : fPipelineDescs.items()) {
-        fullPipelines.push_back(resourceProvider->findOrCreateGraphicsPipeline(context, desc));
+    for (const GraphicsPipelineDesc& pipelineDesc : fPipelineDescs.items()) {
+        fullPipelines.push_back(resourceProvider->findOrCreateGraphicsPipeline(
+                context, pipelineDesc, renderPassDesc));
     }
 
     // Set viewport to the entire texture for now (eventually, we may have logically smaller bounds
