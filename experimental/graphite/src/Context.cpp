@@ -17,8 +17,9 @@
 #include "experimental/graphite/src/Gpu.h"
 #include "experimental/graphite/src/GraphicsPipelineDesc.h"
 #include "experimental/graphite/src/Renderer.h"
-#include "experimental/graphite/src/ShaderCodeDictionary.h"
 #include "include/core/SkPathTypes.h"
+#include "include/private/SkShaderCodeDictionary.h"
+#include "src/core/SkKeyHelpers.h"
 
 #ifdef SK_METAL
 #include "experimental/graphite/src/mtl/MtlTrampoline.h"
@@ -29,7 +30,7 @@ namespace skgpu {
 Context::Context(sk_sp<Gpu> gpu, BackendApi backend)
         : fGpu(std::move(gpu))
         , fBackend(backend)
-        , fShaderCodeDictionary(new ShaderCodeDictionary) {
+        , fShaderCodeDictionary(std::make_unique<SkShaderCodeDictionary>()) {
 }
 Context::~Context() {}
 
@@ -44,8 +45,8 @@ sk_sp<Context> Context::MakeMetal(const mtl::BackendContext& backendContext) {
 }
 #endif
 
-sk_sp<Recorder> Context::createRecorder() {
-    return sk_sp<Recorder>(new Recorder(sk_ref_sp(this)));
+std::unique_ptr<Recorder> Context::makeRecorder() {
+    return std::unique_ptr<Recorder>(new Recorder(sk_ref_sp(this)));
 }
 
 void Context::insertRecording(std::unique_ptr<Recording> recording) {
@@ -75,7 +76,7 @@ void Context::preCompile(const PaintCombo& paintCombo) {
         for (auto& shaderCombo: paintCombo.fShaders) {
             for (auto shaderType: shaderCombo.fTypes) {
                 for (auto tm: shaderCombo.fTileModes) {
-                    Combination c {shaderType, tm, bm};
+                    SkPaintParamsKey key = CreateKey(shaderType, tm, bm);
 
                     GraphicsPipelineDesc desc;
 
@@ -83,7 +84,7 @@ void Context::preCompile(const PaintCombo& paintCombo) {
                         for (auto&& s : r->steps()) {
                             if (s->performsShading()) {
 
-                                auto entry = fShaderCodeDictionary->findOrCreate(c);
+                                auto entry = fShaderCodeDictionary->findOrCreate(key);
                                 desc.setProgram(s, entry->uniqueID());
                             }
                             // TODO: Combine with renderpass description set to generate full
