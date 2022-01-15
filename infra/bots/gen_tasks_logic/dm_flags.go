@@ -178,7 +178,15 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	sampleCount := 0
 	glPrefix := ""
 	if b.extraConfig("SwiftShader") {
-		configs = append(configs, "gles", "glesdft", "glesdmsaa")
+		configs = append(configs, "vk", "vkdmsaa")
+		// skbug.com/12820
+		skip("_ gm _ ycbcrimage")
+		// skbug.com/12820
+		skip("_ test _ VkYCbcrSampler_DrawImageWithYcbcrSampler")
+		// skbug.com/12826
+		skip("_ test _ GrThreadSafeCache16Verts")
+		// skbug.com/12829
+		skip("_ test _ image_subset")
 	} else if b.cpu() {
 		args = append(args, "--nogpu")
 
@@ -931,6 +939,11 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip("_", "tests", "_", "SkSLMatrices") // skia:12456
 	}
 
+	// disable broken tests on Mali400 || Tegra3
+	if b.matchGpu("Mali400") || b.matchGpu("Tegra3") {
+		skip("_", "tests", "_", "SkSLMatrixScalarMath") // skia:12681
+	}
+
 	if b.gpu("IntelIris6100", "IntelHD4400") && b.matchOs("Win") && !b.extraConfig("Vulkan") {
 		skip("_", "tests", "_", "SkSLVectorToMatrixCast_GPU") // skia:12179
 	}
@@ -950,6 +963,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip("_", "tests", "_", "SkSLSwitchDefaultOnly_GPU")
 		skip("_", "tests", "_", "SkSLSwitchWithFallthrough_GPU")
 		skip("_", "tests", "_", "SkSLSwitchWithLoops_GPU")
+		skip("_", "tests", "_", "SkSLSwitchCaseFolding_GPU")
 		skip("_", "tests", "_", "SkSLLoopFloat_GPU")
 		skip("_", "tests", "_", "SkSLLoopInt_GPU")
 	}
