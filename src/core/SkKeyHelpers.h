@@ -42,12 +42,62 @@ namespace SolidColorShaderBlock {
 // TODO: move this functionality to the SkLinearGradient, SkRadialGradient, etc classes
 namespace GradientShaderBlocks {
 
-    void AddToKey(SkBackend, SkPaintParamsKey*, SkShader::GradientType, SkTileMode);
+    struct GradientData {
+        bool operator==(const GradientData& rhs) const {
+            return fType == rhs.fType &&
+                   fTM == rhs.fTM &&
+                   fNumStops == rhs.fNumStops;
+        }
+        bool operator!=(const GradientData& rhs) const { return !(*this == rhs); }
+
+        SkShader::GradientType fType;
+        SkTileMode             fTM;
+        int                    fNumStops;
+    };
+
+    void AddToKey(SkBackend, SkPaintParamsKey*, const GradientData&);
 #ifdef SK_DEBUG
     void Dump(const SkPaintParamsKey&, int headerOffset);
 #endif
 
 } // namespace GradientShaderBlocks
+
+namespace ImageShaderBlock {
+
+    struct ImageData {
+        bool operator==(const ImageData& rhs) const {
+            return fTileModes[0] == rhs.fTileModes[0] &&
+                   fTileModes[1] == rhs.fTileModes[1];
+        }
+        bool operator!=(const ImageData& rhs) const { return !(*this == rhs); }
+
+        // TODO: add the other image shader parameters that could impact code snippet selection
+        // (e.g., sampling options, subsetting, etc.)
+        SkTileMode fTileModes[2];
+    };
+
+    void AddToKey(SkBackend, SkPaintParamsKey*, const ImageData&);
+#ifdef SK_DEBUG
+    void Dump(const SkPaintParamsKey&, int headerOffset);
+#endif
+
+} // namespace ImageShaderBlock
+
+namespace BlendShaderBlock {
+
+    struct BlendData {
+        SkShader*   fDst;
+        SkShader*   fSrc;
+        // TODO: add support for blenders
+        SkBlendMode fBM;
+    };
+
+    void AddToKey(SkBackend, SkPaintParamsKey*, const BlendData&);
+#ifdef SK_DEBUG
+    void Dump(const SkPaintParamsKey&, int headerOffset);
+#endif
+
+} // namespace BlendShaderBlock
 
 namespace BlendModeBlock {
 
