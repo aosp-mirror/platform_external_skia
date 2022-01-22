@@ -18,11 +18,36 @@ namespace skgpu {
 
 struct BufferWriter {
 public:
+    // Marks a read-only position in the underlying buffer
+    struct Mark {
+    public:
+        Mark() : Mark(nullptr) {}
+        Mark(void* ptr, size_t offset = 0)
+                : fMark(reinterpret_cast<uintptr_t>(ptr) + offset) {
+            SkASSERT(ptr || offset == 0);
+        }
+
+        bool operator< (const Mark& o) const { return fMark <  o.fMark; }
+        bool operator<=(const Mark& o) const { return fMark <= o.fMark; }
+        bool operator==(const Mark& o) const { return fMark == o.fMark; }
+        bool operator!=(const Mark& o) const { return fMark != o.fMark; }
+        bool operator>=(const Mark& o) const { return fMark >= o.fMark; }
+        bool operator> (const Mark& o) const { return fMark >  o.fMark; }
+
+        ptrdiff_t operator-(const Mark& o) const { return fMark - o.fMark; }
+
+        explicit operator bool() const { return *this != Mark(); }
+    private:
+        uintptr_t fMark;
+    };
+
     explicit operator bool() const { return fPtr != nullptr; }
+
+    Mark mark(size_t offset=0) const { return Mark(fPtr, offset); }
 
 protected:
     BufferWriter() = default;
-    BufferWriter(void* ptr) : fPtr(ptr) {}
+    explicit BufferWriter(void* ptr) : fPtr(ptr) {}
 
     BufferWriter& operator=(const BufferWriter&) = delete;
     BufferWriter& operator=(BufferWriter&& that) {
@@ -47,7 +72,7 @@ struct VertexWriter : public BufferWriter {
     inline constexpr static uint32_t kIEEE_32_infinity = 0x7f800000;
 
     VertexWriter() = default;
-    VertexWriter(void* ptr) : BufferWriter(ptr) {}
+    explicit VertexWriter(void* ptr) : BufferWriter(ptr) {}
     VertexWriter(const VertexWriter&) = delete;
     VertexWriter(VertexWriter&& that) { *this = std::move(that); }
 
@@ -57,15 +82,8 @@ struct VertexWriter : public BufferWriter {
         return *this;
     }
 
-    bool operator==(const VertexWriter& that) const { return fPtr == that.fPtr; }
-
-    // TODO: Remove this call. We want all users of VertexWriter to have to go through the vertex
-    // writer functions to write data. We do not want them to directly access fPtr and copy their
-    // own data.
-    void* ptr() const { return fPtr; }
-
     VertexWriter makeOffset(ptrdiff_t offsetInBytes) const {
-        return {SkTAddOffset<void>(fPtr, offsetInBytes)};
+        return VertexWriter{SkTAddOffset<void>(fPtr, offsetInBytes)};
     }
 
     template <typename T>
@@ -297,7 +315,8 @@ SK_MAYBE_UNUSED inline VertexWriter& operator<<(VertexWriter& w, const VertexCol
 
 struct IndexWriter : public BufferWriter {
     IndexWriter() = default;
-    IndexWriter(void* ptr) : BufferWriter(ptr) {}
+    explicit IndexWriter(void* ptr) : BufferWriter(ptr) {}
+
     IndexWriter(const IndexWriter&) = delete;
     IndexWriter(IndexWriter&& that) { *this = std::move(that); }
 
@@ -308,7 +327,7 @@ struct IndexWriter : public BufferWriter {
     }
 
     IndexWriter makeAdvance(int numIndices) const {
-        return {SkTAddOffset<void>(fPtr, numIndices * sizeof(uint16_t))};
+        return IndexWriter{SkTAddOffset<void>(fPtr, numIndices * sizeof(uint16_t))};
     }
 
     void writeArray(const uint16_t* array, int count) {
@@ -331,7 +350,8 @@ inline IndexWriter& operator<<(IndexWriter& w, int val) { return (w << SkTo<uint
 
 struct UniformWriter : public BufferWriter {
     UniformWriter() = default;
-    UniformWriter(void* ptr) : BufferWriter(ptr) {}
+    explicit UniformWriter(void* ptr) : BufferWriter(ptr) {}
+
     UniformWriter(const UniformWriter&) = delete;
     UniformWriter(UniformWriter&& that) { *this = std::move(that); }
 

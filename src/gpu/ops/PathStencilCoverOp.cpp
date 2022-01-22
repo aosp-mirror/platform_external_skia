@@ -244,7 +244,8 @@ void PathStencilCoverOp::onPrepare(GrOpFlushState* flushState) {
         // edge count of n are fanned by strictly fewer triangles.
         int maxTrianglesInFans = std::max(maxCombinedFanEdges - 2, 0);
         int fanTriangleCount = 0;
-        if (VertexWriter triangleVertexWriter = vertexAlloc.lock<SkPoint>(maxTrianglesInFans * 3)) {
+        if (VertexWriter triangleVertexWriter =
+                    vertexAlloc.lockWriter(sizeof(SkPoint), maxTrianglesInFans * 3)) {
             for (auto [pathMatrix, path, color] : *fPathDrawList) {
                 AffineMatrix m(pathMatrix);
                 for (PathMiddleOutFanIter it(path); !it.done();) {
@@ -254,10 +255,12 @@ void PathStencilCoverOp::onPrepare(GrOpFlushState* flushState) {
                     }
                 }
             }
+
+
+            SkASSERT(fanTriangleCount <= maxTrianglesInFans);
+            fFanVertexCount = fanTriangleCount * 3;
+            vertexAlloc.unlock(fFanVertexCount);
         }
-        SkASSERT(fanTriangleCount <= maxTrianglesInFans);
-        fFanVertexCount = fanTriangleCount * 3;
-        vertexAlloc.unlock(fFanVertexCount);
     }
 
     auto tessShader = &fStencilPathProgram->geomProc().cast<GrPathTessellationShader>();
@@ -270,13 +273,13 @@ void PathStencilCoverOp::onPrepare(GrOpFlushState* flushState) {
 
     if (fCoverBBoxProgram) {
         size_t instanceStride = fCoverBBoxProgram->geomProc().instanceStride();
-        VertexWriter vertexWriter = flushState->makeVertexSpace(instanceStride,
-                                                                fPathCount,
-                                                                &fBBoxBuffer,
-                                                                &fBBoxBaseInstance);
+        VertexWriter vertexWriter = flushState->makeVertexWriter(instanceStride,
+                                                                 fPathCount,
+                                                                 &fBBoxBuffer,
+                                                                 &fBBoxBaseInstance);
         SkDEBUGCODE(int pathCount = 0;)
         for (auto [pathMatrix, path, color] : *fPathDrawList) {
-            SkDEBUGCODE(auto end = vertexWriter.makeOffset(instanceStride));
+            SkDEBUGCODE(auto end = vertexWriter.mark(instanceStride));
             vertexWriter << pathMatrix.getScaleX()
                          << pathMatrix.getSkewY()
                          << pathMatrix.getSkewX()
@@ -298,7 +301,7 @@ void PathStencilCoverOp::onPrepare(GrOpFlushState* flushState) {
             } else {
                 vertexWriter << path.getBounds();
             }
-            SkASSERT(vertexWriter == end);
+            SkASSERT(vertexWriter.mark() == end);
             SkDEBUGCODE(++pathCount;)
         }
         SkASSERT(pathCount == fPathCount);
