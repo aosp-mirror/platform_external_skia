@@ -35,6 +35,7 @@
 #include "src/sksl/ir/SkSLFunctionCall.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
+#include "src/sksl/ir/SkSLFunctionPrototype.h"
 #include "src/sksl/ir/SkSLIfStatement.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
 #include "src/sksl/ir/SkSLInlineMarker.h"
@@ -90,8 +91,8 @@ void Dehydrator::write(Layout l) {
         this->writeCommand(Rehydrator::kLayout_Command);
         fBody.write32(l.fFlags);
         this->writeS8(l.fLocation);
-        this->writeS8(l.fOffset);
-        this->writeS8(l.fBinding);
+        this->writeS16(l.fOffset);
+        this->writeS16(l.fBinding);
         this->writeS8(l.fIndex);
         this->writeS8(l.fSet);
         this->writeS16(l.fBuiltin);
@@ -562,9 +563,11 @@ void Dehydrator::write(const ProgramElement& e) {
             break;
         }
         case ProgramElement::Kind::kFunctionPrototype: {
-            // We don't need to emit function prototypes into the dehydrated data, because we don't
-            // ever need to re-emit the intrinsics files as raw GLSL/Metal. As long as the symbols
-            // exist in the symbol table, we're in good shape.
+            const FunctionPrototype& f = e.as<FunctionPrototype>();
+            if (!f.isBuiltin()) {
+                this->writeCommand(Rehydrator::kFunctionPrototype_Command);
+                this->writeU16(this->symbolId(&f.declaration()));
+            }
             break;
         }
         case ProgramElement::Kind::kInterfaceBlock: {
