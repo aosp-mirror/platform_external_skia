@@ -32,7 +32,7 @@ class Type;
  */
 class Rehydrator {
 public:
-    static constexpr uint16_t kVersion = 1;
+    static constexpr uint16_t kVersion = 5;
 
     enum Command {
         // uint16 id, Type componentType, uint8 count
@@ -84,6 +84,8 @@ public:
         // uint16 id, Modifiers modifiers, String name, uint8 parameterCount, uint16[] parameterIds,
         // Type returnType
         kFunctionDeclaration_Command,
+        // uint16 declaration
+        kFunctionPrototype_Command,
         // bool isStatic, Expression test, Statement ifTrue, Statement ifFalse
         kIf_Command,
         // Expression base, Expression index
@@ -94,13 +96,14 @@ public:
         kInterfaceBlock_Command,
         // int32 value
         kIntLiteral_Command,
-        // int32 flags, int8 location, int8 offset, int8 binding, int8 index, int8 set,
+        // int32 flags, int8 location, int16 offset, int16 binding, int8 index, int8 set,
         // int16 builtin, int8 inputAttachmentIndex
         kLayout_Command,
         // Layout layout, uint8 flags
         kModifiers8Bit_Command,
         // Layout layout, uint32 flags
         kModifiers_Command,
+        kNop_Command,
         // uint8 op, Expression operand
         kPostfix_Command,
         // uint8 op, Expression operand
@@ -144,11 +147,17 @@ public:
     Rehydrator(const Context* context, std::shared_ptr<SymbolTable> symbolTable,
                const uint8_t* src, size_t length);
 
+    // Reads a symbol table and makes it current (inheriting from the previous current table)
+    std::shared_ptr<SymbolTable> symbolTable();
+
+    // Reads a collection of program elements and returns it
     std::vector<std::unique_ptr<ProgramElement>> elements();
 
-    std::shared_ptr<SymbolTable> symbolTable(bool inherit = true);
-
 private:
+    // If this ID appears in a symbol table, it means the corresponding symbol isn't actually
+    // present in the file as it's a builtin type.
+    static constexpr uint16_t kBuiltinType_Symbol = 65535;
+
     int8_t readS8() {
         SkASSERT(fIP < fEnd);
         return *(fIP++);
@@ -230,6 +239,7 @@ private:
     SkDEBUGCODE(const uint8_t* fEnd;)
 
     friend class AutoRehydratorSymbolTable;
+    friend class Dehydrator;
 };
 
 }  // namespace SkSL
