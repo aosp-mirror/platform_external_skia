@@ -199,8 +199,7 @@ SKSL_TEST(SkSLCastFolding,                     "folding/CastFolding.sksl")
 SKSL_TEST(SkSLIntFoldingES2,                   "folding/IntFoldingES2.sksl")
 SKSL_TEST_ES3(SkSLIntFoldingES3,               "folding/IntFoldingES3.sksl")
 SKSL_TEST(SkSLFloatFolding,                    "folding/FloatFolding.sksl")
-// skbug.com/11919: Fails on Nexus5/7, and Intel GPUs
-SKSL_TEST_CPU(SkSLMatrixFoldingES2,            "folding/MatrixFoldingES2.sksl")
+SKSL_TEST(SkSLMatrixFoldingES2,                "folding/MatrixFoldingES2.sksl")
 SKSL_TEST_ES3(SkSLMatrixFoldingES3,            "folding/MatrixFoldingES3.sksl")
 SKSL_TEST(SkSLSelfAssignment,                  "folding/SelfAssignment.sksl")
 SKSL_TEST(SkSLShortCircuitBoolFolding,         "folding/ShortCircuitBoolFolding.sksl")
@@ -383,8 +382,7 @@ SKSL_TEST(SkSLUniformArray,                    "shared/UniformArray.sksl")
 SKSL_TEST(SkSLUnusedVariables,                 "shared/UnusedVariables.sksl")
 SKSL_TEST(SkSLVectorConstructors,              "shared/VectorConstructors.sksl")
 SKSL_TEST(SkSLVectorToMatrixCast,              "shared/VectorToMatrixCast.sksl")
-// skbug.com/11919: Fails on Nexus5/7, and Intel GPUs
-SKSL_TEST_CPU(SkSLVectorScalarMath,            "shared/VectorScalarMath.sksl")
+SKSL_TEST(SkSLVectorScalarMath,                "shared/VectorScalarMath.sksl")
 SKSL_TEST_ES3(SkSLWhileLoopControlFlow,        "shared/WhileLoopControlFlow.sksl")
 
 /*

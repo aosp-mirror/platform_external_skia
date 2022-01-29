@@ -84,7 +84,7 @@ public:
     };
 
     size_t vertexStride(const SkMatrix& matrix) const {
-        if (fMaskFormat != kARGB_GrMaskFormat) {
+        if (fMaskType != kARGB_GrMaskFormat) {
             // For formats kA565_GrMaskFormat and kA8_GrMaskFormat where A8 include SDFT.
             return matrix.hasPerspective() ? sizeof(Mask3DVertex) : sizeof(Mask2DVertex);
         } else {
@@ -99,6 +99,9 @@ public:
                         const SkMatrix& positionMatrix,
                         SkIRect clip,
                         void* vertexBuffer) const;
+
+    AtlasTextOp::MaskType opMaskType() const;
+    GrMaskFormat grMaskType() const {return fMaskType;}
 
 private:
     struct AtlasPt {
@@ -146,7 +149,7 @@ private:
                 GrColor color,
                 const SkMatrix& matrix) const;
 
-    const GrMaskFormat fMaskFormat;
+    const GrMaskFormat fMaskType;
     const SkPoint fPaddingInset;
     const SkScalar fStrikeToSourceScale;
 };
@@ -154,7 +157,7 @@ private:
 TransformedMaskVertexFiller::TransformedMaskVertexFiller(GrMaskFormat maskFormat,
                                                          int dstPadding,
                                                          SkScalar strikeToSourceScale)
-        : fMaskFormat{maskFormat}
+        : fMaskType{maskFormat}
         , fPaddingInset{SkPoint::Make(dstPadding, dstPadding)}
         , fStrikeToSourceScale{strikeToSourceScale} {}
 
@@ -169,7 +172,7 @@ void TransformedMaskVertexFiller::fillVertexData(SkSpan<const GrGlyph*> glyphs,
     };
 
     if (!positionMatrix.hasPerspective()) {
-        if (fMaskFormat == GrMaskFormat::kARGB_GrMaskFormat) {
+        if (fMaskType == GrMaskFormat::kARGB_GrMaskFormat) {
             using Quad = ARGB2DVertex[4];
             SkASSERT(sizeof(ARGB2DVertex) == this->vertexStride(positionMatrix));
             this->fill2D(quadData((Quad*) vertexBuffer), color, positionMatrix);
@@ -179,7 +182,7 @@ void TransformedMaskVertexFiller::fillVertexData(SkSpan<const GrGlyph*> glyphs,
             this->fill2D(quadData((Quad*) vertexBuffer), color, positionMatrix);
         }
     } else {
-        if (fMaskFormat == GrMaskFormat::kARGB_GrMaskFormat) {
+        if (fMaskType == GrMaskFormat::kARGB_GrMaskFormat) {
             using Quad = ARGB3DVertex[4];
             SkASSERT(sizeof(ARGB3DVertex) == this->vertexStride(positionMatrix));
             this->fill3D(quadData((Quad*) vertexBuffer), color, positionMatrix);
@@ -240,6 +243,15 @@ void TransformedMaskVertexFiller::fill3D(SkZip<Quad, const GrGlyph*, const Verte
         quad[2] = {rt, color, {ar, at}};  // R,T
         quad[3] = {rb, color, {ar, ab}};  // R,B
     }
+}
+
+AtlasTextOp::MaskType TransformedMaskVertexFiller::opMaskType() const {
+    switch (fMaskType) {
+        case kA8_GrMaskFormat:   return AtlasTextOp::MaskType::kGrayscaleCoverage;
+        case kA565_GrMaskFormat: return AtlasTextOp::MaskType::kLCDCoverage;
+        case kARGB_GrMaskFormat: return AtlasTextOp::MaskType::kColorBitmap;
+    }
+    SkUNREACHABLE;
 }
 
 struct AtlasPt {
@@ -364,7 +376,8 @@ public:
                                 SkScalar strikeToSourceScale,
                                 GrSubRunAllocator* alloc);
 
-    void submitOps(const GrClip* clip,
+    void submitOps(SkCanvas*,
+                   const GrClip* clip,
                    const SkMatrixProvider& viewMatrix,
                    SkPoint drawOrigin,
                    const SkPaint& paint,
@@ -414,7 +427,8 @@ PathOpSubmitter PathOpSubmitter::Make(const SkZip<SkGlyphVariant, SkPoint>& draw
     return PathOpSubmitter{isAntiAliased, strikeToSourceScale, paths, std::move(pathData)};
 }
 
-void PathOpSubmitter::submitOps(const GrClip* clip,
+void PathOpSubmitter::submitOps(SkCanvas* canvas,
+                                const GrClip* clip,
                                 const SkMatrixProvider& viewMatrix,
                                 SkPoint drawOrigin,
                                 const SkPaint& paint,
@@ -437,14 +451,14 @@ void PathOpSubmitter::submitOps(const GrClip* clip,
     if (!needsExactCTM) {
         for (const auto& pathPos : fPaths) {
             const SkPath& path = pathPos.fPath;
-            const SkPoint pos = pathPos.fPosition;  // Transform the glyph to source space.
+            const SkPoint pos = pathPos.fPosition;
+            // Transform the glyph to source space.
             SkMatrix pathMatrix = strikeToSource;
             pathMatrix.postTranslate(pos.x(), pos.y());
-            SkPreConcatMatrixProvider strikeToDevice(viewMatrix, pathMatrix);
 
-            GrStyledShape shape(path, paint);
-            GrBlurUtils::drawShapeWithMaskFilter(
-                    sdc->recordingContext(), sdc, clip, runPaint, strikeToDevice, shape);
+            SkAutoCanvasRestore acr(canvas, true);
+            canvas->concat(pathMatrix);
+            canvas->drawPath(path, runPaint);
         }
     } else {
         // Transform the path to device because the deviceMatrix must be unchanged to
@@ -459,9 +473,7 @@ void PathOpSubmitter::submitOps(const GrClip* clip,
             SkPath deviceOutline;
             path.transform(pathMatrix, &deviceOutline);
             deviceOutline.setIsVolatile(true);
-            GrStyledShape shape(deviceOutline, paint);
-            GrBlurUtils::drawShapeWithMaskFilter(
-                    sdc->recordingContext(), sdc, clip, runPaint, viewMatrix, shape);
+            canvas->drawPath(deviceOutline, runPaint);
         }
     }
 }
@@ -480,12 +492,13 @@ class PathSubRunSlug : public GrSubRun {
 public:
     PathSubRunSlug(PathOpSubmitter&& pathDrawing) : fPathDrawing(std::move(pathDrawing)) {}
 
-    void draw(const GrClip* clip,
+    void draw(SkCanvas* canvas,
+              const GrClip* clip,
               const SkMatrixProvider& viewMatrix,
               SkPoint drawOrigin,
               const SkPaint& paint,
               skgpu::v1::SurfaceDrawContext* sdc) const override {
-        fPathDrawing.submitOps(clip, viewMatrix, drawOrigin, paint, sdc);
+        fPathDrawing.submitOps(canvas, clip, viewMatrix, drawOrigin, paint, sdc);
     }
 
 private:
@@ -663,7 +676,8 @@ public:
                               GrTextBlob* blob,
                               GrSubRunAllocator* alloc);
 
-    void draw(const GrClip*,
+    void draw(SkCanvas*,
+              const GrClip*,
               const SkMatrixProvider& viewMatrix,
               SkPoint drawOrigin,
               const SkPaint& paint,
@@ -795,7 +809,8 @@ int DirectMaskSubRun::glyphCount() const {
     return SkCount(fGlyphs.glyphs());
 }
 
-void DirectMaskSubRun::draw(const GrClip* clip,
+void DirectMaskSubRun::draw(SkCanvas*,
+                            const GrClip* clip,
                             const SkMatrixProvider& viewMatrix,
                             SkPoint drawOrigin,
                             const SkPaint& paint,
@@ -1060,7 +1075,8 @@ public:
                               GrTextBlob* blob,
                               GrSubRunAllocator* alloc);
 
-    void draw(const GrClip*,
+    void draw(SkCanvas*,
+              const GrClip*,
               const SkMatrixProvider& viewMatrix,
               SkPoint drawOrigin,
               const SkPaint& paint,
@@ -1097,11 +1113,9 @@ private:
     // The rectangle that surrounds all the glyph bounding boxes in device space.
     SkRect deviceRect(const SkMatrix& drawMatrix, SkPoint drawOrigin) const;
 
-    const GrMaskFormat fMaskFormat;
-    GrTextBlob* fBlob;
+    const TransformedMaskVertexFiller fVertexFiller;
 
-    // The scale factor between the strike size, and the source size.
-    const SkScalar fStrikeToSourceScale;
+    GrTextBlob* fBlob;
 
     // The bounds in source space. The bounds are the joined rectangles of all the glyphs.
     const SkRect fVertexBounds;
@@ -1118,9 +1132,8 @@ TransformedMaskSubRun::TransformedMaskSubRun(GrMaskFormat format,
                                              const SkRect& bounds,
                                              SkSpan<const VertexData> vertexData,
                                              GlyphVector&& glyphs)
-        : fMaskFormat{format}
+        : fVertexFiller{format, 0, strikeToSourceScale}
         , fBlob{blob}
-        , fStrikeToSourceScale{strikeToSourceScale}
         , fVertexBounds{bounds}
         , fVertexData{vertexData}
         , fGlyphs{std::move(glyphs)} { }
@@ -1154,7 +1167,8 @@ GrSubRunOwner TransformedMaskSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& 
             GlyphVector::Make(std::move(strike), drawables.get<0>(), alloc));
 }
 
-void TransformedMaskSubRun::draw(const GrClip* clip,
+void TransformedMaskSubRun::draw(SkCanvas*,
+                                 const GrClip* clip,
                                  const SkMatrixProvider& viewMatrix,
                                  SkPoint drawOrigin,
                                  const SkPaint& paint,
@@ -1178,7 +1192,8 @@ TransformedMaskSubRun::makeAtlasTextOp(const GrClip* clip,
     const SkMatrix& drawMatrix = viewMatrix.localToDevice();
 
     GrPaint grPaint;
-    SkPMColor4f drawingColor = calculate_colors(sdc, paint, viewMatrix, fMaskFormat, &grPaint);
+    SkPMColor4f drawingColor = calculate_colors(
+            sdc, paint, viewMatrix, fVertexFiller.grMaskType(), &grPaint);
 
     auto geometry = AtlasTextOp::Geometry::MakeForBlob(*this,
                                                        drawMatrix,
@@ -1190,7 +1205,7 @@ TransformedMaskSubRun::makeAtlasTextOp(const GrClip* clip,
 
     GrRecordingContext* const rContext = sdc->recordingContext();
     GrOp::Owner op = GrOp::Make<AtlasTextOp>(rContext,
-                                             op_mask_type(fMaskFormat),
+                                             fVertexFiller.opMaskType(),
                                              true,
                                              this->glyphCount(),
                                              this->deviceRect(drawMatrix, drawOrigin),
@@ -1214,17 +1229,15 @@ void TransformedMaskSubRun::testingOnly_packedGlyphIDToGrGlyph(GrStrikeCache *ca
 
 std::tuple<bool, int> TransformedMaskSubRun::regenerateAtlas(int begin, int end,
                                                              GrMeshDrawTarget* target) const {
-    return fGlyphs.regenerateAtlas(begin, end, fMaskFormat, 1, target, true);
+    return fGlyphs.regenerateAtlas(begin, end, fVertexFiller.grMaskType(), 1, target, true);
 }
 
 void TransformedMaskSubRun::fillVertexData(void* vertexDst, int offset, int count,
                                            GrColor color,
                                            const SkMatrix& drawMatrix, SkPoint drawOrigin,
                                            SkIRect clip) const {
-    TransformedMaskVertexFiller filler{fMaskFormat, 0, fStrikeToSourceScale};
-
     const SkMatrix positionMatrix = position_matrix(drawMatrix, drawOrigin);
-    filler.fillVertexData(fGlyphs.glyphs().subspan(offset, count),
+    fVertexFiller.fillVertexData(fGlyphs.glyphs().subspan(offset, count),
                           fVertexData.subspan(offset, count),
                           color,
                           positionMatrix,
@@ -1233,16 +1246,7 @@ void TransformedMaskSubRun::fillVertexData(void* vertexDst, int offset, int coun
 }
 
 size_t TransformedMaskSubRun::vertexStride(const SkMatrix& drawMatrix) const {
-    switch (fMaskFormat) {
-        case kA8_GrMaskFormat:
-            return drawMatrix.hasPerspective() ? sizeof(Mask3DVertex) : sizeof(Mask2DVertex);
-        case kARGB_GrMaskFormat:
-            return drawMatrix.hasPerspective() ? sizeof(ARGB3DVertex) : sizeof(ARGB2DVertex);
-        default:
-            SkASSERT(!drawMatrix.hasPerspective());
-            return sizeof(Mask2DVertex);
-    }
-    SkUNREACHABLE;
+    return fVertexFiller.vertexStride(drawMatrix);
 }
 
 int TransformedMaskSubRun::glyphCount() const {
@@ -1284,7 +1288,8 @@ public:
                               GrTextBlob* blob,
                               GrSubRunAllocator* alloc);
 
-    void draw(const GrClip*,
+    void draw(SkCanvas*,
+              const GrClip*,
               const SkMatrixProvider& viewMatrix,
               SkPoint drawOrigin,
               const SkPaint&,
@@ -1395,7 +1400,8 @@ GrSubRunOwner SDFTSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& drawables,
             has_some_antialiasing(runFont));
 }
 
-void SDFTSubRun::draw(const GrClip* clip,
+void SDFTSubRun::draw(SkCanvas*,
+                      const GrClip* clip,
                       const SkMatrixProvider& viewMatrix,
                       SkPoint drawOrigin,
                       const SkPaint& paint,
@@ -1739,11 +1745,11 @@ sk_sp<GrTextBlob> GrTextBlob::Make(const SkGlyphRunList& glyphRunList,
 
     const uint64_t uniqueID = glyphRunList.uniqueID();
     for (auto& glyphRun : glyphRunList) {
-        painter->processGlyphRun(glyphRun,
+        painter->processGlyphRun(blob.get(),
+                                 glyphRun,
                                  positionMatrix,
                                  paint,
                                  control,
-                                 blob.get(),
                                  "GrTextBlob",
                                  uniqueID);
     }
@@ -1787,13 +1793,14 @@ bool GrTextBlob::canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) 
 const GrTextBlob::Key& GrTextBlob::key() const { return fKey; }
 size_t GrTextBlob::size() const { return fSize; }
 
-void GrTextBlob::draw(const GrClip* clip,
+void GrTextBlob::draw(SkCanvas* canvas,
+                      const GrClip* clip,
                       const SkMatrixProvider& viewMatrix,
                       SkPoint drawOrigin,
                       const SkPaint& paint,
                       skgpu::v1::SurfaceDrawContext* sdc) {
     for (const GrSubRun& subRun : fSubRunList) {
-        subRun.draw(clip, viewMatrix, drawOrigin, paint, sdc);
+        subRun.draw(canvas, clip, viewMatrix, drawOrigin, paint, sdc);
     }
 }
 
@@ -2165,10 +2172,7 @@ private:
     // The rectangle that surrounds all the glyph bounding boxes in device space.
     SkRect deviceRect(const SkMatrix& drawMatrix, SkPoint drawOrigin) const;
 
-    const GrMaskFormat fMaskFormat;
-
-    // The scale factor between the strike size, and the source size.
-    const SkScalar fStrikeToSourceScale;
+    const TransformedMaskVertexFiller fVertexFiller;
 
     // The bounds in source space. The bounds are the joined rectangles of all the glyphs.
     const SkRect fVertexBounds;
@@ -2187,8 +2191,7 @@ TransformedMaskSubRunNoCache::TransformedMaskSubRunNoCache(GrMaskFormat format,
                                                            const SkRect& bounds,
                                                            SkSpan<const VertexData> vertexData,
                                                            GlyphVector&& glyphs)
-        : fMaskFormat{format}
-        , fStrikeToSourceScale{strikeToSourceScale}
+        : fVertexFiller{format, 0, strikeToSourceScale}
         , fVertexBounds{bounds}
         , fVertexData{vertexData}
         , fGlyphs{std::move(glyphs)} {}
@@ -2233,7 +2236,8 @@ TransformedMaskSubRunNoCache::makeAtlasTextOp(const GrClip* clip,
     const SkMatrix& drawMatrix = viewMatrix.localToDevice();
 
     GrPaint grPaint;
-    SkPMColor4f drawingColor = calculate_colors(sdc, paint, viewMatrix, fMaskFormat, &grPaint);
+    SkPMColor4f drawingColor = calculate_colors(
+            sdc, paint, viewMatrix, fVertexFiller.grMaskType(), &grPaint);
 
     // We can clip geometrically using clipRect and ignore clip if we're not using SDFs or
     // transformed glyphs, and we have an axis-aligned rectangular non-AA clip.
@@ -2249,7 +2253,7 @@ TransformedMaskSubRunNoCache::makeAtlasTextOp(const GrClip* clip,
 
     GrRecordingContext* rContext = sdc->recordingContext();
     GrOp::Owner op = GrOp::Make<AtlasTextOp>(rContext,
-                                             op_mask_type(fMaskFormat),
+                                             fVertexFiller.opMaskType(),
                                              true,
                                              this->glyphCount(),
                                              this->deviceRect(drawMatrix, drawOrigin),
@@ -2264,7 +2268,7 @@ void TransformedMaskSubRunNoCache::testingOnly_packedGlyphIDToGrGlyph(GrStrikeCa
 
 std::tuple<bool, int> TransformedMaskSubRunNoCache::regenerateAtlas(
         int begin, int end, GrMeshDrawTarget* target) const {
-    return fGlyphs.regenerateAtlas(begin, end, fMaskFormat, 1, target, true);
+    return fGlyphs.regenerateAtlas(begin, end, fVertexFiller.grMaskType(), 1, target, true);
 }
 
 void TransformedMaskSubRunNoCache::fillVertexData(
@@ -2272,28 +2276,17 @@ void TransformedMaskSubRunNoCache::fillVertexData(
         GrColor color,
         const SkMatrix& drawMatrix, SkPoint drawOrigin,
         SkIRect clip) const {
-    TransformedMaskVertexFiller filler{fMaskFormat, 0, fStrikeToSourceScale};
-
     const SkMatrix positionMatrix = position_matrix(drawMatrix, drawOrigin);
-    filler.fillVertexData(fGlyphs.glyphs().subspan(offset, count),
-                          fVertexData.subspan(offset, count),
-                          color,
-                          positionMatrix,
-                          clip,
-                          vertexDst);
+    fVertexFiller.fillVertexData(fGlyphs.glyphs().subspan(offset, count),
+                                 fVertexData.subspan(offset, count),
+                                 color,
+                                 positionMatrix,
+                                 clip,
+                                 vertexDst);
 }
 
 size_t TransformedMaskSubRunNoCache::vertexStride(const SkMatrix& drawMatrix) const {
-    switch (fMaskFormat) {
-        case kA8_GrMaskFormat:
-            return drawMatrix.hasPerspective() ? sizeof(Mask3DVertex) : sizeof(Mask2DVertex);
-        case kARGB_GrMaskFormat:
-            return drawMatrix.hasPerspective() ? sizeof(ARGB3DVertex) : sizeof(ARGB2DVertex);
-        default:
-            SkASSERT(!drawMatrix.hasPerspective());
-            return sizeof(Mask2DVertex);
-    }
-    SkUNREACHABLE;
+    return fVertexFiller.vertexStride(drawMatrix);
 }
 
 int TransformedMaskSubRunNoCache::glyphCount() const {
@@ -2512,13 +2505,15 @@ SkRect SDFTSubRunNoCache::deviceRect(const SkMatrix& drawMatrix, SkPoint drawOri
 }
 }  // namespace
 
-GrSubRunNoCachePainter::GrSubRunNoCachePainter(skgpu::v1::SurfaceDrawContext* sdc,
+GrSubRunNoCachePainter::GrSubRunNoCachePainter(SkCanvas* canvas,
+                                               skgpu::v1::SurfaceDrawContext* sdc,
                                                GrSubRunAllocator* alloc,
                                                const GrClip* clip,
                                                const SkMatrixProvider& viewMatrix,
                                                const SkGlyphRunList& glyphRunList,
                                                const SkPaint& paint)
-            : fSDC{sdc}
+            : fCanvas{canvas}
+            , fSDC{sdc}
             , fAlloc{alloc}
             , fClip{clip}
             , fViewMatrix{viewMatrix}
@@ -2560,7 +2555,7 @@ void GrSubRunNoCachePainter::processSourcePaths(const SkZip<SkGlyphVariant, SkPo
                                   strikeToSourceScale,
                                   fAlloc);
 
-    pathDrawing.submitOps(fClip, fViewMatrix, fGlyphRunList.origin(), fPaint, fSDC);
+    pathDrawing.submitOps(fCanvas, fClip, fViewMatrix, fGlyphRunList.origin(), fPaint, fSDC);
 }
 
 void GrSubRunNoCachePainter::processSourceSDFT(const SkZip<SkGlyphVariant, SkPoint>& drawables,
@@ -2603,7 +2598,8 @@ public:
          int allocSize);
     ~Slug() override = default;
 
-    void surfaceDraw(const GrClip* clip,
+    void surfaceDraw(SkCanvas*,
+                     const GrClip* clip,
                      const SkMatrixProvider& viewMatrix,
                      skgpu::v1::SurfaceDrawContext* sdc);
 
@@ -2653,10 +2649,10 @@ Slug::Slug(SkRect sourceBounds,
            , fOrigin{origin}
            , fAlloc {SkTAddOffset<char>(this, sizeof(Slug)), allocSize, allocSize/2} { }
 
-void Slug::surfaceDraw(const GrClip* clip, const SkMatrixProvider& viewMatrix,
+void Slug::surfaceDraw(SkCanvas* canvas, const GrClip* clip, const SkMatrixProvider& viewMatrix,
                        skgpu::v1::SurfaceDrawContext* sdc) {
     for (const GrSubRun& subRun : fSubRuns) {
-        subRun.draw(clip, viewMatrix, fOrigin, fPaint, sdc);
+        subRun.draw(canvas, clip, viewMatrix, fOrigin, fPaint, sdc);
     }
 }
 
@@ -2677,7 +2673,8 @@ public:
                               GrMaskFormat format,
                               GrSubRunAllocator* alloc);
 
-    void draw(const GrClip* clip,
+    void draw(SkCanvas*,
+              const GrClip* clip,
               const SkMatrixProvider& viewMatrix,
               SkPoint drawOrigin,
               const SkPaint& paint,
@@ -3078,11 +3075,11 @@ sk_sp<Slug> Slug::Make(const SkMatrixProvider& viewMatrix,
 
     const uint64_t uniqueID = glyphRunList.uniqueID();
     for (auto& glyphRun : glyphRunList) {
-        painter->processGlyphRun(glyphRun,
+        painter->processGlyphRun(slug.get(),
+                                 glyphRun,
                                  positionMatrix,
                                  paint,
                                  control,
-                                 slug.get(),
                                  "Slug",
                                  uniqueID);
     }
@@ -3123,7 +3120,8 @@ public:
                               SkScalar strikeToSourceScale,
                               GrSubRunAllocator* alloc);
 
-    void draw(const GrClip* clip,
+    void draw(SkCanvas*,
+              const GrClip* clip,
               const SkMatrixProvider& viewMatrix,
               SkPoint drawOrigin,
               const SkPaint& paint,
@@ -3223,11 +3221,12 @@ GrSubRunOwner SDFTSubRunSlug::Make(Slug* slug,
             has_some_antialiasing(runFont));
 }
 
-void SDFTSubRunSlug::draw(const GrClip* clip,
-                      const SkMatrixProvider& viewMatrix,
-                      SkPoint drawOrigin,
-                      const SkPaint& paint,
-                      skgpu::v1::SurfaceDrawContext* sdc) const {
+void SDFTSubRunSlug::draw(SkCanvas*,
+                          const GrClip* clip,
+                          const SkMatrixProvider& viewMatrix,
+                          SkPoint drawOrigin,
+                          const SkPaint& paint,
+                          skgpu::v1::SurfaceDrawContext* sdc) const {
     auto[drawingClip, op] = this->makeAtlasTextOp(
             clip, viewMatrix, drawOrigin, paint, sdc, nullptr);
     if (op != nullptr) {
@@ -3347,7 +3346,8 @@ public:
                               GrMaskFormat format,
                               GrSubRunAllocator* alloc);
 
-    void draw(const GrClip*,
+    void draw(SkCanvas*,
+              const GrClip*,
               const SkMatrixProvider& viewMatrix,
               SkPoint drawOrigin,
               const SkPaint&,
@@ -3374,14 +3374,10 @@ public:
     int glyphCount() const override;
 
 private:
-    Slug* const fSlug;
     // The rectangle that surrounds all the glyph bounding boxes in device space.
     SkRect deviceRect(const SkMatrix& drawMatrix, SkPoint drawOrigin) const;
-
-    const GrMaskFormat fMaskFormat;
-
-    // The scale factor between the strike size, and the source size.
-    const SkScalar fStrikeToSourceScale;
+    const TransformedMaskVertexFiller fVertexFiller;
+    Slug* const fSlug;
 
     // The bounds in source space. The bounds are the joined rectangles of all the glyphs.
     const SkRect fVertexBounds;
@@ -3399,9 +3395,8 @@ TransformedMaskSubRunSlug::TransformedMaskSubRunSlug(
         const SkRect& bounds,
         SkSpan<const VertexData> vertexData,
         GlyphVector&& glyphs)
-            : fSlug{slug}
-            , fMaskFormat{format}
-            , fStrikeToSourceScale{strikeToSourceScale}
+            : fVertexFiller{format, 0, strikeToSourceScale}
+            , fSlug{slug}
             , fVertexBounds{bounds}
             , fVertexData{vertexData}
             , fGlyphs{std::move(glyphs)} { }
@@ -3435,7 +3430,8 @@ GrSubRunOwner TransformedMaskSubRunSlug::Make(Slug* slug,
             GlyphVector::Make(std::move(strike), drawables.get<0>(), alloc));
 }
 
-void TransformedMaskSubRunSlug::draw(const GrClip* clip,
+void TransformedMaskSubRunSlug::draw(SkCanvas*,
+                                     const GrClip* clip,
                                      const SkMatrixProvider& viewMatrix,
                                      SkPoint drawOrigin,
                                      const SkPaint& paint,
@@ -3459,7 +3455,8 @@ TransformedMaskSubRunSlug::makeAtlasTextOp(const GrClip* clip,
     const SkMatrix& drawMatrix = viewMatrix.localToDevice();
 
     GrPaint grPaint;
-    SkPMColor4f drawingColor = calculate_colors(sdc, paint, viewMatrix, fMaskFormat, &grPaint);
+    SkPMColor4f drawingColor = calculate_colors(
+            sdc, paint, viewMatrix, fVertexFiller.grMaskType(), &grPaint);
 
     auto geometry = AtlasTextOp::Geometry::MakeForBlob(*this,
                                                        drawMatrix,
@@ -3471,7 +3468,7 @@ TransformedMaskSubRunSlug::makeAtlasTextOp(const GrClip* clip,
 
     GrRecordingContext* const rContext = sdc->recordingContext();
     GrOp::Owner op = GrOp::Make<AtlasTextOp>(rContext,
-                                             op_mask_type(fMaskFormat),
+                                             fVertexFiller.opMaskType(),
                                              true,
                                              this->glyphCount(),
                                              this->deviceRect(drawMatrix, drawOrigin),
@@ -3486,35 +3483,24 @@ void TransformedMaskSubRunSlug::testingOnly_packedGlyphIDToGrGlyph(GrStrikeCache
 
 std::tuple<bool, int> TransformedMaskSubRunSlug::regenerateAtlas(
         int begin, int end, GrMeshDrawTarget* target) const {
-    return fGlyphs.regenerateAtlas(begin, end, fMaskFormat, 1, target, true);
+    return fGlyphs.regenerateAtlas(begin, end, fVertexFiller.grMaskType(), 1, target, true);
 }
 
 void TransformedMaskSubRunSlug::fillVertexData(void* vertexDst, int offset, int count,
                                                GrColor color,
                                                const SkMatrix& drawMatrix, SkPoint drawOrigin,
                                                SkIRect clip) const {
-    TransformedMaskVertexFiller filler{fMaskFormat, 0, fStrikeToSourceScale};
-
     const SkMatrix positionMatrix = position_matrix(drawMatrix, drawOrigin);
-    filler.fillVertexData(fGlyphs.glyphs().subspan(offset, count),
-                          fVertexData.subspan(offset, count),
-                          color,
-                          positionMatrix,
-                          clip,
-                          vertexDst);
+    fVertexFiller.fillVertexData(fGlyphs.glyphs().subspan(offset, count),
+                                 fVertexData.subspan(offset, count),
+                                 color,
+                                 positionMatrix,
+                                 clip,
+                                 vertexDst);
 }
 
 size_t TransformedMaskSubRunSlug::vertexStride(const SkMatrix& drawMatrix) const {
-    switch (fMaskFormat) {
-        case kA8_GrMaskFormat:
-            return drawMatrix.hasPerspective() ? sizeof(Mask3DVertex) : sizeof(Mask2DVertex);
-        case kARGB_GrMaskFormat:
-            return drawMatrix.hasPerspective() ? sizeof(ARGB3DVertex) : sizeof(ARGB2DVertex);
-        default:
-            SkASSERT(!drawMatrix.hasPerspective());
-            return sizeof(Mask2DVertex);
-    }
-    SkUNREACHABLE;
+    return fVertexFiller.vertexStride(drawMatrix);
 }
 
 int TransformedMaskSubRunSlug::glyphCount() const {
@@ -3552,8 +3538,8 @@ Device::convertGlyphRunListToSlug(const SkGlyphRunList& glyphRunList, const SkPa
             this->asMatrixProvider(), glyphRunList, paint);
 }
 
-void Device::drawSlug(GrSlug* slug) {
-    fSurfaceDrawContext->drawSlug(this->clip(), this->asMatrixProvider(), slug);
+void Device::drawSlug(SkCanvas* canvas, GrSlug* slug) {
+    fSurfaceDrawContext->drawSlug(canvas, this->clip(), this->asMatrixProvider(), slug);
 }
 
 sk_sp<GrSlug>
@@ -3569,11 +3555,12 @@ SurfaceDrawContext::convertGlyphRunListToSlug(const SkMatrixProvider& viewMatrix
     return Slug::Make(viewMatrix, glyphRunList, paint, control, &fGlyphPainter);
 }
 
-void SurfaceDrawContext::drawSlug(const GrClip* clip,
+void SurfaceDrawContext::drawSlug(SkCanvas* canvas,
+                                  const GrClip* clip,
                                   const SkMatrixProvider& viewMatrix,
                                   GrSlug* slugPtr) {
     Slug* slug = static_cast<Slug*>(slugPtr);
 
-    slug->surfaceDraw(clip, viewMatrix, this);
+    slug->surfaceDraw(canvas, clip, viewMatrix, this);
 }
 }  // namespace skgpu::v1
