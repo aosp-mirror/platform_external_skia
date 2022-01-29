@@ -128,7 +128,7 @@ cc_defaults {
     ],
 
     cppflags:[
-        "-Wno-c++17-extensions",
+        
     ],
 
     export_include_dirs: [
@@ -1984,6 +1984,7 @@ cc_defaults {
         "gm/blurs.cpp",
         "gm/blurtextsmallradii.cpp",
         "gm/bmpfilterqualityrepeat.cpp",
+        "gm/bug12866.cpp",
         "gm/bug5252.cpp",
         "gm/bug530095.cpp",
         "gm/bug615686.cpp",
@@ -3209,7 +3210,7 @@ cc_library_shared {
     ],
 
     cppflags:[
-        "-Wno-c++17-extensions",
+        
     ],
 
     local_include_dirs: [
@@ -3308,6 +3309,7 @@ cc_library_shared {
         "gm/blurs.cpp",
         "gm/blurtextsmallradii.cpp",
         "gm/bmpfilterqualityrepeat.cpp",
+        "gm/bug12866.cpp",
         "gm/bug5252.cpp",
         "gm/bug530095.cpp",
         "gm/bug615686.cpp",
