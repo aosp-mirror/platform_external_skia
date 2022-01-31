@@ -246,7 +246,6 @@ SKSL_TEST(SkSLTrivialArgumentsInlineDirectly,     "inliner/TrivialArgumentsInlin
 SKSL_TEST_ES3(SkSLWhileBodyMustBeInlinedIntoAScope,
          "inliner/WhileBodyMustBeInlinedIntoAScope.sksl")
 SKSL_TEST_ES3(SkSLWhileTestCannotBeInlined,       "inliner/WhileTestCannotBeInlined.sksl")
-SKSL_TEST(SkSLInlinerHonorsGLSLOutParamSemantics, "inliner/InlinerHonorsGLSLOutParamSemantics.sksl")
 
 SKSL_TEST(SkSLIntrinsicAbsFloat,               "intrinsics/AbsFloat.sksl")
 SKSL_TEST(SkSLIntrinsicCeil,                   "intrinsics/Ceil.sksl")
@@ -298,9 +297,7 @@ SKSL_TEST(SkSLArrayTypes,                      "shared/ArrayTypes.sksl")
 SKSL_TEST(SkSLAssignment,                      "shared/Assignment.sksl")
 SKSL_TEST(SkSLCastsRoundTowardZero,            "shared/CastsRoundTowardZero.sksl")
 SKSL_TEST(SkSLCommaMixedTypes,                 "shared/CommaMixedTypes.sksl")
-// This test causes the Adreno 330 driver to crash, and does not pass on Quadro P400 in wasm.
-// The CPU test confirms that we can get it right, even if not all drivers do.
-SKSL_TEST_CPU(SkSLCommaSideEffects,            "shared/CommaSideEffects.sksl")
+SKSL_TEST(SkSLCommaSideEffects,                "shared/CommaSideEffects.sksl")
 SKSL_TEST(SkSLConstantIf,                      "shared/ConstantIf.sksl")
 SKSL_TEST_ES3(SkSLConstArray,                  "shared/ConstArray.sksl")
 SKSL_TEST(SkSLConstVariableComparison,         "shared/ConstVariableComparison.sksl")
@@ -341,7 +338,7 @@ SKSL_TEST(SkSLOperatorsES2,                    "shared/OperatorsES2.sksl")
 SKSL_TEST_ES3(SkSLOperatorsES3,                "shared/OperatorsES3.sksl")
 SKSL_TEST(SkSLOssfuzz36852,                    "shared/Ossfuzz36852.sksl")
 SKSL_TEST(SkSLOutParams,                       "shared/OutParams.sksl")
-SKSL_TEST(SkSLOutParamsNoInline,               "shared/OutParamsNoInline.sksl")
+SKSL_TEST(SkSLOutParamsAreDistinct,            "shared/OutParamsAreDistinct.sksl")
 SKSL_TEST(SkSLOutParamsTricky,                 "shared/OutParamsTricky.sksl")
 SKSL_TEST(SkSLResizeMatrix,                    "shared/ResizeMatrix.sksl")
 SKSL_TEST_ES3(SkSLResizeMatrixNonsquare,       "shared/ResizeMatrixNonsquare.sksl")
