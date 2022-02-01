@@ -246,10 +246,7 @@ SKSL_TEST(SkSLTrivialArgumentsInlineDirectly,     "inliner/TrivialArgumentsInlin
 SKSL_TEST_ES3(SkSLWhileBodyMustBeInlinedIntoAScope,
          "inliner/WhileBodyMustBeInlinedIntoAScope.sksl")
 SKSL_TEST_ES3(SkSLWhileTestCannotBeInlined,       "inliner/WhileTestCannotBeInlined.sksl")
-
-// TODO(skia:11052): SPIR-V does not yet honor `out` param semantics correctly
-SKSL_TEST_CPU(SkSLInlinerHonorsGLSLOutParamSemantics,
-         "inliner/InlinerHonorsGLSLOutParamSemantics.sksl")
+SKSL_TEST(SkSLInlinerHonorsGLSLOutParamSemantics, "inliner/InlinerHonorsGLSLOutParamSemantics.sksl")
 
 SKSL_TEST(SkSLIntrinsicAbsFloat,               "intrinsics/AbsFloat.sksl")
 SKSL_TEST(SkSLIntrinsicCeil,                   "intrinsics/Ceil.sksl")
@@ -343,12 +340,9 @@ SKSL_TEST(SkSLNumberCasts,                     "shared/NumberCasts.sksl")
 SKSL_TEST(SkSLOperatorsES2,                    "shared/OperatorsES2.sksl")
 SKSL_TEST_ES3(SkSLOperatorsES3,                "shared/OperatorsES3.sksl")
 SKSL_TEST(SkSLOssfuzz36852,                    "shared/Ossfuzz36852.sksl")
-
-// skbug.com/11919: Fails on Adreno + Vulkan
-SKSL_TEST_CPU(SkSLOutParams,                   "shared/OutParams.sksl")
-SKSL_TEST_CPU(SkSLOutParamsNoInline,           "shared/OutParamsNoInline.sksl")
-SKSL_TEST_CPU(SkSLOutParamsTricky,             "shared/OutParamsTricky.sksl")
-
+SKSL_TEST(SkSLOutParams,                       "shared/OutParams.sksl")
+SKSL_TEST(SkSLOutParamsNoInline,               "shared/OutParamsNoInline.sksl")
+SKSL_TEST(SkSLOutParamsTricky,                 "shared/OutParamsTricky.sksl")
 SKSL_TEST(SkSLResizeMatrix,                    "shared/ResizeMatrix.sksl")
 SKSL_TEST_ES3(SkSLResizeMatrixNonsquare,       "shared/ResizeMatrixNonsquare.sksl")
 SKSL_TEST(SkSLReturnsValueOnEveryPathES2,      "shared/ReturnsValueOnEveryPathES2.sksl")
