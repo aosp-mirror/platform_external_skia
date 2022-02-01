@@ -17,10 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    will now create a surface with a color space of `CanvasKit.ColorSpace.SRGB`.
  - We now build/ship with emscripten 3.1.3.
  - Internal calls no longer use dynamic dispatch (skbug.com/12795).
+ - JPEG and WEBP encoding are turned on by default in full version (in /bin/full/).
 
 ### Fixed
  - Supplying textures via `Surface.makeImageFromTextureSource` should not cause issues with
    Mipmaps or other places where Skia needs to create textures (skbug.com/12797)
+ - `CanvasKit.MakeRenderTarget` correctly takes 2 or 3 params, as per the documentation.
+ - `CanvasKit.MakeOnScreenGLSurface` and other gpu surface constructors correctly adjust the
+   underlying WebGL context, avoiding corruption and mismatched textures
+   (https://github.com/flutter/flutter/issues/95259).
 
 ## [0.32.0] - 2021-12-15
 
