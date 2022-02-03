@@ -584,14 +584,14 @@ void SkVMGenerator::addDebugSlotInfo(String varName,
             int nslots = type.columns();
             const Type& elemType = type.componentType();
             for (int slot = 0; slot < nslots; ++slot) {
-                this->addDebugSlotInfo(varName + "[" + to_string(slot) + "]",
+                this->addDebugSlotInfo(varName + "[" + skstd::to_string(slot) + "]",
                                        elemType, line, fnReturnValue);
             }
             break;
         }
         case Type::TypeKind::kStruct: {
             for (const Type::Field& field : type.fields()) {
-                this->addDebugSlotInfo(varName + "." + field.fName,
+                this->addDebugSlotInfo(varName + "." + SkSL::String(field.fName),
                                        *field.fType, line, fnReturnValue);
             }
             break;
@@ -669,7 +669,7 @@ size_t SkVMGenerator::getSlot(const FunctionDefinition& fn) {
     const FunctionDeclaration& decl = fn.declaration();
     int fnReturnValue = fDebugTrace ? this->getDebugFunctionInfo(decl) : -1;
 
-    size_t slot = this->createSlot("[" + decl.name() + "].result",
+    size_t slot = this->createSlot("[" + SkSL::String(decl.name()) + "].result",
                                    decl.returnType(),
                                    fn.fLine,
                                    fnReturnValue);
@@ -2198,7 +2198,7 @@ static void gather_uniforms(UniformInfo* info, const Type& type, const String& n
     switch (type.typeKind()) {
         case Type::TypeKind::kStruct:
             for (const auto& f : type.fields()) {
-                gather_uniforms(info, *f.fType, name + "." + f.fName);
+                gather_uniforms(info, *f.fType, name + "." + SkSL::String(f.fName));
             }
             break;
         case Type::TypeKind::kArray:

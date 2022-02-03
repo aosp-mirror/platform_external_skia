@@ -315,7 +315,7 @@ void PipelineStageCodeGenerator::writeSwitchStatement(const SwitchStatement& s) 
             this->writeLine("default:");
         } else {
             this->write("case ");
-            this->write(to_string(c.value()));
+            this->write(skstd::to_string(c.value()));
             this->writeLine(":");
         }
         if (!c.statement()->isEmpty()) {
@@ -472,7 +472,7 @@ String PipelineStageCodeGenerator::typeName(const Type& raw) {
         // This is necessary so that name mangling on arrays-of-structs works properly.
         String arrayName = this->typeName(type.componentType());
         arrayName.push_back('[');
-        arrayName += to_string(type.columns());
+        arrayName += skstd::to_string(type.columns());
         arrayName.push_back(']');
         return arrayName;
     }
@@ -654,9 +654,9 @@ String PipelineStageCodeGenerator::modifierString(const Modifiers& modifiers) {
 String PipelineStageCodeGenerator::typedVariable(const Type& type, std::string_view name) {
     const Type& baseType = type.isArray() ? type.componentType() : type;
 
-    String decl = this->typeName(baseType) + " " + name;
+    String decl = this->typeName(baseType) + " " + SkSL::String(name);
     if (type.isArray()) {
-        decl += "[" + to_string(type.columns()) + "]";
+        decl += "[" + skstd::to_string(type.columns()) + "]";
     }
     return decl;
 }

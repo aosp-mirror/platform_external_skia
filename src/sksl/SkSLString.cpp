@@ -6,7 +6,6 @@
  */
 
 #include "include/private/SkSLString.h"
-#include "include/private/SkStringView.h"
 #include "src/sksl/SkSLUtil.h"
 #include <algorithm>
 #include <cinttypes>
@@ -16,46 +15,64 @@
 #include <sstream>
 #include <string>
 
+template <>
+SkSL::String skstd::to_string(float value) {
+    return skstd::to_string((double)value);
+}
+
+template <>
+SkSL::String skstd::to_string(double value) {
+    std::stringstream buffer;
+    buffer.imbue(std::locale::classic());
+    buffer.precision(17);
+    buffer << value;
+    bool needsDotZero = true;
+    const std::string str = buffer.str();
+    for (int i = str.size() - 1; i >= 0; --i) {
+        char c = str[i];
+        if (c == '.' || c == 'e') {
+            needsDotZero = false;
+            break;
+        }
+    }
+    if (needsDotZero) {
+        buffer << ".0";
+    }
+    return SkSL::String(buffer.str().c_str());
+}
+
 namespace SkSL {
 
 String String::printf(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
     String result;
-    result.vappendf(fmt, args);
+    vappendf(&result, fmt, args);
     va_end(args);
     return result;
 }
 
-void String::appendf(const char* fmt, ...) {
+void String::appendf(String* str, const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    this->vappendf(fmt, args);
+    vappendf(str, fmt, args);
     va_end(args);
 }
 
-void String::vappendf(const char* fmt, va_list args) {
+void String::vappendf(String* str, const char* fmt, va_list args) {
     #define BUFFER_SIZE 256
     char buffer[BUFFER_SIZE];
     va_list reuse;
     va_copy(reuse, args);
     size_t size = vsnprintf(buffer, BUFFER_SIZE, fmt, args);
     if (BUFFER_SIZE >= size + 1) {
-        this->append(buffer, size);
+        str->append(buffer, size);
     } else {
         auto newBuffer = std::unique_ptr<char[]>(new char[size + 1]);
         vsnprintf(newBuffer.get(), size + 1, fmt, reuse);
-        this->append(newBuffer.get(), size);
+        str->append(newBuffer.get(), size);
     }
     va_end(reuse);
-}
-
-bool String::starts_with(const char prefix[]) const {
-    return skstd::starts_with(std::string_view(data(), size()), prefix);
-}
-
-bool String::ends_with(const char suffix[]) const {
-    return skstd::ends_with(std::string_view(data(), size()), suffix);
 }
 
 String String::operator+(const char* s) const {
@@ -67,12 +84,6 @@ String String::operator+(const char* s) const {
 String String::operator+(const String& s) const {
     String result(*this);
     result.append(s);
-    return result;
-}
-
-String String::operator+(std::string_view s) const {
-    String result(*this);
-    result.append(s.data(), s.length());
     return result;
 }
 
@@ -102,45 +113,6 @@ String operator+(const char* s1, const String& s2) {
     return result;
 }
 
-String operator+(std::string_view left, std::string_view right) {
-    return String(left) + right;
-}
-
-String to_string(int32_t value) {
-    return SkSL::String(std::to_string(value));
-}
-
-String to_string(uint32_t value) {
-    return SkSL::String(std::to_string(value));
-}
-
-String to_string(int64_t value) {
-    return SkSL::String(std::to_string(value));
-}
-
-String to_string(uint64_t value) {
-    return SkSL::String(std::to_string(value));
-}
-
-String to_string(double value) {
-    std::stringstream buffer;
-    buffer.imbue(std::locale::classic());
-    buffer.precision(17);
-    buffer << value;
-    bool needsDotZero = true;
-    const std::string str = buffer.str();
-    for (int i = str.size() - 1; i >= 0; --i) {
-        char c = str[i];
-        if (c == '.' || c == 'e') {
-            needsDotZero = false;
-            break;
-        }
-    }
-    if (needsDotZero) {
-        buffer << ".0";
-    }
-    return String(buffer.str().c_str());
-}
 
 bool stod(std::string_view s, SKSL_FLOAT* value) {
     std::string str(s.data(), s.size());

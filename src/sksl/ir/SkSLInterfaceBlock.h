@@ -75,7 +75,8 @@ public:
     }
 
     String description() const override {
-        String result = this->variable().modifiers().description() + this->typeName() + " {\n";
+        String result = this->variable().modifiers().description() +
+                        SkSL::String(this->typeName()) + " {\n";
         const Type* structType = &this->variable().type();
         if (structType->isArray()) {
             structType = &structType->componentType();
@@ -85,9 +86,9 @@ public:
         }
         result += "}";
         if (!this->instanceName().empty()) {
-            result += " " + this->instanceName();
+            result += " " + SkSL::String(this->instanceName());
             if (this->arraySize() > 0) {
-                result.appendf("[%d]", this->arraySize());
+                String::appendf(&result, "[%d]", this->arraySize());
             }
         }
         return result + ";";
