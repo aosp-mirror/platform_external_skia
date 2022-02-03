@@ -9,6 +9,7 @@
 
 #include "experimental/graphite/src/ContextPriv.h"
 #include "experimental/graphite/src/ContextUtils.h"
+#include "experimental/graphite/src/GlobalCache.h"
 #include "experimental/graphite/src/PaintParams.h"
 #include "include/core/SkPaint.h"
 #include "include/effects/SkGradientShader.h"
@@ -87,14 +88,20 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(UniformTest, reporter, context) {
                 SkPaintParamsKey expected = CreateKey(SkBackend::kGraphite, s, tm, bm);
 
                 auto [ p, expectedNumUniforms ] = create_paint(s, tm, bm);
-                auto [ actualID, ud] = ExtractPaintData(context, PaintParams(p));
+                auto dict = context->priv().globalCache()->shaderCodeDictionary();
+                auto [ actualID, uniformBlock] = ExtractPaintData(dict, PaintParams(p));
+                int actualNumUniforms = uniformBlock->count();
 
-                auto entry = context->priv().shaderCodeDictionary()->lookup(actualID);
+                auto entry = dict->lookup(actualID);
+
 
                 REPORTER_ASSERT(reporter, expected == entry->paintParamsKey());
-                REPORTER_ASSERT(reporter, expectedNumUniforms == ud->count());
-                for (int i = 0; i < ud->count(); ++i) {
-                    REPORTER_ASSERT(reporter, ud->offset(i) >= 0 && ud->offset(i) < ud->dataSize());
+                REPORTER_ASSERT(reporter, expectedNumUniforms == actualNumUniforms);
+                for (auto& u : *uniformBlock) {
+                    for (int i = 0; i < u->count(); ++i) {
+                        REPORTER_ASSERT(reporter,
+                                        u->offset(i) >= 0 && u->offset(i) < u->dataSize());
+                    }
                 }
             }
         }
