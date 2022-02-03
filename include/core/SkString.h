@@ -19,10 +19,7 @@
 #include <string.h>
 #include <atomic>
 #include <string>
-
-namespace skstd {
-    class string_view;
-}
+#include <string_view>
 
 /*  Some helper functions for C strings */
 static inline bool SkStrStartsWith(const char string[], const char prefixStr[]) {
@@ -126,7 +123,7 @@ public:
                 SkString(const SkString&);
                 SkString(SkString&&);
     explicit    SkString(const std::string&);
-    explicit    SkString(skstd::string_view);
+    explicit    SkString(std::string_view);
                 ~SkString();
 
     bool        isEmpty() const { return 0 == fRec->fLength; }
