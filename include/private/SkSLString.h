@@ -20,54 +20,29 @@
 
 namespace SkSL {
 
-class String;
-
-class SK_API String : public std::string {
-public:
-    using std::string::string;
-
-    explicit String(std::string s) : INHERITED(std::move(s)) {}
-    explicit String(std::string_view s) : INHERITED(s.data(), s.length()) {}
-
-    static String printf(const char* fmt, ...) SK_PRINTF_LIKE(1, 2);
-    void appendf(const char* fmt, ...) SK_PRINTF_LIKE(2, 3);
-    void vappendf(const char* fmt, va_list va);
-
-    bool starts_with(const char prefix[]) const;
-    bool ends_with(const char suffix[]) const;
-
-    String operator+(const char* s) const;
-    String operator+(const String& s) const;
-    String operator+(std::string_view s) const;
-    String& operator+=(char c);
-    String& operator+=(const char* s);
-    String& operator+=(const String& s);
-    String& operator+=(std::string_view s);
-    friend String operator+(const char* s1, const String& s2);
-
-private:
-    using INHERITED = std::string;
-};
-
-String operator+(std::string_view left, std::string_view right);
-
-String to_string(double value);
-String to_string(int32_t value);
-String to_string(uint32_t value);
-String to_string(int64_t value);
-String to_string(uint64_t value);
-
 bool stod(std::string_view s, SKSL_FLOAT* value);
 bool stoi(std::string_view s, SKSL_INT* value);
 
-} // namespace SkSL
+namespace String {
 
-namespace std {
-    template<> struct hash<SkSL::String> {
-        size_t operator()(const SkSL::String& s) const {
-            return hash<std::string>{}(s);
-        }
-    };
-} // namespace std
+std::string printf(const char* fmt, ...) SK_PRINTF_LIKE(1, 2);
+void appendf(std::string* str, const char* fmt, ...) SK_PRINTF_LIKE(2, 3);
+void vappendf(std::string* str, const char* fmt, va_list va);
+
+}  // namespace String
+}  // namespace SkSL
+
+namespace skstd {
+
+// For most types, pass-through to std::to_string as-is.
+template <typename T> std::string to_string(T value) {
+    return std::to_string(value);
+}
+
+// We customize the output from to_string(float|double) slightly.
+template <> std::string to_string(float value);
+template <> std::string to_string(double value);
+
+}  // namespace skstd
 
 #endif

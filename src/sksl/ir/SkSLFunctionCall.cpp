@@ -790,9 +790,9 @@ std::unique_ptr<Expression> FunctionCall::clone() const {
                                           this->arguments().clone());
 }
 
-String FunctionCall::description() const {
-    String result = String(this->function().name()) + "(";
-    String separator;
+std::string FunctionCall::description() const {
+    std::string result = std::string(this->function().name()) + "(";
+    std::string separator;
     for (const std::unique_ptr<Expression>& arg : this->arguments()) {
         result += separator;
         result += arg->description();
@@ -862,8 +862,8 @@ std::unique_ptr<Expression> FunctionCall::Convert(const Context& context,
             int count = f.callParameterCount();
             if (count != (int) arguments.size()) {
                 context.fErrors->error(line,
-                        "external function expected " + to_string(count) +
-                        " arguments, but found " + to_string((int)arguments.size()));
+                        "external function expected " + skstd::to_string(count) +
+                        " arguments, but found " + skstd::to_string(arguments.size()));
                 return nullptr;
             }
             static constexpr int PARAMETER_MAX = 16;
@@ -886,8 +886,8 @@ std::unique_ptr<Expression> FunctionCall::Convert(const Context& context,
             if (best) {
                 return FunctionCall::Convert(context, line, *best, std::move(arguments));
             }
-            String msg = "no match for " + functions[0]->name() + "(";
-            String separator;
+            std::string msg = "no match for " + std::string(functions[0]->name()) + "(";
+            std::string separator;
             for (size_t i = 0; i < arguments.size(); i++) {
                 msg += separator;
                 separator = ", ";
@@ -907,9 +907,9 @@ std::unique_ptr<Expression> FunctionCall::Convert(const Context& context,
             if (best) {
                 return FunctionCall::Convert(context, line, *best, std::move(arguments));
             }
-            String msg = "no match for " + arguments.back()->type().displayName() +
-                         "::" + functions[0]->name().substr(1) + "(";
-            String separator;
+            std::string msg = "no match for " + arguments.back()->type().displayName() +
+                              "::" + std::string(functions[0]->name().substr(1)) + "(";
+            std::string separator;
             for (size_t i = 0; i < arguments.size() - 1; i++) {
                 msg += separator;
                 separator = ", ";
@@ -939,12 +939,12 @@ std::unique_ptr<Expression> FunctionCall::Convert(const Context& context,
 
     // Reject function calls with the wrong number of arguments.
     if (function.parameters().size() != arguments.size()) {
-        String msg = "call to '" + function.name() + "' expected " +
-                     to_string((int)function.parameters().size()) + " argument";
+        std::string msg = "call to '" + std::string(function.name()) + "' expected " +
+                          skstd::to_string(function.parameters().size()) + " argument";
         if (function.parameters().size() != 1) {
             msg += "s";
         }
-        msg += ", but found " + to_string(arguments.count());
+        msg += ", but found " + skstd::to_string(arguments.count());
         context.fErrors->error(line, msg);
         return nullptr;
     }
@@ -953,8 +953,8 @@ std::unique_ptr<Expression> FunctionCall::Convert(const Context& context,
     FunctionDeclaration::ParamTypes types;
     const Type* returnType;
     if (!function.determineFinalTypes(arguments, &types, &returnType)) {
-        String msg = "no match for " + function.name() + "(";
-        String separator;
+        std::string msg = "no match for " + std::string(function.name()) + "(";
+        std::string separator ;
         for (const std::unique_ptr<Expression>& arg : arguments) {
             msg += separator;
             msg += arg->type().displayName();
