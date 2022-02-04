@@ -13,21 +13,30 @@
 
 namespace skgpu {
 
-class Context;
+class Caps;
 class Device;
 class DrawBufferManager;
+class Gpu;
 class Recording;
+class ResourceProvider;
 class UniformCache;
 
 class Recorder final {
 public:
+    Recorder(const Recorder&) = delete;
+    Recorder(Recorder&&) = delete;
+    Recorder& operator=(const Recorder&) = delete;
+    Recorder& operator=(Recorder&&) = delete;
+
     ~Recorder();
 
     void add(sk_sp<Task>);
 
-    Context* context() const;
-    UniformCache* uniformCache();
-    DrawBufferManager* drawBufferManager();
+    // TODO: All of these should be moved to a RecorderPriv class
+    ResourceProvider* resourceProvider() const;
+    UniformCache* uniformCache() const;
+    DrawBufferManager* drawBufferManager() const;
+    const Caps* caps() const;
 
     std::unique_ptr<Recording> snap();
 
@@ -39,7 +48,7 @@ private:
     friend class Context; // For ctor
     friend class Device; // For registering and deregistering Devices;
 
-    Recorder(sk_sp<Context>);
+    Recorder(sk_sp<Gpu>, std::unique_ptr<ResourceProvider>);
 
     // We keep track of all Devices that are connected to a Recorder. This allows the client to
     // safely delete an SkSurface or a Recorder in any order. If the client deletes the Recorder
@@ -61,7 +70,9 @@ private:
     void registerDevice(Device*);
     void deregisterDevice(const Device*);
 
-    sk_sp<Context> fContext;
+    sk_sp<Gpu> fGpu;
+    std::unique_ptr<ResourceProvider> fResourceProvider;
+
     TaskGraph fGraph;
     std::unique_ptr<UniformCache> fUniformCache;
     std::unique_ptr<DrawBufferManager> fDrawBufferManager;

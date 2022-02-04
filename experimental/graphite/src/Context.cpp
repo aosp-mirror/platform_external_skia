@@ -18,6 +18,7 @@
 #include "experimental/graphite/src/Gpu.h"
 #include "experimental/graphite/src/GraphicsPipelineDesc.h"
 #include "experimental/graphite/src/Renderer.h"
+#include "experimental/graphite/src/ResourceProvider.h"
 #include "include/core/SkPathTypes.h"
 #include "include/private/SkShaderCodeDictionary.h"
 #include "src/core/SkKeyHelpers.h"
@@ -36,18 +37,19 @@ Context::Context(sk_sp<Gpu> gpu, BackendApi backend)
 Context::~Context() {}
 
 #ifdef SK_METAL
-sk_sp<Context> Context::MakeMetal(const mtl::BackendContext& backendContext) {
+std::unique_ptr<Context> Context::MakeMetal(const mtl::BackendContext& backendContext) {
     sk_sp<Gpu> gpu = mtl::Trampoline::MakeGpu(backendContext);
     if (!gpu) {
         return nullptr;
     }
 
-    return sk_sp<Context>(new Context(std::move(gpu), BackendApi::kMetal));
+    return std::unique_ptr<Context>(new Context(std::move(gpu), BackendApi::kMetal));
 }
 #endif
 
 std::unique_ptr<Recorder> Context::makeRecorder() {
-    return std::unique_ptr<Recorder>(new Recorder(sk_ref_sp(this)));
+    auto rp = fGpu->makeResourceProvider(fGlobalCache);
+    return std::unique_ptr<Recorder>(new Recorder(fGpu, std::move(rp)));
 }
 
 void Context::insertRecording(std::unique_ptr<Recording> recording) {

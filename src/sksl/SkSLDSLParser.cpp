@@ -55,7 +55,7 @@ public:
         ++fDepth;
         ++fParser->fDepth;
         if (fParser->fDepth > kMaxParseDepth) {
-            fParser->error(fParser->peek(), String("exceeded max parse depth"));
+            fParser->error(fParser->peek(), "exceeded max parse depth");
             return false;
         }
         return true;
@@ -97,11 +97,11 @@ void DSLParser::InitLayoutMap() {
 }
 
 DSLParser::DSLParser(Compiler* compiler, const ProgramSettings& settings, ProgramKind kind,
-                     String text)
+                     std::string text)
     : fCompiler(*compiler)
     , fSettings(settings)
     , fKind(kind)
-    , fText(std::make_unique<String>(std::move(text)))
+    , fText(std::make_unique<std::string>(std::move(text)))
     , fPushback(Token::Kind::TK_NONE, /*offset=*/-1, /*length=*/-1, /*line=*/-1) {
     // We don't want to have to worry about manually releasing all of the objects in the event that
     // an error occurs
@@ -126,12 +126,13 @@ Token DSLParser::nextRawToken() {
         // Some tokens are always invalid, so we detect and report them here.
         switch (token.fKind) {
             case Token::Kind::TK_RESERVED:
-                this->error(token, "'" + this->text(token) + "' is a reserved word");
+                this->error(token, "'" + std::string(this->text(token)) + "' is a reserved word");
                 token.fKind = Token::Kind::TK_IDENTIFIER;  // reduces additional follow-up errors
                 break;
 
             case Token::Kind::TK_BAD_OCTAL:
-                this->error(token, "'" + this->text(token) + "' is not a valid octal number");
+                this->error(token, "'" + std::string(this->text(token)) +
+                                   "' is not a valid octal number");
                 break;
 
             default:
@@ -192,8 +193,8 @@ bool DSLParser::expect(Token::Kind kind, const char* expected, Token* result) {
         }
         return true;
     } else {
-        this->error(next, "expected " + String(expected) + ", but found '" +
-                    this->text(next) + "'");
+        this->error(next, "expected " + std::string(expected) + ", but found '" +
+                          std::string(this->text(next)) + "'");
         this->fEncounteredFatalError = true;
         return false;
     }
@@ -205,7 +206,7 @@ bool DSLParser::expectIdentifier(Token* result) {
     }
     if (IsBuiltinType(this->text(*result))) {
         this->error(*result, "expected an identifier, but found type '" +
-                             this->text(*result) + "'");
+                             std::string(this->text(*result)) + "'");
         this->fEncounteredFatalError = true;
         return false;
     }
@@ -235,11 +236,11 @@ PositionInfo DSLParser::position(int line) {
     return PositionInfo("<unknown>", line);
 }
 
-void DSLParser::error(Token token, String msg) {
+void DSLParser::error(Token token, std::string msg) {
     this->error(token.fLine, msg);
 }
 
-void DSLParser::error(int line, String msg) {
+void DSLParser::error(int line, std::string msg) {
     GetErrorReporter().error(msg.c_str(), this->position(line));
 }
 
@@ -286,7 +287,7 @@ void DSLParser::declarations() {
                 break;
             case Token::Kind::TK_INVALID: {
                 this->nextToken();
-                this->error(this->peek(), String("invalid token"));
+                this->error(this->peek(), "invalid token");
                 done = true;
                 break;
             }
@@ -328,7 +329,7 @@ void DSLParser::directive() {
         // We don't currently do anything different between require, enable, and warn
         dsl::AddExtension(this->text(name));
     } else {
-        this->error(start, "unsupported directive '" + this->text(start) + "'");
+        this->error(start, "unsupported directive '" + std::string(this->text(start)) + "'");
     }
 }
 
@@ -618,7 +619,7 @@ skstd::optional<DSLType> DSLParser::structDeclaration() {
         return skstd::nullopt;
     }
     SkTArray<DSLField> fields;
-    std::unordered_set<String> field_names;
+    std::unordered_set<std::string> field_names;
     while (!this->checkNext(Token::Kind::TK_RBRACE)) {
         DSLModifiers modifiers = this->modifiers();
         skstd::optional<DSLType> type = this->type(&modifiers);
@@ -640,7 +641,7 @@ skstd::optional<DSLType> DSLParser::structDeclaration() {
                 }
             }
 
-            String key(this->text(memberName));
+            std::string key(this->text(memberName));
             auto found = field_names.find(key);
             if (found == field_names.end()) {
                 fields.push_back(DSLField(modifiers,
@@ -649,10 +650,8 @@ skstd::optional<DSLType> DSLParser::structDeclaration() {
                                     this->position(memberName)));
                 field_names.emplace(key);
             } else {
-                this->error(name,
-                            "field '" + key +
-                            "' was already defined in the same struct ('" + this->text(name) +
-                            "')");
+                this->error(name, "field '" + key + "' was already defined in the same struct ('" +
+                                  std::string(this->text(name)) + "')");
             }
         } while (this->checkNext(Token::Kind::TK_COMMA));
         if (!this->expect(Token::Kind::TK_SEMICOLON, "';'")) {
@@ -660,7 +659,8 @@ skstd::optional<DSLType> DSLParser::structDeclaration() {
         }
     }
     if (fields.empty()) {
-        this->error(name, "struct '" + this->text(name) + "' must contain at least one field");
+        this->error(name, "struct '" + std::string(this->text(name)) +
+                          "' must contain at least one field");
     }
     return dsl::Struct(this->text(name), SkMakeSpan(fields), this->position(name));
 }
@@ -695,7 +695,7 @@ skstd::optional<DSLWrapper<DSLParameter>> DSLParser::parameter(size_t paramIndex
         paramPos = this->position(name);
         paramText = this->text(name);
     } else {
-        String anonymousName = String::printf("_skAnonymousParam%zu", paramIndex);
+        std::string anonymousName = String::printf("_skAnonymousParam%zu", paramIndex);
         paramPos = this->position(this->peek());
         paramText = *CurrentSymbolTable()->takeOwnershipOfString(std::move(anonymousName));
     }
@@ -717,7 +717,7 @@ int DSLParser::layoutInt() {
     std::string_view resultFrag = this->text(resultToken);
     SKSL_INT resultValue;
     if (!SkSL::stoi(resultFrag, &resultValue)) {
-        this->error(resultToken, "value in layout is too large: " + resultFrag);
+        this->error(resultToken, "value in layout is too large: " + std::string(resultFrag));
         return -1;
     }
     return resultValue;
@@ -744,7 +744,7 @@ DSLLayout DSLParser::layout() {
         }
         for (;;) {
             Token t = this->nextToken();
-            String text(this->text(t));
+            std::string text(this->text(t));
             auto found = layoutTokens->find(text);
             if (found != layoutTokens->end()) {
                 switch (found->second) {
@@ -870,7 +870,7 @@ skstd::optional<DSLType> DSLParser::type(DSLModifiers* modifiers) {
         return skstd::nullopt;
     }
     if (!IsType(this->text(type))) {
-        this->error(type, ("no type named '" + this->text(type) + "'").c_str());
+        this->error(type, "no type named '" + std::string(this->text(type)) + "'");
         return skstd::nullopt;
     }
     DSLType result(this->text(type), modifiers, this->position(type));
@@ -897,12 +897,12 @@ bool DSLParser::interfaceBlock(const dsl::DSLModifiers& modifiers) {
         // we only get into interfaceBlock if we found a top-level identifier which was not a type.
         // 99% of the time, the user was not actually intending to create an interface block, so
         // it's better to report it as an unknown type
-        this->error(typeName, "no type named '" + this->text(typeName) + "'");
+        this->error(typeName, "no type named '" + std::string(this->text(typeName)) + "'");
         return false;
     }
     this->nextToken();
     SkTArray<dsl::Field> fields;
-    std::unordered_set<String> field_names;
+    std::unordered_set<std::string> field_names;
     while (!this->checkNext(Token::Kind::TK_RBRACE)) {
         DSLModifiers fieldModifiers = this->modifiers();
         skstd::optional<dsl::DSLType> type = this->type(&fieldModifiers);
@@ -929,7 +929,7 @@ bool DSLParser::interfaceBlock(const dsl::DSLModifiers& modifiers) {
                 return false;
             }
 
-            String key(this->text(fieldName));
+            std::string key(this->text(fieldName));
             if (field_names.find(key) == field_names.end()) {
                 fields.push_back(dsl::Field(fieldModifiers,
                                             std::move(actualType),
@@ -940,7 +940,7 @@ bool DSLParser::interfaceBlock(const dsl::DSLModifiers& modifiers) {
                 this->error(typeName,
                             "field '" + key +
                             "' was already defined in the same interface block ('" +
-                            this->text(typeName) +  "')");
+                            std::string(this->text(typeName)) +  "')");
             }
         }
         while (this->checkNext(Token::Kind::TK_COMMA));
@@ -957,7 +957,7 @@ bool DSLParser::interfaceBlock(const dsl::DSLModifiers& modifiers) {
     }
     this->expect(Token::Kind::TK_SEMICOLON, "';'");
     if (fields.empty()) {
-        this->error(typeName, "interface block '" + this->text(typeName) +
+        this->error(typeName, "interface block '" + std::string(this->text(typeName)) +
                               "' must contain at least one member");
     } else {
         dsl::InterfaceBlock(modifiers, this->text(typeName), std::move(fields), instanceName,
@@ -1658,8 +1658,8 @@ DSLExpression DSLParser::swizzle(int line, DSLExpression base,
             case 'q': components[i] = SwizzleComponent::Q;    break;
             case 'B': components[i] = SwizzleComponent::UB;   break;
             default:
-                this->error(line,
-                        String::printf("invalid swizzle component '%c'", swizzleMask[i]).c_str());
+                this->error(line, String::printf("invalid swizzle component '%c'",
+                                                 swizzleMask[i]).c_str());
                 return DSLExpression::Poison();
         }
     }
@@ -1720,7 +1720,8 @@ DSLExpression DSLParser::suffix(DSLExpression base) {
             // identifiers that directly follow the float
             Token id = this->nextRawToken();
             if (id.fKind == Token::Kind::TK_IDENTIFIER) {
-                return this->swizzle(next.fLine, std::move(base), field + this->text(id));
+                return this->swizzle(next.fLine, std::move(base),
+                                     std::string(field) + std::string(this->text(id)));
             } else if (field.empty()) {
                 this->error(next, "expected field name or swizzle mask after '.'");
                 return {{DSLExpression::Poison()}};
@@ -1750,7 +1751,8 @@ DSLExpression DSLParser::suffix(DSLExpression base) {
         case Token::Kind::TK_MINUSMINUS:
             return std::move(base)--;
         default: {
-            this->error(next,  "expected expression suffix, but found '" + this->text(next) + "'");
+            this->error(next, "expected expression suffix, but found '" +
+                              std::string(this->text(next)) + "'");
             return {};
         }
     }
@@ -1802,7 +1804,7 @@ DSLExpression DSLParser::term() {
         }
         default:
             this->nextToken();
-            this->error(t, "expected expression, but found '" + this->text(t) + "'");
+            this->error(t, "expected expression, but found '" + std::string(this->text(t)) + "'");
             fEncounteredFatalError = true;
             break;
     }
@@ -1817,7 +1819,7 @@ bool DSLParser::intLiteral(SKSL_INT* dest) {
     }
     std::string_view s = this->text(t);
     if (!SkSL::stoi(s, dest)) {
-        this->error(t, "integer is too large: " + s);
+        this->error(t, "integer is too large: " + std::string(s));
         return false;
     }
     return true;
@@ -1831,7 +1833,7 @@ bool DSLParser::floatLiteral(SKSL_FLOAT* dest) {
     }
     std::string_view s = this->text(t);
     if (!SkSL::stod(s, dest)) {
-        this->error(t, "floating-point value is too large: " + s);
+        this->error(t, "floating-point value is too large: " + std::string(s));
         return false;
     }
     return true;
@@ -1848,7 +1850,8 @@ bool DSLParser::boolLiteral(bool* dest) {
             *dest = false;
             return true;
         default:
-            this->error(t, "expected 'true' or 'false', but found '" + this->text(t) + "'");
+            this->error(t, "expected 'true' or 'false', but found '" +
+                           std::string(this->text(t)) + "'");
             return false;
     }
 }

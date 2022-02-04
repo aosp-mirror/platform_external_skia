@@ -22,6 +22,13 @@ namespace skgpu {
 
 namespace {
 
+using Circle = PatchWriter::Circle;
+using Conic = PatchWriter::Conic;
+using Cubic = PatchWriter::Cubic;
+using Line = PatchWriter::Line;
+using RawPatch = PatchWriter::RawPatch;
+using Quadratic = PatchWriter::Quadratic;
+
 constexpr static float kMaxParametricSegments_pow4 =
         StrokeFixedCountTessellator::kMaxParametricSegments_pow4;
 
@@ -33,6 +40,8 @@ public:
     InstanceWriter(PatchWriter& patchWriter, float matrixMaxScale)
             : fPatchWriter(patchWriter)
             , fParametricPrecision(StrokeTolerances::CalcParametricPrecision(matrixMaxScale)) {
+        SkASSERT(fPatchWriter.attribs() & PatchAttribs::kJoinControlPoint);
+        SkASSERT(!fPatchWriter.hasJoinControlPoint());
     }
 
     float parametricPrecision() const { return fParametricPrecision; }
@@ -42,9 +51,7 @@ public:
     float maxParametricSegments_pow4() const { return fMaxParametricSegments_pow4; }
 
     SK_ALWAYS_INLINE void lineTo(SkPoint start, SkPoint end) {
-        SkPoint cubic[] = {start, start, end, end};
-        SkPoint endControlPoint = start;
-        this->writeStroke(cubic, endControlPoint, kCubicCurveType);
+        this->writeStroke(RawPatch(Line(start, end)));
     }
 
     SK_ALWAYS_INLINE void quadraticTo(const SkPoint p[3]) {
@@ -53,24 +60,20 @@ public:
             this->chopQuadraticTo(p);
             return;
         }
-        SkPoint cubic[4];
-        VertexWriter(cubic, sizeof(cubic)) << QuadToCubic(p);
-        SkPoint endControlPoint = cubic[2];
-        this->writeStroke(cubic, endControlPoint, kCubicCurveType);
+
+        this->writeStroke(RawPatch(Quadratic(p)));
         fMaxParametricSegments_pow4 = std::max(numParametricSegments_pow4,
                                                fMaxParametricSegments_pow4);
     }
 
     SK_ALWAYS_INLINE void conicTo(const SkPoint p[3], float w) {
-        float n = wangs_formula::conic_pow2(fParametricPrecision, p, w);
-        float numParametricSegments_pow4 = n*n;
+        float n2 = wangs_formula::conic_pow2(fParametricPrecision, p, w);
+        float numParametricSegments_pow4 = n2 * n2;
         if (numParametricSegments_pow4 > kMaxParametricSegments_pow4) {
             this->chopConicTo({p, w});
             return;
         }
-        SkPoint conic[4] = {p[0], p[1], p[2], {w, std::numeric_limits<float>::infinity()}};
-        SkPoint endControlPoint = conic[1];
-        this->writeStroke(conic, endControlPoint, kConicCurveType);
+        this->writeStroke(RawPatch(Conic(p, w)));
         fMaxParametricSegments_pow4 = std::max(numParametricSegments_pow4,
                                                fMaxParametricSegments_pow4);
     }
@@ -81,8 +84,7 @@ public:
             this->chopCubicConvex180To(p);
             return;
         }
-        SkPoint endControlPoint = (p[3] != p[2]) ? p[2] : (p[2] != p[1]) ? p[1] : p[0];
-        this->writeStroke(p, endControlPoint, kCubicCurveType);
+        this->writeStroke(RawPatch(Cubic(p)));
         fMaxParametricSegments_pow4 = std::max(numParametricSegments_pow4,
                                                fMaxParametricSegments_pow4);
     }
@@ -90,28 +92,24 @@ public:
     // Called when we encounter the verb "kMoveWithinContour". Moves invalidate the previous control
     // point. The stroke iterator tells us the new value to use for the previous control point.
     void setLastControlPoint(SkPoint newLastControlPoint) {
-        fLastControlPoint = newLastControlPoint;
-        fHasLastControlPoint = true;
+        fPatchWriter.updateJoinControlPointAttrib(newLastControlPoint);
     }
 
     // Draws a circle whose diameter is equal to the stroke width. We emit circles at cusp points
     // round caps, and empty strokes that are specified to be drawn as circles.
     void writeCircle(SkPoint location) {
-        // The shader interprets an empty stroke + empty join as a special case that denotes a
-        // circle, or 180-degree point stroke.
-        PatchWriter::CubicPatch(fPatchWriter) << VertexWriter::Repeat<5>(location);
+        fPatchWriter << Circle(location);
     }
 
     void finishContour() {
-        if (fHasDeferredFirstStroke) {
+        if (fDeferredFirstStroke.fExplicitCurveType >= 0.f) {
             // We deferred the first stroke because we didn't know the previous control point to use
             // for its join. We write it out now.
-            SkASSERT(fHasLastControlPoint);
-            this->writeStroke(fDeferredFirstStroke, SkPoint(),
-                              fDeferredCurveTypeIfUnsupportedInfinity);
-            fHasDeferredFirstStroke = false;
+            SkASSERT(fPatchWriter.hasJoinControlPoint());
+            this->writeStroke(fDeferredFirstStroke);
+            fDeferredFirstStroke.fExplicitCurveType = -1.f;
         }
-        fHasLastControlPoint = false;
+        fPatchWriter.resetJoinControlPointAttrib();
     }
 
 private:
@@ -138,27 +136,28 @@ private:
         this->cubicConvex180To(chops + 3);
     }
 
-    SK_ALWAYS_INLINE void writeStroke(const SkPoint p[4], SkPoint endControlPoint,
-                                      float curveTypeIfUnsupportedInfinity) {
-        if (fHasLastControlPoint) {
-            PatchWriter::Patch(fPatchWriter, curveTypeIfUnsupportedInfinity)
-                    << VertexWriter::Array(p, 4) << fLastControlPoint;
+    SK_ALWAYS_INLINE void writeStroke(const RawPatch& rawPatch) {
+        if (fPatchWriter.hasJoinControlPoint()) {
+            fPatchWriter << rawPatch;
         } else {
             // We don't know the previous control point yet to use for the join. Defer writing out
             // this stroke until the end.
-            memcpy(fDeferredFirstStroke, p, sizeof(fDeferredFirstStroke));
-            fDeferredCurveTypeIfUnsupportedInfinity = curveTypeIfUnsupportedInfinity;
-            fHasDeferredFirstStroke = true;
-            fHasLastControlPoint = true;
+            SkASSERT(rawPatch.fExplicitCurveType >= 0.f);
+            fDeferredFirstStroke = rawPatch;
         }
-        fLastControlPoint = endControlPoint;
-    }
 
-    void discardStroke(const SkPoint p[], int numPts) {
-        // Set fLastControlPoint to the next stroke's p0 (which will be equal to the final point of
-        // this stroke). This has the effect of disabling the next stroke's join.
-        fLastControlPoint = p[numPts - 1];
-        fHasLastControlPoint = true;
+        SkPoint endControlPoint;
+        if (rawPatch.fExplicitCurveType == kCubicCurveType && any(rawPatch.fP3 != rawPatch.fP2)) {
+            // p2 is control point defining the tangent vector into the next patch.
+            rawPatch.fP2.store(&endControlPoint);
+        } else if (any(rawPatch.fP2 != rawPatch.fP1)) {
+            // p1 is the control point defining the tangent vector.
+            rawPatch.fP1.store(&endControlPoint);
+        } else {
+            // p0 is the control point defining the tangent vector.
+            rawPatch.fP0.store(&endControlPoint);
+        }
+        fPatchWriter.updateJoinControlPointAttrib(endControlPoint);
     }
 
     PatchWriter& fPatchWriter;
@@ -166,11 +165,7 @@ private:
     float fMaxParametricSegments_pow4 = 1;
 
     // We can't write out the first stroke until we know the previous control point for its join.
-    SkPoint fDeferredFirstStroke[4];
-    float fDeferredCurveTypeIfUnsupportedInfinity;
-    SkPoint fLastControlPoint;  // Used to configure the joins in the instance data.
-    bool fHasDeferredFirstStroke = false;
-    bool fHasLastControlPoint = false;
+    RawPatch fDeferredFirstStroke;
 };
 
 // Returns the worst-case number of edges we will need in order to draw a join of the given type.
