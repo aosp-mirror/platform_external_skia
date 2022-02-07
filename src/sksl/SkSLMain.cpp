@@ -9,7 +9,6 @@
 #include "include/core/SkGraphics.h"
 #include "include/core/SkStream.h"
 #include "include/private/SkStringView.h"
-#include "include/private/SkTOptional.h"
 #include "src/core/SkCpu.h"
 #include "src/core/SkOpts.h"
 #include "src/opts/SkChecksum_opts.h"
@@ -31,6 +30,7 @@
 
 #include <fstream>
 #include <limits.h>
+#include <optional>
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -266,7 +266,7 @@ static void show_usage() {
            "--nosettings: ignore /*#pragma settings*/ comments\n");
 }
 
-static bool set_flag(skstd::optional<bool>* flag, const char* name, bool value) {
+static bool set_flag(std::optional<bool>* flag, const char* name, bool value) {
     if (flag->has_value()) {
         printf("%s flag was specified multiple times\n", name);
         return false;
@@ -279,7 +279,7 @@ static bool set_flag(skstd::optional<bool>* flag, const char* name, bool value) 
  * Handle a single input.
  */
 ResultCode processCommand(const std::vector<std::string>& args) {
-    skstd::optional<bool> honorSettings;
+    std::optional<bool> honorSettings;
     std::vector<std::string> paths;
     for (size_t i = 1; i < args.size(); ++i) {
         const std::string& arg = args[i];
@@ -483,17 +483,17 @@ ResultCode processCommand(const std::vector<std::string>& args) {
                         }
 
                         std::string sampleShader(int index, std::string coords) override {
-                            return "child_" + skstd::to_string(index) + ".eval(" + coords + ")";
+                            return "child_" + std::to_string(index) + ".eval(" + coords + ")";
                         }
 
                         std::string sampleColorFilter(int index, std::string color) override {
-                            return "child_" + skstd::to_string(index) + ".eval(" + color + ")";
+                            return "child_" + std::to_string(index) + ".eval(" + color + ")";
                         }
 
                         std::string sampleBlender(int index,
                                                   std::string src,
                                                   std::string dst) override {
-                            return "child_" + skstd::to_string(index) + ".eval(" + src + ", " +
+                            return "child_" + std::to_string(index) + ".eval(" + src + ", " +
                                    dst + ")";
                         }
 
