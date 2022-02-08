@@ -13,67 +13,57 @@
 #include "experimental/graphite/src/ContextPriv.h"
 #include "experimental/graphite/src/Device.h"
 #include "experimental/graphite/src/DrawBufferManager.h"
+#include "experimental/graphite/src/GlobalCache.h"
 #include "experimental/graphite/src/Gpu.h"
 #include "experimental/graphite/src/ResourceProvider.h"
+#include "experimental/graphite/src/TaskGraph.h"
 #include "experimental/graphite/src/UniformCache.h"
 #include "src/core/SkUniformData.h"
 
 namespace skgpu {
 
-Recorder::Recorder(sk_sp<Gpu> gpu, std::unique_ptr<ResourceProvider> resourceProvider)
+#define ASSERT_SINGLE_OWNER SKGPU_ASSERT_SINGLE_OWNER(this->singleOwner())
+
+Recorder::Recorder(sk_sp<Gpu> gpu, sk_sp<GlobalCache> globalCache)
         : fGpu(std::move(gpu))
-        , fResourceProvider(std::move(resourceProvider))
-        , fUniformCache(new UniformCache)
-        , fDrawBufferManager(new DrawBufferManager(
-                fResourceProvider.get(),
-                fGpu->caps()->requiredUniformBufferAlignment())) {
+        , fGraph(new TaskGraph)
+        , fUniformCache(new UniformCache) {
+
+    fResourceProvider = fGpu->makeResourceProvider(std::move(globalCache), this->singleOwner());
+    fDrawBufferManager.reset(new DrawBufferManager(fResourceProvider.get(),
+                                                   fGpu->caps()->requiredUniformBufferAlignment()));
+    SkASSERT(fResourceProvider);
 }
 
 Recorder::~Recorder() {
+    ASSERT_SINGLE_OWNER
     for (auto& device : fTrackedDevices) {
         device->abandonRecorder();
     }
 }
 
-ResourceProvider* Recorder::resourceProvider() const {
-    return fResourceProvider.get();
-}
-
-UniformCache* Recorder::uniformCache() const {
-    return fUniformCache.get();
-}
-
-const Caps* Recorder::caps() const {
-    return fGpu->caps();
-}
-
-DrawBufferManager* Recorder::drawBufferManager() const {
-    return fDrawBufferManager.get();
-}
-
-void Recorder::add(sk_sp<Task> task) {
-    fGraph.add(std::move(task));
-}
-
 std::unique_ptr<Recording> Recorder::snap() {
+    ASSERT_SINGLE_OWNER
     for (auto& device : fTrackedDevices) {
         device->flushPendingWorkToRecorder();
     }
 
     auto commandBuffer = fResourceProvider->createCommandBuffer();
 
-    fGraph.addCommands(fResourceProvider.get(), commandBuffer.get());
+    fGraph->addCommands(fResourceProvider.get(), commandBuffer.get());
     fDrawBufferManager->transferToCommandBuffer(commandBuffer.get());
 
-    fGraph.reset();
+    fGraph->reset();
     return std::unique_ptr<Recording>(new Recording(std::move(commandBuffer)));
 }
 
 void Recorder::registerDevice(Device* device) {
+    ASSERT_SINGLE_OWNER
     fTrackedDevices.push_back(device);
 }
 
 void Recorder::deregisterDevice(const Device* device) {
+    ASSERT_SINGLE_OWNER
     for (auto it = fTrackedDevices.begin(); it != fTrackedDevices.end(); it++) {
         if (*it == device) {
             fTrackedDevices.erase(it);

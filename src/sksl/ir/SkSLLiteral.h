@@ -101,7 +101,7 @@ public:
             return skstd::to_string(this->floatValue());
         }
         if (this->type().isInteger()) {
-            return skstd::to_string(this->intValue());
+            return std::to_string(this->intValue());
         }
         SkASSERT(this->type().isBoolean());
         return fValue ? "true" : "false";
@@ -132,7 +132,7 @@ public:
         return true;
     }
 
-    skstd::optional<double> getConstantValue(int n) const override {
+    std::optional<double> getConstantValue(int n) const override {
         SkASSERT(n == 0);
         return fValue;
     }
