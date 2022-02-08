@@ -38,6 +38,10 @@ public:
         fSurfaceDrawContext->discard();
     }
 
+    void resolveMSAA() override {
+        fSurfaceDrawContext->resolveMSAA();
+    }
+
     bool replaceBackingProxy(SkSurface::ContentChangeMode,
                              sk_sp<GrRenderTargetProxy>,
                              GrColorType,
@@ -155,7 +159,7 @@ protected:
 
     sk_sp<GrSlug> convertGlyphRunListToSlug(
             const SkGlyphRunList& glyphRunList,
-            const SkPaint& paint) const override;
+            const SkPaint& paint) override;
 
     void drawSlug(SkCanvas*, GrSlug* slug) override;
 
