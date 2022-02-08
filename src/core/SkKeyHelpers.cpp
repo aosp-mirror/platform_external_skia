@@ -7,12 +7,15 @@
 
 #include "src/core/SkKeyHelpers.h"
 
-#include "experimental/graphite/src/UniformManager.h"
 #include "include/private/SkPaintParamsKey.h"
 #include "src/core/SkDebugUtils.h"
 #include "src/core/SkUniform.h"
 #include "src/core/SkUniformData.h"
 #include "src/shaders/SkShaderBase.h"
+
+#ifdef SK_GRAPHITE_ENABLED
+#include "experimental/graphite/src/UniformManager.h"
+#endif
 
 namespace skgpu {
 SkSpan<const SkUniform> GetUniforms(CodeSnippetID snippetID);
@@ -265,49 +268,6 @@ GradientData::GradientData(SkShader::GradientType type,
 }
 
 GradientData::GradientData(SkShader::GradientType type,
-                           SkPoint points[2],
-                           float radii[2],
-                           SkTileMode tm,
-                           int numStops,
-                           SkColor colors[kMaxStops],
-                           float offsets[kMaxStops])
-        : fType(type)
-        , fTM(tm)
-        , fNumStops(numStops) {
-    memcpy(fPoints, points, sizeof(fPoints));
-    memcpy(fRadii, radii, sizeof(fRadii));
-    this->toColor4fs(fNumStops, colors);
-    this->toOffsets(fNumStops, offsets);
-}
-
-void GradientData::toColor4fs(int numColors, SkColor colors[kMaxStops]) {
-    if (numColors < 2 || numColors > kMaxStops) {
-        sk_bzero(fColor4fs, sizeof(fColor4fs));
-        return;
-    }
-
-    int i;
-    for (i = 0; i < numColors; ++i) {
-        fColor4fs[i] = SkColor4f::FromColor(colors[i]);
-    }
-    for ( ; i < kMaxStops; ++i) {
-        fColor4fs[i] = fColor4fs[numColors-1];
-    }
-}
-
-void GradientData::toOffsets(int numStops, float inputOffsets[kMaxStops]) {
-    if (numStops < 2 || numStops > kMaxStops) {
-        sk_bzero(fOffsets, sizeof(fOffsets));
-        return;
-    }
-
-    memcpy(fOffsets, inputOffsets, numStops * sizeof(float));
-    for (int i = numStops ; i < kMaxStops; ++i) {
-        fOffsets[i] = fOffsets[numStops-1];
-    }
-}
-
-GradientData::GradientData(SkShader::GradientType type,
                            SkPoint point0, SkPoint point1,
                            float radius0, float radius1,
                            SkTileMode tm,
@@ -453,6 +413,8 @@ void Dump(const SkPaintParamsKey& key, int headerOffset) {
 //--------------------------------------------------------------------------------------------------
 namespace ImageShaderBlock {
 
+namespace {
+
 #ifdef SK_GRAPHITE_ENABLED
 
 inline static constexpr int kTileModeBits = 2;
@@ -478,7 +440,27 @@ ImageData ExtractFromKey(const SkPaintParamsKey& key, uint32_t headerOffset) {
 }
 #endif // SK_DEBUG
 
+sk_sp<SkUniformData> make_image_uniform_data(const ImageData& imgData) {
+    SkDEBUGCODE(static constexpr size_t kExpectedNumUniforms = 0;)
+
+    SkSpan<const SkUniform> uniforms = skgpu::GetUniforms(CodeSnippetID::kImageShader);
+    SkASSERT(uniforms.size() == kExpectedNumUniforms);
+
+    skgpu::UniformManager mgr(skgpu::Layout::kMetal);
+
+    size_t dataSize = mgr.writeUniforms(uniforms, nullptr, nullptr, nullptr);
+
+    sk_sp<SkUniformData> result = SkUniformData::Make(uniforms, dataSize);
+
+    // TODO: add the required data to ImageData and assemble the uniforms here
+
+    mgr.writeUniforms(result->uniforms(), nullptr, result->offsets(), result->data());
+    return result;
+}
+
 #endif // SK_GRAPHITE_ENABLED
+
+} // anonymous namespace
 
 void AddToKey(SkBackend backend,
               SkPaintParamsKey* key,
@@ -498,6 +480,10 @@ void AddToKey(SkBackend backend,
         key->endBlock(headerOffset, CodeSnippetID::kImageShader);
 
         SkASSERT(imgData == ExtractFromKey(*key, headerOffset));
+
+        if (uniformBlock) {
+            uniformBlock->add(make_image_uniform_data(imgData));
+        }
         return;
     }
 #endif // SK_GRAPHITE_ENABLED

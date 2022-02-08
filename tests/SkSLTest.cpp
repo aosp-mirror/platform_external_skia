@@ -18,6 +18,7 @@
 #include "include/effects/SkImageFilters.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/private/SkSLDefines.h"  // for kDefaultInlineThreshold
+#include "include/sksl/DSLCore.h"
 #include "include/utils/SkRandom.h"
 #include "src/core/SkRuntimeEffectPriv.h"
 #include "src/gpu/GrCaps.h"
@@ -25,6 +26,7 @@
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLDehydrator.h"
 #include "src/sksl/SkSLRehydrator.h"
+#include "src/sksl/SkSLThreadContext.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
@@ -54,7 +56,7 @@ static SkString load_source(skiatest::Reporter* r,
     SkString resourcePath = SkStringPrintf("sksl/%s", testFile);
     sk_sp<SkData> shaderData = GetResourceAsData(resourcePath.c_str());
     if (!shaderData) {
-        ERRORF(r, "%s: Unable to load file", testFile);
+        ERRORF(r, "%s%s: Unable to load file", testFile, permutationSuffix);
         return SkString("");
     }
     return SkString{reinterpret_cast<const char*>(shaderData->bytes()), shaderData->size()};
@@ -97,7 +99,7 @@ static void test_one_permutation(skiatest::Reporter* r,
                                                                   7, 8, 9});
     set_uniform_array(&builder, "testArray",  SkMakeSpan(kArray));
 
-    sk_sp<SkShader> shader = builder.makeShader(/*localMatrix=*/nullptr, /*isOpaque=*/true);
+    sk_sp<SkShader> shader = builder.makeShader(/*localMatrix=*/nullptr, /*isOpaque=*/false);
     if (!shader) {
         ERRORF(r, "%s%s: Unable to build shader", testFile, permutationSuffix);
         return;
@@ -182,13 +184,31 @@ static void test_es3(skiatest::Reporter* r, GrDirectContext* ctx, const char* te
     test_permutations(r, surface.get(), testFile, /*worksInES2=*/false);
 }
 
-static int write_symbol_tables(SkSL::Dehydrator& dehydrator, const SkSL::SymbolTable& s) {
-    int count = 1;
-    if (s.fParent) {
-        count += write_symbol_tables(dehydrator, *s.fParent);
+static void test_clone(skiatest::Reporter* r, const char* testFile) {
+    SkString shaderString = load_source(r, testFile, "");
+    if (shaderString.isEmpty()) {
+        return;
     }
-    dehydrator.write(s);
-    return count;
+    std::unique_ptr<SkSL::ShaderCaps> caps = SkSL::ShaderCapsFactory::Standalone();
+    SkSL::Program::Settings settings;
+    settings.fAllowVarDeclarationCloneForTesting = true;
+    SkSL::Compiler compiler(caps.get());
+    std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
+            SkSL::ProgramKind::kRuntimeShader, shaderString.c_str(), settings);
+    if (!program) {
+        ERRORF(r, "%s", compiler.errorText().c_str());
+        return;
+    }
+    // Starting DSL allows us to get access to the ThreadContext::Settings
+    SkSL::dsl::Start(&compiler, SkSL::ProgramKind::kFragment, settings);
+    for (const std::unique_ptr<SkSL::ProgramElement>& element : program->fOwnedElements) {
+        std::string original = element->description();
+        std::string cloned = element->clone()->description();
+        REPORTER_ASSERT(r, original == cloned,
+                "Mismatch after clone!\nOriginal: %s\nCloned: %s\n", original.c_str(),
+                cloned.c_str());
+    }
+    SkSL::dsl::End();
 }
 
 static void test_rehydrate(skiatest::Reporter* r, const char* testFile) {
@@ -211,16 +231,13 @@ static void test_rehydrate(skiatest::Reporter* r, const char* testFile) {
         return;
     }
     SkSL::Dehydrator dehydrator;
-    int symbolTableCount = write_symbol_tables(dehydrator, *program->fSymbols);
-    dehydrator.write(program->fOwnedElements);
+    dehydrator.write(*program);
     SkSL::StringStream stream;
     dehydrator.finish(stream);
 
     SkSL::Rehydrator rehydrator(compiler, (const uint8_t*) stream.str().data(),
             stream.str().length());
-    std::unique_ptr<SkSL::Program> rehydrated = rehydrator.program(symbolTableCount,
-            /*source=*/nullptr, std::make_unique<SkSL::ProgramConfig>(), program->fSharedElements,
-            std::make_unique<SkSL::ModifiersPool>(), /*pool=*/nullptr, program->fInputs);
+    std::unique_ptr<SkSL::Program> rehydrated = rehydrator.program(&program->fSharedElements);
     REPORTER_ASSERT(r, rehydrated->description() == program->description(),
             "Mismatch between original and dehydrated/rehydrated:\n-- Original:\n%s\n"
             "-- Rehydrated:\n%s", program->description().c_str(),
@@ -250,8 +267,13 @@ static void test_rehydrate(skiatest::Reporter* r, const char* testFile) {
         test_rehydrate(r, path);                                    \
     }
 
+#define SKSL_TEST_CLONE(name, path)                                 \
+    DEF_TEST(name ## _CLONE, r) {                                   \
+        test_clone(r, path);                                        \
+    }
+
 #define SKSL_TEST(name, path) SKSL_TEST_CPU(name, path) SKSL_TEST_GPU(name, path) \
-        SKSL_TEST_REHYDRATE(name, path)
+        SKSL_TEST_CLONE(name, path) SKSL_TEST_REHYDRATE(name, path)
 
 SKSL_TEST(SkSLArraySizeFolding,                "folding/ArraySizeFolding.sksl")
 SKSL_TEST(SkSLAssignmentOps,                   "folding/AssignmentOps.sksl")
@@ -309,6 +331,7 @@ SKSL_TEST_ES3(SkSLWhileBodyMustBeInlinedIntoAScope,
 SKSL_TEST_ES3(SkSLWhileTestCannotBeInlined,       "inliner/WhileTestCannotBeInlined.sksl")
 
 SKSL_TEST(SkSLIntrinsicAbsFloat,               "intrinsics/AbsFloat.sksl")
+SKSL_TEST_ES3(SkSLIntrinsicAbsInt,             "intrinsics/AbsInt.sksl")
 SKSL_TEST(SkSLIntrinsicCeil,                   "intrinsics/Ceil.sksl")
 SKSL_TEST_ES3(SkSLIntrinsicDeterminant,        "intrinsics/Determinant.sksl")
 SKSL_TEST_ES3(SkSLIntrinsicDFdx,               "intrinsics/DFdx.sksl")
@@ -320,14 +343,14 @@ SKSL_TEST_ES3(SkSLIntrinsicIntBitsToFloat,     "intrinsics/IntBitsToFloat.sksl")
 SKSL_TEST_ES3(SkSLIntrinsicIsInf,              "intrinsics/IsInf.sksl")
 SKSL_TEST_ES3(SkSLIntrinsicClampInt,           "intrinsics/ClampInt.sksl")
 SKSL_TEST_ES3(SkSLIntrinsicClampUInt,          "intrinsics/ClampUInt.sksl")
-// Fails on Adreno 6xx + Vulkan
-SKSL_TEST_CPU(SkSLIntrinsicClampFloat,         "intrinsics/ClampFloat.sksl")
+SKSL_TEST(SkSLIntrinsicClampFloat,             "intrinsics/ClampFloat.sksl")
 SKSL_TEST(SkSLIntrinsicMatrixCompMultES2,      "intrinsics/MatrixCompMultES2.sksl")
 SKSL_TEST_ES3(SkSLIntrinsicMatrixCompMultES3,  "intrinsics/MatrixCompMultES3.sksl")
 SKSL_TEST(SkSLIntrinsicMaxFloat,               "intrinsics/MaxFloat.sksl")
+SKSL_TEST_ES3(SkSLIntrinsicMaxInt,             "intrinsics/MaxInt.sksl")
 SKSL_TEST(SkSLIntrinsicMinFloat,               "intrinsics/MinFloat.sksl")
-// Fails on Adreno + Vulkan (skia:11919)
-SKSL_TEST_CPU(SkSLIntrinsicMixFloat,           "intrinsics/MixFloat.sksl")
+SKSL_TEST_ES3(SkSLIntrinsicMinInt,             "intrinsics/MinInt.sksl")
+SKSL_TEST(SkSLIntrinsicMixFloat,               "intrinsics/MixFloat.sksl")
 SKSL_TEST_ES3(SkSLIntrinsicModf,               "intrinsics/Modf.sksl")
 SKSL_TEST_ES3(SkSLIntrinsicOuterProduct,       "intrinsics/OuterProduct.sksl")
 // Fails on Mac OpenGL + Radeon 5300M (skia:12434)
@@ -437,12 +460,3 @@ SKSL_TEST(SkSLVectorConstructors,              "shared/VectorConstructors.sksl")
 SKSL_TEST(SkSLVectorToMatrixCast,              "shared/VectorToMatrixCast.sksl")
 SKSL_TEST(SkSLVectorScalarMath,                "shared/VectorScalarMath.sksl")
 SKSL_TEST_ES3(SkSLWhileLoopControlFlow,        "shared/WhileLoopControlFlow.sksl")
-
-/*
-TODO(skia:11209): enable these tests when Runtime Effects have support for ES3
-
-SKSL_TEST(SkSLIntrinsicAbsInt,                 "intrinsics/AbsInt.sksl")
-SKSL_TEST(SkSLIntrinsicMaxInt,                 "intrinsics/MaxInt.sksl")
-SKSL_TEST(SkSLIntrinsicMinInt,                 "intrinsics/MinInt.sksl")
-SKSL_TEST(SkSLIntrinsicMixBool,                "intrinsics/MixBool.sksl")
-*/

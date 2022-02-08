@@ -618,6 +618,11 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	if b.extraConfig("TSAN") {
 		// skbug.com/10848
 		removeFromArgs("svg")
+		// skbug.com/12900 avoid OOM on
+		// Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-TSAN_Vulkan
+		if b.Name == "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-TSAN_Vulkan" {
+			skip("_", "test", "_", "_")
+		}
 	}
 
 	// TODO: ???
@@ -921,6 +926,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "tests", ALL, "SkSLArrayCast_GPU")       // skia:12332
 		skip(ALL, "tests", ALL, "SkSLArrayComparison_GPU") // skia:12332
 		skip(ALL, "tests", ALL, "SkSLCommaSideEffects_GPU")
+		skip(ALL, "tests", ALL, "SkSLIntrinsicMixFloat_GPU")
+		skip(ALL, "tests", ALL, "SkSLIntrinsicClampFloat_GPU")
 	}
 
 	if b.matchGpu("Adreno[345]") && !b.extraConfig("Vulkan") { // disable broken tests on Adreno 3/4/5xx GLSL
