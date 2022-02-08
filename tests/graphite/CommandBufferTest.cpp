@@ -14,7 +14,6 @@
 #include "experimental/graphite/src/Caps.h"
 #include "experimental/graphite/src/CommandBuffer.h"
 #include "experimental/graphite/src/ContextPriv.h"
-#include "experimental/graphite/src/ContextUtils.h"
 #include "experimental/graphite/src/DrawBufferManager.h"
 #include "experimental/graphite/src/DrawWriter.h"
 #include "experimental/graphite/src/GlobalCache.h"
@@ -237,6 +236,7 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
 #endif
     auto recorder = context->makeRecorder();
     auto resourceProvider = recorder->priv().resourceProvider();
+    auto dict = resourceProvider->shaderCodeDictionary();
     auto commandBuffer = resourceProvider->createCommandBuffer();
 
     SkISize textureSize = { kTextureWidth, kTextureHeight };
@@ -254,12 +254,12 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
     TextureInfo textureInfo;
 #endif
 
-    SkPaintParamsKey key = CreateKey(SkBackend::kGraphite,
+    SkPaintParamsKey key = CreateKey(dict,
+                                     SkBackend::kGraphite,
                                      ShaderCombo::ShaderType::kSolidColor,
                                      SkTileMode::kClamp,
                                      SkBlendMode::kSrc);
 
-    auto dict = resourceProvider->shaderCodeDictionary();
     auto entry = dict->findOrCreate(key);
 
     auto target = sk_sp<TextureProxy>(new TextureProxy(textureSize, textureInfo));

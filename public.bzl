@@ -673,7 +673,6 @@ DM_SRCS_ALL = struct(
         "tests/FontMgrFontConfigTest.cpp",  # FontConfig-only.
         "tests/TypefaceMacTest.cpp",  # CoreText-only.
         "tests/SkParagraphTest.cpp",  # Skipping tests for now.
-        "tests/skia_test.cpp",  # Old main.
         "tools/gpu/d3d/*",
         "tools/gpu/dawn/*",
         "tools/gpu/gl/angle/*",
@@ -821,6 +820,11 @@ def base_defines(os_conditions):
             # MACOS
             [
                 "SK_BUILD_FOR_MAC",
+                "SK_GL",
+            ],
+            # ANDROID W/ NO CODECS
+            [
+                "SK_BUILD_FOR_ANDROID",
                 "SK_GL",
             ],
         ],
