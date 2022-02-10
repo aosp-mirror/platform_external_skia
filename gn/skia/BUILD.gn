@@ -412,6 +412,10 @@ config("warnings") {
       "-Weverything",
       "-Wno-unknown-warning-option",  # Let older Clangs ignore newer Clangs'
                                       # warnings.
+
+      # This was deprecated in Clang 14 and removed in Clang 15. It might still
+      # fire with older Clangs, so disable it explicitly.
+      "-Wno-weak-template-vtables",
     ]
 
     if (target_cpu == "arm" && is_ios) {
@@ -459,8 +463,6 @@ config("warnings") {
       "-Wno-unreachable-code-return",
       "-Wno-unused-macros",
       "-Wno-unused-member-function",
-      "-Wno-unused-template",
-      "-Wunneeded-internal-declaration",  # disabled by -Wno-unused-template
       "-Wno-zero-as-null-pointer-constant",
       "-Wno-non-c-typedef-for-linkage",  # Dawn, not Skia per se.
     ]

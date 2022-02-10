@@ -6,11 +6,11 @@
  */
 
 #include "include/core/SkPaint.h"
-#include "include/private/SkPaintParamsKey.h"
 #include "src/core/SkBlenderBase.h"
 #include "src/core/SkColorFilterBase.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkKeyHelpers.h"
+#include "src/core/SkPaintParamsKey.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/core/SkXfermodePriv.h"
 #include "src/shaders/SkColorFilterShader.h"
@@ -138,13 +138,13 @@ std::vector<SkPaintParamsKey> SkPaintPriv::ToKeys(const SkPaint& paint,
         if (paint.getShader()) {
             as_SB(paint.getShader())->addToKey(dict, backend, &key, nullptr);
         } else {
-            SolidColorShaderBlock::AddToKey(backend, &key, nullptr, paint.getColor4f());
+            SolidColorShaderBlock::AddToKey(dict, backend, &key, nullptr, paint.getColor4f());
         }
 
         if (paint.getBlender()) {
             as_BB(paint.getBlender())->addToKey(dict, backend, &key, nullptr);
         } else {
-            BlendModeBlock::AddToKey(backend, &key, nullptr, SkBlendMode::kSrcOver);
+            BlendModeBlock::AddToKey(dict, backend, &key, nullptr, SkBlendMode::kSrcOver);
         }
 
         SkASSERT(key.sizeInBytes() > 0);

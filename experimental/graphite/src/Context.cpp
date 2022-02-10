@@ -13,15 +13,14 @@
 #include "experimental/graphite/include/TextureInfo.h"
 #include "experimental/graphite/src/Caps.h"
 #include "experimental/graphite/src/CommandBuffer.h"
-#include "experimental/graphite/src/ContextUtils.h"
 #include "experimental/graphite/src/GlobalCache.h"
 #include "experimental/graphite/src/Gpu.h"
 #include "experimental/graphite/src/GraphicsPipelineDesc.h"
 #include "experimental/graphite/src/Renderer.h"
 #include "experimental/graphite/src/ResourceProvider.h"
 #include "include/core/SkPathTypes.h"
-#include "include/private/SkShaderCodeDictionary.h"
 #include "src/core/SkKeyHelpers.h"
+#include "src/core/SkShaderCodeDictionary.h"
 
 #ifdef SK_METAL
 #include "experimental/graphite/src/mtl/MtlTrampoline.h"
@@ -78,7 +77,8 @@ void Context::preCompile(const PaintCombo& paintCombo) {
         for (auto& shaderCombo: paintCombo.fShaders) {
             for (auto shaderType: shaderCombo.fTypes) {
                 for (auto tm: shaderCombo.fTileModes) {
-                    SkPaintParamsKey key = CreateKey(SkBackend::kGraphite, shaderType, tm, bm);
+                    SkPaintParamsKey key = CreateKey(fGlobalCache->shaderCodeDictionary(),
+                                                     SkBackend::kGraphite, shaderType, tm, bm);
 
                     GraphicsPipelineDesc desc;
 

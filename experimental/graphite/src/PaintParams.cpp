@@ -8,9 +8,9 @@
 #include "experimental/graphite/src/PaintParams.h"
 
 #include "include/core/SkShader.h"
-#include "include/private/SkPaintParamsKey.h"
 #include "src/core/SkBlenderBase.h"
 #include "src/core/SkKeyHelpers.h"
+#include "src/core/SkPaintParamsKey.h"
 #include "src/shaders/SkShaderBase.h"
 
 namespace skgpu {
@@ -48,13 +48,13 @@ void PaintParams::toKey(SkShaderCodeDictionary* dict,
     if (fShader) {
         as_SB(fShader)->addToKey(dict, backend, key, uniformBlock);
     } else {
-        SolidColorShaderBlock::AddToKey(backend, key, uniformBlock, fColor);
+        SolidColorShaderBlock::AddToKey(dict, backend, key, uniformBlock, fColor);
     }
 
     if (fBlender) {
         as_BB(fBlender)->addToKey(dict, backend, key, uniformBlock);
     } else {
-        BlendModeBlock::AddToKey(backend, key, uniformBlock, SkBlendMode::kSrcOver);
+        BlendModeBlock::AddToKey(dict, backend, key, uniformBlock, SkBlendMode::kSrcOver);
     }
 
     SkASSERT(key->sizeInBytes() > 0);
