@@ -237,7 +237,7 @@ static void test_rehydrate(skiatest::Reporter* r, const char* testFile) {
 
     SkSL::Rehydrator rehydrator(compiler, (const uint8_t*) stream.str().data(),
             stream.str().length());
-    std::unique_ptr<SkSL::Program> rehydrated = rehydrator.program(&program->fSharedElements);
+    std::unique_ptr<SkSL::Program> rehydrated = rehydrator.program();
     REPORTER_ASSERT(r, rehydrated->description() == program->description(),
             "Mismatch between original and dehydrated/rehydrated:\n-- Original:\n%s\n"
             "-- Rehydrated:\n%s", program->description().c_str(),
@@ -410,8 +410,8 @@ SKSL_TEST(SkSLInoutParameters,                 "shared/InoutParameters.sksl")
 SKSL_TEST(SkSLMatrices,                        "shared/Matrices.sksl")
 SKSL_TEST_ES3(SkSLMatricesNonsquare,           "shared/MatricesNonsquare.sksl")
 // TODO(skia:12443) These tests actually don't work on MANY devices. The GLSL conformance suite
-// does a terrible job of enforcing this rule. We still test them on CPU.
-SKSL_TEST_CPU(SkSLMatrixConstructorsES2,       "shared/MatrixConstructorsES2.sksl")
+// does a terrible job of enforcing this rule. We still test them on newer (ES3) devices, and CPU.
+SKSL_TEST_CPU_ES3(SkSLMatrixConstructorsES2,   "shared/MatrixConstructorsES2.sksl")
 SKSL_TEST_CPU_ES3(SkSLMatrixConstructorsES3,   "shared/MatrixConstructorsES3.sksl")
 SKSL_TEST(SkSLMatrixEquality,                  "shared/MatrixEquality.sksl")
 SKSL_TEST(SkSLMatrixScalarMath,                "shared/MatrixScalarMath.sksl")
