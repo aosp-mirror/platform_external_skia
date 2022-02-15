@@ -78,7 +78,7 @@ static const bool gPrintSKSL = false;
 static const bool gPrintHLSL = false;
 
 static gr_cp<ID3DBlob> GrCompileHLSLShader(GrD3DGpu* gpu,
-                                           const SkSL::String& hlsl,
+                                           const std::string& hlsl,
                                            SkSL::ProgramKind kind) {
     TRACE_EVENT0("skia.shaders", "driver_compile_shader");
     const char* compileTarget = nullptr;
@@ -114,7 +114,7 @@ static gr_cp<ID3DBlob> GrCompileHLSLShader(GrD3DGpu* gpu,
 
 bool GrD3DPipelineStateBuilder::loadHLSLFromCache(SkReadBuffer* reader, gr_cp<ID3DBlob> shaders[]) {
 
-    SkSL::String hlsl[kGrShaderTypeCount];
+    std::string hlsl[kGrShaderTypeCount];
     SkSL::Program::Inputs inputs[kGrShaderTypeCount];
 
     if (!GrPersistentCacheUtils::UnpackCachedShaders(reader, hlsl, inputs, kGrShaderTypeCount)) {
@@ -135,14 +135,14 @@ bool GrD3DPipelineStateBuilder::loadHLSLFromCache(SkReadBuffer* reader, gr_cp<ID
 
 gr_cp<ID3DBlob> GrD3DPipelineStateBuilder::compileD3DProgram(
         SkSL::ProgramKind kind,
-        const SkSL::String& sksl,
+        const std::string& sksl,
         const SkSL::Program::Settings& settings,
         SkSL::Program::Inputs* outInputs,
-        SkSL::String* outHLSL) {
+        std::string* outHLSL) {
 #ifdef SK_DEBUG
-    SkSL::String src = SkShaderUtils::PrettyPrint(sksl);
+    std::string src = SkShaderUtils::PrettyPrint(sksl);
 #else
-    const SkSL::String& src = sksl;
+    const std::string& src = sksl;
 #endif
 
     std::unique_ptr<SkSL::Program> program = fGpu->shaderCompiler()->convertProgram(
@@ -245,32 +245,26 @@ static void setup_vertex_input_layout(const GrGeometryProcessor& geomProc,
     }
 
     unsigned int currentAttrib = 0;
-    unsigned int vertexAttributeOffset = 0;
 
-    for (const auto& attrib : geomProc.vertexAttributes()) {
+    for (auto attrib : geomProc.vertexAttributes()) {
         // When using SPIRV-Cross it converts the location modifier in SPIRV to be
         // TEXCOORD<N> where N is the location value for eveery vertext attribute
         inputElements[currentAttrib] = { "TEXCOORD", currentAttrib,
                                         attrib_type_to_format(attrib.cpuType()),
-                                        vertexSlot, vertexAttributeOffset,
+                                        vertexSlot, SkToU32(*attrib.offset()),
                                         D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 };
-        vertexAttributeOffset += attrib.sizeAlign4();
         currentAttrib++;
     }
-    SkASSERT(vertexAttributeOffset == geomProc.vertexStride());
 
-    unsigned int instanceAttributeOffset = 0;
-    for (const auto& attrib : geomProc.instanceAttributes()) {
+    for (auto attrib : geomProc.instanceAttributes()) {
         // When using SPIRV-Cross it converts the location modifier in SPIRV to be
         // TEXCOORD<N> where N is the location value for eveery vertext attribute
         inputElements[currentAttrib] = { "TEXCOORD", currentAttrib,
                                         attrib_type_to_format(attrib.cpuType()),
-                                        instanceSlot, instanceAttributeOffset,
+                                        instanceSlot, SkToU32(*attrib.offset()),
                                         D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 };
-        instanceAttributeOffset += attrib.sizeAlign4();
         currentAttrib++;
     }
-    SkASSERT(instanceAttributeOffset == geomProc.instanceStride());
 }
 
 static D3D12_BLEND blend_coeff_to_d3d_blend(GrBlendCoeff coeff) {
@@ -593,12 +587,12 @@ std::unique_ptr<GrD3DPipelineState> GrD3DPipelineStateBuilder::finalize() {
         // We successfully loaded and compiled HLSL
     } else {
         SkSL::Program::Inputs inputs[kGrShaderTypeCount];
-        SkSL::String* sksl[kGrShaderTypeCount] = {
+        std::string* sksl[kGrShaderTypeCount] = {
             &fVS.fCompilerString,
             &fFS.fCompilerString,
         };
-        SkSL::String cached_sksl[kGrShaderTypeCount];
-        SkSL::String hlsl[kGrShaderTypeCount];
+        std::string cached_sksl[kGrShaderTypeCount];
+        std::string hlsl[kGrShaderTypeCount];
 
         if (kSKSL_Tag == shaderType) {
             if (GrPersistentCacheUtils::UnpackCachedShaders(&reader, cached_sksl, inputs,

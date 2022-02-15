@@ -28,6 +28,9 @@ public:
     virtual skvm::Color sampleShader(int index, skvm::Coord coord) = 0;
     virtual skvm::Color sampleColorFilter(int index, skvm::Color color) = 0;
     virtual skvm::Color sampleBlender(int index, skvm::Color src, skvm::Color dst) = 0;
+
+    virtual skvm::Color toLinearSrgb(skvm::Color color) = 0;
+    virtual skvm::Color fromLinearSrgb(skvm::Color color) = 0;
 };
 
 // Convert 'function' to skvm instructions in 'builder', for use by blends, shaders, & color filters
@@ -72,7 +75,7 @@ const FunctionDefinition* Program_GetFunction(const Program& program, const char
 
 struct UniformInfo {
     struct Uniform {
-        String fName;
+        std::string fName;
         Type::NumberKind fKind;
         int fColumns;
         int fRows;

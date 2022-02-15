@@ -28,6 +28,8 @@ struct SkVMSlotInfo {
     uint8_t                 columns = 1, rows = 1;
     /** Which component of the variable is this slot? (e.g. `vec4.z` is component 2) */
     uint8_t                 componentIndex = 0;
+    /** Complex types (arrays/structs) can be tracked as a "group" of adjacent slots. */
+    int                     groupIndex = 0;
     /** What kind of numbers belong in this slot? */
     SkSL::Type::NumberKind  numberKind = SkSL::Type::NumberKind::kNonnumeric;
     /** Where is this variable located in the program? */
@@ -47,6 +49,7 @@ struct SkVMTraceInfo {
         kVar,   /** data: slot, value */
         kEnter, /** data: function index, (unused) */
         kExit,  /** data: function index, (unused) */
+        kScope, /** data: scope delta, (unused) */
     };
     Op op;
     int32_t data[2];
@@ -72,8 +75,14 @@ public:
     /** Returns a slot's component as a variable-name suffix, e.g. ".x" or "[2][2]". */
     std::string getSlotComponentSuffix(int slotIndex) const;
 
-    /** Returns a slot's value in human-readable form, e.g. "3.14" or "true" or "12345". */
+    /** Bit-casts a slot's value, then converts to text, e.g. "3.14" or "true" or "12345". */
     std::string getSlotValue(int slotIndex, int32_t value) const;
+
+    /** Bit-casts a value for a given slot into a double, honoring the slot's NumberKind. */
+    double interpretValueBits(int slotIndex, int32_t valueBits) const;
+
+    /** Converts a numeric value into text, based on the slot's NumberKind. */
+    std::string slotValueToString(int slotIndex, double value) const;
 
     /** The device-coordinate pixel to trace (controlled by setTraceCoord) */
     SkIPoint fTraceCoord = {};

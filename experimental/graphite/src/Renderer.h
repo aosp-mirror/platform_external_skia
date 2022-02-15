@@ -12,18 +12,19 @@
 #include "experimental/graphite/src/DrawTypes.h"
 #include "experimental/graphite/src/EnumBitMask.h"
 #include "experimental/graphite/src/ResourceTypes.h"
-#include "experimental/graphite/src/Uniform.h"
 
 #include "include/core/SkSpan.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
+#include "src/core/SkUniform.h"
 
 #include <array>
 #include <initializer_list>
 #include <vector>
 
-
+struct SkIRect;
 enum class SkPathFillType;
+class SkUniformData;
 
 namespace skgpu {
 
@@ -31,7 +32,6 @@ class DrawWriter;
 class ResourceProvider;
 class Shape;
 class Transform;
-class UniformData;
 
 enum class Layout;
 
@@ -42,7 +42,10 @@ public:
     // The DrawWriter is configured with the vertex and instance strides of the RenderStep, and its
     // primitive type. The recorded draws will be executed with a graphics pipeline compatible with
     // this RenderStep.
-    virtual void writeVertices(DrawWriter*, const Transform&, const Shape&) const = 0;
+    virtual void writeVertices(DrawWriter*,
+                               const SkIRect& bounds,
+                               const Transform&,
+                               const Shape&) const = 0;
 
     // Write out the uniform values (aligned for the layout). These values will be de-duplicated
     // across all draws using the RenderStep before uploading to the GPU, but it can be assumed the
@@ -53,9 +56,10 @@ public:
     // nice if we could remember the offsets for the layout/gpu and reuse them across draws.
     // Similarly, it would be nice if this could write into reusable storage and then DrawPass or
     // UniformCache handles making an sk_sp if we need to assign a new unique ID to the uniform data
-    virtual sk_sp<UniformData> writeUniforms(Layout layout,
-                                             const Transform&,
-                                             const Shape&) const = 0;
+    virtual sk_sp<SkUniformData> writeUniforms(Layout layout,
+                                               const SkIRect& bounds,
+                                               const Transform&,
+                                               const Shape&) const = 0;
 
     virtual const char* name()      const = 0;
 
@@ -96,7 +100,7 @@ public:
 
     // The uniforms of a RenderStep are bound to the kRenderStep slot, the rest of the pipeline
     // may still use uniforms bound to other slots.
-    SkSpan<const Uniform>   uniforms()           const { return SkMakeSpan(fUniforms);      }
+    SkSpan<const SkUniform> uniforms()           const { return SkMakeSpan(fUniforms);      }
     SkSpan<const Attribute> vertexAttributes()   const { return SkMakeSpan(fVertexAttrs);   }
     SkSpan<const Attribute> instanceAttributes() const { return SkMakeSpan(fInstanceAttrs); }
 
@@ -121,7 +125,7 @@ protected:
     // entire vertex layout of the pipeline. This is not allowed to change, so can be provided to
     // the RenderStep constructor by subclasses.
     RenderStep(Mask<Flags> flags,
-               std::initializer_list<Uniform> uniforms,
+               std::initializer_list<SkUniform> uniforms,
                PrimitiveType primitiveType,
                DepthStencilSettings depthStencilSettings,
                std::initializer_list<Attribute> vertexAttrs,
@@ -158,7 +162,7 @@ private:
     // could just have this be std::array and keep all attributes inline with the RenderStep memory.
     // On the other hand, the attributes are only needed when creating a new pipeline so it's not
     // that performance sensitive.
-    std::vector<Uniform>   fUniforms;
+    std::vector<SkUniform> fUniforms;
     std::vector<Attribute> fVertexAttrs;
     std::vector<Attribute> fInstanceAttrs;
 

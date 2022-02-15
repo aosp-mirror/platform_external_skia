@@ -15,10 +15,8 @@
 #include "include/core/SkRefCnt.h"
 #include "include/utils/SkNoDrawCanvas.h"
 
-class Deserializer;
-class Serializer;
-class SkAutoDescriptor;
 struct SkPackedGlyphID;
+class SkAutoDescriptor;
 class SkStrikeCache;
 class SkStrikeClientImpl;
 class SkStrikeServer;
@@ -49,8 +47,7 @@ public:
 
         // Returns true if a handle has been deleted on the remote client. It is
         // invalid to use a handle id again with this manager once this returns true.
-        // TODO(khushalsagar): Make pure virtual once chrome implementation lands.
-        SK_SPI virtual bool isHandleDeleted(SkDiscardableHandleId) { return false; }
+        SK_SPI virtual bool isHandleDeleted(SkDiscardableHandleId) = 0;
     };
 
     SK_SPI explicit SkStrikeServer(DiscardableHandleManager* discardableHandleManager);
@@ -94,9 +91,10 @@ public:
 
         // (DEPRECATED) The original glyph could not be found and a fallback was used.
         kGlyphMetricsFallback = 4,
-        kGlyphPathFallback = 5,
+        kGlyphPathFallback    = 5,
 
-        kLast = kGlyphPath
+        kGlyphDrawable = 6,
+        kLast = kGlyphDrawable
     };
 
     // An interface to delete handles that may be pinned by the remote server.
@@ -108,12 +106,7 @@ public:
         // successful, subsequent attempts to delete the same handle are invalid.
         virtual bool deleteHandle(SkDiscardableHandleId) = 0;
 
-        // TODO: remove this old interface when Chrome has moved over to the one below.
-        virtual void notifyCacheMiss(CacheMissType type) { }
-
-        virtual void notifyCacheMiss(CacheMissType type, int fontSize) {
-            this->notifyCacheMiss(type);
-        }
+        virtual void notifyCacheMiss(CacheMissType type, int fontSize) = 0;
 
         struct ReadFailureData {
             size_t memorySize;
@@ -141,11 +134,11 @@ public:
     // Returns false if the data is invalid.
     SK_SPI bool readStrikeData(const volatile void* memory, size_t memorySize);
 
+    // Given a descriptor re-write the Rec mapping the typefaceID from the renderer to the
+    // corresponding typefaceID on the GPU.
+    SK_SPI bool translateTypefaceID(SkAutoDescriptor* descriptor) const;
+
 private:
     std::unique_ptr<SkStrikeClientImpl> fImpl;
 };
-
-// For exposure to fuzzing only.
-bool SkFuzzDeserializeSkDescriptor(sk_sp<SkData> bytes, SkAutoDescriptor* ad);
-
 #endif  // SkChromeRemoteGlyphCache_DEFINED

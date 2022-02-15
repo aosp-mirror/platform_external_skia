@@ -9,7 +9,9 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkDrawable.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkPictureRecorder.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/private/SkColorData.h"
 #include "include/private/SkTo.h"
@@ -594,11 +596,12 @@ bool colrv1_configure_skpaint(FT_Face face,
 
             // Follow implementation note in nanoemoji:
             // https://github.com/googlefonts/nanoemoji/blob/0ac6e7bb4d8202db692574d8530a9b643f1b3b3c/src/nanoemoji/svg.py#L188
-            // to compute a new gradient end point as the orthogonal projection of the vector from p0 to p1 onto a line
-            // perpendicular to line p0p2 and passing through p0.
+            // to compute a new gradient end point P3 as the orthogonal
+            // projection of the vector from p0 to p1 onto a line perpendicular
+            // to line p0p2 and passing through p0.
             SkVector perpendicular_to_p2_p0 = (p2 - p0);
             perpendicular_to_p2_p0 = SkPoint::Make(perpendicular_to_p2_p0.y(), -perpendicular_to_p2_p0.x());
-            line_positions[1] = p0 + SkVectorProjection((p1 - p0), perpendicular_to_p2_p0);
+            SkVector p3 = p0 + SkVectorProjection((p1 - p0), perpendicular_to_p2_p0);
 
             std::vector<SkScalar> stops;
             std::vector<SkColor> colors;
@@ -613,15 +616,15 @@ bool colrv1_configure_skpaint(FT_Face face,
                 break;
             }
 
-            // Project/scale points according to stop extrema along p0p1 line,
-            // then scale stops to to [0, 1] range so that repeat modes work.
-            // The Skia linear gradient shader performs the repeat modes over
-            // the 0 to 1 range, that's why we need to scale the stops to within
-            // that range.
-            SkVector p0p1 = p1 - p0;
-            SkVector new_p0_offset = p0p1;
+            // Project/scale points according to stop extrema along p0p3 line,
+            // p3 being the result of the projection above, then scale stops to
+            // to [0, 1] range so that repeat modes work.  The Skia linear
+            // gradient shader performs the repeat modes over the 0 to 1 range,
+            // that's why we need to scale the stops to within that range.
+            SkVector p0p3 = p3 - p0;
+            SkVector new_p0_offset = p0p3;
             new_p0_offset.scale(stops.front());
-            SkVector new_p1_offset = p0p1;
+            SkVector new_p1_offset = p0p3;
             new_p1_offset.scale(stops.back());
 
             line_positions[0] = p0 + new_p0_offset;
@@ -809,7 +812,7 @@ void colrv1_draw_glyph_with_path(SkCanvas* canvas, const SkSpan<SkColor>& palett
 void colrv1_transform(FT_Face face,
                       FT_COLR_Paint colrv1_paint,
                       SkCanvas* canvas,
-                      SkMatrix* out_transform = 0) {
+                      SkMatrix* out_transform = nullptr) {
     SkMatrix transform;
 
     SkASSERT(canvas || out_transform);
@@ -1233,6 +1236,76 @@ bool colrv1_start_glyph_bounds(SkMatrix *ctm,
 
 }  // namespace
 
+#ifdef FT_COLOR_H
+bool SkScalerContext_FreeType_Base::drawColorGlyph(SkCanvas* canvas,
+                                                   FT_Face face,
+                                                   const SkGlyph& glyph) {
+    SkPaint paint;
+    paint.setAntiAlias(true);
+
+    FT_Palette_Data palette_data;
+    FT_Error err = FT_Palette_Data_Get(face, &palette_data);
+    if (err) {
+        SK_TRACEFTR(err, "Could not get palette data from %s fontFace.",
+                    face->family_name);
+        return false;
+    }
+
+    SkAutoTArray<SkColor> originalPalette;
+
+    FT_Color* ftPalette;
+    err = FT_Palette_Select(face, 0, &ftPalette);
+    if (err) {
+        SK_TRACEFTR(err, "Could not get palette colors from %s fontFace.",
+                    face->family_name);
+        return false;
+    }
+    originalPalette.reset(palette_data.num_palette_entries);
+    for (int i = 0; i < palette_data.num_palette_entries; ++i) {
+        originalPalette[i] = SkColorSetARGB(ftPalette[i].alpha,
+                                            ftPalette[i].red,
+                                            ftPalette[i].green,
+                                            ftPalette[i].blue);
+    }
+    SkSpan<SkColor> paletteSpan(originalPalette.data(),
+                                palette_data.num_palette_entries);
+
+    // Only attempt to draw a COLRv1 glyph if FreeType is new enough to have the COLRv1 support.
+#ifdef TT_SUPPORT_COLRV1
+    VisitedSet visited_set;
+    if (colrv1_start_glyph(canvas, paletteSpan,
+                           fRec.fForegroundColor,
+                           face, glyph.getGlyphID(),
+                           FT_COLOR_INCLUDE_ROOT_TRANSFORM,
+                           &visited_set))
+    {
+        return true;
+    }
+#endif  // TT_SUPPORT_COLRV1
+
+    // If we didn't have colr v1 layers, try v0 layers.
+    bool haveLayers = false;
+    FT_LayerIterator layerIterator;
+    layerIterator.p = nullptr;
+    FT_UInt layerGlyphIndex = 0;
+    FT_UInt layerColorIndex = 0;
+    while (FT_Get_Color_Glyph_Layer(face, glyph.getGlyphID(), &layerGlyphIndex,
+                                    &layerColorIndex, &layerIterator)) {
+        haveLayers = true;
+        if (layerColorIndex == 0xFFFF) {
+            paint.setColor(fRec.fForegroundColor);
+        } else {
+            paint.setColor(paletteSpan[layerColorIndex]);
+        }
+        SkPath path;
+        if (this->generateFacePath(face, layerGlyphIndex, &path)) {
+            canvas->drawPath(path, paint);
+        }
+    }
+    return haveLayers;
+}
+#endif  // FT_COLOR_H
+
 void SkScalerContext_FreeType_Base::generateGlyphImage(
     FT_Face face,
     const SkGlyph& glyph,
@@ -1279,76 +1352,11 @@ void SkScalerContext_FreeType_Base::generateGlyphImage(
                                      SkFixedToScalar(glyph.getSubYFixed()));
                 }
 
-                SkPaint paint;
-                paint.setAntiAlias(true);
-
-                FT_Palette_Data palette_data;
-                FT_Error err = FT_Palette_Data_Get(face, &palette_data);
-                if (err) {
-                    SK_TRACEFTR(err, "Could not get palette data from %s fontFace.",
-                                face->family_name);
-                    return;
-                }
-
-                SkAutoTArray<SkColor> originalPalette;
-
-                FT_Color* ftPalette;
-                err = FT_Palette_Select(face, 0, &ftPalette);
-                if (err) {
-                    SK_TRACEFTR(err, "Could not get palette colors from %s fontFace.",
-                                face->family_name);
-                    return;
-                }
-                originalPalette.reset(palette_data.num_palette_entries);
-                for (int i = 0; i < palette_data.num_palette_entries; ++i) {
-                    originalPalette[i] = SkColorSetARGB(ftPalette[i].alpha,
-                                                        ftPalette[i].red,
-                                                        ftPalette[i].green,
-                                                        ftPalette[i].blue);
-                }
-                SkSpan<SkColor> paletteSpan(originalPalette.data(),
-                                            palette_data.num_palette_entries);
-
-                FT_Bool haveLayers = false;
-
-#ifdef TT_SUPPORT_COLRV1
-                // Only attempt to draw COLRv1 glyph is FreeType is new enough
-                // to have the COLRv1 additions, as indicated by the
-                // TT_SUPPORT_COLRV1 flag defined by the FreeType headers in
-                // that case.
-                VisitedSet visited_set;
-                haveLayers = colrv1_start_glyph(&canvas, paletteSpan,
-                                                fRec.fForegroundColor,
-                                                face, glyph.getGlyphID(),
-                                                FT_COLOR_INCLUDE_ROOT_TRANSFORM,
-                                                &visited_set);
-#else
-                haveLayers = false;
-#endif
-                if (!haveLayers) {
-                    // If we didn't have colr v1 layers, try v0 layers.
-                    FT_LayerIterator layerIterator;
-                    layerIterator.p = NULL;
-                    FT_UInt layerGlyphIndex = 0;
-                    FT_UInt layerColorIndex = 0;
-                    while (FT_Get_Color_Glyph_Layer(face, glyph.getGlyphID(), &layerGlyphIndex,
-                                                    &layerColorIndex, &layerIterator)) {
-                        haveLayers = true;
-                        if (layerColorIndex == 0xFFFF) {
-                            paint.setColor(fRec.fForegroundColor);
-                        } else {
-                            paint.setColor(paletteSpan[layerColorIndex]);
-                        }
-                        SkPath path;
-                        if (this->generateFacePath(face, layerGlyphIndex, &path)) {
-                            canvas.drawPath(path, paint);
-                        }
-                    }
-                }
+                bool haveLayers = this->drawColorGlyph(&canvas, face, glyph);
 
                 if (!haveLayers) {
-                    SK_TRACEFTR(err, "Could not get layers (neither v0, nor v1) from %s fontFace.",
-                                face->family_name);
+                    SkDebugf("Could not get layers (neither v0, nor v1) from %s fontFace.",
+                             face->family_name);
                     return;
                 }
             } else
@@ -1778,4 +1786,19 @@ bool SkScalerContext_FreeType_Base::computeColrV1GlyphBoundingBox(FT_Face face,
     SkASSERT(false);
     return false;
 #endif
+}
+
+sk_sp<SkDrawable> SkScalerContext_FreeType_Base::generateGlyphDrawable(FT_Face face,
+                                                                       const SkGlyph& glyph) {
+#ifdef FT_COLOR_H
+    if (face->glyph->format == FT_GLYPH_FORMAT_OUTLINE && glyph.isColor()) {
+        SkPictureRecorder recorder;
+        SkCanvas* recordingCanvas = recorder.beginRecording(SkRect::Make(glyph.mask().fBounds));
+        if (!this->drawColorGlyph(recordingCanvas, face, glyph)) {
+            return nullptr;
+        }
+        return recorder.finishRecordingAsDrawable();
+    }
+#endif  // FT_COLOR_H
+    return nullptr;
 }

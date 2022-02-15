@@ -38,6 +38,8 @@
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
 #include "include/core/SkVertices.h"
+#include "include/effects/Sk1DPathEffect.h"
+#include "include/effects/Sk2DPathEffect.h"
 #include "include/effects/SkCornerPathEffect.h"
 #include "include/effects/SkDashPathEffect.h"
 #include "include/effects/SkDiscretePathEffect.h"
@@ -85,6 +87,10 @@
 #include "include/pathops/SkPathOps.h"
 #endif
 
+#if defined(SK_INCLUDE_RUNTIME_EFFECT) && defined(SK_INCLUDE_SKSL_TRACE)
+#include "include/sksl/SkSLDebugTrace.h"
+#endif
+
 #ifndef SK_NO_FONTS
 sk_sp<SkFontMgr> SkFontMgr_New_Custom_Data(sk_sp<SkData>* datas, int n);
 #endif
@@ -128,7 +134,8 @@ struct SimpleImageInfo {
 };
 
 SkImageInfo toSkImageInfo(const SimpleImageInfo& sii) {
-    return SkImageInfo::Make(sii.width, sii.height, sii.colorType, sii.alphaType, sii.colorSpace);
+    return SkImageInfo::Make(sii.width, sii.height, sii.colorType, sii.alphaType,
+                             sii.colorSpace ? sii.colorSpace : SkColorSpace::MakeSRGB());
 }
 
 #ifdef SK_GL
@@ -179,6 +186,10 @@ sk_sp<SkSurface> MakeOnScreenGLSurface(sk_sp<GrDirectContext> dContext, int widt
     GrGLint stencil;
     emscripten_glGetIntegerv(GL_STENCIL_BITS, &stencil);
 
+    if (!colorSpace) {
+        colorSpace = SkColorSpace::MakeSRGB();
+    }
+
     const auto colorSettings = ColorSettings(colorSpace);
     info.fFormat = colorSettings.pixFormat;
     GrBackendRenderTarget target(width, height, sampleCnt, stencil, info);
@@ -188,7 +199,8 @@ sk_sp<SkSurface> MakeOnScreenGLSurface(sk_sp<GrDirectContext> dContext, int widt
 }
 
 sk_sp<SkSurface> MakeRenderTarget(sk_sp<GrDirectContext> dContext, int width, int height) {
-    SkImageInfo info = SkImageInfo::MakeN32(width, height, SkAlphaType::kPremul_SkAlphaType);
+    SkImageInfo info = SkImageInfo::MakeN32(
+            width, height, SkAlphaType::kPremul_SkAlphaType, SkColorSpace::MakeSRGB());
 
     sk_sp<SkSurface> surface(SkSurface::MakeRenderTarget(dContext.get(),
                              SkBudgeted::kYes,
@@ -747,11 +759,16 @@ protected:
         }
 
         GrGLTextureInfo glInfo;
+        // This callback is defined in gpu.js
         glInfo.fID     = fCallback.call<uint32_t>("makeTexture");
         // The format and target should match how we make the texture on the JS side
         // See the implementation of the makeTexture function.
         glInfo.fFormat = GR_GL_RGBA8;
         glInfo.fTarget = GR_GL_TEXTURE_2D;
+
+        // In order to bind the image source to the texture, makeTexture has changed which
+        // texture is "in focus" for the WebGL context.
+        GrAsDirectContext(ctx)->resetContext(kTextureBinding_GrGLBackendState);
 
         static constexpr auto kMipmapped = GrMipmapped::kNo;
         GrBackendTexture backendTexture(info.width(), info.height(), kMipmapped, glInfo);
@@ -1335,7 +1352,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
 
     class_<SkImage>("Image")
         .smart_ptr<sk_sp<SkImage>>("sk_sp<Image>")
-#if SK_GL
+#ifdef SK_GL
         .class_function("_makeFromGenerator", &MakeImageFromGenerator)
 #endif
         // Note that this needs to be cleaned up with delete().
@@ -1492,7 +1509,22 @@ EMSCRIPTEN_BINDINGS(Skia) {
             const float* intervals = reinterpret_cast<const float*>(cptr);
             return SkDashPathEffect::Make(intervals, count, phase);
         }), allow_raw_pointers())
-        .class_function("MakeDiscrete", &SkDiscretePathEffect::Make);
+        .class_function("MakeDiscrete", &SkDiscretePathEffect::Make)
+        .class_function("_MakeLine2D", optional_override([](SkScalar width,
+                                                            WASMPointerF32 mPtr)->sk_sp<SkPathEffect> {
+            SkMatrix matrix;
+            const SkScalar* nineMatrixValues = reinterpret_cast<const SkScalar*>(mPtr);
+            matrix.set9(nineMatrixValues);
+            return SkLine2DPathEffect::Make(width, matrix);
+        }), allow_raw_pointers())
+        .class_function("MakePath1D", &SkPath1DPathEffect::Make)
+        .class_function("_MakePath2D", optional_override([](WASMPointerF32 mPtr,
+                                                          SkPath path)->sk_sp<SkPathEffect> {
+            SkMatrix matrix;
+            const SkScalar* nineMatrixValues = reinterpret_cast<const SkScalar*>(mPtr);
+            matrix.set9(nineMatrixValues);
+            return SkPath2DPathEffect::Make(matrix, path);
+        }), allow_raw_pointers());
 
     // TODO(kjlubick, reed) Make SkPath immutable and only creatable via a factory/builder.
     class_<SkPath>("Path")
@@ -1618,6 +1650,13 @@ EMSCRIPTEN_BINDINGS(Skia) {
 
     class_<SkPicture>("Picture")
         .smart_ptr<sk_sp<SkPicture>>("sk_sp<Picture>")
+        .function("_makeShader",  optional_override([](SkPicture& self,
+                                 SkTileMode tmx, SkTileMode tmy, SkFilterMode mode,
+                                 WASMPointerF32 mPtr, WASMPointerF32 rPtr) -> sk_sp<SkShader> {
+            OptionalMatrix localMatrix(mPtr);
+            SkRect* tileRect = reinterpret_cast<SkRect*>(rPtr);
+            return self.makeShader(tmx, tmy, mode, &localMatrix, tileRect);
+        }), allow_raw_pointers())
 #ifdef SK_SERIALIZE_SKP
         // The serialized format of an SkPicture (informally called an "skp"), is not something
         // that clients should ever rely on.  The format may change at anytime and no promises
@@ -1761,6 +1800,21 @@ EMSCRIPTEN_BINDINGS(Skia) {
         }), allow_raw_pointers());
 
 #ifdef SK_INCLUDE_RUNTIME_EFFECT
+#ifdef SK_INCLUDE_SKSL_TRACE
+    class_<SkSL::DebugTrace>("DebugTrace")
+        .smart_ptr<sk_sp<SkSL::DebugTrace>>("sk_sp<DebugTrace>")
+        .function("writeTrace", optional_override([](SkSL::DebugTrace& self) -> std::string {
+            SkDynamicMemoryWStream wstream;
+            self.writeTrace(&wstream);
+            sk_sp<SkData> trace = wstream.detachAsData();
+            return std::string(reinterpret_cast<const char*>(trace->bytes()), trace->size());
+        }));
+
+    value_object<SkRuntimeEffect::TracedShader>("TracedShader")
+        .field("shader",     &SkRuntimeEffect::TracedShader::shader)
+        .field("debugTrace", &SkRuntimeEffect::TracedShader::debugTrace);
+#endif
+
     class_<SkRuntimeEffect>("RuntimeEffect")
         .smart_ptr<sk_sp<SkRuntimeEffect>>("sk_sp<RuntimeEffect>")
         .class_function("_Make", optional_override([](std::string sksl,
@@ -1774,17 +1828,30 @@ EMSCRIPTEN_BINDINGS(Skia) {
             }
             return effect;
         }))
-        .function("_makeShader", optional_override([](SkRuntimeEffect& self, WASMPointerF32 fPtr, size_t fLen, bool isOpaque,
+#ifdef SK_INCLUDE_SKSL_TRACE
+        .class_function("MakeTraced", optional_override([](
+                sk_sp<SkShader> shader,
+                int traceCoordX,
+                int traceCoordY) -> SkRuntimeEffect::TracedShader {
+            return SkRuntimeEffect::MakeTraced(shader, SkIPoint::Make(traceCoordX, traceCoordY));
+        }))
+#endif
+        .function("_makeShader", optional_override([](SkRuntimeEffect& self,
+                                                      WASMPointerF32 fPtr,
+                                                      size_t fLen,
                                                       WASMPointerF32 mPtr)->sk_sp<SkShader> {
             void* inputData = reinterpret_cast<void*>(fPtr);
             castUniforms(inputData, fLen, self);
             sk_sp<SkData> inputs = SkData::MakeFromMalloc(inputData, fLen);
 
             OptionalMatrix localMatrix(mPtr);
-            return self.makeShader(inputs, nullptr, 0, &localMatrix, isOpaque);
+            return self.makeShader(inputs, nullptr, 0, &localMatrix);
         }))
-        .function("_makeShaderWithChildren", optional_override([](SkRuntimeEffect& self, WASMPointerF32 fPtr, size_t fLen, bool isOpaque,
-                                                                  WASMPointerU32 cPtrs, size_t cLen,
+        .function("_makeShaderWithChildren", optional_override([](SkRuntimeEffect& self,
+                                                                  WASMPointerF32 fPtr,
+                                                                  size_t fLen,
+                                                                  WASMPointerU32 cPtrs,
+                                                                  size_t cLen,
                                                                   WASMPointerF32 mPtr)->sk_sp<SkShader> {
             void* inputData = reinterpret_cast<void*>(fPtr);
             castUniforms(inputData, fLen, self);
@@ -1798,7 +1865,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
                 children[i] = sk_ref_sp<SkShader>(childrenPtrs[i]);
             }
             OptionalMatrix localMatrix(mPtr);
-            auto s = self.makeShader(inputs, children, cLen, &localMatrix, isOpaque);
+            auto s = self.makeShader(inputs, children, cLen, &localMatrix);
             delete[] children;
             return s;
         }))
@@ -1883,6 +1950,9 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("sampleCnt", optional_override([](SkSurface& self)->int {
             auto backendRT = self.getBackendRenderTarget(SkSurface::kFlushRead_BackendHandleAccess);
             return (backendRT.isValid()) ? backendRT.sampleCnt() : 0;
+        }))
+        .function("_resetContext",optional_override([](SkSurface& self)->void {
+            GrAsDirectContext(self.recordingContext())->resetContext(kTextureBinding_GrGLBackendState);
         }))
 #else
         .function("reportBackendTypeIsGPU", optional_override([](SkSurface& self) -> bool {
@@ -2054,6 +2124,11 @@ EMSCRIPTEN_BINDINGS(Skia) {
     enum_<SkPaint::Style>("PaintStyle")
         .value("Fill",            SkPaint::Style::kFill_Style)
         .value("Stroke",          SkPaint::Style::kStroke_Style);
+
+    enum_<SkPath1DPathEffect::Style>("Path1DEffect")
+        .value("Translate", SkPath1DPathEffect::Style::kTranslate_Style)
+        .value("Rotate",    SkPath1DPathEffect::Style::kRotate_Style)
+        .value("Morph",     SkPath1DPathEffect::Style::kMorph_Style);
 
 #ifdef SK_INCLUDE_PATHOPS
     enum_<SkPathOp>("PathOp")

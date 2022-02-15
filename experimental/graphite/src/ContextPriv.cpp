@@ -19,9 +19,4 @@ const Gpu* ContextPriv::gpu() const {
     return fContext->fGpu.get();
 }
 
-ResourceProvider* ContextPriv::resourceProvider() {
-    return this->gpu()->resourceProvider();
-}
-
-
 } // namespace skgpu

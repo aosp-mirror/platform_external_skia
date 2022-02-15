@@ -14,6 +14,10 @@
 #include "src/sksl/SkSLCompiler.h"
 #include "src/utils/SkShaderUtils.h"
 
+#ifdef SK_BUILD_FOR_IOS
+#import <UIKit/UIApplication.h>
+#endif
+
 namespace skgpu::mtl {
 
 bool FormatIsDepthOrStencil(MTLPixelFormat format) {
@@ -49,6 +53,8 @@ MTLPixelFormat SkColorTypeToFormat(SkColorType colorType) {
     switch (colorType) {
         case kRGBA_8888_SkColorType:
             return MTLPixelFormatRGBA8Unorm;
+        case kBGRA_8888_SkColorType:
+            return MTLPixelFormatBGRA8Unorm;
         case kAlpha_8_SkColorType:
             return MTLPixelFormatR8Unorm;
         case kRGBA_F16_SkColorType:
@@ -80,16 +86,16 @@ static const bool gPrintSKSL = false;
 static const bool gPrintMSL = false;
 
 bool SkSLToMSL(const Gpu* gpu,
-               const SkSL::String& sksl,
+               const std::string& sksl,
                SkSL::ProgramKind programKind,
                const SkSL::Program::Settings& settings,
-               SkSL::String* msl,
+               std::string* msl,
                SkSL::Program::Inputs* outInputs,
                ShaderErrorHandler* errorHandler) {
 #ifdef SK_DEBUG
-    SkSL::String src = SkShaderUtils::PrettyPrint(sksl);
+    std::string src = SkShaderUtils::PrettyPrint(sksl);
 #else
-    const SkSL::String& src = sksl;
+    const std::string& src = sksl;
 #endif
     SkSL::Compiler* compiler = gpu->shaderCompiler();
     std::unique_ptr<SkSL::Program> program =
@@ -118,7 +124,7 @@ bool SkSLToMSL(const Gpu* gpu,
 }
 
 sk_cfp<id<MTLLibrary>> CompileShaderLibrary(const Gpu* gpu,
-                                            const SkSL::String& msl,
+                                            const std::string& msl,
                                             ShaderErrorHandler* errorHandler) {
     TRACE_EVENT0("skia.shaders", "driver_compile_shader");
     auto nsSource = [[NSString alloc] initWithBytesNoCopy:const_cast<char*>(msl.c_str())
@@ -149,4 +155,10 @@ sk_cfp<id<MTLLibrary>> CompileShaderLibrary(const Gpu* gpu,
     return compiledLibrary;
 }
 
+#ifdef SK_BUILD_FOR_IOS
+bool IsAppInBackground() {
+    return [NSThread isMainThread] &&
+           ([UIApplication sharedApplication].applicationState == UIApplicationStateBackground);
+}
+#endif
 } // namespace skgpu::mtl

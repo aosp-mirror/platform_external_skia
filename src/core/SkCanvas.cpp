@@ -19,7 +19,6 @@
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkVertices.h"
 #include "include/effects/SkRuntimeEffect.h"
-#include "include/private/SkTOptional.h"
 #include "include/private/SkTo.h"
 #include "include/utils/SkNoDrawCanvas.h"
 #include "src/core/SkArenaAlloc.h"
@@ -27,6 +26,7 @@
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkClipStack.h"
 #include "src/core/SkColorFilterBase.h"
+#include "src/core/SkCustomMeshPriv.h"
 #include "src/core/SkDraw.h"
 #include "src/core/SkGlyphRun.h"
 #include "src/core/SkImageFilterCache.h"
@@ -49,6 +49,7 @@
 
 #include <memory>
 #include <new>
+#include <optional>
 
 #if SK_SUPPORT_GPU
 #include "include/gpu/GrDirectContext.h"
@@ -327,6 +328,7 @@ public:
                 rawBounds = &fPaint.computeFastBounds(*rawBounds, &storage);
             }
 
+            canvas->fSaveCount += 1;
             (void)canvas->internalSaveLayer(SkCanvas::SaveLayerRec(rawBounds, &restorePaint),
                                             SkCanvas::kFullLayer_SaveLayerStrategy);
             fTempLayerForImageFilter = true;
@@ -340,6 +342,7 @@ public:
 
     ~AutoLayerForImageFilter() {
         if (fTempLayerForImageFilter) {
+            fCanvas->fSaveCount -= 1;
             fCanvas->internalRestore();
         }
         SkASSERT(fCanvas->getSaveCount() == fSaveCount);
@@ -355,7 +358,7 @@ private:
     SkDEBUGCODE(int fSaveCount;)
 };
 
-skstd::optional<AutoLayerForImageFilter> SkCanvas::aboutToDraw(
+std::optional<AutoLayerForImageFilter> SkCanvas::aboutToDraw(
     SkCanvas* canvas,
     const SkPaint& paint,
     const SkRect* rawBounds,
@@ -364,14 +367,14 @@ skstd::optional<AutoLayerForImageFilter> SkCanvas::aboutToDraw(
 {
     if (checkOverwrite == CheckForOverwrite::kYes) {
         if (!this->predrawNotify(rawBounds, &paint, overrideOpacity)) {
-            return skstd::nullopt;
+            return std::nullopt;
         }
     } else {
         if (!this->predrawNotify()) {
-            return skstd::nullopt;
+            return std::nullopt;
         }
     }
-    return skstd::optional<AutoLayerForImageFilter>(canvas, paint, rawBounds);
+    return std::optional<AutoLayerForImageFilter>(std::in_place, canvas, paint, rawBounds);
 }
 
 ////////////////////////////////////////////////////////////////////////////
@@ -923,12 +926,15 @@ void SkCanvas::internalDrawDeviceWithFilter(SkBaseDevice* src,
             intermediateDevice->setOrigin(SkM44(srcToIntermediate),
                                           requiredInput.left(), requiredInput.top());
 
-            SkMatrix offsetLocalToDevice = intermediateDevice->localToDevice();
-            offsetLocalToDevice.preTranslate(srcSubset.left(), srcSubset.top());
-            // We draw with non-AA bilinear since we cover the destination but definitely don't have
-            // a pixel-aligned transform.
-            intermediateDevice->drawSpecial(srcImage.get(), offsetLocalToDevice,
-                                            SkSamplingOptions{SkFilterMode::kLinear}, {});
+            // We use drawPaint to fill the entire device with the src input + clamp tiling, which
+            // extends the backdrop's edge pixels to the parts of 'requiredInput' that map offscreen
+            // Without this, the intermediateDevice would contain transparent pixels that may then
+            // infect blurs and other filters with large kernels.
+            SkPaint imageFill;
+            imageFill.setShader(srcImage->asShader(SkTileMode::kClamp,
+                                                   SkSamplingOptions{SkFilterMode::kLinear},
+                                                   SkMatrix::Translate(srcSubset.topLeft())));
+            intermediateDevice->drawPaint(imageFill);
             filterInput = intermediateDevice->snapSpecial();
 
             // TODO: Like the non-intermediate case, we need to apply the image origin.
@@ -1796,6 +1802,17 @@ void SkCanvas::drawVertices(const SkVertices* vertices, SkBlendMode mode, const 
     this->onDrawVerticesObject(vertices, mode, paint);
 }
 
+#ifdef SK_ENABLE_SKSL
+void SkCanvas::drawCustomMesh(SkCustomMesh cm, sk_sp<SkBlender> blender, const SkPaint& paint) {
+    TRACE_EVENT0("skia", TRACE_FUNC);
+    RETURN_ON_FALSE(SkValidateCustomMesh(cm));
+    if (!blender) {
+        blender = SkBlender::Mode(SkBlendMode::kModulate);
+    }
+    this->onDrawCustomMesh(std::move(cm), std::move(blender), paint);
+}
+#endif
+
 void SkCanvas::drawPath(const SkPath& path, const SkPaint& paint) {
     TRACE_EVENT0("skia", TRACE_FUNC);
     this->onDrawPath(path, paint);
@@ -2280,7 +2297,7 @@ void SkCanvas::onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPa
     }
     auto layer = this->aboutToDraw(this, paint, &bounds);
     if (layer) {
-        this->topDevice()->drawGlyphRunList(glyphRunList, layer->paint());
+        this->topDevice()->drawGlyphRunList(this, glyphRunList, layer->paint());
     }
 }
 
@@ -2319,7 +2336,7 @@ void SkCanvas::doDrawSlug(GrSlug* slug) {
         return;
     }
 
-    this->topDevice()->drawSlug(slug);
+    this->topDevice()->drawSlug(this, slug);
 }
 #endif
 
@@ -2438,6 +2455,21 @@ void SkCanvas::onDrawVerticesObject(const SkVertices* vertices, SkBlendMode bmod
     }
 }
 
+#ifdef SK_ENABLE_SKSL
+void SkCanvas::onDrawCustomMesh(SkCustomMesh cm, sk_sp<SkBlender> blender, const SkPaint& paint) {
+    SkPaint simplePaint = clean_paint_for_drawVertices(paint);
+
+    if (this->internalQuickReject(cm.bounds, simplePaint)) {
+        return;
+    }
+
+    auto layer = this->aboutToDraw(this, simplePaint, nullptr);
+    if (layer) {
+        this->topDevice()->drawCustomMesh(std::move(cm), std::move(blender), paint);
+    }
+}
+#endif
+
 void SkCanvas::drawPatch(const SkPoint cubics[12], const SkColor colors[4],
                          const SkPoint texCoords[4], SkBlendMode bmode,
                          const SkPaint& paint) {
@@ -2498,7 +2530,7 @@ void SkCanvas::onDrawDrawable(SkDrawable* dr, const SkMatrix* matrix) {
     // drawable bounds are no longer reliable (e.g. android displaylist)
     // so don't use them for quick-reject
     if (this->predrawNotify()) {
-        this->topDevice()->drawDrawable(dr, matrix, this);
+        this->topDevice()->drawDrawable(this, dr, matrix);
     }
 }
 

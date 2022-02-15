@@ -12,6 +12,8 @@
 
 #include <sstream>
 
+static constexpr char kTraceVersion[] = "20220209";
+
 namespace SkSL {
 
 std::string SkVMDebugTrace::getSlotComponentSuffix(int slotIndex) const {
@@ -24,40 +26,55 @@ std::string SkVMDebugTrace::getSlotComponentSuffix(int slotIndex) const {
     }
     if (slot.columns > 1) {
         switch (slot.componentIndex) {
-            case 0:  return ".x"; break;
-            case 1:  return ".y"; break;
-            case 2:  return ".z"; break;
-            case 3:  return ".w"; break;
-            default: return "[???]"; break;
+            case 0:  return ".x";
+            case 1:  return ".y";
+            case 2:  return ".z";
+            case 3:  return ".w";
+            default: return "[???]";
         }
     }
     return {};
 }
 
-std::string SkVMDebugTrace::getSlotValue(int slotIndex, int32_t value) const {
-    const SkSL::SkVMSlotInfo& slot = fSlotInfo[slotIndex];
-    switch (slot.numberKind) {
-        case SkSL::Type::NumberKind::kBoolean:
-            return value ? "true" : "false";
-
-        case SkSL::Type::NumberKind::kSigned:
-        default:
-            return std::to_string(value);
-
+double SkVMDebugTrace::interpretValueBits(int slotIndex, int32_t valueBits) const {
+    SkASSERT(slotIndex >= 0);
+    SkASSERT((size_t)slotIndex < fSlotInfo.size());
+    switch (fSlotInfo[slotIndex].numberKind) {
         case SkSL::Type::NumberKind::kUnsigned: {
-            uint32_t unsignedVal;
-            memcpy(&unsignedVal, &value, sizeof(unsignedVal));
-            return std::to_string(unsignedVal);
+            uint32_t uintValue;
+            static_assert(sizeof(uintValue) == sizeof(valueBits));
+            memcpy(&uintValue, &valueBits, sizeof(uintValue));
+            return uintValue;
         }
         case SkSL::Type::NumberKind::kFloat: {
-            float floatVal;
-            static_assert(sizeof(floatVal) == sizeof(value));
-            memcpy(&floatVal, &value, sizeof(floatVal));
+            float floatValue;
+            static_assert(sizeof(floatValue) == sizeof(valueBits));
+            memcpy(&floatValue, &valueBits, sizeof(floatValue));
+            return floatValue;
+        }
+        default: {
+            return valueBits;
+        }
+    }
+}
+
+std::string SkVMDebugTrace::slotValueToString(int slotIndex, double value) const {
+    SkASSERT(slotIndex >= 0);
+    SkASSERT((size_t)slotIndex < fSlotInfo.size());
+    switch (fSlotInfo[slotIndex].numberKind) {
+        case SkSL::Type::NumberKind::kBoolean: {
+            return value ? "true" : "false";
+        }
+        default: {
             char buffer[32];
-            snprintf(buffer, SK_ARRAY_COUNT(buffer), "%.8g", floatVal);
+            snprintf(buffer, SK_ARRAY_COUNT(buffer), "%.8g", value);
             return buffer;
         }
     }
+}
+
+std::string SkVMDebugTrace::getSlotValue(int slotIndex, int32_t valueBits) const {
+    return this->slotValueToString(slotIndex, this->interpretValueBits(slotIndex, valueBits));
 }
 
 void SkVMDebugTrace::setTraceCoord(const SkIPoint& coord) {
@@ -153,6 +170,19 @@ void SkVMDebugTrace::dump(SkWStream* o) const {
                     o->writeText("exit ");
                     o->writeText(fFuncInfo[data0].name.c_str());
                     break;
+
+                case SkSL::SkVMTraceInfo::Op::kScope:
+                    for (int delta = data0; delta < 0; ++delta) {
+                        indent.pop_back();
+                    }
+                    o->writeText(indent.c_str());
+                    o->writeText("scope ");
+                    o->writeText((data0 >= 0) ? "+" : "");
+                    o->writeDecAsText(data0);
+                    for (int delta = data0; delta > 0; --delta) {
+                        indent.push_back(' ');
+                    }
+                    break;
             }
             o->newline();
         }
@@ -163,6 +193,7 @@ void SkVMDebugTrace::writeTrace(SkWStream* w) const {
     SkJSONWriter json(w);
 
     json.beginObject(); // root
+    json.appendString("version", kTraceVersion);
     json.beginArray("source");
 
     for (const std::string& line : fSource) {
@@ -176,11 +207,13 @@ void SkVMDebugTrace::writeTrace(SkWStream* w) const {
         const SkVMSlotInfo& info = fSlotInfo[index];
 
         json.beginObject();
-        json.appendS32("slot", index);
         json.appendString("name", info.name.c_str());
         json.appendS32("columns", info.columns);
         json.appendS32("rows", info.rows);
         json.appendS32("index", info.componentIndex);
+        if (info.groupIndex != info.componentIndex) {
+            json.appendS32("groupIdx", info.groupIndex);
+        }
         json.appendS32("kind", (int)info.numberKind);
         json.appendS32("line", info.line);
         if (info.fnReturnValue >= 0) {
@@ -196,7 +229,6 @@ void SkVMDebugTrace::writeTrace(SkWStream* w) const {
         const SkVMFunctionInfo& info = fFuncInfo[index];
 
         json.beginObject();
-        json.appendS32("slot", index);
         json.appendString("name", info.name.c_str());
         json.endObject();
     }
@@ -233,6 +265,11 @@ bool SkVMDebugTrace::readTrace(SkStream* r) {
         return false;
     }
 
+    const skjson::StringValue* version = (*root)["version"];
+    if (!version || version->str() != kTraceVersion) {
+        return false;
+    }
+
     const skjson::ArrayValue* source = (*root)["source"];
     if (!source) {
         return false;
@@ -257,23 +294,19 @@ bool SkVMDebugTrace::readTrace(SkStream* r) {
             return false;
         }
 
-        // Grow the slot array to hold this element. (But don't shrink it if we somehow get our
-        // slots out of order!)
-        const skjson::NumberValue* slot = (*element)["slot"];
-        if (!slot) {
-            return false;
-        }
-        fSlotInfo.resize(std::max(fSlotInfo.size(), (size_t)(**slot + 1)));
-        SkVMSlotInfo& info = fSlotInfo[(size_t)(**slot)];
+        // Grow the slot array to hold this element.
+        fSlotInfo.push_back({});
+        SkVMSlotInfo& info = fSlotInfo.back();
 
         // Populate the SlotInfo with our JSON data.
-        const skjson::StringValue* name    = (*element)["name"];
-        const skjson::NumberValue* columns = (*element)["columns"];
-        const skjson::NumberValue* rows    = (*element)["rows"];
-        const skjson::NumberValue* index   = (*element)["index"];
-        const skjson::NumberValue* kind    = (*element)["kind"];
-        const skjson::NumberValue* line    = (*element)["line"];
-        const skjson::NumberValue* retval  = (*element)["retval"];
+        const skjson::StringValue* name     = (*element)["name"];
+        const skjson::NumberValue* columns  = (*element)["columns"];
+        const skjson::NumberValue* rows     = (*element)["rows"];
+        const skjson::NumberValue* index    = (*element)["index"];
+        const skjson::NumberValue* groupIdx = (*element)["groupIdx"];
+        const skjson::NumberValue* kind     = (*element)["kind"];
+        const skjson::NumberValue* line     = (*element)["line"];
+        const skjson::NumberValue* retval   = (*element)["retval"];
         if (!name || !columns || !rows || !index || !kind || !line) {
             return false;
         }
@@ -282,6 +315,7 @@ bool SkVMDebugTrace::readTrace(SkStream* r) {
         info.columns = **columns;
         info.rows = **rows;
         info.componentIndex = **index;
+        info.groupIndex = groupIdx ? **groupIdx : info.componentIndex;
         info.numberKind = (SkSL::Type::NumberKind)(int)**kind;
         info.line = **line;
         info.fnReturnValue = retval ? **retval : -1;
@@ -298,14 +332,9 @@ bool SkVMDebugTrace::readTrace(SkStream* r) {
             return false;
         }
 
-        // Grow the function array to hold this element. (But don't shrink it if we somehow get our
-        // functions out of order!)
-        const skjson::NumberValue* slot = (*element)["slot"];
-        if (!slot) {
-            return false;
-        }
-        fFuncInfo.resize(std::max(fFuncInfo.size(), (size_t)(**slot + 1)));
-        SkVMFunctionInfo& info = fFuncInfo[(size_t)(**slot)];
+        // Grow the function array to hold this element.
+        fFuncInfo.push_back({});
+        SkVMFunctionInfo& info = fFuncInfo.back();
 
         // Populate the FunctionInfo with our JSON data.
         const skjson::StringValue* name = (*element)["name"];

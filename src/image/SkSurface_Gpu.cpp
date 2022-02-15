@@ -24,6 +24,7 @@
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrTexture.h"
+#include "src/gpu/SkRenderEngineAbortf.h"
 #include "src/image/SkImage_Base.h"
 #include "src/image/SkImage_Gpu.h"
 #include "src/image/SkSurface_Base.h"
@@ -206,6 +207,8 @@ bool SkSurface_Gpu::onCopyOnWrite(ContentChangeMode mode) {
 }
 
 void SkSurface_Gpu::onDiscard() { fDevice->discard(); }
+
+void SkSurface_Gpu::onResolveMSAA() { fDevice->resolveMSAA(); }
 
 GrSemaphoresSubmitted SkSurface_Gpu::onFlush(BackendSurfaceAccess access, const GrFlushInfo& info,
                                              const GrBackendSurfaceMutableState* newState) {
@@ -425,12 +428,6 @@ sk_sp<SkSurface> SkSurface::MakeRenderTarget(GrRecordingContext* rContext,
     return result;
 }
 
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-#define ANDROIDFRAMEWORK_DEBUGF(...) SkDebugf(__VA_ARGS__)
-#else
-#define ANDROIDFRAMEWORK_DEBUGF(...)
-#endif
-
 static bool validate_backend_texture(const GrCaps* caps, const GrBackendTexture& tex,
                                      int sampleCnt, GrColorType grCT,
                                      bool texturable) {
@@ -440,18 +437,18 @@ static bool validate_backend_texture(const GrCaps* caps, const GrBackendTexture&
 
     GrBackendFormat backendFormat = tex.getBackendFormat();
     if (!backendFormat.isValid()) {
-        ANDROIDFRAMEWORK_DEBUGF("%s failed due to an invalid format", __func__);
+        RENDERENGINE_ABORTF("%s failed due to an invalid format", __func__);
         return false;
     }
 
     if (!caps->areColorTypeAndFormatCompatible(grCT, backendFormat)) {
-        ANDROIDFRAMEWORK_DEBUGF("%s failed due to an invalid format and colorType combination",
+        RENDERENGINE_ABORTF("%s failed due to an invalid format and colorType combination",
                                 __func__);
         return false;
     }
 
     if (!caps->isFormatAsColorTypeRenderable(grCT, backendFormat, sampleCnt)) {
-        ANDROIDFRAMEWORK_DEBUGF(
+        RENDERENGINE_ABORTF(
                 "%s failed due to no supported rendering path for the selected "
                 "format and colorType",
                 __func__);
@@ -459,7 +456,7 @@ static bool validate_backend_texture(const GrCaps* caps, const GrBackendTexture&
     }
 
     if (texturable && !caps->isFormatTexturable(backendFormat, tex.textureType())) {
-        ANDROIDFRAMEWORK_DEBUGF(
+        RENDERENGINE_ABORTF(
                 "%s failed due to no texturing support for the selected format and "
                 "colorType",
                 __func__);
@@ -505,14 +502,14 @@ sk_sp<SkSurface> SkSurface::MakeFromBackendTexture(GrRecordingContext* rContext,
     auto releaseHelper = GrRefCntedCallback::Make(textureReleaseProc, releaseContext);
 
     if (!rContext) {
-        ANDROIDFRAMEWORK_DEBUGF("%s failed due to a null context ", __func__);
+        RENDERENGINE_ABORTF("%s failed due to a null context ", __func__);
         return nullptr;
     }
     sampleCnt = std::max(1, sampleCnt);
 
     GrColorType grColorType = SkColorTypeToGrColorType(colorType);
     if (grColorType == GrColorType::kUnknown) {
-        ANDROIDFRAMEWORK_DEBUGF(
+        RENDERENGINE_ABORTF(
                 "%s failed due to an unsupported colorType %d", __func__, colorType);
         return nullptr;
     }
@@ -525,8 +522,18 @@ sk_sp<SkSurface> SkSurface::MakeFromBackendTexture(GrRecordingContext* rContext,
             tex, sampleCnt, kBorrow_GrWrapOwnership, GrWrapCacheable::kNo,
             std::move(releaseHelper)));
     if (!proxy) {
-        ANDROIDFRAMEWORK_DEBUGF("%s failed to wrap the texture into a renderable target ",
-                                __func__);
+#ifdef SK_IN_RENDERENGINE
+        GrGLTextureInfo textureInfo;
+        bool retrievedTextureInfo = tex.getGLTextureInfo(&textureInfo);
+        RENDERENGINE_ABORTF("%s failed to wrap the texture into a renderable target "
+             "\n\tGrBackendTexture: (%i x %i) hasMipmaps: %i isProtected: %i texType: %i"
+             "\n\t\tGrGLTextureInfo: success: %i fTarget: %u fFormat: %u"
+             "\n\tmaxRenderTargetSize: %d",
+             __func__, tex.width(), tex.height(), tex.hasMipmaps(),
+             tex.isProtected(), static_cast<int>(tex.textureType()),
+             retrievedTextureInfo, textureInfo.fTarget, textureInfo.fFormat,
+             rContext->priv().caps()->maxRenderTargetSize());
+#endif
         return nullptr;
     }
 
@@ -535,7 +542,7 @@ sk_sp<SkSurface> SkSurface::MakeFromBackendTexture(GrRecordingContext* rContext,
                                                 SkSurfacePropsCopyOrDefault(props),
                                                 skgpu::BaseDevice::InitContents::kUninit);
     if (!device) {
-        ANDROIDFRAMEWORK_DEBUGF("%s failed to wrap the renderTarget into a surface", __func__);
+        RENDERENGINE_ABORTF("%s failed to wrap the renderTarget into a surface", __func__);
         return nullptr;
     }
 

@@ -15,6 +15,7 @@
 #include "imgui.h"
 
 using namespace sk_app;
+using LineNumberMap = SkSL::SkVMDebugTracePlayer::LineNumberMap;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -28,6 +29,7 @@ void SkSLDebuggerSlide::load(SkScalar winWidth, SkScalar winHeight) {}
 void SkSLDebuggerSlide::unload() {
     fTrace = sk_make_sp<SkSL::SkVMDebugTrace>();
     fPlayer.reset(nullptr);
+    fPlayer.setBreakpoints(std::unordered_set<int>{});
 }
 
 void SkSLDebuggerSlide::showLoadTraceGUI() {
@@ -69,6 +71,11 @@ void SkSLDebuggerSlide::showLoadTraceGUI() {
 }
 
 void SkSLDebuggerSlide::showDebuggerGUI() {
+    if (ImGui::Button("Reset")) {
+        fPlayer.reset(fTrace);
+        fRefresh = true;
+    }
+    ImGui::SameLine(/*offset_from_start_x=*/0, /*spacing=*/100);
     if (ImGui::Button("Step")) {
         fPlayer.step();
         fRefresh = true;
@@ -81,6 +88,11 @@ void SkSLDebuggerSlide::showDebuggerGUI() {
     ImGui::SameLine();
     if (ImGui::Button("Step Out")) {
         fPlayer.stepOut();
+        fRefresh = true;
+    }
+    ImGui::SameLine(/*offset_from_start_x=*/0, /*spacing=*/100);
+    if (ImGui::Button(fPlayer.getBreakpoints().empty() ? "Run" : "Run to Breakpoint")) {
+        fPlayer.run();
         fRefresh = true;
     }
 
@@ -116,8 +128,39 @@ void SkSLDebuggerSlide::showCodeTable() {
                             ImGuiTableBgTarget_RowBg1,
                             ImGui::GetColorU32(ImGui::GetStyleColorVec4(ImGuiCol_TextSelectedBg)));
                 }
+
+                // Show line numbers and breakpoints.
                 ImGui::TableSetColumnIndex(0);
-                ImGui::Text("%03zu ", humanReadableLine);
+                const LineNumberMap& lineNumberMap = fPlayer.getLineNumbersReached();
+                LineNumberMap::const_iterator iter = lineNumberMap.find(humanReadableLine);
+                bool reachable = iter != lineNumberMap.end() && iter->second > 0;
+                bool breakpointOn = fPlayer.getBreakpoints().count(humanReadableLine);
+                if (breakpointOn) {
+                    ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(1.0f, 0.0f, 0.0f, 0.70f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.0f, 0.0f, 0.85f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
+                } else if (reachable) {
+                    ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(1.0f, 1.0f, 1.0f, 0.75f));
+                    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(1.0f, 1.0f, 1.0f, 0.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.2f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(1.0f, 1.0f, 1.0f, 0.4f));
+                } else {
+                    ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(1.0f, 1.0f, 1.0f, 0.25f));
+                    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(1.0f, 1.0f, 1.0f, 0.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(1.0f, 1.0f, 1.0f, 0.0f));
+                }
+                if (ImGui::SmallButton(SkStringPrintf("%03zu ", humanReadableLine).c_str())) {
+                    if (breakpointOn) {
+                        fPlayer.removeBreakpoint(humanReadableLine);
+                    } else if (reachable) {
+                        fPlayer.addBreakpoint(humanReadableLine);
+                    }
+                }
+                ImGui::PopStyleColor(4);
+
+                // Show lines of code.
                 ImGui::TableSetColumnIndex(1);
                 ImGui::Text("%s", fTrace->fSource[row].c_str());
             }
@@ -186,34 +229,34 @@ void SkSLDebuggerSlide::showVariableTable() {
     } else {
         vars = fPlayer.getGlobalVariables();
     }
-    if (vars.empty()) {
-        return;
-    }
     ImVec2 varViewSize = ImVec2(0.0f, ImGui::GetTextLineHeightWithSpacing() * kNumTopRows);
     if (ImGui::BeginTable("Variables", /*column=*/2, kTableFlags, varViewSize)) {
         ImGui::TableSetupColumn("Variable", kColumnFlags);
         ImGui::TableSetupColumn("Value", kColumnFlags);
         ImGui::TableHeadersRow();
+        if (!vars.empty()) {
+            ImGuiListClipper clipper;
+            clipper.Begin(vars.size());
+            while (clipper.Step()) {
+                for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
+                    const SkSL::SkVMDebugTracePlayer::VariableData& var = vars.at(row);
+                    SkASSERT(var.fSlotIndex >= 0);
+                    SkASSERT((size_t)var.fSlotIndex < fTrace->fSlotInfo.size());
+                    const SkSL::SkVMSlotInfo& slotInfo = fTrace->fSlotInfo[var.fSlotIndex];
 
-        ImGuiListClipper clipper;
-        clipper.Begin(vars.size());
-        while (clipper.Step()) {
-            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
-                const SkSL::SkVMDebugTracePlayer::VariableData& var = vars.at(row);
-                SkASSERT(var.fSlotIndex >= 0 && (size_t)var.fSlotIndex < fTrace->fSlotInfo.size());
-                const SkSL::SkVMSlotInfo& slotInfo = fTrace->fSlotInfo[var.fSlotIndex];
-
-                ImGui::TableNextRow();
-                if (var.fDirty) {
-                    // Highlight recently-changed variables.
-                    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1,
-                                           ImGui::GetColorU32(ImVec4{0.0f, 1.0f, 0.0f, 0.20f}));
+                    ImGui::TableNextRow();
+                    if (var.fDirty) {
+                        // Highlight recently-changed variables.
+                        ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1,
+                                               ImGui::GetColorU32(ImVec4{0.0f, 1.0f, 0.0f, 0.20f}));
+                    }
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::Text("%s%s", slotInfo.name.c_str(),
+                                        fTrace->getSlotComponentSuffix(var.fSlotIndex).c_str());
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::Text("%s",
+                                fTrace->slotValueToString(var.fSlotIndex, var.fValue).c_str());
                 }
-                ImGui::TableSetColumnIndex(0);
-                ImGui::Text("%s%s", slotInfo.name.c_str(),
-                                    fTrace->getSlotComponentSuffix(var.fSlotIndex).c_str());
-                ImGui::TableSetColumnIndex(1);
-                ImGui::Text("%s", fTrace->getSlotValue(var.fSlotIndex, var.fValue).c_str());
             }
         }
         ImGui::EndTable();

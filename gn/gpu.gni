@@ -27,8 +27,6 @@ skia_gpu_sources = [
   "$_include/private/GrGLTypesPriv.h",
   "$_include/private/GrImageContext.h",
   "$_include/private/GrMtlTypesPriv.h",
-  "$_include/private/GrResourceKey.h",
-  "$_include/private/GrSingleOwner.h",
   "$_include/private/GrTypesPriv.h",
   "$_include/private/chromium/GrSlug.h",
   "$_src/gpu/GrAHardwareBufferImageGenerator.cpp",
@@ -354,6 +352,8 @@ skia_gpu_sources = [
   "$_src/gpu/text/GrAtlasManager.h",
   "$_src/gpu/text/GrDistanceFieldAdjustTable.cpp",
   "$_src/gpu/text/GrDistanceFieldAdjustTable.h",
+  "$_src/gpu/text/GrGlyphVector.cpp",
+  "$_src/gpu/text/GrGlyphVector.h",
   "$_src/gpu/text/GrSDFMaskFilter.cpp",
   "$_src/gpu/text/GrSDFMaskFilter.h",
   "$_src/gpu/text/GrSDFTControl.cpp",
@@ -511,8 +511,8 @@ skia_skgpu_v1_sources = [
   "$_src/gpu/ops/DrawAtlasOp.h",
   "$_src/gpu/ops/DrawAtlasPathOp.cpp",
   "$_src/gpu/ops/DrawAtlasPathOp.h",
-  "$_src/gpu/ops/DrawVerticesOp.cpp",
-  "$_src/gpu/ops/DrawVerticesOp.h",
+  "$_src/gpu/ops/DrawCustomMeshOp.cpp",
+  "$_src/gpu/ops/DrawCustomMeshOp.h",
   "$_src/gpu/ops/DrawableOp.cpp",
   "$_src/gpu/ops/DrawableOp.h",
   "$_src/gpu/ops/FillPathFlags.h",
@@ -817,7 +817,11 @@ skia_native_gpu_sources = [
 
 skia_shared_gpu_sources = [
   "$_include/gpu/ShaderErrorHandler.h",
+  "$_include/private/SingleOwner.h",
   "$_src/gpu/BufferWriter.h",
+  "$_src/gpu/KeyBuilder.h",
+  "$_src/gpu/ResourceKey.cpp",
+  "$_src/gpu/ResourceKey.h",
   "$_src/gpu/ShaderErrorHandler.cpp",
 
   # tessellate
