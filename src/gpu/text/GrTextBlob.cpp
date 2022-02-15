@@ -502,6 +502,8 @@ public:
     }
 
     const GrBlobSubRun* blobCast() const override { return this; }
+    int unflattenSize() const override { return 0; }
+
     bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const override {
         return true;
     }
@@ -632,6 +634,8 @@ public:
         fDrawingDrawing.submitOps(canvas, clip, viewMatrix, drawOrigin, paint, sdc);
     }
 
+    int unflattenSize() const override { return 0; }
+
 private:
     DrawableOpSubmitter fDrawingDrawing;
 };
@@ -641,6 +645,8 @@ class DrawableSubRun final : public DrawableSubRunSlug, public GrBlobSubRun {
 public:
     using DrawableSubRunSlug::DrawableSubRunSlug;
     const GrBlobSubRun* blobCast() const override { return this; }
+    int unflattenSize() const override { return 0; }
+
     bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const override {
         return true;
     }
@@ -682,6 +688,7 @@ public:
                     GrAtlasSubRunOwner) const override;
 
     const GrBlobSubRun* blobCast() const override { return this; }
+    int unflattenSize() const override { return 0; }
 
     bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const override;
 
@@ -738,8 +745,8 @@ GrSubRunOwner DirectMaskSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& accep
                                      GrMaskFormat format,
                                      GrTextBlob* blob,
                                      GrSubRunAllocator* alloc) {
-    DevicePosition* glyphLeftTop = alloc->makePODArray<DevicePosition>(accepted.size());
-    GrGlyphVector::Variant* glyphIDs = alloc->makePODArray<GrGlyphVector::Variant>(accepted.size());
+    auto glyphLeftTop = alloc->makePODArray<DevicePosition>(accepted.size());
+    auto glyphIDs = alloc->makePODArray<GrGlyphVector::Variant>(accepted.size());
 
     // Because this is the direct case, the maximum width or height is the size that fits in the
     // atlas. This boundary is checked below to ensure that the call to SkGlyphRect below will
@@ -1084,6 +1091,7 @@ public:
                     GrAtlasSubRunOwner) const override;
 
     const GrBlobSubRun* blobCast() const override { return this; }
+    int unflattenSize() const override { return 0; }
 
     bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const override;
 
@@ -1294,6 +1302,8 @@ public:
                     GrAtlasSubRunOwner) const override;
 
     const GrBlobSubRun* blobCast() const override { return this; }
+    int unflattenSize() const override { return 0; }
+
     bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const override;
 
     const GrAtlasSubRun* testingOnly_atlasSubRun() const override;
@@ -1928,11 +1938,8 @@ GrAtlasSubRunOwner DirectMaskSubRunNoCache::Make(const SkZip<SkGlyphVariant, SkP
                                                  GrMaskFormat format,
                                                  bool supportBilerpAtlas,
                                                  GrSubRunAllocator* alloc) {
-    DevicePosition* glyphLeftTop = alloc->makePODArray<DevicePosition>(accepted.size());
-
-    GrGlyphVector::Variant* glyphIDs = static_cast<GrGlyphVector::Variant*>(
-            alloc->alignedBytes(accepted.size() * sizeof(GrGlyphVector::Variant),
-                                alignof(GrGlyphVector::Variant)));
+    auto glyphLeftTop = alloc->makePODArray<DevicePosition>(accepted.size());
+    auto glyphIDs = alloc->makePODArray<GrGlyphVector::Variant>(accepted.size());
 
     // Because this is the direct case, the maximum width or height is the size that fits in the
     // atlas. This boundary is checked below to ensure that the call to SkGlyphRect below will
@@ -1946,7 +1953,7 @@ GrAtlasSubRunOwner DirectMaskSubRunNoCache::Make(const SkZip<SkGlyphVariant, SkP
         // Ensure that the .offset() call below does not overflow. And, at this point none of the
         // rectangles are empty because they were culled before the run was created. Basically,
         // cull all the glyphs that can't appear on the screen.
-        if (-kMaxPos < x && x < kMaxPos && -kMaxPos  < y && y < kMaxPos) {
+        if (-kMaxPos < x && x < kMaxPos && -kMaxPos < y && y < kMaxPos) {
             const SkGlyph* const skGlyph = variant;
             const SkGlyphRect deviceBounds =
                     skGlyph->glyphRect().offset(SkScalarRoundToInt(x), SkScalarRoundToInt(y));
@@ -2592,6 +2599,7 @@ public:
                      const SkMatrixProvider& viewMatrix,
                      skgpu::v1::SurfaceDrawContext* sdc);
 
+    void flatten(SkWriteBuffer& buffer) const override;
     SkRect sourceBounds() const override { return fSourceBounds; }
     const SkPaint& paint() const override { return fPaint; }
 
@@ -2620,6 +2628,16 @@ public:
     void operator delete(void* p) { ::operator delete(p); }
     void* operator new(size_t) { SK_ABORT("All slugs are created by placement new."); }
     void* operator new(size_t, void* p) { return p; }
+
+    std::tuple<int, int> subRunCountAndUnflattenSizeHint() const {
+        int unflattenSizeHint = 0;
+        int subRunCount = 0;
+        for (auto& subrun : fSubRuns) {
+            subRunCount += 1;
+            unflattenSizeHint += subrun.unflattenSize();
+        }
+        return {subRunCount, unflattenSizeHint + sizeof(Slug)};
+    }
 
 private:
     // The allocator must come first because it needs to be destroyed last. Other fields of this
@@ -2680,6 +2698,8 @@ public:
         }
     }
 
+    int unflattenSize() const override;
+
     size_t vertexStride(const SkMatrix& drawMatrix) const override;
 
     int glyphCount() const override;
@@ -2736,11 +2756,8 @@ GrSubRunOwner DirectMaskSubRunSlug::Make(Slug* slug,
                                          sk_sp<SkStrike>&& strike,
                                          GrMaskFormat format,
                                          GrSubRunAllocator* alloc) {
-    DevicePosition* glyphLeftTop = alloc->makePODArray<DevicePosition>(accepted.size());
-
-    GrGlyphVector::Variant* glyphIDs = static_cast<GrGlyphVector::Variant*>(
-            alloc->alignedBytes(accepted.size() * sizeof(GrGlyphVector::Variant),
-                                alignof(GrGlyphVector::Variant)));
+    auto glyphLeftTop = alloc->makePODArray<DevicePosition>(accepted.size());
+    auto glyphIDs = alloc->makePODArray<GrGlyphVector::Variant>(accepted.size());
 
     // Because this is the direct case, the maximum width or height is the size that fits in the
     // atlas. This boundary is checked below to ensure that the call to SkGlyphRect below will
@@ -2774,6 +2791,12 @@ GrSubRunOwner DirectMaskSubRunSlug::Make(Slug* slug,
     return alloc->makeUnique<DirectMaskSubRunSlug>(
             slug, format, runBounds, leftTop,
             GrGlyphVector{std::move(strike), {glyphIDs, goodPosCount}});
+}
+
+int DirectMaskSubRunSlug::unflattenSize() const {
+    return sizeof(DirectMaskSubRunSlug) +
+           fGlyphs.unflattenSize() +
+           sizeof(DevicePosition) * fGlyphs.glyphs().size();
 }
 
 size_t DirectMaskSubRunSlug::vertexStride(const SkMatrix& positionMatrix) const {
@@ -3121,6 +3144,8 @@ void Slug::processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& accepted,
 
     add_multi_mask_format(addGlyphsWithSameFormat, accepted, std::move(strike));
 }
+
+void Slug::flatten(SkWriteBuffer& buffer) const { SK_ABORT("Not implemented."); }
 }  // namespace
 
 namespace skgpu::v1 {
