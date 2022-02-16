@@ -36,12 +36,11 @@ class DockerApi(recipe_api.RecipeApi):
       step_stdout = self.m.python.inline(
           name='Get uid and gid',
           program='''import os
-print('%d:%d' % (os.getuid(), os.getgid()))
+print '%d:%d' % (os.getuid(), os.getgid())
 ''',
           stdout=self.m.raw_io.output(),
           step_test_data=(
-              lambda: self.m.raw_io.test_api.stream_output('13:17'))
-          ).stdout.decode('utf-8')
+              lambda: self.m.raw_io.test_api.stream_output('13:17'))).stdout
       uid_gid_pair = step_stdout.rstrip() if step_stdout else ''
       # Make sure out_dir exists, otherwise mounting will fail.
       # (Note that the docker --mount option, unlike the --volume option, does
@@ -60,9 +59,7 @@ print('%d:%d' % (os.getuid(), os.getgid()))
 
       # Copy any requested files.
       if copies:
-        for copy in copies:
-          src = copy['src']
-          dest = copy['dst']
+        for src, dest in copies.iteritems():
           dirname = self.m.path.dirname(dest)
           self.m.file.ensure_directory(
               'mkdirs %s' % dirname, dirname, mode=0o777)

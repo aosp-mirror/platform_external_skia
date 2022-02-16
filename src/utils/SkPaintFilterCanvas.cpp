@@ -172,7 +172,7 @@ void SkPaintFilterCanvas::onDrawPicture(const SkPicture* picture, const SkMatrix
             if (   newPaint->getAlphaf()      == 1.0f
                 && newPaint->getColorFilter() == nullptr
                 && newPaint->getImageFilter() == nullptr
-                && newPaint->asBlendMode()    == SkBlendMode::kSrcOver) {
+                && newPaint->getBlendMode()   == SkBlendMode::kSrcOver) {
                 // restore the original nullptr
                 newPaint = nullptr;
             }
@@ -233,7 +233,7 @@ void SkPaintFilterCanvas::onDrawEdgeAAQuad(const SkRect& rect, const SkPoint cli
     AutoPaintFilter apf(this, paint);
     if (apf.shouldDraw()) {
         this->SkNWayCanvas::onDrawEdgeAAQuad(rect, clip, aa, apf.paint().getColor4f(),
-                                             apf.paint().getBlendMode_or(SkBlendMode::kSrcOver));
+                                             apf.paint().getBlendMode());
     }
 }
 
@@ -252,18 +252,18 @@ void SkPaintFilterCanvas::onDrawEdgeAAImageSet2(const ImageSetEntry set[], int c
 
 sk_sp<SkSurface> SkPaintFilterCanvas::onNewSurface(const SkImageInfo& info,
                                                    const SkSurfaceProps& props) {
-    return this->proxy()->makeSurface(info, &props);
+    return proxy()->makeSurface(info, &props);
 }
 
 bool SkPaintFilterCanvas::onPeekPixels(SkPixmap* pixmap) {
-    return this->proxy()->peekPixels(pixmap);
+    return proxy()->peekPixels(pixmap);
 }
 
 bool SkPaintFilterCanvas::onAccessTopLayerPixels(SkPixmap* pixmap) {
     SkImageInfo info;
     size_t rowBytes;
 
-    void* addr = this->proxy()->accessTopLayerPixels(&info, &rowBytes);
+    void* addr = proxy()->accessTopLayerPixels(&info, &rowBytes);
     if (!addr) {
         return false;
     }
@@ -273,9 +273,13 @@ bool SkPaintFilterCanvas::onAccessTopLayerPixels(SkPixmap* pixmap) {
 }
 
 SkImageInfo SkPaintFilterCanvas::onImageInfo() const {
-    return this->proxy()->imageInfo();
+    return proxy()->imageInfo();
 }
 
 bool SkPaintFilterCanvas::onGetProps(SkSurfaceProps* props) const {
-    return this->proxy()->getProps(props);
+    return proxy()->getProps(props);
+}
+
+GrSurfaceDrawContext* SkPaintFilterCanvas::topDeviceSurfaceDrawContext() {
+    return SkCanvasPriv::TopDeviceSurfaceDrawContext(this->proxy());
 }

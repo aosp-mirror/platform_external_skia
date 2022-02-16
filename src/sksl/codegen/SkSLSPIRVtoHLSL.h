@@ -12,7 +12,7 @@
 
 namespace SkSL {
 
-bool SPIRVtoHLSL(const std::string& spirv, std::string* hlsl);
+bool SPIRVtoHLSL(const String& spirv, String* hlsl);
 
 }  // namespace SkSL
 

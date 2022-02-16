@@ -66,13 +66,13 @@ bool GrRenderTask::deferredProxiesAreInstantiated() const {
 }
 #endif
 
-void GrRenderTask::makeClosed(GrRecordingContext* rContext) {
+void GrRenderTask::makeClosed(const GrCaps& caps) {
     if (this->isClosed()) {
         return;
     }
 
     SkIRect targetUpdateBounds;
-    if (ExpectedOutcome::kTargetDirty == this->onMakeClosed(rContext, &targetUpdateBounds)) {
+    if (ExpectedOutcome::kTargetDirty == this->onMakeClosed(caps, &targetUpdateBounds)) {
         GrSurfaceProxy* proxy = this->target(0);
         if (proxy->requiresManualMSAAResolve()) {
             SkASSERT(this->target(0)->asRenderTargetProxy());
@@ -86,7 +86,7 @@ void GrRenderTask::makeClosed(GrRecordingContext* rContext) {
 
     if (fTextureResolveTask) {
         this->addDependency(fTextureResolveTask);
-        fTextureResolveTask->makeClosed(rContext);
+        fTextureResolveTask->makeClosed(caps);
         fTextureResolveTask = nullptr;
     }
 
@@ -149,12 +149,10 @@ void GrRenderTask::addDependency(GrDrawingManager* drawingMgr, GrSurfaceProxy* d
             return;  // don't add duplicate dependencies
         }
 
-        if (!dependedOnTask->isSetFlag(kAtlas_Flag)) {
-            // We are closing 'dependedOnTask' here bc the current contents of it are what 'this'
-            // renderTask depends on. We need a break in 'dependedOnTask' so that the usage of
-            // that state has a chance to execute.
-            dependedOnTask->makeClosed(drawingMgr->getContext());
-        }
+        // We are closing 'dependedOnTask' here bc the current contents of it are what 'this'
+        // renderTask depends on. We need a break in 'dependedOnTask' so that the usage of
+        // that state has a chance to execute.
+        dependedOnTask->makeClosed(caps);
     }
 
     auto resolveFlags = GrSurfaceProxy::ResolveFlags::kNone;
@@ -276,6 +274,14 @@ void GrRenderTask::validate() const {
     }
 }
 #endif
+
+void GrRenderTask::closeThoseWhoDependOnMe(const GrCaps& caps) {
+    for (int i = 0; i < fDependents.count(); ++i) {
+        if (!fDependents[i]->isClosed()) {
+            fDependents[i]->makeClosed(caps);
+        }
+    }
+}
 
 bool GrRenderTask::isInstantiated() const {
     for (const sk_sp<GrSurfaceProxy>& target : fTargets) {

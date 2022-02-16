@@ -9,13 +9,11 @@
 #define GrMtlGpu_DEFINED
 
 #include "include/gpu/mtl/GrMtlBackendContext.h"
-#include "include/private/GrMtlTypesPriv.h"
 #include "include/private/SkDeque.h"
 
 #include "src/gpu/GrFinishCallbacks.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrRenderTarget.h"
-#include "src/gpu/GrRingBuffer.h"
 #include "src/gpu/GrSemaphore.h"
 #include "src/gpu/GrStagingBufferManager.h"
 #include "src/gpu/GrTexture.h"
@@ -49,8 +47,6 @@ public:
 
     GrMtlResourceProvider& resourceProvider() { return fResourceProvider; }
 
-    GrStagingBufferManager* stagingBufferManager() override { return &fStagingBufferManager; }
-
     GrMtlCommandBuffer* commandBuffer();
 
     enum SyncQueue {
@@ -80,9 +76,8 @@ public:
 
     void copySurfaceAsResolve(GrSurface* dst, GrSurface* src);
 
-    void copySurfaceAsBlit(GrSurface* dst, GrSurface* src,
-                           GrMtlAttachment* dstAttachment, GrMtlAttachment* srcAttachment,
-                           const SkIRect& srcRect, const SkIPoint& dstPoint);
+    void copySurfaceAsBlit(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
+                           const SkIPoint& dstPoint);
 
     bool onCopySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
                        const SkIPoint& dstPoint) override;
@@ -100,19 +95,15 @@ public:
     void deleteFence(GrFence) const override;
 
     std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned) override;
-    std::unique_ptr<GrSemaphore> wrapBackendSemaphore(const GrBackendSemaphore&,
-                                                      GrSemaphoreWrapType,
-                                                      GrWrapOwnership) override;
+    std::unique_ptr<GrSemaphore> wrapBackendSemaphore(
+            const GrBackendSemaphore& semaphore,
+            GrResourceProvider::SemaphoreWrapType wrapType,
+            GrWrapOwnership ownership) override;
     void insertSemaphore(GrSemaphore* semaphore) override;
     void waitSemaphore(GrSemaphore* semaphore) override;
     void checkFinishProcs() override { this->checkForFinishedCommandBuffers(); }
     void finishOutstandingGpuWork() override;
     std::unique_ptr<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override;
-
-    GrMtlRenderCommandEncoder* loadMSAAFromResolve(GrAttachment* dst,
-                                                   GrMtlAttachment* src,
-                                                   const SkIRect& srcRect,
-                                                   MTLRenderPassStencilAttachmentDescriptor*);
 
     // When the Metal backend actually uses indirect command buffers, this function will actually do
     // what it says. For now, every command is encoded directly into the primary command buffer, so
@@ -123,16 +114,15 @@ public:
         this->didWriteToSurface(surface, origin, bounds);
     }
 
-    GrRingBuffer* uniformsRingBuffer() override { return &fUniformsRingBuffer; }
-
 private:
     GrMtlGpu(GrDirectContext*, const GrContextOptions&, id<MTLDevice>,
-             id<MTLCommandQueue>, GrMTLHandle binaryArchive);
+             id<MTLCommandQueue>, GrMTLHandle binaryArchive, MTLFeatureSet);
 
     void destroyResources();
 
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override {}
 
+    GrStagingBufferManager* stagingBufferManager() override { return &fStagingBufferManager; }
     void takeOwnershipOfBuffer(sk_sp<GrGpuBuffer>) override;
 
     GrBackendTexture onCreateBackendTexture(SkISize dimensions,
@@ -189,41 +179,27 @@ private:
     sk_sp<GrGpuBuffer> onCreateBuffer(size_t, GrGpuBufferType, GrAccessPattern,
                                       const void*) override;
 
-    bool onReadPixels(GrSurface* surface,
-                      SkIRect,
-                      GrColorType surfaceColorType,
-                      GrColorType bufferColorType,
-                      void*,
+    bool onReadPixels(GrSurface* surface, int left, int top, int width, int height,
+                      GrColorType surfaceColorType, GrColorType bufferColorType, void* buffer,
                       size_t rowBytes) override;
 
-    bool onWritePixels(GrSurface*,
-                       SkIRect,
-                       GrColorType surfaceColorType,
-                       GrColorType bufferColorType,
-                       const GrMipLevel[],
-                       int mipLevelCount,
+    bool onWritePixels(GrSurface*, int left, int top, int width, int height,
+                       GrColorType surfaceColorType, GrColorType bufferColorType,
+                       const GrMipLevel[], int mipLevelCount,
                        bool prepForTexSampling) override;
 
-    bool onTransferPixelsTo(GrTexture*,
-                            SkIRect,
-                            GrColorType textureColorType,
-                            GrColorType bufferColorType,
-                            sk_sp<GrGpuBuffer>,
-                            size_t offset,
-                            size_t rowBytes) override;
-
-    bool onTransferPixelsFrom(GrSurface*,
-                              SkIRect,
-                              GrColorType surfaceColorType,
-                              GrColorType bufferColorType,
-                              sk_sp<GrGpuBuffer>,
-                              size_t offset) override;
+    bool onTransferPixelsTo(GrTexture*, int left, int top, int width, int height,
+                            GrColorType textureColorType, GrColorType bufferColorType,
+                            sk_sp<GrGpuBuffer>, size_t offset, size_t rowBytes) override;
+    bool onTransferPixelsFrom(GrSurface*, int left, int top, int width, int height,
+                              GrColorType surfaceColorType, GrColorType bufferColorType,
+                              sk_sp<GrGpuBuffer>, size_t offset) override;
 
     bool onRegenerateMipMapLevels(GrTexture*) override;
 
     void onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect) override;
 
-    void resolve(GrMtlAttachment* resolveAttachment, GrMtlAttachment* msaaAttachment);
+    void resolveTexture(id<MTLTexture> colorTexture, id<MTLTexture> resolveTexture);
 
     void addFinishedProc(GrGpuFinishedProc finishedProc,
                          GrGpuFinishedContext finishedContext) override;
@@ -249,22 +225,13 @@ private:
     void checkForFinishedCommandBuffers();
 
     // Function that uploads data onto textures with private storage mode (GPU access only).
-    bool uploadToTexture(GrMtlTexture* tex,
-                         SkIRect rect,
-                         GrColorType dataColorType,
-                         const GrMipLevel texels[],
-                         int mipLevels);
-
+    bool uploadToTexture(GrMtlTexture* tex, int left, int top, int width, int height,
+                         GrColorType dataColorType, const GrMipLevel texels[], int mipLevels);
     // Function that fills texture levels with transparent black based on levelMask.
     bool clearTexture(GrMtlTexture*, size_t bbp, uint32_t levelMask);
-
-    bool readOrTransferPixels(GrSurface* surface,
-                              SkIRect rect,
-                              GrColorType dstColorType,
-                              id<MTLBuffer> transferBuffer,
-                              size_t offset,
-                              size_t imageBytes,
-                              size_t rowBytes);
+    bool readOrTransferPixels(GrSurface* surface, int left, int top, int width, int height,
+                              GrColorType dstColorType, id<MTLBuffer> transferBuffer, size_t offset,
+                              size_t imageBytes, size_t rowBytes);
 
     sk_sp<GrAttachment> makeStencilAttachment(const GrBackendFormat& /*colorFormat*/,
                                               SkISize dimensions, int numStencilSamples) override;
@@ -276,8 +243,9 @@ private:
     sk_sp<GrAttachment> makeMSAAAttachment(SkISize dimensions,
                                            const GrBackendFormat& format,
                                            int numSamples,
-                                           GrProtected isProtected,
-                                           GrMemoryless isMemoryless) override;
+                                           GrProtected isProtected) override {
+        return nullptr;
+    }
 
     bool createMtlTextureForBackendSurface(MTLPixelFormat,
                                            SkISize dimensions,
@@ -312,7 +280,6 @@ private:
 
     GrMtlResourceProvider fResourceProvider;
     GrStagingBufferManager fStagingBufferManager;
-    GrRingBuffer fUniformsRingBuffer;
 
     bool fDisconnected;
 

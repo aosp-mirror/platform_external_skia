@@ -50,8 +50,10 @@ public:
               fOverdrawCanvas{overdrawCanvas},
               fPainter{props, kN32_SkColorType, nullptr, SkStrikeCache::GlobalStrikeCache()} {}
 
-    void paintMasks(SkDrawableGlyphBuffer* accepted, const SkPaint& paint) const override {
-        for (auto t : accepted->accepted()) {
+    void paintPaths(SkDrawableGlyphBuffer*, SkScalar, SkPoint, const SkPaint&) const override {}
+
+    void paintMasks(SkDrawableGlyphBuffer* drawables, const SkPaint& paint) const override {
+        for (auto t : drawables->drawable()) {
             SkGlyphVariant glyph; SkPoint pos;
             std::tie(glyph, pos) = t;
             SkMask mask = glyph.glyph()->mask(pos);
@@ -62,11 +64,9 @@ public:
     void    drawBitmap(const SkBitmap&, const SkMatrix&, const SkRect* dstOrNull,
                        const SkSamplingOptions&, const SkPaint&) const override {}
 
-    void onDrawGlyphRunList(SkCanvas* canvas, const SkGlyphRunList& glyphRunList,
-                            const SkPaint& paint) override {
+    void onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) override {
         SkASSERT(!glyphRunList.hasRSXForm());
-        fPainter.drawForBitmapDevice(canvas, this, glyphRunList, paint,
-                                     fOverdrawCanvas->getTotalMatrix());
+        fPainter.drawForBitmapDevice(glyphRunList, paint, fOverdrawCanvas->getTotalMatrix(), this);
     }
 
 private:
@@ -88,7 +88,7 @@ void SkOverdrawCanvas::onDrawGlyphRunList(
     this->getProps(&props);
     TextDevice device{this, props};
 
-    device.drawGlyphRunList(this, glyphRunList, paint);
+    device.drawGlyphRunList(glyphRunList, paint);
 }
 
 void SkOverdrawCanvas::onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
@@ -185,8 +185,8 @@ void SkOverdrawCanvas::onDrawImageLattice2(const SkImage* image, const Lattice& 
     if (SkLatticeIter::Valid(image->width(), image->height(), latticePlusBounds)) {
         SkLatticeIter iter(latticePlusBounds, dst);
 
-        SkRect ignored, iterDst;
-        while (iter.next(&ignored, &iterDst)) {
+        SkRect dummy, iterDst;
+        while (iter.next(&dummy, &iterDst)) {
             fList[0]->onDrawRect(iterDst, fPaint);
         }
     } else {

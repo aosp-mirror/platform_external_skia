@@ -25,6 +25,8 @@ class ParagraphImpl;
 class ParagraphCacheKey;
 class ParagraphCacheValue;
 
+bool operator==(const ParagraphCacheKey& a, const ParagraphCacheKey& b);
+
 class ParagraphCache {
 public:
     ParagraphCache();
@@ -57,6 +59,7 @@ public:
     static const int kMaxEntries = 128;
 
     struct KeyHash {
+        uint32_t mix(uint32_t hash, uint32_t data) const;
         uint32_t operator()(const ParagraphCacheKey& key) const;
     };
 

@@ -1,23 +1,12 @@
 # Prerequisites
 
-Node v14 or later is required to run tests. We use npm (the Node Package Manager) to install
-test dependencies. Recent installations of Node have npm as well.
-CanvasKit has no other external source dependencies.
-
 To compile CanvasKit, you will first need to [install `emscripten`][1].  This
 will set the environment `EMSDK` (among others) which is required for
 compilation. Which version should you use?  [`/infra/wasm-common/docker/emsdk-base/Dockerfile`][2]
-shows the version we build and test with. We try to use as recent a version of emscripten as
-is reasonable.
+shows the version we build and test with. We try to keep this up-to-date.
 
 [1]: https://emscripten.org/docs/getting_started/downloads.html
-[2]: https://github.com/google/skia/blob/main/infra/wasm-common/docker/emsdk-base/Dockerfile
-
-Be sure to both install **and** activate the correct version. For example:
-```
-    ./emsdk install 3.1.3
-    ./emsdk activate 3.1.3
-```
+[2]: https://github.com/google/skia/blob/master/infra/wasm-common/docker/emsdk-base/Dockerfile
 
 This document also assumes you have followed the instructions to download Skia and its deps
 <https://skia.org/user/download>.
@@ -32,10 +21,6 @@ for a solution to Python3 using the wrong certificates.
 # Compile and Run Local Example
 
 ```
-# The following installs all npm dependencies and only needs to be when setting up
-# or if our npm dependencies have changed (rarely).
-npm ci
-
 make release  # make debug is much faster and has better error messages
 make local-example
 ```
@@ -61,13 +46,13 @@ make debug
 make test-continuous
 ```
 
-This reads karma.conf.js, and opens a Chrome browser and begins running all the test
+This reads karma.conf.js, and opens a chrome browser and begins running all the test
 in `test/` it will detect changes to the tests in that directory and automatically
-run again, however it will automatically rebuild and reload CanvasKit. Closing the
+run again, however it will automatically rebuild and reload canvaskit. Closing the
 chrome window will just cause it to re-opened. Kill the karma process to stop continuous
 monitoring for changes.
 
-The tests are run with whichever build of CanvasKit you last made. be sure to also
+The tests are run with whichever build of canvaskit you last made. be sure to also
 test with `release`, `debug_cpu`, and `release_cpu`. testing with release builds will
 expose problems in closure compilation and usually forgotten externs.
 
@@ -95,7 +80,7 @@ head.
 
 ## Testing from Gerrit
 
-When submitting a CL in gerrit, click "choose tryjobs" and type CanvasKit to filter them.
+When submitting a CL in gerrit, click "choose tryjobs" and type canvaskit to filter them.
 select all of them, which at the time of this writing is four jobs, for each combination
 of perf/test gpu/cpu.
 
@@ -152,12 +137,3 @@ sdk and verified/fixed any build issues that have arisen.
       Test.+PathKit, Perf.+PathKit jobs to make sure the new builds pass all
       tests and don't crash the perf harnesses.
   12. Send out CL for review. Feel free to point the reviewer at these steps.
-
-## Running Skia's GMs and Unit Tests against wasm+WebGL ##
-TODO(kjlubick)
-
-General Tips:
- - Make use of the skip lists and start indexes in the run-wasm-gm-tests.html to focus in on
-   problematic tests.
- - `Uncaught (in promise) RuntimeError: function signature mismatch` tends to mean null was
-   dereferenced somewhere. Add SkASSERT to verify.

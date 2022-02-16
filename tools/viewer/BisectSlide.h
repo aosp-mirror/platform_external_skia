@@ -23,7 +23,7 @@
  *   'Z': Back up one level.
  *   'D': Dump the path.
  */
-class BisectSlide : public Slide {
+class BisectSlide : public Slide, public SkCanvas {
 public:
     static sk_sp<BisectSlide> Create(const char filepath[]);
 
@@ -34,6 +34,9 @@ public:
 
 private:
     BisectSlide(const char filepath[]);
+
+    // SkCanvas override called only during creation.
+    void onDrawPath(const SkPath& path, const SkPaint& paint) override;
 
     struct FoundPath {
         SkPath fPath;

@@ -79,17 +79,20 @@ SkSL::ProgramKind vk_shader_stage_to_skiasl_kind(VkShaderStageFlagBits stage) {
     if (VK_SHADER_STAGE_VERTEX_BIT == stage) {
         return SkSL::ProgramKind::kVertex;
     }
+    if (VK_SHADER_STAGE_GEOMETRY_BIT == stage) {
+        return SkSL::ProgramKind::kGeometry;
+    }
     SkASSERT(VK_SHADER_STAGE_FRAGMENT_BIT == stage);
     return SkSL::ProgramKind::kFragment;
 }
 
 bool GrCompileVkShaderModule(GrVkGpu* gpu,
-                             const std::string& shaderString,
+                             const SkSL::String& shaderString,
                              VkShaderStageFlagBits stage,
                              VkShaderModule* shaderModule,
                              VkPipelineShaderStageCreateInfo* stageInfo,
                              const SkSL::Program::Settings& settings,
-                             std::string* outSPIRV,
+                             SkSL::String* outSPIRV,
                              SkSL::Program::Inputs* outInputs) {
     TRACE_EVENT0("skia.shaders", "CompileVkShaderModule");
     auto errorHandler = gpu->getContext()->priv().getShaderErrorHandler();
@@ -111,7 +114,7 @@ bool GrCompileVkShaderModule(GrVkGpu* gpu,
 }
 
 bool GrInstallVkShaderModule(GrVkGpu* gpu,
-                             const std::string& spirv,
+                             const SkSL::String& spirv,
                              VkShaderStageFlagBits stage,
                              VkShaderModule* shaderModule,
                              VkPipelineShaderStageCreateInfo* stageInfo) {

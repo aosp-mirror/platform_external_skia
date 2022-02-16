@@ -20,10 +20,10 @@ namespace SkSL {
  */
 class InlineMarker final : public Statement {
 public:
-    inline static constexpr Kind kStatementKind = Kind::kInlineMarker;
+    static constexpr Kind kStatementKind = Kind::kInlineMarker;
 
     InlineMarker(const FunctionDeclaration* function)
-            : INHERITED(/*line=*/-1, kStatementKind)
+            : INHERITED(/*offset=*/-1, kStatementKind)
             , fFunction(*function) {}
 
     static std::unique_ptr<Statement> Make(const FunctionDeclaration* function) {
@@ -38,8 +38,8 @@ public:
         return true;
     }
 
-    std::string description() const override {
-        return "/* inlined: " + std::string(this->function().name()) + " */";
+    String description() const override {
+        return String("/* inlined: ") + this->function().name() + String(" */");
     }
 
     std::unique_ptr<Statement> clone() const override {

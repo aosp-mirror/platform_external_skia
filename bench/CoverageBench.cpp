@@ -22,7 +22,7 @@ class DrawPathBench : public Benchmark {
     SkPath      fPath;
     SkRasterClip fRC;
     SkAutoPixmapStorage fPixmap;
-    SkMatrixProvider fIdentityMatrixProvider;
+    SkSimpleMatrixProvider fIdentityMatrixProvider;
     SkDraw      fDraw;
     bool        fDrawCoverage;
 public:
