@@ -799,7 +799,9 @@ public:
             : SkNoPixelsDevice(SkIRect::MakeSize(dimensions), props, std::move(colorSpace))
             , fStrikeServerImpl(server)
             , fDFTSupport(DFTSupport)
-            , fPainter{props, kUnknown_SkColorType, imageInfo().colorSpace(), fStrikeServerImpl} {
+            , fPainter{props, kUnknown_SkColorType, imageInfo().colorSpace(), fStrikeServerImpl}
+            , fConvertPainter{props, kUnknown_SkColorType, imageInfo().colorSpace(),
+                              SkStrikeCache::GlobalStrikeCache()} {
         SkASSERT(fStrikeServerImpl != nullptr);
     }
 
@@ -845,7 +847,26 @@ protected:
                               ctxOptions.fGlyphsAsPathsFontSize};
 
         SkMatrix drawMatrix = this->localToDevice();
-        return skgpu::v1::MakeSlug(drawMatrix, glyphRunList, paint, control, &fPainter);
+
+        // Run to fill the cache with the right strike transfer information.
+        drawMatrix.preTranslate(glyphRunList.origin().x(), glyphRunList.origin().y());
+
+        // TODO these two passes can be converted into one when the SkRemoteGlyphCache's strike
+        //  cache is fortified with enough information for supporting slug creation.
+
+        // Use the lightweight strike cache provided by SkRemoteGlyphCache through fPainter to do
+        // the analysis.
+        for (auto& glyphRun : glyphRunList) {
+            fPainter.processGlyphRun(nullptr,
+                                     glyphRun,
+                                     drawMatrix,
+                                     paint,
+                                     control,
+                                     "Convert Slug Analysis");
+        }
+
+        // Use the glyph strike cache to get actual glyph information.
+        return skgpu::v1::MakeSlug(drawMatrix, glyphRunList, paint, control, &fConvertPainter);
     }
     #endif  // SK_SUPPORT_GPU
 
@@ -853,6 +874,7 @@ private:
     SkStrikeServerImpl* const fStrikeServerImpl;
     const bool fDFTSupport{false};
     SkGlyphRunListPainter fPainter;
+    SkGlyphRunListPainter fConvertPainter;
 };
 
 // -- SkStrikeServer -------------------------------------------------------------------------------
@@ -1186,5 +1208,9 @@ bool SkStrikeClient::translateTypefaceID(SkAutoDescriptor* descriptor) const {
 }
 
 #if SK_SUPPORT_GPU
-sk_sp<GrSlug> SkStrikeClient::makeSlugFromBuffer(SkReadBuffer& buffer) const { return nullptr; }
+// Entry point for making slugs from the Slug class in GrTextBlob.cpp
+sk_sp<GrSlug> SkMakeSlugFromBuffer(SkReadBuffer& buffer, const SkStrikeClient* client);
+sk_sp<GrSlug> SkStrikeClient::makeSlugFromBuffer(SkReadBuffer& buffer) const {
+    return SkMakeSlugFromBuffer(buffer, this);
+}
 #endif  // SK_SUPPORT_GPU
