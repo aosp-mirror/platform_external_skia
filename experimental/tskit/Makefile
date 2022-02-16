@@ -16,13 +16,10 @@ release:
 
 serve:
 	echo "Go check out http://localhost:8000/npm_build/example.html"
-	python3 ../../tools/serve_wasm.py
+	python serve.py
 
 lint:
 	npx eslint . --ext .ts
 
 apply-lint:
 	npx eslint . --ext .ts --fix
-
-generate:
-	go run ./go/gen_types --input_cpp_dir ./bindings --output_namespace_dir ./bindings

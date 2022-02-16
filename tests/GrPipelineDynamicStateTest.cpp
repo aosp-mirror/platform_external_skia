@@ -20,11 +20,11 @@
 #include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
 #include "src/gpu/glsl/GrGLSLVarying.h"
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
-#include "src/gpu/ops/GrDrawOp.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
 
 /**
  * This is a GPU-backend specific test for dynamic pipeline state. It draws boxes using dynamic
@@ -56,66 +56,66 @@ struct Vertex {
     GrColor   fColor;
 };
 
-namespace {
-class PipelineDynamicStateTestProcessor : public GrGeometryProcessor {
+class GrPipelineDynamicStateTestProcessor : public GrGeometryProcessor {
 public:
     static GrGeometryProcessor* Make(SkArenaAlloc* arena) {
-        return arena->make(
-                [&](void* ptr) { return new (ptr) PipelineDynamicStateTestProcessor(); });
+        return arena->make([&](void* ptr) {
+            return new (ptr) GrPipelineDynamicStateTestProcessor();
+        });
     }
 
     const char* name() const override { return "GrPipelineDynamicStateTest Processor"; }
 
-    void addToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const final {}
+    void getGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const final {}
 
-    std::unique_ptr<ProgramImpl> makeProgramImpl(const GrShaderCaps&) const final;
-
-private:
-    PipelineDynamicStateTestProcessor() : INHERITED(kGrPipelineDynamicStateTestProcessor_ClassID) {
-        this->setVertexAttributesWithImplicitOffsets(kAttributes, SK_ARRAY_COUNT(kAttributes));
-    }
+    GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps&) const final;
 
     const Attribute& inVertex() const { return kAttributes[0]; }
     const Attribute& inColor() const { return kAttributes[1]; }
 
-    inline static constexpr Attribute kAttributes[] = {
-            {"vertex", kFloat2_GrVertexAttribType, SkSLType::kHalf2},
-            {"color", kUByte4_norm_GrVertexAttribType, SkSLType::kHalf4},
+private:
+    GrPipelineDynamicStateTestProcessor()
+            : INHERITED(kGrPipelineDynamicStateTestProcessor_ClassID) {
+        this->setVertexAttributes(kAttributes, SK_ARRAY_COUNT(kAttributes));
+    }
+
+    static constexpr Attribute kAttributes[] = {
+        {"vertex", kFloat2_GrVertexAttribType, kHalf2_GrSLType},
+        {"color", kUByte4_norm_GrVertexAttribType, kHalf4_GrSLType},
     };
 
     friend class GLSLPipelineDynamicStateTestProcessor;
     using INHERITED = GrGeometryProcessor;
 };
-}  // anonymous namespace
+constexpr GrGeometryProcessor::Attribute GrPipelineDynamicStateTestProcessor::kAttributes[];
 
-std::unique_ptr<GrGeometryProcessor::ProgramImpl>
-PipelineDynamicStateTestProcessor::makeProgramImpl(const GrShaderCaps&) const {
-    class Impl : public GrGeometryProcessor::ProgramImpl {
-    public:
-        void setData(const GrGLSLProgramDataManager&,
-                     const GrShaderCaps&,
-                     const GrGeometryProcessor&) final {}
+class GLSLPipelineDynamicStateTestProcessor : public GrGLSLGeometryProcessor {
+    void setData(const GrGLSLProgramDataManager&,
+                 const GrShaderCaps&,
+                 const GrGeometryProcessor&) final {}
 
-        void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) final {
-            const PipelineDynamicStateTestProcessor& mp =
-                    args.fGeomProc.cast<PipelineDynamicStateTestProcessor>();
-            GrGLSLVertexBuilder* v = args.fVertBuilder;
-            GrGLSLFPFragmentBuilder* f = args.fFragBuilder;
+    void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) final {
+        const GrPipelineDynamicStateTestProcessor& mp =
+            args.fGeomProc.cast<GrPipelineDynamicStateTestProcessor>();
+        GrGLSLVertexBuilder* v = args.fVertBuilder;
+        GrGLSLFPFragmentBuilder* f = args.fFragBuilder;
 
-            GrGLSLVaryingHandler* varyingHandler = args.fVaryingHandler;
-            varyingHandler->emitAttributes(mp);
-            f->codeAppendf("half4 %s;", args.fOutputColor);
-            varyingHandler->addPassThroughAttribute(mp.inColor().asShaderVar(), args.fOutputColor);
+        GrGLSLVaryingHandler* varyingHandler = args.fVaryingHandler;
+        varyingHandler->emitAttributes(mp);
+        f->codeAppendf("half4 %s;", args.fOutputColor);
+        varyingHandler->addPassThroughAttribute(mp.inColor(), args.fOutputColor);
 
-            v->codeAppendf("float2 vertex = %s;", mp.inVertex().name());
-            gpArgs->fPositionVar.set(SkSLType::kFloat2, "vertex");
-            f->codeAppendf("const half4 %s = half4(1);", args.fOutputCoverage);
-        }
-    };
-    return std::make_unique<Impl>();
+        v->codeAppendf("float2 vertex = %s;", mp.inVertex().name());
+        gpArgs->fPositionVar.set(kFloat2_GrSLType, "vertex");
+        f->codeAppendf("const half4 %s = half4(1);", args.fOutputCoverage);
+    }
+};
+
+GrGLSLGeometryProcessor*
+GrPipelineDynamicStateTestProcessor::createGLSLInstance(const GrShaderCaps&) const {
+    return new GLSLPipelineDynamicStateTestProcessor;
 }
 
-namespace {
 class GrPipelineDynamicStateTestOp : public GrDrawOp {
 public:
     DEFINE_OP_CLASS_ID
@@ -145,7 +145,7 @@ private:
     void onPrePrepare(GrRecordingContext*,
                       const GrSurfaceProxyView& writeView,
                       GrAppliedClip*,
-                      const GrDstProxyView&,
+                      const GrXferProcessor::DstProxyView&,
                       GrXferBarrierFlags renderPassXferBarriers,
                       GrLoadOp colorLoadOp) override {}
     void onPrepare(GrOpFlushState*) override {}
@@ -158,11 +158,9 @@ private:
             mesh.set(fVertexBuffer, 4, 4 * i);
         }
 
-        auto geomProc = PipelineDynamicStateTestProcessor::Make(flushState->allocator());
+        auto geomProc = GrPipelineDynamicStateTestProcessor::Make(flushState->allocator());
 
-        GrProgramInfo programInfo(flushState->caps(),
-                                  flushState->writeView(),
-                                  flushState->usesMSAASurface(),
+        GrProgramInfo programInfo(flushState->writeView(),
                                   &pipeline,
                                   &GrUserStencilSettings::kUnused,
                                   geomProc,
@@ -184,16 +182,15 @@ private:
 
     using INHERITED = GrDrawOp;
 };
-}  // anonymous namespace
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrPipelineDynamicStateTest, reporter, ctxInfo) {
     auto dContext = ctxInfo.directContext();
     GrResourceProvider* rp = dContext->priv().resourceProvider();
 
-    auto sdc = skgpu::v1::SurfaceDrawContext::Make(
+    auto rtc = GrSurfaceDrawContext::Make(
             dContext, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
             {kScreenSize, kScreenSize}, SkSurfaceProps());
-    if (!sdc) {
+    if (!rtc) {
         ERRORF(reporter, "could not create render target context.");
         return;
     }
@@ -231,12 +228,12 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrPipelineDynamicStateTest, reporter, ctxInfo
     uint32_t resultPx[kScreenSize * kScreenSize];
 
     for (GrScissorTest scissorTest : {GrScissorTest::kEnabled, GrScissorTest::kDisabled}) {
-        sdc->clear(SkPMColor4f::FromBytes_RGBA(0xbaaaaaad));
-        sdc->addDrawOp(GrPipelineDynamicStateTestOp::Make(dContext, scissorTest, vbuff));
+        rtc->clear(SkPMColor4f::FromBytes_RGBA(0xbaaaaaad));
+        rtc->addDrawOp(GrPipelineDynamicStateTestOp::Make(dContext, scissorTest, vbuff));
         auto ii = SkImageInfo::Make(kScreenSize, kScreenSize,
                                     kRGBA_8888_SkColorType, kPremul_SkAlphaType);
         GrPixmap resultPM(ii, resultPx, kScreenSize*sizeof(uint32_t));
-        sdc->readPixels(dContext, resultPM, {0, 0});
+        rtc->readPixels(dContext, resultPM, {0, 0});
         for (int y = 0; y < kScreenSize; ++y) {
             for (int x = 0; x < kScreenSize; ++x) {
                 int expectedColorIdx;

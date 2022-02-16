@@ -46,13 +46,13 @@ SkRect SkGlyphRun::sourceBounds(const SkPaint& paint) const {
     if (fontBounds.isEmpty()) {
         // Empty font bounds are likely a font bug.  TightBounds has a better chance of
         // producing useful results in this case.
-        auto [strikeSpec, strikeToSourceScale] = SkStrikeSpec::MakeCanonicalized(fFont, &paint);
+        SkStrikeSpec strikeSpec = SkStrikeSpec::MakeCanonicalized(fFont, &paint);
         SkBulkGlyphMetrics metrics{strikeSpec};
         SkSpan<const SkGlyph*> glyphs = metrics.glyphs(this->glyphsIDs());
         if (fScaledRotations.empty()) {
             // No RSXForm data - glyphs x/y aligned.
             auto scaleAndTranslateRect =
-                [scale = strikeToSourceScale](const SkRect& in, const SkPoint& pos) {
+                [scale = strikeSpec.strikeToSourceRatio()](const SkRect& in, const SkPoint& pos) {
                     return SkRect::MakeLTRB(in.left()   * scale + pos.x(),
                                             in.top()    * scale + pos.y(),
                                             in.right()  * scale + pos.x(),
@@ -68,13 +68,14 @@ SkRect SkGlyphRun::sourceBounds(const SkPaint& paint) const {
             return bounds;
         } else {
             // RSXForm - glyphs can be any scale or rotation.
+            SkScalar scale = strikeSpec.strikeToSourceRatio();
             SkRect bounds = SkRect::MakeEmpty();
             for (auto [pos, scaleRotate, glyph] :
                     SkMakeZip(this->positions(), fScaledRotations, glyphs)) {
                 if (!glyph->rect().isEmpty()) {
                     SkMatrix xform = SkMatrix().setRSXform(
                             SkRSXform{pos.x(), pos.y(), scaleRotate.x(), scaleRotate.y()});
-                    xform.preScale(strikeToSourceScale, strikeToSourceScale);
+                    xform.preScale(scale, scale);
                     bounds.join(xform.mapRect(glyph->rect()));
                 }
             }

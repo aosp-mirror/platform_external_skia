@@ -45,4 +45,4 @@ clean_npm:
 
 serve:
 	echo "Go check out http://localhost:8001/"
-	cd examples && python3 python3 ../../../tools/serve_wasm.py
+	cd examples && python ../serve.py

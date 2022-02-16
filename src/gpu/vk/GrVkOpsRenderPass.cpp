@@ -16,13 +16,12 @@
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrPipeline.h"
 #include "src/gpu/GrRenderTarget.h"
-#include "src/gpu/effects/GrTextureEffect.h"
+#include "src/gpu/vk/GrVkAttachment.h"
 #include "src/gpu/vk/GrVkBuffer.h"
 #include "src/gpu/vk/GrVkCommandBuffer.h"
 #include "src/gpu/vk/GrVkCommandPool.h"
 #include "src/gpu/vk/GrVkFramebuffer.h"
 #include "src/gpu/vk/GrVkGpu.h"
-#include "src/gpu/vk/GrVkImage.h"
 #include "src/gpu/vk/GrVkPipeline.h"
 #include "src/gpu/vk/GrVkRenderPass.h"
 #include "src/gpu/vk/GrVkRenderTarget.h"
@@ -91,19 +90,13 @@ void GrVkOpsRenderPass::setAttachmentLayouts(LoadFromResolve loadFromResolve) {
     }
 
     if (withResolve) {
-        GrVkImage* resolveAttachment = fFramebuffer->resolveAttachment();
+        GrVkAttachment* resolveAttachment = fFramebuffer->resolveAttachment();
         SkASSERT(resolveAttachment);
         if (loadFromResolve == LoadFromResolve::kLoad) {
-            // We need input access to do the shader read and color read access to do the attachment
-            // load.
-            VkAccessFlags dstAccess =
-                    VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
-            VkPipelineStageFlags dstStages = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-                                             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
             resolveAttachment->setImageLayout(fGpu,
                                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                              dstAccess,
-                                              dstStages,
+                                              VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,
+                                              VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                                               false);
         } else {
             resolveAttachment->setImageLayout(
@@ -370,7 +363,7 @@ bool GrVkOpsRenderPass::set(GrRenderTarget* rt,
             SkASSERT(sampledProxies[i]->asTextureProxy());
             GrVkTexture* vkTex = static_cast<GrVkTexture*>(sampledProxies[i]->peekTexture());
             SkASSERT(vkTex);
-            GrVkImage* texture = vkTex->textureImage();
+            GrVkAttachment* texture = vkTex->textureAttachment();
             SkASSERT(texture);
             texture->setImageLayout(
                     fGpu, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
@@ -492,7 +485,7 @@ void GrVkOpsRenderPass::onClear(const GrScissorState& scissor, std::array<float,
     // means we missed an opportunity higher up the stack to set the load op to be a clear. However,
     // there are situations where higher up we couldn't discard the previous ops and set a clear
     // load op (e.g. if we needed to execute a wait op). Thus we also have the empty check here.
-    // TODO: Make the waitOp a RenderTask instead so we can clear out the OpsTask for a clear. We
+    // TODO: Make the waitOp a RenderTask instead so we can clear out the GrOpsTask for a clear. We
     // can then reenable this assert assuming we can't get messed up by a waitOp.
     //SkASSERT(!fCurrentCBIsEmpty || scissor);
 
@@ -639,6 +632,7 @@ bool GrVkOpsRenderPass::onBindPipeline(const GrProgramInfo& programInfo, const S
     SkASSERT(fCurrentRenderPass);
 
     VkRenderPass compatibleRenderPass = fCurrentRenderPass->vkRenderPass();
+
     fCurrentPipelineState = fGpu->resourceProvider().findOrCreateCompatiblePipelineState(
             fRenderTarget, programInfo, compatibleRenderPass, fOverridePipelinesForResolveLoad);
     if (!fCurrentPipelineState) {
@@ -684,7 +678,7 @@ void GrVkOpsRenderPass::onSetScissorRect(const SkIRect& scissor) {
 #ifdef SK_DEBUG
 void check_sampled_texture(GrTexture* tex, GrAttachment* colorAttachment, GrVkGpu* gpu) {
     SkASSERT(!tex->isProtected() || (colorAttachment->isProtected() && gpu->protectedContext()));
-    auto vkTex = static_cast<GrVkTexture*>(tex)->textureImage();
+    auto vkTex = static_cast<GrVkTexture*>(tex)->textureAttachment();
     SkASSERT(vkTex->currentLayout() == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 #endif
@@ -866,8 +860,9 @@ void GrVkOpsRenderPass::onExecuteDrawable(std::unique_ptr<SkDrawable::GpuDrawHan
     vkInfo.fFormat = fFramebuffer->colorAttachment()->imageFormat();
     vkInfo.fDrawBounds = &bounds;
 #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-    vkInfo.fFromSwapchainOrAndroidWindow =
-            fFramebuffer->colorAttachment()->vkImageInfo().fPartOfSwapchainOrAndroidWindow;
+    vkInfo.fImage = fFramebuffer->colorAttachment()->image();
+#else
+    vkInfo.fImage = VK_NULL_HANDLE;
 #endif //SK_BUILD_FOR_ANDROID_FRAMEWORK
 
     GrBackendDrawableInfo info(vkInfo);

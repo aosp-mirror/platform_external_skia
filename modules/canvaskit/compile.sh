@@ -39,7 +39,7 @@ fi
 if [[ $@ == *debug* ]]; then
   echo "Building a Debug build"
   EXTRA_CFLAGS="\"-DSK_DEBUG\","
-  RELEASE_CONF="-O0 --js-opts 0 -sDEMANGLE_SUPPORT=1 -sASSERTIONS=1 -sGL_ASSERTIONS=1 -g3 \
+  RELEASE_CONF="-O0 --js-opts 0 -s DEMANGLE_SUPPORT=1 -s ASSERTIONS=1 -s GL_ASSERTIONS=1 -g3 \
                 --source-map-base /node_modules/canvaskit/bin/ -DSK_DEBUG --pre-js $BASE_DIR/debug.js"
   BUILD_DIR=${BUILD_DIR:="out/canvaskit_wasm_debug"}
 elif [[ $@ == *profiling* ]]; then
@@ -67,12 +67,12 @@ GN_GPU="skia_enable_gpu=true skia_gl_standard = \"webgl\""
 GN_GPU_FLAGS="\"-DSK_DISABLE_LEGACY_SHADERCONTEXT\","
 WASM_GPU="-lGL -DSK_SUPPORT_GPU=1 -DSK_GL \
           -DSK_DISABLE_LEGACY_SHADERCONTEXT --pre-js $BASE_DIR/cpu.js --pre-js $BASE_DIR/gpu.js\
-          -sUSE_WEBGL2=1"
+          -s USE_WEBGL2=1"
 if [[ $@ == *cpu* ]]; then
   echo "Using the CPU backend instead of the GPU backend"
   GN_GPU="skia_enable_gpu=false"
   GN_GPU_FLAGS=""
-  WASM_GPU="-DSK_SUPPORT_GPU=0 -DSK_ENABLE_SKSL --pre-js $BASE_DIR/cpu.js -sUSE_WEBGL2=0"
+  WASM_GPU="-DSK_SUPPORT_GPU=0 --pre-js $BASE_DIR/cpu.js -s USE_WEBGL2=0"
 fi
 
 SKP_JS="--pre-js $BASE_DIR/skp.js"
@@ -103,13 +103,13 @@ if [[ $@ == *no_skottie* ]]; then
   SKOTTIE_BINDINGS=""
 fi
 
-GN_VIEWER="skia_use_expat=false"
+GN_VIEWER="skia_use_expat=false skia_enable_ccpr=false skia_enable_nga=false"
 VIEWER_BINDINGS=""
 VIEWER_LIB=""
 
 if [[ $@ == *viewer* ]]; then
   echo "Including viewer"
-  GN_VIEWER="skia_use_expat=true"
+  GN_VIEWER="skia_use_expat=true skia_enable_ccpr=true skia_enable_nga=false"
   VIEWER_BINDINGS="$BASE_DIR/viewer_bindings.cpp"
   VIEWER_LIB="$BUILD_DIR/libviewer_wasm.a"
   IS_OFFICIAL_BUILD="false"
@@ -153,11 +153,6 @@ if [[ $@ == *no_rt_shader* ]] ; then
   RT_SHADER_JS=""
 fi
 
-WASM_SKSL_TRACE="-DSK_INCLUDE_SKSL_TRACE"
-if [[ $@ == *no_sksl_trace* ]] ; then
-  WASM_SKSL_TRACE=""
-fi
-
 MATRIX_HELPER_JS="--pre-js $BASE_DIR/matrix.js"
 if [[ $@ == *no_matrix* ]]; then
   echo "Omitting matrix helper code"
@@ -170,7 +165,6 @@ HTML_CANVAS_API="--pre-js $BASE_DIR/htmlcanvas/preamble.js \
 --pre-js $BASE_DIR/htmlcanvas/font.js \
 --pre-js $BASE_DIR/htmlcanvas/canvas2dcontext.js \
 --pre-js $BASE_DIR/htmlcanvas/htmlcanvas.js \
---pre-js $BASE_DIR/htmlcanvas/htmlimage.js \
 --pre-js $BASE_DIR/htmlcanvas/imagedata.js \
 --pre-js $BASE_DIR/htmlcanvas/lineargradient.js \
 --pre-js $BASE_DIR/htmlcanvas/path2d.js \
@@ -218,8 +212,7 @@ FONT_CFLAGS+=" -DCANVASKIT_NO_ALIAS_FONT"
 fi
 
 GN_SHAPER="skia_use_icu=true skia_use_system_icu=false skia_use_harfbuzz=true skia_use_system_harfbuzz=false"
-SHAPER_LIB="$BUILD_DIR/libskunicode.a \
-            $BUILD_DIR/libharfbuzz.a \
+SHAPER_LIB="$BUILD_DIR/libharfbuzz.a \
             $BUILD_DIR/libicu.a"
 if [[ $@ == *primitive_shaper* ]] || [[ $@ == *no_font* ]]; then
   echo "Using the primitive shaper instead of the harfbuzz/icu one"
@@ -254,14 +247,14 @@ else
     ENCODE_PNG="false"
   fi
 
-  ENCODE_JPEG="true"
-  if [[ $@ == *no_encode_jpeg* ]]; then
-    ENCODE_JPEG="false"
+  ENCODE_JPEG="false"
+  if [[ $@ == *force_encode_jpeg* ]]; then
+    ENCODE_JPEG="true"
   fi
 
-  ENCODE_WEBP="true"
-  if [[ $@ == *no_encode_webp* ]]; then
-    ENCODE_WEBP="false"
+  ENCODE_WEBP="false"
+  if [[ $@ == *force_encode_webp* ]]; then
+    ENCODE_WEBP="true"
   fi
 
 fi # no_codecs
@@ -285,7 +278,7 @@ echo "Compiling bitcode"
   --args="cc=\"${EMCC}\" \
   cxx=\"${EMCXX}\" \
   ar=\"${EMAR}\" \
-  extra_cflags=[\"-s\", \"MAIN_MODULE=1\",
+  extra_cflags=[\"-s\", \"WARN_UNALIGNED=1\", \"-s\", \"MAIN_MODULE=1\",
     \"-DSKNX_NO_SIMD\", \"-DSK_DISABLE_AAA\",
     \"-DSK_FORCE_8_BYTE_ALIGNMENT\",
     ${GN_GPU_FLAGS}
@@ -344,6 +337,14 @@ export EMCC_CLOSURE_ARGS="--externs $BASE_DIR/externs.js "
 
 echo "Generating final wasm"
 
+# Disable '-s STRICT=1' outside of Linux until
+# https://github.com/emscripten-core/emscripten/issues/12118 is resovled.
+STRICTNESS="-s STRICT=1"
+if [[ `uname` != "Linux" ]]; then
+  echo "Disabling '-s STRICT=1'. See: https://github.com/emscripten-core/emscripten/issues/12118"
+  STRICTNESS=""
+fi
+
 # Emscripten prefers that the .a files go last in order, otherwise, it
 # may drop symbols that it incorrectly thinks aren't used. One day,
 # Emscripten will use LLD, which may relax this requirement.
@@ -360,7 +361,6 @@ EMCC_DEBUG=1 ${EMCXX} \
     $WASM_GPU \
     $WASM_PATHOPS \
     $WASM_RT_SHADER \
-    $WASM_SKSL_TRACE \
     $WASM_SKP \
     $FONT_CFLAGS \
     -std=c++17 \
@@ -369,6 +369,7 @@ EMCC_DEBUG=1 ${EMCXX} \
     --pre-js $BASE_DIR/preamble.js \
     --pre-js $BASE_DIR/color.js \
     --pre-js $BASE_DIR/memory.js \
+    --pre-js $BASE_DIR/helper.js \
     --pre-js $BASE_DIR/util.js \
     --pre-js $BASE_DIR/interface.js \
     $MATRIX_HELPER_JS \
@@ -395,16 +396,15 @@ EMCC_DEBUG=1 ${EMCXX} \
     $SHAPER_LIB \
     $BUILD_DIR/libskia.a \
     $BUILTIN_FONT \
-    -sLLD_REPORT_UNDEFINED \
-    -sALLOW_MEMORY_GROWTH=1 \
-    -sEXPORT_NAME="CanvasKitInit" \
-    -sEXPORTED_FUNCTIONS=['_malloc','_free'] \
-    -sFORCE_FILESYSTEM=0 \
-    -sFILESYSTEM=0 \
-    -sMODULARIZE=1 \
-    -sNO_EXIT_RUNTIME=1 \
-    -sDYNAMIC_EXECUTION=0 \
-    -sINITIAL_MEMORY=128MB \
-    -sWASM=1 \
-    -sSTRICT=1 \
+    -s LLD_REPORT_UNDEFINED \
+    -s ALLOW_MEMORY_GROWTH=1 \
+    -s EXPORT_NAME="CanvasKitInit" \
+    -s EXPORTED_FUNCTIONS=['_malloc','_free'] \
+    -s FORCE_FILESYSTEM=0 \
+    -s FILESYSTEM=0 \
+    -s MODULARIZE=1 \
+    -s NO_EXIT_RUNTIME=1 \
+    -s INITIAL_MEMORY=128MB \
+    -s WASM=1 \
+    $STRICTNESS \
     -o $BUILD_DIR/canvaskit.js

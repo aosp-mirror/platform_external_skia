@@ -111,7 +111,7 @@ template <typename T> void SkTHeapSort(T array[], size_t count) {
 
 /** Sorts the array of size count using comparator lessThan using an Insertion Sort algorithm. */
 template <typename T, typename C>
-void SkTInsertionSort(T* left, int count, const C& lessThan) {
+static void SkTInsertionSort(T* left, int count, const C& lessThan) {
     T* right = left + count - 1;
     for (T* next = left + 1; next <= right; ++next) {
         if (!lessThan(*next, *(next - 1))) {
@@ -130,7 +130,7 @@ void SkTInsertionSort(T* left, int count, const C& lessThan) {
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename T, typename C>
-T* SkTQSort_Partition(T* left, int count, T* pivot, const C& lessThan) {
+static T* SkTQSort_Partition(T* left, int count, T* pivot, const C& lessThan) {
     T* right = left + count - 1;
     using std::swap;
     T pivotValue = *pivot;

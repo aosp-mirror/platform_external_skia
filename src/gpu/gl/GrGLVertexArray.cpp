@@ -66,7 +66,7 @@ static AttribLayout attrib_layout(GrVertexAttribType type) {
             return {true, 2, GR_GL_UNSIGNED_SHORT};
         case kInt_GrVertexAttribType:
             return {false, 1, GR_GL_INT};
-        case kUInt_GrVertexAttribType:
+        case kUint_GrVertexAttribType:
             return {false, 1, GR_GL_UNSIGNED_INT};
         case kUShort_norm_GrVertexAttribType:
             return {true, 1, GR_GL_UNSIGNED_SHORT};
@@ -80,7 +80,7 @@ void GrGLAttribArrayState::set(GrGLGpu* gpu,
                                int index,
                                const GrBuffer* vertexBuffer,
                                GrVertexAttribType cpuType,
-                               SkSLType gpuType,
+                               GrSLType gpuType,
                                GrGLsizei stride,
                                size_t offsetInBytes,
                                int divisor) {
@@ -113,7 +113,7 @@ void GrGLAttribArrayState::set(GrGLGpu* gpu,
         // GrGLGpu will avoid redundant binds.
         gpu->bindBuffer(GrGpuBufferType::kVertex, vertexBuffer);
         const AttribLayout& layout = attrib_layout(cpuType);
-        if (SkSLTypeIsFloatType(gpuType)) {
+        if (GrSLTypeIsFloatType(gpuType)) {
             GR_GL_CALL(gpu->glInterface(), VertexAttribPointer(index,
                                                                layout.fCount,
                                                                layout.fType,
@@ -202,6 +202,7 @@ GrGLAttribArrayState* GrGLVertexArray::bindWithIndexBuffer(GrGLGpu* gpu, const G
     } else {
         const GrGLBuffer* glBuffer = static_cast<const GrGLBuffer*>(ibuff);
         if (fIndexBufferUniqueID != glBuffer->uniqueID()) {
+            const GrGLBuffer* glBuffer = static_cast<const GrGLBuffer*>(ibuff);
             GR_GL_CALL(gpu->glInterface(),
                        BindBuffer(GR_GL_ELEMENT_ARRAY_BUFFER, glBuffer->bufferID()));
             fIndexBufferUniqueID = glBuffer->uniqueID();

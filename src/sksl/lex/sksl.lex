@@ -10,8 +10,7 @@
 //    rebuild, and then set it back to 1.
 
 FLOAT_LITERAL  = [0-9]*\.[0-9]+([eE][+-]?[0-9]+)?|[0-9]+\.[0-9]*([eE][+-]?[0-9]+)?|[0-9]+([eE][+-]?[0-9]+)
-INT_LITERAL    = ([1-9][0-9]*|0[0-7]*|0[xX][0-9a-fA-F]+)[uU]?
-BAD_OCTAL      = (0[0-9]+)[uU]?
+INT_LITERAL    = [0-9]+|0x[0-9a-fA-F]+
 TRUE_LITERAL   = "true"
 FALSE_LITERAL  = "false"
 IF             = "if"
@@ -40,13 +39,11 @@ NOINLINE       = "noinline"
 HASSIDEEFFECTS = "sk_has_side_effects"
 STRUCT         = "struct"
 LAYOUT         = "layout"
-HIGHP          = "highp"
-MEDIUMP        = "mediump"
-LOWP           = "lowp"
-ES3            = "$es3"
-RESERVED       = attribute|varying|precision|invariant|asm|class|union|enum|typedef|template|this|packed|goto|volatile|public|static|extern|external|interface|long|double|fixed|unsigned|superp|input|output|hvec[234]|dvec[234]|fvec[234]|sampler[12]DShadow|sampler3DRect|sampler2DRectShadow|samplerCube|sizeof|cast|namespace|using|gl_[0-9a-zA-Z_]*
-IDENTIFIER     = [a-zA-Z_$][0-9a-zA-Z_]*
-DIRECTIVE      = #[a-zA-Z_][0-9a-zA-Z_]*
+ENUM           = "enum"
+CLASS          = "class"
+IDENTIFIER     = [a-zA-Z_$]([0-9]|[a-zA-Z_$])*
+DIRECTIVE      = #[a-zA-Z_$]([0-9]|[a-zA-Z_$])*
+SECTION        = @[a-zA-Z_$]([0-9]|[a-zA-Z_$])*
 LPAREN         = "("
 RPAREN         = ")"
 LBRACE         = "{"
@@ -73,6 +70,7 @@ LOGICALXOR     = "^^"
 LOGICALAND     = "&&"
 LOGICALNOT     = "!"
 QUESTION       = "?"
+COLONCOLON     = "::"
 COLON          = ":"
 EQ             = "="
 EQEQ           = "=="
@@ -92,6 +90,7 @@ BITWISEOREQ    = "|="
 BITWISEXOREQ   = "^="
 BITWISEANDEQ   = "&="
 SEMICOLON      = ";"
+ARROW          = "->"
 WHITESPACE     = \s+
 LINE_COMMENT   = //.*
 BLOCK_COMMENT  = /\*([^*]|\*[^/])*\*/

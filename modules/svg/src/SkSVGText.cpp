@@ -574,6 +574,8 @@ SkRect SkSVGText::onObjectBoundingBox(const SkSVGRenderContext& ctx) const {
 
             SkAutoSTArray<64, SkRect> glyphBounds;
 
+            SkTextBlobRunIterator it(blob.get());
+
             for (SkTextBlobRunIterator it(blob.get()); !it.done(); it.next()) {
                 glyphBounds.reset(SkToInt(it.glyphCount()));
                 it.font().getBounds(it.glyphs(), it.glyphCount(), glyphBounds.get(), nullptr);
@@ -605,6 +607,7 @@ SkPath SkSVGText::onAsPath(const SkSVGRenderContext& ctx) const {
                 return;
             }
 
+            SkTextBlobRunIterator it(blob.get());
             for (SkTextBlobRunIterator it(blob.get()); !it.done(); it.next()) {
                 struct GetPathsCtx {
                     SkPathBuilder&   builder;

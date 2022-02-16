@@ -46,7 +46,8 @@ sk_sp<SkFlattenable> SkMatrixImageFilter::CreateProc(SkReadBuffer& buffer) {
 
     auto sampling = [&]() {
         if (buffer.isVersionLT(SkPicturePriv::kMatrixImageFilterSampling_Version)) {
-            return SkSamplingPriv::FromFQ(buffer.read32LE(kLast_SkLegacyFQ), kLinear_SkMediumAs);
+            return SkSamplingOptions(buffer.read32LE(kLast_SkFilterQuality),
+                                     SkSamplingOptions::kMedium_asMipmapLinear);
         } else {
             return SkSamplingPriv::Read(buffer);
         }
