@@ -10,6 +10,7 @@
 
 #include "include/core/SkMatrix.h"
 #include "include/gpu/GrConfig.h"
+#include "include/pathops/SkPathOps.h"
 #include "include/private/SkTPin.h"
 #include "src/core/SkAutoMalloc.h"
 #include "src/core/SkGeometry.h"
@@ -17,21 +18,7 @@
 #include "src/core/SkRectPriv.h"
 #include "src/gpu/geometry/GrPathUtils.h"
 
-namespace {
-// TODO: should we make this real (i.e. src/core) and distinguish it from
-//       pathops SkDPoint?
-struct DPoint {
-    double fX, fY;
-
-    double distanceSquared(DPoint p) const {
-        double dx = fX - p.fX;
-        double dy = fY - p.fY;
-        return dx*dx + dy*dy;
-    }
-
-    double distance(DPoint p) const { return sqrt(this->distanceSquared(p)); }
-};
-}
+#include "src/pathops/SkPathOpsPoint.h"
 
 /**
  * If a scanline (a row of texel) cross from the kRight_SegSide
@@ -108,12 +95,12 @@ public:
     // alias for reset()
     void setIdentity() { this->reset(); }
 
-    DPoint mapPoint(const SkPoint& src) const {
-        DPoint pt = {src.fX, src.fY};
+    SkDPoint mapPoint(const SkPoint& src) const {
+        SkDPoint pt = {src.fX, src.fY};
         return this->mapPoint(pt);
     }
 
-    DPoint mapPoint(const DPoint& src) const {
+    SkDPoint mapPoint(const SkDPoint& src) const {
         return { fMat[0] * src.fX + fMat[1] * src.fY + fMat[2],
                  fMat[3] * src.fX + fMat[4] * src.fY + fMat[5] };
     }
@@ -203,7 +190,7 @@ public:
     // line uses 2 pts, quad uses 3 pts
     SkPoint fPts[3];
 
-    DPoint  fP0T, fP2T;
+    SkDPoint  fP0T, fP2T;
     DAffineMatrix fXformMatrix;  // transforms the segment into canonical space
     double fScalingFactor;
     double fScalingFactorSqd;
@@ -227,8 +214,8 @@ public:
 typedef SkTArray<PathSegment, true> PathSegmentArray;
 
 void PathSegment::init() {
-    const DPoint p0 = { fPts[0].fX, fPts[0].fY };
-    const DPoint p2 = { this->endPt().fX, this->endPt().fY };
+    const SkDPoint p0 = { fPts[0].fX, fPts[0].fY };
+    const SkDPoint p2 = { this->endPt().fX, this->endPt().fY };
     const double p0x = p0.fX;
     const double p0y = p0.fY;
     const double p2x = p2.fX;
@@ -239,18 +226,15 @@ void PathSegment::init() {
     if (fType == PathSegment::kLine) {
         fScalingFactorSqd = fScalingFactor = 1.0;
         double hypotenuse = p0.distance(p2);
-        if (SkTAbs(hypotenuse) < 1.0e-100) {
-            fXformMatrix.reset();
-        } else {
-            const double cosTheta = (p2x - p0x) / hypotenuse;
-            const double sinTheta = (p2y - p0y) / hypotenuse;
 
-            // rotates the segment to the x-axis, with p0 at the origin
-            fXformMatrix.setAffine(
-                cosTheta, sinTheta, -(cosTheta * p0x) - (sinTheta * p0y),
-                -sinTheta, cosTheta, (sinTheta * p0x) - (cosTheta * p0y)
-            );
-        }
+        const double cosTheta = (p2x - p0x) / hypotenuse;
+        const double sinTheta = (p2y - p0y) / hypotenuse;
+
+        // rotates the segment to the x-axis, with p0 at the origin
+        fXformMatrix.setAffine(
+            cosTheta, sinTheta, -(cosTheta * p0x) - (sinTheta * p0y),
+            -sinTheta, cosTheta, (sinTheta * p0x) - (cosTheta * p0y)
+        );
     } else {
         SkASSERT(fType == PathSegment::kQuad);
 
@@ -391,7 +375,7 @@ static inline void add_cubic(const SkPoint pts[4],
 
 static float calculate_nearest_point_for_quad(
                 const PathSegment& segment,
-                const DPoint &xFormPt) {
+                const SkDPoint &xFormPt) {
     static const float kThird = 0.33333333333f;
     static const float kTwentySeventh = 0.037037037f;
 
@@ -458,8 +442,8 @@ void precomputation_for_row(RowData *rowData, const PathSegment& segment,
         return;
     }
 
-    const DPoint& xFormPtLeft = segment.fXformMatrix.mapPoint(pointLeft);
-    const DPoint& xFormPtRight = segment.fXformMatrix.mapPoint(pointRight);
+    const SkDPoint& xFormPtLeft = segment.fXformMatrix.mapPoint(pointLeft);
+    const SkDPoint& xFormPtRight = segment.fXformMatrix.mapPoint(pointRight);
 
     rowData->fQuadXDirection = (int)sign_of(segment.fP2T.fX - segment.fP0T.fX);
     rowData->fScanlineXDirection = (int)sign_of(xFormPtRight.fX - xFormPtLeft.fX);
@@ -508,7 +492,7 @@ void precomputation_for_row(RowData *rowData, const PathSegment& segment,
 SegSide calculate_side_of_quad(
             const PathSegment& segment,
             const SkPoint& point,
-            const DPoint& xFormPt,
+            const SkDPoint& xFormPt,
             const RowData& rowData) {
     SegSide side = kNA_SegSide;
 
@@ -573,7 +557,7 @@ static float distance_to_segment(const SkPoint& point,
                                  SegSide* side) {
     SkASSERT(side);
 
-    const DPoint xformPt = segment.fXformMatrix.mapPoint(point);
+    const SkDPoint xformPt = segment.fXformMatrix.mapPoint(point);
 
     if (segment.fType == PathSegment::kLine) {
         float result = SK_DistanceFieldPad * SK_DistanceFieldPad;
@@ -602,7 +586,7 @@ static float distance_to_segment(const SkPoint& point,
         float dist;
 
         if (between_closed(nearestPoint, segment.fP0T.fX, segment.fP2T.fX)) {
-            DPoint x = { nearestPoint, nearestPoint * nearestPoint };
+            SkDPoint x = { nearestPoint, nearestPoint * nearestPoint };
             dist = (float)xformPt.distanceSquared(x);
         } else {
             const float distToB0T = (float)xformPt.distanceSquared(segment.fP0T);
@@ -760,7 +744,6 @@ bool GrGenerateDistanceFieldFromPath(unsigned char* distanceField,
     }
 
     // transform to device space + SDF offset
-    // TODO: remove degenerate segments while doing this?
     workingPath.transform(dfMatrix);
 
     SkDEBUGCODE(pathBounds = workingPath.getBounds().roundOut());
@@ -810,16 +793,16 @@ bool GrGenerateDistanceFieldFromPath(unsigned char* distanceField,
 
     // adjust distance based on winding
     for (int row = 0; row < height; ++row) {
-        enum DFSign {
-            kInside = -1,
-            kOutside = 1
-        };
-        int windingNumber = 0;  // Winding number start from zero for each scanline
+        int windingNumber = 0; // Winding number start from zero for each scanline
         for (int col = 0; col < width; ++col) {
             int idx = (row * width) + col;
             windingNumber += dataPtr[idx].fDeltaWindingScore;
 
-            DFSign dfSign;
+            enum DFSign {
+                kInside = -1,
+                kOutside = 1
+            } dfSign;
+
             switch (workingPath.getFillType()) {
                 case SkPathFillType::kWinding:
                     dfSign = windingNumber ? kInside : kOutside;
@@ -835,29 +818,30 @@ bool GrGenerateDistanceFieldFromPath(unsigned char* distanceField,
                     break;
             }
 
+            // The winding number at the end of a scanline should be zero.
+            SkASSERT(((col != width - 1) || (windingNumber == 0)) &&
+                    "Winding number should be zero at the end of a scan line.");
+            // Fallback to use SkPath::contains to determine the sign of pixel in release build.
+            if (col == width - 1 && windingNumber != 0) {
+                for (int col = 0; col < width; ++col) {
+                    int idx = (row * width) + col;
+                    dfSign = workingPath.contains(col + 0.5, row + 0.5) ? kInside : kOutside;
+                    const float miniDist = sqrt(dataPtr[idx].fDistSq);
+                    const float dist = dfSign * miniDist;
+
+                    unsigned char pixelVal = pack_distance_field_val<SK_DistanceFieldMagnitude>(dist);
+
+                    distanceField[(row * rowBytes) + col] = pixelVal;
+                }
+                continue;
+            }
+
             const float miniDist = sqrt(dataPtr[idx].fDistSq);
             const float dist = dfSign * miniDist;
 
             unsigned char pixelVal = pack_distance_field_val<SK_DistanceFieldMagnitude>(dist);
 
             distanceField[(row * rowBytes) + col] = pixelVal;
-        }
-
-        // The winding number at the end of a scanline should be zero.
-        if (windingNumber != 0) {
-            SkDEBUGFAIL("Winding number should be zero at the end of a scan line.");
-            // Fallback to use SkPath::contains to determine the sign of pixel in release build.
-            for (int col = 0; col < width; ++col) {
-                int idx = (row * width) + col;
-                DFSign dfSign = workingPath.contains(col + 0.5, row + 0.5) ? kInside : kOutside;
-                const float miniDist = sqrt(dataPtr[idx].fDistSq);
-                const float dist = dfSign * miniDist;
-
-                unsigned char pixelVal = pack_distance_field_val<SK_DistanceFieldMagnitude>(dist);
-
-                distanceField[(row * rowBytes) + col] = pixelVal;
-            }
-            continue;
         }
     }
     return true;

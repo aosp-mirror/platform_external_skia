@@ -157,11 +157,11 @@ std::unique_ptr<SkCodec> SkIcoCodec::MakeFromStream(std::unique_ptr<SkStream> st
 
         // Check if the embedded codec is bmp or png and create the codec
         std::unique_ptr<SkCodec> codec;
-        Result ignoredResult;
+        Result dummyResult;
         if (SkPngCodec::IsPng(embeddedData->bytes(), embeddedData->size())) {
-            codec = SkPngCodec::MakeFromStream(std::move(embeddedStream), &ignoredResult);
+            codec = SkPngCodec::MakeFromStream(std::move(embeddedStream), &dummyResult);
         } else {
-            codec = SkBmpCodec::MakeFromIco(std::move(embeddedStream), &ignoredResult);
+            codec = SkBmpCodec::MakeFromIco(std::move(embeddedStream), &dummyResult);
         }
 
         if (nullptr != codec) {

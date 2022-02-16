@@ -33,13 +33,12 @@ func main() {
 		output    = flag.String("o", "", "Dump JSON step data to the given file, or stdout if -.")
 		local     = flag.Bool("local", true, "Running locally (else on the bots)?")
 
-		resources     = flag.String("resources", "resources", "Passed to fm -i.")
-		imgs          = flag.String("imgs", "", "Shorthand `directory` contents as 'imgs'.")
-		skps          = flag.String("skps", "", "Shorthand `directory` contents as 'skps'.")
-		svgs          = flag.String("svgs", "", "Shorthand `directory` contents as 'svgs'.")
-		script        = flag.String("script", "", "File (or - for stdin) with one job per line.")
-		gold          = flag.Bool("gold", false, "Fetch known hashes, upload to Gold, etc.?")
-		goldHashesURL = flag.String("gold_hashes_url", "", "URL from which to download pre-existing hashes")
+		resources = flag.String("resources", "resources", "Passed to fm -i.")
+		imgs      = flag.String("imgs", "", "Shorthand `directory` contents as 'imgs'.")
+		skps      = flag.String("skps", "", "Shorthand `directory` contents as 'skps'.")
+		svgs      = flag.String("svgs", "", "Shorthand `directory` contents as 'svgs'.")
+		script    = flag.String("script", "", "File (or - for stdin) with one job per line.")
+		gold      = flag.Bool("gold", false, "Fetch known hashes, upload to Gold, etc.?")
 	)
 	flag.Parse()
 
@@ -163,7 +162,8 @@ func main() {
 	}
 	if *gold {
 		func() {
-			resp, err := httpClient(ctx).Get(*goldHashesURL)
+			url := "https://storage.googleapis.com/skia-infra-gm/hash_files/gold-prod-hashes.txt"
+			resp, err := httpClient(ctx).Get(url)
 			if err != nil {
 				fatal(ctx, err)
 			}
@@ -251,7 +251,7 @@ func main() {
 
 			// Only rerun sources from a batch (or we'd rerun failures over and over and over).
 			if len(sources) > 1 {
-				for name := range reruns {
+				for name, _ := range reruns {
 					failures += worker(ctx, []string{name}, flags)
 				}
 				return

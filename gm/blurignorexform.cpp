@@ -119,7 +119,7 @@ protected:
     }
 
 private:
-    inline static constexpr int kNumBlurs = 2;
+    static constexpr int kNumBlurs = 2;
 
     static const struct BlurFlags {
         bool fRespectCTM;

@@ -74,57 +74,6 @@ static constexpr uint32_t GrVkFormatChannels(VkFormat vkFormat) {
     }
 }
 
-static constexpr GrColorFormatDesc GrVkFormatDesc(VkFormat vkFormat) {
-    switch (vkFormat) {
-        case VK_FORMAT_R8G8B8A8_UNORM:
-            return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kUnorm);
-        case VK_FORMAT_R8_UNORM:
-            return GrColorFormatDesc::MakeR(8, GrColorTypeEncoding::kUnorm);
-        case VK_FORMAT_B8G8R8A8_UNORM:
-            return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kUnorm);
-        case VK_FORMAT_R5G6B5_UNORM_PACK16:
-            return GrColorFormatDesc::MakeRGB(5, 6, 5, GrColorTypeEncoding::kUnorm);
-        case VK_FORMAT_R16G16B16A16_SFLOAT:
-            return GrColorFormatDesc::MakeRGBA(16, GrColorTypeEncoding::kFloat);
-        case VK_FORMAT_R16_SFLOAT:
-            return GrColorFormatDesc::MakeR(16, GrColorTypeEncoding::kFloat);
-        case VK_FORMAT_R8G8B8_UNORM:
-            return GrColorFormatDesc::MakeRGB(8, GrColorTypeEncoding::kUnorm);
-        case VK_FORMAT_R8G8_UNORM:
-            return GrColorFormatDesc::MakeRG(8, GrColorTypeEncoding::kUnorm);
-        case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-            return GrColorFormatDesc::MakeRGBA(10, 2, GrColorTypeEncoding::kUnorm);
-        case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
-            return GrColorFormatDesc::MakeRGBA(10, 2, GrColorTypeEncoding::kUnorm);
-        case VK_FORMAT_B4G4R4A4_UNORM_PACK16:
-            return GrColorFormatDesc::MakeRGBA(4, GrColorTypeEncoding::kUnorm);
-        case VK_FORMAT_R4G4B4A4_UNORM_PACK16:
-            return GrColorFormatDesc::MakeRGBA(4, GrColorTypeEncoding::kUnorm);
-        case VK_FORMAT_R8G8B8A8_SRGB:
-            return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kSRGBUnorm);
-        case VK_FORMAT_R16_UNORM:
-            return GrColorFormatDesc::MakeR(16, GrColorTypeEncoding::kUnorm);
-        case VK_FORMAT_R16G16_UNORM:
-            return GrColorFormatDesc::MakeRG(16, GrColorTypeEncoding::kUnorm);
-        case VK_FORMAT_R16G16B16A16_UNORM:
-            return GrColorFormatDesc::MakeRGBA(16, GrColorTypeEncoding::kUnorm);
-        case VK_FORMAT_R16G16_SFLOAT:
-            return GrColorFormatDesc::MakeRG(16, GrColorTypeEncoding::kFloat);
-
-        // Compressed texture formats are not expected to have a description.
-        case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK: return GrColorFormatDesc::MakeInvalid();
-        case VK_FORMAT_BC1_RGB_UNORM_BLOCK:     return GrColorFormatDesc::MakeInvalid();
-        case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:    return GrColorFormatDesc::MakeInvalid();
-
-        // This type only describes color channels.
-        case VK_FORMAT_S8_UINT:            return GrColorFormatDesc::MakeInvalid();
-        case VK_FORMAT_D24_UNORM_S8_UINT:  return GrColorFormatDesc::MakeInvalid();
-        case VK_FORMAT_D32_SFLOAT_S8_UINT: return GrColorFormatDesc::MakeInvalid();
-
-        default: return GrColorFormatDesc::MakeInvalid();
-    }
-}
-
 static constexpr size_t GrVkFormatBytesPerBlock(VkFormat vkFormat) {
     switch (vkFormat) {
         case VK_FORMAT_R8G8B8A8_UNORM:            return 4;
@@ -178,16 +127,16 @@ bool GrVkFormatNeedsYcbcrSampler(VkFormat format);
 bool GrSampleCountToVkSampleCount(uint32_t samples, VkSampleCountFlagBits* vkSamples);
 
 bool GrCompileVkShaderModule(GrVkGpu* gpu,
-                             const std::string& shaderString,
+                             const SkSL::String& shaderString,
                              VkShaderStageFlagBits stage,
                              VkShaderModule* shaderModule,
                              VkPipelineShaderStageCreateInfo* stageInfo,
                              const SkSL::Program::Settings& settings,
-                             std::string* outSPIRV,
+                             SkSL::String* outSPIRV,
                              SkSL::Program::Inputs* outInputs);
 
 bool GrInstallVkShaderModule(GrVkGpu* gpu,
-                             const std::string& spirv,
+                             const SkSL::String& spirv,
                              VkShaderStageFlagBits stage,
                              VkShaderModule* shaderModule,
                              VkPipelineShaderStageCreateInfo* stageInfo);

@@ -195,10 +195,9 @@ public:
         }
         skif::DeviceSpace<SkIRect> targetOutput(target);
         skif::ParameterSpace<SkRect> contentBounds(localContentRect);
-        skif::ParameterSpace<SkPoint> contentCenter({localContentRect.centerX(),
-                                                     localContentRect.centerY()});
-        skif::Mapping mapping;
-        SkAssertResult(mapping.decomposeCTM(ctm, fBlur.get(), contentCenter));
+        skif::Mapping mapping = skif::Mapping::DecomposeCTM(
+                ctm, fBlur.get(), skif::ParameterSpace<SkPoint>({localContentRect.centerX(),
+                                                                 localContentRect.centerY()}));
 
         // Add axis lines, to show perspective distortion
         canvas->save();

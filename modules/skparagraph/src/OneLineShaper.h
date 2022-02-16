@@ -19,7 +19,6 @@ public:
         : fParagraph(paragraph)
         , fHeight(0.0f)
         , fUseHalfLeading(false)
-        , fBaselineShift(0.0f)
         , fAdvance(SkPoint::Make(0.0f, 0.0f))
         , fUnresolvedGlyphs(0)
         , fUniqueRunId(paragraph->fRuns.size()){ }
@@ -84,7 +83,6 @@ private:
                                            fCurrentText.start,
                                            fHeight,
                                            fUseHalfLeading,
-                                           fBaselineShift,
                                            ++fUniqueRunId,
                                            fAdvance.fX);
         return fCurrentRun->newRunBuffer();
@@ -106,7 +104,6 @@ private:
     TextRange fCurrentText;
     SkScalar fHeight;
     bool fUseHalfLeading;
-    SkScalar fBaselineShift;
     SkVector fAdvance;
     size_t fUnresolvedGlyphs;
     size_t fUniqueRunId;

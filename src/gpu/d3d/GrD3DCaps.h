@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2020 Google LLC
  *
@@ -14,6 +13,8 @@
 #include "include/gpu/d3d/GrD3DTypes.h"
 #include "src/gpu/d3d/GrD3DAttachment.h"
 
+class GrShaderCaps;
+
 /**
  * Stores some capabilities of a D3D backend.
  */
@@ -27,7 +28,7 @@ public:
 
     bool isFormatSRGB(const GrBackendFormat&) const override;
 
-    bool isFormatTexturable(const GrBackendFormat&, GrTextureType) const override;
+    bool isFormatTexturable(const GrBackendFormat&) const override;
     bool isFormatTexturable(DXGI_FORMAT) const;
 
     bool isFormatCopyable(const GrBackendFormat&) const override { return true; }
@@ -94,16 +95,13 @@ public:
 
     uint64_t computeFormatKey(const GrBackendFormat&) const override;
 
-    void addExtraSamplerKey(skgpu::KeyBuilder*,
+    void addExtraSamplerKey(GrProcessorKeyBuilder*,
                             GrSamplerState,
                             const GrBackendFormat&) const override;
 
     GrProgramDesc makeDesc(GrRenderTarget*,
                            const GrProgramInfo&,
                            ProgramDescOverrideFlags) const override;
-
-    bool resolveSubresourceRegionSupport() const { return fResolveSubresourceRegionSupport; }
-    bool standardSwizzleLayoutSupport() const { return fStandardSwizzleLayoutSupport; }
 
 #if GR_TEST_UTILS
     std::vector<TestFormatColorTypeCombination> getTestingCombinations() const override;
@@ -207,9 +205,6 @@ private:
     int fMaxPerStageUnorderedAccessViews;
 
     DXGI_FORMAT fPreferredStencilFormat;
-
-    bool fResolveSubresourceRegionSupport : 1;
-    bool fStandardSwizzleLayoutSupport : 1;
 
     using INHERITED = GrCaps;
 };

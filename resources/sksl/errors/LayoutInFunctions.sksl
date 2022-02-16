@@ -1,52 +1,41 @@
 layout (
     origin_upper_left,
+    override_coverage,
     push_constant,
     blend_support_all_equations,
-    color,
+    tracked,
+    srgb_unpremul,
+    key,
     location = 1,
     offset = 1,
     binding = 1,
     index = 1,
     set = 1,
     builtin = 1,
-    input_attachment_index = 1)
+    input_attachment_index = 1,
+    max_vertices = 1,
+    invocations = 1,
+    when = one,
+    ctype = int)
 void on_return() {}
 
 void on_param(
 layout (
     origin_upper_left,
+    override_coverage,
     push_constant,
     blend_support_all_equations,
-    color,
+    tracked,
+    srgb_unpremul,
+    key,
     location = 1,
     offset = 1,
     binding = 1,
     index = 1,
     set = 1,
     builtin = 1,
-    input_attachment_index = 1) float x) {}
-
-/*%%*
-layout qualifier 'origin_upper_left' is not permitted here
-layout qualifier 'push_constant' is not permitted here
-layout qualifier 'blend_support_all_equations' is not permitted here
-layout qualifier 'color' is not permitted here
-layout qualifier 'location' is not permitted here
-layout qualifier 'offset' is not permitted here
-layout qualifier 'binding' is not permitted here
-layout qualifier 'index' is not permitted here
-layout qualifier 'set' is not permitted here
-layout qualifier 'builtin' is not permitted here
-layout qualifier 'input_attachment_index' is not permitted here
-layout qualifier 'origin_upper_left' is not permitted here
-layout qualifier 'push_constant' is not permitted here
-layout qualifier 'blend_support_all_equations' is not permitted here
-layout qualifier 'color' is not permitted here
-layout qualifier 'location' is not permitted here
-layout qualifier 'offset' is not permitted here
-layout qualifier 'binding' is not permitted here
-layout qualifier 'index' is not permitted here
-layout qualifier 'set' is not permitted here
-layout qualifier 'builtin' is not permitted here
-layout qualifier 'input_attachment_index' is not permitted here
-*%%*/
+    input_attachment_index = 1,
+    max_vertices = 1,
+    invocations = 1,
+    when = one,
+    ctype = int) float x) {}

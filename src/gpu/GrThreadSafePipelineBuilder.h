@@ -10,7 +10,6 @@
 
 #include "include/core/SkRefCnt.h"
 #include "include/gpu/GrConfig.h"
-#include <atomic>
 
 #if GR_TEST_UTILS
 #include "include/private/SkTArray.h"
@@ -77,10 +76,10 @@ public:
         std::atomic<int> fShaderCompilations{0};
 
         std::atomic<int> fNumInlineCompilationFailures{0};
-        std::atomic<int> fInlineProgramCacheStats[kNumProgramCacheResults]{};
+        std::atomic<int> fInlineProgramCacheStats[kNumProgramCacheResults]{0};
 
         std::atomic<int> fNumPreCompilationFailures{0};
-        std::atomic<int> fPreProgramCacheStats[kNumProgramCacheResults]{};
+        std::atomic<int> fPreProgramCacheStats[kNumProgramCacheResults]{0};
 
         std::atomic<int> fNumCompilationFailures{0};
         std::atomic<int> fNumPartialCompilationSuccesses{0};

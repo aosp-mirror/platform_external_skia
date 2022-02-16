@@ -19,18 +19,11 @@ namespace SkSL {
  */
 class TypeReference final : public Expression {
 public:
-    inline static constexpr Kind kExpressionKind = Kind::kTypeReference;
+    static constexpr Kind kExpressionKind = Kind::kTypeReference;
 
-    TypeReference(const Context& context, int line, const Type* value)
-        : TypeReference(line, value, context.fTypes.fInvalid.get()) {}
-
-    // Creates a reference to an SkSL type; uses the ErrorReporter to report errors.
-    static std::unique_ptr<TypeReference> Convert(const Context& context,
-                                                  int line,
-                                                  const Type* type);
-
-    // Creates a reference to an SkSL type; reports errors via ASSERT.
-    static std::unique_ptr<TypeReference> Make(const Context& context, int line, const Type* type);
+    TypeReference(const Context& context, int offset, const Type* value)
+        : INHERITED(offset, kExpressionKind, context.fTypes.fInvalid.get())
+        , fValue(*value) {}
 
     const Type& value() const {
         return fValue;
@@ -40,17 +33,18 @@ public:
         return false;
     }
 
-    std::string description() const override {
-        return std::string(this->value().name());
+    String description() const override {
+        return String(this->value().name());
     }
 
     std::unique_ptr<Expression> clone() const override {
-        return std::unique_ptr<Expression>(new TypeReference(fLine, &this->value(), &this->type()));
+        return std::unique_ptr<Expression>(new TypeReference(fOffset, &this->value(),
+                                                             &this->type()));
     }
 
 private:
-    TypeReference(int line, const Type* value, const Type* type)
-        : INHERITED(line, kExpressionKind, type)
+    TypeReference(int offset, const Type* value, const Type* type)
+        : INHERITED(offset, kExpressionKind, type)
         , fValue(*value) {}
 
     const Type& fValue;

@@ -68,7 +68,7 @@ static inline VkFormat attrib_type_to_vkformat(GrVertexAttribType type) {
             return VK_FORMAT_R16G16_UNORM;
         case kInt_GrVertexAttribType:
             return VK_FORMAT_R32_SINT;
-        case kUInt_GrVertexAttribType:
+        case kUint_GrVertexAttribType:
             return VK_FORMAT_R32_UINT;
         case kUShort_norm_GrVertexAttribType:
             return VK_FORMAT_R16_UNORM;
@@ -100,33 +100,39 @@ static void setup_vertex_input_state(
 
     // setup attribute descriptions
     int attribIndex = 0;
-    for (auto attrib : vertexAttribs) {
+    size_t vertexAttributeOffset = 0;
+    for (const auto& attrib : vertexAttribs) {
         VkVertexInputAttributeDescription& vkAttrib = attributeDesc[attribIndex];
         vkAttrib.location = attribIndex++;  // for now assume location = attribIndex
         vkAttrib.binding = vertexBinding;
         vkAttrib.format = attrib_type_to_vkformat(attrib.cpuType());
-        vkAttrib.offset = *attrib.offset();
+        vkAttrib.offset = vertexAttributeOffset;
+        vertexAttributeOffset += attrib.sizeAlign4();
     }
+    SkASSERT(vertexAttributeOffset == vertexAttribs.stride());
 
-    for (auto attrib : instanceAttribs) {
+    size_t instanceAttributeOffset = 0;
+    for (const auto& attrib : instanceAttribs) {
         VkVertexInputAttributeDescription& vkAttrib = attributeDesc[attribIndex];
         vkAttrib.location = attribIndex++;  // for now assume location = attribIndex
         vkAttrib.binding = instanceBinding;
         vkAttrib.format = attrib_type_to_vkformat(attrib.cpuType());
-        vkAttrib.offset = *attrib.offset();
+        vkAttrib.offset = instanceAttributeOffset;
+        instanceAttributeOffset += attrib.sizeAlign4();
     }
+    SkASSERT(instanceAttributeOffset == instanceAttribs.stride());
 
     if (vaCount) {
         bindingDescs->push_back() = {
                 vertexBinding,
-                (uint32_t) vertexAttribs.stride(),
+                (uint32_t) vertexAttributeOffset,
                 VK_VERTEX_INPUT_RATE_VERTEX
         };
     }
     if (iaCount) {
         bindingDescs->push_back() = {
                 instanceBinding,
-                (uint32_t) instanceAttribs.stride(),
+                (uint32_t) instanceAttributeOffset,
                 VK_VERTEX_INPUT_RATE_INSTANCE
         };
     }
@@ -287,6 +293,29 @@ static void setup_multisample_state(int numSamples,
     multisampleInfo->pSampleMask = nullptr;
     multisampleInfo->alphaToCoverageEnable = VK_FALSE;
     multisampleInfo->alphaToOneEnable = VK_FALSE;
+}
+
+static void setup_all_sample_locations_at_pixel_center(
+        int numSamples,
+        VkPipelineSampleLocationsStateCreateInfoEXT* sampleLocations) {
+    constexpr static VkSampleLocationEXT kCenteredSampleLocations[16] = {
+            {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f},
+            {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}};
+    memset(sampleLocations, 0, sizeof(VkPipelineSampleLocationsStateCreateInfoEXT));
+    sampleLocations->sType = VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT;
+    sampleLocations->pNext = nullptr;
+    sampleLocations->sampleLocationsEnable = VK_TRUE;
+    sampleLocations->sampleLocationsInfo.sType = VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT;
+    sampleLocations->sampleLocationsInfo.pNext = nullptr;
+    SkAssertResult(GrSampleCountToVkSampleCount(
+            numSamples,
+            &sampleLocations->sampleLocationsInfo.sampleLocationsPerPixel));
+    sampleLocations->sampleLocationsInfo.sampleLocationGridSize.width = 1;
+    sampleLocations->sampleLocationsInfo.sampleLocationGridSize.height = 1;
+    SkASSERT(numSamples < (int)SK_ARRAY_COUNT(kCenteredSampleLocations));
+    sampleLocations->sampleLocationsInfo.sampleLocationsCount = std::min(
+            numSamples, (int)SK_ARRAY_COUNT(kCenteredSampleLocations));
+    sampleLocations->sampleLocationsInfo.pSampleLocations = kCenteredSampleLocations;
 }
 
 static VkBlendFactor blend_coeff_to_vk_blend(GrBlendCoeff coeff) {
@@ -501,6 +530,15 @@ sk_sp<GrVkPipeline> GrVkPipeline::Make(GrVkGpu* gpu,
     VkPipelineMultisampleStateCreateInfo multisampleInfo;
     setup_multisample_state(numSamples, gpu->caps(), &multisampleInfo);
 
+    VkPipelineSampleLocationsStateCreateInfoEXT sampleLocations;
+    if (gpu->caps()->multisampleDisableSupport()) {
+        if (numSamples > 1 && !isHWAntialiasState) {
+            setup_all_sample_locations_at_pixel_center(numSamples, &sampleLocations);
+            sampleLocations.pNext = multisampleInfo.pNext;
+            multisampleInfo.pNext = &sampleLocations;
+        }
+    }
+
     // We will only have one color attachment per pipeline.
     VkPipelineColorBlendAttachmentState attachmentStates[1];
     VkPipelineColorBlendStateCreateInfo colorBlendInfo;
@@ -584,7 +622,7 @@ sk_sp<GrVkPipeline> GrVkPipeline::Make(GrVkGpu* gpu,
                 programInfo.origin(),
                 programInfo.nonGLStencilSettings(),
                 programInfo.numSamples(),
-                programInfo.numSamples() > 1,
+                pipeline.isHWAntialiasState(),
                 pipeline.getXferProcessor().getBlendInfo(),
                 pipeline.isWireframe(),
                 pipeline.usesConservativeRaster(),

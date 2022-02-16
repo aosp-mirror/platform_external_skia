@@ -7,17 +7,16 @@
 
 #include "src/gpu/gl/GrGLProgram.h"
 
-#include "src/gpu/GrFragmentProcessor.h"
-#include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrPipeline.h"
 #include "src/gpu/GrProcessor.h"
 #include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrXferProcessor.h"
-#include "src/gpu/effects/GrTextureEffect.h"
 #include "src/gpu/gl/GrGLBuffer.h"
 #include "src/gpu/gl/GrGLGpu.h"
-#include "src/sksl/SkSLCompiler.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
+#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
+#include "src/gpu/glsl/GrGLSLXferProcessor.h"
 
 #define GL_CALL(X) GR_GL_CALL(fGpu->glInterface(), X)
 #define GL_CALL_RET(R, X) GR_GL_CALL_RET(fGpu->glInterface(), R, X)
@@ -30,9 +29,9 @@ sk_sp<GrGLProgram> GrGLProgram::Make(
         GrGLuint programID,
         const UniformInfoArray& uniforms,
         const UniformInfoArray& textureSamplers,
-        std::unique_ptr<GrGeometryProcessor::ProgramImpl> gpImpl,
-        std::unique_ptr<GrXferProcessor::ProgramImpl> xpImpl,
-        std::vector<std::unique_ptr<GrFragmentProcessor::ProgramImpl>> fpImpls,
+        std::unique_ptr<GrGLSLGeometryProcessor> geometryProcessor,
+        std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
+        std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fpImpls,
         std::unique_ptr<Attribute[]> attributes,
         int vertexAttributeCnt,
         int instanceAttributeCnt,
@@ -43,8 +42,8 @@ sk_sp<GrGLProgram> GrGLProgram::Make(
                                                programID,
                                                uniforms,
                                                textureSamplers,
-                                               std::move(gpImpl),
-                                               std::move(xpImpl),
+                                               std::move(geometryProcessor),
+                                               std::move(xferProcessor),
                                                std::move(fpImpls),
                                                std::move(attributes),
                                                vertexAttributeCnt,
@@ -62,9 +61,9 @@ GrGLProgram::GrGLProgram(GrGLGpu* gpu,
                          GrGLuint programID,
                          const UniformInfoArray& uniforms,
                          const UniformInfoArray& textureSamplers,
-                         std::unique_ptr<GrGeometryProcessor::ProgramImpl> gpImpl,
-                         std::unique_ptr<GrXferProcessor::ProgramImpl> xpImpl,
-                         std::vector<std::unique_ptr<GrFragmentProcessor::ProgramImpl>> fpImpls,
+                         std::unique_ptr<GrGLSLGeometryProcessor> geometryProcessor,
+                         std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
+                         std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fpImpls,
                          std::unique_ptr<Attribute[]> attributes,
                          int vertexAttributeCnt,
                          int instanceAttributeCnt,
@@ -72,8 +71,8 @@ GrGLProgram::GrGLProgram(GrGLGpu* gpu,
                          int instanceStride)
         : fBuiltinUniformHandles(builtinUniforms)
         , fProgramID(programID)
-        , fGPImpl(std::move(gpImpl))
-        , fXPImpl(std::move(xpImpl))
+        , fGeometryProcessor(std::move(geometryProcessor))
+        , fXferProcessor(std::move(xferProcessor))
         , fFPImpls(std::move(fpImpls))
         , fAttributes(std::move(attributes))
         , fVertexAttributeCnt(vertexAttributeCnt)
@@ -82,7 +81,8 @@ GrGLProgram::GrGLProgram(GrGLGpu* gpu,
         , fInstanceStride(instanceStride)
         , fGpu(gpu)
         , fProgramDataManager(gpu, uniforms)
-        , fNumTextureSamplers(textureSamplers.count()) {}
+        , fNumTextureSamplers(textureSamplers.count()) {
+}
 
 GrGLProgram::~GrGLProgram() {
     if (fProgramID) {
@@ -106,24 +106,27 @@ void GrGLProgram::updateUniforms(const GrRenderTarget* renderTarget,
     // We must bind to texture units in the same order in which we set the uniforms in
     // GrGLProgramDataManager. That is, we bind textures for processors in this order:
     // primProc, fragProcs, XP.
-    fGPImpl->setData(fProgramDataManager, *fGpu->caps()->shaderCaps(), programInfo.geomProc());
+    fGeometryProcessor->setData(fProgramDataManager,
+                                *fGpu->caps()->shaderCaps(),
+                                programInfo.geomProc());
 
     for (int i = 0; i < programInfo.pipeline().numFragmentProcessors(); ++i) {
-        const auto& fp = programInfo.pipeline().getFragmentProcessor(i);
-        fp.visitWithImpls([&](const GrFragmentProcessor& fp,
-                              GrFragmentProcessor::ProgramImpl& impl) {
+        auto& fp = programInfo.pipeline().getFragmentProcessor(i);
+        for (auto [fp, impl] : GrGLSLFragmentProcessor::ParallelRange(fp, *fFPImpls[i])) {
             impl.setData(fProgramDataManager, fp);
-        }, *fFPImpls[i]);
+        }
     }
 
-    programInfo.pipeline().setDstTextureUniforms(fProgramDataManager, &fBuiltinUniformHandles);
-    fXPImpl->setData(fProgramDataManager, programInfo.pipeline().getXferProcessor());
+    const GrXferProcessor& xp = programInfo.pipeline().getXferProcessor();
+    SkIPoint offset;
+    GrTexture* dstTexture = programInfo.pipeline().peekDstTexture(&offset);
+
+    fXferProcessor->setData(fProgramDataManager, xp, dstTexture, offset);
 }
 
 void GrGLProgram::bindTextures(const GrGeometryProcessor& geomProc,
                                const GrSurfaceProxy* const geomProcTextures[],
                                const GrPipeline& pipeline) {
-    // Bind textures from the geometry processor.
     for (int i = 0; i < geomProc.numTextureSamplers(); ++i) {
         SkASSERT(geomProcTextures[i]->asTextureProxy());
         auto* overrideTexture = static_cast<GrGLTexture*>(geomProcTextures[i]->peekTexture());
@@ -131,13 +134,7 @@ void GrGLProgram::bindTextures(const GrGeometryProcessor& geomProc,
                           geomProc.textureSampler(i).swizzle(), overrideTexture);
     }
     int nextTexSamplerIdx = geomProc.numTextureSamplers();
-    // Bind texture from the destination proxy view.
-    GrTexture* dstTexture = pipeline.peekDstTexture();
-    if (dstTexture) {
-        fGpu->bindTexture(nextTexSamplerIdx++, GrSamplerState::Filter::kNearest,
-                          pipeline.dstProxyView().swizzle(), static_cast<GrGLTexture*>(dstTexture));
-    }
-    // Bind textures from all of the fragment processors.
+
     pipeline.visitTextureEffects([&](const GrTextureEffect& te) {
         GrSamplerState samplerState = te.samplerState();
         GrSwizzle swizzle = te.view().swizzle();
@@ -145,29 +142,33 @@ void GrGLProgram::bindTextures(const GrGeometryProcessor& geomProc,
         fGpu->bindTexture(nextTexSamplerIdx++, samplerState, swizzle, texture);
     });
 
+    SkIPoint offset;
+    GrTexture* dstTexture = pipeline.peekDstTexture(&offset);
+    if (dstTexture) {
+        fGpu->bindTexture(nextTexSamplerIdx++, GrSamplerState::Filter::kNearest,
+                          pipeline.dstProxyView().swizzle(), static_cast<GrGLTexture*>(dstTexture));
+    }
     SkASSERT(nextTexSamplerIdx == fNumTextureSamplers);
 }
 
 void GrGLProgram::setRenderTargetState(const GrRenderTarget* rt,
                                        GrSurfaceOrigin origin,
                                        const GrGeometryProcessor& geomProc) {
-    // Set RT adjustment and RT flip
+    // Load the RT height uniform if it is needed
+    if (fBuiltinUniformHandles.fRTHeightUni.isValid() &&
+        fRenderTargetState.fRenderTargetSize.fHeight != rt->height()) {
+        fProgramDataManager.set1f(fBuiltinUniformHandles.fRTHeightUni, SkIntToScalar(rt->height()));
+    }
+
+    // set RT adjustment
     SkISize dimensions = rt->dimensions();
     if (fRenderTargetState.fRenderTargetOrigin != origin ||
         fRenderTargetState.fRenderTargetSize != dimensions) {
         fRenderTargetState.fRenderTargetSize = dimensions;
         fRenderTargetState.fRenderTargetOrigin = origin;
 
-        // The client will mark a swap buffer as kBottomLeft when making a SkSurface because
-        // GL's framebuffer space has (0, 0) at the bottom left. In NDC (-1, -1) is also the
-        // bottom left. However, Skia's device coords has (0, 0) at the top left, so a flip is
-        // required when the origin is kBottomLeft.
-        bool flip = (origin == kBottomLeft_GrSurfaceOrigin);
-        std::array<float, 4> v = SkSL::Compiler::GetRTAdjustVector(dimensions, flip);
-        fProgramDataManager.set4fv(fBuiltinUniformHandles.fRTAdjustmentUni, 1, v.data());
-        if (fBuiltinUniformHandles.fRTFlipUni.isValid()) {
-            std::array<float, 2> d = SkSL::Compiler::GetRTFlipVector(dimensions.height(), flip);
-            fProgramDataManager.set2fv(fBuiltinUniformHandles.fRTFlipUni, 1, d.data());
-        }
+        float rtAdjustmentVec[4];
+        fRenderTargetState.getRTAdjustmentVec(rtAdjustmentVec);
+        fProgramDataManager.set4fv(fBuiltinUniformHandles.fRTAdjustmentUni, 1, rtAdjustmentVec);
     }
 }

@@ -28,7 +28,8 @@ public:
         fMaxVertexAttributes = options.fMaxVertexAttributes;
         fSampleLocationsSupport = true;
 
-        fShaderCaps = std::make_unique<GrShaderCaps>();
+        fShaderCaps.reset(new GrShaderCaps(contextOptions));
+        fShaderCaps->fGeometryShaderSupport = options.fGeometryShaderSupport;
         fShaderCaps->fIntegerSupport = options.fIntegerSupport;
         fShaderCaps->fFlatInterpolationSupport = options.fFlatInterpolationSupport;
         fShaderCaps->fMaxFragmentSamplers = options.fMaxFragmentSamplers;
@@ -50,7 +51,7 @@ public:
         return GrGetColorTypeDesc(ct).encoding() == GrColorTypeEncoding::kSRGBUnorm;
     }
 
-    bool isFormatTexturable(const GrBackendFormat& format, GrTextureType) const override {
+    bool isFormatTexturable(const GrBackendFormat& format) const override {
         SkImage::CompressionType compression = format.asMockCompressionType();
         if (compression != SkImage::CompressionType::kNone) {
             return fOptions.fCompressedOptions[(int)compression].fTexturable;
@@ -83,7 +84,19 @@ public:
         return sampleCount <= this->maxRenderTargetSampleCount(format.asMockColorType());
     }
 
-    int getRenderTargetSampleCount(int requestCount, GrColorType) const;
+    int getRenderTargetSampleCount(int requestCount, GrColorType ct) const {
+        requestCount = std::max(requestCount, 1);
+
+        switch (fOptions.fConfigOptions[(int)ct].fRenderability) {
+            case GrMockOptions::ConfigOptions::Renderability::kNo:
+                return 0;
+            case GrMockOptions::ConfigOptions::Renderability::kNonMSAA:
+                return requestCount > 1 ? 0 : 1;
+            case GrMockOptions::ConfigOptions::Renderability::kMSAA:
+                return requestCount > kMaxSampleCnt ? 0 : GrNextPow2(requestCount);
+        }
+        return 0;
+    }
 
     int getRenderTargetSampleCount(int requestCount,
                                    const GrBackendFormat& format) const override {

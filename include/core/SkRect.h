@@ -108,66 +108,66 @@ struct SK_API SkIRect {
 
         @return  fLeft
     */
-    constexpr int32_t left() const { return fLeft; }
+    int32_t left() const { return fLeft; }
 
     /** Returns top edge of SkIRect, if sorted. Call isEmpty() to see if SkIRect may be invalid,
         and sort() to reverse fTop and fBottom if needed.
 
         @return  fTop
     */
-    constexpr int32_t top() const { return fTop; }
+    int32_t top() const { return fTop; }
 
     /** Returns right edge of SkIRect, if sorted.
         Call sort() to reverse fLeft and fRight if needed.
 
         @return  fRight
     */
-    constexpr int32_t right() const { return fRight; }
+    int32_t right() const { return fRight; }
 
     /** Returns bottom edge of SkIRect, if sorted. Call isEmpty() to see if SkIRect may be invalid,
         and sort() to reverse fTop and fBottom if needed.
 
         @return  fBottom
     */
-    constexpr int32_t bottom() const { return fBottom; }
+    int32_t bottom() const { return fBottom; }
 
     /** Returns left edge of SkIRect, if sorted. Call isEmpty() to see if SkIRect may be invalid,
         and sort() to reverse fLeft and fRight if needed.
 
         @return  fLeft
     */
-    constexpr int32_t x() const { return fLeft; }
+    int32_t x() const { return fLeft; }
 
     /** Returns top edge of SkIRect, if sorted. Call isEmpty() to see if SkIRect may be invalid,
         and sort() to reverse fTop and fBottom if needed.
 
         @return  fTop
     */
-    constexpr int32_t y() const { return fTop; }
+    int32_t y() const { return fTop; }
 
     // Experimental
-    constexpr SkIPoint topLeft() const { return {fLeft, fTop}; }
+    SkIPoint topLeft() const { return {fLeft, fTop}; }
 
     /** Returns span on the x-axis. This does not check if SkIRect is sorted, or if
         result fits in 32-bit signed integer; result may be negative.
 
         @return  fRight minus fLeft
     */
-    constexpr int32_t width() const { return Sk32_can_overflow_sub(fRight, fLeft); }
+    int32_t width() const { return Sk32_can_overflow_sub(fRight, fLeft); }
 
     /** Returns span on the y-axis. This does not check if SkIRect is sorted, or if
         result fits in 32-bit signed integer; result may be negative.
 
         @return  fBottom minus fTop
     */
-    constexpr int32_t height() const { return Sk32_can_overflow_sub(fBottom, fTop); }
+    int32_t height() const { return Sk32_can_overflow_sub(fBottom, fTop); }
 
     /** Returns spans on the x-axis and y-axis. This does not check if SkIRect is sorted,
         or if result fits in 32-bit signed integer; result may be negative.
 
         @return  SkISize (width, height)
     */
-    constexpr SkISize size() const { return SkISize::Make(this->width(), this->height()); }
+    SkISize size() const { return SkISize::Make(this->width(), this->height()); }
 
     /** Returns span on the x-axis. This does not check if SkIRect is sorted, so the
         result may be negative. This is safer than calling width() since width() might
@@ -175,7 +175,7 @@ struct SK_API SkIRect {
 
         @return  fRight minus fLeft cast to int64_t
     */
-    constexpr int64_t width64() const { return (int64_t)fRight - (int64_t)fLeft; }
+    int64_t width64() const { return (int64_t)fRight - (int64_t)fLeft; }
 
     /** Returns span on the y-axis. This does not check if SkIRect is sorted, so the
         result may be negative. This is safer than calling height() since height() might
@@ -183,7 +183,7 @@ struct SK_API SkIRect {
 
         @return  fBottom minus fTop cast to int64_t
     */
-    constexpr int64_t height64() const { return (int64_t)fBottom - (int64_t)fTop; }
+    int64_t height64() const { return (int64_t)fBottom - (int64_t)fTop; }
 
     /** Returns true if fLeft is equal to or greater than fRight, or if fTop is equal
         to or greater than fBottom. Call sort() to reverse rectangles with negative
@@ -529,7 +529,8 @@ struct SK_API SkIRect {
         @return   true if a and b have area in common
     */
     static bool Intersects(const SkIRect& a, const SkIRect& b) {
-        return SkIRect{}.intersect(a, b);
+        SkIRect dummy;
+        return dummy.intersect(a, b);
     }
 
     /** Sets SkIRect to the union of itself and r.
@@ -727,56 +728,56 @@ struct SK_API SkRect {
 
         @return  fLeft
     */
-    constexpr SkScalar x() const { return fLeft; }
+    SkScalar    x() const { return fLeft; }
 
     /** Returns top edge of SkRect, if sorted. Call isEmpty() to see if SkRect may be invalid,
         and sort() to reverse fTop and fBottom if needed.
 
         @return  fTop
     */
-    constexpr SkScalar y() const { return fTop; }
+    SkScalar    y() const { return fTop; }
 
     /** Returns left edge of SkRect, if sorted. Call isSorted() to see if SkRect is valid.
         Call sort() to reverse fLeft and fRight if needed.
 
         @return  fLeft
     */
-    constexpr SkScalar left() const { return fLeft; }
+    SkScalar    left() const { return fLeft; }
 
     /** Returns top edge of SkRect, if sorted. Call isEmpty() to see if SkRect may be invalid,
         and sort() to reverse fTop and fBottom if needed.
 
         @return  fTop
     */
-    constexpr SkScalar top() const { return fTop; }
+    SkScalar    top() const { return fTop; }
 
     /** Returns right edge of SkRect, if sorted. Call isSorted() to see if SkRect is valid.
         Call sort() to reverse fLeft and fRight if needed.
 
         @return  fRight
     */
-    constexpr SkScalar right() const { return fRight; }
+    SkScalar    right() const { return fRight; }
 
     /** Returns bottom edge of SkRect, if sorted. Call isEmpty() to see if SkRect may be invalid,
         and sort() to reverse fTop and fBottom if needed.
 
         @return  fBottom
     */
-    constexpr SkScalar bottom() const { return fBottom; }
+    SkScalar    bottom() const { return fBottom; }
 
     /** Returns span on the x-axis. This does not check if SkRect is sorted, or if
         result fits in 32-bit float; result may be negative or infinity.
 
         @return  fRight minus fLeft
     */
-    constexpr SkScalar width() const { return fRight - fLeft; }
+    SkScalar    width() const { return fRight - fLeft; }
 
     /** Returns span on the y-axis. This does not check if SkRect is sorted, or if
         result fits in 32-bit float; result may be negative or infinity.
 
         @return  fBottom minus fTop
     */
-    constexpr SkScalar height() const { return fBottom - fTop; }
+    SkScalar    height() const { return fBottom - fTop; }
 
     /** Returns average of left edge and right edge. Result does not change if SkRect
         is sorted. Result may overflow to infinity if SkRect is far from the origin.
@@ -1295,18 +1296,6 @@ public:
     SkIRect roundOut() const {
         SkIRect ir;
         this->roundOut(&ir);
-        return ir;
-    }
-    /** Sets SkIRect by rounding up fLeft and fTop; and discarding the fractional portion
-        of fRight and fBottom, using
-        (SkScalarCeilToInt(fLeft), SkScalarCeilToInt(fTop),
-         SkScalarFloorToInt(fRight), SkScalarFloorToInt(fBottom)).
-
-        @return  rounded SkIRect
-    */
-    SkIRect roundIn() const {
-        SkIRect ir;
-        this->roundIn(&ir);
         return ir;
     }
 

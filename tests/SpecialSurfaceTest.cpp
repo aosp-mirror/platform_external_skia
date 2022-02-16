@@ -77,17 +77,14 @@ DEF_TEST(SpecialSurface_Raster2, reporter) {
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialSurface_Gpu1, reporter, ctxInfo) {
-    auto dContext = ctxInfo.directContext();
+    auto direct = ctxInfo.directContext();
 
-    for (auto colorType : { kRGBA_8888_SkColorType, kRGBA_1010102_SkColorType }) {
-        if (!dContext->colorTypeSupportedAsSurface(colorType)) {
+    for (auto colorType : {GrColorType::kRGBA_8888, GrColorType::kRGBA_1010102}) {
+        if (!direct->colorTypeSupportedAsSurface(GrColorTypeToSkColorType(colorType))) {
             continue;
         }
-
-        SkImageInfo ii = SkImageInfo::Make({ kSmallerSize, kSmallerSize }, colorType,
-                                           kPremul_SkAlphaType);
-
-        auto surf(SkSpecialSurface::MakeRenderTarget(dContext, ii, SkSurfaceProps()));
+        sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeRenderTarget(
+                direct, kSmallerSize, kSmallerSize, colorType, nullptr, SkSurfaceProps()));
         test_surface(surf, reporter, 0);
     }
 }

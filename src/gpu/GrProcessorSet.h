@@ -43,6 +43,11 @@ public:
         return fCoverageFragmentProcessor.get();
     }
 
+    bool usesVaryingCoords() const {
+        return (fColorFragmentProcessor && fColorFragmentProcessor->usesVaryingCoords()) ||
+               (fCoverageFragmentProcessor && fCoverageFragmentProcessor->usesVaryingCoords());
+    }
+
     const GrXferProcessor* xferProcessor() const {
         SkASSERT(this->isFinalized());
         return fXP.fProcessor;
@@ -72,8 +77,6 @@ public:
     public:
         Analysis(const Analysis&) = default;
         Analysis() { *reinterpret_cast<uint32_t*>(this) = 0; }
-
-        Analysis& operator=(const Analysis &other) = default;
 
         bool isInitialized() const { return fIsInitialized; }
         bool usesLocalCoords() const { return fUsesLocalCoords; }
@@ -154,7 +157,7 @@ public:
     SkString dumpProcessors() const;
 #endif
 
-    void visitProxies(const GrVisitProxyFunc&) const;
+    void visitProxies(const GrOp::VisitProxyFunc& func) const;
 
 private:
     GrProcessorSet(Empty) : fXP((const GrXferProcessor*)nullptr), fFlags(kFinalized_Flag) {}

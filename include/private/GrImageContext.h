@@ -9,7 +9,7 @@
 #define GrImageContext_DEFINED
 
 #include "include/private/GrContext_Base.h"
-#include "include/private/SingleOwner.h"
+#include "include/private/GrSingleOwner.h"
 
 class GrImageContextPriv;
 
@@ -33,7 +33,7 @@ protected:
     SK_API virtual bool abandoned();
 
     /** This is only useful for debug purposes */
-    skgpu::SingleOwner* singleOwner() const { return &fSingleOwner; }
+    GrSingleOwner* singleOwner() const { return &fSingleOwner; }
 
     GrImageContext* asImageContext() override { return this; }
 
@@ -47,7 +47,7 @@ private:
     // This guard is passed to the GrDrawingManager and, from there to all the
     // GrSurfaceDrawContexts.  It is also passed to the GrResourceProvider and SkGpuDevice.
     // TODO: Move this down to GrRecordingContext.
-    mutable skgpu::SingleOwner fSingleOwner;
+    mutable GrSingleOwner            fSingleOwner;
 
     using INHERITED = GrContext_Base;
 };

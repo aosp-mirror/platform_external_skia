@@ -33,17 +33,8 @@
 #include <algorithm>
 #include <cinttypes>
 #include <sstream>
-#include <regex>
 
-namespace skqp {
-
-/** Prefered colortype for comparing test outcomes. */
-constexpr SkColorType kColorType = kRGBA_8888_SkColorType;
-
-/** Prefered alphatype for comparing test outcomes. */
-constexpr SkAlphaType kAlphaType = kUnpremul_SkAlphaType;
-
-}
+#include "tools/skqp/src/skqp_model.h"
 
 #define IMAGES_DIRECTORY_PATH "images"
 #define PATH_MAX_PNG "max.png"
@@ -74,38 +65,26 @@ static void readlines(const void* data, size_t size, F f) {
     }
 }
 
-// Parses the unittests.txt file.
-// when exclude is true, all tests are run except those matching lines from the file
-// when exclude is false, only tests matching lines from the file are run.
-// Each line is a regular expression matching test names.
-// Lines may start with # to indicate a comment
-static void get_unit_tests(SkQPAssetManager* mgr, std::vector<SkQP::UnitTest>* unitTests, bool exclude) {
-    std::vector<std::regex> patterns;
-    auto insert = [&patterns](const char* s, size_t l) {
+static void get_unit_tests(SkQPAssetManager* mgr, std::vector<SkQP::UnitTest>* unitTests) {
+    std::unordered_set<std::string> testset;
+    auto insert = [&testset](const char* s, size_t l) {
         SkASSERT(l > 1) ;
         if (l > 0 && s[l - 1] == '\n') {  // strip line endings.
             --l;
         }
-        if (l > 0 && s[0] != '#') {  // only add non-empty strings, and ignore comments.
-            patterns.emplace_back(std::string(s, l));
+        if (l > 0) {  // only add non-empty strings.
+            testset.insert(std::string(s, l));
         }
     };
     if (sk_sp<SkData> dat = mgr->open(kUnitTestsPath)) {
         readlines(dat->data(), dat->size(), insert);
     }
     for (const skiatest::Test& test : skiatest::TestRegistry::Range()) {
-        bool matches_one = false;
-        for (const auto& pat : patterns) {
-            if (std::regex_match(std::string(test.fName), pat)) {
-                matches_one = true;
-                continue;
-            }
-        }
-        if (exclude != matches_one && test.fNeedsGpu) {
+        if ((testset.empty() || testset.count(std::string(test.name)) > 0) && test.needsGpu) {
             unitTests->push_back(&test);
         }
     }
-    auto lt = [](SkQP::UnitTest u, SkQP::UnitTest v) { return strcmp(u->fName, v->fName) < 0; };
+    auto lt = [](SkQP::UnitTest u, SkQP::UnitTest v) { return strcmp(u->name, v->name) < 0; };
     std::sort(unitTests->begin(), unitTests->end(), lt);
 }
 
@@ -236,6 +215,19 @@ static void print_backend_info(const char* dstPath,
 #endif
 }
 
+static void encode_png(const SkBitmap& src, const std::string& dst) {
+    SkFILEWStream wStream(dst.c_str());
+    SkPngEncoder::Options options;
+    bool success = wStream.isValid() && SkPngEncoder::Encode(&wStream, src.pixmap(), options);
+    SkASSERT_RELEASE(success);
+}
+
+static void write_to_file(const sk_sp<SkData>& src, const std::string& dst) {
+    SkFILEWStream wStream(dst.c_str());
+    bool success = wStream.isValid() && wStream.write(src->data(), src->size());
+    SkASSERT_RELEASE(success);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 const char* SkQP::GetBackendName(SkQP::SkiaBackend b) {
@@ -252,7 +244,7 @@ std::string SkQP::GetGMName(SkQP::GMFactory f) {
     return std::string(gm ? gm->getName() : "");
 }
 
-const char* SkQP::GetUnitTestName(SkQP::UnitTest t) { return t->fName; }
+const char* SkQP::GetUnitTestName(SkQP::UnitTest t) { return t->name; }
 
 SkQP::SkQP() {}
 
@@ -269,10 +261,8 @@ void SkQP::init(SkQPAssetManager* am, const char* renderTests, const char* repor
 
     get_render_tests(fAssetManager, renderTests, &fGMs, &fGMThresholds);
     /* If the file "skqp/unittests.txt" does not exist or is empty, run all gpu
-       unit tests.  Otherwise run only tests that do not match a line in that file.
-       The list is checked in at platform_tools/android/apps/skqp/src/main/assets/skqp/unittests.txt
-    */
-    get_unit_tests(fAssetManager, &fUnitTests, true);
+       unit tests.  Otherwise only run tests mentioned in that file.  */
+    get_unit_tests(fAssetManager, &fUnitTests);
     fSupportedBackends = get_backends();
 
     print_backend_info((fReportDirectory + "/grdump.txt").c_str(), fSupportedBackends);
@@ -293,6 +283,7 @@ std::tuple<SkQP::RenderOutcome, std::string> SkQP::evaluateGM(SkQP::SkiaBackend 
     SkASSERT(gmFact);
     std::unique_ptr<skiagm::GM> gm(gmFact());
     SkASSERT(gm);
+    const char* const name = gm->getName();
     const SkISize size = gm->getISize();
     const int w = size.width();
     const int h = size.height();
@@ -317,8 +308,37 @@ std::tuple<SkQP::RenderOutcome, std::string> SkQP::evaluateGM(SkQP::SkiaBackend 
     if (!surf->readPixels(image.pixmap(), 0, 0)) {
         return std::make_tuple(kError, "Skia Failure: read pixels");
     }
+    int64_t passingThreshold = fGMThresholds.empty() ? -1 : fGMThresholds[std::string(name)];
 
-    return std::make_tuple(kPass, "");
+    if (-1 == passingThreshold) {
+        return std::make_tuple(kPass, "");
+    }
+    skqp::ModelResult modelResult =
+        skqp::CheckAgainstModel(name, image.pixmap(), fAssetManager);
+
+    if (!modelResult.fErrorString.empty()) {
+        return std::make_tuple(kError, std::move(modelResult.fErrorString));
+    }
+    fRenderResults.push_back(SkQP::RenderResult{backend, gmFact, modelResult.fOutcome});
+    if (modelResult.fOutcome.fMaxError <= passingThreshold) {
+        return std::make_tuple(kPass, "");
+    }
+    std::string imagesDirectory = fReportDirectory + "/" IMAGES_DIRECTORY_PATH;
+    if (!sk_mkdir(imagesDirectory.c_str())) {
+        SkDebugf("ERROR: sk_mkdir('%s');\n", imagesDirectory.c_str());
+        return std::make_tuple(modelResult.fOutcome, "");
+    }
+    std::ostringstream tmp;
+    tmp << imagesDirectory << '/' << SkQP::GetBackendName(backend) << '_' << name << '_';
+    std::string imagesPathPrefix1 = tmp.str();
+    tmp = std::ostringstream();
+    tmp << imagesDirectory << '/' << PATH_MODEL << '_' << name << '_';
+    std::string imagesPathPrefix2 = tmp.str();
+    encode_png(image,                  imagesPathPrefix1 + PATH_IMG_PNG);
+    encode_png(modelResult.fErrors,    imagesPathPrefix1 + PATH_ERR_PNG);
+    write_to_file(modelResult.fMaxPng, imagesPathPrefix2 + PATH_MAX_PNG);
+    write_to_file(modelResult.fMinPng, imagesPathPrefix2 + PATH_MIN_PNG);
+    return std::make_tuple(modelResult.fOutcome, "");
 }
 
 std::vector<std::string> SkQP::executeTest(SkQP::UnitTest test) {
@@ -335,7 +355,7 @@ std::vector<std::string> SkQP::executeTest(SkQP::UnitTest test) {
     if (test->fContextOptionsProc) {
         test->fContextOptionsProc(&options);
     }
-    test->fProc(&r, options);
+    test->proc(&r, options);
     fUnitTestResults.push_back(UnitTestResult{test, r.fErrors});
     return r.fErrors;
 }

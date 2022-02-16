@@ -507,9 +507,10 @@ protected:
         }
     }
     // Draw a single polygon with insets and potentially outsets
-    void drawPolygon(SkCanvas* canvas, int index, SkPoint* position) {
+    void drawPolygon(SkCanvas* canvas, int index, SkPoint* offset) {
 
         SkPoint center;
+        SkRect bounds;
         {
             std::unique_ptr<SkPoint[]> data(nullptr);
             int numPts;
@@ -518,17 +519,16 @@ protected:
             } else {
                 GetSimplePolygon(index, SkPathDirection::kCW, &data, &numPts);
             }
-            SkRect bounds;
             bounds.setBounds(data.get(), numPts);
             if (!fConvexOnly) {
                 bounds.outset(kMaxOutset, kMaxOutset);
             }
-            if (position->fX + bounds.width() > kGMWidth) {
-                position->fX = 0;
-                position->fY += kMaxPathHeight;
+            if (offset->fX + bounds.width() > kGMWidth) {
+                offset->fX = 0;
+                offset->fY += kMaxPathHeight;
             }
-            center = { position->fX + SkScalarHalf(bounds.width()), position->fY };
-            position->fX += bounds.width();
+            center = { offset->fX + SkScalarHalf(bounds.width()), offset->fY };
+            offset->fX += bounds.width();
         }
 
         const SkPathDirection dirs[2] = { SkPathDirection::kCW, SkPathDirection::kCCW };
@@ -581,8 +581,8 @@ protected:
             if (result) {
                 SkPath path;
                 path.moveTo(offsetPoly[0]);
-                for (int j = 1; j < offsetPoly.count(); ++j) {
-                    path.lineTo(offsetPoly[j]);
+                for (int i = 1; i < offsetPoly.count(); ++i) {
+                    path.lineTo(offsetPoly[i]);
                 }
                 path.close();
 
@@ -608,11 +608,11 @@ protected:
     }
 
 private:
-    inline static constexpr int kNumPaths = 20;
-    inline static constexpr int kMaxPathHeight = 100;
-    inline static constexpr int kMaxOutset = 16;
-    inline static constexpr int kGMWidth = 512;
-    inline static constexpr int kGMHeight = 512;
+    static constexpr int kNumPaths = 20;
+    static constexpr int kMaxPathHeight = 100;
+    static constexpr int kMaxOutset = 16;
+    static constexpr int kGMWidth = 512;
+    static constexpr int kGMHeight = 512;
 
     bool fConvexOnly;
 

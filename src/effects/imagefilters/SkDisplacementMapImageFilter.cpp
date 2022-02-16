@@ -18,14 +18,12 @@
 #include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrColorSpaceXform.h"
-#include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxy.h"
-#include "src/gpu/KeyBuilder.h"
 #include "src/gpu/SkGr.h"
-#include "src/gpu/SurfaceFillContext.h"
-#include "src/gpu/effects/GrTextureEffect.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
@@ -165,6 +163,10 @@ public:
 
     ~GrDisplacementMapEffect() override;
 
+    SkColorChannel xChannelSelector() const { return fXChannelSelector; }
+    SkColorChannel yChannelSelector() const { return fYChannelSelector; }
+    const SkVector& scale() const { return fScale; }
+
     const char* name() const override { return "DisplacementMap"; }
 
     std::unique_ptr<GrFragmentProcessor> clone() const override;
@@ -174,9 +176,9 @@ private:
 
     explicit GrDisplacementMapEffect(const GrDisplacementMapEffect&);
 
-    std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override;
+    std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override;
 
-    void onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override;
+    void onGetGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override;
 
     bool onIsEqual(const GrFragmentProcessor&) const override;
 
@@ -283,10 +285,10 @@ sk_sp<SkSpecialImage> SkDisplacementMapImageFilter::onFilterImage(const Context&
 
 #if SK_SUPPORT_GPU
     if (ctx.gpuBacked()) {
-        auto rContext = ctx.getContext();
+        auto context = ctx.getContext();
 
-        GrSurfaceProxyView colorView = color->view(rContext);
-        GrSurfaceProxyView displView = displ->view(rContext);
+        GrSurfaceProxyView colorView = color->view(context);
+        GrSurfaceProxyView displView = displ->view(context);
         if (!colorView.proxy() || !displView.proxy()) {
             return nullptr;
         }
@@ -304,7 +306,7 @@ sk_sp<SkSpecialImage> SkDisplacementMapImageFilter::onFilterImage(const Context&
                                               offsetMatrix,
                                               std::move(colorView),
                                               color->subset(),
-                                              *rContext->priv().caps());
+                                              *context->priv().caps());
         fp = GrColorSpaceXformEffect::Make(std::move(fp),
                                            color->getColorSpace(), color->alphaType(),
                                            ctx.colorSpace(), kPremul_SkAlphaType);
@@ -312,28 +314,29 @@ sk_sp<SkSpecialImage> SkDisplacementMapImageFilter::onFilterImage(const Context&
                          kPremul_SkAlphaType,
                          ctx.refColorSpace(),
                          bounds.size());
-        auto sfc = rContext->priv().makeSFC(info,
-                                            SkBackingFit::kApprox,
-                                            1,
-                                            GrMipmapped::kNo,
-                                            isProtected,
-                                            kBottomLeft_GrSurfaceOrigin);
-        if (!sfc) {
+        auto surfaceFillContext = GrSurfaceFillContext::Make(context,
+                                                             info,
+                                                             SkBackingFit::kApprox,
+                                                             1,
+                                                             GrMipmapped::kNo,
+                                                             isProtected,
+                                                             kBottomLeft_GrSurfaceOrigin);
+        if (!surfaceFillContext) {
             return nullptr;
         }
 
-        sfc->fillRectToRectWithFP(colorBounds,
-                                  SkIRect::MakeSize(colorBounds.size()),
-                                  std::move(fp));
+        surfaceFillContext->fillRectToRectWithFP(colorBounds,
+                                                 SkIRect::MakeSize(colorBounds.size()),
+                                                 std::move(fp));
 
         offset->fX = bounds.left();
         offset->fY = bounds.top();
-        return SkSpecialImage::MakeDeferredFromGpu(rContext,
+        return SkSpecialImage::MakeDeferredFromGpu(context,
                                                    SkIRect::MakeWH(bounds.width(), bounds.height()),
                                                    kNeedNewImageUniqueID_SpecialImage,
-                                                   sfc->readSurfaceView(),
-                                                   sfc->colorInfo().colorType(),
-                                                   sfc->colorInfo().refColorSpace(),
+                                                   surfaceFillContext->readSurfaceView(),
+                                                   surfaceFillContext->colorInfo().colorType(),
+                                                   surfaceFillContext->colorInfo().refColorSpace(),
                                                    ctx.surfaceProps());
     }
 #endif
@@ -399,16 +402,21 @@ SkIRect SkDisplacementMapImageFilter::onFilterBounds(
 ///////////////////////////////////////////////////////////////////////////////
 
 #if SK_SUPPORT_GPU
-class GrDisplacementMapEffect::Impl : public ProgramImpl {
+class GrDisplacementMapEffect::Impl : public GrGLSLFragmentProcessor {
 public:
     void emitCode(EmitArgs&) override;
 
-private:
+    static inline void GenKey(const GrProcessor&, const GrShaderCaps&, GrProcessorKeyBuilder*);
+
+protected:
     void onSetData(const GrGLSLProgramDataManager&, const GrFragmentProcessor&) override;
 
+private:
     typedef GrGLSLProgramDataManager::UniformHandle UniformHandle;
 
     UniformHandle fScaleUni;
+
+    using INHERITED = GrGLSLFragmentProcessor;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -445,18 +453,13 @@ std::unique_ptr<GrFragmentProcessor> GrDisplacementMapEffect::Make(SkColorChanne
                                         std::move(colorEffect)));
 }
 
-std::unique_ptr<GrFragmentProcessor::ProgramImpl>
-GrDisplacementMapEffect::onMakeProgramImpl() const {
+std::unique_ptr<GrGLSLFragmentProcessor> GrDisplacementMapEffect::onMakeProgramImpl() const {
     return std::make_unique<Impl>();
 }
 
-void GrDisplacementMapEffect::onAddToKey(const GrShaderCaps& caps, skgpu::KeyBuilder* b) const {
-    static constexpr int kChannelSelectorKeyBits = 2;  // Max value is 3, so 2 bits are required
-
-    uint32_t xKey = static_cast<uint32_t>(fXChannelSelector);
-    uint32_t yKey = static_cast<uint32_t>(fYChannelSelector) << kChannelSelectorKeyBits;
-
-    b->add32(xKey | yKey);
+void GrDisplacementMapEffect::onGetGLSLProcessorKey(const GrShaderCaps& caps,
+                                                    GrProcessorKeyBuilder* b) const {
+    Impl::GenKey(*this, caps, b);
 }
 
 GrDisplacementMapEffect::GrDisplacementMapEffect(SkColorChannel xChannelSelector,
@@ -474,10 +477,13 @@ GrDisplacementMapEffect::GrDisplacementMapEffect(SkColorChannel xChannelSelector
 }
 
 GrDisplacementMapEffect::GrDisplacementMapEffect(const GrDisplacementMapEffect& that)
-        : INHERITED(that)
+        : INHERITED(kGrDisplacementMapEffect_ClassID, that.optimizationFlags())
         , fXChannelSelector(that.fXChannelSelector)
         , fYChannelSelector(that.fYChannelSelector)
-        , fScale(that.fScale) {}
+        , fScale(that.fScale) {
+    this->cloneAndRegisterAllChildProcessors(that);
+    this->setUsesSampleCoordsDirectly();
+}
 
 GrDisplacementMapEffect::~GrDisplacementMapEffect() {}
 
@@ -532,7 +538,7 @@ void GrDisplacementMapEffect::Impl::emitCode(EmitArgs& args) {
     const GrDisplacementMapEffect& displacementMap = args.fFp.cast<GrDisplacementMapEffect>();
 
     fScaleUni = args.fUniformHandler->addUniform(&displacementMap, kFragment_GrShaderFlag,
-                                                 SkSLType::kHalf2, "Scale");
+                                                 kHalf2_GrSLType, "Scale");
     const char* scaleUni = args.fUniformHandler->getUniformCStr(fScaleUni);
 
     GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
@@ -549,10 +555,9 @@ void GrDisplacementMapEffect::Impl::emitCode(EmitArgs& args) {
         }
     };
     fragBuilder->codeAppendf("float2 cCoords = %s + %s * (dColor.%c%c - half2(0.5));",
-                             args.fSampleCoord,
-                             scaleUni,
-                             chanChar(displacementMap.fXChannelSelector),
-                             chanChar(displacementMap.fYChannelSelector));
+                             args.fSampleCoord, scaleUni,
+                             chanChar(displacementMap.xChannelSelector()),
+                             chanChar(displacementMap.yChannelSelector()));
 
     SkString colorSample = this->invokeChild(/*childIndex=*/1, args, "cCoords");
 
@@ -562,6 +567,21 @@ void GrDisplacementMapEffect::Impl::emitCode(EmitArgs& args) {
 void GrDisplacementMapEffect::Impl::onSetData(const GrGLSLProgramDataManager& pdman,
                                               const GrFragmentProcessor& proc) {
     const auto& displacementMap = proc.cast<GrDisplacementMapEffect>();
-    pdman.set2f(fScaleUni, displacementMap.fScale.x(), displacementMap.fScale.y());
+    const SkVector& scale = displacementMap.scale();
+    pdman.set2f(fScaleUni, scale.x(), scale.y());
+}
+
+void GrDisplacementMapEffect::Impl::GenKey(const GrProcessor& proc,
+                                           const GrShaderCaps&,
+                                           GrProcessorKeyBuilder* b) {
+    const GrDisplacementMapEffect& displacementMap = proc.cast<GrDisplacementMapEffect>();
+
+    static constexpr int kChannelSelectorKeyBits = 2;  // Max value is 3, so 2 bits are required
+
+    uint32_t xKey = static_cast<uint32_t>(displacementMap.xChannelSelector());
+    uint32_t yKey = static_cast<uint32_t>(displacementMap.yChannelSelector())
+            << kChannelSelectorKeyBits;
+
+    b->add32(xKey | yKey);
 }
 #endif

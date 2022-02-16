@@ -12,7 +12,6 @@
 #include "include/private/SkTHash.h"
 #include "src/sksl/ir/SkSLType.h"
 
-#include <optional>
 #include <unordered_map>
 
 namespace SkSL {
@@ -29,10 +28,9 @@ class Expression : public IRNode {
 public:
     enum class Kind {
         kBinary = (int) Statement::Kind::kLast + 1,
-        kChildCall,
+        kBoolLiteral,
         kCodeString,
         kConstructorArray,
-        kConstructorArrayCast,
         kConstructorCompound,
         kConstructorCompoundCast,
         kConstructorDiagonalMatrix,
@@ -42,15 +40,14 @@ public:
         kConstructorStruct,
         kExternalFunctionCall,
         kExternalFunctionReference,
+        kIntLiteral,
         kFieldAccess,
+        kFloatLiteral,
         kFunctionReference,
         kFunctionCall,
         kIndex,
-        kLiteral,
-        kMethodReference,
-        kPoison,
-        kPostfix,
         kPrefix,
+        kPostfix,
         kSetting,
         kSwizzle,
         kTernary,
@@ -66,8 +63,8 @@ public:
         kContainsRTAdjust
     };
 
-    Expression(int line, Kind kind, const Type* type)
-        : INHERITED(line, (int) kind)
+    Expression(int offset, Kind kind, const Type* type)
+        : INHERITED(offset, (int) kind)
         , fType(type) {
         SkASSERT(kind >= Kind::kFirst && kind <= Kind::kLast);
     }
@@ -82,7 +79,7 @@ public:
 
     /**
      *  Use is<T> to check the type of an expression.
-     *  e.g. replace `e.kind() == Expression::Kind::kLiteral` with `e.is<Literal>()`.
+     *  e.g. replace `e.kind() == Expression::Kind::kIntLiteral` with `e.is<IntLiteral>()`.
      */
     template <typename T>
     bool is() const {
@@ -95,20 +92,8 @@ public:
         return this->kind() >= Kind::kConstructorArray && this->kind() <= Kind::kConstructorStruct;
     }
 
-    bool isIntLiteral() const {
-        return this->kind() == Kind::kLiteral && this->type().isInteger();
-    }
-
-    bool isFloatLiteral() const {
-        return this->kind() == Kind::kLiteral && this->type().isFloat();
-    }
-
-    bool isBoolLiteral() const {
-        return this->kind() == Kind::kLiteral && this->type().isBoolean();
-    }
-
     /**
-     *  Use as<T> to downcast expressions: e.g. replace `(Literal&) i` with `i.as<Literal>()`.
+     *  Use as<T> to downcast expressions: e.g. replace `(IntLiteral&) i` with `i.as<IntLiteral>()`.
      */
     template <typename T>
     const T& as() const {
@@ -132,13 +117,6 @@ public:
     virtual bool isCompileTimeConstant() const {
         return false;
     }
-
-    /**
-     * Returns true if this expression is incomplete. Specifically, dangling function/method-call
-     * references that were never invoked, or type references that were never constructed, are
-     * considered incomplete expressions and should result in an error.
-     */
-    bool isIncomplete(const Context& context) const;
 
     /**
      * Compares this constant expression against another constant expression. Returns kUnknown if
@@ -178,30 +156,15 @@ public:
     }
 
     /**
-     * Returns true if this expression type supports `getConstantValue`. (This particular expression
-     * may or may not actually contain a constant value.) It's harmless to call `getConstantValue`
-     * on expressions which don't support constant values or don't contain any constant values, but
-     * if `supportsConstantValues` returns false, you can assume that `getConstantValue` will return
-     * nullopt for every slot of this expression. This allows for early-out opportunities in some
-     * cases. (Some expressions have tons of slots but never hold a constant value; e.g. a variable
-     * holding a very large array.)
+     * Returns the n'th compile-time constant expression within a literal or constructor.
+     * Use Type::slotCount to determine the number of subexpressions within an expression.
+     * Subexpressions which are not compile-time constants will return null.
+     * `vec4(1, vec2(2), 3)` contains four subexpressions: (1, 2, 2, 3)
+     * `mat2(f)` contains four subexpressions: (null, 0,
+     *                                          0, null)
      */
-    virtual bool supportsConstantValues() const {
-        return false;
-    }
-
-    /**
-     * Returns the n'th compile-time constant value within a literal or constructor.
-     * Use Type::slotCount to determine the number of slots within an expression.
-     * Slots which do not contain compile-time constant values will return nullopt.
-     * `vec4(1, vec2(2), 3)` contains four compile-time constants: (1, 2, 2, 3)
-     * `mat2(f)` contains four slots, and two are constant: (nullopt, 0,
-     *                                                       0, nullopt)
-     * All classes which override this function must also implement `supportsConstantValues`.
-     */
-    virtual std::optional<double> getConstantValue(int n) const {
-        SkASSERT(!this->supportsConstantValues());
-        return std::nullopt;
+    virtual const Expression* getConstantSubexpression(int n) const {
+        return nullptr;
     }
 
     virtual std::unique_ptr<Expression> clone() const = 0;

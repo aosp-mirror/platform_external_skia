@@ -34,7 +34,7 @@ std::vector<SkTextBlobTrace::Record> SkTextBlobTrace::CreateBlobTrace(SkStream* 
     while (!readBuffer.eof()) {
         SkTextBlobTrace::Record record;
         record.origUniqueID = readBuffer.readUInt();
-        record.paint = readBuffer.readPaint();
+        readBuffer.readPaint(&record.paint, nullptr);
         readBuffer.readPoint(&record.offset);
         record.blob = SkTextBlobPriv::MakeFromBuffer(readBuffer);
         trace.push_back(std::move(record));
@@ -63,8 +63,8 @@ void SkTextBlobTrace::DumpTrace(const std::vector<SkTextBlobTrace::Record>& trac
                     font.getScaleX(),
                     font.getSkewX(),
                     SkFontPriv::Flags(font),
-                    (int)font.getEdging(),
-                    (int)font.getHinting());
+                    font.getEdging(),
+                    font.getHinting());
             uint32_t glyphCount = iter.glyphCount();
             const uint16_t* glyphs = iter.glyphs();
             for (uint32_t i = 0; i < glyphCount; i++) {
