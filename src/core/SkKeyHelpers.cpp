@@ -173,7 +173,7 @@ namespace {
 
 #ifdef SK_GRAPHITE_ENABLED
 static const int kBlockDataSize = 1;
-static const int kExpectedNumGradientUniforms = 6;
+static const int kExpectedNumGradientUniforms = 7;
 
 sk_sp<SkUniformData> make_gradient_uniform_data_common(
         SkSpan<const SkUniform> uniforms,
@@ -196,6 +196,7 @@ sk_sp<SkUniformData> make_linear_gradient_uniform_data(SkShaderCodeDictionary* d
     auto uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kLinearGradientShader);
     SkASSERT(uniforms.size() == kExpectedNumGradientUniforms);
 
+    SkPoint padding{0, 0};
     const void* srcs[kExpectedNumGradientUniforms] = {
         gradData.fColor4fs,
         gradData.fOffsets,
@@ -203,6 +204,7 @@ sk_sp<SkUniformData> make_linear_gradient_uniform_data(SkShaderCodeDictionary* d
         &gradData.fPoints[1],
         &gradData.fRadii[0], // unused
         &gradData.fRadii[1], // unused
+        &padding
     };
 
     return make_gradient_uniform_data_common(uniforms, srcs);
@@ -214,6 +216,7 @@ sk_sp<SkUniformData> make_radial_gradient_uniform_data(SkShaderCodeDictionary* d
     auto uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kRadialGradientShader);
     SkASSERT(uniforms.size() == kExpectedNumGradientUniforms);
 
+    SkPoint padding{0, 0};
     const void* srcs[kExpectedNumGradientUniforms] = {
         gradData.fColor4fs,
         gradData.fOffsets,
@@ -221,6 +224,7 @@ sk_sp<SkUniformData> make_radial_gradient_uniform_data(SkShaderCodeDictionary* d
         &gradData.fPoints[1], // unused
         &gradData.fRadii[0],
         &gradData.fRadii[1],  // unused
+        &padding
     };
 
     return make_gradient_uniform_data_common(uniforms, srcs);
@@ -232,6 +236,7 @@ sk_sp<SkUniformData> make_sweep_gradient_uniform_data(SkShaderCodeDictionary* di
     auto uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kSweepGradientShader);
     SkASSERT(uniforms.size() == kExpectedNumGradientUniforms);
 
+    SkPoint padding{0, 0};
     const void* srcs[kExpectedNumGradientUniforms] = {
         gradData.fColor4fs,
         gradData.fOffsets,
@@ -239,6 +244,7 @@ sk_sp<SkUniformData> make_sweep_gradient_uniform_data(SkShaderCodeDictionary* di
         &gradData.fPoints[1], // unused
         &gradData.fRadii[0],  // unused
         &gradData.fRadii[1],  // unused
+        &padding
     };
 
     return make_gradient_uniform_data_common(uniforms, srcs);
@@ -250,6 +256,7 @@ sk_sp<SkUniformData> make_conical_gradient_uniform_data(SkShaderCodeDictionary* 
     auto uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kConicalGradientShader);
     SkASSERT(uniforms.size() == kExpectedNumGradientUniforms);
 
+    SkPoint padding{0, 0};
     const void* srcs[kExpectedNumGradientUniforms] = {
         gradData.fColor4fs,
         gradData.fOffsets,
@@ -257,6 +264,7 @@ sk_sp<SkUniformData> make_conical_gradient_uniform_data(SkShaderCodeDictionary* 
         &gradData.fPoints[1],
         &gradData.fRadii[0],
         &gradData.fRadii[1],
+        &padding,
     };
 
     return make_gradient_uniform_data_common(uniforms, srcs);
@@ -539,7 +547,7 @@ void AddToKey(SkShaderCodeDictionary* dict,
     if (backend == SkBackend::kGraphite) {
         int headerOffset = key->beginBlock(SkBuiltInCodeSnippetID::kBlendShader);
 
-        add_blendmode_to_key(key, blendData.fBM);
+        // Child blocks always go right after the parent block's header
         int start = key->sizeInBytes();
         as_SB(blendData.fDst)->addToKey(dict, backend, key, uniformBlock);
         int firstShaderSize = key->sizeInBytes() - start;
@@ -547,6 +555,8 @@ void AddToKey(SkShaderCodeDictionary* dict,
         start = key->sizeInBytes();
         as_SB(blendData.fSrc)->addToKey(dict, backend, key, uniformBlock);
         int secondShaderSize = key->sizeInBytes() - start;
+
+        add_blendmode_to_key(key, blendData.fBM);
 
         key->endBlock(headerOffset, SkBuiltInCodeSnippetID::kBlendShader);
 
@@ -573,18 +583,19 @@ void Dump(const SkPaintParamsKey& key, int headerOffset) {
 
     int runningOffset = headerOffset + SkPaintParamsKey::kBlockHeaderSizeInBytes;
 
-    uint8_t data = key.byte(runningOffset);
-    SkBlendMode bm = to_blendmode(data);
-
-    SkDebugf("BlendMode: %s\n", SkBlendMode_Name(bm));
-    runningOffset += 1; // 1 byte for blendmode
-
     SkDebugf("\nDst:  ");
     int firstBlockSize = SkPaintParamsKey::DumpBlock(key, runningOffset);
     runningOffset += firstBlockSize;
 
     SkDebugf("Src: ");
     int secondBlockSize = SkPaintParamsKey::DumpBlock(key, runningOffset);
+    runningOffset += secondBlockSize;
+
+    uint8_t data = key.byte(runningOffset);
+    SkBlendMode bm = to_blendmode(data);
+
+    SkDebugf("BlendMode: %s\n", SkBlendMode_Name(bm));
+    runningOffset += 1; // 1 byte for blendmode
 
     int calculatedBlockSize = SkPaintParamsKey::kBlockHeaderSizeInBytes +
                               firstBlockSize + secondBlockSize + 1;
