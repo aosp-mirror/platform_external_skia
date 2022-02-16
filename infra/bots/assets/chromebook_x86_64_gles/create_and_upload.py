@@ -10,37 +10,38 @@
 
 
 import argparse
+import common
 import os
 import subprocess
 import sys
-import tempfile
-import create
-
-
-FILE_DIR = os.path.dirname(os.path.abspath(__file__))
-ASSET = os.path.basename(FILE_DIR)
+import utils
 
 
 def main():
   if 'linux' not in sys.platform:
-    print('This script only runs on Linux.', file=sys.stderr)
+    print >> sys.stderr, 'This script only runs on Linux.'
     sys.exit(1)
   parser = argparse.ArgumentParser()
+  parser.add_argument('--gsutil')
   parser.add_argument('--lib_path', '-l', required=True)
   args = parser.parse_args()
-  # Pass lib_path to the creation script via an environment variable, since
-  # we're calling the script via `sk` and not directly.
-  os.environ[create.ENV_VAR] = args.lib_path
 
-  sk = os.path.realpath(os.path.join(
-      FILE_DIR, os.pardir, os.pardir, os.pardir, os.pardir, 'bin', 'sk'))
-  if os.name == 'nt':
-    sk += '.exe'
-  if not os.path.isfile(sk):
-    raise Exception('`sk` not found at %s; maybe you need to run bin/fetch-sk?')
+  with utils.tmp_dir():
+    cwd = os.getcwd()
+    create_script = os.path.join(common.FILE_DIR, 'create.py')
+    upload_script = os.path.join(common.FILE_DIR, 'upload.py')
 
-  # Upload the asset.
-  subprocess.check_call([sk, 'asset', 'upload', ASSET], cwd=FILE_DIR)
+    try:
+      subprocess.check_call(['python', create_script,
+                             '-t', cwd,
+                             '-l', args.lib_path])
+      cmd = ['python', upload_script, '-t', cwd]
+      if args.gsutil:
+        cmd.extend(['--gsutil', args.gsutil])
+      subprocess.check_call(cmd)
+    except subprocess.CalledProcessError:
+      # Trap exceptions to avoid printing two stacktraces.
+      sys.exit(1)
 
 
 if __name__ == '__main__':

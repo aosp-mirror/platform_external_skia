@@ -5,7 +5,6 @@
 
 # Recipe module for Skia Swarming compile.
 
-PYTHON_VERSION_COMPATIBILITY = "PY3"
 
 DEPS = [
   'build',
@@ -44,7 +43,7 @@ def RunSteps(api):
 # [VPYTHON:BEGIN]
 # wheel: <
 #  name: "infra/python/wheels/psutil/${vpython_platform}"
-#  version: "version:5.8.0.chromium.2"
+#  version: "version:5.4.7"
 # >
 # [VPYTHON:END]
 

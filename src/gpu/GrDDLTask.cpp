@@ -74,7 +74,7 @@ void GrDDLTask::gatherProxyIntervals(GrResourceAllocator* alloc) const {
     }
 }
 
-GrRenderTask::ExpectedOutcome GrDDLTask::onMakeClosed(GrRecordingContext*,
+GrRenderTask::ExpectedOutcome GrDDLTask::onMakeClosed(const GrCaps& caps,
                                                       SkIRect* targetUpdateBounds) {
     SkASSERT(0);
     return ExpectedOutcome::kTargetUnchanged;

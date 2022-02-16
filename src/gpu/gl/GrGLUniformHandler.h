@@ -46,7 +46,7 @@ private:
 
     UniformHandle internalAddUniformArray(const GrFragmentProcessor* owner,
                                           uint32_t visibility,
-                                          SkSLType type,
+                                          GrSLType type,
                                           const char* name,
                                           bool mangleName,
                                           int arrayCount,

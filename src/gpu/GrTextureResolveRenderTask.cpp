@@ -91,5 +91,5 @@ bool GrTextureResolveRenderTask::onExecute(GrOpFlushState* flushState) {
 }
 
 #ifdef SK_DEBUG
-void GrTextureResolveRenderTask::visitProxies_debugOnly(const GrVisitProxyFunc&) const {}
+void GrTextureResolveRenderTask::visitProxies_debugOnly(const GrOp::VisitProxyFunc& fn) const {}
 #endif

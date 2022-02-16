@@ -14,17 +14,17 @@
 #include "src/gpu/GrAppliedClip.h"
 #include "src/gpu/GrBufferAllocPool.h"
 #include "src/gpu/GrDeferredUpload.h"
-#include "src/gpu/GrMeshDrawTarget.h"
 #include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrRenderTargetProxy.h"
 #include "src/gpu/GrSurfaceProxyView.h"
+#include "src/gpu/ops/GrMeshDrawOp.h"
 
 class GrGpu;
 class GrOpsRenderPass;
 class GrResourceProvider;
 
-/** Tracks the state across all the GrOps (really just the GrDrawOps) in a OpsTask flush. */
-class GrOpFlushState final : public GrDeferredUploadTarget, public GrMeshDrawTarget {
+/** Tracks the state across all the GrOps (really just the GrDrawOps) in a GrOpsTask flush. */
+class GrOpFlushState final : public GrDeferredUploadTarget, public GrMeshDrawOp::Target {
 public:
     // vertexSpace and indexSpace may either be null or an alloation of size
     // GrBufferAllocPool::kDefaultBufferSize. If the latter, then CPU memory is only allocated for
@@ -59,7 +59,8 @@ public:
     struct OpArgs {
         // TODO: why does OpArgs have the op we're going to pass it to as a member? Remove it.
         explicit OpArgs(GrOp* op, const GrSurfaceProxyView& surfaceView, bool usesMSAASurface,
-                        GrAppliedClip* appliedClip, const GrDstProxyView& dstProxyView,
+                        GrAppliedClip* appliedClip,
+                        const GrXferProcessor::DstProxyView& dstProxyView,
                         GrXferBarrierFlags renderPassXferBarriers, GrLoadOp colorLoadOp)
                 : fOp(op)
                 , fSurfaceView(surfaceView)
@@ -79,7 +80,7 @@ public:
         bool usesMSAASurface() const { return fUsesMSAASurface; }
         GrAppliedClip* appliedClip() { return fAppliedClip; }
         const GrAppliedClip* appliedClip() const { return fAppliedClip; }
-        const GrDstProxyView& dstProxyView() const { return fDstProxyView; }
+        const GrXferProcessor::DstProxyView& dstProxyView() const { return fDstProxyView; }
         GrXferBarrierFlags renderPassBarriers() const { return fRenderPassXferBarriers; }
         GrLoadOp colorLoadOp() const { return fColorLoadOp; }
 
@@ -96,7 +97,7 @@ public:
         GrRenderTargetProxy*          fRenderTargetProxy;
         bool                          fUsesMSAASurface;
         GrAppliedClip*                fAppliedClip;
-        GrDstProxyView                fDstProxyView;   // TODO: do we still need the dst proxy here?
+        GrXferProcessor::DstProxyView fDstProxyView;   // TODO: do we still need the dst proxy here?
         GrXferBarrierFlags            fRenderPassXferBarriers;
         GrLoadOp                      fColorLoadOp;
     };
@@ -123,7 +124,7 @@ public:
     GrDeferredUploadToken addInlineUpload(GrDeferredTextureUploadFn&&) final;
     GrDeferredUploadToken addASAPUpload(GrDeferredTextureUploadFn&&) final;
 
-    /** Overrides of GrMeshDrawTarget. */
+    /** Overrides of GrMeshDrawOp::Target. */
     void recordDraw(const GrGeometryProcessor*,
                     const GrSimpleMesh[],
                     int meshCnt,
@@ -162,7 +163,7 @@ public:
                 fOpArgs->appliedClip()->hardClip() : GrAppliedHardClip::Disabled();
     }
     GrAppliedClip detachAppliedClip() final;
-    const GrDstProxyView& dstProxyView() const final {
+    const GrXferProcessor::DstProxyView& dstProxyView() const final {
         return this->drawOpArgs().dstProxyView();
     }
 
@@ -182,11 +183,11 @@ public:
     GrStrikeCache* strikeCache() const final;
 
     // At this point we know we're flushing so full access to the GrAtlasManager and
-    // SmallPathAtlasMgr is required (and permissible).
+    // GrSmallPathAtlasMgr is required (and permissible).
     GrAtlasManager* atlasManager() const final;
-    skgpu::v1::SmallPathAtlasMgr* smallPathAtlasManager() const final;
+    GrSmallPathAtlasMgr* smallPathAtlasManager() const final;
 
-    /** GrMeshDrawTarget override. */
+    /** GrMeshDrawOp::Target override. */
     SkArenaAlloc* allocator() override { return &fArena; }
 
     // This is a convenience method that binds the given pipeline, and then, if our applied clip has
@@ -275,8 +276,9 @@ private:
     // the shared state once and then issue draws for each mesh.
     struct Draw {
         ~Draw();
-        // The geometry processor is always forced to be in an arena allocation. This object does
-        // not need to manage its lifetime.
+        // The geometry processor is always forced to be in an arena allocation or appears on
+        // the stack (for CCPR). In either case this object does not need to manage its
+        // lifetime.
         const GrGeometryProcessor* fGeometryProcessor = nullptr;
         // Must have GrGeometryProcessor::numTextureSamplers() entries. Can be null if no samplers.
         const GrSurfaceProxy* const* fGeomProcProxies = nullptr;
@@ -307,7 +309,7 @@ private:
     // an op is not currently preparing of executing.
     OpArgs* fOpArgs = nullptr;
 
-    // This field is only transiently set during flush. Each OpsTask will set it to point to an
+    // This field is only transiently set during flush. Each GrOpsTask will set it to point to an
     // array of proxies it uses before call onPrepare and onExecute.
     SkTArray<GrSurfaceProxy*, true>* fSampledProxies;
 

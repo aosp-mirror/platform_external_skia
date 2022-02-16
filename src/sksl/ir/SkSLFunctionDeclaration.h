@@ -24,7 +24,7 @@ class FunctionDefinition;
 
 // This enum holds every intrinsic supported by SkSL.
 #define SKSL_INTRINSIC(name) k_##name##_IntrinsicKind,
-enum IntrinsicKind : int8_t {
+enum IntrinsicKind {
     kNotIntrinsic = -1,
     SKSL_INTRINSIC_LIST
 };
@@ -35,22 +35,23 @@ enum IntrinsicKind : int8_t {
  */
 class FunctionDeclaration final : public Symbol {
 public:
-    inline static constexpr Kind kSymbolKind = Kind::kFunctionDeclaration;
+    static constexpr Kind kSymbolKind = Kind::kFunctionDeclaration;
 
-    FunctionDeclaration(int line,
+    FunctionDeclaration(int offset,
                         const Modifiers* modifiers,
-                        std::string_view name,
+                        StringFragment name,
                         std::vector<const Variable*> parameters,
                         const Type* returnType,
                         bool builtin);
 
     static const FunctionDeclaration* Convert(const Context& context,
                                               SymbolTable& symbols,
-                                              int line,
+                                              int offset,
                                               const Modifiers* modifiers,
-                                              std::string_view name,
+                                              StringFragment name,
                                               std::vector<std::unique_ptr<Variable>> parameters,
-                                              const Type* returnType);
+                                              const Type* returnType,
+                                              bool isBuiltin);
 
     const Modifiers& modifiers() const {
         return *fModifiers;
@@ -62,7 +63,6 @@ public:
 
     void setDefinition(const FunctionDefinition* definition) const {
         fDefinition = definition;
-        fIntrinsicKind = kNotIntrinsic;
     }
 
     const std::vector<const Variable*>& parameters() const {
@@ -89,9 +89,9 @@ public:
         return this->intrinsicKind() != kNotIntrinsic;
     }
 
-    std::string mangledName() const;
+    String mangledName() const;
 
-    std::string description() const override;
+    String description() const override;
 
     bool matches(const FunctionDeclaration& f) const;
 
@@ -122,7 +122,9 @@ private:
     const Type* fReturnType;
     bool fBuiltin;
     bool fIsMain;
-    mutable IntrinsicKind fIntrinsicKind = kNotIntrinsic;
+    IntrinsicKind fIntrinsicKind = kNotIntrinsic;
+
+    friend class SkSL::dsl::DSLFunction;
 
     using INHERITED = Symbol;
 };

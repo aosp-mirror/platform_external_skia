@@ -24,7 +24,7 @@ public:
 
         kLast = kSamplerDescriptorTable
     };
-    inline static constexpr unsigned int kParamIndexCount = (unsigned int)(ParamIndex::kLast) + 1;
+    static constexpr unsigned int kParamIndexCount = (unsigned int)(ParamIndex::kLast) + 1;
 
     bool isCompatible(int numTextureSamplers, int numUAVs) const;
 

@@ -8,17 +8,16 @@
 #ifndef SkDashImpl_DEFINED
 #define SkDashImpl_DEFINED
 
-#include "src/core/SkPathEffectBase.h"
+#include "include/core/SkPathEffect.h"
 
-class SkDashImpl : public SkPathEffectBase {
+class SkDashImpl : public SkPathEffect {
 public:
     SkDashImpl(const SkScalar intervals[], int count, SkScalar phase);
 
 protected:
     ~SkDashImpl() override;
     void flatten(SkWriteBuffer&) const override;
-    bool onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, const SkRect*,
-                      const SkMatrix&) const override;
+    bool onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, const SkRect*) const override;
 
     bool onAsPoints(PointData* results, const SkPath& src, const SkStrokeRec&, const SkMatrix&,
                     const SkRect*) const override;
@@ -43,7 +42,7 @@ private:
     int32_t     fInitialDashIndex;
     SkScalar    fIntervalLength;
 
-    using INHERITED = SkPathEffectBase;
+    using INHERITED = SkPathEffect;
 };
 
 #endif

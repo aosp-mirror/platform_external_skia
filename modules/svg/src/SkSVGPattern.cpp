@@ -39,13 +39,13 @@ const SkSVGPattern* SkSVGPattern::hrefTarget(const SkSVGRenderContext& ctx) cons
 }
 
 template <typename T>
-int inherit_if_needed(const SkTLazy<T>& src, SkTLazy<T>& dst) {
+bool inherit_if_needed(const SkTLazy<T>& src, SkTLazy<T>& dst) {
     if (!dst.isValid()) {
         dst = src;
-        return 1;
+        return true;
     }
 
-    return 0;
+    return false;
 }
 
 /* https://www.w3.org/TR/SVG11/pservers.html#PatternElementHrefAttribute

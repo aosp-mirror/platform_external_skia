@@ -8,7 +8,7 @@
 #ifndef GrMemoryPool_DEFINED
 #define GrMemoryPool_DEFINED
 
-#include "src/core/SkBlockAllocator.h"
+#include "src/gpu/GrBlockAllocator.h"
 
 #ifdef SK_DEBUG
 #include "include/private/SkTHash.h"
@@ -28,21 +28,21 @@ public:
     // https://github.com/emscripten-core/emscripten/issues/10072
     // Since Skia does not use "long double" (16 bytes), we should be ok to force it back to 8 bytes
     // until emscripten is fixed.
-    inline static constexpr size_t kAlignment = 8;
+    static constexpr size_t kAlignment = 8;
 #else
     // Guaranteed alignment of pointer returned by allocate().
-    inline static constexpr size_t kAlignment = alignof(std::max_align_t);
+    static constexpr size_t kAlignment = alignof(std::max_align_t);
 #endif
 
     // Smallest block size allocated on the heap (not the smallest reservation via allocate()).
-    inline static constexpr size_t kMinAllocationSize = 1 << 10;
+    static constexpr size_t kMinAllocationSize = 1 << 10;
 
     /**
      * Prealloc size is the amount of space to allocate at pool creation
      * time and keep around until pool destruction. The min alloc size is
      * the smallest allowed size of additional allocations. Both sizes are
      * adjusted to ensure that they are at least as large as kMinAllocationSize
-     * and less than SkBlockAllocator::kMaxAllocationSize.
+     * and less than GrBlockAllocator::kMaxAllocationSize.
      *
      * Both sizes are what the pool will end up allocating from the system, and
      * portions of the allocated memory is used for internal bookkeeping.
@@ -88,7 +88,6 @@ public:
      */
     size_t preallocSize() const {
         // Account for the debug-only fields in this count, the offset is 0 for release builds
-        static_assert(std::is_standard_layout<GrMemoryPool>::value, "");
         return offsetof(GrMemoryPool, fAllocator) + fAllocator.preallocSize();
     }
 
@@ -120,16 +119,10 @@ private:
     GrMemoryPool(size_t preallocSize, size_t minAllocSize);
 
 #ifdef SK_DEBUG
-    // Because this exists preallocSize wants to use offsetof, so keep GrMemoryPool standard layout
-    // without depending on SkTHashSet being standard layout. Note that std::unique_ptr may not be
-    // standard layout.
-    struct Debug{
-        SkTHashSet<int>  fAllocatedIDs;
-        int              fAllocationCount;
-    };
-    Debug* fDebug{nullptr};
+    SkTHashSet<int>  fAllocatedIDs;
+    int              fAllocationCount;
 #endif
 
-    SkBlockAllocator fAllocator; // Must be the last field, in order to use extra allocated space
+    GrBlockAllocator fAllocator; // Must be the last field, in order to use extra allocated space
 };
 #endif

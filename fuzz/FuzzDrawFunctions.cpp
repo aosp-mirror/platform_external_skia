@@ -14,6 +14,7 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
+#include "src/core/SkClipOpPriv.h"
 #include "src/core/SkPaintPriv.h"
 
 static const int kBmpSize = 24;
@@ -192,7 +193,7 @@ static void fuzz_drawRect(Fuzz* fuzz) {
     fuzz->next(&bl);
     fuzz->next(&a, &b, &c, &d);
     r = SkRect::MakeXYWH(a, b, c, d);
-    cnv->clipRect(r, SkClipOp::kIntersect, bl);
+    cnv->clipRect(r, kIntersect_SkClipOp, bl);
 }
 
 static void fuzz_drawPath(Fuzz* fuzz) {
@@ -243,7 +244,7 @@ static void fuzz_drawPath(Fuzz* fuzz) {
 
     bool bl;
     fuzz->next(&bl);
-    cnv->clipPath(path, SkClipOp::kIntersect, bl);
+    cnv->clipPath(path, kIntersect_SkClipOp, bl);
 }
 
 static void fuzz_drawImage(Fuzz* fuzz) {

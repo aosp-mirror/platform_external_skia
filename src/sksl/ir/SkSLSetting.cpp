@@ -5,11 +5,8 @@
  * found in the LICENSE file.
  */
 
+#include "src/sksl/SkSLIRGenerator.h"
 #include "src/sksl/ir/SkSLSetting.h"
-
-#include "include/sksl/SkSLErrorReporter.h"
-#include "src/sksl/SkSLProgramSettings.h"
-#include "src/sksl/ir/SkSLLiteral.h"
 #include "src/sksl/ir/SkSLVariableReference.h"
 
 namespace SkSL {
@@ -26,7 +23,7 @@ public:
 
 class BoolCapsLookup : public CapsLookupMethod {
 public:
-    using CapsFn = bool (ShaderCaps::*)() const;
+    using CapsFn = bool (ShaderCapsClass::*)() const;
 
     BoolCapsLookup(const CapsFn& fn) : fGetCap(fn) {}
 
@@ -34,7 +31,7 @@ public:
         return context.fTypes.fBool.get();
     }
     std::unique_ptr<Expression> value(const Context& context) const override {
-        return Literal::MakeBool(context, /*line=*/-1, (context.fCaps.*fGetCap)());
+        return BoolLiteral::Make(context, /*offset=*/-1, (context.fCaps.*fGetCap)());
     }
 
 private:
@@ -43,7 +40,7 @@ private:
 
 class IntCapsLookup : public CapsLookupMethod {
 public:
-    using CapsFn = int (ShaderCaps::*)() const;
+    using CapsFn = int (ShaderCapsClass::*)() const;
 
     IntCapsLookup(const CapsFn& fn) : fGetCap(fn) {}
 
@@ -51,7 +48,7 @@ public:
         return context.fTypes.fInt.get();
     }
     std::unique_ptr<Expression> value(const Context& context) const override {
-        return Literal::MakeInt(context, /*line=*/-1, (context.fCaps.*fGetCap)());
+        return IntLiteral::Make(context, /*offset=*/-1, (context.fCaps.*fGetCap)());
     }
 
 private:
@@ -68,19 +65,19 @@ public:
         }
     }
 
-    const CapsLookupMethod* lookup(std::string_view name) const {
+    const CapsLookupMethod* lookup(const String& name) const {
         auto iter = fMap.find(name);
         return (iter != fMap.end()) ? iter->second.get() : nullptr;
     }
 
 private:
-    std::unordered_map<std::string_view, std::unique_ptr<CapsLookupMethod>> fMap;
+    std::unordered_map<String, std::unique_ptr<CapsLookupMethod>> fMap;
 };
 
 static const CapsLookupTable& caps_lookup_table() {
-    // Create a lookup table that converts strings into the equivalent ShaderCaps methods.
+    // Create a lookup table that converts strings into the equivalent ShaderCapsClass methods.
     static CapsLookupTable* sCapsLookupTable = new CapsLookupTable({
-    #define CAP(T, name) CapsLookupTable::Pair{#name, new T##CapsLookup{&ShaderCaps::name}}
+    #define CAP(T, name) CapsLookupTable::Pair{#name, new T##CapsLookup{&ShaderCapsClass::name}}
         CAP(Bool, fbFetchSupport),
         CAP(Bool, fbFetchNeedsCustomOutput),
         CAP(Bool, flatInterpolationSupport),
@@ -90,6 +87,7 @@ static const CapsLookupTable& caps_lookup_table() {
         CAP(Bool, mustDeclareFragmentShaderOutput),
         CAP(Bool, mustDoOpBetweenFloorAndAbs),
         CAP(Bool, mustGuardDivisionEvenAfterExplicitZeroCheck),
+        CAP(Bool, inBlendModesFailRandomlyForAllZeroVec),
         CAP(Bool, atan2ImplementedAsAtanYOverX),
         CAP(Bool, canUseAnyFunctionInShader),
         CAP(Bool, floatIs32Bits),
@@ -104,37 +102,37 @@ static const CapsLookupTable& caps_lookup_table() {
 
 }  // namespace
 
-static const Type* get_type(const Context& context, int line, std::string_view name) {
+static const Type* get_type(const Context& context, int offset, const String& name) {
     if (const CapsLookupMethod* caps = caps_lookup_table().lookup(name)) {
         return caps->type(context);
     }
 
-    context.fErrors->error(line, "unknown capability flag '" + std::string(name) + "'");
+    context.fErrors.error(offset, "unknown capability flag '" + name + "'");
     return nullptr;
 }
 
-static std::unique_ptr<Expression> get_value(const Context& context, int line,
-                                             const std::string_view& name) {
+static std::unique_ptr<Expression> get_value(const Context& context, int offset,
+                                             const String& name) {
     if (const CapsLookupMethod* caps = caps_lookup_table().lookup(name)) {
         return caps->value(context);
     }
 
-    context.fErrors->error(line, "unknown capability flag '" + std::string(name) + "'");
+    context.fErrors.error(offset, "unknown capability flag '" + name + "'");
     return nullptr;
 }
 
-std::unique_ptr<Expression> Setting::Convert(const Context& context, int line,
-                                             const std::string_view& name) {
+std::unique_ptr<Expression> Setting::Convert(const Context& context, int offset,
+                                             const String& name) {
     SkASSERT(context.fConfig);
 
     if (context.fConfig->fSettings.fReplaceSettings) {
         // Insert the settings value directly into the IR.
-        return get_value(context, line, name);
+        return get_value(context, offset, name);
     }
 
     // Generate a Setting IRNode.
-    const Type* type = get_type(context, line, name);
-    return type ? std::make_unique<Setting>(line, name, type) : nullptr;
+    const Type* type = get_type(context, offset, name);
+    return type ? std::make_unique<Setting>(offset, name, type) : nullptr;
 }
 
 }  // namespace SkSL

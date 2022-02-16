@@ -1,20 +1,15 @@
-/*#pragma settings RewriteSwitchStatements*/
-
-uniform half4 colorGreen, colorRed;
-
-half4 main(float2 coords) {
+void main() {
     // Basic switch test.
-    half4 color;
-    switch (int(colorGreen.g)) {
+    float x;
+    switch (int(sqrt(1))) {
         case 0:
-            color = colorRed;
+            x = 0.0;
             break;
         case 1:
-            color = colorGreen;
+            x = 1.0;
             break;
         default:
-            color = colorRed;
-            break;
+            x = 2.0;
     }
-    return color;
+    sk_FragColor = half4(half(x));
 }

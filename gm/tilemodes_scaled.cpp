@@ -9,6 +9,7 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkFilterQuality.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPaint.h"
@@ -26,13 +27,6 @@
 #include "include/utils/SkTextUtils.h"
 #include "tools/ToolUtils.h"
 
-const SkSamplingOptions gSamplings[] = {
-    SkSamplingOptions(SkFilterMode::kNearest),
-    SkSamplingOptions(SkFilterMode::kLinear),
-    SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kLinear),
-    SkSamplingOptions(SkCubicResampler::Mitchell()),
-};
-
 static void makebm(SkBitmap* bm, SkColorType ct, int w, int h) {
     bm->allocPixels(SkImageInfo::Make(w, h, ct, kPremul_SkAlphaType));
     bm->eraseColor(SK_ColorTRANSPARENT);
@@ -49,9 +43,9 @@ static void makebm(SkBitmap* bm, SkColorType ct, int w, int h) {
     canvas.drawPaint(paint);
 }
 
-static void setup(SkPaint* paint, const SkBitmap& bm, const SkSamplingOptions& sampling,
+static void setup(SkPaint* paint, const SkBitmap& bm, SkFilterQuality filter_level,
                   SkTileMode tmx, SkTileMode tmy) {
-    paint->setShader(bm.makeShader(tmx, tmy, sampling));
+    paint->setShader(bm.makeShader(tmx, tmy, SkSamplingOptions(filter_level)));
 }
 
 constexpr SkColorType gColorTypes[] = {
@@ -102,6 +96,11 @@ protected:
 
         const char* gColorTypeNames[] = { "8888" , "565", "4444" };
 
+        constexpr SkFilterQuality gFilterQualitys[] =
+            { kNone_SkFilterQuality,
+              kLow_SkFilterQuality,
+              kMedium_SkFilterQuality,
+              kHigh_SkFilterQuality };
         const char* gFilterNames[] = { "None", "Low", "Medium", "High" };
 
         constexpr SkTileMode gModes[] = {
@@ -126,7 +125,7 @@ protected:
         y = SkIntToScalar(40) / scale;
 
         for (size_t i = 0; i < SK_ARRAY_COUNT(gColorTypes); i++) {
-            for (size_t j = 0; j < SK_ARRAY_COUNT(gSamplings); j++) {
+            for (size_t j = 0; j < SK_ARRAY_COUNT(gFilterQualitys); j++) {
                 x = SkIntToScalar(10)/scale;
                 for (size_t kx = 0; kx < SK_ARRAY_COUNT(gModes); kx++) {
                     for (size_t ky = 0; ky < SK_ARRAY_COUNT(gModes); ky++) {
@@ -137,7 +136,7 @@ protected:
                             makebm(&fTexture[i], gColorTypes[i], size, size);
                         }
 #endif
-                        setup(&paint, fTexture[i], gSamplings[j], gModes[kx], gModes[ky]);
+                        setup(&paint, fTexture[i], gFilterQualitys[j], gModes[kx], gModes[ky]);
                         paint.setDither(true);
 
                         canvas->save();

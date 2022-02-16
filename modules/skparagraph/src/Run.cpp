@@ -19,7 +19,6 @@ Run::Run(ParagraphImpl* owner,
          size_t firstChar,
          SkScalar heightMultiplier,
          bool useHalfLeading,
-         SkScalar baselineShift,
          size_t index,
          SkScalar offsetX)
     : fOwner(owner)
@@ -27,21 +26,14 @@ Run::Run(ParagraphImpl* owner,
     , fClusterRange(EMPTY_CLUSTERS)
     , fFont(info.fFont)
     , fClusterStart(firstChar)
-    , fGlyphData(std::make_shared<GlyphData>())
-    , fGlyphs(fGlyphData->glyphs)
-    , fPositions(fGlyphData->positions)
-    , fClusterIndexes(fGlyphData->clusterIndexes)
-    , fBounds(fGlyphData->bounds)
     , fHeightMultiplier(heightMultiplier)
     , fUseHalfLeading(useHalfLeading)
-    , fBaselineShift(baselineShift)
 {
     fBidiLevel = info.fBidiLevel;
     fAdvance = info.fAdvance;
     fIndex = index;
     fUtf8Range = info.utf8Range;
     fOffset = SkVector::Make(offsetX, 0);
-
     fGlyphs.push_back_n(info.glyphCount);
     fBounds.push_back_n(info.glyphCount);
     fPositions.push_back_n(info.glyphCount + 1);
@@ -77,9 +69,6 @@ void Run::calculateMetrics() {
         fCorrectAscent *= multiplier;
         fCorrectDescent *= multiplier;
     }
-    // If we shift the baseline we need to make sure the shifted text fits the line
-    fCorrectAscent += fBaselineShift;
-    fCorrectDescent += fBaselineShift;
 }
 
 SkShaper::RunHandler::Buffer Run::newRunBuffer() {

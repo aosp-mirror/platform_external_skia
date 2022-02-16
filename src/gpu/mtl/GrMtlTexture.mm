@@ -20,19 +20,18 @@ GR_NORETAIN_BEGIN
 GrMtlTexture::GrMtlTexture(GrMtlGpu* gpu,
                            SkBudgeted budgeted,
                            SkISize dimensions,
-                           sk_sp<GrMtlAttachment> texture,
+                           id<MTLTexture> texture,
                            GrMipmapStatus mipmapStatus)
         : GrSurface(gpu, dimensions, GrProtected::kNo)
         , INHERITED(gpu, dimensions, GrProtected::kNo, GrTextureType::k2D, mipmapStatus)
-        , fTexture(std::move(texture)) {
-    SkDEBUGCODE(id<MTLTexture> mtlTexture = fTexture->mtlTexture();)
-    SkASSERT((GrMipmapStatus::kNotAllocated == mipmapStatus) == (1 == mtlTexture.mipmapLevelCount));
+        , fTexture(texture) {
+    SkASSERT((GrMipmapStatus::kNotAllocated == mipmapStatus) == (1 == texture.mipmapLevelCount));
     if (@available(macOS 10.11, iOS 9.0, *)) {
-        SkASSERT(SkToBool(mtlTexture.usage & MTLTextureUsageShaderRead));
+        SkASSERT(SkToBool(texture.usage & MTLTextureUsageShaderRead));
     }
-    SkASSERT(!mtlTexture.framebufferOnly);
+    SkASSERT(!texture.framebufferOnly);
     this->registerWithCache(budgeted);
-    if (GrMtlFormatIsCompressed(fTexture->mtlFormat())) {
+    if (GrMtlFormatIsCompressed(texture.pixelFormat)) {
         this->setReadOnly();
     }
 }
@@ -40,19 +39,18 @@ GrMtlTexture::GrMtlTexture(GrMtlGpu* gpu,
 GrMtlTexture::GrMtlTexture(GrMtlGpu* gpu,
                            Wrapped,
                            SkISize dimensions,
-                           sk_sp<GrMtlAttachment> texture,
+                           id<MTLTexture> texture,
                            GrMipmapStatus mipmapStatus,
                            GrWrapCacheable cacheable,
                            GrIOType ioType)
         : GrSurface(gpu, dimensions, GrProtected::kNo)
         , INHERITED(gpu, dimensions, GrProtected::kNo, GrTextureType::k2D, mipmapStatus)
-        , fTexture(std::move(texture)) {
-    SkDEBUGCODE(id<MTLTexture> mtlTexture = fTexture->mtlTexture();)
-    SkASSERT((GrMipmapStatus::kNotAllocated == mipmapStatus) == (1 == mtlTexture.mipmapLevelCount));
+        , fTexture(texture) {
+    SkASSERT((GrMipmapStatus::kNotAllocated == mipmapStatus) == (1 == texture.mipmapLevelCount));
     if (@available(macOS 10.11, iOS 9.0, *)) {
-        SkASSERT(SkToBool(mtlTexture.usage & MTLTextureUsageShaderRead));
+        SkASSERT(SkToBool(texture.usage & MTLTextureUsageShaderRead));
     }
-    SkASSERT(!mtlTexture.framebufferOnly);
+    SkASSERT(!texture.framebufferOnly);
     if (ioType == kRead_GrIOType) {
         this->setReadOnly();
     }
@@ -61,33 +59,31 @@ GrMtlTexture::GrMtlTexture(GrMtlGpu* gpu,
 
 GrMtlTexture::GrMtlTexture(GrMtlGpu* gpu,
                            SkISize dimensions,
-                           sk_sp<GrMtlAttachment> texture,
+                           id<MTLTexture> texture,
                            GrMipmapStatus mipmapStatus)
         : GrSurface(gpu, dimensions, GrProtected::kNo)
         , INHERITED(gpu, dimensions, GrProtected::kNo, GrTextureType::k2D, mipmapStatus)
-        , fTexture(std::move(texture)) {
-    SkDEBUGCODE(id<MTLTexture> mtlTexture = fTexture->mtlTexture();)
-    SkASSERT((GrMipmapStatus::kNotAllocated == mipmapStatus) == (1 == mtlTexture.mipmapLevelCount));
+        , fTexture(texture) {
+    SkASSERT((GrMipmapStatus::kNotAllocated == mipmapStatus) == (1 == texture.mipmapLevelCount));
     if (@available(macOS 10.11, iOS 9.0, *)) {
-        SkASSERT(SkToBool(mtlTexture.usage & MTLTextureUsageShaderRead));
+        SkASSERT(SkToBool(texture.usage & MTLTextureUsageShaderRead));
     }
-    SkASSERT(!mtlTexture.framebufferOnly);
+    SkASSERT(!texture.framebufferOnly);
 }
 
 sk_sp<GrMtlTexture> GrMtlTexture::MakeNewTexture(GrMtlGpu* gpu,
                                                  SkBudgeted budgeted,
                                                  SkISize dimensions,
-                                                 MTLPixelFormat format,
-                                                 uint32_t mipLevels,
+                                                 MTLTextureDescriptor* texDesc,
                                                  GrMipmapStatus mipmapStatus) {
-    sk_sp<GrMtlAttachment> texture = GrMtlAttachment::MakeTexture(
-            gpu, dimensions, format, mipLevels, GrRenderable::kNo, /*numSamples=*/1, budgeted);
-
+    id<MTLTexture> texture = [gpu->device() newTextureWithDescriptor:texDesc];
     if (!texture) {
         return nullptr;
     }
-    return sk_sp<GrMtlTexture>(new GrMtlTexture(gpu, budgeted, dimensions, std::move(texture),
-                                                mipmapStatus));
+    if (@available(macOS 10.11, iOS 9.0, *)) {
+        SkASSERT(SkToBool(texture.usage & MTLTextureUsageShaderRead));
+    }
+    return sk_sp<GrMtlTexture>(new GrMtlTexture(gpu, budgeted, dimensions, texture, mipmapStatus));
 }
 
 sk_sp<GrMtlTexture> GrMtlTexture::MakeWrappedTexture(GrMtlGpu* gpu,
@@ -99,18 +95,10 @@ sk_sp<GrMtlTexture> GrMtlTexture::MakeWrappedTexture(GrMtlGpu* gpu,
     if (@available(macOS 10.11, iOS 9.0, *)) {
         SkASSERT(SkToBool(texture.usage & MTLTextureUsageShaderRead));
     }
-    sk_sp<GrMtlAttachment> attachment =
-            GrMtlAttachment::MakeWrapped(gpu, dimensions, texture,
-                                         GrAttachment::UsageFlags::kTexture, cacheable);
-    if (!attachment) {
-        return nullptr;
-    }
-
     GrMipmapStatus mipmapStatus = texture.mipmapLevelCount > 1 ? GrMipmapStatus::kValid
                                                                : GrMipmapStatus::kNotAllocated;
     return sk_sp<GrMtlTexture>(
-            new GrMtlTexture(gpu, kWrapped, dimensions, std::move(attachment), mipmapStatus,
-                             cacheable, ioType));
+            new GrMtlTexture(gpu, kWrapped, dimensions, texture, mipmapStatus, cacheable, ioType));
 }
 
 GrMtlTexture::~GrMtlTexture() {
@@ -123,15 +111,15 @@ GrMtlGpu* GrMtlTexture::getMtlGpu() const {
 }
 
 GrBackendTexture GrMtlTexture::getBackendTexture() const {
-    GrMipmapped mipMapped = fTexture->mtlTexture().mipmapLevelCount > 1 ? GrMipmapped::kYes
-                                                                        : GrMipmapped::kNo;
+    GrMipmapped mipMapped = fTexture.mipmapLevelCount > 1 ? GrMipmapped::kYes
+                                                          : GrMipmapped::kNo;
     GrMtlTextureInfo info;
-    info.fTexture.reset(GrRetainPtrFromId(fTexture->mtlTexture()));
+    info.fTexture.reset(GrRetainPtrFromId(fTexture));
     return GrBackendTexture(this->width(), this->height(), mipMapped, info);
 }
 
 GrBackendFormat GrMtlTexture::backendFormat() const {
-    return GrBackendFormat::MakeMtl(fTexture->mtlFormat());
+    return GrBackendFormat::MakeMtl(fTexture.pixelFormat);
 }
 
 GR_NORETAIN_END

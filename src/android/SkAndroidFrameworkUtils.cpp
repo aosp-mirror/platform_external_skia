@@ -34,8 +34,18 @@ int SkAndroidFrameworkUtils::SaveBehind(SkCanvas* canvas, const SkRect* subset) 
     return canvas->only_axis_aligned_saveBehind(subset);
 }
 
-void SkAndroidFrameworkUtils::ResetClip(SkCanvas* canvas) {
-    canvas->internal_private_resetClip();
+void SkAndroidFrameworkUtils::ReplaceClip(SkCanvas* canvas, const SkIRect* rect) {
+    SkIRect deviceRestriction;
+    if (!rect) {
+        if (canvas->fClipRestrictionRect.isEmpty()) {
+            deviceRestriction = canvas->imageInfo().bounds();
+        } else {
+            deviceRestriction = canvas->fClipRestrictionRect;
+        }
+    } else {
+        deviceRestriction = *rect;
+    }
+    canvas->androidFramework_replaceClip(deviceRestriction);
 }
 
 SkCanvas* SkAndroidFrameworkUtils::getBaseWrappedCanvas(SkCanvas* canvas) {

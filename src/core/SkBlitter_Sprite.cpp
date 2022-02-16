@@ -6,7 +6,6 @@
  */
 
 #include "include/core/SkColorSpace.h"
-#include "include/private/SkImageInfoPriv.h"
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkColorSpaceXformSteps.h"
@@ -14,7 +13,6 @@
 #include "src/core/SkOpts.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkSpriteBlitter.h"
-#include "src/core/SkVMBlitter.h"
 
 extern bool gUseSkVMBlitter;
 
@@ -73,8 +71,8 @@ public:
         if (0xFF != paint.getAlpha()) {
             return false;
         }
-        const auto mode = paint.asBlendMode();
-        return mode == SkBlendMode::kSrc || (mode == SkBlendMode::kSrcOver && src.isOpaque());
+        SkBlendMode mode = paint.getBlendMode();
+        return SkBlendMode::kSrc == mode || (SkBlendMode::kSrcOver == mode && src.isOpaque());
     }
 
     SkSpriteBlitter_Memcpy(const SkPixmap& src)
@@ -121,16 +119,16 @@ public:
         SkRasterPipeline p(fAlloc);
         p.append_load(fSource.colorType(), &fSrcPtr);
 
-        if (SkColorTypeIsAlphaOnly(fSource.colorType())) {
+        if (fSource.colorType() == kAlpha_8_SkColorType) {
             // The color for A8 images comes from the (sRGB) paint color.
             p.append_set_rgb(fAlloc, fPaintColor);
             p.append(SkRasterPipeline::premul);
         }
         if (auto dstCS = fDst.colorSpace()) {
             auto srcCS = fSource.colorSpace();
-            if (!srcCS || SkColorTypeIsAlphaOnly(fSource.colorType())) {
+            if (!srcCS || fSource.colorType() == kAlpha_8_SkColorType) {
                 // We treat untagged images as sRGB.
-                // Alpha-only images get their r,g,b from the paint color, so they're also sRGB.
+                // A8 images get their r,g,b from the paint color, so they're also sRGB.
                 srcCS = sk_srgb_singleton();
             }
             auto srcAT = fSource.isOpaque() ? kOpaque_SkAlphaType
@@ -189,7 +187,7 @@ SkBlitter* SkBlitter::ChooseSprite(const SkPixmap& dst, const SkPaint& paint,
     SkASSERT(alloc != nullptr);
 
     if (gUseSkVMBlitter) {
-        return SkVMBlitter::Make(dst, paint, source,left,top, alloc, std::move(clipShader));
+        return SkCreateSkVMSpriteBlitter(dst, paint, source,left,top, alloc, std::move(clipShader));
     }
 
     // TODO: in principle SkRasterPipelineSpriteBlitter could be made to handle this.
@@ -227,5 +225,5 @@ SkBlitter* SkBlitter::ChooseSprite(const SkPixmap& dst, const SkPaint& paint,
         return blitter;
     }
 
-    return SkVMBlitter::Make(dst, paint, source,left,top, alloc, std::move(clipShader));
+    return SkCreateSkVMSpriteBlitter(dst, paint, source,left,top, alloc, std::move(clipShader));
 }

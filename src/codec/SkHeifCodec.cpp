@@ -214,28 +214,20 @@ bool SkHeifCodec::conversionSupported(const SkImageInfo& dstInfo, bool srcIsOpaq
 
     switch (dstInfo.colorType()) {
         case kRGBA_8888_SkColorType:
-            this->setSrcXformFormat(skcms_PixelFormat_RGBA_8888);
             return fHeifDecoder->setOutputColor(kHeifColorFormat_RGBA_8888);
 
         case kBGRA_8888_SkColorType:
-            this->setSrcXformFormat(skcms_PixelFormat_RGBA_8888);
             return fHeifDecoder->setOutputColor(kHeifColorFormat_BGRA_8888);
 
         case kRGB_565_SkColorType:
-            this->setSrcXformFormat(skcms_PixelFormat_RGBA_8888);
             if (needsColorXform) {
                 return fHeifDecoder->setOutputColor(kHeifColorFormat_RGBA_8888);
             } else {
                 return fHeifDecoder->setOutputColor(kHeifColorFormat_RGB565);
             }
 
-        case kRGBA_1010102_SkColorType:
-            this->setSrcXformFormat(skcms_PixelFormat_RGBA_1010102);
-            return fHeifDecoder->setOutputColor(kHeifColorFormat_RGBA_1010102);
-
         case kRGBA_F16_SkColorType:
             SkASSERT(needsColorXform);
-            this->setSrcXformFormat(skcms_PixelFormat_RGBA_8888);
             return fHeifDecoder->setOutputColor(kHeifColorFormat_RGBA_8888);
 
         default:
@@ -434,12 +426,8 @@ void SkHeifCodec::initializeSwizzler(
         const SkImageInfo& dstInfo, const Options& options) {
     SkImageInfo swizzlerDstInfo = dstInfo;
     if (this->colorXform()) {
-        // Aligned with conversionSupported()
-        if (dstInfo.colorType() == kRGBA_1010102_SkColorType) {
-            swizzlerDstInfo = swizzlerDstInfo.makeColorType(kRGBA_1010102_SkColorType);
-        } else {
-            swizzlerDstInfo = swizzlerDstInfo.makeColorType(kRGBA_8888_SkColorType);
-        }
+        // The color xform will be expecting RGBA 8888 input.
+        swizzlerDstInfo = swizzlerDstInfo.makeColorType(kRGBA_8888_SkColorType);
     }
 
     int srcBPP = 4;
