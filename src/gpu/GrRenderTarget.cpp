@@ -13,18 +13,19 @@
 #include "src/gpu/GrBackendUtils.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrStencilSettings.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 
 GrRenderTarget::GrRenderTarget(GrGpu* gpu,
                                const SkISize& dimensions,
                                int sampleCount,
                                GrProtected isProtected,
-                               sk_sp<GrAttachment> stencil)
+                               GrAttachment* stencil)
         : INHERITED(gpu, dimensions, isProtected)
         , fSampleCnt(sampleCount) {
     if (this->numSamples() > 1) {
-        fMSAAStencilAttachment = std::move(stencil);
+        fMSAAStencilAttachment.reset(stencil);
     } else {
-        fStencilAttachment = std::move(stencil);
+        fStencilAttachment.reset(stencil);
     }
 }
 

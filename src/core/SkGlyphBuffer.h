@@ -12,14 +12,10 @@
 #include "src/core/SkGlyph.h"
 #include "src/core/SkZip.h"
 
-#include <climits>
-
 class SkStrikeForGPU;
 struct SkGlyphPositionRoundingSpec;
-class SkPath;
-class SkDrawable;
 
-// SkSourceGlyphBuffer is the source of glyphs between the different stages of glyph drawing.
+// SkSourceGlyphBuffer is the source of glyphs between the different stages of character drawing.
 // It starts with the glyphs and positions from the SkGlyphRun as the first source. When glyphs
 // are reject by a stage they become the source for the next stage.
 class SkSourceGlyphBuffer {
@@ -49,10 +45,7 @@ public:
     }
 
     void reject(size_t index, int rejectedMaxDimension) {
-        auto [prevMin, prevMax] = fMaxDimensionHintForRejects;
-        fMaxDimensionHintForRejects =
-                {std::min(prevMin, rejectedMaxDimension),
-                 std::max(prevMax, rejectedMaxDimension)};
+        fRejectedMaxDimension = std::max(fRejectedMaxDimension, rejectedMaxDimension);
         this->reject(index);
     }
 
@@ -60,14 +53,14 @@ public:
         fRejects = SkMakeZip(fRejectedGlyphIDs, fRejectedPositions).first(fRejectSize);
         fSource = fRejects;
         fRejectSize = 0;
-        fMaxDimensionHintForSource = fMaxDimensionHintForRejects;
-        fMaxDimensionHintForRejects = {INT_MAX, 0};
+        fSourceMaxDimension = fRejectedMaxDimension;
+        fRejectedMaxDimension = 0;
         return fSource;
     }
 
     SkZip<const SkGlyphID, const SkPoint> source() const { return fSource; }
 
-    std::tuple<int, int> maxDimensionHint() const {return fMaxDimensionHintForSource;}
+    int rejectedMaxDimension() const { return fSourceMaxDimension; }
 
 private:
     SkSourceGlyphBuffer(const SkZip<const SkGlyphID, const SkPoint>& source) {
@@ -79,12 +72,8 @@ private:
 
     SkZip<const SkGlyphID, const SkPoint> fSource;
     size_t fRejectSize{0};
-
-    // Calculate the smallest and largest max glyph dimension. fMaxDimensionHintForSource captures
-    // fMaxDimensionHintForRejects when flipping rejects to the source.
-    std::tuple<int, int> fMaxDimensionHintForSource{INT_MAX, 0};
-    std::tuple<int, int> fMaxDimensionHintForRejects{INT_MAX, 0};
-
+    int fSourceMaxDimension{0};
+    int fRejectedMaxDimension{0};
     SkZip<SkGlyphID, SkPoint> fRejects;
     SkSTArray<4, SkGlyphID> fRejectedGlyphIDs;
     SkSTArray<4, SkPoint> fRejectedPositions;
@@ -101,7 +90,7 @@ public:
         SkDEBUGCODE(fTag = kPackedID);
         return *this;
     }
-    SkGlyphVariant& operator= (const SkGlyph* glyph) {
+    SkGlyphVariant& operator= (SkGlyph* glyph) {
         fV.glyph = glyph;
         SkDEBUGCODE(fTag = kGlyph);
         return *this;
@@ -112,13 +101,8 @@ public:
         SkDEBUGCODE(fTag = kPath);
         return *this;
     }
-    SkGlyphVariant& operator= (SkDrawable* drawable) {
-        fV.drawable = drawable;
-        SkDEBUGCODE(fTag = kDrawable);
-        return *this;
-    }
 
-    const SkGlyph* glyph() const {
+    SkGlyph* glyph() const {
         SkASSERT(fTag == kGlyph);
         return fV.glyph;
     }
@@ -126,25 +110,19 @@ public:
         SkASSERT(fTag == kPath);
         return fV.path;
     }
-    SkDrawable* drawable() const {
-        SkASSERT(fTag == kDrawable);
-        return fV.drawable;
-    }
     SkPackedGlyphID packedID() const {
         SkASSERT(fTag == kPackedID);
         return fV.packedID;
     }
 
-    operator SkPackedGlyphID()  const { return this->packedID(); }
-    operator const SkGlyph*()   const { return this->glyph();    }
-    operator const SkPath*()    const { return this->path();     }
-    operator const SkDrawable*()const { return this->drawable(); }
+    operator SkPackedGlyphID() const { return this->packedID(); }
+    operator SkGlyph*()        const { return this->glyph();    }
+    operator const SkPath*()   const { return this->path();     }
 
 private:
     union {
-        const SkGlyph* glyph;
+        SkGlyph* glyph;
         const SkPath* path;
-        SkDrawable* drawable;
         SkPackedGlyphID packedID;
     } fV;
 
@@ -153,8 +131,7 @@ private:
         kEmpty,
         kPackedID,
         kGlyph,
-        kPath,
-        kDrawable,
+        kPath
     } fTag{kEmpty};
 #endif
 };
@@ -204,49 +181,42 @@ public:
         return SkZip<SkGlyphVariant, SkPoint>{fInputSize, fMultiBuffer.get(), fPositions};
     }
 
-    // Store the glyph in the next slot, using the position information located at index from.
-    void accept(SkGlyph* glyph, size_t from) {
+    // Store the glyph in the next drawable slot, using the position information located at index
+    // from.
+    void push_back(SkGlyph* glyph, size_t from) {
         SkASSERT(fPhase == kProcess);
-        SkASSERT(fAcceptedSize <= from);
-        fPositions[fAcceptedSize] = fPositions[from];
-        fMultiBuffer[fAcceptedSize] = glyph;
-        fAcceptedSize++;
+        SkASSERT(fDrawableSize <= from);
+        fPositions[fDrawableSize] = fPositions[from];
+        fMultiBuffer[fDrawableSize] = glyph;
+        fDrawableSize++;
     }
 
-    // Store the path in the next slot, using the position information located at index from.
-    void accept(const SkPath* path, size_t from) {
+    // Store the path in the next drawable slot, using the position information located at index
+    // from.
+    void push_back(const SkPath* path, size_t from) {
         SkASSERT(fPhase == kProcess);
-        SkASSERT(fAcceptedSize <= from);
-        fPositions[fAcceptedSize] = fPositions[from];
-        fMultiBuffer[fAcceptedSize] = path;
-        fAcceptedSize++;
+        SkASSERT(fDrawableSize <= from);
+        fPositions[fDrawableSize] = fPositions[from];
+        fMultiBuffer[fDrawableSize] = path;
+        fDrawableSize++;
     }
 
-    // Store drawable in the next slot, using the position information located at index from.
-    void accept(SkDrawable* drawable, size_t from) {
-        SkASSERT(fPhase == kProcess);
-        SkASSERT(fAcceptedSize <= from);
-        fPositions[fAcceptedSize] = fPositions[from];
-        fMultiBuffer[fAcceptedSize] = drawable;
-        fAcceptedSize++;
-    }
-
-    // The result after a series of `accept` of accepted SkGlyph* or SkPath*.
-    SkZip<SkGlyphVariant, SkPoint> accepted() {
+    // The result after a series of push_backs of drawable SkGlyph* or SkPath*.
+    SkZip<SkGlyphVariant, SkPoint> drawable() {
         SkASSERT(fPhase == kProcess);
         SkDEBUGCODE(fPhase = kDraw);
-        return SkZip<SkGlyphVariant, SkPoint>{fAcceptedSize, fMultiBuffer.get(), fPositions};
+        return SkZip<SkGlyphVariant, SkPoint>{fDrawableSize, fMultiBuffer.get(), fPositions};
     }
 
-    bool empty() const {
+    bool drawableIsEmpty() const {
         SkASSERT(fPhase == kProcess || fPhase == kDraw);
-        return fAcceptedSize == 0;
+        return fDrawableSize == 0;
     }
 
     void reset();
 
     template <typename Fn>
-    void forEachInput(Fn&& fn) {
+    void forEachGlyphID(Fn&& fn) {
         for (auto [i, packedID, pos] : SkMakeEnumerate(this->input())) {
             fn(i, packedID.packedID(), pos);
         }
@@ -255,7 +225,7 @@ public:
 private:
     size_t fMaxSize{0};
     size_t fInputSize{0};
-    size_t fAcceptedSize{0};
+    size_t fDrawableSize{0};
     SkAutoTArray<SkGlyphVariant> fMultiBuffer;
     SkAutoTMalloc<SkPoint> fPositions;
 

@@ -10,12 +10,11 @@
 
 #include "include/core/SkRefCnt.h"
 #include "src/gpu/GrColor.h"
-#include "src/gpu/ops/GrOp.h"
 
 class GrDrawOp;
 class GrPaint;
 class GrRecordingContext;
-struct GrShaderCaps;
+class GrShaderCaps;
 class GrStyle;
 class SkMatrix;
 struct SkRect;

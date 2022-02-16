@@ -30,7 +30,6 @@ enum class SkEncodedImageFormat {
     kDNG,
     kHEIF,
     kAVIF,
-    kJPEGXL,
 };
 
 #endif  // SkEncodedImageFormat_DEFINED

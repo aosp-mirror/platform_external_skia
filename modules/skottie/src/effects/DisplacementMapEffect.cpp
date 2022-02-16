@@ -18,12 +18,9 @@
 #include "modules/sksg/include/SkSGRenderEffect.h"
 #include "modules/sksg/include/SkSGRenderNode.h"
 
-#include <cmath>
 #include <tuple>
 
 namespace skottie::internal {
-
-#ifdef SK_ENABLE_SKSL
 
 namespace  {
 
@@ -48,11 +45,11 @@ static constexpr char gDisplacementSkSL[] = R"(
     uniform half4   selector_offset;
 
     half4 main(float2 xy) {
-        half4 d = displ.eval(xy);
+        half4 d = sample(displ, xy);
 
         d = selector_matrix*unpremul(d) + selector_offset;
 
-        return child.eval(xy + d.xy*d.zw);
+        return sample(child, xy + d.xy*d.zw);
     }
 )";
 
@@ -115,7 +112,6 @@ public:
     SG_ATTRIBUTE(Pos          , Pos       , fPos           )
     SG_ATTRIBUTE(XSelector    , Selector  , fXSelector     )
     SG_ATTRIBUTE(YSelector    , Selector  , fYSelector     )
-    SG_ATTRIBUTE(ExpandBounds , bool      , fExpandBounds  )
 
 private:
     DisplacementNode(sk_sp<RenderNode> child, const SkSize& child_size,
@@ -237,19 +233,13 @@ private:
         builder.uniform("selector_offset") = selector_o;
 
         // TODO: RGB->HSL stage
-        return builder.makeShader();
+        return builder.makeShader(nullptr, false);
     }
 
     SkRect onRevalidate(sksg::InvalidationController* ic, const SkMatrix& ctm) override {
         fEffectShader = this->buildEffectShader(ic, ctm);
 
-        auto bounds = this->children()[0]->revalidate(ic, ctm);
-        if (fExpandBounds) {
-            // Expand the bounds to accommodate max displacement (which is |fScale|).
-            bounds.outset(std::abs(fScale.x), std::abs(fScale.y));
-        }
-
-        return bounds;
+        return this->children()[0]->revalidate(ic, ctm);
     }
 
     void onRender(SkCanvas* canvas, const RenderContext* ctx) const override {
@@ -304,7 +294,6 @@ private:
     Pos                    fPos            = Pos::kCenter;
     Selector               fXSelector      = Selector::kR,
                            fYSelector      = Selector::kR;
-    bool                   fExpandBounds   = false;
 
     using INHERITED = sksg::CustomRenderNode;
 };
@@ -322,8 +311,7 @@ public:
                 .bind(kUseForVertical_Index  , fVerticalSelector  )
                 .bind(kMaxVertical_Index     , fMaxVertical       )
                 .bind(kMapBehavior_Index     , fMapBehavior       )
-                .bind(kEdgeBehavior_Index    , fEdgeBehavior      )
-                .bind(kExpandOutput_Index    , fExpandOutput      );
+                .bind(kEdgeBehavior_Index    , fEdgeBehavior      );
     }
 
     static std::tuple<sk_sp<sksg::RenderNode>, SkSize> GetDisplacementSource(
@@ -349,7 +337,7 @@ private:
         kMaxVertical_Index      = 4,
         kMapBehavior_Index      = 5,
         kEdgeBehavior_Index     = 6,
-        kExpandOutput_Index     = 7,
+        // kExpandOutput_Index     = 7,
     };
 
     template <typename E>
@@ -373,7 +361,6 @@ private:
         this->node()->setPos(ToEnum<DisplacementNode::Pos>(fMapBehavior));
         this->node()->setXSelector(ToEnum<DisplacementNode::Selector>(fHorizontalSelector));
         this->node()->setYSelector(ToEnum<DisplacementNode::Selector>(fVerticalSelector));
-        this->node()->setExpandBounds(fExpandOutput != 0);
     }
 
     ScalarValue  fHorizontalSelector = 0,
@@ -381,19 +368,15 @@ private:
                  fMaxHorizontal      = 0,
                  fMaxVertical        = 0,
                  fMapBehavior        = 0,
-                 fEdgeBehavior       = 0,
-                 fExpandOutput       = 0;
+                 fEdgeBehavior       = 0;
 
     using INHERITED = DiscardableAdapterBase<DisplacementMapAdapter, DisplacementNode>;
 };
 
 } // namespace
 
-#endif  // SK_ENABLE_SKSL
-
 sk_sp<sksg::RenderNode> EffectBuilder::attachDisplacementMapEffect(
         const skjson::ArrayValue& jprops, sk_sp<sksg::RenderNode> layer) const {
-#ifdef SK_ENABLE_SKSL
     auto [ displ, displ_size ] = DisplacementMapAdapter::GetDisplacementSource(jprops, this);
 
     auto displ_node = DisplacementNode::Make(layer, fLayerSize, std::move(displ), displ_size);
@@ -405,10 +388,6 @@ sk_sp<sksg::RenderNode> EffectBuilder::attachDisplacementMapEffect(
     return fBuilder->attachDiscardableAdapter<DisplacementMapAdapter>(jprops,
                                                                       fBuilder,
                                                                       std::move(displ_node));
-#else
-    // TODO(skia:12197)
-    return layer;
-#endif
 }
 
 } // namespace skottie::internal

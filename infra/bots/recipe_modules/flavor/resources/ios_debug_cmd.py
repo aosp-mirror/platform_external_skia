@@ -22,7 +22,7 @@ log = ''
 def collect_log():
   global log
   while True:
-    out = logp.stdout.read().decode('utf-8')
+    out = logp.stdout.read()
     if out:
       log = log + out
     else:

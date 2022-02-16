@@ -56,24 +56,27 @@ DEF_TEST(SkScalerCacheMultiThread, Reporter) {
     // Make our own executor so the --threads parameter doesn't mess things up.
     auto executor = SkExecutor::MakeFIFOThreadPool(kThreadCount);
     for (int tries = 0; tries < 100; tries++) {
-        SkScalerCache scalerCache{strikeSpec.createScalerContext()};
+        SkScalerContextEffects effects;
+        std::unique_ptr<SkScalerContext> ctx{
+                typeface->createScalerContext(effects, &strikeSpec.descriptor())};
+        SkScalerCache scalerCache{strikeSpec.descriptor(), std::move(ctx)};
 
         auto perThread = [&](int threadIndex) {
             barrier.waitForAll();
 
             auto local = data.subspan(threadIndex * 2, data.size() - kThreadCount * 2);
             for (int i = 0; i < 100; i++) {
-                SkDrawableGlyphBuffer accepted;
-                SkSourceGlyphBuffer rejected;
+                SkDrawableGlyphBuffer drawable;
+                SkSourceGlyphBuffer rejects;
 
-                accepted.ensureSize(glyphCount);
-                rejected.setSource(local);
+                drawable.ensureSize(glyphCount);
+                rejects.setSource(local);
 
-                accepted.startBitmapDevice(rejected.source(), {0, 0}, SkMatrix::I(),
+                drawable.startBitmapDevice(rejects.source(), {0, 0}, SkMatrix::I(),
                                            scalerCache.roundingSpec());
-                scalerCache.prepareForMaskDrawing(&accepted, &rejected);
-                rejected.flipRejectsToSource();
-                accepted.reset();
+                scalerCache.prepareForMaskDrawing(&drawable, &rejects);
+                rejects.flipRejectsToSource();
+                drawable.reset();
             }
         };
 

@@ -99,12 +99,6 @@ protected:
         p2.setColor(0xFFFF0000);
         p2.setStrokeWidth(4);
         p2.setStrokeCap(SkPaint::kSquare_Cap);
-        SkPaint underp;
-        underp.setStroke(true);
-        underp.setStrokeWidth(2);
-        underp.setAntiAlias(true);
-        underp.setColor(p.getColor());
-        const SkScalar GAP = 2;
 
         para->visit([&](int, const skia::textlayout::Paragraph::VisitorInfo* info) {
             if (!info) {
@@ -113,45 +107,19 @@ protected:
             canvas->drawGlyphs(info->count, info->glyphs, info->positions, info->origin,
                                info->font, p);
 
-            if (fFlags & kUseUnderline) {
-                // Need to modify positions to roll-in the orign
-                std::vector<SkPoint> pos;
+            if (info->utf8Starts && false) {
+                SkString str;
                 for (int i = 0; i < info->count; ++i) {
-                    pos.push_back({info->origin.fX + info->positions[i].fX,
-                                   info->origin.fY + info->positions[i].fY});
+                    str.appendUnichar(gSpeach[info->utf8Starts[i]]);
                 }
-
-                const SkScalar X0 = pos[0].fX;
-                const SkScalar X1 = X0 + info->advanceX;
-                const SkScalar Y  = pos[0].fY;
-                auto sects = info->font.getIntercepts(info->glyphs, info->count, pos.data(),
-                                                      Y+1, Y+3);
-
-                SkScalar x0 = X0;
-                for (size_t i = 0; i < sects.size(); i += 2) {
-                    SkScalar x1 = sects[i] - GAP;
-                    if (x0 < x1) {
-                        canvas->drawLine(x0, Y+2, x1, Y+2, underp);
-                    }
-                    x0 = sects[i+1] + GAP;
-                }
-                canvas->drawLine(x0, Y+2, X1, Y+2, underp);
+                SkDebugf("'%s'\n", str.c_str());
             }
 
-            if ((false)) {
-                if (info->utf8Starts) {
-                    SkString str;
-                    for (int i = 0; i < info->count; ++i) {
-                        str.appendUnichar(gSpeach[info->utf8Starts[i]]);
-                    }
-                    SkDebugf("'%s'\n", str.c_str());
-                }
-
-                // show position points
-                for (int i = 0; i < info->count; ++i) {
-                    auto pos = info->positions[i];
-                    canvas->drawPoint(pos.fX + info->origin.fX, pos.fY + info->origin.fY, p2);
-                }
+            if (false) {    // show position points
+            for (int i = 0; i < info->count; ++i) {
+                auto pos = info->positions[i];
+                canvas->drawPoint(pos.fX + info->origin.fX, pos.fY + info->origin.fY, p2);
+            }
             }
         });
     }
@@ -208,4 +176,3 @@ DEF_GM(return new ParagraphGM(0);)
 DEF_GM(return new ParagraphGM(kTimeLayout);)
 DEF_GM(return new ParagraphGM(kUseUnderline);)
 DEF_GM(return new ParagraphGM(kShowVisitor);)
-DEF_GM(return new ParagraphGM(kShowVisitor | kUseUnderline);)

@@ -15,6 +15,8 @@
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrXferProcessor.h"
 #include "src/gpu/effects/GrPorterDuffXferProcessor.h"
+#include "src/gpu/gl/GrGLCaps.h"
+#include "src/gpu/ops/GrMeshDrawOp.h"
 #include "tools/gpu/GrContextFactory.h"
 #include "tools/gpu/ManagedBackendTexture.h"
 
@@ -1078,7 +1080,7 @@ DEF_GPUTEST(PorterDuffNoDualSourceBlending, reporter, options) {
         ERRORF(reporter, "Could not make texture.");
         return;
     }
-    GrDstProxyView fakeDstProxyView;
+    GrXferProcessor::DstProxyView fakeDstProxyView;
     {
         sk_sp<GrTextureProxy> proxy = proxyProvider->wrapBackendTexture(
                 mbet->texture(), kBorrow_GrWrapOwnership, GrWrapCacheable::kNo, kRead_GrIOType,

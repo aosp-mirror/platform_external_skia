@@ -9,7 +9,9 @@
 #define SkTLazy_DEFINED
 
 #include "include/core/SkTypes.h"
-#include <optional>
+#include <new>
+#include <type_traits>
+#include <utility>
 
 /**
  *  Efficient way to defer allocating/initializing a class until it is needed
@@ -18,19 +20,27 @@
 template <typename T> class SkTLazy {
 public:
     SkTLazy() = default;
-    explicit SkTLazy(const T* src) : fValue(src ? std::optional<T>(*src) : std::nullopt) {}
-    SkTLazy(const SkTLazy& that) : fValue(that.fValue) {}
-    SkTLazy(SkTLazy&& that) : fValue(std::move(that.fValue)) {}
+    explicit SkTLazy(const T* src) : fPtr(src ? new (&fStorage) T(*src) : nullptr) {}
+    SkTLazy(const SkTLazy& that) : fPtr(that.fPtr ? new (&fStorage) T(*that.fPtr) : nullptr) {}
+    SkTLazy(SkTLazy&& that) : fPtr(that.fPtr ? new (&fStorage) T(std::move(*that.fPtr)) : nullptr){}
 
-    ~SkTLazy() = default;
+    ~SkTLazy() { this->reset(); }
 
     SkTLazy& operator=(const SkTLazy& that) {
-        fValue = that.fValue;
+        if (that.isValid()) {
+            this->set(*that);
+        } else {
+            this->reset();
+        }
         return *this;
     }
 
     SkTLazy& operator=(SkTLazy&& that) {
-        fValue = std::move(that.fValue);
+        if (that.isValid()) {
+            this->set(std::move(*that));
+        } else {
+            this->reset();
+        }
         return *this;
     }
 
@@ -41,8 +51,9 @@ public:
      *  instance is always returned.
      */
     template <typename... Args> T* init(Args&&... args) {
-        fValue.emplace(std::forward<Args>(args)...);
-        return this->get();
+        this->reset();
+        fPtr = new (&fStorage) T(std::forward<Args>(args)...);
+        return fPtr;
     }
 
     /**
@@ -52,61 +63,56 @@ public:
      *  contents.
      */
     T* set(const T& src) {
-        fValue = src;
-        return this->get();
+        if (this->isValid()) {
+            *fPtr = src;
+        } else {
+            fPtr = new (&fStorage) T(src);
+        }
+        return fPtr;
     }
 
     T* set(T&& src) {
-        fValue = std::move(src);
-        return this->get();
+        if (this->isValid()) {
+            *fPtr = std::move(src);
+        } else {
+            fPtr = new (&fStorage) T(std::move(src));
+        }
+        return fPtr;
     }
 
     /**
      * Destroy the lazy object (if it was created via init() or set())
      */
     void reset() {
-        fValue.reset();
+        if (this->isValid()) {
+            fPtr->~T();
+            fPtr = nullptr;
+        }
     }
 
     /**
      *  Returns true if a valid object has been initialized in the SkTLazy,
      *  false otherwise.
      */
-    bool isValid() const { return fValue.has_value(); }
+    bool isValid() const { return SkToBool(fPtr); }
 
     /**
      * Returns the object. This version should only be called when the caller
      * knows that the object has been initialized.
      */
-    T* get() {
-        SkASSERT(fValue.has_value());
-        return &fValue.value();
-    }
-    const T* get() const {
-        SkASSERT(fValue.has_value());
-        return &fValue.value();
-    }
-
-    T* operator->() { return this->get(); }
-    const T* operator->() const { return this->get(); }
-
-    T& operator*() {
-        SkASSERT(fValue.has_value());
-        return *fValue;
-    }
-    const T& operator*() const {
-        SkASSERT(fValue.has_value());
-        return *fValue;
-    }
+    T* get() const { SkASSERT(this->isValid()); return fPtr; }
+    T* operator->() const { return this->get(); }
+    T& operator*() const { return *this->get(); }
 
     /**
      * Like above but doesn't assert if object isn't initialized (in which case
      * nullptr is returned).
      */
-    const T* getMaybeNull() const { return fValue.has_value() ? this->get() : nullptr; }
+    T* getMaybeNull() const { return fPtr; }
 
 private:
-    std::optional<T> fValue;
+    alignas(T) char fStorage[sizeof(T)];
+    T*              fPtr{nullptr}; // nullptr or fStorage
 };
 
 /**

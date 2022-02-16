@@ -1,5 +1,1 @@
 Bad { sampler x; };
-
-/*%%*
-variables of type 'sampler' must be global
-*%%*/

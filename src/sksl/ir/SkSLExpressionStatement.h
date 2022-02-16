@@ -18,10 +18,10 @@ namespace SkSL {
  */
 class ExpressionStatement final : public Statement {
 public:
-    inline static constexpr Kind kStatementKind = Kind::kExpression;
+    static constexpr Kind kStatementKind = Kind::kExpression;
 
     ExpressionStatement(std::unique_ptr<Expression> expression)
-        : INHERITED(expression->fLine, kStatementKind)
+        : INHERITED(expression->fOffset, kStatementKind)
         , fExpression(std::move(expression)) {}
 
     // Creates an SkSL expression-statement. Note that there is never any type-coercion and no error
@@ -41,7 +41,7 @@ public:
         return std::make_unique<ExpressionStatement>(this->expression()->clone());
     }
 
-    std::string description() const override {
+    String description() const override {
         return this->expression()->description() + ";";
     }
 
