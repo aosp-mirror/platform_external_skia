@@ -291,7 +291,7 @@ type JobInfo struct {
 	// The name of the job.
 	Name string `json:"name"`
 
-	// The optinal CQ config of this job. If the CQ config is missing then the
+	// The optional CQ config of this job. If the CQ config is missing then the
 	// job will not be added to the CQ of this branch.
 	CQConfig *specs.CommitQueueJobConfig `json:"cq_config,omitempty"`
 }
@@ -667,7 +667,7 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 				"NoGPUThreads", "ProcDump", "DDL1", "DDL3", "OOPRDDL", "T8888",
 				"DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "SkottieTracing", "SkottieWASM",
 				"GpuTess", "DMSAAStats", "Mskp", "Docker", "PDF", "SkVM", "Puppeteer",
-				"SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile", "WebGL2"}
+				"SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile", "WebGL2", "i5"}
 			keep := make([]string, 0, len(ec))
 			for _, part := range ec {
 				if !In(part, ignore) {
@@ -884,6 +884,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				d["machine_type"] = MACHINE_TYPE_MEDIUM
 			}
 		} else {
+			// It's a GPU job.
 			if b.matchOs("Win") {
 				gpu, ok := map[string]string{
 					// At some point this might use the device ID, but for now it's like Chromebooks.
@@ -940,10 +941,17 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				} else {
 					d["gpu"] = gpu
 				}
-				// Yuck. We have two different types of MacMini7,1 with the same GPU but different CPUs.
+				// We have two different types of MacMini7,1 with the same GPU but different CPUs.
 				if b.gpu("IntelIris5100") {
-					// Run all tasks on Golo machines for now.
-					d["cpu"] = "x86-64-i7-4578U"
+					if b.extraConfig("i5") {
+						// If we say "i5", run on our MacMini7,1s in the Skolo:
+						d["cpu"] = "x86-64-i5-4278U"
+					} else {
+						// Otherwise, run on Golo machines, just because that's
+						// where those jobs have always run. Plus, some of them
+						// are Perf jobs, which we want to keep consistent.
+						d["cpu"] = "x86-64-i7-4578U"
+					}
 				}
 			} else if b.os("ChromeOS") {
 				version, ok := map[string]string{
