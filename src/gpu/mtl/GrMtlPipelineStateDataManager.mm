@@ -9,7 +9,6 @@
 
 #include "src/gpu/mtl/GrMtlBuffer.h"
 #include "src/gpu/mtl/GrMtlGpu.h"
-#include "src/gpu/mtl/GrMtlRenderCommandEncoder.h"
 
 #if !__has_feature(objc_arc)
 #error This file must be compiled with Arc. Use -fobjc-arc flag
@@ -29,65 +28,63 @@ GrMtlPipelineStateDataManager::GrMtlPipelineStateDataManager(const UniformInfoAr
                  uniformInfo.fVariable.getArrayCount() > 0);
         SkDEBUGCODE(
             uniform.fArrayCount = uniformInfo.fVariable.getArrayCount();
+            uniform.fType = uniformInfo.fVariable.getType();
         )
         uniform.fOffset = uniformInfo.fUBOffset;
-        uniform.fType = uniformInfo.fVariable.getType();
         ++i;
     }
-
-    fWrite16BitUniforms = true;
 }
 
 void GrMtlPipelineStateDataManager::set1iv(UniformHandle u,
                                            int arrayCount,
                                            const int32_t v[]) const {
     const Uniform& uni = fUniforms[u.toIndex()];
-    SkASSERT(uni.fType == SkSLType::kInt || uni.fType == SkSLType::kShort);
+    SkASSERT(uni.fType == kInt_GrSLType || uni.fType == kShort_GrSLType);
     SkASSERT(arrayCount > 0);
     SkASSERT(arrayCount <= uni.fArrayCount ||
              (1 == arrayCount && GrShaderVar::kNonArray == uni.fArrayCount));
 
     void* buffer = this->getBufferPtrAndMarkDirty(uni);
-    this->copyUniforms(buffer, v, arrayCount, uni.fType);
+    memcpy(buffer, v, arrayCount * sizeof(int32_t));
 }
 
 void GrMtlPipelineStateDataManager::set1fv(UniformHandle u,
                                            int arrayCount,
                                            const float v[]) const {
     const Uniform& uni = fUniforms[u.toIndex()];
-    SkASSERT(uni.fType == SkSLType::kFloat || uni.fType == SkSLType::kHalf);
+    SkASSERT(uni.fType == kFloat_GrSLType || uni.fType == kHalf_GrSLType);
     SkASSERT(arrayCount > 0);
     SkASSERT(arrayCount <= uni.fArrayCount ||
              (1 == arrayCount && GrShaderVar::kNonArray == uni.fArrayCount));
 
     void* buffer = this->getBufferPtrAndMarkDirty(uni);
-    this->copyUniforms(buffer, v, arrayCount, uni.fType);
+    memcpy(buffer, v, arrayCount * sizeof(float));
 }
 
 void GrMtlPipelineStateDataManager::set2iv(UniformHandle u,
                                            int arrayCount,
                                            const int32_t v[]) const {
     const Uniform& uni = fUniforms[u.toIndex()];
-    SkASSERT(uni.fType == SkSLType::kInt2 || uni.fType == SkSLType::kShort2);
+    SkASSERT(uni.fType == kInt2_GrSLType || uni.fType == kShort2_GrSLType);
     SkASSERT(arrayCount > 0);
     SkASSERT(arrayCount <= uni.fArrayCount ||
              (1 == arrayCount && GrShaderVar::kNonArray == uni.fArrayCount));
 
     void* buffer = this->getBufferPtrAndMarkDirty(uni);
-    this->copyUniforms(buffer, v, arrayCount * 2, uni.fType);
+    memcpy(buffer, v, arrayCount * 2 * sizeof(int32_t));
 }
 
 void GrMtlPipelineStateDataManager::set2fv(UniformHandle u,
                                            int arrayCount,
                                            const float v[]) const {
     const Uniform& uni = fUniforms[u.toIndex()];
-    SkASSERT(uni.fType == SkSLType::kFloat2 || uni.fType == SkSLType::kHalf2);
+    SkASSERT(uni.fType == kFloat2_GrSLType || uni.fType == kHalf2_GrSLType);
     SkASSERT(arrayCount > 0);
     SkASSERT(arrayCount <= uni.fArrayCount ||
              (1 == arrayCount && GrShaderVar::kNonArray == uni.fArrayCount));
 
     void* buffer = this->getBufferPtrAndMarkDirty(uni);
-    this->copyUniforms(buffer, v, arrayCount * 2, uni.fType);
+    memcpy(buffer, v, arrayCount * 2 * sizeof(float));
 }
 
 void GrMtlPipelineStateDataManager::setMatrix2f(UniformHandle u, const float matrix[]) const {
@@ -98,40 +95,32 @@ void GrMtlPipelineStateDataManager::setMatrix2fv(UniformHandle u,
                                                  int arrayCount,
                                                  const float m[]) const {
     const Uniform& uni = fUniforms[u.toIndex()];
-    SkASSERT(uni.fType == SkSLType::kFloat2x2 || uni.fType == SkSLType::kHalf2x2);
+    SkASSERT(uni.fType == kFloat2x2_GrSLType || uni.fType == kHalf2x2_GrSLType);
     SkASSERT(arrayCount > 0);
     SkASSERT(arrayCount <= uni.fArrayCount ||
              (1 == arrayCount && GrShaderVar::kNonArray == uni.fArrayCount));
 
     void* buffer = this->getBufferPtrAndMarkDirty(uni);
-    this->copyUniforms(buffer, m, arrayCount * 4, uni.fType);
+    memcpy(buffer, m, arrayCount * 4 * sizeof(float));
 }
 
 void GrMtlPipelineStateDataManager::uploadAndBindUniformBuffers(
         GrMtlGpu* gpu,
-        GrMtlRenderCommandEncoder* renderCmdEncoder) const {
+        id<MTLRenderCommandEncoder> renderCmdEncoder) const {
     if (fUniformSize && fUniformsDirty) {
-        fUniformsDirty = false;
         if (@available(macOS 10.11, iOS 8.3, *)) {
-            if (fUniformSize <= gpu->caps()->maxPushConstantsSize()) {
-                renderCmdEncoder->setVertexBytes(fUniformData.get(), fUniformSize,
-                                                 GrMtlUniformHandler::kUniformBinding);
-                renderCmdEncoder->setFragmentBytes(fUniformData.get(), fUniformSize,
-                                                   GrMtlUniformHandler::kUniformBinding);
-                return;
-            }
+            SkASSERT(fUniformSize <= gpu->caps()->maxPushConstantsSize());
+            [renderCmdEncoder setVertexBytes: fUniformData.get()
+                                      length: fUniformSize
+                                     atIndex: GrMtlUniformHandler::kUniformBinding];
+            [renderCmdEncoder setFragmentBytes: fUniformData.get()
+                                        length: fUniformSize
+                                       atIndex: GrMtlUniformHandler::kUniformBinding];
+        } else {
+            // We only support iOS 9.0+, so we should never hit this
+            SK_ABORT("Missing interface. Skia only supports Metal on iOS 9.0 and higher");
         }
-
-        // upload the data
-        GrRingBuffer::Slice slice = gpu->uniformsRingBuffer()->suballocate(fUniformSize);
-        GrMtlBuffer* buffer = (GrMtlBuffer*) slice.fBuffer;
-        char* destPtr = static_cast<char*>(slice.fBuffer->map()) + slice.fOffset;
-        memcpy(destPtr, fUniformData.get(), fUniformSize);
-
-        renderCmdEncoder->setVertexBuffer(buffer->mtlBuffer(), slice.fOffset,
-                                          GrMtlUniformHandler::kUniformBinding);
-        renderCmdEncoder->setFragmentBuffer(buffer->mtlBuffer(), slice.fOffset,
-                                            GrMtlUniformHandler::kUniformBinding);
+        fUniformsDirty = false;
     }
 }
 

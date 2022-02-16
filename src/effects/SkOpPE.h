@@ -8,18 +8,16 @@
 #ifndef SkOpPE_DEFINED
 #define SkOpPE_DEFINED
 
-#include "include/pathops/SkPathOps.h"
-#include "src/core/SkPathEffectBase.h"
+#include "include/effects/SkOpPathEffect.h"
 
-class SkOpPE : public SkPathEffectBase {
+class SkOpPE : public SkPathEffect {
 public:
     SkOpPE(sk_sp<SkPathEffect> one, sk_sp<SkPathEffect> two, SkPathOp op);
 
 
 protected:
     void flatten(SkWriteBuffer&) const override;
-    bool onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, const SkRect*,
-                      const SkMatrix&) const override;
+    bool onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, const SkRect*) const override;
 
 private:
     SK_FLATTENABLE_HOOKS(SkOpPE)
@@ -30,17 +28,16 @@ private:
     sk_sp<SkPathEffect> fTwo;
     SkPathOp            fOp;
 
-    using INHERITED = SkPathEffectBase;
+    using INHERITED = SkPathEffect;
 };
 
-class SkMatrixPE : public SkPathEffectBase {
+class SkMatrixPE : public SkPathEffect {
 public:
     SkMatrixPE(const SkMatrix&);
 
 protected:
     void flatten(SkWriteBuffer&) const override;
-    bool onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, const SkRect*,
-                      const SkMatrix&) const override;
+    bool onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, const SkRect*) const override;
 
 private:
     SK_FLATTENABLE_HOOKS(SkMatrixPE)
@@ -54,17 +51,16 @@ private:
 
     SkMatrix    fMatrix;
 
-    using INHERITED = SkPathEffectBase;
+    using INHERITED = SkPathEffect;
 };
 
-class SkStrokePE : public SkPathEffectBase {
+class SkStrokePE : public SkPathEffect {
 public:
     SkStrokePE(SkScalar width, SkPaint::Join, SkPaint::Cap, SkScalar miter);
 
 protected:
     void flatten(SkWriteBuffer&) const override;
-    bool onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, const SkRect*,
-                      const SkMatrix&) const override;
+    bool onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, const SkRect*) const override;
 
 private:
     SK_FLATTENABLE_HOOKS(SkStrokePE)
@@ -76,17 +72,16 @@ private:
     SkPaint::Join   fJoin;
     SkPaint::Cap    fCap;
 
-    using INHERITED = SkPathEffectBase;
+    using INHERITED = SkPathEffect;
 };
 
-class SkStrokeAndFillPE : public SkPathEffectBase {
+class SkStrokeAndFillPE : public SkPathEffect {
 public:
     SkStrokeAndFillPE() {}
 
 protected:
     void flatten(SkWriteBuffer&) const override;
-    bool onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, const SkRect*,
-                      const SkMatrix&) const override;
+    bool onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, const SkRect*) const override;
 
 private:
     SK_FLATTENABLE_HOOKS(SkStrokeAndFillPE)
@@ -96,7 +91,7 @@ private:
         return false;
     }
 
-    using INHERITED = SkPathEffectBase;
+    using INHERITED = SkPathEffect;
 };
 
 #endif

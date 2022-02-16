@@ -129,13 +129,13 @@ GrProcessorSet::Analysis GrProcessorSet::finalize(
         if (!fCoverageFragmentProcessor->compatibleWithCoverageAsAlpha()) {
             analysis.fCompatibleWithCoverageAsAlpha = false;
         }
-        coverageUsesLocalCoords |= fCoverageFragmentProcessor->usesSampleCoords();
+        coverageUsesLocalCoords |= fCoverageFragmentProcessor->usesVaryingCoords();
     }
     if (clip && clip->hasCoverageFragmentProcessor()) {
         hasCoverageFP = true;
         const GrFragmentProcessor* clipFP = clip->coverageFragmentProcessor();
         analysis.fCompatibleWithCoverageAsAlpha &= clipFP->compatibleWithCoverageAsAlpha();
-        coverageUsesLocalCoords |= clipFP->usesSampleCoords();
+        coverageUsesLocalCoords |= clipFP->usesVaryingCoords();
     }
     int colorFPsToEliminate = colorAnalysis.initialProcessorsToEliminate(overrideInputColor);
     analysis.fInputColorType = static_cast<Analysis::PackedInputColorType>(
@@ -153,13 +153,12 @@ GrProcessorSet::Analysis GrProcessorSet::finalize(
 
     GrXPFactory::AnalysisProperties props = GrXPFactory::GetAnalysisProperties(
             this->xpFactory(), colorAnalysis.outputColor(), outputCoverage, caps, clampType);
-    analysis.fRequiresDstTexture = (props & GrXPFactory::AnalysisProperties::kRequiresDstTexture) ||
-                                   colorAnalysis.requiresDstTexture(caps);
+    analysis.fRequiresDstTexture =
+            SkToBool(props & GrXPFactory::AnalysisProperties::kRequiresDstTexture);
     analysis.fCompatibleWithCoverageAsAlpha &=
             SkToBool(props & GrXPFactory::AnalysisProperties::kCompatibleWithCoverageAsAlpha);
     analysis.fRequiresNonOverlappingDraws =
-            (props & GrXPFactory::AnalysisProperties::kRequiresNonOverlappingDraws) ||
-            analysis.fRequiresDstTexture;
+            SkToBool(props & GrXPFactory::AnalysisProperties::kRequiresNonOverlappingDraws);
     analysis.fUsesNonCoherentHWBlending =
             SkToBool(props & GrXPFactory::AnalysisProperties::kUsesNonCoherentHWBlending);
     analysis.fUnaffectedByDstValue =
@@ -172,7 +171,7 @@ GrProcessorSet::Analysis GrProcessorSet::finalize(
     } else {
         analysis.fCompatibleWithCoverageAsAlpha &=
             colorAnalysis.allProcessorsCompatibleWithCoverageAsAlpha();
-        analysis.fUsesLocalCoords = coverageUsesLocalCoords || colorAnalysis.usesLocalCoords();
+        analysis.fUsesLocalCoords = coverageUsesLocalCoords | colorAnalysis.usesLocalCoords();
     }
     if (colorFPsToEliminate) {
         SkASSERT(colorFPsToEliminate == 1);
@@ -196,7 +195,7 @@ GrProcessorSet::Analysis GrProcessorSet::finalize(
     return analysis;
 }
 
-void GrProcessorSet::visitProxies(const GrVisitProxyFunc& func) const {
+void GrProcessorSet::visitProxies(const GrOp::VisitProxyFunc& func) const {
     if (this->hasColorFragmentProcessor()) {
         fColorFragmentProcessor->visitProxies(func);
     }

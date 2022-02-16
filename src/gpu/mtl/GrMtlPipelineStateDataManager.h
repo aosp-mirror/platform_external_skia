@@ -16,7 +16,6 @@
 
 class GrMtlBuffer;
 class GrMtlGpu;
-class GrMtlRenderCommandEncoder;
 
 class GrMtlPipelineStateDataManager : public GrUniformDataManager {
 public:
@@ -35,7 +34,7 @@ public:
     void setMatrix2fv(UniformHandle, int arrayCount, const float matrices[]) const override;
 
     void uploadAndBindUniformBuffers(GrMtlGpu* gpu,
-                                     GrMtlRenderCommandEncoder* renderCmdEncoder) const;
+                                     id<MTLRenderCommandEncoder> renderCmdEncoder) const;
     void resetDirtyBits();
 
 private:

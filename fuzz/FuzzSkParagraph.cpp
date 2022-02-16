@@ -52,8 +52,6 @@
 #include <utility>
 #include <vector>
 
-#if defined(SK_ENABLE_PARAGRAPH)
-
 using namespace skia::textlayout;
 namespace {
 const uint8_t MAX_TEXT_LENGTH = 255;
@@ -282,5 +280,3 @@ DEF_FUZZ(SkParagraph, fuzz) {
     paragraph->layout(layout_width);
     paragraph->paint(&canvas, 0, 0);
 }
-
-#endif // SK_ENABLE_PARAGRAPH

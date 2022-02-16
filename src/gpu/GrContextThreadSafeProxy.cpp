@@ -41,7 +41,7 @@ GrContextThreadSafeProxy::~GrContextThreadSafeProxy() = default;
 void GrContextThreadSafeProxy::init(sk_sp<const GrCaps> caps,
                                     sk_sp<GrThreadSafePipelineBuilder> pipelineBuilder) {
     fCaps = std::move(caps);
-    fTextBlobRedrawCoordinator = std::make_unique<GrTextBlobRedrawCoordinator>(fContextID);
+    fTextBlobCache = std::make_unique<GrTextBlobCache>(fContextID);
     fThreadSafeCache = std::make_unique<GrThreadSafeCache>();
     fPipelineBuilder = std::move(pipelineBuilder);
 }
@@ -99,7 +99,7 @@ SkSurfaceCharacterization GrContextThreadSafeProxy::createCharacterization(
         return {};
     }
 
-    if (isTextureable && !fCaps->isFormatTexturable(backendFormat, backendFormat.textureType())) {
+    if (isTextureable && !fCaps->isFormatTexturable(backendFormat)) {
         // Skia doesn't agree that this is textureable.
         return {};
     }
@@ -153,18 +153,9 @@ GrBackendFormat GrContextThreadSafeProxy::defaultBackendFormat(SkColorType skCol
     return format;
 }
 
-GrBackendFormat GrContextThreadSafeProxy::compressedBackendFormat(SkImage::CompressionType c) const {
-    SkASSERT(fCaps);
-
-    GrBackendFormat format = fCaps->getBackendFormatFromCompressionType(c);
-
-    SkASSERT(!format.isValid() || fCaps->isFormatTexturable(format, GrTextureType::k2D));
-    return format;
-}
-
 void GrContextThreadSafeProxy::abandonContext() {
     if (!fAbandoned.exchange(true)) {
-        fTextBlobRedrawCoordinator->freeAll();
+        fTextBlobCache->freeAll();
     }
 }
 

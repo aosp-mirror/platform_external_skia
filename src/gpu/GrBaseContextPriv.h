@@ -8,7 +8,6 @@
 #ifndef GrBaseContextPriv_DEFINED
 #define GrBaseContextPriv_DEFINED
 
-#include "include/gpu/GrContextOptions.h"
 #include "include/private/GrContext_Base.h"
 
 /** Class that exposes methods on GrContext_Base that are only intended for use internal to Skia.
@@ -16,35 +15,32 @@
     additional data members or virtual methods. */
 class GrBaseContextPriv {
 public:
-    GrContext_Base* context() { return fContext; }
-    const GrContext_Base* context() const { return fContext; }
+    // from GrContext_Base
+    uint32_t contextID() const { return fContext->contextID(); }
 
-    uint32_t contextID() const { return this->context()->contextID(); }
+    bool matches(GrContext_Base* candidate) const { return fContext->matches(candidate); }
 
-    bool matches(GrContext_Base* candidate) const { return this->context()->matches(candidate); }
+    const GrContextOptions& options() const { return fContext->options(); }
 
-    const GrContextOptions& options() const { return this->context()->options(); }
-
-    const GrCaps* caps() const { return this->context()->caps(); }
+    const GrCaps* caps() const { return fContext->caps(); }
     sk_sp<const GrCaps> refCaps() const;
 
-    GrImageContext* asImageContext() { return this->context()->asImageContext(); }
-    GrRecordingContext* asRecordingContext() { return this->context()->asRecordingContext(); }
-    GrDirectContext* asDirectContext() { return this->context()->asDirectContext(); }
+    GrImageContext* asImageContext() { return fContext->asImageContext(); }
+    GrRecordingContext* asRecordingContext() { return fContext->asRecordingContext(); }
+    GrDirectContext* asDirectContext() { return fContext->asDirectContext(); }
 
     GrContextOptions::ShaderErrorHandler* getShaderErrorHandler() const;
 
-protected:
-    explicit GrBaseContextPriv(GrContext_Base* context) : fContext(context) {}
-
-    GrContext_Base* fContext;
-
 private:
+    explicit GrBaseContextPriv(GrContext_Base* context) : fContext(context) {}
+    GrBaseContextPriv(const GrBaseContextPriv&) = delete;
     GrBaseContextPriv& operator=(const GrBaseContextPriv&) = delete;
 
     // No taking addresses of this type.
     const GrBaseContextPriv* operator&() const;
     GrBaseContextPriv* operator&();
+
+    GrContext_Base* fContext;
 
     friend class GrContext_Base; // to construct/copy this type.
 };

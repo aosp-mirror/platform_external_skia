@@ -14,6 +14,7 @@ class GrClip;
 class GrPaint;
 class GrRecordingContext;
 class GrRenderTarget;
+class GrSurfaceDrawContext;
 class GrStyledShape;
 class GrStyle;
 struct SkIRect;
@@ -23,7 +24,7 @@ class SkMatrix;
 class SkPaint;
 class SkPath;
 class SkPathEffect;
-namespace skgpu { namespace v1 { class SurfaceDrawContext; }}
+
 
 /**
  *  Blur utilities.
@@ -33,7 +34,7 @@ namespace GrBlurUtils {
      * Draw a shape handling the mask filter if present.
      */
     void drawShapeWithMaskFilter(GrRecordingContext*,
-                                 skgpu::v1::SurfaceDrawContext*,
+                                 GrSurfaceDrawContext*,
                                  const GrClip*,
                                  const SkPaint&,
                                  const SkMatrixProvider&,
@@ -44,7 +45,7 @@ namespace GrBlurUtils {
      * The GrPaint will be modified after return.
      */
     void drawShapeWithMaskFilter(GrRecordingContext*,
-                                 skgpu::v1::SurfaceDrawContext*,
+                                 GrSurfaceDrawContext*,
                                  const GrClip*,
                                  const GrStyledShape&,
                                  GrPaint&&,

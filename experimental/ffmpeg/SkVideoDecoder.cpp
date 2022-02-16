@@ -255,9 +255,9 @@ sk_sp<SkImage> SkVideoDecoder::convertFrame(const AVFrame* frame) {
 }
 
 sk_sp<SkImage> SkVideoDecoder::nextImage(double* timeStamp) {
-    double defaultTimeStampStorage = 0;
+    double dummyTimeStampStorage = 0;
     if (!timeStamp) {
-        timeStamp = &defaultTimeStampStorage;
+        timeStamp = &dummyTimeStampStorage;
     }
 
     if (fFormatCtx == nullptr) {

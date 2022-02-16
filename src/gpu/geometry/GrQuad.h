@@ -12,7 +12,6 @@
 #include "include/core/SkPoint.h"
 #include "include/core/SkPoint3.h"
 #include "include/private/SkVx.h"
-#include "src/gpu/BufferWriter.h"
 
 enum class GrQuadAAFlags;
 
@@ -42,7 +41,6 @@ public:
 
     // This enforces W == 1 for non-perspective quads, but does not initialize X or Y.
     GrQuad() = default;
-    GrQuad(const GrQuad&) = default;
 
     explicit GrQuad(const SkRect& rect)
             : fX{rect.fLeft, rect.fLeft, rect.fRight, rect.fRight}
@@ -65,10 +63,6 @@ public:
         } else {
             return {fX[i], fY[i]};
         }
-    }
-
-    void writeVertex(int cornerIdx, skgpu::VertexWriter& w) const {
-        w << this->point(cornerIdx);
     }
 
     SkRect bounds() const {
@@ -168,8 +162,6 @@ private:
 
     Type fType = Type::kAxisAligned;
 };
-
-template<> struct skgpu::VertexWriter::is_quad<GrQuad> : std::true_type {};
 
 // A simple struct representing the common work unit of a pair of device and local coordinates, as
 // well as the edge flags controlling anti-aliasing for the quadrilateral when drawn.

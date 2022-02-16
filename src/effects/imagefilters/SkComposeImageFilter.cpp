@@ -27,7 +27,7 @@ protected:
     sk_sp<SkSpecialImage> onFilterImage(const Context&, SkIPoint* offset) const override;
     SkIRect onFilterBounds(const SkIRect&, const SkMatrix& ctm,
                            MapDirection, const SkIRect* inputRect) const override;
-    MatrixCapability onGetCTMCapability() const override { return MatrixCapability::kComplex; }
+    bool onCanHandleComplexCTM() const override { return true; }
 
 private:
     friend void ::SkRegisterComposeImageFilterFlattenable();

@@ -24,11 +24,11 @@ class SymbolTable;
  */
 class SwitchStatement final : public Statement {
 public:
-    inline static constexpr Kind kStatementKind = Kind::kSwitch;
+    static constexpr Kind kStatementKind = Kind::kSwitch;
 
-    SwitchStatement(int line, bool isStatic, std::unique_ptr<Expression> value,
+    SwitchStatement(int offset, bool isStatic, std::unique_ptr<Expression> value,
                     StatementArray cases, std::shared_ptr<SymbolTable> symbols)
-        : INHERITED(line, kStatementKind)
+        : INHERITED(offset, kStatementKind)
         , fIsStatic(isStatic)
         , fValue(std::move(value))
         , fCases(std::move(cases))
@@ -38,7 +38,7 @@ public:
     // Coerces case values to the proper type and reports an error if cases are duplicated.
     // Reports errors via the ErrorReporter.
     static std::unique_ptr<Statement> Convert(const Context& context,
-                                              int line,
+                                              int offset,
                                               bool isStatic,
                                               std::unique_ptr<Expression> value,
                                               ExpressionArray caseValues,
@@ -48,7 +48,7 @@ public:
     // Create a `switch` statement with an array of SwitchCases. The array of SwitchCases must
     // already contain non-overlapping, correctly-typed case values. Reports errors via ASSERT.
     static std::unique_ptr<Statement> Make(const Context& context,
-                                           int line,
+                                           int offset,
                                            bool isStatic,
                                            std::unique_ptr<Expression> value,
                                            StatementArray cases,
@@ -89,7 +89,7 @@ public:
 
     std::unique_ptr<Statement> clone() const override;
 
-    std::string description() const override;
+    String description() const override;
 
 private:
     bool fIsStatic;
