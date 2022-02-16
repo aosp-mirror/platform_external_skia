@@ -7,24 +7,21 @@
 
 #include "src/sksl/ir/SkSLConstructorStruct.h"
 
-#include "include/sksl/SkSLErrorReporter.h"
-#include "src/sksl/SkSLContext.h"
-
 namespace SkSL {
 
 std::unique_ptr<Expression> ConstructorStruct::Convert(const Context& context,
-                                                       int line,
+                                                       int offset,
                                                        const Type& type,
                                                        ExpressionArray args) {
     SkASSERTF(type.isStruct() && type.fields().size() > 0, "%s", type.description().c_str());
 
     // Check that the number of constructor arguments matches the array size.
     if (type.fields().size() != args.size()) {
-        context.fErrors->error(line,
-                               String::printf("invalid arguments to '%s' constructor "
-                                              "(expected %zu elements, but found %zu)",
-                                              type.displayName().c_str(), type.fields().size(),
-                                              args.size()));
+        context.fErrors.error(offset,
+                              String::printf("invalid arguments to '%s' constructor "
+                                             "(expected %zu elements, but found %zu)",
+                                             type.displayName().c_str(), type.fields().size(),
+                                             args.size()));
         return nullptr;
     }
 
@@ -39,7 +36,7 @@ std::unique_ptr<Expression> ConstructorStruct::Convert(const Context& context,
         }
     }
 
-    return ConstructorStruct::Make(context, line, type, std::move(args));
+    return ConstructorStruct::Make(context, offset, type, std::move(args));
 }
 
 [[maybe_unused]] static bool arguments_match_field_types(const ExpressionArray& args,
@@ -49,7 +46,7 @@ std::unique_ptr<Expression> ConstructorStruct::Convert(const Context& context,
     for (int index = 0; index < args.count(); ++index) {
         const std::unique_ptr<Expression>& argument = args[index];
         const Type::Field& field = type.fields()[index];
-        if (!argument->type().matches(*field.fType)) {
+        if (argument->type() != *field.fType) {
             return false;
         }
     }
@@ -58,12 +55,11 @@ std::unique_ptr<Expression> ConstructorStruct::Convert(const Context& context,
 }
 
 std::unique_ptr<Expression> ConstructorStruct::Make(const Context& context,
-                                                    int line,
+                                                    int offset,
                                                     const Type& type,
                                                     ExpressionArray args) {
-    SkASSERT(type.isAllowedInES2(context));
     SkASSERT(arguments_match_field_types(args, type));
-    return std::make_unique<ConstructorStruct>(line, type, std::move(args));
+    return std::make_unique<ConstructorStruct>(offset, type, std::move(args));
 }
 
 }  // namespace SkSL

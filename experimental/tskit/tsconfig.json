@@ -11,7 +11,6 @@
     "target": "ES5"
   },
   "include": [
-    "bindings/*.ts",
-    "interface/*.ts"
+    "bindings/*.ts"
   ]
 }

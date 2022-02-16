@@ -9,6 +9,7 @@
 
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGpuResourcePriv.h"
+#include "src/gpu/GrOpsTask.h"
 #include "src/gpu/GrRenderTargetProxy.h"
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrSurfaceProxy.h"
@@ -105,7 +106,7 @@ static bool can_proxy_use_scratch(const GrCaps& caps, GrSurfaceProxy* proxy) {
 }
 
 GrResourceAllocator::Register::Register(GrSurfaceProxy* originatingProxy,
-                                        skgpu::ScratchKey scratchKey,
+                                        GrScratchKey scratchKey,
                                         GrResourceProvider* provider)
         : fOriginatingProxy(originatingProxy)
         , fScratchKey(std::move(scratchKey)) {
@@ -113,7 +114,7 @@ GrResourceAllocator::Register::Register(GrSurfaceProxy* originatingProxy,
     SkASSERT(!originatingProxy->isInstantiated());
     SkASSERT(!originatingProxy->isLazy());
     SkDEBUGCODE(fUniqueID = CreateUniqueID();)
-    if (fScratchKey.isValid()) {
+    if (scratchKey.isValid()) {
         if (can_proxy_use_scratch(*provider->caps(), originatingProxy)) {
             fExistingSurface = provider->findAndRefScratchTexture(fScratchKey);
         }
@@ -276,15 +277,13 @@ GrResourceAllocator::Register* GrResourceAllocator::findOrCreateRegisterFor(GrSu
             return *p;
         }
         // No need for a scratch key. These don't go in the free pool.
-        Register* r = fInternalAllocator.make<Register>(proxy,
-                                                        skgpu::ScratchKey(),
-                                                        resourceProvider);
+        Register* r = fInternalAllocator.make<Register>(proxy, GrScratchKey(), resourceProvider);
         fUniqueKeyRegisters.set(uniqueKey, r);
         return r;
     }
 
     // Then look in the free pool
-    skgpu::ScratchKey scratchKey;
+    GrScratchKey scratchKey;
     proxy->priv().computeScratchKey(*fDContext->priv().caps(), &scratchKey);
 
     auto filter = [] (const Register* r) {

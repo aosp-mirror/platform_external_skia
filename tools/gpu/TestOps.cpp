@@ -8,14 +8,14 @@
 #include "tools/gpu/TestOps.h"
 
 #include "src/core/SkPointPriv.h"
-#include "src/gpu/BufferWriter.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrProgramInfo.h"
-#include "src/gpu/KeyBuilder.h"
+#include "src/gpu/GrVertexWriter.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
 #include "src/gpu/glsl/GrGLSLVarying.h"
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
 #include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
@@ -27,59 +27,63 @@ public:
     GP(const SkMatrix& localMatrix, bool wideColor)
             : GrGeometryProcessor(kTestRectOp_ClassID), fLocalMatrix(localMatrix) {
         fInColor = MakeColorAttribute("color", wideColor);
-        this->setVertexAttributesWithImplicitOffsets(&fInPosition, 3);
+        this->setVertexAttributes(&fInPosition, 3);
     }
 
     const char* name() const override { return "TestRectOp::GP"; }
 
-    std::unique_ptr<ProgramImpl> makeProgramImpl(const GrShaderCaps&) const override {
-        class Impl : public ProgramImpl {
-        public:
-            void setData(const GrGLSLProgramDataManager& pdman,
-                         const GrShaderCaps& shaderCaps,
-                         const GrGeometryProcessor& geomProc) override {
-                const auto& gp = geomProc.cast<GP>();
-                SetTransform(pdman, shaderCaps, fLocalMatrixUni, gp.fLocalMatrix);
-            }
-
-        private:
-            void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
-                const auto& gp = args.fGeomProc.cast<GP>();
-                args.fVaryingHandler->emitAttributes(gp);
-                GrGLSLVarying colorVarying(SkSLType::kHalf4);
-                args.fVaryingHandler->addVarying("color", &colorVarying,
-                                                 GrGLSLVaryingHandler::Interpolation::kCanBeFlat);
-                args.fVertBuilder->codeAppendf("%s = %s;", colorVarying.vsOut(), gp.fInColor.name());
-                args.fFragBuilder->codeAppendf("half4 %s = %s;",
-                                               args.fOutputColor, colorVarying.fsIn());
-                args.fFragBuilder->codeAppendf("const half4 %s = half4(1);", args.fOutputCoverage);
-                WriteOutputPosition(args.fVertBuilder, gpArgs, gp.fInPosition.name());
-                WriteLocalCoord(args.fVertBuilder,
-                                args.fUniformHandler,
-                                *args.fShaderCaps,
-                                gpArgs,
-                                gp.fInLocalCoords.asShaderVar(),
-                                gp.fLocalMatrix,
-                                &fLocalMatrixUni);
-            }
-
-            UniformHandle fLocalMatrixUni;
-        };
-
-        return std::make_unique<Impl>();
+    GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps& caps) const override {
+        return new GLSLGP();
     }
 
-    void addToKey(const GrShaderCaps& shaderCaps, skgpu::KeyBuilder* b) const override {
-        b->add32(ProgramImpl::ComputeMatrixKey(shaderCaps, fLocalMatrix));
+    void getGLSLProcessorKey(const GrShaderCaps& shaderCaps,
+                             GrProcessorKeyBuilder* b) const override {
+        GLSLGP::GenKey(*this, shaderCaps, b);
     }
 
     bool wideColor() const { return fInColor.cpuType() != kUByte4_norm_GrVertexAttribType; }
 
 private:
-    Attribute fInPosition    = {   "inPosition", kFloat2_GrVertexAttribType, SkSLType::kFloat2};
-    Attribute fInLocalCoords = {"inLocalCoords", kFloat2_GrVertexAttribType, SkSLType::kFloat2};
-    Attribute fInColor;
+    class GLSLGP : public GrGLSLGeometryProcessor {
+    public:
+        void setData(const GrGLSLProgramDataManager& pdman,
+                     const GrShaderCaps& shaderCaps,
+                     const GrGeometryProcessor& geomProc) override {
+            const auto& gp = geomProc.cast<GP>();
+            SetTransform(pdman, shaderCaps, fLocalMatrixUni, gp.fLocalMatrix);
+        }
 
+        static void GenKey(const GP& gp, const GrShaderCaps& shaderCaps, GrProcessorKeyBuilder* b) {
+            b->add32(ComputeMatrixKey(shaderCaps, gp.fLocalMatrix));
+        }
+
+    private:
+        void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
+            const auto& gp = args.fGeomProc.cast<GP>();
+            args.fVaryingHandler->emitAttributes(gp);
+            GrGLSLVarying colorVarying(kHalf4_GrSLType);
+            args.fVaryingHandler->addVarying("color", &colorVarying,
+                                             GrGLSLVaryingHandler::Interpolation::kCanBeFlat);
+            args.fVertBuilder->codeAppendf("%s = %s;", colorVarying.vsOut(), gp.fInColor.name());
+            args.fFragBuilder->codeAppendf("half4 %s = %s;",
+                                           args.fOutputColor, colorVarying.fsIn());
+            args.fFragBuilder->codeAppendf("const half4 %s = half4(1);", args.fOutputCoverage);
+            WriteOutputPosition(args.fVertBuilder, gpArgs, gp.fInPosition.name());
+            WriteLocalCoord(args.fVertBuilder,
+                            args.fUniformHandler,
+                            *args.fShaderCaps,
+                            gpArgs,
+                            gp.fInLocalCoords.asShaderVar(),
+                            gp.fLocalMatrix,
+                            &fLocalMatrixUni);
+        }
+
+        UniformHandle fLocalMatrixUni;
+    };
+
+    Attribute fInPosition = {"inPosition", kFloat2_GrVertexAttribType, kFloat2_GrSLType};
+    Attribute fInLocalCoords = {"inLocalCoords", kFloat2_GrVertexAttribType, kFloat2_GrSLType};
+    Attribute fInColor;
     SkMatrix fLocalMatrix;
 };
 
@@ -99,7 +103,7 @@ public:
                                       const GrAppliedClip*,
                                       GrClampType) override;
 
-    void visitProxies(const GrVisitProxyFunc& func) const override {
+    void visitProxies(const VisitProxyFunc& func) const override {
         if (fProgramInfo) {
             fProgramInfo->visitFPProxies(func);
         } else {
@@ -120,13 +124,12 @@ private:
     void onCreateProgramInfo(const GrCaps*,
                              SkArenaAlloc*,
                              const GrSurfaceProxyView& writeView,
-                             bool usesMSAASurface,
                              GrAppliedClip&&,
-                             const GrDstProxyView&,
+                             const GrXferProcessor::DstProxyView&,
                              GrXferBarrierFlags renderPassXferBarriers,
                              GrLoadOp colorLoadOp) override;
 
-    void onPrepareDraws(GrMeshDrawTarget*) override;
+    void onPrepareDraws(Target*) override;
     void onExecute(GrOpFlushState*, const SkRect& chainBounds) override;
 
     SkRect         fDrawRect;
@@ -180,15 +183,13 @@ TestRectOp::TestRectOp(const GrCaps* caps,
 void TestRectOp::onCreateProgramInfo(const GrCaps* caps,
                                      SkArenaAlloc* arena,
                                      const GrSurfaceProxyView& writeView,
-                                     bool usesMSAASurface,
                                      GrAppliedClip&& appliedClip,
-                                     const GrDstProxyView& dstProxyView,
+                                     const GrXferProcessor::DstProxyView& dstProxyView,
                                      GrXferBarrierFlags renderPassXferBarriers,
                                      GrLoadOp colorLoadOp) {
     fProgramInfo = GrSimpleMeshDrawOpHelper::CreateProgramInfo(caps,
                                                                arena,
                                                                writeView,
-                                                               usesMSAASurface,
                                                                std::move(appliedClip),
                                                                dstProxyView,
                                                                &fGP,
@@ -199,12 +200,12 @@ void TestRectOp::onCreateProgramInfo(const GrCaps* caps,
                                                                GrPipeline::InputFlags::kNone);
 }
 
-void TestRectOp::onPrepareDraws(GrMeshDrawTarget* target) {
+void TestRectOp::onPrepareDraws(Target* target) {
     QuadHelper helper(target, fGP.vertexStride(), 1);
-    skgpu::VertexWriter writer{helper.vertices()};
-    auto pos = skgpu::VertexWriter::TriStripFromRect(fDrawRect);
-    auto local = skgpu::VertexWriter::TriStripFromRect(fLocalRect);
-    skgpu::VertexColor color(fColor, fGP.wideColor());
+    GrVertexWriter writer{helper.vertices()};
+    auto pos = GrVertexWriter::TriStripFromRect(fDrawRect);
+    auto local = GrVertexWriter::TriStripFromRect(fLocalRect);
+    GrVertexColor color(fColor, fGP.wideColor());
     writer.writeQuad(pos, local, color);
 
     fMesh = helper.mesh();

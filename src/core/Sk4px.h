@@ -106,7 +106,7 @@ public:
     // A generic driver that maps fn over a src array into a dst array.
     // fn should take an Sk4px (4 src pixels) and return an Sk4px (4 dst pixels).
     template <typename Fn>
-    [[maybe_unused]] static void MapSrc(int n, SkPMColor* dst, const SkPMColor* src, const Fn& fn) {
+    static void MapSrc(int n, SkPMColor* dst, const SkPMColor* src, const Fn& fn) {
         SkASSERT(dst);
         SkASSERT(src);
         // This looks a bit odd, but it helps loop-invariant hoisting across different calls to fn.
@@ -138,8 +138,7 @@ public:
 
     // As above, but with dst4' = fn(dst4, src4).
     template <typename Fn>
-    [[maybe_unused]] static void MapDstSrc(int n, SkPMColor* dst, const SkPMColor* src,
-                                           const Fn& fn) {
+    static void MapDstSrc(int n, SkPMColor* dst, const SkPMColor* src, const Fn& fn) {
         SkASSERT(dst);
         SkASSERT(src);
         while (n > 0) {
@@ -169,8 +168,7 @@ public:
 
     // As above, but with dst4' = fn(dst4, alpha4).
     template <typename Fn>
-    [[maybe_unused]] static void MapDstAlpha(int n, SkPMColor* dst, const SkAlpha* a,
-                                             const Fn& fn) {
+    static void MapDstAlpha(int n, SkPMColor* dst, const SkAlpha* a, const Fn& fn) {
         SkASSERT(dst);
         SkASSERT(a);
         while (n > 0) {
@@ -200,8 +198,8 @@ public:
 
     // As above, but with dst4' = fn(dst4, src4, alpha4).
     template <typename Fn>
-    [[maybe_unused]] static void MapDstSrcAlpha(int n, SkPMColor* dst, const SkPMColor* src,
-                                                const SkAlpha* a, const Fn& fn) {
+    static void MapDstSrcAlpha(int n, SkPMColor* dst, const SkPMColor* src, const SkAlpha* a,
+                               const Fn& fn) {
         SkASSERT(dst);
         SkASSERT(src);
         SkASSERT(a);

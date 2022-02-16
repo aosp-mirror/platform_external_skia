@@ -16,38 +16,26 @@
 #include "src/core/SkSurfacePriv.h"
 #include "src/gpu/GrContextThreadSafeProxyPriv.h"
 #include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrRenderTargetProxy.h"
-#include "src/gpu/GrSurfaceProxyView.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
+#include "src/gpu/SkGpuDevice.h"
 
-sk_sp<GrVkSecondaryCBDrawContext> GrVkSecondaryCBDrawContext::Make(GrRecordingContext* rContext,
+sk_sp<GrVkSecondaryCBDrawContext> GrVkSecondaryCBDrawContext::Make(GrRecordingContext* ctx,
                                                                    const SkImageInfo& imageInfo,
                                                                    const GrVkDrawableInfo& vkInfo,
                                                                    const SkSurfaceProps* props) {
-    if (!rContext) {
+    if (!ctx) {
         return nullptr;
     }
 
-    if (rContext->backend() != GrBackendApi::kVulkan) {
+    if (ctx->backend() != GrBackendApi::kVulkan) {
         return nullptr;
     }
 
-    sk_sp<GrSurfaceProxy> proxy(
-            rContext->priv().proxyProvider()->wrapVulkanSecondaryCBAsRenderTarget(imageInfo,
-                                                                                  vkInfo));
-    if (!proxy) {
-        return nullptr;
-    }
+    auto rtc = GrSurfaceDrawContext::MakeFromVulkanSecondaryCB(ctx, imageInfo, vkInfo,
+                                                               SkSurfacePropsCopyOrDefault(props));
+    SkASSERT(rtc->asSurfaceProxy()->isInstantiated());
 
-    SkASSERT(proxy->isInstantiated());
-
-    auto device = rContext->priv().createDevice(SkColorTypeToGrColorType(imageInfo.colorType()),
-                                                std::move(proxy),
-                                                imageInfo.refColorSpace(),
-                                                kTopLeft_GrSurfaceOrigin,
-                                                SkSurfacePropsCopyOrDefault(props),
-                                                skgpu::BaseDevice::InitContents::kUninit);
+    auto device = SkGpuDevice::Make(std::move(rtc), SkGpuDevice::kUninit_InitContents);
     if (!device) {
         return nullptr;
     }
@@ -56,7 +44,7 @@ sk_sp<GrVkSecondaryCBDrawContext> GrVkSecondaryCBDrawContext::Make(GrRecordingCo
                                                                             props));
 }
 
-GrVkSecondaryCBDrawContext::GrVkSecondaryCBDrawContext(sk_sp<skgpu::BaseDevice> device,
+GrVkSecondaryCBDrawContext::GrVkSecondaryCBDrawContext(sk_sp<SkGpuDevice> device,
                                                        const SkSurfaceProps* props)
     : fDevice(device)
     , fProps(SkSurfacePropsCopyOrDefault(props)) {}
@@ -77,7 +65,7 @@ void GrVkSecondaryCBDrawContext::flush() {
     auto dContext = GrAsDirectContext(fDevice->recordingContext());
 
     if (dContext) {
-        dContext->priv().flushSurface(fDevice->targetProxy());
+        dContext->priv().flushSurface(fDevice->surfaceDrawContext()->asSurfaceProxy());
         dContext->submit();
     }
 }
@@ -94,38 +82,40 @@ void GrVkSecondaryCBDrawContext::releaseResources() {
 }
 
 bool GrVkSecondaryCBDrawContext::characterize(SkSurfaceCharacterization* characterization) const {
+    GrSurfaceDrawContext* sdc = fDevice->surfaceDrawContext();
+
     auto direct = fDevice->recordingContext()->asDirectContext();
     if (!direct) {
         return false;
     }
 
-    SkImageInfo ii = fDevice->imageInfo();
-    if (ii.colorType() == kUnknown_SkColorType) {
-        return false;
-    }
-
-    GrSurfaceProxyView readSurfaceView = fDevice->readSurfaceView();
     size_t maxResourceBytes = direct->getResourceCacheLimit();
 
     // We current don't support textured GrVkSecondaryCBDrawContexts.
-    SkASSERT(!readSurfaceView.asTextureProxy());
+    SkASSERT(!sdc->asTextureProxy());
 
-    GrBackendFormat format = readSurfaceView.asRenderTargetProxy()->backendFormat();
-    int numSamples = readSurfaceView.asRenderTargetProxy()->numSamples();
-    GrProtected isProtected = readSurfaceView.asRenderTargetProxy()->isProtected();
+    SkColorType ct = GrColorTypeToSkColorType(sdc->colorInfo().colorType());
+    if (ct == kUnknown_SkColorType) {
+        return false;
+    }
+
+    SkImageInfo ii = SkImageInfo::Make(sdc->width(), sdc->height(), ct, kPremul_SkAlphaType,
+                                       sdc->colorInfo().refColorSpace());
+
+    GrBackendFormat format = sdc->asRenderTargetProxy()->backendFormat();
 
     characterization->set(direct->threadSafeProxy(),
                           maxResourceBytes,
                           ii,
                           format,
-                          readSurfaceView.origin(),
-                          numSamples,
+                          sdc->origin(),
+                          sdc->numSamples(),
                           SkSurfaceCharacterization::Textureable(false),
                           SkSurfaceCharacterization::MipMapped(false),
                           SkSurfaceCharacterization::UsesGLFBO0(false),
                           SkSurfaceCharacterization::VkRTSupportsInputAttachment(false),
                           SkSurfaceCharacterization::VulkanSecondaryCBCompatible(true),
-                          isProtected,
+                          sdc->asRenderTargetProxy()->isProtected(),
                           this->props());
 
     return true;
@@ -133,9 +123,10 @@ bool GrVkSecondaryCBDrawContext::characterize(SkSurfaceCharacterization* charact
 
 bool GrVkSecondaryCBDrawContext::isCompatible(
         const SkSurfaceCharacterization& characterization) const {
+    GrSurfaceDrawContext* sdc = fDevice->surfaceDrawContext();
 
-    auto dContext = fDevice->recordingContext()->asDirectContext();
-    if (!dContext) {
+    auto direct = fDevice->recordingContext()->asDirectContext();
+    if (!direct) {
         return false;
     }
 
@@ -147,6 +138,11 @@ bool GrVkSecondaryCBDrawContext::isCompatible(
         return false;
     }
 
+    // As long as the current state in the context allows for greater or equal resources,
+    // we allow the DDL to be replayed.
+    // DDL TODO: should we just remove the resource check and ignore the cache limits on playback?
+    size_t maxResourceBytes = direct->getResourceCacheLimit();
+
     if (characterization.isTextureable()) {
         // We don't support textureable DDL when rendering to a GrVkSecondaryCBDrawContext.
         return false;
@@ -156,33 +152,26 @@ bool GrVkSecondaryCBDrawContext::isCompatible(
         return false;
     }
 
-    SkImageInfo ii = fDevice->imageInfo();
-    if (ii.colorType() == kUnknown_SkColorType) {
+    SkColorType rtColorType = GrColorTypeToSkColorType(sdc->colorInfo().colorType());
+    if (rtColorType == kUnknown_SkColorType) {
         return false;
     }
 
-    GrSurfaceProxyView readSurfaceView = fDevice->readSurfaceView();
-    // As long as the current state in the context allows for greater or equal resources,
-    // we allow the DDL to be replayed.
-    // DDL TODO: should we just remove the resource check and ignore the cache limits on playback?
-    size_t maxResourceBytes = dContext->getResourceCacheLimit();
-
-    GrBackendFormat format = readSurfaceView.asRenderTargetProxy()->backendFormat();
-    int numSamples = readSurfaceView.asRenderTargetProxy()->numSamples();
-    GrProtected isProtected = readSurfaceView.asRenderTargetProxy()->isProtected();
+    GrBackendFormat rtcFormat = sdc->asRenderTargetProxy()->backendFormat();
+    GrProtected isProtected = sdc->asRenderTargetProxy()->isProtected();
 
     return characterization.contextInfo() &&
-           characterization.contextInfo()->priv().matches(dContext) &&
+           characterization.contextInfo()->priv().matches(direct) &&
            characterization.cacheMaxResourceBytes() <= maxResourceBytes &&
-           characterization.origin() == readSurfaceView.origin() &&
-           characterization.backendFormat() == format &&
-           characterization.width() == ii.width() &&
-           characterization.height() == ii.height() &&
-           characterization.colorType() == ii.colorType() &&
-           characterization.sampleCount() == numSamples &&
-           SkColorSpace::Equals(characterization.colorSpace(), ii.colorInfo().colorSpace()) &&
+           characterization.origin() == sdc->origin() &&
+           characterization.backendFormat() == rtcFormat &&
+           characterization.width() == sdc->width() &&
+           characterization.height() == sdc->height() &&
+           characterization.colorType() == rtColorType &&
+           characterization.sampleCount() == sdc->numSamples() &&
+           SkColorSpace::Equals(characterization.colorSpace(), sdc->colorInfo().colorSpace()) &&
            characterization.isProtected() == isProtected &&
-           characterization.surfaceProps() == fDevice->surfaceProps();
+           characterization.surfaceProps() == sdc->surfaceProps();
 }
 
 #ifndef SK_DDL_IS_UNIQUE_POINTER
@@ -194,13 +183,15 @@ bool GrVkSecondaryCBDrawContext::draw(const SkDeferredDisplayList* ddl) {
         return false;
     }
 
+    GrSurfaceDrawContext* sdc = fDevice->surfaceDrawContext();
+
     auto direct = fDevice->recordingContext()->asDirectContext();
     if (!direct) {
         return false;
     }
 
-    GrSurfaceProxyView readSurfaceView = fDevice->readSurfaceView();
-
-    direct->priv().createDDLTask(std::move(ddl), readSurfaceView.asRenderTargetProxyRef(), {0, 0});
+    direct->priv().createDDLTask(std::move(ddl), sdc->asRenderTargetProxyRef(), {0, 0});
     return true;
 }
+
+

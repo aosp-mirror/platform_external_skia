@@ -23,51 +23,49 @@ BUILDER_NAME_SEP = None
 BUILDER_ROLE_BUILD = 'Build'
 BUILDER_ROLE_BUILDSTATS = 'BuildStats'
 BUILDER_ROLE_CANARY = 'Canary'
-BUILDER_ROLE_CODESIZE = 'CodeSize'
 BUILDER_ROLE_HOUSEKEEPER = 'Housekeeper'
 BUILDER_ROLE_INFRA = 'Infra'
 BUILDER_ROLE_PERF = 'Perf'
 BUILDER_ROLE_TEST = 'Test'
 BUILDER_ROLE_FM = 'FM'
+BUILDER_ROLE_FUZZ = 'Fuzz'
 BUILDER_ROLE_UPLOAD = 'Upload'
 BUILDER_ROLES = (BUILDER_ROLE_BUILD,
                  BUILDER_ROLE_BUILDSTATS,
                  BUILDER_ROLE_CANARY,
-                 BUILDER_ROLE_CODESIZE,
                  BUILDER_ROLE_HOUSEKEEPER,
                  BUILDER_ROLE_INFRA,
                  BUILDER_ROLE_PERF,
                  BUILDER_ROLE_TEST,
                  BUILDER_ROLE_FM,
+                 BUILDER_ROLE_FUZZ,
                  BUILDER_ROLE_UPLOAD)
 
 
 def _LoadSchema():
   """ Load the builder naming schema from the JSON file. """
 
-  def ToStr(obj):
+  def _UnicodeToStr(obj):
     """ Convert all unicode strings in obj to Python strings. """
-    if isinstance(obj, str):
-      return obj  # pragma: nocover
+    if isinstance(obj, unicode):
+      return str(obj)
     elif isinstance(obj, dict):
-      return dict(map(ToStr, obj.items()))
+      return dict(map(_UnicodeToStr, obj.iteritems()))
     elif isinstance(obj, list):
-      return list(map(ToStr, obj))
+      return list(map(_UnicodeToStr, obj))
     elif isinstance(obj, tuple):
-      return tuple(map(ToStr, obj))
-    else:
-      return obj.decode('utf-8')
+      return tuple(map(_UnicodeToStr, obj))
 
   builder_name_json_filename = os.path.join(
       os.path.dirname(__file__), 'builder_name_schema.json')
   builder_name_schema_json = json.load(open(builder_name_json_filename))
 
   global BUILDER_NAME_SCHEMA
-  BUILDER_NAME_SCHEMA = ToStr(
+  BUILDER_NAME_SCHEMA = _UnicodeToStr(
       builder_name_schema_json['builder_name_schema'])
 
   global BUILDER_NAME_SEP
-  BUILDER_NAME_SEP = ToStr(
+  BUILDER_NAME_SEP = _UnicodeToStr(
       builder_name_schema_json['builder_name_sep'])
 
   # Since the builder roles are dictionary keys, just assert that the global
@@ -81,7 +79,7 @@ _LoadSchema()
 
 
 def MakeBuilderName(**parts):
-  for v in parts.values():
+  for v in parts.itervalues():
     if BUILDER_NAME_SEP in v:
       raise ValueError('Parts cannot contain "%s"' % BUILDER_NAME_SEP)
 
@@ -156,19 +154,19 @@ def DictForBuilderName(builder_name):
     if not schema:
       raise ValueError('Invalid builder name: %s' % builder_name)
     if depth == 0:
-      result['role'] = str(role)
+      result['role'] = role
     else:
-      result['sub-role-%d' % depth] = str(role)
+      result['sub-role-%d' % depth] = role
     for key in schema.get('keys', []):
       value, parts = pop_front(parts)
-      result[key] = str(value)
+      result[key] = value
     for sub_role in schema.get('recurse_roles', []):
       if len(parts) > 0 and sub_role == parts[0]:
         parts = _parse(depth+1, parts[0], parts[1:])
     for key in schema.get('optional_keys', []):
       if parts:
         value, parts = pop_front(parts)
-        result[key] = str(value)
+        result[key] = value
     if parts:
       raise ValueError('Invalid builder name: %s' % builder_name)
     return parts

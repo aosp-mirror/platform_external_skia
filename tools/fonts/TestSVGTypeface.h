@@ -40,8 +40,6 @@ struct SkAdvancedTypefaceMetrics;
 struct SkScalerContextEffects;
 struct SkScalerContextRec;
 
-#ifdef SK_ENABLE_SVG
-
 struct SkSVGTestTypefaceGlyphData {
     const char* fSvgResourcePath;
     SkPoint     fOrigin;  // y-down
@@ -108,8 +106,6 @@ protected:
     bool onGetPostScriptName(SkString*) const override;
     SkTypeface::LocalizedStrings* onCreateFamilyNameIterator() const override;
 
-    bool onGlyphMaskNeedsCurrentColor() const override { return false; }
-
     int onGetVariationDesignPosition(SkFontArguments::VariationPosition::Coordinate coordinates[],
                                      int coordinateCount) const override {
         return 0;
@@ -161,6 +157,4 @@ private:
     friend class SkTestSVGScalerContext;
 };
 
-#endif // SK_ENABLE_SVG
-
-#endif // TestSVGTypeface_DEFINED
+#endif

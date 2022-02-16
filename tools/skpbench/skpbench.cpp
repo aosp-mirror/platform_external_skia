@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "bench/BigPath.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkDeferredDisplayList.h"
 #include "include/core/SkGraphics.h"
@@ -34,7 +33,7 @@
 #include "tools/gpu/GpuTimer.h"
 #include "tools/gpu/GrContextFactory.h"
 
-#if defined(SK_ENABLE_SVG)
+#ifdef SK_XML
 #include "modules/svg/include/SkSVGDOM.h"
 #include "src/xml/SkDOM.h"
 #endif
@@ -563,7 +562,7 @@ int main(int argc, char** argv) {
 
     // Create a context.
     GrContextOptions ctxOptions;
-    CommonFlags::SetCtxOptions(&ctxOptions);
+    SetCtxOptionsFromCommonFlags(&ctxOptions);
     sk_gpu_test::GrContextFactory factory(ctxOptions);
     sk_gpu_test::ContextInfo ctxInfo =
         factory.getContextInfo(config->getContextType(), config->getContextOverrides());
@@ -596,8 +595,9 @@ int main(int argc, char** argv) {
     }
 
     // Create a render target.
-    SkImageInfo info = SkImageInfo::Make(
-            width, height, config->getColorType(), config->getAlphaType(), config->refColorSpace());
+    SkImageInfo info =
+            SkImageInfo::Make(width, height, config->getColorType(), config->getAlphaType(),
+                              sk_ref_sp(config->getColorSpace()));
     SkSurfaceProps props(config->getSurfaceFlags(), kRGB_H_SkPixelGeometry);
     sk_sp<SkSurface> surface =
         SkSurface::MakeRenderTarget(ctx, SkBudgeted::kNo, info, config->getSamples(), &props);
@@ -688,7 +688,7 @@ static sk_sp<SkPicture> create_warmup_skp() {
     stroke.setStrokeWidth(2);
 
     // Use a big path to (theoretically) warmup the CPU.
-    SkPath bigPath = BenchUtils::make_big_path();
+    SkPath bigPath = ToolUtils::make_big_path();
     recording->drawPath(bigPath, stroke);
 
     // Use a perlin shader to warmup the GPU.
@@ -700,7 +700,7 @@ static sk_sp<SkPicture> create_warmup_skp() {
 }
 
 static sk_sp<SkPicture> create_skp_from_svg(SkStream* stream, const char* filename) {
-#if defined(SK_ENABLE_SVG)
+#ifdef SK_XML
     sk_sp<SkSVGDOM> svg = SkSVGDOM::MakeFromStream(*stream);
     if (!svg) {
         exitf(ExitErr::kData, "failed to build svg dom from file %s", filename);
@@ -715,7 +715,7 @@ static sk_sp<SkPicture> create_skp_from_svg(SkStream* stream, const char* filena
 
     return recorder.finishRecordingAsPicture();
 #endif
-    exitf(ExitErr::kData, "SK_ENABLE_SVG is disabled; cannot open svg file %s", filename);
+    exitf(ExitErr::kData, "SK_XML is disabled; cannot open svg file %s", filename);
     return nullptr;
 }
 
@@ -733,8 +733,6 @@ static SkString join(const CommandLineFlags::StringArray& stringArray) {
     }
     return joined;
 }
-
-static void exitf(ExitErr err, const char* format, ...) SK_PRINTF_LIKE(2, 3);
 
 static void exitf(ExitErr err, const char* format, ...) {
     fprintf(stderr, ExitErr::kSoftware == err ? "INTERNAL ERROR: " : "ERROR: ");

@@ -11,7 +11,6 @@
 #include "include/gpu/GrDirectContext.h"
 #include "src/gpu/GrDeferredProxyUploader.h"
 #include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrGpuResourcePriv.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrSurface.h"
 #include "src/gpu/GrTexture.h"
@@ -166,7 +165,7 @@ bool GrTextureProxy::ProxiesAreCompatibleAsDynamicState(const GrSurfaceProxy* fi
            first->backendFormat() == second->backendFormat();
 }
 
-void GrTextureProxy::setUniqueKey(GrProxyProvider* proxyProvider, const skgpu::UniqueKey& key) {
+void GrTextureProxy::setUniqueKey(GrProxyProvider* proxyProvider, const GrUniqueKey& key) {
     SkASSERT(key.isValid());
     SkASSERT(!fUniqueKey.isValid()); // proxies can only ever get one uniqueKey
 
@@ -203,7 +202,6 @@ GrSurfaceProxy::LazySurfaceDesc GrTextureProxy::callbackDesc() const {
             fMipmapped,
             1,
             this->backendFormat(),
-            this->textureType(),
             this->isProtected(),
             this->isBudgeted(),
     };

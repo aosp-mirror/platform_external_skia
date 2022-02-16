@@ -51,7 +51,6 @@ static constexpr uint32_t GrGLFormatChannels(GrGLFormat format) {
         case GrGLFormat::kRGBA16F:               return kRGBA_SkColorChannelFlags;
         case GrGLFormat::kR16F:                  return kRed_SkColorChannelFlag;
         case GrGLFormat::kRGB8:                  return kRGB_SkColorChannelFlags;
-        case GrGLFormat::kRGBX8:                 return kRGB_SkColorChannelFlags;
         case GrGLFormat::kRG8:                   return kRG_SkColorChannelFlags;
         case GrGLFormat::kRGB10_A2:              return kRGBA_SkColorChannelFlags;
         case GrGLFormat::kRGBA4:                 return kRGBA_SkColorChannelFlags;
@@ -68,65 +67,6 @@ static constexpr uint32_t GrGLFormatChannels(GrGLFormat format) {
         case GrGLFormat::kSTENCIL_INDEX8:        return 0;
         case GrGLFormat::kSTENCIL_INDEX16:       return 0;
         case GrGLFormat::kDEPTH24_STENCIL8:      return 0;
-    }
-    SkUNREACHABLE;
-}
-
-static constexpr GrColorFormatDesc GrGLFormatDesc(GrGLFormat format) {
-    switch (format) {
-        case GrGLFormat::kUnknown: return GrColorFormatDesc::MakeInvalid();
-
-        case GrGLFormat::kRGBA8:
-            return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kUnorm);
-        case GrGLFormat::kR8:
-            return GrColorFormatDesc::MakeR(8, GrColorTypeEncoding::kUnorm);
-        case GrGLFormat::kALPHA8:
-            return GrColorFormatDesc::MakeAlpha(8, GrColorTypeEncoding::kUnorm);
-        case GrGLFormat::kLUMINANCE8:
-            return GrColorFormatDesc::MakeGray(8, GrColorTypeEncoding::kUnorm);
-        case GrGLFormat::kLUMINANCE8_ALPHA8:
-            return GrColorFormatDesc::MakeGrayAlpha(8, GrColorTypeEncoding::kUnorm);
-        case GrGLFormat::kBGRA8:
-            return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kUnorm);
-        case GrGLFormat::kRGB565:
-            return GrColorFormatDesc::MakeRGB(5, 6, 5, GrColorTypeEncoding::kUnorm);
-        case GrGLFormat::kRGBA16F:
-            return GrColorFormatDesc::MakeRGBA(16, GrColorTypeEncoding::kFloat);
-        case GrGLFormat::kR16F:
-            return GrColorFormatDesc::MakeR(16, GrColorTypeEncoding::kFloat);
-        case GrGLFormat::kRGB8:
-            return GrColorFormatDesc::MakeRGB(8, GrColorTypeEncoding::kUnorm);
-        case GrGLFormat::kRGBX8:
-            return GrColorFormatDesc::MakeRGB(8, GrColorTypeEncoding::kUnorm);
-        case GrGLFormat::kRG8:
-            return GrColorFormatDesc::MakeRG(8, GrColorTypeEncoding::kUnorm);
-        case GrGLFormat::kRGB10_A2:
-            return GrColorFormatDesc::MakeRGBA(10, 2, GrColorTypeEncoding::kUnorm);
-        case GrGLFormat::kRGBA4:
-            return GrColorFormatDesc::MakeRGBA(4, GrColorTypeEncoding::kUnorm);
-        case GrGLFormat::kSRGB8_ALPHA8:
-            return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kSRGBUnorm);
-        case GrGLFormat::kR16:
-            return GrColorFormatDesc::MakeR(16, GrColorTypeEncoding::kUnorm);
-        case GrGLFormat::kRG16:
-            return GrColorFormatDesc::MakeRG(16, GrColorTypeEncoding::kUnorm);
-        case GrGLFormat::kRGBA16:
-            return GrColorFormatDesc::MakeRGBA(16, GrColorTypeEncoding::kUnorm);
-        case GrGLFormat::kRG16F:
-            return GrColorFormatDesc::MakeRG(16, GrColorTypeEncoding::kFloat);
-        case GrGLFormat::kLUMINANCE16F:
-            return GrColorFormatDesc::MakeGray(16, GrColorTypeEncoding::kFloat);
-
-        // Compressed texture formats are not expected to have a description.
-        case GrGLFormat::kCOMPRESSED_ETC1_RGB8: return GrColorFormatDesc::MakeInvalid();
-        case GrGLFormat::kCOMPRESSED_RGB8_ETC2: return GrColorFormatDesc::MakeInvalid();
-        case GrGLFormat::kCOMPRESSED_RGB8_BC1:  return GrColorFormatDesc::MakeInvalid();
-        case GrGLFormat::kCOMPRESSED_RGBA8_BC1: return GrColorFormatDesc::MakeInvalid();
-
-        // This type only describes color channels.
-        case GrGLFormat::kSTENCIL_INDEX8:   return GrColorFormatDesc::MakeInvalid();
-        case GrGLFormat::kSTENCIL_INDEX16:  return GrColorFormatDesc::MakeInvalid();
-        case GrGLFormat::kDEPTH24_STENCIL8: return GrColorFormatDesc::MakeInvalid();
     }
     SkUNREACHABLE;
 }
@@ -162,7 +102,6 @@ enum class GrGLRenderer {
     kAdreno620,  // Pixel5
     kAdreno630,  // Pixel3
     kAdreno640,  // Pixel4
-    kAdreno6xx_other,
 
     kGoogleSwiftShader,
 
@@ -189,14 +128,7 @@ enum class GrGLRenderer {
     // 11th gen
     kIntelIceLake,
 
-    // 12th gen
-    kIntelRocketLake,
-    kIntelTigerLake,
-    kIntelAlderLake,
-
     kGalliumLLVM,
-
-    kVirgl,
 
     kMali4xx,
     /** G-3x, G-5x, or G-7x */
@@ -215,14 +147,12 @@ enum class GrGLRenderer {
 
 enum class GrGLDriver {
     kMesa,
+    kChromium,
     kNVIDIA,
     kIntel,
     kSwiftShader,
     kQualcomm,
-    kFreedreno,
     kAndroidEmulator,
-    kImagination,
-    kARM,
     kUnknown
 };
 
@@ -303,9 +233,6 @@ struct GrGLDriverInfo {
     GrGLRenderer      fANGLERenderer      = GrGLRenderer::kOther;
     GrGLDriver        fANGLEDriver        = GrGLDriver::kUnknown;
     GrGLDriverVersion fANGLEDriverVersion = GR_GL_DRIVER_UNKNOWN_VER;
-
-    // Are we running over the Chrome interprocess command buffer?
-    bool fIsOverCommandBuffer = false;
 };
 
 GrGLDriverInfo GrGLGetDriverInfo(const GrGLInterface*);
@@ -392,7 +319,6 @@ static constexpr GrGLFormat GrGLFormatFromGLEnum(GrGLenum glFormat) {
         case GR_GL_LUMINANCE16F:         return GrGLFormat::kLUMINANCE16F;
         case GR_GL_R16F:                 return GrGLFormat::kR16F;
         case GR_GL_RGB8:                 return GrGLFormat::kRGB8;
-        case GR_GL_RGBX8:                return GrGLFormat::kRGBX8;
         case GR_GL_RG8:                  return GrGLFormat::kRG8;
         case GR_GL_RGB10_A2:             return GrGLFormat::kRGB10_A2;
         case GR_GL_RGBA4:                return GrGLFormat::kRGBA4;
@@ -428,7 +354,6 @@ static constexpr GrGLenum GrGLFormatToEnum(GrGLFormat format) {
         case GrGLFormat::kLUMINANCE16F:         return GR_GL_LUMINANCE16F;
         case GrGLFormat::kR16F:                 return GR_GL_R16F;
         case GrGLFormat::kRGB8:                 return GR_GL_RGB8;
-        case GrGLFormat::kRGBX8:                return GR_GL_RGBX8;
         case GrGLFormat::kRG8:                  return GR_GL_RG8;
         case GrGLFormat::kRGB10_A2:             return GR_GL_RGB10_A2;
         case GrGLFormat::kRGBA4:                return GR_GL_RGBA4;
@@ -463,7 +388,6 @@ static constexpr size_t GrGLFormatBytesPerBlock(GrGLFormat format) {
         case GrGLFormat::kR16F:                 return 2;
         // We assume the GPU stores this format 4 byte aligned
         case GrGLFormat::kRGB8:                 return 4;
-        case GrGLFormat::kRGBX8:                return 4;
         case GrGLFormat::kRG8:                  return 2;
         case GrGLFormat::kRGB10_A2:             return 4;
         case GrGLFormat::kRGBA4:                return 2;
@@ -507,7 +431,6 @@ static constexpr int GrGLFormatStencilBits(GrGLFormat format) {
         case GrGLFormat::kR16F:
         case GrGLFormat::kLUMINANCE16F:
         case GrGLFormat::kRGB8:
-        case GrGLFormat::kRGBX8:
         case GrGLFormat::kRG8:
         case GrGLFormat::kRGB10_A2:
         case GrGLFormat::kRGBA4:
@@ -541,7 +464,6 @@ static constexpr bool GrGLFormatIsPackedDepthStencil(GrGLFormat format) {
         case GrGLFormat::kR16F:
         case GrGLFormat::kLUMINANCE16F:
         case GrGLFormat::kRGB8:
-        case GrGLFormat::kRGBX8:
         case GrGLFormat::kRG8:
         case GrGLFormat::kRGB10_A2:
         case GrGLFormat::kRGBA4:
@@ -577,7 +499,6 @@ static constexpr bool GrGLFormatIsSRGB(GrGLFormat format) {
     case GrGLFormat::kR16F:
     case GrGLFormat::kLUMINANCE16F:
     case GrGLFormat::kRGB8:
-    case GrGLFormat::kRGBX8:
     case GrGLFormat::kRG8:
     case GrGLFormat::kRGB10_A2:
     case GrGLFormat::kRGBA4:

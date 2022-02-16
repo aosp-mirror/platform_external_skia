@@ -8,9 +8,6 @@
     },
     {
       "name": "librenderengine_test"
-    },
-    {
-      "name": "SurfaceFlinger_test"
     }
   ],
   "imports": [
