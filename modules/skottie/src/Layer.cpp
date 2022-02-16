@@ -72,8 +72,6 @@ public:
 
         if (this->bind(abuilder, jmask["f"], fFeather)) {
             fMaskFilter = sksg::BlurImageFilter::Make();
-            // Mask feathers don't repeat edge pixels.
-            fMaskFilter->setTileMode(SkTileMode::kDecal);
         }
     }
 
@@ -346,7 +344,7 @@ sk_sp<sksg::Transform> LayerBuilder::getTransform(const AnimationBuilder& abuild
         // Set valid flag upfront to break cycles.
         fFlags |= cache_valid_mask;
 
-        const AnimationBuilder::AutoPropertyTracker apt(&abuilder, fJlayer, PropertyObserver::NodeType::LAYER);
+        const AnimationBuilder::AutoPropertyTracker apt(&abuilder, fJlayer);
         AnimationBuilder::AutoScope ascope(&abuilder, std::move(fLayerScope));
         fTransformCache[ttype] = this->doAttachTransform(abuilder, cbuilder, ttype);
         fLayerScope = ascope.release();
@@ -412,7 +410,7 @@ bool LayerBuilder::hasMotionBlur(const CompositionBuilder* cbuilder) const {
 sk_sp<sksg::RenderNode> LayerBuilder::buildRenderTree(const AnimationBuilder& abuilder,
                                                       CompositionBuilder* cbuilder,
                                                       const LayerBuilder* prev_layer) {
-    const AnimationBuilder::AutoPropertyTracker apt(&abuilder, fJlayer, PropertyObserver::NodeType::LAYER);
+    const AnimationBuilder::AutoPropertyTracker apt(&abuilder, fJlayer);
 
     using LayerBuilder =
         sk_sp<sksg::RenderNode> (AnimationBuilder::*)(const skjson::ObjectValue&,
@@ -450,11 +448,12 @@ sk_sp<sksg::RenderNode> LayerBuilder::buildRenderTree(const AnimationBuilder& ab
         { nullptr                              ,                 0 },  // 'ty': 14 -> light
     };
 
-    if (fType < 0 || static_cast<size_t>(fType) >= SK_ARRAY_COUNT(gLayerBuildInfo)) {
+    const auto type = SkToSizeT(fType);
+    if (type >= SK_ARRAY_COUNT(gLayerBuildInfo)) {
         return nullptr;
     }
 
-    const auto& build_info = gLayerBuildInfo[fType];
+    const auto& build_info = gLayerBuildInfo[type];
 
     // Switch to the layer animator scope (which at this point holds transform-only animators).
     AnimationBuilder::AutoScope ascope(&abuilder, std::move(fLayerScope));
@@ -546,10 +545,8 @@ sk_sp<sksg::RenderNode> LayerBuilder::buildRenderTree(const AnimationBuilder& ab
     }
 
     // Optional matte.
-    const auto matte_mode = prev_layer
-            ? ParseDefault<size_t>(fJlayer["tt"], 0)
-            : 0;
-    if (matte_mode > 0) {
+    size_t matte_mode;
+    if (prev_layer && Parse(fJlayer["tt"], &matte_mode)) {
         static constexpr sksg::MaskEffect::Mode gMatteModes[] = {
             sksg::MaskEffect::Mode::kAlphaNormal, // tt: 1
             sksg::MaskEffect::Mode::kAlphaInvert, // tt: 2
@@ -557,7 +554,7 @@ sk_sp<sksg::RenderNode> LayerBuilder::buildRenderTree(const AnimationBuilder& ab
             sksg::MaskEffect::Mode::kLumaInvert,  // tt: 4
         };
 
-        if (matte_mode <= SK_ARRAY_COUNT(gMatteModes)) {
+        if (matte_mode > 0 && matte_mode <= SK_ARRAY_COUNT(gMatteModes)) {
             // The current layer is masked with the previous layer *content*.
             layer = sksg::MaskEffect::Make(std::move(layer),
                                            prev_layer->fContentTree,

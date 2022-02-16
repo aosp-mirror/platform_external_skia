@@ -90,8 +90,8 @@ protected:
 private:
     sk_sp<SkTextBlob> fBlob;
 
-    inline static constexpr int kWidth = 275;
-    inline static constexpr int kHeight = 200;
+    static constexpr int kWidth = 275;
+    static constexpr int kHeight = 200;
 
     using INHERITED = GM;
 };

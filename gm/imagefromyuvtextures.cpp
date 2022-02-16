@@ -31,8 +31,10 @@
 #include "tools/Resources.h"
 #include "tools/gpu/YUVUtils.h"
 
+class GrSurfaceDrawContext;
+
 namespace skiagm {
-class ImageFromYUVTextures : public GM {
+class ImageFromYUVTextures : public GpuGM {
 public:
     ImageFromYUVTextures() {
         this->setBGColor(0xFFFFFFFF);
@@ -146,9 +148,8 @@ protected:
         return resultSurface->makeImageSnapshot();
     }
 
-    DrawResult onGpuSetup(GrDirectContext* dContext, SkString* errorMsg) override {
-        if (!dContext || dContext->abandoned()) {
-            *errorMsg = "DirectContext required to create YUV images";
+    DrawResult onGpuSetup(GrDirectContext* context, SkString* errorMsg) override {
+        if (!context || context->abandoned()) {
             return DrawResult::kSkip;
         }
 
@@ -159,14 +160,14 @@ protected:
         // We make a version of this image for each draw because, if any draw flattens it to
         // RGBA, then all subsequent draws would use the RGBA texture.
         for (int i = 0; i < kNumImages; ++i) {
-            fYUVAImages[i] = this->makeYUVAImage(dContext);
+            fYUVAImages[i] = this->makeYUVAImage(context);
             if (!fYUVAImages[i]) {
                 *errorMsg = "Couldn't create src YUVA image.";
                 return DrawResult::kFail;
             }
         }
 
-        fReferenceImage = this->createReferenceImage(dContext);
+        fReferenceImage = this->createReferenceImage(context);
         if (!fReferenceImage) {
             *errorMsg = "Couldn't create reference YUVA image.";
             return DrawResult::kFail;
@@ -175,8 +176,8 @@ protected:
         // Some backends (e.g., Vulkan) require all work be completed for backend textures
         // before they are deleted. Since we don't know when we'll next have access to a
         // direct context, flush all the work now.
-        dContext->flush();
-        dContext->submit(true);
+        context->flush();
+        context->submit(true);
 
         return DrawResult::kOk;
     }
@@ -193,7 +194,7 @@ protected:
         return fYUVAImages[index].get();
     }
 
-    void onDraw(SkCanvas* canvas) override {
+    void onDraw(GrRecordingContext*, GrSurfaceDrawContext*, SkCanvas* canvas) override {
         auto draw_image = [canvas](SkImage* image, const SkSamplingOptions& sampling) -> SkSize {
             if (!image) {
                 return {0, 0};
@@ -266,11 +267,11 @@ private:
     std::unique_ptr<sk_gpu_test::LazyYUVImage> fLazyYUVImage;
 
     // 3 draws x 3 scales x 4 filter qualities
-    inline static constexpr int kNumImages = 3 * 3 * 4;
+    static constexpr int kNumImages = 3 * 3 * 4;
     sk_sp<SkImage> fYUVAImages[kNumImages];
     sk_sp<SkImage> fReferenceImage;
 
-    inline static constexpr SkScalar kPad = 10.0f;
+    static constexpr SkScalar kPad = 10.0f;
 
     using INHERITED = GM;
 };

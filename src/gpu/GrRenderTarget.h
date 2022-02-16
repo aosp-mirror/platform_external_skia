@@ -70,8 +70,7 @@ public:
     const SkTArray<SkPoint>& getSampleLocations();
 
 protected:
-    GrRenderTarget(GrGpu*, const SkISize&, int sampleCount, GrProtected,
-                   sk_sp<GrAttachment> stenicl = nullptr);
+    GrRenderTarget(GrGpu*, const SkISize&, int sampleCount, GrProtected, GrAttachment* = nullptr);
     ~GrRenderTarget() override;
 
     // override of GrResource

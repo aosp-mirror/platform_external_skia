@@ -18,17 +18,16 @@ namespace SkSL {
  * An expression which extracts a value from an array or matrix, as in 'm[2]'.
  */
 struct IndexExpression final : public Expression {
-    inline static constexpr Kind kExpressionKind = Kind::kIndex;
+    static constexpr Kind kExpressionKind = Kind::kIndex;
 
     IndexExpression(const Context& context, std::unique_ptr<Expression> base,
                     std::unique_ptr<Expression> index)
-        : INHERITED(base->fLine, kExpressionKind, &IndexType(context, base->type()))
+        : INHERITED(base->fOffset, kExpressionKind, &IndexType(context, base->type()))
         , fBase(std::move(base))
         , fIndex(std::move(index)) {}
 
     // Returns a simplified index-expression; reports errors via the ErrorReporter.
     static std::unique_ptr<Expression> Convert(const Context& context,
-                                               SymbolTable& symbolTable,
                                                std::unique_ptr<Expression> base,
                                                std::unique_ptr<Expression> index);
 
@@ -68,7 +67,7 @@ struct IndexExpression final : public Expression {
                                                                &this->type()));
     }
 
-    std::string description() const override {
+    String description() const override {
         return this->base()->description() + "[" + this->index()->description() + "]";
     }
 
@@ -77,7 +76,7 @@ struct IndexExpression final : public Expression {
 private:
     IndexExpression(std::unique_ptr<Expression> base, std::unique_ptr<Expression> index,
                     const Type* type)
-        : INHERITED(base->fLine, Kind::kIndex, type)
+        : INHERITED(base->fOffset, Kind::kIndex, type)
         , fBase(std::move(base))
         , fIndex(std::move(index)) {}
 

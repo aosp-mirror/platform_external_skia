@@ -62,6 +62,7 @@ public:
                                            const SkFontArguments&) const override {
         return nullptr;
     }
+    sk_sp<SkTypeface> onMakeFromFontData(std::unique_ptr<SkFontData>) const override;
     sk_sp<SkTypeface> onMakeFromFile(const char[], int) const override {
         return nullptr;
     }

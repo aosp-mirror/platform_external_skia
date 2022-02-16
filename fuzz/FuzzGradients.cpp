@@ -9,7 +9,6 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkSurface.h"
 #include "include/effects/SkGradientShader.h"
-#include "src/core/SkDebugUtils.h"
 #include "src/core/SkTLazy.h"
 #include "tools/flags/CommandLineFlags.h"
 
@@ -96,7 +95,11 @@ static void logLinearGradient(const SkPoint pts[2],
     }
     SkDebugf("]\n");
 
-    SkDebugf("  mode:\t\t%s\n", SkTileModeToStr(mode));
+    static const char* gModeName[] = {
+        "kClamp_TileMode", "kRepeat_TileMode", "kMirror_TileMode", "kDecal_TileMode"
+    };
+    SkASSERT((unsigned)mode < SK_ARRAY_COUNT(gModeName));
+    SkDebugf("  mode:\t\t%s\n", gModeName[(unsigned)mode]);
     SkDebugf("  flags:\t0x%x\n", flags);
     logOptionalMatrix("local matrix", localMatrix);
     logOptionalMatrix("global matrix", globalMatrix);

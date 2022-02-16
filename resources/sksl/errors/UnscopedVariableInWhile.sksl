@@ -1,7 +1,3 @@
 void main() {
     while (false) bool b;
 }
-
-/*%%*
-variable 'b' must be created in a scope
-*%%*/

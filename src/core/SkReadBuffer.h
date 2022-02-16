@@ -16,13 +16,10 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkSerialProcs.h"
-#include "src/core/SkBlenderBase.h"
 #include "src/core/SkColorFilterBase.h"
-#include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/core/SkPicturePriv.h"
-#include "src/core/SkSamplingPriv.h"
 #include "src/core/SkWriteBuffer.h"
 #include "src/shaders/SkShaderBase.h"
 
@@ -108,8 +105,8 @@ public:
 
     void readPath(SkPath* path);
 
-    SkPaint readPaint() {
-        return SkPaintPriv::Unflatten(*this);
+    SkReadPaintResult readPaint(SkPaint* paint, SkFont* font) {
+        return SkPaintPriv::Unflatten(paint, *this, font);
     }
 
     SkFlattenable* readFlattenable(SkFlattenable::Type);
@@ -120,8 +117,7 @@ public:
 #ifdef SK_SUPPORT_LEGACY_DRAWLOOPER
     sk_sp<SkDrawLooper> readDrawLooper() { return this->readFlattenable<SkDrawLooper>(); }
 #endif
-    sk_sp<SkImageFilter> readImageFilter() { return this->readFlattenable<SkImageFilter_Base>(); }
-    sk_sp<SkBlender> readBlender() { return this->readFlattenable<SkBlenderBase>(); }
+    sk_sp<SkImageFilter> readImageFilter() { return this->readFlattenable<SkImageFilter>(); }
     sk_sp<SkMaskFilter> readMaskFilter() { return this->readFlattenable<SkMaskFilterBase>(); }
     sk_sp<SkPathEffect> readPathEffect() { return this->readFlattenable<SkPathEffect>(); }
     sk_sp<SkShader> readShader() { return this->readFlattenable<SkShaderBase>(); }
@@ -204,7 +200,7 @@ public:
                                              static_cast<int32_t>(max)));
     }
 
-    SkLegacyFQ checkFilterQuality();
+    SkFilterQuality checkFilterQuality();
 
     SkSamplingOptions readSampling();
 
@@ -214,6 +210,8 @@ private:
     void setInvalid();
     bool readArray(void* value, size_t size, size_t elementSize);
     bool isAvailable(size_t size) const { return size <= this->available(); }
+
+    sk_sp<SkImage> readImage_preV78();
 
     // These are always 4-byte aligned
     const char* fCurr = nullptr;  // current position within buffer

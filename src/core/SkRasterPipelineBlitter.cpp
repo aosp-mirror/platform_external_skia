@@ -90,11 +90,6 @@ SkBlitter* SkCreateRasterPipelineBlitter(const SkPixmap& dst,
                                          const SkMatrixProvider& matrixProvider,
                                          SkArenaAlloc* alloc,
                                          sk_sp<SkShader> clipShader) {
-    if (!paint.asBlendMode()) {
-        // The raster pipeline doesn't support SkBlender.
-        return nullptr;
-    }
-
     SkColorSpace* dstCS = dst.colorSpace();
     SkColorType dstCT = dst.colorType();
     SkColor4f paintColor = paint.getColor4f();
@@ -151,12 +146,10 @@ SkBlitter* SkRasterPipelineBlitter::Create(const SkPixmap& dst,
                                            bool is_opaque,
                                            bool is_constant,
                                            sk_sp<SkShader> clipShader) {
-    const auto bm = paint.asBlendMode();
-    if (!bm) {
-        return nullptr;
-    }
+    auto blitter = alloc->make<SkRasterPipelineBlitter>(dst,
+                                                        paint.getBlendMode(),
+                                                        alloc);
 
-    auto blitter = alloc->make<SkRasterPipelineBlitter>(dst, bm.value(), alloc);
 
     // Our job in this factory is to fill out the blitter's color pipeline.
     // This is the common front of the full blit pipelines, each constructed lazily on first use.
@@ -168,7 +161,7 @@ SkBlitter* SkRasterPipelineBlitter::Create(const SkPixmap& dst,
         SkPaint clipPaint;  // just need default values
         SkColorType clipCT = kRGBA_8888_SkColorType;
         SkColorSpace* clipCS = nullptr;
-        SkMatrixProvider clipMatrixProvider(SkMatrix::I());
+        SkSimpleMatrixProvider clipMatrixProvider(SkMatrix::I());
         SkStageRec rec = {clipP, alloc, clipCT, clipCS, clipPaint, nullptr, clipMatrixProvider};
         if (as_SB(clipShader)->appendStages(rec)) {
             struct Storage {
@@ -189,7 +182,7 @@ SkBlitter* SkRasterPipelineBlitter::Create(const SkPixmap& dst,
 
     // If there's a color filter it comes next.
     if (auto colorFilter = paint.getColorFilter()) {
-        SkMatrixProvider matrixProvider(SkMatrix::I());
+        SkSimpleMatrixProvider matrixProvider(SkMatrix::I());
         SkStageRec rec = {
             colorPipeline, alloc, dst.colorType(), dst.colorSpace(), paint, nullptr, matrixProvider
         };
@@ -203,26 +196,16 @@ SkBlitter* SkRasterPipelineBlitter::Create(const SkPixmap& dst,
     // to zero.  We only dither non-constant shaders, so is_constant won't change here.
     if (paint.isDither() && !is_constant) {
         switch (dst.info().colorType()) {
-            case kARGB_4444_SkColorType:
-                blitter->fDitherRate = 1 / 15.0f;
-                break;
-            case kRGB_565_SkColorType:
-                blitter->fDitherRate = 1 / 63.0f;
-                break;
-            case kGray_8_SkColorType:
-            case kRGB_888x_SkColorType:
+            case kARGB_4444_SkColorType:    blitter->fDitherRate =   1/15.0f; break;
+            case   kRGB_565_SkColorType:    blitter->fDitherRate =   1/63.0f; break;
+            case    kGray_8_SkColorType:
+            case  kRGB_888x_SkColorType:
             case kRGBA_8888_SkColorType:
-            case kBGRA_8888_SkColorType:
-            case kSRGBA_8888_SkColorType:
-            case kR8_unorm_SkColorType:
-                blitter->fDitherRate = 1 / 255.0f;
-                break;
+            case kBGRA_8888_SkColorType:    blitter->fDitherRate =  1/255.0f; break;
             case kRGB_101010x_SkColorType:
             case kRGBA_1010102_SkColorType:
             case kBGR_101010x_SkColorType:
-            case kBGRA_1010102_SkColorType:
-                blitter->fDitherRate = 1 / 1023.0f;
-                break;
+            case kBGRA_1010102_SkColorType: blitter->fDitherRate = 1/1023.0f; break;
 
             case kUnknown_SkColorType:
             case kAlpha_8_SkColorType:
@@ -234,9 +217,7 @@ SkBlitter* SkRasterPipelineBlitter::Create(const SkPixmap& dst,
             case kA16_unorm_SkColorType:
             case kR16G16_float_SkColorType:
             case kR16G16_unorm_SkColorType:
-            case kR16G16B16A16_unorm_SkColorType:
-                blitter->fDitherRate = 0.0f;
-                break;
+            case kR16G16B16A16_unorm_SkColorType: blitter->fDitherRate = 0.0f; break;
         }
         if (blitter->fDitherRate > 0.0f) {
             colorPipeline->append(SkRasterPipeline::dither, &blitter->fDitherRate);

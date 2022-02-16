@@ -94,7 +94,7 @@ public:
         return fVariation.reset(coordinateCount);
     }
 
-    static SkFontStyle::Width SkFontStyleWidthForWidthAxisValue(SkScalar width);
+    std::unique_ptr<SkFontData> maybeAsSkFontData();
 
 private:
     SkString fFamilyName;
@@ -105,6 +105,7 @@ private:
     std::unique_ptr<SkStreamAsset> fStream;
     int fCollectionIndex = 0;
     using Coordinates = SkAutoSTMalloc<4, SkFontArguments::VariationPosition::Coordinate>;
+    bool fVariationDataIsOldAndBad = false;
     int fCoordinateCount = 0;
     Coordinates fVariation;
 };

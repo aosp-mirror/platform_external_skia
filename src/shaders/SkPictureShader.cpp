@@ -387,9 +387,9 @@ std::unique_ptr<GrFragmentProcessor> SkPictureShader::asFragmentProcessor(
         info.imageInfo = info.imageInfo.makeColorType(kRGBA_8888_SkColorType);
     }
 
-    static const skgpu::UniqueKey::Domain kDomain = skgpu::UniqueKey::GenerateDomain();
-    skgpu::UniqueKey key;
-    skgpu::UniqueKey::Builder builder(&key, kDomain, 10, "Picture Shader Image");
+    static const GrUniqueKey::Domain kDomain = GrUniqueKey::GenerateDomain();
+    GrUniqueKey key;
+    GrUniqueKey::Builder builder(&key, kDomain, 10, "Picture Shader Image");
     builder[0] = dstCS->toXYZD50Hash();
     builder[1] = dstCS->transferFnHash();
     builder[2] = static_cast<uint32_t>(dstColorType);
@@ -425,8 +425,7 @@ std::unique_ptr<GrFragmentProcessor> SkPictureShader::asFragmentProcessor(
     const GrSamplerState sampler(static_cast<GrSamplerState::WrapMode>(fTmx),
                                  static_cast<GrSamplerState::WrapMode>(fTmy),
                                  fFilter);
-
-    return GrTextureEffect::Make(
-            std::move(view), kPremul_SkAlphaType, inv, sampler, *ctx->priv().caps());
+    return GrTextureEffect::Make(std::move(view), kPremul_SkAlphaType, inv, sampler,
+                                 *ctx->priv().caps());
 }
 #endif

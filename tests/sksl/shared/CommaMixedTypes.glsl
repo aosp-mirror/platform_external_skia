@@ -1,7 +1,6 @@
 
 out vec4 sk_FragColor;
 uniform vec4 colorGreen;
-uniform float unknownInput;
 vec4 main() {
     vec4 result;
     result.x = colorGreen.x;

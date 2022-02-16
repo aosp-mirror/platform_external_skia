@@ -4,8 +4,6 @@
 
 # Recipe which runs the PathKit tests using docker
 
-PYTHON_VERSION_COMPATIBILITY = "PY3"
-
 DEPS = [
   'checkout',
   'docker',
@@ -46,16 +44,10 @@ def RunSteps(api):
   if 'asmjs' in api.vars.builder_name:
     bundle_name = 'pathkit.js.mem'
 
-  copies = [
-    {
-      'src': base_dir.join('pathkit.js'),
-      'dst': copy_dest.join('pathkit.js'),
-    },
-    {
-      'src': base_dir.join(bundle_name),
-      'dst': copy_dest.join(bundle_name),
-    },
-  ]
+  copies = {
+    base_dir.join('pathkit.js'): copy_dest.join('pathkit.js'),
+    base_dir.join(bundle_name):  copy_dest.join(bundle_name),
+  }
   recursive_read = [checkout_root.join('skia')]
 
   docker_args = None

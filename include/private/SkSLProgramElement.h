@@ -20,15 +20,17 @@ namespace SkSL {
 class ProgramElement : public IRNode {
 public:
     enum class Kind {
-        kExtension = 0,
+        kEnum = 0,
+        kExtension,
         kFunction,
         kFunctionPrototype,
         kGlobalVar,
         kInterfaceBlock,
         kModifiers,
+        kSection,
         kStructDefinition,
 
-        kFirst = kExtension,
+        kFirst = kEnum,
         kLast = kStructDefinition
     };
 
@@ -43,7 +45,7 @@ public:
 
     /**
      *  Use is<T> to check the type of a program element.
-     *  e.g. replace `el.kind() == ProgramElement::Kind::kExtension` with `el.is<Extension>()`.
+     *  e.g. replace `el.kind() == ProgramElement::Kind::kEnum` with `el.is<Enum>()`.
      */
     template <typename T>
     bool is() const {
@@ -51,8 +53,7 @@ public:
     }
 
     /**
-     *  Use as<T> to downcast program elements. e.g. replace `(Extension&) el` with
-     * `el.as<Extension>()`.
+     *  Use as<T> to downcast program elements. e.g. replace `(Enum&) el` with `el.as<Enum>()`.
      */
     template <typename T>
     const T& as() const {

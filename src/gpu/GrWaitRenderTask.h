@@ -27,7 +27,7 @@ private:
     }
     void gatherProxyIntervals(GrResourceAllocator*) const override;
 
-    ExpectedOutcome onMakeClosed(GrRecordingContext*, SkIRect*) override {
+    ExpectedOutcome onMakeClosed(const GrCaps&, SkIRect*) override {
         return ExpectedOutcome::kTargetUnchanged;
     }
 
@@ -38,7 +38,7 @@ private:
 #endif
 #ifdef SK_DEBUG
     // No non-dst proxies.
-    void visitProxies_debugOnly(const GrVisitProxyFunc&) const override {}
+    void visitProxies_debugOnly(const GrOp::VisitProxyFunc& fn) const override {}
 #endif
     std::unique_ptr<std::unique_ptr<GrSemaphore>[]> fSemaphores;
     int fNumSemaphores;

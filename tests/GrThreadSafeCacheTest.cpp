@@ -19,11 +19,9 @@
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrStyle.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrThreadSafeCache.h"
-#include "src/gpu/ops/GrDrawOp.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
 #include "tests/Test.h"
 #include "tests/TestUtils.h"
 #include "tools/gpu/ProxyUtils.h"
@@ -38,24 +36,23 @@ static SkImageInfo default_ii(int wh) {
     return SkImageInfo::Make(wh, wh, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
 }
 
-static std::unique_ptr<skgpu::v1::SurfaceDrawContext> new_SDC(GrRecordingContext* rContext,
-                                                              int wh) {
-    return skgpu::v1::SurfaceDrawContext::Make(rContext,
-                                               GrColorType::kRGBA_8888,
-                                               nullptr,
-                                               SkBackingFit::kExact,
-                                               {wh, wh},
-                                               SkSurfaceProps(),
-                                               1,
-                                               GrMipMapped::kNo,
-                                               GrProtected::kNo,
-                                               kImageOrigin,
-                                               SkBudgeted::kYes);
+static std::unique_ptr<GrSurfaceDrawContext> new_RTC(GrRecordingContext* rContext, int wh) {
+    return GrSurfaceDrawContext::Make(rContext,
+                                      GrColorType::kRGBA_8888,
+                                      nullptr,
+                                      SkBackingFit::kExact,
+                                      {wh, wh},
+                                      SkSurfaceProps(),
+                                      1,
+                                      GrMipMapped::kNo,
+                                      GrProtected::kNo,
+                                      kImageOrigin,
+                                      SkBudgeted::kYes);
 }
 
-static void create_view_key(skgpu::UniqueKey* key, int wh, int id) {
-    static const skgpu::UniqueKey::Domain kViewDomain = skgpu::UniqueKey::GenerateDomain();
-    skgpu::UniqueKey::Builder builder(key, kViewDomain, 1);
+static void create_view_key(GrUniqueKey* key, int wh, int id) {
+    static const GrUniqueKey::Domain kViewDomain = GrUniqueKey::GenerateDomain();
+    GrUniqueKey::Builder builder(key, kViewDomain, 1);
     builder[0] = wh;
     builder.finish();
 
@@ -64,9 +61,9 @@ static void create_view_key(skgpu::UniqueKey* key, int wh, int id) {
     }
 }
 
-static void create_vert_key(skgpu::UniqueKey* key, int wh, int id) {
-    static const skgpu::UniqueKey::Domain kVertDomain = skgpu::UniqueKey::GenerateDomain();
-    skgpu::UniqueKey::Builder builder(key, kVertDomain, 1);
+static void create_vert_key(GrUniqueKey* key, int wh, int id) {
+    static const GrUniqueKey::Domain kVertDomain = GrUniqueKey::GenerateDomain();
+    GrUniqueKey::Builder builder(key, kVertDomain, 1);
     builder[0] = wh;
     builder.finish();
 
@@ -215,7 +212,7 @@ public:
             return false;
         }
 
-        skgpu::UniqueKey key;
+        GrUniqueKey key;
         create_view_key(&key, wh, kNoID);
 
         auto threadSafeCache = this->threadSafeCache();
@@ -301,7 +298,7 @@ public:
             return false;
         }
 
-        skgpu::UniqueKey key;
+        GrUniqueKey key;
         create_vert_key(&key, wh, kNoID);
 
         auto threadSafeCache = this->threadSafeCache();
@@ -457,9 +454,8 @@ private:
     GrProgramInfo* createProgramInfo(const GrCaps* caps,
                                      SkArenaAlloc* arena,
                                      const GrSurfaceProxyView& writeView,
-                                     bool usesMSAASurface,
                                      GrAppliedClip&& appliedClip,
-                                     const GrDstProxyView& dstProxyView,
+                                     const GrXferProcessor::DstProxyView& dstProxyView,
                                      GrXferBarrierFlags renderPassXferBarriers,
                                      GrLoadOp colorLoadOp) const {
         using namespace GrDefaultGeoProcFactory;
@@ -471,7 +467,7 @@ private:
                                      LocalCoords::kUnused_Type,
                                      SkMatrix::I());
 
-        return sk_gpu_test::CreateProgramInfo(caps, arena, writeView, usesMSAASurface,
+        return sk_gpu_test::CreateProgramInfo(caps, arena, writeView,
                                               std::move(appliedClip), dstProxyView,
                                               gp, SkBlendMode::kSrcOver,
                                               GrPrimitiveType::kTriangleStrip,
@@ -482,7 +478,6 @@ private:
         return this->createProgramInfo(&flushState->caps(),
                                        flushState->allocator(),
                                        flushState->writeView(),
-                                       flushState->usesMSAASurface(),
                                        flushState->detachAppliedClip(),
                                        flushState->dstProxyView(),
                                        flushState->renderPassBarriers(),
@@ -500,7 +495,7 @@ private:
                 ++fStats->fNumLazyCreations;
             }
 
-            skgpu::UniqueKey key;
+            GrUniqueKey key;
             create_vert_key(&key, fWH, fID);
 
             // We can "fail the lookup" to simulate a threaded race condition
@@ -552,20 +547,17 @@ private:
     void onPrePrepare(GrRecordingContext* rContext,
                       const GrSurfaceProxyView& writeView,
                       GrAppliedClip* clip,
-                      const GrDstProxyView& dstProxyView,
+                      const GrXferProcessor::DstProxyView& dstProxyView,
                       GrXferBarrierFlags renderPassXferBarriers,
                       GrLoadOp colorLoadOp) override {
         SkArenaAlloc* arena = rContext->priv().recordTimeAllocator();
-
-        // DMSAA is not supported on DDL.
-        bool usesMSAASurface = writeView.asRenderTargetProxy()->numSamples() > 1;
 
         // This is equivalent to a GrOpFlushState::detachAppliedClip
         GrAppliedClip appliedClip = clip ? std::move(*clip) : GrAppliedClip::Disabled();
 
         fProgramInfo = this->createProgramInfo(rContext->priv().caps(), arena, writeView,
-                                               usesMSAASurface, std::move(appliedClip),
-                                               dstProxyView, renderPassXferBarriers, colorLoadOp);
+                                               std::move(appliedClip), dstProxyView,
+                                               renderPassXferBarriers, colorLoadOp);
 
         rContext->priv().recordProgramInfo(fProgramInfo);
 
@@ -649,17 +641,17 @@ bool TestHelper::FillInViewOnGpu(GrDirectContext* dContext, int wh, Stats* stats
                                  const GrSurfaceProxyView& lazyView,
                                  sk_sp<GrThreadSafeCache::Trampoline> trampoline) {
 
-    std::unique_ptr<skgpu::v1::SurfaceDrawContext> sdc = new_SDC(dContext, wh);
+    std::unique_ptr<GrSurfaceDrawContext> rtc = new_RTC(dContext, wh);
 
     GrPaint paint;
     paint.setColor4f({0.0f, 0.0f, 1.0f, 1.0f});
 
-    sdc->clear(SkPMColor4f{1.0f, 1.0f, 1.0f, 1.0f});
-    sdc->drawRect(nullptr, std::move(paint), GrAA::kNo, SkMatrix::I(),
+    rtc->clear(SkPMColor4f{1.0f, 1.0f, 1.0f, 1.0f});
+    rtc->drawRect(nullptr, std::move(paint), GrAA::kNo, SkMatrix::I(),
                   { 10, 10, wh-10.0f, wh-10.0f }, &GrStyle::SimpleFill());
 
     ++stats->fNumHWCreations;
-    auto view = sdc->readSurfaceView();
+    auto view = rtc->readSurfaceView();
 
     SkASSERT(view.swizzle() == lazyView.swizzle());
     SkASSERT(view.origin() == lazyView.origin());
@@ -673,7 +665,7 @@ GrSurfaceProxyView TestHelper::AccessCachedView(GrRecordingContext* rContext,
                                                 int wh,
                                                 bool failLookup, bool failFillingIn, int id,
                                                 Stats* stats) {
-    skgpu::UniqueKey key;
+    GrUniqueKey key;
     create_view_key(&key, wh, id);
 
     if (GrDirectContext* dContext = rContext->asDirectContext()) {
@@ -1422,7 +1414,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrThreadSafeCache14, reporter, ctxInfo) {
 static void test_15(GrDirectContext* dContext, skiatest::Reporter* reporter,
                     TestHelper::addAccessFP addAccess,
                     TestHelper::checkFP check,
-                    void (*create_key)(skgpu::UniqueKey*, int wh, int id)) {
+                    void (*create_key)(GrUniqueKey*, int wh, int id)) {
 
     TestHelper helper(dContext);
 
@@ -1433,13 +1425,13 @@ static void test_15(GrDirectContext* dContext, skiatest::Reporter* reporter,
 
     REPORTER_ASSERT(reporter, helper.numCacheEntries() == 1);
 
-    skgpu::UniqueKey key;
+    GrUniqueKey key;
     (*create_key)(&key, kImageWH, kNoID);
 
-    skgpu::UniqueKeyInvalidatedMessage msg(key, dContext->priv().contextID(),
+    GrUniqueKeyInvalidatedMessage msg(key, dContext->priv().contextID(),
                                       /* inThreadSafeCache */ true);
 
-    SkMessageBus<skgpu::UniqueKeyInvalidatedMessage, uint32_t>::Post(msg);
+    SkMessageBus<GrUniqueKeyInvalidatedMessage, uint32_t>::Post(msg);
 
     // This purge call is needed to process the invalidation messages
     dContext->purgeUnlockedResources(/* scratchResourcesOnly */ true);
@@ -1478,7 +1470,7 @@ static bool newer_is_always_better(SkData* /* incumbent */, SkData* /* challenge
 };
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrThreadSafeCache16Verts, reporter, ctxInfo) {
-    skgpu::UniqueKey key;
+    GrUniqueKey key;
     create_vert_key(&key, kImageWH, kNoID);
 
     TestHelper helper(ctxInfo.directContext(), newer_is_always_better);
