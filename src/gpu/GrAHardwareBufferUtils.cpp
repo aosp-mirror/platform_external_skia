@@ -51,10 +51,6 @@ SkColorType GetSkColorTypeFromBufferFormat(uint32_t bufferFormat) {
             return kRGB_888x_SkColorType;
         case AHARDWAREBUFFER_FORMAT_R10G10B10A2_UNORM:
             return kRGBA_1010102_SkColorType;
-#if __ANDROID_API__ >= 33
-        case AHARDWAREBUFFER_FORMAT_R8_UNORM:
-            return kAlpha_8_SkColorType;
-#endif
         default:
             // Given that we only use this texture as a source, colorType will not impact how Skia
             // uses the texture.  The only potential affect this is anticipated to have is that for
@@ -82,10 +78,6 @@ GrBackendFormat GetBackendFormat(GrDirectContext* dContext, AHardwareBuffer* har
                 return GrBackendFormat::MakeGL(GR_GL_RGB10_A2, GR_GL_TEXTURE_EXTERNAL);
             case AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM:
                 return GrBackendFormat::MakeGL(GR_GL_RGB8, GR_GL_TEXTURE_EXTERNAL);
-#if __ANDROID_API__ >= 33
-            case AHARDWAREBUFFER_FORMAT_R8_UNORM:
-                return GrBackendFormat::MakeGL(GR_GL_R8, GR_GL_TEXTURE_EXTERNAL);
-#endif
             default:
                 if (requireKnownFormat) {
                     return GrBackendFormat();
@@ -108,10 +100,6 @@ GrBackendFormat GetBackendFormat(GrDirectContext* dContext, AHardwareBuffer* har
                 return GrBackendFormat::MakeVk(VK_FORMAT_R8G8B8A8_UNORM);
             case AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM:
                 return GrBackendFormat::MakeVk(VK_FORMAT_R8G8B8_UNORM);
-#if __ANDROID_API__ >= 33
-            case AHARDWAREBUFFER_FORMAT_R8_UNORM:
-                return GrBackendFormat::MakeVk(VK_FORMAT_R8_UNORM);
-#endif
             default: {
                 if (requireKnownFormat) {
                     return GrBackendFormat();
@@ -318,8 +306,7 @@ static GrBackendTexture make_vk_backend_texture(
         TexImageCtx* imageCtx,
         bool isProtectedContent,
         const GrBackendFormat& backendFormat,
-        bool isRenderable,
-        bool fromAndroidWindow) {
+        bool isRenderable) {
     SkASSERT(dContext->backend() == GrBackendApi::kVulkan);
     GrVkGpu* gpu = static_cast<GrVkGpu*>(dContext->priv().getGpu());
 
@@ -414,7 +401,7 @@ static GrBackendTexture make_vk_backend_texture(
         usageFlags,                                  // VkImageUsageFlags
         VK_SHARING_MODE_EXCLUSIVE,                   // VkSharingMode
         0,                                           // queueFamilyCount
-        nullptr,                                     // pQueueFamilyIndices
+        0,                                           // pQueueFamilyIndices
         VK_IMAGE_LAYOUT_UNDEFINED,                   // initialLayout
     };
 
@@ -429,6 +416,7 @@ static GrBackendTexture make_vk_backend_texture(
     phyDevMemProps.pNext = nullptr;
 
     uint32_t typeIndex = 0;
+    uint32_t heapIndex = 0;
     bool foundHeap = false;
     VK_CALL(GetPhysicalDeviceMemoryProperties2(physicalDevice, &phyDevMemProps));
     uint32_t memTypeCnt = phyDevMemProps.memoryProperties.memoryTypeCount;
@@ -439,6 +427,7 @@ static GrBackendTexture make_vk_backend_texture(
                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             if (supportedFlags == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
                 typeIndex = i;
+                heapIndex = pdmp.memoryTypes[i].heapIndex;
                 foundHeap = true;
             }
         }
@@ -508,9 +497,6 @@ static GrBackendTexture make_vk_backend_texture(
     imageInfo.fProtected = isProtectedContent ? GrProtected::kYes : GrProtected::kNo;
     imageInfo.fYcbcrConversionInfo = *ycbcrConversion;
     imageInfo.fSharingMode = imageCreateInfo.sharingMode;
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-    imageInfo.fPartOfSwapchainOrAndroidWindow = fromAndroidWindow;
-#endif
 
     *deleteProc = delete_vk_image;
     *updateProc = update_vk_image;
@@ -555,8 +541,7 @@ GrBackendTexture MakeBackendTexture(GrDirectContext* dContext, AHardwareBuffer* 
                                     TexImageCtx* imageCtx,
                                     bool isProtectedContent,
                                     const GrBackendFormat& backendFormat,
-                                    bool isRenderable,
-                                    bool fromAndroidWindow) {
+                                    bool isRenderable) {
     SkASSERT(dContext);
     if (!dContext || dContext->abandoned()) {
         return GrBackendTexture();
@@ -572,7 +557,7 @@ GrBackendTexture MakeBackendTexture(GrDirectContext* dContext, AHardwareBuffer* 
 #ifdef SK_VULKAN
         return make_vk_backend_texture(dContext, hardwareBuffer, width, height, deleteProc,
                                        updateProc, imageCtx, createProtectedImage, backendFormat,
-                                       isRenderable, fromAndroidWindow);
+                                       isRenderable);
 #else
         return GrBackendTexture();
 #endif

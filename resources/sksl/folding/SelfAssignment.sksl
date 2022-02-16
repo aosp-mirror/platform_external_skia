@@ -22,7 +22,7 @@ half4 main(float2 coords) {
     a[1] = a[0];
 
     // All of these assignments should be eliminated.
-    x.wy = x.wy;
+    x.ay = x.ay;
     x.xyz = x.xyz;
     x = x;
     s.i = s.i;

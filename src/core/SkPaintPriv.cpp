@@ -6,11 +6,8 @@
  */
 
 #include "include/core/SkPaint.h"
-#include "src/core/SkBlenderBase.h"
 #include "src/core/SkColorFilterBase.h"
 #include "src/core/SkColorSpacePriv.h"
-#include "src/core/SkKeyHelpers.h"
-#include "src/core/SkPaintParamsKey.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/core/SkXfermodePriv.h"
 #include "src/shaders/SkColorFilterShader.h"
@@ -45,11 +42,7 @@ bool SkPaintPriv::Overwrites(const SkPaint* paint, ShaderOverrideOpacity overrid
         }
     }
 
-    const auto bm = paint->asBlendMode();
-    if (!bm) {
-        return false;   // don't know for sure, so we play it safe and return false.
-    }
-    return SkXfermode::IsOpaque(bm.value(), opacityType);
+    return SkXfermode::IsOpaque(paint->getBlendMode(), opacityType);
 }
 
 bool SkPaintPriv::ShouldDither(const SkPaint& p, SkColorType dstCT) {
@@ -64,8 +57,8 @@ bool SkPaintPriv::ShouldDither(const SkPaint& p, SkColorType dstCT) {
     }
 
     // Otherwise, dither is only needed for non-const paints.
-    return p.getImageFilter() || p.getMaskFilter() ||
-           (p.getShader() && !as_SB(p.getShader())->isConstant());
+    return p.getImageFilter() || p.getMaskFilter()
+        || !p.getShader() || !as_SB(p.getShader())->isConstant();
 }
 
 // return true if the paint is just a single color (i.e. not a shader). If its
@@ -108,49 +101,4 @@ void SkPaintPriv::RemoveColorFilter(SkPaint* p, SkColorSpace* dstCS) {
         }
         p->setColorFilter(nullptr);
     }
-}
-
-SkScalar SkPaintPriv::ComputeResScaleForStroking(const SkMatrix& matrix) {
-    // Not sure how to handle perspective differently, so we just don't try (yet)
-    SkScalar sx = SkPoint::Length(matrix[SkMatrix::kMScaleX], matrix[SkMatrix::kMSkewY]);
-    SkScalar sy = SkPoint::Length(matrix[SkMatrix::kMSkewX],  matrix[SkMatrix::kMScaleY]);
-    if (SkScalarsAreFinite(sx, sy)) {
-        SkScalar scale = std::max(sx, sy);
-        if (scale > 0) {
-            return scale;
-        }
-    }
-    return 1;
-}
-
-std::vector<SkPaintParamsKey> SkPaintPriv::ToKeys(const SkPaint& paint,
-                                                  SkShaderCodeDictionary* dict,
-                                                  SkBackend backend) {
-    std::vector<SkPaintParamsKey> keys;
-
-    // TODO: actually split the SkPaint into multiple PaintParams and generate the keys
-    // for them separately.
-    // TODO: actually collect and return the SkUniformData vector for each PaintParams derived
-    // from the SkPaint
-    {
-        SkPaintParamsKey key;
-
-        if (paint.getShader()) {
-            as_SB(paint.getShader())->addToKey(dict, backend, &key, nullptr);
-        } else {
-            SolidColorShaderBlock::AddToKey(dict, backend, &key, nullptr, paint.getColor4f());
-        }
-
-        if (paint.getBlender()) {
-            as_BB(paint.getBlender())->addToKey(dict, backend, &key, nullptr);
-        } else {
-            BlendModeBlock::AddToKey(dict, backend, &key, nullptr, SkBlendMode::kSrcOver);
-        }
-
-        SkASSERT(key.sizeInBytes() > 0);
-
-        keys.push_back(key);
-    }
-
-    return keys;
 }

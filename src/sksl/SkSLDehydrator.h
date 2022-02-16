@@ -8,6 +8,8 @@
 #ifndef SKSL_DEHYDRATOR
 #define SKSL_DEHYDRATOR
 
+#ifdef SKSL_STANDALONE
+
 #include "include/core/SkSpan.h"
 #include "include/private/SkSLModifiers.h"
 #include "include/private/SkSLSymbol.h"
@@ -23,7 +25,6 @@ namespace SkSL {
 
 class AnyConstructor;
 class Expression;
-struct Program;
 class ProgramElement;
 class Statement;
 class Symbol;
@@ -31,7 +32,6 @@ class SymbolTable;
 
 // The file has the structure:
 //
-// uint16 version
 // uint16 total string length
 // string data
 // symboltable
@@ -45,8 +45,6 @@ public:
     ~Dehydrator() {
         SkASSERT(fSymbolMap.size() == 1);
     }
-
-    void write(const Program& program);
 
     void write(const SymbolTable& symbols);
 
@@ -84,24 +82,25 @@ private:
     }
 
     void writeS32(int64_t i) {
-        SkASSERT(i >= -2147483648LL && i <= 2147483647);
+        SkASSERT(i >= -2147483648 && i <= 2147483647);
         fBody.write32(i);
     }
 
-    void allocSymbolId(const Symbol* s) {
-        SkASSERT(!symbolId(s));
-        fSymbolMap.back()[s] = fNextId++;
+    void writeId(const Symbol* s) {
+        if (!symbolId(s, false)) {
+            fSymbolMap.back()[s] = fNextId++;
+        }
+        this->writeU16(symbolId(s));
     }
 
-    void writeId(const Symbol* s);
-
-    uint16_t symbolId(const Symbol* s) {
+    uint16_t symbolId(const Symbol* s, bool required = true) {
         for (const auto& symbols : fSymbolMap) {
             auto found = symbols.find(s);
             if (found != symbols.end()) {
                 return found->second;
             }
         }
+        SkASSERT(!required);
         return 0;
     }
 
@@ -109,9 +108,9 @@ private:
 
     void write(Modifiers m);
 
-    void write(std::string_view s);
+    void write(StringFragment s);
 
-    void write(std::string s);
+    void write(String s);
 
     void write(const ProgramElement& e);
 
@@ -129,7 +128,7 @@ private:
 
     StringStream fBody;
 
-    std::unordered_map<std::string, int> fStrings;
+    std::unordered_map<String, int> fStrings;
 
     std::vector<std::unordered_map<const Symbol*, int>> fSymbolMap;
     SkTHashSet<size_t> fStringBreaks;
@@ -140,6 +139,8 @@ private:
     friend class AutoDehydratorSymbolTable;
 };
 
-} // namespace SkSL
+} // namespace
+
+#endif
 
 #endif

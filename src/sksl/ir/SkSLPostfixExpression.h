@@ -19,10 +19,10 @@ namespace SkSL {
  */
 class PostfixExpression final : public Expression {
 public:
-    inline static constexpr Kind kExpressionKind = Kind::kPostfix;
+    static constexpr Kind kExpressionKind = Kind::kPostfix;
 
     PostfixExpression(std::unique_ptr<Expression> operand, Operator op)
-        : INHERITED(operand->fLine, kExpressionKind, &operand->type())
+        : INHERITED(operand->fOffset, kExpressionKind, &operand->type())
         , fOperand(std::move(operand))
         , fOperator(op) {}
 
@@ -57,7 +57,7 @@ public:
         return std::make_unique<PostfixExpression>(this->operand()->clone(), this->getOperator());
     }
 
-    std::string description() const override {
+    String description() const override {
         return this->operand()->description() + this->getOperator().operatorName();
     }
 

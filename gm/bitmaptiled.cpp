@@ -14,9 +14,11 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 
+class GrSurfaceDrawContext;
+
 // This test exercises Ganesh's drawing of tiled bitmaps. In particular, that the offsets and the
 // extents of the tiles don't causes gaps between tiles.
-static void draw_tile_bitmap_with_fractional_offset(GrRecordingContext* rContext,
+static void draw_tile_bitmap_with_fractional_offset(GrRecordingContext* context,
                                                     SkCanvas* canvas,
                                                     bool vertical) {
     // This should match kBmpSmallTileSize in SkGpuDevice.cpp. Note that our canvas size is tuned
@@ -28,14 +30,14 @@ static void draw_tile_bitmap_with_fractional_offset(GrRecordingContext* rContext
     const int kBitmapLongEdge = 7 * kTileSize;
     const int kBitmapShortEdge = 1 * kTileSize;
 
-    if (auto dContext = rContext->asDirectContext()) {
+    if (auto direct = context->asDirectContext()) {
         // To trigger tiling, we also need the image to be more than 50% of the cache, so we
         // ensure the cache is sized to make that true.
         const int kBitmapArea = kBitmapLongEdge * kBitmapShortEdge;
         const size_t kBitmapBytes = kBitmapArea * sizeof(SkPMColor);
 
         const size_t newMaxResourceBytes = kBitmapBytes + (kBitmapBytes / 2);
-        dContext->setResourceCacheLimit(newMaxResourceBytes);
+        direct->setResourceCacheLimit(newMaxResourceBytes);
     }
 
     // Construct our bitmap as either very wide or very tall
@@ -64,11 +66,11 @@ static void draw_tile_bitmap_with_fractional_offset(GrRecordingContext* rContext
 }
 
 DEF_SIMPLE_GPU_GM_BG(
-        bitmaptiled_fractional_horizontal, rContext, canvas, 1124, 365, SK_ColorBLACK) {
-    draw_tile_bitmap_with_fractional_offset(rContext, canvas, false);
+        bitmaptiled_fractional_horizontal, context, rtc, canvas, 1124, 365, SK_ColorBLACK) {
+    draw_tile_bitmap_with_fractional_offset(context, canvas, false);
 }
 
 DEF_SIMPLE_GPU_GM_BG(
-        bitmaptiled_fractional_vertical, rContext, canvas, 365, 1124, SK_ColorBLACK) {
-    draw_tile_bitmap_with_fractional_offset(rContext, canvas, true);
+        bitmaptiled_fractional_vertical, context, rtc, canvas, 365, 1124, SK_ColorBLACK) {
+    draw_tile_bitmap_with_fractional_offset(context, canvas, true);
 }

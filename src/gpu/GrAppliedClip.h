@@ -146,7 +146,7 @@ public:
     }
     bool operator!=(const GrAppliedClip& that) const { return !(*this == that); }
 
-    void visitProxies(const GrVisitProxyFunc& func) const {
+    void visitProxies(const GrOp::VisitProxyFunc& func) const {
         if (fCoverageFP != nullptr) {
             fCoverageFP->visitProxies(func);
         }

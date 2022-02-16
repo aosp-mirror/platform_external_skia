@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 #
 # Copyright 2019 Google Inc.
 #
@@ -6,12 +6,11 @@
 # found in the LICENSE file.
 
 
+from __future__ import print_function
+import StringIO
 import argparse
 import os
-import six
 import sys
-
-from six import StringIO
 
 
 parser = argparse.ArgumentParser()
@@ -84,13 +83,14 @@ for file_path in to_rewrite():
       file_path.endswith('.m') or
       file_path.endswith('.mm') or
       file_path.endswith('.inc') or
+      file_path.endswith('.fp') or
       file_path.endswith('.cc') or
       file_path.endswith('.cpp')):
     # Read the whole file into memory.
     lines = open(file_path).readlines()
 
     # Write it back out again line by line with substitutions for #includes.
-    output = StringIO() if args.dry_run else open(file_path, 'w')
+    output = StringIO.StringIO() if args.dry_run else open(file_path, 'wb')
 
     includes = []
     for line in lines:

@@ -5,11 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/gl/GrGLBuffer.h"
-
 #include "include/core/SkTraceMemoryDump.h"
-#include "src/core/SkTraceEvent.h"
 #include "src/gpu/GrGpuResourcePriv.h"
+#include "src/gpu/gl/GrGLBuffer.h"
 #include "src/gpu/gl/GrGLCaps.h"
 #include "src/gpu/gl/GrGLGpu.h"
 

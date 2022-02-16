@@ -16,15 +16,15 @@ Using Git
 
 Update the local repository
 
-    git fetch origin main
+    git fetch origin master
 
-Create a local branch with origin/main as its start point.
+Create a local branch with origin/master as its start point.
 
-    git checkout -b revert$RANDOM origin/main
+    git checkout -b revert$RANDOM origin/master
 
 Find the SHA1 of the commit you want to revert
 
-    git log origin/main
+    git log origin/master
 
 Create a revert commit.
 
@@ -34,7 +34,7 @@ Upload it to Gerrit.
 
     git cl upload
 
-Land the revert in origin/main.
+Land the revert in origin/master.
 
     git cl land
 

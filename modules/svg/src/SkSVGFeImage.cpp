@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkSamplingOptions.h"
 #include "include/effects/SkImageFilters.h"
 #include "modules/svg/include/SkSVGFeImage.h"
 #include "modules/svg/include/SkSVGFilterContext.h"
@@ -34,9 +33,8 @@ sk_sp<SkImageFilter> SkSVGFeImage::onMakeImageFilter(const SkSVGRenderContext& c
     const SkRect srcRect = SkRect::Make(imgInfo.fImage->bounds());
     const SkRect& dstRect = imgInfo.fDst;
     // TODO: image-rendering property
-    auto imgfilt = SkImageFilters::Image(imgInfo.fImage, srcRect, dstRect,
-                                         SkSamplingOptions(SkFilterMode::kLinear,
-                                                           SkMipmapMode::kNearest));
+    const SkFilterQuality fq = SkFilterQuality::kMedium_SkFilterQuality;
+    auto imgfilt = SkImageFilters::Image(imgInfo.fImage, srcRect, dstRect, SkSamplingOptions(fq));
 
     // Aspect ratio mapping may end up drawing content outside of the filter effects region,
     // so perform an explicit crop.

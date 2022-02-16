@@ -15,6 +15,10 @@ function getSurface(CanvasKit, webglversion) {
       window._error = 'fell back to CPU';
       return null;
     }
+    if (webglversion !== surface.openGLversion) {
+      window._error = 'Want WebGL version '+webglversion+' but got '+surface.openGLversion;
+      return null;
+    }
   } else {
     surface = CanvasKit.MakeSWCanvasSurface('anim');
     if (!surface) {
@@ -42,18 +46,11 @@ function startTimingFrames(drawFn, surface, warmupFrames, maxFrames, timeoutMill
     let previousFrame;
 
     function drawFrame() {
-      let start, afterDraw, end;
-      try {
-        start = performance.now();
-        drawFn();
-        afterDraw = performance.now();
-        surface.flush();
-        end = performance.now();
-      } catch (e) {
-        console.error(e);
-        window._error = e.stack || e.toString();
-        return;
-      }
+      const start = performance.now();
+      drawFn();
+      const afterDraw = performance.now();
+      surface.flush();
+      const end = performance.now();
 
       if (warmUp) {
         idx++;

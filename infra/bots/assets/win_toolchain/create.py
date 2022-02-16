@@ -22,14 +22,13 @@ pass the unzipped directory as the src_dir to this script.
 
 from __future__ import print_function
 import argparse
+import common
 import os
 import shlex
 import shutil
 import subprocess
 import sys
-
-
-ENV_VAR = 'WIN_TOOLCHAIN_SRC_DIR'
+import utils
 
 
 # By default the toolchain includes a bunch of unnecessary stuff with long path
@@ -43,16 +42,6 @@ IGNORE_LIST = [
   'AccChecker',
 ]
 
-
-def getenv(key):
-  val = os.environ.get(key)
-  if not val:
-    print(('Environment variable %s not set; you should run this via '
-           'create_and_upload.py.' % key), file=sys.stderr)
-    sys.exit(1)
-  return val
-
-
 def filter_toolchain_files(dirname, files):
   """Callback for shutil.copytree. Return lists of files to skip."""
   split = dirname.split(os.path.sep)
@@ -62,23 +51,18 @@ def filter_toolchain_files(dirname, files):
        return files
   return []
 
-
 def main():
   if sys.platform != 'win32':
     print('This script only runs on Windows.', file=sys.stderr)
     sys.exit(1)
 
   parser = argparse.ArgumentParser()
+  parser.add_argument('--src_dir', '-s', required=True)
   parser.add_argument('--target_dir', '-t', required=True)
   args = parser.parse_args()
-
-  # Obtain src_dir from create_and_upload via an environment variable, since
-  # this script is called via `sk` and not directly.
-  src_dir = getenv(ENV_VAR)
-
+  src_dir = os.path.abspath(args.src_dir)
   target_dir = os.path.abspath(args.target_dir)
   shutil.copytree(src_dir, target_dir, ignore=filter_toolchain_files)
-
 
 if __name__ == '__main__':
   main()

@@ -67,10 +67,10 @@ public:
         const SkVector& unitsPerMeter,
         const SkVector& pixelsPerMeter,
         const SkSize& trimSize,
-        const SkRect* mediaBox = nullptr,
-        const SkRect* bleedBox = nullptr,
-        const SkRect* artBox = nullptr,
-        const SkRect* cropBox = nullptr);
+        const SkRect* mediaBox = NULL,
+        const SkRect* bleedBox = NULL,
+        const SkRect* artBox = NULL,
+        const SkRect* cropBox = NULL);
 
     bool endSheet();
     bool endPortfolio();
@@ -92,19 +92,18 @@ protected:
                        const SkRect* srcOrNull, const SkRect& dst,
                        const SkSamplingOptions&, const SkPaint& paint,
                        SkCanvas::SrcRectConstraint) override;
-    void onDrawGlyphRunList(SkCanvas*, const SkGlyphRunList&, const SkPaint&) override;
-    void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&) override;
-    void drawCustomMesh(SkCustomMesh, sk_sp<SkBlender>, const SkPaint&) override;
+    void onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) override;
+    void drawVertices(const SkVertices*, SkBlendMode, const SkPaint&) override;
     void drawDevice(SkBaseDevice*, const SkSamplingOptions&, const SkPaint&) override;
 
 private:
     class TypefaceUse {
     public:
-        TypefaceUse(SkTypefaceID id, int index, std::unique_ptr<SkStream> data,
+        TypefaceUse(SkFontID id, int index, std::unique_ptr<SkStream> data,
                     SkTScopedComPtr<IXpsOMFontResource> xps, size_t numGlyphs)
             : typefaceId(id), ttcIndex(index), fontData(std::move(data))
             , xpsFont(std::move(xps)), glyphsUsed(numGlyphs) {}
-        const SkTypefaceID typefaceId;
+        const SkFontID typefaceId;
         const int ttcIndex;
         const std::unique_ptr<SkStream> fontData;
         const SkTScopedComPtr<IXpsOMFontResource> xpsFont;
@@ -157,7 +156,7 @@ private:
     HRESULT createXpsBrush(
         const SkPaint& skPaint,
         IXpsOMBrush** xpsBrush,
-        const SkMatrix* parentTransform = nullptr);
+        const SkMatrix* parentTransform = NULL);
 
     HRESULT createXpsSolidColorBrush(
         const SkColor skColor, const SkAlpha alpha,

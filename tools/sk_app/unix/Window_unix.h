@@ -98,7 +98,7 @@ private:
     int      fPendingHeight;
     bool     fPendingResize;
 
-    BackendType fBackend = BackendType::kRaster_BackendType;
+    BackendType fBackend;
 
     std::string fClipboardText;
 

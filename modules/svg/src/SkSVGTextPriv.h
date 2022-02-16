@@ -65,7 +65,7 @@ public:
         bool isImplicitRotate() const { return fImplicitRotate; }
 
     private:
-        inline static constexpr auto kNone = std::numeric_limits<float>::infinity();
+        static constexpr auto kNone = std::numeric_limits<float>::infinity();
 
         float fStorage[5]     = { kNone, kNone, kNone, kNone, kNone };
         bool  fImplicitRotate = false;

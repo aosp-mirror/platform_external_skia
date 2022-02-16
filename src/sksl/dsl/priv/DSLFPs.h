@@ -12,22 +12,22 @@
 
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
 
-#include "src/gpu/GrFragmentProcessor.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 
 namespace SkSL {
 
 namespace dsl {
 
-void StartFragmentProcessor(GrFragmentProcessor::ProgramImpl* processor,
-                            GrFragmentProcessor::ProgramImpl::EmitArgs* emitArgs);
+void StartFragmentProcessor(GrGLSLFragmentProcessor* processor,
+                            GrGLSLFragmentProcessor::EmitArgs* emitArgs);
 
 void EndFragmentProcessor();
 
-DSLGlobalVar sk_SampleCoord();
+DSLVar sk_SampleCoord();
 
 DSLExpression SampleChild(int index, DSLExpression coords = DSLExpression());
 
-GrGLSLUniformHandler::UniformHandle VarUniformHandle(const DSLGlobalVar& var);
+GrGLSLUniformHandler::UniformHandle VarUniformHandle(const DSLVar& var);
 
 } // namespace dsl
 

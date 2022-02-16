@@ -16,10 +16,10 @@ class CommandBufferGLTestContext : public GLTestContext {
 public:
     ~CommandBufferGLTestContext() override;
 
-    static CommandBufferGLTestContext *Create(int version, GLTestContext* shareContext) {
+    static CommandBufferGLTestContext *Create(GLTestContext* shareContext) {
         CommandBufferGLTestContext* cbShareContext =
                 reinterpret_cast<CommandBufferGLTestContext*>(shareContext);
-        CommandBufferGLTestContext *ctx = new CommandBufferGLTestContext(version, cbShareContext);
+        CommandBufferGLTestContext *ctx = new CommandBufferGLTestContext(cbShareContext);
         if (!ctx->isValid()) {
             delete ctx;
             return nullptr;
@@ -36,7 +36,7 @@ public:
     int getSampleCount();
 
 private:
-    CommandBufferGLTestContext(int version, CommandBufferGLTestContext* shareContext);
+    CommandBufferGLTestContext(CommandBufferGLTestContext* shareContext);
 
     void destroyGLContext();
 

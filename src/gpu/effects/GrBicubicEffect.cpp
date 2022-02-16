@@ -9,7 +9,6 @@
 
 #include "src/core/SkMatrixPriv.h"
 #include "src/gpu/GrTexture.h"
-#include "src/gpu/KeyBuilder.h"
 #include "src/gpu/effects/GrMatrixEffect.h"
 #include "src/gpu/effects/GrTextureEffect.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -17,15 +16,18 @@
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
 #include <cmath>
 
-class GrBicubicEffect::Impl : public ProgramImpl {
+class GrBicubicEffect::Impl : public GrGLSLFragmentProcessor {
 public:
+    Impl() : fKernel{-1, -1} {}
     void emitCode(EmitArgs&) override;
 
-private:
+protected:
     void onSetData(const GrGLSLProgramDataManager&, const GrFragmentProcessor&) override;
 
-    SkImage::CubicResampler fKernel = {-1, -1};
+private:
+    SkImage::CubicResampler fKernel;
     UniformHandle fCoefficientUni;
+    using INHERITED = GrGLSLFragmentProcessor;
 };
 
 void GrBicubicEffect::Impl::emitCode(EmitArgs& args) {
@@ -35,7 +37,7 @@ void GrBicubicEffect::Impl::emitCode(EmitArgs& args) {
 
     const char* coeffs;
     fCoefficientUni = args.fUniformHandler->addUniform(&args.fFp, kFragment_GrShaderFlag,
-                                                       SkSLType::kHalf4x4, "coefficients", &coeffs);
+                                                       kHalf4x4_GrSLType, "coefficients", &coeffs);
     // We determine our fractional offset (f) within the texel. We then snap coord to a texel
     // center. The snap prevents cases where the starting coords are near a texel boundary and
     // offsets with imperfect precision would cause us to skip/double hit a texel.
@@ -52,8 +54,10 @@ void GrBicubicEffect::Impl::emitCode(EmitArgs& args) {
         fragBuilder->codeAppend("half4 rowColors[4];");
         for (int y = 0; y < 4; ++y) {
             for (int x = 0; x < 4; ++x) {
-                auto coord = SkSL::String::printf("coord + float2(%d, %d)", x - 1, y - 1);
-                auto childStr = this->invokeChild(0, args, coord);
+                SkString coord;
+                coord.printf("coord + float2(%d, %d)", x - 1, y - 1);
+                auto childStr =
+                        this->invokeChild(0, args, SkSL::String(coord.c_str(), coord.size()));
                 fragBuilder->codeAppendf("rowColors[%d] = %s;", x, childStr.c_str());
             }
             fragBuilder->codeAppendf(
@@ -72,13 +76,13 @@ void GrBicubicEffect::Impl::emitCode(EmitArgs& args) {
         fragBuilder->codeAppendf("half4 w = %s * half4(1.0, f, f2, f2 * f);", coeffs);
         fragBuilder->codeAppend("half4 c[4];");
         for (int i = 0; i < 4; ++i) {
-            std::string coord;
+            SkString coord;
             if (bicubicEffect.fDirection == Direction::kX) {
-                coord = SkSL::String::printf("float2(coord + %d, %s.y)", i - 1, args.fSampleCoord);
+                coord.printf("float2(coord + %d, %s.y)", i - 1, args.fSampleCoord);
             } else {
-                coord = SkSL::String::printf("float2(%s.x, coord + %d)", args.fSampleCoord, i - 1);
+                coord.printf("float2(%s.x, coord + %d)", args.fSampleCoord, i - 1);
             }
-            auto childStr = this->invokeChild(0, args, coord);
+            auto childStr = this->invokeChild(0, args, SkSL::String(coord.c_str(), coord.size()));
             fragBuilder->codeAppendf("c[%d] = %s;", i, childStr.c_str());
         }
         fragBuilder->codeAppend(
@@ -207,17 +211,21 @@ GrBicubicEffect::GrBicubicEffect(std::unique_ptr<GrFragmentProcessor> fp,
 }
 
 GrBicubicEffect::GrBicubicEffect(const GrBicubicEffect& that)
-        : INHERITED(that)
+        : INHERITED(kGrBicubicEffect_ClassID, that.optimizationFlags())
         , fKernel(that.fKernel)
         , fDirection(that.fDirection)
-        , fClamp(that.fClamp) {}
+        , fClamp(that.fClamp) {
+    this->setUsesSampleCoordsDirectly();
+    this->cloneAndRegisterAllChildProcessors(that);
+}
 
-void GrBicubicEffect::onAddToKey(const GrShaderCaps& caps, skgpu::KeyBuilder* b) const {
+void GrBicubicEffect::onGetGLSLProcessorKey(const GrShaderCaps& caps,
+                                            GrProcessorKeyBuilder* b) const {
     uint32_t key = (static_cast<uint32_t>(fDirection) << 0) | (static_cast<uint32_t>(fClamp) << 2);
     b->add32(key);
 }
 
-std::unique_ptr<GrFragmentProcessor::ProgramImpl> GrBicubicEffect::onMakeProgramImpl() const {
+std::unique_ptr<GrGLSLFragmentProcessor> GrBicubicEffect::onMakeProgramImpl() const {
     return std::make_unique<Impl>();
 }
 

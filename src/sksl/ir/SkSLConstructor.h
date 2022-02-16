@@ -9,6 +9,7 @@
 #define SKSL_CONSTRUCTOR
 
 #include "include/core/SkSpan.h"
+#include "src/sksl/SkSLIRGenerator.h"
 #include "src/sksl/ir/SkSLExpression.h"
 
 namespace SkSL {
@@ -18,8 +19,8 @@ namespace SkSL {
  */
 class AnyConstructor : public Expression {
 public:
-    AnyConstructor(int line, Kind kind, const Type* type)
-            : INHERITED(line, kind, type) {}
+    AnyConstructor(int offset, Kind kind, const Type* type)
+            : INHERITED(offset, kind, type) {}
 
     virtual SkSpan<std::unique_ptr<Expression>> argumentSpan() = 0;
     virtual SkSpan<const std::unique_ptr<Expression>> argumentSpan() const = 0;
@@ -33,8 +34,8 @@ public:
         return false;
     }
 
-    std::string description() const override {
-        std::string result = this->type().description() + "(";
+    String description() const override {
+        String result = this->type().description() + "(";
         const char* separator = "";
         for (const std::unique_ptr<Expression>& arg : this->argumentSpan()) {
             result += separator;
@@ -67,12 +68,13 @@ public:
         return true;
     }
 
-    bool supportsConstantValues() const override { return true; }
-    std::optional<double> getConstantValue(int n) const override;
+    const Expression* getConstantSubexpression(int n) const override;
 
     ComparisonResult compareConstant(const Expression& other) const override;
 
 private:
+    std::unique_ptr<Expression> fArgument;
+
     using INHERITED = Expression;
 };
 
@@ -81,9 +83,9 @@ private:
  */
 class SingleArgumentConstructor : public AnyConstructor {
 public:
-    SingleArgumentConstructor(int line, Kind kind, const Type* type,
+    SingleArgumentConstructor(int offset, Kind kind, const Type* type,
                               std::unique_ptr<Expression> argument)
-            : INHERITED(line, kind, type)
+            : INHERITED(offset, kind, type)
             , fArgument(std::move(argument)) {}
 
     std::unique_ptr<Expression>& argument() {
@@ -113,8 +115,8 @@ private:
  */
 class MultiArgumentConstructor : public AnyConstructor {
 public:
-    MultiArgumentConstructor(int line, Kind kind, const Type* type, ExpressionArray arguments)
-            : INHERITED(line, kind, type)
+    MultiArgumentConstructor(int offset, Kind kind, const Type* type, ExpressionArray arguments)
+            : INHERITED(offset, kind, type)
             , fArguments(std::move(arguments)) {}
 
     ExpressionArray& arguments() {
@@ -123,6 +125,15 @@ public:
 
     const ExpressionArray& arguments() const {
         return fArguments;
+    }
+
+    ExpressionArray cloneArguments() const {
+        ExpressionArray clonedArgs;
+        clonedArgs.reserve_back(this->arguments().size());
+        for (const std::unique_ptr<Expression>& arg: this->arguments()) {
+            clonedArgs.push_back(arg->clone());
+        }
+        return clonedArgs;
     }
 
     SkSpan<std::unique_ptr<Expression>> argumentSpan() final {
@@ -157,7 +168,7 @@ namespace Constructor {
     // Constructor expression types; this class chooses the proper one based on context, e.g.
     // `ConstructorCompound`, `ConstructorScalarCast`, or `ConstructorMatrixResize`.
     std::unique_ptr<Expression> Convert(const Context& context,
-                                        int line,
+                                        int offset,
                                         const Type& type,
                                         ExpressionArray args);
 };

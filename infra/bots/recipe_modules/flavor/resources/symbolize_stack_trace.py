@@ -38,7 +38,6 @@ def main(basedir, cmd):
   proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT)
   for line in iter(proc.stdout.readline, ''):
-    line = line.decode('utf-8')
     sys.stdout.write(line)
     logs.append(line)
   proc.wait()
@@ -77,8 +76,7 @@ def main(basedir, cmd):
         if not addr or not addr.startswith('0x'):
           addr = addr2
         try:
-          sym = subprocess.check_output([
-              'addr2line', '-Cfpe', path, addr]).decode('utf-8')
+          sym = subprocess.check_output(['addr2line', '-Cfpe', path, addr])
         except subprocess.CalledProcessError:
           sym = ''
         sym = sym.strip()

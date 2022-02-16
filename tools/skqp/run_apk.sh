@@ -20,7 +20,7 @@ printf '\n\nAPK = "%s"\nDST = "%s"\n\n' "$APK" "$DST"
 
 set -x
 
-adb wait-for-device || exit 1
+timeout 60 adb wait-for-device || exit 1
 
 sleep ${SKQP_SLEEP:-0}
 
