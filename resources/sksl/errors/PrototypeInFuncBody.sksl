@@ -1,7 +1,3 @@
 void main() {
     float x();
 }
-
-/*%%*
-expected ';', but found '('
-*%%*/

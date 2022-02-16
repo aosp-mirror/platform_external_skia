@@ -77,11 +77,13 @@ static bool depends_on(GrRenderTask* depender, GrRenderTask* dependee) {
         }
     }
     // Check for a formal dependency.
-    if (depender->dependsOn(dependee)) {
-        CLUSTER_DEBUGF("Cluster: Bail, %s depends on %s.\n",
-                       describe_task(depender).c_str(),
-                       describe_task(dependee).c_str());
-        return true;
+    for (GrRenderTask* t : depender->dependencies()) {
+        if (dependee == t) {
+            CLUSTER_DEBUGF("Cluster: Bail, %s depends on %s.\n",
+                           describe_task(depender).c_str(),
+                           describe_task(dependee).c_str());
+            return true;
+        }
     }
     return false;
 }

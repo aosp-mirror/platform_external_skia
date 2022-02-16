@@ -29,7 +29,7 @@ public:
     GrSurfaceProxyView(GrSurfaceProxyView&& view) = default;
     GrSurfaceProxyView(const GrSurfaceProxyView&) = default;
 
-    explicit operator bool() const { return SkToBool(fProxy.get()); }
+    operator bool() const { return SkToBool(fProxy.get()); }
 
     GrSurfaceProxyView& operator=(const GrSurfaceProxyView&) = default;
     GrSurfaceProxyView& operator=(GrSurfaceProxyView&& view) = default;
@@ -44,13 +44,6 @@ public:
     int width() const { return this->proxy()->width(); }
     int height() const { return this->proxy()->height(); }
     SkISize dimensions() const { return this->proxy()->dimensions(); }
-
-    GrMipmapped mipmapped() const {
-        if (const GrTextureProxy* proxy = this->asTextureProxy()) {
-            return proxy->mipmapped();
-        }
-        return GrMipmapped::kNo;
-    }
 
     GrSurfaceProxy* proxy() const { return fProxy.get(); }
     sk_sp<GrSurfaceProxy> refProxy() const { return fProxy; }
@@ -111,12 +104,12 @@ public:
         return {std::move(copy), src.origin(), src.swizzle()};
     }
 
-    static GrSurfaceProxyView Copy(GrRecordingContext* rContext,
+    static GrSurfaceProxyView Copy(GrRecordingContext* context,
                                    GrSurfaceProxyView src,
                                    GrMipmapped mipMapped,
                                    SkBackingFit fit,
                                    SkBudgeted budgeted) {
-        auto copy = GrSurfaceProxy::Copy(rContext,
+        auto copy = GrSurfaceProxy::Copy(context,
                                          src.refProxy(),
                                          src.origin(),
                                          mipMapped,

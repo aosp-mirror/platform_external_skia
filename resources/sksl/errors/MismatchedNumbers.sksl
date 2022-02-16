@@ -30,7 +30,7 @@ void   u_eq_float_literal_disallowed()     { u = 1.0; }
 void   i_eq_u_disallowed()                 { i = u; }
 void   i_eq_f_disallowed()                 { i = f; }
 float  f_eq_i_disallowed()                 { f = i; }
-float  f_eq_u_disallowed()                 { f = u; }
+float  f_eq_i_disallowed()                 { f = u; }
 void   u_eq_i_disallowed()                 { u = i; }
 void   u_eq_f_disallowed()                 { u = f; }
 void   i_plus_float_literal_disallowed()   { i + 1.0; }
@@ -73,56 +73,3 @@ void   u_plus_i_disallowed()               { u + i; }
 void   u_minus_i_disallowed()              { u - i; }
 void   u_mul_i_disallowed()                { u * i; }
 void   u_div_i_disallowed()                { u / i; }
-
-/*%%*
-type mismatch: '=' cannot operate on 'int', 'float'
-type mismatch: '=' cannot operate on 'uint', 'float'
-type mismatch: '=' cannot operate on 'int', 'uint'
-type mismatch: '=' cannot operate on 'int', 'float'
-type mismatch: '=' cannot operate on 'float', 'int'
-function 'f_eq_i_disallowed' can exit without returning a value
-type mismatch: '=' cannot operate on 'float', 'uint'
-function 'f_eq_u_disallowed' can exit without returning a value
-type mismatch: '=' cannot operate on 'uint', 'int'
-type mismatch: '=' cannot operate on 'uint', 'float'
-type mismatch: '+' cannot operate on 'int', 'float'
-type mismatch: '-' cannot operate on 'int', 'float'
-type mismatch: '*' cannot operate on 'int', 'float'
-type mismatch: '/' cannot operate on 'int', 'float'
-type mismatch: '+' cannot operate on 'float', 'int'
-type mismatch: '-' cannot operate on 'float', 'int'
-type mismatch: '*' cannot operate on 'float', 'int'
-type mismatch: '/' cannot operate on 'float', 'int'
-type mismatch: '+' cannot operate on 'uint', 'float'
-type mismatch: '-' cannot operate on 'uint', 'float'
-type mismatch: '*' cannot operate on 'uint', 'float'
-type mismatch: '/' cannot operate on 'uint', 'float'
-type mismatch: '+' cannot operate on 'float', 'uint'
-type mismatch: '-' cannot operate on 'float', 'uint'
-type mismatch: '*' cannot operate on 'float', 'uint'
-type mismatch: '/' cannot operate on 'float', 'uint'
-type mismatch: '+' cannot operate on 'int', 'float'
-type mismatch: '-' cannot operate on 'int', 'float'
-type mismatch: '*' cannot operate on 'int', 'float'
-type mismatch: '/' cannot operate on 'int', 'float'
-type mismatch: '+' cannot operate on 'float', 'int'
-type mismatch: '-' cannot operate on 'float', 'int'
-type mismatch: '*' cannot operate on 'float', 'int'
-type mismatch: '/' cannot operate on 'float', 'int'
-type mismatch: '+' cannot operate on 'uint', 'float'
-type mismatch: '-' cannot operate on 'uint', 'float'
-type mismatch: '*' cannot operate on 'uint', 'float'
-type mismatch: '/' cannot operate on 'uint', 'float'
-type mismatch: '+' cannot operate on 'float', 'uint'
-type mismatch: '-' cannot operate on 'float', 'uint'
-type mismatch: '*' cannot operate on 'float', 'uint'
-type mismatch: '/' cannot operate on 'float', 'uint'
-type mismatch: '+' cannot operate on 'int', 'uint'
-type mismatch: '-' cannot operate on 'int', 'uint'
-type mismatch: '*' cannot operate on 'int', 'uint'
-type mismatch: '/' cannot operate on 'int', 'uint'
-type mismatch: '+' cannot operate on 'uint', 'int'
-type mismatch: '-' cannot operate on 'uint', 'int'
-type mismatch: '*' cannot operate on 'uint', 'int'
-type mismatch: '/' cannot operate on 'uint', 'int'
-*%%*/

@@ -17,7 +17,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y  \
   g++-multilib \
   openjdk-8-jdk-headless \
   libxi-dev \
-  python3-django \
+  python-django \
   libc++-dev \
   libc++abi-dev \
   gperf \
@@ -25,7 +25,6 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y  \
   usbutils \
   libfontconfig-dev \
   libglu-dev \
-  python3 \
+  python \
   git \
-  curl \
   && rm -rf /var/lib/apt/lists/*

@@ -79,27 +79,32 @@ public:
 
     const char* name() const override { return "Conic"; }
 
-    void addToKey(const GrShaderCaps& caps, skgpu::KeyBuilder* b) const override;
-
-    std::unique_ptr<ProgramImpl> makeProgramImpl(const GrShaderCaps&) const override;
-
-private:
-    class Impl;
-
-    GrConicEffect(const SkPMColor4f&, const SkMatrix& viewMatrix, uint8_t coverage,
-                  const SkMatrix& localMatrix, bool usesLocalCoords);
-
     inline const Attribute& inPosition() const { return kAttributes[0]; }
     inline const Attribute& inConicCoeffs() const { return kAttributes[1]; }
+    inline bool isAntiAliased() const { return true; }
+    inline bool isFilled() const { return false; }
+    const SkPMColor4f& color() const { return fColor; }
+    const SkMatrix& viewMatrix() const { return fViewMatrix; }
+    const SkMatrix& localMatrix() const { return fLocalMatrix; }
+    bool usesLocalCoords() const { return fUsesLocalCoords; }
+    uint8_t coverageScale() const { return fCoverageScale; }
+
+    void getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override;
+
+    GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps&) const override;
+
+private:
+    GrConicEffect(const SkPMColor4f&, const SkMatrix& viewMatrix, uint8_t coverage,
+                  const SkMatrix& localMatrix, bool usesLocalCoords);
 
     SkPMColor4f         fColor;
     SkMatrix            fViewMatrix;
     SkMatrix            fLocalMatrix;
     bool                fUsesLocalCoords;
     uint8_t             fCoverageScale;
-    inline static constexpr Attribute kAttributes[] = {
-        {"inPosition", kFloat2_GrVertexAttribType, SkSLType::kFloat2},
-        {"inConicCoeffs", kFloat4_GrVertexAttribType, SkSLType::kHalf4}
+    static constexpr Attribute kAttributes[] = {
+        {"inPosition", kFloat2_GrVertexAttribType, kFloat2_GrSLType},
+        {"inConicCoeffs", kFloat4_GrVertexAttribType, kHalf4_GrSLType}
     };
 
     GR_DECLARE_GEOMETRY_PROCESSOR_TEST
@@ -141,18 +146,23 @@ public:
 
     const char* name() const override { return "Quad"; }
 
-    void addToKey(const GrShaderCaps& caps, skgpu::KeyBuilder* b) const override;
-
-    std::unique_ptr<ProgramImpl> makeProgramImpl(const GrShaderCaps&) const override;
-
-private:
-    class Impl;
-
-    GrQuadEffect(const SkPMColor4f&, const SkMatrix& viewMatrix, uint8_t coverage,
-                 const SkMatrix& localMatrix, bool usesLocalCoords);
-
     inline const Attribute& inPosition() const { return kAttributes[0]; }
     inline const Attribute& inHairQuadEdge() const { return kAttributes[1]; }
+    inline bool isAntiAliased() const { return true; }
+    inline bool isFilled() const { return false; }
+    const SkPMColor4f& color() const { return fColor; }
+    const SkMatrix& viewMatrix() const { return fViewMatrix; }
+    const SkMatrix& localMatrix() const { return fLocalMatrix; }
+    bool usesLocalCoords() const { return fUsesLocalCoords; }
+    uint8_t coverageScale() const { return fCoverageScale; }
+
+    void getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override;
+
+    GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps&) const override;
+
+private:
+    GrQuadEffect(const SkPMColor4f&, const SkMatrix& viewMatrix, uint8_t coverage,
+                 const SkMatrix& localMatrix, bool usesLocalCoords);
 
     SkPMColor4f fColor;
     SkMatrix fViewMatrix;
@@ -160,9 +170,9 @@ private:
     bool fUsesLocalCoords;
     uint8_t fCoverageScale;
 
-    inline static constexpr Attribute kAttributes[] = {
-        {"inPosition", kFloat2_GrVertexAttribType, SkSLType::kFloat2},
-        {"inHairQuadEdge", kFloat4_GrVertexAttribType, SkSLType::kHalf4}
+    static constexpr Attribute kAttributes[] = {
+        {"inPosition", kFloat2_GrVertexAttribType, kFloat2_GrSLType},
+        {"inHairQuadEdge", kFloat4_GrVertexAttribType, kHalf4_GrSLType}
     };
 
     GR_DECLARE_GEOMETRY_PROCESSOR_TEST

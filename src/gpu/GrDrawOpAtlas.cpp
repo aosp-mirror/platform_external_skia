@@ -136,8 +136,7 @@ bool GrDrawOpAtlas::Plot::addSubImage(
     dataPtr += fBytesPerPixel * fWidth * rect.fTop;
     dataPtr += fBytesPerPixel * rect.fLeft;
     // copy into the data buffer, swizzling as we go if this is ARGB data
-    constexpr bool kBGRAIsNative = kN32_SkColorType == kBGRA_8888_SkColorType;
-    if (4 == fBytesPerPixel && kBGRAIsNative) {
+    if (4 == fBytesPerPixel && kN32_SkColorType == kBGRA_8888_SkColorType) {
         for (int i = 0; i < height; ++i) {
             SkOpts::RGBA_to_BGRA((uint32_t*)dataPtr, (const uint32_t*)imagePtr, width);
             dataPtr += fBytesPerPixel * fWidth;
@@ -177,11 +176,8 @@ void GrDrawOpAtlas::Plot::uploadToTexture(GrDeferredTextureUploadWritePixelsFn& 
     dataPtr += rowBytes * fDirtyRect.fTop;
     dataPtr += fBytesPerPixel * fDirtyRect.fLeft;
 
-    writePixels(proxy,
-                fDirtyRect.makeOffset(fOffset.fX, fOffset.fY),
-                fColorType,
-                dataPtr,
-                rowBytes);
+    writePixels(proxy, fOffset.fX + fDirtyRect.fLeft, fOffset.fY + fDirtyRect.fTop,
+                fDirtyRect.width(), fDirtyRect.height(), fColorType, dataPtr, rowBytes);
     fDirtyRect.setEmpty();
     SkDEBUGCODE(fDirty = false;)
 }
@@ -698,3 +694,5 @@ SkISize GrDrawOpAtlasConfig::plotDimensions(GrMaskFormat type) const {
         return { 256, 256 };
     }
 }
+
+constexpr int GrDrawOpAtlasConfig::kMaxAtlasDim;

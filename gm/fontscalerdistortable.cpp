@@ -44,8 +44,8 @@ private:
         return SkISize::Make(550, 700);
     }
 
-    inline static constexpr int rows = 2;
-    inline static constexpr int cols = 5;
+    static constexpr int rows = 2;
+    static constexpr int cols = 5;
     sk_sp<SkTypeface> typeface[rows][cols];
     void onOnceBeforeDraw() override {
         sk_sp<SkFontMgr> fontMgr(SkFontMgr::RefDefault());

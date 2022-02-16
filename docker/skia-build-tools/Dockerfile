@@ -1,8 +1,7 @@
 # Dockerfile for building an image with all the tools needed to checkout and build Skia.
-FROM launcher.gcr.io/google/debian11 AS build
-RUN apt update && apt dist-upgrade -y && apt install -y \
+FROM launcher.gcr.io/google/clang-debian9 AS build
+RUN apt-get update && apt-get upgrade -y && apt-get install -y \
   git \
-  clang \
   python \
   curl \
   build-essential \

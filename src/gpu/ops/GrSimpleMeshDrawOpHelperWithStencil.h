@@ -24,10 +24,9 @@ public:
 
     GrProgramInfo* createProgramInfoWithStencil(const GrCaps*,
                                                 SkArenaAlloc*,
-                                                const GrSurfaceProxyView& writeView,
-                                                bool usesMSAASurface,
+                                                const GrSurfaceProxyView& writeViewSwizzle,
                                                 GrAppliedClip&&,
-                                                const GrDstProxyView&,
+                                                const GrXferProcessor::DstProxyView&,
                                                 GrGeometryProcessor*,
                                                 GrPrimitiveType,
                                                 GrXferBarrierFlags renderPassXferBarriers,

@@ -52,8 +52,7 @@ class SK_API SkSurfaceProps {
 public:
     enum Flags {
         kUseDeviceIndependentFonts_Flag = 1 << 0,
-        // Use internal MSAA to render to non-MSAA GPU surfaces.
-        kDynamicMSAA_Flag               = 1 << 1
+        kLast_Flag                      = kUseDeviceIndependentFonts_Flag
     };
     /** Deprecated alias used by Chromium. Will be removed. */
     static const Flags kUseDistanceFieldFonts_Flag = kUseDeviceIndependentFonts_Flag;

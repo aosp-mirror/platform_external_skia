@@ -16,15 +16,15 @@
 
 std::unique_ptr<SkSL::Program> GrSkSLtoGLSL(const GrGLGpu* gpu,
                                             SkSL::ProgramKind programKind,
-                                            const std::string& sksl,
+                                            const SkSL::String& sksl,
                                             const SkSL::Program::Settings& settings,
-                                            std::string* glsl,
+                                            SkSL::String* glsl,
                                             GrContextOptions::ShaderErrorHandler* errorHandler);
 
 GrGLuint GrGLCompileAndAttachShader(const GrGLContext& glCtx,
                                     GrGLuint programId,
                                     GrGLenum type,
-                                    const std::string& glsl,
+                                    const SkSL::String& glsl,
                                     GrThreadSafePipelineBuilder::Stats*,
                                     GrContextOptions::ShaderErrorHandler* errorHandler);
 

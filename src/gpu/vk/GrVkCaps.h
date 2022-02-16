@@ -10,10 +10,11 @@
 
 #include "include/gpu/vk/GrVkTypes.h"
 #include "src/gpu/GrCaps.h"
+#include "src/gpu/vk/GrVkAttachment.h"
 
+class GrShaderCaps;
 class GrVkExtensions;
 struct GrVkInterface;
-class GrVkRenderTarget;
 
 /**
  * Stores some capabilities of a Vk backend.
@@ -35,7 +36,7 @@ public:
 
     bool isFormatSRGB(const GrBackendFormat&) const override;
 
-    bool isFormatTexturable(const GrBackendFormat&, GrTextureType) const override;
+    bool isFormatTexturable(const GrBackendFormat&) const override;
     bool isVkFormatTexturable(VkFormat) const;
 
     bool isFormatCopyable(const GrBackendFormat&) const override { return true; }
@@ -161,9 +162,6 @@ public:
     // Returns true if the device supports protected memory.
     bool supportsProtectedMemory() const { return fSupportsProtectedMemory; }
 
-    // Returns true if the VK_EXT_image_drm_format_modifier is enabled.
-    bool supportsDRMFormatModifiers() const { return fSupportsDRMFormatModifiers; }
-
     // Returns whether we prefer to record draws directly into a primary command buffer.
     bool preferPrimaryOverSecondaryCommandBuffers() const {
         return fPreferPrimaryOverSecondaryCommandBuffers;
@@ -241,7 +239,7 @@ public:
     int getFragmentUniformBinding() const;
     int getFragmentUniformSet() const;
 
-    void addExtraSamplerKey(skgpu::KeyBuilder*,
+    void addExtraSamplerKey(GrProcessorKeyBuilder*,
                             GrSamplerState,
                             const GrBackendFormat&) const override;
 
@@ -253,16 +251,17 @@ public:
 
     VkShaderStageFlags getPushConstantStageFlags() const;
 
+    // If true then when doing MSAA draws, we will prefer to discard the msaa attachment on load
+    // and stores. The use of this feature for specific draws depends on the render target having a
+    // resolve attachment, and if we need to load previous data the resolve attachment must be
+    // usable as an input attachment. Otherwise we will just write out and store the msaa attachment
+    // like normal.
+    // This flag is similar to enabling gl render to texture for msaa rendering.
+    bool preferDiscardableMSAAAttachment() const { return fPreferDiscardableMSAAAttachment; }
+
     bool mustLoadFullImageWithDiscardableMSAA() const {
         return fMustLoadFullImageWithDiscardableMSAA;
     }
-    bool supportsDiscardableMSAAForDMSAA() const { return fSupportsDiscardableMSAAForDMSAA; }
-    bool renderTargetSupportsDiscardableMSAA(const GrVkRenderTarget*) const;
-    bool programInfoWillUseDiscardableMSAA(const GrProgramInfo&) const;
-
-    bool dmsaaResolveCanBeUsedAsTextureInSameRenderPass() const override { return false; }
-
-    bool supportsMemorylessAttachments() const { return fSupportsMemorylessAttachments; }
 
 #if GR_TEST_UTILS
     std::vector<TestFormatColorTypeCombination> getTestingCombinations() const override;
@@ -276,40 +275,6 @@ private:
         kIntel_VkVendor = 32902,
         kNvidia_VkVendor = 4318,
         kQualcomm_VkVendor = 20803,
-    };
-
-    // Some common Intel GPU models, currently we cover ICL/RKL/TGL/ADL
-    // Referenced from the following Mesa source files:
-    // https://github.com/mesa3d/mesa/blob/master/include/pci_ids/i965_pci_ids.h
-    // https://github.com/mesa3d/mesa/blob/master/include/pci_ids/iris_pci_ids.h
-    struct VkIntelGPUInfo {
-        // IceLake
-        const std::array<uint32_t, 14> IceLake = {
-            {0x8A50, 0x8A51, 0x8A52, 0x8A53, 0x8A54, 0x8A56, 0x8A57,
-             0x8A58, 0x8A59, 0x8A5A, 0x8A5B, 0x8A5C, 0x8A5D, 0x8A71}};
-        // RocketLake
-        const std::array<uint32_t, 5> RocketLake = {
-            {0x4c8a, 0x4c8b, 0x4c8c, 0x4c90, 0x4c9a}};
-        // TigerLake
-        const std::array<uint32_t, 11> TigerLake = {
-            {0x9A40, 0x9A49, 0x9A59, 0x9A60, 0x9A68, 0x9A70,
-             0x9A78, 0x9AC0, 0x9AC9, 0x9AD9, 0x9AF8}};
-        // Alderlake
-        const std::array<uint32_t, 10> Alderlake = {
-            {0x4680, 0x4681, 0x4682, 0x4683, 0x4690,
-             0x4691, 0x4692, 0x4693, 0x4698, 0x4699}};
-    };
-
-    enum class VkIntelGPUType {
-        // 11th gen
-        kIntelIceLake,
-
-        // 12th gen
-        kIntelRocketLake,
-        kIntelTigerLake,
-        kIntelAlderLake,
-
-        kOther
     };
 
     void init(const GrContextOptions& contextOptions, const GrVkInterface* vkInterface,
@@ -340,9 +305,7 @@ private:
 
     GrSwizzle onGetReadSwizzle(const GrBackendFormat&, GrColorType) const override;
 
-    GrDstSampleFlags onGetDstSampleFlagsForProxy(const GrRenderTargetProxy*) const override;
-
-    bool onSupportsDynamicMSAA(const GrRenderTargetProxy*) const override;
+    GrDstSampleType onGetDstSampleTypeForProxy(const GrRenderTargetProxy*) const override;
 
     // ColorTypeInfo for a specific format
     struct ColorTypeInfo {
@@ -429,8 +392,6 @@ private:
 
     bool fSupportsProtectedMemory = false;
 
-    bool fSupportsDRMFormatModifiers = false;
-
     bool fPreferPrimaryOverSecondaryCommandBuffers = true;
     bool fMustInvalidatePrimaryCmdBufferStateAfterClearAttachments = false;
 
@@ -445,9 +406,8 @@ private:
 
     uint32_t fMaxInputAttachmentDescriptors = 0;
 
+    bool fPreferDiscardableMSAAAttachment = false;
     bool fMustLoadFullImageWithDiscardableMSAA = false;
-    bool fSupportsDiscardableMSAAForDMSAA = true;
-    bool fSupportsMemorylessAttachments = false;
 
     uint32_t fMaxDrawIndirectDrawCount = 0;
 

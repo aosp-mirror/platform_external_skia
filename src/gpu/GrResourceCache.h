@@ -10,6 +10,7 @@
 
 #include "include/core/SkRefCnt.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/private/GrResourceKey.h"
 #include "include/private/SkTArray.h"
 #include "include/private/SkTHash.h"
 #include "src/core/SkMessageBus.h"
@@ -19,18 +20,14 @@
 #include "src/gpu/GrGpuResource.h"
 #include "src/gpu/GrGpuResourceCacheAccess.h"
 #include "src/gpu/GrGpuResourcePriv.h"
-#include "src/gpu/ResourceKey.h"
 
 class GrCaps;
 class GrProxyProvider;
 class SkString;
 class SkTraceMemoryDump;
+class GrSingleOwner;
 class GrTexture;
 class GrThreadSafeCache;
-
-namespace skgpu {
-class SingleOwner;
-}
 
 struct GrTextureFreedMessage {
     GrTexture* fTexture;
@@ -61,7 +58,7 @@ static inline bool SkShouldPostMessageToBus(
  */
 class GrResourceCache {
 public:
-    GrResourceCache(skgpu::SingleOwner* owner,
+    GrResourceCache(GrSingleOwner* owner,
                     GrDirectContext::DirectContextID owningContextID,
                     uint32_t familyID);
     ~GrResourceCache();
@@ -126,11 +123,11 @@ public:
     /**
      * Find a resource that matches a scratch key.
      */
-    GrGpuResource* findAndRefScratchResource(const skgpu::ScratchKey& scratchKey);
+    GrGpuResource* findAndRefScratchResource(const GrScratchKey& scratchKey);
 
 #ifdef SK_DEBUG
     // This is not particularly fast and only used for validation, so debug only.
-    int countScratchEntriesForKey(const skgpu::ScratchKey& scratchKey) const {
+    int countScratchEntriesForKey(const GrScratchKey& scratchKey) const {
         return fScratchMap.countForKey(scratchKey);
     }
 #endif
@@ -138,7 +135,7 @@ public:
     /**
      * Find a resource that matches a unique key.
      */
-    GrGpuResource* findAndRefUniqueResource(const skgpu::UniqueKey& key) {
+    GrGpuResource* findAndRefUniqueResource(const GrUniqueKey& key) {
         GrGpuResource* resource = fUniqueHash.find(key);
         if (resource) {
             this->refAndMakeResourceMRU(resource);
@@ -149,7 +146,7 @@ public:
     /**
      * Query whether a unique key exists in the cache.
      */
-    bool hasUniqueKey(const skgpu::UniqueKey& key) const {
+    bool hasUniqueKey(const GrUniqueKey& key) const {
         return SkToBool(fUniqueHash.find(key));
     }
 
@@ -240,13 +237,14 @@ public:
     void dumpStatsKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* value) const;
 #endif
 
-#endif // GR_CACHE_STATS
-
-#if GR_TEST_UTILS
-    int countUniqueKeysWithTag(const char* tag) const;
-
-    void changeTimestamp(uint32_t newTimestamp);
 #endif
+
+#ifdef SK_DEBUG
+    int countUniqueKeysWithTag(const char* tag) const;
+#endif
+
+    // This function is for unit testing and is only defined in test tools.
+    void changeTimestamp(uint32_t newTimestamp);
 
     // Enumerates all cached resources and dumps their details to traceMemoryDump.
     void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const;
@@ -263,7 +261,7 @@ private:
     void insertResource(GrGpuResource*);
     void removeResource(GrGpuResource*);
     void notifyARefCntReachedZero(GrGpuResource*, GrGpuResource::LastRemovedRef);
-    void changeUniqueKey(GrGpuResource*, const skgpu::UniqueKey&);
+    void changeUniqueKey(GrGpuResource*, const GrUniqueKey&);
     void removeUniqueKey(GrGpuResource*);
     void willRemoveScratchKey(const GrGpuResource*);
     void didChangeBudgetStatus(GrGpuResource*);
@@ -294,21 +292,21 @@ private:
     class AvailableForScratchUse;
 
     struct ScratchMapTraits {
-        static const skgpu::ScratchKey& GetKey(const GrGpuResource& r) {
+        static const GrScratchKey& GetKey(const GrGpuResource& r) {
             return r.resourcePriv().getScratchKey();
         }
 
-        static uint32_t Hash(const skgpu::ScratchKey& key) { return key.hash(); }
+        static uint32_t Hash(const GrScratchKey& key) { return key.hash(); }
         static void OnFree(GrGpuResource*) { }
     };
-    typedef SkTMultiMap<GrGpuResource, skgpu::ScratchKey, ScratchMapTraits> ScratchMap;
+    typedef SkTMultiMap<GrGpuResource, GrScratchKey, ScratchMapTraits> ScratchMap;
 
     struct UniqueHashTraits {
-        static const skgpu::UniqueKey& GetKey(const GrGpuResource& r) { return r.getUniqueKey(); }
+        static const GrUniqueKey& GetKey(const GrGpuResource& r) { return r.getUniqueKey(); }
 
-        static uint32_t Hash(const skgpu::UniqueKey& key) { return key.hash(); }
+        static uint32_t Hash(const GrUniqueKey& key) { return key.hash(); }
     };
-    typedef SkTDynamicHash<GrGpuResource, skgpu::UniqueKey, UniqueHashTraits> UniqueHash;
+    typedef SkTDynamicHash<GrGpuResource, GrUniqueKey, UniqueHashTraits> UniqueHash;
 
     class TextureAwaitingUnref {
     public:
@@ -340,7 +338,7 @@ private:
     using TextureFreedMessageBus = SkMessageBus<GrTextureFreedMessage,
                                                 GrDirectContext::DirectContextID>;
 
-    typedef SkMessageBus<skgpu::UniqueKeyInvalidatedMessage, uint32_t>::Inbox InvalidUniqueKeyInbox;
+    typedef SkMessageBus<GrUniqueKeyInvalidatedMessage, uint32_t>::Inbox InvalidUniqueKeyInbox;
     typedef SkTDPQueue<GrGpuResource*, CompareTimestamp, AccessResourceIndex> PurgeableQueue;
     typedef SkTDArray<GrGpuResource*> ResourceArray;
 
@@ -385,7 +383,7 @@ private:
 
     GrDirectContext::DirectContextID    fOwningContextID;
     uint32_t                            fContextUniqueID = SK_InvalidUniqueID;
-    skgpu::SingleOwner*                 fSingleOwner = nullptr;
+    GrSingleOwner*                      fSingleOwner = nullptr;
 
     // This resource is allowed to be in the nonpurgeable array for the sake of validate() because
     // we're in the midst of converting it to purgeable status.
@@ -436,7 +434,7 @@ private:
     /**
      * Called by GrGpuResources to change their unique keys.
      */
-    void changeUniqueKey(GrGpuResource* resource, const skgpu::UniqueKey& newKey) {
+    void changeUniqueKey(GrGpuResource* resource, const GrUniqueKey& newKey) {
          fCache->changeUniqueKey(resource, newKey);
     }
 

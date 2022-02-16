@@ -25,7 +25,6 @@ public:
 
     int count() const { return fArray.count(); }
     SkDrawable* const* begin() const { return fArray.begin(); }
-    SkDrawable* const* end() const { return fArray.end(); }
 
     void append(SkDrawable* drawable);
 
@@ -62,6 +61,7 @@ public:
     void willRestore() override {}
     void didRestore() override;
 
+    void onMarkCTM(const char*) override;
     void didConcat44(const SkM44&) override;
     void didSetM44(const SkM44&) override;
     void didScale(SkScalar, SkScalar) override;
@@ -105,7 +105,6 @@ public:
     void onClipPath(const SkPath& path, SkClipOp, ClipEdgeStyle) override;
     void onClipShader(sk_sp<SkShader>, SkClipOp) override;
     void onClipRegion(const SkRegion& deviceRgn, SkClipOp) override;
-    void onResetClip() override;
 
     void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*) override;
 

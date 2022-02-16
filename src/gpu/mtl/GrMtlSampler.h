@@ -11,14 +11,13 @@
 #import <Metal/Metal.h>
 
 #include "src/core/SkOpts.h"
-#include "src/gpu/GrManagedResource.h"
 #include <atomic>
 
 class GrSamplerState;
 class GrMtlGpu;
 
 // A wrapper for a MTLSamplerState object with caching support.
-class GrMtlSampler : public GrManagedResource {
+class GrMtlSampler : public SkRefCnt {
 public:
     static GrMtlSampler* Create(const GrMtlGpu* gpu, GrSamplerState);
     ~GrMtlSampler() override { fMtlSamplerState = nil; }
@@ -35,25 +34,12 @@ public:
         return SkOpts::hash(reinterpret_cast<const uint32_t*>(&key), sizeof(Key));
     }
 
-#ifdef SK_TRACE_MANAGED_RESOURCES
-    /** output a human-readable dump of this resource's information
-     */
-    void dumpInfo() const override {
-        SkDebugf("GrMtlSampler: %p (%ld refs)\n", fMtlSamplerState,
-                 CFGetRetainCount((CFTypeRef)fMtlSamplerState));
-    }
-#endif
-
-    void freeGPUData() const override {
-        fMtlSamplerState = nil;
-    }
-
 private:
     GrMtlSampler(id<MTLSamplerState> mtlSamplerState, Key key)
         : fMtlSamplerState(mtlSamplerState)
         , fKey(key) {}
 
-    mutable id<MTLSamplerState> fMtlSamplerState;
+    id<MTLSamplerState> fMtlSamplerState;
     Key                 fKey;
 };
 

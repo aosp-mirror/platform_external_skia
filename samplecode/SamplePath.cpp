@@ -604,6 +604,7 @@ protected:
         SkPoint storage[3 + 2 + 1];
         SkPoint* tmp = storage;
         const SkPoint* prev = pts;
+        int n = count;
         for (int n = count; n > 0; --n) {
             for (int i = 0; i < n; ++i) {
                 canvas->drawLine(prev[i], prev[i+1], paint);
@@ -615,7 +616,7 @@ protected:
 
         paint.setColor(SK_ColorBLUE);
         paint.setStyle(SkPaint::kFill_Style);
-        int n = tmp - storage;
+        n = tmp - storage;
         for (int i = 0; i < n; ++i) {
             Dot(canvas, storage[i], 4, SK_ColorBLUE);
         }
@@ -731,7 +732,7 @@ protected:
             Dot(canvas, p, 7, SK_ColorBLACK);
         }
 
-        if ((false)) {
+        if (false) {
             SkScalar ts[2];
             int n = SkFindCubicInflections(fPts, ts);
             for (int i = 0; i < n; ++i) {

@@ -121,8 +121,8 @@ func (b *jobBuilder) genTasksForJob() {
 	if b.extraConfig("PushAppsFromSkiaDockerImage") {
 		b.createPushAppsFromSkiaDockerImage()
 		return
-	} else if b.extraConfig("PushBazelAppsFromWASMDockerImage") {
-		b.createPushBazelAppsFromWASMDockerImage()
+	} else if b.extraConfig("PushAppsFromWASMDockerImage") {
+		b.createPushAppsFromWASMDockerImage()
 		return
 	}
 
@@ -163,11 +163,6 @@ func (b *jobBuilder) genTasksForJob() {
 		return
 	}
 
-	if b.role("CodeSize") {
-		b.codesize()
-		return
-	}
-
 	// Valgrind runs at a low priority so that it doesn't occupy all the bots.
 	if b.extraConfig("Valgrind") {
 		// Priority of 0.085 should result in Valgrind tasks with a blamelist of ~10 commits having the
@@ -196,13 +191,13 @@ func (b *jobBuilder) genTasksForJob() {
 			b.g3FrameworkCanary()
 			return
 		} else if b.project("Android") {
-			b.canary("android-master-autoroll", "Canary-Android-Topic", "https://googleplex-android-review.googlesource.com/q/topic:")
+			b.canary("android-master-autoroll")
 			return
 		} else if b.project("Chromium") {
-			b.canary("skia-autoroll", "Canary-Chromium-CL", "https://chromium-review.googlesource.com/c/")
+			b.canary("skia-autoroll")
 			return
 		} else if b.project("Flutter") {
-			b.canary("skia-flutter-autoroll", "Canary-Flutter-PR", "https://github.com/flutter/engine/pull/")
+			b.canary("skia-flutter-autoroll")
 			return
 		}
 	}
@@ -219,6 +214,13 @@ func (b *jobBuilder) genTasksForJob() {
 		return
 	}
 
+	// Fuzz bots (aka CIFuzz). See
+	// https://google.github.io/oss-fuzz/getting-started/continuous-integration/ for more.
+	if b.role("Fuzz") {
+		b.cifuzz()
+		return
+	}
+
 	log.Fatalf("Don't know how to handle job %q", b.Name)
 }
 
@@ -228,8 +230,8 @@ func (b *jobBuilder) finish() {
 		b.trigger(specs.TRIGGER_NIGHTLY)
 	} else if b.frequency("Weekly") {
 		b.trigger(specs.TRIGGER_WEEKLY)
-	} else if b.extraConfig("Flutter", "CommandBuffer", "CreateDockerImage", "PushAppsFromSkiaDockerImage", "PushBazelAppsFromWASMDockerImage") {
-		b.trigger(specs.TRIGGER_MAIN_ONLY)
+	} else if b.extraConfig("Flutter", "CommandBuffer") {
+		b.trigger(specs.TRIGGER_MASTER_ONLY)
 	} else if b.frequency("OnDemand") || b.role("Canary") {
 		b.trigger(specs.TRIGGER_ON_DEMAND)
 	} else {
