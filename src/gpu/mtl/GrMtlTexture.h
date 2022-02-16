@@ -9,7 +9,7 @@
 #define GrMtlTexture_DEFINED
 
 #include "src/gpu/GrTexture.h"
-#include "src/gpu/mtl/GrMtlAttachment.h"
+
 #import <Metal/Metal.h>
 
 class GrMtlGpu;
@@ -18,9 +18,8 @@ class GrMtlTexture : public GrTexture {
 public:
     static sk_sp<GrMtlTexture> MakeNewTexture(GrMtlGpu*,
                                               SkBudgeted budgeted,
-                                              SkISize dimensions,
-                                              MTLPixelFormat format,
-                                              uint32_t mipLevels,
+                                              SkISize,
+                                              MTLTextureDescriptor*,
                                               GrMipmapStatus);
 
     static sk_sp<GrMtlTexture> MakeWrappedTexture(GrMtlGpu*,
@@ -31,8 +30,7 @@ public:
 
     ~GrMtlTexture() override;
 
-    GrMtlAttachment* attachment() const { return fTexture.get(); }
-    id<MTLTexture> mtlTexture() const { return fTexture->mtlTexture(); }
+    id<MTLTexture> mtlTexture() const { return fTexture; }
 
     GrBackendTexture getBackendTexture() const override;
 
@@ -43,7 +41,7 @@ public:
     bool reallocForMipmap(GrMtlGpu* gpu, uint32_t mipLevels);
 
 protected:
-    GrMtlTexture(GrMtlGpu*, SkISize, sk_sp<GrMtlAttachment>, GrMipmapStatus);
+    GrMtlTexture(GrMtlGpu*, SkISize, id<MTLTexture>, GrMipmapStatus);
 
     GrMtlGpu* getMtlGpu() const;
 
@@ -63,17 +61,17 @@ protected:
 private:
     enum Wrapped { kWrapped };
 
-    GrMtlTexture(GrMtlGpu*, SkBudgeted, SkISize, sk_sp<GrMtlAttachment>, GrMipmapStatus);
+    GrMtlTexture(GrMtlGpu*, SkBudgeted, SkISize, id<MTLTexture>, GrMipmapStatus);
 
     GrMtlTexture(GrMtlGpu*,
                  Wrapped,
                  SkISize,
-                 sk_sp<GrMtlAttachment>,
+                 id<MTLTexture>,
                  GrMipmapStatus,
                  GrWrapCacheable,
                  GrIOType);
 
-    sk_sp<GrMtlAttachment> fTexture;
+    id<MTLTexture> fTexture;
 
     using INHERITED = GrTexture;
 };

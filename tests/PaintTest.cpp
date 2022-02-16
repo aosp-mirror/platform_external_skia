@@ -31,6 +31,7 @@ DEF_TEST(Paint_copy, reporter) {
 
     // copy the paint using the copy constructor and check they are the same
     SkPaint copiedPaint = paint;
+    REPORTER_ASSERT(reporter, paint.getHash() == copiedPaint.getHash());
     REPORTER_ASSERT(reporter, paint == copiedPaint);
 
     // copy the paint using the equal operator and check they are the same
@@ -116,7 +117,8 @@ DEF_TEST(Paint_flattening, reporter) {
     writer.writeToMemory(buf.get());
     SkReadBuffer reader(buf.get(), writer.bytesWritten());
 
-    SkPaint paint2 = reader.readPaint();
+    SkPaint paint2;
+    SkPaintPriv::Unflatten(&paint2, reader, nullptr);
     REPORTER_ASSERT(reporter, paint2 == paint);
 
     }}}
@@ -152,12 +154,33 @@ DEF_TEST(Paint_MoreFlattening, r) {
     writer.writeToMemory(buf.get());
     SkReadBuffer reader(buf.get(), writer.bytesWritten());
 
-    SkPaint other = reader.readPaint();
+    SkPaint other;
+    SkPaintPriv::Unflatten(&other, reader, nullptr);
     ASSERT(reader.offset() == writer.bytesWritten());
 
     // No matter the encoding, these must always hold.
-    ASSERT(other.getColor()    == paint.getColor());
-    ASSERT(other.asBlendMode() == paint.asBlendMode());
+    ASSERT(other.getColor()      == paint.getColor());
+    ASSERT(other.getBlendMode()  == paint.getBlendMode());
+}
+
+DEF_TEST(Paint_getHash, r) {
+    // Try not to inspect the actual hash values in here.
+    // We might want to change the hash function.
+
+    SkPaint paint;
+    const uint32_t defaultHash = paint.getHash();
+
+    // Check that some arbitrary field affects the hash.
+    paint.setColor(0xFF00FF00);
+    REPORTER_ASSERT(r, paint.getHash() != defaultHash);
+    paint.setColor(SK_ColorBLACK);  // Reset to default value.
+    REPORTER_ASSERT(r, paint.getHash() == defaultHash);
+
+    // This is part of fBitfields, the last field we hash.
+    paint.setBlendMode(SkBlendMode::kSrc);
+    REPORTER_ASSERT(r, paint.getHash() != defaultHash);
+    paint.setBlendMode(SkBlendMode::kSrcOver);
+    REPORTER_ASSERT(r, paint.getHash() == defaultHash);
 }
 
 #include "include/effects/SkColorMatrixFilter.h"
@@ -227,13 +250,4 @@ DEF_TEST(Font_getpos, r) {
             }
         }
     }
-}
-
-DEF_TEST(Paint_dither, reporter) {
-    SkPaint p;
-    p.setDither(true);
-
-    bool shouldDither = SkPaintPriv::ShouldDither(p, kBGRA_8888_SkColorType);
-
-    REPORTER_ASSERT(reporter, !shouldDither);
 }

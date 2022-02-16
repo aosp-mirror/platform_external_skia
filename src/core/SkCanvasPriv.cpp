@@ -16,8 +16,9 @@
 
 SkAutoCanvasMatrixPaint::SkAutoCanvasMatrixPaint(SkCanvas* canvas, const SkMatrix* matrix,
                                                  const SkPaint* paint, const SkRect& bounds)
-        : fCanvas(canvas)
-        , fSaveCount(canvas->getSaveCount()) {
+: fCanvas(canvas)
+, fSaveCount(canvas->getSaveCount())
+{
     if (paint) {
         SkRect newBounds = bounds;
         if (matrix) {
@@ -101,69 +102,19 @@ void SkCanvasPriv::GetDstClipAndMatrixCounts(const SkCanvas::ImageSetEntry set[]
     *totalMatrixCount = maxMatrixIndex + 1;
 }
 
-#ifdef SK_ENABLE_SKSL
-void SkCanvasPriv::DrawCustomMesh(SkCanvas* canvas,
-                                  SkCustomMesh cm,
-                                  sk_sp<SkBlender> blender,
-                                  const SkPaint& paint) {
-    canvas->drawCustomMesh(cm, std::move(blender), paint);
-}
-#endif
-
-#if GR_TEST_UTILS
-
-#if SK_SUPPORT_GPU
-#include "src/gpu/BaseDevice.h"
-
-#if SK_GPU_V1
-skgpu::v1::SurfaceDrawContext* SkCanvasPriv::TopDeviceSurfaceDrawContext(SkCanvas* canvas) {
-    if (auto gpuDevice = canvas->topDevice()->asGpuDevice()) {
-        return gpuDevice->surfaceDrawContext();
+bool SkCanvasPriv::ValidateMarker(const char* name) {
+    if (!name) {
+        return false;
     }
 
-    return nullptr;
-}
-#endif // SK_GPU_V1
-
-skgpu::SurfaceFillContext* SkCanvasPriv::TopDeviceSurfaceFillContext(SkCanvas* canvas) {
-    if (auto gpuDevice = canvas->topDevice()->asGpuDevice()) {
-        return gpuDevice->surfaceFillContext();
+    std::locale loc(std::locale::classic());
+    if (!std::isalpha(*name, loc)) {
+        return false;
     }
-
-    return nullptr;
-}
-
-#else // SK_SUPPORT_GPU
-
-#if SK_GPU_V1
-skgpu::v1::SurfaceDrawContext* SkCanvasPriv::TopDeviceSurfaceDrawContext(SkCanvas* canvas) {
-    return nullptr;
-}
-#endif // SK_GPU_V1
-
-skgpu::SurfaceFillContext* SkCanvasPriv::TopDeviceSurfaceFillContext(SkCanvas* canvas) {
-    return nullptr;
-}
-
-#endif // SK_SUPPORT_GPU
-
-#endif // GR_TEST_UTILS
-
-#if SK_SUPPORT_GPU
-#include "src/gpu/BaseDevice.h"
-
-GrRenderTargetProxy* SkCanvasPriv::TopDeviceTargetProxy(SkCanvas* canvas) {
-    if (auto gpuDevice = canvas->topDevice()->asGpuDevice()) {
-        return gpuDevice->targetProxy();
+    while (*(++name)) {
+        if (!std::isalnum(*name, loc) && *name != '_') {
+            return false;
+        }
     }
-
-    return nullptr;
+    return true;
 }
-
-#else // SK_SUPPORT_GPU
-
-GrRenderTargetProxy* SkCanvasPriv::TopDeviceTargetProxy(SkCanvas* canvas) {
-    return nullptr;
-}
-
-#endif // SK_SUPPORT_GPU

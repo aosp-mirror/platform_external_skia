@@ -16,8 +16,6 @@
 
 namespace skottie::internal {
 
-#ifdef SK_ENABLE_SKSL
-
 namespace  {
 
 // The B&W effect allows controlling individual luminance contribution of
@@ -127,18 +125,12 @@ private:
 
 } // namespace
 
-#endif  // SK_ENABLE_SKSL
 
 sk_sp<sksg::RenderNode> EffectBuilder::attachBlackAndWhiteEffect(
         const skjson::ArrayValue& jprops, sk_sp<sksg::RenderNode> layer) const {
-#ifdef SK_ENABLE_SKSL
     return fBuilder->attachDiscardableAdapter<BlackAndWhiteAdapter>(jprops,
                                                                     *fBuilder,
                                                                     std::move(layer));
-#else
-    // TODO(skia:12197)
-    return layer;
-#endif
 }
 
 } // namespace skottie::internal

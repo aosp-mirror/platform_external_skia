@@ -13,7 +13,7 @@
 #include "include/private/GrTypesPriv.h"
 #include "src/gpu/GrFragmentProcessor.h"
 
-struct GrShaderCaps;
+class GrShaderCaps;
 class GrProcessor;
 class SkRRect;
 

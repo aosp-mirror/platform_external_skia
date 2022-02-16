@@ -14,12 +14,7 @@
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/sksg/include/SkSGRenderNode.h"
 
-#include <cmath>
-
 namespace skottie::internal {
-
-#ifdef SK_ENABLE_SKSL
-
 namespace {
 
 // An implementation of the ADBE Fractal Noise effect:
@@ -55,15 +50,14 @@ namespace {
 //   - Contrast/Brightness
 
 static constexpr char gNoiseEffectSkSL[] =
-    "uniform float3x3 u_submatrix;" // sublayer transform
+    "uniform half3x3 u_submatrix;" // sublayer transform
 
-    "uniform float2 u_noise_planes;" // noise planes computed based on evolution params
-    "uniform float  u_noise_weight," // noise planes lerp weight
-                   "u_octaves,"      // number of octaves (can be fractional)
-                   "u_persistence;"  // relative octave weight
+    "uniform half u_octaves,"      // number of octaves (can be fractional)
+                 "u_persistence,"  // relative octave weight
+                 "u_evolution;"    // evolution/seed
 
     // Hash based on hash13 (https://www.shadertoy.com/view/4djSRW).
-    "float hash(float3 v) {"
+    "half hash(half3 v) {"
         "v  = fract(v*0.1031);"
         "v += dot(v, v.zxy + 31.32);"
         "return fract((v.x + v.y)*v.z);"
@@ -72,16 +66,18 @@ static constexpr char gNoiseEffectSkSL[] =
     // The general idea is to compute a coherent hash for two planes in discretized (x,y,e) space,
     // and interpolate between them.  This yields gradual changes when animating |e| - which is the
     // desired outcome.
-    "float sample_noise(float2 xy) {"
+    "half sample_noise(vec2 xy) {"
         "xy = floor(xy);"
 
-        "float n0  = hash(float3(xy, u_noise_planes.x)),"
-              "n1  = hash(float3(xy, u_noise_planes.y));"
+        "half e_ = floor(u_evolution),"
+             "t  = u_evolution - e_,"
+             "n0 = hash(half3(xy, e_ + 0)),"
+             "n1 = hash(half3(xy, e_ + 1));"
 
         // Note: Ideally we would use 4 samples (-1, 0, 1, 2) and cubic interpolation for
         //       better results -- but that's significantly more expensive than lerp.
 
-        "return mix(n0, n1, u_noise_weight);"
+        "return mix(n0, n1, t);"
     "}"
 
     // filter() placeholder
@@ -91,15 +87,15 @@ static constexpr char gNoiseEffectSkSL[] =
     "%s"
 
     // Generate ceil(u_octaves) noise layers and combine based on persistentce and sublayer xform.
-    "float4 main(vec2 xy) {"
-        "float oct = u_octaves," // initial octave count (this is the effective loop counter)
-              "amp = 1,"         // initial layer amplitude
-             "wacc = 0,"         // weight accumulator
-                "n = 0;"         // noise accumulator
+    "half4 main(vec2 xy) {"
+        "half oct = u_octaves," // initial octave count (this is the effective loop counter)
+             "amp = 1,"         // initial layer amplitude
+            "wacc = 0,"         // weight accumulator
+               "n = 0;"         // noise accumulator
 
         // Constant loop counter chosen to be >= ceil(u_octaves).
         // The logical counter is actually 'oct'.
-        "for (float i = 0; i < %u; ++i) {"
+        "for (half i = 0; i < %u; ++i) {"
             // effective layer weight computed to accommodate fixed loop counters
             //
             //   -- for full octaves:              layer amplitude
@@ -107,7 +103,7 @@ static constexpr char gNoiseEffectSkSL[] =
             //   -- for octaves > ceil(u_octaves): 0
             //
             // e.g. for 6 loops and u_octaves = 2.3, this generates the sequence [1,1,.3,0,0]
-            "float w = amp*saturate(oct);"
+            "half w = amp*saturate(oct);"
 
             "n += w*fractal(filter(xy));"
 
@@ -115,67 +111,67 @@ static constexpr char gNoiseEffectSkSL[] =
             "amp  *= u_persistence;"
             "oct  -= 1;"
 
-            "xy = (u_submatrix*float3(xy,1)).xy;"
+            "xy = (u_submatrix*half3(xy,1)).xy;"
         "}"
 
         "n /= wacc;"
 
         // TODO: fractal functions
 
-        "return float4(n,n,n,1);"
+        "return half4(n,n,n,1);"
     "}";
 
 static constexpr char gFilterNearestSkSL[] =
-    "float filter(float2 xy) {"
+    "half filter(half2 xy) {"
         "return sample_noise(xy);"
     "}";
 
 static constexpr char gFilterLinearSkSL[] =
-    "float filter(float2 xy) {"
+    "half filter(half2 xy) {"
         "xy -= 0.5;"
 
-        "float n00 = sample_noise(xy + float2(0,0)),"
-              "n10 = sample_noise(xy + float2(1,0)),"
-              "n01 = sample_noise(xy + float2(0,1)),"
-              "n11 = sample_noise(xy + float2(1,1));"
+        "half n00 = sample_noise(xy + half2(0,0)),"
+             "n10 = sample_noise(xy + half2(1,0)),"
+             "n01 = sample_noise(xy + half2(0,1)),"
+             "n11 = sample_noise(xy + half2(1,1));"
 
-        "float2 t = fract(xy);"
+        "half2 t = fract(xy);"
 
         "return mix(mix(n00, n10, t.x), mix(n01, n11, t.x), t.y);"
     "}";
 
 static constexpr char gFilterSoftLinearSkSL[] =
-    "float filter(float2 xy) {"
+    "half filter(half2 xy) {"
         "xy -= 0.5;"
 
-        "float n00 = sample_noise(xy + float2(0,0)),"
-              "n10 = sample_noise(xy + float2(1,0)),"
-              "n01 = sample_noise(xy + float2(0,1)),"
-              "n11 = sample_noise(xy + float2(1,1));"
+        "half n00 = sample_noise(xy + half2(0,0)),"
+             "n10 = sample_noise(xy + half2(1,0)),"
+             "n01 = sample_noise(xy + half2(0,1)),"
+             "n11 = sample_noise(xy + half2(1,1));"
 
-        "float2 t = smoothstep(0, 1, fract(xy));"
+        "half2 t = smoothstep(0, 1, fract(xy));"
 
         "return mix(mix(n00, n10, t.x), mix(n01, n11, t.x), t.y);"
     "}";
 
 static constexpr char gFractalBasicSkSL[] =
-    "float fractal(float n) {"
+    "half fractal(half n) {"
         "return n;"
     "}";
 
 static constexpr char gFractalTurbulentBasicSkSL[] =
-    "float fractal(float n) {"
+    "half fractal(half n) {"
         "return 2*abs(0.5 - n);"
     "}";
 
 static constexpr char gFractalTurbulentSmoothSkSL[] =
-    "float fractal(float n) {"
+    "half fractal(half n) {"
         "n = 2*abs(0.5 - n);"
         "return n*n;"
     "}";
 
 static constexpr char gFractalTurbulentSharpSkSL[] =
-    "float fractal(float n) {"
+    "half fractal(half n) {"
         "return sqrt(2*abs(0.5 - n));"
     "}";
 
@@ -196,6 +192,10 @@ enum class NoiseFractal {
 sk_sp<SkRuntimeEffect> make_noise_effect(unsigned loops, const char* filter, const char* fractal) {
     auto result = SkRuntimeEffect::MakeForShader(
             SkStringPrintf(gNoiseEffectSkSL, filter, fractal, loops), {});
+
+    if (0 && !result.effect) {
+        printf("!!! %s\n", result.errorText.c_str());
+    }
 
     return std::move(result.effect);
 }
@@ -232,15 +232,14 @@ class FractalNoiseNode final : public sksg::CustomRenderNode {
 public:
     explicit FractalNoiseNode(sk_sp<RenderNode> child) : INHERITED({std::move(child)}) {}
 
-    SG_ATTRIBUTE(Matrix         , SkMatrix    , fMatrix         )
-    SG_ATTRIBUTE(SubMatrix      , SkMatrix    , fSubMatrix      )
+    SG_ATTRIBUTE(Matrix      , SkMatrix    , fMatrix     )
+    SG_ATTRIBUTE(SubMatrix   , SkMatrix    , fSubMatrix  )
 
-    SG_ATTRIBUTE(NoiseFilter    , NoiseFilter , fFilter         )
-    SG_ATTRIBUTE(NoiseFractal   , NoiseFractal, fFractal        )
-    SG_ATTRIBUTE(NoisePlanes    , SkV2        , fNoisePlanes    )
-    SG_ATTRIBUTE(NoiseWeight    , float       , fNoiseWeight    )
-    SG_ATTRIBUTE(Octaves        , float       , fOctaves        )
-    SG_ATTRIBUTE(Persistence    , float       , fPersistence    )
+    SG_ATTRIBUTE(NoiseFilter , NoiseFilter , fFilter     )
+    SG_ATTRIBUTE(NoiseFractal, NoiseFractal, fFractal    )
+    SG_ATTRIBUTE(Octaves     , float       , fOctaves    )
+    SG_ATTRIBUTE(Persistence , float       , fPersistence)
+    SG_ATTRIBUTE(Evolution   , float       , fEvolution  )
 
 private:
     template <NoiseFilter FI, NoiseFractal FR>
@@ -283,22 +282,21 @@ private:
     sk_sp<SkShader> buildEffectShader() const {
         SkRuntimeShaderBuilder builder(this->getEffect());
 
-        builder.uniform("u_noise_planes") = fNoisePlanes;
-        builder.uniform("u_noise_weight") = fNoiseWeight;
-        builder.uniform("u_octaves"     ) = fOctaves;
-        builder.uniform("u_persistence" ) = fPersistence;
-        builder.uniform("u_submatrix"   ) = std::array<float,9>{
+        builder.uniform("u_octaves")     = fOctaves;
+        builder.uniform("u_persistence") = fPersistence;
+        builder.uniform("u_evolution")   = fEvolution;
+        builder.uniform("u_submatrix")   = std::array<float,9>{
             fSubMatrix.rc(0,0), fSubMatrix.rc(1,0), fSubMatrix.rc(2,0),
             fSubMatrix.rc(0,1), fSubMatrix.rc(1,1), fSubMatrix.rc(2,1),
             fSubMatrix.rc(0,2), fSubMatrix.rc(1,2), fSubMatrix.rc(2,2),
         };
 
-        return builder.makeShader(&fMatrix);
+        return builder.makeShader(&fMatrix, false);
     }
 
     SkRect onRevalidate(sksg::InvalidationController* ic, const SkMatrix& ctm) override {
         const auto& child = this->children()[0];
-        const auto bounds = child->revalidate(ic, ctm);
+        const auto bounds = child->revalidate(nullptr, SkMatrix::I());
 
         fEffectShader = this->buildEffectShader();
 
@@ -326,12 +324,11 @@ private:
 
     SkMatrix     fMatrix,
                  fSubMatrix;
-    NoiseFilter  fFilter          = NoiseFilter::kNearest;
-    NoiseFractal fFractal         = NoiseFractal::kBasic;
-    SkV2         fNoisePlanes     = {0,0};
-    float        fNoiseWeight     = 0,
-                 fOctaves         = 1,
-                 fPersistence     = 1;
+    NoiseFilter  fFilter      = NoiseFilter::kNearest;
+    NoiseFractal fFractal     = NoiseFractal::kBasic;
+    float        fOctaves     = 1,
+                 fPersistence = 1,
+                 fEvolution   = 0;
 
     using INHERITED = sksg::CustomRenderNode;
 };
@@ -370,8 +367,8 @@ public:
              // 22 -- sub settings end-group
             .bind(23, fEvolution       )
              // 24 -- evolution options begin-group
-            .bind(25, fCycleEvolution  )
-            .bind(26, fCycleRevolutions)
+             // 25 -- cycle evolution
+             // 26 -- cycle revolution
             .bind(27, fRandomSeed      )
              // 28 -- evolution options end-group
             .bind(29, fOpacity         );
@@ -379,46 +376,14 @@ public:
     }
 
 private:
-    std::tuple<SkV2, float> noise() const {
+    float evolution() const {
         // Constant chosen to visually match AE's evolution rate.
-        static constexpr auto kEvolutionScale = 0.25f;
+        const auto evo = SkDegreesToRadians(fEvolution) * 0.25f;
 
-        // Evolution inputs:
-        //
-        //   * evolution         - main evolution control (degrees)
-        //   * cycle evolution   - flag controlling whether evolution cycles
-        //   * cycle revolutions - number of revolutions after which evolution cycles (period)
-        //   * random seed       - determines an arbitrary starting plane (evolution offset)
-        //
-        // The shader uses evolution floor/ceil to select two noise planes, and the fractional part
-        // to interpolate between the two -> in order to wrap around smoothly, the cycle/period
-        // must be integral.
-        const float
-            evo_rad = SkDegreesToRadians(fEvolution),
-            rev_rad = std::max(fCycleRevolutions, 1.0f)*SK_FloatPI*2,
-            cycle   = fCycleEvolution
-                          ? SkScalarRoundToScalar(rev_rad*kEvolutionScale)
-                          : SK_ScalarMax,
-            // Adjust scale when cycling to ensure an integral period (post scaling).
-            scale   = fCycleEvolution
-                          ? cycle/rev_rad
-                          : kEvolutionScale,
-            offset  = SkRandom(static_cast<uint32_t>(fRandomSeed)).nextRangeU(0, 100),
-            evo     = evo_rad*scale,
-            evo_    = std::floor(evo),
-            weight  = evo - evo_;
+        // The random seed determines an arbitrary start plane.
+        const auto base = SkRandom(static_cast<uint32_t>(fRandomSeed)).nextRangeU(0, 100);
 
-        // We want the GLSL mod() flavor.
-        auto glsl_mod = [](float x, float y) {
-            return x - y*std::floor(x/y);
-        };
-
-        const SkV2 noise_planes = {
-            glsl_mod(evo_ + 0, cycle) + offset,
-            glsl_mod(evo_ + 1, cycle) + offset,
-        };
-
-        return std::make_tuple(noise_planes, weight);
+        return evo + base;
     }
 
     SkMatrix shaderMatrix() const {
@@ -429,9 +394,9 @@ private:
                 : SkV2{fScaleWidth, fScaleHeight};
 
         return SkMatrix::Translate(fOffset.x, fOffset.y)
+             * SkMatrix::RotateDeg(fRotation)
              * SkMatrix::Scale(SkTPin(scale.x, 1.0f, 10000.0f) * 0.01f,
                                SkTPin(scale.y, 1.0f, 10000.0f) * 0.01f)
-             * SkMatrix::RotateDeg(fRotation)
              * SkMatrix::Scale(kGridSize, kGridSize);
     }
 
@@ -465,12 +430,9 @@ private:
     void onSync() override {
         const auto& n = this->node();
 
-        const auto [noise_planes, noise_weight] = this->noise();
-
         n->setOctaves(SkTPin(fComplexity, 1.0f, 20.0f));
         n->setPersistence(SkTPin(fSubInfluence * 0.01f, 0.0f, 100.0f));
-        n->setNoisePlanes(noise_planes);
-        n->setNoiseWeight(noise_weight);
+        n->setEvolution(this->evolution());
         n->setNoiseFilter(this->noiseFilter());
         n->setNoiseFractal(this->noiseFractal());
         n->setMatrix(this->shaderMatrix());
@@ -495,8 +457,6 @@ private:
                 fSubRotation      =     0,
 
                 fEvolution        =     0,
-                fCycleEvolution   =     0,
-                fCycleRevolutions =     0,
                 fRandomSeed       =     0,
 
                 fOpacity          =   100, // TODO
@@ -509,19 +469,12 @@ private:
 
 } // namespace
 
-#endif  // SK_ENABLE_SKSL
-
 sk_sp<sksg::RenderNode> EffectBuilder::attachFractalNoiseEffect(
         const skjson::ArrayValue& jprops, sk_sp<sksg::RenderNode> layer) const {
-#ifdef SK_ENABLE_SKSL
     auto fractal_noise = sk_make_sp<FractalNoiseNode>(std::move(layer));
 
     return fBuilder->attachDiscardableAdapter<FractalNoiseAdapter>(jprops, fBuilder,
                                                                    std::move(fractal_noise));
-#else
-    // TODO(skia:12197)
-    return layer;
-#endif
 }
 
 } // namespace skottie::internal

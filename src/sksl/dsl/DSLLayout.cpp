@@ -7,7 +7,7 @@
 
 #include "include/sksl/DSLLayout.h"
 
-#include "src/sksl/SkSLThreadContext.h"
+#include "src/sksl/dsl/priv/DSLWriter.h"
 
 namespace SkSL {
 
@@ -15,8 +15,8 @@ namespace dsl {
 
 DSLLayout& DSLLayout::flag(SkSL::Layout::Flag mask, const char* name, PositionInfo pos) {
     if (fSkSLLayout.fFlags & mask) {
-        ThreadContext::ReportError(
-                "layout qualifier '" + std::string(name) + "' appears more than once", pos);
+        DSLWriter::ReportError(("error: layout qualifier '" + String(name) +
+                                "' appears more than once\n").c_str(), &pos);
     }
     fSkSLLayout.fFlags |= mask;
     return *this;

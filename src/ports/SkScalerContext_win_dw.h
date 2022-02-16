@@ -28,9 +28,9 @@ public:
 
 protected:
     bool generateAdvance(SkGlyph* glyph) override;
-    void generateMetrics(SkGlyph* glyph, SkArenaAlloc*) override;
+    void generateMetrics(SkGlyph* glyph) override;
     void generateImage(const SkGlyph& glyph) override;
-    bool generatePath(const SkGlyph&, SkPath*) override;
+    bool generatePath(SkGlyphID glyph, SkPath* path) override;
     void generateFontMetrics(SkFontMetrics*) override;
 
 private:
@@ -69,11 +69,11 @@ private:
 
     bool getColorGlyphRun(const SkGlyph& glyph, IDWriteColorGlyphRunEnumerator** colorGlyph);
 
-    bool generateColorMetrics(SkGlyph* glyph);
+    void generateColorMetrics(SkGlyph* glyph);
 
     void generateColorGlyphImage(const SkGlyph& glyph);
 
-    bool generatePngMetrics(SkGlyph* glyph);
+    void generatePngMetrics(SkGlyph* glyph);
 
     void generatePngGlyphImage(const SkGlyph& glyph);
 

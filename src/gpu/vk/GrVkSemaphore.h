@@ -11,9 +11,8 @@
 #include "src/gpu/GrSemaphore.h"
 
 #include "include/gpu/vk/GrVkTypes.h"
+#include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/vk/GrVkManagedResource.h"
-
-#include <cinttypes>
 
 class GrBackendSemaphore;
 class GrVkGpu;
@@ -22,9 +21,11 @@ class GrVkSemaphore : public GrSemaphore {
 public:
     static std::unique_ptr<GrVkSemaphore> Make(GrVkGpu* gpu, bool isOwned);
 
-    static std::unique_ptr<GrVkSemaphore> MakeWrapped(GrVkGpu*,
-                                                      VkSemaphore,
-                                                      GrSemaphoreWrapType,
+    using WrapType = GrResourceProvider::SemaphoreWrapType;
+
+    static std::unique_ptr<GrVkSemaphore> MakeWrapped(GrVkGpu* gpu,
+                                                      VkSemaphore semaphore,
+                                                      WrapType wrapType,
                                                       GrWrapOwnership);
 
     ~GrVkSemaphore() override;
@@ -65,8 +66,7 @@ public:
 
 #ifdef SK_TRACE_MANAGED_RESOURCES
         void dumpInfo() const override {
-            SkDebugf("GrVkSemaphore: %" PRIdPTR " (%d refs)\n", (intptr_t)fSemaphore,
-                     this->getRefCnt());
+            SkDebugf("GrVkSemaphore: %d (%d refs)\n", fSemaphore, this->getRefCnt());
         }
 #endif
     private:

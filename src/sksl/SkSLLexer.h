@@ -11,7 +11,6 @@
 #define SKSL_Lexer
 #include <cstddef>
 #include <cstdint>
-#include <string_view>
 namespace SkSL {
 
 struct Token {
@@ -19,7 +18,6 @@ struct Token {
         TK_END_OF_FILE,
         TK_FLOAT_LITERAL,
         TK_INT_LITERAL,
-        TK_BAD_OCTAL,
         TK_TRUE_LITERAL,
         TK_FALSE_LITERAL,
         TK_IF,
@@ -48,13 +46,11 @@ struct Token {
         TK_HASSIDEEFFECTS,
         TK_STRUCT,
         TK_LAYOUT,
-        TK_HIGHP,
-        TK_MEDIUMP,
-        TK_LOWP,
-        TK_ES3,
-        TK_RESERVED,
+        TK_ENUM,
+        TK_CLASS,
         TK_IDENTIFIER,
         TK_DIRECTIVE,
+        TK_SECTION,
         TK_LPAREN,
         TK_RPAREN,
         TK_LBRACE,
@@ -81,6 +77,7 @@ struct Token {
         TK_LOGICALAND,
         TK_LOGICALNOT,
         TK_QUESTION,
+        TK_COLONCOLON,
         TK_COLON,
         TK_EQ,
         TK_EQEQ,
@@ -100,6 +97,7 @@ struct Token {
         TK_BITWISEXOREQ,
         TK_BITWISEANDEQ,
         TK_SEMICOLON,
+        TK_ARROW,
         TK_WHITESPACE,
         TK_LINE_COMMENT,
         TK_BLOCK_COMMENT,
@@ -107,42 +105,34 @@ struct Token {
         TK_NONE,
     };
 
-    Token() {}
-    Token(Kind kind, int32_t offset, int32_t length, int32_t line)
-            : fKind(kind), fOffset(offset), fLength(length), fLine(line) {}
+    Token() : fKind(Kind::TK_NONE), fOffset(-1), fLength(-1) {}
 
-    Kind fKind = Kind::TK_NONE;
-    int32_t fOffset = -1;
-    int32_t fLength = -1;
-    int32_t fLine = -1;
+    Token(Kind kind, int32_t offset, int32_t length)
+            : fKind(kind), fOffset(offset), fLength(length) {}
+
+    Kind fKind;
+    int fOffset;
+    int fLength;
 };
 
 class Lexer {
 public:
-    void start(std::string_view text) {
+    void start(const char* text, int32_t length) {
         fText = text;
+        fLength = length;
         fOffset = 0;
-        fLine = 1;
     }
 
     Token next();
 
-    struct Checkpoint {
-        int32_t fOffset;
-        int32_t fLine;
-    };
+    int32_t getCheckpoint() const { return fOffset; }
 
-    Checkpoint getCheckpoint() const { return {fOffset, fLine}; }
-
-    void rewindToCheckpoint(Checkpoint checkpoint) {
-        fOffset = checkpoint.fOffset;
-        fLine = checkpoint.fLine;
-    }
+    void rewindToCheckpoint(int32_t checkpoint) { fOffset = checkpoint; }
 
 private:
-    std::string_view fText;
+    const char* fText;
+    int32_t fLength;
     int32_t fOffset;
-    int32_t fLine;
 };
 
 }  // namespace SkSL

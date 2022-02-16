@@ -10,6 +10,7 @@
 #include "include/core/SkBlurTypes.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkFilterQuality.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
@@ -184,10 +185,9 @@ protected:
 
         const int kPadX = 30;
         const int kPadY = 40;
-        SkPaint alphaPaint;
-        alphaPaint.setAlphaf(0.125f);
-        canvas->drawImageRect(fImage, SkRect::MakeIWH(gSize, gSize), SkSamplingOptions(),
-                              &alphaPaint);
+        SkPaint paint;
+        paint.setAlphaf(0.125f);
+        canvas->drawImageRect(fImage, SkRect::MakeIWH(gSize, gSize), SkSamplingOptions(), &paint);
         canvas->translate(SK_Scalar1 * kPadX / 2,
                           SK_Scalar1 * kPadY / 2);
         SkPaint blackPaint;
@@ -238,16 +238,16 @@ protected:
             // test the following code path:
             // SkGpuDevice::drawPath() -> SkGpuDevice::drawWithMaskFilter()
             SkIRect srcRect;
-            SkPaint maskPaint;
+            SkPaint paint;
             SkBitmap bm = make_chessbm(5, 5);
 
             srcRect.setXYWH(1, 1, 3, 3);
-            maskPaint.setMaskFilter(SkMaskFilter::MakeBlur(
+            paint.setMaskFilter(SkMaskFilter::MakeBlur(
                 kNormal_SkBlurStyle,
                 SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(5))));
 
             fProc(canvas, bm.asImage().get(), bm, srcRect, dstRect,
-                  SkSamplingOptions(SkFilterMode::kLinear), &maskPaint);
+                  SkSamplingOptions(SkFilterMode::kLinear), &paint);
         }
     }
 

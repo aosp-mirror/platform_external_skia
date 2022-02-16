@@ -17,26 +17,26 @@ namespace SkSL {
  */
 class Extension final : public ProgramElement {
 public:
-    inline static constexpr Kind kProgramElementKind = Kind::kExtension;
+    static constexpr Kind kProgramElementKind = Kind::kExtension;
 
-    Extension(int line, std::string_view name)
-        : INHERITED(line, kProgramElementKind)
-        , fName(name) {}
+    Extension(int offset, String name)
+        : INHERITED(offset, kProgramElementKind)
+        , fName(std::move(name)) {}
 
-    std::string_view name() const {
+    const String& name() const {
         return fName;
     }
 
     std::unique_ptr<ProgramElement> clone() const override {
-        return std::unique_ptr<ProgramElement>(new Extension(fLine, this->name()));
+        return std::unique_ptr<ProgramElement>(new Extension(fOffset, this->name()));
     }
 
-    std::string description() const override {
-        return "#extension " + std::string(this->name()) + " : enable";
+    String description() const override {
+        return "#extension " + this->name() + " : enable";
     }
 
 private:
-    std::string_view fName;
+    String fName;
 
     using INHERITED = ProgramElement;
 };

@@ -7,17 +7,12 @@
 
 #include "src/core/SkGlyph.h"
 
-#include "include/core/SkDrawable.h"
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkScalerContext.h"
 #include "src/pathops/SkPathOpsCubic.h"
 #include "src/pathops/SkPathOpsQuad.h"
 
-SkGlyph::SkGlyph(const SkGlyph&) = default;
-SkGlyph& SkGlyph::operator=(const SkGlyph&) = default;
-SkGlyph::SkGlyph(SkGlyph&&) = default;
-SkGlyph& SkGlyph::operator=(SkGlyph&&) = default;
-SkGlyph::~SkGlyph() = default;
+constexpr SkIPoint SkPackedGlyphID::kXYFieldMask;
 
 SkMask SkGlyph::mask() const {
     SkMask mask;
@@ -107,7 +102,7 @@ bool SkGlyph::setImage(SkArenaAlloc* alloc, const void* image) {
 size_t SkGlyph::setMetricsAndImage(SkArenaAlloc* alloc, const SkGlyph& from) {
     // Since the code no longer tries to find replacement glyphs, the image should always be
     // nullptr.
-    SkASSERT(fImage == nullptr || from.fImage == nullptr);
+    SkASSERT(fImage == nullptr);
 
     // TODO(herb): remove "if" when we are sure there are no colliding glyphs.
     if (fImage == nullptr) {
@@ -124,8 +119,6 @@ size_t SkGlyph::setMetricsAndImage(SkArenaAlloc* alloc, const SkGlyph& from) {
         if (from.fImage != nullptr && this->setImage(alloc, from.image())) {
             return this->imageSize();
         }
-
-        SkDEBUGCODE(fAdvancesBoundsFormatAndInitialPathDone = from.fAdvancesBoundsFormatAndInitialPathDone;)
     }
     return 0;
 }
@@ -150,7 +143,7 @@ size_t SkGlyph::imageSize() const {
     return size;
 }
 
-void SkGlyph::installPath(SkArenaAlloc* alloc, const SkPath* path, bool hairline) {
+void SkGlyph::installPath(SkArenaAlloc* alloc, const SkPath* path) {
     SkASSERT(fPathData == nullptr);
     SkASSERT(!this->setPathHasBeenCalled());
     fPathData = alloc->make<SkGlyph::PathData>();
@@ -159,23 +152,26 @@ void SkGlyph::installPath(SkArenaAlloc* alloc, const SkPath* path, bool hairline
         fPathData->fPath.updateBoundsCache();
         fPathData->fPath.getGenerationID();
         fPathData->fHasPath = true;
-        fPathData->fHairline = hairline;
     }
 }
 
 bool SkGlyph::setPath(SkArenaAlloc* alloc, SkScalerContext* scalerContext) {
     if (!this->setPathHasBeenCalled()) {
-        scalerContext->getPath(*this, alloc);
-        SkASSERT(this->setPathHasBeenCalled());
+        SkPath path;
+        if (scalerContext->getPath(this->getPackedID(), &path)) {
+            this->installPath(alloc, &path);
+        } else {
+            this->installPath(alloc, nullptr);
+        }
         return this->path() != nullptr;
     }
 
     return false;
 }
 
-bool SkGlyph::setPath(SkArenaAlloc* alloc, const SkPath* path, bool hairline) {
+bool SkGlyph::setPath(SkArenaAlloc* alloc, const SkPath* path) {
     if (!this->setPathHasBeenCalled()) {
-        this->installPath(alloc, path, hairline);
+        this->installPath(alloc, path);
         return this->path() != nullptr;
     }
     return false;
@@ -186,49 +182,6 @@ const SkPath* SkGlyph::path() const {
     SkASSERT(this->setPathHasBeenCalled());
     if (fPathData->fHasPath) {
         return &fPathData->fPath;
-    }
-    return nullptr;
-}
-
-bool SkGlyph::pathIsHairline() const {
-    // setPath must have been called previously.
-    SkASSERT(this->setPathHasBeenCalled());
-    return fPathData->fHairline;
-}
-
-void SkGlyph::installDrawable(SkArenaAlloc* alloc, sk_sp<SkDrawable> drawable) {
-    SkASSERT(fDrawableData == nullptr);
-    SkASSERT(!this->setDrawableHasBeenCalled());
-    fDrawableData = alloc->make<SkGlyph::DrawableData>();
-    if (drawable != nullptr) {
-        fDrawableData->fDrawable = std::move(drawable);
-        fDrawableData->fDrawable->getGenerationID();
-        fDrawableData->fHasDrawable = true;
-    }
-}
-
-bool SkGlyph::setDrawable(SkArenaAlloc* alloc, SkScalerContext* scalerContext) {
-    if (!this->setDrawableHasBeenCalled()) {
-        sk_sp<SkDrawable> drawable = scalerContext->getDrawable(*this);
-        this->installDrawable(alloc, std::move(drawable));
-        return this->drawable() != nullptr;
-    }
-    return false;
-}
-
-bool SkGlyph::setDrawable(SkArenaAlloc* alloc, sk_sp<SkDrawable> drawable) {
-    if (!this->setDrawableHasBeenCalled()) {
-        this->installDrawable(alloc, std::move(drawable));
-        return this->drawable() != nullptr;
-    }
-    return false;
-}
-
-SkDrawable* SkGlyph::drawable() const {
-    // setDrawable must have been called previously.
-    SkASSERT(this->setDrawableHasBeenCalled());
-    if (fDrawableData->fHasDrawable) {
-        return fDrawableData->fDrawable.get();
     }
     return nullptr;
 }
@@ -393,12 +346,3 @@ void SkGlyph::ensureIntercepts(const SkScalar* bounds, SkScalar scale, SkScalar 
     }
     offsetResults(intercept, array, count);
 }
-
-SkGlyphDigest::SkGlyphDigest(size_t index, const SkGlyph& glyph)
-        : fPackedGlyphID{glyph.getPackedID().value()}
-        , fIndex{SkTo<uint32_t>(index)}
-        , fIsEmpty(glyph.isEmpty())
-        , fIsColor(glyph.isColor())
-        , fCanDrawAsMask{SkStrikeForGPU::CanDrawAsMask(glyph)}
-        , fCanDrawAsSDFT{SkStrikeForGPU::CanDrawAsSDFT(glyph)}
-        , fMaxDimension{(uint16_t)glyph.maxDimension()} {}

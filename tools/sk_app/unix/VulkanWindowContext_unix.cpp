@@ -25,7 +25,8 @@ namespace window_context_factory {
 std::unique_ptr<WindowContext> MakeVulkanForXlib(const XlibWindowInfo& info,
                                                  const DisplayParams& displayParams) {
     PFN_vkGetInstanceProcAddr instProc;
-    if (!sk_gpu_test::LoadVkLibraryAndGetProcAddrFuncs(&instProc)) {
+    PFN_vkGetDeviceProcAddr devProc;
+    if (!sk_gpu_test::LoadVkLibraryAndGetProcAddrFuncs(&instProc, &devProc)) {
         return nullptr;
     }
 
@@ -74,7 +75,7 @@ std::unique_ptr<WindowContext> MakeVulkanForXlib(const XlibWindowInfo& info,
         return (VK_FALSE != check);
     };
     std::unique_ptr<WindowContext> ctx(
-            new VulkanWindowContext(displayParams, createVkSurface, canPresent, instProc));
+            new VulkanWindowContext(displayParams, createVkSurface, canPresent, instProc, devProc));
     if (!ctx->isValid()) {
         return nullptr;
     }

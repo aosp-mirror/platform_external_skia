@@ -6,13 +6,12 @@
  */
 
 #include "src/core/SkAutoMalloc.h"
-#include "src/core/SkTraceEvent.h"
+#include "src/gpu/GrShaderUtils.h"
 #include "src/gpu/gl/GrGLGpu.h"
 #include "src/gpu/gl/builders/GrGLShaderStringBuilder.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/codegen/SkSLGLSLCodeGenerator.h"
 #include "src/sksl/ir/SkSLProgram.h"
-#include "src/utils/SkShaderUtils.h"
 
 // Print the source code for all shaders generated.
 static const bool gPrintSKSL = false;
@@ -20,16 +19,16 @@ static const bool gPrintGLSL = false;
 
 std::unique_ptr<SkSL::Program> GrSkSLtoGLSL(const GrGLGpu* gpu,
                                             SkSL::ProgramKind programKind,
-                                            const std::string& sksl,
+                                            const SkSL::String& sksl,
                                             const SkSL::Program::Settings& settings,
-                                            std::string* glsl,
+                                            SkSL::String* glsl,
                                             GrContextOptions::ShaderErrorHandler* errorHandler) {
     SkSL::Compiler* compiler = gpu->shaderCompiler();
     std::unique_ptr<SkSL::Program> program;
 #ifdef SK_DEBUG
-    std::string src = SkShaderUtils::PrettyPrint(sksl);
+    SkSL::String src = GrShaderUtils::PrettyPrint(sksl);
 #else
-    const std::string& src = sksl;
+    const SkSL::String& src = sksl;
 #endif
     program = compiler->convertProgram(programKind, src, settings);
     if (!program || !compiler->toGLSL(*program, glsl)) {
@@ -38,14 +37,14 @@ std::unique_ptr<SkSL::Program> GrSkSLtoGLSL(const GrGLGpu* gpu,
     }
 
     if (gPrintSKSL || gPrintGLSL) {
-        SkShaderUtils::PrintShaderBanner(programKind);
+        GrShaderUtils::PrintShaderBanner(programKind);
         if (gPrintSKSL) {
             SkDebugf("SKSL:\n");
-            SkShaderUtils::PrintLineByLine(SkShaderUtils::PrettyPrint(sksl));
+            GrShaderUtils::PrintLineByLine(GrShaderUtils::PrettyPrint(sksl));
         }
         if (gPrintGLSL) {
             SkDebugf("GLSL:\n");
-            SkShaderUtils::PrintLineByLine(SkShaderUtils::PrettyPrint(*glsl));
+            GrShaderUtils::PrintLineByLine(GrShaderUtils::PrettyPrint(*glsl));
         }
     }
 
@@ -55,7 +54,7 @@ std::unique_ptr<SkSL::Program> GrSkSLtoGLSL(const GrGLGpu* gpu,
 GrGLuint GrGLCompileAndAttachShader(const GrGLContext& glCtx,
                                     GrGLuint programId,
                                     GrGLenum type,
-                                    const std::string& glsl,
+                                    const SkSL::String& glsl,
                                     GrThreadSafePipelineBuilder::Stats* stats,
                                     GrContextOptions::ShaderErrorHandler* errorHandler) {
     TRACE_EVENT0_ALWAYS("skia.shaders", "driver_compile_shader");

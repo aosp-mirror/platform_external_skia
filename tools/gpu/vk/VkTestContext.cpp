@@ -37,14 +37,21 @@ public:
             ownsContext = false;
         } else {
             PFN_vkGetInstanceProcAddr instProc;
-            if (!sk_gpu_test::LoadVkLibraryAndGetProcAddrFuncs(&instProc)) {
+            PFN_vkGetDeviceProcAddr devProc;
+            if (!sk_gpu_test::LoadVkLibraryAndGetProcAddrFuncs(&instProc, &devProc)) {
                 return nullptr;
             }
-
+            auto getProc = [instProc, devProc](const char* proc_name,
+                                               VkInstance instance, VkDevice device) {
+                if (device != VK_NULL_HANDLE) {
+                    return devProc(device, proc_name);
+                }
+                return instProc(instance, proc_name);
+            };
             extensions = new GrVkExtensions();
             features = new VkPhysicalDeviceFeatures2;
             memset(features, 0, sizeof(VkPhysicalDeviceFeatures2));
-            if (!sk_gpu_test::CreateVkBackendContext(instProc, &backendContext, extensions,
+            if (!sk_gpu_test::CreateVkBackendContext(getProc, &backendContext, extensions,
                                                      features, &debugCallback)) {
                 sk_gpu_test::FreeVulkanFeaturesStructs(features);
                 delete features;

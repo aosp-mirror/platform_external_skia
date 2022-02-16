@@ -11,7 +11,7 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
 #include "include/private/SkSLStatement.h"
-#include "include/sksl/SkSLErrorReporter.h"
+#include "include/sksl/DSLErrorHandling.h"
 
 #include <memory>
 
@@ -36,33 +36,26 @@ public:
 
     DSLStatement(DSLExpression expr);
 
-    DSLStatement(DSLPossibleExpression expr, PositionInfo pos = PositionInfo::Capture());
+    DSLStatement(DSLPossibleExpression expr, PositionInfo pos = PositionInfo());
 
-    DSLStatement(DSLPossibleStatement stmt, PositionInfo pos = PositionInfo::Capture());
+    DSLStatement(DSLPossibleStatement stmt, PositionInfo pos = PositionInfo());
 
     DSLStatement(DSLBlock block);
 
     DSLStatement(DSLStatement&&) = default;
 
-    DSLStatement(std::unique_ptr<SkSL::Statement> stmt);
-
-    DSLStatement(std::unique_ptr<SkSL::Expression> expr);
-
     ~DSLStatement();
 
     DSLStatement& operator=(DSLStatement&& other) = default;
 
-    bool hasValue() { return fStatement != nullptr; }
-
     std::unique_ptr<SkSL::Statement> release() {
-        SkASSERT(this->hasValue());
         return std::move(fStatement);
     }
 
 private:
-    std::unique_ptr<SkSL::Statement> releaseIfPossible() {
-        return std::move(fStatement);
-    }
+    DSLStatement(std::unique_ptr<SkSL::Statement> stmt);
+
+    DSLStatement(std::unique_ptr<SkSL::Expression> expr);
 
     std::unique_ptr<SkSL::Statement> fStatement;
 
@@ -90,10 +83,8 @@ public:
 
     ~DSLPossibleStatement();
 
-    bool hasValue() { return fStatement != nullptr; }
-
     std::unique_ptr<SkSL::Statement> release() {
-        return DSLStatement(std::move(*this)).release();
+        return std::move(fStatement);
     }
 
 private:

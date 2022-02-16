@@ -21,7 +21,7 @@ private:
     void onDraw(int loops, SkCanvas*) override {
         SkPictureRecorder rec;
 
-        for (int loop = 0; loop < loops; loop++) {
+        for (int i = 0; i < loops; i++) {
             SkCanvas* canvas = rec.beginRecording({0,0, 2000,3000});
 
             SkPaint paint;
