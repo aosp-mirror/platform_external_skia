@@ -91,6 +91,10 @@ sk_sp<SkTypeface> SkOrderedFontMgr::onMakeFromStreamArgs(std::unique_ptr<SkStrea
     return nullptr;
 }
 
+sk_sp<SkTypeface> SkOrderedFontMgr::onMakeFromFontData(std::unique_ptr<SkFontData>) const {
+    return nullptr;
+}
+
 sk_sp<SkTypeface> SkOrderedFontMgr::onMakeFromFile(const char path[], int ttcIndex) const {
     return nullptr;
 }

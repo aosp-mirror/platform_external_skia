@@ -33,17 +33,15 @@ public:
     // Direct mapping of AE properties.
     struct AnimatedProps {
         VectorValue position,
-                    scale          = { 100, 100, 100 },
+                    scale    = { 100, 100, 100 },
                     fill_color,
                     stroke_color;
         // unlike pos/scale which are animated vectors, rotation is separated in each dimension.
-        SkV3        rotation       = { 0, 0, 0 };
-        Vec2Value   blur           = { 0, 0 },
-                line_spacing       = { 0, 0 };
-        ScalarValue opacity        = 100,
-                    fill_opacity   = 100,
-                    stroke_opacity = 100,
-                    tracking       = 0;
+        SkV3        rotation = { 0, 0, 0 };
+        Vec2Value   blur     = { 0, 0 },
+                line_spacing = { 0, 0 };
+        ScalarValue opacity  = 100,
+                    tracking = 0;
     };
 
     struct ResolvedProps {
@@ -102,9 +100,6 @@ private:
     AnimatedProps fTextProps;
     bool          fHasFillColor        : 1,
                   fHasStrokeColor      : 1,
-                  fHasFillOpacity      : 1,
-                  fHasStrokeOpacity    : 1,
-                  fHasOpacity          : 1,
                   fHasBlur             : 1,
                   fRequiresAnchorPoint : 1; // animator sensitive to transform origin?
 };

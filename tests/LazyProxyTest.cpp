@@ -15,16 +15,13 @@
 #include "src/gpu/GrOnFlushResourceProvider.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrSurfaceProxy.h"
 #include "src/gpu/GrSurfaceProxyPriv.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/GrTextureProxyPriv.h"
-#include "src/gpu/effects/GrTextureEffect.h"
 #include "src/gpu/mock/GrMockGpu.h"
-#include "src/gpu/ops/GrDrawOp.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
 
 // This test verifies that lazy proxy callbacks get invoked during flush, after onFlush callbacks,
 // but before Ops are executed. It also ensures that lazy proxy callbacks are invoked both for
@@ -63,7 +60,7 @@ public:
             return GrOp::Make<Op>(context, context, proxyProvider, test, nullTexture);
         }
 
-        void visitProxies(const GrVisitProxyFunc& func) const override {
+        void visitProxies(const VisitProxyFunc& func) const override {
             func(fProxy.get(), GrMipmapped::kNo);
         }
 
@@ -92,14 +89,8 @@ public:
                         } else {
                             static constexpr SkISize kDimensions = {1234, 567};
                             sk_sp<GrTexture> texture = rp->createTexture(
-                                    kDimensions,
-                                    desc.fFormat,
-                                    desc.fTextureType,
-                                    desc.fRenderable,
-                                    desc.fSampleCnt,
-                                    desc.fMipmapped,
-                                    desc.fBudgeted,
-                                    desc.fProtected);
+                                    kDimensions, desc.fFormat, desc.fRenderable, desc.fSampleCnt,
+                                    desc.fMipmapped, desc.fBudgeted, desc.fProtected);
                             REPORTER_ASSERT(fTest->fReporter, texture);
                             return texture;
                         }
@@ -120,7 +111,7 @@ public:
         void onPrePrepare(GrRecordingContext*,
                           const GrSurfaceProxyView& writeView,
                           GrAppliedClip*,
-                          const GrDstProxyView&,
+                          const GrXferProcessor::DstProxyView&,
                           GrXferBarrierFlags renderPassXferBarriers,
                           GrLoadOp colorLoadOp) override {}
 
@@ -164,10 +155,10 @@ public:
         std::unique_ptr<GrFragmentProcessor> clone() const override {
             return std::make_unique<ClipFP>(fContext, fProxyProvider, fTest, fAtlas);
         }
-        std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override {
+        std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override {
             return nullptr;
         }
-        void onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override {}
+        void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
         bool onIsEqual(const GrFragmentProcessor&) const override { return false; }
 
         GrRecordingContext* const fContext;
@@ -188,14 +179,11 @@ public:
         SkIRect getConservativeBounds() const final {
             return SkIRect::MakeSize(fAtlas->dimensions());
         }
-        Effect apply(GrRecordingContext* rContext,
-                     skgpu::v1::SurfaceDrawContext*,
-                     GrDrawOp*,
-                     GrAAType,
-                     GrAppliedClip* out,
-                     SkRect* bounds) const override {
-            GrProxyProvider* proxyProvider = rContext->priv().proxyProvider();
-            out->addCoverageFP(std::make_unique<ClipFP>(rContext, proxyProvider, fTest, fAtlas));
+        Effect apply(GrRecordingContext* context, GrSurfaceDrawContext*, GrAAType,
+                         bool hasUserStencilSettings, GrAppliedClip* out,
+                         SkRect* bounds) const override {
+            GrProxyProvider* proxyProvider = context->priv().proxyProvider();
+            out->addCoverageFP(std::make_unique<ClipFP>(context, proxyProvider, fTest, fAtlas));
             return Effect::kClipped;
         }
 
@@ -219,16 +207,15 @@ DEF_GPUTEST(LazyProxyTest, reporter, /* options */) {
     for (bool nullTexture : {false, true}) {
         LazyProxyTest test(reporter);
         ctx->priv().addOnFlushCallbackObject(&test);
-        auto sdc = skgpu::v1::SurfaceDrawContext::Make(ctx.get(), GrColorType::kRGBA_8888, nullptr,
-                                                       SkBackingFit::kExact, {100, 100},
-                                                       SkSurfaceProps());
-        REPORTER_ASSERT(reporter, sdc);
-        auto mockAtlas = skgpu::v1::SurfaceDrawContext::Make(ctx.get(), GrColorType::kAlpha_F16,
-                                                             nullptr, SkBackingFit::kExact,
-                                                             {10, 10}, SkSurfaceProps());
+        auto rtc = GrSurfaceDrawContext::Make(ctx.get(), GrColorType::kRGBA_8888, nullptr,
+                                              SkBackingFit::kExact, {100, 100}, SkSurfaceProps());
+        REPORTER_ASSERT(reporter, rtc);
+        auto mockAtlas = GrSurfaceDrawContext::Make(ctx.get(), GrColorType::kAlpha_F16, nullptr,
+                                                    SkBackingFit::kExact, {10, 10},
+                                                    SkSurfaceProps());
         REPORTER_ASSERT(reporter, mockAtlas);
         LazyProxyTest::Clip clip(&test, mockAtlas->asTextureProxy());
-        sdc->addDrawOp(&clip,
+        rtc->addDrawOp(&clip,
                        LazyProxyTest::Op::Make(ctx.get(), proxyProvider, &test, nullTexture));
         ctx->priv().testingOnly_flushAndRemoveOnFlushCallbackObject(&test);
     }
@@ -245,14 +232,9 @@ DEF_GPUTEST(LazyProxyReleaseTest, reporter, /* options */) {
     GrBackendFormat format = caps->getDefaultBackendFormat(GrColorType::kRGBA_8888,
                                                            GrRenderable::kNo);
 
-    auto tex = ctx->priv().resourceProvider()->createTexture({kSize, kSize},
-                                                             format,
-                                                             GrTextureType::k2D,
-                                                             GrRenderable::kNo,
-                                                             1,
-                                                             GrMipmapped::kNo,
-                                                             SkBudgeted::kNo,
-                                                             GrProtected::kNo);
+    auto tex = ctx->priv().resourceProvider()->createTexture({kSize, kSize}, format,
+                                                             GrRenderable::kNo, 1, GrMipmapped::kNo,
+                                                             SkBudgeted::kNo, GrProtected::kNo);
     using LazyInstantiationResult = GrSurfaceProxy::LazyCallbackResult;
     for (bool doInstantiate : {true, false}) {
         for (bool releaseCallback : {false, true}) {
@@ -334,7 +316,7 @@ public:
                                                          shouldFailInstantiation);
     }
 
-    void visitProxies(const GrVisitProxyFunc& func) const override {
+    void visitProxies(const VisitProxyFunc& func) const override {
         func(fLazyProxy.get(), GrMipmapped::kNo);
     }
 
@@ -357,13 +339,8 @@ private:
                         *testExecuteValue = 1;
                         return {};
                     }
-                    return {rp->createTexture(desc.fDimensions,
-                                              desc.fFormat,
-                                              desc.fTextureType,
-                                              desc.fRenderable,
-                                              desc.fSampleCnt,
-                                              desc.fMipmapped,
-                                              desc.fBudgeted,
+                    return {rp->createTexture(desc.fDimensions, desc.fFormat, desc.fRenderable,
+                                              desc.fSampleCnt, desc.fMipmapped, desc.fBudgeted,
                                               desc.fProtected),
                             true, GrSurfaceProxy::LazyInstantiationKeyMode::kUnsynced};
                 },
@@ -384,7 +361,7 @@ private:
     void onPrePrepare(GrRecordingContext*,
                       const GrSurfaceProxyView& writeView,
                       GrAppliedClip*,
-                      const GrDstProxyView&,
+                      const GrXferProcessor::DstProxyView&,
                       GrXferBarrierFlags renderPassXferBarriers,
                       GrLoadOp colorLoadOp) override {}
     void onPrepare(GrOpFlushState*) override {}
@@ -405,15 +382,14 @@ DEF_GPUTEST(LazyProxyFailedInstantiationTest, reporter, /* options */) {
     sk_sp<GrDirectContext> ctx = GrDirectContext::MakeMock(&mockOptions, GrContextOptions());
     GrProxyProvider* proxyProvider = ctx->priv().proxyProvider();
     for (bool failInstantiation : {false, true}) {
-        auto sdc = skgpu::v1::SurfaceDrawContext::Make(ctx.get(), GrColorType::kRGBA_8888, nullptr,
-                                                       SkBackingFit::kExact, {100, 100},
-                                                       SkSurfaceProps());
-        REPORTER_ASSERT(reporter, sdc);
+        auto rtc = GrSurfaceDrawContext::Make(ctx.get(), GrColorType::kRGBA_8888, nullptr,
+                                              SkBackingFit::kExact, {100, 100}, SkSurfaceProps());
+        REPORTER_ASSERT(reporter, rtc);
 
-        sdc->clear(SkPMColor4f::FromBytes_RGBA(0xbaaaaaad));
+        rtc->clear(SkPMColor4f::FromBytes_RGBA(0xbaaaaaad));
 
         int executeTestValue = 0;
-        sdc->addDrawOp(LazyFailedInstantiationTestOp::Make(ctx.get(), proxyProvider,
+        rtc->addDrawOp(LazyFailedInstantiationTestOp::Make(ctx.get(), proxyProvider,
                                                            &executeTestValue, failInstantiation));
         ctx->flushAndSubmit();
 

@@ -12,8 +12,6 @@
 #include "include/core/SkString.h"
 #include "tools/Resources.h"
 
-#if defined(SK_ENABLE_PARAGRAPH)
-
 #include "modules/skparagraph/include/FontCollection.h"
 #include "modules/skparagraph/include/ParagraphBuilder.h"
 #include "modules/skparagraph/include/ParagraphStyle.h"
@@ -94,5 +92,3 @@ private:
 };
 
 DEF_BENCH( return new ParagraphBench; )
-
-#endif // SK_ENABLE_PARAGRAPH

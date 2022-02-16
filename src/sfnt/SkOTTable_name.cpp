@@ -7,10 +7,11 @@
 
 #include "src/sfnt/SkOTTable_name.h"
 
+#include "include/private/SkTemplates.h"
 #include "src/core/SkEndian.h"
 #include "src/core/SkStringUtils.h"
 #include "src/core/SkTSearch.h"
-#include "src/utils/SkUTF.h"
+#include "src/core/SkUtils.h"
 
 static SkUnichar next_unichar_UTF16BE(const uint8_t** srcPtr, size_t* length) {
     SkASSERT(srcPtr && *srcPtr && length);
@@ -26,10 +27,10 @@ static SkUnichar next_unichar_UTF16BE(const uint8_t** srcPtr, size_t* length) {
     *length -= sizeof(leading);
     SkUnichar c = SkEndian_SwapBE16(leading);
 
-    if (SkUTF::IsTrailingSurrogateUTF16(c)) {
+    if (SkUTF16_IsTrailingSurrogate(c)) {
         return 0xFFFD;
     }
-    if (SkUTF::IsLeadingSurrogateUTF16(c)) {
+    if (SkUTF16_IsLeadingSurrogate(c)) {
         uint16_t trailing;
         if (*length < sizeof(trailing)) {
             *length = 0;
@@ -37,7 +38,7 @@ static SkUnichar next_unichar_UTF16BE(const uint8_t** srcPtr, size_t* length) {
         }
         memcpy(&trailing, *srcPtr, sizeof(trailing));
         SkUnichar c2 = SkEndian_SwapBE16(trailing);
-        if (!SkUTF::IsTrailingSurrogateUTF16(c2)) {
+        if (!SkUTF16_IsTrailingSurrogate(c2)) {
             return 0xFFFD;
         }
         *srcPtr += sizeof(trailing);

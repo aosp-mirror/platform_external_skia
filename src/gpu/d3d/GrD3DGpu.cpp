@@ -155,7 +155,6 @@ bool GrD3DGpu::submitDirectCommandList(SyncQueue sync) {
 
     GrD3DDirectCommandList::SubmitResult result = fCurrentDirectCommandList->submit(fQueue.get());
     if (result == GrD3DDirectCommandList::SubmitResult::kFailure) {
-        fCurrentDirectCommandList = fResourceProvider.findOrCreateDirectCommandList();
         return false;
     } else if (result == GrD3DDirectCommandList::SubmitResult::kNoWork) {
         if (sync == SyncQueue::kForce) {
@@ -390,7 +389,7 @@ sk_sp<GrTexture> GrD3DGpu::onCreateCompressedTexture(SkISize dimensions,
     GrStagingBufferManager::Slice slice = fStagingBufferManager.allocateStagingBufferSlice(
             combinedBufferSize, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
     if (!slice.fBuffer) {
-        return nullptr;
+        return false;
     }
 
     char* bufferData = (char*)slice.fOffsetMapPtr;
@@ -557,11 +556,8 @@ void GrD3DGpu::onResolveRenderTarget(GrRenderTarget* target, const SkIRect& reso
     this->resolveTexture(target, resolveRect.fLeft, resolveRect.fTop, rt, resolveRect);
 }
 
-bool GrD3DGpu::onReadPixels(GrSurface* surface,
-                            SkIRect rect,
-                            GrColorType surfaceColorType,
-                            GrColorType dstColorType,
-                            void* buffer,
+bool GrD3DGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int height,
+                            GrColorType surfaceColorType, GrColorType dstColorType, void* buffer,
                             size_t rowBytes) {
     SkASSERT(surface);
 
@@ -569,6 +565,7 @@ bool GrD3DGpu::onReadPixels(GrSurface* surface,
         return false;
     }
 
+    // Set up src location and box
     GrD3DTextureResource* texResource = nullptr;
     GrD3DRenderTarget* rt = static_cast<GrD3DRenderTarget*>(surface->asRenderTarget());
     if (rt) {
@@ -581,46 +578,6 @@ bool GrD3DGpu::onReadPixels(GrSurface* surface,
         return false;
     }
 
-    D3D12_RESOURCE_DESC desc = texResource->d3dResource()->GetDesc();
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT placedFootprint;
-    UINT64 transferTotalBytes;
-    fDevice->GetCopyableFootprints(&desc, 0, 1, 0, &placedFootprint,
-                                   nullptr, nullptr, &transferTotalBytes);
-    SkASSERT(transferTotalBytes);
-    // TODO: implement some way of reusing buffers instead of making a new one every time.
-    sk_sp<GrGpuBuffer> transferBuffer = this->createBuffer(transferTotalBytes,
-                                                           GrGpuBufferType::kXferGpuToCpu,
-                                                           kDynamic_GrAccessPattern);
-
-    this->readOrTransferPixels(texResource, rect, transferBuffer, placedFootprint);
-    this->submitDirectCommandList(SyncQueue::kForce);
-
-    // Copy back to CPU buffer
-    size_t bpp = GrColorTypeBytesPerPixel(dstColorType);
-    if (GrDxgiFormatBytesPerBlock(texResource->dxgiFormat()) != bpp) {
-        return false;
-    }
-    size_t tightRowBytes = bpp * rect.width();
-
-    const void* mappedMemory = transferBuffer->map();
-
-    SkRectMemcpy(buffer,
-                 rowBytes,
-                 mappedMemory,
-                 placedFootprint.Footprint.RowPitch,
-                 tightRowBytes,
-                 rect.height());
-
-    transferBuffer->unmap();
-
-    return true;
-}
-
-void GrD3DGpu::readOrTransferPixels(GrD3DTextureResource* texResource,
-                                    SkIRect rect,
-                                    sk_sp<GrGpuBuffer> transferBuffer,
-                                    const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& placedFootprint) {
-    // Set up src location and box
     D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
     srcLocation.pResource = texResource->d3dResource();
     SkASSERT(srcLocation.pResource);
@@ -628,17 +585,32 @@ void GrD3DGpu::readOrTransferPixels(GrD3DTextureResource* texResource,
     srcLocation.SubresourceIndex = 0;
 
     D3D12_BOX srcBox = {};
-    srcBox.left = rect.left();
-    srcBox.top = rect.top();
-    srcBox.right = rect.right();
-    srcBox.bottom = rect.bottom();
+    srcBox.left = left;
+    srcBox.top = top;
+    srcBox.right = left + width;
+    srcBox.bottom = top + height;
     srcBox.front = 0;
     srcBox.back = 1;
 
-    // Set up dst location
+    // Set up dst location and create transfer buffer
     D3D12_TEXTURE_COPY_LOCATION dstLocation = {};
     dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    dstLocation.PlacedFootprint = placedFootprint;
+    UINT64 transferTotalBytes;
+    const UINT64 baseOffset = 0;
+    D3D12_RESOURCE_DESC desc = srcLocation.pResource->GetDesc();
+    fDevice->GetCopyableFootprints(&desc, 0, 1, baseOffset, &dstLocation.PlacedFootprint,
+                                   nullptr, nullptr, &transferTotalBytes);
+    SkASSERT(transferTotalBytes);
+    size_t bpp = GrColorTypeBytesPerPixel(dstColorType);
+    if (GrDxgiFormatBytesPerBlock(texResource->dxgiFormat()) != bpp) {
+        return false;
+    }
+    size_t tightRowBytes = bpp * width;
+
+    // TODO: implement some way of reusing buffers instead of making a new one every time.
+    sk_sp<GrGpuBuffer> transferBuffer = this->createBuffer(transferTotalBytes,
+                                                           GrGpuBufferType::kXferGpuToCpu,
+                                                           kDynamic_GrAccessPattern);
     GrD3DBuffer* d3dBuf = static_cast<GrD3DBuffer*>(transferBuffer.get());
     dstLocation.pResource = d3dBuf->d3dResource();
 
@@ -648,14 +620,21 @@ void GrD3DGpu::readOrTransferPixels(GrD3DTextureResource* texResource,
     fCurrentDirectCommandList->copyTextureRegionToBuffer(transferBuffer, &dstLocation, 0, 0,
                                                          texResource->resource(), &srcLocation,
                                                          &srcBox);
+    this->submitDirectCommandList(SyncQueue::kForce);
+
+    const void* mappedMemory = transferBuffer->map();
+
+    SkRectMemcpy(buffer, rowBytes, mappedMemory, dstLocation.PlacedFootprint.Footprint.RowPitch,
+                 tightRowBytes, height);
+
+    transferBuffer->unmap();
+
+    return true;
 }
 
-bool GrD3DGpu::onWritePixels(GrSurface* surface,
-                             SkIRect rect,
-                             GrColorType surfaceColorType,
-                             GrColorType srcColorType,
-                             const GrMipLevel texels[],
-                             int mipLevelCount,
+bool GrD3DGpu::onWritePixels(GrSurface* surface, int left, int top, int width, int height,
+                             GrColorType surfaceColorType, GrColorType srcColorType,
+                             const GrMipLevel texels[], int mipLevelCount,
                              bool prepForTexSampling) {
     GrD3DTexture* d3dTex = static_cast<GrD3DTexture*>(surface->asTexture());
     if (!d3dTex) {
@@ -674,7 +653,8 @@ bool GrD3DGpu::onWritePixels(GrSurface* surface,
     d3dTex->setResourceState(this, D3D12_RESOURCE_STATE_COPY_DEST);
 
     SkASSERT(mipLevelCount <= d3dTex->maxMipmapLevel() + 1);
-    success = this->uploadToTexture(d3dTex, rect, srcColorType, texels, mipLevelCount);
+    success = this->uploadToTexture(d3dTex, left, top, width, height, srcColorType, texels,
+                                    mipLevelCount);
 
     if (prepForTexSampling) {
         d3dTex->setResourceState(this, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -683,20 +663,18 @@ bool GrD3DGpu::onWritePixels(GrSurface* surface,
     return success;
 }
 
-bool GrD3DGpu::uploadToTexture(GrD3DTexture* tex,
-                               SkIRect rect,
-                               GrColorType colorType,
-                               const GrMipLevel* texels,
-                               int mipLevelCount) {
-    SkASSERT(this->d3dCaps().isFormatTexturable(tex->dxgiFormat()));
+bool GrD3DGpu::uploadToTexture(GrD3DTexture* tex, int left, int top, int width, int height,
+                               GrColorType colorType, const GrMipLevel* texels, int mipLevelCount) {
+    SkASSERT(this->caps()->isFormatTexturable(tex->backendFormat()));
     // The assumption is either that we have no mipmaps, or that our rect is the entire texture
-    SkASSERT(mipLevelCount == 1 || rect == SkIRect::MakeSize(tex->dimensions()));
+    SkASSERT(1 == mipLevelCount ||
+             (0 == left && 0 == top && width == tex->width() && height == tex->height()));
 
     // We assume that if the texture has mip levels, we either upload to all the levels or just the
     // first.
-    SkASSERT(mipLevelCount == 1 || mipLevelCount == (tex->maxMipmapLevel() + 1));
+    SkASSERT(1 == mipLevelCount || mipLevelCount == (tex->maxMipmapLevel() + 1));
 
-    if (rect.isEmpty()) {
+    if (width == 0 || height == 0) {
         return false;
     }
 
@@ -724,8 +702,8 @@ bool GrD3DGpu::uploadToTexture(GrD3DTexture* tex,
     UINT64 combinedBufferSize;
     // We reset the width and height in the description to match our subrectangle size
     // so we don't end up allocating more space than we need.
-    desc.Width = rect.width();
-    desc.Height = rect.height();
+    desc.Width = width;
+    desc.Height = height;
     fDevice->GetCopyableFootprints(&desc, 0, mipLevelCount, 0, placedFootprints.get(),
                                    nullptr, nullptr, &combinedBufferSize);
     size_t bpp = GrColorTypeBytesPerPixel(colorType);
@@ -739,10 +717,13 @@ bool GrD3DGpu::uploadToTexture(GrD3DTexture* tex,
 
     char* bufferData = (char*)slice.fOffsetMapPtr;
 
-    int currentWidth = rect.width();
-    int currentHeight = rect.height();
+    int currentWidth = width;
+    int currentHeight = height;
+    int layerHeight = tex->height();
+
     for (int currentMipLevel = 0; currentMipLevel < mipLevelCount; currentMipLevel++) {
         if (texels[currentMipLevel].fPixels) {
+            SkASSERT(1 == mipLevelCount || currentHeight == layerHeight);
 
             const size_t trimRowBytes = currentWidth * bpp;
             const size_t srcRowBytes = texels[currentMipLevel].fRowBytes;
@@ -756,6 +737,7 @@ bool GrD3DGpu::uploadToTexture(GrD3DTexture* tex,
         }
         currentWidth = std::max(1, currentWidth / 2);
         currentHeight = std::max(1, currentHeight / 2);
+        layerHeight = currentHeight;
     }
 
     // Update the offsets in the footprints to be relative to the slice's offset
@@ -764,137 +746,12 @@ bool GrD3DGpu::uploadToTexture(GrD3DTexture* tex,
     }
 
     ID3D12Resource* d3dBuffer = static_cast<GrD3DBuffer*>(slice.fBuffer)->d3dResource();
-    fCurrentDirectCommandList->copyBufferToTexture(d3dBuffer,
-                                                   tex,
-                                                   mipLevelCount,
-                                                   placedFootprints.get(),
-                                                   rect.left(),
-                                                   rect.top());
+    fCurrentDirectCommandList->copyBufferToTexture(d3dBuffer, tex, mipLevelCount,
+                                                   placedFootprints.get(), left, top);
 
     if (mipLevelCount < (int)desc.MipLevels) {
         tex->markMipmapsDirty();
     }
-
-    return true;
-}
-
-bool GrD3DGpu::onTransferPixelsTo(GrTexture* texture,
-                                  SkIRect rect,
-                                  GrColorType surfaceColorType,
-                                  GrColorType bufferColorType,
-                                  sk_sp<GrGpuBuffer> transferBuffer,
-                                  size_t bufferOffset,
-                                  size_t rowBytes) {
-    if (!this->currentCommandList()) {
-        return false;
-    }
-
-    if (!transferBuffer) {
-        return false;
-    }
-
-    size_t bpp = GrColorTypeBytesPerPixel(bufferColorType);
-    if (GrBackendFormatBytesPerPixel(texture->backendFormat()) != bpp) {
-        return false;
-    }
-
-    // D3D requires offsets for texture transfers to be aligned to this value
-    if (SkToBool(bufferOffset & (D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT-1))) {
-        return false;
-    }
-
-    GrD3DTexture* d3dTex = static_cast<GrD3DTexture*>(texture);
-    if (!d3dTex) {
-        return false;
-    }
-
-    SkDEBUGCODE(DXGI_FORMAT format = d3dTex->dxgiFormat());
-
-    // Can't transfer compressed data
-    SkASSERT(!GrDxgiFormatIsCompressed(format));
-
-    SkASSERT(GrDxgiFormatBytesPerBlock(format) == GrColorTypeBytesPerPixel(bufferColorType));
-
-    SkASSERT(SkIRect::MakeSize(texture->dimensions()).contains(rect));
-
-    // Set up copy region
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT placedFootprint = {};
-    ID3D12Resource* d3dResource = d3dTex->d3dResource();
-    SkASSERT(d3dResource);
-    D3D12_RESOURCE_DESC desc = d3dResource->GetDesc();
-    desc.Width = rect.width();
-    desc.Height = rect.height();
-    UINT64 totalBytes;
-    fDevice->GetCopyableFootprints(&desc, 0, 1, 0, &placedFootprint,
-                                   nullptr, nullptr, &totalBytes);
-    placedFootprint.Offset = bufferOffset;
-
-    // Change state of our target so it can be copied to
-    d3dTex->setResourceState(this, D3D12_RESOURCE_STATE_COPY_DEST);
-
-    // Copy the buffer to the image.
-    ID3D12Resource* d3dBuffer = static_cast<GrD3DBuffer*>(transferBuffer.get())->d3dResource();
-    fCurrentDirectCommandList->copyBufferToTexture(d3dBuffer,
-                                                   d3dTex,
-                                                   1,
-                                                   &placedFootprint,
-                                                   rect.left(),
-                                                   rect.top());
-    this->currentCommandList()->addGrBuffer(std::move(transferBuffer));
-
-    d3dTex->markMipmapsDirty();
-    return true;
-}
-
-bool GrD3DGpu::onTransferPixelsFrom(GrSurface* surface,
-                                    SkIRect rect,
-                                    GrColorType surfaceColorType,
-                                    GrColorType bufferColorType,
-                                    sk_sp<GrGpuBuffer> transferBuffer,
-                                    size_t offset) {
-    if (!this->currentCommandList()) {
-        return false;
-    }
-    SkASSERT(surface);
-    SkASSERT(transferBuffer);
-    // TODO
-    //if (fProtectedContext == GrProtected::kYes) {
-    //    return false;
-    //}
-
-    // D3D requires offsets for texture transfers to be aligned to this value
-    if (SkToBool(offset & (D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT-1))) {
-        return false;
-    }
-
-    GrD3DTextureResource* texResource = nullptr;
-    GrD3DRenderTarget* rt = static_cast<GrD3DRenderTarget*>(surface->asRenderTarget());
-    if (rt) {
-        texResource = rt;
-    } else {
-        texResource = static_cast<GrD3DTexture*>(surface->asTexture());
-    }
-
-    if (!texResource) {
-        return false;
-    }
-
-    SkDEBUGCODE(DXGI_FORMAT format = texResource->dxgiFormat());
-    SkASSERT(GrDxgiFormatBytesPerBlock(format) == GrColorTypeBytesPerPixel(bufferColorType));
-
-    D3D12_RESOURCE_DESC desc = texResource->d3dResource()->GetDesc();
-    desc.Width = rect.width();
-    desc.Height = rect.height();
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT placedFootprint;
-    UINT64 transferTotalBytes;
-    fDevice->GetCopyableFootprints(&desc, 0, 1, offset, &placedFootprint,
-                                   nullptr, nullptr, &transferTotalBytes);
-    SkASSERT(transferTotalBytes);
-
-    this->readOrTransferPixels(texResource, rect, transferBuffer, placedFootprint);
-
-    // TODO: It's not clear how to ensure the transfer is done before we read from the buffer,
-    // other than maybe doing a resource state transition.
 
     return true;
 }
@@ -1031,17 +888,6 @@ static bool is_odd(int x) {
     return x > 1 && SkToBool(x & 0x1);
 }
 
-// TODO: enable when sRGB shader supported
-//static bool is_srgb(DXGI_FORMAT format) {
-//    // the only one we support at the moment
-//    return (format == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
-//}
-
-static bool is_bgra(DXGI_FORMAT format) {
-    // the only one we support at the moment
-    return (format == DXGI_FORMAT_B8G8R8A8_UNORM);
-}
-
 bool GrD3DGpu::onRegenerateMipMapLevels(GrTexture * tex) {
     auto * d3dTex = static_cast<GrD3DTexture*>(tex);
     SkASSERT(tex->textureType() == GrTextureType::k2D);
@@ -1056,35 +902,18 @@ bool GrD3DGpu::onRegenerateMipMapLevels(GrTexture * tex) {
     }
 
     sk_sp<GrD3DTexture> uavTexture;
-    sk_sp<GrD3DTexture> bgraAliasTexture;
-    DXGI_FORMAT originalFormat = d3dTex->dxgiFormat();
-    D3D12_RESOURCE_DESC originalDesc = d3dTex->d3dResource()->GetDesc();
     // if the format is unordered accessible and resource flag is set, use resource for uav
-    if (caps.isFormatUnorderedAccessible(originalFormat) &&
-        (originalDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)) {
+    if (caps.isFormatUnorderedAccessible(d3dTex->dxgiFormat()) &&
+        (d3dTex->d3dResource()->GetDesc().Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)) {
         uavTexture = sk_ref_sp(d3dTex);
     } else {
         // need to make a copy and use that for our uav
-        D3D12_RESOURCE_DESC uavDesc = originalDesc;
+        D3D12_RESOURCE_DESC uavDesc = d3dTex->d3dResource()->GetDesc();
         uavDesc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         // if the format is unordered accessible, copy to resource with same format and flag set
-        if (!caps.isFormatUnorderedAccessible(originalFormat)) {
-            // for the BGRA and sRGB cases, we find a suitable RGBA format to use instead
-            if (is_bgra(originalFormat)) {
-                uavDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-                // Technically if this support is not available we should not be doing
-                // aliasing. However, on Intel the BGRA and RGBA swizzle appears to be
-                // the same so it still works. We may need to disable BGRA support
-                // on a case-by-base basis if this doesn't hold true in general.
-                if (caps.standardSwizzleLayoutSupport()) {
-                    uavDesc.Layout = D3D12_TEXTURE_LAYOUT_64KB_STANDARD_SWIZZLE;
-                }
-            // TODO: enable when sRGB shader supported
-            //} else if (is_srgb(originalFormat)) {
-            //    uavDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-            } else {
-                return false;
-            }
+        if (!caps.isFormatUnorderedAccessible(d3dTex->dxgiFormat())) {
+            // TODO: support BGR and sRGB
+            return false;
         }
         // TODO: make this a scratch texture
         GrProtected grProtected = tex->isProtected() ? GrProtected::kYes : GrProtected::kNo;
@@ -1095,27 +924,9 @@ bool GrD3DGpu::onRegenerateMipMapLevels(GrTexture * tex) {
         }
 
         d3dTex->setResourceState(this, D3D12_RESOURCE_STATE_COPY_SOURCE);
-        if (!caps.isFormatUnorderedAccessible(originalFormat) && is_bgra(originalFormat)) {
-            // for BGRA, we alias this uavTexture with a BGRA texture and copy to that
-            bgraAliasTexture = GrD3DTexture::MakeAliasingTexture(this, uavTexture, originalDesc,
-                                                                 D3D12_RESOURCE_STATE_COPY_DEST);
-            // make the BGRA version the active alias
-            this->currentCommandList()->aliasingBarrier(nullptr,
-                                                        nullptr,
-                                                        bgraAliasTexture->resource(),
-                                                        bgraAliasTexture->d3dResource());
-            // copy top miplevel to bgraAliasTexture (should already be in COPY_DEST state)
-            this->currentCommandList()->copyTextureToTexture(bgraAliasTexture.get(), d3dTex, 0);
-            // make the RGBA version the active alias
-            this->currentCommandList()->aliasingBarrier(bgraAliasTexture->resource(),
-                                                        bgraAliasTexture->d3dResource(),
-                                                        uavTexture->resource(),
-                                                        uavTexture->d3dResource());
-        } else {
-            // copy top miplevel to uavTexture
-            uavTexture->setResourceState(this, D3D12_RESOURCE_STATE_COPY_DEST);
-            this->currentCommandList()->copyTextureToTexture(uavTexture.get(), d3dTex, 0);
-        }
+        // copy top miplevel to uavTexture
+        uavTexture->setResourceState(this, D3D12_RESOURCE_STATE_COPY_DEST);
+        this->currentCommandList()->copyTextureToTexture(uavTexture.get(), d3dTex, 0);
     }
 
     uint32_t levelCount = d3dTex->mipLevels();
@@ -1136,6 +947,9 @@ bool GrD3DGpu::onRegenerateMipMapLevels(GrTexture * tex) {
     samplers[0] = fResourceProvider.findOrCreateCompatibleSampler(samplerState);
     this->currentCommandList()->addSampledTextureRef(uavTexture.get());
     sk_sp<GrD3DDescriptorTable> samplerTable = fResourceProvider.findOrCreateSamplerTable(samplers);
+    this->currentCommandList()->setComputeRootDescriptorTable(
+            static_cast<unsigned int>(GrD3DRootSignature::ParamIndex::kSamplerDescriptorTable),
+            samplerTable->baseGpuDescriptor());
 
     // Transition the top subresource to be readable in the compute shader
     D3D12_RESOURCE_STATES currentResourceState = uavTexture->currentState();
@@ -1186,18 +1000,12 @@ bool GrD3DGpu::onRegenerateMipMapLevels(GrTexture * tex) {
         shaderViews.push_back(uavHandle.fHandle);
         fMipmapCPUDescriptors.push_back(uavHandle);
 
-        // set up shaderView descriptor table
+        // set up and bind shaderView descriptor table
         sk_sp<GrD3DDescriptorTable> srvTable =
                 fResourceProvider.findOrCreateShaderViewTable(shaderViews);
-
-        // bind both descriptor tables
-        this->currentCommandList()->setDescriptorHeaps(srvTable->heap(), samplerTable->heap());
         this->currentCommandList()->setComputeRootDescriptorTable(
                 (unsigned int)GrD3DRootSignature::ParamIndex::kShaderViewDescriptorTable,
                 srvTable->baseGpuDescriptor());
-        this->currentCommandList()->setComputeRootDescriptorTable(
-                static_cast<unsigned int>(GrD3DRootSignature::ParamIndex::kSamplerDescriptorTable),
-                samplerTable->baseGpuDescriptor());
 
         // Transition resource state of dstMip subresource so we can write to it
         barrier.Subresource = dstMip;
@@ -1220,22 +1028,12 @@ bool GrD3DGpu::onRegenerateMipMapLevels(GrTexture * tex) {
     // copy back if necessary
     if (uavTexture.get() != d3dTex) {
         d3dTex->setResourceState(this, D3D12_RESOURCE_STATE_COPY_DEST);
-        if (bgraAliasTexture) {
-            // make the BGRA version the active alias
-            this->currentCommandList()->aliasingBarrier(uavTexture->resource(),
-                                                        uavTexture->d3dResource(),
-                                                        bgraAliasTexture->resource(),
-                                                        bgraAliasTexture->d3dResource());
-            // copy from bgraAliasTexture to d3dTex
-            bgraAliasTexture->setResourceState(this, D3D12_RESOURCE_STATE_COPY_SOURCE);
-            this->currentCommandList()->copyTextureToTexture(d3dTex, bgraAliasTexture.get());
-        } else {
-            barrier.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            barrier.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-            barrier.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
-            this->addResourceBarriers(uavTexture->resource(), 1, &barrier);
-            this->currentCommandList()->copyTextureToTexture(d3dTex, uavTexture.get());
-        }
+        barrier.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrier.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+        barrier.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+        // TODO: support BGR and sRGB
+        this->addResourceBarriers(uavTexture->resource(), 1, &barrier);
+        this->currentCommandList()->copyTextureToTexture(d3dTex, uavTexture.get());
     } else {
         // For simplicity our resource state tracking considers all subresources to have the same
         // state. However, we've changed that state one subresource at a time without going through
@@ -1700,9 +1498,10 @@ bool GrD3DGpu::onSubmitToGpu(bool syncCpu) {
 std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT GrD3DGpu::makeSemaphore(bool) {
     return GrD3DSemaphore::Make(this);
 }
-std::unique_ptr<GrSemaphore> GrD3DGpu::wrapBackendSemaphore(const GrBackendSemaphore& semaphore,
-                                                            GrSemaphoreWrapType /* wrapType */,
-                                                            GrWrapOwnership /* ownership */) {
+std::unique_ptr<GrSemaphore> GrD3DGpu::wrapBackendSemaphore(
+        const GrBackendSemaphore& semaphore,
+        GrResourceProvider::SemaphoreWrapType,
+        GrWrapOwnership) {
     SkASSERT(this->caps()->semaphoreSupport());
     GrD3DFenceInfo fenceInfo;
     if (!semaphore.getD3DFenceInfo(&fenceInfo)) {

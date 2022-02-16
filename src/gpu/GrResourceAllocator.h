@@ -29,51 +29,42 @@ class GrDirectContext;
  * The ResourceAllocator explicitly distributes GPU resources at flush time. It operates by
  * being given the usage intervals of the various proxies. It keeps these intervals in a singly
  * linked list sorted by increasing start index. (It also maintains a hash table from proxyID
- * to interval to find proxy reuse). The ResourceAllocator uses Registers (in the sense of register
- * allocation) to represent a future surface that will be used for each proxy during
- * `planAssignment`, and then assigns actual surfaces during `assign`.
+ * to interval to find proxy reuse). When it comes time to allocate the resources it
+ * traverses the sorted list and:
+ *     removes intervals from the active list that have completed (returning their GrSurfaces
+ *     to the free pool)
+
+ *     allocates a new resource (preferably from the free pool) for the new interval
+ *     adds the new interval to the active list (that is sorted by increasing end index)
  *
  * Note: the op indices (used in the usage intervals) come from the order of the ops in
  * their opsTasks after the opsTask DAG has been linearized.
- *
- * The planAssignment method traverses the sorted list and:
- *     moves intervals from the active list that have completed (returning their registers
- *     to the free pool) into the finished list (sorted by increasing start)
- *
- *     allocates a new register (preferably from the free pool) for the new interval
- *     adds the new interval to the active list (that is sorted by increasing end index)
- *
- * After assignment planning, the user can choose to call `makeBudgetHeadroom` which:
- *     computes how much VRAM would be needed for new resources for all extant Registers
- *
- *     asks the resource cache to purge enough resources to get that much free space
- *
- *     if it's not possible, do nothing and return false. The user may opt to reset
- *     the allocator and start over with a different DAG.
- *
- * If the user wants to commit to the current assignment plan, they call `assign` which:
- *     instantiates lazy proxies
- *
- *     instantantiates new surfaces for all registers that need them
- *
- *     assigns the surface for each register to all the proxies that will use it
  *
  *************************************************************************************************
  * How does instantiation failure handling work when explicitly allocating?
  *
  * In the gather usage intervals pass all the GrSurfaceProxies used in the flush should be
- * gathered (i.e., in OpsTask::gatherProxyIntervals).
+ * gathered (i.e., in GrOpsTask::gatherProxyIntervals).
  *
- * During addInterval, read-only lazy proxies are instantiated. If that fails, the resource
- * allocator will note the failure and ignore pretty much anything else until `reset`.
+ * The allocator will churn through this list but could fail anywhere.
  *
- * During planAssignment, fully-lazy proxies are instantiated so that we can know their size for
- * budgeting purposes. If this fails, return false.
+ * Allocation failure handling occurs at two levels:
  *
- * During assign, partially-lazy proxies are instantiated and new surfaces are created for all other
- * proxies. If any of these fails, return false.
+ * 1) If the GrSurface backing an opsTask fails to allocate then the entire opsTask is dropped.
  *
- * The drawing manager will drop the flush if any proxies fail to instantiate.
+ * 2) If an individual GrSurfaceProxy fails to allocate then any ops that use it are dropped
+ * (via GrOpsTask::purgeOpsWithUninstantiatedProxies)
+ *
+ * The pass to determine which ops to drop is a bit laborious so we only check the opsTasks and
+ * individual ops when something goes wrong in allocation (i.e., when the return code from
+ * GrResourceAllocator::assign is bad)
+ *
+ * All together this means we should never attempt to draw an op which is missing some
+ * required GrSurface.
+ *
+ * One wrinkle in this plan is that promise images are fulfilled during the gather interval pass.
+ * If any of the promise images fail at this stage then the allocator is set into an error
+ * state and all allocations are then scanned for failures during the main allocation pass.
  */
 class GrResourceAllocator {
 public:
@@ -134,21 +125,21 @@ private:
     Register* findOrCreateRegisterFor(GrSurfaceProxy* proxy);
 
     struct FreePoolTraits {
-        static const skgpu::ScratchKey& GetKey(const Register& r) {
+        static const GrScratchKey& GetKey(const Register& r) {
             return r.scratchKey();
         }
 
-        static uint32_t Hash(const skgpu::ScratchKey& key) { return key.hash(); }
+        static uint32_t Hash(const GrScratchKey& key) { return key.hash(); }
         static void OnFree(Register* r) { }
     };
-    typedef SkTMultiMap<Register, skgpu::ScratchKey, FreePoolTraits> FreePoolMultiMap;
+    typedef SkTMultiMap<Register, GrScratchKey, FreePoolTraits> FreePoolMultiMap;
 
     typedef SkTHashMap<uint32_t, Interval*, GrCheapHash>        IntvlHash;
 
     struct UniqueKeyHash {
-        uint32_t operator()(const skgpu::UniqueKey& key) const { return key.hash(); }
+        uint32_t operator()(const GrUniqueKey& key) const { return key.hash(); }
     };
-    typedef SkTHashMap<skgpu::UniqueKey, Register*, UniqueKeyHash> UniqueKeyRegisterHash;
+    typedef SkTHashMap<GrUniqueKey, Register*, UniqueKeyHash> UniqueKeyRegisterHash;
 
     // Each proxy – with some exceptions – is assigned a register. After all assignments are made,
     // another pass is performed to instantiate and assign actual surfaces to the proxies. Right
@@ -157,10 +148,10 @@ private:
     class Register {
     public:
         // It's OK to pass an invalid scratch key iff the proxy has a unique key.
-        Register(GrSurfaceProxy* originatingProxy, skgpu::ScratchKey, GrResourceProvider*);
+        Register(GrSurfaceProxy* originatingProxy, GrScratchKey, GrResourceProvider*);
 
-        const skgpu::ScratchKey& scratchKey() const { return fScratchKey; }
-        const skgpu::UniqueKey& uniqueKey() const { return fOriginatingProxy->getUniqueKey(); }
+        const GrScratchKey& scratchKey() const { return fScratchKey; }
+        const GrUniqueKey& uniqueKey() const { return fOriginatingProxy->getUniqueKey(); }
 
         bool accountedForInBudget() const { return fAccountedForInBudget; }
         void setAccountedForInBudget() { fAccountedForInBudget = true; }
@@ -178,10 +169,10 @@ private:
         SkDEBUGCODE(uint32_t uniqueID() const { return fUniqueID; })
 
     private:
-        GrSurfaceProxy*   fOriginatingProxy;
-        skgpu::ScratchKey fScratchKey; // free pool wants a reference to this.
-        sk_sp<GrSurface>  fExistingSurface; // queried from resource cache. may be null.
-        bool              fAccountedForInBudget = false;
+        GrSurfaceProxy*  fOriginatingProxy;
+        GrScratchKey     fScratchKey; // free pool wants a reference to this.
+        sk_sp<GrSurface> fExistingSurface; // queried from resource cache. may be null.
+        bool             fAccountedForInBudget = false;
 
 #ifdef SK_DEBUG
         uint32_t         fUniqueID;

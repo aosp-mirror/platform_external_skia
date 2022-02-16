@@ -14,15 +14,17 @@
 
 namespace SkSL {
 
+struct ASTNode;
+
 /**
  * A function prototype (a function declaration as a top-level program element)
  */
 class FunctionPrototype final : public ProgramElement {
 public:
-    inline static constexpr Kind kProgramElementKind = Kind::kFunctionPrototype;
+    static constexpr Kind kProgramElementKind = Kind::kFunctionPrototype;
 
-    FunctionPrototype(int line, const FunctionDeclaration* declaration, bool builtin)
-            : INHERITED(line, kProgramElementKind)
+    FunctionPrototype(int offset, const FunctionDeclaration* declaration, bool builtin)
+            : INHERITED(offset, kProgramElementKind)
             , fDeclaration(declaration)
             , fBuiltin(builtin) {}
 
@@ -35,10 +37,11 @@ public:
     }
 
     std::unique_ptr<ProgramElement> clone() const override {
-        return std::make_unique<FunctionPrototype>(fLine, &this->declaration(), /*builtin=*/false);
+        return std::make_unique<FunctionPrototype>(fOffset, &this->declaration(),
+                                                   /*builtin=*/false);
     }
 
-    std::string description() const override {
+    String description() const override {
         return this->declaration().description() + ";";
     }
 

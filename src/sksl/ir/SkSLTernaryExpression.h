@@ -8,6 +8,7 @@
 #ifndef SKSL_TERNARYEXPRESSION
 #define SKSL_TERNARYEXPRESSION
 
+#include "src/sksl/SkSLPosition.h"
 #include "src/sksl/ir/SkSLExpression.h"
 
 namespace SkSL {
@@ -17,15 +18,15 @@ namespace SkSL {
  */
 class TernaryExpression final : public Expression {
 public:
-    inline static constexpr Kind kExpressionKind = Kind::kTernary;
+    static constexpr Kind kExpressionKind = Kind::kTernary;
 
-    TernaryExpression(int line, std::unique_ptr<Expression> test,
+    TernaryExpression(int offset, std::unique_ptr<Expression> test,
                       std::unique_ptr<Expression> ifTrue, std::unique_ptr<Expression> ifFalse)
-        : INHERITED(line, kExpressionKind, &ifTrue->type())
+        : INHERITED(offset, kExpressionKind, &ifTrue->type())
         , fTest(std::move(test))
         , fIfTrue(std::move(ifTrue))
         , fIfFalse(std::move(ifFalse)) {
-        SkASSERT(this->ifTrue()->type().matches(this->ifFalse()->type()));
+        SkASSERT(this->ifTrue()->type() == this->ifFalse()->type());
     }
 
     // Creates a potentially-simplified form of the ternary. Typechecks and coerces input
@@ -76,12 +77,12 @@ public:
     }
 
     std::unique_ptr<Expression> clone() const override {
-        return std::make_unique<TernaryExpression>(fLine, this->test()->clone(),
+        return std::make_unique<TernaryExpression>(fOffset, this->test()->clone(),
                                                    this->ifTrue()->clone(),
                                                    this->ifFalse()->clone());
     }
 
-    std::string description() const override {
+    String description() const override {
         return "(" + this->test()->description() + " ? " + this->ifTrue()->description() + " : " +
                this->ifFalse()->description() + ")";
     }

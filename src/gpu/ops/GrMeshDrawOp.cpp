@@ -16,24 +16,14 @@ GrMeshDrawOp::GrMeshDrawOp(uint32_t classID) : INHERITED(classID) {}
 
 void GrMeshDrawOp::onPrepare(GrOpFlushState* state) { this->onPrepareDraws(state); }
 
-void GrMeshDrawOp::createProgramInfo(GrMeshDrawTarget* target) {
+void GrMeshDrawOp::createProgramInfo(Target* target) {
     this->createProgramInfo(&target->caps(),
                             target->allocator(),
                             target->writeView(),
-                            target->usesMSAASurface(),
                             target->detachAppliedClip(),
                             target->dstProxyView(),
                             target->renderPassBarriers(),
                             target->colorLoadOp());
-}
-
-bool GrMeshDrawOp::CombinedQuadCountWillOverflow(GrAAType aaType,
-                                                 bool willBeUpgradedToAA,
-                                                 int combinedQuadCount) {
-    bool willBeAA = (aaType == GrAAType::kCoverage) || willBeUpgradedToAA;
-
-    return combinedQuadCount > (willBeAA ? GrResourceProvider::MaxNumAAQuads()
-                                         : GrResourceProvider::MaxNumNonAAQuads());
 }
 
 // This onPrepareDraws implementation assumes the derived Op only has a single programInfo -
@@ -41,18 +31,15 @@ bool GrMeshDrawOp::CombinedQuadCountWillOverflow(GrAAType aaType,
 void GrMeshDrawOp::onPrePrepareDraws(GrRecordingContext* context,
                                      const GrSurfaceProxyView& writeView,
                                      GrAppliedClip* clip,
-                                     const GrDstProxyView& dstProxyView,
+                                     const GrXferProcessor::DstProxyView& dstProxyView,
                                      GrXferBarrierFlags renderPassXferBarriers,
                                      GrLoadOp colorLoadOp) {
     SkArenaAlloc* arena = context->priv().recordTimeAllocator();
 
-    // http://skbug.com/12201 -- DDL does not yet support DMSAA.
-    bool usesMSAASurface = writeView.asRenderTargetProxy()->numSamples() > 1;
-
     // This is equivalent to a GrOpFlushState::detachAppliedClip
     GrAppliedClip appliedClip = clip ? std::move(*clip) : GrAppliedClip::Disabled();
 
-    this->createProgramInfo(context->priv().caps(), arena, writeView, usesMSAASurface,
+    this->createProgramInfo(context->priv().caps(), arena, writeView,
                             std::move(appliedClip), dstProxyView, renderPassXferBarriers,
                             colorLoadOp);
 
@@ -65,7 +52,7 @@ void GrMeshDrawOp::onPrePrepareDraws(GrRecordingContext* context,
 
 //////////////////////////////////////////////////////////////////////////////
 
-GrMeshDrawOp::PatternHelper::PatternHelper(GrMeshDrawTarget* target, GrPrimitiveType primitiveType,
+GrMeshDrawOp::PatternHelper::PatternHelper(Target* target, GrPrimitiveType primitiveType,
                                            size_t vertexStride, sk_sp<const GrBuffer> indexBuffer,
                                            int verticesPerRepetition, int indicesPerRepetition,
                                            int repeatCount, int maxRepetitions) {
@@ -73,7 +60,7 @@ GrMeshDrawOp::PatternHelper::PatternHelper(GrMeshDrawTarget* target, GrPrimitive
                indicesPerRepetition, repeatCount, maxRepetitions);
 }
 
-void GrMeshDrawOp::PatternHelper::init(GrMeshDrawTarget* target, GrPrimitiveType primitiveType,
+void GrMeshDrawOp::PatternHelper::init(Target* target, GrPrimitiveType primitiveType,
                                        size_t vertexStride, sk_sp<const GrBuffer> indexBuffer,
                                        int verticesPerRepetition, int indicesPerRepetition,
                                        int repeatCount, int maxRepetitions) {
@@ -100,13 +87,12 @@ void GrMeshDrawOp::PatternHelper::init(GrMeshDrawTarget* target, GrPrimitiveType
                                firstVertex);
 }
 
-void GrMeshDrawOp::PatternHelper::recordDraw(GrMeshDrawTarget* target,
-                                             const GrGeometryProcessor* gp) const {
+void GrMeshDrawOp::PatternHelper::recordDraw(Target* target, const GrGeometryProcessor* gp) const {
     target->recordDraw(gp, fMesh, 1, fPrimitiveType);
 }
 
 void GrMeshDrawOp::PatternHelper::recordDraw(
-        GrMeshDrawTarget* target,
+        Target* target,
         const GrGeometryProcessor* gp,
         const GrSurfaceProxy* const primProcProxies[]) const {
     target->recordDraw(gp, fMesh, 1, primProcProxies, fPrimitiveType);
@@ -114,9 +100,7 @@ void GrMeshDrawOp::PatternHelper::recordDraw(
 
 //////////////////////////////////////////////////////////////////////////////
 
-GrMeshDrawOp::QuadHelper::QuadHelper(GrMeshDrawTarget* target,
-                                     size_t vertexStride,
-                                     int quadsToDraw) {
+GrMeshDrawOp::QuadHelper::QuadHelper(Target* target, size_t vertexStride, int quadsToDraw) {
     sk_sp<const GrGpuBuffer> indexBuffer = target->resourceProvider()->refNonAAQuadIndexBuffer();
     if (!indexBuffer) {
         SkDebugf("Could not get quad index buffer.");

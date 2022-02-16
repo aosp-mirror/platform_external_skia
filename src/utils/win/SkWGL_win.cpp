@@ -174,11 +174,11 @@ namespace {
     #define STR_LIT(X) #X
 #endif
 
-#define TEMP_CLASS STR_LIT("TempClass")
+#define DUMMY_CLASS STR_LIT("DummyClass")
 
-HWND create_temp_window() {
+HWND create_dummy_window() {
     HMODULE module = GetModuleHandle(nullptr);
-    HWND wnd;
+    HWND dummy;
     RECT windowRect;
     windowRect.left = 0;
     windowRect.right = 8;
@@ -196,7 +196,7 @@ HWND create_temp_window() {
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.hbrBackground = nullptr;
     wc.lpszMenuName = nullptr;
-    wc.lpszClassName = TEMP_CLASS;
+    wc.lpszClassName = DUMMY_CLASS;
 
     if(!RegisterClass(&wc)) {
         return 0;
@@ -207,28 +207,28 @@ HWND create_temp_window() {
     style = WS_SYSMENU;
 
     AdjustWindowRectEx(&windowRect, style, false, exStyle);
-    if(!(wnd = CreateWindowEx(exStyle,
-                              TEMP_CLASS,
-                              STR_LIT("PlaceholderWindow"),
-                              WS_CLIPSIBLINGS | WS_CLIPCHILDREN | style,
-                              0, 0,
-                              windowRect.right-windowRect.left,
-                              windowRect.bottom-windowRect.top,
-                              nullptr, nullptr,
-                              module,
-                              nullptr))) {
-        UnregisterClass(TEMP_CLASS, module);
+    if(!(dummy = CreateWindowEx(exStyle,
+                                DUMMY_CLASS,
+                                STR_LIT("DummyWindow"),
+                                WS_CLIPSIBLINGS | WS_CLIPCHILDREN | style,
+                                0, 0,
+                                windowRect.right-windowRect.left,
+                                windowRect.bottom-windowRect.top,
+                                nullptr, nullptr,
+                                module,
+                                nullptr))) {
+        UnregisterClass(DUMMY_CLASS, module);
         return nullptr;
     }
-    ShowWindow(wnd, SW_HIDE);
+    ShowWindow(dummy, SW_HIDE);
 
-    return wnd;
+    return dummy;
 }
 
-void destroy_temp_window(HWND wnd) {
-    DestroyWindow(wnd);
+void destroy_dummy_window(HWND dummy) {
+    DestroyWindow(dummy);
     HMODULE module = GetModuleHandle(nullptr);
-    UnregisterClass(TEMP_CLASS, module);
+    UnregisterClass(DUMMY_CLASS, module);
 }
 }
 
@@ -256,30 +256,25 @@ SkWGLExtensions::SkWGLExtensions() {
         HDC prevDC = wglGetCurrentDC();
         HGLRC prevGLRC = wglGetCurrentContext();
 
-        PIXELFORMATDESCRIPTOR tempPFD;
+        PIXELFORMATDESCRIPTOR dummyPFD;
 
-        ZeroMemory(&tempPFD, sizeof(tempPFD));
-        tempPFD.nSize = sizeof(tempPFD);
-        tempPFD.nVersion = 1;
-        tempPFD.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL;
-        tempPFD.iPixelType = PFD_TYPE_RGBA;
-        tempPFD.cColorBits  = 32;
-        tempPFD.cDepthBits  = 0;
-        tempPFD.cStencilBits = 8;
-        tempPFD.iLayerType = PFD_MAIN_PLANE;
-        HWND tempWND = create_temp_window();
-        if (tempWND) {
-            HDC tempDC = GetDC(tempWND);
-            int tempFormat = ChoosePixelFormat(tempDC, &tempPFD);
-            SetPixelFormat(tempDC, tempFormat, &tempPFD);
-            HGLRC tempGLRC = wglCreateContext(tempDC);
-            SkASSERT(tempGLRC);
-            wglMakeCurrent(tempDC, tempGLRC);
-
-            #if defined(__clang__)
-                #pragma clang diagnostic push
-                #pragma clang diagnostic ignored "-Wcast-function-type"
-            #endif
+        ZeroMemory(&dummyPFD, sizeof(dummyPFD));
+        dummyPFD.nSize = sizeof(dummyPFD);
+        dummyPFD.nVersion = 1;
+        dummyPFD.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL;
+        dummyPFD.iPixelType = PFD_TYPE_RGBA;
+        dummyPFD.cColorBits  = 32;
+        dummyPFD.cDepthBits  = 0;
+        dummyPFD.cStencilBits = 8;
+        dummyPFD.iLayerType = PFD_MAIN_PLANE;
+        HWND dummyWND = create_dummy_window();
+        if (dummyWND) {
+            HDC dummyDC = GetDC(dummyWND);
+            int dummyFormat = ChoosePixelFormat(dummyDC, &dummyPFD);
+            SetPixelFormat(dummyDC, dummyFormat, &dummyPFD);
+            HGLRC dummyGLRC = wglCreateContext(dummyDC);
+            SkASSERT(dummyGLRC);
+            wglMakeCurrent(dummyDC, dummyGLRC);
 
             GET_PROC(GetExtensionsString, ARB);
             GET_PROC(ChoosePixelFormat, ARB);
@@ -292,13 +287,9 @@ SkWGLExtensions::SkWGLExtensions() {
             GET_PROC(ReleasePbufferDC, ARB);
             GET_PROC(DestroyPbuffer, ARB);
 
-            #if defined(__clang__)
-                #pragma clang diagnostic pop
-            #endif
-
-            wglMakeCurrent(tempDC, nullptr);
-            wglDeleteContext(tempGLRC);
-            destroy_temp_window(tempWND);
+            wglMakeCurrent(dummyDC, nullptr);
+            wglDeleteContext(dummyGLRC);
+            destroy_dummy_window(dummyWND);
         }
 
         wglMakeCurrent(prevDC, prevGLRC);

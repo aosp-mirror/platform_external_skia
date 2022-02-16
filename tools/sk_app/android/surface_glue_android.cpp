@@ -228,6 +228,8 @@ void* SkiaAndroidApp::pthread_main(void* arg) {
         }
     }
 
+    SkDebugf("pthread_main ends");
+
     return nullptr;
 }
 

@@ -59,7 +59,7 @@
 //make it clear when converting a scalar that this is what is wanted.
 #define SkScalarToFLOAT(n) SkScalarToFloat(n)
 
-//Placeholder representation of a GUID from createId.
+//Dummy representation of a GUID from createId.
 #define L_GUID_ID L"XXXXXXXXsXXXXsXXXXsXXXXsXXXXXXXXXXXX"
 //Length of GUID representation from createId, including nullptr terminator.
 #define GUID_ID_LEN SK_ARRAY_COUNT(L_GUID_ID)
@@ -1142,12 +1142,8 @@ void SkXPSDevice::drawPoints(SkCanvas::PointMode mode,
     //TODO
 }
 
-void SkXPSDevice::drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&) {
+void SkXPSDevice::drawVertices(const SkVertices*, SkBlendMode, const SkPaint&) {
     //TODO
-}
-
-void SkXPSDevice::drawCustomMesh(SkCustomMesh, sk_sp<SkBlender>, const SkPaint&) {
-    // TODO
 }
 
 void SkXPSDevice::drawPaint(const SkPaint& origPaint) {
@@ -1734,7 +1730,7 @@ HRESULT SkXPSDevice::CreateTypefaceUse(const SkFont& font,
     SkTypeface* typeface = font.getTypefaceOrDefault();
 
     //Check cache.
-    const SkTypefaceID typefaceID = typeface->uniqueID();
+    const SkFontID typefaceID = typeface->uniqueID();
     for (TypefaceUse& current : *this->fTopTypefaces) {
         if (current.typefaceId == typefaceID) {
             *typefaceUse = &current;
@@ -1896,9 +1892,7 @@ static bool text_must_be_pathed(const SkPaint& paint, const SkMatrix& matrix) {
     ;
 }
 
-void SkXPSDevice::onDrawGlyphRunList(SkCanvas*,
-                                     const SkGlyphRunList& glyphRunList,
-                                     const SkPaint& paint) {
+void SkXPSDevice::onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) {
     SkASSERT(!glyphRunList.hasRSXForm());
 
     for (const auto& run : glyphRunList) {

@@ -626,19 +626,17 @@ const char ovalsAsQuads[] = "M 146.4187316894531 136.5"
 #include "include/utils/SkParsePath.h"
 
 DEF_TEST(PathOpsOvalsAsQuads, reporter) {
-    if ((false)) { // don't execute this for now
-        SkPath path;
-        SkParsePath::FromSVGString(ovalsAsQuads, &path);
-        Simplify(path, &path);
-    }
+    return; // don't execute this for now
+    SkPath path;
+    SkParsePath::FromSVGString(ovalsAsQuads, &path);
+    Simplify(path, &path);
 }
 
 DEF_TEST(PathOps64OvalsAsQuads, reporter) {
-    if ((false)) { // don't execute this for now
-        SkPath path, result;
-        SkOpBuilder builder;
-        SkParsePath::FromSVGString(ovalsAsQuads, &path);
-        OvalSet set = {{0, 0, 0, 0}, 2, 3, 9, 100, 100};
-        testOvalSet(set, path, &builder, nullptr, &result);
-    }
+    return; // don't execute this for now
+    SkPath path, result;
+    SkOpBuilder builder;
+    SkParsePath::FromSVGString(ovalsAsQuads, &path);
+    OvalSet set = {{0, 0, 0, 0}, 2, 3, 9, 100, 100};
+    testOvalSet(set, path, &builder, nullptr, &result);
 }
