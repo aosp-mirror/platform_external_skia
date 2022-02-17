@@ -12,13 +12,17 @@
 #include "src/core/SkColorSpaceXformSteps.h"
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkConvertPixels.h"
+#include "src/core/SkMathPriv.h"
 #include "src/core/SkMipmap.h"
+#include "src/core/SkRasterPipeline.h"
 #include "src/core/SkTLazy.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/core/SkUtils.h"
+#include "src/gpu/GrCaps.h"
 #include "src/gpu/GrColor.h"
 #include "src/gpu/GrImageInfo.h"
 #include "src/gpu/GrPixmap.h"
+#include "src/gpu/GrSwizzle.h"
 
 struct ETC1Block {
     uint32_t fHigh;
@@ -389,6 +393,12 @@ static GrSwizzle get_load_and_src_swizzle(GrColorType ct, SkRasterPipeline::Stoc
         case GrColorType::kGray_8:           *load = SkRasterPipeline::load_a8;
                                              swizzle = GrSwizzle("aaa1");
                                              break;
+        case GrColorType::kR_8xxx:           *load = SkRasterPipeline::load_8888;
+                                             swizzle = GrSwizzle("r001");
+                                             break;
+        case GrColorType::kR_8:              *load = SkRasterPipeline::load_a8;
+                                             swizzle = GrSwizzle("a001");
+                                             break;
         case GrColorType::kGrayAlpha_88:    *load = SkRasterPipeline::load_rg88;
                                              swizzle = GrSwizzle("rrrg");
                                              break;
@@ -401,7 +411,6 @@ static GrSwizzle get_load_and_src_swizzle(GrColorType ct, SkRasterPipeline::Stoc
 
         // These are color types we don't expect to ever have to load.
         case GrColorType::kRGB_888:
-        case GrColorType::kR_8:
         case GrColorType::kR_16:
         case GrColorType::kR_F16:
         case GrColorType::kGray_F16:
@@ -467,6 +476,9 @@ static GrSwizzle get_dst_swizzle_and_store(GrColorType ct, SkRasterPipeline::Sto
                                              *store = SkRasterPipeline::store_8888;
                                              break;
         case GrColorType::kRGB_888x:         swizzle = GrSwizzle("rgb1");
+                                             *store = SkRasterPipeline::store_8888;
+                                             break;
+        case GrColorType::kR_8xxx:           swizzle = GrSwizzle("r001");
                                              *store = SkRasterPipeline::store_8888;
                                              break;
         case GrColorType::kR_8:              swizzle = GrSwizzle("agbr");
@@ -743,19 +755,4 @@ bool GrClearImage(const GrImageInfo& dstInfo, void* dst, size_t dstRB, std::arra
     pipeline.run(0, 0, dstInfo.width(), dstInfo.height());
 
     return true;
-}
-
-GrColorType SkColorTypeAndFormatToGrColorType(const GrCaps* caps,
-                                              SkColorType skCT,
-                                              const GrBackendFormat& format) {
-    GrColorType grCT = SkColorTypeToGrColorType(skCT);
-    // Until we support SRGB in the SkColorType we have to do this manual check here to make sure
-    // we use the correct GrColorType.
-    if (caps->isFormatSRGB(format)) {
-        if (grCT != GrColorType::kRGBA_8888) {
-            return GrColorType::kUnknown;
-        }
-        grCT = GrColorType::kRGBA_8888_SRGB;
-    }
-    return grCT;
 }
