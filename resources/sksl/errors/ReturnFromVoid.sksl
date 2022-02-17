@@ -1,1 +1,9 @@
-void main() { return true; }
+void a() { return true; }
+void b() { return b; }
+void c() { return int; }
+
+/*%%*
+may not return a value from a void function
+may not return a value from a void function
+may not return a value from a void function
+*%%*/
