@@ -8,7 +8,7 @@
 #ifndef GrSPIRVUniformHandler_DEFINED
 #define GrSPIRVUniformHandler_DEFINED
 
-#include "src/gpu/GrTBlockList.h"
+#include "src/core/SkTBlockList.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
 
 /*
@@ -27,13 +27,13 @@ public:
     struct SPIRVUniformInfo : public UniformInfo {
         int fUBOOffset;
     };
-    typedef GrTBlockList<SPIRVUniformInfo> UniformInfoArray;
+    typedef SkTBlockList<SPIRVUniformInfo> UniformInfoArray;
     enum {
         kUniformBinding = 0,
         kUniformDescriptorSet = 0,
         kSamplerTextureDescriptorSet = 1,
     };
-    uint32_t getRTHeightOffset() const;
+    uint32_t getRTFlipOffset() const;
 
     int numUniforms() const override {
         return fUniforms.count();
@@ -56,7 +56,7 @@ private:
     void appendUniformDecls(GrShaderFlags visibility, SkString*) const override;
     UniformHandle internalAddUniformArray(const GrFragmentProcessor* owner,
                                           uint32_t visibility,
-                                          GrSLType type,
+                                          SkSLType type,
                                           const char* name,
                                           bool mangleName,
                                           int arrayCount,
@@ -69,7 +69,7 @@ private:
     SkTArray<SkString>  fSamplerReferences;
 
     uint32_t fCurrentUBOOffset = 0;
-    uint32_t fRTHeightOffset = 0;
+    uint32_t fRTFlipOffset = 0;
 
     friend class GrD3DPipelineStateBuilder;
     friend class GrDawnProgramBuilder;

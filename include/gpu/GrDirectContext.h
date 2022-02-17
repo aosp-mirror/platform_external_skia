@@ -28,8 +28,6 @@ struct GrMtlBackendContext;
 struct GrMockOptions;
 class GrPath;
 class GrResourceCache;
-class GrSmallPathAtlasMgr;
-class GrSurfaceDrawContext;
 class GrResourceProvider;
 class GrStrikeCache;
 class GrSurfaceProxy;
@@ -43,6 +41,8 @@ class SkSurfaceCharacterization;
 class SkSurfaceProps;
 class SkTaskGroup;
 class SkTraceMemoryDump;
+
+namespace skgpu { namespace v1 { class SmallPathAtlasMgr; }}
 
 class SK_API GrDirectContext : public GrRecordingContext {
 public:
@@ -656,6 +656,7 @@ public:
      * Retrieve the GrBackendFormat for a given SkImage::CompressionType. This is
      * guaranteed to match the backend format used by the following
      * createCompressedBackendTexture methods that take a CompressionType.
+     *
      * The caller should check that the returned format is valid.
      */
     using GrRecordingContext::compressedBackendFormat;
@@ -830,7 +831,7 @@ protected:
     bool init() override;
 
     GrAtlasManager* onGetAtlasManager() { return fAtlasManager.get(); }
-    GrSmallPathAtlasMgr* onGetSmallPathAtlasMgr();
+    skgpu::v1::SmallPathAtlasMgr* onGetSmallPathAtlasMgr();
 
     GrDirectContext* asDirectContext() override { return this; }
 
@@ -864,12 +865,11 @@ private:
     bool                                    fPMUPMConversionsRoundTrip;
 
     GrContextOptions::PersistentCache*      fPersistentCache;
-    GrContextOptions::ShaderErrorHandler*   fShaderErrorHandler;
 
     std::unique_ptr<GrClientMappedBufferManager> fMappedBufferManager;
     std::unique_ptr<GrAtlasManager> fAtlasManager;
 
-    std::unique_ptr<GrSmallPathAtlasMgr> fSmallPathAtlasMgr;
+    std::unique_ptr<skgpu::v1::SmallPathAtlasMgr> fSmallPathAtlasMgr;
 
     friend class GrDirectContextPriv;
 
