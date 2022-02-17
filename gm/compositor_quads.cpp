@@ -14,7 +14,6 @@
 #include "include/core/SkColor.h"
 #include "include/core/SkColorFilter.h"
 #include "include/core/SkData.h"
-#include "include/core/SkFilterQuality.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageFilter.h"
@@ -588,7 +587,7 @@ public:
         canvas->translate(0.f, 15.f);
 
         SkString config;
-        static const char* kFormat = "Ext(%s) - Int(%s)";
+        constexpr char kFormat[] = "Ext(%s) - Int(%s)";
         if (fEnableAAOverride) {
             SkASSERT(fAAOverride == SkCanvas::kAll_QuadAAFlags ||
                      fAAOverride == SkCanvas::kNone_QuadAAFlags);
