@@ -39,7 +39,7 @@
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskGamma.h"
 #include "src/core/SkMathPriv.h"
-#include "src/core/SkUtils.h"
+#include "src/core/SkOpts.h"
 #include "src/ports/SkScalerContext_mac_ct.h"
 #include "src/ports/SkTypeface_mac_ct.h"
 #include "src/sfnt/SkOTTableTypes.h"
@@ -118,6 +118,7 @@ SkScalerContext_Mac::SkScalerContext_Mac(sk_sp<SkTypeface_Mac> typeface,
                                          const SkScalerContextEffects& effects,
                                          const SkDescriptor* desc)
         : INHERITED(std::move(typeface), effects, desc)
+        , fOffscreen(fRec.fForegroundColor)
         , fDoSubPosition(SkToBool(fRec.fFlags & kSubpixelPositioning_Flag))
 
 {
@@ -150,17 +151,36 @@ static int RoundSize(int dimension) {
     return SkNextPow2(dimension);
 }
 
+static CGColorRef CGColorForSkColor(CGColorSpaceRef rgbcs, SkColor bgra) {
+    CGFloat components[4];
+    components[0] = (CGFloat)SkColorGetR(bgra) * (1/255.0f);
+    components[1] = (CGFloat)SkColorGetG(bgra) * (1/255.0f);
+    components[2] = (CGFloat)SkColorGetB(bgra) * (1/255.0f);
+    // CoreText applies the CGContext fill color as the COLR foreground color.
+    // However, the alpha is applied to the whole glyph drawing (and Skia will do that as well).
+    // For now, cannot really support COLR foreground color alpha.
+    components[3] = 1.0f;
+    return CGColorCreate(rgbcs, components);
+}
+
+SkScalerContext_Mac::Offscreen::Offscreen(SkColor foregroundColor)
+    // It doesn't appear to matter what color space is specified.
+    // Regular blends and antialiased text are always (s*a + d*(1-a))
+    // and subpixel antialiased text is always g=2.0.
+    // However, we need to specify one anyway.
+    : fRGBSpace(CGColorSpaceCreateDeviceRGB())
+    , fCG(nullptr)
+    , fForegroundColor(CGColorForSkColor(fRGBSpace.get(), foregroundColor))
+    , fDoAA(false)
+    , fDoLCD(false)
+{
+    fSize.set(0, 0);
+}
+
 CGRGBPixel* SkScalerContext_Mac::Offscreen::getCG(const SkScalerContext_Mac& context,
                                                   const SkGlyph& glyph, CGGlyph glyphID,
                                                   size_t* rowBytesPtr,
                                                   bool generateA8FromLCD) {
-    if (!fRGBSpace) {
-        //It doesn't appear to matter what color space is specified.
-        //Regular blends and antialiased text are always (s*a + d*(1-a))
-        //and subpixel antialiased text is always g=2.0.
-        fRGBSpace.reset(CGColorSpaceCreateDeviceRGB());
-    }
-
     // default to kBW_Format
     bool doAA = false;
     bool doLCD = false;
@@ -214,8 +234,12 @@ CGRGBPixel* SkScalerContext_Mac::Offscreen::getCG(const SkScalerContext_Mac& con
 
         CGContextSetTextDrawingMode(fCG.get(), kCGTextFill);
 
-        // Draw black on white to create mask. (Special path exists to speed this up in CG.)
-        CGContextSetGrayFillColor(fCG.get(), 0.0f, 1.0f);
+        if (SkMask::kARGB32_Format != glyph.maskFormat()) {
+            // Draw black on white to create mask. (Special path exists to speed this up in CG.)
+            CGContextSetGrayFillColor(fCG.get(), 0.0f, 1.0f);
+        } else {
+            CGContextSetFillColorWithColor(fCG.get(), fForegroundColor.get());
+        }
 
         // force our checks below to happen
         fDoAA = !doAA;
@@ -269,8 +293,12 @@ bool SkScalerContext_Mac::generateAdvance(SkGlyph* glyph) {
     return false;
 }
 
-void SkScalerContext_Mac::generateMetrics(SkGlyph* glyph) {
+void SkScalerContext_Mac::generateMetrics(SkGlyph* glyph, SkArenaAlloc* alloc) {
     glyph->fMaskFormat = fRec.fMaskFormat;
+
+    if (((SkTypeface_Mac*)this->getTypeface())->fHasColorGlyphs) {
+        glyph->setPath(alloc, nullptr, false);
+    }
 
     const CGGlyph cgGlyph = (CGGlyph) glyph->getGlyphID();
     glyph->zeroMetrics();
@@ -609,7 +637,7 @@ public:
  */
 #define kScaleForSubPixelPositionHinting (4.0f)
 
-bool SkScalerContext_Mac::generatePath(SkGlyphID glyph, SkPath* path) {
+bool SkScalerContext_Mac::generatePath(const SkGlyph& glyph, SkPath* path) {
     SkScalar scaleX = SK_Scalar1;
     SkScalar scaleY = SK_Scalar1;
 
@@ -643,7 +671,7 @@ bool SkScalerContext_Mac::generatePath(SkGlyphID glyph, SkPath* path) {
         xform = CGAffineTransformConcat(fTransform, scale);
     }
 
-    CGGlyph cgGlyph = SkTo<CGGlyph>(glyph);
+    CGGlyph cgGlyph = SkTo<CGGlyph>(glyph.getGlyphID());
     SkUniqueCFRef<CGPathRef> cgPath(CTFontCreatePathForGlyph(fCTFont.get(), cgGlyph, &xform));
 
     path->reset();

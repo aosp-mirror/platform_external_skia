@@ -9,9 +9,9 @@
 #define GrVkUniformHandler_DEFINED
 
 #include "include/gpu/vk/GrVkTypes.h"
+#include "src/core/SkTBlockList.h"
 #include "src/gpu/GrSamplerState.h"
 #include "src/gpu/GrShaderVar.h"
-#include "src/gpu/GrTBlockList.h"
 #include "src/gpu/glsl/GrGLSLProgramBuilder.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
 #include "src/gpu/vk/GrVkSampler.h"
@@ -55,12 +55,12 @@ public:
     static constexpr int kLayoutCount = kLastLayout + 1;
 
     struct VkUniformInfo : public UniformInfo {
-        // offsets are only valid if the GrSLType of the fVariable is not a sampler.
+        // offsets are only valid if the SkSLType of the fVariable is not a sampler.
         uint32_t                fOffsets[kLayoutCount];
         // fImmutableSampler is used for sampling an image with a ycbcr conversion.
         const GrVkSampler*      fImmutableSampler = nullptr;
     };
-    typedef GrTBlockList<VkUniformInfo> UniformInfoArray;
+    typedef SkTBlockList<VkUniformInfo> UniformInfoArray;
 
     ~GrVkUniformHandler() override;
 
@@ -73,9 +73,9 @@ public:
     }
 
     /**
-     * Returns the offset that the RTHeight synthetic uniform should use if it needs to be created.
+     * Returns the offset that the RTFlip synthetic uniform should use if it needs to be created.
      */
-    uint32_t getRTHeightOffset() const;
+    uint32_t getRTFlipOffset() const;
 
     int numUniforms() const override {
         return fUniforms.count();
@@ -88,8 +88,6 @@ public:
         return fUniforms.item(idx);
     }
 
-    bool getFlipY() const { return fFlipY; }
-
     bool usePushConstants() const { return fUsePushConstants; }
     uint32_t currentOffset() const {
         return fUsePushConstants ? fCurrentOffsets[kStd430Layout] : fCurrentOffsets[kStd140Layout];
@@ -100,14 +98,13 @@ private:
         : INHERITED(program)
         , fUniforms(kUniformsPerBlock)
         , fSamplers(kUniformsPerBlock)
-        , fFlipY(program->origin() != kTopLeft_GrSurfaceOrigin)
         , fUsePushConstants(false)
         , fCurrentOffsets{0, 0} {
     }
 
     UniformHandle internalAddUniformArray(const GrFragmentProcessor* owner,
                                           uint32_t visibility,
-                                          GrSLType type,
+                                          SkSLType type,
                                           const char* name,
                                           bool mangleName,
                                           int arrayCount,
@@ -161,7 +158,6 @@ private:
     SkTArray<GrSwizzle> fSamplerSwizzles;
     UniformInfo         fInputUniform;
     GrSwizzle           fInputSwizzle;
-    bool                fFlipY;
     mutable bool        fUsePushConstants;
 
     uint32_t            fCurrentOffsets[kLayoutCount];

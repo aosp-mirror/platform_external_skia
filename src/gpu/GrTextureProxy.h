@@ -8,6 +8,7 @@
 #ifndef GrTextureProxy_DEFINED
 #define GrTextureProxy_DEFINED
 
+#include "include/gpu/GrBackendSurface.h"
 #include "src/gpu/GrSamplerState.h"
 #include "src/gpu/GrSurfaceProxy.h"
 
@@ -68,7 +69,7 @@ public:
     /**
      * Return the texture proxy's unique key. It will be invalid if the proxy doesn't have one.
      */
-    const GrUniqueKey& getUniqueKey() const override {
+    const skgpu::UniqueKey& getUniqueKey() const override {
 #ifdef SK_DEBUG
         if (this->isInstantiated() && fUniqueKey.isValid() && fSyncTargetKey &&
             fCreatingProvider == GrDDLProvider::kNo) {
@@ -127,8 +128,8 @@ protected:
     // The basic knowledge version is used for DDL where we know the type of proxy we are going to
     // use, but we don't have access to the GPU yet to instantiate it.
     //
-    // The minimal knowledge version is used for CCPR where we are generating an atlas but we do not
-    // know the final size until flush time.
+    // The minimal knowledge version is used for when we are generating an atlas but we do not know
+    // the final size until we have finished adding to it.
     GrTextureProxy(LazyInstantiateCallback&&,
                    const GrBackendFormat&,
                    SkISize,
@@ -184,7 +185,7 @@ private:
     // uniquely-keyed textureProxy is also always set on the backing GrTexture.
     GrDDLProvider    fCreatingProvider = GrDDLProvider::kNo;
 
-    GrUniqueKey      fUniqueKey;
+    skgpu::UniqueKey      fUniqueKey;
     GrProxyProvider* fProxyProvider; // only set when fUniqueKey is valid
 
     LazySurfaceDesc callbackDesc() const override;
@@ -197,7 +198,7 @@ private:
     size_t onUninstantiatedGpuMemorySize() const override;
 
     // Methods made available via GrTextureProxy::CacheAccess
-    void setUniqueKey(GrProxyProvider*, const GrUniqueKey&);
+    void setUniqueKey(GrProxyProvider*, const skgpu::UniqueKey&);
     void clearUniqueKey();
 
     SkDEBUGCODE(void onValidateSurface(const GrSurface*) override;)
