@@ -20,10 +20,19 @@
 
 class SkShaderInfo {
 public:
+    struct SnippetEntry;
+    using GenerateGlueCodeForEntry = std::string (*)(const std::string& resultName,
+                                                     int entryIndex, // for uniform name mangling
+                                                     const SnippetEntry&,
+                                                     const std::vector<std::string>& childNames,
+                                                     int indent);
+
     struct SnippetEntry {
         SkSpan<const SkUniform> fUniforms;
-        const char* fName;
-        const char* fCode;
+        const char* fStaticFunctionName;
+        const char* fStaticSkSL;
+        GenerateGlueCodeForEntry fGlueCodeGenerator;
+        int fNumChildren;
     };
 
     void add(const SnippetEntry& entry) {
@@ -31,7 +40,7 @@ public:
     }
 
     // TODO: writing to color should be a property of the SnippetEntries and accumulated as the
-    //  entries are added. _Not_ set manually via 'setWritesColor'.
+    // entries are added. _Not_ set manually via 'setWritesColor'.
     void setWritesColor() { fWritesColor = true; }
     bool writesColor() const { return fWritesColor; }
 
@@ -40,6 +49,8 @@ public:
 #endif
 
 private:
+    std::string emitGlueCodeForEntry(int* entryIndex, std::string* result, int indent) const;
+
     std::vector<SnippetEntry> fEntries;
     bool fWritesColor = false;
 };
