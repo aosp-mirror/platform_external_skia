@@ -30,7 +30,6 @@ public:
 
 private:
     explicit GrTextureProxyPriv(GrTextureProxy* textureProxy) : fTextureProxy(textureProxy) {}
-    GrTextureProxyPriv(const GrTextureProxyPriv&) = delete;
     GrTextureProxyPriv& operator=(const GrTextureProxyPriv&) = delete;
 
     // No taking addresses of this type.
