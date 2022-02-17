@@ -12,8 +12,9 @@
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrSurfaceFillContext.h"
+#include "src/gpu/SurfaceFillContext.h"
 #include "src/gpu/effects/GrBlendFragmentProcessor.h"
+#include "src/gpu/effects/GrTextureEffect.h"
 #include "src/image/SkImage_Base.h"
 #include "tests/Test.h"
 #include "tests/TestUtils.h"
@@ -51,7 +52,7 @@ void test_wrapping(GrDirectContext* dContext,
     sk_sp<ManagedBackendTexture> mbet = create(dContext, mipMapped, renderable);
     if (!mbet) {
         ERRORF(reporter, "Couldn't create backendTexture for grColorType %d renderable %s\n",
-               grColorType,
+               (int)grColorType,
                GrRenderable::kYes == renderable ? "yes" : "no");
         return;
     }
@@ -70,8 +71,8 @@ void test_wrapping(GrDirectContext* dContext,
     // proxy instansiations may add multiple things to the cache. There would be an entry for the
     // GrTexture/GrRenderTarget and entries for one or more attachments.
     int cacheEntriesPerProxy = 1;
-    // We currently only have attachments on the vulkan backend
-    if (dContext->backend() == GrBackend::kVulkan) {
+    // We currently only have attachments on the vulkan and metal backends
+    if (dContext->backend() == GrBackend::kVulkan || dContext->backend() == GrBackend::kMetal) {
         // If we ever make a rt with multisamples this would have an additional
         // attachment as well.
         cacheEntriesPerProxy++;
@@ -282,22 +283,23 @@ static void check_base_readbacks(GrDirectContext* dContext,
                                                                colorType);
         GrSurfaceProxyView readView(proxy, kTopLeft_GrSurfaceOrigin, swizzle);
         GrColorInfo info(colorType, kUnpremul_SkAlphaType, nullptr);
-        auto surfaceContext = GrSurfaceContext::Make(dContext, readView, info);
+        auto surfaceContext = dContext->priv().makeSC(readView, info);
         if (!surfaceContext) {
-            ERRORF(reporter, "Could not create surface context for colorType: %d\n", colorType);
+            ERRORF(reporter, "Could not create surface context for colorType: %d\n",
+                   (int)colorType);
         }
 
         if (!surfaceContext->readPixels(dContext, actual, {0, 0})) {
             // TODO: we need a better way to tell a priori if readPixels will work for an
             // arbitrary colorType
 #if 0
-            ERRORF(reporter, "Couldn't readback from GrSurfaceContext for colorType: %d\n",
-                   colorType);
+            ERRORF(reporter, "Couldn't readback from SurfaceContext for colorType: %d\n",
+                   (int)colorType);
 #endif
         } else {
             auto name = SkStringPrintf("%s::readPixels",
-                                       (renderableCtx == GrRenderable::kYes ? "GrSurfaceFillContext"
-                                                                            : "GrSurfaceContext"));
+                                       (renderableCtx == GrRenderable::kYes ? "SurfaceFillContext"
+                                                                            : "SurfaceContext"));
             check_solid_pixmap(reporter, expectedColor, actual, colorType, label, name.c_str());
         }
     }
@@ -377,7 +379,7 @@ static void check_mipmaps(GrDirectContext* dContext,
     }
 
     GrImageInfo info(GrColorType::kRGBA_8888, kUnpremul_SkAlphaType, nullptr, {32, 32});
-    auto dstFillContext = GrSurfaceFillContext::Make(dContext, info);
+    auto dstFillContext = dContext->priv().makeSFC(info);
     if (!dstFillContext) {
         ERRORF(reporter, "Could not make dst fill context.");
         return;
@@ -410,14 +412,6 @@ static void check_mipmaps(GrDirectContext* dContext,
                                         texMatrix,
                                         kNearestNearest,
                                         *dstFillContext->caps());
-        // Our swizzles for alpha color types currently produce (a, a, a, a) in the shader. Remove
-        // this once they are correctly (0, 0, 0, a).
-        if (GrColorTypeIsAlphaOnly(colorType)) {
-            auto black = GrFragmentProcessor::MakeColor(SK_PMColor4fBLACK);
-            fp = GrBlendFragmentProcessor::Make(std::move(fp),
-                                                std::move(black),
-                                                SkBlendMode::kModulate);
-        }
         dstFillContext->fillRectWithFP(SkIRect::MakeWH(rectSize, rectSize), std::move(fp));
 
         SkImageInfo readbackII = SkImageInfo::Make(rectSize, rectSize,
@@ -580,6 +574,7 @@ void color_type_backend_allocation_test(const sk_gpu_test::ContextInfo& ctxInfo,
         { kRGB_565_SkColorType,           SkColors::kRed           },
         { kARGB_4444_SkColorType,         SkColors::kGreen         },
         { kRGBA_8888_SkColorType,         SkColors::kBlue          },
+        { kSRGBA_8888_SkColorType,        { 0.25f, 0.5f, 0.75f, 1.0f}},
         { kRGB_888x_SkColorType,          SkColors::kCyan          },
         // TODO: readback is busted when alpha = 0.5f (perhaps premul vs. unpremul)
         { kBGRA_8888_SkColorType,         { 1, 0, 0, 1.0f }        },
@@ -599,6 +594,7 @@ void color_type_backend_allocation_test(const sk_gpu_test::ContextInfo& ctxInfo,
         { kA16_float_SkColorType,         kTransCol                },
         { kR16G16_float_SkColorType,      { .25f, .75f, 0, 1 }     },
         { kR16G16B16A16_unorm_SkColorType,{ .25f, .5f, .75f, 1 }   },
+        { kR8_unorm_SkColorType,          { .25f, 0, 0, 1 }        },
     };
 
     static_assert(kLastEnum_SkColorType == SK_ARRAY_COUNT(combinations));
@@ -740,7 +736,7 @@ DEF_GPUTEST(ColorTypeBackendAllocationTest, reporter, options) {
         if (info.directContext()->priv().caps()->writePixelsRowBytesSupport() &&
             info.directContext()->backend() == GrBackendApi::kOpenGL) {
             GrContextOptions overrideOptions = options;
-            overrideOptions.fDisallowWritePixelRowBytes = true;
+            overrideOptions.fDisallowWriteAndTransferPixelRowBytes = true;
             sk_gpu_test::GrContextFactory overrideFactory(overrideOptions);
             info = overrideFactory.getContextInfo(type);
             color_type_backend_allocation_test(info, reporter);
@@ -771,6 +767,7 @@ DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GLBackendAllocationTest, reporter, ctxInfo) {
 
         { GrColorType::kRGB_888x,         GR_GL_RGBA8,                SkColors::kYellow    },
         { GrColorType::kRGB_888x,         GR_GL_RGB8,                 SkColors::kCyan      },
+        { GrColorType::kRGB_888x,         GR_GL_RGBX8,                SkColors::kCyan      },
 
         { GrColorType::kBGRA_8888,        GR_GL_RGBA8,                SkColors::kBlue      },
         { GrColorType::kBGRA_8888,        GR_GL_BGRA8,                SkColors::kBlue      },
@@ -805,10 +802,11 @@ DEF_GPUTEST_FOR_ALL_GL_CONTEXTS(GLBackendAllocationTest, reporter, ctxInfo) {
     };
 
     for (auto combo : combinations) {
-        for (GrGLenum target : {GR_GL_TEXTURE_2D, GR_GL_TEXTURE_RECTANGLE}) {
+        for (GrTextureType textureType : {GrTextureType::k2D, GrTextureType::kRectangle}) {
+            GrGLenum target = textureType == GrTextureType::k2D ? GR_GL_TEXTURE_2D
+                                                                : GR_GL_TEXTURE_RECTANGLE;
             GrBackendFormat format = GrBackendFormat::MakeGL(combo.fFormat, target);
-
-            if (!glCaps->isFormatTexturable(format)) {
+            if (!glCaps->isFormatTexturable(format, textureType)) {
                 continue;
             }
 

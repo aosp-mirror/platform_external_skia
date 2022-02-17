@@ -13,7 +13,6 @@
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
 #include "include/core/SkEncodedImageFormat.h"
-#include "include/core/SkFilterQuality.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageEncoder.h"
@@ -30,6 +29,7 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
+#include "include/effects/SkGradientShader.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/private/SkMalloc.h"
 #include "src/core/SkAutoPixmapStorage.h"
@@ -40,7 +40,12 @@
 #include <functional>
 #include <utility>
 
-class GrSurfaceDrawContext;
+const SkSamplingOptions gSamplings[] = {
+    SkSamplingOptions(SkFilterMode::kNearest),
+    SkSamplingOptions(SkFilterMode::kLinear),
+    SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kLinear),
+    SkSamplingOptions(SkCubicResampler::Mitchell()),
+};
 
 static void drawContents(SkSurface* surface, SkColor fillC) {
     SkSize size = SkSize::Make(SkIntToScalar(surface->width()),
@@ -199,14 +204,11 @@ static void show_scaled_pixels(SkCanvas* canvas, SkImage* image) {
     const SkImage::CachingHint chints[] = {
         SkImage::kAllow_CachingHint, SkImage::kDisallow_CachingHint,
     };
-    const SkFilterQuality qualities[] = {
-        kNone_SkFilterQuality, kLow_SkFilterQuality, kMedium_SkFilterQuality, kHigh_SkFilterQuality,
-    };
 
     for (auto ch : chints) {
         canvas->save();
-        for (auto q : qualities) {
-            if (image->scalePixels(storage, SkSamplingOptions(q), ch)) {
+        for (auto s : gSamplings) {
+            if (image->scalePixels(storage, s, ch)) {
                 draw_pixmap(canvas, storage);
             }
             canvas->translate(70, 0);
@@ -303,9 +305,9 @@ DEF_GM( return new ScalePixelsGM; )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-DEF_SIMPLE_GPU_GM(new_texture_image, context, rtc, canvas, 280, 60) {
-    auto direct = context->asDirectContext();
-    if (!direct) {
+DEF_SIMPLE_GPU_GM(new_texture_image, rContext, canvas, 280, 60) {
+    auto dContext = rContext->asDirectContext();
+    if (!dContext) {
         return;
     }
 
@@ -354,8 +356,8 @@ DEF_SIMPLE_GPU_GM(new_texture_image, context, rtc, canvas, 280, 60) {
                                             SkImage::BitDepth::kU8, srgbColorSpace);
         },
         // Create a texture image
-        [context, render_image]() -> sk_sp<SkImage> {
-            auto surface(SkSurface::MakeRenderTarget(context, SkBudgeted::kYes,
+        [rContext, render_image]() -> sk_sp<SkImage> {
+            auto surface(SkSurface::MakeRenderTarget(rContext, SkBudgeted::kYes,
                                                      SkImageInfo::MakeS32(kSize, kSize,
                                                                           kPremul_SkAlphaType)));
             if (!surface) {
@@ -371,7 +373,7 @@ DEF_SIMPLE_GPU_GM(new_texture_image, context, rtc, canvas, 280, 60) {
     for (const auto& factory : imageFactories) {
         sk_sp<SkImage> image(factory());
         if (image) {
-            sk_sp<SkImage> texImage(image->makeTextureImage(direct));
+            sk_sp<SkImage> texImage(image->makeTextureImage(dContext));
             if (texImage) {
                 canvas->drawImage(texImage, 0, 0);
             }
@@ -404,12 +406,8 @@ DEF_SIMPLE_GM(scalepixels_unpremul, canvas, 1080, 280) {
     SkAutoPixmapStorage pm2;
     pm2.alloc(SkImageInfo::MakeN32(256, 256, kUnpremul_SkAlphaType));
 
-    const SkFilterQuality qualities[] = {
-        kNone_SkFilterQuality, kLow_SkFilterQuality, kMedium_SkFilterQuality, kHigh_SkFilterQuality
-    };
-
-    for (auto fq : qualities) {
-        pm.scalePixels(pm2, SkSamplingOptions(fq));
+    for (auto s : gSamplings) {
+        pm.scalePixels(pm2, s);
         slam_ff(pm2);
         draw_pixmap(canvas, pm2, 10, 10);
         canvas->translate(pm2.width() + 10.0f, 0);
@@ -461,4 +459,40 @@ DEF_SIMPLE_GM_CAN_FAIL(image_subset, canvas, errorMsg, 440, 220) {
     sub = serial_deserial(sub.get());
     canvas->drawImage(sub, 220+110, 10);
     return skiagm::DrawResult::kOk;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+DEF_SIMPLE_GM(image_dither, canvas, 800, 800) {
+    // Make a low-res image of a gradient that shows banding if there's no dithering. When up-scaled
+    // bilerp filtering will emphasize the banding unless the image is drawn with dithering.
+    auto gradImage = []() -> sk_sp<SkImage> {
+        SkImageInfo gradImageInfo = SkImageInfo::Make({8, 16}, {SkColorType::kRGBA_8888_SkColorType,
+                                                                SkAlphaType::kPremul_SkAlphaType,
+                                                                nullptr});
+        auto surface = SkSurface::MakeRaster(gradImageInfo);
+
+        SkPoint pts[2] = {{0.f, 0.f},
+                          {(float) 2 * gradImageInfo.width(), (float) gradImageInfo.height()}};
+        const SkColor colors[] = { 0xFF555555, 0xFF444444 };
+        SkPaint p;
+        p.setShader(SkGradientShader::MakeLinear(pts, colors, nullptr, 2, SkTileMode::kClamp));
+        surface->getCanvas()->drawPaint(p);
+        return surface->makeImageSnapshot();
+    }();
+
+    SkRect imageBounds = SkRect::MakeIWH(gradImage->width(), gradImage->height());
+
+    canvas->scale(50, 50);
+
+    // 1st image definitely goes through general shader paths so should have dithering
+    SkPaint p;
+    p.setShader(gradImage->makeShader(SkSamplingOptions{SkFilterMode::kLinear}));
+    p.setDither(true);
+    canvas->drawRect(imageBounds, p);
+
+    // 2nd image goes through draw-image fast paths, but dithering should be detected
+    p.setShader(nullptr);
+    canvas->translate(imageBounds.width(), 0.f);
+    canvas->drawImage(gradImage, 0.f, 0.f, SkSamplingOptions{SkFilterMode::kLinear}, &p);
 }
