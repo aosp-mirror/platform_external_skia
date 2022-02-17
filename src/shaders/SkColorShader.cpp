@@ -5,15 +5,17 @@
  * found in the LICENSE file.
  */
 
+#include "src/shaders/SkColorShader.h"
+
 #include "include/core/SkColorSpace.h"
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkColorSpaceXformSteps.h"
+#include "src/core/SkKeyHelpers.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkUtils.h"
 #include "src/core/SkVM.h"
-#include "src/shaders/SkColorShader.h"
 
 SkColorShader::SkColorShader(SkColor c) : fColor(c) {}
 
@@ -42,7 +44,7 @@ SkShader::GradientType SkColorShader::asAGradient(GradientInfo* info) const {
 
 SkColor4Shader::SkColor4Shader(const SkColor4f& color, sk_sp<SkColorSpace> space)
     : fColorSpace(std::move(space))
-    , fColor(color)
+    , fColor({color.fR, color.fG, color.fB, SkTPin(color.fA, 0.0f, 1.0f)})
 {}
 
 sk_sp<SkFlattenable> SkColor4Shader::CreateProc(SkReadBuffer& buffer) {
@@ -121,8 +123,7 @@ skvm::Color SkColor4Shader::onProgram(skvm::Builder* p,
 
 std::unique_ptr<GrFragmentProcessor> SkColorShader::asFragmentProcessor(
         const GrFPArgs& args) const {
-    return GrFragmentProcessor::ModulateAlpha(/*child=*/nullptr,
-                                              SkColorToPMColor4f(fColor, *args.fDstColorInfo));
+    return GrFragmentProcessor::MakeColor(SkColorToPMColor4f(fColor, *args.fDstColorInfo));
 }
 
 std::unique_ptr<GrFragmentProcessor> SkColor4Shader::asFragmentProcessor(
@@ -131,7 +132,21 @@ std::unique_ptr<GrFragmentProcessor> SkColor4Shader::asFragmentProcessor(
                                   args.fDstColorInfo->colorSpace(), kUnpremul_SkAlphaType };
     SkColor4f color = fColor;
     steps.apply(color.vec());
-    return GrFragmentProcessor::ModulateAlpha(/*child=*/nullptr, color.premul());
+    return GrFragmentProcessor::MakeColor(color.premul());
 }
 
 #endif
+
+void SkColorShader::addToKey(SkShaderCodeDictionary* dict,
+                             SkBackend backend,
+                             SkPaintParamsKey* key,
+                             SkUniformBlock* uniformBlock) const {
+    SolidColorShaderBlock::AddToKey(dict, backend, key, uniformBlock, SkColor4f::FromColor(fColor));
+}
+
+void SkColor4Shader::addToKey(SkShaderCodeDictionary* dict,
+                              SkBackend backend,
+                              SkPaintParamsKey* key,
+                              SkUniformBlock* uniformBlock) const {
+    SolidColorShaderBlock::AddToKey(dict, backend, key, uniformBlock, fColor);
+}
