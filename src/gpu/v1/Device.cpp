@@ -813,7 +813,7 @@ void Device::drawViewLattice(GrSurfaceProxyView view,
     if (info.isAlphaOnly()) {
         // If we were doing this with an FP graph we'd use a kDstIn blend between the texture and
         // the paint color.
-        view.concatSwizzle(GrSwizzle("aaaa"));
+        view.concatSwizzle(skgpu::Swizzle("aaaa"));
     }
     auto csxf = GrColorSpaceXform::Make(info, fSurfaceDrawContext->colorInfo());
 
@@ -1088,7 +1088,8 @@ SkBaseDevice* Device::onCreateDevice(const CreateInfo& cinfo, const SkPaint*) {
             fContext.get(), SkColorTypeToGrColorType(cinfo.fInfo.colorType()),
             fSurfaceDrawContext->colorInfo().refColorSpace(), fit, cinfo.fInfo.dimensions(), props,
             fSurfaceDrawContext->numSamples(), GrMipmapped::kNo,
-            fSurfaceDrawContext->asSurfaceProxy()->isProtected(), kBottomLeft_GrSurfaceOrigin,
+            fSurfaceDrawContext->asSurfaceProxy()->isProtected(),
+            fSurfaceDrawContext->origin(),
             SkBudgeted::kYes);
     if (!sdc) {
         return nullptr;
