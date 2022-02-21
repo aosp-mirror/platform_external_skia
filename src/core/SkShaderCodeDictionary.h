@@ -65,12 +65,12 @@ public:
             SkASSERT(fUniqueID.isValid());
             return fUniqueID;
         }
-        const SkPaintParamsKey* paintParamsKey() const { return fKey.get(); }
+        const SkPaintParamsKey& paintParamsKey() const { return fKey; }
 
     private:
         friend class SkShaderCodeDictionary;
 
-        Entry(std::unique_ptr<SkPaintParamsKey> key) : fKey(std::move(key)) {}
+        Entry(const SkPaintParamsKey& key) : fKey(key.asSpan()) {}
 
         void setUniqueID(uint32_t newID) {
             SkASSERT(!fUniqueID.isValid());
@@ -78,10 +78,10 @@ public:
         }
 
         SkUniquePaintParamsID fUniqueID;  // fixed-size (uint32_t) unique ID assigned to a key
-        std::unique_ptr<SkPaintParamsKey> fKey; // variable-length paint key descriptor
+        SkPaintParamsKey fKey; // variable-length paint key descriptor
     };
 
-    const Entry* findOrCreate(std::unique_ptr<SkPaintParamsKey>) SK_EXCLUDES(fSpinLock);
+    const Entry* findOrCreate(const SkPaintParamsKey&) SK_EXCLUDES(fSpinLock);
 
     const Entry* lookup(SkUniquePaintParamsID) const SK_EXCLUDES(fSpinLock);
 
@@ -100,10 +100,16 @@ public:
     int addUserDefinedSnippet();
 
 private:
-    Entry* makeEntry(std::unique_ptr<SkPaintParamsKey>);
+    Entry* makeEntry(const SkPaintParamsKey&);
 
     struct Hash {
         size_t operator()(const SkPaintParamsKey*) const;
+    };
+
+    struct KeyEqual {
+        bool operator()(const SkPaintParamsKey* k1, const SkPaintParamsKey* k2) const {
+            return k1->operator==(*k2);
+        }
     };
 
     std::array<SkShaderInfo::SnippetEntry, kBuiltInCodeSnippetIDCount> fBuiltInCodeSnippets;
@@ -112,7 +118,9 @@ private:
     // TODO: can we do something better given this should have write-seldom/read-often behavior?
     mutable SkSpinlock fSpinLock;
 
-    std::unordered_map<const SkPaintParamsKey*, Entry*, Hash> fHash SK_GUARDED_BY(fSpinLock);
+    using PaintHashMap = std::unordered_map<const SkPaintParamsKey*, Entry*, Hash, KeyEqual>;
+
+    PaintHashMap fHash SK_GUARDED_BY(fSpinLock);
     std::vector<Entry*> fEntryVector SK_GUARDED_BY(fSpinLock);
 
     SkArenaAlloc fArena{256};
