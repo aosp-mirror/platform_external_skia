@@ -323,11 +323,11 @@ void SkTypeface_FreeType::FaceRec::setupPalette(const SkFontData& data) {
 
     for (int i = 0; i < data.getPaletteOverrideCount(); ++i) {
         const SkFontArguments::Palette::Override& paletteOverride = data.getPaletteOverrides()[i];
-        if (paletteOverride.index > fFTPaletteEntryCount) {
+        if (paletteOverride.index < 0 || fFTPaletteEntryCount <= paletteOverride.index) {
             continue;
         }
         const SkColor& skColor = paletteOverride.color;
-        FT_Color& ftColor = ftPalette[i];
+        FT_Color& ftColor = ftPalette[paletteOverride.index];
         ftColor.blue  = SkColorGetB(skColor);
         ftColor.green = SkColorGetG(skColor);
         ftColor.red   = SkColorGetR(skColor);
@@ -1381,7 +1381,7 @@ void SkScalerContext_FreeType::generateImage(const SkGlyph& glyph) {
     }
 
     SkSpan<SkColor> palette(fFaceRec->fSkPalette.get(), fFaceRec->fFTPaletteEntryCount);
-    generateGlyphImage(fFace, palette, glyph, *bitmapMatrix);
+    generateGlyphImage(fFace, glyph, fLoadGlyphFlags, palette, *bitmapMatrix);
 }
 
 sk_sp<SkDrawable> SkScalerContext_FreeType::generateDrawable(const SkGlyph& glyph) {
@@ -1409,7 +1409,7 @@ sk_sp<SkDrawable> SkScalerContext_FreeType::generateDrawable(const SkGlyph& glyp
 
     emboldenIfNeeded(fFace, fFace->glyph, glyph.getGlyphID());
     SkSpan<SkColor> palette(fFaceRec->fSkPalette.get(), fFaceRec->fFTPaletteEntryCount);
-    return generateGlyphDrawable(fFace, palette, glyph);
+    return generateGlyphDrawable(fFace, glyph, fLoadGlyphFlags, palette);
 }
 
 bool SkScalerContext_FreeType::generatePath(const SkGlyph& glyph, SkPath* path) {
