@@ -2675,7 +2675,7 @@ public:
                      const SkMatrixProvider& viewMatrix,
                      skgpu::v1::SurfaceDrawContext* sdc);
 
-    void flatten(SkWriteBuffer& buffer) const override;
+    void doFlatten(SkWriteBuffer& buffer) const override;
     SkRect sourceBounds() const override { return fSourceBounds; }
     const SkPaint& paint() const override { return fPaint; }
 
@@ -2744,7 +2744,7 @@ void Slug::surfaceDraw(SkCanvas* canvas, const GrClip* clip, const SkMatrixProvi
     }
 }
 
-void Slug::flatten(SkWriteBuffer& buffer) const {
+void Slug::doFlatten(SkWriteBuffer& buffer) const {
     buffer.writeRect(fSourceBounds);
     SkPaintPriv::Flatten(fPaint, buffer);
     buffer.writeMatrix(fInitialPositionMatrix);
@@ -2935,7 +2935,7 @@ static bool pun_read(SkReadBuffer& buffer, T* dst) {
 GrSubRunOwner DirectMaskSubRunSlug::MakeFromBuffer(const GrTextReferenceFrame* referenceFrame,
                                                    SkReadBuffer& buffer,
                                                    GrSubRunAllocator* alloc,
-                                                   const SkStrikeClient*) {
+                                                   const SkStrikeClient* client) {
 
     GrMaskFormat format = (GrMaskFormat)buffer.readInt();
     SkGlyphRect runBounds;
@@ -2950,7 +2950,7 @@ GrSubRunOwner DirectMaskSubRunSlug::MakeFromBuffer(const GrTextReferenceFrame* r
     }
     SkSpan<DevicePosition> positions(positionsData, glyphCount);
 
-    auto glyphVector = GrGlyphVector::MakeFromBuffer(buffer, alloc);
+    auto glyphVector = GrGlyphVector::MakeFromBuffer(buffer, client, alloc);
     SkASSERT(glyphVector.has_value());
     if (!glyphVector) { return nullptr; }
     SkASSERT(SkTo<int>(glyphVector->glyphs().size()) == glyphCount);
