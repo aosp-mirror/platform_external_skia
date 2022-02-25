@@ -6,13 +6,16 @@
  */
 
 #include "src/core/SkBlendModeBlender.h"
-#include "src/core/SkKeyHelpers.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
 
 #if SK_SUPPORT_GPU
 #include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/effects/GrBlendFragmentProcessor.h"
+#endif
+
+#ifdef SK_ENABLE_SKSL
+#include "src/core/SkKeyHelpers.h"
 #endif
 
 sk_sp<SkBlender> SkBlender::Mode(SkBlendMode mode) {
@@ -60,17 +63,18 @@ sk_sp<SkBlender> SkBlender::Mode(SkBlendMode mode) {
 #undef RETURN_SINGLETON_BLENDER
 }
 
+#ifdef SK_ENABLE_SKSL
 void SkBlenderBase::addToKey(SkShaderCodeDictionary* dict,
-                             SkBackend backend,
                              SkPaintParamsKeyBuilder* builder,
                              SkUniformBlock* uniformBlock) const {
 
     if (std::optional<SkBlendMode> bm = as_BB(this)->asBlendMode(); bm.has_value()) {
-        BlendModeBlock::AddToKey(dict, backend, builder, uniformBlock, bm.value());
+        BlendModeBlock::AddToKey(dict, builder, uniformBlock, bm.value());
     } else {
-        BlendModeBlock::AddToKey(dict, backend, builder, uniformBlock, SkBlendMode::kSrcOver);
+        BlendModeBlock::AddToKey(dict, builder, uniformBlock, SkBlendMode::kSrcOver);
     }
 }
+#endif
 
 sk_sp<SkFlattenable> SkBlendModeBlender::CreateProc(SkReadBuffer& buffer) {
     SkBlendMode mode = buffer.read32LE(SkBlendMode::kLastMode);

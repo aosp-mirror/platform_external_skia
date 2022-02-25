@@ -11,11 +11,14 @@
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkColorSpaceXformSteps.h"
-#include "src/core/SkKeyHelpers.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkUtils.h"
 #include "src/core/SkVM.h"
+
+#ifdef SK_ENABLE_SKSL
+#include "src/core/SkKeyHelpers.h"
+#endif
 
 SkColorShader::SkColorShader(SkColor c) : fColor(c) {}
 
@@ -137,17 +140,17 @@ std::unique_ptr<GrFragmentProcessor> SkColor4Shader::asFragmentProcessor(
 
 #endif
 
+#ifdef SK_ENABLE_SKSL
 void SkColorShader::addToKey(SkShaderCodeDictionary* dict,
-                             SkBackend backend,
                              SkPaintParamsKeyBuilder* builder,
                              SkUniformBlock* uniformBlock) const {
-    SolidColorShaderBlock::AddToKey(dict, backend, builder, uniformBlock,
+    SolidColorShaderBlock::AddToKey(dict, builder, uniformBlock,
                                     SkColor4f::FromColor(fColor));
 }
 
 void SkColor4Shader::addToKey(SkShaderCodeDictionary* dict,
-                              SkBackend backend,
                               SkPaintParamsKeyBuilder* builder,
                               SkUniformBlock* uniformBlock) const {
-    SolidColorShaderBlock::AddToKey(dict, backend, builder, uniformBlock, fColor);
+    SolidColorShaderBlock::AddToKey(dict, builder, uniformBlock, fColor);
 }
+#endif
