@@ -80,13 +80,13 @@ std::tuple<const SkPath*, size_t> SkScalerCache::mergePath(
     return {glyph->path(), pathDelta};
 }
 
-std::tuple<SkDrawable*, size_t> SkScalerCache::prepareDrawable(SkGlyph* glyph) {
+size_t SkScalerCache::prepareDrawable(SkGlyph* glyph) {
     size_t delta = 0;
     if (glyph->setDrawable(&fAlloc, fScalerContext.get())) {
         delta = glyph->drawable()->approximateBytesUsed();
         SkASSERT(delta > 0);
     }
-    return {glyph->drawable(), delta};
+    return delta;
 }
 
 std::tuple<SkDrawable*, size_t> SkScalerCache::mergeDrawable(SkGlyph* glyph,
@@ -187,6 +187,21 @@ std::tuple<SkSpan<const SkGlyph*>, size_t> SkScalerCache::prepareImages(
     return {{results, glyphIDs.size()}, delta};
 }
 
+std::tuple<SkSpan<const SkGlyph*>, size_t> SkScalerCache::prepareDrawables(
+        SkSpan<const SkGlyphID> glyphIDs, const SkGlyph* results[]) {
+    const SkGlyph** cursor = results;
+    SkAutoMutexExclusive lock{fMu};
+    size_t delta = 0;
+    for (auto glyphID : glyphIDs) {
+        auto[glyph, glyphSize] = this->glyph(SkPackedGlyphID{glyphID});
+        size_t drawableSize = this->prepareDrawable(glyph);
+        delta += glyphSize + drawableSize;
+        *cursor++ = glyph;
+    }
+
+    return {{results, glyphIDs.size()}, delta};
+}
+
 template <typename Fn>
 size_t SkScalerCache::commonFilterLoop(SkDrawableGlyphBuffer* accepted, Fn&& fn) {
     size_t total = 0;
@@ -280,11 +295,11 @@ size_t SkScalerCache::prepareForDrawableDrawing(
     size_t delta = this->commonFilterLoop(accepted,
         [&](size_t i, SkGlyphDigest digest, SkPoint pos) SK_REQUIRES(fMu) {
             SkGlyph* glyph = fGlyphForIndex[digest.index()];
-            auto [drawable, drawableSize] = this->prepareDrawable(glyph);
+            size_t drawableSize = this->prepareDrawable(glyph);
             drawableDelta += drawableSize;
-            if (drawable != nullptr) {
+            if (glyph->drawable() != nullptr) {
                 // Save off the drawable to draw later.
-                accepted->accept(drawable, i);
+                accepted->accept(glyph, i);
             } else {
                 // Glyph does not have a drawable.
                 rejected->reject(i, glyph->maxDimension());
