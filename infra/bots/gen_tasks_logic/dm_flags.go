@@ -920,6 +920,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(glMsaaConfig, "gm", ALL, "imageblurtiled")
 			skip(glMsaaConfig, "gm", ALL, "imagefiltersbase")
 		}
+
+		skip(ALL, "tests", ALL, "SkSLUnaryPositiveNegative_GPU")
 	}
 
 	if b.matchGpu("Adreno[3456]") { // disable broken tests on Adreno 3/4/5/6xx
@@ -986,11 +988,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "tests", ALL, "SkSLSwitchWithLoops_GPU")
 		skip(ALL, "tests", ALL, "SkSLSwitchCaseFolding_GPU")
 		skip(ALL, "tests", ALL, "SkSLLoopFloat_GPU")
-		skip(ALL, "tests", ALL, "SkSLLoopInt_GPU")
-	}
-
-	if b.extraConfig("Metal") && b.matchOs("Mac12") {
-		// The macOS 12 Metal shader compiler can crash while compiling LoopInt. (skia:13005)
 		skip(ALL, "tests", ALL, "SkSLLoopInt_GPU")
 	}
 
