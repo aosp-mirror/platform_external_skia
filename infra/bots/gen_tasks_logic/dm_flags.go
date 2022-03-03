@@ -920,6 +920,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(glMsaaConfig, "gm", ALL, "imageblurtiled")
 			skip(glMsaaConfig, "gm", ALL, "imagefiltersbase")
 		}
+
+		skip(ALL, "tests", ALL, "SkSLUnaryPositiveNegative_GPU")
 	}
 
 	if b.matchGpu("Adreno[3456]") { // disable broken tests on Adreno 3/4/5/6xx
@@ -1145,6 +1147,11 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	}
 
 	if b.matchOs("Mac") && b.gpu("IntelHD615") {
+		// skia:7603
+		match = append(match, "~^GrMeshTest$")
+	}
+
+	if b.matchOs("Mac") && b.gpu("IntelIrisPlus") {
 		// skia:7603
 		match = append(match, "~^GrMeshTest$")
 	}
