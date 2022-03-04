@@ -61,11 +61,14 @@ private:
     void refAndMakeResourceMRU(Resource*);
     void addToNonpurgeableArray(Resource* resource);
     void removeFromNonpurgeableArray(Resource* resource);
+    void removeFromPurgeableQueue(Resource* resource);
 
     void processReturnedResources();
     void returnResourceToCache(Resource*, LastRemovedRef);
 
     uint32_t getNextTimestamp();
+
+    bool inPurgeableQueue(Resource*) const;
 
 #ifdef SK_DEBUG
     bool isInCache(const Resource* r) const;
@@ -94,6 +97,8 @@ private:
     uint32_t fTimestamp = 0;
     PurgeableQueue fPurgeableQueue;
     ResourceArray fNonpurgeableResources;
+
+    SkDEBUGCODE(int fCount = 0;)
 
     ResourceMap fResourceMap;
 

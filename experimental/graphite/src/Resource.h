@@ -47,7 +47,7 @@ public:
             SkASSERT(this->hasUsageRef());
             // A release here acts in place of all releases we "should" have been doing in ref().
             if (1 == fUsageRefCnt.fetch_add(-1, std::memory_order_acq_rel)) {
-                shouldFree = this->notifyARefIsZero(LastRemovedRef::kUsageRef);
+                shouldFree = this->notifyARefIsZero(LastRemovedRef::kUsage);
             }
         }
         if (shouldFree) {
@@ -70,7 +70,7 @@ public:
             SkASSERT(this->hasCommandBufferRef());
             // A release here acts in place of all releases we "should" have been doing in ref().
             if (1 == fCommandBufferRefCnt.fetch_add(-1, std::memory_order_acq_rel)) {
-                shouldFree = this->notifyARefIsZero(LastRemovedRef::kCommandBufferRef);
+                shouldFree = this->notifyARefIsZero(LastRemovedRef::kCommandBuffer);
             }
         }
         if (shouldFree) {
@@ -78,6 +78,8 @@ public:
             mutableThis->internalDispose();
         }
     }
+
+    Ownership ownership() const { return fOwnership; }
 
     // Tests whether a object has been abandoned or released. All objects will be in this state
     // after their creating Context is destroyed or abandoned.
@@ -95,7 +97,7 @@ public:
     void setKey(const GraphiteResourceKey& key) { fKey = key; }
 
 protected:
-    Resource(const Gpu*);
+    Resource(const Gpu*, Ownership);
     virtual ~Resource();
 
     // Overridden to free GPU resources in the backend API.
@@ -110,7 +112,7 @@ private:
 
     // This version of ref allows adding a ref when the usage count is 0. This should only be called
     // from the ResourceCache.
-    void refCacheOnly() const {
+    void initialUsageRef() const {
         // Only the cache should be able to add the first usage ref to a resource.
         SkASSERT(fUsageRefCnt >= 0);
         // No barrier required.
@@ -118,6 +120,7 @@ private:
     }
 
     bool isPurgeable() const;
+    int* accessReturnIndex()  const { return &fReturnIndex; }
     int* accessCacheIndex()  const { return &fCacheArrayIndex; }
 
     uint32_t timestamp() const { return fTimestamp; }
@@ -125,21 +128,25 @@ private:
 
     void registerWithCache(sk_sp<ResourceCache>);
 
-    // There is an "implicit" third type of ref which is whether or not the resource is being held
-    // by the cache or not. For the most part this is controlled by trying to return a resource to
-    // the ResourceCache. However, we need a way to remove a resource from the cache and safely
-    // check if we should call internalDispose or not.
-    void removedFromCache() const {
+    // Adds a cache ref to the resource. This is only called by ResourceCache. A Resource will only
+    // ever add a ref when the Resource is part of the cache (i.e. when insertResource is called)
+    // and while the Resource is in the ResourceCache::ReturnQueue.
+    void refCache() const {
+        // No barrier required.
+        (void)fCacheRefCnt.fetch_add(+1, std::memory_order_relaxed);
+    }
+
+    // Removes a cache ref from the resource. The unref here should only ever be called from the
+    // ResourceCache and only in the Recorder thread the ResourceCache is part of.
+    void unrefCache() const {
         bool shouldFree = false;
         {
             SkAutoMutexExclusive locked(fUnrefMutex);
-
-            // This call should only ever be called once for a given resource. Either when the
-            // resource is purged from the cache or when when the cache is destroyed.
-            SkASSERT(!fCalledRemovedFromCache);
-            SkDEBUGCODE(fCalledRemovedFromCache = true;)
-
-            shouldFree = this->notifyARefIsZero(LastRemovedRef::kCache);
+            SkASSERT(this->hasCacheRef());
+            // A release here acts in place of all releases we "should" have been doing in ref().
+            if (1 == fCacheRefCnt.fetch_add(-1, std::memory_order_acq_rel)) {
+                shouldFree = this->notifyARefIsZero(LastRemovedRef::kCache);
+            }
         }
         if (shouldFree) {
             Resource* mutableThis = const_cast<Resource*>(this);
@@ -147,10 +154,15 @@ private:
         }
     }
 
+#ifdef SK_DEBUG
+    bool isUsableAsScratch() const {
+        return fKey.shareable() == Shareable::kNo && !this->hasUsageRef() && fNonShareableInCache;
+    }
+#endif
+
     ////////////////////////////////////////////////////////////////////////////
     // The remaining calls are meant to be truely private
     ////////////////////////////////////////////////////////////////////////////
-
     bool hasUsageRef() const {
         if (0 == fUsageRefCnt.load(std::memory_order_acquire)) {
             // The acquire barrier is only really needed if we return true.  It
@@ -171,8 +183,18 @@ private:
         return true;
     }
 
+    bool hasCacheRef() const {
+        if (0 == fCacheRefCnt.load(std::memory_order_acquire)) {
+            // The acquire barrier is only really needed if we return true. It
+            // prevents code conditioned on the result of hasUsageRef() from running until previous
+            // owners are all totally done calling unref().
+            return false;
+        }
+        return true;
+    }
+
     bool hasAnyRefs() const {
-        return this->hasUsageRef() || this->hasCommandBufferRef();
+        return this->hasUsageRef() || this->hasCommandBufferRef() || this->hasCacheRef();
     }
 
     bool notifyARefIsZero(LastRemovedRef removedRef) const;
@@ -193,17 +215,29 @@ private:
 
     mutable std::atomic<int32_t> fUsageRefCnt;
     mutable std::atomic<int32_t> fCommandBufferRefCnt;
+    mutable std::atomic<int32_t> fCacheRefCnt;
 
     GraphiteResourceKey fKey;
 
     sk_sp<ResourceCache> fReturnCache;
+    // An index into the return cache so we know whether or not the resource is already waiting to
+    // be returned or not.
+    mutable int fReturnIndex = -1;
+
+    Ownership fOwnership;
 
     // An index into a heap when this resource is purgeable or an array when not. This is maintained
     // by the cache.
-    mutable int fCacheArrayIndex;
+    mutable int fCacheArrayIndex = -1;
     // This value reflects how recently this resource was accessed in the cache. This is maintained
     // by the cache.
     uint32_t fTimestamp;
+
+    // This is only used during validation checking. Lots of the validation code depends on a
+    // resource being purgeable or not. However, purgeable itself just means having no refs. The
+    // refs can be removed before a Resource is returned to the cache (or even added to the
+    // ReturnQueue).
+    SkDEBUGCODE(mutable bool fNonShareableInCache = false);
 };
 
 } // namespace skgpu

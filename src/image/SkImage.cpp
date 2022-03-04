@@ -216,7 +216,9 @@ sk_sp<SkImage> SkImage::makeSubset(const SkIRect& subset, GrDirectContext* direc
 
 #if SK_SUPPORT_GPU
 
-bool SkImage::isTextureBacked() const { return as_IB(this)->onIsTextureBacked(); }
+bool SkImage::isTextureBacked() const {
+    return as_IB(this)->isGaneshBacked() || as_IB(this)->isGraphiteBacked();
+}
 
 size_t SkImage::textureSize() const { return as_IB(this)->onTextureSize(); }
 
@@ -450,6 +452,19 @@ GrBackendTexture SkImage_Base::onGetBackendTexture(bool flushPendingGrContextIO,
                                                    GrSurfaceOrigin* origin) const {
     return GrBackendTexture(); // invalid
 }
+
+#ifdef SK_GRAPHITE_ENABLED
+std::tuple<skgpu::TextureProxyView, SkColorType> SkImage_Base::asView(
+        skgpu::Recorder* recorder, skgpu::Mipmapped mipmapped) const {
+    if (!recorder) {
+        return {};
+    }
+    if (this->dimensions().area() <= 1) {
+        mipmapped = skgpu::Mipmapped::kNo;
+    }
+    return this->onAsView(recorder, mipmapped);
+}
+#endif
 
 #endif // SK_SUPPORT_GPU
 
