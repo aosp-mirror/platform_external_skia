@@ -27,6 +27,7 @@ class Caps;
 class GlobalCache;
 class Gpu;
 class GraphicsPipeline;
+class GraphiteResourceKey;
 class ResourceCache;
 class Sampler;
 class SingleOwner;
@@ -44,6 +45,12 @@ public:
 
     sk_sp<Texture> findOrCreateTexture(SkISize, const TextureInfo&);
     virtual sk_sp<Texture> createWrappedTexture(const BackendTexture&) = 0;
+
+    sk_sp<Texture> findOrCreateDepthStencilAttachment(SkISize dimensions,
+                                                      const TextureInfo&);
+
+    sk_sp<Texture> findOrCreateDiscardableMSAAAttachment(SkISize dimensions,
+                                                         const TextureInfo&);
 
     sk_sp<Buffer> findOrCreateBuffer(size_t size, BufferType type, PrioritizeGpuReads);
 
@@ -67,6 +74,10 @@ private:
     virtual sk_sp<Sampler> createSampler(const SkSamplingOptions&,
                                          SkTileMode xTileMode,
                                          SkTileMode yTileMode) = 0;
+
+    sk_sp<Texture> findOrCreateTextureWithKey(SkISize dimensions,
+                                              const TextureInfo& info,
+                                              const GraphiteResourceKey& key);
 
     class GraphicsPipelineCache {
     public:
