@@ -447,6 +447,7 @@ cc_library_shared {
 android_test {
     name: "CtsSkQPTestCases",
     defaults: ["cts_defaults"],
+    test_suites: ["cts"],
 
     libs: ["android.test.runner.stubs"],
     jni_libs: ["libskqp_jni"],
@@ -464,6 +465,7 @@ android_test {
     srcs: ["platform_tools/android/apps/skqp/src/main/java/**/*.java"],
 
     sdk_version: "test_current",
+
 }
 ''')
 
