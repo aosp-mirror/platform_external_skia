@@ -17,6 +17,7 @@
 #include "include/core/SkSpan.h"
 #include "include/gpu/ShaderErrorHandler.h"
 #include "include/private/SkSLString.h"
+#include "src/core/SkPipelineData.h"
 #include "src/core/SkShaderCodeDictionary.h"
 
 namespace skgpu::mtl {
@@ -179,9 +180,9 @@ std::string get_sksl_vs(const GraphicsPipelineDesc& desc) {
 
 std::string get_sksl_fs(SkShaderCodeDictionary* dict,
                         const GraphicsPipelineDesc& desc,
-                        bool* writesColor) {
+                        SkPipelineData::BlendInfo* blendInfo) {
     if (!desc.paintParamsID().isValid()) {
-        *writesColor = false;
+        // TODO: we should return the error shader code here
         return {};
     }
 
@@ -189,7 +190,7 @@ std::string get_sksl_fs(SkShaderCodeDictionary* dict,
 
     dict->getShaderInfo(desc.paintParamsID(), &shaderInfo);
 
-    *writesColor = shaderInfo.writesColor();
+    *blendInfo = shaderInfo.blendInfo();
 #if SK_SUPPORT_GPU
     return shaderInfo.toSkSL();
 #else
@@ -327,14 +328,31 @@ MTLVertexDescriptor* create_vertex_descriptor(const RenderStep* step) {
     return vertexDescriptor;
 }
 
+static MTLRenderPipelineColorAttachmentDescriptor* create_color_attachment(
+        MTLPixelFormat format,
+        const SkPipelineData::BlendInfo& blendInfo) {
+
+    // TODO: I *think* this gets cleaned up by the pipelineDescriptor?
+    auto mtlColorAttachment = [[MTLRenderPipelineColorAttachmentDescriptor alloc] init];
+
+    mtlColorAttachment.pixelFormat = format;
+
+    mtlColorAttachment.blendingEnabled = FALSE;
+
+    mtlColorAttachment.writeMask = blendInfo.fWritesColor ? MTLColorWriteMaskAll
+                                                          : MTLColorWriteMaskNone;
+
+    return mtlColorAttachment;
+}
+
 } // anonymous namespace
 
 std::string GetMtlUniforms(int bufferID,
                            const char* name,
-                           const std::vector<SkShaderSnippet>& codeSnippets) {
+                           const std::vector<SkPaintParamsKey::BlockReader>& readers) {
     size_t numUniforms = 0;
-    for (auto e : codeSnippets) {
-        numUniforms += e.fUniforms.size();
+    for (auto r : readers) {
+        numUniforms += r.entry()->fUniforms.size();
     }
 
     if (!numUniforms) {
@@ -344,8 +362,8 @@ std::string GetMtlUniforms(int bufferID,
     int offset = 0;
 
     std::string result = get_uniform_header(bufferID, name);
-    for (int i = 0; i < (int) codeSnippets.size(); ++i) {
-        result += get_uniforms(codeSnippets[i].fUniforms, &offset, i);
+    for (int i = 0; i < (int) readers.size(); ++i) {
+        result += get_uniforms(readers[i].entry()->fUniforms, &offset, i);
     }
     result.append("};\n\n");
 
@@ -382,10 +400,10 @@ sk_sp<GraphicsPipeline> GraphicsPipeline::Make(ResourceProvider* resourceProvide
         return nullptr;
     }
 
-    bool writesColor;
+    SkPipelineData::BlendInfo blendInfo;
     auto dict = resourceProvider->shaderCodeDictionary();
     if (!SkSLToMSL(gpu,
-                   get_sksl_fs(dict, pipelineDesc, &writesColor),
+                   get_sksl_fs(dict, pipelineDesc, &blendInfo),
                    SkSL::ProgramKind::kFragment,
                    settings,
                    &msl[kFragment_ShaderType],
@@ -416,17 +434,11 @@ sk_sp<GraphicsPipeline> GraphicsPipeline::Make(ResourceProvider* resourceProvide
     // TODO: I *think* this gets cleaned up by the pipelineDescriptor?
     (*psoDescriptor).vertexDescriptor = create_vertex_descriptor(pipelineDesc.renderStep());
 
-    // TODO: I *think* this gets cleaned up by the pipelineDescriptor as well?
-    auto mtlColorAttachment = [[MTLRenderPipelineColorAttachmentDescriptor alloc] init];
-
     mtl::TextureInfo mtlTexInfo;
     renderPassDesc.fColorAttachment.fTextureInfo.getMtlTextureInfo(&mtlTexInfo);
 
-    mtlColorAttachment.pixelFormat = (MTLPixelFormat)mtlTexInfo.fFormat;
-
-    mtlColorAttachment.blendingEnabled = FALSE;
-
-    mtlColorAttachment.writeMask = writesColor ? MTLColorWriteMaskAll : MTLColorWriteMaskNone;
+    auto mtlColorAttachment = create_color_attachment((MTLPixelFormat)mtlTexInfo.fFormat,
+                                                      blendInfo);
 
     (*psoDescriptor).colorAttachments[0] = mtlColorAttachment;
 
