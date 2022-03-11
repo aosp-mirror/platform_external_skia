@@ -8,6 +8,7 @@
 #include "tools/skqp/src/skqp.h"
 
 #include "gm/gm.h"
+#include "include/core/SkBitmap.h"
 #include "include/core/SkFontStyle.h"
 #include "include/core/SkGraphics.h"
 #include "include/core/SkStream.h"
@@ -21,6 +22,7 @@
 #include "src/core/SkStreamPriv.h"
 #include "src/utils/SkOSPath.h"
 #include "tests/Test.h"
+#include "tests/TestHarness.h"
 #include "tools/fonts/TestFontMgr.h"
 #ifdef SK_GL
 #include "tools/gpu/gl/GLTestContext.h"
@@ -163,6 +165,12 @@ static void print_backend_info(const char* dstPath,
     }
     out.writeText("]\n");
 #endif
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TestHarness CurrentTestHarness() {
+    return TestHarness::kSkQP;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
