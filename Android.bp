@@ -802,6 +802,7 @@ cc_library_static {
         "src/sksl/SkSLOperators.cpp",
         "src/sksl/SkSLOutputStream.cpp",
         "src/sksl/SkSLPool.cpp",
+        "src/sksl/SkSLPosition.cpp",
         "src/sksl/SkSLRehydrator.cpp",
         "src/sksl/SkSLSampleUsage.cpp",
         "src/sksl/SkSLSharedCompiler.cpp",
@@ -1332,6 +1333,7 @@ cc_library_static {
         "src/sksl/SkSLOperators.cpp",
         "src/sksl/SkSLOutputStream.cpp",
         "src/sksl/SkSLPool.cpp",
+        "src/sksl/SkSLPosition.cpp",
         "src/sksl/SkSLRehydrator.cpp",
         "src/sksl/SkSLSampleUsage.cpp",
         "src/sksl/SkSLSharedCompiler.cpp",
@@ -1755,7 +1757,7 @@ cc_library_static {
           "android",
         ],
       },
-      linux_glibc: {
+      host_linux: {
         srcs: [
           "src/codec/SkRawCodec.cpp",
           "src/ports/SkDebug_stdio.cpp",
@@ -4332,6 +4334,7 @@ cc_library_shared {
         "src/sksl/SkSLOperators.cpp",
         "src/sksl/SkSLOutputStream.cpp",
         "src/sksl/SkSLPool.cpp",
+        "src/sksl/SkSLPosition.cpp",
         "src/sksl/SkSLRehydrator.cpp",
         "src/sksl/SkSLSampleUsage.cpp",
         "src/sksl/SkSLSharedCompiler.cpp",

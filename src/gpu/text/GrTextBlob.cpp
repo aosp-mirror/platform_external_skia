@@ -576,7 +576,10 @@ std::optional<PathOpSubmitter> PathOpSubmitter::MakeFromBuffer(SkReadBuffer& buf
     SkBulkGlyphMetricsAndPaths pathGetter{std::move(strike)};
 
     for (auto [i, glyphID] : SkMakeEnumerate(SkMakeSpan(glyphIDs, glyphCount))) {
-        paths[i] = *pathGetter.glyph(glyphID)->path();
+        const SkPath* path = pathGetter.glyph(glyphID)->path();
+        // There should never be missing paths in a sub run.
+        if (path == nullptr) { return {}; }
+        paths[i] = *path;
     }
 
     SkASSERT(buffer.isValid());
@@ -3022,9 +3025,10 @@ sk_sp<GrSlug> Slug::MakeFromBuffer(SkReadBuffer& buffer, const SkStrikeClient* c
     buffer.readMatrix(&positionMatrix);
     SkPoint origin = buffer.readPoint();
     int subRunCount = buffer.readInt();
-    SkASSERT(subRunCount != 0);
-    if (!buffer.validate(subRunCount != 0)) { return nullptr; }
+    SkASSERT(subRunCount > 0);
+    if (!buffer.validate(subRunCount > 0)) { return nullptr; }
     int subRunsUnflattenSizeHint = buffer.readInt();
+    if (!buffer.validate(subRunsUnflattenSizeHint >= 0)) { return nullptr; }
 
     sk_sp<Slug> slug{new (::operator new (sizeof(Slug) + subRunsUnflattenSizeHint))
                              Slug(sourceBounds,
