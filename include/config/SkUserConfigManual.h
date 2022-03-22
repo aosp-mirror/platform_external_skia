@@ -31,9 +31,5 @@
 
   #define SK_DISABLE_DAA  // skbug.com/6886
 
-  #ifdef LOG_TAG
-    #undef LOG_TAG
-  #endif
-  #define LOG_TAG "skia"
-  #define SK_ABORT(...) __android_log_assert(nullptr, LOG_TAG, ##__VA_ARGS__)
+  #define SK_ABORT(...) __android_log_assert(nullptr, "skia", ##__VA_ARGS__)
 #endif // SkUserConfigManual_DEFINED
