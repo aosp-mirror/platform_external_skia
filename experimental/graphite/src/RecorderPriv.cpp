@@ -7,6 +7,7 @@
 
 #include "experimental/graphite/src/RecorderPriv.h"
 
+#include "experimental/graphite/src/Device.h"
 #include "experimental/graphite/src/Gpu.h"
 #include "experimental/graphite/src/TaskGraph.h"
 
@@ -18,8 +19,8 @@ ResourceProvider* RecorderPriv::resourceProvider() const {
     return fRecorder->fResourceProvider.get();
 }
 
-PipelineDataCache* RecorderPriv::pipelineDataCache() const {
-    return fRecorder->fPipelineDataCache.get();
+UniformDataCache* RecorderPriv::uniformDataCache() const {
+    return fRecorder->fUniformDataCache.get();
 }
 
 const Caps* RecorderPriv::caps() const {
@@ -33,6 +34,13 @@ DrawBufferManager* RecorderPriv::drawBufferManager() const {
 void RecorderPriv::add(sk_sp<Task> task) {
     ASSERT_SINGLE_OWNER
     fRecorder->fGraph->add(std::move(task));
+}
+
+void RecorderPriv::flushTrackedDevices() {
+    ASSERT_SINGLE_OWNER
+    for (Device* device : fRecorder->fTrackedDevices) {
+        device->flushPendingWorkToRecorder();
+    }
 }
 
 } // namespace skgpu
