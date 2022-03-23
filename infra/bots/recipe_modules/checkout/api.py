@@ -20,15 +20,14 @@ class CheckoutApi(recipe_api.RecipeApi):
   def assert_git_is_from_cipd(self):
     """Fail if git is not obtained from CIPD."""
     self.m.run(self.m.python.inline, 'Assert that Git is from CIPD', program='''
-from __future__ import print_function
 import subprocess
 import sys
 
 which = 'where' if sys.platform == 'win32' else 'which'
-git = subprocess.check_output([which, 'git']).decode('utf-8')
-print('git was found at %s' % git)
+git = subprocess.check_output([which, 'git'])
+print 'git was found at %s' % git
 if 'cipd_bin_packages' not in git:
-  print('Git must be obtained through CIPD.', file=sys.stderr)
+  print >> sys.stderr, 'Git must be obtained through CIPD.'
   sys.exit(1)
 ''')
 
@@ -99,7 +98,7 @@ if 'cipd_bin_packages' not in git:
     main.name = main_name
     main.managed = False
     main.url = main_repo
-    main.revision = self.m.properties.get('revision') or 'origin/main'
+    main.revision = self.m.properties.get('revision') or 'origin/master'
     m = gclient_cfg.got_revision_mapping
     m[main_name] = 'got_revision'
     patch_root = main_name

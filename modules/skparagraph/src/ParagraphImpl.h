@@ -25,7 +25,7 @@
 #include "modules/skparagraph/include/TextStyle.h"
 #include "modules/skparagraph/src/Run.h"
 #include "modules/skparagraph/src/TextLine.h"
-#include "modules/skunicode/include/SkUnicode.h"
+#include "modules/skshaper/src/SkUnicode.h"
 
 #include <memory>
 #include <string>
@@ -102,14 +102,14 @@ public:
                   SkTArray<Block, true> blocks,
                   SkTArray<Placeholder, true> placeholders,
                   sk_sp<FontCollection> fonts,
-                  std::shared_ptr<SkUnicode> unicode);
+                  std::unique_ptr<SkUnicode> unicode);
 
     ParagraphImpl(const std::u16string& utf16text,
                   ParagraphStyle style,
                   SkTArray<Block, true> blocks,
                   SkTArray<Placeholder, true> placeholders,
                   sk_sp<FontCollection> fonts,
-                  std::shared_ptr<SkUnicode> unicode);
+                  std::unique_ptr<SkUnicode> unicode);
     ~ParagraphImpl() override;
 
     void layout(SkScalar width) override;
@@ -125,8 +125,7 @@ public:
 
     size_t lineNumber() override { return fLines.size(); }
 
-    TextLine& addLine(SkVector offset, SkVector advance,
-                      TextRange textExcludingSpaces, TextRange text, TextRange textIncludingNewlines,
+    TextLine& addLine(SkVector offset, SkVector advance, TextRange text, TextRange textWithSpaces,
                       ClusterRange clusters, ClusterRange clustersWithGhosts, SkScalar widthWithSpaces,
                       InternalLineMetrics sizes);
 
@@ -273,7 +272,7 @@ private:
     SkScalar fOldHeight;
     SkScalar fMaxWidthWithTrailingSpaces;
 
-    std::shared_ptr<SkUnicode> fUnicode;
+    std::unique_ptr<SkUnicode> fUnicode;
 };
 }  // namespace textlayout
 }  // namespace skia

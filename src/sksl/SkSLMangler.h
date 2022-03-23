@@ -19,7 +19,7 @@ public:
     /**
      * Mangles baseName to create a name that is unique within symbolTable.
      */
-    std::string uniqueName(std::string_view baseName, SymbolTable* symbolTable);
+    String uniqueName(String baseName, SymbolTable* symbolTable);
 
     void reset() {
         fCounter = 0;

@@ -7,7 +7,7 @@
 
 #include "include/core/SkScalar.h"
 #include "include/private/GrGLTypesPriv.h"
-#include "src/gpu/Swizzle.h"
+#include "src/gpu/GrSwizzle.h"
 #include "src/gpu/gl/GrGLDefines.h"
 
 GrGLTextureParameters::SamplerOverriddenState::SamplerOverriddenState()
@@ -65,20 +65,3 @@ void GrGLBackendTextureInfo::assign(const GrGLBackendTextureInfo& that, bool thi
 }
 
 void GrGLBackendTextureInfo::cleanup() { SkSafeUnref(fParams); }
-
-GrGLSurfaceInfo GrGLTextureSpecToSurfaceInfo(const GrGLTextureSpec& glSpec,
-                                             uint32_t sampleCount,
-                                             uint32_t levelCount,
-                                             GrProtected isProtected) {
-    GrGLSurfaceInfo info;
-    // Shared info
-    info.fSampleCount = sampleCount;
-    info.fLevelCount = levelCount;
-    info.fProtected = isProtected;
-
-    // GL info
-    info.fTarget = glSpec.fTarget;
-    info.fFormat = glSpec.fFormat;
-
-    return info;
-}

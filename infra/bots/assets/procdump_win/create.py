@@ -10,13 +10,8 @@
 
 
 import argparse
-import os
+import common
 import subprocess
-import sys
-
-FILE_DIR = os.path.dirname(os.path.abspath(__file__))
-INFRA_BOTS_DIR = os.path.realpath(os.path.join(FILE_DIR, os.pardir, os.pardir))
-sys.path.insert(0, INFRA_BOTS_DIR)
 import utils
 
 

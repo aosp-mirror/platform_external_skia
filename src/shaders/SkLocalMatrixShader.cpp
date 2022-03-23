@@ -13,6 +13,7 @@
 #if SK_SUPPORT_GPU
 #include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/effects/GrMatrixEffect.h"
+#include "src/gpu/effects/generated/GrDeviceSpaceEffect.h"
 #endif
 
 #if SK_SUPPORT_GPU
@@ -142,7 +143,7 @@ protected:
 #endif
 
     bool onAppendStages(const SkStageRec& rec) const override {
-        SkOverrideDeviceMatrixProvider matrixProvider(fCTM);
+        SkOverrideDeviceMatrixProvider matrixProvider(rec.fMatrixProvider, fCTM);
         SkStageRec newRec = {
             rec.fPipeline,
             rec.fAlloc,
@@ -160,7 +161,7 @@ protected:
                           const SkMatrixProvider& matrices, const SkMatrix* localM,
                           const SkColorInfo& dst,
                           skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const override {
-        SkOverrideDeviceMatrixProvider matrixProvider(fCTM);
+        SkOverrideDeviceMatrixProvider matrixProvider(matrices, fCTM);
         return as_SB(fProxyShader)->program(p, device,local, paint,
                                             matrixProvider,localM, dst,
                                             uniforms,alloc);
@@ -184,7 +185,7 @@ std::unique_ptr<GrFragmentProcessor> SkCTMShader::asFragmentProcessor(
         return nullptr;
     }
 
-    auto ctmProvider = SkOverrideDeviceMatrixProvider(fCTM);
+    auto ctmProvider = SkOverrideDeviceMatrixProvider(args.fMatrixProvider, fCTM);
     auto base = as_SB(fProxyShader)->asFragmentProcessor(
         GrFPArgs::WithPreLocalMatrix(args.withNewMatrixProvider(ctmProvider),
                                      this->getLocalMatrix()));
@@ -195,7 +196,7 @@ std::unique_ptr<GrFragmentProcessor> SkCTMShader::asFragmentProcessor(
     // In order for the shader to be evaluated with the original CTM, we explicitly evaluate it
     // at sk_FragCoord, and pass that through the inverse of the original CTM. This avoids requiring
     // local coords for the shader and mapping from the draw's local to device and then back.
-    return GrFragmentProcessor::DeviceSpace(GrMatrixEffect::Make(ctmInv, std::move(base)));
+    return GrDeviceSpaceEffect::Make(GrMatrixEffect::Make(ctmInv, std::move(base)));
 }
 #endif
 

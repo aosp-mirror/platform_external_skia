@@ -14,18 +14,19 @@
 
 #import <Metal/Metal.h>
 
-class GrMtlRenderTarget;
+class GrShaderCaps;
 
 /**
  * Stores some capabilities of a Mtl backend.
  */
 class GrMtlCaps : public GrCaps {
 public:
-    GrMtlCaps(const GrContextOptions& contextOptions, id<MTLDevice> device);
+    GrMtlCaps(const GrContextOptions& contextOptions, id<MTLDevice> device,
+              MTLFeatureSet featureSet);
 
     bool isFormatSRGB(const GrBackendFormat&) const override;
 
-    bool isFormatTexturable(const GrBackendFormat&, GrTextureType) const override;
+    bool isFormatTexturable(const GrBackendFormat&) const override;
     bool isFormatTexturable(MTLPixelFormat) const;
 
     bool isFormatCopyable(const GrBackendFormat&) const override { return true; }
@@ -57,10 +58,20 @@ public:
         return fPreferredStencilFormat;
     }
 
+    bool canCopyAsBlit(GrSurface* dst,
+                       GrSurface* src,
+                       const SkIRect& srcRect,
+                       const SkIPoint& dstPoint) const;
+
     bool canCopyAsBlit(MTLPixelFormat dstFormat, int dstSampleCount,
                        MTLPixelFormat srcFormat, int srcSampleCount,
                        const SkIRect& srcRect, const SkIPoint& dstPoint,
                        bool areDstSrcSameObj) const;
+
+    bool canCopyAsResolve(GrSurface* dst,
+                          GrSurface* src,
+                          const SkIRect& srcRect,
+                          const SkIPoint& dstPoint) const;
 
     bool canCopyAsResolve(MTLPixelFormat dstFormat, int dstSampleCount,
                           MTLPixelFormat srcFormat, int srcSampleCount,
@@ -76,7 +87,7 @@ public:
         return fColorTypeToFormatTable[idx];
     }
 
-    skgpu::Swizzle getWriteSwizzle(const GrBackendFormat&, GrColorType) const override;
+    GrSwizzle getWriteSwizzle(const GrBackendFormat&, GrColorType) const override;
 
     uint64_t computeFormatKey(const GrBackendFormat&) const override;
 
@@ -85,23 +96,13 @@ public:
                            ProgramDescOverrideFlags) const override;
     MTLPixelFormat getStencilPixelFormat(const GrProgramDesc& desc);
 
-    bool isMac() const { return fGPUFamily == GPUFamily::kMac; }
-    bool isApple() const { return fGPUFamily == GPUFamily::kApple; }
-
-    size_t getMinBufferAlignment() const { return this->isMac() ? 4 : 1; }
-
-    // if true, MTLStoreActionStoreAndMultiplesampleResolve is available
-    bool storeAndMultisampleResolveSupport() const { return fStoreAndMultisampleResolveSupport; }
-
-    bool renderTargetSupportsDiscardableMSAA(const GrMtlRenderTarget*) const;
-
 #if GR_TEST_UTILS
     std::vector<TestFormatColorTypeCombination> getTestingCombinations() const override;
 #endif
     void onDumpJSON(SkJSONWriter*) const override;
 
 private:
-    void initGPUFamily(id<MTLDevice> device);
+    void initFeatureSet(MTLFeatureSet featureSet);
 
     void initStencilFormat(id<MTLDevice> device);
 
@@ -121,7 +122,7 @@ private:
     SupportedRead onSupportedReadPixelsColorType(GrColorType, const GrBackendFormat&,
                                                  GrColorType) const override;
 
-    skgpu::Swizzle onGetReadSwizzle(const GrBackendFormat&, GrColorType) const override;
+    GrSwizzle onGetReadSwizzle(const GrBackendFormat&, GrColorType) const override;
 
     // ColorTypeInfo for a specific format
     struct ColorTypeInfo {
@@ -134,8 +135,8 @@ private:
         };
         uint32_t fFlags = 0;
 
-        skgpu::Swizzle fReadSwizzle;
-        skgpu::Swizzle fWriteSwizzle;
+        GrSwizzle fReadSwizzle;
+        GrSwizzle fWriteSwizzle;
     };
 
     struct FormatInfo {
@@ -163,9 +164,9 @@ private:
         int fColorTypeInfoCount = 0;
     };
 #ifdef SK_BUILD_FOR_IOS
-    inline static constexpr size_t kNumMtlFormats = 17;
+    static constexpr size_t kNumMtlFormats = 17;
 #else
-    inline static constexpr size_t kNumMtlFormats = 16;
+    static constexpr size_t kNumMtlFormats = 16;
 #endif
     static size_t GetFormatIndex(MTLPixelFormat);
     FormatInfo fFormatTable[kNumMtlFormats];
@@ -178,22 +179,20 @@ private:
     MTLPixelFormat fColorTypeToFormatTable[kGrColorTypeCnt];
     void setColorType(GrColorType, std::initializer_list<MTLPixelFormat> formats);
 
-    enum class GPUFamily {
+    enum class Platform {
         kMac,
-        kApple,
+        kIOS
     };
-    bool getGPUFamily(id<MTLDevice> device, GPUFamily* gpuFamily, int* group);
-    bool getGPUFamilyFromFeatureSet(id<MTLDevice> device, GrMtlCaps::GPUFamily* gpuFamily,
-                                    int* group);
+    bool isMac() { return Platform::kMac == fPlatform; }
+    bool isIOS() { return Platform::kIOS == fPlatform; }
 
-    GPUFamily fGPUFamily;
+    Platform fPlatform;
     int fFamilyGroup;
+    int fVersion;
 
     SkTDArray<int> fSampleCounts;
 
     MTLPixelFormat fPreferredStencilFormat;
-
-    bool fStoreAndMultisampleResolveSupport : 1;
 
     using INHERITED = GrCaps;
 };

@@ -26,10 +26,10 @@ namespace SkSL {
  */
 class StructDefinition final : public ProgramElement {
 public:
-    inline static constexpr Kind kProgramElementKind = Kind::kStructDefinition;
+    static constexpr Kind kProgramElementKind = Kind::kStructDefinition;
 
-    StructDefinition(int line, const Type& type)
-    : INHERITED(line, kProgramElementKind)
+    StructDefinition(int offset, const Type& type)
+    : INHERITED(offset, kProgramElementKind)
     , fType(&type) {}
 
     const Type& type() const {
@@ -37,11 +37,11 @@ public:
     }
 
     std::unique_ptr<ProgramElement> clone() const override {
-        return std::make_unique<StructDefinition>(fLine, this->type());
+        return std::make_unique<StructDefinition>(fOffset, this->type());
     }
 
-    std::string description() const override {
-        std::string s = "struct ";
+    String description() const override {
+        String s = "struct ";
         s += this->type().name();
         s += " { ";
         for (const auto& f : this->type().fields()) {

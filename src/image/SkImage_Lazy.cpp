@@ -18,6 +18,7 @@
 #if SK_SUPPORT_GPU
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
+#include "include/private/GrResourceKey.h"
 #include "src/core/SkResourceCache.h"
 #include "src/core/SkYUVPlanesCache.h"
 #include "src/gpu/GrCaps.h"
@@ -27,10 +28,9 @@
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrSamplerState.h"
+#include "src/gpu/GrSurfaceFillContext.h"
 #include "src/gpu/GrYUVATextureProxies.h"
-#include "src/gpu/ResourceKey.h"
 #include "src/gpu/SkGr.h"
-#include "src/gpu/SurfaceFillContext.h"
 #include "src/gpu/effects/GrYUVtoRGBEffect.h"
 #endif
 
@@ -197,12 +197,8 @@ sk_sp<SkImage> SkImage_Lazy::onMakeSubset(const SkIRect& subset, GrDirectContext
     // TODO: can we do this more efficiently, by telling the generator we want to
     //       "realize" a subset?
 
-#if SK_SUPPORT_GPU
     auto pixels = direct ? this->makeTextureImage(direct)
                          : this->makeRasterImage();
-#else
-    auto pixels = this->makeRasterImage();
-#endif
     return pixels ? pixels->makeSubset(subset, direct) : nullptr;
 }
 
@@ -331,15 +327,15 @@ GrSurfaceProxyView SkImage_Lazy::textureProxyViewFromPlanes(GrRecordingContext* 
                      kPremul_SkAlphaType,
                      /*color space*/ nullptr,
                      this->dimensions());
-
-    auto sfc = ctx->priv().makeSFC(info,
-                                   SkBackingFit::kExact,
-                                   1,
-                                   GrMipmapped::kNo,
-                                   GrProtected::kNo,
-                                   kTopLeft_GrSurfaceOrigin,
-                                   budgeted);
-    if (!sfc) {
+    auto surfaceFillContext = GrSurfaceFillContext::Make(ctx,
+                                                         info,
+                                                         SkBackingFit::kExact,
+                                                         1,
+                                                         GrMipmapped::kNo,
+                                                         GrProtected::kNo,
+                                                         kTopLeft_GrSurfaceOrigin,
+                                                         budgeted);
+    if (!surfaceFillContext) {
         return {};
     }
 
@@ -367,9 +363,9 @@ GrSurfaceProxyView SkImage_Lazy::textureProxyViewFromPlanes(GrRecordingContext* 
     fp = GrColorSpaceXformEffect::Make(std::move(fp),
                                        srcColorSpace, kOpaque_SkAlphaType,
                                        dstColorSpace, kOpaque_SkAlphaType);
-    sfc->fillWithFP(std::move(fp));
+    surfaceFillContext->fillWithFP(std::move(fp));
 
-    return sfc->readSurfaceView();
+    return surfaceFillContext->readSurfaceView();
 }
 
 sk_sp<SkCachedData> SkImage_Lazy::getPlanes(
@@ -426,7 +422,7 @@ GrSurfaceProxyView SkImage_Lazy::lockTextureProxyView(GrRecordingContext* rConte
 
     enum { kLockTexturePathCount = kRGBA_LockTexturePath + 1 };
 
-    skgpu::UniqueKey key;
+    GrUniqueKey key;
     if (texGenPolicy == GrImageTexGenPolicy::kDraw) {
         GrMakeKeyFromImageID(&key, this->uniqueID(), SkIRect::MakeSize(this->dimensions()));
     }
@@ -449,9 +445,8 @@ GrSurfaceProxyView SkImage_Lazy::lockTextureProxyView(GrRecordingContext* rConte
     if (key.isValid()) {
         auto proxy = proxyProvider->findOrCreateProxyByUniqueKey(key);
         if (proxy) {
-            skgpu::Swizzle swizzle = caps->getReadSwizzle(proxy->backendFormat(), ct);
-            GrSurfaceOrigin origin = ScopedGenerator(fSharedGenerator)->origin();
-            GrSurfaceProxyView view(std::move(proxy), origin, swizzle);
+            GrSwizzle swizzle = caps->getReadSwizzle(proxy->backendFormat(), ct);
+            GrSurfaceProxyView view(std::move(proxy), kTopLeft_GrSurfaceOrigin, swizzle);
             if (mipmapped == GrMipmapped::kNo ||
                 view.asTextureProxy()->mipmapped() == GrMipmapped::kYes) {
                 return view;

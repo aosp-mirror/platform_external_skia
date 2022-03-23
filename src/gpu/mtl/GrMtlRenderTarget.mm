@@ -7,9 +7,6 @@
 
 #include "src/gpu/mtl/GrMtlRenderTarget.h"
 
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrResourceProvider.h"
-#include "src/gpu/mtl/GrMtlFramebuffer.h"
 #include "src/gpu/mtl/GrMtlGpu.h"
 #include "src/gpu/mtl/GrMtlUtil.h"
 
@@ -22,26 +19,47 @@ GR_NORETAIN_BEGIN
 // Called for wrapped non-texture render targets.
 GrMtlRenderTarget::GrMtlRenderTarget(GrMtlGpu* gpu,
                                      SkISize dimensions,
-                                     sk_sp<GrMtlAttachment> colorAttachment,
-                                     sk_sp<GrMtlAttachment> resolveAttachment,
+                                     int sampleCnt,
+                                     id<MTLTexture> colorTexture,
+                                     id<MTLTexture> resolveTexture,
                                      Wrapped)
         : GrSurface(gpu, dimensions, GrProtected::kNo)
-        , GrRenderTarget(gpu, dimensions, colorAttachment->numSamples(), GrProtected::kNo)
-        , fColorAttachment(std::move(colorAttachment))
-        , fResolveAttachment(std::move(resolveAttachment)) {
+        , GrRenderTarget(gpu, dimensions, sampleCnt, GrProtected::kNo)
+        , fColorTexture(colorTexture)
+        , fResolveTexture(resolveTexture) {
+    SkASSERT(sampleCnt > 1);
+    this->registerWithCacheWrapped(GrWrapCacheable::kNo);
+}
+
+GrMtlRenderTarget::GrMtlRenderTarget(GrMtlGpu* gpu,
+                                     SkISize dimensions,
+                                     id<MTLTexture> colorTexture,
+                                     Wrapped)
+        : GrSurface(gpu, dimensions, GrProtected::kNo)
+        , GrRenderTarget(gpu, dimensions, 1, GrProtected::kNo)
+        , fColorTexture(colorTexture)
+        , fResolveTexture(nil) {
     this->registerWithCacheWrapped(GrWrapCacheable::kNo);
 }
 
 // Called by subclass constructors.
 GrMtlRenderTarget::GrMtlRenderTarget(GrMtlGpu* gpu,
                                      SkISize dimensions,
-                                     sk_sp<GrMtlAttachment> colorAttachment,
-                                     sk_sp<GrMtlAttachment> resolveAttachment)
+                                     int sampleCnt,
+                                     id<MTLTexture> colorTexture,
+                                     id<MTLTexture> resolveTexture)
         : GrSurface(gpu, dimensions, GrProtected::kNo)
-        , GrRenderTarget(gpu, dimensions, colorAttachment->numSamples(), GrProtected::kNo)
-        , fColorAttachment(std::move(colorAttachment))
-        , fResolveAttachment(std::move(resolveAttachment)) {
+        , GrRenderTarget(gpu, dimensions, sampleCnt, GrProtected::kNo)
+        , fColorTexture(colorTexture)
+        , fResolveTexture(resolveTexture) {
+    SkASSERT(sampleCnt > 1);
 }
+
+GrMtlRenderTarget::GrMtlRenderTarget(GrMtlGpu* gpu, SkISize dimensions, id<MTLTexture> colorTexture)
+        : GrSurface(gpu, dimensions, GrProtected::kNo)
+        , GrRenderTarget(gpu, dimensions, 1, GrProtected::kNo)
+        , fColorTexture(colorTexture)
+        , fResolveTexture(nil) {}
 
 sk_sp<GrMtlRenderTarget> GrMtlRenderTarget::MakeWrappedRenderTarget(GrMtlGpu* gpu,
                                                                     SkISize dimensions,
@@ -53,11 +71,6 @@ sk_sp<GrMtlRenderTarget> GrMtlRenderTarget::MakeWrappedRenderTarget(GrMtlGpu* gp
         SkASSERT(MTLTextureUsageRenderTarget & texture.usage);
     }
 
-    sk_sp<GrMtlAttachment> textureAttachment =
-            GrMtlAttachment::MakeWrapped(gpu, dimensions, texture,
-                                         GrAttachment::UsageFlags::kColorAttachment,
-                                         GrWrapCacheable::kNo);
-
     GrMtlRenderTarget* mtlRT;
     if (sampleCnt > 1) {
         if ([texture sampleCount] == 1) {
@@ -65,78 +78,54 @@ sk_sp<GrMtlRenderTarget> GrMtlRenderTarget::MakeWrappedRenderTarget(GrMtlGpu* gp
             if (!gpu->mtlCaps().isFormatRenderable(format, sampleCnt)) {
                 return nullptr;
             }
-            auto rp = gpu->getContext()->priv().resourceProvider();
-            sk_sp<GrAttachment> msaaAttachment = rp->makeMSAAAttachment(
-                    dimensions, GrBackendFormat::MakeMtl(format), sampleCnt, GrProtected::kNo,
-                    GrMemoryless::kNo);
-            if (!msaaAttachment) {
+            MTLTextureDescriptor* texDesc = [[MTLTextureDescriptor alloc] init];
+            texDesc.textureType = MTLTextureType2DMultisample;
+            texDesc.pixelFormat = format;
+            texDesc.width = dimensions.fWidth;
+            texDesc.height = dimensions.fHeight;
+            texDesc.depth = 1;
+            texDesc.mipmapLevelCount = 1;
+            texDesc.sampleCount = sampleCnt;
+            texDesc.arrayLength = 1;
+            if (@available(macOS 10.11, iOS 9.0, *)) {
+                texDesc.storageMode = MTLStorageModePrivate;
+                texDesc.usage = MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
+            }
+
+            id<MTLTexture> colorTexture = [gpu->device() newTextureWithDescriptor:texDesc];
+            if (!colorTexture) {
                 return nullptr;
             }
-            sk_sp<GrMtlAttachment> colorAttachment =
-                    sk_sp<GrMtlAttachment>(static_cast<GrMtlAttachment*>(msaaAttachment.release()));
+            if (@available(macOS 10.11, iOS 9.0, *)) {
+                SkASSERT((MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget) &
+                         colorTexture.usage);
+            }
             mtlRT = new GrMtlRenderTarget(
-                    gpu, dimensions, std::move(colorAttachment), std::move(textureAttachment),
-                    kWrapped);
-            mtlRT->setRequiresManualMSAAResolve();
+                    gpu, dimensions, sampleCnt, colorTexture, texture, kWrapped);
         } else {
             SkASSERT(sampleCnt == static_cast<int>([texture sampleCount]));
-            mtlRT = new GrMtlRenderTarget(gpu, dimensions, std::move(textureAttachment), nil,
-                                          kWrapped);
+            mtlRT = new GrMtlRenderTarget(gpu, dimensions, sampleCnt, texture, nil, kWrapped);
         }
     } else {
-        mtlRT = new GrMtlRenderTarget(gpu, dimensions, std::move(textureAttachment), nil,
-                                      kWrapped);
+        mtlRT = new GrMtlRenderTarget(gpu, dimensions, texture, kWrapped);
     }
 
     return sk_sp<GrMtlRenderTarget>(mtlRT);
 }
 
 GrMtlRenderTarget::~GrMtlRenderTarget() {
-    SkASSERT(nil == fColorAttachment);
-    SkASSERT(nil == fResolveAttachment);
+    SkASSERT(nil == fColorTexture);
+    SkASSERT(nil == fResolveTexture);
 }
 
 GrBackendRenderTarget GrMtlRenderTarget::getBackendRenderTarget() const {
     GrMtlTextureInfo info;
-    info.fTexture.reset(GrRetainPtrFromId(fColorAttachment->mtlTexture()));
+    info.fTexture.reset(GrRetainPtrFromId(fColorTexture));
     return GrBackendRenderTarget(this->width(), this->height(), info);
 }
 
 GrBackendFormat GrMtlRenderTarget::backendFormat() const {
-    return GrBackendFormat::MakeMtl(fColorAttachment->mtlFormat());
-}
-
-static int renderpass_features_to_index(bool hasResolve, bool hasStencil) {
-    int index = 0;
-    if (hasResolve) {
-        index += 1;
-    }
-    if (hasStencil) {
-        index += 2;
-    }
-    return index;
-}
-
-const GrMtlFramebuffer* GrMtlRenderTarget::getFramebuffer(bool withResolve,
-                                                          bool withStencil) {
-    int cacheIndex =
-            renderpass_features_to_index(withResolve, withStencil);
-    SkASSERT(cacheIndex < GrMtlRenderTarget::kNumCachedFramebuffers);
-
-    if (fCachedFramebuffers[cacheIndex]) {
-        return fCachedFramebuffers[cacheIndex].get();
-    }
-
-    GrMtlAttachment* resolve = withResolve ? this->resolveAttachment() : nullptr;
-    GrMtlAttachment* colorAttachment = this->colorAttachment();
-
-    // Stencil attachment view is stored in the base RT stencil attachment
-    GrMtlAttachment* stencil =
-            withStencil ? static_cast<GrMtlAttachment*>(this->getStencilAttachment())
-                        : nullptr;
-    fCachedFramebuffers[cacheIndex] =
-            GrMtlFramebuffer::Make(colorAttachment, resolve, stencil);
-    return fCachedFramebuffers[cacheIndex].get();
+    return GrBackendFormat::MakeMtl(fColorTexture.pixelFormat);
 }
 
 GrMtlGpu* GrMtlRenderTarget::getMtlGpu() const {
@@ -145,14 +134,14 @@ GrMtlGpu* GrMtlRenderTarget::getMtlGpu() const {
 }
 
 void GrMtlRenderTarget::onAbandon() {
-    fColorAttachment = nil;
-    fResolveAttachment = nil;
+    fColorTexture = nil;
+    fResolveTexture = nil;
     INHERITED::onAbandon();
 }
 
 void GrMtlRenderTarget::onRelease() {
-    fColorAttachment = nil;
-    fResolveAttachment = nil;
+    fColorTexture = nil;
+    fResolveTexture = nil;
     INHERITED::onRelease();
 }
 

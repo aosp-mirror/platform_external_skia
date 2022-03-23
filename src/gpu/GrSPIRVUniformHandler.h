@@ -8,7 +8,7 @@
 #ifndef GrSPIRVUniformHandler_DEFINED
 #define GrSPIRVUniformHandler_DEFINED
 
-#include "src/core/SkTBlockList.h"
+#include "src/gpu/GrTBlockList.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
 
 /*
@@ -27,13 +27,13 @@ public:
     struct SPIRVUniformInfo : public UniformInfo {
         int fUBOOffset;
     };
-    typedef SkTBlockList<SPIRVUniformInfo> UniformInfoArray;
+    typedef GrTBlockList<SPIRVUniformInfo> UniformInfoArray;
     enum {
         kUniformBinding = 0,
         kUniformDescriptorSet = 0,
         kSamplerTextureDescriptorSet = 1,
     };
-    uint32_t getRTFlipOffset() const;
+    uint32_t getRTHeightOffset() const;
 
     int numUniforms() const override {
         return fUniforms.count();
@@ -49,14 +49,14 @@ public:
 private:
     explicit GrSPIRVUniformHandler(GrGLSLProgramBuilder* program);
 
-    SamplerHandle addSampler(const GrBackendFormat&, GrSamplerState, const skgpu::Swizzle&,
+    SamplerHandle addSampler(const GrBackendFormat&, GrSamplerState, const GrSwizzle&,
                              const char* name, const GrShaderCaps*) override;
     const char* samplerVariable(SamplerHandle handle) const override;
-    skgpu::Swizzle samplerSwizzle(SamplerHandle handle) const override;
+    GrSwizzle samplerSwizzle(SamplerHandle handle) const override;
     void appendUniformDecls(GrShaderFlags visibility, SkString*) const override;
     UniformHandle internalAddUniformArray(const GrFragmentProcessor* owner,
                                           uint32_t visibility,
-                                          SkSLType type,
+                                          GrSLType type,
                                           const char* name,
                                           bool mangleName,
                                           int arrayCount,
@@ -65,11 +65,11 @@ private:
     UniformInfoArray    fUniforms;
     UniformInfoArray    fSamplers;
     UniformInfoArray    fTextures;
-    SkTArray<skgpu::Swizzle> fSamplerSwizzles;
+    SkTArray<GrSwizzle> fSamplerSwizzles;
     SkTArray<SkString>  fSamplerReferences;
 
     uint32_t fCurrentUBOOffset = 0;
-    uint32_t fRTFlipOffset = 0;
+    uint32_t fRTHeightOffset = 0;
 
     friend class GrD3DPipelineStateBuilder;
     friend class GrDawnProgramBuilder;

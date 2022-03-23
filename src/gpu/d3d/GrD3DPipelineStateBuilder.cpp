@@ -17,6 +17,7 @@
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrPersistentCacheUtils.h"
 #include "src/gpu/GrShaderCaps.h"
+#include "src/gpu/GrShaderUtils.h"
 #include "src/gpu/GrStencilSettings.h"
 #include "src/gpu/d3d/GrD3DGpu.h"
 #include "src/gpu/d3d/GrD3DPipeline.h"
@@ -24,7 +25,6 @@
 #include "src/gpu/d3d/GrD3DRootSignature.h"
 #include "src/gpu/d3d/GrD3DUtil.h"
 #include "src/sksl/SkSLCompiler.h"
-#include "src/utils/SkShaderUtils.h"
 
 #include <d3dcompiler.h>
 
@@ -78,13 +78,16 @@ static const bool gPrintSKSL = false;
 static const bool gPrintHLSL = false;
 
 static gr_cp<ID3DBlob> GrCompileHLSLShader(GrD3DGpu* gpu,
-                                           const std::string& hlsl,
+                                           const SkSL::String& hlsl,
                                            SkSL::ProgramKind kind) {
     TRACE_EVENT0("skia.shaders", "driver_compile_shader");
     const char* compileTarget = nullptr;
     switch (kind) {
         case SkSL::ProgramKind::kVertex:
             compileTarget = "vs_5_1";
+            break;
+        case SkSL::ProgramKind::kGeometry:
+            compileTarget = "gs_5_1";
             break;
         case SkSL::ProgramKind::kFragment:
             compileTarget = "ps_5_1";
@@ -114,7 +117,7 @@ static gr_cp<ID3DBlob> GrCompileHLSLShader(GrD3DGpu* gpu,
 
 bool GrD3DPipelineStateBuilder::loadHLSLFromCache(SkReadBuffer* reader, gr_cp<ID3DBlob> shaders[]) {
 
-    std::string hlsl[kGrShaderTypeCount];
+    SkSL::String hlsl[kGrShaderTypeCount];
     SkSL::Program::Inputs inputs[kGrShaderTypeCount];
 
     if (!GrPersistentCacheUtils::UnpackCachedShaders(reader, hlsl, inputs, kGrShaderTypeCount)) {
@@ -122,27 +125,29 @@ bool GrD3DPipelineStateBuilder::loadHLSLFromCache(SkReadBuffer* reader, gr_cp<ID
     }
 
     auto compile = [&](SkSL::ProgramKind kind, GrShaderType shaderType) {
-        if (inputs[shaderType].fUseFlipRTUniform) {
-            this->addRTFlipUniform(SKSL_RTFLIP_NAME);
+        if (inputs[shaderType].fRTHeight) {
+            this->addRTHeightUniform(SKSL_RTHEIGHT_NAME);
         }
         shaders[shaderType] = GrCompileHLSLShader(fGpu, hlsl[shaderType], kind);
         return shaders[shaderType].get();
     };
 
     return compile(SkSL::ProgramKind::kVertex, kVertex_GrShaderType) &&
-           compile(SkSL::ProgramKind::kFragment, kFragment_GrShaderType);
+           compile(SkSL::ProgramKind::kFragment, kFragment_GrShaderType) &&
+           (hlsl[kGeometry_GrShaderType].empty() ||
+            compile(SkSL::ProgramKind::kGeometry, kGeometry_GrShaderType));
 }
 
 gr_cp<ID3DBlob> GrD3DPipelineStateBuilder::compileD3DProgram(
         SkSL::ProgramKind kind,
-        const std::string& sksl,
+        const SkSL::String& sksl,
         const SkSL::Program::Settings& settings,
         SkSL::Program::Inputs* outInputs,
-        std::string* outHLSL) {
+        SkSL::String* outHLSL) {
 #ifdef SK_DEBUG
-    std::string src = SkShaderUtils::PrettyPrint(sksl);
+    SkSL::String src = GrShaderUtils::PrettyPrint(sksl);
 #else
-    const std::string& src = sksl;
+    const SkSL::String& src = sksl;
 #endif
 
     std::unique_ptr<SkSL::Program> program = fGpu->shaderCompiler()->convertProgram(
@@ -156,19 +161,19 @@ gr_cp<ID3DBlob> GrD3DPipelineStateBuilder::compileD3DProgram(
     *outInputs = program->fInputs;
 
     if (gPrintSKSL || gPrintHLSL) {
-        SkShaderUtils::PrintShaderBanner(kind);
+        GrShaderUtils::PrintShaderBanner(kind);
         if (gPrintSKSL) {
             SkDebugf("SKSL:\n");
-            SkShaderUtils::PrintLineByLine(SkShaderUtils::PrettyPrint(sksl));
+            GrShaderUtils::PrintLineByLine(GrShaderUtils::PrettyPrint(sksl));
         }
         if (gPrintHLSL) {
             SkDebugf("HLSL:\n");
-            SkShaderUtils::PrintLineByLine(SkShaderUtils::PrettyPrint(*outHLSL));
+            GrShaderUtils::PrintLineByLine(GrShaderUtils::PrettyPrint(*outHLSL));
         }
     }
 
-    if (program->fInputs.fUseFlipRTUniform) {
-        this->addRTFlipUniform(SKSL_RTFLIP_NAME);
+    if (program->fInputs.fRTHeight) {
+        this->addRTHeightUniform(SKSL_RTHEIGHT_NAME);
     }
 
     return GrCompileHLSLShader(fGpu, *outHLSL, kind);
@@ -222,7 +227,7 @@ static DXGI_FORMAT attrib_type_to_format(GrVertexAttribType type) {
         return DXGI_FORMAT_R16G16_UNORM;
     case kInt_GrVertexAttribType:
         return DXGI_FORMAT_R32_SINT;
-    case kUInt_GrVertexAttribType:
+    case kUint_GrVertexAttribType:
         return DXGI_FORMAT_R32_UINT;
     case kUShort_norm_GrVertexAttribType:
         return DXGI_FORMAT_R16_UNORM;
@@ -245,26 +250,32 @@ static void setup_vertex_input_layout(const GrGeometryProcessor& geomProc,
     }
 
     unsigned int currentAttrib = 0;
+    unsigned int vertexAttributeOffset = 0;
 
-    for (auto attrib : geomProc.vertexAttributes()) {
+    for (const auto& attrib : geomProc.vertexAttributes()) {
         // When using SPIRV-Cross it converts the location modifier in SPIRV to be
         // TEXCOORD<N> where N is the location value for eveery vertext attribute
         inputElements[currentAttrib] = { "TEXCOORD", currentAttrib,
                                         attrib_type_to_format(attrib.cpuType()),
-                                        vertexSlot, SkToU32(*attrib.offset()),
+                                        vertexSlot, vertexAttributeOffset,
                                         D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 };
+        vertexAttributeOffset += attrib.sizeAlign4();
         currentAttrib++;
     }
+    SkASSERT(vertexAttributeOffset == geomProc.vertexStride());
 
-    for (auto attrib : geomProc.instanceAttributes()) {
+    unsigned int instanceAttributeOffset = 0;
+    for (const auto& attrib : geomProc.instanceAttributes()) {
         // When using SPIRV-Cross it converts the location modifier in SPIRV to be
         // TEXCOORD<N> where N is the location value for eveery vertext attribute
         inputElements[currentAttrib] = { "TEXCOORD", currentAttrib,
                                         attrib_type_to_format(attrib.cpuType()),
-                                        instanceSlot, SkToU32(*attrib.offset()),
+                                        instanceSlot, instanceAttributeOffset,
                                         D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 };
+        instanceAttributeOffset += attrib.sizeAlign4();
         currentAttrib++;
     }
+    SkASSERT(instanceAttributeOffset == geomProc.instanceStride());
 }
 
 static D3D12_BLEND blend_coeff_to_d3d_blend(GrBlendCoeff coeff) {
@@ -371,9 +382,7 @@ static void fill_in_blend_state(const GrPipeline& pipeline, D3D12_BLEND_DESC* bl
     }
 }
 
-static void fill_in_rasterizer_state(const GrPipeline& pipeline,
-                                     bool multisampleEnable,
-                                     const GrCaps* caps,
+static void fill_in_rasterizer_state(const GrPipeline& pipeline, const GrCaps* caps,
                                      D3D12_RASTERIZER_DESC* rasterizer) {
     rasterizer->FillMode = (caps->wireframeMode() || pipeline.isWireframe()) ?
         D3D12_FILL_MODE_WIREFRAME : D3D12_FILL_MODE_SOLID;
@@ -383,7 +392,7 @@ static void fill_in_rasterizer_state(const GrPipeline& pipeline,
     rasterizer->DepthBiasClamp = 0.0f;
     rasterizer->SlopeScaledDepthBias = 0.0f;
     rasterizer->DepthClipEnable = false;
-    rasterizer->MultisampleEnable = multisampleEnable;
+    rasterizer->MultisampleEnable = pipeline.isHWAntialiasState();
     rasterizer->AntialiasedLineEnable = false;
     rasterizer->ForcedSampleCount = 0;
     rasterizer->ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
@@ -490,7 +499,7 @@ static D3D12_PRIMITIVE_TOPOLOGY_TYPE gr_primitive_type_to_d3d(GrPrimitiveType pr
 
 gr_cp<ID3D12PipelineState> create_pipeline_state(
         GrD3DGpu* gpu, const GrProgramInfo& programInfo, const sk_sp<GrD3DRootSignature>& rootSig,
-        gr_cp<ID3DBlob> vertexShader, gr_cp<ID3DBlob> pixelShader,
+        gr_cp<ID3DBlob> vertexShader, gr_cp<ID3DBlob> geometryShader, gr_cp<ID3DBlob> pixelShader,
         DXGI_FORMAT renderTargetFormat, DXGI_FORMAT depthStencilFormat,
         unsigned int sampleQualityPattern) {
     D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
@@ -502,13 +511,17 @@ gr_cp<ID3D12PipelineState> create_pipeline_state(
     psoDesc.PS = { reinterpret_cast<UINT8*>(pixelShader->GetBufferPointer()),
                    pixelShader->GetBufferSize() };
 
+    if (geometryShader.get()) {
+        psoDesc.GS = { reinterpret_cast<UINT8*>(geometryShader->GetBufferPointer()),
+                       geometryShader->GetBufferSize() };
+    }
+
     psoDesc.StreamOutput = { nullptr, 0, nullptr, 0, 0 };
 
     fill_in_blend_state(programInfo.pipeline(), &psoDesc.BlendState);
     psoDesc.SampleMask = UINT_MAX;
 
-    fill_in_rasterizer_state(programInfo.pipeline(), programInfo.numSamples() > 1, gpu->caps(),
-                             &psoDesc.RasterizerState);
+    fill_in_rasterizer_state(programInfo.pipeline(), gpu->caps(), &psoDesc.RasterizerState);
 
     fill_in_depth_stencil_state(programInfo, &psoDesc.DepthStencilState);
 
@@ -555,14 +568,22 @@ static constexpr SkFourByteTag kSKSL_Tag = SkSetFourByteTag('S', 'K', 'S', 'L');
 std::unique_ptr<GrD3DPipelineState> GrD3DPipelineStateBuilder::finalize() {
     TRACE_EVENT0("skia.shaders", TRACE_FUNC);
 
+    // We need to enable the following extensions so that the compiler can correctly make spir-v
+    // from our glsl shaders.
+    fVS.extensions().appendf("#extension GL_ARB_separate_shader_objects : enable\n");
+    fFS.extensions().appendf("#extension GL_ARB_separate_shader_objects : enable\n");
+    fVS.extensions().appendf("#extension GL_ARB_shading_language_420pack : enable\n");
+    fFS.extensions().appendf("#extension GL_ARB_shading_language_420pack : enable\n");
+
     this->finalizeShaders();
 
     SkSL::Program::Settings settings;
+    settings.fFlipY = this->origin() != kTopLeft_GrSurfaceOrigin;
     settings.fSharpenTextures =
         this->gpu()->getContext()->priv().options().fSharpenMipmappedTextures;
-    settings.fRTFlipOffset = fUniformHandler.getRTFlipOffset();
-    settings.fRTFlipBinding = 0;
-    settings.fRTFlipSet = 0;
+    settings.fRTHeightOffset = fUniformHandler.getRTHeightOffset();
+    settings.fRTHeightBinding = 0;
+    settings.fRTHeightSet = 0;
 
     sk_sp<SkData> cached;
     SkReadBuffer reader;
@@ -587,12 +608,13 @@ std::unique_ptr<GrD3DPipelineState> GrD3DPipelineStateBuilder::finalize() {
         // We successfully loaded and compiled HLSL
     } else {
         SkSL::Program::Inputs inputs[kGrShaderTypeCount];
-        std::string* sksl[kGrShaderTypeCount] = {
+        SkSL::String* sksl[kGrShaderTypeCount] = {
             &fVS.fCompilerString,
+            &fGS.fCompilerString,
             &fFS.fCompilerString,
         };
-        std::string cached_sksl[kGrShaderTypeCount];
-        std::string hlsl[kGrShaderTypeCount];
+        SkSL::String cached_sksl[kGrShaderTypeCount];
+        SkSL::String hlsl[kGrShaderTypeCount];
 
         if (kSKSL_Tag == shaderType) {
             if (GrPersistentCacheUtils::UnpackCachedShaders(&reader, cached_sksl, inputs,
@@ -614,6 +636,12 @@ std::unique_ptr<GrD3DPipelineState> GrD3DPipelineStateBuilder::finalize() {
             return nullptr;
         }
 
+        if (geomProc.willUseGeoShader()) {
+            if (!compile(SkSL::ProgramKind::kGeometry, kGeometry_GrShaderType)) {
+                return nullptr;
+            }
+        }
+
         if (persistentCache && !cached) {
             const bool cacheSkSL = fGpu->getContext()->priv().options().fShaderCacheStrategy ==
                                    GrContextOptions::ShaderCacheStrategy::kSkSL;
@@ -621,7 +649,7 @@ std::unique_ptr<GrD3DPipelineState> GrD3DPipelineStateBuilder::finalize() {
                 // Replace the HLSL with formatted SkSL to be cached. This looks odd, but this is
                 // the last time we're going to use these strings, so it's safe.
                 for (int i = 0; i < kGrShaderTypeCount; ++i) {
-                    hlsl[i] = SkShaderUtils::PrettyPrint(*sksl[i]);
+                    hlsl[i] = GrShaderUtils::PrettyPrint(*sksl[i]);
                 }
             }
             sk_sp<SkData> key =
@@ -642,22 +670,22 @@ std::unique_ptr<GrD3DPipelineState> GrD3DPipelineStateBuilder::finalize() {
     const GrD3DRenderTarget* rt = static_cast<const GrD3DRenderTarget*>(fRenderTarget);
     gr_cp<ID3D12PipelineState> pipelineState = create_pipeline_state(
             fGpu, fProgramInfo, rootSig, std::move(shaders[kVertex_GrShaderType]),
-            std::move(shaders[kFragment_GrShaderType]),
+            std::move(shaders[kGeometry_GrShaderType]), std::move(shaders[kFragment_GrShaderType]),
             rt->dxgiFormat(), rt->stencilDxgiFormat(), rt->sampleQualityPattern());
     sk_sp<GrD3DPipeline> pipeline = GrD3DPipeline::Make(std::move(pipelineState));
 
     return std::unique_ptr<GrD3DPipelineState>(
-            new GrD3DPipelineState(std::move(pipeline),
-                                   std::move(rootSig),
-                                   fUniformHandles,
-                                   fUniformHandler.fUniforms,
-                                   fUniformHandler.fCurrentUBOOffset,
-                                   fUniformHandler.fSamplers.count(),
-                                   std::move(fGPImpl),
-                                   std::move(fXPImpl),
-                                   std::move(fFPImpls),
-                                   geomProc.vertexStride(),
-                                   geomProc.instanceStride()));
+                                     new GrD3DPipelineState(std::move(pipeline),
+                                                            std::move(rootSig),
+                                                            fUniformHandles,
+                                                            fUniformHandler.fUniforms,
+                                                            fUniformHandler.fCurrentUBOOffset,
+                                                            fUniformHandler.fSamplers.count(),
+                                                            std::move(fGeometryProcessor),
+                                                            std::move(fXferProcessor),
+                                                            std::move(fFPImpls),
+                                                            geomProc.vertexStride(),
+                                                            geomProc.instanceStride()));
 }
 
 

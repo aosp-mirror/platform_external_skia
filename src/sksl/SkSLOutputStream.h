@@ -37,11 +37,11 @@ public:
 
     virtual void write(const void* s, size_t size) = 0;
 
-    void writeString(const std::string& s);
+    void writeString(const String& s);
 
     void printf(const char format[], ...) SK_PRINTF_LIKE(2, 3);
 
-    void appendVAList(const char format[], va_list args) SK_PRINTF_LIKE(2, 0);
+    void appendVAList(const char format[], va_list args);
 
     virtual ~OutputStream() {}
 

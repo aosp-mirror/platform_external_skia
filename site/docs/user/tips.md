@@ -3,7 +3,17 @@ title: 'Tips & FAQ'
 linkTitle: 'Tips & FAQ'
 ---
 
-## Capture a `.skp` file on a web page in Chromium
+- [Bitmap Subsetting](#bitmap-subsetting)
+- [Capture a `.skp` file on a web page in Chromium](#skp-capture)
+- [Capture a `.mskp` file on a web page in Chromium](#mskp-capture)
+- [How to add hardware acceleration in Skia](#hw-acceleration)
+- [Does Skia support Font hinting?](#font-hinting)
+- [Does Skia shape text (kerning)?](#kerning)
+- [How do I add drop shadow on text?](#text-shadow)
+
+---
+
+## <span id="skp-capture">Capture a `.skp` file on a web page in Chromium</span>
 
 Use the script `experimental/tools/web_to_skp` , _or_ do the following:
 
@@ -25,7 +35,7 @@ rasterize it with `dm`, or use Skia's `viewer` to view it:
 
 ---
 
-## Capture a `.mskp` file on a web page in Chromium
+## <span id="mskp-capture">Capture a `.mskp` file on a web page in Chromium</span>
 
 Multipage Skia Picture files capture the commands sent to produce PDFs and
 printed documents.
@@ -53,7 +63,7 @@ process it with `dm`.
 
 ---
 
-## How to add hardware acceleration in Skia
+## <span id="hw-acceleration">How to add hardware acceleration in Skia</span>
 
 There are two ways Skia takes advantage of specific hardware.
 
@@ -62,11 +72,11 @@ There are two ways Skia takes advantage of specific hardware.
     There are sets of bottleneck routines inside the blits of Skia that can be
     replace on a platform in order to take advantage of specific CPU features.
     One such example is the NEON SIMD instructions on ARM v7 devices. See
-    [src/opts/](https://skia.googlesource.com/skia/+/main/src/opts/)
+    [src/opts/](https://skia.googlesource.com/skia/+/master/src/opts/)
 
 ---
 
-## Does Skia support Font hinting?
+## <span id="font-hinting">Does Skia support Font hinting?</span>
 
 Skia has a built-in font cache, but it does not know how to actually render font
 files like TrueType into its cache. For that it relies on the platform to supply
@@ -77,7 +87,7 @@ be supported in a like manner.
 
 ---
 
-## Does Skia shape text (kerning)?
+## <span id="kerning">Does Skia shape text (kerning)?</span>
 
 Shaping is the process that translates a span of Unicode text into a span of
 positioned glyphs with the appropriate typefaces.
@@ -95,6 +105,31 @@ to draw those glyphs.
 
 ---
 
-## How do I add drop shadow on text?
+## <span id="text-shadow">How do I add drop shadow on text?</span>
 
-<fiddle-embed-sk name='1ff4da09e515087f7011c7caec2e98ae'></fiddle-embed-sk>
+<!--?prettify lang=cc?-->
+
+    void draw(SkCanvas* canvas) {
+        const SkScalar sigma = 1.65f;
+        const SkScalar xDrop = 2.0f;
+        const SkScalar yDrop = 2.0f;
+        const SkScalar x = 8.0f;
+        const SkScalar y = 52.0f;
+        const SkScalar textSize = 48.0f;
+        const uint8_t blurAlpha = 127;
+        auto blob = SkTextBlob::MakeFromString("Skia", SkFont(nullptr, textSize));
+        SkPaint paint;
+        paint.setAntiAlias(true);
+        SkPaint blur(paint);
+        blur.setAlpha(blurAlpha);
+        blur.setMaskFilter(SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, sigma, 0));
+        canvas->drawColor(SK_ColorWHITE);
+        canvas->drawTextBlob(blob.get(), x + xDrop, y + yDrop, blur);
+        canvas->drawTextBlob(blob.get(), x,         y,         paint);
+    }
+
+<a href='https://fiddle.skia.org/c/@text_shadow'><img src='https://fiddle.skia.org/i/@text_shadow_raster.png'></a>
+
+---
+
+<div style="margin-bottom:99%"></div>

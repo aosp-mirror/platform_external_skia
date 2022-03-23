@@ -107,7 +107,7 @@ public:
         const SkSVGNode* operator->() const { return fBorrowed.get(); }
         const SkSVGNode& operator*() const { return *fBorrowed; }
 
-        explicit operator bool() const { return !!fBorrowed; }
+        operator bool() const { return !!fBorrowed; }
 
     private:
         // noncopyable

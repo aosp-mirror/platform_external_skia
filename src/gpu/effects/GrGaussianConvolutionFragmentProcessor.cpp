@@ -10,8 +10,8 @@
 #include "src/core/SkGpuBlurUtils.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxy.h"
-#include "src/gpu/KeyBuilder.h"
 #include "src/gpu/effects/GrTextureEffect.h"
+#include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
@@ -21,17 +21,22 @@
 using UniformHandle = GrGLSLProgramDataManager::UniformHandle;
 using Direction = GrGaussianConvolutionFragmentProcessor::Direction;
 
-class GrGaussianConvolutionFragmentProcessor::Impl : public ProgramImpl {
+class GrGaussianConvolutionFragmentProcessor::Impl : public GrGLSLFragmentProcessor {
 public:
     void emitCode(EmitArgs&) override;
 
-private:
+    static inline void GenKey(const GrProcessor&, const GrShaderCaps&, GrProcessorKeyBuilder*);
+
+protected:
     void onSetData(const GrGLSLProgramDataManager&, const GrFragmentProcessor&) override;
 
+private:
     UniformHandle fKernelUni;
     UniformHandle fOffsetsUni;
     UniformHandle fKernelWidthUni;
     UniformHandle fIncrementUni;
+
+    using INHERITED = GrGLSLFragmentProcessor;
 };
 
 enum class LoopType {
@@ -42,7 +47,7 @@ enum class LoopType {
 
 static LoopType loop_type(const GrShaderCaps& caps) {
     // This checks that bitwise integer operations and array indexing by non-consts are allowed.
-    if (caps.generation() < SkSL::GLSLGeneration::k130) {
+    if (caps.generation() < k130_GrGLSLGeneration) {
         return LoopType::kUnrolled;
     }
     // If we're in reduced shader mode and we can have a loop then use a uniform to limit the
@@ -56,8 +61,8 @@ void GrGaussianConvolutionFragmentProcessor::Impl::emitCode(EmitArgs& args) {
 
     using namespace SkSL::dsl;
     StartFragmentProcessor(this, &args);
-    GlobalVar increment(kUniform_Modifier, kHalf2_Type, "Increment");
-    Declare(increment);
+    Var increment(kUniform_Modifier, kHalf2_Type, "Increment");
+    DeclareGlobal(increment);
     fIncrementUni = VarUniformHandle(increment);
 
     int width = SkGpuBlurUtils::LinearKernelWidth(ce.fRadius);
@@ -73,13 +78,13 @@ void GrGaussianConvolutionFragmentProcessor::Impl::emitCode(EmitArgs& args) {
         SkASSERT(4 * arrayCount >= width);
     }
 
-    GlobalVar kernel(kUniform_Modifier, Array(kHalf4_Type, arrayCount), "Kernel");
-    Declare(kernel);
+    Var kernel(kUniform_Modifier, Array(kHalf4_Type, arrayCount), "Kernel");
+    DeclareGlobal(kernel);
     fKernelUni = VarUniformHandle(kernel);
 
 
-    GlobalVar offsets(kUniform_Modifier, Array(kHalf4_Type, arrayCount), "Offsets");
-    Declare(offsets);
+    Var offsets(kUniform_Modifier, Array(kHalf4_Type, arrayCount), "Offsets");
+    DeclareGlobal(offsets);
     fOffsetsUni = VarUniformHandle(offsets);
 
     Var color(kHalf4_Type, "color", Half4(0));
@@ -103,8 +108,8 @@ void GrGaussianConvolutionFragmentProcessor::Impl::emitCode(EmitArgs& args) {
             break;
         }
         case LoopType::kVariableLength: {
-            GlobalVar kernelWidth(kUniform_Modifier, kInt_Type, "kernelWidth");
-            Declare(kernelWidth);
+            Var kernelWidth(kUniform_Modifier, kInt_Type, "kernelWidth");
+            DeclareGlobal(kernelWidth);
             fKernelWidthUni = VarUniformHandle(kernelWidth);
             Var i(kInt_Type, "i", 0);
             For(Declare(i), i < kernelWidth, i++,
@@ -135,6 +140,15 @@ void GrGaussianConvolutionFragmentProcessor::Impl::onSetData(const GrGLSLProgram
     pdman.set4fv(fOffsetsUni, arrayCount, conv.fOffsets);
     if (fKernelWidthUni.isValid()) {
         pdman.set1i(fKernelWidthUni, width);
+    }
+}
+
+void GrGaussianConvolutionFragmentProcessor::Impl::GenKey(const GrProcessor& processor,
+                                                          const GrShaderCaps& shaderCaps,
+                                                          GrProcessorKeyBuilder* b) {
+    const auto& conv = processor.cast<GrGaussianConvolutionFragmentProcessor>();
+    if (loop_type(shaderCaps) != LoopType::kVariableLength) {
+        b->add32(conv.fRadius);
     }
 }
 
@@ -213,21 +227,21 @@ GrGaussianConvolutionFragmentProcessor::GrGaussianConvolutionFragmentProcessor(
 
 GrGaussianConvolutionFragmentProcessor::GrGaussianConvolutionFragmentProcessor(
         const GrGaussianConvolutionFragmentProcessor& that)
-        : INHERITED(that)
+        : INHERITED(kGrGaussianConvolutionFragmentProcessor_ClassID, that.optimizationFlags())
         , fRadius(that.fRadius)
         , fDirection(that.fDirection) {
+    this->cloneAndRegisterAllChildProcessors(that);
     memcpy(fKernel, that.fKernel, SkGpuBlurUtils::LinearKernelWidth(fRadius) * sizeof(float));
     memcpy(fOffsets, that.fOffsets, SkGpuBlurUtils::LinearKernelWidth(fRadius) * sizeof(float));
+    this->setUsesSampleCoordsDirectly();
 }
 
-void GrGaussianConvolutionFragmentProcessor::onAddToKey(const GrShaderCaps& shaderCaps,
-                                                        skgpu::KeyBuilder* b) const {
-    if (loop_type(shaderCaps) != LoopType::kVariableLength) {
-        b->add32(fRadius);
-    }
+void GrGaussianConvolutionFragmentProcessor::onGetGLSLProcessorKey(const GrShaderCaps& caps,
+                                                                   GrProcessorKeyBuilder* b) const {
+    Impl::GenKey(*this, caps, b);
 }
 
-std::unique_ptr<GrFragmentProcessor::ProgramImpl>
+std::unique_ptr<GrGLSLFragmentProcessor>
 GrGaussianConvolutionFragmentProcessor::onMakeProgramImpl() const {
     return std::make_unique<Impl>();
 }

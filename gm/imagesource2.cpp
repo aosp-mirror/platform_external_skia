@@ -8,6 +8,7 @@
 #include "gm/gm.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkFilterQuality.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageFilter.h"
 #include "include/core/SkPaint.h"
@@ -84,7 +85,7 @@ protected:
     }
 
 private:
-    inline static constexpr int kImageSize = 503;
+    static constexpr int kImageSize = 503;
 
     SkString          fSuffix;
     SkSamplingOptions fSampling;
