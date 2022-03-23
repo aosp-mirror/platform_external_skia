@@ -76,20 +76,11 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
 
     fShaderCaps = std::make_unique<GrShaderCaps>();
 
-    // All of Skia's automated testing of ANGLE and all related tuning of performance and driver
-    // workarounds is oriented around the D3D backends of ANGLE. Chrome has started using Skia
-    // on top of ANGLE's GL backend. In this case ANGLE is still interfacing the same underlying
-    // GL driver that our performance and correctness tuning was performed on. To avoid losing
-    // that we strip the ANGLE info and for the rest of caps setup pretend we're directly on top of
-    // the GL driver. Note that this means that some driver workarounds are likely implemented at
-    // two levels of the stack (Skia and ANGLE) but we haven't determined which.
-    if (ctxInfo.angleBackend() == GrGLANGLEBackend::kOpenGL) {
-        this->init(contextOptions, ctxInfo.makeNonAngle(), glInterface);
-        // A major caveat is that ANGLE does not allow client side arrays.
-        fPreferClientSideDynamicBuffers = false;
-    } else {
-        this->init(contextOptions, ctxInfo, glInterface);
-    }
+    this->init(contextOptions, ctxInfo, glInterface);
+}
+
+static bool angle_backend_is_d3d(GrGLANGLEBackend backend) {
+    return backend == GrGLANGLEBackend::kD3D9 || backend == GrGLANGLEBackend::kD3D11;
 }
 
 void GrGLCaps::init(const GrContextOptions& contextOptions,
@@ -458,10 +449,13 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     // We've measured a performance increase using non-VBO vertex data for dynamic content on these
     // GPUs. Perhaps we should read the renderer string and limit this decision to specific GPU
     // families rather than basing it on the vendor alone.
-    // The Chrome command buffer blocks the use of client side buffers (but may emulate VBOs with
-    // them). Client side buffers are not allowed in core profiles.
+    // Angle doesn't support client side buffers. The Chrome command buffer blocks the use of client
+    // side buffers (but may emulate VBOs with them). Client side buffers are not allowed in core
+    // profiles.
     if (GR_IS_GR_GL(standard) || GR_IS_GR_GL_ES(standard)) {
-        if (!ctxInfo.isOverCommandBuffer() && !fIsCoreProfile &&
+        if (ctxInfo.angleBackend() == GrGLANGLEBackend::kUnknown &&
+            !ctxInfo.isOverCommandBuffer() &&
+            !fIsCoreProfile &&
             (ctxInfo.vendor() == GrGLVendor::kARM         ||
              ctxInfo.vendor() == GrGLVendor::kImagination ||
              ctxInfo.vendor() == GrGLVendor::kQualcomm)) {
@@ -622,11 +616,11 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     }
 
 #ifdef SK_BUILD_FOR_WIN
-    // We're assuming that on Windows Chromium we're using ANGLE.
-    bool isANGLE = ctxInfo.angleBackend() != GrGLANGLEBackend::kUnknown ||
-                   ctxInfo.isOverCommandBuffer();
+    // We're assuming that on Windows Chromium we're using D3D ANGLE.
+    bool isD3DANGLE = angle_backend_is_d3d(ctxInfo.angleBackend()) ||
+                      ctxInfo.isOverCommandBuffer();
     // On ANGLE deferring flushes can lead to GPU starvation
-    fPreferVRAMUseOverFlushes = !isANGLE;
+    fPreferVRAMUseOverFlushes = !isD3DANGLE;
 #endif
 
     if (ctxInfo.isOverCommandBuffer()) {
@@ -945,7 +939,7 @@ void GrGLCaps::initGLSL(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli
     // Is this only true on ANGLE's D3D backends or also on the GL backend?
     shaderCaps->fPreferFlatInterpolation = shaderCaps->fFlatInterpolationSupport &&
                                            ctxInfo.vendor() != GrGLVendor::kQualcomm &&
-                                           ctxInfo.angleBackend() == GrGLANGLEBackend::kUnknown;
+                                           !angle_backend_is_d3d(ctxInfo.angleBackend());
     if (GR_IS_GR_GL(standard)) {
         shaderCaps->fNoPerspectiveInterpolationSupport =
             ctxInfo.glslGeneration() >= SkSL::GLSLGeneration::k130;
@@ -1934,24 +1928,6 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
         FormatInfo& info = this->getFormatInfo(GrGLFormat::kBGRA8);
         info.fFormatType = FormatType::kNormalizedFixedPoint;
 
-        // We currently only use the renderbuffer format when allocating msaa renderbuffers, so we
-        // are making decisions here based on that use case. The GL_EXT_texture_format_BGRA8888
-        // extension adds BGRA color renderbuffer support for ES 2.0, but this does not guarantee
-        // support for MSAA renderbuffers. Additionally, the renderable support was added in a later
-        // revision of the extension. So it is possible for older drivers to support the extension
-        // but only an early revision of it without renderable support. We have no way of
-        // distinguishing between the two. The GL_APPLE_texture_format_BGRA8888 does not add support
-        // for BGRA color renderbuffers at all. Ideally, for both cases we would use RGBA8 for our
-        // format for the MSAA buffer. In the GL_EXT_texture_format_BGRA8888 case we can still
-        // make the resolve BGRA and which will work for glBlitFramebuffer for resolving which just
-        // requires the src and dst be bindable to FBOs. However, we can't do this in the current
-        // world since some devices (e.g. chromium & angle) require the formats in glBlitFramebuffer
-        // to match. We don't have a way to really check this during resolve since we only actually
-        // have GrBackendFormat that is shared by the GrGLRenderTarget. We always set the
-        // renderbuffer format to RGBA8 but disable MSAA unless we have the APPLE extension.
-        // Once we break those up into different surface we can revisit doing this change.
-        info.fInternalFormatForRenderbuffer = GR_GL_RGBA8;
-
         info.fDefaultExternalFormat = GR_GL_BGRA;
         info.fDefaultExternalType = GR_GL_UNSIGNED_BYTE;
         info.fDefaultColorType = GrColorType::kBGRA_8888;
@@ -1981,9 +1957,42 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
 
         if (GR_IS_GR_GL_ES(standard)) {
             if (ctxInfo.hasExtension("GL_EXT_texture_format_BGRA8888")) {
+                // The GL_EXT_texture_format_BGRA8888 extension adds BGRA color renderbuffer support
+                // for ES 2.0. The extension adds BGRA to the supported renerable formats in table
+                // 4.5. In ES 2.0. All the extensions that add multisample support, all reference
+                // table 4.5 as the formats that are supported. Thus we can use msaaRenderFlags.
+                // Additionally, the renderable support was added in a later revision of the
+                // extension. So it is possible for older drivers to support the extension but only
+                // an early revision of it without renderable support. We have no way of
+                // distinguishing between the two and assume renderable.
+
+
                 info.fFlags = FormatInfo::kTexturable_Flag
-                            | FormatInfo::kTransfers_Flag
-                            | nonMSAARenderFlags;
+                            | FormatInfo::kTransfers_Flag;
+                // Only enable BGRA msaa if we know we're going through Angle. The spec for
+                // GL_EXT_texture_format_BGRA8888 was updated in 2016 to add support for GL_BGRA_EXT
+                // as a sized, renderable format. But we may end up running on old drivers written
+                // against earlier version of the spec. Also the interactions between all these
+                // extensions are very suibtle and it wouldn't be hard for a driver to mess them up.
+                // We are confident that Angle does it as we expect. Our non-angle test bots do seem
+                // to pass and draw correctly so we could consider enabling this more broadly in the
+                // future.
+                if (ctxInfo.angleBackend() != GrGLANGLEBackend::kUnknown) {
+                    // Angle incorrectly requires GL_BGRA8_EXT for the interalFormat for both ES2
+                    // and ES3 even though this extension does not define that value. The extension
+                    // only defines GL_BGRA_EXT as an internal format.
+                    info.fInternalFormatForRenderbuffer = GR_GL_BGRA8;
+                    info.fFlags |= msaaRenderFlags;
+                } else {
+                    // It is not clear what the correct format to use on ES3 is. This extension only
+                    // defines GL_BGRA_EXT. That is definitely the correct thing to use on ES2, but
+                    // its unclear whether that is valid in ES3 or if it wants something like
+                    // GL_BGRA8_EXT (which is only defined in the apple extenstion). For now we set
+                    // everything to use BGRA since its the only explicitly defined value. Until we
+                    // enable MSAA for non-angle this is a moot point.
+                    info.fInternalFormatForRenderbuffer = GR_GL_BGRA;
+                    info.fFlags |= nonMSAARenderFlags;
+                }
                 // GL_EXT_texture storage has defined interactions with
                 // GL_EXT_texture_format_BGRA8888. However, ES3 supports glTexStorage but
                 // without GL_EXT_texture_storage it does not allow the BGRA8 sized internal format.
@@ -2006,6 +2015,9 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
                     info.fFlags = FormatInfo::kTexturable_Flag
                                 | FormatInfo::kTransfers_Flag
                                 | msaaRenderFlags;
+                    // The GL_APPLE_texture_format_BGRA8888 does not add support for BGRA color
+                    // renderbuffers at all so we use RGBA here.
+                    info.fInternalFormatForRenderbuffer = GR_GL_RGBA8;
                     supportsBGRATexStorage = true;
                 }
             }
@@ -3723,8 +3735,7 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
 
     // The TransferPixelsToTexture test fails on ANGLE D3D9 and D3D11 if this is enabled.
     // https://anglebug.com/5542
-    if (ctxInfo.angleBackend() == GrGLANGLEBackend::kD3D9 ||
-        ctxInfo.angleBackend() == GrGLANGLEBackend::kD3D11) {
+    if (angle_backend_is_d3d(ctxInfo.angleBackend())) {
         fTransferPixelsToRowBytesSupport = false;
     }
 
@@ -4022,7 +4033,7 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
     // we've explicitly guarded the division with a check against zero. This manifests in much
     // more complex ways in some of our shaders, so we use this caps bit to add an epsilon value
     // to the denominator of divisions, even when we've added checks that the denominator isn't 0.
-    if (ctxInfo.angleBackend() != GrGLANGLEBackend::kUnknown || ctxInfo.isOverCommandBuffer()) {
+    if (angle_backend_is_d3d(ctxInfo.angleBackend()) || ctxInfo.isOverCommandBuffer()) {
         shaderCaps->fMustGuardDivisionEvenAfterExplicitZeroCheck = true;
     }
 #endif
