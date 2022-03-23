@@ -11,8 +11,6 @@
 #include "include/private/SkSLDefines.h"
 #include "src/sksl/SkSLLexer.h"
 
-#include <string_view>
-
 namespace SkSL {
 
 class Context;
@@ -24,7 +22,7 @@ public:
 
     // Allow implicit conversion from Token::Kind, since this is just a utility wrapper on top.
     Operator(Token::Kind t) : fKind(t) {
-        SkASSERTF(this->isOperator(), "token-kind %d is not an operator", (int)fKind);
+        SkASSERTF(this->isOperator(), "token-kind %d is not an operator", fKind);
     }
 
     enum class Precedence {
@@ -50,17 +48,9 @@ public:
 
     Token::Kind kind() const { return fKind; }
 
-    bool isEquality() const {
-        return fKind == Token::Kind::TK_EQEQ || fKind == Token::Kind::TK_NEQ;
-    }
-
     Precedence getBinaryPrecedence() const;
 
-    // Returns the operator name surrounded by the expected whitespace for a tidy binary expression.
     const char* operatorName() const;
-
-    // Returns the operator name without any surrounding whitespace.
-    std::string_view tightOperatorName() const;
 
     // Returns true if op is '=' or any compound assignment operator ('+=', '-=', etc.)
     bool isAssignment() const;
@@ -107,11 +97,11 @@ public:
                              const Type& right,
                              const Type** outLeftType,
                              const Type** outRightType,
-                             const Type** outResultType) const;
+                             const Type** outResultType);
 
 private:
     bool isOperator() const;
-    bool isMatrixMultiply(const Type& left, const Type& right) const;
+    bool isMatrixMultiply(const Type& left, const Type& right);
 
     Kind fKind;
 };

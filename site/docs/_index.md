@@ -68,10 +68,18 @@ Click on any image below to see the source code that generated the image.
   </tr>
 </table>
 
+## Roadmap
+
+For a look at high level themes we have on tap the next 6-12 months, view our
+roadmap
+[here](https://docs.google.com/document/d/1LSdO3I-IdZVZCtEnW9pu3k_32gfPIcB_YeSn-OJBGZI/edit?usp=sharing).
+Note it is a living document that changes based on the requirements of our
+users.
+
 ## Platforms
 
 - Windows 7, 8, 8.1, 10
 - macOS 10.10.5 or later
-- iOS 11 or later
+- iOS 8 or later
 - Android 4.1 (JellyBean) or later
-- Ubuntu 18.04+, Debian 10+, openSUSE 15.2+, or Fedora Linux 32+
+- Ubuntu 14.04+, Debian 8+, openSUSE 13.3+, or Fedora Linux 24+

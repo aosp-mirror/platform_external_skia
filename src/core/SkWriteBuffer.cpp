@@ -155,9 +155,6 @@ void SkBinaryWriteBuffer::writeImage(const SkImage* image) {
     if (mips) {
         flags |= SkWriteBufferImageFlags::kHasMipmap;
     }
-    if (image->alphaType() == kUnpremul_SkAlphaType) {
-        flags |= SkWriteBufferImageFlags::kUnpremul;
-    }
 
     this->write32(flags);
 

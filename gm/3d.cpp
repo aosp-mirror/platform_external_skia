@@ -70,9 +70,9 @@ DEF_SIMPLE_GM(sk3d_simple, real_canvas, 300, 300) {
     do_draw(canvas, 0x880000FF);
 
     auto pic = recorder.finishRecordingAsPicture();
-    real_canvas->drawPicture(pic);
-
-    if ((false)) {
+    if (true) {
+        real_canvas->drawPicture(pic);
+    } else {
         auto data = pic->serialize();
         auto pic2 = SkPicture::MakeFromData(data.get());
         real_canvas->drawPicture(pic2);

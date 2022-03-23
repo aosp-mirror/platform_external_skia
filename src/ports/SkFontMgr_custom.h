@@ -68,7 +68,6 @@ protected:
     std::unique_ptr<SkStreamAsset> onOpenStream(int* ttcIndex) const override;
     std::unique_ptr<SkFontData> onMakeFontData() const override;
     sk_sp<SkTypeface> onMakeClone(const SkFontArguments& args) const override;
-    void onGetFontDescriptor(SkFontDescriptor* desc, bool* isLocal) const override;
 
 private:
     const std::unique_ptr<const SkFontData> fData;
@@ -149,6 +148,7 @@ protected:
     sk_sp<SkTypeface> onMakeFromData(sk_sp<SkData> data, int ttcIndex) const override;
     sk_sp<SkTypeface> onMakeFromStreamIndex(std::unique_ptr<SkStreamAsset>, int ttcIndex) const override;
     sk_sp<SkTypeface> onMakeFromStreamArgs(std::unique_ptr<SkStreamAsset>, const SkFontArguments&) const override;
+    sk_sp<SkTypeface> onMakeFromFontData(std::unique_ptr<SkFontData> data) const override;
     sk_sp<SkTypeface> onMakeFromFile(const char path[], int ttcIndex) const override;
     sk_sp<SkTypeface> onLegacyMakeTypeface(const char familyName[], SkFontStyle style) const override;
 

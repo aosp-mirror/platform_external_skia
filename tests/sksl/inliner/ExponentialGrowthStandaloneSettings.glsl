@@ -82,6 +82,7 @@ void fn6_v() {
     sk_FragColor.x = 0.0;
     sk_FragColor.x = 0.0;
     sk_FragColor.x = 0.0;
+    false;
     sk_FragColor.x = 0.0;
     sk_FragColor.x = 0.0;
     sk_FragColor.x = 0.0;
@@ -163,6 +164,7 @@ void fn6_v() {
     sk_FragColor.x = 0.0;
     sk_FragColor.x = 0.0;
     sk_FragColor.x = 0.0;
+    false;
     sk_FragColor.x = 0.0;
     sk_FragColor.x = 0.0;
     sk_FragColor.x = 0.0;
@@ -244,6 +246,7 @@ void fn6_v() {
     sk_FragColor.x = 0.0;
     sk_FragColor.x = 0.0;
     sk_FragColor.x = 0.0;
+    false;
 }
 void fn7_v() {
     sk_FragColor.x = 0.0;
@@ -489,6 +492,7 @@ void fn7_v() {
     sk_FragColor.x = 0.0;
     sk_FragColor.x = 0.0;
     sk_FragColor.x = 0.0;
+    false;
     fn6_v();
     fn6_v();
 }

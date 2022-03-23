@@ -46,7 +46,7 @@ def write_header(filename, workarounds):
       write(indent + macro + '(' + w.upper() + ',')
       write(indent + ' ' * (len(macro) + 1) + w + ')')
 
-    # one extra line to put 'The End' comment.
+    # one extra line to consume the the last \
     f.write('// The End\n')
 
 

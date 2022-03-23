@@ -13,8 +13,8 @@
 #include "src/core/SkCanvasPriv.h"
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrProxyProvider.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrSurfaceProxy.h"
-#include "src/gpu/SurfaceFillContext.h"
 #include "tests/Test.h"
 #include "tests/TestUtils.h"
 #include "tools/gpu/BackendSurfaceFactory.h"
@@ -36,8 +36,8 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(WrappedSurfaceCopyOnWrite, reporter, ctxInfo) {
     };
 
     auto surfaceProxyID = [&](const sk_sp<SkSurface>& surf) {
-        GrRenderTargetProxy* rtp = SkCanvasPriv::TopDeviceTargetProxy(surf->getCanvas());
-        return rtp->uniqueID();
+        GrSurfaceDrawContext* sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(surf->getCanvas());
+        return sdc->asSurfaceProxy()->uniqueID();
     };
 
     sk_sp<SkSurface> surf = makeDirectBackendSurface();
@@ -82,29 +82,26 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(WrappedSurfaceCopyOnWrite, reporter, ctxInfo) {
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkipCopyTaskTest, reporter, ctxInfo) {
     GrDirectContext* dContext = ctxInfo.directContext();
 
-    GrImageInfo info(GrColorType::kRGBA_8888,
-                     kPremul_SkAlphaType,
-                     /*color space*/ nullptr,
-                     10, 10);
+    auto dst = GrSurfaceDrawContext::Make(dContext,
+                                          GrColorType::kRGBA_8888,
+                                          /*color space*/ nullptr,
+                                          SkBackingFit::kExact,
+                                          {10, 10},
+                                          SkSurfaceProps());
+    dst->clear(SkPMColor4f{1, 0, 0, 1});
 
-    auto dstSC = CreateSurfaceContext(dContext,
-                                      info,
-                                      SkBackingFit::kExact,
-                                      kBottomLeft_GrSurfaceOrigin,
-                                      GrRenderable::kYes);
-    dstSC->asFillContext()->clear(SkPMColor4f{1, 0, 0, 1});
-
-    auto srcSC = CreateSurfaceContext(dContext,
-                                      info,
-                                      SkBackingFit::kExact,
-                                      kBottomLeft_GrSurfaceOrigin,
-                                      GrRenderable::kYes);
-    srcSC->asFillContext()->clear(SkPMColor4f{0, 0, 1, 1});
+    auto src = GrSurfaceDrawContext::Make(dContext,
+                                          GrColorType::kRGBA_8888,
+                                          /*color space*/ nullptr,
+                                          SkBackingFit::kExact,
+                                          {10, 10},
+                                          SkSurfaceProps());
+    src->clear(SkPMColor4f{0, 0, 1, 1});
 
     sk_sp<GrRenderTask> task =
-            dContext->priv().drawingManager()->newCopyRenderTask(srcSC->asSurfaceProxyRef(),
+            dContext->priv().drawingManager()->newCopyRenderTask(src->asSurfaceProxyRef(),
                                                                  SkIRect::MakeWH(10, 10),
-                                                                 dstSC->asSurfaceProxyRef(),
+                                                                 dst->asSurfaceProxyRef(),
                                                                  {0, 0},
                                                                  kTopLeft_GrSurfaceOrigin);
 
@@ -117,7 +114,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkipCopyTaskTest, reporter, ctxInfo) {
 
     SkAutoPixmapStorage pixels;
     pixels.alloc(SkImageInfo::Make({10, 10}, kRGBA_8888_SkColorType, kPremul_SkAlphaType));
-    dstSC->readPixels(dContext, pixels, {0, 0});
+    dst->readPixels(dContext, pixels, {0, 0});
     float kTol[4] = {};
     std::function<ComparePixmapsErrorReporter> errorReporter(
             [&](int x, int y, const float diffs[4]) {
@@ -127,24 +124,30 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkipCopyTaskTest, reporter, ctxInfo) {
     CheckSolidPixels(SkColor4f{1, 0, 0, 1}, pixels, kTol, errorReporter);
 }
 
-#if SK_GPU_V1
-
-// Make sure OpsTask are skippable
+// Make sure GrOpsTask are skippable
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkipOpsTaskTest, reporter, ctxInfo) {
     GrDirectContext* dContext = ctxInfo.directContext();
 
-    GrImageInfo ii(GrColorType::kRGBA_8888, kPremul_SkAlphaType, /*color space*/ nullptr, 10, 10);
-
-    auto dst = dContext->priv().makeSFC(ii, SkBackingFit::kExact);
+    auto dst = GrSurfaceDrawContext::Make(dContext,
+                                          GrColorType::kRGBA_8888,
+                                          /*color space*/ nullptr,
+                                          SkBackingFit::kExact,
+                                          {10, 10},
+                                          SkSurfaceProps());
     dst->clear(SkPMColor4f{1, 0, 0, 1});
     dContext->flush();
 
     dst->clear(SkPMColor4f{0, 0, 1, 1});
-    sk_sp<GrRenderTask> task = dst->refRenderTask();
+    sk_sp<GrRenderTask> task = sk_ref_sp(dst->getOpsTask());
 
     // GrDrawingManager maintains an "active ops task" and doesn't like having it closed behind
     // its back. temp exists just to replace dst's ops task as the active one.
-    auto temp = dContext->priv().makeSFC(ii, SkBackingFit::kExact);
+    auto temp = GrSurfaceDrawContext::Make(dContext,
+                                           GrColorType::kRGBA_8888,
+                                           /*color space*/ nullptr,
+                                           SkBackingFit::kExact,
+                                           {10, 10},
+                                           SkSurfaceProps());
     temp->clear(SkPMColor4f{0, 0, 0, 0});
 
     GrSurfaceProxyView readView = dst->readSurfaceView();
@@ -161,4 +164,3 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkipOpsTaskTest, reporter, ctxInfo) {
             });
     CheckSolidPixels(SkColor4f{1, 0, 0, 1}, pixels, kTol, errorReporter);
 }
-#endif // SK_GPU_V1

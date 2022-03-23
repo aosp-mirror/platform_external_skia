@@ -12,17 +12,13 @@
 #include "src/core/SkColorSpaceXformSteps.h"
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkConvertPixels.h"
-#include "src/core/SkMathPriv.h"
 #include "src/core/SkMipmap.h"
-#include "src/core/SkRasterPipeline.h"
 #include "src/core/SkTLazy.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/core/SkUtils.h"
-#include "src/gpu/GrCaps.h"
 #include "src/gpu/GrColor.h"
 #include "src/gpu/GrImageInfo.h"
 #include "src/gpu/GrPixmap.h"
-#include "src/gpu/Swizzle.h"
 
 struct ETC1Block {
     uint32_t fHigh;
@@ -344,9 +340,9 @@ void GrFillInCompressedData(SkImage::CompressionType type, SkISize dimensions,
     }
 }
 
-static skgpu::Swizzle get_load_and_src_swizzle(GrColorType ct, SkRasterPipeline::StockStage* load,
-                                               bool* isNormalized, bool* isSRGB) {
-    skgpu::Swizzle swizzle("rgba");
+static GrSwizzle get_load_and_src_swizzle(GrColorType ct, SkRasterPipeline::StockStage* load,
+                                          bool* isNormalized, bool* isSRGB) {
+    GrSwizzle swizzle("rgba");
     *isNormalized = true;
     *isSRGB = false;
     switch (ct) {
@@ -354,15 +350,15 @@ static skgpu::Swizzle get_load_and_src_swizzle(GrColorType ct, SkRasterPipeline:
         case GrColorType::kAlpha_16:         *load = SkRasterPipeline::load_a16;      break;
         case GrColorType::kBGR_565:          *load = SkRasterPipeline::load_565;      break;
         case GrColorType::kABGR_4444:        *load = SkRasterPipeline::load_4444;     break;
-        case GrColorType::kARGB_4444:        swizzle = skgpu::Swizzle("bgra");
+        case GrColorType::kARGB_4444:        swizzle = GrSwizzle("bgra");
                                              *load = SkRasterPipeline::load_4444;     break;
-        case GrColorType::kBGRA_4444:        swizzle = skgpu::Swizzle("gbar");
+        case GrColorType::kBGRA_4444:        swizzle = GrSwizzle("gbar");
                                              *load = SkRasterPipeline::load_4444;     break;
         case GrColorType::kRGBA_8888:        *load = SkRasterPipeline::load_8888;     break;
         case GrColorType::kRG_88:            *load = SkRasterPipeline::load_rg88;     break;
         case GrColorType::kRGBA_1010102:     *load = SkRasterPipeline::load_1010102;  break;
         case GrColorType::kBGRA_1010102:     *load = SkRasterPipeline::load_1010102;
-                                             swizzle = skgpu::Swizzle("bgra");
+                                             swizzle = GrSwizzle("bgra");
                                              break;
         case GrColorType::kAlpha_F16:        *load = SkRasterPipeline::load_af16;     break;
         case GrColorType::kRGBA_F16_Clamped: *load = SkRasterPipeline::load_f16;      break;
@@ -382,35 +378,30 @@ static skgpu::Swizzle get_load_and_src_swizzle(GrColorType ct, SkRasterPipeline:
                                              *isNormalized = false;
                                              break;
         case GrColorType::kAlpha_8xxx:       *load = SkRasterPipeline::load_8888;
-                                             swizzle = skgpu::Swizzle("000r");
+                                             swizzle = GrSwizzle("000r");
                                              break;
         case GrColorType::kAlpha_F32xxx:     *load = SkRasterPipeline::load_f32;
-                                             swizzle = skgpu::Swizzle("000r");
+                                             swizzle = GrSwizzle("000r");
                                              break;
         case GrColorType::kGray_8xxx:       *load = SkRasterPipeline::load_8888;
-                                             swizzle = skgpu::Swizzle("rrr1");
+                                             swizzle = GrSwizzle("rrr1");
                                              break;
         case GrColorType::kGray_8:           *load = SkRasterPipeline::load_a8;
-                                             swizzle = skgpu::Swizzle("aaa1");
-                                             break;
-        case GrColorType::kR_8xxx:           *load = SkRasterPipeline::load_8888;
-                                             swizzle = skgpu::Swizzle("r001");
-                                             break;
-        case GrColorType::kR_8:              *load = SkRasterPipeline::load_a8;
-                                             swizzle = skgpu::Swizzle("a001");
+                                             swizzle = GrSwizzle("aaa1");
                                              break;
         case GrColorType::kGrayAlpha_88:    *load = SkRasterPipeline::load_rg88;
-                                             swizzle = skgpu::Swizzle("rrrg");
+                                             swizzle = GrSwizzle("rrrg");
                                              break;
         case GrColorType::kBGRA_8888:        *load = SkRasterPipeline::load_8888;
-                                             swizzle = skgpu::Swizzle("bgra");
+                                             swizzle = GrSwizzle("bgra");
                                              break;
         case GrColorType::kRGB_888x:         *load = SkRasterPipeline::load_8888;
-                                             swizzle = skgpu::Swizzle("rgb1");
+                                             swizzle = GrSwizzle("rgb1");
                                              break;
 
         // These are color types we don't expect to ever have to load.
         case GrColorType::kRGB_888:
+        case GrColorType::kR_8:
         case GrColorType::kR_16:
         case GrColorType::kR_F16:
         case GrColorType::kGray_F16:
@@ -426,10 +417,9 @@ enum class LumMode {
     kToAlpha
 };
 
-static skgpu::Swizzle get_dst_swizzle_and_store(GrColorType ct, SkRasterPipeline::StockStage* store,
-                                                LumMode* lumMode, bool* isNormalized,
-                                                bool* isSRGB) {
-    skgpu::Swizzle swizzle("rgba");
+static GrSwizzle get_dst_swizzle_and_store(GrColorType ct, SkRasterPipeline::StockStage* store,
+                                           LumMode* lumMode, bool* isNormalized, bool* isSRGB) {
+    GrSwizzle swizzle("rgba");
     *isNormalized = true;
     *isSRGB = false;
     *lumMode = LumMode::kNone;
@@ -438,14 +428,14 @@ static skgpu::Swizzle get_dst_swizzle_and_store(GrColorType ct, SkRasterPipeline
         case GrColorType::kAlpha_16:         *store = SkRasterPipeline::store_a16;      break;
         case GrColorType::kBGR_565:          *store = SkRasterPipeline::store_565;      break;
         case GrColorType::kABGR_4444:        *store = SkRasterPipeline::store_4444;     break;
-        case GrColorType::kARGB_4444:        swizzle = skgpu::Swizzle("bgra");
+        case GrColorType::kARGB_4444:        swizzle = GrSwizzle("bgra");
                                              *store = SkRasterPipeline::store_4444;     break;
-        case GrColorType::kBGRA_4444:        swizzle = skgpu::Swizzle("argb");
+        case GrColorType::kBGRA_4444:        swizzle = GrSwizzle("argb");
                                              *store = SkRasterPipeline::store_4444;     break;
         case GrColorType::kRGBA_8888:        *store = SkRasterPipeline::store_8888;     break;
         case GrColorType::kRG_88:            *store = SkRasterPipeline::store_rg88;     break;
         case GrColorType::kRGBA_1010102:     *store = SkRasterPipeline::store_1010102;  break;
-        case GrColorType::kBGRA_1010102:     swizzle = skgpu::Swizzle("bgra");
+        case GrColorType::kBGRA_1010102:     swizzle = GrSwizzle("bgra");
                                              *store = SkRasterPipeline::store_1010102;
                                              break;
         case GrColorType::kRGBA_F16_Clamped: *store = SkRasterPipeline::store_f16;      break;
@@ -468,27 +458,24 @@ static skgpu::Swizzle get_dst_swizzle_and_store(GrColorType ct, SkRasterPipeline
                                              *isNormalized = false;
                                              break;
         case GrColorType::kAlpha_8xxx:       *store = SkRasterPipeline::store_8888;
-                                             swizzle = skgpu::Swizzle("a000");
+                                             swizzle = GrSwizzle("a000");
                                              break;
         case GrColorType::kAlpha_F32xxx:     *store = SkRasterPipeline::store_f32;
-                                             swizzle = skgpu::Swizzle("a000");
+                                             swizzle = GrSwizzle("a000");
                                              break;
-        case GrColorType::kBGRA_8888:        swizzle = skgpu::Swizzle("bgra");
+        case GrColorType::kBGRA_8888:        swizzle = GrSwizzle("bgra");
                                              *store = SkRasterPipeline::store_8888;
                                              break;
-        case GrColorType::kRGB_888x:         swizzle = skgpu::Swizzle("rgb1");
+        case GrColorType::kRGB_888x:         swizzle = GrSwizzle("rgb1");
                                              *store = SkRasterPipeline::store_8888;
                                              break;
-        case GrColorType::kR_8xxx:           swizzle = skgpu::Swizzle("r001");
-                                             *store = SkRasterPipeline::store_8888;
-                                             break;
-        case GrColorType::kR_8:              swizzle = skgpu::Swizzle("agbr");
+        case GrColorType::kR_8:              swizzle = GrSwizzle("agbr");
                                              *store = SkRasterPipeline::store_a8;
                                              break;
-        case GrColorType::kR_16:             swizzle = skgpu::Swizzle("agbr");
+        case GrColorType::kR_16:             swizzle = GrSwizzle("agbr");
                                              *store = SkRasterPipeline::store_a16;
                                              break;
-        case GrColorType::kR_F16:            swizzle = skgpu::Swizzle("agbr");
+        case GrColorType::kR_F16:            swizzle = GrSwizzle("agbr");
                                              *store = SkRasterPipeline::store_af16;
                                              break;
         case GrColorType::kGray_F16:         *lumMode = LumMode::kToAlpha;
@@ -498,12 +485,12 @@ static skgpu::Swizzle get_dst_swizzle_and_store(GrColorType ct, SkRasterPipeline
                                              *store = SkRasterPipeline::store_a8;
                                              break;
         case GrColorType::kGrayAlpha_88:     *lumMode = LumMode::kToRGB;
-                                             swizzle = skgpu::Swizzle("ragb");
+                                             swizzle = GrSwizzle("ragb");
                                              *store = SkRasterPipeline::store_rg88;
                                              break;
         case GrColorType::kGray_8xxx:        *lumMode = LumMode::kToRGB;
                                              *store = SkRasterPipeline::store_8888;
-                                             swizzle = skgpu::Swizzle("r000");
+                                             swizzle = GrSwizzle("r000");
                                              break;
 
         // These are color types we don't expect to ever have to store.
@@ -620,14 +607,14 @@ bool GrConvertPixels(const GrPixmap& dst, const GrCPixmap& src, bool flipY) {
 
     bool clampGamut;
     SkTLazy<SkColorSpaceXformSteps> steps;
-    skgpu::Swizzle loadStoreSwizzle;
+    GrSwizzle loadStoreSwizzle;
     if (alphaOrCSConversion) {
         steps.init(src.colorSpace(), src.alphaType(), dst.colorSpace(), dst.alphaType());
         clampGamut = dstIsNormalized && dst.alphaType() == kPremul_SkAlphaType;
     } else {
         clampGamut = dstIsNormalized && !srcIsNormalized && dst.alphaType() == kPremul_SkAlphaType;
         if (!clampGamut) {
-            loadStoreSwizzle = skgpu::Swizzle::Concat(loadSwizzle, storeSwizzle);
+            loadStoreSwizzle = GrSwizzle::Concat(loadSwizzle, storeSwizzle);
         }
     }
     int cnt = 1;
@@ -727,8 +714,8 @@ bool GrClearImage(const GrImageInfo& dstInfo, void* dst, size_t dstRB, std::arra
     bool isNormalized;
     bool dstIsSRGB;
     SkRasterPipeline::StockStage store;
-    skgpu::Swizzle storeSwizzle = get_dst_swizzle_and_store(dstInfo.colorType(), &store, &lumMode,
-                                                            &isNormalized, &dstIsSRGB);
+    GrSwizzle storeSwizzle = get_dst_swizzle_and_store(dstInfo.colorType(), &store, &lumMode,
+                                                       &isNormalized, &dstIsSRGB);
     char block[64];
     SkArenaAlloc alloc(block, sizeof(block), 1024);
     SkRasterPipeline_<256> pipeline;
@@ -756,4 +743,19 @@ bool GrClearImage(const GrImageInfo& dstInfo, void* dst, size_t dstRB, std::arra
     pipeline.run(0, 0, dstInfo.width(), dstInfo.height());
 
     return true;
+}
+
+GrColorType SkColorTypeAndFormatToGrColorType(const GrCaps* caps,
+                                              SkColorType skCT,
+                                              const GrBackendFormat& format) {
+    GrColorType grCT = SkColorTypeToGrColorType(skCT);
+    // Until we support SRGB in the SkColorType we have to do this manual check here to make sure
+    // we use the correct GrColorType.
+    if (caps->isFormatSRGB(format)) {
+        if (grCT != GrColorType::kRGBA_8888) {
+            return GrColorType::kUnknown;
+        }
+        grCT = GrColorType::kRGBA_8888_SRGB;
+    }
+    return grCT;
 }

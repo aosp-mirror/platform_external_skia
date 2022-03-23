@@ -39,33 +39,35 @@ static void test_string_null(skiatest::Reporter* reporter) {
 }
 
 static void test_rewind(skiatest::Reporter* reporter) {
-    SkSWriter32<32> swriter;
+    SkSWriter32<32> writer;
     int32_t array[3] = { 1, 2, 4 };
 
-    REPORTER_ASSERT(reporter, 0 == swriter.bytesWritten());
+    REPORTER_ASSERT(reporter, 0 == writer.bytesWritten());
     for (size_t i = 0; i < SK_ARRAY_COUNT(array); ++i) {
-        swriter.writeInt(array[i]);
+        writer.writeInt(array[i]);
     }
-    check_contents(reporter, swriter, array, sizeof(array));
+    check_contents(reporter, writer, array, sizeof(array));
 
-    swriter.rewindToOffset(2*sizeof(int32_t));
-    REPORTER_ASSERT(reporter, sizeof(array) - 4 == swriter.bytesWritten());
-    swriter.writeInt(3);
-    REPORTER_ASSERT(reporter, sizeof(array) == swriter.bytesWritten());
+    writer.rewindToOffset(2*sizeof(int32_t));
+    REPORTER_ASSERT(reporter, sizeof(array) - 4 == writer.bytesWritten());
+    writer.writeInt(3);
+    REPORTER_ASSERT(reporter, sizeof(array) == writer.bytesWritten());
     array[2] = 3;
-    check_contents(reporter, swriter, array, sizeof(array));
+    check_contents(reporter, writer, array, sizeof(array));
 
     // test rewinding past allocated chunks. This used to crash because we
     // didn't truncate our link-list after freeing trailing blocks
-    SkWriter32 writer;
-    for (int i = 0; i < 100; ++i) {
-        writer.writeInt(i);
+    {
+        SkWriter32 writer;
+        for (int i = 0; i < 100; ++i) {
+            writer.writeInt(i);
+        }
+        REPORTER_ASSERT(reporter, 100*4 == writer.bytesWritten());
+        for (int j = 100*4; j >= 0; j -= 16) {
+            writer.rewindToOffset(j);
+        }
+        REPORTER_ASSERT(reporter, writer.bytesWritten() < 16);
     }
-    REPORTER_ASSERT(reporter, 100*4 == writer.bytesWritten());
-    for (int j = 100*4; j >= 0; j -= 16) {
-        writer.rewindToOffset(j);
-    }
-    REPORTER_ASSERT(reporter, writer.bytesWritten() < 16);
 }
 
 static void test1(skiatest::Reporter* reporter, SkWriter32* writer) {

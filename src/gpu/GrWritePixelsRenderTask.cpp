@@ -48,7 +48,7 @@ void GrWritePixelsTask::gatherProxyIntervals(GrResourceAllocator* alloc) const {
     alloc->incOps();
 }
 
-GrRenderTask::ExpectedOutcome GrWritePixelsTask::onMakeClosed(GrRecordingContext*,
+GrRenderTask::ExpectedOutcome GrWritePixelsTask::onMakeClosed(const GrCaps&,
                                                               SkIRect* targetUpdateBounds) {
     *targetUpdateBounds = fRect;
     return ExpectedOutcome::kTargetDirty;
@@ -61,7 +61,10 @@ bool GrWritePixelsTask::onExecute(GrOpFlushState* flushState) {
     }
     GrSurface* dstSurface = dstProxy->peekSurface();
     return flushState->gpu()->writePixels(dstSurface,
-                                          fRect,
+                                          fRect.fLeft,
+                                          fRect.fTop,
+                                          fRect.width(),
+                                          fRect.height(),
                                           fDstColorType,
                                           fSrcColorType,
                                           fLevels.get(),

@@ -47,10 +47,10 @@ public:
     void purgeAll();
 
     /**
-     *  Helper: returns a unique typefaceID to pass to the constructor of
+     *  Helper: returns a unique fontID to pass to the constructor of
      *  your subclass of SkTypeface
      */
-    static SkTypefaceID NewTypefaceID();
+    static SkFontID NewFontID();
 
     // These are static wrappers around a global instance of a cache.
 

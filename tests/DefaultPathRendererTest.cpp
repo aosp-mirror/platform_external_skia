@@ -28,7 +28,7 @@
 #include "src/gpu/GrImageInfo.h"
 #include "src/gpu/GrPaint.h"
 #include "src/gpu/GrStyle.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "tests/Test.h"
 #include "tools/gpu/GrContextFactory.h"
 
@@ -38,8 +38,7 @@ static void only_allow_default(GrContextOptions* options) {
     options->fGpuPathRenderers = GpuPathRenderers::kNone;
 }
 
-static SkBitmap read_back(GrDirectContext* dContext,
-                          skgpu::v1::SurfaceDrawContext* sdc,
+static SkBitmap read_back(GrDirectContext* dContext, GrSurfaceDrawContext* rtc,
                           int width, int height) {
 
     SkImageInfo dstII = SkImageInfo::MakeN32Premul(width, height);
@@ -47,7 +46,7 @@ static SkBitmap read_back(GrDirectContext* dContext,
     SkBitmap bm;
     bm.allocPixels(dstII);
 
-    sdc->readPixels(dContext, bm.pixmap(), {0, 0});
+    rtc->readPixels(dContext, bm.pixmap(), {0, 0});
 
     return bm;
 }
@@ -72,7 +71,7 @@ static const int kPad = 3;
 //   create a new render target context that will reuse the prior GrSurface
 //   draw a normally wound concave path that touches outside of the approx fit RTC's content rect
 //
-// When the bug manifests the DefaultPathRenderer/GrMSAAPathRenderer is/was leaving the stencil
+// When the bug manifests the GrDefaultPathRenderer/GrMSAAPathRenderer is/was leaving the stencil
 // buffer outside of the first content rect in a bad state and the second draw would be incorrect.
 
 static void run_test(GrDirectContext* dContext, skiatest::Reporter* reporter) {
@@ -84,12 +83,11 @@ static void run_test(GrDirectContext* dContext, skiatest::Reporter* reporter) {
     GrStyle style(SkStrokeRec::kFill_InitStyle);
 
     {
-        auto sdc = skgpu::v1::SurfaceDrawContext::Make(dContext, GrColorType::kRGBA_8888, nullptr,
-                                                       SkBackingFit::kApprox,
-                                                       {kBigSize/2 + 1, kBigSize/2 + 1},
-                                                       SkSurfaceProps());
+        auto rtc = GrSurfaceDrawContext::Make(dContext, GrColorType::kRGBA_8888, nullptr,
+                                              SkBackingFit::kApprox,
+                                              {kBigSize/2 + 1, kBigSize/2 + 1}, SkSurfaceProps());
 
-        sdc->clear(SK_PMColor4fBLACK);
+        rtc->clear(SK_PMColor4fBLACK);
 
         GrPaint paint;
 
@@ -97,17 +95,17 @@ static void run_test(GrDirectContext* dContext, skiatest::Reporter* reporter) {
         auto fp = GrFragmentProcessor::MakeColor(color);
         paint.setColorFragmentProcessor(std::move(fp));
 
-        sdc->drawPath(nullptr, std::move(paint), GrAA::kNo, SkMatrix::I(), invPath, style);
+        rtc->drawPath(nullptr, std::move(paint), GrAA::kNo, SkMatrix::I(), invPath, style);
 
-        dContext->priv().flushSurface(sdc->asSurfaceProxy());
+        dContext->priv().flushSurface(rtc->asSurfaceProxy());
     }
 
     {
-        auto sdc = skgpu::v1::SurfaceDrawContext::Make(dContext, GrColorType::kRGBA_8888, nullptr,
-                                                       SkBackingFit::kExact, {kBigSize, kBigSize},
-                                                       SkSurfaceProps());
+        auto rtc = GrSurfaceDrawContext::Make(dContext, GrColorType::kRGBA_8888, nullptr,
+                                              SkBackingFit::kExact, {kBigSize, kBigSize},
+                                              SkSurfaceProps());
 
-        sdc->clear(SK_PMColor4fBLACK);
+        rtc->clear(SK_PMColor4fBLACK);
 
         GrPaint paint;
 
@@ -115,10 +113,10 @@ static void run_test(GrDirectContext* dContext, skiatest::Reporter* reporter) {
         auto fp = GrFragmentProcessor::MakeColor(color);
         paint.setColorFragmentProcessor(std::move(fp));
 
-        sdc->drawPath(nullptr, std::move(paint), GrAA::kNo,
+        rtc->drawPath(nullptr, std::move(paint), GrAA::kNo,
                       SkMatrix::I(), path, style);
 
-        SkBitmap bm = read_back(dContext, sdc.get(), kBigSize, kBigSize);
+        SkBitmap bm = read_back(dContext, rtc.get(), kBigSize, kBigSize);
 
         bool correct = true;
         for (int y = kBigSize/2+1; y < kBigSize-kPad-1 && correct; ++y) {
@@ -130,7 +128,7 @@ static void run_test(GrDirectContext* dContext, skiatest::Reporter* reporter) {
     }
 }
 
-DEF_GPUTEST_FOR_CONTEXTS(DefaultPathRendererTest,
+DEF_GPUTEST_FOR_CONTEXTS(GrDefaultPathRendererTest,
                          sk_gpu_test::GrContextFactory::IsRenderingContext,
                          reporter, ctxInfo, only_allow_default) {
     auto ctx = ctxInfo.directContext();

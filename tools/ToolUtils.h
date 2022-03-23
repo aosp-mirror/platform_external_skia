@@ -75,6 +75,12 @@ static inline sk_sp<SkTypeface> create_portable_typeface() {
     return create_portable_typeface(nullptr, SkFontStyle());
 }
 
+/**
+ *  Turn on portable (--nonativeFonts) or GDI font rendering (--gdi).
+ */
+void SetDefaultFontMgr();
+
+
 void get_text_path(const SkFont&,
                    const void* text,
                    size_t      length,
@@ -142,6 +148,8 @@ void create_hemi_normal_map(SkBitmap* bm, const SkIRect& dst);
 void create_frustum_normal_map(SkBitmap* bm, const SkIRect& dst);
 
 void create_tetra_normal_map(SkBitmap* bm, const SkIRect& dst);
+
+SkPath make_big_path();
 
 // A helper object to test the topological sorting code (TopoSortBench.cpp & TopoSortTest.cpp)
 class TopoTestNode : public SkRefCnt {
@@ -289,12 +297,6 @@ private:
     SkPixmap fPM;
     SkIPoint fLoc;
 };
-
-using PathSniffCallback = void(const SkMatrix&, const SkPath&, const SkPaint&);
-
-// Calls the provided PathSniffCallback for each path in the given file.
-// Supported file formats are .svg and .skp.
-void sniff_paths(const char filepath[], std::function<PathSniffCallback>);
 
 }  // namespace ToolUtils
 

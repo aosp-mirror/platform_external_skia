@@ -26,7 +26,6 @@ enum VertFlags {
     kColors_VertFlag  = 1 << 0,
     kTexture_VertFlag = 1 << 1,
     kPersp_VertFlag   = 1 << 2,
-    kBilerp_VertFlag  = 1 << 3,
 };
 
 class VertBench : public Benchmark {
@@ -41,7 +40,7 @@ class VertBench : public Benchmark {
     };
 
     sk_sp<SkShader> fShader;
-    SkPoint fPts[PTS], fTex[PTS];
+    SkPoint fPts[PTS];
     SkColor fColors[PTS];
     uint16_t fIdx[IDX];
     unsigned fFlags;
@@ -53,13 +52,9 @@ class VertBench : public Benchmark {
     }
 
     void onDelayedSetup() override {
-        if (fFlags & kTexture_VertFlag) {
-            auto img = GetResourceAsImage("images/mandrill_256.png");
-            if (img) {
-                SkFilterMode fm = (fFlags & kBilerp_VertFlag) ? SkFilterMode::kLinear
-                                                              : SkFilterMode::kNearest;
-                fShader = img->makeShader(SkSamplingOptions(fm));
-            }
+        auto img = GetResourceAsImage("images/mandrill_256.png");
+        if (img) {
+            fShader = img->makeShader(SkSamplingOptions());
         }
     }
 
@@ -92,11 +87,6 @@ public:
         SkASSERT(PTS == pts - fPts);
         SkASSERT(IDX == idx - fIdx);
 
-        // We want to store texs in a separate array, so the blitters don't "cheat" and
-        // skip the (normal) step of computing the new local-matrix. This is the common case
-        // we think in the wild (where the texture coordinates are different from the positions.
-        memcpy(fTex, fPts, sizeof(fPts));
-
         SkRandom rand;
         for (int i = 0; i < PTS; ++i) {
             fColors[i] = rand.nextU() | (0xFF << 24);
@@ -112,9 +102,6 @@ public:
         if (fFlags & kPersp_VertFlag) {
             fName.append("_persp");
         }
-        if (fFlags & kBilerp_VertFlag) {
-            fName.append("_bilerp");
-        }
     }
 
 protected:
@@ -128,7 +115,7 @@ protected:
             tiny_persp_effect(canvas);
         }
 
-        const SkPoint* texs = (fFlags & kTexture_VertFlag) ? fTex    : nullptr;
+        const SkPoint* texs = (fFlags & kTexture_VertFlag) ? fPts    : nullptr;
         const SkColor* cols = (fFlags & kColors_VertFlag)  ? fColors : nullptr;
         auto verts = SkVertices::MakeCopy(SkVertices::kTriangles_VertexMode, PTS,
                                           fPts, texs, cols, IDX, fIdx);
@@ -140,13 +127,10 @@ private:
     using INHERITED = Benchmark;
 };
 DEF_BENCH(return new VertBench(kTexture_VertFlag | kPersp_VertFlag);)
-DEF_BENCH(return new VertBench(kTexture_VertFlag | kPersp_VertFlag | kBilerp_VertFlag);)
 DEF_BENCH(return new VertBench(kColors_VertFlag  | kPersp_VertFlag);)
 DEF_BENCH(return new VertBench(kTexture_VertFlag);)
-DEF_BENCH(return new VertBench(kTexture_VertFlag | kBilerp_VertFlag);)
 DEF_BENCH(return new VertBench(kColors_VertFlag);)
 DEF_BENCH(return new VertBench(kColors_VertFlag | kTexture_VertFlag);)
-DEF_BENCH(return new VertBench(kColors_VertFlag | kTexture_VertFlag | kBilerp_VertFlag);)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 

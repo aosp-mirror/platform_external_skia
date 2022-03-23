@@ -20,11 +20,11 @@ namespace SkSL {
  */
 class FunctionReference final : public Expression {
 public:
-    inline static constexpr Kind kExpressionKind = Kind::kFunctionReference;
+    static constexpr Kind kExpressionKind = Kind::kFunctionReference;
 
-    FunctionReference(const Context& context, int line,
+    FunctionReference(const Context& context, int offset,
                       std::vector<const FunctionDeclaration*> functions)
-        : INHERITED(line, kExpressionKind, context.fTypes.fInvalid.get())
+        : INHERITED(offset, kExpressionKind, context.fTypes.fInvalid.get())
         , fFunctions(std::move(functions)) {}
 
     const std::vector<const FunctionDeclaration*>& functions() const {
@@ -36,18 +36,18 @@ public:
     }
 
     std::unique_ptr<Expression> clone() const override {
-        return std::unique_ptr<Expression>(new FunctionReference(fLine, this->functions(),
+        return std::unique_ptr<Expression>(new FunctionReference(fOffset, this->functions(),
                                                                  &this->type()));
     }
 
-    std::string description() const override {
-        return "<function>";
+    String description() const override {
+        return String("<function>");
     }
 
 private:
-    FunctionReference(int line, std::vector<const FunctionDeclaration*> functions,
+    FunctionReference(int offset, std::vector<const FunctionDeclaration*> functions,
                       const Type* type)
-        : INHERITED(line, kExpressionKind, type)
+        : INHERITED(offset, kExpressionKind, type)
         , fFunctions(std::move(functions)) {}
 
     std::vector<const FunctionDeclaration*> fFunctions;
