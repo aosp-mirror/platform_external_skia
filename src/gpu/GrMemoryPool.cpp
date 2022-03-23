@@ -9,6 +9,7 @@
 
 #include "include/private/SkTPin.h"
 #include "src/core/SkASAN.h"
+#include "src/gpu/ops/GrOp.h"
 
 #ifdef SK_DEBUG
     #include <atomic>
@@ -22,34 +23,30 @@ std::unique_ptr<GrMemoryPool> GrMemoryPool::Make(size_t preallocSize, size_t min
     static_assert(sizeof(GrMemoryPool) < GrMemoryPool::kMinAllocationSize);
 
     preallocSize = SkTPin(preallocSize, kMinAllocationSize,
-                          (size_t) SkBlockAllocator::kMaxAllocationSize);
+                          (size_t) GrBlockAllocator::kMaxAllocationSize);
     minAllocSize = SkTPin(minAllocSize, kMinAllocationSize,
-                          (size_t) SkBlockAllocator::kMaxAllocationSize);
+                          (size_t) GrBlockAllocator::kMaxAllocationSize);
     void* mem = operator new(preallocSize);
     return std::unique_ptr<GrMemoryPool>(new (mem) GrMemoryPool(preallocSize, minAllocSize));
 }
 
 GrMemoryPool::GrMemoryPool(size_t preallocSize, size_t minAllocSize)
-        : fAllocator(SkBlockAllocator::GrowthPolicy::kFixed, minAllocSize,
-                     preallocSize - offsetof(GrMemoryPool, fAllocator) - sizeof(SkBlockAllocator)) {
-    SkDEBUGCODE(
-        fDebug = new Debug;
-        fDebug->fAllocationCount = 0;
-    )
+        : fAllocator(GrBlockAllocator::GrowthPolicy::kFixed, minAllocSize,
+                     preallocSize - offsetof(GrMemoryPool, fAllocator) - sizeof(GrBlockAllocator)) {
+    SkDEBUGCODE(fAllocationCount = 0;)
 }
 
 GrMemoryPool::~GrMemoryPool() {
     this->reportLeaks();
-    SkASSERT(0 == fDebug->fAllocationCount);
+    SkASSERT(0 == fAllocationCount);
     SkASSERT(this->isEmpty());
-    SkDEBUGCODE(delete fDebug;)
 }
 
 void GrMemoryPool::reportLeaks() const {
 #ifdef SK_DEBUG
     int i = 0;
-    int n = fDebug->fAllocatedIDs.count();
-    for (int id : fDebug->fAllocatedIDs) {
+    int n = fAllocatedIDs.count();
+    for (int id : fAllocatedIDs) {
         if (++i == 1) {
             SkDebugf("Leaked %d IDs (in no particular order): %d%s", n, id, (n == i) ? "\n" : "");
         } else if (i < 11) {
@@ -66,7 +63,7 @@ void* GrMemoryPool::allocate(size_t size) {
     static_assert(alignof(Header) <= kAlignment);
     SkDEBUGCODE(this->validate();)
 
-    SkBlockAllocator::ByteRange alloc = fAllocator.allocate<kAlignment, sizeof(Header)>(size);
+    GrBlockAllocator::ByteRange alloc = fAllocator.allocate<kAlignment, sizeof(Header)>(size);
 
     // Initialize GrMemoryPool's custom header at the start of the allocation
     Header* header = static_cast<Header*>(alloc.fBlock->ptr(alloc.fAlignedOffset - sizeof(Header)));
@@ -79,7 +76,7 @@ void* GrMemoryPool::allocate(size_t size) {
 #if defined(SK_SANITIZE_ADDRESS)
     sk_asan_poison_memory_region(&header->fSentinel, sizeof(header->fSentinel));
 #elif defined(SK_DEBUG)
-    header->fSentinel = SkBlockAllocator::kAssignedMarker;
+    header->fSentinel = GrBlockAllocator::kAssignedMarker;
 #endif
 
 #if defined(SK_DEBUG)
@@ -89,8 +86,8 @@ void* GrMemoryPool::allocate(size_t size) {
     }();
 
     // You can set a breakpoint here when a leaked ID is allocated to see the stack frame.
-    fDebug->fAllocatedIDs.add(header->fID);
-    fDebug->fAllocationCount++;
+    fAllocatedIDs.add(header->fID);
+    fAllocationCount++;
 #endif
 
     // User-facing pointer is after the header padding
@@ -103,19 +100,19 @@ void GrMemoryPool::release(void* p) {
 #if defined(SK_SANITIZE_ADDRESS)
     sk_asan_unpoison_memory_region(&header->fSentinel, sizeof(header->fSentinel));
 #elif defined(SK_DEBUG)
-    SkASSERT(SkBlockAllocator::kAssignedMarker == header->fSentinel);
-    header->fSentinel = SkBlockAllocator::kFreedMarker;
+    SkASSERT(GrBlockAllocator::kAssignedMarker == header->fSentinel);
+    header->fSentinel = GrBlockAllocator::kFreedMarker;
 #endif
 
 #if defined(SK_DEBUG)
-    fDebug->fAllocatedIDs.remove(header->fID);
-    fDebug->fAllocationCount--;
+    fAllocatedIDs.remove(header->fID);
+    fAllocationCount--;
 #endif
 
-    SkBlockAllocator::Block* block = fAllocator.owningBlock<kAlignment>(header, header->fStart);
+    GrBlockAllocator::Block* block = fAllocator.owningBlock<kAlignment>(header, header->fStart);
 
 #if defined(SK_DEBUG)
-    // (p - block) matches the original alignedOffset value from SkBlockAllocator::allocate().
+    // (p - block) matches the original alignedOffset value from GrBlockAllocator::allocate().
     intptr_t alignedOffset = (intptr_t)p - (intptr_t)block;
     SkASSERT(p == block->ptr(alignedOffset));
 
@@ -142,8 +139,8 @@ void GrMemoryPool::validate() const {
     for (const auto* b : fAllocator.blocks()) {
         allocCount += b->metadata();
     }
-    SkASSERT(allocCount == fDebug->fAllocationCount);
-    SkASSERT(fDebug->fAllocationCount == fDebug->fAllocatedIDs.count());
+    SkASSERT(allocCount == fAllocationCount);
+    SkASSERT(fAllocationCount == fAllocatedIDs.count());
     SkASSERT(allocCount > 0 || this->isEmpty());
 }
 #endif

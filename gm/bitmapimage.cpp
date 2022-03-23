@@ -75,7 +75,7 @@ protected:
     }
 
 private:
-    inline static constexpr int kSize = 512;
+    static constexpr int kSize = 512;
 
     using INHERITED = GM;
 };

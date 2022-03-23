@@ -157,8 +157,8 @@ private:
     const char* fEmojiText;
     sk_sp<SkTextBlob> fBlob;
 
-    inline static constexpr int kWidth = 1250;
-    inline static constexpr int kHeight = 700;
+    static constexpr int kWidth = 1250;
+    static constexpr int kHeight = 700;
 
     using INHERITED = GM;
 };

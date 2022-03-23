@@ -13,9 +13,8 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/utils/SkRandom.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/gpu/GrOpsTypes.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/SkGr.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
 
 // Benchmarks that exercise the bulk image and solid color quad APIs, under a variety of patterns:
 enum class ImageMode {
@@ -42,16 +41,16 @@ public:
     static_assert(kImageMode == ImageMode::kNone || kDrawMode != DrawMode::kQuad,
                   "kQuad only supported for solid color draws");
 
-    inline static constexpr int kWidth      = 1024;
-    inline static constexpr int kHeight     = 1024;
+    static constexpr int kWidth      = 1024;
+    static constexpr int kHeight     = 1024;
 
     // There will either be 0 images, 1 image, or 1 image per rect
-    inline static constexpr int kImageCount = kImageMode == ImageMode::kShared ?
+    static constexpr int kImageCount = kImageMode == ImageMode::kShared ?
             1 : (kImageMode == ImageMode::kNone ? 0 : kRectCount);
 
     bool isSuitableFor(Backend backend) override {
         if (kDrawMode == DrawMode::kBatch && kImageMode == ImageMode::kNone) {
-            // Currently the bulk color quad API is only available on skgpu::v1::SurfaceDrawContext
+            // Currently the bulk color quad API is only available on GrSurfaceDrawContext
             return backend == kGPU_Backend;
         } else {
             return this->INHERITED::isSuitableFor(backend);
@@ -134,7 +133,7 @@ protected:
         auto context = canvas->recordingContext();
         SkASSERT(context);
 
-        GrQuadSetEntry batch[kRectCount];
+        GrSurfaceDrawContext::QuadSetEntry batch[kRectCount];
         for (int i = 0; i < kRectCount; ++i) {
             batch[i].fRect = fRects[i];
             batch[i].fColor = fColors[i].premul();
@@ -146,9 +145,9 @@ protected:
         paint.setColor(SK_ColorWHITE);
         paint.setAntiAlias(true);
 
-        auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
+        GrSurfaceDrawContext* sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
         SkMatrix view = canvas->getLocalToDeviceAs3x3();
-        SkMatrixProvider matrixProvider(view);
+        SkSimpleMatrixProvider matrixProvider(view);
         GrPaint grPaint;
         SkPaintToGrPaint(context, sdc->colorInfo(), paint, matrixProvider, &grPaint);
         sdc->drawQuadSet(nullptr, std::move(grPaint), GrAA::kYes, view, batch, kRectCount);

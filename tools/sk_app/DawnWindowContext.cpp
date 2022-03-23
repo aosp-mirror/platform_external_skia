@@ -13,7 +13,7 @@
 
 #include "dawn/dawn_proc.h"
 
-static wgpu::TextureUsage kUsage = wgpu::TextureUsage::RenderAttachment |
+static wgpu::TextureUsage kUsage = wgpu::TextureUsage::OutputAttachment |
                                    wgpu::TextureUsage::CopySrc;
 
 static void PrintDeviceError(WGPUErrorType, const char* message, void*) {
@@ -106,16 +106,14 @@ void DawnWindowContext::setDisplayParams(const DisplayParams& params) {
     fDisplayParams = params;
 }
 
-wgpu::Device DawnWindowContext::createDevice(wgpu::BackendType type) {
+wgpu::Device DawnWindowContext::createDevice(dawn_native::BackendType type) {
     fInstance->DiscoverDefaultAdapters();
     DawnProcTable backendProcs = dawn_native::GetProcs();
     dawnProcSetProcs(&backendProcs);
 
     std::vector<dawn_native::Adapter> adapters = fInstance->GetAdapters();
     for (dawn_native::Adapter adapter : adapters) {
-        wgpu::AdapterProperties properties;
-        adapter.GetProperties(&properties);
-        if (properties.backendType == type) {
+        if (adapter.GetBackendType() == type) {
             return adapter.CreateDevice();
         }
     }

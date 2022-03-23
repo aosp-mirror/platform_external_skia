@@ -8,6 +8,7 @@
 #include "gm/gm.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkFilterQuality.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkRect.h"
@@ -106,9 +107,9 @@ protected:
     }
 
 private:
-    inline static constexpr int kImageSize     = 256;
-    inline static constexpr int kSpacer        = 10;
-    inline static constexpr int kNumVertImages = 5;
+    static constexpr int kImageSize     = 256;
+    static constexpr int kSpacer        = 10;
+    static constexpr int kNumVertImages = 5;
 
     sk_sp<SkImage>    fImage;
     SkSamplingOptions fSampling;

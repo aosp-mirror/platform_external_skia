@@ -111,7 +111,6 @@ private:
     void*                       fSurface;
     ANGLEBackend                fType;
     ANGLEContextVersion         fVersion;
-    bool                        fOwnsDisplay;
 
     angle::ResetDisplayPlatformFunc fResetPlatform = nullptr;
 
@@ -180,8 +179,7 @@ ANGLEGLContext::ANGLEGLContext(ANGLEBackend type, ANGLEContextVersion version,
     , fDisplay(display)
     , fSurface(EGL_NO_SURFACE)
     , fType(type)
-    , fVersion(version)
-    , fOwnsDisplay(false) {
+    , fVersion(version) {
 #ifdef SK_BUILD_FOR_WIN
     fWindow = nullptr;
     fDeviceContext = nullptr;
@@ -233,12 +231,10 @@ ANGLEGLContext::ANGLEGLContext(ANGLEBackend type, ANGLEContextVersion version,
         }
 
         fDisplay = get_angle_egl_display(fDeviceContext, type);
-        fOwnsDisplay = true;
     }
 #else
     SkASSERT(EGL_NO_DISPLAY == fDisplay);
     fDisplay = get_angle_egl_display(EGL_DEFAULT_DISPLAY, type);
-    fOwnsDisplay = true;
 #endif
     if (EGL_NO_DISPLAY == fDisplay) {
         SkDebugf("Could not create EGL display!");
@@ -442,16 +438,8 @@ void ANGLEGLContext::destroyGLContext() {
             fResetPlatform(fDisplay);
         }
 
-        if (fOwnsDisplay) {
-            // Only terminate the display if we created it. If we were a context created by makeNew,
-            // the parent context might still have work to do on the display. If we terminate now,
-            // that context might be deleted once it no longer becomes current, and we may hit
-            // undefined behavior in this destructor when calling eglDestroy[Context|Surface] on a
-            // terminated display.
-            eglTerminate(fDisplay);
-        }
+        eglTerminate(fDisplay);
         fDisplay = EGL_NO_DISPLAY;
-        fOwnsDisplay = false;
     }
 
 #ifdef SK_BUILD_FOR_WIN

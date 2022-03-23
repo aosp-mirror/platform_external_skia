@@ -16,9 +16,7 @@ class GrStencilSettings;
 
 class GrProgramInfo {
 public:
-    GrProgramInfo(const GrCaps& caps,
-                  const GrSurfaceProxyView& targetView,
-                  bool usesMSAASurface,
+    GrProgramInfo(const GrSurfaceProxyView& targetView,
                   const GrPipeline* pipeline,
                   const GrUserStencilSettings* userStencilSettings,
                   const GrGeometryProcessor* geomProc,
@@ -26,15 +24,14 @@ public:
                   uint8_t tessellationPatchVertexCount,
                   GrXferBarrierFlags renderPassXferBarriers,
                   GrLoadOp colorLoadOp)
-            : fNeedsStencil(targetView.asRenderTargetProxy()->needsStencil())
+            : fNumSamples(targetView.asRenderTargetProxy()->numSamples())
+            , fNeedsStencil(targetView.asRenderTargetProxy()->needsStencil())
             , fBackendFormat(targetView.proxy()->backendFormat())
             , fOrigin(targetView.origin())
-            , fTargetHasVkResolveAttachmentWithInput(
-                    targetView.asRenderTargetProxy()->supportsVkInputAttachment() &&
-                    ((targetView.asRenderTargetProxy()->numSamples() > 1 &&
-                     targetView.asTextureProxy()) ||
-                    targetView.asRenderTargetProxy()->numSamples() == 1))
-            , fTargetsNumSamples(targetView.asRenderTargetProxy()->numSamples())
+            , fTargetSupportsVkResolveLoad(
+                      targetView.asRenderTargetProxy()->numSamples() > 1 &&
+                      targetView.asTextureProxy() &&
+                      targetView.asRenderTargetProxy()->supportsVkInputAttachment())
             , fPipeline(pipeline)
             , fUserStencilSettings(userStencilSettings)
             , fGeomProc(geomProc)
@@ -42,15 +39,19 @@ public:
             , fTessellationPatchVertexCount(tessellationPatchVertexCount)
             , fRenderPassXferBarriers(renderPassXferBarriers)
             , fColorLoadOp(colorLoadOp) {
-        SkASSERT(fTargetsNumSamples > 0);
-        fNumSamples = fTargetsNumSamples;
-        if (fNumSamples == 1 && usesMSAASurface) {
-            fNumSamples = caps.internalMultisampleCount(this->backendFormat());
-        }
+        SkASSERT(this->numSamples() > 0);
         SkASSERT((GrPrimitiveType::kPatches == fPrimitiveType) ==
                  (fTessellationPatchVertexCount > 0));
+        fRequestedFeatures = fGeomProc->requestedFeatures();
+        for (int i = 0; i < fPipeline->numFragmentProcessors(); ++i) {
+            fRequestedFeatures |= fPipeline->getFragmentProcessor(i).requestedFeatures();
+        }
+        fRequestedFeatures |= fPipeline->getXferProcessor().requestedFeatures();
+
         SkDEBUGCODE(this->validate(false);)
     }
+
+    GrProcessor::CustomFeatures requestedFeatures() const { return fRequestedFeatures; }
 
     int numSamples() const { return fNumSamples; }
     int needsStencil() const { return fNeedsStencil; }
@@ -61,7 +62,7 @@ public:
     const GrUserStencilSettings* userStencilSettings() const { return fUserStencilSettings; }
     // The backend format of the destination render target [proxy]
     const GrBackendFormat& backendFormat() const { return fBackendFormat; }
-    GrSurfaceOrigin origin() const { return fOrigin; }
+    GrSurfaceOrigin origin() const { return fOrigin;  }
     const GrPipeline& pipeline() const { return *fPipeline; }
     const GrGeometryProcessor& geomProc() const { return *fGeomProc; }
 
@@ -71,11 +72,7 @@ public:
         return fTessellationPatchVertexCount;
     }
 
-    bool targetHasVkResolveAttachmentWithInput() const {
-        return fTargetHasVkResolveAttachmentWithInput;
-    }
-
-    int targetsNumSamples() const { return fTargetsNumSamples; }
+    bool targetSupportsVkResolveLoad() const { return fTargetSupportsVkResolveLoad; }
 
     GrXferBarrierFlags renderPassBarriers() const { return fRenderPassXferBarriers; }
 
@@ -91,7 +88,7 @@ public:
 
     // Invokes the visitor function on all FP proxies in the pipeline. The caller is responsible
     // to call the visitor on its own primProc proxies.
-    void visitFPProxies(const GrVisitProxyFunc& func) const { fPipeline->visitProxies(func); }
+    void visitFPProxies(const GrOp::VisitProxyFunc& func) const { fPipeline->visitProxies(func); }
 
 #ifdef SK_DEBUG
     void validate(bool flushTime) const;
@@ -100,15 +97,15 @@ public:
 #endif
 
 private:
-    int                                   fNumSamples;
-    bool                                  fNeedsStencil;
-    GrBackendFormat                       fBackendFormat;
-    GrSurfaceOrigin                       fOrigin;
-    bool                                  fTargetHasVkResolveAttachmentWithInput;
-    int                                   fTargetsNumSamples;
+    const int                             fNumSamples;
+    const bool                            fNeedsStencil;
+    const GrBackendFormat                 fBackendFormat;
+    const GrSurfaceOrigin                 fOrigin;
+    const bool                            fTargetSupportsVkResolveLoad;
     const GrPipeline*                     fPipeline;
     const GrUserStencilSettings*          fUserStencilSettings;
     const GrGeometryProcessor*            fGeomProc;
+    GrProcessor::CustomFeatures           fRequestedFeatures;
     GrPrimitiveType                       fPrimitiveType;
     uint8_t                               fTessellationPatchVertexCount;  // GrPrimType::kPatches.
     GrXferBarrierFlags                    fRenderPassXferBarriers;

@@ -52,7 +52,7 @@ private:
 GLWindowContext_win::GLWindowContext_win(HWND wnd, const DisplayParams& params)
     : INHERITED(params)
     , fHWND(wnd)
-    , fHGLRC(nullptr) {
+    , fHGLRC(NULL) {
 
     // any config code here (particularly for msaa)?
 
@@ -68,7 +68,7 @@ sk_sp<const GrGLInterface> GLWindowContext_win::onInitializeContext() {
 
     fHGLRC = SkCreateWGLContext(dc, fDisplayParams.fMSAASampleCount, false /* deepColor */,
                                 kGLPreferCompatibilityProfile_SkWGLContextRequest);
-    if (nullptr == fHGLRC) {
+    if (NULL == fHGLRC) {
         return nullptr;
     }
 
@@ -86,7 +86,7 @@ sk_sp<const GrGLInterface> GLWindowContext_win::onInitializeContext() {
             wglDeleteContext(fHGLRC);
             fHGLRC = SkCreateWGLContext(dc, fDisplayParams.fMSAASampleCount, false /* deepColor */,
                                         kGLPreferCoreProfile_SkWGLContextRequest);
-            if (nullptr == fHGLRC) {
+            if (NULL == fHGLRC) {
                 return nullptr;
             }
         }

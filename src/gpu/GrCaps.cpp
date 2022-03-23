@@ -15,6 +15,7 @@
 #include "src/gpu/GrSurface.h"
 #include "src/gpu/GrSurfaceProxy.h"
 #include "src/gpu/GrWindowRectangles.h"
+#include "src/utils/SkJSONWriter.h"
 
 GrCaps::GrCaps(const GrContextOptions& options) {
     fMipmapSupport = false;
@@ -25,13 +26,13 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fOversizedStencilSupport = false;
     fTextureBarrierSupport = false;
     fSampleLocationsSupport = false;
+    fMultisampleDisableSupport = false;
     fDrawInstancedSupport = false;
     fNativeDrawIndirectSupport = false;
     fUseClientSideIndirectBuffers = false;
     fConservativeRasterSupport = false;
     fWireframeSupport = false;
     fMSAAResolvesAutomatically = false;
-    fPreferDiscardableMSAAAttachment = false;
     fUsePrimitiveRestart = false;
     fPreferClientSideDynamicBuffers = false;
     fPreferFullscreenClears = false;
@@ -51,7 +52,6 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fTransferFromBufferToTextureSupport = false;
     fTransferFromSurfaceToBufferSupport = false;
     fWritePixelsRowBytesSupport = false;
-    fTransferPixelsToRowBytesSupport = false;
     fReadPixelsRowBytesSupport = false;
     fShouldCollapseSrcOverToSrcWhenAble = false;
     fMustSyncGpuDuringAbandon = true;
@@ -82,7 +82,6 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fRequiresManualFBBarrierAfterTessellatedStencilDraw = false;
     fNativeDrawIndexedIndirectIsBroken = false;
     fAvoidReorderingRenderTasks = false;
-    fAvoidDithering = false;
 
     fPreferVRAMUseOverFlushes = true;
 
@@ -132,18 +131,11 @@ void GrCaps::applyOptionsOverrides(const GrContextOptions& options) {
 
     fMaxTextureSize = std::min(fMaxTextureSize, options.fMaxTextureSizeOverride);
 #if GR_TEST_UTILS
-    if (options.fSuppressAdvancedBlendEquations) {
-        fBlendEquationSupport = kBasic_BlendEquationSupport;
-    }
     if (options.fClearAllTextures) {
         fShouldInitializeTextures = true;
     }
-    if (options.fDisallowWriteAndTransferPixelRowBytes) {
+    if (options.fDisallowWritePixelRowBytes) {
         fWritePixelsRowBytesSupport = false;
-        fTransferPixelsToRowBytesSupport = false;
-    }
-    if (options.fAlwaysPreferHardwareTessellation) {
-        fMinPathVerbsForHwTessellation = fMinStrokeVerbsForHwTessellation = 0;
     }
 #endif
     if (options.fSuppressMipmapSupport) {
@@ -166,7 +158,6 @@ void GrCaps::applyOptionsOverrides(const GrContextOptions& options) {
 
 #ifdef SK_ENABLE_DUMP_GPU
 #include "src/gpu/GrTestUtils.h"
-#include "src/utils/SkJSONWriter.h"
 
 static SkString map_flags_to_string(uint32_t flags) {
     SkString str;
@@ -205,6 +196,7 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Oversized Stencil Support", fOversizedStencilSupport);
     writer->appendBool("Texture Barrier Support", fTextureBarrierSupport);
     writer->appendBool("Sample Locations Support", fSampleLocationsSupport);
+    writer->appendBool("Multisample disable support", fMultisampleDisableSupport);
     writer->appendBool("Draw Instanced Support", fDrawInstancedSupport);
     writer->appendBool("Native Draw Indirect Support", fNativeDrawIndirectSupport);
     writer->appendBool("Use client side indirect buffers", fUseClientSideIndirectBuffers);
@@ -234,11 +226,10 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Supports transfers from textures to buffers",
                        fTransferFromSurfaceToBufferSupport);
     writer->appendBool("Write pixels row bytes support", fWritePixelsRowBytesSupport);
-    writer->appendBool("Transfer pixels to row bytes support", fTransferPixelsToRowBytesSupport);
     writer->appendBool("Read pixels row bytes support", fReadPixelsRowBytesSupport);
     writer->appendBool("Disable msaa clip mask atlas on current driver [workaround]",
                        fDriverDisableMSAAClipAtlas);
-    writer->appendBool("Disable TessellationPathRenderer current driver [workaround]",
+    writer->appendBool("Disable GrTessellationPathRenderer current driver [workaround]",
                        fDisableTessellationPathRenderer);
     writer->appendBool("Clamp-to-border", fClampToBorderSupport);
 
@@ -250,7 +241,6 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Native draw indexed indirect is broken [workaround]",
                        fNativeDrawIndexedIndirectIsBroken);
     writer->appendBool("Avoid DAG reordering [workaround]", fAvoidReorderingRenderTasks);
-    writer->appendBool("Avoid Dithering [workaround]", fAvoidDithering);
 
     if (this->advancedBlendEquationSupport()) {
         writer->appendHexU32("Advanced Blend Equation Disable Flags", fAdvBlendEqDisableFlags);
@@ -262,8 +252,6 @@ void GrCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendS32("Max Preferred Render Target Size", fMaxPreferredRenderTargetSize);
     writer->appendS32("Max Window Rectangles", fMaxWindowRectangles);
     writer->appendS32("Sample Count for Internal MSAA", fInternalMultisampleCount);
-    writer->appendS32("Min Path Verbs for HW Tessellation", fMinPathVerbsForHwTessellation);
-    writer->appendS32("Min Stroke Verbs for HW Tessellation", fMinStrokeVerbsForHwTessellation);
 
     static const char* kBlendEquationSupportNames[] = {
         "Basic",
@@ -308,11 +296,9 @@ bool GrCaps::canCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src
 
 bool GrCaps::validateSurfaceParams(const SkISize& dimensions, const GrBackendFormat& format,
                                    GrRenderable renderable, int renderTargetSampleCnt,
-                                   GrMipmapped mipped, GrTextureType textureType) const {
-    if (textureType != GrTextureType::kNone) {
-        if (!this->isFormatTexturable(format, textureType)) {
-            return false;
-        }
+                                   GrMipmapped mipped) const {
+    if (!this->isFormatTexturable(format)) {
+        return false;
     }
 
     if (GrMipmapped::kYes == mipped && !this->mipmapSupport()) {
@@ -387,7 +373,7 @@ GrBackendFormat GrCaps::getDefaultBackendFormat(GrColorType colorType,
     }
 
     auto format = this->onGetDefaultBackendFormat(colorType);
-    if (!this->isFormatTexturable(format, GrTextureType::k2D)) {
+    if (!this->isFormatTexturable(format)) {
         return {};
     }
     if (!this->areColorTypeAndFormatCompatible(colorType, format)) {
@@ -422,14 +408,14 @@ bool GrCaps::areColorTypeAndFormatCompatible(GrColorType grCT,
     return this->onAreColorTypeAndFormatCompatible(grCT, format);
 }
 
-skgpu::Swizzle GrCaps::getReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
+GrSwizzle GrCaps::getReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
     SkImage::CompressionType compression = GrBackendFormatToCompressionType(format);
     if (compression != SkImage::CompressionType::kNone) {
         if (colorType == GrColorType::kRGB_888x || colorType == GrColorType::kRGBA_8888) {
-            return skgpu::Swizzle::RGBA();
+            return GrSwizzle::RGBA();
         }
-        SkDEBUGFAILF("Illegal color type (%d) and compressed format (%d) combination.",
-                     (int)colorType, (int)compression);
+        SkDEBUGFAILF("Illegal color type (%d) and compressed format (%d) combination.", colorType,
+                     compression);
         return {};
     }
 
@@ -440,54 +426,16 @@ bool GrCaps::isFormatCompressed(const GrBackendFormat& format) const {
     return GrBackendFormatToCompressionType(format) != SkImage::CompressionType::kNone;
 }
 
-GrDstSampleFlags GrCaps::getDstSampleFlagsForProxy(const GrRenderTargetProxy* rt,
-                                                   bool drawUsesMSAA) const {
+GrDstSampleType GrCaps::getDstSampleTypeForProxy(const GrRenderTargetProxy* rt) const {
     SkASSERT(rt);
-    if (this->textureBarrierSupport() && (!drawUsesMSAA || this->msaaResolvesAutomatically())) {
-        return this->onGetDstSampleFlagsForProxy(rt);
+    if (this->textureBarrierSupport() && !rt->requiresManualMSAAResolve()) {
+        return this->onGetDstSampleTypeForProxy(rt);
     }
-    return GrDstSampleFlags::kNone;
+    return GrDstSampleType::kAsTextureCopy;
 }
 
 bool GrCaps::supportsDynamicMSAA(const GrRenderTargetProxy* rtProxy) const {
     return rtProxy->numSamples() == 1 &&
            this->internalMultisampleCount(rtProxy->backendFormat()) > 1 &&
            this->onSupportsDynamicMSAA(rtProxy);
-}
-
-static inline GrColorType color_type_fallback(GrColorType ct) {
-    switch (ct) {
-        // kRGBA_8888 is our default fallback for many color types that may not have renderable
-        // backend formats.
-        case GrColorType::kAlpha_8:
-        case GrColorType::kBGR_565:
-        case GrColorType::kABGR_4444:
-        case GrColorType::kBGRA_8888:
-        case GrColorType::kRGBA_1010102:
-        case GrColorType::kBGRA_1010102:
-        case GrColorType::kRGBA_F16:
-        case GrColorType::kRGBA_F16_Clamped:
-            return GrColorType::kRGBA_8888;
-        case GrColorType::kAlpha_F16:
-            return GrColorType::kRGBA_F16;
-        case GrColorType::kGray_8:
-            return GrColorType::kRGB_888x;
-        default:
-            return GrColorType::kUnknown;
-    }
-}
-
-std::tuple<GrColorType, GrBackendFormat> GrCaps::getFallbackColorTypeAndFormat(
-                                                                            GrColorType ct,
-                                                                            int sampleCnt) const {
-    do {
-        auto format = this->getDefaultBackendFormat(ct, GrRenderable::kYes);
-        // We continue to the fallback color type if there no default renderable format or we
-        // requested msaa and the format doesn't support msaa.
-        if (format.isValid() && this->isFormatRenderable(format, sampleCnt)) {
-            return {ct, format};
-        }
-        ct = color_type_fallback(ct);
-    } while (ct != GrColorType::kUnknown);
-    return {GrColorType::kUnknown, {}};
 }

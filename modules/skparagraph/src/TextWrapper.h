@@ -26,7 +26,7 @@ class TextWrapper {
         void move(bool up) {
             fCluster += up ? 1 : -1;
             fPos = up ? 0 : fCluster->endPos();
-        }
+}
 
     private:
         Cluster* fCluster;
@@ -118,10 +118,6 @@ class TextWrapper {
             fEnd = fBreak;
         }
 
-        void shiftBreak() {
-            fBreak.move(true);
-        }
-
         void trim() {
 
             if (fEnd.cluster() != nullptr &&
@@ -167,9 +163,8 @@ public:
          fExceededMaxLines = false;
     }
 
-    using AddLineToParagraph = std::function<void(TextRange textExcludingSpaces,
-                                                  TextRange text,
-                                                  TextRange textIncludingNewlines,
+    using AddLineToParagraph = std::function<void(TextRange text,
+                                                  TextRange textWithSpaces,
                                                   ClusterRange clusters,
                                                   ClusterRange clustersWithGhosts,
                                                   SkScalar AddLineToParagraph,

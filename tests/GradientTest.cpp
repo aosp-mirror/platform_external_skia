@@ -391,7 +391,7 @@ static void test_unsorted_degenerate(skiatest::Reporter* r) {
     REPORTER_ASSERT(r, SkToBool(gradient));
     // And it shouldn't crash when creating a fragment processor
 
-    SkMatrixProvider provider(SkMatrix::I());
+    SkSimpleMatrixProvider provider(SkMatrix::I());
     GrColorInfo dstColorInfo(GrColorType::kRGBA_8888, kPremul_SkAlphaType,
                              SkColorSpace::MakeSRGB());
     GrMockOptions options;
