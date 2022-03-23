@@ -195,10 +195,9 @@ public:
         }
         skif::DeviceSpace<SkIRect> targetOutput(target);
         skif::ParameterSpace<SkRect> contentBounds(localContentRect);
-        skif::ParameterSpace<SkPoint> contentCenter({localContentRect.centerX(),
-                                                     localContentRect.centerY()});
-        skif::Mapping mapping;
-        SkAssertResult(mapping.decomposeCTM(ctm, fBlur.get(), contentCenter));
+        skif::Mapping mapping = skif::Mapping::DecomposeCTM(
+                ctm, fBlur.get(), skif::ParameterSpace<SkPoint>({localContentRect.centerX(),
+                                                                 localContentRect.centerY()}));
 
         // Add axis lines, to show perspective distortion
         canvas->save();
@@ -232,7 +231,7 @@ public:
 
         // For visualization purposes, we want to show the layer-space output, this is what we get
         // when contentBounds is provided as a hint in local/parameter space.
-        skif::Mapping layerOnly{mapping.layerMatrix()};
+        skif::Mapping layerOnly(SkMatrix::I(), mapping.layerMatrix());
         skif::DeviceSpace<SkIRect> hintedOutputBounds = as_IFB(fBlur)->getOutputBounds(
                 layerOnly, contentBounds);
         canvas->drawRect(SkRect::Make(SkIRect(hintedOutputBounds)), line_paint(SK_ColorBLUE));

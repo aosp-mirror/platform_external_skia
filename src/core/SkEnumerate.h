@@ -11,9 +11,10 @@
 #include <cstddef>
 #include <iterator>
 #include <tuple>
-#include <variant>
 
-template <typename Iter, typename C = std::monostate>
+#include "include/private/SkTLogic.h"
+
+template <typename Iter, typename C = skstd::monostate>
 class SkEnumerate {
     using Captured = decltype(*std::declval<Iter>());
     template <typename> struct is_tuple : std::false_type {};

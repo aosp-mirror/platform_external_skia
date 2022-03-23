@@ -9,14 +9,13 @@
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/codegen/SkSLVMCodeGenerator.h"
 #include "src/sksl/ir/SkSLExternalFunction.h"
-#include "src/sksl/tracing/SkVMDebugTrace.h"
 #include "src/utils/SkJSON.h"
 
 #include "tests/Test.h"
 
 struct ProgramBuilder {
     ProgramBuilder(skiatest::Reporter* r, const char* src)
-            : fCompiler(&fCaps) {
+            : fCaps(GrContextOptions{}), fCompiler(&fCaps) {
         SkSL::Program::Settings settings;
         // The SkSL inliner is well tested in other contexts. Here, we disable inlining entirely,
         // to stress-test the VM generator's handling of function calls with varying signatures.
@@ -24,17 +23,17 @@ struct ProgramBuilder {
         // For convenience, so we can test functions other than (and not called by) main.
         settings.fRemoveDeadFunctions = false;
 
-        fProgram = fCompiler.convertProgram(SkSL::ProgramKind::kGeneric, std::string(src),
+        fProgram = fCompiler.convertProgram(SkSL::ProgramKind::kGeneric, SkSL::String(src),
                                             settings);
         if (!fProgram) {
             ERRORF(r, "Program failed to compile:\n%s\n%s\n", src, fCompiler.errorText().c_str());
         }
     }
 
-    explicit operator bool() const { return fProgram != nullptr; }
+    operator bool() const { return fProgram != nullptr; }
     SkSL::Program& operator*() { return *fProgram; }
 
-    SkSL::ShaderCaps fCaps;
+    GrShaderCaps fCaps;
     SkSL::Compiler fCompiler;
     std::unique_ptr<SkSL::Program> fProgram;
 };
@@ -89,7 +88,7 @@ void test(skiatest::Reporter* r, const char* src, float* in, const float* expect
 
     skvm::Builder b;
     SkSL::SkVMSignature sig;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{}, &sig);
+    SkSL::ProgramToSkVM(*program, *main, &b, /*uniforms=*/{}, &sig);
     skvm::Program p = b.done();
 
     REPORTER_ASSERT(r, p.nargs() == (int)(sig.fParameterSlots + sig.fReturnSlots));
@@ -119,7 +118,7 @@ void test(skiatest::Reporter* r, const char* src,
     REPORTER_ASSERT(r, main);
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main, &b, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     // TODO: Test with and without JIT?
@@ -528,12 +527,12 @@ DEF_TEST(SkSLInterpreterCompound, r) {
 
     auto build = [&](const SkSL::FunctionDefinition* fn) {
         skvm::Builder b;
-        skvm::UPtr uniformPtr = b.uniform();
+        skvm::Ptr uniformPtr = b.uniform();
         skvm::Val uniforms[16];
         for (int i = 0; i < 16; ++i) {
             uniforms[i] = b.uniform32(uniformPtr, i * sizeof(int)).id;
         }
-        SkSL::ProgramToSkVM(*program, *fn, &b, /*debugTrace=*/nullptr, SkMakeSpan(uniforms));
+        SkSL::ProgramToSkVM(*program, *fn, &b, SkMakeSpan(uniforms));
         return b.done();
     };
 
@@ -624,11 +623,11 @@ DEF_TEST(SkSLInterpreterCompound, r) {
 }
 
 static void expect_failure(skiatest::Reporter* r, const char* src) {
-    SkSL::ShaderCaps caps;
+    GrShaderCaps caps(GrContextOptions{});
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
     auto program = compiler.convertProgram(SkSL::ProgramKind::kGeneric,
-                                           std::string(src), settings);
+                                           SkSL::String(src), settings);
     REPORTER_ASSERT(r, !program);
 }
 
@@ -636,6 +635,14 @@ DEF_TEST(SkSLInterpreterRestrictLoops, r) {
     // while and do-while loops are not allowed
     expect_failure(r, "void main(inout float x) { while (x < 1) { x++; } }");
     expect_failure(r, "void main(inout float x) { do { x++; } while (x < 1); }");
+}
+
+DEF_TEST(SkSLInterpreterRestrictFunctionCalls, r) {
+    // Ensure that simple recursion is not allowed
+    expect_failure(r, "float main() { return main() + 1; }");
+
+    // Ensure that calls to undefined functions are not allowed (to prevent mutual recursion)
+    expect_failure(r, "float foo(); float bar() { return foo(); } float foo() { return bar(); }");
 }
 
 DEF_TEST(SkSLInterpreterReturnThenCall, r) {
@@ -652,7 +659,7 @@ DEF_TEST(SkSLInterpreterReturnThenCall, r) {
     REPORTER_ASSERT(r, main);
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main, &b, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float xs[] = { -2.0f, 0.0f, 3.0f, -1.0f };
@@ -674,7 +681,7 @@ DEF_TEST(SkSLInterpreterEarlyReturn, r) {
     REPORTER_ASSERT(r, main);
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main, &b, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float xs[] = { 1.0f, 3.0f },
@@ -716,7 +723,7 @@ DEF_TEST(SkSLInterpreterFunctions, r) {
 
     auto test_fn = [&](const SkSL::FunctionDefinition* fn, float in, float expected) {
         skvm::Builder b;
-        SkSL::ProgramToSkVM(*program, *fn, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
+        SkSL::ProgramToSkVM(*program, *fn, &b, /*uniforms=*/{});
         skvm::Program p = b.done();
 
         float out = 0.0f;
@@ -892,21 +899,20 @@ private:
 };
 
 DEF_TEST(SkSLInterpreterExternalFunction, r) {
-    SkSL::ShaderCaps caps;
+    GrShaderCaps caps(GrContextOptions{});
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
-    const char* src = "float main() { return externalSqrt(25); }";
+    const char* src = "float main() { return external(25); }";
     std::vector<std::unique_ptr<SkSL::ExternalFunction>> externalFunctions;
-    externalFunctions.push_back(std::make_unique<ExternalSqrt>("externalSqrt", compiler));
-    settings.fExternalFunctions = &externalFunctions;
+    externalFunctions.push_back(std::make_unique<ExternalSqrt>("external", compiler));
     std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
-            SkSL::ProgramKind::kGeneric, std::string(src), settings);
+            SkSL::ProgramKind::kGeneric, SkSL::String(src), settings, &externalFunctions);
     REPORTER_ASSERT(r, program);
 
     const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main, &b, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float out;
@@ -946,7 +952,7 @@ private:
 };
 
 DEF_TEST(SkSLInterpreterExternalTable, r) {
-    SkSL::ShaderCaps caps;
+    GrShaderCaps caps(GrContextOptions{});
     SkSL::Compiler compiler(&caps);
     SkSL::Program::Settings settings;
     const char* src =
@@ -957,14 +963,13 @@ DEF_TEST(SkSLInterpreterExternalTable, r) {
     skvm::Uniforms u(b.uniform(), 0);
 
     externalFunctions.push_back(std::make_unique<ExternalTable>("table", compiler, &u));
-    settings.fExternalFunctions = &externalFunctions;
     std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
-            SkSL::ProgramKind::kGeneric, std::string(src), settings);
+            SkSL::ProgramKind::kGeneric, SkSL::String(src), settings, &externalFunctions);
     REPORTER_ASSERT(r, program);
 
     const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
 
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main, &b, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float out[4];
@@ -973,197 +978,4 @@ DEF_TEST(SkSLInterpreterExternalTable, r) {
     REPORTER_ASSERT(r, out[1] == 1.0);
     REPORTER_ASSERT(r, out[2] == 2.0);
     REPORTER_ASSERT(r, out[3] == 4.0);
-}
-
-DEF_TEST(SkSLInterpreterTrace, r) {
-    SkSL::ShaderCaps caps;
-    SkSL::Compiler compiler(&caps);
-    SkSL::Program::Settings settings;
-    settings.fOptimize = false;
-
-    constexpr const char kSrc[] =
-R"(bool less_than(float left, int right) {
-    bool comparison = left < float(right);
-    if (comparison) {
-        return true;
-    } else {
-        return false;
-    }
-}
-
-int main() {
-    float2 a[2];
-    for (float loop = 10; loop <= 30; loop += 10) {
-        half4 v = half4(loop, loop+1, loop+2, loop+3);
-        float2x2 m = float2x2(v);
-        a[0] = float2(loop, loop+1); a[1] = float2(loop+2, loop+3);
-        bool function_result = less_than(loop, 20);
-    }
-    return 40;
-}
-)";
-    skvm::Builder b;
-    std::unique_ptr<SkSL::Program> program = compiler.convertProgram(SkSL::ProgramKind::kGeneric,
-                                                                     std::string(kSrc), settings);
-    REPORTER_ASSERT(r, program);
-
-    const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
-    SkSL::SkVMDebugTrace debugTrace;
-    SkSL::ProgramToSkVM(*program, *main, &b, &debugTrace, /*uniforms=*/{});
-    skvm::Program p = b.done();
-    REPORTER_ASSERT(r, p.nargs() == 1);
-
-    int result;
-    p.eval(1, &result);
-
-    SkDynamicMemoryWStream streamDump;
-    debugTrace.dump(&streamDump);
-
-    sk_sp<SkData> dataDump = streamDump.detachAsData();
-    std::string_view trace{static_cast<const char*>(dataDump->data()), dataDump->size()};
-
-    REPORTER_ASSERT(r, result == 40);
-    REPORTER_ASSERT(r, trace ==
-R"($0 = [main].result (int, L10)
-$1 = a[0] (float2 : slot 1/2, L11)
-$2 = a[0] (float2 : slot 2/2, L11)
-$3 = a[1] (float2 : slot 1/2, L11)
-$4 = a[1] (float2 : slot 2/2, L11)
-$5 = loop (float, L12)
-$6 = v (float4 : slot 1/4, L13)
-$7 = v (float4 : slot 2/4, L13)
-$8 = v (float4 : slot 3/4, L13)
-$9 = v (float4 : slot 4/4, L13)
-$10 = m (float2x2 : slot 1/4, L14)
-$11 = m (float2x2 : slot 2/4, L14)
-$12 = m (float2x2 : slot 3/4, L14)
-$13 = m (float2x2 : slot 4/4, L14)
-$14 = function_result (bool, L16)
-$15 = [less_than].result (bool, L1)
-$16 = left (float, L1)
-$17 = right (int, L1)
-$18 = comparison (bool, L2)
-F0 = int main()
-F1 = bool less_than(float left, int right)
-
-enter int main()
-  scope +1
-   line 11
-   a[0].x = 0
-   a[0].y = 0
-   a[1].x = 0
-   a[1].y = 0
-   line 12
-   scope +1
-    loop = 10
-    scope +1
-     line 13
-     v.x = 10
-     v.y = 11
-     v.z = 12
-     v.w = 13
-     line 14
-     m[0][0] = 10
-     m[0][1] = 11
-     m[1][0] = 12
-     m[1][1] = 13
-     line 15
-     a[0].x = 10
-     a[0].y = 11
-     line 15
-     a[1].x = 12
-     a[1].y = 13
-     line 16
-     enter bool less_than(float left, int right)
-       left = 10
-       right = 20
-       scope +1
-        line 2
-        comparison = true
-        line 3
-        scope +1
-         line 4
-         [less_than].result = true
-        scope -1
-       scope -1
-     exit bool less_than(float left, int right)
-     function_result = true
-    scope -1
-    line 12
-    loop = 20
-    scope +1
-     line 13
-     v.x = 20
-     v.y = 21
-     v.z = 22
-     v.w = 23
-     line 14
-     m[0][0] = 20
-     m[0][1] = 21
-     m[1][0] = 22
-     m[1][1] = 23
-     line 15
-     a[0].x = 20
-     a[0].y = 21
-     line 15
-     a[1].x = 22
-     a[1].y = 23
-     line 16
-     enter bool less_than(float left, int right)
-       left = 20
-       right = 20
-       scope +1
-        line 2
-        comparison = false
-        line 3
-        scope +1
-         line 6
-         [less_than].result = false
-        scope -1
-       scope -1
-     exit bool less_than(float left, int right)
-     function_result = false
-    scope -1
-    line 12
-    loop = 30
-    scope +1
-     line 13
-     v.x = 30
-     v.y = 31
-     v.z = 32
-     v.w = 33
-     line 14
-     m[0][0] = 30
-     m[0][1] = 31
-     m[1][0] = 32
-     m[1][1] = 33
-     line 15
-     a[0].x = 30
-     a[0].y = 31
-     line 15
-     a[1].x = 32
-     a[1].y = 33
-     line 16
-     enter bool less_than(float left, int right)
-       left = 30
-       right = 20
-       scope +1
-        line 2
-        comparison = false
-        line 3
-        scope +1
-         line 6
-         [less_than].result = false
-        scope -1
-       scope -1
-     exit bool less_than(float left, int right)
-     function_result = false
-    scope -1
-    line 12
-   scope -1
-   line 18
-   [main].result = 40
-  scope -1
-exit int main()
-)", "Trace output does not match expectation:\n%.*s\n", (int)trace.size(), trace.data());
 }

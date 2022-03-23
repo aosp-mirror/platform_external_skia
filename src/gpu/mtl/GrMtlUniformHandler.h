@@ -8,8 +8,8 @@
 #ifndef GrMtlUniformHandler_DEFINED
 #define GrMtlUniformHandler_DEFINED
 
-#include "src/core/SkTBlockList.h"
 #include "src/gpu/GrShaderVar.h"
+#include "src/gpu/GrTBlockList.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
 
 #include <vector>
@@ -26,13 +26,12 @@ public:
         kUniformBinding = 0,
         kLastUniformBinding = kUniformBinding,
     };
-    static constexpr int kUniformBindingCount = kLastUniformBinding + 1;
 
-    // fUBOffset is only valid if the SkSLType of the fVariable is not a sampler
+    // fUBOffset is only valid if the GrSLType of the fVariable is not a sampler
     struct MtlUniformInfo : public UniformInfo {
         uint32_t fUBOffset;
     };
-    typedef SkTBlockList<MtlUniformInfo> UniformInfoArray;
+    typedef GrTBlockList<MtlUniformInfo> UniformInfoArray;
 
     const GrShaderVar& getUniformVariable(UniformHandle u) const override {
         return fUniforms.item(u.toIndex()).fVariable;
@@ -64,7 +63,7 @@ private:
 
     UniformHandle internalAddUniformArray(const GrFragmentProcessor* owner,
                                           uint32_t visibility,
-                                          SkSLType type,
+                                          GrSLType type,
                                           const char* name,
                                           bool mangleName,
                                           int arrayCount,
@@ -72,7 +71,7 @@ private:
 
     SamplerHandle addSampler(const GrBackendFormat&,
                              GrSamplerState,
-                             const skgpu::Swizzle&,
+                             const GrSwizzle&,
                              const char* name,
                              const GrShaderCaps*) override;
 
@@ -80,7 +79,7 @@ private:
     const char* samplerVariable(SamplerHandle handle) const override {
         return fSamplers.item(handle.toIndex()).fVariable.c_str();
     }
-    skgpu::Swizzle samplerSwizzle(SamplerHandle handle) const override {
+    GrSwizzle samplerSwizzle(SamplerHandle handle) const override {
         return fSamplerSwizzles[handle.toIndex()];
     }
     uint32_t samplerVisibility(SamplerHandle handle) const {
@@ -95,7 +94,7 @@ private:
 
     UniformInfoArray    fUniforms;
     UniformInfoArray    fSamplers;
-    SkTArray<skgpu::Swizzle> fSamplerSwizzles;
+    SkTArray<GrSwizzle> fSamplerSwizzles;
 
     uint32_t            fCurrentUBOOffset;
     uint32_t            fCurrentUBOMaxAlignment;

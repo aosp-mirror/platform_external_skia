@@ -2,7 +2,3 @@ void main() {
     if (2 < 2) int a;
     a;
 }
-
-/*%%*
-variable 'a' must be created in a scope
-*%%*/

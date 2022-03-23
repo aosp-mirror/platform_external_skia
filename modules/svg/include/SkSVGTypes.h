@@ -81,25 +81,13 @@ public:
         fValue.set(std::move(value));
     }
 
-    T* operator->() {
+    T* operator->() const {
         SkASSERT(fState == SkSVGPropertyState::kValue);
         SkASSERT(fValue.isValid());
         return fValue.get();
     }
 
-    const T* operator->() const {
-        SkASSERT(fState == SkSVGPropertyState::kValue);
-        SkASSERT(fValue.isValid());
-        return fValue.get();
-    }
-
-    T& operator*() {
-        SkASSERT(fState == SkSVGPropertyState::kValue);
-        SkASSERT(fValue.isValid());
-        return *fValue;
-    }
-
-    const T& operator*() const {
+    T& operator*() const {
         SkASSERT(fState == SkSVGPropertyState::kValue);
         SkASSERT(fValue.isValid());
         return *fValue;

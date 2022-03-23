@@ -2,13 +2,13 @@
 #include <simd/simd.h>
 using namespace metal;
 struct Uniforms {
-    half4 colorGreen;
-    half4 colorRed;
+    float4 colorGreen;
+    float4 colorRed;
 };
 struct Inputs {
 };
 struct Outputs {
-    half4 sk_FragColor [[color(0)]];
+    float4 sk_FragColor [[color(0)]];
 };
 void bar_vf(thread float& x);
 void _skOutParamHelper0_bar_vf(thread float& x) {
@@ -16,7 +16,8 @@ void _skOutParamHelper0_bar_vf(thread float& x) {
     bar_vf(_var0);
     x = _var0;
 }
-float foo_ff2(const float2 v) {
+
+float foo_ff2(float2 v) {
     return v.x * v.y;
 }
 void bar_vf(thread float& x) {

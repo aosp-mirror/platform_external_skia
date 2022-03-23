@@ -86,8 +86,7 @@ public:
     sk_sp<GrAttachment> makeMSAAAttachment(SkISize dimensions,
                                            const GrBackendFormat& format,
                                            int numSamples,
-                                           GrProtected isProtected,
-                                           GrMemoryless isMemoryless) override {
+                                           GrProtected isProtected) override {
         return nullptr;
     }
 
@@ -104,9 +103,10 @@ public:
     void deleteFence(GrFence) const override {}
 
     std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned) override;
-    std::unique_ptr<GrSemaphore> wrapBackendSemaphore(const GrBackendSemaphore&,
-                                                      GrSemaphoreWrapType,
-                                                      GrWrapOwnership) override;
+    std::unique_ptr<GrSemaphore> wrapBackendSemaphore(
+            const GrBackendSemaphore& semaphore,
+            GrResourceProvider::SemaphoreWrapType wrapType,
+            GrWrapOwnership ownership) override;
     void insertSemaphore(GrSemaphore* semaphore) override;
     void waitSemaphore(GrSemaphore* semaphore) override;
     std::unique_ptr<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override {
@@ -165,36 +165,26 @@ private:
     sk_sp<GrGpuBuffer> onCreateBuffer(size_t sizeInBytes, GrGpuBufferType, GrAccessPattern,
                                       const void*) override;
 
-    bool onReadPixels(GrSurface*,
-                      SkIRect,
-                      GrColorType surfaceColorType,
-                      GrColorType dstColorType,
-                      void*,
+    bool onReadPixels(GrSurface* surface, int left, int top, int width, int height,
+                      GrColorType surfaceColorType, GrColorType dstColorType, void* buffer,
                       size_t rowBytes) override;
 
-    bool onWritePixels(GrSurface*,
-                       SkIRect,
-                       GrColorType surfaceColorType,
-                       GrColorType srcColorType,
-                       const GrMipLevel[],
-                       int mipLevelCount,
+    bool onWritePixels(GrSurface* surface, int left, int top, int width, int height,
+                       GrColorType surfaceColorType, GrColorType srcColorType,
+                       const GrMipLevel texels[], int mipLevelCount,
                        bool prepForTexSampling) override;
 
-    bool onTransferPixelsTo(GrTexture*,
-                            SkIRect,
-                            GrColorType surfaceColorType,
-                            GrColorType bufferColorType,
-                            sk_sp<GrGpuBuffer>,
-                            size_t offset,
-                            size_t rowBytes) override;
-
-    bool onTransferPixelsFrom(GrSurface*,
-                              SkIRect,
-                              GrColorType surfaceColorType,
-                              GrColorType bufferColorType,
-                              sk_sp<GrGpuBuffer>,
-                              size_t offset) override;
-
+    bool onTransferPixelsTo(GrTexture* texture, int left, int top, int width, int height,
+                            GrColorType surfaceColorType, GrColorType bufferColorType,
+                            sk_sp<GrGpuBuffer> transferBuffer, size_t offset,
+                            size_t rowBytes) override {
+        return true;
+    }
+    bool onTransferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
+                              GrColorType surfaceColorType, GrColorType bufferColorType,
+                              sk_sp<GrGpuBuffer> transferBuffer, size_t offset) override {
+        return true;
+    }
     bool onCopySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
                        const SkIPoint& dstPoint) override;
 
@@ -266,16 +256,8 @@ private:
                                          int mipLevelCount,
                                          GrMipmapStatus);
 
-    bool uploadToTexture(GrD3DTexture* tex,
-                         SkIRect rect,
-                         GrColorType colorType,
-                         const GrMipLevel texels[],
-                         int mipLevelCount);
-
-    void readOrTransferPixels(GrD3DTextureResource* texResource,
-                              SkIRect rect,
-                              sk_sp<GrGpuBuffer> transferBuffer,
-                              const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& placedFootprint);
+    bool uploadToTexture(GrD3DTexture* tex, int left, int top, int width, int height,
+                         GrColorType colorType, const GrMipLevel* texels, int mipLevelCount);
 
     bool createTextureResourceForBackendSurface(DXGI_FORMAT dxgiFormat,
                                                 SkISize dimensions,

@@ -6,8 +6,6 @@
  */
 #include "tests/PathOpsTestCommon.h"
 
-namespace PathOpsCubicIntersectionTestData {
-
 extern const CubicPts pointDegenerates[];
 extern const CubicPts notPointDegenerates[];
 extern const CubicPts tests[][2];
@@ -28,5 +26,3 @@ extern const size_t notLines_count;
 extern const size_t modEpsilonLines_count;
 extern const size_t lessEpsilonLines_count;
 extern const size_t negEpsilonLines_count;
-
-}  // namespace PathOpsCubicIntersectionTestData

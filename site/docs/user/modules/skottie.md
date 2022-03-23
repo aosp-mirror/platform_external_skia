@@ -20,14 +20,6 @@ contributing advancements back to Bodymovin/Lottie.
 
 Here are some test samples rendering with Skia's animation player:
 
-<script src="https://skottie.skia.org/static/canvaskit.js"></script>
-<script src="https://skottie.skia.org/static/inline-bundle.js"></script>
-<style>
-    skottie-inline-sk {
-        display: inline-block;
-    }
-</style>
-
 <a href="https://skottie.skia.org/e6741dda67629da1f80c254dad3df865">
   <skottie-inline-sk src="https://skottie.skia.org/_/j/e6741dda67629da1f80c254dad3df865" width=200 height=200></skottie-inline-sk>
 </a>
@@ -69,9 +61,9 @@ Test your Lottie files in our player at https://skottie.skia.org
 ## The code
 
 Skia's animation code entry point can be found here on
-[Googlesource](https://skia.googlesource.com/skia/+/main/modules/skottie/include/Skottie.h)
+[Googlesource](https://skia.googlesource.com/skia/+/master/modules/skottie/include/Skottie.h)
 and
-[GitHub](https://github.com/google/skia/blob/main/modules/skottie/include/Skottie.h).
+[GitHub](https://github.com/google/skia/blob/master/modules/skottie/include/Skottie.h).
 The code is part of Skia's library but can also be made available as a separate
 package.
 
@@ -80,13 +72,13 @@ package.
 ## Embedding examples
 
 Sample C code for using the Skottie native player can be found
-[here](https://github.com/google/skia/blob/main/modules/skottie/src/SkottieTool.cpp).
+[here](https://github.com/google/skia/blob/master/modules/skottie/src/SkottieTool.cpp).
 
 Android app code for inspiration can be found
-[here](https://github.com/google/skia/tree/main/platform_tools/android/apps/skottie).
+[here](https://github.com/google/skia/tree/master/platform_tools/android/apps/skottie).
 
 Example code embedding Skottie into our Viewer app is
-[here](https://github.com/google/skia/blob/main/tools/viewer/SkottieSlide.cpp).
+[here](https://github.com/google/skia/blob/master/tools/viewer/SkottieSlide.cpp).
 
 The Viewer or Skottie Android apps can be built following
 [these](/docs/user/sample/viewer) instructions.

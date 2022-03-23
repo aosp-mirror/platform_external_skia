@@ -27,8 +27,9 @@ class GrProgramInfo;
 class GrProxyProvider;
 class GrRecordingContextPriv;
 class GrSubRunAllocator;
+class GrSurfaceContext;
 class GrSurfaceProxy;
-class GrTextBlobRedrawCoordinator;
+class GrTextBlobCache;
 class GrThreadSafeCache;
 class SkArenaAlloc;
 class SkJSONWriter;
@@ -182,8 +183,8 @@ protected:
     // same lifetime at the DDL itself.
     virtual void detachProgramData(SkTArray<ProgramData>*) {}
 
-    GrTextBlobRedrawCoordinator* getTextBlobRedrawCoordinator();
-    const GrTextBlobRedrawCoordinator* getTextBlobRedrawCoordinator() const;
+    GrTextBlobCache* getTextBlobCache();
+    const GrTextBlobCache* getTextBlobCache() const;
 
     GrThreadSafeCache* threadSafeCache();
     const GrThreadSafeCache* threadSafeCache() const;
@@ -195,6 +196,8 @@ protected:
      * ensure its lifetime is tied to that of the context.
      */
     void addOnFlushCallbackObject(GrOnFlushCallbackObject*);
+
+    GrAuditTrail* auditTrail() { return fAuditTrail.get(); }
 
     GrRecordingContext* asRecordingContext() override { return this; }
 
@@ -212,8 +215,8 @@ protected:
         void incNumPathMasksCacheHits() { fNumPathMaskCacheHits++; }
 
 #if GR_TEST_UTILS
-        void dump(SkString* out) const;
-        void dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values) const;
+        void dump(SkString* out);
+        void dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values);
 #endif
 
     private:
@@ -225,8 +228,8 @@ protected:
         void incNumPathMasksCacheHits() {}
 
 #if GR_TEST_UTILS
-        void dump(SkString*) const {}
-        void dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values) const {}
+        void dump(SkString*) {}
+        void dumpKeyValuePairs(SkTArray<SkString>* keys, SkTArray<double>* values) {}
 #endif
 #endif // GR_GPU_STATS
     } fStats;
@@ -248,11 +251,10 @@ protected:
     const Stats* stats() const { return &fStats; }
     void dumpJSON(SkJSONWriter*) const;
 
-protected:
+private:
     // Delete last in case other objects call it during destruction.
     std::unique_ptr<GrAuditTrail>     fAuditTrail;
 
-private:
     OwnedArenas                       fArenas;
 
     std::unique_ptr<GrDrawingManager> fDrawingManager;

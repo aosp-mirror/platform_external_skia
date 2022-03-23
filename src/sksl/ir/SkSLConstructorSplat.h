@@ -23,28 +23,24 @@ namespace SkSL {
  */
 class ConstructorSplat final : public SingleArgumentConstructor {
 public:
-    inline static constexpr Kind kExpressionKind = Kind::kConstructorSplat;
+    static constexpr Kind kExpressionKind = Kind::kConstructorSplat;
 
-    ConstructorSplat(int line, const Type& type, std::unique_ptr<Expression> arg)
-        : INHERITED(line, kExpressionKind, &type, std::move(arg)) {}
+    ConstructorSplat(int offset, const Type& type, std::unique_ptr<Expression> arg)
+        : INHERITED(offset, kExpressionKind, &type, std::move(arg)) {}
 
     // The input argument must be scalar. A "splat" to a scalar type will be optimized into a no-op.
     static std::unique_ptr<Expression> Make(const Context& context,
-                                            int line,
+                                            int offset,
                                             const Type& type,
                                             std::unique_ptr<Expression> arg);
 
     std::unique_ptr<Expression> clone() const override {
-        return std::make_unique<ConstructorSplat>(fLine, this->type(), argument()->clone());
+        return std::make_unique<ConstructorSplat>(fOffset, this->type(), argument()->clone());
     }
 
-    bool supportsConstantValues() const override {
-        return true;
-    }
-
-    std::optional<double> getConstantValue(int n) const override {
+    const Expression* getConstantSubexpression(int n) const override {
         SkASSERT(n >= 0 && n < this->type().columns());
-        return this->argument()->getConstantValue(0);
+        return this->argument()->getConstantSubexpression(0);
     }
 
 private:

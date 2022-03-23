@@ -15,33 +15,31 @@
 #include "src/gpu/GrBufferAllocPool.h"
 #include "src/gpu/GrDeferredUpload.h"
 #include "src/gpu/GrHashMapWithCache.h"
+#include "src/gpu/GrPathRenderer.h"
+#include "src/gpu/GrPathRendererChain.h"
 #include "src/gpu/GrResourceCache.h"
 #include "src/gpu/GrSurfaceProxy.h"
-
-#if SK_GPU_V1
-#include "src/gpu/v1/PathRenderer.h"
-#include "src/gpu/v1/PathRendererChain.h"
-#endif
 
 // Enabling this will print out which path renderers are being chosen
 #define GR_PATH_RENDERER_SPEW 0
 
 class GrArenas;
+class GrCoverageCountingPathRenderer;
 class GrGpuBuffer;
 class GrOnFlushCallbackObject;
 class GrOpFlushState;
+class GrOpsTask;
 class GrRecordingContext;
 class GrRenderTargetProxy;
 class GrRenderTask;
 class GrResourceAllocator;
 class GrSemaphore;
+class GrSoftwarePathRenderer;
+class GrSurfaceContext;
+class GrSurfaceDrawContext;
 class GrSurfaceProxyView;
 class GrTextureResolveRenderTask;
 class SkDeferredDisplayList;
-namespace skgpu { namespace v1 {
-    class OpsTask;
-    class SoftwarePathRenderer;
-}}
 
 class GrDrawingManager {
 public:
@@ -49,29 +47,15 @@ public:
 
     void freeGpuResources();
 
-#if SK_GPU_V1
     // OpsTasks created at flush time are stored and handled different from the others.
-    sk_sp<skgpu::v1::OpsTask> newOpsTask(GrSurfaceProxyView,
-                                         sk_sp<GrArenas> arenas,
-                                         bool flushTimeOpsTask);
-
-    // Adds 'atlasTask' to the DAG and leaves it open.
-    //
-    // If 'previousAtlasTask' is provided, closes it and configures dependencies to guarantee
-    // previousAtlasTask and all its users are completely out of service before atlasTask executes.
-    void addAtlasTask(sk_sp<GrRenderTask> atlasTask, GrRenderTask* previousAtlasTask);
-#endif
+    sk_sp<GrOpsTask> newOpsTask(GrSurfaceProxyView,
+                                sk_sp<GrArenas> arenas,
+                                bool flushTimeOpsTask);
 
     // Create a render task that can resolve MSAA and/or regenerate mipmap levels on proxies. This
-    // method will only add the new render task to the list. However, it adds the task before the
-    // last task in the list. It is up to the caller to call addProxy() on the returned object.
-    GrTextureResolveRenderTask* newTextureResolveRenderTaskBefore(const GrCaps&);
-
-    // Creates a render task that can resolve MSAA and/or regenerate mimap levels on the passed in
-    // proxy. The task is appended to the end of the current list of tasks.
-    void newTextureResolveRenderTask(sk_sp<GrSurfaceProxy> proxy,
-                                     GrSurfaceProxy::ResolveFlags,
-                                     const GrCaps&);
+    // method will only add the new render task to the list. It is up to the caller to call
+    // addProxy() on the returned object.
+    GrTextureResolveRenderTask* newTextureResolveRenderTask(const GrCaps&);
 
     // Create a new render task that will cause the gpu to wait on semaphores before executing any
     // more RenderTasks that target proxy. It is possible for this wait to also block additional
@@ -118,25 +102,20 @@ public:
 
     GrRecordingContext* getContext() { return fContext; }
 
-#if SK_GPU_V1
-    using PathRenderer = skgpu::v1::PathRenderer;
-    using PathRendererChain = skgpu::v1::PathRendererChain;
+    GrPathRenderer* getPathRenderer(const GrPathRenderer::CanDrawPathArgs& args,
+                                    bool allowSW,
+                                    GrPathRendererChain::DrawType drawType,
+                                    GrPathRenderer::StencilSupport* stencilSupport = nullptr);
 
-    PathRenderer* getPathRenderer(const PathRenderer::CanDrawPathArgs&,
-                                  bool allowSW,
-                                  PathRendererChain::DrawType,
-                                  PathRenderer::StencilSupport* = nullptr);
+    GrPathRenderer* getSoftwarePathRenderer();
 
-    PathRenderer* getSoftwarePathRenderer();
-
-    // Returns a direct pointer to the atlas path renderer, or null if it is not supported and
-    // turned on.
-    skgpu::v1::AtlasPathRenderer* getAtlasPathRenderer();
+    // Returns a direct pointer to the coverage counting path renderer, or null if it is not
+    // supported and turned on.
+    GrCoverageCountingPathRenderer* getCoverageCountingPathRenderer();
 
     // Returns a direct pointer to the tessellation path renderer, or null if it is not supported
     // and turned on.
-    PathRenderer* getTessellationPathRenderer();
-#endif
+    GrPathRenderer* getTessellationPathRenderer();
 
     void flushIfNecessary();
 
@@ -151,15 +130,13 @@ public:
 
 #if GR_TEST_UTILS
     void testingOnly_removeOnFlushCallbackObject(GrOnFlushCallbackObject*);
-#if SK_GPU_V1
-    PathRendererChain::Options testingOnly_getOptionsForPathRendererChain() {
+    GrPathRendererChain::Options testingOnly_getOptionsForPathRendererChain() {
         return fOptionsForPathRendererChain;
     }
 #endif
-#endif
 
     GrRenderTask* getLastRenderTask(const GrSurfaceProxy*) const;
-    skgpu::v1::OpsTask* getLastOpsTask(const GrSurfaceProxy*) const;
+    GrOpsTask* getLastOpsTask(const GrSurfaceProxy*) const;
     void setLastRenderTask(const GrSurfaceProxy*, GrRenderTask*);
 
     void moveRenderTasksToDDL(SkDeferredDisplayList* ddl);
@@ -168,13 +145,9 @@ public:
                        SkIPoint offset);
 
 private:
-#if SK_GPU_V1
     GrDrawingManager(GrRecordingContext*,
-                     const PathRendererChain::Options&,
+                     const GrPathRendererChain::Options&,
                      bool reduceOpsTaskSplitting);
-#else
-    GrDrawingManager(GrRecordingContext*, bool reduceOpsTaskSplitting);
-#endif
 
     bool wasAbandoned() const;
 
@@ -215,31 +188,29 @@ private:
     static const int kNumPixelGeometries = 5; // The different pixel geometries
     static const int kNumDFTOptions = 2;      // DFT or no DFT
 
-    GrRecordingContext*                      fContext;
+    GrRecordingContext*               fContext;
+    GrPathRendererChain::Options      fOptionsForPathRendererChain;
 
     // This cache is used by both the vertex and index pools. It reuses memory across multiple
     // flushes.
     sk_sp<GrBufferAllocPool::CpuBufferCache> fCpuBufferCache;
 
-    SkTArray<sk_sp<GrRenderTask>>            fDAG;
-    skgpu::v1::OpsTask*                      fActiveOpsTask = nullptr;
+    SkTArray<sk_sp<GrRenderTask>>     fDAG;
+    GrOpsTask*                        fActiveOpsTask = nullptr;
     // These are the IDs of the opsTask currently being flushed (in internalFlush). They are
     // only stored here to prevent memory thrashing.
-    SkSTArray<8, uint32_t, true>             fFlushingRenderTaskIDs;
+    SkSTArray<8, uint32_t, true>      fFlushingRenderTaskIDs;
     // These are the new renderTasks generated by the onFlush CBs
-    SkSTArray<4, sk_sp<GrRenderTask>>        fOnFlushRenderTasks;
+    SkSTArray<4, sk_sp<GrRenderTask>> fOnFlushRenderTasks;
 
-#if SK_GPU_V1
-    PathRendererChain::Options               fOptionsForPathRendererChain;
-    std::unique_ptr<PathRendererChain>       fPathRendererChain;
-    sk_sp<skgpu::v1::SoftwarePathRenderer>   fSoftwarePathRenderer;
-#endif
+    std::unique_ptr<GrPathRendererChain> fPathRendererChain;
+    sk_sp<GrSoftwarePathRenderer>     fSoftwarePathRenderer;
 
-    GrTokenTracker                           fTokenTracker;
-    bool                                     fFlushing = false;
-    const bool                               fReduceOpsTaskSplitting;
+    GrTokenTracker                    fTokenTracker;
+    bool                              fFlushing;
+    const bool                        fReduceOpsTaskSplitting;
 
-    SkTArray<GrOnFlushCallbackObject*>       fOnFlushCBObjects;
+    SkTArray<GrOnFlushCallbackObject*> fOnFlushCBObjects;
 
     struct SurfaceIDKeyTraits {
         static uint32_t GetInvalidKey() {

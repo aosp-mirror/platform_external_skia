@@ -7,7 +7,6 @@
 
 #include "src/sksl/dsl/priv/DSLFPs.h"
 
-#include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/dsl/priv/DSLWriter.h"
 #include "src/sksl/ir/SkSLCodeStringExpression.h"
 
@@ -17,28 +16,28 @@ namespace SkSL {
 
 namespace dsl {
 
-void StartFragmentProcessor(GrFragmentProcessor::ProgramImpl* processor,
-                            GrFragmentProcessor::ProgramImpl::EmitArgs* emitArgs) {
-    ThreadContext::StartFragmentProcessor(processor, emitArgs);
+void StartFragmentProcessor(GrGLSLFragmentProcessor* processor,
+                            GrGLSLFragmentProcessor::EmitArgs* emitArgs) {
+    DSLWriter::StartFragmentProcessor(processor, emitArgs);
 }
 
 void EndFragmentProcessor() {
-    ThreadContext::EndFragmentProcessor();
+    DSLWriter::EndFragmentProcessor();
 }
 
-DSLGlobalVar sk_SampleCoord() {
-    return DSLGlobalVar("sk_SampleCoord");
+DSLVar sk_SampleCoord() {
+    return DSLVar("sk_SampleCoord");
 }
 
 DSLExpression SampleChild(int index, DSLExpression sampleExpr) {
-    std::unique_ptr<SkSL::Expression> expr = sampleExpr.releaseIfPossible();
+    std::unique_ptr<SkSL::Expression> expr = sampleExpr.release();
     if (expr) {
         SkASSERT(expr->type().isVector());
         SkASSERT(expr->type().componentType().isFloat());
     }
 
-    GrFragmentProcessor::ProgramImpl* proc = ThreadContext::CurrentProcessor();
-    GrFragmentProcessor::ProgramImpl::EmitArgs& emitArgs = *ThreadContext::CurrentEmitArgs();
+    GrGLSLFragmentProcessor* proc = DSLWriter::CurrentProcessor();
+    GrGLSLFragmentProcessor::EmitArgs& emitArgs = *DSLWriter::CurrentEmitArgs();
     SkString code;
     switch (expr ? expr->type().columns() : 0) {
         default:
@@ -56,10 +55,10 @@ DSLExpression SampleChild(int index, DSLExpression sampleExpr) {
     }
 
     return DSLExpression(std::make_unique<SkSL::CodeStringExpression>(
-            code.c_str(), ThreadContext::Context().fTypes.fHalf4.get()));
+            code.c_str(), DSLWriter::Context().fTypes.fHalf4.get()));
 }
 
-GrGLSLUniformHandler::UniformHandle VarUniformHandle(const DSLGlobalVar& var) {
+GrGLSLUniformHandler::UniformHandle VarUniformHandle(const DSLVar& var) {
     return DSLWriter::VarUniformHandle(var);
 }
 

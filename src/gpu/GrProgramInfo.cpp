@@ -8,7 +8,6 @@
 #include "src/gpu/GrProgramInfo.h"
 
 #include "src/gpu/GrStencilSettings.h"
-#include "src/gpu/effects/GrTextureEffect.h"
 
 GrStencilSettings GrProgramInfo::nonGLStencilSettings() const {
     GrStencilSettings stencil;

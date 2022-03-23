@@ -39,7 +39,7 @@ your chance when you are the general Skia Gardener.
 ---
 
 The Android autoroller into the master branch runs on
-[https://skia-autoroll.corp.goog/r/android-master-autoroll](https://skia-autoroll.corp.goog/r/android-master-autoroll) and
+[https://android-master-roll.skia.org](https://android-master-roll.skia.org) and
 is accessible only to Googlers.<br/> The autoroller's status is displayed on
 Skia's [status page](https://status.skia.org/).
 

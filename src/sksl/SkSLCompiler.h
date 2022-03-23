@@ -11,11 +11,11 @@
 #include <set>
 #include <unordered_set>
 #include <vector>
-#include "include/core/SkSize.h"
+#include "src/sksl/SkSLASTFile.h"
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLContext.h"
+#include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/SkSLInliner.h"
-#include "src/sksl/SkSLParsedModule.h"
 #include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
 
@@ -24,15 +24,16 @@
 #endif
 
 #define SK_FRAGCOLOR_BUILTIN           10001
+#define SK_IN_BUILTIN                  10002
+#define SK_OUT_BUILTIN                 10007
 #define SK_LASTFRAGCOLOR_BUILTIN       10008
 #define SK_MAIN_COORDS_BUILTIN         10009
 #define SK_INPUT_COLOR_BUILTIN         10010
-#define SK_DEST_COLOR_BUILTIN          10011
-#define SK_SECONDARYFRAGCOLOR_BUILTIN  10012
 #define SK_FRAGCOORD_BUILTIN              15
 #define SK_CLOCKWISE_BUILTIN              17
 #define SK_VERTEXID_BUILTIN               42
 #define SK_INSTANCEID_BUILTIN             43
+#define SK_INVOCATIONID_BUILTIN            8
 #define SK_POSITION_BUILTIN                0
 
 class SkBitSet;
@@ -41,14 +42,14 @@ class SkSLCompileBench;
 namespace SkSL {
 
 namespace dsl {
-    class DSLCore;
     class DSLWriter;
 }
 
 class ExternalFunction;
 class FunctionDeclaration;
+class IRGenerator;
+class IRIntrinsicMap;
 class ProgramUsage;
-struct ShaderCaps;
 
 struct LoadedModule {
     ProgramKind                                  fKind;
@@ -56,49 +57,24 @@ struct LoadedModule {
     std::vector<std::unique_ptr<ProgramElement>> fElements;
 };
 
+struct ParsedModule {
+    std::shared_ptr<SymbolTable>    fSymbols;
+    std::shared_ptr<IRIntrinsicMap> fIntrinsics;
+};
+
 /**
- * Main compiler entry point. The compiler parses the SkSL text directly into a tree of IRNodes,
- * while performing basic optimizations such as constant-folding and dead-code elimination. Then the
- * Program is passed into a CodeGenerator to produce compiled output.
+ * Main compiler entry point. This is a traditional compiler design which first parses the .sksl
+ * file into an abstract syntax tree (a tree of ASTNodes), then performs semantic analysis to
+ * produce a Program (a tree of IRNodes), then feeds the Program into a CodeGenerator to produce
+ * compiled output.
  *
  * See the README for information about SkSL.
  */
-class SK_API Compiler {
+class SK_API Compiler : public ErrorReporter {
 public:
-    inline static constexpr const char FRAGCOLOR_NAME[] = "sk_FragColor";
-    inline static constexpr const char RTADJUST_NAME[]  = "sk_RTAdjust";
-    inline static constexpr const char PERVERTEX_NAME[] = "sk_PerVertex";
-    inline static constexpr const char POISON_TAG[]     = "<POISON>";
-
-    /**
-     * Gets a float4 that adjusts the position from Skia device coords to normalized device coords,
-     * used to populate sk_RTAdjust.  Assuming the transformed position, pos, is a homogeneous
-     * float4, the vec, v, is applied as such:
-     * float4((pos.xy * v.xz) + sk_Position.ww * v.yw, 0, pos.w);
-     */
-    static std::array<float, 4> GetRTAdjustVector(SkISize rtDims, bool flipY) {
-        std::array<float, 4> result;
-        result[0] = 2.f/rtDims.width();
-        result[2] = 2.f/rtDims.height();
-        result[1] = -1.f;
-        result[3] = -1.f;
-        if (flipY) {
-            result[2] = -result[2];
-            result[3] = -result[3];
-        }
-        return result;
-    }
-
-    /**
-     * Uniform values  by the compiler to implement origin-neutral dFdy, sk_Clockwise, and
-     * sk_FragCoord.
-     */
-    static std::array<float, 2> GetRTFlipVector(int rtHeight, bool flipY) {
-        std::array<float, 2> result;
-        result[0] = flipY ? rtHeight : 0.f;
-        result[1] = flipY ?     -1.f : 1.f;
-        return result;
-    }
+    static constexpr const char FRAGCOLOR_NAME[]  = "sk_FragColor";
+    static constexpr const char RTADJUST_NAME[]  = "sk_RTAdjust";
+    static constexpr const char PERVERTEX_NAME[] = "sk_PerVertex";
 
     struct OptimizationContext {
         // nodes we have already reported errors for and should not error on again
@@ -113,9 +89,9 @@ public:
         StatementArray fOwnedStatements;
     };
 
-    Compiler(const ShaderCaps* caps);
+    Compiler(const ShaderCapsClass* caps);
 
-    ~Compiler();
+    ~Compiler() override;
 
     Compiler(const Compiler&) = delete;
     Compiler& operator=(const Compiler&) = delete;
@@ -133,54 +109,51 @@ public:
     static void EnableInliner(OverrideFlag flag) { sInliner = flag; }
 
     /**
-     * If fExternalFunctions is supplied in the settings, those values are registered in the symbol
-     * table of the Program, but ownership is *not* transferred. It is up to the caller to keep them
-     * alive.
+     * If externalFunctions is supplied, those values are registered in the symbol table of the
+     * Program, but ownership is *not* transferred. It is up to the caller to keep them alive.
      */
     std::unique_ptr<Program> convertProgram(
             ProgramKind kind,
-            std::string text,
-            Program::Settings settings);
-
-    std::unique_ptr<Expression> convertIdentifier(int line, std::string_view name);
+            String text,
+            const Program::Settings& settings,
+            const std::vector<std::unique_ptr<ExternalFunction>>* externalFunctions = nullptr);
 
     bool toSPIRV(Program& program, OutputStream& out);
 
-    bool toSPIRV(Program& program, std::string* out);
+    bool toSPIRV(Program& program, String* out);
 
     bool toGLSL(Program& program, OutputStream& out);
 
-    bool toGLSL(Program& program, std::string* out);
+    bool toGLSL(Program& program, String* out);
 
-    bool toHLSL(Program& program, OutputStream& out);
-
-    bool toHLSL(Program& program, std::string* out);
+    bool toHLSL(Program& program, String* out);
 
     bool toMetal(Program& program, OutputStream& out);
 
-    bool toMetal(Program& program, std::string* out);
+    bool toMetal(Program& program, String* out);
 
-    void handleError(std::string_view msg, PositionInfo pos);
+#if defined(SKSL_STANDALONE) || GR_TEST_UTILS
+    bool toCPP(Program& program, String name, OutputStream& out);
 
-    std::string errorText(bool showCount = true);
+    bool toDSLCPP(Program& program, String name, OutputStream& out);
 
-    ErrorReporter& errorReporter() { return *fContext->fErrors; }
+    bool toH(Program& program, String name, OutputStream& out);
+#endif
 
-    int errorCount() const { return fContext->fErrors->errorCount(); }
+    void error(int offset, String msg) override;
+
+    String errorText(bool showCount = true);
 
     void writeErrorCount();
 
-    void resetErrors() {
-        fErrorText.clear();
-        this->errorReporter().resetErrorCount();
+    int errorCount() override {
+        return fErrorCount;
     }
 
-    Context& context() const {
+    void setErrorCount(int c) override;
+
+    Context& context() {
         return *fContext;
-    }
-
-    std::shared_ptr<SymbolTable> symbolTable() const {
-        return fSymbolTable;
     }
 
     // When  SKSL_STANDALONE, fPath is used. (fData, fSize) will be (nullptr, 0)
@@ -203,48 +176,44 @@ public:
                             bool dehydrate);
     ParsedModule parseModule(ProgramKind kind, ModuleData data, const ParsedModule& base);
 
+    IRGenerator& irGenerator() {
+        return *fIRGenerator;
+    }
+
     const ParsedModule& moduleForProgramKind(ProgramKind kind);
 
 private:
-    class CompilerErrorReporter : public ErrorReporter {
-    public:
-        CompilerErrorReporter(Compiler* compiler)
-            : fCompiler(*compiler) {}
-
-        void handleError(std::string_view msg, PositionInfo pos) override {
-            fCompiler.handleError(msg, pos);
-        }
-
-    private:
-        Compiler& fCompiler;
-    };
-
     const ParsedModule& loadGPUModule();
     const ParsedModule& loadFragmentModule();
     const ParsedModule& loadVertexModule();
+    const ParsedModule& loadFPModule();
+    const ParsedModule& loadGeometryModule();
     const ParsedModule& loadPublicModule();
+    const ParsedModule& loadRuntimeColorFilterModule();
     const ParsedModule& loadRuntimeShaderModule();
 
-    std::shared_ptr<SymbolTable> makeRootSymbolTable() const;
-    std::shared_ptr<SymbolTable> makeGLSLRootSymbolTable() const;
-    std::shared_ptr<SymbolTable> makePrivateSymbolTable(std::shared_ptr<SymbolTable> parent);
+    /** Verifies that @if and @switch statements were actually optimized away. */
+    void verifyStaticTests(const Program& program);
 
     /** Optimize every function in the program. */
     bool optimize(Program& program);
 
-    /** Performs final checks to confirm that a fully-assembled/optimized is valid. */
-    bool finalize(Program& program);
-
     /** Optimize the module. */
     bool optimize(LoadedModule& module);
 
-    /** Flattens out function calls when it is safe to do so. */
-    bool runInliner(const std::vector<std::unique_ptr<ProgramElement>>& elements,
-                    std::shared_ptr<SymbolTable> symbols,
-                    ProgramUsage* usage);
+    /** Eliminates unused functions from a Program, according to the stats in ProgramUsage. */
+    bool removeDeadFunctions(Program& program, ProgramUsage* usage);
 
-    CompilerErrorReporter fErrorReporter;
+    /** Eliminates unreferenced variables from a Program, according to the stats in ProgramUsage. */
+    bool removeDeadGlobalVariables(Program& program, ProgramUsage* usage);
+    bool removeDeadLocalVariables(Program& program, ProgramUsage* usage);
+
+    Position position(int offset);
+
     std::shared_ptr<Context> fContext;
+
+    std::shared_ptr<SymbolTable> fRootSymbolTable;
+    std::shared_ptr<SymbolTable> fPrivateSymbolTable;
 
     ParsedModule fRootModule;                // Core types
 
@@ -252,30 +221,30 @@ private:
     ParsedModule fGPUModule;                 // [Private] + GPU intrinsics, helper functions
     ParsedModule fVertexModule;              // [GPU] + Vertex stage decls
     ParsedModule fFragmentModule;            // [GPU] + Fragment stage decls
+    ParsedModule fGeometryModule;            // [GPU] + Geometry stage decls
+    ParsedModule fFPModule;                  // [GPU] + FP features
 
     ParsedModule fPublicModule;              // [Root] + Public features
-    ParsedModule fRuntimeShaderModule;       // [Public] + Runtime shader decls
+    ParsedModule fRuntimeColorFilterModule;  // [Public] + Runtime shader decls
+    ParsedModule fRuntimeShaderModule;       // [Public] + Runtime color filter decls
 
     // holds ModifiersPools belonging to the core includes for lifetime purposes
     ModifiersPool fCoreModifiers;
 
-    Mangler fMangler;
     Inliner fInliner;
-    // This is the current symbol table of the code we are processing, and therefore changes during
-    // compilation
-    std::shared_ptr<SymbolTable> fSymbolTable;
+    std::unique_ptr<IRGenerator> fIRGenerator;
 
-    std::string fErrorText;
+    const String* fSource = nullptr;
+    int fErrorCount = 0;
+    String fErrorText;
+    std::vector<size_t> fErrorTextLength;
 
     static OverrideFlag sOptimizer;
     static OverrideFlag sInliner;
 
     friend class AutoSource;
     friend class ::SkSLCompileBench;
-    friend class DSLParser;
-    friend class Rehydrator;
-    friend class ThreadContext;
-    friend class dsl::DSLCore;
+    friend class dsl::DSLWriter;
 };
 
 }  // namespace SkSL

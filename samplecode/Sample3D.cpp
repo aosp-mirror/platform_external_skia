@@ -176,8 +176,8 @@ class RotateAnimator {
     SkScalar    fAngleSpeed = 0,
                 fAngleSign = 1;
 
-    inline static constexpr double kSlowDown = 4;
-    inline static constexpr SkScalar kMaxSpeed = 16;
+    static constexpr double kSlowDown = 4;
+    static constexpr SkScalar kMaxSpeed = 16;
 
 public:
     void update(SkV3 axis, SkScalar angle) {
@@ -389,7 +389,7 @@ public:
             }
 
             half4 main(float2 p) {
-                float3 norm = convert_normal_sample(normal_map.eval(p));
+                float3 norm = convert_normal_sample(sample(normal_map, p));
                 float3 plane_norm = normalize(localToWorldAdjInv * norm.xyz0).xyz;
 
                 float3 plane_pos = (localToWorld * p.xy01).xyz;
@@ -399,7 +399,7 @@ public:
                 float dp = dot(plane_norm, light_dir);
                 float scale = min(ambient + max(dp, 0), 1);
 
-                return color_map.eval(p) * scale.xxx1;
+                return sample(color_map, p) * scale.xxx1;
             }
         )";
         auto [effect, error] = SkRuntimeEffect::MakeForShader(SkString(code));
@@ -428,7 +428,7 @@ public:
 
         SkPaint paint;
         paint.setColor(color);
-        paint.setShader(builder.makeShader());
+        paint.setShader(builder.makeShader(nullptr, true));
 
         canvas->drawRRect(fRR, paint);
     }

@@ -5,14 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
-
 #include "src/gpu/GrAppliedClip.h"
 #include "src/gpu/GrProcessorSet.h"
 #include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrUserStencilSettings.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/geometry/GrRect.h"
+#include "src/gpu/ops/GrSimpleMeshDrawOpHelper.h"
 
 GrSimpleMeshDrawOpHelper::GrSimpleMeshDrawOpHelper(GrProcessorSet* processorSet,
                                                    GrAAType aaType,
@@ -24,6 +23,9 @@ GrSimpleMeshDrawOpHelper::GrSimpleMeshDrawOpHelper(GrProcessorSet* processorSet,
         , fCompatibleWithCoverageAsAlpha(false) {
     SkDEBUGCODE(fDidAnalysis = false);
     SkDEBUGCODE(fMadePipeline = false);
+    if (GrAATypeIsHW(aaType)) {
+        fPipelineFlags |= GrPipeline::InputFlags::kHWAntialias;
+    }
 }
 
 GrSimpleMeshDrawOpHelper::~GrSimpleMeshDrawOpHelper() {
@@ -86,7 +88,7 @@ GrProcessorSet::Analysis GrSimpleMeshDrawOpHelper::finalizeProcessors(
     if (fProcessors) {
         GrProcessorAnalysisCoverage coverage = geometryCoverage;
         if (GrProcessorAnalysisCoverage::kNone == coverage) {
-            coverage = (clip && clip->hasCoverageFragmentProcessor())
+            coverage = clip->hasCoverageFragmentProcessor()
                                ? GrProcessorAnalysisCoverage::kSingleChannel
                                : GrProcessorAnalysisCoverage::kNone;
         }
@@ -107,9 +109,9 @@ GrProcessorSet::Analysis GrSimpleMeshDrawOpHelper::finalizeProcessors(
 const GrPipeline* GrSimpleMeshDrawOpHelper::CreatePipeline(
                                                 const GrCaps* caps,
                                                 SkArenaAlloc* arena,
-                                                skgpu::Swizzle writeViewSwizzle,
+                                                GrSwizzle writeViewSwizzle,
                                                 GrAppliedClip&& appliedClip,
-                                                const GrDstProxyView& dstProxyView,
+                                                const GrXferProcessor::DstProxyView& dstProxyView,
                                                 GrProcessorSet&& processorSet,
                                                 GrPipeline::InputFlags pipelineFlags) {
     GrPipeline::InitArgs pipelineArgs;
@@ -150,9 +152,9 @@ const GrPipeline* GrSimpleMeshDrawOpHelper::createPipeline(GrOpFlushState* flush
 const GrPipeline* GrSimpleMeshDrawOpHelper::createPipeline(
         const GrCaps* caps,
         SkArenaAlloc* arena,
-        skgpu::Swizzle writeViewSwizzle,
+        GrSwizzle writeViewSwizzle,
         GrAppliedClip&& appliedClip,
-        const GrDstProxyView& dstProxyView) {
+        const GrXferProcessor::DstProxyView& dstProxyView) {
     return GrSimpleMeshDrawOpHelper::CreatePipeline(caps,
                                                     arena,
                                                     writeViewSwizzle,
@@ -166,9 +168,8 @@ GrProgramInfo* GrSimpleMeshDrawOpHelper::CreateProgramInfo(
             const GrCaps* caps,
             SkArenaAlloc* arena,
             const GrSurfaceProxyView& writeView,
-            bool usesMSAASurface,
             GrAppliedClip&& appliedClip,
-            const GrDstProxyView& dstProxyView,
+            const GrXferProcessor::DstProxyView& dstProxyView,
             GrGeometryProcessor* geometryProcessor,
             GrProcessorSet&& processorSet,
             GrPrimitiveType primitiveType,
@@ -184,23 +185,19 @@ GrProgramInfo* GrSimpleMeshDrawOpHelper::CreateProgramInfo(
                                    std::move(processorSet),
                                    pipelineFlags);
 
-    return CreateProgramInfo(caps, arena, pipeline, writeView, usesMSAASurface, geometryProcessor,
-                             primitiveType, renderPassXferBarriers, colorLoadOp, stencilSettings);
+    return CreateProgramInfo(arena, pipeline, writeView, geometryProcessor, primitiveType,
+                             renderPassXferBarriers, colorLoadOp, stencilSettings);
 }
 
-GrProgramInfo* GrSimpleMeshDrawOpHelper::CreateProgramInfo(const GrCaps* caps,
-                                                           SkArenaAlloc* arena,
+GrProgramInfo* GrSimpleMeshDrawOpHelper::CreateProgramInfo(SkArenaAlloc* arena,
                                                            const GrPipeline* pipeline,
                                                            const GrSurfaceProxyView& writeView,
-                                                           bool usesMSAASurface,
                                                            GrGeometryProcessor* geometryProcessor,
                                                            GrPrimitiveType primitiveType,
                                                            GrXferBarrierFlags xferBarrierFlags,
                                                            GrLoadOp colorLoadOp,
                                                            const GrUserStencilSettings* stencilSettings) {
-    auto tmp = arena->make<GrProgramInfo>(*caps,
-                                          writeView,
-                                          usesMSAASurface,
+    auto tmp = arena->make<GrProgramInfo>(writeView,
                                           pipeline,
                                           stencilSettings,
                                           geometryProcessor,
@@ -215,9 +212,8 @@ GrProgramInfo* GrSimpleMeshDrawOpHelper::createProgramInfo(
                                             const GrCaps* caps,
                                             SkArenaAlloc* arena,
                                             const GrSurfaceProxyView& writeView,
-                                            bool usesMSAASurface,
                                             GrAppliedClip&& appliedClip,
-                                            const GrDstProxyView& dstProxyView,
+                                            const GrXferProcessor::DstProxyView& dstProxyView,
                                             GrGeometryProcessor* gp,
                                             GrPrimitiveType primType,
                                             GrXferBarrierFlags renderPassXferBarriers,
@@ -225,7 +221,6 @@ GrProgramInfo* GrSimpleMeshDrawOpHelper::createProgramInfo(
     return CreateProgramInfo(caps,
                              arena,
                              writeView,
-                             usesMSAASurface,
                              std::move(appliedClip),
                              dstProxyView,
                              gp,
@@ -241,6 +236,9 @@ static void dump_pipeline_flags(GrPipeline::InputFlags flags, SkString* result) 
     if (GrPipeline::InputFlags::kNone != flags) {
         if (flags & GrPipeline::InputFlags::kSnapVerticesToPixelCenters) {
             result->append("Snap vertices to pixel center.\n");
+        }
+        if (flags & GrPipeline::InputFlags::kHWAntialias) {
+            result->append("HW Antialiasing enabled.\n");
         }
         if (flags & GrPipeline::InputFlags::kWireframe) {
             result->append("Wireframe enabled.\n");
