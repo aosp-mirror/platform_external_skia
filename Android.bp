@@ -2423,6 +2423,7 @@ cc_defaults {
         "modules/skottie/utils/SkottieUtils.cpp",
         "modules/skparagraph/gm/simple_gm.cpp",
         "modules/skparagraph/src/Decorations.cpp",
+        "modules/skparagraph/src/FontArguments.cpp",
         "modules/skparagraph/src/FontCollection.cpp",
         "modules/skparagraph/src/OneLineShaper.cpp",
         "modules/skparagraph/src/ParagraphBuilderImpl.cpp",
