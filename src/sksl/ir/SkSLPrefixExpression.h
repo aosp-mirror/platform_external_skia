@@ -8,6 +8,7 @@
 #ifndef SKSL_PREFIXEXPRESSION
 #define SKSL_PREFIXEXPRESSION
 
+#include "src/sksl/SkSLIRGenerator.h"
 #include "src/sksl/SkSLLexer.h"
 #include "src/sksl/SkSLOperators.h"
 #include "src/sksl/ir/SkSLExpression.h"
@@ -21,11 +22,11 @@ namespace SkSL {
  */
 class PrefixExpression final : public Expression {
 public:
-    inline static constexpr Kind kExpressionKind = Kind::kPrefix;
+    static constexpr Kind kExpressionKind = Kind::kPrefix;
 
     // Use PrefixExpression::Make to automatically simplify various prefix expression types.
     PrefixExpression(Operator op, std::unique_ptr<Expression> operand)
-        : INHERITED(operand->fLine, kExpressionKind, &operand->type())
+        : INHERITED(operand->fOffset, kExpressionKind, &operand->type())
         , fOperator(op)
         , fOperand(std::move(operand)) {}
 
@@ -62,7 +63,7 @@ public:
         return std::make_unique<PrefixExpression>(this->getOperator(), this->operand()->clone());
     }
 
-    std::string description() const override {
+    String description() const override {
         return this->getOperator().operatorName() + this->operand()->description();
     }
 

@@ -45,15 +45,22 @@ public:
 
 protected:
     bool generateAdvance(SkGlyph* glyph) override;
-    void generateMetrics(SkGlyph* glyph, SkArenaAlloc*) override;
+    void generateMetrics(SkGlyph* glyph) override;
     void generateImage(const SkGlyph& glyph) override;
-    bool generatePath(const SkGlyph& glyph, SkPath* path) override;
+    bool generatePath(SkGlyphID glyph, SkPath* path) override;
     void generateFontMetrics(SkFontMetrics*) override;
 
 private:
     class Offscreen {
     public:
-        Offscreen(SkColor foregroundColor);
+        Offscreen()
+            : fRGBSpace(nullptr)
+            , fCG(nullptr)
+            , fDoAA(false)
+            , fDoLCD(false)
+        {
+            fSize.set(0, 0);
+        }
 
         CGRGBPixel* getCG(const SkScalerContext_Mac& context, const SkGlyph& glyph,
                           CGGlyph glyphID, size_t* rowBytesPtr, bool generateA8FromLCD);
@@ -67,8 +74,6 @@ private:
 
         // cached state
         SkUniqueCFRef<CGContextRef> fCG;
-        SkUniqueCFRef<CGColorRef> fCGForegroundColor;
-        SkColor fSKForegroundColor;
         SkISize fSize;
         bool fDoAA;
         bool fDoLCD;

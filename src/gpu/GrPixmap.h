@@ -62,7 +62,7 @@ protected:
 
     GrPixmapBase(GrImageInfo info, T* addr, size_t rowBytes)
             : fAddr(addr), fRowBytes(rowBytes), fInfo(std::move(info)) {
-        if (fRowBytes < fInfo.minRowBytes() || !addr) {
+        if (fRowBytes < info.minRowBytes() || !addr) {
             *this = {};
         }
     }

@@ -27,7 +27,6 @@ bool TextPropertyValue::operator==(const TextPropertyValue& other) const {
         && fResize == other.fResize
         && fLineBreak == other.fLineBreak
         && fDirection == other.fDirection
-        && fCapitalization == other.fCapitalization
         && fBox == other.fBox
         && fFillColor == other.fFillColor
         && fStrokeColor == other.fStrokeColor
@@ -51,49 +50,49 @@ bool TransformPropertyValue::operator!=(const TransformPropertyValue& other) con
     return !(*this == other);
 }
 
-template <> SK_API
+template <>
 PropertyHandle<ColorPropertyValue, sksg::Color>::~PropertyHandle() {}
 
-template <> SK_API
+template <>
 ColorPropertyValue PropertyHandle<ColorPropertyValue, sksg::Color>::get() const {
     return fNode->getColor();
 }
 
-template <> SK_API
+template <>
 void PropertyHandle<ColorPropertyValue, sksg::Color>::set(const ColorPropertyValue& c) {
     fNode->setColor(c);
 }
 
-template <> SK_API
+template <>
 PropertyHandle<OpacityPropertyValue, sksg::OpacityEffect>::~PropertyHandle() {}
 
-template <> SK_API
+template <>
 OpacityPropertyValue PropertyHandle<OpacityPropertyValue, sksg::OpacityEffect>::get() const {
     return fNode->getOpacity() * 100;
 }
 
-template <> SK_API
+template <>
 void PropertyHandle<OpacityPropertyValue, sksg::OpacityEffect>::set(const OpacityPropertyValue& o) {
     fNode->setOpacity(o / 100);
 }
 
-template <> SK_API
+template <>
 PropertyHandle<TextPropertyValue, internal::TextAdapter>::~PropertyHandle() {}
 
-template <> SK_API
+template <>
 TextPropertyValue PropertyHandle<TextPropertyValue, internal::TextAdapter>::get() const {
       return fNode->getText();
 }
 
-template<> SK_API
+template<>
 void PropertyHandle<TextPropertyValue, internal::TextAdapter>::set(const TextPropertyValue& t) {
       fNode->setText(t);
 }
 
-template <> SK_API
+template <>
 PropertyHandle<TransformPropertyValue, internal::TransformAdapter2D>::~PropertyHandle() {}
 
-template <> SK_API
+template <>
 TransformPropertyValue PropertyHandle<TransformPropertyValue,
                                       internal::TransformAdapter2D>::get() const {
     return {
@@ -106,7 +105,7 @@ TransformPropertyValue PropertyHandle<TransformPropertyValue,
     };
 }
 
-template <> SK_API
+template <>
 void PropertyHandle<TransformPropertyValue, internal::TransformAdapter2D>::set(
         const TransformPropertyValue& t) {
     fNode->setAnchorPoint(t.fAnchorPoint);
@@ -129,8 +128,8 @@ void PropertyObserver::onTextProperty(const char[],
 void PropertyObserver::onTransformProperty(const char[],
                                            const LazyHandle<TransformPropertyHandle>&) {}
 
-void PropertyObserver::onEnterNode(const char node_name[], NodeType) {}
+void PropertyObserver::onEnterNode(const char node_name[]) {}
 
-void PropertyObserver::onLeavingNode(const char node_name[], NodeType) {}
+void PropertyObserver::onLeavingNode(const char node_name[]) {}
 
 }  // namespace skottie

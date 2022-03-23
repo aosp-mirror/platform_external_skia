@@ -323,8 +323,7 @@ SkCanvas::SaveLayerStrategy SkRecorder::getSaveLayerStrategy(const SaveLayerRec&
     this->append<SkRecords::SaveLayer>(this->copy(rec.fBounds)
                     , this->copy(rec.fPaint)
                     , sk_ref_sp(rec.fBackdrop)
-                    , rec.fSaveLayerFlags
-                    , SkCanvasPriv::GetBackdropScaleFactor(rec));
+                    , rec.fSaveLayerFlags);
     return SkCanvas::kNoLayer_SaveLayerStrategy;
 }
 
@@ -335,6 +334,10 @@ bool SkRecorder::onDoSaveBehind(const SkRect* subset) {
 
 void SkRecorder::didRestore() {
     this->append<SkRecords::Restore>(this->getTotalMatrix());
+}
+
+void SkRecorder::onMarkCTM(const char* name) {
+    this->append<SkRecords::MarkCTM>(SkString(name));
 }
 
 void SkRecorder::didConcat44(const SkM44& m) {
@@ -379,11 +382,6 @@ void SkRecorder::onClipShader(sk_sp<SkShader> cs, SkClipOp op) {
 void SkRecorder::onClipRegion(const SkRegion& deviceRgn, SkClipOp op) {
     INHERITED(onClipRegion, deviceRgn, op);
     this->append<SkRecords::ClipRegion>(deviceRgn, op);
-}
-
-void SkRecorder::onResetClip() {
-    INHERITED(onResetClip);
-    this->append<SkRecords::ResetClip>();
 }
 
 sk_sp<SkSurface> SkRecorder::onNewSurface(const SkImageInfo&, const SkSurfaceProps&) {

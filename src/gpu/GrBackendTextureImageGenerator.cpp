@@ -17,6 +17,7 @@
 #include "src/gpu/GrResourceProvider.h"
 #include "src/gpu/GrResourceProviderPriv.h"
 #include "src/gpu/GrSemaphore.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxyPriv.h"
 #include "src/gpu/SkGr.h"
@@ -142,8 +143,8 @@ GrSurfaceProxyView GrBackendTextureImageGenerator::onGenerateTexture(
     }
     fRefHelper->fBorrowingContextID = dContext->directContextID();
     if (!fRefHelper->fBorrowedTextureKey.isValid()) {
-        static const auto kDomain = skgpu::UniqueKey::GenerateDomain();
-        skgpu::UniqueKey::Builder builder(&fRefHelper->fBorrowedTextureKey, kDomain, 1);
+        static const auto kDomain = GrUniqueKey::GenerateDomain();
+        GrUniqueKey::Builder builder(&fRefHelper->fBorrowedTextureKey, kDomain, 1);
         builder[0] = this->uniqueID();
     }
     fBorrowingMutex.release();
@@ -163,8 +164,7 @@ GrSurfaceProxyView GrBackendTextureImageGenerator::onGenerateTexture(
     GrMipmapStatus mipmapStatus = fBackendTexture.hasMipmaps()
             ? GrMipmapStatus::kValid : GrMipmapStatus::kNotAllocated;
 
-    skgpu::Swizzle readSwizzle = dContext->priv().caps()->getReadSwizzle(backendFormat,
-                                                                         grColorType);
+    GrSwizzle readSwizzle = dContext->priv().caps()->getReadSwizzle(backendFormat, grColorType);
 
     // Must make copies of member variables to capture in the lambda since this image generator may
     // be deleted before we actually execute the lambda.

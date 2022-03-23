@@ -11,8 +11,6 @@
 #include "include/private/SkSLStatement.h"
 #include "src/sksl/ir/SkSLExpression.h"
 
-#include <inttypes.h>
-
 namespace SkSL {
 
 /**
@@ -20,25 +18,19 @@ namespace SkSL {
  */
 class SwitchCase final : public Statement {
 public:
-    inline static constexpr Kind kStatementKind = Kind::kSwitchCase;
+    static constexpr Kind kStatementKind = Kind::kSwitchCase;
 
-    static std::unique_ptr<SwitchCase> Make(int line, SKSL_INT value,
-            std::unique_ptr<Statement> statement) {
-        return std::unique_ptr<SwitchCase>(new SwitchCase(line, /*isDefault=*/false, value,
-                std::move(statement)));
+    // null value implies "default" case
+    SwitchCase(int offset, std::unique_ptr<Expression> value, std::unique_ptr<Statement> statement)
+        : INHERITED(offset, kStatementKind)
+        , fValue(std::move(value))
+        , fStatement(std::move(statement)) {}
+
+    std::unique_ptr<Expression>& value() {
+        return fValue;
     }
 
-    static std::unique_ptr<SwitchCase> MakeDefault(int line, std::unique_ptr<Statement> statement) {
-        return std::unique_ptr<SwitchCase>(new SwitchCase(line, /*isDefault=*/true, -1,
-                std::move(statement)));
-    }
-
-    bool isDefault() const {
-        return fDefault;
-    }
-
-    SKSL_INT value() const {
-        SkASSERT(!this->isDefault());
+    const std::unique_ptr<Expression>& value() const {
         return fValue;
     }
 
@@ -51,29 +43,23 @@ public:
     }
 
     std::unique_ptr<Statement> clone() const override {
-        return fDefault ? SwitchCase::MakeDefault(fLine, this->statement()->clone())
-                        : SwitchCase::Make(fLine, this->value(), this->statement()->clone());
+        return std::make_unique<SwitchCase>(fOffset,
+                                            this->value() ? this->value()->clone() : nullptr,
+                                            this->statement()->clone());
     }
 
-    std::string description() const override {
-        if (this->isDefault()) {
-            return String::printf("default:\n%s", fStatement->description().c_str());
-        } else {
-            return String::printf("case %" PRId64 ":\n%s",
-                                  (int64_t) this->value(),
+    String description() const override {
+        if (this->value()) {
+            return String::printf("case %s:\n%s",
+                                  this->value()->description().c_str(),
                                   fStatement->description().c_str());
+        } else {
+            return String::printf("default:\n%s", fStatement->description().c_str());
         }
     }
 
 private:
-    SwitchCase(int line, bool isDefault, SKSL_INT value, std::unique_ptr<Statement> statement)
-        : INHERITED(line, kStatementKind)
-        , fDefault(isDefault)
-        , fValue(std::move(value))
-        , fStatement(std::move(statement)) {}
-
-    bool fDefault;
-    SKSL_INT fValue;
+    std::unique_ptr<Expression> fValue;
     std::unique_ptr<Statement> fStatement;
 
     using INHERITED = Statement;

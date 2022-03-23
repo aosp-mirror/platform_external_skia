@@ -14,7 +14,6 @@
 #include "include/effects/SkColorMatrix.h"
 #include "include/utils/SkRandom.h"
 #include "src/core/SkAutoMalloc.h"
-#include "src/core/SkColorFilterPriv.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
 #include "tests/Test.h"
@@ -105,10 +104,10 @@ DEF_TEST(WorkingFormatFilterFlags, r) {
 
         // No working format change will itself change alpha.
         SkAlphaType unpremul = kUnpremul_SkAlphaType;
-        cf = SkColorFilterPriv::WithWorkingFormat(std::move(cf),
-                                                  &SkNamedTransferFn::kLinear,
-                                                  &SkNamedGamut::kDisplayP3,
-                                                  &unpremul);
+        cf = SkColorFilters::WithWorkingFormat(std::move(cf),
+                                               &SkNamedTransferFn::kLinear,
+                                               &SkNamedGamut::kDisplayP3,
+                                               &unpremul);
         REPORTER_ASSERT(r, cf->isAlphaUnchanged());
     }
 
@@ -121,10 +120,10 @@ DEF_TEST(WorkingFormatFilterFlags, r) {
         REPORTER_ASSERT(r, !cf->isAlphaUnchanged());
 
         SkAlphaType unpremul = kUnpremul_SkAlphaType;
-        cf = SkColorFilterPriv::WithWorkingFormat(std::move(cf),
-                                                  &SkNamedTransferFn::kLinear,
-                                                  &SkNamedGamut::kDisplayP3,
-                                                  &unpremul);
+        cf = SkColorFilters::WithWorkingFormat(std::move(cf),
+                                               &SkNamedTransferFn::kLinear,
+                                               &SkNamedGamut::kDisplayP3,
+                                               &unpremul);
         REPORTER_ASSERT(r, !cf->isAlphaUnchanged());
     }
 }

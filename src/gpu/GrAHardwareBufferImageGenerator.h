@@ -38,18 +38,17 @@ public:
 
     static void DeleteGLTexture(void* ctx);
 
-private:
-    GrAHardwareBufferImageGenerator(const SkImageInfo&, AHardwareBuffer*, SkAlphaType,
-                                    bool isProtectedContent, uint32_t bufferFormat,
-                                    GrSurfaceOrigin surfaceOrigin);
+protected:
 
     bool onIsValid(GrRecordingContext*) const override;
 
     GrSurfaceProxyView onGenerateTexture(GrRecordingContext*, const SkImageInfo&, const SkIPoint&,
                                          GrMipmapped, GrImageTexGenPolicy) override;
 
-    GrSurfaceOrigin origin() const override { return fSurfaceOrigin; }
-
+private:
+    GrAHardwareBufferImageGenerator(const SkImageInfo&, AHardwareBuffer*, SkAlphaType,
+                                    bool isProtectedContent, uint32_t bufferFormat,
+                                    GrSurfaceOrigin surfaceOrigin);
     GrSurfaceProxyView makeView(GrRecordingContext* context);
 
     void releaseTextureRef();

@@ -12,12 +12,6 @@
 DEF_SIMPLE_GM(bicubic, canvas, 300, 320) {
     canvas->clear(SK_ColorBLACK);
 
-    const SkSamplingOptions gSamplings[] = {
-        SkSamplingOptions(SkFilterMode::kNearest),
-        SkSamplingOptions(SkFilterMode::kLinear),
-        SkSamplingOptions(SkCubicResampler::Mitchell()),
-    };
-
     auto make_img = []() {
         auto surf = SkSurface::MakeRasterN32Premul(7, 7);
         surf->getCanvas()->drawColor(SK_ColorBLACK);
@@ -31,8 +25,8 @@ DEF_SIMPLE_GM(bicubic, canvas, 300, 320) {
     auto img = make_img();
 
     canvas->scale(40, 8);
-    for (const auto& s : gSamplings) {
-        canvas->drawImage(img, 0, 0, s, nullptr);
+    for (auto q : {kNone_SkFilterQuality, kLow_SkFilterQuality, kHigh_SkFilterQuality}) {
+        canvas->drawImage(img, 0, 0, SkSamplingOptions(q), nullptr);
         canvas->translate(0, img->height() + 1.0f);
     }
 

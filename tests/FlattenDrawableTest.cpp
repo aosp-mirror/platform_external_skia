@@ -11,7 +11,6 @@
 #include "include/core/SkPictureRecorder.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkStream.h"
-#include "src/core/SkPathEffectBase.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
 #include "tests/Test.h"
@@ -71,7 +70,9 @@ public:
     }
 
     static sk_sp<SkFlattenable> CreateProc(SkReadBuffer& buffer) {
-        return sk_sp<PaintDrawable>(new PaintDrawable(buffer.readPaint()));
+        SkPaint paint;
+        buffer.readPaint(&paint, nullptr);
+        return sk_sp<PaintDrawable>(new PaintDrawable(paint));
     }
 
     Factory getFactory() const override { return CreateProc; }
@@ -290,7 +291,7 @@ DEF_TEST(Flattenable_EmptyDeserialze, reporter) {
     auto data = SkData::MakeEmpty();
 
     #define test(name)  REPORTER_ASSERT(reporter, !name::Deserialize(data->data(), data->size()))
-    test(SkPathEffectBase);
+    test(SkPathEffect);
     test(SkMaskFilter);
     test(SkShaderBase); // todo: make this just be shader!
     test(SkColorFilterBase);

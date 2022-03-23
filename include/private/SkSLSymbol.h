@@ -22,6 +22,7 @@ public:
         kExternal = (int) ProgramElement::Kind::kLast + 1,
         kField,
         kFunctionDeclaration,
+        kSymbolAlias,
         kType,
         kUnresolvedFunction,
         kVariable,
@@ -30,7 +31,7 @@ public:
         kLast = kVariable
     };
 
-    Symbol(int offset, Kind kind, std::string_view name, const Type* type = nullptr)
+    Symbol(int offset, Kind kind, StringFragment name, const Type* type = nullptr)
         : INHERITED(offset, (int) kind)
         , fName(name)
         , fType(type) {
@@ -48,7 +49,7 @@ public:
         return (Kind) fKind;
     }
 
-    std::string_view name() const {
+    StringFragment name() const {
         return fName;
     }
 
@@ -77,7 +78,7 @@ public:
     }
 
 private:
-    std::string_view fName;
+    StringFragment fName;
     const Type* fType;
 
     using INHERITED = IRNode;

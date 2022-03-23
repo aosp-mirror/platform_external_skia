@@ -46,20 +46,20 @@ private:
 
     UniformHandle internalAddUniformArray(const GrFragmentProcessor* owner,
                                           uint32_t visibility,
-                                          SkSLType type,
+                                          GrSLType type,
                                           const char* name,
                                           bool mangleName,
                                           int arrayCount,
                                           const char** outName) override;
 
-    SamplerHandle addSampler(const GrBackendFormat&, GrSamplerState, const skgpu::Swizzle&,
+    SamplerHandle addSampler(const GrBackendFormat&, GrSamplerState, const GrSwizzle&,
                              const char* name, const GrShaderCaps*) override;
 
     const char* samplerVariable(SamplerHandle handle) const override {
         return fSamplers.item(handle.toIndex()).fVariable.c_str();
     }
 
-    skgpu::Swizzle samplerSwizzle(SamplerHandle handle) const override {
+    GrSwizzle samplerSwizzle(SamplerHandle handle) const override {
         return fSamplerSwizzles[handle.toIndex()];
     }
 
@@ -76,9 +76,9 @@ private:
     typedef GrGLProgramDataManager::GLUniformInfo GLUniformInfo;
     typedef GrGLProgramDataManager::UniformInfoArray UniformInfoArray;
 
-    UniformInfoArray         fUniforms;
-    UniformInfoArray         fSamplers;
-    SkTArray<skgpu::Swizzle> fSamplerSwizzles;
+    UniformInfoArray    fUniforms;
+    UniformInfoArray    fSamplers;
+    SkTArray<GrSwizzle> fSamplerSwizzles;
 
     friend class GrGLProgramBuilder;
 

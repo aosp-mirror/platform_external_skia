@@ -1,17 +1,24 @@
 OpCapability Shader
 %1 = OpExtInstImport "GLSL.std.450"
 OpMemoryModel Logical GLSL450
-OpEntryPoint Fragment %_entrypoint_v "_entrypoint" %sk_FragColor %sk_Clockwise
-OpExecutionMode %_entrypoint_v OriginUpperLeft
+OpEntryPoint Fragment %main "main" %sk_FragColor %sk_Clockwise
+OpExecutionMode %main OriginUpperLeft
 OpName %sk_FragColor "sk_FragColor"
 OpName %sk_Clockwise "sk_Clockwise"
-OpName %_entrypoint_v "_entrypoint_v"
+OpName %test "test"
 OpName %main "main"
 OpDecorate %sk_FragColor RelaxedPrecision
 OpDecorate %sk_FragColor Location 0
 OpDecorate %sk_FragColor Index 0
 OpDecorate %sk_Clockwise BuiltIn FrontFacing
-OpDecorate %24 RelaxedPrecision
+OpDecorate %test RelaxedPrecision
+OpDecorate %_arr_float_int_4 ArrayStride 16
+OpDecorate %19 RelaxedPrecision
+OpDecorate %26 RelaxedPrecision
+OpDecorate %29 RelaxedPrecision
+OpDecorate %32 RelaxedPrecision
+OpDecorate %35 RelaxedPrecision
+OpDecorate %36 RelaxedPrecision
 %float = OpTypeFloat 32
 %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
@@ -19,25 +26,35 @@ OpDecorate %24 RelaxedPrecision
 %bool = OpTypeBool
 %_ptr_Input_bool = OpTypePointer Input %bool
 %sk_Clockwise = OpVariable %_ptr_Input_bool Input
-%void = OpTypeVoid
-%12 = OpTypeFunction %void
-%v2float = OpTypeVector %float 2
-%float_0 = OpConstant %float 0
-%16 = OpConstantComposite %v2float %float_0 %float_0
-%_ptr_Function_v2float = OpTypePointer Function %v2float
-%20 = OpTypeFunction %v4float %_ptr_Function_v2float
+%int = OpTypeInt 32 1
+%int_4 = OpConstant %int 4
+%_arr_float_int_4 = OpTypeArray %float %int_4
+%_ptr_Private__arr_float_int_4 = OpTypePointer Private %_arr_float_int_4
+%test = OpVariable %_ptr_Private__arr_float_int_4 Private
 %float_1 = OpConstant %float 1
-%24 = OpConstantComposite %v4float %float_0 %float_1 %float_0 %float_1
-%_entrypoint_v = OpFunction %void None %12
-%13 = OpLabel
-%17 = OpVariable %_ptr_Function_v2float Function
-OpStore %17 %16
-%19 = OpFunctionCall %v4float %main %17
-OpStore %sk_FragColor %19
-OpReturn
-OpFunctionEnd
-%main = OpFunction %v4float None %20
-%21 = OpFunctionParameter %_ptr_Function_v2float
+%float_2 = OpConstant %float 2
+%float_3 = OpConstant %float 3
+%float_4 = OpConstant %float 4
+%void = OpTypeVoid
+%21 = OpTypeFunction %void
+%int_0 = OpConstant %int 0
+%_ptr_Private_float = OpTypePointer Private %float
+%int_1 = OpConstant %int 1
+%int_2 = OpConstant %int 2
+%int_3 = OpConstant %int 3
+%main = OpFunction %void None %21
 %22 = OpLabel
-OpReturnValue %24
+%19 = OpCompositeConstruct %_arr_float_int_4 %float_1 %float_2 %float_3 %float_4
+OpStore %test %19
+%24 = OpAccessChain %_ptr_Private_float %test %int_0
+%26 = OpLoad %float %24
+%28 = OpAccessChain %_ptr_Private_float %test %int_1
+%29 = OpLoad %float %28
+%31 = OpAccessChain %_ptr_Private_float %test %int_2
+%32 = OpLoad %float %31
+%34 = OpAccessChain %_ptr_Private_float %test %int_3
+%35 = OpLoad %float %34
+%36 = OpCompositeConstruct %v4float %26 %29 %32 %35
+OpStore %sk_FragColor %36
+OpReturn
 OpFunctionEnd
