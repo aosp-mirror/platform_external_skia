@@ -12,8 +12,8 @@
 #include "include/private/SkSLStatement.h"
 #include "include/private/SkSLString.h"
 #include "include/private/SkTDArray.h"
-#include "src/core/SkTBlockList.h"
 #include "src/gpu/GrShaderVar.h"
+#include "src/gpu/GrTBlockList.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
 
 #include <stdarg.h>
@@ -21,7 +21,9 @@
 class GrGLSLColorSpaceXformHelper;
 
 namespace SkSL {
-    class ThreadContext;
+    namespace dsl {
+        class DSLWriter;
+    }
 }
 
 /**
@@ -46,8 +48,8 @@ public:
                              GrGLSLColorSpaceXformHelper* colorXformHelper = nullptr);
 
     /** Does the work of appendTextureLookup and blends the result by dst, treating the texture
-        lookup as the src input to the blend. The dst is assumed to be half4 and the result is
-        always a half4. If dst is nullptr we use half4(1) as the blend dst. */
+        lookup a the src input to the blend. The dst is assumed to be half4 and the result is always
+        a half4. If dst is nullptr we use half4(1) as the blend dst. */
     void appendTextureLookupAndBlend(const char* dst,
                                      SkBlendMode,
                                      SamplerHandle,
@@ -82,14 +84,13 @@ public:
         this->definitions().appendf("const float %s = %f;\n", name, value);
     }
 
-    void defineConstantf(const char* type, const char* name, const char* fmt, ...)
-            SK_PRINTF_LIKE(4, 5) {
-        this->definitions().appendf("const %s %s = ", type, name);
-        va_list args;
-        va_start(args, fmt);
-        this->definitions().appendVAList(fmt, args);
-        va_end(args);
-        this->definitions().append(";\n");
+    void defineConstantf(const char* type, const char* name, const char* fmt, ...) {
+       this->definitions().appendf("const %s %s = ", type, name);
+       va_list args;
+       va_start(args, fmt);
+       this->definitions().appendVAList(fmt, args);
+       va_end(args);
+       this->definitions().append(";\n");
     }
 
     void definitionAppend(const char* str) { this->definitions().append(str); }
@@ -138,14 +139,12 @@ public:
     SkString getMangledFunctionName(const char* baseName);
 
     /** Emits a prototype for a helper function outside of main() in the fragment shader. */
-    void emitFunctionPrototype(SkSLType returnType,
+    void emitFunctionPrototype(GrSLType returnType,
                                const char* mangledName,
                                SkSpan<const GrShaderVar> args);
 
-    void emitFunctionPrototype(const char* declaration);
-
     /** Emits a helper function outside of main() in the fragment shader. */
-    void emitFunction(SkSLType returnType,
+    void emitFunction(GrSLType returnType,
                       const char* mangledName,
                       SkSpan<const GrShaderVar> args,
                       const char* body);
@@ -180,10 +179,10 @@ public:
     };
 
 protected:
-    typedef SkTBlockList<GrShaderVar> VarArray;
+    typedef GrTBlockList<GrShaderVar> VarArray;
     void appendDecls(const VarArray& vars, SkString* out) const;
 
-    void appendFunctionDecl(SkSLType returnType,
+    void appendFunctionDecl(GrSLType returnType,
                             const char* mangledName,
                             SkSpan<const GrShaderVar> args);
 
@@ -263,7 +262,7 @@ protected:
     };
 
     GrGLSLProgramBuilder* fProgramBuilder;
-    std::string fCompilerString;
+    SkSL::String fCompilerString;
     SkSTArray<kPrealloc, SkString> fShaderStrings;
     SkString fCode;
     SkString fFunctions;
@@ -281,6 +280,7 @@ protected:
     // Counter for generating unique scratch variable names in a shader.
     int fTmpVariableCounter;
 
+    friend class GrCCCoverageProcessor; // to access code().
     friend class GrGLSLProgramBuilder;
     friend class GrGLProgramBuilder;
     friend class GrD3DPipelineStateBuilder;
@@ -289,6 +289,6 @@ protected:
     friend class GrGLPathProgramBuilder; // to access fInputs.
     friend class GrVkPipelineStateBuilder;
     friend class GrMtlPipelineStateBuilder;
-    friend class SkSL::ThreadContext;
+    friend class SkSL::dsl::DSLWriter;
 };
 #endif

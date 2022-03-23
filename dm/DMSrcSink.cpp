@@ -30,7 +30,6 @@
 #include "include/private/SkTLogic.h"
 #include "include/third_party/skcms/skcms.h"
 #include "include/utils/SkNullCanvas.h"
-#include "include/utils/SkPaintFilterCanvas.h"
 #include "include/utils/SkRandom.h"
 #include "modules/skottie/utils/SkottieUtils.h"
 #include "src/codec/SkCodecImageGenerator.h"
@@ -51,7 +50,6 @@
 #include "tools/DDLPromiseImageHelper.h"
 #include "tools/DDLTileHelper.h"
 #include "tools/Resources.h"
-#include "tools/RuntimeBlendUtils.h"
 #include "tools/debugger/DebugCanvas.h"
 #include "tools/gpu/BackendSurfaceFactory.h"
 #include "tools/gpu/MemoryCache.h"
@@ -72,22 +70,10 @@
     #include "experimental/skrive/include/SkRive.h"
 #endif
 
-#if defined(SK_ENABLE_SVG)
+#if defined(SK_XML)
     #include "include/svg/SkSVGCanvas.h"
     #include "modules/svg/include/SkSVGDOM.h"
-    #include "modules/svg/include/SkSVGNode.h"
     #include "src/xml/SkXMLWriter.h"
-#endif
-
-#ifdef SK_GRAPHITE_ENABLED
-#include "experimental/graphite/include/Context.h"
-#include "experimental/graphite/include/Recorder.h"
-#include "experimental/graphite/include/Recording.h"
-#include "experimental/graphite/include/SkStuff.h"
-// TODO: Remove this src include once we figure out public readPixels call for Graphite.
-#include "experimental/graphite/src/Surface_Graphite.h"
-#include "tools/graphite/ContextFactory.h"
-#include "tools/graphite/GraphiteTestContext.h"
 #endif
 
 #if defined(SK_ENABLE_ANDROID_UTILS)
@@ -998,9 +984,7 @@ Result ImageGenSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
             status = Result::Status::Skip;
         }
 #endif
-        return Result(
-                status,
-                SkStringPrintf("Image generator could not getPixels() for %s\n", fPath.c_str()));
+        return Result(status, "Image generator could not getPixels() for %s\n", fPath.c_str());
     }
 
     set_bitmap_color_space(&decodeInfo);
@@ -1318,7 +1302,7 @@ bool SkRiveSrc::veto(SinkFlags flags) const {
 #endif
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-#if defined(SK_ENABLE_SVG)
+#if defined(SK_XML)
 // Used when the image doesn't have an intrinsic size.
 static const SkSize kDefaultSVGSize = {1000, 1000};
 
@@ -1387,7 +1371,7 @@ bool SVGSrc::veto(SinkFlags flags) const {
     return !type_ok || flags.approach != SinkFlags::kDirect;
 }
 
-#endif // defined(SK_ENABLE_SVG)
+#endif // defined(SK_XML)
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 MSKPSrc::MSKPSrc(Path path) : fPath(path) {
@@ -1466,7 +1450,7 @@ static Result compare_bitmaps(const SkBitmap& reference, const SkBitmap& bitmap)
             errString.append("\nActual image failed to encode: ");
             errString.append(encoded);
         }
-        return Result(Result::Status::Fatal, errString);
+        return Result::Fatal(errString);
     }
     return Result::Ok();
 }
@@ -1493,6 +1477,7 @@ GPUSink::GPUSink(const SkCommandLineConfigGpu* config,
         , fSurfaceFlags(config->getSurfaceFlags())
         , fColorType(config->getColorType())
         , fAlphaType(config->getAlphaType())
+        , fColorSpace(sk_ref_sp(config->getColorSpace()))
         , fBaseContextOptions(grCtxOptions) {
     if (FLAGS_programBinaryCache) {
         fBaseContextOptions.fPersistentCache = &fMemoryCache;
@@ -1575,8 +1560,8 @@ Result GPUSink::onDraw(const Src& src, SkBitmap* dst, SkWStream*, SkString* log,
     if (FLAGS_preAbandonGpuContext) {
         factory.abandonContexts();
     }
-
-    Result result = src.draw(direct, surface->getCanvas());
+    SkCanvas* canvas = surface->getCanvas();
+    Result result = src.draw(direct, canvas);
     if (!result.isOk()) {
         return result;
     }
@@ -2084,7 +2069,7 @@ Result DebugSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) con
 SVGSink::SVGSink(int pageIndex) : fPageIndex(pageIndex) {}
 
 Result SVGSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const {
-#if defined(SK_ENABLE_SVG)
+#if defined(SK_XML)
     if (src.pageCount() > 1) {
         int pageCount = src.pageCount();
         if (fPageIndex > pageCount - 1) {
@@ -2100,13 +2085,14 @@ Result SVGSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const
 #else
     (void)fPageIndex;
     return Result::Fatal("SVG sink is disabled.");
-#endif // SK_ENABLE_SVG
+#endif // SK_XML
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-RasterSink::RasterSink(SkColorType colorType)
-    : fColorType(colorType) {}
+RasterSink::RasterSink(SkColorType colorType, sk_sp<SkColorSpace> colorSpace)
+    : fColorType(colorType)
+    , fColorSpace(std::move(colorSpace)) {}
 
 Result RasterSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString*) const {
     const SkISize size = src.size();
@@ -2123,113 +2109,22 @@ Result RasterSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString*) co
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-#ifdef SK_GRAPHITE_ENABLED
-
-namespace {
-
-// For the sprint Graphite only handles:
-//    solid colors with src or srcOver
-//    repeated or clamped linear gradients with src or srcOver
-void precompile(skgpu::Context* context) {
-    using ShaderType = skgpu::ShaderCombo::ShaderType;
-
-    skgpu::PaintCombo c1 { { skgpu::ShaderCombo({ ShaderType::kSolidColor },
-                                                { SkTileMode::kRepeat }) },
-                           { SkBlendMode::kSrcOver, SkBlendMode::kSrc } };
-    context->preCompile(c1);
-
-    skgpu::PaintCombo c2 { { skgpu::ShaderCombo({ ShaderType::kLinearGradient },
-                                                { SkTileMode::kRepeat, SkTileMode::kClamp }) },
-                           { SkBlendMode::kSrcOver, SkBlendMode::kSrc } };
-    context->preCompile(c2);
-}
-
-} // anonymous namespace
-
-GraphiteSink::GraphiteSink(const SkCommandLineConfigGraphite* config)
-        : fContextType(config->getContextType())
-        , fColorType(config->getColorType())
-        , fAlphaType(config->getAlphaType())
-        , fTestPrecompile(config->getTestPrecompile()) {
-}
-
-Result GraphiteSink::draw(const Src& src,
-                          SkBitmap* dst,
-                          SkWStream* dstStream,
-                          SkString* log) const {
-    SkImageInfo ii = SkImageInfo::Make(src.size(), fColorType, fAlphaType);
-
-    skiatest::graphite::ContextFactory factory;
-    auto [_, context] = factory.getContextInfo(fContextType);
-    if (!context) {
-        return Result::Fatal("Could not create a context.");
-    }
-
-    if (fTestPrecompile) {
-        precompile(context);
-    }
-
-    std::unique_ptr<skgpu::Recorder> recorder = context->makeRecorder();
-    if (!recorder) {
-        return Result::Fatal("Could not create a recorder.");
-    }
-
-    dst->allocPixels(ii);
-
-    {
-        sk_sp<SkSurface> surface = MakeGraphite(recorder.get(), ii);
-        if (!surface) {
-            return Result::Fatal("Could not create a surface.");
-        }
-        Result result = src.draw(/* dContext */ nullptr, surface->getCanvas());
-        if (!result.isOk()) {
-            return result;
-        }
-
-        // For now we cast and call directly into Surface. Once we have a been idea of
-        // what the public API for synchronous graphite readPixels we can update this call to use
-        // that instead.
-        SkPixmap pm;
-        if (!dst->peekPixels(&pm) ||
-            !static_cast<skgpu::Surface*>(surface.get())->onReadPixels(context,
-                                                                       recorder.get(),
-                                                                       pm,
-                                                                       0,
-                                                                       0)) {
-            return Result::Fatal("Could not readback from surface.");
-        }
-    }
-
-    std::unique_ptr<skgpu::Recording> recording = recorder->snap();
-
-    context->insertRecording(std::move(recording));
-    context->submit(skgpu::SyncToCpu::kYes);
-
-    return Result::Ok();
-}
-#endif
-
-/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-
 // Handy for front-patching a Src.  Do whatever up-front work you need, then call draw_to_canvas(),
 // passing the Sink draw() arguments, a size, and a function draws into an SkCanvas.
 // Several examples below.
 
-using DrawToCanvasFn = std::function<DM::Result(GrDirectContext*, SkCanvas*)>;
-
-static Result draw_to_canvas(Sink* sink, SkBitmap* bitmap, SkWStream* stream,
-                             SkString* log, SkISize size, const DrawToCanvasFn& draw) {
+template <typename Fn>
+static Result draw_to_canvas(Sink* sink, SkBitmap* bitmap, SkWStream* stream, SkString* log,
+                             SkISize size, const Fn& draw) {
     class ProxySrc : public Src {
     public:
-        ProxySrc(SkISize size, const DrawToCanvasFn& draw) : fSize(size), fDraw(draw) {}
-        Result draw(GrDirectContext* context, SkCanvas* canvas) const override {
-            return fDraw(context, canvas);
-        }
+        ProxySrc(SkISize size, const Fn& draw) : fSize(size), fDraw(draw) {}
+        Result  draw(GrDirectContext*, SkCanvas* canvas) const override { return fDraw(canvas); }
         Name    name() const override { return "ProxySrc"; }
         SkISize size() const override { return fSize; }
     private:
-        SkISize               fSize;
-        const DrawToCanvasFn& fDraw;
+        SkISize   fSize;
+        const Fn& fDraw;
     };
     return sink->draw(ProxySrc(size, draw), bitmap, stream, log);
 }
@@ -2271,11 +2166,10 @@ ViaMatrix::ViaMatrix(SkMatrix matrix, Sink* sink) : Via(sink), fMatrix(matrix) {
 Result ViaMatrix::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
     SkMatrix matrix = fMatrix;
     SkISize size = auto_compute_translate(&matrix, src.size().width(), src.size().height());
-    return draw_to_canvas(fSink.get(), bitmap, stream, log, size,
-                          [&](GrDirectContext* context, SkCanvas* canvas) {
-                              canvas->concat(matrix);
-                              return src.draw(context, canvas);
-                          });
+    return draw_to_canvas(fSink.get(), bitmap, stream, log, size, [&](SkCanvas* canvas) {
+        canvas->concat(matrix);
+        return src.draw(nullptr, canvas);
+    });
 }
 
 // Undoes any flip or 90 degree rotate without changing the scale of the bitmap.
@@ -2329,11 +2223,10 @@ Result ViaSerialization::draw(
     // Serialize it and then deserialize it.
     sk_sp<SkPicture> deserialized(SkPicture::MakeFromData(pic->serialize().get()));
 
-    result = draw_to_canvas(fSink.get(), bitmap, stream, log, size,
-                            [&](GrDirectContext*, SkCanvas* canvas) {
-                                canvas->drawPicture(deserialized);
-                                return Result::Ok();
-                            });
+    result = draw_to_canvas(fSink.get(), bitmap, stream, log, size, [&](SkCanvas* canvas) {
+        canvas->drawPicture(deserialized);
+        return Result::Ok();
+    });
     if (!result.isOk()) {
         return result;
     }
@@ -2345,11 +2238,10 @@ Result ViaSerialization::draw(
 
 Result ViaPicture::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
     auto size = src.size();
-    Result result = draw_to_canvas(fSink.get(), bitmap, stream, log, size,
-                                   [&](GrDirectContext* context, SkCanvas* canvas) {
+    Result result = draw_to_canvas(fSink.get(), bitmap, stream, log, size, [&](SkCanvas* canvas) {
         SkPictureRecorder recorder;
         sk_sp<SkPicture> pic;
-        Result result = src.draw(context, recorder.beginRecording(SkIntToScalar(size.width()),
+        Result result = src.draw(nullptr, recorder.beginRecording(SkIntToScalar(size.width()),
                                                                   SkIntToScalar(size.height())));
         if (!result.isOk()) {
             return result;
@@ -2367,35 +2259,6 @@ Result ViaPicture::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkS
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-Result ViaRuntimeBlend::draw(const Src& src,
-                             SkBitmap* bitmap,
-                             SkWStream* stream,
-                             SkString* log) const {
-    class RuntimeBlendFilterCanvas : public SkPaintFilterCanvas {
-    public:
-        RuntimeBlendFilterCanvas(SkCanvas* canvas) : INHERITED(canvas) { }
-
-    protected:
-        bool onFilter(SkPaint& paint) const override {
-            if (std::optional<SkBlendMode> mode = paint.asBlendMode()) {
-                paint.setBlender(GetRuntimeBlendForBlendMode(*mode));
-            }
-            return true;
-        }
-
-    private:
-        using INHERITED = SkPaintFilterCanvas;
-    };
-
-    return draw_to_canvas(fSink.get(), bitmap, stream, log, src.size(),
-                          [&](GrDirectContext* context, SkCanvas* canvas) {
-        RuntimeBlendFilterCanvas runtimeBlendCanvas{canvas};
-        return src.draw(context, &runtimeBlendCanvas);
-    });
-}
-
-/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-
 #ifdef TEST_VIA_SVG
 #include "include/svg/SkSVGCanvas.h"
 #include "modules/svg/include/SkSVGDOM.h"
@@ -2403,8 +2266,7 @@ Result ViaRuntimeBlend::draw(const Src& src,
 
 Result ViaSVG::draw(const Src& src, SkBitmap* bitmap, SkWStream* stream, SkString* log) const {
     auto size = src.size();
-    return draw_to_canvas(fSink.get(), bitmap, stream, log, size,
-                          [&](GrDirectContext*, SkCanvas* canvas) -> Result {
+    return draw_to_canvas(fSink.get(), bitmap, stream, log, size, [&](SkCanvas* canvas) -> Result {
         SkDynamicMemoryWStream wstream;
         SkXMLStreamWriter writer(&wstream);
         Result result = src.draw(SkSVGCanvas::Make(SkRect::Make(size), &writer).get());

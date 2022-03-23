@@ -18,13 +18,13 @@
 #include "include/core/SkString.h"
 #include "include/core/SkYUVAInfo.h"
 #include "include/core/SkYUVAPixmaps.h"
-#include "src/core/SkCanvasPriv.h"
+#include "src/gpu/GrPaint.h"
 #include "src/gpu/GrSamplerState.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/GrYUVATextureProxies.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/effects/GrYUVtoRGBEffect.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
 
 #include <memory>
 #include <utility>
@@ -112,15 +112,10 @@ protected:
 
     void onGpuTeardown() override { fProxies = {}; }
 
-    DrawResult onDraw(GrRecordingContext* rContext,
+    DrawResult onDraw(GrRecordingContext* context,
+                      GrSurfaceDrawContext* surfaceDrawContext,
                       SkCanvas* canvas,
                       SkString* errorMsg) override {
-        auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
-        if (!sdc) {
-            *errorMsg = kErrorMsg_DrawSkippedGpuOnly;
-            return DrawResult::kSkip;
-        }
-
         static const GrSamplerState::Filter kFilters[] = {GrSamplerState::Filter::kNearest,
                                                           GrSamplerState::Filter::kLinear};
         static const SkRect kColorRect = SkRect::MakeLTRB(2.f, 2.f, 6.f, 6.f);
@@ -147,13 +142,14 @@ protected:
                     samplerState.setWrapModeX(wm);
                     samplerState.setWrapModeY(wm);
                 }
-                const auto& caps = *rContext->priv().caps();
+                const auto& caps = *context->priv().caps();
                 std::unique_ptr<GrFragmentProcessor> fp =
                         GrYUVtoRGBEffect::Make(fProxies, samplerState, caps, SkMatrix::I(), subset);
                 if (fp) {
                     GrPaint grPaint;
                     grPaint.setColorFragmentProcessor(std::move(fp));
-                    sdc->drawRect(nullptr, std::move(grPaint), GrAA::kYes, ctm, rect);
+                    surfaceDrawContext->drawRect(
+                            nullptr, std::move(grPaint), GrAA::kYes, ctm, rect);
                 }
                 x += rect.width() + kTestPad;
             }
@@ -168,7 +164,7 @@ private:
     SkYUVAPixmaps fPixmaps;
     GrYUVATextureProxies fProxies;
 
-    inline static constexpr SkScalar kTestPad = 10.f;
+    static constexpr SkScalar kTestPad = 10.f;
 
     using INHERITED = GM;
 };

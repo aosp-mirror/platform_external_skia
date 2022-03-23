@@ -76,7 +76,7 @@ DEF_TEST(AnimatedImage_rotation, r) {
 
             auto bounds = animatedImage->getBounds();
             if (bounds != expectedBounds) {
-                ERRORF(r, "Mismatched bounds for %s", file);
+                ERRORF(r, "Mismatched bounds for %", file);
                 bounds.dump();
             }
         }

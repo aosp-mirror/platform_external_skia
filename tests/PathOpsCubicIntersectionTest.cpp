@@ -14,12 +14,10 @@
 
 #include <stdlib.h>
 
-using namespace PathOpsCubicIntersectionTestData;
-
-static constexpr int kFirstCubicIntersectionTest = 9;
+const int firstCubicIntersectionTest = 9;
 
 static void standardTestCases(skiatest::Reporter* reporter) {
-    for (size_t index = kFirstCubicIntersectionTest; index < tests_count; ++index) {
+    for (size_t index = firstCubicIntersectionTest; index < tests_count; ++index) {
         int iIndex = static_cast<int>(index);
         const CubicPts& cubic1 = tests[index][0];
         const CubicPts& cubic2 = tests[index][1];
@@ -413,6 +411,9 @@ static void oneOff(skiatest::Reporter* reporter, const CubicPts& cubic1, const C
         SkDebugf("sect%d,\n", index);
     }
 #endif
+    if (coin && intersections.used() < 2) {
+        SkDebugf("");
+    }
     REPORTER_ASSERT(reporter, !coin || intersections.used() >= 2);
     double tt1, tt2;
     SkDPoint xy1, xy2;
@@ -469,11 +470,11 @@ static void oneOffTests(skiatest::Reporter* reporter) {
 
 static void CubicIntersection_RandTest(skiatest::Reporter* reporter) {
     srand(0);
-    const int kNumTests = 10000000;
+    const int tests = 10000000;
 #if !defined(SK_BUILD_FOR_WIN) && !defined(SK_BUILD_FOR_ANDROID)
     unsigned seed = 0;
 #endif
-    for (int test = 0; test < kNumTests; ++test) {
+    for (int test = 0; test < tests; ++test) {
         CubicPts cubic1, cubic2;
         for (int i = 0; i < 4; ++i) {
             cubic1.fPts[i].fX = static_cast<double>(SK_RAND(seed)) / RAND_MAX * 100;
@@ -639,8 +640,8 @@ static const CubicPts selfSet[] = {
 
 int selfSetCount = (int) SK_ARRAY_COUNT(selfSet);
 
-static void selfOneOff(skiatest::Reporter* reporter, int setIdx) {
-    const CubicPts& cubic = selfSet[setIdx];
+static void selfOneOff(skiatest::Reporter* reporter, int index) {
+    const CubicPts& cubic = selfSet[index];
     SkPoint c[4];
     for (int i = 0; i < 4; ++i) {
         c[i] = cubic.fPts[i].asSkPoint();
@@ -730,6 +731,6 @@ DEF_TEST(PathOpsCubicIntersection, reporter) {
     cubicIntersectionSelfTest(reporter);
     cubicIntersectionCoinTest(reporter);
     standardTestCases(reporter);
-    if ((false)) CubicIntersection_IntersectionFinder();
-    if ((false)) CubicIntersection_RandTest(reporter);
+    if (false) CubicIntersection_IntersectionFinder();
+    if (false) CubicIntersection_RandTest(reporter);
 }

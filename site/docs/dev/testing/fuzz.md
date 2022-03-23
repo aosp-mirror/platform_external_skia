@@ -60,9 +60,7 @@ Set up GN args to use libfuzzer:
     cc = "clang-10"
     cxx = "clang++-10"
     sanitize = "fuzzer"
-    extra_cflags = [ "-DSK_BUILD_FOR_LIBFUZZER", # enables fuzzer-constraints (see below)
-                     "-O1"  # Or whatever you want.
-                   ]
+    extra_cflags = [ "-O1" ]  # Or whatever you want.
     ...
 
 Build Skia and your fuzzer entry point:

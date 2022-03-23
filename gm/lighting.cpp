@@ -180,7 +180,7 @@ protected:
     }
 
 private:
-    inline static constexpr int kStartAzimuth = 225;
+    static constexpr int kStartAzimuth = 225;
 
     SkBitmap fBitmap;
     SkScalar fAzimuth;

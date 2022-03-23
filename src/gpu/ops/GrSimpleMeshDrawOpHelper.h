@@ -95,7 +95,7 @@ public:
 
     bool compatibleWithCoverageAsAlpha() const { return fCompatibleWithCoverageAsAlpha; }
 
-    void visitProxies(const GrVisitProxyFunc& func) const {
+    void visitProxies(const GrOp::VisitProxyFunc& func) const {
         if (fProcessors) {
             fProcessors->visitProxies(func);
         }
@@ -113,9 +113,9 @@ public:
     static const GrPipeline* CreatePipeline(
                                 const GrCaps*,
                                 SkArenaAlloc*,
-                                skgpu::Swizzle writeViewSwizzle,
+                                GrSwizzle writeViewSwizzle,
                                 GrAppliedClip&&,
-                                const GrDstProxyView&,
+                                const GrXferProcessor::DstProxyView&,
                                 GrProcessorSet&&,
                                 GrPipeline::InputFlags pipelineFlags);
     static const GrPipeline* CreatePipeline(
@@ -127,15 +127,13 @@ public:
 
     const GrPipeline* createPipeline(const GrCaps*,
                                      SkArenaAlloc*,
-                                     skgpu::Swizzle writeViewSwizzle,
+                                     GrSwizzle writeViewSwizzle,
                                      GrAppliedClip&&,
-                                     const GrDstProxyView&);
+                                     const GrXferProcessor::DstProxyView&);
 
-    static GrProgramInfo* CreateProgramInfo(const GrCaps*,
-                                            SkArenaAlloc*,
+    static GrProgramInfo* CreateProgramInfo(SkArenaAlloc*,
                                             const GrPipeline*,
                                             const GrSurfaceProxyView& writeView,
-                                            bool usesMSAASurface,
                                             GrGeometryProcessor*,
                                             GrPrimitiveType,
                                             GrXferBarrierFlags renderPassXferBarriers,
@@ -149,9 +147,8 @@ public:
     static GrProgramInfo* CreateProgramInfo(const GrCaps*,
                                             SkArenaAlloc*,
                                             const GrSurfaceProxyView& writeView,
-                                            bool usesMSAASurface,
                                             GrAppliedClip&&,
-                                            const GrDstProxyView&,
+                                            const GrXferProcessor::DstProxyView&,
                                             GrGeometryProcessor*,
                                             GrProcessorSet&&,
                                             GrPrimitiveType,
@@ -165,9 +162,8 @@ public:
     GrProgramInfo* createProgramInfo(const GrCaps*,
                                      SkArenaAlloc*,
                                      const GrSurfaceProxyView& writeView,
-                                     bool usesMSAASurface,
                                      GrAppliedClip&&,
-                                     const GrDstProxyView&,
+                                     const GrXferProcessor::DstProxyView&,
                                      GrGeometryProcessor*,
                                      GrPrimitiveType,
                                      GrXferBarrierFlags renderPassXferBarriers,

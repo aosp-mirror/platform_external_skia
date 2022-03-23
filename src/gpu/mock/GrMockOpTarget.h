@@ -9,15 +9,13 @@
 #define GrMockOpTarget_DEFINED
 
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrAppliedClip.h"
 #include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrDstProxyView.h"
 #include "src/gpu/GrGpu.h"
-#include "src/gpu/GrMeshDrawTarget.h"
+#include "src/gpu/ops/GrMeshDrawOp.h"
 
-// This is a mock GrMeshDrawTarget implementation that just gives back pointers into
+// This is a mock GrMeshDrawOp::Target implementation that just gives back pointers into
 // pre-allocated CPU buffers, rather than allocating and mapping GPU buffers.
-class GrMockOpTarget : public GrMeshDrawTarget {
+class GrMockOpTarget : public GrMeshDrawOp::Target {
 public:
     GrMockOpTarget(sk_sp<GrDirectContext> mockContext) : fMockContext(std::move(mockContext)) {
         fStaticVertexBuffer = fMockContext->priv().getGpu()->createBuffer(
@@ -34,12 +32,12 @@ public:
     GrResourceProvider* resourceProvider() const override {
         return fMockContext->priv().resourceProvider();
     }
-    skgpu::v1::SmallPathAtlasMgr* smallPathAtlasManager() const override { return nullptr; }
+    GrSmallPathAtlasMgr* smallPathAtlasManager() const override { return nullptr; }
     void resetAllocator() { fAllocator.reset(); }
     SkArenaAlloc* allocator() override { return &fAllocator; }
     void putBackVertices(int vertices, size_t vertexStride) override { /* no-op */ }
     GrAppliedClip detachAppliedClip() override { return GrAppliedClip::Disabled(); }
-    const GrDstProxyView& dstProxyView() const override { return fDstProxyView; }
+    const GrXferProcessor::DstProxyView& dstProxyView() const override { return fDstProxyView; }
     GrXferBarrierFlags renderPassBarriers() const override { return GrXferBarrierFlags::kNone; }
     GrLoadOp colorLoadOp() const override { return GrLoadOp::kLoad; }
 
@@ -121,7 +119,7 @@ private:
     char fStaticIndirectData[sizeof(GrDrawIndexedIndirectCommand) * 32];
     sk_sp<GrGpuBuffer> fStaticIndirectBuffer;
     SkSTArenaAllocWithReset<1024 * 1024> fAllocator;
-    GrDstProxyView fDstProxyView;
+    GrXferProcessor::DstProxyView fDstProxyView;
 };
 
 #endif

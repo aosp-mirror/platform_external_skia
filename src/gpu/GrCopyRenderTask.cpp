@@ -10,7 +10,6 @@
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrResourceAllocator.h"
-#include "src/gpu/geometry/GrRect.h"
 
 sk_sp<GrRenderTask> GrCopyRenderTask::Make(GrDrawingManager* drawingMgr,
                                            sk_sp<GrSurfaceProxy> src,
@@ -63,7 +62,7 @@ void GrCopyRenderTask::gatherProxyIntervals(GrResourceAllocator* alloc) const {
     alloc->incOps();
 }
 
-GrRenderTask::ExpectedOutcome GrCopyRenderTask::onMakeClosed(GrRecordingContext*,
+GrRenderTask::ExpectedOutcome GrCopyRenderTask::onMakeClosed(const GrCaps&,
                                                              SkIRect* targetUpdateBounds) {
     // We don't expect to be marked skippable before being closed.
     SkASSERT(fSrc);

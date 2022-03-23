@@ -2,18 +2,15 @@ const CanvasKitInit = require('./bin/canvaskit.js');
 const fs = require('fs');
 const path = require('path');
 
-const assetPath = path.join(__dirname, '..', 'tests', 'assets');
-
 CanvasKitInit({
   locateFile: (file) => __dirname + '/bin/'+file,
 }).then((CanvasKit) => {
   let canvas = CanvasKit.MakeCanvas(300, 300);
 
-
-  let img = fs.readFileSync(path.join(assetPath, 'mandrill_512.png'));
+  let img = fs.readFileSync(path.join(__dirname, 'test.png'));
   img = canvas.decodeImage(img);
 
-  let fontData = fs.readFileSync(path.join(assetPath, 'Roboto-Regular.woff'));
+  let fontData = fs.readFileSync(path.join(__dirname, './Roboto-Regular.woff'));
   canvas.loadFont(fontData, {
                                 'family': 'Roboto',
                                 'style': 'normal',
@@ -42,7 +39,6 @@ CanvasKitInit({
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(img, 100, 150, 400, 350, 10, 200, 150, 100);
 
-  console.log('drop in Canvas2D replacement');
   console.log('<img src="' + canvas.toDataURL() + '" />');
 
   fancyAPI(CanvasKit);
@@ -54,8 +50,9 @@ function fancyAPI(CanvasKit) {
 
   const paint = new CanvasKit.Paint();
 
-  let robotoData = fs.readFileSync(path.join(assetPath, 'Roboto-Regular.woff'));
-  const roboto = CanvasKit.Typeface.MakeFreeTypeFaceFromData(robotoData);
+  const fontMgr = CanvasKit.FontMgr.RefDefault();
+  let robotoData = fs.readFileSync(path.join(__dirname, './Roboto-Regular.woff'));
+  const roboto = fontMgr.MakeTypefaceFromData(robotoData);
 
   const textPaint = new CanvasKit.Paint();
   textPaint.setColor(CanvasKit.Color(40, 0, 0));
@@ -87,11 +84,10 @@ function fancyAPI(CanvasKit) {
   const pngBytes = img.encodeToBytes();
   if (!pngBytes) {
     console.error('encoding failure');
-    return;
+    return
   }
   // See https://stackoverflow.com/a/12713326
   let b64encoded = Buffer.from(pngBytes).toString('base64');
-  console.log('Other APIs too!');
   console.log(`<img src="data:image/png;base64,${b64encoded}" />`);
 
   // These delete calls free up memeory in the C++ WASM memory block.

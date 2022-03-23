@@ -45,8 +45,6 @@ var (
 	explicitPaths = []string{
 		".clang-format",
 		".clang-tidy",
-		".vpython",
-		"bin/activate-emsdk",
 		"bin/fetch-clang-format",
 		"bin/fetch-gn",
 		"buildtools",

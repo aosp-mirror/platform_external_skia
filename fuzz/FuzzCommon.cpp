@@ -7,7 +7,6 @@
 
 #include "fuzz/Fuzz.h"
 #include "fuzz/FuzzCommon.h"
-#include "src/core/SkPathPriv.h"
 
 // We don't always want to test NaNs and infinities.
 static void fuzz_nice_float(Fuzz* fuzz, float* f) {
@@ -45,9 +44,9 @@ void FuzzNicePath(Fuzz* fuzz, SkPath* path, int maxOps) {
             return;
         }
         // How many items in the switch statement below.
-        constexpr uint8_t MAX_PATH_OPERATION = 32;
+        constexpr uint8_t PATH_OPERATIONS = 32;
         uint8_t op;
-        fuzz->nextRange(&op, 0, MAX_PATH_OPERATION);
+        fuzz->nextRange(&op, 0, PATH_OPERATIONS);
         bool test;
         SkPath p;
         SkMatrix m;
@@ -206,18 +205,12 @@ void FuzzNicePath(Fuzz* fuzz, SkPath* path, int maxOps) {
                 break;
             case 30:
                 FuzzNicePath(fuzz, &p, maxOps-1);
-                // transform can explode path sizes so skip this op if p too big
-                if (p.countPoints() <= 100000) {
-                    FuzzNiceMatrix(fuzz, &m);
-                    p.transform(m, path);
-                }
+                FuzzNiceMatrix(fuzz, &m);
+                p.transform(m, path);
                 break;
             case 31:
                 fuzz_nice_float(fuzz, &a, &b);
                 path->setLastPt(a, b);
-                break;
-            case MAX_PATH_OPERATION:
-                SkPathPriv::ShrinkToFit(path);
                 break;
 
             default:

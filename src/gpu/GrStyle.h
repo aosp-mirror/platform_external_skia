@@ -8,11 +8,11 @@
 #ifndef GrStyle_DEFINED
 #define GrStyle_DEFINED
 
-#include "include/core/SkMatrix.h"
+#include "include/core/SkPathEffect.h"
 #include "include/core/SkStrokeRec.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/SkTemplates.h"
-#include "src/core/SkPathEffectBase.h"
+#include "src/core/SkPathEffectPriv.h"
 
 /**
  * Represents the various ways that a GrStyledShape can be styled. It has fill/stroking information
@@ -172,8 +172,7 @@ public:
     /** Given bounds of a path compute the bounds of path with the style applied. */
     void adjustBounds(SkRect* dst, const SkRect& src) const {
         *dst = src;
-        auto pe = as_PEB(this->pathEffect());
-        if (pe && !pe->computeFastBounds(dst)) {
+        if (this->pathEffect() && !SkPathEffectPriv::ComputeFastBounds(this->pathEffect(), dst)) {
             // Restore dst == src since ComputeFastBounds leaves it undefined when returning false
             *dst = src;
         }
@@ -188,7 +187,7 @@ private:
     void initPathEffect(sk_sp<SkPathEffect> pe);
 
     struct DashInfo {
-        DashInfo() : fType(SkPathEffectBase::kNone_DashType) {}
+        DashInfo() : fType(SkPathEffect::kNone_DashType) {}
         DashInfo(const DashInfo& that) { *this = that; }
         DashInfo& operator=(const DashInfo& that) {
             fType = that.fType;

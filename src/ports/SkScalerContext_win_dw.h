@@ -28,10 +28,9 @@ public:
 
 protected:
     bool generateAdvance(SkGlyph* glyph) override;
-    void generateMetrics(SkGlyph* glyph, SkArenaAlloc*) override;
+    void generateMetrics(SkGlyph* glyph) override;
     void generateImage(const SkGlyph& glyph) override;
-    bool generatePath(const SkGlyph&, SkPath*) override;
-    sk_sp<SkDrawable> generateDrawable(const SkGlyph&) override;
+    bool generatePath(SkGlyphID glyph, SkPath* path) override;
     void generateFontMetrics(SkFontMetrics*) override;
 
 private:
@@ -60,20 +59,23 @@ private:
                            DWRITE_TEXTURE_TYPE textureType,
                            RECT* bbox);
 
+    bool isColorGlyph(const SkGlyph& glyph);
+
+    bool isPngGlyph(const SkGlyph& glyph);
+
     DWriteFontTypeface* getDWriteTypeface() {
         return static_cast<DWriteFontTypeface*>(this->getTypeface());
     }
 
-    bool isColorGlyph(const SkGlyph&);
-    bool getColorGlyphRun(const SkGlyph&, IDWriteColorGlyphRunEnumerator**);
-    bool generateColorMetrics(SkGlyph*);
-    void generateColorGlyphImage(const SkGlyph&);
-    void drawColorGlyphImage(const SkGlyph&, SkCanvas&);
+    bool getColorGlyphRun(const SkGlyph& glyph, IDWriteColorGlyphRunEnumerator** colorGlyph);
 
-    bool isPngGlyph(const SkGlyph&);
-    bool generatePngMetrics(SkGlyph*);
-    void generatePngGlyphImage(const SkGlyph&);
-    void drawPngGlyphImage(const SkGlyph&, SkCanvas&);
+    void generateColorMetrics(SkGlyph* glyph);
+
+    void generateColorGlyphImage(const SkGlyph& glyph);
+
+    void generatePngMetrics(SkGlyph* glyph);
+
+    void generatePngGlyphImage(const SkGlyph& glyph);
 
 
     SkTDArray<uint8_t> fBits;
@@ -91,6 +93,7 @@ private:
     DWRITE_MEASURING_MODE fMeasuringMode;
     DWRITE_TEXT_ANTIALIAS_MODE fAntiAliasMode;
     DWRITE_GRID_FIT_MODE fGridFitMode;
+    bool fIsColorFont;
 };
 
 #endif
