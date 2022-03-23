@@ -12,7 +12,6 @@
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkColorSpaceXformSteps.h"
-#include "src/core/SkKeyHelpers.h"
 #include "src/core/SkMatrixProvider.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkReadBuffer.h"
@@ -25,7 +24,6 @@
 #include "src/shaders/SkImageShader.h"
 #include "src/shaders/SkPictureShader.h"
 #include "src/shaders/SkShaderBase.h"
-#include "src/shaders/SkTransformShader.h"
 
 #if SK_SUPPORT_GPU
 #include "src/gpu/GrFragmentProcessor.h"
@@ -135,26 +133,6 @@ std::unique_ptr<GrFragmentProcessor> SkShaderBase::asFragmentProcessor(const GrF
 
 sk_sp<SkShader> SkShaderBase::makeAsALocalMatrixShader(SkMatrix*) const {
     return nullptr;
-}
-
-SkUpdatableShader* SkShaderBase::updatableShader(SkArenaAlloc* alloc) const {
-    if (auto updatable = this->onUpdatableShader(alloc)) {
-        return updatable;
-    }
-
-    return alloc->make<SkTransformShader>(*as_SB(this));
-}
-
-SkUpdatableShader* SkShaderBase::onUpdatableShader(SkArenaAlloc* alloc) const {
-    return nullptr;
-}
-
-// TODO: add implementations for derived classes
-void SkShaderBase::addToKey(SkShaderCodeDictionary* dict,
-                            SkBackend backend,
-                            SkPaintParamsKeyBuilder* builder,
-                            SkUniformBlock* uniformBlock) const {
-    SolidColorShaderBlock::AddToKey(dict, backend, builder, uniformBlock, SkColors::kRed);
 }
 
 sk_sp<SkShader> SkShaders::Empty() { return sk_make_sp<SkEmptyShader>(); }

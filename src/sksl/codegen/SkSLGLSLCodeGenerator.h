@@ -8,59 +8,72 @@
 #ifndef SKSL_GLSLCODEGENERATOR
 #define SKSL_GLSLCODEGENERATOR
 
+#include <set>
+#include <stack>
+#include <tuple>
 #include <unordered_map>
 
+#include "include/private/SkSLProgramElement.h"
+#include "include/private/SkSLStatement.h"
 #include "src/sksl/SkSLOperators.h"
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/codegen/SkSLCodeGenerator.h"
+#include "src/sksl/ir/SkSLBinaryExpression.h"
+#include "src/sksl/ir/SkSLBoolLiteral.h"
+#include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLConstructorScalarCast.h"
+#include "src/sksl/ir/SkSLDoStatement.h"
+#include "src/sksl/ir/SkSLExtension.h"
+#include "src/sksl/ir/SkSLFieldAccess.h"
+#include "src/sksl/ir/SkSLFloatLiteral.h"
+#include "src/sksl/ir/SkSLForStatement.h"
+#include "src/sksl/ir/SkSLFunctionCall.h"
+#include "src/sksl/ir/SkSLFunctionDeclaration.h"
+#include "src/sksl/ir/SkSLFunctionDefinition.h"
+#include "src/sksl/ir/SkSLFunctionPrototype.h"
+#include "src/sksl/ir/SkSLIfStatement.h"
+#include "src/sksl/ir/SkSLIndexExpression.h"
+#include "src/sksl/ir/SkSLIntLiteral.h"
+#include "src/sksl/ir/SkSLInterfaceBlock.h"
+#include "src/sksl/ir/SkSLPostfixExpression.h"
+#include "src/sksl/ir/SkSLPrefixExpression.h"
+#include "src/sksl/ir/SkSLReturnStatement.h"
+#include "src/sksl/ir/SkSLSetting.h"
+#include "src/sksl/ir/SkSLSwitchStatement.h"
+#include "src/sksl/ir/SkSLSwizzle.h"
+#include "src/sksl/ir/SkSLTernaryExpression.h"
+#include "src/sksl/ir/SkSLVarDeclarations.h"
+#include "src/sksl/ir/SkSLVariableReference.h"
 
 namespace SkSL {
-
-class BinaryExpression;
-class Block;
-class ConstructorDiagonalMatrix;
-class ConstructorScalarCast;
-class DoStatement;
-class ExpressionStatement;
-class Extension;
-class FieldAccess;
-class ForStatement;
-class FunctionCall;
-class FunctionDeclaration;
-class FunctionDefinition;
-class FunctionPrototype;
-class IfStatement;
-struct IndexExpression;
-class InterfaceBlock;
-class Literal;
-class PostfixExpression;
-class PrefixExpression;
-class ReturnStatement;
-class Setting;
-class StructDefinition;
-class SwitchStatement;
-struct Swizzle;
-class TernaryExpression;
-class VarDeclaration;
-class VariableReference;
 
 /**
  * Converts a Program into GLSL code.
  */
 class GLSLCodeGenerator : public CodeGenerator {
 public:
-    GLSLCodeGenerator(const Context* context, const Program* program, OutputStream* out)
-    : INHERITED(context, program, out)
-    , fLineEnding("\n") {}
+    GLSLCodeGenerator(const Context* context, const Program* program, ErrorReporter* errors,
+                      OutputStream* out)
+    : INHERITED(program, errors, out)
+    , fLineEnding("\n")
+    , fContext(*context) {}
 
     bool generateCode() override;
 
 protected:
     using Precedence = Operator::Precedence;
 
-    void write(std::string_view s);
+    void write(const char* s);
 
-    void writeLine(std::string_view s = std::string_view());
+    void writeLine();
+
+    void writeLine(const char* s);
+
+    void write(const String& s);
+
+    void write(StringFragment s);
+
+    void writeLine(const String& s);
 
     void finishLine();
 
@@ -68,13 +81,15 @@ protected:
 
     virtual bool usesPrecisionModifiers() const;
 
-    virtual std::string getTypeName(const Type& type);
+    virtual String getTypeName(const Type& type);
 
     void writeStructDefinition(const StructDefinition& s);
 
     void writeType(const Type& type);
 
-    void writeExtension(std::string_view name, bool require = true);
+    void writeExtension(const String& name);
+
+    void writeExtension(const String& name, bool require);
 
     void writeInterfaceBlock(const InterfaceBlock& intf);
 
@@ -118,12 +133,7 @@ protected:
 
     void writeInverseSqrtHack(const Expression& x);
 
-    void writeMatrixComparisonWorkaround(const BinaryExpression& x);
-
     virtual void writeFunctionCall(const FunctionCall& c);
-
-    void writeConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c,
-                                        Precedence parentPrecedence);
 
     virtual void writeAnyConstructor(const AnyConstructor& c, Precedence parentPrecedence);
 
@@ -146,7 +156,11 @@ protected:
 
     void writePostfixExpression(const PostfixExpression& p, Precedence parentPrecedence);
 
-    virtual void writeLiteral(const Literal& l);
+    void writeBoolLiteral(const BoolLiteral& b);
+
+    virtual void writeIntLiteral(const IntLiteral& i);
+
+    virtual void writeFloatLiteral(const FloatLiteral& f);
 
     virtual void writeSetting(const Setting& s);
 
@@ -160,34 +174,34 @@ protected:
 
     void writeDoStatement(const DoStatement& d);
 
-    void writeExpressionStatement(const ExpressionStatement& s);
-
     virtual void writeSwitchStatement(const SwitchStatement& s);
 
     virtual void writeReturnStatement(const ReturnStatement& r);
 
     virtual void writeProgramElement(const ProgramElement& e);
 
-    const ShaderCaps& caps() const { return fContext.fCaps; }
+    const ShaderCapsClass& caps() const { return fContext.fCaps; }
 
     const char* fLineEnding;
+    const Context& fContext;
     StringStream fExtensions;
     StringStream fGlobals;
     StringStream fExtraFunctions;
-    std::string fFunctionHeader;
+    String fFunctionHeader;
     int fVarCount = 0;
     int fIndentation = 0;
     bool fAtLineStart = false;
-    std::set<std::string> fWrittenIntrinsics;
+    std::set<String> fWrittenIntrinsics;
     // true if we have run into usages of dFdx / dFdy
     bool fFoundDerivatives = false;
     bool fFoundExternalSamplerDecl = false;
     bool fFoundRectSamplerDecl = false;
-    bool fSetupClockwise = false;
-    bool fSetupFragPosition = false;
+    bool fFoundGSInvocations = false;
+    bool fSetupFragPositionGlobal = false;
+    bool fSetupFragPositionLocal = false;
     bool fSetupFragCoordWorkaround = false;
     // if non-empty, replace all texture / texture2D / textureProj / etc. calls with this name
-    std::string fTextureFunctionOverride;
+    String fTextureFunctionOverride;
 
     // We map function names to function class so we can quickly deal with function calls that need
     // extra processing
@@ -208,7 +222,7 @@ protected:
         kTexture,
         kTranspose
     };
-    static std::unordered_map<std::string_view, FunctionClass>* fFunctionClasses;
+    static std::unordered_map<StringFragment, FunctionClass>* fFunctionClasses;
 
     using INHERITED = CodeGenerator;
 };

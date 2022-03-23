@@ -26,7 +26,7 @@ class GrFragmentProcessor;
 class GrPaint;
 class GrRecordingContext;
 class GrRenderTarget;
-namespace skgpu { namespace v1 { class SurfaceDrawContext; }}
+class GrSurfaceDrawContext;
 class GrResourceProvider;
 class GrStyledShape;
 class GrSurfaceProxyView;
@@ -114,7 +114,7 @@ public:
      *  successful. If false is returned then paint is unmodified.
      */
     virtual bool directFilterMaskGPU(GrRecordingContext*,
-                                     skgpu::v1::SurfaceDrawContext*,
+                                     GrSurfaceDrawContext*,
                                      GrPaint&& paint,
                                      const GrClip*,
                                      const SkMatrix& viewMatrix,
@@ -158,14 +158,6 @@ public:
      *  and ignore the BlurRec parameter.
      */
     virtual bool asABlur(BlurRec*) const;
-
-    static SkFlattenable::Type GetFlattenableType() {
-        return kSkMaskFilter_Type;
-    }
-
-    SkFlattenable::Type getFlattenableType() const override {
-        return kSkMaskFilter_Type;
-    }
 
 protected:
     SkMaskFilterBase() {}

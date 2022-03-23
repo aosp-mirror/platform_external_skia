@@ -7,7 +7,6 @@
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
-#include "include/core/SkDrawable.h"
 #include "include/core/SkPath.h"
 #include "src/core/SkAdvancedTypefaceMetrics.h"
 #include "src/core/SkGlyph.h"
@@ -25,10 +24,9 @@ public:
 
 protected:
     bool     generateAdvance(SkGlyph*) override;
-    void     generateMetrics(SkGlyph*, SkArenaAlloc*) override;
+    void     generateMetrics(SkGlyph*) override;
     void     generateImage(const SkGlyph&) override;
-    bool     generatePath(const SkGlyph&, SkPath*) override;
-    sk_sp<SkDrawable> generateDrawable(const SkGlyph&) override;
+    bool     generatePath(SkGlyphID, SkPath*) override;
     void     generateFontMetrics(SkFontMetrics*) override;
 
 private:
@@ -36,9 +34,6 @@ private:
         return static_cast<SkRandomTypeface*>(this->getTypeface());
     }
     std::unique_ptr<SkScalerContext> fProxy;
-    // Many of the SkGlyphs returned are the same as those created by the fProxy.
-    // When they are not, the originals are kept here.
-    SkTHashMap<SkPackedGlyphID, SkGlyph> fProxyGlyphs;
     bool                             fFakeIt;
 };
 
@@ -54,7 +49,7 @@ RandomScalerContext::RandomScalerContext(sk_sp<SkRandomTypeface>       face,
 
 bool RandomScalerContext::generateAdvance(SkGlyph* glyph) { return fProxy->generateAdvance(glyph); }
 
-void RandomScalerContext::generateMetrics(SkGlyph* glyph, SkArenaAlloc* alloc) {
+void RandomScalerContext::generateMetrics(SkGlyph* glyph) {
     // Here we will change the mask format of the glyph
     // NOTE: this may be overridden by the base class (e.g. if a mask filter is applied).
     SkMask::Format format = SkMask::kA8_Format;
@@ -65,32 +60,22 @@ void RandomScalerContext::generateMetrics(SkGlyph* glyph, SkArenaAlloc* alloc) {
         case 3: format = SkMask::kBW_Format; break;
     }
 
-    *glyph = fProxy->internalMakeGlyph(glyph->getPackedID(), format, alloc);
+    *glyph = fProxy->internalMakeGlyph(glyph->getPackedID(), format);
 
     if (fFakeIt || (glyph->getGlyphID() % 4) != 2) {
         return;
     }
 
-    fProxy->getPath(*glyph, alloc);
-    if (!glyph->path()) {
+    SkPath path;
+    if (!fProxy->getPath(glyph->getPackedID(), &path)) {
         return;
     }
-
-    // The proxy glyph has a path, but this glyph does not.
-    // Stash the proxy glyph so it can be used later.
-    const SkGlyph* proxyGlyph = fProxyGlyphs.set(glyph->getPackedID(), std::move(*glyph));
-    const SkPath& proxyPath = *proxyGlyph->path();
-
-    *glyph = SkGlyph(glyph->getPackedID());
-    glyph->setPath(alloc, nullptr, false);
     glyph->fMaskFormat = SkMask::kARGB32_Format;
-    glyph->fAdvanceX = proxyGlyph->fAdvanceX;
-    glyph->fAdvanceY = proxyGlyph->fAdvanceY;
 
     SkRect         storage;
     const SkPaint& paint = this->getRandomTypeface()->paint();
     const SkRect&  newBounds =
-            paint.doComputeFastBounds(proxyPath.getBounds(), &storage, SkPaint::kFill_Style);
+            paint.doComputeFastBounds(path.getBounds(), &storage, SkPaint::kFill_Style);
     SkIRect ibounds;
     newBounds.roundOut(&ibounds);
     glyph->fLeft   = ibounds.fLeft;
@@ -100,18 +85,34 @@ void RandomScalerContext::generateMetrics(SkGlyph* glyph, SkArenaAlloc* alloc) {
 }
 
 void RandomScalerContext::generateImage(const SkGlyph& glyph) {
+    // TODO: can force down but not up
+    /*
+    SkMask::Format format = (SkMask::Format)glyph.fMaskFormat;
+    switch (glyph.getGlyphID() % 4) {
+        case 0: format = SkMask::kLCD16_Format; break;
+        case 1: format = SkMask::kA8_Format; break;
+        case 2: format = SkMask::kARGB32_Format; break;
+        case 3: format = SkMask::kBW_Format; break;
+    }
+    const_cast<SkGlyph&>(glyph).fMaskFormat = format;
+    */
+
     if (fFakeIt) {
         sk_bzero(glyph.fImage, glyph.imageSize());
         return;
     }
 
-    SkGlyph* proxyGlyph = fProxyGlyphs.find(glyph.getPackedID());
-    if (!proxyGlyph || !proxyGlyph->path()) {
+    if (SkMask::kARGB32_Format != glyph.fMaskFormat) {
         fProxy->getImage(glyph);
         return;
     }
-    const SkPath& path = *proxyGlyph->path();
-    const bool hairline = proxyGlyph->pathIsHairline();
+
+    // If the format is ARGB, just draw the glyph from path.
+    SkPath path;
+    if (!fProxy->getPath(glyph.getPackedID(), &path)) {
+        fProxy->getImage(glyph);
+        return;
+    }
 
     SkBitmap bm;
     bm.installPixels(SkImageInfo::MakeN32Premul(glyph.fWidth, glyph.fHeight),
@@ -121,31 +122,11 @@ void RandomScalerContext::generateImage(const SkGlyph& glyph) {
 
     SkCanvas canvas(bm);
     canvas.translate(-SkIntToScalar(glyph.fLeft), -SkIntToScalar(glyph.fTop));
-    SkPaint paint = this->getRandomTypeface()->paint();
-    if (hairline) {
-        // We have a device path with effects already applied which is normally a fill path.
-        // However here we do not have a fill path and there is no area to fill.
-        paint.setStyle(SkPaint::kStroke_Style);
-        paint.setStroke(0);
-    }
-    canvas.drawPath(path, paint); //Need to modify the paint if the devPath is hairline
+    canvas.drawPath(path, this->getRandomTypeface()->paint());
 }
 
-bool RandomScalerContext::generatePath(const SkGlyph& glyph, SkPath* path) {
-    SkGlyph* shadowProxyGlyph = fProxyGlyphs.find(glyph.getPackedID());
-    if (shadowProxyGlyph && shadowProxyGlyph->path()) {
-        path->reset();
-        return false;
-    }
+bool RandomScalerContext::generatePath(SkGlyphID glyph, SkPath* path) {
     return fProxy->generatePath(glyph, path);
-}
-
-sk_sp<SkDrawable> RandomScalerContext::generateDrawable(const SkGlyph& glyph) {
-    SkGlyph* shadowProxyGlyph = fProxyGlyphs.find(glyph.getPackedID());
-    if (shadowProxyGlyph && shadowProxyGlyph->path()) {
-        return nullptr;
-    }
-    return fProxy->generateDrawable(glyph);
 }
 
 void RandomScalerContext::generateFontMetrics(SkFontMetrics* metrics) {
@@ -221,10 +202,6 @@ SkTypeface::LocalizedStrings* SkRandomTypeface::onCreateFamilyNameIterator() con
 
 void SkRandomTypeface::getPostScriptGlyphNames(SkString* names) const {
     return fProxy->getPostScriptGlyphNames(names);
-}
-
-bool SkRandomTypeface::onGlyphMaskNeedsCurrentColor() const {
-    return fProxy->glyphMaskNeedsCurrentColor();
 }
 
 int SkRandomTypeface::onGetVariationDesignPosition(

@@ -21,7 +21,7 @@ namespace GrPersistentCacheUtils {
 
 struct ShaderMetadata {
     SkSL::Program::Settings* fSettings = nullptr;
-    SkTArray<std::string> fAttributeNames;
+    SkTArray<SkSL::String> fAttributeNames;
     bool fHasCustomColorOutput = false;
     bool fHasSecondaryColorOutput = false;
     sk_sp<SkData> fPlatformData;
@@ -30,7 +30,7 @@ struct ShaderMetadata {
 int GetCurrentVersion();
 
 sk_sp<SkData> PackCachedShaders(SkFourByteTag shaderType,
-                                const std::string shaders[],
+                                const SkSL::String shaders[],
                                 const SkSL::Program::Inputs inputs[],
                                 int numInputs,
                                 const ShaderMetadata* meta = nullptr);
@@ -38,7 +38,7 @@ sk_sp<SkData> PackCachedShaders(SkFourByteTag shaderType,
 SkFourByteTag GetType(SkReadBuffer* reader);
 
 bool UnpackCachedShaders(SkReadBuffer* reader,
-                         std::string shaders[],
+                         SkSL::String shaders[],
                          SkSL::Program::Inputs inputs[],
                          int numInputs,
                          ShaderMetadata* meta = nullptr);

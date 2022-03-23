@@ -6,12 +6,12 @@
 # We want to run python in unbuffered mode; however shebangs on linux grab the
 # entire rest of the shebang line as a single argument, leading to errors like:
 #
-#   /usr/bin/env: 'python3 -u': No such file or directory
+#   /usr/bin/env: 'python2 -u': No such file or directory
 #
 # This little shell hack is a triple-quoted noop in python, but in sh it
 # evaluates to re-exec'ing this script in unbuffered mode.
 # pylint: disable=pointless-string-statement
-''''exec python3 -u -- "$0" ${1+"$@"} # '''
+''''exec python2 -u -- "$0" ${1+"$@"} # '''
 # vi: syntax=python
 """Bootstrap script to clone and forward to the recipe engine tool.
 
@@ -19,7 +19,7 @@
 ** DO NOT MODIFY **
 *******************
 
-This is a copy of https://chromium.googlesource.com/infra/luci/recipes-py/+/main/recipes.py.
+This is a copy of https://chromium.googlesource.com/infra/luci/recipes-py/+/master/recipes.py.
 To fix bugs, fix in the googlesource repo then run the autoroller.
 """
 
@@ -33,7 +33,6 @@ import subprocess
 import sys
 
 from collections import namedtuple
-from io import open  # pylint: disable=redefined-builtin
 
 try:
   import urllib.parse as urlparse
@@ -45,7 +44,7 @@ except ImportError:
 # url (str) - the url to the engine repo we want to use.
 # revision (str) - the git revision for the engine to get.
 # branch (str) - the branch to fetch for the engine as an absolute ref (e.g.
-#   refs/heads/main)
+#   refs/heads/master)
 EngineDep = namedtuple('EngineDep', 'url revision branch')
 
 
@@ -71,7 +70,7 @@ def parse(repo_root, recipes_cfg_path):
       current repo (i.e. the folder containing `recipes/` and/or
       `recipe_modules`)
   """
-  with open(recipes_cfg_path, 'r') as fh:
+  with open(recipes_cfg_path, 'rU') as fh:
     pb = json.load(fh)
 
   try:
@@ -95,7 +94,7 @@ def parse(repo_root, recipes_cfg_path):
           recipes_cfg_path)
 
     engine.setdefault('revision', '')
-    engine.setdefault('branch', 'refs/heads/main')
+    engine.setdefault('branch', 'refs/heads/master')
     recipes_path = pb.get('recipes_path', '')
 
     # TODO(iannucci): only support absolute refs
@@ -106,16 +105,14 @@ def parse(repo_root, recipes_cfg_path):
                                 recipes_path.replace('/', os.path.sep))
     return EngineDep(**engine), recipes_path
   except KeyError as ex:
-    raise MalformedRecipesCfg(str(ex), recipes_cfg_path)
+    raise MalformedRecipesCfg(ex.message, recipes_cfg_path)
 
 
 IS_WIN = sys.platform.startswith(('win', 'cygwin'))
 
 _BAT = '.bat' if IS_WIN else ''
 GIT = 'git' + _BAT
-VPYTHON = ('vpython' +
-           ('3' if os.getenv('RECIPES_USE_PY3') == 'true' else '') +
-           _BAT)
+VPYTHON = 'vpython' + _BAT
 CIPD = 'cipd' + _BAT
 REQUIRED_BINARIES = {GIT, VPYTHON, CIPD}
 
@@ -244,6 +241,7 @@ def main():
     repo_root = os.path.abspath(repo_root).decode()
     recipes_cfg_path = os.path.join(repo_root, 'infra', 'config', 'recipes.cfg')
     args = ['--package', recipes_cfg_path] + args
+
   engine_path = checkout_engine(engine_override, repo_root, recipes_cfg_path)
 
   argv = (

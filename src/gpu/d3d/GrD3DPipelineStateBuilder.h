@@ -53,10 +53,10 @@ private:
     bool loadHLSLFromCache(SkReadBuffer* reader, gr_cp<ID3DBlob> shaders[]);
 
     gr_cp<ID3DBlob> compileD3DProgram(SkSL::ProgramKind kind,
-                                      const std::string& sksl,
+                                      const SkSL::String& sksl,
                                       const SkSL::Program::Settings& settings,
                                       SkSL::Program::Inputs* outInputs,
-                                      std::string* outHLSL);
+                                      SkSL::String* outHLSL);
 
     GrGLSLUniformHandler* uniformHandler() override { return &fUniformHandler; }
     const GrGLSLUniformHandler* uniformHandler() const override { return &fUniformHandler; }

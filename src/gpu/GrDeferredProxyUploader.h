@@ -58,11 +58,8 @@ public:
             // If the worker thread was unable to allocate pixels, this check will fail, and we'll
             // end up drawing with an uninitialized mask texture, but at least we won't crash.
             if (this->fPixels.addr()) {
-                writePixelsFn(proxy,
-                              SkIRect::MakeSize(fPixels.dimensions()),
-                              pixelColorType,
-                              this->fPixels.addr(),
-                              this->fPixels.rowBytes());
+                writePixelsFn(proxy, 0, 0, this->fPixels.width(), this->fPixels.height(),
+                              pixelColorType, this->fPixels.addr(), this->fPixels.rowBytes());
             }
             // Upload has finished, so tell the proxy to release this GrDeferredProxyUploader
             proxy->texPriv().resetDeferredUploader();

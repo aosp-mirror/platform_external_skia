@@ -936,16 +936,14 @@ void SkMatrix::Scale_pts(const SkMatrix& m, SkPoint dst[], const SkPoint src[], 
         SkScalar ty = m.getTranslateY();
         SkScalar sx = m.getScaleX();
         SkScalar sy = m.getScaleY();
-        Sk4s trans4(tx, ty, tx, ty);
-        Sk4s scale4(sx, sy, sx, sy);
         if (count & 1) {
-            Sk4s p(src->fX, src->fY, 0, 0);
-            p = p * scale4 + trans4;
-            dst->fX = p[0];
-            dst->fY = p[1];
+            dst->fX = src->fX * sx + tx;
+            dst->fY = src->fY * sy + ty;
             src += 1;
             dst += 1;
         }
+        Sk4s trans4(tx, ty, tx, ty);
+        Sk4s scale4(sx, sy, sx, sy);
         count >>= 1;
         if (count & 1) {
             (Sk4s::Load(src) * scale4 + trans4).store(dst);
@@ -1866,7 +1864,8 @@ SkScalar SkMatrixPriv::DifferentialAreaScale(const SkMatrix& m, const SkPoint& p
                                           m.getScaleX(), m.getSkewY(), m.getPerspX(),
                                           m.getSkewX(), m.getScaleY(), m.getPerspY());
 
-    double denom = 1.0 / xyw.fZ;   // 1/w
+    SkScalar denom = 1.f / xyw.fZ; // 1/w
     denom = denom * denom * denom; // 1/w^3
-    return SkScalarAbs(SkDoubleToScalar(sk_determinant(jacobian.fMat, true) * denom));
+
+    return SkScalarAbs(SkDoubleToScalar(sk_determinant(jacobian.fMat, true)) * denom);
 }

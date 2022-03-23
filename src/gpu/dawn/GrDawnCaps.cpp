@@ -11,18 +11,16 @@
 #include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrStencilSettings.h"
-#include "src/gpu/KeyBuilder.h"
 
 GrDawnCaps::GrDawnCaps(const GrContextOptions& contextOptions) : INHERITED(contextOptions) {
     fMipmapSupport = true;
     fBufferMapThreshold = SK_MaxS32;  // FIXME: get this from Dawn?
-    fShaderCaps = std::make_unique<GrShaderCaps>();
+    fShaderCaps.reset(new GrShaderCaps(contextOptions));
     fMaxTextureSize = fMaxRenderTargetSize = 8192; // FIXME
     fMaxVertexAttributes = 16; // FIXME
     fClampToBorderSupport = false;
     fPerformPartialClearsAsDraws = true;
     fDynamicStateArrayGeometryProcessorTextureSupport = true;
-    fTwoSidedStencilRefsAndMasksMustMatch = true;
 
     fShaderCaps->fFlatInterpolationSupport = true;
     fShaderCaps->fIntegerSupport = true;
@@ -39,36 +37,36 @@ bool GrDawnCaps::isFormatSRGB(const GrBackendFormat& format) const {
     return false;
 }
 
-bool GrDawnCaps::isFormatTexturable(const GrBackendFormat& format, GrTextureType) const {
+bool GrDawnCaps::isFormatTexturable(const GrBackendFormat& format) const {
     // Currently, all the formats in GrDawnFormatToPixelConfig are texturable.
     wgpu::TextureFormat dawnFormat;
     return format.asDawnFormat(&dawnFormat);
 }
 
-static skgpu::Swizzle get_swizzle(const GrBackendFormat& format, GrColorType colorType,
-                                  bool forOutput) {
+static GrSwizzle get_swizzle(const GrBackendFormat& format, GrColorType colorType,
+                             bool forOutput) {
     switch (colorType) {
         case GrColorType::kAlpha_8: // fall through
         case GrColorType::kAlpha_F16:
             if (forOutput) {
-                return skgpu::Swizzle("a000");
+                return GrSwizzle("a000");
             } else {
-                return skgpu::Swizzle("000r");
+                return GrSwizzle("000r");
             }
         case GrColorType::kGray_8:
             if (!forOutput) {
-                return skgpu::Swizzle::RRRA();
+                return GrSwizzle::RRRA();
             }
             break;
         case GrColorType::kRGB_888x:
             if (!forOutput) {
-                return skgpu::Swizzle::RGB1();
+                return GrSwizzle::RGB1();
             }
             break;
         default:
-            return skgpu::Swizzle::RGBA();
+            return GrSwizzle::RGBA();
     }
-    return skgpu::Swizzle::RGBA();
+    return GrSwizzle::RGBA();
 }
 
 bool GrDawnCaps::isFormatRenderable(const GrBackendFormat& format,
@@ -124,13 +122,12 @@ GrBackendFormat GrDawnCaps::getBackendFormatFromCompressionType(SkImage::Compres
     return GrBackendFormat();
 }
 
-skgpu::Swizzle GrDawnCaps::onGetReadSwizzle(const GrBackendFormat& format,
-                                            GrColorType colorType) const {
+GrSwizzle GrDawnCaps::onGetReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const
+{
     return get_swizzle(format, colorType, false);
 }
 
-skgpu::Swizzle GrDawnCaps::getWriteSwizzle(const GrBackendFormat& format,
-                                           GrColorType colorType) const {
+GrSwizzle GrDawnCaps::getWriteSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
     return get_swizzle(format, colorType, true);
 }
 
@@ -181,7 +178,7 @@ GrProgramDesc GrDawnCaps::makeDesc(GrRenderTarget* rt,
         return desc;
     }
 
-    skgpu::KeyBuilder b(desc.key());
+    GrProcessorKeyBuilder b(desc.key());
     GrStencilSettings stencil = programInfo.nonGLStencilSettings();
     stencil.genKey(&b, true);
 

@@ -45,18 +45,12 @@ public:
         }
     }
 
-    void onEnterNode(const char node_name[], PropertyObserver::NodeType node_type) override {
-        if (node_name == nullptr) {
-            return;
-        }
+    void onEnterNode(const char node_name[]) override {
         fMgr->fCurrentNode =
                 fMgr->fCurrentNode.empty() ? node_name : fMgr->fCurrentNode + "." + node_name;
     }
 
-    void onLeavingNode(const char node_name[], PropertyObserver::NodeType node_type) override {
-        if (node_name == nullptr) {
-            return;
-        }
+    void onLeavingNode(const char node_name[]) override {
         auto length = strlen(node_name);
         fMgr->fCurrentNode =
                 fMgr->fCurrentNode.length() > length

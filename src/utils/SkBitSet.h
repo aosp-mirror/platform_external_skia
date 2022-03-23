@@ -11,12 +11,10 @@
 #include "include/private/SkMalloc.h"
 #include "include/private/SkTemplates.h"
 #include "src/core/SkMathPriv.h"
-
 #include <climits>
 #include <cstring>
 #include <limits>
 #include <memory>
-#include <optional>
 
 class SkBitSet {
 public:
@@ -91,7 +89,38 @@ public:
         }
     }
 
-    using OptionalIndex = std::optional<size_t>;
+    // Use std::optional<size_t> when possible.
+    class OptionalIndex {
+        bool fHasValue;
+        size_t fValue;
+    public:
+        OptionalIndex() : fHasValue(false) {}
+        constexpr OptionalIndex(size_t index) : fHasValue(true), fValue(index) {}
+
+        constexpr size_t* operator->() { return &fValue; }
+        constexpr const size_t* operator->() const { return &fValue; }
+        constexpr size_t& operator*() & { return fValue; }
+        constexpr const size_t& operator*() const& { return fValue; }
+        constexpr size_t&& operator*() && { return std::move(fValue); }
+        constexpr const size_t&& operator*() const&& { return std::move(fValue); }
+
+        constexpr explicit operator bool() const noexcept { return fHasValue; }
+        constexpr bool has_value() const noexcept { return fHasValue; }
+
+        constexpr size_t& value() & { return fValue; }
+        constexpr const size_t& value() const & { return fValue; }
+        constexpr size_t&& value() && { return std::move(fValue); }
+        constexpr const size_t&& value() const && { return std::move(fValue); }
+
+        template<typename U> constexpr size_t value_or(U&& defaultValue) const& {
+            return bool(*this) ? **this
+                               : static_cast<size_t>(std::forward<U>(defaultValue));
+        }
+        template<typename U> constexpr size_t value_or(U&& defaultValue) && {
+            return bool(*this) ? std::move(**this)
+                               : static_cast<size_t>(std::forward<U>(defaultValue));
+        }
+    };
 
     // If any bits are set, returns the index of the first.
     OptionalIndex findFirst() {
@@ -129,7 +158,7 @@ private:
 
     using Chunk = uint32_t;
     static_assert(std::numeric_limits<Chunk>::radix == 2);
-    inline static constexpr size_t kChunkBits = std::numeric_limits<Chunk>::digits;
+    static constexpr size_t kChunkBits = std::numeric_limits<Chunk>::digits;
     static_assert(kChunkBits == sizeof(Chunk)*CHAR_BIT, "SkBitSet must use every bit in a Chunk");
     std::unique_ptr<Chunk, SkFunctionWrapper<void(void*), sk_free>> fChunks;
 

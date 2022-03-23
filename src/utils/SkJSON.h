@@ -14,7 +14,6 @@
 #include "src/core/SkArenaAlloc.h"
 
 #include <cstring>
-#include <string_view>
 
 class SkString;
 class SkWStream;
@@ -133,7 +132,7 @@ protected:
         kArray                        = 0b00000110,  // ptr to external storage
         kObject                       = 0b00000111,  // ptr to external storage
     };
-    inline static constexpr uint8_t kTagMask = 0b00000111;
+    static constexpr uint8_t kTagMask = 0b00000111;
 
     void init_tagged(Tag);
     void init_tagged_pointer(Tag, void*);
@@ -200,7 +199,7 @@ protected:
     }
 
 private:
-    inline static constexpr size_t kValueSize = 8;
+    static constexpr size_t kValueSize = 8;
 
     uint8_t fData8[kValueSize];
 
@@ -212,14 +211,14 @@ private:
 
 class NullValue final : public Value {
 public:
-    inline static constexpr Type kType = Type::kNull;
+    static constexpr Type kType = Type::kNull;
 
     NullValue();
 };
 
 class BoolValue final : public Value {
 public:
-    inline static constexpr Type kType = Type::kBool;
+    static constexpr Type kType = Type::kBool;
 
     explicit BoolValue(bool);
 
@@ -231,7 +230,7 @@ public:
 
 class NumberValue final : public Value {
 public:
-    inline static constexpr Type kType = Type::kNumber;
+    static constexpr Type kType = Type::kNumber;
 
     explicit NumberValue(int32_t);
     explicit NumberValue(float);
@@ -250,7 +249,7 @@ template <typename T, Value::Type vtype>
 class VectorValue : public Value {
 public:
     using ValueT = T;
-    inline static constexpr Type kType = vtype;
+    static constexpr Type kType = vtype;
 
     size_t size() const {
         SkASSERT(this->getType() == kType);
@@ -284,7 +283,7 @@ public:
 
 class StringValue final : public Value {
 public:
-    inline static constexpr Type kType = Type::kString;
+    static constexpr Type kType = Type::kString;
 
     StringValue();
     StringValue(const char* src, size_t size, SkArenaAlloc& alloc);
@@ -314,10 +313,6 @@ public:
         return this->getTag() == Tag::kShortString
             ? strchr(this->cast<char>(), '\0')
             : this->cast<VectorValue<char, Value::Type::kString>>()->end();
-    }
-
-    std::string_view str() const {
-        return std::string_view(this->begin(), this->size());
     }
 };
 

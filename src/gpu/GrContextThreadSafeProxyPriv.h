@@ -12,7 +12,7 @@
 #include "include/private/GrContext_Base.h"
 
 #include "src/gpu/GrCaps.h"
-#include "src/gpu/text/GrTextBlobRedrawCoordinator.h"
+#include "src/gpu/text/GrTextBlobCache.h"
 
 /**
  * Class that adds methods to GrContextThreadSafeProxy that are only intended for use internal to
@@ -34,12 +34,8 @@ public:
     const GrCaps* caps() const { return fProxy->fCaps.get(); }
     sk_sp<const GrCaps> refCaps() const { return fProxy->fCaps; }
 
-    GrTextBlobRedrawCoordinator* getTextBlobRedrawCoordinator() {
-        return fProxy->fTextBlobRedrawCoordinator.get();
-    }
-    const GrTextBlobRedrawCoordinator* getTextBlobRedrawCoordinator() const {
-        return fProxy->fTextBlobRedrawCoordinator.get();
-    }
+    GrTextBlobCache* getTextBlobCache() { return fProxy->fTextBlobCache.get(); }
+    const GrTextBlobCache* getTextBlobCache() const { return fProxy->fTextBlobCache.get(); }
 
     GrThreadSafeCache* threadSafeCache() { return fProxy->fThreadSafeCache.get(); }
     const GrThreadSafeCache* threadSafeCache() const { return fProxy->fThreadSafeCache.get(); }
@@ -52,6 +48,7 @@ public:
 
 private:
     explicit GrContextThreadSafeProxyPriv(GrContextThreadSafeProxy* proxy) : fProxy(proxy) {}
+    GrContextThreadSafeProxyPriv(const GrContextThreadSafeProxy&) = delete;
     GrContextThreadSafeProxyPriv& operator=(const GrContextThreadSafeProxyPriv&) = delete;
 
     // No taking addresses of this type.

@@ -47,7 +47,7 @@ std::unique_ptr<GrGLContext> GrGLContext::Make(sk_sp<const GrGLInterface> interf
         char androidAPIVersion[PROP_VALUE_MAX];
         int strLength = __system_property_get("ro.build.version.sdk", androidAPIVersion);
         if (strLength == 0 || atoi(androidAPIVersion) < 26) {
-            args.fGLSLGeneration = SkSL::GLSLGeneration::k110;
+            args.fGLSLGeneration = k110_GrGLSLGeneration;
         }
     }
 #endif
@@ -61,10 +61,10 @@ std::unique_ptr<GrGLContext> GrGLContext::Make(sk_sp<const GrGLInterface> interf
         options.fPreferExternalImagesOverES3 &&
         !options.fDisableDriverCorrectnessWorkarounds &&
         interface->hasExtension("GL_OES_EGL_image_external") &&
-        args.fGLSLGeneration >= SkSL::GLSLGeneration::k330 &&
+        args.fGLSLGeneration >= k330_GrGLSLGeneration &&
         !interface->hasExtension("GL_OES_EGL_image_external_essl3") &&
         !interface->hasExtension("OES_EGL_image_external_essl3")) {
-        args.fGLSLGeneration = SkSL::GLSLGeneration::k110;
+        args.fGLSLGeneration = k110_GrGLSLGeneration;
     }
 
     args.fContextOptions = &options;
@@ -74,26 +74,6 @@ std::unique_ptr<GrGLContext> GrGLContext::Make(sk_sp<const GrGLInterface> interf
 }
 
 GrGLContext::~GrGLContext() {}
-
-GrGLContextInfo GrGLContextInfo::makeNonAngle() const {
-    GrGLContextInfo copy = *this;
-    if (fDriverInfo.fANGLEBackend == GrGLANGLEBackend::kUnknown) {
-        return copy;
-    }
-
-    copy.fDriverInfo.fVendor        = copy.fDriverInfo.fANGLEVendor;
-    copy.fDriverInfo.fDriver        = copy.fDriverInfo.fANGLEDriver;
-    copy.fDriverInfo.fDriverVersion = copy.fDriverInfo.fANGLEDriverVersion;
-    copy.fDriverInfo.fRenderer      = copy.fDriverInfo.fANGLERenderer;
-
-    copy.fDriverInfo.fANGLEBackend       = GrGLANGLEBackend::kUnknown;
-    copy.fDriverInfo.fANGLEVendor        = GrGLVendor::kOther;
-    copy.fDriverInfo.fANGLEDriver        = GrGLDriver::kUnknown;
-    copy.fDriverInfo.fANGLEDriverVersion = GR_GL_DRIVER_UNKNOWN_VER;
-    copy.fDriverInfo.fANGLERenderer      = GrGLRenderer::kOther;
-
-    return copy;
-}
 
 GrGLContextInfo::GrGLContextInfo(ConstructorArgs&& args) {
     fInterface = std::move(args.fInterface);

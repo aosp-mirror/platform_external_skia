@@ -94,10 +94,10 @@ protected:
             fillPaint.setAntiAlias(true);
             fillPaint.setColor(faceColors[i]);
 
-            // Leverages FillRectOp on GPU backend
+            // Leverages GrFillRectOp on GPU backend
             canvas->drawRect(SkRect::MakeWH(viewportWidth, viewportWidth), fillPaint);
 
-            // Leverages TextureOp on GPU backend, to ensure sure both quad paths handle clipping
+            // Leverages GrTextureOp on GPU backend, to ensure sure both quad paths handle clipping
             canvas->drawImageRect(fCubeImage.get(),
                                   SkRect::MakeWH(fCubeImage->width(), fCubeImage->height()),
                                   SkRect::MakeWH(viewportWidth, viewportWidth),

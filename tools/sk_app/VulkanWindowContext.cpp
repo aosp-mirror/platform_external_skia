@@ -24,17 +24,16 @@
 #undef CreateSemaphore
 #endif
 
-#define GET_PROC(F) f ## F = \
-    (PFN_vk ## F) backendContext.fGetProc("vk" #F, fInstance, VK_NULL_HANDLE)
-#define GET_DEV_PROC(F) f ## F = \
-    (PFN_vk ## F) backendContext.fGetProc("vk" #F, VK_NULL_HANDLE, fDevice)
+#define GET_PROC(F) f ## F = (PFN_vk ## F) fGetInstanceProcAddr(fInstance, "vk" #F)
+#define GET_DEV_PROC(F) f ## F = (PFN_vk ## F) fGetDeviceProcAddr(fDevice, "vk" #F)
 
 namespace sk_app {
 
 VulkanWindowContext::VulkanWindowContext(const DisplayParams& params,
                                          CreateVkSurfaceFn createVkSurface,
                                          CanPresentFn canPresent,
-                                         PFN_vkGetInstanceProcAddr instProc)
+                                         PFN_vkGetInstanceProcAddr instProc,
+                                         PFN_vkGetDeviceProcAddr devProc)
     : WindowContext(params)
     , fCreateVkSurfaceFn(createVkSurface)
     , fCanPresentFn(canPresent)
@@ -45,6 +44,7 @@ VulkanWindowContext::VulkanWindowContext(const DisplayParams& params,
     , fSurfaces(nullptr)
     , fBackbuffers(nullptr) {
     fGetInstanceProcAddr = instProc;
+    fGetDeviceProcAddr = devProc;
     this->initializeContext();
 }
 
@@ -53,12 +53,19 @@ void VulkanWindowContext::initializeContext() {
     // any config code here (particularly for msaa)?
 
     PFN_vkGetInstanceProcAddr getInstanceProc = fGetInstanceProcAddr;
+    PFN_vkGetDeviceProcAddr getDeviceProc = fGetDeviceProcAddr;
+    auto getProc = [getInstanceProc, getDeviceProc](const char* proc_name,
+                                                    VkInstance instance, VkDevice device) {
+        if (device != VK_NULL_HANDLE) {
+            return getDeviceProc(device, proc_name);
+        }
+        return getInstanceProc(instance, proc_name);
+    };
     GrVkBackendContext backendContext;
     GrVkExtensions extensions;
     VkPhysicalDeviceFeatures2 features;
-    if (!sk_gpu_test::CreateVkBackendContext(getInstanceProc, &backendContext, &extensions,
-                                             &features, &fDebugCallback, &fPresentQueueIndex,
-                                             fCanPresentFn)) {
+    if (!sk_gpu_test::CreateVkBackendContext(getProc, &backendContext, &extensions, &features,
+                                             &fDebugCallback, &fPresentQueueIndex, fCanPresentFn)) {
         sk_gpu_test::FreeVulkanFeaturesStructs(&features);
         return;
     }

@@ -137,7 +137,7 @@ public:
 
 private:
     // first byte reserved for tagging, \0 terminator => 6 usable chars
-    inline static constexpr size_t kMaxInlineStringSize = sizeof(Value) - 2;
+    static constexpr size_t kMaxInlineStringSize = sizeof(Value) - 2;
 
     void initLongString(const char* src, size_t size, SkArenaAlloc& alloc) {
         SkASSERT(size > kMaxInlineStringSize);
@@ -468,11 +468,11 @@ private:
     SkArenaAlloc&         fAlloc;
 
     // Pending values stack.
-    inline static constexpr size_t kValueStackReserve = 256;
+    static constexpr size_t kValueStackReserve = 256;
     std::vector<Value>    fValueStack;
 
     // String unescape buffer.
-    inline static constexpr size_t kUnescapeBufferReserve = 512;
+    static constexpr size_t kUnescapeBufferReserve = 512;
     std::vector<char>     fUnescapeBuffer;
 
     // Tracks the current object/array scope, as an index into fStack:
@@ -874,9 +874,9 @@ void Write(const Value& v, SkWStream* stream) {
         const auto& array = v.as<ArrayValue>();
         stream->writeText("[");
         bool first_value = true;
-        for (const auto& entry : array) {
+        for (const auto& v : array) {
             if (!first_value) stream->writeText(",");
-            Write(entry, stream);
+            Write(v, stream);
             first_value = false;
         }
         stream->writeText("]");

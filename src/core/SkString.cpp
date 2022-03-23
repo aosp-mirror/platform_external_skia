@@ -14,7 +14,6 @@
 
 #include <cstdio>
 #include <new>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -25,10 +24,6 @@ struct StringBuffer {
     char*  fText;
     int    fLength;
 };
-
-template <int SIZE>
-static StringBuffer apply_format_string(const char* format, va_list args, char (&stackBuffer)[SIZE],
-                                        SkString* heapBuffer) SK_PRINTF_LIKE(1, 0);
 
 template <int SIZE>
 static StringBuffer apply_format_string(const char* format, va_list args, char (&stackBuffer)[SIZE],
@@ -255,19 +250,15 @@ bool SkString::Rec::unique() const {
 }
 
 #ifdef SK_DEBUG
-int32_t SkString::Rec::getRefCnt() const {
-    return fRefCnt.load(std::memory_order_relaxed);
-}
-
 const SkString& SkString::validate() const {
-    // make sure no one has written over our global
+    // make sure know one has written over our global
     SkASSERT(0 == gEmptyRec.fLength);
-    SkASSERT(0 == gEmptyRec.getRefCnt());
+    SkASSERT(0 == gEmptyRec.fRefCnt.load(std::memory_order_relaxed));
     SkASSERT(0 == gEmptyRec.data()[0]);
 
     if (fRec.get() != &gEmptyRec) {
         SkASSERT(fRec->fLength > 0);
-        SkASSERT(fRec->getRefCnt() > 0);
+        SkASSERT(fRec->fRefCnt.load(std::memory_order_relaxed) > 0);
         SkASSERT(0 == fRec->data()[fRec->fLength]);
     }
     return *this;
@@ -301,10 +292,6 @@ SkString::SkString(SkString&& src) : fRec(std::move(src.validate().fRec)) {
 
 SkString::SkString(const std::string& src) {
     fRec = Rec::Make(src.c_str(), src.size());
-}
-
-SkString::SkString(std::string_view src) {
-    fRec = Rec::Make(src.data(), src.length());
 }
 
 SkString::~SkString() {

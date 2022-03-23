@@ -20,10 +20,10 @@ namespace SkSL {
  */
 class ExternalFunctionCall final : public Expression {
 public:
-    inline static constexpr Kind kExpressionKind = Kind::kExternalFunctionCall;
+    static constexpr Kind kExpressionKind = Kind::kExternalFunctionCall;
 
-    ExternalFunctionCall(int line, const ExternalFunction* function, ExpressionArray arguments)
-        : INHERITED(line, kExpressionKind, &function->type())
+    ExternalFunctionCall(int offset, const ExternalFunction* function, ExpressionArray arguments)
+        : INHERITED(offset, kExpressionKind, &function->type())
         , fFunction(*function)
         , fArguments(std::move(arguments)) {}
 
@@ -52,13 +52,18 @@ public:
     }
 
     std::unique_ptr<Expression> clone() const override {
-        return std::make_unique<ExternalFunctionCall>(fLine, &this->function(),
-                                                      this->arguments().clone());
+        ExpressionArray cloned;
+        cloned.reserve_back(this->arguments().size());
+        for (const auto& arg : this->arguments()) {
+            cloned.push_back(arg->clone());
+        }
+        return std::make_unique<ExternalFunctionCall>(fOffset, &this->function(),
+                                                      std::move(cloned));
     }
 
-    std::string description() const override {
-        std::string result = std::string(this->function().name()) + "(";
-        std::string separator;
+    String description() const override {
+        String result = String(this->function().name()) + "(";
+        String separator;
         for (const std::unique_ptr<Expression>& arg : this->arguments()) {
             result += separator;
             result += arg->description();

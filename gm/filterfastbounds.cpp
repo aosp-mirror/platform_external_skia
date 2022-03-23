@@ -9,6 +9,7 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkFilterQuality.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageFilter.h"
 #include "include/core/SkMatrix.h"
@@ -157,10 +158,10 @@ public:
     }
 
 protected:
-    inline static constexpr int kTileWidth = 100;
-    inline static constexpr int kTileHeight = 100;
-    inline static constexpr int kNumVertTiles = 7;
-    inline static constexpr int kNumXtraCols = 2;
+    static constexpr int kTileWidth = 100;
+    static constexpr int kTileHeight = 100;
+    static constexpr int kNumVertTiles = 7;
+    static constexpr int kNumXtraCols = 2;
 
     SkString onShortName() override { return SkString("filterfastbounds"); }
 

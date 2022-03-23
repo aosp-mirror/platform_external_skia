@@ -52,14 +52,14 @@ public:
     enum class Type : uint8_t {
         kEmpty, kPoint, kRect, kRRect, kPath, kArc, kLine
     };
-    inline static constexpr int kTypeCount = static_cast<int>(Type::kLine) + 1;
+    static constexpr int kTypeCount = static_cast<int>(Type::kLine) + 1;
 
     // The direction and start index used when a shape does not have a representable winding,
     // or when that information was discarded during simplification (kIgnoreWinding_Flag).
-    inline static constexpr SkPathDirection kDefaultDir   = SkPathDirection::kCW;
-    inline static constexpr unsigned        kDefaultStart = 0;
+    static constexpr SkPathDirection kDefaultDir   = SkPathDirection::kCW;
+    static constexpr unsigned        kDefaultStart = 0;
     // The fill rule that is used by asPath() for shapes that aren't already a path.
-    inline static constexpr SkPathFillType  kDefaultFillType = SkPathFillType::kEvenOdd;
+    static constexpr SkPathFillType  kDefaultFillType = SkPathFillType::kEvenOdd;
 
     GrShape() {}
     explicit GrShape(const SkPoint& point) { this->setPoint(point); }

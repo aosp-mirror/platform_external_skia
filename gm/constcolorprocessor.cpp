@@ -28,14 +28,14 @@
 #include "include/gpu/GrConfig.h"
 #include "include/private/GrTypesPriv.h"
 #include "include/private/SkColorData.h"
-#include "src/core/SkCanvasPriv.h"
 #include "src/core/SkMatrixProvider.h"
 #include "src/gpu/GrColor.h"
 #include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrPaint.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/SkGr.h"
-#include "src/gpu/ops/GrOp.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include "src/gpu/ops/GrDrawOp.h"
+#include "src/gpu/ops/GrFillRectOp.h"
 #include "tools/ToolUtils.h"
 #include "tools/gpu/TestOps.h"
 
@@ -43,13 +43,14 @@
 
 namespace skiagm {
 /**
- * This GM directly exercises Color and ModulateRGBA.
+ * This GM directly exercises Color, ModulateRGBA and ModulateAlpha.
  */
 class ColorProcessor : public GpuGM {
 public:
     enum class TestMode {
         kConstColor,
-        kModulateRGBA
+        kModulateRGBA,
+        kModulateAlpha
     };
 
     ColorProcessor(TestMode mode) : fMode(mode) {
@@ -61,6 +62,7 @@ protected:
         switch (fMode) {
             case TestMode::kConstColor:    return SkString("const_color_processor");
             case TestMode::kModulateRGBA:  return SkString("modulate_rgba");
+            case TestMode::kModulateAlpha: return SkString("modulate_alpha");
         }
         SkUNREACHABLE;
     }
@@ -76,13 +78,8 @@ protected:
                                                SkTileMode::kClamp);
     }
 
-    DrawResult onDraw(GrRecordingContext* rContext, SkCanvas* canvas, SkString* errorMsg) override {
-        auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
-        if (!sdc) {
-            *errorMsg = kErrorMsg_DrawSkippedGpuOnly;
-            return DrawResult::kSkip;
-        }
-
+    void onDraw(GrRecordingContext* context, GrSurfaceDrawContext* surfaceDrawContext,
+                SkCanvas* canvas) override {
         constexpr GrColor kColors[] = {
             0xFFFFFFFF,
             0xFFFF00FF,
@@ -113,7 +110,7 @@ protected:
                 std::unique_ptr<GrFragmentProcessor> baseFP;
                 if (paintType >= SK_ARRAY_COUNT(kPaintColors)) {
                     GrColorInfo colorInfo;
-                    GrFPArgs args(rContext, SkMatrixProvider(SkMatrix::I()), &colorInfo);
+                    GrFPArgs args(context, SkSimpleMatrixProvider(SkMatrix::I()), &colorInfo);
                     baseFP = as_SB(fShader)->asFragmentProcessor(args);
                 } else {
                     baseFP = GrFragmentProcessor::MakeColor(
@@ -132,15 +129,20 @@ protected:
                         colorFP = GrFragmentProcessor::ModulateRGBA(
                                 std::move(baseFP), SkPMColor4f::FromBytes_RGBA(kColors[procColor]));
                         break;
+
+                    case TestMode::kModulateAlpha:
+                        colorFP = GrFragmentProcessor::ModulateAlpha(
+                                std::move(baseFP), SkPMColor4f::FromBytes_RGBA(kColors[procColor]));
+                        break;
                 }
 
                 // Render the FP tree.
-                if (auto op = sk_gpu_test::test_ops::MakeRect(rContext,
+                if (auto op = sk_gpu_test::test_ops::MakeRect(context,
                                                               std::move(colorFP),
                                                               renderRect.makeOffset(x, y),
                                                               renderRect,
                                                               SkMatrix::I())) {
-                    sdc->addDrawOp(std::move(op));
+                    surfaceDrawContext->addDrawOp(std::move(op));
                 }
 
                 // Draw labels for the input to the processor and the processor to the right of
@@ -196,8 +198,6 @@ protected:
                 }
             }
         }
-
-        return DrawResult::kOk;
     }
 
 private:
@@ -205,15 +205,16 @@ private:
     sk_sp<SkShader> fShader;
     TestMode        fMode;
 
-    inline static constexpr SkScalar       kPad = 10.f;
-    inline static constexpr SkScalar       kRectSize = 20.f;
-    inline static constexpr int            kWidth  = 820;
-    inline static constexpr int            kHeight = 500;
+    static constexpr SkScalar       kPad = 10.f;
+    static constexpr SkScalar       kRectSize = 20.f;
+    static constexpr int            kWidth  = 820;
+    static constexpr int            kHeight = 500;
 
     using INHERITED = GM;
 };
 
 DEF_GM(return new ColorProcessor{ColorProcessor::TestMode::kConstColor};)
 DEF_GM(return new ColorProcessor{ColorProcessor::TestMode::kModulateRGBA};)
+DEF_GM(return new ColorProcessor{ColorProcessor::TestMode::kModulateAlpha};)
 
 }  // namespace skiagm
