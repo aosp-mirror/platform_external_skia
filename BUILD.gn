@@ -2039,6 +2039,8 @@ if (skia_enable_tools) {
     sources = [
       "tests/Test.cpp",
       "tests/Test.h",
+      "tests/TestHarness.cpp",
+      "tests/TestHarness.h",
       "tests/TestUtils.cpp",
       "tests/TestUtils.h",
     ]
@@ -2476,6 +2478,7 @@ if (skia_enable_tools) {
       sources = [
         "dm/DMGpuTestProcs.cpp",
         "tools/skqp/src/skqp.cpp",
+        "tools/skqp/src/skqp.h",
       ]
       deps = [
         ":gm",
