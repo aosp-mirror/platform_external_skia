@@ -24,9 +24,10 @@ class GrMtlPipelineState;
 class SkReadBuffer;
 
 struct GrMtlPrecompiledLibraries {
-    // TODO: wrap this in sk_cfp<> or unique_ptr<> when we remove ARC
-    id<MTLRenderPipelineState> fPipelineState;
-    bool fRTHeight = false;
+    // TODO: wrap these in sk_cfp<> or unique_ptr<> when we remove ARC
+    id<MTLLibrary> fVertexLibrary;
+    id<MTLLibrary> fFragmentLibrary;
+    bool fRTFlip = false;
 };
 
 class GrMtlPipelineStateBuilder : public GrGLSLProgramBuilder {
@@ -60,10 +61,10 @@ private:
 
     void finalizeFragmentSecondaryColor(GrShaderVar& outputColor) override;
 
-    id<MTLLibrary> compileMtlShaderLibrary(const SkSL::String& shader,
+    id<MTLLibrary> compileMtlShaderLibrary(const std::string& shader,
                                            SkSL::Program::Inputs inputs,
                                            GrContextOptions::ShaderErrorHandler* errorHandler);
-    void storeShadersInCache(const SkSL::String shaders[], const SkSL::Program::Inputs inputs[],
+    void storeShadersInCache(const std::string shaders[], const SkSL::Program::Inputs inputs[],
                              SkSL::Program::Settings*, sk_sp<SkData>, bool isSkSL);
 
     GrGLSLUniformHandler* uniformHandler() override { return &fUniformHandler; }
