@@ -101,8 +101,8 @@ static void dump_array(const uint16_t array[], int count) {
 class FontCacheEfficiency : public Benchmark {
 public:
     FontCacheEfficiency()  {
-        if (false) dump_array(nullptr, 0);
-        if (false) rotr(0, 0);
+        if ((false)) dump_array(nullptr, 0);
+        if ((false)) rotr(0, 0);
     }
 
 protected:
@@ -176,7 +176,7 @@ protected:
 
     void onDraw(int loops, SkCanvas* canvas) override {
         SkPath path;
-        for (int i = 0; i < loops; ++i) {
+        for (int loop = 0; loop < loops; ++loop) {
             if (fOneAtATime) {
                 for (size_t i = 0; i < SK_ARRAY_COUNT(fGlyphs); ++i) {
                     fFont.getPath(fGlyphs[i], &path);

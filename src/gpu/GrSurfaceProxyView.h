@@ -12,14 +12,14 @@
 #include "include/gpu/GrTypes.h"
 #include "src/gpu/GrRenderTargetProxy.h"
 #include "src/gpu/GrSurfaceProxy.h"
-#include "src/gpu/GrSwizzle.h"
 #include "src/gpu/GrTextureProxy.h"
+#include "src/gpu/Swizzle.h"
 
 class GrSurfaceProxyView {
 public:
     GrSurfaceProxyView() = default;
 
-    GrSurfaceProxyView(sk_sp<GrSurfaceProxy> proxy, GrSurfaceOrigin origin, GrSwizzle swizzle)
+    GrSurfaceProxyView(sk_sp<GrSurfaceProxy> proxy, GrSurfaceOrigin origin, skgpu::Swizzle swizzle)
             : fProxy(std::move(proxy)), fOrigin(origin), fSwizzle(swizzle) {}
 
     // This entry point is used when we don't care about the origin or the swizzle.
@@ -29,7 +29,7 @@ public:
     GrSurfaceProxyView(GrSurfaceProxyView&& view) = default;
     GrSurfaceProxyView(const GrSurfaceProxyView&) = default;
 
-    operator bool() const { return SkToBool(fProxy.get()); }
+    explicit operator bool() const { return SkToBool(fProxy.get()); }
 
     GrSurfaceProxyView& operator=(const GrSurfaceProxyView&) = default;
     GrSurfaceProxyView& operator=(GrSurfaceProxyView&& view) = default;
@@ -44,6 +44,13 @@ public:
     int width() const { return this->proxy()->width(); }
     int height() const { return this->proxy()->height(); }
     SkISize dimensions() const { return this->proxy()->dimensions(); }
+
+    GrMipmapped mipmapped() const {
+        if (const GrTextureProxy* proxy = this->asTextureProxy()) {
+            return proxy->mipmapped();
+        }
+        return GrMipmapped::kNo;
+    }
 
     GrSurfaceProxy* proxy() const { return fProxy.get(); }
     sk_sp<GrSurfaceProxy> refProxy() const { return fProxy; }
@@ -70,16 +77,18 @@ public:
     }
 
     GrSurfaceOrigin origin() const { return fOrigin; }
-    GrSwizzle swizzle() const { return fSwizzle; }
+    skgpu::Swizzle swizzle() const { return fSwizzle; }
 
-    void concatSwizzle(GrSwizzle swizzle) { fSwizzle = GrSwizzle::Concat(fSwizzle, swizzle); }
-
-    GrSurfaceProxyView makeSwizzle(GrSwizzle swizzle) const & {
-        return {fProxy, fOrigin, GrSwizzle::Concat(fSwizzle, swizzle)};
+    void concatSwizzle(skgpu::Swizzle swizzle) {
+        fSwizzle = skgpu::Swizzle::Concat(fSwizzle, swizzle);
     }
 
-    GrSurfaceProxyView makeSwizzle(GrSwizzle swizzle) && {
-        return {std::move(fProxy), fOrigin, GrSwizzle::Concat(fSwizzle, swizzle)};
+    GrSurfaceProxyView makeSwizzle(skgpu::Swizzle swizzle) const & {
+        return {fProxy, fOrigin, skgpu::Swizzle::Concat(fSwizzle, swizzle)};
+    }
+
+    GrSurfaceProxyView makeSwizzle(skgpu::Swizzle swizzle) && {
+        return {std::move(fProxy), fOrigin, skgpu::Swizzle::Concat(fSwizzle, swizzle)};
     }
 
     void reset() {
@@ -104,12 +113,12 @@ public:
         return {std::move(copy), src.origin(), src.swizzle()};
     }
 
-    static GrSurfaceProxyView Copy(GrRecordingContext* context,
+    static GrSurfaceProxyView Copy(GrRecordingContext* rContext,
                                    GrSurfaceProxyView src,
                                    GrMipmapped mipMapped,
                                    SkBackingFit fit,
                                    SkBudgeted budgeted) {
-        auto copy = GrSurfaceProxy::Copy(context,
+        auto copy = GrSurfaceProxy::Copy(rContext,
                                          src.refProxy(),
                                          src.origin(),
                                          mipMapped,
@@ -127,7 +136,7 @@ public:
 private:
     sk_sp<GrSurfaceProxy> fProxy;
     GrSurfaceOrigin fOrigin = kTopLeft_GrSurfaceOrigin;
-    GrSwizzle fSwizzle;
+    skgpu::Swizzle fSwizzle;
 };
 
 #endif
