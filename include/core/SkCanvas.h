@@ -2271,8 +2271,8 @@ protected:
 #if SK_SUPPORT_GPU
     /** Experimental
      */
-    virtual sk_sp<GrSlug> doConvertBlobToSlug(
-            const SkTextBlob& blob, SkPoint origin, const SkPaint& paint);
+    virtual sk_sp<GrSlug> onConvertGlyphRunListToSlug(
+            const SkGlyphRunList& glyphRunList, const SkPaint& paint);
 
     /** Experimental
      */
@@ -2402,6 +2402,9 @@ private:
     friend class SkPictureRecord;   // predrawNotify (why does it need it? <reed>)
     friend class SkOverdrawCanvas;
     friend class SkRasterHandleAllocator;
+    template <typename Key>
+    friend class SkTestCanvas;
+
 protected:
     // For use by SkNoDrawCanvas (via SkCanvasVirtualEnforcer, which can't be a friend)
     SkCanvas(const SkIRect& bounds);
