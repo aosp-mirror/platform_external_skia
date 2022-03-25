@@ -9,6 +9,8 @@
 #define GrRefCnt_DEFINED
 
 #include "include/core/SkRefCnt.h"
+#include "src/gpu/GrGpuResource.h"
+#include "src/gpu/GrManagedResource.h"
 
 // We have to use auto for the function pointers here because if the actual functions live on the
 // base class of T we need the function here to be a pointer to a function of the base class and not
@@ -169,15 +171,15 @@ private:
  * usages in Ganesh. This allows for a scratch GrGpuResource to be reused for new draw calls even
  * if it is in use on the GPU.
  */
-template <typename T> using gr_cb =
-        gr_sp<T, &T::addCommandBufferUsage, &T::removeCommandBufferUsage>;
+template <typename T>
+using gr_cb = gr_sp<T, &T::addCommandBufferUsage, &T::removeCommandBufferUsage>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
  * This class mimics sk_sp but instead of calling unref it calls recycle instead.
  */
-template<typename T> using gr_rp = gr_sp<T, &T::ref, &T::recycle>;
+template <typename T> using gr_rp = gr_sp<T, &T::ref, &T::recycle>;
 
 /**
  *  Returns a gr_rp wrapping the provided ptr AND calls ref on it (if not null).

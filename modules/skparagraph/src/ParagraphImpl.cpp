@@ -66,7 +66,7 @@ ParagraphImpl::ParagraphImpl(const SkString& text,
                              SkTArray<Block, true> blocks,
                              SkTArray<Placeholder, true> placeholders,
                              sk_sp<FontCollection> fonts,
-                             std::unique_ptr<SkUnicode> unicode)
+                             std::shared_ptr<SkUnicode> unicode)
         : Paragraph(std::move(style), std::move(fonts))
         , fTextStyles(std::move(blocks))
         , fPlaceholders(std::move(placeholders))
@@ -87,7 +87,7 @@ ParagraphImpl::ParagraphImpl(const std::u16string& utf16text,
                              SkTArray<Block, true> blocks,
                              SkTArray<Placeholder, true> placeholders,
                              sk_sp<FontCollection> fonts,
-                             std::unique_ptr<SkUnicode> unicode)
+                             std::shared_ptr<SkUnicode> unicode)
         : ParagraphImpl(SkString(),
                         std::move(style),
                         std::move(blocks),
@@ -267,7 +267,7 @@ bool ParagraphImpl::computeCodeUnitProperties() {
 
     // Get all spaces
     fUnicode->forEachCodepoint(fText.c_str(), fText.size(),
-       [this](SkUnichar unichar, int32_t start, int32_t end) {
+       [this](SkUnichar unichar, int32_t start, int32_t end, int32_t count) {
             if (fUnicode->isWhitespace(unichar)) {
                 for (auto i = start; i < end; ++i) {
                     fCodeUnitProperties[i] |=  CodeUnitFlags::kPartOfWhiteSpaceBreak;
@@ -515,8 +515,9 @@ void ParagraphImpl::breakShapedTextIntoLines(SkScalar maxWidth) {
     textWrapper.breakTextIntoLines(
             this,
             maxWidth,
-            [&](TextRange text,
-                TextRange textWithSpaces,
+            [&](TextRange textExcludingSpaces,
+                TextRange text,
+                TextRange textWithNewlines,
                 ClusterRange clusters,
                 ClusterRange clustersWithGhosts,
                 SkScalar widthWithSpaces,
@@ -527,7 +528,7 @@ void ParagraphImpl::breakShapedTextIntoLines(SkScalar maxWidth) {
                 InternalLineMetrics metrics,
                 bool addEllipsis) {
                 // TODO: Take in account clipped edges
-                auto& line = this->addLine(offset, advance, text, textWithSpaces, clusters, clustersWithGhosts, widthWithSpaces, metrics);
+                auto& line = this->addLine(offset, advance, textExcludingSpaces, text, textWithNewlines, clusters, clustersWithGhosts, widthWithSpaces, metrics);
                 if (addEllipsis) {
                     line.createEllipsis(maxWidth, getEllipsis(), true);
                 }
@@ -600,13 +601,13 @@ void ParagraphImpl::resolveStrut() {
         fStrutMetrics = InternalLineMetrics(
             (metrics.fAscent / strutHeight) * strutMultiplier,
             (metrics.fDescent / strutHeight) * strutMultiplier,
-                strutStyle.getLeading() < 0 ? 0 : strutStyle.getLeading() * strutStyle.getFontSize());
+                strutStyle.getLeading() < 0 ? 0 : strutStyle.getLeading() * strutStyle.getFontSize(),
+            metrics.fAscent, metrics.fDescent, metrics.fLeading);
     } else {
         fStrutMetrics = InternalLineMetrics(
                 metrics.fAscent,
                 metrics.fDescent,
-                strutStyle.getLeading() < 0 ? 0
-                                            : strutStyle.getLeading() * strutStyle.getFontSize());
+                strutStyle.getLeading() < 0 ? 0 : strutStyle.getLeading() * strutStyle.getFontSize());
     }
     fStrutMetrics.setForceStrut(this->paragraphStyle().getStrutStyle().getForceStrutHeight());
 }
@@ -639,15 +640,18 @@ BlockRange ParagraphImpl::findAllBlocks(TextRange textRange) {
 
 TextLine& ParagraphImpl::addLine(SkVector offset,
                                  SkVector advance,
+                                 TextRange textExcludingSpaces,
                                  TextRange text,
-                                 TextRange textWithSpaces,
+                                 TextRange textIncludingNewLines,
                                  ClusterRange clusters,
                                  ClusterRange clustersWithGhosts,
                                  SkScalar widthWithSpaces,
                                  InternalLineMetrics sizes) {
     // Define a list of styles that covers the line
-    auto blocks = findAllBlocks(text);
-    return fLines.emplace_back(this, offset, advance, blocks, text, textWithSpaces, clusters, clustersWithGhosts, widthWithSpaces, sizes);
+    auto blocks = findAllBlocks(textExcludingSpaces);
+    return fLines.emplace_back(this, offset, advance, blocks,
+                               textExcludingSpaces, text, textIncludingNewLines,
+                               clusters, clustersWithGhosts, widthWithSpaces, sizes);
 }
 
 // Returns a vector of bounding boxes that enclose all text between
@@ -698,7 +702,7 @@ std::vector<TextBox> ParagraphImpl::getRectsForRange(unsigned start,
     }
     //SkDebugf("getRectsForRange(%d,%d) -> (%d:%d)\n", start, end, text.start, text.end);
     for (auto& line : fLines) {
-        auto lineText = line.textWithSpaces();
+        auto lineText = line.textWithNewlines();
         auto intersect = lineText * text;
         if (intersect.empty() && lineText.start != text.start) {
             continue;
