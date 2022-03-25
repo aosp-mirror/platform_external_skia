@@ -83,7 +83,7 @@ private:
             // For visualization purposes, we want the output bounds in layer space, before it's
             // been transformed to device space. To achieve that, we mock a new mapping with the
             // identity matrix transform.
-            skif::Mapping layerOnly = skif::Mapping(SkMatrix::I(), fMapping.layerMatrix());
+            skif::Mapping layerOnly{fMapping.layerMatrix()};
             skif::DeviceSpace<SkIRect> pseudoDeviceBounds =
                     as_IFB(fFilter)->getOutputBounds(layerOnly, fContent);
             // Since layerOnly's device matrix is I, this is effectively a cast to layer space
@@ -122,7 +122,8 @@ static FilterNode build_dag(const SkMatrix& ctm, const SkRect& rect,
     // Emulate SkCanvas::internalSaveLayer's decomposition of the CTM.
     skif::ParameterSpace<SkRect> content(rect);
     skif::ParameterSpace<SkPoint> center({rect.centerX(), rect.centerY()});
-    skif::Mapping mapping = skif::Mapping::DecomposeCTM(ctm, rootFilter, center);
+    skif::Mapping mapping;
+    SkAssertResult(mapping.decomposeCTM(ctm, rootFilter, center));
     return FilterNode(rootFilter, mapping, content, 0);
 }
 
