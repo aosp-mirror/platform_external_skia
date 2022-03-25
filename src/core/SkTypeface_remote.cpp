@@ -6,7 +6,7 @@
  */
 
 #include "include/core/SkPaint.h"
-#include "src/core/SkRemoteGlyphCache.h"
+#include "include/private/chromium/SkChromeRemoteGlyphCache.h"
 #include "src/core/SkScalerCache.h"
 #include "src/core/SkStrikeCache.h"
 #include "src/core/SkTraceEvent.h"
@@ -23,10 +23,11 @@ bool SkScalerContextProxy::generateAdvance(SkGlyph* glyph) {
     return false;
 }
 
-void SkScalerContextProxy::generateMetrics(SkGlyph* glyph) {
+void SkScalerContextProxy::generateMetrics(SkGlyph* glyph, SkArenaAlloc*) {
     TRACE_EVENT1("skia", "generateMetrics", "rec", TRACE_STR_COPY(this->getRec().dump().c_str()));
     if (this->getProxyTypeface()->isLogging()) {
-        SkDebugf("GlyphCacheMiss generateMetrics: %s\n", this->getRec().dump().c_str());
+        SkDebugf("GlyphCacheMiss generateMetrics looking for glyph: %x\n  generateMetrics: %s\n",
+                 glyph->getPackedID().value(), this->getRec().dump().c_str());
     }
 
     glyph->fMaskFormat = fRec.fMaskFormat;
@@ -47,7 +48,7 @@ void SkScalerContextProxy::generateImage(const SkGlyph& glyph) {
             SkStrikeClient::CacheMissType::kGlyphImage, fRec.fTextSize);
 }
 
-bool SkScalerContextProxy::generatePath(SkGlyphID glyphID, SkPath* path) {
+bool SkScalerContextProxy::generatePath(const SkGlyph& glyph, SkPath* path) {
     TRACE_EVENT1("skia", "generatePath", "rec", TRACE_STR_COPY(this->getRec().dump().c_str()));
     if (this->getProxyTypeface()->isLogging()) {
         SkDebugf("GlyphCacheMiss generatePath: %s\n", this->getRec().dump().c_str());
@@ -58,12 +59,22 @@ bool SkScalerContextProxy::generatePath(SkGlyphID glyphID, SkPath* path) {
     return false;
 }
 
+sk_sp<SkDrawable> SkScalerContextProxy::generateDrawable(const SkGlyph&) {
+    TRACE_EVENT1("skia", "generateDrawable", "rec", TRACE_STR_COPY(this->getRec().dump().c_str()));
+    if (this->getProxyTypeface()->isLogging()) {
+        SkDebugf("GlyphCacheMiss generateDrawable: %s\n", this->getRec().dump().c_str());
+    }
+
+    fDiscardableManager->notifyCacheMiss(
+            SkStrikeClient::CacheMissType::kGlyphDrawable, fRec.fTextSize);
+    return nullptr;
+}
+
 void SkScalerContextProxy::generateFontMetrics(SkFontMetrics* metrics) {
     TRACE_EVENT1(
             "skia", "generateFontMetrics", "rec", TRACE_STR_COPY(this->getRec().dump().c_str()));
     if (this->getProxyTypeface()->isLogging()) {
         SkDebugf("GlyphCacheMiss generateFontMetrics: %s\n", this->getRec().dump().c_str());
-        SkDEBUGCODE(SkStrikeCache::Dump());
     }
 
     // Font metrics aren't really used for render, so just zero out the data and return.
