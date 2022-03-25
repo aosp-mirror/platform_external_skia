@@ -13,6 +13,7 @@
 #include "include/private/GrTypesPriv.h"
 #include "include/private/SkTArray.h"
 #include "src/core/SkAutoMalloc.h"
+#include "src/core/SkSLTypeShared.h"
 
 /**
  * Subclass of GrGLSLProgramDataManager used to store uniforms for a program in a CPU buffer that
@@ -39,11 +40,11 @@ public:
     void set4iv(UniformHandle, int arrayCount, const int32_t v[]) const override;
     void set4f(UniformHandle, float, float, float, float) const override;
     void set4fv(UniformHandle, int arrayCount, const float v[]) const override;
-    // matrices are column-major, the first two upload a single matrix, the latter two upload
-    // arrayCount matrices into a uniform array.
+    // Matrices are column-major. The following three calls upload a single matrix into a uniform.
     void setMatrix2f(UniformHandle, const float matrix[]) const override;
     void setMatrix3f(UniformHandle, const float matrix[]) const override;
     void setMatrix4f(UniformHandle, const float matrix[]) const override;
+    // These three calls upload arrayCount matrices into a uniform array.
     void setMatrix2fv(UniformHandle, int arrayCount, const float matrices[]) const override;
     void setMatrix3fv(UniformHandle, int arrayCount, const float matrices[]) const override;
     void setMatrix4fv(UniformHandle, int arrayCount, const float matrices[]) const override;
@@ -53,24 +54,31 @@ public:
 
 protected:
     struct Uniform {
-        uint32_t fOffset;
+        uint32_t fOffset : 24;
+        SkSLType fType   : 8;
         SkDEBUGCODE(
-            GrSLType    fType;
-            int         fArrayCount;
+            int  fArrayCount;
         );
     };
 
-    template<int N> inline void setMatrices(UniformHandle, int arrayCount,
-                                            const float matrices[]) const;
+    int copyUniforms(void* dest, const void* src, int numUniforms, SkSLType uniformType) const;
+
+    template <int N, SkSLType kFullType, SkSLType kHalfType>
+    inline void set(UniformHandle u, const void* v) const;
+    template <int N, SkSLType kFullType, SkSLType kHalfType>
+    inline void setv(UniformHandle u, int arrayCount, const void* v) const;
+    template <int N, SkSLType FullType, SkSLType HalfType>
+    inline void setMatrices(UniformHandle, int arrayCount, const float matrices[]) const;
 
     void* getBufferPtrAndMarkDirty(const Uniform& uni) const;
 
     uint32_t fUniformSize;
+    bool fWrite16BitUniforms = false;
 
     SkTArray<Uniform, true> fUniforms;
 
     mutable SkAutoMalloc fUniformData;
-    mutable bool         fUniformsDirty;
+    mutable bool         fUniformsDirty = false;
 };
 
 #endif
