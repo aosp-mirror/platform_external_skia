@@ -1113,12 +1113,26 @@ namespace skvm {
     I32 Builder:: lt(I32 x, I32 y) { return y>x; }
     I32 Builder::lte(I32 x, I32 y) { return y>=x; }
 
+    Val Builder::holdsBitNot(Val id) {
+        // We represent `~x` as `x ^ ~0`.
+        if (fProgram[id].op == Op::bit_xor && this->isImm(fProgram[id].y, ~0)) {
+            return fProgram[id].x;
+        }
+        return NA;
+    }
+
     I32 Builder::bit_and(I32 x, I32 y) {
         if (x.id == y.id) { return x; }
         if (int X,Y; this->allImm(x.id,&X, y.id,&Y)) { return splat(X&Y); }
         this->canonicalizeIdOrder(x, y);
-        if (this->isImm(y.id, 0)) { return splat(0); }   // (x & false) == false
-        if (this->isImm(y.id,~0)) { return x; }          // (x & true) == x
+        if (this->isImm(y.id, 0)) { return splat(0); }         // (x & false) == false
+        if (this->isImm(y.id,~0)) { return x; }                // (x & true) == x
+        if (Val notX = this->holdsBitNot(x.id); notX != NA) {  // (~x & y) == bit_clear(y, ~x)
+            return bit_clear(y, {this, notX});
+        }
+        if (Val notY = this->holdsBitNot(y.id); notY != NA) {  // (x & ~y) == bit_clear(x, ~y)
+            return bit_clear(x, {this, notY});
+        }
         return {this, this->push(Op::bit_and, x.id, y.id)};
     }
     I32 Builder::bit_or(I32 x, I32 y) {
@@ -1149,10 +1163,14 @@ namespace skvm {
     I32 Builder::select(I32 x, I32 y, I32 z) {
         if (y.id == z.id) { return y; }
         if (int X,Y,Z; this->allImm(x.id,&X, y.id,&Y, z.id,&Z)) { return splat(X?Y:Z); }
-        if (this->isImm(x.id,~0)) { return y; }               // true  ? y : z == y
-        if (this->isImm(x.id, 0)) { return z; }               // false ? y : z == z
-        if (this->isImm(y.id, 0)) { return bit_clear(z,x); }  //     x ? 0 : z == ~x&z
-        if (this->isImm(z.id, 0)) { return bit_and  (y,x); }  //     x ? y : 0 ==  x&y
+        if (this->isImm(x.id,~0)) { return y; }                // (true  ? y : z) == y
+        if (this->isImm(x.id, 0)) { return z; }                // (false ? y : z) == z
+        if (this->isImm(y.id, 0)) { return bit_clear(z,x); }   //     (x ? 0 : z) == ~x&z
+        if (this->isImm(z.id, 0)) { return bit_and  (y,x); }   //     (x ? y : 0) ==  x&y
+        if (Val notX = this->holdsBitNot(x.id); notX != NA) {  //    (!x ? y : z) == (x ? z : y)
+            x.id = notX;
+            std::swap(y, z);
+        }
         return {this, this->push(Op::select, x.id, y.id, z.id)};
     }
 

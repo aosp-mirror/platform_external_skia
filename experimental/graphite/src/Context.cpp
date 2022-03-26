@@ -22,6 +22,7 @@
 #include "src/core/SkKeyContext.h"
 #include "src/core/SkKeyHelpers.h"
 #include "src/core/SkShaderCodeDictionary.h"
+#include "src/gpu/RefCntedCallback.h"
 
 #ifdef SK_METAL
 #include "experimental/graphite/src/mtl/MtlTrampoline.h"
@@ -51,19 +52,32 @@ std::unique_ptr<Recorder> Context::makeRecorder() {
     return std::unique_ptr<Recorder>(new Recorder(fGpu, fGlobalCache));
 }
 
-void Context::insertRecording(std::unique_ptr<Recording> recording) {
-    fRecordings.emplace_back(std::move(recording));
+void Context::insertRecording(const InsertRecordingInfo& info) {
+    sk_sp<RefCntedCallback> callback;
+    if (info.fFinishedProc) {
+        callback = RefCntedCallback::Make(info.fFinishedProc, info.fFinishedContext);
+    }
+
+    SkASSERT(info.fRecording);
+    if (!info.fRecording) {
+        return;
+    }
+
+    SkASSERT(!fCurrentCommandBuffer);
+    // For now we only allow one CommandBuffer. So we just ref it off the InsertRecordingInfo and
+    // hold onto it until we submit.
+    fCurrentCommandBuffer = info.fRecording->fCommandBuffer;
+    if (callback) {
+        fCurrentCommandBuffer->addFinishedProc(std::move(callback));
+    }
 }
 
 void Context::submit(SyncToCpu syncToCpu) {
-    // TODO: we want Gpu::submit to take an array of command buffers but, for now, it just takes
-    // one. Once we have more than one recording queued up we will need to extract the
-    // command buffers and submit them as a block.
-    SkASSERT(fRecordings.size() == 1);
-    fGpu->submit(fRecordings[0]->fCommandBuffer);
+    SkASSERT(fCurrentCommandBuffer);
+
+    fGpu->submit(std::move(fCurrentCommandBuffer));
 
     fGpu->checkForFinishedWork(syncToCpu);
-    fRecordings.clear();
 }
 
 void Context::preCompile(const PaintCombo& paintCombo) {
