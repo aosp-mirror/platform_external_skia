@@ -499,10 +499,13 @@ func GenTasks(cfg *Config) {
 		Root: "..",
 		Paths: []string{
 			// Deps needed to use Bazel
+			"skia/.bazelrc",
+			"skia/.bazelversion",
 			"skia/BUILD.bazel",
 			"skia/WORKSPACE.bazel",
 			"skia/bazel",
 			"skia/go_repositories.bzl",
+			"skia/requirements.txt",
 			"skia/toolchain",
 			// Actually needed to build the task drivers
 			"skia/infra/bots/BUILD.bazel",
@@ -1300,9 +1303,7 @@ func (b *jobBuilder) compileWithBazel(name string) {
 				"--task_id", specs.PLACEHOLDER_TASK_ID,
 				"--task_name", b.Name,
 			)
-			// Only the large machines have the compute-engine scope necessary to use RBE
-			// http://review.skia.org/446297
-			b.linuxGceDimensions(MACHINE_TYPE_LARGE)
+			b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
 			b.cipd(b.MustGetCipdPackageFromAsset("bazelisk"))
 			b.addToPATH("bazelisk")
 			b.idempotent()
@@ -1324,9 +1325,7 @@ func (b *jobBuilder) checkGeneratedBazelFiles() {
 			"--task_id", specs.PLACEHOLDER_TASK_ID,
 			"--task_name", b.Name,
 		)
-		// Only the large machines have the compute-engine scope necessary to use RBE
-		// http://review.skia.org/446297
-		b.linuxGceDimensions(MACHINE_TYPE_LARGE)
+		b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
 		b.cipd(b.MustGetCipdPackageFromAsset("bazelisk"))
 		b.addToPATH("bazelisk")
 		b.idempotent()
