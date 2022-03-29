@@ -12,6 +12,7 @@
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkRefCnt.h"
 #include "src/gpu/ResourceKey.h"
+#include "src/gpu/Swizzle.h"
 
 namespace SkSL {
 struct ShaderCaps;
@@ -69,8 +70,32 @@ public:
 
     bool clampToBorderSupport() const { return fClampToBorderSupport; }
 
+    // Returns the skgpu::Swizzle to use when sampling or reading back from a texture with the
+    // passed in SkColorType and TextureInfo.
+    skgpu::Swizzle getReadSwizzle(SkColorType, const TextureInfo&) const;
+
+    // Returns the skgpu::Swizzle to use when writing colors to a surface with the passed in
+    // SkColorType and TextureInfo.
+    skgpu::Swizzle getWriteSwizzle(SkColorType, const TextureInfo&) const;
+
 protected:
     Caps();
+
+    // ColorTypeInfo for a specific format.
+    // Used in format tables.
+    struct ColorTypeInfo {
+        SkColorType fColorType = kUnknown_SkColorType;
+        enum {
+            kUploadData_Flag = 0x1,
+            // Does Graphite itself support rendering to this colorType & format pair. Renderability
+            // still additionally depends on if the format itself is renderable.
+            kRenderable_Flag = 0x2,
+        };
+        uint32_t fFlags = 0;
+
+        skgpu::Swizzle fReadSwizzle;
+        skgpu::Swizzle fWriteSwizzle;
+    };
 
     int fMaxTextureSize = 0;
     size_t fRequiredUniformBufferAlignment = 0;
@@ -81,7 +106,7 @@ protected:
 
 private:
     virtual bool onIsTexturable(const TextureInfo&) const = 0;
-    virtual bool onAreColorTypeAndTextureInfoCompatible(SkColorType, const TextureInfo&) const = 0;
+    virtual const ColorTypeInfo* getColorTypeInfo(SkColorType, const TextureInfo&) const = 0;
 };
 
 } // namespace skgpu

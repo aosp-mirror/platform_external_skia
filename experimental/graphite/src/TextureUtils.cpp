@@ -25,8 +25,6 @@
 
 namespace skgpu {
 
-// Based on Ganesh, we may need to use this in more than one place,
-// so pulling it out to make it more modular before finding it a home.
 std::tuple<TextureProxyView, SkColorType> MakeBitmapProxyView(Recorder* recorder,
                                                               const SkBitmap& bitmap,
                                                               Mipmapped mipmapped,
@@ -107,8 +105,7 @@ std::tuple<TextureProxyView, SkColorType> MakeBitmapProxyView(Recorder* recorder
             recorder, proxy, ct, texels, SkIRect::MakeSize(bmpToUpload.dimensions()));
     recorder->priv().add(UploadTask::Make(upload));
 
-    // TODO: get readSwizzle from caps
-    Swizzle swizzle = Swizzle::RGBA();
+    Swizzle swizzle = caps->getReadSwizzle(ct, textureInfo);
     return {{std::move(proxy), swizzle}, ct};
 }
 

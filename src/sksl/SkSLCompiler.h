@@ -54,6 +54,8 @@ class Expression;
 class IRNode;
 class OutputStream;
 class SymbolTable;
+class Variable;
+
 struct ShaderCaps;
 
 struct LoadedModule {
@@ -149,6 +151,9 @@ public:
             Program::Settings settings);
 
     std::unique_ptr<Expression> convertIdentifier(Position pos, std::string_view name);
+
+    /** Updates the Program's Inputs when a builtin variable is referenced. */
+    void updateInputsForBuiltinVariable(const Variable& var);
 
     bool toSPIRV(Program& program, OutputStream& out);
 
