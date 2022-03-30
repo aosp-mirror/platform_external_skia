@@ -20,9 +20,8 @@ import (
 	"go.skia.org/infra/task_driver/go/td"
 )
 
-// This value is currently 110% of the total number of workers. We can play with this number as
-// RBE gets more and more use.
-const rbeJobs = 165
+// This value is arbitrarily selected. It is smaller than our maximum RBE pool size.
+const rbeJobs = 100
 
 var (
 	// Required properties for this task.
@@ -46,8 +45,8 @@ func main() {
 	skiaDir := filepath.Join(wd, "skia")
 
 	opts := bazel.BazelOptions{
-		// We choose a path that is not in the home directory (which is the default) so it is easier
-		// to monitor/clean up if we are running low on disk space.
+		// We want the cache to be on a bigger disk than default. The root disk, where the home
+		// directory (and default Bazel cache) lives, is only 15 GB on our GCE VMs.
 		CachePath: "/mnt/pd0/bazel_cache",
 	}
 	if err := bazel.EnsureBazelRCFile(ctx, opts); err != nil {
