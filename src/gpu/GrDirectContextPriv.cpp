@@ -24,13 +24,13 @@
 #include "src/gpu/effects/GrSkSLFP.h"
 #include "src/gpu/effects/GrTextureEffect.h"
 #include "src/gpu/text/GrAtlasManager.h"
-#include "src/gpu/text/GrTextBlobCache.h"
+#include "src/gpu/text/GrTextBlobRedrawCoordinator.h"
 #include "src/image/SkImage_Base.h"
 #include "src/image/SkImage_Gpu.h"
 
 #define ASSERT_OWNED_PROXY(P) \
     SkASSERT(!(P) || !((P)->peekTexture()) || (P)->peekTexture()->getContext() == this->context())
-#define ASSERT_SINGLE_OWNER GR_ASSERT_SINGLE_OWNER(this->context()->singleOwner())
+#define ASSERT_SINGLE_OWNER SKGPU_ASSERT_SINGLE_OWNER(this->context()->singleOwner())
 #define RETURN_VALUE_IF_ABANDONED(value) if (this->context()->abandoned()) { return (value); }
 
 GrSemaphoresSubmitted GrDirectContextPriv::flushSurfaces(
@@ -194,7 +194,8 @@ static std::unique_ptr<GrFragmentProcessor> make_premul_effect(
     }
 
     static auto effect = SkMakeRuntimeEffect(SkRuntimeEffect::MakeForColorFilter, R"(
-        half4 main(half4 color) {
+        half4 main(half4 halfColor) {
+            float4 color = float4(halfColor);
             color = floor(color * 255 + 0.5) / 255;
             color.rgb = floor(color.rgb * color.a * 255 + 0.5) / 255;
             return color;
@@ -212,7 +213,8 @@ static std::unique_ptr<GrFragmentProcessor> make_unpremul_effect(
     }
 
     static auto effect = SkMakeRuntimeEffect(SkRuntimeEffect::MakeForColorFilter, R"(
-        half4 main(half4 color) {
+        half4 main(half4 halfColor) {
+            float4 color = float4(halfColor);
             color = floor(color * 255 + 0.5) / 255;
             color.rgb = color.a <= 0 ? half3(0) : floor(color.rgb / color.a * 255 + 0.5) / 255;
             return color;

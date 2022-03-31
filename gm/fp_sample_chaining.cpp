@@ -24,7 +24,7 @@ namespace {
 // Scales along Y
 class UniformMatrixEffect : public GrFragmentProcessor {
 public:
-    static constexpr GrProcessor::ClassID CLASS_ID = (GrProcessor::ClassID) 4;
+    inline static constexpr GrProcessor::ClassID CLASS_ID = (GrProcessor::ClassID) 4;
 
     UniformMatrixEffect(std::unique_ptr<GrFragmentProcessor> child)
             : GrFragmentProcessor(CLASS_ID, kNone_OptimizationFlags) {
@@ -33,7 +33,7 @@ public:
     }
 
     const char* name() const override { return "UniformMatrixEffect"; }
-    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
+    void onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override {}
     bool onIsEqual(const GrFragmentProcessor& that) const override { return this == &that; }
     std::unique_ptr<GrFragmentProcessor> clone() const override { return nullptr; }
 
@@ -44,7 +44,7 @@ public:
                 fMatrixVar =
                         args.fUniformHandler->addUniform(&args.fFp,
                                                          kFragment_GrShaderFlag,
-                                                         kFloat3x3_GrSLType,
+                                                         SkSLType::kFloat3x3,
                                                          SkSL::SampleUsage::MatrixUniformName());
                 SkString sample = this->invokeChildWithMatrix(0, args);
                 args.fFragBuilder->codeAppendf("return %s;\n", sample.c_str());
@@ -65,7 +65,7 @@ public:
 // Translates along Y
 class ExplicitCoordEffect : public GrFragmentProcessor {
 public:
-    static constexpr GrProcessor::ClassID CLASS_ID = (GrProcessor::ClassID) 6;
+    inline static constexpr GrProcessor::ClassID CLASS_ID = (GrProcessor::ClassID) 6;
 
     ExplicitCoordEffect(std::unique_ptr<GrFragmentProcessor> child)
             : GrFragmentProcessor(CLASS_ID, kNone_OptimizationFlags) {
@@ -74,7 +74,7 @@ public:
     }
 
     const char* name() const override { return "ExplicitCoordEffect"; }
-    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
+    void onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override {}
     bool onIsEqual(const GrFragmentProcessor& that) const override { return this == &that; }
     std::unique_ptr<GrFragmentProcessor> clone() const override { return nullptr; }
 
@@ -96,14 +96,14 @@ public:
 // Generates test pattern
 class TestPatternEffect : public GrFragmentProcessor {
 public:
-    static constexpr GrProcessor::ClassID CLASS_ID = (GrProcessor::ClassID) 7;
+    inline static constexpr GrProcessor::ClassID CLASS_ID = (GrProcessor::ClassID) 7;
 
     TestPatternEffect() : GrFragmentProcessor(CLASS_ID, kNone_OptimizationFlags) {
         this->setUsesSampleCoordsDirectly();
     }
 
     const char* name() const override { return "TestPatternEffect"; }
-    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
+    void onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override {}
     bool onIsEqual(const GrFragmentProcessor& that) const override { return this == &that; }
     std::unique_ptr<GrFragmentProcessor> clone() const override { return nullptr; }
 

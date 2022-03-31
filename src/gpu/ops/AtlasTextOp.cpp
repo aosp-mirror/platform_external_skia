@@ -32,6 +32,9 @@
 
 namespace skgpu::v1 {
 
+inline static constexpr int kVerticesPerGlyph = 4;
+inline static constexpr int kIndicesPerGlyph = 6;
+
 // If we have thread local, then cache memory for a single AtlasTextOp.
 static thread_local void* gCache = nullptr;
 void* AtlasTextOp::operator new(size_t s) {
@@ -107,7 +110,7 @@ auto AtlasTextOp::Geometry::MakeForBlob(const GrAtlasSubRun& subRun,
                                         const SkMatrix& drawMatrix,
                                         SkPoint drawOrigin,
                                         SkIRect clipRect,
-                                        sk_sp<GrTextBlob> blob,
+                                        sk_sp<SkRefCnt> supportData,
                                         const SkPMColor4f& color,
                                         SkArenaAlloc* alloc) -> Geometry* {
     // Bypass the automatic dtor behavior in SkArenaAlloc. I'm leaving this up to the Op to run
@@ -117,16 +120,14 @@ auto AtlasTextOp::Geometry::MakeForBlob(const GrAtlasSubRun& subRun,
                              drawMatrix,
                              drawOrigin,
                              clipRect,
-                             std::move(blob),
+                             std::move(supportData),
                              nullptr,
                              color};
 }
 
 void AtlasTextOp::Geometry::fillVertexData(void *dst, int offset, int count) const {
-    SkMatrix positionMatrix = fDrawMatrix;
-    positionMatrix.preTranslate(fDrawOrigin.x(), fDrawOrigin.y());
     fSubRun.fillVertexData(
-            dst, offset, count, fColor.toBytes_RGBA(), positionMatrix, fClipRect);
+            dst, offset, count, fColor.toBytes_RGBA(), fDrawMatrix, fDrawOrigin, fClipRect);
 }
 
 void AtlasTextOp::visitProxies(const GrVisitProxyFunc& func) const {
@@ -507,17 +508,17 @@ GrOp::Owner AtlasTextOp::CreateOpTestingOnly(SurfaceDrawContext* sdc,
             rContext->priv().getSDFTControl(sdc->surfaceProps().isUseDeviceIndependentFonts());
 
     SkGlyphRunListPainter* painter = sdc->glyphRunPainter();
-    sk_sp<GrTextBlob> blob = GrTextBlob::Make(glyphRunList, skPaint, drawMatrix, control, painter);
+    sk_sp<GrTextBlob> blob = GrTextBlob::Make(
+            glyphRunList, skPaint, drawMatrix, false, control, painter);
 
-    if (blob->subRunList().isEmpty()) {
+    const GrAtlasSubRun* subRun = blob->testingOnlyFirstSubRun();
+    if (!subRun) {
         return nullptr;
     }
 
-    GrAtlasSubRun* subRun = blob->subRunList().front().testingOnly_atlasSubRun();
-    SkASSERT(subRun);
     GrOp::Owner op;
     std::tie(std::ignore, op) = subRun->makeAtlasTextOp(
-            nullptr, mtxProvider, glyphRunList, skPaint, sdc, nullptr);
+            nullptr, mtxProvider, glyphRunList.origin(), skPaint, sdc, nullptr);
     return op;
 }
 
@@ -528,7 +529,7 @@ GrOp::Owner AtlasTextOp::CreateOpTestingOnly(SurfaceDrawContext* sdc,
 #if GR_TEST_UTILS
 
 GR_DRAW_OP_TEST_DEFINE(AtlasTextOp) {
-    SkSimpleMatrixProvider matrixProvider(GrTest::TestMatrixInvertible(random));
+    SkMatrixProvider matrixProvider(GrTest::TestMatrixInvertible(random));
 
     SkPaint skPaint;
     skPaint.setColor(random->nextU());

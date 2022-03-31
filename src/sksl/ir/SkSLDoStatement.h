@@ -18,7 +18,7 @@ namespace SkSL {
  */
 class DoStatement final : public Statement {
 public:
-    static constexpr Kind kStatementKind = Kind::kDo;
+    inline static constexpr Kind kStatementKind = Kind::kDo;
 
     DoStatement(int line, std::unique_ptr<Statement> statement, std::unique_ptr<Expression> test)
         : INHERITED(line, kStatementKind)
@@ -53,7 +53,7 @@ public:
 
     std::unique_ptr<Statement> clone() const override;
 
-    String description() const override;
+    std::string description() const override;
 
 private:
     std::unique_ptr<Statement> fStatement;

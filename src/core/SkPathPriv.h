@@ -26,7 +26,7 @@ public:
 
     // skbug.com/9906: Not a perfect solution for W plane clipping, but 1/16384 is a
     // reasonable limit (roughly 5e-5)
-    static constexpr SkScalar kW0PlaneDistance = 1.f / (1 << 14);
+    inline static constexpr SkScalar kW0PlaneDistance = 1.f / (1 << 14);
 
     static SkPathFirstDirection AsFirstDirection(SkPathDirection dir) {
         // since we agree numerically for the values in Direction, we can just cast.
@@ -429,7 +429,7 @@ class SkPathEdgeIter {
     SkPoint         fScratch[2];    // for auto-close lines
     bool            fNeedsCloseLine;
     bool            fNextIsNewContour;
-    SkDEBUGCODE(bool fIsConic);
+    SkDEBUGCODE(bool fIsConic;)
 
     enum {
         kIllegalEdgeValue = 99
@@ -460,7 +460,7 @@ public:
         bool            fIsNewContour;
 
         // Returns true when it holds an Edge, false when the path is done.
-        operator bool() { return fPts != nullptr; }
+        explicit operator bool() { return fPts != nullptr; }
     };
 
     Result next() {

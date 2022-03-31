@@ -24,29 +24,17 @@
 
 class GrFragmentProcessor;
 class SkArenaAlloc;
+enum class SkBackend : uint8_t;
 class SkColorSpace;
 class SkImage;
 struct SkImageInfo;
 class SkPaint;
+class SkPaintParamsKeyBuilder;
 class SkRasterPipeline;
 class SkRuntimeEffect;
-
-/**
- *  Shaders can optionally return a subclass of this when appending their stages.
- *  Doing so tells the caller that the stages can be reused with different CTMs (but nothing
- *  else can change), by calling the updater's udpate() method before each use.
- *
- *  This can be a perf-win bulk draws like drawAtlas and drawVertices, where most of the setup
- *  (i.e. uniforms) are constant, and only something small is changing (i.e. matrices). This
- *  reuse skips the cost of computing the stages (and/or avoids having to allocate a separate
- *  shader for each small draw.
- */
-class SkStageUpdater {
-public:
-    virtual ~SkStageUpdater() {}
-
-    virtual bool SK_WARN_UNUSED_RESULT update(const SkMatrix& ctm) = 0;
-};
+class SkShaderCodeDictionary;
+class SkUniformBlock;
+class SkStageUpdater;
 
 class SkUpdatableShader;
 
@@ -225,6 +213,21 @@ public:
                         const SkMatrixProvider&, const SkMatrix* localM, const SkColorInfo& dst,
                         skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const;
 
+
+    /**
+        Add implementation details, for the specified backend, of this SkShader to the
+        provided key.
+
+        @param dictionary   dictionary of code fragments available to be used in the key
+        @param backend      the backend that would be carrying out the drawing
+        @param builder      builder for creating the key for this SkShader
+        @param uniformBlock if non-null, storage for this shader's uniform data
+    */
+    virtual void addToKey(SkShaderCodeDictionary* dictionary,
+                          SkBackend backend,
+                          SkPaintParamsKeyBuilder* builder,
+                          SkUniformBlock* uniformBlock) const;
+
 protected:
     SkShaderBase(const SkMatrix* localMatrix = nullptr);
 
@@ -264,10 +267,25 @@ private:
     using INHERITED = SkShader;
 };
 
-class SkUpdatableShader : public SkShaderBase {
+/**
+ *  Shaders can optionally return a subclass of this when appending their stages.
+ *  Doing so tells the caller that the stages can be reused with different CTMs (but nothing
+ *  else can change), by calling the updater's update() method before each use.
+ *
+ *  This can be a perf-win bulk draws like drawAtlas and drawVertices, where most of the setup
+ *  (i.e. uniforms) are constant, and only something small is changing (i.e. matrices). This
+ *  reuse skips the cost of computing the stages (and/or avoids having to allocate a separate
+ *  shader for each small draw.
+ */
+class SkStageUpdater {
 public:
-    virtual bool update(const SkMatrix& ctm) const = 0;
+    virtual ~SkStageUpdater() {}
+    virtual bool SK_WARN_UNUSED_RESULT update(const SkMatrix& ctm) const = 0;
+};
 
+// TODO: use the SkStageUpdater as an interface until all the code is converted over to use
+//       SkUpdatableShader.
+class SkUpdatableShader : public SkShaderBase, public SkStageUpdater {
 private:
     // For serialization.  This will never be called.
     Factory getFactory() const override { return nullptr; }

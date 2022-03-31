@@ -410,9 +410,9 @@ void SkPDFDevice::drawPoints(SkCanvas::PointMode mode,
     }
 
     // SkDraw::drawPoints converts to multiple calls to fDevice->drawPath.
-    // We only use this when there's a path effect because of the overhead
+    // We only use this when there's a path effect or perspective because of the overhead
     // of multiple calls to setUpContentEntry it causes.
-    if (paint->getPathEffect()) {
+    if (paint->getPathEffect() || this->localToDevice().hasPerspective()) {
         draw_points(mode, count, points, *paint, this->devClipBounds(), this);
         return;
     }
@@ -504,7 +504,7 @@ void SkPDFDevice::internalDrawPathWithFilter(const SkClipStack& clipStack,
 
     SkIRect bounds = clipStack.bounds(this->bounds()).roundOut();
     SkMask sourceMask;
-    if (!SkDraw::DrawToMask(path, &bounds, paint->getMaskFilter(), &SkMatrix::I(),
+    if (!SkDraw::DrawToMask(path, bounds, paint->getMaskFilter(), &SkMatrix::I(),
                             &sourceMask, SkMask::kComputeBoundsAndRenderImage_CreateMode,
                             initStyle)) {
         return;
@@ -837,7 +837,7 @@ void SkPDFDevice::internalDrawGlyphRun(
     if (!metrics) {
         return;
     }
-    SkAdvancedTypefaceMetrics::FontType fontType = SkPDFFont::FontType(*metrics);
+    SkAdvancedTypefaceMetrics::FontType fontType = SkPDFFont::FontType(*typeface, *metrics);
 
     const std::vector<SkUnichar>& glyphToUnicode = SkPDFFont::GetUnicodeMap(typeface, fDocument);
 
@@ -956,18 +956,27 @@ void SkPDFDevice::internalDrawGlyphRun(
     }
 }
 
-void SkPDFDevice::onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) {
+void SkPDFDevice::onDrawGlyphRunList(SkCanvas*,
+                                     const SkGlyphRunList& glyphRunList,
+                                     const SkPaint& paint) {
     SkASSERT(!glyphRunList.hasRSXForm());
     for (const SkGlyphRun& glyphRun : glyphRunList) {
         this->internalDrawGlyphRun(glyphRun, glyphRunList.origin(), paint);
     }
 }
 
-void SkPDFDevice::drawVertices(const SkVertices*, SkBlendMode, const SkPaint&) {
+void SkPDFDevice::drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&) {
     if (this->hasEmptyClip()) {
         return;
     }
     // TODO: implement drawVertices
+}
+
+void SkPDFDevice::drawCustomMesh(SkCustomMesh, sk_sp<SkBlender>, const SkPaint&) {
+    if (this->hasEmptyClip()) {
+        return;
+    }
+    // TODO: implement drawCustomMesh
 }
 
 void SkPDFDevice::drawFormXObject(SkPDFIndirectReference xObject, SkDynamicMemoryWStream* content) {

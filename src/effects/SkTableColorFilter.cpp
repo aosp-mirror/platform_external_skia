@@ -124,13 +124,13 @@ public:
         return std::unique_ptr<GrFragmentProcessor>(new ColorTableEffect(*this));
     }
 
-    static constexpr int kTexEffectFPIndex = 0;
-    static constexpr int kInputFPIndex = 1;
+    inline static constexpr int kTexEffectFPIndex = 0;
+    inline static constexpr int kInputFPIndex = 1;
 
 private:
     std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override;
 
-    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
+    void onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override {}
 
     bool onIsEqual(const GrFragmentProcessor&) const override { return true; }
 

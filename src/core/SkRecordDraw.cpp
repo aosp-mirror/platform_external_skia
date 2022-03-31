@@ -80,10 +80,11 @@ template <> void Draw::draw(const NoOp&) {}
 DRAW(Flush, flush());
 DRAW(Restore, restore());
 DRAW(Save, save());
-DRAW(SaveLayer, saveLayer(SkCanvas::SaveLayerRec(r.bounds,
-                                                 r.paint,
-                                                 r.backdrop.get(),
-                                                 r.saveLayerFlags)));
+DRAW(SaveLayer, saveLayer(SkCanvasPriv::ScaledBackdropLayer(r.bounds,
+                                                            r.paint,
+                                                            r.backdrop.get(),
+                                                            r.backdropScale,
+                                                            r.saveLayerFlags)));
 
 template <> void Draw::draw(const SaveBehind& r) {
     SkCanvasPriv::SaveBehind(fCanvas, r.subset);
@@ -93,7 +94,6 @@ template <> void Draw::draw(const DrawBehind& r) {
     SkCanvasPriv::DrawBehind(fCanvas, r.paint);
 }
 
-DRAW(MarkCTM, markCTM(r.name.c_str()));
 DRAW(SetMatrix, setMatrix(fInitialCTM.asM33() * r.matrix));
 DRAW(SetM44, setMatrix(fInitialCTM * r.matrix));
 DRAW(Concat44, concat(r.matrix));
@@ -274,7 +274,6 @@ private:
         fMeta  [fCurrentOp].isDraw = isSaveLayer;
     }
 
-    void trackBounds(const MarkCTM&)           { this->pushControl(); }
     void trackBounds(const SetMatrix&)         { this->pushControl(); }
     void trackBounds(const SetM44&)            { this->pushControl(); }
     void trackBounds(const Concat&)            { this->pushControl(); }

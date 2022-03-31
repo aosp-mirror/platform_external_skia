@@ -18,7 +18,7 @@ namespace SkSL {
  */
 class DiscardStatement final : public Statement {
 public:
-    static constexpr Kind kStatementKind = Kind::kDiscard;
+    inline static constexpr Kind kStatementKind = Kind::kDiscard;
 
     DiscardStatement(int line)
     : INHERITED(line, kStatementKind) {}
@@ -31,8 +31,8 @@ public:
         return std::make_unique<DiscardStatement>(fLine);
     }
 
-    String description() const override {
-        return String("discard;");
+    std::string description() const override {
+        return "discard;";
     }
 
 private:

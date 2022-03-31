@@ -23,7 +23,7 @@
     !defined(SK_BUILD_FOR_UNIX) && !defined(SK_BUILD_FOR_MAC)
 
     #ifdef __APPLE__
-        #include "TargetConditionals.h"
+        #include <TargetConditionals.h>
     #endif
 
     #if defined(_WIN32) || defined(__SYMBIAN32__)
@@ -236,7 +236,7 @@
 #  define SK_SUPPORT_GPU 1
 #endif
 
-#if SK_SUPPORT_GPU
+#if SK_SUPPORT_GPU || SK_GRAPHITE_ENABLED
 #  if !defined(SK_ENABLE_SKSL)
 #    define SK_ENABLE_SKSL
 #  endif
@@ -372,14 +372,6 @@
 #  endif
 #endif
 
-#if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE1
-    #define SK_PREFETCH(ptr) _mm_prefetch(reinterpret_cast<const char*>(ptr), _MM_HINT_T0)
-#elif defined(__GNUC__)
-    #define SK_PREFETCH(ptr) __builtin_prefetch(ptr)
-#else
-    #define SK_PREFETCH(ptr)
-#endif
-
 #ifndef SK_PRINTF_LIKE
 #  if defined(__clang__) || defined(__GNUC__)
 #    define SK_PRINTF_LIKE(A, B) __attribute__((format(printf, (A), (B))))
@@ -398,10 +390,6 @@
 
 #ifndef GR_TEST_UTILS
 #  define GR_TEST_UTILS 0
-#endif
-
-#ifndef SK_GPU_V2
-#  define SK_GPU_V2 0
 #endif
 
 #ifndef SK_GPU_V1
@@ -512,7 +500,7 @@ typedef unsigned U16CPU;
 /** @return false or true based on the condition
 */
 template <typename T> static constexpr bool SkToBool(const T& x) {
-    return 0 != x;  // NOLINT(modernize-use-nullptr)
+    return (bool)x;
 }
 
 static constexpr int16_t SK_MaxS16 = INT16_MAX;
@@ -555,6 +543,15 @@ template <typename T> static constexpr T SkAlignPtr(T x) {
 }
 template <typename T> static constexpr bool SkIsAlignPtr(T x) {
     return sizeof(void*) == 8 ? SkIsAlign8(x) : SkIsAlign4(x);
+}
+
+/**
+ *  align up to a power of 2
+ */
+static inline constexpr size_t SkAlignTo(size_t x, size_t alignment) {
+    // The same as alignment && SkIsPow2(value), w/o a dependency cycle.
+    SkASSERT(alignment && (alignment & (alignment - 1)) == 0);
+    return (x + alignment - 1) & ~(alignment - 1);
 }
 
 typedef uint32_t SkFourByteTag;

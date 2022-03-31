@@ -230,7 +230,8 @@ bool SkImage_Gpu::surfaceMustCopyOnWrite(GrSurfaceProxy* surfaceProxy) const {
 
 bool SkImage_Gpu::onHasMipmaps() const { return fChooser.mipmapped() == GrMipmapped::kYes; }
 
-GrSemaphoresSubmitted SkImage_Gpu::onFlush(GrDirectContext* dContext, const GrFlushInfo& info) {
+GrSemaphoresSubmitted SkImage_Gpu::onFlush(GrDirectContext* dContext,
+                                           const GrFlushInfo& info) const {
     if (!fContext->priv().matches(dContext) || dContext->abandoned()) {
         if (info.fSubmittedProc) {
             info.fSubmittedProc(info.fSubmittedContext, false);
@@ -331,7 +332,7 @@ void SkImage_Gpu::onAsyncRescaleAndReadPixels(const SkImageInfo& info,
                                               RescaleGamma rescaleGamma,
                                               RescaleMode rescaleMode,
                                               ReadPixelsCallback callback,
-                                              ReadPixelsContext context) {
+                                              ReadPixelsContext context) const {
     auto dContext = fContext->asDirectContext();
     if (!dContext) {
         // DDL TODO: buffer up the readback so it occurs when the DDL is drawn?
@@ -354,7 +355,7 @@ void SkImage_Gpu::onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSpac
                                                     RescaleGamma rescaleGamma,
                                                     RescaleMode rescaleMode,
                                                     ReadPixelsCallback callback,
-                                                    ReadPixelsContext context) {
+                                                    ReadPixelsContext context) const {
     auto dContext = fContext->asDirectContext();
     if (!dContext) {
         // DDL TODO: buffer up the readback so it occurs when the DDL is drawn?
@@ -400,7 +401,8 @@ static sk_sp<SkImage> new_wrapped_texture_common(GrRecordingContext* rContext,
         return nullptr;
     }
 
-    GrSwizzle swizzle = rContext->priv().caps()->getReadSwizzle(proxy->backendFormat(), colorType);
+    skgpu::Swizzle swizzle = rContext->priv().caps()->getReadSwizzle(proxy->backendFormat(),
+                                                                     colorType);
     GrSurfaceProxyView view(std::move(proxy), origin, swizzle);
     SkColorInfo info(GrColorTypeToSkColorType(colorType), at, std::move(colorSpace));
     return sk_make_sp<SkImage_Gpu>(sk_ref_sp(rContext),
@@ -438,7 +440,7 @@ sk_sp<SkImage> SkImage::MakeFromCompressedTexture(GrRecordingContext* rContext,
     CompressionType type = GrBackendFormatToCompressionType(tex.getBackendFormat());
     SkColorType ct = GrCompressionTypeToSkColorType(type);
 
-    GrSurfaceProxyView view(std::move(proxy), origin, GrSwizzle::RGBA());
+    GrSurfaceProxyView view(std::move(proxy), origin, skgpu::Swizzle::RGBA());
     return sk_make_sp<SkImage_Gpu>(sk_ref_sp(rContext),
                                    kNeedNewImageUniqueID,
                                    std::move(view),
@@ -614,7 +616,8 @@ sk_sp<SkImage> SkImage::MakePromiseTexture(sk_sp<GrContextThreadSafeProxy> threa
     if (!proxy) {
         return nullptr;
     }
-    GrSwizzle swizzle = threadSafeProxy->priv().caps()->getReadSwizzle(backendFormat, grColorType);
+    skgpu::Swizzle swizzle = threadSafeProxy->priv().caps()->getReadSwizzle(backendFormat,
+                                                                            grColorType);
     GrSurfaceProxyView view(std::move(proxy), origin, swizzle);
     sk_sp<GrImageContext> ctx(GrImageContextPriv::MakeForPromiseImage(std::move(threadSafeProxy)));
     return sk_make_sp<SkImage_Gpu>(std::move(ctx),
@@ -743,7 +746,7 @@ sk_sp<SkImage> SkImage::MakeFromAHardwareBufferWithData(GrDirectContext* dContex
         return nullptr;
     }
 
-    GrSwizzle swizzle = dContext->priv().caps()->getReadSwizzle(backendFormat, grColorType);
+    skgpu::Swizzle swizzle = dContext->priv().caps()->getReadSwizzle(backendFormat, grColorType);
     GrSurfaceProxyView framebufferView(std::move(proxy), surfaceOrigin, swizzle);
     SkColorInfo colorInfo = pixmap.info().colorInfo().makeColorType(colorType);
     sk_sp<SkImage> image = sk_make_sp<SkImage_Gpu>(sk_ref_sp(dContext),

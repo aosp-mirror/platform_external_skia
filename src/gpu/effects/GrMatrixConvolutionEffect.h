@@ -17,7 +17,7 @@ public:
     // A little bit less than the minimum # uniforms required by DX9SM2 (32).
     // Allows for a 5x5 kernel (or 28x1, for that matter).
     // Must be a multiple of 4, since we upload these in vec4s.
-    static constexpr int kMaxUniformSize = 28;
+    inline static constexpr int kMaxUniformSize = 28;
 
     static std::unique_ptr<GrFragmentProcessor> Make(GrRecordingContext*,
                                                      GrSurfaceProxyView srcView,
@@ -103,7 +103,7 @@ private:
 
     std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override;
 
-    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
+    void onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override;
 
     bool onIsEqual(const GrFragmentProcessor&) const override;
 

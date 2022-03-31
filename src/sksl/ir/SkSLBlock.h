@@ -18,7 +18,7 @@ namespace SkSL {
  */
 class Block final : public Statement {
 public:
-    static constexpr Kind kStatementKind = Kind::kBlock;
+    inline static constexpr Kind kStatementKind = Kind::kBlock;
 
     Block(int line, StatementArray statements,
           const std::shared_ptr<SymbolTable> symbols = nullptr, bool isScope = true)
@@ -69,7 +69,7 @@ public:
 
     std::unique_ptr<Statement> clone() const override;
 
-    String description() const override;
+    std::string description() const override;
 
 private:
     StatementArray fChildren;

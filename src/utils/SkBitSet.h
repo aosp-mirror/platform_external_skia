@@ -9,13 +9,14 @@
 #define SkBitSet_DEFINED
 
 #include "include/private/SkMalloc.h"
-#include "include/private/SkTOptional.h"
 #include "include/private/SkTemplates.h"
 #include "src/core/SkMathPriv.h"
+
 #include <climits>
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <optional>
 
 class SkBitSet {
 public:
@@ -90,7 +91,7 @@ public:
         }
     }
 
-    using OptionalIndex = skstd::optional<size_t>;
+    using OptionalIndex = std::optional<size_t>;
 
     // If any bits are set, returns the index of the first.
     OptionalIndex findFirst() {
@@ -128,7 +129,7 @@ private:
 
     using Chunk = uint32_t;
     static_assert(std::numeric_limits<Chunk>::radix == 2);
-    static constexpr size_t kChunkBits = std::numeric_limits<Chunk>::digits;
+    inline static constexpr size_t kChunkBits = std::numeric_limits<Chunk>::digits;
     static_assert(kChunkBits == sizeof(Chunk)*CHAR_BIT, "SkBitSet must use every bit in a Chunk");
     std::unique_ptr<Chunk, SkFunctionWrapper<void(void*), sk_free>> fChunks;
 

@@ -16,12 +16,12 @@
 #include "src/core/SkMatrixProvider.h"
 #include "src/core/SkPointPriv.h"
 #include "src/core/SkRasterClip.h"
+#include "src/gpu/BufferWriter.h"
 #include "src/gpu/GrBuffer.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrDistanceFieldGenFromVector.h"
 #include "src/gpu/GrDrawOpTest.h"
 #include "src/gpu/GrResourceProvider.h"
-#include "src/gpu/GrVertexWriter.h"
 #include "src/gpu/effects/GrBitmapTextGeoProc.h"
 #include "src/gpu/effects/GrDistanceFieldGeoProc.h"
 #include "src/gpu/geometry/GrQuad.h"
@@ -31,6 +31,8 @@
 #include "src/gpu/ops/SmallPathAtlasMgr.h"
 #include "src/gpu/ops/SmallPathShapeData.h"
 #include "src/gpu/v1/SurfaceDrawContext_v1.h"
+
+namespace skgpu::v1 {
 
 namespace {
 
@@ -209,12 +211,12 @@ private:
         if (instanceCount > SK_MaxS32 / GrResourceProvider::NumVertsPerNonAAQuad()) {
             return;
         }
-        GrVertexWriter vertices{ target->makeVertexSpace(
+        VertexWriter vertices = target->makeVertexWriter(
             kVertexStride, GrResourceProvider::NumVertsPerNonAAQuad() * instanceCount,
-            &flushInfo.fVertexBuffer, &flushInfo.fVertexOffset)};
+            &flushInfo.fVertexBuffer, &flushInfo.fVertexOffset);
 
         flushInfo.fIndexBuffer = target->resourceProvider()->refNonAAQuadIndexBuffer();
-        if (!vertices.fPtr || !flushInfo.fIndexBuffer) {
+        if (!vertices || !flushInfo.fIndexBuffer) {
             SkDebugf("Could not allocate vertices\n");
             return;
         }
@@ -308,7 +310,7 @@ private:
             auto uploadTarget = target->deferredUploadTarget();
             atlasMgr->setUseToken(shapeData, uploadTarget->tokenTracker()->nextDrawToken());
 
-            this->writePathVertices(vertices, GrVertexColor(args.fColor, fWideColor),
+            this->writePathVertices(vertices, VertexColor(args.fColor, fWideColor),
                                     args.fViewMatrix, shapeData);
             flushInfo.fInstancesToFlush++;
         }
@@ -417,7 +419,7 @@ private:
             SkRasterClip rasterClip;
             rasterClip.setRect(devPathBounds);
             draw.fRC = &rasterClip;
-            SkSimpleMatrixProvider matrixProvider(drawMatrix);
+            SkMatrixProvider matrixProvider(drawMatrix);
             draw.fMatrixProvider = &matrixProvider;
             draw.fDst = dst;
 
@@ -497,7 +499,7 @@ private:
         rasterClip.setRect(devPathBounds);
         draw.fRC = &rasterClip;
         drawMatrix.postTranslate(translateX, translateY);
-        SkSimpleMatrixProvider matrixProvider(drawMatrix);
+        SkMatrixProvider matrixProvider(drawMatrix);
         draw.fMatrixProvider = &matrixProvider;
         draw.fDst = dst;
 
@@ -510,8 +512,8 @@ private:
                                          drawBounds, 0, shapeData);
     }
 
-    void writePathVertices(GrVertexWriter& vertices,
-                           const GrVertexColor& color,
+    void writePathVertices(VertexWriter& vertices,
+                           const VertexColor& color,
                            const SkMatrix& ctm,
                            const skgpu::v1::SmallPathShapeData* shapeData) const {
         SkRect translatedBounds(shapeData->fBounds);
@@ -521,14 +523,14 @@ private:
         }
 
         // set up texture coordinates
-        auto texCoords = GrVertexWriter::TriStripFromUVs(shapeData->fAtlasLocator.getUVs());
+        auto texCoords = VertexWriter::TriStripFromUVs(shapeData->fAtlasLocator.getUVs());
 
         if (fUsesDistanceField && !ctm.hasPerspective()) {
             vertices.writeQuad(GrQuad::MakeFromRect(translatedBounds, ctm),
                                color,
                                texCoords);
         } else {
-            vertices.writeQuad(GrVertexWriter::TriStripFromRect(translatedBounds),
+            vertices.writeQuad(VertexWriter::TriStripFromRect(translatedBounds),
                                color,
                                texCoords);
         }
@@ -657,24 +659,6 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#if GR_TEST_UTILS
-
-GR_DRAW_OP_TEST_DEFINE(SmallPathOp) {
-    SkMatrix viewMatrix = GrTest::TestMatrix(random);
-    bool gammaCorrect = random->nextBool();
-
-    // This path renderer only allows fill styles.
-    GrStyledShape shape(GrTest::TestPath(random), GrStyle::SimpleFill());
-    return SmallPathOp::Make(context, std::move(paint), shape, viewMatrix,
-                             gammaCorrect, GrGetRandomStencil(random, context));
-}
-
-#endif // GR_TEST_UTILS
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-namespace skgpu::v1 {
-
 PathRenderer::CanDrawPath SmallPathRenderer::onCanDrawPath(const CanDrawPathArgs& args) const {
     if (!args.fCaps->shaderCaps()->shaderDerivativeSupport()) {
         return CanDrawPath::kNo;
@@ -738,3 +722,17 @@ bool SmallPathRenderer::onDrawPath(const DrawPathArgs& args) {
 }
 
 } // namespace skgpu::v1
+
+#if GR_TEST_UTILS
+
+GR_DRAW_OP_TEST_DEFINE(SmallPathOp) {
+    SkMatrix viewMatrix = GrTest::TestMatrix(random);
+    bool gammaCorrect = random->nextBool();
+
+    // This path renderer only allows fill styles.
+    GrStyledShape shape(GrTest::TestPath(random), GrStyle::SimpleFill());
+    return skgpu::v1::SmallPathOp::Make(context, std::move(paint), shape, viewMatrix, gammaCorrect,
+                                        GrGetRandomStencil(random, context));
+}
+
+#endif // GR_TEST_UTILS

@@ -21,9 +21,7 @@
 class GrGLSLColorSpaceXformHelper;
 
 namespace SkSL {
-    namespace dsl {
-        class DSLWriter;
-    }
+    class ThreadContext;
 }
 
 /**
@@ -84,13 +82,14 @@ public:
         this->definitions().appendf("const float %s = %f;\n", name, value);
     }
 
-    void defineConstantf(const char* type, const char* name, const char* fmt, ...) {
-       this->definitions().appendf("const %s %s = ", type, name);
-       va_list args;
-       va_start(args, fmt);
-       this->definitions().appendVAList(fmt, args);
-       va_end(args);
-       this->definitions().append(";\n");
+    void defineConstantf(const char* type, const char* name, const char* fmt, ...)
+            SK_PRINTF_LIKE(4, 5) {
+        this->definitions().appendf("const %s %s = ", type, name);
+        va_list args;
+        va_start(args, fmt);
+        this->definitions().appendVAList(fmt, args);
+        va_end(args);
+        this->definitions().append(";\n");
     }
 
     void definitionAppend(const char* str) { this->definitions().append(str); }
@@ -139,14 +138,14 @@ public:
     SkString getMangledFunctionName(const char* baseName);
 
     /** Emits a prototype for a helper function outside of main() in the fragment shader. */
-    void emitFunctionPrototype(GrSLType returnType,
+    void emitFunctionPrototype(SkSLType returnType,
                                const char* mangledName,
                                SkSpan<const GrShaderVar> args);
 
     void emitFunctionPrototype(const char* declaration);
 
     /** Emits a helper function outside of main() in the fragment shader. */
-    void emitFunction(GrSLType returnType,
+    void emitFunction(SkSLType returnType,
                       const char* mangledName,
                       SkSpan<const GrShaderVar> args,
                       const char* body);
@@ -184,7 +183,7 @@ protected:
     typedef SkTBlockList<GrShaderVar> VarArray;
     void appendDecls(const VarArray& vars, SkString* out) const;
 
-    void appendFunctionDecl(GrSLType returnType,
+    void appendFunctionDecl(SkSLType returnType,
                             const char* mangledName,
                             SkSpan<const GrShaderVar> args);
 
@@ -264,7 +263,7 @@ protected:
     };
 
     GrGLSLProgramBuilder* fProgramBuilder;
-    SkSL::String fCompilerString;
+    std::string fCompilerString;
     SkSTArray<kPrealloc, SkString> fShaderStrings;
     SkString fCode;
     SkString fFunctions;
@@ -290,6 +289,6 @@ protected:
     friend class GrGLPathProgramBuilder; // to access fInputs.
     friend class GrVkPipelineStateBuilder;
     friend class GrMtlPipelineStateBuilder;
-    friend class SkSL::dsl::DSLWriter;
+    friend class SkSL::ThreadContext;
 };
 #endif

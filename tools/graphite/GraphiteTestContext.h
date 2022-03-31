@@ -5,15 +5,15 @@
  * found in the LICENSE file.
  */
 
-#ifndef sk_graphite_test_GraphiteTestContext_DEFINED
-#define sk_graphite_test_GraphiteTestContext_DEFINED
+#ifndef skiatest_graphite_GraphiteTestContext_DEFINED
+#define skiatest_graphite_GraphiteTestContext_DEFINED
 
 #include "experimental/graphite/include/GraphiteTypes.h"
 #include "include/core/SkRefCnt.h"
 
 namespace skgpu { class Context; }
 
-namespace sk_graphite_test {
+namespace skiatest::graphite {
 
 /**
  * An offscreen 3D context. This class is intended for Skia's internal testing needs and not
@@ -28,13 +28,13 @@ public:
 
     virtual skgpu::BackendApi backend() = 0;
 
-    virtual sk_sp<skgpu::Context> makeContext() = 0;
+    virtual std::unique_ptr<skgpu::Context> makeContext() = 0;
 
 protected:
     GraphiteTestContext();
 };
 
 
-}  // namespace sk_graphite_test
+}  // namespace skiatest::graphite
 
-#endif // sk_graphite_test_GraphiteTestContext_DEFINED
+#endif // skiatest_graphite_GraphiteTestContext_DEFINED

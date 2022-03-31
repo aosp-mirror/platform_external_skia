@@ -17,7 +17,7 @@ namespace SkSL {
  */
 class ConstructorArray final : public MultiArgumentConstructor {
 public:
-    static constexpr Kind kExpressionKind = Kind::kConstructorArray;
+    inline static constexpr Kind kExpressionKind = Kind::kConstructorArray;
 
     ConstructorArray(int line, const Type& type, ExpressionArray arguments)
         : INHERITED(line, kExpressionKind, &type, std::move(arguments)) {}
@@ -36,7 +36,7 @@ public:
                                             ExpressionArray args);
 
     std::unique_ptr<Expression> clone() const override {
-        return std::make_unique<ConstructorArray>(fLine, this->type(), this->cloneArguments());
+        return std::make_unique<ConstructorArray>(fLine, this->type(), this->arguments().clone());
     }
 
 private:

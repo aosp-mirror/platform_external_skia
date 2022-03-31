@@ -18,7 +18,7 @@ namespace SkSL {
  */
 class ContinueStatement final : public Statement {
 public:
-    static constexpr Kind kStatementKind = Kind::kContinue;
+    inline static constexpr Kind kStatementKind = Kind::kContinue;
 
     ContinueStatement(int line)
     : INHERITED(line, kStatementKind) {}
@@ -31,8 +31,8 @@ public:
         return std::make_unique<ContinueStatement>(fLine);
     }
 
-    String description() const override {
-        return String("continue;");
+    std::string description() const override {
+        return "continue;";
     }
 
 private:

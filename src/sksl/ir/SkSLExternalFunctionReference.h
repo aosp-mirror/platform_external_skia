@@ -20,7 +20,7 @@ namespace SkSL {
  */
 class ExternalFunctionReference final : public Expression {
 public:
-    static constexpr Kind kExpressionKind = Kind::kExternalFunctionReference;
+    inline static constexpr Kind kExpressionKind = Kind::kExternalFunctionReference;
 
     ExternalFunctionReference(int line, const ExternalFunction* ef)
         : INHERITED(line, kExpressionKind, &ef->type())
@@ -34,8 +34,8 @@ public:
         return property == Property::kSideEffects;
     }
 
-    String description() const override {
-        return String(this->function().name());
+    std::string description() const override {
+        return std::string(this->function().name());
     }
 
     std::unique_ptr<Expression> clone() const override {

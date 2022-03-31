@@ -176,8 +176,8 @@ class RotateAnimator {
     SkScalar    fAngleSpeed = 0,
                 fAngleSign = 1;
 
-    static constexpr double kSlowDown = 4;
-    static constexpr SkScalar kMaxSpeed = 16;
+    inline static constexpr double kSlowDown = 4;
+    inline static constexpr SkScalar kMaxSpeed = 16;
 
 public:
     void update(SkV3 axis, SkScalar angle) {
@@ -428,7 +428,7 @@ public:
 
         SkPaint paint;
         paint.setColor(color);
-        paint.setShader(builder.makeShader(nullptr, true));
+        paint.setShader(builder.makeShader());
 
         canvas->drawRRect(fRR, paint);
     }

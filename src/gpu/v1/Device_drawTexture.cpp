@@ -351,7 +351,7 @@ void draw_texture(skgpu::v1::SurfaceDrawContext* sdc,
                   GrSurfaceProxyView view,
                   const GrColorInfo& srcColorInfo) {
     if (GrColorTypeIsAlphaOnly(srcColorInfo.colorType())) {
-        view.concatSwizzle(GrSwizzle("aaaa"));
+        view.concatSwizzle(skgpu::Swizzle("aaaa"));
     }
     const GrColorInfo& dstInfo = sdc->colorInfo();
     auto textureXform = GrColorSpaceXform::Make(srcColorInfo, sdc->colorInfo());
@@ -511,19 +511,23 @@ void draw_image(GrRecordingContext* rContext,
                                        image.imageInfo().colorInfo(),
                                        sdc->colorInfo());
     if (image.isAlphaOnly()) {
-        fp = GrBlendFragmentProcessor::Make(std::move(fp), nullptr, SkBlendMode::kDstIn);
-    } else {
-        fp = GrBlendFragmentProcessor::Make(std::move(fp), nullptr, SkBlendMode::kSrcIn);
+        if (const auto* shader = as_SB(paint.getShader())) {
+            auto shaderFP = shader->asFragmentProcessor(
+                    GrFPArgs(rContext, matrixProvider, &sdc->colorInfo()));
+            if (!shaderFP) {
+                return;
+            }
+            fp = GrBlendFragmentProcessor::Make(
+                    std::move(fp), std::move(shaderFP), SkBlendMode::kDstIn);
+        } else {
+            // Multiply the input (paint) color by the texture (alpha)
+            fp = GrFragmentProcessor::MulInputByChildAlpha(std::move(fp));
+        }
     }
 
     GrPaint grPaint;
-    if (!SkPaintToGrPaintWithTexture(rContext,
-                                     sdc->colorInfo(),
-                                     paint,
-                                     matrixProvider,
-                                     std::move(fp),
-                                     image.isAlphaOnly(),
-                                     &grPaint)) {
+    if (!SkPaintToGrPaintReplaceShader(
+                rContext, sdc->colorInfo(), paint, matrixProvider, std::move(fp), &grPaint)) {
         return;
     }
 
@@ -727,7 +731,7 @@ void Device::drawSpecial(SkSpecialImage* special,
                       std::move(colorInfo));
     // In most cases this ought to hit draw_texture since there won't be a color filter,
     // alpha-only texture+shader, or a high filter quality.
-    SkOverrideDeviceMatrixProvider matrixProvider(this->asMatrixProvider(), localToDevice);
+    SkOverrideDeviceMatrixProvider matrixProvider(localToDevice);
     draw_image(fContext.get(),
                fSurfaceDrawContext.get(),
                this->clip(),
@@ -928,7 +932,8 @@ void Device::drawEdgeAAImageSet(const SkCanvas::ImageSetEntry set[], int count,
         if (!image->isYUVA()) {
             std::tie(view, std::ignore) = image->asView(this->recordingContext(), GrMipmapped::kNo);
             if (image->isAlphaOnly()) {
-                GrSwizzle swizzle = GrSwizzle::Concat(view.swizzle(), GrSwizzle("aaaa"));
+                skgpu::Swizzle swizzle = skgpu::Swizzle::Concat(view.swizzle(),
+                                                                skgpu::Swizzle("aaaa"));
                 view = {view.detachProxy(), view.origin(), swizzle};
             }
         }

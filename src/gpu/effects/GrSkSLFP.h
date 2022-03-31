@@ -8,6 +8,7 @@
 #ifndef GrSkSLFP_DEFINED
 #define GrSkSLFP_DEFINED
 
+#include "include/core/SkM44.h"
 #include "include/core/SkRefCnt.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/GrContextOptions.h"
@@ -18,7 +19,7 @@
 #include <utility>
 #include <vector>
 
-class GrShaderCaps;
+struct GrShaderCaps;
 class SkData;
 class SkRuntimeEffect;
 
@@ -30,6 +31,9 @@ template <typename T> struct GrFPUniformType {
 };
 #define UNIFORM_TYPE(E, ...)                                                                       \
     template <> struct GrFPUniformType<__VA_ARGS__> {                                              \
+        static constexpr SkRuntimeEffect::Uniform::Type value = SkRuntimeEffect::Uniform::Type::E; \
+    };                                                                                             \
+    template <> struct GrFPUniformType<SkSpan<__VA_ARGS__>> {                                      \
         static constexpr SkRuntimeEffect::Uniform::Type value = SkRuntimeEffect::Uniform::Type::E; \
     }
 
@@ -99,6 +103,7 @@ public:
     static std::unique_ptr<GrSkSLFP> MakeWithData(
             sk_sp<SkRuntimeEffect> effect,
             const char* name,
+            sk_sp<SkColorSpace> dstColorSpace,
             std::unique_ptr<GrFragmentProcessor> inputFP,
             std::unique_ptr<GrFragmentProcessor> destColorFP,
             sk_sp<SkData> uniforms,
@@ -145,6 +150,10 @@ public:
                   effect->fChildren.end(),
                   std::forward<Args>(args)...);
 #endif
+        // This factory is used internally (for "runtime FPs"). We don't pass/know the destination
+        // color space, so these effects can't use the color transform intrinsics. Callers of this
+        // factory should instead construct an GrColorSpaceXformEffect as part of the FP tree.
+        SkASSERT(!effect->usesColorTransform());
 
         size_t uniformPayloadSize = UniformPayloadSize(effect.get());
         std::unique_ptr<GrSkSLFP> fp(new (uniformPayloadSize)
@@ -168,19 +177,20 @@ private:
     void addChild(std::unique_ptr<GrFragmentProcessor> child, bool mergeOptFlags);
     void setInput(std::unique_ptr<GrFragmentProcessor> input);
     void setDestColorFP(std::unique_ptr<GrFragmentProcessor> destColorFP);
+    void addColorTransformChildren(sk_sp<SkColorSpace> dstColorSpace);
 
     std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override;
 
-    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
+    void onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override;
 
     bool onIsEqual(const GrFragmentProcessor&) const override;
 
     SkPMColor4f constantOutputForConstantInput(const SkPMColor4f&) const override;
 
     // An instance of GrSkSLFP is always allocated with a payload immediately following the FP.
-    // First the the values of all the uniforms, and then a set of flags (one per uniform).
+    // First the values of all the uniforms, and then a set of flags (one per uniform).
     static size_t UniformPayloadSize(const SkRuntimeEffect* effect) {
-        return effect->uniformSize() + effect->uniforms().count() * sizeof(UniformFlags);
+        return effect->uniformSize() + effect->uniforms().size() * sizeof(UniformFlags);
     }
 
     const uint8_t* uniformData() const { return reinterpret_cast<const uint8_t*>(this + 1); }
@@ -262,6 +272,19 @@ private:
     void appendArgs(uint8_t* uniformDataPtr,
                     UniformFlags* uniformFlagsPtr,
                     const char* name,
+                    SkSpan<T> val,
+                    Args&&... remainder) {
+        // Uniform array case -- We copy the supplied values into our uniform data area,
+        // then advance our uniform data and flags pointers.
+        memcpy(uniformDataPtr, val.data(), val.size_bytes());
+        uniformDataPtr += val.size_bytes();
+        uniformFlagsPtr++;
+        this->appendArgs(uniformDataPtr, uniformFlagsPtr, std::forward<Args>(remainder)...);
+    }
+    template <typename T, typename... Args>
+    void appendArgs(uint8_t* uniformDataPtr,
+                    UniformFlags* uniformFlagsPtr,
+                    const char* name,
                     const T& val,
                     Args&&... remainder) {
         // Raw uniform value case -- We copy the supplied value into our uniform data area,
@@ -284,6 +307,12 @@ private:
         SkASSERTF(uIter == uEnd, "Expected more uniforms, starting with '%s'", uIter->name.c_str());
         SkASSERTF(cIter == cEnd, "Expected more children, starting with '%s'", cIter->name.c_str());
     }
+    static void checkOneChild(child_iterator cIter, child_iterator cEnd, const char* name) {
+        SkASSERTF(cIter != cEnd, "Too many children, wasn't expecting '%s'", name);
+        SkASSERTF(cIter->name.equals(name),
+                  "Expected child '%s', got '%s' instead",
+                  cIter->name.c_str(), name);
+    }
     template <typename... Args>
     static void checkArgs(uniform_iterator uIter,
                           uniform_iterator uEnd,
@@ -295,10 +324,7 @@ private:
         // NOTE: This function (necessarily) gets an rvalue reference to child, but deliberately
         // does not use it. We leave it intact, and our caller (Make) will pass another rvalue
         // reference to appendArgs, which will then move it to call addChild.
-        SkASSERTF(cIter != cEnd, "Too many children, wasn't expecting '%s'", name);
-        SkASSERTF(cIter->name.equals(name),
-                  "Expected child '%s', got '%s' instead",
-                  cIter->name.c_str(), name);
+        checkOneChild(cIter, cEnd, name);
         checkArgs(uIter, uEnd, ++cIter, cEnd, std::forward<Args>(remainder)...);
     }
     template <typename... Args>
@@ -312,10 +338,7 @@ private:
         // NOTE: This function (necessarily) gets an rvalue reference to child, but deliberately
         // does not use it. We leave it intact, and our caller (Make) will pass another rvalue
         // reference to appendArgs, which will then move it to call addChild.
-        SkASSERTF(cIter != cEnd, "Too many children, wasn't expecting '%s'", name);
-        SkASSERTF(cIter->name.equals(name),
-                  "Expected child '%s', got '%s' instead",
-                  cIter->name.c_str(), name);
+        checkOneChild(cIter, cEnd, name);
         checkArgs(uIter, uEnd, ++cIter, cEnd, std::forward<Args>(remainder)...);
     }
     template <typename T, typename... Args>
@@ -343,6 +366,34 @@ private:
             checkArgs(uIter, uEnd, cIter, cEnd, std::forward<Args>(remainder)...);
         }
     }
+    template <typename T>
+    static void checkOneUniform(uniform_iterator uIter,
+                                uniform_iterator uEnd,
+                                const char* name,
+                                const T* /*val*/,
+                                size_t valSize) {
+        SkASSERTF(uIter != uEnd, "Too many uniforms, wasn't expecting '%s'", name);
+        SkASSERTF(uIter->name.equals(name),
+                  "Expected uniform '%s', got '%s' instead",
+                  uIter->name.c_str(), name);
+        SkASSERTF(uIter->sizeInBytes() == valSize,
+                  "Expected uniform '%s' to be %zu bytes, got %zu instead",
+                  name, uIter->sizeInBytes(), valSize);
+        SkASSERTF(GrFPUniformType<T>::value == uIter->type,
+                  "Wrong type for uniform '%s'",
+                  name);
+    }
+    template <typename T, typename... Args>
+    static void checkArgs(uniform_iterator uIter,
+                          uniform_iterator uEnd,
+                          child_iterator cIter,
+                          child_iterator cEnd,
+                          const char* name,
+                          SkSpan<T> val,
+                          Args&&... remainder) {
+        checkOneUniform(uIter, uEnd, name, val.data(), val.size_bytes());
+        checkArgs(++uIter, uEnd, cIter, cEnd, std::forward<Args>(remainder)...);
+    }
     template <typename T, typename... Args>
     static void checkArgs(uniform_iterator uIter,
                           uniform_iterator uEnd,
@@ -351,16 +402,7 @@ private:
                           const char* name,
                           const T& val,
                           Args&&... remainder) {
-        SkASSERTF(uIter != uEnd, "Too many uniforms, wasn't expecting '%s'", name);
-        SkASSERTF(uIter->name.equals(name),
-                  "Expected uniform '%s', got '%s' instead",
-                  uIter->name.c_str(), name);
-        SkASSERTF(uIter->sizeInBytes() == sizeof(val),
-                  "Expected uniform '%s' to be %zu bytes, got %zu instead",
-                  name, uIter->sizeInBytes(), sizeof(val));
-        SkASSERTF(GrFPUniformType<T>::value == uIter->type,
-                  "Wrong type for uniform '%s'",
-                  name);
+        checkOneUniform(uIter, uEnd, name, &val, sizeof(val));
         checkArgs(++uIter, uEnd, cIter, cEnd, std::forward<Args>(remainder)...);
     }
 #endif
@@ -370,6 +412,8 @@ private:
     uint32_t               fUniformSize;
     int                    fInputChildIndex = -1;
     int                    fDestColorChildIndex = -1;
+    int                    fToLinearSrgbChildIndex = -1;
+    int                    fFromLinearSrgbChildIndex = -1;
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 

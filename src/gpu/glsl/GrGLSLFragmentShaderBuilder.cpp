@@ -50,7 +50,7 @@ void GrGLSLFragmentShaderBuilder::enableAdvancedBlendEquationIfNeeded(GrBlendEqu
 
 void GrGLSLFragmentShaderBuilder::enableCustomOutput() {
     if (!fCustomColorOutput) {
-        fCustomColorOutput = &fOutputs.emplace_back(DeclaredColorOutputName(), kHalf4_GrSLType,
+        fCustomColorOutput = &fOutputs.emplace_back(DeclaredColorOutputName(), SkSLType::kHalf4,
                                                     GrShaderVar::TypeModifier::Out);
         fProgramBuilder->finalizeFragmentOutputColor(fOutputs.back());
     }
@@ -66,10 +66,10 @@ void GrGLSLFragmentShaderBuilder::enableSecondaryOutput() {
 
     // If the primary output is declared, we must declare also the secondary output
     // and vice versa, since it is not allowed to use a built-in gl_FragColor and a custom
-    // output. The condition also co-incides with the condition in which GLES SL 2.0
-    // requires the built-in gl_SecondaryFragColorEXT, where as 3.0 requires a custom output.
+    // output. The condition also co-incides with the condition in which GLSL ES 2.0
+    // requires the built-in gl_SecondaryFragColorEXT, whereas 3.0 requires a custom output.
     if (caps.mustDeclareFragmentShaderOutput()) {
-        fOutputs.emplace_back(DeclaredSecondaryColorOutputName(), kHalf4_GrSLType,
+        fOutputs.emplace_back(DeclaredSecondaryColorOutputName(), SkSLType::kHalf4,
                               GrShaderVar::TypeModifier::Out);
         fProgramBuilder->finalizeFragmentSecondaryColor(fOutputs.back());
     }
@@ -88,7 +88,7 @@ const char* GrGLSLFragmentShaderBuilder::getSecondaryColorOutputName() const {
     if (this->hasSecondaryOutput()) {
         return (fProgramBuilder->shaderCaps()->mustDeclareFragmentShaderOutput())
                 ? DeclaredSecondaryColorOutputName()
-                : "gl_SecondaryFragColorEXT";
+                : "sk_SecondaryFragColor";
     }
     return nullptr;
 }

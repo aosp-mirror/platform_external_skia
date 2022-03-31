@@ -3611,6 +3611,52 @@ protected:
 private:
     using INHERITED = Sample;
 };
+
+// Baseline shift
+class ParagraphView63 : public ParagraphView_Base {
+protected:
+    SkString name() override { return SkString("ParagraphView63"); }
+
+    void onDrawContent(SkCanvas* canvas) override {
+
+        canvas->drawColor(SK_ColorWHITE);
+        auto fontCollection = sk_make_sp<TestFontCollection>(GetResourcePath("fonts").c_str(), true, true);
+        TextStyle text_style;
+        text_style.setFontFamilies({SkString("Ahem")});
+        text_style.setFontSize(10);
+        SkPaint black; black.setColor(SK_ColorBLACK);
+        text_style.setForegroundColor(black);
+
+        ParagraphStyle paragraph_style;
+        paragraph_style.setTextStyle(text_style);
+        paragraph_style.setTextDirection(TextDirection::kLtr);
+        StrutStyle strut_style;
+        strut_style.setStrutEnabled(true);
+        strut_style.setFontFamilies({SkString("Ahem")});
+        strut_style.setFontSize(16);
+        strut_style.setHeight(4.0f);
+        strut_style.setHeightOverride(true);
+        strut_style.setLeading(-1.0f);
+        strut_style.setForceStrutHeight(true);
+        paragraph_style.setStrutStyle(strut_style);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+
+        builder.pushStyle(text_style);
+        builder.addText(u"Atwater Peel Sherbrooke Bonaventure\nhi\nwasssup!");
+        auto paragraph = builder.Build();
+        paragraph->layout(797);
+        paragraph->paint(canvas, 0, 0);
+        auto boxes = paragraph->getRectsForRange(0, 60,
+                                                 RectHeightStyle::kIncludeLineSpacingTop, RectWidthStyle::kMax);
+        for (auto& box : boxes) {
+            SkDebugf("[%f, %f, %f, %f]: %s\n", box.rect.left(), box.rect.top(), box.rect.right(), box.rect.bottom(), box.direction == TextDirection::kLtr ? "left" : "right");
+        }
+    }
+
+private:
+    using INHERITED = Sample;
+};
+
 }  // namespace
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3674,3 +3720,4 @@ DEF_SAMPLE(return new ParagraphView59();)
 DEF_SAMPLE(return new ParagraphView60();)
 DEF_SAMPLE(return new ParagraphView61();)
 DEF_SAMPLE(return new ParagraphView62();)
+DEF_SAMPLE(return new ParagraphView63();)

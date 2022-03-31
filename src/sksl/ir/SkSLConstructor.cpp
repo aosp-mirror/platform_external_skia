@@ -7,6 +7,7 @@
 
 #include "src/sksl/ir/SkSLConstructor.h"
 
+#include "include/sksl/SkSLErrorReporter.h"
 #include "src/sksl/ir/SkSLConstructorArray.h"
 #include "src/sksl/ir/SkSLConstructorCompound.h"
 #include "src/sksl/ir/SkSLConstructorCompoundCast.h"
@@ -32,7 +33,7 @@ static std::unique_ptr<Expression> convert_compound_constructor(const Context& c
     if (args.size() == 1) {
         std::unique_ptr<Expression>& argument = args.front();
         if (type.isVector() && argument->type().isVector() &&
-            argument->type().componentType() == type.componentType() &&
+            argument->type().componentType().matches(type.componentType()) &&
             argument->type().slotCount() > type.slotCount()) {
             // Casting a vector-type into a smaller matching vector-type is a slice in GLSL.
             // We don't allow those casts in SkSL; recommend a swizzle instead.
@@ -54,9 +55,13 @@ static std::unique_ptr<Expression> convert_compound_constructor(const Context& c
         if (argument->type().isScalar()) {
             // A constructor containing a single scalar is a splat (for vectors) or diagonal matrix
             // (for matrices). It's legal regardless of the scalar's type, so synthesize an explicit
-            // conversion to the proper type. (This cast is a no-op if it's unnecessary.)
-            std::unique_ptr<Expression> typecast = ConstructorScalarCast::Make(
-                    context, line, type.componentType(), std::move(argument));
+            // conversion to the proper type. (This cast is a no-op if it's unnecessary; it can fail
+            // if we're casting a literal that exceeds the limits of the type.)
+            std::unique_ptr<Expression> typecast = ConstructorScalarCast::Convert(
+                        context, line, type.componentType(), std::move(args));
+            if (!typecast) {
+                return nullptr;
+            }
 
             // Matrix-from-scalar creates a diagonal matrix; vector-from-scalar creates a splat.
             return type.isMatrix()
@@ -108,32 +113,12 @@ static std::unique_ptr<Expression> convert_compound_constructor(const Context& c
     // For more complex cases, we walk the argument list and fix up the arguments as needed.
     int expected = type.rows() * type.columns();
     int actual = 0;
-    for (size_t index = 0; index < args.size(); ++index) {
-        std::unique_ptr<Expression>& arg = args[index];
+    for (std::unique_ptr<Expression>& arg : args) {
         if (!arg->type().isScalar() && !arg->type().isVector()) {
             context.fErrors->error(line, "'" + arg->type().displayName() +
                                          "' is not a valid parameter to '" + type.displayName() +
                                          "' constructor");
             return nullptr;
-        }
-
-        if (type.isMatrix()) {
-            if (type.slotCount() == 4 && arg->type().slotCount() == 4) {
-                // Allow mat2(vec4) constructors. These have real-world utility.
-            } else {
-                // Disallow arguments which split across multiple matrix columns. The GLSL spec
-                // technically allows it, but it's rarely useful, and several GPU drivers fail in
-                // practice.
-                int limit = type.rows() - (actual % type.rows());
-                if (arg->type().columns() > limit) {
-                    context.fErrors->error(line,
-                            "argument " + std::to_string(index + 1) + " to '" + type.displayName() +
-                            "' constructor is '" + arg->type().displayName() + "', but matrix "
-                            "column only has " + std::to_string(limit) + " slot" +
-                            ((limit != 1) ? "s" : "") + " left");
-                    return nullptr;
-                }
-            }
         }
 
         // Rely on Constructor::Convert to force this subexpression to the proper type. If it's a
@@ -154,8 +139,8 @@ static std::unique_ptr<Expression> convert_compound_constructor(const Context& c
 
     if (actual != expected) {
         context.fErrors->error(line, "invalid arguments to '" + type.displayName() +
-                                     "' constructor (expected " + to_string(expected) +
-                                     " scalars, but found " + to_string(actual) + ")");
+                                     "' constructor (expected " + std::to_string(expected) +
+                                     " scalars, but found " + std::to_string(actual) + ")");
         return nullptr;
     }
 
@@ -166,7 +151,7 @@ std::unique_ptr<Expression> Constructor::Convert(const Context& context,
                                                  int line,
                                                  const Type& type,
                                                  ExpressionArray args) {
-    if (args.size() == 1 && args[0]->type() == type && !type.componentType().isOpaque()) {
+    if (args.size() == 1 && args[0]->type().matches(type) && !type.componentType().isOpaque()) {
         // Don't generate redundant casts; if the expression is already of the correct type, just
         // return it as-is.
         return std::move(args[0]);
@@ -188,47 +173,44 @@ std::unique_ptr<Expression> Constructor::Convert(const Context& context,
     return nullptr;
 }
 
-const Expression* AnyConstructor::getConstantSubexpression(int n) const {
+std::optional<double> AnyConstructor::getConstantValue(int n) const {
     SkASSERT(n >= 0 && n < (int)this->type().slotCount());
     for (const std::unique_ptr<Expression>& arg : this->argumentSpan()) {
         int argSlots = arg->type().slotCount();
         if (n < argSlots) {
-            return arg->getConstantSubexpression(n);
+            return arg->getConstantValue(n);
         }
         n -= argSlots;
     }
 
     SkDEBUGFAIL("argument-list slot count doesn't match constructor-type slot count");
-    return nullptr;
+    return std::nullopt;
 }
 
 Expression::ComparisonResult AnyConstructor::compareConstant(const Expression& other) const {
     SkASSERT(this->type().slotCount() == other.type().slotCount());
 
-    if (!other.allowsConstantSubexpressions()) {
+    if (!other.supportsConstantValues()) {
         return ComparisonResult::kUnknown;
     }
 
-    ComparisonResult result = ComparisonResult::kEqual;
     int exprs = this->type().slotCount();
     for (int n = 0; n < exprs; ++n) {
         // Get the n'th subexpression from each side. If either one is null, return "unknown."
-        const Expression* left = this->getConstantSubexpression(n);
-        if (!left) {
+        std::optional<double> left = this->getConstantValue(n);
+        if (!left.has_value()) {
             return ComparisonResult::kUnknown;
         }
-        const Expression* right = other.getConstantSubexpression(n);
-        if (!right) {
+        std::optional<double> right = other.getConstantValue(n);
+        if (!right.has_value()) {
             return ComparisonResult::kUnknown;
         }
-        // Recurse into the subexpressions; the literal types will perform real comparisons, and
-        // most other expressions fall back on the base class Expression which returns unknown.
-        result = left->compareConstant(*right);
-        if (result != ComparisonResult::kEqual) {
-            break;
+        // Both sides are known and can be compared for equality directly.
+        if (*left != *right) {
+            return ComparisonResult::kNotEqual;
         }
     }
-    return result;
+    return ComparisonResult::kEqual;
 }
 
 AnyConstructor& Expression::asAnyConstructor() {

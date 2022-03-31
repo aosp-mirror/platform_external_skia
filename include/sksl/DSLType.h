@@ -17,6 +17,7 @@
 
 namespace SkSL {
 
+class Compiler;
 class Type;
 
 namespace dsl {
@@ -83,12 +84,11 @@ public:
     DSLType(TypeConstant tc)
         : fTypeConstant(tc) {}
 
-    DSLType(const SkSL::Type* type)
-        : fSkSLType(type) {}
+    DSLType(const SkSL::Type* type);
 
-    DSLType(skstd::string_view name);
+    DSLType(std::string_view name);
 
-    DSLType(skstd::string_view name,
+    DSLType(std::string_view name,
             DSLModifiers* modifiers,
             PositionInfo pos = PositionInfo::Capture());
 
@@ -169,19 +169,17 @@ public:
 private:
     const SkSL::Type& skslType() const;
 
-    bool reportIllegalTypes(PositionInfo pos) const;
-
     const SkSL::Type* fSkSLType = nullptr;
 
     TypeConstant fTypeConstant = kPoison_Type;
 
     friend DSLType Array(const DSLType& base, int count, PositionInfo pos);
-    friend DSLType Struct(skstd::string_view name, SkSpan<DSLField> fields, PositionInfo pos);
+    friend DSLType Struct(std::string_view name, SkSpan<DSLField> fields, PositionInfo pos);
     friend class DSLCore;
-    friend class DSLField;
     friend class DSLFunction;
     friend class DSLVarBase;
     friend class DSLWriter;
+    friend class SkSL::Compiler;
 };
 
 #define TYPE(T)                                                                                    \
@@ -226,34 +224,32 @@ DSLType Array(const DSLType& base, int count, PositionInfo pos = PositionInfo::C
 
 class DSLField {
 public:
-    DSLField(const DSLType type, skstd::string_view name,
+    DSLField(const DSLType type, std::string_view name,
              PositionInfo pos = PositionInfo::Capture())
         : DSLField(DSLModifiers(), type, name, pos) {}
 
-    DSLField(const DSLModifiers& modifiers, const DSLType type, skstd::string_view name,
+    DSLField(const DSLModifiers& modifiers, const DSLType type, std::string_view name,
              PositionInfo pos = PositionInfo::Capture())
         : fModifiers(modifiers)
         , fType(type)
         , fName(name)
-        , fPosition(pos) {
-        type.reportIllegalTypes(pos);
-    }
+        , fPosition(pos) {}
 
 private:
     DSLModifiers fModifiers;
     const DSLType fType;
-    skstd::string_view fName;
+    std::string_view fName;
     PositionInfo fPosition;
 
     friend class DSLCore;
-    friend DSLType Struct(skstd::string_view name, SkSpan<DSLField> fields, PositionInfo pos);
+    friend DSLType Struct(std::string_view name, SkSpan<DSLField> fields, PositionInfo pos);
 };
 
-DSLType Struct(skstd::string_view name, SkSpan<DSLField> fields,
+DSLType Struct(std::string_view name, SkSpan<DSLField> fields,
                PositionInfo pos = PositionInfo::Capture());
 
 template<typename... Field>
-DSLType Struct(skstd::string_view name, Field... fields) {
+DSLType Struct(std::string_view name, Field... fields) {
     DSLField fieldTypes[] = {std::move(fields)...};
     return Struct(name, SkMakeSpan(fieldTypes), PositionInfo());
 }

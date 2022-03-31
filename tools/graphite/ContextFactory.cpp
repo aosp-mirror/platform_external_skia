@@ -13,14 +13,29 @@
 #include "tools/graphite/mtl/GraphiteMtlTestContext.h"
 #endif
 
-namespace sk_graphite_test {
+namespace skiatest::graphite {
 
- std::tuple<GraphiteTestContext*, sk_sp<skgpu::Context>> ContextFactory::getContextInfo(
+ContextFactory::ContextInfo::ContextInfo(ContextInfo&& other)
+    : fType(other.fType)
+    , fTestContext(std::move(other.fTestContext))
+    , fContext(std::move(other.fContext)) {
+}
+
+ContextFactory::ContextInfo::ContextInfo(ContextFactory::ContextType type,
+                                         std::unique_ptr<GraphiteTestContext> testContext,
+                                         std::unique_ptr<skgpu::Context> context)
+    : fType(type)
+    , fTestContext(std::move(testContext))
+    , fContext(std::move(context)) {
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+std::tuple<GraphiteTestContext*, skgpu::Context*> ContextFactory::getContextInfo(
         ContextType type) {
 
     for (ContextInfo& c : fContexts) {
         if (c.type() == type) {
-            return { c.testContext(), c.refContext() };
+            return { c.testContext(), c.context() };
         }
     }
 
@@ -41,14 +56,14 @@ namespace sk_graphite_test {
         return {};
     }
 
-    sk_sp<skgpu::Context> context = testCtx->makeContext();
+    std::unique_ptr<skgpu::Context> context = testCtx->makeContext();
     if (!context) {
         return {};
     }
 
     fContexts.push_back({ type, std::move(testCtx), std::move(context) });
 
-    return { fContexts.back().testContext(), fContexts.back().refContext() };
+    return { fContexts.back().testContext(), fContexts.back().context() };
 }
 
-} // namespace sk_graphite_test
+} // namespace skiatest::graphite

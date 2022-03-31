@@ -3,10 +3,10 @@ uniform float unknownInput;
 
 half4 main(float2 coords) {
     float x = 1, y = 2;
-    int z = 3;
+    int z = 3U;
     x = x - x + y * x * x * (y - x);
     y = x / y / x;
-    z = (z / 2 % 3 << 4) >> 2 << 1;
+    z = (z / 2u % 3 << 4) >> 2 << 1;
     bool b = (x > 4) == x < 2 || 2 >= unknownInput && y <= x;
     bool c = unknownInput > 2;
     bool d = b ^^ c;
@@ -24,6 +24,8 @@ half4 main(float2 coords) {
     x = (colorGreen.xy, 6);
     y = (float(b) * float(c) * float(d) * float(e) * float(f), 6.0);
     z = (colorRed.zw, 6);
+    int2 w = int2(~5);
+    w = ~w;
 
-    return (x == 6 && y == 6 && z == 6) ? colorGreen : colorRed;
+    return (w.x == 5 && w.y == 5 && x == 6 && y == 6 && z == 6) ? colorGreen : colorRed;
 }

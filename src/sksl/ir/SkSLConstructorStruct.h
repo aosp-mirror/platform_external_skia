@@ -17,7 +17,7 @@ namespace SkSL {
  */
 class ConstructorStruct final : public MultiArgumentConstructor {
 public:
-    static constexpr Kind kExpressionKind = Kind::kConstructorStruct;
+    inline static constexpr Kind kExpressionKind = Kind::kConstructorStruct;
 
     ConstructorStruct(int line, const Type& type, ExpressionArray arguments)
         : INHERITED(line, kExpressionKind, &type, std::move(arguments)) {}
@@ -36,7 +36,7 @@ public:
                                             ExpressionArray args);
 
     std::unique_ptr<Expression> clone() const override {
-        return std::make_unique<ConstructorStruct>(fLine, this->type(), this->cloneArguments());
+        return std::make_unique<ConstructorStruct>(fLine, this->type(), this->arguments().clone());
     }
 
 private:

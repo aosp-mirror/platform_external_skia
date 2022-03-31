@@ -15,7 +15,6 @@
 #include "src/gpu/GrSurface.h"
 #include "src/gpu/GrSurfaceProxy.h"
 #include "src/gpu/GrWindowRectangles.h"
-#include "src/utils/SkJSONWriter.h"
 
 GrCaps::GrCaps(const GrContextOptions& options) {
     fMipmapSupport = false;
@@ -32,6 +31,7 @@ GrCaps::GrCaps(const GrContextOptions& options) {
     fConservativeRasterSupport = false;
     fWireframeSupport = false;
     fMSAAResolvesAutomatically = false;
+    fPreferDiscardableMSAAAttachment = false;
     fUsePrimitiveRestart = false;
     fPreferClientSideDynamicBuffers = false;
     fPreferFullscreenClears = false;
@@ -166,6 +166,7 @@ void GrCaps::applyOptionsOverrides(const GrContextOptions& options) {
 
 #ifdef SK_ENABLE_DUMP_GPU
 #include "src/gpu/GrTestUtils.h"
+#include "src/utils/SkJSONWriter.h"
 
 static SkString map_flags_to_string(uint32_t flags) {
     SkString str;
@@ -421,11 +422,11 @@ bool GrCaps::areColorTypeAndFormatCompatible(GrColorType grCT,
     return this->onAreColorTypeAndFormatCompatible(grCT, format);
 }
 
-GrSwizzle GrCaps::getReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
+skgpu::Swizzle GrCaps::getReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
     SkImage::CompressionType compression = GrBackendFormatToCompressionType(format);
     if (compression != SkImage::CompressionType::kNone) {
         if (colorType == GrColorType::kRGB_888x || colorType == GrColorType::kRGBA_8888) {
-            return GrSwizzle::RGBA();
+            return skgpu::Swizzle::RGBA();
         }
         SkDEBUGFAILF("Illegal color type (%d) and compressed format (%d) combination.",
                      (int)colorType, (int)compression);

@@ -8,13 +8,17 @@
 #ifndef skgpu_RenderPassTask_DEFINED
 #define skgpu_RenderPassTask_DEFINED
 
+#include "experimental/graphite/src/CommandBuffer.h"
 #include "experimental/graphite/src/Task.h"
 
 #include <vector>
 
 namespace skgpu {
 
+class CommandBuffer;
+class Context;
 class DrawPass;
+class ResourceProvider;
 
 /**
  * RenderPassTask handles preparing and recording DrawLists into a single render pass within a
@@ -25,19 +29,22 @@ class DrawPass;
  */
 class RenderPassTask final : public Task {
 public:
-    // TODO: 'prior' isn't actually used yet but is here to represent the dependency between a
-    // series of RenderPassTasks.
-    static sk_sp<RenderPassTask> Make(sk_sp<Task> prior,
-                                      std::vector<std::unique_ptr<DrawPass>> passes);
+    static sk_sp<RenderPassTask> Make(std::vector<std::unique_ptr<DrawPass>> passes,
+                                      const RenderPassDesc&,
+                                      sk_sp<TextureProxy> target);
 
     ~RenderPassTask() override;
 
-    // TBD: Expose the surfaces that will need to be attached within the renderpass?
+    void addCommands(ResourceProvider*, CommandBuffer*) override;
 
 private:
-    RenderPassTask(std::vector<std::unique_ptr<DrawPass>> passes);
+    RenderPassTask(std::vector<std::unique_ptr<DrawPass>> passes,
+                   const RenderPassDesc&,
+                   sk_sp<TextureProxy> target);
 
     std::vector<std::unique_ptr<DrawPass>> fDrawPasses;
+    RenderPassDesc fRenderPassDesc;
+    sk_sp<TextureProxy> fTarget;
 };
 
 } // namespace skgpu

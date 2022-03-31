@@ -8,145 +8,485 @@
 #include "experimental/graphite/src/DrawPass.h"
 
 #include "experimental/graphite/include/GraphiteTypes.h"
+#include "experimental/graphite/include/Recorder.h"
+#include "experimental/graphite/src/Buffer.h"
+#include "experimental/graphite/src/ContextPriv.h"
+#include "experimental/graphite/src/ContextUtils.h"
+#include "experimental/graphite/src/DrawBufferManager.h"
 #include "experimental/graphite/src/DrawContext.h"
 #include "experimental/graphite/src/DrawList.h"
+#include "experimental/graphite/src/DrawWriter.h"
+#include "experimental/graphite/src/GlobalCache.h"
+#include "experimental/graphite/src/GraphicsPipeline.h"
+#include "experimental/graphite/src/GraphicsPipelineDesc.h"
+#include "experimental/graphite/src/RecorderPriv.h"
+#include "experimental/graphite/src/Renderer.h"
+#include "experimental/graphite/src/ResourceProvider.h"
+#include "experimental/graphite/src/TextureProxy.h"
+#include "experimental/graphite/src/UniformCache.h"
+#include "experimental/graphite/src/UniformManager.h"
+#include "experimental/graphite/src/geom/BoundsManager.h"
 
-#include "src/core/SkUtils.h"
+#include "src/core/SkMathPriv.h"
+#include "src/core/SkTBlockList.h"
+#include "src/core/SkUniformData.h"
+#include "src/gpu/BufferWriter.h"
+
+#include <algorithm>
+#include <unordered_map>
 
 namespace skgpu {
 
-namespace {
+// Helper to manage packed fields within a uint64_t
+template <uint64_t Bits, uint64_t Offset>
+struct Bitfield {
+    static constexpr uint64_t kMask = ((uint64_t) 1 << Bits) - 1;
+    static constexpr uint64_t kOffset = Offset;
+    static constexpr uint64_t kBits = Bits;
 
-// Any given draw command in a DrawList might require more than one actual operation on the GPU
-// (e.g. stencil then cover passes). While this does get encoded in the pipeline description and
-// thus pipeline index of SortKeys, correctly rendering the original command requires a guaranteed
-// order so the specific steps are ordered explicitly with two reserved bits higher than the
-// pipeline index.
-enum class DrawStage : unsigned {
-    kStencilCurves = 0b00, // Primary stencil pass for large paths, or only stencil pass
-    kStencilTris   = 0b01, // Optional secondary pass for large paths, just inner triangles
-    kFillCurves    = 0b10, // Primary color (and/or depth) pass for paths and other primitives
-    kFillTris      = 0b11, // Secondary pass for color/depth for large convex paths' interiors
+    static uint32_t get(uint64_t v) { return static_cast<uint32_t>((v >> kOffset) & kMask); }
+    static uint64_t set(uint32_t v) { return (v & kMask) << kOffset; }
 };
 
-// Each command in a DrawList can produce up to several actual "draw" operations that are
-// dependent on the original command but can also be sorted independently. The goal of sorting
-// the operations for the DrawPass is to minimize pipeline transitions and dynamic binds within
-// a pipeline, while still respecting the overall painter's order. This reduces to a vertex
-// coloring problem on the intersection graph formed by the commands and how their bounds
-// overlap, followed by ordering by pipeline description and uniform data. General vertex
-// coloring is NP-complete so DrawPass uses a greedy algorithm where the order it "colors" the
-// vertices is based on the ordering constraints for the color+depth buffer and optionally the
-// stencil buffer (stored in fColorDepthIndex and fStencilIndex respectively). skgpu::Device
-// determines the ordering on-the-fly by using BoundsManager to approximate intersections as
-// draw commands are recorded. It is possible to issue draws to Skia that produce pathologic
-// orderings using this method, but it strikes a reasonable balance between finding a near
-// optimal ordering that respects painter's order and is very efficient to compute.
-//
-// The color-depth index and stencil index represent the most significant bits of the key, and
-// are shared by all SortKeys produced by the same command. Next, the pipeline description is
-// encoded in two steps:
-//  1. The logical type of draw (i.e. stencil, stencil inner triangles, depth-only, regular) is
-//     packed in the high bits to ensure dependent draws are ordered correctly.
-//  2. An index into a cache of pipeline descriptions is used to encode the identity of the
-//     pipeline (sort keys that differ in the high bits from #1 necessarily would have different
-//     description indices, but then ordering isn't enforced).
-// Last, the command-specific uniform/sampling data is hashed to increase the probability that
-// draws with the same pipeline and same data are adjacent. This data hash is split into data
-// for the geometry (e.g. transform matrix and scissor) and for shading (e.g. color) so that
-// a hierarchical uniform binding approach can be more easily implemented.
-//
-// The SortKey also stores an index pointing back to the command in the DrawList. To minimize
-// the size of the struct, this index (and the pipeline description index) are not pointers,
-// which means using SortKeys is only possible when the originating DrawList and DrawPass are
-// available.
-struct SortKey {
-    SortKey(int commandIndex,
-            CompressedPaintersOrder colorDepthOrder,
-            CompressedPaintersOrder stencilOrder,
-            DrawStage drawStage,
-            int pipelineIndex,
-            uint16_t geomDataHash,
-            uint32_t shadingDataHash)
-        : fPipelineKey{colorDepthOrder,
-                       stencilOrder,
-                       static_cast<uint16_t>(drawStage),
-                       static_cast<uint32_t>(pipelineIndex)}
-        , fDataHash{geomDataHash,
-                    static_cast<uint16_t>(commandIndex),
-                    shadingDataHash} {}
+/**
+ * Each Draw in a DrawList might be processed by multiple RenderSteps (determined by the Draw's
+ * Renderer), which can be sorted independently. Each (step, draw) pair produces its own SortKey.
+ *
+ * The goal of sorting draws for the DrawPass is to minimize pipeline transitions and dynamic binds
+ * within a pipeline, while still respecting the overall painter's order. This decreases the number
+ * of low-level draw commands in a command buffer and increases the size of those, allowing the GPU
+ * to operate more efficiently and have fewer bubbles within its own instruction stream.
+ *
+ * The Draw's CompresssedPaintersOrder and DisjointStencilINdex represent the most significant bits
+ * of the key, and are shared by all SortKeys produced by the same draw. Next, the pipeline
+ * description is encoded in two steps:
+ *  1. The index of the RenderStep packed in the high bits to ensure each step for a draw is
+ *     ordered correctly.
+ *  2. An index into a cache of pipeline descriptions is used to encode the identity of the
+ *     pipeline (SortKeys that differ in the bits from #1 necessarily would have different
+ *     descriptions, but then the specific ordering of the RenderSteps isn't enforced).
+ * Last, the SortKey encodes an index into the set of uniform bindings accumulated for a DrawPass.
+ * This allows the SortKey to cluster draw steps that have both a compatible pipeline and do not
+ * require rebinding uniform data or other state (e.g. scissor). Since the uniform data index and
+ * the pipeline description index are packed into indices and not actual pointers, a given SortKey
+ * is only valid for the a specific DrawList->DrawPass conversion.
+ */
+class DrawPass::SortKey {
+public:
+    SortKey(const DrawList::Draw* draw,
+            int renderStep,
+            uint32_t pipelineIndex,
+            uint32_t geomUniformIndex,
+            uint32_t shadingUniformIndex)
+        : fPipelineKey(ColorDepthOrderField::set(draw->fOrder.paintOrder().bits()) |
+                       StencilIndexField::set(draw->fOrder.stencilIndex().bits())  |
+                       RenderStepField::set(static_cast<uint32_t>(renderStep))     |
+                       PipelineField::set(pipelineIndex))
+        , fUniformKey(GeometryUniformField::set(geomUniformIndex) |
+                      ShadingUniformField::set(shadingUniformIndex))
+        , fDraw(draw) {
+        SkASSERT(renderStep <= draw->fRenderer.numRenderSteps());
+    }
 
     bool operator<(const SortKey& k) const {
-        uint64_t k1 = this->pipelineKey();
-        uint64_t k2 = k.pipelineKey();
-        return k1 < k2 || (k1 == k2 && this->dataHash() < k.dataHash());
+        return fPipelineKey < k.fPipelineKey ||
+               (fPipelineKey == k.fPipelineKey && fUniformKey < k.fUniformKey);
     }
 
-    int commandIndex() const { return static_cast<int>(fDataHash.fCommandIndex); }
-    int pipelineIndex() const { return static_cast<int>(fPipelineKey.fPipelineIndex); }
-
-    DrawStage stage() const { return static_cast<DrawStage>(fPipelineKey.fDrawStage); }
-
-    // Exposed for inspection, but generally the painters ordering isn't needed after sorting
-    // since draws can be merged with different values as long as they have the same pipeline and
-    // their sorted ordering is preserved within the pipeline.
-    CompressedPaintersOrder colorDepthOrder() const {
-        return static_cast<CompressedPaintersOrder>(fPipelineKey.fColorDepthOrder);
-    }
-    CompressedPaintersOrder stencilOrder() const {
-        return static_cast<CompressedPaintersOrder>(fPipelineKey.fStencilOrder);
+    const RenderStep& renderStep() const {
+        return *fDraw->fRenderer.steps()[RenderStepField::get(fPipelineKey)];
     }
 
-    // These are exposed to help optimize detecting when new uniforms need to be bound.
-    // Differing hashes definitely represent different uniform bindings, but identical hashes
-    // require a complete comparison.
-    uint16_t geomDataHash() const { return static_cast<uint16_t>(fDataHash.fGeomDataHash); }
-    uint32_t shadingDataHash() const {
-        return static_cast<uint32_t>(fDataHash.fShadingDataHash);
+    const DrawList::Draw* draw() const { return fDraw; }
+
+    uint32_t pipeline()          const { return PipelineField::get(fPipelineKey);       }
+    uint32_t geometryUniforms()  const { return GeometryUniformField::get(fUniformKey); }
+    uint32_t shadingUniforms()   const { return ShadingUniformField::get(fUniformKey);  }
+
+private:
+    // Fields are ordered from most-significant to least when sorting by 128-bit value.
+    // NOTE: We don't use bit fields because field ordering is implementation defined and we need
+    // to sort consistently.
+    using ColorDepthOrderField = Bitfield<16, 48>; // sizeof(CompressedPaintersOrder)
+    using StencilIndexField    = Bitfield<16, 32>; // sizeof(DisjointStencilIndex)
+    using RenderStepField      = Bitfield<2,  30>; // bits >= log2(Renderer::kMaxRenderSteps)
+    using PipelineField        = Bitfield<30, 0>;  // bits >= log2(max steps*DrawList::kMaxDraws)
+    uint64_t fPipelineKey;
+
+    using GeometryUniformField = Bitfield<32, 32>; // bits >= log2(max steps * max draw count)
+    using ShadingUniformField  = Bitfield<32, 0>;  //  ""
+    uint64_t fUniformKey;
+
+    // Backpointer to the draw that produced the sort key
+    const DrawList::Draw* fDraw;
+
+    static_assert(ColorDepthOrderField::kBits >= sizeof(CompressedPaintersOrder));
+    static_assert(StencilIndexField::kBits    >= sizeof(DisjointStencilIndex));
+    static_assert(RenderStepField::kBits      >= SkNextLog2_portable(Renderer::kMaxRenderSteps));
+    static_assert(PipelineField::kBits        >=
+                        SkNextLog2_portable(Renderer::kMaxRenderSteps * DrawList::kMaxDraws));
+    static_assert(GeometryUniformField::kBits >= PipelineField::kBits);
+    static_assert(ShadingUniformField::kBits  >= PipelineField::kBits);
+};
+
+class DrawPass::Drawer final : public DrawDispatcher {
+public:
+    Drawer(DrawPass* drawPass) : fPass(drawPass) {}
+    ~Drawer() override = default;
+
+    void bindDrawBuffers(BindBufferInfo vertexAttribs,
+                         BindBufferInfo instanceAttribs,
+                         BindBufferInfo indices) override {
+        fPass->fCommands.emplace_back(BindDrawBuffers{vertexAttribs, instanceAttribs, indices});
+    }
+
+    void draw(PrimitiveType type, unsigned int baseVertex, unsigned int vertexCount) override {
+        fPass->fCommands.emplace_back(Draw{type, baseVertex, vertexCount});
+    }
+
+    void drawIndexed(PrimitiveType type, unsigned int baseIndex,
+                     unsigned int indexCount, unsigned int baseVertex) override {
+        fPass->fCommands.emplace_back(DrawIndexed{type, baseIndex, indexCount, baseVertex});
+    }
+
+    void drawInstanced(PrimitiveType type,
+                       unsigned int baseVertex, unsigned int vertexCount,
+                       unsigned int baseInstance, unsigned int instanceCount) override {
+        fPass->fCommands.emplace_back(DrawInstanced{type, baseVertex, vertexCount,
+                                                    baseInstance, instanceCount});
+    }
+
+    void drawIndexedInstanced(PrimitiveType type,
+                              unsigned int baseIndex, unsigned int indexCount,
+                              unsigned int baseVertex, unsigned int baseInstance,
+                              unsigned int instanceCount) override {
+        fPass->fCommands.emplace_back(DrawIndexedInstanced{type, baseIndex, indexCount, baseVertex,
+                                                           baseInstance, instanceCount});
     }
 
 private:
-    // Fields are ordered from most-significant to lowest when sorting by 128-bit value.
-    struct {
-        // The compressed painters orders are limited by the number of unique values we can store
-        // in the depth attachment, which at minimum supports 16-bits, so this packing is sufficient
-        uint64_t fColorDepthOrder : 16;
-        uint64_t fStencilOrder    : 16;
-        uint64_t fDrawStage       : 2;
-        // The 16-bit limitation on command index (and buffer indices), combined with the max of
-        // 4 dependent draws per command means that 30 bits for the pipeline index is more than
-        // sufficient to represent the unique pipeline descriptions referenced in a DrawPass.
-        uint64_t fPipelineIndex   : 30;
-    } fPipelineKey; // NOTE: named for bit-punning, can't take address of a bit-field
+    DrawPass* fPass;
+};
 
-    uint64_t pipelineKey() const { return sk_bit_cast<uint64_t>(fPipelineKey); }
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
-    struct {
-        // Presumably there is less variance in geometric uniform data, so a 16-bit hash is
-        // hopefully sufficient (also why it has higher sort precedence than shading).
-        uint64_t fGeomDataHash    : 16;
-        // The command index does not impact comparison of SortKeys but is stored in the data
-        // hash for better packing (must be masked off to compare).
-        uint64_t fCommandIndex    : 16;
-        // 32-bit hash could have collisions, but hopefully it's low enough given that
-        // collisions only produce sub-optimal ordering when they have the same pipeline desc.
-        uint64_t fShadingDataHash : 32;
-    } fDataHash;
+namespace {
 
-    uint64_t dataHash() const {
-        static constexpr uint64_t kCommandIndexMask = 0xffff0000ffffffff;
-        return sk_bit_cast<uint64_t>(fDataHash) & kCommandIndexMask;
+class UniformBindingCache {
+public:
+    UniformBindingCache(DrawBufferManager* bufferMgr, UniformCache* cache)
+            : fBufferMgr(bufferMgr), fCache(cache) {}
+
+    uint32_t addUniforms(std::unique_ptr<SkUniformBlock> uniformBlock) {
+        if (!uniformBlock || uniformBlock->empty()) {
+            return UniformCache::kInvalidUniformID;
+        }
+
+        uint32_t index = fCache->insert(std::move(uniformBlock));
+        if (fBindings.find(index) == fBindings.end()) {
+            SkUniformBlock* tmp = fCache->lookup(index);
+            // First time encountering this data, so upload to the GPU
+            size_t totalDataSize = tmp->totalSize();
+            auto [writer, bufferInfo] = fBufferMgr->getUniformWriter(totalDataSize);
+            for (auto& u : *tmp) {
+                writer.write(u->data(), u->dataSize());
+            }
+
+            fBindings.insert({index, bufferInfo});
+        }
+
+        return index;
+    }
+
+    BindBufferInfo getBinding(uint32_t uniformIndex) {
+        auto lookup = fBindings.find(uniformIndex);
+        SkASSERT(lookup != fBindings.end());
+        return lookup->second;
+    }
+
+private:
+    DrawBufferManager* fBufferMgr;
+    UniformCache*      fCache;
+
+    std::unordered_map<uint32_t, BindBufferInfo> fBindings;
+};
+
+// std::unordered_map implementation for GraphicsPipelineDesc* that de-reference the pointers.
+struct Hash {
+    size_t operator()(const skgpu::GraphicsPipelineDesc* desc) const noexcept {
+        return skgpu::GraphicsPipelineDesc::Hash()(*desc);
     }
 };
-// NOTE: This assert is here to ensure SortKey is as tightly packed as possible. Any change to its
-// size should be done with care and good reason.
-static_assert(sizeof(SortKey) == 16);
 
-} // namespace
+struct Eq {
+    bool operator()(const skgpu::GraphicsPipelineDesc* a,
+                    const skgpu::GraphicsPipelineDesc* b) const noexcept {
+        return *a == *b;
+    }
+};
 
-std::unique_ptr<DrawPass> DrawPass::Make(std::unique_ptr<DrawList> cmds, DrawContext* dc) {
-    // TODO: DrawList processing will likely go here and then move the results into the DrawPass
-    return std::unique_ptr<DrawPass>(new DrawPass());
+} // anonymous namespace
+
+DrawPass::DrawPass(sk_sp<TextureProxy> target,
+                   std::pair<LoadOp, StoreOp> ops,
+                   std::array<float, 4> clearColor,
+                   int renderStepCount)
+        : fCommands(std::max(1, renderStepCount / 4), SkBlockAllocator::GrowthPolicy::kFibonacci)
+        , fTarget(std::move(target))
+        , fBounds(SkIRect::MakeEmpty())
+        , fOps(ops)
+        , fClearColor(clearColor) {
+    // TODO: Tune this estimate and the above "itemPerBlock" value for the command buffer sequence
+    // After merging, etc. one pipeline per recorded draw+step combo is likely unnecessary.
+    fPipelineDescs.reserve(renderStepCount);
+    fCommands.reserve(renderStepCount);
+}
+
+DrawPass::~DrawPass() = default;
+
+std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
+                                         std::unique_ptr<DrawList> draws,
+                                         sk_sp<TextureProxy> target,
+                                         std::pair<LoadOp, StoreOp> ops,
+                                         std::array<float, 4> clearColor,
+                                         const BoundsManager* occlusionCuller) {
+    // NOTE: This assert is here to ensure SortKey is as tightly packed as possible. Any change to
+    // its size should be done with care and good reason. The performance of sorting the keys is
+    // heavily tied to the total size.
+    //
+    // At 24 bytes (current), sorting is about 30% slower than if SortKey could be packed into just
+    // 16 bytes. There are several ways this could be done if necessary:
+    //  - Restricting the max draw count to 16k (14-bits) and only using a single index to refer to
+    //    the uniform data => 8 bytes of key, 8 bytes of pointer.
+    //  - Restrict the max draw count to 32k (15-bits), use a single uniform index, and steal the
+    //    4 low bits from the Draw* pointer since it's 16 byte aligned.
+    //  - Compact the Draw* to an index into the original collection, although that has extra
+    //    indirection and does not work as well with SkTBlockList.
+    // In pseudo tests, manipulating the pointer or having to mask out indices was about 15% slower
+    // than an 8 byte key and unmodified pointer.
+    static_assert(sizeof(DrawPass::SortKey) == 16 + sizeof(void*));
+
+    // The DrawList is converted directly into the DrawPass' data structures, but once the DrawPass
+    // is returned from Make(), it is considered immutable.
+    std::unique_ptr<DrawPass> drawPass(new DrawPass(std::move(target), ops, clearColor,
+                                                    draws->renderStepCount()));
+
+    Rect passBounds = Rect::InfiniteInverted();
+
+    DrawBufferManager* bufferMgr = recorder->priv().drawBufferManager();
+    UniformCache geometryUniforms;
+    UniformBindingCache geometryUniformBindings(bufferMgr, &geometryUniforms);
+    UniformBindingCache shadingUniformBindings(bufferMgr, recorder->priv().uniformCache());
+
+    std::unordered_map<const GraphicsPipelineDesc*, uint32_t, Hash, Eq> pipelineDescToIndex;
+
+    std::vector<SortKey> keys;
+    keys.reserve(draws->renderStepCount()); // will not exceed but may use less with occluded draws
+
+    for (const DrawList::Draw& draw : draws->fDraws.items()) {
+        if (occlusionCuller && occlusionCuller->isOccluded(draw.fClip.drawBounds(),
+                                                           draw.fOrder.depth())) {
+            continue;
+        }
+
+        // If we have two different descriptors, such that the uniforms from the PaintParams can be
+        // bound independently of those used by the rest of the RenderStep, then we can upload now
+        // and remember the location for re-use on any RenderStep that does shading.
+        SkUniquePaintParamsID shaderID;
+        std::unique_ptr<SkUniformBlock> shadingUniforms;
+        uint32_t shadingIndex = UniformCache::kInvalidUniformID;
+        if (draw.fPaintParams.has_value()) {
+            SkShaderCodeDictionary* dict =
+                    recorder->priv().resourceProvider()->shaderCodeDictionary();
+            std::tie(shaderID, shadingUniforms) = ExtractPaintData(dict, draw.fPaintParams.value());
+            shadingIndex = shadingUniformBindings.addUniforms(std::move(shadingUniforms));
+        } // else depth-only
+
+        for (int stepIndex = 0; stepIndex < draw.fRenderer.numRenderSteps(); ++stepIndex) {
+            const RenderStep* const step = draw.fRenderer.steps()[stepIndex];
+            const bool performsShading = draw.fPaintParams.has_value() && step->performsShading();
+
+            SkUniquePaintParamsID stepShaderID;
+            uint32_t stepShadingIndex = UniformCache::kInvalidUniformID;
+            if (performsShading) {
+                stepShaderID = shaderID;
+                stepShadingIndex = shadingIndex;
+            } // else depth-only draw or stencil-only step of renderer so no shading is needed
+
+            uint32_t geometryIndex = UniformCache::kInvalidUniformID;
+            if (step->numUniforms() > 0) {
+                // TODO: Get layout from the GPU
+                auto uniforms = step->writeUniforms(Layout::kMetal,
+                                                    draw.fClip.scissor(),
+                                                    draw.fTransform,
+                                                    draw.fShape);
+
+                geometryIndex = geometryUniformBindings.addUniforms(
+                        std::make_unique<SkUniformBlock>(std::move(uniforms)));
+            }
+
+            GraphicsPipelineDesc desc;
+            desc.setProgram(step, stepShaderID);
+            uint32_t pipelineIndex = 0;
+            auto pipelineLookup = pipelineDescToIndex.find(&desc);
+            if (pipelineLookup == pipelineDescToIndex.end()) {
+                // Assign new index to first appearance of this pipeline description
+                pipelineIndex = SkTo<uint32_t>(drawPass->fPipelineDescs.count());
+                const GraphicsPipelineDesc& finalDesc = drawPass->fPipelineDescs.push_back(desc);
+                pipelineDescToIndex.insert({&finalDesc, pipelineIndex});
+            } else {
+                // Reuse the existing pipeline description for better batching after sorting
+                pipelineIndex = pipelineLookup->second;
+            }
+
+            keys.push_back({&draw, stepIndex, pipelineIndex, geometryIndex, stepShadingIndex});
+        }
+
+        passBounds.join(draw.fClip.drawBounds());
+        drawPass->fDepthStencilFlags |= draw.fRenderer.depthStencilFlags();
+        drawPass->fRequiresMSAA |= draw.fRenderer.requiresMSAA();
+    }
+
+    // TODO: Explore sorting algorithms; in all likelihood this will be mostly sorted already, so
+    // algorithms that approach O(n) in that condition may be favorable. Alternatively, could
+    // explore radix sort that is always O(n). Brief testing suggested std::sort was faster than
+    // std::stable_sort and SkTQSort on my [ml]'s Windows desktop. Also worth considering in-place
+    // vs. algorithms that require an extra O(n) storage.
+    // TODO: It's not strictly necessary, but would a stable sort be useful or just end up hiding
+    // bugs in the DrawOrder determination code?
+    std::sort(keys.begin(), keys.end());
+
+    // Used to record vertex/instance data, buffer binds, and draw calls
+    Drawer drawer(drawPass.get());
+    DrawWriter drawWriter(&drawer, bufferMgr);
+
+    // Used to track when a new pipeline or dynamic state needs recording between draw steps.
+    // Setting to # render steps ensures the very first time through the loop will bind a pipeline.
+    uint32_t lastPipeline = draws->renderStepCount();
+    uint32_t lastShadingUniforms = UniformCache::kInvalidUniformID;
+    uint32_t lastGeometryUniforms = UniformCache::kInvalidUniformID;
+    SkIRect lastScissor = SkIRect::MakeSize(drawPass->fTarget->dimensions());
+
+    for (const SortKey& key : keys) {
+        const DrawList::Draw& draw = *key.draw();
+        const RenderStep& renderStep = key.renderStep();
+
+        const bool pipelineChange = key.pipeline() != lastPipeline;
+        const bool stateChange = key.geometryUniforms() != lastGeometryUniforms ||
+                                 key.shadingUniforms() != lastShadingUniforms ||
+                                 draw.fClip.scissor() != lastScissor;
+
+        // Update DrawWriter *before* we actually change any state so that accumulated draws from
+        // the previous state use the proper state.
+        if (pipelineChange) {
+            drawWriter.newPipelineState(renderStep.primitiveType(),
+                                        renderStep.vertexStride(),
+                                        renderStep.instanceStride());
+        } else if (stateChange) {
+            drawWriter.newDynamicState();
+        }
+
+        // Make state changes before accumulating new draw data
+        if (pipelineChange) {
+            drawPass->fCommands.emplace_back(BindGraphicsPipeline{key.pipeline()});
+            lastPipeline = key.pipeline();
+            lastShadingUniforms = UniformCache::kInvalidUniformID;
+            lastGeometryUniforms = UniformCache::kInvalidUniformID;
+        }
+        if (stateChange) {
+            if (key.geometryUniforms() != lastGeometryUniforms) {
+                if (key.geometryUniforms() != UniformCache::kInvalidUniformID) {
+                    auto binding = geometryUniformBindings.getBinding(key.geometryUniforms());
+                    drawPass->fCommands.emplace_back(
+                            BindUniformBuffer{binding, UniformSlot::kRenderStep});
+                }
+                lastGeometryUniforms = key.geometryUniforms();
+            }
+            if (key.shadingUniforms() != lastShadingUniforms) {
+                if (key.shadingUniforms() != UniformCache::kInvalidUniformID) {
+                    auto binding = shadingUniformBindings.getBinding(key.shadingUniforms());
+                    drawPass->fCommands.emplace_back(
+                            BindUniformBuffer{binding, UniformSlot::kPaint});
+                }
+                lastShadingUniforms = key.shadingUniforms();
+            }
+            if (draw.fClip.scissor() != lastScissor) {
+                drawPass->fCommands.emplace_back(SetScissor{draw.fClip.scissor()});
+                lastScissor = draw.fClip.scissor();
+            }
+        }
+
+        renderStep.writeVertices(&drawWriter, draw.fClip.scissor(), draw.fTransform, draw.fShape);
+    }
+    // Finish recording draw calls for any collected data at the end of the loop
+    drawWriter.flush();
+
+    passBounds.roundOut();
+    drawPass->fBounds = SkIRect::MakeLTRB((int) passBounds.left(), (int) passBounds.top(),
+                                          (int) passBounds.right(), (int) passBounds.bot());
+    return drawPass;
+}
+
+void DrawPass::addCommands(ResourceProvider* resourceProvider,
+                           CommandBuffer* buffer,
+                           const RenderPassDesc& renderPassDesc) const {
+    // TODO: Validate RenderPass state against DrawPass's target and requirements?
+    // Generate actual GraphicsPipeline objects combining the target-level properties and each of
+    // the GraphicsPipelineDesc's referenced in this DrawPass.
+
+    // Use a vector instead of SkTBlockList for the full pipelines so that random access is fast.
+    std::vector<sk_sp<GraphicsPipeline>> fullPipelines;
+    fullPipelines.reserve(fPipelineDescs.count());
+    for (const GraphicsPipelineDesc& pipelineDesc : fPipelineDescs.items()) {
+        fullPipelines.push_back(resourceProvider->findOrCreateGraphicsPipeline(pipelineDesc,
+                                                                               renderPassDesc));
+    }
+
+    // Set viewport to the entire texture for now (eventually, we may have logically smaller bounds
+    // within an approx-sized texture). It is assumed that this also configures the sk_rtAdjust
+    // intrinsic for programs (however the backend chooses to do so).
+    buffer->setViewport(0, 0, fTarget->dimensions().width(), fTarget->dimensions().height());
+
+    for (const Command& c : fCommands.items()) {
+        switch(c.fType) {
+            case CommandType::kBindGraphicsPipeline: {
+                auto& d = c.fBindGraphicsPipeline;
+                buffer->bindGraphicsPipeline(fullPipelines[d.fPipelineIndex]);
+                break; }
+            case CommandType::kBindUniformBuffer: {
+                auto& d = c.fBindUniformBuffer;
+                buffer->bindUniformBuffer(d.fSlot, sk_ref_sp(d.fInfo.fBuffer), d.fInfo.fOffset);
+                break; }
+            case CommandType::kBindDrawBuffers: {
+                auto& d = c.fBindDrawBuffers;
+                buffer->bindDrawBuffers(d.fVertices, d.fInstances, d.fIndices);
+                break; }
+            case CommandType::kDraw: {
+                auto& d = c.fDraw;
+                buffer->draw(d.fType, d.fBaseVertex, d.fVertexCount);
+                break; }
+            case CommandType::kDrawIndexed: {
+                auto& d = c.fDrawIndexed;
+                buffer->drawIndexed(d.fType, d.fBaseIndex, d.fIndexCount, d.fBaseVertex);
+                break; }
+            case CommandType::kDrawInstanced: {
+                auto& d = c.fDrawInstanced;
+                buffer->drawInstanced(d.fType, d.fBaseVertex, d.fVertexCount,
+                                      d.fBaseInstance, d.fInstanceCount);
+                break; }
+            case CommandType::kDrawIndexedInstanced: {
+                auto& d = c.fDrawIndexedInstanced;
+                buffer->drawIndexedInstanced(d.fType, d.fBaseIndex, d.fIndexCount, d.fBaseVertex,
+                                             d.fBaseInstance, d.fInstanceCount);
+                break; }
+            case CommandType::kSetScissor: {
+                auto& d = c.fSetScissor;
+                buffer->setScissor(d.fScissor.fLeft, d.fScissor.fTop,
+                                   d.fScissor.fRight, d.fScissor.fBottom);
+                break;
+            }
+        }
+    }
 }
 
 } // namespace skgpu

@@ -20,7 +20,7 @@ namespace SkSL {
  */
 class FunctionReference final : public Expression {
 public:
-    static constexpr Kind kExpressionKind = Kind::kFunctionReference;
+    inline static constexpr Kind kExpressionKind = Kind::kFunctionReference;
 
     FunctionReference(const Context& context, int line,
                       std::vector<const FunctionDeclaration*> functions)
@@ -40,8 +40,8 @@ public:
                                                                  &this->type()));
     }
 
-    String description() const override {
-        return String("<function>");
+    std::string description() const override {
+        return "<function>";
     }
 
 private:

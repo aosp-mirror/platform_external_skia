@@ -10,10 +10,11 @@
 
 #include "include/core/SkStrokeRec.h"
 #include "src/gpu/ops/GrDrawOp.h"
-#include "src/gpu/tessellate/GrStrokeTessellator.h"
+#include "src/gpu/tessellate/StrokeTessellator.h"
 #include "src/gpu/tessellate/shaders/GrTessellationShader.h"
 
 class GrRecordingContext;
+class GrStrokeTessellationShader;
 
 namespace skgpu::v1 {
 
@@ -24,8 +25,7 @@ public:
     StrokeTessellateOp(GrAAType, const SkMatrix&, const SkPath&, const SkStrokeRec&, GrPaint&&);
 
 private:
-    using ShaderFlags = GrStrokeTessellationShader::ShaderFlags;
-    using PathStrokeList = GrStrokeTessellator::PathStrokeList;
+    using PathStrokeList = StrokeTessellator::PathStrokeList;
     DEFINE_OP_CLASS_ID
 
     SkStrokeRec& headStroke() { return fPathStrokeList.fStroke; }
@@ -34,11 +34,11 @@ private:
     // Returns whether it is a good tradeoff to use the dynamic states flagged in the given
     // bitfield. Dynamic states improve batching, but if they aren't already enabled, they come at
     // the cost of having to write out more data with each patch or instance.
-    bool shouldUseDynamicStates(ShaderFlags neededDynamicStates) const {
+    bool shouldUseDynamicStates(PatchAttribs neededDynamicStates) const {
         // Use the dynamic states if either (1) they are all already enabled anyway, or (2) we don't
         // have many verbs.
         constexpr static int kMaxVerbsToEnableDynamicState = 50;
-        bool anyStateDisabled = (bool)(~fShaderFlags & neededDynamicStates);
+        bool anyStateDisabled = (bool)(~fPatchAttribs & neededDynamicStates);
         bool allStatesEnabled = !anyStateDisabled;
         return allStatesEnabled || (fTotalCombinedVerbCnt <= kMaxVerbsToEnableDynamicState);
     }
@@ -66,15 +66,15 @@ private:
 
     const GrAAType fAAType;
     const SkMatrix fViewMatrix;
-    ShaderFlags fShaderFlags = ShaderFlags::kNone;
+    PatchAttribs fPatchAttribs = PatchAttribs::kNone;
     PathStrokeList fPathStrokeList;
     PathStrokeList** fPathStrokeTail = &fPathStrokeList.fNext;
-    float fInflationRadius = 0;
     int fTotalCombinedVerbCnt = 0;
     GrProcessorSet fProcessors;
     bool fNeedsStencil;
 
-    GrStrokeTessellator* fTessellator = nullptr;
+    StrokeTessellator* fTessellator = nullptr;
+    GrStrokeTessellationShader* fTessellationShader;
     const GrProgramInfo* fStencilProgram = nullptr;  // Only used if the stroke has transparency.
     const GrProgramInfo* fFillProgram = nullptr;
 };

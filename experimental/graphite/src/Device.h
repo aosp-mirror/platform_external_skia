@@ -10,26 +10,56 @@
 
 #include "src/core/SkDevice.h"
 
+#include "experimental/graphite/src/DrawOrder.h"
+#include "experimental/graphite/src/EnumBitMask.h"
+#include "experimental/graphite/src/geom/Rect.h"
+
+class SkStrokeRec;
+
 namespace skgpu {
 
+class BoundsManager;
+class Clip;
 class Context;
 class DrawContext;
+class Recorder;
+class Shape;
+class TextureProxy;
+class Transform;
 
 class Device final : public SkBaseDevice  {
 public:
-    static sk_sp<Device> Make(sk_sp<Context>, const SkImageInfo&);
+    ~Device() override;
 
-    sk_sp<Context> refContext() { return fContext; }
+    static sk_sp<Device> Make(Recorder*, const SkImageInfo&);
+    static sk_sp<Device> Make(Recorder*,
+                              sk_sp<TextureProxy>,
+                              sk_sp<SkColorSpace>,
+                              SkColorType,
+                              SkAlphaType);
 
-protected:
+    Recorder* recorder() { return fRecorder; }
+    // This call is triggered from the Recorder on its registered Devices. It is typically called
+    // when the Recorder is abandoned or deleted.
+    void abandonRecorder();
+
+    // Ensures clip elements are drawn that will clip previous draw calls, snaps all pending work
+    // from the DrawContext as a RenderPassTask and records it in the Device's recorder.
+    void flushPendingWorkToRecorder();
+
+    bool readPixels(Context*, Recorder*, const SkPixmap& dst, int x, int y);
+
+private:
+    class IntersectionTreeSet;
+
     // Clipping
     void onSave() override {}
     void onRestore() override {}
 
     bool onClipIsAA() const override { return false; }
-    bool onClipIsWideOpen() const override { return false; }
-    ClipType onGetClipType() const override { return ClipType::kEmpty; }
-    SkIRect onDevClipBounds() const override { return {}; }
+    bool onClipIsWideOpen() const override { return true; }
+    ClipType onGetClipType() const override { return ClipType::kRect; }
+    SkIRect onDevClipBounds() const override;
 
     void onClipRect(const SkRect& rect, SkClipOp, bool aa) override {}
     void onClipRRect(const SkRRect& rrect, SkClipOp, bool aa) override {}
@@ -63,7 +93,7 @@ protected:
     void onClipRegion(const SkRegion& deviceRgn, SkClipOp) override {}
     void onReplaceClip(const SkIRect& rect) override {}
 
-    bool onWritePixels(const SkPixmap&, int x, int y) override { return false; }
+    bool onWritePixels(const SkPixmap&, int x, int y) override;
 
     // TODO: This will likely be implemented with the same primitive building block that drawRect
     // and drawRRect will rely on.
@@ -83,14 +113,14 @@ protected:
                        SkCanvas::SrcRectConstraint) override {}
     void drawImageLattice(const SkImage*, const SkCanvas::Lattice&,
                           const SkRect& dst, SkFilterMode, const SkPaint&) override {}
-    void drawAtlas(const SkImage* atlas, const SkRSXform[], const SkRect[],
-                   const SkColor[], int count, SkBlendMode, const SkSamplingOptions&,
+    void drawAtlas(const SkRSXform[], const SkRect[], const SkColor[], int count, sk_sp<SkBlender>,
                    const SkPaint&) override {}
 
-    void drawDrawable(SkDrawable*, const SkMatrix*, SkCanvas*) override {}
-    void drawVertices(const SkVertices*, SkBlendMode, const SkPaint&) override {}
+    void drawDrawable(SkCanvas*, SkDrawable*, const SkMatrix*) override {}
+    void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&) override {}
+    void drawCustomMesh(SkCustomMesh, sk_sp<SkBlender>, const SkPaint&) override {}
     void drawShadow(const SkPath&, const SkDrawShadowRec&) override {}
-    void onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) override {}
+    void onDrawGlyphRunList(SkCanvas*, const SkGlyphRunList&, const SkPaint&) override {}
 
     void drawDevice(SkBaseDevice*, const SkSamplingOptions&, const SkPaint&) override {}
     void drawSpecial(SkSpecialImage*, const SkMatrix& localToDevice,
@@ -100,12 +130,61 @@ protected:
     sk_sp<SkSpecialImage> makeSpecial(const SkImage*) override;
     sk_sp<SkSpecialImage> snapSpecial(const SkIRect& subset, bool forceCopy = false) override;
 
-private:
-    Device(sk_sp<Context>, sk_sp<DrawContext>);
+    // DrawFlags alters the effects used by drawShape.
+    enum class DrawFlags : unsigned {
+        kNone             = 0b00,
 
-    sk_sp<Context> fContext;
+        // Any SkMaskFilter on the SkPaint passed into drawShape() is ignored.
+        // - drawPaint, drawVertices, drawAtlas
+        // - drawShape after it's applied the mask filter.
+        kIgnoreMaskFilter = 0b01,
+
+        // Any SkPathEffect on the SkPaint passed into drawShape() is ignored.
+        // - drawPaint, drawImageLattice, drawImageRect, drawEdgeAAImageSet, drawVertices, drawAtlas
+        // - drawShape after it's applied the path effect.
+        kIgnorePathEffect = 0b10,
+    };
+    SKGPU_DECL_MASK_OPS_FRIENDS(DrawFlags);
+
+    Device(Recorder*, sk_sp<DrawContext>);
+
+    // Handles applying path effects, mask filters, stroke-and-fill styles, and hairlines.
+    // Ignores geometric style on the paint in favor of explicitly provided SkStrokeRec and flags.
+    void drawShape(const Shape&,
+                   const SkPaint&,
+                   const SkStrokeRec&,
+                   Mask<DrawFlags> = DrawFlags::kNone);
+
+    // Determines most optimal painters order for a draw of the given shape and style. This computes
+    // the draw's bounds, applying both the style and scissor to the returned bounds. Low-level
+    // renderers must not draw outside of these bounds or decisions made about ordering draw
+    // operations at the Device level can be invalidated. In addition to the scissor test and draw
+    // bounds, this returns the largest compressed painter's order of the clip shapes that affect
+    // the draw (the draw's order must be greater than this value to be rendered/clipped correctly).
+    //
+    // This also records the draw's bounds to any clip elements that affect it so that they are
+    // recorded when popped off the stack, or making an image snapshot of the Device.
+    std::pair<Clip, CompressedPaintersOrder>
+    applyClipToDraw(const Transform&, const Shape&, const SkStrokeRec&, PaintersDepth z);
+
+    bool needsFlushBeforeDraw(int numNewDraws) const;
+
+    Recorder* fRecorder;
     sk_sp<DrawContext> fDC;
+
+    // Tracks accumulated intersections for ordering dependent use of the color and depth attachment
+    // (i.e. depth-based clipping, and transparent blending)
+    std::unique_ptr<BoundsManager> fColorDepthBoundsManager;
+    // Tracks disjoint stencil indices for all recordered draws
+    std::unique_ptr<IntersectionTreeSet> fDisjointStencilSet;
+
+    // The max depth value sent to the DrawContext, incremented so each draw has a unique value.
+    PaintersDepth fCurrentDepth;
+
+    bool fDrawsOverlap;
 };
+
+SKGPU_MAKE_MASK_OPS(Device::DrawFlags)
 
 } // namespace skgpu
 

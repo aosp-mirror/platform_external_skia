@@ -8,6 +8,7 @@
 #include "src/gpu/effects/GrPorterDuffXferProcessor.h"
 
 #include "include/gpu/GrTypes.h"
+#include "include/private/SkMacros.h"
 #include "include/private/SkTo.h"
 #include "src/gpu/GrBlend.h"
 #include "src/gpu/GrCaps.h"
@@ -15,6 +16,7 @@
 #include "src/gpu/GrProcessor.h"
 #include "src/gpu/GrProcessorAnalysis.h"
 #include "src/gpu/GrXferProcessor.h"
+#include "src/gpu/KeyBuilder.h"
 #include "src/gpu/glsl/GrGLSLBlend.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
@@ -112,7 +114,7 @@ private:
 
         kLast_Property = kCanTweakAlphaForCoverage_Property
     };
-    GR_DECL_BITFIELD_OPS_FRIENDS(Properties)
+    SK_DECL_BITFIELD_OPS_FRIENDS(Properties)
 
     /**
      * Deduce the properties of a BlendFormula.
@@ -140,7 +142,7 @@ private:
 
 static_assert(4 == sizeof(BlendFormula));
 
-GR_MAKE_BITFIELD_OPS(BlendFormula::Properties)
+SK_MAKE_BITFIELD_OPS(BlendFormula::Properties)
 
 constexpr BlendFormula::Properties BlendFormula::GetProperties(OutputType PrimaryOut,
                                                                OutputType SecondaryOut,
@@ -384,7 +386,7 @@ public:
     BlendFormula getBlendFormula() const { return fBlendFormula; }
 
 private:
-    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
+    void onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override;
 
     bool onHasSecondaryOutput() const override { return fBlendFormula.hasSecondaryOutput(); }
 
@@ -438,7 +440,7 @@ static void append_color_output(const PorterDuffXferProcessor& xp,
     }
 }
 
-void PorterDuffXferProcessor::onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder* b) const {
+void PorterDuffXferProcessor::onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder* b) const {
     b->add32(fBlendFormula.primaryOutput() | (fBlendFormula.secondaryOutput() << 3));
     static_assert(BlendFormula::kLast_OutputType < 8);
 }
@@ -485,7 +487,7 @@ public:
     std::unique_ptr<ProgramImpl> makeProgramImpl() const override;
 
 private:
-    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
+    void onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override;
 
     bool onIsEqual(const GrXferProcessor& xpBase) const override {
         const ShaderPDXferProcessor& xp = xpBase.cast<ShaderPDXferProcessor>();
@@ -500,7 +502,7 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 
-void ShaderPDXferProcessor::onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder* b) const {
+void ShaderPDXferProcessor::onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder* b) const {
     b->add32(static_cast<int>(fXfermode));
 }
 
@@ -546,7 +548,7 @@ public:
 private:
     PDLCDXferProcessor(const SkPMColor4f& blendConstant, float alpha);
 
-    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
+    void onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override {}
 
     void onGetBlendInfo(GrXferProcessor::BlendInfo* blendInfo) const override {
         blendInfo->fSrcBlend = kConstC_GrBlendCoeff;
@@ -597,7 +599,7 @@ std::unique_ptr<GrXferProcessor::ProgramImpl> PDLCDXferProcessor::makeProgramImp
             const char* alpha;
             fAlphaUniform = args.fUniformHandler->addUniform(nullptr,
                                                              kFragment_GrShaderFlag,
-                                                             kHalf_GrSLType,
+                                                             SkSLType::kHalf,
                                                              "alpha",
                                                              &alpha);
             GrGLSLXPFragmentBuilder* fragBuilder = args.fXPFragBuilder;

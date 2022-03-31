@@ -23,7 +23,7 @@ class GrSurfaceProxyView;
  */
 class GrBitmapTextGeoProc : public GrGeometryProcessor {
 public:
-    static constexpr int kMaxTextures = 4;
+    inline static constexpr int kMaxTextures = 4;
 
     static GrGeometryProcessor* Make(SkArenaAlloc* arena,
                                      const GrShaderCaps& caps,
@@ -47,7 +47,7 @@ public:
 
     void addNewViews(const GrSurfaceProxyView*, int numActiveViews, GrSamplerState);
 
-    void addToKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override;
+    void addToKey(const GrShaderCaps& caps, skgpu::KeyBuilder* b) const override;
 
     std::unique_ptr<ProgramImpl> makeProgramImpl(const GrShaderCaps& caps) const override;
 

@@ -54,7 +54,7 @@ enum GrDistanceFieldEffectFlags {
  */
 class GrDistanceFieldA8TextGeoProc : public GrGeometryProcessor {
 public:
-    static constexpr int kMaxTextures = 4;
+    inline static constexpr int kMaxTextures = 4;
 
     /** The local matrix should be identity if local coords are not required by the GrPipeline. */
 #ifdef SK_GAMMA_APPLY_TO_A8
@@ -92,7 +92,7 @@ public:
 
     void addNewViews(const GrSurfaceProxyView* views, int numViews, GrSamplerState);
 
-    void addToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
+    void addToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override;
 
     std::unique_ptr<ProgramImpl> makeProgramImpl(const GrShaderCaps&) const override;
 
@@ -135,7 +135,7 @@ private:
  */
 class GrDistanceFieldPathGeoProc : public GrGeometryProcessor {
 public:
-    static constexpr int kMaxTextures = 4;
+    inline static constexpr int kMaxTextures = 4;
 
     /** The local matrix should be identity if local coords are not required by the GrPipeline. */
     static GrGeometryProcessor* Make(SkArenaAlloc* arena, const GrShaderCaps& caps,
@@ -154,7 +154,7 @@ public:
 
     void addNewViews(const GrSurfaceProxyView*, int numActiveViews, GrSamplerState);
 
-    void addToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
+    void addToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override;
 
     std::unique_ptr<ProgramImpl> makeProgramImpl(const GrShaderCaps&) const override;
 
@@ -192,7 +192,7 @@ private:
  */
 class GrDistanceFieldLCDTextGeoProc : public GrGeometryProcessor {
 public:
-    static constexpr int kMaxTextures = 4;
+    inline static constexpr int kMaxTextures = 4;
 
     struct DistanceAdjust {
         SkScalar fR, fG, fB;
@@ -230,7 +230,7 @@ public:
 
     void addNewViews(const GrSurfaceProxyView*, int numActiveViews, GrSamplerState);
 
-    void addToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
+    void addToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override;
 
     std::unique_ptr<ProgramImpl> makeProgramImpl(const GrShaderCaps&) const override;
 

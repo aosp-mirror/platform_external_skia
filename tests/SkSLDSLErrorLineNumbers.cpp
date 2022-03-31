@@ -10,7 +10,7 @@
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGpu.h"
 #include "src/sksl/SkSLCompiler.h"
-#include "src/sksl/SkSLIRGenerator.h"
+#include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/dsl/priv/DSLWriter.h"
 
 #include "tests/Test.h"
@@ -36,13 +36,13 @@ public:
         SetErrorReporter(fOldReporter);
     }
 
-    void handleError(skstd::string_view msg, SkSL::PositionInfo pos) override {
+    void handleError(std::string_view msg, SkSL::PositionInfo pos) override {
         REPORTER_ASSERT(fReporter, msg == fMsg,
                 "Error mismatch: expected:\n%sbut received:\n%.*s", fMsg, (int)msg.length(),
                 msg.data());
         REPORTER_ASSERT(fReporter, pos.line() == fLine,
                 "Line number mismatch: expected %d, but received %d\n", fLine, pos.line());
-        DSLWriter::Compiler().handleError(msg, pos);
+        SkSL::ThreadContext::Compiler().handleError(msg, pos);
         fMsg = nullptr;
     }
 

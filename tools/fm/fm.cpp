@@ -121,20 +121,15 @@ static bool parse_flag(const CommandLineFlags::StringArray& flag,
 }
 
 struct Result {
-    enum { Ok, Skip, Fail} status;
-    SkString               failure;
+    enum { Ok, Skip, Fail } status;
+    SkString                failure;
 };
-static const Result ok = {Result::Ok,   {}},
-                  skip = {Result::Skip, {}};
+static const Result ok   = {Result::Ok,   {}},
+                    skip = {Result::Skip, {}};
 
-static Result fail(const char* why) {
-    return { Result::Fail, SkString(why) };
+static Result fail(SkString why) {
+    return {Result::Fail, why};
 }
-template <typename... Args>
-static Result fail(const char* whyFmt, Args... args) {
-    return { Result::Fail, SkStringPrintf(whyFmt, args...) };
-}
-
 
 struct Source {
     SkString                               name;
@@ -153,13 +148,13 @@ static void init(Source* source, std::shared_ptr<skiagm::GM> gm) {
         switch (gm->gpuSetup(direct, canvas, &err)) {
             case skiagm::DrawResult::kOk  : break;
             case skiagm::DrawResult::kSkip: return skip;
-            case skiagm::DrawResult::kFail: return fail(err.c_str());
+            case skiagm::DrawResult::kFail: return fail(err);
         }
 
         switch (gm->draw(canvas, &err)) {
             case skiagm::DrawResult::kOk:   break;
             case skiagm::DrawResult::kSkip: return skip;
-            case skiagm::DrawResult::kFail: return fail(err.c_str());
+            case skiagm::DrawResult::kFail: return fail(err);
         }
         return ok;
     };
@@ -186,7 +181,7 @@ static void init(Source* source, std::shared_ptr<SkCodec> codec) {
             canvas->drawImage(image, 0,0);
             return ok;
         }
-        return fail("codec->getPixels() failed: %d\n", result);
+        return fail(SkStringPrintf("codec->getPixels() failed: %d\n", result));
     };
 }
 
@@ -254,7 +249,7 @@ static void init(Source* source, const skiatest::Test& test) {
         }
 
         canvas->clear(SK_ColorRED);
-        return fail(reporter.msg.c_str());
+        return fail(reporter.msg);
     };
 }
 
@@ -392,11 +387,11 @@ int main(int argc, char** argv) {
     gSkVMJITViaDylib = FLAGS_dylib;
 
     initializeEventTracingForTools();
-    ToolUtils::SetDefaultFontMgr();
-    SetAnalyticAAFromCommonFlags();
+    CommonFlags::SetDefaultFontMgr();
+    CommonFlags::SetAnalyticAA();
 
     GrContextOptions baseOptions;
-    SetCtxOptionsFromCommonFlags(&baseOptions);
+    CommonFlags::SetCtxOptions(&baseOptions);
     baseOptions.fReducedShaderVariations = FLAGS_reducedshaders;
 
     sk_gpu_test::MemoryCache memoryCache;
@@ -417,13 +412,13 @@ int main(int argc, char** argv) {
 
     SkTHashMap<SkString, const skiatest::Test*> tests;
     for (const skiatest::Test& test : skiatest::TestRegistry::Range()) {
-        if (test.needsGpu) {
+        if (test.fNeedsGpu || test.fNeedsGraphite) {
             continue;  // TODO
         }
         if (FLAGS_listTests) {
-            fprintf(stdout, "%s\n", test.name);
+            fprintf(stdout, "%s\n", test.fName);
         } else {
-            tests.set(SkString{test.name}, &test);
+            tests.set(SkString{test.fName}, &test);
         }
     }
 
@@ -515,7 +510,7 @@ int main(int argc, char** argv) {
     };
     const FlagOption<SkColorType> kColorTypes[] = {
         { "a8",                  kAlpha_8_SkColorType },
-        { "g8",                   kGray_8_SkColorType },
+        { "r8",                 kR8_unorm_SkColorType },
         { "565",                 kRGB_565_SkColorType },
         { "4444",              kARGB_4444_SkColorType },
         { "8888",                    kN32_SkColorType },

@@ -613,12 +613,6 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
                 canvas->drawVertices(vertices, bmode, paint);
             }
         } break;
-        case MARK_CTM: {
-            SkString name;
-            reader->readString(&name);
-            BREAK_ON_READ_ERROR(reader);
-            canvas->markCTM(name.c_str());
-        } break;
         case RESTORE:
             canvas->restore();
             break;
@@ -663,6 +657,10 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             if (flatFlags & SAVELAYERREC_HAS_CLIPMATRIX_OBSOLETE) {
                 SkMatrix clipMatrix_ignored;
                 reader->readMatrix(&clipMatrix_ignored);
+            }
+            if (!reader->isVersionLT(SkPicturePriv::Version::kBackdropScaleFactor) &&
+                (flatFlags & SAVELAYERREC_HAS_BACKDROP_SCALE)) {
+                SkCanvasPriv::SetBackdropScaleFactor(&rec, reader->readScalar());
             }
             BREAK_ON_READ_ERROR(reader);
 

@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#ifndef skgpu_MtlTestContext_DEFINED
-#define skgpu_MtlTestContext_DEFINED
+#ifndef skiatest_graphite_MtlTestContext_DEFINED
+#define skiatest_graphite_MtlTestContext_DEFINED
 
 #include "tools/graphite/GraphiteTestContext.h"
 
@@ -14,7 +14,7 @@
 
 #include "experimental/graphite/include/mtl/MtlBackendContext.h"
 
-namespace sk_graphite_test::mtl {
+namespace skiatest::graphite::mtl {
 
 class TestContext : public GraphiteTestContext {
 public:
@@ -24,7 +24,7 @@ public:
 
     skgpu::BackendApi backend() override { return skgpu::BackendApi::kMetal; }
 
-    sk_sp<skgpu::Context> makeContext() override;
+    std::unique_ptr<skgpu::Context> makeContext() override;
 
     const skgpu::mtl::BackendContext& getBackendContext() const {
         return fMtl;
@@ -36,8 +36,8 @@ protected:
     skgpu::mtl::BackendContext fMtl;
 };
 
-}  // namespace sk_graphite_test::mtl
+}  // namespace skiatest::graphite::mtl
 
 #endif // SK_METAL
 
-#endif // skgpu_MtlTestContext_DEFINED
+#endif // skiatest_graphite_MtlTestContext_DEFINED

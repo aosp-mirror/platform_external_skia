@@ -77,9 +77,26 @@ public:
     static void GetDstClipAndMatrixCounts(const SkCanvas::ImageSetEntry set[], int count,
                                           int* totalDstClipCount, int* totalMatrixCount);
 
-    // Checks that the marker name is an identifier ([a-zA-Z][a-zA-Z0-9_]*)
-    // Identifiers with leading underscores are reserved (not allowed).
-    static bool ValidateMarker(const char*);
+    static SkCanvas::SaveLayerRec ScaledBackdropLayer(const SkRect* bounds,
+                                                      const SkPaint* paint,
+                                                      const SkImageFilter* backdrop,
+                                                      SkScalar backdropScale,
+                                                      SkCanvas::SaveLayerFlags saveLayerFlags) {
+        return SkCanvas::SaveLayerRec(bounds, paint, backdrop, backdropScale, saveLayerFlags);
+    }
+
+    static SkScalar GetBackdropScaleFactor(const SkCanvas::SaveLayerRec& rec) {
+        return rec.fExperimentalBackdropScale;
+    }
+
+    static void SetBackdropScaleFactor(SkCanvas::SaveLayerRec* rec, SkScalar scale) {
+        rec->fExperimentalBackdropScale = scale;
+    }
+
+    static void DrawCustomMesh(SkCanvas*,
+                               SkCustomMesh cm,
+                               sk_sp<SkBlender> blender,
+                               const SkPaint& paint);
 };
 
 /**

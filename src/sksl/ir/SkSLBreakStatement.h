@@ -18,7 +18,7 @@ namespace SkSL {
  */
 class BreakStatement final : public Statement {
 public:
-    static constexpr Kind kStatementKind = Kind::kBreak;
+    inline static constexpr Kind kStatementKind = Kind::kBreak;
 
     BreakStatement(int line)
     : INHERITED(line, kStatementKind) {}
@@ -31,8 +31,8 @@ public:
         return std::make_unique<BreakStatement>(fLine);
     }
 
-    String description() const override {
-        return String("break;");
+    std::string description() const override {
+        return "break;";
     }
 
 private:

@@ -9,48 +9,47 @@
 #define SKSL_SPIRVCODEGENERATOR
 
 #include <stack>
-#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 
-#include "include/private/SkSLModifiers.h"
-#include "include/private/SkSLProgramElement.h"
-#include "include/private/SkSLStatement.h"
 #include "src/core/SkOpts.h"
 #include "src/sksl/SkSLMemoryLayout.h"
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/codegen/SkSLCodeGenerator.h"
-#include "src/sksl/ir/SkSLBinaryExpression.h"
-#include "src/sksl/ir/SkSLConstructor.h"
-#include "src/sksl/ir/SkSLConstructorArray.h"
-#include "src/sksl/ir/SkSLConstructorCompound.h"
-#include "src/sksl/ir/SkSLConstructorCompoundCast.h"
-#include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
-#include "src/sksl/ir/SkSLConstructorMatrixResize.h"
-#include "src/sksl/ir/SkSLConstructorScalarCast.h"
-#include "src/sksl/ir/SkSLConstructorSplat.h"
-#include "src/sksl/ir/SkSLConstructorStruct.h"
-#include "src/sksl/ir/SkSLDoStatement.h"
-#include "src/sksl/ir/SkSLFieldAccess.h"
-#include "src/sksl/ir/SkSLForStatement.h"
-#include "src/sksl/ir/SkSLFunctionCall.h"
-#include "src/sksl/ir/SkSLFunctionDeclaration.h"
-#include "src/sksl/ir/SkSLFunctionDefinition.h"
-#include "src/sksl/ir/SkSLIfStatement.h"
-#include "src/sksl/ir/SkSLIndexExpression.h"
-#include "src/sksl/ir/SkSLInterfaceBlock.h"
-#include "src/sksl/ir/SkSLLiteral.h"
-#include "src/sksl/ir/SkSLPostfixExpression.h"
-#include "src/sksl/ir/SkSLPrefixExpression.h"
-#include "src/sksl/ir/SkSLReturnStatement.h"
-#include "src/sksl/ir/SkSLSwitchStatement.h"
-#include "src/sksl/ir/SkSLSwizzle.h"
-#include "src/sksl/ir/SkSLTernaryExpression.h"
-#include "src/sksl/ir/SkSLVarDeclarations.h"
-#include "src/sksl/ir/SkSLVariableReference.h"
-#include "src/sksl/spirv.h"
 
 namespace SkSL {
+
+class BinaryExpression;
+class Block;
+class ConstructorCompound;
+class ConstructorCompoundCast;
+class ConstructorDiagonalMatrix;
+class ConstructorMatrixResize;
+class ConstructorScalarCast;
+class ConstructorSplat;
+class DoStatement;
+class FieldAccess;
+class ForStatement;
+class FunctionCall;
+class FunctionDeclaration;
+class FunctionDefinition;
+class FunctionPrototype;
+class IfStatement;
+struct IndexExpression;
+class InterfaceBlock;
+enum IntrinsicKind : int8_t;
+class Literal;
+class Operator;
+class PostfixExpression;
+class PrefixExpression;
+class ReturnStatement;
+class Setting;
+class StructDefinition;
+class SwitchStatement;
+struct Swizzle;
+class TernaryExpression;
+class VarDeclaration;
+class VariableReference;
 
 struct SPIRVNumberConstant {
     bool operator==(const SPIRVNumberConstant& that) const {
@@ -201,9 +200,9 @@ private:
 
     std::vector<SpvId> getAccessChain(const Expression& expr, OutputStream& out);
 
-    void writeLayout(const Layout& layout, SpvId target);
+    void writeLayout(const Layout& layout, SpvId target, int line);
 
-    void writeLayout(const Layout& layout, SpvId target, int member);
+    void writeFieldLayout(const Layout& layout, SpvId target, int member);
 
     void writeStruct(const Type& type, const MemoryLayout& layout, SpvId resultId);
 
@@ -231,8 +230,8 @@ private:
 
     SpvId writeIntrinsicCall(const FunctionCall& c, OutputStream& out);
 
-    SpvId writeFunctionCallArgument(const Expression& arg,
-                                    const Modifiers& paramModifiers,
+    SpvId writeFunctionCallArgument(const FunctionCall& call,
+                                    int argIndex,
                                     std::vector<TempVar>* tempVars,
                                     OutputStream& out);
 
@@ -386,6 +385,8 @@ private:
 
     SpvId writeLiteral(const Literal& f);
 
+    SpvId writeLiteral(double value, const Type& type);
+
     void writeStatement(const Statement& s, OutputStream& out);
 
     void writeBlock(const Block& b, OutputStream& out);
@@ -408,20 +409,20 @@ private:
 
     void writeWord(int32_t word, OutputStream& out);
 
-    void writeString(skstd::string_view s, OutputStream& out);
+    void writeString(std::string_view s, OutputStream& out);
 
     void writeLabel(SpvId id, OutputStream& out);
 
     void writeInstruction(SpvOp_ opCode, OutputStream& out);
 
-    void writeInstruction(SpvOp_ opCode, skstd::string_view string, OutputStream& out);
+    void writeInstruction(SpvOp_ opCode, std::string_view string, OutputStream& out);
 
     void writeInstruction(SpvOp_ opCode, int32_t word1, OutputStream& out);
 
-    void writeInstruction(SpvOp_ opCode, int32_t word1, skstd::string_view string,
+    void writeInstruction(SpvOp_ opCode, int32_t word1, std::string_view string,
                           OutputStream& out);
 
-    void writeInstruction(SpvOp_ opCode, int32_t word1, int32_t word2, skstd::string_view string,
+    void writeInstruction(SpvOp_ opCode, int32_t word1, int32_t word2, std::string_view string,
                           OutputStream& out);
 
     void writeInstruction(SpvOp_ opCode, int32_t word1, int32_t word2, OutputStream& out);
@@ -473,13 +474,19 @@ private:
     uint64_t fCapabilities;
     SpvId fIdCount;
     SpvId fGLSLExtendedInstructions;
-    typedef std::tuple<IntrinsicOpcodeKind, int32_t, int32_t, int32_t, int32_t> Intrinsic;
+    struct Intrinsic {
+        IntrinsicOpcodeKind opKind;
+        int32_t floatOp;
+        int32_t signedOp;
+        int32_t unsignedOp;
+        int32_t boolOp;
+    };
     std::unordered_map<IntrinsicKind, Intrinsic> fIntrinsicMap;
     std::unordered_map<const FunctionDeclaration*, SpvId> fFunctionMap;
     std::unordered_map<const Variable*, SpvId> fVariableMap;
     std::unordered_map<const Variable*, int32_t> fInterfaceBlockMap;
-    std::unordered_map<String, SpvId> fImageTypeMap;
-    std::unordered_map<String, SpvId> fTypeMap;
+    std::unordered_map<std::string, SpvId> fImageTypeMap;
+    std::unordered_map<std::string, SpvId> fTypeMap;
     StringStream fCapabilitiesBuffer;
     StringStream fGlobalInitializersBuffer;
     StringStream fConstantBuffer;

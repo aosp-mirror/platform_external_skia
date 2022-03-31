@@ -337,7 +337,8 @@ void TextLine::buildTextBlob(TextRange textRange, const TextStyle& style, const 
         record.fClipRect = context.clip.makeOffset(this->offset());
     }
 
-    SkScalar correctedBaseline = SkScalarFloorToScalar(this->baseline() + 0.5);
+    SkASSERT(nearlyEqual(context.run->baselineShift(), style.getBaselineShift()));
+    SkScalar correctedBaseline = SkScalarFloorToScalar(this->baseline() + style.getBaselineShift() +  0.5);
     record.fBlob = builder.make();
     if (record.fBlob != nullptr) {
         record.fBounds.joinPossiblyEmptyRect(record.fBlob->bounds());
@@ -366,7 +367,7 @@ void TextLine::paintBackground(SkCanvas* canvas, SkScalar x, SkScalar y, TextRan
 
 SkRect TextLine::paintShadow(SkCanvas* canvas, SkScalar x, SkScalar y, TextRange textRange, const TextStyle& style, const ClipContext& context) const {
 
-    SkScalar correctedBaseline = SkScalarFloorToScalar(this->baseline() + 0.5);
+    SkScalar correctedBaseline = SkScalarFloorToScalar(this->baseline() + style.getBaselineShift() + 0.5);
     SkRect shadowBounds = SkRect::MakeEmpty();
 
     for (TextShadow shadow : style.getShadows()) {
@@ -413,9 +414,9 @@ SkRect TextLine::paintShadow(SkCanvas* canvas, SkScalar x, SkScalar y, TextRange
 void TextLine::paintDecorations(SkCanvas* canvas, SkScalar x, SkScalar y, TextRange textRange, const TextStyle& style, const ClipContext& context) const {
 
     SkAutoCanvasRestore acr(canvas, true);
-    canvas->translate(x + this->offset().fX, y + this->offset().fY);
+    canvas->translate(x + this->offset().fX, y + this->offset().fY + style.getBaselineShift());
     Decorations decorations;
-    SkScalar correctedBaseline = SkScalarFloorToScalar(this->baseline() + 0.5);
+    SkScalar correctedBaseline = SkScalarFloorToScalar(this->baseline() + style.getBaselineShift() + 0.5);
     decorations.paint(canvas, style, context, correctedBaseline);
 }
 
@@ -541,8 +542,8 @@ std::unique_ptr<Run> TextLine::shapeEllipsis(const SkString& ellipsis, const Run
 
     class ShapeHandler final : public SkShaper::RunHandler {
     public:
-        ShapeHandler(SkScalar lineHeight, bool useHalfLeading, const SkString& ellipsis)
-            : fRun(nullptr), fLineHeight(lineHeight), fUseHalfLeading(useHalfLeading), fEllipsis(ellipsis) {}
+        ShapeHandler(SkScalar lineHeight, bool useHalfLeading, SkScalar baselineShift, const SkString& ellipsis)
+            : fRun(nullptr), fLineHeight(lineHeight), fUseHalfLeading(useHalfLeading), fBaselineShift(baselineShift), fEllipsis(ellipsis) {}
         Run* run() & { return fRun.get(); }
         std::unique_ptr<Run> run() && { return std::move(fRun); }
 
@@ -555,7 +556,7 @@ std::unique_ptr<Run> TextLine::shapeEllipsis(const SkString& ellipsis, const Run
 
         Buffer runBuffer(const RunInfo& info) override {
             SkASSERT(!fRun);
-            fRun = std::make_unique<Run>(nullptr, info, 0, fLineHeight, fUseHalfLeading, 0, 0);
+            fRun = std::make_unique<Run>(nullptr, info, 0, fLineHeight, fUseHalfLeading, fBaselineShift, 0, 0);
             return fRun->newRunBuffer();
         }
 
@@ -571,10 +572,11 @@ std::unique_ptr<Run> TextLine::shapeEllipsis(const SkString& ellipsis, const Run
         std::unique_ptr<Run> fRun;
         SkScalar fLineHeight;
         bool fUseHalfLeading;
+        SkScalar fBaselineShift;
         SkString fEllipsis;
     };
 
-    ShapeHandler handler(run.heightMultiplier(), run.useHalfLeading(), ellipsis);
+    ShapeHandler handler(run.heightMultiplier(), run.useHalfLeading(), run.baselineShift(), ellipsis);
     std::unique_ptr<SkShaper> shaper = SkShaper::MakeShapeDontWrapOrReorder();
     SkASSERT_RELEASE(shaper != nullptr);
     shaper->shape(ellipsis.c_str(), ellipsis.size(), run.font(), true,
@@ -995,20 +997,31 @@ void TextLine::getRectsForRange(TextRange textRange0,
                     clip.fTop = this->sizes().delta();
                     break;
                 case RectHeightStyle::kIncludeLineSpacingTop: {
+                    clip.fBottom = this->height();
+                    clip.fTop = this->sizes().delta();
+                    auto verticalShift = this->sizes().rawAscent() - this->sizes().ascent();
                     if (isFirstLine()) {
-                        auto verticalShift =  this->sizes().runTop(context.run, LineMetricStyle::Typographic);
                         clip.fTop += verticalShift;
                     }
                     break;
                 }
                 case RectHeightStyle::kIncludeLineSpacingMiddle: {
-                    auto verticalShift =  this->sizes().runTop(context.run, LineMetricStyle::Typographic);
-                    clip.fTop += isFirstLine() ? verticalShift : verticalShift / 2;
-                    clip.fBottom += isLastLine() ? 0 : verticalShift / 2;
+                    clip.fBottom = this->height();
+                    clip.fTop = this->sizes().delta();
+                    auto verticalShift = this->sizes().rawAscent() - this->sizes().ascent();
+                    clip.offset(0, verticalShift / 2.0);
+                    if (isFirstLine()) {
+                        clip.fTop += verticalShift / 2.0;
+                    }
+                    if (isLastLine()) {
+                        clip.fBottom -= verticalShift / 2.0;
+                    }
                     break;
                  }
                 case RectHeightStyle::kIncludeLineSpacingBottom: {
-                    auto verticalShift =  this->sizes().runTop(context.run, LineMetricStyle::Typographic);
+                    clip.fBottom = this->height();
+                    clip.fTop = this->sizes().delta();
+                    auto verticalShift = this->sizes().rawAscent() - this->sizes().ascent();
                     clip.offset(0, verticalShift);
                     if (isLastLine()) {
                         clip.fBottom -= verticalShift;
@@ -1090,6 +1103,7 @@ void TextLine::getRectsForRange(TextRange textRange0,
                 bool mergedBoxes = false;
                 if (!boxes.empty() &&
                     lastRun != nullptr &&
+                    context.run->leftToRight() == lastRun->leftToRight() &&
                     lastRun->placeholderStyle() == nullptr &&
                     context.run->placeholderStyle() == nullptr &&
                     nearlyEqual(lastRun->heightMultiplier(),
@@ -1183,16 +1197,19 @@ PositionWithAffinity TextLine::getGlyphPositionAtCoordinate(SkScalar dx) {
                     context.clip.fRight = dx - offsetX;
                 }
 
-                if (dx < context.clip.fLeft + offsetX) {
+                if (dx <= context.clip.fLeft + offsetX) {
                     // All the other runs are placed right of this one
                     auto utf16Index = fOwner->getUTF16Index(context.run->globalClusterIndex(context.pos));
                     if (run->leftToRight()) {
-                        result = { SkToS32(utf16Index), kDownstream };
+                        result = { SkToS32(utf16Index), kDownstream};
+                        keepLooking = false;
                     } else {
-                        result = { SkToS32(utf16Index + 1), kUpstream };
+                        result = { SkToS32(utf16Index), kDownstream};
+                        // If we haven't reached the end of the run we need to keep looking
+                        keepLooking = context.pos != 0;
                     }
                     // For RTL we go another way
-                    return keepLooking = !run->leftToRight();
+                    return !run->leftToRight();
                 }
 
                 if (dx >= context.clip.fRight + offsetX) {
@@ -1204,7 +1221,7 @@ PositionWithAffinity TextLine::getGlyphPositionAtCoordinate(SkScalar dx) {
                         result = {SkToS32(utf16Index), kDownstream};
                     }
                     // For RTL we go another way
-                    return keepLooking = run->leftToRight();
+                    return run->leftToRight();
                 }
 
                 // So we found the run that contains our coordinates
@@ -1218,6 +1235,7 @@ PositionWithAffinity TextLine::getGlyphPositionAtCoordinate(SkScalar dx) {
                         break;
                     } else if (end == dx && !context.run->leftToRight()) {
                         // When we move RTL variable end points to the beginning of the code point which is included
+                        found = index;
                         break;
                     }
                     found = index;
@@ -1232,17 +1250,21 @@ PositionWithAffinity TextLine::getGlyphPositionAtCoordinate(SkScalar dx) {
 
                 SkScalar center = glyphemePosLeft + glyphemePosWidth / 2;
                 if ((dx < center) == context.run->leftToRight()) {
-                    size_t utf16Index = fOwner->getUTF16Index(clusterIndex8);
+                    size_t utf16Index = context.run->leftToRight()
+                                                ? fOwner->getUTF16Index(clusterIndex8)
+                                                : fOwner->getUTF16Index(clusterEnd8) + 1;
                     result = { SkToS32(utf16Index), kDownstream };
                 } else {
-                    size_t utf16Index = fOwner->getUTF16Index(clusterEnd8);
+                    size_t utf16Index = context.run->leftToRight()
+                                                ? fOwner->getUTF16Index(clusterEnd8)
+                                                : fOwner->getUTF16Index(clusterIndex8) + 1;
                     result = { SkToS32(utf16Index), kUpstream };
                 }
 
                 return keepLooking = false;
 
             });
-          return keepLooking;
+            return keepLooking;
         }
     );
     return result;

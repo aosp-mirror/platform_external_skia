@@ -29,7 +29,7 @@ class FunctionDeclaration;
  */
 class MethodReference final : public Expression {
 public:
-    static constexpr Kind kExpressionKind = Kind::kMethodReference;
+    inline static constexpr Kind kExpressionKind = Kind::kMethodReference;
 
     MethodReference(const Context& context,
                     int line,
@@ -51,8 +51,8 @@ public:
                 fLine, this->self()->clone(), this->functions(), &this->type()));
     }
 
-    String description() const override {
-        return String("<method>");
+    std::string description() const override {
+        return "<method>";
     }
 
 private:

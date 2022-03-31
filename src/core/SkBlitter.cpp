@@ -17,11 +17,11 @@
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkMatrixProvider.h"
+#include "src/core/SkOpts.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkRegionPriv.h"
 #include "src/core/SkTLazy.h"
-#include "src/core/SkUtils.h"
 #include "src/core/SkVMBlitter.h"
 #include "src/core/SkWriteBuffer.h"
 #include "src/core/SkXfermodeInterpretation.h"
@@ -272,20 +272,6 @@ void SkBlitter::blitMask(const SkMask& mask, const SkIRect& clip) {
 }
 
 /////////////////////// these are not virtual, just helpers
-
-void SkBlitter::blitMaskRegion(const SkMask& mask, const SkRegion& clip) {
-    if (clip.quickReject(mask.fBounds)) {
-        return;
-    }
-
-    SkRegion::Cliperator clipper(clip, mask.fBounds);
-
-    while (!clipper.done()) {
-        const SkIRect& cr = clipper.rect();
-        this->blitMask(mask, cr);
-        clipper.next();
-    }
-}
 
 void SkBlitter::blitRectRegion(const SkIRect& rect, const SkRegion& clip) {
     SkRegion::Cliperator clipper(clip, rect);
@@ -646,7 +632,7 @@ SkBlitter* SkBlitterClipper::apply(SkBlitter* blitter, const SkRegion* clip,
 bool SkBlitter::UseLegacyBlitter(const SkPixmap& device,
                                  const SkPaint& paint,
                                  const SkMatrix& matrix) {
-    if (gSkForceRasterPipelineBlitter) {
+    if (gSkForceRasterPipelineBlitter || gUseSkVMBlitter) {
         return false;
     }
 #if defined(SK_FORCE_RASTER_PIPELINE_BLITTER)
@@ -748,19 +734,14 @@ SkBlitter* SkBlitter::Choose(const SkPixmap& device,
         paint.writable()->setDither(false);
     }
 
-    if (gUseSkVMBlitter) {
-        if (auto blitter = SkVMBlitter::Make(device, *paint, matrixProvider,
-                                             alloc, clipShader)) {
-            return blitter;
-        }
-    }
-
     // Same basic idea used a few times: try SkRP, then try SkVM, then give up with a null-blitter.
     // (Setting gUseSkVMBlitter is the only way we prefer SkVM over SkRP at the moment.)
     auto create_SkRP_or_SkVMBlitter = [&]() -> SkBlitter* {
-        if (auto blitter = SkCreateRasterPipelineBlitter(device, *paint, matrixProvider,
-                                                         alloc, clipShader)) {
-            return blitter;
+        if (!gUseSkVMBlitter) {
+            if (auto blitter = SkCreateRasterPipelineBlitter(
+                        device, *paint, matrixProvider, alloc, clipShader)) {
+                return blitter;
+            }
         }
         if (auto blitter = SkVMBlitter::Make(device, *paint, matrixProvider,
                                              alloc, clipShader)) {

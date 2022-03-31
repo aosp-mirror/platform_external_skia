@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#ifndef sk_graphite_test_ContextFactory_DEFINED
-#define sk_graphite_test_ContextFactory_DEFINED
+#ifndef skiatest_graphite_ContextFactory_DEFINED
+#define skiatest_graphite_ContextFactory_DEFINED
 
 #include <vector>
 #include "experimental/graphite/include/GraphiteTypes.h"
@@ -17,30 +17,26 @@ namespace skgpu {
     class Context;
 };
 
-namespace sk_graphite_test {
+namespace skiatest::graphite {
 
 class ContextFactory {
 public:
     enum class ContextType {
+        kDirect3D,
         kMetal,
+        kVulkan,
         kMock,
     };
 
     class ContextInfo {
     public:
         ContextInfo() = default;
-        ContextInfo(ContextInfo&& other)
-           : fType(other.fType)
-           , fTestContext(std::move(other.fTestContext))
-           , fContext(std::move(other.fContext)) {
-        }
-
+        ContextInfo(ContextInfo&& other);
         ~ContextInfo() = default;
 
         ContextFactory::ContextType type() const { return fType; }
 
         skgpu::Context* context() const { return fContext.get(); }
-        sk_sp<skgpu::Context> refContext() const { return fContext; }
         GraphiteTestContext* testContext() const { return fTestContext.get(); }
 
     private:
@@ -48,15 +44,11 @@ public:
 
         ContextInfo(ContextFactory::ContextType type,
                     std::unique_ptr<GraphiteTestContext> testContext,
-                    sk_sp<skgpu::Context> context)
-            : fType(type)
-            , fTestContext(std::move(testContext))
-            , fContext(std::move(context)) {
-        }
+                    std::unique_ptr<skgpu::Context> context);
 
         ContextType                          fType = ContextType::kMock;
         std::unique_ptr<GraphiteTestContext> fTestContext;
-        sk_sp<skgpu::Context>                fContext;
+        std::unique_ptr<skgpu::Context>      fContext;
     };
 
     ContextFactory() = default;
@@ -65,12 +57,12 @@ public:
 
     ~ContextFactory() = default;
 
-    std::tuple<GraphiteTestContext*, sk_sp<skgpu::Context>> getContextInfo(ContextType);
+    std::tuple<GraphiteTestContext*, skgpu::Context*> getContextInfo(ContextType);
 
 private:
     std::vector<ContextInfo> fContexts;
 };
 
-} // namespace sk_graphite_test
+} // namespace skiatest::graphite
 
-#endif // sk_graphite_test_ContextFactory_DEFINED
+#endif // skiatest_graphite_ContextFactory_DEFINED

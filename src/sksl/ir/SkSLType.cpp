@@ -7,27 +7,122 @@
 
 #include "src/sksl/ir/SkSLType.h"
 
+#include "include/private/SkStringView.h"
 #include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/SkSLContext.h"
+#include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLConstructorArrayCast.h"
 #include "src/sksl/ir/SkSLConstructorCompoundCast.h"
 #include "src/sksl/ir/SkSLConstructorScalarCast.h"
-#include "src/sksl/ir/SkSLExternalFunctionReference.h"
-#include "src/sksl/ir/SkSLFunctionReference.h"
+#include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
 #include "src/sksl/ir/SkSLType.h"
-#include "src/sksl/ir/SkSLTypeReference.h"
+
+#include <optional>
+#include <string_view>
 
 namespace SkSL {
 
 static constexpr int kMaxStructDepth = 8;
 
+class AliasType final : public Type {
+public:
+    AliasType(std::string_view name, const Type& targetType)
+        : INHERITED(name, targetType.abbreviatedName(), targetType.typeKind())
+        , fTargetType(targetType) {}
+
+    const Type& resolve() const override {
+        return fTargetType;
+    }
+
+    const Type& componentType() const override {
+        return fTargetType.componentType();
+    }
+
+    NumberKind numberKind() const override {
+        return fTargetType.numberKind();
+    }
+
+    int priority() const override {
+        return fTargetType.priority();
+    }
+
+    int columns() const override {
+        return fTargetType.columns();
+    }
+
+    int rows() const override {
+        return fTargetType.rows();
+    }
+
+    int bitWidth() const override {
+        return fTargetType.bitWidth();
+    }
+
+    bool isPrivate() const override {
+        return fTargetType.isPrivate();
+    }
+
+    bool isAllowedInES2() const override {
+        return fTargetType.isAllowedInES2();
+    }
+
+    size_t slotCount() const override {
+        return fTargetType.slotCount();
+    }
+
+    bool isDepth() const override {
+        return fTargetType.isDepth();
+    }
+
+    bool isArrayedTexture() const override {
+        return fTargetType.isArrayedTexture();
+    }
+
+    bool isScalar() const override {
+        return fTargetType.isScalar();
+    }
+
+    bool isLiteral() const override {
+        return fTargetType.isLiteral();
+    }
+
+    bool isVector() const override {
+        return fTargetType.isVector();
+    }
+
+    bool isMatrix() const override {
+        return fTargetType.isMatrix();
+    }
+
+    bool isArray() const override {
+        return fTargetType.isArray();
+    }
+
+    bool isStruct() const override {
+        return fTargetType.isStruct();
+    }
+
+    bool isInterfaceBlock() const override {
+        return fTargetType.isInterfaceBlock();
+    }
+
+    const std::vector<const Type*>& coercibleTypes() const override {
+        return fTargetType.coercibleTypes();
+    }
+
+private:
+    using INHERITED = Type;
+
+    const Type& fTargetType;
+};
+
 class ArrayType final : public Type {
 public:
-    static constexpr TypeKind kTypeKind = TypeKind::kArray;
+    inline static constexpr TypeKind kTypeKind = TypeKind::kArray;
 
-    ArrayType(skstd::string_view name, const char* abbrev, const Type& componentType, int count)
+    ArrayType(std::string_view name, const char* abbrev, const Type& componentType, int count)
         : INHERITED(name, abbrev, kTypeKind)
         , fComponentType(componentType)
         , fCount(count) {
@@ -61,6 +156,11 @@ public:
         return fComponentType.isAllowedInES2();
     }
 
+    size_t slotCount() const override {
+        SkASSERT(fCount > 0);
+        return fCount * fComponentType.slotCount();
+    }
+
 private:
     using INHERITED = Type;
 
@@ -70,7 +170,7 @@ private:
 
 class GenericType final : public Type {
 public:
-    static constexpr TypeKind kTypeKind = TypeKind::kGeneric;
+    inline static constexpr TypeKind kTypeKind = TypeKind::kGeneric;
 
     GenericType(const char* name, std::vector<const Type*> coercibleTypes)
         : INHERITED(name, "G", kTypeKind)
@@ -88,7 +188,7 @@ private:
 
 class LiteralType : public Type {
 public:
-    static constexpr TypeKind kTypeKind = TypeKind::kLiteral;
+    inline static constexpr TypeKind kTypeKind = TypeKind::kLiteral;
 
     LiteralType(const char* name, const Type& scalarType, int8_t priority)
         : INHERITED(name, "L", kTypeKind)
@@ -127,6 +227,14 @@ public:
         return true;
     }
 
+    bool isPrivate() const override {
+        return true;
+    }
+
+    size_t slotCount() const override {
+        return 1;
+    }
+
 private:
     using INHERITED = Type;
 
@@ -137,9 +245,9 @@ private:
 
 class ScalarType final : public Type {
 public:
-    static constexpr TypeKind kTypeKind = TypeKind::kScalar;
+    inline static constexpr TypeKind kTypeKind = TypeKind::kScalar;
 
-    ScalarType(skstd::string_view name, const char* abbrev, NumberKind numberKind, int8_t priority,
+    ScalarType(std::string_view name, const char* abbrev, NumberKind numberKind, int8_t priority,
                int8_t bitWidth)
         : INHERITED(name, abbrev, kTypeKind)
         , fNumberKind(numberKind)
@@ -174,6 +282,10 @@ public:
         return fNumberKind != NumberKind::kUnsigned;
     }
 
+    size_t slotCount() const override {
+        return 1;
+    }
+
 private:
     using INHERITED = Type;
 
@@ -184,9 +296,9 @@ private:
 
 class MatrixType final : public Type {
 public:
-    static constexpr TypeKind kTypeKind = TypeKind::kMatrix;
+    inline static constexpr TypeKind kTypeKind = TypeKind::kMatrix;
 
-    MatrixType(skstd::string_view name, const char* abbrev, const Type& componentType,
+    MatrixType(std::string_view name, const char* abbrev, const Type& componentType,
                int8_t columns, int8_t rows)
         : INHERITED(name, abbrev, kTypeKind)
         , fComponentType(componentType.as<ScalarType>())
@@ -220,6 +332,10 @@ public:
         return fColumns == fRows;
     }
 
+    size_t slotCount() const override {
+        return fColumns * fRows;
+    }
+
 private:
     using INHERITED = Type;
 
@@ -230,7 +346,7 @@ private:
 
 class TextureType final : public Type {
 public:
-    static constexpr TypeKind kTypeKind = TypeKind::kTexture;
+    inline static constexpr TypeKind kTypeKind = TypeKind::kTexture;
 
     TextureType(const char* name, SpvDim_ dimensions, bool isDepth, bool isArrayed,
                 bool isMultisampled, bool isSampled)
@@ -273,7 +389,7 @@ private:
 
 class SamplerType final : public Type {
 public:
-    static constexpr TypeKind kTypeKind = TypeKind::kSampler;
+    inline static constexpr TypeKind kTypeKind = TypeKind::kSampler;
 
     SamplerType(const char* name, const Type& textureType)
         : INHERITED(name, "Z", kTypeKind)
@@ -311,11 +427,12 @@ private:
 
 class StructType final : public Type {
 public:
-    static constexpr TypeKind kTypeKind = TypeKind::kStruct;
+    inline static constexpr TypeKind kTypeKind = TypeKind::kStruct;
 
-    StructType(int line, skstd::string_view name, std::vector<Field> fields)
+    StructType(int line, std::string_view name, std::vector<Field> fields, bool interfaceBlock)
         : INHERITED(std::move(name), "S", kTypeKind, line)
-        , fFields(std::move(fields)) {}
+        , fFields(std::move(fields))
+        , fInterfaceBlock(interfaceBlock) {}
 
     const std::vector<Field>& fields() const override {
         return fFields;
@@ -323,6 +440,10 @@ public:
 
     bool isStruct() const override {
         return true;
+    }
+
+    bool isInterfaceBlock() const override {
+        return fInterfaceBlock;
     }
 
     bool isPrivate() const override {
@@ -337,17 +458,26 @@ public:
         });
     }
 
+    size_t slotCount() const override {
+        size_t slots = 0;
+        for (const Field& field : fFields) {
+            slots += field.fType->slotCount();
+        }
+        return slots;
+    }
+
 private:
     using INHERITED = Type;
 
     std::vector<Field> fFields;
+    bool fInterfaceBlock;
 };
 
 class VectorType final : public Type {
 public:
-    static constexpr TypeKind kTypeKind = TypeKind::kVector;
+    inline static constexpr TypeKind kTypeKind = TypeKind::kVector;
 
-    VectorType(skstd::string_view name, const char* abbrev, const Type& componentType,
+    VectorType(std::string_view name, const char* abbrev, const Type& componentType,
                int8_t columns)
         : INHERITED(name, abbrev, kTypeKind)
         , fComponentType(componentType.as<ScalarType>())
@@ -379,6 +509,10 @@ public:
         return fComponentType.isAllowedInES2();
     }
 
+    size_t slotCount() const override {
+        return fColumns;
+    }
+
 private:
     using INHERITED = Type;
 
@@ -386,12 +520,16 @@ private:
     int8_t fColumns;
 };
 
-String Type::getArrayName(int arraySize) const {
-    skstd::string_view name = this->name();
+std::string Type::getArrayName(int arraySize) const {
+    std::string_view name = this->name();
     return String::printf("%.*s[%d]", (int)name.size(), name.data(), arraySize);
 }
 
-std::unique_ptr<Type> Type::MakeArrayType(skstd::string_view name, const Type& componentType,
+std::unique_ptr<Type> Type::MakeAliasType(std::string_view name, const Type& targetType) {
+    return std::make_unique<AliasType>(std::move(name), targetType);
+}
+
+std::unique_ptr<Type> Type::MakeArrayType(std::string_view name, const Type& componentType,
                                           int columns) {
     return std::make_unique<ArrayType>(std::move(name), componentType.abbreviatedName(),
                                        componentType, columns);
@@ -406,7 +544,7 @@ std::unique_ptr<Type> Type::MakeLiteralType(const char* name, const Type& scalar
     return std::make_unique<LiteralType>(name, scalarType, priority);
 }
 
-std::unique_ptr<Type> Type::MakeMatrixType(skstd::string_view name, const char* abbrev,
+std::unique_ptr<Type> Type::MakeMatrixType(std::string_view name, const char* abbrev,
                                            const Type& componentType, int columns, int8_t rows) {
     return std::make_unique<MatrixType>(name, abbrev, componentType, columns, rows);
 }
@@ -420,16 +558,16 @@ std::unique_ptr<Type> Type::MakeSpecialType(const char* name, const char* abbrev
     return std::unique_ptr<Type>(new Type(name, abbrev, typeKind));
 }
 
-std::unique_ptr<Type> Type::MakeScalarType(skstd::string_view name, const char* abbrev,
+std::unique_ptr<Type> Type::MakeScalarType(std::string_view name, const char* abbrev,
                                            Type::NumberKind numberKind, int8_t priority,
                                            int8_t bitWidth) {
     return std::make_unique<ScalarType>(name, abbrev, numberKind, priority, bitWidth);
 
 }
 
-std::unique_ptr<Type> Type::MakeStructType(int line, skstd::string_view name,
-                                           std::vector<Field> fields) {
-    return std::make_unique<StructType>(line, name, std::move(fields));
+std::unique_ptr<Type> Type::MakeStructType(int line, std::string_view name,
+                                           std::vector<Field> fields, bool interfaceBlock) {
+    return std::make_unique<StructType>(line, name, std::move(fields), interfaceBlock);
 }
 
 std::unique_ptr<Type> Type::MakeTextureType(const char* name, SpvDim_ dimensions, bool isDepth,
@@ -439,13 +577,13 @@ std::unique_ptr<Type> Type::MakeTextureType(const char* name, SpvDim_ dimensions
                                          isMultisampled, isSampled);
 }
 
-std::unique_ptr<Type> Type::MakeVectorType(skstd::string_view name, const char* abbrev,
+std::unique_ptr<Type> Type::MakeVectorType(std::string_view name, const char* abbrev,
                                            const Type& componentType, int columns) {
     return std::make_unique<VectorType>(name, abbrev, componentType, columns);
 }
 
 CoercionCost Type::coercionCost(const Type& other) const {
-    if (*this == other) {
+    if (this->matches(other)) {
         return CoercionCost::Free();
     }
     if (this->typeKind() == other.typeKind() &&
@@ -473,7 +611,7 @@ CoercionCost Type::coercionCost(const Type& other) const {
     if (fTypeKind == TypeKind::kGeneric) {
         const std::vector<const Type*>& types = this->coercibleTypes();
         for (size_t i = 0; i < types.size(); i++) {
-            if (*types[i] == other) {
+            if (types[i]->matches(other)) {
                 return CoercionCost::Normal((int) i + 1);
             }
         }
@@ -557,7 +695,7 @@ const Type& Type::toCompound(const Context& context, int columns, int rows) cons
     if (columns == 1 && rows == 1) {
         return *this;
     }
-    if (*this == *context.fTypes.fFloat || *this == *context.fTypes.fFloatLiteral) {
+    if (this->matches(*context.fTypes.fFloat) || this->matches(*context.fTypes.fFloatLiteral)) {
         switch (rows) {
             case 1:
                 switch (columns) {
@@ -590,7 +728,7 @@ const Type& Type::toCompound(const Context& context, int columns, int rows) cons
                 }
             default: SK_ABORT("unsupported row count (%d)", rows);
         }
-    } else if (*this == *context.fTypes.fHalf) {
+    } else if (this->matches(*context.fTypes.fHalf)) {
         switch (rows) {
             case 1:
                 switch (columns) {
@@ -623,7 +761,7 @@ const Type& Type::toCompound(const Context& context, int columns, int rows) cons
                 }
             default: SK_ABORT("unsupported row count (%d)", rows);
         }
-    } else if (*this == *context.fTypes.fInt || *this == *context.fTypes.fIntLiteral) {
+    } else if (this->matches(*context.fTypes.fInt) || this->matches(*context.fTypes.fIntLiteral)) {
         switch (rows) {
             case 1:
                 switch (columns) {
@@ -635,7 +773,7 @@ const Type& Type::toCompound(const Context& context, int columns, int rows) cons
                 }
             default: SK_ABORT("unsupported row count (%d)", rows);
         }
-    } else if (*this == *context.fTypes.fShort) {
+    } else if (this->matches(*context.fTypes.fShort)) {
         switch (rows) {
             case 1:
                 switch (columns) {
@@ -647,7 +785,7 @@ const Type& Type::toCompound(const Context& context, int columns, int rows) cons
                 }
             default: SK_ABORT("unsupported row count (%d)", rows);
         }
-    } else if (*this == *context.fTypes.fUInt) {
+    } else if (this->matches(*context.fTypes.fUInt)) {
         switch (rows) {
             case 1:
                 switch (columns) {
@@ -659,7 +797,7 @@ const Type& Type::toCompound(const Context& context, int columns, int rows) cons
                 }
             default: SK_ABORT("unsupported row count (%d)", rows);
         }
-    } else if (*this == *context.fTypes.fUShort) {
+    } else if (this->matches(*context.fTypes.fUShort)) {
         switch (rows) {
             case 1:
                 switch (columns) {
@@ -671,7 +809,7 @@ const Type& Type::toCompound(const Context& context, int columns, int rows) cons
                 }
             default: SK_ABORT("unsupported row count (%d)", rows);
         }
-    } else if (*this == *context.fTypes.fBool) {
+    } else if (this->matches(*context.fTypes.fBool)) {
         switch (rows) {
             case 1:
                 switch (columns) {
@@ -706,8 +844,9 @@ const Type* Type::clone(SymbolTable* symbolTable) const {
             return symbolTable->addArrayDimension(&this->componentType(), this->columns());
         }
         case TypeKind::kStruct: {
-            const String* name = symbolTable->takeOwnershipOfString(String(this->name()));
-            return symbolTable->add(Type::MakeStructType(this->fLine, *name, this->fields()));
+            const std::string* name = symbolTable->takeOwnershipOfString(std::string(this->name()));
+            return symbolTable->add(Type::MakeStructType(
+                    this->fLine, *name, this->fields(), this->isInterfaceBlock()));
         }
         default:
             SkDEBUGFAILF("don't know how to clone type '%s'", this->description().c_str());
@@ -717,22 +856,14 @@ const Type* Type::clone(SymbolTable* symbolTable) const {
 
 std::unique_ptr<Expression> Type::coerceExpression(std::unique_ptr<Expression> expr,
                                                    const Context& context) const {
-    if (!expr) {
+    if (!expr || expr->isIncomplete(context)) {
         return nullptr;
     }
-    const int line = expr->fLine;
-    if (expr->is<FunctionReference>() || expr->is<ExternalFunctionReference>()) {
-        context.fErrors->error(line, "expected '(' to begin function call");
-        return nullptr;
-    }
-    if (expr->is<TypeReference>()) {
-        context.fErrors->error(line, "expected '(' to begin constructor invocation");
-        return nullptr;
-    }
-    if (expr->type() == *this) {
+    if (expr->type().matches(*this)) {
         return expr;
     }
 
+    const int line = expr->fLine;
     const Program::Settings& settings = context.fConfig->fSettings;
     if (!expr->coercionCost(*this).isPossible(settings.fAllowNarrowingConversions)) {
         context.fErrors->error(line, "expected '" + this->displayName() + "', but found '" +
@@ -751,6 +882,10 @@ std::unique_ptr<Expression> Type::coerceExpression(std::unique_ptr<Expression> e
     }
     context.fErrors->error(line, "cannot construct '" + this->displayName() + "'");
     return nullptr;
+}
+
+bool Type::isPrivate() const {
+    return skstd::starts_with(this->name(), '$');
 }
 
 bool Type::isOrContainsArray() const {
@@ -796,21 +931,14 @@ bool Type::checkForOutOfRangeLiteral(const Context& context, const Expression& e
     if (baseType.isInteger()) {
         // Replace constant expressions with their corresponding values.
         const Expression* valueExpr = ConstantFolder::GetConstantValueForVariable(expr);
-        if (valueExpr->allowsConstantSubexpressions()) {
+        if (valueExpr->supportsConstantValues()) {
             // Iterate over every constant subexpression in the value.
             int numSlots = valueExpr->type().slotCount();
             for (int slot = 0; slot < numSlots; ++slot) {
-                const Expression* subexpr = valueExpr->getConstantSubexpression(slot);
-                if (!subexpr || !subexpr->isIntLiteral()) {
-                    continue;
-                }
-                // Look for an int Literal value that is out of range for the corresponding type.
-                SKSL_INT value = subexpr->as<Literal>().intValue();
-                if (value < baseType.minimumValue() || value > baseType.maximumValue()) {
-                    // We found a value that can't fit in the type. Flag it as an error.
-                    context.fErrors->error(expr.fLine,
-                                           String("integer is out of range for type '") +
-                                           this->displayName().c_str() + "': " + to_string(value));
+                std::optional<double> slotVal = valueExpr->getConstantValue(slot);
+                // Check for Literal values that are out of range for the base type.
+                if (slotVal.has_value() &&
+                    baseType.checkForOutOfRangeLiteral(context, *slotVal, valueExpr->fLine)) {
                     foundError = true;
                 }
             }
@@ -819,6 +947,22 @@ bool Type::checkForOutOfRangeLiteral(const Context& context, const Expression& e
 
     // We don't need range checks for floats or booleans; any matched-type value is acceptable.
     return foundError;
+}
+
+bool Type::checkForOutOfRangeLiteral(const Context& context, double value, int line) const {
+    SkASSERT(this->isScalar());
+    if (this->isInteger()) {
+        if (value < this->minimumValue() || value > this->maximumValue()) {
+            // We found a value that can't fit in the type. Flag it as an error.
+            context.fErrors->error(
+                    line,
+                    SkSL::String::printf("integer is out of range for type '%s': %.0f",
+                                         this->displayName().c_str(),
+                                         std::floor(value)));
+            return true;
+        }
+    }
+    return false;
 }
 
 SKSL_INT Type::convertArraySize(const Context& context, std::unique_ptr<Expression> size) const {
@@ -835,15 +979,15 @@ SKSL_INT Type::convertArraySize(const Context& context, std::unique_ptr<Expressi
         return 0;
     }
     if (this->isOpaque()) {
-        context.fErrors->error(size->fLine, "opaque type '" + this->name() +
+        context.fErrors->error(size->fLine, "opaque type '" + std::string(this->name()) +
                                             "' may not be used in an array");
         return 0;
     }
-    if (!size->isIntLiteral()) {
+    SKSL_INT count;
+    if (!ConstantFolder::GetConstantInt(*size, &count)) {
         context.fErrors->error(size->fLine, "array size must be an integer");
         return 0;
     }
-    SKSL_INT count = size->as<Literal>().intValue();
     if (count <= 0) {
         context.fErrors->error(size->fLine, "array size must be positive");
         return 0;

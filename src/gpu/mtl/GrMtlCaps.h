@@ -14,7 +14,6 @@
 
 #import <Metal/Metal.h>
 
-class GrShaderCaps;
 class GrMtlRenderTarget;
 
 /**
@@ -77,7 +76,7 @@ public:
         return fColorTypeToFormatTable[idx];
     }
 
-    GrSwizzle getWriteSwizzle(const GrBackendFormat&, GrColorType) const override;
+    skgpu::Swizzle getWriteSwizzle(const GrBackendFormat&, GrColorType) const override;
 
     uint64_t computeFormatKey(const GrBackendFormat&) const override;
 
@@ -86,15 +85,14 @@ public:
                            ProgramDescOverrideFlags) const override;
     MTLPixelFormat getStencilPixelFormat(const GrProgramDesc& desc);
 
+    bool isMac() const { return fGPUFamily == GPUFamily::kMac; }
+    bool isApple() const { return fGPUFamily == GPUFamily::kApple; }
+
+    size_t getMinBufferAlignment() const { return this->isMac() ? 4 : 1; }
+
     // if true, MTLStoreActionStoreAndMultiplesampleResolve is available
     bool storeAndMultisampleResolveSupport() const { return fStoreAndMultisampleResolveSupport; }
 
-    // If true when doing MSAA draws, we will prefer to discard the MSAA attachment on load
-    // and stores. The use of this feature for specific draws depends on the render target having a
-    // resolve attachment, and if we need to load previous data the resolve attachment must
-    // be readable in a shader. Otherwise we will just write out and store the MSAA attachment
-    // like normal.
-    bool preferDiscardableMSAAAttachment() const { return fPreferDiscardableMSAAAttachment; }
     bool renderTargetSupportsDiscardableMSAA(const GrMtlRenderTarget*) const;
 
 #if GR_TEST_UTILS
@@ -123,7 +121,7 @@ private:
     SupportedRead onSupportedReadPixelsColorType(GrColorType, const GrBackendFormat&,
                                                  GrColorType) const override;
 
-    GrSwizzle onGetReadSwizzle(const GrBackendFormat&, GrColorType) const override;
+    skgpu::Swizzle onGetReadSwizzle(const GrBackendFormat&, GrColorType) const override;
 
     // ColorTypeInfo for a specific format
     struct ColorTypeInfo {
@@ -136,8 +134,8 @@ private:
         };
         uint32_t fFlags = 0;
 
-        GrSwizzle fReadSwizzle;
-        GrSwizzle fWriteSwizzle;
+        skgpu::Swizzle fReadSwizzle;
+        skgpu::Swizzle fWriteSwizzle;
     };
 
     struct FormatInfo {
@@ -165,9 +163,9 @@ private:
         int fColorTypeInfoCount = 0;
     };
 #ifdef SK_BUILD_FOR_IOS
-    static constexpr size_t kNumMtlFormats = 17;
+    inline static constexpr size_t kNumMtlFormats = 17;
 #else
-    static constexpr size_t kNumMtlFormats = 16;
+    inline static constexpr size_t kNumMtlFormats = 16;
 #endif
     static size_t GetFormatIndex(MTLPixelFormat);
     FormatInfo fFormatTable[kNumMtlFormats];
@@ -184,8 +182,6 @@ private:
         kMac,
         kApple,
     };
-    bool isMac() { return fGPUFamily == GPUFamily::kMac; }
-    bool isApple() { return fGPUFamily == GPUFamily::kApple; }
     bool getGPUFamily(id<MTLDevice> device, GPUFamily* gpuFamily, int* group);
     bool getGPUFamilyFromFeatureSet(id<MTLDevice> device, GrMtlCaps::GPUFamily* gpuFamily,
                                     int* group);
@@ -198,7 +194,6 @@ private:
     MTLPixelFormat fPreferredStencilFormat;
 
     bool fStoreAndMultisampleResolveSupport : 1;
-    bool fPreferDiscardableMSAAAttachment : 1;
 
     using INHERITED = GrCaps;
 };

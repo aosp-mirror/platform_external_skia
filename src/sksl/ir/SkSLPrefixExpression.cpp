@@ -7,13 +7,17 @@
 
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 
+#include "include/sksl/SkSLErrorReporter.h"
+#include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLConstantFolder.h"
+#include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLConstructorArray.h"
 #include "src/sksl/ir/SkSLConstructorCompound.h"
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 #include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLLiteral.h"
+#include "src/sksl/ir/SkSLVariableReference.h"
 
 namespace SkSL {
 
@@ -23,25 +27,27 @@ static std::unique_ptr<Expression> simplify_negation(const Context& context,
                                                      const Expression& originalExpr) {
     const Expression* value = ConstantFolder::GetConstantValueForVariable(originalExpr);
     switch (value->kind()) {
-        case Expression::Kind::kLiteral:
+        case Expression::Kind::kLiteral: {
             // Convert -literal(1) to literal(-1).
-            return Literal::Make(originalExpr.fLine,
-                                 -value->as<Literal>().value(),
-                                 &value->type());
-
-        case Expression::Kind::kPrefix:
-            if (context.fConfig->fSettings.fOptimize) {
-                // Convert `-(-expression)` into `expression`.
-                const PrefixExpression& prefix = value->as<PrefixExpression>();
-                if (prefix.getOperator().kind() == Token::Kind::TK_MINUS) {
-                    return prefix.operand()->clone();
-                }
+            double negated = -value->as<Literal>().value();
+            // Don't simplify the expression if the type can't hold the negated value.
+            const Type& type = value->type();
+            if (type.checkForOutOfRangeLiteral(context, negated, value->fLine)) {
+                return nullptr;
+            }
+            return Literal::Make(originalExpr.fLine, negated, &type);
+        }
+        case Expression::Kind::kPrefix: {
+            // Convert `-(-expression)` into `expression`.
+            const PrefixExpression& prefix = value->as<PrefixExpression>();
+            if (prefix.getOperator().kind() == Token::Kind::TK_MINUS) {
+                return prefix.operand()->clone();
             }
             break;
-
+        }
         case Expression::Kind::kConstructorArray:
             // Convert `-array[N](literal, ...)` into `array[N](-literal, ...)`.
-            if (context.fConfig->fSettings.fOptimize && value->isCompileTimeConstant()) {
+            if (value->isCompileTimeConstant()) {
                 const ConstructorArray& ctor = value->as<ConstructorArray>();
                 return ConstructorArray::Make(context, originalExpr.fLine, ctor.type(),
                                               negate_operands(context, ctor.arguments()));
@@ -50,25 +56,31 @@ static std::unique_ptr<Expression> simplify_negation(const Context& context,
 
         case Expression::Kind::kConstructorDiagonalMatrix:
             // Convert `-matrix(literal)` into `matrix(-literal)`.
-            if (context.fConfig->fSettings.fOptimize && value->isCompileTimeConstant()) {
+            if (value->isCompileTimeConstant()) {
                 const ConstructorDiagonalMatrix& ctor = value->as<ConstructorDiagonalMatrix>();
-                return ConstructorDiagonalMatrix::Make(context, originalExpr.fLine, ctor.type(),
-                                                      simplify_negation(context, *ctor.argument()));
+                if (std::unique_ptr<Expression> simplified = simplify_negation(context,
+                                                                               *ctor.argument())) {
+                    return ConstructorDiagonalMatrix::Make(context, originalExpr.fLine, ctor.type(),
+                                                           std::move(simplified));
+                }
             }
             break;
 
         case Expression::Kind::kConstructorSplat:
             // Convert `-vector(literal)` into `vector(-literal)`.
-            if (context.fConfig->fSettings.fOptimize && value->isCompileTimeConstant()) {
+            if (value->isCompileTimeConstant()) {
                 const ConstructorSplat& ctor = value->as<ConstructorSplat>();
-                return ConstructorSplat::Make(context, originalExpr.fLine, ctor.type(),
-                                              simplify_negation(context, *ctor.argument()));
+                if (std::unique_ptr<Expression> simplified = simplify_negation(context,
+                                                                               *ctor.argument())) {
+                    return ConstructorSplat::Make(context, originalExpr.fLine, ctor.type(),
+                                                  std::move(simplified));
+                }
             }
             break;
 
         case Expression::Kind::kConstructorCompound:
             // Convert `-vecN(literal, ...)` into `vecN(-literal, ...)`.
-            if (context.fConfig->fSettings.fOptimize && value->isCompileTimeConstant()) {
+            if (value->isCompileTimeConstant()) {
                 const ConstructorCompound& ctor = value->as<ConstructorCompound>();
                 return ConstructorCompound::Make(context, originalExpr.fLine, ctor.type(),
                                                  negate_operands(context, ctor.arguments()));
@@ -117,16 +129,14 @@ static std::unique_ptr<Expression> logical_not_operand(const Context& context,
             const Literal& b = value->as<Literal>();
             return Literal::MakeBool(operand->fLine, !b.boolValue(), &operand->type());
         }
-        case Expression::Kind::kPrefix:
-            if (context.fConfig->fSettings.fOptimize) {
-                // Convert `!(!expression)` into `expression`.
-                PrefixExpression& prefix = operand->as<PrefixExpression>();
-                if (prefix.getOperator().kind() == Token::Kind::TK_LOGICALNOT) {
-                    return std::move(prefix.operand());
-                }
+        case Expression::Kind::kPrefix: {
+            // Convert `!(!expression)` into `expression`.
+            PrefixExpression& prefix = operand->as<PrefixExpression>();
+            if (prefix.getOperator().kind() == Token::Kind::TK_LOGICALNOT) {
+                return std::move(prefix.operand());
             }
             break;
-
+        }
         default:
             break;
     }
@@ -141,7 +151,7 @@ std::unique_ptr<Expression> PrefixExpression::Convert(const Context& context,
     const Type& baseType = base->type();
     switch (op.kind()) {
         case Token::Kind::TK_PLUS:
-            if (!baseType.componentType().isNumber()) {
+            if (baseType.isArray() || !baseType.componentType().isNumber()) {
                 context.fErrors->error(base->fLine,
                                        "'+' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
@@ -149,7 +159,7 @@ std::unique_ptr<Expression> PrefixExpression::Convert(const Context& context,
             break;
 
         case Token::Kind::TK_MINUS:
-            if (!baseType.componentType().isNumber()) {
+            if (baseType.isArray() || !baseType.componentType().isNumber()) {
                 context.fErrors->error(base->fLine,
                                        "'-' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
@@ -160,8 +170,8 @@ std::unique_ptr<Expression> PrefixExpression::Convert(const Context& context,
         case Token::Kind::TK_MINUSMINUS:
             if (!baseType.isNumber()) {
                 context.fErrors->error(base->fLine,
-                                       String("'") + op.operatorName() + "' cannot operate on '" +
-                                       baseType.displayName() + "'");
+                                       "'" + std::string(op.tightOperatorName()) +
+                                       "' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
             }
             if (!Analysis::UpdateVariableRefKind(base.get(), VariableReference::RefKind::kReadWrite,
@@ -173,8 +183,8 @@ std::unique_ptr<Expression> PrefixExpression::Convert(const Context& context,
         case Token::Kind::TK_LOGICALNOT:
             if (!baseType.isBoolean()) {
                 context.fErrors->error(base->fLine,
-                                       String("'") + op.operatorName() + "' cannot operate on '" +
-                                       baseType.displayName() + "'");
+                                       "'" + std::string(op.tightOperatorName()) +
+                                       "' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
             }
             break;
@@ -184,18 +194,21 @@ std::unique_ptr<Expression> PrefixExpression::Convert(const Context& context,
                 // GLSL ES 1.00, Section 5.1
                 context.fErrors->error(
                         base->fLine,
-                        String("operator '") + op.operatorName() + "' is not allowed");
+                        "operator '" + std::string(op.tightOperatorName()) + "' is not allowed");
                 return nullptr;
             }
-            if (!baseType.isInteger()) {
+            if (baseType.isArray() || !baseType.componentType().isInteger()) {
                 context.fErrors->error(base->fLine,
-                                       String("'") + op.operatorName() + "' cannot operate on '" +
-                                       baseType.displayName() + "'");
+                                       "'" + std::string(op.tightOperatorName()) +
+                                       "' cannot operate on '" + baseType.displayName() + "'");
                 return nullptr;
             }
             if (baseType.isLiteral()) {
                 // The expression `~123` is no longer a literal; coerce to the actual type.
                 base = baseType.scalarTypeForLiteral().coerceExpression(std::move(base), context);
+                if (!base) {
+                    return nullptr;
+                }
             }
             break;
 
@@ -210,10 +223,12 @@ std::unique_ptr<Expression> PrefixExpression::Make(const Context& context, Opera
                                                    std::unique_ptr<Expression> base) {
     switch (op.kind()) {
         case Token::Kind::TK_PLUS:
+            SkASSERT(!base->type().isArray());
             SkASSERT(base->type().componentType().isNumber());
             return base;
 
         case Token::Kind::TK_MINUS:
+            SkASSERT(!base->type().isArray());
             SkASSERT(base->type().componentType().isNumber());
             return negate_operand(context, std::move(base));
 
@@ -229,7 +244,8 @@ std::unique_ptr<Expression> PrefixExpression::Make(const Context& context, Opera
 
         case Token::Kind::TK_BITWISENOT:
             SkASSERT(!context.fConfig->strictES2Mode());
-            SkASSERT(base->type().isInteger());
+            SkASSERT(!base->type().isArray());
+            SkASSERT(base->type().componentType().isInteger());
             SkASSERT(!base->type().isLiteral());
             break;
 

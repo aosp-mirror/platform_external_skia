@@ -47,6 +47,8 @@ def compile_fn(api, checkout_root, out_dir):
     args['skia_use_gl'] = 'false'
   if 'ASAN' in extra_tokens:
     args['sanitize'] = '"ASAN"'
+  if 'HWASAN' in extra_tokens:
+    args['sanitize'] = '"HWASAN"'
   if 'Wuffs' in extra_tokens:
     args['skia_use_wuffs'] = 'true'
 
@@ -60,7 +62,7 @@ def compile_fn(api, checkout_root, out_dir):
   if extra_cflags:
     args['extra_cflags'] = repr(extra_cflags).replace("'", '"')
 
-  gn_args = ' '.join('%s=%s' % (k,v) for (k,v) in sorted(args.iteritems()))
+  gn_args = ' '.join('%s=%s' % (k,v) for (k,v) in sorted(args.items()))
   gn      = skia_dir.join('bin', 'gn')
 
   with api.context(cwd=skia_dir):

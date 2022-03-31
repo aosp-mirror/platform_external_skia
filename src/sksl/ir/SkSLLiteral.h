@@ -11,6 +11,8 @@
 #include "src/sksl/SkSLContext.h"
 #include "src/sksl/ir/SkSLExpression.h"
 
+#include <cinttypes>
+
 namespace SkSL {
 
 /**
@@ -19,7 +21,7 @@ namespace SkSL {
 
 class Literal : public Expression {
 public:
-    static constexpr Kind kExpressionKind = Kind::kLiteral;
+    inline static constexpr Kind kExpressionKind = Kind::kLiteral;
 
     Literal(int line, double value, const Type* type)
         : INHERITED(line, kExpressionKind, type)
@@ -44,6 +46,10 @@ public:
     // Makes an int literal of the specified type.
     static std::unique_ptr<Literal> MakeInt(int line, SKSL_INT value, const Type* type) {
         SkASSERT(type->isInteger());
+        SkASSERTF(value >= type->minimumValue(), "Value %" PRId64 " does not fit in type %s",
+                                                 value, type->description().c_str());
+        SkASSERTF(value <= type->maximumValue(), "Value %" PRId64 " does not fit in type %s",
+                                                 value, type->description().c_str());
         return std::make_unique<Literal>(line, value, type);
     }
 
@@ -90,12 +96,12 @@ public:
         return fValue;
     }
 
-    String description() const override {
+    std::string description() const override {
         if (this->type().isFloat()) {
-            return to_string(this->floatValue());
+            return skstd::to_string(this->floatValue());
         }
         if (this->type().isInteger()) {
-            return to_string(this->intValue());
+            return std::to_string(this->intValue());
         }
         SkASSERT(this->type().isBoolean());
         return fValue ? "true" : "false";
@@ -122,13 +128,13 @@ public:
         return std::make_unique<Literal>(fLine, this->value(), &this->type());
     }
 
-    bool allowsConstantSubexpressions() const override {
+    bool supportsConstantValues() const override {
         return true;
     }
 
-    const Expression* getConstantSubexpression(int n) const override {
+    std::optional<double> getConstantValue(int n) const override {
         SkASSERT(n == 0);
-        return this;
+        return fValue;
     }
 
 private:

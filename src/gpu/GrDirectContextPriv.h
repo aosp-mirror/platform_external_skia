@@ -141,7 +141,6 @@ public:
 
 private:
     explicit GrDirectContextPriv(GrDirectContext* dContext) : GrRecordingContextPriv(dContext) {}
-    GrDirectContextPriv(const GrDirectContextPriv&) = delete;
     GrDirectContextPriv& operator=(const GrDirectContextPriv&) = delete;
 
     // No taking addresses of this type.

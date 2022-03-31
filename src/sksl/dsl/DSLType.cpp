@@ -7,7 +7,7 @@
 
 #include "include/sksl/DSLType.h"
 
-#include "src/sksl/dsl/priv/DSLWriter.h"
+#include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLStructDefinition.h"
 
@@ -15,31 +15,51 @@ namespace SkSL {
 
 namespace dsl {
 
-static const SkSL::Type* find_type(skstd::string_view name, PositionInfo pos) {
-    const Symbol* symbol = (*DSLWriter::SymbolTable())[name];
-    if (!symbol) {
-        DSLWriter::ReportError(String::printf("no symbol named '%.*s'", (int)name.length(),
-                name.data()), pos);
-        return nullptr;
+static const SkSL::Type* verify_type(const Context& context,
+                                     const SkSL::Type* type,
+                                     bool allowPrivateTypes,
+                                     PositionInfo pos) {
+    if (!context.fConfig->fIsBuiltinCode) {
+        if (!allowPrivateTypes && type->isPrivate()) {
+            context.fErrors->error("type '" + std::string(type->name()) + "' is private", pos);
+            return context.fTypes.fPoison.get();
+        }
+        if (!type->isAllowedInES2(context)) {
+            context.fErrors->error("type '" + std::string(type->name()) + "' is not supported",
+                                   pos);
+            return context.fTypes.fPoison.get();
+        }
     }
-    if (!symbol->is<SkSL::Type>()) {
-        DSLWriter::ReportError(String::printf("symbol '%.*s' is not a type", (int)name.length(),
-                name.data()), pos);
-        return nullptr;
-    }
-    return &symbol->as<SkSL::Type>();
+    return type;
 }
 
-static const SkSL::Type* find_type(skstd::string_view name, Modifiers* modifiers,
-        PositionInfo pos) {
-    const Type* type = find_type(name, pos);
-    if (!type) {
-        return nullptr;
+static const SkSL::Type* find_type(const Context& context,
+                                   std::string_view name,
+                                   PositionInfo pos) {
+    const Symbol* symbol = (*ThreadContext::SymbolTable())[name];
+    if (!symbol) {
+        context.fErrors->error(String::printf("no symbol named '%.*s'",
+                                              (int)name.length(), name.data()), pos);
+        return context.fTypes.fPoison.get();
     }
-    const Type* result = type->applyPrecisionQualifiers(DSLWriter::Context(), modifiers,
-            DSLWriter::SymbolTable().get(), /*line=*/-1);
-    DSLWriter::ReportErrors(pos);
-    return result;
+    if (!symbol->is<SkSL::Type>()) {
+        context.fErrors->error(String::printf("symbol '%.*s' is not a type",
+                                              (int)name.length(), name.data()), pos);
+        return context.fTypes.fPoison.get();
+    }
+    const SkSL::Type* type = &symbol->as<SkSL::Type>();
+    return verify_type(context, type, /*allowPrivateTypes=*/false, pos);
+}
+
+static const SkSL::Type* find_type(const Context& context,
+                                   std::string_view name,
+                                   Modifiers* modifiers,
+                                   PositionInfo pos) {
+    const Type* type = find_type(context, name, pos);
+    type = type->applyPrecisionQualifiers(context, modifiers, ThreadContext::SymbolTable().get(),
+                                          pos.line());
+    ThreadContext::ReportErrors(pos);
+    return type;
 }
 
 static const SkSL::Type* get_type_from_type_constant(const Context& context, TypeConstant tc) {
@@ -147,11 +167,15 @@ static const SkSL::Type* get_type_from_type_constant(const Context& context, Typ
     }
 }
 
-DSLType::DSLType(skstd::string_view name)
-        : fSkSLType(find_type(name, PositionInfo())) {}
+DSLType::DSLType(std::string_view name)
+        : fSkSLType(find_type(ThreadContext::Context(), name, PositionInfo())) {}
 
-DSLType::DSLType(skstd::string_view name, DSLModifiers* modifiers, PositionInfo position)
-        : fSkSLType(find_type(name, &modifiers->fModifiers, position)) {}
+DSLType::DSLType(std::string_view name, DSLModifiers* modifiers, PositionInfo position)
+        : fSkSLType(find_type(ThreadContext::Context(), name, &modifiers->fModifiers, position)) {}
+
+DSLType::DSLType(const SkSL::Type* type)
+        : fSkSLType(verify_type(ThreadContext::Context(), type, /*allowPrivateTypes=*/true,
+                                PositionInfo())) {}
 
 bool DSLType::isBoolean() const {
     return this->skslType().isBoolean();
@@ -205,80 +229,73 @@ const SkSL::Type& DSLType::skslType() const {
     if (fSkSLType) {
         return *fSkSLType;
     }
-    return *get_type_from_type_constant(DSLWriter::Context(), fTypeConstant);
-}
-
-bool DSLType::reportIllegalTypes(PositionInfo pos) const {
-    if (!DSLWriter::IsModule()) {
-        const SkSL::Type* type = &this->skslType();
-        if (type->isPrivate()) {
-            DSLWriter::ReportError("type '" + String(type->name()) + "' is private", pos);
-            return true;
-        }
-        if (!type->isAllowedInES2(DSLWriter::Context())) {
-            DSLWriter::ReportError("type '" + String(type->name()) + "' is not supported", pos);
-            return true;
-        }
-    }
-    return false;
+    const Context& context = ThreadContext::Context();
+    return *verify_type(context,
+                        get_type_from_type_constant(context, fTypeConstant),
+                        /*allowPrivateTypes=*/true,
+                        PositionInfo());
 }
 
 DSLPossibleExpression DSLType::Construct(DSLType type, SkSpan<DSLExpression> argArray) {
     SkSL::ExpressionArray skslArgs;
     skslArgs.reserve_back(argArray.size());
 
-    if (type.reportIllegalTypes(PositionInfo())) {
-        for (DSLExpression& arg : argArray) {
-            arg.releaseIfPossible();
-        }
-        return DSLPossibleExpression(nullptr);
-    }
     for (DSLExpression& arg : argArray) {
         if (!arg.hasValue()) {
             return DSLPossibleExpression(nullptr);
         }
         skslArgs.push_back(arg.release());
     }
-    return SkSL::Constructor::Convert(DSLWriter::Context(), /*line=*/-1, type.skslType(),
+    return SkSL::Constructor::Convert(ThreadContext::Context(), /*line=*/-1, type.skslType(),
             std::move(skslArgs));
 }
 
 DSLType Array(const DSLType& base, int count, PositionInfo pos) {
-    count = base.skslType().convertArraySize(DSLWriter::Context(),
+    count = base.skslType().convertArraySize(ThreadContext::Context(),
             DSLExpression(count, pos).release());
-    DSLWriter::ReportErrors(pos);
+    ThreadContext::ReportErrors(pos);
     if (!count) {
         return DSLType(kPoison_Type);
     }
-    return DSLWriter::SymbolTable()->addArrayDimension(&base.skslType(), count);
+    return ThreadContext::SymbolTable()->addArrayDimension(&base.skslType(), count);
 }
 
-DSLType Struct(skstd::string_view name, SkSpan<DSLField> fields, PositionInfo pos) {
+DSLType Struct(std::string_view name, SkSpan<DSLField> fields, PositionInfo pos) {
     std::vector<SkSL::Type::Field> skslFields;
     skslFields.reserve(fields.size());
     for (const DSLField& field : fields) {
         if (field.fModifiers.fModifiers.fFlags != Modifiers::kNo_Flag) {
-            String desc = field.fModifiers.fModifiers.description();
+            std::string desc = field.fModifiers.fModifiers.description();
             desc.pop_back();  // remove trailing space
-            DSLWriter::ReportError("modifier '" + desc + "' is not permitted on a struct field",
+            ThreadContext::ReportError("modifier '" + desc + "' is not permitted on a struct field",
                     field.fPosition);
+        }
+        if (field.fModifiers.fModifiers.fLayout.fFlags & Layout::kBinding_Flag) {
+            ThreadContext::ReportError(
+                    "layout qualifier 'binding' is not permitted on a struct field",
+                    field.fPosition);
+        }
+        if (field.fModifiers.fModifiers.fLayout.fFlags & Layout::kSet_Flag) {
+            ThreadContext::ReportError("layout qualifier 'set' is not permitted on a struct field",
+                                       field.fPosition);
         }
 
         const SkSL::Type& type = field.fType.skslType();
-        if (type.isOpaque()) {
-            DSLWriter::ReportError("opaque type '" + type.displayName() +
-                    "' is not permitted in a struct", field.fPosition);
+        if (type.isVoid()) {
+            ThreadContext::ReportError("type 'void' is not permitted in a struct", field.fPosition);
+        } else if (type.isOpaque()) {
+            ThreadContext::ReportError("opaque type '" + type.displayName() +
+                                       "' is not permitted in a struct", field.fPosition);
         }
         skslFields.emplace_back(field.fModifiers.fModifiers, field.fName, &type);
     }
-    const SkSL::Type* result = DSLWriter::SymbolTable()->add(Type::MakeStructType(pos.line(),
-                                                                                  name,
-                                                                                  skslFields));
+    const SkSL::Type* result = ThreadContext::SymbolTable()->add(Type::MakeStructType(pos.line(),
+            name, skslFields));
     if (result->isTooDeeplyNested()) {
-        DSLWriter::ReportError("struct '" + String(name) + "' is too deeply nested", pos);
+        ThreadContext::ReportError("struct '" + std::string(name) + "' is too deeply nested", pos);
     }
-    DSLWriter::ProgramElements().push_back(std::make_unique<SkSL::StructDefinition>(/*line=*/-1,
-                                                                                    *result));
+    ThreadContext::ProgramElements().push_back(std::make_unique<SkSL::StructDefinition>(/*line=*/-1,
+            *result));
     return result;
 }
 

@@ -22,7 +22,15 @@ class Expression;
 class Statement;
 
 using ComponentArray = SkSTArray<4, int8_t>; // for Swizzles
-using ExpressionArray = SkSTArray<2, std::unique_ptr<Expression>>;
+
+class ExpressionArray : public SkSTArray<2, std::unique_ptr<Expression>> {
+public:
+    using SkSTArray::SkSTArray;
+
+    /** Returns a new ExpressionArray containing a clone of every element. */
+    ExpressionArray clone() const;
+};
+
 using StatementArray = SkSTArray<2, std::unique_ptr<Statement>>;
 
 // Functions larger than this (measured in IR nodes) will not be inlined. This growth factor
@@ -30,6 +38,11 @@ using StatementArray = SkSTArray<2, std::unique_ptr<Statement>>;
 // five inlining opportunities) would be considered 5x larger than if it were called once. This
 // default threshold value is arbitrary, but tends to work well in practice.
 static constexpr int kDefaultInlineThreshold = 50;
+
+// A hard upper limit on the number of variable slots allowed in a function/global scope.
+// This is an arbitrary limit, but is needed to prevent code generation from taking unbounded
+// amounts of time or space.
+static constexpr int kVariableSlotLimit = 100000;
 
 // The SwizzleComponent namespace is used both by the SkSL::Swizzle expression, and the DSL swizzle.
 // This namespace is injected into SkSL::dsl so that `using namespace SkSL::dsl` enables DSL code

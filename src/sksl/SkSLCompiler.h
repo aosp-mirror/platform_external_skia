@@ -11,6 +11,7 @@
 #include <set>
 #include <unordered_set>
 #include <vector>
+#include "include/core/SkSize.h"
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLInliner.h"
@@ -27,6 +28,7 @@
 #define SK_MAIN_COORDS_BUILTIN         10009
 #define SK_INPUT_COLOR_BUILTIN         10010
 #define SK_DEST_COLOR_BUILTIN          10011
+#define SK_SECONDARYFRAGCOLOR_BUILTIN  10012
 #define SK_FRAGCOORD_BUILTIN              15
 #define SK_CLOCKWISE_BUILTIN              17
 #define SK_VERTEXID_BUILTIN               42
@@ -45,8 +47,8 @@ namespace dsl {
 
 class ExternalFunction;
 class FunctionDeclaration;
-class IRGenerator;
 class ProgramUsage;
+struct ShaderCaps;
 
 struct LoadedModule {
     ProgramKind                                  fKind;
@@ -55,19 +57,18 @@ struct LoadedModule {
 };
 
 /**
- * Main compiler entry point. This is a traditional compiler design which first parses the .sksl
- * file into an abstract syntax tree (a tree of ASTNodes), then performs semantic analysis to
- * produce a Program (a tree of IRNodes), then feeds the Program into a CodeGenerator to produce
- * compiled output.
+ * Main compiler entry point. The compiler parses the SkSL text directly into a tree of IRNodes,
+ * while performing basic optimizations such as constant-folding and dead-code elimination. Then the
+ * Program is passed into a CodeGenerator to produce compiled output.
  *
  * See the README for information about SkSL.
  */
 class SK_API Compiler {
 public:
-    static constexpr const char FRAGCOLOR_NAME[] = "sk_FragColor";
-    static constexpr const char RTADJUST_NAME[]  = "sk_RTAdjust";
-    static constexpr const char PERVERTEX_NAME[] = "sk_PerVertex";
-    static constexpr const char POISON_TAG[]     = "<POISON>";
+    inline static constexpr const char FRAGCOLOR_NAME[] = "sk_FragColor";
+    inline static constexpr const char RTADJUST_NAME[]  = "sk_RTAdjust";
+    inline static constexpr const char PERVERTEX_NAME[] = "sk_PerVertex";
+    inline static constexpr const char POISON_TAG[]     = "<POISON>";
 
     /**
      * Gets a float4 that adjusts the position from Skia device coords to normalized device coords,
@@ -112,7 +113,7 @@ public:
         StatementArray fOwnedStatements;
     };
 
-    Compiler(const ShaderCapsClass* caps);
+    Compiler(const ShaderCaps* caps);
 
     ~Compiler();
 
@@ -138,26 +139,30 @@ public:
      */
     std::unique_ptr<Program> convertProgram(
             ProgramKind kind,
-            String text,
+            std::string text,
             Program::Settings settings);
+
+    std::unique_ptr<Expression> convertIdentifier(int line, std::string_view name);
 
     bool toSPIRV(Program& program, OutputStream& out);
 
-    bool toSPIRV(Program& program, String* out);
+    bool toSPIRV(Program& program, std::string* out);
 
     bool toGLSL(Program& program, OutputStream& out);
 
-    bool toGLSL(Program& program, String* out);
+    bool toGLSL(Program& program, std::string* out);
 
-    bool toHLSL(Program& program, String* out);
+    bool toHLSL(Program& program, OutputStream& out);
+
+    bool toHLSL(Program& program, std::string* out);
 
     bool toMetal(Program& program, OutputStream& out);
 
-    bool toMetal(Program& program, String* out);
+    bool toMetal(Program& program, std::string* out);
 
-    void handleError(skstd::string_view msg, PositionInfo pos);
+    void handleError(std::string_view msg, PositionInfo pos);
 
-    String errorText(bool showCount = true);
+    std::string errorText(bool showCount = true);
 
     ErrorReporter& errorReporter() { return *fContext->fErrors; }
 
@@ -170,8 +175,12 @@ public:
         this->errorReporter().resetErrorCount();
     }
 
-    Context& context() {
+    Context& context() const {
         return *fContext;
+    }
+
+    std::shared_ptr<SymbolTable> symbolTable() const {
+        return fSymbolTable;
     }
 
     // When  SKSL_STANDALONE, fPath is used. (fData, fSize) will be (nullptr, 0)
@@ -194,10 +203,6 @@ public:
                             bool dehydrate);
     ParsedModule parseModule(ProgramKind kind, ModuleData data, const ParsedModule& base);
 
-    IRGenerator& irGenerator() {
-        return *fIRGenerator;
-    }
-
     const ParsedModule& moduleForProgramKind(ProgramKind kind);
 
 private:
@@ -206,7 +211,7 @@ private:
         CompilerErrorReporter(Compiler* compiler)
             : fCompiler(*compiler) {}
 
-        void handleError(skstd::string_view msg, PositionInfo pos) override {
+        void handleError(std::string_view msg, PositionInfo pos) override {
             fCompiler.handleError(msg, pos);
         }
 
@@ -220,7 +225,8 @@ private:
     const ParsedModule& loadPublicModule();
     const ParsedModule& loadRuntimeShaderModule();
 
-    std::shared_ptr<SymbolTable> makeRootSymbolTable();
+    std::shared_ptr<SymbolTable> makeRootSymbolTable() const;
+    std::shared_ptr<SymbolTable> makeGLSLRootSymbolTable() const;
     std::shared_ptr<SymbolTable> makePrivateSymbolTable(std::shared_ptr<SymbolTable> parent);
 
     /** Optimize every function in the program. */
@@ -231,16 +237,6 @@ private:
 
     /** Optimize the module. */
     bool optimize(LoadedModule& module);
-
-    /** Eliminates unused functions from a Program, according to the stats in ProgramUsage. */
-    bool removeDeadFunctions(Program& program, ProgramUsage* usage);
-
-    /** Eliminates unreferenced variables from a Program, according to the stats in ProgramUsage. */
-    bool removeDeadGlobalVariables(Program& program, ProgramUsage* usage);
-    bool removeDeadLocalVariables(Program& program, ProgramUsage* usage);
-
-    /** Eliminates unreachable statements from a Program. */
-    void removeUnreachableCode(Program& program, ProgramUsage* usage);
 
     /** Flattens out function calls when it is safe to do so. */
     bool runInliner(const std::vector<std::unique_ptr<ProgramElement>>& elements,
@@ -265,9 +261,11 @@ private:
 
     Mangler fMangler;
     Inliner fInliner;
-    std::unique_ptr<IRGenerator> fIRGenerator;
+    // This is the current symbol table of the code we are processing, and therefore changes during
+    // compilation
+    std::shared_ptr<SymbolTable> fSymbolTable;
 
-    String fErrorText;
+    std::string fErrorText;
 
     static OverrideFlag sOptimizer;
     static OverrideFlag sInliner;
@@ -275,8 +273,9 @@ private:
     friend class AutoSource;
     friend class ::SkSLCompileBench;
     friend class DSLParser;
+    friend class Rehydrator;
+    friend class ThreadContext;
     friend class dsl::DSLCore;
-    friend class dsl::DSLWriter;
 };
 
 }  // namespace SkSL

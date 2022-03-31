@@ -35,7 +35,7 @@ class VariableReference final : public Expression {
 public:
     using RefKind = VariableRefKind;
 
-    static constexpr Kind kExpressionKind = Kind::kVariableReference;
+    inline static constexpr Kind kExpressionKind = Kind::kVariableReference;
 
     VariableReference(int line, const Variable* variable, RefKind refKind);
 
@@ -70,7 +70,7 @@ public:
         return std::make_unique<VariableReference>(fLine, this->variable(), this->refKind());
     }
 
-    String description() const override;
+    std::string description() const override;
 
 private:
     const Variable* fVariable;

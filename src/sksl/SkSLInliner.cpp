@@ -217,6 +217,24 @@ public:
 
 }  // namespace
 
+const Variable* Inliner::RemapVariable(const Variable* variable,
+                                       const VariableRewriteMap* varMap) {
+    auto iter = varMap->find(variable);
+    if (iter == varMap->end()) {
+        SkDEBUGFAILF("rewrite map does not contain variable '%.*s'",
+                     (int)variable->name().size(), variable->name().data());
+        return variable;
+    }
+    Expression* expr = iter->second.get();
+    SkASSERT(expr);
+    if (!expr->is<VariableReference>()) {
+        SkDEBUGFAILF("rewrite map contains non-variable replacement for '%.*s'",
+                     (int)variable->name().size(), variable->name().data());
+        return variable;
+    }
+    return expr->as<VariableReference>().variable();
+}
+
 Inliner::ReturnComplexity Inliner::GetReturnComplexity(const FunctionDefinition& funcDef) {
     int returnsAtEndOfControlFlow = count_returns_at_end_of_control_flow(funcDef);
     CountReturnsWithLimit counter{funcDef, returnsAtEndOfControlFlow + 1};
@@ -489,10 +507,17 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int line,
             // need to ensure initializer is evaluated first so that we've already remapped its
             // declarations by the time we evaluate test & next
             std::unique_ptr<Statement> initializer = stmt(f.initializer());
-            // We can't reuse the unroll info from the original for loop, because it uses a
-            // different induction variable. Ours is a clone.
+
+            std::unique_ptr<LoopUnrollInfo> unrollInfo;
+            if (f.unrollInfo()) {
+                // The for loop's unroll-info points to the Variable in the initializer as the
+                // index. This variable has been rewritten into a clone by the inliner, so we need
+                // to update the loop-unroll info to point to the clone.
+                unrollInfo = std::make_unique<LoopUnrollInfo>(*f.unrollInfo());
+                unrollInfo->fIndex = RemapVariable(unrollInfo->fIndex, varMap);
+            }
             return ForStatement::Make(*fContext, line, std::move(initializer), expr(f.test()),
-                                      expr(f.next()), stmt(f.statement()), /*unrollInfo=*/nullptr,
+                                      expr(f.next()), stmt(f.statement()), std::move(unrollInfo),
                                       SymbolTable::WrapIfBuiltin(f.symbols()));
         }
         case Statement::Kind::kIf: {
@@ -541,8 +566,11 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int line,
             cases.reserve_back(ss.cases().size());
             for (const std::unique_ptr<Statement>& switchCaseStmt : ss.cases()) {
                 const SwitchCase& sc = switchCaseStmt->as<SwitchCase>();
-                cases.push_back(std::make_unique<SwitchCase>(line, expr(sc.value()),
-                                                             stmt(sc.statement())));
+                if (sc.isDefault()) {
+                    cases.push_back(SwitchCase::MakeDefault(line, stmt(sc.statement())));
+                } else {
+                    cases.push_back(SwitchCase::Make(line, sc.value(), stmt(sc.statement())));
+                }
             }
             return SwitchStatement::Make(*fContext, line, ss.isStatic(), expr(ss.value()),
                                         std::move(cases), SymbolTable::WrapIfBuiltin(ss.symbols()));
@@ -555,7 +583,7 @@ std::unique_ptr<Statement> Inliner::inlineStatement(int line,
             // We assign unique names to inlined variables--scopes hide most of the problems in this
             // regard, but see `InlinerAvoidsVariableNameOverlap` for a counterexample where unique
             // names are important.
-            const String* name = symbolTableForStatement->takeOwnershipOfString(
+            const std::string* name = symbolTableForStatement->takeOwnershipOfString(
                     fContext->fMangler->uniqueName(variable.name(), symbolTableForStatement));
             auto clonedVar = std::make_unique<Variable>(
                                                      line,
@@ -596,7 +624,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
     // end.
     SkASSERT(fContext);
     SkASSERT(call);
-    SkASSERT(this->isSafeToInline(call->function().definition()));
+    SkASSERT(this->isSafeToInline(call->function().definition(), usage));
 
     ExpressionArray& arguments = call->arguments();
     const int line = call->fLine;
@@ -684,7 +712,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
         // Still, discard our output and generate an error.
         SkDEBUGFAIL("inliner found non-void function that fails to return a value on any path");
         fContext->fErrors->error(function.fLine, "inliner found non-void function '" +
-                                                 function.declaration().name() +
+                                                 std::string(function.declaration().name()) +
                                                  "' that fails to return a value on any path");
         inlinedCall = {};
     }
@@ -692,7 +720,7 @@ Inliner::InlinedCall Inliner::inlineCall(FunctionCall* call,
     return inlinedCall;
 }
 
-bool Inliner::isSafeToInline(const FunctionDefinition* functionDef) {
+bool Inliner::isSafeToInline(const FunctionDefinition* functionDef, const ProgramUsage& usage) {
     // A threshold of zero indicates that the inliner is completely disabled, so we can just return.
     if (this->settings().fInlineThreshold <= 0) {
         return false;
@@ -713,10 +741,14 @@ bool Inliner::isSafeToInline(const FunctionDefinition* functionDef) {
         return false;
     }
 
-    // We don't allow inlining a function with out parameters. (See skia:11326 for rationale.)
+    // We don't allow inlining a function with out parameters that are written to.
+    // (See skia:11326 for rationale.)
     for (const Variable* param : functionDef->declaration().parameters()) {
         if (param->modifiers().fFlags & Modifiers::Flag::kOut_Flag) {
-            return false;
+            ProgramUsage::VariableCounts counts = usage.get(*param);
+            if (counts.fWrite > 0) {
+                return false;
+            }
         }
     }
 
@@ -1021,12 +1053,14 @@ static const FunctionDeclaration& candidate_func(const InlineCandidate& candidat
     return (*candidate.fCandidateExpr)->as<FunctionCall>().function();
 }
 
-bool Inliner::candidateCanBeInlined(const InlineCandidate& candidate, InlinabilityCache* cache) {
+bool Inliner::candidateCanBeInlined(const InlineCandidate& candidate,
+                                    const ProgramUsage& usage,
+                                    InlinabilityCache* cache) {
     const FunctionDeclaration& funcDecl = candidate_func(candidate);
     auto [iter, wasInserted] = cache->insert({&funcDecl, false});
     if (wasInserted) {
         // Recursion is forbidden here to avoid an infinite death spiral of inlining.
-        iter->second = this->isSafeToInline(funcDecl.definition()) &&
+        iter->second = this->isSafeToInline(funcDecl.definition(), usage) &&
                        !contains_recursive_call(funcDecl);
     }
 
@@ -1063,7 +1097,8 @@ void Inliner::buildCandidateList(const std::vector<std::unique_ptr<ProgramElemen
     candidates.erase(std::remove_if(candidates.begin(),
                                     candidates.end(),
                                     [&](const InlineCandidate& candidate) {
-                                        return !this->candidateCanBeInlined(candidate, &cache);
+                                        return !this->candidateCanBeInlined(
+                                                candidate, *usage, &cache);
                                     }),
                      candidates.end());
 

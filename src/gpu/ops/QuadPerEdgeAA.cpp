@@ -10,6 +10,7 @@
 #include "include/private/SkVx.h"
 #include "src/gpu/GrMeshDrawTarget.h"
 #include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/KeyBuilder.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/geometry/GrQuadUtils.h"
 #include "src/gpu/glsl/GrGLSLColorSpaceXformHelper.h"
@@ -24,6 +25,8 @@ static_assert((int)GrQuadAAFlags::kBottom == SkCanvas::kBottom_QuadAAFlag);
 static_assert((int)GrQuadAAFlags::kNone   == SkCanvas::kNone_QuadAAFlags);
 static_assert((int)GrQuadAAFlags::kAll    == SkCanvas::kAll_QuadAAFlags);
 
+namespace skgpu::v1::QuadPerEdgeAA {
+
 namespace {
 
 using VertexSpec = skgpu::v1::QuadPerEdgeAA::VertexSpec;
@@ -32,7 +35,7 @@ using ColorType = skgpu::v1::QuadPerEdgeAA::ColorType;
 
 // Generic WriteQuadProc that can handle any VertexSpec. It writes the 4 vertices in triangle strip
 // order, although the data per-vertex is dependent on the VertexSpec.
-void write_quad_generic(GrVertexWriter* vb,
+void write_quad_generic(VertexWriter* vb,
                         const VertexSpec& spec,
                         const GrQuad* deviceQuad,
                         const GrQuad* localQuad,
@@ -40,7 +43,7 @@ void write_quad_generic(GrVertexWriter* vb,
                         const SkPMColor4f& color,
                         const SkRect& geomSubset,
                         const SkRect& texSubset) {
-    static constexpr auto If = GrVertexWriter::If<float>;
+    static constexpr auto If = VertexWriter::If<float>;
 
     SkASSERT(!spec.hasLocalCoords() || localQuad);
 
@@ -48,31 +51,32 @@ void write_quad_generic(GrVertexWriter* vb,
     for (int i = 0; i < 4; ++i) {
         // save position, this is a float2 or float3 or float4 depending on the combination of
         // perspective and coverage mode.
-        vb->write(deviceQuad->x(i), deviceQuad->y(i),
-                  If(spec.deviceQuadType() == GrQuad::Type::kPerspective, deviceQuad->w(i)),
-                  If(mode == CoverageMode::kWithPosition, coverage[i]));
+        *vb << deviceQuad->x(i)
+            << deviceQuad->y(i)
+            << If(spec.deviceQuadType() == GrQuad::Type::kPerspective, deviceQuad->w(i))
+            << If(mode == CoverageMode::kWithPosition, coverage[i]);
 
         // save color
         if (spec.hasVertexColors()) {
             bool wide = spec.colorType() == ColorType::kFloat;
-            vb->write(GrVertexColor(color * (mode == CoverageMode::kWithColor ? coverage[i] : 1.f),
-                                    wide));
+            *vb << VertexColor(color * (mode == CoverageMode::kWithColor ? coverage[i] : 1), wide);
         }
 
         // save local position
         if (spec.hasLocalCoords()) {
-            vb->write(localQuad->x(i), localQuad->y(i),
-                      If(spec.localQuadType() == GrQuad::Type::kPerspective, localQuad->w(i)));
+            *vb << localQuad->x(i)
+                << localQuad->y(i)
+                << If(spec.localQuadType() == GrQuad::Type::kPerspective, localQuad->w(i));
         }
 
         // save the geometry subset
         if (spec.requiresGeometrySubset()) {
-            vb->write(geomSubset);
+            *vb << geomSubset;
         }
 
         // save the texture subset
         if (spec.hasSubset()) {
-            vb->write(texSubset);
+            *vb << texSubset;
         }
     }
 }
@@ -82,7 +86,7 @@ void write_quad_generic(GrVertexWriter* vb,
 
 // 2D (XY), no explicit coverage, vertex color, no locals, no geometry subset, no texture subsetn
 // This represents simple, solid color or shader, non-AA (or AA with cov. as alpha) rects.
-void write_2d_color(GrVertexWriter* vb,
+void write_2d_color(VertexWriter* vb,
                     const VertexSpec& spec,
                     const GrQuad* deviceQuad,
                     const GrQuad* localQuad,
@@ -106,13 +110,15 @@ void write_2d_color(GrVertexWriter* vb,
     for (int i = 0; i < 4; ++i) {
         // If this is not coverage-with-alpha, make sure coverage == 1 so it doesn't do anything
         SkASSERT(spec.coverageMode() == CoverageMode::kWithColor || coverage[i] == 1.f);
-        vb->write(deviceQuad->x(i), deviceQuad->y(i), GrVertexColor(color * coverage[i], wide));
+        *vb << deviceQuad->x(i)
+            << deviceQuad->y(i)
+            << VertexColor(color * coverage[i], wide);
     }
 }
 
 // 2D (XY), no explicit coverage, UV locals, no color, no geometry subset, no texture subset
 // This represents opaque, non AA, textured rects
-void write_2d_uv(GrVertexWriter* vb,
+void write_2d_uv(VertexWriter* vb,
                  const VertexSpec& spec,
                  const GrQuad* deviceQuad,
                  const GrQuad* localQuad,
@@ -130,13 +136,16 @@ void write_2d_uv(GrVertexWriter* vb,
     SkASSERT(localQuad);
 
     for (int i = 0; i < 4; ++i) {
-        vb->write(deviceQuad->x(i), deviceQuad->y(i), localQuad->x(i), localQuad->y(i));
+        *vb << deviceQuad->x(i)
+            << deviceQuad->y(i)
+            << localQuad->x(i)
+            << localQuad->y(i);
     }
 }
 
 // 2D (XY), no explicit coverage, UV locals, vertex color, no geometry or texture subsets
 // This represents transparent, non AA (or AA with cov. as alpha), textured rects
-void write_2d_color_uv(GrVertexWriter* vb,
+void write_2d_color_uv(VertexWriter* vb,
                        const VertexSpec& spec,
                        const GrQuad* deviceQuad,
                        const GrQuad* localQuad,
@@ -158,14 +167,17 @@ void write_2d_color_uv(GrVertexWriter* vb,
     for (int i = 0; i < 4; ++i) {
         // If this is not coverage-with-alpha, make sure coverage == 1 so it doesn't do anything
         SkASSERT(spec.coverageMode() == CoverageMode::kWithColor || coverage[i] == 1.f);
-        vb->write(deviceQuad->x(i), deviceQuad->y(i), GrVertexColor(color * coverage[i], wide),
-                  localQuad->x(i), localQuad->y(i));
+        *vb << deviceQuad->x(i)
+            << deviceQuad->y(i)
+            << VertexColor(color * coverage[i], wide)
+            << localQuad->x(i)
+            << localQuad->y(i);
     }
 }
 
 // 2D (XY), explicit coverage, UV locals, no color, no geometry subset, no texture subset
 // This represents opaque, AA, textured rects
-void write_2d_cov_uv(GrVertexWriter* vb,
+void write_2d_cov_uv(VertexWriter* vb,
                      const VertexSpec& spec,
                      const GrQuad* deviceQuad,
                      const GrQuad* localQuad,
@@ -183,8 +195,11 @@ void write_2d_cov_uv(GrVertexWriter* vb,
     SkASSERT(localQuad);
 
     for (int i = 0; i < 4; ++i) {
-        vb->write(deviceQuad->x(i), deviceQuad->y(i), coverage[i],
-                  localQuad->x(i), localQuad->y(i));
+        *vb << deviceQuad->x(i)
+            << deviceQuad->y(i)
+            << coverage[i]
+            << localQuad->x(i)
+            << localQuad->y(i);
     }
 }
 
@@ -196,7 +211,7 @@ void write_2d_cov_uv(GrVertexWriter* vb,
 
 // 2D (XY), no explicit coverage, UV locals, no color, tex subset but no geometry subset
 // This represents opaque, non AA, textured rects with strict uv sampling
-void write_2d_uv_strict(GrVertexWriter* vb,
+void write_2d_uv_strict(VertexWriter* vb,
                         const VertexSpec& spec,
                         const GrQuad* deviceQuad,
                         const GrQuad* localQuad,
@@ -214,13 +229,17 @@ void write_2d_uv_strict(GrVertexWriter* vb,
     SkASSERT(localQuad);
 
     for (int i = 0; i < 4; ++i) {
-        vb->write(deviceQuad->x(i), deviceQuad->y(i), localQuad->x(i), localQuad->y(i), texSubset);
+        *vb << deviceQuad->x(i)
+            << deviceQuad->y(i)
+            << localQuad->x(i)
+            << localQuad->y(i)
+            << texSubset;
     }
 }
 
 // 2D (XY), no explicit coverage, UV locals, vertex color, tex subset but no geometry subset
 // This represents transparent, non AA (or AA with cov. as alpha), textured rects with strict sample
-void write_2d_color_uv_strict(GrVertexWriter* vb,
+void write_2d_color_uv_strict(VertexWriter* vb,
                               const VertexSpec& spec,
                               const GrQuad* deviceQuad,
                               const GrQuad* localQuad,
@@ -242,14 +261,18 @@ void write_2d_color_uv_strict(GrVertexWriter* vb,
     for (int i = 0; i < 4; ++i) {
         // If this is not coverage-with-alpha, make sure coverage == 1 so it doesn't do anything
         SkASSERT(spec.coverageMode() == CoverageMode::kWithColor || coverage[i] == 1.f);
-        vb->write(deviceQuad->x(i), deviceQuad->y(i), GrVertexColor(color * coverage[i], wide),
-                  localQuad->x(i), localQuad->y(i), texSubset);
+        *vb << deviceQuad->x(i)
+            << deviceQuad->y(i)
+            << VertexColor(color * coverage[i], wide)
+            << localQuad->x(i)
+            << localQuad->y(i)
+            << texSubset;
     }
 }
 
 // 2D (XY), explicit coverage, UV locals, no color, tex subset but no geometry subset
 // This represents opaque, AA, textured rects with strict uv sampling
-void write_2d_cov_uv_strict(GrVertexWriter* vb,
+void write_2d_cov_uv_strict(VertexWriter* vb,
                             const VertexSpec& spec,
                             const GrQuad* deviceQuad,
                             const GrQuad* localQuad,
@@ -267,14 +290,16 @@ void write_2d_cov_uv_strict(GrVertexWriter* vb,
     SkASSERT(localQuad);
 
     for (int i = 0; i < 4; ++i) {
-        vb->write(deviceQuad->x(i), deviceQuad->y(i), coverage[i],
-                  localQuad->x(i), localQuad->y(i), texSubset);
+        *vb << deviceQuad->x(i)
+            << deviceQuad->y(i)
+            << coverage[i]
+            << localQuad->x(i)
+            << localQuad->y(i)
+            << texSubset;
     }
 }
 
 } // anonymous namespace
-
-namespace skgpu::v1::QuadPerEdgeAA {
 
 IndexBufferOption CalcIndexBufferOption(GrAAType aa, int numQuads) {
     if (aa == GrAAType::kCoverage) {
@@ -343,7 +368,7 @@ void Tessellator::append(GrQuad* deviceQuad, GrQuad* localQuad,
                          const SkPMColor4f& color, const SkRect& uvSubset, GrQuadAAFlags aaFlags) {
     // We allow Tessellator to be created with a null vertices pointer for convenience, but it is
     // assumed it will never actually be used in those cases.
-    SkASSERT(fVertexWriter.fPtr);
+    SkASSERT(fVertexWriter);
     SkASSERT(deviceQuad->quadType() <= fVertexSpec.deviceQuadType());
     SkASSERT(localQuad || !fVertexSpec.hasLocalCoords());
     SkASSERT(!fVertexSpec.hasLocalCoords() || localQuad->quadType() <= fVertexSpec.localQuadType());
@@ -588,7 +613,7 @@ public:
                                      const GrShaderCaps& caps,
                                      const GrBackendFormat& backendFormat,
                                      GrSamplerState samplerState,
-                                     const GrSwizzle& swizzle,
+                                     const skgpu::Swizzle& swizzle,
                                      sk_sp<GrColorSpaceXform> textureColorSpaceXform,
                                      Saturate saturate) {
         return arena->make([&](void* ptr) {
@@ -600,7 +625,7 @@ public:
 
     const char* name() const override { return "QuadPerEdgeAAGeometryProcessor"; }
 
-    void addToKey(const GrShaderCaps&, GrProcessorKeyBuilder* b) const override {
+    void addToKey(const GrShaderCaps&, KeyBuilder* b) const override {
         // texturing, device-dimensions are single bit flags
         b->addBool(fTexSubset.isInitialized(),    "subset");
         b->addBool(fSampler.isInitialized(),      "textured");
@@ -662,8 +687,8 @@ public:
                                                        gp.fPosition.name());
                     }
                     gpArgs->fPositionVar = {"position",
-                                            gp.fNeedsPerspective ? kFloat3_GrSLType
-                                                                 : kFloat2_GrSLType,
+                                            gp.fNeedsPerspective ? SkSLType::kFloat3
+                                                                 : SkSLType::kFloat2,
                                             GrShaderVar::TypeModifier::None};
                 } else {
                     // No coverage to eliminate
@@ -740,7 +765,7 @@ public:
 
                 // And lastly, output the coverage calculation code
                 if (gp.fCoverageMode == CoverageMode::kWithPosition) {
-                    GrGLSLVarying coverage(kFloat_GrSLType);
+                    GrGLSLVarying coverage(SkSLType::kFloat);
                     args.fVaryingHandler->addVarying("coverage", &coverage);
                     if (gp.fNeedsPerspective) {
                         // Multiply by "W" in the vertex shader, then by 1/w (sk_FragCoord.w) in
@@ -817,7 +842,7 @@ private:
                                    const GrShaderCaps& caps,
                                    const GrBackendFormat& backendFormat,
                                    GrSamplerState samplerState,
-                                   const GrSwizzle& swizzle,
+                                   const skgpu::Swizzle& swizzle,
                                    sk_sp<GrColorSpaceXform> textureColorSpaceXform,
                                    Saturate saturate)
             : INHERITED(kQuadPerEdgeAAGeometryProcessor_ClassID)
@@ -836,30 +861,30 @@ private:
 
         if (fCoverageMode == CoverageMode::kWithPosition) {
             if (fNeedsPerspective) {
-                fPosition = {"positionWithCoverage", kFloat4_GrVertexAttribType, kFloat4_GrSLType};
+                fPosition = {"positionWithCoverage", kFloat4_GrVertexAttribType, SkSLType::kFloat4};
             } else {
-                fPosition = {"position", kFloat2_GrVertexAttribType, kFloat2_GrSLType};
-                fCoverage = {"coverage", kFloat_GrVertexAttribType, kFloat_GrSLType};
+                fPosition = {"position", kFloat2_GrVertexAttribType, SkSLType::kFloat2};
+                fCoverage = {"coverage", kFloat_GrVertexAttribType, SkSLType::kFloat};
             }
         } else {
             if (fNeedsPerspective) {
-                fPosition = {"position", kFloat3_GrVertexAttribType, kFloat3_GrSLType};
+                fPosition = {"position", kFloat3_GrVertexAttribType, SkSLType::kFloat3};
             } else {
-                fPosition = {"position", kFloat2_GrVertexAttribType, kFloat2_GrSLType};
+                fPosition = {"position", kFloat2_GrVertexAttribType, SkSLType::kFloat2};
             }
         }
 
         // Need a geometry subset when the quads are AA and not rectilinear, since their AA
         // outsetting can go beyond a half pixel.
         if (spec.requiresGeometrySubset()) {
-            fGeomSubset = {"geomSubset", kFloat4_GrVertexAttribType, kFloat4_GrSLType};
+            fGeomSubset = {"geomSubset", kFloat4_GrVertexAttribType, SkSLType::kFloat4};
         }
 
         int localDim = spec.localDimensionality();
         if (localDim == 3) {
-            fLocalCoord = {"localCoord", kFloat3_GrVertexAttribType, kFloat3_GrSLType};
+            fLocalCoord = {"localCoord", kFloat3_GrVertexAttribType, SkSLType::kFloat3};
         } else if (localDim == 2) {
-            fLocalCoord = {"localCoord", kFloat2_GrVertexAttribType, kFloat2_GrSLType};
+            fLocalCoord = {"localCoord", kFloat2_GrVertexAttribType, SkSLType::kFloat2};
         } // else localDim == 0 and attribute remains uninitialized
 
         if (spec.hasVertexColors()) {
@@ -867,10 +892,10 @@ private:
         }
 
         if (spec.hasSubset()) {
-            fTexSubset = {"texSubset", kFloat4_GrVertexAttribType, kFloat4_GrSLType};
+            fTexSubset = {"texSubset", kFloat4_GrVertexAttribType, SkSLType::kFloat4};
         }
 
-        this->setVertexAttributes(&fPosition, 6);
+        this->setVertexAttributesWithImplicitOffsets(&fPosition, 6);
     }
 
     const TextureSampler& onTextureSampler(int) const override { return fSampler; }
@@ -906,7 +931,7 @@ GrGeometryProcessor* MakeTexturedProcessor(SkArenaAlloc* arena,
                                            const GrShaderCaps& caps,
                                            const GrBackendFormat& backendFormat,
                                            GrSamplerState samplerState,
-                                           const GrSwizzle& swizzle,
+                                           const skgpu::Swizzle& swizzle,
                                            sk_sp<GrColorSpaceXform> textureColorSpaceXform,
                                            Saturate saturate) {
     return QuadPerEdgeAAGeometryProcessor::Make(arena, spec, caps, backendFormat, samplerState,

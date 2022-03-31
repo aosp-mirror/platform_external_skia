@@ -10,6 +10,7 @@
 #include "src/gpu/gradients/GrGradientBitmapCache.h"
 
 #include "include/gpu/GrRecordingContext.h"
+#include "src/core/SkMathPriv.h"
 #include "src/core/SkRuntimeEffectPriv.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrColor.h"
@@ -19,6 +20,8 @@
 #include "src/gpu/effects/GrMatrixEffect.h"
 #include "src/gpu/effects/GrSkSLFP.h"
 #include "src/gpu/effects/GrTextureEffect.h"
+
+using Vec4 = skvx::Vec<4, float>;
 
 // Intervals smaller than this (that aren't hard stops) on low-precision-only devices force us to
 // use the textured gradient
@@ -85,52 +88,48 @@ static std::unique_ptr<GrFragmentProcessor> make_dual_interval_colorizer(const S
                                                                          const SkPMColor4f& c3,
                                                                          float threshold) {
     static auto effect = SkMakeRuntimeEffect(SkRuntimeEffect::MakeForShader, R"(
-        uniform float4 scale01;
-        uniform float4 bias01;
-        uniform float4 scale23;
-        uniform float4 bias23;
+        uniform float4 scale[2];
+        uniform float4 bias[2];
         uniform half threshold;
 
         half4 main(float2 coord) {
             half t = half(coord.x);
 
-            float4 scale, bias;
+            float4 s, b;
             if (t < threshold) {
-                scale = scale01;
-                bias = bias01;
+                s = scale[0];
+                b = bias[0];
             } else {
-                scale = scale23;
-                bias = bias23;
+                s = scale[1];
+                b = bias[1];
             }
 
-            return half4(t * scale + bias);
+            return half4(t * s + b);
         }
     )");
 
-    using sk4f = skvx::Vec<4, float>;
-
     // Derive scale and biases from the 4 colors and threshold
-    auto vc0 = sk4f::Load(c0.vec());
-    auto vc1 = sk4f::Load(c1.vec());
-    auto scale01 = (vc1 - vc0) / threshold;
-    // bias01 = c0
+    Vec4 vc0 = Vec4::Load(c0.vec());
+    Vec4 vc1 = Vec4::Load(c1.vec());
+    Vec4 vc2 = Vec4::Load(c2.vec());
+    Vec4 vc3 = Vec4::Load(c3.vec());
 
-    auto vc2 = sk4f::Load(c2.vec());
-    auto vc3 = sk4f::Load(c3.vec());
-    auto scale23 = (vc3 - vc2) / (1 - threshold);
-    auto bias23 = vc2 - threshold * scale23;
-
+    const Vec4 scale[2] = {(vc1 - vc0) / threshold,
+                           (vc3 - vc2) / (1 - threshold)};
+    const Vec4 bias[2]  = {vc0,
+                           vc2 - threshold * scale[1]};
     return GrSkSLFP::Make(effect, "DualIntervalColorizer", /*inputFP=*/nullptr,
                           GrSkSLFP::OptFlags::kNone,
-                          "scale01", scale01,
-                          "bias01", c0,
-                          "scale23", scale23,
-                          "bias23", bias23,
+                          "scale", SkMakeSpan(scale),
+                          "bias", SkMakeSpan(bias),
                           "threshold", threshold);
 }
 
+// The "unrolled" colorizer contains hand-written nested ifs which perform a binary search.
+// This works on ES2 hardware that doesn't support non-constant array indexes.
+// However, to keep code size under control, we are limited to a small number of stops.
 static constexpr int kMaxUnrolledColorCount    = 16;
-static constexpr int kMaxUnrolledIntervalCount = 8;
+static constexpr int kMaxUnrolledIntervalCount = kMaxUnrolledColorCount / 2;
 
 static std::unique_ptr<GrFragmentProcessor> make_unrolled_colorizer(int intervalCount,
                                                                     const SkPMColor4f* scale,
@@ -163,46 +162,32 @@ static std::unique_ptr<GrFragmentProcessor> make_unrolled_colorizer(int interval
         // With the current hardstop detection threshold of 0.00024, the maximum scale and bias
         // values will be on the order of 4k (since they divide by dt). That is well outside the
         // precision capabilities of half floats, which can lead to inaccurate gradient calculations
-        for (int i = 0; i < intervalCount; ++i) {
-            sksl.appendf("uniform float4 scale%d_%d;", 2 * i, 2 * i + 1);
-            sksl.appendf("uniform float4 bias%d_%d;", 2 * i, 2 * i + 1);
-        }
+        sksl.appendf("uniform float4 scale[%d];", intervalCount);
+        sksl.appendf("uniform float4 bias[%d];", intervalCount);
 
-        sksl.append("half4 main(float2 coord) {");
-        sksl.append("  half t = half(coord.x);");
-        sksl.append("  float4 scale, bias;");
-
-        // To ensure that the code below always compiles, inject local variables with the names of
-        // the uniforms that we *didn't* emit above. These will all end up unused and removed.
-        for (int i = intervalCount; i < kMaxUnrolledIntervalCount; i++) {
-            sksl.appendf("float4 scale%d_%d, bias%d_%d;", i * 2, i * 2 + 1, i * 2, i * 2 + 1);
-        }
-
+        // Explicit binary search for the proper interval that t falls within. The interval
+        // count checks are constant expressions, which are then optimized to the minimal number
+        // of branches for the specific interval count.
         sksl.appendf(R"(
-            // Explicit binary search for the proper interval that t falls within. The interval
-            // count checks are constant expressions, which are then optimized to the minimal number
-            // of branches for the specific interval count.
-
+        half4 main(float2 coord) {
+            half t = half(coord.x);
+            float4 s, b;
             // thresholds1_7.w is mid point for intervals (0,7) and (8,15)
             if (%d <= 4 || t < thresholds1_7.w) {
                 // thresholds1_7.y is mid point for intervals (0,3) and (4,7)
                 if (%d <= 2 || t < thresholds1_7.y) {
                     // thresholds1_7.x is mid point for intervals (0,1) and (2,3)
                     if (%d <= 1 || t < thresholds1_7.x) {
-                        scale = scale0_1;
-                        bias = bias0_1;
+                        %s s = scale[0]; b = bias[0];
                     } else {
-                        scale = scale2_3;
-                        bias = bias2_3;
+                        %s s = scale[1]; b = bias[1];
                     }
                 } else {
                     // thresholds1_7.z is mid point for intervals (4,5) and (6,7)
                     if (%d <= 3 || t < thresholds1_7.z) {
-                        scale = scale4_5;
-                        bias = bias4_5;
+                        %s s = scale[2]; b = bias[2];
                     } else {
-                        scale = scale6_7;
-                        bias = bias6_7;
+                        %s s = scale[3]; b = bias[3];
                     }
                 }
             } else {
@@ -210,87 +195,165 @@ static std::unique_ptr<GrFragmentProcessor> make_unrolled_colorizer(int interval
                 if (%d <= 6 || t < thresholds9_13.y) {
                     // thresholds9_13.x is mid point for intervals (8,9) and (10,11)
                     if (%d <= 5 || t < thresholds9_13.x) {
-                        // interval 8-9
-                        scale = scale8_9;
-                        bias = bias8_9;
+                        %s s = scale[4]; b = bias[4];
                     } else {
-                        // interval 10-11
-                        scale = scale10_11;
-                        bias = bias10_11;
+                        %s s = scale[5]; b = bias[5];
                     }
                 } else {
                     // thresholds9_13.z is mid point for intervals (12,13) and (14,15)
                     if (%d <= 7 || t < thresholds9_13.z) {
-                        // interval 12-13
-                        scale = scale12_13;
-                        bias = bias12_13;
+                        %s s = scale[6]; b = bias[6];
                     } else {
-                        // interval 14-15
-                        scale = scale14_15;
-                        bias = bias14_15;
+                        %s s = scale[7]; b = bias[7];
                     }
                 }
             }
-
-        )", intervalCount, intervalCount, intervalCount, intervalCount, intervalCount,
-            intervalCount, intervalCount);
-
-        sksl.append("return half4(t * scale + bias); }");
+            return t * s + b;
+        }
+        )", intervalCount,
+              intervalCount,
+                intervalCount,
+                  (intervalCount <= 0) ? "//" : "",
+                  (intervalCount <= 1) ? "//" : "",
+                intervalCount,
+                  (intervalCount <= 2) ? "//" : "",
+                  (intervalCount <= 3) ? "//" : "",
+              intervalCount,
+                intervalCount,
+                  (intervalCount <= 4) ? "//" : "",
+                  (intervalCount <= 5) ? "//" : "",
+                intervalCount,
+                  (intervalCount <= 6) ? "//" : "",
+                  (intervalCount <= 7) ? "//" : "");
 
         auto result = SkRuntimeEffect::MakeForShader(std::move(sksl));
         SkASSERTF(result.effect, "%s", result.errorText.c_str());
         effects[intervalCount - 1] = std::move(result.effect);
     });
 
-#define ADD_STOP(N, suffix) \
-    "scale" #suffix, GrSkSLFP::When(intervalCount > N, scale[N]), \
-    "bias"  #suffix, GrSkSLFP::When(intervalCount > N, bias[N])
-
     return GrSkSLFP::Make(effects[intervalCount - 1], "UnrolledBinaryColorizer",
                           /*inputFP=*/nullptr, GrSkSLFP::OptFlags::kNone,
                           "thresholds1_7", thresholds1_7,
                           "thresholds9_13", thresholds9_13,
-                          "scale0_1", scale[0], "bias0_1", bias[0],
-                          ADD_STOP(1, 2_3),
-                          ADD_STOP(2, 4_5),
-                          ADD_STOP(3, 6_7),
-                          ADD_STOP(4, 8_9),
-                          ADD_STOP(5, 10_11),
-                          ADD_STOP(6, 12_13),
-                          ADD_STOP(7, 14_15));
-#undef ADD_STOP
+                          "scale", SkMakeSpan(scale, intervalCount),
+                          "bias", SkMakeSpan(bias, intervalCount));
 }
 
-static std::unique_ptr<GrFragmentProcessor> make_unrolled_binary_colorizer(
-        const SkPMColor4f* colors, const SkScalar* positions, int count) {
+// The "looping" colorizer uses a real loop to binary-search the array of gradient stops.
+static constexpr int kMaxLoopingColorCount    = 128;
+static constexpr int kMaxLoopingIntervalCount = kMaxLoopingColorCount / 2;
+
+static std::unique_ptr<GrFragmentProcessor> make_looping_colorizer(int intervalCount,
+                                                                   const SkPMColor4f* scale,
+                                                                   const SkPMColor4f* bias,
+                                                                   const SkScalar* thresholds) {
+    SkASSERT(intervalCount >= 1 && intervalCount <= kMaxLoopingIntervalCount);
+    SkASSERT((intervalCount & 3) == 0);  // intervals are required to come in groups of four
+    int intervalChunks = intervalCount / 4;
+    int cacheIndex = (size_t)intervalChunks - 1;
+
+    struct EffectCacheEntry {
+        SkOnce once;
+        sk_sp<SkRuntimeEffect> effect;
+    };
+
+    static EffectCacheEntry effectCache[kMaxLoopingIntervalCount / 4];
+    SkASSERT(cacheIndex >= 0 && cacheIndex < (int)SK_ARRAY_COUNT(effectCache));
+    EffectCacheEntry* cacheEntry = &effectCache[cacheIndex];
+
+    cacheEntry->once([intervalCount, intervalChunks, cacheEntry] {
+        SkString sksl;
+
+        // Binary search for the interval that `t` falls within. We can precalculate the number of
+        // loop iterations we need, and we know `t` will always be in range, so we can just loop a
+        // fixed number of times and can be guaranteed to have found the proper element.
+        //
+        // Threshold values are stored in half4s to keep them compact, so the last two rounds of
+        // binary search are hand-unrolled to allow them to use swizzles.
+        //
+        // Note that this colorizer is also designed to handle the case of exactly 4 intervals (a
+        // single chunk). In this case, the binary search for-loop will optimize away entirely, as
+        // it can be proven to execute zero times. We also optimize away the calculation of `4 *
+        // chunk` near the end via an @if statement, as the result will always be in chunk 0.
+        int loopCount = SkNextLog2(intervalChunks);
+        sksl.appendf(R"(
+        uniform half4 thresholds[%d];
+        uniform float4 scale[%d];
+        uniform float4 bias[%d];
+
+        half4 main(float2 coord) {
+            half t = half(coord.x);
+
+            // Choose a chunk from thresholds via binary search in a loop.
+            int low = 0;
+            int high = %d;
+            int chunk = %d;
+            for (int loop = 0; loop < %d; ++loop) {
+                if (t < thresholds[chunk].w) {
+                    high = chunk;
+                } else {
+                    low = chunk + 1;
+                }
+                chunk = (low + high) / 2;
+            }
+
+            // Choose the final position via explicit 4-way binary search.
+            int pos;
+            if (t < thresholds[chunk].y) {
+                pos = (t < thresholds[chunk].x) ? 0 : 1;
+            } else {
+                pos = (t < thresholds[chunk].z) ? 2 : 3;
+            }
+            @if (%d > 0) {
+                pos += 4 * chunk;
+            }
+            return t * scale[pos] + bias[pos];
+        }
+        )", /* thresholds: */ intervalChunks,
+            /* scale: */ intervalCount,
+            /* bias: */ intervalCount,
+            /* high: */ intervalChunks - 1,
+            /* chunk: */ (intervalChunks - 1) / 2,
+            /* loopCount: */ loopCount,
+            /* @if (loopCount > 0): */ loopCount);
+
+        auto result = SkRuntimeEffect::MakeForShader(std::move(sksl),
+                                                     SkRuntimeEffectPriv::ES3Options());
+        SkASSERTF(result.effect, "%s", result.errorText.c_str());
+        cacheEntry->effect = std::move(result.effect);
+    });
+
+    return GrSkSLFP::Make(cacheEntry->effect, "LoopingBinaryColorizer",
+                          /*inputFP=*/nullptr, GrSkSLFP::OptFlags::kNone,
+                          "thresholds", SkMakeSpan((const SkV4*)thresholds, intervalChunks),
+                          "scale", SkMakeSpan(scale, intervalCount),
+                          "bias", SkMakeSpan(bias, intervalCount));
+}
+
+// Converts an input array of {colors, positions} into an array of {scales, biases, thresholds}.
+// The length of the result array may differ from the input due to hard-stops or empty intervals.
+int build_intervals(int inputLength,
+                    const SkPMColor4f* inColors,
+                    const SkScalar* inPositions,
+                    int outputLength,
+                    SkPMColor4f* outScales,
+                    SkPMColor4f* outBiases,
+                    SkScalar* outThresholds) {
     // Depending on how the positions resolve into hard stops or regular stops, the number of
     // intervals specified by the number of colors/positions can change. For instance, a plain
     // 3 color gradient is two intervals, but a 4 color gradient with a hard stop is also
     // two intervals. At the most extreme end, an 8 interval gradient made entirely of hard
     // stops has 16 colors.
-
-    if (count > kMaxUnrolledColorCount) {
-        // Definitely cannot represent this gradient configuration
-        return nullptr;
-    }
-
-    // The raster implementation also uses scales and biases, but since they must be calculated
-    // after the dst color space is applied, it limits our ability to cache their values.
-    SkPMColor4f scales[kMaxUnrolledIntervalCount];
-    SkPMColor4f biases[kMaxUnrolledIntervalCount];
-    SkScalar thresholds[kMaxUnrolledIntervalCount] = { 0 };
-
     int intervalCount = 0;
-
-    for (int i = 0; i < count - 1; i++) {
-        if (intervalCount >= kMaxUnrolledIntervalCount) {
-            // Already reached kMaxUnrolledIntervalCount, and haven't run out of color stops so this
-            // gradient cannot be represented by this shader.
-            return nullptr;
+    for (int i = 0; i < inputLength - 1; i++) {
+        if (intervalCount >= outputLength) {
+            // Already reached our output limit, and haven't run out of color stops. This gradient
+            // cannot be represented without more intervals.
+            return 0;
         }
 
-        SkScalar t0 = positions[i];
-        SkScalar t1 = positions[i + 1];
+        SkScalar t0 = inPositions[i];
+        SkScalar t1 = inPositions[i + 1];
         SkScalar dt = t1 - t0;
         // If the interval is empty, skip to the next interval. This will automatically create
         // distinct hard stop intervals as needed. It also protects against malformed gradients
@@ -299,16 +362,33 @@ static std::unique_ptr<GrFragmentProcessor> make_unrolled_binary_colorizer(
             continue;
         }
 
-        auto c0 = Sk4f::Load(colors[i].vec());
-        auto c1 = Sk4f::Load(colors[i + 1].vec());
+        Vec4 c0 = Vec4::Load(inColors[i].vec());
+        Vec4 c1 = Vec4::Load(inColors[i + 1].vec());
+        Vec4 scale = (c1 - c0) / dt;
+        Vec4 bias = c0 - t0 * scale;
 
-        auto scale = (c1 - c0) / dt;
-        auto bias = c0 - t0 * scale;
-
-        scale.store(scales + intervalCount);
-        bias.store(biases + intervalCount);
-        thresholds[intervalCount] = t1;
+        scale.store(outScales + intervalCount);
+        bias.store(outBiases + intervalCount);
+        outThresholds[intervalCount] = t1;
         intervalCount++;
+    }
+    return intervalCount;
+}
+
+static std::unique_ptr<GrFragmentProcessor> make_unrolled_binary_colorizer(
+        const SkPMColor4f* colors, const SkScalar* positions, int count) {
+    if (count > kMaxUnrolledColorCount) {
+        // Definitely cannot represent this gradient configuration
+        return nullptr;
+    }
+
+    SkPMColor4f scales[kMaxUnrolledIntervalCount];
+    SkPMColor4f biases[kMaxUnrolledIntervalCount];
+    SkScalar thresholds[kMaxUnrolledIntervalCount] = {};
+    int intervalCount = build_intervals(count, colors, positions,
+                                        kMaxUnrolledIntervalCount, scales, biases, thresholds);
+    if (intervalCount <= 0) {
+        return nullptr;
     }
 
     SkRect thresholds1_7  = {thresholds[0], thresholds[1], thresholds[2], thresholds[3]},
@@ -317,10 +397,44 @@ static std::unique_ptr<GrFragmentProcessor> make_unrolled_binary_colorizer(
     return make_unrolled_colorizer(intervalCount, scales, biases, thresholds1_7, thresholds9_13);
 }
 
+static std::unique_ptr<GrFragmentProcessor> make_looping_binary_colorizer(const SkPMColor4f* colors,
+                                                                          const SkScalar* positions,
+                                                                          int count) {
+    if (count > kMaxLoopingColorCount) {
+        // Definitely cannot represent this gradient configuration
+        return nullptr;
+    }
+
+    SkPMColor4f scales[kMaxLoopingIntervalCount];
+    SkPMColor4f biases[kMaxLoopingIntervalCount];
+    SkScalar thresholds[kMaxLoopingIntervalCount] = {};
+    int intervalCount = build_intervals(count, colors, positions,
+                                        kMaxLoopingIntervalCount, scales, biases, thresholds);
+    if (intervalCount <= 0) {
+        return nullptr;
+    }
+
+    // We round up the number of intervals to the next power of two. This reduces the number of
+    // unique shaders and doesn't require any additional GPU processing power, but this does waste a
+    // handful of uniforms.
+    int roundedSize = std::max(4, SkNextPow2(intervalCount));
+    SkASSERT(roundedSize <= kMaxLoopingIntervalCount);
+    for (; intervalCount < roundedSize; ++intervalCount) {
+        thresholds[intervalCount] = thresholds[intervalCount - 1];
+        scales[intervalCount] = scales[intervalCount - 1];
+        biases[intervalCount] = biases[intervalCount - 1];
+    }
+
+    return make_looping_colorizer(intervalCount, scales, biases, thresholds);
+}
+
 // Analyze the shader's color stops and positions and chooses an appropriate colorizer to represent
 // the gradient.
 static std::unique_ptr<GrFragmentProcessor> make_colorizer(const SkPMColor4f* colors,
-        const SkScalar* positions, int count, bool premul, const GrFPArgs& args) {
+                                                           const SkScalar* positions,
+                                                           int count,
+                                                           bool premul,
+                                                           const GrFPArgs& args) {
     // If there are hard stops at the beginning or end, the first and/or last color should be
     // ignored by the colorizer since it should only be used in a clamped border color. By detecting
     // and removing these stops at the beginning, it makes optimizing the remaining color stops
@@ -331,9 +445,9 @@ static std::unique_ptr<GrFragmentProcessor> make_colorizer(const SkPMColor4f* co
     // The same is true for pos[end] == 1
     bool topHardStop = SkScalarNearlyEqual(positions[count - 2], positions[count - 1]);
 
-    int offset = 0;
     if (bottomHardStop) {
-        offset += 1;
+        colors++;
+        positions++;
         count--;
     }
     if (topHardStop) {
@@ -343,60 +457,71 @@ static std::unique_ptr<GrFragmentProcessor> make_colorizer(const SkPMColor4f* co
     // Two remaining colors means a single interval from 0 to 1
     // (but it may have originally been a 3 or 4 color gradient with 1-2 hard stops at the ends)
     if (count == 2) {
-        return make_single_interval_colorizer(colors[offset], colors[offset + 1]);
+        return make_single_interval_colorizer(colors[0], colors[1]);
     }
 
-    // Do an early test for the texture fallback to skip all of the other tests for specific
-    // analytic support of the gradient (and compatibility with the hardware), when it's definitely
-    // impossible to use an analytic solution.
-    bool tryAnalyticColorizer = count <= kMaxUnrolledColorCount;
-
-    // The remaining analytic colorizers use scale*t+bias, and the scale/bias values can become
-    // quite large when thresholds are close (but still outside the hardstop limit). If float isn't
-    // 32-bit, output can be incorrect if the thresholds are too close together. However, the
-    // analytic shaders are higher quality, so they can be used with lower precision hardware when
-    // the thresholds are not ill-conditioned.
     const GrShaderCaps* caps = args.fContext->priv().caps()->shaderCaps();
-    if (!caps->floatIs32Bits() && tryAnalyticColorizer) {
-        // Could run into problems, check if thresholds are close together (with a limit of .01, so
-        // that scales will be less than 100, which leaves 4 decimals of precision on 16-bit).
-        for (int i = offset; i < count - 1; i++) {
-            SkScalar dt = SkScalarAbs(positions[i] - positions[i + 1]);
-            if (dt <= kLowPrecisionIntervalLimit && dt > SK_ScalarNearlyZero) {
-                tryAnalyticColorizer = false;
-                break;
+    auto intervalsExceedPrecisionLimit = [&]() -> bool {
+        // The remaining analytic colorizers use scale*t+bias, and the scale/bias values can become
+        // quite large when thresholds are close (but still outside the hardstop limit). If float
+        // isn't 32-bit, output can be incorrect if the thresholds are too close together. However,
+        // the analytic shaders are higher quality, so they can be used with lower precision
+        // hardware when the thresholds are not ill-conditioned.
+        if (!caps->floatIs32Bits()) {
+            // Could run into problems. Check if thresholds are close together (with a limit of .01,
+            // so that scales will be less than 100, which leaves 4 decimals of precision on
+            // 16-bit).
+            for (int i = 0; i < count - 1; i++) {
+                SkScalar dt = SkScalarAbs(positions[i] - positions[i + 1]);
+                if (dt <= kLowPrecisionIntervalLimit && dt > SK_ScalarNearlyZero) {
+                    return true;
+                }
             }
         }
-    }
+        return false;
+    };
 
-    if (tryAnalyticColorizer) {
+    auto makeDualIntervalColorizer = [&]() -> std::unique_ptr<GrFragmentProcessor> {
+        // The dual-interval colorizer uses the same principles as the binary-search colorizer, but
+        // is limited to exactly 2 intervals.
         if (count == 3) {
-            // Must be a dual interval gradient, where the middle point is at offset+1 and the two
-            // intervals share the middle color stop.
-            return make_dual_interval_colorizer(colors[offset], colors[offset + 1],
-                                                colors[offset + 1], colors[offset + 2],
-                                                positions[offset + 1]);
-        } else if (count == 4 && SkScalarNearlyEqual(positions[offset + 1],
-                                                     positions[offset + 2])) {
-            // Two separate intervals that join at the same threshold position
-            return make_dual_interval_colorizer(colors[offset], colors[offset + 1],
-                                                colors[offset + 2], colors[offset + 3],
-                                                positions[offset + 1]);
+            // Must be a dual interval gradient, where the middle point is at 1 and the
+            // two intervals share the middle color stop.
+            return make_dual_interval_colorizer(colors[0], colors[1],
+                                                colors[1], colors[2],
+                                                positions[1]);
         }
+        if (count == 4 && SkScalarNearlyEqual(positions[1], positions[2])) {
+            // Two separate intervals that join at the same threshold position
+            return make_dual_interval_colorizer(colors[0], colors[1],
+                                                colors[2], colors[3],
+                                                positions[1]);
+        }
+        // The gradient can't be represented in only two intervals.
+        return nullptr;
+    };
 
-        // The single and dual intervals are a specialized case of the unrolled binary search
-        // colorizer which can analytically render gradients of up to 8 intervals (up to 9 or 16
-        // colors depending on how many hard stops are inserted).
-        std::unique_ptr<GrFragmentProcessor> unrolled =
-                make_unrolled_binary_colorizer(colors + offset, positions + offset, count);
-        if (unrolled) {
-            return unrolled;
+    int binaryColorizerLimit = caps->nonconstantArrayIndexSupport() ? kMaxLoopingColorCount
+                                                                    : kMaxUnrolledColorCount;
+    if ((count <= binaryColorizerLimit) && !intervalsExceedPrecisionLimit()) {
+        // The dual-interval colorizer uses the same principles as the binary-search colorizer, but
+        // is limited to exactly 2 intervals.
+        std::unique_ptr<GrFragmentProcessor> colorizer = makeDualIntervalColorizer();
+        if (colorizer) {
+            return colorizer;
+        }
+        // Attempt to create an analytic colorizer that uses a binary-search loop.
+        colorizer = caps->nonconstantArrayIndexSupport()
+                            ? make_looping_binary_colorizer(colors, positions, count)
+                            : make_unrolled_binary_colorizer(colors, positions, count);
+        if (colorizer) {
+            return colorizer;
         }
     }
 
     // Otherwise fall back to a rasterized gradient sampled by a texture, which can handle
-    // arbitrary gradients (the only downside being sampling resolution).
-    return make_textured_colorizer(colors + offset, positions + offset, count, premul, args);
+    // arbitrary gradients. (This has limited sampling resolution, and always blurs hard-stops.)
+    return make_textured_colorizer(colors, positions, count, premul, args);
 }
 
 // This top-level effect implements clamping on the layout coordinate and requires specifying the
@@ -640,19 +765,7 @@ static std::unique_ptr<GrFragmentProcessor> make_gradient(
             break;
     }
 
-    if (gradient == nullptr) {
-        // Unexpected tile mode
-        return nullptr;
-    }
-    if (args.fInputColorIsOpaque) {
-        // If the input alpha is known to be 1, we don't need to take the kSrcIn path. This is
-        // just an optimization. However, we can't just return 'gradient' here. We need to actually
-        // inhibit the coverage-as-alpha optimization, or we'll fail to incorporate AA correctly.
-        // The OverrideInput FP happens to do that, so wrap our fp in one of those. The gradient FP
-        // doesn't actually use the input color at all, so the overridden input is irrelevant.
-        return GrFragmentProcessor::OverrideInput(std::move(gradient), SK_PMColor4fWHITE, false);
-    }
-    return GrFragmentProcessor::MulChildByInputAlpha(std::move(gradient));
+    return gradient;
 }
 
 namespace GrGradientShader {
@@ -661,7 +774,7 @@ std::unique_ptr<GrFragmentProcessor> MakeLinear(const SkLinearGradient& shader,
                                                 const GrFPArgs& args) {
     // We add a tiny delta to t. When gradient stops are set up so that a hard stop in a vertically
     // or horizontally oriented gradient falls exactly at a column or row of pixel centers we can
-    // we can get slightly different interpolated t values along the column/row. By adding the delta
+    // get slightly different interpolated t values along the column/row. By adding the delta
     // we will consistently get the color to the "right" of the stop. Of course if the hard stop
     // falls at X.5 - delta then we still could get inconsistent results, but that is much less
     // likely. crbug.com/938592

@@ -106,7 +106,7 @@ enum DrawType {
     DRAW_BEHIND_PAINT,
     CONCAT44,
     CLIP_SHADER_IN_PAINT,
-    MARK_CTM,
+    MARK_CTM, // deprecated
     SET_M44,
 
     DRAW_IMAGE2,
@@ -143,6 +143,7 @@ enum SaveLayerRecFlatFlags {
     SAVELAYERREC_HAS_FLAGS      = 1 << 3,
     SAVELAYERREC_HAS_CLIPMASK_OBSOLETE   = 1 << 4,  // 6/13/2020
     SAVELAYERREC_HAS_CLIPMATRIX_OBSOLETE = 1 << 5,  // 6/13/2020
+    SAVELAYERREC_HAS_BACKDROP_SCALE = 1 << 6
 };
 
 enum SaveBehindFlatFlags {

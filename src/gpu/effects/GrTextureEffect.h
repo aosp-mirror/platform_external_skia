@@ -16,7 +16,7 @@
 
 class GrTextureEffect : public GrFragmentProcessor {
 public:
-    static constexpr float kDefaultBorder[4] = {0};
+    inline static constexpr float kDefaultBorder[4] = {0};
 
     /** Make from a filter. The sampler will be configured with clamp mode. */
     static std::unique_ptr<GrFragmentProcessor> Make(
@@ -168,7 +168,7 @@ private:
 
     std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override;
 
-    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
+    void onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override;
 
     bool onIsEqual(const GrFragmentProcessor&) const override;
 

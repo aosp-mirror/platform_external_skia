@@ -323,7 +323,8 @@ GrSurfaceProxyView render_sw_mask(GrRecordingContext* context,
         GrBackendFormat format = caps->getDefaultBackendFormat(GrColorType::kAlpha_8,
                                                                GrRenderable::kNo);
 
-        GrSwizzle swizzle = context->priv().caps()->getReadSwizzle(format, GrColorType::kAlpha_8);
+        skgpu::Swizzle swizzle = context->priv().caps()->getReadSwizzle(format,
+                                                                        GrColorType::kAlpha_8);
         auto proxy = proxyProvider->createProxy(format, bounds.size(), GrRenderable::kNo, 1,
                                                 GrMipMapped::kNo, SkBackingFit::kApprox,
                                                 SkBudgeted::kYes, GrProtected::kNo);
@@ -742,17 +743,17 @@ ClipStack::ClipState ClipStack::RawElement::clipType() const {
 ClipStack::Mask::Mask(const SaveRecord& current, const SkIRect& drawBounds)
         : fBounds(drawBounds)
         , fGenID(current.genID()) {
-    static const GrUniqueKey::Domain kDomain = GrUniqueKey::GenerateDomain();
+    static const UniqueKey::Domain kDomain = UniqueKey::GenerateDomain();
 
     // The gen ID should not be invalid, empty, or wide open, since those do not require masks
     SkASSERT(fGenID != kInvalidGenID && fGenID != kEmptyGenID && fGenID != kWideOpenGenID);
 
-    GrUniqueKey::Builder builder(&fKey, kDomain, 3, "clip_mask");
+    UniqueKey::Builder builder(&fKey, kDomain, 5, "clip_mask");
     builder[0] = fGenID;
-    // SkToS16 because image filters outset layers to a size indicated by the filter, which can
-    // sometimes result in negative coordinates from device space.
-    builder[1] = SkToS16(drawBounds.fLeft) | (SkToS16(drawBounds.fRight) << 16);
-    builder[2] = SkToS16(drawBounds.fTop) | (SkToS16(drawBounds.fBottom) << 16);
+    builder[1] = drawBounds.fLeft;
+    builder[2] = drawBounds.fRight;
+    builder[3] = drawBounds.fTop;
+    builder[4] = drawBounds.fBottom;
     SkASSERT(fKey.isValid());
 
     SkDEBUGCODE(fOwner = &current;)

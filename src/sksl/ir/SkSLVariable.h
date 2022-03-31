@@ -40,9 +40,9 @@ class Variable final : public Symbol {
 public:
     using Storage = VariableStorage;
 
-    static constexpr Kind kSymbolKind = Kind::kVariable;
+    inline static constexpr Kind kSymbolKind = Kind::kVariable;
 
-    Variable(int line, const Modifiers* modifiers, skstd::string_view name, const Type* type,
+    Variable(int line, const Modifiers* modifiers, std::string_view name, const Type* type,
              bool builtin, Storage storage)
     : INHERITED(line, kSymbolKind, name, type)
     , fModifiers(modifiers)
@@ -50,6 +50,14 @@ public:
     , fBuiltin(builtin) {}
 
     ~Variable() override;
+
+    static std::unique_ptr<Variable> Convert(const Context& context, int line,
+            const Modifiers& modifiers, const Type* baseType, std::string_view name, bool isArray,
+            std::unique_ptr<Expression> arraySize, Variable::Storage storage);
+
+    static std::unique_ptr<Variable> Make(const Context& context, int line,
+            const Modifiers& modifiers, const Type* baseType, std::string_view name, bool isArray,
+            std::unique_ptr<Expression> arraySize, Variable::Storage storage);
 
     /**
      * Creates a local scratch variable and the associated VarDeclaration statement.
@@ -60,7 +68,7 @@ public:
         std::unique_ptr<Statement> fVarDecl;
     };
     static ScratchVariable MakeScratchVariable(const Context& context,
-                                               skstd::string_view baseName,
+                                               std::string_view baseName,
                                                const Type* type,
                                                const Modifiers& modifiers,
                                                SymbolTable* symbolTable,
@@ -94,8 +102,9 @@ public:
         const_cast<Variable*>(this)->fDeclaration = nullptr;
     }
 
-    String description() const override {
-        return this->modifiers().description() + this->type().name() + " " + this->name();
+    std::string description() const override {
+        return this->modifiers().description() + this->type().displayName() + " " +
+               std::string(this->name());
     }
 
 private:

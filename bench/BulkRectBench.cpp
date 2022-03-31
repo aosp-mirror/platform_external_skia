@@ -42,11 +42,11 @@ public:
     static_assert(kImageMode == ImageMode::kNone || kDrawMode != DrawMode::kQuad,
                   "kQuad only supported for solid color draws");
 
-    static constexpr int kWidth      = 1024;
-    static constexpr int kHeight     = 1024;
+    inline static constexpr int kWidth      = 1024;
+    inline static constexpr int kHeight     = 1024;
 
     // There will either be 0 images, 1 image, or 1 image per rect
-    static constexpr int kImageCount = kImageMode == ImageMode::kShared ?
+    inline static constexpr int kImageCount = kImageMode == ImageMode::kShared ?
             1 : (kImageMode == ImageMode::kNone ? 0 : kRectCount);
 
     bool isSuitableFor(Backend backend) override {
@@ -148,7 +148,7 @@ protected:
 
         auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
         SkMatrix view = canvas->getLocalToDeviceAs3x3();
-        SkSimpleMatrixProvider matrixProvider(view);
+        SkMatrixProvider matrixProvider(view);
         GrPaint grPaint;
         SkPaintToGrPaint(context, sdc->colorInfo(), paint, matrixProvider, &grPaint);
         sdc->drawQuadSet(nullptr, std::move(grPaint), GrAA::kYes, view, batch, kRectCount);

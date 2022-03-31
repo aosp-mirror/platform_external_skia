@@ -13,8 +13,6 @@
 #include "src/gpu/GrSurfaceProxyView.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
 
-struct GrVertexWriter;
-
 namespace skgpu::v1 {
 
 // This class encapsulates all the necessary steps for an instanced GrGeometryProcessor to clip
@@ -40,7 +38,7 @@ public:
     }
 
     GrSurfaceProxy* proxy() const { return fAtlasProxy.get(); }
-    const GrSwizzle& atlasSwizzle() const { return fAtlasSwizzle; }
+    const skgpu::Swizzle& atlasSwizzle() const { return fAtlasSwizzle; }
 
     // Returns whether the two helpers can be batched together in a single draw.
     bool isCompatible(const AtlasInstancedHelper& helper) {
@@ -51,9 +49,7 @@ public:
     }
 
     // Adds bits to the shader key that uniquely identify this specific helper's shader code.
-    void getKeyBits(GrProcessorKeyBuilder* b) const {
-        b->addBits(kNumShaderFlags, (int)fShaderFlags, "atlasFlags");
-    }
+    void getKeyBits(KeyBuilder* b) const;
 
     // Appends the instanced input attribs to the back of the array that we will need in order to
     // locate our path in the atlas.
@@ -74,7 +70,7 @@ public:
 
     // Writes out the given instance data, formatted for the specific attribs that we added during
     // appendInstanceAttribs().
-    void writeInstanceData(GrVertexWriter* instanceWriter, const Instance*) const;
+    void writeInstanceData(VertexWriter* instanceWriter, const Instance*) const;
 
     // Injects vertex code, fragment code, varyings, and uniforms to ultimately multiply
     // "args.fOutputCoverage" in the fragment shader by the atlas coverage.
@@ -93,7 +89,7 @@ public:
 
 private:
     const sk_sp<GrSurfaceProxy> fAtlasProxy;
-    const GrSwizzle fAtlasSwizzle;
+    const skgpu::Swizzle fAtlasSwizzle;
     const ShaderFlags fShaderFlags;
 };
 

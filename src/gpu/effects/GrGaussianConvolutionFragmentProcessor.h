@@ -49,7 +49,7 @@ public:
     // samples per fragment program run in DX9SM2 (32). A sigma param of 4.0
     // on a blur filter gives a kernel width of 25 while a sigma of 5.0
     // would exceed a 32 wide kernel.
-    static constexpr int kMaxKernelRadius = 12;
+    inline static constexpr int kMaxKernelRadius = 12;
 
 private:
     class Impl;
@@ -70,13 +70,13 @@ private:
 
     std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override;
 
-    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
+    void onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override;
 
     bool onIsEqual(const GrFragmentProcessor&) const override;
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
-    static constexpr int kMaxKernelWidth = kMaxKernelRadius + 1;
+    inline static constexpr int kMaxKernelWidth = kMaxKernelRadius + 1;
 
     // The array size must be a multiple of 4 because we pass it as an array of float4 uniform
     // values.

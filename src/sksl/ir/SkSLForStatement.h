@@ -29,7 +29,7 @@ struct LoopUnrollInfo {
  */
 class ForStatement final : public Statement {
 public:
-    static constexpr Kind kStatementKind = Kind::kFor;
+    inline static constexpr Kind kStatementKind = Kind::kFor;
 
     ForStatement(int line,
                  std::unique_ptr<Statement> initializer,
@@ -112,7 +112,7 @@ public:
 
     std::unique_ptr<Statement> clone() const override;
 
-    String description() const override;
+    std::string description() const override;
 
 private:
     std::shared_ptr<SymbolTable> fSymbolTable;

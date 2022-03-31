@@ -46,7 +46,6 @@
 #include "src/core/SkMask.h"
 #include "src/core/SkScalerContext.h"
 #include "src/core/SkTypefaceCache.h"
-#include "src/core/SkUtils.h"
 #include "src/ports/SkScalerContext_mac_ct.h"
 #include "src/ports/SkTypeface_mac_ct.h"
 #include "src/sfnt/SkOTTableTypes.h"
@@ -776,6 +775,33 @@ std::unique_ptr<SkStreamAsset> SkTypeface_Mac::onOpenStream(int* ttcIndex) const
     return fStream->duplicate();
 }
 
+std::unique_ptr<SkStreamAsset> SkTypeface_Mac::onOpenExistingStream(int* ttcIndex) const {
+    *ttcIndex = 0;
+    return fStream ? fStream->duplicate() : nullptr;
+}
+
+static bool has_table(CTFontRef ctFont, SkFontTableTag tableTag) {
+    SkUniqueCFRef<CFArrayRef> cfArray(
+            CTFontCopyAvailableTables(ctFont, kCTFontTableOptionNoOptions));
+    if (!cfArray) {
+        return 0;
+    }
+    CFIndex count = CFArrayGetCount(cfArray.get());
+    for (CFIndex i = 0; i < count; ++i) {
+        uintptr_t fontTag = reinterpret_cast<uintptr_t>(
+            CFArrayGetValueAtIndex(cfArray.get(), i));
+        if (tableTag == static_cast<SkFontTableTag>(fontTag)) {
+            return true;
+        }
+    }
+    return false;
+}
+bool SkTypeface_Mac::onGlyphMaskNeedsCurrentColor() const {
+    constexpr SkFontTableTag cpalTag = SkSetFourByteTag('C', 'P', 'A', 'L');
+    // CoreText only provides the size of a table with a copy, so do not use this->getTableSize().
+    return has_table(fFontRef.get(), cpalTag);
+}
+
 int SkTypeface_Mac::onGetVariationDesignPosition(
         SkFontArguments::VariationPosition::Coordinate coordinates[], int coordinateCount) const
 {
@@ -861,9 +887,9 @@ int SkTypeface_Mac::onGetTableTags(SkFontTableTag tags[]) const {
     if (!cfArray) {
         return 0;
     }
-    int count = SkToInt(CFArrayGetCount(cfArray.get()));
+    CFIndex count = CFArrayGetCount(cfArray.get());
     if (tags) {
-        for (int i = 0; i < count; ++i) {
+        for (CFIndex i = 0; i < count; ++i) {
             uintptr_t fontTag = reinterpret_cast<uintptr_t>(
                 CFArrayGetValueAtIndex(cfArray.get(), i));
             tags[i] = static_cast<SkFontTableTag>(fontTag);
@@ -1094,7 +1120,7 @@ void SkTypeface_Mac::onCharsToGlyphs(const SkUnichar uni[], int count, SkGlyphID
         int extra = 0;
         for (int i = 0; i < count; ++i) {
             glyphs[i] = macGlyphs[i + extra];
-            if (SkUTF16_IsLeadingSurrogate(src[i + extra])) {
+            if (SkUTF::IsLeadingSurrogateUTF16(src[i + extra])) {
                 ++extra;
             }
         }

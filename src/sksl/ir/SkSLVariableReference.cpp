@@ -7,10 +7,10 @@
 
 #include "src/sksl/ir/SkSLVariableReference.h"
 
-#include "src/sksl/SkSLIRGenerator.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLLiteral.h"
 #include "src/sksl/ir/SkSLSetting.h"
+#include "src/sksl/ir/SkSLVariable.h"
 
 namespace SkSL {
 
@@ -35,8 +35,8 @@ bool VariableReference::isConstantOrUniform() const {
     return (this->variable()->modifiers().fFlags & Modifiers::kUniform_Flag) != 0;
 }
 
-String VariableReference::description() const {
-    return String(this->variable()->name());
+std::string VariableReference::description() const {
+    return std::string(this->variable()->name());
 }
 
 void VariableReference::setRefKind(RefKind refKind) {

@@ -9,80 +9,12 @@
 #include "src/gpu/GrShaderCaps.h"
 
 #include "include/gpu/GrContextOptions.h"
-#include "src/utils/SkJSONWriter.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 
-GrShaderCaps::GrShaderCaps(const GrContextOptions& options) {
-    fGLSLGeneration = k330_GrGLSLGeneration;
-    fShaderDerivativeSupport = false;
-    fDstReadInShaderSupport = false;
-    fDualSourceBlendingSupport = false;
-    fIntegerSupport = false;
-    fNonsquareMatrixSupport = false;
-    fInverseHyperbolicSupport = false;
-    fFBFetchSupport = false;
-    fFBFetchNeedsCustomOutput = false;
-    fUsesPrecisionModifiers = false;
-    fCanUseAnyFunctionInShader = true;
-    fCanUseMinAndAbsTogether = true;
-    fCanUseFractForNegativeValues = true;
-    fMustForceNegatedAtanParamToFloat = false;
-    fMustForceNegatedLdexpParamToMultiply = false;
-    fAtan2ImplementedAsAtanYOverX = false;
-    fMustDoOpBetweenFloorAndAbs = false;
-    fRequiresLocalOutputColorForFBFetch = false;
-    fMustObfuscateUniformColor = false;
-    fMustGuardDivisionEvenAfterExplicitZeroCheck = false;
-    fInBlendModesFailRandomlyForAllZeroVec = false;
-    fCanUseFragCoord = true;
-    fIncompleteShortIntPrecision = false;
-    fAddAndTrueToLoopCondition = false;
-    fUnfoldShortCircuitAsTernary = false;
-    fEmulateAbsIntFunction = false;
-    fRewriteDoWhileLoops = false;
-    fRewriteSwitchStatements = false;
-    fRemovePowWithConstantExponent = false;
-    fMustWriteToFragColor = false;
-    fNoDefaultPrecisionForExternalSamplers = false;
-    fRewriteMatrixVectorMultiply = false;
-    fRewriteMatrixComparisons = false;
-    fFlatInterpolationSupport = false;
-    fPreferFlatInterpolation = false;
-    fNoPerspectiveInterpolationSupport = false;
-    fSampleMaskSupport = false;
-    fExternalTextureSupport = false;
-    fVertexIDSupport = false;
-    fInfinitySupport = false;
-    fBitManipulationSupport = false;
-    fFloatIs32Bits = true;
-    fHalfIs32Bits = false;
-    fHasLowFragmentPrecision = false;
-    fReducedShaderMode = false;
-    fColorSpaceMathNeedsFloat = false;
-    fBuiltinFMASupport = false;
-    fBuiltinDeterminantSupport = false;
-    fCanUseDoLoops = true;
-    fCanUseFastMath = false;
-    fUseNodePools = true;
-    fAvoidDfDxForGradientsWhenPossible = false;
-
-    fVersionDeclString = nullptr;
-    fShaderDerivativeExtensionString = nullptr;
-    fSecondaryOutputExtensionString = nullptr;
-    fExternalTextureExtensionString = nullptr;
-    fSecondExternalTextureExtensionString = nullptr;
-    fNoPerspectiveInterpolationExtensionString = nullptr;
-    fSampleVariablesExtensionString = nullptr;
-    fTessellationExtensionString = nullptr;
-    fFBFetchColorName = nullptr;
-    fFBFetchExtensionString = nullptr;
-    fMaxFragmentSamplers = 0;
-    fMaxTessellationSegments = 0;
-    fAdvBlendEqInteraction = kNotSupported_AdvBlendEqInteraction;
-}
-
 #ifdef SK_ENABLE_DUMP_GPU
+#include "src/utils/SkJSONWriter.h"
+
 void GrShaderCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->beginObject();
 
@@ -116,9 +48,6 @@ void GrShaderCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Must obfuscate uniform color", fMustObfuscateUniformColor);
     writer->appendBool("Must guard division even after explicit zero check",
                        fMustGuardDivisionEvenAfterExplicitZeroCheck);
-    writer->appendBool(
-            "src-in and dst-in blend modes may return (0,0,0,1) when dst/src is all zeros",
-            fInBlendModesFailRandomlyForAllZeroVec);
     writer->appendBool("Can use gl_FragCoord", fCanUseFragCoord);
     writer->appendBool("Incomplete short int precision", fIncompleteShortIntPrecision);
     writer->appendBool("Add and true to loops workaround", fAddAndTrueToLoopCondition);
@@ -139,6 +68,7 @@ void GrShaderCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("External texture support", fExternalTextureSupport);
     writer->appendBool("sk_VertexID support", fVertexIDSupport);
     writer->appendBool("Infinity support", fInfinitySupport);
+    writer->appendBool("Non-constant array index support", fNonconstantArrayIndexSupport);
     writer->appendBool("Bit manipulation support", fBitManipulationSupport);
     writer->appendBool("float == fp32", fFloatIs32Bits);
     writer->appendBool("half == fp32", fHalfIs32Bits);
@@ -146,7 +76,6 @@ void GrShaderCaps::dumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Color space math needs float", fColorSpaceMathNeedsFloat);
     writer->appendBool("Builtin fma() support", fBuiltinFMASupport);
     writer->appendBool("Builtin determinant() support", fBuiltinDeterminantSupport);
-    writer->appendBool("Can use do-while loops", fCanUseDoLoops);
     writer->appendBool("Use node pools", fUseNodePools);
 
     writer->appendS32("Max FS Samplers", fMaxFragmentSamplers);
@@ -172,7 +101,6 @@ void GrShaderCaps::applyOptionsOverrides(const GrContextOptions& options) {
         SkASSERT(!fRequiresLocalOutputColorForFBFetch);
         SkASSERT(!fMustObfuscateUniformColor);
         SkASSERT(!fMustGuardDivisionEvenAfterExplicitZeroCheck);
-        SkASSERT(!fInBlendModesFailRandomlyForAllZeroVec);
         SkASSERT(fCanUseFragCoord);
         SkASSERT(!fIncompleteShortIntPrecision);
         SkASSERT(!fAddAndTrueToLoopCondition);

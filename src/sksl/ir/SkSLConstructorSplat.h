@@ -23,7 +23,7 @@ namespace SkSL {
  */
 class ConstructorSplat final : public SingleArgumentConstructor {
 public:
-    static constexpr Kind kExpressionKind = Kind::kConstructorSplat;
+    inline static constexpr Kind kExpressionKind = Kind::kConstructorSplat;
 
     ConstructorSplat(int line, const Type& type, std::unique_ptr<Expression> arg)
         : INHERITED(line, kExpressionKind, &type, std::move(arg)) {}
@@ -38,13 +38,13 @@ public:
         return std::make_unique<ConstructorSplat>(fLine, this->type(), argument()->clone());
     }
 
-    bool allowsConstantSubexpressions() const override {
+    bool supportsConstantValues() const override {
         return true;
     }
 
-    const Expression* getConstantSubexpression(int n) const override {
+    std::optional<double> getConstantValue(int n) const override {
         SkASSERT(n >= 0 && n < this->type().columns());
-        return this->argument()->getConstantSubexpression(0);
+        return this->argument()->getConstantValue(0);
     }
 
 private:

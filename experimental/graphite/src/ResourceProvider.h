@@ -8,15 +8,27 @@
 #ifndef skgpu_ResourceProvider_DEFINED
 #define skgpu_ResourceProvider_DEFINED
 
-#include "experimental/graphite/src/RenderPipelineDesc.h"
+#include "experimental/graphite/src/CommandBuffer.h"
+#include "experimental/graphite/src/GraphicsPipelineDesc.h"
+#include "experimental/graphite/src/ResourceCache.h"
+#include "experimental/graphite/src/ResourceTypes.h"
 #include "include/core/SkSize.h"
+#include "include/core/SkTileMode.h"
 #include "src/core/SkLRUCache.h"
+#include "src/gpu/ResourceKey.h"
+
+struct SkSamplingOptions;
+class SkShaderCodeDictionary;
 
 namespace skgpu {
 
-class CommandBuffer;
+class BackendTexture;
+class Buffer;
+class Caps;
+class GlobalCache;
 class Gpu;
-class RenderPipeline;
+class GraphicsPipeline;
+class Sampler;
 class Texture;
 class TextureInfo;
 
@@ -24,47 +36,65 @@ class ResourceProvider {
 public:
     virtual ~ResourceProvider();
 
-    virtual std::unique_ptr<CommandBuffer> createCommandBuffer() { return nullptr; }
-    RenderPipeline* findOrCreateRenderPipeline(const RenderPipelineDesc&);
+    virtual sk_sp<CommandBuffer> createCommandBuffer() = 0;
+
+    sk_sp<GraphicsPipeline> findOrCreateGraphicsPipeline(const GraphicsPipelineDesc&,
+                                                         const RenderPassDesc&);
 
     sk_sp<Texture> findOrCreateTexture(SkISize, const TextureInfo&);
+    virtual sk_sp<Texture> createWrappedTexture(const BackendTexture&) = 0;
+
+    sk_sp<Buffer> findOrCreateBuffer(size_t size, BufferType type, PrioritizeGpuReads);
+
+    sk_sp<Sampler> findOrCreateCompatibleSampler(const SkSamplingOptions&,
+                                                 SkTileMode xTileMode,
+                                                 SkTileMode yTileMode);
+
+    SkShaderCodeDictionary* shaderCodeDictionary() const;
 
 protected:
-    ResourceProvider(const Gpu* gpu);
-
-    virtual RenderPipeline* onCreateRenderPipeline(const RenderPipelineDesc&) {
-        return nullptr;
-    }
+    ResourceProvider(const Gpu* gpu, sk_sp<GlobalCache>, SingleOwner* singleOwner);
 
     const Gpu* fGpu;
 
 private:
+    virtual sk_sp<GraphicsPipeline> onCreateGraphicsPipeline(const GraphicsPipelineDesc&,
+                                                             const RenderPassDesc&) = 0;
     virtual sk_sp<Texture> createTexture(SkISize, const TextureInfo&) = 0;
+    virtual sk_sp<Buffer> createBuffer(size_t size, BufferType type, PrioritizeGpuReads) = 0;
 
-    class RenderPipelineCache {
+    virtual sk_sp<Sampler> createSampler(const SkSamplingOptions&,
+                                         SkTileMode xTileMode,
+                                         SkTileMode yTileMode) = 0;
+
+    class GraphicsPipelineCache {
     public:
-        RenderPipelineCache(ResourceProvider* resourceProvider);
-        ~RenderPipelineCache();
+        GraphicsPipelineCache(ResourceProvider* resourceProvider);
+        ~GraphicsPipelineCache();
 
         void release();
-        RenderPipeline* refPipeline(const RenderPipelineDesc&);
+        sk_sp<GraphicsPipeline> refPipeline(const Caps* caps,
+                                            const GraphicsPipelineDesc&,
+                                            const RenderPassDesc&);
 
     private:
         struct Entry;
-
-        struct DescHash {
-            uint32_t operator()(const RenderPipelineDesc& desc) const {
-                return SkOpts::hash_fn(desc.asKey(), desc.keyLength(), 0);
+        struct KeyHash {
+            uint32_t operator()(const UniqueKey& key) const {
+                return key.hash();
             }
         };
-
-        SkLRUCache<const RenderPipelineDesc, std::unique_ptr<Entry>, DescHash> fMap;
+        SkLRUCache<UniqueKey, std::unique_ptr<Entry>, KeyHash> fMap;
 
         ResourceProvider* fResourceProvider;
     };
 
-    // Cache of RenderPipelines
-    std::unique_ptr<RenderPipelineCache> fRenderPipelineCache;
+    ResourceCache fResourceCache;
+    sk_sp<GlobalCache> fGlobalCache;
+
+    // Cache of GraphicsPipelines
+    // TODO: Move this onto GlobalCache
+    std::unique_ptr<GraphicsPipelineCache> fGraphicsPipelineCache;
 };
 
 } // namespace skgpu

@@ -12,7 +12,7 @@
 
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkMipmap.h"
-#include "src/core/SkUtils.h"
+#include "src/core/SkOpts.h"
 #include "tools/flags/CommandLineFlags.h"
 
 #include "tools/fiddle/fiddle_main.h"
@@ -139,7 +139,8 @@ static bool setup_backend_objects(GrDirectContext* dContext,
         }
 
         SkAutoPixmapStorage rgbaPixmap;
-        if (kN32_SkColorType != kRGBA_8888_SkColorType) {
+        constexpr bool kRGBAIsNative = kN32_SkColorType == kRGBA_8888_SkColorType;
+        if ((!kRGBAIsNative)) {
             if (!rgbaPixmap.tryAlloc(bm.info().makeColorType(kRGBA_8888_SkColorType))) {
                 fputs("Unable to alloc rgbaPixmap.\n", stderr);
                 return false;

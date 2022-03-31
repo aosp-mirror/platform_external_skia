@@ -26,7 +26,7 @@ namespace SkSL {
  */
 class StructDefinition final : public ProgramElement {
 public:
-    static constexpr Kind kProgramElementKind = Kind::kStructDefinition;
+    inline static constexpr Kind kProgramElementKind = Kind::kStructDefinition;
 
     StructDefinition(int line, const Type& type)
     : INHERITED(line, kProgramElementKind)
@@ -40,8 +40,8 @@ public:
         return std::make_unique<StructDefinition>(fLine, this->type());
     }
 
-    String description() const override {
-        String s = "struct ";
+    std::string description() const override {
+        std::string s = "struct ";
         s += this->type().name();
         s += " { ";
         for (const auto& f : this->type().fields()) {

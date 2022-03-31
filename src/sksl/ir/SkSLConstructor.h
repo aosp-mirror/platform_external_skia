@@ -9,7 +9,6 @@
 #define SKSL_CONSTRUCTOR
 
 #include "include/core/SkSpan.h"
-#include "src/sksl/SkSLIRGenerator.h"
 #include "src/sksl/ir/SkSLExpression.h"
 
 namespace SkSL {
@@ -34,8 +33,8 @@ public:
         return false;
     }
 
-    String description() const override {
-        String result = this->type().description() + "(";
+    std::string description() const override {
+        std::string result = this->type().description() + "(";
         const char* separator = "";
         for (const std::unique_ptr<Expression>& arg : this->argumentSpan()) {
             result += separator;
@@ -68,14 +67,12 @@ public:
         return true;
     }
 
-    bool allowsConstantSubexpressions() const override { return true; }
-    const Expression* getConstantSubexpression(int n) const override;
+    bool supportsConstantValues() const override { return true; }
+    std::optional<double> getConstantValue(int n) const override;
 
     ComparisonResult compareConstant(const Expression& other) const override;
 
 private:
-    std::unique_ptr<Expression> fArgument;
-
     using INHERITED = Expression;
 };
 
@@ -126,15 +123,6 @@ public:
 
     const ExpressionArray& arguments() const {
         return fArguments;
-    }
-
-    ExpressionArray cloneArguments() const {
-        ExpressionArray clonedArgs;
-        clonedArgs.reserve_back(this->arguments().size());
-        for (const std::unique_ptr<Expression>& arg: this->arguments()) {
-            clonedArgs.push_back(arg->clone());
-        }
-        return clonedArgs;
     }
 
     SkSpan<std::unique_ptr<Expression>> argumentSpan() final {

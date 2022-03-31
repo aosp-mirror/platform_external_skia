@@ -81,7 +81,11 @@
 
 #ifdef SK_GRAPHITE_ENABLED
 #include "experimental/graphite/include/Context.h"
+#include "experimental/graphite/include/Recorder.h"
+#include "experimental/graphite/include/Recording.h"
 #include "experimental/graphite/include/SkStuff.h"
+// TODO: Remove this src include once we figure out public readPixels call for Graphite.
+#include "experimental/graphite/src/Surface_Graphite.h"
 #include "tools/graphite/ContextFactory.h"
 #include "tools/graphite/GraphiteTestContext.h"
 #endif
@@ -994,7 +998,9 @@ Result ImageGenSrc::draw(GrDirectContext*, SkCanvas* canvas) const {
             status = Result::Status::Skip;
         }
 #endif
-        return Result(status, "Image generator could not getPixels() for %s\n", fPath.c_str());
+        return Result(
+                status,
+                SkStringPrintf("Image generator could not getPixels() for %s\n", fPath.c_str()));
     }
 
     set_bitmap_color_space(&decodeInfo);
@@ -1460,7 +1466,7 @@ static Result compare_bitmaps(const SkBitmap& reference, const SkBitmap& bitmap)
             errString.append("\nActual image failed to encode: ");
             errString.append(encoded);
         }
-        return Result::Fatal(errString);
+        return Result(Result::Status::Fatal, errString);
     }
     return Result::Ok();
 }
@@ -2117,41 +2123,89 @@ Result RasterSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString*) co
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-GraphiteSink::GraphiteSink() {}
-
 #ifdef SK_GRAPHITE_ENABLED
+
+namespace {
+
+// For the sprint Graphite only handles:
+//    solid colors with src or srcOver
+//    repeated or clamped linear gradients with src or srcOver
+void precompile(skgpu::Context* context) {
+    using ShaderType = skgpu::ShaderCombo::ShaderType;
+
+    skgpu::PaintCombo c1 { { skgpu::ShaderCombo({ ShaderType::kSolidColor },
+                                                { SkTileMode::kRepeat }) },
+                           { SkBlendMode::kSrcOver, SkBlendMode::kSrc } };
+    context->preCompile(c1);
+
+    skgpu::PaintCombo c2 { { skgpu::ShaderCombo({ ShaderType::kLinearGradient },
+                                                { SkTileMode::kRepeat, SkTileMode::kClamp }) },
+                           { SkBlendMode::kSrcOver, SkBlendMode::kSrc } };
+    context->preCompile(c2);
+}
+
+} // anonymous namespace
+
+GraphiteSink::GraphiteSink(const SkCommandLineConfigGraphite* config)
+        : fContextType(config->getContextType())
+        , fColorType(config->getColorType())
+        , fAlphaType(config->getAlphaType())
+        , fTestPrecompile(config->getTestPrecompile()) {
+}
 
 Result GraphiteSink::draw(const Src& src,
                           SkBitmap* dst,
                           SkWStream* dstStream,
                           SkString* log) const {
-    using ContextType = sk_graphite_test::ContextFactory::ContextType;
+    SkImageInfo ii = SkImageInfo::Make(src.size(), fColorType, fAlphaType);
 
-    SkImageInfo ii = SkImageInfo::Make(src.size(), kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-
-    sk_graphite_test::ContextFactory factory;
-    auto [_, context] = factory.getContextInfo(ContextType::kMetal);
-
-    sk_sp<SkSurface> surface = MakeGraphite(std::move(context), ii);
-    if (!surface) {
-        return Result::Fatal("Could not create a surface.");
+    skiatest::graphite::ContextFactory factory;
+    auto [_, context] = factory.getContextInfo(fContextType);
+    if (!context) {
+        return Result::Fatal("Could not create a context.");
     }
-    Result result = src.draw(/* dContext */ nullptr, surface->getCanvas());
-    if (!result.isOk()) {
-        return result;
-    }
-    surface->flushAndSubmit();
 
-    dst->allocPixels(surface->imageInfo());
-    if (!surface->readPixels(*dst, 0, 0)) {
-        return Result::Fatal("Could not readback from surface.");
+    if (fTestPrecompile) {
+        precompile(context);
     }
+
+    std::unique_ptr<skgpu::Recorder> recorder = context->makeRecorder();
+    if (!recorder) {
+        return Result::Fatal("Could not create a recorder.");
+    }
+
+    dst->allocPixels(ii);
+
+    {
+        sk_sp<SkSurface> surface = MakeGraphite(recorder.get(), ii);
+        if (!surface) {
+            return Result::Fatal("Could not create a surface.");
+        }
+        Result result = src.draw(/* dContext */ nullptr, surface->getCanvas());
+        if (!result.isOk()) {
+            return result;
+        }
+
+        // For now we cast and call directly into Surface. Once we have a been idea of
+        // what the public API for synchronous graphite readPixels we can update this call to use
+        // that instead.
+        SkPixmap pm;
+        if (!dst->peekPixels(&pm) ||
+            !static_cast<skgpu::Surface*>(surface.get())->onReadPixels(context,
+                                                                       recorder.get(),
+                                                                       pm,
+                                                                       0,
+                                                                       0)) {
+            return Result::Fatal("Could not readback from surface.");
+        }
+    }
+
+    std::unique_ptr<skgpu::Recording> recording = recorder->snap();
+
+    context->insertRecording(std::move(recording));
+    context->submit(skgpu::SyncToCpu::kYes);
 
     return Result::Ok();
-}
-#else
-Result GraphiteSink::draw(const Src& src, SkBitmap*, SkWStream* dst, SkString*) const {
-    return Result::Fatal("Graphite not enabled.");
 }
 #endif
 
@@ -2323,7 +2377,7 @@ Result ViaRuntimeBlend::draw(const Src& src,
 
     protected:
         bool onFilter(SkPaint& paint) const override {
-            if (skstd::optional<SkBlendMode> mode = paint.asBlendMode()) {
+            if (std::optional<SkBlendMode> mode = paint.asBlendMode()) {
                 paint.setBlender(GetRuntimeBlendForBlendMode(*mode));
             }
             return true;

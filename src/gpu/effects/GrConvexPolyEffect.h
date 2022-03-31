@@ -23,7 +23,7 @@ class SkPath;
  */
 class GrConvexPolyEffect : public GrFragmentProcessor {
 public:
-    static constexpr int kMaxEdges = 8;
+    inline static constexpr int kMaxEdges = 8;
 
     /**
      * edges is a set of n edge equations where n is limited to kMaxEdges. It contains 3*n values.
@@ -67,7 +67,7 @@ private:
 
     std::unique_ptr<ProgramImpl> onMakeProgramImpl() const override;
 
-    void onAddToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
+    void onAddToKey(const GrShaderCaps&, skgpu::KeyBuilder*) const override;
 
     bool onIsEqual(const GrFragmentProcessor& other) const override;
 

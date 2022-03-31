@@ -11,6 +11,7 @@
 #include "src/sksl/ir/SkSLBlock.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLForStatement.h"
+#include "src/sksl/ir/SkSLNop.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
 #include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
@@ -57,8 +58,8 @@ std::unique_ptr<Statement> ForStatement::clone() const {
             SymbolTable::WrapIfBuiltin(this->symbols()));
 }
 
-String ForStatement::description() const {
-    String result("for (");
+std::string ForStatement::description() const {
+    std::string result("for (");
     if (this->initializer()) {
         result += this->initializer()->description();
     } else {
@@ -98,23 +99,25 @@ std::unique_ptr<Statement> ForStatement::Convert(const Context& context, int lin
         }
     }
 
-    if (next) {
-        // The type of the next-expression doesn't matter, but it needs to be a complete expression.
-        // Report an error on intermediate expressions like FunctionReference or TypeReference.
-        const Type& nextType = next->type();
-        next = nextType.coerceExpression(std::move(next), context);
-        if (!next) {
-            return nullptr;
-        }
+    // The type of the next-expression doesn't matter, but it needs to be a complete expression.
+    // Report an error on intermediate expressions like FunctionReference or TypeReference.
+    if (next && next->isIncomplete(context)) {
+        return nullptr;
     }
 
     std::unique_ptr<LoopUnrollInfo> unrollInfo;
     if (context.fConfig->strictES2Mode()) {
+        // In strict-ES2, loops must be unrollable or it's an error.
         unrollInfo = Analysis::GetLoopUnrollInfo(line, initializer.get(), test.get(),
                                                  next.get(), statement.get(), context.fErrors);
         if (!unrollInfo) {
             return nullptr;
         }
+    } else {
+        // In ES3, loops don't have to be unrollable, but we can use the unroll information for
+        // optimization purposes.
+        unrollInfo = Analysis::GetLoopUnrollInfo(line, initializer.get(), test.get(),
+                                                 next.get(), statement.get(), /*errors=*/nullptr);
     }
 
     if (Analysis::DetectVarDeclarationWithoutScope(*statement, context.fErrors)) {
@@ -132,8 +135,8 @@ std::unique_ptr<Statement> ForStatement::Convert(const Context& context, int lin
         scope.push_back(std::move(initializer));
         scope.push_back(ForStatement::Make(context, line, /*initializer=*/nullptr,
                                            std::move(test), std::move(next), std::move(statement),
-                                           std::move(unrollInfo), std::move(symbolTable)));
-        return Block::Make(line, std::move(scope));
+                                           std::move(unrollInfo), /*symbolTable=*/nullptr));
+        return Block::Make(line, std::move(scope), std::move(symbolTable));
     }
 
     return ForStatement::Make(context, line, std::move(initializer), std::move(test),
@@ -162,14 +165,18 @@ std::unique_ptr<Statement> ForStatement::Make(const Context& context, int line,
                                               std::shared_ptr<SymbolTable> symbolTable) {
     SkASSERT(is_simple_initializer(initializer.get()) ||
              is_vardecl_block_initializer(initializer.get()));
-    SkASSERT(!test || test->type() == *context.fTypes.fBool);
+    SkASSERT(!test || test->type().matches(*context.fTypes.fBool));
     SkASSERT(!Analysis::DetectVarDeclarationWithoutScope(*statement));
+    SkASSERT(unrollInfo || !context.fConfig->strictES2Mode());
 
-    // If the caller didn't provide us with unroll info, we can compute it here if needed.
-    if (!unrollInfo && context.fConfig->strictES2Mode()) {
-        unrollInfo = Analysis::GetLoopUnrollInfo(line, initializer.get(), test.get(),
-                                                 next.get(), statement.get(), /*errors=*/nullptr);
-        SkASSERT(unrollInfo);
+    // Unrollable loops are easy to optimize because we know initializer, test and next don't have
+    // interesting side effects.
+    if (unrollInfo) {
+        // A zero-iteration unrollable loop can be replaced with Nop.
+        // An unrollable loop with an empty body can be replaced with Nop.
+        if (unrollInfo->fCount <= 0 || statement->isEmpty()) {
+            return Nop::Make();
+        }
     }
 
     return std::make_unique<ForStatement>(line, std::move(initializer), std::move(test),

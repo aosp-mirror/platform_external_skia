@@ -19,7 +19,7 @@ namespace SkSL {
  */
 class ChildCall final : public Expression {
 public:
-    static constexpr Kind kExpressionKind = Kind::kChildCall;
+    inline static constexpr Kind kExpressionKind = Kind::kChildCall;
 
     ChildCall(int line, const Type* type, const Variable* child, ExpressionArray arguments)
             : INHERITED(line, kExpressionKind, type)
@@ -49,7 +49,7 @@ public:
 
     std::unique_ptr<Expression> clone() const override;
 
-    String description() const override;
+    std::string description() const override;
 
 private:
     const Variable& fChild;

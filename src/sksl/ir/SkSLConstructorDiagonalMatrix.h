@@ -12,6 +12,7 @@
 #include "src/sksl/SkSLContext.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLLiteral.h"
 
 #include <memory>
 
@@ -24,11 +25,10 @@ namespace SkSL {
  */
 class ConstructorDiagonalMatrix final : public SingleArgumentConstructor {
 public:
-    static constexpr Kind kExpressionKind = Kind::kConstructorDiagonalMatrix;
+    inline static constexpr Kind kExpressionKind = Kind::kConstructorDiagonalMatrix;
 
     ConstructorDiagonalMatrix(int line, const Type& type, std::unique_ptr<Expression> arg)
-        : INHERITED(line, kExpressionKind, &type, std::move(arg))
-        , fZeroLiteral(line, /*value=*/0.0, &type.componentType()) {}
+        : INHERITED(line, kExpressionKind, &type, std::move(arg)) {}
 
     static std::unique_ptr<Expression> Make(const Context& context,
                                             int line,
@@ -40,11 +40,10 @@ public:
                                                            argument()->clone());
     }
 
-    bool allowsConstantSubexpressions() const override { return true; }
-    const Expression* getConstantSubexpression(int n) const override;
+    bool supportsConstantValues() const override { return true; }
+    std::optional<double> getConstantValue(int n) const override;
 
 private:
-    const Literal fZeroLiteral;
     using INHERITED = SingleArgumentConstructor;
 };
 

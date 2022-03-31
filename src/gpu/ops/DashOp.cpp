@@ -10,6 +10,7 @@
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkPointPriv.h"
+#include "src/gpu/BufferWriter.h"
 #include "src/gpu/GrAppliedClip.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrDefaultGeoProcFactory.h"
@@ -20,7 +21,7 @@
 #include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrStyle.h"
-#include "src/gpu/GrVertexWriter.h"
+#include "src/gpu/KeyBuilder.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/geometry/GrQuad.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -36,6 +37,8 @@ using AAMode = skgpu::v1::DashOp::AAMode;
 #if GR_TEST_UTILS
 static const int kAAModeCnt = static_cast<int>(skgpu::v1::DashOp::AAMode::kCoverageWithMSAA) + 1;
 #endif
+
+namespace skgpu::v1::DashOp {
 
 namespace {
 
@@ -116,7 +119,7 @@ enum DashCap {
 };
 
 void setup_dashed_rect(const SkRect& rect,
-                       GrVertexWriter& vertices,
+                       VertexWriter& vertices,
                        const SkMatrix& matrix,
                        SkScalar offset,
                        SkScalar bloatX,
@@ -139,7 +142,7 @@ void setup_dashed_rect(const SkRect& rect,
         SkScalar centerX = SkScalarHalf(endInterval);
 
         vertices.writeQuad(GrQuad::MakeFromRect(rect, matrix),
-                           GrVertexWriter::TriStripFromRect(dashRect),
+                           VertexWriter::TriStripFromRect(dashRect),
                            intervalLength,
                            radius,
                            centerX);
@@ -152,7 +155,7 @@ void setup_dashed_rect(const SkRect& rect,
                           halfOffLen + startInterval - 0.5f,  halfStroke - 0.5f);
 
         vertices.writeQuad(GrQuad::MakeFromRect(rect, matrix),
-                           GrVertexWriter::TriStripFromRect(dashRect),
+                           VertexWriter::TriStripFromRect(dashRect),
                            intervalLength,
                            rectParam);
     }
@@ -561,8 +564,8 @@ private:
         }
 
         QuadHelper helper(target, fProgramInfo->geomProc().vertexStride(), totalRectCount);
-        GrVertexWriter vertices{ helper.vertices() };
-        if (!vertices.fPtr) {
+        VertexWriter vertices{ helper.vertices() };
+        if (!vertices) {
             return;
         }
 
@@ -716,7 +719,7 @@ public:
 
     const char* name() const override { return "DashingCircleEffect"; }
 
-    void addToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
+    void addToKey(const GrShaderCaps&, KeyBuilder*) const override;
 
     std::unique_ptr<ProgramImpl> makeProgramImpl(const GrShaderCaps&) const override;
 
@@ -772,12 +775,12 @@ void DashingCircleEffect::Impl::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     varyingHandler->emitAttributes(dce);
 
     // XY are dashPos, Z is dashInterval
-    GrGLSLVarying dashParams(kHalf3_GrSLType);
+    GrGLSLVarying dashParams(SkSLType::kHalf3);
     varyingHandler->addVarying("DashParam", &dashParams);
     vertBuilder->codeAppendf("%s = %s;", dashParams.vsOut(), dce.fInDashParams.name());
 
     // x refers to circle radius - 0.5, y refers to cicle's center x coord
-    GrGLSLVarying circleParams(kHalf2_GrSLType);
+    GrGLSLVarying circleParams(SkSLType::kHalf2);
     varyingHandler->addVarying("CircleParams", &circleParams);
     vertBuilder->codeAppendf("%s = %s;", circleParams.vsOut(), dce.fInCircleParams.name());
 
@@ -840,7 +843,7 @@ GrGeometryProcessor* DashingCircleEffect::Make(SkArenaAlloc* arena,
     });
 }
 
-void DashingCircleEffect::addToKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const {
+void DashingCircleEffect::addToKey(const GrShaderCaps& caps, KeyBuilder* b) const {
     uint32_t key = 0;
     key |= fUsesLocalCoords ? 0x1 : 0x0;
     key |= static_cast<uint32_t>(fAAMode) << 1;
@@ -862,10 +865,10 @@ DashingCircleEffect::DashingCircleEffect(const SkPMColor4f& color,
         , fLocalMatrix(localMatrix)
         , fUsesLocalCoords(usesLocalCoords)
         , fAAMode(aaMode) {
-    fInPosition = {"inPosition", kFloat2_GrVertexAttribType, kFloat2_GrSLType};
-    fInDashParams = {"inDashParams", kFloat3_GrVertexAttribType, kHalf3_GrSLType};
-    fInCircleParams = {"inCircleParams", kFloat2_GrVertexAttribType, kHalf2_GrSLType};
-    this->setVertexAttributes(&fInPosition, 3);
+    fInPosition = {"inPosition", kFloat2_GrVertexAttribType, SkSLType::kFloat2};
+    fInDashParams = {"inDashParams", kFloat3_GrVertexAttribType, SkSLType::kHalf3};
+    fInCircleParams = {"inCircleParams", kFloat2_GrVertexAttribType, SkSLType::kHalf2};
+    this->setVertexAttributesWithImplicitOffsets(&fInPosition, 3);
 }
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(DashingCircleEffect);
@@ -908,7 +911,7 @@ public:
 
     bool usesLocalCoords() const { return fUsesLocalCoords; }
 
-    void addToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
+    void addToKey(const GrShaderCaps&, KeyBuilder*) const override;
 
     std::unique_ptr<ProgramImpl> makeProgramImpl(const GrShaderCaps&) const override;
 
@@ -961,13 +964,13 @@ void DashingLineEffect::Impl::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     varyingHandler->emitAttributes(de);
 
     // XY refers to dashPos, Z is the dash interval length
-    GrGLSLVarying inDashParams(kFloat3_GrSLType);
+    GrGLSLVarying inDashParams(SkSLType::kFloat3);
     varyingHandler->addVarying("DashParams", &inDashParams);
     vertBuilder->codeAppendf("%s = %s;", inDashParams.vsOut(), de.fInDashParams.name());
 
     // The rect uniform's xyzw refer to (left + 0.5, top + 0.5, right - 0.5, bottom - 0.5),
     // respectively.
-    GrGLSLVarying inRectParams(kFloat4_GrSLType);
+    GrGLSLVarying inRectParams(SkSLType::kFloat4);
     varyingHandler->addVarying("RectParams", &inRectParams);
     vertBuilder->codeAppendf("%s = %s;", inRectParams.vsOut(), de.fInRect.name());
 
@@ -1054,7 +1057,7 @@ GrGeometryProcessor* DashingLineEffect::Make(SkArenaAlloc* arena,
     });
 }
 
-void DashingLineEffect::addToKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const {
+void DashingLineEffect::addToKey(const GrShaderCaps& caps, KeyBuilder* b) const {
     uint32_t key = 0;
     key |= fUsesLocalCoords ? 0x1 : 0x0;
     key |= static_cast<int>(fAAMode) << 1;
@@ -1076,10 +1079,10 @@ DashingLineEffect::DashingLineEffect(const SkPMColor4f& color,
         , fLocalMatrix(localMatrix)
         , fUsesLocalCoords(usesLocalCoords)
         , fAAMode(aaMode) {
-    fInPosition = {"inPosition", kFloat2_GrVertexAttribType, kFloat2_GrSLType};
-    fInDashParams = {"inDashParams", kFloat3_GrVertexAttribType, kHalf3_GrSLType};
-    fInRect = {"inRect", kFloat4_GrVertexAttribType, kHalf4_GrSLType};
-    this->setVertexAttributes(&fInPosition, 3);
+    fInPosition = {"inPosition", kFloat2_GrVertexAttribType, SkSLType::kFloat2};
+    fInDashParams = {"inDashParams", kFloat3_GrVertexAttribType, SkSLType::kHalf3};
+    fInRect = {"inRect", kFloat4_GrVertexAttribType, SkSLType::kHalf4};
+    this->setVertexAttributesWithImplicitOffsets(&fInPosition, 3);
 }
 
 GR_DEFINE_GEOMETRY_PROCESSOR_TEST(DashingLineEffect);
@@ -1123,90 +1126,6 @@ GrGeometryProcessor* make_dash_gp(SkArenaAlloc* arena,
 } // anonymous namespace
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
-
-#if GR_TEST_UTILS
-
-#include "src/gpu/GrDrawOpTest.h"
-
-GR_DRAW_OP_TEST_DEFINE(DashOpImpl) {
-    SkMatrix viewMatrix = GrTest::TestMatrixPreservesRightAngles(random);
-    AAMode aaMode;
-    do {
-        aaMode = static_cast<AAMode>(random->nextULessThan(kAAModeCnt));
-    } while (AAMode::kCoverageWithMSAA == aaMode && numSamples <= 1);
-
-    // We can only dash either horizontal or vertical lines
-    SkPoint pts[2];
-    if (random->nextBool()) {
-        // vertical
-        pts[0].fX = 1.f;
-        pts[0].fY = random->nextF() * 10.f;
-        pts[1].fX = 1.f;
-        pts[1].fY = random->nextF() * 10.f;
-    } else {
-        // horizontal
-        pts[0].fX = random->nextF() * 10.f;
-        pts[0].fY = 1.f;
-        pts[1].fX = random->nextF() * 10.f;
-        pts[1].fY = 1.f;
-    }
-
-    // pick random cap
-    SkPaint::Cap cap = SkPaint::Cap(random->nextULessThan(SkPaint::kCapCount));
-
-    SkScalar intervals[2];
-
-    // We can only dash with the following intervals
-    enum Intervals {
-        kOpenOpen_Intervals ,
-        kOpenClose_Intervals,
-        kCloseOpen_Intervals,
-    };
-
-    Intervals intervalType = SkPaint::kRound_Cap == cap ?
-                             kOpenClose_Intervals :
-                             Intervals(random->nextULessThan(kCloseOpen_Intervals + 1));
-    static const SkScalar kIntervalMin = 0.1f;
-    static const SkScalar kIntervalMinCircles = 1.f; // Must be >= to stroke width
-    static const SkScalar kIntervalMax = 10.f;
-    switch (intervalType) {
-        case kOpenOpen_Intervals:
-            intervals[0] = random->nextRangeScalar(kIntervalMin, kIntervalMax);
-            intervals[1] = random->nextRangeScalar(kIntervalMin, kIntervalMax);
-            break;
-        case kOpenClose_Intervals: {
-            intervals[0] = 0.f;
-            SkScalar min = SkPaint::kRound_Cap == cap ? kIntervalMinCircles : kIntervalMin;
-            intervals[1] = random->nextRangeScalar(min, kIntervalMax);
-            break;
-        }
-        case kCloseOpen_Intervals:
-            intervals[0] = random->nextRangeScalar(kIntervalMin, kIntervalMax);
-            intervals[1] = 0.f;
-            break;
-
-    }
-
-    // phase is 0 < sum (i0, i1)
-    SkScalar phase = random->nextRangeScalar(0, intervals[0] + intervals[1]);
-
-    SkPaint p;
-    p.setStyle(SkPaint::kStroke_Style);
-    p.setStrokeWidth(SkIntToScalar(1));
-    p.setStrokeCap(cap);
-    p.setPathEffect(GrTest::TestDashPathEffect::Make(intervals, 2, phase));
-
-    GrStyle style(p);
-
-    return skgpu::v1::DashOp::MakeDashLineOp(context, std::move(paint), viewMatrix, pts, aaMode,
-                                             style, GrGetRandomStencil(random, context));
-}
-
-#endif // GR_TEST_UTILS
-
-///////////////////////////////////////////////////////////////////////////////
-
-namespace skgpu::v1::DashOp {
 
 GrOp::Owner MakeDashLineOp(GrRecordingContext* context,
                            GrPaint&& paint,
@@ -1306,3 +1225,83 @@ bool CanDrawDashLine(const SkPoint pts[2], const GrStyle& style, const SkMatrix&
 }
 
 } // namespace skgpu::v1::DashOp
+
+#if GR_TEST_UTILS
+
+#include "src/gpu/GrDrawOpTest.h"
+
+GR_DRAW_OP_TEST_DEFINE(DashOpImpl) {
+    SkMatrix viewMatrix = GrTest::TestMatrixPreservesRightAngles(random);
+    AAMode aaMode;
+    do {
+        aaMode = static_cast<AAMode>(random->nextULessThan(kAAModeCnt));
+    } while (AAMode::kCoverageWithMSAA == aaMode && numSamples <= 1);
+
+    // We can only dash either horizontal or vertical lines
+    SkPoint pts[2];
+    if (random->nextBool()) {
+        // vertical
+        pts[0].fX = 1.f;
+        pts[0].fY = random->nextF() * 10.f;
+        pts[1].fX = 1.f;
+        pts[1].fY = random->nextF() * 10.f;
+    } else {
+        // horizontal
+        pts[0].fX = random->nextF() * 10.f;
+        pts[0].fY = 1.f;
+        pts[1].fX = random->nextF() * 10.f;
+        pts[1].fY = 1.f;
+    }
+
+    // pick random cap
+    SkPaint::Cap cap = SkPaint::Cap(random->nextULessThan(SkPaint::kCapCount));
+
+    SkScalar intervals[2];
+
+    // We can only dash with the following intervals
+    enum Intervals {
+        kOpenOpen_Intervals ,
+        kOpenClose_Intervals,
+        kCloseOpen_Intervals,
+    };
+
+    Intervals intervalType = SkPaint::kRound_Cap == cap ?
+                             kOpenClose_Intervals :
+                             Intervals(random->nextULessThan(kCloseOpen_Intervals + 1));
+    static const SkScalar kIntervalMin = 0.1f;
+    static const SkScalar kIntervalMinCircles = 1.f; // Must be >= to stroke width
+    static const SkScalar kIntervalMax = 10.f;
+    switch (intervalType) {
+        case kOpenOpen_Intervals:
+            intervals[0] = random->nextRangeScalar(kIntervalMin, kIntervalMax);
+            intervals[1] = random->nextRangeScalar(kIntervalMin, kIntervalMax);
+            break;
+        case kOpenClose_Intervals: {
+            intervals[0] = 0.f;
+            SkScalar min = SkPaint::kRound_Cap == cap ? kIntervalMinCircles : kIntervalMin;
+            intervals[1] = random->nextRangeScalar(min, kIntervalMax);
+            break;
+        }
+        case kCloseOpen_Intervals:
+            intervals[0] = random->nextRangeScalar(kIntervalMin, kIntervalMax);
+            intervals[1] = 0.f;
+            break;
+
+    }
+
+    // phase is 0 < sum (i0, i1)
+    SkScalar phase = random->nextRangeScalar(0, intervals[0] + intervals[1]);
+
+    SkPaint p;
+    p.setStyle(SkPaint::kStroke_Style);
+    p.setStrokeWidth(SkIntToScalar(1));
+    p.setStrokeCap(cap);
+    p.setPathEffect(GrTest::TestDashPathEffect::Make(intervals, 2, phase));
+
+    GrStyle style(p);
+
+    return skgpu::v1::DashOp::MakeDashLineOp(context, std::move(paint), viewMatrix, pts, aaMode,
+                                             style, GrGetRandomStencil(random, context));
+}
+
+#endif // GR_TEST_UTILS
