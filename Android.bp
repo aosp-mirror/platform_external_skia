@@ -822,6 +822,7 @@ cc_library_static {
         "src/sksl/codegen/SkSLSPIRVCodeGenerator.cpp",
         "src/sksl/codegen/SkSLSPIRVtoHLSL.cpp",
         "src/sksl/codegen/SkSLVMCodeGenerator.cpp",
+        "src/sksl/codegen/SkSLWGSLCodeGenerator.cpp",
         "src/sksl/dsl/DSLBlock.cpp",
         "src/sksl/dsl/DSLCase.cpp",
         "src/sksl/dsl/DSLCore.cpp",
@@ -1748,6 +1749,7 @@ cc_library_static {
           "src/sksl/codegen/SkSLPipelineStageCodeGenerator.cpp",
           "src/sksl/codegen/SkSLSPIRVCodeGenerator.cpp",
           "src/sksl/codegen/SkSLSPIRVtoHLSL.cpp",
+          "src/sksl/codegen/SkSLWGSLCodeGenerator.cpp",
           "tools/SkSharingProc.cpp",
         ],
         local_include_dirs: [
@@ -4355,6 +4357,7 @@ cc_library_shared {
         "src/sksl/codegen/SkSLSPIRVCodeGenerator.cpp",
         "src/sksl/codegen/SkSLSPIRVtoHLSL.cpp",
         "src/sksl/codegen/SkSLVMCodeGenerator.cpp",
+        "src/sksl/codegen/SkSLWGSLCodeGenerator.cpp",
         "src/sksl/dsl/DSLBlock.cpp",
         "src/sksl/dsl/DSLCase.cpp",
         "src/sksl/dsl/DSLCore.cpp",
