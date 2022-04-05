@@ -146,6 +146,16 @@ public:
     DSLExpression prefix(Operator::Kind op, Position pos);
 
     /**
+     * Invokes a postfix operator.
+     */
+    DSLExpression postfix(Operator::Kind op, Position pos);
+
+    /**
+     * Invokes a binary operator.
+     */
+    DSLExpression binary(Operator::Kind op, DSLExpression right, Position pos);
+
+    /**
      * Equivalent to operator[].
      */
     DSLExpression index(DSLExpression index, Position pos);
