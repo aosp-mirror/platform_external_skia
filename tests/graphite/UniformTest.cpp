@@ -25,49 +25,43 @@
 
 namespace {
 
-std::tuple<SkPaint, int, int> create_paint(skgpu::ShaderCombo::ShaderType shaderType,
-                                           SkTileMode tm,
-                                           SkBlendMode bm) {
+std::tuple<SkPaint, int> create_paint(skgpu::ShaderCombo::ShaderType shaderType,
+                                      SkTileMode tm,
+                                      SkBlendMode bm) {
     SkPoint pts[2] = {{-100, -100},
                       {100,  100}};
     SkColor colors[2] = {SK_ColorRED, SK_ColorGREEN};
     SkScalar offsets[2] = {0.0f, 1.0f};
 
     sk_sp<SkShader> s;
-    int numUniforms = 0;
     int numTextures = 0;
     switch (shaderType) {
         case skgpu::ShaderCombo::ShaderType::kNone:
             SkDEBUGFAIL("kNone cannot be represented as an SkPaint");
             break;
         case skgpu::ShaderCombo::ShaderType::kSolidColor:
-            numUniforms += 1;
             break;
         case skgpu::ShaderCombo::ShaderType::kLinearGradient:
             s = SkGradientShader::MakeLinear(pts, colors, offsets, 2, tm);
-            numUniforms += 7;
             break;
         case skgpu::ShaderCombo::ShaderType::kRadialGradient:
             s = SkGradientShader::MakeRadial({0, 0}, 100, colors, offsets, 2, tm);
-            numUniforms += 7;
             break;
         case skgpu::ShaderCombo::ShaderType::kSweepGradient:
             s = SkGradientShader::MakeSweep(0, 0, colors, offsets, 2, tm,
                                             0, 359, 0, nullptr);
-            numUniforms += 7;
             break;
         case skgpu::ShaderCombo::ShaderType::kConicalGradient:
             s = SkGradientShader::MakeTwoPointConical({100, 100}, 100,
                                                       {-100, -100}, 100,
                                                       colors, offsets, 2, tm);
-            numUniforms += 7;
             break;
     }
     SkPaint p;
     p.setColor(SK_ColorRED);
     p.setShader(std::move(s));
     p.setBlendMode(bm);
-    return { p, numUniforms, numTextures };
+    return { p, numTextures };
 }
 
 } // anonymous namespace
@@ -78,11 +72,10 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(UniformTest, reporter, context) {
     auto recorder = context->makeRecorder();
     SkKeyContext keyContext(recorder.get());
     auto dict = keyContext.dict();
-    auto uCache = recorder->priv().uniformDataCache();
     auto tCache = recorder->priv().textureDataCache();
 
     SkPaintParamsKeyBuilder builder(dict, SkBackend::kGraphite);
-    SkPipelineDataGatherer gatherer;
+    SkPipelineDataGatherer gatherer(Layout::kMetal);
 
     // Intentionally does not include ShaderType::kNone, which represents no fragment shading stage
     // and is thus not relevant to uniform extraction/caching.
@@ -100,7 +93,7 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(UniformTest, reporter, context) {
             }
 
             for (auto bm : { SkBlendMode::kSrc, SkBlendMode::kSrcOver }) {
-                auto [ p, expectedNumUniforms, expectedNumTextures ] = create_paint(s, tm, bm);
+                auto [ p, expectedNumTextures ] = create_paint(s, tm, bm);
 
                 auto [ uniqueID1, uIndex, tIndex] = ExtractPaintData(recorder.get(), &gatherer,
                                                                      &builder, PaintParams(p));
@@ -108,18 +101,6 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(UniformTest, reporter, context) {
                 SkUniquePaintParamsID uniqueID2 = CreateKey(keyContext, &builder, s, tm, bm);
                 // ExtractPaintData and CreateKey agree
                 REPORTER_ASSERT(reporter, uniqueID1 == uniqueID2);
-
-                {
-                    SkUniformDataBlock* uniforms = uCache->lookup(uIndex);
-                    int actualNumUniforms = uniforms->numUniforms();
-
-                    // CreateKey doesn't create any uniform data so we can't compare that.
-                    // The fact that the SkUniquePaintParamsID's matched means CreateKey and
-                    //   ExtractPaintData created the same PaintParamsKey so we know their
-                    //   structure matches.
-                    // All we can really check wrt the uniform data is that we got the expected #
-                    REPORTER_ASSERT(reporter, expectedNumUniforms == actualNumUniforms);
-                }
 
                 // TODO: This isn't particularly useful until we add image shaders to the
                 // pre-compilation set.

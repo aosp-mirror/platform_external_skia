@@ -17,6 +17,7 @@
 
 #ifdef SK_GRAPHITE_ENABLED
 #include "experimental/graphite/src/TextureProxy.h"
+#include "experimental/graphite/src/UniformManager.h"
 #include "src/gpu/Blend.h"
 #endif
 
@@ -24,13 +25,12 @@ class SkUniformDataBlock {
 public:
     SkUniformDataBlock() = default;
     SkUniformDataBlock(sk_sp<SkUniformData> initial) {
-        SkASSERT(initial && initial->count());
+        SkASSERT(initial && initial->dataSize());
         fUniformData.push_back(std::move(initial));
     }
 
     bool empty() const { return fUniformData.empty(); }
     size_t totalUniformSize() const;  // TODO: cache this?
-    int numUniforms() const;          // TODO: cache this?
 
     bool operator==(const SkUniformDataBlock&) const;
     bool operator!=(const SkUniformDataBlock& other) const { return !(*this == other);  }
@@ -124,13 +124,17 @@ public:
     };
 #endif
 
-    SkPipelineDataGatherer() = default;
+#ifdef SK_GRAPHITE_ENABLED
+    SkPipelineDataGatherer(skgpu::Layout layout) : fLayout(layout) {}
+#endif
 
     void reset();
     // Check that the gatherer has been reset to its initial state prior to collecting new data.
     SkDEBUGCODE(void checkReset();)
 
 #ifdef SK_GRAPHITE_ENABLED
+    skgpu::Layout layout() const { return fLayout; }
+
     void setBlendInfo(const SkPipelineDataGatherer::BlendInfo& blendInfo) {
         fBlendInfo = blendInfo;
     }
@@ -157,6 +161,7 @@ private:
 #ifdef SK_GRAPHITE_ENABLED
     SkTextureDataBlock fTextureDataBlock;
     BlendInfo        fBlendInfo;
+    skgpu::Layout    fLayout;
 #endif
 };
 
