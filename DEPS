@@ -6,7 +6,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling different
   # dependencies without interference from each other.
-  'sk_tool_revision': 'git_revision:5d48b27e1dea36fbc47f1a3771eb498b8f8b70ea',
+  'sk_tool_revision': 'git_revision:c3f14155edc9da3f9918d4ac97c5f35e762ea88e',
 }
 
 deps = {
@@ -31,7 +31,7 @@ deps = {
   "third_party/externals/icu"             : "https://chromium.googlesource.com/chromium/deps/icu.git@a0718d4f121727e30b8d52c7a189ebf5ab52421f",
   "third_party/externals/imgui"           : "https://skia.googlesource.com/external/github.com/ocornut/imgui.git@55d35d8387c15bf0cfd71861df67af8cfbda7456",
   "third_party/externals/libgifcodec"     : "https://skia.googlesource.com/libgifcodec@fd59fa92a0c86788dcdd84d091e1ce81eda06a77",
-  "third_party/externals/libjpeg-turbo"   : "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo.git@02959c3ee17abacfd1339ec22ea93301292ffd56",
+  "third_party/externals/libjpeg-turbo"   : "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo.git@22f1a22c99e9dde8cd3c72ead333f425c5a7aa77",
   "third_party/externals/libjxl"          : "https://chromium.googlesource.com/external/gitlab.com/wg1/jpeg-xl.git@a205468bc5d3a353fb15dae2398a101dff52f2d3",
   "third_party/externals/libpng"          : "https://skia.googlesource.com/third_party/libpng.git@386707c6d19b974ca2e3db7f5c61873813c6fe44",
   "third_party/externals/libwebp"         : "https://chromium.googlesource.com/webm/libwebp.git@69c7f16111ec582bf1e7cb4d0d4f8d127e28a715",
@@ -44,6 +44,7 @@ deps = {
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@814e728b30ddd0f4509233099a3ad96fd4318c07",
   "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@4b092d2ab81854e61632bdd1e658907f0071c37e",
   "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@d3cc7d7ac0c364be2ef445347c1cc1f22722f099",
+  "third_party/externals/vulkan-headers"  : "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Headers@76f00ef6cbb1886eb1162d1fa39bee8b51e22ee8",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
   "third_party/externals/wuffs"           : "https://skia.googlesource.com/external/github.com/google/wuffs-mirror-release-c.git@600cd96cf47788ee3a74b40a6028b035c9fd6a61",
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@c876c8f87101c5a75f6014b0f832499afeb65b73",
