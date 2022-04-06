@@ -176,7 +176,7 @@ cc_library_static {
           "android",
         ],
       },
-      linux_glibc: {
+      host_linux: {
         cflags: [
           "-mssse3",
         ],
