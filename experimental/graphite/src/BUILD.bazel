@@ -758,7 +758,11 @@ generated_cc_atom(
     hdrs = ["UniformManager.h"],
     visibility = ["//:__subpackages__"],
     deps = [
+        "//experimental/graphite/src/geom:VectorTypes_hdr",
+        "//include/core:SkRefCnt_hdr",
         "//include/core:SkSpan_hdr",
+        "//include/private:SkColorData_hdr",
+        "//include/private:SkTDArray_hdr",
         "//src/core:SkSLTypeShared_hdr",
     ],
 )
@@ -773,6 +777,7 @@ generated_cc_atom(
         "//include/core:SkMatrix_hdr",
         "//include/private:SkHalf_hdr",
         "//include/private:SkTemplates_hdr",
+        "//src/core:SkPipelineData_hdr",
         "//src/core:SkUniform_hdr",
     ],
 )
@@ -1039,6 +1044,7 @@ generated_cc_atom(
     hdrs = ["ClipStack_graphite.h"],
     visibility = ["//:__subpackages__"],
     deps = [
+        ":DrawOrder_hdr",
         "//experimental/graphite/src/geom:Shape_hdr",
         "//experimental/graphite/src/geom:Transform_graphite_hdr",
         "//include/core:SkClipOp_hdr",
@@ -1052,8 +1058,11 @@ generated_cc_atom(
     visibility = ["//:__subpackages__"],
     deps = [
         ":ClipStack_graphite_hdr",
+        ":DrawGeometry_hdr",
+        "//experimental/graphite/src/geom:BoundsManager_hdr",
         "//include/core:SkMatrix_hdr",
         "//include/core:SkShader_hdr",
+        "//include/core:SkStrokeRec_hdr",
         "//src/core:SkMatrixProvider_hdr",
         "//src/core:SkPathPriv_hdr",
         "//src/core:SkRRectPriv_hdr",

@@ -32,7 +32,6 @@
 #include "src/core/SkKeyContext.h"
 #include "src/core/SkKeyHelpers.h"
 #include "src/core/SkShaderCodeDictionary.h"
-#include "src/core/SkUniformData.h"
 
 #if GRAPHITE_TEST_UTILS
 // set to 1 if you want to do GPU capture of the commandBuffer
@@ -76,14 +75,21 @@ public:
 
     void writeUniforms(const DrawGeometry& geom, SkPipelineDataGatherer* gatherer) const override {
         SkASSERT(geom.shape().isRect());
+
+#ifdef SK_DEBUG
+        static constexpr int kNumRectUniforms = 2;
+        static constexpr SkUniform kRectUniforms[kNumRectUniforms] = {
+                { "scale",      SkSLType::kFloat2 },
+                { "translate",  SkSLType::kFloat2 },
+        };
+#endif
+
         // TODO: A << API for uniforms would be nice, particularly if it could take pre-computed
         // offsets for each uniform.
-        sk_sp<SkUniformData> uniforms = SkUniformData::Make(sizeof(float) * 4);
-        float2 scale = geom.shape().rect().size();
-        float2 translate = geom.shape().rect().topLeft();
-        memcpy(uniforms->data(), &scale, sizeof(float2));
-        memcpy(uniforms->data() + sizeof(float2), &translate, sizeof(float2));
-        gatherer->add(std::move(uniforms));
+        SkDEBUGCODE(gatherer->setExpectedUniforms(SkMakeSpan(kRectUniforms, kNumRectUniforms));)
+        gatherer->write(geom.shape().rect().size());
+        gatherer->write(geom.shape().rect().topLeft());
+        SkDEBUGCODE(gatherer->doneWithExpectedUniforms();)
     }
 
 private:
@@ -134,10 +140,18 @@ public:
     }
 
     void writeUniforms(const DrawGeometry&, SkPipelineDataGatherer* gatherer) const override {
-        sk_sp<SkUniformData> uniforms = SkUniformData::Make(sizeof(float) * 4);
-        float data[4] = {2.f, 2.f, -1.f, -1.f};
-        memcpy(uniforms->data(), data, 4 * sizeof(float));
-        gatherer->add(std::move(uniforms));
+#ifdef SK_DEBUG
+        static constexpr int kNumRectUniforms = 2;
+        static constexpr SkUniform kRectUniforms[kNumRectUniforms] = {
+                { "scale",      SkSLType::kFloat2 },
+                { "translate",  SkSLType::kFloat2 },
+        };
+#endif
+
+        SkDEBUGCODE(gatherer->setExpectedUniforms(SkMakeSpan(kRectUniforms, kNumRectUniforms));)
+        gatherer->write(SkPoint::Make(2.0f, 2.0f));
+        gatherer->write(SkPoint::Make(-1.0f, -1.0f));
+        SkDEBUGCODE(gatherer->doneWithExpectedUniforms();)
     }
 
 private:
@@ -221,7 +235,7 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
 
     SkISize textureSize = { kTextureWidth, kTextureHeight };
 #ifdef SK_METAL
-    skgpu::mtl::TextureInfo mtlTextureInfo = {
+    skgpu::graphite::MtlTextureInfo mtlTextureInfo = {
         1,
         1,
         70,     // MTLPixelFormatRGBA8Unorm
@@ -315,12 +329,9 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
             SkDEBUGCODE(gatherer.checkReset());
             step->writeUniforms(geom, &gatherer);
             if (gatherer.hasUniforms()) {
-                SkUniformDataBlock* renderStepUniforms = &gatherer.uniformDataBlock();
-                auto [writer, bindInfo] =
-                        bufferMgr.getUniformWriter(renderStepUniforms->totalUniformSize());
-                for (const auto &u : *renderStepUniforms) {
-                    writer.write(u->data(), u->dataSize());
-                }
+                SkUniformDataBlock renderStepUniforms = gatherer.peekUniformData();
+                auto [writer, bindInfo] = bufferMgr.getUniformWriter(renderStepUniforms.size());
+                writer.write(renderStepUniforms.data(), renderStepUniforms.size());
                 commandBuffer->bindUniformBuffer(UniformSlot::kRenderStep,
                                                  sk_ref_sp(bindInfo.fBuffer),
                                                  bindInfo.fOffset);

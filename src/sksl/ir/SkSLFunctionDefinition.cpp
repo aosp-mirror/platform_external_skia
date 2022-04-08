@@ -180,9 +180,9 @@ std::unique_ptr<FunctionDefinition> FunctionDefinition::Convert(const Context& c
                                     std::move(returnStmt.expression()), fContext));
                         } else {
                             // Returning something from a function with a void return type.
-                            returnStmt.setExpression(nullptr);
-                            fContext.fErrors->error(returnStmt.fPosition,
+                            fContext.fErrors->error(returnStmt.expression()->fPosition,
                                                     "may not return a value from a void function");
+                            returnStmt.setExpression(nullptr);
                         }
                     } else {
                         if (this->functionReturnsValue()) {
@@ -259,7 +259,7 @@ std::unique_ptr<FunctionDefinition> FunctionDefinition::Convert(const Context& c
     }
 
     if (Analysis::CanExitWithoutReturningValue(function, *body)) {
-        context.fErrors->error(function.fPosition, "function '" + std::string(function.name()) +
+        context.fErrors->error(body->fPosition, "function '" + std::string(function.name()) +
                 "' can exit without returning a value");
     }
 

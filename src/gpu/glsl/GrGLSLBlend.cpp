@@ -77,7 +77,7 @@ std::string BlendExpression(const GrProcessor* processor,
             const char* blendName;
             *blendUniform = uniformHandler->addUniform(processor, kFragment_GrShaderFlag,
                                                        SkSLType::kHalf2, "blend", &blendName);
-            return SkSL::String::printf("blend_hslc(%s, %s, %s.x, bool(%s.y))",
+            return SkSL::String::printf("blend_hslc(%s, %s, bool(%s.x), bool(%s.y))",
                                         srcColor, dstColor, blendName, blendName);
         }
         case SkBlendMode::kOverlay:
@@ -85,7 +85,8 @@ std::string BlendExpression(const GrProcessor* processor,
             const char* blendName;
             *blendUniform = uniformHandler->addUniform(processor, kFragment_GrShaderFlag,
                                                        SkSLType::kHalf, "blend", &blendName);
-            return SkSL::String::printf("blend_overlay(%s, %s, %s)", srcColor, dstColor, blendName);
+            return SkSL::String::printf("blend_overlay(%s, %s, bool(%s))",
+                                        srcColor, dstColor, blendName);
         }
         case SkBlendMode::kDarken:
         case SkBlendMode::kLighten: {

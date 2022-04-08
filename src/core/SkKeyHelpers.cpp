@@ -76,22 +76,10 @@ static const int kBlockDataSize = 0;
 void add_solid_uniform_data(const SkShaderCodeDictionary* dict,
                             const SkPMColor4f& premulColor,
                             SkPipelineDataGatherer* gatherer) {
-    static constexpr size_t kExpectedNumUniforms = 1;
-
-    SkSpan<const SkUniform> uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kSolidColorShader);
-    SkASSERT(uniforms.size() == kExpectedNumUniforms);
-
-    skgpu::UniformManager mgr(gatherer->layout());
-
-    size_t dataSize = mgr.writeUniforms(uniforms, nullptr, nullptr);
-
-    sk_sp<SkUniformData> result = SkUniformData::Make(dataSize);
-
-    const void* srcs[kExpectedNumUniforms] = { &premulColor };
-
-    mgr.writeUniforms(uniforms, srcs, result->data());
-
-    gatherer->add(std::move(result));
+    SkDEBUGCODE(auto uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kSolidColorShader);)
+    SkDEBUGCODE(gatherer->setExpectedUniforms(uniforms);)
+    gatherer->write(premulColor);
+    SkDEBUGCODE(gatherer->doneWithExpectedUniforms();)
 }
 #endif // SK_GRAPHITE_ENABLED
 
@@ -135,106 +123,65 @@ namespace {
 
 #ifdef SK_GRAPHITE_ENABLED
 static const int kBlockDataSize = 1;
-static const int kExpectedNumGradientUniforms = 7;
-
-void add_gradient_uniform_data_common(SkSpan<const SkUniform> uniforms,
-                                      const void* srcs[kExpectedNumGradientUniforms],
-                                      SkPipelineDataGatherer* gatherer) {
-    skgpu::UniformManager mgr(gatherer->layout());
-
-    // TODO: Given that, for the sprint, we always know the uniforms we could cache 'dataSize'
-    // for each layout and skip the first call.
-    size_t dataSize = mgr.writeUniforms(uniforms, nullptr, nullptr);
-
-    sk_sp<SkUniformData> result = SkUniformData::Make(dataSize);
-
-    mgr.writeUniforms(uniforms, srcs, result->data());
-
-    gatherer->add(std::move(result));
-}
 
 void add_linear_gradient_uniform_data(const SkShaderCodeDictionary* dict,
                                       const GradientData& gradData,
                                       SkPipelineDataGatherer* gatherer) {
-
-    auto uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kLinearGradientShader);
-    SkASSERT(uniforms.size() == kExpectedNumGradientUniforms);
-
-    SkPoint padding{0, 0};
-    const void* srcs[kExpectedNumGradientUniforms] = {
-        gradData.fColor4fs,
-        gradData.fOffsets,
-        &gradData.fPoints[0],
-        &gradData.fPoints[1],
-        &gradData.fRadii[0], // unused
-        &gradData.fRadii[1], // unused
-        &padding
-    };
-
-    add_gradient_uniform_data_common(uniforms, srcs, gatherer);
+    SkDEBUGCODE(auto uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kLinearGradientShader);)
+    SkDEBUGCODE(gatherer->setExpectedUniforms(uniforms);)
+    gatherer->write(gradData.fColor4fs, GradientData::kMaxStops);
+    gatherer->write(gradData.fOffsets, GradientData::kMaxStops);
+    gatherer->write(gradData.fPoints[0]);
+    gatherer->write(gradData.fPoints[1]);
+    gatherer->write(gradData.fRadii[0]);        // unused
+    gatherer->write(gradData.fRadii[1]);        // unused
+    gatherer->write(SkPoint::Make(0.0f, 0.0f)); // padding
+    SkDEBUGCODE(gatherer->doneWithExpectedUniforms();)
 };
 
 void add_radial_gradient_uniform_data(const SkShaderCodeDictionary* dict,
                                       const GradientData& gradData,
                                       SkPipelineDataGatherer* gatherer) {
-
-    auto uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kRadialGradientShader);
-    SkASSERT(uniforms.size() == kExpectedNumGradientUniforms);
-
-    SkPoint padding{0, 0};
-    const void* srcs[kExpectedNumGradientUniforms] = {
-        gradData.fColor4fs,
-        gradData.fOffsets,
-        &gradData.fPoints[0],
-        &gradData.fPoints[1], // unused
-        &gradData.fRadii[0],
-        &gradData.fRadii[1],  // unused
-        &padding
-    };
-
-    add_gradient_uniform_data_common(uniforms, srcs, gatherer);
+    SkDEBUGCODE(auto uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kRadialGradientShader);)
+    SkDEBUGCODE(gatherer->setExpectedUniforms(uniforms);)
+    gatherer->write(gradData.fColor4fs, GradientData::kMaxStops);
+    gatherer->write(gradData.fOffsets, GradientData::kMaxStops);
+    gatherer->write(gradData.fPoints[0]);
+    gatherer->write(gradData.fPoints[1]);       // unused
+    gatherer->write(gradData.fRadii[0]);
+    gatherer->write(gradData.fRadii[1]);        // unused
+    gatherer->write(SkPoint::Make(0.0f, 0.0f)); // padding
+    SkDEBUGCODE(gatherer->doneWithExpectedUniforms();)
 };
 
 void add_sweep_gradient_uniform_data(const SkShaderCodeDictionary* dict,
                                      const GradientData& gradData,
                                      SkPipelineDataGatherer* gatherer) {
-
-    auto uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kSweepGradientShader);
-    SkASSERT(uniforms.size() == kExpectedNumGradientUniforms);
-
-    SkPoint padding{0, 0};
-    const void* srcs[kExpectedNumGradientUniforms] = {
-        gradData.fColor4fs,
-        gradData.fOffsets,
-        &gradData.fPoints[0],
-        &gradData.fPoints[1], // unused
-        &gradData.fRadii[0],  // unused
-        &gradData.fRadii[1],  // unused
-        &padding
-    };
-
-    add_gradient_uniform_data_common(uniforms, srcs, gatherer);
+    SkDEBUGCODE(auto uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kSweepGradientShader);)
+    SkDEBUGCODE(gatherer->setExpectedUniforms(uniforms);)
+    gatherer->write(gradData.fColor4fs, GradientData::kMaxStops);
+    gatherer->write(gradData.fOffsets, GradientData::kMaxStops);
+    gatherer->write(gradData.fPoints[0]);
+    gatherer->write(gradData.fPoints[1]);       // unused
+    gatherer->write(gradData.fRadii[0]);        // unused
+    gatherer->write(gradData.fRadii[1]);        // unused
+    gatherer->write(SkPoint::Make(0.0f, 0.0f)); // padding
+    SkDEBUGCODE(gatherer->doneWithExpectedUniforms();)
 };
 
 void add_conical_gradient_uniform_data(const SkShaderCodeDictionary* dict,
                                        const GradientData& gradData,
                                        SkPipelineDataGatherer* gatherer) {
-
-    auto uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kConicalGradientShader);
-    SkASSERT(uniforms.size() == kExpectedNumGradientUniforms);
-
-    SkPoint padding{0, 0};
-    const void* srcs[kExpectedNumGradientUniforms] = {
-        gradData.fColor4fs,
-        gradData.fOffsets,
-        &gradData.fPoints[0],
-        &gradData.fPoints[1],
-        &gradData.fRadii[0],
-        &gradData.fRadii[1],
-        &padding,
-    };
-
-    add_gradient_uniform_data_common(uniforms, srcs, gatherer);
+    SkDEBUGCODE(auto uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kConicalGradientShader);)
+    SkDEBUGCODE(gatherer->setExpectedUniforms(uniforms);)
+    gatherer->write(gradData.fColor4fs, GradientData::kMaxStops);
+    gatherer->write(gradData.fOffsets, GradientData::kMaxStops);
+    gatherer->write(gradData.fPoints[0]);
+    gatherer->write(gradData.fPoints[1]);
+    gatherer->write(gradData.fRadii[0]);
+    gatherer->write(gradData.fRadii[1]);
+    gatherer->write(SkPoint::Make(0.0f, 0.0f)); // padding
+    SkDEBUGCODE(gatherer->doneWithExpectedUniforms();)
 };
 
 #endif // SK_GRAPHITE_ENABLED
@@ -357,23 +304,10 @@ namespace {
 void add_image_uniform_data(const SkShaderCodeDictionary* dict,
                             const ImageData& imgData,
                             SkPipelineDataGatherer* gatherer) {
-    static constexpr size_t kExpectedNumUniforms = 1;
-
-    SkSpan<const SkUniform> uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kImageShader);
-    SkASSERT(uniforms.size() == kExpectedNumUniforms);
-
-    skgpu::UniformManager mgr(gatherer->layout());
-
-    size_t dataSize = mgr.writeUniforms(uniforms, nullptr, nullptr);
-
-    sk_sp<SkUniformData> result = SkUniformData::Make(dataSize);
-
-    // TODO: add the required data to ImageData and assemble the uniforms here
-    const void* srcs[kExpectedNumUniforms] = { &imgData.fSubset };
-
-    mgr.writeUniforms(uniforms, srcs, result->data());
-
-    gatherer->add(std::move(result));
+    SkDEBUGCODE(auto uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kImageShader);)
+    SkDEBUGCODE(gatherer->setExpectedUniforms(uniforms);)
+    gatherer->write(imgData.fSubset);
+    SkDEBUGCODE(gatherer->doneWithExpectedUniforms();)
 }
 
 #endif // SK_GRAPHITE_ENABLED
@@ -447,23 +381,13 @@ namespace {
 void add_blendshader_uniform_data(SkShaderCodeDictionary* dict,
                                   SkBlendMode bm,
                                   SkPipelineDataGatherer* gatherer) {
-    static constexpr size_t kExpectedNumUniforms = 4; // actual blend uniform + 3 padding int
-
-    SkSpan<const SkUniform> uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kBlendShader);
-    SkASSERT(uniforms.size() == kExpectedNumUniforms);
-
-    skgpu::UniformManager mgr(gatherer->layout());
-
-    size_t dataSize = mgr.writeUniforms(uniforms, nullptr, nullptr);
-
-    sk_sp<SkUniformData> result = SkUniformData::Make(dataSize);
-
-    int tmp = SkTo<int>(bm);
-    const void* srcs[kExpectedNumUniforms] = { &tmp, &tmp, &tmp, &tmp };
-
-    mgr.writeUniforms(uniforms, srcs, result->data());
-
-    gatherer->add(std::move(result));
+    SkDEBUGCODE(auto uniforms = dict->getUniforms(SkBuiltInCodeSnippetID::kBlendShader);)
+    SkDEBUGCODE(gatherer->setExpectedUniforms(uniforms);)
+    gatherer->write(SkTo<int>(bm));
+    gatherer->write(0); // padding - remove
+    gatherer->write(0); // padding - remove
+    gatherer->write(0); // padding - remove
+    SkDEBUGCODE(gatherer->doneWithExpectedUniforms();)
 }
 
 #endif // SK_GRAPHITE_ENABLED
