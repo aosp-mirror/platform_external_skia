@@ -10,7 +10,7 @@
 #include "include/core/SkColor.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkPaint.h"
-#include "include/core/SkPathBuilder.h"
+#include "include/core/SkPath.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
@@ -125,35 +125,30 @@ static constexpr SkPoint kPts[kPtsCount] = {
     {120, 40},
 };
 
-static SkPath make_path_move() {
-    SkPathBuilder builder;
+static void make_path_move(SkPath* path) {
     for (SkPoint p : kPts) {
-        builder.moveTo(p);
+        path->moveTo(p);
     }
-    return builder.detach();
 }
 
-static SkPath make_path_move_close() {
-    SkPathBuilder builder;
+static void make_path_move_close(SkPath* path) {
     for (SkPoint p : kPts) {
-        builder.moveTo(p).close();
+        path->moveTo(p);
+        path->close();
     }
-    return builder.detach();
 }
 
-static SkPath make_path_move_line() {
-    SkPathBuilder builder;
+static void make_path_move_line(SkPath* path) {
     for (SkPoint p : kPts) {
-        builder.moveTo(p).lineTo(p);
+        path->moveTo(p);
+        path->lineTo(p);
     }
-    return builder.detach();
 }
 
-static SkPath make_path_move_mix() {
-    return SkPathBuilder().moveTo(kPts[0])
-                          .moveTo(kPts[1]).close()
-                          .moveTo(kPts[2]).lineTo(kPts[2])
-                          .detach();
+static void make_path_move_mix(SkPath* path) {
+    path->moveTo(kPts[0]);
+    path->moveTo(kPts[1]); path->close();
+    path->moveTo(kPts[2]); path->lineTo(kPts[2]);
 }
 
 class EmptyStrokeGM : public GM {
@@ -162,7 +157,7 @@ class EmptyStrokeGM : public GM {
     SkISize onISize() override { return {200, 240}; }
 
     void onDraw(SkCanvas* canvas) override {
-        static constexpr SkPath (*kProcs[])() = {
+        static constexpr void (*kProcs[])(SkPath*) = {
             make_path_move,             // expect red red red
             make_path_move_close,       // expect black black black
             make_path_move_line,        // expect black black black
@@ -180,12 +175,14 @@ class EmptyStrokeGM : public GM {
         dotPaint.setStrokeWidth(7);
 
         for (auto proc : kProcs) {
+            SkPath path;
+            proc(&path);
             canvas->drawPoints(SkCanvas::kPoints_PointMode, kPtsCount, kPts, dotPaint);
-            canvas->drawPath(proc(), strokePaint);
+            canvas->drawPath(path, strokePaint);
             canvas->translate(0, 40);
         }
     }
 };
 DEF_GM( return new EmptyStrokeGM; )
 
-}  // namespace skiagm
+}

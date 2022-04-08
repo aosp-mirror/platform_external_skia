@@ -12,8 +12,6 @@
 #include "src/core/SkColorSpaceXformSteps.h"
 #include "src/core/SkCoreBlitters.h"
 #include "src/core/SkDraw.h"
-#include "src/core/SkMatrixProvider.h"
-#include "src/core/SkRasterClip.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkScan.h"
 #include "src/shaders/SkShaderBase.h"
@@ -47,9 +45,8 @@ static void load_color(SkRasterPipeline_UniformColorCtx* ctx, const float rgba[]
 }
 
 void SkDraw::drawAtlas(const SkImage* atlas, const SkRSXform xform[], const SkRect textures[],
-                       const SkColor colors[], int count, SkBlendMode bmode,
-                       const SkSamplingOptions& sampling, const SkPaint& paint) {
-    sk_sp<SkShader> atlasShader = atlas->makeShader(sampling);
+                       const SkColor colors[], int count, SkBlendMode bmode, const SkPaint& paint) {
+    sk_sp<SkShader> atlasShader = atlas->makeShader();
     if (!atlasShader) {
         return;
     }
@@ -63,7 +60,7 @@ void SkDraw::drawAtlas(const SkImage* atlas, const SkRSXform xform[], const SkRe
     SkSTArenaAlloc<256> alloc;
     SkRasterPipeline pipeline(&alloc);
     SkStageRec rec = {
-        &pipeline, &alloc, fDst.colorType(), fDst.colorSpace(), p, nullptr, *fMatrixProvider
+        &pipeline, &alloc, fDst.colorType(), fDst.colorSpace(), p, nullptr, *fMatrix
     };
 
     SkStageUpdater* updator = as_SB(atlasShader.get())->appendUpdatableStages(rec);
@@ -78,8 +75,8 @@ void SkDraw::drawAtlas(const SkImage* atlas, const SkRSXform xform[], const SkRe
             SkMatrix mx;
             mx.setRSXform(xform[i]);
             mx.preTranslate(-textures[i].fLeft, -textures[i].fTop);
-            SkPreConcatMatrixProvider matrixProvider(*fMatrixProvider, mx);
-            draw.fMatrixProvider = &matrixProvider;
+            mx.postConcat(*fMatrix);
+            draw.fMatrix = &mx;
             draw.drawRect(textures[i], p);
         }
         return;
@@ -102,25 +99,22 @@ void SkDraw::drawAtlas(const SkImage* atlas, const SkRSXform xform[], const SkRe
         isOpaque = false;
     }
 
-    if (auto blitter = SkCreateRasterPipelineBlitter(fDst, p, pipeline, isOpaque, &alloc,
-                                                     fRC->clipShader())) {
-        SkPath scratchPath;
+    auto blitter = SkCreateRasterPipelineBlitter(fDst, p, pipeline, isOpaque, &alloc);
+    SkPath scratchPath;
 
-        for (int i = 0; i < count; ++i) {
-            if (colors) {
-                SkColor4f c4 = SkColor4f::FromColor(colors[i]);
-                steps.apply(c4.vec());
-                load_color(uniformCtx, c4.premul().vec());
-            }
-
-            SkMatrix mx;
-            mx.setRSXform(xform[i]);
-            mx.preTranslate(-textures[i].fLeft, -textures[i].fTop);
-            mx.postConcat(fMatrixProvider->localToDevice());
-
-            if (updator->update(mx, nullptr)) {
-                fill_rect(mx, *fRC, textures[i], blitter, &scratchPath);
-            }
+    for (int i = 0; i < count; ++i) {
+        if (colors) {
+            SkColor4f c4 = SkColor4f::FromColor(colors[i]);
+            steps.apply(c4.vec());
+            load_color(uniformCtx, c4.premul().vec());
         }
+
+        SkMatrix mx;
+        mx.setRSXform(xform[i]);
+        mx.preTranslate(-textures[i].fLeft, -textures[i].fTop);
+        mx.postConcat(*fMatrix);
+
+        updator->update(mx, nullptr);
+        fill_rect(mx, *fRC, textures[i], blitter, &scratchPath);
     }
 }

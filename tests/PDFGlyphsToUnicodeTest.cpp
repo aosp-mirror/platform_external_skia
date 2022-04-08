@@ -13,6 +13,7 @@
 #include "include/core/SkStream.h"
 #include "include/private/SkTo.h"
 #include "src/pdf/SkPDFMakeToUnicodeCmap.h"
+#include "src/utils/SkBitSet.h"
 
 static constexpr SkGlyphID kMaximumGlyphIndex = UINT16_MAX;
 

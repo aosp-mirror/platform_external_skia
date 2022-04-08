@@ -55,7 +55,7 @@ enum DrawType {
     RESTORE,
     ROTATE,
     SAVE,
-    SAVE_LAYER_SAVEFLAGS_DEPRECATED_2015_REMOVED_12_2020,
+    SAVE_LAYER_SAVEFLAGS_DEPRECATED,
     SCALE,
     SET_MATRIX,
     SKEW,
@@ -105,16 +105,8 @@ enum DrawType {
 
     DRAW_BEHIND_PAINT,
     CONCAT44,
-    CLIP_SHADER_IN_PAINT,
-    MARK_CTM,
-    SET_M44,
 
-    DRAW_IMAGE2,
-    DRAW_IMAGE_RECT2,
-    DRAW_IMAGE_LATTICE2,
-    DRAW_EDGEAA_IMAGE_SET2,
-
-    LAST_DRAWTYPE_ENUM = DRAW_EDGEAA_IMAGE_SET2,
+    LAST_DRAWTYPE_ENUM = CONCAT44,
 };
 
 enum DrawVertexFlags {
@@ -125,9 +117,8 @@ enum DrawVertexFlags {
 };
 
 enum DrawAtlasFlags {
-    DRAW_ATLAS_HAS_COLORS     = 1 << 0,
-    DRAW_ATLAS_HAS_CULL       = 1 << 1,
-    DRAW_ATLAS_HAS_SAMPLING   = 1 << 2,
+    DRAW_ATLAS_HAS_COLORS   = 1 << 0,
+    DRAW_ATLAS_HAS_CULL     = 1 << 1,
 };
 
 enum DrawTextRSXformFlags {
@@ -139,8 +130,8 @@ enum SaveLayerRecFlatFlags {
     SAVELAYERREC_HAS_PAINT      = 1 << 1,
     SAVELAYERREC_HAS_BACKDROP   = 1 << 2,
     SAVELAYERREC_HAS_FLAGS      = 1 << 3,
-    SAVELAYERREC_HAS_CLIPMASK_OBSOLETE   = 1 << 4,  // 6/13/2020
-    SAVELAYERREC_HAS_CLIPMATRIX_OBSOLETE = 1 << 5,  // 6/13/2020
+    SAVELAYERREC_HAS_CLIPMASK   = 1 << 4,
+    SAVELAYERREC_HAS_CLIPMATRIX = 1 << 5,
 };
 
 enum SaveBehindFlatFlags {

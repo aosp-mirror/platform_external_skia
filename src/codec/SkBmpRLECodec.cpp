@@ -5,12 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "src/codec/SkBmpRLECodec.h"
-
-#include <memory>
-
 #include "include/core/SkStream.h"
 #include "include/private/SkColorData.h"
+#include "src/codec/SkBmpRLECodec.h"
 #include "src/codec/SkCodecPriv.h"
 
 /*
@@ -555,7 +552,7 @@ private:
 
 SkSampler* SkBmpRLECodec::getSampler(bool createIfNecessary) {
     if (!fSampler && createIfNecessary) {
-        fSampler = std::make_unique<SkBmpRLESampler>(this);
+        fSampler.reset(new SkBmpRLESampler(this));
     }
 
     return fSampler.get();

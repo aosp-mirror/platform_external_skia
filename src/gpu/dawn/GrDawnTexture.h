@@ -8,7 +8,7 @@
 #ifndef GrDawnTexture_DEFINED
 #define GrDawnTexture_DEFINED
 
-#include "src/gpu/GrTexture.h"
+#include "include/gpu/GrTexture.h"
 #include "dawn/webgpu_cpp.h"
 
 class GrDawnGpu;
@@ -17,10 +17,11 @@ class GrDawnTexture : public GrTexture {
 public:
     static sk_sp<GrDawnTexture> Make(GrDawnGpu*, SkISize dimensions,
                                      wgpu::TextureFormat format, GrRenderable, int sampleCnt,
-                                     SkBudgeted, int mipLevels, GrMipmapStatus);
+                                     SkBudgeted, int mipLevels, GrMipMapsStatus);
 
-    static sk_sp<GrDawnTexture> MakeWrapped(GrDawnGpu*, SkISize dimensions, GrRenderable,
-                                            int sampleCnt, GrWrapCacheable, GrIOType,
+    static sk_sp<GrDawnTexture> MakeWrapped(GrDawnGpu*, SkISize dimensions,
+                                            GrRenderable, int sampleCnt,
+                                            GrMipMapsStatus, GrWrapCacheable, GrIOType,
                                             const GrDawnTextureInfo&);
 
     ~GrDawnTexture() override;
@@ -30,10 +31,16 @@ public:
 
     void textureParamsModified() override {}
 
+    void upload(GrColorType, const GrMipLevel texels[], int mipLevels,
+                wgpu::CommandEncoder copyEncoder);
+    void upload(GrColorType, const GrMipLevel texels[], int mipLevels,
+                const SkIRect& dstRect, wgpu::CommandEncoder copyEncoder);
+
     wgpu::Texture texture() const { return fInfo.fTexture; }
-    wgpu::TextureFormat format() const { return fInfo.fFormat; }
+    wgpu::TextureView textureView() const { return fTextureView; }
 protected:
-    GrDawnTexture(GrDawnGpu*, SkISize dimensions, const GrDawnTextureInfo&, GrMipmapStatus);
+    GrDawnTexture(GrDawnGpu*, SkISize dimensions, wgpu::TextureView,
+                  const GrDawnTextureInfo&, GrMipMapsStatus);
 
     GrDawnGpu* getDawnGpu() const;
 
@@ -46,8 +53,9 @@ protected:
 
 private:
     GrDawnTextureInfo        fInfo;
+    wgpu::TextureView        fTextureView;
 
-    using INHERITED = GrTexture;
+    typedef GrTexture INHERITED;
 };
 
 #endif

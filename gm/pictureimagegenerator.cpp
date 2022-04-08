@@ -67,8 +67,10 @@ static void draw_vector_logo(SkCanvas* canvas, const SkRect& viewBox) {
     const SkScalar accentSize = iBox.width() * kAccentScale;
     const SkScalar underlineY = iBox.bottom() +
         (kVerticalSpacing + SkScalarSqrt(3) / 2) * accentSize;
+    SkMatrix m;
+    m.setRectToRect(skiaBox, viewBox, SkMatrix::kFill_ScaleToFit);
     SkAutoCanvasRestore acr(canvas, true);
-    canvas->concat(SkMatrix::RectToRect(skiaBox, viewBox));
+    canvas->concat(m);
 
     canvas->drawCircle(iBox.centerX(),
                        iBox.y() - (0.5f + kVerticalSpacing) * accentSize,
@@ -168,7 +170,7 @@ protected:
             SkPaint p;
             p.setAlphaf(configs[i].opacity);
 
-            SkMatrix m = SkMatrix::Scale(configs[i].scaleX, configs[i].scaleY);
+            SkMatrix m = SkMatrix::MakeScale(configs[i].scaleX, configs[i].scaleY);
             if (configs[i].scaleX < 0) {
                 m.postTranslate(SkIntToScalar(configs[i].size.width()), 0);
             }
@@ -194,7 +196,7 @@ protected:
             canvas->drawRect(SkRect::MakeXYWH(x, y,
                                               SkIntToScalar(bm.width()),
                                               SkIntToScalar(bm.height())), p);
-            canvas->drawImage(bm.asImage(), x, y);
+            canvas->drawBitmap(bm, x, y);
         }
     }
 
@@ -204,7 +206,7 @@ private:
     const SkScalar kPictureWidth = 200;
     const SkScalar kPictureHeight = 100;
 
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 
 DEF_GM(return new PictureGeneratorGM;)

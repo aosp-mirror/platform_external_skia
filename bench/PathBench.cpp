@@ -16,8 +16,6 @@
 #include "include/private/SkTArray.h"
 #include "include/utils/SkRandom.h"
 
-#include "src/core/SkDraw.h"
-
 enum Flags {
     kStroke_Flag = 1 << 0,
     kBig_Flag    = 1 << 1
@@ -60,7 +58,7 @@ protected:
         SkPath path;
         this->makePath(&path);
         if (fFlags & kBig_Flag) {
-            const SkMatrix m = SkMatrix::Scale(10, 10);
+            const SkMatrix m = SkMatrix::MakeScale(SkIntToScalar(10), SkIntToScalar(10));
             path.transform(m);
         }
 
@@ -70,7 +68,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 class TrianglePathBench : public PathBench {
@@ -90,7 +88,7 @@ public:
         path->close();
     }
 private:
-    using INHERITED = PathBench;
+    typedef PathBench INHERITED;
 };
 
 class RectPathBench : public PathBench {
@@ -105,7 +103,7 @@ public:
         path->addRect(r);
     }
 private:
-    using INHERITED = PathBench;
+    typedef PathBench INHERITED;
 };
 
 class RotatedRectBench : public PathBench {
@@ -129,12 +127,12 @@ public:
         path->transform(rotateMatrix);
     }
 
-    void setupPaint(SkPaint* paint) override {
+    virtual void setupPaint(SkPaint* paint) override {
         PathBench::setupPaint(paint);
         paint->setAntiAlias(fAA);
     }
 private:
-    using INHERITED = PathBench;
+    typedef PathBench INHERITED;
     int fDegrees;
     bool fAA;
 };
@@ -151,7 +149,7 @@ public:
         path->addOval(r);
     }
 private:
-    using INHERITED = PathBench;
+    typedef PathBench INHERITED;
 };
 
 class CirclePathBench: public PathBench {
@@ -166,7 +164,7 @@ public:
                         SkIntToScalar(10));
     }
 private:
-    using INHERITED = PathBench;
+    typedef PathBench INHERITED;
 };
 
 class NonAACirclePathBench: public CirclePathBench {
@@ -183,7 +181,7 @@ public:
     }
 
 private:
-    using INHERITED = CirclePathBench;
+    typedef CirclePathBench INHERITED;
 };
 
 // Test max speedup of Analytic AA for concave paths
@@ -204,7 +202,7 @@ public:
     }
 
 private:
-    using INHERITED = PathBench;
+    typedef PathBench INHERITED;
 };
 
 // Test max speedup of Analytic AA for convex paths
@@ -224,7 +222,7 @@ public:
     }
 
 private:
-    using INHERITED = PathBench;
+    typedef PathBench INHERITED;
 };
 
 class SawToothPathBench : public PathBench {
@@ -254,7 +252,7 @@ public:
     }
     int complexity() override { return 1; }
 private:
-    using INHERITED = PathBench;
+    typedef PathBench INHERITED;
 };
 
 class LongCurvedPathBench : public PathBench {
@@ -275,7 +273,7 @@ public:
     }
     int complexity() override { return 2; }
 private:
-    using INHERITED = PathBench;
+    typedef PathBench INHERITED;
 };
 
 class LongLinePathBench : public PathBench {
@@ -294,7 +292,7 @@ public:
     }
     int complexity() override { return 2; }
 private:
-    using INHERITED = PathBench;
+    typedef PathBench INHERITED;
 };
 
 class RandomPathBench : public Benchmark {
@@ -395,7 +393,7 @@ private:
     int                         fCurrVerb;
     int                         fCurrPoint;
     SkRandom                    fRandom;
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 class PathCreateBench : public RandomPathBench {
@@ -425,7 +423,7 @@ protected:
 private:
     SkPath fPath;
 
-    using INHERITED = RandomPathBench;
+    typedef RandomPathBench INHERITED;
 };
 
 class PathCopyBench : public RandomPathBench {
@@ -461,7 +459,7 @@ private:
     SkAutoTArray<SkPath> fPaths;
     SkAutoTArray<SkPath> fCopies;
 
-    using INHERITED = RandomPathBench;
+    typedef RandomPathBench INHERITED;
 };
 
 class PathTransformBench : public RandomPathBench {
@@ -509,7 +507,7 @@ private:
 
     SkMatrix fMatrix;
     bool fInPlace;
-    using INHERITED = RandomPathBench;
+    typedef RandomPathBench INHERITED;
 };
 
 class PathEqualityBench : public RandomPathBench {
@@ -548,7 +546,7 @@ private:
     };
     SkAutoTArray<SkPath> fPaths;
     SkAutoTArray<SkPath> fCopies;
-    using INHERITED = RandomPathBench;
+    typedef RandomPathBench INHERITED;
 };
 
 class SkBench_AddPathTest : public RandomPathBench {
@@ -646,7 +644,7 @@ private:
     SkAutoTArray<SkPath> fPaths0;
     SkAutoTArray<SkPath> fPaths1;
     SkMatrix         fMatrix;
-    using INHERITED = RandomPathBench;
+    typedef RandomPathBench INHERITED;
 };
 
 
@@ -702,7 +700,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 
@@ -806,7 +804,7 @@ protected:
 private:
     bool fZeroRad;      // should 0 radius rounds rects be tested?
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 class ConservativelyContainsBench : public Benchmark {
@@ -882,7 +880,7 @@ private:
     bool                fParity;
     SkTDArray<SkRect>   fQueryRects;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -914,7 +912,7 @@ private:
         }
     }
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 DEF_BENCH( return new ConicBench_Chop; )
 
@@ -968,41 +966,6 @@ public:
 DEF_BENCH( return new ConicBench_EvalTan(false); )
 DEF_BENCH( return new ConicBench_EvalTan(true); )
 
-class ConicBench_TinyError : public Benchmark {
-protected:
-    SkString fName;
-
-public:
-    ConicBench_TinyError() : fName("conic-tinyerror") {}
-
-protected:
-    const char* onGetName() override { return fName.c_str(); }
-
-    void onDraw(int loops, SkCanvas*) override {
-        SkPaint paint;
-        paint.setColor(SK_ColorBLACK);
-        paint.setAntiAlias(true);
-        paint.setStyle(SkPaint::kStroke_Style);
-        paint.setStrokeWidth(2);
-
-        SkPath path;
-        path.moveTo(-100, 1);
-        path.cubicTo(-101, 1, -118, -47, -138, -44);
-
-        // The large y scale factor produces a tiny error threshold.
-        const SkMatrix mtx = SkMatrix::MakeAll(3.07294035f, 0.833333373f, 361.111115f, 0.0f,
-                                               6222222.5f, 28333.334f, 0.0f, 0.0f, 1.0f);
-        for (int i = 0; i < loops; ++i) {
-            SkPath dst;
-            paint.getFillPath(path, &dst, nullptr, SkDraw::ComputeResScaleForStroking(mtx));
-        }
-    }
-
-private:
-    using INHERITED = Benchmark;
-};
-DEF_BENCH( return new ConicBench_TinyError; )
-
 ///////////////////////////////////////////////////////////////////////////////
 
 static void rand_conic(SkConic* conic, SkRandom& rand) {
@@ -1036,7 +999,7 @@ protected:
     SkConic fConics[CONICS];
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 class ConicBench_ComputeError : public ConicBench {
@@ -1058,7 +1021,7 @@ protected:
     }
 
 private:
-    using INHERITED = ConicBench;
+    typedef ConicBench INHERITED;
 };
 
 class ConicBench_asQuadTol : public ConicBench {
@@ -1079,7 +1042,7 @@ protected:
     }
 
 private:
-    using INHERITED = ConicBench;
+    typedef ConicBench INHERITED;
 };
 
 class ConicBench_quadPow2 : public ConicBench {
@@ -1100,7 +1063,7 @@ protected:
     }
 
 private:
-    using INHERITED = ConicBench;
+    typedef ConicBench INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1141,7 +1104,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 
@@ -1243,7 +1206,7 @@ public:
         fPath.addRRect(SkRRect::MakeRectXY(r, w/8.0f, h/8.0f));
 
         if (forceConcave) {
-            SkPathPriv::SetConvexity(fPath, SkPathConvexity::kConcave);
+            fPath.setConvexityType(SkPathConvexityType::kConcave);
             SkASSERT(!fPath.isConvex());
         } else {
             SkASSERT(fPath.isConvex());
@@ -1267,7 +1230,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 DEF_BENCH( return new CommonConvexBench( 16, 16, false, false); )

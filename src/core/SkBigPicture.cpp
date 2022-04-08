@@ -42,7 +42,7 @@ void SkBigPicture::playback(SkCanvas* canvas, AbortCallback* callback) const {
 void SkBigPicture::partialPlayback(SkCanvas* canvas,
                                    int start,
                                    int stop,
-                                   const SkM44& initialCTM) const {
+                                   const SkMatrix& initialCTM) const {
     SkASSERT(canvas);
     SkRecordPartialDraw(*fRecord,
                         canvas,
@@ -53,29 +53,8 @@ void SkBigPicture::partialPlayback(SkCanvas* canvas,
                         initialCTM);
 }
 
-struct NestedApproxOpCounter {
-    int fCount = 0;
-
-    template <typename T> void operator()(const T& op) {
-        fCount += 1;
-    }
-    void operator()(const SkRecords::DrawPicture& op) {
-        fCount += op.picture->approximateOpCount(true);
-    }
-};
-
 SkRect SkBigPicture::cullRect()            const { return fCullRect; }
-int SkBigPicture::approximateOpCount(bool nested) const {
-    if (nested) {
-        NestedApproxOpCounter visitor;
-        for (int i = 0; i < fRecord->count(); i++) {
-            fRecord->visit(i, visitor);
-        }
-        return visitor.fCount;
-    } else {
-        return fRecord->count();
-    }
-}
+int    SkBigPicture::approximateOpCount()   const { return fRecord->count(); }
 size_t SkBigPicture::approximateBytesUsed() const {
     size_t bytes = sizeof(*this) + fRecord->bytesUsed() + fApproxBytesUsedBySubPictures;
     if (fBBH) { bytes += fBBH->bytesUsed(); }

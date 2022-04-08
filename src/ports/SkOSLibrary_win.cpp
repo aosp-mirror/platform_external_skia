@@ -10,16 +10,12 @@
 #include "src/core/SkLeanWindows.h"
 #include "src/ports/SkOSLibrary.h"
 
-void* SkLoadDynamicLibrary(const char* libraryName) {
+void* DynamicLoadLibrary(const char* libraryName) {
     return LoadLibraryA(libraryName);
 }
 
-void* SkGetProcedureAddress(void* library, const char* functionName) {
+void* GetProcedureAddress(void* library, const char* functionName) {
     return reinterpret_cast<void*>(::GetProcAddress((HMODULE)library, functionName));
-}
-
-bool SkFreeDynamicLibrary(void* library) {
-    return FreeLibrary((HMODULE)library);
 }
 
 #endif//defined(SK_BUILD_FOR_WIN)

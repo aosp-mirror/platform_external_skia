@@ -28,8 +28,8 @@ protected:
         fY = 50;
         fR = 40;
 
-        fCircle1 = SkPath::Circle(fX1, fY, fR, SkPathDirection::kCW);
-        fCircle2 = SkPath::Circle(fX2, fY, fR, SkPathDirection::kCW);
+        fCircle1.addCircle(fX1, fY, fR, SkPathDirection::kCW);
+        fCircle2.addCircle(fX2, fY, fR, SkPathDirection::kCW);
     }
 
 
@@ -40,13 +40,17 @@ protected:
     }
 
     SkISize onISize() override {
-        return SkISize::Make(800, 200);
+        return SkISize::Make(800, 600);
     }
 
     void onDraw(SkCanvas* canvas) override {
         const SkClipOp ops[] = {
             kDifference_SkClipOp,
-            kIntersect_SkClipOp
+            kIntersect_SkClipOp,
+            kUnion_SkClipOp,
+            kXOR_SkClipOp,
+            kReverseDifference_SkClipOp,
+            kReplace_SkClipOp,
         };
 
         SkRect rect = SkRect::MakeLTRB(fX1 - fR, fY - fR, fX2 + fR, fY + fR);
@@ -91,7 +95,7 @@ protected:
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

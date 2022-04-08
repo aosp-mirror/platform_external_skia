@@ -75,7 +75,7 @@ protected:
         sk_sp<SkTypeface> typeface;
         const char* text;
     } emojiFont;
-    void onOnceBeforeDraw() override {
+    virtual void onOnceBeforeDraw() override {
         emojiFont.typeface = ToolUtils::emoji_typeface();
         emojiFont.text     = ToolUtils::emoji_sample_text();
     }
@@ -191,11 +191,11 @@ protected:
         }
     }
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new ColorEmojiGM;)
 
-}  // namespace skiagm
+}

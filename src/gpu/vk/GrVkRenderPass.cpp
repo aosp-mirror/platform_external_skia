@@ -17,15 +17,12 @@ typedef GrVkRenderPass::AttachmentsDescriptor::AttachmentDesc AttachmentDesc;
 
 void setup_vk_attachment_description(VkAttachmentDescription* attachment,
                                      const AttachmentDesc& desc,
-                                     VkImageLayout startLayout,
-                                     VkImageLayout endLayout) {
+                                     VkImageLayout layout) {
     attachment->flags = 0;
     attachment->format = desc.fFormat;
     SkAssertResult(GrSampleCountToVkSampleCount(desc.fSamples, &attachment->samples));
-    switch (startLayout) {
+    switch (layout) {
         case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-        case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-        case VK_IMAGE_LAYOUT_GENERAL:
             attachment->loadOp = desc.fLoadStoreOps.fLoadOp;
             attachment->storeOp = desc.fLoadStoreOps.fStoreOp;
             attachment->stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -41,158 +38,71 @@ void setup_vk_attachment_description(VkAttachmentDescription* attachment,
             SK_ABORT("Unexpected attachment layout");
     }
 
-    attachment->initialLayout = startLayout;
-    attachment->finalLayout = endLayout == VK_IMAGE_LAYOUT_UNDEFINED ? startLayout : endLayout;
+    attachment->initialLayout = layout;
+    attachment->finalLayout = layout;
 }
 
-GrVkRenderPass* GrVkRenderPass::CreateSimple(GrVkGpu* gpu,
-                                             AttachmentsDescriptor* attachmentsDescriptor,
-                                             AttachmentFlags attachmentFlags,
-                                             SelfDependencyFlags selfDepFlags,
-                                             LoadFromResolve loadFromResolve) {
+GrVkRenderPass* GrVkRenderPass::CreateSimple(GrVkGpu* gpu, const GrVkRenderTarget& target) {
     static const GrVkRenderPass::LoadStoreOps kBasicLoadStoreOps(VK_ATTACHMENT_LOAD_OP_LOAD,
                                                                  VK_ATTACHMENT_STORE_OP_STORE);
-    switch (loadFromResolve) {
-        case LoadFromResolve::kNo:
-            return Create(gpu, attachmentFlags, attachmentsDescriptor, kBasicLoadStoreOps,
-                          kBasicLoadStoreOps, kBasicLoadStoreOps, selfDepFlags, loadFromResolve);
-        case LoadFromResolve::kLoad: {
-            static const GrVkRenderPass::LoadStoreOps kDiscardLoadStoreOps(
-                    VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE);
-            return Create(gpu, attachmentFlags, attachmentsDescriptor, kDiscardLoadStoreOps,
-                          kBasicLoadStoreOps, kBasicLoadStoreOps, selfDepFlags, loadFromResolve);
-        }
-    }
-    SkUNREACHABLE;
+
+    AttachmentFlags attachmentFlags;
+    AttachmentsDescriptor attachmentsDescriptor;
+    // Get attachment information from render target. This includes which attachments the render
+    // target has (color, stencil) and the attachments format and sample count.
+    target.getAttachmentsDescriptor(&attachmentsDescriptor, &attachmentFlags);
+    return Create(gpu, attachmentFlags, attachmentsDescriptor, kBasicLoadStoreOps,
+                  kBasicLoadStoreOps);
 }
 
 GrVkRenderPass* GrVkRenderPass::Create(GrVkGpu* gpu,
-                                       const GrVkRenderPass& compatibleRenderPass,
-                                       const LoadStoreOps& colorOp,
-                                       const LoadStoreOps& resolveOp,
-                                       const LoadStoreOps& stencilOp) {
+                            const GrVkRenderPass& compatibleRenderPass,
+                            const LoadStoreOps& colorOp,
+                            const LoadStoreOps& stencilOp) {
     AttachmentFlags attachmentFlags = compatibleRenderPass.fAttachmentFlags;
     AttachmentsDescriptor attachmentsDescriptor = compatibleRenderPass.fAttachmentsDescriptor;
-    SelfDependencyFlags selfDepFlags = compatibleRenderPass.fSelfDepFlags;
-    LoadFromResolve loadFromResolve = compatibleRenderPass.fLoadFromResolve;
-    return Create(gpu, attachmentFlags, &attachmentsDescriptor, colorOp, resolveOp, stencilOp,
-                  selfDepFlags, loadFromResolve);
+    return Create(gpu, attachmentFlags, attachmentsDescriptor, colorOp, stencilOp);
 }
 
 GrVkRenderPass* GrVkRenderPass::Create(GrVkGpu* gpu,
                                        AttachmentFlags attachmentFlags,
-                                       AttachmentsDescriptor* attachmentsDescriptor,
+                                       AttachmentsDescriptor& attachmentsDescriptor,
                                        const LoadStoreOps& colorOp,
-                                       const LoadStoreOps& resolveOp,
-                                       const LoadStoreOps& stencilOp,
-                                       SelfDependencyFlags selfDepFlags,
-                                       LoadFromResolve loadFromResolve) {
-    SkASSERT(!SkToBool(selfDepFlags & SelfDependencyFlags::kForNonCoherentAdvBlend) ||
-             gpu->caps()->advancedBlendEquationSupport());
-    SkASSERT(!SkToBool(selfDepFlags & SelfDependencyFlags::kForInputAttachment) ||
-             gpu->caps()->textureBarrierSupport());
-
-    // If we have a resolve attachment, we will always do a resolve into it. Thus it doesn't make
-    // sense not to store the resolve attachment at the end of the render pass.
-    //
-    // Currently today (when not using discardable msaa images) we load and store the the msaa image
-    // and then use the copy resolve command to handle the resolving. If instead we moved to doing
-    // the resolving at the end of the last render pass, we would probably want a separate flag
-    // for having a resolve attachment versus actually doing the resolving. This would allow us to
-    // use the same VkPiplines for render passes where we resolve and those we don't since each will
-    // always have the resolve attachment. The actual resolving or not does not affect render pass
-    // compatibility if there is only one sub pass, just the presence of the attachment or not.
-    SkASSERT(!SkToBool(attachmentFlags & kResolve_AttachmentFlag) ||
-             resolveOp.fStoreOp == VK_ATTACHMENT_STORE_OP_STORE);
-
-    SkASSERT(loadFromResolve == LoadFromResolve::kNo ||
-             (SkToBool(attachmentFlags & kColor_AttachmentFlag) &&
-              SkToBool(attachmentFlags & kResolve_AttachmentFlag)));
-
-#ifdef SK_DEBUG
-    if (loadFromResolve == LoadFromResolve::kLoad) {
-        // If we are loading the resolve image into the msaa color attachment then we should not be
-        // loading or storing the msaa attachment. Additionally we need to make sure we are loading
-        // the resolve so it can be copied into the msaa color attachment.
-        SkASSERT(colorOp.fLoadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE);
-        SkASSERT(colorOp.fStoreOp == VK_ATTACHMENT_STORE_OP_DONT_CARE);
-        SkASSERT(resolveOp.fLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD);
-    }
-#endif
-
-    uint32_t numAttachments = attachmentsDescriptor->fAttachmentCount;
+                                       const LoadStoreOps& stencilOp) {
+    uint32_t numAttachments = attachmentsDescriptor.fAttachmentCount;
     // Attachment descriptions to be set on the render pass
     SkTArray<VkAttachmentDescription> attachments(numAttachments);
     attachments.reset(numAttachments);
     memset(attachments.begin(), 0, numAttachments * sizeof(VkAttachmentDescription));
 
-    // Refs to attachments on the render pass (as described by the VkAttachmentDescription above),
+    // Refs to attachments on the render pass (as described by teh VkAttachmentDescription above),
     // that are used by the subpass.
     VkAttachmentReference colorRef;
-    VkAttachmentReference resolveRef;
-    VkAttachmentReference resolveLoadInputRef;
     VkAttachmentReference stencilRef;
     uint32_t currentAttachment = 0;
 
     // Go through each of the attachment types (color, stencil) and set the necessary
     // on the various Vk structs.
-    VkSubpassDescription subpassDescs[2];
-    memset(subpassDescs, 0, 2*sizeof(VkSubpassDescription));
-    const int mainSubpass = loadFromResolve == LoadFromResolve::kLoad ? 1 : 0;
-    VkSubpassDescription& subpassDescMain = subpassDescs[mainSubpass];
-    subpassDescMain.flags = 0;
-    subpassDescMain.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpassDescMain.inputAttachmentCount = 0;
-    subpassDescMain.pInputAttachments = nullptr;
-    subpassDescMain.pResolveAttachments = nullptr;
+    VkSubpassDescription subpassDesc;
+    memset(&subpassDesc, 0, sizeof(VkSubpassDescription));
+    subpassDesc.flags = 0;
+    subpassDesc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpassDesc.inputAttachmentCount = 0;
+    subpassDesc.pInputAttachments = nullptr;
+    subpassDesc.pResolveAttachments = nullptr;
 
     uint32_t clearValueCount = 0;
 
-    VkSubpassDependency dependencies[2];
-    int currentDependency = 0;
-
     if (attachmentFlags & kColor_AttachmentFlag) {
         // set up color attachment
-        bool needsGeneralLayout = SkToBool(selfDepFlags & SelfDependencyFlags::kForInputAttachment);
-        VkImageLayout layout = needsGeneralLayout ? VK_IMAGE_LAYOUT_GENERAL
-                                                  : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        attachmentsDescriptor->fColor.fLoadStoreOps = colorOp;
-
+        attachmentsDescriptor.fColor.fLoadStoreOps = colorOp;
         setup_vk_attachment_description(&attachments[currentAttachment],
-                                        attachmentsDescriptor->fColor,
-                                        layout, layout);
+                                        attachmentsDescriptor.fColor,
+                                        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         // setup subpass use of attachment
         colorRef.attachment = currentAttachment++;
-        colorRef.layout = layout;
-        subpassDescMain.colorAttachmentCount = 1;
-
-        if (selfDepFlags != SelfDependencyFlags::kNone) {
-            VkSubpassDependency& dependency = dependencies[currentDependency++];
-            dependency.srcSubpass = mainSubpass;
-            dependency.dstSubpass = mainSubpass;
-            dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-            dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-            dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-            dependency.dstStageMask = 0;
-            dependency.dstAccessMask = 0;
-
-            if (selfDepFlags & SelfDependencyFlags::kForNonCoherentAdvBlend) {
-                // If we have coherent support we shouldn't be needing a self dependency
-                SkASSERT(!gpu->caps()->advancedCoherentBlendEquationSupport());
-                dependency.dstStageMask |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-                dependency.dstAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_READ_NONCOHERENT_BIT_EXT;
-            }
-            if (selfDepFlags & SelfDependencyFlags::kForInputAttachment) {
-                SkASSERT(gpu->vkCaps().maxInputAttachmentDescriptors());
-
-                subpassDescMain.inputAttachmentCount = 1;
-                subpassDescMain.pInputAttachments = &colorRef;
-
-                dependency.dstStageMask |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-                dependency.dstAccessMask |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
-            }
-        }
+        colorRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        subpassDesc.colorAttachmentCount = 1;
 
         if (VK_ATTACHMENT_LOAD_OP_CLEAR == colorOp.fLoadOp) {
             clearValueCount = colorRef.attachment + 1;
@@ -200,69 +110,17 @@ GrVkRenderPass* GrVkRenderPass::Create(GrVkGpu* gpu,
     } else {
         // I don't think there should ever be a time where we don't have a color attachment
         SkASSERT(false);
-        SkASSERT(selfDepFlags == SelfDependencyFlags::kNone);
         colorRef.attachment = VK_ATTACHMENT_UNUSED;
         colorRef.layout = VK_IMAGE_LAYOUT_UNDEFINED;
-        subpassDescMain.colorAttachmentCount = 0;
+        subpassDesc.colorAttachmentCount = 0;
     }
-
-    subpassDescMain.pColorAttachments = &colorRef;
-
-    if (attachmentFlags & kResolve_AttachmentFlag) {
-        attachmentsDescriptor->fResolve.fLoadStoreOps = resolveOp;
-
-        VkImageLayout layout = loadFromResolve == LoadFromResolve::kLoad
-                                       ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                                       : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        setup_vk_attachment_description(&attachments[currentAttachment],
-                                        attachmentsDescriptor->fResolve,
-                                        layout,
-                                        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-
-        // setup main subpass use of attachment
-        resolveRef.attachment = currentAttachment++;
-        resolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        subpassDescMain.pResolveAttachments = &resolveRef;
-
-        // Setup the load subpass and set subpass dependendcies
-        if (loadFromResolve == LoadFromResolve::kLoad) {
-            resolveLoadInputRef.attachment = resolveRef.attachment;
-            resolveLoadInputRef.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-            // The load subpass will always be the first
-            VkSubpassDescription& subpassDescLoad = subpassDescs[0];
-            subpassDescLoad.flags = 0;
-            subpassDescLoad.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-            subpassDescLoad.inputAttachmentCount = 1;
-            subpassDescLoad.pInputAttachments = &resolveLoadInputRef;
-            subpassDescLoad.colorAttachmentCount = 1;
-            subpassDescLoad.pColorAttachments = &colorRef;
-            subpassDescLoad.pResolveAttachments = nullptr;
-            subpassDescLoad.pDepthStencilAttachment = nullptr;
-            subpassDescLoad.preserveAttachmentCount = 0;
-            subpassDescLoad.pPreserveAttachments = nullptr;
-
-            VkSubpassDependency& dependency = dependencies[currentDependency++];
-            dependency.srcSubpass = 0;
-            dependency.dstSubpass = mainSubpass;
-            dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-            dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-            dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-            dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-            dependency.dstAccessMask =
-                    VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        }
-    }
-
+    subpassDesc.pColorAttachments = &colorRef;
 
     if (attachmentFlags & kStencil_AttachmentFlag) {
         // set up stencil attachment
-        attachmentsDescriptor->fStencil.fLoadStoreOps = stencilOp;
+        attachmentsDescriptor.fStencil.fLoadStoreOps = stencilOp;
         setup_vk_attachment_description(&attachments[currentAttachment],
-                                        attachmentsDescriptor->fStencil,
-                                        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                                        attachmentsDescriptor.fStencil,
                                         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
         // setup subpass use of attachment
         stencilRef.attachment = currentAttachment++;
@@ -274,14 +132,12 @@ GrVkRenderPass* GrVkRenderPass::Create(GrVkGpu* gpu,
         stencilRef.attachment = VK_ATTACHMENT_UNUSED;
         stencilRef.layout = VK_IMAGE_LAYOUT_UNDEFINED;
     }
-    subpassDescMain.pDepthStencilAttachment = &stencilRef;
+    subpassDesc.pDepthStencilAttachment = &stencilRef;
 
-    subpassDescMain.preserveAttachmentCount = 0;
-    subpassDescMain.pPreserveAttachments = nullptr;
+    subpassDesc.preserveAttachmentCount = 0;
+    subpassDesc.pPreserveAttachments = nullptr;
 
     SkASSERT(numAttachments == currentAttachment);
-
-    uint32_t subpassCount = loadFromResolve == LoadFromResolve::kLoad ? 2 : 1;
 
     // Create the VkRenderPass compatible with the attachment descriptions above
     VkRenderPassCreateInfo createInfo;
@@ -291,10 +147,10 @@ GrVkRenderPass* GrVkRenderPass::Create(GrVkGpu* gpu,
     createInfo.flags = 0;
     createInfo.attachmentCount = numAttachments;
     createInfo.pAttachments = attachments.begin();
-    createInfo.subpassCount = subpassCount;
-    createInfo.pSubpasses = subpassDescs;
-    createInfo.dependencyCount = currentDependency;
-    createInfo.pDependencies = dependencies;
+    createInfo.subpassCount = 1;
+    createInfo.pSubpasses = &subpassDesc;
+    createInfo.dependencyCount = 0;
+    createInfo.pDependencies = nullptr;
 
     VkResult result;
     VkRenderPass renderPass;
@@ -312,28 +168,23 @@ GrVkRenderPass* GrVkRenderPass::Create(GrVkGpu* gpu,
                                                             renderPass,
                                                             &granularity));
 
-    return new GrVkRenderPass(gpu, renderPass, attachmentFlags, *attachmentsDescriptor,
-                              selfDepFlags, loadFromResolve, granularity, clearValueCount);
+    return new GrVkRenderPass(renderPass, attachmentFlags, attachmentsDescriptor, granularity,
+                              clearValueCount);
 }
 
-GrVkRenderPass::GrVkRenderPass(const GrVkGpu* gpu, VkRenderPass renderPass, AttachmentFlags flags,
+GrVkRenderPass::GrVkRenderPass(VkRenderPass renderPass, AttachmentFlags flags,
                                const AttachmentsDescriptor& descriptor,
-                               SelfDependencyFlags selfDepFlags,
-                               LoadFromResolve loadFromResolve,
                                const VkExtent2D& granularity, uint32_t clearValueCount)
-        : INHERITED(gpu)
-        , fRenderPass(renderPass)
+        : fRenderPass(renderPass)
         , fAttachmentFlags(flags)
         , fAttachmentsDescriptor(descriptor)
-        , fSelfDepFlags(selfDepFlags)
-        , fLoadFromResolve(loadFromResolve)
         , fGranularity(granularity)
         , fClearValueCount(clearValueCount) {
 }
 
-void GrVkRenderPass::freeGPUData() const {
+void GrVkRenderPass::freeGPUData(GrVkGpu* gpu) const {
     if (!(fAttachmentFlags & kExternal_AttachmentFlag)) {
-        GR_VK_CALL(fGpu->vkInterface(), DestroyRenderPass(fGpu->device(), fRenderPass, nullptr));
+        GR_VK_CALL(gpu->vkInterface(), DestroyRenderPass(gpu->device(), fRenderPass, nullptr));
     }
 }
 
@@ -347,7 +198,7 @@ bool GrVkRenderPass::colorAttachmentIndex(uint32_t* index) const {
 }
 
 // Works under the assumption that stencil attachment will always be after the color and resolve
-// attachments.
+// attachment.
 bool GrVkRenderPass::stencilAttachmentIndex(uint32_t* index) const {
     *index = 0;
     if (fAttachmentFlags & kColor_AttachmentFlag) {
@@ -360,9 +211,7 @@ bool GrVkRenderPass::stencilAttachmentIndex(uint32_t* index) const {
 }
 
 bool GrVkRenderPass::isCompatible(const AttachmentsDescriptor& desc,
-                                  const AttachmentFlags& flags,
-                                  SelfDependencyFlags selfDepFlags,
-                                  LoadFromResolve loadFromResolve) const {
+                                  const AttachmentFlags& flags) const {
     SkASSERT(!(fAttachmentFlags & kExternal_AttachmentFlag));
     if (flags != fAttachmentFlags) {
         return false;
@@ -373,45 +222,27 @@ bool GrVkRenderPass::isCompatible(const AttachmentsDescriptor& desc,
             return false;
         }
     }
-    if (fAttachmentFlags & kResolve_AttachmentFlag) {
-        if (!fAttachmentsDescriptor.fResolve.isCompatible(desc.fResolve)) {
-            return false;
-        }
-    }
     if (fAttachmentFlags & kStencil_AttachmentFlag) {
         if (!fAttachmentsDescriptor.fStencil.isCompatible(desc.fStencil)) {
             return false;
         }
     }
 
-    if (fSelfDepFlags != selfDepFlags) {
-        return false;
-    }
-
-    if (fLoadFromResolve != loadFromResolve) {
-        return false;
-    }
-
     return true;
 }
 
-bool GrVkRenderPass::isCompatible(GrVkRenderTarget* target,
-                                  SelfDependencyFlags selfDepFlags,
-                                  LoadFromResolve loadFromResolve) const {
+bool GrVkRenderPass::isCompatible(const GrVkRenderTarget& target) const {
     SkASSERT(!(fAttachmentFlags & kExternal_AttachmentFlag));
-
     AttachmentsDescriptor desc;
     AttachmentFlags flags;
-    target->getAttachmentsDescriptor(&desc, &flags, this->hasResolveAttachment(),
-                                     this->hasStencilAttachment());
+    target.getAttachmentsDescriptor(&desc, &flags);
 
-    return this->isCompatible(desc, flags, selfDepFlags, loadFromResolve);
+    return this->isCompatible(desc, flags);
 }
 
 bool GrVkRenderPass::isCompatible(const GrVkRenderPass& renderPass) const {
     SkASSERT(!(fAttachmentFlags & kExternal_AttachmentFlag));
-    return this->isCompatible(renderPass.fAttachmentsDescriptor, renderPass.fAttachmentFlags,
-                              renderPass.fSelfDepFlags, renderPass.fLoadFromResolve);
+    return this->isCompatible(renderPass.fAttachmentsDescriptor, renderPass.fAttachmentFlags);
 }
 
 bool GrVkRenderPass::isCompatibleExternalRP(VkRenderPass renderPass) const {
@@ -420,16 +251,10 @@ bool GrVkRenderPass::isCompatibleExternalRP(VkRenderPass renderPass) const {
 }
 
 bool GrVkRenderPass::equalLoadStoreOps(const LoadStoreOps& colorOps,
-                                       const LoadStoreOps& resolveOps,
                                        const LoadStoreOps& stencilOps) const {
     SkASSERT(!(fAttachmentFlags & kExternal_AttachmentFlag));
     if (fAttachmentFlags & kColor_AttachmentFlag) {
         if (fAttachmentsDescriptor.fColor.fLoadStoreOps != colorOps) {
-            return false;
-        }
-    }
-    if (fAttachmentFlags & kResolve_AttachmentFlag) {
-        if (fAttachmentsDescriptor.fResolve.fLoadStoreOps != resolveOps) {
             return false;
         }
     }
@@ -442,40 +267,19 @@ bool GrVkRenderPass::equalLoadStoreOps(const LoadStoreOps& colorOps,
 }
 
 void GrVkRenderPass::genKey(GrProcessorKeyBuilder* b) const {
-    GenKey(b, fAttachmentFlags, fAttachmentsDescriptor, fSelfDepFlags,
-           fLoadFromResolve, (uint64_t)fRenderPass);
-}
-
-void GrVkRenderPass::GenKey(GrProcessorKeyBuilder* b,
-                            AttachmentFlags attachmentFlags,
-                            const AttachmentsDescriptor& attachmentsDescriptor,
-                            SelfDependencyFlags selfDepFlags,
-                            LoadFromResolve loadFromResolve,
-                            uint64_t externalRenderPass) {
-    b->add32(attachmentFlags);
-    if (attachmentFlags & kColor_AttachmentFlag) {
-        b->add32(attachmentsDescriptor.fColor.fFormat);
-        b->add32(attachmentsDescriptor.fColor.fSamples);
+    b->add32(fAttachmentFlags);
+    if (fAttachmentFlags & kColor_AttachmentFlag) {
+        b->add32(fAttachmentsDescriptor.fColor.fFormat);
+        b->add32(fAttachmentsDescriptor.fColor.fSamples);
     }
-    if (attachmentFlags & kResolve_AttachmentFlag) {
-        b->add32(attachmentsDescriptor.fResolve.fFormat);
-        b->add32(attachmentsDescriptor.fResolve.fSamples);
+    if (fAttachmentFlags & kStencil_AttachmentFlag) {
+        b->add32(fAttachmentsDescriptor.fStencil.fFormat);
+        b->add32(fAttachmentsDescriptor.fStencil.fSamples);
     }
-    if (attachmentFlags & kStencil_AttachmentFlag) {
-        b->add32(attachmentsDescriptor.fStencil.fFormat);
-        b->add32(attachmentsDescriptor.fStencil.fSamples);
-    }
-
-    uint32_t extraFlags = (uint32_t)selfDepFlags;
-    SkASSERT(extraFlags < (1 << 30));
-    SkASSERT((uint32_t)loadFromResolve <= 2);
-    extraFlags |= ((uint32_t)loadFromResolve << 30);
-
-    b->add32(extraFlags);
-
-    if (attachmentFlags & kExternal_AttachmentFlag) {
-        SkASSERT(!(attachmentFlags & ~kExternal_AttachmentFlag));
-        b->add32((uint32_t)(externalRenderPass & 0xFFFFFFFF));
-        b->add32((uint32_t)(externalRenderPass>>32));
+    if (fAttachmentFlags & kExternal_AttachmentFlag) {
+        SkASSERT(!(fAttachmentFlags & ~kExternal_AttachmentFlag));
+        uint64_t handle = (uint64_t)fRenderPass;
+        b->add32((uint32_t)(handle & 0xFFFFFFFF));
+        b->add32((uint32_t)(handle>>32));
     }
 }

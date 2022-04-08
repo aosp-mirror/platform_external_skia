@@ -17,7 +17,6 @@
 #include <cstddef>
 #include <memory>
 #include <new>
-#include <type_traits>
 #include <utility>
 
 /** \file SkTemplates.h
@@ -65,12 +64,10 @@ template <typename T, T* P> struct SkFunctionWrapper {
     function.
 */
 template <typename T, void (*P)(T*)> class SkAutoTCallVProc
-    : public std::unique_ptr<T, SkFunctionWrapper<std::remove_pointer_t<decltype(P)>, P>> {
-    using inherited = std::unique_ptr<T, SkFunctionWrapper<std::remove_pointer_t<decltype(P)>, P>>;
+    : public std::unique_ptr<T, SkFunctionWrapper<skstd::remove_pointer_t<decltype(P)>, P>> {
 public:
-    using inherited::inherited;
-    SkAutoTCallVProc(const SkAutoTCallVProc&) = delete;
-    SkAutoTCallVProc(SkAutoTCallVProc&& that) : inherited(std::move(that)) {}
+    SkAutoTCallVProc(T* obj)
+        : std::unique_ptr<T, SkFunctionWrapper<skstd::remove_pointer_t<decltype(P)>, P>>(obj) {}
 
     operator T*() const { return this->get(); }
 };
@@ -103,7 +100,7 @@ public:
 
     /** Reallocates given a new count. Reallocation occurs even if new count equals old count.
      */
-    void reset(int count = 0) { *this = SkAutoTArray(count); }
+    void reset(int count) { *this = SkAutoTArray(count);  }
 
     /** Return the array of T elements. Will be NULL if count == 0
      */
@@ -115,10 +112,6 @@ public:
         SkASSERT((unsigned)index < (unsigned)fCount);
         return fArray[index];
     }
-
-    /** Aliases matching other types, like std::vector. */
-    const T* data() const { return fArray.get(); }
-    T* data() { return fArray.get(); }
 
 private:
     std::unique_ptr<T[]> fArray;
@@ -209,11 +202,6 @@ public:
         return fArray[index];
     }
 
-    /** Aliases matching other types, like std::vector. */
-    const T* data() const { return fArray; }
-    T* data() { return fArray; }
-    size_t size() const { return fCount; }
-
 private:
 #if defined(SK_BUILD_FOR_GOOGLE3)
     // Stack frame size is limited for SK_BUILD_FOR_GOOGLE3. 4k is less than the actual max, but some functions
@@ -235,10 +223,7 @@ private:
 /** Manages an array of T elements, freeing the array in the destructor.
  *  Does NOT call any constructors/destructors on T (T must be POD).
  */
-template <typename T,
-          typename = std::enable_if_t<std::is_trivially_default_constructible<T>::value &&
-                                      std::is_trivially_destructible<T>::value>>
-class SkAutoTMalloc  {
+template <typename T> class SkAutoTMalloc  {
 public:
     /** Takes ownership of the ptr. The ptr must be a value which can be passed to sk_free. */
     explicit SkAutoTMalloc(T* ptr = nullptr) : fPtr(ptr) {}
@@ -271,10 +256,6 @@ public:
 
     const T& operator[](int index) const { return fPtr.get()[index]; }
 
-    /** Aliases matching other types, like std::vector. */
-    const T* data() const { return fPtr.get(); }
-    T* data() { return fPtr.get(); }
-
     /**
      *  Transfer ownership of the ptr to the caller, setting the internal
      *  pointer to NULL. Note that this differs from get(), which also returns
@@ -286,11 +267,7 @@ private:
     std::unique_ptr<T, SkFunctionWrapper<void(void*), sk_free>> fPtr;
 };
 
-template <size_t kCountRequested,
-          typename T,
-          typename = std::enable_if_t<std::is_trivially_default_constructible<T>::value &&
-                                      std::is_trivially_destructible<T>::value>>
-class SkAutoSTMalloc {
+template <size_t kCountRequested, typename T> class SkAutoSTMalloc {
 public:
     SkAutoSTMalloc() : fPtr(fTStorage) {}
 
@@ -348,16 +325,12 @@ public:
         return fPtr[index];
     }
 
-    /** Aliases matching other types, like std::vector. */
-    const T* data() const { return fPtr; }
-    T* data() { return fPtr; }
-
     // Reallocs the array, can be used to shrink the allocation.  Makes no attempt to be intelligent
     void realloc(size_t count) {
         if (count > kCount) {
             if (fPtr == fTStorage) {
                 fPtr = (T*)sk_malloc_throw(count, sizeof(T));
-                memcpy((void*)fPtr, fTStorage, kCount * sizeof(T));
+                memcpy(fPtr, fTStorage, kCount * sizeof(T));
             } else {
                 fPtr = (T*)sk_realloc_throw(fPtr, count, sizeof(T));
             }
@@ -418,7 +391,36 @@ T* SkInPlaceNewCheck(void* storage, size_t size, Args&&... args) {
     return (sizeof(T) <= size) ? new (storage) T(std::forward<Args>(args)...)
                                : new T(std::forward<Args>(args)...);
 }
+/**
+ * Reserves memory that is aligned on double and pointer boundaries.
+ * Hopefully this is sufficient for all practical purposes.
+ */
+template <size_t N> class SkAlignedSStorage {
+public:
+    SkAlignedSStorage() {}
+    SkAlignedSStorage(SkAlignedSStorage&&) = delete;
+    SkAlignedSStorage(const SkAlignedSStorage&) = delete;
+    SkAlignedSStorage& operator=(SkAlignedSStorage&&) = delete;
+    SkAlignedSStorage& operator=(const SkAlignedSStorage&) = delete;
 
+    size_t size() const { return N; }
+    void* get() { return fData; }
+    const void* get() const { return fData; }
+
+private:
+    union {
+        void*   fPtr;
+        double  fDouble;
+        char    fData[N];
+    };
+};
+
+/**
+ * Reserves memory that is aligned on double and pointer boundaries.
+ * Hopefully this is sufficient for all practical purposes. Otherwise,
+ * we have to do some arcane trickery to determine alignment of non-POD
+ * types. Lifetime of the memory is the lifetime of the object.
+ */
 template <int N, typename T> class SkAlignedSTStorage {
 public:
     SkAlignedSTStorage() {}
@@ -429,25 +431,25 @@ public:
 
     /**
      * Returns void* because this object does not initialize the
-     * memory. Use placement new for types that require a constructor.
+     * memory. Use placement new for types that require a cons.
      */
-    void* get() { return fStorage; }
-    const void* get() const { return fStorage; }
+    void* get() { return fStorage.get(); }
+    const void* get() const { return fStorage.get(); }
 private:
-    alignas(T) char fStorage[sizeof(T)*N];
+    SkAlignedSStorage<sizeof(T)*N> fStorage;
 };
 
 using SkAutoFree = std::unique_ptr<void, SkFunctionWrapper<void(void*), sk_free>>;
 
 template<typename C, std::size_t... Is>
-constexpr auto SkMakeArrayFromIndexSequence(C c, std::index_sequence<Is...> is)
--> std::array<decltype(c(std::declval<typename decltype(is)::value_type>())), sizeof...(Is)> {
+constexpr auto SkMakeArrayFromIndexSequence(C c, skstd::index_sequence<Is...>)
+-> std::array<skstd::result_of_t<C(std::size_t)>, sizeof...(Is)> {
     return {{ c(Is)... }};
 }
 
 template<size_t N, typename C> constexpr auto SkMakeArray(C c)
--> std::array<decltype(c(std::declval<typename std::index_sequence<N>::value_type>())), N> {
-    return SkMakeArrayFromIndexSequence(c, std::make_index_sequence<N>{});
+-> std::array<skstd::result_of_t<C(std::size_t)>, N> {
+    return SkMakeArrayFromIndexSequence(c, skstd::make_index_sequence<N>{});
 }
 
 #endif

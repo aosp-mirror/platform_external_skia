@@ -33,7 +33,7 @@ protected:
     HWND fWnd;
 
 private:
-    using INHERITED = RasterWindowContext;
+    typedef RasterWindowContext INHERITED;
 };
 
 RasterWindowContext_win::RasterWindowContext_win(HWND wnd, const DisplayParams& params)

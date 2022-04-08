@@ -10,11 +10,11 @@
 
 #include "src/gpu/glsl/GrGLSL.h"
 
-struct GrGLDriverInfo;
+struct GrGLInterface;
 
 /**
  * Gets the most recent GLSL Generation compatible with the OpenGL context.
  */
-bool GrGLGetGLSLGeneration(const GrGLDriverInfo&, GrGLSLGeneration* generation);
+bool GrGLGetGLSLGeneration(const GrGLInterface* gl, GrGLSLGeneration* generation);
 
 #endif

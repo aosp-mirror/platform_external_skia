@@ -29,7 +29,7 @@ private:
     void onUnmap() override { sk_free(fMapPtr); }
     bool onUpdateData(const void* src, size_t srcSizeInBytes) override { return true; }
 
-    using INHERITED = GrGpuBuffer;
+    typedef GrGpuBuffer INHERITED;
 };
 
 #endif

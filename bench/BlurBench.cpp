@@ -72,7 +72,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 DEF_BENCH(return new BlurBench(MINI, kNormal_SkBlurStyle);)

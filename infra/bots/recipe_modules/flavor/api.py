@@ -14,6 +14,7 @@ from . import default
 from . import docker
 from . import ios
 from . import valgrind
+from . import win_ssh
 
 
 """Abstractions for running code on various platforms.
@@ -59,25 +60,30 @@ def is_test_skqp(vars_api):
 def is_valgrind(vars_api):
   return 'Valgrind' in vars_api.extra_tokens
 
+def is_win_ssh(vars_api):
+  return 'LenovoYogaC630' in vars_api.builder_cfg.get('model', '')
+
 
 class SkiaFlavorApi(recipe_api.RecipeApi):
-  def get_flavor(self, vars_api, app_name):
+  def get_flavor(self, vars_api):
     """Return a flavor utils object specific to the given builder."""
     if is_chromebook(vars_api):
-      return chromebook.ChromebookFlavor(self, app_name)
+      return chromebook.ChromebookFlavor(self)
     if is_android(vars_api) and not is_test_skqp(vars_api):
-      return android.AndroidFlavor(self, app_name)
+      return android.AndroidFlavor(self)
     elif is_docker(vars_api):
-      return docker.DockerFlavor(self, app_name)
+      return docker.DockerFlavor(self)
     elif is_ios(vars_api):
-      return ios.iOSFlavor(self, app_name)
+      return ios.iOSFlavor(self)
     elif is_valgrind(vars_api):
-      return valgrind.ValgrindFlavor(self, app_name)
+      return valgrind.ValgrindFlavor(self)
+    elif is_win_ssh(vars_api):
+      return win_ssh.WinSSHFlavor(self)
     else:
-      return default.DefaultFlavor(self, app_name)
+      return default.DefaultFlavor(self)
 
-  def setup(self, app_name):
-    self._f = self.get_flavor(self.m.vars, app_name)
+  def setup(self):
+    self._f = self.get_flavor(self.m.vars)
     self.device_dirs = self._f.device_dirs
     self.host_dirs = self._f.host_dirs
     self._skia_dir = self.m.path['start_dir'].join('skia')

@@ -44,9 +44,11 @@ protected:
     }
 
     void onOnceBeforeDraw() override {
-        fBitmap = ToolUtils::create_string_image(80, 80, 0xD000D000, 15, 65, 96, "e");
+        fBitmap = SkImage::MakeFromBitmap(
+                ToolUtils::create_string_bitmap(80, 80, 0xD000D000, 15, 65, 96, "e"));
 
-        fCheckerboard = ToolUtils::create_checkerboard_image(80, 80, 0xFFA0A0A0, 0xFF404040, 8);
+        fCheckerboard = SkImage::MakeFromBitmap(
+                ToolUtils::create_checkerboard_bitmap(80, 80, 0xFFA0A0A0, 0xFF404040, 8));
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -79,12 +81,12 @@ private:
         canvas->save();
         canvas->clipRect(clipRect);
         canvas->scale(scale, scale);
-        canvas->drawImage(image, 0, 0, SkSamplingOptions(), &paint);
+        canvas->drawImage(image, 0, 0, &paint);
         canvas->restore();
 
         // Draw a boundary rect around the intersection of the clip rect and crop rect.
         SkRect cropRectFloat;
-        SkMatrix::Scale(scale, scale).mapRect(&cropRectFloat, SkRect::Make(cropRect));
+        SkMatrix::MakeScale(scale, scale).mapRect(&cropRectFloat, SkRect::Make(cropRect));
         if (clipRect.intersect(cropRectFloat)) {
             SkPaint strokePaint;
             strokePaint.setStyle(SkPaint::kStroke_Style);
@@ -96,7 +98,7 @@ private:
 
     sk_sp<SkImage> fBitmap, fCheckerboard;
 
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 DEF_GM( return new OffsetImageFilterGM; )
 
@@ -114,7 +116,7 @@ protected:
     SkISize onISize() override { return SkISize::Make(640, 200); }
 
     void doDraw(SkCanvas* canvas, const SkRect& r, sk_sp<SkImageFilter> imgf,
-                const SkIRect* cropR = nullptr, const SkRect* clipR = nullptr) {
+                const SkRect* clipR = nullptr) {
         SkPaint p;
 
         if (clipR) {
@@ -125,12 +127,12 @@ protected:
         }
 
         // Visualize the crop rect for debugging
-        if (imgf && cropR) {
+        if (imgf && as_IFB(imgf)->cropRectIsSet()) {
+            SkImageFilter::CropRect cr = as_IFB(imgf)->getCropRect();
+
             p.setColor(0x66FF00FF);
             p.setStyle(SkPaint::kStroke_Style);
-
-            SkRect cr = SkRect::Make(*cropR).makeInset(SK_ScalarHalf, SK_ScalarHalf);
-            canvas->drawRect(cr, p);
+            canvas->drawRect(cr.rect().makeInset(SK_ScalarHalf, SK_ScalarHalf), p);
             p.setStyle(SkPaint::kFill_Style);
         }
 
@@ -168,17 +170,17 @@ protected:
         this->doDraw(canvas, r, SkImageFilters::Offset(20, 20, nullptr));
 
         canvas->translate(100, 0);
-        this->doDraw(canvas, r, SkImageFilters::Offset(20, 20, nullptr, &cr0), &cr0);
+        this->doDraw(canvas, r, SkImageFilters::Offset(20, 20, nullptr, &cr0));
 
         canvas->translate(100, 0);
-        this->doDraw(canvas, r, SkImageFilters::Offset(20, 20, nullptr), /* cropR */ nullptr, &r);
+        this->doDraw(canvas, r, SkImageFilters::Offset(20, 20, nullptr), &r);
 
         canvas->translate(100, 0);
-        this->doDraw(canvas, r, SkImageFilters::Offset(20, 20, nullptr, &cr1), &cr1);
+        this->doDraw(canvas, r, SkImageFilters::Offset(20, 20, nullptr, &cr1));
 
         SkRect clipR = SkRect::MakeXYWH(40, 40, 40, 40);
         canvas->translate(100, 0);
-        this->doDraw(canvas, r, SkImageFilters::Offset(20, 20, nullptr), /* cropR */ nullptr, &clipR);
+        this->doDraw(canvas, r, SkImageFilters::Offset(20, 20, nullptr, nullptr), &clipR);
         canvas->restore();
 
         // 2nd row
@@ -189,22 +191,22 @@ protected:
          */
 
         // crop==clip==src
-        this->doDraw(canvas, r, SkImageFilters::Offset(40, 0, nullptr, &cr0), &cr0, &r);
+        this->doDraw(canvas, r, SkImageFilters::Offset(40, 0, nullptr, &cr0), &r);
 
         // crop==src, clip==dst
         canvas->translate(100, 0);
-        this->doDraw(canvas, r, SkImageFilters::Offset(40, 0, nullptr, &cr0), &cr0, &r2);
+        this->doDraw(canvas, r, SkImageFilters::Offset(40, 0, nullptr, &cr0), &r2);
 
         // crop==dst, clip==src
         canvas->translate(100, 0);
-        this->doDraw(canvas, r, SkImageFilters::Offset(40, 0, nullptr, &cr2), &cr2, &r);
+        this->doDraw(canvas, r, SkImageFilters::Offset(40, 0, nullptr, &cr2), &r);
 
         // crop==clip==dst
         canvas->translate(100, 0);
-        this->doDraw(canvas, r, SkImageFilters::Offset(40, 0, nullptr, &cr2), &cr2, &r2);
+        this->doDraw(canvas, r, SkImageFilters::Offset(40, 0, nullptr, &cr2), &r2);
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 DEF_GM( return new SimpleOffsetImageFilterGM; )

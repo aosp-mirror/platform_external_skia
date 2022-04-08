@@ -16,24 +16,22 @@
 #include "include/core/SkShader.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
-#include "include/core/SkSurface.h"
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
 
-static sk_sp<SkImage> make_image() {
-    auto surf = SkSurface::MakeRasterN32Premul(64, 64);
-    auto canvas = surf->getCanvas();
+static void make_bitmap(SkBitmap* bitmap) {
+    bitmap->allocN32Pixels(64, 64);
 
-    canvas->drawColor(SK_ColorRED);
+    SkCanvas canvas(*bitmap);
+
+    canvas.drawColor(SK_ColorRED);
     SkPaint paint;
     paint.setAntiAlias(true);
     const SkPoint pts[] = { { 0, 0 }, { 64, 64 } };
     const SkColor colors[] = { SK_ColorWHITE, SK_ColorBLUE };
     paint.setShader(SkGradientShader::MakeLinear(pts, colors, nullptr, 2, SkTileMode::kClamp));
-    canvas->drawCircle(32, 32, 32, paint);
-
-    return surf->makeImageSnapshot();
+    canvas.drawCircle(32, 32, 32, paint);
 }
 
 class DrawBitmapRect2 : public skiagm::GM {
@@ -65,9 +63,9 @@ protected:
 
         SkPaint paint;
         paint.setStyle(SkPaint::kStroke_Style);
-        auto sampling = SkSamplingOptions();
 
-        auto image = make_image();
+        SkBitmap bitmap;
+        make_bitmap(&bitmap);
 
         SkRect dstR = { 0, 200, 128, 380 };
 
@@ -76,13 +74,12 @@ protected:
             SkRect srcR;
             srcR.set(src[i]);
 
-            canvas->drawImage(image, 0, 0, sampling, &paint);
+            canvas->drawBitmap(bitmap, 0, 0, &paint);
             if (!fUseIRect) {
-                canvas->drawImageRect(image.get(), srcR, dstR, sampling, &paint,
-                                      SkCanvas::kStrict_SrcRectConstraint);
+                canvas->drawBitmapRect(bitmap, srcR, dstR, &paint,
+                                       SkCanvas::kStrict_SrcRectConstraint);
             } else {
-                canvas->drawImageRect(image.get(), SkRect::Make(src[i]), dstR, sampling, &paint,
-                                      SkCanvas::kStrict_SrcRectConstraint);
+                canvas->drawBitmapRect(bitmap, src[i], dstR, &paint);
             }
 
             canvas->drawRect(dstR, paint);
@@ -93,7 +90,7 @@ protected:
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -152,35 +149,31 @@ protected:
         SkRect srcR = { 0.5f, 0.5f, 2.5f, 2.5f };
         SkRect dstR = { 100, 100, 300, 200 };
 
-        canvas->drawImageRect(bitmap.asImage(), srcR, dstR, SkSamplingOptions(),
-                              nullptr, SkCanvas::kStrict_SrcRectConstraint);
+        canvas->drawBitmapRect(bitmap, srcR, dstR, nullptr, SkCanvas::kStrict_SrcRectConstraint);
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
-static sk_sp<SkImage> make_big_bitmap() {
+static void make_big_bitmap(SkBitmap* bitmap) {
 
     constexpr int gXSize = 4096;
     constexpr int gYSize = 4096;
     constexpr int gBorderWidth = 10;
 
-    SkBitmap bitmap;
-    bitmap.allocN32Pixels(gXSize, gYSize);
+    bitmap->allocN32Pixels(gXSize, gYSize);
     for (int y = 0; y < gYSize; ++y) {
         for (int x = 0; x < gXSize; ++x) {
             if (x <= gBorderWidth || x >= gXSize-gBorderWidth ||
                 y <= gBorderWidth || y >= gYSize-gBorderWidth) {
-                *bitmap.getAddr32(x, y) = SkPreMultiplyColor(0x88FFFFFF);
+                *bitmap->getAddr32(x, y) = SkPreMultiplyColor(0x88FFFFFF);
             } else {
-                *bitmap.getAddr32(x, y) = SkPreMultiplyColor(0x88FF0000);
+                *bitmap->getAddr32(x, y) = SkPreMultiplyColor(0x88FF0000);
             }
         }
     }
-    bitmap.setImmutable();
-    return bitmap.asImage();
 }
 
 // This GM attempts to reveal any issues we may have when the GPU has to
@@ -189,7 +182,7 @@ static sk_sp<SkImage> make_big_bitmap() {
 // tile placement.
 class DrawBitmapRect4 : public skiagm::GM {
     bool fUseIRect;
-    sk_sp<SkImage> fBigImage;
+    SkBitmap fBigBitmap;
 
 public:
     DrawBitmapRect4(bool useIRect) : fUseIRect(useIRect) {
@@ -208,14 +201,13 @@ protected:
     }
 
     void onOnceBeforeDraw() override {
-        fBigImage = make_big_bitmap();
+        make_big_bitmap(&fBigBitmap);
     }
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
         paint.setAlpha(128);
         paint.setBlendMode(SkBlendMode::kXor);
-        SkSamplingOptions sampling;
 
         SkRect srcR1 = { 0.0f, 0.0f, 4096.0f, 2040.0f };
         SkRect dstR1 = { 10.1f, 10.1f, 629.9f, 400.9f };
@@ -224,20 +216,18 @@ protected:
         SkRect dstR2 = { 10, 410, 30, 430 };
 
         if (!fUseIRect) {
-            canvas->drawImageRect(fBigImage, srcR1, dstR1, sampling, &paint,
+            canvas->drawBitmapRect(fBigBitmap, srcR1, dstR1, &paint,
                                    SkCanvas::kStrict_SrcRectConstraint);
-            canvas->drawImageRect(fBigImage, srcR2, dstR2, sampling, &paint,
+            canvas->drawBitmapRect(fBigBitmap, srcR2, dstR2, &paint,
                                    SkCanvas::kStrict_SrcRectConstraint);
         } else {
-            canvas->drawImageRect(fBigImage, SkRect::Make(srcR1.roundOut()), dstR1, sampling,
-                                  &paint, SkCanvas::kStrict_SrcRectConstraint);
-            canvas->drawImageRect(fBigImage, SkRect::Make(srcR2.roundOut()), dstR2, sampling,
-                                  &paint, SkCanvas::kStrict_SrcRectConstraint);
+            canvas->drawBitmapRect(fBigBitmap, srcR1.roundOut(), dstR1, &paint);
+            canvas->drawBitmapRect(fBigBitmap, srcR2.roundOut(), dstR2, &paint);
         }
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 
 class BitmapRectRounding : public skiagm::GM {
@@ -276,11 +266,11 @@ protected:
 
         // the drawRect shows the same problem as clipRect(r) followed by drawcolor(red)
         canvas->drawRect(r, paint);
-        canvas->drawImageRect(fBM.asImage(), r, SkSamplingOptions());
+        canvas->drawBitmapRect(fBM, r, nullptr);
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 DEF_GM( return new BitmapRectRounding; )
 

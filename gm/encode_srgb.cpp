@@ -129,7 +129,7 @@ protected:
         for (SkColorType colorType : colorTypes) {
             for (SkAlphaType alphaType : alphaTypes) {
                 canvas->save();
-                for (const sk_sp<SkColorSpace>& colorSpace : colorSpaces) {
+                for (sk_sp<SkColorSpace> colorSpace : colorSpaces) {
                     make(&bitmap, colorType, alphaType, colorSpace);
                     auto image = SkImage::MakeFromEncoded(encode_data(bitmap, fEncodedFormat));
                     canvas->drawImage(image.get(), 0.0f, 0.0f);
@@ -144,10 +144,10 @@ protected:
 private:
     SkEncodedImageFormat fEncodedFormat;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 DEF_GM( return new EncodeSRGBGM(SkEncodedImageFormat::kPNG); )
 DEF_GM( return new EncodeSRGBGM(SkEncodedImageFormat::kWEBP); )
 DEF_GM( return new EncodeSRGBGM(SkEncodedImageFormat::kJPEG); )
-}  // namespace skiagm
+}

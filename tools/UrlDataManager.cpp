@@ -35,9 +35,13 @@ SkString UrlDataManager::addData(SkData* data, const char* contentType) {
 }
 
 void UrlDataManager::reset() {
-    fCache.foreach([&](UrlData* urlData) {
+    SkTDynamicHash<UrlData, SkData, LookupTrait>::Iter iter(&fCache);
+    while (!iter.done()) {
+        UrlData* urlData = &(*iter);
         urlData->unref();
-    });
+        ++iter;
+    }
+
     fCache.rewind();
 }
 

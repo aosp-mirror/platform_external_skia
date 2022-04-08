@@ -10,19 +10,18 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkFilterQuality.h"
-#include "include/core/SkImage.h"
+#include "include/core/SkImageFilter.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
-#include "include/effects/SkImageFilters.h"
 
 static void draw(SkCanvas* canvas, const SkRect& rect, const SkBitmap& bitmap,
-                 const SkMatrix& matrix, const SkSamplingOptions& sampling) {
+                 const SkMatrix& matrix, SkFilterQuality filter) {
         SkPaint paint;
-        paint.setImageFilter(SkImageFilters::MatrixTransform(matrix, sampling, nullptr));
+        paint.setImageFilter(SkImageFilter::MakeMatrixFilter(matrix, filter, nullptr));
         canvas->saveLayer(&rect, &paint);
-        canvas->drawImage(bitmap.asImage(), 0, 0, sampling);
+        canvas->drawBitmap(bitmap, 0, 0);
         canvas->restore();
 }
 
@@ -56,10 +55,10 @@ DEF_SIMPLE_GM_BG(matriximagefilter, canvas, 420, 100, SK_ColorBLACK) {
         SkRect srcRect = SkRect::MakeWH(96, 96);
 
         canvas->translate(margin, margin);
-        draw(canvas, srcRect, checkerboard, matrix, SkSamplingOptions());
+        draw(canvas, srcRect, checkerboard, matrix, kNone_SkFilterQuality);
 
         canvas->translate(srcRect.width() + margin, 0);
-        draw(canvas, srcRect, checkerboard, matrix, SkSamplingOptions(SkFilterMode::kLinear));
+        draw(canvas, srcRect, checkerboard, matrix, kLow_SkFilterQuality);
 
 #if 0
         // This may be causing Mac 10.6 to barf.

@@ -4,7 +4,6 @@
 
 
 from recipe_engine import recipe_api
-from recipe_engine import recipe_test_api
 
 from . import default
 import subprocess  # TODO(borenet): No! Remove this.
@@ -14,8 +13,8 @@ import subprocess  # TODO(borenet): No! Remove this.
 
 
 class AndroidFlavor(default.DefaultFlavor):
-  def __init__(self, m, app_name):
-    super(AndroidFlavor, self).__init__(m, app_name)
+  def __init__(self, m):
+    super(AndroidFlavor, self).__init__(m)
     self._ever_ran_adb = False
     self.ADB_BINARY = '/usr/bin/adb.1.0.35'
     self.ADB_PUB_KEY = '/home/chrome-bot/.android/adbkey'
@@ -41,9 +40,9 @@ class AndroidFlavor(default.DefaultFlavor):
 
     # A list of devices we can't root.  If rooting fails and a device is not
     # on the list, we fail the task to avoid perf inconsistencies.
-    self.cant_root = ['GalaxyS6', 'GalaxyS7_G930FD', 'GalaxyS9',
-                      'GalaxyS20', 'MotoG4', 'NVIDIA_Shield',
-                      'P30', 'Pixel4','Pixel4XL', 'Pixel5', 'TecnoSpark3Pro']
+    self.rootable_blacklist = ['GalaxyS6', 'GalaxyS7_G930FD', 'GalaxyS9',
+                               'MotoG4', 'NVIDIA_Shield', 'P30',
+                               'TecnoSpark3Pro']
 
     # Maps device type -> CPU ids that should be scaled for nanobench.
     # Many devices have two (or more) different CPUs (e.g. big.LITTLE
@@ -84,7 +83,7 @@ class AndroidFlavor(default.DefaultFlavor):
 
     self._ever_ran_adb = True
     # ADB seems to be occasionally flaky on every device, so always retry.
-    attempts = kwargs.pop('attempts', 3)
+    attempts = 3
 
     def wait_for_device(attempt):
       self.m.run(self.m.step,
@@ -109,7 +108,7 @@ class AndroidFlavor(default.DefaultFlavor):
 
   def _scale_for_dm(self):
     device = self.m.vars.builder_cfg.get('model')
-    if (device in self.cant_root or
+    if (device in self.rootable_blacklist or
         self.m.vars.internal_hardware_label):
       return
 
@@ -137,7 +136,7 @@ class AndroidFlavor(default.DefaultFlavor):
 
   def _scale_for_nanobench(self):
     device = self.m.vars.builder_cfg.get('model')
-    if (device in self.cant_root or
+    if (device in self.rootable_blacklist or
       self.m.vars.internal_hardware_label):
       return
 
@@ -349,20 +348,14 @@ if actual_freq != str(freq):
 
 
   def _asan_setup_path(self):
-    return self.m.vars.workdir.join(
+    return self.m.vars.slave_dir.join(
         'android_ndk_linux', 'toolchains', 'llvm', 'prebuilt', 'linux-x86_64',
-        'lib64', 'clang', '9.0.8', 'bin', 'asan_device_setup')
+        'lib64', 'clang', '8.0.7', 'bin', 'asan_device_setup')
 
 
   def install(self):
     self._adb('mkdir ' + self.device_dirs.resource_dir,
               'shell', 'mkdir', '-p', self.device_dirs.resource_dir)
-    if self.m.vars.builder_cfg.get('model') in ['GalaxyS20', 'GalaxyS9']:
-      # See skia:10184, should be moot once upgraded to Android 11?
-      self._adb('cp libGLES_mali.so to ' + self.device_dirs.bin_dir,
-                 'shell', 'cp',
-                '/vendor/lib64/egl/libGLES_mali.so',
-                self.device_dirs.bin_dir + 'libvulkan.so')
     if 'ASAN' in self.m.vars.extra_tokens:
       self._ever_ran_adb = True
       self.m.run(self.m.python.inline, 'Setting up device to run ASAN',
@@ -442,15 +435,6 @@ time.sleep(60)
                  infra_step=True,
                  timeout=300,
                  abort_on_failure=True)
-    if self.app_name:
-      if (self.app_name == 'nanobench'):
-        self._scale_for_nanobench()
-      else:
-        self._scale_for_dm()
-      app_path = self.host_dirs.bin_dir.join(self.app_name)
-      self._adb('push %s' % self.app_name,
-                'push', app_path, self.device_dirs.bin_dir)
-
 
 
   def cleanup_steps(self):
@@ -508,11 +492,19 @@ time.sleep(60)
     if self._ever_ran_adb:
       self._adb('kill adb server', 'kill-server')
 
-  def step(self, name, cmd):
+  def step(self, name, cmd, **kwargs):
+    if not kwargs.get('skip_binary_push', False):
+      if (cmd[0] == 'nanobench'):
+        self._scale_for_nanobench()
+      else:
+        self._scale_for_dm()
+      app = self.host_dirs.bin_dir.join(cmd[0])
+      self._adb('push %s' % cmd[0],
+                'push', app, self.device_dirs.bin_dir)
+
     sh = '%s.sh' % cmd[0]
     self.m.run.writefile(self.m.vars.tmp_dir.join(sh),
-        'set -x; LD_LIBRARY_PATH=%s %s%s; echo $? >%src' % (
-            self.device_dirs.bin_dir,
+        'set -x; %s%s; echo $? >%src' % (
             self.device_dirs.bin_dir, subprocess.list2cmdline(map(str, cmd)),
             self.device_dirs.bin_dir))
     self._adb('push %s' % sh,
@@ -538,11 +530,30 @@ time.sleep(60)
     self._adb('push %s %s' % (host, device), 'push', host, device)
 
   def copy_directory_contents_to_device(self, host, device):
-    contents = self.m.file.glob_paths('ls %s/*' % host,
-                                      host, '*',
-                                      test_data=['foo.png', 'bar.jpg'])
-    args = contents + [device]
-    self._adb('push %s/* %s' % (host, device), 'push', *args)
+    # Copy the tree, avoiding hidden directories and resolving symlinks.
+    sep = self.m.path.sep
+    host_str = str(host).rstrip(sep) + sep
+    device = device.rstrip('/')
+    with self.m.step.nest('push %s* %s' % (host_str, device)):
+      contents = self.m.file.listdir('list %s' % host, host, recursive=True,
+                                     test_data=['file1',
+                                                'subdir' + sep + 'file2',
+                                                '.file3',
+                                                '.ignore' + sep + 'file4'])
+      for path in contents:
+        path_str = str(path)
+        assert path_str.startswith(host_str), (
+            'expected %s to have %s as a prefix' % (path_str, host_str))
+        relpath = path_str[len(host_str):]
+        # NOTE(dogben): Previous logic used os.walk and skipped directories
+        # starting with '.', but not files starting with '.'. It's not clear
+        # what the reason was (maybe skipping .git?), but I'm keeping that
+        # behavior here.
+        if self.m.path.dirname(relpath).startswith('.'):
+          continue
+        device_path = device + '/' + relpath  # Android paths use /
+        self._adb('push %s' % path, 'push',
+                  self.m.path.realpath(path), device_path)
 
   def copy_directory_contents_to_host(self, device, host):
     # TODO(borenet): When all of our devices are on Android 6.0 and up, we can
@@ -565,36 +576,8 @@ time.sleep(60)
     return rv.stdout.rstrip() if rv and rv.stdout else None
 
   def remove_file_on_device(self, path):
-    self.m.run.with_retry(self.m.python.inline, 'rm %s' % path, 3, program="""
-        import subprocess
-        import sys
-
-        # Remove the path.
-        adb = sys.argv[1]
-        path = sys.argv[2]
-        print('Removing %s' % path)
-        cmd = [adb, 'shell', 'rm', '-rf', path]
-        print(' '.join(cmd))
-        subprocess.check_call(cmd)
-
-        # Verify that the path was deleted.
-        print('Checking for existence of %s' % path)
-        cmd = [adb, 'shell', 'ls', path]
-        print(' '.join(cmd))
-        try:
-          output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-        except subprocess.CalledProcessError as e:
-          output = e.output
-        print('Output was:')
-        print('======')
-        print(output)
-        print('======')
-        if 'No such file or directory' not in output:
-          raise Exception('%s exists despite being deleted' % path)
-        """,
-        args=[self.ADB_BINARY, path],
-        infra_step=True)
+    self._adb('rm %s' % path, 'shell', 'rm', '-f', path)
 
   def create_clean_device_dir(self, path):
-    self.remove_file_on_device(path)
+    self._adb('rm %s' % path, 'shell', 'rm', '-rf', path)
     self._adb('mkdir %s' % path, 'shell', 'mkdir', '-p', path)

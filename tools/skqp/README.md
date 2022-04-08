@@ -86,5 +86,7 @@ Run as a non-APK executable
 
 2.  Build the SkQP program, load files on the device, and run skqp:
 
-        ninja -C out/skqp/arm skqp
-        python tools/skqp/run_skqp_exe out/skqp/arm
+        gn gen out/skqp-arm
+        ninja -C out/skqp-arm skqp
+        python tools/skqp/run_skqp_exe out/skqp-arm
+

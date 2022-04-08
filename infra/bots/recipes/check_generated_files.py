@@ -16,6 +16,7 @@ DEPS = [
   'recipe_engine/raw_io',
   'recipe_engine/step',
   'checkout',
+  'flavor',
   'run',
   'vars',
 ]
@@ -27,6 +28,7 @@ def RunSteps(api):
   checkout_root = api.checkout.default_checkout_root
   api.checkout.bot_update(checkout_root=checkout_root)
   api.file.ensure_directory('makedirs tmp_dir', api.vars.tmp_dir)
+  api.flavor.setup()
 
   cwd = api.path['checkout']
 
@@ -43,6 +45,22 @@ def RunSteps(api):
       api.step('generate gl interfaces',
                cmd=['make', '-C', 'tools/gpu/gl/interface', 'generate'])
 
+    # Reformat all tracked .gn files.
+    api.run(api.python, 'fetch-gn',
+            script='bin/fetch-gn',
+            infra_step=True)
+    files = api.run(api.step, 'list .gn files',
+                    cmd=['git', 'ls-files', '*.gn'],
+                    stdout=api.m.raw_io.output(),
+                    infra_step=True).stdout
+    for f in files.split():
+      api.run(api.step, 'format ' + f,
+              cmd=['bin/gn', 'format', f])
+
+    # Rewrite #includes.
+    api.run(api.python, 'rewrite #includes',
+            script='tools/rewrite_includes.py')
+
     # Touch all .fp files so that the generated files are rebuilt.
     api.run(
         api.python.inline,
@@ -50,7 +68,7 @@ def RunSteps(api):
         program="""import os
 import subprocess
 
-for r, d, files in os.walk(os.path.join('%s', 'src')):
+for r, d, files in os.walk('%s'):
   for f in files:
     if f.endswith('.fp'):
       path = os.path.join(r, f)
@@ -92,5 +110,7 @@ def GenTests(api):
                      revision='abc123',
                      path_config='kitchen',
                      swarm_out_dir='[SWARM_OUT_DIR]') +
-      api.path.exists(api.path['start_dir'])
+      api.path.exists(api.path['start_dir']) +
+      api.step_data('list .gn files',
+                    stdout=api.raw_io.output('BUILD.gn\ngn/foo.gn\n'))
   )

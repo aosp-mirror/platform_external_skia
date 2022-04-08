@@ -137,7 +137,7 @@ protected:
     }
 
 private:
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

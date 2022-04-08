@@ -12,44 +12,42 @@
 
 class GrCopyRenderTask final : public GrRenderTask {
 public:
-    /**
-     * Copies pixels from srcRect in src to SkIRect::MakePtSize(dstPoint, srcRect.dimensions) in
-     * dst. The src/dst share a common origin.
-     */
-    static sk_sp<GrRenderTask> Make(GrDrawingManager*,
-                                    sk_sp<GrSurfaceProxy> src,
-                                    SkIRect srcRect,
-                                    sk_sp<GrSurfaceProxy> dst,
-                                    SkIPoint dstPoint,
-                                    GrSurfaceOrigin);
+    static sk_sp<GrRenderTask> Make(GrSurfaceProxyView srcView,
+                                    const SkIRect& srcRect,
+                                    GrSurfaceProxyView dstView,
+                                    const SkIPoint& dstPoint,
+                                    const GrCaps*);
 
 private:
-    GrCopyRenderTask(GrDrawingManager*,
-                     sk_sp<GrSurfaceProxy> src,
-                     SkIRect srcRect,
-                     sk_sp<GrSurfaceProxy> dst,
-                     SkIPoint dstPoint,
-                     GrSurfaceOrigin);
+    GrCopyRenderTask(GrSurfaceProxyView srcView,
+                     const SkIRect& srcRect,
+                     GrSurfaceProxyView dstView,
+                     const SkIPoint& dstPoint);
 
-    void onMakeSkippable() override { fSrc.reset(); }
-    bool onIsUsed(GrSurfaceProxy* proxy) const override { return proxy == fSrc.get(); }
+    bool onIsUsed(GrSurfaceProxy* proxy) const override {
+        // This case should be handled by GrRenderTask.
+        SkASSERT(proxy != fTargetView.proxy());
+        return proxy == fSrcView.proxy();
+    }
+    // If instantiation failed, at flush time we simply will skip doing the copy.
+    void handleInternalAllocationFailure() override {}
     void gatherProxyIntervals(GrResourceAllocator*) const override;
-    ExpectedOutcome onMakeClosed(const GrCaps&, SkIRect* targetUpdateBounds) override;
+    ExpectedOutcome onMakeClosed(const GrCaps&, SkIRect* targetUpdateBounds) override {
+        targetUpdateBounds->setXYWH(fDstPoint.x(), fDstPoint.y(), fSrcRect.width(),
+                                    fSrcRect.height());
+        return ExpectedOutcome::kTargetDirty;
+    }
     bool onExecute(GrOpFlushState*) override;
 
-#if GR_TEST_UTILS
-    const char* name() const final { return "Copy"; }
-#endif
 #ifdef SK_DEBUG
     void visitProxies_debugOnly(const GrOp::VisitProxyFunc& fn) const override {
-        fn(fSrc.get(), GrMipmapped::kNo);
+        fn(fSrcView.proxy(), GrMipMapped::kNo);
     }
 #endif
 
-    sk_sp<GrSurfaceProxy> fSrc;
+    GrSurfaceProxyView fSrcView;
     SkIRect fSrcRect;
     SkIPoint fDstPoint;
-    GrSurfaceOrigin fOrigin;
 };
 
 #endif

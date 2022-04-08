@@ -79,7 +79,7 @@ protected:
     std::unique_ptr<SkFontData> onMakeFontData() const override;
 
 private:
-    using INHERITED = SkTypeface_FreeType;
+    typedef SkTypeface_FreeType INHERITED;
 };
 
 #endif  // SkFontConfigTypeface_DEFINED

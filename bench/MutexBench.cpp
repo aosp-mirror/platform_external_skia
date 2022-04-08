@@ -31,7 +31,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
     SkString fBenchName;
     Mutex fMu;
 };
@@ -55,7 +55,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
     SkSharedMutex fMu;
 };
 

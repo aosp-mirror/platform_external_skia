@@ -47,7 +47,7 @@ private:
     NSOpenGLPixelFormat* fPixelFormat;
     sk_sp<SkSurface>     fBackbufferSurface;
 
-    using INHERITED = GLWindowContext;
+    typedef GLWindowContext INHERITED;
 };
 
 RasterWindowContext_mac::RasterWindowContext_mac(const MacWindowInfo& info,
@@ -115,7 +115,6 @@ sk_sp<const GrGLInterface> RasterWindowContext_mac::onInitializeContext() {
             return nullptr;
         }
 
-        [fMainView setWantsBestResolutionOpenGLSurface:YES];
         [fGLContext setView:fMainView];
 
         GLint swapInterval = fDisplayParams.fDisableVsync ? 0 : 1;
@@ -138,9 +137,9 @@ sk_sp<const GrGLInterface> RasterWindowContext_mac::onInitializeContext() {
     fSampleCount = sampleCount;
     fSampleCount = std::max(fSampleCount, 1);
 
-    CGFloat backingScaleFactor = sk_app::GetBackingScaleFactor(fMainView);
-    fWidth = fMainView.bounds.size.width * backingScaleFactor;
-    fHeight = fMainView.bounds.size.height * backingScaleFactor;
+    const NSRect viewportRect = [fMainView frame];
+    fWidth = viewportRect.size.width;
+    fHeight = viewportRect.size.height;
     glViewport(0, 0, fWidth, fHeight);
 
     // make the offscreen image
@@ -168,9 +167,7 @@ void RasterWindowContext_mac::onSwapBuffers() {
 
 void RasterWindowContext_mac::resize(int w, int h) {
     [fGLContext update];
-
-    // The super class always recreates the context.
-    INHERITED::resize(0, 0);
+    INHERITED::resize(w, h);
 }
 
 }  // anonymous namespace

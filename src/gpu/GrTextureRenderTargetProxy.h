@@ -32,14 +32,14 @@ private:
                                const GrBackendFormat&,
                                SkISize,
                                int sampleCnt,
-                               GrMipmapped,
-                               GrMipmapStatus,
+                               GrMipMapped,
+                               GrMipMapsStatus,
+                               const GrSwizzle& textureSwizzle,
                                SkBackingFit,
                                SkBudgeted,
                                GrProtected,
                                GrInternalSurfaceFlags,
-                               UseAllocator,
-                               GrDDLProvider creatingProvider);
+                               UseAllocator);
 
     // Lazy-callback version
     GrTextureRenderTargetProxy(const GrCaps&,
@@ -47,27 +47,27 @@ private:
                                const GrBackendFormat&,
                                SkISize,
                                int sampleCnt,
-                               GrMipmapped,
-                               GrMipmapStatus,
+                               GrMipMapped,
+                               GrMipMapsStatus,
+                               const GrSwizzle& textureSwizzle,
                                SkBackingFit,
                                SkBudgeted,
                                GrProtected,
                                GrInternalSurfaceFlags,
-                               UseAllocator,
-                               GrDDLProvider creatingProvider);
+                               UseAllocator);
 
     // Wrapped version
     GrTextureRenderTargetProxy(sk_sp<GrSurface>,
-                               UseAllocator,
-                               GrDDLProvider creatingProvider);
+                               const GrSwizzle& textureSwizzle,
+                               UseAllocator);
 
     void initSurfaceFlags(const GrCaps&);
 
     bool instantiate(GrResourceProvider*) override;
     sk_sp<GrSurface> createSurface(GrResourceProvider*) const override;
 
-    size_t onUninstantiatedGpuMemorySize() const override;
-    LazySurfaceDesc callbackDesc() const override;
+    size_t onUninstantiatedGpuMemorySize(const GrCaps&) const override;
+
     SkDEBUGCODE(void onValidateSurface(const GrSurface*) override;)
 };
 

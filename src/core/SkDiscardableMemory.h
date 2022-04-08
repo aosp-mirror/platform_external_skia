@@ -31,7 +31,7 @@ public:
     public:
         virtual SkDiscardableMemory* create(size_t bytes) = 0;
     private:
-        using INHERITED = SkRefCnt;
+        typedef SkRefCnt INHERITED;
     };
 
     /** Must not be called while locked.
@@ -60,11 +60,6 @@ public:
      * after every successful lock call.
      */
     virtual void unlock() = 0;
-
-protected:
-    SkDiscardableMemory() = default;
-    SkDiscardableMemory(const SkDiscardableMemory&) = delete;
-    SkDiscardableMemory& operator=(const SkDiscardableMemory&) = delete;
 };
 
 #endif

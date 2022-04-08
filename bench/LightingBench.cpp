@@ -92,7 +92,7 @@ protected:
     }
 
     bool fIsSmall;
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 class LightingPointLitDiffuseBench : public LightingBaseBench {
@@ -110,7 +110,7 @@ protected:
     }
 
 private:
-    using INHERITED = LightingBaseBench;
+    typedef LightingBaseBench INHERITED;
 };
 
 class LightingDistantLitDiffuseBench : public LightingBaseBench {
@@ -128,7 +128,7 @@ protected:
     }
 
 private:
-    using INHERITED = LightingBaseBench;
+    typedef LightingBaseBench INHERITED;
 };
 
 class LightingSpotLitDiffuseBench : public LightingBaseBench {
@@ -147,7 +147,7 @@ protected:
     }
 
 private:
-    using INHERITED = LightingBaseBench;
+    typedef LightingBaseBench INHERITED;
 };
 
 class LightingPointLitSpecularBench : public LightingBaseBench {
@@ -166,7 +166,7 @@ protected:
     }
 
 private:
-    using INHERITED = LightingBaseBench;
+    typedef LightingBaseBench INHERITED;
 };
 
 class LightingDistantLitSpecularBench : public LightingBaseBench {
@@ -185,7 +185,7 @@ protected:
     }
 
 private:
-    using INHERITED = LightingBaseBench;
+    typedef LightingBaseBench INHERITED;
 };
 
 class LightingSpotLitSpecularBench : public LightingBaseBench {
@@ -204,7 +204,7 @@ protected:
     }
 
 private:
-    using INHERITED = LightingBaseBench;
+    typedef LightingBaseBench INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -13,12 +13,12 @@
 #include "include/core/SkFontMetrics.h"
 #include "include/core/SkFontStyle.h"
 #include "include/core/SkPath.h"
-#include "include/core/SkSpan.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypeface.h"
 #include "include/private/SkTArray.h"
 #include "src/core/SkOSFile.h"
-#include "src/core/SkPathPriv.h"
+#include "src/core/SkSpan.h"
+#include "src/core/SkTSort.h"
 #include "src/utils/SkOSPath.h"
 #include "src/utils/SkUTF.h"
 
@@ -128,22 +128,25 @@ static void output_path_data(const SkFont& font,
         uint16_t glyphID = font.unicharToGlyph(index);
         SkPath path;
         font.getPath(glyphID, &path);
-        for (auto [verb, pts, w] : SkPathPriv::Iterate(path)) {
-            *verbs->append() = (SkPath::Verb)verb;
+        SkPath::RawIter iter(path);
+        SkPath::Verb verb;
+        SkPoint pts[4];
+        while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
+            *verbs->append() = verb;
             switch (verb) {
-                case SkPathVerb::kMove:
+                case SkPath::kMove_Verb:
                     output_points(&pts[0], emSize, 1, ptsOut);
                     break;
-                case SkPathVerb::kLine:
+                case SkPath::kLine_Verb:
                     output_points(&pts[1], emSize, 1, ptsOut);
                     break;
-                case SkPathVerb::kQuad:
+                case SkPath::kQuad_Verb:
                     output_points(&pts[1], emSize, 2, ptsOut);
                     break;
-                case SkPathVerb::kCubic:
+                case SkPath::kCubic_Verb:
                     output_points(&pts[1], emSize, 3, ptsOut);
                     break;
-                case SkPathVerb::kClose:
+                case SkPath::kClose_Verb:
                     break;
                 default:
                     SkDEBUGFAIL("bad verb");

@@ -5,12 +5,11 @@
  * found in the LICENSE file.
  */
 #include "bench/Benchmark.h"
+#include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
-#include "include/core/SkImage.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkString.h"
-#include "include/core/SkSurface.h"
 
 /**
  * This bench measures the rendering time of SkCanvas::drawBitmap with different anti-aliasing /
@@ -24,6 +23,8 @@ public:
         , fName("draw_bitmap_") {
 
         fPaint.setAntiAlias(doAA);
+        // Most clients use filtering, so let's focus on this for now.
+        fPaint.setFilterQuality(kLow_SkFilterQuality);
         fName.appendf("%s_%s", doAA ? "aa" : "noaa", name);
     }
 
@@ -33,16 +34,14 @@ protected:
     }
 
     void onDelayedSetup() override {
-        auto surf = SkSurface::MakeRasterN32Premul(200, 200);
-        surf->getCanvas()->clear(0xFF00FF00);
-        fImage = surf->makeImageSnapshot();
+        fBitmap.allocN32Pixels(200, 200);
+        fBitmap.eraseARGB(255, 0, 255, 0);
     }
 
     void onDraw(int loops, SkCanvas* canvas) override {
-        SkSamplingOptions sampling(SkFilterMode::kLinear);
         canvas->concat(fMatrix);
         for (int i = 0; i < loops; i++) {
-            canvas->drawImage(fImage.get(), 0, 0, sampling, &fPaint);
+            canvas->drawBitmap(fBitmap, 0, 0, &fPaint);
         }
     }
 
@@ -50,16 +49,16 @@ private:
     SkPaint  fPaint;
     SkMatrix fMatrix;
     SkString fName;
-    sk_sp<SkImage> fImage;
+    SkBitmap fBitmap;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
-DEF_BENCH( return new DrawBitmapAABench(false, SkMatrix::I(), "ident"); )
+DEF_BENCH( return new DrawBitmapAABench(false, SkMatrix::MakeScale(1), "ident"); )
 
-DEF_BENCH( return new DrawBitmapAABench(false, SkMatrix::Scale(1.17f, 1.17f), "scale"); )
+DEF_BENCH( return new DrawBitmapAABench(false, SkMatrix::MakeScale(1.17f), "scale"); )
 
-DEF_BENCH( return new DrawBitmapAABench(false, SkMatrix::Translate(17.5f, 17.5f), "translate"); )
+DEF_BENCH( return new DrawBitmapAABench(false, SkMatrix::MakeTrans(17.5f, 17.5f), "translate"); )
 
 DEF_BENCH(
     SkMatrix m;
@@ -68,11 +67,11 @@ DEF_BENCH(
     return new DrawBitmapAABench(false, m, "rotate");
 )
 
-DEF_BENCH( return new DrawBitmapAABench(true, SkMatrix::I(), "ident"); )
+DEF_BENCH( return new DrawBitmapAABench(true, SkMatrix::MakeScale(1), "ident"); )
 
-DEF_BENCH( return new DrawBitmapAABench(true, SkMatrix::Scale(1.17f, 1.17f), "scale"); )
+DEF_BENCH( return new DrawBitmapAABench(true, SkMatrix::MakeScale(1.17f), "scale"); )
 
-DEF_BENCH( return new DrawBitmapAABench(true, SkMatrix::Translate(17.5f, 17.5f), "translate"); )
+DEF_BENCH( return new DrawBitmapAABench(true, SkMatrix::MakeTrans(17.5f, 17.5f), "translate"); )
 
 DEF_BENCH(
     SkMatrix m;

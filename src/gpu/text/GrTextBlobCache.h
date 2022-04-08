@@ -9,28 +9,99 @@
 #define GrTextBlobCache_DEFINED
 
 #include "include/core/SkRefCnt.h"
-#include "include/private/SkMutex.h"
 #include "include/private/SkTArray.h"
 #include "include/private/SkTHash.h"
 #include "src/core/SkMessageBus.h"
 #include "src/core/SkTextBlobPriv.h"
 #include "src/gpu/text/GrTextBlob.h"
 
-#include <functional>
-
 class GrTextBlobCache {
 public:
-    GrTextBlobCache(uint32_t messageBusID);
+    /**
+     * The callback function used by the cache when it is still over budget after a purge. The
+     * passed in 'data' is the same 'data' handed to setOverbudgetCallback.
+     */
+    typedef void (*PFOverBudgetCB)(void* data);
 
-    // If not already in the cache, then add it else, return the text blob from the cache.
-    sk_sp<GrTextBlob> addOrReturnExisting(
-            const SkGlyphRunList& glyphRunList, sk_sp<GrTextBlob> blob) SK_EXCLUDES(fSpinLock);
+    GrTextBlobCache(PFOverBudgetCB cb, void* data, uint32_t uniqueID)
+        : fCallback(cb)
+        , fData(data)
+        , fSizeBudget(kDefaultBudget)
+        , fUniqueID(uniqueID)
+        , fPurgeBlobInbox(uniqueID) {
+        SkASSERT(cb && data);
+    }
+    ~GrTextBlobCache();
 
-    sk_sp<GrTextBlob> find(const GrTextBlob::Key& key) SK_EXCLUDES(fSpinLock);
+    sk_sp<GrTextBlob> makeBlob(const SkGlyphRunList& glyphRunList,
+                               GrStrikeCache* strikeCache,
+                               const SkMatrix& viewMatrix,
+                               GrColor color,
+                               bool forceW) {
+        return GrTextBlob::Make(
+                glyphRunList,
+                strikeCache,
+                viewMatrix,
+                color,
+                forceW);
+    }
 
-    void remove(GrTextBlob* blob) SK_EXCLUDES(fSpinLock);
+    sk_sp<GrTextBlob> makeCachedBlob(const SkGlyphRunList& glyphRunList,
+                                     GrStrikeCache* strikeCache,
+                                     const GrTextBlob::Key& key,
+                                     const SkMaskFilterBase::BlurRec& blurRec,
+                                     const SkMatrix& viewMatrix,
+                                     GrColor color,
+                                     bool forceW) {
+        sk_sp<GrTextBlob> cacheBlob(
+                this->makeBlob(glyphRunList, strikeCache, viewMatrix, color, forceW));
+        cacheBlob->setupKey(key, blurRec, glyphRunList.paint());
+        this->add(cacheBlob);
+        glyphRunList.temporaryShuntBlobNotifyAddedToCache(fUniqueID);
+        return cacheBlob;
+    }
 
-    void freeAll() SK_EXCLUDES(fSpinLock);
+    sk_sp<GrTextBlob> find(const GrTextBlob::Key& key) const {
+        const auto* idEntry = fBlobIDCache.find(key.fUniqueID);
+        return idEntry ? idEntry->find(key) : nullptr;
+    }
+
+    void remove(GrTextBlob* blob) {
+        auto  id      = GrTextBlob::GetKey(*blob).fUniqueID;
+        auto* idEntry = fBlobIDCache.find(id);
+        SkASSERT(idEntry);
+
+        fCurrentSize -= blob->size();
+        fBlobList.remove(blob);
+        idEntry->removeBlob(blob);
+        if (idEntry->fBlobs.empty()) {
+            fBlobIDCache.remove(id);
+        }
+    }
+
+    void makeMRU(GrTextBlob* blob) {
+        if (fBlobList.head() == blob) {
+            return;
+        }
+
+        fBlobList.remove(blob);
+        fBlobList.addToHead(blob);
+    }
+
+    void freeAll();
+
+    // TODO move to SkTextBlob
+    static void BlobGlyphCount(int* glyphCount, int* runCount, const SkTextBlob* blob) {
+        SkTextBlobRunIterator itCounter(blob);
+        for (; !itCounter.done(); itCounter.next(), (*runCount)++) {
+            *glyphCount += itCounter.glyphCount();
+        }
+    }
+
+    void setBudget(size_t budget) {
+        fSizeBudget = budget;
+        this->checkPurge();
+    }
 
     struct PurgeBlobMessage {
         PurgeBlobMessage(uint32_t blobID, uint32_t contextUniqueID)
@@ -42,54 +113,87 @@ public:
 
     static void PostPurgeBlobMessage(uint32_t blobID, uint32_t cacheID);
 
-    void purgeStaleBlobs() SK_EXCLUDES(fSpinLock);
+    void purgeStaleBlobs();
 
-    size_t usedBytes() const SK_EXCLUDES(fSpinLock);
-
-    bool isOverBudget() const SK_EXCLUDES(fSpinLock);
+    size_t usedBytes() const { return fCurrentSize; }
 
 private:
-    friend class GrTextBlobTestingPeer;
-    using TextBlobList = SkTInternalLList<GrTextBlob>;
+    using BitmapBlobList = SkTInternalLList<GrTextBlob>;
 
     struct BlobIDCacheEntry {
-        BlobIDCacheEntry();
-        explicit BlobIDCacheEntry(uint32_t id);
+        BlobIDCacheEntry() : fID(SK_InvalidGenID) {}
+        explicit BlobIDCacheEntry(uint32_t id) : fID(id) {}
 
-        static uint32_t GetKey(const BlobIDCacheEntry& entry);
+        static uint32_t GetKey(const BlobIDCacheEntry& entry) {
+            return entry.fID;
+        }
 
-        void addBlob(sk_sp<GrTextBlob> blob);
+        void addBlob(sk_sp<GrTextBlob> blob) {
+            SkASSERT(blob);
+            SkASSERT(GrTextBlob::GetKey(*blob).fUniqueID == fID);
+            SkASSERT(!this->find(GrTextBlob::GetKey(*blob)));
 
-        void removeBlob(GrTextBlob* blob);
+            fBlobs.emplace_back(std::move(blob));
+        }
 
-        sk_sp<GrTextBlob> find(const GrTextBlob::Key& key) const;
+        void removeBlob(GrTextBlob* blob) {
+            SkASSERT(blob);
+            SkASSERT(GrTextBlob::GetKey(*blob).fUniqueID == fID);
 
-        int findBlobIndex(const GrTextBlob::Key& key) const;
+            auto index = this->findBlobIndex(GrTextBlob::GetKey(*blob));
+            SkASSERT(index >= 0);
 
-        uint32_t fID;
+            fBlobs.removeShuffle(index);
+        }
+
+        sk_sp<GrTextBlob> find(const GrTextBlob::Key& key) const {
+            auto index = this->findBlobIndex(key);
+            return index < 0 ? nullptr : fBlobs[index];
+        }
+
+        int findBlobIndex(const GrTextBlob::Key& key) const{
+            for (int i = 0; i < fBlobs.count(); ++i) {
+                if (GrTextBlob::GetKey(*fBlobs[i]) == key) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        uint32_t                        fID;
         // Current clients don't generate multiple GrAtlasTextBlobs per SkTextBlob, so an array w/
         // linear search is acceptable.  If usage changes, we should re-evaluate this structure.
         SkSTArray<1, sk_sp<GrTextBlob>> fBlobs;
     };
 
-    void internalPurgeStaleBlobs() SK_REQUIRES(fSpinLock);
+    void add(sk_sp<GrTextBlob> blob) {
+        auto  id      = GrTextBlob::GetKey(*blob).fUniqueID;
+        auto* idEntry = fBlobIDCache.find(id);
+        if (!idEntry) {
+            idEntry = fBlobIDCache.set(id, BlobIDCacheEntry(id));
+        }
 
-    sk_sp<GrTextBlob> internalAdd(sk_sp<GrTextBlob> blob) SK_REQUIRES(fSpinLock);
-    void internalRemove(GrTextBlob* blob) SK_REQUIRES(fSpinLock);
+        // Safe to retain a raw ptr temporarily here, because the cache will hold a ref.
+        GrTextBlob* rawBlobPtr = blob.get();
+        fBlobList.addToHead(rawBlobPtr);
+        fCurrentSize += blob->size();
+        idEntry->addBlob(std::move(blob));
 
-    void internalCheckPurge(GrTextBlob* blob = nullptr) SK_REQUIRES(fSpinLock);
+        this->checkPurge(rawBlobPtr);
+    }
 
+    void checkPurge(GrTextBlob* blob = nullptr);
+
+    static const int kMinGrowthSize = 1 << 16;
     static const int kDefaultBudget = 1 << 22;
-
-    mutable SkSpinlock fSpinLock;
-    TextBlobList fBlobList SK_GUARDED_BY(fSpinLock);
-    SkTHashMap<uint32_t, BlobIDCacheEntry> fBlobIDCache SK_GUARDED_BY(fSpinLock);
-    size_t fSizeBudget SK_GUARDED_BY(fSpinLock);
-    size_t fCurrentSize SK_GUARDED_BY(fSpinLock) {0};
-
-    // In practice 'messageBusID' is always the unique ID of the owning GrContext
-    const uint32_t fMessageBusID;
-    SkMessageBus<PurgeBlobMessage, uint32_t>::Inbox fPurgeBlobInbox SK_GUARDED_BY(fSpinLock);
+    BitmapBlobList fBlobList;
+    SkTHashMap<uint32_t, BlobIDCacheEntry> fBlobIDCache;
+    PFOverBudgetCB fCallback;
+    void* fData;
+    size_t fSizeBudget;
+    size_t fCurrentSize{0};
+    uint32_t fUniqueID;      // unique id to use for messaging
+    SkMessageBus<PurgeBlobMessage>::Inbox fPurgeBlobInbox;
 };
 
 #endif

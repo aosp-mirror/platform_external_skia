@@ -10,8 +10,7 @@
  **************************************************************************************************/
 #include "GrColorMatrixFragmentProcessor.h"
 
-#include "src/core/SkUtils.h"
-#include "src/gpu/GrTexture.h"
+#include "include/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramBuilder.h"
@@ -35,37 +34,20 @@ public:
         (void)clampRGBOutput;
         auto premulOutput = _outer.premulOutput;
         (void)premulOutput;
-        mVar = args.fUniformHandler->addUniform(
-                &_outer, kFragment_GrShaderFlag, kHalf4x4_GrSLType, "m");
-        vVar = args.fUniformHandler->addUniform(
-                &_outer, kFragment_GrShaderFlag, kHalf4_GrSLType, "v");
-        SkString _sample0 = this->invokeChild(0, args);
+        mVar = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kHalf4x4_GrSLType, "m");
+        vVar = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kHalf4_GrSLType, "v");
         fragBuilder->codeAppendf(
-                R"SkSL(half4 color = %s;
-@if (%s) {
-    color = half4(color.xyz / max(color.w, 9.9999997473787516e-05), color.w);
-}
-color = (sk_Caps.rewriteMatrixVectorMultiply ? ((%s[0] * color.x + %s[1] * color.y) + %s[2] * color.z) + %s[3] * color.w : %s * color) + %s;
-@if (%s) {
-    color = clamp(color, 0.0, 1.0);
-} else {
-    color.w = clamp(color.w, 0.0, 1.0);
-}
-@if (%s) {
-    color.xyz *= color.w;
-}
-return color;
-)SkSL",
-                _sample0.c_str(),
-                (_outer.unpremulInput ? "true" : "false"),
-                args.fUniformHandler->getUniformCStr(mVar),
-                args.fUniformHandler->getUniformCStr(mVar),
-                args.fUniformHandler->getUniformCStr(mVar),
-                args.fUniformHandler->getUniformCStr(mVar),
+                "half4 inputColor = %s;\n@if (%s) {\n    half nonZeroAlpha = max(inputColor.w, "
+                "9.9999997473787516e-05);\n    inputColor = half4(inputColor.xyz / nonZeroAlpha, "
+                "inputColor.w);\n}\n%s = %s * inputColor + %s;\n@if (%s) {\n    %s = clamp(%s, "
+                "0.0, 1.0);\n} else {\n    %s.w = clamp(%s.w, 0.0, 1.0);\n}\n@if (%s) {\n    "
+                "%s.xyz *= %s.w;\n}\n",
+                args.fInputColor, (_outer.unpremulInput ? "true" : "false"), args.fOutputColor,
                 args.fUniformHandler->getUniformCStr(mVar),
                 args.fUniformHandler->getUniformCStr(vVar),
-                (_outer.clampRGBOutput ? "true" : "false"),
-                (_outer.premulOutput ? "true" : "false"));
+                (_outer.clampRGBOutput ? "true" : "false"), args.fOutputColor, args.fOutputColor,
+                args.fOutputColor, args.fOutputColor, (_outer.premulOutput ? "true" : "false"),
+                args.fOutputColor, args.fOutputColor);
     }
 
 private:
@@ -76,7 +58,6 @@ private:
             const SkM44& mValue = _outer.m;
             if (mPrev != (mValue)) {
                 mPrev = mValue;
-                static_assert(1 == 1);
                 pdman.setSkM44(mVar, mValue);
             }
             const SkV4& vValue = _outer.v;
@@ -91,14 +72,14 @@ private:
     UniformHandle mVar;
     UniformHandle vVar;
 };
-std::unique_ptr<GrGLSLFragmentProcessor> GrColorMatrixFragmentProcessor::onMakeProgramImpl() const {
-    return std::make_unique<GrGLSLColorMatrixFragmentProcessor>();
+GrGLSLFragmentProcessor* GrColorMatrixFragmentProcessor::onCreateGLSLInstance() const {
+    return new GrGLSLColorMatrixFragmentProcessor();
 }
 void GrColorMatrixFragmentProcessor::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                                            GrProcessorKeyBuilder* b) const {
-    b->addBool(unpremulInput, "unpremulInput");
-    b->addBool(clampRGBOutput, "clampRGBOutput");
-    b->addBool(premulOutput, "premulOutput");
+    b->add32((int32_t)unpremulInput);
+    b->add32((int32_t)clampRGBOutput);
+    b->add32((int32_t)premulOutput);
 }
 bool GrColorMatrixFragmentProcessor::onIsEqual(const GrFragmentProcessor& other) const {
     const GrColorMatrixFragmentProcessor& that = other.cast<GrColorMatrixFragmentProcessor>();
@@ -117,42 +98,10 @@ GrColorMatrixFragmentProcessor::GrColorMatrixFragmentProcessor(
         , v(src.v)
         , unpremulInput(src.unpremulInput)
         , clampRGBOutput(src.clampRGBOutput)
-        , premulOutput(src.premulOutput) {
-    this->cloneAndRegisterAllChildProcessors(src);
-}
+        , premulOutput(src.premulOutput) {}
 std::unique_ptr<GrFragmentProcessor> GrColorMatrixFragmentProcessor::clone() const {
-    return std::make_unique<GrColorMatrixFragmentProcessor>(*this);
+    return std::unique_ptr<GrFragmentProcessor>(new GrColorMatrixFragmentProcessor(*this));
 }
-#if GR_TEST_UTILS
-SkString GrColorMatrixFragmentProcessor::onDumpInfo() const {
-    return SkStringPrintf(
-            "(m=half4x4(%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f), "
-            "v=half4(%f, %f, %f, %f), unpremulInput=%s, clampRGBOutput=%s, premulOutput=%s)",
-            m.rc(0, 0),
-            m.rc(1, 0),
-            m.rc(2, 0),
-            m.rc(3, 0),
-            m.rc(0, 1),
-            m.rc(1, 1),
-            m.rc(2, 1),
-            m.rc(3, 1),
-            m.rc(0, 2),
-            m.rc(1, 2),
-            m.rc(2, 2),
-            m.rc(3, 2),
-            m.rc(0, 3),
-            m.rc(1, 3),
-            m.rc(2, 3),
-            m.rc(3, 3),
-            v.x,
-            v.y,
-            v.z,
-            v.w,
-            (unpremulInput ? "true" : "false"),
-            (clampRGBOutput ? "true" : "false"),
-            (premulOutput ? "true" : "false"));
-}
-#endif
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrColorMatrixFragmentProcessor);
 #if GR_TEST_UTILS
 std::unique_ptr<GrFragmentProcessor> GrColorMatrixFragmentProcessor::TestCreate(
@@ -164,6 +113,6 @@ std::unique_ptr<GrFragmentProcessor> GrColorMatrixFragmentProcessor::TestCreate(
     bool unpremul = d->fRandom->nextBool();
     bool clampRGB = d->fRandom->nextBool();
     bool premul = d->fRandom->nextBool();
-    return Make(d->inputFP(), m, unpremul, clampRGB, premul);
+    return Make(m, unpremul, clampRGB, premul);
 }
 #endif

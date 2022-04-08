@@ -47,14 +47,7 @@ SK_API const GrGLInterface* GrGLCreateNativeInterface();
  */
 struct SK_API GrGLInterface : public SkRefCnt {
 private:
-    using INHERITED = SkRefCnt;
-
-#if GR_GL_CHECK_ERROR
-    // This is here to avoid having our debug code that checks for a GL error after most GL calls
-    // accidentally swallow an OOM that should be reported.
-    mutable bool fOOMed = false;
-    bool fSuppressErrorLogging = false;
-#endif
+    typedef SkRefCnt INHERITED;
 
 public:
     GrGLInterface();
@@ -63,19 +56,6 @@ public:
     // function pointers have been initialized for both the GL version and any advertised
     // extensions.
     bool validate() const;
-
-#if GR_GL_CHECK_ERROR
-    GrGLenum checkError(const char* location, const char* call) const;
-    bool checkAndResetOOMed() const;
-    void suppressErrorLogging();
-#endif
-
-#if GR_TEST_UTILS
-    GrGLInterface(const GrGLInterface& that)
-            : fStandard(that.fStandard)
-            , fExtensions(that.fExtensions)
-            , fFunctions(that.fFunctions) {}
-#endif
 
     // Indicates the type of GL implementation
     union {
@@ -205,12 +185,8 @@ public:
         GrGLFunction<GrGLMapBufferSubDataFn> fMapBufferSubData;
         GrGLFunction<GrGLMapTexSubImage2DFn> fMapTexSubImage2D;
         GrGLFunction<GrGLMemoryBarrierFn> fMemoryBarrier;
-        GrGLFunction<GrGLDrawArraysInstancedBaseInstanceFn> fDrawArraysInstancedBaseInstance;
-        GrGLFunction<GrGLDrawElementsInstancedBaseVertexBaseInstanceFn> fDrawElementsInstancedBaseVertexBaseInstance;
         GrGLFunction<GrGLMultiDrawArraysIndirectFn> fMultiDrawArraysIndirect;
         GrGLFunction<GrGLMultiDrawElementsIndirectFn> fMultiDrawElementsIndirect;
-        GrGLFunction<GrGLMultiDrawArraysInstancedBaseInstanceFn> fMultiDrawArraysInstancedBaseInstance;
-        GrGLFunction<GrGLMultiDrawElementsInstancedBaseVertexBaseInstanceFn> fMultiDrawElementsInstancedBaseVertexBaseInstance;
         GrGLFunction<GrGLPatchParameteriFn> fPatchParameteri;
         GrGLFunction<GrGLPixelStoreiFn> fPixelStorei;
         GrGLFunction<GrGLPolygonModeFn> fPolygonMode;
@@ -302,6 +278,35 @@ public:
         GrGLFunction<GrGLVertexAttribIPointerFn> fVertexAttribIPointer;
         GrGLFunction<GrGLVertexAttribPointerFn> fVertexAttribPointer;
         GrGLFunction<GrGLViewportFn> fViewport;
+
+        /* GL_NV_path_rendering */
+        GrGLFunction<GrGLMatrixLoadfFn> fMatrixLoadf;
+        GrGLFunction<GrGLMatrixLoadIdentityFn> fMatrixLoadIdentity;
+        GrGLFunction<GrGLGetProgramResourceLocationFn> fGetProgramResourceLocation;
+        GrGLFunction<GrGLPathCommandsFn> fPathCommands;
+        GrGLFunction<GrGLPathParameteriFn> fPathParameteri;
+        GrGLFunction<GrGLPathParameterfFn> fPathParameterf;
+        GrGLFunction<GrGLGenPathsFn> fGenPaths;
+        GrGLFunction<GrGLDeletePathsFn> fDeletePaths;
+        GrGLFunction<GrGLIsPathFn> fIsPath;
+        GrGLFunction<GrGLPathStencilFuncFn> fPathStencilFunc;
+        GrGLFunction<GrGLStencilFillPathFn> fStencilFillPath;
+        GrGLFunction<GrGLStencilStrokePathFn> fStencilStrokePath;
+        GrGLFunction<GrGLStencilFillPathInstancedFn> fStencilFillPathInstanced;
+        GrGLFunction<GrGLStencilStrokePathInstancedFn> fStencilStrokePathInstanced;
+        GrGLFunction<GrGLCoverFillPathFn> fCoverFillPath;
+        GrGLFunction<GrGLCoverStrokePathFn> fCoverStrokePath;
+        GrGLFunction<GrGLCoverFillPathInstancedFn> fCoverFillPathInstanced;
+        GrGLFunction<GrGLCoverStrokePathInstancedFn> fCoverStrokePathInstanced;
+        // NV_path_rendering v1.2
+        GrGLFunction<GrGLStencilThenCoverFillPathFn> fStencilThenCoverFillPath;
+        GrGLFunction<GrGLStencilThenCoverStrokePathFn> fStencilThenCoverStrokePath;
+        GrGLFunction<GrGLStencilThenCoverFillPathInstancedFn> fStencilThenCoverFillPathInstanced;
+        GrGLFunction<GrGLStencilThenCoverStrokePathInstancedFn> fStencilThenCoverStrokePathInstanced;
+        // NV_path_rendering v1.3
+        GrGLFunction<GrGLProgramPathFragmentInputGenFn> fProgramPathFragmentInputGen;
+        // CHROMIUM_path_rendering
+        GrGLFunction<GrGLBindFragmentInputLocationFn> fBindFragmentInputLocation;
 
         /* NV_framebuffer_mixed_samples */
         GrGLFunction<GrGLCoverageModulationFn> fCoverageModulation;

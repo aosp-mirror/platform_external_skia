@@ -97,15 +97,22 @@
 #define SK_CPU_SSE_LEVEL_SSE42    42
 #define SK_CPU_SSE_LEVEL_AVX      51
 #define SK_CPU_SSE_LEVEL_AVX2     52
-#define SK_CPU_SSE_LEVEL_SKX      60
+#define SK_CPU_SSE_LEVEL_AVX512   60
+
+// When targetting iOS and using gyp to generate the build files, it is not
+// possible to select files to build depending on the architecture (i.e. it
+// is not possible to use hand optimized assembly implementation). In that
+// configuration SK_BUILD_NO_OPTS is defined. Remove optimisation then.
+#ifdef SK_BUILD_NO_OPTS
+    #define SK_CPU_SSE_LEVEL 0
+#endif
 
 // Are we in GCC/Clang?
 #ifndef SK_CPU_SSE_LEVEL
     // These checks must be done in descending order to ensure we set the highest
     // available SSE level.
-    #if defined(__AVX512F__) && defined(__AVX512DQ__) && defined(__AVX512CD__) && \
-        defined(__AVX512BW__) && defined(__AVX512VL__)
-        #define SK_CPU_SSE_LEVEL    SK_CPU_SSE_LEVEL_SKX
+    #if defined(__AVX512F__)
+        #define SK_CPU_SSE_LEVEL    SK_CPU_SSE_LEVEL_AVX512
     #elif defined(__AVX2__)
         #define SK_CPU_SSE_LEVEL    SK_CPU_SSE_LEVEL_AVX2
     #elif defined(__AVX__)
@@ -127,10 +134,7 @@
 #ifndef SK_CPU_SSE_LEVEL
     // These checks must be done in descending order to ensure we set the highest
     // available SSE level. 64-bit intel guarantees at least SSE2 support.
-    #if defined(__AVX512F__) && defined(__AVX512DQ__) && defined(__AVX512CD__) && \
-        defined(__AVX512BW__) && defined(__AVX512VL__)
-        #define SK_CPU_SSE_LEVEL        SK_CPU_SSE_LEVEL_SKX
-    #elif defined(__AVX2__)
+    #if defined(__AVX2__)
         #define SK_CPU_SSE_LEVEL        SK_CPU_SSE_LEVEL_AVX2
     #elif defined(__AVX__)
         #define SK_CPU_SSE_LEVEL        SK_CPU_SSE_LEVEL_AVX
@@ -148,16 +152,18 @@
 // ARM defines
 #if defined(__arm__) && (!defined(__APPLE__) || !TARGET_IPHONE_SIMULATOR)
     #define SK_CPU_ARM32
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && !defined(SK_BUILD_NO_OPTS)
     #define SK_CPU_ARM64
 #endif
 
 // All 64-bit ARM chips have NEON.  Many 32-bit ARM chips do too.
-#if !defined(SK_ARM_HAS_NEON) && defined(__ARM_NEON)
+#if !defined(SK_ARM_HAS_NEON) && !defined(SK_BUILD_NO_OPTS) && defined(__ARM_NEON)
     #define SK_ARM_HAS_NEON
 #endif
 
-#if defined(__ARM_FEATURE_CRC32)
+// Really this __APPLE__ check shouldn't be necessary, but it seems that Apple's Clang defines
+// __ARM_FEATURE_CRC32 for -arch arm64, even though their chips don't support those instructions!
+#if defined(__ARM_FEATURE_CRC32) && !defined(__APPLE__)
     #define SK_ARM_HAS_CRC32
 #endif
 
@@ -236,24 +242,28 @@
 #  define SK_SUPPORT_GPU 1
 #endif
 
-#if !SK_SUPPORT_GPU
-#  undef SK_GL
-#  undef SK_VULKAN
-#  undef SK_METAL
-#  undef SK_DAWN
-#  undef SK_DIRECT3D
+/**
+ * If GPU is enabled but no GPU backends are enabled then enable GL by default.
+ * Traditionally clients have relied on Skia always building with the GL backend
+ * and opting in to additional backends. TODO: Require explicit opt in for GL.
+ */
+#if SK_SUPPORT_GPU
+#  if !defined(SK_GL) && !defined(SK_VULKAN) && !defined(SK_METAL)
+#    define SK_GL
+#  endif
+#endif
+
+#if !defined(SK_SUPPORT_ATLAS_TEXT)
+#  define SK_SUPPORT_ATLAS_TEXT 0
+#elif SK_SUPPORT_ATLAS_TEXT && !SK_SUPPORT_GPU
+#  error "SK_SUPPORT_ATLAS_TEXT requires SK_SUPPORT_GPU"
 #endif
 
 #if !defined(SkUNREACHABLE)
 #  if defined(_MSC_VER) && !defined(__clang__)
-#    include <intrin.h>
-#    define FAST_FAIL_INVALID_ARG                 5
-// See https://developercommunity.visualstudio.com/content/problem/1128631/code-flow-doesnt-see-noreturn-with-extern-c.html
-// for why this is wrapped. Hopefully removable after msvc++ 19.27 is no longer supported.
-[[noreturn]] static inline void sk_fast_fail() { __fastfail(FAST_FAIL_INVALID_ARG); }
-#    define SkUNREACHABLE sk_fast_fail()
+#    define SkUNREACHABLE __assume(false)
 #  else
-#    define SkUNREACHABLE __builtin_trap()
+#    define SkUNREACHABLE __builtin_unreachable()
 #  endif
 #endif
 
@@ -265,19 +275,22 @@
 #  define SK_DUMP_GOOGLE3_STACK()
 #endif
 
+#ifdef SK_BUILD_FOR_WIN
+    // Lets visual studio follow error back to source
+    #define SK_DUMP_LINE_FORMAT(message) \
+        SkDebugf("%s(%d): fatal error: \"%s\"\n", __FILE__, __LINE__, message)
+#else
+    #define SK_DUMP_LINE_FORMAT(message) \
+        SkDebugf("%s:%d: fatal error: \"%s\"\n", __FILE__, __LINE__, message)
+#endif
+
 #ifndef SK_ABORT
-#  ifdef SK_BUILD_FOR_WIN
-     // This style lets Visual Studio follow errors back to the source file.
-#    define SK_DUMP_LINE_FORMAT "%s(%d)"
-#  else
-#    define SK_DUMP_LINE_FORMAT "%s:%d"
-#  endif
-#  define SK_ABORT(message, ...) \
+#  define SK_ABORT(message) \
     do { \
-        SkDebugf(SK_DUMP_LINE_FORMAT ": fatal error: \"" message "\"\n", \
-                 __FILE__, __LINE__, ##__VA_ARGS__); \
-        SK_DUMP_GOOGLE3_STACK(); \
-        sk_abort_no_print(); \
+       SK_DUMP_LINE_FORMAT(message); \
+       SK_DUMP_GOOGLE3_STACK(); \
+       sk_abort_no_print(); \
+       SkUNREACHABLE; \
     } while (false)
 #endif
 
@@ -302,7 +315,12 @@
 
 
 /**
- * SK_PMCOLOR_BYTE_ORDER can be used to query the byte order of SkPMColor at compile time.
+ * SK_PMCOLOR_BYTE_ORDER can be used to query the byte order of SkPMColor at compile time. The
+ * relationship between the byte order and shift values depends on machine endianness. If the shift
+ * order is R=0, G=8, B=16, A=24 then ((char*)&pmcolor)[0] will produce the R channel on a little
+ * endian machine and the A channel on a big endian machine. Thus, given those shifts values,
+ * SK_PMCOLOR_BYTE_ORDER(R,G,B,A) will be true on a little endian machine and
+ * SK_PMCOLOR_BYTE_ORDER(A,B,G,R) will be true on a big endian machine.
  */
 #ifdef SK_CPU_BENDIAN
 #  define SK_PMCOLOR_BYTE_ORDER(C0, C1, C2, C3)     \
@@ -331,14 +349,6 @@
 #    define SK_UNUSED __pragma(warning(suppress:4189))
 #  else
 #    define SK_UNUSED SK_ATTRIBUTE(unused)
-#  endif
-#endif
-
-#if !defined(SK_MAYBE_UNUSED)
-#  if defined(__clang__) || defined(__GNUC__)
-#    define SK_MAYBE_UNUSED [[maybe_unused]]
-#  else
-#    define SK_MAYBE_UNUSED
 #  endif
 #endif
 
@@ -384,6 +394,14 @@
 #  endif
 #endif
 
+#ifndef SK_SIZE_T_SPECIFIER
+#  if defined(_MSC_VER) && !defined(__clang__)
+#    define SK_SIZE_T_SPECIFIER "%Iu"
+#  else
+#    define SK_SIZE_T_SPECIFIER "%zu"
+#  endif
+#endif
+
 #ifndef SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
     #define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 0
 #endif
@@ -396,59 +414,32 @@
 #  define GR_TEST_UTILS 0
 #endif
 
-#if defined(SK_HISTOGRAM_ENUMERATION)  || \
-    defined(SK_HISTOGRAM_BOOLEAN)      || \
-    defined(SK_HISTOGRAM_EXACT_LINEAR) || \
-    defined(SK_HISTOGRAM_MEMORY_KB)
+#if defined(SK_HISTOGRAM_ENUMERATION) && defined(SK_HISTOGRAM_BOOLEAN)
 #  define SK_HISTOGRAMS_ENABLED 1
 #else
 #  define SK_HISTOGRAMS_ENABLED 0
 #endif
 
 #ifndef SK_HISTOGRAM_BOOLEAN
-#  define SK_HISTOGRAM_BOOLEAN(name, sample)
+#  define SK_HISTOGRAM_BOOLEAN(name, value)
 #endif
 
 #ifndef SK_HISTOGRAM_ENUMERATION
-#  define SK_HISTOGRAM_ENUMERATION(name, sample, enum_size)
+#  define SK_HISTOGRAM_ENUMERATION(name, value, boundary_value)
 #endif
-
-#ifndef SK_HISTOGRAM_EXACT_LINEAR
-#  define SK_HISTOGRAM_EXACT_LINEAR(name, sample, value_max)
-#endif
-
-#ifndef SK_HISTOGRAM_MEMORY_KB
-#  define SK_HISTOGRAM_MEMORY_KB(name, sample)
-#endif
-
-#define SK_HISTOGRAM_PERCENTAGE(name, percent_as_int) \
-    SK_HISTOGRAM_EXACT_LINEAR(name, percent_as_int, 101)
 
 #ifndef SK_DISABLE_LEGACY_SHADERCONTEXT
 #define SK_ENABLE_LEGACY_SHADERCONTEXT
-#endif
-
-#ifdef SK_ENABLE_API_AVAILABLE
-#define SK_API_AVAILABLE API_AVAILABLE
-#else
-#define SK_API_AVAILABLE(...)
-#endif
-
-#if defined(SK_BUILD_FOR_LIBFUZZER) || defined(SK_BUILD_FOR_AFL_FUZZ)
-    #define SK_BUILD_FOR_FUZZER
 #endif
 
 /** Called internally if we hit an unrecoverable error.
     The platform implementation must not return, but should either throw
     an exception or otherwise exit.
 */
-[[noreturn]] SK_API extern void sk_abort_no_print(void);
+SK_API extern void sk_abort_no_print(void);
 
 #ifndef SkDebugf
     SK_API void SkDebugf(const char format[], ...);
-#endif
-#if defined(SK_BUILD_FOR_LIBFUZZER)
-    SK_API inline void SkDebugf(const char format[], ...) {}
 #endif
 
 // SkASSERT, SkASSERTF and SkASSERT_RELEASE can be used as stand alone assertion expressions, e.g.
@@ -462,16 +453,16 @@
 //               x - 4;
 //    }
 #define SkASSERT_RELEASE(cond) \
-        static_cast<void>( (cond) ? (void)0 : []{ SK_ABORT("assert(%s)", #cond); }() )
+        static_cast<void>( (cond) ? (void)0 : []{ SK_ABORT("assert(" #cond ")"); }() )
 
 #ifdef SK_DEBUG
     #define SkASSERT(cond) SkASSERT_RELEASE(cond)
     #define SkASSERTF(cond, fmt, ...) static_cast<void>( (cond) ? (void)0 : [&]{ \
-                                          SkDebugf(fmt"\n", ##__VA_ARGS__);      \
-                                          SK_ABORT("assert(%s)", #cond);         \
+                                          SkDebugf(fmt"\n", __VA_ARGS__);        \
+                                          SK_ABORT("assert(" #cond ")");         \
                                       }() )
-    #define SkDEBUGFAIL(message)        SK_ABORT("%s", message)
-    #define SkDEBUGFAILF(fmt, ...)      SK_ABORT(fmt, ##__VA_ARGS__)
+    #define SkDEBUGFAIL(message)        SK_ABORT(message)
+    #define SkDEBUGFAILF(fmt, ...)      SkASSERTF(false, fmt, ##__VA_ARGS__)
     #define SkDEBUGCODE(...)            __VA_ARGS__
     #define SkDEBUGF(...)               SkDebugf(__VA_ARGS__)
     #define SkAssertResult(cond)        SkASSERT(cond)
@@ -502,9 +493,7 @@ typedef unsigned U16CPU;
 
 /** @return false or true based on the condition
 */
-template <typename T> static constexpr bool SkToBool(const T& x) {
-    return 0 != x;  // NOLINT(modernize-use-nullptr)
-}
+template <typename T> static constexpr bool SkToBool(const T& x) { return 0 != x; }
 
 static constexpr int16_t SK_MaxS16 = INT16_MAX;
 static constexpr int16_t SK_MinS16 = -SK_MaxS16;
@@ -550,7 +539,7 @@ template <typename T> static constexpr bool SkIsAlignPtr(T x) {
 
 typedef uint32_t SkFourByteTag;
 static inline constexpr SkFourByteTag SkSetFourByteTag(char a, char b, char c, char d) {
-    return (((uint32_t)a << 24) | ((uint32_t)b << 16) | ((uint32_t)c << 8) | (uint32_t)d);
+    return (((uint8_t)a << 24) | ((uint8_t)b << 16) | ((uint8_t)c << 8) | (uint8_t)d);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -593,6 +582,15 @@ template <typename T> static inline T SkTAbs(T value) {
         value = -value;
     }
     return value;
+}
+
+/** @return value pinned (clamped) between min and max, inclusively.
+
+    NOTE: Unlike std::clamp, SkTPin has well-defined behavior if 'value' is a
+          floating point NaN. In that case, 'max' is returned.
+*/
+template <typename T> static constexpr const T& SkTPin(const T& value, const T& min, const T& max) {
+    return value < min ? min : (value < max ? value : max);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

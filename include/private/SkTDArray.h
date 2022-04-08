@@ -17,13 +17,6 @@
 #include <initializer_list>
 #include <utility>
 
-/** SkTDArray<T> implements a std::vector-like array for raw data-only objects that do not require
-    construction or destruction. The constructor and destructor for T will not be called; T objects
-    will always be moved via raw memcpy. Newly created T objects will contain uninitialized memory.
-
-    In most cases, std::vector<T> can provide a similar level of performance for POD objects when
-    used with appropriate care. In new code, consider std::vector<T> instead.
-*/
 template <typename T> class SkTDArray {
 public:
     SkTDArray() : fArray(nullptr), fReserve(0), fCount(0) {}
@@ -33,8 +26,8 @@ public:
         fReserve = fCount = 0;
         fArray = nullptr;
         if (count) {
-            fArray = (T*)sk_malloc_throw(SkToSizeT(count) * sizeof(T));
-            memcpy(fArray, src, sizeof(T) * SkToSizeT(count));
+            fArray = (T*)sk_malloc_throw(count * sizeof(T));
+            memcpy(fArray, src, sizeof(T) * count);
             fReserve = fCount = count;
         }
     }
@@ -56,7 +49,7 @@ public:
                 SkTDArray<T> tmp(src.fArray, src.fCount);
                 this->swap(tmp);
             } else {
-                sk_careful_memcpy(fArray, src.fArray, sizeof(T) * SkToSizeT(src.fCount));
+                sk_careful_memcpy(fArray, src.fArray, sizeof(T) * src.fCount);
                 fCount = src.fCount;
             }
         }
@@ -73,7 +66,7 @@ public:
     friend bool operator==(const SkTDArray<T>& a, const SkTDArray<T>& b) {
         return  a.fCount == b.fCount &&
                 (a.fCount == 0 ||
-                 !memcmp(a.fArray, b.fArray, SkToSizeT(a.fCount) * sizeof(T)));
+                 !memcmp(a.fArray, b.fArray, a.fCount * sizeof(T)));
     }
     friend bool operator!=(const SkTDArray<T>& a, const SkTDArray<T>& b) {
         return !(a == b);
@@ -125,8 +118,6 @@ public:
         return (*this)[index];
     }
 
-    const T& back() const { SkASSERT(fCount > 0); return fArray[fCount-1]; }
-          T& back()       { SkASSERT(fCount > 0); return fArray[fCount-1]; }
 
     void reset() {
         if (fArray) {
@@ -374,7 +365,7 @@ private:
         SkASSERT_RELEASE( SkTFitsIn<int>(reserve) );
 
         fReserve = SkTo<int>(reserve);
-        fArray = (T*)sk_realloc_throw(fArray, (size_t)fReserve * sizeof(T));
+        fArray = (T*)sk_realloc_throw(fArray, fReserve * sizeof(T));
     }
 };
 

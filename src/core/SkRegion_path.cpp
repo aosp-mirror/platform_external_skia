@@ -322,10 +322,11 @@ static bool check_inverse_on_empty_return(SkRegion* dst, const SkPath& path, con
 bool SkRegion::setPath(const SkPath& path, const SkRegion& clip) {
     SkDEBUGCODE(SkRegionPriv::Validate(*this));
 
-    if (clip.isEmpty() || !path.isFinite() || path.isEmpty()) {
-        // This treats non-finite paths as empty as well, so this returns empty or 'clip' if
-        // it's inverse-filled. If clip is also empty, path's fill type doesn't really matter
-        // and this region ends up empty.
+    if (clip.isEmpty() || !path.isFinite()) {
+        return this->setEmpty();
+    }
+
+    if (path.isEmpty()) {
         return check_inverse_on_empty_return(this, path, clip);
     }
 
@@ -524,7 +525,7 @@ bool SkRegion::getBoundaryPath(SkPath* path) const {
     int count = edges.count();
     Edge* start = edges.begin();
     Edge* stop = start + count;
-    SkTQSort<Edge>(start, stop, EdgeLT());
+    SkTQSort<Edge>(start, stop - 1, EdgeLT());
 
     Edge* e;
     for (e = start; e != stop; e++) {

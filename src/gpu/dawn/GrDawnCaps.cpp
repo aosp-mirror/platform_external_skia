@@ -10,13 +10,14 @@
 #include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrRenderTarget.h"
+#include "src/gpu/GrRenderTargetPriv.h"
 #include "src/gpu/GrStencilSettings.h"
 
 GrDawnCaps::GrDawnCaps(const GrContextOptions& contextOptions) : INHERITED(contextOptions) {
-    fMipmapSupport = true;
+    fMipMapSupport = false;  // FIXME: implement onRegenerateMipMapLevels in GrDawnGpu.
     fBufferMapThreshold = SK_MaxS32;  // FIXME: get this from Dawn?
     fShaderCaps.reset(new GrShaderCaps(contextOptions));
-    fMaxTextureSize = fMaxRenderTargetSize = 8192; // FIXME
+    fMaxTextureSize = fMaxRenderTargetSize = 4096; // FIXME
     fMaxVertexAttributes = 16; // FIXME
     fClampToBorderSupport = false;
     fPerformPartialClearsAsDraws = true;
@@ -37,6 +38,10 @@ bool GrDawnCaps::isFormatSRGB(const GrBackendFormat& format) const {
     return false;
 }
 
+SkImage::CompressionType GrDawnCaps::compressionType(const GrBackendFormat& format) const {
+    return SkImage::CompressionType::kNone;
+}
+
 bool GrDawnCaps::isFormatTexturable(const GrBackendFormat& format) const {
     // Currently, all the formats in GrDawnFormatToPixelConfig are texturable.
     wgpu::TextureFormat dawnFormat;
@@ -49,9 +54,9 @@ static GrSwizzle get_swizzle(const GrBackendFormat& format, GrColorType colorTyp
         case GrColorType::kAlpha_8: // fall through
         case GrColorType::kAlpha_F16:
             if (forOutput) {
-                return GrSwizzle("a000");
+                return GrSwizzle::AAAA();
             } else {
-                return GrSwizzle("000r");
+                return GrSwizzle::RRRR();
             }
         case GrColorType::kGray_8:
             if (!forOutput) {
@@ -62,11 +67,29 @@ static GrSwizzle get_swizzle(const GrBackendFormat& format, GrColorType colorTyp
             if (!forOutput) {
                 return GrSwizzle::RGB1();
             }
-            break;
         default:
             return GrSwizzle::RGBA();
     }
     return GrSwizzle::RGBA();
+}
+
+bool GrDawnCaps::isFormatTexturableAndUploadable(GrColorType ct,
+                                                 const GrBackendFormat& format) const {
+    wgpu::TextureFormat dawnFormat;
+    if (!format.asDawnFormat(&dawnFormat)) {
+        return false;
+    }
+    switch (ct) {
+        case GrColorType::kAlpha_8:
+            return wgpu::TextureFormat::R8Unorm == dawnFormat;
+        case GrColorType::kRGBA_8888:
+        case GrColorType::kRGB_888x:
+        case GrColorType::kBGRA_8888:
+            return wgpu::TextureFormat::RGBA8Unorm == dawnFormat ||
+                   wgpu::TextureFormat::BGRA8Unorm == dawnFormat;
+        default:
+            return false;
+    }
 }
 
 bool GrDawnCaps::isFormatRenderable(const GrBackendFormat& format,
@@ -84,16 +107,12 @@ bool GrDawnCaps::isFormatAsColorTypeRenderable(GrColorType ct, const GrBackendFo
     return isFormatRenderable(format, sampleCount);
 }
 
-GrCaps::SurfaceReadPixelsSupport GrDawnCaps::surfaceSupportsReadPixels(
-      const GrSurface* surface) const {
-    // We currently support readbacks only from Textures and TextureRenderTargets.
-    return surface->asTexture() ? SurfaceReadPixelsSupport::kSupported
-                                : SurfaceReadPixelsSupport::kUnsupported;
-}
-
-bool GrDawnCaps::onSurfaceSupportsWritePixels(const GrSurface* surface) const {
-    // We currently support writePixels only to Textures and TextureRenderTargets.
-    return surface->asTexture() != nullptr;
+size_t GrDawnCaps::bytesPerPixel(const GrBackendFormat& backendFormat) const {
+    wgpu::TextureFormat dawnFormat;
+    if (!backendFormat.asDawnFormat(&dawnFormat)) {
+        return 0;
+    }
+    return GrDawnBytesPerPixel(dawnFormat);
 }
 
 int GrDawnCaps::getRenderTargetSampleCount(int requestedCount,
@@ -109,10 +128,11 @@ int GrDawnCaps::maxRenderTargetSampleCount(const GrBackendFormat& format) const 
     return format.isValid() ? 1 : 0;
 }
 
-GrBackendFormat GrDawnCaps::onGetDefaultBackendFormat(GrColorType ct) const {
+GrBackendFormat GrDawnCaps::onGetDefaultBackendFormat(GrColorType ct,
+                                                      GrRenderable renderable) const {
     wgpu::TextureFormat format;
     if (!GrColorTypeToDawnFormat(ct, &format)) {
-        return {};
+        return GrBackendFormat();
     }
     return GrBackendFormat::MakeDawn(format);
 }
@@ -122,12 +142,13 @@ GrBackendFormat GrDawnCaps::getBackendFormatFromCompressionType(SkImage::Compres
     return GrBackendFormat();
 }
 
-GrSwizzle GrDawnCaps::onGetReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const
+GrSwizzle GrDawnCaps::getReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const
 {
     return get_swizzle(format, colorType, false);
 }
 
-GrSwizzle GrDawnCaps::getWriteSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
+GrSwizzle GrDawnCaps::getOutputSwizzle(const GrBackendFormat& format, GrColorType colorType) const
+{
     return get_swizzle(format, colorType, true);
 }
 
@@ -147,6 +168,21 @@ bool GrDawnCaps::onAreColorTypeAndFormatCompatible(GrColorType ct,
     return true;
 }
 
+GrColorType GrDawnCaps::getYUVAColorTypeFromBackendFormat(const GrBackendFormat& backendFormat,
+                                                          bool isAlphaChannel) const {
+    wgpu::TextureFormat textureFormat;
+    if (!backendFormat.asDawnFormat(&textureFormat)) {
+        return GrColorType::kUnknown;
+    }
+    switch (textureFormat) {
+        case wgpu::TextureFormat::R8Unorm:     return isAlphaChannel ? GrColorType::kAlpha_8
+                                                                     : GrColorType::kGray_8;
+        case wgpu::TextureFormat::RGBA8Unorm:  return GrColorType::kRGBA_8888;
+        case wgpu::TextureFormat::BGRA8Unorm:  return GrColorType::kBGRA_8888;
+        default:                               return GrColorType::kUnknown;
+    }
+}
+
 // FIXME: taken from GrVkPipelineState; refactor.
 static uint32_t get_blend_info_key(const GrPipeline& pipeline) {
     GrXferProcessor::BlendInfo blendInfo = pipeline.getXferProcessor().getBlendInfo();
@@ -164,33 +200,33 @@ static uint32_t get_blend_info_key(const GrPipeline& pipeline) {
     return key;
 }
 
-GrProgramDesc GrDawnCaps::makeDesc(GrRenderTarget* rt,
-                                   const GrProgramInfo& programInfo,
-                                   ProgramDescOverrideFlags overrideFlags) const {
-    SkASSERT(overrideFlags == ProgramDescOverrideFlags::kNone);
+GrProgramDesc GrDawnCaps::makeDesc(const GrRenderTarget* rt,
+                                   const GrProgramInfo& programInfo) const {
     GrProgramDesc desc;
-    GrProgramDesc::Build(&desc, programInfo, *this);
-
-    wgpu::TextureFormat format;
-    if (!programInfo.backendFormat().asDawnFormat(&format)) {
-        desc.reset();
+    if (!GrProgramDesc::Build(&desc, rt, programInfo, *this)) {
         SkASSERT(!desc.isValid());
         return desc;
     }
 
-    GrProcessorKeyBuilder b(desc.key());
+    wgpu::TextureFormat format;
+    if (!programInfo.backendFormat().asDawnFormat(&format)) {
+        desc.key().reset();
+        SkASSERT(!desc.isValid());
+        return desc;
+    }
+
+    GrProcessorKeyBuilder b(&desc.key());
+
     GrStencilSettings stencil = programInfo.nonGLStencilSettings();
-    stencil.genKey(&b, true);
+    stencil.genKey(&b);
 
     // TODO: remove this reliance on the renderTarget
-    bool hasDepthStencil = rt->getStencilAttachment() != nullptr;
+    bool hasDepthStencil = rt->renderTargetPriv().getStencilAttachment() != nullptr;
 
     b.add32(static_cast<uint32_t>(format));
     b.add32(static_cast<int32_t>(hasDepthStencil));
     b.add32(get_blend_info_key(programInfo.pipeline()));
     b.add32(programInfo.primitiveTypeKey());
-
-    b.flush();
     return desc;
 }
 
@@ -207,7 +243,7 @@ std::vector<GrCaps::TestFormatColorTypeCombination> GrDawnCaps::getTestingCombin
     };
 
 #ifdef SK_DEBUG
-    for (const GrCaps::TestFormatColorTypeCombination& combo : combos) {
+    for (auto combo : combos) {
         SkASSERT(this->onAreColorTypeAndFormatCompatible(combo.fColorType, combo.fFormat));
     }
 #endif

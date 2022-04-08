@@ -33,6 +33,6 @@ protected:
 private:
     SkAutoFree fSrcBuffer;
 
-    using INHERITED = SkBmpCodec;
+    typedef SkBmpCodec INHERITED;
 };
 #endif // SkBmpBaseCodec_DEFINED

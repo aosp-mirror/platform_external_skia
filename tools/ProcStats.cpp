@@ -14,7 +14,7 @@
     #include <zircon/syscalls/object.h>
     #include <zircon/types.h>
 
-    int64_t sk_tools::getMaxResidentSetSizeBytes() {
+    int sk_tools::getMaxResidentSetSizeMB() {
       zx_info_task_stats_t task_stats;
       zx_handle_t process = zx_process_self();
       zx_status_t status = zx_object_get_info(
@@ -22,46 +22,46 @@
       if (status != ZX_OK) {
         return -1;
       }
-      return (task_stats.mem_private_bytes + task_stats.mem_shared_bytes);
+      return (task_stats.mem_private_bytes + task_stats.mem_shared_bytes) / (1 << 20);
     }
 #elif defined(SK_BUILD_FOR_UNIX) || defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS) || defined(SK_BUILD_FOR_ANDROID)
     #include <sys/resource.h>
-    int64_t sk_tools::getMaxResidentSetSizeBytes() {
+    int sk_tools::getMaxResidentSetSizeMB() {
         struct rusage ru;
         getrusage(RUSAGE_SELF, &ru);
     #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
-        return ru.ru_maxrss;         // Darwin reports bytes.
+        return static_cast<int>(ru.ru_maxrss / 1024 / 1024);  // Darwin reports bytes.
     #else
-        return ru.ru_maxrss * 1024;  // Linux reports kilobytes.
+        return static_cast<int>(ru.ru_maxrss / 1024);  // Linux reports kilobytes.
     #endif
     }
 #elif defined(SK_BUILD_FOR_WIN)
     #include <windows.h>
     #include <psapi.h>
-    int64_t sk_tools::getMaxResidentSetSizeBytes() {
+    int sk_tools::getMaxResidentSetSizeMB() {
         PROCESS_MEMORY_COUNTERS info;
         GetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info));
-        return info.PeakWorkingSetSize;
+        return static_cast<int>(info.PeakWorkingSetSize / 1024 / 1024);  // Windows reports bytes.
     }
 #else
-    int64_t sk_tools::getMaxResidentSetSizeBytes() { return -1; }
+    int sk_tools::getMaxResidentSetSizeMB() { return -1; }
 #endif
 
 #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
     #include <mach/mach.h>
-    int64_t sk_tools::getCurrResidentSetSizeBytes() {
+    int sk_tools::getCurrResidentSetSizeMB() {
         mach_task_basic_info info;
         mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
         if (KERN_SUCCESS !=
                 task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &count)) {
             return -1;
         }
-        return info.resident_size;
+        return info.resident_size / 1024 / 1024;  // Darwin reports bytes.
     }
 #elif defined(SK_BUILD_FOR_UNIX) || defined(SK_BUILD_FOR_ANDROID)  // N.B. /proc is Linux-only.
     #include <unistd.h>
     #include <stdio.h>
-    int64_t sk_tools::getCurrResidentSetSizeBytes() {
+    int sk_tools::getCurrResidentSetSizeMB() {
         const long pageSize = sysconf(_SC_PAGESIZE);
         long long rssPages = 0;
         if (FILE* statm = fopen("/proc/self/statm", "r")) {
@@ -72,24 +72,15 @@
                 return -1;
             }
         }
-        return rssPages * pageSize;
+        return rssPages * pageSize / 1024 / 1024;
     }
+
 #elif defined(SK_BUILD_FOR_WIN)
-    int64_t sk_tools::getCurrResidentSetSizeBytes() {
+    int sk_tools::getCurrResidentSetSizeMB() {
         PROCESS_MEMORY_COUNTERS info;
         GetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info));
-        return info.WorkingSetSize;
+        return static_cast<int>(info.WorkingSetSize / 1024 / 1024);  // Windows reports bytes.
     }
 #else
-    int64_t sk_tools::getCurrResidentSetSizeBytes() { return -1; }
+    int sk_tools::getCurrResidentSetSizeMB() { return -1; }
 #endif
-
-int sk_tools::getMaxResidentSetSizeMB() {
-    int64_t bytes = sk_tools::getMaxResidentSetSizeBytes();
-    return bytes < 0 ? -1 : static_cast<int>(bytes / 1024 / 1024);
-}
-
-int sk_tools::getCurrResidentSetSizeMB() {
-    int64_t bytes = sk_tools::getCurrResidentSetSizeBytes();
-    return bytes < 0 ? -1 : static_cast<int>(bytes / 1024 / 1024);
-}

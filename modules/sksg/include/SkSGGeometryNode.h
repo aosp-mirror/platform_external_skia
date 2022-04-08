@@ -45,7 +45,7 @@ protected:
 private:
     friend class Draw; // wants to know the cached bounds.
 
-    using INHERITED = Node;
+    typedef Node INHERITED;
 };
 
 } // namespace sksg

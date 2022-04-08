@@ -48,7 +48,7 @@ private:
     SkRect      fInner;
     SkScalar    fRadius;
 
-    using INHERITED =     Benchmark;
+    typedef     Benchmark INHERITED;
 };
 
 class BlurRectsNinePatchBench: public BlurRectsBench {
@@ -58,7 +58,7 @@ public:
         this->setName(SkString("blurrectsninepatch"));
     }
 private:
-    using INHERITED = BlurRectsBench;
+    typedef BlurRectsBench INHERITED;
 };
 
 class BlurRectsNonNinePatchBench: public BlurRectsBench {
@@ -69,7 +69,7 @@ public:
         this->setName(SkString("blurrectsnonninepatch"));
     }
 private:
-    using INHERITED = BlurRectsBench;
+    typedef BlurRectsBench INHERITED;
 };
 
 DEF_BENCH(return new BlurRectsNinePatchBench(SkRect::MakeXYWH(10, 10, 100, 100),

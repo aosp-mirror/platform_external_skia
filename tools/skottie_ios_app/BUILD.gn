@@ -6,7 +6,9 @@ import("../../gn/ios.gni")
 
 if (is_ios) {
   group("skottie_ios_app") {
-    deps = [ ":skottie_example" ]
+    deps = [
+      ":skottie_example",
+    ]
   }
   ios_app_bundle("skottie_example") {
     sources = [
@@ -51,19 +53,19 @@ if (is_ios) {
       "-std=c++14",
       "-w",
     ]
-    frameworks = [
+    libs = [
       "CoreFoundation.framework",
       "Foundation.framework",
       "QuartzCore.framework",
       "UIKit.framework",
     ]
     if (skia_enable_gpu && skia_use_metal) {
-      frameworks += [
+      libs += [
         "Metal.framework",
         "MetalKit.framework",
       ]
     } else if (skia_enable_gpu && skia_use_gl) {
-      frameworks += [
+      libs += [
         "GLKit.framework",
         "OpenGLES.framework",
       ]

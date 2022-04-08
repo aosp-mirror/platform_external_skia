@@ -8,7 +8,6 @@
 #include "bench/Benchmark.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkString.h"
-#include "include/private/SkTemplates.h"
 #include "include/utils/SkRandom.h"
 #include "src/core/SkRTree.h"
 
@@ -51,7 +50,7 @@ protected:
 private:
     MakeRectProc fProc;
     SkString fName;
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 // Time how long it takes to perform queries on an R-Tree.
@@ -93,7 +92,7 @@ private:
     SkRTree fTree;
     MakeRectProc fProc;
     SkString fName;
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 static inline SkRect make_XYordered_rects(SkRandom& rand, int index, int numRects) {

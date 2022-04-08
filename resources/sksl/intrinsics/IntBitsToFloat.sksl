@@ -1,1 +1,0 @@
-uniform int a; void main() { sk_FragColor.x = half(intBitsToFloat(a)); }

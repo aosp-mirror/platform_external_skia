@@ -8,19 +8,20 @@
 #ifndef SkColorFilter_Matrix_DEFINED
 #define SkColorFilter_Matrix_DEFINED
 
-#include "src/core/SkColorFilterBase.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkFlattenable.h"
 
-class SkColorFilter_Matrix : public SkColorFilterBase {
+class SkColorFilter_Matrix : public SkColorFilter {
 public:
     enum class Domain : uint8_t { kRGBA, kHSLA };
 
     explicit SkColorFilter_Matrix(const float array[20], Domain);
 
-    bool onIsAlphaUnchanged() const override { return fAlphaIsUnchanged; }
+    uint32_t getFlags() const override;
 
 #if SK_SUPPORT_GPU
-    GrFPResult asFragmentProcessor(std::unique_ptr<GrFragmentProcessor> inputFP,
-                                   GrRecordingContext*, const GrColorInfo&) const override;
+    std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(GrRecordingContext*,
+                                                             const GrColorInfo&) const override;
 #endif
 
     static void RegisterFlattenables();
@@ -32,15 +33,16 @@ private:
     SK_FLATTENABLE_HOOKS(SkColorFilter_Matrix)
 
     bool onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override;
-    skvm::Color onProgram(skvm::Builder*, skvm::Color,
-                          SkColorSpace* dstCS,
-                          skvm::Uniforms* uniforms, SkArenaAlloc*) const override;
+    bool onProgram(skvm::Builder*,
+                   SkColorSpace* dstCS,
+                   skvm::Uniforms* uniforms, SkArenaAlloc*,
+                   skvm::F32* r, skvm::F32* g, skvm::F32* b, skvm::F32* a) const override;
 
-    float   fMatrix[20];
-    bool    fAlphaIsUnchanged;
-    Domain  fDomain;
+    float       fMatrix[20];
+    uint16_t    fFlags;
+    Domain      fDomain;
 
-    using INHERITED = SkColorFilterBase;
+    typedef SkColorFilter INHERITED;
 };
 
 #endif

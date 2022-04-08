@@ -8,7 +8,6 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorFilter.h"
 #include "include/core/SkColorPriv.h"
-#include "include/core/SkFont.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkTime.h"
 #include "include/core/SkTypeface.h"
@@ -17,8 +16,8 @@
 #include "src/utils/SkUTF.h"
 
 #if SK_SUPPORT_GPU
-#include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrContextPriv.h"
 #endif
 
 SkRandom gRand;
@@ -63,18 +62,17 @@ class AnimatedTextView : public Sample {
 
         SkPaint paint;
         paint.setAntiAlias(true);
+        paint.setFilterQuality(kMedium_SkFilterQuality);
 
         canvas->save();
 
 #if SK_SUPPORT_GPU
-        auto direct = GrAsDirectContext(canvas->recordingContext());
-        if (direct) {
-            SkSamplingOptions sampling(SkFilterMode::kLinear, SkMipmapMode::kNearest);
-            sk_sp<SkImage> image = direct->priv().testingOnly_getFontAtlasImage(
+        GrContext* grContext = canvas->getGrContext();
+        if (grContext) {
+            sk_sp<SkImage> image = grContext->priv().testingOnly_getFontAtlasImage(
                                                                 GrMaskFormat::kA8_GrMaskFormat);
-            const SkRect rect = SkRect::MakeXYWH(512.0f, 10.0f, 512.0f, 512.0f);
-            canvas->drawImageRect(image.get(), rect, rect, sampling, &paint,
-                                  SkCanvas::kFast_SrcRectConstraint);
+            canvas->drawImageRect(image,
+                                  SkRect::MakeXYWH(512.0f, 10.0f, 512.0f, 512.0f), &paint);
         }
 #endif
         canvas->translate(180, 180);

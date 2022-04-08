@@ -6,9 +6,7 @@
  */
 
 #include "include/core/SkStrokeRec.h"
-#include "src/core/SkPathEffectPriv.h"
 #include "src/core/SkReadBuffer.h"
-#include "src/core/SkRectPriv.h"
 #include "src/core/SkWriteBuffer.h"
 #include "src/effects/SkOpPE.h"
 
@@ -40,44 +38,6 @@ bool SkOpPE::onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec* rec,
     return Op(one, two, fOp, dst);
 }
 
-bool SkOpPE::computeFastBounds(SkRect* bounds) const {
-    if (!bounds) {
-        return (!SkToBool(fOne) || SkPathEffectPriv::ComputeFastBounds(fOne.get(), nullptr)) &&
-               (!SkToBool(fTwo) || SkPathEffectPriv::ComputeFastBounds(fTwo.get(), nullptr));
-    }
-
-    // bounds will hold the result of the fOne while b2 holds the result of fTwo's fast bounds
-    SkRect b2 = *bounds;
-    if (fOne && !SkPathEffectPriv::ComputeFastBounds(fOne.get(), bounds)) {
-        return false;
-    }
-    if (fTwo && !SkPathEffectPriv::ComputeFastBounds(fTwo.get(), &b2)) {
-        return false;
-    }
-
-    switch (fOp) {
-        case SkPathOp::kIntersect_SkPathOp:
-            if (!bounds->intersect(b2)) {
-                bounds->setEmpty();
-            }
-            break;
-        case SkPathOp::kDifference_SkPathOp:
-            // (one - two) conservatively leaves one's bounds unmodified
-            break;
-        case SkPathOp::kReverseDifference_SkPathOp:
-            // (two - one) conservatively leaves two's bounds unmodified
-            *bounds = b2;
-            break;
-        case SkPathOp::kXOR_SkPathOp:
-            // fall through to union since XOR computes a subset of regular OR
-        case SkPathOp::kUnion_SkPathOp:
-            bounds->join(b2);
-            break;
-    }
-
-    return true;
-}
-
 void SkOpPE::flatten(SkWriteBuffer& buffer) const {
     buffer.writeFlattenable(fOne.get());
     buffer.writeFlattenable(fTwo.get());
@@ -97,7 +57,7 @@ sk_sp<SkPathEffect> SkMatrixPathEffect::MakeTranslate(SkScalar dx, SkScalar dy) 
     if (!SkScalarsAreFinite(dx, dy)) {
         return nullptr;
     }
-    return sk_sp<SkPathEffect>(new SkMatrixPE(SkMatrix::Translate(dx, dy)));
+    return sk_sp<SkPathEffect>(new SkMatrixPE(SkMatrix::MakeTrans(dx, dy)));
 }
 
 sk_sp<SkPathEffect> SkMatrixPathEffect::Make(const SkMatrix& matrix) {
@@ -146,16 +106,6 @@ bool SkStrokePE::onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, cons
     return rec.applyToPath(dst, src);
 }
 
-bool SkStrokePE::computeFastBounds(SkRect* bounds) const {
-    if (bounds) {
-        SkStrokeRec rec(SkStrokeRec::kFill_InitStyle);
-        rec.setStrokeStyle(fWidth);
-        rec.setStrokeParams(fCap, fJoin, fMiter);
-        bounds->outset(rec.getInflationRadius(), rec.getInflationRadius());
-    }
-    return true;
-}
-
 void SkStrokePE::flatten(SkWriteBuffer& buffer) const {
     buffer.writeScalar(fWidth);
     buffer.writeScalar(fMiter);
@@ -171,55 +121,4 @@ sk_sp<SkFlattenable> SkStrokePE::CreateProc(SkReadBuffer& buffer) {
     return buffer.isValid() ? SkStrokePathEffect::Make(width, join, cap, miter) : nullptr;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "include/effects/SkStrokeAndFillPathEffect.h"
-#include "src/core/SkPathPriv.h"
-
-sk_sp<SkPathEffect> SkStrokeAndFillPathEffect::Make() {
-    static SkPathEffect* strokeAndFill = new SkStrokeAndFillPE;
-    return sk_ref_sp(strokeAndFill);
-}
-
-void SkStrokeAndFillPE::flatten(SkWriteBuffer&) const {}
-
-static bool known_to_be_opposite_directions(const SkPath& a, const SkPath& b) {
-    auto a_dir = SkPathPriv::ComputeFirstDirection(a),
-         b_dir = SkPathPriv::ComputeFirstDirection(b);
-
-    return (a_dir == SkPathFirstDirection::kCCW &&
-            b_dir == SkPathFirstDirection::kCW)
-            ||
-           (a_dir == SkPathFirstDirection::kCW &&
-            b_dir == SkPathFirstDirection::kCCW);
-}
-
-bool SkStrokeAndFillPE::onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec* rec,
-                                     const SkRect*) const {
-    // This one is weird, since we exist to allow this paint-style to go away. If we see it,
-    // just let the normal machine run its course.
-    if (rec->getStyle() == SkStrokeRec::kStrokeAndFill_Style) {
-        *dst = src;
-        return true;
-    }
-
-    if (rec->getStyle() == SkStrokeRec::kStroke_Style) {
-        if (!rec->applyToPath(dst, src)) {
-            return false;
-        }
-
-        if (known_to_be_opposite_directions(src, *dst)) {
-            dst->reverseAddPath(src);
-        } else {
-            dst->addPath(src);
-        }
-    } else {
-        *dst = src;
-    }
-    rec->setFillStyle();
-    return true;
-}
-
-sk_sp<SkFlattenable> SkStrokeAndFillPE::CreateProc(SkReadBuffer& buffer) {
-    return SkStrokeAndFillPathEffect::Make();
-}

@@ -25,22 +25,21 @@ static sk_sp<SkColorFilter> make_color_filter() {
 }
 
 void draw(SkCanvas* canvas) {
-    auto image = make_alpha_image(96, 96).asImage();
-    SkSamplingOptions sampling;
+    auto image = SkImage::MakeFromBitmap(make_alpha_image(96, 96));
     SkPaint paint;
 
     paint.setColorFilter(make_color_filter());
     paint.setMaskFilter(SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, 10.0f, false));
-    canvas->drawImage(image.get(), 16, 16, sampling, &paint);
+    canvas->drawImage(image.get(), 16, 16, &paint);
 
     paint.setColorFilter(nullptr);
     paint.setShader(SkShaders::Color(SK_ColorCYAN));
-    canvas->drawImage(image.get(), 144, 16, sampling, &paint);
+    canvas->drawImage(image.get(), 144, 16, &paint);
 
     paint.setColorFilter(make_color_filter());
-    canvas->drawImage(image.get(), 16, 144, sampling, &paint);
+    canvas->drawImage(image.get(), 16, 144, &paint);
 
     paint.setMaskFilter(nullptr);
-    canvas->drawImage(image.get(), 144, 144, sampling, &paint);
+    canvas->drawImage(image.get(), 144, 144, &paint);
 }
 }  // END FIDDLE

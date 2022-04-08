@@ -9,7 +9,6 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImage.h"
-#include "src/core/SkPaintPriv.h"
 
 namespace sksg {
 
@@ -22,18 +21,13 @@ void Image::onRender(SkCanvas* canvas, const RenderContext* ctx) const {
 
     SkPaint paint;
     paint.setAntiAlias(fAntiAlias);
+    paint.setFilterQuality(fQuality);
 
-    sksg::RenderNode::ScopedRenderContext local_ctx(canvas, ctx);
     if (ctx) {
-        if (ctx->fMaskShader) {
-            // Mask shaders cannot be applied via drawImage - we need layer isolation.
-            // TODO: remove after clipShader conversion.
-            local_ctx.setIsolation(this->bounds(), canvas->getTotalMatrix(), true);
-        }
-        local_ctx->modulatePaint(canvas->getTotalMatrix(), &paint);
+        ctx->modulatePaint(canvas->getTotalMatrix(), &paint);
     }
 
-    canvas->drawImage(fImage, 0, 0, fSamplingOptions, &paint);
+    canvas->drawImage(fImage, 0, 0, &paint);
 }
 
 const RenderNode* Image::onNodeAt(const SkPoint& p) const {

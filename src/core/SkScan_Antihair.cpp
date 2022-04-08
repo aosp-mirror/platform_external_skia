@@ -135,7 +135,8 @@ public:
         return fy - SK_Fixed1/2;
     }
 
-    SkFixed drawLine(int x, int stopx, SkFixed fy, SkFixed slope) override {
+    virtual SkFixed drawLine(int x, int stopx, SkFixed fy,
+                             SkFixed slope) override {
         SkASSERT(x < stopx);
         int count = stopx - x;
         fy += SK_Fixed1/2;
@@ -762,7 +763,7 @@ void SkScan::AntiFillXRect(const SkXRect& xr, const SkRasterClip& clip,
     }
 }
 
-/*  This takes a float-rect, but with the key improvement that it has
+/*  This guy takes a float-rect, but with the key improvement that it has
     already been clipped, so we know that it is safe to convert it into a
     XRect (fixedpoint), as it won't overflow.
 */

@@ -13,7 +13,6 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
 #include "include/docs/SkPDFDocument.h"
-#include "include/private/SkTPin.h"
 #include "include/private/SkTemplates.h"
 #include "src/pdf/SkPDFDevice.h"
 #include "src/pdf/SkPDFDocumentPriv.h"
@@ -25,7 +24,7 @@
 
 static void draw(SkCanvas* canvas, const SkImage* image, SkColor4f paintColor) {
     SkPaint paint(paintColor);
-    canvas->drawImage(image, 0, 0, SkSamplingOptions(), &paint);
+    canvas->drawImage(image, 0, 0, &paint);
 }
 
 static SkBitmap to_bitmap(const SkImage* image) {
@@ -49,7 +48,7 @@ static void draw_bitmap_matrix(SkCanvas* canvas, const SkBitmap& bm,
     SkAutoCanvasRestore acr(canvas, true);
     canvas->concat(matrix);
     SkPaint paint(paintColor);
-    canvas->drawImage(bm.asImage(), 0, 0, SkSamplingOptions(), &paint);
+    canvas->drawBitmap(bm, 0, 0, &paint);
 }
 
 static void fill_color_from_bitmap(SkCanvas* canvas,

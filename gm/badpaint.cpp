@@ -39,11 +39,11 @@ protected:
 
         // Empty bitmap.
         fPaints.push_back().setColor(SK_ColorGREEN);
-        fPaints.back().setShader(emptyBmp.makeShader(SkSamplingOptions()));
+        fPaints.back().setShader(emptyBmp.makeShader());
 
         // Non-invertible local matrix.
         fPaints.push_back().setColor(SK_ColorGREEN);
-        fPaints.back().setShader(blueBmp.makeShader(SkSamplingOptions(), badMatrix));
+        fPaints.back().setShader(blueBmp.makeShader(&badMatrix));
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -56,7 +56,7 @@ protected:
 private:
     SkTArray<SkPaint> fPaints;
 
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 
 /////////////////////////////////////////////////////////////////////////////////////

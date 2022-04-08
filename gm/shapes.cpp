@@ -36,7 +36,7 @@ protected:
         }
     }
 
-    SkString onShortName() final { return fName; }
+    SkString onShortName() override final { return fName; }
     SkISize onISize() override { return SkISize::Make(500, 500); }
 
     void onOnceBeforeDraw() override {
@@ -94,7 +94,7 @@ protected:
     int                  fSimpleShapeCount;
 
 private:
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 class SimpleShapesGM : public ShapesGM {
@@ -126,7 +126,7 @@ private:
         }
     }
 
-    using INHERITED = ShapesGM;
+    typedef ShapesGM INHERITED;
 };
 
 class InnerShapesGM : public ShapesGM {
@@ -140,29 +140,10 @@ private:
             const SkRRect& outer = fShapes[i];
             const SkRRect& inner = fShapes[(i * 7 + 11) % fSimpleShapeCount];
             float s = 0.95f * std::min(outer.rect().width() / inner.rect().width(),
-                                       outer.rect().height() / inner.rect().height());
+                                     outer.rect().height() / inner.rect().height());
             SkMatrix innerXform;
             float dx = (rand.nextF() - 0.5f) * (outer.rect().width() - s * inner.rect().width());
             float dy = (rand.nextF() - 0.5f) * (outer.rect().height() - s * inner.rect().height());
-            // Fixup inner rects so they don't reach outside the outer rect.
-            switch (i) {
-                case 0:
-                    s *= .85f;
-                    break;
-                case 8:
-                    s *= .4f;
-                    dx = dy = 0;
-                    break;
-                case 5:
-                    s *= .75f;
-                    dx = dy = 0;
-                    break;
-                case 6:
-                    s *= .65f;
-                    dx = -5;
-                    dy = 10;
-                    break;
-            }
             innerXform.setTranslate(outer.rect().centerX() + dx, outer.rect().centerY() + dy);
             if (s < 1) {
                 innerXform.preScale(s, s);
@@ -180,7 +161,7 @@ private:
         }
     }
 
-    using INHERITED = ShapesGM;
+    typedef ShapesGM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -190,4 +171,4 @@ DEF_GM( return new SimpleShapesGM(false); )
 DEF_GM( return new InnerShapesGM(true); )
 DEF_GM( return new InnerShapesGM(false); )
 
-}  // namespace skiagm
+}

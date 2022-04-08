@@ -111,7 +111,7 @@ public:
      */
     void sort() {
         if (fArray.count() > 1) {
-            SkTQSort<T>(fArray.begin(), fArray.end(), LESS);
+            SkTQSort<T>(fArray.begin(), fArray.end() - 1, LESS);
             for (int i = 0; i < fArray.count(); i++) {
                 this->setIndex(i);
             }

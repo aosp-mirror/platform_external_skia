@@ -1,10 +1,7 @@
 // Copyright 2019 Google LLC.
-
-#include "modules/skparagraph/include/DartTypes.h"
+#include <string>
 #include "modules/skparagraph/include/ParagraphStyle.h"
-#include "modules/skshaper/src/SkUnicode.h"
-#include "src/core/SkStringUtils.h"
-#include "src/utils/SkUTF.h"
+#include "unicode/unistr.h"
 
 namespace skia {
 namespace textlayout {
@@ -16,7 +13,6 @@ StrutStyle::StrutStyle() {
     fLeading = -1;
     fForceHeight = false;
     fHeightOverride = false;
-    fHalfLeading = false;
     fEnabled = false;
 }
 
@@ -25,7 +21,6 @@ ParagraphStyle::ParagraphStyle() {
     fTextDirection = TextDirection::kLtr;
     fLinesLimit = std::numeric_limits<size_t>::max();
     fHeight = 1;
-    fTextHeightBehavior = TextHeightBehavior::kAll;
     fHintingIsOn = true;
 }
 
@@ -37,6 +32,14 @@ TextAlign ParagraphStyle::effective_align() const {
     } else {
         return fTextAlign;
     }
+}
+
+void ParagraphStyle::setEllipsis(const std::u16string& ellipsis) {
+    icu::UnicodeString unicode;
+    unicode.setTo((UChar*)ellipsis.data());
+    std::string str;
+    unicode.toUTF8String(str);
+    fEllipsis = SkString(str.c_str());
 }
 }  // namespace textlayout
 }  // namespace skia

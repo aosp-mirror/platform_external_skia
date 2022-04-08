@@ -4,8 +4,6 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include <memory>
-
 #include "bench/Benchmark.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
@@ -45,8 +43,8 @@ public:
     void onDelayedSetup() override {
         std::unique_ptr<SkBBHFactory> factory;
         switch (fBBH) {
-            case kNone:                                                   break;
-            case kRTree:    factory = std::make_unique<SkRTreeFactory>(); break;
+            case kNone:                                                 break;
+            case kRTree:    factory.reset(new SkRTreeFactory);          break;
         }
 
         SkPictureRecorder recorder;

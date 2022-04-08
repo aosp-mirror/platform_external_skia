@@ -9,7 +9,6 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImageFilter.h"
-#include "include/core/SkSurface.h"
 #include "include/effects/SkColorMatrixFilter.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkImageFilters.h"
@@ -41,19 +40,21 @@ protected:
         for(int i = 0; i < loops; i++) {
             SkPaint paint;
             paint.setImageFilter(fImageFilter);
-            canvas->drawImage(fImage, 0, 0, SkSamplingOptions(), &paint);
+            canvas->drawBitmap(fBitmap, 0, 0, &paint);
         }
     }
 
 private:
     sk_sp<SkImageFilter> fImageFilter;
-    sk_sp<SkImage> fImage;
+    SkBitmap fBitmap;
 
     void makeBitmap() {
         int W = 400;
         int H = 400;
-        auto surf = SkSurface::MakeRasterN32Premul(W, H);
+        fBitmap.allocN32Pixels(W, H);
+        fBitmap.eraseColor(SK_ColorTRANSPARENT);
 
+        SkCanvas canvas(fBitmap);
         SkPaint paint;
         SkPoint pts[] = { {0, 0}, {SkIntToScalar(W), SkIntToScalar(H)} };
         SkColor colors[] = {
@@ -62,8 +63,7 @@ private:
         };
         paint.setShader(SkGradientShader::MakeLinear(pts, colors, nullptr, SK_ARRAY_COUNT(colors),
                                                      SkTileMode::kClamp));
-        surf->getCanvas()->drawPaint(paint);
-        fImage = surf->makeImageSnapshot();       // shader->makeImage()
+        canvas.drawPaint(paint);
     }
 };
 

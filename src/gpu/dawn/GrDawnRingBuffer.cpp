@@ -11,7 +11,7 @@
 #include "src/gpu/dawn/GrDawnUtil.h"
 
 namespace {
-    const int kDefaultSize = 64 * 1024;
+    const int kDefaultSize = 512 * 1024;
 }
 
 GrDawnRingBuffer::GrDawnRingBuffer(GrDawnGpu* gpu, wgpu::BufferUsage usage)
@@ -29,8 +29,7 @@ GrDawnRingBuffer::Slice GrDawnRingBuffer::allocate(int size) {
         fBuffer = fGpu->device().CreateBuffer(&desc);
         fOffset = 0;
     }
-
-    size_t offset = fOffset;
+    int offset = fOffset;
     fOffset += size;
     fOffset = GrDawnRoundRowBytes(fOffset);
     return Slice(fBuffer, offset);

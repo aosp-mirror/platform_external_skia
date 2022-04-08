@@ -20,6 +20,7 @@
 #include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/effects/GrCustomXfermode.h"
 #include "src/gpu/effects/GrPorterDuffXferProcessor.h"
+#include "src/gpu/effects/GrXfermodeFragmentProcessor.h"
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -60,7 +61,7 @@ public:
 private:
     const SkBlendMode fMode;
 
-    using INHERITED = SkXfermode;
+    typedef SkXfermode INHERITED;
 };
 
 const char* SkBlendMode_Name(SkBlendMode mode) {

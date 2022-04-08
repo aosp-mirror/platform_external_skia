@@ -11,19 +11,17 @@
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrProgramInfo.h"
+#include "src/gpu/GrRenderTarget.h"
+#include "src/gpu/GrRenderTargetPriv.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
-#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
+#include "src/gpu/glsl/GrGLSLPrimitiveProcessor.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
 #include "src/gpu/glsl/GrGLSLXferProcessor.h"
-#include "src/sksl/SkSLCompiler.h"
-
-#include <vector>
 
 class GrProgramDesc;
-class GrRenderTarget;
 class GrShaderVar;
 class GrGLSLVaryingHandler;
 class SkString;
@@ -34,14 +32,14 @@ public:
     using UniformHandle      = GrGLSLUniformHandler::UniformHandle;
     using SamplerHandle      = GrGLSLUniformHandler::SamplerHandle;
 
-    virtual ~GrGLSLProgramBuilder();
+    virtual ~GrGLSLProgramBuilder() {}
 
     virtual const GrCaps* caps() const = 0;
     const GrShaderCaps* shaderCaps() const { return this->caps()->shaderCaps(); }
 
     GrSurfaceOrigin origin() const { return fProgramInfo.origin(); }
     const GrPipeline& pipeline() const { return fProgramInfo.pipeline(); }
-    const GrGeometryProcessor& geometryProcessor() const { return fProgramInfo.geomProc(); }
+    const GrPrimitiveProcessor& primitiveProcessor() const { return fProgramInfo.primProc(); }
     GrProcessor::CustomFeatures processorFeatures() const {
         return fProgramInfo.requestedFeatures();
     }
@@ -49,7 +47,15 @@ public:
         return fProgramInfo.pipeline().snapVerticesToPixelCenters();
     }
     bool hasPointSize() const { return fProgramInfo.primitiveType() == GrPrimitiveType::kPoints; }
-    virtual SkSL::Compiler* shaderCompiler() const = 0;
+
+    // TODO: stop passing in the renderTarget for just the sampleLocations
+    int effectiveSampleCnt() const {
+        SkASSERT(GrProcessor::CustomFeatures::kSampleLocations & fProgramInfo.requestedFeatures());
+        return fRenderTarget->renderTargetPriv().getSampleLocations().count();
+    }
+    const SkTArray<SkPoint>& getSampleLocations() const {
+        return fRenderTarget->renderTargetPriv().getSampleLocations();
+    }
 
     const GrProgramDesc& desc() const { return fDesc; }
 
@@ -60,26 +66,24 @@ public:
     }
 
     GrSwizzle samplerSwizzle(SamplerHandle handle) const {
-        return this->uniformHandler()->samplerSwizzle(handle);
+        if (this->caps()->shaderCaps()->textureSwizzleAppliedInShader()) {
+            return this->uniformHandler()->samplerSwizzle(handle);
+        }
+        return GrSwizzle::RGBA();
     }
 
-    const char* inputSamplerVariable(SamplerHandle handle) const {
-        return this->uniformHandler()->inputSamplerVariable(handle);
-    }
+    // Used to add a uniform for the RenderTarget width (used for sk_Width) without mangling
+    // the name of the uniform inside of a stage.
+    void addRTWidthUniform(const char* name);
 
-    GrSwizzle inputSamplerSwizzle(SamplerHandle handle) const {
-        return this->uniformHandler()->inputSamplerSwizzle(handle);
-    }
-
-    // Used to add a uniform for the RenderTarget height (used for u_skRTHeight and frag position)
+    // Used to add a uniform for the RenderTarget height (used for sk_Height and frag position)
     // without mangling the name of the uniform inside of a stage.
     void addRTHeightUniform(const char* name);
 
     // Generates a name for a variable. The generated string will be name prefixed by the prefix
     // char (unless the prefix is '\0'). It also will mangle the name to be stage-specific unless
-    // explicitly asked not to. `nameVariable` can also be used to generate names for functions or
-    // other types of symbols where unique names are important.
-    SkString nameVariable(char prefix, const char* name, bool mangle = true);
+    // explicitly asked not to.
+    void nameVariable(SkString* out, char prefix, const char* name, bool mangle = true);
 
     virtual GrGLSLUniformHandler* uniformHandler() = 0;
     virtual const GrGLSLUniformHandler* uniformHandler() const = 0;
@@ -99,17 +103,19 @@ public:
 
     int fStageIndex;
 
+    const GrRenderTarget*        fRenderTarget; // TODO: remove this
     const GrProgramDesc&         fDesc;
     const GrProgramInfo&         fProgramInfo;
 
     GrGLSLBuiltinUniformHandles  fUniformHandles;
 
-    std::unique_ptr<GrGLSLGeometryProcessor> fGeometryProcessor;
-    std::unique_ptr<GrGLSLXferProcessor>     fXferProcessor;
-    std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fFPImpls;
+    std::unique_ptr<GrGLSLPrimitiveProcessor> fGeometryProcessor;
+    std::unique_ptr<GrGLSLXferProcessor> fXferProcessor;
+    std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fFragmentProcessors;
+    int fFragmentProcessorCnt;
 
 protected:
-    explicit GrGLSLProgramBuilder(const GrProgramDesc&, const GrProgramInfo&);
+    explicit GrGLSLProgramBuilder(GrRenderTarget*, const GrProgramDesc&, const GrProgramInfo&);
 
     void addFeature(GrShaderFlags shaders, uint32_t featureBit, const char* extensionName);
 
@@ -145,28 +151,28 @@ private:
     // Generates a possibly mangled name for a stage variable and writes it to the fragment shader.
     void nameExpression(SkString*, const char* baseName);
 
-    bool emitAndInstallPrimProc(SkString* outputColor, SkString* outputCoverage);
-    bool emitAndInstallFragProcs(SkString* colorInOut, SkString* coverageInOut);
-    SkString emitFragProc(const GrFragmentProcessor&,
-                          GrGLSLFragmentProcessor&,
-                          int transformedCoordVarsIdx,
-                          const SkString& input,
-                          SkString output);
-    bool emitAndInstallXferProc(const SkString& colorIn, const SkString& coverageIn);
-    SamplerHandle emitSampler(const GrBackendFormat&, GrSamplerState, const GrSwizzle&,
+    void emitAndInstallPrimProc(SkString* outputColor, SkString* outputCoverage);
+    void emitAndInstallFragProcs(SkString* colorInOut, SkString* coverageInOut);
+    SkString emitAndInstallFragProc(const GrFragmentProcessor&,
+                                    int index,
+                                    int transformedCoordVarsIdx,
+                                    const SkString& input,
+                                    SkString output,
+                                    SkTArray<std::unique_ptr<GrGLSLFragmentProcessor>>*);
+    void emitAndInstallXferProc(const SkString& colorIn, const SkString& coverageIn);
+    SamplerHandle emitSampler(const GrSurfaceProxy*, GrSamplerState, const GrSwizzle&,
                               const char* name);
-    SamplerHandle emitInputSampler(const GrSwizzle& swizzle, const char* name);
     bool checkSamplerCounts();
 
 #ifdef SK_DEBUG
-    void verify(const GrGeometryProcessor&);
+    void verify(const GrPrimitiveProcessor&);
     void verify(const GrFragmentProcessor&);
     void verify(const GrXferProcessor&);
 #endif
 
     // These are used to check that we don't excede the allowable number of resources in a shader.
     int fNumFragmentSamplers;
-    SkSTArray<4, GrShaderVar> fTransformedCoordVars;
+    SkSTArray<4, GrGLSLPrimitiveProcessor::TransformVar> fTransformedCoordVars;
 };
 
 #endif

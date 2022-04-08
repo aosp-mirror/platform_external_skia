@@ -23,36 +23,53 @@
 #include <fontconfig/fontconfig.h>
 #include <unistd.h>
 
+#ifdef SK_DEBUG
+#    include "src/core/SkTLS.h"
+#endif
+
 namespace {
 
-// FontConfig was thread antagonistic until 2.10.91 with known thread safety issues until 2.13.93.
-// Before that, lock with a global mutex.
-// See https://bug.skia.org/1497 and cl/339089311 for background.
+// Fontconfig is not threadsafe before 2.10.91. Before that, we lock with a global mutex.
+// See https://bug.skia.org/1497 for background.
 static SkMutex& f_c_mutex() {
     static SkMutex& mutex = *(new SkMutex);
     return mutex;
 }
 
-struct FCLocker {
-    static constexpr int FontConfigThreadSafeVersion = 21393;
+#ifdef SK_DEBUG
+void* CreateThreadFcLocked() { return new bool(false); }
+void DeleteThreadFcLocked(void* v) { delete static_cast<bool*>(v); }
+#   define THREAD_FC_LOCKED \
+        static_cast<bool*>(SkTLS::Get(CreateThreadFcLocked, DeleteThreadFcLocked))
+#endif
 
+struct FCLocker {
     // Assume FcGetVersion() has always been thread safe.
+
     FCLocker() {
-        if (FcGetVersion() < FontConfigThreadSafeVersion) {
+        if (FcGetVersion() < 21091) {
             f_c_mutex().acquire();
+        } else {
+            SkDEBUGCODE(bool* threadLocked = THREAD_FC_LOCKED);
+            SkASSERT(false == *threadLocked);
+            SkDEBUGCODE(*threadLocked = true);
         }
     }
 
     ~FCLocker() {
         AssertHeld();
-        if (FcGetVersion() < FontConfigThreadSafeVersion) {
+        if (FcGetVersion() < 21091) {
             f_c_mutex().release();
+        } else {
+            SkDEBUGCODE(*THREAD_FC_LOCKED = false);
         }
     }
 
     static void AssertHeld() { SkDEBUGCODE(
-        if (FcGetVersion() < FontConfigThreadSafeVersion) {
+        if (FcGetVersion() < 21091) {
             f_c_mutex().assertHeld();
+        } else {
+            SkASSERT(true == *THREAD_FC_LOCKED);
         }
     ) }
 };
@@ -511,8 +528,8 @@ bool SkFontConfigInterfaceDirect::isValidPattern(FcPattern* pattern) {
 #ifdef SK_FONT_CONFIG_INTERFACE_ONLY_ALLOW_SFNT_FONTS
     const char* font_format = get_string(pattern, FC_FONTFORMAT);
     if (font_format
-        && 0 != strcmp(font_format, kFontFormatTrueType)
-        && 0 != strcmp(font_format, kFontFormatCFF))
+        && strcmp(font_format, kFontFormatTrueType) != 0
+        && strcmp(font_format, kFontFormatCFF) != 0)
     {
         return false;
     }

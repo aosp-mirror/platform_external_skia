@@ -15,11 +15,14 @@
 constexpr SkIPoint SkPackedGlyphID::kXYFieldMask;
 
 SkMask SkGlyph::mask() const {
+    // getMetrics had to be called.
+    SkASSERT(fMaskFormat != MASK_FORMAT_UNKNOWN);
+
     SkMask mask;
     mask.fImage = (uint8_t*)fImage;
     mask.fBounds.setXYWH(fLeft, fTop, fWidth, fHeight);
     mask.fRowBytes = this->rowBytes();
-    mask.fFormat = fMaskFormat;
+    mask.fFormat = static_cast<SkMask::Format>(fMaskFormat);
     return mask;
 }
 
@@ -99,12 +102,7 @@ bool SkGlyph::setImage(SkArenaAlloc* alloc, const void* image) {
     return false;
 }
 
-size_t SkGlyph::setMetricsAndImage(SkArenaAlloc* alloc, const SkGlyph& from) {
-    // Since the code no longer tries to find replacement glyphs, the image should always be
-    // nullptr.
-    SkASSERT(fImage == nullptr);
-
-    // TODO(herb): remove "if" when we are sure there are no colliding glyphs.
+bool SkGlyph::setMetricsAndImage(SkArenaAlloc* alloc, const SkGlyph& from) {
     if (fImage == nullptr) {
         fAdvanceX = from.fAdvanceX;
         fAdvanceY = from.fAdvanceY;
@@ -116,15 +114,13 @@ size_t SkGlyph::setMetricsAndImage(SkArenaAlloc* alloc, const SkGlyph& from) {
         fMaskFormat = from.fMaskFormat;
 
         // From glyph may not have an image because the glyph is too large.
-        if (from.fImage != nullptr && this->setImage(alloc, from.image())) {
-            return this->imageSize();
-        }
+        return from.fImage != nullptr && this->setImage(alloc, from.image());
     }
-    return 0;
+    return false;
 }
 
 size_t SkGlyph::rowBytes() const {
-    return format_rowbytes(fWidth, fMaskFormat);
+    return format_rowbytes(fWidth, (SkMask::Format)fMaskFormat);
 }
 
 size_t SkGlyph::rowBytesUsingFormat(SkMask::Format format) const {

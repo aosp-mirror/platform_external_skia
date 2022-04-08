@@ -7,7 +7,6 @@
 
 #include "src/pdf/SkPDFUtils.h"
 
-#include "include/core/SkBitmap.h"
 #include "include/core/SkData.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
@@ -335,8 +334,7 @@ bool SkPDFUtils::ToBitmap(const SkImage* img, SkBitmap* dst) {
     SkASSERT(img);
     SkASSERT(dst);
     SkBitmap bitmap;
-    // TODO: support GPU images
-    if(as_IB(img)->getROPixels(nullptr, &bitmap)) {
+    if(as_IB(img)->getROPixels(&bitmap)) {
         SkASSERT(bitmap.dimensions() == img->dimensions());
         SkASSERT(!bitmap.drawsNothing());
         *dst = std::move(bitmap);

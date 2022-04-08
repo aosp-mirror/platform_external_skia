@@ -32,6 +32,8 @@
 
 #include <string.h>
 
+class GrContext;
+
 class DFTextGM : public skiagm::GM {
 public:
     DFTextGM() {
@@ -52,23 +54,21 @@ protected:
         return SkISize::Make(1024, 768);
     }
 
-    void onDraw(SkCanvas* inputCanvas) override {
+    virtual void onDraw(SkCanvas* inputCanvas) override {
         SkScalar textSizes[] = { 9.0f, 9.0f*2.0f, 9.0f*5.0f, 9.0f*2.0f*5.0f };
         SkScalar scales[] = { 2.0f*5.0f, 5.0f, 2.0f, 1.0f };
 
         // set up offscreen rendering with distance field text
-        auto ctx = inputCanvas->recordingContext();
+        GrContext* ctx = inputCanvas->getGrContext();
         SkISize size = onISize();
         SkImageInfo info = SkImageInfo::MakeN32(size.width(), size.height(), kPremul_SkAlphaType,
                                                 inputCanvas->imageInfo().refColorSpace());
-        SkSurfaceProps inputProps;
-        inputCanvas->getProps(&inputProps);
-        SkSurfaceProps props(SkSurfaceProps::kUseDeviceIndependentFonts_Flag | inputProps.flags(),
-                             inputProps.pixelGeometry());
+        SkSurfaceProps props(SkSurfaceProps::kUseDeviceIndependentFonts_Flag,
+                             SkSurfaceProps::kLegacyFontHost_InitType);
         auto surface(SkSurface::MakeRenderTarget(ctx, SkBudgeted::kNo, info, 0, &props));
         SkCanvas* canvas = surface ? surface->getCanvas() : inputCanvas;
         // init our new canvas with the old canvas's matrix
-        canvas->setMatrix(inputCanvas->getLocalToDeviceAs3x3());
+        canvas->setMatrix(inputCanvas->getTotalMatrix());
         // apply global scale to test glyph positioning
         canvas->scale(1.05f, 1.05f);
         canvas->clear(0xffffffff);
@@ -236,7 +236,7 @@ protected:
             SkAutoCanvasRestore acr(inputCanvas, true);
             // since we prepended this matrix already, we blit using identity
             inputCanvas->resetMatrix();
-            inputCanvas->drawImage(surface->makeImageSnapshot().get(), 0, 0);
+            inputCanvas->drawImage(surface->makeImageSnapshot().get(), 0, 0, nullptr);
         }
     }
 
@@ -244,7 +244,7 @@ private:
     sk_sp<SkTypeface> fEmojiTypeface;
     const char* fEmojiText;
 
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 
 DEF_GM(return new DFTextGM;)

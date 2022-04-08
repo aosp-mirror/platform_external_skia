@@ -13,7 +13,7 @@ sk_sp<SkImage> foo() {
         path.lineTo(pts[i] * scale, pts[i + 1] * scale);
     }
     path.close();
-    SkMatrix matrix = SkMatrix::Scale(4 * scale, 4 * scale);
+    SkMatrix matrix = SkMatrix::MakeScale(4 * scale);
     SkPaint paint;
     paint.setPathEffect(SkPath2DPathEffect::Make(matrix, path));
     paint.setAntiAlias(true);
@@ -23,7 +23,7 @@ sk_sp<SkImage> foo() {
     SkCanvas c(bm);
     c.clear(0);
     c.drawRect(bounds, paint);
-    return bm.asImage();
+    return SkImage::MakeFromBitmap(bm);
 }
 
 void draw(SkCanvas* canvas) {
@@ -31,6 +31,6 @@ void draw(SkCanvas* canvas) {
     SkPaint paint;
     paint.setMaskFilter(SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, 2.0f, 0));
     paint.setColor(0xFF008000);
-    canvas->drawImage(a8img, 8, 8, SkSamplingOptions(), &paint);
+    canvas->drawImage(a8img, 8, 8, &paint);
 }
 }  // END FIDDLE

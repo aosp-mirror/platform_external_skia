@@ -25,17 +25,13 @@ public:
 protected:
     const char* onGetName() override;
     bool isSuitableFor(Backend backend) override;
-    void onPerCanvasPreDraw(SkCanvas*) override;
-    void onPerCanvasPostDraw(SkCanvas*) override;
-    void onDraw(int loops, SkCanvas*) override;
+    void onDraw(int loops, SkCanvas* canvas) override;
     SkIPoint onGetSize() override;
 
 private:
     std::unique_ptr<skiagm::GM> fGM;
-    SkString                    fName;
-    bool                        fGpuSetupFailed = false;
-
-    using INHERITED = Benchmark;
+    SkString    fName;
+    typedef Benchmark INHERITED;
 };
 
 #endif

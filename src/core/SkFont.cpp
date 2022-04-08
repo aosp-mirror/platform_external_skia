@@ -270,7 +270,7 @@ void SkFont::getWidthsBounds(const SkGlyphID glyphIDs[],
     SkScalar scale = strikeSpec.strikeToSourceRatio();
 
     if (bounds) {
-        SkMatrix scaleMat = SkMatrix::Scale(scale, scale);
+        SkMatrix scaleMat = SkMatrix::MakeScale(scale);
         SkRect* cursor = bounds;
         for (auto glyph : glyphs) {
             scaleMat.mapRectScaleTranslate(cursor++, glyph->rect());
@@ -316,7 +316,7 @@ void SkFont::getPaths(const SkGlyphID glyphIDs[], int count,
                       void (*proc)(const SkPath*, const SkMatrix&, void*), void* ctx) const {
     SkFont font(*this);
     SkScalar scale = font.setupForAsPaths(nullptr);
-    const SkMatrix mx = SkMatrix::Scale(scale, scale);
+    const SkMatrix mx = SkMatrix::MakeScale(scale);
 
     SkStrikeSpec strikeSpec = SkStrikeSpec::MakeWithNoDevice(font);
     SkBulkGlyphMetricsAndPaths paths{strikeSpec};
@@ -352,7 +352,7 @@ SkScalar SkFont::getMetrics(SkFontMetrics* metrics) const {
         metrics = &storage;
     }
 
-    auto cache = strikeSpec.findOrCreateStrike();
+    auto cache = strikeSpec.findOrCreateExclusiveStrike();
     *metrics = cache->getFontMetrics();
 
     if (strikeSpec.strikeToSourceRatio() != 1) {

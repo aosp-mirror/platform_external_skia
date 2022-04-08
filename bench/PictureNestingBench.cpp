@@ -102,7 +102,7 @@ private:
     SkString fName;
     SkPaint  fPaint;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 class PictureNestingRecording : public PictureNesting {
@@ -129,7 +129,7 @@ protected:
     }
 
 private:
-    using INHERITED = PictureNesting;
+    typedef PictureNesting INHERITED;
 };
 
 class PictureNestingPlayback : public PictureNesting {
@@ -159,7 +159,7 @@ protected:
 private:
     sk_sp<SkPicture> fPicture;
 
-    using INHERITED = PictureNesting;
+    typedef PictureNesting INHERITED;
 };
 
 DEF_BENCH( return new PictureNestingRecording(8, 0); )

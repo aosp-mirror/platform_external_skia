@@ -16,12 +16,11 @@
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrRecordingContext.h"
 #include "include/utils/SkRandom.h"
 #include "tools/ToolUtils.h"
 
-class GrSurfaceDrawContext;
+class GrContext;
+class GrRenderTargetContext;
 
 namespace skiagm {
 
@@ -32,7 +31,8 @@ namespace skiagm {
 class DiscardGM : public GpuGM {
 
 public:
-    DiscardGM() {}
+    DiscardGM() {
+    }
 
 protected:
     SkString onShortName() override {
@@ -43,19 +43,13 @@ protected:
         return SkISize::Make(100, 100);
     }
 
-    DrawResult onDraw(GrRecordingContext* context, GrSurfaceDrawContext*, SkCanvas* canvas,
+    DrawResult onDraw(GrContext* context, GrRenderTargetContext*, SkCanvas* canvas,
                       SkString* errorMsg) override {
-        auto direct = context->asDirectContext();
-        if (!direct) {
-            *errorMsg = "GM relies on having access to a live direct context.";
-            return DrawResult::kSkip;
-        }
-
         SkISize size = this->getISize();
         size.fWidth /= 10;
         size.fHeight /= 10;
         SkImageInfo info = SkImageInfo::MakeN32Premul(size);
-        sk_sp<SkSurface> surface = SkSurface::MakeRenderTarget(direct, SkBudgeted::kNo, info);
+        auto surface = SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, info);
         if (nullptr == surface) {
             *errorMsg = "Could not create render target.";
             return DrawResult::kFail;
@@ -82,7 +76,7 @@ protected:
                       surface->getCanvas()->drawPaint(paint);
                       break;
               }
-              surface->draw(canvas, 10.f*x, 10.f*y);
+              surface->draw(canvas, 10.f*x, 10.f*y, nullptr);
             }
         }
 
@@ -91,11 +85,11 @@ protected:
     }
 
 private:
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new DiscardGM;)
 
-}  // namespace skiagm
+} // end namespace

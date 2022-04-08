@@ -40,14 +40,10 @@ public:
 
     bool doLazyInstantiation(GrResourceProvider*);
 
-    void setIsDDLTarget() { fProxy->fIsDDLTarget = true; }
-
-    void setIsPromiseProxy() { fProxy->fIsPromiseProxy = true; }
-
 private:
     explicit GrSurfaceProxyPriv(GrSurfaceProxy* proxy) : fProxy(proxy) {}
-    GrSurfaceProxyPriv(const GrSurfaceProxyPriv&) = delete;
-    GrSurfaceProxyPriv& operator=(const GrSurfaceProxyPriv&) = delete;
+    GrSurfaceProxyPriv(const GrSurfaceProxyPriv&) {} // unimpl
+    GrSurfaceProxyPriv& operator=(const GrSurfaceProxyPriv&); // unimpl
 
     // No taking addresses of this type.
     const GrSurfaceProxyPriv* operator&() const;
@@ -60,7 +56,7 @@ private:
 
 inline GrSurfaceProxyPriv GrSurfaceProxy::priv() { return GrSurfaceProxyPriv(this); }
 
-inline const GrSurfaceProxyPriv GrSurfaceProxy::priv () const {  // NOLINT(readability-const-return-type)
+inline const GrSurfaceProxyPriv GrSurfaceProxy::priv () const {
     return GrSurfaceProxyPriv(const_cast<GrSurfaceProxy*>(this));
 }
 

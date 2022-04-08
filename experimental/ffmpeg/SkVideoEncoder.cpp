@@ -8,6 +8,7 @@
 #include "experimental/ffmpeg/SkVideoEncoder.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkYUVAIndex.h"
 #include "include/private/SkTDArray.h"
 
 extern "C" {

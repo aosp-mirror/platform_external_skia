@@ -10,8 +10,8 @@
 #include "include/core/SkColor.h"
 #include "include/core/SkPoint.h"
 #include "include/private/SkNx.h"
+#include "modules/skottie/src/Animator.h"
 #include "modules/skottie/src/SkottieValue.h"
-#include "modules/skottie/src/animator/Animator.h"
 #include "modules/skottie/src/text/RangeSelector.h"
 #include "src/utils/SkJSON.h"
 
@@ -117,15 +117,11 @@ TextAnimator::ResolvedProps TextAnimator::modulateProps(const ResolvedProps& pro
     auto modulated_props = props;
 
     // Transform props compose.
-    modulated_props.position += static_cast<SkV3>(fTextProps.position) * amount;
+    modulated_props.position += ValueTraits<VectorValue>::As<SkV3>(fTextProps.position) * amount;
     modulated_props.rotation += fTextProps.rotation * amount;
     modulated_props.tracking += fTextProps.tracking * amount;
     modulated_props.scale    *= SkV3{1,1,1} +
-            (static_cast<SkV3>(fTextProps.scale) * 0.01f - SkV3{1,1,1}) * amount;
-
-    // ... as does blur and line spacing
-    modulated_props.blur         += fTextProps.blur         * amount;
-    modulated_props.line_spacing += fTextProps.line_spacing * amount;
+            (ValueTraits<VectorValue>::As<SkV3>(fTextProps.scale) * 0.01f - SkV3{1,1,1}) * amount;
 
     const auto lerp_color = [](SkColor c0, SkColor c1, float t) {
         const auto c0_4f = SkNx_cast<float>(Sk4b::Load(&c0)),
@@ -140,11 +136,11 @@ TextAnimator::ResolvedProps TextAnimator::modulateProps(const ResolvedProps& pro
     // Colors and opacity are overridden, and use a clamped amount value.
     const auto clamped_amount = std::max(amount, 0.0f);
     if (fHasFillColor) {
-        const auto fc = static_cast<SkColor>(fTextProps.fill_color);
+        const auto fc = ValueTraits<VectorValue>::As<SkColor>(fTextProps.fill_color);
         modulated_props.fill_color = lerp_color(props.fill_color, fc, clamped_amount);
     }
     if (fHasStrokeColor) {
-        const auto sc = static_cast<SkColor>(fTextProps.stroke_color);
+        const auto sc = ValueTraits<VectorValue>::As<SkColor>(fTextProps.stroke_color);
         modulated_props.stroke_color = lerp_color(props.stroke_color, sc, clamped_amount);
     }
     modulated_props.opacity *= 1 + (fTextProps.opacity * 0.01f - 1) * clamped_amount; // 100-based
@@ -156,26 +152,21 @@ TextAnimator::TextAnimator(std::vector<sk_sp<RangeSelector>>&& selectors,
                            const skjson::ObjectValue& jprops,
                            const AnimationBuilder* abuilder,
                            AnimatablePropertyContainer* acontainer)
-    : fSelectors(std::move(selectors))
-    , fRequiresAnchorPoint(false) {
+    : fSelectors(std::move(selectors)) {
 
-    acontainer->bind(*abuilder, jprops["p" ], fTextProps.position);
-    acontainer->bind(*abuilder, jprops["o" ], fTextProps.opacity );
-    acontainer->bind(*abuilder, jprops["t" ], fTextProps.tracking);
-    acontainer->bind(*abuilder, jprops["ls"], fTextProps.line_spacing);
-
-    // Scale and rotation are anchor-point-dependent.
-    fRequiresAnchorPoint |= acontainer->bind(*abuilder, jprops["s"], fTextProps.scale);
+    acontainer->bind(*abuilder, jprops["p" ], &fTextProps.position);
+    acontainer->bind(*abuilder, jprops["s" ], &fTextProps.scale   );
+    acontainer->bind(*abuilder, jprops["o" ], &fTextProps.opacity );
+    acontainer->bind(*abuilder, jprops["t" ], &fTextProps.tracking);
 
     // Depending on whether we're in 2D/3D mode, some of these will stick and some will not.
     // It's fine either way.
-    fRequiresAnchorPoint |= acontainer->bind(*abuilder, jprops["rx"], fTextProps.rotation.x);
-    fRequiresAnchorPoint |= acontainer->bind(*abuilder, jprops["ry"], fTextProps.rotation.y);
-    fRequiresAnchorPoint |= acontainer->bind(*abuilder, jprops["r" ], fTextProps.rotation.z);
+    acontainer->bind(*abuilder, jprops["rx"], &fTextProps.rotation.x);
+    acontainer->bind(*abuilder, jprops["ry"], &fTextProps.rotation.y);
+    acontainer->bind(*abuilder, jprops["r" ], &fTextProps.rotation.z);
 
-    fHasFillColor   = acontainer->bind(*abuilder, jprops["fc"], fTextProps.fill_color  );
-    fHasStrokeColor = acontainer->bind(*abuilder, jprops["sc"], fTextProps.stroke_color);
-    fHasBlur        = acontainer->bind(*abuilder, jprops["bl"], fTextProps.blur        );
+    fHasFillColor   = acontainer->bind(*abuilder, jprops["fc"], &fTextProps.fill_color  );
+    fHasStrokeColor = acontainer->bind(*abuilder, jprops["sc"], &fTextProps.stroke_color);
 }
 
 } // namespace internal

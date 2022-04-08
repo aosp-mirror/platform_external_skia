@@ -15,16 +15,15 @@ extern "C" {
 #include "libavformat/avformat.h"
 #include "libavformat/avio.h"
 #include "libavutil/pixdesc.h"
-#include "libswscale/swscale.h"
 }
 
 class SkVideoDecoder {
 public:
-    SkVideoDecoder(GrRecordingContext* = nullptr);
+    SkVideoDecoder(GrContext* gr = nullptr);
     ~SkVideoDecoder();
 
     void reset();
-    void setGrContext(GrRecordingContext* rContext) { fRecordingContext = rContext; }
+    void setGrContext(GrContext* gr) { fGr = gr; }
 
     bool loadStream(std::unique_ptr<SkStream>);
     bool rewind();
@@ -52,7 +51,7 @@ private:
         void update(AVColorPrimaries, AVColorTransferCharacteristic);
     };
 
-    GrRecordingContext* fRecordingContext = nullptr;  // not owned by us
+    GrContext*          fGr = nullptr;  // not owned by us
 
     std::unique_ptr<SkStream>   fStream;
 

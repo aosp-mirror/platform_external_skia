@@ -5,8 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkYUVAInfo.h"
-#include "include/core/SkYUVAPixmaps.h"
 #include "src/core/SkCachedData.h"
 #include "src/core/SkResourceCache.h"
 #include "src/core/SkYUVPlanesCache.h"
@@ -33,46 +31,46 @@ static void check_data(skiatest::Reporter* reporter, SkCachedData* data,
 DEF_TEST(YUVPlanesCache, reporter) {
     SkResourceCache cache(1024);
 
-    SkYUVAInfo yuvaInfo({5, 5},
-                        SkYUVAInfo::PlaneConfig::kY_U_V,
-                        SkYUVAInfo::Subsampling::k420,
-                        kRec601_Limited_SkYUVColorSpace);
-    SkYUVAPixmapInfo yuvaPixmapInfo(yuvaInfo,
-                                    SkYUVAPixmapInfo::DataType::kUnorm8,
-                                    /*rowBytes[]*/ nullptr);
-    SkYUVAPixmaps yuvaPixmaps;
+    SkYUVPlanesCache::Info yuvInfo;
+    for (int i = 0; i < SkYUVASizeInfo::kMaxCount; i++) {
+        yuvInfo.fSizeInfo.fSizes[i].fWidth = 20 * (i + 1);
+        yuvInfo.fSizeInfo.fSizes[i].fHeight = 10 * (i + 1);
+        yuvInfo.fSizeInfo.fWidthBytes[i] = 80 * (i + 1);
+    }
+
+    for (int i = 0; i < SkYUVAIndex::kIndexCount; ++i) {
+        yuvInfo.fYUVAIndices[i].fIndex = -1;
+        yuvInfo.fYUVAIndices[i].fChannel = SkColorChannel::kR;
+    }
+    yuvInfo.fColorSpace = kRec601_SkYUVColorSpace;
+
     const uint32_t genID = 12345678;
 
-    SkCachedData* data = SkYUVPlanesCache::FindAndRef(genID, &yuvaPixmaps, &cache);
-    REPORTER_ASSERT(reporter, !data);
+    SkCachedData* data = SkYUVPlanesCache::FindAndRef(genID, &yuvInfo, &cache);
+    REPORTER_ASSERT(reporter, nullptr == data);
 
-    size_t size = yuvaPixmapInfo.computeTotalBytes();
+    size_t size = 256;
     data = cache.newCachedData(size);
     memset(data->writable_data(), 0xff, size);
 
-    SkPixmap pmaps[SkYUVAInfo::kMaxPlanes];
-    yuvaPixmapInfo.initPixmapsFromSingleAllocation(data->writable_data(), pmaps);
-    yuvaPixmaps = SkYUVAPixmaps::FromExternalPixmaps(yuvaInfo, pmaps);
-
-    SkYUVPlanesCache::Add(genID, data, yuvaPixmaps, &cache);
+    SkYUVPlanesCache::Add(genID, data, &yuvInfo, &cache);
     check_data(reporter, data, 2, kInCache, kLocked);
 
     data->unref();
     check_data(reporter, data, 1, kInCache, kUnlocked);
 
-    SkYUVAPixmaps yuvaPixmapsRead;
-    data = SkYUVPlanesCache::FindAndRef(genID, &yuvaPixmapsRead, &cache);
+    SkYUVPlanesCache::Info yuvInfoRead;
+    data = SkYUVPlanesCache::FindAndRef(genID, &yuvInfoRead, &cache);
 
     REPORTER_ASSERT(reporter, data);
     REPORTER_ASSERT(reporter, data->size() == size);
-    REPORTER_ASSERT(reporter, yuvaPixmapsRead.yuvaInfo() == yuvaPixmaps.yuvaInfo());
+    REPORTER_ASSERT(reporter, yuvInfo.fSizeInfo == yuvInfoRead.fSizeInfo);
 
-    for (int i = 0; i < yuvaPixmaps.numPlanes(); ++i) {
-        REPORTER_ASSERT(reporter, yuvaPixmaps.plane(i).info() == yuvaPixmapsRead.plane(i).info());
-        REPORTER_ASSERT(reporter, yuvaPixmaps.plane(i).addr() == yuvaPixmapsRead.plane(i).addr());
-        REPORTER_ASSERT(reporter, yuvaPixmaps.plane(i).rowBytes() ==
-                                  yuvaPixmapsRead.plane(i).rowBytes());
+    for (int i = 0; i < SkYUVAIndex::kIndexCount; ++i) {
+        REPORTER_ASSERT(reporter, yuvInfo.fYUVAIndices[i] == yuvInfoRead.fYUVAIndices[i]);
     }
+
+    REPORTER_ASSERT(reporter, yuvInfo.fColorSpace == yuvInfoRead.fColorSpace);
 
     check_data(reporter, data, 2, kInCache, kLocked);
 

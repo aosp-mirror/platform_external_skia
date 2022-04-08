@@ -23,16 +23,13 @@ bool FuzzImageDecode(sk_sp<SkData> bytes) {
         return false;
     }
 
-    s->getCanvas()->drawImage(img, 0, 0);
+    SkPaint p;
+    s->getCanvas()->drawImage(img, 0, 0, &p);
     return true;
 }
 
-// TODO(kjlubick): remove IS_FUZZING... after https://crrev.com/c/2410304 lands
-#if defined(SK_BUILD_FOR_LIBFUZZER) || defined(IS_FUZZING_WITH_LIBFUZZER)
+#if defined(IS_FUZZING_WITH_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-    if (size > 10240) {
-        return 0;
-    }
     auto bytes = SkData::MakeWithoutCopy(data, size);
     FuzzImageDecode(bytes);
     return 0;

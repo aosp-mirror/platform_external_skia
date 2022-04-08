@@ -44,7 +44,7 @@ public:
     void onOnceBeforeDraw() override {
        // Build the picture.
         SkPictureRecorder recorder;
-        SkCanvas* pictureCanvas = recorder.beginRecording(fTileSize, fTileSize);
+        SkCanvas* pictureCanvas = recorder.beginRecording(fTileSize, fTileSize, nullptr, 0);
         this->drawTile(pictureCanvas);
         fPicture = recorder.finishRecordingAsPicture();
 
@@ -163,7 +163,6 @@ private:
 
         auto pictureShader = fPicture->makeShader(kTileConfigs[tileMode].tmx,
                                                   kTileConfigs[tileMode].tmy,
-                                                  SkFilterMode::kNearest,
                                                   fUseLocalMatrixWrapper ? nullptr : &localMatrix,
                                                   nullptr);
         paint.setShader(fUseLocalMatrixWrapper
@@ -173,10 +172,11 @@ private:
 
         canvas->translate(fSceneSize * 1.1f, 0);
 
-        auto bitmapShader = fBitmap.makeShader(kTileConfigs[tileMode].tmx,
-                                               kTileConfigs[tileMode].tmy,
-                                               SkSamplingOptions(),
-                                               fUseLocalMatrixWrapper ? nullptr : &localMatrix);
+        auto bitmapShader = fBitmap.makeShader(
+                                                       kTileConfigs[tileMode].tmx,
+                                                       kTileConfigs[tileMode].tmy,
+                                                       fUseLocalMatrixWrapper
+                                                           ? nullptr : &localMatrix);
         paint.setShader(fUseLocalMatrixWrapper
                             ? bitmapShader->makeWithLocalMatrix(localMatrix)
                             : bitmapShader);
@@ -192,7 +192,7 @@ private:
     SkScalar    fSceneSize;
     bool        fUseLocalMatrixWrapper;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 DEF_GM(return new PictureShaderGM(50, 100);)
@@ -223,7 +223,6 @@ DEF_SIMPLE_GM(tiled_picture_shader, canvas, 400, 400) {
     p.setColor(0xFFB6B6B6);  // gray
     canvas->drawPaint(p);
 
-    p.setShader(picture->makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
-                                    SkFilterMode::kNearest));
+    p.setShader(picture->makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat));
     canvas->drawPaint(p);
 }

@@ -15,12 +15,12 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrContext.h"
 #include "tools/ToolUtils.h"
 
 #include <string.h>
 
-class GrSurfaceDrawContext;
+class GrRenderTargetContext;
 
 // This tests that we correctly regenerate textblobs after freeing all gpu resources crbug/491350
 namespace skiagm {
@@ -37,7 +37,7 @@ protected:
         return SkISize::Make(kWidth, kHeight);
     }
 
-    void onDraw(GrRecordingContext* context, GrSurfaceDrawContext*, SkCanvas* canvas) override {
+    void onDraw(GrContext* context, GrRenderTargetContext*, SkCanvas* canvas) override {
         const char text[] = "Hamburgefons";
 
         SkFont font(ToolUtils::create_portable_typeface(), 20);
@@ -51,9 +51,7 @@ protected:
         canvas->drawTextBlob(blob, 20, 60, SkPaint());
 
         // This text should look fine
-        if (auto direct = context->asDirectContext()) {
-            direct->freeGpuResources();
-        }
+        context->freeGpuResources();
         canvas->drawTextBlob(blob, 20, 160, SkPaint());
     }
 
@@ -61,10 +59,10 @@ private:
     static constexpr int kWidth = 200;
     static constexpr int kHeight = 200;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new TextBlobUseAfterGpuFree;)
-}  // namespace skiagm
+}

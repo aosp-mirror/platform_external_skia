@@ -7,7 +7,7 @@
 
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrContext.h"
 #include "src/core/SkAutoMalloc.h"
 #include "tools/sk_app/DawnWindowContext.h"
 
@@ -31,20 +31,18 @@ DawnWindowContext::DawnWindowContext(const DisplayParams& params,
 }
 
 void DawnWindowContext::initializeContext(int width, int height) {
-    SkASSERT(!fContext);
-
     fWidth = width;
     fHeight = height;
     fDevice = onInitializeContext();
+    fContext = GrContext::MakeDawn(fDevice, fDisplayParams.fGrContextOptions);
 
-    fContext = GrDirectContext::MakeDawn(fDevice, fDisplayParams.fGrContextOptions);
     if (!fContext) {
         return;
     }
     fSwapChainImplementation = this->createSwapChainImplementation(-1, -1, fDisplayParams);
     wgpu::SwapChainDescriptor swapChainDesc;
     swapChainDesc.implementation = reinterpret_cast<int64_t>(&fSwapChainImplementation);
-    fSwapChain = fDevice.CreateSwapChain(nullptr, &swapChainDesc);
+    fSwapChain = fDevice.CreateSwapChain(&swapChainDesc);
     if (!fSwapChain) {
         fContext.reset();
         return;
@@ -94,7 +92,7 @@ void DawnWindowContext::resize(int w, int h) {
     fSwapChainImplementation = this->createSwapChainImplementation(w, h, fDisplayParams);
     wgpu::SwapChainDescriptor swapChainDesc;
     swapChainDesc.implementation = reinterpret_cast<int64_t>(&fSwapChainImplementation);
-    fSwapChain = fDevice.CreateSwapChain(nullptr, &swapChainDesc);
+    fSwapChain = fDevice.CreateSwapChain(&swapChainDesc);
     if (!fSwapChain) {
         fContext.reset();
         return;

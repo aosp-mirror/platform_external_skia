@@ -50,7 +50,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -138,7 +138,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 DEF_BENCH( return new FontCacheBench(); )
 
@@ -193,7 +193,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 DEF_BENCH( return new FontPathBench(true); )
 DEF_BENCH( return new FontPathBench(false); )

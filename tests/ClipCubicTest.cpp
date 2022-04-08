@@ -29,9 +29,11 @@ static void test_giantClip() {
     SkCanvas canvas(bm);
     canvas.clear(SK_ColorTRANSPARENT);
 
+    SkPath path;
+    path.moveTo(0, 0); path.lineTo(1, 0); path.lineTo(33, 1);
     SkPaint paint;
     paint.setAntiAlias(true);
-    canvas.drawPath(SkPath::Polygon({{0,0}, {1,0}, {33,1}}, false), paint);
+    canvas.drawPath(path, paint);
 }
 
 static void PrintCurve(const char *name, const SkPoint crv[4]) {

@@ -13,8 +13,8 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
 #include "include/encode/SkPngEncoder.h"
+#include "include/gpu/GrContext.h"
 #include "include/gpu/GrContextOptions.h"
-#include "include/gpu/GrDirectContext.h"
 #include "include/private/SkImageInfoPriv.h"
 #include "src/core/SkFontMgrPriv.h"
 #include "src/core/SkOSFile.h"
@@ -45,7 +45,7 @@
 
 static constexpr char kRenderTestCSVReport[] = "out.csv";
 static constexpr char kRenderTestReportPath[] = "report.html";
-static constexpr char kDefaultRenderTestsPath[] = "skqp/rendertests.txt";
+static constexpr char kRenderTestsPath[] = "skqp/rendertests.txt";
 static constexpr char kUnitTestReportPath[] = "unit_tests.txt";
 static constexpr char kUnitTestsPath[]   = "skqp/unittests.txt";
 
@@ -89,12 +89,8 @@ static void get_unit_tests(SkQPAssetManager* mgr, std::vector<SkQP::UnitTest>* u
 }
 
 static void get_render_tests(SkQPAssetManager* mgr,
-                             const char *renderTestsIn,
                              std::vector<SkQP::GMFactory>* gmlist,
                              std::unordered_map<std::string, int64_t>* gmThresholds) {
-    // Runs all render tests if the |renderTests| file can't be found or is empty.
-    const char *renderTests = (renderTestsIn && renderTestsIn[0]) ?
-        renderTestsIn : kDefaultRenderTestsPath;
     auto insert = [gmThresholds](const char* s, size_t l) {
         SkASSERT(l > 1) ;
         if (l > 0 && s[l - 1] == '\n') {  // strip line endings.
@@ -121,7 +117,7 @@ static void get_render_tests(SkQPAssetManager* mgr,
         }
         gmThresholds->insert({std::move(key), value});  // (*gmThresholds)[s] = value;
     };
-    if (sk_sp<SkData> dat = mgr->open(renderTests)) {
+    if (sk_sp<SkData> dat = mgr->open(kRenderTestsPath)) {
         readlines(dat->data(), dat->size(), insert);
     }
     using GmAndName = std::pair<SkQP::GMFactory, std::string>;
@@ -186,7 +182,7 @@ static std::vector<SkQP::SkiaBackend> get_backends() {
         std::unique_ptr<sk_gpu_test::TestContext> testCtx = make_test_context(backend);
         if (testCtx) {
             testCtx->makeCurrent();
-            if (nullptr != testCtx->makeContext(context_options())) {
+            if (nullptr != testCtx->makeGrContext(context_options())) {
                 result.push_back(backend);
             }
         }
@@ -203,7 +199,7 @@ static void print_backend_info(const char* dstPath,
     for (SkQP::SkiaBackend backend : backends) {
         if (std::unique_ptr<sk_gpu_test::TestContext> testCtx = make_test_context(backend)) {
             testCtx->makeCurrent();
-            if (sk_sp<GrDirectContext> ctx = testCtx->makeContext(context_options())) {
+            if (sk_sp<GrContext> ctx = testCtx->makeGrContext(context_options())) {
                 SkString info = ctx->dump();
                 // remove null
                 out.write(info.c_str(), info.size());
@@ -250,7 +246,7 @@ SkQP::SkQP() {}
 
 SkQP::~SkQP() {}
 
-void SkQP::init(SkQPAssetManager* am, const char* renderTests, const char* reportDirectory) {
+void SkQP::init(SkQPAssetManager* am, const char* reportDirectory) {
     SkASSERT_RELEASE(!fAssetManager);
     SkASSERT_RELEASE(am);
     fAssetManager = am;
@@ -259,7 +255,9 @@ void SkQP::init(SkQPAssetManager* am, const char* renderTests, const char* repor
     SkGraphics::Init();
     gSkFontMgr_DefaultFactory = &ToolUtils::MakePortableFontMgr;
 
-    get_render_tests(fAssetManager, renderTests, &fGMs, &fGMThresholds);
+    /* If the file "skqp/rendertests.txt" does not exist or is empty, run all
+       render tests.  Otherwise only run tests mentioned in that file.  */
+    get_render_tests(fAssetManager, &fGMs, &fGMThresholds);
     /* If the file "skqp/unittests.txt" does not exist or is empty, run all gpu
        unit tests.  Otherwise only run tests mentioned in that file.  */
     get_unit_tests(fAssetManager, &fUnitTests);
@@ -289,10 +287,10 @@ std::tuple<SkQP::RenderOutcome, std::string> SkQP::evaluateGM(SkQP::SkiaBackend 
     const int h = size.height();
     const SkImageInfo info =
         SkImageInfo::Make(w, h, skqp::kColorType, kPremul_SkAlphaType, nullptr);
-    const SkSurfaceProps props(0, kRGB_H_SkPixelGeometry);
+    const SkSurfaceProps props(0, SkSurfaceProps::kLegacyFontHost_InitType);
 
     sk_sp<SkSurface> surf = SkSurface::MakeRenderTarget(
-            testCtx->makeContext(context_options(gm.get())).get(),
+            testCtx->makeGrContext(context_options(gm.get())).get(),
             SkBudgeted::kNo, info, 0, &props);
     if (!surf) {
         return std::make_tuple(kError, "Skia Failure: gr-context");
@@ -494,7 +492,7 @@ void SkQP::makeReport() {
         if (result.fErrors.empty()) {
             unitOut.writeText(" PASSED\n* * *\n");
         } else {
-            write(&unitOut, SkStringPrintf(" FAILED (%zu errors)\n", result.fErrors.size()));
+            write(&unitOut, SkStringPrintf(" FAILED (%u errors)\n", result.fErrors.size()));
             for (const std::string& err : result.fErrors) {
                 write(&unitOut, err);
                 unitOut.newline();

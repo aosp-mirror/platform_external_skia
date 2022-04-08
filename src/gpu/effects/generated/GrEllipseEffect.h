@@ -10,35 +10,30 @@
  **************************************************************************************************/
 #ifndef GrEllipseEffect_DEFINED
 #define GrEllipseEffect_DEFINED
-
-#include "include/core/SkM44.h"
 #include "include/core/SkTypes.h"
+#include "include/core/SkM44.h"
 
 #include "src/gpu/GrShaderCaps.h"
 
+#include "src/gpu/GrCoordTransform.h"
 #include "src/gpu/GrFragmentProcessor.h"
-
 class GrEllipseEffect : public GrFragmentProcessor {
 public:
-    static GrFPResult Make(std::unique_ptr<GrFragmentProcessor> inputFP,
-                           GrClipEdgeType edgeType,
-                           SkPoint center,
-                           SkPoint radii,
-                           const GrShaderCaps& caps) {
+    static std::unique_ptr<GrFragmentProcessor> Make(GrClipEdgeType edgeType, SkPoint center,
+                                                     SkPoint radii, const GrShaderCaps& caps) {
         // Small radii produce bad results on devices without full float.
         if (!caps.floatIs32Bits() && (radii.fX < 0.5f || radii.fY < 0.5f)) {
-            return GrFPFailure(std::move(inputFP));
+            return nullptr;
         }
         // Very narrow ellipses produce bad results on devices without full float
         if (!caps.floatIs32Bits() && (radii.fX > 255 * radii.fY || radii.fY > 255 * radii.fX)) {
-            return GrFPFailure(std::move(inputFP));
+            return nullptr;
         }
         // Very large ellipses produce bad results on devices without full float
         if (!caps.floatIs32Bits() && (radii.fX > 16384 || radii.fY > 16384)) {
-            return GrFPFailure(std::move(inputFP));
+            return nullptr;
         }
-        return GrFPSuccess(std::unique_ptr<GrFragmentProcessor>(
-                new GrEllipseEffect(std::move(inputFP), edgeType, center, radii)));
+        return std::unique_ptr<GrFragmentProcessor>(new GrEllipseEffect(edgeType, center, radii));
     }
     GrEllipseEffect(const GrEllipseEffect& src);
     std::unique_ptr<GrFragmentProcessor> clone() const override;
@@ -48,25 +43,16 @@ public:
     SkPoint radii;
 
 private:
-    GrEllipseEffect(std::unique_ptr<GrFragmentProcessor> inputFP,
-                    GrClipEdgeType edgeType,
-                    SkPoint center,
-                    SkPoint radii)
+    GrEllipseEffect(GrClipEdgeType edgeType, SkPoint center, SkPoint radii)
             : INHERITED(kGrEllipseEffect_ClassID,
-                        (OptimizationFlags)ProcessorOptimizationFlags(inputFP.get()) &
-                                kCompatibleWithCoverageAsAlpha_OptimizationFlag)
+                        (OptimizationFlags)kCompatibleWithCoverageAsAlpha_OptimizationFlag)
             , edgeType(edgeType)
             , center(center)
-            , radii(radii) {
-        this->registerChild(std::move(inputFP), SkSL::SampleUsage::PassThrough());
-    }
-    std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override;
+            , radii(radii) {}
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
     bool onIsEqual(const GrFragmentProcessor&) const override;
-#if GR_TEST_UTILS
-    SkString onDumpInfo() const override;
-#endif
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST
-    using INHERITED = GrFragmentProcessor;
+    typedef GrFragmentProcessor INHERITED;
 };
 #endif

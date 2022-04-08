@@ -57,7 +57,7 @@ protected:
 private:
 
     SkScalar fAngle;
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

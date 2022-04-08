@@ -7,10 +7,7 @@
 
 #include "tools/skiaserve/Request.h"
 
-#include <memory>
-
 #include "include/core/SkPictureRecorder.h"
-#include "include/gpu/GrDirectContext.h"
 #include "src/utils/SkJSONWriter.h"
 #include "tools/ToolUtils.h"
 
@@ -52,7 +49,6 @@ sk_sp<SkData> Request::writeCanvasToPng(SkCanvas* canvas) {
 }
 
 SkCanvas* Request::getCanvas() {
-#ifdef SK_GL
     GrContextFactory* factory = fContextFactory;
     GLTestContext* gl = factory->getContextInfo(GrContextFactory::kGL_ContextType,
             GrContextFactory::ContextOverrides::kNone).glContext();
@@ -63,7 +59,6 @@ SkCanvas* Request::getCanvas() {
     if (gl) {
         gl->makeCurrent();
     }
-#endif
     SkASSERT(fDebugCanvas);
 
     // create the appropriate surface if necessary
@@ -95,9 +90,9 @@ sk_sp<SkData> Request::writeOutSkp() {
     return recorder.finishRecordingAsPicture()->serialize();
 }
 
-GrDirectContext* Request::directContext() {
-    auto result = fContextFactory->get(GrContextFactory::kGL_ContextType,
-                                       GrContextFactory::ContextOverrides::kNone);
+GrContext* Request::getContext() {
+    GrContext* result = fContextFactory->get(GrContextFactory::kGL_ContextType,
+                                             GrContextFactory::ContextOverrides::kNone);
     if (!result) {
         result = fContextFactory->get(GrContextFactory::kGLES_ContextType,
                                       GrContextFactory::ContextOverrides::kNone);
@@ -110,7 +105,7 @@ SkIRect Request::getBounds() {
     if (fPicture) {
         bounds = fPicture->cullRect().roundOut();
         if (fGPUEnabled) {
-            int maxRTSize = this->directContext()->maxRenderTargetSize();
+            int maxRTSize = this->getContext()->maxRenderTargetSize();
             bounds = SkIRect::MakeWH(std::min(bounds.width(), maxRTSize),
                                      std::min(bounds.height(), maxRTSize));
         }
@@ -138,7 +133,7 @@ ColorAndProfile ColorModes[] = {
     { kRGBA_F16_SkColorType,  true },
 };
 
-}  // namespace
+}
 
 SkSurface* Request::createCPUSurface() {
     SkIRect bounds = this->getBounds();
@@ -152,7 +147,7 @@ SkSurface* Request::createCPUSurface() {
 }
 
 SkSurface* Request::createGPUSurface() {
-    auto context = this->directContext();
+    GrContext* context = this->getContext();
     SkIRect bounds = this->getBounds();
     ColorAndProfile cap = ColorModes[fColorMode];
     auto colorSpace = kRGBA_F16_SkColorType == cap.fColorType
@@ -186,7 +181,7 @@ bool Request::enableGPU(bool enable) {
             // TODO understand what is actually happening here
             if (fDebugCanvas) {
                 fDebugCanvas->drawTo(this->getCanvas(), this->getLastOp());
-                fSurface->flush();
+                this->getCanvas()->flush();
             }
 
             return true;
@@ -211,12 +206,12 @@ bool Request::initPictureFromStream(SkStream* stream) {
 
     // pour picture into debug canvas
     SkIRect bounds = this->getBounds();
-    fDebugCanvas = std::make_unique<DebugCanvas>(bounds.width(), bounds.height());
+    fDebugCanvas.reset(new DebugCanvas(bounds.width(), bounds.height()));
     fDebugCanvas->drawPicture(fPicture);
 
     // for some reason we need to 'flush' the debug canvas by drawing all of the ops
     fDebugCanvas->drawTo(this->getCanvas(), this->getLastOp());
-    fSurface->flush();
+    this->getCanvas()->flush();
     return true;
 }
 
@@ -260,12 +255,12 @@ sk_sp<SkData> Request::getJsonInfo(int n) {
     SkDynamicMemoryWStream stream;
     SkJSONWriter writer(&stream, SkJSONWriter::Mode::kFast);
 
-    SkM44 vm = fDebugCanvas->getCurrentMatrix();
+    SkMatrix vm = fDebugCanvas->getCurrentMatrix();
     SkIRect clip = fDebugCanvas->getCurrentClip();
 
     writer.beginObject(); // root
     writer.appendName("ViewMatrix");
-    DrawCommand::MakeJsonMatrix44(writer, vm);
+    DrawCommand::MakeJsonMatrix(writer, vm);
     writer.appendName("ClipRect");
     DrawCommand::MakeJsonIRect(writer, clip);
     writer.endObject(); // root

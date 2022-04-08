@@ -32,6 +32,8 @@
 
 #include <string.h>
 
+class GrContext;
+
 namespace skiagm {
 class TextBlobMixedSizes : public GM {
 public:
@@ -105,18 +107,15 @@ protected:
         sk_sp<SkSurface> surface;
         if (fUseDFT) {
             // Create a new Canvas to enable DFT
-            auto ctx = inputCanvas->recordingContext();
+            GrContext* ctx = inputCanvas->getGrContext();
             SkISize size = onISize();
             sk_sp<SkColorSpace> colorSpace = inputCanvas->imageInfo().refColorSpace();
             SkImageInfo info = SkImageInfo::MakeN32(size.width(), size.height(),
                                                     kPremul_SkAlphaType, colorSpace);
-            SkSurfaceProps inputProps;
-            inputCanvas->getProps(&inputProps);
-            SkSurfaceProps props(
-                    SkSurfaceProps::kUseDeviceIndependentFonts_Flag | inputProps.flags(),
-                    inputProps.pixelGeometry());
+            SkSurfaceProps props(SkSurfaceProps::kUseDeviceIndependentFonts_Flag,
+                                 SkSurfaceProps::kLegacyFontHost_InitType);
             surface = SkSurface::MakeRenderTarget(ctx, SkBudgeted::kNo, info, 0, &props);
-            canvas = surface ? surface->getCanvas() : inputCanvas;
+            canvas = surface.get() ? surface->getCanvas() : inputCanvas;
             // init our new canvas with the old canvas's matrix
             canvas->setMatrix(inputCanvas->getTotalMatrix());
         }
@@ -176,7 +175,7 @@ protected:
             SkAutoCanvasRestore acr(inputCanvas, true);
             // since we prepended this matrix already, we blit using identity
             inputCanvas->resetMatrix();
-            inputCanvas->drawImage(surface->makeImageSnapshot().get(), 0, 0);
+            inputCanvas->drawImage(surface->makeImageSnapshot().get(), 0, 0, nullptr);
         }
     }
 
@@ -188,11 +187,11 @@ private:
 
     bool fUseDFT;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM( return new TextBlobMixedSizes(false); )
 DEF_GM( return new TextBlobMixedSizes(true); )
-}  // namespace skiagm
+}

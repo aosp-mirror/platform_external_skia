@@ -78,11 +78,11 @@ protected:
     }
 
 private:
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM( return new FontScalerGM; )
 
-}  // namespace skiagm
+}

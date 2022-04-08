@@ -10,7 +10,6 @@
 #include "include/core/SkFontMetrics.h"
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkTextBlob.h"
-#include "include/private/SkTPin.h"
 #include "include/private/SkTemplates.h"
 #include "modules/skshaper/include/SkShaper.h"
 #include "src/core/SkTLazy.h"
@@ -142,7 +141,7 @@ public:
             // All glyphs are pending in a single blob.
             SkASSERT(fResult.fFragments.empty());
             fResult.fFragments.reserve(1);
-            fResult.fFragments.push_back({fBuilder.make(), {fBox.x(), fBox.y()}, 0, 0, 0, false});
+            fResult.fFragments.push_back({fBuilder.make(), {fBox.x(), fBox.y()}, 0, false});
         }
 
         const auto ascent = this->ascent();
@@ -175,27 +174,26 @@ public:
         // Only compute the extent box when needed.
         SkTLazy<SkRect> ebox;
 
-        // Vertical adjustments.
-        float v_offset = -fDesc.fLineShift;
-
+        // Perform additional adjustments based on VAlign.
+        float v_offset = 0;
         switch (fDesc.fVAlign) {
         case Shaper::VAlign::kTop:
-            v_offset -= ascent;
+            v_offset = -ascent;
             break;
         case Shaper::VAlign::kTopBaseline:
             // Default behavior.
             break;
         case Shaper::VAlign::kVisualTop:
             ebox.init(extent_box());
-            v_offset += fBox.fTop - ebox->fTop;
+            v_offset = fBox.fTop - ebox->fTop;
             break;
         case Shaper::VAlign::kVisualCenter:
             ebox.init(extent_box());
-            v_offset += fBox.centerY() - ebox->centerY();
+            v_offset = fBox.centerY() - ebox->centerY();
             break;
         case Shaper::VAlign::kVisualBottom:
             ebox.init(extent_box());
-            v_offset += fBox.fBottom - ebox->fBottom;
+            v_offset = fBox.fBottom - ebox->fBottom;
             break;
         }
 
@@ -238,13 +236,13 @@ public:
             }
         }
 
-        const auto shape_width = fDesc.fLinebreak == Shaper::LinebreakPolicy::kExplicit
-                                    ? SK_ScalarMax
-                                    : fBox.width();
-        const auto shape_ltr   = fDesc.fDirection == Shaper::Direction::kLTR;
+        // When no text box is present, text is laid out on a single infinite line
+        // (modulo explicit line breaks).
+        const auto shape_width = fBox.isEmpty() ? SK_ScalarMax
+                                                : fBox.width();
 
         fUTF8 = start;
-        fShaper->shape(start, SkToSizeT(end - start), fFont, shape_ltr, shape_width, this);
+        fShaper->shape(start, SkToSizeT(end - start), fFont, true, shape_width, this);
         fUTF8 = nullptr;
     }
 
@@ -264,20 +262,6 @@ private:
             return c == ' ' || c == '\t' || c == '\r' || c == '\n';
         };
 
-        float ascent = 0;
-
-        if (fDesc.fFlags & Shaper::Flags::kTrackFragmentAdvanceAscent) {
-            SkFontMetrics metrics;
-            rec.fFont.getMetrics(&metrics);
-            ascent = metrics.fAscent;
-
-            // Note: we use per-glyph advances for anchoring, but it's unclear whether this
-            // is exactly the same as AE.  E.g. are 'acute' glyphs anchored separately for fonts
-            // in which they're distinct?
-            fAdvanceBuffer.resize(rec.fGlyphCount);
-            fFont.getWidths(glyphs, SkToInt(rec.fGlyphCount), fAdvanceBuffer.data());
-        }
-
         // In fragmented mode we immediately push the glyphs to fResult,
         // one fragment (blob) per glyph.  Glyph positioning is externalized
         // (positions returned in Fragment::fPos).
@@ -286,15 +270,10 @@ private:
             blob_buffer.glyphs[0] = glyphs[i];
             blob_buffer.pos[0] = blob_buffer.pos[1] = 0;
 
-            const auto advance = (fDesc.fFlags & Shaper::Flags::kTrackFragmentAdvanceAscent)
-                    ? fAdvanceBuffer[SkToInt(i)]
-                    : 0.0f;
-
             // Note: we only check the first code point in the cluster for whitespace.
             // It's unclear whether thers's a saner approach.
             fResult.fFragments.push_back({fBuilder.make(),
                                           { fBox.x() + pos[i].fX, fBox.y() + pos[i].fY },
-                                          advance, ascent,
                                           line_index, is_whitespace(fUTF8[clusters[i]])
                                          });
             fResult.fMissingGlyphCount += (glyphs[i] == kMissingGlyphID);
@@ -348,8 +327,6 @@ private:
     SkSTArray<16, RunRec>         fLineRuns;
     size_t                        fLineGlyphCount = 0;
 
-    SkSTArray<64, float, true>    fAdvanceBuffer;
-
     SkPoint  fCurrentPosition{ 0, 0 };
     SkPoint  fOffset{ 0, 0 };
     SkVector fPendingLineAdvance{ 0, 0 };
@@ -396,12 +373,9 @@ Shaper::Result ShapeToFit(const SkString& txt, const Shaper::TextDesc& orig_desc
 
     auto desc = orig_desc;
 
-    const auto min_scale = std::max(desc.fMinTextSize / desc.fTextSize, 0.0f),
-               max_scale = std::max(desc.fMaxTextSize / desc.fTextSize, min_scale);
-
-    float in_scale = min_scale,                          // maximum scale that fits inside
-         out_scale = max_scale,                          // minimum scale that doesn't fit
-         try_scale = SkTPin(1.0f, min_scale, max_scale); // current probe
+    float in_scale = 0,                                 // maximum scale that fits inside
+         out_scale = std::numeric_limits<float>::max(), // minimum scale that doesn't fit
+         try_scale = 1;                                 // current probe
 
     // Perform a binary search for the best vertical fit (SkShaper already handles
     // horizontal fitting), starting with the specified text size.
@@ -413,35 +387,24 @@ Shaper::Result ShapeToFit(const SkString& txt, const Shaper::TextDesc& orig_desc
         SkASSERT(try_scale >= in_scale && try_scale <= out_scale);
         desc.fTextSize   = try_scale * orig_desc.fTextSize;
         desc.fLineHeight = try_scale * orig_desc.fLineHeight;
-        desc.fLineShift  = try_scale * orig_desc.fLineShift;
         desc.fAscent     = try_scale * orig_desc.fAscent;
 
         SkSize res_size = {0, 0};
         auto res = ShapeImpl(txt, desc, box, fontmgr, &res_size);
 
-        const auto prev_scale = try_scale;
         if (res_size.width() > box.width() || res_size.height() > box.height()) {
             out_scale = try_scale;
-            try_scale = (in_scale == min_scale)
-                    // initial in_scale not found yet - search exponentially
-                    ? std::max(min_scale, try_scale * 0.5f)
-                    // in_scale found - binary search
-                    : (in_scale + out_scale) * 0.5f;
+            try_scale = (in_scale == 0)
+                    ? try_scale * 0.5f // initial in_scale not found yet - search exponentially
+                    : (in_scale + out_scale) * 0.5f; // in_scale found - binary search
         } else {
             // It fits - so it's a candidate.
             best_result = std::move(res);
 
             in_scale = try_scale;
-            try_scale = (out_scale == max_scale)
-                    // initial out_scale not found yet - search exponentially
-                    ? std::min(max_scale, try_scale * 2)
-                    // out_scale found - binary search
-                    : (in_scale + out_scale) * 0.5f;
-        }
-
-        if (try_scale == prev_scale) {
-            // no more progress
-            break;
+            try_scale = (out_scale == std::numeric_limits<float>::max())
+                    ? try_scale * 2 // initial out_scale not found yet - search exponentially
+                    : (in_scale + out_scale) * 0.5f; // out_scale found - binary search
         }
     }
 

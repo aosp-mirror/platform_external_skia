@@ -6,7 +6,7 @@
  */
 
 #include "include/core/SkTypes.h"
-#if defined(SK_BUILD_FOR_WIN) && !defined(_M_ARM64) && !defined(WINUWP)
+#if defined(SK_BUILD_FOR_WIN) && !defined(_M_ARM64)
 
 #include "src/utils/win/SkWGL.h"
 
@@ -150,7 +150,9 @@ int SkWGLExtensions::selectFormat(const int formats[],
         rankedFormats[i].fSampleCnt = std::max(1, numSamples);
         rankedFormats[i].fChoosePixelFormatRank = i;
     }
-    SkTQSort(rankedFormats.begin(), rankedFormats.end(), pf_less);
+    SkTQSort(rankedFormats.begin(),
+             rankedFormats.begin() + rankedFormats.count() - 1,
+             SkTLessFunctionToFunctorAdaptor<PixelFormat, pf_less>());
     int idx = SkTSearch<PixelFormat, pf_less>(rankedFormats.begin(),
                                               rankedFormats.count(),
                                               desiredFormat,

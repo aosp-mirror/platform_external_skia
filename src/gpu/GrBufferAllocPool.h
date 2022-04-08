@@ -14,7 +14,6 @@
 #include "include/private/SkTArray.h"
 #include "include/private/SkTDArray.h"
 #include "src/gpu/GrCpuBuffer.h"
-#include "src/gpu/GrDrawIndirectCommand.h"
 #include "src/gpu/GrNonAtomicRef.h"
 
 class GrGpu;
@@ -242,7 +241,7 @@ public:
                            int* actualVertexCount);
 
 private:
-    using INHERITED = GrBufferAllocPool;
+    typedef GrBufferAllocPool INHERITED;
 };
 
 /**
@@ -312,35 +311,7 @@ public:
                            int* actualIndexCount);
 
 private:
-    using INHERITED = GrBufferAllocPool;
-};
-
-class GrDrawIndirectBufferAllocPool : private GrBufferAllocPool {
-public:
-    GrDrawIndirectBufferAllocPool(GrGpu* gpu, sk_sp<CpuBufferCache> cpuBufferCache)
-            : GrBufferAllocPool(gpu, GrGpuBufferType::kDrawIndirect, std::move(cpuBufferCache)) {}
-
-    GrDrawIndirectWriter makeSpace(int drawCount, sk_sp<const GrBuffer>* buffer, size_t* offset) {
-        return this->GrBufferAllocPool::makeSpace(drawCount * sizeof(GrDrawIndirectCommand), 4,
-                                                  buffer, offset);
-    }
-
-    void putBack(int drawCount) {
-        this->GrBufferAllocPool::putBack(drawCount * sizeof(GrDrawIndirectCommand));
-    }
-
-    GrDrawIndexedIndirectWriter makeIndexedSpace(int drawCount, sk_sp<const GrBuffer>* buffer,
-                                                 size_t* offset) {
-        return this->GrBufferAllocPool::makeSpace(
-                drawCount * sizeof(GrDrawIndexedIndirectCommand), 4, buffer, offset);
-    }
-
-    void putBackIndexed(int drawCount) {
-        this->GrBufferAllocPool::putBack(drawCount * sizeof(GrDrawIndexedIndirectCommand));
-    }
-
-    using GrBufferAllocPool::unmap;
-    using GrBufferAllocPool::reset;
+    typedef GrBufferAllocPool INHERITED;
 };
 
 #endif

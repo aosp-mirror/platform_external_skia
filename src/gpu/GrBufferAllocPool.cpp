@@ -5,17 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrContext.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/SkMacros.h"
 #include "src/core/SkSafeMath.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/gpu/GrBufferAllocPool.h"
-
-#include <memory>
 #include "src/gpu/GrCaps.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrCpuBuffer.h"
-#include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrGpuBuffer.h"
 #include "src/gpu/GrResourceProvider.h"
@@ -28,7 +26,7 @@ sk_sp<GrBufferAllocPool::CpuBufferCache> GrBufferAllocPool::CpuBufferCache::Make
 GrBufferAllocPool::CpuBufferCache::CpuBufferCache(int maxBuffersToCache)
         : fMaxBuffersToCache(maxBuffersToCache) {
     if (fMaxBuffersToCache) {
-        fBuffers = std::make_unique<Buffer[]>(fMaxBuffersToCache);
+        fBuffers.reset(new Buffer[fMaxBuffersToCache]);
     }
 }
 
@@ -252,35 +250,57 @@ void* GrBufferAllocPool::makeSpaceAtLeast(size_t minSize,
     SkASSERT(offset);
     SkASSERT(actualSize);
 
-    size_t usedBytes = (fBlocks.empty()) ? 0 : fBlocks.back().fBuffer->size() -
-                                               fBlocks.back().fBytesFree;
-    size_t pad = align_up_pad(usedBytes, alignment);
-    if (fBlocks.empty() || (minSize + pad) > fBlocks.back().fBytesFree) {
-        // We either don't have a block yet or the current block doesn't have enough free space.
-        // Create a new one.
-        if (!this->createBlock(fallbackSize)) {
-            return nullptr;
+    if (fBufferPtr) {
+        BufferBlock& back = fBlocks.back();
+        size_t usedBytes = back.fBuffer->size() - back.fBytesFree;
+        size_t pad = align_up_pad(usedBytes, alignment);
+        if ((minSize + pad) <= back.fBytesFree) {
+            // Consume padding first, to make subsequent alignment math easier
+            memset((void*)(reinterpret_cast<intptr_t>(fBufferPtr) + usedBytes), 0, pad);
+            usedBytes += pad;
+            back.fBytesFree -= pad;
+            fBytesInUse += pad;
+
+            // Give caller all remaining space in this block up to fallbackSize (but aligned
+            // correctly)
+            size_t size;
+            if (back.fBytesFree >= fallbackSize) {
+                SkASSERT(align_down(fallbackSize, alignment) == fallbackSize);
+                size = fallbackSize;
+            } else {
+                size = align_down(back.fBytesFree, alignment);
+            }
+            *offset = usedBytes;
+            *buffer = back.fBuffer;
+            *actualSize = size;
+            back.fBytesFree -= size;
+            fBytesInUse += size;
+            VALIDATE();
+            return (void*)(reinterpret_cast<intptr_t>(fBufferPtr) + usedBytes);
         }
-        usedBytes = 0;
-        pad = 0;
+    }
+
+    // We could honor the space request using by a partial update of the current
+    // VB (if there is room). But we don't currently use draw calls to GL that
+    // allow the driver to know that previously issued draws won't read from
+    // the part of the buffer we update. Also, the GL buffer implementation
+    // may be cheating on the actual buffer size by shrinking the buffer on
+    // updateData() if the amount of data passed is less than the full buffer
+    // size.
+
+    if (!this->createBlock(fallbackSize)) {
+        return nullptr;
     }
     SkASSERT(fBufferPtr);
 
-    // Consume padding first, to make subsequent alignment math easier
-    memset(static_cast<char*>(fBufferPtr) + usedBytes, 0, pad);
-    usedBytes += pad;
-    fBlocks.back().fBytesFree -= pad;
-    fBytesInUse += pad;
-
-    // Give caller all remaining space in this block (but aligned correctly)
-    size_t size = align_down(fBlocks.back().fBytesFree, alignment);
-    *offset = usedBytes;
-    *buffer = fBlocks.back().fBuffer;
-    *actualSize = size;
-    fBlocks.back().fBytesFree -= size;
-    fBytesInUse += size;
+    *offset = 0;
+    BufferBlock& back = fBlocks.back();
+    *buffer = back.fBuffer;
+    *actualSize = fallbackSize;
+    back.fBytesFree -= fallbackSize;
+    fBytesInUse += fallbackSize;
     VALIDATE();
-    return static_cast<char*>(fBufferPtr) + usedBytes;
+    return fBufferPtr;
 }
 
 void GrBufferAllocPool::putBack(size_t bytes) {
@@ -409,12 +429,10 @@ void GrBufferAllocPool::flushCpuData(const BufferBlock& block, size_t flushSize)
 }
 
 sk_sp<GrBuffer> GrBufferAllocPool::getBuffer(size_t size) {
-    const GrCaps& caps = *fGpu->caps();
     auto resourceProvider = fGpu->getContext()->priv().resourceProvider();
-    if (caps.preferClientSideDynamicBuffers() ||
-        (fBufferType == GrGpuBufferType::kDrawIndirect && caps.useClientSideIndirectBuffers())) {
-        // Create a CPU buffer.
-        bool mustInitialize = caps.mustClearUploadedBufferData();
+
+    if (fGpu->caps()->preferClientSideDynamicBuffers()) {
+        bool mustInitialize = fGpu->caps()->mustClearUploadedBufferData();
         return fCpuBufferCache ? fCpuBufferCache->makeBuffer(size, mustInitialize)
                                : GrCpuBuffer::Make(size);
     }

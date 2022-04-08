@@ -37,20 +37,22 @@ static void make_bm(SkBitmap* bm) {
     *bm->getAddr32(1, 1) = colorsPM[3];
 }
 
-static SkScalar draw_bm(SkCanvas* canvas, sk_sp<SkImage> img, SkScalar x, SkScalar y,
-                        const SkSamplingOptions& sampling, SkPaint* paint) {
-    canvas->drawImage(img, x, y, sampling, paint);
-    return SkIntToScalar(img->width()) * 5/4;
+static SkScalar draw_bm(SkCanvas* canvas, const SkBitmap& bm,
+                        SkScalar x, SkScalar y, SkPaint* paint) {
+    canvas->drawBitmap(bm, x, y, paint);
+    return SkIntToScalar(bm.width()) * 5/4;
 }
 
-static SkScalar draw_set(SkCanvas* c, sk_sp<SkImage> img, SkScalar x, SkPaint* p) {
-    x += draw_bm(c, img, x, 0, SkSamplingOptions(), p);
-    x += draw_bm(c, img, x, 0, SkSamplingOptions(SkFilterMode::kLinear), p);
+static SkScalar draw_set(SkCanvas* c, const SkBitmap& bm, SkScalar x,
+                         SkPaint* p) {
+    x += draw_bm(c, bm, x, 0, p);
+    p->setFilterQuality(kLow_SkFilterQuality);
+    x += draw_bm(c, bm, x, 0, p);
     p->setDither(true);
-    return x + draw_bm(c, img, x, 0, SkSamplingOptions(SkFilterMode::kLinear), p);
+    return x + draw_bm(c, bm, x, 0, p);
 }
 
-static SkScalar draw_row(SkCanvas* canvas, sk_sp<SkImage> img) {
+static SkScalar draw_row(SkCanvas* canvas, const SkBitmap& bm) {
     SkAutoCanvasRestore acr(canvas, true);
 
     SkPaint paint;
@@ -60,33 +62,29 @@ static SkScalar draw_row(SkCanvas* canvas, sk_sp<SkImage> img) {
     const int scale = 32;
 
     SkFont      font(ToolUtils::create_portable_typeface());
-    const char* name = ToolUtils::colortype_name(img->colorType());
-    canvas->drawString(name, x, SkIntToScalar(img->height())*scale*5/8, font, paint);
+    const char* name = ToolUtils::colortype_name(bm.colorType());
+    canvas->drawString(name, x, SkIntToScalar(bm.height())*scale*5/8,
+                       font, paint);
     canvas->translate(SkIntToScalar(48), 0);
 
     canvas->scale(SkIntToScalar(scale), SkIntToScalar(scale));
 
-    x += draw_set(canvas, img, 0, &paint);
+    x += draw_set(canvas, bm, 0, &paint);
     paint.reset();
     paint.setAlphaf(0.5f);
-    draw_set(canvas, img, x, &paint);
+    draw_set(canvas, bm, x, &paint);
     return x * scale / 3;
 }
 
 class FilterGM : public skiagm::GM {
     void onOnceBeforeDraw() override {
-        SkBitmap bm32, bm4444, bm565;
-        make_bm(&bm32);
-        ToolUtils::copy_to(&bm4444, kARGB_4444_SkColorType, bm32);
-        ToolUtils::copy_to(&bm565, kRGB_565_SkColorType, bm32);
-
-        fImg32 = bm32.asImage();
-        fImg4444 = bm4444.asImage();
-        fImg565 = bm565.asImage();
+        make_bm(&fBM32);
+        ToolUtils::copy_to(&fBM4444, kARGB_4444_SkColorType, fBM32);
+        ToolUtils::copy_to(&fBM16, kRGB_565_SkColorType, fBM32);
     }
 
 public:
-    sk_sp<SkImage> fImg32, fImg4444, fImg565;
+    SkBitmap    fBM4444, fBM16, fBM32;
 
     FilterGM() {
         this->setBGColor(0xFFDDDDDD);
@@ -106,15 +104,15 @@ protected:
         SkScalar y = SkIntToScalar(10);
 
         canvas->translate(x, y);
-        y = draw_row(canvas, fImg4444);
+        y = draw_row(canvas, fBM4444);
         canvas->translate(0, y);
-        y = draw_row(canvas, fImg565);
+        y = draw_row(canvas, fBM16);
         canvas->translate(0, y);
-        draw_row(canvas, fImg32);
+        draw_row(canvas, fBM32);
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 DEF_GM( return new FilterGM; )
 
@@ -153,17 +151,14 @@ protected:
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
         paint.setAntiAlias(true);
+        paint.setFilterQuality(kLow_SkFilterQuality);
         paint.setColor(SK_ColorRED);
 
-        SkSamplingOptions sampling(SkFilterMode::kLinear);
-
-        // should stay blue (ignore paint's color)
-        canvas->drawImage(fBitmap.asImage(), 10, 10, sampling, &paint);
-        // should draw red
-        canvas->drawImage(fAlpha.asImage(), 120, 10, sampling, &paint);
+        canvas->drawBitmap(fBitmap, 10, 10, &paint);    // should stay blue (ignore paint's color)
+        canvas->drawBitmap(fAlpha, 120, 10, &paint);    // should draw red
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 DEF_GM( return new TestExtractAlphaGM; )

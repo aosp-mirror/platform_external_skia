@@ -11,7 +11,7 @@
 #include "include/core/SkColor.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkPaint.h"
-#include "include/core/SkPathBuilder.h"
+#include "include/core/SkPath.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
@@ -36,27 +36,30 @@ public:
 
 protected:
 
-    SkString onShortName() override {
+    SkString onShortName() {
         SkString str;
         str.printf("complexclip3_%s", fDoSimpleClipFirst ? "simple" : "complex");
         return str;
     }
 
-    SkISize onISize() override { return SkISize::Make(400, 950); }
+    SkISize onISize() { return SkISize::Make(1000, 950); }
 
-    void onDraw(SkCanvas* canvas) override {
-        SkPath clipSimple = SkPath::Circle(70, 50, 20);
+    virtual void onDraw(SkCanvas* canvas) {
+        SkPath clipSimple;
+        clipSimple.addCircle(SkIntToScalar(70), SkIntToScalar(50), SkIntToScalar(20));
 
         SkRect r1 = { 10, 20, 70, 80 };
-        SkPath clipComplex = SkPathBuilder().moveTo(40,  50)
-                                            .arcTo(r1, 30, 300, false)
-                                            .close()
-                                            .detach();
+        SkPath clipComplex;
+        clipComplex.moveTo(SkIntToScalar(40),  SkIntToScalar(50));
+        clipComplex.arcTo(r1, SkIntToScalar(30), SkIntToScalar(300), false);
+        clipComplex.close();
 
         SkPath* firstClip = &clipSimple;
         SkPath* secondClip = &clipComplex;
+
         if (!fDoSimpleClipFirst) {
-            std::swap(firstClip, secondClip);
+            using std::swap;
+            swap(firstClip, secondClip);
         }
 
         SkPaint paint;
@@ -70,6 +73,9 @@ protected:
         } gOps[] = {
             {kIntersect_SkClipOp,         "I"},
             {kDifference_SkClipOp,        "D" },
+            {kUnion_SkClipOp,             "U"},
+            {kXOR_SkClipOp,               "X"  },
+            {kReverseDifference_SkClipOp, "R"}
         };
 
         canvas->translate(SkIntToScalar(20), SkIntToScalar(20));
@@ -129,7 +135,7 @@ protected:
 private:
     bool fDoSimpleClipFirst;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -138,4 +144,4 @@ private:
 DEF_GM( return new ComplexClip3GM(true); )
 // Complex clip first
 DEF_GM( return new ComplexClip3GM(false); )
-}  // namespace skiagm
+}

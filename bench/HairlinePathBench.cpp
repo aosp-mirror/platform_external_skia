@@ -60,7 +60,7 @@ protected:
         SkPath path;
         this->makePath(&path);
         if (fFlags & kBig_Flag) {
-            const SkMatrix m = SkMatrix::Scale(3, 3);
+            const SkMatrix m = SkMatrix::MakeScale(SkIntToScalar(3), SkIntToScalar(3));
             path.transform(m);
         }
 
@@ -75,7 +75,7 @@ private:
     SkPaint     fPaint;
     SkString    fName;
     Flags       fFlags;
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 class LinePathBench : public HairlinePathBench {
@@ -107,7 +107,7 @@ public:
         }
     }
 private:
-    using INHERITED = HairlinePathBench;
+    typedef HairlinePathBench INHERITED;
 };
 
 class QuadPathBench : public HairlinePathBench {
@@ -139,7 +139,7 @@ public:
         }
     }
 private:
-    using INHERITED = HairlinePathBench;
+    typedef HairlinePathBench INHERITED;
 };
 
 class ConicPathBench : public HairlinePathBench {
@@ -175,7 +175,7 @@ public:
     }
 
 private:
-    using INHERITED = HairlinePathBench;
+    typedef HairlinePathBench INHERITED;
 };
 
 class CubicPathBench : public HairlinePathBench {
@@ -210,7 +210,7 @@ public:
         }
     }
 private:
-    using INHERITED = HairlinePathBench;
+    typedef HairlinePathBench INHERITED;
 };
 
 // FLAG00 - no AA, small

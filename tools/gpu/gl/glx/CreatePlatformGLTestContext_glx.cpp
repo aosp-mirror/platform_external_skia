@@ -64,6 +64,7 @@ private:
     void onPlatformMakeNotCurrent() const override;
     void onPlatformMakeCurrent() const override;
     std::function<void()> onPlatformGetAutoContextRestore() const override;
+    void onPlatformSwapBuffers() const override;
     GrGLFuncPtr onPlatformGetProcAddress(const char*) const override;
 
     GLXContext fContext;
@@ -87,7 +88,7 @@ static Display* get_display() {
     };
     static std::unique_ptr<AutoDisplay> ad;
     static SkOnce once;
-    once([] { ad = std::make_unique<AutoDisplay>(); });
+    once([] { ad.reset(new AutoDisplay{}); });
     return ad->display();
 }
 
@@ -205,7 +206,7 @@ GLXGLTestContext::GLXGLTestContext(GrGLStandard forcedGpuAPI, GLXGLTestContext* 
     if (!gluCheckExtension(reinterpret_cast<const GLubyte*>("GLX_ARB_create_context"),
                            reinterpret_cast<const GLubyte*>(glxExts))) {
         if (kGLES_GrGLStandard != forcedGpuAPI) {
-            fContext = glXCreateNewContext(fDisplay, bestFbc, GLX_RGBA_TYPE, nullptr, True);
+            fContext = glXCreateNewContext(fDisplay, bestFbc, GLX_RGBA_TYPE, 0, True);
         }
     } else {
         if (kGLES_GrGLStandard == forcedGpuAPI) {
@@ -239,7 +240,6 @@ GLXGLTestContext::GLXGLTestContext(GrGLStandard forcedGpuAPI, GLXGLTestContext* 
         return;
     }
 
-#ifdef SK_GL
     auto gl = GrGLMakeNativeInterface();
     if (!gl) {
         SkDebugf("Failed to create gl interface");
@@ -254,12 +254,6 @@ GLXGLTestContext::GLXGLTestContext(GrGLStandard forcedGpuAPI, GLXGLTestContext* 
     }
 
     this->init(std::move(gl));
-#else
-    // Allow the GLTestContext creation to succeed without a GrGLInterface to support
-    // GrContextFactory's persistent GL context workaround for Vulkan. We won't need the
-    // GrGLInterface since we're not running the GL backend.
-    this->init(nullptr);
-#endif
 }
 
 
@@ -333,7 +327,10 @@ GLXContext GLXGLTestContext::CreateBestContext(bool isES, Display* display, GLXF
             flags.push_back(GLX_CONTEXT_ES2_PROFILE_BIT_EXT);
         } else if (versions[i].first > 2) {
             flags.push_back(GLX_CONTEXT_PROFILE_MASK_ARB);
-            flags.push_back(GLX_CONTEXT_CORE_PROFILE_BIT_ARB);
+            // TODO When Nvidia implements NVPR on Core profiles, we should start
+            // requesting core here - currently Nv Path rendering on Nvidia
+            // requires a compatibility profile.
+            flags.push_back(GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB);
         }
         flags.push_back(0);
         context = glXCreateContextAttribsARB(display, bestFbc, glxShareContext, true,
@@ -369,6 +366,10 @@ std::function<void()> GLXGLTestContext::onPlatformGetAutoContextRestore() const 
         return nullptr;
     }
     return context_restorer();
+}
+
+void GLXGLTestContext::onPlatformSwapBuffers() const {
+    glXSwapBuffers(fDisplay, fGlxPixmap);
 }
 
 GrGLFuncPtr GLXGLTestContext::onPlatformGetProcAddress(const char* procName) const {

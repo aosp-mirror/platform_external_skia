@@ -16,15 +16,17 @@ public:
     GrWaitRenderTask(GrSurfaceProxyView surfaceView,
                      std::unique_ptr<std::unique_ptr<GrSemaphore>[]> semaphores,
                      int numSemaphores)
-            : GrRenderTask()
+            : GrRenderTask(std::move(surfaceView))
             , fSemaphores(std::move(semaphores))
-            , fNumSemaphores(numSemaphores)
-            , fWaitedOn(std::move(surfaceView)) {}
+            , fNumSemaphores(numSemaphores) {}
 
 private:
     bool onIsUsed(GrSurfaceProxy* proxy) const override {
-        return proxy == fWaitedOn.proxy();
+        // This case should be handled by GrRenderTask.
+        SkASSERT(proxy != fTargetView.proxy());
+        return false;
     }
+    void handleInternalAllocationFailure() override {}
     void gatherProxyIntervals(GrResourceAllocator*) const override;
 
     ExpectedOutcome onMakeClosed(const GrCaps&, SkIRect*) override {
@@ -33,20 +35,12 @@ private:
 
     bool onExecute(GrOpFlushState*) override;
 
-#if GR_TEST_UTILS
-    const char* name() const final { return "Wait"; }
-#endif
 #ifdef SK_DEBUG
     // No non-dst proxies.
     void visitProxies_debugOnly(const GrOp::VisitProxyFunc& fn) const override {}
 #endif
     std::unique_ptr<std::unique_ptr<GrSemaphore>[]> fSemaphores;
     int fNumSemaphores;
-
-    // This field is separate from the main "targets" field on GrRenderTask because this task
-    // does not actually write to the surface and so should not participate in the normal
-    // lastRenderTask tracking that written-to targets do.
-    GrSurfaceProxyView fWaitedOn;
 };
 
 #endif

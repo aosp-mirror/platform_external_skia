@@ -67,7 +67,7 @@ private:
     private:
         const SkEncodedInfo::Alpha fReportedAlpha;
 
-        using INHERITED = SkFrame;
+        typedef SkFrame INHERITED;
     };
 
     class FrameHolder : public SkFrameHolder {
@@ -99,6 +99,6 @@ private:
     // succeed.
     bool        fFailed;
 
-    using INHERITED = SkScalingCodec;
+    typedef SkScalingCodec INHERITED;
 };
 #endif // SkWebpCodec_DEFINED

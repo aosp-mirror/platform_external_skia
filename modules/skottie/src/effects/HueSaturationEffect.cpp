@@ -7,7 +7,7 @@
 
 #include "modules/skottie/src/effects/Effects.h"
 
-#include "include/private/SkTPin.h"
+#include "modules/skottie/src/Animator.h"
 #include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/sksg/include/SkSGColorFilter.h"
@@ -36,22 +36,25 @@ private:
                                const AnimationBuilder* abuilder)
         : fColorFilter(sksg::ExternalColorFilter::Make(std::move(layer))) {
         enum : size_t {
-               kChannelControl_Index = 0,
-                 kChannelRange_Index = 1,
-                    kMasterHue_Index = 2,
-                    kMasterSat_Index = 3,
-              kMasterLightness_Index = 4,
-                     kColorize_Index = 5,
-                  kColorizeHue_Index = 6,
-                  kColorizeSat_Index = 7,
-            kColorizeLightness_Index = 8,
+            kChannelControl_Index     = 0,
+            kChannelRange_Index       = 1,
+            kMasterHue_Index          = 2,
+            kMasterSat_Index          = 3,
+            kMasterLightness_Index    = 4,
+            kColorize_Index           = 5,
+            kColorizeHue_Index        = 6,
+            kColorizeSat_Index        = 7,
+            kColorizeLightness_Index  = 8,
         };
 
-        EffectBinder(jprops, *abuilder, this)
-                .bind( kChannelControl_Index, fChanCtrl   )
-                .bind(      kMasterHue_Index, fMasterHue  )
-                .bind(      kMasterSat_Index, fMasterSat  )
-                .bind(kMasterLightness_Index, fMasterLight);
+        this->bind(*abuilder, EffectBuilder::GetPropValue(jprops, kChannelControl_Index),
+                   &fChanCtrl);
+        this->bind(*abuilder, EffectBuilder::GetPropValue(jprops, kMasterHue_Index),
+                   &fMasterHue);
+        this->bind(*abuilder, EffectBuilder::GetPropValue(jprops, kMasterSat_Index),
+                   &fMasterSat);
+        this->bind(*abuilder, EffectBuilder::GetPropValue(jprops, kMasterLightness_Index),
+                   &fMasterLight);
 
         // TODO: colorize support?
     }

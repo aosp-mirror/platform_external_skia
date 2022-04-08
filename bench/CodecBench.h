@@ -36,6 +36,6 @@ private:
     sk_sp<SkData>           fData;
     SkImageInfo             fInfo;          // Set in onDelayedSetup.
     SkAutoMalloc            fPixelStorage;
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 #endif // CodecBench_DEFINED

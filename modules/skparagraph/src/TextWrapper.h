@@ -3,8 +3,8 @@
 #define TextWrapper_DEFINED
 
 #include <string>
-#include "include/core/SkSpan.h"
 #include "modules/skparagraph/src/TextLine.h"
+#include "src/core/SkSpan.h"
 
 namespace skia {
 namespace textlayout {
@@ -38,14 +38,10 @@ class TextWrapper {
         TextStretch(Cluster* s, Cluster* e, bool forceStrut)
                 : fStart(s, 0), fEnd(e, e->endPos()), fMetrics(forceStrut), fWidth(0), fWidthWithGhostSpaces(0) {
             for (auto c = s; c <= e; ++c) {
-                if (auto r = c->runOrNull()) {
-                    fMetrics.add(r);
-                }
-                if (c < e) {
-                    fWidth += c->width();
+                if (c->run() != nullptr) {
+                    fMetrics.add(c->run());
                 }
             }
-            fWidthWithGhostSpaces = fWidth;
         }
 
         inline SkScalar width() const { return fWidth; }
@@ -79,31 +75,24 @@ class TextWrapper {
                 fStart = ClusterPos(cluster, cluster->startPos());
             }
             fEnd = ClusterPos(cluster, cluster->endPos());
-            // TODO: Make sure all the checks are correct and there are no unnecessary checks
-            auto& r = cluster->run();
-            if (!cluster->isHardBreak() && !r.isPlaceholder()) {
-                // We ignore metrics for \n as the Flutter does
-                fMetrics.add(&r);
+            if (!cluster->run()->isPlaceholder()) {
+                fMetrics.add(cluster->run());
             }
             fWidth += cluster->width();
         }
 
         void extend(Cluster* cluster, size_t pos) {
             fEnd = ClusterPos(cluster, pos);
-            if (auto r = cluster->runOrNull()) {
-                fMetrics.add(r);
+            if (cluster->run() != nullptr) {
+                fMetrics.add(cluster->run());
             }
         }
 
         void startFrom(Cluster* cluster, size_t pos) {
             fStart = ClusterPos(cluster, pos);
             fEnd = ClusterPos(cluster, pos);
-            if (auto r = cluster->runOrNull()) {
-                // In case of placeholder we should ignore the default text style -
-                // we will pick up the correct one from the placeholder
-                if (!r->isPlaceholder()) {
-                    fMetrics.add(r);
-                }
+            if (cluster->run() != nullptr) {
+                fMetrics.add(cluster->run());
             }
             fWidth = 0;
         }
@@ -121,9 +110,9 @@ class TextWrapper {
         void trim() {
 
             if (fEnd.cluster() != nullptr &&
-                fEnd.cluster()->owner() != nullptr &&
-                fEnd.cluster()->runOrNull() != nullptr &&
-                fEnd.cluster()->run().placeholderStyle() == nullptr &&
+                fEnd.cluster()->master() != nullptr &&
+                fEnd.cluster()->run() != nullptr &&
+                fEnd.cluster()->run()->placeholderStyle() == nullptr &&
                 fWidth > 0) {
                 fWidth -= (fEnd.cluster()->width() - fEnd.cluster()->trimmedWidth(fEnd.position()));
             }
@@ -135,7 +124,6 @@ class TextWrapper {
                 fEnd.move(false);
                 fWidth -= cluster->width();
             } else {
-                fEnd.setPosition(fStart.position());
                 fWidth = 0;
             }
         }

@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkYUVAIndex.h"
 #include "src/codec/SkCodecImageGenerator.h"
-
 #include "src/core/SkPixmapPriv.h"
 
 std::unique_ptr<SkImageGenerator> SkCodecImageGenerator::MakeFromEncodedCodec(sk_sp<SkData> data) {
@@ -30,7 +30,7 @@ static SkImageInfo adjust_info(SkCodec* codec) {
     if (kUnpremul_SkAlphaType == info.alphaType()) {
         info = info.makeAlphaType(kPremul_SkAlphaType);
     }
-    if (SkEncodedOriginSwapsWidthHeight(codec->getOrigin())) {
+    if (SkPixmapPriv::ShouldSwapWidthHeight(codec->getOrigin())) {
         info = SkPixmapPriv::SwapWidthHeight(info);
     }
     return info;
@@ -46,11 +46,12 @@ sk_sp<SkData> SkCodecImageGenerator::onRefEncodedData() {
     return fData;
 }
 
-bool SkCodecImageGenerator::getPixels(const SkImageInfo& info, void* pixels, size_t rowBytes, const SkCodec::Options* options) {
-    SkPixmap dst(info, pixels, rowBytes);
+bool SkCodecImageGenerator::onGetPixels(const SkImageInfo& requestInfo, void* requestPixels,
+                                        size_t requestRowBytes, const Options&) {
+    SkPixmap dst(requestInfo, requestPixels, requestRowBytes);
 
-    auto decode = [this, options](const SkPixmap& pm) {
-        SkCodec::Result result = fCodec->getPixels(pm, options);
+    auto decode = [this](const SkPixmap& pm) {
+        SkCodec::Result result = fCodec->getPixels(pm);
         switch (result) {
             case SkCodec::kSuccess:
             case SkCodec::kIncompleteInput:
@@ -64,19 +65,29 @@ bool SkCodecImageGenerator::getPixels(const SkImageInfo& info, void* pixels, siz
     return SkPixmapPriv::Orient(dst, fCodec->getOrigin(), decode);
 }
 
-bool SkCodecImageGenerator::onGetPixels(const SkImageInfo& requestInfo, void* requestPixels,
-                                        size_t requestRowBytes, const Options& options) {
-    return this->getPixels(requestInfo, requestPixels, requestRowBytes, nullptr);
+bool SkCodecImageGenerator::onQueryYUVA8(SkYUVASizeInfo* sizeInfo,
+                                         SkYUVAIndex yuvaIndices[SkYUVAIndex::kIndexCount],
+                                         SkYUVColorSpace* colorSpace) const {
+    // This image generator always returns 3 separate non-interleaved planes
+    yuvaIndices[SkYUVAIndex::kY_Index].fIndex = 0;
+    yuvaIndices[SkYUVAIndex::kY_Index].fChannel = SkColorChannel::kR;
+    yuvaIndices[SkYUVAIndex::kU_Index].fIndex = 1;
+    yuvaIndices[SkYUVAIndex::kU_Index].fChannel = SkColorChannel::kR;
+    yuvaIndices[SkYUVAIndex::kV_Index].fIndex = 2;
+    yuvaIndices[SkYUVAIndex::kV_Index].fChannel = SkColorChannel::kR;
+    yuvaIndices[SkYUVAIndex::kA_Index].fIndex = -1;
+    yuvaIndices[SkYUVAIndex::kA_Index].fChannel = SkColorChannel::kR;
+
+    return fCodec->queryYUV8(sizeInfo, colorSpace);
 }
 
-bool SkCodecImageGenerator::onQueryYUVAInfo(
-        const SkYUVAPixmapInfo::SupportedDataTypes& supportedDataTypes,
-        SkYUVAPixmapInfo* yuvaPixmapInfo) const {
-    return fCodec->queryYUVAInfo(supportedDataTypes, yuvaPixmapInfo);
-}
+bool SkCodecImageGenerator::onGetYUVA8Planes(const SkYUVASizeInfo& sizeInfo,
+                                             const SkYUVAIndex indices[SkYUVAIndex::kIndexCount],
+                                             void* planes[]) {
+    SkCodec::Result result = fCodec->getYUV8Planes(sizeInfo, planes);
+    // TODO: check indices
 
-bool SkCodecImageGenerator::onGetYUVAPlanes(const SkYUVAPixmaps& yuvaPixmaps) {
-    switch (fCodec->getYUVAPlanes(yuvaPixmaps)) {
+    switch (result) {
         case SkCodec::kSuccess:
         case SkCodec::kIncompleteInput:
         case SkCodec::kErrorInInput:
@@ -84,12 +95,4 @@ bool SkCodecImageGenerator::onGetYUVAPlanes(const SkYUVAPixmaps& yuvaPixmaps) {
         default:
             return false;
     }
-}
-
-SkISize SkCodecImageGenerator::getScaledDimensions(float desiredScale) const {
-    SkISize size = fCodec->getScaledDimensions(desiredScale);
-    if (SkEncodedOriginSwapsWidthHeight(fCodec->getOrigin())) {
-        std::swap(size.fWidth, size.fHeight);
-    }
-    return size;
 }

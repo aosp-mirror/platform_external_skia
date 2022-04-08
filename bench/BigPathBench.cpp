@@ -42,7 +42,7 @@ protected:
         return SkIPoint::Make(640, 100);
     }
 
-    void onDelayedSetup() override { fPath = ToolUtils::make_big_path(); }
+    void onDelayedSetup() override { ToolUtils::make_big_path(fPath); }
 
     void onDraw(int loops, SkCanvas* canvas) override {
         SkPaint paint;
@@ -72,7 +72,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 DEF_BENCH( return new BigPathBench(kLeft_Align,     false); )

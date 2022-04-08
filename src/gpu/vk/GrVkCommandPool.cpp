@@ -7,12 +7,14 @@
 
 #include "src/gpu/vk/GrVkCommandPool.h"
 
-#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/vk/GrVkCommandBuffer.h"
 #include "src/gpu/vk/GrVkGpu.h"
 
 GrVkCommandPool* GrVkCommandPool::Create(GrVkGpu* gpu) {
-    VkCommandPoolCreateFlags cmdPoolCreateFlags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+    VkCommandPoolCreateFlags cmdPoolCreateFlags =
+            VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
+            VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     if (gpu->protectedContext()) {
         cmdPoolCreateFlags |= VK_COMMAND_POOL_CREATE_PROTECTED_BIT;
     }
@@ -41,11 +43,8 @@ GrVkCommandPool* GrVkCommandPool::Create(GrVkGpu* gpu) {
 
 GrVkCommandPool::GrVkCommandPool(GrVkGpu* gpu, VkCommandPool commandPool,
                                  GrVkPrimaryCommandBuffer* primaryCmdBuffer)
-        : GrVkManagedResource(gpu)
-        , fCommandPool(commandPool)
-        , fPrimaryCommandBuffer(primaryCmdBuffer)
-        , fMaxCachedSecondaryCommandBuffers(
-                gpu->vkCaps().maxPerPoolCachedSecondaryCommandBuffers()) {
+        : fCommandPool(commandPool)
+        , fPrimaryCommandBuffer(primaryCmdBuffer) {
 }
 
 std::unique_ptr<GrVkSecondaryCommandBuffer> GrVkCommandPool::findOrCreateSecondaryCommandBuffer(
@@ -62,13 +61,7 @@ std::unique_ptr<GrVkSecondaryCommandBuffer> GrVkCommandPool::findOrCreateSeconda
 
 void GrVkCommandPool::recycleSecondaryCommandBuffer(GrVkSecondaryCommandBuffer* buffer) {
     std::unique_ptr<GrVkSecondaryCommandBuffer> scb(buffer);
-    if (fAvailableSecondaryBuffers.count() < fMaxCachedSecondaryCommandBuffers) {
-        fAvailableSecondaryBuffers.push_back(std::move(scb));
-    } else {
-        VkCommandBuffer vkBuffer = buffer->vkCommandBuffer();
-        GR_VK_CALL(fGpu->vkInterface(),
-                   FreeCommandBuffers(fGpu->device(), fCommandPool, 1, &vkBuffer));
-    }
+    fAvailableSecondaryBuffers.push_back(std::move(scb));
 }
 
 void GrVkCommandPool::close() {
@@ -86,26 +79,26 @@ void GrVkCommandPool::reset(GrVkGpu* gpu) {
     SkASSERT(result == VK_SUCCESS || result == VK_ERROR_DEVICE_LOST);
 }
 
-void GrVkCommandPool::releaseResources() {
+void GrVkCommandPool::releaseResources(GrVkGpu* gpu) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     SkASSERT(!fOpen);
-    fPrimaryCommandBuffer->releaseResources();
+    fPrimaryCommandBuffer->releaseResources(gpu);
     fPrimaryCommandBuffer->recycleSecondaryCommandBuffers(this);
 }
 
-void GrVkCommandPool::freeGPUData() const {
-    // TODO: having freeGPUData virtual on GrManagedResource be const seems like a bad restriction since
+void GrVkCommandPool::freeGPUData(GrVkGpu* gpu) const {
+    // TODO: having freeGPUData virtual on GrVkResource be const seems like a bad restriction since
     // we are changing the internal objects of these classes when it is called. We should go back a
     // revisit how much of a headache it would be to make this function non-const
     GrVkCommandPool* nonConstThis = const_cast<GrVkCommandPool*>(this);
     nonConstThis->close();
-    nonConstThis->releaseResources();
-    fPrimaryCommandBuffer->freeGPUData(fGpu, fCommandPool);
+    nonConstThis->releaseResources(gpu);
+    fPrimaryCommandBuffer->freeGPUData(gpu, fCommandPool);
     for (const auto& buffer : fAvailableSecondaryBuffers) {
-        buffer->freeGPUData(fGpu, fCommandPool);
+        buffer->freeGPUData(gpu, fCommandPool);
     }
     if (fCommandPool != VK_NULL_HANDLE) {
-        GR_VK_CALL(fGpu->vkInterface(),
-                   DestroyCommandPool(fGpu->device(), fCommandPool, nullptr));
+        GR_VK_CALL(gpu->vkInterface(),
+                   DestroyCommandPool(gpu->device(), fCommandPool, nullptr));
     }
 }

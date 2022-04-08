@@ -145,7 +145,7 @@ private:
     const size_t                fSrcRowBytes;
     std::unique_ptr<uint32_t[]> fXformBuffer;
 
-    using INHERITED = SkCodec;
+    typedef SkCodec INHERITED;
 };
 
 #endif

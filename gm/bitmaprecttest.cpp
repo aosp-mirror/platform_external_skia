@@ -8,24 +8,26 @@
 #include "gm/gm.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
-#include "include/core/SkImage.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
 
-static sk_sp<SkImage> make_bm() {
-    SkBitmap bm;
-    bm.allocN32Pixels(60, 60);
-    bm.eraseColor(0);
+static void make_bm(SkBitmap* bm) {
+    bm->allocN32Pixels(60, 60);
+    bm->eraseColor(0);
 
-    SkCanvas canvas(bm);
+    SkCanvas canvas(*bm);
     SkPaint paint;
-    canvas.drawPath(SkPath::Polygon({{6,6}, {6,54}, {30,54}}, false), paint);
+
+    SkPath path;
+    path.moveTo(6, 6);
+    path.lineTo(6, 54);
+    path.lineTo(30, 54);
+    canvas.drawPath(path, paint);
 
     paint.setStyle(SkPaint::kStroke_Style);
     canvas.drawRect(SkRect::MakeLTRB(0.5f, 0.5f, 59.5f, 59.5f), paint);
-    return bm.asImage();
 }
 
 // This creates a close, but imperfect concatenation of
@@ -37,16 +39,17 @@ static sk_sp<SkImage> make_bm() {
 //  the image correctly.
 //
 DEF_SIMPLE_GM(bitmaprecttest, canvas, 320, 240) {
-    auto image = make_bm();
+    SkBitmap bm;
+    make_bm(&bm);
 
-    canvas->drawImage(image, 150, 45);
+    canvas->drawBitmap(bm, 150, 45, nullptr);
 
     SkScalar scale = 0.472560018f;
     canvas->save();
     canvas->scale(scale, scale);
-    canvas->drawImageRect(image, SkRect::MakeXYWH(100, 100, 128, 128), SkSamplingOptions());
+    canvas->drawBitmapRect(bm, SkRect::MakeXYWH(100, 100, 128, 128), nullptr);
     canvas->restore();
 
     canvas->scale(-1, 1);
-    canvas->drawImage(image, -310, 45);
+    canvas->drawBitmap(bm, -310, 45, nullptr);
 }

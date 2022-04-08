@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "include/private/SkTPin.h"
 #include "modules/skottie/src/Adapter.h"
 #include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/SkottiePriv.h"
@@ -57,14 +56,14 @@ private:
         : fGradient(std::move(gradient))
         , fType(type)
         , fStopCount(stop_count) {
-        this->bind(abuilder,  jgrad["s"], fStartPoint);
-        this->bind(abuilder,  jgrad["e"], fEndPoint  );
-        this->bind(abuilder, jstops["k"], fStops     );
+        this->bind(abuilder,  jgrad["s"], &fStartPoint);
+        this->bind(abuilder,  jgrad["e"], &fEndPoint);
+        this->bind(abuilder, jstops["k"], &fStops);
     }
 
     void onSync() override {
-        const auto s_point = SkPoint{fStartPoint.x, fStartPoint.y},
-                   e_point = SkPoint{  fEndPoint.x,   fEndPoint.y};
+        const auto s_point = ValueTraits<VectorValue>::As<SkPoint>(this->fStartPoint),
+                   e_point = ValueTraits<VectorValue>::As<SkPoint>(this->fEndPoint);
 
         switch (fType) {
         case Type::kLinear: {
@@ -197,9 +196,9 @@ private:
     const Type                  fType;
     const size_t                fStopCount;
 
-    VectorValue  fStops;
-    Vec2Value    fStartPoint = {0,0},
-                 fEndPoint   = {0,0};
+    VectorValue  fStartPoint,
+                 fEndPoint,
+                 fStops;
 };
 
 } // namespace

@@ -10,8 +10,7 @@
  **************************************************************************************************/
 #include "GrBlurredEdgeFragmentProcessor.h"
 
-#include "src/core/SkUtils.h"
-#include "src/gpu/GrTexture.h"
+#include "include/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramBuilder.h"
@@ -25,38 +24,37 @@ public:
         const GrBlurredEdgeFragmentProcessor& _outer =
                 args.fFp.cast<GrBlurredEdgeFragmentProcessor>();
         (void)_outer;
-        SkString _sample0 = this->invokeChild(0, args);
+        auto mode = _outer.mode;
+        (void)mode;
         fragBuilder->codeAppendf(
-                R"SkSL(half inputAlpha = %s.w;
-half factor = 1.0 - inputAlpha;
-factor = exp((-factor * factor) * 4.0) - 0.017999999225139618;
-return half4(factor);
-)SkSL",
-                _sample0.c_str());
+                "half factor = 1.0 - %s.w;\n@switch (%d) {\n    case 0:\n        factor = "
+                "exp((-factor * factor) * 4.0) - 0.017999999225139618;\n        break;\n    case "
+                "1:\n        factor = smoothstep(1.0, 0.0, factor);\n        break;\n}\n%s = "
+                "half4(factor);\n",
+                args.fInputColor, (int)_outer.mode, args.fOutputColor);
     }
 
 private:
     void onSetData(const GrGLSLProgramDataManager& pdman,
                    const GrFragmentProcessor& _proc) override {}
 };
-std::unique_ptr<GrGLSLFragmentProcessor> GrBlurredEdgeFragmentProcessor::onMakeProgramImpl() const {
-    return std::make_unique<GrGLSLBlurredEdgeFragmentProcessor>();
+GrGLSLFragmentProcessor* GrBlurredEdgeFragmentProcessor::onCreateGLSLInstance() const {
+    return new GrGLSLBlurredEdgeFragmentProcessor();
 }
 void GrBlurredEdgeFragmentProcessor::onGetGLSLProcessorKey(const GrShaderCaps& caps,
-                                                           GrProcessorKeyBuilder* b) const {}
+                                                           GrProcessorKeyBuilder* b) const {
+    b->add32((int32_t)mode);
+}
 bool GrBlurredEdgeFragmentProcessor::onIsEqual(const GrFragmentProcessor& other) const {
     const GrBlurredEdgeFragmentProcessor& that = other.cast<GrBlurredEdgeFragmentProcessor>();
     (void)that;
+    if (mode != that.mode) return false;
     return true;
 }
 GrBlurredEdgeFragmentProcessor::GrBlurredEdgeFragmentProcessor(
         const GrBlurredEdgeFragmentProcessor& src)
-        : INHERITED(kGrBlurredEdgeFragmentProcessor_ClassID, src.optimizationFlags()) {
-    this->cloneAndRegisterAllChildProcessors(src);
-}
+        : INHERITED(kGrBlurredEdgeFragmentProcessor_ClassID, src.optimizationFlags())
+        , mode(src.mode) {}
 std::unique_ptr<GrFragmentProcessor> GrBlurredEdgeFragmentProcessor::clone() const {
-    return std::make_unique<GrBlurredEdgeFragmentProcessor>(*this);
+    return std::unique_ptr<GrFragmentProcessor>(new GrBlurredEdgeFragmentProcessor(*this));
 }
-#if GR_TEST_UTILS
-SkString GrBlurredEdgeFragmentProcessor::onDumpInfo() const { return SkString(); }
-#endif

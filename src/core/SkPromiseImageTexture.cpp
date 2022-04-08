@@ -15,12 +15,12 @@ std::atomic<uint32_t> SkPromiseImageTexture::gUniqueID{1};
 SkPromiseImageTexture::SkPromiseImageTexture(const GrBackendTexture& backendTexture) {
     SkASSERT(backendTexture.isValid());
     fBackendTexture = backendTexture;
-    fUniqueID = gUniqueID.fetch_add(1, std::memory_order_relaxed);
+    fUniqueID = gUniqueID++;
 }
 
 SkPromiseImageTexture::~SkPromiseImageTexture() {
     for (const auto& msg : fMessages) {
-        SkMessageBus<GrUniqueKeyInvalidatedMessage, uint32_t>::Post(msg);
+        SkMessageBus<GrUniqueKeyInvalidatedMessage>::Post(msg);
     }
 }
 
@@ -32,7 +32,7 @@ void SkPromiseImageTexture::addKeyToInvalidate(uint32_t contextID, const GrUniqu
             return;
         }
     }
-    fMessages.emplace_back(key, contextID, /* inThreadSafeCache */ false);
+    fMessages.emplace_back(key, contextID);
 }
 
 #if GR_TEST_UTILS

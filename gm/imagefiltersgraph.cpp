@@ -38,7 +38,8 @@ protected:
     SkISize onISize() override { return SkISize::Make(600, 150); }
 
     void onOnceBeforeDraw() override {
-        fImage = ToolUtils::create_string_image(100, 100, SK_ColorWHITE, 20, 70, 96, "e");
+        fImage = SkImage::MakeFromBitmap(
+                ToolUtils::create_string_bitmap(100, 100, SK_ColorWHITE, 20, 70, 96, "e"));
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -70,8 +71,8 @@ protected:
             sk_sp<SkImageFilter> colorMorph(SkImageFilters::ColorFilter(std::move(matrixFilter),
                                                                            std::move(morph)));
             SkPaint paint;
-            paint.setImageFilter(SkImageFilters::Blend(SkBlendMode::kSrcOver,
-                                                       std::move(colorMorph)));
+            paint.setImageFilter(SkImageFilters::Xfermode(SkBlendMode::kSrcOver,
+                                                          std::move(colorMorph)));
 
             DrawClippedImage(canvas, fImage.get(), paint);
             canvas->translate(SkIntToScalar(100), 0);
@@ -99,7 +100,7 @@ protected:
             SkIRect cropRect = SkIRect::MakeWH(95, 100);
             SkPaint paint;
             paint.setImageFilter(
-                SkImageFilters::Blend(SkBlendMode::kSrcIn, std::move(blur), nullptr, &cropRect));
+                SkImageFilters::Xfermode(SkBlendMode::kSrcIn, std::move(blur), nullptr, &cropRect));
             DrawClippedImage(canvas, fImage.get(), paint);
             canvas->translate(SkIntToScalar(100), 0);
         }
@@ -148,14 +149,14 @@ protected:
 private:
     static void DrawClippedImage(SkCanvas* canvas, const SkImage* image, const SkPaint& paint) {
         canvas->save();
-        canvas->clipIRect(image->bounds());
-        canvas->drawImage(image, 0, 0, SkSamplingOptions(), &paint);
+        canvas->clipRect(SkRect::MakeIWH(image->width(), image->height()));
+        canvas->drawImage(image, 0, 0, &paint);
         canvas->restore();
     }
 
     sk_sp<SkImage> fImage;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

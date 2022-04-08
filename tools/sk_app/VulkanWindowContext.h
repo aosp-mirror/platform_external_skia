@@ -61,7 +61,7 @@ private:
 
     BackbufferInfo* getAvailableBackbuffer();
     bool createSwapchain(int width, int height, const DisplayParams& params);
-    bool createBuffers(VkFormat format, VkImageUsageFlags, SkColorType colorType, VkSharingMode);
+    void createBuffers(VkFormat format, SkColorType colorType);
     void destroyBuffers();
 
     VkInstance fInstance = VK_NULL_HANDLE;

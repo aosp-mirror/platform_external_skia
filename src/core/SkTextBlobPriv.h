@@ -39,6 +39,25 @@ public:
     static sk_sp<SkTextBlob> MakeFromBuffer(SkReadBuffer&);
 };
 
+class SkTextBlobBuilderPriv {
+public:
+    static const SkTextBlobBuilder::RunBuffer& AllocRunText(SkTextBlobBuilder* builder,
+            const SkFont& font, int count, SkScalar x, SkScalar y, int textByteCount,
+            SkString lang, const SkRect* bounds = nullptr) {
+        return builder->allocRunText(font, count, x, y, textByteCount, lang, bounds);
+    }
+    static const SkTextBlobBuilder::RunBuffer& AllocRunTextPosH(SkTextBlobBuilder* builder,
+            const SkFont& font, int count, SkScalar y, int textByteCount, SkString lang,
+            const SkRect* bounds = nullptr) {
+        return builder->allocRunTextPosH(font, count, y, textByteCount, lang, bounds);
+    }
+    static const SkTextBlobBuilder::RunBuffer& AllocRunTextPos(SkTextBlobBuilder* builder,
+            const SkFont& font, int count, int textByteCount, SkString lang,
+            const SkRect* bounds = nullptr) {
+        return builder->allocRunTextPos(font, count, textByteCount, lang, bounds);
+    }
+};
+
 //
 // Textblob data is laid out into externally-managed storage as follows:
 //
@@ -225,7 +244,6 @@ public:
         return fCurrentRun->font();
     }
     GlyphPositioning positioning() const;
-    unsigned scalarsPerGlyph() const;
     uint32_t* clusters() const {
         SkASSERT(!this->done());
         return fCurrentRun->clusterBuffer();

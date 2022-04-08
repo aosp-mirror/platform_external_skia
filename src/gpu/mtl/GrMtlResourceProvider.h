@@ -12,7 +12,6 @@
 #include "include/private/SkTArray.h"
 #include "src/core/SkLRUCache.h"
 #include "src/gpu/GrProgramDesc.h"
-#include "src/gpu/GrThreadSafePipelineBuilder.h"
 #include "src/gpu/mtl/GrMtlDepthStencil.h"
 #include "src/gpu/mtl/GrMtlPipelineStateBuilder.h"
 #include "src/gpu/mtl/GrMtlSampler.h"
@@ -26,10 +25,8 @@ class GrMtlResourceProvider {
 public:
     GrMtlResourceProvider(GrMtlGpu* gpu);
 
-    GrMtlPipelineState* findOrCreateCompatiblePipelineState(
-            const GrProgramDesc&,const GrProgramInfo&,
-            GrThreadSafePipelineBuilder::Stats::ProgramCacheResult* stat = nullptr);
-    bool precompileShader(const SkData& key, const SkData& data);
+    GrMtlPipelineState* findOrCreateCompatiblePipelineState(GrRenderTarget*,
+                                                            const GrProgramInfo&);
 
     // Finds or creates a compatible MTLDepthStencilState based on the GrStencilSettings.
     GrMtlDepthStencil* findOrCreateCompatibleDepthStencilState(const GrStencilSettings&,
@@ -38,32 +35,26 @@ public:
     // Finds or creates a compatible MTLSamplerState based on the GrSamplerState.
     GrMtlSampler* findOrCreateCompatibleSampler(GrSamplerState);
 
+    id<MTLBuffer> getDynamicBuffer(size_t size, size_t* offset);
+    void addBufferCompletionHandler(GrMtlCommandBuffer* cmdBuffer);
+
     // Destroy any cached resources. To be called before releasing the MtlDevice.
     void destroyResources();
-
-#if GR_TEST_UTILS
-    void resetShaderCacheForTesting() const { fPipelineStateCache->release(); }
-#endif
 
 private:
 #ifdef SK_DEBUG
 #define GR_PIPELINE_STATE_CACHE_STATS
 #endif
 
-    class PipelineStateCache : public GrThreadSafePipelineBuilder {
+    class PipelineStateCache : public ::SkNoncopyable {
     public:
         PipelineStateCache(GrMtlGpu* gpu);
-        ~PipelineStateCache() override;
+        ~PipelineStateCache();
 
         void release();
-        GrMtlPipelineState* refPipelineState(const GrProgramDesc&, const GrProgramInfo&,
-                                             Stats::ProgramCacheResult*);
-        bool precompileShader(const SkData& key, const SkData& data);
+        GrMtlPipelineState* refPipelineState(GrRenderTarget*, const GrProgramInfo&);
 
     private:
-        GrMtlPipelineState* onRefPipelineState(const GrProgramDesc&, const GrProgramInfo&,
-                                               Stats::ProgramCacheResult*);
-
         struct Entry;
 
         struct DescHash {
@@ -75,7 +66,34 @@ private:
         SkLRUCache<const GrProgramDesc, std::unique_ptr<Entry>, DescHash> fMap;
 
         GrMtlGpu*                   fGpu;
+
+#ifdef GR_PIPELINE_STATE_CACHE_STATS
+        int                         fTotalRequests;
+        int                         fCacheMisses;
+#endif
     };
+
+    // Buffer allocator
+    class BufferSuballocator : public SkRefCnt {
+    public:
+        BufferSuballocator(id<MTLDevice> device, size_t size);
+        ~BufferSuballocator() {
+            fBuffer = nil;
+            fTotalSize = 0;
+        }
+
+        id<MTLBuffer> getAllocation(size_t size, size_t* offset);
+        void addCompletionHandler(GrMtlCommandBuffer* cmdBuffer);
+        size_t size() { return fTotalSize; }
+
+    private:
+        id<MTLBuffer> fBuffer;
+        size_t        fTotalSize;
+        size_t        fHead SK_GUARDED_BY(fMutex);     // where we start allocating
+        size_t        fTail SK_GUARDED_BY(fMutex);     // where we start deallocating
+        SkSpinlock    fMutex;
+    };
+    static constexpr size_t kBufferSuballocatorStartSize = 1024*1024;
 
     GrMtlGpu* fGpu;
 
@@ -84,6 +102,12 @@ private:
 
     SkTDynamicHash<GrMtlSampler, GrMtlSampler::Key> fSamplers;
     SkTDynamicHash<GrMtlDepthStencil, GrMtlDepthStencil::Key> fDepthStencilStates;
+
+    // This is ref-counted because we might delete the GrContext before the command buffer
+    // finishes. The completion handler will retain a reference to this so it won't get
+    // deleted along with the GrContext.
+    sk_sp<BufferSuballocator> fBufferSuballocator;
+    size_t fBufferSuballocatorMaxSize;
 };
 
 #endif

@@ -18,43 +18,36 @@ namespace SkSL {
  * An identifier referring to a function name. This is an intermediate value: FunctionReferences are
  * always eventually replaced by FunctionCalls in valid programs.
  */
-class FunctionReference final : public Expression {
-public:
-    static constexpr Kind kExpressionKind = Kind::kFunctionReference;
-
+struct FunctionReference : public Expression {
     FunctionReference(const Context& context, int offset,
-                      std::vector<const FunctionDeclaration*> functions)
-        : INHERITED(offset, kExpressionKind, context.fTypes.fInvalid.get())
-        , fFunctions(std::move(functions)) {}
-
-    const std::vector<const FunctionDeclaration*>& functions() const {
-        return fFunctions;
-    }
+                      std::vector<const FunctionDeclaration*> function)
+    : INHERITED(offset, kFunctionReference_Kind, *context.fInvalid_Type)
+    , fFunctions(function) {}
 
     bool hasProperty(Property property) const override {
         return false;
     }
 
     std::unique_ptr<Expression> clone() const override {
-        return std::unique_ptr<Expression>(new FunctionReference(fOffset, this->functions(),
-                                                                 &this->type()));
+        return std::unique_ptr<Expression>(new FunctionReference(fOffset, fFunctions, &fType));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         return String("<function>");
     }
+#endif
+
+    const std::vector<const FunctionDeclaration*> fFunctions;
+
+    typedef Expression INHERITED;
 
 private:
-    FunctionReference(int offset, std::vector<const FunctionDeclaration*> functions,
+    FunctionReference(int offset, std::vector<const FunctionDeclaration*> function,
                       const Type* type)
-        : INHERITED(offset, kExpressionKind, type)
-        , fFunctions(std::move(functions)) {}
+    : INHERITED(offset, kFunctionReference_Kind, *type)
+    , fFunctions(function) {}};
 
-    std::vector<const FunctionDeclaration*> fFunctions;
-
-    using INHERITED = Expression;
-};
-
-}  // namespace SkSL
+} // namespace
 
 #endif

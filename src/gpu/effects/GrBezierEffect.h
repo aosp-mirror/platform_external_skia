@@ -61,18 +61,26 @@ public:
     static GrGeometryProcessor* Make(SkArenaAlloc* arena,
                                      const SkPMColor4f& color,
                                      const SkMatrix& viewMatrix,
+                                     const GrClipEdgeType edgeType,
                                      const GrCaps& caps,
                                      const SkMatrix& localMatrix,
                                      bool usesLocalCoords,
                                      uint8_t coverage = 0xff) {
-        if (!caps.shaderCaps()->shaderDerivativeSupport()) {
-            return nullptr;
+        switch (edgeType) {
+            case GrClipEdgeType::kFillAA:       // fall through
+            case GrClipEdgeType::kHairlineAA:
+                if (!caps.shaderCaps()->shaderDerivativeSupport()) {
+                    return nullptr;
+                }
+                break;
+            case GrClipEdgeType::kFillBW:
+                break;
+            default: // kInverseFillBW or kInverseFillAA
+                return nullptr;
         }
 
-        return arena->make([&](void* ptr) {
-            return new (ptr) GrConicEffect(color, viewMatrix, coverage, localMatrix,
-                                           usesLocalCoords);
-        });
+        return arena->make<GrConicEffect>(color, viewMatrix, coverage, edgeType, localMatrix,
+                                          usesLocalCoords);
     }
 
     ~GrConicEffect() override;
@@ -81,8 +89,9 @@ public:
 
     inline const Attribute& inPosition() const { return kAttributes[0]; }
     inline const Attribute& inConicCoeffs() const { return kAttributes[1]; }
-    inline bool isAntiAliased() const { return true; }
-    inline bool isFilled() const { return false; }
+    inline bool isAntiAliased() const { return GrProcessorEdgeTypeIsAA(fEdgeType); }
+    inline bool isFilled() const { return GrProcessorEdgeTypeIsFill(fEdgeType); }
+    inline GrClipEdgeType getEdgeType() const { return fEdgeType; }
     const SkPMColor4f& color() const { return fColor; }
     const SkMatrix& viewMatrix() const { return fViewMatrix; }
     const SkMatrix& localMatrix() const { return fLocalMatrix; }
@@ -91,10 +100,12 @@ public:
 
     void getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override;
 
-    GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps&) const override;
+    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override;
 
 private:
-    GrConicEffect(const SkPMColor4f&, const SkMatrix& viewMatrix, uint8_t coverage,
+    friend class ::SkArenaAlloc; // for access to ctor
+
+    GrConicEffect(const SkPMColor4f&, const SkMatrix& viewMatrix, uint8_t coverage, GrClipEdgeType,
                   const SkMatrix& localMatrix, bool usesLocalCoords);
 
     SkPMColor4f         fColor;
@@ -102,6 +113,7 @@ private:
     SkMatrix            fLocalMatrix;
     bool                fUsesLocalCoords;
     uint8_t             fCoverageScale;
+    GrClipEdgeType fEdgeType;
     static constexpr Attribute kAttributes[] = {
         {"inPosition", kFloat2_GrVertexAttribType, kFloat2_GrSLType},
         {"inConicCoeffs", kFloat4_GrVertexAttribType, kHalf4_GrSLType}
@@ -109,7 +121,7 @@ private:
 
     GR_DECLARE_GEOMETRY_PROCESSOR_TEST
 
-    using INHERITED = GrGeometryProcessor;
+    typedef GrGeometryProcessor INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -128,18 +140,26 @@ public:
     static GrGeometryProcessor* Make(SkArenaAlloc* arena,
                                      const SkPMColor4f& color,
                                      const SkMatrix& viewMatrix,
+                                     const GrClipEdgeType edgeType,
                                      const GrCaps& caps,
                                      const SkMatrix& localMatrix,
                                      bool usesLocalCoords,
                                      uint8_t coverage = 0xff) {
-        if (!caps.shaderCaps()->shaderDerivativeSupport()) {
-            return nullptr;
+        switch (edgeType) {
+            case GrClipEdgeType::kFillAA:       // fall through
+            case GrClipEdgeType::kHairlineAA:
+                if (!caps.shaderCaps()->shaderDerivativeSupport()) {
+                    return nullptr;
+                }
+                break;
+            case GrClipEdgeType::kFillBW:
+                break;
+            default: // kInverseFillBW and kInverseFillAA
+                return nullptr;
         }
 
-        return arena->make([&](void* ptr) {
-            return new (ptr) GrQuadEffect(color, viewMatrix, coverage, localMatrix,
-                                          usesLocalCoords);
-        });
+        return arena->make<GrQuadEffect>(color, viewMatrix, coverage, edgeType,
+                                         localMatrix, usesLocalCoords);
     }
 
     ~GrQuadEffect() override;
@@ -148,8 +168,9 @@ public:
 
     inline const Attribute& inPosition() const { return kAttributes[0]; }
     inline const Attribute& inHairQuadEdge() const { return kAttributes[1]; }
-    inline bool isAntiAliased() const { return true; }
-    inline bool isFilled() const { return false; }
+    inline bool isAntiAliased() const { return GrProcessorEdgeTypeIsAA(fEdgeType); }
+    inline bool isFilled() const { return GrProcessorEdgeTypeIsFill(fEdgeType); }
+    inline GrClipEdgeType getEdgeType() const { return fEdgeType; }
     const SkPMColor4f& color() const { return fColor; }
     const SkMatrix& viewMatrix() const { return fViewMatrix; }
     const SkMatrix& localMatrix() const { return fLocalMatrix; }
@@ -158,10 +179,12 @@ public:
 
     void getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override;
 
-    GrGLSLGeometryProcessor* createGLSLInstance(const GrShaderCaps&) const override;
+    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override;
 
 private:
-    GrQuadEffect(const SkPMColor4f&, const SkMatrix& viewMatrix, uint8_t coverage,
+    friend class ::SkArenaAlloc; // for access to ctor
+
+    GrQuadEffect(const SkPMColor4f&, const SkMatrix& viewMatrix, uint8_t coverage, GrClipEdgeType,
                  const SkMatrix& localMatrix, bool usesLocalCoords);
 
     SkPMColor4f fColor;
@@ -169,6 +192,7 @@ private:
     SkMatrix fLocalMatrix;
     bool fUsesLocalCoords;
     uint8_t fCoverageScale;
+    GrClipEdgeType fEdgeType;
 
     static constexpr Attribute kAttributes[] = {
         {"inPosition", kFloat2_GrVertexAttribType, kFloat2_GrSLType},
@@ -177,7 +201,7 @@ private:
 
     GR_DECLARE_GEOMETRY_PROCESSOR_TEST
 
-    using INHERITED = GrGeometryProcessor;
+    typedef GrGeometryProcessor INHERITED;
 };
 
 #endif

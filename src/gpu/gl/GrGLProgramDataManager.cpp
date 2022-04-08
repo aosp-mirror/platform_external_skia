@@ -14,12 +14,16 @@
          SkASSERT((COUNT) <= (UNI).fArrayCount || \
                   (1 == (COUNT) && GrShaderVar::kNonArray == (UNI).fArrayCount))
 
-GrGLProgramDataManager::GrGLProgramDataManager(GrGLGpu* gpu, const UniformInfoArray& uniforms)
-        : fGpu(gpu) {
-    fUniforms.push_back_n(uniforms.count());
-    int i = 0;
-    for (const GLUniformInfo& builderUniform : uniforms.items()) {
-        Uniform& uniform = fUniforms[i++];
+GrGLProgramDataManager::GrGLProgramDataManager(GrGLGpu* gpu, GrGLuint programID,
+                                               const UniformInfoArray& uniforms,
+                                               const VaryingInfoArray& pathProcVaryings)
+    : fGpu(gpu)
+    , fProgramID(programID) {
+    int count = uniforms.count();
+    fUniforms.push_back_n(count);
+    for (int i = 0; i < count; i++) {
+        Uniform& uniform = fUniforms[i];
+        const UniformInfo& builderUniform = uniforms[i];
         SkASSERT(GrShaderVar::kNonArray == builderUniform.fVariable.getArrayCount() ||
                  builderUniform.fVariable.getArrayCount() > 0);
         SkDEBUGCODE(
@@ -28,17 +32,32 @@ GrGLProgramDataManager::GrGLProgramDataManager(GrGLGpu* gpu, const UniformInfoAr
         )
         uniform.fLocation = builderUniform.fLocation;
     }
+
+    // NVPR programs have separable varyings
+    count = pathProcVaryings.count();
+    fPathProcVaryings.push_back_n(count);
+    for (int i = 0; i < count; i++) {
+        SkASSERT(fGpu->glCaps().shaderCaps()->pathRenderingSupport());
+        PathProcVarying& pathProcVarying = fPathProcVaryings[i];
+        const VaryingInfo& builderPathProcVarying = pathProcVaryings[i];
+        SkASSERT(GrShaderVar::kNonArray == builderPathProcVarying.fVariable.getArrayCount() ||
+                 builderPathProcVarying.fVariable.getArrayCount() > 0);
+        SkDEBUGCODE(
+            pathProcVarying.fArrayCount = builderPathProcVarying.fVariable.getArrayCount();
+            pathProcVarying.fType = builderPathProcVarying.fVariable.getType();
+        )
+        pathProcVarying.fLocation = builderPathProcVarying.fLocation;
+    }
 }
 
 void GrGLProgramDataManager::setSamplerUniforms(const UniformInfoArray& samplers,
                                                 int startUnit) const {
-    int i = 0;
-    for (const GLUniformInfo& sampler : samplers.items()) {
+    for (int i = 0; i < samplers.count(); ++i) {
+        const UniformInfo& sampler = samplers[i];
         SkASSERT(sampler.fVisibility);
         if (kUnusedUniform != sampler.fLocation) {
             GR_GL_CALL(fGpu->glInterface(), Uniform1i(sampler.fLocation, i + startUnit));
         }
-        ++i;
     }
 }
 
@@ -278,3 +297,21 @@ template<> struct set_uniform_matrix<4> {
         GR_GL_CALL(gli, UniformMatrix4fv(loc, cnt, false, m));
     }
 };
+
+void GrGLProgramDataManager::setPathFragmentInputTransform(VaryingHandle u,
+                                                           int components,
+                                                           const SkMatrix& matrix) const {
+    SkASSERT(fGpu->glCaps().shaderCaps()->pathRenderingSupport());
+    const PathProcVarying& fragmentInput = fPathProcVaryings[u.toIndex()];
+
+    SkASSERT((components == 2 && (fragmentInput.fType == kFloat2_GrSLType ||
+                                  fragmentInput.fType == kHalf2_GrSLType)) ||
+              (components == 3 && (fragmentInput.fType == kFloat3_GrSLType ||
+                                   fragmentInput.fType == kHalf3_GrSLType)));
+
+    fGpu->glPathRendering()->setProgramPathFragmentInputTransform(fProgramID,
+                                                                  fragmentInput.fLocation,
+                                                                  GR_GL_OBJECT_LINEAR,
+                                                                  components,
+                                                                  matrix);
+}

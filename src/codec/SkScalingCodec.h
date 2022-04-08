@@ -33,7 +33,7 @@ protected:
     }
 
 private:
-    using INHERITED = SkCodec;
+    typedef SkCodec INHERITED;
 };
 
 #endif  // SkScalingCodec_DEFINED

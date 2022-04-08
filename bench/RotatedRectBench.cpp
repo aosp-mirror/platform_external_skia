@@ -182,7 +182,7 @@ private:
     SkBlendMode fMode;
     SkString    fName;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 #define DEF_FOR_COLOR_TYPES(aa, blend) \

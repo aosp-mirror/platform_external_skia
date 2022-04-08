@@ -97,10 +97,10 @@ private:
     static constexpr int kWidth = 675;
     static constexpr int kHeight = 1600;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new TextBlobColorTrans;)
-}  // namespace skiagm
+}

@@ -19,9 +19,10 @@ public:
     GrGLSLRRectShadowGeoProc() {}
 
     void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) override {
-        const GrRRectShadowGeoProc& rsgp = args.fGeomProc.cast<GrRRectShadowGeoProc>();
+        const GrRRectShadowGeoProc& rsgp = args.fGP.cast<GrRRectShadowGeoProc>();
         GrGLSLVertexBuilder* vertBuilder = args.fVertBuilder;
         GrGLSLVaryingHandler* varyingHandler = args.fVaryingHandler;
+        GrGLSLUniformHandler* uniformHandler = args.fUniformHandler;
         GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
 
         // emit attributes
@@ -30,27 +31,33 @@ public:
         varyingHandler->addPassThroughAttribute(rsgp.inShadowParams(), "shadowParams");
 
         // setup pass through color
-        fragBuilder->codeAppendf("half4 %s;", args.fOutputColor);
         varyingHandler->addPassThroughAttribute(rsgp.inColor(), args.fOutputColor);
 
         // Setup position
-        WriteOutputPosition(vertBuilder, gpArgs, rsgp.inPosition().name());
-        // No need for local coordinates, this GP does not combine with fragment processors
+        this->writeOutputPosition(vertBuilder, gpArgs, rsgp.inPosition().name());
+
+        // emit transforms
+        this->emitTransforms(vertBuilder,
+                             varyingHandler,
+                             uniformHandler,
+                             rsgp.inPosition().asShaderVar(),
+                             args.fFPCoordTransformHandler);
 
         fragBuilder->codeAppend("half d = length(shadowParams.xy);");
         fragBuilder->codeAppend("float2 uv = float2(shadowParams.z * (1.0 - d), 0.5);");
         fragBuilder->codeAppend("half factor = ");
         fragBuilder->appendTextureLookup(args.fTexSamplers[0], "uv");
         fragBuilder->codeAppend(".a;");
-        fragBuilder->codeAppendf("half4 %s = half4(factor);", args.fOutputCoverage);
+        fragBuilder->codeAppendf("%s = half4(factor);", args.fOutputCoverage);
     }
 
-    void setData(const GrGLSLProgramDataManager&,
-                 const GrShaderCaps&,
-                 const GrGeometryProcessor&) override {}
+    void setData(const GrGLSLProgramDataManager& pdman, const GrPrimitiveProcessor& proc,
+                 const CoordTransformRange& transformRange) override {
+        this->setTransformDataHelper(SkMatrix::I(), pdman, transformRange);
+    }
 
 private:
-    using INHERITED = GrGLSLGeometryProcessor;
+    typedef GrGLSLGeometryProcessor INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -63,12 +70,12 @@ GrRRectShadowGeoProc::GrRRectShadowGeoProc(const GrSurfaceProxyView& lutView)
     this->setVertexAttributes(&fInPosition, 3);
 
     SkASSERT(lutView.proxy());
-    fLUTTextureSampler.reset(GrSamplerState::Filter::kLinear, lutView.proxy()->backendFormat(),
+    fLUTTextureSampler.reset(GrSamplerState::Filter::kBilerp, lutView.proxy()->backendFormat(),
                              lutView.swizzle());
     this->setTextureSamplerCnt(1);
 }
 
-GrGLSLGeometryProcessor* GrRRectShadowGeoProc::createGLSLInstance(const GrShaderCaps&) const {
+GrGLSLPrimitiveProcessor* GrRRectShadowGeoProc::createGLSLInstance(const GrShaderCaps&) const {
     return new GrGLSLRRectShadowGeoProc();
 }
 

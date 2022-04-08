@@ -7,16 +7,14 @@
 
 #include "src/gpu/GrOpFlushState.h"
 
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrTexture.h"
 #include "src/core/SkConvertPixels.h"
-#include "src/gpu/GrDataUtils.h"
-#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrDrawOpAtlas.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrImageInfo.h"
 #include "src/gpu/GrProgramInfo.h"
 #include "src/gpu/GrResourceProvider.h"
-#include "src/gpu/GrTexture.h"
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -24,8 +22,7 @@ GrOpFlushState::GrOpFlushState(GrGpu* gpu, GrResourceProvider* resourceProvider,
                                GrTokenTracker* tokenTracker,
                                sk_sp<GrBufferAllocPool::CpuBufferCache> cpuBufferCache)
         : fVertexPool(gpu, cpuBufferCache)
-        , fIndexPool(gpu, cpuBufferCache)
-        , fDrawIndirectPool(gpu, std::move(cpuBufferCache))
+        , fIndexPool(gpu, std::move(cpuBufferCache))
         , fGpu(gpu)
         , fResourceProvider(resourceProvider)
         , fTokenTracker(tokenTracker) {}
@@ -34,13 +31,8 @@ const GrCaps& GrOpFlushState::caps() const {
     return *fGpu->caps();
 }
 
-GrThreadSafeCache* GrOpFlushState::threadSafeCache() const {
-    return fGpu->getContext()->priv().threadSafeCache();
-}
-
 void GrOpFlushState::executeDrawsAndUploadsForMeshDrawOp(
-        const GrOp* op, const SkRect& chainBounds, const GrPipeline* pipeline,
-        const GrUserStencilSettings* userStencilSettings) {
+        const GrOp* op, const SkRect& chainBounds, const GrPipeline* pipeline) {
     SkASSERT(this->opsRenderPass());
 
     while (fCurrDraw != fDraws.end() && fCurrDraw->fOp == op) {
@@ -51,22 +43,19 @@ void GrOpFlushState::executeDrawsAndUploadsForMeshDrawOp(
             ++fCurrUpload;
         }
 
-        GrProgramInfo programInfo(this->writeView(),
+        GrProgramInfo programInfo(this->proxy()->numSamples(),
+                                  this->proxy()->numStencilSamples(),
+                                  this->proxy()->backendFormat(),
+                                  this->view()->origin(),
                                   pipeline,
-                                  userStencilSettings,
                                   fCurrDraw->fGeometryProcessor,
-                                  fCurrDraw->fPrimitiveType,
-                                  0,
-                                  this->renderPassBarriers(),
-                                  this->colorLoadOp());
+                                  fCurrDraw->fFixedDynamicState,
+                                  fCurrDraw->fDynamicStateArrays,
+                                  fCurrDraw->fMeshCnt,
+                                  fCurrDraw->fPrimitiveType);
 
-        this->bindPipelineAndScissorClip(programInfo, chainBounds);
-        this->bindTextures(programInfo.geomProc(), fCurrDraw->fGeomProcProxies,
-                           programInfo.pipeline());
-        for (int i = 0; i < fCurrDraw->fMeshCnt; ++i) {
-            this->drawMesh(fCurrDraw->fMeshes[i]);
-        }
-
+        this->opsRenderPass()->bindPipeline(programInfo, chainBounds);
+        this->opsRenderPass()->drawMeshes(programInfo, fCurrDraw->fMeshes, fCurrDraw->fMeshCnt);
         fTokenTracker->flushToken();
         ++fCurrDraw;
     }
@@ -75,7 +64,6 @@ void GrOpFlushState::executeDrawsAndUploadsForMeshDrawOp(
 void GrOpFlushState::preExecuteDraws() {
     fVertexPool.unmap();
     fIndexPool.unmap();
-    fDrawIndirectPool.unmap();
     for (auto& upload : fASAPUploads) {
         this->doUpload(upload);
     }
@@ -89,7 +77,6 @@ void GrOpFlushState::reset() {
     SkASSERT(fCurrUpload == fInlineUploads.end());
     fVertexPool.reset();
     fIndexPool.reset();
-    fDrawIndirectPool.reset();
     fArena.reset();
     fASAPUploads.reset();
     fInlineUploads.reset();
@@ -114,12 +101,12 @@ void GrOpFlushState::doUpload(GrDeferredTextureUploadFn& upload,
         if (supportedWrite.fColorType != colorType ||
             (!fGpu->caps()->writePixelsRowBytesSupport() && rowBytes != tightRB)) {
             tmpPixels.reset(new char[height * tightRB]);
-            // Use kUnknown to ensure no alpha type conversions or clamping occur.
-            static constexpr auto kAT = kUnknown_SkAlphaType;
-            GrImageInfo srcInfo(colorType,                 kAT, nullptr, width, height);
-            GrImageInfo tmpInfo(supportedWrite.fColorType, kAT, nullptr, width, height);
-            if (!GrConvertPixels( GrPixmap(tmpInfo, tmpPixels.get(), tightRB ),
-                                 GrCPixmap(srcInfo,          buffer, rowBytes))) {
+            // Use kUnpremul to ensure no alpha type conversions or clamping occur.
+            static constexpr auto kAT = kUnpremul_SkAlphaType;
+            GrImageInfo srcInfo(colorType, kAT, nullptr, width, height);
+            GrImageInfo tmpInfo(supportedWrite.fColorType, kAT, nullptr, width,
+                                height);
+            if (!GrConvertPixels(tmpInfo, tmpPixels.get(), tightRB, srcInfo, buffer, rowBytes)) {
                 return false;
             }
             rowBytes = tightRB;
@@ -143,22 +130,29 @@ GrDeferredUploadToken GrOpFlushState::addASAPUpload(GrDeferredTextureUploadFn&& 
 }
 
 void GrOpFlushState::recordDraw(
-        const GrGeometryProcessor* geomProc,
-        const GrSimpleMesh meshes[],
-        int meshCnt,
-        const GrSurfaceProxy* const geomProcProxies[],
+        const GrGeometryProcessor* gp, const GrMesh meshes[], int meshCnt,
+        const GrPipeline::FixedDynamicState* fixedDynamicState,
+        const GrPipeline::DynamicStateArrays* dynamicStateArrays,
         GrPrimitiveType primitiveType) {
     SkASSERT(fOpArgs);
     SkDEBUGCODE(fOpArgs->validate());
     bool firstDraw = fDraws.begin() == fDraws.end();
     auto& draw = fDraws.append(&fArena);
     GrDeferredUploadToken token = fTokenTracker->issueDrawToken();
-    for (int i = 0; i < geomProc->numTextureSamplers(); ++i) {
-        SkASSERT(geomProcProxies && geomProcProxies[i]);
-        geomProcProxies[i]->ref();
+    if (fixedDynamicState && fixedDynamicState->fPrimitiveProcessorTextures) {
+        for (int i = 0; i < gp->numTextureSamplers(); ++i) {
+            fixedDynamicState->fPrimitiveProcessorTextures[i]->ref();
+        }
     }
-    draw.fGeometryProcessor = geomProc;
-    draw.fGeomProcProxies = geomProcProxies;
+    if (dynamicStateArrays && dynamicStateArrays->fPrimitiveProcessorTextures) {
+        int n = gp->numTextureSamplers() * meshCnt;
+        for (int i = 0; i < n; ++i) {
+            dynamicStateArrays->fPrimitiveProcessorTextures[i]->ref();
+        }
+    }
+    draw.fGeometryProcessor = gp;
+    draw.fFixedDynamicState = fixedDynamicState;
+    draw.fDynamicStateArrays = dynamicStateArrays;
     draw.fMeshes = meshes;
     draw.fMeshCnt = meshCnt;
     draw.fOp = fOpArgs->op();
@@ -201,10 +195,10 @@ void GrOpFlushState::putBackVertices(int vertices, size_t vertexStride) {
 }
 
 GrAppliedClip GrOpFlushState::detachAppliedClip() {
-    return fOpArgs->appliedClip() ? std::move(*fOpArgs->appliedClip()) : GrAppliedClip::Disabled();
+    return fOpArgs->appliedClip() ? std::move(*fOpArgs->appliedClip()) : GrAppliedClip();
 }
 
-GrStrikeCache* GrOpFlushState::strikeCache() const {
+GrStrikeCache* GrOpFlushState::glyphCache() const {
     return fGpu->getContext()->priv().getGrStrikeCache();
 }
 
@@ -212,33 +206,19 @@ GrAtlasManager* GrOpFlushState::atlasManager() const {
     return fGpu->getContext()->priv().getAtlasManager();
 }
 
-GrSmallPathAtlasMgr* GrOpFlushState::smallPathAtlasManager() const {
-    return fGpu->getContext()->priv().getSmallPathAtlasMgr();
-}
-
-void GrOpFlushState::drawMesh(const GrSimpleMesh& mesh) {
-    SkASSERT(mesh.fIsInitialized);
-    if (!mesh.fIndexBuffer) {
-        this->bindBuffers(nullptr, nullptr, mesh.fVertexBuffer);
-        this->draw(mesh.fVertexCount, mesh.fBaseVertex);
-    } else {
-        this->bindBuffers(mesh.fIndexBuffer, nullptr, mesh.fVertexBuffer, mesh.fPrimitiveRestart);
-        if (0 == mesh.fPatternRepeatCount) {
-            this->drawIndexed(mesh.fIndexCount, mesh.fBaseIndex, mesh.fMinIndexValue,
-                              mesh.fMaxIndexValue, mesh.fBaseVertex);
-        } else {
-            this->drawIndexPattern(mesh.fIndexCount, mesh.fPatternRepeatCount,
-                                   mesh.fMaxPatternRepetitionsInIndexBuffer, mesh.fVertexCount,
-                                   mesh.fBaseVertex);
-        }
-    }
-}
-
 //////////////////////////////////////////////////////////////////////////////
 
 GrOpFlushState::Draw::~Draw() {
-    for (int i = 0; i < fGeometryProcessor->numTextureSamplers(); ++i) {
-        SkASSERT(fGeomProcProxies && fGeomProcProxies[i]);
-        fGeomProcProxies[i]->unref();
+    if (fFixedDynamicState && fFixedDynamicState->fPrimitiveProcessorTextures) {
+        for (int i = 0; i < fGeometryProcessor->numTextureSamplers(); ++i) {
+            fFixedDynamicState->fPrimitiveProcessorTextures[i]->unref();
+        }
+    }
+    if (fDynamicStateArrays && fDynamicStateArrays->fPrimitiveProcessorTextures) {
+        int n = fGeometryProcessor->numTextureSamplers() * fMeshCnt;
+        const auto* textures = fDynamicStateArrays->fPrimitiveProcessorTextures;
+        for (int i = 0; i < n; ++i) {
+            textures[i]->unref();
+        }
     }
 }

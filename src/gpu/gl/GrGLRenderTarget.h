@@ -15,23 +15,21 @@
 
 class GrGLCaps;
 class GrGLGpu;
-class GrGLAttachment;
+class GrGLStencilAttachment;
 
 class GrGLRenderTarget : public GrRenderTarget {
 public:
-    using GrSurface::glRTFBOIDis0;
-    bool alwaysClearStencil() const override { return this->glRTFBOIDis0(); }
+    bool alwaysClearStencil() const override { return 0 == fRTFBOID; }
 
-    // set fSingleSampleFBOID to this value to indicate that it is multisampled but
+    // set fTexFBOID to this value to indicate that it is multisampled but
     // Gr doesn't know how to resolve it.
     enum { kUnresolvableFBOID = 0 };
 
     struct IDs {
-        GrGLuint                   fMultisampleFBOID;
+        GrGLuint                   fRTFBOID;
         GrBackendObjectOwnership   fRTFBOOwnership;
-        GrGLuint                   fSingleSampleFBOID;
+        GrGLuint                   fTexFBOID;
         GrGLuint                   fMSColorRenderbufferID;
-        int                        fTotalMemorySamplesPerPixel;
     };
 
     static sk_sp<GrGLRenderTarget> MakeWrapped(GrGLGpu*,
@@ -41,23 +39,24 @@ public:
                                                const IDs&,
                                                int stencilBits);
 
-    GrGLuint singleSampleFBOID() const { return fSingleSampleFBOID; }
-    GrGLuint multisampleFBOID() const { return fMultisampleFBOID; }
+    // The following two functions return the same ID when a texture/render target is not
+    // multisampled, and different IDs when it is multisampled.
+    // FBO ID used to render into
+    GrGLuint renderFBOID() const { return fRTFBOID; }
+    // FBO ID that has texture ID attached.
+    GrGLuint textureFBOID() const { return fTexFBOID; }
 
     GrBackendRenderTarget getBackendRenderTarget() const override;
 
     GrBackendFormat backendFormat() const override;
 
-    bool canAttemptStencilAttachment(bool useMultisampleFBO) const override;
+    bool canAttemptStencilAttachment() const override;
 
     // GrGLRenderTarget overrides dumpMemoryStatistics so it can log its texture and renderbuffer
-    // components separately.
+    // components seperately.
     void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const override;
 
     GrGLFormat format() const { return fRTFormat; }
-
-    bool hasDynamicMSAAAttachment() const { return SkToBool(fDynamicMSAAAttachment); }
-    bool ensureDynamicMSAAAttachment();
 
 protected:
     // Constructor for subclasses.
@@ -72,24 +71,30 @@ protected:
     void onAbandon() override;
     void onRelease() override;
 
-    int totalMemorySamplesPerPixel() const { return fTotalMemorySamplesPerPixel; }
+    int numSamplesOwnedPerPixel() const { return fNumSamplesOwnedPerPixel; }
 
 private:
     // Constructor for instances wrapping backend objects.
-    GrGLRenderTarget(
-            GrGLGpu*, const SkISize&, GrGLFormat, int sampleCount, const IDs&, GrGLAttachment*);
+    GrGLRenderTarget(GrGLGpu*,
+                     const SkISize&,
+                     GrGLFormat,
+                     int sampleCount,
+                     const IDs&,
+                     GrGLStencilAttachment*);
 
     void setFlags(const GrGLCaps&, const IDs&);
 
     GrGLGpu* getGLGpu() const;
-    bool completeStencilAttachment(GrAttachment* stencil, bool useMultisampleFBO) override;
+    bool completeStencilAttachment() override;
 
     size_t onGpuMemorySize() const override;
 
-    sk_sp<GrGLAttachment> fDynamicMSAAAttachment;
+    int msaaSamples() const;
+    // The number total number of samples, including both MSAA and resolve texture samples.
+    int totalSamples() const;
 
-    GrGLuint    fMultisampleFBOID;
-    GrGLuint    fSingleSampleFBOID;
+    GrGLuint    fRTFBOID;
+    GrGLuint    fTexFBOID;
     GrGLuint    fMSColorRenderbufferID;
     GrGLFormat  fRTFormat;
 
@@ -98,9 +103,9 @@ private:
     // The RenderTarget needs to be able to report its VRAM footprint even after abandon and
     // release have potentially zeroed out the IDs (e.g., so the cache can reset itself). Since
     // the IDs are just required for the computation in totalSamples we cache that result here.
-    int fTotalMemorySamplesPerPixel;
+    int         fNumSamplesOwnedPerPixel;
 
-    using INHERITED = GrRenderTarget;
+    typedef GrRenderTarget INHERITED;
 };
 
 #endif

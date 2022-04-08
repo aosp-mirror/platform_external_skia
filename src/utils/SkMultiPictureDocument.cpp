@@ -17,7 +17,6 @@
 #include "src/utils/SkMultiPictureDocumentPriv.h"
 
 #include <limits.h>
-#include <functional>
 
 /*
   File format:
@@ -54,12 +53,9 @@ struct MultiPictureDocument final : public SkDocument {
     SkSize fCurrentPageSize;
     SkTArray<sk_sp<SkPicture>> fPages;
     SkTArray<SkSize> fSizes;
-    std::function<void(const SkPicture*)> fOnEndPage;
-    MultiPictureDocument(SkWStream* s, const SkSerialProcs* procs,
-        std::function<void(const SkPicture*)> onEndPage)
+    MultiPictureDocument(SkWStream* s, const SkSerialProcs* procs)
         : SkDocument(s)
         , fProcs(procs ? *procs : SkSerialProcs())
-        , fOnEndPage(onEndPage)
     {}
     ~MultiPictureDocument() override { this->close(); }
 
@@ -69,11 +65,7 @@ struct MultiPictureDocument final : public SkDocument {
     }
     void onEndPage() override {
         fSizes.push_back(fCurrentPageSize);
-        sk_sp<SkPicture> lastPage = fPictureRecorder.finishRecordingAsPicture();
-        fPages.push_back(lastPage);
-        if (fOnEndPage) {
-            fOnEndPage(lastPage.get());
-        }
+        fPages.push_back(fPictureRecorder.finishRecordingAsPicture());
     }
     void onClose(SkWStream* wStream) override {
         SkASSERT(wStream);
@@ -102,11 +94,10 @@ struct MultiPictureDocument final : public SkDocument {
         fSizes.reset();
     }
 };
-}  // namespace
+}
 
-sk_sp<SkDocument> SkMakeMultiPictureDocument(SkWStream* wStream, const SkSerialProcs* procs,
-    std::function<void(const SkPicture*)> onEndPage) {
-    return sk_make_sp<MultiPictureDocument>(wStream, procs, onEndPage);
+sk_sp<SkDocument> SkMakeMultiPictureDocument(SkWStream* wStream, const SkSerialProcs* procs) {
+    return sk_make_sp<MultiPictureDocument>(wStream, procs);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -199,9 +190,6 @@ bool SkMultiPictureDocumentRead(SkStreamSeekable* stream,
     }
 
     auto picture = SkPicture::MakeFromStream(stream, procs);
-    if (!picture) {
-        return false;
-    }
 
     PagerCanvas canvas(joined.toCeil(), dstArray, dstArrayCount);
     // Must call playback(), not drawPicture() to reach

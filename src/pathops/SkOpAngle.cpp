@@ -1026,7 +1026,7 @@ void SkOpAngle::setSpans() {
         }
         testTs[testCount++] = startT;
         testTs[testCount++] = endT;
-        SkTQSort<double>(testTs, testTs + testCount);
+        SkTQSort<double>(testTs, &testTs[testCount - 1]);
         double bestSide = 0;
         int testCases = (testCount << 1) - 1;
         index = 0;

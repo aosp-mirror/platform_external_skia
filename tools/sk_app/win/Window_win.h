@@ -33,12 +33,11 @@ public:
 private:
     void closeWindow();
 
-    HINSTANCE   fHInstance;
-    HWND        fHWnd;
+    HINSTANCE fHInstance;
+    HWND      fHWnd;
     BackendType fBackend;
-    bool        fInitializedBackend = false;
 
-    using INHERITED = Window;
+    typedef Window INHERITED;
 };
 
 }   // namespace sk_app

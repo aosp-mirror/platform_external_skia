@@ -12,8 +12,8 @@
 #include "include/core/SkGraphics.h"
 #include "include/core/SkTypeface.h"
 #include "src/core/SkRemoteGlyphCache.h"
+#include "src/core/SkStrikeCache.h"
 #include "src/core/SkStrikeSpec.h"
-#include "src/core/SkTLazy.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/core/SkTextBlobTrace.h"
 #include "tools/Resources.h"
@@ -68,7 +68,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
     const size_t fCacheSize;
     SkString fName;
 };
@@ -107,7 +107,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
     const size_t fCacheSize;
     SkString fName;
 };
@@ -220,15 +220,13 @@ class DiffCanvasBench : public Benchmark {
 
     bool isSuitableFor(Backend b) override { return b == kNonRendering_Backend; }
 
-    void onDraw(int loops, SkCanvas* modelCanvas) override {
-        SkSurfaceProps props;
-        if (modelCanvas) { modelCanvas->getProps(&props); }
-        std::unique_ptr<SkCanvas> canvas = fServer->makeAnalysisCanvas(1024, 1024, props,
-                                                                       nullptr, true);
+    void onDraw(int loops, SkCanvas*) override {
+        const SkSurfaceProps props(SkSurfaceProps::kLegacyFontHost_InitType);
+        SkTextBlobCacheDiffCanvas canvas{1024, 1024, props, fServer.get()};
         loops *= 100;
         while (loops --> 0) {
             for (const auto& record : fTrace) {
-                canvas->drawTextBlob(
+                canvas.drawTextBlob(
                         record.blob.get(), record.offset.x(), record.offset.y(),record.paint);
             }
         }

@@ -348,14 +348,11 @@ void Window_win::show() {
 
 bool Window_win::attach(BackendType attachType) {
     fBackend = attachType;
-    fInitializedBackend = true;
 
     switch (attachType) {
-#ifdef SK_GL
         case kNativeGL_BackendType:
             fWindowContext = window_context_factory::MakeGLForWin(fHWnd, fRequestedDisplayParams);
             break;
-#endif
 #if SK_ANGLE
         case kANGLE_BackendType:
             fWindowContext =
@@ -378,12 +375,6 @@ bool Window_win::attach(BackendType attachType) {
                     window_context_factory::MakeVulkanForWin(fHWnd, fRequestedDisplayParams);
             break;
 #endif
-#ifdef SK_DIRECT3D
-        case kDirect3D_BackendType:
-            fWindowContext =
-                window_context_factory::MakeD3D12ForWin(fHWnd, fRequestedDisplayParams);
-            break;
-#endif
     }
     this->onBackendCreated();
 
@@ -404,9 +395,7 @@ void Window_win::setRequestedDisplayParams(const DisplayParams& params, bool all
         fWindowContext = nullptr;
         this->closeWindow();
         this->init(fHInstance);
-        if (fInitializedBackend) {
-            this->attach(fBackend);
-        }
+        this->attach(fBackend);
     }
 
     INHERITED::setRequestedDisplayParams(params, allowReattach);

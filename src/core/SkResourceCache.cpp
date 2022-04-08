@@ -13,13 +13,13 @@
 #include "src/core/SkDiscardableMemory.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkMessageBus.h"
-#include "src/core/SkMipmap.h"
+#include "src/core/SkMipMap.h"
 #include "src/core/SkOpts.h"
 
 #include <stddef.h>
 #include <stdlib.h>
 
-DECLARE_SKMESSAGEBUS_MESSAGE(SkResourceCache::PurgeSharedIDMessage, uint32_t, true)
+DECLARE_SKMESSAGEBUS_MESSAGE(SkResourceCache::PurgeSharedIDMessage)
 
 static inline bool SkShouldPostMessageToBus(
         const SkResourceCache::PurgeSharedIDMessage&, uint32_t) {
@@ -70,7 +70,7 @@ namespace {
             return rec->getKey();
         }
     };
-}  // namespace
+}
 
 class SkResourceCache::Hash :
     public SkTHashTable<SkResourceCache::Rec*, SkResourceCache::Key, HashTraits> {};
@@ -91,14 +91,12 @@ void SkResourceCache::init() {
     fDiscardableFactory = nullptr;
 }
 
-SkResourceCache::SkResourceCache(DiscardableFactory factory)
-        : fPurgeSharedIDInbox(SK_InvalidUniqueID) {
+SkResourceCache::SkResourceCache(DiscardableFactory factory) {
     this->init();
     fDiscardableFactory = factory;
 }
 
-SkResourceCache::SkResourceCache(size_t byteLimit)
-        : fPurgeSharedIDInbox(SK_InvalidUniqueID) {
+SkResourceCache::SkResourceCache(size_t byteLimit) {
     this->init();
     fTotalByteLimit = byteLimit;
 }
@@ -522,11 +520,6 @@ void SkResourceCache::PurgeAll() {
     return get_cache()->purgeAll();
 }
 
-void SkResourceCache::CheckMessages() {
-    SkAutoMutexExclusive am(resource_cache_mutex());
-    return get_cache()->checkMessages();
-}
-
 bool SkResourceCache::Find(const Key& key, FindVisitor visitor, void* context) {
     SkAutoMutexExclusive am(resource_cache_mutex());
     return get_cache()->find(key, visitor, context);
@@ -544,7 +537,7 @@ void SkResourceCache::VisitAll(Visitor visitor, void* context) {
 
 void SkResourceCache::PostPurgeSharedID(uint64_t sharedID) {
     if (sharedID) {
-        SkMessageBus<PurgeSharedIDMessage, uint32_t>::Post(PurgeSharedIDMessage(sharedID));
+        SkMessageBus<PurgeSharedIDMessage>::Post(PurgeSharedIDMessage(sharedID));
     }
 }
 

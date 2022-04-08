@@ -5,34 +5,30 @@
  * found in the LICENSE file.
  */
 
-#include <memory>
-
 #include "bench/Benchmark.h"
 
-#include "include/core/SkCanvas.h"
 #include "include/core/SkDeferredDisplayListRecorder.h"
 #include "include/core/SkSurfaceCharacterization.h"
-#include "include/gpu/GrDirectContext.h"
 
-static SkSurfaceCharacterization create_characterization(GrDirectContext* direct) {
-    size_t maxResourceBytes = direct->getResourceCacheLimit();
+static SkSurfaceCharacterization create_characterization(GrContext* context) {
+    size_t maxResourceBytes = context->getResourceCacheLimit();
 
-    if (!direct->colorTypeSupportedAsSurface(kRGBA_8888_SkColorType)) {
+    if (!context->colorTypeSupportedAsSurface(kRGBA_8888_SkColorType)) {
         return SkSurfaceCharacterization();
     }
 
     SkImageInfo ii = SkImageInfo::Make(32, 32, kRGBA_8888_SkColorType,
                                        kPremul_SkAlphaType, nullptr);
 
-    GrBackendFormat backendFormat = direct->defaultBackendFormat(kRGBA_8888_SkColorType,
-                                                                 GrRenderable::kYes);
+    GrBackendFormat backendFormat = context->defaultBackendFormat(kRGBA_8888_SkColorType,
+                                                                  GrRenderable::kYes);
     if (!backendFormat.isValid()) {
         return SkSurfaceCharacterization();
     }
 
     SkSurfaceProps props(0x0, kUnknown_SkPixelGeometry);
 
-    SkSurfaceCharacterization c = direct->threadSafeProxy()->createCharacterization(
+    SkSurfaceCharacterization c = context->threadSafeProxy()->createCharacterization(
                                                         maxResourceBytes, ii, backendFormat, 1,
                                                         kTopLeft_GrSurfaceOrigin, props, false);
     return c;
@@ -46,8 +42,6 @@ public:
     DDLRecorderBench() { }
 
 protected:
-    bool isSuitableFor(Backend backend) override { return kGPU_Backend == backend; }
-
     const char* onGetName() override { return "DDLRecorder"; }
 
     void onDraw(int loops, SkCanvas* origCanvas) override {
@@ -70,14 +64,14 @@ protected:
 private:
     // We create one DDLRecorder for all the timing runs and just keep reusing it
     void onPerCanvasPreDraw(SkCanvas* origCanvas) override {
-        auto context = origCanvas->recordingContext()->asDirectContext();
+        GrContext* context = origCanvas->getGrContext();
         if (!context) {
             return;
         }
 
         SkSurfaceCharacterization c = create_characterization(context);
 
-        fRecorder = std::make_unique<SkDeferredDisplayListRecorder>(c);
+        fRecorder.reset(new SkDeferredDisplayListRecorder(c));
     }
 
     // We defer the clean up of the DDLs so it is done outside of the timing loop
@@ -86,9 +80,9 @@ private:
     }
 
     std::unique_ptr<SkDeferredDisplayListRecorder>      fRecorder = nullptr;
-    std::vector<sk_sp<SkDeferredDisplayList>>           fDDLs;
+    std::vector<std::unique_ptr<SkDeferredDisplayList>> fDDLs;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 DEF_BENCH(return new DDLRecorderBench();)

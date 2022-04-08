@@ -8,37 +8,31 @@
 #ifndef SKSL_DISCARDSTATEMENT
 #define SKSL_DISCARDSTATEMENT
 
-#include "include/private/SkSLStatement.h"
 #include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLStatement.h"
 
 namespace SkSL {
 
 /**
  * A 'discard' statement.
  */
-class DiscardStatement final : public Statement {
-public:
-    static constexpr Kind kStatementKind = Kind::kDiscard;
-
+struct DiscardStatement : public Statement {
     DiscardStatement(int offset)
-    : INHERITED(offset, kStatementKind) {}
-
-    static std::unique_ptr<Statement> Make(int offset) {
-        return std::make_unique<DiscardStatement>(offset);
-    }
+    : INHERITED(offset, kDiscard_Kind) {}
 
     std::unique_ptr<Statement> clone() const override {
-        return std::make_unique<DiscardStatement>(fOffset);
+        return std::unique_ptr<Statement>(new DiscardStatement(fOffset));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         return String("discard;");
     }
+#endif
 
-private:
-    using INHERITED = Statement;
+    typedef Statement INHERITED;
 };
 
-}  // namespace SkSL
+} // namespace
 
 #endif

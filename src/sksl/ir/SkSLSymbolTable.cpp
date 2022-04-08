@@ -6,50 +6,34 @@
  */
 
 #include "src/sksl/ir/SkSLSymbolTable.h"
-
-#include "src/sksl/ir/SkSLSymbolAlias.h"
-#include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLUnresolvedFunction.h"
 
 namespace SkSL {
 
 std::vector<const FunctionDeclaration*> SymbolTable::GetFunctions(const Symbol& s) {
-    switch (s.kind()) {
-        case Symbol::Kind::kFunctionDeclaration:
-            return { &s.as<FunctionDeclaration>() };
-        case Symbol::Kind::kUnresolvedFunction:
-            return s.as<UnresolvedFunction>().functions();
+    switch (s.fKind) {
+        case Symbol::kFunctionDeclaration_Kind:
+            return { &((FunctionDeclaration&) s) };
+        case Symbol::kUnresolvedFunction_Kind:
+            return ((UnresolvedFunction&) s).fFunctions;
         default:
             return std::vector<const FunctionDeclaration*>();
     }
 }
 
 const Symbol* SymbolTable::operator[](StringFragment name) {
-    return this->lookup(fBuiltin ? nullptr : this, MakeSymbolKey(name));
-}
-
-const Symbol* SymbolTable::lookup(SymbolTable* writableSymbolTable, const SymbolKey& key) {
-    // Symbol-table lookup can cause new UnresolvedFunction nodes to be created; however, we don't
-    // want these to end up in built-in root symbol tables (where they will outlive the Program
-    // associated with those UnresolvedFunction nodes). `writableSymbolTable` tracks the closest
-    // symbol table to the root which is not a built-in.
-    if (!fBuiltin) {
-        writableSymbolTable = this;
-    }
-    const Symbol** symbolPPtr = fSymbols.find(key);
-    if (!symbolPPtr) {
+    const auto& entry = fSymbols.find(name);
+    if (entry == fSymbols.end()) {
         if (fParent) {
-            return fParent->lookup(writableSymbolTable, key);
+            return (*fParent)[name];
         }
         return nullptr;
     }
-
-    const Symbol* symbol = *symbolPPtr;
     if (fParent) {
-        auto functions = GetFunctions(*symbol);
+        auto functions = GetFunctions(*entry->second);
         if (functions.size() > 0) {
             bool modified = false;
-            const Symbol* previous = fParent->lookup(writableSymbolTable, key);
+            const Symbol* previous = (*fParent)[name];
             if (previous) {
                 auto previousFunctions = GetFunctions(*previous);
                 for (const FunctionDeclaration* prev : previousFunctions) {
@@ -67,70 +51,85 @@ const Symbol* SymbolTable::lookup(SymbolTable* writableSymbolTable, const Symbol
                 }
                 if (modified) {
                     SkASSERT(functions.size() > 1);
-                    return writableSymbolTable
-                                   ? writableSymbolTable->takeOwnershipOfSymbol(
-                                             std::make_unique<UnresolvedFunction>(functions))
-                                   : nullptr;
+                    return this->takeOwnership(std::unique_ptr<Symbol>(
+                                                                new UnresolvedFunction(functions)));
                 }
             }
         }
     }
-    while (symbol && symbol->is<SymbolAlias>()) {
-        symbol = symbol->as<SymbolAlias>().origSymbol();
-    }
-    return symbol;
+    return entry->second;
 }
 
-const String* SymbolTable::takeOwnershipOfString(String str) {
-    fOwnedStrings.push_front(std::move(str));
-    // Because fOwnedStrings is a linked list, pointers to elements are stable.
-    return &fOwnedStrings.front();
+Symbol* SymbolTable::takeOwnership(std::unique_ptr<Symbol> s) {
+    Symbol* result = s.get();
+    fOwnedSymbols.push_back(std::move(s));
+    return result;
 }
 
-void SymbolTable::addAlias(StringFragment name, const Symbol* symbol) {
-    this->add(std::make_unique<SymbolAlias>(symbol->fOffset, name, symbol));
+IRNode* SymbolTable::takeOwnership(std::unique_ptr<IRNode> n) {
+    IRNode* result = n.get();
+    fOwnedNodes.push_back(std::move(n));
+    return result;
 }
 
-void SymbolTable::addWithoutOwnership(const Symbol* symbol) {
-    const StringFragment& name = symbol->name();
+void SymbolTable::add(StringFragment name, std::unique_ptr<Symbol> symbol) {
+    this->addWithoutOwnership(name, symbol.get());
+    this->takeOwnership(std::move(symbol));
+}
 
-    const Symbol*& refInSymbolTable = fSymbols[MakeSymbolKey(name)];
-    if (refInSymbolTable == nullptr) {
-        refInSymbolTable = symbol;
-        return;
-    }
-
-    if (!symbol->is<FunctionDeclaration>()) {
+void SymbolTable::addWithoutOwnership(StringFragment name, const Symbol* symbol) {
+    const auto& existing = fSymbols.find(name);
+    if (existing == fSymbols.end()) {
+        fSymbols[name] = symbol;
+    } else if (symbol->fKind == Symbol::kFunctionDeclaration_Kind) {
+        const Symbol* oldSymbol = existing->second;
+        if (oldSymbol->fKind == Symbol::kFunctionDeclaration_Kind) {
+            std::vector<const FunctionDeclaration*> functions;
+            functions.push_back((const FunctionDeclaration*) oldSymbol);
+            functions.push_back((const FunctionDeclaration*) symbol);
+            std::unique_ptr<Symbol> u = std::unique_ptr<Symbol>(new UnresolvedFunction(std::move(
+                                                                                       functions)));
+            fSymbols[name] = this->takeOwnership(std::move(u));
+        } else if (oldSymbol->fKind == Symbol::kUnresolvedFunction_Kind) {
+            std::vector<const FunctionDeclaration*> functions;
+            for (const auto* f : ((UnresolvedFunction&) *oldSymbol).fFunctions) {
+                functions.push_back(f);
+            }
+            functions.push_back((const FunctionDeclaration*) symbol);
+            std::unique_ptr<Symbol> u = std::unique_ptr<Symbol>(new UnresolvedFunction(std::move(
+                                                                                       functions)));
+            fSymbols[name] = this->takeOwnership(std::move(u));
+        }
+    } else {
         fErrorReporter.error(symbol->fOffset, "symbol '" + name + "' was already defined");
-        return;
-    }
-
-    std::vector<const FunctionDeclaration*> functions;
-    if (refInSymbolTable->is<FunctionDeclaration>()) {
-        functions = {&refInSymbolTable->as<FunctionDeclaration>(),
-                     &symbol->as<FunctionDeclaration>()};
-
-        refInSymbolTable = this->takeOwnershipOfSymbol(
-                std::make_unique<UnresolvedFunction>(std::move(functions)));
-    } else if (refInSymbolTable->is<UnresolvedFunction>()) {
-        functions = refInSymbolTable->as<UnresolvedFunction>().functions();
-        functions.push_back(&symbol->as<FunctionDeclaration>());
-
-        refInSymbolTable = this->takeOwnershipOfSymbol(
-                std::make_unique<UnresolvedFunction>(std::move(functions)));
     }
 }
 
-const Type* SymbolTable::addArrayDimension(const Type* type, int arraySize) {
-    if (arraySize != 0) {
-        String baseName = type->name();
-        String arrayName = (arraySize != Type::kUnsizedArray)
-                                   ? String::printf("%s[%d]", baseName.c_str(), arraySize)
-                                   : String::printf("%s[]", baseName.c_str());
-        type = this->takeOwnershipOfSymbol(Type::MakeArrayType(std::move(arrayName),
-                                                               *type, arraySize));
+
+void SymbolTable::markAllFunctionsBuiltin() {
+    for (const auto& pair : fSymbols) {
+        switch (pair.second->fKind) {
+            case Symbol::kFunctionDeclaration_Kind:
+                ((FunctionDeclaration&)*pair.second).fBuiltin = true;
+                break;
+            case Symbol::kUnresolvedFunction_Kind:
+                for (auto& f : ((UnresolvedFunction&) *pair.second).fFunctions) {
+                    ((FunctionDeclaration*)f)->fBuiltin = true;
+                }
+                break;
+            default:
+                break;
+        }
     }
-    return type;
 }
 
-}  // namespace SkSL
+std::unordered_map<StringFragment, const Symbol*>::iterator SymbolTable::begin() {
+    return fSymbols.begin();
+}
+
+std::unordered_map<StringFragment, const Symbol*>::iterator SymbolTable::end() {
+    return fSymbols.end();
+}
+
+
+} // namespace

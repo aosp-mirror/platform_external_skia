@@ -12,25 +12,16 @@
 
 #ifdef SK_METAL
 
-#include "include/gpu/mtl/GrMtlBackendContext.h"
-
 namespace sk_gpu_test {
 class MtlTestContext : public TestContext {
 public:
     GrBackendApi backend() override { return GrBackendApi::kMetal; }
 
-    const GrMtlBackendContext& getMtlBackendContext() const {
-        return fMtl;
-    }
-
 protected:
-    MtlTestContext(const GrMtlBackendContext& mtl)
-            : fMtl(mtl) {}
-
-    GrMtlBackendContext fMtl;
+    MtlTestContext() {}
 
 private:
-    using INHERITED = TestContext;
+    typedef TestContext INHERITED;
 };
 
 /**

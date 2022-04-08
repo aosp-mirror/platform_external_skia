@@ -25,11 +25,10 @@
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrRecordingContext.h"
+#include "include/gpu/GrContext.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/GrTypesPriv.h"
-#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrSamplerState.h"
 #include "src/gpu/GrSurfaceContext.h"
 #include "src/gpu/GrTextureProxy.h"
@@ -95,7 +94,7 @@ protected:
     }
 
     void drawSet(SkCanvas* canvas) const {
-        SkMatrix matrix = SkMatrix::Translate(-100, -100);
+        SkMatrix matrix = SkMatrix::MakeTrans(-100, -100);
         canvas->drawPicture(fPicture, &matrix, nullptr);
         canvas->drawImage(fImage0.get(), 150, 0);
         canvas->drawImage(fImage1.get(), 300, 0);
@@ -120,14 +119,13 @@ protected:
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 DEF_GM( return new ImagePictGM; )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-static std::unique_ptr<SkImageGenerator> make_pic_generator(GrDirectContext*,
-                                                            sk_sp<SkPicture> pic) {
+static std::unique_ptr<SkImageGenerator> make_pic_generator(GrContext*, sk_sp<SkPicture> pic) {
     SkMatrix matrix;
     matrix.setTranslate(-100, -100);
     return SkImageGenerator::MakeFromPicture({ 100, 100 }, std::move(pic), &matrix, nullptr,
@@ -150,8 +148,7 @@ protected:
 private:
     SkBitmap fBM;
 };
-static std::unique_ptr<SkImageGenerator> make_ras_generator(GrDirectContext*,
-                                                            sk_sp<SkPicture> pic) {
+static std::unique_ptr<SkImageGenerator> make_ras_generator(GrContext*, sk_sp<SkPicture> pic) {
     SkBitmap bm;
     bm.allocN32Pixels(100, 100);
     SkCanvas canvas(bm);
@@ -161,74 +158,82 @@ static std::unique_ptr<SkImageGenerator> make_ras_generator(GrDirectContext*,
     return std::make_unique<RasterGenerator>(bm);
 }
 
+class EmptyGenerator : public SkImageGenerator {
+public:
+    EmptyGenerator(const SkImageInfo& info) : SkImageGenerator(info) {}
+};
+
 class TextureGenerator : public SkImageGenerator {
 public:
-    TextureGenerator(GrRecordingContext* rContext, const SkImageInfo& info, sk_sp<SkPicture> pic)
-            : SkImageGenerator(info)
-            , fRContext(SkRef(rContext)) {
+    TextureGenerator(GrContext* ctx, const SkImageInfo& info, sk_sp<SkPicture> pic)
+        : SkImageGenerator(info)
+        , fCtx(SkRef(ctx)) {
 
-        sk_sp<SkSurface> surface(SkSurface::MakeRenderTarget(rContext, SkBudgeted::kYes, info, 0,
+        sk_sp<SkSurface> surface(SkSurface::MakeRenderTarget(ctx, SkBudgeted::kYes, info, 0,
                                                              kTopLeft_GrSurfaceOrigin, nullptr));
         if (surface) {
             surface->getCanvas()->clear(0);
             surface->getCanvas()->translate(-100, -100);
             surface->getCanvas()->drawPicture(pic);
             sk_sp<SkImage> image(surface->makeImageSnapshot());
-            std::tie(fView, std::ignore) = as_IB(image)->asView(rContext, GrMipmapped::kNo);
+            const GrSurfaceProxyView* view = as_IB(image)->view(fCtx.get());
+            if (view) {
+                fView = *view;
+            }
         }
     }
 protected:
-    GrSurfaceProxyView onGenerateTexture(GrRecordingContext* rContext,
-                                         const SkImageInfo& info,
+    GrSurfaceProxyView onGenerateTexture(GrRecordingContext* ctx, const SkImageInfo& info,
                                          const SkIPoint& origin,
-                                         GrMipmapped mipMapped,
-                                         GrImageTexGenPolicy policy) override {
-        SkASSERT(rContext);
-        SkASSERT(rContext->priv().matches(fRContext.get()));
+                                         bool willBeMipped) override {
+        SkASSERT(ctx);
+        SkASSERT(ctx == fCtx.get());
 
         if (!fView) {
             return {};
         }
 
-        if (origin.fX == 0 && origin.fY == 0 && info.dimensions() == fView.proxy()->dimensions() &&
-            policy == GrImageTexGenPolicy::kDraw) {
+        if (origin.fX == 0 && origin.fY == 0 && info.dimensions() == fView.proxy()->dimensions()) {
             return fView;
         }
-        auto budgeted = policy == GrImageTexGenPolicy::kNew_Uncached_Unbudgeted ? SkBudgeted::kNo
-                                                                                : SkBudgeted::kYes;
-        return GrSurfaceProxyView::Copy(
-                fRContext.get(), fView, mipMapped,
+
+        GrMipMapped mipMapped = willBeMipped ? GrMipMapped::kYes : GrMipMapped::kNo;
+
+        // TODO: When we update this function to return a view instead of just a proxy then we can
+        // remove the extra ref that happens when we call asTextureProxyRef.
+        return GrSurfaceProxy::Copy(
+                fCtx.get(), fView.proxy(), fView.origin(),
+                SkColorTypeToGrColorType(info.colorType()), mipMapped,
                 SkIRect::MakeXYWH(origin.x(), origin.y(), info.width(), info.height()),
-                SkBackingFit::kExact, budgeted);
+                SkBackingFit::kExact, SkBudgeted::kYes);
     }
 
 private:
-    sk_sp<GrRecordingContext> fRContext;
-    GrSurfaceProxyView        fView;
+    sk_sp<GrContext>   fCtx;
+    GrSurfaceProxyView fView;
 };
 
-static std::unique_ptr<SkImageGenerator> make_tex_generator(GrDirectContext* dContext,
-                                                            sk_sp<SkPicture> pic) {
-    if (!dContext) {
-        return nullptr;
-    }
-
+static std::unique_ptr<SkImageGenerator> make_tex_generator(GrContext* ctx, sk_sp<SkPicture> pic) {
     const SkImageInfo info = SkImageInfo::MakeN32Premul(100, 100);
 
-    return std::make_unique<TextureGenerator>(dContext, info, pic);
+    if (!ctx) {
+        return std::make_unique<EmptyGenerator>(info);
+    }
+    return std::make_unique<TextureGenerator>(ctx, info, pic);
 }
 
 class ImageCacheratorGM : public skiagm::GM {
-    typedef std::unique_ptr<SkImageGenerator> (*FactoryFunc)(GrDirectContext*, sk_sp<SkPicture>);
-
-    SkString         fName;
-    FactoryFunc      fFactory;
-    sk_sp<SkPicture> fPicture;
-    sk_sp<SkImage>   fImage;
-    sk_sp<SkImage>   fImageSubset;
+    SkString                         fName;
+    std::unique_ptr<SkImageGenerator> (*fFactory)(GrContext*, sk_sp<SkPicture>);
+    sk_sp<SkPicture>                 fPicture;
+    sk_sp<SkImage>                   fImage;
+    sk_sp<SkImage>                   fImageSubset;
 
 public:
-    ImageCacheratorGM(const char suffix[], FactoryFunc factory) : fFactory(factory) {
+    ImageCacheratorGM(const char suffix[],
+                      std::unique_ptr<SkImageGenerator> (*factory)(GrContext*, sk_sp<SkPicture>))
+        : fFactory(factory)
+    {
         fName.printf("image-cacherator-from-%s", suffix);
     }
 
@@ -248,122 +253,85 @@ protected:
         fPicture = recorder.finishRecordingAsPicture();
     }
 
-    bool makeCaches(GrDirectContext* dContext) {
-        {
-            auto gen = fFactory(dContext, fPicture);
-            if (!gen) {
-                return false;
-            }
-            fImage = SkImage::MakeFromGenerator(std::move(gen));
-            if (!fImage) {
-                return false;
-            }
-            SkASSERT(fImage->dimensions() == SkISize::Make(100, 100));
-        }
+    void makeCaches(GrContext* ctx) {
+        auto gen = fFactory(ctx, fPicture);
+        fImage = SkImage::MakeFromGenerator(std::move(gen));
 
-        {
-            const SkIRect subset = SkIRect::MakeLTRB(50, 50, 100, 100);
+        const SkIRect subset = SkIRect::MakeLTRB(50, 50, 100, 100);
 
-            // We re-create the generator here on the off chance that making a subset from
-            // 'fImage' might perturb its state.
-            auto gen = fFactory(dContext, fPicture);
-            if (!gen) {
-                return false;
-            }
-            fImageSubset = SkImage::MakeFromGenerator(std::move(gen))->makeSubset(subset, dContext);
-            if (!fImageSubset) {
-                return false;
-            }
-            SkASSERT(fImageSubset->dimensions() == SkISize::Make(50, 50));
-        }
+        gen = fFactory(ctx, fPicture);
+        fImageSubset = SkImage::MakeFromGenerator(std::move(gen), &subset);
 
-        return true;
+        SkASSERT(fImage->dimensions() == SkISize::Make(100, 100));
+        SkASSERT(fImageSubset->dimensions() == SkISize::Make(50, 50));
     }
 
-    static void draw_placeholder(SkCanvas* canvas, SkScalar x, SkScalar y, int w, int h) {
-        SkPaint paint;
-        paint.setStyle(SkPaint::kStroke_Style);
-        SkRect r = SkRect::MakeXYWH(x, y, SkIntToScalar(w), SkIntToScalar(h));
-        canvas->drawRect(r, paint);
-        canvas->drawLine(r.left(), r.top(), r.right(), r.bottom(), paint);
-        canvas->drawLine(r.left(), r.bottom(), r.right(), r.top(), paint);
-    }
-
-    static void draw_as_bitmap(GrDirectContext* dContext, SkCanvas* canvas, SkImage* image,
-                               SkScalar x, SkScalar y) {
+    static void draw_as_bitmap(SkCanvas* canvas, SkImage* image, SkScalar x, SkScalar y) {
         SkBitmap bitmap;
-        if (as_IB(image)->getROPixels(dContext, &bitmap)) {
-            canvas->drawImage(bitmap.asImage(), x, y);
-        } else {
-            draw_placeholder(canvas, x, y, image->width(), image->height());
-        }
+        as_IB(image)->getROPixels(&bitmap);
+        canvas->drawBitmap(bitmap, x, y);
     }
 
     static void draw_as_tex(SkCanvas* canvas, SkImage* image, SkScalar x, SkScalar y) {
-        // The gpu-backed images are drawn in this manner bc the generator backed images
-        // aren't considered texture-backed
-        auto [view, ct] = as_IB(image)->asView(canvas->recordingContext(), GrMipmapped::kNo);
+        GrSurfaceProxyView view = as_IB(image)->refView(canvas->getGrContext(),
+                                                        GrSamplerState::Filter::kBilerp, nullptr);
         if (!view) {
             // show placeholder if we have no texture
-            draw_placeholder(canvas, x, y, image->width(), image->height());
+            SkPaint paint;
+            paint.setStyle(SkPaint::kStroke_Style);
+            SkRect r = SkRect::MakeXYWH(x, y, SkIntToScalar(image->width()),
+                                        SkIntToScalar(image->width()));
+            canvas->drawRect(r, paint);
+            canvas->drawLine(r.left(), r.top(), r.right(), r.bottom(), paint);
+            canvas->drawLine(r.left(), r.bottom(), r.right(), r.top(), paint);
             return;
         }
-        SkColorInfo colorInfo(GrColorTypeToSkColorType(ct),
-                              image->alphaType(),
-                              image->refColorSpace());
+
         // No API to draw a GrTexture directly, so we cheat and create a private image subclass
-        sk_sp<SkImage> texImage(new SkImage_Gpu(sk_ref_sp(canvas->recordingContext()),
-                                                image->uniqueID(),
-                                                std::move(view),
-                                                std::move(colorInfo)));
+        sk_sp<SkImage> texImage(new SkImage_Gpu(sk_ref_sp(canvas->getGrContext()),
+                                                image->uniqueID(), std::move(view),
+                                                image->colorType(), image->alphaType(),
+                                                image->refColorSpace()));
         canvas->drawImage(texImage.get(), x, y);
     }
 
-    void drawRow(GrDirectContext* dContext, SkCanvas* canvas, float scale) const {
-        canvas->scale(scale, scale);
-
-        SkMatrix matrix = SkMatrix::Translate(-100, -100);
+    void drawSet(SkCanvas* canvas) const {
+        SkMatrix matrix = SkMatrix::MakeTrans(-100, -100);
         canvas->drawPicture(fPicture, &matrix, nullptr);
 
         // Draw the tex first, so it doesn't hit a lucky cache from the raster version. This
         // way we also can force the generateTexture call.
 
-        draw_as_tex(canvas, fImage.get(), 150, 0);
-        draw_as_tex(canvas, fImageSubset.get(), 150+101, 0);
+        draw_as_tex(canvas, fImage.get(), 310, 0);
+        draw_as_tex(canvas, fImageSubset.get(), 310+101, 0);
 
-        draw_as_bitmap(dContext, canvas, fImage.get(), 310, 0);
-        draw_as_bitmap(dContext, canvas, fImageSubset.get(), 310+101, 0);
+        draw_as_bitmap(canvas, fImage.get(), 150, 0);
+        draw_as_bitmap(canvas, fImageSubset.get(), 150+101, 0);
     }
 
-    DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
-        auto dContext = GrAsDirectContext(canvas->recordingContext());
-        if (!this->makeCaches(dContext)) {
-            errorMsg->printf("Could not create cached images");
-            return DrawResult::kSkip;
-        }
+    void onDraw(SkCanvas* canvas) override {
+        this->makeCaches(canvas->getGrContext());
+
+        canvas->translate(20, 20);
+
+        this->drawSet(canvas);
 
         canvas->save();
-            canvas->translate(20, 20);
-            this->drawRow(dContext, canvas, 1.0);
+        canvas->translate(0, 130);
+        canvas->scale(0.25f, 0.25f);
+        this->drawSet(canvas);
         canvas->restore();
 
         canvas->save();
-            canvas->translate(20, 150);
-            this->drawRow(dContext, canvas, 0.25f);
+        canvas->translate(0, 200);
+        canvas->scale(2, 2);
+        this->drawSet(canvas);
         canvas->restore();
-
-        canvas->save();
-            canvas->translate(20, 220);
-            this->drawRow(dContext, canvas, 2.0f);
-        canvas->restore();
-
-        return DrawResult::kOk;
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
-
 DEF_GM( return new ImageCacheratorGM("picture", make_pic_generator); )
 DEF_GM( return new ImageCacheratorGM("raster", make_ras_generator); )
 DEF_GM( return new ImageCacheratorGM("texture", make_tex_generator); )

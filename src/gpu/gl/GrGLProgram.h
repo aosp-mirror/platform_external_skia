@@ -13,13 +13,11 @@
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
 
-#include <vector>
-
 class GrGLSLFragmentProcessor;
-class GrGLSLGeometryProcessor;
+class GrGLSLPrimitiveProcessor;
 class GrGLSLXferProcessor;
 class GrPipeline;
-class GrGeometryProcessor;
+class GrPrimitiveProcessor;
 class GrProgramInfo;
 class GrRenderTarget;
 class GrTextureProxy;
@@ -50,21 +48,23 @@ public:
      * The attribute array consists of vertexAttributeCnt + instanceAttributeCnt elements with
      * the vertex attributes preceding the instance attributes.
      */
-    static sk_sp<GrGLProgram> Make(GrGLGpu*,
-                                   const GrGLSLBuiltinUniformHandles&,
-                                   GrGLuint programID,
-                                   const UniformInfoArray& uniforms,
-                                   const UniformInfoArray& textureSamplers,
-                                   std::unique_ptr<GrGLSLGeometryProcessor>,
-                                   std::unique_ptr<GrGLSLXferProcessor>,
-                                   std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fps,
-                                   std::unique_ptr<Attribute[]>,
-                                   int vertexAttributeCnt,
-                                   int instanceAttributeCnt,
-                                   int vertexStride,
-                                   int instanceStride);
+    GrGLProgram(GrGLGpu*,
+                const GrGLSLBuiltinUniformHandles&,
+                GrGLuint programID,
+                const UniformInfoArray& uniforms,
+                const UniformInfoArray& textureSamplers,
+                const VaryingInfoArray&, // used for NVPR only currently
+                std::unique_ptr<GrGLSLPrimitiveProcessor> geometryProcessor,
+                std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
+                std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fragmentProcessors,
+                int fragmentProcessorCnt,
+                std::unique_ptr<Attribute[]>,
+                int vertexAttributeCnt,
+                int instanceAttributeCnt,
+                int vertexStride,
+                int instanceStride);
 
-    ~GrGLProgram() override;
+    ~GrGLProgram();
 
     /**
      * Call to abandon GL objects owned by this program.
@@ -120,11 +120,12 @@ public:
     void updateUniforms(const GrRenderTarget*, const GrProgramInfo&);
 
     /**
-     * Binds all geometry processor and fragment processor textures.
+     * Binds all primitive processor and fragment processor textures. We configure primitive
+     * processor samplers based on the proxies on the processor itself, but the actual textures we
+     * bind come from primProcTextureOverrides.
      */
-    void bindTextures(const GrGeometryProcessor&,
-                      const GrSurfaceProxy* const geomProcTextures[],
-                      const GrPipeline&);
+    void bindTextures(const GrPrimitiveProcessor&, const GrPipeline&,
+                      const GrSurfaceProxy* const primProcTextureOverrides[]);
 
     int vertexStride() const { return fVertexStride; }
     int instanceStride() const { return fInstanceStride; }
@@ -142,22 +143,8 @@ public:
     }
 
 private:
-    GrGLProgram(GrGLGpu*,
-                const GrGLSLBuiltinUniformHandles&,
-                GrGLuint programID,
-                const UniformInfoArray& uniforms,
-                const UniformInfoArray& textureSamplers,
-                std::unique_ptr<GrGLSLGeometryProcessor>,
-                std::unique_ptr<GrGLSLXferProcessor>,
-                std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fpImpls,
-                std::unique_ptr<Attribute[]>,
-                int vertexAttributeCnt,
-                int instanceAttributeCnt,
-                int vertexStride,
-                int instanceStride);
-
     // Helper for setData() that sets the view matrix and loads the render target height uniform
-    void setRenderTargetState(const GrRenderTarget*, GrSurfaceOrigin, const GrGeometryProcessor&);
+    void setRenderTargetState(const GrRenderTarget*, GrSurfaceOrigin, const GrPrimitiveProcessor&);
 
     // these reflect the current values of uniforms (GL uniform values travel with program)
     RenderTargetState fRenderTargetState;
@@ -165,9 +152,10 @@ private:
     GrGLuint fProgramID;
 
     // the installed effects
-    std::unique_ptr<GrGLSLGeometryProcessor> fGeometryProcessor;
+    std::unique_ptr<GrGLSLPrimitiveProcessor> fPrimitiveProcessor;
     std::unique_ptr<GrGLSLXferProcessor> fXferProcessor;
-    std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fFPImpls;
+    std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fFragmentProcessors;
+    int fFragmentProcessorCnt;
 
     std::unique_ptr<Attribute[]> fAttributes;
     int fVertexAttributeCnt;
@@ -180,7 +168,7 @@ private:
 
     int fNumTextureSamplers;
 
-    using INHERITED = SkRefCnt;
+    typedef SkRefCnt INHERITED;
 };
 
 #endif

@@ -45,7 +45,8 @@ static void makebm(SkBitmap* bm, SkColorType ct, int w, int h) {
 
 static void setup(SkPaint* paint, const SkBitmap& bm, SkFilterQuality filter_level,
                   SkTileMode tmx, SkTileMode tmy) {
-    paint->setShader(bm.makeShader(tmx, tmy, SkSamplingOptions(filter_level)));
+    paint->setShader(bm.makeShader(tmx, tmy));
+    paint->setFilterQuality(filter_level);
 }
 
 constexpr SkColorType gColorTypes[] = {
@@ -158,7 +159,7 @@ protected:
 
 private:
     bool fPowerOfTwoSize;
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 
 constexpr int gWidth = 32;
@@ -167,7 +168,7 @@ constexpr int gHeight = 32;
 static sk_sp<SkShader> make_bm(SkTileMode tx, SkTileMode ty) {
     SkBitmap bm;
     makebm(&bm, kN32_SkColorType, gWidth, gHeight);
-    return bm.makeShader(tx, ty, SkSamplingOptions());
+    return bm.makeShader(tx, ty);
 }
 
 static sk_sp<SkShader> make_grad(SkTileMode tx, SkTileMode ty) {

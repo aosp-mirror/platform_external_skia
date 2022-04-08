@@ -90,10 +90,10 @@ private:
     static constexpr int kWidth = 1164;
     static constexpr int kHeight = 802;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new BlurredClippedCircleGM;)
-}  // namespace skiagm
+}

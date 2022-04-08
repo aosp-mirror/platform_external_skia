@@ -8,8 +8,8 @@ void draw(SkCanvas* canvas) {
     auto img = SkImage::MakeRasterCopy({info, p, 8});
 
     SkPaint paint;
-    paint.setShader(img->makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
-                                    SkSamplingOptions(SkFilterMode::kLinear)));
+    paint.setFilterQuality(kMedium_SkFilterQuality);
+    paint.setShader(img->makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat));
 
     canvas->translate(20, 20);
     canvas->scale(20, 20);

@@ -285,10 +285,6 @@ private:
 
     SkScalar              fMiterLimit;
 
-    // accumulated error when removing near colinear points to prevent an
-    // overly greedy simplification
-    SkScalar              fAccumLinearError;
-
     SkTDArray<SkPoint>    fPointBuffer;
 };
 

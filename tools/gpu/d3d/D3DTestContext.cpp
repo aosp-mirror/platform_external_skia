@@ -9,7 +9,7 @@
 
 #ifdef SK_DIRECT3D
 
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrContext.h"
 #include "tools/gpu/d3d/D3DTestUtils.h"
 
 namespace {
@@ -38,10 +38,13 @@ public:
 
     void testAbandon() override {}
 
+    // There is really nothing to here since we don't own any unqueued command buffers here.
+    void submit() override {}
+
     void finish() override {}
 
-    sk_sp<GrDirectContext> makeContext(const GrContextOptions& options) override {
-        return GrDirectContext::MakeDirect3D(fD3D, options);
+    sk_sp<GrContext> makeGrContext(const GrContextOptions& options) override {
+        return GrContext::MakeDirect3D(fD3D, options);
     }
 
 protected:
@@ -55,14 +58,14 @@ protected:
 private:
     D3DTestContextImpl(const GrD3DBackendContext& backendContext, bool ownsContext)
             : D3DTestContext(backendContext, ownsContext) {
-        fFenceSupport = true;
     }
 
     void onPlatformMakeNotCurrent() const override {}
     void onPlatformMakeCurrent() const override {}
     std::function<void()> onPlatformGetAutoContextRestore() const override  { return nullptr; }
+    void onPlatformSwapBuffers() const override {}
 
-    using INHERITED = sk_gpu_test::D3DTestContext;
+    typedef sk_gpu_test::D3DTestContext INHERITED;
 };
 }  // anonymous namespace
 

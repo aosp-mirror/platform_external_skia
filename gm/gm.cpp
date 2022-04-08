@@ -10,6 +10,7 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkFilterQuality.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkFontTypes.h"
 #include "include/core/SkMatrix.h"
@@ -18,14 +19,13 @@
 #include "include/core/SkShader.h"
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypeface.h"
-#include "include/gpu/GrRecordingContext.h"
-#include "src/core/SkCanvasPriv.h"
+#include "include/gpu/GrContext.h"
 #include "src/core/SkTraceEvent.h"
 #include "tools/ToolUtils.h"
 
 #include <stdarg.h>
 
-class GrSurfaceDrawContext;
+class GrRenderTargetContext;
 
 using namespace skiagm;
 
@@ -59,52 +59,18 @@ static void draw_gpu_only_message(SkCanvas* canvas) {
     SkMatrix localM;
     localM.setRotate(35.f);
     localM.postTranslate(10.f, 0.f);
-    paint.setShader(bmp.makeShader(SkTileMode::kMirror, SkTileMode::kMirror,
-                                   SkSamplingOptions(SkFilterMode::kLinear,
-                                                     SkMipmapMode::kNearest),
-                                   localM));
+    paint.setShader(bmp.makeShader(SkTileMode::kMirror, SkTileMode::kMirror, &localM));
+    paint.setFilterQuality(kMedium_SkFilterQuality);
     canvas->drawPaint(paint);
-}
-
-static void handle_gm_failure(SkCanvas* canvas, DrawResult result, const SkString& errorMsg) {
-    if (DrawResult::kFail == result) {
-        draw_failure_message(canvas, "DRAW FAILED: %s", errorMsg.c_str());
-    } else if (SkString(GM::kErrorMsg_DrawSkippedGpuOnly) == errorMsg) {
-        draw_gpu_only_message(canvas);
-    } else {
-        draw_failure_message(canvas, "DRAW SKIPPED: %s", errorMsg.c_str());
-    }
 }
 
 GM::GM(SkColor bgColor) {
     fMode = kGM_Mode;
     fBGColor = bgColor;
+    fHaveCalledOnceBeforeDraw = false;
 }
 
 GM::~GM() {}
-
-DrawResult GM::gpuSetup(GrDirectContext* context, SkCanvas* canvas, SkString* errorMsg) {
-    TRACE_EVENT1("GM", TRACE_FUNC, "name", TRACE_STR_COPY(this->getName()));
-    if (!fGpuSetup) {
-        // When drawn in viewer, gpuSetup will be called multiple times with the same
-        // GrContext.
-        fGpuSetup = true;
-        fGpuSetupResult = this->onGpuSetup(context, errorMsg);
-    }
-    if (DrawResult::kOk != fGpuSetupResult) {
-        handle_gm_failure(canvas, fGpuSetupResult, *errorMsg);
-    }
-
-    return fGpuSetupResult;
-}
-
-void GM::gpuTeardown() {
-    this->onGpuTeardown();
-
-    // After 'gpuTeardown' a GM can be reused with a different GrContext. Reset the flag
-    // so 'onGpuSetup' will be called.
-    fGpuSetup = false;
-}
 
 DrawResult GM::draw(SkCanvas* canvas, SkString* errorMsg) {
     TRACE_EVENT1("GM", TRACE_FUNC, "name", TRACE_STR_COPY(this->getName()));
@@ -114,18 +80,31 @@ DrawResult GM::draw(SkCanvas* canvas, SkString* errorMsg) {
 
 DrawResult GM::drawContent(SkCanvas* canvas, SkString* errorMsg) {
     TRACE_EVENT0("GM", TRACE_FUNC);
-    this->onceBeforeDraw();
+    if (!fHaveCalledOnceBeforeDraw) {
+        fHaveCalledOnceBeforeDraw = true;
+        this->onOnceBeforeDraw();
+    }
     SkAutoCanvasRestore acr(canvas, true);
     DrawResult drawResult = this->onDraw(canvas, errorMsg);
     if (DrawResult::kOk != drawResult) {
-        handle_gm_failure(canvas, drawResult, *errorMsg);
+        if (DrawResult::kFail == drawResult) {
+            draw_failure_message(canvas, "DRAW FAILED: %s", errorMsg->c_str());
+        } else if (SkString(kErrorMsg_DrawSkippedGpuOnly) == *errorMsg) {
+            draw_gpu_only_message(canvas);
+        } else {
+            draw_failure_message(canvas, "DRAW SKIPPED: %s", errorMsg->c_str());
+        }
     }
     return drawResult;
 }
 
 void GM::drawBackground(SkCanvas* canvas) {
     TRACE_EVENT0("GM", TRACE_FUNC);
-    this->onceBeforeDraw();
+    if (!fHaveCalledOnceBeforeDraw) {
+        fHaveCalledOnceBeforeDraw = true;
+        this->onOnceBeforeDraw();
+    }
+    SkAutoCanvasRestore acr(canvas, true);
     canvas->drawColor(fBGColor, SkBlendMode::kSrc);
 }
 
@@ -144,8 +123,8 @@ DrawResult SimpleGM::onDraw(SkCanvas* canvas, SkString* errorMsg) {
 
 SkISize SimpleGpuGM::onISize() { return fSize; }
 SkString SimpleGpuGM::onShortName() { return fName; }
-DrawResult SimpleGpuGM::onDraw(GrRecordingContext* ctx, GrSurfaceDrawContext* rtc,
-                               SkCanvas* canvas, SkString* errorMsg) {
+DrawResult SimpleGpuGM::onDraw(GrContext* ctx, GrRenderTargetContext* rtc, SkCanvas* canvas,
+                               SkString* errorMsg) {
     return fDrawProc(ctx, rtc, canvas, errorMsg);
 }
 
@@ -189,20 +168,19 @@ void GM::drawSizeBounds(SkCanvas* canvas, SkColor color) {
 // need to explicitly declare this, or we get some weird infinite loop llist
 template GMRegistry* GMRegistry::gHead;
 
-DrawResult GpuGM::onDraw(GrRecordingContext* ctx, GrSurfaceDrawContext* rtc, SkCanvas* canvas,
-                         SkString* errorMsg) {
+DrawResult GpuGM::onDraw(GrContext* ctx, GrRenderTargetContext* rtc, SkCanvas* canvas,
+                          SkString* errorMsg) {
     this->onDraw(ctx, rtc, canvas);
     return DrawResult::kOk;
 }
-void GpuGM::onDraw(GrRecordingContext*, GrSurfaceDrawContext*, SkCanvas*) {
+void GpuGM::onDraw(GrContext*, GrRenderTargetContext*, SkCanvas*) {
     SK_ABORT("Not implemented.");
 }
 
 DrawResult GpuGM::onDraw(SkCanvas* canvas, SkString* errorMsg) {
-
-    auto ctx = canvas->recordingContext();
-    GrSurfaceDrawContext* sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
-    if (!ctx || !sdc) {
+    GrContext* ctx = canvas->getGrContext();
+    GrRenderTargetContext* rtc = canvas->internal_private_accessTopLayerRenderTargetContext();
+    if (!ctx || !rtc) {
         *errorMsg = kErrorMsg_DrawSkippedGpuOnly;
         return DrawResult::kSkip;
     }
@@ -210,7 +188,7 @@ DrawResult GpuGM::onDraw(SkCanvas* canvas, SkString* errorMsg) {
         *errorMsg = "GrContext abandoned.";
         return DrawResult::kSkip;
     }
-    return this->onDraw(ctx, sdc, canvas, errorMsg);
+    return this->onDraw(ctx, rtc, canvas, errorMsg);
 }
 
 template <typename Fn>

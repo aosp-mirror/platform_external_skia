@@ -14,11 +14,10 @@ def basename(pathname):
 
 def find_skps(skps):
   pathnames = list()
-  for skpglob in skps:
-    for skp in glob.iglob(skpglob):
-      if (path.isdir(skp)):
-        pathnames.extend(glob.iglob(path.join(skp, '*.skp')))
-        pathnames.extend(glob.iglob(path.join(skp, '*.mskp')))
-      else:
-        pathnames.append(skp)
+  for skp in skps:
+    if (path.isdir(skp)):
+      pathnames.extend(glob.iglob(path.join(skp, '*.skp')))
+      pathnames.extend(glob.iglob(path.join(skp, '*.mskp')))
+    else:
+      pathnames.append(skp)
   return pathnames

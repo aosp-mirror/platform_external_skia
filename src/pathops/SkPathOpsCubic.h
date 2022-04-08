@@ -160,7 +160,7 @@ inline int other_two(int one, int two) {
 }
 
 struct SkDCubicPair {
-    SkDCubic first() const {
+    const SkDCubic first() const {
 #ifdef SK_DEBUG
         SkDCubic result;
         result.debugSet(&pts[0]);
@@ -169,7 +169,7 @@ struct SkDCubicPair {
         return (const SkDCubic&) pts[0];
 #endif
     }
-    SkDCubic second() const {
+    const SkDCubic second() const {
 #ifdef SK_DEBUG
         SkDCubic result;
         result.debugSet(&pts[3]);

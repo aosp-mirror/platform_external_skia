@@ -37,8 +37,7 @@ class SkiaCss3gradientsDesktopPageSet(story.StorySet):
 
     urls_list = [
       # Why: http://code.google.com/p/chromium/issues/detail?id=168448
-      # and https://bugs.chromium.org/p/skia/issues/detail?id=10390
-      'https://www.w3schools.com/css/css3_gradients.asp',
+      'https://www.webkit.org/blog/1424/css3-gradients/',
     ]
 
     for url in urls_list:

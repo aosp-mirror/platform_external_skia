@@ -60,6 +60,6 @@ private:
     sk_sp<SkImage>   fImage;
     sk_sp<SkSurface> fRasterSurface;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 DEF_BENCH( return new Image2RasterBench; )

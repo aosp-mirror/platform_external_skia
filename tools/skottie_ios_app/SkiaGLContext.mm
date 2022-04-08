@@ -6,7 +6,7 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkTime.h"
 #include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrContext.h"
 #include "include/gpu/gl/GrGLInterface.h"
 #include "include/gpu/gl/GrGLTypes.h"
 
@@ -22,17 +22,17 @@ static void configure_glkview_for_skia(GLKView* view) {
     [view setDrawableStencilFormat:GLKViewDrawableStencilFormat8];
 }
 
-static sk_sp<SkSurface> make_gl_surface(GrDirectContext* dContext, int width, int height) {
+static sk_sp<SkSurface> make_gl_surface(GrContext* grContext, int width, int height) {
     static constexpr int kStencilBits = 8;
     static constexpr int kSampleCount = 1;
-    static const SkSurfaceProps surfaceProps;
-    if (!dContext || width <= 0 || height <= 0) {
+    static const SkSurfaceProps surfaceProps = SkSurfaceProps::kLegacyFontHost_InitType;
+    if (!grContext || width <= 0 || height <= 0) {
         return nullptr;
     }
     GLint fboid = 0;
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &fboid);
     return SkSurface::MakeFromBackendRenderTarget(
-            dContext,
+            grContext,
             GrBackendRenderTarget(width,
                                   height,
                                   kSampleCount,
@@ -54,18 +54,18 @@ static sk_sp<SkSurface> make_gl_surface(GrDirectContext* dContext, int width, in
     // Required initializer.
     - (instancetype)initWithFrame:(CGRect)frame
                     withEAGLContext:(EAGLContext*)eaglContext
-                    withDirectContext:(GrDirectContext*)dContext;
+                    withGrContext:(GrContext*)grContext;
 @end
 
 @implementation SkiaGLView {
-    GrDirectContext* fDContext;
+    GrContext* fGrContext;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame
                 withEAGLContext:(EAGLContext*)eaglContext
-                withDirectContext:(GrDirectContext*)dContext {
+                withGrContext:(GrContext*)grContext {
     self = [super initWithFrame:frame context:eaglContext];
-    fDContext = dContext;
+    fGrContext = grContext;
     configure_glkview_for_skia(self);
     return self;
 }
@@ -79,15 +79,15 @@ static sk_sp<SkSurface> make_gl_surface(GrDirectContext* dContext, int width, in
 
     int width  = (int)[self drawableWidth],
         height = (int)[self drawableHeight];
-    if (!(fDContext)) {
-        NSLog(@"Error: GrDirectContext missing.\n");
+    if (!(fGrContext)) {
+        NSLog(@"Error: grContext missing.\n");
         return;
     }
-    if (sk_sp<SkSurface> surface = make_gl_surface(fDContext, width, height)) {
+    if (sk_sp<SkSurface> surface = make_gl_surface(fGrContext, width, height)) {
         [viewController draw:rect
                         toCanvas:(surface->getCanvas())
                         atSize:CGSize{(CGFloat)width, (CGFloat)height}];
-        surface->flushAndSubmit();
+        surface->flush();
     }
     if (next) {
         [NSTimer scheduledTimerWithTimeInterval:std::max(0.0, next - SkTime::GetNSecs() * 1e-9)
@@ -107,7 +107,7 @@ static sk_sp<SkSurface> make_gl_surface(GrDirectContext* dContext, int width, in
 @end
 
 @implementation SkiaGLContext {
-    sk_sp<GrDirectContext> fDContext;
+    sk_sp<GrContext> fGrContext;
 }
 - (instancetype) init {
     self = [super init];
@@ -122,10 +122,10 @@ static sk_sp<SkSurface> make_gl_surface(GrDirectContext* dContext, int width, in
     }
     EAGLContext* oldContext = [EAGLContext currentContext];
     [EAGLContext setCurrentContext:[self eaglContext]];
-    fDContext = GrDirectContext::MakeGL(nullptr, GrContextOptions());
+    fGrContext = GrContext::MakeGL(nullptr, GrContextOptions());
     [EAGLContext setCurrentContext:oldContext];
-    if (!fDContext) {
-        NSLog(@"GrDirectContext::MakeGL failed");
+    if (!fGrContext) {
+        NSLog(@"GrContext::MakeGL failed");
         return nil;
     }
     return self;
@@ -134,7 +134,7 @@ static sk_sp<SkSurface> make_gl_surface(GrDirectContext* dContext, int width, in
 - (UIView*) makeViewWithController:(SkiaViewController*)vc withFrame:(CGRect)frame {
     SkiaGLView* skiaView = [[SkiaGLView alloc] initWithFrame:frame
                                                withEAGLContext:[self eaglContext]
-                                               withDirectContext:fDContext.get()];
+                                               withGrContext:fGrContext.get()];
     [skiaView setController:vc];
     return skiaView;
 }

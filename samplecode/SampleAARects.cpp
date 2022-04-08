@@ -49,8 +49,7 @@ class AARectView : public Sample {
         SkPaint bluePaint;
         bluePaint.setARGB(0xff, 0x0, 0x0, 0xff);
         SkPaint bmpPaint;
-        bmpPaint.setShader(fBitmap.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
-                                              SkSamplingOptions()));
+        bmpPaint.setShader(fBitmap.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat));
         bluePaint.setStrokeWidth(3);
         bmpPaint.setStrokeWidth(3);
 
@@ -171,7 +170,7 @@ class AARectView : public Sample {
 
 private:
 
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

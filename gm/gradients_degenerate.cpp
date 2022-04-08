@@ -20,7 +20,6 @@
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
-#include "tools/ToolUtils.h"
 
 // NOTE: The positions define hardstops for the red and green borders. For the repeating degenerate
 // gradients, that means the red and green are never visible, so the average color used should only
@@ -47,9 +46,8 @@ typedef sk_sp<SkShader> (*GradientFactory)(SkTileMode tm);
 static void draw_tile_header(SkCanvas* canvas) {
     canvas->save();
 
-    SkFont font(ToolUtils::create_portable_typeface(), 12);
     for (int i = 0; i < TILE_MODE_CT; ++i) {
-        canvas->drawString(TILE_NAMES[i], 0, 0, font, SkPaint());
+        canvas->drawString(TILE_NAMES[i], 0, 0, SkFont(), SkPaint());
         canvas->translate(TILE_SIZE + TILE_GAP, 0);
     }
 
@@ -65,10 +63,8 @@ static void draw_row(SkCanvas* canvas, const char* desc, GradientFactory factory
     SkPaint text;
     text.setAntiAlias(true);
 
-    SkFont font(ToolUtils::create_portable_typeface(), 12);
-
     canvas->translate(0, TILE_GAP);
-    canvas->drawString(desc, 0, 0, font, text);
+    canvas->drawString(desc, 0, 0, SkFont(), text);
     canvas->translate(0, TILE_GAP);
 
     SkPaint paint;
@@ -154,7 +150,7 @@ protected:
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 
 DEF_GM(return new DegenerateGradientGM;)

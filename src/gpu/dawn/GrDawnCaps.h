@@ -18,7 +18,9 @@ public:
     GrDawnCaps(const GrContextOptions& contextOptions);
 
     bool isFormatSRGB(const GrBackendFormat&) const override;
+    SkImage::CompressionType compressionType(const GrBackendFormat&) const override;
 
+    bool isFormatTexturableAndUploadable(GrColorType, const GrBackendFormat& format) const override;
     bool isFormatRenderable(const GrBackendFormat& format,
                             int sampleCount = 1) const override;
     bool isFormatAsColorTypeRenderable(GrColorType ct, const GrBackendFormat& format,
@@ -35,7 +37,11 @@ public:
         return {surfaceColorType, GrColorTypeBytesPerPixel(surfaceColorType)};
     }
 
-    SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const override;
+    SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const override {
+        return SurfaceReadPixelsSupport::kSupported;
+    }
+
+    size_t bytesPerPixel(const GrBackendFormat&) const override;
 
     int getRenderTargetSampleCount(int requestedCount,
                                    const GrBackendFormat&) const override;
@@ -44,25 +50,30 @@ public:
 
     GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override;
 
-    GrSwizzle getWriteSwizzle(const GrBackendFormat&, GrColorType) const override;
+    GrSwizzle getReadSwizzle(const GrBackendFormat&, GrColorType) const override;
+
+    GrSwizzle getOutputSwizzle(const GrBackendFormat&, GrColorType) const override;
 
     uint64_t computeFormatKey(const GrBackendFormat&) const override;
 
-    GrProgramDesc makeDesc(GrRenderTarget*,
-                           const GrProgramInfo&,
-                           ProgramDescOverrideFlags) const override;
+    GrColorType getYUVAColorTypeFromBackendFormat(const GrBackendFormat&,
+                                                  bool isAlphaChannel) const override;
+
+    GrProgramDesc makeDesc(const GrRenderTarget*, const GrProgramInfo&) const override;
 
 #if GR_TEST_UTILS
     std::vector<TestFormatColorTypeCombination> getTestingCombinations() const override;
 #endif
 
 private:
-    bool onSurfaceSupportsWritePixels(const GrSurface* surface) const override;
+    bool onSurfaceSupportsWritePixels(const GrSurface* surface) const override {
+        return true;
+    }
     bool onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
         const SkIRect& srcRect, const SkIPoint& dstPoint) const override {
         return true;
     }
-    GrBackendFormat onGetDefaultBackendFormat(GrColorType) const override;
+    GrBackendFormat onGetDefaultBackendFormat(GrColorType, GrRenderable) const override;
 
     bool onAreColorTypeAndFormatCompatible(GrColorType, const GrBackendFormat&) const override;
 
@@ -72,9 +83,7 @@ private:
         return { srcColorType, GrColorTypeBytesPerPixel(srcColorType) };
     }
 
-    GrSwizzle onGetReadSwizzle(const GrBackendFormat&, GrColorType) const override;
-
-    using INHERITED = GrCaps;
+    typedef GrCaps INHERITED;
 };
 
 #endif

@@ -44,21 +44,20 @@ public:
      * be supplied to skip the shader compilation.
      * @return the created program if generation was successful.
      */
-    static sk_sp<GrGLProgram> CreateProgram(GrDirectContext*,
+    static sk_sp<GrGLProgram> CreateProgram(GrGLGpu*,
+                                            GrRenderTarget*,
                                             const GrProgramDesc&,
                                             const GrProgramInfo&,
                                             const GrGLPrecompiledProgram* = nullptr);
 
-    static bool PrecompileProgram(GrDirectContext*, GrGLPrecompiledProgram*, const SkData&);
+    static bool PrecompileProgram(GrGLPrecompiledProgram*, GrGLGpu*, const SkData&);
 
     const GrCaps* caps() const override;
 
     GrGLGpu* gpu() const { return fGpu; }
 
-    SkSL::Compiler* shaderCompiler() const override;
-
 private:
-    GrGLProgramBuilder(GrGLGpu*, const GrProgramDesc&, const GrProgramInfo&);
+    GrGLProgramBuilder(GrGLGpu*, GrRenderTarget*, const GrProgramDesc&, const GrProgramInfo&);
 
     void addInputVars(const SkSL::Program::Inputs& inputs);
     bool compileAndAttachShaders(const SkSL::String& glsl,
@@ -67,8 +66,7 @@ private:
                                  SkTDArray<GrGLuint>* shaderIds,
                                  GrContextOptions::ShaderErrorHandler* errorHandler);
 
-    void computeCountsAndStrides(GrGLuint programID,
-                                 const GrGeometryProcessor&,
+    void computeCountsAndStrides(GrGLuint programID, const GrPrimitiveProcessor& primProc,
                                  bool bindAttribLocations);
     void storeShaderInCache(const SkSL::Program::Inputs& inputs, GrGLuint programID,
                             const SkSL::String shaders[], bool isSkSL,
@@ -102,6 +100,6 @@ private:
     // (all remaining bytes) char[] binary
     sk_sp<SkData> fCached;
 
-    using INHERITED = GrGLSLProgramBuilder;
+    typedef GrGLSLProgramBuilder INHERITED;
 };
 #endif

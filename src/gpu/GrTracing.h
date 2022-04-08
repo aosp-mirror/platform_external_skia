@@ -12,6 +12,8 @@
 
 #include "src/gpu/GrAuditTrail.h"
 
+class GrContext;
+
 /**
  * Context level GrTracing macros, classname and op are const char*, context is GrContext
  */

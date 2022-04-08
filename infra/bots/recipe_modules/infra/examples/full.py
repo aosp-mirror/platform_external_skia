@@ -21,8 +21,9 @@ DEPS = [
 
 def RunSteps(api):
   api.vars.setup()
-  with api.context(env=api.infra.go_env):
-    api.step('hello', cmd=['echo', 'hello world'])
+  api.infra.go_version()
+  with api.infra.MetadataFetch(api, 'key', 'file'):
+    pass
 
 
 def GenTests(api):

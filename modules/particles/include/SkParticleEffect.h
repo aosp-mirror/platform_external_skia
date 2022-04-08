@@ -14,25 +14,27 @@
 #include "include/core/SkString.h"
 #include "include/private/SkTArray.h"
 #include "include/private/SkTemplates.h"
+#include "include/utils/SkRandom.h"
 #include "modules/particles/include/SkParticleData.h"
+#include "src/sksl/SkSLInterpreter.h"
 
 #include <memory>
-#include <vector>
 
 class SkCanvas;
 class SkFieldVisitor;
 class SkParticleBinding;
 class SkParticleDrawable;
-struct SkParticleProgram;
+class SkParticleExternalValue;
+
+static constexpr int INTERPRETER_WIDTH = 8;
 
 namespace skresources {
     class ResourceProvider;
-}  // namespace skresources
+}
 
 namespace SkSL {
-    class ExternalFunction;
-    struct UniformInfo;
-}  // namespace SkSL
+    class ByteCode;
+}
 
 class SkParticleEffectParams : public SkRefCnt {
 public:
@@ -45,7 +47,8 @@ public:
     // See SkParticleDrawable::Make*
     sk_sp<SkParticleDrawable> fDrawable;
 
-    // Particle behavior is driven by SkSL code. Effect functions get a mutable Effect struct:
+    // Particle behavior is driven by two chunks of SkSL code. Effect functions are defined in
+    // fEffectCode, and get a mutable Effect struct:
     //
     // struct Effect {
     //   float age;       // Normalized age of the effect
@@ -64,11 +67,10 @@ public:
     //   float  spin  = 0;               // Angular velocity, in (radians / second)
     //   float4 color = { 1, 1, 1, 1 };  // RGBA color
     //   float  frame = 0;               // Normalized sprite index for multi-frame drawables
-    //   float  seed  = 0;               // Random value, used with rand() (see below)
     // };
     //
-    // Particle functions get a mutable Particle struct, as well as a uniform copy of the current
-    // Effect, named 'effect'.
+    // Particle functions are defined in fParticleCode, and get a mutable Particle struct, as well
+    // as a uniform copy of the current Effect, named 'effect'.
     //
     // struct Particle {
     //   float  age;
@@ -80,25 +82,24 @@ public:
     //   float  spin;
     //   float4 color;
     //   float  frame;
-    //   float  seed;
     // };
     //
-    // All functions have access to a global function named 'rand'. It takes a float seed value,
-    // which it uses and updates (using a PRNG). It returns a random floating point value in [0, 1].
-    // Typical usage is to pass the particle or effect's seed value to rand.
-    // For particle functions, the seed is rewound after each update, so calls to 'rand(p.seed)'
-    // will return consistent values from one update to the next.
+    // All functions have access to a global variable named 'rand'. Every read of 'rand' returns a
+    // random floating point value in [0, 1). For particle functions, the state is rewound after
+    // each update, so calls to 'rand' will return consistent values from one update to the next.
     //
     // Finally, there is one global uniform values available, 'dt'. This is a floating point
     // number of seconds that have elapsed since the last update.
     //
-    // There are four functions that can be defined in fCode:
+    // Effect code should define two functions:
     //
     // 'void effectSpawn(inout Effect e)' is called when an instance of the effect is first
     // created, and again at every loop point (if the effect is played with the looping flag).
     //
     // 'void effectUpdate(inout Effect e)' is called once per update to adjust properties of the
     // effect (ie emitter).
+    //
+    // Particle code should also define two functions:
     //
     // 'void spawn(inout Particle p)' is called once for each particle when it is first created,
     // to set initial values. At a minimum, this should set 'lifetime' to the number of seconds
@@ -108,7 +109,8 @@ public:
     // SkParticleEffect's update() method. It can animate any of the particle's values. Note that
     // the 'lifetime' field has a different meaning in 'update', and should not be used or changed.
 
-    SkString fCode;
+    SkString fEffectCode;
+    SkString fParticleCode;
 
     // External objects accessible by the effect's SkSL code. Each binding is a name and particular
     // kind of object. See SkParticleBinding::Make* for details.
@@ -122,16 +124,26 @@ public:
 private:
     friend class SkParticleEffect;
 
-    std::unique_ptr<SkParticleProgram> fProgram;
+    // Cached
+    template<int width>
+    struct Program {
+        std::unique_ptr<SkSL::Interpreter<width>> fInterpreter;
+        SkTArray<std::unique_ptr<SkParticleExternalValue>> fExternalValues;
+    };
+
+    // for performance it would be better to run this with a Program<1>, but for code-size reasons
+    // we stick to INTERPRETER_WIDTH
+    Program<INTERPRETER_WIDTH> fEffectProgram;
+    Program<INTERPRETER_WIDTH> fParticleProgram;
 };
 
 class SkParticleEffect : public SkRefCnt {
 public:
-    SkParticleEffect(sk_sp<SkParticleEffectParams> params);
+    SkParticleEffect(sk_sp<SkParticleEffectParams> params, const SkRandom& random);
 
     // Start playing this effect, specifying initial values for the emitter's properties
     void start(double now, bool looping, SkPoint position, SkVector heading, float scale,
-               SkVector velocity, float spin, SkColor4f color, float frame, float seed);
+               SkVector velocity, float spin, SkColor4f color, float frame, uint32_t flags);
 
     // Start playing this effect, with default values for the emitter's properties
     void start(double now, bool looping) {
@@ -143,13 +155,16 @@ public:
                     0.0f,                        // spin
                     { 1.0f, 1.0f, 1.0f, 1.0f },  // color
                     0.0f,                        // sprite frame
-                    0.0f);                       // seed
+                    0);                          // flags
     }
 
     void update(double now);
     void draw(SkCanvas* canvas);
 
-    bool isAlive() const { return (fState.fAge >= 0 && fState.fAge <= 1); }
+    bool isAlive(bool includeSubEffects = true) const {
+        return (fState.fAge >= 0 && fState.fAge <= 1)
+            || (includeSubEffects && !fSubEffects.empty());
+    }
     int getCount() const { return fCount; }
 
     float     getRate()     const { return fState.fRate;     }
@@ -161,6 +176,7 @@ public:
     float     getSpin()     const { return fState.fSpin;     }
     SkColor4f getColor()    const { return fState.fColor;    }
     float     getFrame()    const { return fState.fFrame;    }
+    uint32_t  getFlags()    const { return fState.fFlags;    }
 
     void setRate    (float     r) { fState.fRate     = r; }
     void setBurst   (int       b) { fState.fBurst    = b; }
@@ -171,33 +187,40 @@ public:
     void setSpin    (float     s) { fState.fSpin     = s; }
     void setColor   (SkColor4f c) { fState.fColor    = c; }
     void setFrame   (float     f) { fState.fFrame    = f; }
+    void setFlags   (uint32_t  f) { fState.fFlags    = f; }
 
-    const SkSL::UniformInfo* uniformInfo() const;
-    float* uniformData() { return fUniforms.data(); }
+    const SkSL::ByteCode* effectCode() const {
+        return fParams->fEffectProgram.fInterpreter ?
+               &fParams->fEffectProgram.fInterpreter->getCode() :
+               nullptr;
+    }
 
-    // Sets named uniform to the data in 'val'. 'count' must be equal to the total number of floats
-    // in the uniform (eg, the number of elements in a vector). Returns false if the uniform isn't
-    // found, or if count is incorrect. Returns true if the value is changed successfully.
-    bool setUniform(const char* name, const float* val, int count);
+    const SkSL::ByteCode* particleCode() const {
+        return fParams->fParticleProgram.fInterpreter ?
+               &fParams->fParticleProgram.fInterpreter->getCode() :
+               nullptr;
+    }
+
+    float* effectUniforms() { return fEffectUniforms.data(); }
+    float* particleUniforms() { return fParticleUniforms.data(); }
 
     static void RegisterParticleTypes();
 
 private:
     void setCapacity(int capacity);
-    void updateStorage();
 
     // Helpers to break down update
     void advanceTime(double now);
 
-    enum class EntryPoint {
-        kSpawn,
-        kUpdate,
-    };
+    void processEffectSpawnRequests(double now);
+    void runEffectScript(double now, const char* entry);
 
-    void runEffectScript(EntryPoint entryPoint);
-    void runParticleScript(EntryPoint entryPoint, int start, int count);
+    void processParticleSpawnRequests(double now, int start);
+    void runParticleScript(double now, const char* entry, int start, int count);
 
-    sk_sp<SkParticleEffectParams> fParams;
+    sk_sp<SkParticleEffectParams>        fParams;
+
+    SkRandom fRandom;
 
     bool   fLooping;
     int    fCount;
@@ -205,7 +228,7 @@ private:
     float  fSpawnRemainder;
 
     // C++ version of the SkSL Effect struct. This is the inout parameter to per-effect scripts,
-    // and provided as a uniform (named 'effect') to all scripts.
+    // and provided as a uniform (named 'effect') to the per-particle scripts.
     struct EffectState {
         float fAge;
         float fLifetime;
@@ -221,18 +244,36 @@ private:
         float     fSpin;
         SkColor4f fColor;
         float     fFrame;
-        float     fRandom;
+        uint32_t  fFlags;
     };
     EffectState fState;
 
-    SkParticles          fParticles;
-    SkAutoTMalloc<float> fStableRandoms;
+    SkParticles             fParticles;
+    SkAutoTMalloc<SkRandom> fStableRandoms;
 
     // Cached
-    int fCapacity = 0;
-    SkTArray<float, true> fUniforms;
+    int fCapacity;
+    SkTArray<float, true> fEffectUniforms;
+    SkTArray<float, true> fParticleUniforms;
 
-    friend struct SkParticleProgram;
+    // Private interface used by SkEffectBinding and SkEffectExternalValue to spawn sub effects
+    friend class SkEffectExternalValue;
+    struct SpawnRequest {
+        SpawnRequest(int index, bool loop, sk_sp<SkParticleEffectParams> params)
+            : fIndex(index)
+            , fLoop(loop)
+            , fParams(std::move(params)) {}
+
+        int fIndex;
+        bool fLoop;
+        sk_sp<SkParticleEffectParams> fParams;
+    };
+    void addSpawnRequest(int index, bool loop, sk_sp<SkParticleEffectParams> params) {
+        fSpawnRequests.emplace_back(index, loop, std::move(params));
+    }
+    SkTArray<SpawnRequest> fSpawnRequests;
+
+    SkTArray<sk_sp<SkParticleEffect>> fSubEffects;
 };
 
 #endif // SkParticleEffect_DEFINED

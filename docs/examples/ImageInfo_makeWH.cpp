@@ -6,15 +6,13 @@ REG_FIDDLE(ImageInfo_makeWH, 256, 144, false, 3) {
 void draw(SkCanvas* canvas) {
     SkImageInfo canvasImageInfo = canvas->imageInfo();
     SkRect canvasBounds = SkRect::Make(canvasImageInfo.bounds());
-    canvas->drawImageRect(image, SkRect::Make(source.bounds()), canvasBounds, SkSamplingOptions(),
-                          nullptr, SkCanvas::kStrict_SrcRectConstraint);
+    canvas->drawBitmapRect(source, source.bounds(), canvasBounds, nullptr);
     SkImageInfo insetImageInfo =
               canvasImageInfo.makeWH(canvasBounds.width() / 2, canvasBounds.height() / 2);
     SkBitmap inset;
     inset.allocPixels(insetImageInfo);
     SkCanvas offscreen(inset);
-    offscreen.drawImageRect(image, SkRect::Make(source.bounds()), SkRect::Make(inset.bounds()),
-                            SkSamplingOptions(), nullptr, SkCanvas::kStrict_SrcRectConstraint);
-    canvas->drawImage(inset.asImage(), canvasBounds.width() / 4, canvasBounds.height() / 4);
+    offscreen.drawBitmapRect(source, source.bounds(), SkRect::Make(inset.bounds()), nullptr);
+    canvas->drawBitmap(inset, canvasBounds.width() / 4, canvasBounds.height() / 4);
 }
 }  // END FIDDLE

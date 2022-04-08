@@ -38,7 +38,8 @@ protected:
         this->INHERITED::begin(uvBounds, dst);
     }
 
-    void next(const SkPoint& loc, int u, int v, SkPath* dst) const override {
+    virtual void next(const SkPoint& loc, int u, int v,
+                      SkPath* dst) const override {
         if (fPts) {
             *fPts->append() = loc;
         }
@@ -55,7 +56,7 @@ private:
     SkScalar fRadius;
     SkTDArray<SkPoint>* fPts;
 
-    using INHERITED = Sk2DPathEffect;
+    typedef Sk2DPathEffect INHERITED;
 };
 
 // Register this path effect as deserializable before main().
@@ -65,7 +66,7 @@ namespace {
             SK_REGISTER_FLATTENABLE(Dot2DPathEffect);
         }
     } initializer;
-}  // namespace
+}
 
 
 sk_sp<SkFlattenable> Dot2DPathEffect::CreateProc(SkReadBuffer& buffer) {
@@ -77,7 +78,8 @@ sk_sp<SkFlattenable> Dot2DPathEffect::CreateProc(SkReadBuffer& buffer) {
 class InverseFillPE : public SkPathEffect {
 public:
     InverseFillPE() {}
-    bool onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, const SkRect*) const override {
+    virtual bool onFilterPath(SkPath* dst, const SkPath& src,
+                              SkStrokeRec*, const SkRect*) const override {
         *dst = src;
         dst->setFillType(SkPathFillType::kInverseWinding);
         return true;
@@ -86,9 +88,7 @@ public:
 private:
     SK_FLATTENABLE_HOOKS(InverseFillPE)
 
-    bool computeFastBounds(SkRect* bounds) const override { return false; }
-
-    using INHERITED = SkPathEffect;
+    typedef SkPathEffect INHERITED;
 };
 
 sk_sp<SkFlattenable> InverseFillPE::CreateProc(SkReadBuffer& buffer) {
@@ -164,7 +164,7 @@ protected:
     }
 
 private:
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

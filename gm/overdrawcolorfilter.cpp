@@ -10,7 +10,6 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkColorFilter.h"
-#include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkRefCnt.h"
@@ -30,10 +29,8 @@ static inline void set_bitmap(SkBitmap* bitmap, uint8_t alpha) {
     bitmap->notifyPixelsChanged();
 }
 
-struct OverdrawColorFilter : public skiagm::GM {
-    SkString onShortName() override {
-        return SkString{"overdrawcolorfilter"};
-    }
+class OverdrawColorFilter : public skiagm::GM {
+    SkString onShortName() override { return SkString("overdrawcolorfilter"); }
 
     SkISize onISize() override { return {200, 400}; }
 
@@ -43,26 +40,26 @@ struct OverdrawColorFilter : public skiagm::GM {
         };
 
         SkPaint paint;
-        paint.setColorFilter(SkOverdrawColorFilter::MakeWithSkColors(colors));
-        SkSamplingOptions sampling;
+        sk_sp<SkColorFilter> colorFilter = SkOverdrawColorFilter::MakeWithSkColors(colors);
+        paint.setColorFilter(colorFilter);
 
         SkImageInfo info = SkImageInfo::MakeA8(100, 100);
         SkBitmap bitmap;
         bitmap.allocPixels(info);
         set_bitmap(&bitmap, 0);
-        canvas->drawImage(bitmap.asImage(), 0, 0, sampling, &paint);
+        canvas->drawBitmap(bitmap, 0, 0, &paint);
         set_bitmap(&bitmap, 1);
-        canvas->drawImage(bitmap.asImage(), 0, 100, sampling, &paint);
+        canvas->drawBitmap(bitmap, 0, 100, &paint);
         set_bitmap(&bitmap, 2);
-        canvas->drawImage(bitmap.asImage(), 0, 200, sampling, &paint);
+        canvas->drawBitmap(bitmap, 0, 200, &paint);
         set_bitmap(&bitmap, 3);
-        canvas->drawImage(bitmap.asImage(), 0, 300, sampling, &paint);
+        canvas->drawBitmap(bitmap, 0, 300, &paint);
         set_bitmap(&bitmap, 4);
-        canvas->drawImage(bitmap.asImage(), 100, 0, sampling, &paint);
+        canvas->drawBitmap(bitmap, 100, 0, &paint);
         set_bitmap(&bitmap, 5);
-        canvas->drawImage(bitmap.asImage(), 100, 100, sampling, &paint);
+        canvas->drawBitmap(bitmap, 100, 100, &paint);
         set_bitmap(&bitmap, 6);
-        canvas->drawImage(bitmap.asImage(), 100, 200, sampling, &paint);
+        canvas->drawBitmap(bitmap, 100, 200, &paint);
     }
 };
 

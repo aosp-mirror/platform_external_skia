@@ -9,46 +9,11 @@
 
 #include "src/gpu/GrOpFlushState.h"
 #include "src/gpu/GrOpsRenderPass.h"
-#include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrResourceProvider.h"
 
 GrMeshDrawOp::GrMeshDrawOp(uint32_t classID) : INHERITED(classID) {}
 
 void GrMeshDrawOp::onPrepare(GrOpFlushState* state) { this->onPrepareDraws(state); }
-
-void GrMeshDrawOp::createProgramInfo(Target* target) {
-    this->createProgramInfo(&target->caps(),
-                            target->allocator(),
-                            target->writeView(),
-                            target->detachAppliedClip(),
-                            target->dstProxyView(),
-                            target->renderPassBarriers(),
-                            target->colorLoadOp());
-}
-
-// This onPrepareDraws implementation assumes the derived Op only has a single programInfo -
-// which is the majority of the cases.
-void GrMeshDrawOp::onPrePrepareDraws(GrRecordingContext* context,
-                                     const GrSurfaceProxyView& writeView,
-                                     GrAppliedClip* clip,
-                                     const GrXferProcessor::DstProxyView& dstProxyView,
-                                     GrXferBarrierFlags renderPassXferBarriers,
-                                     GrLoadOp colorLoadOp) {
-    SkArenaAlloc* arena = context->priv().recordTimeAllocator();
-
-    // This is equivalent to a GrOpFlushState::detachAppliedClip
-    GrAppliedClip appliedClip = clip ? std::move(*clip) : GrAppliedClip::Disabled();
-
-    this->createProgramInfo(context->priv().caps(), arena, writeView,
-                            std::move(appliedClip), dstProxyView, renderPassXferBarriers,
-                            colorLoadOp);
-
-    // TODO: at this point we've created both the program info and desc in the recording context's
-    // arena. In the DDL case, it would be cool if 'recordProgramInfo' could return the
-    // pre-existing versions if the program has already been seen. We could then return the
-    // memory for the current copy to the arena.
-    context->priv().recordProgramInfo(this->programInfo());
-}
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -82,9 +47,9 @@ void GrMeshDrawOp::PatternHelper::init(Target* target, GrPrimitiveType primitive
 
     SkASSERT(maxRepetitions ==
              static_cast<int>(indexBuffer->size() / (sizeof(uint16_t) * indicesPerRepetition)));
-    fMesh->setIndexedPatterned(std::move(indexBuffer), indicesPerRepetition, repeatCount,
-                               maxRepetitions, std::move(vertexBuffer), verticesPerRepetition,
-                               firstVertex);
+    fMesh->setIndexedPatterned(std::move(indexBuffer), indicesPerRepetition, verticesPerRepetition,
+                               repeatCount, maxRepetitions);
+    fMesh->setVertexData(std::move(vertexBuffer), firstVertex);
 }
 
 void GrMeshDrawOp::PatternHelper::recordDraw(Target* target, const GrGeometryProcessor* gp) const {
@@ -92,10 +57,9 @@ void GrMeshDrawOp::PatternHelper::recordDraw(Target* target, const GrGeometryPro
 }
 
 void GrMeshDrawOp::PatternHelper::recordDraw(
-        Target* target,
-        const GrGeometryProcessor* gp,
-        const GrSurfaceProxy* const primProcProxies[]) const {
-    target->recordDraw(gp, fMesh, 1, primProcProxies, fPrimitiveType);
+        Target* target, const GrGeometryProcessor* gp,
+        const GrPipeline::FixedDynamicState* fixedDynamicState) const {
+    target->recordDraw(gp, fMesh, 1, fixedDynamicState, nullptr, fPrimitiveType);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -110,4 +74,45 @@ GrMeshDrawOp::QuadHelper::QuadHelper(Target* target, size_t vertexStride, int qu
                GrResourceProvider::NumVertsPerNonAAQuad(),
                GrResourceProvider::NumIndicesPerNonAAQuad(), quadsToDraw,
                GrResourceProvider::MaxNumNonAAQuads());
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+GrPipeline::DynamicStateArrays* GrMeshDrawOp::Target::AllocDynamicStateArrays(
+        SkArenaAlloc* arena, int numMeshes, int numPrimitiveProcessorTextures,
+        bool allocScissors) {
+
+    auto result = arena->make<GrPipeline::DynamicStateArrays>();
+
+    if (allocScissors) {
+        result->fScissorRects = arena->makeArray<SkIRect>(numMeshes);
+    }
+
+    if (numPrimitiveProcessorTextures) {
+        result->fPrimitiveProcessorTextures = arena->makeArrayDefault<GrSurfaceProxy*>(
+                        numPrimitiveProcessorTextures * numMeshes);
+    }
+
+    return result;
+}
+
+GrPipeline::FixedDynamicState* GrMeshDrawOp::Target::MakeFixedDynamicState(
+        SkArenaAlloc* arena, const GrAppliedClip* clip, int numPrimProcTextures) {
+
+    bool haveScissor = clip && clip->scissorState().enabled();
+
+    if (haveScissor || numPrimProcTextures) {
+        auto result = arena->make<GrPipeline::FixedDynamicState>();
+
+        if (haveScissor) {
+            result->fScissorRect = clip->scissorState().rect();
+        }
+
+        if (numPrimProcTextures) {
+            result->fPrimitiveProcessorTextures = arena->makeArrayDefault<GrSurfaceProxy*>(
+                        numPrimProcTextures);
+        }
+        return result;
+    }
+    return nullptr;
 }

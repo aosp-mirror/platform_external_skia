@@ -68,7 +68,7 @@ protected:
             SkImageFilters::Blur(5, 5, nullptr),
             SkImageFilters::DropShadow(10, 10, 3, 3, SK_ColorGREEN, nullptr),
             SkImageFilters::Offset(-16, 32, nullptr),
-            SkImageFilters::MatrixTransform(resizeMatrix, SkSamplingOptions(), nullptr),
+            SkImageFilters::MatrixTransform(resizeMatrix, kNone_SkFilterQuality, nullptr),
         };
 
         SkRect r = SkRect::MakeWH(64, 64);
@@ -102,11 +102,11 @@ protected:
     }
 
 private:
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new ImageFiltersStrokedGM;)
 
-}  // namespace skiagm
+}

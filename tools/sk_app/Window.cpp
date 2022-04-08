@@ -76,25 +76,20 @@ void Window::onPaint() {
     if (!fWindowContext) {
         return;
     }
-    if (!fIsActive) {
-        return;
-    }
-    sk_sp<SkSurface> backbuffer = fWindowContext->getBackbufferSurface();
-    if (backbuffer == nullptr) {
-        printf("no backbuffer!?\n");
-        // TODO: try recreating testcontext
-        return;
-    }
-
     markInvalProcessed();
-
-    // draw into the canvas of this surface
     this->visitLayers([](Layer* layer) { layer->onPrePaint(); });
-    this->visitLayers([=](Layer* layer) { layer->onPaint(backbuffer.get()); });
+    sk_sp<SkSurface> backbuffer = fWindowContext->getBackbufferSurface();
+    if (backbuffer) {
+        // draw into the canvas of this surface
+        this->visitLayers([=](Layer* layer) { layer->onPaint(backbuffer.get()); });
 
-    backbuffer->flushAndSubmit();
+        backbuffer->flush();
 
-    fWindowContext->swapBuffers();
+        fWindowContext->swapBuffers();
+    } else {
+        printf("no backbuffer!?\n");
+        // try recreating testcontext
+    }
 }
 
 void Window::onResize(int w, int h) {
@@ -103,13 +98,6 @@ void Window::onResize(int w, int h) {
     }
     fWindowContext->resize(w, h);
     this->visitLayers([=](Layer* layer) { layer->onResize(w, h); });
-}
-
-void Window::onActivate(bool isActive) {
-    if (fWindowContext) {
-        fWindowContext->activate(isActive);
-    }
-    fIsActive = isActive;
 }
 
 int Window::width() const {
@@ -147,11 +135,11 @@ int Window::stencilBits() const {
     return fWindowContext->stencilBits();
 }
 
-GrDirectContext* Window::directContext() const {
+GrContext* Window::getGrContext() const {
     if (!fWindowContext) {
         return nullptr;
     }
-    return fWindowContext->directContext();
+    return fWindowContext->getGrContext();
 }
 
 void Window::inval() {

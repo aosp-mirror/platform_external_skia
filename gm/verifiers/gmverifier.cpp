@@ -67,16 +67,13 @@ SkBitmap GMVerifier::RenderGoldBmp(skiagm::GM* gm, const SkColorInfo& colorInfo)
     SkBitmap goldBmp;
     goldBmp.allocPixels(SkImageInfo::Make(size, colorInfo));
     SkCanvas canvas(goldBmp);
-
-    if (gm->gpuSetup(nullptr, &canvas) == DrawResult::kOk) {
-        gm->draw(&canvas);
-    }
+    gm->draw(&canvas);
 
     // Convert into common verifier colorspace.
     SkBitmap goldVerifierBmp;
     goldVerifierBmp.allocPixels(SkImageInfo::Make(size, VerifierColorInfo()));
     SkCanvas verifierCanvas(goldVerifierBmp);
-    verifierCanvas.drawImage(goldBmp.asImage(), 0, 0);
+    verifierCanvas.drawBitmap(goldBmp, 0, 0);
 
     return goldVerifierBmp;
 }
@@ -127,5 +124,5 @@ VerifierResult VerifierList::verifyAll(const SkColorInfo& colorInfo, const SkBit
     return VerifierResult::Ok();
 }
 
-}  // namespace verifiers
-}  // namespace skiagm
+}
+}

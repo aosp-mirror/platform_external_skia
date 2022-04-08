@@ -13,7 +13,6 @@
 
 class SkPath;
 class SkMatrix;
-class SkString;
 
 /** \class SkRRect
     SkRRect describes a rounded rectangle with a bounds and a pair of radii for each corner.
@@ -185,7 +184,21 @@ public:
 
         @param oval  bounds of oval
     */
-    void setOval(const SkRect& oval);
+    void setOval(const SkRect& oval) {
+        if (!this->initializeRect(oval)) {
+            return;
+        }
+
+        SkScalar xRad = SkScalarHalf(fRect.width());
+        SkScalar yRad = SkScalarHalf(fRect.height());
+
+        for (int i = 0; i < 4; ++i) {
+            fRadii[i].set(xRad, yRad);
+        }
+        fType = kOval_Type;
+
+        SkASSERT(this->isValid());
+    }
 
     /** Sets to rounded rectangle with the same radii for all four corners.
         If rect is empty, sets to kEmpty_Type.
@@ -462,7 +475,6 @@ public:
         example: https://fiddle.skia.org/c/@RRect_dump
     */
     void dump(bool asHex) const;
-    SkString dumpToString(bool asHex) const;
 
     /** Writes text representation of SkRRect to standard output. The representation
         may be directly compiled as C++ code. Floating point values are written
@@ -494,8 +506,7 @@ private:
 
     void computeType();
     bool checkCornerContainment(SkScalar x, SkScalar y) const;
-    // Returns true if the radii had to be scaled to fit rect
-    bool scaleRadii();
+    void scaleRadii(const SkRect& rect);
 
     SkRect fRect = SkRect::MakeEmpty();
     // Radii order is UL, UR, LR, LL. Use Corner enum to index into fRadii[]

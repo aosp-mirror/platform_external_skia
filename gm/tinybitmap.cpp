@@ -21,7 +21,7 @@ class TinyBitmapGM : public skiagm::GM {
 
     SkString onShortName() override { return SkString("tinybitmap"); }
 
-    SkISize onISize() override { return SkISize::Make(100, 100); }
+    virtual SkISize onISize() override { return SkISize::Make(100, 100); }
 
     void onDraw(SkCanvas* canvas) override {
         SkBitmap bm;
@@ -29,11 +29,10 @@ class TinyBitmapGM : public skiagm::GM {
         *bm.getAddr32(0, 0) = SkPackARGB32(0x80, 0x80, 0, 0);
         SkPaint paint;
         paint.setAlphaf(0.5f);
-        paint.setShader(bm.makeShader(SkTileMode::kRepeat, SkTileMode::kMirror,
-                                      SkSamplingOptions()));
+        paint.setShader(bm.makeShader(SkTileMode::kRepeat, SkTileMode::kMirror));
         canvas->drawPaint(paint);
     }
 };
-}  // namespace
+}
 
 DEF_GM( return new TinyBitmapGM; )

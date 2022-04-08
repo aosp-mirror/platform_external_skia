@@ -14,7 +14,7 @@
 #include <utility>
 
 #ifdef SK_XML
-#include "modules/svg/include/SkSVGDOM.h"
+#include "experimental/svg/model/SkSVGDOM.h"
 #include "src/xml/SkDOM.h"
 #endif
 
@@ -28,7 +28,12 @@ sk_sp<BisectSlide> BisectSlide::Create(const char filepath[]) {
     sk_sp<BisectSlide> bisect(new BisectSlide(filepath));
     if (bisect->fFilePath.endsWith(".svg")) {
 #ifdef SK_XML
-        sk_sp<SkSVGDOM> svg = SkSVGDOM::MakeFromStream(stream);
+        SkDOM xml;
+        if (!xml.build(stream)) {
+            SkDebugf("BISECT: XML parsing failed: \"%s\"\n", filepath);
+            return nullptr;
+        }
+        sk_sp<SkSVGDOM> svg = SkSVGDOM::MakeFromDOM(xml);
         if (!svg) {
             SkDebugf("BISECT: couldn't load svg at \"%s\"\n", filepath);
             return nullptr;

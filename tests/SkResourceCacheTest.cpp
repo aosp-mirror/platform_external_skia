@@ -11,7 +11,7 @@
 #include "include/core/SkPictureRecorder.h"
 #include "include/core/SkSurface.h"
 #include "src/core/SkBitmapCache.h"
-#include "src/core/SkMipmap.h"
+#include "src/core/SkMipMap.h"
 #include "src/core/SkResourceCache.h"
 #include "src/image/SkImage_Base.h"
 #include "src/lazy/SkDiscardableMemoryPool.h"
@@ -43,17 +43,17 @@ static void test_mipmapcache(skiatest::Reporter* reporter, SkResourceCache* cach
     SkBitmap src;
     src.allocN32Pixels(5, 5);
     src.setImmutable();
-    sk_sp<SkImage> img = src.asImage();
+    sk_sp<SkImage> img = SkImage::MakeFromBitmap(src);
     const auto desc = SkBitmapCacheDesc::Make(img.get());
 
-    const SkMipmap* mipmap = SkMipmapCache::FindAndRef(desc, cache);
+    const SkMipMap* mipmap = SkMipMapCache::FindAndRef(desc, cache);
     REPORTER_ASSERT(reporter, nullptr == mipmap);
 
-    mipmap = SkMipmapCache::AddAndRef(as_IB(img.get()), cache);
+    mipmap = SkMipMapCache::AddAndRef(as_IB(img.get()), cache);
     REPORTER_ASSERT(reporter, mipmap);
 
     {
-        const SkMipmap* mm = SkMipmapCache::FindAndRef(desc, cache);
+        const SkMipMap* mm = SkMipMapCache::FindAndRef(desc, cache);
         REPORTER_ASSERT(reporter, mm);
         REPORTER_ASSERT(reporter, mm == mipmap);
         mm->unref();
@@ -67,7 +67,7 @@ static void test_mipmapcache(skiatest::Reporter* reporter, SkResourceCache* cach
     check_data(reporter, mipmap, 1, kInCache, kNotLocked);
 
     // find us again
-    mipmap = SkMipmapCache::FindAndRef(desc, cache);
+    mipmap = SkMipMapCache::FindAndRef(desc, cache);
     check_data(reporter, mipmap, 2, kInCache, kLocked);
 
     cache->purgeAll();
@@ -85,24 +85,24 @@ static void test_mipmap_notify(skiatest::Reporter* reporter, SkResourceCache* ca
     for (int i = 0; i < N; ++i) {
         src[i].allocN32Pixels(5, 5);
         src[i].setImmutable();
-        img[i] = src[i].asImage();
-        SkMipmapCache::AddAndRef(as_IB(img[i].get()), cache)->unref();
+        img[i] = SkImage::MakeFromBitmap(src[i]);
+        SkMipMapCache::AddAndRef(as_IB(img[i].get()), cache)->unref();
         desc[i] = SkBitmapCacheDesc::Make(img[i].get());
     }
 
     for (int i = 0; i < N; ++i) {
-        const SkMipmap* mipmap = SkMipmapCache::FindAndRef(desc[i], cache);
+        const SkMipMap* mipmap = SkMipMapCache::FindAndRef(desc[i], cache);
         // We're always using a local cache, so we know we won't be purged by other threads
         REPORTER_ASSERT(reporter, mipmap);
         SkSafeUnref(mipmap);
 
         img[i].reset(); // delete the image, which *should not* remove us from the cache
-        mipmap = SkMipmapCache::FindAndRef(desc[i], cache);
+        mipmap = SkMipMapCache::FindAndRef(desc[i], cache);
         REPORTER_ASSERT(reporter, mipmap);
         SkSafeUnref(mipmap);
 
         src[i].reset(); // delete the underlying pixelref, which *should* remove us from the cache
-        mipmap = SkMipmapCache::FindAndRef(desc[i], cache);
+        mipmap = SkMipMapCache::FindAndRef(desc[i], cache);
         REPORTER_ASSERT(reporter, !mipmap);
     }
 }
@@ -110,11 +110,8 @@ static void test_mipmap_notify(skiatest::Reporter* reporter, SkResourceCache* ca
 #include "src/lazy/SkDiscardableMemoryPool.h"
 
 static SkDiscardableMemoryPool* gPool = nullptr;
-static int gFactoryCalls = 0;
-
 static SkDiscardableMemory* pool_factory(size_t bytes) {
     SkASSERT(gPool);
-    gFactoryCalls++;
     return gPool->create(bytes);
 }
 
@@ -137,7 +134,6 @@ DEF_TEST(BitmapCache_discarded_bitmap, reporter) {
         SkResourceCache cache(factory);
         testBitmapCache_discarded_bitmap(reporter, &cache, factory);
     }
-    REPORTER_ASSERT(reporter, gFactoryCalls > 0);
 }
 
 static void test_discarded_image(skiatest::Reporter* reporter, const SkMatrix& transform,
@@ -153,11 +149,14 @@ static void test_discarded_image(skiatest::Reporter* reporter, const SkMatrix& t
 
         sk_sp<SkImage> image(buildImage());
 
+        // always use high quality to ensure caching when scaled
+        SkPaint paint;
+        paint.setFilterQuality(kHigh_SkFilterQuality);
+
         // draw the image (with a transform, to tickle different code paths) to ensure
         // any associated resources get cached
         canvas->concat(transform);
-        // always use high quality to ensure caching when scaled
-        canvas->drawImage(image, 0, 0, SkSamplingOptions({1.0f/3, 1.0f/3}));
+        canvas->drawImage(image, 0, 0, &paint);
 
         const auto desc = SkBitmapCacheDesc::Make(image.get());
 
@@ -182,8 +181,8 @@ DEF_TEST(BitmapCache_discarded_image, reporter) {
     // To exercise the latter, we draw scaled bitmap images using HQ filters.
 
     const SkMatrix xforms[] = {
-        SkMatrix::Scale(1, 1),
-        SkMatrix::Scale(1.7f, 0.5f),
+        SkMatrix::MakeScale(1, 1),
+        SkMatrix::MakeScale(1.7f, 0.5f),
     };
 
     for (size_t i = 0; i < SK_ARRAY_COUNT(xforms); ++i) {

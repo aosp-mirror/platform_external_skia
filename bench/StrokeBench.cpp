@@ -44,7 +44,7 @@ private:
     SkPaint     fPaint;
     SkString    fName;
     SkScalar    fRes;
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

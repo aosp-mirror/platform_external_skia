@@ -15,8 +15,7 @@
 
 namespace SkSL {
 class ShaderCapsFactory;
-class SharedCompiler;
-}  // namespace SkSL
+}
 
 struct GrContextOptions;
 class SkJSONWriter;
@@ -31,8 +30,9 @@ public:
         kNotSupported_AdvBlendEqInteraction,     //<! No _blend_equation_advanced extension
         kAutomatic_AdvBlendEqInteraction,        //<! No interaction required
         kGeneralEnable_AdvBlendEqInteraction,    //<! layout(blend_support_all_equations) out
+        kSpecificEnables_AdvBlendEqInteraction,  //<! Specific layout qualifiers per equation
 
-        kLast_AdvBlendEqInteraction = kGeneralEnable_AdvBlendEqInteraction
+        kLast_AdvBlendEqInteraction = kSpecificEnables_AdvBlendEqInteraction
     };
 
     GrShaderCaps(const GrContextOptions&);
@@ -44,10 +44,10 @@ public:
     bool shaderDerivativeSupport() const { return fShaderDerivativeSupport; }
     bool geometryShaderSupport() const { return fGeometryShaderSupport; }
     bool gsInvocationsSupport() const { return fGSInvocationsSupport; }
+    bool pathRenderingSupport() const { return fPathRenderingSupport; }
     bool dstReadInShaderSupport() const { return fDstReadInShaderSupport; }
     bool dualSourceBlendingSupport() const { return fDualSourceBlendingSupport; }
     bool integerSupport() const { return fIntegerSupport; }
-    bool nonsquareMatrixSupport() const { return fNonsquareMatrixSupport; }
 
     /**
      * Some helper functions for encapsulating various extensions to read FB Buffer on openglES
@@ -72,6 +72,8 @@ public:
 
     bool sampleMaskSupport() const { return fSampleMaskSupport; }
 
+    bool tessellationSupport() const { return fTessellationSupport; }
+
     bool externalTextureSupport() const { return fExternalTextureSupport; }
 
     bool vertexIDSupport() const { return fVertexIDSupport; }
@@ -85,19 +87,17 @@ public:
 
     bool hasLowFragmentPrecision() const { return fHasLowFragmentPrecision; }
 
-    // Use a reduced set of rendering algorithms or less optimal effects in order to
-    // reduce the number of unique shaders generated.
-    bool reducedShaderMode() const { return fReducedShaderMode; }
-
     // SkSL only.
     bool builtinFMASupport() const { return fBuiltinFMASupport; }
-
-    bool builtinDeterminantSupport() const { return fBuiltinDeterminantSupport; }
 
     AdvBlendEqInteraction advBlendEqInteraction() const { return fAdvBlendEqInteraction; }
 
     bool mustEnableAdvBlendEqs() const {
         return fAdvBlendEqInteraction >= kGeneralEnable_AdvBlendEqInteraction;
+    }
+
+    bool mustEnableSpecificAdvBlendEqs() const {
+        return fAdvBlendEqInteraction == kSpecificEnables_AdvBlendEqInteraction;
     }
 
     bool mustDeclareFragmentShaderOutput() const { return fGLSLGeneration > k110_GrGLSLGeneration; }
@@ -127,8 +127,6 @@ public:
     // If true, short ints can't represent every integer in the 16-bit two's complement range as
     // required by the spec. SKSL will always emit full ints.
     bool incompleteShortIntPrecision() const { return fIncompleteShortIntPrecision; }
-
-    bool colorSpaceMathNeedsFloat() const { return fColorSpaceMathNeedsFloat; }
 
     // If true, then conditions in for loops need "&& true" to work around driver bugs.
     bool addAndTrueToLoopCondition() const { return fAddAndTrueToLoopCondition; }
@@ -170,27 +168,10 @@ public:
         return fNoDefaultPrecisionForExternalSamplers;
     }
 
-    // ARM GPUs calculate `matrix * vector` in SPIR-V at full precision, even when the inputs are
-    // RelaxedPrecision. Rewriting the multiply as a sum of vector*scalar fixes this. (skia:11769)
-    bool rewriteMatrixVectorMultiply() const {
-        return fRewriteMatrixVectorMultiply;
-    }
-
-    // ANGLE disallows do loops altogether, and we're seeing crashes on Tegra3 with do loops in at
-    // least some cases.
-    bool canUseDoLoops() const { return fCanUseDoLoops; }
-
-    // Some GPUs produce poor results when enabling Metal's fastmath option
-    bool canUseFastMath() const { return fCanUseFastMath; }
-
-    // By default, SkSL pools IR nodes per-program. To debug memory corruption, it is sometimes
-    // helpful to disable that feature.
-    bool useNodePools() const { return fUseNodePools; }
-
-    // When we have the option of using either dFdx or dfDy in a shader, this returns whether we
-    // should avoid using dFdx. We have found some drivers have bugs or lower precision when using
-    // dFdx.
-    bool avoidDfDxForGradientsWhenPossible() const { return fAvoidDfDxForGradientsWhenPossible; }
+    // The sample mask round rect op draws nothing on several Adreno and Radeon bots. Other ops that
+    // use sample mask while rendering to stencil seem to work fine.
+    // http://skbug.com/8921
+    bool canOnlyUseSampleMaskWithStencil() const { return fCanOnlyUseSampleMaskWithStencil; }
 
     // Returns the string of an extension that must be enabled in the shader to support
     // derivatives. If nullptr is returned then no extension needs to be enabled. Before calling
@@ -261,10 +242,7 @@ public:
 
     int maxFragmentSamplers() const { return fMaxFragmentSamplers; }
 
-    // Maximum number of segments a tessellation edge can be divided into.
-    int maxTessellationSegments() const { return fMaxTessellationSegments; }
-
-    bool tessellationSupport() const { return SkToBool(fMaxTessellationSegments);}
+    bool textureSwizzleAppliedInShader() const { return fTextureSwizzleAppliedInShader; }
 
     GrGLSLGeneration generation() const { return fGLSLGeneration; }
 
@@ -276,10 +254,10 @@ private:
     bool fShaderDerivativeSupport           : 1;
     bool fGeometryShaderSupport             : 1;
     bool fGSInvocationsSupport              : 1;
+    bool fPathRenderingSupport              : 1;
     bool fDstReadInShaderSupport            : 1;
     bool fDualSourceBlendingSupport         : 1;
     bool fIntegerSupport                    : 1;
-    bool fNonsquareMatrixSupport            : 1;
     bool fFBFetchSupport                    : 1;
     bool fFBFetchNeedsCustomOutput          : 1;
     bool fUsesPrecisionModifiers            : 1;
@@ -287,17 +265,17 @@ private:
     bool fPreferFlatInterpolation           : 1;
     bool fNoPerspectiveInterpolationSupport : 1;
     bool fSampleMaskSupport                 : 1;
+    bool fTessellationSupport               : 1;
     bool fExternalTextureSupport            : 1;
     bool fVertexIDSupport                   : 1;
     bool fFPManipulationSupport             : 1;
     bool fFloatIs32Bits                     : 1;
     bool fHalfIs32Bits                      : 1;
     bool fHasLowFragmentPrecision           : 1;
-    bool fReducedShaderMode                 : 1;
+    bool fTextureSwizzleAppliedInShader     : 1;
 
     // Used by SkSL to know when to generate polyfills.
     bool fBuiltinFMASupport : 1;
-    bool fBuiltinDeterminantSupport : 1;
 
     // Used for specific driver bug work arounds
     bool fCanUseAnyFunctionInShader                   : 1;
@@ -319,14 +297,7 @@ private:
     bool fRemovePowWithConstantExponent               : 1;
     bool fMustWriteToFragColor                        : 1;
     bool fNoDefaultPrecisionForExternalSamplers       : 1;
-    bool fRewriteMatrixVectorMultiply                 : 1;
-    bool fColorSpaceMathNeedsFloat                    : 1;
-    bool fCanUseDoLoops                               : 1;
-    bool fCanUseFastMath                              : 1;
-    bool fAvoidDfDxForGradientsWhenPossible           : 1;
-
-    // This controls behavior of the SkSL compiler, not the code we generate
-    bool fUseNodePools : 1;
+    bool fCanOnlyUseSampleMaskWithStencil             : 1;
 
     const char* fVersionDeclString;
 
@@ -345,19 +316,16 @@ private:
     const char* fFBFetchExtensionString;
 
     int fMaxFragmentSamplers;
-    int fMaxTessellationSegments;
 
     AdvBlendEqInteraction fAdvBlendEqInteraction;
 
     friend class GrCaps;  // For initialization.
     friend class GrDawnCaps;
-    friend class GrD3DCaps;
     friend class GrGLCaps;
     friend class GrMockCaps;
     friend class GrMtlCaps;
     friend class GrVkCaps;
     friend class SkSL::ShaderCapsFactory;
-    friend class SkSL::SharedCompiler;
 };
 
 #endif

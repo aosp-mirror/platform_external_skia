@@ -1,4 +1,3 @@
-function Debug(msg) {
+function SkDebug(msg) {
   console.warn(msg);
 }
-/** @const */ var IsDebug = true;

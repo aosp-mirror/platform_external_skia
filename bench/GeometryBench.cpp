@@ -9,7 +9,6 @@
 #include "include/core/SkRect.h"
 #include "include/utils/SkRandom.h"
 #include "src/core/SkGeometry.h"
-#include "src/core/SkPathPriv.h"
 
 class GeometryBench : public Benchmark {
 public:
@@ -47,7 +46,7 @@ public:
 protected:
     SkRect fRects[2048];
 
-    void onDelayedSetup() override {
+    virtual void onDelayedSetup() {
         const SkScalar min = -100;
         const SkScalar max = 100;
         SkRandom rand;
@@ -272,7 +271,8 @@ protected:
 
     void onDraw(int loops, SkCanvas* canvas) override {
         for (int i = 0; i < loops; ++i) {
-            SkPathPriv::ForceComputeConvexity(fPath);
+            fPath.setConvexityType(SkPathConvexityType::kUnknown);
+            (void)fPath.isConvex();
         }
     }
 

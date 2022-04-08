@@ -38,7 +38,7 @@ private:
     const sk_sp<SkData> fData;
     const SkEncodedOrigin fOrigin;
 
-    using INHERITED = SkImageGenerator;
+    typedef SkImageGenerator INHERITED;
 };
 
 static SkUniqueCFRef<CGImageSourceRef> data_to_CGImageSrc(SkData* data) {
@@ -92,7 +92,7 @@ std::unique_ptr<SkImageGenerator> SkImageGeneratorCG::MakeFromEncodedCG(sk_sp<Sk
         origin = (SkEncodedOrigin) originInt;
     }
 
-    if (SkEncodedOriginSwapsWidthHeight(origin)) {
+    if (SkPixmapPriv::ShouldSwapWidthHeight(origin)) {
         info = SkPixmapPriv::SwapWidthHeight(info);
     }
 

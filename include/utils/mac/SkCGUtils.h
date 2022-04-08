@@ -63,7 +63,7 @@ SK_API CGImageRef SkCreateCGImageRefWithColorspace(const SkBitmap& bm,
  *  by CGColorSpaceCreateDeviceRGB()
  */
 static inline CGImageRef SkCreateCGImageRef(const SkBitmap& bm) {
-    return SkCreateCGImageRefWithColorspace(bm, nil);
+    return SkCreateCGImageRefWithColorspace(bm, NULL);
 }
 
 /**

@@ -9,12 +9,11 @@
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkColorSpaceXformSteps.h"
 #include "src/core/SkRasterPipeline.h"
-#include "src/core/SkVM.h"
 
-// See skia.org/user/color  (== site/user/color.md).
+// TODO(mtklein): explain the logic of this file
 
-SkColorSpaceXformSteps::SkColorSpaceXformSteps(const SkColorSpace* src, SkAlphaType srcAT,
-                                               const SkColorSpace* dst, SkAlphaType dstAT) {
+SkColorSpaceXformSteps::SkColorSpaceXformSteps(SkColorSpace* src, SkAlphaType srcAT,
+                                               SkColorSpace* dst, SkAlphaType dstAT) {
     // Opaque outputs are treated as the same alpha type as the source input.
     // TODO: we'd really like to have a good way of explaining why we think this is useful.
     if (dstAT == kOpaque_SkAlphaType) {
@@ -64,6 +63,9 @@ SkColorSpaceXformSteps::SkColorSpaceXformSteps(const SkColorSpace* src, SkAlphaT
     // Fill out all the transfer functions we'll use.
     src->   transferFn(&this->srcTF   );
     dst->invTransferFn(&this->dstTFInv);
+
+    this->srcTF_is_sRGB = src->gammaCloseToSRGB();
+    this->dstTF_is_sRGB = dst->gammaCloseToSRGB();
 
     // If we linearize then immediately reencode with the same transfer function, skip both.
     if ( this->flags.linearize       &&
@@ -128,87 +130,28 @@ void SkColorSpaceXformSteps::apply(float* rgba) const {
     }
 }
 
-void SkColorSpaceXformSteps::apply(SkRasterPipeline* p) const {
-    if (flags.unpremul)        { p->append(SkRasterPipeline::unpremul); }
-    if (flags.linearize)       { p->append_transfer_function(srcTF); }
-    if (flags.gamut_transform) { p->append(SkRasterPipeline::matrix_3x3, &src_to_dst_matrix); }
-    if (flags.encode)          { p->append_transfer_function(dstTFInv); }
-    if (flags.premul)          { p->append(SkRasterPipeline::premul); }
-}
-
-skvm::Color sk_program_transfer_fn(skvm::Builder* p, skvm::Uniforms* uniforms,
-                                   const skcms_TransferFunction& tf, skvm::Color c) {
-    skvm::F32 G = p->uniformF(uniforms->pushF(tf.g)),
-              A = p->uniformF(uniforms->pushF(tf.a)),
-              B = p->uniformF(uniforms->pushF(tf.b)),
-              C = p->uniformF(uniforms->pushF(tf.c)),
-              D = p->uniformF(uniforms->pushF(tf.d)),
-              E = p->uniformF(uniforms->pushF(tf.e)),
-              F = p->uniformF(uniforms->pushF(tf.f));
-
-    auto apply = [&](skvm::F32 v) -> skvm::F32 {
-        // Strip off the sign bit and save it for later.
-        skvm::I32 bits = pun_to_I32(v),
-                  sign = bits & 0x80000000;
-        v = pun_to_F32(bits ^ sign);
-
-        switch (classify_transfer_fn(tf)) {
-            case Bad_TF: SkASSERT(false); break;
-
-            case sRGBish_TF:
-                v = select(v <= D, C*v + F
-                                 , approx_powf(A*v + B, G) + E);
-                break;
-
-            case PQish_TF: {
-                skvm::F32 vC = approx_powf(v, C);
-                v = approx_powf(max(B * vC + A, 0.0f) / (E * vC + D), F);
-            } break;
-
-            case HLGish_TF: {
-                skvm::F32 vA = v*A,
-                           K = F + 1.0f;
-                v = K*select(vA <= 1.0f, approx_powf(vA, B)
-                                       , approx_exp((v-E) * C + D));
-            } break;
-
-            case HLGinvish_TF:
-                skvm::F32 K = F + 1.0f;
-                v /= K;
-                v = select(v <= 1.0f, A * approx_powf(v, B)
-                                    , C * approx_log(v-D) + E);
-                break;
-        }
-
-        // Re-apply the original sign bit on our way out the door.
-        return pun_to_F32(sign | pun_to_I32(v));
-    };
-
-    return {apply(c.r), apply(c.g), apply(c.b), c.a};
-}
-
-skvm::Color SkColorSpaceXformSteps::program(skvm::Builder* p, skvm::Uniforms* uniforms,
-                                            skvm::Color c) const {
-    if (flags.unpremul) {
-        c = unpremul(c);
-    }
+void SkColorSpaceXformSteps::apply(SkRasterPipeline* p, bool src_is_normalized) const {
+#if defined(SK_LEGACY_SRGB_STAGE_CHOICE)
+    src_is_normalized = true;
+#endif
+    if (flags.unpremul) { p->append(SkRasterPipeline::unpremul); }
     if (flags.linearize) {
-        c = sk_program_transfer_fn(p, uniforms, srcTF, c);
+        if (src_is_normalized && srcTF_is_sRGB) {
+            p->append(SkRasterPipeline::from_srgb);
+        } else {
+            p->append_transfer_function(srcTF);
+        }
     }
     if (flags.gamut_transform) {
-        auto m = [&](int index) {
-            return p->uniformF(uniforms->pushF(src_to_dst_matrix[index]));
-        };
-        auto R = c.r * m(0) + c.g * m(3) + c.b * m(6),
-             G = c.r * m(1) + c.g * m(4) + c.b * m(7),
-             B = c.r * m(2) + c.g * m(5) + c.b * m(8);
-        c = {R, G, B, c.a};
+        p->append(SkRasterPipeline::matrix_3x3, &src_to_dst_matrix);
     }
     if (flags.encode) {
-        c = sk_program_transfer_fn(p, uniforms, dstTFInv, c);
+        if (src_is_normalized && dstTF_is_sRGB) {
+            p->append(SkRasterPipeline::to_srgb);
+        } else {
+            p->append_transfer_function(dstTFInv);
+        }
     }
-    if (flags.premul) {
-        c = premul(c);
-    }
-    return c;
+    if (flags.premul) { p->append(SkRasterPipeline::premul); }
 }
+

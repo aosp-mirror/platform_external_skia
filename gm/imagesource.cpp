@@ -48,7 +48,8 @@ protected:
     SkISize onISize() override { return SkISize::Make(500, 150); }
 
     void onOnceBeforeDraw() override {
-        fImage = ToolUtils::create_string_image(100, 100, 0xFFFFFFFF, 20, 70, 96, "e");
+        SkBitmap bm = ToolUtils::create_string_bitmap(100, 100, 0xFFFFFFFF, 20, 70, 96, "e");
+        fImage = SkImage::MakeFromBitmap(bm);
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -58,7 +59,6 @@ protected:
         const SkRect dstRect = SkRect::MakeXYWH(0, 10, 60, 60);
         const SkRect clipRect = SkRect::MakeXYWH(0, 0, 100, 100);
         const SkRect bounds = SkRect::MakeIWH(fImage->width(), fImage->height());
-        const SkSamplingOptions sampling({1/3.0f, 1/3.0f});
 
         {
             // Draw an unscaled bitmap.
@@ -69,21 +69,21 @@ protected:
         {
             // Draw an unscaled subset of the source bitmap (srcRect -> srcRect).
             sk_sp<SkImageFilter> imageSourceSrcRect(
-                    SkImageFilters::Image(fImage, srcRect, srcRect, sampling));
+                    SkImageFilters::Image(fImage, srcRect, srcRect, kHigh_SkFilterQuality));
             fill_rect_filtered(canvas, clipRect, std::move(imageSourceSrcRect));
             canvas->translate(SkIntToScalar(100), 0);
         }
         {
             // Draw a subset of the bitmap scaled to a destination rect (srcRect -> dstRect).
             sk_sp<SkImageFilter> imageSourceSrcRectDstRect(
-                    SkImageFilters::Image(fImage, srcRect, dstRect, sampling));
+                    SkImageFilters::Image(fImage, srcRect, dstRect, kHigh_SkFilterQuality));
             fill_rect_filtered(canvas, clipRect, std::move(imageSourceSrcRectDstRect));
             canvas->translate(SkIntToScalar(100), 0);
         }
         {
             // Draw the entire bitmap scaled to a destination rect (bounds -> dstRect).
             sk_sp<SkImageFilter> imageSourceDstRectOnly(
-                    SkImageFilters::Image(fImage, bounds, dstRect, sampling));
+                    SkImageFilters::Image(fImage, bounds, dstRect, kHigh_SkFilterQuality));
             fill_rect_filtered(canvas, clipRect, std::move(imageSourceDstRectOnly));
             canvas->translate(SkIntToScalar(100), 0);
         }
@@ -91,7 +91,7 @@ protected:
 
 private:
     sk_sp<SkImage> fImage;
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

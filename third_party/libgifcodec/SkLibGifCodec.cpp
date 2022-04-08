@@ -129,19 +129,12 @@ bool SkLibGifCodec::onGetFrameInfo(int i, SkCodec::FrameInfo* frameInfo) const {
     SkASSERT(frameContext->reachedStartOfData());
 
     if (frameInfo) {
-        frameContext->fillIn(frameInfo, frameContext->isComplete());
-
-        auto* rect = &frameInfo->fFrameRect;
-        auto bounds = this->bounds();
-        if (!rect->intersect(bounds)) {
-            // If a frame is offscreen, it will have no effect on the output
-            // image. Modify its bounds to be consistent with the Wuffs
-            // implementation.
-            rect->setLTRB(std::min(rect->left(), bounds.right()),
-                          std::min(rect->top(), bounds.bottom()),
-                          std::min(rect->right(), bounds.right()),
-                          std::min(rect->bottom(), bounds.bottom()));
-        }
+        frameInfo->fDuration = frameContext->getDuration();
+        frameInfo->fRequiredFrame = frameContext->getRequiredFrame();
+        frameInfo->fFullyReceived = frameContext->isComplete();
+        frameInfo->fAlphaType = frameContext->hasAlpha() ? kUnpremul_SkAlphaType
+                                                         : kOpaque_SkAlphaType;
+        frameInfo->fDisposalMethod = frameContext->getDisposalMethod();
     }
     return true;
 }
@@ -427,7 +420,7 @@ void SkLibGifCodec::haveDecodedRow(int frameIndex, const unsigned char* rowBegin
     const int xBegin = frameContext->xOffset();
     const int yBegin = frameContext->yOffset() + rowNumber;
     const int xEnd = std::min(xBegin + width, this->dimensions().width());
-    const int yEnd = std::min(yBegin + repeatCount, this->dimensions().height());
+    const int yEnd = std::min(yBegin + rowNumber + repeatCount, this->dimensions().height());
     // FIXME: No need to make the checks on width/xBegin/xEnd for every row. We could instead do
     // this once in prepareToDecode.
     if (!width || (xBegin < 0) || (yBegin < 0) || (xEnd <= xBegin) || (yEnd <= yBegin))

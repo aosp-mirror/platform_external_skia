@@ -13,7 +13,6 @@
 #include "include/core/SkPictureRecorder.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
-#include "include/core/SkSurface.h"
 #include "src/core/SkBlendModePriv.h"
 
 #include <cstring>
@@ -28,12 +27,12 @@ namespace {
 class Drawer {
  public:
     explicit Drawer() : fImageInfo(SkImageInfo::MakeN32Premul(200, 100)) {
-        auto surf = SkSurface::MakeRasterN32Premul(100, 100);
-        surf->getCanvas()->clear(0xffffffff);
+        fCircleBM.allocPixels(SkImageInfo::MakeN32Premul(100, 100));
+        SkCanvas canvas(fCircleBM);
+        canvas.clear(0xffffffff);
         SkPaint circlePaint;
         circlePaint.setColor(0xff000000);
-        surf->getCanvas()->drawCircle(50, 50, 50, circlePaint);
-        fCircleImage = surf->makeImageSnapshot();
+        canvas.drawCircle(50, 50, 50, circlePaint);
     }
 
     const SkImageInfo& imageInfo() const { return fImageInfo; }
@@ -57,15 +56,14 @@ class Drawer {
         canvas->saveLayer(nullptr, &blackPaint);
             canvas->drawRect(canvasRect, greenPaint);
             canvas->saveLayer(nullptr, &layerPaint);
-                canvas->drawImageRect(fCircleImage, SkRect::MakeXYWH(20,20,60,60),
-                                      SkSamplingOptions(), &blackPaint);
+                canvas->drawBitmapRect(fCircleBM, SkRect::MakeXYWH(20,20,60,60), &blackPaint);
             canvas->restore();
         canvas->restore();
     }
 
  private:
     const SkImageInfo fImageInfo;
-    sk_sp<SkImage> fCircleImage;
+    SkBitmap fCircleBM;
 };
 
 class RecordingStrategy {
@@ -162,7 +160,7 @@ DEF_TEST(SkRecordingAccuracyXfermode, reporter) {
         REPORTER_ASSERT(reporter,
                         0 == memcmp(goldenBM.getPixels(), pictureBM.getPixels(), pixelsSize));
 #else
-        if (0 != memcmp(goldenBM.getPixels(), pictureBM.getPixels(), pixelsSize)) {
+        if (memcmp(goldenBM.getPixels(), pictureBM.getPixels(), pixelsSize)) {
             numErrors++;
             errors.appendf("For SkXfermode %d %s:    SkPictureRecorder bitmap is wrong\n",
                            iMode, SkBlendMode_Name(mode));

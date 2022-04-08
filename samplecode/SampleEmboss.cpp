@@ -33,9 +33,9 @@ public:
     }
 
 protected:
-    SkString name() override { return SkString("Emboss"); }
+    virtual SkString name() { return SkString("Emboss"); }
 
-    void onDrawContent(SkCanvas* canvas) override {
+    virtual void onDrawContent(SkCanvas* canvas) {
         SkPaint paint;
 
         paint.setAntiAlias(true);
@@ -51,7 +51,7 @@ protected:
 
 private:
 
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

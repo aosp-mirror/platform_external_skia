@@ -75,7 +75,7 @@ struct NFAState {
                 return value != fInverse;
             }
             default:
-                SkUNREACHABLE;
+                ABORT("unreachable");
         }
     }
 
@@ -132,7 +132,7 @@ struct NFAState {
                 return result;
             }
             default:
-                SkUNREACHABLE;
+                ABORT("unreachable");
         }
     }
 #endif

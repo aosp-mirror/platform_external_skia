@@ -27,8 +27,6 @@ public:
         SkPoint           fPos;
 
         // Only valid for kFragmentGlyphs
-        float             fAdvance,
-                          fAscent;
         uint32_t          fLineIndex;    // 0-based index for the line this fragment belongs to.
         bool              fIsWhitespace; // True if the first code point in the corresponding
                                          // cluster is whitespace.
@@ -76,40 +74,22 @@ public:
         kDownscaleToFit,
     };
 
-    enum class LinebreakPolicy : uint8_t {
-        // Break lines such that they fit in a non-empty paragraph box, horizontally.
-        kParagraph,
-        // Only break lines when requested explicitly (\r), regardless of paragraph box dimensions.
-        kExplicit,
-    };
-
-    // Initial text direction.
-    enum class Direction : uint8_t { kLTR, kRTL };
-
     enum Flags : uint32_t {
-        kNone                       = 0x00,
+        kNone           = 0x00,
 
         // Split out individual glyphs into separate Fragments
         // (useful when the caller intends to manipulate glyphs independently).
-        kFragmentGlyphs             = 0x01,
-
-        // Compute the advance and ascent for each fragment.
-        kTrackFragmentAdvanceAscent = 0x02,
+        kFragmentGlyphs = 0x01,
     };
 
     struct TextDesc {
         const sk_sp<SkTypeface>&  fTypeface;
         SkScalar                  fTextSize,
-                                  fMinTextSize,
-                                  fMaxTextSize,
                                   fLineHeight,
-                                  fLineShift,
                                   fAscent;
         SkTextUtils::Align        fHAlign;
         VAlign                    fVAlign;
         ResizePolicy              fResize;
-        LinebreakPolicy           fLinebreak;
-        Direction                 fDirection;
         uint32_t                  fFlags;
     };
 

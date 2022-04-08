@@ -95,17 +95,19 @@ protected:
             fFont.setSize(fPtSizes[i]);
 
             fFont.measureText(fStrings[i].c_str(), fStrings[i].size(), SkTextEncoding::kUTF8, &r);
-            // The set of x,y offsets which place the bounding box inside the GM's border.
+            // safeRect is set of x,y positions where we can draw the string without hitting
+            // the GM's border.
             SkRect safeRect = SkRect::MakeLTRB(-r.fLeft, -r.fTop, w - r.fRight, h - r.fBottom);
             if (safeRect.isEmpty()) {
-                // If the bounds don't fit then allow any offset in the GM's border.
+                // If we don't fit then just don't worry about how we get cliped to the device
+                // border.
                 safeRect = SkRect::MakeWH(w, h);
             }
-            fOffsets[i].fX = random.nextRangeScalar(safeRect.fLeft, safeRect.fRight);
-            fOffsets[i].fY = random.nextRangeScalar(safeRect.fTop, safeRect.fBottom);
+            fPositions[i].fX = random.nextRangeScalar(safeRect.fLeft, safeRect.fRight);
+            fPositions[i].fY = random.nextRangeScalar(safeRect.fTop, safeRect.fBottom);
 
             fClipRects[i] = r;
-            fClipRects[i].offset(fOffsets[i].fX, fOffsets[i].fY);
+            fClipRects[i].offset(fPositions[i].fX, fPositions[i].fY);
             fClipRects[i].outset(2.f, 2.f);
 
             if (fEffectiveClip) {
@@ -122,7 +124,7 @@ protected:
 
             canvas->save();
                 canvas->clipRect(fClipRects[i]);
-                canvas->translate(fOffsets[i].fX, fOffsets[i].fY);
+                canvas->translate(fPositions[i].fX, fPositions[i].fY);
                 canvas->drawSimpleText(fStrings[i].c_str(), fStrings[i].size(), SkTextEncoding::kUTF8,
                                        0, 0, fFont, fPaint);
             canvas->restore();
@@ -158,10 +160,10 @@ private:
     SkColor         fColors[kCnt];
     SkScalar        fPtSizes[kCnt];
     int             fTypefaceIndices[kCnt];
-    SkPoint         fOffsets[kCnt];
+    SkPoint         fPositions[kCnt];
     SkRect          fClipRects[kCnt];
 
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 
 DEF_GM(return new VariedTextGM(false, false);)

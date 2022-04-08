@@ -6,23 +6,23 @@
  */
 
 #include "gm/gm.h"
+#include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkFilterQuality.h"
-#include "include/core/SkImage.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
-#include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
 
 namespace skiagm {
 
 // This GM exercises HighQuality anisotropic filtering.
 class AnisotropicGM : public GM {
 public:
-    AnisotropicGM() : fSampling(SkCubicResampler::Mitchell()) {
+    AnisotropicGM() : fFilterQuality(kHigh_SkFilterQuality) {
         this->setBGColor(0xFFCCCCCC);
     }
 
@@ -41,31 +41,32 @@ protected:
         constexpr SkScalar kAngleStep = 360.0f / kNumLines;
         constexpr int kInnerOffset = 10;
 
-        auto info = SkImageInfo::MakeN32(kImageSize, kImageSize, kOpaque_SkAlphaType);
-        auto surf = SkSurface::MakeRaster(info);
-        auto canvas = surf->getCanvas();
+        fBM.allocN32Pixels(kImageSize, kImageSize, true);
 
-        canvas->clear(SK_ColorWHITE);
+        SkCanvas canvas(fBM);
+
+        canvas.clear(SK_ColorWHITE);
 
         SkPaint p;
         p.setAntiAlias(true);
 
         SkScalar angle = 0.0f, sin, cos;
 
-        canvas->translate(kImageSize/2.0f, kImageSize/2.0f);
+        canvas.translate(kImageSize/2.0f, kImageSize/2.0f);
         for (int i = 0; i < kNumLines; ++i, angle += kAngleStep) {
             sin = SkScalarSin(angle);
             cos = SkScalarCos(angle);
-            canvas->drawLine(cos * kInnerOffset, sin * kInnerOffset,
-                             cos * kImageSize/2, sin * kImageSize/2, p);
+            canvas.drawLine(cos * kInnerOffset, sin * kInnerOffset,
+                            cos * kImageSize/2, sin * kImageSize/2, p);
         }
-        fImage = surf->makeImageSnapshot();
     }
 
     void draw(SkCanvas* canvas, int x, int y, int xSize, int ySize) {
         SkRect r = SkRect::MakeXYWH(SkIntToScalar(x), SkIntToScalar(y),
                                     SkIntToScalar(xSize), SkIntToScalar(ySize));
-        canvas->drawImageRect(fImage, r, fSampling);
+        SkPaint p;
+        p.setFilterQuality(fFilterQuality);
+        canvas->drawBitmapRect(fBM, r, &p);
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -75,34 +76,34 @@ protected:
 
         // Minimize vertically
         for (int i = 0; i < (int)SK_ARRAY_COUNT(gScales); ++i) {
-            int height = SkScalarFloorToInt(fImage->height() * gScales[i]);
+            int height = SkScalarFloorToInt(fBM.height() * gScales[i]);
 
             int yOff;
             if (i <= (int)SK_ARRAY_COUNT(gScales)/2) {
-                yOff = kSpacer + i * (fImage->height() + kSpacer);
+                yOff = kSpacer + i * (fBM.height() + kSpacer);
             } else {
                 // Position the more highly squashed images with their less squashed counterparts
-                yOff = (SK_ARRAY_COUNT(gScales) - i) * (fImage->height() + kSpacer) - height;
+                yOff = (SK_ARRAY_COUNT(gScales) - i) * (fBM.height() + kSpacer) - height;
             }
 
-            this->draw(canvas, kSpacer, yOff, fImage->width(), height);
+            this->draw(canvas, kSpacer, yOff, fBM.width(), height);
         }
 
         // Minimize horizontally
         for (int i = 0; i < (int)SK_ARRAY_COUNT(gScales); ++i) {
-            int width = SkScalarFloorToInt(fImage->width() * gScales[i]);
+            int width = SkScalarFloorToInt(fBM.width() * gScales[i]);
 
             int xOff, yOff;
             if (i <= (int)SK_ARRAY_COUNT(gScales)/2) {
-                xOff = fImage->width() + 2*kSpacer;
-                yOff = kSpacer + i * (fImage->height() + kSpacer);
+                xOff = fBM.width() + 2*kSpacer;
+                yOff = kSpacer + i * (fBM.height() + kSpacer);
             } else {
                 // Position the more highly squashed images with their less squashed counterparts
-                xOff = fImage->width() + 2*kSpacer + fImage->width() - width;
-                yOff = kSpacer + (SK_ARRAY_COUNT(gScales) - i - 1) * (fImage->height() + kSpacer);
+                xOff = fBM.width() + 2*kSpacer + fBM.width() - width;
+                yOff = kSpacer + (SK_ARRAY_COUNT(gScales) - i - 1) * (fBM.height() + kSpacer);
             }
 
-            this->draw(canvas, xOff, yOff, width, fImage->height());
+            this->draw(canvas, xOff, yOff, width, fBM.height());
         }
     }
 
@@ -111,13 +112,13 @@ private:
     static constexpr int kSpacer        = 10;
     static constexpr int kNumVertImages = 5;
 
-    sk_sp<SkImage>    fImage;
-    SkSamplingOptions fSampling;
+    SkBitmap         fBM;
+    SkFilterQuality  fFilterQuality;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new AnisotropicGM;)
-}  // namespace skiagm
+}

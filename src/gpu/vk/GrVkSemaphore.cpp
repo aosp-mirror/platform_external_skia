@@ -38,7 +38,6 @@ std::unique_ptr<GrVkSemaphore> GrVkSemaphore::MakeWrapped(GrVkGpu* gpu,
                                                           WrapType wrapType,
                                                           GrWrapOwnership ownership) {
     if (VK_NULL_HANDLE == semaphore) {
-        SkDEBUGFAIL("Trying to wrap an invalid VkSemaphore");
         return nullptr;
     }
     bool prohibitSignal = WrapType::kWillWait == wrapType;
@@ -49,20 +48,21 @@ std::unique_ptr<GrVkSemaphore> GrVkSemaphore::MakeWrapped(GrVkGpu* gpu,
 }
 
 GrVkSemaphore::GrVkSemaphore(GrVkGpu* gpu, VkSemaphore semaphore, bool prohibitSignal,
-                             bool prohibitWait, bool isOwned) {
-    fResource = new Resource(gpu, semaphore, prohibitSignal, prohibitWait, isOwned);
+                             bool prohibitWait, bool isOwned)
+        : fGpu(gpu) {
+    fResource = new Resource(semaphore, prohibitSignal, prohibitWait, isOwned);
 }
 
 GrVkSemaphore::~GrVkSemaphore() {
     if (fResource) {
-        fResource->unref();
+        fResource->unref(fGpu);
     }
 }
 
-void GrVkSemaphore::Resource::freeGPUData() const {
+void GrVkSemaphore::Resource::freeGPUData(GrVkGpu* gpu) const {
     if (fIsOwned) {
-        GR_VK_CALL(fGpu->vkInterface(),
-                   DestroySemaphore(fGpu->device(), fSemaphore, nullptr));
+        GR_VK_CALL(gpu->vkInterface(),
+                   DestroySemaphore(gpu->device(), fSemaphore, nullptr));
     }
 }
 

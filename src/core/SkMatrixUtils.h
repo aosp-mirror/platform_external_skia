@@ -13,7 +13,6 @@
 
 class SkMatrix;
 class SkPaint;
-struct SkSamplingOptions;
 
 /**
  *  Given a matrix, size and paint, return true if the computed dst-rect would
@@ -23,8 +22,7 @@ struct SkSamplingOptions;
  *
  *  The src-rect is defined to be { 0, 0, size.width(), size.height() }
  */
-bool SkTreatAsSprite(const SkMatrix&, const SkISize& size, const SkSamplingOptions&,
-                     const SkPaint&);
+bool SkTreatAsSprite(const SkMatrix&, const SkISize& size, const SkPaint& paint);
 
 /** Decomposes the upper-left 2x2 of the matrix into a rotation (represented by
     the cosine and sine of the rotation angle), followed by a non-uniform scale,

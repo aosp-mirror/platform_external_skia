@@ -108,11 +108,11 @@ private:
     SkDataTable(const void* array, size_t elemSize, int count,
                 FreeProc, void* context);
     SkDataTable(const Dir*, int count, FreeProc, void* context);
-    ~SkDataTable() override;
+    virtual ~SkDataTable();
 
     friend class SkDataTableBuilder;    // access to Dir
 
-    using INHERITED = SkRefCnt;
+    typedef SkRefCnt INHERITED;
 };
 
 #endif

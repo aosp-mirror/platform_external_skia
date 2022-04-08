@@ -44,6 +44,12 @@ layout(when=!useUniform, key, ctype=SkPMColor4f) in half4 literalColor;
 
 @optimizationFlags { OptFlags(fp, useUniform ? uniformColor : literalColor) }
 
-half4 main() {
-    return sample(fp, useUniform ? uniformColor : literalColor);
+void main() {
+    half4 constColor;
+    @if(useUniform) {
+        constColor = uniformColor;
+    } else {
+        constColor = literalColor;
+    }
+    sk_OutColor = sample(fp, constColor);
 }

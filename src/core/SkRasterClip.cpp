@@ -63,8 +63,6 @@ static MutateResult mutate_conservative_op(SkRegion::Op* op, bool inverseFilled)
 
 void SkConservativeClip::opRect(const SkRect& localRect, const SkMatrix& ctm,
                                 const SkIRect& devBounds, SkRegion::Op op, bool doAA) {
-    this->applyOpParams(op, doAA ? ClipAA::kYes : ClipAA::kNo,
-                        ctm.isScaleTranslate() ? IsRect::kYes : IsRect::kNo);
     SkIRect ir;
     switch (mutate_conservative_op(&op, false)) {
         case kDoNothing_MutateResult:
@@ -83,14 +81,11 @@ void SkConservativeClip::opRect(const SkRect& localRect, const SkMatrix& ctm,
 
 void SkConservativeClip::opRRect(const SkRRect& rrect, const SkMatrix& ctm,
                                  const SkIRect& devBounds, SkRegion::Op op, bool doAA) {
-    this->applyOpParams(op, doAA ? ClipAA::kYes : ClipAA::kNo,
-                        (rrect.isRect() && ctm.isScaleTranslate()) ? IsRect::kYes : IsRect:: kNo);
     this->opRect(rrect.getBounds(), ctm, devBounds, op, doAA);
 }
 
 void SkConservativeClip::opPath(const SkPath& path, const SkMatrix& ctm, const SkIRect& devBounds,
                                 SkRegion::Op op, bool doAA) {
-    this->applyOpParams(op, doAA ? ClipAA::kYes : ClipAA::kNo, IsRect::kNo);
     SkIRect ir;
     switch (mutate_conservative_op(&op, path.isInverseFillType())) {
         case kDoNothing_MutateResult:
@@ -109,13 +104,10 @@ void SkConservativeClip::opPath(const SkPath& path, const SkMatrix& ctm, const S
 }
 
 void SkConservativeClip::opRegion(const SkRegion& rgn, SkRegion::Op op) {
-    this->applyOpParams(op, ClipAA::kNo, rgn.isRect() ? IsRect::kYes : IsRect::kNo);
     this->opIRect(rgn.getBounds(), op);
 }
 
 void SkConservativeClip::opIRect(const SkIRect& devRect, SkRegion::Op op) {
-    this->applyOpParams(op, ClipAA::kNo, IsRect::kYes);
-
     if (SkRegion::kIntersect_Op == op) {
         if (!fBounds.intersect(devRect)) {
             fBounds.setEmpty();
@@ -133,37 +125,20 @@ void SkConservativeClip::opIRect(const SkIRect& devRect, SkRegion::Op op) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-SkRasterClip::SkRasterClip(const SkRasterClip& that)
-    : fIsBW(that.fIsBW), fIsEmpty(that.fIsEmpty), fIsRect(that.fIsRect)
-    , fClipRestrictionRect(that.fClipRestrictionRect), fShader(that.fShader)
-{
-    AUTO_RASTERCLIP_VALIDATE(that);
+SkRasterClip::SkRasterClip(const SkRasterClip& src) {
+    AUTO_RASTERCLIP_VALIDATE(src);
 
+    fIsBW = src.fIsBW;
     if (fIsBW) {
-        fBW = that.fBW;
+        fBW = src.fBW;
     } else {
-        fAA = that.fAA;
+        fAA = src.fAA;
     }
 
+    fIsEmpty = src.isEmpty();
+    fIsRect = src.isRect();
+    fClipRestrictionRect = src.fClipRestrictionRect;
     SkDEBUGCODE(this->validate();)
-}
-
-SkRasterClip& SkRasterClip::operator=(const SkRasterClip& that) {
-    AUTO_RASTERCLIP_VALIDATE(that);
-
-    fIsBW = that.fIsBW;
-    if (fIsBW) {
-        fBW = that.fBW;
-    } else {
-        fAA = that.fAA;
-    }
-
-    fIsEmpty = that.isEmpty();
-    fIsRect = that.isRect();
-    fClipRestrictionRect = that.fClipRestrictionRect;
-    fShader = that.fShader;
-    SkDEBUGCODE(this->validate();)
-    return *this;
 }
 
 SkRasterClip::SkRasterClip(const SkRegion& rgn) : fBW(rgn) {
@@ -271,7 +246,10 @@ bool SkRasterClip::op(const SkRRect& rrect, const SkMatrix& matrix, const SkIRec
     SkIRect bounds(devBounds);
     this->applyClipRestriction(op, &bounds);
 
-    return this->op(SkPath::RRect(rrect), matrix, bounds, op, doAA);
+    SkPath path;
+    path.addRRect(rrect);
+
+    return this->op(path, matrix, bounds, op, doAA);
 }
 
 bool SkRasterClip::op(const SkPath& path, const SkMatrix& matrix, const SkIRect& devBounds,
@@ -367,17 +345,6 @@ bool SkRasterClip::op(const SkRasterClip& clip, SkRegion::Op op) {
         (void)fAA.op(*other, op);
     }
     return this->updateCacheAndReturnNonEmpty();
-}
-
-bool SkRasterClip::op(sk_sp<SkShader> sh) {
-    AUTO_RASTERCLIP_VALIDATE(*this);
-
-    if (!fShader) {
-        fShader = sh;
-    } else {
-        fShader = SkShaders::Blend(SkBlendMode::kSrcIn, sh, fShader);
-    }
-    return !this->isEmpty();
 }
 
 /**

@@ -13,16 +13,6 @@
 namespace SkSL {
 
 class IRGenerator;
-class Variable;
-
-enum class VariableRefKind : int8_t {
-    kRead,
-    kWrite,
-    kReadWrite,
-    // taking the address of a variable - we consider this a read & write but don't complain if
-    // the variable was not previously assigned
-    kPointer
-};
 
 /**
  * A reference to a variable, through which it can be read or written. In the statement:
@@ -31,54 +21,63 @@ enum class VariableRefKind : int8_t {
  *
  * there is only one Variable 'x', but two VariableReferences to it.
  */
-class VariableReference final : public Expression {
-public:
-    using RefKind = VariableRefKind;
+struct VariableReference : public Expression {
+    enum RefKind {
+        kRead_RefKind,
+        kWrite_RefKind,
+        kReadWrite_RefKind,
+        // taking the address of a variable - we consider this a read & write but don't complain if
+        // the variable was not previously assigned
+        kPointer_RefKind
+    };
 
-    static constexpr Kind kExpressionKind = Kind::kVariableReference;
+    VariableReference(int offset, const Variable& variable, RefKind refKind = kRead_RefKind);
 
-    VariableReference(int offset, const Variable* variable, RefKind refKind);
-
-    // Creates a VariableReference. There isn't much in the way of error-checking or optimization
-    // opportunities here.
-    static std::unique_ptr<Expression> Make(int offset,
-                                            const Variable* variable,
-                                            RefKind refKind = RefKind::kRead) {
-        SkASSERT(variable);
-        return std::make_unique<VariableReference>(offset, variable, refKind);
-    }
-
-    VariableReference(const VariableReference&) = delete;
-    VariableReference& operator=(const VariableReference&) = delete;
-
-    const Variable* variable() const {
-        return fVariable;
-    }
+    ~VariableReference() override;
 
     RefKind refKind() const {
         return fRefKind;
     }
 
     void setRefKind(RefKind refKind);
-    void setVariable(const Variable* variable);
 
-    bool hasProperty(Property property) const override;
-
-    bool isConstantOrUniform() const override;
-
-    std::unique_ptr<Expression> clone() const override {
-        return std::make_unique<VariableReference>(fOffset, this->variable(), this->refKind());
+    bool hasProperty(Property property) const override {
+        switch (property) {
+            case Property::kSideEffects:      return false;
+            case Property::kContainsRTAdjust: return fVariable.fName == "sk_RTAdjust";
+            default:
+                SkASSERT(false);
+                return false;
+        }
     }
 
-    String description() const override;
+    bool isConstant() const override {
+        return 0 != (fVariable.fModifiers.fFlags & Modifiers::kConst_Flag);
+    }
+
+    std::unique_ptr<Expression> clone() const override {
+        return std::unique_ptr<Expression>(new VariableReference(fOffset, fVariable, fRefKind));
+    }
+
+#ifdef SK_DEBUG
+    String description() const override {
+        return fVariable.fName;
+    }
+#endif
+
+    static std::unique_ptr<Expression> copy_constant(const IRGenerator& irGenerator,
+                                                     const Expression* expr);
+
+    std::unique_ptr<Expression> constantPropagate(const IRGenerator& irGenerator,
+                                                  const DefinitionMap& definitions) override;
+
+    const Variable& fVariable;
+    RefKind fRefKind;
 
 private:
-    const Variable* fVariable;
-    VariableRefKind fRefKind;
-
-    using INHERITED = Expression;
+    typedef Expression INHERITED;
 };
 
-}  // namespace SkSL
+} // namespace
 
 #endif

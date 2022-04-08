@@ -111,8 +111,8 @@ public:
     T* getMaybeNull() const { return fPtr; }
 
 private:
-    alignas(T) char fStorage[sizeof(T)];
-    T*              fPtr{nullptr}; // nullptr or fStorage
+    typename std::aligned_storage<sizeof(T), alignof(T)>::type fStorage;
+    T*                                                         fPtr{nullptr}; // nullptr or fStorage
 };
 
 /**
@@ -168,15 +168,6 @@ public:
         SkASSERT(nullptr == fObj);
         SkASSERT(!fLazy.isValid());
         fObj = &initial;
-    }
-
-    // If not already initialized, in-place instantiates the writable object
-    template <typename... Args>
-    void initIfNeeded(Args&&... args) {
-        if (nullptr == fObj) {
-            SkASSERT(!fLazy.isValid());
-            fObj = fLazy.init(std::forward<Args>(args)...);
-        }
     }
 
     /**

@@ -9,10 +9,8 @@
 
 #include <algorithm>
 
-GrClientMappedBufferManager::GrClientMappedBufferManager(
-            GrDirectContext::DirectContextID owningDirectContext)
-        : fFinishedBufferInbox(owningDirectContext) {
-}
+GrClientMappedBufferManager::GrClientMappedBufferManager(uint32_t contextID)
+        : fFinishedBufferInbox(contextID) {}
 
 GrClientMappedBufferManager::~GrClientMappedBufferManager() {
     this->process();
@@ -65,11 +63,9 @@ void GrClientMappedBufferManager::remove(const sk_sp<GrGpuBuffer>& b) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-DECLARE_SKMESSAGEBUS_MESSAGE(GrClientMappedBufferManager::BufferFinishedMessage,
-                             GrDirectContext::DirectContextID,
-                             false)
+DECLARE_SKMESSAGEBUS_MESSAGE(GrClientMappedBufferManager::BufferFinishedMessage)
 
 bool SkShouldPostMessageToBus(const GrClientMappedBufferManager::BufferFinishedMessage& m,
-                              GrDirectContext::DirectContextID potentialRecipient) {
-    return m.fIntendedRecipient == potentialRecipient;
+                              uint32_t msgBusUniqueID) {
+    return m.fInboxID == msgBusUniqueID;
 }

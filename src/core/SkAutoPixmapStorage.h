@@ -84,7 +84,7 @@ private:
         fStorage = nullptr;
     }
 
-    using INHERITED = SkPixmap;
+    typedef SkPixmap INHERITED;
 };
 
 #endif

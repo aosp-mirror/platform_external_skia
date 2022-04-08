@@ -10,7 +10,6 @@
 #include "include/core/SkPath.h"
 #include "include/utils/SkRandom.h"
 #include "samplecode/Sample.h"
-#include "src/core/SkPathPriv.h"
 #include "src/core/SkScalerCache.h"
 #include "src/core/SkStrikeCache.h"
 #include "src/core/SkStrikeSpec.h"
@@ -30,19 +29,18 @@ public:
         for (Glyph& glyph : fGlyphs) {
             glyph.reset(fRand, this->width(), this->height());
         }
-        fGlyphAnimator->reset(&fRand, this->width(), this->height());
     }
 
     void onOnceBeforeDraw() final {
         SkFont defaultFont;
         SkStrikeSpec strikeSpec = SkStrikeSpec::MakeWithNoDevice(defaultFont);
-        auto strike = strikeSpec.findOrCreateStrike();
+        auto cache = strikeSpec.findOrCreateExclusiveStrike();
         SkPath glyphPaths[52];
         for (int i = 0; i < 52; ++i) {
             // I and l are rects on OS X ...
             char c = "aQCDEFGH7JKLMNOPBRZTUVWXYSAbcdefghijk1mnopqrstuvwxyz"[i];
             SkPackedGlyphID id(defaultFont.unicharToGlyph(c));
-            sk_ignore_unused_variable(strike->getScalerContext()->getPath(id, &glyphPaths[i]));
+            sk_ignore_unused_variable(cache->getScalerContext()->getPath(id, &glyphPaths[i]));
         }
 
         for (int i = 0; i < kNumPaths; ++i) {
@@ -50,30 +48,43 @@ public:
             fGlyphs[i].init(fRand, p);
         }
 
-        this->Sample::onOnceBeforeDraw();
+        this->INHERITED::onOnceBeforeDraw();
         this->reset();
     }
-    void onSizeChange() final { this->Sample::onSizeChange(); this->reset(); }
+    void onSizeChange() final { this->INHERITED::onSizeChange(); this->reset(); }
 
     SkString name() override { return SkString(this->getName()); }
 
-    bool onChar(SkUnichar) override;
-
-    bool onAnimate(double nanos) final {
-        return fGlyphAnimator->animate(nanos, this->width(), this->height());
+    bool onChar(SkUnichar unichar) override {
+            if (unichar == 'X') {
+                fDoClip = !fDoClip;
+                return true;
+            }
+            return false;
     }
 
     void onDrawContent(SkCanvas* canvas) override {
         if (fDoClip) {
             SkPath deviceSpaceClipPath = fClipPath;
-            deviceSpaceClipPath.transform(SkMatrix::Scale(this->width(), this->height()));
+            deviceSpaceClipPath.transform(SkMatrix::MakeScale(this->width(), this->height()));
             canvas->save();
             canvas->clipPath(deviceSpaceClipPath, SkClipOp::kDifference, true);
             canvas->clear(SK_ColorBLACK);
             canvas->restore();
             canvas->clipPath(deviceSpaceClipPath, SkClipOp::kIntersect, true);
         }
-        fGlyphAnimator->draw(canvas);
+        this->drawGlyphs(canvas);
+    }
+
+    virtual void drawGlyphs(SkCanvas* canvas) {
+        for (Glyph& glyph : fGlyphs) {
+            SkAutoCanvasRestore acr(canvas, true);
+            canvas->translate(glyph.fPosition.x(), glyph.fPosition.y());
+            canvas->scale(glyph.fZoom, glyph.fZoom);
+            canvas->rotate(glyph.fSpin);
+            canvas->translate(-glyph.fMidpt.x(), -glyph.fMidpt.y());
+            canvas->drawPath(glyph.fPath, glyph.fPaint);
+        }
     }
 
 protected:
@@ -89,36 +100,12 @@ protected:
         SkPoint    fMidpt;
     };
 
-    class GlyphAnimator {
-    public:
-        GlyphAnimator(Glyph* glyphs) : fGlyphs(glyphs) {}
-        virtual void reset(SkRandom*, int screenWidth, int screenHeight) {}
-        virtual bool animate(double nanos, int screenWidth, int screenHeight) { return false; }
-        virtual void draw(SkCanvas* canvas) {
-            for (int i = 0; i < kNumPaths; ++i) {
-                Glyph& glyph = fGlyphs[i];
-                SkAutoCanvasRestore acr(canvas, true);
-                canvas->translate(glyph.fPosition.x(), glyph.fPosition.y());
-                canvas->scale(glyph.fZoom, glyph.fZoom);
-                canvas->rotate(glyph.fSpin);
-                canvas->translate(-glyph.fMidpt.x(), -glyph.fMidpt.y());
-                canvas->drawPath(glyph.fPath, glyph.fPaint);
-            }
-        }
-        virtual ~GlyphAnimator() {}
+    Glyph      fGlyphs[kNumPaths];
+    SkRandom   fRand{25};
+    SkPath     fClipPath = ToolUtils::make_star(SkRect{0, 0, 1, 1}, 11, 3);
+    bool       fDoClip = false;
 
-    protected:
-        Glyph* const fGlyphs;
-    };
-
-    class MovingGlyphAnimator;
-    class WavyGlyphAnimator;
-
-    Glyph fGlyphs[kNumPaths];
-    SkRandom fRand{25};
-    SkPath fClipPath = ToolUtils::make_star(SkRect{0, 0, 1, 1}, 11, 3);
-    bool fDoClip = false;
-    std::unique_ptr<GlyphAnimator> fGlyphAnimator = std::make_unique<GlyphAnimator>(fGlyphs);
+    typedef Sample INHERITED;
 };
 
 void PathText::Glyph::init(SkRandom& rand, const SkPath& path) {
@@ -142,46 +129,48 @@ void PathText::Glyph::reset(SkRandom& rand, int w, int h) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Text from paths with animated transformation matrices.
-class PathText::MovingGlyphAnimator : public PathText::GlyphAnimator {
+class MovingPathText : public PathText {
 public:
-    MovingGlyphAnimator(Glyph* glyphs)
-            : GlyphAnimator(glyphs)
-            , fFrontMatrices(kNumPaths)
-            , fBackMatrices(kNumPaths) {
+    const char* getName() const override { return "MovingPathText"; }
+
+    MovingPathText()
+        : fFrontMatrices(kNumPaths)
+        , fBackMatrices(kNumPaths) {
     }
 
-    ~MovingGlyphAnimator() override {
+    ~MovingPathText() override {
         fBackgroundAnimationTask.wait();
     }
 
-    void reset(SkRandom* rand, int screenWidth, int screenHeight) override {
-        const SkScalar screensize = static_cast<SkScalar>(std::max(screenWidth, screenHeight));
+    void reset() override {
+        const SkScalar screensize = static_cast<SkScalar>(std::max(this->width(), this->height()));
+        this->INHERITED::reset();
 
         for (auto& v : fVelocities) {
             for (SkScalar* d : {&v.fDx, &v.fDy}) {
-                SkScalar t = pow(rand->nextF(), 3);
-                *d = ((1 - t) / 60 + t / 10) * (rand->nextBool() ? screensize : -screensize);
+                SkScalar t = pow(fRand.nextF(), 3);
+                *d = ((1 - t) / 60 + t / 10) * (fRand.nextBool() ? screensize : -screensize);
             }
 
-            SkScalar t = pow(rand->nextF(), 25);
-            v.fDSpin = ((1 - t) * 360 / 7.5 + t * 360 / 1.5) * (rand->nextBool() ? 1 : -1);
+            SkScalar t = pow(fRand.nextF(), 25);
+            v.fDSpin = ((1 - t) * 360 / 7.5 + t * 360 / 1.5) * (fRand.nextBool() ? 1 : -1);
         }
 
         // Get valid front data.
         fBackgroundAnimationTask.wait();
-        this->runAnimationTask(0, 0, screenWidth, screenHeight);
-        std::copy_n(fBackMatrices.get(), kNumPaths, fFrontMatrices.get());
+        this->runAnimationTask(0, 0, this->width(), this->height());
+        memcpy(fFrontMatrices, fBackMatrices, kNumPaths * sizeof(SkMatrix));
         fLastTick = 0;
     }
 
-    bool animate(double nanos, int screenWidth, int screenHeight) final {
+    bool onAnimate(double nanos) final {
         fBackgroundAnimationTask.wait();
         this->swapAnimationBuffers();
 
         const double tsec = 1e-9 * nanos;
         const double dt = fLastTick ? (1e-9 * nanos - fLastTick) : 0;
-        fBackgroundAnimationTask.add(std::bind(&MovingGlyphAnimator::runAnimationTask, this, tsec,
-                                               dt, screenWidth, screenHeight));
+        fBackgroundAnimationTask.add(std::bind(&MovingPathText::runAnimationTask, this, tsec,
+                                               dt, this->width(), this->height()));
         fLastTick = 1e-9 * nanos;
         return true;
     }
@@ -226,7 +215,7 @@ public:
         std::swap(fFrontMatrices, fBackMatrices);
     }
 
-    void draw(SkCanvas* canvas) override {
+    void drawGlyphs(SkCanvas* canvas) override {
         for (int i = 0; i < kNumPaths; ++i) {
             SkAutoCanvasRestore acr(canvas, true);
             canvas->concat(fFrontMatrices[i]);
@@ -240,31 +229,33 @@ protected:
         SkScalar fDSpin;
     };
 
-    Velocity fVelocities[kNumPaths];
-    SkAutoTArray<SkMatrix> fFrontMatrices;
-    SkAutoTArray<SkMatrix> fBackMatrices;
-    SkTaskGroup fBackgroundAnimationTask;
-    double fLastTick;
+    Velocity                  fVelocities[kNumPaths];
+    SkAutoTMalloc<SkMatrix>   fFrontMatrices;
+    SkAutoTMalloc<SkMatrix>   fBackMatrices;
+    SkTaskGroup               fBackgroundAnimationTask;
+    double                    fLastTick;
+
+    typedef PathText INHERITED;
 };
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Text from paths with animated control points.
-class PathText::WavyGlyphAnimator : public PathText::MovingGlyphAnimator {
+class WavyPathText : public MovingPathText {
 public:
-    WavyGlyphAnimator(Glyph* glyphs)
-            : MovingGlyphAnimator(glyphs)
-            , fFrontPaths(kNumPaths)
-            , fBackPaths(kNumPaths) {
-    }
+    const char* getName() const override { return "WavyPathText"; }
 
-    ~WavyGlyphAnimator() override {
+    WavyPathText()
+        : fFrontPaths(kNumPaths)
+        , fBackPaths(kNumPaths) {}
+
+    ~WavyPathText() override {
         fBackgroundAnimationTask.wait();
     }
 
-    void reset(SkRandom* rand, int screenWidth, int screenHeight) override {
-        fWaves.reset(*rand, screenWidth, screenHeight);
-        this->MovingGlyphAnimator::reset(rand, screenWidth, screenHeight);
+    void reset() override {
+        fWaves.reset(fRand, this->width(), this->height());
+        this->INHERITED::reset();
         std::copy(fBackPaths.get(), fBackPaths.get() + kNumPaths, fFrontPaths.get());
     }
 
@@ -273,7 +264,7 @@ public:
      */
     void runAnimationTask(double t, double dt, int w, int h) override {
         const float tsec = static_cast<float>(t);
-        this->MovingGlyphAnimator::runAnimationTask(t, 0.5 * dt, w, h);
+        this->INHERITED::runAnimationTask(t, 0.5 * dt, w, h);
 
         for (int i = 0; i < kNumPaths; ++i) {
             const Glyph& glyph = fGlyphs[i];
@@ -289,30 +280,35 @@ public:
             backpath->reset();
             backpath->setFillType(SkPathFillType::kEvenOdd);
 
-            for (auto [verb, pts, w] : SkPathPriv::Iterate(glyph.fPath)) {
+            SkPath::RawIter iter(glyph.fPath);
+            SkPath::Verb verb;
+            SkPoint pts[4];
+
+            while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
                 switch (verb) {
-                    case SkPathVerb::kMove: {
+                    case SkPath::kMove_Verb: {
                         SkPoint pt = fWaves.apply(tsec, matrix, pts[0]);
                         backpath->moveTo(pt.x(), pt.y());
                         break;
                     }
-                    case SkPathVerb::kLine: {
+                    case SkPath::kLine_Verb: {
                         SkPoint endpt = fWaves.apply(tsec, matrix, pts[1]);
                         backpath->lineTo(endpt.x(), endpt.y());
                         break;
                     }
-                    case SkPathVerb::kQuad: {
+                    case SkPath::kQuad_Verb: {
                         SkPoint controlPt = fWaves.apply(tsec, matrix, pts[1]);
                         SkPoint endpt = fWaves.apply(tsec, matrix, pts[2]);
                         backpath->quadTo(controlPt.x(), controlPt.y(), endpt.x(), endpt.y());
                         break;
                     }
-                    case SkPathVerb::kClose: {
+                    case SkPath::kClose_Verb: {
                         backpath->close();
                         break;
                     }
-                    case SkPathVerb::kCubic:
-                    case SkPathVerb::kConic:
+                    case SkPath::kCubic_Verb:
+                    case SkPath::kConic_Verb:
+                    case SkPath::kDone_Verb:
                         SK_ABORT("Unexpected path verb");
                         break;
                 }
@@ -321,11 +317,11 @@ public:
     }
 
     void swapAnimationBuffers() override {
-        this->MovingGlyphAnimator::swapAnimationBuffers();
+        this->INHERITED::swapAnimationBuffers();
         std::swap(fFrontPaths, fBackPaths);
     }
 
-    void draw(SkCanvas* canvas) override {
+    void drawGlyphs(SkCanvas* canvas) override {
         for (int i = 0; i < kNumPaths; ++i) {
             canvas->drawPath(fFrontPaths[i], fGlyphs[i].fPaint);
         }
@@ -352,12 +348,14 @@ private:
         float fOffsets[4];
     };
 
-    SkAutoTArray<SkPath> fFrontPaths;
-    SkAutoTArray<SkPath> fBackPaths;
-    Waves fWaves;
+    SkAutoTArray<SkPath>   fFrontPaths;
+    SkAutoTArray<SkPath>   fBackPaths;
+    Waves                  fWaves;
+
+    typedef MovingPathText INHERITED;
 };
 
-void PathText::WavyGlyphAnimator::Waves::reset(SkRandom& rand, int w, int h) {
+void WavyPathText::Waves::reset(SkRandom& rand, int w, int h) {
     const double pixelsPerMeter = 0.06 * std::max(w, h);
     const double medianWavelength = 8 * pixelsPerMeter;
     const double medianWaveAmplitude = 0.05 * 4 * pixelsPerMeter;
@@ -377,8 +375,7 @@ void PathText::WavyGlyphAnimator::Waves::reset(SkRandom& rand, int w, int h) {
     }
 }
 
-SkPoint PathText::WavyGlyphAnimator::Waves::apply(float tsec, const Sk2f matrix[3],
-                                                  const SkPoint& pt) const {
+SkPoint WavyPathText::Waves::apply(float tsec, const Sk2f matrix[3], const SkPoint& pt) const {
     constexpr static int kTablePeriod = 1 << 12;
     static float sin2table[kTablePeriod + 1];
     static SkOnce initTable;
@@ -425,28 +422,8 @@ SkPoint PathText::WavyGlyphAnimator::Waves::apply(float tsec, const Sk2f matrix[
     return {devicePt[0] + offsetY[0] + offsetY[1], devicePt[1] - offsetX[0] - offsetX[1]};
 }
 
-bool PathText::onChar(SkUnichar unichar) {
-    switch (unichar) {
-        case 'X':
-            fDoClip = !fDoClip;
-            return true;
-        case 'S':
-            fGlyphAnimator = std::make_unique<GlyphAnimator>(fGlyphs);
-            fGlyphAnimator->reset(&fRand, this->width(), this->height());
-            return true;
-        case 'M':
-            fGlyphAnimator = std::make_unique<MovingGlyphAnimator>(fGlyphs);
-            fGlyphAnimator->reset(&fRand, this->width(), this->height());
-            return true;
-        case 'W':
-            fGlyphAnimator = std::make_unique<WavyGlyphAnimator>(fGlyphs);
-            fGlyphAnimator->reset(&fRand, this->width(), this->height());
-            return true;
-    }
-    return false;
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Sample* MakePathTextSample() { return new PathText; }
-static SampleRegistry gPathTextSample(MakePathTextSample);
+DEF_SAMPLE( return new WavyPathText; )
+DEF_SAMPLE( return new MovingPathText; )
+DEF_SAMPLE( return new PathText; )

@@ -37,15 +37,15 @@ protected:
     }
 
     void onOnceBeforeDraw() override {
-        auto surf = SkSurface::MakeRasterN32Premul(135, 135);
+        fBitmap.allocN32Pixels(135, 135);
+        SkCanvas canvas(fBitmap);
+        canvas.clear(0x0);
 
         SkFont  font(ToolUtils::create_portable_typeface(), 64.0f);
         SkPaint paint;
         paint.setColor(0xFFFFFFFF);
-        surf->getCanvas()->drawString("ABC", 10, 55,  font, paint);
-        surf->getCanvas()->drawString("XYZ", 10, 110, font, paint);
-
-        fImage = surf->makeImageSnapshot();
+        canvas.drawString("ABC", 10, 55,  font, paint);
+        canvas.drawString("XYZ", 10, 110, font, paint);
     }
 
     SkISize onISize() override {
@@ -55,8 +55,9 @@ protected:
     void drawClippedBitmap(SkCanvas* canvas, const SkPaint& paint, int x, int y) {
         canvas->save();
         canvas->translate(SkIntToScalar(x), SkIntToScalar(y));
-        canvas->clipIRect(fImage->bounds());
-        canvas->drawImage(fImage, 0, 0, SkSamplingOptions(), &paint);
+        canvas->clipRect(SkRect::MakeWH(
+          SkIntToScalar(fBitmap.width()), SkIntToScalar(fBitmap.height())));
+        canvas->drawBitmap(fBitmap, 0, 0, &paint);
         canvas->restore();
     }
 
@@ -90,13 +91,13 @@ protected:
     }
 
 private:
-    sk_sp<SkImage> fImage;
+    SkBitmap fBitmap;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new MorphologyGM;)
 
-}  // namespace skiagm
+}

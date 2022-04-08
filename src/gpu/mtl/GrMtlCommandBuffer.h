@@ -11,27 +11,18 @@
 #import <Metal/Metal.h>
 
 #include "include/core/SkRefCnt.h"
-#include "include/gpu/GrTypes.h"
-#include "src/gpu/GrBuffer.h"
 #include "src/gpu/mtl/GrMtlUtil.h"
 
 class GrMtlGpu;
 class GrMtlPipelineState;
 class GrMtlOpsRenderPass;
 
-GR_NORETAIN_BEGIN
-
-class GrMtlCommandBuffer : public SkRefCnt {
+class GrMtlCommandBuffer {
 public:
-    static sk_sp<GrMtlCommandBuffer> Make(id<MTLCommandQueue> queue);
-    ~GrMtlCommandBuffer() override;
+    static GrMtlCommandBuffer* Create(id<MTLCommandQueue> queue);
+    ~GrMtlCommandBuffer();
 
-    bool commit(bool waitUntilCompleted);
-    bool hasWork() { return fHasWork; }
-
-    void addFinishedCallback(sk_sp<GrRefCntedCallback> callback) {
-        fFinishedCallbacks.push_back(std::move(callback));
-    }
+    void commit(bool waitUntilCompleted);
 
     id<MTLBlitCommandEncoder> getBlitCommandEncoder();
     id<MTLRenderCommandEncoder> getRenderCommandEncoder(MTLRenderPassDescriptor*,
@@ -42,31 +33,13 @@ public:
         [fCmdBuffer addCompletedHandler:block];
     }
 
-    void addGrBuffer(sk_sp<const GrBuffer> buffer) {
-        fTrackedGrBuffers.push_back(std::move(buffer));
-    }
-
-    void encodeSignalEvent(id<MTLEvent>, uint64_t value) SK_API_AVAILABLE(macos(10.14), ios(12.0));
-    void encodeWaitForEvent(id<MTLEvent>, uint64_t value) SK_API_AVAILABLE(macos(10.14), ios(12.0));
-
-    void waitUntilCompleted() {
-        [fCmdBuffer waitUntilCompleted];
-    }
-    bool isCompleted() {
-        return fCmdBuffer.status == MTLCommandBufferStatusCompleted ||
-               fCmdBuffer.status == MTLCommandBufferStatusError;
-    }
-    void callFinishedCallbacks() { fFinishedCallbacks.reset(); }
+    void encodeSignalEvent(id<MTLEvent>, uint64_t value) API_AVAILABLE(macos(10.14), ios(12.0));
+    void encodeWaitForEvent(id<MTLEvent>, uint64_t value) API_AVAILABLE(macos(10.14), ios(12.0));
 
 private:
-    static const int kInitialTrackedResourcesCount = 32;
-
     GrMtlCommandBuffer(id<MTLCommandBuffer> cmdBuffer)
         : fCmdBuffer(cmdBuffer)
-        , fActiveBlitCommandEncoder(nil)
-        , fActiveRenderCommandEncoder(nil)
-        , fPreviousRenderPassDescriptor(nil)
-        , fHasWork(false) {}
+        , fPreviousRenderPassDescriptor(nil) {}
 
     void endAllEncoding();
 
@@ -74,13 +47,6 @@ private:
     id<MTLBlitCommandEncoder>   fActiveBlitCommandEncoder;
     id<MTLRenderCommandEncoder> fActiveRenderCommandEncoder;
     MTLRenderPassDescriptor*    fPreviousRenderPassDescriptor;
-    bool                        fHasWork;
-
-    SkTArray<sk_sp<GrRefCntedCallback>> fFinishedCallbacks;
-
-    SkSTArray<kInitialTrackedResourcesCount, sk_sp<const GrBuffer>> fTrackedGrBuffers;
 };
-
-GR_NORETAIN_END
 
 #endif

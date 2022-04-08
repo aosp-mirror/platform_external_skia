@@ -21,7 +21,7 @@ private:
 
     friend class GrMtlPipelineStateBuilder;
 
-    using INHERITED = GrGLSLVaryingHandler;
+    typedef GrGLSLVaryingHandler INHERITED;
 };
 
 #endif

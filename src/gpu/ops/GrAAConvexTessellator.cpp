@@ -9,7 +9,6 @@
 #include "include/core/SkPath.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkString.h"
-#include "include/private/SkTPin.h"
 #include "src/gpu/geometry/GrPathUtils.h"
 #include "src/gpu/ops/GrAAConvexTessellator.h"
 
@@ -42,7 +41,8 @@ static bool intersect(const SkPoint& p0, const SkPoint& n0,
         return false;
     }
     *t = (v.fX * n1.fY - v.fY * n1.fX) / perpDot;
-    return SkScalarIsFinite(*t);
+    SkASSERT(SkScalarIsFinite(*t));
+    return true;
 }
 
 // This is a special case version of intersect where we have the vector
@@ -60,22 +60,21 @@ static bool duplicate_pt(const SkPoint& p0, const SkPoint& p1) {
 }
 
 static bool points_are_colinear_and_b_is_middle(const SkPoint& a, const SkPoint& b,
-                                                const SkPoint& c, float* accumError) {
+                                                const SkPoint& c) {
     // First check distance from b to the infinite line through a, c
     SkVector aToC = c - a;
     SkVector n = {aToC.fY, -aToC.fX};
     n.normalize();
 
-    SkScalar distBToLineAC = SkScalarAbs(n.dot(b) - n.dot(a));
-    if (*accumError + distBToLineAC >= kClose || aToC.dot(b - a) <= 0.f || aToC.dot(c - b) <= 0.f) {
-        // Too far from the line or not between the line segment from a to c
+    SkScalar distBToLineAC = n.dot(b) - n.dot(a);
+    if (SkScalarAbs(distBToLineAC) >= kClose) {
+        // Too far from the line, cannot be colinear
         return false;
-    } else {
-        // Accumulate the distance from b to |ac| that goes "away" when this near-colinear point
-        // is removed to simplify the path.
-        *accumError += distBToLineAC;
-        return true;
     }
+
+    // b is colinear, but it may not be in the line segment between a and c. It's in the middle if
+    // both the angle at a and the angle at c are acute.
+    return aToC.dot(b - a) > 0 && aToC.dot(c - b) > 0;
 }
 
 int GrAAConvexTessellator::addPt(const SkPoint& pt,
@@ -378,7 +377,7 @@ bool GrAAConvexTessellator::computePtAlongBisector(int startIdx,
 }
 
 bool GrAAConvexTessellator::extractFromPath(const SkMatrix& m, const SkPath& path) {
-    SkASSERT(path.isConvex());
+    SkASSERT(SkPathConvexityType::kConvex == path.getConvexityType());
 
     SkRect bounds = path.getBounds();
     m.mapRect(&bounds);
@@ -397,8 +396,6 @@ bool GrAAConvexTessellator::extractFromPath(const SkMatrix& m, const SkPath& pat
     // Presumptive inner ring: 6*numPts + 6
     fIndices.setReserve(18*path.countPoints() + 6);
 
-    // Reset the accumulated error for all the future lineTo() calls when iterating over the path.
-    fAccumLinearError = 0.f;
     // TODO: is there a faster way to extract the points from the path? Perhaps
     // get all the points via a new entry point, transform them all in bulk
     // and then walk them to find duplicates?
@@ -438,14 +435,11 @@ bool GrAAConvexTessellator::extractFromPath(const SkMatrix& m, const SkPath& pat
     }
 
     // Remove any lingering colinear points where the path wraps around
-    fAccumLinearError = 0.f;
     bool noRemovalsToDo = false;
     while (!noRemovalsToDo && this->numPts() >= 3) {
-        if (points_are_colinear_and_b_is_middle(fPts[fPts.count() - 2], fPts.top(), fPts[0],
-                                                &fAccumLinearError)) {
+        if (points_are_colinear_and_b_is_middle(fPts[fPts.count() - 2], fPts.top(), fPts[0])) {
             this->popLastPt();
-        } else if (points_are_colinear_and_b_is_middle(fPts.top(), fPts[0], fPts[1],
-                                                       &fAccumLinearError)) {
+        } else if (points_are_colinear_and_b_is_middle(fPts.top(), fPts[0], fPts[1])) {
             this->popFirstPtShuffle();
         } else {
             noRemovalsToDo = true;
@@ -928,8 +922,7 @@ void GrAAConvexTessellator::lineTo(const SkPoint& p, CurveState curve) {
     }
 
     if (this->numPts() >= 2 &&
-        points_are_colinear_and_b_is_middle(fPts[fPts.count() - 2], fPts.top(), p,
-                                            &fAccumLinearError)) {
+        points_are_colinear_and_b_is_middle(fPts[fPts.count() - 2], fPts.top(), p)) {
         // The old last point is on the line from the second to last to the new point
         this->popLastPt();
         // double-check that the new last point is not a duplicate of the new point. In an ideal
@@ -939,8 +932,6 @@ void GrAAConvexTessellator::lineTo(const SkPoint& p, CurveState curve) {
         if (duplicate_pt(p, this->lastPoint())) {
             return;
         }
-    } else {
-        fAccumLinearError = 0.f;
     }
     SkScalar initialRingCoverage = (SkStrokeRec::kFill_Style == fStyle) ? 0.5f : 1.0f;
     this->addPt(p, 0.0f, initialRingCoverage, false, curve);

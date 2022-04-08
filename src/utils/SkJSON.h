@@ -117,69 +117,58 @@ protected:
              char[8] (short string storage)
              external payload (tagged) pointer
 
-         -- lowest 3 bits reserved for tag storage
+         -- highest 3 bits reserved for type storage
 
      */
     enum class Tag : uint8_t {
-        // n.b.: we picked kShortString == 0 on purpose,
-        // to enable certain short-string optimizations.
+        // We picked kShortString == 0 so that tag 0x00 and stored max_size-size (7-7=0)
+        // conveniently overlap the '\0' terminator, allowing us to store a 7 character
+        // C string inline.
         kShortString                  = 0b00000000,  // inline payload
-        kNull                         = 0b00000001,  // no payload
-        kBool                         = 0b00000010,  // inline payload
-        kInt                          = 0b00000011,  // inline payload
-        kFloat                        = 0b00000100,  // inline payload
-        kString                       = 0b00000101,  // ptr to external storage
-        kArray                        = 0b00000110,  // ptr to external storage
-        kObject                       = 0b00000111,  // ptr to external storage
+        kNull                         = 0b00100000,  // no payload
+        kBool                         = 0b01000000,  // inline payload
+        kInt                          = 0b01100000,  // inline payload
+        kFloat                        = 0b10000000,  // inline payload
+        kString                       = 0b10100000,  // ptr to external storage
+        kArray                        = 0b11000000,  // ptr to external storage
+        kObject                       = 0b11100000,  // ptr to external storage
     };
-    static constexpr uint8_t kTagMask = 0b00000111;
+    static constexpr uint8_t kTagMask = 0b11100000;
 
     void init_tagged(Tag);
     void init_tagged_pointer(Tag, void*);
 
     Tag getTag() const {
-        return static_cast<Tag>(fData8[0] & kTagMask);
+        return static_cast<Tag>(fData8[kTagOffset] & kTagMask);
     }
 
-    // Access the record payload as T.
+    // Access the record data as T.
     //
-    // Since the tag is stored in the lower bits, we skip the first word whenever feasible.
+    // This is also used to access the payload for inline records.  Since the record type lives in
+    // the high bits, sizeof(T) must be less than sizeof(Value) when accessing inline payloads.
     //
-    // E.g. (U == unused)
+    // E.g.
     //
     //   uint8_t
     //    -----------------------------------------------------------------------
-    //   |TAG| U  |  val8  |   U    |   U    |   U    |   U    |   U    |   U    |
-    //    -----------------------------------------------------------------------
-    //
-    //   uint16_t
-    //    -----------------------------------------------------------------------
-    //   |TAG|      U      |      val16      |        U        |        U        |
+    //   |  val8  |  val8  |  val8  |  val8  |  val8  |  val8  |  val8  |    TYPE|
     //    -----------------------------------------------------------------------
     //
     //   uint32_t
     //    -----------------------------------------------------------------------
-    //   |TAG|             U                 |                val32              |
-    //    -----------------------------------------------------------------------
-    //
-    //   T* (32b)
-    //    -----------------------------------------------------------------------
-    //   |TAG|             U                 |             T* (32bits)           |
+    //   |               val32               |          unused          |    TYPE|
     //    -----------------------------------------------------------------------
     //
     //   T* (64b)
     //    -----------------------------------------------------------------------
-    //   |TAG|                        T* (61bits)                                |
+    //   |                        T* (kTypeShift bits)                      |TYPE|
     //    -----------------------------------------------------------------------
     //
     template <typename T>
     const T* cast() const {
         static_assert(sizeof (T) <=  sizeof(Value), "");
         static_assert(alignof(T) <= alignof(Value), "");
-
-        return (sizeof(T) > sizeof(*this) / 2)
-                ? reinterpret_cast<const T*>(this) + 0  // need all the bits
-                : reinterpret_cast<const T*>(this) + 1; // skip the first word (where the tag lives)
+        return reinterpret_cast<const T*>(this);
     }
 
     template <typename T>
@@ -194,8 +183,8 @@ protected:
         return (sizeof(uintptr_t) < sizeof(Value))
             // For 32-bit, pointers are stored unmodified.
             ? *this->cast<const T*>()
-            // For 64-bit, we use the lower bits of the pointer as tag storage.
-            : reinterpret_cast<T*>(*this->cast<uintptr_t>() & ~static_cast<uintptr_t>(kTagMask));
+            // For 64-bit, we use the high bits of the pointer as tag storage.
+            : reinterpret_cast<T*>(*this->cast<uintptr_t>() & kTagPointerMask);
     }
 
 private:
@@ -203,7 +192,12 @@ private:
 
     uint8_t fData8[kValueSize];
 
-#if !defined(SK_CPU_LENDIAN)
+#if defined(SK_CPU_LENDIAN)
+    static constexpr size_t kTagOffset = kValueSize - 1;
+
+    static constexpr uintptr_t kTagPointerMask =
+            ~(static_cast<uintptr_t>(kTagMask) << ((sizeof(uintptr_t) - 1) * 8));
+#else
     // The current value layout assumes LE and will take some tweaking for BE.
     static_assert(false, "Big-endian builds are not supported at this time.");
 #endif
@@ -325,11 +319,11 @@ class ObjectValue final : public VectorValue<Member, Value::Type::kObject> {
 public:
     ObjectValue(const Member* src, size_t size, SkArenaAlloc& alloc);
 
-    const  Value& operator[](const char*) const;
+    const Value& operator[](const char*) const;
 
-    const Member& operator[](size_t i) const {
-        return this->VectorValue::operator[](i);
-    }
+private:
+    // Not particularly interesting - hiding for disambiguation.
+    const Member& operator[](size_t i) const = delete;
 };
 
 class DOM final : public SkNoncopyable {

@@ -16,6 +16,10 @@
 #include "samplecode/Sample.h"
 #include "tools/timer/Timer.h"
 
+#if SK_SUPPORT_GPU
+#include "include/gpu/GrContext.h"
+#endif
+
 // Create an animation of a bunch of letters that rotate in place. This is intended to stress
 // the glyph atlas and test that we don't see corruption or bad slowdowns.
 class FlutterAnimateView : public Sample {
@@ -33,6 +37,7 @@ protected:
     void onDrawContent(SkCanvas* canvas) override {
         SkFont font(fTypeface, 50);
         SkPaint paint;
+        paint.setFilterQuality(kMedium_SkFilterQuality);
 
         // rough center of each glyph
         static constexpr auto kMidX = 35;
@@ -89,7 +94,7 @@ private:
     static constexpr int kNumChars = 40;
     AnimatedChar fChars[kNumChars];
 
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

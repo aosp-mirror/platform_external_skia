@@ -5,8 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include <array>
-
 #include "src/sfnt/SkOTUtils.h"
 
 #include "include/core/SkData.h"

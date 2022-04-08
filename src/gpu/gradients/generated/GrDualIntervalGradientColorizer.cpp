@@ -10,8 +10,7 @@
  **************************************************************************************************/
 #include "GrDualIntervalGradientColorizer.h"
 
-#include "src/core/SkUtils.h"
-#include "src/gpu/GrTexture.h"
+#include "include/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramBuilder.h"
@@ -35,36 +34,25 @@ public:
         (void)bias23;
         auto threshold = _outer.threshold;
         (void)threshold;
-        scale01Var = args.fUniformHandler->addUniform(
-                &_outer, kFragment_GrShaderFlag, kFloat4_GrSLType, "scale01");
-        bias01Var = args.fUniformHandler->addUniform(
-                &_outer, kFragment_GrShaderFlag, kFloat4_GrSLType, "bias01");
-        scale23Var = args.fUniformHandler->addUniform(
-                &_outer, kFragment_GrShaderFlag, kFloat4_GrSLType, "scale23");
-        bias23Var = args.fUniformHandler->addUniform(
-                &_outer, kFragment_GrShaderFlag, kFloat4_GrSLType, "bias23");
-        thresholdVar = args.fUniformHandler->addUniform(
-                &_outer, kFragment_GrShaderFlag, kHalf_GrSLType, "threshold");
+        scale01Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
+                                                      "scale01");
+        bias01Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
+                                                     "bias01");
+        scale23Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
+                                                      "scale23");
+        bias23Var = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kFloat4_GrSLType,
+                                                     "bias23");
+        thresholdVar = args.fUniformHandler->addUniform(kFragment_GrShaderFlag, kHalf_GrSLType,
+                                                        "threshold");
         fragBuilder->codeAppendf(
-                R"SkSL(half t = half(%s.x);
-float4 scale;
-float4 bias;
-
-if (t < %s) {
-    scale = %s;
-    bias = %s;
-} else {
-    scale = %s;
-    bias = %s;
-}
-return half4(float(t) * scale + bias);
-)SkSL",
-                args.fSampleCoord,
-                args.fUniformHandler->getUniformCStr(thresholdVar),
+                "half t = %s.x;\nfloat4 scale, bias;\nif (t < %s) {\n    scale = %s;\n    bias = "
+                "%s;\n} else {\n    scale = %s;\n    bias = %s;\n}\n%s = half4(float(t) * scale + "
+                "bias);\n",
+                args.fInputColor, args.fUniformHandler->getUniformCStr(thresholdVar),
                 args.fUniformHandler->getUniformCStr(scale01Var),
                 args.fUniformHandler->getUniformCStr(bias01Var),
                 args.fUniformHandler->getUniformCStr(scale23Var),
-                args.fUniformHandler->getUniformCStr(bias23Var));
+                args.fUniformHandler->getUniformCStr(bias23Var), args.fOutputColor);
     }
 
 private:
@@ -111,9 +99,8 @@ private:
     UniformHandle bias23Var;
     UniformHandle thresholdVar;
 };
-std::unique_ptr<GrGLSLFragmentProcessor> GrDualIntervalGradientColorizer::onMakeProgramImpl()
-        const {
-    return std::make_unique<GrGLSLDualIntervalGradientColorizer>();
+GrGLSLFragmentProcessor* GrDualIntervalGradientColorizer::onCreateGLSLInstance() const {
+    return new GrGLSLDualIntervalGradientColorizer();
 }
 void GrDualIntervalGradientColorizer::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                                             GrProcessorKeyBuilder* b) const {}
@@ -134,37 +121,10 @@ GrDualIntervalGradientColorizer::GrDualIntervalGradientColorizer(
         , bias01(src.bias01)
         , scale23(src.scale23)
         , bias23(src.bias23)
-        , threshold(src.threshold) {
-    this->cloneAndRegisterAllChildProcessors(src);
-    this->setUsesSampleCoordsDirectly();
-}
+        , threshold(src.threshold) {}
 std::unique_ptr<GrFragmentProcessor> GrDualIntervalGradientColorizer::clone() const {
-    return std::make_unique<GrDualIntervalGradientColorizer>(*this);
+    return std::unique_ptr<GrFragmentProcessor>(new GrDualIntervalGradientColorizer(*this));
 }
-#if GR_TEST_UTILS
-SkString GrDualIntervalGradientColorizer::onDumpInfo() const {
-    return SkStringPrintf(
-            "(scale01=float4(%f, %f, %f, %f), bias01=float4(%f, %f, %f, %f), scale23=float4(%f, "
-            "%f, %f, %f), bias23=float4(%f, %f, %f, %f), threshold=%f)",
-            scale01.fR,
-            scale01.fG,
-            scale01.fB,
-            scale01.fA,
-            bias01.fR,
-            bias01.fG,
-            bias01.fB,
-            bias01.fA,
-            scale23.fR,
-            scale23.fG,
-            scale23.fB,
-            scale23.fA,
-            bias23.fR,
-            bias23.fG,
-            bias23.fB,
-            bias23.fA,
-            threshold);
-}
-#endif
 
 std::unique_ptr<GrFragmentProcessor> GrDualIntervalGradientColorizer::Make(const SkPMColor4f& c0,
                                                                            const SkPMColor4f& c1,
@@ -182,10 +142,8 @@ std::unique_ptr<GrFragmentProcessor> GrDualIntervalGradientColorizer::Make(const
     auto scale23 = (vc3 - vc2) / (1 - threshold);
     auto bias23 = vc2 - threshold * scale23;
 
-    return std::unique_ptr<GrFragmentProcessor>(
-            new GrDualIntervalGradientColorizer({scale01[0], scale01[1], scale01[2], scale01[3]},
-                                                c0,
-                                                {scale23[0], scale23[1], scale23[2], scale23[3]},
-                                                {bias23[0], bias23[1], bias23[2], bias23[3]},
-                                                threshold));
+    return std::unique_ptr<GrFragmentProcessor>(new GrDualIntervalGradientColorizer(
+            {scale01[0], scale01[1], scale01[2], scale01[3]}, c0,
+            {scale23[0], scale23[1], scale23[2], scale23[3]},
+            {bias23[0], bias23[1], bias23[2], bias23[3]}, threshold));
 }

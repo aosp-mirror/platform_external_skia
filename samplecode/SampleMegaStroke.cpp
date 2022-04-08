@@ -76,7 +76,7 @@ private:
     SkRect      fClip;
     int         fAngle;
     int         fPlusMinus;
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

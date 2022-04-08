@@ -9,36 +9,63 @@
 #define SkottieValue_DEFINED
 
 #include "include/core/SkColor.h"
-#include "include/core/SkM44.h"
+#include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkString.h"
 
-#include <initializer_list>
 #include <vector>
 
 namespace skjson { class Value; }
 
 namespace skottie {
+namespace internal {
+class AnimationBuilder;
+} // namespace internal
 
-using ScalarValue = SkScalar;
-using   Vec2Value = SkV2;
+template <typename T>
+struct ValueTraits {
+    static bool FromJSON(const skjson::Value&, const internal::AnimationBuilder*, T*);
 
-class VectorValue final : public std::vector<float> {
-public:
-    VectorValue() = default;
+    template <typename U>
+    static U As(const T&);
 
-    VectorValue(std::initializer_list<float> l) : INHERITED(l) {}
-
-    operator SkV3()      const;
-    operator SkColor()   const;
-    operator SkColor4f() const;
-
-private:
-    using INHERITED = std::vector<float>;
+    static bool CanLerp(const T&, const T&);
+    static void Lerp(const T&, const T&, float, T*);
 };
 
-class ShapeValue final : public std::vector<float> {
-public:
-    operator SkPath() const;
+using ScalarValue = SkScalar;
+using VectorValue = std::vector<ScalarValue>;
+
+struct BezierVertex {
+    SkPoint fInPoint,  // "in" control point, relative to the vertex
+            fOutPoint, // "out" control point, relative to the vertex
+            fVertex;
+
+    bool operator==(const BezierVertex& other) const {
+        return fInPoint  == other.fInPoint
+            && fOutPoint == other.fOutPoint
+            && fVertex   == other.fVertex;
+    }
+
+    bool operator!=(const BezierVertex& other) const { return !(*this == other); }
+};
+
+struct ShapeValue {
+    std::vector<BezierVertex> fVertices;
+    bool                      fClosed   : 1,
+                              fVolatile : 1;
+
+    ShapeValue() : fClosed(false), fVolatile(false) {}
+    ShapeValue(const ShapeValue&)            = default;
+    ShapeValue(ShapeValue&&)                 = default;
+    ShapeValue& operator=(const ShapeValue&) = default;
+
+    bool operator==(const ShapeValue& other) const {
+        return fVertices == other.fVertices && fClosed == other.fClosed;
+    }
+
+    bool operator!=(const ShapeValue& other) const { return !(*this == other); }
 };
 
 } // namespace skottie

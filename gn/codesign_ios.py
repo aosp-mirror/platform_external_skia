@@ -21,18 +21,15 @@ import tempfile
 #  profile          path or name of provisioning profile
 pkg,identstr,profile = sys.argv[1:]
 
-# Find the signing identity.
+# Find the Google signing identity.
 identity = None
 for line in subprocess.check_output(['security', 'find-identity']).split('\n'):
   m = re.match(r'''.*\) (.*) "''' + identstr + '"', line)
   if m:
     identity = m.group(1)
-if identity is None:
-  print("Signing identity matching '" + identstr + "' not found.")
-  print("Please verify by running 'security find-identity' or checking your keychain.")
-  sys.exit(1)
+assert identity
 
-# Find the mobile provisioning profile.
+# Find the Google mobile provisioning profile.
 mobileprovision = None
 if os.path.isfile(profile):
   mobileprovision = profile
@@ -43,10 +40,7 @@ else:
     if re.search(r'''<key>Name</key>
 \t<string>''' + profile + r'''</string>''', open(p).read(), re.MULTILINE):
       mobileprovision = p
-if mobileprovision is None:
-  print("Provisioning profile matching '" + profile + "' not found.")
-  print("Please verify that the correct profile is installed in '${HOME}/Library/MobileDevice/Provisioning Profiles' or specify the path directly.")
-  sys.exit(1)
+assert mobileprovision
 
 # The .mobileprovision just gets copied into the package.
 shutil.copy(mobileprovision,

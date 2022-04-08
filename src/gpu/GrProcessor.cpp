@@ -5,7 +5,9 @@
  * found in the LICENSE file.
  */
 
+#include "include/gpu/GrContext.h"
 #include "include/private/SkSpinlock.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrMemoryPool.h"
 #include "src/gpu/GrProcessor.h"
@@ -38,7 +40,7 @@ public:
         return gPool;
     }
 };
-}  // namespace
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 

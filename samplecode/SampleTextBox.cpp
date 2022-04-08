@@ -56,7 +56,6 @@ protected:
         paint.setColor(fg);
 
         for (int i = 9; i < 24; i += 2) {
-            SkShaper::PurgeCaches();
             SkTextBlobBuilderRunHandler builder(gText, { margin, margin });
             SkFont srcFont(nullptr, SkIntToScalar(i));
             srcFont.setEdging(SkFont::Edging::kSubpixelAntiAlias);
@@ -111,11 +110,11 @@ protected:
 
 private:
     std::unique_ptr<SkShaper> fShaper;
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 DEF_SAMPLE( return new TextBoxView([](){ return SkShaper::Make(); }, "default"); );
-#ifdef SK_SHAPER_CORETEXT_AVAILABLE
+#ifdef SK_BUILD_FOR_MAC
 DEF_SAMPLE( return new TextBoxView(SkShaper::MakeCoreText, "coretext"); );
 #endif
 
@@ -177,14 +176,12 @@ protected:
         for (SkScalar size = 30; size <= 30; size += 10) {
             this->drawTest(canvas, text, size, SkShaper::Make());
             canvas->translate(0, size + 5);
-            #ifdef SK_SHAPER_CORETEXT_AVAILABLE
             this->drawTest(canvas, text, size, SkShaper::MakeCoreText());
-            #endif
             canvas->translate(0, size*2);
         }
     }
 
 private:
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 DEF_SAMPLE( return new SampleShaper; );

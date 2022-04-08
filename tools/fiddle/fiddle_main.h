@@ -13,7 +13,7 @@
     #include "include/core/SkPictureRecorder.h"
     #include "include/core/SkStream.h"
     #include "include/core/SkSurface.h"
-    #include "include/gpu/GrDirectContext.h"
+    #include "include/gpu/GrContext.h"
     #include "include/gpu/gl/GrGLAssembleInterface.h"
     #include "include/gpu/gl/GrGLInterface.h"
 #else
@@ -23,27 +23,26 @@
 #include <memory>
 #include <sstream>
 
-namespace sk_gpu_test {
-class GLTestContext;
-class ManagedBackendTexture;
-}  // namespace sk_gpu_test
-
-extern sk_sp<sk_gpu_test::ManagedBackendTexture> backEndTexture;
+extern GrBackendTexture backEndTexture;
 extern GrBackendRenderTarget backEndRenderTarget;
-extern sk_sp<sk_gpu_test::ManagedBackendTexture> backEndTextureRenderTarget;
+extern GrBackendTexture backEndTextureRenderTarget;
 extern SkBitmap source;
 extern sk_sp<SkImage> image;
 extern double duration; // The total duration of the animation in seconds.
 extern double frame;    // A value in [0, 1] of where we are in the animation.
 
+namespace sk_gpu_test {
+class GLTestContext;
+}
+
 struct DrawOptions {
     DrawOptions(int w, int h, bool r, bool g, bool p, bool k, bool srgb, bool f16,
                 bool textOnly, const char* s,
-                GrMipmapped mipMapping,
+                GrMipMapped mipMapping,
                 int offScreenWidth,
                 int offScreenHeight,
-                int deprecated, // TODO(jcgregorio): remove
-                GrMipmapped offScreenMipMapping)
+                int offScreenSampleCount,
+                GrMipMapped offScreenMipMapping)
         : size(SkISize::Make(w, h))
         , raster(r)
         , gpu(g)
@@ -56,6 +55,7 @@ struct DrawOptions {
         , fMipMapping(mipMapping)
         , fOffScreenWidth(offScreenWidth)
         , fOffScreenHeight(offScreenHeight)
+        , fOffScreenSampleCount(offScreenSampleCount)
         , fOffScreenMipMapping(offScreenMipMapping) {
         // F16 mode is only valid for color correct backends.
         SkASSERT(srgb || !f16);
@@ -71,26 +71,27 @@ struct DrawOptions {
     const char* source;
 
     // This flag is used when a GPU texture resource is created and exposed as a GrBackendTexture.
-    // In this case the resource is created with extra room to accommodate mipmaps.
+    // In this case the resource is created with extra room to accomodate mipmaps.
     // TODO: The SkImage::makeTextureImage API would need to be widened to allow this to be true
     // for the non-backend gpu SkImages.
-    GrMipmapped fMipMapping;
+    GrMipMapped fMipMapping;
 
     // Parameters for an GPU offscreen resource exposed as a GrBackendRenderTarget
     int         fOffScreenWidth;
     int         fOffScreenHeight;
+    int         fOffScreenSampleCount;
     // TODO: should we also expose stencilBits here? How about the config?
 
-    GrMipmapped fOffScreenMipMapping; // only applicable if the offscreen is also textureable
+    GrMipMapped fOffScreenMipMapping; // only applicable if the offscreen is also textureable
 };
 
 extern DrawOptions GetDrawOptions();
 extern void SkDebugf(const char * format, ...);
 extern void draw(SkCanvas*);
 
-// There are different implementations of create_direct_context() for EGL, Mesa,
+// There are different implementations of create_grcontext() for EGL, Mesa,
 // and a fallback to a null context.
-extern sk_sp<GrDirectContext> create_direct_context(std::ostringstream& driverinfo,
-                                                    std::unique_ptr<sk_gpu_test::GLTestContext>*);
+extern sk_sp<GrContext> create_grcontext(std::ostringstream& driverinfo,
+                                         std::unique_ptr<sk_gpu_test::GLTestContext>* glContext);
 
 #endif  // fiddle_main_DEFINED

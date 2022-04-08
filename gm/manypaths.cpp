@@ -64,7 +64,7 @@ protected:
     }
 
 private:
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -117,7 +117,7 @@ protected:
     }
 
 private:
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -125,4 +125,4 @@ private:
 DEF_GM( return new ManyCirclesGM; )
 DEF_GM( return new ManyRRectsGM; )
 
-}  // namespace skiagm
+}

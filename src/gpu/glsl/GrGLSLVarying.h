@@ -9,9 +9,9 @@
 #define GrGLSLVarying_DEFINED
 
 #include "include/private/GrTypesPriv.h"
+#include "src/gpu/GrAllocator.h"
 #include "src/gpu/GrGeometryProcessor.h"
 #include "src/gpu/GrShaderVar.h"
-#include "src/gpu/GrTBlockList.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
 
 class GrGLSLProgramBuilder;
@@ -130,7 +130,7 @@ public:
     void addPassThroughAttribute(const GrGeometryProcessor::Attribute&, const char* output,
                                  Interpolation = Interpolation::kInterpolated);
 
-    void emitAttributes(const GrGeometryProcessor&);
+    void emitAttributes(const GrGeometryProcessor& gp);
 
     // This should be called once all attributes and varyings have been added to the
     // GrGLSLVaryingHanlder and before getting/adding any of the declarations to the shaders.
@@ -149,8 +149,9 @@ protected:
         GrShaderFlags    fVisibility;
     };
 
-    typedef GrTBlockList<VaryingInfo> VaryingList;
-    typedef GrTBlockList<GrShaderVar> VarArray;
+    typedef GrTAllocator<VaryingInfo> VaryingList;
+    typedef GrTAllocator<GrShaderVar> VarArray;
+    typedef GrGLSLProgramDataManager::VaryingHandle VaryingHandle;
 
     VaryingList    fVaryings;
     VarArray       fVertexInputs;

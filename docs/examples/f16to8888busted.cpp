@@ -14,6 +14,6 @@ void draw(SkCanvas* canvas) {
 
     // Take a snapshot from surface and draw it on the canvas
     sk_sp<SkImage> img = offscreen->makeImageSnapshot();
-    canvas->drawImageRect(img, SkRect::MakeWH(100, 100), SkSamplingOptions());
+    canvas->drawImageRect(img, SkRect::MakeWH(100, 100), nullptr);
 }
 }  // END FIDDLE

@@ -12,6 +12,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/private/SkTemplates.h"
 #include "include/private/SkTo.h"
+#include "src/codec/SkCodecAnimationPriv.h"
 #include "src/codec/SkCodecPriv.h"
 #include "src/codec/SkParseEncodedOrigin.h"
 #include "src/codec/SkSampler.h"
@@ -76,7 +77,7 @@ std::unique_ptr<SkCodec> SkWebpCodec::MakeFromStream(std::unique_ptr<SkStream> s
     const int width = WebPDemuxGetI(demux, WEBP_FF_CANVAS_WIDTH);
     const int height = WebPDemuxGetI(demux, WEBP_FF_CANVAS_HEIGHT);
 
-    // Validate the image size that's about to be decoded.
+    // Sanity check for image size that's about to be decoded.
     {
         const int64_t size = sk_64_mul(width, height);
         // now check that if we are 4-bytes per pixel, we also don't overflow
@@ -142,7 +143,7 @@ std::unique_ptr<SkCodec> SkWebpCodec::MakeFromStream(std::unique_ptr<SkStream> s
             // sense to guess kBGRA which is likely closer to the final
             // output.  Otherwise, we might end up converting
             // BGRA->YUVA->BGRA.
-            [[fallthrough]];
+            // Fallthrough:
         case 2:
             // This is the lossless format (BGRA).
             if (hasAlpha) {
@@ -223,7 +224,9 @@ int SkWebpCodec::onGetRepetitionCount() {
         return kRepetitionCountInfinite;
     }
 
+#ifndef SK_LEGACY_WEBP_LOOP_COUNT
     loopCount--;
+#endif
     return loopCount;
 }
 
@@ -265,7 +268,7 @@ int SkWebpCodec::onGetFrameCount() {
                 SkCodecAnimation::DisposalMethod::kKeep);
         frame->setDuration(iter.duration);
         if (WEBP_MUX_BLEND != iter.blend_method) {
-            frame->setBlend(SkCodecAnimation::Blend::kSrc);
+            frame->setBlend(SkCodecAnimation::Blend::kBG);
         }
         fFrameHolder.setAlphaAndRequiredFrame(frame);
     }
@@ -294,9 +297,14 @@ bool SkWebpCodec::onGetFrameInfo(int i, FrameInfo* frameInfo) const {
     }
 
     if (frameInfo) {
+        frameInfo->fRequiredFrame = frame->getRequiredFrame();
+        frameInfo->fDuration = frame->getDuration();
         // libwebp only reports fully received frames for an
         // animated image.
-        frame->fillIn(frameInfo, true);
+        frameInfo->fFullyReceived = true;
+        frameInfo->fAlphaType = frame->hasAlpha() ? kUnpremul_SkAlphaType
+                                                  : kOpaque_SkAlphaType;
+        frameInfo->fDisposalMethod = frame->getDisposalMethod();
     }
 
     return true;
@@ -445,12 +453,10 @@ SkCodec::Result SkWebpCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst, 
     const bool blendWithPrevFrame = !independent && frame.blend_method == WEBP_MUX_BLEND
         && frame.has_alpha;
 
+    SkBitmap webpDst;
     auto webpInfo = dstInfo;
     if (!frame.has_alpha) {
         webpInfo = webpInfo.makeAlphaType(kOpaque_SkAlphaType);
-    } else if (this->colorXform() || blendWithPrevFrame) {
-        // the colorXform and blend_line expect unpremul.
-        webpInfo = webpInfo.makeAlphaType(kUnpremul_SkAlphaType);
     }
     if (this->colorXform()) {
         // Swizzling between RGBA and BGRA is zero cost in a color transform.  So when we have a
@@ -459,9 +465,12 @@ SkCodec::Result SkWebpCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst, 
         // Lossy webp is encoded as YUV (so RGBA and BGRA are the same cost).  Lossless webp is
         // encoded as BGRA. This means decoding to BGRA is either faster or the same cost as RGBA.
         webpInfo = webpInfo.makeColorType(kBGRA_8888_SkColorType);
+
+        if (webpInfo.alphaType() == kPremul_SkAlphaType) {
+            webpInfo = webpInfo.makeAlphaType(kUnpremul_SkAlphaType);
+        }
     }
 
-    SkBitmap webpDst;
     if ((this->colorXform() && !is_8888(dstInfo.colorType())) || blendWithPrevFrame) {
         // We will decode the entire image and then perform the color transform.  libwebp
         // does not provide a row-by-row API.  This is a shame particularly when we do not want
@@ -473,7 +482,7 @@ SkCodec::Result SkWebpCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst, 
     }
 
     config.output.colorspace = webp_decode_mode(webpInfo.colorType(),
-            webpInfo.alphaType() == kPremul_SkAlphaType);
+            frame.has_alpha && dstInfo.alphaType() == kPremul_SkAlphaType && !this->colorXform());
     config.output.is_external_memory = 1;
 
     config.output.u.RGBA.rgba = reinterpret_cast<uint8_t*>(webpDst.getAddr(dstX, dstY));

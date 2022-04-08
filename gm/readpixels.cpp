@@ -22,13 +22,14 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrDirectContext.h"
 #include "include/third_party/skcms/skcms.h"
 #include "tools/Resources.h"
 
 #include <string.h>
 #include <memory>
 #include <utility>
+
+class GrContext;
 
 static const int kWidth = 64;
 static const int kHeight = 64;
@@ -40,10 +41,14 @@ static sk_sp<SkImage> make_raster_image(SkColorType colorType) {
         return nullptr;
     }
 
+    SkBitmap bitmap;
     SkImageInfo info = codec->getInfo().makeWH(kWidth, kHeight)
                                        .makeColorType(colorType)
                                        .makeAlphaType(kPremul_SkAlphaType);
-    return std::get<0>(codec->getImage(info));
+    bitmap.allocPixels(info);
+    codec->getPixels(info, bitmap.getPixels(), bitmap.rowBytes());
+    bitmap.setImmutable();
+    return SkImage::MakeFromBitmap(bitmap);
 }
 
 static sk_sp<SkImage> make_codec_image() {
@@ -106,21 +111,21 @@ static sk_sp<SkColorSpace> make_small_gamut() {
     return make_parametric_transfer_fn(primaries);
 }
 
-static void draw_image(GrDirectContext* dContext, SkCanvas* canvas, SkImage* image,
-                       SkColorType dstColorType, SkAlphaType dstAlphaType,
-                       sk_sp<SkColorSpace> dstColorSpace, SkImage::CachingHint hint) {
+static void draw_image(SkCanvas* canvas, SkImage* image, SkColorType dstColorType,
+                       SkAlphaType dstAlphaType, sk_sp<SkColorSpace> dstColorSpace,
+                       SkImage::CachingHint hint) {
     size_t rowBytes = image->width() * SkColorTypeBytesPerPixel(dstColorType);
     sk_sp<SkData> data = SkData::MakeUninitialized(rowBytes * image->height());
     SkImageInfo dstInfo = SkImageInfo::Make(image->width(), image->height(), dstColorType,
                                             dstAlphaType, dstColorSpace);
-    if (!image->readPixels(dContext, dstInfo, data->writable_data(), rowBytes, 0, 0, hint)) {
+    if (!image->readPixels(dstInfo, data->writable_data(), rowBytes, 0, 0, hint)) {
         memset(data->writable_data(), 0, rowBytes * image->height());
     }
 
     // Now that we have called readPixels(), dump the raw pixels into an srgb image.
     sk_sp<SkColorSpace> srgb = SkColorSpace::MakeSRGB();
     sk_sp<SkImage> raw = SkImage::MakeRasterData(dstInfo.makeColorSpace(srgb), data, rowBytes);
-    canvas->drawImage(raw.get(), 0.0f, 0.0f);
+    canvas->drawImage(raw.get(), 0.0f, 0.0f, nullptr);
 }
 
 class ReadPixelsGM : public skiagm::GM {
@@ -152,21 +157,20 @@ protected:
                 make_small_gamut(),
         };
 
-        for (const sk_sp<SkColorSpace>& dstColorSpace : colorSpaces) {
+        for (sk_sp<SkColorSpace> dstColorSpace : colorSpaces) {
             for (SkColorType srcColorType : colorTypes) {
                 canvas->save();
                 sk_sp<SkImage> image = make_raster_image(srcColorType);
                 if (!image) {
                     continue;
                 }
-                auto dContext = GrAsDirectContext(canvas->recordingContext());
-                if (dContext) {
-                    image = image->makeTextureImage(dContext);
+                if (GrContext* context = canvas->getGrContext()) {
+                    image = image->makeTextureImage(context);
                 }
                 if (image) {
                     for (SkColorType dstColorType : colorTypes) {
                         for (SkAlphaType dstAlphaType : alphaTypes) {
-                            draw_image(dContext, canvas, image.get(), dstColorType, dstAlphaType,
+                            draw_image(canvas, image.get(), dstColorType, dstAlphaType,
                                        dstColorSpace, SkImage::kAllow_CachingHint);
                             canvas->translate((float)kWidth, 0.0f);
                         }
@@ -179,7 +183,7 @@ protected:
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 DEF_GM( return new ReadPixelsGM; )
 
@@ -222,13 +226,13 @@ protected:
         };
 
         sk_sp<SkImage> image = make_codec_image();
-        for (const sk_sp<SkColorSpace>& dstColorSpace : colorSpaces) {
+        for (sk_sp<SkColorSpace> dstColorSpace : colorSpaces) {
             canvas->save();
             for (SkColorType dstColorType : colorTypes) {
                 for (SkAlphaType dstAlphaType : alphaTypes) {
                     for (SkImage::CachingHint hint : hints) {
-                        draw_image(nullptr, canvas, image.get(), dstColorType, dstAlphaType,
-                                   dstColorSpace, hint);
+                        draw_image(canvas, image.get(), dstColorType, dstAlphaType, dstColorSpace,
+                                   hint);
                         canvas->translate(0.0f, (float) kEncodedHeight + 1);
                     }
                 }
@@ -243,7 +247,7 @@ private:
     static const int kEncodedWidth = 8;
     static const int kEncodedHeight = 8;
 
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 DEF_GM( return new ReadPixelsCodecGM; )
 
@@ -288,13 +292,13 @@ protected:
                 SkImage::kDisallow_CachingHint,
         };
 
-        for (const sk_sp<SkImage>& image : images) {
-            for (const sk_sp<SkColorSpace>& dstColorSpace : colorSpaces) {
+        for (sk_sp<SkImage> image : images) {
+            for (sk_sp<SkColorSpace> dstColorSpace : colorSpaces) {
                 canvas->save();
                 for (SkColorType dstColorType : colorTypes) {
                     for (SkAlphaType dstAlphaType : alphaTypes) {
                         for (SkImage::CachingHint hint : hints) {
-                            draw_image(nullptr, canvas, image.get(), dstColorType, dstAlphaType,
+                            draw_image(canvas, image.get(), dstColorType, dstAlphaType,
                                        dstColorSpace, hint);
                             canvas->translate(0.0f, (float) kHeight);
                         }
@@ -309,6 +313,6 @@ protected:
 
 private:
 
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 DEF_GM( return new ReadPixelsPictureGM; )

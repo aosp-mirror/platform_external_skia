@@ -28,7 +28,7 @@
 
 #include "include/effects/SkImageFilters.h"
 
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrContext.h"
 
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
@@ -98,9 +98,9 @@ static sk_sp<SkImageFilter> arithmetic_factory(sk_sp<SkImage> auxImage, const Sk
                                       nullptr, cropRect);
 }
 
-static sk_sp<SkImageFilter> blend_factory(sk_sp<SkImage> auxImage, const SkIRect* cropRect) {
+static sk_sp<SkImageFilter> xfermode_factory(sk_sp<SkImage> auxImage, const SkIRect* cropRect) {
     sk_sp<SkImageFilter> background = SkImageFilters::Image(std::move(auxImage));
-    return SkImageFilters::Blend(
+    return SkImageFilters::Xfermode(
             SkBlendMode::kModulate, std::move(background), nullptr, cropRect);
 }
 
@@ -120,7 +120,7 @@ static sk_sp<SkImageFilter> matrix_factory(sk_sp<SkImage> auxImage, const SkIRec
     matrix.setRotate(45.f, 50.f, 50.f);
 
     // This doesn't support a cropRect
-    return SkImageFilters::MatrixTransform(matrix, SkSamplingOptions(SkFilterMode::kLinear), nullptr);
+    return SkImageFilters::MatrixTransform(matrix, kLow_SkFilterQuality, nullptr);
 }
 
 static sk_sp<SkImageFilter> alpha_threshold_factory(sk_sp<SkImage> auxImage,
@@ -178,7 +178,7 @@ namespace {
         // Uses saveLayer after clipRect() to filter on the restore (i.e. reference image)
         kSaveLayer
     };
-}  // namespace
+};
 
 // In this GM, we're going to feed the inner portion of a 100x100 mandrill (i.e., strip off a
 // 25-wide border) through the makeWithFilter method. We'll then draw the appropriate subset of the
@@ -216,15 +216,14 @@ protected:
         // Resize to 100x100
         surface->getCanvas()->drawImageRect(
                 colorImage, SkRect::MakeWH(colorImage->width(), colorImage->height()),
-                SkRect::MakeWH(info.width(), info.height()), SkSamplingOptions(), nullptr,
-                                            SkCanvas::kStrict_SrcRectConstraint);
+                SkRect::MakeWH(info.width(), info.height()), nullptr);
         fMainImage = surface->makeImageSnapshot();
 
         ToolUtils::draw_checkerboard(surface->getCanvas());
         fAuxImage = surface->makeImageSnapshot();
     }
 
-    DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
+    void onDraw(SkCanvas* canvas) override {
         FilterFactory filters[] = {
             color_filter_factory,
             blur_filter_factory,
@@ -234,7 +233,7 @@ protected:
             erode_factory,
             displacement_factory,
             arithmetic_factory,
-            blend_factory,
+            xfermode_factory,
             convolution_factory,
             matrix_factory,
             alpha_threshold_factory,
@@ -250,7 +249,7 @@ protected:
             "Erode",
             "Displacement",
             "Arithmetic",
-            "Xfer Mode", // "blend"
+            "Xfer Mode",
             "Convolution",
             "Matrix Xform",
             "Alpha Threshold",
@@ -271,30 +270,18 @@ protected:
         // These need to be GPU-backed when on the GPU to ensure that the image filters use the GPU
         // code paths (otherwise they may choose to do CPU filtering then upload)
         sk_sp<SkImage> mainImage, auxImage;
-
-        auto rContext = canvas->recordingContext();
-        // In a DDL context, we can't use the GPU code paths and we will drop the work – skip.
-        auto dContext = GrAsDirectContext(rContext);
-        if (rContext) {
-            if (!dContext) {
-                *errorMsg = "Requires a direct context.";
-                return DrawResult::kSkip;
+        if (canvas->getGrContext()) {
+            if (canvas->getGrContext()->abandoned()) {
+                return;
             }
-            if (dContext->abandoned()) {
-                *errorMsg = "Direct context abandoned.";
-                return DrawResult::kSkip;
-            }
-            mainImage = fMainImage->makeTextureImage(dContext);
-            auxImage = fAuxImage->makeTextureImage(dContext);
+            mainImage = fMainImage->makeTextureImage(canvas->getGrContext());
+            auxImage = fAuxImage->makeTextureImage(canvas->getGrContext());
         } else {
             mainImage = fMainImage;
             auxImage = fAuxImage;
         }
-        if (!mainImage || !auxImage) {
-            return DrawResult::kFail;
-        }
-        SkASSERT(mainImage && (mainImage->isTextureBacked() || !rContext));
-        SkASSERT(auxImage && (auxImage->isTextureBacked() || !rContext));
+        SkASSERT(mainImage && (mainImage->isTextureBacked() || !canvas->getGrContext()));
+        SkASSERT(auxImage && (auxImage->isTextureBacked() || !canvas->getGrContext()));
 
         SkScalar MARGIN = SkIntToScalar(40);
         SkScalar DX = mainImage->width() + MARGIN;
@@ -320,7 +307,7 @@ protected:
                 // filtered result.
                 SkPaint alpha;
                 alpha.setAlphaf(0.3f);
-                canvas->drawImage(mainImage, 0, 0, SkSamplingOptions(), &alpha);
+                canvas->drawImage(mainImage, 0, 0, &alpha);
 
                 this->drawImageWithFilter(canvas, mainImage, auxImage, filters[i], clipBound,
                                           subset, &outSubset);
@@ -338,7 +325,6 @@ protected:
             canvas->restore();
             canvas->translate(0, DY);
         }
-        return DrawResult::kOk;
     }
 
 private:
@@ -369,9 +355,7 @@ private:
             canvas->saveLayer(nullptr, &paint);
 
             // Draw the original subset of the image
-            SkRect r = SkRect::Make(subset);
-            canvas->drawImageRect(mainImage, r, r, SkSamplingOptions(),
-                                  nullptr, SkCanvas::kStrict_SrcRectConstraint);
+            canvas->drawImageRect(mainImage, subset, SkRect::Make(subset), nullptr);
 
             *dstRect = subset;
         } else {
@@ -379,22 +363,18 @@ private:
             SkIRect outSubset;
             SkIPoint offset;
 
-            auto rContext = canvas->recordingContext();
-            result = mainImage->makeWithFilter(rContext, filter.get(), subset, clip,
-                                               &outSubset, &offset);
+            result = mainImage->makeWithFilter(filter.get(), subset, clip, &outSubset, &offset);
 
             SkASSERT(result);
             SkASSERT(mainImage->isTextureBacked() == result->isTextureBacked());
 
             *dstRect = SkIRect::MakeXYWH(offset.x(), offset.y(),
                                          outSubset.width(), outSubset.height());
-            canvas->drawImageRect(result, SkRect::Make(outSubset), SkRect::Make(*dstRect),
-                                  SkSamplingOptions(), nullptr,
-                                  SkCanvas::kStrict_SrcRectConstraint);
+            canvas->drawImageRect(result, outSubset, SkRect::Make(*dstRect), nullptr);
         }
     }
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 // The different strategies should all look the same, with the exception of filters that affect
 // transparent black (i.e. the lighting filter). In the save layer case, the filter affects the

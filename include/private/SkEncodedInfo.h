@@ -8,8 +8,6 @@
 #ifndef SkEncodedInfo_DEFINED
 #define SkEncodedInfo_DEFINED
 
-#include <memory>
-
 #include "include/core/SkData.h"
 #include "include/core/SkImageInfo.h"
 #include "include/third_party/skcms/skcms.h"
@@ -222,7 +220,7 @@ public:
     SkEncodedInfo copy() const {
         auto copy = SkEncodedInfo::Make(fWidth, fHeight, fColor, fAlpha, fBitsPerComponent);
         if (fProfile) {
-            copy.fProfile = std::make_unique<ICCProfile>(*fProfile);
+            copy.fProfile.reset(new ICCProfile(*fProfile.get()));
         }
         return copy;
     }

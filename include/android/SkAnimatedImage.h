@@ -37,6 +37,19 @@ public:
             const SkImageInfo& info, SkIRect cropRect, sk_sp<SkPicture> postProcess);
 
     /**
+     *  Create an SkAnimatedImage from the SkAndroidCodec.
+     *
+     *  Returns null on failure to allocate pixels. On success, this will
+     *  decode the first frame.
+     *
+     *  @param scaledSize Size to draw the image, possibly requiring scaling.
+     *  @param cropRect Rectangle to crop to after scaling.
+     *  @param postProcess Picture to apply after scaling and cropping.
+     */
+    static sk_sp<SkAnimatedImage> Make(std::unique_ptr<SkAndroidCodec>,
+            SkISize scaledSize, SkIRect cropRect, sk_sp<SkPicture> postProcess);
+
+    /**
      *  Simpler version that uses the default size, no cropping, and no postProcess.
      */
     static sk_sp<SkAnimatedImage> Make(std::unique_ptr<SkAndroidCodec>);
@@ -110,6 +123,11 @@ public:
      */
     int getFrameCount() const { return fFrameCount; }
 
+    /**
+     * Return the (possibly scaled) dimensions of the image.
+     */
+    SkISize dimensions() const { return fScaledSize; }
+
 protected:
     SkRect onGetBounds() override;
     void onDraw(SkCanvas*) override;
@@ -138,12 +156,13 @@ private:
     };
 
     std::unique_ptr<SkAndroidCodec> fCodec;
-          SkImageInfo               fDecodeInfo;
+    const SkISize                   fScaledSize;
+    const SkImageInfo               fDecodeInfo;
     const SkIRect                   fCropRect;
     const sk_sp<SkPicture>          fPostProcess;
     const int                       fFrameCount;
-    SkMatrix                        fMatrix;
-    int                             fSampleSize;
+    const bool                      fSimple;     // no crop, scale, or postprocess
+    SkMatrix                        fMatrix;     // used only if !fSimple
 
     bool                            fFinished;
     int                             fCurrentFrameDuration;
@@ -153,27 +172,14 @@ private:
     int                             fRepetitionCount;
     int                             fRepetitionsCompleted;
 
-    SkAnimatedImage(std::unique_ptr<SkAndroidCodec>, const SkImageInfo& requestedInfo,
-            SkIRect cropRect, sk_sp<SkPicture> postProcess);
+    SkAnimatedImage(std::unique_ptr<SkAndroidCodec>, SkISize scaledSize,
+            SkImageInfo decodeInfo, SkIRect cropRect, sk_sp<SkPicture> postProcess);
+    SkAnimatedImage(std::unique_ptr<SkAndroidCodec>);
 
     int computeNextFrame(int current, bool* animationEnded);
     double finish();
 
-    /**
-     *  True if there is no crop, orientation, or post decoding scaling.
-     */
-    bool simple() const { return fMatrix.isIdentity() && !fPostProcess
-                                 && fCropRect == fDecodeInfo.bounds(); }
-
-    /**
-     *  Returns the current frame as an SkImage.
-     *
-     *  Like getCurrentFrame, but only returns the raw data from the internal SkBitmap. (i.e. no
-     *  scaling, orientation-correction or cropping.) If simple(), this is the final output.
-     */
-    sk_sp<SkImage> getCurrentFrameSimple();
-
-    using INHERITED = SkDrawable;
+    typedef SkDrawable INHERITED;
 };
 
 #endif // SkAnimatedImage_DEFINED

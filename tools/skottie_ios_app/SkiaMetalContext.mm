@@ -4,7 +4,7 @@
 #include "tools/skottie_ios_app/SkiaContext.h"
 
 #include "include/core/SkSurface.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrContext.h"
 #include "tools/skottie_ios_app/SkMetalViewBridge.h"
 
 #import <Metal/Metal.h>
@@ -22,21 +22,21 @@
     - (instancetype)initWithFrame:(CGRect)frameRect
                     device:(id<MTLDevice>)device
                     queue:(id<MTLCommandQueue>)queue
-                    grDevice:(GrDirectContext*)dContext;
+                    grDevice:(GrContext*)grContext;
 @end
 
 @implementation SkiaMtkView {
     id<MTLCommandQueue> fQueue;
-    GrDirectContext*    fDContext;
+    GrContext* fGrContext;
 }
 
 - (instancetype)initWithFrame:(CGRect)frameRect
                 device:(id<MTLDevice>)mtlDevice
                 queue:(id<MTLCommandQueue>)queue
-                grDevice:(GrDirectContext*)dContext {
+                grDevice:(GrContext*)grContext {
     self = [super initWithFrame:frameRect device:mtlDevice];
     fQueue = queue;
-    fDContext = dContext;
+    fGrContext = grContext;
     SkMtkViewConfigForSkia(self);
     return self;
 }
@@ -45,17 +45,17 @@
     [super drawRect:rect];
     // TODO(halcanary): Use the rect and the InvalidationController to speed up rendering.
     SkiaViewController* viewController = [self controller];
-    if (!viewController || ![[self currentDrawable] texture] || !fDContext) {
+    if (!viewController || ![[self currentDrawable] texture] || !fGrContext) {
         return;
     }
     CGSize size = [self drawableSize];
-    sk_sp<SkSurface> surface = SkMtkViewToSurface(self, fDContext);
+    sk_sp<SkSurface> surface = SkMtkViewToSurface(self, fGrContext);
     if (!surface) {
         NSLog(@"error: no sksurface");
         return;
     }
     [viewController draw:rect toCanvas:surface->getCanvas() atSize:size];
-    surface->flushAndSubmit();
+    surface->flush();
     surface = nullptr;
 
     id<MTLCommandBuffer> commandBuffer = [fQueue commandBuffer];
@@ -77,7 +77,7 @@
 @end
 
 @implementation SkiaMetalContext {
-    sk_sp<GrDirectContext> fDContext;
+    sk_sp<GrContext> fGrContext;
 }
 
 - (instancetype) init {
@@ -88,12 +88,12 @@
         return nil;
     }
     [self setMetalQueue:[[self metalDevice] newCommandQueue]];
-    fDContext = GrDirectContext::MakeMetal((__bridge void*)[self metalDevice],
-                                           (__bridge void*)[self metalQueue],
-                                           GrContextOptions());
+    fGrContext = GrContext::MakeMetal((__bridge void*)[self metalDevice],
+                                      (__bridge void*)[self metalQueue],
+                                      GrContextOptions());
 
-    if (!fDContext) {
-        NSLog(@"GrDirectContext::MakeMetal failed");
+    if (!fGrContext) {
+        NSLog(@"GrContext::MakeMetal failed");
         return nil;
     }
     return self;
@@ -103,7 +103,7 @@
     SkiaMtkView* skiaView = [[SkiaMtkView alloc] initWithFrame:frame
                                                  device:[self metalDevice]
                                                  queue:[self metalQueue]
-                                                 grDevice:fDContext.get()];
+                                                 grDevice:fGrContext.get()];
     [skiaView setPreferredFramesPerSecond:30];
     [skiaView setController:vc];
     return skiaView;

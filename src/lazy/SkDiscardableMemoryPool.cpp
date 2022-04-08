@@ -68,7 +68,7 @@ private:
 
     friend class PoolDiscardableMemory;
 
-    using INHERITED = SkDiscardableMemory::Factory;
+    typedef SkDiscardableMemory::Factory INHERITED;
 };
 
 /**

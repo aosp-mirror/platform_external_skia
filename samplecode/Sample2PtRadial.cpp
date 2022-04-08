@@ -14,9 +14,9 @@ public:
     TwoPtConicalView() {}
 
 protected:
-    SkString name() override { return SkString("2PtConical"); }
+    virtual SkString name() { return SkString("2PtConical"); }
 
-    void onDrawContent(SkCanvas* canvas) override {
+    virtual void onDrawContent(SkCanvas* canvas) {
         canvas->translate(SkIntToScalar(10), SkIntToScalar(20));
 
         SkColor colors[] = { SK_ColorRED, SK_ColorBLUE };
@@ -32,7 +32,7 @@ protected:
     }
 
 private:
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

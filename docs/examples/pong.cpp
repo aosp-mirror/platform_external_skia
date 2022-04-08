@@ -22,7 +22,7 @@ void draw(SkCanvas* canvas) {
   float bX = ballX * 472 + 20;
   float bY = ballY * 200 + 28;
 
-  if (canvas->recordingContext()) {
+  if (canvas->getGrContext()) {
     canvas->drawRect(SkRect::MakeXYWH(236, bY - 15, 10, 30), p);
     bX -= 256;
   } else {

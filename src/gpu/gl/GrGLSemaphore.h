@@ -51,7 +51,7 @@ private:
     GrGLsync fSync;
     bool     fIsOwned;
 
-    using INHERITED = GrSemaphore;
+    typedef GrSemaphore INHERITED;
 };
 
 #endif

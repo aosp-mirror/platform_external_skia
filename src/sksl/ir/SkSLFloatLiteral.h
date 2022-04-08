@@ -14,78 +14,56 @@
 namespace SkSL {
 
 /**
- * A literal floating point number. These are generally referred to as FloatLiteral, but
- * Literal<SKSL_FLOAT> is also available for use with template code.
+ * A literal floating point number.
  */
-template <typename T> class Literal;
-using FloatLiteral = Literal<SKSL_FLOAT>;
+struct FloatLiteral : public Expression {
+    FloatLiteral(const Context& context, int offset, double value)
+    : INHERITED(offset, kFloatLiteral_Kind, *context.fFloatLiteral_Type)
+    , fValue(value) {}
 
-template <>
-class Literal<SKSL_FLOAT> final : public Expression {
-public:
-    static constexpr Kind kExpressionKind = Kind::kFloatLiteral;
+    FloatLiteral(int offset, double value, const Type* type)
+    : INHERITED(offset, kFloatLiteral_Kind, *type)
+    , fValue(value) {}
 
-    Literal(int offset, float value, const Type* type)
-        : INHERITED(offset, kExpressionKind, type)
-        , fValue(value) {}
-
-    // Makes a literal of $floatLiteral type.
-    static std::unique_ptr<FloatLiteral> Make(const Context& context, int offset, float value) {
-        return std::make_unique<FloatLiteral>(offset, value, context.fTypes.fFloatLiteral.get());
-    }
-
-    // Makes a literal of the specified floating-point type.
-    static std::unique_ptr<FloatLiteral> Make(int offset, float value, const Type* type) {
-        SkASSERT(type->isFloat());
-        return std::make_unique<FloatLiteral>(offset, value, type);
-    }
-
-    float value() const {
-        return fValue;
-    }
-
+#ifdef SK_DEBUG
     String description() const override {
-        return to_string(this->value());
+        return to_string(fValue);
     }
+#endif
 
     bool hasProperty(Property property) const override {
         return false;
     }
 
-    bool isCompileTimeConstant() const override {
+    bool isConstant() const override {
         return true;
     }
 
-    CoercionCost coercionCost(const Type& target) const override {
+    int coercionCost(const Type& target) const override {
         if (target.isFloat()) {
-            return CoercionCost::Free();
+            return 0;
         }
         return INHERITED::coercionCost(target);
     }
 
-    ComparisonResult compareConstant(const Expression& other) const override {
-        if (!other.is<FloatLiteral>()) {
-            return ComparisonResult::kUnknown;
-        }
-        return this->value() == other.as<FloatLiteral>().value() ? ComparisonResult::kEqual
-                                                                 : ComparisonResult::kNotEqual;
+    bool compareConstant(const Context& context, const Expression& other) const override {
+        FloatLiteral& f = (FloatLiteral&) other;
+        return fValue == f.fValue;
+    }
+
+    double getConstantFloat() const override {
+        return fValue;
     }
 
     std::unique_ptr<Expression> clone() const override {
-        return std::make_unique<FloatLiteral>(fOffset, this->value(), &this->type());
+        return std::unique_ptr<Expression>(new FloatLiteral(fOffset, fValue, &fType));
     }
 
-    const Expression* getConstantSubexpression(int n) const override {
-        SkASSERT(n == 0);
-        return this;
-    }
+    const double fValue;
 
-private:
-    float fValue;
-
-    using INHERITED = Expression;
+    typedef Expression INHERITED;
 };
 
-}  // namespace SkSL
+} // namespace
 
 #endif

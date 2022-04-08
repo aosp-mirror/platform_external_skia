@@ -21,6 +21,7 @@
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkClipOpPriv.h"
 #include "src/core/SkTLazy.h"
+#include "tests/CanvasStateHelpers.h"
 #include "tests/Test.h"
 #include "tools/flags/CommandLineFlags.h"
 
@@ -28,58 +29,47 @@
 
 class SkCanvasState;
 
-// Uncomment to include tests of CanvasState across a library boundary. This will change how 'dm'
-// is built so that the functions defined in CanvasStateHelpers do not exist inside 'dm', and are
-// instead compiled as part of the 'canvas_state_lib' build target. This produces a shared library
-// that must be passed to 'dm' using the --library flag when running.
-// #define SK_TEST_CANVAS_STATE_CROSS_LIBRARY
-
-// Must be included after SK_TEST_CANVAS_STATE_CROSS_LIBRARY is defined
-#include "tests/CanvasStateHelpers.h"
-
-// dlopen, the library flag and canvas state helpers are only used for tests which require this flag
-#if defined(SK_TEST_CANVAS_STATE_CROSS_LIBRARY)
+// dlopen and the library flag are only used for tests which require this flag.
+#ifdef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
+#include <dlfcn.h>
 
 static DEFINE_string(library, "",
-                     "Support library to use for CanvasState test. Must be provided when"
-                     " SK_TEST_CANVAS_STATE_CROSS_LIBRARY to specify the dynamically loaded library"
-                     " that receives the captured canvas state. Functions from the library will be"
-                     " called to test SkCanvasState. The library is built from the canvas_state_lib"
-                     " target");
+                     "Support library to use for CanvasState test. If empty (the default), "
+                     "the test will be run without crossing a library boundary. Otherwise, "
+                     "it is expected to be a full path to a shared library file, which will"
+                     " be dynamically loaded. Functions from the library will be called to "
+                     "test SkCanvasState. Instructions for generating the library are in "
+                     "gyp/canvas_state_lib.gyp");
 
-#include "src/ports/SkOSLibrary.h"
 
-// Automatically loads library passed to --library flag and closes it when it goes out of scope.
+// This class calls dlopen on the library passed in to the command line flag library, and handles
+// calling dlclose when it goes out of scope.
 class OpenLibResult {
 public:
+    // If the flag library was passed to this run of the test, attempt to open it using dlopen and
+    // report whether it succeeded.
     OpenLibResult(skiatest::Reporter* reporter) {
         if (FLAGS_library.count() == 1) {
-            fLibrary = SkLoadDynamicLibrary(FLAGS_library[0]);
-            REPORTER_ASSERT(reporter, fLibrary != nullptr, "Failed to open library!");
+            fHandle = dlopen(FLAGS_library[0], RTLD_LAZY | RTLD_LOCAL);
+            REPORTER_ASSERT(reporter, fHandle != nullptr, "Failed to open library!");
         } else {
-            fLibrary = nullptr;
+            fHandle = nullptr;
         }
     }
 
+    // Automatically call dlclose when going out of scope.
     ~OpenLibResult() {
-        if (fLibrary) {
-            SkFreeDynamicLibrary(fLibrary);
+        if (fHandle) {
+            dlclose(fHandle);
         }
     }
 
-    // Load a function address from the library object, or null if the library had failed
-    void* procAddress(const char* funcName) {
-        if (fLibrary) {
-            return SkGetProcedureAddress(fLibrary, funcName);
-        }
-        return nullptr;
-    }
+    // Pointer to the shared library object.
+    void* handle() { return fHandle; }
 
 private:
-    void* fLibrary;
+    void* fHandle;
 };
-
-#endif
 
 static void write_image(const SkImage* img, const char path[]) {
     auto data = img->encodeToData();
@@ -106,7 +96,7 @@ static void compare(skiatest::Reporter* reporter, SkImage* img0, SkImage* img1) 
     REPORTER_ASSERT(reporter, pm[0].computeByteSize() == pm[1].computeByteSize());
     REPORTER_ASSERT(reporter, pm[0].rowBytes() == (size_t)pm[0].width() * pm[0].info().bytesPerPixel());
     REPORTER_ASSERT(reporter, pm[1].rowBytes() == (size_t)pm[1].width() * pm[1].info().bytesPerPixel());
-    if (memcmp(pm[0].addr(0, 0), pm[1].addr(0, 0), pm[0].computeByteSize()) != 0) {
+    if (memcmp(pm[0].addr(0, 0), pm[1].addr(0, 0), pm[0].computeByteSize())) {
         REPORTER_ASSERT(reporter, false);
     }
 }
@@ -125,16 +115,23 @@ DEF_TEST(CanvasState_test_complex_layers, reporter) {
     };
 
     const int layerAlpha[] = { 255, 255, 0 };
+    const SkCanvas::SaveLayerFlags flags[] = {
+        static_cast<SkCanvas::SaveLayerFlags>(SkCanvasPriv::kDontClipToLayer_SaveLayerFlag),
+        0,
+        static_cast<SkCanvas::SaveLayerFlags>(SkCanvasPriv::kDontClipToLayer_SaveLayerFlag),
+    };
+    REPORTER_ASSERT(reporter, sizeof(layerAlpha) == sizeof(flags));
 
     bool (*drawFn)(SkCanvasState* state, float l, float t,
                    float r, float b, int32_t s);
 
-#if defined(SK_TEST_CANVAS_STATE_CROSS_LIBRARY)
     OpenLibResult openLibResult(reporter);
-    *(void**) (&drawFn) = openLibResult.procAddress("complex_layers_draw_from_canvas_state");
-#else
-    drawFn = complex_layers_draw_from_canvas_state;
-#endif
+    if (openLibResult.handle() != nullptr) {
+        *(void**) (&drawFn) = dlsym(openLibResult.handle(),
+                                    "complex_layers_draw_from_canvas_state");
+    } else {
+        drawFn = complex_layers_draw_from_canvas_state;
+    }
 
     REPORTER_ASSERT(reporter, drawFn);
     if (!drawFn) {
@@ -158,7 +155,7 @@ DEF_TEST(CanvasState_test_complex_layers, reporter) {
                 }
 
                 // draw a rect within the layer's bounds and again outside the layer's bounds
-                canvas->saveLayer(SkCanvas::SaveLayerRec(&rect, paint.getMaybeNull()));
+                canvas->saveLayer(SkCanvas::SaveLayerRec(&rect, paint.getMaybeNull(), flags[k]));
 
                 if (j) {
                     // Capture from the first Skia.
@@ -189,9 +186,11 @@ DEF_TEST(CanvasState_test_complex_layers, reporter) {
         compare(reporter, images[0].get(), images[1].get());
     }
 }
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#ifdef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
 DEF_TEST(CanvasState_test_complex_clips, reporter) {
     const int WIDTH = 400;
     const int HEIGHT = 400;
@@ -217,19 +216,26 @@ DEF_TEST(CanvasState_test_complex_clips, reporter) {
 
     const SkRegion::Op clipOps[] = { SkRegion::kIntersect_Op,
                                      SkRegion::kIntersect_Op,
-                                     SkRegion::kDifference_Op,
+                                     SkRegion::kReplace_Op,
     };
+    const SkCanvas::SaveLayerFlags flags[] = {
+        static_cast<SkCanvas::SaveLayerFlags>(SkCanvasPriv::kDontClipToLayer_SaveLayerFlag),
+        0,
+        static_cast<SkCanvas::SaveLayerFlags>(SkCanvasPriv::kDontClipToLayer_SaveLayerFlag),
+    };
+    REPORTER_ASSERT(reporter, sizeof(clipOps) == sizeof(flags));
 
     bool (*drawFn)(SkCanvasState* state, int32_t l, int32_t t,
                    int32_t r, int32_t b, int32_t clipOp,
                    int32_t regionRects, int32_t* rectCoords);
 
-#if defined(SK_TEST_CANVAS_STATE_CROSS_LIBRARY)
     OpenLibResult openLibResult(reporter);
-    *(void**) (&drawFn) = openLibResult.procAddress("complex_clips_draw_from_canvas_state");
-#else
-    drawFn = complex_clips_draw_from_canvas_state;
-#endif
+    if (openLibResult.handle() != nullptr) {
+        *(void**) (&drawFn) = dlsym(openLibResult.handle(),
+                                    "complex_clips_draw_from_canvas_state");
+    } else {
+        drawFn = complex_clips_draw_from_canvas_state;
+    }
 
     REPORTER_ASSERT(reporter, drawFn);
     if (!drawFn) {
@@ -247,9 +253,9 @@ DEF_TEST(CanvasState_test_complex_clips, reporter) {
 
         SkPaint paint;
         paint.setAlpha(128);
-        for (size_t j = 0; j < SK_ARRAY_COUNT(clipOps); ++j) {
+        for (size_t j = 0; j < SK_ARRAY_COUNT(flags); ++j) {
             SkRect layerBounds = SkRect::Make(layerRect);
-            canvas->saveLayer(SkCanvas::SaveLayerRec(&layerBounds, &paint));
+            canvas->saveLayer(SkCanvas::SaveLayerRec(&layerBounds, &paint, flags[j]));
 
             if (i) {
                 SkCanvasState* state = SkCanvasStateUtils::CaptureCanvasState(canvas);
@@ -287,6 +293,7 @@ DEF_TEST(CanvasState_test_complex_clips, reporter) {
 
     compare(reporter, images[0].get(), images[1].get());
 }
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -305,6 +312,10 @@ DEF_TEST(CanvasState_test_soft_clips, reporter) {
 }
 
 DEF_TEST(CanvasState_test_saveLayer_clip, reporter) {
+#ifdef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
+    static_assert(SkCanvas::kDontClipToLayer_Legacy_SaveLayerFlag ==
+                  SkCanvasPriv::kDontClipToLayer_SaveLayerFlag, "");
+#endif
     const int WIDTH = 100;
     const int HEIGHT = 100;
     const int LAYER_WIDTH = 50;
@@ -317,9 +328,20 @@ DEF_TEST(CanvasState_test_saveLayer_clip, reporter) {
     SkRect bounds = SkRect::MakeWH(SkIntToScalar(LAYER_WIDTH), SkIntToScalar(LAYER_HEIGHT));
     canvas.clipRect(SkRect::MakeWH(SkIntToScalar(WIDTH), SkIntToScalar(HEIGHT)));
 
-    // Check that saveLayer sets the clip stack to the layer bounds.
+    SkIRect devClip;
+    // Check that saveLayer without the kClipToLayer_SaveFlag leaves the clip unchanged.
+    canvas.saveLayer(SkCanvas::SaveLayerRec(&bounds, nullptr,
+            (SkCanvas::SaveLayerFlags) SkCanvasPriv::kDontClipToLayer_SaveLayerFlag));
+    devClip = canvas.getDeviceClipBounds();
+    REPORTER_ASSERT(reporter, canvas.isClipRect());
+    REPORTER_ASSERT(reporter, devClip.width() == WIDTH);
+    REPORTER_ASSERT(reporter, devClip.height() == HEIGHT);
+    canvas.restore();
+
+    // Check that saveLayer with the kClipToLayer_SaveFlag sets the clip
+    // stack to the layer bounds.
     canvas.saveLayer(&bounds, nullptr);
-    SkIRect devClip = canvas.getDeviceClipBounds();
+    devClip = canvas.getDeviceClipBounds();
     REPORTER_ASSERT(reporter, canvas.isClipRect());
     REPORTER_ASSERT(reporter, devClip.width() == LAYER_WIDTH);
     REPORTER_ASSERT(reporter, devClip.height() == LAYER_HEIGHT);

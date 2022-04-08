@@ -11,7 +11,6 @@
 #include "include/core/SkPictureRecorder.h"
 #include "include/core/SkShader.h"
 #include "include/effects/SkGradientShader.h"
-#include "include/private/SkTPin.h"
 #include "modules/skottie/src/Adapter.h"
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/sksg/include/SkSGRenderNode.h"
@@ -79,12 +78,12 @@ protected:
                                             tile_size.width(),
                                             tile_size.height());
 
-        const auto layerShaderMatrix = SkMatrix::RectToRect(
-                    SkRect::MakeWH(fLayerSize.width(), fLayerSize.height()), tile);
+        const auto layerShaderMatrix = SkMatrix::MakeRectToRect(
+                    SkRect::MakeWH(fLayerSize.width(), fLayerSize.height()),
+                    tile, SkMatrix::kFill_ScaleToFit);
 
         const auto tm = fMirrorEdges ? SkTileMode::kMirror : SkTileMode::kRepeat;
-        auto layer_shader = fLayerPicture->makeShader(tm, tm, SkFilterMode::kLinear,
-                                                      &layerShaderMatrix, nullptr);
+        auto layer_shader = fLayerPicture->makeShader(tm, tm, &layerShaderMatrix);
 
         if (fPhase) {
             // To implement AE phase semantics, we construct a mask shader for the pass-through
@@ -96,7 +95,7 @@ protected:
             const auto phase_shift = SkVector::Make(phase_vec.fX / layerShaderMatrix.getScaleX(),
                                                     phase_vec.fY / layerShaderMatrix.getScaleY())
                                      * std::fmod(fPhase * (1/360.0f), 1);
-            const auto phase_shader_matrix = SkMatrix::Translate(phase_shift.x(), phase_shift.y());
+            const auto phase_shader_matrix = SkMatrix::MakeTrans(phase_shift.x(), phase_shift.y());
 
             // The mask is generated using a step gradient shader, spanning 2 x tile width/height,
             // and perpendicular to the phase vector.
@@ -114,8 +113,8 @@ protected:
             // First drawing pass: in-place masked layer content.
             fMainPassShader  = SkShaders::Blend(SkBlendMode::kSrcIn , mask_shader, layer_shader);
             // Second pass: phased-shifted layer content, with an inverse mask.
-            fPhasePassShader = SkShaders::Blend(SkBlendMode::kSrcOut, mask_shader, layer_shader)
-                               ->makeWithLocalMatrix(phase_shader_matrix);
+            fPhasePassShader = SkShaders::Blend(SkBlendMode::kSrcOut, mask_shader, layer_shader,
+                                                &phase_shader_matrix);
         } else {
             fMainPassShader  = std::move(layer_shader);
             fPhasePassShader = nullptr;
@@ -202,7 +201,7 @@ private:
     void onSync() override {
         const auto& tiler = this->node();
 
-        tiler->setTileCenter({fTileCenter.x, fTileCenter.y});
+        tiler->setTileCenter(ValueTraits<VectorValue>::As<SkPoint>(fTileCenter));
         tiler->setTileWidth (fTileW);
         tiler->setTileHeight(fTileH);
         tiler->setOutputWidth (fOutputW);
@@ -212,7 +211,7 @@ private:
         tiler->setHorizontalPhase(SkToBool(fHorizontalPhase));
     }
 
-    Vec2Value   fTileCenter      = {0,0};
+    VectorValue fTileCenter;
     ScalarValue fTileW           = 1,
                 fTileH           = 1,
                 fOutputW         = 1,
@@ -224,7 +223,7 @@ private:
     using INHERITED = DiscardableAdapterBase<MotionTileAdapter, TileRenderNode>;
 };
 
-}  // namespace
+} // anonymous ns
 
 sk_sp<sksg::RenderNode> EffectBuilder::attachMotionTileEffect(const skjson::ArrayValue& jprops,
                                                               sk_sp<sksg::RenderNode> layer) const {

@@ -165,11 +165,11 @@ func dumpJSON(w http.ResponseWriter, r *http.Request) {
 
 	results := jsonio.GoldResults{
 		Builder:                     *builder,
-		ChangelistID:                *issue,
+		ChangeListID:                *issue,
 		GitHash:                     *gitHash,
 		CodeReviewSystem:            "gerrit",
 		Key:                         defaultKeys,
-		PatchsetOrder:               *patchset,
+		PatchSetOrder:               *patchset,
 		Results:                     results,
 		TaskID:                      *taskId,
 		TryJobID:                    *buildBucketID,

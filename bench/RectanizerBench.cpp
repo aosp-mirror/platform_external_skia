@@ -5,14 +5,12 @@
 * found in the LICENSE file.
 */
 
-#include <memory>
-
 #include "bench/Benchmark.h"
 #include "include/core/SkSize.h"
 #include "include/private/SkTDArray.h"
 #include "include/utils/SkRandom.h"
 
-#include "src/gpu/GrRectanizerPow2.h"
+#include "src/core/SkMathPriv.h"
 #include "src/gpu/GrRectanizerSkyline.h"
 
 /**
@@ -27,11 +25,10 @@
  */
 class RectanizerBench : public Benchmark {
 public:
-    static constexpr int kWidth = 1024;
-    static constexpr int kHeight = 1024;
+    static const int kWidth = 1024;
+    static const int kHeight = 1024;
 
     enum RectanizerType {
-        kPow2_RectanizerType,
         kSkyline_RectanizerType,
     };
 
@@ -43,15 +40,9 @@ public:
 
     RectanizerBench(RectanizerType rectanizerType, RectType rectType)
         : fName("rectanizer_")
-        , fRectanizerType(rectanizerType)
         , fRectType(rectType) {
 
-        if (kPow2_RectanizerType == fRectanizerType) {
-            fName.append("pow2_");
-        } else {
-            SkASSERT(kSkyline_RectanizerType == fRectanizerType);
-            fName.append("skyline_");
-        }
+        fName.append("skyline_");
 
         if (kRand_RectType == fRectType) {
             fName.append("rand");
@@ -75,12 +66,7 @@ protected:
     void onDelayedSetup() override {
         SkASSERT(nullptr == fRectanizer.get());
 
-        if (kPow2_RectanizerType == fRectanizerType) {
-            fRectanizer = std::make_unique<GrRectanizerPow2>(kWidth, kHeight);
-        } else {
-            SkASSERT(kSkyline_RectanizerType == fRectanizerType);
-            fRectanizer = std::make_unique<GrRectanizerSkyline>(kWidth, kHeight);
-        }
+        fRectanizer.reset(new GrRectanizerSkyline(kWidth, kHeight));
     }
 
     void onDraw(int loops, SkCanvas* canvas) override {
@@ -113,21 +99,14 @@ protected:
 
 private:
     SkString                    fName;
-    RectanizerType              fRectanizerType;
     RectType                    fRectType;
-    std::unique_ptr<GrRectanizer> fRectanizer;
+    std::unique_ptr<GrRectanizerSkyline> fRectanizer;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_BENCH(return new RectanizerBench(RectanizerBench::kPow2_RectanizerType,
-                                     RectanizerBench::kRand_RectType);)
-DEF_BENCH(return new RectanizerBench(RectanizerBench::kPow2_RectanizerType,
-                                     RectanizerBench::kRandPow2_RectType);)
-DEF_BENCH(return new RectanizerBench(RectanizerBench::kPow2_RectanizerType,
-                                     RectanizerBench::kSmallPow2_RectType);)
 DEF_BENCH(return new RectanizerBench(RectanizerBench::kSkyline_RectanizerType,
                                      RectanizerBench::kRand_RectType);)
 DEF_BENCH(return new RectanizerBench(RectanizerBench::kSkyline_RectanizerType,

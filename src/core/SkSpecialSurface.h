@@ -17,6 +17,7 @@
 #endif
 
 class GrBackendFormat;
+class GrContext;
 class GrRecordingContext;
 class SkBitmap;
 class SkCanvas;
@@ -62,14 +63,14 @@ public:
      */
     static sk_sp<SkSpecialSurface> MakeRenderTarget(GrRecordingContext*, int width, int height,
                                                     GrColorType, sk_sp<SkColorSpace> colorSpace,
-                                                    const SkSurfaceProps&);
+                                                    const SkSurfaceProps* = nullptr);
 #endif
 
     /**
      * Use and existing SkBitmap as the backing store.
      */
     static sk_sp<SkSpecialSurface> MakeFromBitmap(const SkIRect& subset, SkBitmap& bm,
-                                                  const SkSurfaceProps&);
+                                                  const SkSurfaceProps* = nullptr);
 
     /**
      *  Return a new CPU-backed surface, with the memory for the pixels automatically
@@ -79,10 +80,10 @@ public:
      *  supported configuration, nullptr will be returned.
      */
     static sk_sp<SkSpecialSurface> MakeRaster(const SkImageInfo&,
-                                              const SkSurfaceProps&);
+                                              const SkSurfaceProps* = nullptr);
 
 protected:
-    SkSpecialSurface(const SkIRect& subset, const SkSurfaceProps&);
+    SkSpecialSurface(const SkIRect& subset, const SkSurfaceProps*);
 
     // For testing only
     friend class TestingSpecialSurfaceAccess;
@@ -92,7 +93,7 @@ private:
     const SkSurfaceProps fProps;
     const SkIRect        fSubset;
 
-    using INHERITED = SkRefCnt;
+    typedef SkRefCnt INHERITED;
 };
 
 #endif

@@ -8,9 +8,9 @@
 #ifndef SKSL_FUNCTIONDEFINITION
 #define SKSL_FUNCTIONDEFINITION
 
-#include "include/private/SkSLProgramElement.h"
 #include "src/sksl/ir/SkSLBlock.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
+#include "src/sksl/ir/SkSLProgramElement.h"
 
 namespace SkSL {
 
@@ -19,75 +19,35 @@ struct ASTNode;
 /**
  * A function definition (a declaration plus an associated block of code).
  */
-class FunctionDefinition final : public ProgramElement {
-public:
-    static constexpr Kind kProgramElementKind = Kind::kFunction;
-
-    FunctionDefinition(int offset,
-                       const FunctionDeclaration* declaration, bool builtin,
-                       std::unique_ptr<Statement> body,
-                       std::unordered_set<const FunctionDeclaration*> referencedIntrinsics = {})
-        : INHERITED(offset, kProgramElementKind)
-        , fDeclaration(declaration)
-        , fBuiltin(builtin)
-        , fBody(std::move(body))
-        , fReferencedIntrinsics(std::move(referencedIntrinsics))
-        , fSource(nullptr) {}
-
-    const FunctionDeclaration& declaration() const {
-        return *fDeclaration;
-    }
-
-    bool isBuiltin() const {
-        return fBuiltin;
-    }
-
-    std::unique_ptr<Statement>& body() {
-        return fBody;
-    }
-
-    const std::unique_ptr<Statement>& body() const {
-        return fBody;
-    }
-
-    const std::unordered_set<const FunctionDeclaration*>& referencedIntrinsics() const {
-        return fReferencedIntrinsics;
-    }
-
-    const ASTNode* source() const {
-        return fSource;
-    }
-
-    void setSource(const ASTNode* source) {
-        fSource = source;
-    }
+struct FunctionDefinition : public ProgramElement {
+    FunctionDefinition(int offset, const FunctionDeclaration& declaration,
+                       std::unique_ptr<Statement> body)
+    : INHERITED(offset, kFunction_Kind)
+    , fDeclaration(declaration)
+    , fBody(std::move(body)) {}
 
     std::unique_ptr<ProgramElement> clone() const override {
-        return std::make_unique<FunctionDefinition>(fOffset, &this->declaration(),
-                                                    /*builtin=*/false, this->body()->clone(),
-                                                    this->referencedIntrinsics());
+        return std::unique_ptr<ProgramElement>(new FunctionDefinition(fOffset, fDeclaration,
+                                                                      fBody->clone()));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
-        return this->declaration().description() + " " + this->body()->description();
+        return fDeclaration.description() + " " + fBody->description();
     }
+#endif
 
-private:
-    const FunctionDeclaration* fDeclaration;
-    bool fBuiltin;
+    const FunctionDeclaration& fDeclaration;
     std::unique_ptr<Statement> fBody;
-    // We track intrinsic functions we reference so that we can ensure that all of them end up
-    // copied into the final output.
-    std::unordered_set<const FunctionDeclaration*> fReferencedIntrinsics;
-    // This pointer may be null, and even when non-null is not guaranteed to remain valid for
-    // the entire lifespan of this object. The parse tree's lifespan is normally controlled by
-    // IRGenerator, so the IRGenerator being destroyed or being used to compile another file
-    // will invalidate this pointer.
-    const ASTNode* fSource;
+    // This pointer may be null, and even when non-null is not guaranteed to remain valid for the
+    // entire lifespan of this object. The parse tree's lifespan is normally controlled by
+    // IRGenerator, so the IRGenerator being destroyed or being used to compile another file will
+    // invalidate this pointer.
+    const ASTNode* fSource = nullptr;
 
-    using INHERITED = ProgramElement;
+    typedef ProgramElement INHERITED;
 };
 
-}  // namespace SkSL
+} // namespace
 
 #endif

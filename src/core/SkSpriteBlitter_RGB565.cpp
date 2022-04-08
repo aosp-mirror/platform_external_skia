@@ -59,7 +59,7 @@ public:
 private:
     bool fUseSrcOver;
 
-    using INHERITED = SkSpriteBlitter;
+    typedef SkSpriteBlitter INHERITED;
 };
 
 SkSpriteBlitter* SkSpriteBlitter::ChooseL565(const SkPixmap& source, const SkPaint& paint,
@@ -147,7 +147,7 @@ public:
 private:
     bool fUseSrcOver;
 
-    using INHERITED = SkSpriteBlitter;
+    typedef SkSpriteBlitter INHERITED;
 };
 
 SkSpriteBlitter* SkSpriteBlitter::ChooseLA8(const SkPixmap& source, const SkPaint& paint,

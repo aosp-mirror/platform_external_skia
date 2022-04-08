@@ -13,79 +13,46 @@
 
 namespace SkSL {
 
-enum class FieldAccessOwnerKind : int8_t {
-    kDefault,
-    // this field access is to a field of an anonymous interface block (and thus, the field name
-    // is actually in global scope, so only the field name needs to be written in GLSL)
-    kAnonymousInterfaceBlock
-};
-
 /**
  * An expression which extracts a field from a struct, as in 'foo.bar'.
  */
-class FieldAccess final : public Expression {
-public:
-    using OwnerKind = FieldAccessOwnerKind;
-
-    static constexpr Kind kExpressionKind = Kind::kFieldAccess;
+struct FieldAccess : public Expression {
+    enum OwnerKind {
+        kDefault_OwnerKind,
+        // this field access is to a field of an anonymous interface block (and thus, the field name
+        // is actually in global scope, so only the field name needs to be written in GLSL)
+        kAnonymousInterfaceBlock_OwnerKind
+    };
 
     FieldAccess(std::unique_ptr<Expression> base, int fieldIndex,
-                OwnerKind ownerKind = OwnerKind::kDefault)
-    : INHERITED(base->fOffset, kExpressionKind, base->type().fields()[fieldIndex].fType)
+                OwnerKind ownerKind = kDefault_OwnerKind)
+    : INHERITED(base->fOffset, kFieldAccess_Kind, *base->fType.fields()[fieldIndex].fType)
+    , fBase(std::move(base))
     , fFieldIndex(fieldIndex)
-    , fOwnerKind(ownerKind)
-    , fBase(std::move(base)) {}
-
-    // Returns a field-access expression; reports errors via the ErrorReporter.
-    static std::unique_ptr<Expression> Convert(const Context& context,
-                                               std::unique_ptr<Expression> base,
-                                               StringFragment field);
-
-    // Returns a field-access expression; reports errors via ASSERT.
-    static std::unique_ptr<Expression> Make(const Context& context,
-                                            std::unique_ptr<Expression> base,
-                                            int fieldIndex,
-                                            OwnerKind ownerKind = OwnerKind::kDefault);
-
-    std::unique_ptr<Expression>& base() {
-        return fBase;
-    }
-
-    const std::unique_ptr<Expression>& base() const {
-        return fBase;
-    }
-
-    int fieldIndex() const {
-        return fFieldIndex;
-    }
-
-    OwnerKind ownerKind() const {
-        return fOwnerKind;
-    }
+    , fOwnerKind(ownerKind) {}
 
     bool hasProperty(Property property) const override {
-        return this->base()->hasProperty(property);
+        return fBase->hasProperty(property);
     }
 
     std::unique_ptr<Expression> clone() const override {
-        return std::unique_ptr<Expression>(new FieldAccess(this->base()->clone(),
-                                                           this->fieldIndex(),
-                                                           this->ownerKind()));
+        return std::unique_ptr<Expression>(new FieldAccess(fBase->clone(), fFieldIndex,
+                                                           fOwnerKind));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
-        return this->base()->description() + "." +
-               this->base()->type().fields()[this->fieldIndex()].fName;
+        return fBase->description() + "." + fBase->fType.fields()[fFieldIndex].fName;
     }
+#endif
 
-private:
-    int fFieldIndex;
-    FieldAccessOwnerKind fOwnerKind;
     std::unique_ptr<Expression> fBase;
+    const int fFieldIndex;
+    const OwnerKind fOwnerKind;
 
-    using INHERITED = Expression;
+    typedef Expression INHERITED;
 };
 
-}  // namespace SkSL
+} // namespace
 
 #endif

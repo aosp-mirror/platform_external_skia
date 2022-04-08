@@ -72,8 +72,7 @@ protected:
         canvas->drawRect(r, p);
 
         SkImageInfo info = SkImageInfo::MakeN32Premul(kWidth, kHeight);
-        SkSurfaceProps props = SkSurfaceProps(0, kRGB_H_SkPixelGeometry);
-        auto surface(ToolUtils::makeSurface(canvas, info, &props));
+        auto        surface(ToolUtils::makeSurface(canvas, info));
 
         SkCanvas* surfCanvas = surface->getCanvas();
         this->drawColumn(surfCanvas, SK_ColorBLACK, SK_ColorWHITE, false);
@@ -86,7 +85,7 @@ protected:
 
         SkPaint surfPaint;
         surfPaint.setBlendMode(SkBlendMode::kSrcOver);
-        surface->draw(canvas, 0, 0, SkSamplingOptions(), &surfPaint);
+        surface->draw(canvas, 0, 0, &surfPaint);
     }
 
     void drawColumn(SkCanvas* canvas, SkColor backgroundColor, SkColor textColor, bool useGrad) {
@@ -147,10 +146,10 @@ protected:
 private:
     SkScalar fTextHeight;
     sk_sp<SkShader> fCheckerboard;
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM( return new LcdBlendGM; )
-}  // namespace skiagm
+}

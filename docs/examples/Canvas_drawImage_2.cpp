@@ -7,8 +7,8 @@ void draw(SkCanvas* canvas) {
    // sk_sp<SkImage> image;
    canvas->drawImage(image, 0, 0);
    SkPaint paint;
-   canvas->drawImage(image, 80, 0, SkSamplingOptions(), &paint);
+   canvas->drawImage(image, 80, 0, &paint);
    paint.setAlpha(0x80);
-   canvas->drawImage(image, 160, 0, SkSamplingOptions(), &paint);
+   canvas->drawImage(image, 160, 0, &paint);
 }
 }  // END FIDDLE

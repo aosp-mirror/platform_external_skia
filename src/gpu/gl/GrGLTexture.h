@@ -9,9 +9,9 @@
 #ifndef GrGLTexture_DEFINED
 #define GrGLTexture_DEFINED
 
+#include "include/gpu/GrTexture.h"
 #include "include/private/GrGLTypesPriv.h"
 #include "src/gpu/GrGpu.h"
-#include "src/gpu/GrTexture.h"
 #include "src/gpu/gl/GrGLUtil.h"
 
 class GrGLGpu;
@@ -28,7 +28,7 @@ public:
 
     static GrTextureType TextureTypeFromTarget(GrGLenum textureTarget);
 
-    GrGLTexture(GrGLGpu*, SkBudgeted, const Desc&, GrMipmapStatus);
+    GrGLTexture(GrGLGpu*, SkBudgeted, const Desc&, GrMipMapsStatus);
 
     ~GrGLTexture() override {}
 
@@ -51,7 +51,7 @@ public:
     void baseLevelWasBoundToFBO() { fBaseLevelHasBeenBoundToFBO = true; }
 
     static sk_sp<GrGLTexture> MakeWrapped(GrGLGpu*,
-                                          GrMipmapStatus,
+                                          GrMipMapsStatus,
                                           const Desc&,
                                           sk_sp<GrGLTextureParameters>,
                                           GrWrapCacheable, GrIOType);
@@ -60,12 +60,12 @@ public:
 
 protected:
     // Constructor for subclasses.
-    GrGLTexture(GrGLGpu*, const Desc&, sk_sp<GrGLTextureParameters>, GrMipmapStatus);
+    GrGLTexture(GrGLGpu*, const Desc&, sk_sp<GrGLTextureParameters>, GrMipMapsStatus);
 
     // Constructor for instances wrapping backend objects.
     GrGLTexture(GrGLGpu*,
                 const Desc&,
-                GrMipmapStatus,
+                GrMipMapsStatus,
                 sk_sp<GrGLTextureParameters>,
                 GrWrapCacheable,
                 GrIOType);
@@ -84,7 +84,7 @@ private:
     GrBackendObjectOwnership fTextureIDOwnership;
     bool fBaseLevelHasBeenBoundToFBO = false;
 
-    using INHERITED = GrTexture;
+    typedef GrTexture INHERITED;
 };
 
 #endif

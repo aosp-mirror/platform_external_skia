@@ -64,42 +64,42 @@ static void simple_test(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, 0 == heap.count());
 }
 
-struct Mock {
+struct Dummy {
     int fValue;
     int fPriority;
     mutable int fIndex;
 
-    static bool LessP(Mock* const& a, Mock* const& b) { return a->fPriority < b->fPriority; }
-    static int* PQIndex(Mock* const& mock) { return &mock->fIndex; }
+    static bool LessP(Dummy* const& a, Dummy* const& b) { return a->fPriority < b->fPriority; }
+    static int* PQIndex(Dummy* const& dummy) { return &dummy->fIndex; }
 
-    bool operator== (const Mock& that) const {
+    bool operator== (const Dummy& that) const {
         return fValue == that.fValue && fPriority == that.fPriority;
     }
-    bool operator!= (const Mock& that) const { return !(*this == that); }
+    bool operator!= (const Dummy& that) const { return !(*this == that); }
 };
 
 void random_test(skiatest::Reporter* reporter) {
     SkRandom random;
-    static const Mock kSentinel = {-1, -1, -1};
+    static const Dummy kSentinel = {-1, -1, -1};
 
     for (int i = 0; i < 100; ++i) {
-        // Create a random set of Mock objects.
+        // Create a random set of Dummy objects.
         int count = random.nextULessThan(100);
-        SkTDArray<Mock> array;
+        SkTDArray<Dummy> array;
         array.setReserve(count);
         for (int j = 0; j < count; ++j) {
-            Mock* mock = array.append();
-            mock->fPriority = random.nextS();
-            mock->fValue = random.nextS();
-            mock->fIndex = -1;
-            if (*mock == kSentinel) {
+            Dummy* dummy = array.append();
+            dummy->fPriority = random.nextS();
+            dummy->fValue = random.nextS();
+            dummy->fIndex = -1;
+            if (*dummy == kSentinel) {
                 array.pop();
                 --j;
             }
         }
 
-        // Stick the mock objects in the pqueue.
-        SkTDPQueue<Mock*, Mock::LessP, Mock::PQIndex> pq;
+        // Stick the dummy objects in the pqueue.
+        SkTDPQueue<Dummy*, Dummy::LessP, Dummy::PQIndex> pq;
         for (int j = 0; j < count; ++j) {
             pq.insert(&array[j]);
         }
@@ -112,7 +112,7 @@ void random_test(skiatest::Reporter* reporter) {
         // Begin the test.
         while (pq.count()) {
             // Make sure the top of the queue is really the highest priority.
-            Mock* top = pq.peek();
+            Dummy* top = pq.peek();
             for (int k = 0; k < count; ++k) {
                 REPORTER_ASSERT(reporter, kSentinel == array[k] ||
                                             array[k].fPriority >= top->fPriority);
@@ -121,7 +121,7 @@ void random_test(skiatest::Reporter* reporter) {
             unsigned action = random.nextULessThan(3);
             switch (action) {
                 case 0: { // pop the top,
-                    Mock* top = pq.peek();
+                    Dummy* top = pq.peek();
                     REPORTER_ASSERT(reporter, array.begin() <= top && top < array.end());
                     pq.pop();
                     *top = kSentinel;
@@ -153,29 +153,29 @@ void random_test(skiatest::Reporter* reporter) {
 void sort_test(skiatest::Reporter* reporter) {
     SkRandom random;
 
-    SkTDPQueue<Mock *, Mock::LessP, Mock::PQIndex> pqTest;
-    SkTDPQueue<Mock *, Mock::LessP, Mock::PQIndex> pqControl;
+    SkTDPQueue<Dummy *, Dummy::LessP, Dummy::PQIndex> pqTest;
+    SkTDPQueue<Dummy *, Dummy::LessP, Dummy::PQIndex> pqControl;
 
-    // Create a random set of Mock objects and populate the test queue.
+    // Create a random set of Dummy objects and populate the test queue.
     int count = random.nextULessThan(100);
-    SkTDArray<Mock> testArray;
+    SkTDArray<Dummy> testArray;
     testArray.setReserve(count);
     for (int i = 0; i < count; i++) {
-        Mock *mock = testArray.append();
-        mock->fPriority = random.nextS();
-        mock->fValue = random.nextS();
-        mock->fIndex = -1;
+        Dummy *dummy = testArray.append();
+        dummy->fPriority = random.nextS();
+        dummy->fValue = random.nextS();
+        dummy->fIndex = -1;
         pqTest.insert(&testArray[i]);
     }
 
-    // Stick equivalent mock objects into the control queue.
-    SkTDArray<Mock> controlArray;
+    // Stick equivalent dummy objects into the control queue.
+    SkTDArray<Dummy> controlArray;
     controlArray.setReserve(count);
     for (int i = 0; i < count; i++) {
-        Mock *mock = controlArray.append();
-        mock->fPriority = testArray[i].fPriority;
-        mock->fValue = testArray[i].fValue;
-        mock->fIndex = -1;
+        Dummy *dummy = controlArray.append();
+        dummy->fPriority = testArray[i].fPriority;
+        dummy->fValue = testArray[i].fValue;
+        dummy->fIndex = -1;
         pqControl.insert(&controlArray[i]);
     }
 

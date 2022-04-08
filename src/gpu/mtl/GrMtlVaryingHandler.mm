@@ -7,18 +7,15 @@
 
 #include "src/gpu/mtl/GrMtlVaryingHandler.h"
 
-#include "include/private/GrMtlTypesPriv.h"
-
 #if !__has_feature(objc_arc)
 #error This file must be compiled with Arc. Use -fobjc-arc flag
 #endif
 
-GR_NORETAIN_BEGIN
-
 static void finalize_helper(GrMtlVaryingHandler::VarArray& vars) {
-    int locationIndex = 0;
+    int locationIndex;
     int componentCount = 0;
-    for (GrShaderVar& var : vars.items()) {
+    for (locationIndex = 0; locationIndex < vars.count(); locationIndex++) {
+        GrShaderVar& var = vars[locationIndex];
         // Metal only allows scalars (including bool and char) and vectors as varyings
         SkASSERT(GrSLTypeVecLength(var.getType()) != -1);
         componentCount += GrSLTypeVecLength(var.getType());
@@ -26,7 +23,6 @@ static void finalize_helper(GrMtlVaryingHandler::VarArray& vars) {
         SkString location;
         location.appendf("location = %d", locationIndex);
         var.addLayoutQualifier(location.c_str());
-        ++locationIndex;
     }
     // The max number of inputs is 60 for iOS and 32 for macOS. The max number of components is 60
     // for iOS and 128 for macOS. To be conservative, we are going to assert that we have less than
@@ -44,5 +40,3 @@ void GrMtlVaryingHandler::onFinalize() {
     finalize_helper(fFragInputs);
     finalize_helper(fFragOutputs);
 }
-
-GR_NORETAIN_END

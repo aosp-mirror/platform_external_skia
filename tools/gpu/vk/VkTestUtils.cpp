@@ -17,8 +17,6 @@
     #endif
 #endif
 
-#include <algorithm>
-
 #if defined(SK_BUILD_FOR_UNIX)
 #include <execinfo.h>
 #endif
@@ -35,17 +33,23 @@ namespace sk_gpu_test {
 
 bool LoadVkLibraryAndGetProcAddrFuncs(PFN_vkGetInstanceProcAddr* instProc,
                                       PFN_vkGetDeviceProcAddr* devProc) {
+#ifdef SK_MOLTENVK
+    // MoltenVK is a statically linked framework, so there is no Vulkan library to load.
+    *instProc = &vkGetInstanceProcAddr;
+    *devProc = &vkGetDeviceProcAddr;
+    return true;
+#else
     static void* vkLib = nullptr;
     static PFN_vkGetInstanceProcAddr localInstProc = nullptr;
     static PFN_vkGetDeviceProcAddr localDevProc = nullptr;
     if (!vkLib) {
-        vkLib = SkLoadDynamicLibrary(SK_GPU_TOOLS_VK_LIBRARY_NAME);
+        vkLib = DynamicLoadLibrary(SK_GPU_TOOLS_VK_LIBRARY_NAME);
         if (!vkLib) {
             return false;
         }
-        localInstProc = (PFN_vkGetInstanceProcAddr) SkGetProcedureAddress(vkLib,
+        localInstProc = (PFN_vkGetInstanceProcAddr) GetProcedureAddress(vkLib,
                                                                         "vkGetInstanceProcAddr");
-        localDevProc = (PFN_vkGetDeviceProcAddr) SkGetProcedureAddress(vkLib,
+        localDevProc = (PFN_vkGetDeviceProcAddr) GetProcedureAddress(vkLib,
                                                                      "vkGetDeviceProcAddr");
     }
     if (!localInstProc || !localDevProc) {
@@ -54,6 +58,7 @@ bool LoadVkLibraryAndGetProcAddrFuncs(PFN_vkGetInstanceProcAddr* instProc,
     *instProc = localInstProc;
     *devProc = localDevProc;
     return true;
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -112,16 +117,6 @@ VKAPI_ATTR VkBool32 VKAPI_CALL DebugReportCallback(
     const char*                 pMessage,
     void*                       pUserData) {
     if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
-        // See https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/1887
-        if (strstr(pMessage, "VUID-VkGraphicsPipelineCreateInfo-pDynamicStates-01521") ||
-            strstr(pMessage, "VUID-VkGraphicsPipelineCreateInfo-pDynamicStates-01522")) {
-            return VK_FALSE;
-        }
-        // See https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/2171
-        if (strstr(pMessage, "VUID-vkCmdDraw-None-02686") ||
-            strstr(pMessage, "VUID-vkCmdDrawIndexed-None-02686")) {
-            return VK_FALSE;
-        }
         SkDebugf("Vulkan error [%s]: code: %d: %s\n", pLayerPrefix, messageCode, pMessage);
         print_backtrace();
         SkDEBUGFAIL("Vulkan debug layer error");
@@ -483,7 +478,7 @@ bool CreateVkBackendContext(GrVkGetProc getProc,
         instanceLayerNames.push_back(instanceLayers[i].layerName);
     }
     for (int i = 0; i < instanceExtensions.count(); ++i) {
-        if (strncmp(instanceExtensions[i].extensionName, "VK_KHX", 6) != 0) {
+        if (strncmp(instanceExtensions[i].extensionName, "VK_KHX", 6)) {
             instanceExtensionNames.push_back(instanceExtensions[i].extensionName);
         }
     }
@@ -641,35 +636,13 @@ bool CreateVkBackendContext(GrVkGetProc getProc,
     for (int i = 0; i < deviceLayers.count(); ++i) {
         deviceLayerNames.push_back(deviceLayers[i].layerName);
     }
-
-    // We can't have both VK_KHR_buffer_device_address and VK_EXT_buffer_device_address as
-    // extensions. So see if we have the KHR version and if so don't push back the EXT version in
-    // the next loop.
-    bool hasKHRBufferDeviceAddress = false;
-    for (int i = 0; i < deviceExtensions.count(); ++i) {
-        if (!strcmp(deviceExtensions[i].extensionName, "VK_KHR_buffer_device_address")) {
-            hasKHRBufferDeviceAddress = true;
-            break;
-        }
-    }
-
     for (int i = 0; i < deviceExtensions.count(); ++i) {
         // Don't use experimental extensions since they typically don't work with debug layers and
         // often are missing dependecy requirements for other extensions. Additionally, these are
         // often left behind in the driver even after they've been promoted to real extensions.
-        if (0 != strncmp(deviceExtensions[i].extensionName, "VK_KHX", 6) &&
-            0 != strncmp(deviceExtensions[i].extensionName, "VK_NVX", 6)) {
-
-            // This is an nvidia extension that isn't supported by the debug layers so we get lots
-            // of warnings. We don't actually use it, so it is easiest to just not enable it.
-            if (0 == strcmp(deviceExtensions[i].extensionName, "VK_NV_low_latency")) {
-                continue;
-            }
-
-            if (!hasKHRBufferDeviceAddress ||
-                0 != strcmp(deviceExtensions[i].extensionName, "VK_EXT_buffer_device_address")) {
-                deviceExtensionNames.push_back(deviceExtensions[i].extensionName);
-            }
+        if (strncmp(deviceExtensions[i].extensionName, "VK_KHX", 6) &&
+            strncmp(deviceExtensions[i].extensionName, "VK_NVX", 6)) {
+            deviceExtensionNames.push_back(deviceExtensions[i].extensionName);
         }
     }
 
@@ -803,6 +776,6 @@ void FreeVulkanFeaturesStructs(const VkPhysicalDeviceFeatures2* features) {
     }
 }
 
-}  // namespace sk_gpu_test
+}
 
 #endif

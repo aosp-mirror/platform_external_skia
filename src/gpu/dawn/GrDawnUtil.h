@@ -11,24 +11,12 @@
 #include "include/private/GrTypesPriv.h"
 #include "dawn/webgpu_cpp.h"
 
-size_t GrDawnBytesPerBlock(wgpu::TextureFormat format);
-int GrDawnFormatStencilBits(wgpu::TextureFormat format);
+size_t GrDawnBytesPerPixel(wgpu::TextureFormat format);
 bool GrDawnFormatIsRenderable(wgpu::TextureFormat format);
 bool GrColorTypeToDawnFormat(GrColorType colorType, wgpu::TextureFormat* format);
-bool GrDawnFormatToGrColorType(wgpu::TextureFormat format, GrColorType* colorType);
 size_t GrDawnRoundRowBytes(size_t rowBytes);
-#if defined(SK_DEBUG) || GR_TEST_UTILS
+#if GR_TEST_UTILS
 const char* GrDawnFormatToStr(wgpu::TextureFormat format);
 #endif
-
-static constexpr uint32_t GrDawnFormatChannels(wgpu::TextureFormat format) {
-    switch (format) {
-        case wgpu::TextureFormat::RGBA8Unorm:   return kRGBA_SkColorChannelFlags;
-        case wgpu::TextureFormat::BGRA8Unorm:   return kRGBA_SkColorChannelFlags;
-        case wgpu::TextureFormat::R8Unorm:      return kRed_SkColorChannelFlag;
-
-        default:                                return 0;
-    }
-}
 
 #endif // GrDawnUtil_DEFINED

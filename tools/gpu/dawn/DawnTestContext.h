@@ -9,7 +9,6 @@
 #define DawnTestContext_DEFINED
 
 #include "tools/gpu/TestContext.h"
-#include <dawn_native/DawnNative.h>
 
 #ifdef SK_DAWN
 
@@ -23,14 +22,12 @@ public:
     }
 
 protected:
-    DawnTestContext(std::unique_ptr<dawn_native::Instance> instance, const wgpu::Device& device)
-        : fInstance(std::move(instance)), fDevice(device) {}
+    DawnTestContext(const wgpu::Device& device) : fDevice(device) {}
 
-    std::unique_ptr<dawn_native::Instance> fInstance;
     wgpu::Device fDevice;
 
 private:
-    using INHERITED = TestContext;
+    typedef TestContext INHERITED;
 };
 
 /**

@@ -20,9 +20,6 @@ class SkData;
 class SkRRect;
 class SkWStream;
 
-// WIP -- define this locally, and fix call-sites to use SkPathBuilder (skbug.com/9000)
-//#define SK_HIDE_PATH_EDIT_METHODS
-
 /** \class SkPath
     SkPath contain geometry. SkPath may be empty, or contain one or more verbs that
     outline a figure. SkPath always starts with a move verb to a Cartesian coordinate,
@@ -43,54 +40,6 @@ class SkWStream;
 */
 class SK_API SkPath {
 public:
-    /**
-     *  Create a new path with the specified segments.
-     *
-     *  The points and weights arrays are read in order, based on the sequence of verbs.
-     *
-     *  Move    1 point
-     *  Line    1 point
-     *  Quad    2 points
-     *  Conic   2 points and 1 weight
-     *  Cubic   3 points
-     *  Close   0 points
-     *
-     *  If an illegal sequence of verbs is encountered, or the specified number of points
-     *  or weights is not sufficient given the verbs, an empty Path is returned.
-     *
-     *  A legal sequence of verbs consists of any number of Contours. A contour always begins
-     *  with a Move verb, followed by 0 or more segments: Line, Quad, Conic, Cubic, followed
-     *  by an optional Close.
-     */
-    static SkPath Make(const SkPoint[],  int pointCount,
-                       const uint8_t[],  int verbCount,
-                       const SkScalar[], int conicWeightCount,
-                       SkPathFillType, bool isVolatile = false);
-
-    static SkPath Rect(const SkRect&, SkPathDirection = SkPathDirection::kCW,
-                       unsigned startIndex = 0);
-    static SkPath Oval(const SkRect&, SkPathDirection = SkPathDirection::kCW);
-    static SkPath Oval(const SkRect&, SkPathDirection, unsigned startIndex);
-    static SkPath Circle(SkScalar center_x, SkScalar center_y, SkScalar radius,
-                         SkPathDirection dir = SkPathDirection::kCW);
-    static SkPath RRect(const SkRRect&, SkPathDirection dir = SkPathDirection::kCW);
-    static SkPath RRect(const SkRRect&, SkPathDirection, unsigned startIndex);
-    static SkPath RRect(const SkRect& bounds, SkScalar rx, SkScalar ry,
-                        SkPathDirection dir = SkPathDirection::kCW);
-
-    static SkPath Polygon(const SkPoint pts[], int count, bool isClosed,
-                          SkPathFillType = SkPathFillType::kWinding,
-                          bool isVolatile = false);
-
-    static SkPath Polygon(const std::initializer_list<SkPoint>& list, bool isClosed,
-                          SkPathFillType fillType = SkPathFillType::kWinding,
-                          bool isVolatile = false) {
-        return Polygon(list.begin(), SkToInt(list.size()), isClosed, fillType, isVolatile);
-    }
-
-    static SkPath Line(const SkPoint a, const SkPoint b) {
-        return Polygon({a, b}, false);
-    }
 
     /** Constructs an empty SkPath. By default, SkPath has no verbs, no SkPoint, and no weights.
         FillType is set to kWinding.
@@ -223,10 +172,39 @@ public:
         fFillType ^= 2;
     }
 
+    /** Returns the comvexity type, computing if needed. Never returns kUnknown.
+        @return  path's convexity type (convex or concave)
+    */
+    SkPathConvexityType getConvexityType() const {
+        SkPathConvexityType convexity = this->getConvexityTypeOrUnknown();
+        if (convexity != SkPathConvexityType::kUnknown) {
+            return convexity;
+        }
+        return this->internalGetConvexity();
+    }
+
+    /** If the path's convexity is already known, return it, else return kUnknown.
+     *  If you always want to know the convexity, even if that means having to compute it,
+     *  call getConvexitytype().
+     *
+     *  @return  known convexity, or kUnknown
+     */
+    SkPathConvexityType getConvexityTypeOrUnknown() const {
+        return (SkPathConvexityType)fConvexity.load(std::memory_order_relaxed);
+    }
+
+    /** Stores a convexity type for this path. This is what will be returned if
+     *  getConvexityTypeOrUnknown() is called. If you pass kUnknown, then if getContexityType()
+     *  is called, the real convexity will be computed.
+     *
+     *  example: https://fiddle.skia.org/c/@Path_setConvexity
+     */
+    void setConvexityType(SkPathConvexityType convexity);
+
     /** Returns true if the path is convex. If necessary, it will first compute the convexity.
      */
     bool isConvex() const {
-        return SkPathConvexity::kConvex == this->getConvexity();
+        return SkPathConvexityType::kConvex == this->getConvexityType();
     }
 
     /** Returns true if this path is recognized as an oval or circle.
@@ -336,11 +314,9 @@ public:
         GPU surface SkPath draws are affected by volatile for some shadows and concave geometries.
 
         @param isVolatile  true if caller will alter SkPath after drawing
-        @return            reference to SkPath
     */
-    SkPath& setIsVolatile(bool isVolatile) {
+    void setIsVolatile(bool isVolatile) {
         fIsVolatile = isVolatile;
-        return *this;
     }
 
     /** Tests if line between SkPoint pair is degenerate.
@@ -543,9 +519,10 @@ public:
     */
     void incReserve(int extraPtCount);
 
-#ifdef SK_HIDE_PATH_EDIT_METHODS
-private:
-#endif
+    /** Shrinks SkPath verb array and SkPoint array storage to discard unused capacity.
+        May reduce the heap overhead for SkPath known to be fully constructed.
+    */
+    void shrinkToFit();
 
     /** Adds beginning of contour at SkPoint (x, y).
 
@@ -994,10 +971,6 @@ private:
     */
     SkPath& close();
 
-#ifdef SK_HIDE_PATH_EDIT_METHODS
-public:
-#endif
-
     /** Approximates conic with quad array. Conic is constructed from start SkPoint p0,
         control SkPoint p1, end SkPoint p2, and weight w.
         Quad array is stored in pts; this storage is supplied by caller.
@@ -1043,45 +1016,48 @@ public:
     */
     bool isRect(SkRect* rect, bool* isClosed = nullptr, SkPathDirection* direction = nullptr) const;
 
-#ifdef SK_HIDE_PATH_EDIT_METHODS
-private:
-#endif
+    /** Adds SkRect to SkPath, appending kMove_Verb, three kLine_Verb, and kClose_Verb,
+        starting with top-left corner of SkRect; followed by top-right, bottom-right,
+        and bottom-left if dir is kCW_Direction; or followed by bottom-left,
+        bottom-right, and top-right if dir is kCCW_Direction.
 
-    /** Adds a new contour to the path, defined by the rect, and wound in the
-        specified direction. The verbs added to the path will be:
+        @param rect  SkRect to add as a closed contour
+        @param dir   SkPath::Direction to wind added contour
+        @return      reference to SkPath
 
-        kMove, kLine, kLine, kLine, kClose
+        example: https://fiddle.skia.org/c/@Path_addRect
+    */
+    SkPath& addRect(const SkRect& rect, SkPathDirection dir = SkPathDirection::kCW);
 
-        start specifies which corner to begin the contour:
-            0: upper-left  corner
-            1: upper-right corner
-            2: lower-right corner
-            3: lower-left  corner
-
-        This start point also acts as the implied beginning of the subsequent,
-        contour, if it does not have an explicit moveTo(). e.g.
-
-            path.addRect(...)
-            // if we don't say moveTo() here, we will use the rect's start point
-            path.lineTo(...)
+    /** Adds SkRect to SkPath, appending kMove_Verb, three kLine_Verb, and kClose_Verb.
+        If dir is kCW_Direction, SkRect corners are added clockwise; if dir is
+        kCCW_Direction, SkRect corners are added counterclockwise.
+        start determines the first corner added.
 
         @param rect   SkRect to add as a closed contour
-        @param dir    SkPath::Direction to orient the new contour
+        @param dir    SkPath::Direction to wind added contour
         @param start  initial corner of SkRect to add
         @return       reference to SkPath
 
         example: https://fiddle.skia.org/c/@Path_addRect_2
-     */
+    */
     SkPath& addRect(const SkRect& rect, SkPathDirection dir, unsigned start);
 
-    SkPath& addRect(const SkRect& rect, SkPathDirection dir = SkPathDirection::kCW) {
-        return this->addRect(rect, dir, 0);
-    }
+    /** Adds SkRect (left, top, right, bottom) to SkPath,
+        appending kMove_Verb, three kLine_Verb, and kClose_Verb,
+        starting with top-left corner of SkRect; followed by top-right, bottom-right,
+        and bottom-left if dir is kCW_Direction; or followed by bottom-left,
+        bottom-right, and top-right if dir is kCCW_Direction.
 
+        @param left    smaller x-axis value of SkRect
+        @param top     smaller y-axis value of SkRect
+        @param right   larger x-axis value of SkRect
+        @param bottom  larger y-axis value of SkRect
+        @param dir     SkPath::Direction to wind added contour
+        @return        reference to SkPath
+    */
     SkPath& addRect(SkScalar left, SkScalar top, SkScalar right, SkScalar bottom,
-                    SkPathDirection dir = SkPathDirection::kCW) {
-        return this->addRect({left, top, right, bottom}, dir, 0);
-    }
+                    SkPathDirection dir = SkPathDirection::kCW);
 
     /** Adds oval to path, appending kMove_Verb, four kConic_Verb, and kClose_Verb.
         Oval is upright ellipse bounded by SkRect oval with radii equal to half oval width
@@ -1235,10 +1211,6 @@ private:
         return this->addPoly(list.begin(), SkToInt(list.size()), close);
     }
 
-#ifdef SK_HIDE_PATH_EDIT_METHODS
-public:
-#endif
-
     /** \enum SkPath::AddPathMode
         AddPathMode chooses how addPath() appends. Adding one SkPath to another can extend
         the last contour or start a new contour.
@@ -1350,17 +1322,6 @@ public:
         this->transform(matrix, this, pc);
     }
 
-    SkPath makeTransform(const SkMatrix& m,
-                         SkApplyPerspectiveClip pc = SkApplyPerspectiveClip::kYes) const {
-        SkPath dst;
-        this->transform(m, &dst, pc);
-        return dst;
-    }
-
-    SkPath makeScale(SkScalar sx, SkScalar sy) {
-        return this->makeTransform(SkMatrix::Scale(sx, sy), SkApplyPerspectiveClip::kNo);
-    }
-
     /** Returns last point on SkPath in lastPt. Returns false if SkPoint array is empty,
         storing (0, 0) if lastPt is not nullptr.
 
@@ -1422,7 +1383,7 @@ public:
         kConic_Verb = static_cast<int>(SkPathVerb::kConic),
         kCubic_Verb = static_cast<int>(SkPathVerb::kCubic),
         kClose_Verb = static_cast<int>(SkPathVerb::kClose),
-        kDone_Verb  = kClose_Verb + 1
+        kDone_Verb  = static_cast<int>(SkPathVerb::kDone),
     };
 
     /** \class SkPath::Iter
@@ -1518,87 +1479,23 @@ public:
         bool            fForceClose;
         bool            fNeedClose;
         bool            fCloseLine;
+        enum SegmentState : uint8_t {
+            /** The current contour is empty. Starting processing or have just closed a contour. */
+            kEmptyContour_SegmentState,
+            /** Have seen a move, but nothing else. */
+            kAfterMove_SegmentState,
+            /** Have seen a primitive but not yet closed the path. Also the initial state. */
+            kAfterPrimitive_SegmentState
+        };
+        SegmentState    fSegmentState;
 
+        inline const SkPoint& cons_moveTo();
         Verb autoClose(SkPoint pts[2]);
     };
 
-private:
-    /** \class SkPath::RangeIter
-        Iterates through a raw range of path verbs, points, and conics. All values are returned
-        unaltered.
-
-        NOTE: This class will be moved into SkPathPriv once RangeIter is removed.
-    */
-    class RangeIter {
-    public:
-        RangeIter() = default;
-        RangeIter(const uint8_t* verbs, const SkPoint* points, const SkScalar* weights)
-                : fVerb(verbs), fPoints(points), fWeights(weights) {
-            SkDEBUGCODE(fInitialPoints = fPoints;)
-        }
-        bool operator!=(const RangeIter& that) const {
-            return fVerb != that.fVerb;
-        }
-        bool operator==(const RangeIter& that) const {
-            return fVerb == that.fVerb;
-        }
-        RangeIter& operator++() {
-            auto verb = static_cast<SkPathVerb>(*fVerb++);
-            fPoints += pts_advance_after_verb(verb);
-            if (verb == SkPathVerb::kConic) {
-                ++fWeights;
-            }
-            return *this;
-        }
-        RangeIter operator++(int) {
-            RangeIter copy = *this;
-            this->operator++();
-            return copy;
-        }
-        SkPathVerb peekVerb() const {
-            return static_cast<SkPathVerb>(*fVerb);
-        }
-        std::tuple<SkPathVerb, const SkPoint*, const SkScalar*> operator*() const {
-            SkPathVerb verb = this->peekVerb();
-            // We provide the starting point for beziers by peeking backwards from the current
-            // point, which works fine as long as there is always a kMove before any geometry.
-            // (SkPath::injectMoveToIfNeeded should have guaranteed this to be the case.)
-            int backset = pts_backset_for_verb(verb);
-            SkASSERT(fPoints + backset >= fInitialPoints);
-            return {verb, fPoints + backset, fWeights};
-        }
-    private:
-        constexpr static int pts_advance_after_verb(SkPathVerb verb) {
-            switch (verb) {
-                case SkPathVerb::kMove: return 1;
-                case SkPathVerb::kLine: return 1;
-                case SkPathVerb::kQuad: return 2;
-                case SkPathVerb::kConic: return 2;
-                case SkPathVerb::kCubic: return 3;
-                case SkPathVerb::kClose: return 0;
-            }
-            SkUNREACHABLE;
-        }
-        constexpr static int pts_backset_for_verb(SkPathVerb verb) {
-            switch (verb) {
-                case SkPathVerb::kMove: return 0;
-                case SkPathVerb::kLine: return -1;
-                case SkPathVerb::kQuad: return -1;
-                case SkPathVerb::kConic: return -1;
-                case SkPathVerb::kCubic: return -1;
-                case SkPathVerb::kClose: return -1;
-            }
-            SkUNREACHABLE;
-        }
-        const uint8_t* fVerb = nullptr;
-        const SkPoint* fPoints = nullptr;
-        const SkScalar* fWeights = nullptr;
-        SkDEBUGCODE(const SkPoint* fInitialPoints = nullptr;)
-    };
-public:
-
     /** \class SkPath::RawIter
-        Use Iter instead. This class will soon be removed and RangeIter will be made private.
+        Iterates through verb array, and associated SkPoint array and conic weight.
+        verb array, SkPoint array, and conic weight are returned unaltered.
     */
     class SK_API RawIter {
     public:
@@ -1624,7 +1521,9 @@ public:
 
             @param path  SkPath to iterate
         */
-        void setPath(const SkPath&);
+        void setPath(const SkPath& path) {
+            fRawIter.setPathRef(*path.fPathRef.get());
+        }
 
         /** Returns next SkPath::Verb in verb array, and advances RawIter.
             When verb array is exhausted, returns kDone_Verb.
@@ -1633,14 +1532,16 @@ public:
             @param pts  storage for SkPoint data describing returned SkPath::Verb
             @return     next SkPath::Verb from verb array
         */
-        Verb next(SkPoint[4]);
+        Verb next(SkPoint pts[4]) {
+            return (Verb) fRawIter.next(pts);
+        }
 
         /** Returns next SkPath::Verb, but does not advance RawIter.
 
             @return  next SkPath::Verb from verb array
         */
         Verb peek() const {
-            return (fIter != fEnd) ? static_cast<Verb>(std::get<0>(*fIter)) : kDone_Verb;
+            return (Verb) fRawIter.peek();
         }
 
         /** Returns conic weight if next() returned kConic_Verb.
@@ -1651,13 +1552,11 @@ public:
             @return  conic weight for conic SkPoint returned by next()
         */
         SkScalar conicWeight() const {
-            return fConicWeight;
+            return fRawIter.conicWeight();
         }
 
     private:
-        RangeIter fIter;
-        RangeIter fEnd;
-        SkScalar fConicWeight = 0;
+        SkPathRef::Iter fRawIter;
         friend class SkPath;
 
     };
@@ -1674,22 +1573,37 @@ public:
     bool contains(SkScalar x, SkScalar y) const;
 
     /** Writes text representation of SkPath to stream. If stream is nullptr, writes to
-        standard output. Set dumpAsHex true to generate exact binary representations
+        standard output. Set forceClose to true to get edges used to fill SkPath.
+        Set dumpAsHex true to generate exact binary representations
         of floating point numbers used in SkPoint array and conic weights.
 
         @param stream      writable SkWStream receiving SkPath text representation; may be nullptr
+        @param forceClose  true if missing kClose_Verb is output
         @param dumpAsHex   true if SkScalar values are written as hexadecimal
 
         example: https://fiddle.skia.org/c/@Path_dump
     */
-    void dump(SkWStream* stream, bool dumpAsHex) const;
+    void dump(SkWStream* stream, bool forceClose, bool dumpAsHex) const;
 
-    void dump() const { this->dump(nullptr, false); }
-    void dumpHex() const { this->dump(nullptr, true); }
+    /** Writes text representation of SkPath to standard output. The representation may be
+        directly compiled as C++ code. Floating point values are written
+        with limited precision; it may not be possible to reconstruct original SkPath
+        from output.
 
-    // Like dump(), but outputs for the SkPath::Make() factory
-    void dumpArrays(SkWStream* stream, bool dumpAsHex) const;
-    void dumpArrays() const { this->dumpArrays(nullptr, false); }
+        example: https://fiddle.skia.org/c/@Path_dump_2
+    */
+    void dump() const;
+
+    /** Writes text representation of SkPath to standard output. The representation may be
+        directly compiled as C++ code. Floating point values are written
+        in hexadecimal to preserve their exact bit pattern. The output reconstructs the
+        original SkPath.
+
+        Use instead of dump() when submitting
+
+        example: https://fiddle.skia.org/c/@Path_dumpHex
+    */
+    void dumpHex() const;
 
     /** Writes SkPath to buffer, returning the number of bytes written.
         Pass nullptr to obtain the storage size.
@@ -1762,13 +1676,10 @@ public:
     bool isValid() const { return this->isValidImpl() && fPathRef->isValid(); }
 
 private:
-    SkPath(sk_sp<SkPathRef>, SkPathFillType, bool isVolatile, SkPathConvexity,
-           SkPathFirstDirection firstDirection);
-
     sk_sp<SkPathRef>               fPathRef;
     int                            fLastMoveToIndex;
-    mutable std::atomic<uint8_t>   fConvexity;      // SkPathConvexity
-    mutable std::atomic<uint8_t>   fFirstDirection; // SkPathFirstDirection
+    mutable std::atomic<uint8_t>   fConvexity;      // SkPathConvexityType
+    mutable std::atomic<uint8_t>   fFirstDirection; // really an SkPathPriv::FirstDirection
     uint8_t                        fFillType    : 2;
     uint8_t                        fIsVolatile  : 1;
 
@@ -1808,7 +1719,7 @@ private:
 
     inline bool hasOnlyMoveTos() const;
 
-    SkPathConvexity computeConvexity() const;
+    SkPathConvexityType internalGetConvexity() const;
 
     /** Asserts if SkPath data is inconsistent.
         Debugging check intended for internal use only.
@@ -1842,43 +1753,13 @@ private:
 
     // Bottlenecks for working with fConvexity and fFirstDirection.
     // Notice the setters are const... these are mutable atomic fields.
-    void  setConvexity(SkPathConvexity) const;
-
-    void setFirstDirection(SkPathFirstDirection) const;
-    SkPathFirstDirection getFirstDirection() const;
-
-    /** Returns the comvexity type, computing if needed. Never returns kUnknown.
-        @return  path's convexity type (convex or concave)
-    */
-    SkPathConvexity getConvexity() const;
-
-    SkPathConvexity getConvexityOrUnknown() const {
-        return (SkPathConvexity)fConvexity.load(std::memory_order_relaxed);
-    }
-
-    // Compares the cached value with a freshly computed one (computeConvexity())
-    bool isConvexityAccurate() const;
-
-    /** Stores a convexity type for this path. This is what will be returned if
-     *  getConvexityOrUnknown() is called. If you pass kUnknown, then if getContexityType()
-     *  is called, the real convexity will be computed.
-     *
-     *  example: https://fiddle.skia.org/c/@Path_setConvexity
-     */
-    void setConvexity(SkPathConvexity convexity);
-
-    /** Shrinks SkPath verb array and SkPoint array storage to discard unused capacity.
-     *  May reduce the heap overhead for SkPath known to be fully constructed.
-     *
-     *  NOTE: This may relocate the underlying buffers, and thus any Iterators referencing
-     *        this path should be discarded after calling shrinkToFit().
-     */
-    void shrinkToFit();
+    void    setConvexityType(SkPathConvexityType) const;
+    void    setFirstDirection(uint8_t) const;
+    uint8_t getFirstDirection() const;
 
     friend class SkAutoPathBoundsUpdate;
     friend class SkAutoDisableOvalCheck;
     friend class SkAutoDisableDirectionCheck;
-    friend class SkPathBuilder;
     friend class SkPathEdgeIter;
     friend class SkPathWriter;
     friend class SkOpBuilder;

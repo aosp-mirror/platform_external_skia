@@ -11,7 +11,6 @@
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkImageInfo.h"
 #include "include/private/SkImageInfoPriv.h"
-#include "src/core/SkVM_fwd.h"
 
 class SkRasterPipeline;
 
@@ -33,8 +32,8 @@ struct SkColorSpaceXformSteps {
         }
     };
 
-    SkColorSpaceXformSteps(const SkColorSpace* src, SkAlphaType srcAT,
-                           const SkColorSpace* dst, SkAlphaType dstAT);
+    SkColorSpaceXformSteps(SkColorSpace* src, SkAlphaType srcAT,
+                           SkColorSpace* dst, SkAlphaType dstAT);
 
     template <typename S, typename D>
     SkColorSpaceXformSteps(const S& src, const D& dst)
@@ -42,11 +41,16 @@ struct SkColorSpaceXformSteps {
                                  dst.colorSpace(), dst.alphaType()) {}
 
     void apply(float rgba[4]) const;
-    void apply(SkRasterPipeline*) const;
-    skvm::Color program(skvm::Builder*, skvm::Uniforms*, skvm::Color) const;
+    void apply(SkRasterPipeline*, bool src_is_normalized) const;
+
+    void apply(SkRasterPipeline* p, SkColorType srcCT) const {
+        return this->apply(p, SkColorTypeIsNormalized(srcCT));
+    }
 
     Flags flags;
 
+    bool srcTF_is_sRGB,
+         dstTF_is_sRGB;
     skcms_TransferFunction srcTF,     // Apply for linearize.
                            dstTFInv;  // Apply for encode.
     float src_to_dst_matrix[9];       // Apply this 3x3 column-major matrix for gamut_transform.

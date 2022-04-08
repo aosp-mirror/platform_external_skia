@@ -12,7 +12,7 @@
 #include "include/core/SkImage.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
-#include "include/core/SkPathBuilder.h"
+#include "include/core/SkPath.h"
 #include "include/core/SkPixelRef.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkPoint3.h"
@@ -58,8 +58,8 @@ const char* colortype_name(SkColorType ct) {
         case kRGB_888x_SkColorType:           return "RGB_888x";
         case kBGRA_8888_SkColorType:          return "BGRA_8888";
         case kRGBA_1010102_SkColorType:       return "RGBA_1010102";
-        case kBGRA_1010102_SkColorType:       return "BGRA_1010102";
         case kRGB_101010x_SkColorType:        return "RGB_101010x";
+        case kBGRA_1010102_SkColorType:       return "BGRA_1010102";
         case kBGR_101010x_SkColorType:        return "BGR_101010x";
         case kGray_8_SkColorType:             return "Gray_8";
         case kRGBA_F16Norm_SkColorType:       return "RGBA_F16Norm";
@@ -86,8 +86,8 @@ const char* colortype_depth(SkColorType ct) {
         case kRGB_888x_SkColorType:           return "888";
         case kBGRA_8888_SkColorType:          return "8888";
         case kRGBA_1010102_SkColorType:       return "1010102";
-        case kBGRA_1010102_SkColorType:       return "1010102";
         case kRGB_101010x_SkColorType:        return "101010";
+        case kBGRA_1010102_SkColorType:       return "1010102";
         case kBGR_101010x_SkColorType:        return "101010";
         case kGray_8_SkColorType:             return "G8";
         case kRGBA_F16Norm_SkColorType:       return "F16Norm";  // TODO: "F16"?
@@ -130,7 +130,7 @@ sk_sp<SkShader> create_checkerboard_shader(SkColor c1, SkColor c2, int size) {
     bm.eraseColor(c1);
     bm.eraseArea(SkIRect::MakeLTRB(0, 0, size, size), c2);
     bm.eraseArea(SkIRect::MakeLTRB(size, size, 2 * size, 2 * size), c2);
-    return bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, SkSamplingOptions());
+    return bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat);
 }
 
 SkBitmap create_checkerboard_bitmap(int w, int h, SkColor c1, SkColor c2, int checkSize) {
@@ -140,12 +140,6 @@ SkBitmap create_checkerboard_bitmap(int w, int h, SkColor c1, SkColor c2, int ch
 
     ToolUtils::draw_checkerboard(&canvas, c1, c2, checkSize);
     return bitmap;
-}
-
-sk_sp<SkImage> create_checkerboard_image(int w, int h, SkColor c1, SkColor c2, int checkSize) {
-    auto surf = SkSurface::MakeRasterN32Premul(w, h);
-    ToolUtils::draw_checkerboard(surf->getCanvas(), c1, c2, checkSize);
-    return surf->makeImageSnapshot();
 }
 
 void draw_checkerboard(SkCanvas* canvas, SkColor c1, SkColor c2, int size) {
@@ -181,11 +175,6 @@ create_string_bitmap(int w, int h, SkColor c, int x, int y, int textSize, const 
     result.setInfo(SkImageInfo::MakeS32(w, h, kPremul_SkAlphaType));
     result.setPixelRef(sk_ref_sp(bitmap.pixelRef()), 0, 0);
     return result;
-}
-
-sk_sp<SkImage> create_string_image(int w, int h, SkColor c, int x, int y, int textSize,
-                                   const char* str) {
-    return create_string_bitmap(w, h, c, x, y, textSize, str).asImage();
 }
 
 void add_to_text_blob_w_len(SkTextBlobBuilder* builder,
@@ -246,18 +235,17 @@ void get_text_path(const SkFont&  font,
 
 SkPath make_star(const SkRect& bounds, int numPts, int step) {
     SkASSERT(numPts != step);
-    SkPathBuilder builder;
-    builder.setFillType(SkPathFillType::kEvenOdd);
-    builder.moveTo(0, -1);
+    SkPath path;
+    path.setFillType(SkPathFillType::kEvenOdd);
+    path.moveTo(0, -1);
     for (int i = 1; i < numPts; ++i) {
         int      idx   = i * step % numPts;
         SkScalar theta = idx * 2 * SK_ScalarPI / numPts + SK_ScalarPI / 2;
         SkScalar x     = SkScalarCos(theta);
         SkScalar y     = -SkScalarSin(theta);
-        builder.lineTo(x, y);
+        path.lineTo(x, y);
     }
-    SkPath path = builder.detach();
-    path.transform(SkMatrix::RectToRect(path.getBounds(), bounds));
+    path.transform(SkMatrix::MakeRectToRect(path.getBounds(), bounds, SkMatrix::kFill_ScaleToFit));
     return path;
 }
 
@@ -374,10 +362,79 @@ void create_tetra_normal_map(SkBitmap* bm, const SkIRect& dst) {
 // We don't really care to wait that long for this function.
 #pragma optimize("", off)
 #endif
-SkPath make_big_path() {
-    SkPathBuilder path;
+void make_big_path(SkPath& path) {
 #include "BigPathBench.inc"  // IWYU pragma: keep
-    return path.detach();
+}
+
+void set_path_pt(int index, const SkPoint& pt, SkPath* path) {
+    SkPath result;
+    SkPoint pts[4];
+    SkPath::Verb verb;
+    SkPath::RawIter iter(*path);
+    int startIndex = 0;
+    int endIndex = 0;
+    while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
+        switch (verb) {
+            case SkPath::kMove_Verb:
+                endIndex += 1;
+                break;
+            case SkPath::kLine_Verb:
+                endIndex += 1;
+                break;
+            case SkPath::kQuad_Verb:
+            case SkPath::kConic_Verb:
+                endIndex += 2;
+                break;
+            case SkPath::kCubic_Verb:
+                endIndex += 3;
+                break;
+            case SkPath::kClose_Verb:
+                break;
+            case SkPath::kDone_Verb:
+                break;
+            default:
+                SkASSERT(0);
+        }
+        if (startIndex <= index && index < endIndex) {
+            pts[index - startIndex] = pt;
+        }
+        switch (verb) {
+            case SkPath::kMove_Verb:
+                result.moveTo(pts[0]);
+                break;
+            case SkPath::kLine_Verb:
+                result.lineTo(pts[1]);
+                startIndex += 1;
+                break;
+            case SkPath::kQuad_Verb:
+                result.quadTo(pts[1], pts[2]);
+                startIndex += 2;
+                break;
+            case SkPath::kConic_Verb:
+                result.conicTo(pts[1], pts[2], iter.conicWeight());
+                startIndex += 2;
+                break;
+            case SkPath::kCubic_Verb:
+                result.cubicTo(pts[1], pts[2], pts[3]);
+                startIndex += 3;
+                break;
+            case SkPath::kClose_Verb:
+                result.close();
+                startIndex += 1;
+                break;
+            case SkPath::kDone_Verb:
+                break;
+            default:
+                SkASSERT(0);
+        }
+    }
+#if 0
+    SkDebugf("\n\noriginal\n");
+    path->dump();
+    SkDebugf("\nedited\n");
+    result.dump();
+#endif
+    *path = result;
 }
 
 bool copy_to(SkBitmap* dst, SkColorType dstColorType, const SkBitmap& src) {
@@ -450,9 +507,11 @@ bool equal_pixels(const SkPixmap& a, const SkPixmap& b) {
     for (int y = 0; y < a.height(); ++y) {
         const char* aptr = (const char*)a.addr(0, y);
         const char* bptr = (const char*)b.addr(0, y);
-        if (0 != memcmp(aptr, bptr, a.width() * a.info().bytesPerPixel())) {
+        if (memcmp(aptr, bptr, a.width() * a.info().bytesPerPixel())) {
             return false;
         }
+        aptr += a.rowBytes();
+        bptr += b.rowBytes();
     }
     return true;
 }

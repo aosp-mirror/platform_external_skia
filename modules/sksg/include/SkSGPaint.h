@@ -51,7 +51,7 @@ private:
     SkPaint::Join  fStrokeJoin  = SkPaint::kMiter_Join;
     SkPaint::Cap   fStrokeCap   = SkPaint::kButt_Cap;
 
-    using INHERITED = Node;
+    typedef Node INHERITED;
 };
 
 /**

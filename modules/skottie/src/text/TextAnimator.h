@@ -38,8 +38,6 @@ public:
                     stroke_color;
         // unlike pos/scale which are animated vectors, rotation is separated in each dimension.
         SkV3        rotation = { 0, 0, 0 };
-        Vec2Value   blur     = { 0, 0 },
-                line_spacing = { 0, 0 };
         ScalarValue opacity  = 100,
                     tracking = 0;
     };
@@ -52,8 +50,6 @@ public:
                   tracking = 0;
         SkColor fill_color = SK_ColorTRANSPARENT,
               stroke_color = SK_ColorTRANSPARENT;
-        SkV2          blur = { 0, 0 },
-              line_spacing = { 0, 0 };
     };
 
     struct AnimatedPropsModulator {
@@ -68,10 +64,7 @@ public:
     // Each domain[i] represents a [domain[i].fOffset.. domain[i].fOffset+domain[i].fCount-1]
     // fragment subset.
     struct DomainSpan {
-        size_t fOffset,
-               fCount;
-        float  fAdvance, // cumulative advance for all fragments in span
-               fAscent;  // max ascent for all fragments in span
+        size_t fOffset, fCount;
     };
     using DomainMap = std::vector<DomainSpan>;
 
@@ -82,10 +75,6 @@ public:
     };
 
     void modulateProps(const DomainMaps&, ModulatorBuffer&) const;
-
-    bool hasBlur() const { return fHasBlur; }
-
-    bool requiresAnchorPoint() const { return fRequiresAnchorPoint; }
 
 private:
     TextAnimator(std::vector<sk_sp<RangeSelector>>&&,
@@ -98,10 +87,8 @@ private:
     const std::vector<sk_sp<RangeSelector>> fSelectors;
 
     AnimatedProps fTextProps;
-    bool          fHasFillColor        : 1,
-                  fHasStrokeColor      : 1,
-                  fHasBlur             : 1,
-                  fRequiresAnchorPoint : 1; // animator sensitive to transform origin?
+    bool          fHasFillColor   : 1,
+                  fHasStrokeColor : 1;
 };
 
 } // namespace internal

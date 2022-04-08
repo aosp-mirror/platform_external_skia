@@ -32,7 +32,7 @@ protected:
     bool fOwnsContext;
 
 private:
-    using INHERITED = TestContext;
+    typedef TestContext INHERITED;
 };
 
 /**

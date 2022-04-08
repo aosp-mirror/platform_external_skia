@@ -9,12 +9,11 @@
 
 #include "src/gpu/GrProgramDesc.h"
 
-GrProgramDesc GrMockCaps::makeDesc(GrRenderTarget* /* rt */,
-                                   const GrProgramInfo& programInfo,
-                                   ProgramDescOverrideFlags overrideFlags) const {
-    SkASSERT(overrideFlags == ProgramDescOverrideFlags::kNone);
+GrProgramDesc GrMockCaps::makeDesc(const GrRenderTarget* rt,
+                                   const GrProgramInfo& programInfo) const {
     GrProgramDesc desc;
-    GrProgramDesc::Build(&desc, programInfo, *this);
+    SkDEBUGCODE(bool result =) GrProgramDesc::Build(&desc, rt, programInfo, *this);
+    SkASSERT(result == desc.isValid());
     return desc;
 }
 
@@ -49,8 +48,6 @@ std::vector<GrCaps::TestFormatColorTypeCombination> GrMockCaps::getTestingCombin
                                                                   SkImage::CompressionType::kNone)},
         { GrColorType::kRGBA_1010102,   GrBackendFormat::MakeMock(GrColorType::kRGBA_1010102,
                                                                   SkImage::CompressionType::kNone)},
-        { GrColorType::kBGRA_1010102,   GrBackendFormat::MakeMock(GrColorType::kBGRA_1010102,
-                                                                  SkImage::CompressionType::kNone)},
         { GrColorType::kGray_8,         GrBackendFormat::MakeMock(GrColorType::kGray_8,
                                                                   SkImage::CompressionType::kNone)},
         { GrColorType::kAlpha_F16,      GrBackendFormat::MakeMock(GrColorType::kAlpha_F16,
@@ -77,7 +74,7 @@ std::vector<GrCaps::TestFormatColorTypeCombination> GrMockCaps::getTestingCombin
     };
 
 #ifdef SK_DEBUG
-    for (const GrCaps::TestFormatColorTypeCombination& combo : combos) {
+    for (auto combo : combos) {
         SkASSERT(this->onAreColorTypeAndFormatCompatible(combo.fColorType, combo.fFormat));
     }
 #endif

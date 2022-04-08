@@ -9,6 +9,7 @@
 DEPS = [
   'checkout',
   'depot_tools/gclient',
+  'flavor',
   'infra',
   'recipe_engine/context',
   'recipe_engine/file',
@@ -25,7 +26,7 @@ DEPS = [
 TEST_BUILDERS = {
   'client.skia.compile': {
     'skiabot-linux-swarm-000': [
-      'Housekeeper-Nightly-RecreateSKPs_DryRun',
+      'Housekeeper-Nightly-RecreateSKPs_Canary',
       'Housekeeper-Weekly-RecreateSKPs',
     ],
   },
@@ -45,6 +46,7 @@ def RunSteps(api):
       extra_gclient_env=extra_gclient_env)
 
   api.file.ensure_directory('makedirs tmp_dir', api.vars.tmp_dir)
+  api.flavor.setup()
 
   src_dir = checkout_root.join('src')
   skia_dir = checkout_root.join('skia')
@@ -74,25 +76,23 @@ def RunSteps(api):
          '--chrome_src_path', src_dir,
          '--browser_executable', src_dir.join('out', 'Release', 'chrome'),
          '--target_dir', output_dir]
-  if 'DryRun' not in api.properties['buildername']:
+  if 'Canary' not in api.properties['buildername']:
     cmd.append('--upload_to_partner_bucket')
   with api.context(cwd=skia_dir):
     api.run(api.step, 'Recreate SKPs', cmd=cmd)
 
   # Upload the SKPs.
-  if 'DryRun' not in api.properties['buildername']:
+  if 'Canary' not in api.properties['buildername']:
     cmd = ['python',
            skia_dir.join('infra', 'bots', 'upload_skps.py'),
            '--target_dir', output_dir,
            '--chromium_path', src_dir]
-    upload_env = api.infra.go_env
-    upload_env['GCLIENT_PY3'] = 0
-    with api.context(cwd=skia_dir, env=upload_env):
+    with api.context(cwd=skia_dir, env=api.infra.go_env):
       api.run(api.step, 'Upload SKPs', cmd=cmd)
 
 
 def GenTests(api):
-  builder = 'Housekeeper-Nightly-RecreateSKPs_DryRun'
+  builder = 'Housekeeper-Nightly-RecreateSKPs_Canary'
   yield (
       api.test(builder) +
       api.properties(buildername=builder,

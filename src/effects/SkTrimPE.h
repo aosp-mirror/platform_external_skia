@@ -20,22 +20,14 @@ protected:
     void flatten(SkWriteBuffer&) const override;
     bool onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, const SkRect*) const override;
 
-
-
 private:
     SK_FLATTENABLE_HOOKS(SkTrimPE)
-
-    bool computeFastBounds(SkRect* bounds) const override {
-        // Trimming a path returns a subset of the input path so just return true and leave bounds
-        // unmodified
-        return true;
-    }
 
     const SkScalar               fStartT,
                                  fStopT;
     const SkTrimPathEffect::Mode fMode;
 
-    using INHERITED = SkPathEffect;
+    typedef SkPathEffect INHERITED;
 };
 
 #endif

@@ -59,8 +59,7 @@ protected:
 
         draw_into_bitmap(fBitmap);
 
-        fPaint.setShader(fBitmap.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
-                                            SkSamplingOptions()));
+        fPaint.setShader(fBitmap.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat));
     }
 
 
@@ -74,7 +73,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 DEF_BENCH(return new RepeatTileBench(kN32_SkColorType, kOpaque_SkAlphaType))

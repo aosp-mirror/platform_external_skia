@@ -57,6 +57,6 @@ private:
     std::unique_ptr<SkMasks>        fMasks;
     std::unique_ptr<SkMaskSwizzler> fMaskSwizzler;
 
-    using INHERITED = SkBmpBaseCodec;
+    typedef SkBmpBaseCodec INHERITED;
 };
 #endif  // SkBmpMaskCodec_DEFINED

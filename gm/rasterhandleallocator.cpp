@@ -303,5 +303,7 @@ DEF_SIMPLE_GM(rasterallocator, canvas, 600, 300) {
 
     SkPixmap pm;
     nativeCanvas->peekPixels(&pm);
-    canvas->drawImage(SkImage::MakeRasterCopy(pm), 280, 0);
+    SkBitmap bm;
+    bm.installPixels(pm);
+    canvas->drawBitmap(bm, 280, 0, nullptr);
 }

@@ -16,13 +16,13 @@ void draw(SkCanvas* canvas) {
     bitmap.allocPixels(srcInfo);
     SkCanvas srcCanvas(bitmap);
     srcCanvas.drawRect(SkRect::MakeWH(width, height), paint);
-    canvas->drawImage(bitmap.asImage(), 0, 0);
+    canvas->drawBitmap(bitmap, 0, 0);
     SkImageInfo dstInfo = srcInfo.makeColorType(kARGB_4444_SkColorType);
     std::vector<int16_t> dstPixels;
     dstPixels.resize(height * width);
     bitmap.readPixels(dstInfo, &dstPixels.front(), width * 2, 0, 0);
     SkPixmap dstPixmap(dstInfo, &dstPixels.front(), width * 2);
     bitmap.installPixels(dstPixmap);
-    canvas->drawImage(bitmap.asImage(), 0, 64);
+    canvas->drawBitmap(bitmap, 0, 64);
 }
 }  // END FIDDLE

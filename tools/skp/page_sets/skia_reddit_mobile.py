@@ -33,7 +33,7 @@ class SkiaRedditMobilePageSet(story.StorySet):
 
     urls_list = [
       # go/skia-skps-3-2019
-      'https://www.reddit.com/r/programming/comments/1g96ve/effectively_managing_memory_at_gmail_scale/',
+      'https://www.reddit.com/r/programming/comments/1g96ve/',
     ]
 
     for url in urls_list:

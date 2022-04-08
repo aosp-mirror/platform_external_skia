@@ -8,7 +8,6 @@
 #ifndef SKSL_FUNCTIONCALL
 #define SKSL_FUNCTIONCALL
 
-#include "include/private/SkTArray.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 
@@ -17,55 +16,55 @@ namespace SkSL {
 /**
  * A function invocation.
  */
-class FunctionCall final : public Expression {
-public:
-    static constexpr Kind kExpressionKind = Kind::kFunctionCall;
+struct FunctionCall : public Expression {
+    FunctionCall(int offset, const Type& type, const FunctionDeclaration& function,
+                 std::vector<std::unique_ptr<Expression>> arguments)
+    : INHERITED(offset, kFunctionCall_Kind, type)
+    , fFunction(std::move(function))
+    , fArguments(std::move(arguments)) {}
 
-    FunctionCall(int offset, const Type* type, const FunctionDeclaration* function,
-                 ExpressionArray arguments)
-        : INHERITED(offset, kExpressionKind, type)
-        , fFunction(*function)
-        , fArguments(std::move(arguments)) {}
-
-    // Resolves generic types, performs type conversion on arguments, determines return type, and
-    // reports errors via the ErrorReporter.
-    static std::unique_ptr<Expression> Convert(const Context& context,
-                                               int offset,
-                                               const FunctionDeclaration& function,
-                                               ExpressionArray arguments);
-
-    // Creates the function call; reports errors via ASSERT.
-    static std::unique_ptr<Expression> Make(const Context& context,
-                                            int offset,
-                                            const Type* returnType,
-                                            const FunctionDeclaration& function,
-                                            ExpressionArray arguments);
-
-    const FunctionDeclaration& function() const {
-        return fFunction;
+    bool hasProperty(Property property) const override {
+        if (property == Property::kSideEffects && (fFunction.fModifiers.fFlags &
+                                                   Modifiers::kHasSideEffects_Flag)) {
+            return true;
+        }
+        for (const auto& arg : fArguments) {
+            if (arg->hasProperty(property)) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    ExpressionArray& arguments() {
-        return fArguments;
+    std::unique_ptr<Expression> clone() const override {
+        std::vector<std::unique_ptr<Expression>> cloned;
+        for (const auto& arg : fArguments) {
+            cloned.push_back(arg->clone());
+        }
+        return std::unique_ptr<Expression>(new FunctionCall(fOffset, fType, fFunction,
+                                                            std::move(cloned)));
     }
 
-    const ExpressionArray& arguments() const {
-        return fArguments;
+#ifdef SK_DEBUG
+    String description() const override {
+        String result = String(fFunction.fName) + "(";
+        String separator;
+        for (size_t i = 0; i < fArguments.size(); i++) {
+            result += separator;
+            result += fArguments[i]->description();
+            separator = ", ";
+        }
+        result += ")";
+        return result;
     }
+#endif
 
-    bool hasProperty(Property property) const override;
-
-    std::unique_ptr<Expression> clone() const override;
-
-    String description() const override;
-
-private:
     const FunctionDeclaration& fFunction;
-    ExpressionArray fArguments;
+    std::vector<std::unique_ptr<Expression>> fArguments;
 
-    using INHERITED = Expression;
+    typedef Expression INHERITED;
 };
 
-}  // namespace SkSL
+} // namespace
 
 #endif

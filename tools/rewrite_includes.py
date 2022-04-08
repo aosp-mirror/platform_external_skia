@@ -5,13 +5,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-
-from __future__ import print_function
 import StringIO
 import argparse
 import os
 import sys
-
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-n', '--dry-run', action='store_true',
@@ -54,11 +51,10 @@ for root in roots:
   for path, _, files in os.walk(root):
     if not any(snippet in fix_path(path) for snippet in ignorelist):
       for file_name in files:
-        if file_name.endswith('.h'):
+        if file_name.endswith('.h') and 'SkM44' not in file_name:
           if file_name in headers:
-            message = ('Header filename is used more than once!\n- ' + path + '/' + file_name +
-                       '\n- ' + headers[file_name])
-            assert file_name not in headers, message
+            print path, file_name, headers[file_name]
+          assert file_name not in headers
           headers[file_name] = os.path.abspath(os.path.join(path, file_name))
 
 def to_rewrite():
@@ -74,9 +70,7 @@ def to_rewrite():
 # Rewrite any #includes relative to Skia's top-level directory.
 need_rewriting = []
 for file_path in to_rewrite():
-  if ('/generated/' in file_path or
-      'tests/sksl/' in file_path or
-      'third_party/skcms' in file_path):
+  if 'generated' in file_path or 'third_party/skcms' in file_path:
     continue
   if (file_path.endswith('.h') or
       file_path.endswith('.c') or
@@ -113,9 +107,9 @@ for file_path in to_rewrite():
     output.close()
 
 if need_rewriting:
-  print('Some files need rewritten #includes:')
+  print 'Some files need rewritten #includes:'
   for path in need_rewriting:
-    print('\t' + path)
-  print('To do this automatically, run')
-  print('python tools/rewrite_includes.py ' + ' '.join(need_rewriting))
+    print '\t' + path
+  print 'To do this automatically, run'
+  print 'python tools/rewrite_includes.py ' + ' '.join(need_rewriting)
   sys.exit(1)

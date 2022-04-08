@@ -35,7 +35,7 @@ private:
         FNPTR_TYPE fPtr;
     };
 
-    using INHERITED = SkRefCnt;
+    typedef SkRefCnt INHERITED;
 
 public:
     GrVkInterface(GrVkGetProc getProc,

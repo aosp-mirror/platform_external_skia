@@ -115,7 +115,7 @@ void GetCustomFontFamilies(SkTDArray<FontFamily*>& fontFamilies,
                            const char* fallbackFontsXml,
                            const char* langFallbackFontsDir = nullptr);
 
-}  // namespace SkFontMgr_Android_Parser
+} // SkFontMgr_Android_Parser namespace
 
 
 /** Parses a null terminated string into an integer type, checking for overflow.

@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-in fragmentProcessor src;
+in uniform sampler2D src;
 layout(ctype=SkIRect) in int4 bounds;
 uniform float4 boundsUniform;
 layout(ctype=SkRect) in float4 srcRect;
@@ -16,15 +16,20 @@ in uniform float yInvInset;
 
 uniform half2 offset;
 
-half4 main(float2 coord) {
+@coordTransform(src) {
+    SkMatrix::I()
+}
+
+void main() {
+    float2 coord = sk_TransformedCoords2D[0];
     float2 zoom_coord = offset + coord * float2(xInvZoom, yInvZoom);
     float2 delta = (coord - boundsUniform.xy) * boundsUniform.zw;
-    delta = min(delta, float2(1.0) - delta);
+    delta = min(delta, half2(1.0, 1.0) - delta);
     delta *= float2(xInvInset, yInvInset);
 
     float weight = 0.0;
     if (delta.s < 2.0 && delta.t < 2.0) {
-        delta = float2(2.0) - delta;
+        delta = half2(2.0, 2.0) - delta;
         float dist = length(delta);
         dist = max(2.0 - dist, 0.0);
         weight = min(dist * dist, 1.0);
@@ -33,15 +38,40 @@ half4 main(float2 coord) {
         weight = min(min(delta_squared.x, delta_squared.y), 1.0);
     }
 
-    return sample(src, mix(coord, zoom_coord, weight));
+    sk_OutColor = sample(src, mix(coord, zoom_coord, weight));
 }
 
 @setData(pdman) {
-    pdman.set2f(offset, srcRect.x(), srcRect.y());
-    pdman.set4f(boundsUniform, bounds.x(), bounds.y(), 1.f/ bounds.width(), 1.f / bounds.height());
+    SkScalar invW = 1.0f / src.width();
+    SkScalar invH = 1.0f / src.height();
+
+    {
+        SkScalar y = srcRect.y() * invH;
+        if (srcView.origin() != kTopLeft_GrSurfaceOrigin) {
+            y = 1.0f - (srcRect.height() / bounds.height()) - y;
+        }
+
+        pdman.set2f(offset, srcRect.x() * invW, y);
+    }
+
+    {
+        SkScalar y = bounds.y() * invH;
+        SkScalar hSign = 1.f;
+        if (srcView.origin() != kTopLeft_GrSurfaceOrigin) {
+            y = 1.0f - bounds.y() * invH;
+            hSign = -1.f;
+        }
+
+        pdman.set4f(boundsUniform,
+                    bounds.x() * invW,
+                    y,
+                    SkIntToScalar(src.width()) / bounds.width(),
+                    hSign * SkIntToScalar(src.height()) / bounds.height());
+    }
 }
 
 @test(d) {
+    auto [view, ct, at] = d->randomView();
     const int kMaxWidth = 200;
     const int kMaxHeight = 200;
     const SkScalar kMaxInset = 20.0f;
@@ -52,8 +82,7 @@ half4 main(float2 coord) {
     SkIRect bounds = SkIRect::MakeWH(SkIntToScalar(kMaxWidth), SkIntToScalar(kMaxHeight));
     SkRect srcRect = SkRect::MakeWH(SkIntToScalar(width), SkIntToScalar(height));
 
-    auto src = GrProcessorUnitTest::MakeChildFP(d);
-    auto effect = GrMagnifierEffect::Make(std::move(src),
+    auto effect = GrMagnifierEffect::Make(std::move(view),
                                           bounds,
                                           srcRect,
                                           srcRect.width() / bounds.width(),

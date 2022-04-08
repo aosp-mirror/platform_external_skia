@@ -5,13 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/gl/GrGLTexture.h"
-
 #include "include/core/SkTraceMemoryDump.h"
 #include "src/gpu/GrSemaphore.h"
 #include "src/gpu/GrShaderCaps.h"
-#include "src/gpu/GrTexture.h"
+#include "src/gpu/GrTexturePriv.h"
 #include "src/gpu/gl/GrGLGpu.h"
+#include "src/gpu/gl/GrGLTexture.h"
 
 #define GPUGL static_cast<GrGLGpu*>(this->getGpu())
 #define GL_CALL(X) GR_GL_CALL(GPUGL->glInterface(), X)
@@ -44,10 +43,10 @@ static inline GrGLenum target_from_texture_type(GrTextureType type) {
 
 // Because this class is virtually derived from GrSurface we must explicitly call its constructor.
 GrGLTexture::GrGLTexture(GrGLGpu* gpu, SkBudgeted budgeted, const Desc& desc,
-                         GrMipmapStatus mipmapStatus)
+                         GrMipMapsStatus mipMapsStatus)
         : GrSurface(gpu, desc.fSize, GrProtected::kNo)
         , INHERITED(gpu, desc.fSize, GrProtected::kNo,
-                    TextureTypeFromTarget(desc.fTarget), mipmapStatus)
+                    TextureTypeFromTarget(desc.fTarget), mipMapsStatus)
         , fParameters(sk_make_sp<GrGLTextureParameters>()) {
     this->init(desc);
     this->registerWithCache(budgeted);
@@ -56,12 +55,12 @@ GrGLTexture::GrGLTexture(GrGLGpu* gpu, SkBudgeted budgeted, const Desc& desc,
     }
 }
 
-GrGLTexture::GrGLTexture(GrGLGpu* gpu, const Desc& desc, GrMipmapStatus mipmapStatus,
+GrGLTexture::GrGLTexture(GrGLGpu* gpu, const Desc& desc, GrMipMapsStatus mipMapsStatus,
                          sk_sp<GrGLTextureParameters> parameters, GrWrapCacheable cacheable,
                          GrIOType ioType)
         : GrSurface(gpu, desc.fSize, GrProtected::kNo)
         , INHERITED(gpu, desc.fSize, GrProtected::kNo,
-                    TextureTypeFromTarget(desc.fTarget), mipmapStatus)
+                    TextureTypeFromTarget(desc.fTarget), mipMapsStatus)
         , fParameters(std::move(parameters)) {
     SkASSERT(fParameters);
     this->init(desc);
@@ -72,10 +71,10 @@ GrGLTexture::GrGLTexture(GrGLGpu* gpu, const Desc& desc, GrMipmapStatus mipmapSt
 }
 
 GrGLTexture::GrGLTexture(GrGLGpu* gpu, const Desc& desc, sk_sp<GrGLTextureParameters> parameters,
-                         GrMipmapStatus mipmapStatus)
+                         GrMipMapsStatus mipMapsStatus)
         : GrSurface(gpu, desc.fSize, GrProtected::kNo)
         , INHERITED(gpu, desc.fSize, GrProtected::kNo,
-                    TextureTypeFromTarget(desc.fTarget), mipmapStatus) {
+                    TextureTypeFromTarget(desc.fTarget), mipMapsStatus) {
     SkASSERT(parameters || desc.fOwnership == GrBackendObjectOwnership::kOwned);
     fParameters = parameters ? std::move(parameters) : sk_make_sp<GrGLTextureParameters>();
     this->init(desc);
@@ -89,11 +88,12 @@ void GrGLTexture::init(const Desc& desc) {
     fTextureIDOwnership = desc.fOwnership;
 }
 
-GrGLenum GrGLTexture::target() const { return target_from_texture_type(this->textureType()); }
+GrGLenum GrGLTexture::target() const {
+    return target_from_texture_type(this->texturePriv().textureType());
+}
 
 void GrGLTexture::onRelease() {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
-    ATRACE_ANDROID_FRAMEWORK_ALWAYS("Texture release(%u)", this->uniqueID().asUInt());
 
     if (fID) {
         if (GrBackendObjectOwnership::kBorrowed != fTextureIDOwnership) {
@@ -111,25 +111,26 @@ void GrGLTexture::onAbandon() {
 
 GrBackendTexture GrGLTexture::getBackendTexture() const {
     GrGLTextureInfo info;
-    info.fTarget = target_from_texture_type(this->textureType());
+    info.fTarget = target_from_texture_type(this->texturePriv().textureType());
     info.fID = fID;
     info.fFormat = GrGLFormatToEnum(fFormat);
-    return GrBackendTexture(this->width(), this->height(), this->mipmapped(), info, fParameters);
+    return GrBackendTexture(this->width(), this->height(), this->texturePriv().mipMapped(), info,
+                            fParameters);
 }
 
 GrBackendFormat GrGLTexture::backendFormat() const {
     return GrBackendFormat::MakeGL(GrGLFormatToEnum(fFormat),
-                                   target_from_texture_type(this->textureType()));
+                                   target_from_texture_type(this->texturePriv().textureType()));
 }
 
 sk_sp<GrGLTexture> GrGLTexture::MakeWrapped(GrGLGpu* gpu,
-                                            GrMipmapStatus mipmapStatus,
+                                            GrMipMapsStatus mipMapsStatus,
                                             const Desc& desc,
                                             sk_sp<GrGLTextureParameters> parameters,
                                             GrWrapCacheable cacheable,
                                             GrIOType ioType) {
     return sk_sp<GrGLTexture>(
-            new GrGLTexture(gpu, desc, mipmapStatus, std::move(parameters), cacheable, ioType));
+            new GrGLTexture(gpu, desc, mipMapsStatus, std::move(parameters), cacheable, ioType));
 }
 
 bool GrGLTexture::onStealBackendTexture(GrBackendTexture* backendTexture,
@@ -155,9 +156,6 @@ void GrGLTexture::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const
         return;
     }
 
-    size_t size = GrSurface::ComputeSize(this->backendFormat(), this->dimensions(), 1,
-                                         this->mipmapped());
-
     // Dump as skia/gpu_resources/resource_#/texture, to avoid conflicts in the
     // GrGLTextureRenderTarget case, where multiple things may dump to the same resource. This
     // has no downside in the normal case.
@@ -167,7 +165,8 @@ void GrGLTexture::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const
     // As we are only dumping our texture memory (not any additional memory tracked by classes
     // which may inherit from us), specifically call GrGLTexture::gpuMemorySize to avoid
     // hitting an override.
-    this->dumpMemoryStatisticsPriv(traceMemoryDump, resourceName, "Texture", size);
+    this->dumpMemoryStatisticsPriv(traceMemoryDump, resourceName, "Texture",
+                                   GrGLTexture::gpuMemorySize());
 
     SkString texture_id;
     texture_id.appendU32(this->textureID());

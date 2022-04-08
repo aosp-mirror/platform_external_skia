@@ -16,7 +16,7 @@
  */
 class SkSampledCodec : public SkAndroidCodec {
 public:
-    explicit SkSampledCodec(SkCodec*);
+    explicit SkSampledCodec(SkCodec*, ExifOrientationBehavior);
 
     ~SkSampledCodec() override {}
 
@@ -54,6 +54,6 @@ private:
     SkCodec::Result sampledDecode(const SkImageInfo& info, void* pixels, size_t rowBytes,
             const AndroidOptions& options);
 
-    using INHERITED = SkAndroidCodec;
+    typedef SkAndroidCodec INHERITED;
 };
 #endif // SkSampledCodec_DEFINED

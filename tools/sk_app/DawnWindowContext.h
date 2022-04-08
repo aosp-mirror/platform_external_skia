@@ -15,6 +15,8 @@
 #include "dawn_native/DawnNative.h"
 #include "dawn/dawn_wsi.h"
 
+class GrContext;
+
 namespace sk_app {
 
 class DawnWindowContext : public WindowContext {

@@ -22,13 +22,11 @@ protected:
 private:
     SK_FLATTENABLE_HOOKS(SkOpPE)
 
-    bool computeFastBounds(SkRect* bounds) const override;
-
     sk_sp<SkPathEffect> fOne;
     sk_sp<SkPathEffect> fTwo;
     SkPathOp            fOp;
 
-    using INHERITED = SkPathEffect;
+    typedef SkPathEffect INHERITED;
 };
 
 class SkMatrixPE : public SkPathEffect {
@@ -42,16 +40,9 @@ protected:
 private:
     SK_FLATTENABLE_HOOKS(SkMatrixPE)
 
-    bool computeFastBounds(SkRect* bounds) const override {
-        if (bounds) {
-            fMatrix.mapRect(bounds);
-        }
-        return true;
-    }
-
     SkMatrix    fMatrix;
 
-    using INHERITED = SkPathEffect;
+    typedef SkPathEffect INHERITED;
 };
 
 class SkStrokePE : public SkPathEffect {
@@ -61,37 +52,18 @@ public:
 protected:
     void flatten(SkWriteBuffer&) const override;
     bool onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, const SkRect*) const override;
+    // TODO: override onComputeFastBounds (I think)
 
 private:
     SK_FLATTENABLE_HOOKS(SkStrokePE)
-
-    bool computeFastBounds(SkRect* bounds) const override;
 
     SkScalar        fWidth,
                     fMiter;
     SkPaint::Join   fJoin;
     SkPaint::Cap    fCap;
 
-    using INHERITED = SkPathEffect;
-};
-
-class SkStrokeAndFillPE : public SkPathEffect {
-public:
-    SkStrokeAndFillPE() {}
-
-protected:
-    void flatten(SkWriteBuffer&) const override;
-    bool onFilterPath(SkPath* dst, const SkPath& src, SkStrokeRec*, const SkRect*) const override;
-
-private:
-    SK_FLATTENABLE_HOOKS(SkStrokeAndFillPE)
-
-    bool computeFastBounds(SkRect* bounds) const override {
-        // The effect's bounds depend on the StrokeRect that is not yet available
-        return false;
-    }
-
-    using INHERITED = SkPathEffect;
+    typedef SkPathEffect INHERITED;
 };
 
 #endif
+

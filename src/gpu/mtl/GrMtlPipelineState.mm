@@ -7,9 +7,12 @@
 
 #include "src/gpu/mtl/GrMtlPipelineState.h"
 
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrPipeline.h"
 #include "src/gpu/GrRenderTarget.h"
-#include "src/gpu/GrTexture.h"
+#include "src/gpu/GrRenderTargetPriv.h"
+#include "src/gpu/GrTexturePriv.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
 #include "src/gpu/glsl/GrGLSLXferProcessor.h"
@@ -21,8 +24,6 @@
 #error This file must be compiled with Arc. Use -fobjc-arc flag
 #endif
 
-GR_NORETAIN_BEGIN
-
 GrMtlPipelineState::SamplerBindings::SamplerBindings(GrSamplerState state,
                                                      GrTexture* texture,
                                                      GrMtlGpu* gpu)
@@ -31,16 +32,17 @@ GrMtlPipelineState::SamplerBindings::SamplerBindings(GrSamplerState state,
 }
 
 GrMtlPipelineState::GrMtlPipelineState(
-            GrMtlGpu* gpu,
-            id<MTLRenderPipelineState> pipelineState,
-            MTLPixelFormat pixelFormat,
-            const GrGLSLBuiltinUniformHandles& builtinUniformHandles,
-            const UniformInfoArray& uniforms,
-            uint32_t uniformBufferSize,
-            uint32_t numSamplers,
-            std::unique_ptr<GrGLSLGeometryProcessor> geometryProcessor,
-            std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
-            std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fpImpls)
+        GrMtlGpu* gpu,
+        id<MTLRenderPipelineState> pipelineState,
+        MTLPixelFormat pixelFormat,
+        const GrGLSLBuiltinUniformHandles& builtinUniformHandles,
+        const UniformInfoArray& uniforms,
+        uint32_t uniformBufferSize,
+        uint32_t numSamplers,
+        std::unique_ptr<GrGLSLPrimitiveProcessor> geometryProcessor,
+        std::unique_ptr<GrGLSLXferProcessor> xferProcessor,
+        std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fragmentProcessors,
+        int fragmentProcessorCnt)
         : fGpu(gpu)
         , fPipelineState(pipelineState)
         , fPixelFormat(pixelFormat)
@@ -48,7 +50,8 @@ GrMtlPipelineState::GrMtlPipelineState(
         , fNumSamplers(numSamplers)
         , fGeometryProcessor(std::move(geometryProcessor))
         , fXferProcessor(std::move(xferProcessor))
-        , fFPImpls(std::move(fpImpls))
+        , fFragmentProcessors(std::move(fragmentProcessors))
+        , fFragmentProcessorCnt(fragmentProcessorCnt)
         , fDataManager(uniforms, uniformBufferSize) {
     (void) fPixelFormat; // Suppress unused-var warning.
 }
@@ -56,50 +59,56 @@ GrMtlPipelineState::GrMtlPipelineState(
 void GrMtlPipelineState::setData(const GrRenderTarget* renderTarget,
                                  const GrProgramInfo& programInfo) {
     this->setRenderTargetState(renderTarget, programInfo.origin());
-    fGeometryProcessor->setData(fDataManager, *fGpu->caps()->shaderCaps(), programInfo.geomProc());
+    GrFragmentProcessor::PipelineCoordTransformRange transformRange(programInfo.pipeline());
+    fGeometryProcessor->setData(fDataManager, programInfo.primProc(), transformRange);
 
-    for (int i = 0; i < programInfo.pipeline().numFragmentProcessors(); ++i) {
-        auto& fp = programInfo.pipeline().getFragmentProcessor(i);
-        for (auto [fp, impl] : GrGLSLFragmentProcessor::ParallelRange(fp, *fFPImpls[i])) {
-            impl.setData(fDataManager, fp);
-        }
+    if (!programInfo.hasDynamicPrimProcTextures()) {
+        auto proxies = programInfo.hasFixedPrimProcTextures() ? programInfo.fixedPrimProcTextures()
+                                                              : nullptr;
+        this->setTextures(programInfo, proxies);
     }
-
-    {
-        SkIPoint offset;
-        GrTexture* dstTexture = programInfo.pipeline().peekDstTexture(&offset);
-        fXferProcessor->setData(fDataManager, programInfo.pipeline().getXferProcessor(), dstTexture,
-                                offset);
-    }
-
     fDataManager.resetDirtyBits();
 
 #ifdef SK_DEBUG
-    if (programInfo.isStencilEnabled()) {
-        SkASSERT(renderTarget->getStencilAttachment());
-        SkASSERT(renderTarget->numStencilBits(renderTarget->numSamples() > 1) == 8);
+    if (programInfo.pipeline().isStencilEnabled()) {
+        SkASSERT(renderTarget->renderTargetPriv().getStencilAttachment());
+        SkASSERT(renderTarget->renderTargetPriv().numStencilBits() == 8);
     }
 #endif
 
     fStencil = programInfo.nonGLStencilSettings();
 }
 
-void GrMtlPipelineState::setTextures(const GrGeometryProcessor& geomProc,
-                                     const GrPipeline& pipeline,
-                                     const GrSurfaceProxy* const geomProcTextures[]) {
+void GrMtlPipelineState::setTextures(const GrProgramInfo& programInfo,
+                                     const GrSurfaceProxy* const primProcTextures[]) {
     fSamplerBindings.reset();
-    for (int i = 0; i < geomProc.numTextureSamplers(); ++i) {
-        SkASSERT(geomProcTextures[i]->asTextureProxy());
-        const auto& sampler = geomProc.textureSampler(i);
-        auto texture = static_cast<GrMtlTexture*>(geomProcTextures[i]->peekTexture());
+    for (int i = 0; i < programInfo.primProc().numTextureSamplers(); ++i) {
+        SkASSERT(primProcTextures[i]->asTextureProxy());
+        const auto& sampler = programInfo.primProc().textureSampler(i);
+        auto texture = static_cast<GrMtlTexture*>(primProcTextures[i]->peekTexture());
         fSamplerBindings.emplace_back(sampler.samplerState(), texture, fGpu);
     }
 
-    pipeline.visitTextureEffects([&](const GrTextureEffect& te) {
-        fSamplerBindings.emplace_back(te.samplerState(), te.texture(), fGpu);
-    });
+    GrFragmentProcessor::CIter fpIter(programInfo.pipeline());
+    GrGLSLFragmentProcessor::Iter glslIter(fFragmentProcessors.get(), fFragmentProcessorCnt);
+    for (; fpIter && glslIter; ++fpIter, ++glslIter) {
+        glslIter->setData(fDataManager, *fpIter);
+        for (int i = 0; i < fpIter->numTextureSamplers(); ++i) {
+            const auto& sampler = fpIter->textureSampler(i);
+            fSamplerBindings.emplace_back(sampler.samplerState(), sampler.peekTexture(), fGpu);
+        }
+    }
+    SkASSERT(!fpIter && !glslIter);
 
-    if (GrTextureProxy* dstTextureProxy = pipeline.dstProxyView().asTextureProxy()) {
+    {
+        SkIPoint offset;
+        GrTexture* dstTexture = programInfo.pipeline().peekDstTexture(&offset);
+
+        fXferProcessor->setData(fDataManager, programInfo.pipeline().getXferProcessor(),
+                                dstTexture, offset);
+    }
+
+    if (GrTextureProxy* dstTextureProxy = programInfo.pipeline().dstProxyView().asTextureProxy()) {
         fSamplerBindings.emplace_back(
                 GrSamplerState::Filter::kNearest, dstTextureProxy->peekTexture(), fGpu);
     }
@@ -108,11 +117,11 @@ void GrMtlPipelineState::setTextures(const GrGeometryProcessor& geomProc,
 }
 
 void GrMtlPipelineState::setDrawState(id<MTLRenderCommandEncoder> renderCmdEncoder,
-                                      const GrSwizzle& writeSwizzle,
+                                      const GrSwizzle& outputSwizzle,
                                       const GrXferProcessor& xferProcessor) {
     [renderCmdEncoder pushDebugGroup:@"setDrawState"];
     this->bindUniforms(renderCmdEncoder);
-    this->setBlendConstants(renderCmdEncoder, writeSwizzle, xferProcessor);
+    this->setBlendConstants(renderCmdEncoder, outputSwizzle, xferProcessor);
     this->setDepthStencilState(renderCmdEncoder);
     [renderCmdEncoder popDebugGroup];
 }
@@ -152,6 +161,18 @@ void GrMtlPipelineState::setRenderTargetState(const GrRenderTarget* rt, GrSurfac
     }
 }
 
+static bool blend_coeff_refs_constant(GrBlendCoeff coeff) {
+    switch (coeff) {
+        case kConstC_GrBlendCoeff:
+        case kIConstC_GrBlendCoeff:
+        case kConstA_GrBlendCoeff:
+        case kIConstA_GrBlendCoeff:
+            return true;
+        default:
+            return false;
+    }
+}
+
 void GrMtlPipelineState::setBlendConstants(id<MTLRenderCommandEncoder> renderCmdEncoder,
                                            const GrSwizzle& swizzle,
                                            const GrXferProcessor& xferProcessor) {
@@ -162,7 +183,7 @@ void GrMtlPipelineState::setBlendConstants(id<MTLRenderCommandEncoder> renderCmd
     const GrXferProcessor::BlendInfo& blendInfo = xferProcessor.getBlendInfo();
     GrBlendCoeff srcCoeff = blendInfo.fSrcBlend;
     GrBlendCoeff dstCoeff = blendInfo.fDstBlend;
-    if (GrBlendCoeffRefsConstant(srcCoeff) || GrBlendCoeffRefsConstant(dstCoeff)) {
+    if (blend_coeff_refs_constant(srcCoeff) || blend_coeff_refs_constant(dstCoeff)) {
         // Swizzle the blend to match what the shader will output.
         SkPMColor4f blendConst = swizzle.applyTo(blendInfo.fBlendConstant);
 
@@ -229,5 +250,3 @@ bool GrMtlPipelineState::doesntSampleAttachment(
     }
     return true;
 }
-
-GR_NORETAIN_END

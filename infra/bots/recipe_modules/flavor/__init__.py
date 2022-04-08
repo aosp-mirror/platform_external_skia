@@ -3,8 +3,10 @@
 # found in the LICENSE file.
 
 DEPS = [
+  'builder_name_schema',
   'docker',
   'env',
+  'infra',
   'recipe_engine/context',
   'recipe_engine/file',
   'recipe_engine/json',

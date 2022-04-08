@@ -169,8 +169,7 @@ protected:
             m.preScale(3.0f, 3.0f);
 
             SkPaint p;
-            p.setShader(bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
-                                      SkSamplingOptions(), m));
+            p.setShader(bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, &m));
             fPaints.push_back(p);
         }
         {
@@ -233,10 +232,10 @@ private:
     SkTArray<SkPaint> fPaints;
     SkTArray<SkMatrix> fMatrices;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new StrokedLinesGM;)
-}  // namespace skiagm
+}

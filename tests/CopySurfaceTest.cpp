@@ -10,16 +10,16 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrContext.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/GrTypesPriv.h"
 #include "include/private/SkTemplates.h"
 #include "src/core/SkUtils.h"
 #include "src/gpu/GrCaps.h"
-#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrImageInfo.h"
+#include "src/gpu/GrRenderTargetContext.h"
 #include "src/gpu/GrSurfaceContext.h"
-#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrSurfaceProxy.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/SkGr.h"
@@ -31,8 +31,7 @@
 #include <utility>
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(CopySurface, reporter, ctxInfo) {
-    auto dContext = ctxInfo.directContext();
-
+    GrContext* context = ctxInfo.grContext();
     static const int kW = 10;
     static const int kH = 10;
     static const size_t kRowBytes = sizeof(uint32_t) * kW;
@@ -75,49 +74,56 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(CopySurface, reporter, ctxInfo) {
         for (auto dOrigin : {kBottomLeft_GrSurfaceOrigin, kTopLeft_GrSurfaceOrigin}) {
             for (auto sRenderable : {GrRenderable::kYes, GrRenderable::kNo}) {
                 for (auto dRenderable : {GrRenderable::kYes, GrRenderable::kNo}) {
-                    for (const SkIRect& srcRect : kSrcRects) {
-                        for (const SkIPoint& dstPoint : kDstPoints) {
-                            for (const SkImageInfo& ii: kImageInfos) {
-                                GrCPixmap srcPM(ii, srcPixels.get(), kRowBytes);
-                                GrPixmap  dstPM(ii, dstPixels.get(), kRowBytes);
-                                auto srcView = sk_gpu_test::MakeTextureProxyViewFromData(
-                                        dContext, sRenderable, sOrigin, srcPM);
-                                auto dstView = sk_gpu_test::MakeTextureProxyViewFromData(
-                                        dContext, dRenderable, dOrigin, dstPM);
+                    for (auto srcRect : kSrcRects) {
+                        for (auto dstPoint : kDstPoints) {
+                            for (auto ii: kImageInfos) {
+                                auto src = sk_gpu_test::MakeTextureProxyFromData(
+                                        context, sRenderable, sOrigin, ii, srcPixels.get(),
+                                        kRowBytes);
+                                auto dst = sk_gpu_test::MakeTextureProxyFromData(
+                                        context, dRenderable, dOrigin, ii, dstPixels.get(),
+                                        kRowBytes);
 
                                 // Should always work if the color type is RGBA, but may not work
                                 // for BGRA
                                 if (ii.colorType() == kRGBA_8888_SkColorType) {
-                                    if (!srcView || !dstView) {
+                                    if (!src || !dst) {
                                         ERRORF(reporter,
                                                "Could not create surfaces for copy surface test.");
                                         continue;
                                     }
                                 } else {
-                                    if (!dContext->defaultBackendFormat(
+                                    if (!context->defaultBackendFormat(
                                             kBGRA_8888_SkColorType, GrRenderable::kNo).isValid()) {
                                         continue;
                                     }
-                                    if (!srcView || !dstView) {
+                                    if (!src || !dst) {
                                         ERRORF(reporter,
                                                "Could not create surfaces for copy surface test.");
                                         continue;
                                     }
                                 }
 
-                                auto dstContext = GrSurfaceContext::Make(dContext,
+                                GrColorType grColorType = SkColorTypeToGrColorType(ii.colorType());
+                                GrSwizzle dstSwizzle = context->priv().caps()->getReadSwizzle(
+                                        dst->backendFormat(), grColorType);
+                                GrSurfaceProxyView dstView(std::move(dst), dOrigin, dstSwizzle);
+                                auto dstContext = GrSurfaceContext::Make(context,
                                                                          std::move(dstView),
-                                                                         ii.colorInfo());
+                                                                         grColorType,
+                                                                         ii.alphaType(), nullptr);
 
                                 bool result = false;
                                 if (sOrigin == dOrigin) {
-                                    result = dstContext->testCopy(srcView.refProxy(),
-                                                                  srcRect,
+                                    result = dstContext->testCopy(src.get(), sOrigin, srcRect,
                                                                   dstPoint);
                                 } else if (dRenderable == GrRenderable::kYes) {
-                                    SkASSERT(dstContext->asFillContext());
-                                    result = dstContext->asFillContext()->blitTexture(
-                                            std::move(srcView), srcRect, dstPoint);
+                                    SkASSERT(dstContext->asRenderTargetContext());
+                                    GrSwizzle srcSwizzle = context->priv().caps()->getReadSwizzle(
+                                        src->backendFormat(), grColorType);
+                                    GrSurfaceProxyView view(std::move(src), sOrigin, srcSwizzle);
+                                    result = dstContext->asRenderTargetContext()->blitTexture(
+                                            std::move(view), srcRect, dstPoint);
                                 }
 
                                 bool expectedResult = true;
@@ -162,8 +168,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(CopySurface, reporter, ctxInfo) {
                                 }
 
                                 sk_memset32(read.get(), 0, kW * kH);
-                                GrPixmap readPM(ii, read.get(), kRowBytes);
-                                if (!dstContext->readPixels(dContext, readPM, {0, 0})) {
+                                if (!dstContext->readPixels(ii, read.get(), kRowBytes, {0, 0})) {
                                     ERRORF(reporter, "Error calling readPixels");
                                     continue;
                                 }

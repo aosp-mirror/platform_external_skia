@@ -36,7 +36,7 @@ public:
      */
     static SkEventTracer* GetInstance();
 
-    virtual ~SkEventTracer() = default;
+    virtual ~SkEventTracer() { }
 
     // The pointer returned from GetCategoryGroupEnabled() points to a
     // value with zero or more of the following bits. Used in this class only.
@@ -69,11 +69,6 @@ public:
         updateTraceEventDuration(const uint8_t* categoryEnabledFlag,
                                  const char* name,
                                  SkEventTracer::Handle handle) = 0;
-
-protected:
-    SkEventTracer() = default;
-    SkEventTracer(const SkEventTracer&) = delete;
-    SkEventTracer& operator=(const SkEventTracer&) = delete;
 };
 
 #endif // SkEventTracer_DEFINED

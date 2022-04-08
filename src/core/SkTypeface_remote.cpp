@@ -19,6 +19,10 @@ SkScalerContextProxy::SkScalerContextProxy(sk_sp<SkTypeface> tf,
         : SkScalerContext{std::move(tf), effects, desc}
         , fDiscardableManager{std::move(manager)} {}
 
+unsigned SkScalerContextProxy::generateGlyphCount()  {
+    SK_ABORT("Should never be called.");
+}
+
 bool SkScalerContextProxy::generateAdvance(SkGlyph* glyph) {
     return false;
 }
@@ -31,8 +35,7 @@ void SkScalerContextProxy::generateMetrics(SkGlyph* glyph) {
 
     glyph->fMaskFormat = fRec.fMaskFormat;
     glyph->zeroMetrics();
-    fDiscardableManager->notifyCacheMiss(
-            SkStrikeClient::CacheMissType::kGlyphMetrics, fRec.fTextSize);
+    fDiscardableManager->notifyCacheMiss(SkStrikeClient::CacheMissType::kGlyphMetrics);
 }
 
 void SkScalerContextProxy::generateImage(const SkGlyph& glyph) {
@@ -43,8 +46,7 @@ void SkScalerContextProxy::generateImage(const SkGlyph& glyph) {
 
     // There is no desperation search here, because if there was an image to be found it was
     // copied over with the metrics search.
-    fDiscardableManager->notifyCacheMiss(
-            SkStrikeClient::CacheMissType::kGlyphImage, fRec.fTextSize);
+    fDiscardableManager->notifyCacheMiss(SkStrikeClient::CacheMissType::kGlyphImage);
 }
 
 bool SkScalerContextProxy::generatePath(SkGlyphID glyphID, SkPath* path) {
@@ -53,8 +55,7 @@ bool SkScalerContextProxy::generatePath(SkGlyphID glyphID, SkPath* path) {
         SkDebugf("GlyphCacheMiss generatePath: %s\n", this->getRec().dump().c_str());
     }
 
-    fDiscardableManager->notifyCacheMiss(
-            SkStrikeClient::CacheMissType::kGlyphPath, fRec.fTextSize);
+    fDiscardableManager->notifyCacheMiss(SkStrikeClient::CacheMissType::kGlyphPath);
     return false;
 }
 
@@ -67,8 +68,7 @@ void SkScalerContextProxy::generateFontMetrics(SkFontMetrics* metrics) {
     }
 
     // Font metrics aren't really used for render, so just zero out the data and return.
-    fDiscardableManager->notifyCacheMiss(
-            SkStrikeClient::CacheMissType::kFontMetrics, fRec.fTextSize);
+    fDiscardableManager->notifyCacheMiss(SkStrikeClient::CacheMissType::kFontMetrics);
     sk_bzero(metrics, sizeof(*metrics));
 }
 

@@ -18,7 +18,6 @@ public:
 
     void load(SkScalar winWidth, SkScalar winHeight) override;
     void unload() override;
-    void resize(SkScalar, SkScalar) override;
 
     SkISize getDimensions() const override;
 
@@ -29,7 +28,7 @@ private:
     SkSize          fWinSize = SkSize::MakeEmpty();
     sk_sp<SkSVGDOM> fDom;
 
-    using INHERITED = Slide;
+    typedef Slide INHERITED;
 };
 
 #endif // SvgSlide_DEFINED

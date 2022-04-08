@@ -53,10 +53,9 @@ private:
     bool                               fShowAnimationInval = false,
                                        fShowAnimationStats = false,
                                        fShowUI             = false,
-                                       fDraggingProgress   = false,
-                                       fPreferGlyphPaths   = false;
+                                       fDraggingProgress   = false;
 
-    using INHERITED = Slide;
+    typedef Slide INHERITED;
 };
 
 #endif // SK_ENABLE_SKOTTIE

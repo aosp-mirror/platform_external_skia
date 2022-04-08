@@ -15,12 +15,12 @@ void doCell(SkCanvas* canvas, float x, float y, SkAlphaType at, SkColor c, int n
     SkBitmap bmp;
     bmp.allocPixels(info);
     fill(bmp, c, n);
-    sk_sp<SkImage> img = bmp.asImage();
+    sk_sp<SkImage> img = SkImage::MakeFromBitmap(bmp);
 
     SkPaint paint;
     const SkTileMode tile = SkTileMode::kRepeat;
 
-    paint.setShader(img->makeShader(tile, tile, SkSamplingOptions()));
+    paint.setShader(img->makeShader(tile, tile, nullptr));
     canvas->drawRect(SkRect::MakeXYWH(x, y, 50, 50), paint);
 }
 

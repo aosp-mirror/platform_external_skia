@@ -32,28 +32,27 @@ public:
     using UniformHandle = GrGLSLProgramDataManager::UniformHandle;
 
     GrMtlPipelineState(
-            GrMtlGpu*,
-            id<MTLRenderPipelineState>,
-            MTLPixelFormat,
+            GrMtlGpu* gpu,
+            id<MTLRenderPipelineState> pipelineState,
+            MTLPixelFormat pixelFormat,
             const GrGLSLBuiltinUniformHandles& builtinUniformHandles,
             const UniformInfoArray& uniforms,
             uint32_t uniformBufferSize,
             uint32_t numSamplers,
-            std::unique_ptr<GrGLSLGeometryProcessor>,
-            std::unique_ptr<GrGLSLXferProcessor>,
-            std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fpImpls);
+            std::unique_ptr<GrGLSLPrimitiveProcessor> geometryProcessor,
+            std::unique_ptr<GrGLSLXferProcessor> xferPRocessor,
+            std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fragmentProcessors,
+            int fFragmentProcessorCnt);
 
     id<MTLRenderPipelineState> mtlPipelineState() { return fPipelineState; }
 
     void setData(const GrRenderTarget*, const GrProgramInfo&);
 
-    void setTextures(const GrGeometryProcessor&,
-                     const GrPipeline&,
-                     const GrSurfaceProxy* const geomProcTextures[]);
+    void setTextures(const GrProgramInfo& programInfo,
+                     const GrSurfaceProxy* const primProcTextures[]);
     void bindTextures(id<MTLRenderCommandEncoder> renderCmdEncoder);
 
-    void setDrawState(id<MTLRenderCommandEncoder>,
-                      const GrSwizzle& writeSwizzle,
+    void setDrawState(id<MTLRenderCommandEncoder>, const GrSwizzle& outputSwizzle,
                       const GrXferProcessor&);
 
     static void SetDynamicScissorRectState(id<MTLRenderCommandEncoder> renderCmdEncoder,
@@ -127,9 +126,10 @@ private:
     int fNumSamplers;
     SkTArray<SamplerBindings> fSamplerBindings;
 
-    std::unique_ptr<GrGLSLGeometryProcessor> fGeometryProcessor;
+    std::unique_ptr<GrGLSLPrimitiveProcessor> fGeometryProcessor;
     std::unique_ptr<GrGLSLXferProcessor> fXferProcessor;
-    std::vector<std::unique_ptr<GrGLSLFragmentProcessor>> fFPImpls;
+    std::unique_ptr<std::unique_ptr<GrGLSLFragmentProcessor>[]> fFragmentProcessors;
+    int fFragmentProcessorCnt;
 
     GrMtlPipelineStateDataManager fDataManager;
 };

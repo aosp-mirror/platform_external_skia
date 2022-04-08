@@ -8,39 +8,33 @@
 #ifndef SKSL_EXTENSION
 #define SKSL_EXTENSION
 
-#include "include/private/SkSLProgramElement.h"
+#include "src/sksl/ir/SkSLProgramElement.h"
 
 namespace SkSL {
 
 /**
  * An extension declaration.
  */
-class Extension final : public ProgramElement {
-public:
-    static constexpr Kind kProgramElementKind = Kind::kExtension;
-
+struct Extension : public ProgramElement {
     Extension(int offset, String name)
-        : INHERITED(offset, kProgramElementKind)
-        , fName(std::move(name)) {}
-
-    const String& name() const {
-        return fName;
-    }
+    : INHERITED(offset, kExtension_Kind)
+    , fName(std::move(name)) {}
 
     std::unique_ptr<ProgramElement> clone() const override {
-        return std::unique_ptr<ProgramElement>(new Extension(fOffset, this->name()));
+        return std::unique_ptr<ProgramElement>(new Extension(fOffset, fName));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
-        return "#extension " + this->name() + " : enable";
+        return "#extension " + fName + " : enable";
     }
+#endif
 
-private:
-    String fName;
+    const String fName;
 
-    using INHERITED = ProgramElement;
+    typedef ProgramElement INHERITED;
 };
 
-}  // namespace SkSL
+} // namespace
 
 #endif

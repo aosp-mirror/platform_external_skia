@@ -131,6 +131,7 @@ protected:
         canvas->drawColor(0xFFDDDDDD);
         canvas->translate(20, 20);
 
+
         static sk_sp<SkColorFilter> (*gColorFilterMakers[])() = {
             make_null_cf, make_cf0, make_cf1, make_cf2, make_cf3
         };
@@ -141,7 +142,7 @@ protected:
         //  - A first line with the original bitmap, followed by the image drawn once
         //  with each of the N color filters
         //  - N lines of the bitmap drawn N times, this will cover all N*N combinations of
-        //  pair of color filters in order to test the collapsing of consecutive table
+        //  pair of color filters in order to test the collpsing of consecutive table
         //  color filters.
         //
         //  Here is a graphical representation of the result for 2 bitmaps and 2 filters
@@ -167,16 +168,14 @@ protected:
             // Draw the first element of the first line
             x = 0;
             SkPaint paint;
-            SkSamplingOptions sampling;
-
-            canvas->drawImage(bm.asImage(), x, y);
+            canvas->drawBitmap(bm, x, y, &paint);
 
             // Draws the rest of the first line for this bitmap
             // each draw being at xOffset of the previous one
             for (unsigned i = 1; i < SK_ARRAY_COUNT(gColorFilterMakers); ++i) {
                 x += xOffset;
                 paint.setColorFilter(gColorFilterMakers[i]());
-                canvas->drawImage(bm.asImage(), x, y, sampling, &paint);
+                canvas->drawBitmap(bm, x, y, &paint);
             }
 
             paint.setColorFilter(nullptr);
@@ -195,7 +194,7 @@ protected:
                     sk_sp<SkImageFilter> imageFilter2(SkImageFilters::ColorFilter(
                             std::move(colorFilter2), imageFilter1, nullptr));
                     paint.setImageFilter(std::move(imageFilter2));
-                    canvas->drawImage(bm.asImage(), x, y, sampling, &paint);
+                    canvas->drawBitmap(bm, x, y, &paint);
                     x += xOffset;
                 }
             }
@@ -206,7 +205,7 @@ protected:
     }
 
 private:
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 DEF_GM( return new TableColorFilterGM; )
 

@@ -9,11 +9,10 @@
 #include "fuzz/FuzzCommon.h"
 
 DEF_FUZZ(RegionOp, fuzz) {  // `fuzz -t api -n RegionOp`
-    SkRegion region;
-    // FuzzNiceRegion generates a random region by joining a random amount of regions
-    // together. This fuzzer simply targets that directly. 300 was picked arbitrarily as
-    // a number over 2^8.
-    FuzzNiceRegion(fuzz, &region, 300);
-    // Do a computation to make sure region is not optimized out.
-    region.computeRegionComplexity();
+    SkRegion regionA, regionB, regionC;
+    FuzzNiceRegion(fuzz, &regionA, 2000);
+    FuzzNiceRegion(fuzz, &regionB, 2000);
+    SkRegion::Op op;
+    fuzz->nextRange(&op, 0, SkRegion::kLastOp);
+    regionC.op(regionA, regionB, op);
 }

@@ -130,15 +130,15 @@ struct SkOSFileIterData {
 };
 static_assert(sizeof(SkOSFileIterData) <= SkOSFile::Iter::kStorageSize, "not_enough_space");
 
-SkOSFile::Iter::Iter() { new (fSelf) SkOSFileIterData; }
+SkOSFile::Iter::Iter() { new (fSelf.get()) SkOSFileIterData; }
 
 SkOSFile::Iter::Iter(const char path[], const char suffix[]) {
-    new (fSelf) SkOSFileIterData;
+    new (fSelf.get()) SkOSFileIterData;
     this->reset(path, suffix);
 }
 
 SkOSFile::Iter::~Iter() {
-    SkOSFileIterData& self = *reinterpret_cast<SkOSFileIterData*>(fSelf);
+    SkOSFileIterData& self = *static_cast<SkOSFileIterData*>(fSelf.get());
     if (self.fDIR) {
         ::closedir(self.fDIR);
     }
@@ -146,7 +146,7 @@ SkOSFile::Iter::~Iter() {
 }
 
 void SkOSFile::Iter::reset(const char path[], const char suffix[]) {
-    SkOSFileIterData& self = *reinterpret_cast<SkOSFileIterData*>(fSelf);
+    SkOSFileIterData& self = *static_cast<SkOSFileIterData*>(fSelf.get());
     if (self.fDIR) {
         ::closedir(self.fDIR);
         self.fDIR = nullptr;
@@ -177,7 +177,7 @@ static bool issuffixfor(const SkString& suffix, const char str[]) {
 }
 
 bool SkOSFile::Iter::next(SkString* name, bool getDir) {
-    SkOSFileIterData& self = *reinterpret_cast<SkOSFileIterData*>(fSelf);
+    SkOSFileIterData& self = *static_cast<SkOSFileIterData*>(fSelf.get());
     if (self.fDIR) {
         dirent* entry;
 

@@ -7,32 +7,24 @@
 
 #include "src/gpu/vk/GrVkFramebuffer.h"
 
-#include "src/gpu/vk/GrVkAttachment.h"
-#include "src/gpu/vk/GrVkCommandBuffer.h"
 #include "src/gpu/vk/GrVkGpu.h"
 #include "src/gpu/vk/GrVkImageView.h"
 #include "src/gpu/vk/GrVkRenderPass.h"
 
-sk_sp<const GrVkFramebuffer> GrVkFramebuffer::Make(
-        GrVkGpu* gpu,
-        SkISize dimensions,
-        sk_sp<const GrVkRenderPass> compatibleRenderPass,
-        GrVkAttachment* colorAttachment,
-        GrVkAttachment* resolveAttachment,
-        GrVkAttachment* stencilAttachment,
-        GrVkResourceProvider::CompatibleRPHandle compatibleRenderPassHandle) {
+GrVkFramebuffer* GrVkFramebuffer::Create(GrVkGpu* gpu,
+                                         int width, int height,
+                                         const GrVkRenderPass* renderPass,
+                                         const GrVkImageView* colorAttachment,
+                                         const GrVkImageView* stencilAttachment) {
     // At the very least we need a renderPass and a colorAttachment
-    SkASSERT(compatibleRenderPass);
+    SkASSERT(renderPass);
     SkASSERT(colorAttachment);
 
     VkImageView attachments[3];
-    attachments[0] = colorAttachment->framebufferView()->imageView();
+    attachments[0] = colorAttachment->imageView();
     int numAttachments = 1;
-    if (resolveAttachment) {
-        attachments[numAttachments++] = resolveAttachment->framebufferView()->imageView();
-    }
     if (stencilAttachment) {
-        attachments[numAttachments++] = stencilAttachment->framebufferView()->imageView();
+        attachments[numAttachments++] = stencilAttachment->imageView();
     }
 
     VkFramebufferCreateInfo createInfo;
@@ -40,11 +32,11 @@ sk_sp<const GrVkFramebuffer> GrVkFramebuffer::Make(
     createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     createInfo.pNext = nullptr;
     createInfo.flags = 0;
-    createInfo.renderPass = compatibleRenderPass->vkRenderPass();
+    createInfo.renderPass = renderPass->vkRenderPass();
     createInfo.attachmentCount = numAttachments;
     createInfo.pAttachments = attachments;
-    createInfo.width = dimensions.width();
-    createInfo.height = dimensions.height();
+    createInfo.width = width;
+    createInfo.height = height;
     createInfo.layers = 1;
 
     VkFramebuffer framebuffer;
@@ -55,67 +47,10 @@ sk_sp<const GrVkFramebuffer> GrVkFramebuffer::Make(
         return nullptr;
     }
 
-    auto fb = new GrVkFramebuffer(gpu, framebuffer, sk_ref_sp(colorAttachment),
-                                  sk_ref_sp(resolveAttachment), sk_ref_sp(stencilAttachment),
-                                  std::move(compatibleRenderPass), compatibleRenderPassHandle);
-    return sk_sp<const GrVkFramebuffer>(fb);
+    return new GrVkFramebuffer(framebuffer);
 }
 
-GrVkFramebuffer::GrVkFramebuffer(const GrVkGpu* gpu,
-                                 VkFramebuffer framebuffer,
-                                 sk_sp<GrVkAttachment> colorAttachment,
-                                 sk_sp<GrVkAttachment> resolveAttachment,
-                                 sk_sp<GrVkAttachment> stencilAttachment,
-                                 sk_sp<const GrVkRenderPass> compatibleRenderPass,
-                                 GrVkResourceProvider::CompatibleRPHandle compatibleRPHandle)
-        : GrVkManagedResource(gpu)
-        , fFramebuffer(framebuffer)
-        , fColorAttachment(std::move(colorAttachment))
-        , fResolveAttachment(std::move(resolveAttachment))
-        , fStencilAttachment(std::move(stencilAttachment))
-        , fCompatibleRenderPass(std::move(compatibleRenderPass))
-        , fCompatibleRenderPassHandle(compatibleRPHandle) {
-    SkASSERT(fCompatibleRenderPassHandle.isValid());
-}
-
-GrVkFramebuffer::GrVkFramebuffer(const GrVkGpu* gpu,
-                                 sk_sp<GrVkAttachment> colorAttachment,
-                                 sk_sp<const GrVkRenderPass> renderPass,
-                                 std::unique_ptr<GrVkSecondaryCommandBuffer> externalCommandBuffer)
-        : GrVkManagedResource(gpu)
-        , fColorAttachment(std::move(colorAttachment))
-        , fExternalRenderPass(std::move(renderPass))
-        , fExternalCommandBuffer(std::move(externalCommandBuffer)) {}
-
-GrVkFramebuffer::~GrVkFramebuffer() {}
-
-void GrVkFramebuffer::freeGPUData() const {
-    SkASSERT(this->isExternal() || fFramebuffer != VK_NULL_HANDLE);
-    if (!this->isExternal()) {
-        GR_VK_CALL(fGpu->vkInterface(), DestroyFramebuffer(fGpu->device(), fFramebuffer, nullptr));
-    }
-
-    // TODO: having freeGPUData virtual on GrManagedResource be const seems like a bad restriction
-    // since we are changing the internal objects of these classes when it is called. We should go
-    // back a revisit how much of a headache it would be to make this function non-const
-    GrVkFramebuffer* nonConstThis = const_cast<GrVkFramebuffer*>(this);
-    nonConstThis->releaseResources();
-}
-
-void GrVkFramebuffer::releaseResources() {
-    if (fExternalCommandBuffer) {
-        fExternalCommandBuffer->releaseResources();
-        fExternalCommandBuffer.reset();
-    }
-}
-
-void GrVkFramebuffer::returnExternalGrSecondaryCommandBuffer(
-        std::unique_ptr<GrVkSecondaryCommandBuffer> cmdBuffer) {
-    SkASSERT(!fExternalCommandBuffer);
-    fExternalCommandBuffer = std::move(cmdBuffer);
-}
-
-std::unique_ptr<GrVkSecondaryCommandBuffer> GrVkFramebuffer::externalCommandBuffer() {
-    SkASSERT(fExternalCommandBuffer);
-    return std::move(fExternalCommandBuffer);
+void GrVkFramebuffer::freeGPUData(GrVkGpu* gpu) const {
+    SkASSERT(fFramebuffer);
+    GR_VK_CALL(gpu->vkInterface(), DestroyFramebuffer(gpu->device(), fFramebuffer, nullptr));
 }

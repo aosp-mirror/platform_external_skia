@@ -24,43 +24,32 @@
 #include "include/encode/SkWebpEncoder.h"
 #include "tools/Resources.h"
 
-#if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS) || defined(SK_BUILD_FOR_WIN) \
- || defined(SK_ENABLE_NDK_IMAGES)
+#if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS) || defined(SK_BUILD_FOR_WIN)
 #include "src/images/SkImageEncoderPriv.h"
 #endif
 
-namespace {
+namespace skiagm {
 
-static const struct {
-    SkEncodedImageFormat format;
-    int                  quality;
-} gRecs[] = {
 #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
-    { SkEncodedImageFormat::kPNG,  100},
-    { SkEncodedImageFormat::kJPEG, 100},
-    { SkEncodedImageFormat::kGIF,  100},
-    { SkEncodedImageFormat::kBMP,  100},
-    { SkEncodedImageFormat::kICO,  100},
-#elif defined(SK_BUILD_FOR_WIN)
-    // Our WIC encoder does not support GIF, BMP, or ICO.
-    { SkEncodedImageFormat::kPNG,  100},
-    { SkEncodedImageFormat::kJPEG, 100},
-    { SkEncodedImageFormat::kPNG,  100},
-    { SkEncodedImageFormat::kPNG,  100},
-    { SkEncodedImageFormat::kPNG,  100},
-#else
-    // We don't support GIF, BMP, or ICO. This applies to both NDK and SkEncoder.
-    { SkEncodedImageFormat::kPNG,  100},
-    { SkEncodedImageFormat::kJPEG, 100},
-    { SkEncodedImageFormat::kWEBP, 100}, // Lossless
-    { SkEncodedImageFormat::kWEBP,  80}, // Lossy
-    { SkEncodedImageFormat::kPNG,  100},
-#endif
+static SkEncodedImageFormat kTypes[] {
+        SkEncodedImageFormat::kPNG, SkEncodedImageFormat::kJPEG, SkEncodedImageFormat::kGIF,
+        SkEncodedImageFormat::kBMP, SkEncodedImageFormat::kICO,
 };
+#elif defined(SK_BUILD_FOR_WIN)
+// Use PNG multiple times because our WIC encoder does not support GIF, BMP, or ICO.
+static SkEncodedImageFormat kTypes[] {
+        SkEncodedImageFormat::kPNG, SkEncodedImageFormat::kJPEG, SkEncodedImageFormat::kPNG,
+        SkEncodedImageFormat::kPNG, SkEncodedImageFormat::kPNG,
+};
+#else
+// Use WEBP in place of GIF.  Use PNG two extra times.  We don't support GIF, BMP, or ICO.
+static SkEncodedImageFormat kTypes[] {
+        SkEncodedImageFormat::kPNG, SkEncodedImageFormat::kJPEG, SkEncodedImageFormat::kWEBP,
+        SkEncodedImageFormat::kPNG, SkEncodedImageFormat::kPNG,
+};
+#endif
 
-} // anonymous namespace
-
-static sk_sp<SkData> encode_data(SkEncodedImageFormat type, const SkBitmap& bitmap, int quality) {
+static sk_sp<SkData> encode_data(SkEncodedImageFormat type, const SkBitmap& bitmap) {
     SkPixmap src;
     if (!bitmap.peekPixels(&src)) {
         return nullptr;
@@ -69,9 +58,7 @@ static sk_sp<SkData> encode_data(SkEncodedImageFormat type, const SkBitmap& bitm
     #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
         return SkEncodeImageWithCG(&buf, src, type) ? buf.detachAsData() : nullptr;
     #elif defined(SK_BUILD_FOR_WIN)
-        return SkEncodeImageWithWIC(&buf, src, type, quality) ? buf.detachAsData() : nullptr;
-    #elif defined(SK_ENABLE_NDK_IMAGES)
-        return SkEncodeImageWithNDK(&buf, src, type, quality) ? buf.detachAsData() : nullptr;
+        return SkEncodeImageWithWIC(&buf, src, type, 100) ? buf.detachAsData() : nullptr;
     #else
         switch (type) {
             case SkEncodedImageFormat::kPNG: {
@@ -87,12 +74,11 @@ static sk_sp<SkData> encode_data(SkEncodedImageFormat type, const SkBitmap& bitm
                 return success ? buf.detachAsData() : nullptr;
             }
             default:
-                SkUNREACHABLE;
+                SkASSERT(false);
+                return nullptr;
         }
     #endif
 }
-
-namespace skiagm {
 
 class EncodePlatformGM : public GM {
 public:
@@ -104,7 +90,7 @@ protected:
     }
 
     SkISize onISize() override {
-        return SkISize::Make(256 * SK_ARRAY_COUNT(gRecs), 256 * 3);
+        return SkISize::Make(256 * SK_ARRAY_COUNT(kTypes), 256 * 3);
     }
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
@@ -126,11 +112,10 @@ protected:
         unpremulBm.allocPixels(premulBm.info().makeAlphaType(kUnpremul_SkAlphaType));
         SkAssertResult(premulBm.readPixels(unpremulBm.pixmap()));
 
-        for (const auto& rec : gRecs) {
-            auto fmt = rec.format; int q = rec.quality;
-            auto opaqueImage   = SkImage::MakeFromEncoded(encode_data(fmt, opaqueBm,   q));
-            auto premulImage   = SkImage::MakeFromEncoded(encode_data(fmt, premulBm,   q));
-            auto unpremulImage = SkImage::MakeFromEncoded(encode_data(fmt, unpremulBm, q));
+        for (SkEncodedImageFormat type : kTypes) {
+            auto opaqueImage = SkImage::MakeFromEncoded(encode_data(type, opaqueBm));
+            auto premulImage = SkImage::MakeFromEncoded(encode_data(type, premulBm));
+            auto unpremulImage = SkImage::MakeFromEncoded(encode_data(type, unpremulBm));
 
             canvas->drawImage(opaqueImage.get(), 0.0f, 0.0f);
             canvas->drawImage(premulImage.get(), 0.0f, 256.0f);
@@ -142,8 +127,8 @@ protected:
     }
 
 private:
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 DEF_GM( return new EncodePlatformGM; )
-}  // namespace skiagm
+}

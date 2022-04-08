@@ -8,9 +8,7 @@
 #include "src/gpu/mtl/GrMtlResourceProvider.h"
 
 #include "include/gpu/GrContextOptions.h"
-#include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrProgramDesc.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/mtl/GrMtlCommandBuffer.h"
 #include "src/gpu/mtl/GrMtlGpu.h"
 #include "src/gpu/mtl/GrMtlPipelineState.h"
@@ -22,22 +20,27 @@
 #error This file must be compiled with Arc. Use -fobjc-arc flag
 #endif
 
-GR_NORETAIN_BEGIN
-
 GrMtlResourceProvider::GrMtlResourceProvider(GrMtlGpu* gpu)
     : fGpu(gpu) {
     fPipelineStateCache.reset(new PipelineStateCache(gpu));
+    fBufferSuballocator.reset(new BufferSuballocator(gpu->device(), kBufferSuballocatorStartSize));
+    // TODO: maxBufferLength seems like a reasonable metric to determine fBufferSuballocatorMaxSize
+    // but may need tuning. Might also need a GrContextOption to let the client set this.
+#ifdef SK_BUILD_FOR_MAC
+    int64_t maxBufferLength = 1024*1024*1024;
+#else
+    int64_t maxBufferLength = 256*1024*1024;
+#endif
+    if (@available(iOS 12, macOS 10.14, *)) {
+       maxBufferLength = gpu->device().maxBufferLength;
+    }
+    fBufferSuballocatorMaxSize = maxBufferLength/16;
 }
 
 GrMtlPipelineState* GrMtlResourceProvider::findOrCreateCompatiblePipelineState(
-        const GrProgramDesc& programDesc,
-        const GrProgramInfo& programInfo,
-        GrThreadSafePipelineBuilder::Stats::ProgramCacheResult* stat) {
-    return fPipelineStateCache->refPipelineState(programDesc, programInfo, stat);
-}
-
-bool GrMtlResourceProvider::precompileShader(const SkData& key, const SkData& data) {
-    return fPipelineStateCache->precompileShader(key, data);
+        GrRenderTarget* renderTarget,
+        const GrProgramInfo& programInfo) {
+    return fPipelineStateCache->refPipelineState(renderTarget, programInfo);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -67,10 +70,18 @@ GrMtlSampler* GrMtlResourceProvider::findOrCreateCompatibleSampler(GrSamplerStat
 }
 
 void GrMtlResourceProvider::destroyResources() {
-    fSamplers.foreach([&](GrMtlSampler* sampler) { sampler->unref(); });
+    // Iterate through all stored GrMtlSamplers and unref them before resetting the hash.
+    SkTDynamicHash<GrMtlSampler, GrMtlSampler::Key>::Iter samplerIter(&fSamplers);
+    for (; !samplerIter.done(); ++samplerIter) {
+        (*samplerIter).unref();
+    }
     fSamplers.reset();
 
-    fDepthStencilStates.foreach([&](GrMtlDepthStencil* stencil) { stencil->unref(); });
+    // Iterate through all stored GrMtlDepthStencils and unref them before resetting the hash.
+    SkTDynamicHash<GrMtlDepthStencil, GrMtlDepthStencil::Key>::Iter dsIter(&fDepthStencilStates);
+    for (; !dsIter.done(); ++dsIter) {
+        (*dsIter).unref();
+    }
     fDepthStencilStates.reset();
 
     fPipelineStateCache->release();
@@ -78,25 +89,43 @@ void GrMtlResourceProvider::destroyResources() {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
+#ifdef GR_PIPELINE_STATE_CACHE_STATS
+// Display pipeline state cache usage
+static const bool c_DisplayMtlPipelineCache{false};
+#endif
+
 struct GrMtlResourceProvider::PipelineStateCache::Entry {
-    Entry(GrMtlPipelineState* pipelineState)
-            : fPipelineState(pipelineState) {}
-    Entry(const GrMtlPrecompiledLibraries& precompiledLibraries)
-            : fPipelineState(nullptr)
-            , fPrecompiledLibraries(precompiledLibraries) {}
+    Entry(GrMtlGpu* gpu, GrMtlPipelineState* pipelineState)
+    : fGpu(gpu)
+    , fPipelineState(pipelineState) {}
 
+    GrMtlGpu* fGpu;
     std::unique_ptr<GrMtlPipelineState> fPipelineState;
-
-    // TODO: change to one library once we can build that
-    GrMtlPrecompiledLibraries fPrecompiledLibraries;
 };
 
 GrMtlResourceProvider::PipelineStateCache::PipelineStateCache(GrMtlGpu* gpu)
     : fMap(gpu->getContext()->priv().options().fRuntimeProgramCacheSize)
-    , fGpu(gpu) {}
+    , fGpu(gpu)
+#ifdef GR_PIPELINE_STATE_CACHE_STATS
+    , fTotalRequests(0)
+    , fCacheMisses(0)
+#endif
+{}
 
 GrMtlResourceProvider::PipelineStateCache::~PipelineStateCache() {
     SkASSERT(0 == fMap.count());
+    // dump stats
+#ifdef GR_PIPELINE_STATE_CACHE_STATS
+    if (c_DisplayMtlPipelineCache) {
+        SkDebugf("--- Pipeline State Cache ---\n");
+        SkDebugf("Total requests: %d\n", fTotalRequests);
+        SkDebugf("Cache misses: %d\n", fCacheMisses);
+        SkDebugf("Cache miss %%: %f\n", (fTotalRequests > 0) ?
+                 100.f * fCacheMisses / fTotalRequests :
+                 0.f);
+        SkDebugf("---------------------\n");
+    }
+#endif
 }
 
 void GrMtlResourceProvider::PipelineStateCache::release() {
@@ -104,86 +133,160 @@ void GrMtlResourceProvider::PipelineStateCache::release() {
 }
 
 GrMtlPipelineState* GrMtlResourceProvider::PipelineStateCache::refPipelineState(
-        const GrProgramDesc& desc,
-        const GrProgramInfo& programInfo,
-        Stats::ProgramCacheResult* stat) {
+        GrRenderTarget* renderTarget,
+        const GrProgramInfo& programInfo) {
+#ifdef GR_PIPELINE_STATE_CACHE_STATS
+    ++fTotalRequests;
+#endif
 
-    if (!stat) {
-        // If stat is NULL we are using inline compilation rather than through DDL,
-        // so we need to track those stats as well.
-        GrThreadSafePipelineBuilder::Stats::ProgramCacheResult stat;
-        auto tmp = this->onRefPipelineState(desc, programInfo, &stat);
-        if (!tmp) {
-            fStats.incNumInlineCompilationFailures();
-        } else {
-            fStats.incNumInlineProgramCacheResult(stat);
-        }
-        return tmp;
-    } else {
-        return this->onRefPipelineState(desc, programInfo, stat);
+    const GrMtlCaps& caps = fGpu->mtlCaps();
+
+    GrProgramDesc desc = caps.makeDesc(renderTarget, programInfo);
+    if (!desc.isValid()) {
+        GrCapsDebugf(fGpu->caps(), "Failed to build mtl program descriptor!\n");
+        return nullptr;
     }
-}
 
-GrMtlPipelineState* GrMtlResourceProvider::PipelineStateCache::onRefPipelineState(
-        const GrProgramDesc& desc,
-        const GrProgramInfo& programInfo,
-        Stats::ProgramCacheResult* stat) {
-    *stat = Stats::ProgramCacheResult::kHit;
     std::unique_ptr<Entry>* entry = fMap.find(desc);
-    if (entry && !(*entry)->fPipelineState) {
-        // We've pre-compiled the MSL shaders but don't have the pipelineState
-        const GrMtlPrecompiledLibraries* precompiledLibs = &((*entry)->fPrecompiledLibraries);
-        SkASSERT(precompiledLibs->fPipelineState);
-        (*entry)->fPipelineState.reset(
-                GrMtlPipelineStateBuilder::CreatePipelineState(fGpu, desc, programInfo,
-                                                               precompiledLibs));
-        if (!(*entry)->fPipelineState) {
-            // Should we purge the precompiled shaders from the cache at this point?
-            SkDEBUGFAIL("Couldn't create pipelineState from precompiled shaders");
-            fStats.incNumCompilationFailures();
+    if (!entry) {
+#ifdef GR_PIPELINE_STATE_CACHE_STATS
+        ++fCacheMisses;
+#endif
+        GrMtlPipelineState* pipelineState(GrMtlPipelineStateBuilder::CreatePipelineState(
+            fGpu, renderTarget, desc, programInfo));
+        if (!pipelineState) {
             return nullptr;
         }
-        // release the ref on the pipeline state
-        (*entry)->fPrecompiledLibraries.fPipelineState = nil;
-
-        fStats.incNumPartialCompilationSuccesses();
-        *stat = Stats::ProgramCacheResult::kPartial;
-    } else if (!entry) {
-        GrMtlPipelineState* pipelineState(
-                GrMtlPipelineStateBuilder::CreatePipelineState(fGpu, desc, programInfo));
-        if (!pipelineState) {
-            fStats.incNumCompilationFailures();
-           return nullptr;
-        }
-        fStats.incNumCompilationSuccesses();
-        entry = fMap.insert(desc, std::unique_ptr<Entry>(new Entry(pipelineState)));
-        *stat = Stats::ProgramCacheResult::kMiss;
+        entry = fMap.insert(desc, std::unique_ptr<Entry>(new Entry(fGpu, pipelineState)));
         return (*entry)->fPipelineState.get();
     }
     return (*entry)->fPipelineState.get();
 }
 
-bool GrMtlResourceProvider::PipelineStateCache::precompileShader(const SkData& key,
-                                                                 const SkData& data) {
-    GrProgramDesc desc;
-    if (!GrProgramDesc::BuildFromData(&desc, key.data(), key.size())) {
-        return false;
-    }
+////////////////////////////////////////////////////////////////////////////////////////////////
 
-    std::unique_ptr<Entry>* entry = fMap.find(desc);
-    if (entry) {
-        // We've already seen/compiled this shader
-        return true;
+static id<MTLBuffer> alloc_dynamic_buffer(id<MTLDevice> device, size_t size) {
+    NSUInteger options = 0;
+    if (@available(macOS 10.11, iOS 9.0, *)) {
+#ifdef SK_BUILD_FOR_MAC
+        options |= MTLResourceStorageModeManaged;
+#else
+        options |= MTLResourceStorageModeShared;
+#endif
     }
-
-    GrMtlPrecompiledLibraries precompiledLibraries;
-    if (!GrMtlPipelineStateBuilder::PrecompileShaders(fGpu, data, &precompiledLibraries)) {
-        return false;
-    }
-
-    fMap.insert(desc, std::make_unique<Entry>(precompiledLibraries));
-    return true;
+    return [device newBufferWithLength: size
+                               options: options];
 
 }
 
-GR_NORETAIN_END
+// The idea here is that we create a ring buffer which is used for all dynamic allocations
+// below a certain size. When a dynamic GrMtlBuffer is mapped, it grabs a portion of this
+// buffer and uses it. On a subsequent map it will grab a different portion of the buffer.
+// This prevents the buffer from overwriting itself before it's submitted to the command
+// stream.
+
+GrMtlResourceProvider::BufferSuballocator::BufferSuballocator(id<MTLDevice> device, size_t size)
+        : fBuffer(alloc_dynamic_buffer(device, size))
+        , fTotalSize(size)
+        , fHead(0)
+        , fTail(0) {
+    // We increment fHead and fTail without bound and let overflow handle any wrapping.
+    // Because of this, size needs to be a power of two.
+    SkASSERT(SkIsPow2(size));
+}
+
+id<MTLBuffer> GrMtlResourceProvider::BufferSuballocator::getAllocation(size_t size,
+                                                                       size_t* offset) {
+    // capture current state locally (because fTail could be overwritten by the completion handler)
+    size_t head, tail;
+    SkAutoSpinlock lock(fMutex);
+    head = fHead;
+    tail = fTail;
+
+    // The head and tail indices increment without bound, wrapping with overflow,
+    // so we need to mod them down to the actual bounds of the allocation to determine
+    // which blocks are available.
+    size_t modHead = head & (fTotalSize - 1);
+    size_t modTail = tail & (fTotalSize - 1);
+
+    bool full = (head != tail && modHead == modTail);
+
+
+    // We don't want large allocations to eat up this buffer, so we allocate them separately.
+    if (full || size > fTotalSize/2) {
+        return nil;
+    }
+
+    // case 1: free space lies at the beginning and/or the end of the buffer
+    if (modHead >= modTail) {
+        // check for room at the end
+        if (fTotalSize - modHead < size) {
+            // no room at the end, check the beginning
+            if (modTail < size) {
+                // no room at the beginning
+                return nil;
+            }
+            // we are going to allocate from the beginning, adjust head to '0' position
+            head += fTotalSize - modHead;
+            modHead = 0;
+        }
+    // case 2: free space lies in the middle of the buffer, check for room there
+    } else if (modTail - modHead < size) {
+        // no room in the middle
+        return nil;
+    }
+
+    *offset = modHead;
+    // We're not sure what the usage of the next allocation will be --
+    // to be safe we'll use 16 byte alignment.
+    fHead = GrAlignTo(head + size, 16);
+    return fBuffer;
+}
+
+void GrMtlResourceProvider::BufferSuballocator::addCompletionHandler(
+        GrMtlCommandBuffer* cmdBuffer) {
+    this->ref();
+    SkAutoSpinlock lock(fMutex);
+    size_t newTail = fHead;
+    cmdBuffer->addCompletedHandler(^(id <MTLCommandBuffer>commandBuffer) {
+        // Make sure SkAutoSpinlock goes out of scope before
+        // the BufferSuballocator is potentially deleted.
+        {
+            SkAutoSpinlock lock(fMutex);
+            fTail = newTail;
+        }
+        this->unref();
+    });
+}
+
+id<MTLBuffer> GrMtlResourceProvider::getDynamicBuffer(size_t size, size_t* offset) {
+#ifdef SK_BUILD_FOR_MAC
+    // Mac requires 4-byte alignment for didModifyRange:
+    size = SkAlign4(size);
+#endif
+    id<MTLBuffer> buffer = fBufferSuballocator->getAllocation(size, offset);
+    if (buffer) {
+        return buffer;
+    }
+
+    // Try to grow allocation (old allocation will age out).
+    // We grow up to a maximum size, and only grow if the requested allocation will
+    // fit into half of the new buffer (to prevent very large transient buffers forcing
+    // growth when they'll never fit anyway).
+    if (fBufferSuballocator->size() < fBufferSuballocatorMaxSize &&
+        size <= fBufferSuballocator->size()) {
+        fBufferSuballocator.reset(new BufferSuballocator(fGpu->device(),
+                                                         2*fBufferSuballocator->size()));
+        id<MTLBuffer> buffer = fBufferSuballocator->getAllocation(size, offset);
+        if (buffer) {
+            return buffer;
+        }
+    }
+
+    *offset = 0;
+    return alloc_dynamic_buffer(fGpu->device(), size);
+}
+
+void GrMtlResourceProvider::addBufferCompletionHandler(GrMtlCommandBuffer* cmdBuffer) {
+    fBufferSuballocator->addCompletionHandler(cmdBuffer);
+}

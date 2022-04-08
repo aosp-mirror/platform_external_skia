@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 #include "include/core/SkRect.h"
-#include "src/core/SkPathPriv.h"
 #include "src/pathops/SkOpEdgeBuilder.h"
 #include "src/pathops/SkPathOpsCommon.h"
 #include <algorithm>
@@ -179,25 +178,29 @@ public:
     void contourBounds(vector<Contour>* containers) {
         SkRect bounds;
         bounds.setEmpty();
+        SkPath::RawIter iter(fPath);
+        SkPoint pts[4];
+        SkPath::Verb verb;
         int lastStart = 0;
         int verbStart = 0;
-        for (auto [verb, pts, w] : SkPathPriv::Iterate(fPath)) {
-            if (SkPathVerb::kMove == verb) {
+        do {
+            verb = iter.next(pts);
+            if (SkPath::kMove_Verb == verb) {
                 if (!bounds.isEmpty()) {
                     containers->emplace_back(bounds, lastStart, verbStart);
                     lastStart = verbStart;
                }
-               bounds.setBounds(&pts[kPtIndex[SkPath::kMove_Verb]], kPtCount[SkPath::kMove_Verb]);
+               bounds.setBounds(&pts[kPtIndex[verb]], kPtCount[verb]);
             }
-            if (SkPathVerb::kLine <= verb && verb <= SkPathVerb::kCubic) {
+            if (SkPath::kLine_Verb <= verb && verb <= SkPath::kCubic_Verb) {
                 SkRect verbBounds;
-                verbBounds.setBounds(&pts[kPtIndex[(int)verb]], kPtCount[(int)verb]);
+                verbBounds.setBounds(&pts[kPtIndex[verb]], kPtCount[verb]);
                 bounds.joinPossiblyEmptyRect(verbBounds);
             }
             ++verbStart;
-        }
+        } while (SkPath::kDone_Verb != verb);
         if (!bounds.isEmpty()) {
-            containers->emplace_back(bounds, lastStart, ++verbStart);
+            containers->emplace_back(bounds, lastStart, verbStart);
         }
     }
 
@@ -321,45 +324,43 @@ public:
         return reversed;
     }
 
-    SkPath reverseMarkedContours(vector<Contour>& contours, SkPathFillType fillType) {
-        SkPathPriv::Iterate iterate(fPath);
-        auto iter = iterate.begin();
+    void reverseMarkedContours(vector<Contour>& contours, SkPath* result) {
+        SkPath::RawIter iter(fPath);
         int verbCount = 0;
-
-        SkPathBuilder result;
-        result.setFillType(fillType);
-        for (const Contour& contour : contours) {
-            SkPathBuilder reverse;
-            SkPathBuilder* temp = contour.fReverse ? &reverse : &result;
-            for (; iter != iterate.end() && verbCount < contour.fVerbEnd; ++iter, ++verbCount) {
-                auto [verb, pts, w] = *iter;
-                switch (verb) {
-                    case SkPathVerb::kMove:
+        for (auto contour : contours) {
+            SkPath reverse;
+            SkPath* temp = contour.fReverse ? &reverse : result;
+            do {
+                SkPoint pts[4];
+                switch (iter.next(pts)) {
+                    case SkPath::kMove_Verb:
                         temp->moveTo(pts[0]);
                         break;
-                    case SkPathVerb::kLine:
+                    case SkPath::kLine_Verb:
                         temp->lineTo(pts[1]);
                         break;
-                    case SkPathVerb::kQuad:
+                    case SkPath::kQuad_Verb:
                         temp->quadTo(pts[1], pts[2]);
                         break;
-                    case SkPathVerb::kConic:
-                        temp->conicTo(pts[1], pts[2], *w);
+                    case SkPath::kConic_Verb:
+                        temp->conicTo(pts[1], pts[2], iter.conicWeight());
                         break;
-                    case SkPathVerb::kCubic:
+                    case SkPath::kCubic_Verb:
                         temp->cubicTo(pts[1], pts[2], pts[3]);
                         break;
-                    case SkPathVerb::kClose:
+                    case SkPath::kClose_Verb:
                         temp->close();
                         break;
+                    case SkPath::kDone_Verb:
+                        break;
+                    default:
+                        SkASSERT(0);
                 }
-            }
+            } while (++verbCount < contour.fVerbEnd);
             if (contour.fReverse) {
-                SkASSERT(temp == &reverse);
-                SkPathPriv::ReverseAddPath(&result, reverse.detach());
+                result->reverseAddPath(reverse);
             }
         }
-        return result.detach();
     }
 
 private:
@@ -418,6 +419,9 @@ bool AsWinding(const SkPath& path, SkPath* result) {
     if (!reversed) {
         return set_result_path(result, path, fillType);
     }
-    *result = winder.reverseMarkedContours(contours, fillType);
+    SkPath temp;
+    temp.setFillType(fillType);
+    winder.reverseMarkedContours(contours, &temp);
+    result->swap(temp);
     return true;
 }

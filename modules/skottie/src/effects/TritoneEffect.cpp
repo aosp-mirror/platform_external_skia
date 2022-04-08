@@ -52,9 +52,9 @@ private:
     }
 
     void onSync() override {
-        fLoColorNode->setColor(fLoColor);
-        fMiColorNode->setColor(fMiColor);
-        fHiColorNode->setColor(fHiColor);
+        fLoColorNode->setColor(ValueTraits<VectorValue>::As<SkColor>(fLoColor));
+        fMiColorNode->setColor(ValueTraits<VectorValue>::As<SkColor>(fMiColor));
+        fHiColorNode->setColor(ValueTraits<VectorValue>::As<SkColor>(fHiColor));
 
         // 100-based, inverted
         fCF->setWeight((100 - fWeight) / 100);

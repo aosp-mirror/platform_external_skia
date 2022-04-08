@@ -13,13 +13,12 @@
 struct SkImageInfo;
 
 static inline SkSurfaceProps SkSurfacePropsCopyOrDefault(const SkSurfaceProps* props) {
-    return props ? *props : SkSurfaceProps();
+    if (props) {
+        return *props;
+    } else {
+        return SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType);
+    }
 }
-
-enum SkSurfacePropsPrivateFlags {
-    // Use internal MSAA to render to non-MSAA GPU surfaces.
-    kDMSAA_SkSurfacePropsPrivateFlag = SkSurfaceProps::kLast_Flag << 1
-};
 
 constexpr size_t kIgnoreRowBytesValue = static_cast<size_t>(~0);
 

@@ -31,7 +31,7 @@ protected:
 private:
     SK_FLATTENABLE_HOOKS(GrSDFMaskFilterImpl)
 
-    using INHERITED = SkMaskFilter;
+    typedef SkMaskFilter INHERITED;
     friend void gr_register_sdf_maskfilter_createproc();
 };
 

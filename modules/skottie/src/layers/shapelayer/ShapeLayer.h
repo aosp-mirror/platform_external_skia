@@ -9,7 +9,7 @@
 #define SkottieShapeLayer_DEFINED
 
 #include "include/private/SkNoncopyable.h"
-#include "modules/skottie/src/animator/Animator.h"
+#include "modules/skottie/src/Animator.h"
 #include "modules/sksg/include/SkSGMerge.h"
 
 #include <vector>
@@ -65,15 +65,6 @@ public:
             const AnimationBuilder*,
             std::vector<sk_sp<sksg::GeometryNode>>&&);
     static std::vector<sk_sp<sksg::GeometryNode>> AttachRoundGeometryEffect(
-            const skjson::ObjectValue&, const AnimationBuilder*,
-            std::vector<sk_sp<sksg::GeometryNode>>&&);
-    static std::vector<sk_sp<sksg::GeometryNode>> AttachOffsetGeometryEffect(
-            const skjson::ObjectValue&, const AnimationBuilder*,
-            std::vector<sk_sp<sksg::GeometryNode>>&&);
-    static std::vector<sk_sp<sksg::GeometryNode>> AttachPuckerBloatGeometryEffect(
-            const skjson::ObjectValue&, const AnimationBuilder*,
-            std::vector<sk_sp<sksg::GeometryNode>>&&);
-    static std::vector<sk_sp<sksg::GeometryNode>> AdjustStrokeGeometry(
             const skjson::ObjectValue&, const AnimationBuilder*,
             std::vector<sk_sp<sksg::GeometryNode>>&&);
 

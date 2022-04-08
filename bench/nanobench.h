@@ -27,7 +27,7 @@ struct Config {
     int samples;
     sk_gpu_test::GrContextFactory::ContextType ctxType;
     sk_gpu_test::GrContextFactory::ContextOverrides ctxOverrides;
-    uint32_t surfaceFlags;
+    bool useDFText;
 };
 
 struct Target {
@@ -74,7 +74,7 @@ struct Target {
     virtual void dumpStats() {}
 
     SkCanvas* getCanvas() const {
-        if (!surface) {
+        if (!surface.get()) {
             return nullptr;
         }
         return surface->getCanvas();

@@ -13,15 +13,8 @@ def compile_fn(api, checkout_root, _ignore):
   # owned by root, which causes mysterious failures. To mitigate this risk
   # further, we don't use the same out_dir as everyone else (thus the _ignore)
   # param. Instead, we use a "skqp" subdirectory in the "docker" named_cache.
-  api.file.ensure_directory('mkdirs out_dir', out_dir, mode=0o777)
+  api.file.ensure_directory('mkdirs out_dir', out_dir, mode=0777)
 
-  # Ensure gn is available.
-  skia_dir = checkout_root.join('skia')
-  with api.context(cwd=skia_dir):
-    api.run(api.python,
-            'fetch-gn',
-            script=skia_dir.join('bin', 'fetch-gn'),
-            infra_step=True)
   # This uses the emscriptem sdk docker image and says "run the
   # build_apk.sh helper script in there". Additionally, it binds two
   # folders: the skia checkout to /SRC and the output directory to /OUT
@@ -46,6 +39,7 @@ def compile_fn(api, checkout_root, _ignore):
 
 SKQP_BUILD_PRODUCTS = [
   '*.apk',
+  'whitelist_devices.json',
 ]
 
 

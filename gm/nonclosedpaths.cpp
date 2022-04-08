@@ -8,7 +8,7 @@
 #include "gm/gm.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPaint.h"
-#include "include/core/SkPathBuilder.h"
+#include "include/core/SkPath.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
@@ -49,22 +49,20 @@ protected:
 
     // Use rect-like geometry for non-closed path, for right angles make it
     // easier to show the visual difference of lineCap and lineJoin.
-    static SkPath MakePath(ClosureType type) {
-        SkPathBuilder path;
+    static void MakePath(SkPath* path, ClosureType type) {
         if (FakeCloseMiddle == type) {
-            path.moveTo(30, 50);
-            path.lineTo(30, 30);
+            path->moveTo(30, 50);
+            path->lineTo(30, 30);
         } else {
-            path.moveTo(30, 30);
+            path->moveTo(30, 30);
         }
-        path.lineTo(70, 30);
-        path.lineTo(70, 70);
-        path.lineTo(30, 70);
-        path.lineTo(30, 50);
+        path->lineTo(70, 30);
+        path->lineTo(70, 70);
+        path->lineTo(30, 70);
+        path->lineTo(30, 50);
         if (FakeCloseCorner == type) {
-            path.lineTo(30, 30);
+            path->lineTo(30, 30);
         }
-        return path.detach();
     }
 
     // Set the location for the current test on the canvas
@@ -110,7 +108,8 @@ protected:
                             canvas->save();
                             SetLocation(canvas, counter, SkPaint::kJoinCount * numWidths);
 
-                            SkPath path = MakePath(kType[type]);
+                            SkPath path;
+                            MakePath(&path, kType[type]);
 
                             paint.setStyle(kStyle[style]);
                             paint.setStrokeCap(kCap[cap]);
@@ -132,7 +131,8 @@ protected:
             canvas->save();
             SetLocation(canvas, counter, SkPaint::kJoinCount * numWidths);
 
-            SkPath path = MakePath(kType[type]);
+            SkPath path;
+            MakePath(&path, kType[type]);
 
             canvas->drawPath(path, paint);
             canvas->restore();
@@ -141,11 +141,11 @@ protected:
     }
 
 private:
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new NonClosedPathsGM;)
 
-}  // namespace skiagm
+}

@@ -11,7 +11,7 @@
 #include "include/core/SkColor.h"
 #include "include/core/SkMaskFilter.h"
 #include "include/core/SkPaint.h"
-#include "include/core/SkPathBuilder.h"
+#include "include/core/SkPath.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
@@ -55,11 +55,11 @@ protected:
     void onDraw(SkCanvas* canvas) override {
         constexpr SkScalar kMaxR = kMaxRadius + kMaxBlurRadius;
 
-        auto almostCircleMaker = [] (SkScalar radius) {
-            return SkPathBuilder().addArc(SkRect::MakeXYWH(-radius, -radius, 2 * radius, 2 * radius), 0, 355)
-                                  .setIsVolatile(true)
-                                  .close()
-                                  .detach();
+        auto almostCircleMaker = [] (SkScalar radius, SkPath* dst) {
+            dst->reset();
+            dst->addArc(SkRect::MakeXYWH(-radius, -radius, 2 * radius, 2 * radius), 0, 355);
+            dst->setIsVolatile(true);
+            dst->close();
         };
 
         auto blurMaker = [] (SkScalar radius) ->sk_sp<SkMaskFilter> {
@@ -73,7 +73,8 @@ protected:
         if (this->getMode() == kSample_Mode) {
             paint.setMaskFilter(blurMaker(fAnimBlurRadius));
             SkISize size = canvas->getBaseLayerSize();
-            SkPath almostCircle = almostCircleMaker(fAnimRadius);
+            SkPath almostCircle;
+            almostCircleMaker(fAnimRadius, &almostCircle);
             canvas->save();
                 canvas->translate(size.fWidth / 2.f, size.fHeight / 4.f);
                 canvas->drawCircle(0, 0, fAnimRadius, paint);
@@ -113,7 +114,7 @@ protected:
                     }
                     SkPath almostCircle;
                     if (!benchMode) {
-                        almostCircle = almostCircleMaker(radius);
+                        almostCircleMaker(radius, &almostCircle);
                     }
                     canvas->save();
                         canvas->drawCircle(0, 0, radius, paint);
@@ -164,7 +165,7 @@ private:
 
     SkRandom    fRandom;
 
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 
 DEF_GM(return new BlurCircles2GM();)

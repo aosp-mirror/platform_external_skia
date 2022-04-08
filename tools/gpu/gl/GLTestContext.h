@@ -9,30 +9,31 @@
 #define GLTestContext_DEFINED
 
 #include "include/gpu/gl/GrGLInterface.h"
-#include "src/gpu/gl/GrGLUtil.h"
 #include "tools/gpu/TestContext.h"
 
 namespace sk_gpu_test {
 /**
  * An offscreen OpenGL context. Provides a GrGLInterface struct of function pointers for the context
  * This class is intended for Skia's internal testing needs and not for general use.
- * When SK_GL is not defined the GrGLInterface will always be nullptr.
  */
 class GLTestContext : public TestContext {
 public:
     ~GLTestContext() override;
 
-    GrBackendApi backend() override { return GrBackendApi::kOpenGL; }
+    virtual GrBackendApi backend() override { return GrBackendApi::kOpenGL; }
 
-    /** Does this represent a successfully created GL context? */
-    bool isValid() const;
+    bool isValid() const { return SkToBool(this->gl()); }
 
-    const GrGLInterface* gl() const { return fGLInterface.get(); }
+    const GrGLInterface* gl() const { return fGL.get(); }
 
     /** Used for testing EGLImage integration. Take a GL_TEXTURE_2D and wraps it in an EGL Image */
     virtual GrEGLImage texture2DToEGLImage(GrGLuint /*texID*/) const { return nullptr; }
 
     virtual void destroyEGLImage(GrEGLImage) const { }
+
+    /** Used for testing GL_TEXTURE_RECTANGLE integration. */
+    GrGLuint createTextureRectangle(int width, int height, GrGLenum internalFormat,
+                                    GrGLenum externalFormat, GrGLenum externalType, GrGLvoid* data);
 
     /**
      * Used for testing EGLImage integration. Takes a EGLImage and wraps it in a
@@ -42,10 +43,11 @@ public:
 
     void testAbandon() override;
 
+    /** Ensures all work is submitted to the GPU for execution. */
+    void submit() override;
+
     /** Wait until all GPU work is finished. */
     void finish() override;
-
-    void overrideVersion(const char* version, const char* shadingLanguageVersion);
 
     /**
      * Creates a new GL context of the same type and makes the returned context current
@@ -69,32 +71,26 @@ public:
         }
     }
 
-    sk_sp<GrDirectContext> makeContext(const GrContextOptions& options) override;
+    sk_sp<GrContext> makeGrContext(const GrContextOptions& options) override;
 
 protected:
     GLTestContext();
 
     /*
-     * Methods that subclasses must call from their constructors and destructors.
+     * Methods that sublcasses must call from their constructors and destructors.
      */
-    void init(sk_sp<const GrGLInterface>);
+    void init(sk_sp<const GrGLInterface>, std::unique_ptr<FenceSync> = nullptr);
 
     void teardown() override;
 
     virtual GrGLFuncPtr onPlatformGetProcAddress(const char *) const = 0;
 
 private:
-    /** Subclass provides the gl interface object if construction was successful. */
-    sk_sp<const GrGLInterface> fOriginalGLInterface;
+    /** Subclass provides the gl interface object if construction was
+     *  successful. */
+    sk_sp<const GrGLInterface> fGL;
 
-    /** The same as fOriginalGLInterface unless the version has been overridden. */
-    sk_sp<const GrGLInterface> fGLInterface;
-
-#ifndef SK_GL
-    bool fWasInitialized = false;
-#endif
-
-    using INHERITED = TestContext;
+    typedef TestContext INHERITED;
 };
 
 /**

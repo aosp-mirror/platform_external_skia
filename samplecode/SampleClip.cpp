@@ -9,7 +9,7 @@
 #include "include/core/SkColorPriv.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkPaint.h"
-#include "include/core/SkPathBuilder.h"
+#include "include/core/SkPath.h"
 #include "include/utils/SkRandom.h"
 #include "samplecode/Sample.h"
 #include "src/core/SkClipOpPriv.h"
@@ -39,6 +39,7 @@ static void show_fill(SkCanvas* canvas, bool doAA) {
 
     for (int i = 0; i < 50; ++i) {
         SkRect r;
+        SkPath p;
 
         r.setXYWH(rand.nextSScalar1() * W, rand.nextSScalar1() * H,
                   rand.nextUScalar1() * W, rand.nextUScalar1() * H);
@@ -48,7 +49,8 @@ static void show_fill(SkCanvas* canvas, bool doAA) {
         r.setXYWH(rand.nextSScalar1() * W, rand.nextSScalar1() * H,
                   rand.nextUScalar1() * W, rand.nextUScalar1() * H);
         paint.setColor(rand.nextU());
-        canvas->drawOval(r, paint);
+        p.addOval(r);
+        canvas->drawPath(p, paint);
     }
 }
 
@@ -66,6 +68,7 @@ static void show_stroke(SkCanvas* canvas, bool doAA, SkScalar strokeWidth, int n
 
     for (int i = 0; i < n; ++i) {
         SkRect r;
+        SkPath p;
 
         r.setXYWH(rand.nextSScalar1() * W, rand.nextSScalar1() * H,
                   rand.nextUScalar1() * W, rand.nextUScalar1() * H);
@@ -75,7 +78,8 @@ static void show_stroke(SkCanvas* canvas, bool doAA, SkScalar strokeWidth, int n
         r.setXYWH(rand.nextSScalar1() * W, rand.nextSScalar1() * H,
                   rand.nextUScalar1() * W, rand.nextUScalar1() * H);
         paint.setColor(rand.nextU());
-        canvas->drawOval(r, paint);
+        p.addOval(r);
+        canvas->drawPath(p, paint);
 
         const SkScalar minx = -SkIntToScalar(W)/4;
         const SkScalar maxx = 5*SkIntToScalar(W)/4;
@@ -110,8 +114,9 @@ class ClipView : public Sample {
         };
 
         SkRect r = { 0, 0, SkIntToScalar(W), SkIntToScalar(H) };
+        SkPath clipPath;
         r.inset(SK_Scalar1 / 4, SK_Scalar1 / 4);
-        SkPath clipPath = SkPathBuilder().addRRect(SkRRect::MakeRectXY(r, 20, 20)).detach();
+        clipPath.addRoundRect(r, SkIntToScalar(20), SkIntToScalar(20));
 
 //        clipPath.toggleInverseFillType();
 
@@ -208,7 +213,7 @@ struct SkHalfPlane {
 
 #include "src/core/SkEdgeClipper.h"
 
-static SkPath clip(const SkPath& path, SkPoint p0, SkPoint p1) {
+static void clip(const SkPath& path, SkPoint p0, SkPoint p1, SkPath* clippedPath) {
     SkMatrix mx, inv;
     SkVector v = p1 - p0;
     mx.setAll(v.fX, -v.fY, p0.fX,
@@ -223,9 +228,9 @@ static SkPath clip(const SkPath& path, SkPoint p0, SkPoint p1) {
     SkRect clip = {-big, 0, big, big };
 
     struct Rec {
-        SkPathBuilder   fResult;
-        SkPoint         fPrev = {0, 0};
-    } rec;
+        SkPath* fResult;
+        SkPoint fPrev;
+    } rec = { clippedPath, {0, 0} };
 
     SkEdgeClipper::ClipPath(rotated, clip, false,
                             [](SkEdgeClipper* clipper, bool newCtr, void* ctx) {
@@ -236,26 +241,26 @@ static SkPath clip(const SkPath& path, SkPoint p0, SkPoint p1) {
         SkPath::Verb verb;
         while ((verb = clipper->next(pts)) != SkPath::kDone_Verb) {
             if (newCtr) {
-                rec->fResult.moveTo(pts[0]);
+                rec->fResult->moveTo(pts[0]);
                 rec->fPrev = pts[0];
                 newCtr = false;
             }
 
             if (addLineTo || pts[0] != rec->fPrev) {
-                rec->fResult.lineTo(pts[0]);
+                rec->fResult->lineTo(pts[0]);
             }
 
             switch (verb) {
                 case SkPath::kLine_Verb:
-                    rec->fResult.lineTo(pts[1]);
+                    rec->fResult->lineTo(pts[1]);
                     rec->fPrev = pts[1];
                     break;
                 case SkPath::kQuad_Verb:
-                    rec->fResult.quadTo(pts[1], pts[2]);
+                    rec->fResult->quadTo(pts[1], pts[2]);
                     rec->fPrev = pts[2];
                     break;
                 case SkPath::kCubic_Verb:
-                    rec->fResult.cubicTo(pts[1], pts[2], pts[3]);
+                    rec->fResult->cubicTo(pts[1], pts[2], pts[3]);
                     rec->fPrev = pts[3];
                     break;
                 default: break;
@@ -264,7 +269,7 @@ static SkPath clip(const SkPath& path, SkPoint p0, SkPoint p1) {
         }
     }, &rec);
 
-    return rec.fResult.detach().makeTransform(mx);
+    rec.fResult->transform(mx);
 }
 
 static void draw_halfplane(SkCanvas* canvas, SkPoint p0, SkPoint p1, SkColor c) {
@@ -285,7 +290,7 @@ static SkPath make_path() {
         return SkPoint{x * 400, y * 400};
     };
 
-    SkPathBuilder path;
+    SkPath path;
     for (int i = 0; i < 4; ++i) {
         SkPoint pts[6];
         for (auto& p : pts) {
@@ -293,7 +298,7 @@ static SkPath make_path() {
         }
         path.moveTo(pts[0]).quadTo(pts[1], pts[2]).quadTo(pts[3], pts[4]).lineTo(pts[5]);
     }
-    return path.detach();
+    return path;
 }
 
 class HalfPlaneView : public Sample {
@@ -316,7 +321,9 @@ class HalfPlaneView : public Sample {
 
         paint.setColor({0, 0, 0, 1}, nullptr);
 
-        canvas->drawPath(clip(fPath, fPts[0], fPts[1]), paint);
+        SkPath clippedPath;
+        clip(fPath, fPts[0], fPts[1], &clippedPath);
+        canvas->drawPath(clippedPath, paint);
 
         draw_halfplane(canvas, fPts[0], fPts[1], SK_ColorRED);
     }
@@ -456,8 +463,8 @@ public:
         SkScalar w = r.width();
         SkScalar h = r.height();
 
-        SkM44 camera = SkM44::LookAt(fEye, fCOA, fUp),
-              perspective = SkM44::Perspective(fNear, fFar, fAngle),
+        SkM44 camera = Sk3LookAt(fEye, fCOA, fUp),
+              perspective = Sk3Perspective(fNear, fFar, fAngle),
               translate = SkM44::Translate(fTrans.x, fTrans.y, fTrans.z),
               viewport = SkM44::Translate(r.centerX(), r.centerY(), 0) *
                          SkM44::Scale(w*0.5f, h*0.5f, 1);
@@ -498,7 +505,7 @@ class HalfPlaneView3 : public SampleCameraView {
     void onOnceBeforeDraw() override {
         fPath = make_path();
         fShader = GetResourceAsImage("images/mandrill_128.png")
-                        ->makeShader(SkSamplingOptions(), SkMatrix::Scale(3, 3));
+                        ->makeShader(SkMatrix::MakeScale(3, 3));
     }
 
     bool onChar(SkUnichar uni) override {
@@ -520,7 +527,7 @@ class HalfPlaneView3 : public SampleCameraView {
 
         if (fShowUnclipped) {
             canvas->save();
-            canvas->concat(mx);
+            canvas->concat44(mx);
             paint.setAlphaf(0.33f);
             canvas->drawPath(fPath, paint);
             paint.setAlphaf(1.f);
@@ -535,7 +542,7 @@ class HalfPlaneView3 : public SampleCameraView {
             planeColor = SK_ColorRED;
         }
         canvas->save();
-        canvas->concat(mx);
+        canvas->concat44(mx);
         canvas->drawPath(*path, paint);
         canvas->restore();
 
@@ -571,14 +578,14 @@ class HalfPlaneCoons : public SampleCameraView {
         fPatch[10] = {  0, 200 };
         fPatch[11] = {  0, 100 };
 
-        fShader = GetResourceAsImage("images/mandrill_256.png")->makeShader(SkSamplingOptions());
+        fShader = GetResourceAsImage("images/mandrill_256.png")->makeShader();
     }
 
     void onDrawContent(SkCanvas* canvas) override {
         SkPaint paint;
 
         canvas->save();
-        canvas->concat(this->get44({0, 0, 300, 300}));
+        canvas->concat44(this->get44({0, 0, 300, 300}));
 
         const SkPoint* tex = nullptr;
         const SkColor* col = nullptr;
@@ -612,13 +619,20 @@ class HalfPlaneCoons : public SampleCameraView {
         const float tol = 15;
         for (int i = 0; i < 12; ++i) {
             if (dist({x,y}, fPatch[i]) <= tol) {
-                return new Click([this, i](Click* c) {
-                    fPatch[i] = c->fCurr;
-                    return true;
-                });
+                Click* c = new Click;
+                c->fMeta.setS32("index", i);
+                return c;
             }
         }
         return nullptr;
+    }
+
+    bool onClick(Click* click) override {
+        int32_t index;
+        SkAssertResult(click->fMeta.findS32("index", &index));
+        SkASSERT(index >= 0 && index < 12);
+        fPatch[index] = click->fCurr;
+        return true;
     }
 
     bool onChar(SkUnichar uni) override {

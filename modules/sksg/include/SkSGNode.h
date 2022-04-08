@@ -91,7 +91,7 @@ private:
     friend class NodePriv;
     friend class RenderNode; // node flags access
 
-    using INHERITED = SkRefCnt;
+    typedef SkRefCnt INHERITED;
 };
 
 // Helper for defining attribute getters/setters in subclasses.

@@ -6,7 +6,6 @@
 # found in the LICENSE file.
 
 
-from __future__ import print_function
 import os
 import re
 import subprocess
@@ -28,7 +27,7 @@ SK_MILESTONE_H = os.path.join('include', 'core', 'SkMilestone.h')
 SK_MILESTONE_TMPL = r'#define SK_MILESTONE %s'
 SK_MILESTONE_RE = SK_MILESTONE_TMPL % r'(\d+)'
 SKIA_REPO = 'https://skia.googlesource.com/skia.git'
-SUPPORTED_CHROME_BRANCHES = 3
+SUPPORTED_CHROME_BRANCHES = 2  # Per infra policy; see skbug.com/8940
 UPDATE_MILESTONE_COMMIT_MSG = '''Update Skia milestone to %d'''
 
 
@@ -84,9 +83,6 @@ def update_infra_config(old_branch, new_branch):
                          '--owner', owner,
                          '--exclude-trybots=chromium.*',
                          '--exclude-trybots=.*Android_Framework.*',
-                         '--exclude-trybots=.*G3_Framework.*',
-                         '--exclude-trybots=.*CanvasKit.*',
-                         '--exclude-trybots=.*PathKit.*',
                          '--submit'])
 
 
@@ -99,8 +95,8 @@ def main():
   m = get_current_milestone()
   new_branch = '%s%d' % (CHROME_REF_PREFIX, m)
   old_branch = '%s%d' % (CHROME_REF_PREFIX, m-SUPPORTED_CHROME_BRANCHES)
-  print('Creating branch %s and removing support (eg. CQ) for %s' % (
-      new_branch, old_branch))
+  print 'Creating branch %s and removing support (eg. CQ) for %s' % (
+      new_branch, old_branch)
   create_new_branch(new_branch, branch_at)
   update_milestone(m+1)
   update_infra_config(old_branch, new_branch)

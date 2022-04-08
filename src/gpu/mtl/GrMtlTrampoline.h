@@ -11,10 +11,9 @@
 #include "include/core/SkRefCnt.h"
 #include "include/gpu/GrTypes.h"
 
-class GrDirectContext;
+class GrContext;
 class GrGpu;
 struct GrContextOptions;
-struct GrMtlBackendContext;
 
 /*
  * This class is used to hold functions which trampoline from the Ganesh cpp code to the GrMtl
@@ -22,8 +21,7 @@ struct GrMtlBackendContext;
  */
 class GrMtlTrampoline {
 public:
-    static sk_sp<GrGpu> MakeGpu(const GrMtlBackendContext&, const GrContextOptions&,
-                                GrDirectContext*);
+    static sk_sp<GrGpu> MakeGpu(GrContext*, const GrContextOptions&, void* device, void* queue);
 };
 
 #endif

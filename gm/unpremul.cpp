@@ -11,7 +11,6 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkColorSpace.h"
-#include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPaint.h"
 
@@ -70,7 +69,7 @@ DEF_SIMPLE_GM(unpremul, canvas, 200, 200) {
         bm.allocPixels(SkImageInfo::Make(100,100, kRGBA_8888_SkColorType, kUnpremul_SkAlphaType));
         bm.eraseColor(color);
 
-        canvas->drawImage(bm.asImage(), 0,0, SkSamplingOptions(), &paint);
+        canvas->drawBitmap(bm, 0,0, &paint);
         grade(50,150);
     }
 

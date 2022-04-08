@@ -5,16 +5,14 @@
  * found in the LICENSE file.
  */
 
+#include "src/xml/SkXMLParser.h"
+
+#include "expat.h"
+
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkTemplates.h"
 #include "include/private/SkTo.h"
-#include "src/xml/SkXMLParser.h"
-
-#include <expat.h>
-
-#include <vector>
 
 static char const* const gErrorStrings[] = {
     "empty or missing file ",
@@ -71,21 +69,21 @@ struct ParsingContext {
         , fXMLParser(XML_ParserCreate_MM(nullptr, &sk_XML_alloc, nullptr)) { }
 
     void flushText() {
-        if (!fBufferedText.empty()) {
-            fParser->text(fBufferedText.data(), SkTo<int>(fBufferedText.size()));
-            fBufferedText.clear();
+        if (!fBufferedText.isEmpty()) {
+            fParser->text(fBufferedText.c_str(), SkTo<int>(fBufferedText.size()));
+            fBufferedText.reset();
         }
     }
 
     void appendText(const char* txt, size_t len) {
-        fBufferedText.insert(fBufferedText.end(), txt, &txt[len]);
+        fBufferedText.append(txt, len);
     }
 
     SkXMLParser* fParser;
-    SkAutoTCallVProc<std::remove_pointer_t<XML_Parser>, XML_ParserFree> fXMLParser;
+    SkAutoTCallVProc<skstd::remove_pointer_t<XML_Parser>, XML_ParserFree> fXMLParser;
 
 private:
-    std::vector<char> fBufferedText;
+    SkString fBufferedText;
 };
 
 #define HANDLER_CONTEXT(arg, name) ParsingContext* name = static_cast<ParsingContext*>(arg)
@@ -154,7 +152,7 @@ bool SkXMLParser::parse(SkStream& docStream)
     // Disable entity processing, to inhibit internal entity expansion. See expat CVE-2013-0340.
     XML_SetEntityDeclHandler(ctx.fXMLParser, entity_decl_handler);
 
-    static constexpr int kBufferSize = 4096;
+    static const int kBufferSize = 512 SkDEBUGCODE( - 507);
     bool done = false;
     do {
         void* buffer = XML_GetBuffer(ctx.fXMLParser, kBufferSize);

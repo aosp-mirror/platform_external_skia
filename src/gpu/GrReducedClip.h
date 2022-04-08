@@ -15,7 +15,7 @@
 
 class GrCoverageCountingPathRenderer;
 class GrRecordingContext;
-class GrSurfaceDrawContext;
+class GrRenderTargetContext;
 
 /**
  * This class takes a clip stack and produces a reduced set of elements that are equivalent to
@@ -27,8 +27,7 @@ public:
     using ElementList = SkTLList<SkClipStack::Element, 16>;
 
     GrReducedClip(const SkClipStack&, const SkRect& queryBounds, const GrCaps* caps,
-                  int maxWindowRectangles = 0, int maxAnalyticElements = 0,
-                  int maxCCPRClipPaths = 0);
+                  int maxWindowRectangles = 0, int maxAnalyticFPs = 0, int maxCCPRClipPaths = 0);
 
     enum class InitialState : bool {
         kAllIn,
@@ -52,13 +51,6 @@ public:
      * nonempty.
      */
     bool hasScissor() const { return fHasScissor; }
-
-    /**
-     * Indicates if there is a clip shader, representing the merge of all shader elements of the
-     * original stack.
-     */
-    bool hasShader() const { return SkToBool(fShader); }
-    sk_sp<SkShader> shader() const { SkASSERT(fShader); return fShader; }
 
     /**
      * If nonempty, the clip mask is not valid inside these windows and the caller must clip them
@@ -90,10 +82,10 @@ public:
      */
     bool maskRequiresAA() const { SkASSERT(!fMaskElements.isEmpty()); return fMaskRequiresAA; }
 
-    bool drawAlphaClipMask(GrSurfaceDrawContext*) const;
-    bool drawStencilClipMask(GrRecordingContext*, GrSurfaceDrawContext*) const;
+    bool drawAlphaClipMask(GrRenderTargetContext*) const;
+    bool drawStencilClipMask(GrRecordingContext*, GrRenderTargetContext*) const;
 
-    int numAnalyticElements() const;
+    int numAnalyticFPs() const { return fAnalyticFPs.count() + fCCPRClipPaths.count(); }
 
     /**
      * Called once the client knows the ID of the opsTask that the clip FPs will operate in. This
@@ -104,9 +96,8 @@ public:
      * the render target context, surface allocations, and even switching render targets (pre MDB)
      * may cause flushes or otherwise change which opsTask the actual draw is going into.
      */
-    GrFPResult finishAndDetachAnalyticElements(GrRecordingContext*, const SkMatrixProvider&
-                                               matrixProvider, GrCoverageCountingPathRenderer*,
-                                               uint32_t opsTaskID);
+    std::unique_ptr<GrFragmentProcessor> finishAndDetachAnalyticFPs(
+            GrCoverageCountingPathRenderer*, uint32_t opsTaskID);
 
 private:
     void walkStack(const SkClipStack&, const SkRect& queryBounds);
@@ -133,33 +124,28 @@ private:
     };
 
     static GrClipEdgeType GetClipEdgeType(Invert, GrAA);
-    ClipResult addAnalyticRect(const SkRect& deviceSpaceRect, Invert, GrAA);
-    ClipResult addAnalyticRRect(const SkRRect& deviceSpaceRRect, Invert, GrAA);
-    ClipResult addAnalyticPath(const SkPath& deviceSpacePath, Invert, GrAA);
+    ClipResult addAnalyticFP(const SkRect& deviceSpaceRect, Invert, GrAA);
+    ClipResult addAnalyticFP(const SkRRect& deviceSpaceRRect, Invert, GrAA);
+    ClipResult addAnalyticFP(const SkPath& deviceSpacePath, Invert, GrAA);
 
     void makeEmpty();
 
     const GrCaps* fCaps;
     const int fMaxWindowRectangles;
-    const int fMaxAnalyticElements;
+    const int fMaxAnalyticFPs;
     const int fMaxCCPRClipPaths;
 
     InitialState fInitialState;
     SkIRect fScissor;
-    bool fHasScissor = false;
+    bool fHasScissor;
     SkRect fAAClipRect;
-    uint32_t fAAClipRectGenID = SK_InvalidGenID;  // the GenID that the mask will have if the AA
-                                                  // clip-rect is included
+    uint32_t fAAClipRectGenID; // GenID the mask will have if includes the AA clip rect.
     GrWindowRectangles fWindowRects;
     ElementList fMaskElements;
-    uint32_t fMaskGenID = SK_InvalidGenID;
-    bool fMaskRequiresAA = false;
-    std::unique_ptr<GrFragmentProcessor> fAnalyticFP;
-    int fNumAnalyticElements = 0;
-    SkSTArray<4, SkPath> fCCPRClipPaths; // Converted to FPs once we have an opsTask ID for CCPR.
-    // Will be the combination of all kShader elements or null if there's no clip shader.
-    // Does not count against the analytic FP limit.
-    sk_sp<SkShader> fShader;
+    uint32_t fMaskGenID;
+    bool fMaskRequiresAA;
+    SkSTArray<4, std::unique_ptr<GrFragmentProcessor>> fAnalyticFPs;
+    SkSTArray<4, SkPath> fCCPRClipPaths; // Will convert to FPs once we have an opsTask ID for CCPR.
 };
 
 #endif

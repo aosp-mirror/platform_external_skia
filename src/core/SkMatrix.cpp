@@ -82,7 +82,7 @@ SkMatrix& SkMatrix::setAffine(const SkScalar buffer[]) {
     return *this;
 }
 
-// this aligns with the masks, so we can compute a mask from a variable 0/1
+// this guy aligns with the masks, so we can compute a mask from a varaible 0/1
 enum {
     kTranslate_Shift,
     kScale_Shift,
@@ -384,7 +384,7 @@ SkMatrix& SkMatrix::postScale(SkScalar sx, SkScalar sy) {
     return this->postConcat(m);
 }
 
-// this perhaps can go away, if we have a fract/high-precision way to
+// this guy perhaps can go away, if we have a fract/high-precision way to
 // scale matrices
 bool SkMatrix::postIDiv(int divx, int divy) {
     if (divx == 0 || divy == 0) {
@@ -720,27 +720,25 @@ static inline SkScalar dcross_dscale(double a, double b,
     return SkDoubleToScalar(dcross(a, b, c, d) * scale);
 }
 
-static double sk_determinant(const float mat[9], int isPerspective) {
-    if (isPerspective) {
-        return mat[SkMatrix::kMScaleX] *
-                    dcross(mat[SkMatrix::kMScaleY], mat[SkMatrix::kMPersp2],
-                           mat[SkMatrix::kMTransY], mat[SkMatrix::kMPersp1])
-                    +
-                    mat[SkMatrix::kMSkewX]  *
-                    dcross(mat[SkMatrix::kMTransY], mat[SkMatrix::kMPersp0],
-                           mat[SkMatrix::kMSkewY],  mat[SkMatrix::kMPersp2])
-                    +
-                    mat[SkMatrix::kMTransX] *
-                    dcross(mat[SkMatrix::kMSkewY],  mat[SkMatrix::kMPersp1],
-                           mat[SkMatrix::kMScaleY], mat[SkMatrix::kMPersp0]);
-    } else {
-        return dcross(mat[SkMatrix::kMScaleX], mat[SkMatrix::kMScaleY],
-                      mat[SkMatrix::kMSkewX], mat[SkMatrix::kMSkewY]);
-    }
-}
-
 static double sk_inv_determinant(const float mat[9], int isPerspective) {
-    double det = sk_determinant(mat, isPerspective);
+    double det;
+
+    if (isPerspective) {
+        det = mat[SkMatrix::kMScaleX] *
+              dcross(mat[SkMatrix::kMScaleY], mat[SkMatrix::kMPersp2],
+                     mat[SkMatrix::kMTransY], mat[SkMatrix::kMPersp1])
+              +
+              mat[SkMatrix::kMSkewX]  *
+              dcross(mat[SkMatrix::kMTransY], mat[SkMatrix::kMPersp0],
+                     mat[SkMatrix::kMSkewY],  mat[SkMatrix::kMPersp2])
+              +
+              mat[SkMatrix::kMTransX] *
+              dcross(mat[SkMatrix::kMSkewY],  mat[SkMatrix::kMPersp1],
+                     mat[SkMatrix::kMScaleY], mat[SkMatrix::kMPersp0]);
+    } else {
+        det = dcross(mat[SkMatrix::kMScaleX], mat[SkMatrix::kMScaleY],
+                     mat[SkMatrix::kMSkewX], mat[SkMatrix::kMSkewY]);
+    }
 
     // Since the determinant is on the order of the cube of the matrix members,
     // compare to the cube of the default nearly-zero constant (although an
@@ -1459,10 +1457,10 @@ template <MinMaxOrBoth MIN_MAX_OR_BOTH> bool get_scale_factor(SkMatrix::TypeMask
     if (!(typeMask & SkMatrix::kAffine_Mask)) {
         if (kMin_MinMaxOrBoth == MIN_MAX_OR_BOTH) {
              results[0] = std::min(SkScalarAbs(m[SkMatrix::kMScaleX]),
-                                   SkScalarAbs(m[SkMatrix::kMScaleY]));
+                                      SkScalarAbs(m[SkMatrix::kMScaleY]));
         } else if (kMax_MinMaxOrBoth == MIN_MAX_OR_BOTH) {
              results[0] = std::max(SkScalarAbs(m[SkMatrix::kMScaleX]),
-                                   SkScalarAbs(m[SkMatrix::kMScaleY]));
+                                      SkScalarAbs(m[SkMatrix::kMScaleY]));
         } else {
             results[0] = SkScalarAbs(m[SkMatrix::kMScaleX]);
             results[1] = SkScalarAbs(m[SkMatrix::kMScaleY]);
@@ -1521,6 +1519,7 @@ template <MinMaxOrBoth MIN_MAX_OR_BOTH> bool get_scale_factor(SkMatrix::TypeMask
     // Due to the floating point inaccuracy, there might be an error in a, b, c
     // calculated by sdot, further deepened by subsequent arithmetic operations
     // on them. Therefore, we allow and cap the nearly-zero negative values.
+    SkASSERT(results[0] >= -SK_ScalarNearlyZero);
     if (results[0] < 0) {
         results[0] = 0;
     }
@@ -1529,6 +1528,7 @@ template <MinMaxOrBoth MIN_MAX_OR_BOTH> bool get_scale_factor(SkMatrix::TypeMask
         if (!SkScalarIsFinite(results[1])) {
             return false;
         }
+        SkASSERT(results[1] >= -SK_ScalarNearlyZero);
         if (results[1] < 0) {
             results[1] = 0;
         }
@@ -1614,8 +1614,6 @@ size_t SkMatrix::readFromMemory(const void* buffer, size_t length) {
     }
     memcpy(fMat, buffer, sizeInMemory);
     this->setTypeMask(kUnknown_Mask);
-    // Figure out the type now so that we're thread-safe
-    (void)this->getType();
     return sizeInMemory;
 }
 
@@ -1630,14 +1628,8 @@ void SkMatrix::dump() const {
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "src/core/SkMatrixUtils.h"
-#include "src/core/SkSamplingPriv.h"
 
-bool SkTreatAsSprite(const SkMatrix& mat, const SkISize& size, const SkSamplingOptions& sampling,
-                     const SkPaint& paint) {
-    if (!SkSamplingPriv::NoChangeWithIdentityMatrix(sampling)) {
-        return false;
-    }
-
+bool SkTreatAsSprite(const SkMatrix& mat, const SkISize& size, const SkPaint& paint) {
     // Our path aa is 2-bits, and our rect aa is 8, so we could use 8,
     // but in practice 4 seems enough (still looks smooth) and allows
     // more slightly fractional cases to fall into the fast (sprite) case.
@@ -1835,37 +1827,33 @@ void SkRSXform::toTriStrip(SkScalar width, SkScalar height, SkPoint strip[4]) co
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-SkScalar SkMatrixPriv::DifferentialAreaScale(const SkMatrix& m, const SkPoint& p) {
-    //              [m00 m01 m02]                                 [f(u,v)]
-    // Assuming M = [m10 m11 m12], define the projected p'(u,v) = [g(u,v)] where
-    //              [m20 m12 m22]
-    //                                                        [x]     [u]
-    // f(u,v) = x(u,v) / w(u,v), g(u,v) = y(u,v) / w(u,v) and [y] = M*[v]
-    //                                                        [w]     [1]
-    //
-    // Then the differential scale factor between p = (u,v) and p' is |det J|,
-    // where J is the Jacobian for p': [df/du dg/du]
-    //                                 [df/dv dg/dv]
-    // and df/du = (w*dx/du - x*dw/du)/w^2,   dg/du = (w*dy/du - y*dw/du)/w^2
-    //     df/dv = (w*dx/dv - x*dw/dv)/w^2,   dg/dv = (w*dy/dv - y*dw/dv)/w^2
-    //
-    // From here, |det J| can be rewritten as |det J'/w^3|, where
-    //      [x     y     w    ]   [x   y   w  ]
-    // J' = [dx/du dy/du dw/du] = [m00 m10 m20]
-    //      [dx/dv dy/dv dw/dv]   [m01 m11 m21]
-    SkPoint3 xyw;
-    m.mapHomogeneousPoints(&xyw, &p, 1);
-
-    if (xyw.fZ < SK_ScalarNearlyZero) {
-        // Reaching the discontinuity of xy/w and where the point would clip to w >= 0
-        return SK_ScalarInfinity;
+SkFilterQuality SkMatrixPriv::AdjustHighQualityFilterLevel(const SkMatrix& matrix,
+                                                           bool matrixIsInverse) {
+    if (matrix.isIdentity()) {
+        return kNone_SkFilterQuality;
     }
-    SkMatrix jacobian = SkMatrix::MakeAll(xyw.fX, xyw.fY, xyw.fZ,
-                                          m.getScaleX(), m.getSkewY(), m.getPerspX(),
-                                          m.getSkewX(), m.getScaleY(), m.getPerspY());
 
-    SkScalar denom = 1.f / xyw.fZ; // 1/w
-    denom = denom * denom * denom; // 1/w^3
+    auto is_minimizing = [&](SkScalar scale) {
+        return matrixIsInverse ? scale > 1 : scale < 1;
+    };
 
-    return SkScalarAbs(SkDoubleToScalar(sk_determinant(jacobian.fMat, true)) * denom);
+    SkScalar scales[2];
+    if (!matrix.getMinMaxScales(scales) || is_minimizing(scales[0])) {
+        // Bicubic doesn't handle arbitrary minimization well, as src texels can be skipped
+        // entirely,
+        return kMedium_SkFilterQuality;
+    }
+
+    // At this point if scales[1] == SK_Scalar1 then the matrix doesn't do any scaling.
+    if (scales[1] == SK_Scalar1) {
+        if (matrix.rectStaysRect() && SkScalarIsInt(matrix.getTranslateX()) &&
+                                      SkScalarIsInt(matrix.getTranslateY())) {
+            return kNone_SkFilterQuality;
+        } else {
+            // Use bilerp to handle rotation or fractional translation.
+            return kLow_SkFilterQuality;
+        }
+    }
+
+    return kHigh_SkFilterQuality;
 }

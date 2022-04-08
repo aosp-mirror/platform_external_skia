@@ -48,10 +48,10 @@ private:
     void onDelayedSetup() override {
         SkFont defaultFont;
         SkStrikeSpec strikeSpec = SkStrikeSpec::MakeWithNoDevice(defaultFont);
-        auto strike = strikeSpec.findOrCreateStrike();
+        auto cache = strikeSpec.findOrCreateExclusiveStrike();
         for (int i = 0; i < kNumGlyphs; ++i) {
             SkPackedGlyphID id(defaultFont.unicharToGlyph(kGlyphs[i]));
-            sk_ignore_unused_variable(strike->getScalerContext()->getPath(id, &fGlyphs[i]));
+            sk_ignore_unused_variable(cache->getScalerContext()->getPath(id, &fGlyphs[i]));
             fGlyphs[i].setIsVolatile(fUncached);
         }
 
@@ -103,7 +103,7 @@ private:
     SkMatrix fXforms[kNumDraws];
     SkPath fClipPath;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 DEF_BENCH(return new PathTextBench(false, false);)

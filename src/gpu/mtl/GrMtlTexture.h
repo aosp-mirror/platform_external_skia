@@ -8,7 +8,7 @@
 #ifndef GrMtlTexture_DEFINED
 #define GrMtlTexture_DEFINED
 
-#include "src/gpu/GrTexture.h"
+#include "include/gpu/GrTexture.h"
 
 #import <Metal/Metal.h>
 
@@ -20,7 +20,7 @@ public:
                                               SkBudgeted budgeted,
                                               SkISize,
                                               MTLTextureDescriptor*,
-                                              GrMipmapStatus);
+                                              GrMipMapsStatus);
 
     static sk_sp<GrMtlTexture> MakeWrappedTexture(GrMtlGpu*,
                                                   SkISize,
@@ -41,7 +41,7 @@ public:
     bool reallocForMipmap(GrMtlGpu* gpu, uint32_t mipLevels);
 
 protected:
-    GrMtlTexture(GrMtlGpu*, SkISize, id<MTLTexture>, GrMipmapStatus);
+    GrMtlTexture(GrMtlGpu*, SkISize, id<MTLTexture>, GrMipMapsStatus);
 
     GrMtlGpu* getMtlGpu() const;
 
@@ -61,19 +61,19 @@ protected:
 private:
     enum Wrapped { kWrapped };
 
-    GrMtlTexture(GrMtlGpu*, SkBudgeted, SkISize, id<MTLTexture>, GrMipmapStatus);
+    GrMtlTexture(GrMtlGpu*, SkBudgeted, SkISize, id<MTLTexture>, GrMipMapsStatus);
 
     GrMtlTexture(GrMtlGpu*,
                  Wrapped,
                  SkISize,
                  id<MTLTexture>,
-                 GrMipmapStatus,
+                 GrMipMapsStatus,
                  GrWrapCacheable,
                  GrIOType);
 
     id<MTLTexture> fTexture;
 
-    using INHERITED = GrTexture;
+    typedef GrTexture INHERITED;
 };
 
 #endif

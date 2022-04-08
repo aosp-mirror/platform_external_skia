@@ -9,7 +9,7 @@
 #define GrVkDescriptorPool_DEFINED
 
 #include "include/gpu/vk/GrVkTypes.h"
-#include "src/gpu/vk/GrVkManagedResource.h"
+#include "src/gpu/vk/GrVkResource.h"
 
 class GrVkGpu;
 
@@ -18,7 +18,7 @@ class GrVkGpu;
  * make one type of descriptor set. Thus a single VkDescriptorPool will only allocated space for
  * for one type of descriptor.
  */
-class GrVkDescriptorPool : public GrVkManagedResource {
+class GrVkDescriptorPool : public GrVkResource {
 public:
     static GrVkDescriptorPool* Create(GrVkGpu* gpu, VkDescriptorType type, uint32_t count);
 
@@ -28,7 +28,7 @@ public:
     // not in use by another draw, to support the requested type and count.
     bool isCompatible(VkDescriptorType type, uint32_t count) const;
 
-#ifdef SK_TRACE_MANAGED_RESOURCES
+#ifdef SK_TRACE_VK_RESOURCES
     void dumpInfo() const override {
         SkDebugf("GrVkDescriptorPool: %d, type %d (%d refs)\n", fDescPool, fType,
                  this->getRefCnt());
@@ -36,16 +36,15 @@ public:
 #endif
 
 private:
-    GrVkDescriptorPool(const GrVkGpu*, VkDescriptorPool pool, VkDescriptorType type,
-                       uint32_t count);
+    GrVkDescriptorPool(VkDescriptorPool pool, VkDescriptorType type, uint32_t count);
 
-    void freeGPUData() const override;
+    void freeGPUData(GrVkGpu* gpu) const override;
 
     VkDescriptorType     fType;
     uint32_t             fCount;
     VkDescriptorPool     fDescPool;
 
-    using INHERITED = GrVkManagedResource;
+    typedef GrVkResource INHERITED;
 };
 
 #endif

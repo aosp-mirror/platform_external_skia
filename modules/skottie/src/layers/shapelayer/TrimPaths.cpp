@@ -10,8 +10,8 @@
 #include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/skottie/src/layers/shapelayer/ShapeLayer.h"
-#include "modules/sksg/include/SkSGGeometryEffect.h"
 #include "modules/sksg/include/SkSGMerge.h"
+#include "modules/sksg/include/SkSGTrimEffect.h"
 
 #include <vector>
 
@@ -95,7 +95,8 @@ std::vector<sk_sp<sksg::GeometryNode>> ShapeBuilder::AttachTrimGeometryEffect(
 
     for (const auto& i : inputs) {
         trimmed.push_back(
-            abuilder->attachDiscardableAdapter<TrimEffectAdapter>(jtrim, *abuilder, i));
+            abuilder->attachDiscardableAdapter<TrimEffectAdapter, sk_sp<sksg::TrimEffect>>
+                        (jtrim, *abuilder, i));
     }
 
     return trimmed;

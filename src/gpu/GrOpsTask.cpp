@@ -7,11 +7,10 @@
 
 #include "src/gpu/GrOpsTask.h"
 
-#include "include/gpu/GrRecordingContext.h"
+#include "include/private/GrRecordingContext.h"
+#include "src/core/SkExchange.h"
 #include "src/core/SkRectPriv.h"
-#include "src/core/SkScopeExit.h"
 #include "src/core/SkTraceEvent.h"
-#include "src/gpu/GrAttachment.h"
 #include "src/gpu/GrAuditTrail.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrGpu.h"
@@ -20,9 +19,11 @@
 #include "src/gpu/GrOpsRenderPass.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrRenderTarget.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrRenderTargetPriv.h"
 #include "src/gpu/GrResourceAllocator.h"
-#include "src/gpu/GrSurfaceDrawContext.h"
-#include "src/gpu/GrTexture.h"
+#include "src/gpu/GrStencilAttachment.h"
+#include "src/gpu/GrTexturePriv.h"
 #include "src/gpu/geometry/GrRect.h"
 #include "src/gpu/ops/GrClearOp.h"
 
@@ -42,7 +43,7 @@ static inline bool can_reorder(const SkRect& a, const SkRect& b) { return !GrRec
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline GrOpsTask::OpChain::List::List(GrOp::Owner op)
+inline GrOpsTask::OpChain::List::List(std::unique_ptr<GrOp> op)
         : fHead(std::move(op)), fTail(fHead.get()) {
     this->validate();
 }
@@ -57,7 +58,7 @@ inline GrOpsTask::OpChain::List& GrOpsTask::OpChain::List::operator=(List&& that
     return *this;
 }
 
-inline GrOp::Owner GrOpsTask::OpChain::List::popHead() {
+inline std::unique_ptr<GrOp> GrOpsTask::OpChain::List::popHead() {
     SkASSERT(fHead);
     auto temp = fHead->cutChain();
     std::swap(temp, fHead);
@@ -68,7 +69,7 @@ inline GrOp::Owner GrOpsTask::OpChain::List::popHead() {
     return temp;
 }
 
-inline GrOp::Owner GrOpsTask::OpChain::List::removeOp(GrOp* op) {
+inline std::unique_ptr<GrOp> GrOpsTask::OpChain::List::removeOp(GrOp* op) {
 #ifdef SK_DEBUG
     auto head = op;
     while (head->prevInChain()) { head = head->prevInChain(); }
@@ -90,7 +91,7 @@ inline GrOp::Owner GrOpsTask::OpChain::List::removeOp(GrOp* op) {
     return temp;
 }
 
-inline void GrOpsTask::OpChain::List::pushHead(GrOp::Owner op) {
+inline void GrOpsTask::OpChain::List::pushHead(std::unique_ptr<GrOp> op) {
     SkASSERT(op);
     SkASSERT(op->isChainHead());
     SkASSERT(op->isChainTail());
@@ -103,7 +104,7 @@ inline void GrOpsTask::OpChain::List::pushHead(GrOp::Owner op) {
     }
 }
 
-inline void GrOpsTask::OpChain::List::pushTail(GrOp::Owner op) {
+inline void GrOpsTask::OpChain::List::pushTail(std::unique_ptr<GrOp> op) {
     SkASSERT(op->isChainTail());
     fTail->chainConcat(std::move(op));
     fTail = fTail->nextInChain();
@@ -120,7 +121,7 @@ inline void GrOpsTask::OpChain::List::validate() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-GrOpsTask::OpChain::OpChain(GrOp::Owner op,
+GrOpsTask::OpChain::OpChain(std::unique_ptr<GrOp> op,
                             GrProcessorSet::Analysis processorAnalysis,
                             GrAppliedClip* appliedClip, const DstProxyView* dstProxyView)
         : fList{std::move(op)}
@@ -141,25 +142,24 @@ void GrOpsTask::OpChain::visitProxies(const GrOp::VisitProxyFunc& func) const {
         op.visitProxies(func);
     }
     if (fDstProxyView.proxy()) {
-        func(fDstProxyView.proxy(), GrMipmapped::kNo);
+        func(fDstProxyView.proxy(), GrMipMapped::kNo);
     }
     if (fAppliedClip) {
         fAppliedClip->visitProxies(func);
     }
 }
 
-void GrOpsTask::OpChain::deleteOps() {
+void GrOpsTask::OpChain::deleteOps(GrOpMemoryPool* pool) {
     while (!fList.empty()) {
-        // Since the value goes out of scope immediately, the GrOp::Owner deletes the op.
-        fList.popHead();
+        pool->release(fList.popHead());
     }
 }
 
 // Concatenates two op chains and attempts to merge ops across the chains. Assumes that we know that
 // the two chains are chainable. Returns the new chain.
-GrOpsTask::OpChain::List GrOpsTask::OpChain::DoConcat(List chainA, List chainB, const GrCaps& caps,
-                                                      SkArenaAlloc* opsTaskArena,
-                                                      GrAuditTrail* auditTrail) {
+GrOpsTask::OpChain::List GrOpsTask::OpChain::DoConcat(
+        List chainA, List chainB, const GrCaps& caps, GrRecordingContext::Arenas* arenas,
+        GrAuditTrail* auditTrail) {
     // We process ops in chain b from head to tail. We attempt to merge with nodes in a, starting
     // at chain a's tail and working toward the head. We produce one of the following outcomes:
     // 1) b's head is merged into an op in a.
@@ -184,7 +184,7 @@ GrOpsTask::OpChain::List GrOpsTask::OpChain::DoConcat(List chainA, List chainB, 
             bool canForwardMerge =
                     (a == chainA.tail()) || can_reorder(a->bounds(), forwardMergeBounds);
             if (canForwardMerge || canBackwardMerge) {
-                auto result = a->combineIfPossible(chainB.head(), opsTaskArena, caps);
+                auto result = a->combineIfPossible(chainB.head(), arenas, caps);
                 SkASSERT(result != GrOp::CombineResult::kCannotCombine);
                 merged = (result == GrOp::CombineResult::kMerged);
                 GrOP_INFO("\t\t: (%s opID: %u) -> Combining with (%s, opID: %u)\n",
@@ -194,8 +194,7 @@ GrOpsTask::OpChain::List GrOpsTask::OpChain::DoConcat(List chainA, List chainB, 
             if (merged) {
                 GR_AUDIT_TRAIL_OPS_RESULT_COMBINED(auditTrail, a, chainB.head());
                 if (canBackwardMerge) {
-                    // The GrOp::Owner releases the op.
-                    chainB.popHead();
+                    arenas->opMemoryPool()->release(chainB.popHead());
                 } else {
                     // We merged the contents of b's head into a. We will replace b's head with a in
                     // chain b.
@@ -203,9 +202,8 @@ GrOpsTask::OpChain::List GrOpsTask::OpChain::DoConcat(List chainA, List chainB, 
                     if (a == origATail) {
                         origATail = a->prevInChain();
                     }
-                    GrOp::Owner detachedA = chainA.removeOp(a);
-                    // The GrOp::Owner releases the op.
-                    chainB.popHead();
+                    std::unique_ptr<GrOp> detachedA = chainA.removeOp(a);
+                    arenas->opMemoryPool()->release(chainB.popHead());
                     chainB.pushHead(std::move(detachedA));
                     if (chainA.empty()) {
                         // We merged all the nodes in chain a to chain b.
@@ -238,7 +236,7 @@ GrOpsTask::OpChain::List GrOpsTask::OpChain::DoConcat(List chainA, List chainB, 
 bool GrOpsTask::OpChain::tryConcat(
         List* list, GrProcessorSet::Analysis processorAnalysis, const DstProxyView& dstProxyView,
         const GrAppliedClip* appliedClip, const SkRect& bounds, const GrCaps& caps,
-        SkArenaAlloc* opsTaskArena, GrAuditTrail* auditTrail) {
+        GrRecordingContext::Arenas* arenas, GrAuditTrail* auditTrail) {
     SkASSERT(!fList.empty());
     SkASSERT(!list->empty());
     SkASSERT(fProcessorAnalysis.requiresDstTexture() == SkToBool(fDstProxyView.proxy()));
@@ -261,8 +259,7 @@ bool GrOpsTask::OpChain::tryConcat(
 
     SkDEBUGCODE(bool first = true;)
     do {
-        switch (fList.tail()->combineIfPossible(list->head(), opsTaskArena, caps))
-        {
+        switch (fList.tail()->combineIfPossible(list->head(), arenas, caps)) {
             case GrOp::CombineResult::kCannotCombine:
                 // If an op supports chaining then it is required that chaining is transitive and
                 // that if any two ops in two different chains can merge then the two chains
@@ -271,7 +268,7 @@ bool GrOpsTask::OpChain::tryConcat(
                 SkASSERT(first);
                 return false;
             case GrOp::CombineResult::kMayChain:
-                fList = DoConcat(std::move(fList), std::exchange(*list, List()), caps, opsTaskArena,
+                fList = DoConcat(std::move(fList), skstd::exchange(*list, List()), caps, arenas,
                                  auditTrail);
                 // The above exchange cleared out 'list'. The list needs to be empty now for the
                 // loop to terminate.
@@ -282,8 +279,7 @@ bool GrOpsTask::OpChain::tryConcat(
                           list->tail()->name(), list->tail()->uniqueID(), list->head()->name(),
                           list->head()->uniqueID());
                 GR_AUDIT_TRAIL_OPS_RESULT_COMBINED(auditTrail, fList.tail(), list->head());
-                // The GrOp::Owner releases the op.
-                list->popHead();
+                arenas->opMemoryPool()->release(list->popHead());
                 break;
             }
         }
@@ -295,10 +291,11 @@ bool GrOpsTask::OpChain::tryConcat(
     return true;
 }
 
-bool GrOpsTask::OpChain::prependChain(OpChain* that, const GrCaps& caps, SkArenaAlloc* opsTaskArena,
+bool GrOpsTask::OpChain::prependChain(OpChain* that, const GrCaps& caps,
+                                      GrRecordingContext::Arenas* arenas,
                                       GrAuditTrail* auditTrail) {
     if (!that->tryConcat(&fList, fProcessorAnalysis, fDstProxyView, fAppliedClip, fBounds, caps,
-                         opsTaskArena, auditTrail)) {
+                         arenas, auditTrail)) {
         this->validate();
         // append failed
         return false;
@@ -310,18 +307,19 @@ bool GrOpsTask::OpChain::prependChain(OpChain* that, const GrCaps& caps, SkArena
     fBounds = that->fBounds;
 
     that->fDstProxyView.setProxyView({});
-    if (that->fAppliedClip && that->fAppliedClip->hasCoverageFragmentProcessor()) {
-        // Obliterates the processor.
-        that->fAppliedClip->detachCoverageFragmentProcessor();
+    if (that->fAppliedClip) {
+        for (int i = 0; i < that->fAppliedClip->numClipCoverageFragmentProcessors(); ++i) {
+            that->fAppliedClip->detachClipCoverageFragmentProcessor(i);
+        }
     }
     this->validate();
     return true;
 }
 
-GrOp::Owner GrOpsTask::OpChain::appendOp(
-        GrOp::Owner op, GrProcessorSet::Analysis processorAnalysis,
+std::unique_ptr<GrOp> GrOpsTask::OpChain::appendOp(
+        std::unique_ptr<GrOp> op, GrProcessorSet::Analysis processorAnalysis,
         const DstProxyView* dstProxyView, const GrAppliedClip* appliedClip, const GrCaps& caps,
-        SkArenaAlloc* opsTaskArena, GrAuditTrail* auditTrail) {
+        GrRecordingContext::Arenas* arenas, GrAuditTrail* auditTrail) {
     const GrXferProcessor::DstProxyView noDstProxyView;
     if (!dstProxyView) {
         dstProxyView = &noDstProxyView;
@@ -329,8 +327,9 @@ GrOp::Owner GrOpsTask::OpChain::appendOp(
     SkASSERT(op->isChainHead() && op->isChainTail());
     SkRect opBounds = op->bounds();
     List chain(std::move(op));
-    if (!this->tryConcat(&chain, processorAnalysis, *dstProxyView, appliedClip, opBounds, caps,
-                         opsTaskArena, auditTrail)) {
+    if (!this->tryConcat(
+            &chain, processorAnalysis, *dstProxyView, appliedClip, opBounds, caps,
+            arenas, auditTrail)) {
         // append failed, give the op back to the caller.
         this->validate();
         return chain.popHead();
@@ -354,23 +353,20 @@ inline void GrOpsTask::OpChain::validate() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-GrOpsTask::GrOpsTask(GrDrawingManager* drawingMgr,
+GrOpsTask::GrOpsTask(GrRecordingContext::Arenas arenas,
                      GrSurfaceProxyView view,
-                     GrAuditTrail* auditTrail,
-                     sk_sp<GrArenas> arenas)
-        : GrRenderTask()
+                     GrAuditTrail* auditTrail)
+        : GrRenderTask(std::move(view))
+        , fArenas(arenas)
         , fAuditTrail(auditTrail)
-        , fUsesMSAASurface(view.asRenderTargetProxy()->numSamples() > 1)
-        , fTargetSwizzle(view.swizzle())
-        , fTargetOrigin(view.origin())
-        , fArenas{std::move(arenas)}
-          SkDEBUGCODE(, fNumClips(0)) {
-    this->addTarget(drawingMgr, view.detachProxy());
+        , fLastClipStackGenID(SK_InvalidUniqueID)
+        SkDEBUGCODE(, fNumClips(0)) {
+    fTargetView.proxy()->setLastRenderTask(this);
 }
 
 void GrOpsTask::deleteOps() {
     for (auto& chain : fOpChains) {
-        chain.deleteOps();
+        chain.deleteOps(fArenas.opMemoryPool());
     }
     fOpChains.reset();
 }
@@ -379,75 +375,29 @@ GrOpsTask::~GrOpsTask() {
     this->deleteOps();
 }
 
-void GrOpsTask::addOp(GrDrawingManager* drawingMgr, GrOp::Owner op,
-                      GrTextureResolveManager textureResolveManager, const GrCaps& caps) {
-    auto addDependency = [&](GrSurfaceProxy* p, GrMipmapped mipmapped) {
-        this->addDependency(drawingMgr, p, mipmapped, textureResolveManager, caps);
-    };
+////////////////////////////////////////////////////////////////////////////////
 
-    op->visitProxies(addDependency);
-
-    this->recordOp(std::move(op), GrProcessorSet::EmptySetAnalysis(), nullptr, nullptr, caps);
-}
-
-void GrOpsTask::addDrawOp(GrDrawingManager* drawingMgr, GrOp::Owner op,
-                          GrDrawOp::FixedFunctionFlags fixedFunctionFlags,
-                          const GrProcessorSet::Analysis& processorAnalysis, GrAppliedClip&& clip,
-                          const DstProxyView& dstProxyView,
-                          GrTextureResolveManager textureResolveManager, const GrCaps& caps) {
-    auto addDependency = [&](GrSurfaceProxy* p, GrMipmapped mipmapped) {
-        this->addSampledTexture(p);
-        this->addDependency(drawingMgr, p, mipmapped, textureResolveManager, caps);
-    };
-
-    op->visitProxies(addDependency);
-    clip.visitProxies(addDependency);
-    if (dstProxyView.proxy()) {
-        if (GrDstSampleTypeUsesTexture(dstProxyView.dstSampleType())) {
-            this->addSampledTexture(dstProxyView.proxy());
-        }
-        addDependency(dstProxyView.proxy(), GrMipmapped::kNo);
-        if (this->target(0) == dstProxyView.proxy()) {
-            // Since we are sampling and drawing to the same surface we will need to use
-            // texture barriers.
-            SkASSERT(GrDstSampleTypeDirectlySamplesDst(dstProxyView.dstSampleType()));
-            fRenderPassXferBarriers |= GrXferBarrierFlags::kTexture;
-        }
-        SkASSERT(dstProxyView.dstSampleType() != GrDstSampleType::kAsInputAttachment ||
-                 dstProxyView.offset().isZero());
-    }
-
-    if (processorAnalysis.usesNonCoherentHWBlending()) {
-        fRenderPassXferBarriers |= GrXferBarrierFlags::kBlend;
-    }
-
-#ifdef SK_DEBUG
-    // Ensure we can support dynamic msaa if the caller is trying to trigger it.
-    GrRenderTargetProxy* rtProxy = this->target(0)->asRenderTargetProxy();
-    if (rtProxy->numSamples() == 1 &&
-        (fixedFunctionFlags & GrDrawOp::FixedFunctionFlags::kUsesHWAA)) {
-        SkASSERT(caps.supportsDynamicMSAA(rtProxy));
-    }
-#endif
-    fUsesMSAASurface |= (fixedFunctionFlags & GrDrawOp::FixedFunctionFlags::kUsesHWAA);
-
-    this->recordOp(std::move(op), processorAnalysis, clip.doesClip() ? &clip : nullptr,
-                   &dstProxyView, caps);
-}
-
-void GrOpsTask::endFlush(GrDrawingManager* drawingMgr) {
+void GrOpsTask::endFlush() {
     fLastClipStackGenID = SK_InvalidUniqueID;
     this->deleteOps();
+    fClipAllocator.reset();
 
+    GrSurfaceProxy* proxy = fTargetView.proxy();
+    if (proxy && this == proxy->getLastRenderTask()) {
+        proxy->setLastRenderTask(nullptr);
+    }
+
+    fTargetView.reset();
     fDeferredProxies.reset();
     fSampledProxies.reset();
     fAuditTrail = nullptr;
-
-    GrRenderTask::endFlush(drawingMgr);
 }
 
 void GrOpsTask::onPrePrepare(GrRecordingContext* context) {
     SkASSERT(this->isClosed());
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
+#endif
     // TODO: remove the check for discard here once reduced op splitting is turned on. Currently we
     // can end up with GrOpsTasks that only have a discard load op and no ops. For vulkan validation
     // we need to keep that discard and not drop it. Once we have reduce op list splitting enabled
@@ -455,24 +405,23 @@ void GrOpsTask::onPrePrepare(GrRecordingContext* context) {
     if (this->isNoOp() || (fClippedContentBounds.isEmpty() && fColorLoadOp != GrLoadOp::kDiscard)) {
         return;
     }
-    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
 
-    GrSurfaceProxyView dstView(sk_ref_sp(this->target(0)), fTargetOrigin, fTargetSwizzle);
     for (const auto& chain : fOpChains) {
         if (chain.shouldExecute()) {
             chain.head()->prePrepare(context,
-                                     dstView,
+                                     &fTargetView,
                                      chain.appliedClip(),
-                                     chain.dstProxyView(),
-                                     fRenderPassXferBarriers,
-                                     fColorLoadOp);
+                                     chain.dstProxyView());
         }
     }
 }
 
 void GrOpsTask::onPrepare(GrOpFlushState* flushState) {
-    SkASSERT(this->target(0)->peekRenderTarget());
+    SkASSERT(fTargetView.proxy()->peekRenderTarget());
     SkASSERT(this->isClosed());
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
+#endif
     // TODO: remove the check for discard here once reduced op splitting is turned on. Currently we
     // can end up with GrOpsTasks that only have a discard load op and no ops. For vulkan validation
     // we need to keep that discard and not drop it. Once we have reduce op list splitting enabled
@@ -480,10 +429,8 @@ void GrOpsTask::onPrepare(GrOpFlushState* flushState) {
     if (this->isNoOp() || (fClippedContentBounds.isEmpty() && fColorLoadOp != GrLoadOp::kDiscard)) {
         return;
     }
-    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
 
     flushState->setSampledProxyArray(&fSampledProxies);
-    GrSurfaceProxyView dstView(sk_ref_sp(this->target(0)), fTargetOrigin, fTargetSwizzle);
     // Loop over the ops that haven't yet been prepared.
     for (const auto& chain : fOpChains) {
         if (chain.shouldExecute()) {
@@ -491,18 +438,15 @@ void GrOpsTask::onPrepare(GrOpFlushState* flushState) {
             TRACE_EVENT0("skia.gpu", chain.head()->name());
 #endif
             GrOpFlushState::OpArgs opArgs(chain.head(),
-                                          dstView,
-                                          fUsesMSAASurface,
+                                          &fTargetView,
                                           chain.appliedClip(),
-                                          chain.dstProxyView(),
-                                          fRenderPassXferBarriers,
-                                          fColorLoadOp);
+                                          chain.dstProxyView());
 
             flushState->setOpArgs(&opArgs);
 
             // Temporary debugging helper: for debugging prePrepare w/o going through DDLs
             // Delete once most of the GrOps have an onPrePrepare.
-            // chain.head()->prePrepare(flushState->gpu()->getContext(), &this->target(0),
+            // chain.head()->prePrepare(flushState->gpu()->getContext(), &fTargetView,
             //                          chain.appliedClip());
 
             // GrOp::prePrepare may or may not have been called at this point
@@ -513,18 +457,10 @@ void GrOpsTask::onPrepare(GrOpFlushState* flushState) {
     flushState->setSampledProxyArray(nullptr);
 }
 
-static GrOpsRenderPass* create_render_pass(GrGpu* gpu,
-                                           GrRenderTarget* rt,
-                                           bool useMSAASurface,
-                                           GrAttachment* stencil,
-                                           GrSurfaceOrigin origin,
-                                           const SkIRect& bounds,
-                                           GrLoadOp colorLoadOp,
-                                           const std::array<float, 4>& loadClearColor,
-                                           GrLoadOp stencilLoadOp,
-                                           GrStoreOp stencilStoreOp,
-                                           const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
-                                           GrXferBarrierFlags renderPassXferBarriers) {
+static GrOpsRenderPass* create_render_pass(
+        GrGpu* gpu, GrRenderTarget* rt, GrSurfaceOrigin origin, const SkIRect& bounds,
+        GrLoadOp colorLoadOp, const SkPMColor4f& loadClearColor, GrLoadOp stencilLoadOp,
+        GrStoreOp stencilStoreOp, const SkTArray<GrSurfaceProxy*, true>& sampledProxies) {
     const GrOpsRenderPass::LoadAndStoreInfo kColorLoadStoreInfo {
         colorLoadOp,
         GrStoreOp::kStore,
@@ -541,19 +477,14 @@ static GrOpsRenderPass* create_render_pass(GrGpu* gpu,
         stencilStoreOp,
     };
 
-    return gpu->getOpsRenderPass(rt, useMSAASurface, stencil, origin, bounds, kColorLoadStoreInfo,
-                                 stencilLoadAndStoreInfo, sampledProxies, renderPassXferBarriers);
+    return gpu->getOpsRenderPass(rt, origin, bounds, kColorLoadStoreInfo, stencilLoadAndStoreInfo,
+                                 sampledProxies);
 }
 
 // TODO: this is where GrOp::renderTarget is used (which is fine since it
 // is at flush time). However, we need to store the RenderTargetProxy in the
 // Ops and instantiate them here.
 bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
-    SkASSERT(this->numTargets() == 1);
-    GrRenderTargetProxy* proxy = this->target(0)->asRenderTargetProxy();
-    SkASSERT(proxy);
-    SK_AT_SCOPE_EXIT(proxy->clearArenas());
-
     // TODO: remove the check for discard here once reduced op splitting is turned on. Currently we
     // can end up with GrOpsTasks that only have a discard load op and no ops. For vulkan validation
     // we need to keep that discard and not drop it. Once we have reduce op list splitting enabled
@@ -562,6 +493,9 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
         return false;
     }
 
+    SkASSERT(fTargetView.proxy());
+    GrRenderTargetProxy* proxy = fTargetView.proxy()->asRenderTargetProxy();
+    SkASSERT(proxy);
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
 
     // Make sure load ops are not kClear if the GPU needs to use draws for clears
@@ -572,16 +506,17 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
     GrRenderTarget* renderTarget = proxy->peekRenderTarget();
     SkASSERT(renderTarget);
 
-    GrAttachment* stencil = nullptr;
-    if (proxy->needsStencil()) {
-        SkASSERT(proxy->canUseStencil(caps));
-        if (!flushState->resourceProvider()->attachStencilAttachment(renderTarget,
-                                                                     fUsesMSAASurface)) {
+    GrStencilAttachment* stencil = nullptr;
+    if (int numStencilSamples = proxy->numStencilSamples()) {
+        if (!flushState->resourceProvider()->attachStencilAttachment(
+                renderTarget, numStencilSamples)) {
             SkDebugf("WARNING: failed to attach a stencil buffer. Rendering will be skipped.\n");
             return false;
         }
-        stencil = renderTarget->getStencilAttachment(fUsesMSAASurface);
+        stencil = renderTarget->renderTargetPriv().getStencilAttachment();
     }
+
+    SkASSERT(!stencil || stencil->numSamples() == proxy->numStencilSamples());
 
     GrLoadOp stencilLoadOp;
     switch (fInitialStencilContent) {
@@ -607,14 +542,13 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
             // once finished, meaning the stencil values will always remain cleared after the
             // initial clear. Just fall through to reloading the existing (cleared) stencil values
             // from memory.
-            [[fallthrough]];
         case StencilContent::kPreserved:
             SkASSERT(stencil);
             stencilLoadOp = GrLoadOp::kLoad;
             break;
     }
 
-    // NOTE: If fMustPreserveStencil is set, then we are executing a surfaceDrawContext that split
+    // NOTE: If fMustPreserveStencil is set, then we are executing a renderTargetContext that split
     // its opsTask.
     //
     // FIXME: We don't currently flag render passes that don't use stencil at all. In that case
@@ -625,26 +559,15 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
             ? GrStoreOp::kDiscard
             : GrStoreOp::kStore;
 
-    GrOpsRenderPass* renderPass = create_render_pass(flushState->gpu(),
-                                                     proxy->peekRenderTarget(),
-                                                     fUsesMSAASurface,
-                                                     stencil,
-                                                     fTargetOrigin,
-                                                     fClippedContentBounds,
-                                                     fColorLoadOp,
-                                                     fLoadClearColor,
-                                                     stencilLoadOp,
-                                                     stencilStoreOp,
-                                                     fSampledProxies,
-                                                     fRenderPassXferBarriers);
-
+    GrOpsRenderPass* renderPass = create_render_pass(
+            flushState->gpu(), proxy->peekRenderTarget(), fTargetView.origin(),
+            fClippedContentBounds, fColorLoadOp, fLoadClearColor, stencilLoadOp, stencilStoreOp,
+            fSampledProxies);
     if (!renderPass) {
         return false;
     }
     flushState->setOpsRenderPass(renderPass);
     renderPass->begin();
-
-    GrSurfaceProxyView dstView(sk_ref_sp(this->target(0)), fTargetOrigin, fTargetSwizzle);
 
     // Draw all the generated geometry.
     for (const auto& chain : fOpChains) {
@@ -656,12 +579,9 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
 #endif
 
         GrOpFlushState::OpArgs opArgs(chain.head(),
-                                      dstView,
-                                      fUsesMSAASurface,
+                                      &fTargetView,
                                       chain.appliedClip(),
-                                      chain.dstProxyView(),
-                                      fRenderPassXferBarriers,
-                                      fColorLoadOp);
+                                      chain.dstProxyView());
 
         flushState->setOpArgs(&opArgs);
         chain.head()->execute(flushState, chain.bounds());
@@ -675,100 +595,23 @@ bool GrOpsTask::onExecute(GrOpFlushState* flushState) {
     return true;
 }
 
-void GrOpsTask::setColorLoadOp(GrLoadOp op, std::array<float, 4> color) {
+void GrOpsTask::setColorLoadOp(GrLoadOp op, const SkPMColor4f& color) {
     fColorLoadOp = op;
     fLoadClearColor = color;
     if (GrLoadOp::kClear == fColorLoadOp) {
-        GrSurfaceProxy* proxy = this->target(0);
+        GrSurfaceProxy* proxy = fTargetView.proxy();
         SkASSERT(proxy);
-        fTotalBounds = proxy->backingStoreBoundsRect();
+        fTotalBounds = proxy->getBoundsRect();
     }
-}
-
-void GrOpsTask::reset() {
-    fDeferredProxies.reset();
-    fSampledProxies.reset();
-    fClippedContentBounds = SkIRect::MakeEmpty();
-    fTotalBounds = SkRect::MakeEmpty();
-    this->deleteOps();
-    fRenderPassXferBarriers = GrXferBarrierFlags::kNone;
-}
-
-int GrOpsTask::mergeFrom(SkSpan<const sk_sp<GrRenderTask>> tasks) {
-    int mergedCount = 0;
-    for (const sk_sp<GrRenderTask>& task : tasks) {
-        auto opsTask = task->asOpsTask();
-        if (!opsTask || opsTask->target(0) != this->target(0)
-                     || this->fArenas != opsTask->fArenas) {
-            break;
-        }
-        SkASSERT(fTargetSwizzle == opsTask->fTargetSwizzle);
-        SkASSERT(fTargetOrigin == opsTask->fTargetOrigin);
-        if (GrLoadOp::kClear == opsTask->fColorLoadOp) {
-            // TODO(11903): Go back to actually dropping ops tasks when we are merged with
-            // color clear.
-            return 0;
-        }
-        mergedCount += 1;
-    }
-    if (0 == mergedCount) {
-        return 0;
-    }
-
-    SkSpan<const sk_sp<GrOpsTask>> mergingNodes(
-            reinterpret_cast<const sk_sp<GrOpsTask>*>(tasks.data()), SkToSizeT(mergedCount));
-    int addlDeferredProxyCount = 0;
-    int addlProxyCount = 0;
-    int addlOpChainCount = 0;
-    for (const auto& toMerge : mergingNodes) {
-        addlDeferredProxyCount += toMerge->fDeferredProxies.count();
-        addlProxyCount += toMerge->fSampledProxies.count();
-        addlOpChainCount += toMerge->fOpChains.count();
-        fClippedContentBounds.join(toMerge->fClippedContentBounds);
-        fTotalBounds.join(toMerge->fTotalBounds);
-        fRenderPassXferBarriers |= toMerge->fRenderPassXferBarriers;
-        if (fInitialStencilContent == StencilContent::kDontCare) {
-            // Propogate the first stencil content that isn't kDontCare.
-            //
-            // Once the stencil has any kind of initial content that isn't kDontCare, then the
-            // inital contents of subsequent opsTasks that get merged in don't matter.
-            //
-            // (This works because the opsTask all target the same render target and are in
-            // painter's order. kPreserved obviously happens automatically with a merge, and kClear
-            // is also automatic because the contract is for ops to leave the stencil buffer in a
-            // cleared state when finished.)
-            fInitialStencilContent = toMerge->fInitialStencilContent;
-        }
-        fUsesMSAASurface |= toMerge->fUsesMSAASurface;
-        SkDEBUGCODE(fNumClips += toMerge->fNumClips);
-    }
-
-    fLastClipStackGenID = SK_InvalidUniqueID;
-    fDeferredProxies.reserve_back(addlDeferredProxyCount);
-    fSampledProxies.reserve_back(addlProxyCount);
-    fOpChains.reserve_back(addlOpChainCount);
-    for (const auto& toMerge : mergingNodes) {
-        for (GrRenderTask* renderTask : toMerge->dependents()) {
-            renderTask->replaceDependency(toMerge.get(), this);
-        }
-        for (GrRenderTask* renderTask : toMerge->dependencies()) {
-            renderTask->replaceDependent(toMerge.get(), this);
-        }
-        fDeferredProxies.move_back_n(toMerge->fDeferredProxies.count(),
-                                     toMerge->fDeferredProxies.data());
-        fSampledProxies.move_back_n(toMerge->fSampledProxies.count(),
-                                    toMerge->fSampledProxies.data());
-        fOpChains.move_back_n(toMerge->fOpChains.count(),
-                              toMerge->fOpChains.data());
-        toMerge->fDeferredProxies.reset();
-        toMerge->fSampledProxies.reset();
-        toMerge->fOpChains.reset();
-    }
-    fMustPreserveStencil = mergingNodes.back()->fMustPreserveStencil;
-    return mergedCount;
 }
 
 bool GrOpsTask::resetForFullscreenClear(CanDiscardPreviousOps canDiscardPreviousOps) {
+    // If we previously recorded a wait op, we cannot delete the wait op. Until we track the wait
+    // ops separately from normal ops, we have to avoid clearing out any ops in this case as well.
+    if (fHasWaitOp) {
+        canDiscardPreviousOps = CanDiscardPreviousOps::kNo;
+    }
+
     if (CanDiscardPreviousOps::kYes == canDiscardPreviousOps || this->isEmpty()) {
         this->deleteOps();
         fDeferredProxies.reset();
@@ -777,7 +620,7 @@ bool GrOpsTask::resetForFullscreenClear(CanDiscardPreviousOps canDiscardPrevious
         // If the opsTask is using a render target which wraps a vulkan command buffer, we can't do
         // a clear load since we cannot change the render pass that we are using. Thus we fall back
         // to making a clear op in this case.
-        return !this->target(0)->asRenderTargetProxy()->wrapsVkSecondaryCB();
+        return !fTargetView.asRenderTargetProxy()->wrapsVkSecondaryCB();
     }
 
     // Could not empty the task, so an op must be added to handle the clear
@@ -796,31 +639,24 @@ void GrOpsTask::discard() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#if GR_TEST_UTILS
-void GrOpsTask::dump(const SkString& label,
-                     SkString indent,
-                     bool printDependencies,
-                     bool close) const {
-    GrRenderTask::dump(label, indent, printDependencies, false);
+#ifdef SK_DEBUG
+void GrOpsTask::dump(bool printDependencies) const {
+    GrRenderTask::dump(printDependencies);
 
-    SkDebugf("%sfColorLoadOp: ", indent.c_str());
+    SkDebugf("fColorLoadOp: ");
     switch (fColorLoadOp) {
         case GrLoadOp::kLoad:
             SkDebugf("kLoad\n");
             break;
         case GrLoadOp::kClear:
-            SkDebugf("kClear {%g, %g, %g, %g}\n",
-                     fLoadClearColor[0],
-                     fLoadClearColor[1],
-                     fLoadClearColor[2],
-                     fLoadClearColor[3]);
+            SkDebugf("kClear (0x%x)\n", fLoadClearColor.toBytes_RGBA());
             break;
         case GrLoadOp::kDiscard:
             SkDebugf("kDiscard\n");
             break;
     }
 
-    SkDebugf("%sfInitialStencilContent: ", indent.c_str());
+    SkDebugf("fInitialStencilContent: ");
     switch (fInitialStencilContent) {
         case StencilContent::kDontCare:
             SkDebugf("kDontCare\n");
@@ -833,38 +669,29 @@ void GrOpsTask::dump(const SkString& label,
             break;
     }
 
-    SkDebugf("%s%d ops:\n", indent.c_str(), fOpChains.count());
+    SkDebugf("ops (%d):\n", fOpChains.count());
     for (int i = 0; i < fOpChains.count(); ++i) {
-        SkDebugf("%s*******************************\n", indent.c_str());
+        SkDebugf("*******************************\n");
         if (!fOpChains[i].head()) {
-            SkDebugf("%s%d: <combined forward or failed instantiation>\n", indent.c_str(), i);
+            SkDebugf("%d: <combined forward or failed instantiation>\n", i);
         } else {
-            SkDebugf("%s%d: %s\n", indent.c_str(), i, fOpChains[i].head()->name());
+            SkDebugf("%d: %s\n", i, fOpChains[i].head()->name());
             SkRect bounds = fOpChains[i].bounds();
-            SkDebugf("%sClippedBounds: [L: %.2f, T: %.2f, R: %.2f, B: %.2f]\n",
-                     indent.c_str(),
-                     bounds.fLeft, bounds.fTop, bounds.fRight, bounds.fBottom);
+            SkDebugf("ClippedBounds: [L: %.2f, T: %.2f, R: %.2f, B: %.2f]\n", bounds.fLeft,
+                     bounds.fTop, bounds.fRight, bounds.fBottom);
             for (const auto& op : GrOp::ChainRange<>(fOpChains[i].head())) {
                 SkString info = SkTabString(op.dumpInfo(), 1);
-                SkDebugf("%s%s\n", indent.c_str(), info.c_str());
+                SkDebugf("%s\n", info.c_str());
                 bounds = op.bounds();
-                SkDebugf("%s\tClippedBounds: [L: %.2f, T: %.2f, R: %.2f, B: %.2f]\n",
-                         indent.c_str(),
-                         bounds.fLeft, bounds.fTop, bounds.fRight, bounds.fBottom);
+                SkDebugf("\tClippedBounds: [L: %.2f, T: %.2f, R: %.2f, B: %.2f]\n", bounds.fLeft,
+                         bounds.fTop, bounds.fRight, bounds.fBottom);
             }
         }
     }
-
-    if (close) {
-        SkDebugf("%s--------------------------------------------------------------\n\n",
-                 indent.c_str());
-    }
 }
-#endif
 
-#ifdef SK_DEBUG
 void GrOpsTask::visitProxies_debugOnly(const GrOp::VisitProxyFunc& func) const {
-    auto textureFunc = [ func ] (GrSurfaceProxy* tex, GrMipmapped mipmapped) {
+    auto textureFunc = [ func ] (GrSurfaceProxy* tex, GrMipMapped mipmapped) {
         func(tex, mipmapped);
     };
 
@@ -877,17 +704,10 @@ void GrOpsTask::visitProxies_debugOnly(const GrOp::VisitProxyFunc& func) const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void GrOpsTask::onMakeSkippable() {
-    this->deleteOps();
-    fDeferredProxies.reset();
-    fColorLoadOp = GrLoadOp::kLoad;
-    SkASSERT(this->isNoOp());
-}
-
 bool GrOpsTask::onIsUsed(GrSurfaceProxy* proxyToCheck) const {
     bool used = false;
 
-    auto visit = [ proxyToCheck, &used ] (GrSurfaceProxy* p, GrMipmapped) {
+    auto visit = [ proxyToCheck, &used ] (GrSurfaceProxy* p, GrMipMapped) {
         if (p == proxyToCheck) {
             used = true;
         }
@@ -899,12 +719,23 @@ bool GrOpsTask::onIsUsed(GrSurfaceProxy* proxyToCheck) const {
     return used;
 }
 
-void GrOpsTask::gatherProxyIntervals(GrResourceAllocator* alloc) const {
-    SkASSERT(this->isClosed());
-    if (this->isNoOp()) {
-        return;
+void GrOpsTask::handleInternalAllocationFailure() {
+    bool hasUninstantiatedProxy = false;
+    auto checkInstantiation = [&hasUninstantiatedProxy](GrSurfaceProxy* p, GrMipMapped) {
+        if (!p->isInstantiated()) {
+            hasUninstantiatedProxy = true;
+        }
+    };
+    for (OpChain& recordedOp : fOpChains) {
+        hasUninstantiatedProxy = false;
+        recordedOp.visitProxies(checkInstantiation);
+        if (hasUninstantiatedProxy) {
+            recordedOp.setSkipExecuteFlag();
+        }
     }
+}
 
+void GrOpsTask::gatherProxyIntervals(GrResourceAllocator* alloc) const {
     for (int i = 0; i < fDeferredProxies.count(); ++i) {
         SkASSERT(!fDeferredProxies[i]->isInstantiated());
         // We give all the deferred proxies a write usage at the very start of flushing. This
@@ -915,7 +746,7 @@ void GrOpsTask::gatherProxyIntervals(GrResourceAllocator* alloc) const {
         alloc->addInterval(fDeferredProxies[i], 0, 0, GrResourceAllocator::ActualUse::kNo);
     }
 
-    GrSurfaceProxy* targetProxy = this->target(0);
+    GrSurfaceProxy* targetProxy = fTargetView.proxy();
 
     // Add the interval for all the writes to this GrOpsTasks's target
     if (fOpChains.count()) {
@@ -932,12 +763,9 @@ void GrOpsTask::gatherProxyIntervals(GrResourceAllocator* alloc) const {
         alloc->incOps();
     }
 
-    auto gather = [ alloc SkDEBUGCODE(, this) ] (GrSurfaceProxy* p, GrMipmapped) {
-        alloc->addInterval(p,
-                           alloc->curOp(),
-                           alloc->curOp(),
-                           GrResourceAllocator::ActualUse::kYes
-                           SkDEBUGCODE(, this->target(0) == p));
+    auto gather = [ alloc SkDEBUGCODE(, this) ] (GrSurfaceProxy* p, GrMipMapped) {
+        alloc->addInterval(p, alloc->curOp(), alloc->curOp(), GrResourceAllocator::ActualUse::kYes
+                           SkDEBUGCODE(, fTargetView.proxy() == p));
     };
     for (const OpChain& recordedOp : fOpChains) {
         recordedOp.visitProxies(gather);
@@ -949,16 +777,17 @@ void GrOpsTask::gatherProxyIntervals(GrResourceAllocator* alloc) const {
 }
 
 void GrOpsTask::recordOp(
-        GrOp::Owner op, GrProcessorSet::Analysis processorAnalysis, GrAppliedClip* clip,
+        std::unique_ptr<GrOp> op, GrProcessorSet::Analysis processorAnalysis, GrAppliedClip* clip,
         const DstProxyView* dstProxyView, const GrCaps& caps) {
     SkDEBUGCODE(op->validate();)
     SkASSERT(processorAnalysis.requiresDstTexture() == (dstProxyView && dstProxyView->proxy()));
-    GrSurfaceProxy* proxy = this->target(0);
+    GrSurfaceProxy* proxy = fTargetView.proxy();
     SkASSERT(proxy);
 
     // A closed GrOpsTask should never receive new/more ops
     SkASSERT(!this->isClosed());
     if (!op->bounds().isFinite()) {
+        fArenas.opMemoryPool()->release(std::move(op));
         return;
     }
 
@@ -986,7 +815,7 @@ void GrOpsTask::recordOp(
         while (true) {
             OpChain& candidate = fOpChains.fromBack(i);
             op = candidate.appendOp(std::move(op), processorAnalysis, dstProxyView, clip, caps,
-                                    fArenas->arenaAlloc(), fAuditTrail);
+                                    &fArenas, fAuditTrail);
             if (!op) {
                 return;
             }
@@ -1005,7 +834,7 @@ void GrOpsTask::recordOp(
         GrOP_INFO("\t\tBackward: FirstOp\n");
     }
     if (clip) {
-        clip = fArenas->arenaAlloc()->make<GrAppliedClip>(std::move(*clip));
+        clip = fClipAllocator.make<GrAppliedClip>(std::move(*clip));
         SkDEBUGCODE(fNumClips++;)
     }
     fOpChains.emplace_back(std::move(op), processorAnalysis, clip, dstProxyView);
@@ -1021,7 +850,7 @@ void GrOpsTask::forwardCombine(const GrCaps& caps) {
         int j = i + 1;
         while (true) {
             OpChain& candidate = fOpChains[j];
-            if (candidate.prependChain(&chain, caps, fArenas->arenaAlloc(), fAuditTrail)) {
+            if (candidate.prependChain(&chain, caps, &fArenas, fAuditTrail)) {
                 break;
             }
             // Stop traversing if we would cause a painter's order violation.
@@ -1042,22 +871,17 @@ void GrOpsTask::forwardCombine(const GrCaps& caps) {
     }
 }
 
-GrRenderTask::ExpectedOutcome GrOpsTask::onMakeClosed(const GrCaps& caps,
-                                                      SkIRect* targetUpdateBounds) {
+GrRenderTask::ExpectedOutcome GrOpsTask::onMakeClosed(
+        const GrCaps& caps, SkIRect* targetUpdateBounds) {
     this->forwardCombine(caps);
     if (!this->isNoOp()) {
-        GrSurfaceProxy* proxy = this->target(0);
-        // Use the entire backing store bounds since the GPU doesn't clip automatically to the
-        // logical dimensions.
-        SkRect clippedContentBounds = proxy->backingStoreBoundsRect();
-        // TODO: If we can fix up GLPrograms test to always intersect the target proxy bounds
+        GrSurfaceProxy* proxy = fTargetView.proxy();
+        SkRect clippedContentBounds = proxy->getBoundsRect();
+        // TODO: If we can fix up GLPrograms test to always intersect the fTargetView proxy bounds
         // then we can simply assert here that the bounds intersect.
         if (clippedContentBounds.intersect(fTotalBounds)) {
             clippedContentBounds.roundOut(&fClippedContentBounds);
-            *targetUpdateBounds = GrNativeRect::MakeIRectRelativeTo(
-                    fTargetOrigin,
-                    this->target(0)->backingStoreDimensions().height(),
-                    fClippedContentBounds);
+            *targetUpdateBounds = fClippedContentBounds;
             return ExpectedOutcome::kTargetDirty;
         }
     }

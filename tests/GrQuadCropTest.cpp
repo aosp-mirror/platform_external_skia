@@ -195,7 +195,8 @@ static void test_axis_aligned_all_clips(skiatest::Reporter* r, const SkMatrix& v
 static void test_axis_aligned(skiatest::Reporter* r, const SkMatrix& viewMatrix) {
     test_axis_aligned_all_clips(r, viewMatrix, nullptr);
 
-    SkMatrix normalized = SkMatrix::RectToRect(kDrawRect, SkRect::MakeWH(1.f, 1.f));
+    SkMatrix normalized = SkMatrix::MakeRectToRect(kDrawRect, SkRect::MakeWH(1.f, 1.f),
+                                                   SkMatrix::kFill_ScaleToFit);
     test_axis_aligned_all_clips(r, viewMatrix, &normalized);
 
     SkMatrix rotated;
@@ -212,7 +213,8 @@ static void test_crop_fully_covered(skiatest::Reporter* r, const SkMatrix& viewM
     run_crop_fully_covered_test(r, GrAA::kNo, viewMatrix, nullptr);
     run_crop_fully_covered_test(r, GrAA::kYes, viewMatrix, nullptr);
 
-    SkMatrix normalized = SkMatrix::RectToRect(kDrawRect, SkRect::MakeWH(1.f, 1.f));
+    SkMatrix normalized = SkMatrix::MakeRectToRect(kDrawRect, SkRect::MakeWH(1.f, 1.f),
+                                                   SkMatrix::kFill_ScaleToFit);
     run_crop_fully_covered_test(r, GrAA::kNo, viewMatrix, &normalized);
     run_crop_fully_covered_test(r, GrAA::kYes, viewMatrix, &normalized);
 
@@ -230,8 +232,8 @@ static void test_crop_fully_covered(skiatest::Reporter* r, const SkMatrix& viewM
 
 TEST(AxisAligned) {
     test_axis_aligned(r, SkMatrix::I());
-    test_axis_aligned(r, SkMatrix::Scale(-1.f, 1.f));
-    test_axis_aligned(r, SkMatrix::Scale(1.f, -1.f));
+    test_axis_aligned(r, SkMatrix::MakeScale(-1.f, 1.f));
+    test_axis_aligned(r, SkMatrix::MakeScale(1.f, -1.f));
 
     SkMatrix rotation;
     rotation.setRotate(90.f);

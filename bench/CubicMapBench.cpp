@@ -36,7 +36,7 @@ private:
     SkCubicMap  fCMap;
     SkString    fName;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 DEF_BENCH( return new CubicMapBench({1, 0}, {0,0}); )

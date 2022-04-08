@@ -10,8 +10,7 @@
  **************************************************************************************************/
 #include "GrClampedGradientEffect.h"
 
-#include "src/core/SkUtils.h"
-#include "src/gpu/GrTexture.h"
+#include "include/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramBuilder.h"
@@ -32,40 +31,28 @@ public:
         (void)makePremul;
         auto colorsAreOpaque = _outer.colorsAreOpaque;
         (void)colorsAreOpaque;
-        auto layoutPreservesOpacity = _outer.layoutPreservesOpacity;
-        (void)layoutPreservesOpacity;
-        leftBorderColorVar = args.fUniformHandler->addUniform(
-                &_outer, kFragment_GrShaderFlag, kHalf4_GrSLType, "leftBorderColor");
-        rightBorderColorVar = args.fUniformHandler->addUniform(
-                &_outer, kFragment_GrShaderFlag, kHalf4_GrSLType, "rightBorderColor");
-        SkString _sample0 = this->invokeChild(1, args);
+        leftBorderColorVar = args.fUniformHandler->addUniform(kFragment_GrShaderFlag,
+                                                              kHalf4_GrSLType, "leftBorderColor");
+        rightBorderColorVar = args.fUniformHandler->addUniform(kFragment_GrShaderFlag,
+                                                               kHalf4_GrSLType, "rightBorderColor");
+        SkString _sample1099;
+        _sample1099 = this->invokeChild(_outer.gradLayout_index, args);
         fragBuilder->codeAppendf(
-                R"SkSL(half4 t = %s;
-half4 outColor;
-if (!%s && t.y < 0.0) {
-    outColor = half4(0.0);
-} else if (t.x < 0.0) {
-    outColor = %s;
-} else if (t.x > 1.0) {
-    outColor = %s;
-} else {)SkSL",
-                _sample0.c_str(),
-                (_outer.layoutPreservesOpacity ? "true" : "false"),
-                args.fUniformHandler->getUniformCStr(leftBorderColorVar),
+                "half4 t = %s;\nif (!%s && t.y < 0.0) {\n    %s = half4(0.0);\n} else if (t.x < "
+                "0.0) {\n    %s = %s;\n} else if (t.x > 1.0) {\n    %s = %s;\n} else {",
+                _sample1099.c_str(),
+                (_outer.childProcessor(_outer.gradLayout_index).preservesOpaqueInput() ? "true"
+                                                                                       : "false"),
+                args.fOutputColor, args.fOutputColor,
+                args.fUniformHandler->getUniformCStr(leftBorderColorVar), args.fOutputColor,
                 args.fUniformHandler->getUniformCStr(rightBorderColorVar));
-        SkString _coords1("float2(half2(t.x, 0.0))");
-        SkString _sample1 = this->invokeChild(0, args, _coords1.c_str());
-        fragBuilder->codeAppendf(
-                R"SkSL(
-    outColor = %s;
-}
-@if (%s) {
-    outColor.xyz *= outColor.w;
-}
-return outColor;
-)SkSL",
-                _sample1.c_str(),
-                (_outer.makePremul ? "true" : "false"));
+        SkString _input1767("t");
+        SkString _sample1767;
+        _sample1767 = this->invokeChild(_outer.colorizer_index, _input1767.c_str(), args);
+        fragBuilder->codeAppendf("\n    %s = %s;\n}\n@if (%s) {\n    %s.xyz *= %s.w;\n}\n",
+                                 args.fOutputColor, _sample1767.c_str(),
+                                 (_outer.makePremul ? "true" : "false"), args.fOutputColor,
+                                 args.fOutputColor);
     }
 
 private:
@@ -90,13 +77,12 @@ private:
     UniformHandle leftBorderColorVar;
     UniformHandle rightBorderColorVar;
 };
-std::unique_ptr<GrGLSLFragmentProcessor> GrClampedGradientEffect::onMakeProgramImpl() const {
-    return std::make_unique<GrGLSLClampedGradientEffect>();
+GrGLSLFragmentProcessor* GrClampedGradientEffect::onCreateGLSLInstance() const {
+    return new GrGLSLClampedGradientEffect();
 }
 void GrClampedGradientEffect::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                                     GrProcessorKeyBuilder* b) const {
-    b->addBool(makePremul, "makePremul");
-    b->addBool(layoutPreservesOpacity, "layoutPreservesOpacity");
+    b->add32((int32_t)makePremul);
 }
 bool GrClampedGradientEffect::onIsEqual(const GrFragmentProcessor& other) const {
     const GrClampedGradientEffect& that = other.cast<GrClampedGradientEffect>();
@@ -105,36 +91,29 @@ bool GrClampedGradientEffect::onIsEqual(const GrFragmentProcessor& other) const 
     if (rightBorderColor != that.rightBorderColor) return false;
     if (makePremul != that.makePremul) return false;
     if (colorsAreOpaque != that.colorsAreOpaque) return false;
-    if (layoutPreservesOpacity != that.layoutPreservesOpacity) return false;
     return true;
 }
 GrClampedGradientEffect::GrClampedGradientEffect(const GrClampedGradientEffect& src)
         : INHERITED(kGrClampedGradientEffect_ClassID, src.optimizationFlags())
+        , colorizer_index(src.colorizer_index)
+        , gradLayout_index(src.gradLayout_index)
         , leftBorderColor(src.leftBorderColor)
         , rightBorderColor(src.rightBorderColor)
         , makePremul(src.makePremul)
-        , colorsAreOpaque(src.colorsAreOpaque)
-        , layoutPreservesOpacity(src.layoutPreservesOpacity) {
-    this->cloneAndRegisterAllChildProcessors(src);
+        , colorsAreOpaque(src.colorsAreOpaque) {
+    {
+        auto clone = src.childProcessor(colorizer_index).clone();
+        clone->setSampledWithExplicitCoords(
+                src.childProcessor(colorizer_index).isSampledWithExplicitCoords());
+        this->registerChildProcessor(std::move(clone));
+    }
+    {
+        auto clone = src.childProcessor(gradLayout_index).clone();
+        clone->setSampledWithExplicitCoords(
+                src.childProcessor(gradLayout_index).isSampledWithExplicitCoords());
+        this->registerChildProcessor(std::move(clone));
+    }
 }
 std::unique_ptr<GrFragmentProcessor> GrClampedGradientEffect::clone() const {
-    return std::make_unique<GrClampedGradientEffect>(*this);
+    return std::unique_ptr<GrFragmentProcessor>(new GrClampedGradientEffect(*this));
 }
-#if GR_TEST_UTILS
-SkString GrClampedGradientEffect::onDumpInfo() const {
-    return SkStringPrintf(
-            "(leftBorderColor=half4(%f, %f, %f, %f), rightBorderColor=half4(%f, %f, %f, %f), "
-            "makePremul=%s, colorsAreOpaque=%s, layoutPreservesOpacity=%s)",
-            leftBorderColor.fR,
-            leftBorderColor.fG,
-            leftBorderColor.fB,
-            leftBorderColor.fA,
-            rightBorderColor.fR,
-            rightBorderColor.fG,
-            rightBorderColor.fB,
-            rightBorderColor.fA,
-            (makePremul ? "true" : "false"),
-            (colorsAreOpaque ? "true" : "false"),
-            (layoutPreservesOpacity ? "true" : "false"));
-}
-#endif

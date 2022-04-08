@@ -6,6 +6,18 @@
 from . import util
 
 
+# XCode build is listed in parentheses after the version at
+# https://developer.apple.com/news/releases/, or on Wikipedia here:
+# https://en.wikipedia.org/wiki/Xcode#Version_comparison_table
+# Use lowercase letters.
+# When updating XCODE_BUILD_VERSION, you will also need to update
+# XCODE_CLANG_VERSION.
+XCODE_BUILD_VERSION = '10g8'
+# Wikipedia lists the Clang version here:
+# https://en.wikipedia.org/wiki/Xcode#Toolchain_versions
+XCODE_CLANG_VERSION = '10.0.1'
+
+
 def build_command_buffer(api, chrome_dir, skia_dir, out):
   api.run(api.python, 'build command_buffer',
       script=skia_dir.join('tools', 'build_command_buffer.py'),
@@ -29,19 +41,13 @@ def compile_swiftshader(api, extra_tokens, swiftshader_root, cc, cxx, out):
   """
   swiftshader_opts = [
       '-DSWIFTSHADER_BUILD_TESTS=OFF',
-      '-DSWIFTSHADER_WARNINGS_AS_ERRORS=OFF',
-      '-DREACTOR_ENABLE_MEMORY_SANITIZER_INSTRUMENTATION=OFF',  # Way too slow.
+      '-DSWIFTSHADER_WARNINGS_AS_ERRORS=0',
   ]
-  cmake_bin = str(api.vars.workdir.join('cmake_linux', 'bin'))
+  cmake_bin = str(api.vars.slave_dir.join('cmake_linux', 'bin'))
   env = {
       'CC': cc,
       'CXX': cxx,
-      'PATH': '%%(PATH)s:%s' % cmake_bin,
-      # We arrange our MSAN/TSAN prebuilts a little differently than
-      # SwiftShader's CMakeLists.txt expects, so we'll just keep our custom
-      # setup (everything mentioning libcxx below) and point SwiftShader's
-      # CMakeLists.txt at a harmless non-existent path.
-      'SWIFTSHADER_MSAN_INSTRUMENTED_LIBCXX_PATH': '/totally/phony/path',
+      'PATH': '%%(PATH)s:%s' % cmake_bin
   }
 
   # Extra flags for MSAN/TSAN, if necessary.
@@ -53,7 +59,7 @@ def compile_swiftshader(api, extra_tokens, swiftshader_root, cc, cxx, out):
 
   if san:
     short,full = san
-    clang_linux = str(api.vars.workdir.join('clang_linux'))
+    clang_linux = str(api.vars.slave_dir.join('clang_linux'))
     libcxx = clang_linux + '/' + short
     cflags = ' '.join([
       '-fsanitize=' + full,
@@ -86,8 +92,9 @@ def compile_fn(api, checkout_root, out_dir):
   os            = api.vars.builder_cfg.get('os',            '')
   target_arch   = api.vars.builder_cfg.get('target_arch',   '')
 
-  clang_linux      = str(api.vars.workdir.join('clang_linux'))
-  win_toolchain    = str(api.vars.workdir.join('win_toolchain'))
+  clang_linux      = str(api.vars.slave_dir.join('clang_linux'))
+  win_toolchain    = str(api.vars.slave_dir.join('win_toolchain'))
+  moltenvk         = str(api.vars.slave_dir.join('moltenvk'))
 
   cc, cxx, ccache = None, None, None
   extra_cflags = []
@@ -96,17 +103,9 @@ def compile_fn(api, checkout_root, out_dir):
   env = {}
 
   if os == 'Mac':
-    # XCode build is listed in parentheses after the version at
-    # https://developer.apple.com/news/releases/, or on Wikipedia here:
-    # https://en.wikipedia.org/wiki/Xcode#Version_comparison_table
-    # Use lowercase letters.
-    # https://chrome-infra-packages.appspot.com/p/infra_internal/ios/xcode
-    XCODE_BUILD_VERSION = '12c33'
-    if compiler == 'Xcode11.4.1':
-      XCODE_BUILD_VERSION = '11e503a'
     extra_cflags.append(
-        '-DREBUILD_IF_CHANGED_xcode_build_version=%s' % XCODE_BUILD_VERSION)
-    mac_toolchain_cmd = api.vars.workdir.join(
+        '-DDUMMY_xcode_build_version=%s' % XCODE_BUILD_VERSION)
+    mac_toolchain_cmd = api.vars.slave_dir.join(
         'mac_toolchain', 'mac_toolchain')
     xcode_app_path = api.vars.cache_dir.join('Xcode.app')
     # Copied from
@@ -127,8 +126,13 @@ def compile_fn(api, checkout_root, out_dir):
       api.step('select xcode', [
           'sudo', 'xcode-select', '-switch', xcode_app_path])
       if 'iOS' in extra_tokens:
-        # Can't compile for Metal before 11.0.
-        env['IPHONEOS_DEPLOYMENT_TARGET'] = '11.0'
+        if target_arch == 'arm':
+          # Can only compile for 32-bit up to iOS 10.
+          env['IPHONEOS_DEPLOYMENT_TARGET'] = '10.0'
+        else:
+          # Our iOS devices are on an older version.
+          # Can't compile for Metal before 11.0.
+          env['IPHONEOS_DEPLOYMENT_TARGET'] = '11.0'
       else:
         # We have some bots on 10.13.
         env['MACOSX_DEPLOYMENT_TARGET'] = '10.13'
@@ -136,18 +140,17 @@ def compile_fn(api, checkout_root, out_dir):
   if 'CheckGeneratedFiles' in extra_tokens:
     compiler = 'Clang'
     args['skia_compile_processors'] = 'true'
-    args['skia_compile_sksl_tests'] = 'true'
     args['skia_generate_workarounds'] = 'true'
 
   # ccache + clang-tidy.sh chokes on the argument list.
-  if (api.vars.is_linux or os == 'Mac' or os == 'Mac10.15.5' or os == 'Mac10.15.7') and 'Tidy' not in extra_tokens:
+  if (api.vars.is_linux or os == 'Mac') and 'Tidy' not in extra_tokens:
     if api.vars.is_linux:
-      ccache = api.vars.workdir.join('ccache_linux', 'bin', 'ccache')
-      # As of 2020-02-07, the sum of each Debian10-Clang-x86
+      ccache = api.vars.slave_dir.join('ccache_linux', 'bin', 'ccache')
+      # As of 2020-02-07, the sum of each Debian9-Clang-x86
       # non-flutter/android/chromebook build takes less than 75G cache space.
       env['CCACHE_MAXSIZE'] = '75G'
     else:
-      ccache = api.vars.workdir.join('ccache_mac', 'bin', 'ccache')
+      ccache = api.vars.slave_dir.join('ccache_mac', 'bin', 'ccache')
       # As of 2020-02-10, the sum of each Build-Mac-Clang- non-android build
       # takes ~30G cache space.
       env['CCACHE_MAXSIZE'] = '50G'
@@ -167,7 +170,7 @@ def compile_fn(api, checkout_root, out_dir):
     extra_cflags .append('-B%s/bin' % clang_linux)
     extra_ldflags.append('-B%s/bin' % clang_linux)
     extra_ldflags.append('-fuse-ld=lld')
-    extra_cflags.append('-DPLACEHOLDER_clang_linux_version=%s' %
+    extra_cflags.append('-DDUMMY_clang_linux_version=%s' %
                         api.run.asset_version('clang_linux', skia_dir))
     if 'Static' in extra_tokens:
       extra_ldflags.extend(['-static-libstdc++', '-static-libgcc'])
@@ -179,14 +182,6 @@ def compile_fn(api, checkout_root, out_dir):
     # Swap in clang-tidy.sh for clang++, but update PATH so it can find clang++.
     cxx = skia_dir.join("tools/clang-tidy.sh")
     env['PATH'] = '%s:%%(PATH)s' % (clang_linux + '/bin')
-    # Increase ClangTidy code coverage by enabling features.
-    args.update({
-      'skia_enable_fontmgr_empty':     'true',
-      'skia_enable_pdf':               'true',
-      'skia_use_expat':                'true',
-      'skia_use_freetype':             'true',
-      'skia_use_vulkan':               'true',
-    })
 
   if 'Coverage' in extra_tokens:
     # See https://clang.llvm.org/docs/SourceBasedCodeCoverage.html for
@@ -211,6 +206,9 @@ def compile_fn(api, checkout_root, out_dir):
     if 'SK_CPU_LIMIT' in extra_tokens[0]:
       extra_cflags.append('-DSKCMS_PORTABLE')
 
+  if 'SkVM' in extra_tokens:
+    extra_cflags.append('-DSK_USE_SKVM_BLITTER')
+
   if 'MSAN' in extra_tokens:
     extra_ldflags.append('-L' + clang_linux + '/msan')
   elif 'TSAN' in extra_tokens:
@@ -220,13 +218,6 @@ def compile_fn(api, checkout_root, out_dir):
 
   if configuration != 'Debug':
     args['is_debug'] = 'false'
-  if 'Dawn' in extra_tokens:
-    args['skia_use_dawn'] = 'true'
-    args['skia_use_gl'] = 'false'
-    # Dawn imports jinja2, which imports markupsafe. Along with DEPS, make it
-    # importable.
-    env['PYTHONPATH'] = api.path.pathsep.join([
-        str(skia_dir.join('third_party', 'externals')), '%%(PYTHONPATH)s'])
   if 'ANGLE' in extra_tokens:
     args['skia_use_angle'] = 'true'
   if 'SwiftShader' in extra_tokens:
@@ -258,45 +249,39 @@ def compile_fn(api, checkout_root, out_dir):
     args['skia_enable_spirv_validation'] = 'false'
   if 'NoDEPS' in extra_tokens:
     args.update({
-      'is_official_build':             'true',
-      'skia_enable_fontmgr_empty':     'true',
-      'skia_enable_gpu':               'true',
+      'is_official_build':         'true',
+      'skia_enable_fontmgr_empty': 'true',
+      'skia_enable_gpu':           'true',
 
-      'skia_enable_pdf':               'false',
-      'skia_use_expat':                'false',
-      'skia_use_freetype':             'false',
-      'skia_use_harfbuzz':             'false',
-      'skia_use_libjpeg_turbo_decode': 'false',
-      'skia_use_libjpeg_turbo_encode': 'false',
-      'skia_use_libpng_decode':        'false',
-      'skia_use_libpng_encode':        'false',
-      'skia_use_libwebp_decode':       'false',
-      'skia_use_libwebp_encode':       'false',
-      'skia_use_vulkan':               'false',
-      'skia_use_zlib':                 'false',
+      'skia_enable_pdf':        'false',
+      'skia_use_expat':         'false',
+      'skia_use_freetype':      'false',
+      'skia_use_harfbuzz':      'false',
+      'skia_use_libjpeg_turbo': 'false',
+      'skia_use_libpng':        'false',
+      'skia_use_libwebp':       'false',
+      'skia_use_vulkan':        'false',
+      'skia_use_zlib':          'false',
     })
   if 'Shared' in extra_tokens:
     args['is_component_build'] = 'true'
   if 'Vulkan' in extra_tokens and not 'Android' in extra_tokens:
     args['skia_use_vulkan'] = 'true'
     args['skia_enable_vulkan_debug_layers'] = 'true'
-    args['skia_use_gl'] = 'false'
-  if 'Direct3D' in extra_tokens:
-    args['skia_use_direct3d'] = 'true'
-    args['skia_use_gl'] = 'false'
+    if 'MoltenVK' in extra_tokens:
+      args['skia_moltenvk_path'] = '"%s"' % moltenvk
   if 'Metal' in extra_tokens:
     args['skia_use_metal'] = 'true'
-    args['skia_use_gl'] = 'false'
   if 'OpenCL' in extra_tokens:
     args['skia_use_opencl'] = 'true'
     if api.vars.is_linux:
       extra_cflags.append(
-          '-isystem%s' % api.vars.workdir.join('opencl_headers'))
+          '-isystem%s' % api.vars.slave_dir.join('opencl_headers'))
       extra_ldflags.append(
-          '-L%s' % api.vars.workdir.join('opencl_ocl_icd_linux'))
+          '-L%s' % api.vars.slave_dir.join('opencl_ocl_icd_linux'))
     elif 'Win' in os:
       extra_cflags.append(
-          '-imsvc%s' % api.vars.workdir.join('opencl_headers'))
+          '-imsvc%s' % api.vars.slave_dir.join('opencl_headers'))
       extra_ldflags.append(
           '/LIBPATH:%s' %
           skia_dir.join('third_party', 'externals', 'opencl-lib', '3-0', 'lib',
@@ -305,12 +290,12 @@ def compile_fn(api, checkout_root, out_dir):
     # Bots use Chromium signing cert.
     args['skia_ios_identity'] = '".*GS9WA.*"'
     # Get mobileprovision via the CIPD package.
-    args['skia_ios_profile'] = '"%s"' % api.vars.workdir.join(
+    args['skia_ios_profile'] = '"%s"' % api.vars.slave_dir.join(
         'provisioning_profile_ios',
         'Upstream_Testing_Provisioning_Profile.mobileprovision')
   if compiler == 'Clang' and 'Win' in os:
-    args['clang_win'] = '"%s"' % api.vars.workdir.join('clang_win')
-    extra_cflags.append('-DPLACEHOLDER_clang_win_version=%s' %
+    args['clang_win'] = '"%s"' % api.vars.slave_dir.join('clang_win')
+    extra_cflags.append('-DDUMMY_clang_win_version=%s' %
                         api.run.asset_version('clang_win', skia_dir))
 
   sanitize = ''
@@ -380,18 +365,13 @@ def copy_build_products(api, src, dst):
         util.DEFAULT_BUILD_PRODUCTS)
 
   if os == 'Mac' and any('SAN' in t for t in extra_tokens):
-    # The XSAN dylibs are in
-    # Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib
-    # /clang/11.0.0/lib/darwin, where 11.0.0 could change in future versions.
-    xcode_clang_ver_dirs = api.file.listdir(
-        'find XCode Clang version',
-        api.vars.cache_dir.join(
-            'Xcode.app', 'Contents', 'Developer', 'Toolchains',
-            'XcodeDefault.xctoolchain', 'usr', 'lib', 'clang'),
-        test_data=['11.0.0'])
-    assert len(xcode_clang_ver_dirs) == 1
-    dylib_dir = xcode_clang_ver_dirs[0].join('lib', 'darwin')
-    dylibs = api.file.glob_paths('find xSAN dylibs', dylib_dir,
+    # Hardcoding this path because it should only change when we upgrade to a
+    # new Xcode.
+    lib_dir = api.vars.cache_dir.join(
+        'Xcode.app', 'Contents', 'Developer', 'Toolchains',
+        'XcodeDefault.xctoolchain', 'usr', 'lib', 'clang', XCODE_CLANG_VERSION,
+        'lib', 'darwin')
+    dylibs = api.file.glob_paths('find xSAN dylibs', lib_dir,
                                  'libclang_rt.*san_osx_dynamic.dylib',
                                  test_data=[
                                      'libclang_rt.asan_osx_dynamic.dylib',

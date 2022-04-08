@@ -35,7 +35,6 @@ public:
     void  clear();
 
 protected:
-    Group();
     explicit Group(std::vector<sk_sp<RenderNode>>);
     ~Group() override;
 
@@ -48,7 +47,7 @@ private:
     std::vector<sk_sp<RenderNode>> fChildren;
     bool                           fRequiresIsolation = true;
 
-    using INHERITED = RenderNode;
+    typedef RenderNode INHERITED;
 };
 
 } // namespace sksg

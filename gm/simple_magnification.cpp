@@ -26,7 +26,9 @@
 
 #include <utility>
 
-static sk_sp<SkImage> make_image(GrRecordingContext* context, int size, GrSurfaceOrigin origin) {
+class GrContext;
+
+static sk_sp<SkImage> make_image(GrContext* context, int size, GrSurfaceOrigin origin) {
     if (context) {
         SkImageInfo ii = SkImageInfo::Make(size, size, kN32_SkColorType, kPremul_SkAlphaType);
         sk_sp<SkSurface> surf(SkSurface::MakeRenderTarget(context, SkBudgeted::kYes, ii, 0,
@@ -60,7 +62,7 @@ static sk_sp<SkImage> make_image(GrRecordingContext* context, int size, GrSurfac
     *bm.getAddr32(2, 1) = SkPackARGB32(0xFF, 0x00, 0x00, 0xFF);
     *bm.getAddr32(1, 2) = SkPackARGB32(0xFF, 0x00, 0xFF, 0xFF);
     *bm.getAddr32(2, 2) = SkPackARGB32(0xFF, 0x88, 0x88, 0x88);
-    return bm.asImage();
+    return SkImage::MakeFromBitmap(bm);
 }
 
 /*
@@ -112,7 +114,7 @@ protected:
     }
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
-        auto context = canvas->recordingContext();
+        GrContext* context = canvas->getGrContext();
 
         sk_sp<SkImage> bottomLImg = make_image(context, kImgSize, kBottomLeft_GrSurfaceOrigin);
         sk_sp<SkImage> topLImg = make_image(context, kImgSize, kTopLeft_GrSurfaceOrigin);
@@ -134,7 +136,7 @@ private:
     static const int kImgSize = 33;
     static const int kPad = 2;
 
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

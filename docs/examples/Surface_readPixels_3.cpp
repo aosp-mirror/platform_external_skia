@@ -18,6 +18,6 @@ void draw(SkCanvas* canvas) {
             surf->readPixels(bitmap, x, y);
         }
     }
-    canvas->drawImage(bitmap.asImage(), 0, 0);
+    canvas->drawBitmap(bitmap, 0, 0);
 }
 }  // END FIDDLE

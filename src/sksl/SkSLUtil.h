@@ -12,26 +12,21 @@
 #include <memory>
 #include "stdlib.h"
 #include "string.h"
-#include "include/private/SkSLDefines.h"
+#include "src/sksl/SkSLDefines.h"
 #include "src/sksl/SkSLLexer.h"
 
 #ifndef SKSL_STANDALONE
 #include "include/core/SkTypes.h"
-#include "include/private/GrTypesPriv.h"
 #if SK_SUPPORT_GPU
-#include "include/gpu/GrContextOptions.h"
+#include "include/core/SkRefCnt.h"
 #include "src/gpu/GrShaderCaps.h"
 #endif // SK_SUPPORT_GPU
 #endif // SKSL_STANDALONE
 
-class GrShaderCaps;
-
 namespace SkSL {
 
-class Context;
 class OutputStream;
 class StringStream;
-class Type;
 
 #if defined(SKSL_STANDALONE) || !SK_SUPPORT_GPU
 
@@ -48,452 +43,241 @@ enum GrGLSLGeneration {
     k320es_GrGLSLGeneration,
 };
 
+#define SKSL_CAPS_CLASS StandaloneShaderCaps
 class StandaloneShaderCaps {
 public:
-    GrGLSLGeneration fGLSLGeneration = k400_GrGLSLGeneration;
     GrGLSLGeneration generation() const {
-        return fGLSLGeneration;
+        return k400_GrGLSLGeneration;
     }
 
-    bool fAtan2ImplementedAsAtanYOverX = false;
     bool atan2ImplementedAsAtanYOverX() const {
-        return fAtan2ImplementedAsAtanYOverX;
+        return false;
     }
 
-    bool fCanUseMinAndAbsTogether = true;
     bool canUseMinAndAbsTogether() const {
-        return fCanUseMinAndAbsTogether;
+        return true;
     }
 
-    bool fMustForceNegatedAtanParamToFloat = false;
     bool mustForceNegatedAtanParamToFloat() const {
-        return fMustForceNegatedAtanParamToFloat;
+        return false;
     }
 
-    bool fGeometryShaderSupport = true;
-    bool geometryShaderSupport() const {
-        return fGeometryShaderSupport;
-    }
-
-    bool fShaderDerivativeSupport = true;
     bool shaderDerivativeSupport() const {
-        return fShaderDerivativeSupport;
+        return true;
     }
 
-    bool fUsesPrecisionModifiers = false;
     bool usesPrecisionModifiers() const {
-        return fUsesPrecisionModifiers;
+        return true;
     }
 
     bool mustDeclareFragmentShaderOutput() const {
-        return fGLSLGeneration > k110_GrGLSLGeneration;
+        return true;
     }
 
-    bool fFBFetchSupport = true;
     bool fbFetchSupport() const {
-        return fFBFetchSupport;
+        return true;
     }
 
-    bool fFBFetchNeedsCustomOutput = false;
     bool fbFetchNeedsCustomOutput() const {
-        return fFBFetchNeedsCustomOutput;
+        return false;
     }
 
-    bool fFlatInterpolationSupport = true;
     bool flatInterpolationSupport() const {
-        return fFlatInterpolationSupport;
+        return true;
     }
 
-    bool fNoperspectiveInterpolationSupport = true;
     bool noperspectiveInterpolationSupport() const {
-        return fNoperspectiveInterpolationSupport;
+        return true;
     }
 
-    bool fMultisampleInterpolationSupport = true;
     bool multisampleInterpolationSupport() const {
-        return fMultisampleInterpolationSupport;
+        return true;
     }
 
-    bool fSampleMaskSupport = true;
     bool sampleMaskSupport() const {
-        return fSampleMaskSupport;
+        return true;
     }
 
-    bool fExternalTextureSupport = true;
     bool externalTextureSupport() const {
-        return fExternalTextureSupport;
+        return true;
     }
 
-    bool fMustDoOpBetweenFloorAndAbs = false;
     bool mustDoOpBetweenFloorAndAbs() const {
-        return fMustDoOpBetweenFloorAndAbs;
+        return false;
     }
 
-    bool fMustGuardDivisionEvenAfterExplicitZeroCheck = false;
     bool mustGuardDivisionEvenAfterExplicitZeroCheck() const {
-        return fMustGuardDivisionEvenAfterExplicitZeroCheck;
+        return false;
     }
 
-    bool fInBlendModesFailRandomlyForAllZeroVec = false;
     bool inBlendModesFailRandomlyForAllZeroVec() const {
-        return fInBlendModesFailRandomlyForAllZeroVec;
+        return false;
     }
 
-    bool fMustEnableAdvBlendEqs = false;
     bool mustEnableAdvBlendEqs() const {
-        return fMustEnableAdvBlendEqs;
+        return false;
     }
 
-    bool fCanUseAnyFunctionInShader = true;
+    bool mustEnableSpecificAdvBlendEqs() const {
+        return false;
+    }
+
     bool canUseAnyFunctionInShader() const {
-        return fCanUseAnyFunctionInShader;
+        return false;
     }
 
-    bool fNoDefaultPrecisionForExternalSamplers = false;
     bool noDefaultPrecisionForExternalSamplers() const {
-        return fNoDefaultPrecisionForExternalSamplers;
+        return false;
     }
 
-    bool fFloatIs32Bits = true;
     bool floatIs32Bits() const {
-        return fFloatIs32Bits;
+        return true;
     }
 
-    bool fIntegerSupport = false;
     bool integerSupport() const {
-        return fIntegerSupport;
+        return false;
     }
 
-    bool fNonsquareMatrixSupport = false;
-    bool nonsquareMatrixSupport() const {
-        return fNonsquareMatrixSupport;
-    }
-
-    bool fBuiltinFMASupport = false;
     bool builtinFMASupport() const {
-        return fBuiltinFMASupport;
+        return true;
     }
 
-    bool fBuiltinDeterminantSupport = false;
-    bool builtinDeterminantSupport() const {
-        return fBuiltinDeterminantSupport;
-    }
-
-    bool fCanUseDoLoops = false;
-    bool canUseDoLoops() const {
-        // we define this to false in standalone so we don't use do loops while inlining in FP files
-        // (which would then, being baked in, end up being used even in contexts where do loops are
-        // not allowed)
-        return fCanUseDoLoops;
-    }
-
-    bool fUseNodePools = true;
-    bool useNodePools() const {
-        return fUseNodePools;
-    }
-
-    const char* fShaderDerivativeExtensionString = nullptr;
     const char* shaderDerivativeExtensionString() const {
-        return fShaderDerivativeExtensionString;
+        return nullptr;
     }
 
-    const char* fFragCoordConventionsExtensionString = nullptr;
     const char* fragCoordConventionsExtensionString() const {
-        return fFragCoordConventionsExtensionString;
+        return nullptr;
     }
 
-    const char* fGeometryShaderExtensionString = nullptr;
     const char* geometryShaderExtensionString() const {
-        return fGeometryShaderExtensionString;
+        return nullptr;
     }
 
-    const char* fGSInvocationsExtensionString = nullptr;
     const char* gsInvocationsExtensionString() const {
-        return fGSInvocationsExtensionString;
+        return nullptr;
     }
 
-    const char* fExternalTextureExtensionString = nullptr;
     const char* externalTextureExtensionString() const {
-        return fExternalTextureExtensionString;
+        return nullptr;
     }
 
-    const char* fSecondExternalTextureExtensionString = nullptr;
     const char* secondExternalTextureExtensionString() const {
-        return fSecondExternalTextureExtensionString;
+        return nullptr;
     }
 
-    const char* fVersionDeclString = "";
     const char* versionDeclString() const {
-        return fVersionDeclString;
+        return "";
     }
 
-    bool fGSInvocationsSupport = true;
     bool gsInvocationsSupport() const {
-        return fGSInvocationsSupport;
+        return true;
     }
 
-    bool fCanUseFractForNegativeValues = true;
     bool canUseFractForNegativeValues() const {
-        return fCanUseFractForNegativeValues;
+        return true;
     }
 
-    bool fCanUseFragCoord = true;
     bool canUseFragCoord() const {
-        return fCanUseFragCoord;
+        return true;
     }
 
-    bool fIncompleteShortIntPrecision = false;
     bool incompleteShortIntPrecision() const {
-        return fIncompleteShortIntPrecision;
+        return false;
     }
 
-    bool fAddAndTrueToLoopCondition = false;
     bool addAndTrueToLoopCondition() const {
-        return fAddAndTrueToLoopCondition;
+        return false;
     }
 
-    bool fUnfoldShortCircuitAsTernary = false;
     bool unfoldShortCircuitAsTernary() const {
-        return fUnfoldShortCircuitAsTernary;
+        return false;
     }
 
-    bool fEmulateAbsIntFunction = false;
     bool emulateAbsIntFunction() const {
-        return fEmulateAbsIntFunction;
+        return false;
     }
 
-    bool fRewriteDoWhileLoops = false;
     bool rewriteDoWhileLoops() const {
-        return fRewriteDoWhileLoops;
+        return false;
     }
 
-    bool fRemovePowWithConstantExponent = false;
     bool removePowWithConstantExponent() const {
-        return fRemovePowWithConstantExponent;
+        return false;
     }
 
-    const char* fFBFetchColorName = nullptr;
     const char* fbFetchColorName() const {
-        return fFBFetchColorName;
+        return nullptr;
     }
-
-    bool fRewriteMatrixVectorMultiply = false;
-    bool rewriteMatrixVectorMultiply() const {
-        return fRewriteMatrixVectorMultiply;
-    }
-
 };
 
-using ShaderCapsClass = StandaloneShaderCaps;
-using ShaderCapsPointer = std::shared_ptr<StandaloneShaderCaps>;
 extern StandaloneShaderCaps standaloneCaps;
 
 #else
 
-using ShaderCapsClass = GrShaderCaps;
-using ShaderCapsPointer = sk_sp<GrShaderCaps>;
-
-#endif  // defined(SKSL_STANDALONE) || !SK_SUPPORT_GPU
-
+#define SKSL_CAPS_CLASS GrShaderCaps
 // Various sets of caps for use in tests
 class ShaderCapsFactory {
 public:
-    static ShaderCapsPointer Default() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fShaderDerivativeSupport = true;
-        result->fBuiltinDeterminantSupport = true;
-        result->fCanUseDoLoops = true;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> Default();
 
-    static ShaderCapsPointer Standalone() {
-        return MakeShaderCaps();
-    }
+    static sk_sp<GrShaderCaps> Version450Core();
 
-    static ShaderCapsPointer AddAndTrueToLoopCondition() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fAddAndTrueToLoopCondition = true;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> Version110();
 
-    static ShaderCapsPointer BlendModesFailRandomlyForAllZeroVec() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fInBlendModesFailRandomlyForAllZeroVec = true;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> UsesPrecisionModifiers();
 
-    static ShaderCapsPointer CannotUseFractForNegativeValues() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fCanUseFractForNegativeValues = false;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> CannotUseMinAndAbsTogether();
 
-    static ShaderCapsPointer CannotUseFragCoord() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fCanUseFragCoord = false;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> CannotUseFractForNegativeValues();
 
-    static ShaderCapsPointer CannotUseMinAndAbsTogether() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fCanUseMinAndAbsTogether = false;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> MustForceNegatedAtanParamToFloat();
 
-    static ShaderCapsPointer EmulateAbsIntFunction() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fEmulateAbsIntFunction = true;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> ShaderDerivativeExtensionString();
 
-    static ShaderCapsPointer FragCoordsNew() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fFragCoordConventionsExtensionString = "GL_ARB_fragment_coord_conventions";
-        return result;
-    }
-    static ShaderCapsPointer FragCoordsOld() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 110";
-        result->fGLSLGeneration = GrGLSLGeneration::k110_GrGLSLGeneration;
-        result->fFragCoordConventionsExtensionString = "GL_ARB_fragment_coord_conventions";
-        return result;
-    }
+    static sk_sp<GrShaderCaps> FragCoordsOld();
 
-    static ShaderCapsPointer GeometryShaderExtensionString() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 310es";
-        result->fGeometryShaderSupport = true;
-        result->fGeometryShaderExtensionString = "GL_EXT_geometry_shader";
-        result->fGSInvocationsSupport = true;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> FragCoordsNew();
 
-    static ShaderCapsPointer GeometryShaderSupport() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fGeometryShaderSupport = true;
-        result->fGSInvocationsSupport = true;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> GeometryShaderSupport();
 
-    static ShaderCapsPointer GSInvocationsExtensionString() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fGeometryShaderSupport = true;
-        result->fGSInvocationsSupport = true;
-        result->fGSInvocationsExtensionString = "GL_ARB_gpu_shader5";
-        return result;
-    }
+    static sk_sp<GrShaderCaps> NoGSInvocationsSupport();
 
-    static ShaderCapsPointer IncompleteShortIntPrecision() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 310es";
-        result->fUsesPrecisionModifiers = true;
-        result->fIncompleteShortIntPrecision = true;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> GeometryShaderExtensionString();
 
-    static ShaderCapsPointer MustForceNegatedAtanParamToFloat() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fMustForceNegatedAtanParamToFloat = true;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> GSInvocationsExtensionString();
 
-    static ShaderCapsPointer MustGuardDivisionEvenAfterExplicitZeroCheck() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fMustGuardDivisionEvenAfterExplicitZeroCheck = true;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> VariousCaps();
 
-    static ShaderCapsPointer NoGSInvocationsSupport() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fGeometryShaderSupport = true;
-        result->fGSInvocationsSupport = false;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> CannotUseFragCoord();
 
-    static ShaderCapsPointer RemovePowWithConstantExponent() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fRemovePowWithConstantExponent = true;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> IncompleteShortIntPrecision();
 
-    static ShaderCapsPointer RewriteDoWhileLoops() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fRewriteDoWhileLoops = true;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> AddAndTrueToLoopCondition();
 
-    static ShaderCapsPointer RewriteMatrixVectorMultiply() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fRewriteMatrixVectorMultiply = true;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> UnfoldShortCircuitAsTernary();
 
-    static ShaderCapsPointer SampleMaskSupport() {
-        ShaderCapsPointer result = Default();
-        result->fSampleMaskSupport = true;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> EmulateAbsIntFunction();
 
-    static ShaderCapsPointer ShaderDerivativeExtensionString() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fShaderDerivativeSupport = true;
-        result->fShaderDerivativeExtensionString = "GL_OES_standard_derivatives";
-        result->fUsesPrecisionModifiers = true;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> RewriteDoWhileLoops();
 
-    static ShaderCapsPointer UnfoldShortCircuitAsTernary() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fUnfoldShortCircuitAsTernary = true;
-        return result;
-    }
+    static sk_sp<GrShaderCaps> RemovePowWithConstantExponent();
 
-    static ShaderCapsPointer UsesPrecisionModifiers() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 400";
-        result->fUsesPrecisionModifiers = true;
-        return result;
-    }
-
-    static ShaderCapsPointer Version110() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 110";
-        result->fGLSLGeneration = GrGLSLGeneration::k110_GrGLSLGeneration;
-        return result;
-    }
-
-    static ShaderCapsPointer Version450Core() {
-        ShaderCapsPointer result = MakeShaderCaps();
-        result->fVersionDeclString = "#version 450 core";
-        return result;
-    }
-
-private:
-    static ShaderCapsPointer MakeShaderCaps();
+    static sk_sp<GrShaderCaps> SampleMaskSupport();
 };
-
-#if !defined(SKSL_STANDALONE)
-bool type_to_grsltype(const Context& context, const Type& type, GrSLType* outType);
 #endif
 
 void write_stringstream(const StringStream& d, OutputStream& out);
 
-}  // namespace SkSL
+// Returns true if op is '=' or any compound assignment operator ('+=', '-=', etc.)
+bool is_assignment(Token::Kind op);
 
-#endif  // SKSL_UTIL
+// Given a compound assignment operator, returns the non-assignment version of the operator (e.g.
+// '+=' becomes '+')
+Token::Kind remove_assignment(Token::Kind op);
+
+NORETURN void sksl_abort();
+
+} // namespace
+
+#endif

@@ -110,6 +110,12 @@ public:
         *(int32_t*)this->reserve(sizeof(value)) = value;
     }
 
+    void writePtr(void* value) {
+        // this->reserve() only returns 4-byte aligned pointers,
+        // so this may be an under-aligned write if we were to do this like the others.
+        memcpy(this->reserve(sizeof(value)), &value, sizeof(value));
+    }
+
     void writeScalar(SkScalar value) {
         *(SkScalar*)this->reserve(sizeof(value)) = value;
     }
@@ -184,9 +190,10 @@ public:
     }
 
     /**
-     *  Writes a string to the writer, which can be retrieved with SkReadBuffer::readString().
-     *  The length can be specified, or if -1 is passed, it will be computed by calling strlen().
-     *  The length must be < max size_t.
+     *  Writes a string to the writer, which can be retrieved with
+     *  SkReader32::readString().
+     *  The length can be specified, or if -1 is passed, it will be computed by
+     *  calling strlen(). The length must be < max size_t.
      *
      *  If you write NULL, it will be read as "".
      */
@@ -269,7 +276,7 @@ private:
         char    fStorage[SIZE];
     } fData;
 
-    using INHERITED = SkWriter32;
+    typedef SkWriter32 INHERITED;
 };
 
 #endif

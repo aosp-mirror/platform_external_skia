@@ -9,6 +9,7 @@
 #define SkHighContrastFilter_DEFINED
 
 #include "include/core/SkColorFilter.h"
+#include "include/core/SkPaint.h"
 
 /**
  *  Configuration struct for SkHighContrastFilter.
@@ -72,9 +73,12 @@ struct SkHighContrastConfig {
  * -1.0 to 1.0.
  */
 
-struct SK_API SkHighContrastFilter {
+class SK_API SkHighContrastFilter {
+public:
     // Returns the filter, or nullptr if the config is invalid.
     static sk_sp<SkColorFilter> Make(const SkHighContrastConfig& config);
+
+    static void RegisterFlattenables();
 };
 
 #endif

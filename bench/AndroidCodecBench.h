@@ -35,6 +35,6 @@ private:
     const int               fSampleSize;
     SkImageInfo             fInfo;          // Set in onDelayedSetup.
     SkAutoMalloc            fPixelStorage;  // Set in onDelayedSetup.
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 #endif // AndroidCodecBench_DEFINED

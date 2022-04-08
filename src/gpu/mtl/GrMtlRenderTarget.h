@@ -19,8 +19,6 @@ class GrMtlGpu;
 
 class GrMtlRenderTarget: public GrRenderTarget {
 public:
-    // If sampleCnt is greater than 1 and the texture is single sampled, then a MSAA texture
-    // is created that will resolve to the wrapped single sample texture.
     static sk_sp<GrMtlRenderTarget> MakeWrappedRenderTarget(GrMtlGpu*,
                                                             SkISize,
                                                             int sampleCnt,
@@ -28,8 +26,7 @@ public:
 
     ~GrMtlRenderTarget() override;
 
-    bool canAttemptStencilAttachment(bool useMSAASurface) const override {
-        SkASSERT(useMSAASurface == (this->numSamples() > 1));
+    bool canAttemptStencilAttachment() const override {
         return true;
     }
 
@@ -63,8 +60,9 @@ protected:
         if (numColorSamples > 1) {
             ++numColorSamples;
         }
-        return GrSurface::ComputeSize(this->backendFormat(), this->dimensions(),
-                                      numColorSamples, GrMipmapped::kNo);
+        const GrCaps& caps = *this->getGpu()->caps();
+        return GrSurface::ComputeSize(caps, this->backendFormat(), this->dimensions(),
+                                      numColorSamples, GrMipMapped::kNo);
     }
 
     id<MTLTexture> fColorTexture;
@@ -81,9 +79,9 @@ private:
                       Wrapped);
     GrMtlRenderTarget(GrMtlGpu* gpu, SkISize, id<MTLTexture> colorTexture, Wrapped);
 
-    bool completeStencilAttachment(GrAttachment* stencil, bool useMSAASurface) override;
+    bool completeStencilAttachment() override;
 
-    using INHERITED = GrRenderTarget;
+    typedef GrRenderTarget INHERITED;
 };
 
 

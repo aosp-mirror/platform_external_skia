@@ -38,7 +38,7 @@ int SkColorTypeBytesPerPixel(SkColorType ct) {
 }
 
 bool SkColorTypeIsAlwaysOpaque(SkColorType ct) {
-    return !(SkColorTypeChannelFlags(ct) & kAlpha_SkColorChannelFlag);
+    return !(kAlpha_SkColorTypeComponentFlag & SkColorTypeComponentFlags(ct));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -90,7 +90,7 @@ bool SkColorTypeValidateAlphaType(SkColorType colorType, SkAlphaType alphaType,
             if (kUnpremul_SkAlphaType == alphaType) {
                 alphaType = kPremul_SkAlphaType;
             }
-            [[fallthrough]];
+            // fall-through
         case kARGB_4444_SkColorType:
         case kRGBA_8888_SkColorType:
         case kBGRA_8888_SkColorType:

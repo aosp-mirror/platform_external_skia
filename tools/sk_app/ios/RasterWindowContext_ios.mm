@@ -58,7 +58,7 @@ private:
     GLuint               fRenderbuffer;
     sk_sp<SkSurface>     fBackbufferSurface;
 
-    using INHERITED = GLWindowContext;
+    typedef GLWindowContext INHERITED;
 };
 
 RasterWindowContext_ios::RasterWindowContext_ios(const IOSWindowInfo& info,

@@ -44,7 +44,7 @@ private:
     SkPMColor*  fColors;
     int         fCount;
 
-    using INHERITED = SkRefCnt;
+    typedef SkRefCnt INHERITED;
 };
 
 #endif

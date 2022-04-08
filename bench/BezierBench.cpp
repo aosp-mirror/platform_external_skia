@@ -75,11 +75,11 @@ public:
     }
 
 protected:
-    const char* onGetName() override {
+    virtual const char* onGetName() {
         return fName.c_str();
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    virtual void onDraw(int loops, SkCanvas* canvas) {
         fRec.fCanvas = canvas;
         this->setupPaint(&fRec.fPaint);
         fRec.fPaint.setStyle(SkPaint::kStroke_Style);
@@ -90,7 +90,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 DEF_BENCH( return new BezierBench(SkPaint::kButt_Cap, SkPaint::kRound_Join, 2, draw_quad); )

@@ -8,38 +8,40 @@
 #ifndef GrYUVtoRGBEffect_DEFINED
 #define GrYUVtoRGBEffect_DEFINED
 
-#include "include/core/SkYUVAInfo.h"
-#include "src/core/SkYUVAInfoLocation.h"
-#include "src/gpu/GrFragmentProcessor.h"
+#include "include/core/SkTypes.h"
 
-class GrYUVATextureProxies;
+#include "include/core/SkYUVAIndex.h"
+#include "src/gpu/GrCoordTransform.h"
+#include "src/gpu/GrFragmentProcessor.h"
 
 class GrYUVtoRGBEffect : public GrFragmentProcessor {
 public:
-    static std::unique_ptr<GrFragmentProcessor> Make(const GrYUVATextureProxies& yuvaProxies,
-                                                     GrSamplerState samplerState,
+    // The domain supported by this effect is more limited than the general GrTextureDomain due
+    // to the multi-planar, varying resolution images that it has to sample. If 'domain' is provided
+    // it is the Y plane's domain. This will automatically inset for bilinear filtering, and only
+    // the clamp wrap mode is supported.
+    static std::unique_ptr<GrFragmentProcessor> Make(GrSurfaceProxyView views[],
+                                                     const SkYUVAIndex indices[4],
+                                                     SkYUVColorSpace yuvColorSpace,
+                                                     GrSamplerState::Filter filterMode,
                                                      const GrCaps&,
                                                      const SkMatrix& localMatrix = SkMatrix::I(),
-                                                     const SkRect* subset = nullptr,
                                                      const SkRect* domain = nullptr);
+#ifdef SK_DEBUG
+    SkString dumpInfo() const override;
+#endif
+
     std::unique_ptr<GrFragmentProcessor> clone() const override;
 
     const char* name() const override { return "YUVtoRGBEffect"; }
 
 private:
-    GrYUVtoRGBEffect(std::unique_ptr<GrFragmentProcessor> planeFPs[4],
-                     int numPlanes,
-                     const SkYUVAInfo::YUVALocations&,
-                     const bool snap[2],
-                     SkYUVColorSpace yuvColorSpace);
+    GrYUVtoRGBEffect(std::unique_ptr<GrFragmentProcessor> planeFPs[4], int numPlanes,
+                     const SkYUVAIndex yuvaIndices[4], SkYUVColorSpace yuvColorSpace);
 
     GrYUVtoRGBEffect(const GrYUVtoRGBEffect& src);
 
-#if GR_TEST_UTILS
-    SkString onDumpInfo() const override;
-#endif
-
-    std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override;
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
 
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
 
@@ -47,8 +49,7 @@ private:
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST
 
-    SkYUVAInfo::YUVALocations   fLocations;
-    SkYUVColorSpace             fYUVColorSpace;
-    bool                        fSnap[2];
+    SkYUVAIndex      fYUVAIndices[4];
+    SkYUVColorSpace  fYUVColorSpace;
 };
 #endif

@@ -9,34 +9,25 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkRect.h"
-#include "include/effects/SkImageFilters.h"
 #include "src/core/SkReadBuffer.h"
-#include "src/core/SkSamplingPriv.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkSpecialSurface.h"
 #include "src/core/SkWriteBuffer.h"
 
 SkMatrixImageFilter::SkMatrixImageFilter(const SkMatrix& transform,
-                                         const SkSamplingOptions& sampling,
+                                         SkFilterQuality filterQuality,
                                          sk_sp<SkImageFilter> input)
     : INHERITED(&input, 1, nullptr)
     , fTransform(transform)
-    , fSampling(sampling) {
-    // Pre-cache so future calls to fTransform.getType() are threadsafe.
-    (void)fTransform.getType();
+    , fFilterQuality(filterQuality) {
 }
 
 sk_sp<SkImageFilter> SkMatrixImageFilter::Make(const SkMatrix& transform,
-                                               const SkSamplingOptions& sampling,
+                                               SkFilterQuality filterQuality,
                                                sk_sp<SkImageFilter> input) {
     return sk_sp<SkImageFilter>(new SkMatrixImageFilter(transform,
-                                                        sampling,
+                                                        filterQuality,
                                                         std::move(input)));
-}
-
-sk_sp<SkImageFilter> SkImageFilters::MatrixTransform(
-        const SkMatrix& transform, const SkSamplingOptions& sampling, sk_sp<SkImageFilter> input) {
-    return SkMatrixImageFilter::Make(transform, sampling, std::move(input));
 }
 
 sk_sp<SkFlattenable> SkMatrixImageFilter::CreateProc(SkReadBuffer& buffer) {
@@ -44,24 +35,14 @@ sk_sp<SkFlattenable> SkMatrixImageFilter::CreateProc(SkReadBuffer& buffer) {
     SkMatrix matrix;
     buffer.readMatrix(&matrix);
 
-    auto sampling = [&]() {
-        if (buffer.isVersionLT(SkPicturePriv::kMatrixImageFilterSampling_Version)) {
-            return SkSamplingOptions(buffer.read32LE(kLast_SkFilterQuality),
-                                     SkSamplingOptions::kMedium_asMipmapLinear);
-        } else {
-            return SkSamplingPriv::Read(buffer);
-        }
-    }();
-    return Make(matrix, sampling, common.getInput(0));
+    return Make(matrix, buffer.read32LE(kLast_SkFilterQuality), common.getInput(0));
 }
 
 void SkMatrixImageFilter::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writeMatrix(fTransform);
-    SkSamplingPriv::Write(buffer, fSampling);
+    buffer.writeInt(fFilterQuality);
 }
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
 
 sk_sp<SkSpecialImage> SkMatrixImageFilter::onFilterImage(const Context& ctx,
                                                          SkIPoint* offset) const {
@@ -104,8 +85,9 @@ sk_sp<SkSpecialImage> SkMatrixImageFilter::onFilterImage(const Context& ctx,
     SkPaint paint;
     paint.setAntiAlias(true);
     paint.setBlendMode(SkBlendMode::kSrc);
+    paint.setFilterQuality(fFilterQuality);
 
-    input->draw(canvas, srcRect.x(), srcRect.y(), fSampling, &paint);
+    input->draw(canvas, srcRect.x(), srcRect.y(), &paint);
 
     offset->fX = dstBounds.fLeft;
     offset->fY = dstBounds.fTop;
@@ -139,7 +121,7 @@ SkIRect SkMatrixImageFilter::onFilterNodeBounds(const SkIRect& src, const SkMatr
     matrix.mapRect(&floatBounds, SkRect::Make(src));
     SkIRect result = floatBounds.roundOut();
 
-    if (kReverse_MapDirection == dir && SkSamplingOptions() != fSampling) {
+    if (kReverse_MapDirection == dir && kNone_SkFilterQuality != fFilterQuality) {
         // When filtering we might need some pixels in the source that might be otherwise
         // clipped off.
         result.outset(1, 1);

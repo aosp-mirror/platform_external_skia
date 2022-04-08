@@ -177,7 +177,7 @@ public:
     /** The iterator becomes invalid if the element it refers to is removed from the list. */
     class Iter : private NodeList::Iter {
     private:
-        using INHERITED = typename NodeList::Iter;
+        typedef typename NodeList::Iter INHERITED;
 
     public:
         typedef typename INHERITED::IterStart IterStart;
@@ -187,8 +187,6 @@ public:
         static const IterStart kTail_IterStart = INHERITED::kTail_IterStart;
 
         Iter() {}
-        Iter(const Iter& that) : INHERITED(that) {}
-        Iter& operator=(const Iter& that) { INHERITED::operator=(that); return *this; }
 
         Iter(const SkTLList& list, IterStart start = kHead_IterStart) {
             INHERITED::init(list.fList, start);
@@ -203,6 +201,8 @@ public:
         T* next() { return this->nodeToObj(INHERITED::next()); }
 
         T* prev() { return this->nodeToObj(INHERITED::prev()); }
+
+        Iter& operator= (const Iter& iter) { INHERITED::operator=(iter); return *this; }
 
     private:
         friend class SkTLList;

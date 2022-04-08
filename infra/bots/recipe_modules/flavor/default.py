@@ -24,11 +24,7 @@ DeviceDirs = collections.namedtuple(
 
 
 class DefaultFlavor(object):
-  def __init__(self, module, app_name):
-    # Name of the app we're going to run. May be used in various ways by
-    # different flavors.
-    self.app_name = app_name
-
+  def __init__(self, module):
     # Store a pointer to the parent recipe module (SkiaFlavorApi) so that
     # FlavorUtils objects can do recipe module-like things, like run steps or
     # access module-level resources.
@@ -127,22 +123,22 @@ class DefaultFlavor(object):
     path = []
     ld_library_path = []
 
-    workdir = self.m.vars.workdir
-    clang_linux = str(workdir.join('clang_linux'))
+    slave_dir = self.m.vars.slave_dir
+    clang_linux = str(slave_dir.join('clang_linux'))
     extra_tokens = self.m.vars.extra_tokens
 
     if self.m.vars.is_linux:
       if (self.m.vars.builder_cfg.get('cpu_or_gpu', '') == 'GPU'
           and 'Intel' in self.m.vars.builder_cfg.get('cpu_or_gpu_value', '')):
-        dri_path = workdir.join('mesa_intel_driver_linux')
+        dri_path = slave_dir.join('mesa_intel_driver_linux')
         ld_library_path.append(dri_path)
         env['LIBGL_DRIVERS_PATH'] = str(dri_path)
         env['VK_ICD_FILENAMES'] = str(dri_path.join('intel_icd.x86_64.json'))
 
       if 'Vulkan' in extra_tokens:
-        env['VULKAN_SDK'] = str(workdir.join('linux_vulkan_sdk'))
-        path.append(workdir.join('linux_vulkan_sdk', 'bin'))
-        ld_library_path.append(workdir.join('linux_vulkan_sdk', 'lib'))
+        env['VULKAN_SDK'] = str(slave_dir.join('linux_vulkan_sdk'))
+        path.append(slave_dir.join('linux_vulkan_sdk', 'bin'))
+        ld_library_path.append(slave_dir.join('linux_vulkan_sdk', 'lib'))
         # Enable layers for Debug only to avoid affecting perf results on
         # Release.
         # ASAN reports leaks in the Vulkan SDK when the debug layer is enabled.
@@ -150,15 +146,15 @@ class DefaultFlavor(object):
         if (self.m.vars.builder_cfg.get('configuration', '') != 'Release' and
             'ASAN' not in extra_tokens and
             'TSAN' not in extra_tokens):
-          env['VK_LAYER_PATH'] = str(workdir.join(
+          env['VK_LAYER_PATH'] = str(slave_dir.join(
               'linux_vulkan_sdk', 'etc', 'vulkan', 'explicit_layer.d'))
 
       if 'OpenCL' in extra_tokens:
-        ld_library_path.append(workdir.join('opencl_ocl_icd_linux'))
+        ld_library_path.append(slave_dir.join('opencl_ocl_icd_linux'))
         # TODO(dogben): Limit to the appropriate GPUs when we start running on
         # GPUs other than IntelIris640.
         # Skylake and later use the NEO driver.
-        neo_path = workdir.join('opencl_intel_neo_linux')
+        neo_path = slave_dir.join('opencl_intel_neo_linux')
         ld_library_path.append(neo_path)
         # Generate vendors dir contaning the ICD file pointing to the NEO OpenCL
         # library.
@@ -191,7 +187,7 @@ class DefaultFlavor(object):
     elif 'ProcDump' in extra_tokens:
       dumps_dir = self.m.path.join(self.m.vars.swarming_out_dir, 'dumps')
       self.m.file.ensure_directory('makedirs dumps', dumps_dir)
-      procdump = str(self.m.vars.workdir.join('procdump_win',
+      procdump = str(self.m.vars.slave_dir.join('procdump_win',
                                                 'procdump64.exe'))
       # Full docs for ProcDump here:
       # https://docs.microsoft.com/en-us/sysinternals/downloads/procdump
@@ -203,6 +199,8 @@ class DefaultFlavor(object):
       cmd = [procdump, '-accepteula', '-mp', '-e', '1', '-x', dumps_dir] + cmd
 
     if 'ASAN' in extra_tokens:
+      # Note: if you see "<unknown module>" in stacktraces for xSAN warnings,
+      # try adding "fast_unwind_on_malloc=0" to xSAN_OPTIONS.
       os = self.m.vars.builder_cfg.get('os', '')
       if 'Mac' in os or 'Win' in os:
         # Mac and Win don't support detect_leaks.
@@ -211,12 +209,6 @@ class DefaultFlavor(object):
         env['ASAN_OPTIONS'] = 'symbolize=1 detect_leaks=1'
       env[ 'LSAN_OPTIONS'] = 'symbolize=1 print_suppressions=1'
       env['UBSAN_OPTIONS'] = 'symbolize=1 print_stacktrace=1'
-
-      # If you see <unknown module> in stacktraces, try fast_unwind_on_malloc=0.
-      # This may cause a 2-25x slowdown, so use it only when you really need it.
-      if name == 'dm' and 'Vulkan' in extra_tokens:
-        env['ASAN_OPTIONS'] += ' fast_unwind_on_malloc=0'
-        env['LSAN_OPTIONS'] += ' fast_unwind_on_malloc=0'
 
     if 'TSAN' in extra_tokens:
       # We don't care about malloc(), fprintf, etc. used in signal handlers.
@@ -242,7 +234,7 @@ class DefaultFlavor(object):
     if name in to_symbolize and self.m.vars.is_linux:
       # Convert path objects or placeholders into strings such that they can
       # be passed to symbolize_stack_trace.py
-      args = [workdir] + [str(x) for x in cmd]
+      args = [slave_dir] + [str(x) for x in cmd]
       with self.m.context(cwd=self.m.path['start_dir'].join('skia'), env=env):
         self._py('symbolized %s' % name,
                  self.module.resource('symbolize_stack_trace.py'),

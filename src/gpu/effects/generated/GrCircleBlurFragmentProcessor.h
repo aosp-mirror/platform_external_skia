@@ -10,49 +10,39 @@
  **************************************************************************************************/
 #ifndef GrCircleBlurFragmentProcessor_DEFINED
 #define GrCircleBlurFragmentProcessor_DEFINED
-
-#include "include/core/SkM44.h"
 #include "include/core/SkTypes.h"
+#include "include/core/SkM44.h"
 
-#include "src/gpu/effects/GrTextureEffect.h"
-
+#include "src/gpu/GrCoordTransform.h"
 #include "src/gpu/GrFragmentProcessor.h"
-
 class GrCircleBlurFragmentProcessor : public GrFragmentProcessor {
 public:
-    static std::unique_ptr<GrFragmentProcessor> Make(std::unique_ptr<GrFragmentProcessor> inputFP,
-                                                     GrRecordingContext*,
-                                                     const SkRect& circle,
+    static std::unique_ptr<GrFragmentProcessor> Make(GrRecordingContext*, const SkRect& circle,
                                                      float sigma);
     GrCircleBlurFragmentProcessor(const GrCircleBlurFragmentProcessor& src);
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "CircleBlurFragmentProcessor"; }
     SkRect circleRect;
-    float solidRadius;
     float textureRadius;
+    float solidRadius;
+    TextureSampler blurProfileSampler;
 
 private:
-    GrCircleBlurFragmentProcessor(std::unique_ptr<GrFragmentProcessor> inputFP,
-                                  SkRect circleRect,
-                                  float solidRadius,
-                                  float textureRadius,
-                                  std::unique_ptr<GrFragmentProcessor> blurProfile)
+    GrCircleBlurFragmentProcessor(SkRect circleRect, float textureRadius, float solidRadius,
+                                  GrSurfaceProxyView blurProfileSampler)
             : INHERITED(kGrCircleBlurFragmentProcessor_ClassID,
-                        (OptimizationFlags)ProcessorOptimizationFlags(inputFP.get()) &
-                                kCompatibleWithCoverageAsAlpha_OptimizationFlag)
+                        (OptimizationFlags)kCompatibleWithCoverageAsAlpha_OptimizationFlag)
             , circleRect(circleRect)
+            , textureRadius(textureRadius)
             , solidRadius(solidRadius)
-            , textureRadius(textureRadius) {
-        this->registerChild(std::move(inputFP), SkSL::SampleUsage::PassThrough());
-        this->registerChild(std::move(blurProfile), SkSL::SampleUsage::Explicit());
+            , blurProfileSampler(std::move(blurProfileSampler)) {
+        this->setTextureSamplerCnt(1);
     }
-    std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override;
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
     bool onIsEqual(const GrFragmentProcessor&) const override;
-#if GR_TEST_UTILS
-    SkString onDumpInfo() const override;
-#endif
+    const TextureSampler& onTextureSampler(int) const override;
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST
-    using INHERITED = GrFragmentProcessor;
+    typedef GrFragmentProcessor INHERITED;
 };
 #endif

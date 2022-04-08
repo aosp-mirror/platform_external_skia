@@ -27,14 +27,12 @@ public:
 
     GrImageContext* asImageContext() { return fContext->asImageContext(); }
     GrRecordingContext* asRecordingContext() { return fContext->asRecordingContext(); }
-    GrDirectContext* asDirectContext() { return fContext->asDirectContext(); }
-
-    GrContextOptions::ShaderErrorHandler* getShaderErrorHandler() const;
+    GrContext* asDirectContext() { return fContext->asDirectContext(); }
 
 private:
     explicit GrBaseContextPriv(GrContext_Base* context) : fContext(context) {}
-    GrBaseContextPriv(const GrBaseContextPriv&) = delete;
-    GrBaseContextPriv& operator=(const GrBaseContextPriv&) = delete;
+    GrBaseContextPriv(const GrBaseContextPriv&); // unimpl
+    GrBaseContextPriv& operator=(const GrBaseContextPriv&); // unimpl
 
     // No taking addresses of this type.
     const GrBaseContextPriv* operator&() const;
@@ -47,7 +45,7 @@ private:
 
 inline GrBaseContextPriv GrContext_Base::priv() { return GrBaseContextPriv(this); }
 
-inline const GrBaseContextPriv GrContext_Base::priv () const {  // NOLINT(readability-const-return-type)
+inline const GrBaseContextPriv GrContext_Base::priv () const {
     return GrBaseContextPriv(const_cast<GrContext_Base*>(this));
 }
 

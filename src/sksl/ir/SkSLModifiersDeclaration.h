@@ -8,8 +8,8 @@
 #ifndef SKSL_MODIFIERDECLARATION
 #define SKSL_MODIFIERDECLARATION
 
-#include "include/private/SkSLModifiers.h"
-#include "include/private/SkSLProgramElement.h"
+#include "src/sksl/ir/SkSLModifiers.h"
+#include "src/sksl/ir/SkSLProgramElement.h"
 
 namespace SkSL {
 
@@ -18,32 +18,26 @@ namespace SkSL {
  *
  * layout(blend_support_all_equations) out;
  */
-class ModifiersDeclaration final : public ProgramElement {
-public:
-    static constexpr Kind kProgramElementKind = Kind::kModifiers;
-
-    ModifiersDeclaration(const Modifiers* modifiers)
-        : INHERITED(-1, kProgramElementKind)
-        , fModifiers(modifiers) {}
-
-    const Modifiers& modifiers() const {
-        return *fModifiers;
-    }
+struct ModifiersDeclaration : public ProgramElement {
+    ModifiersDeclaration(Modifiers modifiers)
+    : INHERITED(-1, kModifiers_Kind)
+    , fModifiers(modifiers) {}
 
     std::unique_ptr<ProgramElement> clone() const override {
-        return std::make_unique<ModifiersDeclaration>(&this->modifiers());
+        return std::unique_ptr<ProgramElement>(new ModifiersDeclaration(fModifiers));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
-        return this->modifiers().description() + ";";
+        return fModifiers.description() + ";";
     }
+#endif
 
-private:
-    const Modifiers* fModifiers;
+    Modifiers fModifiers;
 
-    using INHERITED = ProgramElement;
+    typedef ProgramElement INHERITED;
 };
 
-}  // namespace SkSL
+} // namespace
 
 #endif

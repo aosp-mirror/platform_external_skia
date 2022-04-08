@@ -10,7 +10,6 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkCubicMap.h"
 #include "include/core/SkTypeface.h"
-#include "include/private/SkTPin.h"
 #include "modules/sksg/include/SkSGDraw.h"
 #include "modules/sksg/include/SkSGGroup.h"
 #include "modules/sksg/include/SkSGPaint.h"
@@ -24,19 +23,6 @@
 
 #include <cmath>
 #include <utility>
-
-class SlideDir::Animator : public SkRefCnt {
-public:
-    Animator(const Animator&) = delete;
-    Animator& operator=(const Animator&) = delete;
-
-    void tick(float t) { this->onTick(t); }
-
-protected:
-    Animator() = default;
-
-    virtual void onTick(float t) = 0;
-};
 
 namespace {
 
@@ -60,9 +46,9 @@ public:
         SkASSERT(fSlide);
     }
 
-    sk_sp<SlideDir::Animator> makeForwardingAnimator() {
+    sk_sp<sksg::Animator> makeForwardingAnimator() {
         // Trivial sksg::Animator -> skottie::Animation tick adapter
-        class ForwardingAnimator final : public SlideDir::Animator {
+        class ForwardingAnimator final : public sksg::Animator {
         public:
             explicit ForwardingAnimator(sk_sp<SlideAdapter> adapter)
                 : fAdapter(std::move(adapter)) {}
@@ -108,8 +94,9 @@ private:
 
 SkMatrix SlideMatrix(const sk_sp<Slide>& slide, const SkRect& dst) {
     const auto slideSize = slide->getDimensions();
-    return SkMatrix::RectToRect(SkRect::MakeIWH(slideSize.width(), slideSize.height()), dst,
-                                SkMatrix::kCenter_ScaleToFit);
+    return SkMatrix::MakeRectToRect(SkRect::MakeIWH(slideSize.width(), slideSize.height()),
+                                    dst,
+                                    SkMatrix::kCenter_ScaleToFit);
 }
 
 } // namespace
@@ -121,7 +108,7 @@ struct SlideDir::Rec {
     SkRect                        fRect;
 };
 
-class SlideDir::FocusController final : public Animator {
+class SlideDir::FocusController final : public sksg::Animator {
 public:
     FocusController(const SlideDir* dir, const SkRect& focusRect)
         : fDir(dir)
@@ -179,8 +166,9 @@ public:
         }
 
         // Map coords to slide space.
-        const auto xform = SkMatrix::RectToRect(fRect, SkRect::MakeSize(fDir->fWinSize),
-                                                SkMatrix::kCenter_ScaleToFit);
+        const auto xform = SkMatrix::MakeRectToRect(fRect,
+                                                    SkRect::MakeSize(fDir->fWinSize),
+                                                    SkMatrix::kCenter_ScaleToFit);
         const auto pt = xform.mapXY(x, y);
 
         return fTarget->fSlide->onMouse(pt.x(), pt.y(), state, modifiers);
@@ -193,7 +181,7 @@ public:
     }
 
 protected:
-    void onTick(float t) override {
+    void onTick(float t) {
         if (!this->isAnimating())
             return;
 
@@ -259,7 +247,7 @@ private:
                     fTimeBase = 0;
     State           fState    = State::kIdle;
 
-    using INHERITED = Animator;
+    using INHERITED = sksg::Animator;
 };
 
 SlideDir::SlideDir(const SkString& name, SkTArray<sk_sp<Slide>>&& slides, int columns)
@@ -304,6 +292,7 @@ void SlideDir::load(SkScalar winWidth, SkScalar winHeight) {
     const auto  cellWidth =  winWidth / fColumns;
     fCellSize = SkSize::Make(cellWidth, cellWidth / kAspectRatio);
 
+    sksg::AnimatorList sceneAnimators;
     fRoot = sksg::Group::Make();
 
     for (int i = 0; i < fSlides.count(); ++i) {
@@ -329,13 +318,13 @@ void SlideDir::load(SkScalar winWidth, SkScalar winHeight) {
                                      slideMatrix->getMatrix()));
         auto slideRoot = sksg::TransformEffect::Make(std::move(slideGrp), slideMatrix);
 
-        fSceneAnimators.push_back(adapter->makeForwardingAnimator());
+        sceneAnimators.push_back(adapter->makeForwardingAnimator());
 
         fRoot->addChild(slideRoot);
         fRecs.push_back({ slide, slideRoot, slideMatrix, slideRect });
     }
 
-    fScene = sksg::Scene::Make(fRoot);
+    fScene = sksg::Scene::Make(fRoot, std::move(sceneAnimators));
 
     const auto focusRect = SkRect::MakeSize(fWinSize).makeInset(kFocusInset.width(),
                                                                 kFocusInset.height());
@@ -371,9 +360,7 @@ bool SlideDir::animate(double nanos) {
     }
 
     const auto t = msec - fTimeBase;
-    for (const auto& anim : fSceneAnimators) {
-        anim->tick(t);
-    }
+    fScene->animate(t);
     fFocusController->tick(t);
 
     return true;
@@ -394,7 +381,7 @@ bool SlideDir::onChar(SkUnichar c) {
 bool SlideDir::onMouse(SkScalar x, SkScalar y, skui::InputState state,
                        skui::ModifierKey modifiers) {
     modifiers &= ~skui::ModifierKey::kFirstPress;
-    if (state == skui::InputState::kMove || sknonstd::Any(modifiers))
+    if (state == skui::InputState::kMove || skstd::Any(modifiers))
         return false;
 
     if (fFocusController->hasFocus()) {

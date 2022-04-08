@@ -112,11 +112,10 @@ public:
         setContrast(0);
     }
 
-    SkMask::Format fMaskFormat;
-
+    uint8_t     fMaskFormat;
 private:
-    uint8_t        fStrokeJoin : 4;
-    uint8_t        fStrokeCap  : 4;
+    uint8_t     fStrokeJoin : 4;
+    uint8_t     fStrokeCap : 4;
 
 public:
     uint16_t    fFlags;
@@ -128,13 +127,13 @@ public:
 
     SkString dump() const {
         SkString msg;
-        msg.appendf("    Rec\n");
-        msg.appendf("      textsize %a prescale %a preskew %a post [%a %a %a %a]\n",
+        msg.appendf("Rec\n");
+        msg.appendf("  textsize %g prescale %g preskew %g post [%g %g %g %g]\n",
                    fTextSize, fPreScaleX, fPreSkewX, fPost2x2[0][0],
                    fPost2x2[0][1], fPost2x2[1][0], fPost2x2[1][1]);
-        msg.appendf("      frame %g miter %g format %d join %d cap %d flags %#hx\n",
+        msg.appendf("  frame %g miter %g format %d join %d cap %d flags %#hx\n",
                    fFrameWidth, fMiterLimit, fMaskFormat, fStrokeJoin, fStrokeCap, fFlags);
-        msg.appendf("      lum bits %x, device gamma %d, paint gamma %d contrast %d\n", fLumBits,
+        msg.appendf("  lum bits %x, device gamma %d, paint gamma %d contrast %d\n", fLumBits,
                     fDeviceGamma, fPaintGamma, fContrast);
         return msg;
     }
@@ -194,7 +193,7 @@ public:
     inline void setHinting(SkFontHinting);
 
     SkMask::Format getFormat() const {
-        return fMaskFormat;
+        return static_cast<SkMask::Format>(fMaskFormat);
     }
 
     SkColor getLuminanceColor() const {
@@ -270,7 +269,7 @@ public:
     SkTypeface* getTypeface() const { return fTypeface.get(); }
 
     SkMask::Format getMaskFormat() const {
-        return fRec.fMaskFormat;
+        return (SkMask::Format)fRec.fMaskFormat;
     }
 
     bool isSubpixel() const {
@@ -284,7 +283,9 @@ public:
     // DEPRECATED
     bool isVertical() const { return false; }
 
-    SkGlyph     makeGlyph(SkPackedGlyphID);
+    unsigned    getGlyphCount() { return this->generateGlyphCount(); }
+    void        getAdvance(SkGlyph*);
+    void        getMetrics(SkGlyph*);
     void        getImage(const SkGlyph&);
     bool SK_WARN_UNUSED_RESULT getPath(SkPackedGlyphID, SkPath*);
     void        getFontMetrics(SkFontMetrics*);
@@ -315,11 +316,14 @@ public:
                                           SkScalerContextEffects* effects) {
         SkPaint paint;
         return MakeRecAndEffects(
-                font, paint, SkSurfaceProps(),
+                font, paint, SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType),
                 SkScalerContextFlags::kNone, SkMatrix::I(), rec, effects);
     }
 
-    static std::unique_ptr<SkScalerContext> MakeEmpty(
+    static SkDescriptor*  MakeDescriptorForPaths(SkFontID fontID,
+                                                 SkAutoDescriptor* ad);
+
+    static SkScalerContext* MakeEmptyContext(
             sk_sp<SkTypeface> typeface, const SkScalerContextEffects& effects,
             const SkDescriptor* desc);
 
@@ -368,7 +372,7 @@ protected:
     /** Generates the contents of glyph.fWidth, fHeight, fTop, fLeft,
      *  as well as fAdvanceX and fAdvanceY if not already set.
      *
-     *  TODO: fMaskFormat is set by internalMakeGlyph later; cannot be set here.
+     *  TODO: fMaskFormat is set by getMetrics later; cannot be set here.
      */
     virtual void generateMetrics(SkGlyph* glyph) = 0;
 
@@ -391,6 +395,9 @@ protected:
 
     /** Retrieves font metrics. */
     virtual void generateFontMetrics(SkFontMetrics*) = 0;
+
+    /** Returns the number of glyphs in the font. */
+    virtual unsigned generateGlyphCount() = 0;
 
     void forceGenerateImageFromPath() { fGenerateImageFromPath = true; }
     void forceOffGenerateImageFromPath() { fGenerateImageFromPath = false; }
@@ -415,7 +422,6 @@ private:
 
     /** Returns false if the glyph has no path at all. */
     bool internalGetPath(SkPackedGlyphID id, SkPath* devPath);
-    SkGlyph internalMakeGlyph(SkPackedGlyphID packedID, SkMask::Format format);
 
     // SkMaskGamma::PreBlend converts linear masks to gamma correcting masks.
 protected:

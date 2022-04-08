@@ -56,7 +56,7 @@ private:
     SkColor fColors[N];
     bool fInit;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 DEF_BENCH(return new FSRectBench();)

@@ -54,8 +54,7 @@ public:
     SkCommandLineConfigGpu(const SkString&           tag,
                            const SkTArray<SkString>& viaParts,
                            ContextType               contextType,
-                           bool                      fakeGLESVer2,
-                           uint32_t                  surfaceFlags,
+                           bool                      useDIText,
                            int                       samples,
                            SkColorType               colorType,
                            SkAlphaType               alphaType,
@@ -65,14 +64,12 @@ public:
                            int                       testPersistentCache,
                            bool                      testPrecompile,
                            bool                      useDDLSink,
-                           bool                      OOPRish,
-                           bool                      reducedShaders,
                            SurfType);
 
     const SkCommandLineConfigGpu* asConfigGpu() const override { return this; }
     ContextType                   getContextType() const { return fContextType; }
     ContextOverrides              getContextOverrides() const { return fContextOverrides; }
-    uint32_t      getSurfaceFlags() const { return fSurfaceFlags; }
+    bool          getUseDIText() const { return fUseDIText; }
     int           getSamples() const { return fSamples; }
     SkColorType   getColorType() const { return fColorType; }
     SkAlphaType   getAlphaType() const { return fAlphaType; }
@@ -81,14 +78,12 @@ public:
     int           getTestPersistentCache() const { return fTestPersistentCache; }
     bool          getTestPrecompile() const { return fTestPrecompile; }
     bool          getUseDDLSink() const { return fUseDDLSink; }
-    bool          getOOPRish() const { return fOOPRish; }
-    bool          getReducedShaders() const { return fReducedShaders; }
     SurfType      getSurfType() const { return fSurfType; }
 
 private:
     ContextType         fContextType;
     ContextOverrides    fContextOverrides;
-    uint32_t            fSurfaceFlags;
+    bool                fUseDIText;
     int                 fSamples;
     SkColorType         fColorType;
     SkAlphaType         fAlphaType;
@@ -97,8 +92,6 @@ private:
     int                 fTestPersistentCache;
     bool                fTestPrecompile;
     bool                fUseDDLSink;
-    bool                fOOPRish;
-    bool                fReducedShaders;
     SurfType            fSurfType;
 };
 

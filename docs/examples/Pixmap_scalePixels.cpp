@@ -9,19 +9,18 @@ void draw(SkCanvas* canvas) {
     int rowBytes = image->width() * 4;
     srcPixels.resize(image->height() * rowBytes);
     SkPixmap pixmap(info, (const void*) &srcPixels.front(), rowBytes);
-    image->readPixels(nullptr, pixmap, 0, 0);
+    image->readPixels(pixmap, 0, 0);
     for (int offset : { 32, 64, 96 } ) {
         info = SkImageInfo::MakeN32Premul(image->width() + offset, image->height());
         rowBytes = info.width() * 4;
         std::vector<int32_t> dstPixels;
         dstPixels.resize(image->height() * rowBytes);
         SkPixmap dstmap(info, &dstPixels.front(), rowBytes);
-        pixmap.scalePixels(dstmap, SkSamplingOptions(SkFilterMode::kLinear,
-                                                     SkMipmapMode::kNearest));
+        pixmap.scalePixels(dstmap, kMedium_SkFilterQuality);
         SkBitmap bitmap;
         bitmap.installPixels(dstmap);
         canvas->translate(32, 32);
-        canvas->drawImage(bitmap.asImage(), 0, 0);
+        canvas->drawBitmap(bitmap, 0, 0);
     }
 }
 }  // END FIDDLE

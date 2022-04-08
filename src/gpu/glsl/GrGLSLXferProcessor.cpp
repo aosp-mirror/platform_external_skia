@@ -7,8 +7,8 @@
 
 #include "src/gpu/glsl/GrGLSLXferProcessor.h"
 
+#include "include/gpu/GrTexture.h"
 #include "src/gpu/GrShaderCaps.h"
-#include "src/gpu/GrTexture.h"
 #include "src/gpu/GrXferProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
@@ -39,6 +39,8 @@ void GrGLSLXferProcessor::emitCode(const EmitArgs& args) {
         bool needsLocalOutColor = false;
 
         if (args.fDstTextureSamplerHandle.isValid()) {
+            bool flipY = kBottomLeft_GrSurfaceOrigin == args.fDstTextureOrigin;
+
             if (args.fInputCoverage) {
                 // We don't think any shaders actually output negative coverage, but just as a
                 // safety check for floating point precision errors we compare with <= here. We just
@@ -53,39 +55,30 @@ void GrGLSLXferProcessor::emitCode(const EmitArgs& args) {
                                          "    discard;"
                                          "}", args.fInputCoverage);
             }
-            if (GrDstSampleTypeUsesTexture(args.fDstSampleType)) {
-                bool flipY = kBottomLeft_GrSurfaceOrigin == args.fDstTextureOrigin;
 
-                const char* dstTopLeftName;
-                const char* dstCoordScaleName;
+            const char* dstTopLeftName;
+            const char* dstCoordScaleName;
 
-                fDstTopLeftUni = uniformHandler->addUniform(nullptr,
-                                                            kFragment_GrShaderFlag,
-                                                            kHalf2_GrSLType,
-                                                            "DstTextureUpperLeft",
-                                                            &dstTopLeftName);
-                fDstScaleUni = uniformHandler->addUniform(nullptr,
-                                                          kFragment_GrShaderFlag,
-                                                          kHalf2_GrSLType,
-                                                          "DstTextureCoordScale",
-                                                          &dstCoordScaleName);
+            fDstTopLeftUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
+                                                        kHalf2_GrSLType,
+                                                        "DstTextureUpperLeft",
+                                                        &dstTopLeftName);
+            fDstScaleUni = uniformHandler->addUniform(kFragment_GrShaderFlag,
+                                                      kHalf2_GrSLType,
+                                                      "DstTextureCoordScale",
+                                                      &dstCoordScaleName);
 
-                fragBuilder->codeAppend("// Read color from copy of the destination.\n");
-                fragBuilder->codeAppendf("half2 _dstTexCoord = (half2(sk_FragCoord.xy) - %s) * %s;",
-                                         dstTopLeftName, dstCoordScaleName);
+            fragBuilder->codeAppend("// Read color from copy of the destination.\n");
+            fragBuilder->codeAppendf("half2 _dstTexCoord = (half2(sk_FragCoord.xy) - %s) * %s;",
+                                     dstTopLeftName, dstCoordScaleName);
 
-                if (flipY) {
-                    fragBuilder->codeAppend("_dstTexCoord.y = 1.0 - _dstTexCoord.y;");
-                }
-
-                fragBuilder->codeAppendf("half4 %s = ", dstColor);
-                fragBuilder->appendTextureLookup(args.fDstTextureSamplerHandle, "_dstTexCoord");
-                fragBuilder->codeAppend(";");
-            } else if (args.fDstSampleType == GrDstSampleType::kAsInputAttachment) {
-                fragBuilder->codeAppendf("half4 %s = ", dstColor);
-                fragBuilder->appendInputLoad(args.fDstTextureSamplerHandle);
-                fragBuilder->codeAppend(";");
+            if (flipY) {
+                fragBuilder->codeAppend("_dstTexCoord.y = 1.0 - _dstTexCoord.y;");
             }
+
+            fragBuilder->codeAppendf("half4 %s = ", dstColor);
+            fragBuilder->appendTextureLookup(args.fDstTextureSamplerHandle, "_dstTexCoord");
+            fragBuilder->codeAppend(";");
         } else {
             needsLocalOutColor = args.fShaderCaps->requiresLocalOutputColorForFBFetch();
         }
@@ -111,14 +104,13 @@ void GrGLSLXferProcessor::emitCode(const EmitArgs& args) {
     }
 
     // Swizzle the fragment shader outputs if necessary.
-    this->emitWriteSwizzle(args.fXPFragBuilder, args.fWriteSwizzle, args.fOutputPrimary,
-                           args.fOutputSecondary);
+    this->emitOutputSwizzle(
+            args.fXPFragBuilder, args.fOutputSwizzle, args.fOutputPrimary, args.fOutputSecondary);
 }
 
-void GrGLSLXferProcessor::emitWriteSwizzle(GrGLSLXPFragmentBuilder* x,
-                                           const GrSwizzle& swizzle,
-                                           const char* outColor,
-                                           const char* outColorSecondary) const {
+void GrGLSLXferProcessor::emitOutputSwizzle(
+        GrGLSLXPFragmentBuilder* x, const GrSwizzle& swizzle, const char* outColor,
+        const char* outColorSecondary) const {
     if (GrSwizzle::RGBA() != swizzle) {
         x->codeAppendf("%s = %s.%s;", outColor, outColor, swizzle.asString().c_str());
         if (outColorSecondary) {
@@ -151,15 +143,30 @@ void GrGLSLXferProcessor::DefaultCoverageModulation(GrGLSLXPFragmentBuilder* fra
                                                     const char* outColor,
                                                     const char* outColorSecondary,
                                                     const GrXferProcessor& proc) {
-    if (srcCoverage) {
+    if (proc.dstReadUsesMixedSamples()) {
+        if (srcCoverage) {
+            // TODO: Once we are no longer using legacy mesh ops, it will not be possible to even
+            // create a mixed sample with lcd so we can uncomment the below assert. In practice
+            // today this never happens except for GLPrograms test which can make one. skia:6661
+            // SkASSERT(!proc.isLCD());
+            fragBuilder->codeAppendf("%s *= %s;", outColor, srcCoverage);
+            fragBuilder->codeAppendf("%s = %s;", outColorSecondary, srcCoverage);
+        } else {
+            fragBuilder->codeAppendf("%s = half4(1.0);", outColorSecondary);
+        }
+    } else if (srcCoverage) {
         if (proc.isLCD()) {
-            fragBuilder->codeAppendf("half3 lerpRGB = mix(%s.aaa, %s.aaa, %s.rgb);",
+            fragBuilder->codeAppendf("half lerpRed = mix(%s.a, %s.a, %s.r);",
+                                     dstColor, outColor, srcCoverage);
+            fragBuilder->codeAppendf("half lerpBlue = mix(%s.a, %s.a, %s.g);",
+                                     dstColor, outColor, srcCoverage);
+            fragBuilder->codeAppendf("half lerpGreen = mix(%s.a, %s.a, %s.b);",
                                      dstColor, outColor, srcCoverage);
         }
         fragBuilder->codeAppendf("%s = %s * %s + (half4(1.0) - %s) * %s;",
                                  outColor, srcCoverage, outColor, srcCoverage, dstColor);
         if (proc.isLCD()) {
-            fragBuilder->codeAppendf("%s.a = max(max(lerpRGB.r, lerpRGB.b), lerpRGB.g);", outColor);
+            fragBuilder->codeAppendf("%s.a = max(max(lerpRed, lerpBlue), lerpGreen);", outColor);
         }
     }
 }

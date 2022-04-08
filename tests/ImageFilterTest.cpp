@@ -18,17 +18,17 @@
 #include "include/effects/SkImageFilters.h"
 #include "include/effects/SkPerlinNoiseShader.h"
 #include "include/effects/SkTableColorFilter.h"
-#include "include/gpu/GrDirectContext.h"
-#include "src/core/SkColorFilterBase.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkSpecialSurface.h"
-#include "src/gpu/GrCaps.h"
-#include "src/gpu/GrRecordingContextPriv.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
+
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrContextPriv.h"
 
 static const int kBitmapSize = 4;
 
@@ -64,7 +64,7 @@ private:
     skiatest::Reporter* fReporter;
     SkMatrix fExpectedMatrix;
 
-    using INHERITED = SkImageFilter_Base;
+    typedef SkImageFilter_Base INHERITED;
 };
 
 class FailImageFilter : public SkImageFilter_Base {
@@ -78,7 +78,7 @@ public:
     SK_FLATTENABLE_HOOKS(FailImageFilter)
 
 private:
-    using INHERITED = SkImageFilter_Base;
+    typedef SkImageFilter_Base INHERITED;
 };
 
 sk_sp<SkFlattenable> FailImageFilter::CreateProc(SkReadBuffer& buffer) {
@@ -124,7 +124,7 @@ public:
                     SkImageFilters::ColorFilter(std::move(cf), input, cropRect));
         }
         {
-            sk_sp<SkImage> gradientImage(make_gradient_circle(64, 64).asImage());
+            sk_sp<SkImage> gradientImage(SkImage::MakeFromBitmap(make_gradient_circle(64, 64)));
             sk_sp<SkImageFilter> gradientSource(SkImageFilters::Image(std::move(gradientImage)));
 
             this->addFilter("displacement map",
@@ -158,18 +158,19 @@ public:
         this->addFilter("merge", SkImageFilters::Merge(input, input, cropRect));
 
         {
-            sk_sp<SkShader> greenColorShader = SkShaders::Color(SK_ColorGREEN);
+            SkPaint greenColorShaderPaint;
+            greenColorShaderPaint.setShader(SkShaders::Color(SK_ColorGREEN));
 
             SkIRect leftSideCropRect = SkIRect::MakeXYWH(0, 0, 32, 64);
-            sk_sp<SkImageFilter> shaderFilterLeft(SkImageFilters::Shader(greenColorShader,
-                                                                         &leftSideCropRect));
+            sk_sp<SkImageFilter> paintFilterLeft(SkImageFilters::Paint(greenColorShaderPaint,
+                                                                       &leftSideCropRect));
             SkIRect rightSideCropRect = SkIRect::MakeXYWH(32, 0, 32, 64);
-            sk_sp<SkImageFilter> shaderFilterRight(SkImageFilters::Shader(greenColorShader,
-                                                                          &rightSideCropRect));
+            sk_sp<SkImageFilter> paintFilterRight(SkImageFilters::Paint(greenColorShaderPaint,
+                                                                        &rightSideCropRect));
 
 
             this->addFilter("merge with disjoint inputs", SkImageFilters::Merge(
-                    std::move(shaderFilterLeft), std::move(shaderFilterRight), cropRect));
+                    std::move(paintFilterLeft), std::move(paintFilterRight), cropRect));
         }
 
         this->addFilter("offset", SkImageFilters::Offset(SK_Scalar1, SK_Scalar1, input, cropRect));
@@ -187,9 +188,7 @@ public:
             matrix.postRotate(SkIntToScalar(45), SK_Scalar1, SK_Scalar1);
 
             this->addFilter("matrix",
-                    SkImageFilters::MatrixTransform(matrix,
-                                                    SkSamplingOptions(SkFilterMode::kLinear),
-                                                    input));
+                    SkImageFilters::MatrixTransform(matrix, kLow_SkFilterQuality, input));
         }
         {
             sk_sp<SkImageFilter> blur(SkImageFilters::Blur(kBlurSigma, kBlurSigma, input));
@@ -211,13 +210,14 @@ public:
                     kBlurSigma, kBlurSigma, std::move(pictureFilter), cropRect));
         }
         {
-            sk_sp<SkImageFilter> paintFilter(SkImageFilters::Shader(
-                    SkPerlinNoiseShader::MakeTurbulence(SK_Scalar1, SK_Scalar1, 1, 0)));
+            SkPaint paint;
+            paint.setShader(SkPerlinNoiseShader::MakeTurbulence(SK_Scalar1, SK_Scalar1, 1, 0));
+            sk_sp<SkImageFilter> paintFilter(SkImageFilters::Paint(paint));
 
             this->addFilter("paint and blur", SkImageFilters::Blur(
                     kBlurSigma, kBlurSigma,  std::move(paintFilter), cropRect));
         }
-        this->addFilter("blend", SkImageFilters::Blend(
+        this->addFilter("xfermode", SkImageFilters::Xfermode(
                 SkBlendMode::kSrc, input, input, cropRect));
     }
     int count() const { return fFilters.count(); }
@@ -263,9 +263,9 @@ private:
 
     SkIRect fBounds;
 
-    using INHERITED = SkImageFilter_Base;
+    typedef SkImageFilter_Base INHERITED;
 };
-}  // namespace
+}
 
 sk_sp<SkFlattenable> MatrixTestImageFilter::CreateProc(SkReadBuffer& buffer) {
     SkDEBUGFAIL("Should never get here");
@@ -329,31 +329,28 @@ static sk_sp<SkImageFilter> make_blue(sk_sp<SkImageFilter> input, const SkIRect*
     return SkImageFilters::ColorFilter(std::move(filter), std::move(input), cropRect);
 }
 
-static sk_sp<SkSpecialSurface> create_empty_special_surface(GrRecordingContext* rContext,
-                                                            int widthHeight) {
-    if (rContext) {
-        return SkSpecialSurface::MakeRenderTarget(rContext, widthHeight, widthHeight,
-                                                  GrColorType::kRGBA_8888, nullptr,
-                                                  SkSurfaceProps());
+static sk_sp<SkSpecialSurface> create_empty_special_surface(GrContext* context, int widthHeight) {
+    if (context) {
+        return SkSpecialSurface::MakeRenderTarget(context, widthHeight, widthHeight,
+                                                  GrColorType::kRGBA_8888, nullptr);
     } else {
         const SkImageInfo info = SkImageInfo::MakeN32(widthHeight, widthHeight,
                                                       kOpaque_SkAlphaType);
-        return SkSpecialSurface::MakeRaster(info, SkSurfaceProps());
+        return SkSpecialSurface::MakeRaster(info);
     }
 }
 
-static sk_sp<SkSurface> create_surface(GrRecordingContext* rContext, int width, int height) {
+static sk_sp<SkSurface> create_surface(GrContext* context, int width, int height) {
     const SkImageInfo info = SkImageInfo::MakeN32(width, height, kOpaque_SkAlphaType);
-    if (rContext) {
-        return SkSurface::MakeRenderTarget(rContext, SkBudgeted::kNo, info);
+    if (context) {
+        return SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, info);
     } else {
         return SkSurface::MakeRaster(info);
     }
 }
 
-static sk_sp<SkSpecialImage> create_empty_special_image(GrRecordingContext* rContext,
-                                                        int widthHeight) {
-    sk_sp<SkSpecialSurface> surf(create_empty_special_surface(rContext, widthHeight));
+static sk_sp<SkSpecialImage> create_empty_special_image(GrContext* context, int widthHeight) {
+    sk_sp<SkSpecialSurface> surf(create_empty_special_surface(context, widthHeight));
 
     SkASSERT(surf);
 
@@ -470,11 +467,11 @@ DEF_TEST(ImageFilter, reporter) {
     }
 }
 
-static void test_cropRects(skiatest::Reporter* reporter, GrRecordingContext* rContext) {
+static void test_cropRects(skiatest::Reporter* reporter, GrContext* context) {
     // Check that all filters offset to their absolute crop rect,
     // unaffected by the input crop rect.
     // Tests pass by not asserting.
-    sk_sp<SkSpecialImage> srcImg(create_empty_special_image(rContext, 100));
+    sk_sp<SkSpecialImage> srcImg(create_empty_special_image(context, 100));
     SkASSERT(srcImg);
 
     SkIRect inputCropRect = SkIRect::MakeXYWH(8, 13, 80, 80);
@@ -494,22 +491,7 @@ static void test_cropRects(skiatest::Reporter* reporter, GrRecordingContext* rCo
     }
 }
 
-static bool special_image_to_bitmap(GrDirectContext* dContext, const SkSpecialImage* src,
-                                    SkBitmap* dst) {
-    sk_sp<SkImage> img = src->asImage();
-    if (!img) {
-        return false;
-    }
-
-    if (!dst->tryAllocN32Pixels(src->width(), src->height())) {
-        return false;
-    }
-
-    return img->readPixels(dContext, dst->pixmap(), src->subset().fLeft, src->subset().fTop);
-}
-
-static void test_negative_blur_sigma(skiatest::Reporter* reporter,
-                                     GrDirectContext* dContext) {
+static void test_negative_blur_sigma(skiatest::Reporter* reporter, GrContext* context) {
     // Check that SkBlurImageFilter will accept a negative sigma, either in
     // the given arguments or after CTM application.
     static const int kWidth = 32, kHeight = 32;
@@ -518,10 +500,12 @@ static void test_negative_blur_sigma(skiatest::Reporter* reporter,
     sk_sp<SkImageFilter> positiveFilter(SkImageFilters::Blur(kBlurSigma, kBlurSigma, nullptr));
     sk_sp<SkImageFilter> negativeFilter(SkImageFilters::Blur(-kBlurSigma, kBlurSigma, nullptr));
 
-    sk_sp<SkImage> gradient = make_gradient_circle(kWidth, kHeight).asImage();
-    sk_sp<SkSpecialImage> imgSrc(
-            SkSpecialImage::MakeFromImage(dContext, SkIRect::MakeWH(kWidth, kHeight), gradient,
-                                          SkSurfaceProps()));
+    SkBitmap gradient = make_gradient_circle(kWidth, kHeight);
+    sk_sp<SkSpecialImage> imgSrc(SkSpecialImage::MakeFromRaster(SkIRect::MakeWH(kWidth, kHeight),
+                                                                gradient));
+    if (context) {
+        imgSrc = imgSrc->makeTextureImage(context);
+    }
 
     SkIPoint offset;
     SkImageFilter_Base::Context ctx(SkMatrix::I(), SkIRect::MakeWH(32, 32), nullptr,
@@ -552,14 +536,10 @@ static void test_negative_blur_sigma(skiatest::Reporter* reporter,
     SkBitmap positiveResultBM1, positiveResultBM2;
     SkBitmap negativeResultBM1, negativeResultBM2;
 
-    REPORTER_ASSERT(reporter, special_image_to_bitmap(dContext, positiveResult1.get(),
-                                                      &positiveResultBM1));
-    REPORTER_ASSERT(reporter, special_image_to_bitmap(dContext, positiveResult2.get(),
-                                                      &positiveResultBM2));
-    REPORTER_ASSERT(reporter, special_image_to_bitmap(dContext, negativeResult1.get(),
-                                                      &negativeResultBM1));
-    REPORTER_ASSERT(reporter, special_image_to_bitmap(dContext, negativeResult2.get(),
-                                                      &negativeResultBM2));
+    REPORTER_ASSERT(reporter, positiveResult1->getROPixels(&positiveResultBM1));
+    REPORTER_ASSERT(reporter, positiveResult2->getROPixels(&positiveResultBM2));
+    REPORTER_ASSERT(reporter, negativeResult1->getROPixels(&negativeResultBM1));
+    REPORTER_ASSERT(reporter, negativeResult2->getROPixels(&negativeResultBM2));
 
     for (int y = 0; y < kHeight; y++) {
         int diffs = memcmp(positiveResultBM1.getAddr32(0, y),
@@ -591,11 +571,10 @@ DEF_TEST(ImageFilterNegativeBlurSigma, reporter) {
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageFilterNegativeBlurSigma_Gpu, reporter, ctxInfo) {
-    test_negative_blur_sigma(reporter, ctxInfo.directContext());
+    test_negative_blur_sigma(reporter, ctxInfo.grContext());
 }
 
-static void test_morphology_radius_with_mirror_ctm(skiatest::Reporter* reporter,
-                                                   GrDirectContext* dContext) {
+static void test_morphology_radius_with_mirror_ctm(skiatest::Reporter* reporter, GrContext* context) {
     // Check that SkMorphologyImageFilter maps the radius correctly when the
     // CTM contains a mirroring transform.
     static const int kWidth = 32, kHeight = 32;
@@ -611,10 +590,12 @@ static void test_morphology_radius_with_mirror_ctm(skiatest::Reporter* reporter,
     paint.setColor(SK_ColorWHITE);
     canvas.drawRect(SkRect::MakeXYWH(kWidth / 4, kHeight / 4, kWidth / 2, kHeight / 2),
                     paint);
-    sk_sp<SkImage> image = bitmap.asImage();
-    sk_sp<SkSpecialImage> imgSrc(
-            SkSpecialImage::MakeFromImage(dContext, SkIRect::MakeWH(kWidth, kHeight), image,
-                                          SkSurfaceProps()));
+
+    sk_sp<SkSpecialImage> imgSrc(SkSpecialImage::MakeFromRaster(SkIRect::MakeWH(kWidth, kHeight),
+                                                                bitmap));
+    if (context) {
+        imgSrc = imgSrc->makeTextureImage(context);
+    }
 
     SkIPoint offset;
     SkImageFilter_Base::Context ctx(SkMatrix::I(), SkIRect::MakeWH(32, 32), nullptr,
@@ -646,12 +627,9 @@ static void test_morphology_radius_with_mirror_ctm(skiatest::Reporter* reporter,
 
     SkBitmap normalResultBM, mirrorXResultBM, mirrorYResultBM;
 
-    REPORTER_ASSERT(reporter, special_image_to_bitmap(dContext, normalResult.get(),
-                                                      &normalResultBM));
-    REPORTER_ASSERT(reporter, special_image_to_bitmap(dContext, mirrorXResult.get(),
-                                                      &mirrorXResultBM));
-    REPORTER_ASSERT(reporter, special_image_to_bitmap(dContext, mirrorYResult.get(),
-                                                      &mirrorYResultBM));
+    REPORTER_ASSERT(reporter, normalResult->getROPixels(&normalResultBM));
+    REPORTER_ASSERT(reporter, mirrorXResult->getROPixels(&mirrorXResultBM));
+    REPORTER_ASSERT(reporter, mirrorYResult->getROPixels(&mirrorYResultBM));
 
     for (int y = 0; y < kHeight; y++) {
         int diffs = memcmp(normalResultBM.getAddr32(0, y),
@@ -676,16 +654,16 @@ DEF_TEST(MorphologyFilterRadiusWithMirrorCTM, reporter) {
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(MorphologyFilterRadiusWithMirrorCTM_Gpu, reporter, ctxInfo) {
-    test_morphology_radius_with_mirror_ctm(reporter, ctxInfo.directContext());
+    test_morphology_radius_with_mirror_ctm(reporter, ctxInfo.grContext());
 }
 
-static void test_zero_blur_sigma(skiatest::Reporter* reporter, GrDirectContext* dContext) {
+static void test_zero_blur_sigma(skiatest::Reporter* reporter, GrContext* context) {
     // Check that SkBlurImageFilter with a zero sigma and a non-zero srcOffset works correctly.
     SkIRect cropRect = SkIRect::MakeXYWH(5, 0, 5, 10);
     sk_sp<SkImageFilter> input(SkImageFilters::Offset(0, 0, nullptr, &cropRect));
     sk_sp<SkImageFilter> filter(SkImageFilters::Blur(0, 0, std::move(input), &cropRect));
 
-    sk_sp<SkSpecialSurface> surf(create_empty_special_surface(dContext, 10));
+    sk_sp<SkSpecialSurface> surf(create_empty_special_surface(context, 10));
     surf->getCanvas()->clear(SK_ColorGREEN);
     sk_sp<SkSpecialImage> image(surf->makeImageSnapshot());
 
@@ -700,7 +678,7 @@ static void test_zero_blur_sigma(skiatest::Reporter* reporter, GrDirectContext* 
 
     SkBitmap resultBM;
 
-    REPORTER_ASSERT(reporter, special_image_to_bitmap(dContext, result.get(), &resultBM));
+    REPORTER_ASSERT(reporter, result->getROPixels(&resultBM));
 
     for (int y = 0; y < resultBM.height(); y++) {
         for (int x = 0; x < resultBM.width(); x++) {
@@ -718,28 +696,27 @@ DEF_TEST(ImageFilterZeroBlurSigma, reporter) {
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageFilterZeroBlurSigma_Gpu, reporter, ctxInfo) {
-    test_zero_blur_sigma(reporter, ctxInfo.directContext());
+    test_zero_blur_sigma(reporter, ctxInfo.grContext());
 }
 
 
 // Tests that, even when an upstream filter has returned null (due to failure or clipping), a
 // downstream filter that affects transparent black still does so even with a nullptr input.
-static void test_fail_affects_transparent_black(skiatest::Reporter* reporter,
-                                                GrDirectContext* dContext) {
+static void test_fail_affects_transparent_black(skiatest::Reporter* reporter, GrContext* context) {
     sk_sp<FailImageFilter> failFilter(new FailImageFilter());
-    sk_sp<SkSpecialImage> source(create_empty_special_image(dContext, 5));
+    sk_sp<SkSpecialImage> source(create_empty_special_image(context, 5));
     SkImageFilter_Base::Context ctx(SkMatrix::I(), SkIRect::MakeXYWH(0, 0, 1, 1), nullptr,
                                     kN32_SkColorType, nullptr, source.get());
     sk_sp<SkColorFilter> green(SkColorFilters::Blend(SK_ColorGREEN, SkBlendMode::kSrc));
-    SkASSERT(as_CFB(green)->affectsTransparentBlack());
+    SkASSERT(green->affectsTransparentBlack());
     sk_sp<SkImageFilter> greenFilter(SkImageFilters::ColorFilter(std::move(green),
                                                                  std::move(failFilter)));
     SkIPoint offset;
     sk_sp<SkSpecialImage> result(as_IFB(greenFilter)->filterImage(ctx).imageAndOffset(&offset));
     REPORTER_ASSERT(reporter, nullptr != result.get());
-    if (result) {
+    if (result.get()) {
         SkBitmap resultBM;
-        REPORTER_ASSERT(reporter, special_image_to_bitmap(dContext, result.get(), &resultBM));
+        REPORTER_ASSERT(reporter, result->getROPixels(&resultBM));
         REPORTER_ASSERT(reporter, *resultBM.getAddr32(0, 0) == SK_ColorGREEN);
     }
 }
@@ -749,7 +726,7 @@ DEF_TEST(ImageFilterFailAffectsTransparentBlack, reporter) {
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageFilterFailAffectsTransparentBlack_Gpu, reporter, ctxInfo) {
-    test_fail_affects_transparent_black(reporter, ctxInfo.directContext());
+    test_fail_affects_transparent_black(reporter, ctxInfo.grContext());
 }
 
 DEF_TEST(ImageFilterDrawTiled, reporter) {
@@ -823,8 +800,8 @@ static void draw_saveLayer_picture(int width, int height, int tileSize,
 
     sk_sp<SkColorFilter> cf(SkColorFilters::Blend(SK_ColorWHITE, SkBlendMode::kSrc));
     sk_sp<SkImageFilter> cfif(SkImageFilters::ColorFilter(std::move(cf), nullptr));
-    sk_sp<SkImageFilter> imageFilter(SkImageFilters::MatrixTransform(matrix,
-                                                                     SkSamplingOptions(),
+    sk_sp<SkImageFilter> imageFilter(SkImageFilter::MakeMatrixFilter(matrix,
+                                                                     kNone_SkFilterQuality,
                                                                      std::move(cfif)));
 
     SkPaint paint;
@@ -833,7 +810,7 @@ static void draw_saveLayer_picture(int width, int height, int tileSize,
     SkRect bounds = SkRect::Make(SkIRect::MakeXYWH(0, 0, 50, 50));
     SkCanvas* recordingCanvas = recorder.beginRecording(SkIntToScalar(width),
                                                         SkIntToScalar(height),
-                                                        factory);
+                                                        factory, 0);
     recordingCanvas->translate(-55, 0);
     recordingCanvas->saveLayer(&bounds, &paint);
     recordingCanvas->restore();
@@ -986,15 +963,15 @@ DEF_TEST(ImageFilterUnionBounds, reporter) {
     // Regardless of which order they appear in, the image filter bounds should
     // be combined correctly.
     {
-        sk_sp<SkImageFilter> composite(SkImageFilters::Blend(SkBlendMode::kSrcOver, offset));
+        sk_sp<SkImageFilter> composite(SkImageFilters::Xfermode(SkBlendMode::kSrcOver, offset));
         SkRect bounds = SkRect::MakeIWH(100, 100);
         // Intentionally aliasing here, as that's what the real callers do.
         bounds = composite->computeFastBounds(bounds);
         REPORTER_ASSERT(reporter, bounds == SkRect::MakeIWH(150, 100));
     }
     {
-        sk_sp<SkImageFilter> composite(SkImageFilters::Blend(SkBlendMode::kSrcOver, nullptr,
-                                                             offset, nullptr));
+        sk_sp<SkImageFilter> composite(SkImageFilters::Xfermode(SkBlendMode::kSrcOver, nullptr,
+                                                                offset, nullptr));
         SkRect bounds = SkRect::MakeIWH(100, 100);
         // Intentionally aliasing here, as that's what the real callers do.
         bounds = composite->computeFastBounds(bounds);
@@ -1002,16 +979,15 @@ DEF_TEST(ImageFilterUnionBounds, reporter) {
     }
 }
 
-static void test_imagefilter_merge_result_size(skiatest::Reporter* reporter,
-                                               GrRecordingContext* rContext) {
+static void test_imagefilter_merge_result_size(skiatest::Reporter* reporter, GrContext* context) {
     SkBitmap greenBM;
     greenBM.allocN32Pixels(20, 20);
     greenBM.eraseColor(SK_ColorGREEN);
-    sk_sp<SkImage> greenImage(greenBM.asImage());
+    sk_sp<SkImage> greenImage(SkImage::MakeFromBitmap(greenBM));
     sk_sp<SkImageFilter> source(SkImageFilters::Image(std::move(greenImage)));
     sk_sp<SkImageFilter> merge(SkImageFilters::Merge(source, source));
 
-    sk_sp<SkSpecialImage> srcImg(create_empty_special_image(rContext, 1));
+    sk_sp<SkSpecialImage> srcImg(create_empty_special_image(context, 1));
 
     SkImageFilter_Base::Context ctx(SkMatrix::I(), SkIRect::MakeXYWH(0, 0, 100, 100), nullptr,
                                     kN32_SkColorType, nullptr, srcImg.get());
@@ -1028,7 +1004,7 @@ DEF_TEST(ImageFilterMergeResultSize, reporter) {
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageFilterMergeResultSize_Gpu, reporter, ctxInfo) {
-    test_imagefilter_merge_result_size(reporter, ctxInfo.directContext());
+    test_imagefilter_merge_result_size(reporter, ctxInfo.grContext());
 }
 
 static void draw_blurred_rect(SkCanvas* canvas) {
@@ -1072,8 +1048,8 @@ DEF_TEST(ImageFilterDrawTiledBlurRTree, reporter) {
 
     SkPictureRecorder recorder1, recorder2;
     // The only difference between these two pictures is that one has RTree aceleration.
-    SkCanvas* recordingCanvas1 = recorder1.beginRecording(width, height);
-    SkCanvas* recordingCanvas2 = recorder2.beginRecording(width, height, &factory);
+    SkCanvas* recordingCanvas1 = recorder1.beginRecording(width, height, nullptr, 0);
+    SkCanvas* recordingCanvas2 = recorder2.beginRecording(width, height, &factory, 0);
 
     draw_blurred_rect(recordingCanvas1);
     draw_blurred_rect(recordingCanvas2);
@@ -1149,7 +1125,7 @@ DEF_TEST(ImageFilterMatrixConvolutionBorder, reporter) {
     canvas.restore();
 }
 
-static void test_big_kernel(skiatest::Reporter* reporter, GrRecordingContext* rContext) {
+static void test_big_kernel(skiatest::Reporter* reporter, GrContext* context) {
     // Check that a kernel that is too big for the GPU still works
     SkScalar identityKernel[49] = {
         0, 0, 0, 0, 0, 0, 0,
@@ -1168,7 +1144,7 @@ static void test_big_kernel(skiatest::Reporter* reporter, GrRecordingContext* rC
             kernelSize, identityKernel, gain, bias, kernelOffset,
             SkTileMode::kClamp, true, nullptr));
 
-    sk_sp<SkSpecialImage> srcImg(create_empty_special_image(rContext, 100));
+    sk_sp<SkSpecialImage> srcImg(create_empty_special_image(context, 100));
     SkASSERT(srcImg);
 
     SkIPoint offset;
@@ -1176,7 +1152,7 @@ static void test_big_kernel(skiatest::Reporter* reporter, GrRecordingContext* rC
                                     kN32_SkColorType, nullptr, srcImg.get());
     sk_sp<SkSpecialImage> resultImg(as_IFB(filter)->filterImage(ctx).imageAndOffset(&offset));
     REPORTER_ASSERT(reporter, resultImg);
-    REPORTER_ASSERT(reporter, SkToBool(rContext) == resultImg->isTextureBacked());
+    REPORTER_ASSERT(reporter, SkToBool(context) == resultImg->isTextureBacked());
     REPORTER_ASSERT(reporter, resultImg->width() == 100 && resultImg->height() == 100);
     REPORTER_ASSERT(reporter, offset.fX == 0 && offset.fY == 0);
 }
@@ -1187,7 +1163,7 @@ DEF_TEST(ImageFilterMatrixConvolutionBigKernel, reporter) {
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageFilterMatrixConvolutionBigKernel_Gpu,
                                    reporter, ctxInfo) {
-    test_big_kernel(reporter, ctxInfo.directContext());
+    test_big_kernel(reporter, ctxInfo.grContext());
 }
 
 DEF_TEST(ImageFilterCropRect, reporter) {
@@ -1195,7 +1171,7 @@ DEF_TEST(ImageFilterCropRect, reporter) {
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageFilterCropRect_Gpu, reporter, ctxInfo) {
-    test_cropRects(reporter, ctxInfo.directContext());
+    test_cropRects(reporter, ctxInfo.grContext());
 }
 
 DEF_TEST(ImageFilterMatrix, reporter) {
@@ -1208,7 +1184,7 @@ DEF_TEST(ImageFilterMatrix, reporter) {
 
     SkRTreeFactory factory;
     SkPictureRecorder recorder;
-    SkCanvas* recordingCanvas = recorder.beginRecording(100, 100, &factory);
+    SkCanvas* recordingCanvas = recorder.beginRecording(100, 100, &factory, 0);
 
     SkPaint paint;
     paint.setImageFilter(MatrixTestImageFilter::Make(reporter, expectedMatrix));
@@ -1224,14 +1200,13 @@ DEF_TEST(ImageFilterMatrix, reporter) {
     canvas.drawPicture(recorder.finishRecordingAsPicture());
 }
 
-static void test_clipped_picture_imagefilter(skiatest::Reporter* reporter,
-                                             GrRecordingContext* rContext) {
+static void test_clipped_picture_imagefilter(skiatest::Reporter* reporter, GrContext* context) {
     sk_sp<SkPicture> picture;
 
     {
         SkRTreeFactory factory;
         SkPictureRecorder recorder;
-        SkCanvas* recordingCanvas = recorder.beginRecording(1, 1, &factory);
+        SkCanvas* recordingCanvas = recorder.beginRecording(1, 1, &factory, 0);
 
         // Create an SkPicture which simply draws a green 1x1 rectangle.
         SkPaint greenPaint;
@@ -1240,7 +1215,7 @@ static void test_clipped_picture_imagefilter(skiatest::Reporter* reporter,
         picture = recorder.finishRecordingAsPicture();
     }
 
-    sk_sp<SkSpecialImage> srcImg(create_empty_special_image(rContext, 2));
+    sk_sp<SkSpecialImage> srcImg(create_empty_special_image(context, 2));
 
     sk_sp<SkImageFilter> imageFilter(SkImageFilters::Picture(picture));
 
@@ -1258,7 +1233,7 @@ DEF_TEST(ImageFilterClippedPictureImageFilter, reporter) {
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageFilterClippedPictureImageFilter_Gpu, reporter, ctxInfo) {
-    test_clipped_picture_imagefilter(reporter, ctxInfo.directContext());
+    test_clipped_picture_imagefilter(reporter, ctxInfo.grContext());
 }
 
 DEF_TEST(ImageFilterEmptySaveLayer, reporter) {
@@ -1281,7 +1256,7 @@ DEF_TEST(ImageFilterEmptySaveLayer, reporter) {
 
     SkRect bounds = SkRect::MakeIWH(10, 10);
 
-    SkCanvas* recordingCanvas = recorder.beginRecording(10, 10, &factory);
+    SkCanvas* recordingCanvas = recorder.beginRecording(10, 10, &factory, 0);
     recordingCanvas->saveLayer(&bounds, &imageFilterPaint);
     recordingCanvas->restore();
     sk_sp<SkPicture> picture(recorder.finishRecordingAsPicture());
@@ -1291,7 +1266,7 @@ DEF_TEST(ImageFilterEmptySaveLayer, reporter) {
     uint32_t pixel = *bitmap.getAddr32(0, 0);
     REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
 
-    recordingCanvas = recorder.beginRecording(10, 10, &factory);
+    recordingCanvas = recorder.beginRecording(10, 10, &factory, 0);
     recordingCanvas->saveLayer(nullptr, &imageFilterPaint);
     recordingCanvas->restore();
     sk_sp<SkPicture> picture2(recorder.finishRecordingAsPicture());
@@ -1301,7 +1276,7 @@ DEF_TEST(ImageFilterEmptySaveLayer, reporter) {
     pixel = *bitmap.getAddr32(0, 0);
     REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
 
-    recordingCanvas = recorder.beginRecording(10, 10, &factory);
+    recordingCanvas = recorder.beginRecording(10, 10, &factory, 0);
     recordingCanvas->saveLayer(&bounds, &colorFilterPaint);
     recordingCanvas->restore();
     sk_sp<SkPicture> picture3(recorder.finishRecordingAsPicture());
@@ -1317,10 +1292,10 @@ static void test_huge_blur(SkCanvas* canvas, skiatest::Reporter* reporter) {
     bitmap.allocN32Pixels(100, 100);
     bitmap.eraseARGB(0, 0, 0, 0);
 
-    // Check that a blur with a very large radius does not crash or assert.
+    // Check that a blur with an insane radius does not crash or assert.
     SkPaint paint;
     paint.setImageFilter(SkImageFilters::Blur(SkIntToScalar(1<<30), SkIntToScalar(1<<30), nullptr));
-    canvas->drawImage(bitmap.asImage(), 0, 0, SkSamplingOptions(), &paint);
+    canvas->drawBitmap(bitmap, 0, 0, &paint);
 }
 
 DEF_TEST(HugeBlurImageFilter, reporter) {
@@ -1330,7 +1305,7 @@ DEF_TEST(HugeBlurImageFilter, reporter) {
     test_huge_blur(&canvas, reporter);
 }
 
-DEF_TEST(ImageFilterMatrixConvolutionTest, reporter) {
+DEF_TEST(ImageFilterMatrixConvolutionSanityTest, reporter) {
     SkScalar kernel[1] = { 0 };
     SkScalar gain = SK_Scalar1, bias = 0;
     SkIPoint kernelOffset = SkIPoint::Make(1, 1);
@@ -1377,19 +1352,19 @@ static void test_xfermode_cropped_input(SkSurface* surf, skiatest::Reporter* rep
     SkIRect cropRect = SkIRect::MakeEmpty();
     sk_sp<SkImageFilter> croppedOut(SkImageFilters::ColorFilter(green, nullptr, &cropRect));
 
-    // Check that an blend image filter whose input has been cropped out still draws the other
+    // Check that an xfermode image filter whose input has been cropped out still draws the other
     // input. Also check that drawing with both inputs cropped out doesn't cause a GPU warning.
     SkBlendMode mode = SkBlendMode::kSrcOver;
-    sk_sp<SkImageFilter> xfermodeNoFg(SkImageFilters::Blend(
+    sk_sp<SkImageFilter> xfermodeNoFg(SkImageFilters::Xfermode(
             mode, greenFilter, croppedOut, nullptr));
-    sk_sp<SkImageFilter> xfermodeNoBg(SkImageFilters::Blend(
+    sk_sp<SkImageFilter> xfermodeNoBg(SkImageFilters::Xfermode(
             mode, croppedOut, greenFilter, nullptr));
-    sk_sp<SkImageFilter> xfermodeNoFgNoBg(SkImageFilters::Blend(
+    sk_sp<SkImageFilter> xfermodeNoFgNoBg(SkImageFilters::Xfermode(
             mode, croppedOut,  croppedOut, nullptr));
 
     SkPaint paint;
     paint.setImageFilter(std::move(xfermodeNoFg));
-    canvas->drawImage(bitmap.asImage(), 0, 0, SkSamplingOptions(), &paint);   // drawSprite
+    canvas->drawBitmap(bitmap, 0, 0, &paint);   // drawSprite
 
     uint32_t pixel;
     SkImageInfo info = SkImageInfo::Make(1, 1, kBGRA_8888_SkColorType, kUnpremul_SkAlphaType);
@@ -1397,12 +1372,12 @@ static void test_xfermode_cropped_input(SkSurface* surf, skiatest::Reporter* rep
     REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
 
     paint.setImageFilter(std::move(xfermodeNoBg));
-    canvas->drawImage(bitmap.asImage(), 0, 0, SkSamplingOptions(), &paint);   // drawSprite
+    canvas->drawBitmap(bitmap, 0, 0, &paint);   // drawSprite
     surf->readPixels(info, &pixel, 4, 0, 0);
     REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
 
     paint.setImageFilter(std::move(xfermodeNoFgNoBg));
-    canvas->drawImage(bitmap.asImage(), 0, 0, SkSamplingOptions(), &paint);   // drawSprite
+    canvas->drawBitmap(bitmap, 0, 0, &paint);   // drawSprite
     surf->readPixels(info, &pixel, 4, 0, 0);
     REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
 }
@@ -1421,7 +1396,7 @@ DEF_TEST(ImageFilterNestedSaveLayer, reporter) {
     matrix.setScale(SkIntToScalar(2), SkIntToScalar(2));
     matrix.postTranslate(SkIntToScalar(-20), SkIntToScalar(-20));
     sk_sp<SkImageFilter> matrixFilter(
-        SkImageFilters::MatrixTransform(matrix, SkSamplingOptions(SkFilterMode::kLinear), nullptr));
+            SkImageFilter::MakeMatrixFilter(matrix, kLow_SkFilterQuality, nullptr));
 
     // Test that saveLayer() with a filter nested inside another saveLayer() applies the
     // correct offset to the filter matrix.
@@ -1450,7 +1425,7 @@ DEF_TEST(ImageFilterNestedSaveLayer, reporter) {
     canvas.clear(0x0);
     temp.readPixels(info, &pixel, 4, 25, 25);
     canvas.saveLayer(&bounds1, nullptr);
-    canvas.drawImage(bitmap.asImage(), 20, 20, SkSamplingOptions(), &filterPaint); // drawSprite
+    canvas.drawBitmap(bitmap, 20, 20, &filterPaint);    // drawSprite
     canvas.restore();
 
     temp.readPixels(info, &pixel, 4, 25, 25);
@@ -1461,9 +1436,8 @@ DEF_TEST(XfermodeImageFilterCroppedInput, reporter) {
     test_xfermode_cropped_input(SkSurface::MakeRasterN32Premul(100, 100).get(), reporter);
 }
 
-static void test_composed_imagefilter_offset(skiatest::Reporter* reporter,
-                                             GrRecordingContext* rContext) {
-    sk_sp<SkSpecialImage> srcImg(create_empty_special_image(rContext, 100));
+static void test_composed_imagefilter_offset(skiatest::Reporter* reporter, GrContext* context) {
+    sk_sp<SkSpecialImage> srcImg(create_empty_special_image(context, 100));
 
     SkIRect cropRect = SkIRect::MakeXYWH(1, 0, 20, 20);
     sk_sp<SkImageFilter> offsetFilter(SkImageFilters::Offset(0, 0, nullptr, &cropRect));
@@ -1486,11 +1460,10 @@ DEF_TEST(ComposedImageFilterOffset, reporter) {
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ComposedImageFilterOffset_Gpu, reporter, ctxInfo) {
-    test_composed_imagefilter_offset(reporter, ctxInfo.directContext());
+    test_composed_imagefilter_offset(reporter, ctxInfo.grContext());
 }
 
-static void test_composed_imagefilter_bounds(skiatest::Reporter* reporter,
-                                             GrDirectContext* dContext) {
+static void test_composed_imagefilter_bounds(skiatest::Reporter* reporter, GrContext* context) {
     // The bounds passed to the inner filter must be filtered by the outer
     // filter, so that the inner filter produces the pixels that the outer
     // filter requires as input. This matters if the outer filter moves pixels.
@@ -1508,7 +1481,7 @@ static void test_composed_imagefilter_bounds(skiatest::Reporter* reporter,
     sk_sp<SkImageFilter> composedFilter(SkImageFilters::Compose(std::move(offsetFilter),
                                                                 std::move(pictureFilter)));
 
-    sk_sp<SkSpecialImage> sourceImage(create_empty_special_image(dContext, 100));
+    sk_sp<SkSpecialImage> sourceImage(create_empty_special_image(context, 100));
     SkImageFilter_Base::Context ctx(SkMatrix::I(), SkIRect::MakeWH(100, 100), nullptr,
                                     kN32_SkColorType, nullptr, sourceImage.get());
     SkIPoint offset;
@@ -1519,7 +1492,7 @@ static void test_composed_imagefilter_bounds(skiatest::Reporter* reporter,
     REPORTER_ASSERT(reporter, result->subset().size() == SkISize::Make(100, 100));
 
     SkBitmap resultBM;
-    REPORTER_ASSERT(reporter, special_image_to_bitmap(dContext, result.get(), &resultBM));
+    REPORTER_ASSERT(reporter, result->getROPixels(&resultBM));
     REPORTER_ASSERT(reporter, resultBM.getColor(50, 50) == SK_ColorGREEN);
 }
 
@@ -1528,7 +1501,7 @@ DEF_TEST(ComposedImageFilterBounds, reporter) {
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ComposedImageFilterBounds_Gpu, reporter, ctxInfo) {
-    test_composed_imagefilter_bounds(reporter, ctxInfo.directContext());
+    test_composed_imagefilter_bounds(reporter, ctxInfo.grContext());
 }
 
 DEF_TEST(ImageFilterCanComputeFastBounds, reporter) {
@@ -1546,7 +1519,7 @@ DEF_TEST(ImageFilterCanComputeFastBounds, reporter) {
         {
             SkColorFilter* grayCF;
             REPORTER_ASSERT(reporter, gray->asAColorFilter(&grayCF));
-            REPORTER_ASSERT(reporter, !as_CFB(grayCF)->affectsTransparentBlack());
+            REPORTER_ASSERT(reporter, !grayCF->affectsTransparentBlack());
             grayCF->unref();
         }
         REPORTER_ASSERT(reporter, gray->canComputeFastBounds());
@@ -1565,7 +1538,7 @@ DEF_TEST(ImageFilterCanComputeFastBounds, reporter) {
         sk_sp<SkColorFilter> greenCF(SkColorFilters::Matrix(greenMatrix));
         sk_sp<SkImageFilter> green(SkImageFilters::ColorFilter(greenCF, nullptr));
 
-        REPORTER_ASSERT(reporter, as_CFB(greenCF)->affectsTransparentBlack());
+        REPORTER_ASSERT(reporter, greenCF->affectsTransparentBlack());
         REPORTER_ASSERT(reporter, !green->canComputeFastBounds());
 
         sk_sp<SkImageFilter> greenBlur(SkImageFilters::Blur(SK_Scalar1, SK_Scalar1,
@@ -1582,13 +1555,13 @@ DEF_TEST(ImageFilterCanComputeFastBounds, reporter) {
     sk_sp<SkColorFilter> identityCF(SkTableColorFilter::MakeARGB(identity, identity,
                                                                  identity, allOne));
     sk_sp<SkImageFilter> identityFilter(SkImageFilters::ColorFilter(identityCF, nullptr));
-    REPORTER_ASSERT(reporter, !as_CFB(identityCF)->affectsTransparentBlack());
+    REPORTER_ASSERT(reporter, !identityCF->affectsTransparentBlack());
     REPORTER_ASSERT(reporter, identityFilter->canComputeFastBounds());
 
     sk_sp<SkColorFilter> forceOpaqueCF(SkTableColorFilter::MakeARGB(allOne, identity,
                                                                     identity, identity));
     sk_sp<SkImageFilter> forceOpaque(SkImageFilters::ColorFilter(forceOpaqueCF, nullptr));
-    REPORTER_ASSERT(reporter, as_CFB(forceOpaqueCF)->affectsTransparentBlack());
+    REPORTER_ASSERT(reporter, forceOpaqueCF->affectsTransparentBlack());
     REPORTER_ASSERT(reporter, !forceOpaque->canComputeFastBounds());
 }
 
@@ -1631,7 +1604,7 @@ static void test_large_blur_input(skiatest::Reporter* reporter, SkCanvas* canvas
     int largeW = 5000;
     int largeH = 5000;
     // If we're GPU-backed make the bitmap too large to be converted into a texture.
-    if (auto ctx = canvas->recordingContext()) {
+    if (GrContext* ctx = canvas->getGrContext()) {
         largeW = ctx->priv().caps()->maxTextureSize() + 1;
     }
 
@@ -1642,7 +1615,7 @@ static void test_large_blur_input(skiatest::Reporter* reporter, SkCanvas* canvas
         return;
     }
 
-    sk_sp<SkImage> largeImage(largeBmp.asImage());
+    sk_sp<SkImage> largeImage(SkImage::MakeFromBitmap(largeBmp));
     if (!largeImage) {
         ERRORF(reporter, "Failed to create large image.");
         return;
@@ -1672,8 +1645,8 @@ DEF_TEST(ImageFilterBlurLargeImage, reporter) {
     test_large_blur_input(reporter, surface->getCanvas());
 }
 
-static void test_make_with_filter(skiatest::Reporter* reporter, GrRecordingContext* rContext) {
-    sk_sp<SkSurface> surface(create_surface(rContext, 192, 128));
+static void test_make_with_filter(skiatest::Reporter* reporter, GrContext* context) {
+    sk_sp<SkSurface> surface(create_surface(context, 192, 128));
     surface->getCanvas()->clear(SK_ColorRED);
     SkPaint bluePaint;
     bluePaint.setColor(SK_ColorBLUE);
@@ -1687,39 +1660,31 @@ static void test_make_with_filter(skiatest::Reporter* reporter, GrRecordingConte
     SkIPoint offset;
     sk_sp<SkImage> result;
 
-    result = sourceImage->makeWithFilter(rContext, nullptr, subset, clipBounds,
-                                         &outSubset, &offset);
+    result = sourceImage->makeWithFilter(nullptr, subset, clipBounds, &outSubset, &offset);
     REPORTER_ASSERT(reporter, !result);
 
-    result = sourceImage->makeWithFilter(rContext, filter.get(), subset, clipBounds,
-                                         nullptr, &offset);
+    result = sourceImage->makeWithFilter(filter.get(), subset, clipBounds, nullptr, &offset);
     REPORTER_ASSERT(reporter, !result);
 
-    result = sourceImage->makeWithFilter(rContext, filter.get(), subset, clipBounds,
-                                         &outSubset, nullptr);
+    result = sourceImage->makeWithFilter(filter.get(), subset, clipBounds, &outSubset, nullptr);
     REPORTER_ASSERT(reporter, !result);
 
     SkIRect bigSubset = SkIRect::MakeXYWH(-10000, -10000, 20000, 20000);
-    result = sourceImage->makeWithFilter(rContext, filter.get(), bigSubset, clipBounds,
-                                         &outSubset, &offset);
+    result = sourceImage->makeWithFilter(filter.get(), bigSubset, clipBounds, &outSubset, &offset);
     REPORTER_ASSERT(reporter, !result);
 
     SkIRect empty = SkIRect::MakeEmpty();
-    result = sourceImage->makeWithFilter(rContext, filter.get(), empty, clipBounds,
-                                         &outSubset, &offset);
+    result = sourceImage->makeWithFilter(filter.get(), empty, clipBounds, &outSubset, &offset);
     REPORTER_ASSERT(reporter, !result);
 
-    result = sourceImage->makeWithFilter(rContext, filter.get(), subset, empty,
-                                         &outSubset, &offset);
+    result = sourceImage->makeWithFilter(filter.get(), subset, empty, &outSubset, &offset);
     REPORTER_ASSERT(reporter, !result);
 
     SkIRect leftField = SkIRect::MakeXYWH(-1000, 0, 100, 100);
-    result = sourceImage->makeWithFilter(rContext, filter.get(), subset, leftField,
-                                         &outSubset, &offset);
+    result = sourceImage->makeWithFilter(filter.get(), subset, leftField, &outSubset, &offset);
     REPORTER_ASSERT(reporter, !result);
 
-    result = sourceImage->makeWithFilter(rContext, filter.get(), subset, clipBounds,
-                                         &outSubset, &offset);
+    result = sourceImage->makeWithFilter(filter.get(), subset, clipBounds, &outSubset, &offset);
 
     REPORTER_ASSERT(reporter, result);
     REPORTER_ASSERT(reporter, result->bounds().contains(outSubset));
@@ -1733,9 +1698,8 @@ static void test_make_with_filter(skiatest::Reporter* reporter, GrRecordingConte
         clipBounds.setXYWH(0, 0, 170, 100);
         subset.setXYWH(0, 0, 160, 90);
 
-        filter = SkImageFilters::Blend(SkBlendMode::kSrc, nullptr);
-        result = sourceImage->makeWithFilter(rContext, filter.get(), subset, clipBounds,
-                                             &outSubset, &offset);
+        filter = SkImageFilters::Xfermode(SkBlendMode::kSrc, nullptr);
+        result = sourceImage->makeWithFilter(filter.get(), subset, clipBounds, &outSubset, &offset);
         REPORTER_ASSERT(reporter, result);
     }
 }
@@ -1745,12 +1709,12 @@ DEF_TEST(ImageFilterMakeWithFilter, reporter) {
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageFilterMakeWithFilter_Gpu, reporter, ctxInfo) {
-    test_make_with_filter(reporter, ctxInfo.directContext());
+    test_make_with_filter(reporter, ctxInfo.grContext());
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageFilterHugeBlur_Gpu, reporter, ctxInfo) {
 
-    sk_sp<SkSurface> surf(SkSurface::MakeRenderTarget(ctxInfo.directContext(),
+    sk_sp<SkSurface> surf(SkSurface::MakeRenderTarget(ctxInfo.grContext(),
                                                       SkBudgeted::kNo,
                                                       SkImageInfo::MakeN32Premul(100, 100)));
 
@@ -1762,7 +1726,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageFilterHugeBlur_Gpu, reporter, ctxInfo) {
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(XfermodeImageFilterCroppedInput_Gpu, reporter, ctxInfo) {
     sk_sp<SkSurface> surf(SkSurface::MakeRenderTarget(
-            ctxInfo.directContext(),
+            ctxInfo.grContext(),
             SkBudgeted::kNo,
             SkImageInfo::Make(1, 1, kRGBA_8888_SkColorType, kPremul_SkAlphaType)));
 
@@ -1771,7 +1735,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(XfermodeImageFilterCroppedInput_Gpu, reporter
 
 DEF_GPUTEST_FOR_ALL_CONTEXTS(ImageFilterBlurLargeImage_Gpu, reporter, ctxInfo) {
     auto surface(SkSurface::MakeRenderTarget(
-            ctxInfo.directContext(), SkBudgeted::kYes,
+            ctxInfo.grContext(), SkBudgeted::kYes,
             SkImageInfo::Make(100, 100, kRGBA_8888_SkColorType, kPremul_SkAlphaType)));
     test_large_blur_input(reporter, surface->getCanvas());
 }
@@ -1836,8 +1800,8 @@ DEF_TEST(XfermodeImageFilterBounds, reporter) {
     // The value of this variable doesn't matter because we use inputs with fixed bounds.
     SkIRect src = SkIRect::MakeXYWH(11, 22, 33, 44);
     for (int i = 0; i < kModeCount; ++i) {
-        sk_sp<SkImageFilter> xfermode(SkImageFilters::Blend(static_cast<SkBlendMode>(i),
-                                                            background, foreground, nullptr));
+        sk_sp<SkImageFilter> xfermode(SkImageFilters::Xfermode(static_cast<SkBlendMode>(i),
+                                                               background, foreground, nullptr));
         auto bounds = xfermode->filterBounds(src, SkMatrix::I(),
                                              SkImageFilter::kForward_MapDirection, nullptr);
         REPORTER_ASSERT(reporter, bounds == expectedBounds[i]);
@@ -1846,7 +1810,7 @@ DEF_TEST(XfermodeImageFilterBounds, reporter) {
     // Test empty intersection.
     sk_sp<SkImageFilter> background2(new FixedBoundsImageFilter(SkIRect::MakeXYWH(0, 0, 20, 20)));
     sk_sp<SkImageFilter> foreground2(new FixedBoundsImageFilter(SkIRect::MakeXYWH(40, 40, 50, 50)));
-    sk_sp<SkImageFilter> xfermode(SkImageFilters::Blend(
+    sk_sp<SkImageFilter> xfermode(SkImageFilters::Xfermode(
             SkBlendMode::kSrcIn, std::move(background2), std::move(foreground2), nullptr));
     auto bounds = xfermode->filterBounds(src, SkMatrix::I(),
                                          SkImageFilter::kForward_MapDirection, nullptr);
@@ -1937,29 +1901,9 @@ DEF_TEST(ArithmeticImageFilterBounds, reporter) {
     test_arithmetic_combinations(reporter, 0.5);
 }
 
-// Test SkDisplacementMapEffect::filterBounds.
-DEF_TEST(DisplacementMapBounds, reporter) {
-    SkIRect floodBounds(SkIRect::MakeXYWH(20, 30, 10, 10));
-    sk_sp<SkImageFilter> flood(SkImageFilters::Shader(SkShaders::Color(SK_ColorGREEN),
-                                                      &floodBounds));
-    SkIRect tilingBounds(SkIRect::MakeXYWH(0, 0, 200, 100));
-    sk_sp<SkImageFilter> tiling(SkImageFilters::Tile(SkRect::Make(floodBounds),
-                                                     SkRect::Make(tilingBounds),
-                                                     flood));
-    sk_sp<SkImageFilter> displace(SkImageFilters::DisplacementMap(SkColorChannel::kR,
-                                                                  SkColorChannel::kB,
-                                                                  20.0f, nullptr, tiling));
-    SkIRect input(SkIRect::MakeXYWH(20, 30, 40, 50));
-    // Expected: union(floodBounds, outset(input, 10))
-    SkIRect expected(SkIRect::MakeXYWH(10, 20, 60, 70));
-    REPORTER_ASSERT(reporter,
-                    expected == displace->filterBounds(input, SkMatrix::I(),
-                                                       SkImageFilter::kReverse_MapDirection));
-}
-
 // Test SkImageSource::filterBounds.
 DEF_TEST(ImageSourceBounds, reporter) {
-    sk_sp<SkImage> image(make_gradient_circle(64, 64).asImage());
+    sk_sp<SkImage> image(SkImage::MakeFromBitmap(make_gradient_circle(64, 64)));
     // Default src and dst rects.
     sk_sp<SkImageFilter> source1(SkImageFilters::Image(image));
     SkIRect imageBounds = SkIRect::MakeWH(64, 64);
@@ -1971,7 +1915,7 @@ DEF_TEST(ImageSourceBounds, reporter) {
     REPORTER_ASSERT(reporter,
                     input == source1->filterBounds(input, SkMatrix::I(),
                                                    SkImageFilter::kReverse_MapDirection, &input));
-    SkMatrix scale(SkMatrix::Scale(2, 2));
+    SkMatrix scale(SkMatrix::MakeScale(2));
     SkIRect scaledBounds = SkIRect::MakeWH(128, 128);
     REPORTER_ASSERT(reporter,
                     scaledBounds == source1->filterBounds(input, scale,
@@ -1984,9 +1928,7 @@ DEF_TEST(ImageSourceBounds, reporter) {
     // Specified src and dst rects.
     SkRect src(SkRect::MakeXYWH(0.5, 0.5, 100.5, 100.5));
     SkRect dst(SkRect::MakeXYWH(-10.5, -10.5, 120.5, 120.5));
-    sk_sp<SkImageFilter> source2(SkImageFilters::Image(image, src, dst,
-                                                       SkSamplingOptions(SkFilterMode::kLinear,
-                                                                         SkMipmapMode::kLinear)));
+    sk_sp<SkImageFilter> source2(SkImageFilters::Image(image, src, dst, kMedium_SkFilterQuality));
     REPORTER_ASSERT(reporter,
                     dst.roundOut() == source2->filterBounds(input, SkMatrix::I(),
                                                             SkImageFilter::kForward_MapDirection,
@@ -2005,53 +1947,3 @@ DEF_TEST(ImageSourceBounds, reporter) {
                                                              &input));
 }
 
-// Test SkPictureImageFilter::filterBounds.
-DEF_TEST(PictureImageSourceBounds, reporter) {
-    SkPictureRecorder recorder;
-    SkCanvas* recordingCanvas = recorder.beginRecording(64, 64);
-
-    SkPaint greenPaint;
-    greenPaint.setColor(SK_ColorGREEN);
-    recordingCanvas->drawRect(SkRect::Make(SkIRect::MakeXYWH(10, 10, 30, 20)), greenPaint);
-    sk_sp<SkPicture> picture(recorder.finishRecordingAsPicture());
-
-    // Default target rect.
-    sk_sp<SkImageFilter> source1(SkImageFilters::Picture(picture));
-    SkIRect pictureBounds = SkIRect::MakeWH(64, 64);
-    SkIRect input(SkIRect::MakeXYWH(10, 20, 30, 40));
-    REPORTER_ASSERT(reporter,
-                    pictureBounds == source1->filterBounds(input, SkMatrix::I(),
-                                                           SkImageFilter::kForward_MapDirection,
-                                                           nullptr));
-    REPORTER_ASSERT(reporter,
-                    input == source1->filterBounds(input, SkMatrix::I(),
-                                                   SkImageFilter::kReverse_MapDirection, &input));
-    SkMatrix scale(SkMatrix::Scale(2, 2));
-    SkIRect scaledPictureBounds = SkIRect::MakeWH(128, 128);
-    REPORTER_ASSERT(reporter,
-                    scaledPictureBounds == source1->filterBounds(input, scale,
-                                                                 SkImageFilter::kForward_MapDirection,
-                                                                 nullptr));
-    REPORTER_ASSERT(reporter, input == source1->filterBounds(input, scale,
-                                                             SkImageFilter::kReverse_MapDirection,
-                                                             &input));
-
-    // Specified target rect.
-    SkRect targetRect(SkRect::MakeXYWH(9.5, 9.5, 31, 21));
-    sk_sp<SkImageFilter> source2(SkImageFilters::Picture(picture, targetRect));
-    REPORTER_ASSERT(reporter,
-                    targetRect.roundOut() == source2->filterBounds(input, SkMatrix::I(),
-                                                                   SkImageFilter::kForward_MapDirection,
-                                                                   nullptr));
-    REPORTER_ASSERT(reporter,
-                    input == source2->filterBounds(input, SkMatrix::I(),
-                                                   SkImageFilter::kReverse_MapDirection, &input));
-    scale.mapRect(&targetRect);
-    REPORTER_ASSERT(reporter,
-                    targetRect.roundOut() == source2->filterBounds(input, scale,
-                                                                   SkImageFilter::kForward_MapDirection,
-                                                                   nullptr));
-    REPORTER_ASSERT(reporter, input == source2->filterBounds(input, scale,
-                                                             SkImageFilter::kReverse_MapDirection,
-                                                             &input));
-}

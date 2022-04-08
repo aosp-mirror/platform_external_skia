@@ -7,8 +7,8 @@
 
 #include "tools/gpu/mtl/MtlTestContext.h"
 
+#include "include/gpu/GrContext.h"
 #include "include/gpu/GrContextOptions.h"
-#include "include/gpu/GrDirectContext.h"
 
 #include "src/gpu/mtl/GrMtlUtil.h"
 
@@ -17,63 +17,106 @@
 #import <Metal/Metal.h>
 
 namespace {
+/**
+ * Implements sk_gpu_test::FenceSync for Metal.
+ *
+ * Fences as MTLSharedEvents are not supported across all Metal platforms, so we do
+ * the next best thing and submit an empty MTLCommandBuffer and track when it's complete.
+ */
+class MtlFenceSync : public sk_gpu_test::FenceSync {
+public:
+    MtlFenceSync(id<MTLCommandQueue> queue)
+            : fQueue(queue) {
+        SkDEBUGCODE(fUnfinishedSyncs = 0;)
+    }
+
+    ~MtlFenceSync() override {
+        SkASSERT(!fUnfinishedSyncs);
+    }
+
+    sk_gpu_test::PlatformFence SK_WARN_UNUSED_RESULT insertFence() const override {
+        id<MTLCommandBuffer> cmdBuffer = [fQueue commandBuffer];
+        cmdBuffer.label = @"Fence";
+        [cmdBuffer commit];
+
+        SkDEBUGCODE(++fUnfinishedSyncs;)
+
+        void* cfCmdBuffer = (__bridge_retained void*)cmdBuffer;
+        return (sk_gpu_test::PlatformFence)cfCmdBuffer;
+    }
+
+    bool waitFence(sk_gpu_test::PlatformFence opaqueFence) const override {
+        void* cfCmdBuffer = (void*) opaqueFence;
+        id<MTLCommandBuffer> cmdBuffer = (__bridge id<MTLCommandBuffer>) cfCmdBuffer;
+
+        [cmdBuffer waitUntilCompleted];
+
+        return (MTLCommandBufferStatusError != cmdBuffer.status);
+    }
+
+    void deleteFence(sk_gpu_test::PlatformFence opaqueFence) const override {
+        CFRelease((void*) opaqueFence);
+        SkDEBUGCODE(--fUnfinishedSyncs;)
+    }
+
+private:
+    id<MTLCommandQueue>         fQueue;
+    SkDEBUGCODE(mutable int     fUnfinishedSyncs;)
+    typedef sk_gpu_test::FenceSync INHERITED;
+};
+
+static_assert(sizeof(uint64_t) <= sizeof(sk_gpu_test::PlatformFence));
+
 class MtlTestContextImpl : public sk_gpu_test::MtlTestContext {
 public:
     static MtlTestContext* Create(MtlTestContext* sharedContext) {
-        GrMtlBackendContext backendContext = {};
+        id<MTLDevice> device;
+        id<MTLCommandQueue> queue;
         if (sharedContext) {
             MtlTestContextImpl* sharedContextImpl = (MtlTestContextImpl*) sharedContext;
-            backendContext = sharedContextImpl->getMtlBackendContext();
+            device = sharedContextImpl->device();
+            queue = sharedContextImpl->queue();
         } else {
-            sk_cfp<id<MTLDevice>> device;
-#ifdef SK_BUILD_FOR_MAC
-            sk_cfp<NSArray<id <MTLDevice>>*> availableDevices(MTLCopyAllDevices());
-            // Choose the non-integrated CPU if available
-            for (id<MTLDevice> dev in availableDevices.get()) {
-                if (!dev.isLowPower) {
-                    device.retain(dev);
-                    break;
-                }
-                if (dev.isRemovable) {
-                    device.retain(dev);
-                    break;
-                }
-            }
-            if (!device) {
-                device.reset(MTLCreateSystemDefaultDevice());
-            }
-#else
-            device.reset(MTLCreateSystemDefaultDevice());
-#endif
-            backendContext.fDevice.retain((GrMTLHandle)device.get());
-            sk_cfp<id<MTLCommandQueue>> queue([*device newCommandQueue]);
-            backendContext.fQueue.retain((GrMTLHandle)queue.get());
+            device = MTLCreateSystemDefaultDevice();
+            queue = [device newCommandQueue];
         }
 
-        return new MtlTestContextImpl(backendContext);
+        return new MtlTestContextImpl(device, queue);
     }
 
     ~MtlTestContextImpl() override { this->teardown(); }
 
     void testAbandon() override {}
 
+    // There is really nothing to do here since we don't own any unqueued command buffers here.
+    void submit() override {}
+
     void finish() override {}
 
-    sk_sp<GrDirectContext> makeContext(const GrContextOptions& options) override {
-        return GrDirectContext::MakeMetal(fMtl, options);
+    sk_sp<GrContext> makeGrContext(const GrContextOptions& options) override {
+        return GrContext::MakeMetal((__bridge void*)fDevice,
+                                    (__bridge void*)fQueue,
+                                    options);
     }
 
+    id<MTLDevice> device() { return fDevice; }
+    id<MTLCommandQueue> queue() { return fQueue; }
+
 private:
-    MtlTestContextImpl(const GrMtlBackendContext& mtl)
-            : INHERITED(mtl) {
-        fFenceSupport = true;
+    MtlTestContextImpl(id<MTLDevice> device, id<MTLCommandQueue> queue)
+            : INHERITED(), fDevice(device), fQueue(queue) {
+        fFenceSync.reset(new MtlFenceSync(queue));
     }
 
     void onPlatformMakeNotCurrent() const override {}
     void onPlatformMakeCurrent() const override {}
     std::function<void()> onPlatformGetAutoContextRestore() const override { return nullptr; }
+    void onPlatformSwapBuffers() const override {}
 
-    using INHERITED = sk_gpu_test::MtlTestContext;
+    id<MTLDevice>        fDevice;
+    id<MTLCommandQueue>  fQueue;
+
+    typedef sk_gpu_test::MtlTestContext INHERITED;
 };
 
 }  // anonymous namespace

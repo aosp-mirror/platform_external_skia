@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "include/private/SkSLString.h"
 #include "src/sksl/SkSLASTNode.h"
-#include "src/sksl/SkSLOperators.h"
+#include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLString.h"
 
 namespace SkSL {
 
@@ -17,7 +17,7 @@ String ASTNode::description() const {
         case Kind::kNull: return "";
         case Kind::kBinary:
             return "(" + this->begin()->description() + " " +
-                               getOperator().operatorName() + " " +
+                               Compiler::OperatorName(getToken().fKind) + " " +
                                (this->begin() + 1)->description() + ")";
         case Kind::kBlock: {
             String result = "{\n";
@@ -34,7 +34,7 @@ String ASTNode::description() const {
             return "break";
         case Kind::kCall: {
             auto iter = this->begin();
-            String result = (iter++)->description();
+            String result = iter->description();
             result += "(";
             const char* separator = "";
             while (iter != this->end()) {
@@ -87,7 +87,7 @@ String ASTNode::description() const {
                    (this->begin() + 1)->description() + "; " + (this->begin() + 2)->description() +
                    ") " + (this->begin() + 3)->description();
         case Kind::kFunction: {
-            const FunctionData& fd = getFunctionData();
+            FunctionData fd = getFunctionData();
             String result = fd.fModifiers.description();
             if (result.size()) {
                 result += " ";
@@ -131,7 +131,7 @@ String ASTNode::description() const {
         case Kind::kInt:
             return to_string(getInt());
         case Kind::kInterfaceBlock: {
-            const InterfaceBlockData& id = getInterfaceBlockData();
+            InterfaceBlockData id = getInterfaceBlockData();
             String result = id.fModifiers.description() + " " + id.fTypeName + " {\n";
             auto iter = this->begin();
             for (size_t i = 0; i < id.fDeclarationCount; ++i) {
@@ -139,7 +139,7 @@ String ASTNode::description() const {
             }
             result += "} ";
             result += id.fInstanceName;
-            if (id.fIsArray) {
+            for (size_t i = 0; i < id.fSizeCount; ++i) {
                 result += "[" + (iter++)->description() + "]";
             }
             SkASSERT(iter == this->end());
@@ -149,10 +149,10 @@ String ASTNode::description() const {
         case Kind::kModifiers:
             return getModifiers().description();
         case Kind::kParameter: {
-            const ParameterData& pd = getParameterData();
+            ParameterData pd = getParameterData();
             auto iter = this->begin();
             String result = (iter++)->description() + " " + pd.fName;
-            if (pd.fIsArray) {
+            for (size_t i = 0; i < pd.fSizeCount; ++i) {
                 result += "[" + (iter++)->description() + "]";
             }
             if (iter != this->end()) {
@@ -162,16 +162,14 @@ String ASTNode::description() const {
             return result;
         }
         case Kind::kPostfix:
-            return this->begin()->description() + getOperator().operatorName();
+            return this->begin()->description() + Compiler::OperatorName(getToken().fKind);
         case Kind::kPrefix:
-            return getOperator().operatorName() + this->begin()->description();
+            return Compiler::OperatorName(getToken().fKind) + this->begin()->description();
         case Kind::kReturn:
             if (this->begin() != this->end()) {
                 return "return " + this->begin()->description() + ";";
             }
             return "return;";
-        case Kind::kScope:
-            return this->begin()->description() + "::" + getString();
         case Kind::kSection:
             return "@section { ... }";
         case Kind::kSwitchCase: {
@@ -204,12 +202,12 @@ String ASTNode::description() const {
             return "(" + this->begin()->description() + " ? " + (this->begin() + 1)->description() +
                    " : " + (this->begin() + 2)->description() + ")";
         case Kind::kType:
-            return getString();
+            return String(getTypeData().fName);
         case Kind::kVarDeclaration: {
-            const VarData& vd = getVarData();
+            VarData vd = getVarData();
             String result = vd.fName;
             auto iter = this->begin();
-            if (vd.fIsArray) {
+            for (size_t i = 0; i < vd.fSizeCount; ++i) {
                 result += "[" + (iter++)->description() + "]";
             }
             if (iter != this->end()) {
@@ -232,16 +230,11 @@ String ASTNode::description() const {
             }
             return result;
         }
-        case Kind::kWhile: {
-            return "while (" + this->begin()->description() + ") " +
-                   (this->begin() + 1)->description();
-
-        }
         default:
-            SkDEBUGFAIL("unrecognized AST node kind");
+            SkASSERT(false);
             return "<error>";
     }
 }
 #endif
 
-}  // namespace SkSL
+} // namespace

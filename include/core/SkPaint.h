@@ -23,9 +23,6 @@ class SkPath;
 class SkPathEffect;
 class SkShader;
 
-// Move to clients when they are ready -- aid in deprecating the enum
-#define SK_SUPPORT_LEGACY_SETFILTERQUALITY
-
 /** \class SkPaint
     SkPaint controls options applied when drawing. SkPaint collects all
     options outside of the SkCanvas clip and SkCanvas matrix.
@@ -192,17 +189,21 @@ public:
     */
     void setDither(bool dither) { fBitfields.fDither = static_cast<unsigned>(dither); }
 
-#ifdef SK_SUPPORT_LEGACY_SETFILTERQUALITY
-    // DEPRECATED -- this field is unused.
+    /** Returns SkFilterQuality, the image filtering level. A lower setting
+        draws faster; a higher setting looks better when the image is scaled.
+    */
     SkFilterQuality getFilterQuality() const {
         return (SkFilterQuality)fBitfields.fFilterQuality;
     }
 
-    // DEPRECATED -- this field is unused.
-    void setFilterQuality(SkFilterQuality fq) {
-        fBitfields.fFilterQuality = fq;
-    }
-#endif
+    /** Sets SkFilterQuality, the image filtering level. A lower setting
+        draws faster; a higher setting looks better when the image is scaled.
+        Does not check to see if quality is valid.
+
+        example: https://fiddle.skia.org/c/@Color_Methods
+        example: https://fiddle.skia.org/c/@Paint_setFilterQuality
+    */
+    void setFilterQuality(SkFilterQuality quality);
 
     /** \enum SkPaint::Style
         Set Style to fill, stroke, or both fill and stroke geometry.
@@ -234,11 +235,6 @@ public:
     */
     void setStyle(Style style);
 
-    /**
-     *  Set paint's style to kStroke if true, or kFill if false.
-     */
-    void setStroke(bool);
-
     /** Retrieves alpha and RGB, unpremultiplied, packed into 32 bits.
         Use helpers SkColorGetA(), SkColorGetR(), SkColorGetG(), and SkColorGetB() to extract
         a color component.
@@ -248,7 +244,7 @@ public:
     SkColor getColor() const { return fColor4f.toSkColor(); }
 
     /** Retrieves alpha and RGB, unpremultiplied, as four floating point values. RGB are
-        extended sRGB values (sRGB gamut, and encoded with the sRGB transfer function).
+        are extended sRGB values (sRGB gamut, and encoded with the sRGB transfer function).
 
         @return  unpremultiplied RGBA
     */
@@ -320,10 +316,9 @@ public:
     */
     SkScalar getStrokeWidth() const { return fWidth; }
 
-    /** Sets the thickness of the pen used by the paint to outline the shape.
-        A stroke-width of zero is treated as "hairline" width. Hairlines are always exactly one
-        pixel wide in device space (their thickness does not change as the canvas is scaled).
-        Negative stroke-widths are invalid; setting a negative width will have no effect.
+    /** Sets the thickness of the pen used by the paint to
+        outline the shape.
+        Has no effect if width is less than zero.
 
         @param width  zero thickness for hairline; greater than zero for pen thickness
 
@@ -594,6 +589,7 @@ public:
 
         @param imageFilter  how SkImage is sampled when transformed
 
+        example: https://fiddle.skia.org/c/@Draw_Looper_Methods
         example: https://fiddle.skia.org/c/@Paint_setImageFilter
     */
     void setImageFilter(sk_sp<SkImageFilter> imageFilter);
@@ -708,8 +704,6 @@ private:
         } fBitfields;
         uint32_t fBitfieldsUInt;
     };
-
-    friend class SkPaintPriv;
 };
 
 #endif

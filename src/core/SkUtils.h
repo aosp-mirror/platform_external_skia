@@ -68,7 +68,7 @@ static inline SkUnichar SkUTFN_Next(SkTextEncoding enc, const void** ptr, const 
 namespace SkHexadecimalDigits {
     extern const char gUpper[16];  // 0-9A-F
     extern const char gLower[16];  // 0-9a-f
-}  // namespace SkHexadecimalDigits
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -83,8 +83,7 @@ namespace SkHexadecimalDigits {
 
 template <typename T, typename P>
 static SK_ALWAYS_INLINE T sk_unaligned_load(const P* ptr) {
-    static_assert(std::is_trivially_copyable<T>::value);
-    static_assert(std::is_trivially_copyable<P>::value);
+    // TODO: static_assert desirable things about T here so as not to be totally abused.
     T val;
     memcpy(&val, ptr, sizeof(val));
     return val;
@@ -92,15 +91,8 @@ static SK_ALWAYS_INLINE T sk_unaligned_load(const P* ptr) {
 
 template <typename T, typename P>
 static SK_ALWAYS_INLINE void sk_unaligned_store(P* ptr, T val) {
-    static_assert(std::is_trivially_copyable<T>::value);
-    static_assert(std::is_trivially_copyable<P>::value);
+    // TODO: ditto
     memcpy(ptr, &val, sizeof(val));
-}
-
-template <typename Dst, typename Src>
-static SK_ALWAYS_INLINE Dst sk_bit_cast(const Src& src) {
-    static_assert(sizeof(Dst) == sizeof(Src));
-    return sk_unaligned_load<Dst>(&src);
 }
 
 #endif

@@ -22,18 +22,17 @@ namespace {
 static constexpr char kWebFontResource[] = "fonts/Roboto-Regular.ttf";
 static constexpr char kSkottieResource[] = "skottie/skottie_sample_webfont.json";
 
-// Mock web font loader which serves a single local font (checked in under resources/).
+// Dummy web font loader which serves a single local font (checked in under resources/).
 class FakeWebFontProvider final : public skresources::ResourceProvider {
 public:
-    FakeWebFontProvider()
-        : fTypeface(SkTypeface::MakeFromData(GetResourceAsData(kWebFontResource))) {}
+    FakeWebFontProvider() : fFontData(GetResourceAsData(kWebFontResource)) {}
 
-    sk_sp<SkTypeface> loadTypeface(const char[], const char[]) const override {
-        return fTypeface;
+    sk_sp<SkData> loadFont(const char[], const char[]) const override {
+        return fFontData;
     }
 
 private:
-    sk_sp<SkTypeface> fTypeface;
+    sk_sp<SkData> fFontData;
 
     using INHERITED = skresources::ResourceProvider;
 };
@@ -91,15 +90,9 @@ private:
 DEF_GM(return new SkottieWebFontGM;)
 
 class SkottieColorizeGM : public skiagm::GM {
-public:
-    SkottieColorizeGM(const char* name, const char* resource)
-        : fName(name)
-        , fResource(resource)
-    {}
-
 protected:
     SkString onShortName() override {
-        return SkStringPrintf("skottie_colorize_%s", fName);
+        return SkString("skottie_colorize");
     }
 
     SkISize onISize() override {
@@ -107,13 +100,12 @@ protected:
     }
 
     void onOnceBeforeDraw() override {
-        if (auto stream = GetResourceAsStream(fResource)) {
+        if (auto stream = GetResourceAsStream("skottie/skottie_sample_search.json")) {
             fPropManager = std::make_unique<skottie_utils::CustomPropertyManager>();
             fAnimation   = skottie::Animation::Builder()
                               .setPropertyObserver(fPropManager->getPropertyObserver())
                               .make(stream.get());
-            fColorProps  = fPropManager->getColorProps();
-            fTextProps   = fPropManager->getTextProps();
+            fColors      = fPropManager->getColorProps();
         }
     }
 
@@ -149,13 +141,8 @@ protected:
 
         if (uni == 'c') {
             fColorIndex = (fColorIndex + 1) % SK_ARRAY_COUNT(kColors);
-            for (const auto& prop : fColorProps) {
+            for (const auto& prop : fColors) {
                 fPropManager->setColor(prop, kColors[fColorIndex]);
-            }
-            for (const auto& prop : fTextProps) {
-                auto txtval = fPropManager->getText(prop);
-                txtval.fFillColor = kColors[fColorIndex];
-                fPropManager->setText(prop, txtval);
             }
             return true;
         }
@@ -166,20 +153,15 @@ protected:
 private:
     static constexpr SkScalar kSize = 800;
 
-    const char*                                                fName;
-    const char*                                                fResource;
-
     sk_sp<skottie::Animation>                                  fAnimation;
     std::unique_ptr<skottie_utils::CustomPropertyManager>      fPropManager;
-    std::vector<skottie_utils::CustomPropertyManager::PropKey> fColorProps,
-                                                               fTextProps;
+    std::vector<skottie_utils::CustomPropertyManager::PropKey> fColors;
     size_t                                                     fColorIndex = 0;
 
     using INHERITED = skiagm::GM;
 };
 
-DEF_GM(return new SkottieColorizeGM("color", "skottie/skottie_sample_search.json");)
-DEF_GM(return new SkottieColorizeGM("text" , "skottie/skottie-text-animator-5.json");)
+DEF_GM(return new SkottieColorizeGM;)
 
 class SkottieMultiFrameGM : public skiagm::GM {
 public:

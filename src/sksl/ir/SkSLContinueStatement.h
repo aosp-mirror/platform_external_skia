@@ -8,37 +8,31 @@
 #ifndef SKSL_CONTINUESTATEMENT
 #define SKSL_CONTINUESTATEMENT
 
-#include "include/private/SkSLStatement.h"
 #include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLStatement.h"
 
 namespace SkSL {
 
 /**
  * A 'continue' statement.
  */
-class ContinueStatement final : public Statement {
-public:
-    static constexpr Kind kStatementKind = Kind::kContinue;
-
+struct ContinueStatement : public Statement {
     ContinueStatement(int offset)
-    : INHERITED(offset, kStatementKind) {}
-
-    static std::unique_ptr<Statement> Make(int offset) {
-        return std::make_unique<ContinueStatement>(offset);
-    }
+    : INHERITED(offset, kContinue_Kind) {}
 
     std::unique_ptr<Statement> clone() const override {
-        return std::make_unique<ContinueStatement>(fOffset);
+        return std::unique_ptr<Statement>(new ContinueStatement(fOffset));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
         return String("continue;");
     }
+#endif
 
-private:
-    using INHERITED = Statement;
+    typedef Statement INHERITED;
 };
 
-}  // namespace SkSL
+} // namespace
 
 #endif

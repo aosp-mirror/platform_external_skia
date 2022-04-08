@@ -23,11 +23,12 @@ class GrDawnTextureRenderTarget : public GrDawnTexture, public GrDawnRenderTarge
 public:
     GrDawnTextureRenderTarget(GrDawnGpu* gpu,
                               SkISize dimensions,
+                              const wgpu::TextureView textureView,
                               int sampleCnt,
                               const GrDawnTextureInfo& textureInfo,
-                              GrMipmapStatus mipmapStatus);
+                              GrMipMapsStatus mipMapsStatus);
 
-    bool canAttemptStencilAttachment(bool useMSAASurface) const override;
+    bool canAttemptStencilAttachment() const override;
 
     GrBackendFormat backendFormat() const override { return GrDawnTexture::backendFormat(); }
 

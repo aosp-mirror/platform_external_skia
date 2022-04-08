@@ -17,14 +17,14 @@ a Linux-based device.
 
 class SSHFlavor(default.DefaultFlavor):
 
-  def __init__(self, m, app_name):
-    super(SSHFlavor, self).__init__(m, app_name)
+  def __init__(self, m):
+    super(SSHFlavor, self).__init__(m)
     self._user_ip = ''
 
   @property
   def user_ip(self):
     if not self._user_ip:
-      path = self.m.path.expanduser('~')+'/ssh_machine.json'
+      path = self.m.path.expanduser('~/ssh_machine.json')
       ssh_info = self.m.file.read_json('read ssh_machine.json', path,
                                        test_data={'user_ip':'foo@127.0.0.1'})
       self._user_ip = ssh_info.get(u'user_ip')
@@ -44,12 +44,7 @@ class SSHFlavor(default.DefaultFlavor):
 
   def install(self):
     self.ensure_device_dir(self.device_dirs.resource_dir)
-    if self.app_name:
-      self.create_clean_device_dir(self.device_dirs.bin_dir)
-      host_path = self.host_dirs.bin_dir.join(self.app_name)
-      device_path = self.device_path_join(self.device_dirs.bin_dir, self.app_name)
-      self.copy_file_to_device(host_path, device_path)
-      self.ssh('make %s executable' % self.app_name, 'chmod', '+x', device_path)
+    self.create_clean_device_dir(self.device_dirs.bin_dir)
 
   def create_clean_device_dir(self, path):
     # use -f to silently return if path doesn't exist
@@ -81,6 +76,10 @@ class SSHFlavor(default.DefaultFlavor):
   #def copy_directory_contents_to_host(self, device_path, host_path):
 
   def step(self, name, cmd, **kwargs):
-    # Run cmd (installed above)
+    # Push and run cmd
+    host_path = self.host_dirs.bin_dir.join(cmd[0])
     cmd[0] = self.device_path_join(self.device_dirs.bin_dir, cmd[0])
+    self.copy_file_to_device(host_path, cmd[0])
+
+    self.ssh('make %s executable' % name, 'chmod', '+x', cmd[0])
     self.ssh(str(name), *cmd)

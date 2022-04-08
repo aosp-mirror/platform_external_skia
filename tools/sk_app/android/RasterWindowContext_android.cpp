@@ -33,7 +33,7 @@ private:
     ANativeWindow_Buffer fBuffer;
     ARect fBounds;
 
-    using INHERITED = RasterWindowContext;
+    typedef RasterWindowContext INHERITED;
 };
 
 RasterWindowContext_android::RasterWindowContext_android(ANativeWindow* window,

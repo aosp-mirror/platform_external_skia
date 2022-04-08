@@ -5,9 +5,6 @@
     },
     {
       "name": "minikin_tests"
-    },
-    {
-      "name": "librenderengine_test"
     }
   ],
   "imports": [

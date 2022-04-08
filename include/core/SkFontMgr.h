@@ -32,7 +32,7 @@ protected:
     SkTypeface* matchStyleCSS3(const SkFontStyle& pattern);
 
 private:
-    using INHERITED = SkRefCnt;
+    typedef SkRefCnt INHERITED;
 };
 
 class SK_API SkFontMgr : public SkRefCnt {
@@ -87,6 +87,8 @@ public:
                                           const char* bcp47[], int bcp47Count,
                                           SkUnichar character) const;
 
+    SkTypeface* matchFaceStyle(const SkTypeface*, const SkFontStyle&) const;
+
     /**
      *  Create a typeface for the specified data and TTC index (pass 0 for none)
      *  or NULL if the data is not recognized. The caller must call unref() on
@@ -137,29 +139,25 @@ protected:
     virtual SkTypeface* onMatchFamilyStyleCharacter(const char familyName[], const SkFontStyle&,
                                                     const char* bcp47[], int bcp47Count,
                                                     SkUnichar character) const = 0;
+    virtual SkTypeface* onMatchFaceStyle(const SkTypeface*,
+                                         const SkFontStyle&) const = 0;
 
     virtual sk_sp<SkTypeface> onMakeFromData(sk_sp<SkData>, int ttcIndex) const = 0;
     virtual sk_sp<SkTypeface> onMakeFromStreamIndex(std::unique_ptr<SkStreamAsset>,
                                                     int ttcIndex) const = 0;
     virtual sk_sp<SkTypeface> onMakeFromStreamArgs(std::unique_ptr<SkStreamAsset>,
-                                                   const SkFontArguments&) const = 0;
+                                                   const SkFontArguments&) const;
     virtual sk_sp<SkTypeface> onMakeFromFontData(std::unique_ptr<SkFontData>) const;
     virtual sk_sp<SkTypeface> onMakeFromFile(const char path[], int ttcIndex) const = 0;
 
     virtual sk_sp<SkTypeface> onLegacyMakeTypeface(const char familyName[], SkFontStyle) const = 0;
-
-    // this method is never called -- will be removed
-    virtual SkTypeface* onMatchFaceStyle(const SkTypeface*,
-                                         const SkFontStyle&) const {
-        return nullptr;
-    }
 
 private:
 
     /** Implemented by porting layer to return the default factory. */
     static sk_sp<SkFontMgr> Factory();
 
-    using INHERITED = SkRefCnt;
+    typedef SkRefCnt INHERITED;
 };
 
 #endif

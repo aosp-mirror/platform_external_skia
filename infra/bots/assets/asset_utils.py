@@ -9,7 +9,6 @@
 """Utilities for managing assets."""
 
 
-from __future__ import print_function
 import argparse
 import json
 import os
@@ -40,7 +39,7 @@ TAG_VERSION_PREFIX = 'version:'
 TAG_VERSION_TMPL = '%s%%s' % TAG_VERSION_PREFIX
 
 VERSION_FILENAME = 'VERSION'
-PATTERNS_TO_SKIP = ['.git', '.svn', '*.pyc', '.DS_STORE']
+ZIP_BLACKLIST = ['.git', '.svn', '*.pyc', '.DS_STORE']
 
 
 class CIPDStore(object):
@@ -212,7 +211,7 @@ class GSStore(object):
     target_dir = os.path.abspath(target_dir)
     with utils.tmp_dir():
       zip_file = os.path.join(os.getcwd(), '%d.zip' % version)
-      zip_utils.zip(target_dir, zip_file, to_skip=PATTERNS_TO_SKIP)
+      zip_utils.zip(target_dir, zip_file, blacklist=ZIP_BLACKLIST)
       gs_path = GS_PATH_TMPL % (GS_SUBDIR_TMPL % (self._gs_bucket, name),
                                 str(version))
       self.copy(zip_file, gs_path)
@@ -334,12 +333,12 @@ class Asset(object):
     if os.path.isdir(asset._dir):
       raise Exception('Asset %s already exists!' % asset._name)
 
-    print('Creating asset in %s' % asset._dir)
+    print 'Creating asset in %s' % asset._dir
     os.mkdir(asset._dir)
     def copy_script(script):
       src = os.path.join(ASSETS_DIR, 'scripts', script)
       dst = os.path.join(asset._dir, script)
-      print('Creating %s' % dst)
+      print 'Creating %s' % dst
       shutil.copy(src, dst)
       subprocess.check_call([utils.GIT, 'add', dst])
 
@@ -349,8 +348,8 @@ class Asset(object):
     if resp == 'y':
       copy_script('create.py')
       copy_script('create_and_upload.py')
-      print('You will need to add implementation to the creation script.')
-    print('Successfully created asset %s.' % asset._name)
+      print 'You will need to add implementation to the creation script.'
+    print 'Successfully created asset %s.' % asset._name
     return asset
 
   def remove(self, remove_in_store=False):

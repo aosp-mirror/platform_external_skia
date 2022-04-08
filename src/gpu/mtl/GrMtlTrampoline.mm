@@ -13,12 +13,13 @@
 #error This file must be compiled with Arc. Use -fobjc-arc flag
 #endif
 
-GR_NORETAIN_BEGIN
-
-sk_sp<GrGpu> GrMtlTrampoline::MakeGpu(const GrMtlBackendContext& backendContext,
+sk_sp<GrGpu> GrMtlTrampoline::MakeGpu(GrContext* context,
                                       const GrContextOptions& options,
-                                      GrDirectContext* direct) {
-    return GrMtlGpu::Make(backendContext, options, direct);
+                                      void* device,
+                                      void* queue) {
+    return GrMtlGpu::Make(context,
+                          options,
+                          (__bridge id<MTLDevice>)device,
+                          (__bridge id<MTLCommandQueue>)queue);
 }
 
-GR_NORETAIN_END

@@ -59,7 +59,7 @@ private:
 
     std::unique_ptr<SkDngImage> fDngImage;
 
-    using INHERITED = SkCodec;
+    typedef SkCodec INHERITED;
 };
 
 #endif

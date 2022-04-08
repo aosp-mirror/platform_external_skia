@@ -17,7 +17,6 @@
 #include "include/private/SkMacros.h"
 #include "include/private/SkTemplates.h"
 #include "include/utils/SkRandom.h"
-#include "src/core/SkMatrixProvider.h"
 #include "src/gpu/GrColor.h"
 #include "src/gpu/GrFPArgs.h"
 #include "src/gpu/GrSamplerState.h"
@@ -60,7 +59,7 @@ public:
     const GrFPArgs& args() const { return fArgs; }
 
 private:
-    SkSimpleMatrixProvider fMatrixProvider;
+    SkMatrix fViewMatrixStorage;
     std::unique_ptr<GrColorInfo> fColorInfoStorage;
     GrFPArgs fArgs;
 };
@@ -82,8 +81,6 @@ protected:
 
 private:
     TestDashPathEffect(const SkScalar* intervals, int count, SkScalar phase);
-
-    bool computeFastBounds(SkRect* bounds) const override { return true; }
 
     int                     fCount;
     SkAutoTArray<SkScalar>  fIntervals;

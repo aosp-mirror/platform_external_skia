@@ -162,7 +162,7 @@ private:
         if (nullptr == surface) {
             canvas->restore();
         } else {
-            surface->draw(canvas, 0, 0);
+            surface->draw(canvas, 0, 0, nullptr);
         }
 
         r.inset(-SK_ScalarHalf, -SK_ScalarHalf);
@@ -186,8 +186,7 @@ private:
 
         SkMatrix lm;
         lm.setScale(SkIntToScalar(kCheckSize), SkIntToScalar(kCheckSize));
-        fBGShader = bg.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
-                                  SkSamplingOptions(), lm);
+        fBGShader = bg.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, &lm);
 
         SkPaint bmpPaint;
         const SkPoint kCenter = { SkIntToScalar(kSize) / 2, SkIntToScalar(kSize) / 2 };
@@ -207,7 +206,7 @@ private:
                         7 * SkIntToScalar(kSize) / 8, 7 * SkIntToScalar(kSize) / 8};
         bmpCanvas.drawRect(rect, bmpPaint);
 
-        fBmpShader = bmp.makeShader(SkSamplingOptions());
+        fBmpShader = bmp.makeShader();
     }
 
     enum {
@@ -219,11 +218,11 @@ private:
     sk_sp<SkShader> fBGShader;
     sk_sp<SkShader> fBmpShader;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new Xfermodes3GM;)
 
-}  // namespace skiagm
+}

@@ -5,15 +5,15 @@
  * found in the LICENSE file.
  */
 
+#include "include/effects/SkBlurImageFilter.h"
+
 #include <algorithm>
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkTileMode.h"
-#include "include/effects/SkImageFilters.h"
 #include "include/private/SkColorData.h"
 #include "include/private/SkNx.h"
 #include "include/private/SkTFitsIn.h"
-#include "include/private/SkTPin.h"
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkGpuBlurUtils.h"
@@ -24,16 +24,17 @@
 #include "src/core/SkWriteBuffer.h"
 
 #if SK_SUPPORT_GPU
+#include "include/gpu/GrContext.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/SkGr.h"
 #endif
 
 namespace {
 
-class SkBlurImageFilter final : public SkImageFilter_Base {
+class SkBlurImageFilterImpl final : public SkImageFilter_Base {
 public:
-    SkBlurImageFilter(SkScalar sigmaX, SkScalar sigmaY,  SkTileMode tileMode,
-                      sk_sp<SkImageFilter> input, const SkRect* cropRect)
+    SkBlurImageFilterImpl(SkScalar sigmaX, SkScalar sigmaY,  SkTileMode tileMode,
+                          sk_sp<SkImageFilter> input, const CropRect* cropRect)
             : INHERITED(&input, 1, cropRect)
             , fSigma{sigmaX, sigmaY}
             , fTileMode(tileMode) {}
@@ -47,8 +48,8 @@ protected:
                                MapDirection, const SkIRect* inputRect) const override;
 
 private:
-    friend void ::SkRegisterBlurImageFilterFlattenable();
-    SK_FLATTENABLE_HOOKS(SkBlurImageFilter)
+    friend void SkBlurImageFilter::RegisterFlattenables();
+    SK_FLATTENABLE_HOOKS(SkBlurImageFilterImpl)
 
 #if SK_SUPPORT_GPU
     sk_sp<SkSpecialImage> gpuFilter(
@@ -60,45 +61,75 @@ private:
     SkSize     fSigma;
     SkTileMode fTileMode;
 
-    using INHERITED = SkImageFilter_Base;
+    typedef SkImageFilter_Base INHERITED;
 };
 
 } // end namespace
 
-sk_sp<SkImageFilter> SkImageFilters::Blur(
-        SkScalar sigmaX, SkScalar sigmaY, SkTileMode tileMode, sk_sp<SkImageFilter> input,
-        const CropRect& cropRect) {
+static SkTileMode to_sktilemode(SkBlurImageFilter::TileMode tileMode) {
+    switch(tileMode) {
+        case SkBlurImageFilter::kClamp_TileMode:
+            return SkTileMode::kClamp;
+        case SkBlurImageFilter::kRepeat_TileMode:
+            return SkTileMode::kRepeat;
+        case SkBlurImageFilter::kClampToBlack_TileMode:
+            // Fall through
+        default:
+            return SkTileMode::kDecal;
+    }
+}
+
+sk_sp<SkImageFilter> SkBlurImageFilter::Make(SkScalar sigmaX, SkScalar sigmaY,
+                                             sk_sp<SkImageFilter> input,
+                                             const SkImageFilter::CropRect* cropRect,
+                                             TileMode tileMode) {
+    return Make(sigmaX, sigmaY, to_sktilemode(tileMode), std::move(input), cropRect);
+}
+
+sk_sp<SkImageFilter> SkBlurImageFilter::Make(SkScalar sigmaX, SkScalar sigmaY, SkTileMode tileMode,
+                                             sk_sp<SkImageFilter> input,
+                                             const SkImageFilter::CropRect* cropRect) {
     if (sigmaX < SK_ScalarNearlyZero && sigmaY < SK_ScalarNearlyZero && !cropRect) {
         return input;
     }
     return sk_sp<SkImageFilter>(
-          new SkBlurImageFilter(sigmaX, sigmaY, tileMode, input, cropRect));
+          new SkBlurImageFilterImpl(sigmaX, sigmaY, tileMode, input, cropRect));
 }
 
-void SkRegisterBlurImageFilterFlattenable() {
-    SK_REGISTER_FLATTENABLE(SkBlurImageFilter);
-    SkFlattenable::Register("SkBlurImageFilterImpl", SkBlurImageFilter::CreateProc);
-}
+void SkBlurImageFilter::RegisterFlattenables() { SK_REGISTER_FLATTENABLE(SkBlurImageFilterImpl); }
 
-sk_sp<SkFlattenable> SkBlurImageFilter::CreateProc(SkReadBuffer& buffer) {
+///////////////////////////////////////////////////////////////////////////////
+
+sk_sp<SkFlattenable> SkBlurImageFilterImpl::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 1);
     SkScalar sigmaX = buffer.readScalar();
     SkScalar sigmaY = buffer.readScalar();
-    SkTileMode tileMode = buffer.read32LE(SkTileMode::kLastTileMode);
-    return SkImageFilters::Blur(
-          sigmaX, sigmaY, tileMode, common.getInput(0), common.cropRect());
+    SkTileMode tileMode;
+    if (buffer.isVersionLT(SkPicturePriv::kTileModeInBlurImageFilter_Version)) {
+        tileMode = SkTileMode::kDecal;
+    } else if (buffer.isVersionLT(SkPicturePriv::kCleanupImageFilterEnums_Version)) {
+        tileMode = to_sktilemode(buffer.read32LE(SkBlurImageFilter::kLast_TileMode));
+    } else {
+        tileMode = buffer.read32LE(SkTileMode::kLastTileMode);
+    }
+
+    static_assert(SkBlurImageFilter::kLast_TileMode == 2, "CreateProc");
+
+    return SkBlurImageFilter::Make(
+          sigmaX, sigmaY, tileMode, common.getInput(0), &common.cropRect());
 }
 
-void SkBlurImageFilter::flatten(SkWriteBuffer& buffer) const {
+void SkBlurImageFilterImpl::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writeScalar(fSigma.fWidth);
     buffer.writeScalar(fSigma.fHeight);
 
+    // Fuzzer sanity checks
+    static_assert((int) SkTileMode::kLastTileMode == 3 && SkBlurImageFilter::kLast_TileMode == 2,
+                  "SkBlurImageFilterImpl::flatten");
     SkASSERT(fTileMode <= SkTileMode::kLastTileMode);
     buffer.writeInt(static_cast<int>(fTileMode));
 }
-
-///////////////////////////////////////////////////////////////////////////////
 
 // This is defined by the SVG spec:
 // https://drafts.fxtf.org/filter-effects/#feGaussianBlurElement
@@ -529,8 +560,8 @@ static SkVector map_sigma(const SkSize& localSigma, const SkMatrix& ctm) {
     return sigma;
 }
 
-sk_sp<SkSpecialImage> SkBlurImageFilter::onFilterImage(const Context& ctx,
-                                                       SkIPoint* offset) const {
+sk_sp<SkSpecialImage> SkBlurImageFilterImpl::onFilterImage(const Context& ctx,
+                                                           SkIPoint* offset) const {
     SkIPoint inputOffset = SkIPoint::Make(0, 0);
 
     sk_sp<SkSpecialImage> input(this->filterInput(0, ctx, &inputOffset));
@@ -567,8 +598,7 @@ sk_sp<SkSpecialImage> SkBlurImageFilter::onFilterImage(const Context& ctx,
     if (ctx.gpuBacked()) {
         // Ensure the input is in the destination's gamut. This saves us from having to do the
         // xform during the filter itself.
-        input = ImageToColorSpace(input.get(), ctx.colorType(), ctx.colorSpace(),
-                                  ctx.surfaceProps());
+        input = ImageToColorSpace(input.get(), ctx.colorType(), ctx.colorSpace());
         result = this->gpuFilter(ctx, sigma, input, inputBounds, dstBounds, inputOffset,
                                  &resultOffset);
     } else
@@ -602,11 +632,10 @@ sk_sp<SkSpecialImage> SkBlurImageFilter::onFilterImage(const Context& ctx,
 }
 
 #if SK_SUPPORT_GPU
-sk_sp<SkSpecialImage> SkBlurImageFilter::gpuFilter(
+sk_sp<SkSpecialImage> SkBlurImageFilterImpl::gpuFilter(
         const Context& ctx, SkVector sigma, const sk_sp<SkSpecialImage> &input, SkIRect inputBounds,
         SkIRect dstBounds, SkIPoint inputOffset, SkIPoint* offset) const {
-    if (SkGpuBlurUtils::IsEffectivelyZeroSigma(sigma.x()) &&
-        SkGpuBlurUtils::IsEffectivelyZeroSigma(sigma.y())) {
+    if (0 == sigma.x() && 0 == sigma.y()) {
         offset->fX = inputBounds.x() + inputOffset.fX;
         offset->fY = inputBounds.y() + inputOffset.fY;
         return input->makeSubset(inputBounds);
@@ -623,7 +652,7 @@ sk_sp<SkSpecialImage> SkBlurImageFilter::gpuFilter(
     // TODO (michaelludwig) - The color space choice is odd, should it just be ctx.refColorSpace()?
     dstBounds.offset(input->subset().topLeft());
     inputBounds.offset(input->subset().topLeft());
-    auto surfaceDrawContext = SkGpuBlurUtils::GaussianBlur(
+    auto renderTargetContext = SkGpuBlurUtils::GaussianBlur(
             context,
             std::move(inputView),
             SkColorTypeToGrColorType(input->colorType()),
@@ -634,28 +663,28 @@ sk_sp<SkSpecialImage> SkBlurImageFilter::gpuFilter(
             sigma.x(),
             sigma.y(),
             fTileMode);
-    if (!surfaceDrawContext) {
+    if (!renderTargetContext) {
         return nullptr;
     }
 
     return SkSpecialImage::MakeDeferredFromGpu(context,
                                                SkIRect::MakeSize(dstBounds.size()),
                                                kNeedNewImageUniqueID_SpecialImage,
-                                               surfaceDrawContext->readSurfaceView(),
-                                               surfaceDrawContext->colorInfo().colorType(),
+                                               renderTargetContext->readSurfaceView(),
+                                               renderTargetContext->colorInfo().colorType(),
                                                sk_ref_sp(input->getColorSpace()),
                                                ctx.surfaceProps());
 }
 #endif
 
-SkRect SkBlurImageFilter::computeFastBounds(const SkRect& src) const {
+SkRect SkBlurImageFilterImpl::computeFastBounds(const SkRect& src) const {
     SkRect bounds = this->getInput(0) ? this->getInput(0)->computeFastBounds(src) : src;
     bounds.outset(fSigma.width() * 3, fSigma.height() * 3);
     return bounds;
 }
 
-SkIRect SkBlurImageFilter::onFilterNodeBounds(const SkIRect& src, const SkMatrix& ctm,
-                                              MapDirection, const SkIRect* inputRect) const {
+SkIRect SkBlurImageFilterImpl::onFilterNodeBounds(const SkIRect& src, const SkMatrix& ctm,
+                                                  MapDirection, const SkIRect* inputRect) const {
     SkVector sigma = map_sigma(fSigma, ctm);
     return src.makeOutset(SkScalarCeilToInt(sigma.x() * 3), SkScalarCeilToInt(sigma.y() * 3));
 }

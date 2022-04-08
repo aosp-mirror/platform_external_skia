@@ -9,7 +9,6 @@
 #define GrCCClipPath_DEFINED
 
 #include "include/core/SkPath.h"
-#include "src/gpu/GrSurfaceProxyPriv.h"
 #include "src/gpu/GrTextureProxy.h"
 #include "src/gpu/ccpr/GrCCAtlas.h"
 
@@ -23,44 +22,60 @@ class GrProxyProvider;
  * where by clip FPs in a given opsTask. A single GrCCClipPath can be referenced by multiple FPs. At
  * flush time their coverage count masks are packed into atlas(es) alongside normal DrawPathOps.
  */
-class GrCCClipPath : public SkRefCnt {
+class GrCCClipPath {
 public:
-    GrCCClipPath(const SkPath& deviceSpacePath, const SkIRect&, const GrCaps&);
+    GrCCClipPath() = default;
     GrCCClipPath(const GrCCClipPath&) = delete;
 
-    void addAccess(const SkIRect& accessRect) { fAccessRect.join(accessRect); }
-    GrTextureProxy* atlasLazyProxy() const { return fAtlasLazyProxy.get(); }
-    const SkPath& deviceSpacePath() const { return fDeviceSpacePath; }
-    const SkIRect& pathDevIBounds() const { return fPathDevIBounds; }
-
-    void accountForOwnPath(GrCCAtlas::Specs*) const;
-
-    // Allocates our clip path in an atlas and records the offset.
-    //
-    // If the return value is non-null, it means the given path did not fit in the then-current
-    // atlas, so it was retired and a new one was added to the stack. The return value is the
-    // newly-retired atlas. (*NOT* the atlas this path will reside in.) The caller must call
-    // assignAtlasTexture on all prior GrCCClipPaths that will use the retired atlas.
-    std::unique_ptr<GrCCAtlas> renderPathInAtlas(GrCCPerFlushResources*,
-                                                 GrOnFlushResourceProvider*);
-
-    const SkIVector& atlasTranslate() const {
-        SkASSERT(fHasAtlas);
-        return fDevToAtlasOffset;
+    ~GrCCClipPath() {
+        // Ensure no clip FP exists with a dangling pointer back into this class. This works because
+        // a clip FP will have a ref on the proxy if it exists.
+        //
+        // This assert also guarantees there won't be a lazy proxy callback with a dangling pointer
+        // back into this class, since no proxy will exist after we destruct, if the assert passes.
+        SkASSERT(!fAtlasLazyProxy || fAtlasLazyProxy->unique());
     }
 
-    void assignAtlasTexture(sk_sp<GrTexture> atlasTexture) {
-        fAtlasLazyProxy->priv().assign(std::move(atlasTexture));
+    bool isInitialized() const { return fAtlasLazyProxy != nullptr; }
+    void init(const SkPath& deviceSpacePath, const SkIRect& accessRect,
+              GrCCAtlas::CoverageType atlasCoverageType, const GrCaps&);
+
+    void addAccess(const SkIRect& accessRect) {
+        SkASSERT(this->isInitialized());
+        fAccessRect.join(accessRect);
     }
+    GrTextureProxy* atlasLazyProxy() const {
+        SkASSERT(this->isInitialized());
+        return fAtlasLazyProxy.get();
+    }
+    const SkPath& deviceSpacePath() const {
+        SkASSERT(this->isInitialized());
+        return fDeviceSpacePath;
+    }
+    const SkIRect& pathDevIBounds() const {
+        SkASSERT(this->isInitialized());
+        return fPathDevIBounds;
+    }
+
+    void accountForOwnPath(GrCCPerFlushResourceSpecs*) const;
+    void renderPathInAtlas(GrCCPerFlushResources*, GrOnFlushResourceProvider*);
+
+    const SkVector& atlasScale() const { SkASSERT(fHasAtlasTransform); return fAtlasScale; }
+    const SkVector& atlasTranslate() const { SkASSERT(fHasAtlasTransform); return fAtlasTranslate; }
 
 private:
+    sk_sp<GrTextureProxy> fAtlasLazyProxy;
     SkPath fDeviceSpacePath;
     SkIRect fPathDevIBounds;
     SkIRect fAccessRect;
-    sk_sp<GrTextureProxy> fAtlasLazyProxy;
 
+    const GrCCAtlas* fAtlas = nullptr;
     SkIVector fDevToAtlasOffset;  // Translation from device space to location in atlas.
     SkDEBUGCODE(bool fHasAtlas = false;)
+
+    SkVector fAtlasScale;
+    SkVector fAtlasTranslate;
+    SkDEBUGCODE(bool fHasAtlasTransform = false;)
 };
 
 #endif

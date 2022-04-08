@@ -54,12 +54,10 @@ static SkAlpha ScaleAlpha(SkAlpha alpha, float opacity) {
    return SkToU8(sk_float_round2int(alpha * opacity));
 }
 
-static sk_sp<SkShader> LocalShader(const sk_sp<SkShader> shader,
-                                   const SkMatrix& base,
-                                   const SkMatrix& ctm) {
+static SkMatrix ComputeDiffInverse(const SkMatrix& base, const SkMatrix& ctm) {
     // Mask filters / shaders are declared to operate under a specific transform, but due to the
     // deferral mechanism, other transformations might have been pushed to the state.
-    // We want to undo these transforms (T):
+    // We want to undo these transforms:
     //
     //   baseCTM x T = ctm
     //
@@ -69,46 +67,34 @@ static sk_sp<SkShader> LocalShader(const sk_sp<SkShader> shader,
     //
     //   =>  Inv(T) = Inv(ctm) x baseCTM
 
-    SkMatrix lm;
-    if (base != ctm && ctm.invert(&lm)) {
-        lm.preConcat(base);
+    SkMatrix m;
+    if (base != ctm && ctm.invert(&m)) {
+        m.preConcat(base);
     } else {
-        lm = SkMatrix::I();
+        m = SkMatrix::I();
     }
 
-    // Note: this doesn't play ball with existing shader local matrices (what we really want is
-    // SkShader::makeWithPostLocalMatrix).  Probably a good signal that the whole mechanism is
-    // contrived and should be redesigned (use SkCanvas::clipShader when available, drop shader
-    // "effects" completely, etc).
-    return shader->makeWithLocalMatrix(lm);
+    return m;
 }
 
 bool RenderNode::RenderContext::requiresIsolation() const {
     // Note: fShader is never applied on isolation layers.
     return ScaleAlpha(SK_AlphaOPAQUE, fOpacity) != SK_AlphaOPAQUE
         || fColorFilter
-        || fMaskShader
+        || fMaskFilter
         || fBlendMode != SkBlendMode::kSrcOver;
 }
 
-void RenderNode::RenderContext::modulatePaint(const SkMatrix& ctm, SkPaint* paint,
-                                              bool is_layer_paint) const {
+void RenderNode::RenderContext::modulatePaint(const SkMatrix& ctm, SkPaint* paint) const {
     paint->setAlpha(ScaleAlpha(paint->getAlpha(), fOpacity));
     paint->setColorFilter(SkColorFilters::Compose(fColorFilter, paint->refColorFilter()));
     if (fShader) {
-        paint->setShader(LocalShader(fShader, fShaderCTM, ctm));
+        paint->setShader(fShader->makeWithLocalMatrix(ComputeDiffInverse(fShaderCTM, ctm)));
     }
-    if (fBlendMode != SkBlendMode::kSrcOver) {
-        paint->setBlendMode(fBlendMode);
+    if (fMaskFilter) {
+        paint->setMaskFilter(fMaskFilter->makeWithMatrix(ComputeDiffInverse(fMaskCTM, ctm)));
     }
-
-    // Only apply the shader mask for regular paints.  Isolation layers require
-    // special handling on restore.
-    if (!is_layer_paint && fMaskShader) {
-        paint->setShader(SkShaders::Blend(SkBlendMode::kSrcIn,
-                                          LocalShader(fMaskShader, fMaskCTM, ctm),
-                                          paint->refShader()));
-    }
+    paint->setBlendMode(fBlendMode);
 }
 
 RenderNode::ScopedRenderContext::ScopedRenderContext(SkCanvas* canvas, const RenderContext* ctx)
@@ -118,12 +104,6 @@ RenderNode::ScopedRenderContext::ScopedRenderContext(SkCanvas* canvas, const Ren
 
 RenderNode::ScopedRenderContext::~ScopedRenderContext() {
     if (fRestoreCount >= 0) {
-        if (fMaskShader) {
-            SkPaint mask_paint;
-            mask_paint.setBlendMode(SkBlendMode::kDstIn);
-            mask_paint.setShader(std::move(fMaskShader));
-            fCanvas->drawPaint(mask_paint);
-        }
         fCanvas->restoreToCount(fRestoreCount);
     }
 }
@@ -153,8 +133,8 @@ RenderNode::ScopedRenderContext::modulateShader(sk_sp<SkShader> sh, const SkMatr
 }
 
 RenderNode::ScopedRenderContext&&
-RenderNode::ScopedRenderContext::modulateMaskShader(sk_sp<SkShader> ms, const SkMatrix& ctm) {
-    if (fCtx.fMaskShader) {
+RenderNode::ScopedRenderContext::modulateMaskFilter(sk_sp<SkMaskFilter> mf, const SkMatrix& ctm) {
+    if (fCtx.fMaskFilter) {
         // As we compose mask filters, use the relative transform T for the inner mask:
         //
         //   maskCTM x T = ctm
@@ -162,14 +142,13 @@ RenderNode::ScopedRenderContext::modulateMaskShader(sk_sp<SkShader> ms, const Sk
         //   => T = Inv(maskCTM) x ctm
         //
         SkMatrix invMaskCTM;
-        if (ms && fCtx.fMaskCTM.invert(&invMaskCTM)) {
+        if (mf && fCtx.fMaskCTM.invert(&invMaskCTM)) {
             const auto relative_transform = SkMatrix::Concat(invMaskCTM, ctm);
-            fCtx.fMaskShader = SkShaders::Blend(SkBlendMode::kSrcIn,
-                                                std::move(fCtx.fMaskShader),
-                                                ms->makeWithLocalMatrix(relative_transform));
+            fCtx.fMaskFilter = SkMaskFilter::MakeCompose(std::move(fCtx.fMaskFilter),
+                                                         mf->makeWithMatrix(relative_transform));
         }
     } else {
-        fCtx.fMaskShader = std::move(ms);
+        fCtx.fMaskFilter = std::move(mf);
         fCtx.fMaskCTM    = ctm;
     }
 
@@ -187,17 +166,12 @@ RenderNode::ScopedRenderContext::setIsolation(const SkRect& bounds, const SkMatr
                                               bool isolation) {
     if (isolation && fCtx.requiresIsolation()) {
         SkPaint layer_paint;
-        fCtx.modulatePaint(ctm, &layer_paint, /*is_layer_paint = */true);
+        fCtx.modulatePaint(ctm, &layer_paint);
         fCanvas->saveLayer(bounds, &layer_paint);
-
-        // Fetch the mask shader for restore.
-        if (fCtx.fMaskShader) {
-            fMaskShader = LocalShader(fCtx.fMaskShader, fCtx.fMaskCTM, ctm);
-        }
 
         // Reset only the props applied via isolation layers.
         fCtx.fColorFilter = nullptr;
-        fCtx.fMaskShader  = nullptr;
+        fCtx.fMaskFilter  = nullptr;
         fCtx.fOpacity     = 1;
         fCtx.fBlendMode   = SkBlendMode::kSrcOver;
     }
@@ -208,15 +182,13 @@ RenderNode::ScopedRenderContext::setIsolation(const SkRect& bounds, const SkMatr
 RenderNode::ScopedRenderContext&&
 RenderNode::ScopedRenderContext::setFilterIsolation(const SkRect& bounds, const SkMatrix& ctm,
                                                     sk_sp<SkImageFilter> filter) {
-    if (filter) {
-        SkPaint layer_paint;
-        fCtx.modulatePaint(ctm, &layer_paint);
+    SkPaint layer_paint;
+    fCtx.modulatePaint(ctm, &layer_paint);
 
-        SkASSERT(!layer_paint.getImageFilter());
-        layer_paint.setImageFilter(std::move(filter));
-        fCanvas->saveLayer(bounds, &layer_paint);
-        fCtx = RenderContext();
-    }
+    SkASSERT(!layer_paint.getImageFilter());
+    layer_paint.setImageFilter(std::move(filter));
+    fCanvas->saveLayer(bounds, &layer_paint);
+    fCtx = RenderContext();
 
     return std::move(*this);
 }

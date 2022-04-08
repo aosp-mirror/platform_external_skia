@@ -130,11 +130,11 @@ DEF_TEST(SixtyOvalsOneOff, reporter) {
 
 #if DEBUG_SIMPLIFY_FAILS
 static bool simplify_fails(skiatest::Reporter* reporter, const SkPath& path) {
-    SkPath simplifiedPath;
-    bool failed = !Simplify(path, &simplifiedPath);
+    SkPath dummy;
+    bool failed = !Simplify(path, &dummy);
     if (!failed) {
         SkBitmap bitmap;
-        failed = !!comparePaths(reporter, __FUNCTION__, path, simplifiedPath, bitmap);
+        failed = !!comparePaths(reporter, __FUNCTION__, path, dummy, bitmap);
     }
     return failed;
 }

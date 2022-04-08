@@ -9,7 +9,6 @@
 """Utilities for zipping and unzipping files."""
 
 
-from __future__ import print_function
 import fnmatch
 import ntpath
 import os
@@ -17,23 +16,23 @@ import posixpath
 import zipfile
 
 
-def filtered(names, to_skip):
+def filtered(names, blacklist):
   """Filter the list of file or directory names."""
   rv = names[:]
-  for pattern in to_skip:
+  for pattern in blacklist:
     rv = [n for n in rv if not fnmatch.fnmatch(n, pattern)]
   return rv
 
 
-def zip(target_dir, zip_file, to_skip=None):  # pylint: disable=W0622
+def zip(target_dir, zip_file, blacklist=None):  # pylint: disable=W0622
   """Zip the given directory, write to the given zip file."""
   if not os.path.isdir(target_dir):
     raise IOError('%s does not exist!' % target_dir)
-  to_skip = to_skip or []
+  blacklist = blacklist or []
   with zipfile.ZipFile(zip_file, 'w', zipfile.ZIP_DEFLATED, True) as z:
     for r, d, f in os.walk(target_dir, topdown=True):
-      d[:] = filtered(d, to_skip)
-      for filename in filtered(f, to_skip):
+      d[:] = filtered(d, blacklist)
+      for filename in filtered(f, blacklist):
         filepath = os.path.join(r, filename)
         zi = zipfile.ZipInfo(filepath)
         zi.filename = os.path.relpath(filepath, target_dir)
@@ -44,11 +43,11 @@ def zip(target_dir, zip_file, to_skip=None):  # pylint: disable=W0622
           perms = os.stat(filepath).st_mode
         except OSError:
           if os.path.islink(filepath):
-            print('Skipping symlink %s' % filepath)
+            print 'Skipping symlink %s' % filepath
             continue
           else:
             raise
-        zi.external_attr = perms << 16
+        zi.external_attr = perms << 16L
         zi.compress_type = zipfile.ZIP_DEFLATED
         with open(filepath, 'rb') as f:
           content = f.read()
@@ -74,5 +73,5 @@ def unzip(zip_file, target_dir):
       else:
         with open(dst_path, 'wb') as f:
           f.write(z.read(zi))
-      perms = zi.external_attr >> 16
+      perms = zi.external_attr >> 16L
       os.chmod(dst_path, perms)

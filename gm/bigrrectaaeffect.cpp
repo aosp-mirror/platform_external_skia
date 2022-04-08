@@ -17,12 +17,14 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
+#include "include/gpu/GrContext.h"
 #include "include/private/GrSharedEnums.h"
 #include "include/private/GrTypesPriv.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrPaint.h"
-#include "src/gpu/GrSurfaceDrawContext.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrRenderTargetContextPriv.h"
 #include "src/gpu/effects/GrPorterDuffXferProcessor.h"
 #include "src/gpu/effects/GrRRectEffect.h"
 #include "src/gpu/ops/GrDrawOp.h"
@@ -65,7 +67,7 @@ protected:
 
     SkISize onISize() override { return SkISize::Make(fWidth, fHeight); }
 
-    void onDraw(GrRecordingContext* context, GrSurfaceDrawContext* surfaceDrawContext,
+    void onDraw(GrContext* context, GrRenderTargetContext* renderTargetContext,
                 SkCanvas* canvas) override {
         SkPaint paint;
 
@@ -88,22 +90,21 @@ protected:
 
                 SkRRect rrect = fRRect;
                 rrect.offset(SkIntToScalar(x + kGap), SkIntToScalar(y + kGap));
-                const auto& caps = *surfaceDrawContext->caps()->shaderCaps();
-                auto [success, fp] = GrRRectEffect::Make(/*inputFP=*/nullptr, edgeType, rrect,
-                                                         caps);
-                SkASSERT(success);
-                if (success) {
-                    SkASSERT(fp);
+                const auto& caps = *renderTargetContext->caps()->shaderCaps();
+                auto fp = GrRRectEffect::Make(edgeType, rrect, caps);
+                SkASSERT(fp);
+                if (fp) {
                     GrPaint grPaint;
                     grPaint.setColor4f({ 0, 0, 0, 1.f });
                     grPaint.setXPFactory(GrPorterDuffXPFactory::Get(SkBlendMode::kSrc));
-                    grPaint.setCoverageFragmentProcessor(std::move(fp));
+                    grPaint.addCoverageFragmentProcessor(std::move(fp));
 
                     SkRect bounds = testBounds;
                     bounds.offset(SkIntToScalar(x), SkIntToScalar(y));
 
-                    surfaceDrawContext->addDrawOp(GrFillRectOp::MakeNonAARect(
-                            context, std::move(grPaint), SkMatrix::I(), bounds));
+                    renderTargetContext->priv().testingOnly_addDrawOp(
+                            GrFillRectOp::MakeNonAARect(context, std::move(grPaint),
+                                                        SkMatrix::I(), bounds));
                 }
             canvas->restore();
             x = x + fTestOffsetX;
@@ -124,7 +125,7 @@ private:
     int fTestOffsetX;
     int fTestOffsetY;
     const char* fName;
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -139,4 +140,4 @@ DEF_GM( return new BigRRectAAEffectGM (SkRRect::MakeOval(SkRect::MakeIWH(kSize -
 DEF_GM( return new BigRRectAAEffectGM (SkRRect::MakeRectXY(SkRect::MakeIWH(kSize - 1, kSize - 10), kSize/2.f - 10.f, kSize/2.f - 10.f), "circular_corner"); )
 DEF_GM( return new BigRRectAAEffectGM (SkRRect::MakeRectXY(SkRect::MakeIWH(kSize - 1, kSize - 10), kSize/2.f - 10.f, kSize/2.f - 15.f), "elliptical_corner"); )
 
-}  // namespace skiagm
+}

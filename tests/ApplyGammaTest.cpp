@@ -17,12 +17,12 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrContext.h"
 #include "include/private/GrTypesPriv.h"
 #include "include/private/SkTemplates.h"
 #include "src/core/SkUtils.h"
 #include "src/gpu/GrCaps.h"
-#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrShaderCaps.h"
 #include "tests/Test.h"
 #include "tools/gpu/GrContextFactory.h"
@@ -94,7 +94,7 @@ bool check_gamma(uint32_t src, uint32_t dst, bool toSRGB, float error,
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ApplyGamma, reporter, ctxInfo) {
-    auto context = ctxInfo.directContext();
+    GrContext* context = ctxInfo.grContext();
     static constexpr SkISize kBaseSize{256, 256};
     static const size_t kRowBytes = sizeof(uint32_t) * kBaseSize.fWidth;
 
@@ -109,7 +109,6 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ApplyGamma, reporter, ctxInfo) {
 
     SkBitmap bm;
     bm.installPixels(ii, srcPixels.get(), kRowBytes);
-    auto img = bm.asImage();
 
     SkAutoTMalloc<uint32_t> read(kBaseSize.area());
 
@@ -127,15 +126,15 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ApplyGamma, reporter, ctxInfo) {
         SkCanvas* dstCanvas = dst->getCanvas();
 
         dstCanvas->clear(SK_ColorRED);
-        dst->flushAndSubmit();
+        dst->flush();
 
         SkPaint gammaPaint;
         gammaPaint.setBlendMode(SkBlendMode::kSrc);
         gammaPaint.setColorFilter(toSRGB ? SkColorFilters::LinearToSRGBGamma()
                                          : SkColorFilters::SRGBToLinearGamma());
 
-        dstCanvas->drawImage(img, 0, 0, SkSamplingOptions(), &gammaPaint);
-        dst->flushAndSubmit();
+        dstCanvas->drawBitmap(bm, 0, 0, &gammaPaint);
+        dst->flush();
 
         sk_memset32(read.get(), 0, kBaseSize.fWidth * kBaseSize.fHeight);
         if (!dst->readPixels(ii, read.get(), kRowBytes, 0, 0)) {

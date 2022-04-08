@@ -5,268 +5,231 @@
  * found in the LICENSE file.
  */
 
-#include "src/sksl/ir/SkSLType.h"
-
 #include "src/sksl/SkSLContext.h"
-#include "src/sksl/ir/SkSLConstructor.h"
-#include "src/sksl/ir/SkSLConstructorCompoundCast.h"
-#include "src/sksl/ir/SkSLConstructorScalarCast.h"
-#include "src/sksl/ir/SkSLFunctionReference.h"
-#include "src/sksl/ir/SkSLSymbolTable.h"
 #include "src/sksl/ir/SkSLType.h"
-#include "src/sksl/ir/SkSLTypeReference.h"
 
 namespace SkSL {
 
-CoercionCost Type::coercionCost(const Type& other) const {
+int Type::coercionCost(const Type& other) const {
     if (*this == other) {
-        return CoercionCost::Free();
+        return 0;
     }
-    if (this->isVector() && other.isVector()) {
+    if (this->kind() == kNullable_Kind && other.kind() != kNullable_Kind) {
+        int result = this->componentType().coercionCost(other);
+        if (result != INT_MAX) {
+            ++result;
+        }
+        return result;
+    }
+    if (this->fName == "null" && other.kind() == kNullable_Kind) {
+        return 0;
+    }
+    if (this->kind() == kVector_Kind && other.kind() == kVector_Kind) {
         if (this->columns() == other.columns()) {
             return this->componentType().coercionCost(other.componentType());
         }
-        return CoercionCost::Impossible();
+        return INT_MAX;
     }
-    if (this->isMatrix()) {
+    if (this->kind() == kMatrix_Kind) {
         if (this->columns() == other.columns() && this->rows() == other.rows()) {
             return this->componentType().coercionCost(other.componentType());
         }
-        return CoercionCost::Impossible();
+        return INT_MAX;
     }
-    if (this->isNumber() && other.isNumber()) {
-        if (this->isLiteral() && this->isInteger()) {
-            return CoercionCost::Free();
-        } else if (this->numberKind() != other.numberKind()) {
-            return CoercionCost::Impossible();
-        } else if (other.priority() >= this->priority()) {
-            return CoercionCost::Normal(other.priority() - this->priority());
-        } else {
-            return CoercionCost::Narrowing(this->priority() - other.priority());
-        }
+    if (this->isNumber() && other.isNumber() && other.priority() > this->priority()) {
+        return other.priority() - this->priority();
     }
     for (size_t i = 0; i < fCoercibleTypes.size(); i++) {
         if (*fCoercibleTypes[i] == other) {
-            return CoercionCost::Normal((int) i + 1);
+            return (int) i + 1;
         }
     }
-    return CoercionCost::Impossible();
+    return INT_MAX;
 }
 
 const Type& Type::toCompound(const Context& context, int columns, int rows) const {
-    SkASSERT(this->isScalar());
+    SkASSERT(this->kind() == Type::kScalar_Kind);
     if (columns == 1 && rows == 1) {
         return *this;
     }
-    if (*this == *context.fTypes.fFloat || *this == *context.fTypes.fFloatLiteral) {
+    if (*this == *context.fFloat_Type || *this == *context.fFloatLiteral_Type) {
         switch (rows) {
             case 1:
                 switch (columns) {
-                    case 1: return *context.fTypes.fFloat;
-                    case 2: return *context.fTypes.fFloat2;
-                    case 3: return *context.fTypes.fFloat3;
-                    case 4: return *context.fTypes.fFloat4;
-                    default: SK_ABORT("unsupported vector column count (%d)", columns);
+                    case 2: return *context.fFloat2_Type;
+                    case 3: return *context.fFloat3_Type;
+                    case 4: return *context.fFloat4_Type;
+                    default: ABORT("unsupported vector column count (%d)", columns);
                 }
             case 2:
                 switch (columns) {
-                    case 2: return *context.fTypes.fFloat2x2;
-                    case 3: return *context.fTypes.fFloat3x2;
-                    case 4: return *context.fTypes.fFloat4x2;
-                    default: SK_ABORT("unsupported matrix column count (%d)", columns);
+                    case 2: return *context.fFloat2x2_Type;
+                    case 3: return *context.fFloat3x2_Type;
+                    case 4: return *context.fFloat4x2_Type;
+                    default: ABORT("unsupported matrix column count (%d)", columns);
                 }
             case 3:
                 switch (columns) {
-                    case 2: return *context.fTypes.fFloat2x3;
-                    case 3: return *context.fTypes.fFloat3x3;
-                    case 4: return *context.fTypes.fFloat4x3;
-                    default: SK_ABORT("unsupported matrix column count (%d)", columns);
+                    case 2: return *context.fFloat2x3_Type;
+                    case 3: return *context.fFloat3x3_Type;
+                    case 4: return *context.fFloat4x3_Type;
+                    default: ABORT("unsupported matrix column count (%d)", columns);
                 }
             case 4:
                 switch (columns) {
-                    case 2: return *context.fTypes.fFloat2x4;
-                    case 3: return *context.fTypes.fFloat3x4;
-                    case 4: return *context.fTypes.fFloat4x4;
-                    default: SK_ABORT("unsupported matrix column count (%d)", columns);
+                    case 2: return *context.fFloat2x4_Type;
+                    case 3: return *context.fFloat3x4_Type;
+                    case 4: return *context.fFloat4x4_Type;
+                    default: ABORT("unsupported matrix column count (%d)", columns);
                 }
-            default: SK_ABORT("unsupported row count (%d)", rows);
+            default: ABORT("unsupported row count (%d)", rows);
         }
-    } else if (*this == *context.fTypes.fHalf) {
+    } else if (*this == *context.fHalf_Type) {
         switch (rows) {
             case 1:
                 switch (columns) {
-                    case 1: return *context.fTypes.fHalf;
-                    case 2: return *context.fTypes.fHalf2;
-                    case 3: return *context.fTypes.fHalf3;
-                    case 4: return *context.fTypes.fHalf4;
-                    default: SK_ABORT("unsupported vector column count (%d)", columns);
+                    case 2: return *context.fHalf2_Type;
+                    case 3: return *context.fHalf3_Type;
+                    case 4: return *context.fHalf4_Type;
+                    default: ABORT("unsupported vector column count (%d)", columns);
                 }
             case 2:
                 switch (columns) {
-                    case 2: return *context.fTypes.fHalf2x2;
-                    case 3: return *context.fTypes.fHalf3x2;
-                    case 4: return *context.fTypes.fHalf4x2;
-                    default: SK_ABORT("unsupported matrix column count (%d)", columns);
+                    case 2: return *context.fHalf2x2_Type;
+                    case 3: return *context.fHalf3x2_Type;
+                    case 4: return *context.fHalf4x2_Type;
+                    default: ABORT("unsupported matrix column count (%d)", columns);
                 }
             case 3:
                 switch (columns) {
-                    case 2: return *context.fTypes.fHalf2x3;
-                    case 3: return *context.fTypes.fHalf3x3;
-                    case 4: return *context.fTypes.fHalf4x3;
-                    default: SK_ABORT("unsupported matrix column count (%d)", columns);
+                    case 2: return *context.fHalf2x3_Type;
+                    case 3: return *context.fHalf3x3_Type;
+                    case 4: return *context.fHalf4x3_Type;
+                    default: ABORT("unsupported matrix column count (%d)", columns);
                 }
             case 4:
                 switch (columns) {
-                    case 2: return *context.fTypes.fHalf2x4;
-                    case 3: return *context.fTypes.fHalf3x4;
-                    case 4: return *context.fTypes.fHalf4x4;
-                    default: SK_ABORT("unsupported matrix column count (%d)", columns);
+                    case 2: return *context.fHalf2x4_Type;
+                    case 3: return *context.fHalf3x4_Type;
+                    case 4: return *context.fHalf4x4_Type;
+                    default: ABORT("unsupported matrix column count (%d)", columns);
                 }
-            default: SK_ABORT("unsupported row count (%d)", rows);
+            default: ABORT("unsupported row count (%d)", rows);
         }
-    } else if (*this == *context.fTypes.fInt || *this == *context.fTypes.fIntLiteral) {
+    } else if (*this == *context.fDouble_Type) {
         switch (rows) {
             case 1:
                 switch (columns) {
-                    case 1: return *context.fTypes.fInt;
-                    case 2: return *context.fTypes.fInt2;
-                    case 3: return *context.fTypes.fInt3;
-                    case 4: return *context.fTypes.fInt4;
-                    default: SK_ABORT("unsupported vector column count (%d)", columns);
+                    case 2: return *context.fDouble2_Type;
+                    case 3: return *context.fDouble3_Type;
+                    case 4: return *context.fDouble4_Type;
+                    default: ABORT("unsupported vector column count (%d)", columns);
                 }
-            default: SK_ABORT("unsupported row count (%d)", rows);
+            case 2:
+                switch (columns) {
+                    case 2: return *context.fDouble2x2_Type;
+                    case 3: return *context.fDouble3x2_Type;
+                    case 4: return *context.fDouble4x2_Type;
+                    default: ABORT("unsupported matrix column count (%d)", columns);
+                }
+            case 3:
+                switch (columns) {
+                    case 2: return *context.fDouble2x3_Type;
+                    case 3: return *context.fDouble3x3_Type;
+                    case 4: return *context.fDouble4x3_Type;
+                    default: ABORT("unsupported matrix column count (%d)", columns);
+                }
+            case 4:
+                switch (columns) {
+                    case 2: return *context.fDouble2x4_Type;
+                    case 3: return *context.fDouble3x4_Type;
+                    case 4: return *context.fDouble4x4_Type;
+                    default: ABORT("unsupported matrix column count (%d)", columns);
+                }
+            default: ABORT("unsupported row count (%d)", rows);
         }
-    } else if (*this == *context.fTypes.fShort) {
+    } else if (*this == *context.fInt_Type || *this == *context.fIntLiteral_Type) {
         switch (rows) {
             case 1:
                 switch (columns) {
-                    case 1: return *context.fTypes.fShort;
-                    case 2: return *context.fTypes.fShort2;
-                    case 3: return *context.fTypes.fShort3;
-                    case 4: return *context.fTypes.fShort4;
-                    default: SK_ABORT("unsupported vector column count (%d)", columns);
+                    case 2: return *context.fInt2_Type;
+                    case 3: return *context.fInt3_Type;
+                    case 4: return *context.fInt4_Type;
+                    default: ABORT("unsupported vector column count (%d)", columns);
                 }
-            default: SK_ABORT("unsupported row count (%d)", rows);
+            default: ABORT("unsupported row count (%d)", rows);
         }
-    } else if (*this == *context.fTypes.fUInt) {
+    } else if (*this == *context.fShort_Type) {
         switch (rows) {
             case 1:
                 switch (columns) {
-                    case 1: return *context.fTypes.fUInt;
-                    case 2: return *context.fTypes.fUInt2;
-                    case 3: return *context.fTypes.fUInt3;
-                    case 4: return *context.fTypes.fUInt4;
-                    default: SK_ABORT("unsupported vector column count (%d)", columns);
+                    case 2: return *context.fShort2_Type;
+                    case 3: return *context.fShort3_Type;
+                    case 4: return *context.fShort4_Type;
+                    default: ABORT("unsupported vector column count (%d)", columns);
                 }
-            default: SK_ABORT("unsupported row count (%d)", rows);
+            default: ABORT("unsupported row count (%d)", rows);
         }
-    } else if (*this == *context.fTypes.fUShort) {
+    } else if (*this == *context.fByte_Type) {
         switch (rows) {
             case 1:
                 switch (columns) {
-                    case 1: return *context.fTypes.fUShort;
-                    case 2: return *context.fTypes.fUShort2;
-                    case 3: return *context.fTypes.fUShort3;
-                    case 4: return *context.fTypes.fUShort4;
-                    default: SK_ABORT("unsupported vector column count (%d)", columns);
+                    case 2: return *context.fByte2_Type;
+                    case 3: return *context.fByte3_Type;
+                    case 4: return *context.fByte4_Type;
+                    default: ABORT("unsupported vector column count (%d)", columns);
                 }
-            default: SK_ABORT("unsupported row count (%d)", rows);
+            default: ABORT("unsupported row count (%d)", rows);
         }
-    } else if (*this == *context.fTypes.fBool) {
+    } else if (*this == *context.fUInt_Type) {
         switch (rows) {
             case 1:
                 switch (columns) {
-                    case 1: return *context.fTypes.fBool;
-                    case 2: return *context.fTypes.fBool2;
-                    case 3: return *context.fTypes.fBool3;
-                    case 4: return *context.fTypes.fBool4;
-                    default: SK_ABORT("unsupported vector column count (%d)", columns);
+                    case 2: return *context.fUInt2_Type;
+                    case 3: return *context.fUInt3_Type;
+                    case 4: return *context.fUInt4_Type;
+                    default: ABORT("unsupported vector column count (%d)", columns);
                 }
-            default: SK_ABORT("unsupported row count (%d)", rows);
+            default: ABORT("unsupported row count (%d)", rows);
+        }
+    } else if (*this == *context.fUShort_Type) {
+        switch (rows) {
+            case 1:
+                switch (columns) {
+                    case 2: return *context.fUShort2_Type;
+                    case 3: return *context.fUShort3_Type;
+                    case 4: return *context.fUShort4_Type;
+                    default: ABORT("unsupported vector column count (%d)", columns);
+                }
+            default: ABORT("unsupported row count (%d)", rows);
+        }
+    } else if (*this == *context.fUByte_Type) {
+        switch (rows) {
+            case 1:
+                switch (columns) {
+                    case 2: return *context.fUByte2_Type;
+                    case 3: return *context.fUByte3_Type;
+                    case 4: return *context.fUByte4_Type;
+                    default: ABORT("unsupported vector column count (%d)", columns);
+                }
+            default: ABORT("unsupported row count (%d)", rows);
+        }
+    } else if (*this == *context.fBool_Type) {
+        switch (rows) {
+            case 1:
+                switch (columns) {
+                    case 2: return *context.fBool2_Type;
+                    case 3: return *context.fBool3_Type;
+                    case 4: return *context.fBool4_Type;
+                    default: ABORT("unsupported vector column count (%d)", columns);
+                }
+            default: ABORT("unsupported row count (%d)", rows);
         }
     }
-    SkDEBUGFAILF("unsupported toCompound type %s", this->description().c_str());
-    return *context.fTypes.fVoid;
+#ifdef SK_DEBUG
+    ABORT("unsupported scalar_to_compound type %s", this->description().c_str());
+#endif
+    return *context.fVoid_Type;
 }
 
-const Type* Type::clone(SymbolTable* symbolTable) const {
-    // Many types are built-ins, and exist in every SymbolTable by default.
-    if (this->isInBuiltinTypes()) {
-        return this;
-    }
-    // Even if the type isn't a built-in, it might already exist in the SymbolTable.
-    const Symbol* clonedSymbol = (*symbolTable)[this->name()];
-    if (clonedSymbol != nullptr) {
-        const Type& clonedType = clonedSymbol->as<Type>();
-        SkASSERT(clonedType.typeKind() == this->typeKind());
-        return &clonedType;
-    }
-    // This type actually needs to be cloned into the destination SymbolTable.
-    switch (this->typeKind()) {
-        case TypeKind::kArray:
-            return symbolTable->add(Type::MakeArrayType(this->name(), this->componentType(),
-                                                        this->columns()));
-
-        case TypeKind::kStruct:
-            return symbolTable->add(Type::MakeStructType(this->fOffset, this->name(),
-                                                         this->fields()));
-
-        case TypeKind::kEnum:
-            return symbolTable->add(Type::MakeEnumType(this->name()));
-
-        default:
-            SkDEBUGFAILF("don't know how to clone type '%s'", this->description().c_str());
-            return nullptr;
-    }
-}
-
-std::unique_ptr<Expression> Type::coerceExpression(std::unique_ptr<Expression> expr,
-                                                   const Context& context) const {
-    if (!expr) {
-        return nullptr;
-    }
-    const int offset = expr->fOffset;
-    if (expr->is<FunctionReference>()) {
-        context.fErrors.error(offset, "expected '(' to begin function call");
-        return nullptr;
-    }
-    if (expr->is<TypeReference>()) {
-        context.fErrors.error(offset, "expected '(' to begin constructor invocation");
-        return nullptr;
-    }
-    if (expr->type() == *this) {
-        return expr;
-    }
-
-    const Program::Settings& settings = context.fConfig->fSettings;
-    if (!expr->coercionCost(*this).isPossible(settings.fAllowNarrowingConversions)) {
-        context.fErrors.error(offset, "expected '" + this->displayName() + "', but found '" +
-                                      expr->type().displayName() + "'");
-        return nullptr;
-    }
-
-    if (this->isScalar()) {
-        return ConstructorScalarCast::Make(context, offset, *this, std::move(expr));
-    }
-    if (this->isVector() || this->isMatrix()) {
-        return ConstructorCompoundCast::Make(context, offset, *this, std::move(expr));
-    }
-    context.fErrors.error(offset, "cannot construct '" + this->displayName() + "'");
-    return nullptr;
-}
-
-bool Type::isOrContainsArray() const {
-    if (this->isStruct()) {
-        for (const Field& f : this->fields()) {
-            if (f.fType->isOrContainsArray()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    return this->isArray();
-}
-
-
-}  // namespace SkSL
+} // namespace

@@ -5,12 +5,6 @@
  * found in the LICENSE file.
  */
 
-// Make sure SkUserConfig.h is included so #defines are available on
-// Android.
-#include "include/core/SkTypes.h"
-#ifdef SK_ENABLE_ANDROID_UTILS
-#include "client_utils/android/FrontBufferedStream.h"
-#endif
 #include "include/codec/SkAndroidCodec.h"
 #include "include/codec/SkCodec.h"
 #include "include/core/SkBitmap.h"
@@ -38,6 +32,7 @@
 #include "include/private/SkMalloc.h"
 #include "include/private/SkTemplates.h"
 #include "include/third_party/skcms/skcms.h"
+#include "include/utils/SkFrontBufferedStream.h"
 #include "include/utils/SkRandom.h"
 #include "src/codec/SkCodecImageGenerator.h"
 #include "src/core/SkAutoMalloc.h"
@@ -270,7 +265,7 @@ static void test_codec(skiatest::Reporter* r, const char* path, Codec* codec, Sk
 
 static bool supports_partial_scanlines(const char path[]) {
     static const char* const exts[] = {
-        "jpg", "jpeg", "png", "webp",
+        "jpg", "jpeg", "png", "webp"
         "JPG", "JPEG", "PNG", "WEBP"
     };
 
@@ -460,9 +455,9 @@ static void check(skiatest::Reporter* r,
         REPORTER_ASSERT(r, gen->getPixels(info, bm.getPixels(), bm.rowBytes()));
         compare_to_good_digest(r, codecDigest, bm);
 
-#if !defined(SK_PNG_DISABLE_TESTS) && defined(SK_ENABLE_ANDROID_UTILS)
-        // Test using FrontBufferedStream, as Android does
-        auto bufferedStream = android::skia::FrontBufferedStream::Make(
+#ifndef SK_PNG_DISABLE_TESTS
+        // Test using SkFrontBufferedStream, as Android does
+        auto bufferedStream = SkFrontBufferedStream::Make(
                       SkMemoryStream::Make(std::move(fullData)), SkCodec::MinBufferedBytesNeeded());
         REPORTER_ASSERT(r, bufferedStream);
         codec = SkCodec::MakeFromStream(std::move(bufferedStream));
@@ -610,10 +605,7 @@ static void test_dimensions(skiatest::Reporter* r, const char path[]) {
         options.fSampleSize = sampleSize;
         SkCodec::Result result =
                 codec->getAndroidPixels(scaledInfo, pixels.get(), rowBytes, &options);
-        if (result != SkCodec::kSuccess) {
-            ERRORF(r, "Failed to decode %s with sample size %i; error: %s", path, sampleSize,
-                    SkCodec::ResultToString(result));
-        }
+        REPORTER_ASSERT(r, SkCodec::kSuccess == result);
     }
 }
 
@@ -963,7 +955,7 @@ DEF_TEST(Codec_wbmp_max_size, r) {
     const unsigned char tooBigWbmp[] = { 0x00, 0x00,           // Header
                                          0x84, 0x80, 0x00,     // W: 65536
                                          0x84, 0x80, 0x00 };   // H: 65536
-    stream = std::make_unique<SkMemoryStream>(tooBigWbmp, sizeof(tooBigWbmp), false);
+    stream.reset(new SkMemoryStream(tooBigWbmp, sizeof(tooBigWbmp), false));
     codec = SkCodec::MakeFromStream(std::move(stream));
 
     REPORTER_ASSERT(r, !codec);
@@ -1520,7 +1512,7 @@ DEF_TEST(Codec_InvalidAnimated, r) {
         auto result = codec->startIncrementalDecode(info, bm.getPixels(), bm.rowBytes(), &opts);
 
         if (result != SkCodec::kSuccess) {
-            ERRORF(r, "Failed to start decoding frame %i (out of %zu) with error %i\n", i,
+            ERRORF(r, "Failed to start decoding frame %i (out of %i) with error %i\n", i,
                    frameInfos.size(), result);
             continue;
         }
@@ -1682,7 +1674,7 @@ DEF_TEST(Codec_ossfuzz6274, r) {
     bm.eraseColor(SK_ColorTRANSPARENT);
 
     SkCanvas canvas(bm);
-    canvas.drawImage(image, 0, 0);
+    canvas.drawImage(image, 0, 0, nullptr);
 
     for (int i = 0; i < image->width();  ++i)
     for (int j = 0; j < image->height(); ++j) {
@@ -1772,7 +1764,7 @@ DEF_TEST(Codec_crbug807324, r) {
     bm.eraseColor(SK_ColorTRANSPARENT);
 
     SkCanvas canvas(bm);
-    canvas.drawImage(image, 0, 0);
+    canvas.drawImage(image, 0, 0, nullptr);
 
     for (int i = 0; i < kWidth;  ++i)
     for (int j = 0; j < kHeight; ++j) {

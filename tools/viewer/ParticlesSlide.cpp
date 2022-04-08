@@ -7,52 +7,19 @@
 
 #include "tools/viewer/ParticlesSlide.h"
 
-#include "include/core/SkCanvas.h"
 #include "modules/particles/include/SkParticleEffect.h"
 #include "modules/particles/include/SkParticleSerialization.h"
 #include "modules/particles/include/SkReflected.h"
 #include "modules/skresources/include/SkResources.h"
 #include "src/core/SkOSFile.h"
-#include "src/sksl/codegen/SkSLVMCodeGenerator.h"
+#include "src/sksl/SkSLByteCode.h"
 #include "src/utils/SkOSPath.h"
 #include "tools/Resources.h"
-#include "tools/ToolUtils.h"
 #include "tools/viewer/ImGuiLayer.h"
 
 #include "imgui.h"
 
-#include <string>
-#include <unordered_map>
-
 using namespace sk_app;
-
-class TestingResourceProvider : public skresources::ResourceProvider {
-public:
-    TestingResourceProvider() {}
-
-    sk_sp<SkData> load(const char resource_path[], const char resource_name[]) const override {
-        auto it = fResources.find(resource_name);
-        if (it != fResources.end()) {
-            return it->second;
-        } else {
-            return GetResourceAsData(SkOSPath::Join(resource_path, resource_name).c_str());
-        }
-    }
-
-    sk_sp<skresources::ImageAsset> loadImageAsset(const char resource_path[],
-                                                  const char resource_name[],
-                                                  const char /*resource_id*/[]) const override {
-        auto data = this->load(resource_path, resource_name);
-        return skresources::MultiFrameImageAsset::Make(data);
-    }
-
-    void addPath(const char resource_name[], const SkPath& path) {
-        fResources[resource_name] = path.serialize();
-    }
-
-private:
-    std::unordered_map<std::string, sk_sp<SkData>> fResources;
-};
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -203,11 +170,7 @@ ParticlesSlide::ParticlesSlide() {
     // Register types for serialization
     SkParticleEffect::RegisterParticleTypes();
     fName = "Particles";
-    auto provider = sk_make_sp<TestingResourceProvider>();
-    SkPath star = ToolUtils::make_star({ 0, 0, 100, 100 }, 5);
-    star.close();
-    provider->addPath("star", star);
-    fResourceProvider = provider;
+    fResourceProvider = skresources::FileResourceProvider::Make(GetResourcePath());
 }
 
 void ParticlesSlide::loadEffects(const char* dirname) {
@@ -226,9 +189,6 @@ void ParticlesSlide::loadEffects(const char* dirname) {
             fLoaded.push_back(effect);
         }
     }
-    std::sort(fLoaded.begin(), fLoaded.end(), [](const LoadedEffect& a, const LoadedEffect& b) {
-        return strcmp(a.fName.c_str(), b.fName.c_str()) < 0;
-    });
 }
 
 void ParticlesSlide::load(SkScalar winWidth, SkScalar winHeight) {
@@ -282,10 +242,11 @@ void ParticlesSlide::draw(SkCanvas* canvas) {
         for (int i = 0; i < fLoaded.count(); ++i) {
             ImGui::PushID(i);
             if (fAnimated && ImGui::Button("Play")) {
-                sk_sp<SkParticleEffect> effect(new SkParticleEffect(fLoaded[i].fParams));
-                effect->start(fAnimationTime, looped, { 0, 0 }, { 0, -1 }, 1, { 0, 0 }, 0,
-                              { 1, 1, 1, 1 }, 0, fRandom.nextF());
+                sk_sp<SkParticleEffect> effect(new SkParticleEffect(fLoaded[i].fParams,
+                                                                    fRandom));
+                effect->start(fAnimationTime, looped);
                 fRunning.push_back({ fLoaded[i].fName, effect, false });
+                fRandom.nextU();
             }
             ImGui::SameLine();
 
@@ -324,12 +285,12 @@ void ParticlesSlide::draw(SkCanvas* canvas) {
                 effect->setPosition(mousePos);
             }
 
-            auto uniformsGui = [mousePos](const SkSL::UniformInfo* info, float* data) {
-                if (!info || !data) {
+            auto uniformsGui = [mousePos](const SkSL::ByteCode* code, float* data) {
+                if (!code || !data) {
                     return;
                 }
-                for (size_t i = 0; i < info->fUniforms.size(); ++i) {
-                    const auto& uni = info->fUniforms[i];
+                for (int i = 0; i < code->getUniformCount(); ++i) {
+                    const auto& uni = code->getUniform(i);
                     float* vals = data + uni.fSlot;
 
                     // Skip over builtin uniforms, to reduce clutter
@@ -339,14 +300,14 @@ void ParticlesSlide::draw(SkCanvas* canvas) {
 
                     // Special case for 'uniform float2 mouse_pos' - an example of likely app logic
                     if (uni.fName == "mouse_pos" &&
-                        uni.fKind == SkSL::Type::NumberKind::kFloat &&
+                        uni.fType == SkSL::TypeCategory::kFloat &&
                         uni.fRows == 2 && uni.fColumns == 1) {
                         vals[0] = mousePos.fX;
                         vals[1] = mousePos.fY;
                         continue;
                     }
 
-                    if (uni.fKind == SkSL::Type::NumberKind::kBoolean) {
+                    if (uni.fType == SkSL::TypeCategory::kBool) {
                         for (int c = 0; c < uni.fColumns; ++c, vals += uni.fRows) {
                             for (int r = 0; r < uni.fRows; ++r, ++vals) {
                                 ImGui::PushID(c*uni.fRows + r);
@@ -363,12 +324,11 @@ void ParticlesSlide::draw(SkCanvas* canvas) {
                     }
 
                     ImGuiDataType dataType = ImGuiDataType_COUNT;
-                    using NumberKind = SkSL::Type::NumberKind;
-                    switch (uni.fKind) {
-                        case NumberKind::kSigned:   dataType = ImGuiDataType_S32;   break;
-                        case NumberKind::kUnsigned: dataType = ImGuiDataType_U32;   break;
-                        case NumberKind::kFloat:    dataType = ImGuiDataType_Float; break;
-                        default:                                                    break;
+                    switch (uni.fType) {
+                        case SkSL::TypeCategory::kSigned:   dataType = ImGuiDataType_S32;   break;
+                        case SkSL::TypeCategory::kUnsigned: dataType = ImGuiDataType_U32;   break;
+                        case SkSL::TypeCategory::kFloat:    dataType = ImGuiDataType_Float; break;
+                        default:                                                            break;
                     }
                     SkASSERT(dataType != ImGuiDataType_COUNT);
                     for (int c = 0; c < uni.fColumns; ++c, vals += uni.fRows) {
@@ -378,7 +338,8 @@ void ParticlesSlide::draw(SkCanvas* canvas) {
                     }
                 }
             };
-            uniformsGui(effect->uniformInfo(), effect->uniformData());
+            uniformsGui(effect->effectCode(), effect->effectUniforms());
+            uniformsGui(effect->particleCode(), effect->particleUniforms());
             if (remove) {
                 fRunning.removeShuffle(i);
             }

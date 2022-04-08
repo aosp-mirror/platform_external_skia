@@ -63,7 +63,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 class MathBenchU32 : public MathBench {
@@ -81,7 +81,7 @@ protected:
         this->performITest(d, s, count);
     }
 private:
-    using INHERITED = MathBench;
+    typedef MathBench INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -96,7 +96,7 @@ protected:
         }
     }
 private:
-    using INHERITED = MathBench;
+    typedef MathBench INHERITED;
 };
 
 class SkRSqrtMathBench : public MathBench {
@@ -109,7 +109,7 @@ protected:
         }
     }
 private:
-    using INHERITED = MathBench;
+    typedef MathBench INHERITED;
 };
 
 
@@ -123,7 +123,7 @@ protected:
         }
     }
 private:
-    using INHERITED = MathBench;
+    typedef MathBench INHERITED;
 };
 
 class FastISqrtMathBench : public MathBench {
@@ -136,7 +136,7 @@ protected:
         }
     }
 private:
-    using INHERITED = MathBench;
+    typedef MathBench INHERITED;
 };
 
 static inline uint32_t QMul64(uint32_t value, U8CPU alpha) {
@@ -161,7 +161,7 @@ protected:
         }
     }
 private:
-    using INHERITED = MathBenchU32;
+    typedef MathBenchU32 INHERITED;
 };
 
 class QMul32Bench : public MathBenchU32 {
@@ -176,7 +176,7 @@ protected:
         }
     }
 private:
-    using INHERITED = MathBenchU32;
+    typedef MathBenchU32 INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -317,7 +317,7 @@ private:
     IsFiniteProc    fProc;
     const char*     fName;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 class FloorBench : public Benchmark {
@@ -378,7 +378,7 @@ protected:
 private:
     const char*     fName;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 class CLZBench : public Benchmark {
@@ -438,67 +438,7 @@ protected:
 private:
     const char* fName;
 
-    using INHERITED = Benchmark;
-};
-
-class CTZBench : public Benchmark {
-    enum {
-        ARRAY = 1000,
-    };
-    uint32_t fData[ARRAY];
-    bool fUsePortable;
-
-public:
-    CTZBench(bool usePortable) : fUsePortable(usePortable) {
-
-        SkRandom rand;
-        for (int i = 0; i < ARRAY; ++i) {
-            fData[i] = rand.nextU();
-        }
-
-        if (fUsePortable) {
-            fName = "ctz_portable";
-        } else {
-            fName = "ctz_intrinsic";
-        }
-    }
-
-    bool isSuitableFor(Backend backend) override {
-        return backend == kNonRendering_Backend;
-    }
-
-    // just so the compiler doesn't remove our loops
-    virtual void process(int) {}
-
-protected:
-    void onDraw(int loops, SkCanvas*) override {
-        int accum = 0;
-
-        if (fUsePortable) {
-            for (int j = 0; j < loops; ++j) {
-                for (int i = 0; i < ARRAY; ++i) {
-                    accum += SkCTZ_portable(fData[i]);
-                }
-                this->process(accum);
-            }
-        } else {
-            for (int j = 0; j < loops; ++j) {
-                for (int i = 0; i < ARRAY; ++i) {
-                    accum += SkCTZ(fData[i]);
-                }
-                this->process(accum);
-            }
-        }
-    }
-
-    const char* onGetName() override {
-        return fName;
-    }
-
-private:
-    const char* fName;
-
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -545,7 +485,7 @@ protected:
 private:
     const char* fName;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -589,7 +529,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -654,8 +594,6 @@ DEF_BENCH( return new FloorBench(true); )
 
 DEF_BENCH( return new CLZBench(false); )
 DEF_BENCH( return new CLZBench(true); )
-DEF_BENCH( return new CTZBench(false); )
-DEF_BENCH( return new CTZBench(true); )
 
 DEF_BENCH( return new NormalizeBench(); )
 
@@ -720,7 +658,7 @@ protected:
 private:
     const char* fName;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 DEF_BENCH( return new Floor2IntBench(false); )
 DEF_BENCH( return new Floor2IntBench(true); )

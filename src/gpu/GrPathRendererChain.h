@@ -15,6 +15,7 @@
 #include "include/private/SkNoncopyable.h"
 #include "include/private/SkTArray.h"
 
+class GrContext;
 class GrCoverageCountingPathRenderer;
 
 /**
@@ -50,13 +51,7 @@ public:
     /** Returns a direct pointer to the coverage counting path renderer, or null if it is not in the
         chain. */
     GrCoverageCountingPathRenderer* getCoverageCountingPathRenderer() {
-        return fCoverageCountingPathRenderer.get();
-    }
-
-    /** Returns a direct pointer to the tessellation path renderer, or null if it is not in the
-        chain. */
-    GrPathRenderer* getTessellationPathRenderer() {
-        return fTessellationPathRenderer;
+        return fCoverageCountingPathRenderer;
     }
 
 private:
@@ -64,8 +59,7 @@ private:
         kPreAllocCount = 8,
     };
     SkSTArray<kPreAllocCount, sk_sp<GrPathRenderer>>    fChain;
-    std::unique_ptr<GrCoverageCountingPathRenderer>     fCoverageCountingPathRenderer;
-    GrPathRenderer*                                     fTessellationPathRenderer = nullptr;
+    GrCoverageCountingPathRenderer*                     fCoverageCountingPathRenderer = nullptr;
 };
 
 #endif

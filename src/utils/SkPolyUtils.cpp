@@ -79,16 +79,9 @@ static inline bool outside_interval(SkScalar numer, SkScalar denom, bool denomPo
            (!denomPositive && (numer > 0 || numer < denom));
 }
 
-// special zero-length test when we're using vdotv as a denominator
-static inline bool zero_length(const SkPoint& v, SkScalar vdotv) {
-    return !(SkScalarsAreFinite(v.fX, v.fY) && vdotv);
-}
-
 // Compute the intersection 'p' between segments s0 and s1, if any.
 // 's' is the parametric value for the intersection along 's0' & 't' is the same for 's1'.
 // Returns false if there is no intersection.
-// If the length squared of a segment is 0, then we treat the segment as degenerate
-// and use only the first endpoint for tests.
 static bool compute_intersection(const OffsetSegment& s0, const OffsetSegment& s1,
                                  SkPoint* p, SkScalar* s, SkScalar* t) {
     const SkVector& v0 = s0.fV;
@@ -105,11 +98,9 @@ static bool compute_intersection(const OffsetSegment& s0, const OffsetSegment& s
         }
 
         // Check for zero-length segments
-        SkScalar v0dotv0 = v0.dot(v0);
-        if (zero_length(v0, v0dotv0)) {
+        if (!SkPointPriv::CanNormalize(v0.fX, v0.fY)) {
             // Both are zero-length
-            SkScalar v1dotv1 = v1.dot(v1);
-            if (zero_length(v1, v1dotv1)) {
+            if (!SkPointPriv::CanNormalize(v1.fX, v1.fY)) {
                 // Check if they're the same point
                 if (!SkPointPriv::CanNormalize(w.fX, w.fY)) {
                     *p = s0.fP0;
@@ -117,13 +108,12 @@ static bool compute_intersection(const OffsetSegment& s0, const OffsetSegment& s
                     *t = 0;
                     return true;
                 } else {
-                    // Intersection is indeterminate
                     return false;
                 }
             }
             // Otherwise project segment0's origin onto segment1
             tNumer = v1.dot(-w);
-            denom = v1dotv1;
+            denom = v1.dot(v1);
             if (outside_interval(tNumer, denom, true)) {
                 return false;
             }
@@ -131,13 +121,12 @@ static bool compute_intersection(const OffsetSegment& s0, const OffsetSegment& s
         } else {
             // Project segment1's endpoints onto segment0
             sNumer = v0.dot(w);
-            denom = v0dotv0;
+            denom = v0.dot(v0);
             tNumer = 0;
             if (outside_interval(sNumer, denom, true)) {
                 // The first endpoint doesn't lie on segment0
                 // If segment1 is degenerate, then there's no collision
-                SkScalar v1dotv1 = v1.dot(v1);
-                if (zero_length(v1, v1dotv1)) {
+                if (!SkPointPriv::CanNormalize(v1.fX, v1.fY)) {
                     return false;
                 }
 
@@ -154,7 +143,7 @@ static bool compute_intersection(const OffsetSegment& s0, const OffsetSegment& s
                     // otherwise project segment0's endpoint onto segment1 instead
                     sNumer = 0;
                     tNumer = v1.dot(-w);
-                    denom = v1dotv1;
+                    denom = v1.dot(v1);
                 }
             }
         }
@@ -494,11 +483,6 @@ bool SkComputeRadialSteps(const SkVector& v1, const SkVector& v2, SkScalar offse
     SkScalar dTheta = steps > 0 ? theta / steps : 0;
     *rotSin = SkScalarSin(dTheta);
     *rotCos = SkScalarCos(dTheta);
-    // Our offset may be so large that we end up with a tiny dTheta, in which case we
-    // lose precision when computing rotSin and rotCos.
-    if (steps > 0 && (*rotSin == 0 || *rotCos == 1)) {
-        return false;
-    }
     *n = steps;
     return true;
 }
@@ -901,7 +885,7 @@ public:
                 } else {
                     ActiveEdge *s = parent->fChild[!last];
 
-                    if (s != nullptr) {
+                    if (s != NULL) {
                         if (!IsRed(s->fChild[!last]) && !IsRed(s->fChild[last])) {
                             // color flip
                             parent->fRed = false;
@@ -1623,7 +1607,7 @@ bool SkTriangulateSimplePolygon(const SkPoint* polygonVerts, uint16_t* indexMap,
     }
 
     // Set up vertices
-    SkAutoSTArray<64, TriangulationVertex> triangulationVertices(polygonSize);
+    SkAutoSTMalloc<64, TriangulationVertex> triangulationVertices(polygonSize);
     int prevIndex = polygonSize - 1;
     SkVector v0 = polygonVerts[0] - polygonVerts[prevIndex];
     for (int currIndex = 0; currIndex < polygonSize; ++currIndex) {

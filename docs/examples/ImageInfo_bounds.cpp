@@ -9,7 +9,7 @@ void draw(SkCanvas* canvas) {
     SkIRect bounds = imageInfo.bounds();
     for (int x : { 0, bounds.width() } ) {
         for (int y : { 0, bounds.height() } ) {
-            canvas->drawImage(source.asImage(), x, y);
+            canvas->drawBitmap(source, x, y);
         }
     }
 }

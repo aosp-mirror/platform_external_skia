@@ -50,8 +50,7 @@ static void draw_1_bitmap(SkCanvas* canvas, const SkBitmap& bm, bool doClip,
         canvas->save();
         canvas->clipRect(clipR);
     }
-    canvas->drawImage(bm.asImage(), SkIntToScalar(dx), SkIntToScalar(dy),
-                      SkSamplingOptions(), &paint);
+    canvas->drawBitmap(bm, SkIntToScalar(dx), SkIntToScalar(dy), &paint);
     if (doClip) {
         canvas->restore();
     }
@@ -94,6 +93,6 @@ protected:
     }
 
 private:
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 DEF_GM( return new SpriteBitmapGM; )

@@ -19,7 +19,6 @@
 #include "include/private/SkFloatingPoint.h"
 #include "include/utils/SkParsePath.h"
 #include "src/core/SkPaintDefaults.h"
-#include "src/core/SkPathPriv.h"
 
 #include <emscripten/emscripten.h>
 #include <emscripten/bind.h>
@@ -45,37 +44,51 @@ using JSArray = emscripten::val;
 // Creating/Exporting Paths with cmd arrays
 // =================================================================================
 
+template <typename VisitFunc>
+void VisitPath(const SkPath& p, VisitFunc&& f) {
+    SkPath::RawIter iter(p);
+    SkPoint pts[4];
+    SkPath::Verb verb;
+    while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
+        f(verb, pts, iter);
+    }
+}
+
 JSArray EMSCRIPTEN_KEEPALIVE ToCmds(const SkPath& path) {
     JSArray cmds = emscripten::val::array();
-    for (auto [verb, pts, w] : SkPathPriv::Iterate(path)) {
+
+    VisitPath(path, [&cmds](SkPath::Verb verb, const SkPoint pts[4], SkPath::RawIter iter) {
         JSArray cmd = emscripten::val::array();
         switch (verb) {
-        case SkPathVerb::kMove:
+        case SkPath::kMove_Verb:
             cmd.call<void>("push", MOVE, pts[0].x(), pts[0].y());
             break;
-        case SkPathVerb::kLine:
+        case SkPath::kLine_Verb:
             cmd.call<void>("push", LINE, pts[1].x(), pts[1].y());
             break;
-        case SkPathVerb::kQuad:
+        case SkPath::kQuad_Verb:
             cmd.call<void>("push", QUAD, pts[1].x(), pts[1].y(), pts[2].x(), pts[2].y());
             break;
-        case SkPathVerb::kConic:
+        case SkPath::kConic_Verb:
             cmd.call<void>("push", CONIC,
                            pts[1].x(), pts[1].y(),
-                           pts[2].x(), pts[2].y(), *w);
+                           pts[2].x(), pts[2].y(), iter.conicWeight());
             break;
-        case SkPathVerb::kCubic:
+        case SkPath::kCubic_Verb:
             cmd.call<void>("push", CUBIC,
                            pts[1].x(), pts[1].y(),
                            pts[2].x(), pts[2].y(),
                            pts[3].x(), pts[3].y());
             break;
-        case SkPathVerb::kClose:
+        case SkPath::kClose_Verb:
             cmd.call<void>("push", CLOSE);
+            break;
+        case SkPath::kDone_Verb:
+            SkASSERT(false);
             break;
         }
         cmds.call<void>("push", cmd);
-    }
+    });
     return cmds;
 }
 

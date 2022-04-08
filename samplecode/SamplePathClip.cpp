@@ -53,14 +53,16 @@ protected:
     }
 
     Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, skui::ModifierKey) override {
-        return new Click([&](Click* c) {
-            fCenter = c->fCurr;
-            return false;
-        });
+        return new Click();
+    }
+
+    bool onClick(Click* click) override {
+        fCenter.set(click->fCurr.fX, click->fCurr.fY);
+        return false;
     }
 
 private:
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 DEF_SAMPLE( return new PathClipView; )
 
@@ -300,7 +302,7 @@ protected:
     }
 
 private:
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 DEF_SAMPLE( return new EdgeClipView; )

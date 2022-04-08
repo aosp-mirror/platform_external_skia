@@ -15,9 +15,7 @@
 #include "include/core/SkPoint.h"
 #include "include/core/SkStream.h"
 #include "include/private/SkTArray.h"
-#include "include/private/SkTPin.h"
 #include "include/private/SkTo.h"
-#include "modules/skottie/include/ExternalLayer.h"
 #include "modules/skottie/include/SkottieProperty.h"
 #include "modules/skottie/src/Composition.h"
 #include "modules/skottie/src/SkottieJson.h"
@@ -36,7 +34,6 @@
 
 #include <chrono>
 #include <cmath>
-#include <memory>
 
 #include "stdlib.h"
 
@@ -135,7 +132,7 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachOpacity(const skjson::ObjectValu
     const auto dispatched = this->dispatchOpacityProperty(adapter->node());
 
     if (adapter->isStatic()) {
-        adapter->seek(0);
+        adapter->tick(0);
         if (!dispatched && adapter->node()->getOpacity() >= 1) {
             // No obeservable effects - we can discard.
             return child_node;
@@ -160,7 +157,7 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachBlendMode(const skjson::ObjectVa
 
 AnimationBuilder::AnimationBuilder(sk_sp<ResourceProvider> rp, sk_sp<SkFontMgr> fontmgr,
                                    sk_sp<PropertyObserver> pobserver, sk_sp<Logger> logger,
-                                   sk_sp<MarkerObserver> mobserver, sk_sp<PrecompInterceptor> pi,
+                                   sk_sp<MarkerObserver> mobserver,
                                    Animation::Builder::Stats* stats,
                                    const SkSize& comp_size, float duration, float framerate,
                                    uint32_t flags)
@@ -169,7 +166,6 @@ AnimationBuilder::AnimationBuilder(sk_sp<ResourceProvider> rp, sk_sp<SkFontMgr> 
     , fPropertyObserver(std::move(pobserver))
     , fLogger(std::move(logger))
     , fMarkerObserver(std::move(mobserver))
-    , fPrecompInterceptor(std::move(pi))
     , fStats(stats)
     , fCompSize(comp_size)
     , fDuration(duration)
@@ -177,7 +173,7 @@ AnimationBuilder::AnimationBuilder(sk_sp<ResourceProvider> rp, sk_sp<SkFontMgr> 
     , fFlags(flags)
     , fHasNontrivialBlending(false) {}
 
-AnimationBuilder::AnimationInfo AnimationBuilder::parse(const skjson::ObjectValue& jroot) {
+std::unique_ptr<sksg::Scene> AnimationBuilder::parse(const skjson::ObjectValue& jroot) {
     this->dispatchMarkers(jroot["markers"]);
 
     this->parseAssets(jroot["assets"]);
@@ -189,7 +185,7 @@ AnimationBuilder::AnimationInfo AnimationBuilder::parse(const skjson::ObjectValu
     auto animators = ascope.release();
     fStats->fAnimatorCount = animators.size();
 
-    return { sksg::Scene::Make(std::move(root)), std::move(animators) };
+    return sksg::Scene::Make(std::move(root), std::move(animators));
 }
 
 void AnimationBuilder::parseAssets(const skjson::ArrayValue* jassets) {
@@ -240,7 +236,7 @@ bool AnimationBuilder::dispatchColorProperty(const sk_sp<sksg::Color>& c) const 
         fPropertyObserver->onColorProperty(fPropertyObserverContext,
             [&]() {
                 dispatched = true;
-                return std::make_unique<ColorPropertyHandle>(c);
+                return std::unique_ptr<ColorPropertyHandle>(new ColorPropertyHandle(c));
             });
     }
 
@@ -254,7 +250,7 @@ bool AnimationBuilder::dispatchOpacityProperty(const sk_sp<sksg::OpacityEffect>&
         fPropertyObserver->onOpacityProperty(fPropertyObserverContext,
             [&]() {
                 dispatched = true;
-                return std::make_unique<OpacityPropertyHandle>(o);
+                return std::unique_ptr<OpacityPropertyHandle>(new OpacityPropertyHandle(o));
             });
     }
 
@@ -268,7 +264,7 @@ bool AnimationBuilder::dispatchTextProperty(const sk_sp<TextAdapter>& t) const {
         fPropertyObserver->onTextProperty(fPropertyObserverContext,
             [&]() {
                 dispatched = true;
-                return std::make_unique<TextPropertyHandle>(t);
+                return std::unique_ptr<TextPropertyHandle>(new TextPropertyHandle(t));
             });
     }
 
@@ -282,7 +278,7 @@ bool AnimationBuilder::dispatchTransformProperty(const sk_sp<TransformAdapter2D>
         fPropertyObserver->onTransformProperty(fPropertyObserverContext,
             [&]() {
                 dispatched = true;
-                return std::make_unique<TransformPropertyHandle>(t);
+                return std::unique_ptr<TransformPropertyHandle>(new TransformPropertyHandle(t));
             });
     }
 
@@ -326,11 +322,6 @@ Animation::Builder& Animation::Builder::setLogger(sk_sp<Logger> logger) {
 
 Animation::Builder& Animation::Builder::setMarkerObserver(sk_sp<MarkerObserver> mobserver) {
     fMarkerObserver = std::move(mobserver);
-    return *this;
-}
-
-Animation::Builder& Animation::Builder::setPrecompInterceptor(sk_sp<PrecompInterceptor> pi) {
-    fPrecompInterceptor = std::move(pi);
     return *this;
 }
 
@@ -407,15 +398,14 @@ sk_sp<Animation> Animation::Builder::make(const char* data, size_t data_len) {
                                        std::move(fPropertyObserver),
                                        std::move(fLogger),
                                        std::move(fMarkerObserver),
-                                       std::move(fPrecompInterceptor),
                                        &fStats, size, duration, fps, fFlags);
-    auto ainfo = builder.parse(json);
+    auto scene = builder.parse(json);
 
     const auto t2 = std::chrono::steady_clock::now();
     fStats.fSceneParseTimeMS = std::chrono::duration<float, std::milli>{t2-t1}.count();
     fStats.fTotalLoadTimeMS  = std::chrono::duration<float, std::milli>{t2-t0}.count();
 
-    if (!ainfo.fScene && fLogger) {
+    if (!scene && fLogger) {
         fLogger->log(Logger::Level::kError, "Could not parse animation.\n");
     }
 
@@ -424,8 +414,7 @@ sk_sp<Animation> Animation::Builder::make(const char* data, size_t data_len) {
         flags |= Animation::Flags::kRequiresTopLevelIsolation;
     }
 
-    return sk_sp<Animation>(new Animation(std::move(ainfo.fScene),
-                                          std::move(ainfo.fAnimators),
+    return sk_sp<Animation>(new Animation(std::move(scene),
                                           std::move(version),
                                           size,
                                           inPoint,
@@ -442,12 +431,9 @@ sk_sp<Animation> Animation::Builder::makeFromFile(const char path[]) {
                 : nullptr;
 }
 
-Animation::Animation(std::unique_ptr<sksg::Scene> scene,
-                     std::vector<sk_sp<internal::Animator>>&& animators,
-                     SkString version, const SkSize& size,
+Animation::Animation(std::unique_ptr<sksg::Scene> scene, SkString version, const SkSize& size,
                      double inPoint, double outPoint, double duration, double fps, uint32_t flags)
     : fScene(std::move(scene))
-    , fAnimators(std::move(animators))
     , fVersion(std::move(version))
     , fSize(size)
     , fInPoint(inPoint)
@@ -472,12 +458,10 @@ void Animation::render(SkCanvas* canvas, const SkRect* dstR, RenderFlags renderF
 
     const SkRect srcR = SkRect::MakeSize(this->size());
     if (dstR) {
-        canvas->concat(SkMatrix::RectToRect(srcR, *dstR, SkMatrix::kCenter_ScaleToFit));
+        canvas->concat(SkMatrix::MakeRectToRect(srcR, *dstR, SkMatrix::kCenter_ScaleToFit));
     }
 
-    if (!(renderFlags & RenderFlag::kDisableTopLevelClipping)) {
-        canvas->clipRect(srcR);
-    }
+    canvas->clipRect(srcR);
 
     if ((fFlags & Flags::kRequiresTopLevelIsolation) &&
         !(renderFlags & RenderFlag::kSkipTopLevelIsolation)) {
@@ -496,14 +480,9 @@ void Animation::seekFrame(double t, sksg::InvalidationController* ic) {
         return;
 
     // Per AE/Lottie semantics out_point is exclusive.
-    const auto kLastValidFrame = std::nextafterf(fOutPoint, fInPoint),
-                     comp_time = SkTPin<float>(fInPoint + t, fInPoint, kLastValidFrame);
+    const auto kLastValidFrame = std::nextafterf(fOutPoint, fInPoint);
 
-    for (const auto& anim : fAnimators) {
-        anim->seek(comp_time);
-    }
-
-    fScene->revalidate(ic);
+    fScene->animate(SkTPin<float>(fInPoint + t, fInPoint, kLastValidFrame), ic);
 }
 
 void Animation::seekFrameTime(double t, sksg::InvalidationController* ic) {

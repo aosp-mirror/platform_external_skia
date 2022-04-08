@@ -64,6 +64,7 @@ protected:
         hairlinePaint.setStrokeWidth(0);
 
         SkPaint blurPaint;
+        blurPaint.setFilterQuality(kLow_SkFilterQuality);
         blurPaint.setMaskFilter(SkMaskFilter::MakeBlur(kNormal_SkBlurStyle,
                                                     SkBlurMask::ConvertRadiusToSigma(kBlurRadius)));
 
@@ -84,7 +85,7 @@ private:
     static constexpr int kWidth = 300;
     static constexpr int kHeight = 300;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 DEF_GM( return new BlurQuickRejectGM(); )

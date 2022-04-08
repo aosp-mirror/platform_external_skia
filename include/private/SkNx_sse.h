@@ -100,6 +100,8 @@ public:
     }
 
     AI SkNx   sqrt() const { return _mm_sqrt_ps (fVec);  }
+    AI SkNx  rsqrt() const { return _mm_rsqrt_ps(fVec); }
+    AI SkNx invert() const { return _mm_rcp_ps(fVec); }
 
     AI float operator[](int k) const {
         SkASSERT(0 <= k && k < 2);
@@ -107,8 +109,8 @@ public:
         return pun.fs[k&1];
     }
 
-    AI bool allTrue() const { return 0b11 == (_mm_movemask_ps(fVec) & 0b11); }
-    AI bool anyTrue() const { return 0b00 != (_mm_movemask_ps(fVec) & 0b11); }
+    AI bool allTrue() const { return 0xff == (_mm_movemask_epi8(_mm_castps_si128(fVec)) & 0xff); }
+    AI bool anyTrue() const { return 0x00 != (_mm_movemask_epi8(_mm_castps_si128(fVec)) & 0xff); }
 
     AI SkNx thenElse(const SkNx& t, const SkNx& e) const {
     #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE41
@@ -191,6 +193,8 @@ public:
     }
 
     AI SkNx   sqrt() const { return _mm_sqrt_ps (fVec);  }
+    AI SkNx  rsqrt() const { return _mm_rsqrt_ps(fVec); }
+    AI SkNx invert() const { return _mm_rcp_ps(fVec); }
 
     AI float operator[](int k) const {
         SkASSERT(0 <= k && k < 4);
@@ -210,8 +214,8 @@ public:
         return max[0];
     }
 
-    AI bool allTrue() const { return 0b1111 == _mm_movemask_ps(fVec); }
-    AI bool anyTrue() const { return 0b0000 != _mm_movemask_ps(fVec); }
+    AI bool allTrue() const { return 0xffff == _mm_movemask_epi8(_mm_castps_si128(fVec)); }
+    AI bool anyTrue() const { return 0x0000 != _mm_movemask_epi8(_mm_castps_si128(fVec)); }
 
     AI SkNx thenElse(const SkNx& t, const SkNx& e) const {
     #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE41

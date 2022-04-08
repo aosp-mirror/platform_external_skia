@@ -117,24 +117,10 @@ public:
         this->validate();
     }
 
-    void clipShader(sk_sp<SkShader> sh) {
-        this->writable_rc().op(std::move(sh));
-        this->validate();
-    }
-
     void clipRegion(const SkRegion& rgn, SkClipOp op) {
         this->writable_rc().op(rgn, (SkRegion::Op)op);
         this->trimIfExpanding(op);
         this->validate();
-    }
-
-    void replaceClip(const SkIRect& rect) {
-        SkIRect devRect = rect;
-        if (!devRect.intersect(fRootBounds)) {
-            this->writable_rc().setEmpty();
-        } else {
-            this->writable_rc().setRect(devRect);
-        }
     }
 
     void setDeviceClipRestriction(SkIRect* mutableClipRestriction) {

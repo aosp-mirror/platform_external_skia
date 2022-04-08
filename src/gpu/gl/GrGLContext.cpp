@@ -6,9 +6,8 @@
  */
 
 #include "src/gpu/gl/GrGLContext.h"
-
-#include "include/gpu/GrContextOptions.h"
 #include "src/gpu/gl/GrGLGLSL.h"
+#include "src/sksl/SkSLCompiler.h"
 
 #ifdef SK_BUILD_FOR_ANDROID
 #include <sys/system_properties.h>
@@ -22,15 +21,30 @@ std::unique_ptr<GrGLContext> GrGLContext::Make(sk_sp<const GrGLInterface> interf
         return nullptr;
     }
 
+    const GrGLubyte* verUByte;
+    GR_GL_CALL_RET(interface.get(), verUByte, GetString(GR_GL_VERSION));
+    const char* ver = reinterpret_cast<const char*>(verUByte);
+
+    const GrGLubyte* rendererUByte;
+    GR_GL_CALL_RET(interface.get(), rendererUByte, GetString(GR_GL_RENDERER));
+    const char* renderer = reinterpret_cast<const char*>(rendererUByte);
+
     ConstructorArgs args;
-    args.fDriverInfo = GrGLGetDriverInfo(interface.get());
-    if (args.fDriverInfo.fVersion == GR_GL_INVALID_VER) {
+    args.fGLVersion = GrGLGetVersionFromString(ver);
+    if (GR_GL_INVALID_VER == args.fGLVersion) {
         return nullptr;
     }
 
-    if (!GrGLGetGLSLGeneration(args.fDriverInfo, &args.fGLSLGeneration)) {
+    if (!GrGLGetGLSLGeneration(interface.get(), &args.fGLSLGeneration)) {
         return nullptr;
     }
+
+    args.fVendor = GrGLGetVendor(interface.get());
+
+    args.fRenderer = GrGLGetRendererFromStrings(renderer, interface->fExtensions);
+
+    GrGLGetANGLEInfoFromString(renderer, &args.fANGLEBackend, &args.fANGLEVendor,
+                               &args.fANGLERenderer);
 
     /*
      * Qualcomm drivers for the 3xx series have a horrendous bug with some drivers. Though they
@@ -43,7 +57,7 @@ std::unique_ptr<GrGLContext> GrGLContext::Make(sk_sp<const GrGLInterface> interf
      */
 #ifdef SK_BUILD_FOR_ANDROID
     if (!options.fDisableDriverCorrectnessWorkarounds &&
-        args.fDriverInfo.fRenderer == GrGLRenderer::kAdreno3xx) {
+        kAdreno3xx_GrGLRenderer == args.fRenderer) {
         char androidAPIVersion[PROP_VALUE_MAX];
         int strLength = __system_property_get("ro.build.version.sdk", androidAPIVersion);
         if (strLength == 0 || atoi(androidAPIVersion) < 26) {
@@ -67,18 +81,37 @@ std::unique_ptr<GrGLContext> GrGLContext::Make(sk_sp<const GrGLInterface> interf
         args.fGLSLGeneration = k110_GrGLSLGeneration;
     }
 
+    GrGLGetDriverInfo(interface->fStandard, args.fVendor, renderer, ver,
+                      &args.fDriver, &args.fDriverVersion);
+
     args.fContextOptions = &options;
     args.fInterface = std::move(interface);
 
     return std::unique_ptr<GrGLContext>(new GrGLContext(std::move(args)));
 }
 
-GrGLContext::~GrGLContext() {}
+GrGLContext::~GrGLContext() {
+    delete fCompiler;
+}
+
+SkSL::Compiler* GrGLContext::compiler() const {
+    if (!fCompiler) {
+        fCompiler = new SkSL::Compiler();
+    }
+    return fCompiler;
+}
 
 GrGLContextInfo::GrGLContextInfo(ConstructorArgs&& args) {
     fInterface = std::move(args.fInterface);
-    fDriverInfo = args.fDriverInfo;
+    fGLVersion = args.fGLVersion;
     fGLSLGeneration = args.fGLSLGeneration;
+    fVendor = args.fVendor;
+    fRenderer = args.fRenderer;
+    fDriver = args.fDriver;
+    fDriverVersion = args.fDriverVersion;
+    fANGLEBackend = args.fANGLEBackend;
+    fANGLEVendor = args.fANGLEVendor;
+    fANGLERenderer = args.fANGLERenderer;
 
     fGLCaps = sk_make_sp<GrGLCaps>(*args.fContextOptions, *this, fInterface.get());
 }

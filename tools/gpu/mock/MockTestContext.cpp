@@ -10,7 +10,7 @@
 
 #include "tools/gpu/mock/MockTestContext.h"
 
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrContext.h"
 
 namespace {
 
@@ -19,13 +19,14 @@ public:
     MockTestContext() {}
     ~MockTestContext() override {}
 
-    GrBackendApi backend() override { return GrBackendApi::kMock; }
+    virtual GrBackendApi backend() override { return GrBackendApi::kMock; }
 
     void testAbandon() override {}
+    void submit() override {}
     void finish() override {}
 
-    sk_sp<GrDirectContext> makeContext(const GrContextOptions& options) override {
-        return GrDirectContext::MakeMock(nullptr, options);
+    sk_sp<GrContext> makeGrContext(const GrContextOptions& options) override {
+        return GrContext::MakeMock(nullptr, options);
     }
 
 protected:
@@ -33,9 +34,10 @@ protected:
     void onPlatformMakeNotCurrent() const override {}
     void onPlatformMakeCurrent() const override {}
     std::function<void()> onPlatformGetAutoContextRestore() const override { return nullptr; }
+    void onPlatformSwapBuffers() const override {}
 
 private:
-    using INHERITED = sk_gpu_test::TestContext;
+    typedef sk_gpu_test::TestContext INHERITED;
 };
 
 } // anonymous namespace

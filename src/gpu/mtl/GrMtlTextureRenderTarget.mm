@@ -13,17 +13,15 @@
 #error This file must be compiled with Arc. Use -fobjc-arc flag
 #endif
 
-GR_NORETAIN_BEGIN
-
 GrMtlTextureRenderTarget::GrMtlTextureRenderTarget(GrMtlGpu* gpu,
                                                    SkBudgeted budgeted,
                                                    SkISize dimensions,
                                                    int sampleCnt,
                                                    id<MTLTexture> colorTexture,
                                                    id<MTLTexture> resolveTexture,
-                                                   GrMipmapStatus mipmapStatus)
+                                                   GrMipMapsStatus mipMapsStatus)
         : GrSurface(gpu, dimensions, GrProtected::kNo)
-        , GrMtlTexture(gpu, dimensions, resolveTexture, mipmapStatus)
+        , GrMtlTexture(gpu, dimensions, resolveTexture, mipMapsStatus)
         , GrMtlRenderTarget(gpu, dimensions, sampleCnt, colorTexture, resolveTexture) {
     this->registerWithCache(budgeted);
 }
@@ -32,9 +30,9 @@ GrMtlTextureRenderTarget::GrMtlTextureRenderTarget(GrMtlGpu* gpu,
                                                    SkBudgeted budgeted,
                                                    SkISize dimensions,
                                                    id<MTLTexture> colorTexture,
-                                                   GrMipmapStatus mipmapStatus)
+                                                   GrMipMapsStatus mipMapsStatus)
         : GrSurface(gpu, dimensions, GrProtected::kNo)
-        , GrMtlTexture(gpu, dimensions, colorTexture, mipmapStatus)
+        , GrMtlTexture(gpu, dimensions, colorTexture, mipMapsStatus)
         , GrMtlRenderTarget(gpu, dimensions, colorTexture) {
     this->registerWithCache(budgeted);
 }
@@ -44,10 +42,10 @@ GrMtlTextureRenderTarget::GrMtlTextureRenderTarget(GrMtlGpu* gpu,
                                                    int sampleCnt,
                                                    id<MTLTexture> colorTexture,
                                                    id<MTLTexture> resolveTexture,
-                                                   GrMipmapStatus mipmapStatus,
+                                                   GrMipMapsStatus mipMapsStatus,
                                                    GrWrapCacheable cacheable)
         : GrSurface(gpu, dimensions, GrProtected::kNo)
-        , GrMtlTexture(gpu, dimensions, resolveTexture, mipmapStatus)
+        , GrMtlTexture(gpu, dimensions, resolveTexture, mipMapsStatus)
         , GrMtlRenderTarget(gpu, dimensions, sampleCnt, colorTexture, resolveTexture) {
     this->registerWithCacheWrapped(cacheable);
 }
@@ -55,10 +53,10 @@ GrMtlTextureRenderTarget::GrMtlTextureRenderTarget(GrMtlGpu* gpu,
 GrMtlTextureRenderTarget::GrMtlTextureRenderTarget(GrMtlGpu* gpu,
                                                    SkISize dimensions,
                                                    id<MTLTexture> colorTexture,
-                                                   GrMipmapStatus mipmapStatus,
+                                                   GrMipMapsStatus mipMapsStatus,
                                                    GrWrapCacheable cacheable)
         : GrSurface(gpu, dimensions, GrProtected::kNo)
-        , GrMtlTexture(gpu, dimensions, colorTexture, mipmapStatus)
+        , GrMtlTexture(gpu, dimensions, colorTexture, mipMapsStatus)
         , GrMtlRenderTarget(gpu, dimensions, colorTexture) {
     this->registerWithCacheWrapped(cacheable);
 }
@@ -91,7 +89,7 @@ sk_sp<GrMtlTextureRenderTarget> GrMtlTextureRenderTarget::MakeNewTextureRenderTa
         SkISize dimensions,
         int sampleCnt,
         MTLTextureDescriptor* texDesc,
-        GrMipmapStatus mipmapStatus) {
+        GrMipMapsStatus mipMapsStatus) {
     id<MTLTexture> texture = [gpu->device() newTextureWithDescriptor:texDesc];
     if (!texture) {
         return nullptr;
@@ -110,10 +108,10 @@ sk_sp<GrMtlTextureRenderTarget> GrMtlTextureRenderTarget::MakeNewTextureRenderTa
             SkASSERT((MTLTextureUsageShaderRead|MTLTextureUsageRenderTarget) & colorTexture.usage);
         }
         return sk_sp<GrMtlTextureRenderTarget>(new GrMtlTextureRenderTarget(
-                gpu, budgeted, dimensions, sampleCnt, colorTexture, texture, mipmapStatus));
+                gpu, budgeted, dimensions, sampleCnt, colorTexture, texture, mipMapsStatus));
     } else {
         return sk_sp<GrMtlTextureRenderTarget>(
-                new GrMtlTextureRenderTarget(gpu, budgeted, dimensions, texture, mipmapStatus));
+                new GrMtlTextureRenderTarget(gpu, budgeted, dimensions, texture, mipMapsStatus));
     }
 }
 
@@ -127,9 +125,9 @@ sk_sp<GrMtlTextureRenderTarget> GrMtlTextureRenderTarget::MakeWrappedTextureRend
     if (@available(macOS 10.11, iOS 9.0, *)) {
         SkASSERT((MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget) & texture.usage);
     }
-    GrMipmapStatus mipmapStatus = texture.mipmapLevelCount > 1
-                                            ? GrMipmapStatus::kDirty
-                                            : GrMipmapStatus::kNotAllocated;
+    GrMipMapsStatus mipMapsStatus = texture.mipmapLevelCount > 1
+                                            ? GrMipMapsStatus::kDirty
+                                            : GrMipMapsStatus::kNotAllocated;
     if (sampleCnt > 1) {
         id<MTLTexture> colorTexture =
                 create_msaa_texture(gpu, dimensions, texture.pixelFormat, sampleCnt);
@@ -140,11 +138,9 @@ sk_sp<GrMtlTextureRenderTarget> GrMtlTextureRenderTarget::MakeWrappedTextureRend
             SkASSERT((MTLTextureUsageShaderRead|MTLTextureUsageRenderTarget) & colorTexture.usage);
         }
         return sk_sp<GrMtlTextureRenderTarget>(new GrMtlTextureRenderTarget(
-                gpu, dimensions, sampleCnt, colorTexture, texture, mipmapStatus, cacheable));
+                gpu, dimensions, sampleCnt, colorTexture, texture, mipMapsStatus, cacheable));
     } else {
         return sk_sp<GrMtlTextureRenderTarget>(
-                new GrMtlTextureRenderTarget(gpu, dimensions, texture, mipmapStatus, cacheable));
+                new GrMtlTextureRenderTarget(gpu, dimensions, texture, mipMapsStatus, cacheable));
     }
 }
-
-GR_NORETAIN_END

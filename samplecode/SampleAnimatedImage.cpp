@@ -104,10 +104,11 @@ class SampleAnimatedImage : public Sample {
             switch (uni) {
                 case kPauseKey:
                     fRunning = !fRunning;
-                    if (!fImage->isFinished()) {
+                    if (fImage->isFinished()) {
+                        // fall through
+                    } else {
                         return true;
                     }
-                    [[fallthrough]];
                 case kResetKey:
                     fImage->reset();
                     fCurrentTime = fLastWallTime;

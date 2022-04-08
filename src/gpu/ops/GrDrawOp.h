@@ -28,7 +28,7 @@ public:
      */
     enum class FixedFunctionFlags : uint32_t {
         kNone = 0x0,
-        /** Indices that the op will enable MSAA. */
+        /** Indices that the op will enable MSAA or mixed samples rendering. */
         kUsesHWAA = 0x1,
         /** Indices that the op reads and/or writes the stencil buffer */
         kUsesStencil = 0x2,
@@ -43,7 +43,8 @@ public:
      * at this time the op must report whether a copy of the destination (or destination texture
      * itself) needs to be provided to the GrXferProcessor when this op executes.
      */
-    virtual GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*, GrClampType) = 0;
+    virtual GrProcessorSet::Analysis finalize(
+            const GrCaps&, const GrAppliedClip*, bool hasMixedSampledCoverage, GrClampType) = 0;
 
 #ifdef SK_DEBUG
     bool fAddDrawOpCalled = false;
@@ -59,7 +60,7 @@ public:
 #endif
 
 private:
-    using INHERITED = GrOp;
+    typedef GrOp INHERITED;
 };
 
 GR_MAKE_BITFIELD_CLASS_OPS(GrDrawOp::FixedFunctionFlags);

@@ -60,7 +60,7 @@ private:
     using INHERITED = DiscardableAdapterBase<TransformEffectAdapter, sksg::OpacityEffect>;
 };
 
-}  // namespace
+} // anonymous ns
 
 sk_sp<sksg::RenderNode> EffectBuilder::attachTransformEffect(const skjson::ArrayValue& jprops,
                                                              sk_sp<sksg::RenderNode> layer) const {

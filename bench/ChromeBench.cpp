@@ -460,8 +460,8 @@ public:
 
 protected:
 
-    const char* onGetName() override { return "chrome_scrollGmail"; }
-    void onDraw(int loops, SkCanvas* canvas) override {
+    virtual const char* onGetName() { return "chrome_scrollGmail"; }
+    virtual void onDraw(int loops, SkCanvas* canvas) {
         SkDEBUGCODE(this->validateBounds(canvas));
         SkPaint paint;
         this->setupPaint(&paint);
@@ -473,7 +473,7 @@ protected:
             }
         }
     }
-    SkIPoint onGetSize() override { return SkIPoint::Make(W, H); }
+    virtual SkIPoint onGetSize() { return SkIPoint::Make(W, H); }
 
     void setRectangle(SkRect& current, int i) {
         current.setWH(SkIntToScalar(gmailScrollingRectSpec[i*3+1]),
@@ -489,7 +489,7 @@ protected:
 
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 // Disabled this benchmark: it takes 15x longer than any other benchmark

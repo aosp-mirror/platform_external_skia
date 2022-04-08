@@ -12,15 +12,13 @@
 
 /**
  *  Controls how much filtering to be done when scaling/transforming complex colors
- *  e.g. images.
-    These values are persisted to logs. Entries should not be renumbered and
-    numeric values should never be reused.
+ *  e.g. images
  */
 enum SkFilterQuality {
-    kNone_SkFilterQuality   = 0,    //!< nearest-neighbor; fastest but lowest quality
-    kLow_SkFilterQuality    = 1,    //!< bilerp
-    kMedium_SkFilterQuality = 2,    //!< bilerp + mipmaps; good for down-scaling
-    kHigh_SkFilterQuality   = 3,    //!< bicubic resampling; slowest but good quality
+    kNone_SkFilterQuality,      //!< fastest but lowest quality, typically nearest-neighbor
+    kLow_SkFilterQuality,       //!< typically bilerp
+    kMedium_SkFilterQuality,    //!< typically bilerp + mipmaps for down-scaling
+    kHigh_SkFilterQuality,      //!< slowest but highest quality, typically bicubic or better
 
     kLast_SkFilterQuality = kHigh_SkFilterQuality,
 };

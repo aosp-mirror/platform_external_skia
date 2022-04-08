@@ -29,9 +29,9 @@ public:
                             int sampleCount,
                             const GrGLTexture::Desc& texDesc,
                             const GrGLRenderTarget::IDs&,
-                            GrMipmapStatus);
+                            GrMipMapsStatus);
 
-    bool canAttemptStencilAttachment(bool useMultisampleFBO) const override;
+    bool canAttemptStencilAttachment() const override;
 
     void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const override;
 
@@ -41,7 +41,7 @@ public:
                                                       sk_sp<GrGLTextureParameters>,
                                                       const GrGLRenderTarget::IDs&,
                                                       GrWrapCacheable,
-                                                      GrMipmapStatus);
+                                                      GrMipMapsStatus);
 
     GrBackendFormat backendFormat() const override {
         // It doesn't matter if we take the texture or render target path, so just pick texture.
@@ -67,7 +67,7 @@ private:
                             sk_sp<GrGLTextureParameters> parameters,
                             const GrGLRenderTarget::IDs& ids,
                             GrWrapCacheable,
-                            GrMipmapStatus);
+                            GrMipMapsStatus);
 
     size_t onGpuMemorySize() const override;
 };

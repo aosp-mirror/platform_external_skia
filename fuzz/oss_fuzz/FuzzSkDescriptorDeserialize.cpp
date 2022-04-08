@@ -27,11 +27,8 @@ void FuzzSkDescriptorDeserialize(sk_sp<SkData> bytes) {
     desc->findEntry(tagToFind, &ignore);
 }
 
-#if defined(SK_BUILD_FOR_LIBFUZZER)
+#if defined(IS_FUZZING_WITH_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-    if (size > 1024) {
-        return 0;
-    }
     auto bytes = SkData::MakeWithoutCopy(data, size);
     FuzzSkDescriptorDeserialize(bytes);
     return 0;

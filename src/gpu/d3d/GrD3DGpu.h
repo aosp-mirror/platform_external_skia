@@ -8,50 +8,24 @@
 #ifndef GrD3DGpu_DEFINED
 #define GrD3DGpu_DEFINED
 
-#include "include/private/SkDeque.h"
+#include "include/gpu/d3d/GrD3DBackendContext.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrSemaphore.h"
-#include "src/gpu/GrStagingBufferManager.h"
 #include "src/gpu/d3d/GrD3DCaps.h"
-#include "src/gpu/d3d/GrD3DCommandList.h"
-#include "src/gpu/d3d/GrD3DResourceProvider.h"
 
-struct GrD3DBackendContext;
 class GrD3DOpsRenderPass;
 struct GrD3DOptions;
 class GrPipeline;
-#if GR_TEST_UTILS
-struct IDXGraphicsAnalysis;
-#endif
 
 class GrD3DGpu : public GrGpu {
 public:
     static sk_sp<GrGpu> Make(const GrD3DBackendContext& backendContext, const GrContextOptions&,
-                             GrDirectContext*);
+                             GrContext*);
 
-    ~GrD3DGpu() override;
+    ~GrD3DGpu() override {}
 
-    const GrD3DCaps& d3dCaps() const { return static_cast<const GrD3DCaps&>(*this->caps()); }
-
-    GrD3DResourceProvider& resourceProvider() { return fResourceProvider; }
-
-    GrThreadSafePipelineBuilder* pipelineBuilder() override;
-    sk_sp<GrThreadSafePipelineBuilder> refPipelineBuilder() override;
-
-    ID3D12Device* device() const { return fDevice.get(); }
-    ID3D12CommandQueue* queue() const { return fQueue.get(); }
-
-    GrD3DMemoryAllocator* memoryAllocator() const { return fMemoryAllocator.get(); }
-
-    GrD3DDirectCommandList* currentCommandList() const { return fCurrentDirectCommandList.get(); }
-
-    GrStagingBufferManager* stagingBufferManager() override { return &fStagingBufferManager; }
-    void takeOwnershipOfBuffer(sk_sp<GrGpuBuffer>) override;
-
-    GrRingBuffer* uniformsRingBuffer() override { return &fConstantsRingBuffer; }
-
-    bool protectedContext() const { return false; }
+    void querySampleLocations(GrRenderTarget*, SkTArray<SkPoint>* sampleLocations) override;
 
     void xferBarrier(GrRenderTarget*, GrXferBarrierType) override {}
 
@@ -62,74 +36,48 @@ public:
 #if GR_TEST_UTILS
     bool isTestingOnlyBackendTexture(const GrBackendTexture&) const override;
 
-    GrBackendRenderTarget createTestingOnlyBackendRenderTarget(SkISize dimensions,
-                                                               GrColorType,
-                                                               int sampleCnt,
-                                                               GrProtected) override;
+    GrBackendRenderTarget createTestingOnlyBackendRenderTarget(int w, int h, GrColorType) override;
     void deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget&) override;
 
-    void testingOnly_startCapture() override;
-    void testingOnly_endCapture() override;
-
-    void resetShaderCacheForTesting() const override {
-        fResourceProvider.resetShaderCacheForTesting();
-    }
+    void testingOnly_flushGpuAndSync() override {}
 #endif
 
-    sk_sp<GrAttachment> makeStencilAttachment(const GrBackendFormat& /*colorFormat*/,
-                                              SkISize dimensions, int numStencilSamples) override;
+    GrStencilAttachment* createStencilAttachmentForRenderTarget(
+            const GrRenderTarget*, int width, int height, int numStencilSamples) override;
 
-    GrBackendFormat getPreferredStencilFormat(const GrBackendFormat&) override {
-        return GrBackendFormat::MakeDxgi(this->d3dCaps().preferredStencilFormat());
-    }
+    GrOpsRenderPass* getOpsRenderPass(
+            GrRenderTarget*, GrSurfaceOrigin, const SkIRect&,
+            const GrOpsRenderPass::LoadAndStoreInfo&,
+            const GrOpsRenderPass::StencilLoadAndStoreInfo&,
+            const SkTArray<GrSurfaceProxy*, true>& sampledProxies) override;
 
-    sk_sp<GrAttachment> makeMSAAAttachment(SkISize dimensions,
-                                           const GrBackendFormat& format,
-                                           int numSamples,
-                                           GrProtected isProtected) override {
-        return nullptr;
-    }
-
-    void addResourceBarriers(sk_sp<GrManagedResource> resource,
-                             int numBarriers,
-                             D3D12_RESOURCE_TRANSITION_BARRIER* barriers) const;
-
-    void addBufferResourceBarriers(GrD3DBuffer* buffer,
-                                   int numBarriers,
-                                   D3D12_RESOURCE_TRANSITION_BARRIER* barriers) const;
-
-    GrFence SK_WARN_UNUSED_RESULT insertFence() override;
-    bool waitFence(GrFence) override;
+    GrFence SK_WARN_UNUSED_RESULT insertFence() override { return 0; }
+    bool waitFence(GrFence, uint64_t) override { return true; }
     void deleteFence(GrFence) const override {}
 
-    std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned) override;
+    std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned) override {
+        return nullptr;
+    }
     std::unique_ptr<GrSemaphore> wrapBackendSemaphore(
             const GrBackendSemaphore& semaphore,
             GrResourceProvider::SemaphoreWrapType wrapType,
-            GrWrapOwnership ownership) override;
-    void insertSemaphore(GrSemaphore* semaphore) override;
-    void waitSemaphore(GrSemaphore* semaphore) override;
+            GrWrapOwnership ownership) override {
+        return nullptr;
+    }
+    void insertSemaphore(GrSemaphore* semaphore) override {}
+    void waitSemaphore(GrSemaphore* semaphore) override {}
     std::unique_ptr<GrSemaphore> prepareTextureForCrossContextUsage(GrTexture*) override {
         return nullptr;
     }
 
     void submit(GrOpsRenderPass* renderPass) override;
-    void endRenderPass(GrRenderTarget* target, GrSurfaceOrigin origin,
-                       const SkIRect& bounds);
 
-    void checkFinishProcs() override { this->checkForFinishedCommandLists(); }
-    void finishOutstandingGpuWork() override;
+    void checkFinishProcs() override {}
 
 private:
-    enum class SyncQueue {
-        kForce,
-        kSkip
-    };
+    GrD3DGpu(GrContext* context, const GrContextOptions&, const GrD3DBackendContext&);
 
-    GrD3DGpu(GrDirectContext*, const GrContextOptions&, const GrD3DBackendContext&,
-             sk_sp<GrD3DMemoryAllocator>);
-
-    void destroyResources();
+    void onResetContext(uint32_t resetBits) override {}
 
     sk_sp<GrTexture> onCreateTexture(SkISize,
                                      const GrBackendFormat&,
@@ -143,166 +91,88 @@ private:
     sk_sp<GrTexture> onCreateCompressedTexture(SkISize dimensions,
                                                const GrBackendFormat&,
                                                SkBudgeted,
-                                               GrMipmapped,
+                                               GrMipMapped,
                                                GrProtected,
                                                const void* data, size_t dataSize) override;
 
-    sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&,
-                                          GrWrapOwnership,
-                                          GrWrapCacheable,
-                                          GrIOType) override;
-    sk_sp<GrTexture> onWrapCompressedBackendTexture(const GrBackendTexture&,
-                                                    GrWrapOwnership,
+    sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&, GrColorType, GrWrapOwnership,
+                                          GrWrapCacheable, GrIOType) override;
+    sk_sp<GrTexture> onWrapCompressedBackendTexture(const GrBackendTexture&, GrWrapOwnership,
                                                     GrWrapCacheable) override;
 
     sk_sp<GrTexture> onWrapRenderableBackendTexture(const GrBackendTexture&,
                                                     int sampleCnt,
+                                                    GrColorType,
                                                     GrWrapOwnership,
                                                     GrWrapCacheable) override;
 
-    sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTarget&) override;
+    sk_sp<GrRenderTarget> onWrapBackendRenderTarget(const GrBackendRenderTarget&,
+                                                    GrColorType) override;
+
+    sk_sp<GrRenderTarget> onWrapBackendTextureAsRenderTarget(const GrBackendTexture&,
+                                                             int sampleCnt, GrColorType) override;
 
     sk_sp<GrGpuBuffer> onCreateBuffer(size_t sizeInBytes, GrGpuBufferType, GrAccessPattern,
                                       const void*) override;
 
     bool onReadPixels(GrSurface* surface, int left, int top, int width, int height,
                       GrColorType surfaceColorType, GrColorType dstColorType, void* buffer,
-                      size_t rowBytes) override;
+                      size_t rowBytes) override {
+        return true;
+    }
 
     bool onWritePixels(GrSurface* surface, int left, int top, int width, int height,
                        GrColorType surfaceColorType, GrColorType srcColorType,
                        const GrMipLevel texels[], int mipLevelCount,
-                       bool prepForTexSampling) override;
+                       bool prepForTexSampling) override {
+        return true;
+    }
 
     bool onTransferPixelsTo(GrTexture* texture, int left, int top, int width, int height,
                             GrColorType surfaceColorType, GrColorType bufferColorType,
-                            sk_sp<GrGpuBuffer> transferBuffer, size_t offset,
-                            size_t rowBytes) override {
+                            GrGpuBuffer* transferBuffer, size_t offset, size_t rowBytes) override {
         return true;
     }
     bool onTransferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
                               GrColorType surfaceColorType, GrColorType bufferColorType,
-                              sk_sp<GrGpuBuffer> transferBuffer, size_t offset) override {
+                              GrGpuBuffer* transferBuffer, size_t offset) override {
         return true;
     }
     bool onCopySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
-                       const SkIPoint& dstPoint) override;
+                       const SkIPoint& dstPoint) override {
+        return true;
+    }
 
-    bool onRegenerateMipMapLevels(GrTexture*) override;
+    bool onRegenerateMipMapLevels(GrTexture*) override { return true; }
 
-    void onResolveRenderTarget(GrRenderTarget* target, const SkIRect&) override;
+    void onResolveRenderTarget(GrRenderTarget* target, const SkIRect&, ForExternalIO) override {}
 
-    void addFinishedProc(GrGpuFinishedProc finishedProc,
-                         GrGpuFinishedContext finishedContext) override;
-    void addFinishedCallback(sk_sp<GrRefCntedCallback> finishedCallback);
-
-    GrOpsRenderPass* onGetOpsRenderPass(GrRenderTarget*,
-                                        bool useMSAASurface,
-                                        GrAttachment*,
-                                        GrSurfaceOrigin,
-                                        const SkIRect&,
-                                        const GrOpsRenderPass::LoadAndStoreInfo&,
-                                        const GrOpsRenderPass::StencilLoadAndStoreInfo&,
-                                        const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
-                                        GrXferBarrierFlags renderPassXferBarriers) override;
-
-    void prepareSurfacesForBackendAccessAndStateUpdates(
-            SkSpan<GrSurfaceProxy*> proxies,
-            SkSurface::BackendSurfaceAccess access,
-            const GrBackendSurfaceMutableState* newState) override;
-
-    bool onSubmitToGpu(bool syncCpu) override;
+    bool onFinishFlush(GrSurfaceProxy*[], int n, SkSurface::BackendSurfaceAccess access,
+                       const GrFlushInfo& info, const GrPrepareForExternalIORequests&) override {
+        if (info.fFinishedProc) {
+            info.fFinishedProc(info.fFinishedContext);
+        }
+        return true;
+    }
 
     GrBackendTexture onCreateBackendTexture(SkISize dimensions,
                                             const GrBackendFormat&,
                                             GrRenderable,
-                                            GrMipmapped,
-                                            GrProtected) override;
-
-    bool onClearBackendTexture(const GrBackendTexture&,
-                               sk_sp<GrRefCntedCallback> finishedCallback,
-                               std::array<float, 4> color) override;
-
+                                            GrMipMapped,
+                                            GrProtected,
+                                            const BackendTextureData*) override;
     GrBackendTexture onCreateCompressedBackendTexture(SkISize dimensions,
                                                       const GrBackendFormat&,
-                                                      GrMipmapped,
-                                                      GrProtected) override;
-
-    bool onUpdateCompressedBackendTexture(const GrBackendTexture&,
-                                          sk_sp<GrRefCntedCallback> finishedCallback,
-                                          const void* data,
-                                          size_t size) override;
-
-    bool submitDirectCommandList(SyncQueue sync);
-
-    void checkForFinishedCommandLists();
-    void waitForQueueCompletion();
-
-    void copySurfaceAsCopyTexture(GrSurface* dst, GrSurface* src, GrD3DTextureResource* dstResource,
-                                  GrD3DTextureResource* srcResource, const SkIRect& srcRect,
-                                  const SkIPoint& dstPoint);
-
-    void copySurfaceAsResolve(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
-                              const SkIPoint& dstPoint);
-    void resolveTexture(GrSurface* dst, int32_t dstX, int32_t dstY,
-                        GrD3DRenderTarget* src, const SkIRect& srcRect);
-
-    sk_sp<GrD3DTexture> createD3DTexture(SkISize,
-                                         DXGI_FORMAT,
-                                         GrRenderable,
-                                         int renderTargetSampleCnt,
-                                         SkBudgeted,
-                                         GrProtected,
-                                         int mipLevelCount,
-                                         GrMipmapStatus);
-
-    bool uploadToTexture(GrD3DTexture* tex, int left, int top, int width, int height,
-                         GrColorType colorType, const GrMipLevel* texels, int mipLevelCount);
-
-    bool createTextureResourceForBackendSurface(DXGI_FORMAT dxgiFormat,
-                                                SkISize dimensions,
-                                                GrTexturable texturable,
-                                                GrRenderable renderable,
-                                                GrMipmapped mipMapped,
-                                                int sampleCnt,
-                                                GrD3DTextureResourceInfo* info,
-                                                GrProtected isProtected);
+                                                      GrMipMapped,
+                                                      GrProtected,
+                                                      const BackendTextureData*) override;
 
     gr_cp<ID3D12Device> fDevice;
     gr_cp<ID3D12CommandQueue> fQueue;
 
-    sk_sp<GrD3DMemoryAllocator> fMemoryAllocator;
+    GrProtected fProtectedContext;
 
-    GrD3DResourceProvider fResourceProvider;
-    GrStagingBufferManager fStagingBufferManager;
-    GrRingBuffer fConstantsRingBuffer;
-
-    gr_cp<ID3D12Fence> fFence;
-    uint64_t fCurrentFenceValue = 0;
-
-    std::unique_ptr<GrD3DDirectCommandList> fCurrentDirectCommandList;
-    // One-off special-case descriptors created directly for the mipmap compute shader
-    // and hence aren't tracked by the normal path.
-    SkSTArray<32, GrD3DDescriptorHeap::CPUHandle> fMipmapCPUDescriptors;
-
-    struct OutstandingCommandList {
-        OutstandingCommandList(std::unique_ptr<GrD3DDirectCommandList> commandList,
-                               uint64_t fenceValue)
-            : fCommandList(std::move(commandList)), fFenceValue(fenceValue) {
-        }
-        std::unique_ptr<GrD3DDirectCommandList> fCommandList;
-        uint64_t fFenceValue;
-    };
-
-    SkDeque fOutstandingCommandLists;
-
-    std::unique_ptr<GrD3DOpsRenderPass> fCachedOpsRenderPass;
-
-#if GR_TEST_UTILS
-    IDXGraphicsAnalysis* fGraphicsAnalysis;
-#endif
-
-    using INHERITED = GrGpu;
+    typedef GrGpu INHERITED;
 };
 
 #endif

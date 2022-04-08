@@ -9,7 +9,6 @@
 #define GrRegionOp_DEFINED
 
 #include "include/private/GrTypesPriv.h"
-#include "src/gpu/ops/GrOp.h"
 
 class GrDrawOp;
 class GrRecordingContext;
@@ -20,12 +19,12 @@ struct GrUserStencilSettings;
 
 namespace GrRegionOp {
 /** GrAAType must be kNone or kMSAA. */
-GrOp::Owner Make(GrRecordingContext*,
-                 GrPaint&&,
-                 const SkMatrix& viewMatrix,
-                 const SkRegion&,
-                 GrAAType,
-                 const GrUserStencilSettings* stencilSettings = nullptr);
-}  // namespace GrRegionOp
+std::unique_ptr<GrDrawOp> Make(GrRecordingContext*,
+                               GrPaint&&,
+                               const SkMatrix& viewMatrix,
+                               const SkRegion&,
+                               GrAAType,
+                               const GrUserStencilSettings* stencilSettings = nullptr);
+}
 
 #endif

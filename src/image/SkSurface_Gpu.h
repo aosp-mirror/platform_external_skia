@@ -22,10 +22,8 @@ public:
     ~SkSurface_Gpu() override;
 
     // This is an internal-only factory
-    static sk_sp<SkSurface> MakeWrappedRenderTarget(GrRecordingContext*,
-                                                    std::unique_ptr<GrSurfaceDrawContext>);
-
-    GrRecordingContext* onGetRecordingContext() override;
+    static sk_sp<SkSurface> MakeWrappedRenderTarget(GrContext*,
+                                                    std::unique_ptr<GrRenderTargetContext>);
 
     GrBackendTexture onGetBackendTexture(BackendHandleAccess) override;
     GrBackendRenderTarget onGetBackendRenderTarget(BackendHandleAccess) override;
@@ -37,7 +35,7 @@ public:
     sk_sp<SkImage> onNewImageSnapshot(const SkIRect* subset) override;
     void onWritePixels(const SkPixmap&, int x, int y) override;
     void onAsyncRescaleAndReadPixels(const SkImageInfo& info, const SkIRect& srcRect,
-                                     RescaleGamma rescaleGamma, RescaleMode,
+                                     RescaleGamma rescaleGamma, SkFilterQuality rescaleQuality,
                                      ReadPixelsCallback callback,
                                      ReadPixelsContext context) override;
     void onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSpace,
@@ -45,28 +43,25 @@ public:
                                            const SkIRect& srcRect,
                                            const SkISize& dstSize,
                                            RescaleGamma rescaleGamma,
-                                           RescaleMode,
+                                           SkFilterQuality rescaleQuality,
                                            ReadPixelsCallback callback,
                                            ReadPixelsContext context) override;
 
     void onCopyOnWrite(ContentChangeMode) override;
     void onDiscard() override;
-    GrSemaphoresSubmitted onFlush(BackendSurfaceAccess access, const GrFlushInfo& info,
-                                  const GrBackendSurfaceMutableState*) override;
-    bool onWait(int numSemaphores, const GrBackendSemaphore* waitSemaphores,
-                 bool deleteSemaphoresAfterWait) override;
+    GrSemaphoresSubmitted onFlush(BackendSurfaceAccess access, const GrFlushInfo& info) override;
+    bool onWait(int numSemaphores, const GrBackendSemaphore* waitSemaphores) override;
     bool onCharacterize(SkSurfaceCharacterization*) const override;
     bool onIsCompatible(const SkSurfaceCharacterization&) const override;
-    void onDraw(SkCanvas* canvas, SkScalar x, SkScalar y, const SkSamplingOptions&,
-                const SkPaint* paint) override;
-    bool onDraw(sk_sp<const SkDeferredDisplayList>, SkIPoint offset) override;
+    void onDraw(SkCanvas* canvas, SkScalar x, SkScalar y, const SkPaint* paint) override;
+    bool onDraw(const SkDeferredDisplayList*) override;
 
     SkGpuDevice* getDevice() { return fDevice.get(); }
 
 private:
     sk_sp<SkGpuDevice> fDevice;
 
-    using INHERITED = SkSurface_Base;
+    typedef SkSurface_Base INHERITED;
 };
 
 #endif // SK_SUPPORT_GPU

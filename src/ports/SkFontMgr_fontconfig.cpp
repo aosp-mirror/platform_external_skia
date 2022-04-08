@@ -38,6 +38,10 @@ class SkData;
 #    define FC_POSTSCRIPT_NAME  "postscriptname"
 #endif
 
+#ifdef SK_DEBUG
+#    include "src/core/SkTLS.h"
+#endif
+
 /** Since FontConfig is poorly documented, this gives a high level overview:
  *
  *  FcConfig is a handle to a FontConfig configuration instance. Each 'configuration' is independent
@@ -57,27 +61,37 @@ class SkData;
 
 namespace {
 
-// FontConfig was thread antagonistic until 2.10.91 with known thread safety issues until 2.13.93.
-// Before that, lock with a global mutex.
-// See https://bug.skia.org/1497 and cl/339089311 for background.
+// Fontconfig is not threadsafe before 2.10.91. Before that, we lock with a global mutex.
+// See https://bug.skia.org/1497 for background.
 static SkMutex& f_c_mutex() {
     static SkMutex& mutex = *(new SkMutex);
     return mutex;
 }
 
-class FCLocker {
-    static constexpr int FontConfigThreadSafeVersion = 21393;
+#ifdef SK_DEBUG
+void* CreateThreadFcLocked() { return new bool(false); }
+void DeleteThreadFcLocked(void* v) { delete static_cast<bool*>(v); }
+#   define THREAD_FC_LOCKED \
+        static_cast<bool*>(SkTLS::Get(CreateThreadFcLocked, DeleteThreadFcLocked))
+#endif
 
+class FCLocker {
     // Assume FcGetVersion() has always been thread safe.
     static void lock() SK_NO_THREAD_SAFETY_ANALYSIS {
-        if (FcGetVersion() < FontConfigThreadSafeVersion) {
+        if (FcGetVersion() < 21091) {
             f_c_mutex().acquire();
+        } else {
+            SkDEBUGCODE(bool* threadLocked = THREAD_FC_LOCKED);
+            SkASSERT(false == *threadLocked);
+            SkDEBUGCODE(*threadLocked = true);
         }
     }
     static void unlock() SK_NO_THREAD_SAFETY_ANALYSIS {
         AssertHeld();
-        if (FcGetVersion() < FontConfigThreadSafeVersion) {
+        if (FcGetVersion() < 21091) {
             f_c_mutex().release();
+        } else {
+            SkDEBUGCODE(*THREAD_FC_LOCKED = false);
         }
     }
 
@@ -85,9 +99,21 @@ public:
     FCLocker() { lock(); }
     ~FCLocker() { unlock(); }
 
+    /** If acquire and release were free, FCLocker would be used around each call into FontConfig.
+     *  Instead a much more granular approach is taken, but this means there are times when the
+     *  mutex is held when it should not be. A Suspend will drop the lock until it is destroyed.
+     *  While a Suspend exists, FontConfig should not be used without re-taking the lock.
+     */
+    struct Suspend {
+        Suspend() { unlock(); }
+        ~Suspend() { lock(); }
+    };
+
     static void AssertHeld() { SkDEBUGCODE(
-        if (FcGetVersion() < FontConfigThreadSafeVersion) {
+        if (FcGetVersion() < 21091) {
             f_c_mutex().assertHeld();
+        } else {
+            SkASSERT(true == *THREAD_FC_LOCKED);
         }
     ) }
 };
@@ -99,16 +125,13 @@ template<typename T, void (*D)(T*)> void FcTDestroy(T* t) {
     D(t);
 }
 template <typename T, T* (*C)(), void (*D)(T*)> class SkAutoFc
-    : public SkAutoTCallVProc<T, FcTDestroy<T, D>> {
-    using inherited = SkAutoTCallVProc<T, FcTDestroy<T, D>>;
+    : public SkAutoTCallVProc<T, FcTDestroy<T, D> > {
 public:
-    SkAutoFc() : SkAutoTCallVProc<T, FcTDestroy<T, D>>( C() ) {
+    SkAutoFc() : SkAutoTCallVProc<T, FcTDestroy<T, D> >(C()) {
         T* obj = this->operator T*();
         SkASSERT_RELEASE(nullptr != obj);
     }
-    explicit SkAutoFc(T* obj) : inherited(obj) {}
-    SkAutoFc(const SkAutoFc&) = delete;
-    SkAutoFc(SkAutoFc&& that) : inherited(std::move(that)) {}
+    explicit SkAutoFc(T* obj) : SkAutoTCallVProc<T, FcTDestroy<T, D> >(obj) {}
 };
 
 typedef SkAutoFc<FcCharSet, FcCharSetCreate, FcCharSetDestroy> SkAutoFcCharSet;
@@ -437,7 +460,7 @@ private:
     SkString fFamilyName;
     const std::unique_ptr<const SkFontData> fData;
 
-    using INHERITED = SkTypeface_FreeType;
+    typedef SkTypeface_FreeType INHERITED;
 };
 
 class SkTypeface_fontconfig : public SkTypeface_FreeType {
@@ -534,16 +557,6 @@ public:
                                              this->isFixedPitch());
     }
 
-    std::unique_ptr<SkFontData> onMakeFontData() const override {
-        int index;
-        std::unique_ptr<SkStreamAsset> stream(this->onOpenStream(&index));
-        if (!stream) {
-            return nullptr;
-        }
-        // TODO: FC_VARIABLE and FC_FONT_VARIATIONS
-        return std::make_unique<SkFontData>(std::move(stream), index, nullptr, 0);
-    }
-
     ~SkTypeface_fontconfig() override {
         // Hold the lock while unrefing the pattern.
         FCLocker lock;
@@ -558,7 +571,7 @@ private:
         , fSysroot(std::move(sysroot))
     { }
 
-    using INHERITED = SkTypeface_FreeType;
+    typedef SkTypeface_FreeType INHERITED;
 };
 
 class SkFontMgr_fontconfig : public SkFontMgr {
@@ -596,34 +609,30 @@ class SkFontMgr_fontconfig : public SkFontMgr {
         }
 
         SkTypeface* createTypeface(int index) override {
-            if (index < 0 || fFontSet->nfont <= index) {
-                return nullptr;
-            }
-            SkAutoFcPattern match([this, &index]() {
-                FCLocker lock;
-                FcPatternReference(fFontSet->fonts[index]);
-                return fFontSet->fonts[index];
-            }());
-            return fFontMgr->createTypefaceFromFcPattern(std::move(match)).release();
+            FCLocker lock;
+
+            FcPattern* match = fFontSet->fonts[index];
+            return fFontMgr->createTypefaceFromFcPattern(match).release();
         }
 
         SkTypeface* matchStyle(const SkFontStyle& style) override {
-            SkAutoFcPattern match([this, &style]() {
-                FCLocker lock;
+            FCLocker lock;
 
-                SkAutoFcPattern pattern;
-                fcpattern_from_skfontstyle(style, pattern);
-                FcConfigSubstitute(fFontMgr->fFC, pattern, FcMatchPattern);
-                FcDefaultSubstitute(pattern);
+            SkAutoFcPattern pattern;
+            fcpattern_from_skfontstyle(style, pattern);
+            FcConfigSubstitute(fFontMgr->fFC, pattern, FcMatchPattern);
+            FcDefaultSubstitute(pattern);
 
-                FcResult result;
-                FcFontSet* fontSets[1] = { fFontSet };
-                return FcFontSetMatch(fFontMgr->fFC,
-                                      fontSets, SK_ARRAY_COUNT(fontSets),
-                                      pattern, &result);
+            FcResult result;
+            FcFontSet* fontSets[1] = { fFontSet };
+            SkAutoFcPattern match(FcFontSetMatch(fFontMgr->fFC,
+                                                 fontSets, SK_ARRAY_COUNT(fontSets),
+                                                 pattern, &result));
+            if (nullptr == match) {
+                return nullptr;
+            }
 
-            }());
-            return fFontMgr->createTypefaceFromFcPattern(std::move(match)).release();
+            return fFontMgr->createTypefaceFromFcPattern(match).release();
         }
 
     private:
@@ -690,25 +699,16 @@ class SkFontMgr_fontconfig : public SkFontMgr {
     /** Creates a typeface using a typeface cache.
      *  @param pattern a complete pattern from FcFontRenderPrepare.
      */
-    sk_sp<SkTypeface> createTypefaceFromFcPattern(SkAutoFcPattern pattern) const {
-        if (!pattern) {
-            return nullptr;
-        }
-        // Cannot hold FCLocker when calling fTFCache.add; an evicted typeface may need to lock.
-        // Must hold fTFCacheMutex when interacting with fTFCache.
+    sk_sp<SkTypeface> createTypefaceFromFcPattern(FcPattern* pattern) const {
+        FCLocker::AssertHeld();
         SkAutoMutexExclusive ama(fTFCacheMutex);
-        sk_sp<SkTypeface> face = [&]() {
-            FCLocker lock;
-            sk_sp<SkTypeface> face = fTFCache.findByProcAndRef(FindByFcPattern, pattern);
-            if (face) {
-                pattern.reset();
-            }
-            return face;
-        }();
+        sk_sp<SkTypeface> face = fTFCache.findByProcAndRef(FindByFcPattern, pattern);
         if (!face) {
-            face = SkTypeface_fontconfig::Make(std::move(pattern), fSysroot);
+            FcPatternReference(pattern);
+            face = SkTypeface_fontconfig::Make(SkAutoFcPattern(pattern), fSysroot);
             if (face) {
-                // Cannot hold FCLocker in fTFCache.add; evicted typefaces may need to lock.
+                // Cannot hold the lock when calling add; an evicted typeface may need to lock.
+                FCLocker::Suspend suspend;
                 fTFCache.add(face);
             }
         }
@@ -871,41 +871,39 @@ protected:
     SkTypeface* onMatchFamilyStyle(const char familyName[],
                                    const SkFontStyle& style) const override
     {
-        SkAutoFcPattern font([this, &familyName, &style]() {
-            FCLocker lock;
+        FCLocker lock;
 
-            SkAutoFcPattern pattern;
-            FcPatternAddString(pattern, FC_FAMILY, (FcChar8*)familyName);
-            fcpattern_from_skfontstyle(style, pattern);
-            FcConfigSubstitute(fFC, pattern, FcMatchPattern);
-            FcDefaultSubstitute(pattern);
+        SkAutoFcPattern pattern;
+        FcPatternAddString(pattern, FC_FAMILY, (FcChar8*)familyName);
+        fcpattern_from_skfontstyle(style, pattern);
+        FcConfigSubstitute(fFC, pattern, FcMatchPattern);
+        FcDefaultSubstitute(pattern);
 
-            // We really want to match strong (preferred) and same (acceptable) only here.
-            // If a family name was specified, assume that any weak matches after the last strong
-            // match are weak (default) and ignore them.
-            // After substitution the pattern for 'sans-serif' looks like "wwwwwwwwwwwwwwswww" where
-            // there are many weak but preferred names, followed by defaults.
-            // So it is possible to have weakly matching but preferred names.
-            // In aliases, bindings are weak by default, so this is easy and common.
-            // If no family name was specified, we'll probably only get weak matches, but that's ok.
-            FcPattern* matchPattern;
-            SkAutoFcPattern strongPattern(nullptr);
-            if (familyName) {
-                strongPattern.reset(FcPatternDuplicate(pattern));
-                remove_weak(strongPattern, FC_FAMILY);
-                matchPattern = strongPattern;
-            } else {
-                matchPattern = pattern;
-            }
+        // We really want to match strong (prefered) and same (acceptable) only here.
+        // If a family name was specified, assume that any weak matches after the last strong match
+        // are weak (default) and ignore them.
+        // The reason for is that after substitution the pattern for 'sans-serif' looks like
+        // "wwwwwwwwwwwwwwswww" where there are many weak but preferred names, followed by defaults.
+        // So it is possible to have weakly matching but preferred names.
+        // In aliases, bindings are weak by default, so this is easy and common.
+        // If no family name was specified, we'll probably only get weak matches, but that's ok.
+        FcPattern* matchPattern;
+        SkAutoFcPattern strongPattern(nullptr);
+        if (familyName) {
+            strongPattern.reset(FcPatternDuplicate(pattern));
+            remove_weak(strongPattern, FC_FAMILY);
+            matchPattern = strongPattern;
+        } else {
+            matchPattern = pattern;
+        }
 
-            FcResult result;
-            SkAutoFcPattern font(FcFontMatch(fFC, pattern, &result));
-            if (!font || !FontAccessible(font) || !FontFamilyNameMatches(font, matchPattern)) {
-                font.reset();
-            }
-            return font;
-        }());
-        return createTypefaceFromFcPattern(std::move(font)).release();
+        FcResult result;
+        SkAutoFcPattern font(FcFontMatch(fFC, pattern, &result));
+        if (nullptr == font || !FontAccessible(font) || !FontFamilyNameMatches(font, matchPattern)) {
+            return nullptr;
+        }
+
+        return createTypefaceFromFcPattern(font).release();
     }
 
     SkTypeface* onMatchFamilyStyleCharacter(const char familyName[],
@@ -914,42 +912,49 @@ protected:
                                             int bcp47Count,
                                             SkUnichar character) const override
     {
-        SkAutoFcPattern font([&](){
-            FCLocker lock;
+        FCLocker lock;
 
-            SkAutoFcPattern pattern;
-            if (familyName) {
-                FcValue familyNameValue;
-                familyNameValue.type = FcTypeString;
-                familyNameValue.u.s = reinterpret_cast<const FcChar8*>(familyName);
-                FcPatternAddWeak(pattern, FC_FAMILY, familyNameValue, FcFalse);
+        SkAutoFcPattern pattern;
+        if (familyName) {
+            FcValue familyNameValue;
+            familyNameValue.type = FcTypeString;
+            familyNameValue.u.s = reinterpret_cast<const FcChar8*>(familyName);
+            FcPatternAddWeak(pattern, FC_FAMILY, familyNameValue, FcFalse);
+        }
+        fcpattern_from_skfontstyle(style, pattern);
+
+        SkAutoFcCharSet charSet;
+        FcCharSetAddChar(charSet, character);
+        FcPatternAddCharSet(pattern, FC_CHARSET, charSet);
+
+        if (bcp47Count > 0) {
+            SkASSERT(bcp47);
+            SkAutoFcLangSet langSet;
+            for (int i = bcp47Count; i --> 0;) {
+                FcLangSetAdd(langSet, (const FcChar8*)bcp47[i]);
             }
-            fcpattern_from_skfontstyle(style, pattern);
+            FcPatternAddLangSet(pattern, FC_LANG, langSet);
+        }
 
-            SkAutoFcCharSet charSet;
-            FcCharSetAddChar(charSet, character);
-            FcPatternAddCharSet(pattern, FC_CHARSET, charSet);
+        FcConfigSubstitute(fFC, pattern, FcMatchPattern);
+        FcDefaultSubstitute(pattern);
 
-            if (bcp47Count > 0) {
-                SkASSERT(bcp47);
-                SkAutoFcLangSet langSet;
-                for (int i = bcp47Count; i --> 0;) {
-                    FcLangSetAdd(langSet, (const FcChar8*)bcp47[i]);
-                }
-                FcPatternAddLangSet(pattern, FC_LANG, langSet);
-            }
+        FcResult result;
+        SkAutoFcPattern font(FcFontMatch(fFC, pattern, &result));
+        if (nullptr == font || !FontAccessible(font) || !FontContainsCharacter(font, character)) {
+            return nullptr;
+        }
 
-            FcConfigSubstitute(fFC, pattern, FcMatchPattern);
-            FcDefaultSubstitute(pattern);
+        return createTypefaceFromFcPattern(font).release();
+    }
 
-            FcResult result;
-            SkAutoFcPattern font(FcFontMatch(fFC, pattern, &result));
-            if (!font || !FontAccessible(font) || !FontContainsCharacter(font, character)) {
-                font.reset();
-            }
-            return font;
-        }());
-        return createTypefaceFromFcPattern(std::move(font)).release();
+    SkTypeface* onMatchFaceStyle(const SkTypeface* typeface,
+                                 const SkFontStyle& style) const override
+    {
+        //TODO: should the SkTypeface_fontconfig know its family?
+        const SkTypeface_fontconfig* fcTypeface =
+                static_cast<const SkTypeface_fontconfig*>(typeface);
+        return this->matchFamilyStyle(get_string(fcTypeface->fPattern, FC_FAMILY), style);
     }
 
     sk_sp<SkTypeface> onMakeFromStreamIndex(std::unique_ptr<SkStreamAsset> stream,

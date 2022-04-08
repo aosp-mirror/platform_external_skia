@@ -7,13 +7,14 @@
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
-#include "include/gpu/GrDirectContext.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkSpecialSurface.h"
-#include "src/gpu/GrCaps.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/SkGr.h"
 #include "tests/Test.h"
+
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/SkGr.h"
 
 class TestingSpecialSurfaceAccess {
 public:
@@ -57,7 +58,7 @@ static void test_surface(const sk_sp<SkSpecialSurface>& surf,
 DEF_TEST(SpecialSurface_Raster, reporter) {
 
     SkImageInfo info = SkImageInfo::MakeN32(kSmallerSize, kSmallerSize, kOpaque_SkAlphaType);
-    sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeRaster(info, SkSurfaceProps()));
+    sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeRaster(info));
 
     test_surface(surf, reporter, 0);
 }
@@ -69,7 +70,7 @@ DEF_TEST(SpecialSurface_Raster2, reporter) {
 
     const SkIRect subset = SkIRect::MakeXYWH(kPad, kPad, kSmallerSize, kSmallerSize);
 
-    sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeFromBitmap(subset, bm, SkSurfaceProps()));
+    sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeFromBitmap(subset, bm));
 
     test_surface(surf, reporter, kPad);
 
@@ -77,14 +78,13 @@ DEF_TEST(SpecialSurface_Raster2, reporter) {
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialSurface_Gpu1, reporter, ctxInfo) {
-    auto direct = ctxInfo.directContext();
-
     for (auto colorType : {GrColorType::kRGBA_8888, GrColorType::kRGBA_1010102}) {
-        if (!direct->colorTypeSupportedAsSurface(GrColorTypeToSkColorType(colorType))) {
+        if (!ctxInfo.grContext()->colorTypeSupportedAsSurface(
+                    GrColorTypeToSkColorType(colorType))) {
             continue;
         }
         sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeRenderTarget(
-                direct, kSmallerSize, kSmallerSize, colorType, nullptr, SkSurfaceProps()));
+                ctxInfo.grContext(), kSmallerSize, kSmallerSize, colorType, nullptr));
         test_surface(surf, reporter, 0);
     }
 }

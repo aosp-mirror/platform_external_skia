@@ -45,7 +45,7 @@ private:
 
     static Window_ios* gWindow; // there should be only one
 
-    using INHERITED = Window;
+    typedef Window INHERITED;
 };
 
 }   // namespace sk_app

@@ -407,8 +407,7 @@ public:
             , fParamToLayerMatrix(paramToLayer) {}
 
     // Make the default decomposition Mapping, given the total CTM and the root image filter.
-    static Mapping DecomposeCTM(const SkMatrix& ctm, const SkImageFilter* filter,
-                                const skif::ParameterSpace<SkPoint>& representativePoint);
+    static Mapping Make(const SkMatrix& ctm, const SkImageFilter* filter);
 
     // Return a new Mapping object whose parameter-to-layer matrix is equal to this->layerMatrix() *
     // local, but both share the same layer-to-device matrix.
@@ -520,9 +519,6 @@ public:
     FilterResult(sk_sp<SkSpecialImage> image, const LayerSpace<SkIPoint>& origin)
             : fImage(std::move(image))
             , fOrigin(origin) {}
-    explicit FilterResult(sk_sp<SkSpecialImage> image)
-            : fImage(std::move(image))
-            , fOrigin{{0, 0}} {}
 
     // Allow explicit moves/copies in order to cast from one use type to another, except kInput0
     // and kInput1 can only be cast to kOutput (e.g. as part of a noop image filter).
@@ -647,7 +643,7 @@ public:
     SkColorSpace* colorSpace() const { return fColorSpace; }
     sk_sp<SkColorSpace> refColorSpace() const { return sk_ref_sp(fColorSpace); }
     // The default surface properties to use when making transient surfaces during filtering.
-    const SkSurfaceProps& surfaceProps() const { return fSource.image()->props(); }
+    const SkSurfaceProps* surfaceProps() const { return &fSource.image()->props(); }
 
     // This is the image to use whenever an expected input filter has been set to null. In the
     // majority of cases, this is the original source image for the image filter DAG so it comes
@@ -678,11 +674,8 @@ public:
     // image.
     sk_sp<SkSpecialSurface> makeSurface(const SkISize& size,
                                         const SkSurfaceProps* props = nullptr) const {
-        if (!props) {
-             props = &this->surfaceProps();
-        }
         return fSource.image()->makeSurface(fColorType, fColorSpace, size,
-                                            kPremul_SkAlphaType, *props);
+                                            kPremul_SkAlphaType, props);
     }
 
     // Create a new context that matches this context, but with an overridden layer space.

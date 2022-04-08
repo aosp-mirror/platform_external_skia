@@ -35,7 +35,9 @@ static void test_huge_stroke(SkCanvas* canvas) {
     paint.setStrokeJoin(SkPaint::kRound_Join);
     paint.setStyle(SkPaint::kStroke_Style);
 
-    canvas->concat(SkMatrix::RectToRect(srcR, dstR, SkMatrix::kCenter_ScaleToFit));
+    SkMatrix matrix;
+    matrix.setRectToRect(srcR, dstR, SkMatrix::kCenter_ScaleToFit);
+    canvas->concat(matrix);
 
     canvas->drawPath(path, paint);
 }
@@ -199,7 +201,7 @@ protected:
     }
 
 private:
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

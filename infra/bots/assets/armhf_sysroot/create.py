@@ -9,7 +9,6 @@
 """Create the asset."""
 
 
-from __future__ import print_function
 import argparse
 import fileinput
 import os
@@ -23,7 +22,7 @@ from distutils import dir_util
 def create_asset(target_dir):
   """Create the asset."""
 
-  print("Installing some cross-compiling packages. Hit enter to continue.")
+  print "Installing some cross-compiling packages. Hit enter to continue."
   raw_input()
   subprocess.check_call([
     "sudo","apt-get","install",
@@ -51,22 +50,22 @@ def create_asset(target_dir):
   bad_libpthread = os.path.join(target_dir, "lib", "libpthread.so")
   for line in fileinput.input(bad_libpthread, inplace=True):
     if line.startswith("GROUP"):
-      print("GROUP ( libpthread.so.0 libpthread_nonshared.a )")
+      print "GROUP ( libpthread.so.0 libpthread_nonshared.a )"
     else:
-      print(line)
+      print line
 
   bad_libc = os.path.join(target_dir, "lib", "libc.so")
   for line in fileinput.input(bad_libc, inplace=True):
     if line.startswith("GROUP"):
-      print("GROUP ( libc.so.6 libc_nonshared.a "
+      print ("GROUP ( libc.so.6 libc_nonshared.a "
              "AS_NEEDED ( ld-linux-armhf.so.3 ) )")
     else:
-      print(line)
+      print line
 
 
 def main():
   if 'linux' not in sys.platform:
-    print('This script only runs on Linux.', file=sys.stderr)
+    print >> sys.stderr, 'This script only runs on Linux.'
     sys.exit(1)
   parser = argparse.ArgumentParser()
   parser.add_argument('--target_dir', '-t', required=True)

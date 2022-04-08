@@ -9,7 +9,6 @@
 
 #include "include/core/SkMallocPixelRef.h"
 #include "include/core/SkPixelRef.h"
-#include "include/private/SkIDChangeListener.h"
 
 static void decrement_counter_proc(void* pixels, void* ctx) {
     int* counter = (int*)ctx;
@@ -59,10 +58,10 @@ static void test_install(skiatest::Reporter* reporter) {
 
 }
 
-class TestListener : public SkIDChangeListener {
+class TestListener : public SkPixelRef::GenIDChangeListener {
 public:
     explicit TestListener(int* ptr) : fPtr(ptr) {}
-    void changed() override { (*fPtr)++; }
+    void onChange() override { (*fPtr)++; }
 private:
     int* fPtr;
 };
@@ -74,7 +73,7 @@ DEF_TEST(PixelRef_GenIDChange, r) {
 
     // Register a listener.
     int count = 0;
-    pixelRef->addGenIDChangeListener(sk_make_sp<TestListener>(&count));
+    pixelRef->addGenIDChangeListener(new TestListener(&count));
     REPORTER_ASSERT(r, 0 == count);
 
     // No one has looked at our pixelRef's generation ID, so invalidating it doesn't make sense.
@@ -91,28 +90,9 @@ DEF_TEST(PixelRef_GenIDChange, r) {
 
     // Force the generation ID to be recalculated, then add a listener.
     REPORTER_ASSERT(r, 0 != pixelRef->getGenerationID());
-    pixelRef->addGenIDChangeListener(sk_make_sp<TestListener>(&count));
+    pixelRef->addGenIDChangeListener(new TestListener(&count));
     pixelRef->notifyPixelsChanged();
     REPORTER_ASSERT(r, 1 == count);
-
-    // Check that asking for deregistration causes the listener to not be called.
-    REPORTER_ASSERT(r, 0 != pixelRef->getGenerationID());
-    auto listener = sk_make_sp<TestListener>(&count);
-    pixelRef->addGenIDChangeListener(listener);
-    REPORTER_ASSERT(r, 1 == count);
-    listener->markShouldDeregister();
-    pixelRef->notifyPixelsChanged();
-    REPORTER_ASSERT(r, 1 == count);
-
-    // Check that we use deregistration to prevent unbounded growth.
-    REPORTER_ASSERT(r, 0 != pixelRef->getGenerationID());
-    listener = sk_make_sp<TestListener>(&count);
-    pixelRef->addGenIDChangeListener(listener);
-    REPORTER_ASSERT(r, 1 == count);
-    listener->markShouldDeregister();
-    // Add second listener. Should deregister first listener.
-    pixelRef->addGenIDChangeListener(sk_make_sp<TestListener>(&count));
-    REPORTER_ASSERT(r, listener->unique());
 
     // Quick check that nullptr is safe.
     REPORTER_ASSERT(r, 0 != pixelRef->getGenerationID());

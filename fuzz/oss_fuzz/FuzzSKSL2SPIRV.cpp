@@ -11,12 +11,13 @@
 #include "fuzz/Fuzz.h"
 
 bool FuzzSKSL2SPIRV(sk_sp<SkData> bytes) {
-    sk_sp<GrShaderCaps> caps = SkSL::ShaderCapsFactory::Default();
-    SkSL::Compiler compiler(caps.get());
+    SkSL::Compiler compiler;
     SkSL::String output;
     SkSL::Program::Settings settings;
+    sk_sp<GrShaderCaps> caps = SkSL::ShaderCapsFactory::Default();
+    settings.fCaps = caps.get();
     std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
-                                                    SkSL::ProgramKind::kFragment,
+                                                    SkSL::Program::kFragment_Kind,
                                                     SkSL::String((const char*) bytes->data(),
                                                                  bytes->size()),
                                                     settings);
@@ -26,11 +27,8 @@ bool FuzzSKSL2SPIRV(sk_sp<SkData> bytes) {
     return true;
 }
 
-#if defined(SK_BUILD_FOR_LIBFUZZER)
+#if defined(IS_FUZZING_WITH_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-    if (size > 3000) {
-        return 0;
-    }
     auto bytes = SkData::MakeWithoutCopy(data, size);
     FuzzSKSL2SPIRV(bytes);
     return 0;

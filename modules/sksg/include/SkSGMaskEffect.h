@@ -46,7 +46,7 @@ private:
     const sk_sp<RenderNode> fMaskNode;
     const Mode              fMaskMode;
 
-    using INHERITED = EffectNode;
+    typedef EffectNode INHERITED;
 };
 
 } // namespace sksg

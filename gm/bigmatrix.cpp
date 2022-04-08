@@ -38,11 +38,14 @@ DEF_SIMPLE_GM_BG(bigmatrix, canvas, 50, 50, ToolUtils::color_to_565(0xFF66AA99))
     SkASSERT(success);
     (void)success;  // silence compiler :(
 
+    SkPath path;
+
     SkPoint  pt    = {10 * SK_Scalar1, 10 * SK_Scalar1};
     SkScalar small = 1 / (500 * SK_Scalar1);
 
     m.mapPoints(&pt, 1);
-    canvas->drawCircle(pt.fX, pt.fY, small, paint);
+    path.addCircle(pt.fX, pt.fY, small);
+    canvas->drawPath(path, paint);
 
     pt.set(30 * SK_Scalar1, 10 * SK_Scalar1);
     m.mapPoints(&pt, 1);
@@ -61,9 +64,9 @@ DEF_SIMPLE_GM_BG(bigmatrix, canvas, 50, 50, ToolUtils::color_to_565(0xFF66AA99))
     SkMatrix s;
     s.reset();
     s.setScale(SK_Scalar1 / 1000, SK_Scalar1 / 1000);
-    paint.setShader(bmp.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
-                                   SkSamplingOptions(SkFilterMode::kLinear), s));
+    paint.setShader(bmp.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, &s));
     paint.setAntiAlias(false);
+    paint.setFilterQuality(kLow_SkFilterQuality);
     rect.setLTRB(pt.fX - small, pt.fY - small, pt.fX + small, pt.fY + small);
     canvas->drawRect(rect, paint);
 }

@@ -7,7 +7,7 @@
  */
 
 #include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrContext.h"
 #include "SDL.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
@@ -198,7 +198,7 @@ int main(int argc, char** argv) {
     auto interface = GrGLMakeNativeInterface();
 
     // setup contexts
-    sk_sp<GrDirectContext> grContext(GrDirectContext::MakeGL(interface));
+    sk_sp<GrContext> grContext(GrContext::MakeGL(interface));
     SkASSERT(grContext);
 
     // Wrap the frame buffer object attached to the screen in a Skia render target so Skia can
@@ -229,8 +229,8 @@ int main(int argc, char** argv) {
     // setup SkSurface
     // To use distance field text, use commented out SkSurfaceProps instead
     // SkSurfaceProps props(SkSurfaceProps::kUseDeviceIndependentFonts_Flag,
-    //                      SkSurfaceProps::kUnknown_SkPixelGeometry);
-    SkSurfaceProps props;
+    //                      SkSurfaceProps::kLegacyFontHost_InitType);
+    SkSurfaceProps props(SkSurfaceProps::kLegacyFontHost_InitType);
 
     sk_sp<SkSurface> surface(SkSurface::MakeFromBackendRenderTarget(grContext.get(), target,
                                                                     kBottomLeft_GrSurfaceOrigin,

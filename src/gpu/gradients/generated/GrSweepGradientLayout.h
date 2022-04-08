@@ -10,16 +10,14 @@
  **************************************************************************************************/
 #ifndef GrSweepGradientLayout_DEFINED
 #define GrSweepGradientLayout_DEFINED
-
-#include "include/core/SkM44.h"
 #include "include/core/SkTypes.h"
+#include "include/core/SkM44.h"
 
-#include "src/gpu/effects/GrMatrixEffect.h"
 #include "src/gpu/gradients/GrGradientShader.h"
 #include "src/shaders/gradients/SkSweepGradient.h"
 
+#include "src/gpu/GrCoordTransform.h"
 #include "src/gpu/GrFragmentProcessor.h"
-
 class GrSweepGradientLayout : public GrFragmentProcessor {
 public:
     static std::unique_ptr<GrFragmentProcessor> Make(const SkSweepGradient& gradient,
@@ -27,24 +25,25 @@ public:
     GrSweepGradientLayout(const GrSweepGradientLayout& src);
     std::unique_ptr<GrFragmentProcessor> clone() const override;
     const char* name() const override { return "SweepGradientLayout"; }
+    GrCoordTransform fCoordTransform0;
+    SkMatrix gradientMatrix;
     float bias;
     float scale;
 
 private:
-    GrSweepGradientLayout(float bias, float scale)
+    GrSweepGradientLayout(SkMatrix gradientMatrix, float bias, float scale)
             : INHERITED(kGrSweepGradientLayout_ClassID,
                         (OptimizationFlags)kPreservesOpaqueInput_OptimizationFlag)
+            , fCoordTransform0(gradientMatrix)
+            , gradientMatrix(gradientMatrix)
             , bias(bias)
             , scale(scale) {
-        this->setUsesSampleCoordsDirectly();
+        this->addCoordTransform(&fCoordTransform0);
     }
-    std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override;
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
     void onGetGLSLProcessorKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override;
     bool onIsEqual(const GrFragmentProcessor&) const override;
-#if GR_TEST_UTILS
-    SkString onDumpInfo() const override;
-#endif
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST
-    using INHERITED = GrFragmentProcessor;
+    typedef GrFragmentProcessor INHERITED;
 };
 #endif

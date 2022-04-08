@@ -17,7 +17,7 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypes.h"
-#include "include/effects/SkImageFilters.h"
+#include "include/effects/SkMorphologyImageFilter.h"
 #include "include/effects/SkPerlinNoiseShader.h"
 #include "include/private/SkTo.h"
 #include "src/core/SkGlyphRun.h"
@@ -37,7 +37,6 @@
 
 #include <cstdlib>
 #include <cmath>
-#include <memory>
 
 #define DUMMY_TEXT "DCT compessed stream."
 
@@ -60,7 +59,7 @@ static void assert_eql(skiatest::Reporter* reporter,
                        size_t len) {
     if (!eq(skString, str, len)) {
         REPORT_FAILURE(reporter, "", SkStringPrintf(
-                "'%*s' != '%s'", (int)len, str, skString.c_str()));
+                "'%*s' != '%s'", len, str, skString.c_str()));
     }
 }
 
@@ -200,7 +199,7 @@ static void TestPDFDict(skiatest::Reporter* reporter) {
     dict->insertInt("n1", SkToSizeT(42));
     assert_emit_eq(reporter, *dict, "<</n1 42>>");
 
-    dict = std::make_unique<SkPDFDict>();
+    dict.reset(new SkPDFDict);
     assert_emit_eq(reporter, *dict, "<<>>");
 
     dict->insertInt("n1", 42);
@@ -214,7 +213,7 @@ static void TestPDFDict(skiatest::Reporter* reporter) {
     dict->insertObject(n3, std::move(innerArray));
     assert_emit_eq(reporter, *dict, "<</n1 42\n/n2 .5\n/n3 [-100]>>");
 
-    dict = std::make_unique<SkPDFDict>();
+    dict.reset(new SkPDFDict);
     assert_emit_eq(reporter, *dict, "<<>>");
 
     dict->insertInt("n1", 24);
@@ -241,7 +240,7 @@ static void TestPDFDict(skiatest::Reporter* reporter) {
     assert_emit_eq(reporter, *dict, "<</n1 24\n/n2 99\n/n3 .5\n/n4 /AName\n"
                    "/n5 /AnotherName\n/n6 (A String)\n/n7 (Another String)>>");
 
-    dict = std::make_unique<SkPDFDict>("DType");
+    dict.reset(new SkPDFDict("DType"));
     assert_emit_eq(reporter, *dict, "<</Type /DType>>");
 }
 
@@ -275,7 +274,7 @@ private:
 
     mutable bool fVisited;
 
-    using INHERITED = SkImageFilter_Base;
+    typedef SkImageFilter_Base INHERITED;
 };
 
 sk_sp<SkFlattenable> DummyImageFilter::CreateProc(SkReadBuffer& buffer) {
@@ -284,7 +283,7 @@ sk_sp<SkFlattenable> DummyImageFilter::CreateProc(SkReadBuffer& buffer) {
     return DummyImageFilter::Make(visited);
 }
 
-}  // namespace
+};
 
 // Check that PDF rendering of image filters successfully falls back to
 // CPU rasterization.
@@ -393,8 +392,7 @@ static SkGlyphRun make_run(size_t len, const SkGlyphID* glyphs, SkPoint* pos,
                       SkSpan<const SkPoint>{pos, len},
                       SkSpan<const SkGlyphID>{glyphs, len},
                       SkSpan<const char>{utf8Text, utf8TextByteLength},
-                      SkSpan<const uint32_t>{clusters, len},
-                      SkSpan<const SkVector>{});
+                      SkSpan<const uint32_t>{clusters, len});
 }
 
 DEF_TEST(SkPDF_Clusterator, reporter) {
@@ -454,7 +452,7 @@ DEF_TEST(fuzz875632f0, reporter) {
     SkAutoCanvasRestore autoCanvasRestore(canvas, false);
 
     SkPaint layerPaint({0, 0, 0, 0});
-    layerPaint.setImageFilter(SkImageFilters::Dilate(536870912, 0, nullptr, nullptr));
+    layerPaint.setImageFilter(SkDilateImageFilter::Make(536870912, 0, nullptr, nullptr));
     layerPaint.setBlendMode(SkBlendMode::kClear);
 
     canvas->saveLayer(nullptr, &layerPaint);

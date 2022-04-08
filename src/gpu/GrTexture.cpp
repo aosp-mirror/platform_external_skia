@@ -7,33 +7,33 @@
 
 #include "include/core/SkMath.h"
 #include "include/core/SkTypes.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/GrTexture.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/GrResourceKey.h"
-#include "src/core/SkMipmap.h"
+#include "src/core/SkMipMap.h"
 #include "src/gpu/GrCaps.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrRenderTarget.h"
-#include "src/gpu/GrTexture.h"
+#include "src/gpu/GrSurfacePriv.h"
+#include "src/gpu/GrTexturePriv.h"
 
-#ifdef SK_DEBUG
-#include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#endif
-
-void GrTexture::markMipmapsDirty() {
-    if (GrMipmapStatus::kValid == fMipmapStatus) {
-        fMipmapStatus = GrMipmapStatus::kDirty;
+void GrTexture::markMipMapsDirty() {
+    if (GrMipMapsStatus::kValid == fMipMapsStatus) {
+        fMipMapsStatus = GrMipMapsStatus::kDirty;
     }
 }
 
-void GrTexture::markMipmapsClean() {
-    SkASSERT(GrMipmapStatus::kNotAllocated != fMipmapStatus);
-    fMipmapStatus = GrMipmapStatus::kValid;
+void GrTexture::markMipMapsClean() {
+    SkASSERT(GrMipMapsStatus::kNotAllocated != fMipMapsStatus);
+    fMipMapsStatus = GrMipMapsStatus::kValid;
 }
 
 size_t GrTexture::onGpuMemorySize() const {
-    return GrSurface::ComputeSize(this->backendFormat(), this->dimensions(),
-                                  /*colorSamplesPerPixel=*/1, this->mipmapped());
+    const GrCaps& caps = *this->getGpu()->caps();
+    return GrSurface::ComputeSize(caps, this->backendFormat(), this->dimensions(), 1,
+                                  this->texturePriv().mipMapped());
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -41,17 +41,14 @@ GrTexture::GrTexture(GrGpu* gpu,
                      const SkISize& dimensions,
                      GrProtected isProtected,
                      GrTextureType textureType,
-                     GrMipmapStatus mipmapStatus)
+                     GrMipMapsStatus mipMapsStatus)
         : INHERITED(gpu, dimensions, isProtected)
         , fTextureType(textureType)
-        , fMipmapStatus(mipmapStatus) {
-    if (fMipmapStatus == GrMipmapStatus::kNotAllocated) {
-        fMaxMipmapLevel = 0;
+        , fMipMapsStatus(mipMapsStatus) {
+    if (GrMipMapsStatus::kNotAllocated == fMipMapsStatus) {
+        fMaxMipMapLevel = 0;
     } else {
-        fMaxMipmapLevel = SkMipmap::ComputeLevelCount(this->width(), this->height());
-    }
-    if (textureType == GrTextureType::kExternal) {
-        this->setReadOnly();
+        fMaxMipMapLevel = SkMipMap::ComputeLevelCount(this->width(), this->height());
     }
 }
 
@@ -94,19 +91,20 @@ void GrTexture::computeScratchKey(GrScratchKey* key) const {
             renderable = GrRenderable::kYes;
         }
         auto isProtected = this->isProtected() ? GrProtected::kYes : GrProtected::kNo;
-        ComputeScratchKey(*this->getGpu()->caps(), this->backendFormat(), this->dimensions(),
-                          renderable, sampleCount, this->mipmapped(), isProtected, key);
+        GrTexturePriv::ComputeScratchKey(*this->getGpu()->caps(), this->backendFormat(),
+                                         this->dimensions(), renderable, sampleCount,
+                                         this->texturePriv().mipMapped(), isProtected, key);
     }
 }
 
-void GrTexture::ComputeScratchKey(const GrCaps& caps,
-                                  const GrBackendFormat& format,
-                                  SkISize dimensions,
-                                  GrRenderable renderable,
-                                  int sampleCnt,
-                                  GrMipmapped mipMapped,
-                                  GrProtected isProtected,
-                                  GrScratchKey* key) {
+void GrTexturePriv::ComputeScratchKey(const GrCaps& caps,
+                                      const GrBackendFormat& format,
+                                      SkISize dimensions,
+                                      GrRenderable renderable,
+                                      int sampleCnt,
+                                      GrMipMapped mipMapped,
+                                      GrProtected isProtected,
+                                      GrScratchKey* key) {
     static const GrScratchKey::ResourceType kType = GrScratchKey::GenerateResourceType();
     SkASSERT(!dimensions.isEmpty());
     SkASSERT(sampleCnt > 0);

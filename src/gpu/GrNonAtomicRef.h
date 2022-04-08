@@ -53,7 +53,7 @@ public:
 private:
     mutable int32_t fRefCnt;
 
-    using INHERITED = SkNoncopyable;
+    typedef SkNoncopyable INHERITED;
 };
 
 template<typename T> inline void GrTDeleteNonAtomicRef(const T* ref) {

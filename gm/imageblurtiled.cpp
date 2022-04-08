@@ -71,11 +71,11 @@ private:
     SkScalar fSigmaX;
     SkScalar fSigmaY;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new  ImageBlurTiledGM(3.0f, 3.0f);)
 
-}  // namespace skiagm
+}

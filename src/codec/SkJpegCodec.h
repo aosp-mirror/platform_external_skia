@@ -44,10 +44,10 @@ protected:
     Result onGetPixels(const SkImageInfo& dstInfo, void* dst, size_t dstRowBytes, const Options&,
             int*) override;
 
-    bool onQueryYUVAInfo(const SkYUVAPixmapInfo::SupportedDataTypes&,
-                         SkYUVAPixmapInfo*) const override;
+    bool onQueryYUV8(SkYUVASizeInfo* sizeInfo, SkYUVColorSpace* colorSpace) const override;
 
-    Result onGetYUVAPlanes(const SkYUVAPixmaps& yuvaPixmaps) override;
+    Result onGetYUV8Planes(const SkYUVASizeInfo& sizeInfo,
+                           void* planes[SkYUVASizeInfo::kMaxCount]) override;
 
     SkEncodedImageFormat onGetEncodedFormat() const override {
         return SkEncodedImageFormat::kJPEG;
@@ -138,7 +138,7 @@ private:
 
     friend class SkRawCodec;
 
-    using INHERITED = SkCodec;
+    typedef SkCodec INHERITED;
 };
 
 #endif

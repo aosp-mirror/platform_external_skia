@@ -142,7 +142,7 @@ private:
     unsigned int fSaveBehindCount;
     unsigned int fRestoreCount;
 
-    using INHERITED = SkCanvas;
+    typedef SkCanvas INHERITED;
 };
 
 void check_save_state(skiatest::Reporter* reporter, SkPicture* picture,
@@ -239,7 +239,7 @@ DEF_TEST(PictureRecorder_replay, reporter) {
     {
         SkPictureRecorder recorder;
 
-        SkCanvas* canvas = recorder.beginRecording(4, 3);
+        SkCanvas* canvas = recorder.beginRecording(4, 3, nullptr, 0);
         create_imbalance(canvas);
 
         int expectedSaveCount = canvas->getSaveCount();
@@ -349,22 +349,23 @@ static void test_peephole() {
     }
 }
 
-static void test_bad_bitmap(skiatest::Reporter* reporter) {
-    // missing pixels should return null for image
+#ifndef SK_DEBUG
+// Only test this is in release mode. We deliberately crash in debug mode, since a valid caller
+// should never do this.
+static void test_bad_bitmap() {
+    // This bitmap has a width and height but no pixels. As a result, attempting to record it will
+    // fail.
     SkBitmap bm;
     bm.setInfo(SkImageInfo::MakeN32Premul(100, 100));
-    auto img = bm.asImage();
-    REPORTER_ASSERT(reporter, !img);
-
-    // make sure we don't crash on a null image
     SkPictureRecorder recorder;
     SkCanvas* recordingCanvas = recorder.beginRecording(100, 100);
-    recordingCanvas->drawImage(nullptr, 0, 0);
+    recordingCanvas->drawBitmap(bm, 0, 0);
     sk_sp<SkPicture> picture(recorder.finishRecordingAsPicture());
 
     SkCanvas canvas;
     canvas.drawPicture(picture);
 }
+#endif
 
 static void test_clip_bound_opt(skiatest::Reporter* reporter) {
     // Test for crbug.com/229011
@@ -504,7 +505,7 @@ public:
 private:
     unsigned fClipCount;
 
-    using INHERITED = SkCanvas;
+    typedef SkCanvas INHERITED;
 };
 
 static void test_clip_expansion(skiatest::Reporter* reporter) {
@@ -561,8 +562,9 @@ DEF_TEST(Picture, reporter) {
 #ifdef SK_DEBUG
     test_deleting_empty_picture();
     test_serializing_empty_picture();
+#else
+    test_bad_bitmap();
 #endif
-    test_bad_bitmap(reporter);
     test_unbalanced_save_restores(reporter);
     test_peephole();
     test_clip_bound_opt(reporter);
@@ -572,14 +574,20 @@ DEF_TEST(Picture, reporter) {
 }
 
 static void draw_bitmaps(const SkBitmap bitmap, SkCanvas* canvas) {
+    const SkPaint paint;
     const SkRect rect = { 5.0f, 5.0f, 8.0f, 8.0f };
-    auto img = bitmap.asImage();
+    const SkIRect irect =  { 2, 2, 3, 3 };
+    int divs[] = { 2, 3 };
+    SkCanvas::Lattice lattice;
+    lattice.fXCount = lattice.fYCount = 2;
+    lattice.fXDivs = lattice.fYDivs = divs;
 
     // Don't care what these record, as long as they're legal.
-    canvas->drawImage(img, 0.0f, 0.0f);
-    canvas->drawImageRect(img, rect, rect, SkSamplingOptions(), nullptr,
-                          SkCanvas::kStrict_SrcRectConstraint);
-    canvas->drawImage(img, 1, 1);   // drawSprite
+    canvas->drawBitmap(bitmap, 0.0f, 0.0f, &paint);
+    canvas->drawBitmapRect(bitmap, rect, rect, &paint, SkCanvas::kStrict_SrcRectConstraint);
+    canvas->drawBitmapNine(bitmap, irect, rect, &paint);
+    canvas->drawBitmap(bitmap, 1, 1);   // drawSprite
+    canvas->drawBitmapLattice(bitmap, lattice, rect, &paint);
 }
 
 static void test_draw_bitmaps(SkCanvas* canvas) {
@@ -631,8 +639,8 @@ DEF_TEST(DontOptimizeSaveLayerDrawDrawRestore, reporter) {
     canvas->drawColor(0);
 
     canvas->saveLayer(nullptr, &semiTransparent);
-    canvas->drawImage(blueBM.asImage(), 25, 25);
-    canvas->drawImage(redBM.asImage(), 50, 50);
+    canvas->drawBitmap(blueBM, 25, 25);
+    canvas->drawBitmap(redBM, 50, 50);
     canvas->restore();
 
     sk_sp<SkPicture> picture(recorder.finishRecordingAsPicture());
@@ -660,7 +668,7 @@ struct CountingBBH : public SkBBoxHierarchy {
     }
 
     void insert(const SkRect[], int) override {}
-    size_t bytesUsed() const override { return 0; }
+    virtual size_t bytesUsed() const override { return 0; }
 };
 
 class SpoonFedBBHFactory : public SkBBHFactory {
@@ -714,8 +722,8 @@ DEF_TEST(Picture_BitmapLeak, r) {
         // place it inside local braces.
         SkPictureRecorder rec;
         SkCanvas* canvas = rec.beginRecording(1920, 1200);
-            canvas->drawImage(mut.asImage(), 0, 0);
-            canvas->drawImage(immut.asImage(), 800, 600);
+            canvas->drawBitmap(mut, 0, 0);
+            canvas->drawBitmap(immut, 800, 600);
         pic = rec.finishRecordingAsPicture();
     }
 
@@ -847,11 +855,6 @@ DEF_TEST(Placeholder, r) {
         canvas->drawPicture(p2);
     sk_sp<SkPicture> pic = recorder.finishRecordingAsPicture();
     REPORTER_ASSERT(r, pic->approximateOpCount() == 2);
-
-    // Any upper limit when recursing into nested placeholders is fine as long
-    // as it doesn't overflow an int.
-    REPORTER_ASSERT(r, pic->approximateOpCount(/*nested?*/true) >=  2);
-    REPORTER_ASSERT(r, pic->approximateOpCount(/*nested?*/true) <= 10);
 }
 
 DEF_TEST(Picture_empty_serial, reporter) {
@@ -964,37 +967,4 @@ DEF_TEST(Picture_fillsBBH, r) {
         REPORTER_ASSERT(r, (int)results.size() == n,
                         "results.size() == %d, want %d\n", (int)results.size(), n);
     }
-}
-
-DEF_TEST(Picture_nested_op_count, r) {
-    auto make_pic = [](int n, sk_sp<SkPicture> pic) {
-        SkPictureRecorder rec;
-        SkCanvas* c = rec.beginRecording({0,0, 100,100});
-        for (int i = 0; i < n; i++) {
-            if (pic) {
-                c->drawPicture(pic);
-            } else {
-                c->drawRect({0,0, 100,100}, SkPaint{});
-            }
-        }
-        return rec.finishRecordingAsPicture();
-    };
-
-    auto check = [r](sk_sp<SkPicture> pic, int shallow, int nested) {
-        int s = pic->approximateOpCount(false);
-        int n = pic->approximateOpCount(true);
-        REPORTER_ASSERT(r, s == shallow);
-        REPORTER_ASSERT(r, n == nested);
-    };
-
-    sk_sp<SkPicture> leaf1 = make_pic(1, nullptr);
-    check(leaf1, 1, 1);
-
-    sk_sp<SkPicture> leaf10 = make_pic(10, nullptr);
-    check(leaf10, 10, 10);
-
-    check(make_pic( 1, leaf1),   1,   1);
-    check(make_pic( 1, leaf10),  1,  10);
-    check(make_pic(10, leaf1),  10,  10);
-    check(make_pic(10, leaf10), 10, 100);
 }

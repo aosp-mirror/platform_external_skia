@@ -61,9 +61,9 @@ DEF_TEST(SkPDF_JpegEmbedTest, r) {
     canvas->clear(SK_ColorLTGRAY);
 
     sk_sp<SkImage> im1(SkImage::MakeFromEncoded(mandrillData));
-    canvas->drawImage(im1.get(), 65.0, 0.0);
+    canvas->drawImage(im1.get(), 65.0, 0.0, nullptr);
     sk_sp<SkImage> im2(SkImage::MakeFromEncoded(cmykData));
-    canvas->drawImage(im2.get(), 0.0, 512.0);
+    canvas->drawImage(im2.get(), 0.0, 512.0, nullptr);
 
     document->endPage();
     document->close();

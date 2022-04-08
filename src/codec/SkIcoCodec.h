@@ -86,8 +86,7 @@ private:
      * Constructor called by NewFromStream
      * @param embeddedCodecs codecs for the embedded images, takes ownership
      */
-    SkIcoCodec(SkEncodedInfo&& info, std::unique_ptr<SkStream>,
-               SkTArray<std::unique_ptr<SkCodec>, true>* embeddedCodecs);
+    SkIcoCodec(SkEncodedInfo&& info, SkTArray<std::unique_ptr<SkCodec>, true>* embeddedCodecs);
 
     std::unique_ptr<SkTArray<std::unique_ptr<SkCodec>, true>> fEmbeddedCodecs;
 
@@ -95,6 +94,6 @@ private:
     // std::unique_ptr.  It will be deleted by the destructor of fEmbeddedCodecs.
     SkCodec* fCurrCodec;
 
-    using INHERITED = SkCodec;
+    typedef SkCodec INHERITED;
 };
 #endif  // SkIcoCodec_DEFINED

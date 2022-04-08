@@ -11,14 +11,14 @@
 #include "include/private/GrTypesPriv.h"
 
 class GrClip;
+class GrContext;
 class GrPaint;
 class GrRecordingContext;
 class GrRenderTarget;
-class GrSurfaceDrawContext;
-class GrStyledShape;
+class GrRenderTargetContext;
+class GrShape;
 class GrStyle;
 struct SkIRect;
-class SkMatrixProvider;
 class SkMaskFilter;
 class SkMatrix;
 class SkPaint;
@@ -34,23 +34,23 @@ namespace GrBlurUtils {
      * Draw a shape handling the mask filter if present.
      */
     void drawShapeWithMaskFilter(GrRecordingContext*,
-                                 GrSurfaceDrawContext*,
-                                 const GrClip*,
+                                 GrRenderTargetContext*,
+                                 const GrClip&,
                                  const SkPaint&,
-                                 const SkMatrixProvider&,
-                                 const GrStyledShape&);
+                                 const SkMatrix& viewMatrix,
+                                 const GrShape&);
 
     /**
      * Draw a shape handling the mask filter. The mask filter is not optional.
      * The GrPaint will be modified after return.
      */
     void drawShapeWithMaskFilter(GrRecordingContext*,
-                                 GrSurfaceDrawContext*,
-                                 const GrClip*,
-                                 const GrStyledShape&,
+                                 GrRenderTargetContext*,
+                                 const GrClip&,
+                                 const GrShape&,
                                  GrPaint&&,
                                  const SkMatrix& viewMatrix,
                                  const SkMaskFilter*);
-}  // namespace GrBlurUtils
+};
 
 #endif

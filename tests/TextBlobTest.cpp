@@ -323,7 +323,8 @@ DEF_TEST(TextBlob_extended, reporter) {
     SkAutoTMalloc<uint16_t> glyphs(glyphCount);
     (void)font.textToGlyphs(text1, strlen(text1), SkTextEncoding::kUTF8, glyphs.get(), glyphCount);
 
-    auto run = textBlobBuilder.allocRunText(font, glyphCount, 0, 0, SkToInt(strlen(text2)));
+    auto run = SkTextBlobBuilderPriv::AllocRunText(&textBlobBuilder,
+            font, glyphCount, 0, 0, SkToInt(strlen(text2)), SkString(), nullptr);
     memcpy(run.glyphs, glyphs.get(), sizeof(uint16_t) * glyphCount);
     memcpy(run.utf8text, text2, strlen(text2));
     for (int i = 0; i < glyphCount; ++i) {

@@ -11,12 +11,11 @@
 
 #if SK_SUPPORT_GPU && defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26
 
-#include "include/core/SkCanvas.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkSurface.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrContext.h"
 #include "src/gpu/GrAHardwareBufferImageGenerator.h"
-#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrGpu.h"
 #include "tests/Test.h"
 #include "tools/gpu/GrContextFactory.h"
@@ -102,7 +101,7 @@ static void basic_draw_test_helper(skiatest::Reporter* reporter,
                                    const sk_gpu_test::ContextInfo& info,
                                    GrSurfaceOrigin surfaceOrigin) {
 
-    auto context = info.directContext();
+    GrContext* context = info.grContext();
     if (!context->priv().caps()->supportsAHardwareBufferImages()) {
         return;
     }
@@ -212,7 +211,7 @@ static void surface_draw_test_helper(skiatest::Reporter* reporter,
                                      const sk_gpu_test::ContextInfo& info,
                                      GrSurfaceOrigin surfaceOrigin) {
 
-    auto context = info.directContext();
+    GrContext* context = info.grContext();
     if (!context->priv().caps()->supportsAHardwareBufferImages()) {
         return;
     }
@@ -258,7 +257,7 @@ static void surface_draw_test_helper(skiatest::Reporter* reporter,
         return;
     }
 
-    surface->getCanvas()->drawImage(srcBitmap.asImage(), 0, 0);
+    surface->getCanvas()->drawBitmap(srcBitmap, 0, 0);
 
     SkBitmap readbackBitmap;
     readbackBitmap.allocN32Pixels(DEV_W, DEV_H);

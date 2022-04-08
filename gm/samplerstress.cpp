@@ -84,8 +84,7 @@ protected:
 
         createTexture();
 
-        fShader = fTexture.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
-                                      SkSamplingOptions());
+        fShader = fTexture.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat);
     }
 
     void createMaskFilter() {
@@ -143,11 +142,11 @@ private:
     sk_sp<SkShader> fShader;
     sk_sp<SkMaskFilter> fMaskFilter;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM( return new SamplerStressGM; )
 
-}  // namespace skiagm
+}

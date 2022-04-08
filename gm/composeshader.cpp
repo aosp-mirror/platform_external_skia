@@ -50,11 +50,12 @@ static sk_sp<SkShader> make_shader(SkBlendMode mode) {
 }
 
 class ComposeShaderGM : public skiagm::GM {
-protected:
-    void onOnceBeforeDraw() override {
+public:
+    ComposeShaderGM() {
         fShader = make_shader(SkBlendMode::kDstIn);
     }
 
+protected:
     SkString onShortName() override {
         return SkString("composeshader");
     }
@@ -174,10 +175,9 @@ protected:
         draw_alpha8_bm(&fAlpha8Bitmap, squareLength);
         SkMatrix s;
         s.reset();
-        fColorBitmapShader = fColorBitmap.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
-                                                     SkSamplingOptions(), s);
-        fAlpha8BitmapShader = fAlpha8Bitmap.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
-                                                       SkSamplingOptions(), s);
+        fColorBitmapShader = fColorBitmap.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, &s);
+        fAlpha8BitmapShader = fAlpha8Bitmap.makeShader(SkTileMode::kRepeat,
+                                                       SkTileMode::kRepeat, &s);
         fLinearGradientShader = make_linear_gradient_shader(squareLength);
     }
 
@@ -192,24 +192,23 @@ protected:
     void onDraw(SkCanvas* canvas) override {
         SkBlendMode mode = SkBlendMode::kDstOver;
 
-        SkMatrix lm = SkMatrix::Translate(0, squareLength * 0.5f);
+        SkTLazy<SkMatrix> lm;
+        if (fUseLocalMatrix) {
+            lm.set(SkMatrix::MakeTrans(0, squareLength * 0.5f));
+        }
 
         sk_sp<SkShader> shaders[] = {
             // gradient should appear over color bitmap
-            SkShaders::Blend(mode, fLinearGradientShader, fColorBitmapShader),
+            SkShaders::Blend(mode, fLinearGradientShader, fColorBitmapShader, lm.getMaybeNull()),
             // gradient should appear over alpha8 bitmap colorized by the paint color
-            SkShaders::Blend(mode, fLinearGradientShader, fAlpha8BitmapShader),
+            SkShaders::Blend(mode, fLinearGradientShader, fAlpha8BitmapShader, lm.getMaybeNull()),
         };
-        if (fUseLocalMatrix) {
-            for (unsigned i = 0; i < SK_ARRAY_COUNT(shaders); ++i) {
-                shaders[i] = shaders[i]->makeWithLocalMatrix(lm);
-            }
-        }
 
         SkPaint paint;
         paint.setColor(SK_ColorYELLOW);
 
-        const SkRect r = SkRect::MakeIWH(squareLength, squareLength);
+        const SkRect r = SkRect::MakeXYWH(0, 0, SkIntToScalar(squareLength),
+                                          SkIntToScalar(squareLength));
 
         for (size_t y = 0; y < SK_ARRAY_COUNT(shaders); ++y) {
             canvas->save();
@@ -241,7 +240,7 @@ private:
     sk_sp<SkShader> fAlpha8BitmapShader;
     sk_sp<SkShader> fLinearGradientShader;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 DEF_GM( return new ComposeShaderBitmapGM(false); )
 DEF_GM( return new ComposeShaderBitmapGM(true); )
@@ -272,12 +271,10 @@ DEF_SIMPLE_GM(composeshader_bitmap2, canvas, 200, 200) {
     imageInfo = SkImageInfo::Make(width, height,
             SkColorType::kAlpha_8_SkColorType, kPremul_SkAlphaType);
     skMask.installPixels(imageInfo, dst8Storage.begin(), width, nullptr, nullptr);
-    sk_sp<SkImage> skSrc = skBitmap.asImage();
-    sk_sp<SkImage> skMaskImage = skMask.asImage();
+    sk_sp<SkImage> skSrc = SkImage::MakeFromBitmap(skBitmap);
+    sk_sp<SkImage> skMaskImage = SkImage::MakeFromBitmap(skMask);
     paint.setShader(
-        SkShaders::Blend(SkBlendMode::kSrcIn,
-                         skMaskImage->makeShader(SkSamplingOptions()),
-                         skSrc->makeShader(SkSamplingOptions())));
+        SkShaders::Blend(SkBlendMode::kSrcIn, skMaskImage->makeShader(), skSrc->makeShader()));
     canvas->drawRect(r, paint);
 }
 

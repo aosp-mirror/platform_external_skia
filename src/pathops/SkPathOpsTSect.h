@@ -9,6 +9,7 @@
 
 #include "include/private/SkMacros.h"
 #include "src/core/SkArenaAlloc.h"
+#include "src/core/SkTSort.h"
 #include "src/pathops/SkIntersections.h"
 #include "src/pathops/SkPathOpsBounds.h"
 #include "src/pathops/SkPathOpsRect.h"
@@ -97,10 +98,10 @@ public:
 
     void debugInit(const SkTCurve& curve, SkArenaAlloc& heap) {
 #ifdef SK_DEBUG
-        SkTCurve* fake = curve.make(heap);
-        fake->debugInit();
-        init(*fake);
-        initBounds(*fake);
+        SkTCurve* dummy = curve.make(heap);
+        dummy->debugInit();
+        init(*dummy);
+        initBounds(*dummy);
         fCoinStart.init();
         fCoinEnd.init();
 #endif

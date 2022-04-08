@@ -17,6 +17,6 @@ void draw(SkCanvas* canvas) {
         }
     }
     canvas->concat(matrix);
-    canvas->drawImage(image, 0, 0);
+    canvas->drawBitmap(source, 0, 0);
 }
 }  // END FIDDLE

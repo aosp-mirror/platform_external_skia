@@ -360,7 +360,7 @@ private:
     }
 
 private:
-    using INHERITED = GradientsGM;
+    typedef GradientsGM INHERITED;
 };
 DEF_GM( return new GradientsViewPerspectiveGM(true); )
 DEF_GM( return new GradientsViewPerspectiveGM(false); )
@@ -579,7 +579,7 @@ private:
 private:
     bool fDither;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 DEF_GM( return new RadialGradient2GM(true); )
 DEF_GM( return new RadialGradient2GM(false); )
@@ -617,7 +617,7 @@ private:
     sk_sp<SkShader> fShader;
     bool fDither;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 DEF_GM( return new RadialGradient3GM(true); )
 DEF_GM( return new RadialGradient3GM(false); )
@@ -655,7 +655,7 @@ private:
     sk_sp<SkShader> fShader;
     bool fDither;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 DEF_GM( return new RadialGradient4GM(true); )
 DEF_GM( return new RadialGradient4GM(false); )
@@ -707,7 +707,7 @@ private:
     sk_sp<SkShader> fShader[100];
     bool fDither;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 DEF_GM( return new LinearGradientGM(true); )
 DEF_GM( return new LinearGradientGM(false); )
@@ -922,8 +922,8 @@ DEF_SIMPLE_GM(fancy_gradients, canvas, 800, 300) {
         SkMatrix m = SkMatrix::I();
         m.preRotate(45);
         return recorder.finishRecordingAsPicture()->makeShader(
-                                           SkTileMode::kRepeat, SkTileMode::kRepeat,
-                                           SkFilterMode::kNearest, &m, nullptr);
+                                           SkTileMode::kRepeat,
+                                           SkTileMode::kRepeat, &m, nullptr);
     });
 
     draw_circle_shader(canvas, 400, 150, 100, []() -> sk_sp<SkShader> {
@@ -944,7 +944,7 @@ DEF_SIMPLE_GM(fancy_gradients, canvas, 800, 300) {
 
         return recorder.finishRecordingAsPicture()->makeShader(
                                            SkTileMode::kRepeat,
-                                           SkTileMode::kRepeat, SkFilterMode::kNearest);
+                                           SkTileMode::kRepeat);
     });
 
     draw_circle_shader(canvas, 650, 150, 100, []() -> sk_sp<SkShader> {

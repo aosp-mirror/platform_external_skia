@@ -8,24 +8,25 @@
 #ifndef GrDistanceFieldAdjustTable_DEFINED
 #define GrDistanceFieldAdjustTable_DEFINED
 
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
 
 // Distance field text needs this table to compute a value for use in the fragment shader.
-class GrDistanceFieldAdjustTable {
-public:
-    static const GrDistanceFieldAdjustTable* Get();
-
+// Because the GrTextContext can go out of scope before the final flush, this needs to be
+// refcnted and malloced
+struct GrDistanceFieldAdjustTable : public SkNVRefCnt<GrDistanceFieldAdjustTable> {
+    GrDistanceFieldAdjustTable() { this->buildDistanceAdjustTables(); }
     ~GrDistanceFieldAdjustTable() {
         delete[] fTable;
         delete[] fGammaCorrectTable;
     }
 
-    SkScalar getAdjustment(int i, bool useGammaCorrectTable) const {
+    const SkScalar& getAdjustment(int i, bool useGammaCorrectTable) const {
         return useGammaCorrectTable ? fGammaCorrectTable[i] : fTable[i];
     }
 
 private:
-    GrDistanceFieldAdjustTable();
+    void buildDistanceAdjustTables();
 
     SkScalar* fTable;
     SkScalar* fGammaCorrectTable;

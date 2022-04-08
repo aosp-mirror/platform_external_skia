@@ -80,7 +80,7 @@ public:
         Wide operator << (int bits) const { return INHERITED::operator<<(bits); }
 
     private:
-        using INHERITED = Sk16h;
+        typedef Sk16h INHERITED;
     };
 
     Wide widen() const;               // Widen 8-bit values to low 8-bits of 16-bit lanes.
@@ -231,7 +231,7 @@ public:
 private:
     Sk4px() = default;
 
-    using INHERITED = Sk16b;
+    typedef Sk16b INHERITED;
 };
 
 static_assert(sizeof(Sk4px) == sizeof(Sk16b));

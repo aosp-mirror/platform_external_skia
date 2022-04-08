@@ -61,7 +61,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 DEF_BENCH(return new RegionContainBench(sect_proc, "sect");)

@@ -10,9 +10,9 @@
 #include "samplecode/Sample.h"
 
 #if SK_SUPPORT_GPU
-#   include "include/gpu/GrDirectContext.h"
+#   include "include/gpu/GrContext.h"
 #else
-class GrDirectContext;
+class GrContext;
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
@@ -49,9 +49,9 @@ void Sample::draw(SkCanvas* canvas) {
         SkAutoCanvasRestore acr(canvas, true);
         this->onDrawContent(canvas);
 #if SK_SUPPORT_GPU
-        // Ensure the context doesn't combine GrDrawOps across draw loops.
-        if (auto direct = GrAsDirectContext(canvas->recordingContext())) {
-            direct->flushAndSubmit();
+        // Ensure the GrContext doesn't combine GrDrawOps across draw loops.
+        if (GrContext* context = canvas->getGrContext()) {
+            context->flush();
         }
 #endif
 
@@ -62,10 +62,6 @@ void Sample::draw(SkCanvas* canvas) {
 ////////////////////////////////////////////////////////////////////////////
 
 bool Sample::mouse(SkPoint point, skui::InputState clickState, skui::ModifierKey modifierKeys) {
-    auto dispatch = [this](Click* c) {
-        return c->fHasFunc ? c->fFunc(c) : this->onClick(c);
-    };
-
     switch (clickState) {
         case skui::InputState::kDown:
             fClick = nullptr;
@@ -76,7 +72,7 @@ bool Sample::mouse(SkPoint point, skui::InputState clickState, skui::ModifierKey
             fClick->fPrev = fClick->fCurr = fClick->fOrig = point;
             fClick->fState = skui::InputState::kDown;
             fClick->fModifierKeys = modifierKeys;
-            dispatch(fClick.get());
+            this->onClick(fClick.get());
             return true;
         case skui::InputState::kMove:
             if (fClick) {
@@ -84,7 +80,7 @@ bool Sample::mouse(SkPoint point, skui::InputState clickState, skui::ModifierKey
                 fClick->fCurr = point;
                 fClick->fState = skui::InputState::kMove;
                 fClick->fModifierKeys = modifierKeys;
-                return dispatch(fClick.get());
+                return this->onClick(fClick.get());
             }
             return false;
         case skui::InputState::kUp:
@@ -93,7 +89,7 @@ bool Sample::mouse(SkPoint point, skui::InputState clickState, skui::ModifierKey
                 fClick->fCurr = point;
                 fClick->fState = skui::InputState::kUp;
                 fClick->fModifierKeys = modifierKeys;
-                bool result = dispatch(fClick.get());
+                bool result = this->onClick(fClick.get());
                 fClick = nullptr;
                 return result;
             }

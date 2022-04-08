@@ -127,6 +127,7 @@ private:
         fInfo_ptr = nullptr;
     }
 };
+#define AutoCleanPng(...) SK_REQUIRE_LOCAL_VAR(AutoCleanPng)
 
 static inline bool is_chunk(const png_byte* chunk, const char* tag) {
     return memcmp(chunk + 4, tag, 4) == 0;
@@ -324,7 +325,7 @@ bool SkPngCodec::createColorTable(const SkImageInfo& dstInfo) {
 // Creation
 ///////////////////////////////////////////////////////////////////////////////
 
-bool SkPngCodec::IsPng(const void* buf, size_t bytesRead) {
+bool SkPngCodec::IsPng(const char* buf, size_t bytesRead) {
     return !png_sig_cmp((png_bytep) buf, (png_size_t)0, bytesRead);
 }
 
@@ -519,7 +520,7 @@ private:
     int                         fLastRow;
     int                         fRowsNeeded;
 
-    using INHERITED = SkPngCodec;
+    typedef SkPngCodec INHERITED;
 
     static SkPngNormalDecoder* GetDecoder(png_structp png_ptr) {
         return static_cast<SkPngNormalDecoder*>(png_get_progressive_ptr(png_ptr));
@@ -635,7 +636,7 @@ private:
     size_t                  fPng_rowbytes;
     SkAutoTMalloc<png_byte> fInterlaceBuffer;
 
-    using INHERITED = SkPngCodec;
+    typedef SkPngCodec INHERITED;
 
     // FIXME: Currently sharing interlaced callback for all rows and subset. It's not
     // as expensive as the subset version of non-interlaced, but it still does extra
@@ -1034,7 +1035,8 @@ SkCodec::Result SkPngCodec::initializeXforms(const SkImageInfo& dstInfo, const O
             if (this->getEncodedInfo().bitsPerComponent() != 16) {
                 break;
             }
-            [[fallthrough]];
+
+            // Fall through
         case SkEncodedInfo::kRGBA_Color:
         case SkEncodedInfo::kGray_Color:
             skipFormatConversion = this->colorXform();

@@ -53,7 +53,7 @@ private:
     SkBlitRow::Proc32   fProc32;
     U8CPU               fAlpha;
 
-    using INHERITED = SkSpriteBlitter;
+    typedef SkSpriteBlitter INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -85,7 +85,7 @@ protected:
     SkXfermode* fXfermode;
 
 private:
-    using INHERITED = SkSpriteBlitter;
+    typedef SkSpriteBlitter INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

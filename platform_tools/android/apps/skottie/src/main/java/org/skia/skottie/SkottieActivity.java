@@ -19,6 +19,7 @@ import android.widget.Button;
 import android.widget.GridLayout;
 
 import java.io.FileNotFoundException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -31,6 +32,8 @@ import static java.lang.Math.sqrt;
 public class SkottieActivity extends Activity implements View.OnClickListener {
 
     private final static long TIME_OUT_MS = 10000;
+
+    private SkottieApplication mApplication;
 
     private CountDownLatch mEnterAnimationFence = new CountDownLatch(1);
 
@@ -55,15 +58,16 @@ public class SkottieActivity extends Activity implements View.OnClickListener {
         };
 
         for (int resId : rawAssets) {
-            SkottieView view =  new SkottieView(this);
-            view.setSource(resId);
+            SkottieView view = new SkottieView(this);
+            view.setSource(getResources().openRawResource(resId));
             mAnimations.add(view);
         }
 
         for (Uri uri : mAnimationFiles) {
             try {
+                InputStream inputStream = getContentResolver().openInputStream(uri);
                 SkottieView view = new SkottieView(this);
-                view.setSource(this, uri);
+                view.setSource(inputStream);
                 mAnimations.add(view);
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
@@ -116,7 +120,7 @@ public class SkottieActivity extends Activity implements View.OnClickListener {
             //start and show animations that were in the background
             for (SkottieView anyView : mAnimations) {
                 if (anyView != oldView) {
-                    anyView.start();
+                    anyView.getSkottieAnimation().start();
                     anyView.setVisibility(View.VISIBLE);
                 }
             }
@@ -126,7 +130,7 @@ public class SkottieActivity extends Activity implements View.OnClickListener {
         //stop and hide animations in the background
         for (SkottieView anyView : mAnimations) {
             if (anyView != view) {
-                anyView.stop();
+                anyView.getSkottieAnimation().stop();
                 anyView.setVisibility(View.INVISIBLE);
             }
         }
@@ -171,21 +175,22 @@ public class SkottieActivity extends Activity implements View.OnClickListener {
 
     private void startAnimation() {
         for (SkottieView view : mAnimations) {
-            view.start();
+            view.getSkottieAnimation().start();
         }
     }
 
     private void stopAnimation() {
         for (SkottieView view : mAnimations) {
-            view.stop();
+            view.getSkottieAnimation().stop();
         }
     }
 
     private void addLottie(Uri uri) throws FileNotFoundException {
+        InputStream inputStream = getContentResolver().openInputStream(uri);
         int animations = mAnimations.size();
         if (animations < mRowCount * mColumnCount) {
             SkottieView view = new SkottieView(this);
-            view.setSource(this, uri);
+            view.setSource(inputStream);
             int row = animations / mColumnCount, column = animations % mColumnCount;
             mAnimations.add(view);
             mAnimationFiles.add(uri);
@@ -195,7 +200,7 @@ public class SkottieActivity extends Activity implements View.OnClickListener {
                 }
             });
             addView(view, row, column, true);
-            view.start();
+            view.getSkottieAnimation().start();
         } else {
             stopAnimation();
             mAnimationFiles.add(uri);
@@ -219,16 +224,8 @@ public class SkottieActivity extends Activity implements View.OnClickListener {
 
     private void createLayout() {
         setContentView(R.layout.main_layout);
-        Button open = (Button)findViewById(R.id.open_lottie);
-        open.setOnClickListener(this);
-
-        Button play = (Button)findViewById(R.id.play);
-        play.setOnClickListener(this);
-        Button  pause = (Button)findViewById(R.id.pause);
-        pause.setOnClickListener(this);
-        Button reset = (Button)findViewById(R.id.reset);
-        reset.setOnClickListener(this);
-
+        Button button1 = (Button)findViewById(R.id.open_lottie);
+        button1.setOnClickListener(this);
         mGrid = (GridLayout)findViewById(R.id.grid_lotties);
         mGrid.setBackgroundColor(Color.LTGRAY);
 
@@ -251,30 +248,10 @@ public class SkottieActivity extends Activity implements View.OnClickListener {
 
     @Override
     public void onClick(View view) {
-        switch(view.getId()) {
-            case R.id.open_lottie:
-                Intent intent = new Intent();
-                intent.setType("application/json");
-                Intent i = Intent.createChooser(intent, "View Default File Manager");
-                startActivityForResult(i, PICK_FILE_REQUEST);
-                break;
-            case R.id.play:
-                for (SkottieView anim : mAnimations) {
-                    anim.play();
-                }
-                break;
-            case R.id.pause:
-                for (SkottieView anim : mAnimations) {
-                    anim.pause();
-                }
-                break;
-            case R.id.reset:
-                for (SkottieView anim : mAnimations) {
-                    anim.seek(0f);
-                }
-                break;
-        }
-
+        Intent intent = new Intent();
+        intent.setType("application/json");
+        Intent i = Intent.createChooser(intent, "View Default File Manager");
+        startActivityForResult(i, PICK_FILE_REQUEST);
     }
 
     @Override

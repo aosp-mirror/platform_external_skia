@@ -7,7 +7,6 @@
 
 #include "bench/Benchmark.h"
 #include "include/core/SkString.h"
-#include "include/private/SkTemplates.h"
 #include "include/utils/SkRandom.h"
 #include "src/core/SkTSort.h"
 
@@ -67,7 +66,8 @@ static const struct {
 };
 
 static void skqsort_sort(int array[N]) {
-    SkTQSort<int>(array, array + N);
+    // End is inclusive for SkTQSort!
+    SkTQSort<int>(array, array + N - 1);
 }
 
 static void skheap_sort(int array[N]) {
@@ -144,7 +144,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

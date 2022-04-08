@@ -75,7 +75,7 @@ static sk_sp<SkShader> make_bg_shader() {
 
     SkMatrix m;
     m.setScale(SkIntToScalar(6), SkIntToScalar(6));
-    return bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, SkSamplingOptions(), m);
+    return bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, &m);
 }
 
 namespace skiagm {
@@ -88,7 +88,7 @@ namespace skiagm {
             return SkString("hairmodes");
         }
 
-        SkISize onISize() override { return SkISize::Make(640, 480); }
+        virtual SkISize onISize() override { return SkISize::Make(640, 480); }
 
         void onOnceBeforeDraw() override {
             fBGPaint.setShader(make_bg_shader());
@@ -126,10 +126,10 @@ namespace skiagm {
         }
 
     private:
-        using INHERITED = GM;
+        typedef GM INHERITED;
     };
 
     //////////////////////////////////////////////////////////////////////////////
 
     DEF_GM( return new HairModesGM; )
-}  // namespace skiagm
+}

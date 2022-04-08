@@ -124,15 +124,15 @@ protected:
                                 * SkM44::Translate(0, ringY, 0)
                                 * SkM44::Rotate({0,1,0}, SkDegreesToRadians(yRotation))
                                 * SkM44::Translate(0, 0, kRingRadius);
-                    canvas->concat(model);
+                    canvas->concat44(model);
 
                     SkRect poster = SkRect::MakeLTRB(-0.5f * kPosterSize, -0.5f * kPosterSize,
                                                       0.5f * kPosterSize,  0.5f * kPosterSize);
                     SkPaint fillPaint;
                     fillPaint.setAntiAlias(true);
                     fillPaint.setAlphaf(0.7f);
-                    canvas->drawImageRect(fPosterImages[i], poster,
-                                          SkSamplingOptions(SkFilterMode::kLinear), &fillPaint);
+                    fillPaint.setFilterQuality(kLow_SkFilterQuality);
+                    canvas->drawImageRect(fPosterImages[i], poster, &fillPaint);
 
                     canvas->restore();
                 }

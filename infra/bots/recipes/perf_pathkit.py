@@ -19,7 +19,7 @@ DEPS = [
 ]
 
 
-DOCKER_IMAGE = 'gcr.io/skia-public/perf-karma-chrome-tests:87.0.4280.88_v1'
+DOCKER_IMAGE = 'gcr.io/skia-public/perf-karma-chrome-tests:77.0.3865.120_v1'
 INNER_KARMA_SCRIPT = 'skia/infra/pathkit/perf_pathkit.sh'
 
 
@@ -29,7 +29,7 @@ def RunSteps(api):
   out_dir = api.vars.swarming_out_dir
 
   # Make sure this exists, otherwise Docker will make it with root permissions.
-  api.file.ensure_directory('mkdirs out_dir', out_dir, mode=0o777)
+  api.file.ensure_directory('mkdirs out_dir', out_dir, mode=0777)
 
   # The karma script is configured to look in ./npm-(asmjs|wasm)/bin/ for
   # the test files to load, so we must copy them there (see Set up for docker).
@@ -88,8 +88,8 @@ def RunSteps(api):
 
 def GenTests(api):
   yield (
-      api.test('Perf-Debian10-EMCC-GCE-CPU-AVX2-wasm-Release-All-PathKit') +
-      api.properties(buildername=('Perf-Debian10-EMCC-GCE-CPU-AVX2'
+      api.test('Perf-Debian9-EMCC-GCE-CPU-AVX2-wasm-Release-All-PathKit') +
+      api.properties(buildername=('Perf-Debian9-EMCC-GCE-CPU-AVX2'
                                   '-wasm-Release-All-PathKit'),
                      repository='https://skia.googlesource.com/skia.git',
                      revision='abc123',
@@ -98,8 +98,8 @@ def GenTests(api):
   )
 
   yield (
-      api.test('Perf-Debian10-EMCC-GCE-CPU-AVX2-asmjs-Release-All-PathKit') +
-      api.properties(buildername=('Perf-Debian10-EMCC-GCE-CPU-AVX2'
+      api.test('Perf-Debian9-EMCC-GCE-CPU-AVX2-asmjs-Release-All-PathKit') +
+      api.properties(buildername=('Perf-Debian9-EMCC-GCE-CPU-AVX2'
                                   '-asmjs-Release-All-PathKit'),
                      repository='https://skia.googlesource.com/skia.git',
                      revision='abc123',
@@ -109,7 +109,7 @@ def GenTests(api):
 
   yield (
       api.test('pathkit_trybot') +
-      api.properties(buildername=('Perf-Debian10-EMCC-GCE-CPU-AVX2'
+      api.properties(buildername=('Perf-Debian9-EMCC-GCE-CPU-AVX2'
                                   '-wasm-Release-All-PathKit'),
                      repository='https://skia.googlesource.com/skia.git',
                      revision='abc123',

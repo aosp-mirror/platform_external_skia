@@ -88,13 +88,17 @@ protected:
     void drawPath(const SkPath& path,
                   const SkPaint& paint,
                   bool pathIsMutable = false) override;
-    void drawImageRect(const SkImage*,
-                       const SkRect* srcOrNull, const SkRect& dst,
-                       const SkSamplingOptions&, const SkPaint& paint,
-                       SkCanvas::SrcRectConstraint) override;
-    void onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) override;
-    void drawVertices(const SkVertices*, SkBlendMode, const SkPaint&) override;
-    void drawDevice(SkBaseDevice*, const SkSamplingOptions&, const SkPaint&) override;
+    void drawSprite(const SkBitmap& bitmap,
+                    int x, int y, const SkPaint& paint) override;
+    void drawBitmapRect(const SkBitmap&,
+                        const SkRect* srcOrNull, const SkRect& dst,
+                        const SkPaint& paint,
+                        SkCanvas::SrcRectConstraint) override;
+    void drawGlyphRunList(const SkGlyphRunList& glyphRunList) override;
+    void drawVertices(const SkVertices*, const SkVertices::Bone bones[], int boneCount, SkBlendMode,
+                      const SkPaint&) override;
+    void drawDevice(SkBaseDevice*, int x, int y,
+                    const SkPaint&) override;
 
 private:
     class TypefaceUse {
@@ -124,7 +128,6 @@ private:
     SkVector fCurrentPixelsPerMeter;
 
     SkTArray<TypefaceUse, true> fTypefaces;
-    SkTArray<TypefaceUse, true>* fTopTypefaces;
 
     /** Creates a GUID based id and places it into buffer.
         buffer should have space for at least GUID_ID_LEN wide characters.
@@ -272,7 +275,7 @@ private:
     SkXPSDevice(const SkXPSDevice&);
     void operator=(const SkXPSDevice&);
 
-    using INHERITED = SkClipStackDevice;
+    typedef SkClipStackDevice INHERITED;
 };
 
 #endif  // SK_BUILD_FOR_WIN

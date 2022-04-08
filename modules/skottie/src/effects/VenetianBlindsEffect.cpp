@@ -20,7 +20,7 @@ namespace internal {
 
 namespace  {
 
-class VenetianBlindsAdapter final : public MaskShaderEffectBase {
+class VenetianBlindsAdapter final : public MaskFilterEffectBase {
 public:
     static sk_sp<VenetianBlindsAdapter> Make(const skjson::ArrayValue& jprops,
                                              sk_sp<sksg::RenderNode> layer,
@@ -37,23 +37,21 @@ private:
         : INHERITED(std::move(layer), ls) {
         enum : size_t {
             kCompletion_Index = 0,
-             kDirection_Index = 1,
-                 kWidth_Index = 2,
-               kFeather_Index = 3,
+            kDirection_Index  = 1,
+            kWidth_Index      = 2,
+            kFeather_Index    = 3,
         };
 
-        EffectBinder(jprops, *abuilder, this)
-                .bind(kCompletion_Index, fCompletion)
-                .bind( kDirection_Index, fDirection )
-                .bind(     kWidth_Index, fWidth     )
-                .bind(   kFeather_Index, fFeather   );
+        this->bind(*abuilder, EffectBuilder::GetPropValue(jprops, kCompletion_Index), &fCompletion);
+        this->bind(*abuilder, EffectBuilder::GetPropValue(jprops, kDirection_Index ), &fDirection );
+        this->bind(*abuilder, EffectBuilder::GetPropValue(jprops, kWidth_Index     ), &fWidth     );
+        this->bind(*abuilder, EffectBuilder::GetPropValue(jprops, kFeather_Index   ), &fFeather   );
     }
 
     MaskInfo onMakeMask() const override {
         if (fCompletion >= 100) {
             // The layer is fully disabled.
-            // TODO: fix layer controller visibility clash and pass a null shader instead.
-            return { SkShaders::Color(SK_ColorTRANSPARENT), false };
+            return { nullptr, false };
         }
 
         if (fCompletion <= 0) {
@@ -113,9 +111,8 @@ private:
 
         // Gradient value at fp0/fp1, fp2/fp3.
         // Note: g01 > 0 iff fp0-fp1 is collapsed and g23 < 1 iff fp2-fp3 is collapsed
-        const auto g01 = std::max(0.0f, 0.5f * (1 + sk_ieee_float_divide(0 - t, df))),
-                   g23 = std::min(1.0f, 0.5f * (1 + sk_ieee_float_divide(1 - t, df)));
-        SkASSERT(0 <= g01 && g01 <= g23 && g23 <= 1);
+        const auto g01 = std::max(0.0f, 0.5f * (1 + (0 - t) / df)),
+                   g23 = std::min(1.0f, 0.5f * (1 + (1 - t) / df));
 
         const SkColor c01 = SkColorSetA(SK_ColorWHITE, SkScalarRoundToInt(g01 * 0xff)),
                       c23 = SkColorSetA(SK_ColorWHITE, SkScalarRoundToInt(g23 * 0xff)),
@@ -141,18 +138,20 @@ private:
         };
 
         return {
-            SkGradientShader::MakeLinear(pts, colors, pos, SK_ARRAY_COUNT(colors),
-                                         SkTileMode::kRepeat),
+            SkShaderMaskFilter::Make(SkGradientShader::MakeLinear(pts, colors, pos,
+                                                                  SK_ARRAY_COUNT(colors),
+                                                                  SkTileMode::kRepeat,
+                                                                  0, nullptr)),
             true
         };
     }
 
-    ScalarValue fCompletion = 0,
-                fDirection  = 0,
-                fWidth      = 0,
-                fFeather    = 0;
+    float fCompletion = 0,
+          fDirection  = 0,
+          fWidth      = 0,
+          fFeather    = 0;
 
-    using INHERITED = MaskShaderEffectBase;
+    using INHERITED = MaskFilterEffectBase;
 };
 
 } // namespace

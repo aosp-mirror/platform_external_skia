@@ -15,35 +15,28 @@ namespace SkSL {
 /**
  * A symbol representing multiple functions with the same name.
  */
-class UnresolvedFunction final : public Symbol {
-public:
-    static constexpr Kind kSymbolKind = Kind::kUnresolvedFunction;
-
+struct UnresolvedFunction : public Symbol {
     UnresolvedFunction(std::vector<const FunctionDeclaration*> funcs)
-    : INHERITED(-1, kSymbolKind, funcs[0]->name())
+    : INHERITED(-1, kUnresolvedFunction_Kind, funcs[0]->fName)
     , fFunctions(std::move(funcs)) {
-#ifdef SK_DEBUG
-        SkASSERT(!this->functions().empty());
-        for (auto func : this->functions()) {
-            SkASSERT(func->name() == name());
+#ifdef DEBUG
+        for (auto func : funcs) {
+            SkASSERT(func->fName == fName);
         }
 #endif
     }
 
-    const std::vector<const FunctionDeclaration*>& functions() const {
-        return fFunctions;
-    }
-
+#ifdef SK_DEBUG
     String description() const override {
-        return this->name();
+        return fName;
     }
+#endif
 
-private:
-    std::vector<const FunctionDeclaration*> fFunctions;
+    const std::vector<const FunctionDeclaration*> fFunctions;
 
-    using INHERITED = Symbol;
+    typedef Symbol INHERITED;
 };
 
-}  // namespace SkSL
+} // namespace
 
 #endif

@@ -13,10 +13,8 @@ using namespace sk_gpu_test;
 
 #include "tools/gpu/GrContextFactory.h"
 
-#include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkSurface.h"
-#include "include/gpu/GrDirectContext.h"
 #include "src/core/SkImagePriv.h"
 
 static bool surface_is_expected_color(SkSurface* surf, const SkImageInfo& ii, SkColor color) {
@@ -36,7 +34,7 @@ static bool surface_is_expected_color(SkSurface* surf, const SkImageInfo& ii, Sk
     return true;
 }
 
-static void basic_test(skiatest::Reporter* reporter, GrRecordingContext* rContext) {
+static void basic_test(skiatest::Reporter* reporter, GrContext* context) {
     const SkImageInfo ii = SkImageInfo::Make(64, 64, kN32_SkColorType, kPremul_SkAlphaType);
 
     SkBitmap bm;
@@ -48,7 +46,7 @@ static void basic_test(skiatest::Reporter* reporter, GrRecordingContext* rContex
     // We start off with the raster image being all red.
     sk_sp<SkImage> img = SkMakeImageFromRasterBitmap(bm, kNever_SkCopyPixelsMode);
 
-    sk_sp<SkSurface> gpuSurface = SkSurface::MakeRenderTarget(rContext, SkBudgeted::kYes, ii);
+    sk_sp<SkSurface> gpuSurface = SkSurface::MakeRenderTarget(context, SkBudgeted::kYes, ii);
     SkCanvas* canvas = gpuSurface->getCanvas();
 
     // w/o pinning - the gpu draw always reflects the current state of the underlying bitmap
@@ -64,7 +62,7 @@ static void basic_test(skiatest::Reporter* reporter, GrRecordingContext* rContex
 
     // w/ pinning - the gpu draw is stuck at the pinned state
     {
-        SkImage_pinAsTexture(img.get(), rContext); // pin at blue
+        SkImage_pinAsTexture(img.get(), context); // pin at blue
 
         canvas->drawImage(img, 0, 0);
         REPORTER_ASSERT(reporter, surface_is_expected_color(gpuSurface.get(), ii, SK_ColorGREEN));
@@ -74,7 +72,7 @@ static void basic_test(skiatest::Reporter* reporter, GrRecordingContext* rContex
         canvas->drawImage(img, 0, 0);
         REPORTER_ASSERT(reporter, surface_is_expected_color(gpuSurface.get(), ii, SK_ColorGREEN));
 
-        SkImage_unpinAsTexture(img.get(), rContext);
+        SkImage_unpinAsTexture(img.get(), context);
     }
 
     // once unpinned local changes will be picked up
@@ -95,41 +93,36 @@ static void cleanup_test(skiatest::Reporter* reporter) {
     SkCanvas bmCanvas(bm);
     bmCanvas.clear(SK_ColorRED);
 
-    GrMockOptions options;
-    sk_sp<GrDirectContext> mockContext = GrDirectContext::MakeMock(&options);
-
     for (int i = 0; i < GrContextFactory::kContextTypeCnt; ++i) {
         GrContextFactory::ContextType ctxType = (GrContextFactory::ContextType) i;
 
         {
             sk_sp<SkImage> img;
-            GrDirectContext* dContext = nullptr;
+            GrContext* context = nullptr;
 
             {
                 GrContextFactory testFactory;
                 ContextInfo info = testFactory.getContextInfo(ctxType);
-                dContext = info.directContext();
-                if (!dContext) {
+                context = info.grContext();
+                if (!context) {
                     continue;
                 }
 
                 img = SkMakeImageFromRasterBitmap(bm, kNever_SkCopyPixelsMode);
-                if (!SkImage_pinAsTexture(img.get(), dContext)) {
+                if (!SkImage_pinAsTexture(img.get(), context)) {
                     continue;
                 }
-                // Pinning on a second context should be blocked.
-                REPORTER_ASSERT(reporter, !SkImage_pinAsTexture(img.get(), mockContext.get()));
             }
 
-            // The context used to pin the image is gone at this point!
+            // The GrContext used to pin the image is gone at this point!
             // "context" isn't technically used in this call but it can't be null!
             // We don't really want to support this use case but it currently happens.
-            SkImage_unpinAsTexture(img.get(), dContext);
+            SkImage_unpinAsTexture(img.get(), context);
         }
     }
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(PinnedImageTest, reporter, ctxInfo) {
-    basic_test(reporter, ctxInfo.directContext());
+    basic_test(reporter, ctxInfo.grContext());
     cleanup_test(reporter);
 }

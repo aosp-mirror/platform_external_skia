@@ -31,15 +31,6 @@ enum GrXferBarrierType {
 /** Should be able to treat kNone as false in boolean expressions */
 static_assert(SkToBool(kNone_GrXferBarrierType) == false);
 
-// Flag version of the above enum.
-enum class GrXferBarrierFlags {
-    kNone    = 0,
-    kTexture = 1 << 0,
-    kBlend   = 1 << 1,
-};
-
-GR_MAKE_BITFIELD_CLASS_OPS(GrXferBarrierFlags)
-
 /**
  * GrXferProcessor is responsible for implementing the xfer mode that blends the src color and dst
  * color, and for applying any coverage. It does this by emitting fragment shader code and
@@ -71,17 +62,23 @@ public:
             *this = other;
         }
 
+        DstProxyView(GrSurfaceProxyView view, const SkIPoint& offset)
+            : fProxyView(std::move(view)) {
+            if (fProxyView.proxy()) {
+                fOffset = offset;
+            } else {
+                fOffset.set(0, 0);
+            }
+        }
+
         DstProxyView& operator=(const DstProxyView& other) {
             fProxyView = other.fProxyView;
             fOffset = other.fOffset;
-            fDstSampleType = other.fDstSampleType;
             return *this;
         }
 
         bool operator==(const DstProxyView& that) const {
-            return fProxyView == that.fProxyView &&
-                   fOffset == that.fOffset &&
-                   fDstSampleType == that.fDstSampleType;
+            return fProxyView == that.fProxyView && fOffset == that.fOffset;
         }
         bool operator!=(const DstProxyView& that) const { return !(*this == that); }
 
@@ -90,7 +87,7 @@ public:
         void setOffset(const SkIPoint& offset) { fOffset = offset; }
         void setOffset(int ox, int oy) { fOffset.set(ox, oy); }
 
-        GrSurfaceProxy* proxy() const { return fProxyView.proxy(); }
+        GrTextureProxy* proxy() const { return fProxyView.asTextureProxy(); }
         const GrSurfaceProxyView& proxyView() const { return fProxyView; }
 
         void setProxyView(GrSurfaceProxyView view) {
@@ -100,14 +97,9 @@ public:
             }
         }
 
-        GrDstSampleType dstSampleType() const { return fDstSampleType; }
-
-        void setDstSampleType(GrDstSampleType dstSampleType) { fDstSampleType = dstSampleType; }
-
     private:
-        GrSurfaceProxyView       fProxyView;
-        SkIPoint                 fOffset;
-        GrDstSampleType          fDstSampleType = GrDstSampleType::kNone;
+        GrSurfaceProxyView fProxyView;
+        SkIPoint           fOffset;
     };
 
     /**
@@ -116,8 +108,7 @@ public:
      */
     void getGLSLProcessorKey(const GrShaderCaps&,
                              GrProcessorKeyBuilder*,
-                             const GrSurfaceOrigin* originIfDstTexture,
-                             GrDstSampleType dstSampleType) const;
+                             const GrSurfaceOrigin* originIfDstTexture) const;
 
     /** Returns a new instance of the appropriate *GL* implementation class
         for the given GrXferProcessor; caller is responsible for deleting
@@ -147,11 +138,20 @@ public:
         BlendInfo blendInfo;
         if (!this->willReadDstColor()) {
             this->onGetBlendInfo(&blendInfo);
+        } else if (this->dstReadUsesMixedSamples()) {
+            blendInfo.fDstBlend = kIS2A_GrBlendCoeff;
         }
         return blendInfo;
     }
 
     bool willReadDstColor() const { return fWillReadDstColor; }
+
+    /**
+     * If we are performing a dst read, returns whether the base class will use mixed samples to
+     * antialias the shader's final output. If not doing a dst read, the subclass is responsible
+     * for antialiasing and this returns false.
+     */
+    bool dstReadUsesMixedSamples() const { return fDstReadUsesMixedSamples; }
 
     /**
      * Returns whether or not this xferProcossor will set a secondary output to be used with dual
@@ -176,6 +176,9 @@ public:
         if (this->fWillReadDstColor != that.fWillReadDstColor) {
             return false;
         }
+        if (this->fDstReadUsesMixedSamples != that.fDstReadUsesMixedSamples) {
+            return false;
+        }
         if (fIsLCD != that.fIsLCD) {
             return false;
         }
@@ -184,7 +187,8 @@ public:
 
 protected:
     GrXferProcessor(ClassID classID);
-    GrXferProcessor(ClassID classID, bool willReadDstColor, GrProcessorAnalysisCoverage);
+    GrXferProcessor(ClassID classID, bool willReadDstColor, bool hasMixedSamples,
+                    GrProcessorAnalysisCoverage);
 
 private:
     /**
@@ -210,9 +214,10 @@ private:
     virtual bool onIsEqual(const GrXferProcessor&) const = 0;
 
     bool fWillReadDstColor;
+    bool fDstReadUsesMixedSamples;
     bool fIsLCD;
 
-    using INHERITED = GrProcessor;
+    typedef GrProcessor INHERITED;
 };
 
 /**
@@ -272,20 +277,13 @@ public:
          * texture or because we need an xfer barrier).
          */
         kRequiresNonOverlappingDraws = 0x20,
-        /**
-         * If set the draw will use fixed function non coherent advanced blends.
-         */
-        kUsesNonCoherentHWBlending = 0x40,
-        /**
-         * If set, the existing dst value has no effect on the final output.
-         */
-        kUnaffectedByDstValue = 0x80,
     };
     GR_DECL_BITFIELD_CLASS_OPS_FRIENDS(AnalysisProperties);
 
     static sk_sp<const GrXferProcessor> MakeXferProcessor(const GrXPFactory*,
                                                           const GrProcessorAnalysisColor&,
                                                           GrProcessorAnalysisCoverage,
+                                                          bool hasMixedSamples,
                                                           const GrCaps& caps,
                                                           GrClampType);
 
@@ -301,6 +299,7 @@ protected:
 private:
     virtual sk_sp<const GrXferProcessor> makeXferProcessor(const GrProcessorAnalysisColor&,
                                                            GrProcessorAnalysisCoverage,
+                                                           bool hasMixedSamples,
                                                            const GrCaps&,
                                                            GrClampType) const = 0;
 

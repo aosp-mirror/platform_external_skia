@@ -5,10 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "modules/skottie/include/ExternalLayer.h"
+#include "modules/skottie/src/Animator.h"
 #include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/SkottieValue.h"
-#include "modules/skottie/src/animator/Animator.h"
 #include "src/utils/SkJSON.h"
 #include "tests/Test.h"
 
@@ -23,7 +22,7 @@ template <typename T>
 class MockProperty final : public AnimatablePropertyContainer {
 public:
     explicit MockProperty(const char* jprop) {
-        AnimationBuilder abuilder(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+        AnimationBuilder abuilder(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
                                   {100, 100}, 10, 1, 0);
         skjson::DOM json_dom(jprop, strlen(jprop));
 
@@ -32,7 +31,7 @@ public:
 
     operator bool() const { return fDidBind; }
 
-    const T& operator()(float t) { this->seek(t); return fValue; }
+    const T& operator()(float t) { this->tick(t); return fValue; }
 
 private:
     void onSync() override {}
@@ -41,7 +40,7 @@ private:
     bool  fDidBind;
 };
 
-}  // namespace
+}
 
 DEF_TEST(Skottie_Keyframe, reporter) {
     {

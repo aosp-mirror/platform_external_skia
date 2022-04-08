@@ -12,9 +12,9 @@ void draw(SkCanvas* canvas) {
     SkFont font(nullptr, 96);
     offscreen.clear(0);
     offscreen.drawString("e", 20, 70, font, paint);
-    paint.setImageFilter(SkImageFilters::PointLitDiffuse(
+    paint.setImageFilter(SkLightingImageFilter::MakePointLitDiffuse(
             SkPoint3::Make(80, 100, 10), SK_ColorWHITE, 1, 2, nullptr, nullptr));
-    canvas->drawImage(bitmap.asImage(), 0, 0, SkSamplingOptions(), &paint);
+    canvas->drawBitmap(bitmap, 0, 0, &paint);
 }
 
 }  // END FIDDLE

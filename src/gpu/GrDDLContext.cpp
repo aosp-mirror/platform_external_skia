@@ -5,23 +5,24 @@
  * found in the LICENSE file.
  */
 
-#include "include/gpu/GrRecordingContext.h"
+#include "include/gpu/GrContext.h"
 #include "src/core/SkLRUCache.h"
 #include "src/gpu/GrCaps.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrContextThreadSafeProxyPriv.h"
 #include "src/gpu/GrProgramDesc.h"
 #include "src/gpu/GrProgramInfo.h"
-#include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/effects/GrSkSLFP.h"
 
 /**
  * The DDL Context is the one in effect during DDL Recording. It isn't backed by a GrGPU and
  * cannot allocate any GPU resources.
  */
-class GrDDLContext final : public GrRecordingContext {
+class GrDDLContext final : public GrContext {
 public:
     GrDDLContext(sk_sp<GrContextThreadSafeProxy> proxy)
-        : INHERITED(std::move(proxy), true) {
+            : INHERITED(proxy->backend(), proxy->priv().options(), proxy->priv().contextID()) {
+        fThreadSafeProxy = std::move(proxy);
     }
 
     ~GrDDLContext() override {}
@@ -31,20 +32,56 @@ public:
         INHERITED::abandonContext();
     }
 
+    void releaseResourcesAndAbandonContext() override {
+        SkASSERT(0); // abandoning in a DDL Recorder doesn't make a whole lot of sense
+        INHERITED::releaseResourcesAndAbandonContext();
+    }
+
+    void freeGpuResources() override {
+        SkASSERT(0); // freeing resources in a DDL Recorder doesn't make a whole lot of sense
+        INHERITED::freeGpuResources();
+    }
+
 private:
+    // TODO: Here we're pretending this isn't derived from GrContext. Switch this to be derived from
+    // GrRecordingContext!
+    GrContext* asDirectContext() override { return nullptr; }
+
+    bool init(sk_sp<const GrCaps> caps) override {
+        SkASSERT(caps);
+        SkASSERT(fThreadSafeProxy); // should've been set in the ctor
+
+        if (!INHERITED::init(std::move(caps))) {
+            return false;
+        }
+
+        // DDL contexts/drawing managers always sort the oplists and attempt to reduce opsTask
+        // splitting.
+        this->setupDrawingManager(true, true);
+
+        SkASSERT(this->caps());
+
+        return true;
+    }
+
+    GrAtlasManager* onGetAtlasManager() override {
+        SkASSERT(0);   // the DDL Recorders should never invoke this
+        return nullptr;
+    }
+
     // Add to the set of unique program infos required by this DDL
     void recordProgramInfo(const GrProgramInfo* programInfo) final {
-        if (!programInfo) {
+        const GrCaps* caps = this->caps();
+
+        if (this->backend() == GrBackendApi::kVulkan ||
+            this->backend() == GrBackendApi::kMetal) {
+            // Currently, both Vulkan and Metal require a live renderTarget to
+            // compute the key
             return;
         }
 
-        const GrCaps* caps = this->caps();
-
-        if (this->backend() == GrBackendApi::kMetal ||
-            this->backend() == GrBackendApi::kDirect3D ||
-            this->backend() == GrBackendApi::kDawn) {
-            // Currently Metal, Direct3D, and Dawn require a live renderTarget to
-            // compute the key
+        if (programInfo->requestedFeatures() & GrProcessor::CustomFeatures::kSampleLocations) {
+            // Sample locations require a live renderTarget to compute the key
             return;
         }
 
@@ -108,13 +145,13 @@ private:
 
     ProgramInfoMap fProgramInfoMap;
 
-    using INHERITED = GrRecordingContext;
+    typedef GrContext INHERITED;
 };
 
-sk_sp<GrRecordingContext> GrRecordingContextPriv::MakeDDL(sk_sp<GrContextThreadSafeProxy> proxy) {
-    sk_sp<GrRecordingContext> context(new GrDDLContext(std::move(proxy)));
+sk_sp<GrContext> GrContextPriv::MakeDDL(const sk_sp<GrContextThreadSafeProxy>& proxy) {
+    sk_sp<GrContext> context(new GrDDLContext(proxy));
 
-    if (!context->init()) {
+    if (!context->init(proxy->priv().refCaps())) {
         return nullptr;
     }
     return context;

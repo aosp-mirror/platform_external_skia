@@ -21,11 +21,10 @@ void draw(SkCanvas* canvas) {
         }
         left = right;
     }
-    sk_sp<SkImage> image = bitmap.asImage();
+    sk_sp<SkImage> image = SkImage::MakeFromBitmap(bitmap);
     SkImage* imagePtr = image.get();
     for (auto dest: { 20, 30, 40, 60, 90 } ) {
-        canvas->drawImageNine(imagePtr, center, SkRect::MakeWH(dest, dest),
-                              SkFilterMode::kNearest, nullptr);
+        canvas->drawImageNine(imagePtr, center, SkRect::MakeWH(dest, dest), nullptr);
         canvas->translate(dest + 4, 0);
     }
 }

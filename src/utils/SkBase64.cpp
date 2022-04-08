@@ -25,19 +25,22 @@ static const signed char decodeData[] = {
     41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51
 };
 
+SkBase64::SkBase64() : fLength((size_t) -1), fData(nullptr) {
+}
+
 #if defined _WIN32  // disable 'two', etc. may be used without having been initialized
 #pragma warning ( push )
 #pragma warning ( disable : 4701 )
 #endif
 
-SkBase64::Error SkBase64::Decode(const void* srcv, size_t srcLength, void* dstv, size_t* dstLength){
-    const unsigned char* src = static_cast<const unsigned char*>(srcv);
-    unsigned char* dst = static_cast<unsigned char*>(dstv);
-
+SkBase64::Error SkBase64::decode(const void* srcPtr, size_t size, bool writeDestination) {
+    unsigned char* dst = (unsigned char*)fData;
     int i = 0;
+
+    const unsigned char* src = (const unsigned char*) srcPtr;
     bool padTwo = false;
     bool padThree = false;
-    char unsigned const * const end = src + srcLength;
+    const unsigned char* end = src + size;
     while (src < end) {
         unsigned char bytes[4];
         int byte = 0;
@@ -73,7 +76,7 @@ handlePad:
         } while (byte < 4);
         int two = 0;
         int three = 0;
-        if (dst) {
+        if (writeDestination) {
             int one = (uint8_t) (bytes[0] << 2);
             two = bytes[1];
             one |= two >> 4;
@@ -88,17 +91,17 @@ handlePad:
         i++;
         if (padTwo)
             break;
-        if (dst)
+        if (writeDestination)
             dst[i] = (unsigned char) two;
         i++;
         if (padThree)
             break;
-        if (dst)
+        if (writeDestination)
             dst[i] = (unsigned char) three;
         i++;
     }
 goHome:
-    *dstLength = i;
+    fLength = i;
     return kNoError;
 }
 
@@ -106,19 +109,18 @@ goHome:
 #pragma warning ( pop )
 #endif
 
-size_t SkBase64::Encode(const void* srcv, size_t length, void* dstv, const char* encodeMap) {
-    const unsigned char* src = static_cast<const unsigned char*>(srcv);
-    unsigned char* dst = static_cast<unsigned char*>(dstv);
-
+size_t SkBase64::Encode(const void* srcPtr, size_t length, void* dstPtr, const char* encodeMap) {
     const char* encode;
     if (nullptr == encodeMap) {
         encode = default_encode;
     } else {
         encode = encodeMap;
     }
+    const unsigned char* src = (const unsigned char*) srcPtr;
+    unsigned char* dst = (unsigned char*) dstPtr;
     if (dst) {
         size_t remainder = length % 3;
-        char unsigned const * const end = &src[length - remainder];
+        const unsigned char* end = &src[length - remainder];
         while (src < end) {
             unsigned a = *src++;
             unsigned b = *src++;
@@ -149,4 +151,14 @@ size_t SkBase64::Encode(const void* srcv, size_t length, void* dstv, const char*
         }
     }
     return (length + 2) / 3 * 4;
+}
+
+SkBase64::Error SkBase64::decode(const char* src, size_t len) {
+    Error err = decode(src, len, false);
+    SkASSERT(err == kNoError);
+    if (err != kNoError)
+        return err;
+    fData = new char[fLength];  // should use sk_malloc/sk_free
+    decode(src, len, true);
+    return kNoError;
 }

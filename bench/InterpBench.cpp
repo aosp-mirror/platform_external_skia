@@ -51,7 +51,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 class Fixed16D16Interp : public InterpBench {
@@ -70,7 +70,7 @@ protected:
         }
     }
 private:
-    using INHERITED = InterpBench;
+    typedef InterpBench INHERITED;
 };
 
 class Fixed32D32Interp : public InterpBench {
@@ -101,7 +101,7 @@ protected:
         }
     }
 private:
-    using INHERITED = InterpBench;
+    typedef InterpBench INHERITED;
 };
 
 class Fixed16D48Interp : public InterpBench {
@@ -121,7 +121,7 @@ protected:
         }
     }
 private:
-    using INHERITED = InterpBench;
+    typedef InterpBench INHERITED;
 };
 
 class FloatInterp : public InterpBench {
@@ -139,7 +139,7 @@ protected:
         }
     }
 private:
-    using INHERITED = InterpBench;
+    typedef InterpBench INHERITED;
 };
 
 class DoubleInterp : public InterpBench {
@@ -159,7 +159,7 @@ protected:
         }
     }
 private:
-    using INHERITED = InterpBench;
+    typedef InterpBench INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

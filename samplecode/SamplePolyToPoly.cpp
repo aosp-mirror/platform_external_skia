@@ -69,7 +69,7 @@ public:
     }
 
 protected:
-    SkString name() override { return SkString("PolyToPolyView"); }
+    virtual SkString name() { return SkString("PolyToPolyView"); }
 
     static void doDraw(SkCanvas* canvas, SkPaint* paint, const SkFont& font, const int isrc[],
                        const int idst[], int count) {
@@ -105,7 +105,7 @@ protected:
         canvas->restore();
     }
 
-    void onDrawContent(SkCanvas* canvas) override {
+    virtual void onDrawContent(SkCanvas* canvas) {
         SkPaint paint;
         paint.setAntiAlias(true);
         paint.setStrokeWidth(SkIntToScalar(4));
@@ -147,7 +147,7 @@ protected:
     }
 
 private:
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

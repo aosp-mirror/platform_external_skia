@@ -36,12 +36,11 @@ public:
     void removeCanvas(SkCanvas*) override { SkDEBUGFAIL("Invalid Op"); }
 
 protected:
-    void didSetM44(const SkM44&) override;
+    void didSetMatrix(const SkMatrix&) override;
 
     void onClipRect(const SkRect&, SkClipOp, ClipEdgeStyle) override;
     void onClipRRect(const SkRRect&, SkClipOp, ClipEdgeStyle) override;
     void onClipPath(const SkPath&, SkClipOp, ClipEdgeStyle) override;
-    void onClipShader(sk_sp<SkShader>, SkClipOp) override;
     void onClipRegion(const SkRegion&, SkClipOp) override;
 
 private:
@@ -55,7 +54,7 @@ private:
 
     SkTArray<CanvasData> fCanvasData;
 
-    using INHERITED = SkNWayCanvas;
+    typedef SkNWayCanvas INHERITED;
 };
 
 #endif

@@ -65,7 +65,7 @@ protected:
     GrQuad       fQuads[kQuadCount];
     SkScalar     fArea;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

@@ -8,7 +8,7 @@
 #ifndef SkottieTextAdapter_DEFINED
 #define SkottieTextAdapter_DEFINED
 
-#include "modules/skottie/src/animator/Animator.h"
+#include "modules/skottie/src/Animator.h"
 #include "modules/skottie/src/text/SkottieShaper.h"
 #include "modules/skottie/src/text/TextAnimator.h"
 #include "modules/skottie/src/text/TextValue.h"
@@ -18,7 +18,6 @@
 class SkFontMgr;
 
 namespace sksg {
-class BlurImageFilter;
 class Group;
 template <typename T>
 class Matrix;
@@ -43,47 +42,29 @@ protected:
     void onSync() override;
 
 private:
-    enum class AnchorPointGrouping : uint8_t {
-        kCharacter,
-        kWord,
-        kLine,
-        kAll,
-    };
-
-    TextAdapter(sk_sp<SkFontMgr>, sk_sp<Logger>, AnchorPointGrouping);
+    TextAdapter(sk_sp<SkFontMgr>, sk_sp<Logger>);
 
     struct FragmentRec {
-        SkPoint                      fOrigin; // fragment position
+        SkPoint                    fOrigin; // fragment position
 
-        sk_sp<sksg::Matrix<SkM44>>   fMatrixNode;
-        sk_sp<sksg::Color>           fFillColorNode,
-                                     fStrokeColorNode;
-        sk_sp<sksg::BlurImageFilter> fBlur;
-
-        float                        fAdvance, // used for transform anchor point calculations
-                                     fAscent;  // ^
+        sk_sp<sksg::Matrix<SkM44>> fMatrixNode;
+        sk_sp<sksg::Color>         fFillColorNode,
+                                   fStrokeColorNode;
     };
 
     void reshape();
     void addFragment(const Shaper::Fragment&);
     void buildDomainMaps(const Shaper::Result&);
 
-    void pushPropsToFragment(const TextAnimator::ResolvedProps&, const FragmentRec&,
-                             const SkV2&, const TextAnimator::DomainSpan*) const;
+    void pushPropsToFragment(const TextAnimator::ResolvedProps&, const FragmentRec&) const;
 
-    void adjustLineProps(const TextAnimator::ModulatorBuffer&,
-                         const TextAnimator::DomainSpan&,
-                         const SkV2& line_offset,
-                         float line_tracking) const;
-
-    SkV2 fragmentAnchorPoint(const FragmentRec&, const SkV2&,
-                             const TextAnimator::DomainSpan*) const;
-    uint32_t shaperFlags() const;
+    void adjustLineTracking(const TextAnimator::ModulatorBuffer&,
+                            const TextAnimator::DomainSpan&,
+                            float line_tracking) const;
 
     const sk_sp<sksg::Group>         fRoot;
     const sk_sp<SkFontMgr>           fFontMgr;
     sk_sp<Logger>                    fLogger;
-    const AnchorPointGrouping        fAnchorPointGrouping;
 
     std::vector<sk_sp<TextAnimator>> fAnimators;
     std::vector<FragmentRec>         fFragments;
@@ -108,10 +89,6 @@ private:
     };
 
     TextValueTracker fText;
-    Vec2Value        fGroupingAlignment = {0,0};
-
-    bool             fHasBlurAnimator     : 1,
-                     fRequiresAnchorPoint : 1;
 };
 
 } // namespace internal

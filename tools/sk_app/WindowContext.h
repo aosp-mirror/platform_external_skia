@@ -9,19 +9,24 @@
 
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSurfaceProps.h"
+#include "include/gpu/GrContext.h"
 #include "include/gpu/GrTypes.h"
 #include "tools/sk_app/DisplayParams.h"
 
-class GrDirectContext;
 class SkSurface;
+class GrRenderTarget;
 
 namespace sk_app {
 
 class WindowContext {
 public:
-    WindowContext(const DisplayParams&);
+    WindowContext(const DisplayParams& params)
+            : fContext(nullptr)
+            , fDisplayParams(params)
+            , fSampleCount(1)
+            , fStencilBits(0) {}
 
-    virtual ~WindowContext();
+    virtual ~WindowContext() {}
 
     virtual sk_sp<SkSurface> getBackbufferSurface() = 0;
 
@@ -31,12 +36,10 @@ public:
 
     virtual void resize(int w, int h) = 0;
 
-    virtual void activate(bool isActive) {}
-
     const DisplayParams& getDisplayParams() { return fDisplayParams; }
     virtual void setDisplayParams(const DisplayParams& params) = 0;
 
-    GrDirectContext* directContext() const { return fContext.get(); }
+    GrContext* getGrContext() const { return fContext.get(); }
 
     int width() const { return fWidth; }
     int height() const { return fHeight; }
@@ -46,7 +49,7 @@ public:
 protected:
     virtual bool isGpuContext() { return true;  }
 
-    sk_sp<GrDirectContext> fContext;
+    sk_sp<GrContext>        fContext;
 
     int               fWidth;
     int               fHeight;

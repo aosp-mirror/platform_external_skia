@@ -7,7 +7,7 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPaint.h"
-#include "include/core/SkPathBuilder.h"
+#include "include/core/SkPath.h"
 #include "include/utils/SkRandom.h"
 #include "samplecode/Sample.h"
 
@@ -30,7 +30,9 @@ static void gen_paths(const SkTDArray<SkScalar>& topData,
                       SkScalar yBase,
                       SkScalar xLeft, SkScalar xDelta,
                       int leftShift,
-                      SkPathBuilder* plot, SkPathBuilder* fill) {
+                      SkPath* plot, SkPath* fill) {
+    plot->rewind();
+    fill->rewind();
     plot->incReserve(topData.count());
     if (nullptr == bottomData) {
         fill->incReserve(topData.count() + 2);
@@ -119,6 +121,9 @@ class ChartView : public Sample {
             }
         }
 
+        SkPath plotPath;
+        SkPath fillPath;
+
         static const SkScalar kStrokeWidth = SkIntToScalar(2);
         SkPaint plotPaint;
         SkPaint fillPaint;
@@ -130,9 +135,7 @@ class ChartView : public Sample {
         fillPaint.setAntiAlias(true);
         fillPaint.setStyle(SkPaint::kFill_Style);
 
-        SkPathBuilder plotPath, fillPath;
         SkTDArray<SkScalar>* prevData = nullptr;
-
         for (int i = 0; i < kNumGraphs; ++i) {
             gen_paths(fData[i],
                       prevData,
@@ -145,10 +148,10 @@ class ChartView : public Sample {
 
             // Make the fills partially transparent
             fillPaint.setColor((gColors[i] & 0x00ffffff) | 0x80000000);
-            canvas->drawPath(fillPath.detach(), fillPaint);
+            canvas->drawPath(fillPath, fillPaint);
 
             plotPaint.setColor(gColors[i]);
-            canvas->drawPath(plotPath.detach(), plotPaint);
+            canvas->drawPath(plotPath, plotPaint);
 
             prevData = fData + i;
         }

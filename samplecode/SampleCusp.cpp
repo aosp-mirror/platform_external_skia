@@ -175,7 +175,7 @@ protected:
 
 private:
 
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 DEF_SAMPLE( return new CuspView(); )

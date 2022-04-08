@@ -32,6 +32,8 @@ static AttribLayout attrib_layout(GrVertexAttribType type) {
             return {false, 1, GR_GL_HALF_FLOAT};
         case kHalf2_GrVertexAttribType:
             return {false, 2, GR_GL_HALF_FLOAT};
+        case kHalf3_GrVertexAttribType:
+            return {false, 3, GR_GL_HALF_FLOAT};
         case kHalf4_GrVertexAttribType:
             return {false, 4, GR_GL_HALF_FLOAT};
         case kInt2_GrVertexAttribType:
@@ -44,12 +46,16 @@ static AttribLayout attrib_layout(GrVertexAttribType type) {
             return {false, 1, GR_GL_BYTE};
         case kByte2_GrVertexAttribType:
             return {false, 2, GR_GL_BYTE};
+        case kByte3_GrVertexAttribType:
+            return {false, 3, GR_GL_BYTE};
         case kByte4_GrVertexAttribType:
             return {false, 4, GR_GL_BYTE};
         case kUByte_GrVertexAttribType:
             return {false, 1, GR_GL_UNSIGNED_BYTE};
         case kUByte2_GrVertexAttribType:
             return {false, 2, GR_GL_UNSIGNED_BYTE};
+        case kUByte3_GrVertexAttribType:
+            return {false, 3, GR_GL_UNSIGNED_BYTE};
         case kUByte4_GrVertexAttribType:
             return {false, 4, GR_GL_UNSIGNED_BYTE};
         case kUByte_norm_GrVertexAttribType:
@@ -85,7 +91,7 @@ void GrGLAttribArrayState::set(GrGLGpu* gpu,
                                size_t offsetInBytes,
                                int divisor) {
     SkASSERT(index >= 0 && index < fAttribArrayStates.count());
-    SkASSERT(0 == divisor || gpu->caps()->drawInstancedSupport());
+    SkASSERT(0 == divisor || gpu->caps()->instanceAttribSupport());
     AttribArrayState* array = &fAttribArrayStates[index];
     const char* offsetAsPtr;
     bool bufferChanged = false;
@@ -134,7 +140,7 @@ void GrGLAttribArrayState::set(GrGLGpu* gpu,
         array->fStride = stride;
         array->fOffset = offsetAsPtr;
     }
-    if (gpu->caps()->drawInstancedSupport() && array->fDivisor != divisor) {
+    if (gpu->caps()->instanceAttribSupport() && array->fDivisor != divisor) {
         SkASSERT(0 == divisor || 1 == divisor); // not necessarily a requirement but what we expect.
         GR_GL_CALL(gpu->glInterface(), VertexAttribDivisor(index, divisor));
         array->fDivisor = divisor;

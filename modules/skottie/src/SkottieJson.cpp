@@ -85,18 +85,6 @@ bool Parse<SkString>(const Value& v, SkString* s) {
 }
 
 template <>
-bool Parse<SkV2>(const Value& v, SkV2* v2) {
-    if (!v.is<ArrayValue>())
-        return false;
-    const auto& av = v.as<ArrayValue>();
-
-    // We need at least two scalars (BM sometimes exports a third value == 0).
-    return av.size() >= 2
-        && Parse<SkScalar>(av[0], &v2->x)
-        && Parse<SkScalar>(av[1], &v2->y);
-}
-
-template <>
 bool Parse<SkPoint>(const Value& v, SkPoint* pt) {
     if (!v.is<ObjectValue>())
         return false;
@@ -107,7 +95,7 @@ bool Parse<SkPoint>(const Value& v, SkPoint* pt) {
 }
 
 template <>
-bool Parse<VectorValue>(const Value& v, VectorValue* vec) {
+bool Parse<std::vector<float>>(const Value& v, std::vector<float>* vec) {
     if (!v.is<ArrayValue>())
         return false;
     const auto& av = v.as<ArrayValue>();

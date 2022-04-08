@@ -49,20 +49,19 @@ public:
     type* get() { return fPaint; }
 
     template <typename T>
-    std::enable_if_t<(T::kTags & kDrawWithPaint_Tag) == kDrawWithPaint_Tag, bool>
-    operator()(T* draw) {
+    SK_WHEN((T::kTags & kDrawWithPaint_Tag) == kDrawWithPaint_Tag, bool) operator()(T* draw) {
         fPaint = AsPtr(draw->paint);
         return true;
     }
 
     template <typename T>
-    std::enable_if_t<(T::kTags & kDrawWithPaint_Tag) == kDraw_Tag, bool> operator()(T* draw) {
+    SK_WHEN((T::kTags & kDrawWithPaint_Tag) == kDraw_Tag, bool) operator()(T* draw) {
         fPaint = nullptr;
         return true;
     }
 
     template <typename T>
-    std::enable_if_t<!(T::kTags & kDraw_Tag), bool> operator()(T* draw) {
+    SK_WHEN(!(T::kTags & kDraw_Tag), bool) operator()(T* draw) {
         fPaint = nullptr;
         return false;
     }

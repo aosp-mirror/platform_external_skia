@@ -19,7 +19,6 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
-#include "include/gpu/GrDirectContext.h"
 #include "include/private/SkMalloc.h"
 #include "tools/ToolUtils.h"
 
@@ -81,10 +80,10 @@ static sk_sp<SkImage> make_image(SkCanvas* root, int* xDivs, int* yDivs, int pad
     return surface->makeImageSnapshot();
 }
 
-static void image_to_bitmap(GrDirectContext* dContext, const SkImage* image, SkBitmap* bm) {
+static void image_to_bitmap(const SkImage* image, SkBitmap* bm) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(image->width(), image->height());
     bm->allocPixels(info);
-    image->readPixels(dContext, info, bm->getPixels(), bm->rowBytes(), 0, 0);
+    image->readPixels(info, bm->getPixels(), bm->rowBytes(), 0, 0);
 }
 
 /**
@@ -104,8 +103,7 @@ protected:
         return SkISize::Make(800, 800);
     }
 
-    void onDrawHelper(GrDirectContext* dContext, SkCanvas* canvas, int padLeft, int padTop,
-                      int padRight, int padBottom) {
+    void onDrawHelper(SkCanvas* canvas, int padLeft, int padTop, int padRight, int padBottom) {
         canvas->save();
 
         int xDivs[5];
@@ -116,7 +114,7 @@ protected:
         SkBitmap bitmap;
         sk_sp<SkImage> image = make_image(canvas, xDivs + 1, yDivs + 1, padLeft, padTop,
                                           padRight, padBottom);
-        image_to_bitmap(dContext, image.get(), &bitmap);
+        image_to_bitmap(image.get(), &bitmap);
 
         const SkSize size[] = {
             {  50,  50, }, // shrink in both axes
@@ -125,7 +123,7 @@ protected:
             { 200, 200, },
         };
 
-        canvas->drawImage(image, 10, 10);
+        canvas->drawImage(image, 10, 10, nullptr);
 
         SkScalar x = SkIntToScalar(100);
         SkScalar y = SkIntToScalar(100);
@@ -148,7 +146,7 @@ protected:
                 int i = ix * 2 + iy;
                 SkRect r = SkRect::MakeXYWH(x + ix * 60, y + iy * 60,
                                             size[i].width(), size[i].height());
-                canvas->drawImageLattice(image.get(), lattice, r);
+                canvas->drawBitmapLattice(bitmap, lattice, r);
             }
         }
 
@@ -162,7 +160,7 @@ protected:
         for (int rectNum = 0; rectNum < 3; rectNum++) {
             int srcX = xDivs[fixedColorX[rectNum]-1];
             int srcY = yDivs[fixedColorY[rectNum]-1];
-            image->readPixels(dContext, info, &fixedColor[rectNum], 4, srcX, srcY);
+            image->readPixels(info, &fixedColor[rectNum], 4, srcX, srcY);
         }
 
         // Include the degenerate first div.  While normally the first patch is "scalable",
@@ -207,21 +205,14 @@ protected:
         canvas->restore();
     }
 
-    DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
-        auto rContext = canvas->recordingContext();
-        auto dContext = GrAsDirectContext(rContext);
-        if (rContext && !dContext) {
-            *errorMsg = "not supported in ddl";
-            return DrawResult::kSkip;
-        }
-        this->onDrawHelper(dContext, canvas, 0, 0, 0, 0);
+    void onDraw(SkCanvas* canvas) override {
+        this->onDrawHelper(canvas, 0, 0, 0, 0);
         canvas->translate(0.0f, 400.0f);
-        this->onDrawHelper(dContext, canvas, 3, 7, 4, 11);
-        return DrawResult::kOk;
+        this->onDrawHelper(canvas, 3, 7, 4, 11);
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 DEF_GM( return new LatticeGM; )
 
@@ -299,7 +290,7 @@ public:
 
         sk_sp<SkImage> image = makeImage(canvas, padLeft, padTop, padRight, padBottom);
 
-        canvas->drawImage(image, 10, 10);
+        canvas->drawImage(image, 10, 10, nullptr);
 
         SkCanvas::Lattice lattice;
         lattice.fXCount = 2;
@@ -325,15 +316,13 @@ public:
         lattice.fColors = colors;
         paint.setColor(0xFFFFFFFF);
         canvas->drawImageLattice(image.get(), lattice,
-                                 SkRect::MakeXYWH(100, 100, 200, 200),
-                                 SkFilterMode::kNearest, &paint);
+                                 SkRect::MakeXYWH(100, 100, 200, 200), &paint);
 
         //draw the same content with alpha
         canvas->translate(400, 0);
         paint.setColor(0x80000FFF);
         canvas->drawImageLattice(image.get(), lattice,
-                                 SkRect::MakeXYWH(100, 100, 200, 200),
-                                 SkFilterMode::kNearest, &paint);
+                                 SkRect::MakeXYWH(100, 100, 200, 200), &paint);
 
         canvas->restore();
     }
@@ -357,7 +346,7 @@ public:
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 DEF_GM( return new LatticeGM2; )
 
@@ -381,6 +370,5 @@ DEF_SIMPLE_GM_BG(lattice_alpha, canvas, 120, 120, SK_ColorWHITE) {
 
     SkPaint paint;
     paint.setColor(SK_ColorMAGENTA);
-    canvas->drawImageLattice(image.get(), lattice, SkRect::MakeWH(120, 120),
-                             SkFilterMode::kNearest, &paint);
+    canvas->drawImageLattice(image.get(), lattice, SkRect::MakeWH(120, 120), &paint);
 }

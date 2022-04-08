@@ -17,7 +17,7 @@
 class SkAndroidCodecAdapter : public SkAndroidCodec {
 public:
 
-    explicit SkAndroidCodecAdapter(SkCodec*);
+    explicit SkAndroidCodecAdapter(SkCodec*, ExifOrientationBehavior);
 
     ~SkAndroidCodecAdapter() override {}
 
@@ -32,6 +32,6 @@ protected:
 
 private:
 
-    using INHERITED = SkAndroidCodec;
+    typedef SkAndroidCodec INHERITED;
 };
 #endif // SkAndroidCodecAdapter_DEFINED

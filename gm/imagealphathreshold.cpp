@@ -96,7 +96,7 @@ protected:
 private:
     bool fUseCropRect;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 // Create a 'width' x 'height' SkSurface that matches the colorType of 'canvas' as
@@ -155,12 +155,12 @@ protected:
 
         SkPaint paint = create_filter_paint();
         canvas->clipRect(SkRect::MakeLTRB(100, 100, WIDTH - 100, HEIGHT - 100));
-        canvas->drawImage(surface->makeImageSnapshot().get(), 0, 0, SkSamplingOptions(), &paint);
+        canvas->drawImage(surface->makeImageSnapshot().get(), 0, 0, &paint);
         return DrawResult::kOk;
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -186,7 +186,7 @@ static sk_sp<SkImage> make_img() {
         rect.inset(25, 25);
     }
 
-    return bitmap.asImage();
+    return SkImage::MakeFromBitmap(bitmap);
 }
 
 DEF_SIMPLE_GM_BG(imagealphathreshold_image, canvas, WIDTH * 2, HEIGHT, SK_ColorBLACK) {

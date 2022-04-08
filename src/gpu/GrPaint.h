@@ -60,43 +60,35 @@ public:
     void setCoverageSetOpXPFactory(SkRegion::Op, bool invertCoverage = false);
 
     /**
-     * Sets a processor for color computation.
+     * Appends an additional color processor to the color computation.
      */
-    void setColorFragmentProcessor(std::unique_ptr<GrFragmentProcessor> fp) {
+    void addColorFragmentProcessor(std::unique_ptr<GrFragmentProcessor> fp) {
         SkASSERT(fp);
-        SkASSERT(fColorFragmentProcessor == nullptr);
-        fColorFragmentProcessor = std::move(fp);
+        fColorFragmentProcessors.push_back(std::move(fp));
         fTrivial = false;
     }
 
     /**
      * Appends an additional coverage processor to the coverage computation.
      */
-    void setCoverageFragmentProcessor(std::unique_ptr<GrFragmentProcessor> fp) {
+    void addCoverageFragmentProcessor(std::unique_ptr<GrFragmentProcessor> fp) {
         SkASSERT(fp);
-        SkASSERT(fCoverageFragmentProcessor == nullptr);
-        fCoverageFragmentProcessor = std::move(fp);
+        fCoverageFragmentProcessors.push_back(std::move(fp));
         fTrivial = false;
     }
 
-    bool hasColorFragmentProcessor() const { return fColorFragmentProcessor ? true : false; }
-    int hasCoverageFragmentProcessor() const { return fCoverageFragmentProcessor ? true : false; }
-    int numTotalFragmentProcessors() const {
-        return (this->hasColorFragmentProcessor() ? 1 : 0) +
-               (this->hasCoverageFragmentProcessor() ? 1 : 0);
-    }
+    int numColorFragmentProcessors() const { return fColorFragmentProcessors.count(); }
+    int numCoverageFragmentProcessors() const { return fCoverageFragmentProcessors.count(); }
+    int numTotalFragmentProcessors() const { return this->numColorFragmentProcessors() +
+                                              this->numCoverageFragmentProcessors(); }
 
     const GrXPFactory* getXPFactory() const { return fXPFactory; }
 
-    GrFragmentProcessor* getColorFragmentProcessor() const {
-        return fColorFragmentProcessor.get();
+    GrFragmentProcessor* getColorFragmentProcessor(int i) const {
+        return fColorFragmentProcessors[i].get();
     }
-    GrFragmentProcessor* getCoverageFragmentProcessor() const {
-        return fCoverageFragmentProcessor.get();
-    }
-    bool usesVaryingCoords() const {
-        return (fColorFragmentProcessor && fColorFragmentProcessor->usesVaryingCoords()) ||
-               (fCoverageFragmentProcessor && fCoverageFragmentProcessor->usesVaryingCoords());
+    GrFragmentProcessor* getCoverageFragmentProcessor(int i) const {
+        return fCoverageFragmentProcessors[i].get();
     }
 
     /**
@@ -126,8 +118,8 @@ private:
     friend class GrProcessorSet;
 
     const GrXPFactory* fXPFactory = nullptr;
-    std::unique_ptr<GrFragmentProcessor> fColorFragmentProcessor;
-    std::unique_ptr<GrFragmentProcessor> fCoverageFragmentProcessor;
+    SkSTArray<4, std::unique_ptr<GrFragmentProcessor>> fColorFragmentProcessors;
+    SkSTArray<2, std::unique_ptr<GrFragmentProcessor>> fCoverageFragmentProcessors;
     bool fTrivial = true;
     SkPMColor4f fColor = SK_PMColor4fWHITE;
     SkDEBUGCODE(bool fAlive = true;)  // Set false after moved from.

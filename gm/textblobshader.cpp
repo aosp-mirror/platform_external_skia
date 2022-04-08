@@ -119,7 +119,7 @@ private:
     sk_sp<SkTextBlob>   fBlob;
     sk_sp<SkShader>     fShader;
 
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 
 DEF_GM(return new TextBlobShaderGM;)

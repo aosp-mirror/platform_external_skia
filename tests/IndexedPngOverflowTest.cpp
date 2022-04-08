@@ -29,9 +29,12 @@ unsigned char gPng[] = {
 };
 
 DEF_TEST(IndexedPngOverflow, reporter) {
-    SkBitmap bm;
-    bool success = decode_memory(gPng, sizeof(gPng), &bm);
+    SkBitmap image;
+    bool success = decode_memory(gPng, sizeof(gPng), &image);
     REPORTER_ASSERT(reporter, success);
 
-    SkSurface::MakeRasterN32Premul(20, 1)->getCanvas()->drawImage(bm.asImage(), 0, 0);
+    auto surface(SkSurface::MakeRaster(SkImageInfo::MakeN32Premul(20, 1)));
+    SkCanvas* canvas = surface->getCanvas();
+    SkRect destRect = SkRect::MakeXYWH(0, 0, 20, 1);
+    canvas->drawBitmapRect(image, destRect, nullptr);
 }

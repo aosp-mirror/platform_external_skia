@@ -74,12 +74,12 @@ struct SkPathCounter {
     }
 
     template <typename T>
-    std::enable_if_t<T::kTags & SkRecords::kHasPaint_Tag, void> operator()(const T& op) {
+    SK_WHEN(T::kTags & SkRecords::kHasPaint_Tag, void) operator()(const T& op) {
         this->checkPaint(AsPtr(op.paint));
     }
 
     template <typename T>
-    std::enable_if_t<!(T::kTags & SkRecords::kHasPaint_Tag), void>
+    SK_WHEN(!(T::kTags & SkRecords::kHasPaint_Tag), void)
       operator()(const T& op) { /* do nothing */ }
 
     int fNumSlowPathsAndDashEffects;

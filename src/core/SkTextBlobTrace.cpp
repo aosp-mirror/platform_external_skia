@@ -83,11 +83,11 @@ SkTextBlobTrace::Capture::Capture() : fTypefaceSet(new SkRefCntSet) {
 
 SkTextBlobTrace::Capture::~Capture() = default;
 
-void SkTextBlobTrace::Capture::capture(const SkGlyphRunList& glyphRunList, const SkPaint& paint) {
+void SkTextBlobTrace::Capture::capture(const SkGlyphRunList& glyphRunList) {
     const SkTextBlob* blob = glyphRunList.blob();
     if (blob != nullptr) {
         fWriteBuffer.writeUInt(blob->uniqueID());
-        fWriteBuffer.writePaint(paint);
+        fWriteBuffer.writePaint(glyphRunList.paint());
         fWriteBuffer.writePoint(glyphRunList.origin());
         SkTextBlobPriv::Flatten(*blob, fWriteBuffer);
         fBlobCount++;
@@ -98,7 +98,7 @@ void SkTextBlobTrace::Capture::dump(SkWStream* dst) const {
     SkTLazy<SkFILEWStream> fileStream;
     if (!dst) {
         uint32_t id = SkChecksum::Mix(reinterpret_cast<uintptr_t>(this));
-        SkString f = SkStringPrintf("diff-canvas-%08x-%04zu.trace", id, fBlobCount);
+        SkString f = SkStringPrintf("diff-canvas-%08x-%04d.trace", id, fBlobCount);
         dst = fileStream.init(f.c_str());
         if (!fileStream->isValid()) {
             SkDebugf("Error opening '%s'.\n", f.c_str());

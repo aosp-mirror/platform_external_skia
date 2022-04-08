@@ -34,12 +34,12 @@ protected:
     }
 
     void onDraw(SkCanvas* canvas) override {
-        auto* rContext = canvas->recordingContext();
-        if (!rContext) {
+        GrContext* gr = canvas->getGrContext();
+        if (!gr) {
             return;
         }
 
-        fDecoder.setGrContext(rContext);  // context can change over time in viewer
+        fDecoder.setGrContext(gr); // gr can change over time in viewer
 
         double timeStamp;
         auto img = fDecoder.nextImage(&timeStamp);
@@ -51,7 +51,7 @@ protected:
             if (0) {
                 SkDebugf("ts %g\n", timeStamp);
             }
-            canvas->drawImage(img, 10, 10);
+            canvas->drawImage(img, 10, 10, nullptr);
         }
     }
 
@@ -60,7 +60,7 @@ protected:
     }
 
 private:
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 DEF_GM( return new VideoDecoderGM; )
 

@@ -8,7 +8,6 @@
 #ifndef SkBigPicture_DEFINED
 #define SkBigPicture_DEFINED
 
-#include "include/core/SkM44.h"
 #include "include/core/SkPicture.h"
 #include "include/core/SkRect.h"
 #include "include/private/SkNoncopyable.h"
@@ -45,7 +44,7 @@ public:
 // SkPicture overrides
     void playback(SkCanvas*, AbortCallback*) const override;
     SkRect cullRect() const override;
-    int approximateOpCount(bool nested) const override;
+    int approximateOpCount() const override;
     size_t approximateBytesUsed() const override;
     const SkBigPicture* asSkBigPicture() const override { return this; }
 
@@ -53,7 +52,7 @@ public:
     void partialPlayback(SkCanvas*,
                          int start,
                          int stop,
-                         const SkM44& initialCTM) const;
+                         const SkMatrix& initialCTM) const;
 // Used by GrRecordReplaceDraw
     const SkBBoxHierarchy* bbh() const { return fBBH.get(); }
     const SkRecord*     record() const { return fRecord.get(); }

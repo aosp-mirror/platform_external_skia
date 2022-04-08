@@ -25,7 +25,7 @@ public:
     }
 
 protected:
-    SkString name() override{ return SkString("FillType"); }
+    virtual SkString name() { return SkString("FillType"); }
 
     void showPath(SkCanvas* canvas, int x, int y, SkPathFillType ft,
                   SkScalar scale, const SkPaint& paint) {
@@ -55,7 +55,7 @@ protected:
                  scale, paint);
     }
 
-    void onDrawContent(SkCanvas* canvas) override {
+    virtual void onDrawContent(SkCanvas* canvas) {
         canvas->translate(SkIntToScalar(20), SkIntToScalar(20));
 
         SkPaint paint;
@@ -77,7 +77,7 @@ protected:
     }
 
 private:
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

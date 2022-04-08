@@ -43,6 +43,7 @@ private:
     void onPlatformMakeNotCurrent() const override;
     void onPlatformMakeCurrent() const override;
     std::function<void()> onPlatformGetAutoContextRestore() const override;
+    void onPlatformSwapBuffers() const override;
     GrGLFuncPtr onPlatformGetProcAddress(const char* name) const override;
 
     HWND fWindow;
@@ -96,12 +97,11 @@ WinGLTestContext::WinGLTestContext(GrGLStandard forcedGpuAPI, WinGLTestContext* 
         this->destroyGLContext();
         return;
     }
-
-    // We request a compatibility context since glMultiDrawArraysIndirect, apparently, doesn't
-    // work correctly on Intel Iris GPUs with the core profile (skbug.com/11787).
+    // Requesting a Core profile would bar us from using NVPR. So we request
+    // compatibility profile or GL ES.
     SkWGLContextRequest contextType =
-        kGLES_GrGLStandard == forcedGpuAPI ? kGLES_SkWGLContextRequest
-                                           : kGLPreferCompatibilityProfile_SkWGLContextRequest;
+        kGLES_GrGLStandard == forcedGpuAPI ?
+        kGLES_SkWGLContextRequest : kGLPreferCompatibilityProfile_SkWGLContextRequest;
 
     HGLRC winShareContext = nullptr;
     if (shareContext) {
@@ -138,7 +138,6 @@ WinGLTestContext::WinGLTestContext(GrGLStandard forcedGpuAPI, WinGLTestContext* 
         return;
     }
 
-#ifdef SK_GL
     auto gl = GrGLMakeNativeInterface();
     if (!gl) {
         SkDebugf("Could not create GL interface.\n");
@@ -152,12 +151,6 @@ WinGLTestContext::WinGLTestContext(GrGLStandard forcedGpuAPI, WinGLTestContext* 
     }
 
     this->init(std::move(gl));
-#else
-    // Allow the GLTestContext creation to succeed without a GrGLInterface to support
-    // GrContextFactory's persistent GL context workaround for Vulkan. We won't need the
-    // GrGLInterface since we're not running the GL backend.
-    this->init(nullptr);
-#endif
 }
 
 WinGLTestContext::~WinGLTestContext() {
@@ -201,7 +194,7 @@ void WinGLTestContext::onPlatformMakeCurrent() const {
     }
 
     if (!wglMakeCurrent(dc, glrc)) {
-        SkDebugf("Could not make current.\n");
+        SkDebugf("Could not create rendering context.\n");
     }
 }
 
@@ -210,6 +203,19 @@ std::function<void()> WinGLTestContext::onPlatformGetAutoContextRestore() const 
         return nullptr;
     }
     return context_restorer();
+}
+
+void WinGLTestContext::onPlatformSwapBuffers() const {
+    HDC dc;
+
+    if (nullptr == fPbufferContext) {
+        dc = fDeviceContext;
+    } else {
+        dc = fPbufferContext->getDC();
+    }
+    if (!SwapBuffers(dc)) {
+        SkDebugf("Could not complete SwapBuffers.\n");
+    }
 }
 
 GrGLFuncPtr WinGLTestContext::onPlatformGetProcAddress(const char* name) const {

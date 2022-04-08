@@ -115,6 +115,6 @@ private:
     // on subsequent calls to decodeRows().
     int                        fLinesToSkip;
 
-    using INHERITED = SkBmpCodec;
+    typedef SkBmpCodec INHERITED;
 };
 #endif  // SkBmpRLECodec_DEFINED

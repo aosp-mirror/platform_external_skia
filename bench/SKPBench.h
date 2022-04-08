@@ -21,7 +21,7 @@ class SkSurface;
 class SKPBench : public Benchmark {
 public:
     SKPBench(const char* name, const SkPicture*, const SkIRect& devClip, SkScalar scale,
-             bool doLooping);
+             bool useMultiPictureDraw, bool doLooping);
     ~SKPBench() override;
 
     int calculateLoops(int defaultLoops) const override {
@@ -29,7 +29,6 @@ public:
     }
 
     void getGpuStats(SkCanvas*, SkTArray<SkString>* keys, SkTArray<double>* values) override;
-    bool getDMSAAStats(GrRecordingContext*) override;
 
 protected:
     const char* onGetName() override;
@@ -54,12 +53,13 @@ private:
     SkString fName;
     SkString fUniqueName;
 
+    const bool fUseMultiPictureDraw;
     SkTArray<sk_sp<SkSurface>> fSurfaces;   // for MultiPictureDraw
     SkTDArray<SkIRect> fTileRects;     // for MultiPictureDraw
 
     const bool fDoLooping;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 #endif

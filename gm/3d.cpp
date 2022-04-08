@@ -7,7 +7,6 @@
 
 #include "gm/gm.h"
 #include "include/core/SkCanvas.h"
-#include "include/core/SkData.h"
 
 struct Info {
     float   fNear = 0.05f;
@@ -33,8 +32,8 @@ static SkM44 make_ctm(const Info& info, const SkM44& model, SkSize size) {
     SkScalar w = size.width();
     SkScalar h = size.height();
 
-    perspective = SkM44::Perspective(info.fNear, info.fFar, info.fAngle);
-    camera = SkM44::LookAt(info.fEye, info.fCOA, info.fUp);
+    perspective = Sk3Perspective(info.fNear, info.fFar, info.fAngle);
+    camera = Sk3LookAt(info.fEye, info.fCOA, info.fUp);
     viewport.setScale(w*0.5f, h*0.5f, 1);//.postTranslate(r.centerX(), r.centerY(), 0);
 
     return viewport * perspective * camera * model * inv(viewport);
@@ -50,7 +49,7 @@ static void do_draw(SkCanvas* canvas, SkColor color) {
 
     SkM44 m = SkM44::Rotate({0, 1, 0}, SK_ScalarPI/6);
 
-    canvas->concat(make_ctm(info, m, {300, 300}));
+    canvas->concat44(make_ctm(info, m, {300, 300}));
 
     canvas->translate(150, 150);
     SkPaint paint;

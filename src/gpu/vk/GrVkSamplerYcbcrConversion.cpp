@@ -78,13 +78,13 @@ GrVkSamplerYcbcrConversion* GrVkSamplerYcbcrConversion::Create(
         return nullptr;
     }
 
-    return new GrVkSamplerYcbcrConversion(gpu, conversion, GenerateKey(info));
+    return new GrVkSamplerYcbcrConversion(conversion, GenerateKey(info));
 }
 
-void GrVkSamplerYcbcrConversion::freeGPUData() const {
+void GrVkSamplerYcbcrConversion::freeGPUData(GrVkGpu* gpu) const {
     SkASSERT(fYcbcrConversion);
-    GR_VK_CALL(fGpu->vkInterface(), DestroySamplerYcbcrConversion(fGpu->device(),
-                                                                  fYcbcrConversion, nullptr));
+    GR_VK_CALL(gpu->vkInterface(), DestroySamplerYcbcrConversion(gpu->device(), fYcbcrConversion,
+                                                                 nullptr));
 }
 
 GrVkSamplerYcbcrConversion::Key GrVkSamplerYcbcrConversion::GenerateKey(

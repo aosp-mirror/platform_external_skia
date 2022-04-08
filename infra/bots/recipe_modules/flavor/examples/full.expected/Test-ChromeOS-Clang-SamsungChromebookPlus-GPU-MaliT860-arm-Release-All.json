@@ -13,9 +13,7 @@
     "infra_step": true,
     "name": "read ssh_machine.json",
     "~followup_annotations": [
-      "@@@STEP_LOG_LINE@ssh_machine.json@{@@@",
-      "@@@STEP_LOG_LINE@ssh_machine.json@  \"user_ip\": \"foo@127.0.0.1\"@@@",
-      "@@@STEP_LOG_LINE@ssh_machine.json@}@@@",
+      "@@@STEP_LOG_LINE@ssh_machine.json@{\"user_ip\": \"foo@127.0.0.1\"}@@@",
       "@@@STEP_LOG_END@ssh_machine.json@@@"
     ]
   },
@@ -191,38 +189,6 @@
     },
     "infra_step": true,
     "name": "mkdir /home/chronos/user/bin"
-  },
-  {
-    "cmd": [
-      "scp",
-      "[START_DIR]/build/dm",
-      "foo@127.0.0.1:/home/chronos/user/bin/dm"
-    ],
-    "env": {
-      "CHROME_HEADLESS": "1",
-      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
-    },
-    "infra_step": true,
-    "name": "scp [START_DIR]/build/dm foo@127.0.0.1:/home/chronos/user/bin/dm"
-  },
-  {
-    "cmd": [
-      "ssh",
-      "-oConnectTimeout=15",
-      "-oBatchMode=yes",
-      "-t",
-      "-t",
-      "foo@127.0.0.1",
-      "chmod",
-      "+x",
-      "/home/chronos/user/bin/dm"
-    ],
-    "env": {
-      "CHROME_HEADLESS": "1",
-      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
-    },
-    "infra_step": true,
-    "name": "make dm executable"
   },
   {
     "cmd": [
@@ -697,6 +663,38 @@
     },
     "infra_step": true,
     "name": "scp [START_DIR]/tmp/SVG_VERSION foo@127.0.0.1:/home/chronos/user/SVG_VERSION"
+  },
+  {
+    "cmd": [
+      "scp",
+      "[START_DIR]/build/dm",
+      "foo@127.0.0.1:/home/chronos/user/bin/dm"
+    ],
+    "env": {
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "scp [START_DIR]/build/dm foo@127.0.0.1:/home/chronos/user/bin/dm"
+  },
+  {
+    "cmd": [
+      "ssh",
+      "-oConnectTimeout=15",
+      "-oBatchMode=yes",
+      "-t",
+      "-t",
+      "foo@127.0.0.1",
+      "chmod",
+      "+x",
+      "/home/chronos/user/bin/dm"
+    ],
+    "env": {
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "make dm executable"
   },
   {
     "cmd": [

@@ -16,14 +16,12 @@ namespace SkSL {
 
 class FileOutputStream : public OutputStream {
 public:
-    FileOutputStream(const SkSL::String& name) {
-        fFile = fopen(name.c_str(), "wb");
+    FileOutputStream(const char* name) {
+        fFile = fopen(name, "wb");
     }
 
     ~FileOutputStream() override {
-        if (fOpen) {
-            close();
-        }
+        SkASSERT(!fOpen);
     }
 
     bool isValid() const override {
@@ -70,7 +68,7 @@ private:
     bool fOpen = true;
     FILE *fFile;
 
-    using INHERITED = OutputStream;
+    typedef OutputStream INHERITED;
 };
 
 } // namespace

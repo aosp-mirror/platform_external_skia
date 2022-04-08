@@ -11,6 +11,7 @@
 #include "dawn/dawn_wsi.h"
 #include "dawn_native/DawnNative.h"
 #include "dawn_native/D3D12Backend.h"
+#include "common/SwapChainUtils.h"
 
 namespace sk_app {
 

@@ -231,6 +231,7 @@ private:
     HFONT fFont;
     HFONT fSavefont;
 };
+#define SkAutoHDC(...) SK_REQUIRE_LOCAL_VAR(SkAutoHDC)
 
 class LogFontTypeface : public SkTypeface {
 public:
@@ -274,8 +275,8 @@ public:
 protected:
     std::unique_ptr<SkStreamAsset> onOpenStream(int* ttcIndex) const override;
     sk_sp<SkTypeface> onMakeClone(const SkFontArguments& args) const override;
-    std::unique_ptr<SkScalerContext> onCreateScalerContext(const SkScalerContextEffects&,
-                                                           const SkDescriptor*) const override;
+    SkScalerContext* onCreateScalerContext(const SkScalerContextEffects&,
+                                           const SkDescriptor*) const override;
     void onFilterRec(SkScalerContextRec*) const override;
     void getGlyphToUnicodeMap(SkUnichar*) const override;
     std::unique_ptr<SkAdvancedTypefaceMetrics> onGetAdvancedMetrics() const override;
@@ -285,7 +286,6 @@ protected:
     void getPostScriptGlyphNames(SkString*) const override;
     int onGetUPEM() const override;
     void onGetFamilyName(SkString* familyName) const override;
-    bool onGetPostScriptName(SkString*) const override { return false; }
     SkTypeface::LocalizedStrings* onCreateFamilyNameIterator() const override;
     int onGetVariationDesignPosition(SkFontArguments::VariationPosition::Coordinate coordinates[],
                                      int coordinateCount) const override
@@ -328,7 +328,7 @@ private:
 
     HANDLE fFontMemResource;
 
-    using INHERITED = LogFontTypeface;
+    typedef LogFontTypeface INHERITED;
 };
 
 static const LOGFONT& get_default_font() {
@@ -344,7 +344,7 @@ static bool FindByLogFont(SkTypeface* face, void* ctx) {
 }
 
 /**
- *  This is public. It first searches the cache, and if a match is not found,
+ *  This guy is public. It first searches the cache, and if a match is not found,
  *  it creates a new face.
  */
 SkTypeface* SkCreateTypefaceFromLOGFONT(const LOGFONT& origLF) {
@@ -369,7 +369,7 @@ sk_sp<SkTypeface> SkCreateFontMemResourceTypefaceFromLOGFONT(const LOGFONT& orig
 }
 
 /**
- *  This is public
+ *  This guy is public
  */
 void SkLOGFONTFromTypeface(const SkTypeface* face, LOGFONT* lf) {
     if (nullptr == face) {
@@ -563,6 +563,7 @@ public:
     bool isValid() const;
 
 protected:
+    unsigned generateGlyphCount() override;
     bool generateAdvance(SkGlyph* glyph) override;
     void generateMetrics(SkGlyph* glyph) override;
     void generateImage(const SkGlyph& glyph) override;
@@ -593,6 +594,7 @@ private:
     HFONT        fSavefont;
     HFONT        fFont;
     SCRIPT_CACHE fSC;
+    int          fGlyphCount;
 
     /** The total matrix which also removes EM scale. */
     SkMatrix     fHiResMatrix;
@@ -637,6 +639,7 @@ SkScalerContext_GDI::SkScalerContext_GDI(sk_sp<LogFontTypeface> rawTypeface,
         , fSavefont(0)
         , fFont(0)
         , fSC(0)
+        , fGlyphCount(-1)
 {
     LogFontTypeface* typeface = static_cast<LogFontTypeface*>(this->getTypeface());
 
@@ -795,6 +798,14 @@ SkScalerContext_GDI::~SkScalerContext_GDI() {
 
 bool SkScalerContext_GDI::isValid() const {
     return fDDC && fFont;
+}
+
+unsigned SkScalerContext_GDI::generateGlyphCount() {
+    if (fGlyphCount < 0) {
+        fGlyphCount = calculateGlyphCount(
+                          fDDC, static_cast<const LogFontTypeface*>(this->getTypeface())->fLogFont);
+    }
+    return fGlyphCount;
 }
 
 bool SkScalerContext_GDI::generateAdvance(SkGlyph* glyph) {
@@ -2072,25 +2083,21 @@ sk_sp<SkData> LogFontTypeface::onCopyTableData(SkFontTableTag tag) const {
     return data;
 }
 
-std::unique_ptr<SkScalerContext> LogFontTypeface::onCreateScalerContext(
-    const SkScalerContextEffects& effects, const SkDescriptor* desc) const
-{
+SkScalerContext* LogFontTypeface::onCreateScalerContext(const SkScalerContextEffects& effects,
+                                                        const SkDescriptor* desc) const {
     auto ctx = std::make_unique<SkScalerContext_GDI>(
             sk_ref_sp(const_cast<LogFontTypeface*>(this)), effects, desc);
-    if (ctx->isValid()) {
-        return std::move(ctx);
-    }
-
-    ctx.reset();
-    SkStrikeCache::PurgeAll();
-    ctx = std::make_unique<SkScalerContext_GDI>(
+    if (!ctx->isValid()) {
+        ctx.reset();
+        SkStrikeCache::PurgeAll();
+        ctx = std::make_unique<SkScalerContext_GDI>(
             sk_ref_sp(const_cast<LogFontTypeface*>(this)), effects, desc);
-    if (ctx->isValid()) {
-        return std::move(ctx);
+        if (!ctx->isValid()) {
+            return SkScalerContext::MakeEmptyContext(
+                    sk_ref_sp(const_cast<LogFontTypeface*>(this)), effects, desc);
+        }
     }
-
-    return SkScalerContext::MakeEmpty(
-            sk_ref_sp(const_cast<LogFontTypeface*>(this)), effects, desc);
+    return ctx.release();
 }
 
 void LogFontTypeface::onFilterRec(SkScalerContextRec* rec) const {
@@ -2271,17 +2278,20 @@ protected:
         return nullptr;
     }
 
+    virtual SkTypeface* onMatchFaceStyle(const SkTypeface* familyMember,
+                                         const SkFontStyle& fontstyle) const override {
+        // could be in base impl
+        SkString familyName;
+        ((LogFontTypeface*)familyMember)->getFamilyName(&familyName);
+        return this->matchFamilyStyle(familyName.c_str(), fontstyle);
+    }
+
     sk_sp<SkTypeface> onMakeFromStreamIndex(std::unique_ptr<SkStreamAsset> stream,
                                             int ttcIndex) const override {
         if (ttcIndex != 0) {
             return nullptr;
         }
         return create_from_stream(std::move(stream));
-    }
-
-    sk_sp<SkTypeface> onMakeFromStreamArgs(std::unique_ptr<SkStreamAsset> stream,
-                                           const SkFontArguments& args) const override {
-        return this->makeFromStream(std::move(stream), args.getCollectionIndex());
     }
 
     sk_sp<SkTypeface> onMakeFromData(sk_sp<SkData> data, int ttcIndex) const override {

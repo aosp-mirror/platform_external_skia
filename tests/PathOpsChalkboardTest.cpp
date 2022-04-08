@@ -140,7 +140,6 @@ static void chalkboard_threaded(skiatest::Reporter* reporter, const char* filena
                         }
                         break;
                     }
-                    [[fallthrough]];
                 default:
                     testlines = 0;
                     for (int i = 0; i < bitCount; ++i) {

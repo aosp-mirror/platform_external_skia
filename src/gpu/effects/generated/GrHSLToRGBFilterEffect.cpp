@@ -10,8 +10,7 @@
  **************************************************************************************************/
 #include "GrHSLToRGBFilterEffect.h"
 
-#include "src/core/SkUtils.h"
-#include "src/gpu/GrTexture.h"
+#include "include/gpu/GrTexture.h"
 #include "src/gpu/glsl/GrGLSLFragmentProcessor.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
 #include "src/gpu/glsl/GrGLSLProgramBuilder.h"
@@ -24,27 +23,21 @@ public:
         GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
         const GrHSLToRGBFilterEffect& _outer = args.fFp.cast<GrHSLToRGBFilterEffect>();
         (void)_outer;
-        SkString _sample0 = this->invokeChild(0, args);
         fragBuilder->codeAppendf(
-                R"SkSL(half4 color = %s;
-half3 hsl = color.xyz;
-half C = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y;
-half3 p = hsl.xxx + half3(0.0, 0.66666668653488159, 0.3333333432674408);
-half3 q = clamp(abs(fract(p) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
-half3 rgb = (q - 0.5) * C + hsl.z;
-color = clamp(half4(rgb, color.w), 0.0, 1.0);
-color.xyz *= color.w;
-return color;
-)SkSL",
-                _sample0.c_str());
+                "half3 hsl = %s.xyz;\nhalf C = (1.0 - abs(2.0 * hsl.z - 1.0)) * hsl.y;\nhalf3 p = "
+                "hsl.xxx + half3(0.0, 0.66666666666666663, 0.33333333333333331);\nhalf3 q = "
+                "clamp(abs(fract(p) * 6.0 - 3.0) - 1.0, 0.0, 1.0);\nhalf3 rgb = (q - 0.5) * C + "
+                "hsl.z;\n%s = clamp(half4(rgb, %s.w), 0.0, 1.0);\n%s.xyz *= %s.w;\n",
+                args.fInputColor, args.fOutputColor, args.fInputColor, args.fOutputColor,
+                args.fOutputColor);
     }
 
 private:
     void onSetData(const GrGLSLProgramDataManager& pdman,
                    const GrFragmentProcessor& _proc) override {}
 };
-std::unique_ptr<GrGLSLFragmentProcessor> GrHSLToRGBFilterEffect::onMakeProgramImpl() const {
-    return std::make_unique<GrGLSLHSLToRGBFilterEffect>();
+GrGLSLFragmentProcessor* GrHSLToRGBFilterEffect::onCreateGLSLInstance() const {
+    return new GrGLSLHSLToRGBFilterEffect();
 }
 void GrHSLToRGBFilterEffect::onGetGLSLProcessorKey(const GrShaderCaps& caps,
                                                    GrProcessorKeyBuilder* b) const {}
@@ -54,12 +47,7 @@ bool GrHSLToRGBFilterEffect::onIsEqual(const GrFragmentProcessor& other) const {
     return true;
 }
 GrHSLToRGBFilterEffect::GrHSLToRGBFilterEffect(const GrHSLToRGBFilterEffect& src)
-        : INHERITED(kGrHSLToRGBFilterEffect_ClassID, src.optimizationFlags()) {
-    this->cloneAndRegisterAllChildProcessors(src);
-}
+        : INHERITED(kGrHSLToRGBFilterEffect_ClassID, src.optimizationFlags()) {}
 std::unique_ptr<GrFragmentProcessor> GrHSLToRGBFilterEffect::clone() const {
-    return std::make_unique<GrHSLToRGBFilterEffect>(*this);
+    return std::unique_ptr<GrFragmentProcessor>(new GrHSLToRGBFilterEffect(*this));
 }
-#if GR_TEST_UTILS
-SkString GrHSLToRGBFilterEffect::onDumpInfo() const { return SkString(); }
-#endif

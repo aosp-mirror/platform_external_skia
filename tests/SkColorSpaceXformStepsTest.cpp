@@ -20,7 +20,7 @@ DEF_TEST(SkColorSpaceXformSteps, r) {
          opaque =   kOpaque_SkAlphaType,
        unpremul = kUnpremul_SkAlphaType;
 
-    struct Test {
+    struct {
         sk_sp<SkColorSpace> src, dst;
         SkAlphaType         srcAT, dstAT;
 
@@ -30,8 +30,7 @@ DEF_TEST(SkColorSpaceXformSteps, r) {
         bool encode;
         bool premul;
 
-    };
-    Test tests[] = {
+    } tests[] = {
         // The general case is converting between two color spaces with different gamuts
         // and different transfer functions.  There's no optimization possible here.
         { adobe, srgb, premul, premul,
@@ -131,7 +130,7 @@ DEF_TEST(SkColorSpaceXformSteps, r) {
     };
 
     uint32_t tested = 0x00000000;
-    for (const Test& t : tests) {
+    for (auto t : tests) {
         SkColorSpaceXformSteps steps{t.src.get(), t.srcAT,
                                      t.dst.get(), t.dstAT};
         REPORTER_ASSERT(r, steps.flags.unpremul        == t.unpremul);

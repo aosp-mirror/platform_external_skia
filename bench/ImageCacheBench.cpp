@@ -33,7 +33,7 @@ struct TestRec : public SkResourceCache::Rec {
         return true;
     }
 };
-}  // namespace
+}
 
 class ImageCacheBench : public Benchmark {
     SkResourceCache fCache;
@@ -69,7 +69,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

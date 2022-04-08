@@ -108,7 +108,7 @@ public:
         }
 
     private:
-        using INHERITED = Iter;
+        typedef Iter INHERITED;
     };
 
 private:

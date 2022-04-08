@@ -38,7 +38,7 @@ private:
     const SkString fFamilyName;
     const int fIndex;
 
-    using INHERITED = SkTypeface_FreeType;
+    typedef SkTypeface_FreeType INHERITED;
 };
 
 /** The empty SkTypeface implementation for the custom font manager.
@@ -51,10 +51,9 @@ public:
 protected:
     std::unique_ptr<SkStreamAsset> onOpenStream(int*) const override;
     sk_sp<SkTypeface> onMakeClone(const SkFontArguments& args) const override;
-    std::unique_ptr<SkFontData> onMakeFontData() const override;
 
 private:
-    using INHERITED = SkTypeface_Custom;
+    typedef SkTypeface_Custom INHERITED;
 };
 
 /** The stream SkTypeface implementation for the custom font manager. */
@@ -72,7 +71,7 @@ protected:
 private:
     const std::unique_ptr<const SkFontData> fData;
 
-    using INHERITED = SkTypeface_Custom;
+    typedef SkTypeface_Custom INHERITED;
 };
 
 /** The file SkTypeface implementation for the custom font manager. */
@@ -84,12 +83,11 @@ public:
 protected:
     std::unique_ptr<SkStreamAsset> onOpenStream(int* ttcIndex) const override;
     sk_sp<SkTypeface> onMakeClone(const SkFontArguments& args) const override;
-    std::unique_ptr<SkFontData> onMakeFontData() const override;
 
 private:
     SkString fPath;
 
-    using INHERITED = SkTypeface_Custom;
+    typedef SkTypeface_Custom INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -145,6 +143,8 @@ protected:
     SkTypeface* onMatchFamilyStyleCharacter(const char familyName[], const SkFontStyle&,
                                             const char* bcp47[], int bcp47Count,
                                             SkUnichar character) const override;
+    SkTypeface* onMatchFaceStyle(const SkTypeface* familyMember,
+                                 const SkFontStyle& fontStyle) const override;
     sk_sp<SkTypeface> onMakeFromData(sk_sp<SkData> data, int ttcIndex) const override;
     sk_sp<SkTypeface> onMakeFromStreamIndex(std::unique_ptr<SkStreamAsset>, int ttcIndex) const override;
     sk_sp<SkTypeface> onMakeFromStreamArgs(std::unique_ptr<SkStreamAsset>, const SkFontArguments&) const override;

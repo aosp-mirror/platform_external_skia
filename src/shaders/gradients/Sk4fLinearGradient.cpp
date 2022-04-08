@@ -6,7 +6,6 @@
  */
 
 #include "include/core/SkPaint.h"
-#include "include/private/SkTPin.h"
 #include "src/shaders/gradients/Sk4fLinearGradient.h"
 
 #include <cmath>
@@ -96,7 +95,7 @@ LinearGradient4fContext::LinearGradient4fContext(const SkLinearGradient& shader,
     // Our fast path expects interval points to be monotonically increasing in x.
     const bool reverseIntervals = std::signbit(fDstToPos.getScaleX());
     fIntervals.init(shader, rec.fDstColorSpace, shader.fTileMode,
-                    fColorsArePremul, rec.fPaintAlpha * (1.0f / 255), reverseIntervals);
+                    fColorsArePremul, rec.fPaint->getAlpha() * (1.0f / 255), reverseIntervals);
 
     SkASSERT(fIntervals->count() > 0);
     fCachedInterval = fIntervals->begin();
@@ -191,17 +190,17 @@ LinearGradient4fContext::shadePremulSpan(int x, int y, SkPMColor dst[], int coun
     const SkLinearGradient& shader = static_cast<const SkLinearGradient&>(fShader);
     switch (shader.fTileMode) {
         case SkTileMode::kDecal:
-            SkASSERT(false);    // decal only supported via stages
-            [[fallthrough]];
+        SkASSERT(false);    // decal only supported via stages
+        // fall-through
         case SkTileMode::kClamp:
             this->shadeSpanInternal<premul, SkTileMode::kClamp >(x, y, dst, count, bias0, bias1);
-            break;
+        break;
         case SkTileMode::kRepeat:
             this->shadeSpanInternal<premul, SkTileMode::kRepeat>(x, y, dst, count, bias0, bias1);
-            break;
+        break;
         case SkTileMode::kMirror:
             this->shadeSpanInternal<premul, SkTileMode::kMirror>(x, y, dst, count, bias0, bias1);
-            break;
+        break;
     }
 }
 

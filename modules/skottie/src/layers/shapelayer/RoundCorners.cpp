@@ -10,7 +10,7 @@
 #include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/skottie/src/layers/shapelayer/ShapeLayer.h"
-#include "modules/sksg/include/SkSGGeometryEffect.h"
+#include "modules/sksg/include/SkSGRoundEffect.h"
 
 namespace skottie {
 namespace internal {
@@ -47,7 +47,7 @@ std::vector<sk_sp<sksg::GeometryNode>> ShapeBuilder::AttachRoundGeometryEffect(
 
     for (auto& g : geos) {
         rounded.push_back(
-            abuilder->attachDiscardableAdapter<RoundCornersAdapter>
+            abuilder->attachDiscardableAdapter<RoundCornersAdapter, sk_sp<sksg::RoundEffect>>
                         (jround, *abuilder, std::move(g)));
     }
 

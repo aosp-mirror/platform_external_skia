@@ -13,8 +13,7 @@ void draw(SkCanvas* canvas) {
         image->makeShader(
             SkTileMode::kRepeat,
             SkTileMode::kRepeat,
-            SkSamplingOptions(),
-            matrix));
+            &matrix));
     canvas->drawPaint(paint);
 }
 }  // END FIDDLE

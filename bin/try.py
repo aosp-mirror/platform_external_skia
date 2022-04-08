@@ -9,7 +9,6 @@
 """Submit one or more try jobs."""
 
 
-from __future__ import print_function
 import argparse
 import json
 import os
@@ -17,7 +16,6 @@ import re
 import subprocess
 import sys
 import tempfile
-import urllib2
 
 
 BUCKET_SKIA_PRIMARY = 'skia/skia.primary'
@@ -77,31 +75,6 @@ def main():
                       help='Job name or regular expression to match job names.')
   args = parser.parse_args()
 
-  # First, find the Gerrit issue number. If the change was uploaded using Depot
-  # Tools, this configuration will be present in the git config.
-  branch = subprocess.check_output(['git', 'branch', '--show-current']).rstrip()
-  if not branch:
-    print('Not on any branch; cannot trigger try jobs.')
-    sys.exit(1)
-  branch_issue_config = 'branch.%s.gerritissue' % branch
-  try:
-    issue = subprocess.check_output([
-        'git', 'config', '--local', branch_issue_config])
-  except subprocess.CalledProcessError:
-    # Not using Depot Tools. Find the Change-Id line in the most recent commit
-    # and obtain the issue number using that.
-    print('"git cl issue" not set; searching for Change-Id footer.')
-    msg = subprocess.check_output(['git', 'log', '-n1', branch])
-    m = re.search('Change-Id: (I[a-f0-9]+)', msg)
-    if not m:
-      print('No gerrit issue found in `git config --local %s` and no Change-Id'
-            ' found in most recent commit message.')
-      sys.exit(1)
-    url = 'https://skia-review.googlesource.com/changes/%s' % m.groups()[0]
-    resp = urllib2.urlopen(url).read()
-    issue = str(json.loads('\n'.join(resp.splitlines()[1:]))['_number'])
-    print('Setting "git cl issue %s"' % issue)
-    subprocess.check_call(['git', 'cl', 'issue', issue])
   # Load and filter the list of jobs.
   jobs = []
   tasks_json = os.path.join(find_repo_root(), TASKS_JSON)
@@ -128,16 +101,16 @@ def main():
 
   # Display the list of jobs.
   if len(jobs) == 0:
-    print('Found no jobs matching "%s"' % repr(args.job))
+    print 'Found no jobs matching "%s"' % repr(args.job)
     sys.exit(1)
   count = 0
   for bucket, job_list in jobs:
     count += len(job_list)
-  print('Found %d jobs:' % count)
+  print 'Found %d jobs:' % count
   for bucket, job_list in jobs:
-    print('  %s:' % bucket)
+    print '  %s:' % bucket
     for j in job_list:
-      print('    %s' % j)
+      print '    %s' % j
   if args.list:
     return
 
@@ -145,7 +118,7 @@ def main():
     # Prompt before triggering jobs.
     resp = raw_input('\nDo you want to trigger these jobs? (y/n or i for '
                      'interactive): ')
-    print('')
+    print ''
     if resp != 'y' and resp != 'i':
       sys.exit(1)
     if resp == 'i':

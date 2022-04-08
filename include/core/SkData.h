@@ -176,7 +176,7 @@ private:
 
     static void DummyReleaseProc(const void*, void*); // {}
 
-    using INHERITED = SkRefCnt;
+    typedef SkRefCnt INHERITED;
 };
 
 #endif

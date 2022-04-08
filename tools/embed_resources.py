@@ -15,12 +15,7 @@ def bytes_from_file(f, chunksize=8192):
     chunk = f.read(chunksize)
     if chunk:
       for b in chunk:
-        if isinstance(b, str):
-          # python 2
-          yield ord(b)
-        else:
-          # python 3
-          yield b
+        yield ord(b)
     else:
       break
 

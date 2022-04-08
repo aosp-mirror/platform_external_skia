@@ -73,7 +73,7 @@ protected:
 
 private:
     SkScalar           fTime;
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

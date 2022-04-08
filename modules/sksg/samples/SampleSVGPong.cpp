@@ -6,9 +6,7 @@
  */
 
 #include "include/core/SkCanvas.h"
-#include "include/core/SkPathBuilder.h"
 #include "include/core/SkRRect.h"
-#include "include/private/SkTPin.h"
 #include "include/utils/SkRandom.h"
 #include "samplecode/Sample.h"
 #include "tools/timer/TimeUtils.h"
@@ -76,7 +74,7 @@ void update_pos(const sk_sp<sksg::RRect>& rr, const SkPoint& pos) {
     rr->setRRect(rr->getRRect().makeOffset(offsetX, offsetY));
 }
 
-}  // namespace
+} // anonymous ns
 
 class PongView final : public Sample {
 public:
@@ -104,20 +102,20 @@ protected:
                             SkVector::Make(0, 0));
 
         // Background decoration.
-        SkPathBuilder bgPath;
-        bgPath.moveTo(kBounds.left() , fieldBounds.top())
-              .lineTo(kBounds.right(), fieldBounds.top())
-              .moveTo(kBounds.left() , fieldBounds.bottom())
-              .lineTo(kBounds.right(), fieldBounds.bottom());
+        SkPath bgPath;
+        bgPath.moveTo(kBounds.left() , fieldBounds.top());
+        bgPath.lineTo(kBounds.right(), fieldBounds.top());
+        bgPath.moveTo(kBounds.left() , fieldBounds.bottom());
+        bgPath.lineTo(kBounds.right(), fieldBounds.bottom());
         // TODO: stroke-dash support would come in handy right about now.
         for (uint32_t i = 0; i < kBackgroundDashCount; ++i) {
             bgPath.moveTo(kBounds.centerX(),
-                          kBounds.top() + (i + 0.25f) * kBounds.height() / kBackgroundDashCount)
-                  .lineTo(kBounds.centerX(),
+                          kBounds.top() + (i + 0.25f) * kBounds.height() / kBackgroundDashCount);
+            bgPath.lineTo(kBounds.centerX(),
                           kBounds.top() + (i + 0.75f) * kBounds.height() / kBackgroundDashCount);
         }
 
-        auto bg_path  = sksg::Path::Make(bgPath.detach());
+        auto bg_path  = sksg::Path::Make(bgPath);
         auto bg_paint = sksg::Color::Make(SK_ColorBLACK);
         bg_paint->setStyle(SkPaint::kStroke_Style);
         bg_paint->setStrokeWidth(kBackgroundStroke);
@@ -144,10 +142,11 @@ protected:
 
         // Handle everything in a normalized 1x1 space.
         fContentMatrix = sksg::Matrix<SkMatrix>::Make(
-            SkMatrix::RectToRect(SkRect::MakeWH(1, 1),
-                                 SkRect::MakeIWH(this->width(), this->height())));
+            SkMatrix::MakeRectToRect(SkRect::MakeWH(1, 1),
+                                     SkRect::MakeIWH(this->width(), this->height()),
+                                     SkMatrix::kFill_ScaleToFit));
         auto root = sksg::TransformEffect::Make(std::move(group), fContentMatrix);
-        fScene = sksg::Scene::Make(std::move(root));
+        fScene = sksg::Scene::Make(std::move(root), sksg::AnimatorList());
 
         // Off we go.
         this->updatePaddleStrategy();
@@ -174,9 +173,10 @@ protected:
 
     void onSizeChange() override {
         if (fContentMatrix) {
-            fContentMatrix->setMatrix(SkMatrix::RectToRect(SkRect::MakeWH(1, 1),
-                                                           SkRect::MakeIWH(this->width(),
-                                                                           this->height())));
+            fContentMatrix->setMatrix(SkMatrix::MakeRectToRect(SkRect::MakeWH(1, 1),
+                                                               SkRect::MakeIWH(this->width(),
+                                                                               this->height()),
+                                                               SkMatrix::kFill_ScaleToFit));
         }
 
         this->INHERITED::onSizeChange();
@@ -184,6 +184,7 @@ protected:
 
     void onDrawContent(SkCanvas* canvas) override {
         sksg::InvalidationController ic;
+        fScene->animate(0, &ic);
         fScene->render(canvas);
 
         if (fShowInval) {
@@ -301,7 +302,7 @@ private:
     SkScalar                      fTimeScale = 1.0f;
     bool                          fShowInval = false;
 
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 DEF_SAMPLE( return new PongView(); )

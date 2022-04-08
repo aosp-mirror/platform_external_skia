@@ -27,6 +27,16 @@ static const char* str(SkPaint::Style v) {
     }
 }
 
+static const char* str(SkFilterQuality v) {
+    switch (v) {
+        case kNone_SkFilterQuality:   return "kNone_SkFilterQuality";
+        case kLow_SkFilterQuality:    return "kLow_SkFilterQuality";
+        case kMedium_SkFilterQuality: return "kMedium_SkFilterQuality";
+        case kHigh_SkFilterQuality:   return "kHigh_SkFilterQuality";
+        default: return "?";
+    }
+}
+
 static const char* str(bool v) { return v ? "true" : "false"; }
 
 SkString PaintStringDump(const SkPaint& p) {
@@ -57,6 +67,9 @@ SkString PaintStringDump(const SkPaint& p) {
     if (d.getStyle() != p.getStyle()) {
         s.appendf("p.setStyle(%s);\n", str(p.getStyle()));
     }
+    if (d.getFilterQuality() != p.getFilterQuality()) {
+        s.appendf("p.setFilterQuality(%s);\n", str(p.getFilterQuality()));
+    }
     if (d.getBlendMode() != p.getBlendMode()) {
         s.appendf("p.setBlendMode(SkBlendMode::k%s);\n", SkBlendMode_Name(p.getBlendMode()));
     }
@@ -86,7 +99,7 @@ void draw(SkCanvas* canvas) {
     p.setStrokeWidth(10);
     p.setBlendMode(SkBlendMode::kDstOver);
     p.setStrokeCap(SkPaint::kRound_Cap);
-    p.setShader(image->makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, SkSamplingOptions()));
+    p.setShader(image->makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat));
 
     auto s = PaintStringDump(p);
     SkDebugf("%s", s.c_str());

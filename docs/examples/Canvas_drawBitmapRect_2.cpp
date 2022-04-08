@@ -16,12 +16,10 @@ void draw(SkCanvas* canvas) {
     bitmap.installPixels(SkImageInfo::MakeA8(8, 8),
             (void*) pixels, sizeof(pixels[0]));
     SkPaint paint;
+    paint.setFilterQuality(kHigh_SkFilterQuality);
     for (auto color : { SK_ColorRED, SK_ColorBLUE, 0xFF007F00, 0xFF7f007f} ) {
         paint.setColor(color);
-        canvas->drawImageRect(bitmap.asImage().get(),
-                              SkRect::MakeWH(8, 8), SkRect::MakeWH(32, 32),
-                              SkSamplingOptions({1.0f/3, 1.0f/3}), &paint,
-                              SkCanvas::kStrict_SrcRectConstraint);
+        canvas->drawBitmapRect(bitmap, SkIRect::MakeWH(8, 8), SkRect::MakeWH(32, 32), &paint);
         canvas->translate(48.25f, 0);
     }
 }

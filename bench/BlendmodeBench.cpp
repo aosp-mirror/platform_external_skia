@@ -19,7 +19,7 @@ class XfermodeBench : public Benchmark {
 public:
     XfermodeBench(SkBlendMode mode, bool aa) : fBlendMode(mode) {
         fAA = aa;
-        fName.printf("blendmicro_%s_%s", aa ? "mask" : "rect", SkBlendMode_Name(mode));
+        fName.printf("blendmode_%s_%s", aa ? "mask" : "rect", SkBlendMode_Name(mode));
     }
 
 protected:
@@ -30,7 +30,7 @@ protected:
         size_t len = strlen(text);
         SkISize size = canvas->getBaseLayerSize();
         SkRandom random;
-        while (loops > 0) {
+        for (int i = 0; i < loops; ++i) {
             SkPaint paint;
             paint.setBlendMode(fBlendMode);
             paint.setColor(random.nextU());
@@ -41,11 +41,9 @@ protected:
                 SkScalar x = random.nextRangeScalar(0, (SkScalar)size.fWidth),
                          y = random.nextRangeScalar(0, (SkScalar)size.fHeight);
                 auto blob = SkTextBlob::MakeFromText(text, len, font, SkTextEncoding::kUTF8);
-                int iterations = std::min(1000, loops);
-                for (int j = 0; j < iterations; ++j) {
+                for (int j = 0; j < 1000; ++j) {
                     canvas->drawTextBlob(blob, x, y, paint);
                 }
-                loops -= iterations;
             } else {
                 // Draw rects to exercise non-AA code paths.
                 SkScalar w = random.nextRangeScalar(50, 100);
@@ -56,11 +54,9 @@ protected:
                     w,
                     h
                 );
-                int iterations = std::min(1000, loops);
-                for (int j = 0; j < iterations; ++j) {
+                for (int j = 0; j < 1000; ++j) {
                     canvas->drawRect(rect, paint);
                 }
-                loops -= iterations;
             }
         }
     }
@@ -70,7 +66,7 @@ private:
     SkString    fName;
     bool        fAA;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

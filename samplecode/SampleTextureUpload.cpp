@@ -9,7 +9,7 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrContext.h"
 #include "samplecode/Sample.h"
 #include "tools/timer/TimeUtils.h"
 
@@ -31,11 +31,11 @@ class TextureUploadSample : public Sample {
 
     class RenderTargetTexture : public SkRefCnt {
     public:
-        RenderTargetTexture(GrDirectContext* direct, int size) {
-            SkSurfaceProps surfaceProps(0, kRGB_H_SkPixelGeometry);
+        RenderTargetTexture(GrContext* context, int size) {
+            SkSurfaceProps surfaceProps(SkSurfaceProps::kLegacyFontHost_InitType);
             SkImageInfo imageInfo = SkImageInfo::Make(size, size, kRGBA_8888_SkColorType,
                                                       kPremul_SkAlphaType);
-            fSurface = SkSurface::MakeRenderTarget(direct, SkBudgeted::kNo, imageInfo, 0,
+            fSurface = SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, imageInfo, 0,
                                                    &surfaceProps);
         }
 
@@ -55,7 +55,7 @@ class TextureUploadSample : public Sample {
     };
 
     SkTArray<sk_sp<RenderTargetTexture>> fTextures;
-    GrDirectContext* fCachedContext = nullptr;
+    GrContext* fCachedContext = nullptr;
     SkScalar fActiveTileIndex = 0;
 
     SkString name() override {
@@ -92,11 +92,11 @@ class TextureUploadSample : public Sample {
         this->setSize(1024, 1024);
     }
 
-    void initializeTextures(GrDirectContext* direct) {
+    void initializeTextures(GrContext* context) {
         fTextures.reset();
         int textureCount = fTileRows * fTileCols;
         for (int i = 0; i < textureCount; i++) {
-            fTextures.emplace_back(new RenderTargetTexture(direct, fTileSize));
+            fTextures.emplace_back(new RenderTargetTexture(context, fTileSize));
         }
 
         // Construct two simple rasters of differing colors to serve
@@ -107,12 +107,14 @@ class TextureUploadSample : public Sample {
 
     void onDrawContent(SkCanvas* canvas) override {
 #if SK_SUPPORT_GPU
-        auto direct = GrAsDirectContext(canvas->recordingContext());
-        if (direct) {
+        SkPaint paint;
+
+        GrContext* context = canvas->getGrContext();
+        if (context) {
             // One-time context-specific setup.
-            if (direct != fCachedContext) {
-                fCachedContext = direct;
-                this->initializeTextures(direct);
+            if (context != fCachedContext) {
+                fCachedContext = context;
+                this->initializeTextures(context);
             }
 
             // Upload new texture data for all textures, simulating a full page of tiles
@@ -131,7 +133,7 @@ class TextureUploadSample : public Sample {
                     for (int x = 0; x < fTileCols; x++) {
                         int currentIndex = y * fTileCols + x;
                         canvas->drawImage(fTextures[currentIndex]->getImage(),
-                                          x * fTileSize, y * fTileSize);
+                                          x * fTileSize, y * fTileSize, &paint);
                     }
                 }
             }
@@ -148,6 +150,8 @@ class TextureUploadSample : public Sample {
     }
 };
 
+const int TextureUploadSample::kMinTileSize;
+const int TextureUploadSample::kMaxTileSize;
 
 DEF_SAMPLE( return new TextureUploadSample(); )
 

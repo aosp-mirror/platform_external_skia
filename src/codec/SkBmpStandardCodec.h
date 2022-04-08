@@ -87,6 +87,6 @@ private:
     const bool                  fInIco;
     const size_t                fAndMaskRowBytes; // only used for fInIco decodes
 
-    using INHERITED = SkBmpBaseCodec;
+    typedef SkBmpBaseCodec INHERITED;
 };
 #endif  // SkBmpStandardCodec_DEFINED

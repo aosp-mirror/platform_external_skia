@@ -22,18 +22,17 @@ namespace {
 static constexpr char kWebFontResource[] = "fonts/Roboto-Regular.ttf";
 static constexpr char kSkottieResource[] = "skottie/skottie_sample_webfont.json";
 
-// Mock web font loader which serves a single local font (checked in under resources/).
+// Dummy web font loader which serves a single local font (checked in under resources/).
 class FakeWebFontProvider final : public skresources::ResourceProvider {
 public:
-    FakeWebFontProvider()
-        : fTypeface(SkTypeface::MakeFromData(GetResourceAsData(kWebFontResource))) {}
+    FakeWebFontProvider() : fFontData(GetResourceAsData(kWebFontResource)) {}
 
-    sk_sp<SkTypeface> loadTypeface(const char[], const char[]) const override {
-        return fTypeface;
+    sk_sp<SkData> loadFont(const char[], const char[]) const override {
+        return fFontData;
     }
 
 private:
-    sk_sp<SkTypeface> fTypeface;
+    sk_sp<SkData> fFontData;
 
     using INHERITED = skresources::ResourceProvider;
 };

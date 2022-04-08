@@ -5,11 +5,22 @@
  * found in the LICENSE file.
  */
 
-in fragmentProcessor inputFP;
+enum class Mode {
+    kGaussian   = 0,
+    kSmoothStep = 1
+};
 
-half4 main() {
-    half inputAlpha = sample(inputFP).a;
-    half factor = 1.0 - inputAlpha;
-    factor = half(exp(-factor * factor * 4.0) - 0.018);
-    return half4(factor);
+layout(key) in Mode mode;
+
+void main() {
+    half factor = 1.0 - sk_InColor.a;
+    @switch (mode) {
+        case Mode::kGaussian:
+            factor = half(exp(-factor * factor * 4.0) - 0.018);
+            break;
+        case Mode::kSmoothStep:
+            factor = smoothstep(1.0, 0.0, factor);
+            break;
+    }
+    sk_OutColor = half4(factor);
 }

@@ -17,11 +17,14 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrBitmapTextureMaker.h"
 #include "src/gpu/GrCaps.h"
-#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrContextPriv.h"
+#include "src/gpu/GrCoordTransform.h"
 #include "src/gpu/GrFragmentProcessor.h"
-#include "src/gpu/GrSurfaceDrawContext.h"
-#include "src/gpu/SkGr.h"
+#include "src/gpu/GrRenderTargetContext.h"
+#include "src/gpu/GrRenderTargetContextPriv.h"
 #include "src/gpu/effects/GrRRectEffect.h"
 #include "src/gpu/effects/GrSkSLFP.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
@@ -35,7 +38,8 @@ public:
 
     SampleCoordEffect(std::unique_ptr<GrFragmentProcessor> child)
         : INHERITED(CLASS_ID, kNone_OptimizationFlags) {
-        this->registerChild(std::move(child), SkSL::SampleUsage::Explicit());
+        child->setSampledWithExplicitCoords(true);
+        this->registerChildProcessor(std::move(child));
     }
 
     const char* name() const override { return "SampleCoordEffect"; }
@@ -54,8 +58,8 @@ public:
     }
 
 private:
-    std::unique_ptr<GrGLSLFragmentProcessor> onMakeProgramImpl() const override;
-    using INHERITED = GrFragmentProcessor;
+    GrGLSLFragmentProcessor* onCreateGLSLInstance() const override;
+    typedef GrFragmentProcessor INHERITED;
 };
 
 class GLSLSampleCoordEffect : public GrGLSLFragmentProcessor {
@@ -63,12 +67,13 @@ class GLSLSampleCoordEffect : public GrGLSLFragmentProcessor {
         GrGLSLFPFragmentBuilder* fragBuilder = args.fFragBuilder;
         SkString sample1 = this->invokeChild(0, args, "float2(sk_FragCoord.x, sk_FragCoord.y)");
         SkString sample2 = this->invokeChild(0, args, "float2(sk_FragCoord.x, 512-sk_FragCoord.y)");
-        fragBuilder->codeAppendf("return (%s + %s) / 2;\n", sample1.c_str(), sample2.c_str());
+        fragBuilder->codeAppendf("%s = (%s + %s) / 2;\n", args.fOutputColor, sample1.c_str(),
+                                 sample2.c_str());
     }
 };
 
-std::unique_ptr<GrGLSLFragmentProcessor> SampleCoordEffect::onMakeProgramImpl() const {
-    return std::make_unique<GLSLSampleCoordEffect>();
+GrGLSLFragmentProcessor* SampleCoordEffect::onCreateGLSLInstance() const {
+    return new GLSLSampleCoordEffect();
 }
 
 DEF_SIMPLE_GPU_GM_BG(fpcoordinateoverride, ctx, rtCtx, canvas, 512, 512,
@@ -77,16 +82,17 @@ DEF_SIMPLE_GPU_GM_BG(fpcoordinateoverride, ctx, rtCtx, canvas, 512, 512,
 
     SkBitmap bmp;
     GetResourceAsBitmap("images/mandrill_512_q075.jpg", &bmp);
-    auto view = std::get<0>(GrMakeCachedBitmapProxyView(ctx, bmp, GrMipmapped::kNo));
-    if (!view) {
-        return;
-    }
+    GrBitmapTextureMaker maker(ctx, bmp);
+    auto[view, grCT] = maker.view(GrMipMapped::kNo);
     std::unique_ptr<GrFragmentProcessor> imgFP =
             GrTextureEffect::Make(std::move(view), bmp.alphaType(), SkMatrix());
     auto fp = std::unique_ptr<GrFragmentProcessor>(new SampleCoordEffect(std::move(imgFP)));
 
     GrPaint grPaint;
-    grPaint.setCoverageFragmentProcessor(std::move(fp));
+    grPaint.addCoverageFragmentProcessor(std::move(fp));
 
-    rtCtx->addDrawOp(GrFillRectOp::MakeNonAARect(ctx, std::move(grPaint), SkMatrix::I(), bounds));
+    rtCtx->priv().testingOnly_addDrawOp(GrFillRectOp::MakeNonAARect(ctx,
+                                                                    std::move(grPaint),
+                                                                    SkMatrix::I(),
+                                                                    bounds));
 }

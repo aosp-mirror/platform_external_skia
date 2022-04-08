@@ -9,7 +9,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkPaint.h"
-#include "include/core/SkPathBuilder.h"
+#include "include/core/SkPath.h"
 #include "include/core/SkPathEffect.h"
 #include "include/core/SkPathMeasure.h"
 #include "include/core/SkRect.h"
@@ -72,21 +72,23 @@ DEF_SIMPLE_GM(arcto, canvas, 500, 600) {
     paint.setColor(0xFF660000);
 //    canvas->scale(2, 2);  // for testing on retina
     SkRect oval = SkRect::MakeXYWH(100, 100, 100, 100);
+    SkPath svgArc;
 
-    for (SkScalar angle = 0; angle <= 45; angle += 45) {
-        for (int oHeight = 2; oHeight >= 1; --oHeight) {
-            SkPathBuilder svgArc;
+    for (int angle = 0; angle <= 45; angle += 45) {
+       for (int oHeight = 2; oHeight >= 1; --oHeight) {
             SkScalar ovalHeight = oval.height() / oHeight;
             svgArc.moveTo(oval.fLeft, oval.fTop);
-            svgArc.arcTo({oval.width() / 2, ovalHeight}, angle, SkPathBuilder::kSmall_ArcSize,
-                         SkPathDirection::kCW, {oval.right(), oval.bottom()});
-            canvas->drawPath(svgArc.detach(), paint);
+            svgArc.arcTo(oval.width() / 2, ovalHeight, SkIntToScalar(angle), SkPath::kSmall_ArcSize,
+                    SkPathDirection::kCW, oval.right(), oval.bottom());
+            canvas->drawPath(svgArc, paint);
+            svgArc.reset();
 
             svgArc.moveTo(oval.fLeft + 100, oval.fTop + 100);
-            svgArc.arcTo({oval.width() / 2, ovalHeight}, angle, SkPathBuilder::kLarge_ArcSize,
-                         SkPathDirection::kCCW, {oval.right(), oval.bottom() + 100});
-            canvas->drawPath(svgArc.detach(), paint);
+            svgArc.arcTo(oval.width() / 2, ovalHeight, SkIntToScalar(angle), SkPath::kLarge_ArcSize,
+                    SkPathDirection::kCCW, oval.right(), oval.bottom() + 100);
+            canvas->drawPath(svgArc, paint);
             oval.offset(50, 0);
+            svgArc.reset();
 
         }
     }
@@ -103,22 +105,22 @@ DEF_SIMPLE_GM(arcto, canvas, 500, 600) {
     };
     int cIndex = 0;
     for (const char* arcstr : arcstrs) {
-        SkPath path;
-        SkParsePath::FromSVGString(arcstr, &path);
+        SkParsePath::FromSVGString(arcstr, &svgArc);
         paint.setColor(colors[cIndex++]);
-        canvas->drawPath(path, paint);
+        canvas->drawPath(svgArc, paint);
     }
 
     // test that zero length arcs still draw round cap
     paint.setStrokeCap(SkPaint::kRound_Cap);
-    SkPathBuilder path;
-    path.moveTo(100, 100)
-        .arcTo({0, 0}, 0, SkPathBuilder::kLarge_ArcSize, SkPathDirection::kCW, {200, 200});
-    canvas->drawPath(path.detach(), paint);
+    SkPath path;
+    path.moveTo(100, 100);
+    path.arcTo(0, 0, 0, SkPath::kLarge_ArcSize, SkPathDirection::kCW, 200, 200);
+    canvas->drawPath(path, paint);
 
-    path.moveTo(200, 100)
-        .arcTo({80, 80}, 0, SkPathBuilder::kLarge_ArcSize, SkPathDirection::kCW, {200, 100});
-    canvas->drawPath(path.detach(), paint);
+    path.reset();
+    path.moveTo(200, 100);
+    path.arcTo(80, 80, 0, SkPath::kLarge_ArcSize, SkPathDirection::kCW, 200, 100);
+    canvas->drawPath(path, paint);
 }
 
 enum {
@@ -198,7 +200,7 @@ DEF_SIMPLE_GM(parsedpaths, canvas, kParsePathTestDimension, kParsePathTestDimens
 DEF_SIMPLE_GM(bug593049, canvas, 300, 300) {
     canvas->translate(111, 0);
 
-    SkPathBuilder p;
+    SkPath p;
     p.moveTo(-43.44464063610148f, 79.43535936389853f);
     const SkScalar yOffset = 122.88f;
     const SkScalar radius = 61.44f;
@@ -210,7 +212,7 @@ DEF_SIMPLE_GM(bug593049, canvas, 300, 300) {
     paint.setStrokeCap(SkPaint::kRound_Cap);
     paint.setStrokeWidth(15.36f);
 
-    canvas->drawPath(p.detach(), paint);
+    canvas->drawPath(p, paint);
 }
 
 DEF_SIMPLE_GM(bug583299, canvas, 300, 300) {

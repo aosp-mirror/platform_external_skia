@@ -12,7 +12,6 @@
 #include "include/core/SkImageFilter.h"
 #include "include/core/SkImageInfo.h"
 #include "include/private/SkTArray.h"
-#include "include/private/SkTemplates.h"
 
 #include "src/core/SkImageFilterTypes.h"
 
@@ -71,7 +70,7 @@ public:
      * @return The layer-space bounding box to use for an SkDevice when drawing the source image.
      */
     skif::LayerSpace<SkIRect> getInputBounds(
-            const skif::Mapping& mapping, const skif::DeviceSpace<SkIRect>& desiredOutput,
+            const skif::Mapping& mapping, const skif::DeviceSpace<SkRect>& desiredOutput,
             const skif::ParameterSpace<SkRect>* knownContentBounds) const;
 
     /**
@@ -100,6 +99,22 @@ public:
      */
     skif::DeviceSpace<SkIRect> getOutputBounds(
             const skif::Mapping& mapping, const skif::ParameterSpace<SkRect>& contentBounds) const;
+
+    /**
+     *  Returns whether any edges of the crop rect have been set. The crop
+     *  rect is set at construction time, and determines which pixels from the
+     *  input image will be processed, and which pixels in the output image will be allowed.
+     *  The size of the crop rect should be
+     *  used as the size of the destination image. The origin of this rect
+     *  should be used to offset access to the input images, and should also
+     *  be added to the "offset" parameter in onFilterImage.
+     *
+     *  DEPRECATED - Remove once cropping is handled by a separate filter
+     */
+    bool cropRectIsSet() const { return fCropRect.flags() != 0x0; }
+
+    // DEPRECATED - Remove once cropping is handled by a separate filter
+    CropRect getCropRect() const { return fCropRect; }
 
     // Expose isolated node bounds behavior for SampleImageFilterDAG and debugging
     SkIRect filterNodeBounds(const SkIRect& srcRect, const SkMatrix& ctm,
@@ -135,43 +150,6 @@ public:
     uint32_t uniqueID() const { return fUniqueID; }
 
 protected:
-    // DEPRECATED: Will be removed once cropping is handled by a standalone image filter
-    class CropRect {
-    public:
-        enum CropEdge {
-            kHasLeft_CropEdge   = 0x01,
-            kHasTop_CropEdge    = 0x02,
-            kHasWidth_CropEdge  = 0x04,
-            kHasHeight_CropEdge = 0x08,
-            kHasAll_CropEdge    = 0x0F,
-        };
-        CropRect() : fFlags(0) {}
-        explicit CropRect(const SkRect* rect)
-            : fRect(rect ? *rect : SkRect::MakeEmpty()), fFlags(rect ? kHasAll_CropEdge : 0x0) {}
-
-        // CropRect(const CropRect&) = default;
-
-        uint32_t flags() const { return fFlags; }
-        const SkRect& rect() const { return fRect; }
-
-        /**
-         *  Apply this cropRect to the imageBounds. If a given edge of the cropRect is not set, then
-         *  the corresponding edge from imageBounds will be used. If "embiggen" is true, the crop
-         *  rect is allowed to enlarge the size of the rect, otherwise it may only reduce the rect.
-         *  Filters that can affect transparent black should pass "true", while all other filters
-         *  should pass "false".
-         *
-         *  Note: imageBounds is in "device" space, as the output cropped rectangle will be, so the
-         *  matrix is ignored for those. It is only applied to the cropRect's bounds.
-         */
-        void applyTo(const SkIRect& imageBounds, const SkMatrix& matrix, bool embiggen,
-                     SkIRect* cropped) const;
-
-    private:
-        SkRect fRect;
-        uint32_t fFlags;
-    };
-
     class Common {
     public:
         /**
@@ -184,9 +162,7 @@ protected:
          */
         bool unflatten(SkReadBuffer&, int expectedInputs);
 
-        const SkRect* cropRect() const {
-            return fCropRect.flags() != 0x0 ? &fCropRect.rect() : nullptr;
-        }
+        const CropRect& cropRect() const { return fCropRect; }
         int inputCount() const { return fInputs.count(); }
         sk_sp<SkImageFilter>* inputs() { return fInputs.begin(); }
 
@@ -205,7 +181,7 @@ protected:
     };
 
     SkImageFilter_Base(sk_sp<SkImageFilter> const* inputs, int inputCount,
-                       const SkRect* cropRect);
+                       const CropRect* cropRect);
 
     ~SkImageFilter_Base() override;
 
@@ -259,22 +235,6 @@ protected:
         return this->filterInput<For::kInput1>(1, context);
     }
 
-    /**
-     *  Returns whether any edges of the crop rect have been set. The crop
-     *  rect is set at construction time, and determines which pixels from the
-     *  input image will be processed, and which pixels in the output image will be allowed.
-     *  The size of the crop rect should be
-     *  used as the size of the destination image. The origin of this rect
-     *  should be used to offset access to the input images, and should also
-     *  be added to the "offset" parameter in onFilterImage.
-     *
-     *  DEPRECATED - Remove once cropping is handled by a separate filter
-     */
-    bool cropRectIsSet() const { return fCropRect.flags() != 0x0; }
-
-    // DEPRECATED - Remove once cropping is handled by a separate filter
-    CropRect getCropRect() const { return fCropRect; }
-
     // DEPRECATED - Remove once cropping is handled by a separate filter
     const CropRect* getCropRectIfSet() const {
         return this->cropRectIsSet() ? &fCropRect : nullptr;
@@ -325,7 +285,6 @@ protected:
                                             const SkIRect& bounds,
                                             SkColorType colorType,
                                             const SkColorSpace* colorSpace,
-                                            const SkSurfaceProps&,
                                             GrProtected isProtected = GrProtected::kNo);
 
     /**
@@ -335,8 +294,7 @@ protected:
      */
     static sk_sp<SkSpecialImage> ImageToColorSpace(SkSpecialImage* src,
                                                    SkColorType colorType,
-                                                   SkColorSpace* colorSpace,
-                                                   const SkSurfaceProps&);
+                                                   SkColorSpace* colorSpace);
 #endif
 
     // If 'srcBounds' will sample outside the border of 'originalSrcBounds' (i.e., the sample
@@ -356,6 +314,8 @@ private:
     friend class SkGraphics;
 
     static void PurgeCache();
+
+    void init(sk_sp<SkImageFilter> const* inputs, int inputCount, const CropRect* cropRect);
 
     // Configuration points for the filter implementation, marked private since they should not
     // need to be invoked by the subclasses. These refer to the node's specific behavior and are
@@ -453,7 +413,7 @@ private:
     CropRect fCropRect;
     uint32_t fUniqueID; // Globally unique
 
-    using INHERITED = SkImageFilter;
+    typedef SkImageFilter INHERITED;
 };
 
 static inline SkImageFilter_Base* as_IFB(SkImageFilter* filter) {
@@ -478,30 +438,5 @@ static inline const SkImageFilter_Base* as_IFB(const SkImageFilter* filter) {
             return nullptr;                                         \
         }                                                           \
     } while (0)
-
-
-/**
- * All image filter implementations defined for the include/effects/SkImageFilters.h factories
- * are entirely encapsulated within their own CPP files. SkFlattenable deserialization needs a hook
- * into these types, so their registration functions are exposed here.
- */
-void SkRegisterAlphaThresholdImageFilterFlattenable();
-void SkRegisterArithmeticImageFilterFlattenable();
-void SkRegisterBlendImageFilterFlattenable();
-void SkRegisterBlurImageFilterFlattenable();
-void SkRegisterColorFilterImageFilterFlattenable();
-void SkRegisterComposeImageFilterFlattenable();
-void SkRegisterDisplacementMapImageFilterFlattenable();
-void SkRegisterDropShadowImageFilterFlattenable();
-void SkRegisterImageImageFilterFlattenable();
-void SkRegisterLightingImageFilterFlattenables();
-void SkRegisterMagnifierImageFilterFlattenable();
-void SkRegisterMatrixConvolutionImageFilterFlattenable();
-void SkRegisterMergeImageFilterFlattenable();
-void SkRegisterMorphologyImageFilterFlattenables();
-void SkRegisterOffsetImageFilterFlattenable();
-void SkRegisterPictureImageFilterFlattenable();
-void SkRegisterShaderImageFilterFlattenable();
-void SkRegisterTileImageFilterFlattenable();
 
 #endif // SkImageFilter_Base_DEFINED

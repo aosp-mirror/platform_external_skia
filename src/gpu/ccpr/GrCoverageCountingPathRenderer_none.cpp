@@ -5,20 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include <memory>
 #include "src/gpu/ccpr/GrCoverageCountingPathRenderer.h"
 
-bool GrCoverageCountingPathRenderer::IsSupported(const GrRecordingContext*) {
+bool GrCoverageCountingPathRenderer::IsSupported(const GrCaps& caps, CoverageType*) {
     return false;
 }
 
-std::unique_ptr<GrCoverageCountingPathRenderer> GrCoverageCountingPathRenderer::CreateIfSupported(
-        const GrRecordingContext*) {
+sk_sp<GrCoverageCountingPathRenderer> GrCoverageCountingPathRenderer::CreateIfSupported(
+        const GrCaps& caps, AllowCaching allowCaching, uint32_t contextUniqueID) {
     return nullptr;
 }
 
-GrFPResult GrCoverageCountingPathRenderer::makeClipProcessor(
-        std::unique_ptr<GrFragmentProcessor> inputFP, uint32_t opsTaskID,
-        const SkPath& deviceSpacePath, const SkIRect& accessRect, const GrCaps& caps) {
-    return GrFPFailure(nullptr);
+std::unique_ptr<GrFragmentProcessor> GrCoverageCountingPathRenderer::makeClipProcessor(
+        uint32_t opsTaskID, const SkPath& deviceSpacePath, const SkIRect& accessRect,
+        const GrCaps& caps) {
+    return nullptr;
 }

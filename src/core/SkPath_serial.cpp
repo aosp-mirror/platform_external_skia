@@ -8,7 +8,6 @@
 #include "include/core/SkData.h"
 #include "include/core/SkMath.h"
 #include "include/private/SkPathRef.h"
-#include "include/private/SkTPin.h"
 #include "include/private/SkTo.h"
 #include "src/core/SkBuffer.h"
 #include "src/core/SkPathPriv.h"
@@ -74,7 +73,7 @@ size_t SkPath::writeToMemoryAsRRect(void* storage) const {
         return sizeNeeded;
     }
 
-    int firstDir = isCCW ? (int)SkPathFirstDirection::kCCW : (int)SkPathFirstDirection::kCW;
+    int firstDir = isCCW ? SkPathPriv::kCCW_FirstDirection : SkPathPriv::kCW_FirstDirection;
     int32_t packed = (fFillType << kFillType_SerializationShift) |
                      (firstDir << kDirection_SerializationShift) |
                      (SerializationType::kRRect << kType_SerializationShift) |
@@ -174,10 +173,10 @@ size_t SkPath::readAsRRect(const void* storage, size_t length) {
     SkRRect rrect;
     int32_t start;
     switch (dir) {
-        case (int)SkPathFirstDirection::kCW:
+        case SkPathPriv::kCW_FirstDirection:
             rrectDir = SkPathDirection::kCW;
             break;
-        case (int)SkPathFirstDirection::kCCW:
+        case SkPathPriv::kCCW_FirstDirection:
             rrectDir = SkPathDirection::kCCW;
             break;
         default:
@@ -212,7 +211,7 @@ size_t SkPath::readFromMemory_EQ4Or5(const void* storage, size_t length) {
         case SerializationType::kRRect:
             return this->readAsRRect(storage, length);
         case SerializationType::kGeneral:
-            break;  // fall out
+            break;  // fall through
         default:
             return 0;
     }

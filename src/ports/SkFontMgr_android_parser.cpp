@@ -23,8 +23,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <memory>
-
 #define LMP_SYSTEM_FONTS_FILE "/system/etc/fonts.xml"
 #define OLD_SYSTEM_FONTS_FILE "/system/etc/system_fonts.xml"
 #define FALLBACK_FONTS_FILE "/system/etc/fallback_fonts.xml"
@@ -397,7 +395,7 @@ static const TagHandler familySetHandler = {
     /*chars*/nullptr,
 };
 
-}  // namespace lmpParser
+} // lmpParser
 
 namespace jbParser {
 
@@ -407,7 +405,7 @@ static const TagHandler fileHandler = {
         // 'lang' (string) [default ""]
         // 'index' (non-negative integer) [default 0]
         // The character data should be a filename.
-        FontFamily& currentFamily = *self->fCurrentFamily;
+        FontFamily& currentFamily = *self->fCurrentFamily.get();
         FontFileInfo& newFileInfo = currentFamily.fFonts.push_back();
         if (attributes) {
             for (size_t i = 0; ATTS_NON_NULL(attributes, i); i += 2) {
@@ -503,7 +501,7 @@ static const TagHandler nameSetHandler = {
 
 static const TagHandler familyHandler = {
     /*start*/[](FamilyData* self, const char* tag, const char** attributes) {
-        self->fCurrentFamily = std::make_unique<FontFamily>(self->fBasePath, self->fIsFallback);
+        self->fCurrentFamily.reset(new FontFamily(self->fBasePath, self->fIsFallback));
         // 'order' (non-negative integer) [default -1]
         for (size_t i = 0; ATTS_NON_NULL(attributes, i); i += 2) {
             const char* value = attributes[i+1];
@@ -646,7 +644,7 @@ static int parse_config_file(const char* filename, SkTDArray<FontFamily*>& famil
         return -1;
     }
 
-    SkAutoTCallVProc<std::remove_pointer_t<XML_Parser>, XML_ParserFree> parser(
+    SkAutoTCallVProc<skstd::remove_pointer_t<XML_Parser>, XML_ParserFree> parser(
         XML_ParserCreate_MM(nullptr, &sk_XML_alloc, nullptr));
     if (!parser) {
         SkDebugf(SK_FONTMGR_ANDROID_PARSER_PREFIX "could not create XML parser\n");

@@ -33,8 +33,7 @@ public:
                        const skjson::ObjectValue* jscale,
                        const skjson::ObjectValue* jrotation,
                        const skjson::ObjectValue* jskew,
-                       const skjson::ObjectValue* jskew_axis,
-                       bool auto_orient = false);
+                       const skjson::ObjectValue* jskew_axis);
     ~TransformAdapter2D() override;
 
     // Accessors needed for public property APIs.
@@ -62,13 +61,12 @@ public:
 private:
     void onSync() override;
 
-    Vec2Value   fAnchorPoint = {   0,   0 },
-                fPosition    = {   0,   0 },
-                fScale       = { 100, 100 };
-    ScalarValue fRotation    = 0,
-                fSkew        = 0,
-                fSkewAxis    = 0,
-                fOrientation = 0; // additional rotation component controlled by auto-orient
+    VectorValue fAnchorPoint,
+                fPosition,
+                fScale    = { 100, 100 };
+    ScalarValue fRotation = 0,
+                fSkew     = 0,
+                fSkewAxis = 0;
 
     using INHERITED = DiscardableAdapterBase<TransformAdapter2D, sksg::Matrix<SkMatrix>>;
 };

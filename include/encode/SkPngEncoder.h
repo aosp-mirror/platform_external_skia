@@ -88,7 +88,7 @@ protected:
     SkPngEncoder(std::unique_ptr<SkPngEncoderMgr>, const SkPixmap& src);
 
     std::unique_ptr<SkPngEncoderMgr> fEncoderMgr;
-    using INHERITED = SkEncoder;
+    typedef SkEncoder INHERITED;
 };
 
 static inline SkPngEncoder::FilterFlag operator|(SkPngEncoder::FilterFlag x,

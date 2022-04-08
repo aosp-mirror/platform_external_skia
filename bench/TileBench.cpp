@@ -29,6 +29,7 @@ static void create_gradient(SkBitmap* bm) {
 class ConstXTileBench : public Benchmark {
     SkPaint             fPaint;
     SkString            fName;
+    bool                fDoFilter;
     bool                fDoTrans;
     bool                fDoScale;
     static const int kWidth = 1;
@@ -37,10 +38,11 @@ class ConstXTileBench : public Benchmark {
 public:
     ConstXTileBench(SkTileMode xTile,
                     SkTileMode yTile,
-                    SkFilterMode fm,
+                    bool doFilter,
                     bool doTrans,
                     bool doScale)
-        : fDoTrans(doTrans)
+        : fDoFilter(doFilter)
+        , fDoTrans(doTrans)
         , fDoScale(doScale) {
         SkBitmap bm;
 
@@ -49,7 +51,7 @@ public:
 
         create_gradient(&bm);
 
-        fPaint.setShader(bm.makeShader(xTile, yTile, SkSamplingOptions(fm)));
+        fPaint.setShader(bm.makeShader(xTile, yTile));
 
         fName.printf("constXTile_");
 
@@ -57,7 +59,7 @@ public:
         fName.append(gTileModeStr[(unsigned)xTile]);
         fName.append(gTileModeStr[(unsigned)yTile]);
 
-        if (fm != SkFilterMode::kNearest) {
+        if (doFilter) {
             fName.append("_filter");
         }
 
@@ -71,13 +73,15 @@ public:
     }
 
 protected:
-    const char* onGetName() override {
+    virtual const char* onGetName() {
         return fName.c_str();
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    virtual void onDraw(int loops, SkCanvas* canvas) {
         SkPaint paint(fPaint);
         this->setupPaint(&paint);
+        paint.setFilterQuality(fDoFilter ? kLow_SkFilterQuality
+                                         : kNone_SkFilterQuality);
         if (fDoTrans) {
             paint.setColor(SkColorSetARGB(0x80, 0xFF, 0xFF, 0xFF));
         }
@@ -104,27 +108,24 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 // Scaled benches are trending towards free.  Seems like caching.
 // TODO(mtklein, reed): fix and reenable
 
- constexpr SkFilterMode gNN = SkFilterMode::kNearest;
- constexpr SkFilterMode gLI = SkFilterMode::kLinear;
-
 //DEF_BENCH(return new ConstXTileBench(SkTileMode::kRepeat, SkTileMode::kRepeat, false, false, true))
-DEF_BENCH(return new ConstXTileBench(SkTileMode::kClamp, SkTileMode::kClamp, gNN, false, false))
+DEF_BENCH(return new ConstXTileBench(SkTileMode::kClamp, SkTileMode::kClamp, false, false, false))
 //DEF_BENCH(return new ConstXTileBench(SkTileMode::kMirror, SkTileMode::kMirror, false, false, true))
 
-DEF_BENCH(return new ConstXTileBench(SkTileMode::kRepeat, SkTileMode::kRepeat, gLI, false, false))
+DEF_BENCH(return new ConstXTileBench(SkTileMode::kRepeat, SkTileMode::kRepeat, true, false, false))
 //DEF_BENCH(return new ConstXTileBench(SkTileMode::kClamp, SkTileMode::kClamp, true, false, true))
-DEF_BENCH(return new ConstXTileBench(SkTileMode::kMirror, SkTileMode::kMirror, gLI, false, false))
+DEF_BENCH(return new ConstXTileBench(SkTileMode::kMirror, SkTileMode::kMirror, true, false, false))
 
 //DEF_BENCH(return new ConstXTileBench(SkTileMode::kRepeat, SkTileMode::kRepeat, false, true, true))
-DEF_BENCH(return new ConstXTileBench(SkTileMode::kClamp, SkTileMode::kClamp, gNN, true, false))
+DEF_BENCH(return new ConstXTileBench(SkTileMode::kClamp, SkTileMode::kClamp, false, true, false))
 //DEF_BENCH(return new ConstXTileBench(SkTileMode::kMirror, SkTileMode::kMirror, false, true, true))
 
-DEF_BENCH(return new ConstXTileBench(SkTileMode::kRepeat, SkTileMode::kRepeat, gLI, true, false))
+DEF_BENCH(return new ConstXTileBench(SkTileMode::kRepeat, SkTileMode::kRepeat, true, true, false))
 //DEF_BENCH(return new ConstXTileBench(SkTileMode::kClamp, SkTileMode::kClamp, true, true, true))
-DEF_BENCH(return new ConstXTileBench(SkTileMode::kMirror, SkTileMode::kMirror, gLI, true, false))
+DEF_BENCH(return new ConstXTileBench(SkTileMode::kMirror, SkTileMode::kMirror, true, true, false))

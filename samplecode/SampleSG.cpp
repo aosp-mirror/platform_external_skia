@@ -52,7 +52,7 @@ public:
     SampleSG() {
         fGroup = sksg::Group::Make();
 
-        fScene = sksg::Scene::Make(fGroup);
+        fScene = sksg::Scene::Make(fGroup, sksg::AnimatorList());
 
         auto r = sksg::Rect::Make({20, 20, 400, 300});
         auto p = sksg::Color::Make(SK_ColorRED);
@@ -101,7 +101,7 @@ protected:
 
 private:
 
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

@@ -6,7 +6,6 @@
 # found in the LICENSE file.
 
 
-from __future__ import print_function
 import os
 import subprocess
 import sys
@@ -36,5 +35,5 @@ cmd = [
     '-properties', sys.argv[3],
     '-logdog-annotation-url', logdog_url,
 ]
-print('running command: %s' % ' '.join(cmd))
+print 'running command: %s' % ' '.join(cmd)
 subprocess.check_call(cmd)

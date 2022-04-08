@@ -12,25 +12,30 @@
 #include "include/private/GrSingleOwner.h"
 
 class GrImageContextPriv;
+class GrProxyProvider;
 
-// This is now just a view on a ThreadSafeProxy, that SkImages can attempt to
-// downcast to a GrDirectContext as a backdoor to some operations. Once we remove the backdoors,
-// this goes away and SkImages just hold ThreadSafeProxies.
 class GrImageContext : public GrContext_Base {
 public:
     ~GrImageContext() override;
 
+    SK_API GrBackendFormat defaultBackendFormat(SkColorType ct, GrRenderable renderable) const {
+        return INHERITED::defaultBackendFormat(ct, renderable);
+    }
+
     // Provides access to functions that aren't part of the public API.
     GrImageContextPriv priv();
-    const GrImageContextPriv priv() const;  // NOLINT(readability-const-return-type)
+    const GrImageContextPriv priv() const;
 
 protected:
     friend class GrImageContextPriv; // for hidden functions
 
-    GrImageContext(sk_sp<GrContextThreadSafeProxy>);
+    GrImageContext(GrBackendApi, const GrContextOptions&, uint32_t contextID);
 
     SK_API virtual void abandonContext();
-    SK_API virtual bool abandoned();
+    SK_API bool abandoned() const;
+
+    GrProxyProvider* proxyProvider() { return fProxyProvider.get(); }
+    const GrProxyProvider* proxyProvider() const { return fProxyProvider.get(); }
 
     /** This is only useful for debug purposes */
     GrSingleOwner* singleOwner() const { return &fSingleOwner; }
@@ -38,18 +43,15 @@ protected:
     GrImageContext* asImageContext() override { return this; }
 
 private:
-    // When making promise images, we currently need a placeholder GrImageContext instance to give
-    // to the SkImage that has no real power, just a wrapper around the ThreadSafeProxy.
-    // TODO: De-power SkImage to ThreadSafeProxy or at least figure out a way to share one instance.
-    static sk_sp<GrImageContext> MakeForPromiseImage(sk_sp<GrContextThreadSafeProxy>);
+    std::unique_ptr<GrProxyProvider> fProxyProvider;
+    bool                             fAbandoned = false;
 
     // In debug builds we guard against improper thread handling
     // This guard is passed to the GrDrawingManager and, from there to all the
-    // GrSurfaceDrawContexts.  It is also passed to the GrResourceProvider and SkGpuDevice.
-    // TODO: Move this down to GrRecordingContext.
+    // GrRenderTargetContexts.  It is also passed to the GrResourceProvider and SkGpuDevice.
     mutable GrSingleOwner            fSingleOwner;
 
-    using INHERITED = GrContext_Base;
+    typedef GrContext_Base INHERITED;
 };
 
 #endif

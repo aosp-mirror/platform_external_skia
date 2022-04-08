@@ -182,7 +182,7 @@ private:
     SkTDArray<SkScalar> fData[kNumGraphs];
     bool                fAA;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

@@ -237,7 +237,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 
     sk_sp<SkShader> MakeShader(GradType gradType, GradData data,
                                SkTileMode tm, float scale) {
@@ -319,11 +319,11 @@ public:
     }
 
 protected:
-    const char* onGetName() override {
+    virtual const char* onGetName() {
         return fName.c_str();
     }
 
-    void onDraw(int loops, SkCanvas* canvas) override {
+    virtual void onDraw(int loops, SkCanvas* canvas) {
         SkPaint paint;
         this->setupPaint(&paint);
 
@@ -348,7 +348,7 @@ protected:
     }
 
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 DEF_BENCH( return new Gradient2Bench(false); )

@@ -71,6 +71,15 @@ type work struct {
 func parseWork(args []string, gms []string, tests []string) (*work, error) {
 	w := &work{}
 	for _, arg := range args {
+		// I wish we could parse flags here too, but it's too late.
+		if strings.HasPrefix(arg, "-") {
+			msg := "Is '%s' an fm flag? If so please pass it using flag=value syntax."
+			if flag.Lookup(arg[1:]) != nil {
+				msg = "Please pass fm_bot flags like '%s' on the command line before the FM binary."
+			}
+			return nil, fmt.Errorf(msg, arg)
+		}
+
 		// Everything after a # is a comment.
 		if strings.HasPrefix(arg, "#") {
 			break
@@ -84,17 +93,6 @@ func parseWork(args []string, gms []string, tests []string) (*work, error) {
 		// Same for tests.
 		if arg == "test" || arg == "tests" {
 			w.Sources = append(w.Sources, tests...)
-			continue
-		}
-
-		// -foo to remove foo if already added (e.g. by gms, tests).
-		if strings.HasPrefix(arg, "-") {
-			for i, s := range w.Sources {
-				if s == arg[1:] {
-					w.Sources = append(w.Sources[:i], w.Sources[i+1:]...)
-					break
-				}
-			}
 			continue
 		}
 
@@ -261,12 +259,12 @@ func main() {
 				backend = w.Flags[i+1]
 			}
 		}
-		cpuBackends := map[string]bool{
+		whitelisted := map[string]bool{
 			"cpu": true,
 			"skp": true,
 			"pdf": true,
 		}
-		if cpuBackends[backend] {
+		if whitelisted[backend] {
 			queue, limit = cpu, *cpuLimit
 		}
 

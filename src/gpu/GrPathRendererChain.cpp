@@ -8,38 +8,47 @@
 
 #include "src/gpu/GrPathRendererChain.h"
 
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrRecordingContext.h"
+#include "include/gpu/GrContext.h"
+#include "include/private/GrRecordingContext.h"
 #include "src/gpu/GrCaps.h"
-#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrRecordingContextPriv.h"
 #include "src/gpu/GrShaderCaps.h"
 #include "src/gpu/ccpr/GrCoverageCountingPathRenderer.h"
-#include "src/gpu/geometry/GrStyledShape.h"
 #include "src/gpu/ops/GrAAConvexPathRenderer.h"
 #include "src/gpu/ops/GrAAHairLinePathRenderer.h"
 #include "src/gpu/ops/GrAALinearizingConvexPathRenderer.h"
 #include "src/gpu/ops/GrDashLinePathRenderer.h"
 #include "src/gpu/ops/GrDefaultPathRenderer.h"
 #include "src/gpu/ops/GrSmallPathRenderer.h"
-#include "src/gpu/ops/GrTriangulatingPathRenderer.h"
-#include "src/gpu/tessellate/GrTessellationPathRenderer.h"
+#include "src/gpu/ops/GrStencilAndCoverPathRenderer.h"
+#include "src/gpu/ops/GrTessellatingPathRenderer.h"
+#include "src/gpu/tessellate/GrGpuTessellationPathRenderer.h"
 
 GrPathRendererChain::GrPathRendererChain(GrRecordingContext* context, const Options& options) {
     const GrCaps& caps = *context->priv().caps();
     if (options.fGpuPathRenderers & GpuPathRenderers::kDashLine) {
         fChain.push_back(sk_make_sp<GrDashLinePathRenderer>());
     }
+    if (options.fGpuPathRenderers & GpuPathRenderers::kGpuTessellation) {
+        if (caps.shaderCaps()->tessellationSupport()) {
+            auto gtess = sk_make_sp<GrGpuTessellationPathRenderer>(caps);
+            context->priv().addOnFlushCallbackObject(gtess.get());
+            fChain.push_back(std::move(gtess));
+        }
+    }
     if (options.fGpuPathRenderers & GpuPathRenderers::kAAConvex) {
         fChain.push_back(sk_make_sp<GrAAConvexPathRenderer>());
     }
     if (options.fGpuPathRenderers & GpuPathRenderers::kCoverageCounting) {
-        fCoverageCountingPathRenderer = GrCoverageCountingPathRenderer::CreateIfSupported(context);
-        if (fCoverageCountingPathRenderer) {
-            // Don't add to the chain. This is only for clips.
-            // TODO: Remove from here.
-            context->priv().addOnFlushCallbackObject(fCoverageCountingPathRenderer.get());
+        using AllowCaching = GrCoverageCountingPathRenderer::AllowCaching;
+        if (auto ccpr = GrCoverageCountingPathRenderer::CreateIfSupported(
+                                caps, AllowCaching(options.fAllowPathMaskCaching),
+                                context->priv().contextID())) {
+            fCoverageCountingPathRenderer = ccpr.get();
+            context->priv().addOnFlushCallbackObject(fCoverageCountingPathRenderer);
+            fChain.push_back(std::move(ccpr));
         }
     }
     if (options.fGpuPathRenderers & GpuPathRenderers::kAAHairline) {
@@ -49,18 +58,24 @@ GrPathRendererChain::GrPathRendererChain(GrRecordingContext* context, const Opti
         fChain.push_back(sk_make_sp<GrAALinearizingConvexPathRenderer>());
     }
     if (options.fGpuPathRenderers & GpuPathRenderers::kSmall) {
-        fChain.push_back(sk_make_sp<GrSmallPathRenderer>());
+        auto spr = sk_make_sp<GrSmallPathRenderer>();
+        context->priv().addOnFlushCallbackObject(spr.get());
+        fChain.push_back(std::move(spr));
     }
-    if (options.fGpuPathRenderers & GpuPathRenderers::kTriangulating) {
-        fChain.push_back(sk_make_sp<GrTriangulatingPathRenderer>());
-    }
-    if (options.fGpuPathRenderers & GpuPathRenderers::kTessellation) {
-        if (GrTessellationPathRenderer::IsSupported(caps)) {
-            auto tess = sk_make_sp<GrTessellationPathRenderer>(context);
-            fTessellationPathRenderer = tess.get();
-            context->priv().addOnFlushCallbackObject(tess.get());
-            fChain.push_back(std::move(tess));
+    if (options.fGpuPathRenderers & GpuPathRenderers::kStencilAndCover) {
+        auto direct = context->priv().asDirectContext();
+        if (direct) {
+            auto resourceProvider = direct->priv().resourceProvider();
+
+            sk_sp<GrPathRenderer> pr(
+                    GrStencilAndCoverPathRenderer::Create(resourceProvider, caps));
+            if (pr) {
+                fChain.push_back(std::move(pr));
+            }
         }
+    }
+    if (options.fGpuPathRenderers & GpuPathRenderers::kTessellating) {
+        fChain.push_back(sk_make_sp<GrTessellatingPathRenderer>());
     }
 
     // We always include the default path renderer (as well as SW), so we can draw any path

@@ -7,8 +7,6 @@
 
 #include "modules/skottie/src/effects/Effects.h"
 
-#include "modules/skottie/src/Composition.h"
-#include "modules/skottie/src/Layer.h"
 #include "modules/skottie/src/SkottieJson.h"
 #include "modules/sksg/include/SkSGRenderEffect.h"
 #include "src/utils/SkJSON.h"
@@ -19,11 +17,8 @@
 namespace skottie {
 namespace internal {
 
-EffectBuilder::EffectBuilder(const AnimationBuilder* abuilder,
-                             const SkSize& layer_size,
-                             CompositionBuilder* cbuilder)
+EffectBuilder::EffectBuilder(const AnimationBuilder* abuilder, const SkSize& layer_size)
     : fBuilder(abuilder)
-    , fCompBuilder(cbuilder)
     , fLayerSize(layer_size) {}
 
 EffectBuilder::EffectBuilderT EffectBuilder::findBuilder(const skjson::ObjectValue& jeffect) const {
@@ -31,29 +26,22 @@ EffectBuilder::EffectBuilderT EffectBuilder::findBuilder(const skjson::ObjectVal
         const char*    fName;
         EffectBuilderT fBuilder;
     } gBuilderInfo[] = {
-        { "ADBE Black&White"            , &EffectBuilder::attachBlackAndWhiteEffect      },
-        { "ADBE Brightness & Contrast 2", &EffectBuilder::attachBrightnessContrastEffect },
-        { "ADBE Corner Pin"             , &EffectBuilder::attachCornerPinEffect          },
-        { "ADBE Displacement Map"       , &EffectBuilder::attachDisplacementMapEffect    },
-        { "ADBE Drop Shadow"            , &EffectBuilder::attachDropShadowEffect         },
-        { "ADBE Easy Levels2"           , &EffectBuilder::attachEasyLevelsEffect         },
-        { "ADBE Fill"                   , &EffectBuilder::attachFillEffect               },
-        { "ADBE Fractal Noise"          , &EffectBuilder::attachFractalNoiseEffect       },
-        { "ADBE Gaussian Blur 2"        , &EffectBuilder::attachGaussianBlurEffect       },
-        { "ADBE Geometry2"              , &EffectBuilder::attachTransformEffect          },
-        { "ADBE HUE SATURATION"         , &EffectBuilder::attachHueSaturationEffect      },
-        { "ADBE Invert"                 , &EffectBuilder::attachInvertEffect             },
-        { "ADBE Linear Wipe"            , &EffectBuilder::attachLinearWipeEffect         },
-        { "ADBE Pro Levels2"            , &EffectBuilder::attachProLevelsEffect          },
-        { "ADBE Radial Wipe"            , &EffectBuilder::attachRadialWipeEffect         },
-        { "ADBE Ramp"                   , &EffectBuilder::attachGradientEffect           },
-        { "ADBE Shift Channels"         , &EffectBuilder::attachShiftChannelsEffect      },
-        { "ADBE Threshold2"             , &EffectBuilder::attachThresholdEffect          },
-        { "ADBE Tile"                   , &EffectBuilder::attachMotionTileEffect         },
-        { "ADBE Tint"                   , &EffectBuilder::attachTintEffect               },
-        { "ADBE Tritone"                , &EffectBuilder::attachTritoneEffect            },
-        { "ADBE Venetian Blinds"        , &EffectBuilder::attachVenetianBlindsEffect     },
-        { "CC Sphere"                   , &EffectBuilder::attachSphereEffect             },
+        { "ADBE Drop Shadow"    , &EffectBuilder::attachDropShadowEffect     },
+        { "ADBE Easy Levels2"   , &EffectBuilder::attachEasyLevelsEffect     },
+        { "ADBE Fill"           , &EffectBuilder::attachFillEffect           },
+        { "ADBE Gaussian Blur 2", &EffectBuilder::attachGaussianBlurEffect   },
+        { "ADBE Geometry2"      , &EffectBuilder::attachTransformEffect      },
+        { "ADBE HUE SATURATION" , &EffectBuilder::attachHueSaturationEffect  },
+        { "ADBE Invert"         , &EffectBuilder::attachInvertEffect         },
+        { "ADBE Linear Wipe"    , &EffectBuilder::attachLinearWipeEffect     },
+        { "ADBE Pro Levels2"    , &EffectBuilder::attachProLevelsEffect      },
+        { "ADBE Radial Wipe"    , &EffectBuilder::attachRadialWipeEffect     },
+        { "ADBE Ramp"           , &EffectBuilder::attachGradientEffect       },
+        { "ADBE Shift Channels" , &EffectBuilder::attachShiftChannelsEffect  },
+        { "ADBE Tile"           , &EffectBuilder::attachMotionTileEffect     },
+        { "ADBE Tint"           , &EffectBuilder::attachTintEffect           },
+        { "ADBE Tritone"        , &EffectBuilder::attachTritoneEffect        },
+        { "ADBE Venetian Blinds", &EffectBuilder::attachVenetianBlindsEffect },
     };
 
     const skjson::StringValue* mn = jeffect["mn"];
@@ -127,46 +115,6 @@ sk_sp<sksg::RenderNode> EffectBuilder::attachEffects(const skjson::ArrayValue& j
     return layer;
 }
 
-sk_sp<sksg::RenderNode> EffectBuilder::attachStyles(const skjson::ArrayValue& jstyles,
-                                                     sk_sp<sksg::RenderNode> layer) const {
-#if !defined(SKOTTIE_DISABLE_STYLES)
-    if (!layer) {
-        return nullptr;
-    }
-
-    using StyleBuilder =
-        sk_sp<sksg::RenderNode> (EffectBuilder::*)(const skjson::ObjectValue&,
-                                                   sk_sp<sksg::RenderNode>) const;
-    static constexpr StyleBuilder gStyleBuilders[] = {
-        nullptr,                                 // 'ty': 0 -> stroke
-        &EffectBuilder::attachDropShadowStyle,   // 'ty': 1 -> drop shadow
-        &EffectBuilder::attachInnerShadowStyle,  // 'ty': 2 -> inner shadow
-        &EffectBuilder::attachOuterGlowStyle,    // 'ty': 3 -> outer glow
-        &EffectBuilder::attachInnerGlowStyle,    // 'ty': 4 -> inner glow
-    };
-
-    for (const skjson::ObjectValue* jstyle : jstyles) {
-        if (!jstyle) {
-            continue;
-        }
-
-        const auto style_type =
-                ParseDefault<size_t>((*jstyle)["ty"], std::numeric_limits<size_t>::max());
-        auto builder = style_type < SK_ARRAY_COUNT(gStyleBuilders) ? gStyleBuilders[style_type]
-                                                                   : nullptr;
-
-        if (!builder) {
-            fBuilder->log(Logger::Level::kWarning, jstyle, "Unsupported layer style.");
-            continue;
-        }
-
-        layer = (this->*builder)(*jstyle, std::move(layer));
-    }
-#endif // !defined(SKOTTIE_DISABLE_STYLES)
-
-    return layer;
-}
-
 const skjson::Value& EffectBuilder::GetPropValue(const skjson::ArrayValue& jprops,
                                                  size_t prop_index) {
     static skjson::NullValue kNull;
@@ -180,15 +128,16 @@ const skjson::Value& EffectBuilder::GetPropValue(const skjson::ArrayValue& jprop
     return jprop ? (*jprop)["v"] : kNull;
 }
 
-MaskShaderEffectBase::MaskShaderEffectBase(sk_sp<sksg::RenderNode> child, const SkSize& ls)
-    : fMaskEffectNode(sksg::MaskShaderEffect::Make(std::move(child)))
+MaskFilterEffectBase::MaskFilterEffectBase(sk_sp<sksg::RenderNode> child, const SkSize& ls)
+    : fMaskNode(sksg::MaskFilter::Make(nullptr))
+    , fMaskEffectNode(sksg::MaskFilterEffect::Make(std::move(child), fMaskNode))
     , fLayerSize(ls) {}
 
-void MaskShaderEffectBase::onSync() {
+void MaskFilterEffectBase::onSync() {
     const auto minfo = this->onMakeMask();
 
     fMaskEffectNode->setVisible(minfo.fVisible);
-    fMaskEffectNode->setShader(std::move(minfo.fMaskShader));
+    fMaskNode->setMaskFilter(std::move(minfo.fMask));
 }
 
 } // namespace internal

@@ -48,7 +48,9 @@ protected:
 
         // Create matching bitmap.
         std::unique_ptr<SkCodec> codec(SkCodec::MakeFromStream(GetResourceAsStream(path)));
-        auto [codecImage, _] = codec->getImage();
+        SkBitmap bitmap;
+        bitmap.allocPixels(codec->getInfo());
+        codec->getPixels(codec->getInfo(), bitmap.getPixels(), bitmap.rowBytes());
 
         // The GM will be displayed in a 2x2 grid.
         // The top two squares show an sRGB image, then bitmap, drawn to a legacy canvas.
@@ -56,10 +58,10 @@ protected:
         SkBitmap legacyBMCanvas;
         legacyBMCanvas.allocPixels(linearInfo);
         SkCanvas legacyCanvas(legacyBMCanvas);
-        legacyCanvas.drawImage(image, 0.0f, 0.0f);
+        legacyCanvas.drawImage(image, 0.0f, 0.0f, nullptr);
         legacyCanvas.translate(SkScalar(kSize), 0.0f);
-        legacyCanvas.drawImage(codecImage, 0.0f, 0.0f);
-        canvas->drawImage(legacyBMCanvas.asImage(), 0.0f, 0.0f);
+        legacyCanvas.drawBitmap(bitmap, 0.0f, 0.0f, nullptr);
+        canvas->drawBitmap(legacyBMCanvas, 0.0f, 0.0f, nullptr);
         canvas->translate(0.0f, SkScalar(kSize));
 
         // The bottom two squares show an sRGB image, then bitmap, drawn to a srgb canvas.
@@ -67,21 +69,21 @@ protected:
         SkBitmap srgbBMCanvas;
         srgbBMCanvas.allocPixels(srgbInfo);
         SkCanvas srgbCanvas(srgbBMCanvas);
-        srgbCanvas.drawImage(image, 0.0f, 0.0f);
+        srgbCanvas.drawImage(image, 0.0f, 0.0f, nullptr);
         srgbCanvas.translate(SkScalar(kSize), 0.0f);
-        srgbCanvas.drawImage(codecImage, 0.0f, 0.0f);
-        canvas->drawImage(srgbBMCanvas.asImage(), 0.0f, 0.0f);
+        srgbCanvas.drawBitmap(bitmap, 0.0f, 0.0f, nullptr);
+        canvas->drawBitmap(srgbBMCanvas, 0.0f, 0.0f, nullptr);
         return DrawResult::kOk;
     }
 
 private:
     static constexpr int kSize = 512;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM( return new BitmapImageGM; )
 
-}  // namespace skiagm
+}

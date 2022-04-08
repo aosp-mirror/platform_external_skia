@@ -10,8 +10,6 @@ void draw(SkCanvas* canvas) {
   SkColor colors[] = { 0x7f55aa00, 0x7f3333bf };
   SkPaint paint;
   paint.setAlpha(127);
-  SkSamplingOptions sampling;
-  canvas->drawAtlas(image.get(), xforms, tex, colors, 2, SkBlendMode::kPlus,
-                    sampling, nullptr, &paint);
+  canvas->drawAtlas(image, xforms, tex, colors, 2, SkBlendMode::kPlus, nullptr, &paint);
 }
 }  // END FIDDLE

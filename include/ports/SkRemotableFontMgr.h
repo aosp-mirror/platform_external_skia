@@ -48,9 +48,9 @@ private:
     friend SkRemotableFontIdentitySet* sk_remotable_font_identity_set_new();
 
     int fCount;
-    SkAutoTArray<SkFontIdentity> fData;
+    SkAutoTMalloc<SkFontIdentity> fData;
 
-    using INHERITED = SkRefCnt;
+    typedef SkRefCnt INHERITED;
 };
 
 class SK_API SkRemotableFontMgr : public SkRefCnt {
@@ -133,7 +133,7 @@ public:
     virtual SkStreamAsset* getData(int dataId) const = 0;
 
 private:
-    using INHERITED = SkRefCnt;
+    typedef SkRefCnt INHERITED;
 };
 
 #endif

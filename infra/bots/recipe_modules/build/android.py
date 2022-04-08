@@ -32,11 +32,11 @@ def compile_fn(api, checkout_root, out_dir):
 
   quote = lambda x: '"%s"' % x
   args = {
-      'ndk': quote(api.vars.workdir.join(ndk_path)),
+      'ndk': quote(api.vars.slave_dir.join(ndk_path)),
       'target_cpu': quote(target_arch),
       'werror': 'true',
   }
-  extra_cflags.append('-DREBUILD_IF_CHANGED_ndk_version=%s' %
+  extra_cflags.append('-DDUMMY_ndk_version=%s' %
                       api.run.asset_version(ndk_asset, skia_dir))
 
   if configuration != 'Debug':
@@ -44,7 +44,6 @@ def compile_fn(api, checkout_root, out_dir):
   if 'Vulkan' in extra_tokens:
     args['ndk_api'] = 24
     args['skia_enable_vulkan_debug_layers'] = 'false'
-    args['skia_use_gl'] = 'false'
   if 'ASAN' in extra_tokens:
     args['sanitize'] = '"ASAN"'
   if 'Wuffs' in extra_tokens:
@@ -80,8 +79,8 @@ def compile_fn(api, checkout_root, out_dir):
       # Build the APK.
       ndk_asset = 'android_ndk_linux'
       sdk_asset = 'android_sdk_linux'
-      android_ndk = api.vars.workdir.join(ndk_asset)
-      android_home = api.vars.workdir.join(sdk_asset, 'android-sdk')
+      android_ndk = api.vars.slave_dir.join(ndk_asset)
+      android_home = api.vars.slave_dir.join(sdk_asset, 'android-sdk')
       env = {
         'ANDROID_NDK': android_ndk,
         'ANDROID_HOME': android_home,

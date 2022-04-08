@@ -8,7 +8,7 @@
 #ifndef SkottieAdapter_DEFINED
 #define SkottieAdapter_DEFINED
 
-#include "modules/skottie/src/animator/Animator.h"
+#include "modules/skottie/src/Animator.h"
 
 namespace skottie {
 namespace internal {

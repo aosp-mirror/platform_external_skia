@@ -11,11 +11,11 @@
 #include "modules/particles/include/SkParticleEffect.h"
 #include "modules/particles/include/SkParticleSerialization.h"
 #include "modules/skresources/include/SkResources.h"
-#include "src/sksl/codegen/SkSLVMCodeGenerator.h"
+#include "src/sksl/SkSLByteCode.h"
 
 #include <string>
 
-#include "modules/canvaskit/WasmCommon.h"
+#include "modules/canvaskit/WasmAliases.h"
 
 #include <emscripten.h>
 #include <emscripten/bind.h>
@@ -77,14 +77,14 @@ private:
 
 }
 
-struct ParticleUniform {
+struct SimpleUniform {
     int columns;
     int rows;
     int slot; // the index into the uniforms array that this uniform begins.
 };
 
-ParticleUniform fromUniform(const SkSL::UniformInfo::Uniform& u) {
-    ParticleUniform su;
+SimpleUniform fromUniform(SkSL::ByteCode::Uniform u) {
+    SimpleUniform su;
     su.columns = u.fColumns;
     su.rows = u.fRows;
     su.slot = u.fSlot;
@@ -92,54 +92,84 @@ ParticleUniform fromUniform(const SkSL::UniformInfo::Uniform& u) {
 }
 
 EMSCRIPTEN_BINDINGS(Particles) {
-    class_<SkParticleEffect>("ParticleEffect")
+    class_<SkParticleEffect>("SkParticleEffect")
         .smart_ptr<sk_sp<SkParticleEffect>>("sk_sp<SkParticleEffect>")
         .function("draw", &SkParticleEffect::draw, allow_raw_pointers())
-        .function("_uniformPtr", optional_override([](SkParticleEffect& self)->uintptr_t {
-            return reinterpret_cast<uintptr_t>(self.uniformData());
+        .function("_effectUniformPtr", optional_override([](SkParticleEffect& self)->uintptr_t {
+            return reinterpret_cast<uintptr_t>(self.effectUniforms());
         }))
-        .function("getUniformCount", optional_override([](SkParticleEffect& self)->int {
-            auto info = self.uniformInfo();
-            if (!info) {
+        .function("_particleUniformPtr", optional_override([](SkParticleEffect& self)->uintptr_t {
+            return reinterpret_cast<uintptr_t>(self.particleUniforms());
+        }))
+        .function("getEffectUniformCount", optional_override([](SkParticleEffect& self)->int {
+            auto ec = self.effectCode();
+            if (!ec) {
                 return -1;
             }
-            return info->fUniforms.size();
+            return ec->getUniformCount();
         }))
-        .function("getUniformFloatCount", optional_override([](SkParticleEffect& self)->int {
-            auto info = self.uniformInfo();
-            if (!info) {
+        .function("getEffectUniformFloatCount", optional_override([](SkParticleEffect& self)->int {
+            auto ec = self.effectCode();
+            if (!ec) {
                 return -1;
             }
-            return info->fUniformSlotCount;
+            return ec->getUniformSlotCount();
         }))
-        .function("getUniformName", optional_override([](SkParticleEffect& self, int i)->JSString {
-            auto info = self.uniformInfo();
-            if (!info) {
+        .function("getEffectUniformName", optional_override([](SkParticleEffect& self, int i)->JSString {
+            auto ec = self.effectCode();
+            if (!ec) {
                 return emscripten::val::null();
             }
-            return emscripten::val(info->fUniforms[i].fName.c_str());
+            return emscripten::val(ec->getUniform(i).fName.c_str());
         }))
-        .function("getUniform", optional_override([](SkParticleEffect& self, int i)->ParticleUniform {
-            ParticleUniform su;
-            auto info = self.uniformInfo();
-            if (!info) {
+        .function("getEffectUniform", optional_override([](SkParticleEffect& self, int i)->SimpleUniform {
+            SimpleUniform su;
+            auto ec = self.effectCode();
+            if (!ec) {
                 return su;
             }
-            su = fromUniform(info->fUniforms[i]);
+            su = fromUniform(ec->getUniform(i));
             return su;
         }))
-        .function("_setPosition", optional_override([](SkParticleEffect& self,
-                                                       SkScalar x, SkScalar y)->void {
-            self.setPosition({x, y});
+        .function("getParticleUniformCount", optional_override([](SkParticleEffect& self)->int {
+            auto ec = self.particleCode();
+            if (!ec) {
+                return -1;
+            }
+            return ec->getUniformCount();
         }))
+        .function("getParticleUniformFloatCount", optional_override([](SkParticleEffect& self)->int {
+            auto ec = self.particleCode();
+            if (!ec) {
+                return -1;
+            }
+            return ec->getUniformSlotCount();
+        }))
+        .function("getParticleUniformName", optional_override([](SkParticleEffect& self, int i)->JSString {
+            auto ec = self.particleCode();
+            if (!ec) {
+                return emscripten::val::null();
+            }
+            return emscripten::val(ec->getUniform(i).fName.c_str());
+        }))
+        .function("getParticleUniform", optional_override([](SkParticleEffect& self, int i)->SimpleUniform {
+            SimpleUniform su;
+            auto ec = self.particleCode();
+            if (!ec) {
+                return su;
+            }
+            su = fromUniform(ec->getUniform(i));
+            return su;
+        }))
+        .function("setPosition", select_overload<void (SkPoint)>(&SkParticleEffect::setPosition))
         .function("setRate", select_overload<void (float)>(&SkParticleEffect::setRate))
         .function("start", select_overload<void (double, bool)>(&SkParticleEffect::start))
         .function("update", select_overload<void (double)>(&SkParticleEffect::update));
 
-    value_object<ParticleUniform>("ParticleUniform")
-        .field("columns", &ParticleUniform::columns)
-        .field("rows",    &ParticleUniform::rows)
-        .field("slot",    &ParticleUniform::slot);
+    value_object<SimpleUniform>("SimpleUniform")
+        .field("columns", &SimpleUniform::columns)
+        .field("rows",    &SimpleUniform::rows)
+        .field("slot",    &SimpleUniform::slot);
 
     function("_MakeParticles", optional_override([](std::string json,
                                                    size_t assetCount,
@@ -167,13 +197,14 @@ EMSCRIPTEN_BINDINGS(Particles) {
             assets.push_back(std::make_pair(std::move(name), std::move(bytes)));
         }
 
+        SkRandom r;
         sk_sp<SkParticleEffectParams> params(new SkParticleEffectParams());
         skjson::DOM dom(json.c_str(), json.length());
         SkFromJsonVisitor fromJson(dom.root());
         params->visitFields(&fromJson);
         params->prepare(skresources::DataURIResourceProviderProxy::Make(
                             ParticleAssetProvider::Make(std::move(assets))).get());
-        return sk_sp<SkParticleEffect>(new SkParticleEffect(std::move(params)));
+        return sk_sp<SkParticleEffect>(new SkParticleEffect(std::move(params), r));
     }));
     constant("particles", true);
 

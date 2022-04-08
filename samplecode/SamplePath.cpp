@@ -11,7 +11,7 @@
 #include "include/core/SkColorPriv.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkGraphics.h"
-#include "include/core/SkPathBuilder.h"
+#include "include/core/SkPath.h"
 #include "include/core/SkRegion.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkTime.h"
@@ -195,7 +195,7 @@ protected:
     }
 
 private:
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 DEF_SAMPLE( return new PathView; )
 
@@ -279,29 +279,38 @@ protected:
         canvas->drawPath(path, fSkeletonPaint);
     }
 
+    bool onClick(Click* click) override {
+        int32_t index;
+        if (click->fMeta.findS32("index", &index)) {
+            SkASSERT((unsigned)index < N);
+            fPts[index] = click->fCurr;
+            return true;
+        }
+        return false;
+    }
+
     Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, skui::ModifierKey modi) override {
         const SkScalar tol = 4;
         const SkRect r = SkRect::MakeXYWH(x - tol, y - tol, tol * 2, tol * 2);
         for (int i = 0; i < N; ++i) {
             if (r.intersects(SkRect::MakeXYWH(fPts[i].fX, fPts[i].fY, 1, 1))) {
-                return new Click([this, i](Click* c) {
-                    fPts[i] = c->fCurr;
-                    return true;
-                });
+                Click* click = new Click();
+                click->fMeta.setS32("index", i);
+                return click;
             }
         }
         return nullptr;
     }
 
 private:
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 DEF_SAMPLE( return new ArcToView; )
 
 /////////////
 
 class FatStroke : public Sample {
-    bool fClosed, fShowStroke, fShowHidden, fShowSkeleton, fAsCurves = false;
+    bool fClosed, fShowStroke, fShowHidden, fShowSkeleton;
     int  fJoinType, fCapType;
     float fWidth = 30;
     SkPaint fPtsPaint, fHiddenPaint, fSkeletonPaint, fStrokePaint;
@@ -357,7 +366,6 @@ protected:
                 case '4': this->toggle3(fJoinType); return true;
                 case '5': this->toggle3(fCapType); return true;
                 case '6': this->toggle(fClosed); return true;
-                case 'c': this->toggle(fAsCurves); return true;
                 case '-': fWidth -= 5; return true;
                 case '=': fWidth += 5; return true;
                 default: break;
@@ -367,15 +375,8 @@ protected:
 
     void makePath(SkPath* path) {
         path->moveTo(fPts[0]);
-        if (fAsCurves) {
-            for (int i = 1; i < N-2; ++i) {
-                path->quadTo(fPts[i], (fPts[i+1] + fPts[i]) * 0.5f);
-            }
-            path->quadTo(fPts[N-2], fPts[N-1]);
-        } else {
-            for (int i = 1; i < N; ++i) {
-                path->lineTo(fPts[i]);
-            }
+        for (int i = 1; i < N; ++i) {
+            path->lineTo(fPts[i]);
         }
         if (fClosed) {
             path->close();
@@ -406,22 +407,31 @@ protected:
         canvas->drawPoints(SkCanvas::kPoints_PointMode, N, fPts, fPtsPaint);
     }
 
+    bool onClick(Click* click) override {
+        int32_t index;
+        if (click->fMeta.findS32("index", &index)) {
+            SkASSERT((unsigned)index < N);
+            fPts[index] = click->fCurr;
+            return true;
+        }
+        return false;
+    }
+
     Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, skui::ModifierKey modi) override {
         const SkScalar tol = 4;
         const SkRect r = SkRect::MakeXYWH(x - tol, y - tol, tol * 2, tol * 2);
         for (int i = 0; i < N; ++i) {
             if (r.intersects(SkRect::MakeXYWH(fPts[i].fX, fPts[i].fY, 1, 1))) {
-                return new Click([this, i](Click* c) {
-                    fPts[i] = c->fCurr;
-                    return true;
-                });
+                Click* click = new Click();
+                click->fMeta.setS32("index", i);
+                return click;
             }
         }
         return nullptr;
     }
 
 private:
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 DEF_SAMPLE( return new FatStroke; )
 
@@ -514,22 +524,31 @@ protected:
         }
     }
 
+    bool onClick(Click* click) override {
+        int32_t index;
+        if (click->fMeta.findS32("index", &index)) {
+            SkASSERT((unsigned)index < N);
+            fPts[index] = click->fCurr;
+            return true;
+        }
+        return false;
+    }
+
     Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, skui::ModifierKey modi) override {
         const SkScalar tol = 8;
         const SkRect r = SkRect::MakeXYWH(x - tol, y - tol, tol * 2, tol * 2);
         for (int i = 0; i < N; ++i) {
             if (r.intersects(SkRect::MakeXYWH(fPts[i].fX, fPts[i].fY, 1, 1))) {
-                return new Click([this, i](Click* c) {
-                    fPts[i] = c->fCurr;
-                    return true;
-                });
+                Click* click = new Click();
+                click->fMeta.setS32("index", i);
+                return click;
             }
         }
         return this->INHERITED::onFindClickHandler(x, y, modi);
     }
 
 private:
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 DEF_SAMPLE( return new CubicCurve; )
 
@@ -562,7 +581,6 @@ public:
     SkScalar fT = 0.5f;
     bool fShowSub = false;
     bool fShowFlatness = false;
-    bool fShowInnerQuads = false;
     SkScalar fScale = 0.75;
 
     CubicCurve2() {
@@ -585,18 +603,10 @@ protected:
                 case 'f': fShowFlatness = !fShowFlatness; break;
                 case '-': fT -= 1.0f / 32; break;
                 case '=': fT += 1.0f / 32; break;
-                case 'q': fShowInnerQuads = !fShowInnerQuads; break;
                 default: return false;
             }
             fT = std::min(1.0f, std::max(0.0f, fT));
             return true;
-    }
-
-    static void Dot(SkCanvas* canvas, SkPoint p, SkScalar radius, SkColor c) {
-        SkPaint paint;
-        paint.setAntiAlias(true);
-        paint.setColor(c);
-        canvas->drawCircle(p.fX, p.fY, radius, paint);
     }
 
     void showFrame(SkCanvas* canvas, const SkPoint pts[], int count, const SkPaint& p) {
@@ -618,7 +628,7 @@ protected:
         paint.setStyle(SkPaint::kFill_Style);
         n = tmp - storage;
         for (int i = 0; i < n; ++i) {
-            Dot(canvas, storage[i], 4, SK_ColorBLUE);
+            canvas->drawCircle(storage[i].fX, storage[i].fY, 4, paint);
         }
     }
 
@@ -662,33 +672,6 @@ protected:
         // not sure we can get here
     }
 
-    void showInnerQuads(SkCanvas* canvas) {
-        auto draw_quad = [canvas](SkPoint a, SkPoint b, SkPoint c, SkColor color) {
-            SkPaint paint;
-            paint.setAntiAlias(true);
-            paint.setStroke(true);
-            paint.setColor(color);
-
-            canvas->drawPath(SkPathBuilder().moveTo(a).quadTo(b, c).detach(), paint);
-        };
-
-        SkPoint p0 = SkEvalQuadAt(&fPts[0], fT),
-                p1 = SkEvalQuadAt(&fPts[1], fT),
-                p2 = lerp(p0, p1, fT);
-
-        draw_quad(fPts[0], fPts[1], fPts[2], SK_ColorRED);
-        Dot(canvas, p0, 4, SK_ColorRED);
-
-        draw_quad(fPts[1], fPts[2], fPts[3], SK_ColorBLUE);
-        Dot(canvas, p1, 4, SK_ColorBLUE);
-
-        SkPaint paint;
-        paint.setAntiAlias(true);
-        paint.setColor(0xFF008800);
-        canvas->drawLine(p0, p1, paint);
-        Dot(canvas, p2, 4, 0xFF00AA00);
-    }
-
     void onDrawContent(SkCanvas* canvas) override {
         SkPaint paint;
         paint.setAntiAlias(true);
@@ -719,20 +702,13 @@ protected:
             this->showFlattness(canvas);
         }
 
-        if (fShowInnerQuads) {
-            this->showInnerQuads(canvas);
-        }
-
-        paint.setColor(SK_ColorGRAY);
-        paint.setStroke(true);
-        canvas->drawPath(SkPathBuilder().addPolygon(fPts, 4, false).detach(), paint);
-        canvas->drawPath(SkPathBuilder().addPolygon(fQuad, 3, false).detach(), paint);
-
+        paint.setStyle(SkPaint::kFill_Style);
+        paint.setColor(SK_ColorRED);
         for (SkPoint p : fPts) {
-            Dot(canvas, p, 7, SK_ColorBLACK);
+            canvas->drawCircle(p.fX, p.fY, 7, paint);
         }
 
-        if (false) {
+        {
             SkScalar ts[2];
             int n = SkFindCubicInflections(fPts, ts);
             for (int i = 0; i < n; ++i) {
@@ -744,22 +720,31 @@ protected:
 
     }
 
+    bool onClick(Click* click) override {
+        int32_t index;
+        if (click->fMeta.findS32("index", &index)) {
+            SkASSERT((unsigned)index < N);
+            fPts[index] = click->fCurr;
+            return true;
+        }
+        return false;
+    }
+
     Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, skui::ModifierKey modi) override {
         const SkScalar tol = 8;
         const SkRect r = SkRect::MakeXYWH(x - tol, y - tol, tol * 2, tol * 2);
         for (int i = 0; i < N; ++i) {
             if (r.intersects(SkRect::MakeXYWH(fPts[i].fX, fPts[i].fY, 1, 1))) {
-                return new Click([this, i](Click* c) {
-                    fPts[i] = c->fCurr;
-                    return true;
-                });
+                Click* click = new Click();
+                click->fMeta.setS32("index", i);
+                return click;
             }
         }
         return this->INHERITED::onFindClickHandler(x, y, modi);
     }
 
 private:
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 DEF_SAMPLE( return new CubicCurve2; )
 

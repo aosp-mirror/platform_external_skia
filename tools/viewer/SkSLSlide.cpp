@@ -7,16 +7,13 @@
 
 #include "tools/viewer/SkSLSlide.h"
 
-#include "include/core/SkCanvas.h"
-#include "include/core/SkFont.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkPerlinNoiseShader.h"
 #include "src/core/SkEnumerate.h"
 #include "tools/Resources.h"
-#include "tools/viewer/Viewer.h"
+#include "tools/viewer/ImGuiLayer.h"
 
 #include <algorithm>
-#include <cstdio>
 #include "imgui.h"
 
 using namespace sk_app;
@@ -40,13 +37,11 @@ SkSLSlide::SkSLSlide() {
 
     fSkSL =
 
-        "uniform shader child;\n"
+        "in fragmentProcessor fp;\n"
         "\n"
-        "half4 main(float2 p) {\n"
-        "    return sample(child, p);\n"
+        "void main(float2 p, inout half4 color) {\n"
+        "    color = sample(fp, p);\n"
         "}\n";
-
-    fCodeIsDirty = true;
 }
 
 void SkSLSlide::load(SkScalar winWidth, SkScalar winHeight) {
@@ -55,22 +50,23 @@ void SkSLSlide::load(SkScalar winWidth, SkScalar winHeight) {
 
     sk_sp<SkShader> shader;
 
-    fShaders.push_back(std::make_pair("Null", nullptr));
-
     shader = SkGradientShader::MakeLinear(points, colors, nullptr, 2, SkTileMode::kClamp);
     fShaders.push_back(std::make_pair("Linear Gradient", shader));
 
-    shader = SkGradientShader::MakeRadial({ 256, 256 }, 256, colors, nullptr, 2,
+    shader = SkGradientShader::MakeRadial({ 128, 128 }, 128, colors, nullptr, 2,
                                           SkTileMode::kClamp);
     fShaders.push_back(std::make_pair("Radial Gradient", shader));
 
-    shader = SkGradientShader::MakeSweep(256, 256, colors, nullptr, 2);
+    shader = SkGradientShader::MakeSweep(128, 128, colors, nullptr, 2);
     fShaders.push_back(std::make_pair("Sweep Gradient", shader));
 
-    shader = GetResourceAsImage("images/mandrill_256.png")->makeShader(SkSamplingOptions());
+    shader = GetResourceAsImage("images/mandrill_256.png")->makeShader();
     fShaders.push_back(std::make_pair("Mandrill", shader));
 
-    fResolution = { winWidth, winHeight, 1.0f };
+    shader = SkPerlinNoiseShader::MakeImprovedNoise(0.025f, 0.025f, 3, 0.0f);
+    fShaders.push_back(std::make_pair("Perlin Noise", shader));
+
+    this->rebuild();
 }
 
 void SkSLSlide::unload() {
@@ -81,40 +77,24 @@ void SkSLSlide::unload() {
 }
 
 bool SkSLSlide::rebuild() {
-    // Some of the standard shadertoy inputs:
-    SkString sksl("uniform float3 iResolution;\n"
-                  "uniform float  iTime;\n"
-                  "uniform float4 iMouse;\n");
-    sksl.append(fSkSL);
-
-    // It shouldn't happen, but it's possible to assert in the compiler, especially mid-edit.
-    // To guard against losing your work, write out the shader to a backup file, then remove it
-    // when we compile successfully.
-    constexpr char kBackupFile[] = "sksl.bak";
-    FILE* backup = fopen(kBackupFile, "w");
-    if (backup) {
-        fwrite(fSkSL.c_str(), 1, fSkSL.size(), backup);
-        fclose(backup);
-    }
-    auto [effect, errorText] = SkRuntimeEffect::MakeForShader(sksl);
-    if (backup) {
-        std::remove(kBackupFile);
-    }
-
+    auto [effect, errorText] = SkRuntimeEffect::Make(fSkSL);
     if (!effect) {
-        Viewer::ShaderErrorHandler()->compileError(sksl.c_str(), errorText.c_str());
         return false;
     }
 
-    size_t oldSize = fEffect ? fEffect->uniformSize() : 0;
-    fInputs.realloc(effect->uniformSize());
-    if (effect->uniformSize() > oldSize) {
-        memset(fInputs.get() + oldSize, 0, effect->uniformSize() - oldSize);
+    size_t oldSize = fEffect ? fEffect->inputSize() : 0;
+    fInputs.realloc(effect->inputSize());
+    if (effect->inputSize() > oldSize) {
+        memset(fInputs.get() + oldSize, 0, effect->inputSize() - oldSize);
     }
     fChildren.resize_back(effect->children().count());
+    for (auto& c : fChildren) {
+        if (!c) {
+            c = fShaders[0].second;
+        }
+    }
 
     fEffect = effect;
-    fCodeIsDirty = false;
     return true;
 }
 
@@ -126,12 +106,8 @@ void SkSLSlide::draw(SkCanvas* canvas) {
     // Edit box for shader code
     ImGuiInputTextFlags flags = ImGuiInputTextFlags_CallbackResize;
     ImVec2 boxSize(-1.0f, ImGui::GetTextLineHeight() * 30);
-    if (ImGui::InputTextMultiline("Code", fSkSL.writable_str(), fSkSL.size() + 1, boxSize, flags,
-                                  InputTextCallback, &fSkSL)) {
-        fCodeIsDirty = true;
-    }
-
-    if (fCodeIsDirty || !fEffect) {
+    if (ImGui::InputTextMultiline("Code", fSkSL.writable_str(), fSkSL.size() + 1,
+                                  boxSize, flags, InputTextCallback, &fSkSL)) {
         this->rebuild();
     }
 
@@ -140,143 +116,70 @@ void SkSLSlide::draw(SkCanvas* canvas) {
         return;
     }
 
-    // Update fMousePos
-    ImVec2 mousePos = ImGui::GetMousePos();
-    if (ImGui::IsMouseDown(0)) {
-        fMousePos.x = mousePos.x;
-        fMousePos.y = mousePos.y;
-    }
-    if (ImGui::IsMouseClicked(0)) {
-        fMousePos.z = mousePos.x;
-        fMousePos.w = mousePos.y;
-    }
-    fMousePos.z = abs(fMousePos.z) * (ImGui::IsMouseDown(0)    ? 1 : -1);
-    fMousePos.w = abs(fMousePos.w) * (ImGui::IsMouseClicked(0) ? 1 : -1);
-
-    for (const auto& v : fEffect->uniforms()) {
-        char* data = fInputs.get() + v.offset;
-        if (v.name.equals("iResolution")) {
-            memcpy(data, &fResolution, sizeof(fResolution));
-            continue;
-        }
-        if (v.name.equals("iTime")) {
-            memcpy(data, &fSeconds, sizeof(fSeconds));
-            continue;
-        }
-        if (v.name.equals("iMouse")) {
-            memcpy(data, &fMousePos, sizeof(fMousePos));
-            continue;
-        }
-        switch (v.type) {
-            case SkRuntimeEffect::Uniform::Type::kFloat:
-            case SkRuntimeEffect::Uniform::Type::kFloat2:
-            case SkRuntimeEffect::Uniform::Type::kFloat3:
-            case SkRuntimeEffect::Uniform::Type::kFloat4: {
-                int rows = ((int)v.type - (int)SkRuntimeEffect::Uniform::Type::kFloat) + 1;
-                float* f = reinterpret_cast<float*>(data);
-                for (int c = 0; c < v.count; ++c, f += rows) {
-                    SkString name = v.isArray() ? SkStringPrintf("%s[%d]", v.name.c_str(), c)
-                                                : v.name;
+    for (const auto& v : fEffect->inputs()) {
+        switch (v.fType) {
+            case SkRuntimeEffect::Variable::Type::kBool:
+                ImGui::Checkbox(v.fName.c_str(), (bool*)(fInputs.get() + v.fOffset));
+                break;
+            case SkRuntimeEffect::Variable::Type::kInt:
+                ImGui::DragInt(v.fName.c_str(), (int*)(fInputs.get() + v.fOffset));
+                break;
+            case SkRuntimeEffect::Variable::Type::kFloat:
+            case SkRuntimeEffect::Variable::Type::kFloat2:
+            case SkRuntimeEffect::Variable::Type::kFloat3:
+            case SkRuntimeEffect::Variable::Type::kFloat4: {
+                int rows = ((int)v.fType - (int)SkRuntimeEffect::Variable::Type::kFloat) + 1;
+                float* f = (float*)(fInputs.get() + v.fOffset);
+                for (int c = 0; c < v.fCount; ++c, f += rows) {
+                    SkString name = v.isArray() ? SkStringPrintf("%s[%d]", v.fName.c_str(), c)
+                                                : v.fName;
                     ImGui::PushID(c);
                     ImGui::DragScalarN(name.c_str(), ImGuiDataType_Float, f, rows, 1.0f);
                     ImGui::PopID();
                 }
                 break;
             }
-            case SkRuntimeEffect::Uniform::Type::kFloat2x2:
-            case SkRuntimeEffect::Uniform::Type::kFloat3x3:
-            case SkRuntimeEffect::Uniform::Type::kFloat4x4: {
-                int rows = ((int)v.type - (int)SkRuntimeEffect::Uniform::Type::kFloat2x2) + 2;
+            case SkRuntimeEffect::Variable::Type::kFloat2x2:
+            case SkRuntimeEffect::Variable::Type::kFloat3x3:
+            case SkRuntimeEffect::Variable::Type::kFloat4x4: {
+                int rows = ((int)v.fType - (int)SkRuntimeEffect::Variable::Type::kFloat2x2) + 2;
                 int cols = rows;
-                float* f = reinterpret_cast<float*>(data);
-                for (int e = 0; e < v.count; ++e) {
+                float* f = (float*)(fInputs.get() + v.fOffset);
+                for (int e = 0; e < v.fCount; ++e) {
                     for (int c = 0; c < cols; ++c, f += rows) {
                         SkString name = v.isArray()
-                            ? SkStringPrintf("%s[%d][%d]", v.name.c_str(), e, c)
-                            : SkStringPrintf("%s[%d]", v.name.c_str(), c);
+                            ? SkStringPrintf("%s[%d][%d]", v.fName.c_str(), e, c)
+                            : SkStringPrintf("%s[%d]", v.fName.c_str(), c);
                         ImGui::DragScalarN(name.c_str(), ImGuiDataType_Float, f, rows, 1.0f);
                     }
-                }
-                break;
-            }
-            case SkRuntimeEffect::Uniform::Type::kInt:
-            case SkRuntimeEffect::Uniform::Type::kInt2:
-            case SkRuntimeEffect::Uniform::Type::kInt3:
-            case SkRuntimeEffect::Uniform::Type::kInt4: {
-                int rows = ((int)v.type - (int)SkRuntimeEffect::Uniform::Type::kInt) + 1;
-                int* i = reinterpret_cast<int*>(data);
-                for (int c = 0; c < v.count; ++c, i += rows) {
-                    SkString name = v.isArray() ? SkStringPrintf("%s[%d]", v.name.c_str(), c)
-                                                : v.name;
-                    ImGui::PushID(c);
-                    ImGui::DragScalarN(name.c_str(), ImGuiDataType_S32, i, rows, 1.0f);
-                    ImGui::PopID();
                 }
                 break;
             }
         }
     }
 
-    for (const auto& c : fEffect->children()) {
-        auto curShader =
-                std::find_if(fShaders.begin(), fShaders.end(), [tgt = fChildren[c.index]](auto p) {
-                    return p.second == tgt;
-                });
-        SkASSERT(curShader != fShaders.end());
+    for (const auto [i, name] : SkMakeEnumerate(fEffect->children())) {
+        auto curShader = std::find_if(fShaders.begin(), fShaders.end(),
+                                      [tgt = fChildren[i]](auto p) { return p.second == tgt; });
+        SkASSERT(curShader!= fShaders.end());
 
-        if (ImGui::BeginCombo(c.name.c_str(), curShader->first)) {
+        if (ImGui::BeginCombo(name.c_str(), curShader->first)) {
             for (const auto& namedShader : fShaders) {
                 if (ImGui::Selectable(namedShader.first, curShader->second == namedShader.second)) {
-                    fChildren[c.index] = namedShader.second;
+                    fChildren[i] = namedShader.second;
                 }
             }
             ImGui::EndCombo();
         }
     }
 
-    static SkColor4f gPaintColor { 1.0f, 1.0f, 1.0f , 1.0f };
-    ImGui::ColorEdit4("Paint Color", gPaintColor.vec());
-
-    ImGui::RadioButton("Fill",      &fGeometry, kFill);      ImGui::SameLine();
-    ImGui::RadioButton("Circle",    &fGeometry, kCircle);    ImGui::SameLine();
-    ImGui::RadioButton("RoundRect", &fGeometry, kRoundRect); ImGui::SameLine();
-    ImGui::RadioButton("Capsule",   &fGeometry, kCapsule);   ImGui::SameLine();
-    ImGui::RadioButton("Text",      &fGeometry, kText);
-
     ImGui::End();
 
-    auto inputs = SkData::MakeWithoutCopy(fInputs.get(), fEffect->uniformSize());
+    auto inputs = SkData::MakeWithoutCopy(fInputs.get(), fEffect->inputSize());
     auto shader = fEffect->makeShader(std::move(inputs), fChildren.data(), fChildren.count(),
                                       nullptr, false);
 
     SkPaint p;
-    p.setColor4f(gPaintColor);
     p.setShader(std::move(shader));
-
-    switch (fGeometry) {
-        case kFill:
-            canvas->drawPaint(p);
-            break;
-        case kCircle:
-            canvas->drawCircle({ 256, 256 }, 256, p);
-            break;
-        case kRoundRect:
-            canvas->drawRoundRect({ 0, 0, 512, 512 }, 64, 64, p);
-            break;
-        case kCapsule:
-            canvas->drawRoundRect({ 0, 224, 512, 288 }, 32, 32, p);
-            break;
-        case kText: {
-            SkFont font;
-            font.setSize(SkIntToScalar(96));
-            canvas->drawSimpleText("Hello World", strlen("Hello World"), SkTextEncoding::kUTF8, 0,
-                                   256, font, p);
-        } break;
-        default: break;
-    }
-}
-
-bool SkSLSlide::animate(double nanos) {
-    fSeconds = static_cast<float>(nanos * 1E-9);
-    return true;
+    canvas->drawRect({ 0, 0, 256, 256 }, p);
 }

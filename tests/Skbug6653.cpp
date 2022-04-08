@@ -5,12 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkBitmap.h"
+#include "include/core/SkTypes.h"
+
 #include "include/core/SkCanvas.h"
 #include "include/core/SkSurface.h"
-#include "include/core/SkTypes.h"
-#include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
+
+#include "include/gpu/GrContext.h"
+#include "src/gpu/GrContextPriv.h"
 #include "tests/Test.h"
 
 static SkBitmap read_pixels(sk_sp<SkSurface> surface, SkColor initColor) {
@@ -23,15 +24,13 @@ static SkBitmap read_pixels(sk_sp<SkSurface> surface, SkColor initColor) {
     return bmp;
 }
 
-static sk_sp<SkSurface> make_surface(GrRecordingContext* rContext) {
+static sk_sp<SkSurface> make_surface(GrContext* context) {
     SkImageInfo info = SkImageInfo::Make(50, 50, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-    return SkSurface::MakeRenderTarget(rContext, SkBudgeted::kNo, info, 4,
+    return SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, info, 4,
                                        kBottomLeft_GrSurfaceOrigin, nullptr);
 }
 
-static void test_bug_6653(GrDirectContext* dContext,
-                          skiatest::Reporter* reporter,
-                          const char* label) {
+static void test_bug_6653(GrContext* ctx, skiatest::Reporter* reporter, const char* label) {
     SkRect rect = SkRect::MakeWH(50, 50);
 
     SkPaint paint;
@@ -45,30 +44,31 @@ static void test_bug_6653(GrDirectContext* dContext,
     static const int kNumIterations = 50;
 
     for (int i = 0; i < kNumIterations; ++i) {
-        auto s0 = make_surface(dContext);
+        auto s0 = make_surface(ctx);
         if (!s0) {
             // MSAA may not be supported
             return;
         }
 
-        auto s1 = make_surface(dContext);
+        auto s1 = make_surface(ctx);
         s1->getCanvas()->clear(SK_ColorBLACK);
         s1->getCanvas()->drawOval(rect, paint);
         SkBitmap b1 = read_pixels(s1, SK_ColorBLACK);
         s1 = nullptr;
 
         // The bug requires that all three of the following surfaces are cleared to the same color
-        auto s2 = make_surface(dContext);
+        auto s2 = make_surface(ctx);
         s2->getCanvas()->clear(SK_ColorBLUE);
         SkBitmap b2 = read_pixels(s2, SK_ColorBLACK);
         s2 = nullptr;
 
-        auto s3 = make_surface(dContext);
+        auto s3 = make_surface(ctx);
         s3->getCanvas()->clear(SK_ColorBLUE);
-        s0->getCanvas()->drawImage(read_pixels(s3, SK_ColorBLACK).asImage(), 0, 0);
+        SkBitmap b3 = read_pixels(s3, SK_ColorBLACK);
+        s0->getCanvas()->drawBitmap(b3, 0, 0);
         s3 = nullptr;
 
-        auto s4 = make_surface(dContext);
+        auto s4 = make_surface(ctx);
         s4->getCanvas()->clear(SK_ColorBLUE);
         s4->getCanvas()->drawOval(rect, paint);
 
@@ -97,7 +97,7 @@ static void test_bug_6653(GrDirectContext* dContext,
 // Tests that readPixels returns up-to-date results. This has failed on several GPUs,
 // from multiple vendors, in MSAA mode.
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(skbug6653, reporter, ctxInfo) {
-    auto ctx = ctxInfo.directContext();
+    GrContext* ctx = ctxInfo.grContext();
     test_bug_6653(ctx, reporter, "Default");
 }
 

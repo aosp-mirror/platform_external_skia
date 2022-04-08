@@ -11,7 +11,6 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrTypes.h"
 #include "src/core/SkDevice.h"
 #include "src/core/SkSpecialImage.h"
@@ -20,6 +19,7 @@
 #include "tools/gpu/GrContextFactory.h"
 
 class SkColorSpace;
+class GrContext;
 
 class DeviceTestingAccess {
 public:
@@ -77,7 +77,7 @@ DEF_TEST(SpecialImage_BitmapDevice, reporter) {
 
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_GPUDevice, reporter, ctxInfo) {
-    auto context = ctxInfo.directContext();
+    GrContext* context = ctxInfo.grContext();
 
     static const int kWidth = 100;
     static const int kHeight = 90;
@@ -86,7 +86,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_GPUDevice, reporter, ctxInfo) {
 
     sk_sp<SkBaseDevice> gpuDev(SkGpuDevice::Make(context, SkBudgeted::kNo, ii,
                                                  1, kBottomLeft_GrSurfaceOrigin, nullptr,
-                                                 GrMipmapped::kNo,
+                                                 GrMipMapped::kNo,
                                                  SkGpuDevice::kClear_InitContents));
 
     SkBitmap bm;
@@ -101,7 +101,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialImage_GPUDevice, reporter, ctxInfo) {
     SkASSERT(SkIRect::MakeWH(kWidth, kHeight) == special->subset());
 
     // Create a gpu-backed special image from a raster-backed SkImage
-    sk_sp<SkImage> image(bm.asImage());
+    sk_sp<SkImage> image(SkImage::MakeFromBitmap(bm));
     special = DeviceTestingAccess::MakeSpecial(gpuDev.get(), image.get());
     SkASSERT(special->isTextureBacked());
     SkASSERT(kWidth == special->width());

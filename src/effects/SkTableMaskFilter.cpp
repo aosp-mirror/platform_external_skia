@@ -8,7 +8,6 @@
 #include "include/core/SkString.h"
 #include "include/effects/SkTableMaskFilter.h"
 #include "include/private/SkFixed.h"
-#include "include/private/SkTPin.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
 
@@ -31,7 +30,7 @@ private:
 
     uint8_t fTable[256];
 
-    using INHERITED = SkMaskFilter;
+    typedef SkMaskFilter INHERITED;
 };
 
 SkTableMaskFilterImpl::SkTableMaskFilterImpl() {

@@ -14,13 +14,11 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
 #include "include/private/SkTHash.h"
-#include "include/utils/SkCustomTypeface.h"
 #include "modules/skottie/include/SkottieProperty.h"
-#include "modules/skottie/src/animator/Animator.h"
 #include "modules/sksg/include/SkSGScene.h"
 #include "src/utils/SkUTF.h"
 
-#include <vector>
+#include <functional>
 
 class SkFontMgr;
 
@@ -40,36 +38,26 @@ class Transform;
 namespace skottie {
 namespace internal {
 
-// Close-enough to AE.
-static constexpr float kBlurSizeToSigma = 0.3f;
-
 class TextAdapter;
 class TransformAdapter2D;
 class TransformAdapter3D;
 
-using AnimatorScope = std::vector<sk_sp<Animator>>;
+using AnimatorScope = sksg::AnimatorList;
 
 class AnimationBuilder final : public SkNoncopyable {
 public:
     AnimationBuilder(sk_sp<ResourceProvider>, sk_sp<SkFontMgr>, sk_sp<PropertyObserver>,
-                     sk_sp<Logger>, sk_sp<MarkerObserver>, sk_sp<PrecompInterceptor>,
+                     sk_sp<Logger>, sk_sp<MarkerObserver>,
                      Animation::Builder::Stats*, const SkSize& comp_size,
                      float duration, float framerate, uint32_t flags);
 
-    struct AnimationInfo {
-        std::unique_ptr<sksg::Scene> fScene;
-        AnimatorScope                fAnimators;
-    };
-
-    AnimationInfo parse(const skjson::ObjectValue&);
+    std::unique_ptr<sksg::Scene> parse(const skjson::ObjectValue&);
 
     struct FontInfo {
-        SkString                fFamily,
-                                fStyle,
-                                fPath;
-        SkScalar                fAscentPct;
-        sk_sp<SkTypeface>       fTypeface;
-        SkCustomTypefaceBuilder fCustomBuilder;
+        SkString                  fFamily,
+                                  fStyle;
+        SkScalar                  fAscentPct;
+        sk_sp<SkTypeface>         fTypeface;
 
         bool matches(const char family[], const char style[]) const;
     };
@@ -77,10 +65,8 @@ public:
 
     void log(Logger::Level, const skjson::Value*, const char fmt[], ...) const;
 
-    sk_sp<sksg::Transform> attachMatrix2D(const skjson::ObjectValue&, sk_sp<sksg::Transform>,
-                                          bool auto_orient = false) const;
-    sk_sp<sksg::Transform> attachMatrix3D(const skjson::ObjectValue&, sk_sp<sksg::Transform>,
-                                          bool auto_orient = false) const;
+    sk_sp<sksg::Transform> attachMatrix2D(const skjson::ObjectValue&, sk_sp<sksg::Transform>) const;
+    sk_sp<sksg::Transform> attachMatrix3D(const skjson::ObjectValue&, sk_sp<sksg::Transform>) const;
 
     sk_sp<sksg::Transform> attachCamera(const skjson::ObjectValue& jlayer,
                                         const skjson::ObjectValue& jtransform,
@@ -123,25 +109,22 @@ public:
     void attachDiscardableAdapter(sk_sp<T> adapter) const {
         if (adapter->isStatic()) {
             // Fire off a synthetic tick to force a single SG sync before discarding.
-            adapter->seek(0);
+            adapter->tick(0);
         } else {
             fCurrentAnimatorScope->push_back(std::move(adapter));
         }
     }
 
-    template <typename T, typename... Args>
-    auto attachDiscardableAdapter(Args&&... args) const ->
-        typename std::decay<decltype(T::Make(std::forward<Args>(args)...)->node())>::type
-    {
-        using NodeType =
-        typename std::decay<decltype(T::Make(std::forward<Args>(args)...)->node())>::type;
-
-        NodeType node;
+    template <typename T,  typename NodeType = sk_sp<sksg::RenderNode>, typename... Args>
+    NodeType attachDiscardableAdapter(Args&&... args) const {
         if (auto adapter = T::Make(std::forward<Args>(args)...)) {
-            node = adapter->node();
+            auto node = adapter->node();
             this->attachDiscardableAdapter(std::move(adapter));
+
+            return std::move(node);
         }
-        return node;
+
+        return nullptr;
     }
 
     class AutoPropertyTracker {
@@ -180,37 +163,32 @@ private:
 
     struct AttachLayerContext;
     struct AttachShapeContext;
-    struct FootageAssetInfo;
+    struct ImageAssetInfo;
     struct LayerInfo;
 
     void parseAssets(const skjson::ArrayValue*);
     void parseFonts (const skjson::ObjectValue* jfonts,
                      const skjson::ArrayValue* jchars);
 
-    // Return true iff all fonts were resolved.
-    bool resolveNativeTypefaces();
-    bool resolveEmbeddedTypefaces(const skjson::ArrayValue& jchars);
-
     void dispatchMarkers(const skjson::ArrayValue*) const;
 
     sk_sp<sksg::RenderNode> attachBlendMode(const skjson::ObjectValue&,
                                             sk_sp<sksg::RenderNode>) const;
 
-    sk_sp<sksg::RenderNode> attachShape(const skjson::ArrayValue*, AttachShapeContext*,
-                                        bool suppress_draws = false) const;
-    const FootageAssetInfo* loadFootageAsset(const skjson::ObjectValue&) const;
-    sk_sp<sksg::RenderNode> attachFootageAsset(const skjson::ObjectValue&, LayerInfo*) const;
+    sk_sp<sksg::RenderNode> attachShape(const skjson::ArrayValue*, AttachShapeContext*) const;
+    sk_sp<sksg::RenderNode> attachAssetRef(const skjson::ObjectValue&,
+        const std::function<sk_sp<sksg::RenderNode>(const skjson::ObjectValue&)>&) const;
+    const ImageAssetInfo* loadImageAsset(const skjson::ObjectValue&) const;
+    sk_sp<sksg::RenderNode> attachImageAsset(const skjson::ObjectValue&, LayerInfo*) const;
 
-    sk_sp<sksg::RenderNode> attachExternalPrecompLayer(const skjson::ObjectValue&,
-                                                       const LayerInfo&) const;
+    sk_sp<sksg::RenderNode> attachNestedAnimation(const char* name) const;
 
-    sk_sp<sksg::RenderNode> attachFootageLayer(const skjson::ObjectValue&, LayerInfo*) const;
+    sk_sp<sksg::RenderNode> attachImageLayer  (const skjson::ObjectValue&, LayerInfo*) const;
     sk_sp<sksg::RenderNode> attachNullLayer   (const skjson::ObjectValue&, LayerInfo*) const;
     sk_sp<sksg::RenderNode> attachPrecompLayer(const skjson::ObjectValue&, LayerInfo*) const;
     sk_sp<sksg::RenderNode> attachShapeLayer  (const skjson::ObjectValue&, LayerInfo*) const;
     sk_sp<sksg::RenderNode> attachSolidLayer  (const skjson::ObjectValue&, LayerInfo*) const;
     sk_sp<sksg::RenderNode> attachTextLayer   (const skjson::ObjectValue&, LayerInfo*) const;
-    sk_sp<sksg::RenderNode> attachAudioLayer  (const skjson::ObjectValue&, LayerInfo*) const;
 
     // Delay resolving the fontmgr until it is actually needed.
     struct LazyResolveFontMgr {
@@ -235,7 +213,6 @@ private:
     sk_sp<PropertyObserver>    fPropertyObserver;
     sk_sp<Logger>              fLogger;
     sk_sp<MarkerObserver>      fMarkerObserver;
-    sk_sp<PrecompInterceptor>  fPrecompInterceptor;
     Animation::Builder::Stats* fStats;
     const SkSize               fCompSize;
     const float                fDuration,
@@ -256,32 +233,14 @@ private:
         mutable bool               fIsAttaching; // Used for cycle detection
     };
 
-    struct FootageAssetInfo {
+    struct ImageAssetInfo {
         sk_sp<ImageAsset> fAsset;
         SkISize           fSize;
     };
 
-    class ScopedAssetRef {
-    public:
-        ScopedAssetRef(const AnimationBuilder* abuilder, const skjson::ObjectValue& jlayer);
-
-        ~ScopedAssetRef() {
-            if (fInfo) {
-                fInfo->fIsAttaching = false;
-            }
-        }
-
-        operator bool() const { return !!fInfo; }
-
-        const skjson::ObjectValue& operator*() const { return *fInfo->fAsset; }
-
-    private:
-        const AssetInfo* fInfo = nullptr;
-    };
-
-    SkTHashMap<SkString, AssetInfo>                fAssets;
-    SkTHashMap<SkString, FontInfo>                 fFonts;
-    mutable SkTHashMap<SkString, FootageAssetInfo> fImageAssetCache;
+    SkTHashMap<SkString, AssetInfo>              fAssets;
+    SkTHashMap<SkString, FontInfo>               fFonts;
+    mutable SkTHashMap<SkString, ImageAssetInfo> fImageAssetCache;
 
     using INHERITED = SkNoncopyable;
 };

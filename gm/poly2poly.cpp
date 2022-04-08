@@ -116,7 +116,7 @@ protected:
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
     sk_sp<SkTypeface> fEmFace;
 };
 

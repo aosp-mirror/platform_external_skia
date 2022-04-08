@@ -30,8 +30,8 @@ public:
 
 private:
     explicit GrTextureProxyPriv(GrTextureProxy* textureProxy) : fTextureProxy(textureProxy) {}
-    GrTextureProxyPriv(const GrTextureProxyPriv&) = delete;
-    GrTextureProxyPriv& operator=(const GrTextureProxyPriv&) = delete;
+    GrTextureProxyPriv(const GrTextureProxyPriv&) {} // unimpl
+    GrTextureProxyPriv& operator=(const GrTextureProxyPriv&); // unimpl
 
     // No taking addresses of this type.
     const GrTextureProxyPriv* operator&() const;
@@ -44,7 +44,7 @@ private:
 
 inline GrTextureProxyPriv GrTextureProxy::texPriv() { return GrTextureProxyPriv(this); }
 
-inline const GrTextureProxyPriv GrTextureProxy::texPriv() const {  // NOLINT(readability-const-return-type)
+inline const GrTextureProxyPriv GrTextureProxy::texPriv() const {
     return GrTextureProxyPriv(const_cast<GrTextureProxy*>(this));
 }
 

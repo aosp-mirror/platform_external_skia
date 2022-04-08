@@ -83,7 +83,7 @@ private:
     bool fInitialized;
     sk_sp<SkImage> fImage, fCheckerboard;
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

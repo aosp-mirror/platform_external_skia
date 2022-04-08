@@ -22,7 +22,6 @@
 #include "include/core/SkTypeface.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkImageFilters.h"
-#include "src/gpu/effects/GrMatrixConvolutionEffect.h"
 #include "tools/ToolUtils.h"
 
 #include <vector>
@@ -52,7 +51,9 @@ protected:
 
     void makeBitmap() {
         // Draw our bitmap in N32, so legacy devices get "premul" values they understand
-        auto surf = SkSurface::MakeRasterN32Premul(80, 80);
+        fBitmap.allocN32Pixels(80, 80);
+        SkCanvas canvas(fBitmap);
+        canvas.clear(0x00000000);
         SkPaint paint;
         paint.setColor(0xFFFFFFFF);
         SkPoint pts[2] = { {0, 0},
@@ -61,8 +62,7 @@ protected:
         paint.setShader(SkGradientShader::MakeLinear(
             pts, fColors, pos, 2, SkTileMode::kClamp));
         SkFont font(ToolUtils::create_portable_typeface(), 180.0f);
-        surf->getCanvas()->drawString("e", -10.0f, 80.0f, font, paint);
-        fImage = surf->makeImageSnapshot();
+        canvas.drawString("e", -10.0f, 80.0f, font, paint);
     }
 
     SkISize onISize() override {
@@ -79,7 +79,7 @@ protected:
                 return SkImageFilters::MatrixConvolution({3,3}, kernel.data(), /* gain */ 0.3f, /* bias */ SkIntToScalar(100), kernelOffset, tileMode, convolveAlpha, nullptr, cropRect);
             }
             case kLarge_KernelFixture: {
-                static_assert(49 > GrMatrixConvolutionEffect::kMaxUniformSize);
+                // Intentionally go over the MAX_KERNEL_SIZE limit and trigger CPU fallback.
                 // All 1s except center value, which is -47 (sum of 1).
                 std::vector<SkScalar> kernel(49, SkIntToScalar(1));
                 kernel[24] = SkIntToScalar(-47);
@@ -97,13 +97,13 @@ protected:
         paint.setImageFilter(this->makeFilter(kernelOffset, tileMode, convolveAlpha, cropRect));
         canvas->save();
         canvas->translate(SkIntToScalar(x), SkIntToScalar(y));
-        const SkRect layerBounds = SkRect::Make(fImage->bounds());
+        const SkRect layerBounds = SkRect::MakeIWH(fBitmap.width(), fBitmap.height());
         canvas->clipRect(layerBounds);
         // This GM is, in part, intended to display the wrapping behavior of the
         // matrix image filter. The only (rational) way to achieve that for repeat mode
         // is to create a tight layer.
         canvas->saveLayer(layerBounds, &paint);
-            canvas->drawImage(fImage, 0, 0);
+            canvas->drawBitmap(fBitmap, 0, 0, nullptr);
         canvas->restore();
         canvas->restore();
     }
@@ -115,7 +115,7 @@ protected:
     void onDraw(SkCanvas* canvas) override {
         canvas->clear(SK_ColorBLACK);
         SkIPoint kernelOffset = SkIPoint::Make(1, 0);
-        SkIRect rect = fImage->bounds();
+        SkIRect rect = fBitmap.bounds();
         for (int x = 10; x < 310; x += 100) {
             this->draw(canvas, x, 10, kernelOffset, SkTileMode::kClamp, true, &rect);
             this->draw(canvas, x, 110, kernelOffset, SkTileMode::kDecal, true, &rect);
@@ -134,12 +134,12 @@ protected:
     }
 
 private:
-    sk_sp<SkImage> fImage;
+    SkBitmap fBitmap;
     SkColor fColors[2];
     const char* fNameSuffix;
     KernelFixture fKernelFixture;
 
-    using INHERITED = GM;
+    typedef GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -149,4 +149,4 @@ DEF_GM(return new MatrixConvolutionGM(0xFFFF0000, 0xFF00FF00, KernelFixture::kBa
 DEF_GM(return new MatrixConvolutionGM(0xFFFFFFFF, 0x40404040, KernelFixture::kLarge_KernelFixture, "_big");)
 DEF_GM(return new MatrixConvolutionGM(0xFFFF0000, 0xFF00FF00, KernelFixture::kLarge_KernelFixture, "_big_color");)
 
-}  // namespace skiagm
+}

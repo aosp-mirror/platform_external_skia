@@ -5,8 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkPathBuilder.h"
-#include "include/private/SkTPin.h"
 #include "modules/skottie/src/Adapter.h"
 #include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/SkottiePriv.h"
@@ -29,49 +27,50 @@ public:
     PolystarGeometryAdapter(const skjson::ObjectValue& jstar,
                             const AnimationBuilder* abuilder, Type t)
         : fType(t) {
-        this->bind(*abuilder, jstar["pt"], fPointCount    );
-        this->bind(*abuilder, jstar["p" ], fPosition      );
-        this->bind(*abuilder, jstar["r" ], fRotation      );
-        this->bind(*abuilder, jstar["ir"], fInnerRadius   );
-        this->bind(*abuilder, jstar["or"], fOuterRadius   );
-        this->bind(*abuilder, jstar["is"], fInnerRoundness);
-        this->bind(*abuilder, jstar["os"], fOuterRoundness);
+        this->bind(*abuilder, jstar["pt"], &fPointCount);
+        this->bind(*abuilder, jstar["p" ], &fPosition);
+        this->bind(*abuilder, jstar["r" ], &fRotation);
+        this->bind(*abuilder, jstar["ir"], &fInnerRadius);
+        this->bind(*abuilder, jstar["or"], &fOuterRadius);
+        this->bind(*abuilder, jstar["is"], &fInnerRoundness);
+        this->bind(*abuilder, jstar["os"], &fOuterRoundness);
     }
 
 private:
     void onSync() override {
+        const auto pos   = ValueTraits<VectorValue>::As<SkPoint>(fPosition);
         static constexpr int kMaxPointCount = 100000;
         const auto count = SkToUInt(SkTPin(SkScalarRoundToInt(fPointCount), 0, kMaxPointCount));
         const auto arc   = sk_ieee_float_divide(SK_ScalarPI * 2, count);
 
-        const auto pt_on_circle = [](const SkV2& c, SkScalar r, SkScalar a) {
-            return SkPoint::Make(c.x + r * std::cos(a),
-                                 c.y + r * std::sin(a));
+        const auto pt_on_circle = [](const SkPoint& c, SkScalar r, SkScalar a) {
+            return SkPoint::Make(c.x() + r * std::cos(a),
+                                 c.y() + r * std::sin(a));
         };
 
         // TODO: inner/outer "roundness"?
 
-        SkPathBuilder poly;
+        SkPath poly;
 
         auto angle = SkDegreesToRadians(fRotation - 90);
-        poly.moveTo(pt_on_circle(fPosition, fOuterRadius, angle));
+        poly.moveTo(pt_on_circle(pos, fOuterRadius, angle));
         poly.incReserve(fType == Type::kStar ? count * 2 : count);
 
         for (unsigned i = 0; i < count; ++i) {
             if (fType == Type::kStar) {
-                poly.lineTo(pt_on_circle(fPosition, fInnerRadius, angle + arc * 0.5f));
+                poly.lineTo(pt_on_circle(pos, fInnerRadius, angle + arc * 0.5f));
             }
             angle += arc;
-            poly.lineTo(pt_on_circle(fPosition, fOuterRadius, angle));
+            poly.lineTo(pt_on_circle(pos, fOuterRadius, angle));
         }
 
         poly.close();
-        this->node()->setPath(poly.detach());
+        this->node()->setPath(poly);
     }
 
     const Type fType;
 
-    Vec2Value   fPosition       = {0,0};
+    VectorValue fPosition;
     ScalarValue fPointCount     = 0,
                 fRotation       = 0,
                 fInnerRadius    = 0,
@@ -95,7 +94,7 @@ sk_sp<sksg::GeometryNode> ShapeBuilder::AttachPolystarGeometry(const skjson::Obj
         return nullptr;
     }
 
-    return abuilder->attachDiscardableAdapter<PolystarGeometryAdapter>
+    return abuilder->attachDiscardableAdapter<PolystarGeometryAdapter, sk_sp<sksg::GeometryNode>>
                 (jstar, abuilder, gTypes[type]);
 }
 

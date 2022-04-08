@@ -39,7 +39,7 @@ public:
     }
 
 protected:
-    const char* onGetName() override {
+    virtual const char* onGetName() {
         return fName.c_str();
     }
 
@@ -51,7 +51,7 @@ protected:
         fName = name;
     }
 
-    void onDraw(int loops, SkCanvas*) override {
+    virtual void onDraw(int loops, SkCanvas*) {
         SkPaint paint;
         this->setupPaint(&paint);
 
@@ -70,7 +70,7 @@ protected:
     virtual void makeBlurryRect(const SkRect&) = 0;
     virtual void preBenchSetup(const SkRect&) {}
 private:
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 
@@ -97,7 +97,7 @@ protected:
         SkMask::FreeImage(mask.fImage);
     }
 private:
-    using INHERITED = BlurRectBench;
+    typedef BlurRectBench INHERITED;
 };
 
 class BlurRectSeparableBench: public BlurRectBench {
@@ -123,7 +123,7 @@ protected:
 
     SkMask fSrcMask;
 private:
-    using INHERITED = BlurRectBench;
+    typedef BlurRectBench INHERITED;
 };
 
 class BlurRectBoxFilterBench: public BlurRectSeparableBench {
@@ -151,7 +151,7 @@ protected:
         SkMask::FreeImage(mask.fImage);
     }
 private:
-    using INHERITED = BlurRectSeparableBench;
+    typedef BlurRectSeparableBench INHERITED;
 };
 
 class BlurRectGaussianBench: public BlurRectSeparableBench {
@@ -179,7 +179,7 @@ protected:
         SkMask::FreeImage(mask.fImage);
     }
 private:
-    using INHERITED = BlurRectSeparableBench;
+    typedef BlurRectSeparableBench INHERITED;
 };
 
 DEF_BENCH(return new BlurRectBoxFilterBench(SMALL);)

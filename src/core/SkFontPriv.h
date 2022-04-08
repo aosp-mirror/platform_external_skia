@@ -11,7 +11,6 @@
 #include "include/core/SkFont.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkTypeface.h"
-#include "include/private/SkTemplates.h"
 
 class SkReadBuffer;
 class SkWriteBuffer;
@@ -38,7 +37,7 @@ public:
      *  Return a matrix that applies the paint's text values: size, scale, skew
      */
     static SkMatrix MakeTextMatrix(SkScalar size, SkScalar scaleX, SkScalar skewX) {
-        SkMatrix m = SkMatrix::Scale(size * scaleX, size);
+        SkMatrix m = SkMatrix::MakeScale(size * scaleX, size);
         if (skewX) {
             m.postSkew(skewX, 0);
         }

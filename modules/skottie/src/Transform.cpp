@@ -20,18 +20,15 @@ TransformAdapter2D::TransformAdapter2D(const AnimationBuilder& abuilder,
                                        const skjson::ObjectValue* jscale,
                                        const skjson::ObjectValue* jrotation,
                                        const skjson::ObjectValue* jskew,
-                                       const skjson::ObjectValue* jskew_axis,
-                                       bool auto_orient)
+                                       const skjson::ObjectValue* jskew_axis)
     : INHERITED(sksg::Matrix<SkMatrix>::Make(SkMatrix::I())) {
 
     this->bind(abuilder, janchor_point, fAnchorPoint);
+    this->bind(abuilder, jposition    , fPosition);
     this->bind(abuilder, jscale       , fScale);
     this->bind(abuilder, jrotation    , fRotation);
     this->bind(abuilder, jskew        , fSkew);
     this->bind(abuilder, jskew_axis   , fSkewAxis);
-
-    this->bindAutoOrientable(abuilder, jposition, &fPosition, auto_orient ? &fOrientation
-                                                                          : nullptr);
 }
 
 TransformAdapter2D::~TransformAdapter2D() {}
@@ -41,30 +38,22 @@ void TransformAdapter2D::onSync() {
 }
 
 SkMatrix TransformAdapter2D::totalMatrix() const {
-    auto skew_matrix = [](float sk, float sa) {
-        if (!sk) return SkMatrix::I();
+    const auto anchor_point = ValueTraits<VectorValue>::As<SkPoint>(fAnchorPoint),
+               position     = ValueTraits<VectorValue>::As<SkPoint>(fPosition),
+               scale        = ValueTraits<VectorValue>::As<SkPoint>(fScale);
 
-        // AE control limit.
-        static constexpr float kMaxSkewAngle = 85;
-        sk = -SkDegreesToRadians(SkTPin(sk, -kMaxSkewAngle, kMaxSkewAngle));
-        sa =  SkDegreesToRadians(sa);
+    SkMatrix t = SkMatrix::MakeTrans(-anchor_point.x(), -anchor_point.y());
 
-        // Similar to CSS/SVG SkewX [1] with an explicit rotation.
-        // [1] https://www.w3.org/TR/css-transforms-1/#SkewXDefined
-        return SkMatrix::RotateRad(sa)
-             * SkMatrix::Skew(std::tan(sk), 0)
-             * SkMatrix::RotateRad(-sa);
-    };
+    t.postScale(scale.x() / 100, scale.y() / 100); // 100% based
+    t.postRotate(fRotation);
+    t.postTranslate(position.x(), position.y());
+    // TODO: skew
 
-    return SkMatrix::Translate(fPosition.x, fPosition.y)
-         * SkMatrix::RotateDeg(fRotation + fOrientation)
-         * skew_matrix        (fSkew, fSkewAxis)
-         * SkMatrix::Scale    (fScale.x / 100, fScale.y / 100) // 100% based
-         * SkMatrix::Translate(-fAnchorPoint.x, -fAnchorPoint.y);
+    return t;
 }
 
 SkPoint TransformAdapter2D::getAnchorPoint() const {
-    return { fAnchorPoint.x, fAnchorPoint.y };
+    return ValueTraits<VectorValue>::As<SkPoint>(fAnchorPoint);
 }
 
 void TransformAdapter2D::setAnchorPoint(const SkPoint& ap) {
@@ -73,7 +62,7 @@ void TransformAdapter2D::setAnchorPoint(const SkPoint& ap) {
 }
 
 SkPoint TransformAdapter2D::getPosition() const {
-    return { fPosition.x, fPosition.y };
+    return ValueTraits<VectorValue>::As<SkPoint>(fPosition);
 }
 
 void TransformAdapter2D::setPosition(const SkPoint& p) {
@@ -82,7 +71,7 @@ void TransformAdapter2D::setPosition(const SkPoint& p) {
 }
 
 SkVector TransformAdapter2D::getScale() const {
-    return { fScale.x, fScale.y };
+    return ValueTraits<VectorValue>::As<SkVector>(fScale);
 }
 
 void TransformAdapter2D::setScale(const SkVector& s) {
@@ -106,8 +95,7 @@ void TransformAdapter2D::setSkewAxis(float sa) {
 }
 
 sk_sp<sksg::Transform> AnimationBuilder::attachMatrix2D(const skjson::ObjectValue& jtransform,
-                                                        sk_sp<sksg::Transform> parent,
-                                                        bool auto_orient) const {
+                                                        sk_sp<sksg::Transform> parent) const {
     const auto* jrotation = &jtransform["r"];
     if (jrotation->is<skjson::NullValue>()) {
         // Some 2D rotations are disguised as 3D...
@@ -120,8 +108,7 @@ sk_sp<sksg::Transform> AnimationBuilder::attachMatrix2D(const skjson::ObjectValu
                                             jtransform["s"],
                                             *jrotation,
                                             jtransform["sk"],
-                                            jtransform["sa"],
-                                            auto_orient);
+                                            jtransform["sa"]);
     SkASSERT(adapter);
 
     const auto dispatched = this->dispatchTransformProperty(adapter);
@@ -131,7 +118,7 @@ sk_sp<sksg::Transform> AnimationBuilder::attachMatrix2D(const skjson::ObjectValu
             // The transform has no observable effects - we can discard.
             return parent;
         }
-        adapter->seek(0);
+        adapter->tick(0);
     } else {
         fCurrentAnimatorScope->push_back(adapter);
     }
@@ -162,22 +149,22 @@ void TransformAdapter3D::onSync() {
 }
 
 SkV3 TransformAdapter3D::anchor_point() const {
-    return fAnchorPoint;
+    return ValueTraits<VectorValue>::As<SkV3>(fAnchorPoint);
 }
 
 SkV3 TransformAdapter3D::position() const {
-    return fPosition;
+    return ValueTraits<VectorValue>::As<SkV3>(fPosition);
 }
 
 SkV3 TransformAdapter3D::rotation() const {
     // orientation and axis-wise rotation map onto the same property.
-    return static_cast<SkV3>(fOrientation) + SkV3{ fRx, fRy, fRz };
+    return ValueTraits<VectorValue>::As<SkV3>(fOrientation) + SkV3{ fRx, fRy, fRz };
 }
 
 SkM44 TransformAdapter3D::totalMatrix() const {
     const auto anchor_point = this->anchor_point(),
                position     = this->position(),
-               scale        = static_cast<SkV3>(fScale),
+               scale        = ValueTraits<VectorValue>::As<SkV3>(fScale),
                rotation     = this->rotation();
 
     return SkM44::Translate(position.x, position.y, position.z)
@@ -189,8 +176,7 @@ SkM44 TransformAdapter3D::totalMatrix() const {
 }
 
 sk_sp<sksg::Transform> AnimationBuilder::attachMatrix3D(const skjson::ObjectValue& jtransform,
-                                                        sk_sp<sksg::Transform> parent,
-                                                        bool /*TODO: auto_orient*/) const {
+                                                        sk_sp<sksg::Transform> parent) const {
     auto adapter = TransformAdapter3D::Make(jtransform, *this);
     SkASSERT(adapter);
 
@@ -200,7 +186,7 @@ sk_sp<sksg::Transform> AnimationBuilder::attachMatrix3D(const skjson::ObjectValu
             // The transform has no observable effects - we can discard.
             return parent;
         }
-        adapter->seek(0);
+        adapter->tick(0);
     } else {
         fCurrentAnimatorScope->push_back(adapter);
     }

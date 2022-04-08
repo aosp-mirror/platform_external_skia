@@ -10,14 +10,13 @@
 #include "tests/Test.h"
 
 #include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
+#include "include/gpu/GrTexture.h"
+#include "src/gpu/GrContextPriv.h"
 #include "src/gpu/GrGpu.h"
 #include "src/gpu/GrProxyProvider.h"
 #include "src/gpu/GrRenderTarget.h"
 #include "src/gpu/GrRenderTargetProxy.h"
 #include "src/gpu/GrSurfaceProxy.h"
-#include "src/gpu/GrTexture.h"
 #include "src/gpu/GrTextureProxy.h"
 
 static sk_sp<GrSurfaceProxy> make_wrapped_rt(GrProxyProvider* provider,
@@ -25,8 +24,9 @@ static sk_sp<GrSurfaceProxy> make_wrapped_rt(GrProxyProvider* provider,
                                              skiatest::Reporter* reporter,
                                              const SkISize& size,
                                              GrColorType colorType) {
-    auto backendRT = gpu->createTestingOnlyBackendRenderTarget(size, colorType);
-    return provider->wrapBackendRenderTarget(backendRT, nullptr);
+    auto backendRT =
+            gpu->createTestingOnlyBackendRenderTarget(size.width(), size.height(), colorType);
+    return provider->wrapBackendRenderTarget(backendRT, colorType, nullptr, nullptr);
 }
 
 void clean_up_wrapped_rt(GrGpu* gpu, sk_sp<GrSurfaceProxy> proxy) {
@@ -56,9 +56,8 @@ static sk_sp<GrSurfaceProxy> make_texture(GrProxyProvider* provider,
 
 // Test converting between RenderTargetProxies and TextureProxies for preinstantiated Proxies
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(PreinstantiatedProxyConversionTest, reporter, ctxInfo) {
-    auto context = ctxInfo.directContext();
-    GrProxyProvider* proxyProvider = context->priv().proxyProvider();
-    GrGpu* gpu = context->priv().getGpu();
+    GrProxyProvider* proxyProvider = ctxInfo.grContext()->priv().proxyProvider();
+    GrGpu* gpu = ctxInfo.grContext()->priv().getGpu();
 
     static constexpr auto kSize = SkISize::Make(64, 64);
     static constexpr auto kColorType = GrColorType::kRGBA_8888;
@@ -123,7 +122,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(PreinstantiatedProxyConversionTest, reporter,
 // Test converting between RenderTargetProxies and TextureProxies for deferred
 // Proxies
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DefferredProxyConversionTest, reporter, ctxInfo) {
-    auto context = ctxInfo.directContext();
+    GrContext* context = ctxInfo.grContext();
     GrProxyProvider* proxyProvider = context->priv().proxyProvider();
     const GrCaps* caps = context->priv().caps();
 
@@ -131,10 +130,12 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DefferredProxyConversionTest, reporter, ctxIn
 
     const GrBackendFormat format = caps->getDefaultBackendFormat(GrColorType::kRGBA_8888,
                                                                  GrRenderable::kYes);
+    GrSwizzle swizzle = caps->getReadSwizzle(format, GrColorType::kRGBA_8888);
+
     {
         sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(
-                format, kDims, GrRenderable::kYes, 1, GrMipmapped::kNo, SkBackingFit::kApprox,
-                SkBudgeted::kYes, GrProtected::kNo);
+                format, kDims, swizzle, GrRenderable::kYes, 1, GrMipMapped::kNo,
+                SkBackingFit::kApprox, SkBudgeted::kYes, GrProtected::kNo);
 
         // Both RenderTarget and Texture
         GrRenderTargetProxy* rtProxy = proxy->asRenderTargetProxy();
@@ -147,8 +148,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DefferredProxyConversionTest, reporter, ctxIn
 
     {
         sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(
-                format, kDims, GrRenderable::kYes, 1, GrMipmapped::kNo, SkBackingFit::kApprox,
-                SkBudgeted::kYes, GrProtected::kNo);
+                format, kDims, swizzle, GrRenderable::kYes, 1, GrMipMapped::kNo,
+                SkBackingFit::kApprox, SkBudgeted::kYes, GrProtected::kNo);
 
         // Both RenderTarget and Texture - but via GrTextureProxy
         GrTextureProxy* tProxy = proxy->asTextureProxy();
@@ -161,8 +162,8 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(DefferredProxyConversionTest, reporter, ctxIn
 
     {
         sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(
-                format, kDims, GrRenderable::kNo, 1, GrMipmapped::kNo, SkBackingFit::kApprox,
-                SkBudgeted::kYes, GrProtected::kNo);
+                format, kDims, swizzle, GrRenderable::kNo, 1, GrMipMapped::kNo,
+                SkBackingFit::kApprox, SkBudgeted::kYes, GrProtected::kNo);
         // Texture-only
         GrTextureProxy* tProxy = proxy->asTextureProxy();
         REPORTER_ASSERT(reporter, tProxy);

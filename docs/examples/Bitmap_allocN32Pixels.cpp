@@ -16,7 +16,7 @@ void draw(SkCanvas* canvas) {
             uint32_t h = random.nextRangeU(4, 32);
             uint32_t cy = random.nextRangeU(0, 64 - h);
             bitmap.erase(color, SkIRect::MakeXYWH(cx, cy, w, h));
-            canvas->drawImage(bitmap.asImage(), x, y);
+            canvas->drawBitmap(bitmap, x, y);
         }
     }
 }

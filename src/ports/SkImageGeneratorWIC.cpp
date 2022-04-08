@@ -42,7 +42,7 @@ private:
     SkTScopedComPtr<IWICBitmapSource>   fImageSource;
     sk_sp<SkData>                       fData;
 
-    using INHERITED = SkImageGenerator;
+    typedef SkImageGenerator INHERITED;
 };
 }  // namespace
 

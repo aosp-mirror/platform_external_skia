@@ -9,7 +9,6 @@
     #include "src/gpu/GrShaderCaps.h"
 }
 
-in fragmentProcessor inputFP;
 layout(key) in GrClipEdgeType edgeType;
 in float2 center;
 in float2 radii;
@@ -20,31 +19,29 @@ float2 prevRadii = float2(-1);
 // The last two terms can underflow when float != fp32, so we also provide a workaround.
 uniform float4 ellipse;
 
-layout(when=!sk_Caps.floatIs32Bits) uniform float2 scale;
+bool medPrecision = !sk_Caps.floatIs32Bits;
+layout(when=medPrecision) uniform float2 scale;
 
 @make {
-    static GrFPResult Make(std::unique_ptr<GrFragmentProcessor> inputFP, GrClipEdgeType edgeType,
-                           SkPoint center, SkPoint radii, const GrShaderCaps& caps) {
+    static std::unique_ptr<GrFragmentProcessor> Make(GrClipEdgeType edgeType, SkPoint center,
+                                                     SkPoint radii, const GrShaderCaps& caps) {
         // Small radii produce bad results on devices without full float.
         if (!caps.floatIs32Bits() && (radii.fX < 0.5f || radii.fY < 0.5f)) {
-            return GrFPFailure(std::move(inputFP));
+            return nullptr;
         }
         // Very narrow ellipses produce bad results on devices without full float
         if (!caps.floatIs32Bits() && (radii.fX > 255*radii.fY || radii.fY > 255*radii.fX)) {
-            return GrFPFailure(std::move(inputFP));
+            return nullptr;
         }
         // Very large ellipses produce bad results on devices without full float
         if (!caps.floatIs32Bits() && (radii.fX > 16384 || radii.fY > 16384)) {
-            return GrFPFailure(std::move(inputFP));
+            return nullptr;
         }
-        return GrFPSuccess(std::unique_ptr<GrFragmentProcessor>(
-                    new GrEllipseEffect(std::move(inputFP), edgeType, center, radii)));
+        return std::unique_ptr<GrFragmentProcessor>(new GrEllipseEffect(edgeType, center, radii));
     }
 }
 
-@optimizationFlags {
-    ProcessorOptimizationFlags(inputFP.get()) & kCompatibleWithCoverageAsAlpha_OptimizationFlag
-}
+@optimizationFlags { kCompatibleWithCoverageAsAlpha_OptimizationFlag }
 
 @setData(pdman) {
     if (radii != prevRadii || center != prevCenter) {
@@ -73,14 +70,13 @@ layout(when=!sk_Caps.floatIs32Bits) uniform float2 scale;
     }
 }
 
-half4 main() {
+void main() {
     // d is the offset to the ellipse center
     float2 d = sk_FragCoord.xy - ellipse.xy;
     // If we're on a device with a "real" mediump then we'll do the distance computation in a space
     // that is normalized by the larger radius or 128, whichever is smaller. The scale uniform will
     // be scale, 1/scale. The inverse squared radii uniform values are already in this normalized space.
     // The center is not.
-    const bool medPrecision = !sk_Caps.floatIs32Bits;
     @if (medPrecision) {
         d *= scale.y;
     }
@@ -118,7 +114,7 @@ half4 main() {
             // hairline not supported
             discard;
     }
-    return sample(inputFP) * alpha;
+    sk_OutColor = sk_InColor * alpha;
 }
 
 @test(testData) {
@@ -127,13 +123,10 @@ half4 main() {
     center.fY = testData->fRandom->nextRangeScalar(0.f, 1000.f);
     SkScalar rx = testData->fRandom->nextRangeF(0.f, 1000.f);
     SkScalar ry = testData->fRandom->nextRangeF(0.f, 1000.f);
-    bool success;
-    std::unique_ptr<GrFragmentProcessor> fp = testData->inputFP();
+    GrClipEdgeType et;
     do {
-        GrClipEdgeType et = (GrClipEdgeType)testData->fRandom->nextULessThan(kGrClipEdgeTypeCnt);
-        std::tie(success, fp) = GrEllipseEffect::Make(std::move(fp), et, center,
-                                                      SkPoint::Make(rx, ry),
-                                                      *testData->caps()->shaderCaps());
-    } while (!success);
-    return fp;
+        et = (GrClipEdgeType) testData->fRandom->nextULessThan(kGrClipEdgeTypeCnt);
+    } while (GrClipEdgeType::kHairlineAA == et);
+    return GrEllipseEffect::Make(et, center, SkPoint::Make(rx, ry),
+                                 *testData->caps()->shaderCaps());
 }

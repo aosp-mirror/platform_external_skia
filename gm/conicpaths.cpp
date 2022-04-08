@@ -9,7 +9,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkPaint.h"
-#include "include/core/SkPathBuilder.h"
+#include "include/core/SkPath.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
@@ -30,72 +30,66 @@ protected:
         return SkISize::Make(920, 960);
     }
 
-    template <typename Proc> void append_path(Proc proc) {
-        SkPathBuilder b;
-        proc(&b);
-        fPaths.push_back(b.detach());
-    }
-
     void onOnceBeforeDraw() override {
-        this->append_path([](SkPathBuilder* conicCircle) {
+        {
             const SkScalar w = SkScalarSqrt(2)/2;
-            conicCircle->moveTo(0, 0);
-            conicCircle->conicTo(0, 50, 50, 50, w);
-            conicCircle->rConicTo(50, 0, 50, -50, w);
-            conicCircle->rConicTo(0, -50, -50, -50, w);
-            conicCircle->rConicTo(-50, 0, -50, 50, w);
-        });
+            SkPath* conicCirlce = &fPaths.push_back();
+            conicCirlce->moveTo(0, 0);
+            conicCirlce->conicTo(0, 50, 50, 50, w);
+            conicCirlce->rConicTo(50, 0, 50, -50, w);
+            conicCirlce->rConicTo(0, -50, -50, -50, w);
+            conicCirlce->rConicTo(-50, 0, -50, 50, w);
 
-        this->append_path([](SkPathBuilder* hyperbola) {
+        }
+        {
+            SkPath* hyperbola = &fPaths.push_back();
             hyperbola->moveTo(0, 0);
             hyperbola->conicTo(0, 100, 100, 100, 2);
-        });
-
-        this->append_path([](SkPathBuilder* thinHyperbola) {
+        }
+        {
+            SkPath* thinHyperbola = &fPaths.push_back();
             thinHyperbola->moveTo(0, 0);
             thinHyperbola->conicTo(100, 100, 5, 0, 2);
-        });
-
-        this->append_path([](SkPathBuilder* veryThinHyperbola) {
+        }
+        {
+            SkPath* veryThinHyperbola = &fPaths.push_back();
             veryThinHyperbola->moveTo(0, 0);
             veryThinHyperbola->conicTo(100, 100, 1, 0, 2);
-        });
-
-        this->append_path([](SkPathBuilder* closedHyperbola) {
+        }
+        {
+            SkPath* closedHyperbola = &fPaths.push_back();
             closedHyperbola->moveTo(0, 0);
             closedHyperbola->conicTo(100, 100, 0, 0, 2);
-        });
-
-        this->append_path([](SkPathBuilder* nearParabola) {
+        }
+        {
             // using 1 as weight defaults to using quadTo
+            SkPath* nearParabola = &fPaths.push_back();
             nearParabola->moveTo(0, 0);
             nearParabola->conicTo(0, 100, 100, 100, 0.999f);
-        });
-
-        this->append_path([](SkPathBuilder* thinEllipse) {
+        }
+        {
+            SkPath* thinEllipse = &fPaths.push_back();
             thinEllipse->moveTo(0, 0);
             thinEllipse->conicTo(100, 100, 5, 0, SK_ScalarHalf);
-        });
-
-        this->append_path([](SkPathBuilder* veryThinEllipse) {
+        }
+        {
+            SkPath* veryThinEllipse = &fPaths.push_back();
             veryThinEllipse->moveTo(0, 0);
             veryThinEllipse->conicTo(100, 100, 1, 0, SK_ScalarHalf);
-        });
-
-        this->append_path([](SkPathBuilder* closedEllipse) {
+        }
+        {
+            SkPath* closedEllipse = &fPaths.push_back();
             closedEllipse->moveTo(0,  0);
             closedEllipse->conicTo(100, 100, 0, 0, SK_ScalarHalf);
-        });
-
+        }
         {
-            SkPathBuilder b;
             const SkScalar w = SkScalarSqrt(2)/2;
-            b.moveTo(2.1e+11f, -1.05e+11f);
-            b.conicTo(2.1e+11f, 0, 1.05e+11f, 0, w);
-            b.conicTo(0, 0, 0, -1.05e+11f, w);
-            b.conicTo(0, -2.1e+11f, 1.05e+11f, -2.1e+11f, w);
-            b.conicTo(2.1e+11f, -2.1e+11f, 2.1e+11f, -1.05e+11f, w);
-            fGiantCircle = b.detach();
+            fGiantCircle.moveTo(2.1e+11f, -1.05e+11f);
+            fGiantCircle.conicTo(2.1e+11f, 0, 1.05e+11f, 0, w);
+            fGiantCircle.conicTo(0, 0, 0, -1.05e+11f, w);
+            fGiantCircle.conicTo(0, -2.1e+11f, 1.05e+11f, -2.1e+11f, w);
+            fGiantCircle.conicTo(2.1e+11f, -2.1e+11f, 2.1e+11f, -1.05e+11f, w);
+
         }
     }
 
@@ -118,7 +112,7 @@ protected:
                 for (int aa = 0; aa < 2; ++aa) {
                     paint.setAntiAlias(SkToBool(aa));
                     for (int fh = 0; fh < 2; ++fh) {
-                        paint.setStroke(fh != 0);
+                        paint.setStyle(fh ? SkPaint::kStroke_Style : SkPaint::kFill_Style);
 
                         const SkRect& bounds = fPaths[p].getBounds();
                         canvas->save();
@@ -141,7 +135,7 @@ protected:
 private:
     SkTArray<SkPath> fPaths;
     SkPath           fGiantCircle;
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 DEF_GM(return new ConicPathsGM;)
 
@@ -154,11 +148,11 @@ DEF_SIMPLE_GM(arccirclegap, canvas, 250, 250) {
     SkScalar radius = 1096.702150363923f;
     SkPaint paint;
     paint.setAntiAlias(true);
-    paint.setStroke(true);
+    paint.setStyle(SkPaint::kStroke_Style);
     canvas->drawCircle(c, radius, paint);
-    SkPath path = SkPathBuilder().moveTo(288.88884710654133f, -280.26680862609f)
-                                 .arcTo({0, 0}, {-39.00216443306411f, 400.6058925796476f}, radius)
-                                 .detach();
+    SkPath path;
+    path.moveTo(288.88884710654133f, -280.26680862609f);
+    path.arcTo(0, 0, -39.00216443306411f, 400.6058925796476f, radius);
     paint.setColor(0xff007f00);
     canvas->drawPath(path, paint);
 }
@@ -170,7 +164,7 @@ DEF_SIMPLE_GM(largecircle, canvas, 250, 250) {
     SkScalar radius = 1096.702150363923f;
     SkPaint paint;
     paint.setAntiAlias(true);
-    paint.setStroke(true);
+    paint.setStyle(SkPaint::kStroke_Style);
     canvas->drawCircle(c, radius, paint);
 }
 
@@ -180,7 +174,7 @@ DEF_SIMPLE_GM(largeovals, canvas, 250, 250) {
     SkRect r = SkRect::MakeXYWH(-520, -520, 5000, 4000);
     SkPaint paint;
     paint.setAntiAlias(true);
-    paint.setStroke(true);
+    paint.setStyle(SkPaint::kStroke_Style);
     paint.setStrokeWidth(100);
     canvas->drawOval(r, paint);
     r.offset(-15, -15);
@@ -194,7 +188,7 @@ DEF_SIMPLE_GM(largeovals, canvas, 250, 250) {
     canvas->rotate(1.0f);
     r.offset(55, 55);
     paint.setColor(SK_ColorGRAY);
-    paint.setStroke(true);
+    paint.setStyle(SkPaint::kStroke_Style);
     paint.setStrokeWidth(100);
     canvas->drawOval(r, paint);
     r.offset(-15, -15);
@@ -205,7 +199,7 @@ DEF_SIMPLE_GM(largeovals, canvas, 250, 250) {
 }
 
 DEF_SIMPLE_GM(crbug_640176, canvas, 250, 250) {
-    SkPathBuilder path;
+    SkPath path;
     path.moveTo(SkBits2Float(0x00000000), SkBits2Float(0x00000000));  // 0, 0
     path.lineTo(SkBits2Float(0x42cfd89a), SkBits2Float(0xc2700000));  // 103.923f, -60
     path.lineTo(SkBits2Float(0x42cfd899), SkBits2Float(0xc2700006));  // 103.923f, -60
@@ -216,5 +210,5 @@ DEF_SIMPLE_GM(crbug_640176, canvas, 250, 250) {
     SkPaint paint;
     paint.setAntiAlias(true);
     canvas->translate(125, 125);
-    canvas->drawPath(path.detach(), paint);
+    canvas->drawPath(path, paint);
 }

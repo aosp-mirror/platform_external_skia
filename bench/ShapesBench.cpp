@@ -246,7 +246,7 @@ private:
     SkTArray<ShapeInfo>   fShapes;
 
 
-    using INHERITED = Benchmark;
+    typedef Benchmark INHERITED;
 };
 
 #if ENABLE_COMMAND_LINE_SHAPES_BENCH

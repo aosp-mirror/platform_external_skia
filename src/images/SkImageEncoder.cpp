@@ -5,34 +5,28 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkBitmap.h"
 #include "include/encode/SkJpegEncoder.h"
 #include "include/encode/SkPngEncoder.h"
 #include "include/encode/SkWebpEncoder.h"
 #include "src/images/SkImageEncoderPriv.h"
 
-#ifndef SK_ENCODE_JPEG
+#ifndef SK_HAS_JPEG_LIBRARY
 bool SkJpegEncoder::Encode(SkWStream*, const SkPixmap&, const Options&) { return false; }
 std::unique_ptr<SkEncoder> SkJpegEncoder::Make(SkWStream*, const SkPixmap&, const Options&) {
     return nullptr;
 }
 #endif
 
-#ifndef SK_ENCODE_PNG
+#ifndef SK_HAS_PNG_LIBRARY
 bool SkPngEncoder::Encode(SkWStream*, const SkPixmap&, const Options&) { return false; }
 std::unique_ptr<SkEncoder> SkPngEncoder::Make(SkWStream*, const SkPixmap&, const Options&) {
     return nullptr;
 }
 #endif
 
-#ifndef SK_ENCODE_WEBP
+#ifndef SK_HAS_WEBP_LIBRARY
 bool SkWebpEncoder::Encode(SkWStream*, const SkPixmap&, const Options&) { return false; }
 #endif
-
-bool SkEncodeImage(SkWStream* dst, const SkBitmap& src, SkEncodedImageFormat f, int q) {
-    SkPixmap pixmap;
-    return src.peekPixels(&pixmap) && SkEncodeImage(dst, pixmap, f, q);
-}
 
 bool SkEncodeImage(SkWStream* dst, const SkPixmap& src,
                    SkEncodedImageFormat format, int quality) {
@@ -41,8 +35,6 @@ bool SkEncodeImage(SkWStream* dst, const SkPixmap& src,
         return SkEncodeImageWithCG(dst, src, format);
     #elif SK_USE_WIC_ENCODER
         return SkEncodeImageWithWIC(dst, src, format, quality);
-    #elif SK_ENABLE_NDK_IMAGES
-        return SkEncodeImageWithNDK(dst, src, format, quality);
     #else
         switch(format) {
             case SkEncodedImageFormat::kJPEG: {

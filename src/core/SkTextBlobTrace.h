@@ -32,7 +32,7 @@ class Capture {
 public:
     Capture();
     ~Capture();
-    void capture(const SkGlyphRunList&, const SkPaint&);
+    void capture(const SkGlyphRunList&);
     // If `dst` is nullptr, write to a file.
     void dump(SkWStream* dst = nullptr) const;
 
@@ -45,5 +45,5 @@ private:
     Capture& operator=(const Capture&) = delete;
 };
 
-}  // namespace SkTextBlobTrace
+}  // namespace
 #endif  // SkTextBlobTrace_DEFINED

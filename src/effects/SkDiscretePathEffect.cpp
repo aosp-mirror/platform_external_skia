@@ -97,11 +97,6 @@ bool SkDiscretePathEffect::onFilterPath(SkPath* dst, const SkPath& src,
 
     do {
         SkScalar    length = meas.getLength();
-#if defined(SK_BUILD_FOR_FUZZER)
-        if (length > 1000) {
-            return false;
-        }
-#endif
 
         if (fSegLength * (2 + doFill) > length) {
             meas.getSegment(0, length, dst, true);  // to short for us to mangle
@@ -133,14 +128,6 @@ bool SkDiscretePathEffect::onFilterPath(SkPath* dst, const SkPath& src,
             }
         }
     } while (meas.nextContour());
-    return true;
-}
-
-bool SkDiscretePathEffect::computeFastBounds(SkRect* bounds) const {
-    if (bounds) {
-        SkScalar maxOutset = SkScalarAbs(fPerterb);
-        bounds->outset(maxOutset, maxOutset);
-    }
     return true;
 }
 

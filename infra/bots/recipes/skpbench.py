@@ -40,81 +40,51 @@ def _adb(api, title, *cmd, **kwargs):
 
 def skpbench_steps(api):
   """benchmark Skia using skpbench."""
-  is_vulkan = 'Vulkan' in api.vars.builder_name
-  is_metal = 'Metal' in api.vars.builder_name
-  is_android = 'Android' in api.vars.builder_name
-  is_apple_m1 = 'AppleM1' in api.vars.builder_name
-  is_all_paths_volatile = 'AllPathsVolatile' in api.vars.builder_name
-  is_mskp = 'Mskp' in api.vars.builder_name
-  is_ddl = 'DDL' in api.vars.builder_name
-  is_9x9 = '9x9' in api.vars.builder_name
-
   api.file.ensure_directory(
       'makedirs perf_dir', api.flavor.host_dirs.perf_data_dir)
 
-  if is_android:
+  if 'Android' in api.vars.builder_name:
     app = api.vars.build_dir.join('skpbench')
     _adb(api, 'push skpbench', 'push', app, api.flavor.device_dirs.bin_dir)
 
-  skpbench_dir = api.vars.workdir.join('skia', 'tools', 'skpbench')
+  skpbench_dir = api.vars.slave_dir.join('skia', 'tools', 'skpbench')
   table = api.path.join(api.vars.swarming_out_dir, 'table')
 
-  if is_vulkan:
+  if 'Vulkan' in api.vars.builder_name:
     config = 'vk'
-  elif is_metal:
-    config = 'mtl'
-  elif is_android:
-    config = 'gles'
   else:
-    config = 'gl'
-
-  internal_samples = 4 if is_android or is_apple_m1 else 8
-
-  if is_all_paths_volatile:
-    config = "%smsaa%i" % (config, internal_samples)
-
-  skpbench_invocation = api.path.join(api.flavor.device_dirs.bin_dir, 'skpbench')
-
-  # skbug.com/10184
-  if is_vulkan and 'GalaxyS20' in api.vars.builder_name:
-    skpbench_invocation = "LD_LIBRARY_PATH=/data/local/tmp %s" % skpbench_invocation
+    config = 'gles'
 
   skpbench_args = [
-        skpbench_invocation,
+        api.path.join(api.flavor.device_dirs.bin_dir, 'skpbench'),
         '--resultsfile', table,
         '--config', config,
-        '--internalSamples', str(internal_samples),
         # TODO(dogben): Track down what's causing bots to die.
         '-v5']
-  if is_ddl:
+  if 'DDL' in api.vars.builder_name:
+    # This adds the "--ddl" flag for both DDLTotal and DDLRecord
     skpbench_args += ['--ddl']
-    # disable the mask generation threads for simplicity's sake in DDL mode
+    # disable the mask generation threads for sanity's sake in DDL mode
     skpbench_args += ['--gpuThreads', '0']
-  if is_9x9:
+  if 'DDLRecord' in api.vars.builder_name:
+    skpbench_args += ['--ddlRecord']
+  if '9x9' in api.vars.builder_name:
     skpbench_args += [
-        '--ddlNumRecordingThreads', 9,
+        '--ddlNumAdditionalThreads', 9,
         '--ddlTilingWidthHeight', 3]
-  if is_android:
+  if 'Android' in api.vars.builder_name:
     skpbench_args += [
         '--adb',
         '--adb_binary', ADB_BINARY]
-  if is_mskp:
-    skpbench_args += [api.flavor.device_dirs.mskp_dir]
-  elif is_all_paths_volatile:
+  if 'CCPR' in api.vars.builder_name:
     skpbench_args += [
-        '--allPathsVolatile',
-        '--suffix', "_volatile",
+        '--pr', 'ccpr', '--cc', '--nocache',
         api.path.join(api.flavor.device_dirs.skp_dir, 'desk_*svg.skp'),
-        api.path.join(api.flavor.device_dirs.skp_dir, 'desk_motionmark*.skp'),
         api.path.join(api.flavor.device_dirs.skp_dir, 'desk_chalkboard.skp')]
+  elif 'Mskp' in api.vars.builder_name:
+    skpbench_args += [api.flavor.device_dirs.mskp_dir]
   else:
     skpbench_args += [api.flavor.device_dirs.skp_dir]
-
-  if api.properties.get('dont_reduce_ops_task_splitting') == 'true':
-    skpbench_args += ['--dontReduceOpsTaskSplitting']
-
-  if api.properties.get('gpu_resource_cache_limit'):
-    skpbench_args += ['--gpuResourceCacheLimit', api.properties.get('gpu_resource_cache_limit')]
 
   api.run(api.python, 'skpbench',
       script=skpbench_dir.join('skpbench.py'),
@@ -145,9 +115,10 @@ def skpbench_steps(api):
     '--outfile', json_path
   ])
 
+  keys_blacklist = ['configuration', 'role', 'is_trybot']
   skiaperf_args.append('--key')
   for k in sorted(api.vars.builder_cfg.keys()):
-    if not k in ['configuration', 'role', 'is_trybot']:
+    if not k in keys_blacklist:
       skiaperf_args.extend([k, api.vars.builder_cfg[k]])
 
   api.run(api.python, 'Parse skpbench output into Perf json',
@@ -158,11 +129,7 @@ def skpbench_steps(api):
 def RunSteps(api):
   api.vars.setup()
   api.file.ensure_directory('makedirs tmp_dir', api.vars.tmp_dir)
-
-  # The app_name passed to api.flavor.setup() is used to determine which app
-  # to install on an attached device. That work is done in skpbench_steps, so
-  # we pass None here.
-  api.flavor.setup(None)
+  api.flavor.setup()
 
   try:
     mksp_mode = ('Mskp' in api.vars.builder_name)
@@ -174,13 +141,15 @@ def RunSteps(api):
 
 
 TEST_BUILDERS = [
-  'Perf-Android-Clang-Pixel-GPU-Adreno530-arm64-Release-All-Android_Skpbench_Mskp',
-  'Perf-Android-Clang-GalaxyS20-GPU-MaliG77-arm64-Release-All-Android_AllPathsVolatile_Skpbench',
-  'Perf-Android-Clang-GalaxyS20-GPU-MaliG77-arm64-Release-All-Android_Vulkan_AllPathsVolatile_Skpbench',
+  ('Perf-Android-Clang-Pixel-GPU-Adreno530-arm64-Release-All-'
+   'Android_Skpbench_Mskp'),
+  ('Perf-Android-Clang-Pixel-GPU-Adreno530-arm64-Release-All-'
+   'Android_CCPR_Skpbench'),
   'Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-Vulkan_Skpbench',
-  'Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-Vulkan_Skpbench_DDLTotal_9x9',
-  'Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-AllPathsVolatile_Skpbench',
-  'Perf-Mac11-Clang-MacMini9.1-GPU-AppleM1-arm64-Release-All-Metal_AllPathsVolatile_Skpbench',
+  ('Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-'
+   'Vulkan_Skpbench_DDLTotal_9x9'),
+  ('Perf-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-'
+   'Vulkan_Skpbench_DDLRecord_9x9'),
 ]
 
 
@@ -202,7 +171,7 @@ def GenTests(api):
       api.step_data('get swarming task id',
           stdout=api.raw_io.output('123456'))
     )
-    if 'Win' in builder:
+    if 'Win' in builder and not 'LenovoYogaC630' in builder:
       test += api.platform('win', 64)
     yield test
 
@@ -213,9 +182,7 @@ def GenTests(api):
     api.properties(buildername=b,
                    revision='abc123',
                    path_config='kitchen',
-                   swarm_out_dir='[SWARM_OUT_DIR]',
-                   dont_reduce_ops_task_splitting='true',
-                   gpu_resource_cache_limit='16777216') +
+                   swarm_out_dir='[SWARM_OUT_DIR]') +
     api.path.exists(
         api.path['start_dir'].join('skia'),
         api.path['start_dir'].join('skia', 'infra', 'bots', 'assets',

@@ -12,7 +12,6 @@
 #include "include/private/SkChecksum.h"
 #include "include/private/SkTemplates.h"
 #include <new>
-#include <utility>
 
 // Before trying to use SkTHashTable, look below to see if SkTHashMap or SkTHashSet works for you.
 // They're easier to use, usually perform the same, and have fewer sharp edges.
@@ -26,31 +25,16 @@
 template <typename T, typename K, typename Traits = T>
 class SkTHashTable {
 public:
-    SkTHashTable()  = default;
-    ~SkTHashTable() = default;
+    SkTHashTable() : fCount(0), fCapacity(0) {}
+    SkTHashTable(SkTHashTable&& other)
+        : fCount(other.fCount)
+        , fCapacity(other.fCapacity)
+        , fSlots(std::move(other.fSlots)) { other.fCount = other.fCapacity = 0; }
 
-    SkTHashTable(const SkTHashTable&  that) { *this = that; }
-    SkTHashTable(      SkTHashTable&& that) { *this = std::move(that); }
-
-    SkTHashTable& operator=(const SkTHashTable& that) {
-        if (this != &that) {
-            fCount     = that.fCount;
-            fCapacity  = that.fCapacity;
-            fSlots.reset(that.fCapacity);
-            for (int i = 0; i < fCapacity; i++) {
-                fSlots[i] = that.fSlots[i];
-            }
-        }
-        return *this;
-    }
-
-    SkTHashTable& operator=(SkTHashTable&& that) {
-        if (this != &that) {
-            fCount    = that.fCount;
-            fCapacity = that.fCapacity;
-            fSlots    = std::move(that.fSlots);
-
-            that.fCount = that.fCapacity = 0;
+    SkTHashTable& operator=(SkTHashTable&& other) {
+        if (this != &other) {
+            this->~SkTHashTable();
+            new (this) SkTHashTable(std::move(other));
         }
         return *this;
     }
@@ -60,10 +44,6 @@ public:
 
     // How many entries are in the table?
     int count() const { return fCount; }
-
-    // How many slots does the table contain? (Note that unlike an array, hash tables can grow
-    // before reaching 100% capacity.)
-    int capacity() const { return fCapacity; }
 
     // Approximately how many bytes of memory do we use beyond sizeof(*this)?
     size_t approxBytesUsed() const { return fCapacity * sizeof(Slot); }
@@ -125,9 +105,6 @@ public:
             SkASSERT(!s.empty());
             if (hash == s.hash && key == Traits::GetKey(s.val)) {
                this->removeSlot(index);
-               if (4 * fCount <= fCapacity && fCapacity > 4) {
-                   this->resize(fCapacity / 2);
-               }
                return;
             }
             index = this->next(index);
@@ -154,88 +131,28 @@ public:
         }
     }
 
-    // A basic iterator-like class which disallows mutation; sufficient for range-based for loops.
-    // Intended for use by SkTHashMap and SkTHashSet via begin() and end().
-    // Adding or removing elements may invalidate all iterators.
-    template <typename SlotVal>
-    class Iter {
-    public:
-        using TTable = SkTHashTable<T, K, Traits>;
-
-        Iter(const TTable* table, int slot) : fTable(table), fSlot(slot) {}
-
-        static Iter MakeBegin(const TTable* table) {
-            return Iter{table, table->firstPopulatedSlot()};
+    // Call fn on every entry in the table. Fn can return false to remove the entry. You may mutate
+    // the entries, but be very careful.
+    template <typename Fn>  // f(T*)
+    void mutate(Fn&& fn) {
+        for (int i = 0; i < fCapacity;) {
+            bool keep = true;
+            if (!fSlots[i].empty()) {
+                keep = fn(&fSlots[i].val);
+            }
+            if (keep) {
+                i++;
+            } else {
+                this->removeSlot(i);
+                // Something may now have moved into slot i, so we'll loop
+                // around to check slot i again.
+            }
         }
-
-        static Iter MakeEnd(const TTable* table) {
-            return Iter{table, table->capacity()};
-        }
-
-        const SlotVal& operator*() const {
-            return *fTable->slot(fSlot);
-        }
-
-        const SlotVal* operator->() const {
-            return fTable->slot(fSlot);
-        }
-
-        bool operator==(const Iter& that) const {
-            // Iterators from different tables shouldn't be compared against each other.
-            SkASSERT(fTable == that.fTable);
-            return fSlot == that.fSlot;
-        }
-
-        bool operator!=(const Iter& that) const {
-            return !(*this == that);
-        }
-
-        Iter& operator++() {
-            fSlot = fTable->nextPopulatedSlot(fSlot);
-            return *this;
-        }
-
-        Iter operator++(int) {
-            Iter old = *this;
-            this->operator++();
-            return old;
-        }
-
-    protected:
-        const TTable* fTable;
-        int fSlot;
-    };
+    }
 
 private:
-    // Finds the first non-empty slot for an iterator.
-    int firstPopulatedSlot() const {
-        for (int i = 0; i < fCapacity; i++) {
-            if (!fSlots[i].empty()) {
-                return i;
-            }
-        }
-        return fCapacity;
-    }
-
-    // Increments an iterator's slot.
-    int nextPopulatedSlot(int currentSlot) const {
-        for (int i = currentSlot + 1; i < fCapacity; i++) {
-            if (!fSlots[i].empty()) {
-                return i;
-            }
-        }
-        return fCapacity;
-    }
-
-    // Reads from an iterator's slot.
-    const T* slot(int i) const {
-        SkASSERT(!fSlots[i].empty());
-        return &fSlots[i].val;
-    }
-
     T* uncheckedSet(T&& val) {
         const K& key = Traits::GetKey(val);
-        SkASSERT(key == key);
         uint32_t hash = Hash(key);
         int index = hash & (fCapacity-1);
         for (int n = 0; n < fCapacity; n++) {
@@ -322,18 +239,26 @@ private:
     }
 
     struct Slot {
-        Slot() = default;
+        Slot() : val{}, hash(0) {}
         Slot(T&& v, uint32_t h) : val(std::move(v)), hash(h) {}
+        Slot(Slot&& o) { *this = std::move(o); }
+        Slot& operator=(Slot&& o) {
+            val  = std::move(o.val);
+            hash = o.hash;
+            return *this;
+        }
 
         bool empty() const { return this->hash == 0; }
 
-        T        val{};
-        uint32_t hash = 0;
+        T        val;
+        uint32_t hash;
     };
 
-    int fCount    = 0,
-        fCapacity = 0;
+    int fCount, fCapacity;
     SkAutoTArray<Slot> fSlots;
+
+    SkTHashTable(const SkTHashTable&) = delete;
+    SkTHashTable& operator=(const SkTHashTable&) = delete;
 };
 
 // Maps K->V.  A more user-friendly wrapper around SkTHashTable, suitable for most use cases.
@@ -341,6 +266,10 @@ private:
 template <typename K, typename V, typename HashK = SkGoodHash>
 class SkTHashMap {
 public:
+    SkTHashMap() {}
+    SkTHashMap(SkTHashMap&&) = default;
+    SkTHashMap& operator=(SkTHashMap&&) = default;
+
     // Clear the map.
     void reset() { fTable.reset(); }
 
@@ -356,14 +285,14 @@ public:
     // We copy both key and val, and return a pointer to the value copy now in the table.
     V* set(K key, V val) {
         Pair* out = fTable.set({std::move(key), std::move(val)});
-        return &out->second;
+        return &out->val;
     }
 
     // If there is key/value entry in the table with this key, return a pointer to the value.
     // If not, return null.
     V* find(const K& key) const {
         if (Pair* p = fTable.find(key)) {
-            return &p->second;
+            return &p->val;
         }
         return nullptr;
     }
@@ -384,40 +313,44 @@ public:
     // Call fn on every key/value pair in the table.  You may mutate the value but not the key.
     template <typename Fn>  // f(K, V*) or f(const K&, V*)
     void foreach(Fn&& fn) {
-        fTable.foreach([&fn](Pair* p){ fn(p->first, &p->second); });
+        fTable.foreach([&fn](Pair* p){ fn(p->key, &p->val); });
     }
 
     // Call fn on every key/value pair in the table.  You may not mutate anything.
     template <typename Fn>  // f(K, V), f(const K&, V), f(K, const V&) or f(const K&, const V&).
     void foreach(Fn&& fn) const {
-        fTable.foreach([&fn](const Pair& p){ fn(p.first, p.second); });
+        fTable.foreach([&fn](const Pair& p){ fn(p.key, p.val); });
     }
 
-    // Dereferencing an iterator gives back a key-value pair, suitable for structured binding.
-    struct Pair : public std::pair<K, V> {
-        using std::pair<K, V>::pair;
-        static const K& GetKey(const Pair& p) { return p.first; }
-        static auto Hash(const K& key) { return HashK()(key); }
-    };
-
-    using Iter = typename SkTHashTable<Pair, K>::template Iter<std::pair<K, V>>;
-
-    Iter begin() const {
-        return Iter::MakeBegin(&fTable);
-    }
-
-    Iter end() const {
-        return Iter::MakeEnd(&fTable);
+    // Call fn on every key/value pair in the table. Fn may return false to remove the entry. You
+    // may mutate the value but not the key.
+    template <typename Fn>  // f(K, V*) or f(const K&, V*)
+    void mutate(Fn&& fn) {
+        fTable.mutate([&fn](Pair* p) { return fn(p->key, &p->val); });
     }
 
 private:
+    struct Pair {
+        K key;
+        V val;
+        static const K& GetKey(const Pair& p) { return p.key; }
+        static auto Hash(const K& key) { return HashK()(key); }
+    };
+
     SkTHashTable<Pair, K> fTable;
+
+    SkTHashMap(const SkTHashMap&) = delete;
+    SkTHashMap& operator=(const SkTHashMap&) = delete;
 };
 
 // A set of T.  T is treated as an ordinary copyable C++ type.
 template <typename T, typename HashT = SkGoodHash>
 class SkTHashSet {
 public:
+    SkTHashSet() {}
+    SkTHashSet(SkTHashSet&&) = default;
+    SkTHashSet& operator=(SkTHashSet&&) = default;
+
     // Clear the set.
     void reset() { fTable.reset(); }
 
@@ -457,20 +390,10 @@ private:
         static const T& GetKey(const T& item) { return item; }
         static auto Hash(const T& item) { return HashT()(item); }
     };
-
-public:
-    using Iter = typename SkTHashTable<T, T, Traits>::template Iter<T>;
-
-    Iter begin() const {
-        return Iter::MakeBegin(&fTable);
-    }
-
-    Iter end() const {
-        return Iter::MakeEnd(&fTable);
-    }
-
-private:
     SkTHashTable<T, T, Traits> fTable;
+
+    SkTHashSet(const SkTHashSet&) = delete;
+    SkTHashSet& operator=(const SkTHashSet&) = delete;
 };
 
 #endif//SkTHash_DEFINED

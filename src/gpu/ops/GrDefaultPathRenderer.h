@@ -20,10 +20,8 @@ class GrDefaultPathRenderer : public GrPathRenderer {
 public:
     GrDefaultPathRenderer();
 
-    const char* name() const final { return "Default"; }
-
 private:
-    StencilSupport onGetStencilSupport(const GrStyledShape&) const override;
+    StencilSupport onGetStencilSupport(const GrShape&) const override;
 
     CanDrawPath onCanDrawPath(const CanDrawPathArgs&) const override;
 
@@ -31,16 +29,16 @@ private:
 
     void onStencilPath(const StencilPathArgs&) override;
 
-    bool internalDrawPath(GrSurfaceDrawContext*,
+    bool internalDrawPath(GrRenderTargetContext*,
                           GrPaint&&,
                           GrAAType,
                           const GrUserStencilSettings&,
-                          const GrClip*,
+                          const GrClip&,
                           const SkMatrix& viewMatrix,
-                          const GrStyledShape&,
+                          const GrShape&,
                           bool stencilOnly);
 
-    using INHERITED = GrPathRenderer;
+    typedef GrPathRenderer INHERITED;
 };
 
 #endif

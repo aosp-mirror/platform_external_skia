@@ -91,7 +91,7 @@ private:
     SkJpegEncoder(std::unique_ptr<SkJpegEncoderMgr>, const SkPixmap& src);
 
     std::unique_ptr<SkJpegEncoderMgr> fEncoderMgr;
-    using INHERITED = SkEncoder;
+    typedef SkEncoder INHERITED;
 };
 
 #endif

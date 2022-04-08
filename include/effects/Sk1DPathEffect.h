@@ -32,10 +32,7 @@ protected:
     virtual SkScalar next(SkPath* dst, SkScalar dist, SkPathMeasure&) const = 0;
 
 private:
-    // For simplicity, assume fast bounds cannot be computed
-    bool computeFastBounds(SkRect*) const override { return false; }
-
-    using INHERITED = SkPathEffect;
+    typedef SkPathEffect INHERITED;
 };
 
 class SK_API SkPath1DPathEffect : public Sk1DPathEffect {
@@ -74,7 +71,7 @@ private:
     SkScalar    fInitialOffset; // computed from phase
     Style       fStyle;         // copied from constructor
 
-    using INHERITED = Sk1DPathEffect;
+    typedef Sk1DPathEffect INHERITED;
 };
 
 #endif

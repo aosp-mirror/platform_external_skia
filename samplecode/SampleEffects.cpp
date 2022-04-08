@@ -86,9 +86,9 @@ public:
     }
 
 protected:
-    SkString name() override { return SkString("Effects"); }
+    virtual SkString name() { return SkString("Effects"); }
 
-    void onDrawContent(SkCanvas* canvas) override {
+    virtual void onDrawContent(SkCanvas* canvas) {
         canvas->scale(3, 3);
         canvas->translate(10, 30);
         for (size_t i = 0; i < SK_ARRAY_COUNT(fPaint); i++) {
@@ -98,7 +98,7 @@ protected:
     }
 
 private:
-    using INHERITED = Sample;
+    typedef Sample INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

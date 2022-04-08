@@ -8,7 +8,6 @@
 #ifndef GrDrawAtlasPathOp_DEFINED
 #define GrDrawAtlasPathOp_DEFINED
 
-#include "src/core/SkIPoint16.h"
 #include "src/gpu/ops/GrDrawOp.h"
 
 class GrDrawAtlasPathOp : public GrDrawOp {
@@ -16,13 +15,12 @@ public:
     DEFINE_OP_CLASS_ID
 
     GrDrawAtlasPathOp(int numRenderTargetSamples, sk_sp<GrTextureProxy> atlasProxy,
-                      const SkIRect& devIBounds, const SkIPoint16& locationInAtlas,
-                      bool transposedInAtlas, const SkMatrix& viewMatrix, GrPaint&& paint)
+                      const SkIRect& devIBounds, const SkIVector& devToAtlasOffset,
+                      const SkMatrix& viewMatrix, GrPaint&& paint)
             : GrDrawOp(ClassID())
             , fEnableHWAA(numRenderTargetSamples > 1)
             , fAtlasProxy(std::move(atlasProxy))
-            , fInstanceList(devIBounds, locationInAtlas, transposedInAtlas, paint.getColor4f(),
-                            viewMatrix)
+            , fInstanceList(devIBounds, devToAtlasOffset, paint.getColor4f(), viewMatrix)
             , fProcessors(std::move(paint)) {
         this->setBounds(SkRect::Make(devIBounds), HasAABloat::kYes, IsHairline::kNo);
     }
@@ -32,22 +30,16 @@ public:
         return (fEnableHWAA) ? FixedFunctionFlags::kUsesHWAA : FixedFunctionFlags::kNone;
     }
     void visitProxies(const VisitProxyFunc& fn) const override {
-        fn(fAtlasProxy.get(), GrMipmapped::kNo);
+        fn(fAtlasProxy.get(), GrMipMapped::kNo);
         fProcessors.visitProxies(fn);
     }
-    GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*, GrClampType) override;
-    CombineResult onCombineIfPossible(GrOp*, SkArenaAlloc*, const GrCaps&) override;
+    GrProcessorSet::Analysis finalize(const GrCaps&, const GrAppliedClip*,
+                                      bool hasMixedSampledCoverage, GrClampType) override;
+    CombineResult onCombineIfPossible(GrOp*, GrRecordingContext::Arenas*, const GrCaps&) override;
     void onPrepare(GrOpFlushState*) override;
     void onExecute(GrOpFlushState*, const SkRect& chainBounds) override;
 
 private:
-    void onPrePrepare(GrRecordingContext*,
-                      const GrSurfaceProxyView& writeView,
-                      GrAppliedClip*,
-                      const GrXferProcessor::DstProxyView&,
-                      GrXferBarrierFlags renderPassXferBarriers,
-                      GrLoadOp colorLoadOp) override;
-
     struct Instance {
         constexpr static size_t Stride(bool usesLocalCoords) {
             size_t stride = sizeof(Instance);
@@ -56,27 +48,25 @@ private:
             }
             return stride;
         }
-        Instance(const SkIRect& devIBounds, const SkIPoint16& locationInAtlas,
-                 bool transposedInAtlas, const SkPMColor4f& color, const SkMatrix& m)
-                : fDevXYWH{devIBounds.left(), devIBounds.top(), devIBounds.width(),
-                           // We use negative height to indicate that the path is transposed.
-                           (transposedInAtlas) ? -devIBounds.height() : devIBounds.height()}
-                , fAtlasXY{locationInAtlas.x(), locationInAtlas.y()}
+        Instance(const SkIRect& devIBounds, SkIVector devToAtlasOffset, const SkPMColor4f& color,
+                 const SkMatrix& m)
+                : fDevIBounds(devIBounds)
+                , fDevToAtlasOffset(devToAtlasOffset)
                 , fColor(color)
                 , fViewMatrixIfUsingLocalCoords{m.getScaleX(), m.getSkewY(),
                                                 m.getSkewX(), m.getScaleY(),
                                                 m.getTranslateX(), m.getTranslateY()} {
         }
-        std::array<int, 4> fDevXYWH;
-        std::array<int, 2> fAtlasXY;
+        SkIRect fDevIBounds;
+        SkIVector fDevToAtlasOffset;
         SkPMColor4f fColor;
         float fViewMatrixIfUsingLocalCoords[6];
     };
 
     struct InstanceList {
-        InstanceList(const SkIRect& devIBounds, const SkIPoint16& locationInAtlas,
-                     bool transposedInAtlas, const SkPMColor4f& color, const SkMatrix& viewMatrix)
-                : fInstance(devIBounds, locationInAtlas, transposedInAtlas, color, viewMatrix) {
+        InstanceList(const SkIRect& devIBounds, SkIVector devToAtlasOffset,
+                     const SkPMColor4f& color, const SkMatrix& viewMatrix)
+                : fInstance(devIBounds, devToAtlasOffset, color, viewMatrix) {
         }
         InstanceList* fNext = nullptr;
         Instance fInstance;

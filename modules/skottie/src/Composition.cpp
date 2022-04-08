@@ -8,40 +8,115 @@
 #include "modules/skottie/src/Composition.h"
 
 #include "include/core/SkCanvas.h"
-#include "include/private/SkTPin.h"
 #include "modules/skottie/src/Camera.h"
 #include "modules/skottie/src/SkottieJson.h"
 #include "modules/skottie/src/SkottiePriv.h"
 #include "modules/sksg/include/SkSGGroup.h"
+#include "modules/sksg/include/SkSGTransform.h"
 
 #include <algorithm>
 
 namespace skottie {
 namespace internal {
 
-AnimationBuilder::ScopedAssetRef::ScopedAssetRef(const AnimationBuilder* abuilder,
-                                                 const skjson::ObjectValue& jlayer) {
-    const auto refId = ParseDefault<SkString>(jlayer["refId"], SkString());
-    if (refId.isEmpty()) {
-        abuilder->log(Logger::Level::kError, nullptr, "Layer missing refId.");
-        return;
+sk_sp<sksg::RenderNode> AnimationBuilder::attachNestedAnimation(const char* name) const {
+    class SkottieSGAdapter final : public sksg::RenderNode {
+    public:
+        explicit SkottieSGAdapter(sk_sp<Animation> animation)
+            : fAnimation(std::move(animation)) {
+            SkASSERT(fAnimation);
+        }
+
+    protected:
+        SkRect onRevalidate(sksg::InvalidationController*, const SkMatrix&) override {
+            return SkRect::MakeSize(fAnimation->size());
+        }
+
+        const RenderNode* onNodeAt(const SkPoint&) const override { return nullptr; }
+
+        void onRender(SkCanvas* canvas, const RenderContext* ctx) const override {
+            const auto local_scope =
+                ScopedRenderContext(canvas, ctx).setIsolation(this->bounds(),
+                                                              canvas->getTotalMatrix(),
+                                                              true);
+            fAnimation->render(canvas);
+        }
+
+    private:
+        const sk_sp<Animation> fAnimation;
+    };
+
+    class SkottieAnimatorAdapter final : public sksg::Animator {
+    public:
+        SkottieAnimatorAdapter(sk_sp<Animation> animation, float time_scale)
+            : fAnimation(std::move(animation))
+            , fTimeScale(time_scale) {
+            SkASSERT(fAnimation);
+        }
+
+    protected:
+        void onTick(float t) {
+            // TODO: we prolly need more sophisticated timeline mapping for nested animations.
+            fAnimation->seek(t * fTimeScale);
+        }
+
+    private:
+        const sk_sp<Animation> fAnimation;
+        const float            fTimeScale;
+    };
+
+    const auto data = fResourceProvider->load("", name);
+    if (!data) {
+        this->log(Logger::Level::kError, nullptr, "Could not load: %s.", name);
+        return nullptr;
     }
 
-    const auto* asset_info = abuilder->fAssets.find(refId);
+    auto animation = Animation::Builder()
+            .setResourceProvider(fResourceProvider)
+            .setFontManager(fLazyFontMgr.getMaybeNull())
+            .make(static_cast<const char*>(data->data()), data->size());
+    if (!animation) {
+        this->log(Logger::Level::kError, nullptr, "Could not parse nested animation: %s.", name);
+        return nullptr;
+    }
+
+    fCurrentAnimatorScope->push_back(
+            sk_make_sp<SkottieAnimatorAdapter>(animation, animation->duration() / fDuration));
+
+    return sk_make_sp<SkottieSGAdapter>(std::move(animation));
+}
+
+sk_sp<sksg::RenderNode> AnimationBuilder::attachAssetRef(
+    const skjson::ObjectValue& jlayer,
+    const std::function<sk_sp<sksg::RenderNode>(const skjson::ObjectValue&)>& func) const {
+
+    const auto refId = ParseDefault<SkString>(jlayer["refId"], SkString());
+    if (refId.isEmpty()) {
+        this->log(Logger::Level::kError, nullptr, "Layer missing refId.");
+        return nullptr;
+    }
+
+    if (refId.startsWith("$")) {
+        return this->attachNestedAnimation(refId.c_str() + 1);
+    }
+
+    const auto* asset_info = fAssets.find(refId);
     if (!asset_info) {
-        abuilder->log(Logger::Level::kError, nullptr, "Asset not found: '%s'.", refId.c_str());
-        return;
+        this->log(Logger::Level::kError, nullptr, "Asset not found: '%s'.", refId.c_str());
+        return nullptr;
     }
 
     if (asset_info->fIsAttaching) {
-        abuilder->log(Logger::Level::kError, nullptr,
+        this->log(Logger::Level::kError, nullptr,
                   "Asset cycle detected for: '%s'", refId.c_str());
-        return;
+        return nullptr;
     }
 
     asset_info->fIsAttaching = true;
+    auto asset = func(*asset_info->fAsset);
+    asset_info->fIsAttaching = false;
 
-    fInfo = asset_info;
+    return asset;
 }
 
 CompositionBuilder::CompositionBuilder(const AnimationBuilder& abuilder,
@@ -67,8 +142,7 @@ CompositionBuilder::CompositionBuilder(const AnimationBuilder& abuilder,
             if (!jlayer) continue;
 
             const auto  lbuilder_index = fLayerBuilders.size();
-            fLayerBuilders.emplace_back(*jlayer, fSize);
-            const auto& lbuilder = fLayerBuilders.back();
+            const auto& lbuilder       = fLayerBuilders.emplace_back(*jlayer);
 
             fLayerIndexMap.set(lbuilder.index(), lbuilder_index);
 

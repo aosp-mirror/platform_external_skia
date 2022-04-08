@@ -11,9 +11,12 @@
 #include "modules/skottie/src/SkottiePriv.h"
 #include "modules/skottie/src/SkottieValue.h"
 
-namespace skottie::internal {
+namespace skottie {
 
-bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, TextValue* v) {
+template <>
+bool ValueTraits<TextValue>::FromJSON(const skjson::Value& jv,
+                                       const internal::AnimationBuilder* abuilder,
+                                       TextValue* v) {
     const skjson::ObjectValue* jtxt = jv;
     if (!jtxt) {
         return false;
@@ -27,9 +30,9 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
         return false;
     }
 
-    const auto* font = abuilder.findFont(SkString(font_name->begin(), font_name->size()));
+    const auto* font = abuilder->findFont(SkString(font_name->begin(), font_name->size()));
     if (!font) {
-        abuilder.log(Logger::Level::kError, nullptr, "Unknown font: \"%s\".", font_name->begin());
+        abuilder->log(Logger::Level::kError, nullptr, "Unknown font: \"%s\".", font_name->begin());
         return false;
     }
 
@@ -38,7 +41,6 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
     v->fLineHeight = **line_height;
     v->fTypeface   = font->fTypeface;
     v->fAscent     = font->fAscentPct * -0.01f * v->fTextSize; // negative ascent per SkFontMetrics
-    v->fLineShift  = ParseDefault((*jtxt)["ls"], 0.0f);
 
     static constexpr SkTextUtils::Align gAlignMap[] = {
         SkTextUtils::kLeft_Align,  // 'j': 0
@@ -64,53 +66,33 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
         }
     }
 
+    // Skia resizing extension "sk_rs":
     static constexpr Shaper::ResizePolicy gResizeMap[] = {
-        Shaper::ResizePolicy::kNone,           // 'rs': 0
-        Shaper::ResizePolicy::kScaleToFit,     // 'rs': 1
-        Shaper::ResizePolicy::kDownscaleToFit, // 'rs': 2
+        Shaper::ResizePolicy::kNone,           // 'sk_rs': 0
+        Shaper::ResizePolicy::kScaleToFit,     // 'sk_rs': 1
+        Shaper::ResizePolicy::kDownscaleToFit, // 'sk_rs': 2
     };
-    // TODO: remove "sk_rs" support after migrating clients.
-    v->fResize = gResizeMap[std::min(std::max(ParseDefault<size_t>((*jtxt)[   "rs"], 0),
-                                              ParseDefault<size_t>((*jtxt)["sk_rs"], 0)),
-                                     SK_ARRAY_COUNT(gResizeMap))];
-
-    // Optional min/max font size (used when aute-resizing)
-    v->fMinTextSize = ParseDefault<SkScalar>((*jtxt)["mf"], 0.0f);
-    v->fMaxTextSize = ParseDefault<SkScalar>((*jtxt)["xf"], std::numeric_limits<float>::max());
-
-    // At the moment, BM uses the paragraph box to discriminate point mode vs. paragraph mode.
-    v->fLineBreak = v->fBox.isEmpty()
-            ? Shaper::LinebreakPolicy::kExplicit
-            : Shaper::LinebreakPolicy::kParagraph;
-
-    // Optional explicit text mode.
-    // N.b.: this is not being exported by BM, only used for testing.
-    auto text_mode = ParseDefault((*jtxt)["m"], -1);
-    if (text_mode >= 0) {
-        // Explicit text mode.
-        v->fLineBreak = (text_mode == 0)
-                ? Shaper::LinebreakPolicy::kExplicit   // 'm': 0 -> point text
-                : Shaper::LinebreakPolicy::kParagraph; // 'm': 1 -> paragraph text
-    }
+    v->fResize = gResizeMap[std::min<size_t>(ParseDefault<size_t>((*jtxt)["sk_rs"], 0),
+                                           SK_ARRAY_COUNT(gResizeMap))];
 
     // In point mode, the text is baseline-aligned.
     v->fVAlign = v->fBox.isEmpty() ? Shaper::VAlign::kTopBaseline
                                    : Shaper::VAlign::kTop;
 
+    // Skia vertical alignment extension "sk_vj":
     static constexpr Shaper::VAlign gVAlignMap[] = {
-        Shaper::VAlign::kVisualTop,    // 'vj': 0
-        Shaper::VAlign::kVisualCenter, // 'vj': 1
-        Shaper::VAlign::kVisualBottom, // 'vj': 2
+        Shaper::VAlign::kVisualTop,    // 'sk_vj': 0
+        Shaper::VAlign::kVisualCenter, // 'sk_vj': 1
+        Shaper::VAlign::kVisualBottom, // 'sk_vj': 2
     };
-    size_t vj;
-    if (skottie::Parse((*jtxt)[   "vj"], &vj) ||
-        skottie::Parse((*jtxt)["sk_vj"], &vj)) { // TODO: remove after migrating clients.
-        if (vj < SK_ARRAY_COUNT(gVAlignMap)) {
-            v->fVAlign = gVAlignMap[vj];
+    size_t sk_vj;
+    if (Parse((*jtxt)["sk_vj"], &sk_vj)) {
+        if (sk_vj < SK_ARRAY_COUNT(gVAlignMap)) {
+            v->fVAlign = gVAlignMap[sk_vj];
         } else {
             // Legacy sk_vj values.
             // TODO: remove after clients update.
-            switch (vj) {
+            switch (sk_vj) {
             case 3:
                 // 'sk_vj': 3 -> kVisualCenter/kScaleToFit
                 v->fVAlign = Shaper::VAlign::kVisualCenter;
@@ -122,39 +104,54 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
                 v->fResize = Shaper::ResizePolicy::kDownscaleToFit;
                 break;
             default:
-                abuilder.log(Logger::Level::kWarning, nullptr,
-                             "Ignoring unknown 'vj' value: %zu", vj);
+                abuilder->log(Logger::Level::kWarning, nullptr,
+                              "Ignoring unknown 'sk_vj' value: %zu", sk_vj);
                 break;
             }
         }
     }
 
+    if (v->fResize != Shaper::ResizePolicy::kNone && v->fBox.isEmpty()) {
+        abuilder->log(Logger::Level::kWarning, jtxt, "Auto-scaled text requires a paragraph box.");
+        v->fResize = Shaper::ResizePolicy::kNone;
+    }
+
     const auto& parse_color = [] (const skjson::ArrayValue* jcolor,
+                                  const internal::AnimationBuilder* abuilder,
                                   SkColor* c) {
         if (!jcolor) {
             return false;
         }
 
         VectorValue color_vec;
-        if (!skottie::Parse(*jcolor, &color_vec)) {
+        if (!ValueTraits<VectorValue>::FromJSON(*jcolor, abuilder, &color_vec)) {
             return false;
         }
 
-        *c = color_vec;
+        *c = ValueTraits<VectorValue>::As<SkColor>(color_vec);
         return true;
     };
 
-    v->fHasFill   = parse_color((*jtxt)["fc"], &v->fFillColor);
-    v->fHasStroke = parse_color((*jtxt)["sc"], &v->fStrokeColor);
+    v->fHasFill   = parse_color((*jtxt)["fc"], abuilder, &v->fFillColor);
+    v->fHasStroke = parse_color((*jtxt)["sc"], abuilder, &v->fStrokeColor);
 
     if (v->fHasStroke) {
-        v->fStrokeWidth = ParseDefault((*jtxt)["sw"], 1.0f);
-        v->fPaintOrder  = ParseDefault((*jtxt)["of"], true)
-                ? TextPaintOrder::kFillStroke
-                : TextPaintOrder::kStrokeFill;
+        v->fStrokeWidth = ParseDefault((*jtxt)["s"], 0.0f);
     }
 
     return true;
 }
 
-}  // namespace skottie::internal
+template <>
+bool ValueTraits<TextValue>::CanLerp(const TextValue&, const TextValue&) {
+    // Text values are never interpolated, but we pretend that they could be.
+    return true;
+}
+
+template <>
+void ValueTraits<TextValue>::Lerp(const TextValue& v0, const TextValue&, float, TextValue* result) {
+    // Text value keyframes are treated as selectors, not as interpolated values.
+    *result = v0;
+}
+
+} // namespace skottie

@@ -14,47 +14,44 @@
 namespace SkSL {
 
 /**
- * Represents a compile-time constant setting, such as sk_Caps.fbFetchSupport. These IRNodes should
- * only exist in a dehydrated module. These nodes are replaced with the value of the setting during
- * rehydration or compilation (i.e., whenever fReplaceSettings is true).
+ * Represents a compile-time constant setting, such as sk_Caps.fbFetchSupport. These are generally
+ * collapsed down to their constant representations during the compilation process.
  */
-class Setting final : public Expression {
-public:
-    static constexpr Kind kExpressionKind = Kind::kSetting;
+struct Setting : public Expression {
+    Setting(int offset, String name, std::unique_ptr<Expression> value)
+    : INHERITED(offset, kSetting_Kind, value->fType)
+    , fName(std::move(name))
+    , fValue(std::move(value)) {
+        SkASSERT(fValue->isConstant());
+    }
 
-    Setting(int offset, String name, const Type* type)
-        : INHERITED(offset, kExpressionKind, type)
-        , fName(std::move(name)) {}
-
-    // Creates an SkSL setting expression if `fReplaceSettings` is false, or the current value of
-    // the setting when it is true. Reports errors via the ErrorReporter.
-    // (There's no failsafe Make equivalent, because there really isn't a good fallback expression
-    // to produce when the `name` lookup fails. We wouldn't even know the expected type.)
-    static std::unique_ptr<Expression> Convert(const Context& context, int offset,
-                                               const String& name);
+    std::unique_ptr<Expression> constantPropagate(const IRGenerator& irGenerator,
+                                                  const DefinitionMap& definitions) override;
 
     std::unique_ptr<Expression> clone() const override {
-        return std::make_unique<Setting>(fOffset, this->name(), &this->type());
+        return std::unique_ptr<Expression>(new Setting(fOffset, fName, fValue->clone()));
     }
 
-    const String& name() const {
+#ifdef SK_DEBUG
+    String description() const override {
         return fName;
     }
-
-    String description() const override {
-        return this->name();
-    }
+#endif
 
     bool hasProperty(Property property) const override {
         return false;
     }
 
-private:
-    String fName;
+    bool isConstant() const override {
+        return true;
+    }
 
-    using INHERITED = Expression;
+    const String fName;
+    std::unique_ptr<Expression> fValue;
+
+    typedef Expression INHERITED;
 };
 
-}  // namespace SkSL
+} // namespace
 
 #endif

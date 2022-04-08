@@ -10,7 +10,6 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkColorFilter.h"
-#include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkSize.h"
@@ -46,10 +45,10 @@ protected:
         };
         paint.setColorFilter(SkColorFilters::Matrix(opaqueGrayMatrix));
 
-        canvas->drawImage(bitmap.asImage(), 100.0f, 100.0f, SkSamplingOptions(), &paint);
+        canvas->drawBitmap(bitmap, 100.0f, 100.0f, &paint);
     }
 
 private:
-    using INHERITED = skiagm::GM;
+    typedef skiagm::GM INHERITED;
 };
 DEF_GM( return new ColorFilterAlpha8; )

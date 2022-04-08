@@ -13,7 +13,7 @@ void draw(SkCanvas* canvas) {
     matrix.setScale(4, 4);
     scalePaint.setAlpha(0x40);
     scalePaint.setImageFilter(
-            SkImageFilters::MatrixTransform(matrix, SkSamplingOptions(), nullptr));
+            SkImageFilters::MatrixTransform(matrix, kNone_SkFilterQuality, nullptr));
     SkCanvas::SaveLayerRec saveLayerRec(nullptr, &scalePaint,
             SkCanvas::kInitWithPrevious_SaveLayerFlag);
     canvas->saveLayer(saveLayerRec);

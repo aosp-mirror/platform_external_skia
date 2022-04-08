@@ -11,7 +11,6 @@
 #include "include/core/SkMatrix.h"
 #include "include/gpu/GrConfig.h"
 #include "include/pathops/SkPathOps.h"
-#include "include/private/SkTPin.h"
 #include "src/core/SkAutoMalloc.h"
 #include "src/core/SkGeometry.h"
 #include "src/core/SkPointPriv.h"

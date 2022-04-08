@@ -20,6 +20,7 @@ public:
      */
     static bool Orient(const SkPixmap& dst, const SkPixmap& src, SkEncodedOrigin);
 
+    static bool ShouldSwapWidthHeight(SkEncodedOrigin o);
     static SkImageInfo SwapWidthHeight(const SkImageInfo& info);
 
     /**
@@ -38,7 +39,7 @@ public:
         const SkPixmap* tmp = &dst;
         if (origin != kTopLeft_SkEncodedOrigin) {
             auto info = dst.info();
-            if (SkEncodedOriginSwapsWidthHeight(origin)) {
+            if (ShouldSwapWidthHeight(origin)) {
                 info = SwapWidthHeight(info);
             }
             if (!storage.tryAlloc(info)) {

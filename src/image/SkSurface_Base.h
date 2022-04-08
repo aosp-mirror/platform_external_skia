@@ -9,7 +9,6 @@
 #define SkSurface_Base_DEFINED
 
 #include "include/core/SkCanvas.h"
-#include "include/core/SkDeferredDisplayList.h"
 #include "include/core/SkSurface.h"
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkSurfacePriv.h"
@@ -18,9 +17,7 @@ class SkSurface_Base : public SkSurface {
 public:
     SkSurface_Base(int width, int height, const SkSurfaceProps*);
     SkSurface_Base(const SkImageInfo&, const SkSurfaceProps*);
-    ~SkSurface_Base() override;
-
-    virtual GrRecordingContext* onGetRecordingContext();
+    virtual ~SkSurface_Base();
 
     virtual GrBackendTexture onGetBackendTexture(BackendHandleAccess);
     virtual GrBackendRenderTarget onGetBackendRenderTarget(BackendHandleAccess);
@@ -58,7 +55,7 @@ public:
     virtual void onAsyncRescaleAndReadPixels(const SkImageInfo&,
                                              const SkIRect& srcRect,
                                              RescaleGamma,
-                                             RescaleMode,
+                                             SkFilterQuality,
                                              ReadPixelsCallback,
                                              ReadPixelsContext);
     /**
@@ -69,7 +66,7 @@ public:
                                                    const SkIRect& srcRect,
                                                    const SkISize& dstSize,
                                                    RescaleGamma,
-                                                   RescaleMode,
+                                                   SkFilterQuality,
                                                    ReadPixelsCallback,
                                                    ReadPixelsContext);
 
@@ -82,7 +79,7 @@ public:
      *      image->unref();
      *  }
      */
-    virtual void onDraw(SkCanvas*, SkScalar x, SkScalar y, const SkSamplingOptions&,const SkPaint*);
+    virtual void onDraw(SkCanvas*, SkScalar x, SkScalar y, const SkPaint*);
 
     /**
      * Called as a performance hint when the Surface is allowed to make it's contents
@@ -108,8 +105,7 @@ public:
      * Inserts the requested number of semaphores for the gpu to signal when work is complete on the
      * gpu and inits the array of GrBackendSemaphores with the signaled semaphores.
      */
-    virtual GrSemaphoresSubmitted onFlush(BackendSurfaceAccess access, const GrFlushInfo&,
-                                          const GrBackendSurfaceMutableState*) {
+    virtual GrSemaphoresSubmitted onFlush(BackendSurfaceAccess access, const GrFlushInfo&) {
         return GrSemaphoresSubmitted::kNo;
     }
 
@@ -118,16 +114,13 @@ public:
      * commands on the gpu. Any previously submitting commands will not be blocked by these
      * semaphores.
      */
-    virtual bool onWait(int numSemaphores, const GrBackendSemaphore* waitSemaphores,
-                        bool deleteSemaphoresAfterWait) {
+    virtual bool onWait(int numSemaphores, const GrBackendSemaphore* waitSemaphores) {
         return false;
     }
 
     virtual bool onCharacterize(SkSurfaceCharacterization*) const { return false; }
     virtual bool onIsCompatible(const SkSurfaceCharacterization&) const { return false; }
-    virtual bool onDraw(sk_sp<const SkDeferredDisplayList>, SkIPoint offset) {
-        return false;
-    }
+    virtual bool onDraw(const SkDeferredDisplayList*) { return false; }
 
     inline SkCanvas* getCachedCanvas();
     inline sk_sp<SkImage> refCachedImage();
@@ -150,7 +143,7 @@ private:
     friend class SkCanvas;
     friend class SkSurface;
 
-    using INHERITED = SkSurface;
+    typedef SkSurface INHERITED;
 };
 
 SkCanvas* SkSurface_Base::getCachedCanvas() {

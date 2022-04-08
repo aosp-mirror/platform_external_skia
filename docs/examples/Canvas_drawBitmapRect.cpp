@@ -19,10 +19,7 @@ void draw(SkCanvas* canvas) {
     paint.setMaskFilter(SkMaskFilter::MakeBlur(kSolid_SkBlurStyle, 6));
     for (auto color : { SK_ColorRED, SK_ColorBLUE, 0xFF007F00} ) {
         paint.setColor(color);
-        canvas->drawImageRect(bitmap.asImage(),
-                              SkRect::MakeWH(8, 8), SkRect::MakeWH(32, 32),
-                              SkSamplingOptions(), &paint,
-                              SkCanvas::kStrict_SrcRectConstraint);
+        canvas->drawBitmapRect(bitmap, SkRect::MakeWH(8, 8), SkRect::MakeWH(32, 32), &paint);
         canvas->translate(48, 0);
     }
 }

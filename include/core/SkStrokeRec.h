@@ -127,7 +127,7 @@ public:
             return this->getStyle() == other.getStyle();
         }
         return fWidth == other.fWidth &&
-               (fJoin != SkPaint::kMiter_Join || fMiterLimit == other.fMiterLimit) &&
+               fMiterLimit == other.fMiterLimit &&
                fCap == other.fCap &&
                fJoin == other.fJoin &&
                fStrokeAndFill == other.fStrokeAndFill;

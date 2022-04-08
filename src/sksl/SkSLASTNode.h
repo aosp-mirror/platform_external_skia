@@ -8,15 +8,18 @@
 #ifndef SKSL_ASTNODE
 #define SKSL_ASTNODE
 
-#include "include/private/SkSLModifiers.h"
-#include "include/private/SkSLString.h"
 #include "src/sksl/SkSLLexer.h"
-#include "src/sksl/SkSLOperators.h"
+#include "src/sksl/SkSLString.h"
+#include "src/sksl/ir/SkSLModifiers.h"
 
-#include <algorithm>
 #include <vector>
 
 namespace SkSL {
+
+// std::max isn't constexpr in some compilers
+static constexpr size_t Max(size_t a, size_t b) {
+    return a > b ? a : b;
+}
 
 /**
  * Represents a node in the abstract syntax tree (AST). The AST is based directly on the parse tree;
@@ -54,7 +57,7 @@ struct ASTNode {
     };
 
     enum class Kind {
-        // data: operator, children: left, right
+        // data: operator(Token), children: left, right
         kBinary,
         // children: statements
         kBlock,
@@ -98,14 +101,12 @@ struct ASTNode {
         kNull,
         // data: ParameterData, children: type, arraySize1, arraySize2, ..., value?
         kParameter,
-        // data: operator, children: operand
+        // data: operator(Token), children: operand
         kPostfix,
-        // data: operator, children: operand
+        // data: operator(Token), children: operand
         kPrefix,
         // children: value
         kReturn,
-        // data: field(StringFragment), children: base
-        kScope,
         // ...
         kSection,
         // children: value, statement 1, statement 2...
@@ -114,7 +115,7 @@ struct ASTNode {
         kSwitch,
         // children: test, ifTrue, ifFalse
         kTernary,
-        // data: name(StringFragment), children: sizes
+        // data: TypeData, children: sizes
         kType,
         // data: VarData, children: arraySize1, arraySize2, ..., value?
         kVarDeclaration,
@@ -182,28 +183,41 @@ struct ASTNode {
         friend struct ASTNode;
     };
 
+    struct TypeData {
+        TypeData() {}
+
+        TypeData(StringFragment name, bool isStructDeclaration, bool isNullable)
+            : fName(name)
+            , fIsStructDeclaration(isStructDeclaration)
+            , fIsNullable(isNullable) {}
+
+        StringFragment fName;
+        bool fIsStructDeclaration;
+        bool fIsNullable;
+    };
+
     struct ParameterData {
         ParameterData() {}
 
-        ParameterData(Modifiers modifiers, StringFragment name, bool isArray)
+        ParameterData(Modifiers modifiers, StringFragment name, size_t sizeCount)
             : fModifiers(modifiers)
             , fName(name)
-            , fIsArray(isArray) {}
+            , fSizeCount(sizeCount) {}
 
         Modifiers fModifiers;
         StringFragment fName;
-        bool fIsArray;
+        size_t fSizeCount;
     };
 
     struct VarData {
         VarData() {}
 
-        VarData(StringFragment name, bool isArray)
+        VarData(StringFragment name, size_t sizeCount)
             : fName(name)
-            , fIsArray(isArray) {}
+            , fSizeCount(sizeCount) {}
 
         StringFragment fName;
-        bool fIsArray;
+        size_t fSizeCount;
     };
 
     struct FunctionData {
@@ -223,18 +237,18 @@ struct ASTNode {
         InterfaceBlockData() {}
 
         InterfaceBlockData(Modifiers modifiers, StringFragment typeName, size_t declarationCount,
-                           StringFragment instanceName, bool isArray)
+                           StringFragment instanceName, size_t sizeCount)
             : fModifiers(modifiers)
             , fTypeName(typeName)
             , fDeclarationCount(declarationCount)
             , fInstanceName(instanceName)
-            , fIsArray(isArray) {}
+            , fSizeCount(sizeCount) {}
 
         Modifiers fModifiers;
         StringFragment fTypeName;
         size_t fDeclarationCount;
         StringFragment fInstanceName;
-        bool fIsArray;
+        size_t fSizeCount;
     };
 
     struct SectionData {
@@ -251,28 +265,27 @@ struct ASTNode {
     };
 
     struct NodeData {
-        // We use fBytes as a union which can hold any type of AST node, and use placement-new to
-        // copy AST objects into fBytes. Note that none of the AST objects have interesting
-        // destructors, so we do not bother doing a placement-delete on any of them in ~NodeData.
-        char fBytes[std::max({sizeof(Operator),
-                              sizeof(StringFragment),
-                              sizeof(bool),
-                              sizeof(SKSL_INT),
-                              sizeof(SKSL_FLOAT),
-                              sizeof(Modifiers),
-                              sizeof(FunctionData),
-                              sizeof(ParameterData),
-                              sizeof(VarData),
-                              sizeof(InterfaceBlockData),
-                              sizeof(SectionData)})];
+        char fBytes[Max(sizeof(Token),
+                    Max(sizeof(StringFragment),
+                    Max(sizeof(bool),
+                    Max(sizeof(SKSL_INT),
+                    Max(sizeof(SKSL_FLOAT),
+                    Max(sizeof(Modifiers),
+                    Max(sizeof(TypeData),
+                    Max(sizeof(FunctionData),
+                    Max(sizeof(ParameterData),
+                    Max(sizeof(VarData),
+                    Max(sizeof(InterfaceBlockData),
+                        sizeof(SectionData))))))))))))];
 
         enum class Kind {
-            kOperator,
+            kToken,
             kStringFragment,
             kBool,
             kInt,
             kFloat,
             kModifiers,
+            kTypeData,
             kFunctionData,
             kParameterData,
             kVarData,
@@ -282,59 +295,64 @@ struct ASTNode {
 
         NodeData() = default;
 
-        NodeData(Operator op)
-            : fKind(Kind::kOperator) {
-            new (fBytes) Operator(op);
+        NodeData(Token data)
+            : fKind(Kind::kToken) {
+            memcpy(fBytes, &data, sizeof(data));
         }
 
-        NodeData(const StringFragment& data)
+        NodeData(StringFragment data)
             : fKind(Kind::kStringFragment) {
-            new (fBytes) StringFragment(data);
+            memcpy(fBytes, &data, sizeof(data));
         }
 
         NodeData(bool data)
             : fKind(Kind::kBool) {
-            new (fBytes) bool(data);
+            memcpy(fBytes, &data, sizeof(data));
         }
 
         NodeData(SKSL_INT data)
             : fKind(Kind::kInt) {
-            new (fBytes) SKSL_INT(data);
+            memcpy(fBytes, &data, sizeof(data));
         }
 
         NodeData(SKSL_FLOAT data)
             : fKind(Kind::kFloat) {
-            new (fBytes) SKSL_FLOAT(data);
+            memcpy(fBytes, &data, sizeof(data));
         }
 
-        NodeData(const Modifiers& data)
+        NodeData(Modifiers data)
             : fKind(Kind::kModifiers) {
-            new (fBytes) Modifiers(data);
+            memcpy(fBytes, &data, sizeof(data));
         }
 
-        NodeData(const FunctionData& data)
+        NodeData(TypeData data)
+            : fKind(Kind::kTypeData) {
+            memcpy(fBytes, &data, sizeof(data));
+        }
+
+        NodeData(FunctionData data)
             : fKind(Kind::kFunctionData) {
-            new (fBytes) FunctionData(data);
+            memcpy(fBytes, &data, sizeof(data));
         }
 
-        NodeData(const VarData& data)
+        NodeData(VarData data)
             : fKind(Kind::kVarData) {
-            new (fBytes) VarData(data);
+            memcpy(fBytes, &data, sizeof(data));
         }
 
-        NodeData(const ParameterData& data)
+        NodeData(ParameterData data)
             : fKind(Kind::kParameterData) {
-            new (fBytes) ParameterData(data);
+            memcpy(fBytes, &data, sizeof(data));
         }
 
-        NodeData(const InterfaceBlockData& data)
+        NodeData(InterfaceBlockData data)
             : fKind(Kind::kInterfaceBlockData) {
-            new (fBytes) InterfaceBlockData(data);
+            memcpy(fBytes, &data, sizeof(data));
         }
 
-        NodeData(const SectionData& data)
+        NodeData(SectionData data)
             : fKind(Kind::kSectionData) {
-            new (fBytes) SectionData(data);
+            memcpy(fBytes, &data, sizeof(data));
         }
     };
 
@@ -345,13 +363,12 @@ struct ASTNode {
     ASTNode(std::vector<ASTNode>* nodes, int offset, Kind kind)
         : fNodes(nodes)
         , fOffset(offset)
-        , fKind(kind) {
-
+            , fKind(kind) {
         switch (kind) {
             case Kind::kBinary:
             case Kind::kPostfix:
             case Kind::kPrefix:
-                fData.fKind = NodeData::Kind::kOperator;
+                fData.fKind = NodeData::Kind::kToken;
                 break;
 
             case Kind::kBool:
@@ -365,8 +382,6 @@ struct ASTNode {
             case Kind::kExtension:
             case Kind::kField:
             case Kind::kIdentifier:
-            case Kind::kScope:
-            case Kind::kType:
                 fData.fKind = NodeData::Kind::kStringFragment;
                 break;
 
@@ -398,14 +413,18 @@ struct ASTNode {
                 fData.fKind = NodeData::Kind::kVarData;
                 break;
 
+            case Kind::kType:
+                fData.fKind = NodeData::Kind::kTypeData;
+                break;
+
             default:
                 break;
         }
     }
 
-    ASTNode(std::vector<ASTNode>* nodes, int offset, Kind kind, Operator op)
+    ASTNode(std::vector<ASTNode>* nodes, int offset, Kind kind, Token t)
         : fNodes(nodes)
-        , fData(op)
+        , fData(t)
         , fOffset(offset)
         , fKind(kind) {}
 
@@ -445,6 +464,12 @@ struct ASTNode {
         , fOffset(offset)
         , fKind(kind) {}
 
+    ASTNode(std::vector<ASTNode>* nodes, int offset, Kind kind, TypeData td)
+        : fNodes(nodes)
+        , fData(td)
+        , fOffset(offset)
+        , fKind(kind) {}
+
     ASTNode(std::vector<ASTNode>* nodes, int offset, Kind kind, SectionData s)
         : fNodes(nodes)
         , fData(s)
@@ -455,79 +480,117 @@ struct ASTNode {
         return fKind != Kind::kNull;
     }
 
-    Operator getOperator() const {
-        SkASSERT(fData.fKind == NodeData::Kind::kOperator);
-        return *reinterpret_cast<const Operator*>(fData.fBytes);
+    Token getToken() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kToken);
+        Token result;
+        memcpy(&result, fData.fBytes, sizeof(result));
+        return result;
     }
 
     bool getBool() const {
         SkASSERT(fData.fKind == NodeData::Kind::kBool);
-        return *reinterpret_cast<const bool*>(fData.fBytes);
+        bool result;
+        memcpy(&result, fData.fBytes, sizeof(result));
+        return result;
     }
 
     SKSL_INT getInt() const {
         SkASSERT(fData.fKind == NodeData::Kind::kInt);
-        return *reinterpret_cast<const SKSL_INT*>(fData.fBytes);
+        SKSL_INT result;
+        memcpy(&result, fData.fBytes, sizeof(result));
+        return result;
     }
 
     SKSL_FLOAT getFloat() const {
         SkASSERT(fData.fKind == NodeData::Kind::kFloat);
-        return *reinterpret_cast<const SKSL_FLOAT*>(fData.fBytes);
+        SKSL_FLOAT result;
+        memcpy(&result, fData.fBytes, sizeof(result));
+        return result;
     }
 
-    const StringFragment& getString() const {
+    StringFragment getString() const {
         SkASSERT(fData.fKind == NodeData::Kind::kStringFragment);
-        return *reinterpret_cast<const StringFragment*>(fData.fBytes);
+        StringFragment result;
+        memcpy(&result, fData.fBytes, sizeof(result));
+        return result;
     }
 
-    const Modifiers& getModifiers() const {
+    Modifiers getModifiers() const {
         SkASSERT(fData.fKind == NodeData::Kind::kModifiers);
-        return *reinterpret_cast<const Modifiers*>(fData.fBytes);
+        Modifiers result;
+        memcpy(&result, fData.fBytes, sizeof(result));
+        return result;
     }
 
     void setModifiers(const Modifiers& m) {
-        new (fData.fBytes) Modifiers(m);
+        memcpy(fData.fBytes, &m, sizeof(m));
     }
 
-    const ParameterData& getParameterData() const {
+    TypeData getTypeData() const {
+        SkASSERT(fData.fKind == NodeData::Kind::kTypeData);
+        TypeData result;
+        memcpy(&result, fData.fBytes, sizeof(result));
+        return result;
+    }
+
+    void setTypeData(const ASTNode::TypeData& td) {
+        SkASSERT(fData.fKind == NodeData::Kind::kTypeData);
+        memcpy(fData.fBytes, &td, sizeof(td));
+    }
+
+    ParameterData getParameterData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kParameterData);
-        return *reinterpret_cast<const ParameterData*>(fData.fBytes);
+        ParameterData result;
+        memcpy(&result, fData.fBytes, sizeof(result));
+        return result;
     }
 
     void setParameterData(const ASTNode::ParameterData& pd) {
-        new (fData.fBytes) ParameterData(pd);
+        SkASSERT(fData.fKind == NodeData::Kind::kParameterData);
+        memcpy(fData.fBytes, &pd, sizeof(pd));
     }
 
-    const VarData& getVarData() const {
+    VarData getVarData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kVarData);
-        return *reinterpret_cast<const VarData*>(fData.fBytes);
+        VarData result;
+        memcpy(&result, fData.fBytes, sizeof(result));
+        return result;
     }
 
     void setVarData(const ASTNode::VarData& vd) {
-        new (fData.fBytes) VarData(vd);
+        SkASSERT(fData.fKind == NodeData::Kind::kVarData);
+        memcpy(fData.fBytes, &vd, sizeof(vd));
     }
 
-    const FunctionData& getFunctionData() const {
+    FunctionData getFunctionData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kFunctionData);
-        return *reinterpret_cast<const FunctionData*>(fData.fBytes);
+        FunctionData result;
+        memcpy(&result, fData.fBytes, sizeof(result));
+        return result;
     }
 
     void setFunctionData(const ASTNode::FunctionData& fd) {
-        new (fData.fBytes) FunctionData(fd);
+        SkASSERT(fData.fKind == NodeData::Kind::kFunctionData);
+        memcpy(fData.fBytes, &fd, sizeof(fd));
     }
 
-    const InterfaceBlockData& getInterfaceBlockData() const {
+    InterfaceBlockData getInterfaceBlockData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kInterfaceBlockData);
-        return *reinterpret_cast<const InterfaceBlockData*>(fData.fBytes);
+        InterfaceBlockData result;
+        memcpy(&result, fData.fBytes, sizeof(result));
+        return result;
     }
 
     void setInterfaceBlockData(const ASTNode::InterfaceBlockData& id) {
-        new (fData.fBytes) InterfaceBlockData(id);
+        SkASSERT(fData.fKind == NodeData::Kind::kInterfaceBlockData);
+        memcpy(fData.fBytes, &id, sizeof(id));
     }
 
-    const SectionData& getSectionData() const {
+    SectionData getSectionData() const {
         SkASSERT(fData.fKind == NodeData::Kind::kSectionData);
-        return *reinterpret_cast<const SectionData*>(fData.fBytes);
+        SectionData result;
+        memcpy(&result, fData.fBytes, sizeof(result));
+        return result;
     }
 
     void addChild(ID id) {
@@ -569,6 +632,6 @@ struct ASTNode {
     ID fNext;
 };
 
-}  // namespace SkSL
+} // namespace
 
 #endif

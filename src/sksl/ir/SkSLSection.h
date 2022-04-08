@@ -8,57 +8,42 @@
 #ifndef SKSL_SECTION
 #define SKSL_SECTION
 
-#include "include/private/SkSLProgramElement.h"
+#include "src/sksl/ir/SkSLProgramElement.h"
 
 namespace SkSL {
 
 /**
  * A section declaration (e.g. @body { body code here })..
  */
-class Section final : public ProgramElement {
-public:
-    static constexpr Kind kProgramElementKind = Kind::kSection;
-
+struct Section : public ProgramElement {
     Section(int offset, String name, String arg, String text)
-    : INHERITED(offset, kProgramElementKind)
+    : INHERITED(offset, kSection_Kind)
     , fName(std::move(name))
     , fArgument(std::move(arg))
     , fText(std::move(text)) {}
 
-    const String& name() const {
-        return fName;
-    }
-
-    const String& argument() const {
-        return fArgument;
-    }
-
-    const String& text() const {
-        return fText;
-    }
-
     std::unique_ptr<ProgramElement> clone() const override {
-        return std::unique_ptr<ProgramElement>(new Section(fOffset, this->name(), this->argument(),
-                                                           this->text()));
+        return std::unique_ptr<ProgramElement>(new Section(fOffset, fName, fArgument, fText));
     }
 
+#ifdef SK_DEBUG
     String description() const override {
-        String result = "@" + this->name();
-        if (this->argument().size()) {
-            result += "(" + this->argument() + ")";
+        String result = "@" + fName;
+        if (fArgument.size()) {
+            result += "(" + fArgument + ")";
         }
-        result += " { " + this->text() + " }";
+        result += " { " + fText + " }";
         return result;
     }
+#endif
 
-private:
-    String fName;
-    String fArgument;
-    String fText;
+    const String fName;
+    const String fArgument;
+    const String fText;
 
-    using INHERITED = ProgramElement;
+    typedef ProgramElement INHERITED;
 };
 
-}  // namespace SkSL
+} // namespace
 
 #endif

@@ -8,7 +8,6 @@
 #include "modules/skottie/src/effects/Effects.h"
 
 #include "include/effects/SkTableColorFilter.h"
-#include "include/private/SkTPin.h"
 #include "modules/skottie/src/Adapter.h"
 #include "modules/skottie/src/SkottieValue.h"
 #include "modules/sksg/include/SkSGColorFilter.h"
@@ -129,7 +128,7 @@ public:
         };
 
         EffectBinder(jprops, *abuilder, this)
-            .bind(       kChannel_Index, fChannel         )
+            .bind(       kChannel_Index, fChannel  )
             .bind(       kInBlack_Index, fMapper.fInBlack )
             .bind(       kInWhite_Index, fMapper.fInWhite )
             .bind(         kGamma_Index, fMapper.fGamma   )
@@ -291,7 +290,7 @@ private:
     using INHERITED = DiscardableAdapterBase<ProLevelsEffectAdapter, sksg::ExternalColorFilter>;
 };
 
-}  // namespace
+} // anonymous ns
 
 sk_sp<sksg::RenderNode> EffectBuilder::attachEasyLevelsEffect(const skjson::ArrayValue& jprops,
                                                               sk_sp<sksg::RenderNode> layer) const {

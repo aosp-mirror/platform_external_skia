@@ -9,7 +9,6 @@
 
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSurface.h"
-#include "include/ports/SkCFObject.h"
 
 #include "tools/sk_app/WindowContext.h"
 
@@ -28,11 +27,7 @@ public:
 
     void setDisplayParams(const DisplayParams& params) override;
 
-    void activate(bool isActive) override;
-
 protected:
-    static NSURL* CacheURL();
-
     MetalWindowContext(const DisplayParams&);
     // This should be called by subclass constructor. It is also called when window/display
     // parameters change. This will in turn call onInitializeContext().
@@ -46,14 +41,10 @@ protected:
     virtual void onDestroyContext() = 0;
 
     bool                        fValid;
-    sk_cfp<id<MTLDevice>>       fDevice;
-    sk_cfp<id<MTLCommandQueue>> fQueue;
+    id<MTLDevice>               fDevice;
+    id<MTLCommandQueue>         fQueue;
     CAMetalLayer*               fMetalLayer;
     GrMTLHandle                 fDrawableHandle;
-#if GR_METAL_SDK_VERSION >= 230
-    // wrapping this in sk_cfp throws up an availability warning, so we'll track lifetime manually
-    id<MTLBinaryArchive>        fPipelineArchive SK_API_AVAILABLE(macos(11.0), ios(14.0));
-#endif
 };
 
 }   // namespace sk_app

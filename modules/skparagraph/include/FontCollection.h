@@ -19,6 +19,8 @@ class FontCollection : public SkRefCnt {
 public:
     FontCollection();
 
+    ~FontCollection() = default;
+
     size_t getFontManagersCount() const;
 
     void setAssetFontManager(sk_sp<SkFontMgr> fontManager);
@@ -26,7 +28,6 @@ public:
     void setTestFontManager(sk_sp<SkFontMgr> fontManager);
     void setDefaultFontManager(sk_sp<SkFontMgr> fontManager);
     void setDefaultFontManager(sk_sp<SkFontMgr> fontManager, const char defaultFamilyName[]);
-    void setDefaultFontManager(sk_sp<SkFontMgr> fontManager, const std::vector<SkString>& defaultFamilyNames);
 
     sk_sp<SkFontMgr> getFallbackManager() const { return fDefaultFontManager; }
 
@@ -40,8 +41,6 @@ public:
     bool fontFallbackEnabled() { return fEnableFontFallback; }
 
     ParagraphCache* getParagraphCache() { return &fParagraphCache; }
-
-    void clearCaches();
 
 private:
     std::vector<sk_sp<SkFontMgr>> getFontManagerOrder() const;
@@ -71,7 +70,7 @@ private:
     sk_sp<SkFontMgr> fDynamicFontManager;
     sk_sp<SkFontMgr> fTestFontManager;
 
-    std::vector<SkString> fDefaultFamilyNames;
+    SkString fDefaultFamilyName;
     ParagraphCache fParagraphCache;
 };
 }  // namespace textlayout
