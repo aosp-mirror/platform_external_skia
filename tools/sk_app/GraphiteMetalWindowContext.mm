@@ -9,13 +9,13 @@
 #include "src/core/SkMathPriv.h"
 #include "tools/sk_app/GraphiteMetalWindowContext.h"
 
-#include "experimental/graphite/include/BackendTexture.h"
-#include "experimental/graphite/include/Context.h"
-#include "experimental/graphite/include/Recorder.h"
-#include "experimental/graphite/include/Recording.h"
-#include "experimental/graphite/include/SkStuff.h"
-#include "experimental/graphite/include/mtl/MtlBackendContext.h"
-#include "experimental/graphite/include/mtl/MtlTypes.h"
+#include "include/gpu/graphite/BackendTexture.h"
+#include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/Recorder.h"
+#include "include/gpu/graphite/Recording.h"
+#include "include/gpu/graphite/SkStuff.h"
+#include "include/gpu/graphite/mtl/MtlBackendContext.h"
+#include "include/gpu/graphite/mtl/MtlTypes.h"
 
 using sk_app::DisplayParams;
 using sk_app::GraphiteMetalWindowContext;
@@ -53,7 +53,7 @@ void GraphiteMetalWindowContext::initializeContext() {
     skgpu::graphite::MtlBackendContext backendContext = {};
     backendContext.fDevice.retain((skgpu::graphite::MtlHandle)fDevice.get());
     backendContext.fQueue.retain((skgpu::graphite::MtlHandle)fQueue.get());
-    fGraphiteContext = skgpu::Context::MakeMetal(backendContext);
+    fGraphiteContext = skgpu::graphite::Context::MakeMetal(backendContext);
     fGraphiteRecorder = fGraphiteContext->makeRecorder();
     // TODO
 //    if (!fGraphiteContext && fDisplayParams.fMSAASampleCount > 1) {
@@ -82,8 +82,8 @@ sk_sp<SkSurface> GraphiteMetalWindowContext::getBackbufferSurface() {
     sk_sp<SkSurface> surface;
     id<CAMetalDrawable> currentDrawable = [fMetalLayer nextDrawable];
 
-    skgpu::BackendTexture backendTex(this->dimensions(),
-                                     (skgpu::graphite::MtlHandle)currentDrawable.texture);
+    skgpu::graphite::BackendTexture backendTex(this->dimensions(),
+                                               (skgpu::graphite::MtlHandle)currentDrawable.texture);
 
     surface = MakeGraphiteFromBackendTexture(this->graphiteRecorder(),
                                              backendTex,
@@ -99,13 +99,13 @@ sk_sp<SkSurface> GraphiteMetalWindowContext::getBackbufferSurface() {
 void GraphiteMetalWindowContext::swapBuffers() {
     // This chunk of code should not be in this class but higher up either in Window or
     // WindowContext
-    std::unique_ptr<skgpu::Recording> recording = fGraphiteRecorder->snap();
+    std::unique_ptr<skgpu::graphite::Recording> recording = fGraphiteRecorder->snap();
     if (recording) {
-        skgpu::InsertRecordingInfo info;
+        skgpu::graphite::InsertRecordingInfo info;
         info.fRecording = recording.get();
         fGraphiteContext->insertRecording(info);
     }
-    fGraphiteContext->submit(skgpu::SyncToCpu::kNo);
+    fGraphiteContext->submit(skgpu::graphite::SyncToCpu::kNo);
 
     id<CAMetalDrawable> currentDrawable = (id<CAMetalDrawable>)fDrawableHandle;
 

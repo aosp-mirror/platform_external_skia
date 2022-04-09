@@ -12,7 +12,7 @@
 
 #ifdef SK_METAL
 
-#include "experimental/graphite/include/mtl/MtlBackendContext.h"
+#include "include/gpu/graphite/mtl/MtlBackendContext.h"
 
 namespace skiatest::graphite {
 
@@ -22,9 +22,9 @@ public:
 
     static std::unique_ptr<GraphiteTestContext> Make();
 
-    skgpu::BackendApi backend() override { return skgpu::BackendApi::kMetal; }
+    skgpu::graphite::BackendApi backend() override { return skgpu::graphite::BackendApi::kMetal; }
 
-    std::unique_ptr<skgpu::Context> makeContext() override;
+    std::unique_ptr<skgpu::graphite::Context> makeContext() override;
 
     const skgpu::graphite::MtlBackendContext& getBackendContext() const {
         return fMtl;

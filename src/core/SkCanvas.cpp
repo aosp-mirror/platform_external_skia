@@ -54,17 +54,17 @@
 #if SK_SUPPORT_GPU
 #include "include/gpu/GrDirectContext.h"
 #include "include/private/chromium/GrSlug.h"
-#include "src/gpu/BaseDevice.h"
-#include "src/gpu/SkGr.h"
+#include "src/gpu/ganesh/BaseDevice.h"
+#include "src/gpu/ganesh/SkGr.h"
 #include "src/utils/SkTestCanvas.h"
 #if defined(SK_BUILD_FOR_ANDROID_FRAMEWORK)
-#   include "src/gpu/GrRenderTarget.h"
-#   include "src/gpu/GrRenderTargetProxy.h"
+#   include "src/gpu/ganesh/GrRenderTarget.h"
+#   include "src/gpu/ganesh/GrRenderTargetProxy.h"
 #endif
 #endif
 
 #ifdef SK_GRAPHITE_ENABLED
-#include "experimental/graphite/src/Device.h"
+#include "src/gpu/graphite/Device.h"
 #endif
 
 #define RETURN_ON_NULL(ptr)     do { if (nullptr == (ptr)) return; } while (0)
@@ -1719,7 +1719,7 @@ GrRecordingContext* SkCanvas::recordingContext() {
     return nullptr;
 }
 
-skgpu::Recorder* SkCanvas::recorder() {
+skgpu::graphite::Recorder* SkCanvas::recorder() {
 #ifdef SK_GRAPHITE_ENABLED
     if (auto graphiteDevice = this->topDevice()->asGraphiteDevice()) {
         return graphiteDevice->recorder();

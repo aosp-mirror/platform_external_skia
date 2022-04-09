@@ -10,6 +10,7 @@
 #include "include/private/SkSLDefines.h"
 #include "include/sksl/DSLBlock.h"
 #include "include/sksl/DSLExpression.h"
+#include "include/sksl/SkSLPosition.h"
 #include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/ir/SkSLBlock.h"
 #include "src/sksl/ir/SkSLExpression.h"
@@ -17,8 +18,8 @@
 #include "src/sksl/ir/SkSLNop.h"
 
 #if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
-#include "src/gpu/GrFragmentProcessor.h"
-#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/glsl/GrGLSLFragmentShaderBuilder.h"
 #endif
 
 namespace SkSL {

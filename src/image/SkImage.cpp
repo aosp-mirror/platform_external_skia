@@ -32,14 +32,14 @@
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrContextThreadSafeProxy.h"
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrFragmentProcessor.h"
-#include "src/gpu/GrImageContextPriv.h"
-#include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/SkGr.h"
-#include "src/gpu/effects/GrBicubicEffect.h"
-#include "src/gpu/effects/GrTextureEffect.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/GrImageContextPriv.h"
+#include "src/gpu/ganesh/GrProxyProvider.h"
+#include "src/gpu/ganesh/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/SkGr.h"
+#include "src/gpu/ganesh/effects/GrBicubicEffect.h"
+#include "src/gpu/ganesh/effects/GrTextureEffect.h"
 #include "src/image/SkImage_Gpu.h"
 #endif
 
@@ -457,13 +457,14 @@ GrBackendTexture SkImage_Base::onGetBackendTexture(bool flushPendingGrContextIO,
 #endif // SK_SUPPORT_GPU
 
 #ifdef SK_GRAPHITE_ENABLED
-std::tuple<skgpu::TextureProxyView, SkColorType> SkImage_Base::asView(
-        skgpu::Recorder* recorder, skgpu::Mipmapped mipmapped, SkBudgeted budgeted) const {
+std::tuple<skgpu::graphite::TextureProxyView, SkColorType> SkImage_Base::asView(
+        skgpu::graphite::Recorder* recorder, skgpu::graphite::Mipmapped mipmapped,
+        SkBudgeted budgeted) const {
     if (!recorder) {
         return {};
     }
     if (this->dimensions().area() <= 1) {
-        mipmapped = skgpu::Mipmapped::kNo;
+        mipmapped = skgpu::graphite::Mipmapped::kNo;
     }
     return this->onAsView(recorder, mipmapped, budgeted);
 }

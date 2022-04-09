@@ -16,10 +16,10 @@
 #include "src/shaders/SkShaderBase.h"
 
 #ifdef SK_GRAPHITE_ENABLED
-#include "experimental/graphite/src/Texture.h"
-#include "experimental/graphite/src/TextureProxy.h"
-#include "experimental/graphite/src/UniformManager.h"
 #include "src/gpu/Blend.h"
+#include "src/gpu/graphite/Texture.h"
+#include "src/gpu/graphite/TextureProxy.h"
+#include "src/gpu/graphite/UniformManager.h"
 #endif
 
 constexpr SkPMColor4f kErrorColor = { 1, 0, 0, 1 };
@@ -540,31 +540,31 @@ void AddToKey(const SkKeyContext& keyContext,
 #ifdef SK_GRAPHITE_ENABLED
 SkUniquePaintParamsID CreateKey(const SkKeyContext& keyContext,
                                 SkPaintParamsKeyBuilder* builder,
-                                skgpu::ShaderCombo::ShaderType s,
+                                skgpu::graphite::ShaderCombo::ShaderType s,
                                 SkTileMode tm,
                                 SkBlendMode bm) {
     SkDEBUGCODE(builder->checkReset());
 
     switch (s) {
-        case skgpu::ShaderCombo::ShaderType::kNone:
+        case skgpu::graphite::ShaderCombo::ShaderType::kNone:
             DepthStencilOnlyBlock::AddToKey(keyContext, builder, nullptr);
             break;
-        case skgpu::ShaderCombo::ShaderType::kSolidColor:
+        case skgpu::graphite::ShaderCombo::ShaderType::kSolidColor:
             SolidColorShaderBlock::AddToKey(keyContext, builder, nullptr, kErrorColor);
             break;
-        case skgpu::ShaderCombo::ShaderType::kLinearGradient:
+        case skgpu::graphite::ShaderCombo::ShaderType::kLinearGradient:
             GradientShaderBlocks::AddToKey(keyContext, builder, nullptr,
                                            { SkShader::kLinear_GradientType, tm, 0 });
             break;
-        case skgpu::ShaderCombo::ShaderType::kRadialGradient:
+        case skgpu::graphite::ShaderCombo::ShaderType::kRadialGradient:
             GradientShaderBlocks::AddToKey(keyContext, builder, nullptr,
                                            { SkShader::kRadial_GradientType, tm, 0 });
             break;
-        case skgpu::ShaderCombo::ShaderType::kSweepGradient:
+        case skgpu::graphite::ShaderCombo::ShaderType::kSweepGradient:
             GradientShaderBlocks::AddToKey(keyContext, builder, nullptr,
                                            { SkShader::kSweep_GradientType, tm, 0 });
             break;
-        case skgpu::ShaderCombo::ShaderType::kConicalGradient:
+        case skgpu::graphite::ShaderCombo::ShaderType::kConicalGradient:
             GradientShaderBlocks::AddToKey(keyContext, builder, nullptr,
                                            { SkShader::kConical_GradientType, tm, 0 });
             break;

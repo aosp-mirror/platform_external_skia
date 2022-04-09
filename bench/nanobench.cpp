@@ -62,10 +62,10 @@
 #endif
 
 #ifdef SK_GRAPHITE_ENABLED
-#include "experimental/graphite/include/Context.h"
-#include "experimental/graphite/include/Recorder.h"
-#include "experimental/graphite/include/Recording.h"
-#include "experimental/graphite/include/SkStuff.h"
+#include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/Recorder.h"
+#include "include/gpu/graphite/Recording.h"
+#include "include/gpu/graphite/SkStuff.h"
 #include "tools/graphite/ContextFactory.h"
 #include "tools/graphite/GraphiteTestContext.h"
 #endif
@@ -91,9 +91,9 @@ SK_BLITTER_TRACE_INIT
 #endif
 
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrCaps.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/SkGr.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/SkGr.h"
 #include "tools/gpu/GrContextFactory.h"
 
 using sk_gpu_test::ContextInfo;
@@ -303,8 +303,8 @@ struct GraphiteTarget : public Target {
     std::unique_ptr<ContextFactory> factory;
 
     TestContext* testContext;
-    skgpu::Context* context;
-    std::unique_ptr<skgpu::Recorder> recorder;
+    skgpu::graphite::Context* context;
+    std::unique_ptr<skgpu::graphite::Recorder> recorder;
 
     ~GraphiteTarget() override {}
 
@@ -312,7 +312,7 @@ struct GraphiteTarget : public Target {
 
     void endTiming() override {
         if (context && recorder) {
-            std::unique_ptr<skgpu::Recording> recording = this->recorder->snap();
+            std::unique_ptr<skgpu::graphite::Recording> recording = this->recorder->snap();
             if (recording) {
                 this->testContext->submitRecordingAndWaitOnSync(this->context, recording.get());
             }
@@ -323,13 +323,13 @@ struct GraphiteTarget : public Target {
             // TODO: have a way to sync work with out submitting a Recording which is currently
             // required. Probably need to get to the point where the backend command buffers are
             // stored on the Context and not Recordings before this is feasible.
-            std::unique_ptr<skgpu::Recording> recording = this->recorder->snap();
+            std::unique_ptr<skgpu::graphite::Recording> recording = this->recorder->snap();
             if (recording) {
-                skgpu::InsertRecordingInfo info;
+                skgpu::graphite::InsertRecordingInfo info;
                 info.fRecording = recording.get();
                 this->context->insertRecording(info);
             }
-            this->context->submit(skgpu::SyncToCpu::kYes);
+            this->context->submit(skgpu::graphite::SyncToCpu::kYes);
         }
     }
 

@@ -1,8 +1,13 @@
+# All of our clang builds should use the hermetic toolchain
 build:clang --crosstool_top=//toolchain:clang_suite
-build:clang --compiler=clang
 
-# Use the default Bazel C++ toolchain to build the tools used during the build.
-build:clang --host_crosstool_top=@bazel_tools//tools/cpp:toolchain
+# We don't have a great way to test the host system in order to use the right
+# version of the toolchain. So we need to have the user specify what their host is.
+build:clang_linux --config=clang
+build:clang_linux --compiler=host_is_linux_amd64
+
+build:clang_mac --config=clang
+build:clang_mac --compiler=host_is_mac_M1
 
 # =============================================================================
 # Alias to build configurations below. This makes configuring things from
@@ -23,6 +28,8 @@ build --flag_alias=disable_effect_serialization=//bazel/common_config_settings:d
 build --flag_alias=enable_effect_serialization=no//bazel/common_config_settings:disable_effect_serialization
 build --flag_alias=enable_vma=//bazel/common_config_settings:use_vulkan_memory_allocator
 build --flag_alias=disable_vma=no//bazel/common_config_settings:use_vulkan_memory_allocator
+build --flag_alias=enable_skslc=//bazel/common_config_settings:enable_skslc
+build --flag_alias=disable_skslc=no//bazel/common_config_settings:enable_skslc
 
 # CanvasKit flags
 build --flag_alias=ck_enable_fonts=//modules/canvaskit:enable_fonts
@@ -65,8 +72,9 @@ build:remote --remote_executor=grpcs://remotebuildexecution.googleapis.com
 # correctness and repeatability of the build.
 build:remote --incompatible_strict_action_env=true
 
-# Set a higher timeout value, just in case.
-build:remote --remote_timeout=3600
+# No compile task should take more than 180 seconds. Really long running tasks
+# are probably a result of spinning up new workers.
+build:remote --remote_timeout=180
 
 # Enable authentication. This will pick up application default credentials by
 # default. You can use --google_credentials=some_file.json to use a service

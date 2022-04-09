@@ -263,10 +263,6 @@ Position DSLParser::position(Token t) {
     }
 }
 
-Position DSLParser::position(int line) {
-    return Position::Line(line);
-}
-
 void DSLParser::error(Token token, std::string msg) {
     this->error(this->position(token), msg);
 }
@@ -1343,7 +1339,8 @@ std::optional<DSLBlock> DSLParser::block() {
         switch (this->peek().fKind) {
             case Token::Kind::TK_RBRACE:
                 this->nextToken();
-                return DSLBlock(std::move(statements), CurrentSymbolTable());
+                return DSLBlock(std::move(statements), CurrentSymbolTable(),
+                        this->rangeFrom(start));
             case Token::Kind::TK_END_OF_FILE:
                 this->error(this->peek(), "expected '}', but found end of file");
                 return std::nullopt;
@@ -1406,8 +1403,6 @@ DSLExpression DSLParser::expression() {
     }
     SkASSERTF(result.position().valid(), "Expression %s has invalid position",
             result.description().c_str());
-    SkASSERTF(result.position().line() == -1, "Expression %s has non-range position (line %d)",
-            result.description().c_str(), result.position().line());
     SkASSERTF(result.position().startOffset() == this->position(start).startOffset(),
             "Expected %s to start at %d (first token: '%.*s'), but it has range %d-%d\n",
             result.description().c_str(), this->position(start).startOffset(),

@@ -7,9 +7,9 @@
 
 #include "tools/graphite/GraphiteTestContext.h"
 
-#include "experimental/graphite/include/Context.h"
-#include "experimental/graphite/include/GraphiteTypes.h"
-#include "experimental/graphite/include/Recording.h"
+#include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/GraphiteTypes.h"
+#include "include/gpu/graphite/Recording.h"
 #include "src/core/SkTraceEvent.h"
 #include "tools/gpu/FlushFinishTracker.h"
 
@@ -19,8 +19,8 @@ GraphiteTestContext::GraphiteTestContext() {}
 
 GraphiteTestContext::~GraphiteTestContext() {}
 
-void GraphiteTestContext::submitRecordingAndWaitOnSync(skgpu::Context* context,
-                                                       skgpu::Recording* recording) {
+void GraphiteTestContext::submitRecordingAndWaitOnSync(skgpu::graphite::Context* context,
+                                                       skgpu::graphite::Recording* recording) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     SkASSERT(context);
     SkASSERT(recording);
@@ -35,13 +35,13 @@ void GraphiteTestContext::submitRecordingAndWaitOnSync(skgpu::Context* context,
     // callback on the flush call. The finish callback will unref the tracker when called.
     fFinishTrackers[fCurrentFlushIdx]->ref();
 
-    skgpu::InsertRecordingInfo info;
+    skgpu::graphite::InsertRecordingInfo info;
     info.fRecording = recording;
     info.fFinishedContext = fFinishTrackers[fCurrentFlushIdx].get();
     info.fFinishedProc = sk_gpu_test::FlushFinishTracker::FlushFinishedResult;
     context->insertRecording(info);
 
-    context->submit(skgpu::SyncToCpu::kNo);
+    context->submit(skgpu::graphite::SyncToCpu::kNo);
 
     fCurrentFlushIdx = (fCurrentFlushIdx + 1) % SK_ARRAY_COUNT(fFinishTrackers);
 }

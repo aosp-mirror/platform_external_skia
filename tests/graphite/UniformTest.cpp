@@ -7,24 +7,25 @@
 
 #include "tests/Test.h"
 
-#include "experimental/graphite/include/Recorder.h"
-#include "experimental/graphite/src/ContextPriv.h"
-#include "experimental/graphite/src/ContextUtils.h"
-#include "experimental/graphite/src/GlobalCache.h"
-#include "experimental/graphite/src/PaintParams.h"
-#include "experimental/graphite/src/RecorderPriv.h"
-#include "experimental/graphite/src/ResourceProvider.h"
 #include "include/core/SkPaint.h"
 #include "include/effects/SkGradientShader.h"
+#include "include/gpu/graphite/Recorder.h"
 #include "include/private/SkUniquePaintParamsID.h"
 #include "src/core/SkKeyContext.h"
 #include "src/core/SkKeyHelpers.h"
 #include "src/core/SkPipelineData.h"
 #include "src/core/SkShaderCodeDictionary.h"
+#include "src/gpu/graphite/ContextPriv.h"
+#include "src/gpu/graphite/ContextUtils.h"
+#include "src/gpu/graphite/GlobalCache.h"
+#include "src/gpu/graphite/PaintParams.h"
+#include "src/gpu/graphite/RecorderPriv.h"
+#include "src/gpu/graphite/ResourceProvider.h"
 
 namespace {
+using namespace skgpu::graphite;
 
-std::tuple<SkPaint, int> create_paint(skgpu::ShaderCombo::ShaderType shaderType,
+std::tuple<SkPaint, int> create_paint(ShaderCombo::ShaderType shaderType,
                                       SkTileMode tm,
                                       SkBlendMode bm) {
     SkPoint pts[2] = {{-100, -100},
@@ -35,22 +36,22 @@ std::tuple<SkPaint, int> create_paint(skgpu::ShaderCombo::ShaderType shaderType,
     sk_sp<SkShader> s;
     int numTextures = 0;
     switch (shaderType) {
-        case skgpu::ShaderCombo::ShaderType::kNone:
+        case ShaderCombo::ShaderType::kNone:
             SkDEBUGFAIL("kNone cannot be represented as an SkPaint");
             break;
-        case skgpu::ShaderCombo::ShaderType::kSolidColor:
+        case ShaderCombo::ShaderType::kSolidColor:
             break;
-        case skgpu::ShaderCombo::ShaderType::kLinearGradient:
+        case ShaderCombo::ShaderType::kLinearGradient:
             s = SkGradientShader::MakeLinear(pts, colors, offsets, 2, tm);
             break;
-        case skgpu::ShaderCombo::ShaderType::kRadialGradient:
+        case ShaderCombo::ShaderType::kRadialGradient:
             s = SkGradientShader::MakeRadial({0, 0}, 100, colors, offsets, 2, tm);
             break;
-        case skgpu::ShaderCombo::ShaderType::kSweepGradient:
+        case ShaderCombo::ShaderType::kSweepGradient:
             s = SkGradientShader::MakeSweep(0, 0, colors, offsets, 2, tm,
                                             0, 359, 0, nullptr);
             break;
-        case skgpu::ShaderCombo::ShaderType::kConicalGradient:
+        case ShaderCombo::ShaderType::kConicalGradient:
             s = SkGradientShader::MakeTwoPointConical({100, 100}, 100,
                                                       {-100, -100}, 100,
                                                       colors, offsets, 2, tm);
@@ -66,7 +67,7 @@ std::tuple<SkPaint, int> create_paint(skgpu::ShaderCombo::ShaderType shaderType,
 } // anonymous namespace
 
 DEF_GRAPHITE_TEST_FOR_CONTEXTS(UniformTest, reporter, context) {
-    using namespace skgpu;
+    using namespace skgpu::graphite;
 
     auto recorder = context->makeRecorder();
     SkKeyContext keyContext(recorder.get());
