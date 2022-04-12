@@ -260,21 +260,26 @@ public:
     // Default ctor is only needed for the hash table.
     SkGlyphDigest() = default;
     SkGlyphDigest(size_t index, const SkGlyph& glyph);
-    int index()          const {return fIndex;        }
-    bool isEmpty()       const {return fIsEmpty;      }
-    bool isColor()       const {return fIsColor;      }
-    bool canDrawAsMask() const {return fCanDrawAsMask;}
-    bool canDrawAsSDFT() const {return fCanDrawAsSDFT;}
-    uint16_t maxDimension()  const {return fMaxDimension; }
+    int index()          const { return fIndex;         }
+    bool isEmpty()       const { return fIsEmpty;       }
+    bool isColor()       const { return fIsColor;       }
+    bool canDrawAsMask() const { return fCanDrawAsMask; }
+    bool canDrawAsSDFT() const { return fCanDrawAsSDFT; }
+    uint16_t maxDimension()  const {
+        return std::max(fWidth, fHeight);
+    }
 
 private:
     static_assert(SkPackedGlyphID::kEndData == 20);
-    uint64_t fIndex         : SkPackedGlyphID::kEndData;
-    uint64_t fIsEmpty       : 1;
-    uint64_t fIsColor       : 1;
-    uint64_t fCanDrawAsMask : 1;
-    uint64_t fCanDrawAsSDFT : 1;
-    uint64_t fMaxDimension  : 16;
+    struct {
+        uint32_t fIndex         : SkPackedGlyphID::kEndData;
+        uint32_t fIsEmpty       : 1;
+        uint32_t fIsColor       : 1;
+        uint32_t fCanDrawAsMask : 1;
+        uint32_t fCanDrawAsSDFT : 1;
+    };
+    int16_t fLeft, fTop;
+    uint16_t fWidth, fHeight;
 };
 
 class SkGlyph {
@@ -476,8 +481,9 @@ private:
 
     SkMask::Format fMaskFormat{SkMask::kBW_Format};
 
-    // Used by the DirectWrite scaler to track state.
-    int8_t    fForceBW = 0;
+    // Used by the SkScalerContext to pass state from generateMetrics to generateImage.
+    // Usually specifies which glyph representation was used to generate the metrics.
+    uint32_t  fScalerContextBits = 0;
 
     // An SkGlyph can be created with just a packedID, but generally speaking some glyph factory
     // needs to actually fill out the glyph before it can be used as part of that system.
