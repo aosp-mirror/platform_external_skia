@@ -7,6 +7,10 @@
 #define NOMINMAX
 #endif
 
+#ifndef SKSL_ENABLE_TRACING
+#define SKSL_ENABLE_TRACING
+#endif
+
 #ifndef SK_CODEC_DECODES_JPEG
 #define SK_CODEC_DECODES_JPEG
 #endif
