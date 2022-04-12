@@ -6,12 +6,12 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling different
   # dependencies without interference from each other.
-  'sk_tool_revision': 'git_revision:c0cf9855d48eb501cf4a9e2dc44ca14238a0ae81',
+  'sk_tool_revision': 'git_revision:f1ae235a9cc8b7da0d12bb748fd6f0e276d9cded',
 }
 
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/src/buildtools.git@b138e6ce86ae843c42a1a08f37903207bebcca75",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@3cea7fcc01ce21edb80808b194af7ad40b626fd0",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@1b94c585682b667c266c1ef4dcb3b2e34be788e4",
   "third_party/externals/brotli"          : "https://skia.googlesource.com/external/github.com/google/brotli.git@e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, tint for SPIRV compilation, and abseil for string formatting.
@@ -49,7 +49,7 @@ deps = {
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@c876c8f87101c5a75f6014b0f832499afeb65b73",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@4938e2e781e30ae233c6f122293e90e6a371e7d1",
+    "url": "https://chromium.googlesource.com/chromium/src.git@4064ec2bcf25f720be9c9838ac453c3a18018ac8",
     "condition": "checkout_chromium",
   },
 

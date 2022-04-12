@@ -17,10 +17,10 @@
 #include "include/private/SkColorData.h"
 
 #ifdef SK_GRAPHITE_ENABLED
-#include "experimental/graphite/src/TextureProxy.h"
-#include "experimental/graphite/src/UniformManager.h"
-#include "experimental/graphite/src/geom/VectorTypes.h"
 #include "src/gpu/Blend.h"
+#include "src/gpu/graphite/TextureProxy.h"
+#include "src/gpu/graphite/UniformManager.h"
+#include "src/gpu/graphite/geom/VectorTypes.h"
 #endif
 
 class SkArenaAlloc;
@@ -150,13 +150,6 @@ public:
 
     const SkTextureDataBlock& textureDataBlock() { return fTextureDataBlock; }
 
-#ifdef SK_DEBUG
-    void setExpectedUniforms(SkSpan<const SkUniform> expectedUniforms) {
-        fUniformManager.setExpectedUniforms(expectedUniforms);
-    }
-    void doneWithExpectedUniforms() { fUniformManager.doneWithExpectedUniforms(); }
-#endif // SK_DEBUG
-
     void write(const SkColor4f* colors, int numColors) { fUniformManager.write(colors, numColors); }
     void write(const SkPMColor4f& premulColor) { fUniformManager.write(&premulColor, 1); }
     void write(const SkRect& rect) { fUniformManager.write(rect); }
@@ -171,10 +164,42 @@ public:
     SkUniformDataBlock peekUniformData() const { return fUniformManager.peekData(); }
 
 private:
+#ifdef SK_DEBUG
+    friend class UniformExpectationsValidator;
+
+    void setExpectedUniforms(SkSpan<const SkUniform> expectedUniforms) {
+        fUniformManager.setExpectedUniforms(expectedUniforms);
+    }
+    void doneWithExpectedUniforms() { fUniformManager.doneWithExpectedUniforms(); }
+#endif // SK_DEBUG
+
     SkTextureDataBlock              fTextureDataBlock;
     BlendInfo                       fBlendInfo;
     skgpu::graphite::UniformManager fUniformManager;
 #endif // SK_GRAPHITE_ENABLED
 };
+
+#if defined(SK_DEBUG) && defined(SK_GRAPHITE_ENABLED)
+class UniformExpectationsValidator {
+public:
+    UniformExpectationsValidator(SkPipelineDataGatherer *gatherer,
+                                 SkSpan<const SkUniform> expectedUniforms)
+            : fGatherer(gatherer) {
+        fGatherer->setExpectedUniforms(expectedUniforms);
+    }
+
+    ~UniformExpectationsValidator() {
+        fGatherer->doneWithExpectedUniforms();
+    }
+
+private:
+    SkPipelineDataGatherer *fGatherer;
+
+    UniformExpectationsValidator(UniformExpectationsValidator &&) = delete;
+    UniformExpectationsValidator(const UniformExpectationsValidator &) = delete;
+    UniformExpectationsValidator &operator=(UniformExpectationsValidator &&) = delete;
+    UniformExpectationsValidator &operator=(const UniformExpectationsValidator &) = delete;
+};
+#endif // SK_DEBUG && SK_GRAPHITE_ENABLED
 
 #endif // SkPipelineData_DEFINED
