@@ -3,6 +3,10 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
+#ifndef SKSL_ENABLE_TRACING
+#define SKSL_ENABLE_TRACING
+#endif
+
 #ifndef SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
 #define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 1
 #endif

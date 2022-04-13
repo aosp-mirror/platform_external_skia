@@ -200,7 +200,7 @@ public:
             return {};
         }
 
-        const SkUniformDataBlock *udb = fUniformDataCache->lookup(uIndex);
+        const SkUniformDataBlock* udb = fUniformDataCache->lookup(uIndex);
         SkASSERT(udb);
 
         if (fBindings.find(uIndex.asUInt()) == fBindings.end()) {
@@ -536,7 +536,7 @@ bool DrawPass::addCommands(ResourceProvider* resourceProvider,
             case CommandType::kSetScissor: {
                 auto& d = c.fSetScissor;
                 buffer->setScissor(d.fScissor.fLeft, d.fScissor.fTop,
-                                   d.fScissor.fRight, d.fScissor.fBottom);
+                                   d.fScissor.width(), d.fScissor.height());
                 break;
             }
         }
