@@ -264,12 +264,6 @@ private:
                            OutputStream& out);
 
     /**
-     * Writes a matrix with the diagonal entries all equal to the provided expression, and all other
-     * entries equal to zero.
-     */
-    void writeUniformScaleMatrix(SpvId id, SpvId diagonal, const Type& type, OutputStream& out);
-
-    /**
      * Writes a potentially-different-sized copy of a matrix. Entries which do not exist in the
      * source matrix are filled with zero; entries which do not exist in the destination matrix are
      * ignored.
@@ -447,10 +441,16 @@ private:
     SpvId writeOpConstant(const Type& type, int32_t valueBits);
     SpvId writeOpConstantComposite(const Type& type, const SkTArray<SpvId>& values);
     SpvId writeOpCompositeConstruct(const Type& type, const SkTArray<SpvId>&, OutputStream& out);
+    SpvId writeOpCompositeExtract(const Type& type, SpvId base, int component, OutputStream& out);
+    SpvId writeOpCompositeExtract(const Type& type, SpvId base, int componentA, int componentB,
+                                  OutputStream& out);
 
     // Converts the provided SpvId(s) into an array of scalar OpConstants, if it can be done.
     bool toConstants(SpvId value, SkTArray<SpvId>* constants);
     bool toConstants(SkSpan<const SpvId> values, SkTArray<SpvId>* constants);
+
+    // Extracts the requested component SpvId from a composite instruction, if it can be done.
+    SpvId toComponent(const Instruction& instr, int component);
 
     void pruneReachableOps(size_t numReachableOps);
 
