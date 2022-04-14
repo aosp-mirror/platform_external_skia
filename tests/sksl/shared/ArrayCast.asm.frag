@@ -33,12 +33,6 @@ OpDecorate %39 RelaxedPrecision
 OpDecorate %_arr_v3int_int_3 ArrayStride 16
 OpDecorate %55 RelaxedPrecision
 OpDecorate %_arr_mat2v2float_int_2 ArrayStride 32
-OpDecorate %61 RelaxedPrecision
-OpDecorate %62 RelaxedPrecision
-OpDecorate %63 RelaxedPrecision
-OpDecorate %68 RelaxedPrecision
-OpDecorate %69 RelaxedPrecision
-OpDecorate %70 RelaxedPrecision
 OpDecorate %74 RelaxedPrecision
 OpDecorate %75 RelaxedPrecision
 OpDecorate %79 RelaxedPrecision
@@ -59,8 +53,8 @@ OpDecorate %155 RelaxedPrecision
 %10 = OpVariable %_ptr_Uniform__UniformBuffer Uniform
 %void = OpTypeVoid
 %15 = OpTypeFunction %void
-%v2float = OpTypeVector %float 2
 %float_0 = OpConstant %float 0
+%v2float = OpTypeVector %float 2
 %19 = OpConstantComposite %v2float %float_0 %float_0
 %_ptr_Function_v2float = OpTypePointer Function %v2float
 %23 = OpTypeFunction %v4float %_ptr_Function_v2float
@@ -88,12 +82,14 @@ OpDecorate %155 RelaxedPrecision
 %_ptr_Function__arr_mat2v2float_int_2 = OpTypePointer Function %_arr_mat2v2float_int_2
 %61 = OpConstantComposite %v2float %float_1 %float_2
 %62 = OpConstantComposite %v2float %float_3 %float_4
+%63 = OpConstantComposite %mat2v2float %61 %62
 %float_5 = OpConstant %float 5
 %float_6 = OpConstant %float 6
 %float_7 = OpConstant %float 7
 %float_8 = OpConstant %float 8
 %68 = OpConstantComposite %v2float %float_5 %float_6
 %69 = OpConstantComposite %v2float %float_7 %float_8
+%70 = OpConstantComposite %mat2v2float %68 %69
 %_ptr_Function__arr_mat2v2float_int_2_0 = OpTypePointer Function %_arr_mat2v2float_int_2
 %false = OpConstantFalse %bool
 %v3bool = OpTypeVector %bool 3
@@ -135,8 +131,6 @@ OpStore %s3 %54
 OpStore %i3 %55
 %56 = OpLoad %_arr_v3int_int_3 %i3
 OpStore %s3 %56
-%63 = OpCompositeConstruct %mat2v2float %61 %62
-%70 = OpCompositeConstruct %mat2v2float %68 %69
 %71 = OpCompositeConstruct %_arr_mat2v2float_int_2 %63 %70
 OpStore %h2x2 %71
 %74 = OpLoad %_arr_mat2v2float_int_2 %h2x2

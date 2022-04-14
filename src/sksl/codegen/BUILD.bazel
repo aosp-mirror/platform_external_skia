@@ -1,3 +1,5 @@
+licenses(["notice"])
+
 load("//bazel:macros.bzl", "enforce_iwyu_on_package", "generated_cc_atom")
 
 enforce_iwyu_on_package()
@@ -233,8 +235,8 @@ generated_cc_atom(
         "//include/private:SkSLLayout_hdr",
         "//include/private:SkSLModifiers_hdr",
         "//include/private:SkSLProgramKind_hdr",
+        "//include/private:SkTArray_hdr",
         "//include/private:SkTHash_hdr",
-        "//src/core:SkOpts_hdr",
         "//src/sksl:SkSLMemoryLayout_hdr",
         "//src/sksl:SkSLStringStream_hdr",
         "//src/sksl:spirv_hdr",
@@ -255,6 +257,7 @@ generated_cc_atom(
         ":SkSLSPIRVCodeGenerator_hdr",
         "//include/core:SkSpan_hdr",
         "//include/core:SkTypes_hdr",
+        "//include/private:SkOpts_spi_hdr",
         "//include/private:SkSLProgramElement_hdr",
         "//include/private:SkSLStatement_hdr",
         "//include/private:SkSLSymbol_hdr",
