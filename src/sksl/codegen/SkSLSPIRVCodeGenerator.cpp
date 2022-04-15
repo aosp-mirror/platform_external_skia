@@ -117,9 +117,7 @@ struct SPIRVCodeGenerator::Word {
     }
 
     static Word RelaxedResult() {
-        Kind kind = ThreadContext::Settings().fForceHighPrecision ? kDefaultPrecisionResult
-                                                                  : kRelaxedPrecisionResult;
-        return Word{(int32_t)NA, kind};
+        return Word{(int32_t)NA, kRelaxedPrecisionResult};
     }
 
     static Word UniqueResult() {
@@ -549,11 +547,12 @@ SpvId SPIRVCodeGenerator::writeInstruction(SpvOp_ opCode,
     }
 
     SpvId result = NA;
+    Precision precision = Precision::kDefault;
 
     switch (key.fResultKind) {
         case Word::Kind::kUniqueResult:
             // The instruction returns a SpvId, but we do not want deduplication.
-            result = fIdCount++;
+            result = this->nextId(Precision::kDefault);
             fSpvIdCache.set(result, key);
             break;
 
@@ -562,21 +561,19 @@ SpvId SPIRVCodeGenerator::writeInstruction(SpvOp_ opCode,
             fOpCache.set(key, result);
             break;
 
-        case Word::Kind::kDefaultPrecisionResult:
         case Word::Kind::kRelaxedPrecisionResult:
-            // Consume a new SpvId and cache the instruction.
-            result = fIdCount++;
+            precision = Precision::kRelaxed;
+            [[fallthrough]];
+
+        case Word::Kind::kDefaultPrecisionResult:
+            // Consume a new SpvId.
+            result = this->nextId(precision);
             fOpCache.set(key, result);
             fSpvIdCache.set(result, key);
 
             // Globally-reachable ops are not subject to the whims of flow control.
             if (!is_globally_reachable_op(opCode)) {
                 fReachableOps.push_back(result);
-            }
-            // If the result is relaxed-precision, add the requisite decoration.
-            if (key.fResultKind == Word::Kind::kRelaxedPrecisionResult) {
-                this->writeInstruction(SpvOpDecorate, result, SpvDecorationRelaxedPrecision,
-                                       fDecorationBuffer);
             }
             break;
 
@@ -927,30 +924,6 @@ SpvId SPIRVCodeGenerator::writeStruct(const Type& type, const MemoryLayout& memo
     }
 
     return resultId;
-}
-
-const Type& SPIRVCodeGenerator::getActualType(const Type& type) {
-    if (type.isFloat()) {
-        return *fContext.fTypes.fFloat;
-    }
-    if (type.isSigned()) {
-        return *fContext.fTypes.fInt;
-    }
-    if (type.isUnsigned()) {
-        return *fContext.fTypes.fUInt;
-    }
-    if (type.isMatrix() || type.isVector()) {
-        if (type.componentType().matches(*fContext.fTypes.fHalf)) {
-            return fContext.fTypes.fFloat->toCompound(fContext, type.columns(), type.rows());
-        }
-        if (type.componentType().matches(*fContext.fTypes.fShort)) {
-            return fContext.fTypes.fInt->toCompound(fContext, type.columns(), type.rows());
-        }
-        if (type.componentType().matches(*fContext.fTypes.fUShort)) {
-            return fContext.fTypes.fUInt->toCompound(fContext, type.columns(), type.rows());
-        }
-    }
-    return type;
 }
 
 SpvId SPIRVCodeGenerator::getType(const Type& type) {
@@ -1955,7 +1928,7 @@ SpvId SPIRVCodeGenerator::writeCompositeConstructor(const AnyConstructor& c, Out
 SpvId SPIRVCodeGenerator::writeConstructorScalarCast(const ConstructorScalarCast& c,
                                                      OutputStream& out) {
     const Type& type = c.type();
-    if (this->getActualType(type).matches(this->getActualType(c.argument()->type()))) {
+    if (type.componentType().numberKind() == c.argument()->type().componentType().numberKind()) {
         return this->writeExpression(*c.argument(), out);
     }
 
@@ -1972,7 +1945,7 @@ SpvId SPIRVCodeGenerator::writeConstructorCompoundCast(const ConstructorCompound
 
     // Write the composite that we are casting. If the actual type matches, we are done.
     SpvId compositeId = this->writeExpression(*c.argument(), out);
-    if (this->getActualType(ctorType).matches(this->getActualType(argType))) {
+    if (ctorType.componentType().numberKind() == argType.componentType().numberKind()) {
         return compositeId;
     }
 
@@ -2582,6 +2555,16 @@ SpvId SPIRVCodeGenerator::writeScalarToMatrixSplat(const Type& matrixType,
     return this->writeOpCompositeConstruct(matrixType, matArguments, out);
 }
 
+static bool types_match(const Type& a, const Type& b) {
+    if (a.matches(b)) {
+        return true;
+    }
+    return (a.typeKind() == b.typeKind()) &&
+           (a.isScalar() || a.isVector() || a.isMatrix()) &&
+           (a.columns() == b.columns() && a.rows() == b.rows()) &&
+           a.componentType().numberKind() == b.componentType().numberKind();
+}
+
 SpvId SPIRVCodeGenerator::writeBinaryExpression(const Type& leftType, SpvId lhs, Operator op,
                                                 const Type& rightType, SpvId rhs,
                                                 const Type& resultType, OutputStream& out) {
@@ -2591,9 +2574,11 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const Type& leftType, SpvId lhs,
     }
     // overall type we are operating on: float2, int, uint4...
     const Type* operandType;
-    // IR allows mismatched types in expressions (e.g. float2 * float), but they need special
-    // handling in SPIR-V
-    if (!this->getActualType(leftType).matches(this->getActualType(rightType))) {
+    if (types_match(leftType, rightType)) {
+        operandType = &leftType;
+    } else {
+        // IR allows mismatched types in expressions (e.g. float2 * float), but they need special
+        // handling in SPIR-V
         if (leftType.isVector() && rightType.isNumber()) {
             if (resultType.componentType().isFloat()) {
                 switch (op.kind()) {
@@ -2686,10 +2671,8 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const Type& leftType, SpvId lhs,
             fContext.fErrors->error(leftType.fPosition, "unsupported mixed-type expression");
             return NA;
         }
-    } else {
-        operandType = &this->getActualType(leftType);
-        SkASSERT(operandType->matches(this->getActualType(rightType)));
     }
+
     switch (op.kind()) {
         case Operator::Kind::EQEQ: {
             if (operandType->isMatrix()) {

@@ -161,8 +161,6 @@ private:
 
     SpvId nextId(Precision precision);
 
-    const Type& getActualType(const Type& type);
-
     SpvId getType(const Type& type);
 
     SpvId getType(const Type& type, const MemoryLayout& layout);
@@ -332,9 +330,6 @@ private:
     SpvId writeBinaryOperation(const Type& resultType, const Type& operandType, SpvId lhs,
                                SpvId rhs, SpvOp_ ifFloat, SpvOp_ ifInt, SpvOp_ ifUInt,
                                SpvOp_ ifBool, OutputStream& out);
-
-    SpvId writeBinaryOperation(const BinaryExpression& expr, SpvOp_ ifFloat, SpvOp_ ifInt,
-                               SpvOp_ ifUInt, OutputStream& out);
 
     SpvId writeReciprocal(const Type& type, SpvId value, OutputStream& out);
 
