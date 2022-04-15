@@ -102,7 +102,7 @@ struct SPIRVCodeGenerator::Word {
         kNumber,
         kDefaultPrecisionResult,
         kRelaxedPrecisionResult,
-        kUncachedResult,
+        kUniqueResult,
     };
 
     Word(SpvId id) : fValue(id), fKind(Kind::kSpvId) {}
@@ -122,8 +122,8 @@ struct SPIRVCodeGenerator::Word {
         return Word{(int32_t)NA, kind};
     }
 
-    static Word UncachedResult() {
-        return Word{(int32_t)NA, kUncachedResult};
+    static Word UniqueResult() {
+        return Word{(int32_t)NA, kUniqueResult};
     }
 
     static Word Result() {
@@ -551,9 +551,10 @@ SpvId SPIRVCodeGenerator::writeInstruction(SpvOp_ opCode,
     SpvId result = NA;
 
     switch (key.fResultKind) {
-        case Word::Kind::kUncachedResult:
-            // The instruction returns a SpvId, but we do not want caching or deduplication.
+        case Word::Kind::kUniqueResult:
+            // The instruction returns a SpvId, but we do not want deduplication.
             result = fIdCount++;
+            fSpvIdCache.set(result, key);
             break;
 
         case Word::Kind::kNone:
@@ -708,12 +709,95 @@ SpvId SPIRVCodeGenerator::writeOpCompositeConstruct(const Type& type,
     return this->writeInstruction(SpvOpCompositeConstruct, words, out);
 }
 
-SpvId SPIRVCodeGenerator::toComponent(const SPIRVCodeGenerator::Instruction& instr, int component) {
-    if (instr.fOp == SpvOpConstantComposite) {
-        // Add 2 to the component index to skip past ResultType and ResultID.
-        return instr.fWords[2 + component];
+SPIRVCodeGenerator::Instruction* SPIRVCodeGenerator::resultTypeForInstruction(
+        const Instruction& instr) {
+    // This list should contain every op that we cache that has a result and result-type.
+    // (If one is missing, we will not find some optimization opportunities.)
+    // Generally, the result type of an op is in the 0th word, but I'm not sure if this is
+    // universally true, so it's configurable on a per-op basis.
+    int resultTypeWord;
+    switch (instr.fOp) {
+        case SpvOpConstant:
+        case SpvOpConstantTrue:
+        case SpvOpConstantFalse:
+        case SpvOpConstantComposite:
+        case SpvOpCompositeConstruct:
+        case SpvOpCompositeExtract:
+            resultTypeWord = 0;
+            break;
+
+        default:
+            return nullptr;
     }
-    // TODO(johnstiles): add support for SpvOpCompositeConstruct
+
+    Instruction* typeInstr = fSpvIdCache.find(instr.fWords[resultTypeWord]);
+    SkASSERT(typeInstr);
+    return typeInstr;
+}
+
+int SPIRVCodeGenerator::numComponentsForVecInstruction(const Instruction& instr) {
+    // If an instruction is in the op cache, its type should be as well.
+    Instruction* typeInstr = this->resultTypeForInstruction(instr);
+    SkASSERT(typeInstr);
+    SkASSERT(typeInstr->fOp == SpvOpTypeVector || typeInstr->fOp == SpvOpTypeFloat ||
+             typeInstr->fOp == SpvOpTypeInt || typeInstr->fOp == SpvOpTypeBool);
+
+    // For vectors, extract their column count. Scalars have one component by definition.
+    //   SpvOpTypeVector ResultID ComponentType NumComponents
+    return (typeInstr->fOp == SpvOpTypeVector) ? typeInstr->fWords[2]
+                                               : 1;
+}
+
+SpvId SPIRVCodeGenerator::toComponent(SpvId id, int component) {
+    Instruction* instr = fSpvIdCache.find(id);
+    if (!instr) {
+        return NA;
+    }
+    if (instr->fOp == SpvOpConstantComposite) {
+        // SpvOpConstantComposite ResultType ResultID [components...]
+        // Add 2 to the component index to skip past ResultType and ResultID.
+        return instr->fWords[2 + component];
+    }
+    if (instr->fOp == SpvOpCompositeConstruct) {
+        // SpvOpCompositeConstruct ResultType ResultID [components...]
+        // Vectors have special rules; check to see if we are composing a vector.
+        Instruction* composedType = fSpvIdCache.find(instr->fWords[0]);
+        SkASSERT(composedType);
+
+        // When composing a non-vector, each instruction word maps 1:1 to the component index.
+        // We can just extract out the associated component directly.
+        if (composedType->fOp != SpvOpTypeVector) {
+            return instr->fWords[2 + component];
+        }
+
+        // When composing a vector, components can be either scalars or vectors.
+        // This means we need to check the op type on each component. (+2 to skip ResultType/Result)
+        for (int index = 2; index < instr->fWords.count(); ++index) {
+            int32_t currentWord = instr->fWords[index];
+
+            // Retrieve the sub-instruction pointed to by OpCompositeConstruct.
+            Instruction* subinstr = fSpvIdCache.find(currentWord);
+            if (!subinstr) {
+                return NA;
+            }
+            // If this subinstruction contains the component we're looking for...
+            int numComponents = this->numComponentsForVecInstruction(*subinstr);
+            if (component < numComponents) {
+                if (numComponents == 1) {
+                    // ... it's a scalar. Return it.
+                    SkASSERT(component == 0);
+                    return currentWord;
+                } else {
+                    // ... it's a vector. Recurse into it.
+                    return this->toComponent(currentWord, component);
+                }
+            }
+            // This sub-instruction doesn't contain our component. Keep walking forward.
+            component -= numComponents;
+        }
+        SkDEBUGFAIL("component index goes past the end of this composite value");
+        return NA;
+    }
     return NA;
 }
 
@@ -722,11 +806,9 @@ SpvId SPIRVCodeGenerator::writeOpCompositeExtract(const Type& type,
                                                   int component,
                                                   OutputStream& out) {
     // If the base op is a composite, we can extract from it directly.
-    if (Instruction* instr = fSpvIdCache.find(base)) {
-        SpvId result = this->toComponent(*instr, component);
-        if (result != NA) {
-            return result;
-        }
+    SpvId result = this->toComponent(base, component);
+    if (result != NA) {
+        return result;
     }
     return this->writeInstruction(
             SpvOpCompositeExtract,
@@ -740,11 +822,9 @@ SpvId SPIRVCodeGenerator::writeOpCompositeExtract(const Type& type,
                                                   int componentB,
                                                   OutputStream& out) {
     // If the base op is a composite, we can extract from it directly.
-    if (Instruction* instr = fSpvIdCache.find(base)) {
-        SpvId result = this->toComponent(*instr, componentA);
-        if (result != NA) {
-            return this->writeOpCompositeExtract(type, result, componentB, out);
-        }
+    SpvId result = this->toComponent(base, componentA);
+    if (result != NA) {
+        return this->writeOpCompositeExtract(type, result, componentB, out);
     }
     return this->writeInstruction(SpvOpCompositeExtract,
                                   {this->getType(type),
@@ -787,7 +867,7 @@ SpvId SPIRVCodeGenerator::writeStruct(const Type& type, const MemoryLayout& memo
     // Write all of the field types first, so we don't inadvertently write them while we're in the
     // middle of writing the struct instruction.
     Words words;
-    words.push_back(Word::UncachedResult());
+    words.push_back(Word::UniqueResult());
     for (const auto& f : type.fields()) {
         words.push_back(this->getType(*f.fType, memoryLayout));
     }
@@ -2022,12 +2102,13 @@ std::vector<SpvId> SPIRVCodeGenerator::getAccessChain(const Expression& expr, Ou
 class PointerLValue : public SPIRVCodeGenerator::LValue {
 public:
     PointerLValue(SPIRVCodeGenerator& gen, SpvId pointer, bool isMemoryObject, SpvId type,
-                  SPIRVCodeGenerator::Precision precision)
+                  SPIRVCodeGenerator::Precision precision, SpvStorageClass_ storageClass)
     : fGen(gen)
     , fPointer(pointer)
     , fIsMemoryObject(isMemoryObject)
     , fType(type)
-    , fPrecision(precision) {}
+    , fPrecision(precision)
+    , fStorageClass(storageClass) {}
 
     SpvId getPointer() override {
         return fPointer;
@@ -2053,17 +2134,19 @@ private:
     const bool fIsMemoryObject;
     const SpvId fType;
     const SPIRVCodeGenerator::Precision fPrecision;
+    [[maybe_unused]] const SpvStorageClass_ fStorageClass;
 };
 
 class SwizzleLValue : public SPIRVCodeGenerator::LValue {
 public:
     SwizzleLValue(SPIRVCodeGenerator& gen, SpvId vecPointer, const ComponentArray& components,
-                  const Type& baseType, const Type& swizzleType)
+                  const Type& baseType, const Type& swizzleType, SpvStorageClass_ storageClass)
     : fGen(gen)
     , fVecPointer(vecPointer)
     , fComponents(components)
     , fBaseType(&baseType)
-    , fSwizzleType(&swizzleType) {}
+    , fSwizzleType(&swizzleType)
+    , fStorageClass(storageClass) {}
 
     bool applySwizzle(const ComponentArray& components, const Type& newType) override {
         ComponentArray updatedSwizzle;
@@ -2138,6 +2221,7 @@ private:
     ComponentArray fComponents;
     const Type* fBaseType;
     const Type* fSwizzleType;
+    [[maybe_unused]] const SpvStorageClass_ fStorageClass;
 };
 
 int SPIRVCodeGenerator::findUniformFieldIndex(const Variable& var) const {
@@ -2161,27 +2245,29 @@ std::unique_ptr<SPIRVCodeGenerator::LValue> SPIRVCodeGenerator::getLValue(const 
                                        uniformIdxId, out);
                 return std::make_unique<PointerLValue>(*this, memberId,
                                                        /*isMemoryObjectPointer=*/true,
-                                                       this->getType(type), precision);
+                                                       this->getType(type), precision,
+                                                       SpvStorageClassUniform);
             }
             SpvId typeId = this->getType(type, this->memoryLayoutForVariable(var));
             SpvId* entry = fVariableMap.find(&var);
             SkASSERTF(entry, "%s", expr.description().c_str());
             return std::make_unique<PointerLValue>(*this, *entry,
                                                    /*isMemoryObjectPointer=*/true,
-                                                   typeId, precision);
+                                                   typeId, precision, get_storage_class(expr));
         }
         case Expression::Kind::kIndex: // fall through
         case Expression::Kind::kFieldAccess: {
             std::vector<SpvId> chain = this->getAccessChain(expr, out);
             SpvId member = this->nextId(nullptr);
+            SpvStorageClass_ storageClass = get_storage_class(expr);
             this->writeOpCode(SpvOpAccessChain, (SpvId) (3 + chain.size()), out);
-            this->writeWord(this->getPointerType(type, get_storage_class(expr)), out);
+            this->writeWord(this->getPointerType(type, storageClass), out);
             this->writeWord(member, out);
             for (SpvId idx : chain) {
                 this->writeWord(idx, out);
             }
             return std::make_unique<PointerLValue>(*this, member, /*isMemoryObjectPointer=*/false,
-                                                   this->getType(type), precision);
+                                                   this->getType(type), precision, storageClass);
         }
         case Expression::Kind::kSwizzle: {
             const Swizzle& swizzle = expr.as<Swizzle>();
@@ -2194,19 +2280,19 @@ std::unique_ptr<SPIRVCodeGenerator::LValue> SPIRVCodeGenerator::getLValue(const 
                 fContext.fErrors->error(swizzle.fPosition,
                         "unable to retrieve lvalue from swizzle");
             }
+            SpvStorageClass_ storageClass = get_storage_class(*swizzle.base());
             if (swizzle.components().size() == 1) {
                 SpvId member = this->nextId(nullptr);
-                SpvId typeId = this->getPointerType(type, get_storage_class(*swizzle.base()));
+                SpvId typeId = this->getPointerType(type, storageClass);
                 SpvId indexId = this->writeLiteral(swizzle.components()[0], *fContext.fTypes.fInt);
                 this->writeInstruction(SpvOpAccessChain, typeId, member, base, indexId, out);
-                return std::make_unique<PointerLValue>(*this,
-                                                       member,
+                return std::make_unique<PointerLValue>(*this, member,
                                                        /*isMemoryObjectPointer=*/false,
                                                        this->getType(type),
-                                                       precision);
+                                                       precision, storageClass);
             } else {
                 return std::make_unique<SwizzleLValue>(*this, base, swizzle.components(),
-                                                       swizzle.base()->type(), type);
+                                                       swizzle.base()->type(), type, storageClass);
             }
         }
         default: {
@@ -2220,7 +2306,8 @@ std::unique_ptr<SPIRVCodeGenerator::LValue> SPIRVCodeGenerator::getLValue(const 
                                    fVariableBuffer);
             this->writeInstruction(SpvOpStore, result, this->writeExpression(expr, out), out);
             return std::make_unique<PointerLValue>(*this, result, /*isMemoryObjectPointer=*/true,
-                                                   this->getType(type), precision);
+                                                   this->getType(type), precision,
+                                                   SpvStorageClassFunction);
         }
     }
 }
