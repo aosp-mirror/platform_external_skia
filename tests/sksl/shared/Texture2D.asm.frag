@@ -30,8 +30,8 @@ OpDecorate %37 RelaxedPrecision
 %bool = OpTypeBool
 %_ptr_Input_bool = OpTypePointer Input %bool
 %sk_Clockwise = OpVariable %_ptr_Input_bool Input
-%13 = OpTypeImage %float 2D 0 0 0 1 Unknown
-%12 = OpTypeSampledImage %13
+%11 = OpTypeImage %float 2D 0 0 0 1 Unknown
+%12 = OpTypeSampledImage %11
 %_ptr_UniformConstant_12 = OpTypePointer UniformConstant %12
 %tex = OpVariable %_ptr_UniformConstant_12 UniformConstant
 %void = OpTypeVoid

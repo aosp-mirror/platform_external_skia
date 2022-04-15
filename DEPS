@@ -11,7 +11,7 @@ vars = {
 
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/src/buildtools.git@b138e6ce86ae843c42a1a08f37903207bebcca75",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@6768aff710de8b34b7f8e2c50ac25df29ab3d046",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@8718783526307a3fbb35d4c1ad4e8101262a0d73",
   "third_party/externals/brotli"          : "https://skia.googlesource.com/external/github.com/google/brotli.git@e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, tint for SPIRV compilation, and abseil for string formatting.
@@ -33,27 +33,27 @@ deps = {
   "third_party/externals/libjpeg-turbo"   : "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo.git@22f1a22c99e9dde8cd3c72ead333f425c5a7aa77",
   "third_party/externals/libjxl"          : "https://chromium.googlesource.com/external/gitlab.com/wg1/jpeg-xl.git@a205468bc5d3a353fb15dae2398a101dff52f2d3",
   "third_party/externals/libpng"          : "https://skia.googlesource.com/third_party/libpng.git@386707c6d19b974ca2e3db7f5c61873813c6fe44",
-  "third_party/externals/libwebp"         : "https://chromium.googlesource.com/webm/libwebp.git@69c7f16111ec582bf1e7cb4d0d4f8d127e28a715",
+  "third_party/externals/libwebp"         : "https://chromium.googlesource.com/webm/libwebp.git@20ef03ee351d4ff03fc5ff3ec4804a879d1b9d5c",
   "third_party/externals/microhttpd"      : "https://android.googlesource.com/platform/external/libmicrohttpd@748945ec6f1c67b7efc934ab0808e1d32f2fb98d",
   "third_party/externals/oboe"            : "https://chromium.googlesource.com/external/github.com/google/oboe.git@b02a12d1dd821118763debec6b83d00a8a0ee419",
   "third_party/externals/opengl-registry" : "https://skia.googlesource.com/external/github.com/KhronosGroup/OpenGL-Registry@14b80ebeab022b2c78f84a573f01028c96075553",
   "third_party/externals/piex"            : "https://android.googlesource.com/platform/external/piex.git@bb217acdca1cc0c16b704669dd6f91a1b509c406",
   "third_party/externals/sfntly"          : "https://chromium.googlesource.com/external/github.com/googlei18n/sfntly.git@b55ff303ea2f9e26702b514cf6a3196a2e3e2974",
-  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@011bba68c81900f1c80c619ec4dc4b7478304efa",
+  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@1d450ae99a0f4ade28dd55dac962f8b28d990376",
   # vulkan-deps is a meta-repo containing several interdependent Khronos Vulkan repositories.
   # When the vulkan-deps revision is updated, those repos (spirv-*, vulkan-*) should be updated as well.
-  "third_party/externals/vulkan-deps"     : "https://chromium.googlesource.com/vulkan-deps@c9be322642fb4c85bf70615bdbd2d206e60c19f5",
-  "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@0e2880ab990e79ce6cc8c79c219feda42d98b1e8",
-  "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@814e728b30ddd0f4509233099a3ad96fd4318c07",
-  "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@4b092d2ab81854e61632bdd1e658907f0071c37e",
+  "third_party/externals/vulkan-deps"     : "https://chromium.googlesource.com/vulkan-deps@565408992c44e7d969af8c417a0f72730a85c880",
+  "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@6a67891418a3f08be63f92726e049dc788e46f5b",
+  "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@82becc8a8a92e509d3d8d635889da0a3c17d0606",
+  "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@cb96abbf7affd986016f17dd09f9f971138a922b",
   "third_party/externals/vulkan-headers"  : "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Headers@76f00ef6cbb1886eb1162d1fa39bee8b51e22ee8",
-  "third_party/externals/vulkan-tools"    : "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools@5f3ce24e7a530d089842c8192c2565a672555250",
+  "third_party/externals/vulkan-tools"    : "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools@fa288188b574d9eee31cd52c5432780b6a46a412",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
   "third_party/externals/wuffs"           : "https://skia.googlesource.com/external/github.com/google/wuffs-mirror-release-c.git@600cd96cf47788ee3a74b40a6028b035c9fd6a61",
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@c876c8f87101c5a75f6014b0f832499afeb65b73",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@ba62a8683b71fd89b8234edb4fd3191f4edba6d4",
+    "url": "https://chromium.googlesource.com/chromium/src.git@91a2fd838a6a7ee5c442f5b61945e3cdc6c78649",
     "condition": "checkout_chromium",
   },
 
