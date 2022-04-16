@@ -1,6 +1,6 @@
-licenses(["notice"])
-
 load("//bazel:macros.bzl", "generated_cc_atom", "select_multi", "selects")
+
+licenses(["notice"])
 
 cc_library(
     name = "typeface_freetype",
@@ -288,7 +288,6 @@ generated_cc_atom(
         "//include/core:SkColor_hdr",
         "//include/core:SkDrawable_hdr",
         "//include/core:SkPath_hdr",
-        "//include/core:SkPictureRecorder_hdr",
         "//include/effects:SkGradientShader_hdr",
         "//include/pathops:SkPathOps_hdr",
         "//include/private:SkColorData_hdr",
@@ -311,6 +310,7 @@ generated_cc_atom(
         "//include/core:SkDrawable_hdr",
         "//include/core:SkFontMetrics_hdr",
         "//include/core:SkPath_hdr",
+        "//include/core:SkPictureRecorder_hdr",
         "//include/core:SkStream_hdr",
         "//include/core:SkString_hdr",
         "//include/private:SkColorData_hdr",
@@ -626,6 +626,7 @@ generated_cc_atom(
         "//include/core:SkStream_hdr",
         "//include/core:SkTypeface_hdr",
         "//include/ports:SkFontMgr_fuchsia_hdr",
+        "//include/private:SkThreadAnnotations_hdr",
         "//src/core:SkFontDescriptor_hdr",
         "//src/core:SkTypefaceCache_hdr",
     ],
