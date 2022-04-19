@@ -219,7 +219,6 @@ public:
     static sk_sp<GrTextBlob> Make(const SkGlyphRunList& glyphRunList,
                                   const SkPaint& paint,
                                   const SkMatrix& positionMatrix,
-                                  bool supportBilerpAtlas,
                                   const GrSDFTControl& control,
                                   SkGlyphRunListPainter* painter);
 
@@ -236,7 +235,6 @@ public:
     void addKey(const Key& key);
     bool hasPerspective() const;
     const SkMatrix& initialPositionMatrix() const override { return fInitialPositionMatrix; }
-    bool supportBilerpAtlas() const { return fSupportBilerpAtlas; }
 
     bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const;
 
@@ -253,7 +251,6 @@ public:
 
 private:
     GrTextBlob(int allocSize,
-               bool supportBilerpAtlas,
                const SkMatrix& positionMatrix,
                SkColor initialLuminance);
 
@@ -288,7 +285,7 @@ private:
     const int fSize;
 
     // Support using bilerp for directly mapped sub runs.
-    const bool fSupportBilerpAtlas;
+    [[maybe_unused]] const bool fSupportBilerpAtlas{false};
 
     // The initial view matrix combined with the initial origin. Used to determine if a cached
     // subRun can be used in this draw situation.
