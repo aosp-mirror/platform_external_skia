@@ -11,12 +11,12 @@ vars = {
 
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/src/buildtools.git@b138e6ce86ae843c42a1a08f37903207bebcca75",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@3636d129ee9c6c970e9b31883fcc88c539382434",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@1971008801188a2c1e3dec573f23d27c055af8b3",
   "third_party/externals/brotli"          : "https://skia.googlesource.com/external/github.com/google/brotli.git@e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, tint for SPIRV compilation, and abseil for string formatting.
   # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
-  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@69daaab75938cbe10c40f1a04988d46e09c3007d",
+  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@d431eb9d94fdae9c152d988e869a810e4556ecfb",
   "third_party/externals/jinja2"          : "https://chromium.googlesource.com/chromium/src/third_party/jinja2@ee69aa00ee8536f61db6a451f3858745cf587de6",
   "third_party/externals/markupsafe"      : "https://chromium.googlesource.com/chromium/src/third_party/markupsafe@0944e71f4b2cb9a871bcbe353f95e889b64a611a",
   "third_party/externals/abseil-cpp"      : "https://skia.googlesource.com/external/github.com/abseil/abseil-cpp.git@c5a424a2a21005660b182516eb7a079cd8021699",
@@ -42,10 +42,10 @@ deps = {
   "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@103a69bd6c82980c967c2f4002c9a302ea67c716",
   # vulkan-deps is a meta-repo containing several interdependent Khronos Vulkan repositories.
   # When the vulkan-deps revision is updated, those repos (spirv-*, vulkan-*) should be updated as well.
-  "third_party/externals/vulkan-deps"     : "https://chromium.googlesource.com/vulkan-deps@1a408eb154d7045aab854be59dd5271505aab9bb",
-  "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@6a67891418a3f08be63f92726e049dc788e46f5b",
+  "third_party/externals/vulkan-deps"     : "https://chromium.googlesource.com/vulkan-deps@158676f39f3b0800c8a3c3e17af98c89c2613d8c",
+  "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@d7cae5e7cd326ca0ebfb2a7ac4e634a63ecfe19f",
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@82becc8a8a92e509d3d8d635889da0a3c17d0606",
-  "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@cb96abbf7affd986016f17dd09f9f971138a922b",
+  "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@2b2b0282af25779a5ae5dfc08a1c4e3be5a8ae17",
   "third_party/externals/vulkan-headers"  : "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Headers@76f00ef6cbb1886eb1162d1fa39bee8b51e22ee8",
   "third_party/externals/vulkan-tools"    : "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools@ef20059aea7ec24d0842edca2f75255eaa33a7b0",
   #"third_party/externals/v8"              : "https://chromium.googlesource.com/v8/v8.git@5f1ae66d5634e43563b2d25ea652dfb94c31a3b4",
@@ -53,7 +53,7 @@ deps = {
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@c876c8f87101c5a75f6014b0f832499afeb65b73",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@9b1b8c387f01742ddd84d4a93dbd9f5de2993b58",
+    "url": "https://chromium.googlesource.com/chromium/src.git@e44993cc0096a55914dda0f36ac0a96ee2e67a42",
     "condition": "checkout_chromium",
   },
 
