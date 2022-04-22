@@ -27,8 +27,10 @@ class Statement;
 class Variable;
 class VariableReference;
 enum class VariableRefKind : int8_t;
+struct ForLoopPositions;
 struct LoadedModule;
 struct LoopUnrollInfo;
+struct ParsedModule;
 struct Program;
 
 /**
@@ -92,7 +94,7 @@ bool SwitchCaseContainsUnconditionalExit(Statement& stmt);
 bool SwitchCaseContainsConditionalExit(Statement& stmt);
 
 std::unique_ptr<ProgramUsage> GetUsage(const Program& program);
-std::unique_ptr<ProgramUsage> GetUsage(const LoadedModule& module);
+std::unique_ptr<ProgramUsage> GetUsage(const LoadedModule& module, const ParsedModule& base);
 
 bool StatementWritesToVariable(const Statement& stmt, const Variable& var);
 
@@ -165,6 +167,7 @@ bool IsConstantIndexExpression(const Expression& expr,
  * null is returned.
  */
 std::unique_ptr<LoopUnrollInfo> GetLoopUnrollInfo(Position pos,
+                                                  const ForLoopPositions& positions,
                                                   const Statement* loopInitializer,
                                                   const Expression* loopTest,
                                                   const Expression* loopNext,

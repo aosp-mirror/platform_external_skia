@@ -28,6 +28,7 @@
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLProgram.h"
 
+#include <algorithm>
 #include <memory>
 #include <type_traits>
 #include <unordered_map>
@@ -591,6 +592,7 @@ DSLStatement DSLParser::localVarDeclarationEnd(Position pos, const dsl::DSLModif
         AddToSymbolTable(next, this->position(identifierName));
     }
     this->expect(Token::Kind::TK_SEMICOLON, "';'");
+    result.setPosition(this->rangeFrom(pos));
     return result;
 }
 
@@ -1210,6 +1212,10 @@ DSLStatement DSLParser::switchStatement() {
     }
 }
 
+static Position range_of_at_least_one_char(int start, int end) {
+    return Position::Range(start, std::max(end, start + 1));
+}
+
 /* FOR LPAREN (declaration | expression)? SEMICOLON expression? SEMICOLON expression? RPAREN
    STATEMENT */
 dsl::DSLStatement DSLParser::forStatement() {
@@ -1217,21 +1223,24 @@ dsl::DSLStatement DSLParser::forStatement() {
     if (!this->expect(Token::Kind::TK_FOR, "'for'", &start)) {
         return {};
     }
-    if (!this->expect(Token::Kind::TK_LPAREN, "'('")) {
+    Token lparen;
+    if (!this->expect(Token::Kind::TK_LPAREN, "'('", &lparen)) {
         return {};
     }
     AutoDSLSymbolTable symbols;
     dsl::DSLStatement initializer;
     Token nextToken = this->peek();
+    int firstSemicolonOffset;
     if (nextToken.fKind == Token::Kind::TK_SEMICOLON) {
         // An empty init-statement.
-        this->nextToken();
+        firstSemicolonOffset = this->nextToken().fOffset;
     } else {
         // The init-statement must be an expression or variable declaration.
         initializer = this->varDeclarationsOrExpressionStatement();
         if (!initializer.hasValue()) {
             return {};
         }
+        firstSemicolonOffset = fLexer.getCheckpoint().fOffset - 1;
     }
     dsl::DSLExpression test;
     if (this->peek().fKind != Token::Kind::TK_SEMICOLON) {
@@ -1241,7 +1250,8 @@ dsl::DSLStatement DSLParser::forStatement() {
         }
         test.swap(testValue);
     }
-    if (!this->expect(Token::Kind::TK_SEMICOLON, "';'")) {
+    Token secondSemicolon;
+    if (!this->expect(Token::Kind::TK_SEMICOLON, "';'", &secondSemicolon)) {
         return {};
     }
     dsl::DSLExpression next;
@@ -1252,7 +1262,8 @@ dsl::DSLStatement DSLParser::forStatement() {
         }
         next.swap(nextValue);
     }
-    if (!this->expect(Token::Kind::TK_RPAREN, "')'")) {
+    Token rparen;
+    if (!this->expect(Token::Kind::TK_RPAREN, "')'", &rparen)) {
         return {};
     }
     dsl::DSLStatement statement = this->statement();
@@ -1263,7 +1274,12 @@ dsl::DSLStatement DSLParser::forStatement() {
                test.hasValue() ? std::move(test) : DSLExpression(),
                next.hasValue() ? std::move(next) : DSLExpression(),
                std::move(statement),
-               this->rangeFrom(start));
+               this->rangeFrom(start),
+               ForLoopPositions{
+                    range_of_at_least_one_char(lparen.fOffset + 1, firstSemicolonOffset),
+                    range_of_at_least_one_char(firstSemicolonOffset + 1, secondSemicolon.fOffset),
+                    range_of_at_least_one_char(secondSemicolon.fOffset + 1, rparen.fOffset)
+               });
 }
 
 /* RETURN expression? SEMICOLON */
@@ -1842,7 +1858,7 @@ DSLExpression DSLParser::postfixExpression() {
 }
 
 DSLExpression DSLParser::swizzle(Position pos, DSLExpression base,
-        std::string_view swizzleMask) {
+        std::string_view swizzleMask, Position maskPos) {
     SkASSERT(swizzleMask.length() > 0);
     if (!base.type().isVector() && !base.type().isScalar()) {
         return base.field(swizzleMask, pos);
@@ -1851,7 +1867,10 @@ DSLExpression DSLParser::swizzle(Position pos, DSLExpression base,
     SkSL::SwizzleComponent::Type components[4];
     for (int i = 0; i < length; ++i) {
         if (i >= 4) {
-            this->error(pos, "too many components in swizzle mask");
+            Position errorPos = maskPos.valid() ? Position::Range(maskPos.startOffset() + 4,
+                                                                  maskPos.endOffset())
+                                                : pos;
+            this->error(errorPos, "too many components in swizzle mask");
             return DSLExpression::Poison(pos);
         }
         switch (swizzleMask[i]) {
@@ -1873,19 +1892,22 @@ DSLExpression DSLParser::swizzle(Position pos, DSLExpression base,
             case 'w': components[i] = SwizzleComponent::W;    break;
             case 'q': components[i] = SwizzleComponent::Q;    break;
             case 'B': components[i] = SwizzleComponent::UB;   break;
-            default:
-                this->error(pos, String::printf("invalid swizzle component '%c'",
+            default: {
+                Position componentPos = Position::Range(maskPos.startOffset() + i,
+                        maskPos.startOffset() + i + 1);
+                this->error(componentPos, String::printf("invalid swizzle component '%c'",
                         swizzleMask[i]).c_str());
                 return DSLExpression::Poison(pos);
+            }
         }
     }
     switch (length) {
-        case 1: return dsl::Swizzle(std::move(base), components[0], pos);
-        case 2: return dsl::Swizzle(std::move(base), components[0], components[1], pos);
+        case 1: return dsl::Swizzle(std::move(base), components[0], pos, maskPos);
+        case 2: return dsl::Swizzle(std::move(base), components[0], components[1], pos, maskPos);
         case 3: return dsl::Swizzle(std::move(base), components[0], components[1], components[2],
-                                    pos);
+                                    pos, maskPos);
         case 4: return dsl::Swizzle(std::move(base), components[0], components[1], components[2],
-                                    components[3], pos);
+                                    components[3], pos, maskPos);
         default: SkUNREACHABLE;
     }
 }
@@ -1919,7 +1941,8 @@ DSLExpression DSLParser::suffix(DSLExpression base) {
             std::string_view text;
             if (this->identifier(&text)) {
                 Position pos = this->rangeFrom(base.position());
-                return this->swizzle(pos, std::move(base), text);
+                return this->swizzle(pos, std::move(base), text,
+                        this->rangeFrom(this->position(next).after()));
             }
             [[fallthrough]];
         }
@@ -1932,17 +1955,22 @@ DSLExpression DSLParser::suffix(DSLExpression base) {
             // use the next *raw* token so we don't ignore whitespace - we only care about
             // identifiers that directly follow the float
             Position pos = this->rangeFrom(base.position());
+            Position start = this->position(next);
+            // skip past the "."
+            start = Position::Range(start.startOffset() + 1, start.endOffset());
+            Position maskPos = this->rangeFrom(start);
             Token id = this->nextRawToken();
             if (id.fKind == Token::Kind::TK_IDENTIFIER) {
                 pos = this->rangeFrom(base.position());
+                maskPos = this->rangeFrom(start);
                 return this->swizzle(pos, std::move(base), std::string(field) +
-                        std::string(this->text(id)));
+                        std::string(this->text(id)), maskPos);
             } else if (field.empty()) {
                 this->error(pos, "expected field name or swizzle mask after '.'");
                 return {{DSLExpression::Poison(pos)}};
             }
             this->pushback(id);
-            return this->swizzle(pos, std::move(base), field);
+            return this->swizzle(pos, std::move(base), field, maskPos);
         }
         case Token::Kind::TK_LPAREN: {
             ExpressionArray args;

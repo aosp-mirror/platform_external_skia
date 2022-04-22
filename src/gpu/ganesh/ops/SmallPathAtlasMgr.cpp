@@ -10,6 +10,8 @@
 #include "src/gpu/ganesh/geometry/GrStyledShape.h"
 #include "src/gpu/ganesh/ops/SmallPathShapeData.h"
 
+using MaskFormat = skgpu::MaskFormat;
+
 #ifdef DF_PATH_TRACKING
 static int g_NumCachedShapes = 0;
 static int g_NumFreedShapes = 0;
@@ -51,13 +53,16 @@ bool SmallPathAtlasMgr::initAtlas(GrProxyProvider* proxyProvider, const GrCaps* 
     static constexpr size_t kPlotWidth = 512;
     static constexpr size_t kPlotHeight = 256;
 
-    const GrBackendFormat format = caps->getDefaultBackendFormat(GrColorType::kAlpha_8,
+    GrColorType atlasColorType = GrColorType::kAlpha_8;
+    const GrBackendFormat format = caps->getDefaultBackendFormat(atlasColorType,
                                                                  GrRenderable::kNo);
 
     GrDrawOpAtlasConfig atlasConfig(caps->maxTextureSize(), kMaxAtlasTextureBytes);
-    SkISize size = atlasConfig.atlasDimensions(skgpu::MaskFormat::kA8);
+    SkISize size = atlasConfig.atlasDimensions(MaskFormat::kA8);
     fAtlas = GrDrawOpAtlas::Make(proxyProvider, format,
-                                 GrColorType::kAlpha_8, size.width(), size.height(),
+                                 GrColorTypeToSkColorType(atlasColorType),
+                                 GrColorTypeBytesPerPixel(atlasColorType),
+                                 size.width(), size.height(),
                                  kPlotWidth, kPlotHeight, this,
                                  GrDrawOpAtlas::AllowMultitexturing::kYes, this);
 
