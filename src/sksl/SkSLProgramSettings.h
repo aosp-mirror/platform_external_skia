@@ -104,6 +104,16 @@ struct ProgramConfig {
                (IsRuntimeEffect(fKind) || fKind == ProgramKind::kGeneric);
     }
 
+    static bool IsFragment(ProgramKind kind) {
+        return kind == ProgramKind::kFragment ||
+               kind == ProgramKind::kGraphiteFragment;
+    }
+
+    static bool IsVertex(ProgramKind kind) {
+        return kind == ProgramKind::kVertex ||
+               kind == ProgramKind::kGraphiteVertex;
+    }
+
     static bool IsRuntimeEffect(ProgramKind kind) {
         return (kind == ProgramKind::kRuntimeColorFilter ||
                 kind == ProgramKind::kRuntimeShader ||

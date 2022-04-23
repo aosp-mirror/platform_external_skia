@@ -2,22 +2,6 @@ load("//bazel:macros.bzl", "py_binary", "requirement", "selects")
 
 licenses(["notice"])
 
-cc_library(
-    name = "skcms",
-    srcs = [
-        "skcms/skcms.cc",
-        "skcms/skcms_internal.h",
-        "skcms/src/Transform_inl.h",
-    ],
-    copts = [
-        "-isystem include/third_party/skcms/",
-    ],
-    visibility = ["//:__subpackages__"],
-    deps = [
-        "//include/third_party/skcms:skcms_hdr",
-    ],
-)
-
 LIBPNG_SRCS = [
     "externals/libpng/png.c",
     "externals/libpng/pngconf.h",
@@ -2433,24 +2417,6 @@ cc_library(
     visibility = ["//:__subpackages__"],
 )
 
-cc_library(
-    name = "vulkanmemoryallocator",
-    srcs = [
-        "vulkanmemoryallocator/GrVulkanMemoryAllocator.cpp",
-        "vulkanmemoryallocator/include/vk_mem_alloc.h",
-    ],
-    hdrs = [
-        "vulkanmemoryallocator/GrVulkanMemoryAllocator.h",
-    ],
-    includes = [
-        "vulkanmemoryallocator",
-    ],
-    visibility = ["//:__subpackages__"],
-    deps = [
-        "//include/third_party:skias_vulkan_headers",
-    ],
-)
-
 py_binary(
     name = "dawn_json_generator",
     srcs = [
@@ -2639,6 +2605,8 @@ DAWN_SRCS = [
     "externals/dawn/src/dawn/native/BindGroupTracker.h",
     "externals/dawn/src/dawn/native/BindingInfo.cpp",
     "externals/dawn/src/dawn/native/BindingInfo.h",
+    "externals/dawn/src/dawn/native/BlobCache.cpp",
+    "externals/dawn/src/dawn/native/BlobCache.h",
     "externals/dawn/src/dawn/native/BuddyAllocator.cpp",
     "externals/dawn/src/dawn/native/BuddyAllocator.h",
     "externals/dawn/src/dawn/native/BuddyMemoryAllocator.cpp",
@@ -2955,7 +2923,7 @@ cc_library(
         ":tint",
         "@abseil_cpp//absl/strings:str_format",
         ":vulkan_headers",
-        ":vulkan_tools"
+        ":vulkan_tools",
     ],
 )
 
@@ -3214,9 +3182,10 @@ TINT_SRCS = [
     "externals/dawn/src/tint/resolver/resolver.cc",
     "externals/dawn/src/tint/resolver/resolver.h",
     "externals/dawn/src/tint/resolver/resolver_constants.cc",
-    "externals/dawn/src/tint/resolver/resolver_validation.cc",
     "externals/dawn/src/tint/resolver/sem_helper.cc",
     "externals/dawn/src/tint/resolver/sem_helper.h",
+    "externals/dawn/src/tint/resolver/validator.cc",
+    "externals/dawn/src/tint/resolver/validator.h",
     "externals/dawn/src/tint/scope_stack.h",
     "externals/dawn/src/tint/source.cc",
     "externals/dawn/src/tint/source.h",

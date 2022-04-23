@@ -113,7 +113,7 @@ static bool check_parameters(const Context& context,
                     m.fLayout.fBuiltin = kBuiltinColorIDs[builtinColorIndex++];
                     modifiersChanged = true;
                 }
-            } else if (context.fConfig->fKind == ProgramKind::kFragment) {
+            } else if (ProgramConfig::IsFragment(context.fConfig->fKind)) {
                 // For testing purposes, we have .sksl inputs that are treated as both runtime
                 // effects and fragment shaders. To make that work, fragment shaders are allowed to
                 // have a coords parameter.
@@ -259,7 +259,8 @@ static bool check_main_signature(const Context& context, Position pos, const Typ
         case ProgramKind::kGeneric:
             // No rules apply here
             break;
-        case ProgramKind::kFragment: {
+        case ProgramKind::kFragment:
+        case ProgramKind::kGraphiteFragment: {
             bool validParams = (parameters.size() == 0) ||
                                (parameters.size() == 1 && paramIsCoords(0));
             if (!validParams) {
@@ -269,6 +270,7 @@ static bool check_main_signature(const Context& context, Position pos, const Typ
             break;
         }
         case ProgramKind::kVertex:
+        case ProgramKind::kGraphiteVertex:
             if (parameters.size()) {
                 errors.error(pos, "shader 'main' must have zero parameters");
                 return false;

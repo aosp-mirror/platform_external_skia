@@ -9,6 +9,8 @@ filegroup(
     srcs = [
         "generated/sksl_frag.dehydrated.sksl",
         "generated/sksl_gpu.dehydrated.sksl",
+        "generated/sksl_graphite_frag.dehydrated.sksl",
+        "generated/sksl_graphite_vert.dehydrated.sksl",
         "generated/sksl_public.dehydrated.sksl",
         "generated/sksl_rt_shader.dehydrated.sksl",
         "generated/sksl_vert.dehydrated.sksl",
@@ -728,7 +730,6 @@ generated_cc_atom(
         "//include/private:SkSLDefines_hdr",
         "//include/private:SkSLLayout_hdr",
         "//include/private:SkSLModifiers_hdr",
-        "//include/private:SkSLSymbol_hdr",
         "//src/sksl/ir:SkSLSymbolTable_hdr",
     ],
 )
@@ -750,6 +751,7 @@ generated_cc_atom(
         "//include/private:SkSLProgramElement_hdr",
         "//include/private:SkSLProgramKind_hdr",
         "//include/private:SkSLStatement_hdr",
+        "//include/private:SkSLSymbol_hdr",
         "//include/private:SkTArray_hdr",
         "//include/sksl:DSLCore_hdr",
         "//include/sksl:SkSLOperator_hdr",
