@@ -6,17 +6,17 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling different
   # dependencies without interference from each other.
-  'sk_tool_revision': 'git_revision:ef18d9ac36ea922b33e2069ad8d58cfc9144d7a4',
+  'sk_tool_revision': 'git_revision:657aae3a4b31152a302e22ff5e6a9b5451381343',
 }
 
 deps = {
   "buildtools"                            : "https://chromium.googlesource.com/chromium/src/buildtools.git@b138e6ce86ae843c42a1a08f37903207bebcca75",
-  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@2db718edf233dedc596cede0190eb5cfad99e7ba",
+  "third_party/externals/angle2"          : "https://chromium.googlesource.com/angle/angle.git@9d6b3a7ee45b721ca009dc50a658cf0c38846fc6",
   "third_party/externals/brotli"          : "https://skia.googlesource.com/external/github.com/google/brotli.git@e61745a6b7add50d380cfd7d3883dd6c62fc2c71",
   "third_party/externals/d3d12allocator"  : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, tint for SPIRV compilation, and abseil for string formatting.
   # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
-  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@534a353c7c2176b4fac8fda4c83368c45bec49f8",
+  "third_party/externals/dawn"            : "https://dawn.googlesource.com/dawn.git@7b20709d0ea8b40fdca1f892c87fb66fea93d0f9",
   "third_party/externals/jinja2"          : "https://chromium.googlesource.com/chromium/src/third_party/jinja2@ee69aa00ee8536f61db6a451f3858745cf587de6",
   "third_party/externals/markupsafe"      : "https://chromium.googlesource.com/chromium/src/third_party/markupsafe@0944e71f4b2cb9a871bcbe353f95e889b64a611a",
   "third_party/externals/abseil-cpp"      : "https://skia.googlesource.com/external/github.com/abseil/abseil-cpp.git@c5a424a2a21005660b182516eb7a079cd8021699",
@@ -39,10 +39,10 @@ deps = {
   "third_party/externals/opengl-registry" : "https://skia.googlesource.com/external/github.com/KhronosGroup/OpenGL-Registry@14b80ebeab022b2c78f84a573f01028c96075553",
   "third_party/externals/piex"            : "https://android.googlesource.com/platform/external/piex.git@bb217acdca1cc0c16b704669dd6f91a1b509c406",
   "third_party/externals/sfntly"          : "https://chromium.googlesource.com/external/github.com/googlei18n/sfntly.git@b55ff303ea2f9e26702b514cf6a3196a2e3e2974",
-  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@f13461dbb23cf87b264cd98ec7189525c24b2dfc",
+  "third_party/externals/swiftshader"     : "https://swiftshader.googlesource.com/SwiftShader@5f5faa3a2aad1a4cdc88633af60c4171efc022e2",
   # vulkan-deps is a meta-repo containing several interdependent Khronos Vulkan repositories.
   # When the vulkan-deps revision is updated, those repos (spirv-*, vulkan-*) should be updated as well.
-  "third_party/externals/vulkan-deps"     : "https://chromium.googlesource.com/vulkan-deps@f685346e2e51e137caba54f8df4fdb4156370e63",
+  "third_party/externals/vulkan-deps"     : "https://chromium.googlesource.com/vulkan-deps@e799ba9fb972c141daa6b0f3f7f820317e04c23d",
   "third_party/externals/spirv-cross"     : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@d7cae5e7cd326ca0ebfb2a7ac4e634a63ecfe19f",
   "third_party/externals/spirv-headers"   : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@46b7918218d02b678b9405da538928a0f2c286bb",
   "third_party/externals/spirv-tools"     : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@671f6e633f4233a6e02e66a0b4d54ee1e67fa045",
@@ -53,7 +53,7 @@ deps = {
   "third_party/externals/zlib"            : "https://chromium.googlesource.com/chromium/src/third_party/zlib@c876c8f87101c5a75f6014b0f832499afeb65b73",
 
   "../src": {
-    "url": "https://chromium.googlesource.com/chromium/src.git@afe5a0f01b3b89c463fb6e490d1db32880f9acf0",
+    "url": "https://chromium.googlesource.com/chromium/src.git@2848cc8888b9bf153ff1330d481fff2dad13e5df",
     "condition": "checkout_chromium",
   },
 

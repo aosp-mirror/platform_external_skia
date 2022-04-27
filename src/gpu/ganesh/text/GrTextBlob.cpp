@@ -67,19 +67,6 @@ enum GrSubRun::SubRunType : int {
     kSubRunTypeCount,
 };
 
-// -- GrBlobSubRun ---------------------------------------------------------------------------------
-class GrBlobSubRun {
-public:
-    virtual ~GrBlobSubRun() = default;
-    // Given an already cached subRun, can this subRun handle this combination paint, matrix, and
-    // position.
-    virtual bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const = 0;
-
-    // Return the underlying atlas SubRun if it exists. Otherwise, return nullptr.
-    // * Don't use this API. It is only to support testing.
-    virtual const GrAtlasSubRun* testingOnly_atlasSubRun() const = 0;
-};
-
 // -- GrSubRun -------------------------------------------------------------------------------------
 GrSubRun::~GrSubRun() = default;
 const GrBlobSubRun* GrSubRun::blobCast() const {
@@ -676,7 +663,7 @@ void PathOpSubmitter::submitOps(SkCanvas* canvas,
 }
 
 // -- PathSubRun -----------------------------------------------------------------------------------
-class PathSubRun final : public GrSubRun, public GrBlobSubRun {
+class PathSubRun final : public GrSubRun {
 public:
     PathSubRun(PathOpSubmitter&& pathDrawing) : fPathDrawing(std::move(pathDrawing)) {}
 
@@ -699,7 +686,6 @@ public:
         fPathDrawing.submitOps(canvas, clip, viewMatrix, drawOrigin, paint, sdc);
     }
 
-    const GrBlobSubRun* blobCast() const override { return this; }
     int unflattenSize() const override;
 
     bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const override {
@@ -931,6 +917,15 @@ public:
 
     int unflattenSize() const override;
 
+    bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const override {
+        SK_ABORT("Not Ready Yet!");
+    }
+
+    const GrAtlasSubRun* testingOnly_atlasSubRun() const override {
+        return nullptr;
+    }
+
+
 protected:
     SubRunType subRunType() const override { return kDrawable; }
     void doFlatten(SkWriteBuffer& buffer) const override;
@@ -957,10 +952,9 @@ GrSubRunOwner DrawableSubRunSlug::MakeFromBuffer(const GrTextReferenceFrame* ref
 }
 
 // -- DrawableSubRun -------------------------------------------------------------------------------
-class DrawableSubRun final : public DrawableSubRunSlug, public GrBlobSubRun {
+class DrawableSubRun final : public DrawableSubRunSlug {
 public:
     using DrawableSubRunSlug::DrawableSubRunSlug;
-    const GrBlobSubRun* blobCast() const override { return this; }
 
     bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const override {
         return true;
@@ -969,7 +963,7 @@ public:
 };
 
 // -- DirectMaskSubRun -----------------------------------------------------------------------------
-class DirectMaskSubRun final : public GrSubRun, public GrBlobSubRun, public GrAtlasSubRun {
+class DirectMaskSubRun final : public GrSubRun, public GrAtlasSubRun {
 public:
     using DevicePosition = skvx::Vec<2, int16_t>;
 
@@ -1001,7 +995,6 @@ public:
                     skgpu::v1::SurfaceDrawContext* sdc,
                     GrAtlasSubRunOwner) const override;
 
-    const GrBlobSubRun* blobCast() const override { return this; }
     int unflattenSize() const override { return 0; }
 
     bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const override;
@@ -1375,7 +1368,7 @@ const GrAtlasSubRun* DirectMaskSubRun::testingOnly_atlasSubRun() const {
 }
 
 // -- TransformedMaskSubRun ------------------------------------------------------------------------
-class TransformedMaskSubRun final : public GrSubRun, public GrBlobSubRun, public GrAtlasSubRun {
+class TransformedMaskSubRun final : public GrSubRun, public GrAtlasSubRun {
 public:
     TransformedMaskSubRun(const GrTextReferenceFrame* referenceFrame,
                           TransformedMaskVertexFiller&& vertexFiller,
@@ -1408,7 +1401,6 @@ public:
                     skgpu::v1::SurfaceDrawContext*,
                     GrAtlasSubRunOwner) const override;
 
-    const GrBlobSubRun* blobCast() const override { return this; }
     int unflattenSize() const override;
 
     bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const override;
@@ -1585,7 +1577,7 @@ const GrAtlasSubRun* TransformedMaskSubRun::testingOnly_atlasSubRun() const {
 }
 
 // -- SDFTSubRun -----------------------------------------------------------------------------------
-class SDFTSubRun final : public GrSubRun, public GrBlobSubRun, public GrAtlasSubRun {
+class SDFTSubRun final : public GrSubRun, public GrAtlasSubRun {
 public:
     SDFTSubRun(const GrTextReferenceFrame* referenceFrame,
                bool useLCDText,
@@ -1622,7 +1614,6 @@ public:
                     skgpu::v1::SurfaceDrawContext*,
                     GrAtlasSubRunOwner) const override;
 
-    const GrBlobSubRun* blobCast() const override { return this; }
     int unflattenSize() const override;
 
     bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const override;
@@ -2101,7 +2092,7 @@ bool GrTextBlob::canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) 
     }
 
     for (const GrSubRun& subRun : fSubRunList) {
-        if (!subRun.blobCast()->canReuse(paint, positionMatrix)) {
+        if (!subRun.canReuse(paint, positionMatrix)) {
             return false;
         }
     }
@@ -2128,7 +2119,7 @@ const GrAtlasSubRun* GrTextBlob::testingOnlyFirstSubRun() const {
         return nullptr;
     }
 
-    return fSubRunList.front().blobCast()->testingOnly_atlasSubRun();
+    return fSubRunList.front().testingOnly_atlasSubRun();
 }
 
 GrTextBlob::GrTextBlob(int allocSize,
@@ -2211,7 +2202,8 @@ public:
 
     static sk_sp<Slug> Make(const SkMatrixProvider& viewMatrix,
                             const SkGlyphRunList& glyphRunList,
-                            const SkPaint& paint,
+                            const SkPaint& initialPaint,
+                            const SkPaint& drawingPaint,
                             const GrSDFTControl& control,
                             SkGlyphRunListPainter* painter);
     static sk_sp<GrSlug> MakeFromBuffer(SkReadBuffer& buffer,
@@ -2220,11 +2212,12 @@ public:
     void surfaceDraw(SkCanvas*,
                      const GrClip* clip,
                      const SkMatrixProvider& viewMatrix,
+                     const SkPaint& paint,
                      skgpu::v1::SurfaceDrawContext* sdc) const;
 
     void doFlatten(SkWriteBuffer& buffer) const override;
     SkRect sourceBounds() const override { return fSourceBounds; }
-    const SkPaint& paint() const override { return fPaint; }
+    const SkPaint& initialPaint() const override { return fInitialPaint; }
 
     // SkGlyphRunPainterInterface
     void processDeviceMasks(
@@ -2268,33 +2261,33 @@ private:
     // structure may have pointers into it.
     GrSubRunAllocator fAlloc;
     const SkRect fSourceBounds;
-    const SkPaint fPaint;
+    const SkPaint fInitialPaint;
     const SkMatrix fInitialPositionMatrix;
     const SkPoint fOrigin;
     GrSubRunList fSubRuns;
 };
 
 Slug::Slug(SkRect sourceBounds,
-           const SkPaint& paint,
+           const SkPaint& initialPaint,
            const SkMatrix& positionMatrix,
            SkPoint origin,
            int allocSize)
            : fAlloc {SkTAddOffset<char>(this, sizeof(Slug)), allocSize, allocSize/2}
            , fSourceBounds{sourceBounds}
-           , fPaint{paint}
+           , fInitialPaint{initialPaint}
            , fInitialPositionMatrix{positionMatrix}
            , fOrigin{origin} { }
 
 void Slug::surfaceDraw(SkCanvas* canvas, const GrClip* clip, const SkMatrixProvider& viewMatrix,
-                       skgpu::v1::SurfaceDrawContext* sdc) const {
+                       const SkPaint& drawingPaint, skgpu::v1::SurfaceDrawContext* sdc) const {
     for (const GrSubRun& subRun : fSubRuns) {
-        subRun.draw(canvas, clip, viewMatrix, fOrigin, fPaint, sdc);
+        subRun.draw(canvas, clip, viewMatrix, fOrigin, drawingPaint, sdc);
     }
 }
 
 void Slug::doFlatten(SkWriteBuffer& buffer) const {
     buffer.writeRect(fSourceBounds);
-    SkPaintPriv::Flatten(fPaint, buffer);
+    SkPaintPriv::Flatten(fInitialPaint, buffer);
     buffer.writeMatrix(fInitialPositionMatrix);
     buffer.writePoint(fOrigin);
     auto [subRunCount, subRunsUnflattenSizeHint] = this->subRunCountAndUnflattenSizeHint();
@@ -2404,6 +2397,10 @@ public:
                         GrColor color,
                         const SkMatrix& drawMatrix, SkPoint drawOrigin,
                         SkIRect clip) const override;
+
+    bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const override;
+
+    const GrAtlasSubRun* testingOnly_atlasSubRun() const override;
 
 protected:
     SubRunType subRunType() const override { return kDirectMask; }
@@ -2520,6 +2517,14 @@ int DirectMaskSubRunSlug::unflattenSize() const {
     return sizeof(DirectMaskSubRunSlug) +
            fGlyphs.unflattenSize() +
            sizeof(DevicePosition) * fGlyphs.glyphs().size();
+}
+
+bool DirectMaskSubRunSlug::canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const {
+    SK_ABORT("Not Ready Yet!");
+}
+
+const GrAtlasSubRun* DirectMaskSubRunSlug::testingOnly_atlasSubRun() const {
+    return this;
 }
 
 size_t DirectMaskSubRunSlug::vertexStride(const SkMatrix& positionMatrix) const {
@@ -2772,7 +2777,8 @@ void Slug::processDeviceMasks(
 
 sk_sp<Slug> Slug::Make(const SkMatrixProvider& viewMatrix,
                        const SkGlyphRunList& glyphRunList,
-                       const SkPaint& paint,
+                       const SkPaint& initialPaint,
+                       const SkPaint& drawingPaint,
                        const GrSDFTControl& control,
                        SkGlyphRunListPainter* painter) {
     // The difference in alignment from the per-glyph data to the SubRun;
@@ -2795,7 +2801,7 @@ sk_sp<Slug> Slug::Make(const SkMatrixProvider& viewMatrix,
 
     sk_sp<Slug> slug{new (::operator new (allocationSize))
                              Slug(glyphRunList.sourceBounds(),
-                                  paint,
+                                  initialPaint,
                                   positionMatrix,
                                   glyphRunList.origin(),
                                   bytesNeededForSubRun)};
@@ -2805,7 +2811,7 @@ sk_sp<Slug> Slug::Make(const SkMatrixProvider& viewMatrix,
         painter->processGlyphRun(slug.get(),
                                  glyphRun,
                                  positionMatrix,
-                                 paint,
+                                 drawingPaint,
                                  control,
                                  "Make Slug",
                                  uniqueID);
@@ -2867,19 +2873,22 @@ void Slug::processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& accepted,
 
 namespace skgpu::v1 {
 sk_sp<GrSlug>
-Device::convertGlyphRunListToSlug(const SkGlyphRunList& glyphRunList, const SkPaint& paint) {
+Device::convertGlyphRunListToSlug(const SkGlyphRunList& glyphRunList,
+                                  const SkPaint& initialPaint,
+                                  const SkPaint& drawingPaint) {
     auto recordingContextPriv = this->recordingContext()->priv();
     const GrSDFTControl control = recordingContextPriv.getSDFTControl(
             this->surfaceProps().isUseDeviceIndependentFonts());
 
     return Slug::Make(this->asMatrixProvider(),
                       glyphRunList,
-                      paint,
+                      initialPaint,
+                      drawingPaint,
                       control,
                       fSurfaceDrawContext->glyphRunPainter());
 }
 
-void Device::drawSlug(SkCanvas* canvas, const GrSlug* grSlug) {
+void Device::drawSlug(SkCanvas* canvas, const GrSlug* grSlug, const SkPaint& drawingPaint) {
     const Slug* slug = static_cast<const Slug*>(grSlug);
     auto matrixProvider = this->asMatrixProvider();
 #if defined(SK_DEBUG)
@@ -2893,15 +2902,17 @@ void Device::drawSlug(SkCanvas* canvas, const GrSlug* grSlug) {
         SkASSERT(slugMatrix == positionMatrix);
     }
 #endif
-    slug->surfaceDraw(canvas, this->clip(), matrixProvider, fSurfaceDrawContext.get());
+    slug->surfaceDraw(
+            canvas, this->clip(), matrixProvider, drawingPaint, fSurfaceDrawContext.get());
 }
 
 sk_sp<GrSlug> MakeSlug(const SkMatrixProvider& drawMatrix,
                        const SkGlyphRunList& glyphRunList,
-                       const SkPaint& paint,
+                       const SkPaint& initialPaint,
+                       const SkPaint& drawingPaint,
                        const GrSDFTControl& control,
                        SkGlyphRunListPainter* painter) {
-    return Slug::Make(drawMatrix, glyphRunList, paint, control, painter);
+    return Slug::Make(drawMatrix, glyphRunList, initialPaint, drawingPaint, control, painter);
 }
 }  // namespace skgpu::v1
 

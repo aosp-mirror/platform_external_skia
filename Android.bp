@@ -2501,6 +2501,7 @@ cc_defaults {
         "modules/svg/src/SkSVGLinearGradient.cpp",
         "modules/svg/src/SkSVGMask.cpp",
         "modules/svg/src/SkSVGNode.cpp",
+        "modules/svg/src/SkSVGOpenTypeSVGDecoder.cpp",
         "modules/svg/src/SkSVGPath.cpp",
         "modules/svg/src/SkSVGPattern.cpp",
         "modules/svg/src/SkSVGPoly.cpp",
