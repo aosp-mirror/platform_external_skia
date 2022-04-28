@@ -1753,7 +1753,7 @@ cc_library_static {
           "android",
         ],
       },
-      linux_glibc: {
+      host_linux: {
         srcs: [
           "src/codec/SkRawCodec.cpp",
           "src/ports/SkDebug_stdio.cpp",
