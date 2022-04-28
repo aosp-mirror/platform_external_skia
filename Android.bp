@@ -101,6 +101,7 @@ cc_defaults {
         ],
         local_include_dirs: [
           "third_party/vulkanmemoryallocator/",
+          "vma_android/include",
         ],
       },
     },
@@ -3239,7 +3240,6 @@ cc_library_shared {
         "modules/sksg/include/",
         "modules/skshaper/include/",
         "modules/svg/include/",
-        "third_party/vulkanmemoryallocator/",
         "tools/timer/",
     ],
 
