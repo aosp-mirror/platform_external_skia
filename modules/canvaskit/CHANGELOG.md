@@ -6,8 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+ - `SkRuntimeEffect.makeShader` and `SkRuntimeEffect.makeShaderWithChildren` no longer accept
+   an `isOpaque` parameter. These functions will now make a best effort to determine if your
+   shader always produces opaque output, and optimize accordingly. If you definitely want your
+   shader to produce opaque output, do so in the shader's SkSL code.
+
 ### Added
  - `SkPicture.makeShader`
+ - Skia now has a GN toolchain that is used to compile CanvasKit. Ideally, all settings should
+   be the same, but there may be some subtle differences in practice. This changes the setup
+   to build CanvasKit (users no longer need to download emsdk themselves).
+
+### Changed
+ - If an invalid matrix type is passed in (e.g. not an array, TypedArray, or DOMMatrix), CanvasKit
+   will throw instead of drawing incorrectly.
 
 ## [0.33.0] - 2022-02-03
 

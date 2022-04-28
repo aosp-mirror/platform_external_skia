@@ -673,7 +673,6 @@ DM_SRCS_ALL = struct(
         "tests/FontMgrFontConfigTest.cpp",  # FontConfig-only.
         "tests/TypefaceMacTest.cpp",  # CoreText-only.
         "tests/SkParagraphTest.cpp",  # Skipping tests for now.
-        "tests/skia_test.cpp",  # Old main.
         "tools/gpu/d3d/*",
         "tools/gpu/dawn/*",
         "tools/gpu/gl/angle/*",
@@ -764,10 +763,8 @@ def base_defines(os_conditions):
         "SK_WEBP_ENCODER_USE_DEFAULT_METHOD",
         # Experiment to diagnose image diffs in Google3
         "SK_DISABLE_LOWP_RASTER_PIPELINE",
-        # JPEG is in codec_limited
-        "SK_CODEC_DECODES_JPEG",
-        "SK_ENCODE_JPEG",
-        "SK_HAS_ANDROID_CODEC",
+        # JPEG is in codec_limited and is included in all
+        # builds except the no_codec android build
     ] + skia_select(
         os_conditions,
         [
@@ -781,6 +778,9 @@ def base_defines(os_conditions):
                 "SK_ENCODE_WEBP",
                 "SK_R32_SHIFT=16",
                 "SK_GL",
+                "SK_CODEC_DECODES_JPEG",
+                "SK_ENCODE_JPEG",
+                "SK_HAS_ANDROID_CODEC",
             ],
             # ANDROID
             [
@@ -790,12 +790,18 @@ def base_defines(os_conditions):
                 "SK_ENCODE_PNG",
                 "SK_ENCODE_WEBP",
                 "SK_GL",
+                "SK_CODEC_DECODES_JPEG",
+                "SK_ENCODE_JPEG",
+                "SK_HAS_ANDROID_CODEC",
             ],
             # IOS
             [
                 "SK_BUILD_FOR_IOS",
                 "SK_NO_COMMAND_BUFFER",  # Test tools that use thread_local.
                 "SK_GL",
+                "SK_CODEC_DECODES_JPEG",
+                "SK_ENCODE_JPEG",
+                "SK_HAS_ANDROID_CODEC",
             ],
             # WASM
             [
@@ -807,6 +813,9 @@ def base_defines(os_conditions):
                 "SK_DISABLE_EFFECT_DESERIALIZATION",
                 "SK_FORCE_8_BYTE_ALIGNMENT",
                 "SKNX_NO_SIMD",
+                "SK_CODEC_DECODES_JPEG",
+                "SK_ENCODE_JPEG",
+                "SK_HAS_ANDROID_CODEC",
             ],
             # FUCHSIA
             [
@@ -817,10 +826,21 @@ def base_defines(os_conditions):
                 "SK_ENCODE_WEBP",
                 "SK_R32_SHIFT=16",
                 "SK_VULKAN",
+                "SK_CODEC_DECODES_JPEG",
+                "SK_ENCODE_JPEG",
+                "SK_HAS_ANDROID_CODEC",
             ],
             # MACOS
             [
                 "SK_BUILD_FOR_MAC",
+                "SK_GL",
+                "SK_CODEC_DECODES_JPEG",
+                "SK_ENCODE_JPEG",
+                "SK_HAS_ANDROID_CODEC",
+            ],
+            # ANDROID W/ NO CODECS
+            [
+                "SK_BUILD_FOR_ANDROID",
                 "SK_GL",
             ],
         ],
@@ -885,16 +905,6 @@ def skparagraph_lib_hdrs():
 
 def skparagraph_lib_srcs():
     return native.glob(["modules/skparagraph/src/*.cpp"])
-
-################################################################################
-## experimental xform
-################################################################################
-
-def exp_xform_lib_hdrs():
-    return native.glob(["experimental/xform/*.h"])
-
-def exp_xform_lib_srcs():
-    return native.glob(["experimental/xform/*.cpp"])
 
 ################################################################################
 ## skresources_lib

@@ -18,13 +18,18 @@
 
 enum class SkBackend : uint8_t;
 class SkPaintParamsKey;
+class SkPaintParamsKeyBuilder;
+class SkShaderCodeDictionary;
 class SkUniformBlock;
 
 // The KeyHelpers can be used to manually construct an SkPaintParamsKey
 
 namespace DepthStencilOnlyBlock {
 
-    void AddToKey(SkBackend, SkPaintParamsKey*, SkUniformBlock*);
+    void AddToKey(SkShaderCodeDictionary*,
+                  SkBackend,
+                  SkPaintParamsKeyBuilder*,
+                  SkUniformBlock*);
 #ifdef SK_DEBUG
     void Dump(const SkPaintParamsKey&, int headerOffset);
 #endif
@@ -33,8 +38,9 @@ namespace DepthStencilOnlyBlock {
 
 namespace SolidColorShaderBlock {
 
-    void AddToKey(SkBackend,
-                  SkPaintParamsKey*,
+    void AddToKey(SkShaderCodeDictionary*,
+                  SkBackend,
+                  SkPaintParamsKeyBuilder*,
                   SkUniformBlock*,
                   const SkColor4f&);
 #ifdef SK_DEBUG
@@ -89,8 +95,9 @@ namespace GradientShaderBlocks {
         float                  fOffsets[kMaxStops];
     };
 
-    void AddToKey(SkBackend,
-                  SkPaintParamsKey*,
+    void AddToKey(SkShaderCodeDictionary*,
+                  SkBackend,
+                  SkPaintParamsKeyBuilder*,
                   SkUniformBlock*,
                   const GradientData&);
 #ifdef SK_DEBUG
@@ -113,8 +120,9 @@ namespace ImageShaderBlock {
         SkTileMode fTileModes[2];
     };
 
-    void AddToKey(SkBackend,
-                  SkPaintParamsKey*,
+    void AddToKey(SkShaderCodeDictionary*,
+                  SkBackend,
+                  SkPaintParamsKeyBuilder*,
                   SkUniformBlock*,
                   const ImageData&);
 #ifdef SK_DEBUG
@@ -132,8 +140,9 @@ namespace BlendShaderBlock {
         SkBlendMode fBM;
     };
 
-    void AddToKey(SkBackend,
-                  SkPaintParamsKey*,
+    void AddToKey(SkShaderCodeDictionary*,
+                  SkBackend,
+                  SkPaintParamsKeyBuilder*,
                   SkUniformBlock*,
                   const BlendData&);
 #ifdef SK_DEBUG
@@ -144,7 +153,11 @@ namespace BlendShaderBlock {
 
 namespace BlendModeBlock {
 
-    void AddToKey(SkBackend, SkPaintParamsKey*, SkUniformBlock*, SkBlendMode);
+    void AddToKey(SkShaderCodeDictionary*,
+                  SkBackend,
+                  SkPaintParamsKeyBuilder*,
+                  SkUniformBlock*,
+                  SkBlendMode);
 #ifdef SK_DEBUG
     void Dump(const SkPaintParamsKey&, int headerOffset);
 #endif
@@ -153,7 +166,11 @@ namespace BlendModeBlock {
 
 #ifdef SK_GRAPHITE_ENABLED
 // Bridge between the combinations system and the SkPaintParamsKey
-SkPaintParamsKey CreateKey(SkBackend, skgpu::ShaderCombo::ShaderType, SkTileMode, SkBlendMode);
+std::unique_ptr<SkPaintParamsKey> CreateKey(SkShaderCodeDictionary*,
+                                            SkBackend,
+                                            skgpu::ShaderCombo::ShaderType,
+                                            SkTileMode,
+                                            SkBlendMode);
 #endif
 
 #endif // SkKeyHelpers_DEFINED

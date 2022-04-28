@@ -206,7 +206,7 @@ GrMakeCachedBitmapProxyView(GrRecordingContext* rContext,
         installKey(proxy.get());
     }
 
-    GrSwizzle swizzle = caps->getReadSwizzle(proxy->backendFormat(), ct);
+    skgpu::Swizzle swizzle = caps->getReadSwizzle(proxy->backendFormat(), ct);
     if (mipmapped == GrMipmapped::kNo || proxy->mipmapped() == GrMipmapped::kYes) {
         return {{std::move(proxy), kTopLeft_GrSurfaceOrigin, swizzle}, ct};
     }
@@ -245,7 +245,7 @@ GrMakeUncachedBitmapProxyView(GrRecordingContext* rContext,
     GrColorType ct = choose_bmp_texture_colortype(caps, bitmap);
 
     if (auto proxy = make_bmp_proxy(proxyProvider, bitmap, ct, mipmapped, fit, budgeted)) {
-        GrSwizzle swizzle = caps->getReadSwizzle(proxy->backendFormat(), ct);
+        skgpu::Swizzle swizzle = caps->getReadSwizzle(proxy->backendFormat(), ct);
         SkASSERT(mipmapped == GrMipmapped::kNo || proxy->mipmapped() == GrMipmapped::kYes);
         return {{std::move(proxy), kTopLeft_GrSurfaceOrigin, swizzle}, ct};
     }
@@ -296,6 +296,7 @@ static inline float dither_range_for_config(GrColorType dstColorType) {
         case GrColorType::kGrayAlpha_88:
         case GrColorType::kGray_8xxx:
         case GrColorType::kR_8:
+        case GrColorType::kR_8xxx:
         case GrColorType::kRG_88:
         case GrColorType::kRGB_888:
         case GrColorType::kRGB_888x:

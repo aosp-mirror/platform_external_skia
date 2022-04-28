@@ -64,7 +64,6 @@ license {
         "SPDX-license-identifier-CC0-1.0",
         "SPDX-license-identifier-FTL",
         "SPDX-license-identifier-MIT",
-        "SPDX-license-identifier-MPL",
         "legacy_unencumbered",
     ],
     license_text: [
@@ -181,7 +180,7 @@ cc_library_static {
           "android",
         ],
       },
-      linux_glibc: {
+      host_linux: {
         srcs: [
           $linux_srcs
         ],
@@ -444,6 +443,30 @@ cc_library_shared {
           "libwuffs_mirror_release_c",
     ]
 }
+
+android_test {
+    name: "CtsSkQPTestCases",
+    defaults: ["cts_defaults"],
+    test_suites: ["cts"],
+
+    libs: ["android.test.runner.stubs"],
+    jni_libs: ["libskqp_jni"],
+    compile_multilib: "both",
+
+    static_libs: [
+        "android-support-design",
+        "ctstestrunner-axt",
+    ],
+    manifest: "platform_tools/android/apps/skqp/src/main/AndroidManifest.xml",
+    test_config: "platform_tools/android/apps/skqp/src/main/AndroidTest.xml",
+
+    asset_dirs: ["platform_tools/android/apps/skqp/src/main/assets", "resources"],
+    resource_dirs: ["platform_tools/android/apps/skqp/src/main/res"],
+    srcs: ["platform_tools/android/apps/skqp/src/main/java/**/*.java"],
+
+    sdk_version: "test_current",
+
+}
 ''')
 
 # We'll run GN to get the main source lists and include directories for Skia.
@@ -633,6 +656,10 @@ gn_to_bp_utils.GrabDependentValues(js_skqp, '//:libskqp_app', 'cflags_cc',
                                    skqp_cflags_cc, None)
 gn_to_bp_utils.GrabDependentValues(js_skqp, '//:libskqp_app', 'defines',
                                    skqp_defines, None)
+
+skqp_defines.add("SK_ENABLE_DUMP_GPU")
+skqp_defines.add("SK_BUILD_FOR_SKQP")
+skqp_defines.add("SK_ALLOW_STATIC_GLOBAL_INITIALIZERS=1")
 
 skqp_srcs = strip_headers(skqp_srcs)
 skqp_cflags = gn_to_bp_utils.CleanupCFlags(skqp_cflags)

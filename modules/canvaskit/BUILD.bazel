@@ -23,10 +23,6 @@ BASE_LINKOPTS = [
 ]
 
 RELEASE_OPTS = [
-    # Closure disabled until https://github.com/emscripten-core/emsdk/pull/941 is sorted out.
-    #"--closure 1",  # Run the closure compiler
-    # pass the externs file in
-    #"--closure-args=--externs=modules/canvaskit/externs.js",
     "-sASSERTIONS=0",  # Turn off assertions
     "-Oz",
 ]
@@ -44,6 +40,9 @@ GM_OPTS = [
     "-sEXPORT_NAME=InitWasmGMTests",
     "--pre-js",
     "modules/canvaskit/gm.js",
+    "-sDEMANGLE_SUPPORT=1",
+    "--profiling-funcs",
+    "--profiling",
 ]
 
 filegroup(
@@ -54,12 +53,13 @@ filegroup(
 )
 
 cc_binary_with_flags(
-    name = "gm_bindings.with_flags",
+    name = "wasm_gm_tests.with_flags",
     testonly = True,
     srcs = [
         "gm_bindings.cpp",
         ":hdrs",
-        "//gm:gms",  # Required for the registry to work
+        "//gm:gm_list",
+        "//tests:test_list",
     ],
     additional_linker_inputs = ["gm.js"],
     linkopts = select({
@@ -67,10 +67,6 @@ cc_binary_with_flags(
         "//bazel/common_config_settings:release_build": BASE_LINKOPTS + GM_OPTS + RELEASE_OPTS,
         "//conditions:default": BASE_LINKOPTS + GM_OPTS + RELEASE_OPTS,
     }),
-    local_defines = [
-        "SK_GL",  # FIXME(kjlubick)
-        "SK_USE_WEBGL",
-    ],
     set_flags = {
         "include_decoder": [
             "jpeg_decode_codec",
@@ -78,27 +74,39 @@ cc_binary_with_flags(
             "webp_decode_codec",
             "gif_decode_codec",
         ],
+        "include_encoder": [
+            "jpeg_encode_codec",
+            "png_encode_codec",
+            "webp_encode_codec",
+        ],
         "gpu_backend": [
             "gl_backend",
         ],
         "with_gl_standard": [
             "webgl_standard",
         ],
+        "is_skia_dev_build": [
+            "True",
+        ],
     },
     # This target won't build successfully on its own because of missing emscripten
     # headers etc. Therefore, we hide it from wildcards.
     tags = ["manual"],
     deps = [
-        "//:gms",
-        "//:hash_and_encode",
-        "//:tests",
+        "//:skia_core",
+        "//gm",
+        "//src/core:SkFontMgrPriv_hdr",
+        "//tests",
+        "//tools:hash_and_encode",
+        "//tools:resource_factory",
+        "//tools/fonts:test_font_manager",
     ],
 )
 
 wasm_cc_binary(
-    name = "gm_bindings_wasm",
+    name = "wasm_gm_tests",
     testonly = True,
-    cc_target = ":gm_bindings.with_flags",
+    cc_target = ":wasm_gm_tests.with_flags",
 )
 
 # See https://stackoverflow.com/a/57499321 for reference.
@@ -119,25 +127,26 @@ genrule(
 # Note: These are defines that only impact the _bindings.cpp files in this folder.
 # Any defines that need to effect the entire Skia build should go in //bazel/BUILD.bazel
 CK_DEFINES = [
-    "SK_INCLUDE_PATHOPS=1",
+    "CK_INCLUDE_PATHOPS",
 ] + select({
-    ":enable_fonts_true": ["SK_INCLUDE_PARAGRAPH=1"],
-    ":enable_fonts_false": ["SK_NO_FONTS"],
+    ":enable_fonts_true": ["CK_INCLUDE_PARAGRAPH"],
+    ":enable_fonts_false": ["CK_NO_FONTS"],
 }) + select({
-    # TODO(kjlubick) Get rid of this extra define - if we are including skottie, we will include the
-    #   managed version.
-    ":enable_skottie_true": ["SK_INCLUDE_MANAGED_SKOTTIE=1"],
-    ":enable_skottie_false": [],
-}) + select({
-    ":enable_skp_serialization_true": ["SK_SERIALIZE_SKP=1"],
+    ":enable_skp_serialization_true": ["CK_SERIALIZE_SKP=1"],
     ":enable_skp_serialization_false": [],
 }) + select({
-    ":enable_runtime_effect_true": ["SK_INCLUDE_RUNTIME_EFFECT=1"],
+    ":enable_runtime_effect_true": ["CK_INCLUDE_RUNTIME_EFFECT=1"],
     ":enable_runtime_effect_false": [],
 }) + select({
-    ":enable_sksl_tracing_true": ["SK_INCLUDE_SKSL_TRACE=1"],
+    ":enable_sksl_tracing_true": ["CK_INCLUDE_SKSL_TRACE=1"],
     ":enable_sksl_tracing_false": [],
 })
+
+CK_RELEASE_OPTS = [
+    "--closure 1",  # Run the closure compiler
+    # pass the externs file in
+    "--closure-args=--externs=$(location externs.js)",
+]
 
 CK_OPTS = BASE_LINKOPTS + [
     "-sEXPORT_NAME=CanvasKitInit",
@@ -244,7 +253,7 @@ CK_OPTS = BASE_LINKOPTS + [
         "--pre-js",
         "modules/canvaskit/debug.js",
     ],
-    "//conditions:default": RELEASE_OPTS + [
+    "//conditions:default": RELEASE_OPTS + CK_RELEASE_OPTS + [
         "--pre-js",
         "modules/canvaskit/release.js",
     ],

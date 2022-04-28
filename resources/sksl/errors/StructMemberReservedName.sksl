@@ -1,7 +1,0 @@
-struct S {
-    float float;
-} s;
-
-float4 main() {
-    return s.float.xxxx;
-}

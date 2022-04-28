@@ -375,9 +375,9 @@ std::unique_ptr<GrFragmentProcessor> SkImageShader::asFragmentProcessor(
 
 void SkImageShader::addToKey(SkShaderCodeDictionary* dict,
                              SkBackend backend,
-                             SkPaintParamsKey* key,
+                             SkPaintParamsKeyBuilder* builder,
                              SkUniformBlock* uniformBlock) const {
-    ImageShaderBlock::AddToKey(backend, key, uniformBlock, { fTileModeX, fTileModeY });
+    ImageShaderBlock::AddToKey(dict, backend, builder, uniformBlock, { fTileModeX, fTileModeY });
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -560,6 +560,9 @@ bool SkImageShader::doStages(const SkStageRec& rec, TransformShader* updater) co
 
             case kGray_8_SkColorType:       p->append(SkRasterPipeline::gather_a8,      ctx);
                                             p->append(SkRasterPipeline::alpha_to_gray      ); break;
+
+            case kR8_unorm_SkColorType:     p->append(SkRasterPipeline::gather_a8,      ctx);
+                                            p->append(SkRasterPipeline::alpha_to_red       ); break;
 
             case kRGB_888x_SkColorType:     p->append(SkRasterPipeline::gather_8888,    ctx);
                                             p->append(SkRasterPipeline::force_opaque       ); break;

@@ -8,9 +8,9 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkSurface.h"
 #include "include/effects/SkGradientShader.h"
-#include "include/private/SkPaintParamsKey.h"
-#include "include/private/SkShaderCodeDictionary.h"
+#include "src/core/SkPaintParamsKey.h"
 #include "src/core/SkPaintPriv.h"
+#include "src/core/SkShaderCodeDictionary.h"
 #include "tests/Test.h"
 
 namespace {
@@ -43,9 +43,9 @@ void dump_keys(SkShaderCodeDictionary *dict, const SkPaint &paint) {
 #ifdef SK_DEBUG
     auto keys = SkPaintPriv::ToKeys(paint, dict, SkBackend::kGraphite);
 
-    for (auto k: keys) {
+    for (const auto& k : keys) {
         // TODO: we need a better way to assess that key creation succeeded
-        k.dump();
+        k->dump();
     }
 #endif
 }
