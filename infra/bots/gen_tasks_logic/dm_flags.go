@@ -195,7 +195,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 		if b.extraConfig("BonusConfigs") {
 			configs = []string{
-				"g8", "565",
+				"r8", "565",
 				"pic-8888", "serialize-8888",
 				"linear-f16", "srgb-rgba", "srgb-f16", "narrow-rgba", "narrow-f16",
 				"p3-rgba", "p3-f16", "rec2020-rgba", "rec2020-f16"}
@@ -630,9 +630,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	skip("srgb-gl", "image", ALL, ALL)
 	skip("srgb-gles", "image", ALL, ALL)
 
-	// --src image --config g8 means "decode into Gray8", which isn't supported.
-	skip("g8", "image", ALL, ALL)
-	skip("g8", "colorImage", ALL, ALL)
+	// --src image --config r8 means "decode into R8", which isn't supported.
+	skip("r8", "image", ALL, ALL)
+	skip("r8", "colorImage", ALL, ALL)
 
 	if b.extraConfig("Valgrind") {
 		// These take 18+ hours to run.
@@ -934,13 +934,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "tests", ALL, "DSLFPTest_SwitchStatement")  // skia:11891
 		skip(ALL, "tests", ALL, "SkSLMatrixToVectorCast_GPU") // skia:12192
 		skip(ALL, "tests", ALL, "SkSLStructsInFunctions_GPU") // skia:11929
-	}
-
-	if b.matchGpu("Adreno6") || b.matchGpu("MaliG77") || b.matchGpu("QuadroP400") {
-		skip(ALL, "tests", ALL, "SkSLRecursiveComparison_Arrays_GPU") // skia:12642
-		skip(ALL, "tests", ALL, "SkSLRecursiveComparison_Structs_GPU")
-		skip(ALL, "tests", ALL, "SkSLRecursiveComparison_Types_GPU")
-		skip(ALL, "tests", ALL, "SkSLRecursiveComparison_Vectors_GPU")
 	}
 
 	if b.matchGpu("Adreno6") && !b.extraConfig("Vulkan") { // disable broken tests on Adreno 6xx GLSL

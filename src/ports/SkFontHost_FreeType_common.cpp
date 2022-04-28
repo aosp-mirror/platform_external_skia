@@ -13,6 +13,7 @@
 #include "include/core/SkPath.h"
 #include "include/core/SkPictureRecorder.h"
 #include "include/effects/SkGradientShader.h"
+#include "include/pathops/SkPathOps.h"
 #include "include/private/SkColorData.h"
 #include "include/private/SkTo.h"
 #include "src/core/SkFDot6.h"
@@ -47,6 +48,11 @@
 #else
 #    include "src/core/SkScopeExit.h"
 #endif
+#endif
+
+// FT_OUTLINE_OVERLAP was added in FreeType 2.10.3
+#ifndef FT_OUTLINE_OVERLAP
+#    define FT_OUTLINE_OVERLAP 0x40
 #endif
 
 // FT_LOAD_COLOR and the corresponding FT_Pixel_Mode::FT_PIXEL_MODE_BGRA
@@ -1239,41 +1245,15 @@ bool colrv1_start_glyph_bounds(SkMatrix *ctm,
 #ifdef FT_COLOR_H
 bool SkScalerContext_FreeType_Base::drawColorGlyph(SkCanvas* canvas,
                                                    FT_Face face,
+                                                   SkSpan<SkColor> palette,
                                                    const SkGlyph& glyph) {
     SkPaint paint;
     paint.setAntiAlias(true);
 
-    FT_Palette_Data palette_data;
-    FT_Error err = FT_Palette_Data_Get(face, &palette_data);
-    if (err) {
-        SK_TRACEFTR(err, "Could not get palette data from %s fontFace.",
-                    face->family_name);
-        return false;
-    }
-
-    SkAutoTArray<SkColor> originalPalette;
-
-    FT_Color* ftPalette;
-    err = FT_Palette_Select(face, 0, &ftPalette);
-    if (err) {
-        SK_TRACEFTR(err, "Could not get palette colors from %s fontFace.",
-                    face->family_name);
-        return false;
-    }
-    originalPalette.reset(palette_data.num_palette_entries);
-    for (int i = 0; i < palette_data.num_palette_entries; ++i) {
-        originalPalette[i] = SkColorSetARGB(ftPalette[i].alpha,
-                                            ftPalette[i].red,
-                                            ftPalette[i].green,
-                                            ftPalette[i].blue);
-    }
-    SkSpan<SkColor> paletteSpan(originalPalette.data(),
-                                palette_data.num_palette_entries);
-
     // Only attempt to draw a COLRv1 glyph if FreeType is new enough to have the COLRv1 support.
 #ifdef TT_SUPPORT_COLRV1
     VisitedSet visited_set;
-    if (colrv1_start_glyph(canvas, paletteSpan,
+    if (colrv1_start_glyph(canvas, palette,
                            fRec.fForegroundColor,
                            face, glyph.getGlyphID(),
                            FT_COLOR_INCLUDE_ROOT_TRANSFORM,
@@ -1295,7 +1275,7 @@ bool SkScalerContext_FreeType_Base::drawColorGlyph(SkCanvas* canvas,
         if (layerColorIndex == 0xFFFF) {
             paint.setColor(fRec.fForegroundColor);
         } else {
-            paint.setColor(paletteSpan[layerColorIndex]);
+            paint.setColor(palette[layerColorIndex]);
         }
         SkPath path;
         if (this->generateFacePath(face, layerGlyphIndex, &path)) {
@@ -1308,6 +1288,7 @@ bool SkScalerContext_FreeType_Base::drawColorGlyph(SkCanvas* canvas,
 
 void SkScalerContext_FreeType_Base::generateGlyphImage(
     FT_Face face,
+    SkSpan<SkColor> customPalette,
     const SkGlyph& glyph,
     const SkMatrix& bitmapTransform)
 {
@@ -1352,7 +1333,7 @@ void SkScalerContext_FreeType_Base::generateGlyphImage(
                                      SkFixedToScalar(glyph.getSubYFixed()));
                 }
 
-                bool haveLayers = this->drawColorGlyph(&canvas, face, glyph);
+                bool haveLayers = this->drawColorGlyph(&canvas, face, customPalette, glyph);
 
                 if (!haveLayers) {
                     SkDebugf("Could not get layers (neither v0, nor v1) from %s fontFace.",
@@ -1753,7 +1734,13 @@ bool generateFacePathCOLRv1(FT_Face face, SkGlyphID glyphID, SkPath* path) {
 }  // namespace
 
 bool SkScalerContext_FreeType_Base::generateGlyphPath(FT_Face face, SkPath* path) {
-    return generateGlyphPathStatic(face, path);
+    if (!generateGlyphPathStatic(face, path)) {
+        return false;
+    }
+    if (face->glyph->outline.flags & FT_OUTLINE_OVERLAP) {
+        Simplify(*path, path);
+    }
+    return true;
 }
 
 bool SkScalerContext_FreeType_Base::generateFacePath(FT_Face face,
@@ -1788,13 +1775,13 @@ bool SkScalerContext_FreeType_Base::computeColrV1GlyphBoundingBox(FT_Face face,
 #endif
 }
 
-sk_sp<SkDrawable> SkScalerContext_FreeType_Base::generateGlyphDrawable(FT_Face face,
-                                                                       const SkGlyph& glyph) {
+sk_sp<SkDrawable> SkScalerContext_FreeType_Base::generateGlyphDrawable(
+        FT_Face face, SkSpan<SkColor> palette, const SkGlyph& glyph) {
 #ifdef FT_COLOR_H
     if (face->glyph->format == FT_GLYPH_FORMAT_OUTLINE && glyph.isColor()) {
         SkPictureRecorder recorder;
         SkCanvas* recordingCanvas = recorder.beginRecording(SkRect::Make(glyph.mask().fBounds));
-        if (!this->drawColorGlyph(recordingCanvas, face, glyph)) {
+        if (!this->drawColorGlyph(recordingCanvas, face, palette, glyph)) {
             return nullptr;
         }
         return recorder.finishRecordingAsDrawable();

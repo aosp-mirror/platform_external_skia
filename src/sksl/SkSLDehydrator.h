@@ -29,13 +29,10 @@ class Statement;
 class Symbol;
 class SymbolTable;
 
-// The file has the structure:
-//
-// uint16 version
-// uint16 total string length
-// string data
-// symboltable
-// elements
+/**
+ * Converts SkSL objects into a binary file. See binary_format.md for a description of the file
+ * format.
+ */
 class Dehydrator {
 public:
     Dehydrator() {
@@ -85,6 +82,11 @@ private:
 
     void writeS32(int64_t i) {
         SkASSERT(i >= -2147483648LL && i <= 2147483647);
+        fBody.write32(i);
+    }
+
+    void writeU32(int64_t i) {
+        SkASSERT(i >= 0 && i <= 4294967295);
         fBody.write32(i);
     }
 

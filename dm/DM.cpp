@@ -26,6 +26,7 @@
 #include "src/core/SkTaskGroup.h"
 #include "src/utils/SkOSPath.h"
 #include "tests/Test.h"
+#include "tests/TestHarness.h"
 #include "tools/AutoreleasePool.h"
 #include "tools/HashAndEncode.h"
 #include "tools/ProcStats.h"
@@ -988,7 +989,6 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
 #define SINK(t, sink, ...) if (config->getBackend().equals(t)) return new sink(__VA_ARGS__)
 
     if (FLAGS_cpu) {
-        SINK("g8",          RasterSink, kGray_8_SkColorType);
         SINK("r8",          RasterSink, kR8_unorm_SkColorType);
         SINK("565",         RasterSink, kRGB_565_SkColorType);
         SINK("4444",        RasterSink, kARGB_4444_SkColorType);
@@ -1480,6 +1480,12 @@ static void run_test(skiatest::Test test, const GrContextOptions& grCtxOptions) 
         test.run(&reporter, options);
     }
     done("unit", "test", "", test.fName);
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+TestHarness CurrentTestHarness() {
+    return TestHarness::kDM;
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/

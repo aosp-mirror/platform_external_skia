@@ -42,22 +42,22 @@ std::tuple<SkPaint, int> create_paint(skgpu::ShaderCombo::ShaderType shaderType,
             break;
         case skgpu::ShaderCombo::ShaderType::kLinearGradient:
             s = SkGradientShader::MakeLinear(pts, colors, offsets, 2, tm);
-            numUniforms += 6;
+            numUniforms += 7;
             break;
         case skgpu::ShaderCombo::ShaderType::kRadialGradient:
             s = SkGradientShader::MakeRadial({0, 0}, 100, colors, offsets, 2, tm);
-            numUniforms += 6;
+            numUniforms += 7;
             break;
         case skgpu::ShaderCombo::ShaderType::kSweepGradient:
             s = SkGradientShader::MakeSweep(0, 0, colors, offsets, 2, tm,
                                             0, 359, 0, nullptr);
-            numUniforms += 6;
+            numUniforms += 7;
             break;
         case skgpu::ShaderCombo::ShaderType::kConicalGradient:
             s = SkGradientShader::MakeTwoPointConical({100, 100}, 100,
                                                       {-100, -100}, 100,
                                                       colors, offsets, 2, tm);
-            numUniforms += 6;
+            numUniforms += 7;
             break;
     }
     SkPaint p;
@@ -91,7 +91,8 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(UniformTest, reporter, context) {
             }
 
             for (auto bm : { SkBlendMode::kSrc, SkBlendMode::kSrcOver }) {
-                SkPaintParamsKey expected = CreateKey(dict, SkBackend::kGraphite, s, tm, bm);
+                std::unique_ptr<SkPaintParamsKey> expected = CreateKey(dict, SkBackend::kGraphite,
+                                                                       s, tm, bm);
 
                 auto [ p, expectedNumUniforms ] = create_paint(s, tm, bm);
                 auto [ actualID, uniformBlock] = ExtractPaintData(dict, PaintParams(p));
@@ -100,7 +101,7 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(UniformTest, reporter, context) {
                 auto entry = dict->lookup(actualID);
 
 
-                REPORTER_ASSERT(reporter, expected == entry->paintParamsKey());
+                REPORTER_ASSERT(reporter, *expected == *entry->paintParamsKey());
                 REPORTER_ASSERT(reporter, expectedNumUniforms == actualNumUniforms);
                 for (auto& u : *uniformBlock) {
                     for (int i = 0; i < u->count(); ++i) {
