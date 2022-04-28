@@ -759,14 +759,14 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			"Mac":        DEFAULT_OS_MAC,
 			"Mac10.12":   "Mac-10.12",
 			"Mac10.13":   "Mac-10.13.6",
-			"Mac10.14":   "Mac-10.14.3",
+			"Mac10.14":   "Mac-10.14",
 			"Mac10.15.1": "Mac-10.15.1",
 			"Mac10.15.7": "Mac-10.15.7", // Same as 'Mac', but explicit.
 			"Mac11":      "Mac-11.4",
 			"Mac12":      "Mac-12",
 			"Ubuntu18":   "Ubuntu-18.04",
 			"Win":        DEFAULT_OS_WIN,
-			"Win10":      "Windows-10-19041",
+			"Win10":      "Windows-10-19044",
 			"Win2019":    DEFAULT_OS_WIN,
 			"Win7":       "Windows-7-SP1",
 			"Win8":       "Windows-8.1-SP0",
@@ -778,14 +778,6 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 		if os == "Win10" && b.parts["model"] == "Golo" {
 			// ChOps-owned machines have Windows 10 21h1.
 			d["os"] = "Windows-10-19043"
-		}
-		if os == "Mac10.14" && b.parts["model"] == "VMware7.1" {
-			// ChOps VMs are at a newer version of MacOS.
-			d["os"] = "Mac-10.14.6"
-		}
-		if os == "Mac10.15" && b.parts["model"] == "VMware7.1" {
-			// ChOps VMs are at a newer version of MacOS.
-			d["os"] = "Mac-10.15.7"
 		}
 		if b.parts["model"] == "iPhone11" {
 			d["os"] = "iOS-13.6"
