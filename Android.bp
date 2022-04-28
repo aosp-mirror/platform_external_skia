@@ -436,6 +436,7 @@ cc_library_static {
         "src/effects/imagefilters/SkRuntimeImageFilter.cpp",
         "src/effects/imagefilters/SkShaderImageFilter.cpp",
         "src/effects/imagefilters/SkTileImageFilter.cpp",
+        "src/gpu/AtlasTypes.cpp",
         "src/gpu/Blend.cpp",
         "src/gpu/RectanizerPow2.cpp",
         "src/gpu/RectanizerSkyline.cpp",
@@ -1462,6 +1463,7 @@ cc_library_static {
         srcs: [
           "src/codec/SkHeifCodec.cpp",
           "src/codec/SkRawCodec.cpp",
+          "src/gpu/AtlasTypes.cpp",
           "src/gpu/Blend.cpp",
           "src/gpu/RectanizerPow2.cpp",
           "src/gpu/RectanizerSkyline.cpp",
@@ -3973,6 +3975,7 @@ cc_library_shared {
         "src/effects/imagefilters/SkRuntimeImageFilter.cpp",
         "src/effects/imagefilters/SkShaderImageFilter.cpp",
         "src/effects/imagefilters/SkTileImageFilter.cpp",
+        "src/gpu/AtlasTypes.cpp",
         "src/gpu/Blend.cpp",
         "src/gpu/RectanizerPow2.cpp",
         "src/gpu/RectanizerSkyline.cpp",
