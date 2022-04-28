@@ -170,10 +170,6 @@ std::string get_sksl_vs(const GraphicsPipelineDesc& desc) {
         sksl += emit_SKSL_uniforms(1, "Step", step->uniforms());
     }
 
-    // TODO: This is only needed for tessellation path renderers and should be handled using a
-    // helper function injector that the SkSL built-in code snippets can use.
-    sksl += wangs_formula::as_sksl().c_str();
-
     // Vertex shader function declaration
     sksl += "void main() {\n";
     // Vertex shader body
@@ -443,7 +439,8 @@ static MTLRenderPipelineColorAttachmentDescriptor* create_color_attachment(
 
 std::string GetMtlUniforms(int bufferID,
                            const char* name,
-                           const std::vector<SkPaintParamsKey::BlockReader>& readers) {
+                           const std::vector<SkPaintParamsKey::BlockReader>& readers,
+                           bool needsDev2Local) {
     size_t numUniforms = 0;
     for (auto r : readers) {
         numUniforms += r.entry()->fUniforms.size();
@@ -458,6 +455,10 @@ std::string GetMtlUniforms(int bufferID,
     std::string result = get_uniform_header(bufferID, name);
     for (int i = 0; i < (int) readers.size(); ++i) {
         result += get_uniforms(readers[i].entry()->fUniforms, &offset, i);
+    }
+    if (needsDev2Local) {
+        static constexpr SkUniform kDev2LocalUniform[] = {{ "dev2LocalUni", SkSLType::kFloat4x4 }};
+        result += get_uniforms(SkSpan<const SkUniform>(kDev2LocalUniform, 1), &offset, -1);
     }
     result.append("};\n\n");
 

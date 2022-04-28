@@ -64,9 +64,7 @@ using FixedCountStrokeWriter = PatchWriter<GrVertexChunkBuilder,
                                            Optional<PatchAttribs::kColor>,
                                            Optional<PatchAttribs::kWideColorIfEnabled>,
                                            Optional<PatchAttribs::kExplicitCurveType>,
-#if !defined(SK_LEGACY_LINE_TESSELLATION)
                                            ReplicateLineEndPoints,
-#endif
                                            TrackJoinControlPoints>;
 
 int write_fixed_count_patches(FixedCountStrokeWriter&& patchWriter,
@@ -1135,6 +1133,8 @@ int StrokeHardwareTessellator::prepare(GrMeshDrawTarget* target,
                                        std::array<float,2> matrixMinMaxScales,
                                        PathStrokeList* pathStrokeList,
                                        int totalCombinedStrokeVerbCnt) {
+    SkASSERT(false); // HW tessellation is always disabled, we should never get here now.
+
     // Over-allocate enough patches for 1 in 4 strokes to chop and for 8 extra caps.
     int strokePreallocCount = (totalCombinedStrokeVerbCnt * 5) / 4;
     int capPreallocCount = 8;
