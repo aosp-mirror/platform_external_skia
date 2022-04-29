@@ -7,7 +7,6 @@
 
 #include "src/gpu/ganesh/dawn/GrDawnGpu.h"
 
-#include "include/core/SkColorSpace.h"
 #include "include/gpu/GrBackendSemaphore.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrContextOptions.h"
@@ -776,7 +775,7 @@ bool GrDawnGpu::onRegenerateMipMapLevels(GrTexture* tex) {
         wgpu::BindGroup bindGroup = fDevice.CreateBindGroup(&bgDesc);
         wgpu::RenderPassColorAttachment colorAttachment;
         colorAttachment.view = dstView;
-        colorAttachment.clearColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+        colorAttachment.clearValue = {0.0f, 0.0f, 0.0f, 0.0f};
         colorAttachment.loadOp = wgpu::LoadOp::Load;
         colorAttachment.storeOp = wgpu::StoreOp::Store;
         wgpu::RenderPassColorAttachment* colorAttachments = { &colorAttachment };
@@ -787,7 +786,7 @@ bool GrDawnGpu::onRegenerateMipMapLevels(GrTexture* tex) {
         rpe.SetPipeline(pipeline);
         rpe.SetBindGroup(0, bindGroup);
         rpe.Draw(4, 1, 0, 0);
-        rpe.EndPass();
+        rpe.End();
 
         wgpu::Extent3D copySize = {(uint32_t)dstWidth, (uint32_t)dstHeight, 1};
         wgpu::ImageCopyTexture srcCopyView;
