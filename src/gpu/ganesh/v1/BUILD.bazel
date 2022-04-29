@@ -1,4 +1,6 @@
-load("//bazel:macros.bzl", "generated_cc_atom")
+load("//bazel:macros.bzl", "exports_files_legacy", "generated_cc_atom")
+
+exports_files_legacy()
 
 licenses(["notice"])
 
@@ -63,6 +65,7 @@ generated_cc_atom(
         "//src/core:SkDraw_hdr",
         "//src/core:SkImagePriv_hdr",
         "//src/core:SkMaskFilterBase_hdr",
+        "//src/core:SkSamplingPriv_hdr",
         "//src/core:SkSpecialImage_hdr",
         "//src/gpu/ganesh:GrBlurUtils_hdr",
         "//src/gpu/ganesh:GrCaps_hdr",
