@@ -12,7 +12,9 @@
   {"name": "Build-Debian10-GCC-x86_64-Release-NoGPU_Docker"},
   {"name": "Build-Debian10-GCC-x86_64-Release-Shared_Docker"},
   {"name": "Build-Debian10-BazelClang-x86_64-Release-IWYU",
-    "cq_config": {"location_regexes": ["src/sksl/*", "src/svg/*", "tools/debugger/*"]}
+    "cq_config": {
+      "location_regexes": ["src/sksl/*", "src/svg/*", "src/utils/*", "tools/debugger/*"]
+    }
    },
   {"name": "Build-Debian10-Clang-arm-Debug-Android",
    "cq_config": {}
@@ -730,12 +732,6 @@
   {"name": "Test-Win2019-MSVC-GCE-CPU-AVX2-x86_64-Debug-All-SkVM"},
   {"name": "Test-Win2019-MSVC-GCE-CPU-AVX2-x86_64-Release-All"},
   {"name": "Test-Win2019-MSVC-GCE-CPU-AVX2-x86_64-Release-All-SkVM"},
-  {"name": "Test-Win7-Clang-Golo-CPU-AVX512-x86-Debug-All"},
-  {"name": "Test-Win7-Clang-Golo-CPU-AVX512-x86-Release-All"},
-  {"name": "Test-Win7-Clang-Golo-CPU-AVX512-x86_64-Debug-All"},
-  {"name": "Test-Win7-Clang-Golo-CPU-AVX512-x86_64-Debug-All-NativeFonts"},
-  {"name": "Test-Win7-Clang-Golo-CPU-AVX512-x86_64-Debug-All-NativeFonts_GDI"},
-  {"name": "Test-Win7-Clang-Golo-CPU-AVX512-x86_64-Release-All"},
   {"name": "Test-Win8-Clang-Golo-CPU-AVX512-x86-Debug-All"},
   {"name": "Test-Win8-Clang-Golo-CPU-AVX512-x86-Release-All"},
   {"name": "Test-Win8-Clang-Golo-CPU-AVX512-x86_64-Debug-All"},

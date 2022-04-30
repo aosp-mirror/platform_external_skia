@@ -2296,6 +2296,7 @@ generated_cc_atom(
     deps = [
         ":Test_hdr",
         "//include/core:SkCanvas_hdr",
+        "//include/core:SkColorSpace_hdr",
         "//include/core:SkImage_hdr",
         "//include/core:SkSurface_hdr",
         "//include/core:SkTypes_hdr",
@@ -3055,6 +3056,8 @@ generated_cc_atom(
     visibility = ["//:__subpackages__"],
     deps = [
         ":Test_hdr",
+        "//include/core:SkPoint_hdr",
+        "//include/private:SkTDArray_hdr",
         "//src/utils:SkPolyUtils_hdr",
     ],
 )
@@ -3367,6 +3370,7 @@ generated_cc_atom(
     visibility = ["//:__subpackages__"],
     deps = [
         ":Test_hdr",
+        "//include/core:SkColorSpace_hdr",
         "//include/core:SkTypes_hdr",
         "//include/ports:SkImageGeneratorNDK_hdr",
         "//tools:Resources_hdr",
@@ -3380,6 +3384,7 @@ generated_cc_atom(
     visibility = ["//:__subpackages__"],
     deps = [
         ":Test_hdr",
+        "//include/core:SkColorSpace_hdr",
         "//include/core:SkColor_hdr",
         "//include/core:SkImageEncoder_hdr",
         "//include/core:SkImageGenerator_hdr",
@@ -3420,6 +3425,8 @@ generated_cc_atom(
     visibility = ["//:__subpackages__"],
     deps = [
         ":Test_hdr",
+        "//include/core:SkPoint_hdr",
+        "//include/private:SkTDArray_hdr",
         "//src/utils:SkPolyUtils_hdr",
     ],
 )
@@ -4649,6 +4656,8 @@ generated_cc_atom(
     visibility = ["//:__subpackages__"],
     deps = [
         ":Test_hdr",
+        "//include/core:SkPoint_hdr",
+        "//include/private:SkTDArray_hdr",
         "//src/utils:SkPolyUtils_hdr",
     ],
 )
@@ -6110,6 +6119,7 @@ generated_cc_atom(
     deps = [
         ":Test_hdr",
         "//include/core:SkColorPriv_hdr",
+        "//include/core:SkStream_hdr",
         "//include/private:SkColorData_hdr",
         "//src/core:SkCpu_hdr",
         "//src/core:SkMSAN_hdr",
@@ -6939,6 +6949,7 @@ generated_cc_atom(
         ":Test_hdr",
         "//include/core:SkBitmap_hdr",
         "//include/core:SkCanvas_hdr",
+        "//include/core:SkColorSpace_hdr",
         "//include/core:SkImage_hdr",
         "//include/core:SkSurface_hdr",
         "//include/core:SkTypes_hdr",
