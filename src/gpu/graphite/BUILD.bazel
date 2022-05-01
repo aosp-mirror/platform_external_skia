@@ -1,4 +1,6 @@
-load("//bazel:macros.bzl", "generated_cc_atom")
+load("//bazel:macros.bzl", "exports_files_legacy", "generated_cc_atom")
+
+exports_files_legacy()
 
 licenses(["notice"])
 
@@ -217,7 +219,6 @@ generated_cc_atom(
         ":Renderer_hdr",
         ":TextureProxy_hdr",
         ":TextureUtils_hdr",
-        "//include/core:SkColorSpace_hdr",
         "//include/core:SkPathEffect_hdr",
         "//include/core:SkPath_hdr",
         "//include/core:SkStrokeRec_hdr",

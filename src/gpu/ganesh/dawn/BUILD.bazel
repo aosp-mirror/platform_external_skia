@@ -1,4 +1,6 @@
-load("//bazel:macros.bzl", "generated_cc_atom")
+load("//bazel:macros.bzl", "exports_files_legacy", "generated_cc_atom")
+
+exports_files_legacy()
 
 licenses(["notice"])
 
@@ -101,7 +103,6 @@ generated_cc_atom(
         ":GrDawnRenderTarget_hdr",
         ":GrDawnTexture_hdr",
         ":GrDawnUtil_hdr",
-        "//include/core:SkColorSpace_hdr",
         "//include/gpu:GrBackendSemaphore_hdr",
         "//include/gpu:GrBackendSurface_hdr",
         "//include/gpu:GrContextOptions_hdr",

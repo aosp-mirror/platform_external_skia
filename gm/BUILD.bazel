@@ -1,4 +1,6 @@
-load("//bazel:macros.bzl", "generated_cc_atom")
+load("//bazel:macros.bzl", "cc_library", "exports_files_legacy", "generated_cc_atom")
+
+exports_files_legacy()
 
 licenses(["notice"])
 
@@ -791,6 +793,7 @@ generated_cc_atom(
     deps = [
         ":gm_hdr",
         "//include/core:SkCanvas_hdr",
+        "//include/core:SkColorSpace_hdr",
         "//include/core:SkColor_hdr",
         "//include/core:SkImage_hdr",
         "//include/core:SkPaint_hdr",
