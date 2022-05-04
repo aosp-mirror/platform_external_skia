@@ -185,8 +185,6 @@ cc_library(
         "//src/gpu/ganesh/ops:TessellationPathRenderer_src",
         "//src/gpu/ganesh/ops:TextureOp_src",
         "//src/gpu/ganesh/ops:TriangulatingPathRenderer_src",
-        "//src/gpu/ganesh/tessellate/shaders:GrPathTessellationShader_Hardware_src",
-        "//src/gpu/ganesh/tessellate/shaders:GrPathTessellationShader_MiddleOut_src",
         "//src/gpu/ganesh/tessellate/shaders:GrPathTessellationShader_src",
         "//src/gpu/ganesh/tessellate/shaders:GrStrokeTessellationShader_HardwareImpl_src",
         "//src/gpu/ganesh/tessellate/shaders:GrStrokeTessellationShader_InstancedImpl_src",
@@ -1500,18 +1498,6 @@ generated_cc_atom(
 )
 
 generated_cc_atom(
-    name = "GrGlyph_hdr",
-    hdrs = ["GrGlyph.h"],
-    visibility = ["//:__subpackages__"],
-    deps = [
-        ":GrDrawOpAtlas_hdr",
-        "//include/private/gpu/ganesh:GrTypesPriv_hdr",
-        "//src/core:SkGlyph_hdr",
-        "//src/core:SkMask_hdr",
-    ],
-)
-
-generated_cc_atom(
     name = "GrGpuBuffer_hdr",
     hdrs = ["GrGpuBuffer.h"],
     visibility = ["//:__subpackages__"],
@@ -2737,6 +2723,7 @@ generated_cc_atom(
     deps = [
         "//include/core:SkMath_hdr",
         "//include/core:SkSpan_hdr",
+        "//include/private:SkTemplates_hdr",
         "//src/core:SkArenaAlloc_hdr",
     ],
 )
