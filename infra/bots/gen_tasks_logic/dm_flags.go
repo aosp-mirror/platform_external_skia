@@ -280,14 +280,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("gltestthreading", "gm", ALL, "draw_image_set")
 		}
 
-		// CommandBuffer bot *only* runs the cmdbuffer_es2 configs.
-		if b.extraConfig("CommandBuffer") {
-			configs = []string{"cmdbuffer_es2"}
-			if sampleCount > 0 {
-				configs = append(configs, "cmdbuffer_es2_dmsaa")
-			}
-		}
-
 		// Dawn bot *only* runs the dawn config
 		if b.extraConfig("Dawn") {
 			// tint:1045: Tint doesn't implement MatrixInverse yet.
@@ -360,34 +352,57 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 		// ANGLE bot *only* runs the angle configs
 		if b.extraConfig("ANGLE") {
-			configs = []string{"angle_d3d11_es2",
-				"angle_gl_es2",
-				"angle_d3d11_es3"}
-			if sampleCount > 0 {
-				configs = append(configs, fmt.Sprintf("angle_d3d11_es2_msaa%d", sampleCount))
-				configs = append(configs, fmt.Sprintf("angle_d3d11_es2_dmsaa"))
-				configs = append(configs, fmt.Sprintf("angle_gl_es2_dmsaa"))
-				configs = append(configs, fmt.Sprintf("angle_d3d11_es3_msaa%d", sampleCount))
-				configs = append(configs, fmt.Sprintf("angle_d3d11_es3_dmsaa"))
-				configs = append(configs, fmt.Sprintf("angle_gl_es3_dmsaa"))
-			}
-			if b.matchGpu("GTX", "Quadro") {
-				// See skia:7823 and chromium:693090.
-				configs = append(configs, "angle_gl_es3")
+			if b.matchOs("Win") {
+				configs = []string{"angle_d3d11_es2",
+					"angle_gl_es2",
+					"angle_d3d11_es3"}
 				if sampleCount > 0 {
-					configs = append(configs, fmt.Sprintf("angle_gl_es2_msaa%d", sampleCount))
+					configs = append(configs, fmt.Sprintf("angle_d3d11_es2_msaa%d", sampleCount))
+					configs = append(configs, fmt.Sprintf("angle_d3d11_es2_dmsaa"))
 					configs = append(configs, fmt.Sprintf("angle_gl_es2_dmsaa"))
-					configs = append(configs, fmt.Sprintf("angle_gl_es3_msaa%d", sampleCount))
+					configs = append(configs, fmt.Sprintf("angle_d3d11_es3_msaa%d", sampleCount))
+					configs = append(configs, fmt.Sprintf("angle_d3d11_es3_dmsaa"))
 					configs = append(configs, fmt.Sprintf("angle_gl_es3_dmsaa"))
 				}
-			}
-			if !b.matchGpu("GTX", "Quadro", "GT610") {
-				// See skia:10149
-				configs = append(configs, "angle_d3d9_es2")
-			}
-			if b.model("NUC5i7RYH") {
-				// skbug.com/7376
-				skip(ALL, "test", ALL, "ProcessorCloneTest")
+				if b.matchGpu("GTX", "Quadro") {
+					// See skia:7823 and chromium:693090.
+					configs = append(configs, "angle_gl_es3")
+					if sampleCount > 0 {
+						configs = append(configs, fmt.Sprintf("angle_gl_es2_msaa%d", sampleCount))
+						configs = append(configs, fmt.Sprintf("angle_gl_es2_dmsaa"))
+						configs = append(configs, fmt.Sprintf("angle_gl_es3_msaa%d", sampleCount))
+						configs = append(configs, fmt.Sprintf("angle_gl_es3_dmsaa"))
+					}
+				}
+				if !b.matchGpu("GTX", "Quadro", "GT610") {
+					// See skia:10149
+					configs = append(configs, "angle_d3d9_es2")
+				}
+				if b.model("NUC5i7RYH") {
+					// skbug.com/7376
+					skip(ALL, "test", ALL, "ProcessorCloneTest")
+				}
+			} else if b.matchOs("Mac") {
+				configs = []string{"angle_mtl_es2", "angle_mtl_es3"}
+
+				// anglebug.com/7145
+				skip(ALL, "test", ALL, "SkSLOutParamsAreDistinctFromGlobal_GPU")
+
+				// anglebug.com/7245
+				skip("angle_mtl_es3", "gm", ALL, "runtime_intrinsics_common_es3")
+
+				if b.gpu("AppleM1") {
+					// M1 Macs fail this test for sRGB color types
+					// skbug.com/13289
+					skip(ALL, "test", ALL, "TransferPixelsToTextureTest")
+				}
+
+				if b.model("MacBookAir7.2") {
+					// This issue may be more widespread?
+					// skbug.com/13290
+					skip(ALL, "test", ALL, "SkSLMatricesNonsquare_GPU")
+					skip(ALL, "test", ALL, "SkSLMatrixScalarMath_GPU")
+				}
 			}
 		}
 
@@ -403,11 +418,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "test", ALL, "ProcessorCloneTest")
 		}
 
-		if b.extraConfig("CommandBuffer") && b.model("MacBook10.1") {
-			// skbug.com/9235
-			skip(ALL, "test", ALL, "Programs")
-		}
-
 		if b.model("Spin513") {
 			// skbug.com/11876
 			skip(ALL, "test", ALL, "Programs")
@@ -419,15 +429,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "test", ALL, "ReplaceSurfaceBackendTexture")
 			skip(ALL, "test", ALL, "SurfaceAttachStencil_Gpu")
 			skip(ALL, "test", ALL, "SurfaceWrappedWithRelease_Gpu")
-		}
-
-		if b.extraConfig("CommandBuffer") {
-			// skbug.com/10412
-			skip(ALL, "test", ALL, "GLBackendAllocationTest")
-			skip(ALL, "test", ALL, "InitialTextureClear")
-			// skbug.com/12437
-			skip(ALL, "test", ALL, "GrDDLImage_MakeSubset")
-			skip(ALL, "test", ALL, "GrContext_oomed")
 		}
 
 		// skbug.com/9043 - these devices render this test incorrectly
@@ -454,8 +455,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			}
 		}
 		if b.extraConfig("Slug") {
-		    // Test slug drawing
-		    configs = []string{"glslug"}
+			// Test slug drawing
+			configs = []string{"glslug"}
 		}
 		if b.extraConfig("Direct3D") {
 			configs = []string{"d3d"}
@@ -468,7 +469,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				configs = append(configs, "vk1010102")
 				// Decoding transparent images to 1010102 just looks bad
 				skip("vk1010102", "image", ALL, ALL)
-			} else {
+			} else if !b.extraConfig("Dawn") {
 				configs = append(configs, "gl1010102", "gltestpersistentcache", "gltestglslcache", "gltestprecompile")
 				// Decoding transparent images to 1010102 just looks bad
 				skip("gl1010102", "image", ALL, ALL)
@@ -630,12 +631,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		removeFromArgs("tests")
 	}
 
-	// Workaround for skbug.com/13040. Eventually, the CommandBuffer bots are going to be
-	// replaced with ANGLE bots, so this is fine as a temporary fix
-	if b.extraConfig("CommandBuffer") {
-		removeFromArgs("tests")
-	}
-
 	if b.extraConfig("NativeFonts") { // images won't exercise native font integration :)
 		removeFromArgs("image")
 		removeFromArgs("colorImage")
@@ -651,6 +646,14 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		removeFromArgs("tests")
 		removeFromArgs("image")
 		removeFromArgs("colorImage")
+		removeFromArgs("svg")
+	} else if b.matchExtraConfig("OldestSupportedSkpVersion") {
+		// The OldestSupportedSkpVersion bot only renders skps.
+		removeFromArgs("tests")
+		removeFromArgs("gm")
+		removeFromArgs("image")
+		removeFromArgs("colorImage")
+		removeFromArgs("lottie")
 		removeFromArgs("svg")
 	} else {
 		// No other bots render the .skps.
@@ -1310,6 +1313,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	if b.matchExtraConfig("Lottie") {
 		b.asset("lottie-samples")
 		b.recipeProp("lotties", "true")
+	} else if b.matchExtraConfig("OldestSupportedSkpVersion") {
+		b.recipeProp("skps", "true")
 	} else {
 		b.asset("skimage")
 		b.recipeProp("images", "true")

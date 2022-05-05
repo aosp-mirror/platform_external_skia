@@ -71,6 +71,8 @@ struct SkShaderSnippet {
         return fSnippetRequirementFlags & SnippetRequirementFlags::kLocalCoords;
     }
 
+    int numExpectedChildren() const { return fNumChildren; }
+
     const char* fName = nullptr;
     SkSpan<const SkUniform> fUniforms;
     SnippetRequirementFlags fSnippetRequirementFlags;
@@ -109,6 +111,7 @@ public:
 private:
     std::string emitGlueCodeForEntry(int* entryIndex,
                                      const std::string& priorStageOutputName,
+                                     const std::string& parentPreLocalName,
                                      std::string* result,
                                      int indent) const;
 
