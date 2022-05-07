@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/ganesh/ops/StrokeTessellator.h"
+#include "src/gpu/ganesh/tessellate/StrokeTessellator.h"
 
 #include "src/core/SkGeometry.h"
 #include "src/core/SkPathPriv.h"
@@ -236,8 +236,7 @@ void StrokeTessellator::prepare(GrMeshDrawTarget* target,
                                 PathStrokeList* pathStrokeList,
                                 int totalCombinedStrokeVerbCnt) {
     int preallocCount = FixedCountStrokes::PreallocCount(totalCombinedStrokeVerbCnt);
-    FixedCountStrokeWriter patchWriter{fAttribs, kMaxParametricSegments,
-                                       target, &fVertexChunkArray, preallocCount};
+    FixedCountStrokeWriter patchWriter{fAttribs, target, &fVertexChunkArray, preallocCount};
 
     fFixedEdgeCount = write_fixed_count_patches(std::move(patchWriter),
                                                 shaderMatrix,

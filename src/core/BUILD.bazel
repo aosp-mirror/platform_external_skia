@@ -4691,7 +4691,7 @@ generated_cc_atom(
         "//include/core:SkTypeface_hdr",
         "//include/private:SkMutex_hdr",
         "//include/private:SkTemplates_hdr",
-        "//src/gpu/ganesh/text:GrStrikeCache_hdr",
+        "//src/text/gpu:StrikeCache_hdr",
     ],
 )
 
@@ -4743,7 +4743,7 @@ generated_cc_atom(
         "//include/core:SkGraphics_hdr",
         "//src/gpu/ganesh/text:GrSDFMaskFilter_hdr",
         "//src/gpu/ganesh/text:GrSDFTControl_hdr",
-        "//src/gpu/ganesh/text:GrStrikeCache_hdr",
+        "//src/text/gpu:StrikeCache_hdr",
     ],
 )
 
@@ -5566,7 +5566,12 @@ generated_cc_atom(
         ":SkSLTypeShared_hdr",
         "//include/core:SkCustomMesh_hdr",
         "//include/core:SkData_hdr",
+        "//include/gpu:GrDirectContext_hdr",
         "//include/private/gpu/ganesh:GrTypesPriv_hdr",
+        "//src/gpu/ganesh:GrDirectContextPriv_hdr",
+        "//src/gpu/ganesh:GrGpuBuffer_hdr",
+        "//src/gpu/ganesh:GrResourceCache_hdr",
+        "//src/gpu/ganesh:GrResourceProvider_hdr",
     ],
 )
 
