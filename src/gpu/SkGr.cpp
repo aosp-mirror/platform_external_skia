@@ -206,7 +206,7 @@ GrMakeCachedBitmapProxyView(GrRecordingContext* rContext,
         installKey(proxy.get());
     }
 
-    GrSwizzle swizzle = caps->getReadSwizzle(proxy->backendFormat(), ct);
+    skgpu::Swizzle swizzle = caps->getReadSwizzle(proxy->backendFormat(), ct);
     if (mipmapped == GrMipmapped::kNo || proxy->mipmapped() == GrMipmapped::kYes) {
         return {{std::move(proxy), kTopLeft_GrSurfaceOrigin, swizzle}, ct};
     }
@@ -245,7 +245,7 @@ GrMakeUncachedBitmapProxyView(GrRecordingContext* rContext,
     GrColorType ct = choose_bmp_texture_colortype(caps, bitmap);
 
     if (auto proxy = make_bmp_proxy(proxyProvider, bitmap, ct, mipmapped, fit, budgeted)) {
-        GrSwizzle swizzle = caps->getReadSwizzle(proxy->backendFormat(), ct);
+        skgpu::Swizzle swizzle = caps->getReadSwizzle(proxy->backendFormat(), ct);
         SkASSERT(mipmapped == GrMipmapped::kNo || proxy->mipmapped() == GrMipmapped::kYes);
         return {{std::move(proxy), kTopLeft_GrSurfaceOrigin, swizzle}, ct};
     }
@@ -548,8 +548,7 @@ static inline bool skpaint_to_grpaint_impl(
 
 #ifndef SK_IGNORE_GPU_DITHER
     GrColorType ct = dstColorInfo.colorType();
-    const bool shaderOverride = SkToBool(paintFP);
-    if (SkPaintPriv::ShouldDither(skPaint, GrColorTypeToSkColorType(ct), shaderOverride)) {
+    if (SkPaintPriv::ShouldDither(skPaint, GrColorTypeToSkColorType(ct)) && paintFP != nullptr) {
         float ditherRange = dither_range_for_config(ct);
         paintFP = make_dither_effect(
                 context, std::move(paintFP), ditherRange, context->priv().caps());
