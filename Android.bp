@@ -1753,7 +1753,7 @@ cc_library_static {
           "android",
         ],
       },
-      linux_glibc: {
+      host_linux: {
         srcs: [
           "src/codec/SkRawCodec.cpp",
           "src/ports/SkDebug_stdio.cpp",
@@ -2207,6 +2207,7 @@ cc_defaults {
         "gm/overdrawcolorfilter.cpp",
         "gm/overstroke.cpp",
         "gm/p3.cpp",
+        "gm/palette.cpp",
         "gm/particles.cpp",
         "gm/patch.cpp",
         "gm/path_stroke_with_zero_length.cpp",
@@ -2949,6 +2950,7 @@ cc_defaults {
         "tests/TLazyTest.cpp",
         "tests/TemplatesTest.cpp",
         "tests/Test.cpp",
+        "tests/TestHarness.cpp",
         "tests/TestTest.cpp",
         "tests/TestUtils.cpp",
         "tests/TextBlobCacheTest.cpp",
@@ -3534,6 +3536,7 @@ cc_library_shared {
         "gm/overdrawcolorfilter.cpp",
         "gm/overstroke.cpp",
         "gm/p3.cpp",
+        "gm/palette.cpp",
         "gm/particles.cpp",
         "gm/patch.cpp",
         "gm/path_stroke_with_zero_length.cpp",
@@ -4821,6 +4824,7 @@ cc_library_shared {
         "tests/TLazyTest.cpp",
         "tests/TemplatesTest.cpp",
         "tests/Test.cpp",
+        "tests/TestHarness.cpp",
         "tests/TestTest.cpp",
         "tests/TestUtils.cpp",
         "tests/TextBlobCacheTest.cpp",
@@ -4927,6 +4931,7 @@ cc_library_shared {
 android_test {
     name: "CtsSkQPTestCases",
     defaults: ["cts_defaults"],
+    test_suites: ["cts"],
 
     libs: ["android.test.runner.stubs"],
     jni_libs: ["libskqp_jni"],
@@ -4944,5 +4949,6 @@ android_test {
     srcs: ["platform_tools/android/apps/skqp/src/main/java/**/*.java"],
 
     sdk_version: "test_current",
+
 }
 
