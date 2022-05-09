@@ -10,7 +10,6 @@
 
 #include "include/core/SkSurfaceProps.h"
 #include "src/core/SkDistanceFieldGen.h"
-#include "src/core/SkGlyphBuffer.h"
 #include "src/core/SkGlyphRun.h"
 #include "src/core/SkScalerContext.h"
 #include "src/core/SkTextBlobPriv.h"
@@ -97,15 +96,6 @@ private:
     SkGlyphRunListPainter(const SkSurfaceProps& props, SkColorType colorType,
                           SkScalerContextFlags flags, SkStrikeForGPUCacheInterface* strikeCache);
 
-    struct ScopedBuffers {
-        ScopedBuffers(SkGlyphRunListPainter* painter, size_t size);
-        ~ScopedBuffers();
-        SkGlyphRunListPainter* fPainter;
-    };
-
-    ScopedBuffers SK_WARN_UNUSED_RESULT ensureBuffers(const SkGlyphRunList& glyphRunList);
-    ScopedBuffers SK_WARN_UNUSED_RESULT ensureBuffers(const SkGlyphRun& glyphRun);
-
     // The props as on the actual device.
     const SkSurfaceProps fDeviceProps;
     // The props for when the bitmap device can't draw LCD text.
@@ -114,9 +104,6 @@ private:
     const SkScalerContextFlags fScalerContextFlags;
 
     SkStrikeForGPUCacheInterface* const fStrikeCache;
-
-    SkDrawableGlyphBuffer fAccepted;
-    SkSourceGlyphBuffer fRejected;
 };
 
 // SkGlyphRunPainterInterface are all the ways that Ganesh generates glyphs. The first
@@ -148,7 +135,7 @@ public:
                                     SkScalar strikeToSourceScale) = 0;
 
     virtual void processSourceDrawables(const SkZip<SkGlyphVariant, SkPoint>& accepted,
-                                        const SkFont& runFont,
+                                        sk_sp<SkStrike>&& strike,
                                         const SkDescriptor& descriptor,
                                         SkScalar strikeToSourceScale) = 0;
 
