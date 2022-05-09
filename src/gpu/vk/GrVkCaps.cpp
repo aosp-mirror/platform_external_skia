@@ -610,7 +610,8 @@ void GrVkCaps::initGrCaps(const GrVkInterface* vkInterface,
     // attribs timeout looping over that many. For now, we'll cap this at 64 max and can raise it if
     // we ever find that need.
     static const uint32_t kMaxVertexAttributes = 64;
-    fMaxVertexAttributes = std::min(properties.limits.maxVertexInputAttributes, kMaxVertexAttributes);
+    fMaxVertexAttributes = std::min(properties.limits.maxVertexInputAttributes,
+                                    kMaxVertexAttributes);
 
     // GrCaps::fSampleLocationsSupport refers to the ability to *query* the sample locations (not
     // program them). For now we just set this to true if the device uses standard locations, and
@@ -677,13 +678,6 @@ void GrVkCaps::initGrCaps(const GrVkInterface* vkInterface,
 
     if (kARM_VkVendor == properties.vendorID) {
         fShouldCollapseSrcOverToSrcWhenAble = true;
-    }
-
-    // We're seeing vkCmdClearAttachments take a lot of cpu time when clearing the color attachment.
-    // We really should only be getting in there for partial clears. So instead we will do all
-    // partial clears as draws.
-    if (kQualcomm_VkVendor == properties.vendorID) {
-        fPerformPartialClearsAsDraws = true;
     }
 }
 
@@ -865,7 +859,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 ctInfo.fColorType = ct;
                 ctInfo.fTransferColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag;
-                ctInfo.fReadSwizzle = GrSwizzle::RGB1();
+                ctInfo.fReadSwizzle = skgpu::Swizzle::RGB1();
             }
         }
     }
@@ -894,8 +888,8 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 ctInfo.fColorType = ct;
                 ctInfo.fTransferColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-                ctInfo.fReadSwizzle = GrSwizzle("000r");
-                ctInfo.fWriteSwizzle = GrSwizzle("a000");
+                ctInfo.fReadSwizzle = skgpu::Swizzle("000r");
+                ctInfo.fWriteSwizzle = skgpu::Swizzle("a000");
             }
             // Format: VK_FORMAT_R8_UNORM, Surface: kGray_8
             {
@@ -904,7 +898,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 ctInfo.fColorType = ct;
                 ctInfo.fTransferColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag;
-                ctInfo.fReadSwizzle = GrSwizzle("rrr1");
+                ctInfo.fReadSwizzle = skgpu::Swizzle("rrr1");
             }
         }
     }
@@ -989,8 +983,8 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 ctInfo.fColorType = ct;
                 ctInfo.fTransferColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-                ctInfo.fReadSwizzle = GrSwizzle("000r");
-                ctInfo.fWriteSwizzle = GrSwizzle("a000");
+                ctInfo.fReadSwizzle = skgpu::Swizzle("000r");
+                ctInfo.fWriteSwizzle = skgpu::Swizzle("a000");
             }
         }
     }
@@ -1087,8 +1081,8 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 ctInfo.fColorType = ct;
                 ctInfo.fTransferColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-                ctInfo.fReadSwizzle = GrSwizzle::BGRA();
-                ctInfo.fWriteSwizzle = GrSwizzle::BGRA();
+                ctInfo.fReadSwizzle = skgpu::Swizzle::BGRA();
+                ctInfo.fWriteSwizzle = skgpu::Swizzle::BGRA();
             }
         }
     }
@@ -1147,8 +1141,8 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 ctInfo.fColorType = ct;
                 ctInfo.fTransferColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-                ctInfo.fReadSwizzle = GrSwizzle("000r");
-                ctInfo.fWriteSwizzle = GrSwizzle("a000");
+                ctInfo.fReadSwizzle = skgpu::Swizzle("000r");
+                ctInfo.fWriteSwizzle = skgpu::Swizzle("a000");
             }
         }
     }
@@ -1691,7 +1685,8 @@ GrBackendFormat GrVkCaps::getBackendFormatFromCompressionType(
     SkUNREACHABLE;
 }
 
-GrSwizzle GrVkCaps::onGetReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
+skgpu::Swizzle GrVkCaps::onGetReadSwizzle(const GrBackendFormat& format,
+                                          GrColorType colorType) const {
     VkFormat vkFormat;
     SkAssertResult(format.asVkFormat(&vkFormat));
     const auto* ycbcrInfo = format.getVkYcbcrConversionInfo();
@@ -1699,7 +1694,7 @@ GrSwizzle GrVkCaps::onGetReadSwizzle(const GrBackendFormat& format, GrColorType 
     if (ycbcrInfo->isValid() && ycbcrInfo->fExternalFormat != 0) {
         // We allow these to work with any color type and never swizzle. See
         // onAreColorTypeAndFormatCompatible.
-        return GrSwizzle{"rgba"};
+        return skgpu::Swizzle{"rgba"};
     }
 
     const auto& info = this->getFormatInfo(vkFormat);
@@ -1714,7 +1709,8 @@ GrSwizzle GrVkCaps::onGetReadSwizzle(const GrBackendFormat& format, GrColorType 
     return {};
 }
 
-GrSwizzle GrVkCaps::getWriteSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
+skgpu::Swizzle GrVkCaps::getWriteSwizzle(const GrBackendFormat& format,
+                                         GrColorType colorType) const {
     VkFormat vkFormat;
     SkAssertResult(format.asVkFormat(&vkFormat));
     const auto& info = this->getFormatInfo(vkFormat);
