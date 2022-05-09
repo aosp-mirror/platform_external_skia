@@ -41,7 +41,7 @@ public:
              int attribIndex,
              const GrBuffer* vertexBuffer,
              GrVertexAttribType cpuType,
-             GrSLType gpuType,
+             SkSLType gpuType,
              GrGLsizei stride,
              size_t offsetInBytes,
              int divisor = 0);
@@ -66,7 +66,7 @@ public:
     int count() const { return fAttribArrayStates.count(); }
 
 private:
-    static constexpr int kInvalidDivisor = -1;
+    inline static constexpr int kInvalidDivisor = -1;
 
     /**
      * Tracks the state of glVertexAttribArray for an attribute index.
@@ -81,7 +81,7 @@ private:
         GrGpuResource::UniqueID   fVertexBufferUniqueID;
         bool                      fUsingCpuBuffer;
         GrVertexAttribType        fCPUType;
-        GrSLType                  fGPUType;
+        SkSLType                  fGPUType;
         GrGLsizei                 fStride;
         const GrGLvoid*           fOffset;
         int                       fDivisor;

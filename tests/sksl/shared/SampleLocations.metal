@@ -8,7 +8,6 @@ struct Outputs {
     float2 vcoord_Stage0 [[user(locn1)]];
     float sk_PointSize [[point_size]];
 };
-
 vertex Outputs vertexMain(Inputs _in [[stage_in]], uint sk_VertexID [[vertex_id]], uint sk_InstanceID [[instance_id]]) {
     Outputs _out;
     (void)_out;
@@ -30,5 +29,5 @@ vertex Outputs vertexMain(Inputs _in [[stage_in]], uint sk_VertexID [[vertex_id]
     _out.vcoord_Stage0.x = float(0 == sk_VertexID % 2 ? -1 : 1);
     _out.vcoord_Stage0.y = float(0 == sk_VertexID / 2 ? -1 : 1);
     _out.sk_Position = float4(vertexpos.x, vertexpos.y, 0.0, 1.0);
-    return (_out.sk_Position.y = -_out.sk_Position.y, _out);
+    return _out;
 }
