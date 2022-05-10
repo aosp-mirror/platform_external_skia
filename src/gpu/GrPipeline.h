@@ -8,25 +8,23 @@
 #ifndef GrPipeline_DEFINED
 #define GrPipeline_DEFINED
 
-#include "include/core/SkMatrix.h"
 #include "include/core/SkRefCnt.h"
 #include "src/gpu/GrColor.h"
+#include "src/gpu/GrDstProxyView.h"
 #include "src/gpu/GrFragmentProcessor.h"
 #include "src/gpu/GrProcessorSet.h"
 #include "src/gpu/GrScissorState.h"
 #include "src/gpu/GrSurfaceProxyView.h"
 #include "src/gpu/GrUserStencilSettings.h"
 #include "src/gpu/GrWindowRectsState.h"
-#include "src/gpu/effects/GrCoverageSetOpXP.h"
-#include "src/gpu/effects/GrDisableColorXP.h"
 #include "src/gpu/effects/GrPorterDuffXferProcessor.h"
-#include "src/gpu/effects/GrTextureEffect.h"
-#include "src/gpu/geometry/GrRect.h"
 
 class GrAppliedClip;
 class GrAppliedHardClip;
+struct GrGLSLBuiltinUniformHandles;
+class GrGLSLProgramDataManager;
 class GrOp;
-class GrSurfaceDrawContext;
+class GrTextureEffect;
 
 /**
  * This immutable object contains information needed to build a shader program and set API
@@ -42,12 +40,6 @@ public:
     // NOTE: This enum is extended later by GrPipeline::Flags.
     enum class InputFlags : uint8_t {
         kNone = 0,
-        /**
-         * Perform HW anti-aliasing. This means either HW FSAA, if supported by the render target,
-         * or smooth-line rendering if a line primitive is drawn and line smoothing is supported by
-         * the 3D API.
-         */
-        kHWAntialias = (1 << 0),
         /**
          * Cause every pixel to be rasterized that is touched by the triangle anywhere (not just at
          * pixel center). Additionally, if using MSAA, the sample mask will always have 100%
@@ -68,8 +60,8 @@ public:
     struct InitArgs {
         InputFlags fInputFlags = InputFlags::kNone;
         const GrCaps* fCaps = nullptr;
-        GrXferProcessor::DstProxyView fDstProxyView;
-        GrSwizzle fWriteSwizzle;
+        GrDstProxyView fDstProxyView;
+        skgpu::Swizzle fWriteSwizzle;
     };
 
     /**
@@ -79,7 +71,7 @@ public:
      **/
     GrPipeline(GrScissorTest scissor,
                SkBlendMode blend,
-               const GrSwizzle& writeSwizzle,
+               const skgpu::Swizzle& writeSwizzle,
                InputFlags flags = InputFlags::kNone)
             : GrPipeline(scissor,
                          GrPorterDuffXPFactory::MakeNoCoverageXP(blend),
@@ -88,7 +80,7 @@ public:
 
     GrPipeline(GrScissorTest,
                sk_sp<const GrXferProcessor>,
-               const GrSwizzle& writeSwizzle,
+               const skgpu::Swizzle& writeSwizzle,
                InputFlags = InputFlags::kNone);
 
     GrPipeline(const InitArgs& args, sk_sp<const GrXferProcessor>, const GrAppliedHardClip&);
@@ -107,6 +99,16 @@ public:
     bool isColorFragmentProcessor(int idx) const { return idx < fNumColorProcessors; }
     bool isCoverageFragmentProcessor(int idx) const { return idx >= fNumColorProcessors; }
 
+    bool usesLocalCoords() const {
+        // The sample coords for the top level FPs are implicitly the GP's local coords.
+        for (const auto& fp : fFragmentProcessors) {
+            if (fp->usesSampleCoords()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void visitTextureEffects(const std::function<void(const GrTextureEffect&)>&) const;
 
     const GrXferProcessor& getXferProcessor() const {
@@ -119,17 +121,11 @@ public:
         }
     }
 
-    GrDstSampleType dstSampleType() const {
-        return fDstSampleType;
-    }
-
     // Helper functions to quickly know if this GrPipeline will access the dst as a texture or an
     // input attachment.
-    bool usesDstTexture() const {
-        return GrDstSampleTypeUsesTexture(fDstSampleType);
-    }
-    bool usesInputAttachment() const {
-        return fDstSampleType == GrDstSampleType::kAsInputAttachment;
+    bool usesDstTexture() const { return this->dstProxyView() && !this->usesDstInputAttachment(); }
+    bool usesDstInputAttachment() const {
+        return this->dstSampleFlags() & GrDstSampleFlags::kAsInputAttachment;
     }
 
     /**
@@ -137,21 +133,19 @@ public:
      * GrXferProcessor does not use the dst color then the proxy on the GrSurfaceProxyView will be
      * nullptr.
      */
-    const GrSurfaceProxyView& dstProxyView() const { return fDstProxyView; }
+    const GrSurfaceProxyView& dstProxyView() const { return fDstProxy.proxyView(); }
 
-    /**
-     * If the GrXferProcessor uses a texture to access the dst color, then this returns that
-     * texture and the offset to the dst contents within that texture.
-     */
-    GrTexture* peekDstTexture(SkIPoint* offset = nullptr) const {
+    SkIPoint dstTextureOffset() const { return fDstProxy.offset(); }
+
+    GrDstSampleFlags dstSampleFlags() const { return fDstProxy.dstSampleFlags(); }
+
+    /** If this GrXferProcessor uses a texture to access the dst color, returns that texture. */
+    GrTexture* peekDstTexture() const {
         if (!this->usesDstTexture()) {
             return nullptr;
         }
-        if (offset) {
-            *offset = fDstTextureOffset;
-        }
 
-        if (GrTextureProxy* dstProxy = fDstProxyView.asTextureProxy()) {
+        if (GrTextureProxy* dstProxy = this->dstProxyView().asTextureProxy()) {
             return dstProxy->peekTexture();
         }
 
@@ -170,7 +164,6 @@ public:
 
     const GrWindowRectsState& getWindowRectsState() const { return fWindowRectsState; }
 
-    bool isHWAntialiasState() const { return fFlags & InputFlags::kHWAntialias; }
     bool usesConservativeRaster() const { return fFlags & InputFlags::kConservativeRaster; }
     bool isWireframe() const { return fFlags & InputFlags::kWireframe; }
     bool snapVerticesToPixelCenters() const {
@@ -186,8 +179,8 @@ public:
                 return false;
             }
         }
-        if (fDstProxyView.proxy()) {
-            return fDstProxyView.proxy()->isInstantiated();
+        if (this->dstProxyView().proxy()) {
+            return this->dstProxyView().proxy()->isInstantiated();
         }
 
         return true;
@@ -197,14 +190,18 @@ public:
     GrXferBarrierType xferBarrierType(const GrCaps&) const;
 
     // Used by Vulkan and Metal to cache their respective pipeline objects
-    void genKey(GrProcessorKeyBuilder*, const GrCaps&) const;
+    void genKey(skgpu::KeyBuilder*, const GrCaps&) const;
 
-    const GrSwizzle& writeSwizzle() const { return fWriteSwizzle; }
+    const skgpu::Swizzle& writeSwizzle() const { return fWriteSwizzle; }
 
-    void visitProxies(const GrOp::VisitProxyFunc&) const;
+    void visitProxies(const GrVisitProxyFunc&) const;
+
+    void setDstTextureUniforms(const GrGLSLProgramDataManager& pdm,
+                               GrGLSLBuiltinUniformHandles* fBuiltinUniformHandles) const;
 
 private:
-    static constexpr uint8_t kLastInputFlag = (uint8_t)InputFlags::kSnapVerticesToPixelCenters;
+    inline static constexpr uint8_t kLastInputFlag =
+            (uint8_t)InputFlags::kSnapVerticesToPixelCenters;
 
     /** This is a continuation of the public "InputFlags" enum. */
     enum class Flags : uint8_t {
@@ -219,12 +216,7 @@ private:
     // A pipeline can contain up to three processors: color, paint coverage, and clip coverage.
     using FragmentProcessorArray = SkAutoSTArray<3, std::unique_ptr<const GrFragmentProcessor>>;
 
-    GrSurfaceProxyView fDstProxyView;
-    SkIPoint fDstTextureOffset;
-    // This is the GrDstSampleType that is used for the render pass that this GrPipeline will be
-    // used in (i.e. if this GrPipeline does read the dst, it will do so using this
-    // GrDstSampleType).
-    GrDstSampleType fDstSampleType = GrDstSampleType::kNone;
+    GrDstProxyView fDstProxy;
     GrWindowRectsState fWindowRectsState;
     Flags fFlags;
     sk_sp<const GrXferProcessor> fXferProcessor;
@@ -233,11 +225,11 @@ private:
     // This value is also the index in fFragmentProcessors where coverage processors begin.
     int fNumColorProcessors = 0;
 
-    GrSwizzle fWriteSwizzle;
+    skgpu::Swizzle fWriteSwizzle;
 };
 
-GR_MAKE_BITFIELD_CLASS_OPS(GrPipeline::InputFlags);
-GR_MAKE_BITFIELD_CLASS_OPS(GrPipeline::Flags);
+GR_MAKE_BITFIELD_CLASS_OPS(GrPipeline::InputFlags)
+GR_MAKE_BITFIELD_CLASS_OPS(GrPipeline::Flags)
 
 inline bool operator&(GrPipeline::Flags flags, GrPipeline::InputFlags inputFlag) {
     return (flags & (GrPipeline::Flags)inputFlag);
