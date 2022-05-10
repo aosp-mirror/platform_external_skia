@@ -9,7 +9,7 @@
 #define GrGLSLUniformHandler_DEFINED
 
 #include "src/gpu/GrShaderVar.h"
-#include "src/gpu/GrSwizzle.h"
+#include "src/gpu/Swizzle.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
 
 // variable names beginning with this prefix will not be mangled
@@ -23,9 +23,10 @@ class GrSurfaceProxy;
 // Handles for program uniforms (other than per-effect uniforms)
 struct GrGLSLBuiltinUniformHandles {
     GrGLSLProgramDataManager::UniformHandle fRTAdjustmentUni;
-    // Render target height, used to implement u_skRTHeight and to calculate sk_FragCoord when
-    // origin_upper_left is not supported.
-    GrGLSLProgramDataManager::UniformHandle fRTHeightUni;
+    // Render target flip uniform (used for dFdy, sk_Clockwise, and sk_FragCoord)
+    GrGLSLProgramDataManager::UniformHandle fRTFlipUni;
+    // Destination texture origin and scale, used when dest-texture readback is enabled.
+    GrGLSLProgramDataManager::UniformHandle fDstTextureCoordsUni;
 };
 
 class GrGLSLUniformHandler {
@@ -51,20 +52,20 @@ public:
         to add an array of uniforms. */
     UniformHandle addUniform(const GrFragmentProcessor* owner,
                              uint32_t visibility,
-                             GrSLType type,
+                             SkSLType type,
                              const char* name,
                              const char** outName = nullptr) {
-        SkASSERT(!GrSLTypeIsCombinedSamplerType(type));
+        SkASSERT(!SkSLTypeIsCombinedSamplerType(type));
         return this->addUniformArray(owner, visibility, type, name, 0, outName);
     }
 
     UniformHandle addUniformArray(const GrFragmentProcessor* owner,
                                   uint32_t visibility,
-                                  GrSLType type,
+                                  SkSLType type,
                                   const char* name,
                                   int arrayCount,
                                   const char** outName = nullptr) {
-        SkASSERT(!GrSLTypeIsCombinedSamplerType(type));
+        SkASSERT(!SkSLTypeIsCombinedSamplerType(type));
         bool mangle = strncmp(name, GR_NO_MANGLE_PREFIX, strlen(GR_NO_MANGLE_PREFIX));
         return this->internalAddUniformArray(owner, visibility, type, name, mangle, arrayCount,
                                              outName);
@@ -91,14 +92,6 @@ public:
     GrShaderVar liftUniformToVertexShader(const GrFragmentProcessor& owner, SkString rawName);
 
 protected:
-    struct UniformMapping {
-        const GrFragmentProcessor* fOwner;
-        int fInfoIndex;
-        SkString fRawName;
-        const char* fFinalName;
-        GrSLType fType;
-    };
-
     explicit GrGLSLUniformHandler(GrGLSLProgramBuilder* program) : fProgramBuilder(program) {}
 
     // This is not owned by the class
@@ -106,28 +99,28 @@ protected:
 
 private:
     virtual const char * samplerVariable(SamplerHandle) const = 0;
-    virtual GrSwizzle samplerSwizzle(SamplerHandle) const = 0;
+    virtual skgpu::Swizzle samplerSwizzle(SamplerHandle) const = 0;
 
     virtual const char* inputSamplerVariable(SamplerHandle) const {
         SkDEBUGFAIL("Trying to get input sampler from unsupported backend");
         return nullptr;
     }
-    virtual GrSwizzle inputSamplerSwizzle(SamplerHandle) const {
+    virtual skgpu::Swizzle inputSamplerSwizzle(SamplerHandle) const {
         SkDEBUGFAIL("Trying to get input sampler swizzle from unsupported backend");
         return {};
     }
 
-    virtual SamplerHandle addSampler(const GrBackendFormat&, GrSamplerState, const GrSwizzle&,
+    virtual SamplerHandle addSampler(const GrBackendFormat&, GrSamplerState, const skgpu::Swizzle&,
                                      const char* name, const GrShaderCaps*) = 0;
 
-    virtual SamplerHandle addInputSampler(const GrSwizzle& swizzle, const char* name) {
+    virtual SamplerHandle addInputSampler(const skgpu::Swizzle& swizzle, const char* name) {
         SkDEBUGFAIL("Trying to add input sampler to unsupported backend");
         return {};
     }
 
     virtual UniformHandle internalAddUniformArray(const GrFragmentProcessor* owner,
                                                   uint32_t visibility,
-                                                  GrSLType type,
+                                                  SkSLType type,
                                                   const char* name,
                                                   bool mangleName,
                                                   int arrayCount,

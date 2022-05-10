@@ -14,9 +14,7 @@
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
 #include "include/core/SkDocument.h"
-#include "include/core/SkFontMgr.h"
 #include "include/core/SkGraphics.h"
-#include "include/ports/SkTypeface_win.h"
 #include "include/private/SkChecksum.h"
 #include "include/private/SkHalf.h"
 #include "include/private/SkSpinlock.h"
@@ -28,6 +26,7 @@
 #include "src/core/SkTaskGroup.h"
 #include "src/utils/SkOSPath.h"
 #include "tests/Test.h"
+#include "tests/TestHarness.h"
 #include "tools/AutoreleasePool.h"
 #include "tools/HashAndEncode.h"
 #include "tools/ProcStats.h"
@@ -115,6 +114,7 @@ static DEFINE_bool2(veryVerbose, V, false, "tell individual tests to be verbose.
 
 static DEFINE_bool(cpu, true, "Run CPU-bound work?");
 static DEFINE_bool(gpu, true, "Run GPU-bound work?");
+static DEFINE_bool(graphite, true, "Run Graphite work?");
 
 static DEFINE_bool(dryRun, false,
                    "just print the tests that would be run, without actually running them.");
@@ -176,38 +176,46 @@ int RuntimeCheckErrorFunc(int errorType, const char* filename, int linenumber,
 
 using namespace DM;
 using sk_gpu_test::GrContextFactory;
-using sk_gpu_test::GLTestContext;
 using sk_gpu_test::ContextInfo;
-
-/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-
-static sk_sp<SkColorSpace> rec2020() {
-    return SkColorSpace::MakeRGB(SkNamedTransferFn::kRec2020, SkNamedGamut::kRec2020);
-}
+#ifdef SK_GL
+using sk_gpu_test::GLTestContext;
+#endif
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 static FILE* gVLog;
 
-template <typename... Args>
-static void vlog(const char* fmt, Args&&... args) {
+static void vlog(const char* fmt, ...) SK_PRINTF_LIKE(1, 2);
+
+static void vlog(const char* fmt, ...) {
     if (gVLog) {
-        fprintf(gVLog, fmt, args...);
+        va_list args;
+        va_start(args, fmt);
+        vfprintf(gVLog, fmt, args);
         fflush(gVLog);
+        va_end(args);
     }
 }
 
-template <typename... Args>
-static void info(const char* fmt, Args&&... args) {
-    vlog(fmt, args...);
-    if (!FLAGS_quiet) {
-        printf(fmt, args...);
+static void info(const char* fmt, ...) SK_PRINTF_LIKE(1, 2);
+
+static void info(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+
+    if (gVLog) {
+        va_list vlogArgs;
+        va_copy(vlogArgs, args);
+        vfprintf(gVLog, fmt, vlogArgs);
+        fflush(gVLog);
+        va_end(vlogArgs);
     }
-}
-static void info(const char* fmt) {
+
     if (!FLAGS_quiet) {
-        printf("%s", fmt);  // Clang warns printf(fmt) is insecure.
+        vprintf(fmt, args);
     }
+
+    va_end(args);
 }
 
 static SkTArray<SkString>* gFailures = new SkTArray<SkString>;
@@ -307,7 +315,7 @@ static void find_culprit() {
         SkAutoSpinlock lock(*gMutex);
 
         const DWORD code = e->ExceptionRecord->ExceptionCode;
-        info("\nCaught exception %u", code);
+        info("\nCaught exception %lu", code);
         for (const auto& exception : kExceptions) {
             if (exception.code == code) {
                 info(" %s", exception.name);
@@ -471,8 +479,8 @@ static bool in_shard() {
     return N++ % FLAGS_shards == FLAGS_shard;
 }
 
-static void push_src(const char* tag, ImplicitString options, Src* s) {
-    std::unique_ptr<Src> src(s);
+static void push_src(const char* tag, ImplicitString options, Src* inSrc) {
+    std::unique_ptr<Src> src(inSrc);
     if (in_shard() && FLAGS_src.contains(tag) &&
         !CommandLineFlags::ShouldSkip(FLAGS_match, src->name().c_str())) {
         TaggedSrc& s = gSrcs->push_back();
@@ -883,7 +891,7 @@ static bool gather_srcs() {
 #if defined(SK_ENABLE_SKRIVE)
     gather_file_srcs<SkRiveSrc>(FLAGS_rives, "flr", "rive");
 #endif
-#if defined(SK_XML)
+#if defined(SK_ENABLE_SVG)
     gather_file_srcs<SVGSrc>(FLAGS_svgs, "svg");
 #endif
     if (!FLAGS_bisect.isEmpty()) {
@@ -893,7 +901,7 @@ static bool gather_srcs() {
     }
 
     SkTArray<SkString> images;
-    if (!CollectImages(FLAGS_images, &images)) {
+    if (!CommonFlags::CollectImages(FLAGS_images, &images)) {
         return false;
     }
 
@@ -902,7 +910,7 @@ static bool gather_srcs() {
     }
 
     SkTArray<SkString> colorImages;
-    if (!CollectImages(FLAGS_colorImages, &colorImages)) {
+    if (!CommonFlags::CollectImages(FLAGS_colorImages, &colorImages)) {
         return false;
     }
 
@@ -941,10 +949,6 @@ static void push_sink(const SkCommandLineConfig& config, Sink* s) {
     ts.tag = config.getTag();
 }
 
-static sk_sp<SkColorSpace> rgb_to_gbr() {
-    return SkColorSpace::MakeSRGB()->makeColorSpin();
-}
-
 static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLineConfig* config) {
     if (FLAGS_gpu) {
         if (const SkCommandLineConfigGpu* gpuConfig = config->asConfigGpu()) {
@@ -970,6 +974,13 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
             }
         }
     }
+#ifdef SK_GRAPHITE_ENABLED
+    if (FLAGS_graphite) {
+        if (const SkCommandLineConfigGraphite *graphiteConfig = config->asConfigGraphite()) {
+            return new GraphiteSink(graphiteConfig);
+        }
+    }
+#endif
     if (const SkCommandLineConfigSvg* svgConfig = config->asConfigSvg()) {
         int pageIndex = svgConfig->getPageIndex();
         return new SVGSink(pageIndex);
@@ -978,7 +989,7 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
 #define SINK(t, sink, ...) if (config->getBackend().equals(t)) return new sink(__VA_ARGS__)
 
     if (FLAGS_cpu) {
-        SINK("g8",          RasterSink, kGray_8_SkColorType);
+        SINK("r8",          RasterSink, kR8_unorm_SkColorType);
         SINK("565",         RasterSink, kRGB_565_SkColorType);
         SINK("4444",        RasterSink, kARGB_4444_SkColorType);
         SINK("8888",        RasterSink, kN32_SkColorType);
@@ -989,6 +1000,11 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
         SINK("101010x",     RasterSink, kRGB_101010x_SkColorType);
         SINK("bgra1010102", RasterSink, kBGRA_1010102_SkColorType);
         SINK("bgr101010x",  RasterSink, kBGR_101010x_SkColorType);
+        SINK("f16",         RasterSink, kRGBA_F16_SkColorType);
+        SINK("f16norm",     RasterSink, kRGBA_F16Norm_SkColorType);
+        SINK("f32",         RasterSink, kRGBA_F32_SkColorType);
+        SINK("srgba",       RasterSink, kSRGBA_8888_SkColorType);
+
         SINK("pdf",         PDFSink, false, SK_ScalarDefaultRasterDPI);
         SINK("skp",         SKPSink);
         SINK("svg",         SVGSink);
@@ -997,29 +1013,6 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
         SINK("pdfa",        PDFSink, true,  SK_ScalarDefaultRasterDPI);
         SINK("pdf300",      PDFSink, false, 300);
         SINK("jsdebug",     DebugSink);
-
-        // Configs relevant to color management testing (and 8888 for reference).
-
-        // 'narrow' has a gamut narrower than sRGB, and different transfer function.
-        auto narrow = SkColorSpace::MakeRGB(SkNamedTransferFn::k2Dot2, gNarrow_toXYZD50),
-               srgb = SkColorSpace::MakeSRGB(),
-         srgbLinear = SkColorSpace::MakeSRGBLinear(),
-                 p3 = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDisplayP3);
-
-        SINK(     "f16",  RasterSink,  kRGBA_F16_SkColorType, srgbLinear);
-        SINK(    "srgb",  RasterSink, kRGBA_8888_SkColorType, srgb      );
-        SINK(   "esrgb",  RasterSink,  kRGBA_F16_SkColorType, srgb      );
-        SINK(   "esgbr",  RasterSink,  kRGBA_F16_SkColorType, rgb_to_gbr());
-        SINK(  "narrow",  RasterSink, kRGBA_8888_SkColorType, narrow    );
-        SINK( "enarrow",  RasterSink,  kRGBA_F16_SkColorType, narrow    );
-        SINK(      "p3",  RasterSink, kRGBA_8888_SkColorType, p3        );
-        SINK(     "ep3",  RasterSink,  kRGBA_F16_SkColorType, p3        );
-        SINK( "rec2020",  RasterSink, kRGBA_8888_SkColorType, rec2020() );
-        SINK("erec2020",  RasterSink,  kRGBA_F16_SkColorType, rec2020() );
-
-        SINK("f16norm",  RasterSink,  kRGBA_F16Norm_SkColorType, srgb);
-
-        SINK(    "f32",  RasterSink,  kRGBA_F32_SkColorType, srgbLinear);
     }
 #undef SINK
     return nullptr;
@@ -1032,6 +1025,7 @@ static Sink* create_via(const SkString& tag, Sink* wrapped) {
 #endif
     VIA("serialize", ViaSerialization,     wrapped);
     VIA("pic",       ViaPicture,           wrapped);
+    VIA("rtblend",   ViaRuntimeBlend,      wrapped);
 
     if (FLAGS_matrix.count() == 4) {
         SkMatrix m;
@@ -1045,6 +1039,7 @@ static Sink* create_via(const SkString& tag, Sink* wrapped) {
     }
 
 #undef VIA
+
     return nullptr;
 }
 
@@ -1060,6 +1055,9 @@ static bool gather_sinks(const GrContextOptions& grCtxOptions, bool defaultConfi
                  config.getTag().c_str());
             continue;
         }
+
+        // The command line config already parsed out the via-style color space. Apply it here.
+        sink->setColorSpace(config.refColorSpace());
 
         const SkTArray<SkString>& parts = config.getViaParts();
         for (int j = parts.count(); j-- > 0;) {
@@ -1448,12 +1446,14 @@ static void gather_tests() {
         if (!in_shard()) {
             continue;
         }
-        if (CommandLineFlags::ShouldSkip(FLAGS_match, test.name)) {
+        if (CommandLineFlags::ShouldSkip(FLAGS_match, test.fName)) {
             continue;
         }
-        if (test.needsGpu && FLAGS_gpu) {
+        if (test.fNeedsGpu && FLAGS_gpu) {
             gSerialTests->push_back(test);
-        } else if (!test.needsGpu && FLAGS_cpu) {
+        } else if (test.fNeedsGraphite && FLAGS_graphite) {
+            gSerialTests->push_back(test);
+        } else if (!test.fNeedsGpu && !test.fNeedsGraphite && FLAGS_cpu) {
             gParallelTests->push_back(test);
         }
     }
@@ -1470,16 +1470,22 @@ static void run_test(skiatest::Test test, const GrContextOptions& grCtxOptions) 
         bool verbose() const override { return FLAGS_veryVerbose; }
     } reporter;
 
-    if (!FLAGS_dryRun && !should_skip("_", "tests", "_", test.name)) {
+    if (!FLAGS_dryRun && !should_skip("_", "tests", "_", test.fName)) {
         AutoreleasePool pool;
         GrContextOptions options = grCtxOptions;
         test.modifyGrContextOptions(&options);
 
-        skiatest::ReporterContext ctx(&reporter, SkString(test.name));
-        start("unit", "test", "", test.name);
+        skiatest::ReporterContext ctx(&reporter, SkString(test.fName));
+        start("unit", "test", "", test.fName);
         test.run(&reporter, options);
     }
-    done("unit", "test", "", test.name);
+    done("unit", "test", "", test.fName);
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+TestHarness CurrentTestHarness() {
+    return TestHarness::kDM;
 }
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -1501,8 +1507,8 @@ int main(int argc, char** argv) {
     setbuf(stdout, nullptr);
     setup_crash_handler();
 
-    ToolUtils::SetDefaultFontMgr();
-    SetAnalyticAAFromCommonFlags();
+    CommonFlags::SetDefaultFontMgr();
+    CommonFlags::SetAnalyticAA();
 
     gSkForceRasterPipelineBlitter = FLAGS_forceRasterPipeline;
     gUseSkVMBlitter               = FLAGS_skvm;
@@ -1518,7 +1524,7 @@ int main(int argc, char** argv) {
     }
 
     GrContextOptions grCtxOptions;
-    SetCtxOptionsFromCommonFlags(&grCtxOptions);
+    CommonFlags::SetCtxOptions(&grCtxOptions);
 
     dump_json();  // It's handy for the bots to assume this is ~never missing.
 

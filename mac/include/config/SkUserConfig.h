@@ -31,6 +31,10 @@
 #define SK_ENABLE_API_AVAILABLE
 #endif
 
+#ifndef SK_ENABLE_SKSL
+#define SK_ENABLE_SKSL
+#endif
+
 #ifndef SK_ENCODE_JPEG
 #define SK_ENCODE_JPEG
 #endif
@@ -59,16 +63,16 @@
 #define SK_HAS_ANDROID_CODEC
 #endif
 
+#ifndef SK_HAS_WUFFS_LIBRARY
+#define SK_HAS_WUFFS_LIBRARY
+#endif
+
 #ifndef SK_SUPPORT_GPU
 #define SK_SUPPORT_GPU 0
 #endif
 
 #ifndef SK_SUPPORT_PDF
 #define SK_SUPPORT_PDF
-#endif
-
-#ifndef SK_USE_LIBGIFCODEC
-#define SK_USE_LIBGIFCODEC
 #endif
 
 #ifndef SK_XML
