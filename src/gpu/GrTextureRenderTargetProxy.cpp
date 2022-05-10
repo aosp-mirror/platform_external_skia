@@ -120,7 +120,7 @@ bool GrTextureRenderTargetProxy::instantiate(GrResourceProvider* resourceProvide
         return false;
     }
 
-    const GrUniqueKey& key = this->getUniqueKey();
+    const skgpu::UniqueKey& key = this->getUniqueKey();
 
     if (!this->instantiateImpl(resourceProvider, this->numSamples(), GrRenderable::kYes,
                                this->mipmapped(), key.isValid() ? &key : nullptr)) {
@@ -166,6 +166,7 @@ GrSurfaceProxy::LazySurfaceDesc GrTextureRenderTargetProxy::callbackDesc() const
             this->mipmapped(),
             this->numSamples(),
             this->backendFormat(),
+            this->textureType(),
             this->isProtected(),
             this->isBudgeted(),
     };
