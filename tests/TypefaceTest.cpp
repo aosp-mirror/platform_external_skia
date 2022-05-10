@@ -25,6 +25,7 @@
 #include "tools/ToolUtils.h"
 #include "tools/fonts/TestEmptyTypeface.h"
 
+#include <algorithm>
 #include <memory>
 
 static void TypefaceStyle_test(skiatest::Reporter* reporter,
@@ -133,6 +134,10 @@ DEF_TEST(TypefaceRoundTrip, reporter) {
 
 DEF_TEST(FontDescriptorNegativeVariationSerialize, reporter) {
     SkFontDescriptor desc;
+    SkFontStyle style(2, 9, SkFontStyle::kOblique_Slant);
+    desc.setStyle(style);
+    const char postscriptName[] = "postscript";
+    desc.setPostscriptName(postscriptName);
     SkFontArguments::VariationPosition::Coordinate* variation = desc.setVariationCoordinates(1);
     variation[0] = { 0, -1.0f };
 
@@ -141,34 +146,14 @@ DEF_TEST(FontDescriptorNegativeVariationSerialize, reporter) {
     SkFontDescriptor descD;
     SkFontDescriptor::Deserialize(stream.detachAsStream().get(), &descD);
 
+    REPORTER_ASSERT(reporter, descD.getStyle() == style);
+    REPORTER_ASSERT(reporter, 0 == strcmp(desc.getPostscriptName(), postscriptName));
     if (descD.getVariationCoordinateCount() != 1) {
         REPORT_FAILURE(reporter, "descD.getVariationCoordinateCount() != 1", SkString());
         return;
     }
 
     REPORTER_ASSERT(reporter, descD.getVariation()[0].value == -1.0f);
-};
-
-DEF_TEST(FontDescriptorDeserializeOldFormat, reporter) {
-    // From ossfuzz:26254
-    const uint8_t old_serialized_desc[] = {
-        0x0, //style
-        0xff, 0xfb, 0x0, 0x0, 0x0, // kFontAxes
-        0x0, // coordinateCount
-        0xff, 0xff, 0x0, 0x0, 0x0, // kSentinel
-        0x0, // data length
-    };
-
-    SkMemoryStream stream(old_serialized_desc, sizeof(old_serialized_desc), false);
-    SkFontDescriptor desc;
-    if (!SkFontDescriptor::Deserialize(&stream, &desc)) {
-        REPORT_FAILURE(reporter, "!SkFontDescriptor::Deserialize(&stream, &desc)",
-                       SkString("bytes should be recognized unless removing support"));
-        return;
-    }
-    // This call should not crash and should not return a valid SkFontData.
-    std::unique_ptr<SkFontData> data = desc.maybeAsSkFontData();
-    REPORTER_ASSERT(reporter, !data);
 };
 
 DEF_TEST(TypefaceAxes, reporter) {
@@ -554,6 +539,9 @@ DEF_TEST(Typeface_glyph_to_char, reporter) {
     SkASSERT(font.getTypeface());
     char const * text = ToolUtils::emoji_sample_text();
     size_t const textLen = strlen(text);
+    SkString familyName;
+    font.getTypeface()->getFamilyName(&familyName);
+
     size_t const codepointCount = SkUTF::CountUTF8(text, textLen);
     char const * const textEnd = text + textLen;
     std::unique_ptr<SkUnichar[]> originalCodepoints(new SkUnichar[codepointCount]);
@@ -562,12 +550,15 @@ DEF_TEST(Typeface_glyph_to_char, reporter) {
     }
     std::unique_ptr<SkGlyphID[]> glyphs(new SkGlyphID[codepointCount]);
     font.unicharsToGlyphs(originalCodepoints.get(), codepointCount, glyphs.get());
+    if (std::any_of(glyphs.get(), glyphs.get()+codepointCount, [](SkGlyphID g){ return g == 0;})) {
+        ERRORF(reporter, "Unexpected typeface \"%s\". Expected full support for emoji_sample_text.",
+               familyName.c_str());
+        return;
+    }
 
     std::unique_ptr<SkUnichar[]> newCodepoints(new SkUnichar[codepointCount]);
     SkFontPriv::GlyphsToUnichars(font, glyphs.get(), codepointCount, newCodepoints.get());
 
-    SkString familyName;
-    font.getTypeface()->getFamilyName(&familyName);
     for (size_t i = 0; i < codepointCount; ++i) {
 #if defined(SK_BUILD_FOR_WIN)
         // GDI does not support character to glyph mapping outside BMP.

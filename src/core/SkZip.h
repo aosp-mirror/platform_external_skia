@@ -48,7 +48,7 @@ class SkZip {
     };
 
     template<typename T>
-    static constexpr T* nullify = nullptr;
+    inline static constexpr T* nullify = nullptr;
 
 public:
     constexpr SkZip() : fPointers{nullify<Ts>...}, fSize{0} {}
@@ -57,6 +57,7 @@ public:
             : fPointers{ts...}
             , fSize{size} {}
     constexpr SkZip(const SkZip& that) = default;
+    constexpr SkZip& operator=(const SkZip &that) = default;
 
     // Check to see if U can be used for const T or is the same as T
     template <typename U, typename T>
@@ -65,7 +66,7 @@ public:
 
     // Allow SkZip<const T> to be constructed from SkZip<T>.
     template<typename... Us,
-            typename = std::enable_if<skstd::conjunction<CanConvertToConst<Us, Ts>...>::value>>
+            typename = std::enable_if<std::conjunction<CanConvertToConst<Us, Ts>...>::value>>
     constexpr SkZip(const SkZip<Us...>& that)
         : fPointers(that.data())
         , fSize{that.size()} { }
@@ -202,10 +203,6 @@ public:
         return SkZip<ValueType<Ts>...>{size, Span<Ts>::Data(std::forward<Ts>(ts))...};
     }
 };
-
-template<typename... Ts>
-template<typename T>
-constexpr T* SkZip<Ts...>::nullify;
 
 template<typename... Ts>
 inline constexpr auto SkMakeZip(Ts&& ... ts) {
