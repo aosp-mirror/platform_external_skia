@@ -19,6 +19,7 @@
 #include "src/gpu/d3d/GrD3DPipelineStateBuilder.h"
 #include "src/gpu/d3d/GrD3DRenderTarget.h"
 #include "src/gpu/d3d/GrD3DTexture.h"
+#include "src/gpu/effects/GrTextureEffect.h"
 
 #ifdef SK_DEBUG
 #include "include/gpu/GrDirectContext.h"
@@ -91,7 +92,7 @@ void set_stencil_ref(GrD3DGpu* gpu, const GrProgramInfo& info) {
 
 void set_blend_factor(GrD3DGpu* gpu, const GrProgramInfo& info) {
     const GrXferProcessor& xferProcessor = info.pipeline().getXferProcessor();
-    const GrSwizzle& swizzle = info.pipeline().writeSwizzle();
+    const skgpu::Swizzle& swizzle = info.pipeline().writeSwizzle();
     const GrXferProcessor::BlendInfo& blendInfo = xferProcessor.getBlendInfo();
     GrBlendCoeff srcCoeff = blendInfo.fSrcBlend;
     GrBlendCoeff dstCoeff = blendInfo.fDstBlend;
@@ -184,12 +185,6 @@ bool GrD3DOpsRenderPass::onBindPipeline(const GrProgramInfo& info, const SkRect&
 
     fGpu->currentCommandList()->setGraphicsRootSignature(fCurrentPipelineState->rootSignature());
     fGpu->currentCommandList()->setPipelineState(fCurrentPipelineState->pipeline());
-    if (info.pipeline().isHWAntialiasState()) {
-        fGpu->currentCommandList()->setDefaultSamplePositions();
-    } else {
-        fGpu->currentCommandList()->setCenteredSamplePositions(fRenderTarget->numSamples());
-    }
-
     fCurrentPipelineState->setAndBindConstants(fGpu, fRenderTarget, info);
 
     set_stencil_ref(fGpu, info);
