@@ -19,18 +19,31 @@ namespace SkSL {
 
 class FunctionDefinition;
 struct Program;
+class SkVMDebugTrace;
 
-using SampleChildFn = std::function<skvm::Color(int, skvm::Coord, skvm::Color)>;
+class SkVMCallbacks {
+public:
+    virtual ~SkVMCallbacks() = default;
 
-// Convert 'function' to skvm instructions in 'builder', for use by shaders and color filters
+    virtual skvm::Color sampleShader(int index, skvm::Coord coord) = 0;
+    virtual skvm::Color sampleColorFilter(int index, skvm::Color color) = 0;
+    virtual skvm::Color sampleBlender(int index, skvm::Color src, skvm::Color dst) = 0;
+
+    virtual skvm::Color toLinearSrgb(skvm::Color color) = 0;
+    virtual skvm::Color fromLinearSrgb(skvm::Color color) = 0;
+};
+
+// Convert 'function' to skvm instructions in 'builder', for use by blends, shaders, & color filters
 skvm::Color ProgramToSkVM(const Program& program,
                           const FunctionDefinition& function,
                           skvm::Builder* builder,
+                          SkVMDebugTrace* debugTrace,
                           SkSpan<skvm::Val> uniforms,
                           skvm::Coord device,
                           skvm::Coord local,
                           skvm::Color inputColor,
-                          SampleChildFn sampleChild);
+                          skvm::Color destColor,
+                          SkVMCallbacks* callbacks);
 
 struct SkVMSignature {
     size_t fParameterSlots = 0;
@@ -54,6 +67,7 @@ struct SkVMSignature {
 bool ProgramToSkVM(const Program& program,
                    const FunctionDefinition& function,
                    skvm::Builder* b,
+                   SkVMDebugTrace* debugTrace,
                    SkSpan<skvm::Val> uniforms,
                    SkVMSignature* outSignature = nullptr);
 
@@ -61,7 +75,7 @@ const FunctionDefinition* Program_GetFunction(const Program& program, const char
 
 struct UniformInfo {
     struct Uniform {
-        String fName;
+        std::string fName;
         Type::NumberKind fKind;
         int fColumns;
         int fRows;
@@ -73,7 +87,9 @@ struct UniformInfo {
 
 std::unique_ptr<UniformInfo> Program_GetUniformInfo(const Program& program);
 
-bool testingOnly_ProgramToSkVMShader(const Program& program, skvm::Builder* builder);
+bool testingOnly_ProgramToSkVMShader(const Program& program,
+                                     skvm::Builder* builder,
+                                     SkVMDebugTrace* debugTrace);
 
 }  // namespace SkSL
 
