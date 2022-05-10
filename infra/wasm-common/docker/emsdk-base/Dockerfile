@@ -1,4 +1,4 @@
-FROM emscripten/emsdk:2.0.10
+FROM emscripten/emsdk:3.1.3
 
 RUN apt update && apt install -y python
 

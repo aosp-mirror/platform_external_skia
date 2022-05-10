@@ -100,17 +100,6 @@ GrSurfaceProxyView GrAHardwareBufferImageGenerator::makeView(GrRecordingContext*
     int width = this->getInfo().width();
     int height = this->getInfo().height();
 
-    GrTextureType textureType = GrTextureType::k2D;
-    if (context->backend() == GrBackendApi::kOpenGL) {
-        textureType = GrTextureType::kExternal;
-    } else if (context->backend() == GrBackendApi::kVulkan) {
-        VkFormat format;
-        SkAssertResult(backendFormat.asVkFormat(&format));
-        if (format == VK_FORMAT_UNDEFINED) {
-            textureType = GrTextureType::kExternal;
-        }
-    }
-
     auto proxyProvider = context->priv().proxyProvider();
 
     AHardwareBuffer* hardwareBuffer = fHardwareBuffer;
@@ -188,7 +177,7 @@ GrSurfaceProxyView GrAHardwareBufferImageGenerator::makeView(GrRecordingContext*
             GrInternalSurfaceFlags::kReadOnly, SkBackingFit::kExact, SkBudgeted::kNo,
             GrProtected(fIsProtectedContent), GrSurfaceProxy::UseAllocator::kYes);
 
-    GrSwizzle readSwizzle = context->priv().caps()->getReadSwizzle(backendFormat, grColorType);
+    skgpu::Swizzle readSwizzle = context->priv().caps()->getReadSwizzle(backendFormat, grColorType);
 
     return GrSurfaceProxyView(std::move(texProxy), fSurfaceOrigin, readSwizzle);
 }
