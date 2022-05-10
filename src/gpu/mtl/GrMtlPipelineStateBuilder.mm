@@ -15,7 +15,7 @@
 #include "src/gpu/GrDirectContextPriv.h"
 #include "src/gpu/GrPersistentCacheUtils.h"
 #include "src/gpu/GrRenderTarget.h"
-#include "src/gpu/GrShaderUtils.h"
+#include "src/utils/SkShaderUtils.h"
 
 #include "src/gpu/mtl/GrMtlGpu.h"
 #include "src/gpu/mtl/GrMtlPipelineState.h"
@@ -69,7 +69,7 @@ void GrMtlPipelineStateBuilder::finalizeFragmentSecondaryColor(GrShaderVar& outp
 static constexpr SkFourByteTag kMSL_Tag = SkSetFourByteTag('M', 'S', 'L', ' ');
 static constexpr SkFourByteTag kSKSL_Tag = SkSetFourByteTag('S', 'K', 'S', 'L');
 
-void GrMtlPipelineStateBuilder::storeShadersInCache(const SkSL::String shaders[],
+void GrMtlPipelineStateBuilder::storeShadersInCache(const std::string shaders[],
                                                     const SkSL::Program::Inputs inputs[],
                                                     SkSL::Program::Settings* settings,
                                                     sk_sp<SkData> pipelineData,
@@ -88,11 +88,11 @@ void GrMtlPipelineStateBuilder::storeShadersInCache(const SkSL::String shaders[]
 }
 
 id<MTLLibrary> GrMtlPipelineStateBuilder::compileMtlShaderLibrary(
-        const SkSL::String& shader, SkSL::Program::Inputs inputs,
+        const std::string& shader, SkSL::Program::Inputs inputs,
         GrContextOptions::ShaderErrorHandler* errorHandler) {
     id<MTLLibrary> shaderLibrary = GrCompileMtlShaderLibrary(fGpu, shader, errorHandler);
-    if (shaderLibrary != nil && inputs.fRTHeight) {
-        this->addRTHeightUniform(SKSL_RTHEIGHT_NAME);
+    if (shaderLibrary != nil && inputs.fUseFlipRTUniform) {
+        this->addRTFlipUniform(SKSL_RTFLIP_NAME);
     }
     return shaderLibrary;
 }
@@ -161,7 +161,7 @@ static inline MTLVertexFormat attribute_type_to_mtlformat(GrVertexAttribType typ
             return MTLVertexFormatUShort2Normalized;
         case kInt_GrVertexAttribType:
             return MTLVertexFormatInt;
-        case kUint_GrVertexAttribType:
+        case kUInt_GrVertexAttribType:
             return MTLVertexFormatUInt;
         case kUShort_norm_GrVertexAttribType:
             if (@available(macOS 10.13, iOS 11.0, *)) {
@@ -199,33 +199,30 @@ static MTLVertexDescriptor* create_vertex_descriptor(const GrGeometryProcessor& 
     if (writer) {
         writer->writeInt(vertexAttributeCount);
     }
-    size_t vertexAttributeOffset = 0;
-    for (const auto& attribute : geomProc.vertexAttributes()) {
+    for (auto attribute : geomProc.vertexAttributes()) {
         MTLVertexAttributeDescriptor* mtlAttribute = vertexDescriptor.attributes[attributeIndex];
         MTLVertexFormat format = attribute_type_to_mtlformat(attribute.cpuType());
         SkASSERT(MTLVertexFormatInvalid != format);
         mtlAttribute.format = format;
-        mtlAttribute.offset = vertexAttributeOffset;
+        mtlAttribute.offset = *attribute.offset();
         mtlAttribute.bufferIndex = vertexBinding;
         if (writer) {
             writer->writeInt(format);
-            writer->writeUInt(vertexAttributeOffset);
+            writer->writeUInt(*attribute.offset());
             writer->writeUInt(vertexBinding);
         }
 
-        vertexAttributeOffset += attribute.sizeAlign4();
         attributeIndex++;
     }
-    SkASSERT(vertexAttributeOffset == geomProc.vertexStride());
 
     if (vertexAttributeCount) {
         MTLVertexBufferLayoutDescriptor* vertexBufferLayout =
                 vertexDescriptor.layouts[vertexBinding];
         vertexBufferLayout.stepFunction = MTLVertexStepFunctionPerVertex;
         vertexBufferLayout.stepRate = 1;
-        vertexBufferLayout.stride = vertexAttributeOffset;
+        vertexBufferLayout.stride = geomProc.vertexStride();
         if (writer) {
-            writer->writeUInt(vertexAttributeOffset);
+            writer->writeUInt(geomProc.vertexStride());
         }
     }
 
@@ -233,33 +230,30 @@ static MTLVertexDescriptor* create_vertex_descriptor(const GrGeometryProcessor& 
     if (writer) {
         writer->writeInt(instanceAttributeCount);
     }
-    size_t instanceAttributeOffset = 0;
-    for (const auto& attribute : geomProc.instanceAttributes()) {
+    for (auto attribute : geomProc.instanceAttributes()) {
         MTLVertexAttributeDescriptor* mtlAttribute = vertexDescriptor.attributes[attributeIndex];
         MTLVertexFormat format = attribute_type_to_mtlformat(attribute.cpuType());
         SkASSERT(MTLVertexFormatInvalid != format);
         mtlAttribute.format = format;
-        mtlAttribute.offset = instanceAttributeOffset;
+        mtlAttribute.offset = *attribute.offset();
         mtlAttribute.bufferIndex = instanceBinding;
         if (writer) {
             writer->writeInt(format);
-            writer->writeUInt(instanceAttributeOffset);
+            writer->writeUInt(*attribute.offset());
             writer->writeUInt(instanceBinding);
         }
 
-        instanceAttributeOffset += attribute.sizeAlign4();
         attributeIndex++;
     }
-    SkASSERT(instanceAttributeOffset == geomProc.instanceStride());
 
     if (instanceAttributeCount) {
         MTLVertexBufferLayoutDescriptor* instanceBufferLayout =
                 vertexDescriptor.layouts[instanceBinding];
         instanceBufferLayout.stepFunction = MTLVertexStepFunctionPerInstance;
         instanceBufferLayout.stepRate = 1;
-        instanceBufferLayout.stride = instanceAttributeOffset;
+        instanceBufferLayout.stride = geomProc.instanceStride();
         if (writer) {
-            writer->writeUInt(instanceAttributeOffset);
+            writer->writeUInt(geomProc.instanceStride());
         }
     }
     return vertexDescriptor;
@@ -400,6 +394,15 @@ static uint32_t buffer_size(uint32_t offset, uint32_t maxAlignment) {
 static MTLRenderPipelineDescriptor* read_pipeline_data(SkReadBuffer* reader) {
     auto pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
 
+#ifdef SK_ENABLE_MTL_DEBUG_INFO
+    // set label
+    {
+        SkString description;
+        reader->readString(&description);
+        pipelineDescriptor.label = @(description.c_str());
+    }
+#endif
+
     // set up vertex descriptor
     {
         auto vertexDescriptor = [[MTLVertexDescriptor alloc] init];
@@ -477,34 +480,12 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(
         const GrMtlPrecompiledLibraries* precompiledLibs) {
     TRACE_EVENT0("skia.shaders", TRACE_FUNC);
 
-    // Geometry shaders are not supported
-    SkASSERT(!this->geometryProcessor().willUseGeoShader());
-
-    if (precompiledLibs) {
-        SkASSERT(precompiledLibs->fPipelineState);
-        if (precompiledLibs->fRTHeight) {
-            this->addRTHeightUniform(SKSL_RTHEIGHT_NAME);
-        }
-        uint32_t bufferSize = buffer_size(fUniformHandler.fCurrentUBOOffset,
-                                          fUniformHandler.fCurrentUBOMaxAlignment);
-        return new GrMtlPipelineState(fGpu,
-                                      precompiledLibs->fPipelineState,
-                                      GrBackendFormatAsMTLPixelFormat(programInfo.backendFormat()),
-                                      fUniformHandles,
-                                      fUniformHandler.fUniforms,
-                                      bufferSize,
-                                      (uint32_t)fUniformHandler.numSamplers(),
-                                      std::move(fGeometryProcessor),
-                                      std::move(fXferProcessor),
-                                      std::move(fFPImpls));
-    }
-
-    // build from scratch
+    // Set up for cache if needed
     std::unique_ptr<SkBinaryWriteBuffer> writer;
 
     sk_sp<SkData> cached;
     auto persistentCache = fGpu->getContext()->priv().getPersistentCache();
-    if (persistentCache) {
+    if (persistentCache && !precompiledLibs) {
         sk_sp<SkData> key = SkData::MakeWithoutCopy(desc.asKey(), desc.keyLength());
         cached = persistentCache->load(*key);
     }
@@ -514,6 +495,16 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(
 
     // Ordering in how we set these matters. If it changes adjust read_pipeline_data, above.
     auto pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+#ifdef SK_ENABLE_MTL_DEBUG_INFO
+    SkString description = GrProgramDesc::Describe(programInfo, *fGpu->caps());
+    int split = description.find("\n");
+    description.resize(split);
+    pipelineDescriptor.label = @(description.c_str());
+    if (writer) {
+        writer->writeString(description.c_str());
+    }
+#endif
+
     pipelineDescriptor.vertexDescriptor = create_vertex_descriptor(programInfo.geomProc(),
                                                                    writer.get());
 
@@ -534,130 +525,138 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(
     SkASSERT(pipelineDescriptor.vertexDescriptor);
     SkASSERT(pipelineDescriptor.colorAttachments[0]);
 
-    id<MTLLibrary> shaderLibraries[kGrShaderTypeCount];
+    if (precompiledLibs) {
+        SkASSERT(precompiledLibs->fVertexLibrary);
+        SkASSERT(precompiledLibs->fFragmentLibrary);
+        pipelineDescriptor.vertexFunction =
+                [precompiledLibs->fVertexLibrary newFunctionWithName: @"vertexMain"];
+        pipelineDescriptor.fragmentFunction =
+                [precompiledLibs->fFragmentLibrary newFunctionWithName: @"fragmentMain"];
+        SkASSERT(pipelineDescriptor.vertexFunction);
+        SkASSERT(pipelineDescriptor.fragmentFunction);
+        if (precompiledLibs->fRTFlip) {
+            this->addRTFlipUniform(SKSL_RTFLIP_NAME);
+        }
+    } else {
+        id<MTLLibrary> shaderLibraries[kGrShaderTypeCount];
 
-    fVS.extensions().appendf("#extension GL_ARB_separate_shader_objects : enable\n");
-    fFS.extensions().appendf("#extension GL_ARB_separate_shader_objects : enable\n");
-    fVS.extensions().appendf("#extension GL_ARB_shading_language_420pack : enable\n");
-    fFS.extensions().appendf("#extension GL_ARB_shading_language_420pack : enable\n");
+        this->finalizeShaders();
 
-    this->finalizeShaders();
+        SkSL::Program::Settings settings;
+        settings.fSharpenTextures = fGpu->getContext()->priv().options().fSharpenMipmappedTextures;
+        SkASSERT(!this->fragColorIsInOut());
 
-    SkSL::Program::Settings settings;
-    settings.fFlipY = this->origin() != kTopLeft_GrSurfaceOrigin;
-    settings.fSharpenTextures = fGpu->getContext()->priv().options().fSharpenMipmappedTextures;
-    SkASSERT(!this->fragColorIsInOut());
+        SkReadBuffer reader;
+        SkFourByteTag shaderType = 0;
+        if (persistentCache && cached) {
+            reader.setMemory(cached->data(), cached->size());
+            shaderType = GrPersistentCacheUtils::GetType(&reader);
+        }
 
-    SkReadBuffer reader;
-    SkFourByteTag shaderType = 0;
-    if (persistentCache && cached) {
-        reader.setMemory(cached->data(), cached->size());
-        shaderType = GrPersistentCacheUtils::GetType(&reader);
-    }
+        auto errorHandler = fGpu->getContext()->priv().getShaderErrorHandler();
+        std::string msl[kGrShaderTypeCount];
+        SkSL::Program::Inputs inputs[kGrShaderTypeCount];
 
-    auto errorHandler = fGpu->getContext()->priv().getShaderErrorHandler();
-    SkSL::String msl[kGrShaderTypeCount];
-    SkSL::Program::Inputs inputs[kGrShaderTypeCount];
-
-    // Unpack any stored shaders from the persistent cache
-    if (cached) {
-        switch (shaderType) {
-            case kMSL_Tag: {
-                GrPersistentCacheUtils::UnpackCachedShaders(&reader, msl, inputs,
-                                                            kGrShaderTypeCount);
-                break;
-            }
-
-            case kSKSL_Tag: {
-                SkSL::String cached_sksl[kGrShaderTypeCount];
-                if (GrPersistentCacheUtils::UnpackCachedShaders(&reader, cached_sksl, inputs,
-                                                                kGrShaderTypeCount)) {
-                    bool success = GrSkSLToMSL(fGpu,
-                                               cached_sksl[kVertex_GrShaderType],
-                                               SkSL::ProgramKind::kVertex,
-                                               settings,
-                                               &msl[kVertex_GrShaderType],
-                                               &inputs[kVertex_GrShaderType],
-                                               errorHandler);
-                    success = success && GrSkSLToMSL(fGpu,
-                                                     cached_sksl[kFragment_GrShaderType],
-                                                     SkSL::ProgramKind::kFragment,
-                                                     settings,
-                                                     &msl[kFragment_GrShaderType],
-                                                     &inputs[kFragment_GrShaderType],
-                                                     errorHandler);
-                    if (!success) {
-                        return nullptr;
-                    }
+        // Unpack any stored shaders from the persistent cache
+        if (cached) {
+            switch (shaderType) {
+                case kMSL_Tag: {
+                    GrPersistentCacheUtils::UnpackCachedShaders(&reader, msl, inputs,
+                                                                kGrShaderTypeCount);
+                    break;
                 }
-                break;
+
+                case kSKSL_Tag: {
+                    std::string cached_sksl[kGrShaderTypeCount];
+                    if (GrPersistentCacheUtils::UnpackCachedShaders(&reader, cached_sksl, inputs,
+                                                                    kGrShaderTypeCount)) {
+                        bool success = GrSkSLToMSL(fGpu,
+                                                   cached_sksl[kVertex_GrShaderType],
+                                                   SkSL::ProgramKind::kVertex,
+                                                   settings,
+                                                   &msl[kVertex_GrShaderType],
+                                                   &inputs[kVertex_GrShaderType],
+                                                   errorHandler);
+                        success = success && GrSkSLToMSL(fGpu,
+                                                         cached_sksl[kFragment_GrShaderType],
+                                                         SkSL::ProgramKind::kFragment,
+                                                         settings,
+                                                         &msl[kFragment_GrShaderType],
+                                                         &inputs[kFragment_GrShaderType],
+                                                         errorHandler);
+                        if (!success) {
+                            return nullptr;
+                        }
+                    }
+                    break;
+                }
+
+                default: {
+                    break;
+                }
+            }
+        }
+
+        // Create any MSL shaders from pipeline data if necessary and cache
+        if (msl[kVertex_GrShaderType].empty() || msl[kFragment_GrShaderType].empty()) {
+            bool success = true;
+            if (msl[kVertex_GrShaderType].empty()) {
+                success = GrSkSLToMSL(fGpu,
+                                      fVS.fCompilerString,
+                                      SkSL::ProgramKind::kVertex,
+                                      settings,
+                                      &msl[kVertex_GrShaderType],
+                                      &inputs[kVertex_GrShaderType],
+                                      errorHandler);
+            }
+            if (success && msl[kFragment_GrShaderType].empty()) {
+                success = GrSkSLToMSL(fGpu,
+                                      fFS.fCompilerString,
+                                      SkSL::ProgramKind::kFragment,
+                                      settings,
+                                      &msl[kFragment_GrShaderType],
+                                      &inputs[kFragment_GrShaderType],
+                                      errorHandler);
+            }
+            if (!success) {
+                return nullptr;
             }
 
-            default: {
-                break;
+            if (persistentCache && !cached) {
+                sk_sp<SkData> pipelineData = writer->snapshotAsData();
+                if (fGpu->getContext()->priv().options().fShaderCacheStrategy ==
+                        GrContextOptions::ShaderCacheStrategy::kSkSL) {
+                    std::string sksl[kGrShaderTypeCount];
+                    sksl[kVertex_GrShaderType] = SkShaderUtils::PrettyPrint(fVS.fCompilerString);
+                    sksl[kFragment_GrShaderType] = SkShaderUtils::PrettyPrint(fFS.fCompilerString);
+                    this->storeShadersInCache(sksl, inputs, &settings,
+                                              std::move(pipelineData), true);
+                } else {
+                    /*** dump pipeline data here */
+                    this->storeShadersInCache(msl, inputs, nullptr,
+                                              std::move(pipelineData), false);
+                }
             }
         }
-    }
 
-    // Create any MSL shaders from pipeline data if necessary and cache
-    if (msl[kVertex_GrShaderType].empty() || msl[kFragment_GrShaderType].empty()) {
-        bool success = true;
-        if (msl[kVertex_GrShaderType].empty()) {
-            success = GrSkSLToMSL(fGpu,
-                                  fVS.fCompilerString,
-                                  SkSL::ProgramKind::kVertex,
-                                  settings,
-                                  &msl[kVertex_GrShaderType],
-                                  &inputs[kVertex_GrShaderType],
-                                  errorHandler);
-        }
-        if (success && msl[kFragment_GrShaderType].empty()) {
-            success = GrSkSLToMSL(fGpu,
-                                  fFS.fCompilerString,
-                                  SkSL::ProgramKind::kFragment,
-                                  settings,
-                                  &msl[kFragment_GrShaderType],
-                                  &inputs[kFragment_GrShaderType],
-                                  errorHandler);
-        }
-        if (!success) {
+        // Compile MSL to libraries
+        shaderLibraries[kVertex_GrShaderType] = this->compileMtlShaderLibrary(
+                                                        msl[kVertex_GrShaderType],
+                                                        inputs[kVertex_GrShaderType],
+                                                        errorHandler);
+        shaderLibraries[kFragment_GrShaderType] = this->compileMtlShaderLibrary(
+                                                        msl[kFragment_GrShaderType],
+                                                        inputs[kFragment_GrShaderType],
+                                                        errorHandler);
+        if (!shaderLibraries[kVertex_GrShaderType] || !shaderLibraries[kFragment_GrShaderType]) {
             return nullptr;
         }
 
-        if (persistentCache && !cached) {
-            sk_sp<SkData> pipelineData = writer->snapshotAsData();
-            if (fGpu->getContext()->priv().options().fShaderCacheStrategy ==
-                    GrContextOptions::ShaderCacheStrategy::kSkSL) {
-                SkSL::String sksl[kGrShaderTypeCount];
-                sksl[kVertex_GrShaderType] = GrShaderUtils::PrettyPrint(fVS.fCompilerString);
-                sksl[kFragment_GrShaderType] = GrShaderUtils::PrettyPrint(fFS.fCompilerString);
-                this->storeShadersInCache(sksl, inputs, &settings,
-                                          std::move(pipelineData), true);
-            } else {
-                /*** dump pipeline data here */
-                this->storeShadersInCache(msl, inputs, nullptr,
-                                          std::move(pipelineData), false);
-            }
-        }
+        pipelineDescriptor.vertexFunction =
+                [shaderLibraries[kVertex_GrShaderType] newFunctionWithName: @"vertexMain"];
+        pipelineDescriptor.fragmentFunction =
+                [shaderLibraries[kFragment_GrShaderType] newFunctionWithName: @"fragmentMain"];
     }
-
-    // Compile MSL to libraries
-    shaderLibraries[kVertex_GrShaderType] = this->compileMtlShaderLibrary(
-                                                    msl[kVertex_GrShaderType],
-                                                    inputs[kVertex_GrShaderType],
-                                                    errorHandler);
-    shaderLibraries[kFragment_GrShaderType] = this->compileMtlShaderLibrary(
-                                                    msl[kFragment_GrShaderType],
-                                                    inputs[kFragment_GrShaderType],
-                                                    errorHandler);
-    if (!shaderLibraries[kVertex_GrShaderType] || !shaderLibraries[kFragment_GrShaderType]) {
-        return nullptr;
-    }
-
-    pipelineDescriptor.vertexFunction =
-            [shaderLibraries[kVertex_GrShaderType] newFunctionWithName: @"vertexMain"];
-    pipelineDescriptor.fragmentFunction =
-            [shaderLibraries[kFragment_GrShaderType] newFunctionWithName: @"fragmentMain"];
 
     if (pipelineDescriptor.vertexFunction == nil) {
         SkDebugf("Couldn't find vertexMain() in library\n");
@@ -690,6 +689,7 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(
         }
     }
 #endif
+
     id<MTLRenderPipelineState> pipelineState;
     {
         TRACE_EVENT0("skia.shaders", "newRenderPipelineStateWithDescriptor");
@@ -711,17 +711,19 @@ GrMtlPipelineState* GrMtlPipelineStateBuilder::finalize(
         return nullptr;
     }
 
+    sk_sp<GrMtlRenderPipeline> renderPipeline = GrMtlRenderPipeline::Make(pipelineState);
+
     uint32_t bufferSize = buffer_size(fUniformHandler.fCurrentUBOOffset,
                                       fUniformHandler.fCurrentUBOMaxAlignment);
     return new GrMtlPipelineState(fGpu,
-                                  pipelineState,
+                                  std::move(renderPipeline),
                                   pipelineDescriptor.colorAttachments[0].pixelFormat,
                                   fUniformHandles,
                                   fUniformHandler.fUniforms,
                                   bufferSize,
                                   (uint32_t)fUniformHandler.numSamplers(),
-                                  std::move(fGeometryProcessor),
-                                  std::move(fXferProcessor),
+                                  std::move(fGPImpl),
+                                  std::move(fXPImpl),
                                   std::move(fFPImpls));
 }
 
@@ -741,7 +743,7 @@ bool GrMtlPipelineStateBuilder::PrecompileShaders(GrMtlGpu* gpu, const SkData& c
     GrPersistentCacheUtils::ShaderMetadata meta;
     meta.fSettings = &settings;
 
-    SkSL::String shaders[kGrShaderTypeCount];
+    std::string shaders[kGrShaderTypeCount];
     SkSL::Program::Inputs inputs[kGrShaderTypeCount];
     if (!GrPersistentCacheUtils::UnpackCachedShaders(&reader, shaders, inputs, kGrShaderTypeCount,
                                                      &meta)) {
@@ -755,19 +757,17 @@ bool GrMtlPipelineStateBuilder::PrecompileShaders(GrMtlGpu* gpu, const SkData& c
         return false;
     }
 
-    id<MTLLibrary> vertexLibrary;
-    id<MTLLibrary> fragmentLibrary;
     switch (shaderType) {
         case kMSL_Tag: {
-            vertexLibrary =
+            precompiledLibs->fVertexLibrary =
                     GrCompileMtlShaderLibrary(gpu, shaders[kVertex_GrShaderType], errorHandler);
-            fragmentLibrary =
+            precompiledLibs->fFragmentLibrary =
                     GrCompileMtlShaderLibrary(gpu, shaders[kFragment_GrShaderType], errorHandler);
             break;
         }
 
         case kSKSL_Tag: {
-            SkSL::String msl[kGrShaderTypeCount];
+            std::string msl[kGrShaderTypeCount];
             if (!GrSkSLToMSL(gpu,
                            shaders[kVertex_GrShaderType],
                            SkSL::ProgramKind::kVertex,
@@ -786,9 +786,9 @@ bool GrMtlPipelineStateBuilder::PrecompileShaders(GrMtlGpu* gpu, const SkData& c
                            errorHandler)) {
                 return false;
             }
-            vertexLibrary =
+            precompiledLibs->fVertexLibrary =
                     GrCompileMtlShaderLibrary(gpu, msl[kVertex_GrShaderType], errorHandler);
-            fragmentLibrary =
+            precompiledLibs->fFragmentLibrary =
                     GrCompileMtlShaderLibrary(gpu, msl[kFragment_GrShaderType], errorHandler);
             break;
         }
@@ -799,11 +799,10 @@ bool GrMtlPipelineStateBuilder::PrecompileShaders(GrMtlGpu* gpu, const SkData& c
     }
 
     pipelineDescriptor.vertexFunction =
-            [vertexLibrary newFunctionWithName: @"vertexMain"];
+            [precompiledLibs->fVertexLibrary newFunctionWithName: @"vertexMain"];
     pipelineDescriptor.fragmentFunction =
-            [fragmentLibrary newFunctionWithName: @"fragmentMain"];
+            [precompiledLibs->fFragmentLibrary newFunctionWithName: @"fragmentMain"];
 
-    NSError* error = nil;
 #if GR_METAL_SDK_VERSION >= 230
     if (@available(macOS 11.0, iOS 14.0, *)) {
         id<MTLBinaryArchive> archive = gpu->binaryArchive();
@@ -811,6 +810,7 @@ bool GrMtlPipelineStateBuilder::PrecompileShaders(GrMtlGpu* gpu, const SkData& c
             NSArray* archiveArray = [NSArray arrayWithObjects:archive, nil];
             pipelineDescriptor.binaryArchives = archiveArray;
             BOOL result;
+            NSError* error = nil;
             {
                 TRACE_EVENT0("skia.shaders", "addRenderPipelineFunctionsWithDescriptor");
                 result = [archive addRenderPipelineFunctionsWithDescriptor: pipelineDescriptor
@@ -825,22 +825,21 @@ bool GrMtlPipelineStateBuilder::PrecompileShaders(GrMtlGpu* gpu, const SkData& c
 #endif
     {
         TRACE_EVENT0("skia.shaders", "newRenderPipelineStateWithDescriptor");
-#if defined(SK_BUILD_FOR_MAC)
-        precompiledLibs->fPipelineState =
-            GrMtlNewRenderPipelineStateWithDescriptor(gpu->device(), pipelineDescriptor, &error);
-#else
-        precompiledLibs->fPipelineState =
-            [gpu->device() newRenderPipelineStateWithDescriptor: pipelineDescriptor
-                                                           error: &error];
-#endif
-    }
-    if (error) {
-        SkDebugf("Error creating pipeline: %s\n",
-                 [[error localizedDescription] cStringUsingEncoding: NSASCIIStringEncoding]);
-        return false;
+        MTLNewRenderPipelineStateCompletionHandler completionHandler =
+                 ^(id<MTLRenderPipelineState> state, NSError* error) {
+                     if (error) {
+                         SkDebugf("Error creating pipeline: %s\n",
+                                  [[error localizedDescription]
+                                           cStringUsingEncoding: NSASCIIStringEncoding]);
+                     }
+                 };
+
+        // kick off asynchronous pipeline build and depend on Apple's cache to manage it
+        [gpu->device() newRenderPipelineStateWithDescriptor: pipelineDescriptor
+                                          completionHandler: completionHandler];
     }
 
-    precompiledLibs->fRTHeight = inputs[kFragment_GrShaderType].fRTHeight;
+    precompiledLibs->fRTFlip = inputs[kFragment_GrShaderType].fUseFlipRTUniform;
     return true;
 }
 
