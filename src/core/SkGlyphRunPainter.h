@@ -10,7 +10,6 @@
 
 #include "include/core/SkSurfaceProps.h"
 #include "src/core/SkDistanceFieldGen.h"
-#include "src/core/SkGlyphBuffer.h"
 #include "src/core/SkGlyphRun.h"
 #include "src/core/SkScalerContext.h"
 #include "src/core/SkTextBlobPriv.h"
@@ -85,27 +84,17 @@ public:
     // A nullptr for process means that the calls to the cache will be performed, but none of the
     // callbacks will be called.
     // N.B. The positionMatrix has already been translated to the glyph run list origin.
-    void processGlyphRun(SkGlyphRunPainterInterface* process,
-                         const SkGlyphRun& glyphRun,
-                         const SkMatrix& positionMatrix,
-                         const SkPaint& drawPaint,
-                         const GrSDFTControl& control,
-                         const char* tag = nullptr,
-                         uint64_t blobID = SK_InvalidUniqueID);
+    void categorizeGlyphRunList(SkGlyphRunPainterInterface* process,
+                                const SkGlyphRunList& glyphRunList,
+                                const SkMatrix& positionMatrix,
+                                const SkPaint& drawPaint,
+                                const GrSDFTControl& control,
+                                const char* tag = nullptr);
 #endif  // SK_SUPPORT_GPU
 
 private:
     SkGlyphRunListPainter(const SkSurfaceProps& props, SkColorType colorType,
                           SkScalerContextFlags flags, SkStrikeForGPUCacheInterface* strikeCache);
-
-    struct ScopedBuffers {
-        ScopedBuffers(SkGlyphRunListPainter* painter, size_t size);
-        ~ScopedBuffers();
-        SkGlyphRunListPainter* fPainter;
-    };
-
-    ScopedBuffers SK_WARN_UNUSED_RESULT ensureBuffers(const SkGlyphRunList& glyphRunList);
-    ScopedBuffers SK_WARN_UNUSED_RESULT ensureBuffers(const SkGlyphRun& glyphRun);
 
     // The props as on the actual device.
     const SkSurfaceProps fDeviceProps;
@@ -115,9 +104,6 @@ private:
     const SkScalerContextFlags fScalerContextFlags;
 
     SkStrikeForGPUCacheInterface* const fStrikeCache;
-
-    SkDrawableGlyphBuffer fAccepted;
-    SkSourceGlyphBuffer fRejected;
 };
 
 // SkGlyphRunPainterInterface are all the ways that Ganesh generates glyphs. The first
@@ -149,7 +135,7 @@ public:
                                     SkScalar strikeToSourceScale) = 0;
 
     virtual void processSourceDrawables(const SkZip<SkGlyphVariant, SkPoint>& accepted,
-                                        const SkFont& runFont,
+                                        sk_sp<SkStrike>&& strike,
                                         const SkDescriptor& descriptor,
                                         SkScalar strikeToSourceScale) = 0;
 

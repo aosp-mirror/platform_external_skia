@@ -26,7 +26,6 @@
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkClipStack.h"
 #include "src/core/SkColorFilterBase.h"
-#include "src/core/SkCustomMeshPriv.h"
 #include "src/core/SkDraw.h"
 #include "src/core/SkGlyphRun.h"
 #include "src/core/SkImageFilterCache.h"
@@ -35,6 +34,7 @@
 #include "src/core/SkMSAN.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkMatrixUtils.h"
+#include "src/core/SkMeshPriv.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/core/SkRasterClip.h"
 #include "src/core/SkSpecialImage.h"
@@ -1818,15 +1818,13 @@ void SkCanvas::drawVertices(const SkVertices* vertices, SkBlendMode mode, const 
 }
 
 #ifdef SK_ENABLE_SKSL
-void SkCanvas::drawCustomMesh(const SkCustomMesh& cm,
-                              sk_sp<SkBlender> blender,
-                              const SkPaint& paint) {
+void SkCanvas::drawMesh(const SkMesh& mesh, sk_sp<SkBlender> blender, const SkPaint& paint) {
     TRACE_EVENT0("skia", TRACE_FUNC);
-    RETURN_ON_FALSE(cm.isValid());
+    RETURN_ON_FALSE(mesh.isValid());
     if (!blender) {
         blender = SkBlender::Mode(SkBlendMode::kModulate);
     }
-    this->onDrawCustomMesh(std::move(cm), std::move(blender), paint);
+    this->onDrawMesh(mesh, std::move(blender), paint);
 }
 #endif
 
@@ -2408,11 +2406,8 @@ void SkCanvas::drawGlyphs(int count, const SkGlyphID* glyphs, const SkPoint* pos
             SkMakeSpan(clusters, count),
             SkSpan<SkVector>()
     };
-    SkGlyphRunList glyphRunList {
-            glyphRun,
-            glyphRun.sourceBounds(paint).makeOffset(origin),
-            origin
-    };
+    SkGlyphRunList glyphRunList = fScratchGlyphRunBuilder->makeGlyphRunList(
+            glyphRun, glyphRun.sourceBounds(paint).makeOffset(origin), origin);
     this->onDrawGlyphRunList(glyphRunList, paint);
 }
 
@@ -2428,11 +2423,8 @@ void SkCanvas::drawGlyphs(int count, const SkGlyphID glyphs[], const SkPoint pos
         SkSpan<const uint32_t>(),
         SkSpan<SkVector>()
     };
-    SkGlyphRunList glyphRunList {
-        glyphRun,
-        glyphRun.sourceBounds(paint).makeOffset(origin),
-        origin
-    };
+    SkGlyphRunList glyphRunList = fScratchGlyphRunBuilder->makeGlyphRunList(
+            glyphRun, glyphRun.sourceBounds(paint).makeOffset(origin), origin);
     this->onDrawGlyphRunList(glyphRunList, paint);
 }
 
@@ -2451,11 +2443,8 @@ void SkCanvas::drawGlyphs(int count, const SkGlyphID glyphs[], const SkRSXform x
             SkSpan<const uint32_t>(),
             rotateScales
     };
-    SkGlyphRunList glyphRunList {
-            glyphRun,
-            glyphRun.sourceBounds(paint).makeOffset(origin),
-            origin
-    };
+    SkGlyphRunList glyphRunList = fScratchGlyphRunBuilder->makeGlyphRunList(
+            glyphRun, glyphRun.sourceBounds(paint).makeOffset(origin), origin);
     this->onDrawGlyphRunList(glyphRunList, paint);
 }
 
@@ -2516,18 +2505,16 @@ void SkCanvas::onDrawVerticesObject(const SkVertices* vertices, SkBlendMode bmod
 }
 
 #ifdef SK_ENABLE_SKSL
-void SkCanvas::onDrawCustomMesh(const SkCustomMesh& cm,
-                                sk_sp<SkBlender> blender,
-                                const SkPaint& paint) {
+void SkCanvas::onDrawMesh(const SkMesh& mesh, sk_sp<SkBlender> blender, const SkPaint& paint) {
     SkPaint simplePaint = clean_paint_for_drawVertices(paint);
 
-    if (this->internalQuickReject(cm.bounds(), simplePaint)) {
+    if (this->internalQuickReject(mesh.bounds(), simplePaint)) {
         return;
     }
 
     auto layer = this->aboutToDraw(this, simplePaint, nullptr);
     if (layer) {
-        this->topDevice()->drawCustomMesh(std::move(cm), std::move(blender), paint);
+        this->topDevice()->drawMesh(mesh, std::move(blender), paint);
     }
 }
 #endif
