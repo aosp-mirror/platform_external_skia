@@ -12,7 +12,9 @@
 #include "include/core/SkRegion.h"
 #include "src/gpu/GrUserStencilSettings.h"
 
-class GrProcessorKeyBuilder;
+namespace skgpu {
+class KeyBuilder;
+}
 
 enum class GrStencilTest : uint16_t {
     kAlways,
@@ -68,7 +70,7 @@ public:
     bool usesWrapOp() const { SkASSERT(this->isValid());
                               return !(fFlags & kNoWrapOps_StencilFlag); }
 
-    void genKey(GrProcessorKeyBuilder* b, bool includeRefsAndMasks) const;
+    void genKey(skgpu::KeyBuilder* b, bool includeRefsAndMasks) const;
 
     bool operator!=(const GrStencilSettings& that) const { return !(*this == that); }
     bool operator==(const GrStencilSettings&) const;
@@ -106,7 +108,7 @@ private:
     // NOTE: This value is outside the declared range of GrStencilFlags, but since that type is
     // explicitly backed by 'int', it can still represent this constant. clang 11 complains about
     // mixing enum types in bit operations, so this works around that.
-    static constexpr GrStencilFlags kInvalid_PrivateFlag =
+    inline static constexpr GrStencilFlags kInvalid_PrivateFlag =
             static_cast<GrStencilFlags>(kLast_StencilFlag << 1);
 
     uint32_t   fFlags;

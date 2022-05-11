@@ -26,11 +26,6 @@
 #endif
 #endif
 
-// For _POSIX_VERSION
-#if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
-#include <unistd.h>
-#endif
-
 constexpr float SK_FloatSqrt2 = 1.41421356f;
 constexpr float SK_FloatPI    = 3.14159265f;
 constexpr double SK_DoublePI  = 3.14159265358979323846264338327950288;
@@ -264,9 +259,6 @@ static inline double sk_ieee_double_divide(double numer, double denom) {
 // While we clean up divide by zero, we'll replace places that do divide by zero with this TODO.
 static inline float sk_ieee_float_divide_TODO_IS_DIVIDE_BY_ZERO_SAFE_HERE(float n, float d) {
     return sk_ieee_float_divide(n,d);
-}
-static inline float sk_ieee_double_divide_TODO_IS_DIVIDE_BY_ZERO_SAFE_HERE(double n, double d) {
-    return sk_ieee_double_divide(n,d);
 }
 
 static inline float sk_fmaf(float f, float m, float a) {
