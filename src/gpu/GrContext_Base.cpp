@@ -7,10 +7,10 @@
 
 #include "include/private/GrContext_Base.h"
 
+#include "include/gpu/ShaderErrorHandler.h"
 #include "src/gpu/GrBaseContextPriv.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrContextThreadSafeProxyPriv.h"
-#include "src/gpu/GrShaderUtils.h"
 #include "src/gpu/effects/GrSkSLFP.h"
 
 GrContext_Base::GrContext_Base(sk_sp<GrContextThreadSafeProxy> proxy)
@@ -41,23 +41,18 @@ GrBackendFormat GrContext_Base::defaultBackendFormat(SkColorType skColorType,
 }
 
 GrBackendFormat GrContext_Base::compressedBackendFormat(SkImage::CompressionType c) const {
-    const GrCaps* caps = this->caps();
-
-    GrBackendFormat format = caps->getBackendFormatFromCompressionType(c);
-
-    SkASSERT(!format.isValid() || caps->isFormatTexturable(format));
-    return format;
+    return fThreadSafeProxy->compressedBackendFormat(c);
 }
 
 sk_sp<GrContextThreadSafeProxy> GrContext_Base::threadSafeProxy() { return fThreadSafeProxy; }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 sk_sp<const GrCaps> GrBaseContextPriv::refCaps() const {
-    return fContext->refCaps();
+    return this->context()->refCaps();
 }
 
 GrContextOptions::ShaderErrorHandler* GrBaseContextPriv::getShaderErrorHandler() const {
     const GrContextOptions& options(this->options());
     return options.fShaderErrorHandler ? options.fShaderErrorHandler
-                                       : GrShaderUtils::DefaultShaderErrorHandler();
+                                       : skgpu::DefaultShaderErrorHandler();
 }
