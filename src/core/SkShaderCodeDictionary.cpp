@@ -9,6 +9,7 @@
 
 #include "include/private/SkSLString.h"
 #include "src/core/SkOpts.h"
+#include "src/sksl/SkSLUtil.h"
 
 namespace {
 
@@ -138,14 +139,15 @@ std::string SkShaderInfo::emitGlueCodeForEntry(int* entryIndex,
 }
 
 // The current, incomplete, model for shader construction is:
-//   each static code snippet (which can have an arbitrary signature) gets emitted once as a
-//            preamble
-//   glue code is then generated w/in the "main" method. The glue code is responsible for:
+//   - Static code snippets (which can have an arbitrary signature) live in the Graphite
+//     pre-compiled module, which is located at `src/sksl/sksl_graphite_frag.sksl`.
+//   - Glue code is generated in a `main` method which calls these static code snippets.
+//     The glue code is responsible for:
 //            1) gathering the correct (mangled) uniforms
 //            2) passing the uniforms and any other parameters to the helper method
-//   The result of the last code snippet is then copied into "sk_FragColor".
-// Note: that each entry's 'fStaticFunctionName' field must match the name of a function in the
-// Graphite pre-compiled module, located at `src/sksl/sksl_graphite_frag.sksl`.
+//   - The result of the final code snippet is then copied into "sk_FragColor".
+//   Note: each entry's 'fStaticFunctionName' field is expected to match the name of a function
+//   in the Graphite pre-compiled module.
 std::string SkShaderInfo::toSkSL() const {
     // The uniforms are mangled by having their index in 'fEntries' as a suffix (i.e., "_%d")
     std::string result = skgpu::graphite::GetMtlUniforms(2, "FS", fBlockReaders,
@@ -367,8 +369,21 @@ static constexpr SkUniform kRadialGradientUniforms[kNumRadialGradientUniforms] =
         { "padding",     SkSLType::kFloat } // TODO: add automatic uniform padding
 };
 
+static constexpr int kNumSweepGradientUniforms = 6;
+static constexpr SkUniform kSweepGradientUniforms[kNumSweepGradientUniforms] = {
+        { "localMatrix", SkSLType::kFloat4x4 },
+        { "colors",      SkSLType::kFloat4, kFourStopGradient },
+        { "offsets",     SkSLType::kFloat,  kFourStopGradient },
+        { "center",      SkSLType::kFloat2 },
+        { "bias",        SkSLType::kFloat },
+        { "scale",       SkSLType::kFloat }
+};
+
 static constexpr char kLinearGradient4Name[] = "sk_linear_grad_4_shader";
 static constexpr char kRadialGradient4Name[] = "sk_radial_grad_4_shader";
+static constexpr char kSweepGradient4Name[] = "sk_sweep_grad_4_shader";
+static constexpr char kSweepGradient4AtanWorkaroundName[] =
+        "sk_sweep_grad_4_shader_atan_workaround";
 
 //--------------------------------------------------------------------------------------------------
 static constexpr int kNumSolidShaderUniforms = 1;
@@ -570,7 +585,7 @@ int SkShaderCodeDictionary::addUserDefinedSnippet(
     return kBuiltInCodeSnippetIDCount + fUserDefinedCodeSnippets.size() - 1;
 }
 
-SkShaderCodeDictionary::SkShaderCodeDictionary() {
+SkShaderCodeDictionary::SkShaderCodeDictionary(const SkSL::ShaderCaps* shaderCaps) {
     // The 0th index is reserved as invalid
     fEntryVector.push_back(nullptr);
 
@@ -626,10 +641,11 @@ SkShaderCodeDictionary::SkShaderCodeDictionary() {
     };
     fBuiltInCodeSnippets[(int) SkBuiltInCodeSnippetID::kSweepGradientShader] = {
             "SweepGradient4",
-            SkMakeSpan(kGradientUniforms, kNumGradientUniforms),
+            SkMakeSpan(kSweepGradientUniforms, kNumSweepGradientUniforms),
             SnippetRequirementFlags::kLocalCoords,
             { },     // no samplers
-            kLinearGradient4Name,
+            shaderCaps->atan2ImplementedAsAtanYOverX() ? kSweepGradient4AtanWorkaroundName
+                                                       : kSweepGradient4Name,
             GenerateDefaultGlueCode,
             kNoChildren,
             { }
