@@ -158,13 +158,8 @@ std::string SkShaderInfo::toSkSL() const {
     result += "layout(location = 0, index = 0) out half4 sk_FragColor;\n";
     result += "void main() {\n";
 
-    // TODO: we could have an empty 'parentPreLocal' signal an identity matrix and simplify
-    // the generated code.
     if (this->needsLocalCoords()) {
-        result += "float4x4 initialPreLocal = float4x4(1, 0, 0, 0, "
-                                                      "0, 1, 0, 0, "
-                                                      "0, 0, 1, 0, "
-                                                      "0, 0, 0, 1);\n";
+        result += "float4x4 initialPreLocal = float4x4(1);\n";
     }
 
     std::string parentPreLocal = "initialPreLocal";
@@ -382,8 +377,6 @@ static constexpr SkUniform kSweepGradientUniforms[kNumSweepGradientUniforms] = {
 static constexpr char kLinearGradient4Name[] = "sk_linear_grad_4_shader";
 static constexpr char kRadialGradient4Name[] = "sk_radial_grad_4_shader";
 static constexpr char kSweepGradient4Name[] = "sk_sweep_grad_4_shader";
-static constexpr char kSweepGradient4AtanWorkaroundName[] =
-        "sk_sweep_grad_4_shader_atan_workaround";
 
 //--------------------------------------------------------------------------------------------------
 static constexpr int kNumSolidShaderUniforms = 1;
@@ -585,7 +578,7 @@ int SkShaderCodeDictionary::addUserDefinedSnippet(
     return kBuiltInCodeSnippetIDCount + fUserDefinedCodeSnippets.size() - 1;
 }
 
-SkShaderCodeDictionary::SkShaderCodeDictionary(const SkSL::ShaderCaps* shaderCaps) {
+SkShaderCodeDictionary::SkShaderCodeDictionary() {
     // The 0th index is reserved as invalid
     fEntryVector.push_back(nullptr);
 
@@ -644,8 +637,7 @@ SkShaderCodeDictionary::SkShaderCodeDictionary(const SkSL::ShaderCaps* shaderCap
             SkMakeSpan(kSweepGradientUniforms, kNumSweepGradientUniforms),
             SnippetRequirementFlags::kLocalCoords,
             { },     // no samplers
-            shaderCaps->atan2ImplementedAsAtanYOverX() ? kSweepGradient4AtanWorkaroundName
-                                                       : kSweepGradient4Name,
+            kSweepGradient4Name,
             GenerateDefaultGlueCode,
             kNoChildren,
             { }
