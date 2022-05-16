@@ -395,7 +395,7 @@ LoadedModule Compiler::loadModule(ProgramKind kind,
     }
     ParsedModule baseModule = {std::move(base), /*fElements=*/nullptr};
     LoadedModule module = DSLParser(this, settings, kind, std::move(text))
-                                  .moduleInheritingFrom(std::move(baseModule));
+                                  .moduleInheritingFrom(baseModule);
     if (this->errorCount()) {
         printf("Unexpected errors: %s\n", this->fErrorText.c_str());
         SkDEBUGFAILF("%s %s\n", data.fPath, this->fErrorText.c_str());
@@ -608,6 +608,9 @@ bool Compiler::optimizeModuleForDehydration(LoadedModule& module, const ParsedMo
     while (Transform::EliminateDeadLocalVariables(*fContext, module, usage.get())) {
         // Removing dead variables may cause more variables to become unreferenced. Try again.
     }
+
+    // Save space by eliminating empty statements from the code.
+    Transform::EliminateEmptyStatements(module);
 
     // Note that we intentionally don't attempt to eliminate unreferenced global variables or
     // functions here, since those can be referenced by the finished program even if they're
