@@ -324,6 +324,7 @@ generated_cc_atom(
         "//src/sksl/ir:SkSLVariableReference_hdr",
         "//src/sksl/ir:SkSLVariable_hdr",
         "//src/sksl/transform:SkSLTransform_hdr",
+        "@dawn//:tint",
         "@spirv_tools",
     ],
 )
@@ -426,9 +427,9 @@ generated_cc_atom(
         "//include/sksl:DSLFunction_hdr",
         "//include/sksl:DSLSymbols_hdr",
         "//include/sksl:DSLVar_hdr",
-        "//include/sksl:DSLWrapper_hdr",
         "//include/sksl:DSL_hdr",
         "//include/sksl:SkSLOperator_hdr",
+        "//include/sksl:SkSLVersion_hdr",
         "//src/sksl/dsl/priv:DSLWriter_hdr",
         "//src/sksl/dsl/priv:DSL_priv_hdr",
         "//src/sksl/ir:SkSLExpression_hdr",
@@ -716,6 +717,7 @@ generated_cc_atom(
     deps = [
         "//include/private:SkSLDefines_hdr",
         "//include/private:SkSLProgramKind_hdr",
+        "//include/sksl:SkSLVersion_hdr",
     ],
 )
 
@@ -755,6 +757,7 @@ generated_cc_atom(
         "//include/sksl:DSLCore_hdr",
         "//include/sksl:SkSLOperator_hdr",
         "//include/sksl:SkSLPosition_hdr",
+        "//include/sksl:SkSLVersion_hdr",
         "//src/sksl/ir:SkSLBinaryExpression_hdr",
         "//src/sksl/ir:SkSLBlock_hdr",
         "//src/sksl/ir:SkSLBreakStatement_hdr",
@@ -871,6 +874,7 @@ generated_cc_atom(
     deps = [
         ":SkSLGLSL_hdr",
         "//include/core:SkTypes_hdr",
+        "//include/sksl:SkSLVersion_hdr",
         "//src/core:SkSLTypeShared_hdr",
     ],
 )

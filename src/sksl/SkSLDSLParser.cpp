@@ -18,8 +18,8 @@
 #include "include/sksl/DSLFunction.h"
 #include "include/sksl/DSLSymbols.h"
 #include "include/sksl/DSLVar.h"
-#include "include/sksl/DSLWrapper.h"
 #include "include/sksl/SkSLOperator.h"
+#include "include/sksl/SkSLVersion.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/SkSLParsedModule.h"
@@ -295,6 +295,10 @@ SkSL::LoadedModule DSLParser::moduleInheritingFrom(SkSL::ParsedModule baseModule
 
 void DSLParser::declarations() {
     fEncounteredFatalError = false;
+    // Any #version directive must appear as the first thing in a file
+    if (this->peek().fKind == Token::Kind::TK_DIRECTIVE) {
+        this->directive(/*allowVersion=*/true);
+    }
     bool done = false;
     while (!done) {
         switch (this->peek().fKind) {
@@ -302,14 +306,13 @@ void DSLParser::declarations() {
                 done = true;
                 break;
             case Token::Kind::TK_DIRECTIVE:
-                this->directive();
+                this->directive(/*allowVersion=*/false);
                 break;
-            case Token::Kind::TK_INVALID: {
+            case Token::Kind::TK_INVALID:
                 this->error(this->peek(), "invalid token");
                 this->nextToken();
                 done = true;
                 break;
-            }
             default:
                 this->declaration();
                 done = fEncounteredFatalError;
@@ -319,7 +322,7 @@ void DSLParser::declarations() {
 }
 
 /* DIRECTIVE(#extension) IDENTIFIER COLON IDENTIFIER */
-void DSLParser::directive() {
+void DSLParser::directive(bool allowVersion) {
     Token start;
     if (!this->expect(Token::Kind::TK_DIRECTIVE, "a directive", &start)) {
         return;
@@ -347,6 +350,26 @@ void DSLParser::directive() {
         }
         // We don't currently do anything different between require, enable, and warn
         dsl::AddExtension(this->text(name));
+    } else if (text == "#version") {
+        if (!allowVersion) {
+            this->error(start, "#version directive must appear before anything else");
+            return;
+        }
+        SKSL_INT version;
+        if (!this->intLiteral(&version)) {
+            return;
+        }
+        switch (version) {
+            case 100:
+                ThreadContext::GetProgramConfig()->fRequiredSkSLVersion = Version::k100;
+                break;
+            case 300:
+                ThreadContext::GetProgramConfig()->fRequiredSkSLVersion = Version::k300;
+                break;
+            default:
+                this->error(start, "unsupported version number");
+                return;
+        }
     } else {
         this->error(start, "unsupported directive '" + std::string(this->text(start)) + "'");
     }
@@ -397,7 +420,7 @@ bool DSLParser::functionDeclarationEnd(Position start,
                                        const DSLModifiers& modifiers,
                                        DSLType type,
                                        const Token& name) {
-    SkTArray<DSLWrapper<DSLParameter>> parameters;
+    SkTArray<DSLParameter> parameters;
     Token lookahead = this->peek();
     if (lookahead.fKind == Token::Kind::TK_RPAREN) {
         // `()` means no parameters at all.
@@ -407,7 +430,7 @@ bool DSLParser::functionDeclarationEnd(Position start,
     } else {
         for (;;) {
             size_t paramIndex = parameters.size();
-            std::optional<DSLWrapper<DSLParameter>> parameter = this->parameter(paramIndex);
+            std::optional<DSLParameter> parameter = this->parameter(paramIndex);
             if (!parameter) {
                 return false;
             }
@@ -421,8 +444,8 @@ bool DSLParser::functionDeclarationEnd(Position start,
         return false;
     }
     SkTArray<DSLParameter*> parameterPointers;
-    for (DSLWrapper<DSLParameter>& param : parameters) {
-        parameterPointers.push_back(&param.get());
+    for (DSLParameter& param : parameters) {
+        parameterPointers.push_back(&param);
     }
     DSLFunction result(modifiers, type, this->text(name), parameterPointers,
             this->rangeFrom(start));
@@ -721,7 +744,7 @@ SkTArray<dsl::DSLGlobalVar> DSLParser::structVarDeclaration(Position start,
 }
 
 /* modifiers type IDENTIFIER (LBRACKET INT_LITERAL RBRACKET)? */
-std::optional<DSLWrapper<DSLParameter>> DSLParser::parameter(size_t paramIndex) {
+std::optional<DSLParameter> DSLParser::parameter(size_t paramIndex) {
     Position pos = this->position(this->peek());
     DSLModifiers modifiers = this->modifiers();
     std::optional<DSLType> type = this->type(&modifiers);
@@ -742,7 +765,7 @@ std::optional<DSLWrapper<DSLParameter>> DSLParser::parameter(size_t paramIndex) 
     if (!this->parseArrayDimensions(pos, &type.value())) {
         return std::nullopt;
     }
-    return {{DSLParameter(modifiers, *type, paramText, this->rangeFrom(pos), paramPos)}};
+    return DSLParameter(modifiers, *type, paramText, this->rangeFrom(pos), paramPos);
 }
 
 /** EQ INT_LITERAL */

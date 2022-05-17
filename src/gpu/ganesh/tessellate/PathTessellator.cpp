@@ -171,10 +171,10 @@ void PathCurveTessellator::prepareWithTriangles(
             SkDEBUGCODE(int breadcrumbCount = 0;)
             for (const auto* tri = extraTriangles->head(); tri; tri = tri->fNext) {
                 SkDEBUGCODE(++breadcrumbCount;)
-                auto p0 = float2::Load(tri->fPts);
-                auto p1 = float2::Load(tri->fPts + 1);
-                auto p2 = float2::Load(tri->fPts + 2);
-                if (skvx::any((p0 == p1) & (p1 == p2))) {
+                auto p0 = skvx::float2::Load(tri->fPts);
+                auto p1 = skvx::float2::Load(tri->fPts + 1);
+                auto p2 = skvx::float2::Load(tri->fPts + 2);
+                if (any((p0 == p1) & (p1 == p2))) {
                     // Cull completely horizontal or vertical triangles. GrTriangulator can't always
                     // get these breadcrumb edges right when they run parallel to the sweep
                     // direction because their winding is undefined by its current definition.
@@ -188,7 +188,7 @@ void PathCurveTessellator::prepareWithTriangles(
         }
 
         write_curve_patches(std::move(writer), shaderMatrix, pathDrawList);
-        this->updateResolveLevel(worstCase.requiredResolveLevel());
+        fMaxVertexCount = FixedCountCurves::VertexCount(worstCase);
     }
 
     GrResourceProvider* rp = target->resourceProvider();
@@ -212,10 +212,11 @@ void PathCurveTessellator::draw(GrOpFlushState* flushState) const {
     if (!fFixedVertexBuffer || !fFixedIndexBuffer) {
         return;
     }
-    int fixedIndexCount = NumCurveTrianglesAtResolveLevel(fFixedResolveLevel) * 3;
     for (const GrVertexChunk& chunk : fVertexChunkArray) {
         flushState->bindBuffers(fFixedIndexBuffer, chunk.fBuffer, fFixedVertexBuffer);
-        flushState->drawIndexedInstanced(fixedIndexCount, 0, chunk.fCount, chunk.fBase, 0);
+        // The max vertex count is the logical number of vertices that the GPU needs to emit, so
+        // since we're using drawIndexedInstanced, it's provided as the "index count" parameter.
+        flushState->drawIndexedInstanced(fMaxVertexCount, 0, chunk.fCount, chunk.fBase, 0);
     }
 }
 
@@ -239,7 +240,7 @@ void PathWedgeTessellator::prepare(GrMeshDrawTarget* target,
         LinearTolerances worstCase;
         WedgeWriter writer{fAttribs, &worstCase, target, &fVertexChunkArray, patchPreallocCount};
         write_wedge_patches(std::move(writer), shaderMatrix, pathDrawList);
-        this->updateResolveLevel(worstCase.requiredResolveLevel());
+        fMaxVertexCount = FixedCountWedges::VertexCount(worstCase);
     }
 
     GrResourceProvider* rp = target->resourceProvider();
@@ -263,11 +264,9 @@ void PathWedgeTessellator::draw(GrOpFlushState* flushState) const {
     if (!fFixedVertexBuffer || !fFixedIndexBuffer) {
         return;
     }
-    // Emit 3 vertices per curve triangle, plus 3 more for the fan triangle.
-    int fixedIndexCount = (NumCurveTrianglesAtResolveLevel(fFixedResolveLevel) + 1) * 3;
     for (const GrVertexChunk& chunk : fVertexChunkArray) {
         flushState->bindBuffers(fFixedIndexBuffer, chunk.fBuffer, fFixedVertexBuffer);
-        flushState->drawIndexedInstanced(fixedIndexCount, 0, chunk.fCount, chunk.fBase, 0);
+        flushState->drawIndexedInstanced(fMaxVertexCount, 0, chunk.fCount, chunk.fBase, 0);
     }
 }
 

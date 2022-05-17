@@ -24,6 +24,7 @@
 #include "include/private/SkSLProgramElement.h"
 #include "include/private/SkSLProgramKind.h"
 #include "include/sksl/DSLCore.h"
+#include "include/sksl/SkSLVersion.h"
 #include "src/core/SkRuntimeEffectPriv.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
@@ -232,8 +233,9 @@ static void test_cpu(skiatest::Reporter* r, const char* testFile, int flags) {
 static void test_gpu(skiatest::Reporter* r, GrDirectContext* ctx, const char* testFile, int flags) {
     // If this is an ES3-only test on a GPU which doesn't support SkSL ES3, return immediately.
     bool shouldRunGPU = (flags & SkSLTestFlags::GPU);
-    bool shouldRunGPU_ES3 = (flags & SkSLTestFlags::GPU_ES3) &&
-                            ctx->priv().caps()->shaderCaps()->supportsSkSLES3();
+    bool shouldRunGPU_ES3 =
+            (flags & SkSLTestFlags::GPU_ES3) &&
+            (ctx->priv().caps()->shaderCaps()->supportedSkSLVerion() >= SkSL::Version::k300);
     if (!shouldRunGPU && !shouldRunGPU_ES3) {
         return;
     }
@@ -257,6 +259,7 @@ static void test_clone(skiatest::Reporter* r, const char* testFile, int flags) {
     std::unique_ptr<SkSL::ShaderCaps> caps = SkSL::ShaderCapsFactory::Standalone();
     SkSL::Program::Settings settings;
     settings.fAllowVarDeclarationCloneForTesting = true;
+    // TODO(skia:11209): Can we just put the correct #version in the source files that need this?
     settings.fEnforceES2Restrictions = is_strict_es2(flags);
     SkSL::Compiler compiler(caps.get());
     std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
@@ -285,6 +288,7 @@ static void test_rehydrate(skiatest::Reporter* r, const char* testFile, int flag
     std::unique_ptr<SkSL::ShaderCaps> caps = SkSL::ShaderCapsFactory::Default();
     SkSL::Compiler compiler(caps.get());
     SkSL::Program::Settings settings;
+    // TODO(skia:11209): Can we just put the correct #version in the source files that need this?
     settings.fEnforceES2Restrictions = is_strict_es2(flags);
     // Inlining causes problems because it can create expressions like bool(1) that can't be
     // directly instantiated. After a dehydrate/recycle pass, that expression simply becomes "true"
