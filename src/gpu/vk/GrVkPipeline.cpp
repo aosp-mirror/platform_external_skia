@@ -68,7 +68,7 @@ static inline VkFormat attrib_type_to_vkformat(GrVertexAttribType type) {
             return VK_FORMAT_R16G16_UNORM;
         case kInt_GrVertexAttribType:
             return VK_FORMAT_R32_SINT;
-        case kUint_GrVertexAttribType:
+        case kUInt_GrVertexAttribType:
             return VK_FORMAT_R32_UINT;
         case kUShort_norm_GrVertexAttribType:
             return VK_FORMAT_R16_UNORM;
@@ -100,39 +100,33 @@ static void setup_vertex_input_state(
 
     // setup attribute descriptions
     int attribIndex = 0;
-    size_t vertexAttributeOffset = 0;
-    for (const auto& attrib : vertexAttribs) {
+    for (auto attrib : vertexAttribs) {
         VkVertexInputAttributeDescription& vkAttrib = attributeDesc[attribIndex];
         vkAttrib.location = attribIndex++;  // for now assume location = attribIndex
         vkAttrib.binding = vertexBinding;
         vkAttrib.format = attrib_type_to_vkformat(attrib.cpuType());
-        vkAttrib.offset = vertexAttributeOffset;
-        vertexAttributeOffset += attrib.sizeAlign4();
+        vkAttrib.offset = *attrib.offset();
     }
-    SkASSERT(vertexAttributeOffset == vertexAttribs.stride());
 
-    size_t instanceAttributeOffset = 0;
-    for (const auto& attrib : instanceAttribs) {
+    for (auto attrib : instanceAttribs) {
         VkVertexInputAttributeDescription& vkAttrib = attributeDesc[attribIndex];
         vkAttrib.location = attribIndex++;  // for now assume location = attribIndex
         vkAttrib.binding = instanceBinding;
         vkAttrib.format = attrib_type_to_vkformat(attrib.cpuType());
-        vkAttrib.offset = instanceAttributeOffset;
-        instanceAttributeOffset += attrib.sizeAlign4();
+        vkAttrib.offset = *attrib.offset();
     }
-    SkASSERT(instanceAttributeOffset == instanceAttribs.stride());
 
     if (vaCount) {
         bindingDescs->push_back() = {
                 vertexBinding,
-                (uint32_t) vertexAttributeOffset,
+                (uint32_t) vertexAttribs.stride(),
                 VK_VERTEX_INPUT_RATE_VERTEX
         };
     }
     if (iaCount) {
         bindingDescs->push_back() = {
                 instanceBinding,
-                (uint32_t) instanceAttributeOffset,
+                (uint32_t) instanceAttribs.stride(),
                 VK_VERTEX_INPUT_RATE_INSTANCE
         };
     }
@@ -293,29 +287,6 @@ static void setup_multisample_state(int numSamples,
     multisampleInfo->pSampleMask = nullptr;
     multisampleInfo->alphaToCoverageEnable = VK_FALSE;
     multisampleInfo->alphaToOneEnable = VK_FALSE;
-}
-
-static void setup_all_sample_locations_at_pixel_center(
-        int numSamples,
-        VkPipelineSampleLocationsStateCreateInfoEXT* sampleLocations) {
-    constexpr static VkSampleLocationEXT kCenteredSampleLocations[16] = {
-            {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f},
-            {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}, {.5f,.5f}};
-    memset(sampleLocations, 0, sizeof(VkPipelineSampleLocationsStateCreateInfoEXT));
-    sampleLocations->sType = VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT;
-    sampleLocations->pNext = nullptr;
-    sampleLocations->sampleLocationsEnable = VK_TRUE;
-    sampleLocations->sampleLocationsInfo.sType = VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT;
-    sampleLocations->sampleLocationsInfo.pNext = nullptr;
-    SkAssertResult(GrSampleCountToVkSampleCount(
-            numSamples,
-            &sampleLocations->sampleLocationsInfo.sampleLocationsPerPixel));
-    sampleLocations->sampleLocationsInfo.sampleLocationGridSize.width = 1;
-    sampleLocations->sampleLocationsInfo.sampleLocationGridSize.height = 1;
-    SkASSERT(numSamples < (int)SK_ARRAY_COUNT(kCenteredSampleLocations));
-    sampleLocations->sampleLocationsInfo.sampleLocationsCount = std::min(
-            numSamples, (int)SK_ARRAY_COUNT(kCenteredSampleLocations));
-    sampleLocations->sampleLocationsInfo.pSampleLocations = kCenteredSampleLocations;
 }
 
 static VkBlendFactor blend_coeff_to_vk_blend(GrBlendCoeff coeff) {
@@ -530,15 +501,6 @@ sk_sp<GrVkPipeline> GrVkPipeline::Make(GrVkGpu* gpu,
     VkPipelineMultisampleStateCreateInfo multisampleInfo;
     setup_multisample_state(numSamples, gpu->caps(), &multisampleInfo);
 
-    VkPipelineSampleLocationsStateCreateInfoEXT sampleLocations;
-    if (gpu->caps()->multisampleDisableSupport()) {
-        if (numSamples > 1 && !isHWAntialiasState) {
-            setup_all_sample_locations_at_pixel_center(numSamples, &sampleLocations);
-            sampleLocations.pNext = multisampleInfo.pNext;
-            multisampleInfo.pNext = &sampleLocations;
-        }
-    }
-
     // We will only have one color attachment per pipeline.
     VkPipelineColorBlendAttachmentState attachmentStates[1];
     VkPipelineColorBlendStateCreateInfo colorBlendInfo;
@@ -584,7 +546,7 @@ sk_sp<GrVkPipeline> GrVkPipeline::Make(GrVkGpu* gpu,
     VkPipeline vkPipeline;
     VkResult err;
     {
-        TRACE_EVENT0("skia.shaders", "CreateGraphicsPipeline");
+        TRACE_EVENT0_ALWAYS("skia.shaders", "CreateGraphicsPipeline");
 #if defined(SK_ENABLE_SCOPED_LSAN_SUPPRESSIONS)
         // skia:8712
         __lsan::ScopedDisabler lsanDisabler;
@@ -622,7 +584,7 @@ sk_sp<GrVkPipeline> GrVkPipeline::Make(GrVkGpu* gpu,
                 programInfo.origin(),
                 programInfo.nonGLStencilSettings(),
                 programInfo.numSamples(),
-                pipeline.isHWAntialiasState(),
+                programInfo.numSamples() > 1,
                 pipeline.getXferProcessor().getBlendInfo(),
                 pipeline.isWireframe(),
                 pipeline.usesConservativeRaster(),
@@ -683,7 +645,7 @@ void GrVkPipeline::SetDynamicViewportState(GrVkGpu* gpu,
 
 void GrVkPipeline::SetDynamicBlendConstantState(GrVkGpu* gpu,
                                                 GrVkCommandBuffer* cmdBuffer,
-                                                const GrSwizzle& swizzle,
+                                                const skgpu::Swizzle& swizzle,
                                                 const GrXferProcessor& xferProcessor) {
     const GrXferProcessor::BlendInfo& blendInfo = xferProcessor.getBlendInfo();
     GrBlendCoeff srcCoeff = blendInfo.fSrcBlend;
