@@ -36,6 +36,7 @@ cc_library(
         ":SkCachedData_src",
         ":SkCanvasPriv_src",
         ":SkCanvas_src",
+        ":SkCapabilities_src",
         ":SkChromeRemoteGlyphCache_src",
         ":SkClipStackDevice_src",
         ":SkClipStack_src",
@@ -1508,6 +1509,7 @@ generated_cc_atom(
         ":SkMatrixPriv_hdr",
         ":SkMatrixProvider_hdr",
         ":SkRasterClip_hdr",
+        ":SkScalerContext_hdr",
         "//include/core:SkBlender_hdr",
         "//include/core:SkCanvas_hdr",
         "//include/core:SkColor_hdr",
@@ -2119,6 +2121,7 @@ generated_cc_atom(
     hdrs = ["SkGlyphRunPainter.h"],
     visibility = ["//:__subpackages__"],
     deps = [
+        ":SkDevice_hdr",
         ":SkDistanceFieldGen_hdr",
         ":SkGlyphRun_hdr",
         ":SkScalerContext_hdr",
@@ -2142,6 +2145,7 @@ generated_cc_atom(
         ":SkGlyphRunPainter_hdr",
         ":SkRasterClip_hdr",
         ":SkScalerCache_hdr",
+        ":SkScalerContext_hdr",
         ":SkStrikeCache_hdr",
         ":SkStrikeForGPU_hdr",
         ":SkStrikeSpec_hdr",
@@ -5658,6 +5662,8 @@ generated_cc_atom(
     deps = [
         ":SkOpts_hdr",
         ":SkShaderCodeDictionary_hdr",
+        "//include/effects:SkRuntimeEffect_hdr",
+        "//include/gpu/graphite:Context_hdr",
         "//include/private:SkSLString_hdr",
         "//src/sksl:SkSLUtil_hdr",
     ],
@@ -5725,10 +5731,10 @@ generated_cc_atom(
         "//include/core:SkSpan_hdr",
         "//include/core:SkTileMode_hdr",
         "//include/private:SkColorData_hdr",
+        "//include/private:SkVx_hdr",
         "//src/gpu:Blend_hdr",
         "//src/gpu/graphite:TextureProxy_hdr",
         "//src/gpu/graphite:UniformManager_hdr",
-        "//src/gpu/graphite/geom:VectorTypes_hdr",
     ],
 )
 
@@ -5770,4 +5776,11 @@ generated_cc_atom(
     hdrs = ["SkEnumBitMask.h"],
     visibility = ["//:__subpackages__"],
     deps = ["//include/core:SkTypes_hdr"],
+)
+
+generated_cc_atom(
+    name = "SkCapabilities_src",
+    srcs = ["SkCapabilities.cpp"],
+    visibility = ["//:__subpackages__"],
+    deps = ["//include/core:SkCapabilities_hdr"],
 )

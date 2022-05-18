@@ -112,6 +112,7 @@ public:
         friend class SkRuntimeEffect;
         friend class SkRuntimeEffectPriv;
 
+        // TODO(skia:11209) - Replace this with a promised SkCapabilities?
         // This flag lifts the ES2 restrictions on Runtime Effects that are gated by the
         // `strictES2Mode` check. Be aware that the software renderer and pipeline-stage effect are
         // still largely ES3-unaware and can still fail or crash if post-ES2 features are used.
@@ -163,19 +164,6 @@ public:
     static Result MakeForBlender(SkString sksl) {
         return MakeForBlender(std::move(sksl), Options{});
     }
-
-    // DSL entry points
-    static Result MakeForColorFilter(std::unique_ptr<SkSL::Program> program, const Options&);
-    static Result MakeForColorFilter(std::unique_ptr<SkSL::Program> program);
-
-    static Result MakeForShader(std::unique_ptr<SkSL::Program> program, const Options&);
-    static Result MakeForShader(std::unique_ptr<SkSL::Program> program);
-    static sk_sp<SkRuntimeEffect> MakeForShader(std::unique_ptr<SkSL::Program> program,
-                                                const Options&, SkSL::ErrorReporter* errors);
-
-
-    static Result MakeForBlender(std::unique_ptr<SkSL::Program> program, const Options&);
-    static Result MakeForBlender(std::unique_ptr<SkSL::Program> program);
 
     // Object that allows passing a SkShader, SkColorFilter or SkBlender as a child
     class ChildPtr {
@@ -282,15 +270,6 @@ private:
     sk_sp<SkRuntimeEffect> makeUnoptimizedClone();
 
     static Result MakeFromSource(SkString sksl, const Options& options, SkSL::ProgramKind kind);
-
-    static Result MakeFromDSL(std::unique_ptr<SkSL::Program> program,
-                              const Options& options,
-                              SkSL::ProgramKind kind);
-
-    static sk_sp<SkRuntimeEffect> MakeFromDSL(std::unique_ptr<SkSL::Program> program,
-                                              const Options& options,
-                                              SkSL::ProgramKind kind,
-                                              SkSL::ErrorReporter* errors);
 
     static Result MakeInternal(std::unique_ptr<SkSL::Program> program,
                                const Options& options,

@@ -7,9 +7,12 @@
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTextBlob.h"
+#include "src/core/SkDevice.h"
 #include "src/core/SkSurfacePriv.h"
+#include "src/gpu/ganesh/GrColorInfo.h"
 #include "src/gpu/ganesh/text/GrTextBlob.h"
 #include "tests/Test.h"
 #include "tools/ToolUtils.h"
@@ -322,4 +325,32 @@ DEF_TEST(SubRunAllocator, r) {
         void* ptr = arena.alignedBytes(4081, 8);
         REPORTER_ASSERT(r, ((intptr_t)ptr & 7) == 0);
     }
+}
+
+DEF_TEST(KeyEqualityOnPerspective, r) {
+    SkTextBlobBuilder builder;
+    SkFont font(SkTypeface::MakeDefault(), 16);
+    auto runBuffer = builder.allocRun(font, 1, 0.0f, 0.0f);
+    runBuffer.glyphs[0] = 3;
+    auto blob = builder.make();
+    SkGlyphRunBuilder grBuilder;
+    auto glyphRunList = grBuilder.blobToGlyphRunList(*blob, {100, 100});
+    SkPaint paint;
+
+    // Build the strike device.
+    SkSurfaceProps props;
+    GrSDFTControl control(false, false, 1, 100);
+    SkStrikeDeviceInfo strikeDevice{props, SkScalerContextFlags::kBoostContrast, &control};
+    SkMatrix matrix1;
+    matrix1.setAll(1, 0, 0, 0, 1, 0, 1, 1, 1);
+    SkMatrix matrix2;
+    matrix2.setAll(1, 0, 0, 0, 1, 0, 2, 2, 1);
+    auto key1 = std::get<1>(
+            GrTextBlob::Key::Make(glyphRunList, paint, matrix1, strikeDevice));
+    auto key2 = std::get<1>(
+            GrTextBlob::Key::Make(glyphRunList, paint, matrix1, strikeDevice));
+    auto key3 = std::get<1>(
+            GrTextBlob::Key::Make(glyphRunList, paint, matrix2, strikeDevice));
+    REPORTER_ASSERT(r, key1 == key2);
+    REPORTER_ASSERT(r, !(key1 == key3));
 }

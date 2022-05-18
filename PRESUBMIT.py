@@ -265,7 +265,7 @@ def _CheckBazelBUILDFiles(input_api, output_api):
     affected_file_path = affected_file.LocalPath()
     is_bazel = affected_file_path.endswith('BUILD.bazel')
     # This list lines up with the one in autoroller_lib.py (see G3).
-    excluded_paths = ["infra/", "bazel/rbe/"]
+    excluded_paths = ["infra/", "bazel/rbe/", "bazel/external/"]
     is_excluded = any(affected_file_path.startswith(n) for n in excluded_paths)
     if is_bazel and not is_excluded:
       with open(affected_file_path, 'r') as file:
@@ -289,6 +289,29 @@ def _CheckBazelBUILDFiles(input_api, output_api):
             % affected_file_path
           ))
   return results
+
+
+def _CheckPublicBzl(input_api, output_api):
+  """Reminds devs to add/remove files from public.bzl."""
+  results = []
+  public_bzl = ''
+  with open('public.bzl', 'r', encoding='utf-8') as f:
+    public_bzl = f.read().strip()
+  for affected_file in input_api.AffectedFiles(include_deletes=True):
+    # action is A for newly added, D for newly deleted, M for modified
+    action = affected_file.Action()
+    affected_file_path = affected_file.LocalPath()
+    if ((affected_file_path.startswith("include") or affected_file_path.startswith("src")) and
+        (affected_file_path.endswith(".cpp") or affected_file_path.endswith(".h"))):
+      affected_file_path = '"' + affected_file_path + '"'
+      if action == "D" and affected_file_path in public_bzl:
+        results.append(output_api.PresubmitError(
+              "Need to delete %s from public.bzl (or rename it)" % affected_file_path))
+      elif action == "A" and affected_file_path not in public_bzl:
+        results.append(output_api.PresubmitPromptWarning(
+              "You may need to add %s to public.bzl" % affected_file_path))
+  return results
+
 
 def _CommonChecks(input_api, output_api):
   """Presubmit checks common to upload and commit."""
@@ -330,6 +353,9 @@ def CheckChangeOnUpload(input_api, output_api):
   # coverage or Go installed.
   results.extend(_InfraTests(input_api, output_api))
   results.extend(_CheckReleaseNotesForPublicAPI(input_api, output_api))
+  # Only check public.bzl on upload because new files are likely to be a source
+  # of false positives and we don't want to unnecessarily block commits.
+  results.extend(_CheckPublicBzl(input_api, output_api))
   return results
 
 

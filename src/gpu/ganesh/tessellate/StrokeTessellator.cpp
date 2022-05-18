@@ -23,27 +23,27 @@ namespace {
 
 using namespace skgpu::tess;
 
-using FixedCountStrokeWriter = PatchWriter<VertexChunkPatchAllocator,
-                                           Required<PatchAttribs::kJoinControlPoint>,
-                                           Optional<PatchAttribs::kStrokeParams>,
-                                           Optional<PatchAttribs::kColor>,
-                                           Optional<PatchAttribs::kWideColorIfEnabled>,
-                                           Optional<PatchAttribs::kExplicitCurveType>,
-                                           ReplicateLineEndPoints,
-                                           TrackJoinControlPoints>;
+using StrokeWriter = PatchWriter<VertexChunkPatchAllocator,
+                                 Required<PatchAttribs::kJoinControlPoint>,
+                                 Optional<PatchAttribs::kStrokeParams>,
+                                 Optional<PatchAttribs::kColor>,
+                                 Optional<PatchAttribs::kWideColorIfEnabled>,
+                                 Optional<PatchAttribs::kExplicitCurveType>,
+                                 ReplicateLineEndPoints,
+                                 TrackJoinControlPoints>;
 
-int write_fixed_count_patches(FixedCountStrokeWriter&& patchWriter,
-                              const SkMatrix& shaderMatrix,
-                              StrokeTessellator::PathStrokeList* pathStrokeList) {
+void write_fixed_count_patches(StrokeWriter&& patchWriter,
+                               const SkMatrix& shaderMatrix,
+                               StrokeTessellator::PathStrokeList* pathStrokeList) {
     // The vector xform approximates how the control points are transformed by the shader to
     // more accurately compute how many *parametric* segments are needed.
     // getMaxScale() returns -1 if it can't compute a scale factor (e.g. perspective), taking the
     // absolute value automatically converts that to an identity scale factor for our purposes.
-    float maxScale = std::abs(shaderMatrix.getMaxScale());
-    patchWriter.setShaderTransform(wangs_formula::VectorXform{shaderMatrix}, maxScale);
+    patchWriter.setShaderTransform(wangs_formula::VectorXform{shaderMatrix},
+                                   std::abs(shaderMatrix.getMaxScale()));
     if (!(patchWriter.attribs() & PatchAttribs::kStrokeParams)) {
         // Strokes are static. Calculate tolerances once.
-        patchWriter.tolerances().accumulateStroke(pathStrokeList->fStroke, maxScale);
+        patchWriter.updateUniformStrokeParams(pathStrokeList->fStroke);
     }
 
     for (auto* pathStroke = pathStrokeList; pathStroke; pathStroke = pathStroke->fNext) {
@@ -140,8 +140,6 @@ int write_fixed_count_patches(FixedCountStrokeWriter&& patchWriter,
             }
         }
     }
-
-    return patchWriter.tolerances().requiredStrokeEdges();
 }
 
 }  // namespace
@@ -153,19 +151,17 @@ void StrokeTessellator::prepare(GrMeshDrawTarget* target,
                                 const SkMatrix& shaderMatrix,
                                 PathStrokeList* pathStrokeList,
                                 int totalCombinedStrokeVerbCnt) {
-    int preallocCount = FixedCountStrokes::PreallocCount(totalCombinedStrokeVerbCnt);
-    FixedCountStrokeWriter patchWriter{fAttribs, target, &fVertexChunkArray, preallocCount};
+    LinearTolerances worstCase;
+    const int preallocCount = FixedCountStrokes::PreallocCount(totalCombinedStrokeVerbCnt);
+    StrokeWriter patchWriter{fAttribs, &worstCase,  target, &fVertexChunkArray, preallocCount};
 
-    fFixedEdgeCount = write_fixed_count_patches(std::move(patchWriter),
-                                                shaderMatrix,
-                                                pathStrokeList);
-
-    fFixedEdgeCount = std::min(fFixedEdgeCount, FixedCountStrokes::kMaxEdges);
+    write_fixed_count_patches(std::move(patchWriter), shaderMatrix, pathStrokeList);
+    fVertexCount = FixedCountStrokes::VertexCount(worstCase);
 
     if (!target->caps().shaderCaps()->vertexIDSupport()) {
         // Our shader won't be able to use sk_VertexID. Bind a fallback vertex buffer with the IDs
         // in it instead.
-        fFixedEdgeCount = std::min(fFixedEdgeCount, FixedCountStrokes::kMaxEdgesNoVertexIDs);
+        fVertexCount = std::min(fVertexCount, 2 * FixedCountStrokes::kMaxEdgesNoVertexIDs);
 
         SKGPU_DEFINE_STATIC_UNIQUE_KEY(gVertexIDFallbackBufferKey);
 
@@ -178,7 +174,7 @@ void StrokeTessellator::prepare(GrMeshDrawTarget* target,
 }
 
 void StrokeTessellator::draw(GrOpFlushState* flushState) const {
-    if (fVertexChunkArray.empty() || fFixedEdgeCount <= 0) {
+    if (fVertexChunkArray.empty() || fVertexCount <= 0) {
         return;
     }
     if (!flushState->caps().shaderCaps()->vertexIDSupport() &&
@@ -189,7 +185,7 @@ void StrokeTessellator::draw(GrOpFlushState* flushState) const {
         flushState->bindBuffers(nullptr, instanceChunk.fBuffer, fVertexBufferIfNoIDSupport);
         flushState->drawInstanced(instanceChunk.fCount,
                                   instanceChunk.fBase,
-                                  fFixedEdgeCount * 2,
+                                  fVertexCount,
                                   0);
     }
 }

@@ -2059,10 +2059,9 @@ static SkColor compute_canonical_color(const SkPaint& paint, bool lcd) {
 
 auto GrTextBlob::Key::Make(const SkGlyphRunList& glyphRunList,
                            const SkPaint& paint,
-                           const SkSurfaceProps& surfaceProps,
-                           const GrColorInfo& colorInfo,
                            const SkMatrix& drawMatrix,
-                           const GrSDFTControl& control) -> std::tuple<bool, Key> {
+                           const SkStrikeDeviceInfo& strikeDevice) -> std::tuple<bool, Key> {
+    SkASSERT(strikeDevice.fSDFTControl != nullptr);
     SkMaskFilterBase::BlurRec blurRec;
     // It might be worth caching these things, but its not clear at this time
     // TODO for animated mask filters, this will fill up our cache.  We need a safeguard here
@@ -2071,20 +2070,13 @@ auto GrTextBlob::Key::Make(const SkGlyphRunList& glyphRunList,
                     !(paint.getPathEffect() ||
                         (maskFilter && !as_MFB(maskFilter)->asABlur(&blurRec)));
 
-    // If we're doing linear blending, then we can disable the gamma hacks.
-    // Otherwise, leave them on. In either case, we still want the contrast boost:
-    // TODO: Can we be even smarter about mask gamma based on the dest transfer function?
-    SkScalerContextFlags scalerContextFlags = colorInfo.isLinearlyBlended()
-                                              ? SkScalerContextFlags::kBoostContrast
-                                              : SkScalerContextFlags::kFakeGammaAndBoostContrast;
-
     GrTextBlob::Key key;
     if (canCache) {
         bool hasLCD = glyphRunList.anyRunsLCD();
 
         // We canonicalize all non-lcd draws to use kUnknown_SkPixelGeometry
-        SkPixelGeometry pixelGeometry =
-                hasLCD ? surfaceProps.pixelGeometry() : kUnknown_SkPixelGeometry;
+        SkPixelGeometry pixelGeometry = hasLCD ? strikeDevice.fSurfaceProps.pixelGeometry()
+                                               : kUnknown_SkPixelGeometry;
 
         GrColor canonicalColor = compute_canonical_color(paint, hasLCD);
 
@@ -2101,14 +2093,15 @@ auto GrTextBlob::Key::Make(const SkGlyphRunList& glyphRunList,
             key.fBlurRec = blurRec;
         }
         key.fCanonicalColor = canonicalColor;
-        key.fScalerContextFlags = SkTo<uint32_t>(scalerContextFlags);
+        key.fScalerContextFlags = SkTo<uint32_t>(strikeDevice.fScalerContextFlags);
 
         // Do any runs use direct drawing types?.
         key.fHasSomeDirectSubRuns = false;
         for (auto& run : glyphRunList) {
             SkScalar approximateDeviceTextSize =
                     SkFontPriv::ApproximateTransformedTextSize(run.font(), drawMatrix);
-            key.fHasSomeDirectSubRuns |= control.isDirect(approximateDeviceTextSize, paint);
+            key.fHasSomeDirectSubRuns |=
+                    strikeDevice.fSDFTControl->isDirect(approximateDeviceTextSize, paint);
         }
 
         if (key.fHasSomeDirectSubRuns) {
@@ -2149,9 +2142,12 @@ bool GrTextBlob::Key::operator==(const GrTextBlob::Key& that) const {
     }
     if (fScalerContextFlags != that.fScalerContextFlags) { return false; }
 
-    // Just punt on perspective.
     if (fPositionMatrix.hasPerspective()) {
-        return false;
+        if (fPositionMatrix[SkMatrix::kMPersp0] != that.fPositionMatrix[SkMatrix::kMPersp0] ||
+            fPositionMatrix[SkMatrix::kMPersp1] != that.fPositionMatrix[SkMatrix::kMPersp1] ||
+            fPositionMatrix[SkMatrix::kMPersp2] != that.fPositionMatrix[SkMatrix::kMPersp2]) {
+                return false;
+        }
     }
 
     if (fHasSomeDirectSubRuns != that.fHasSomeDirectSubRuns) {
@@ -2176,7 +2172,7 @@ GrTextBlob::~GrTextBlob() = default;
 sk_sp<GrTextBlob> GrTextBlob::Make(const SkGlyphRunList& glyphRunList,
                                    const SkPaint& paint,
                                    const SkMatrix& positionMatrix,
-                                   const GrSDFTControl& control,
+                                   SkStrikeDeviceInfo strikeDeviceInfo,
                                    SkGlyphRunListPainter* painter) {
     // The difference in alignment from the per-glyph data to the SubRun;
     constexpr size_t alignDiff = alignof(DirectMaskSubRun) - alignof(DevicePosition);
@@ -2196,7 +2192,7 @@ sk_sp<GrTextBlob> GrTextBlob::Make(const SkGlyphRunList& glyphRunList,
             std::move(alloc), totalMemoryAllocated, positionMatrix, initialLuminance));
 
     painter->categorizeGlyphRunList(
-            blob.get(), glyphRunList, positionMatrix, paint, control, "GrTextBlob");
+            blob.get(), glyphRunList, positionMatrix, paint, strikeDeviceInfo, "GrTextBlob");
 
     return blob;
 }
@@ -2338,7 +2334,7 @@ public:
                             const SkGlyphRunList& glyphRunList,
                             const SkPaint& initialPaint,
                             const SkPaint& drawingPaint,
-                            const GrSDFTControl& control,
+                            SkStrikeDeviceInfo strikeDeviceInfo,
                             SkGlyphRunListPainter* painter);
     static sk_sp<GrSlug> MakeFromBuffer(SkReadBuffer& buffer,
                                         const SkStrikeClient* client);
@@ -2492,7 +2488,7 @@ sk_sp<Slug> Slug::Make(const SkMatrixProvider& viewMatrix,
                        const SkGlyphRunList& glyphRunList,
                        const SkPaint& initialPaint,
                        const SkPaint& drawingPaint,
-                       const GrSDFTControl& control,
+                       SkStrikeDeviceInfo strikeDeviceInfo,
                        SkGlyphRunListPainter* painter) {
     // The difference in alignment from the per-glyph data to the SubRun;
     constexpr size_t alignDiff = alignof(DirectMaskSubRun) - alignof(DevicePosition);
@@ -2516,7 +2512,7 @@ sk_sp<Slug> Slug::Make(const SkMatrixProvider& viewMatrix,
             glyphRunList.origin()));
 
     painter->categorizeGlyphRunList(
-            slug.get(), glyphRunList, positionMatrix, drawingPaint, control, "Make Slug");
+            slug.get(), glyphRunList, positionMatrix, drawingPaint, strikeDeviceInfo, "Make Slug");
 
     // There is nothing to draw here. This is particularly a problem with RSX form blobs where a
     // single space becomes a run with no glyphs.
@@ -2577,15 +2573,11 @@ sk_sp<GrSlug>
 Device::convertGlyphRunListToSlug(const SkGlyphRunList& glyphRunList,
                                   const SkPaint& initialPaint,
                                   const SkPaint& drawingPaint) {
-    auto recordingContextPriv = this->recordingContext()->priv();
-    const GrSDFTControl control = recordingContextPriv.getSDFTControl(
-            this->surfaceProps().isUseDeviceIndependentFonts());
-
     return Slug::Make(this->asMatrixProvider(),
                       glyphRunList,
                       initialPaint,
                       drawingPaint,
-                      control,
+                      this->strikeDeviceInfo(),
                       fSurfaceDrawContext->glyphRunPainter());
 }
 
@@ -2611,9 +2603,10 @@ sk_sp<GrSlug> MakeSlug(const SkMatrixProvider& drawMatrix,
                        const SkGlyphRunList& glyphRunList,
                        const SkPaint& initialPaint,
                        const SkPaint& drawingPaint,
-                       const GrSDFTControl& control,
+                       SkStrikeDeviceInfo strikeDeviceInfo,
                        SkGlyphRunListPainter* painter) {
-    return Slug::Make(drawMatrix, glyphRunList, initialPaint, drawingPaint, control, painter);
+    return Slug::Make(
+            drawMatrix, glyphRunList, initialPaint, drawingPaint, strikeDeviceInfo, painter);
 }
 }  // namespace skgpu::v1
 

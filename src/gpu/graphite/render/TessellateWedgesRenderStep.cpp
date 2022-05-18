@@ -36,13 +36,10 @@ struct DrawWriterAllocator {
         fInstances.reserve(reserveCount);
     }
 
-    VertexWriter append() {
-        // TODO (skbug.com/13056): Actually compute optimal minimum required index count based on
-        // PatchWriter's tracked segment count^4.
-        // Wedges use one extra triangle to connect to the fan point compared to the curve version.
-        static constexpr unsigned int kMaxIndexCount =
-                3 * (1 + NumCurveTrianglesAtResolveLevel(tess::kMaxResolveLevel));
-        return fInstances.append(kMaxIndexCount, 1);
+    VertexWriter append(const LinearTolerances& tolerances) {
+        // TODO (skbug.com/13056): Converting tolerances into an index count for every instance is
+        // wasteful; it only has to be computed when we flush.
+        return fInstances.append(FixedCountWedges::VertexCount(tolerances), 1);
     }
 
     DrawWriter::DynamicInstances fInstances;
@@ -123,8 +120,8 @@ void TessellateWedgesRenderStep::writeVertices(DrawWriter* dw, const DrawGeometr
     MidpointContourParser parser{path};
     while (parser.parseNextContour()) {
         writer.updateFanPointAttrib(m.mapPoint(parser.currentMidpoint()));
-        float2 lastPoint = {0, 0};
-        float2 startPoint = {0, 0};
+        skvx::float2 lastPoint = {0, 0};
+        skvx::float2 startPoint = {0, 0};
         for (auto [verb, pts, w] : parser.currentContour()) {
             switch (verb) {
                 case SkPathVerb::kMove: {

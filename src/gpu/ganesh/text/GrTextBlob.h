@@ -14,6 +14,7 @@
 #include "include/core/SkPoint3.h"
 #include "include/core/SkRefCnt.h"
 #include "include/private/chromium/GrSlug.h"
+#include "src/core/SkDevice.h"
 #include "src/core/SkGlyphRunPainter.h"
 #include "src/core/SkIPoint16.h"
 #include "src/core/SkMaskFilterBase.h"
@@ -196,10 +197,8 @@ public:
     struct Key {
         static std::tuple<bool, Key> Make(const SkGlyphRunList& glyphRunList,
                                           const SkPaint& paint,
-                                          const SkSurfaceProps& surfaceProps,
-                                          const GrColorInfo& colorInfo,
                                           const SkMatrix& drawMatrix,
-                                          const GrSDFTControl& control);
+                                          const SkStrikeDeviceInfo& strikeDevice);
         uint32_t fUniqueID;
         // Color may affect the gamma of the mask we generate, but in a fairly limited way.
         // Each color is assigned to on of a fixed number of buckets based on its
@@ -227,7 +226,7 @@ public:
     static sk_sp<GrTextBlob> Make(const SkGlyphRunList& glyphRunList,
                                   const SkPaint& paint,
                                   const SkMatrix& positionMatrix,
-                                  const GrSDFTControl& control,
+                                  SkStrikeDeviceInfo strikeDeviceInfo,
                                   SkGlyphRunListPainter* painter);
 
     GrTextBlob(sktext::gpu::SubRunAllocator&& alloc,
@@ -309,7 +308,7 @@ sk_sp<GrSlug> MakeSlug(const SkMatrixProvider& drawMatrix,
                        const SkGlyphRunList& glyphRunList,
                        const SkPaint& initialPaint,
                        const SkPaint& drawingPaint,
-                       const GrSDFTControl& control,
+                       SkStrikeDeviceInfo strikeDeviceInfo,
                        SkGlyphRunListPainter* painter);
 }  // namespace skgpu::v1
 #endif  // GrTextBlob_DEFINED

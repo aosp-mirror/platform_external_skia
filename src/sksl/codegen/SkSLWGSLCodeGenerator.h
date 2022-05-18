@@ -79,6 +79,17 @@ public:
         kPipelineOutputs = 2,
     };
 
+    // Variable declarations can be terminated by:
+    //   - comma (","), e.g. in struct member declarations or function parameters
+    //   - semicolon (";"), e.g. in function scope variables
+    // A "none" option is provided to skip the delimiter when not needed, e.g. at the end of a list
+    // of declarations.
+    enum class Delimiter {
+        kComma,
+        kSemicolon,
+        kNone,
+    };
+
     struct ProgramRequirements {
         using DepsMap = SkTHashMap<const FunctionDeclaration*, FunctionDependencies>;
 
@@ -115,9 +126,18 @@ private:
     void writeName(std::string_view name);
 
     // Helpers to declare a pipeline stage IO parameter declaration.
-    void writePipelineIODeclaration(Modifiers modifiers, const Type& type, std::string_view name);
-    void writeUserDefinedVariableDecl(const Type& type, std::string_view name, int location);
-    void writeBuiltinVariableDecl(const Type& type, std::string_view name, Builtin kind);
+    void writePipelineIODeclaration(Modifiers modifiers,
+                                    const Type& type,
+                                    std::string_view name,
+                                    Delimiter delimiter);
+    void writeUserDefinedVariableDecl(const Type& type,
+                                      std::string_view name,
+                                      int location,
+                                      Delimiter delimiter);
+    void writeBuiltinVariableDecl(const Type& type,
+                                  std::string_view name,
+                                  Builtin kind,
+                                  Delimiter delimiter);
 
     // Write a function definition.
     void writeFunction(const FunctionDefinition& f);
@@ -155,6 +175,7 @@ private:
     // TODO(skia:13092): populate this
     SkTHashSet<std::string_view> fReservedWords;
     ProgramRequirements fRequirements;
+    int fPipelineInputCount = 0;
 
     // Output processing state.
     int fIndentation = 0;

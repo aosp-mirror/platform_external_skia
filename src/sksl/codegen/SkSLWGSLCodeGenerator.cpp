@@ -199,6 +199,20 @@ std::shared_ptr<SymbolTable> top_level_symbol_table(const FunctionDefinition& f)
     return f.body()->as<Block>().symbolTable()->fParent;
 }
 
+const char* delimiter_to_str(WGSLCodeGenerator::Delimiter delimiter) {
+    using Delim = WGSLCodeGenerator::Delimiter;
+    switch (delimiter) {
+        case Delim::kComma:
+            return ",";
+        case Delim::kSemicolon:
+            return ";";
+        case Delim::kNone:
+        default:
+            break;
+    }
+    return "";
+}
+
 // FunctionDependencyResolver visits the IR tree rooted at a particular function definition and
 // computes that function's dependencies on pipeline stage IO parameters. These are later used to
 // synthesize arguments when writing out function definitions.
@@ -306,6 +320,25 @@ WGSLCodeGenerator::ProgramRequirements resolve_program_requirements(const Progra
     return WGSLCodeGenerator::ProgramRequirements(std::move(dependencies), mainNeedsCoordsArgument);
 }
 
+int count_pipeline_inputs(const Program* program) {
+    int inputCount = 0;
+    for (const ProgramElement* e : program->elements()) {
+        if (e->is<GlobalVarDeclaration>()) {
+            const Variable& v =
+                    e->as<GlobalVarDeclaration>().declaration()->as<VarDeclaration>().var();
+            if (v.modifiers().fFlags & Modifiers::kIn_Flag) {
+                inputCount++;
+            }
+        } else if (e->is<InterfaceBlock>()) {
+            const Variable& v = e->as<InterfaceBlock>().variable();
+            if (v.modifiers().fFlags & Modifiers::kIn_Flag) {
+                inputCount++;
+            }
+        }
+    }
+    return inputCount;
+}
+
 }  // namespace
 
 bool WGSLCodeGenerator::generateCode() {
@@ -350,6 +383,7 @@ bool WGSLCodeGenerator::generateCode() {
 
 void WGSLCodeGenerator::preprocessProgram() {
     fRequirements = resolve_program_requirements(&fProgram);
+    fPipelineInputCount = count_pipeline_inputs(&fProgram);
 }
 
 void WGSLCodeGenerator::write(std::string_view s) {
@@ -387,7 +421,8 @@ void WGSLCodeGenerator::writeName(std::string_view name) {
 
 void WGSLCodeGenerator::writePipelineIODeclaration(Modifiers modifiers,
                                                    const Type& type,
-                                                   std::string_view name) {
+                                                   std::string_view name,
+                                                   Delimiter delimiter) {
     // In WGSL, an entry-point IO parameter is "one of either a built-in value or
     // assigned a location". However, some SkSL declarations, specifically sk_FragColor, can
     // contain both a location and a builtin modifier. In addition, WGSL doesn't have a built-in
@@ -403,34 +438,36 @@ void WGSLCodeGenerator::writePipelineIODeclaration(Modifiers modifiers,
     // https://www.w3.org/TR/WGSL/#builtin-inputs-outputs
     int location = modifiers.fLayout.fLocation;
     if (location >= 0) {
-        this->writeUserDefinedVariableDecl(type, name, location);
+        this->writeUserDefinedVariableDecl(type, name, location, delimiter);
     } else if (modifiers.fLayout.fBuiltin >= 0) {
         auto builtin = builtin_from_sksl_name(modifiers.fLayout.fBuiltin);
         if (builtin.has_value()) {
-            this->writeBuiltinVariableDecl(type, name, *builtin);
+            this->writeBuiltinVariableDecl(type, name, *builtin, delimiter);
         }
     }
 }
 
 void WGSLCodeGenerator::writeUserDefinedVariableDecl(const Type& type,
                                                      std::string_view name,
-                                                     int location) {
+                                                     int location,
+                                                     Delimiter delimiter) {
     this->write("@location(" + std::to_string(location) + ") ");
     this->writeName(name);
     this->write(": " + to_wgsl_type(type));
-    this->writeLine(";");
+    this->writeLine(delimiter_to_str(delimiter));
 }
 
 void WGSLCodeGenerator::writeBuiltinVariableDecl(const Type& type,
                                                  std::string_view name,
-                                                 Builtin kind) {
+                                                 Builtin kind,
+                                                 Delimiter delimiter) {
     this->write("@builtin(");
     this->write(to_wgsl_builtin_name(kind));
     this->write(") ");
 
     this->writeName(name);
     this->write(": " + to_wgsl_type(type));
-    this->writeLine(";");
+    this->writeLine(delimiter_to_str(delimiter));
 }
 
 void WGSLCodeGenerator::writeFunction(const FunctionDefinition& f) {
@@ -498,10 +535,18 @@ void WGSLCodeGenerator::writeEntryPoint(const FunctionDefinition& main) {
     // function.
     std::string outputType;
     if (ProgramConfig::IsVertex(fProgram.fConfig->fKind)) {
-        this->writeLine("@stage(vertex) fn vertexMain(_stageIn: VSIn) -> VSOut {");
+        this->write("@stage(vertex) fn vertexMain(");
+        if (fPipelineInputCount > 0) {
+            this->write("_stageIn: VSIn");
+        }
+        this->writeLine(") -> VSOut {");
         outputType = "VSOut";
     } else if (ProgramConfig::IsFragment(fProgram.fConfig->fKind)) {
-        this->writeLine("@stage(fragment) fn fragmentMain(_stageIn: FSIn) -> FSOut {");
+        this->write("@stage(fragment) fn fragmentMain(");
+        if (fPipelineInputCount > 0) {
+            this->write("_stageIn: FSIn");
+        }
+        this->writeLine(") -> FSOut {");
         outputType = "FSOut";
     } else {
         fContext.fErrors->error(Position(), "program kind not supported");
@@ -765,6 +810,11 @@ void WGSLCodeGenerator::writeStageInputStruct() {
         return;
     }
 
+    // It is illegal to declare a struct with no members.
+    if (fPipelineInputCount < 1) {
+        return;
+    }
+
     this->write("struct ");
     this->write(structNamePrefix);
     this->writeLine("In {");
@@ -776,7 +826,8 @@ void WGSLCodeGenerator::writeStageInputStruct() {
             const Variable& v =
                     e->as<GlobalVarDeclaration>().declaration()->as<VarDeclaration>().var();
             if (v.modifiers().fFlags & Modifiers::kIn_Flag) {
-                this->writePipelineIODeclaration(v.modifiers(), v.type(), v.name());
+                this->writePipelineIODeclaration(
+                        v.modifiers(), v.type(), v.name(), Delimiter::kComma);
                 if (v.modifiers().fLayout.fBuiltin == SK_FRAGCOORD_BUILTIN) {
                     declaredFragCoordsBuiltin = true;
                 }
@@ -790,7 +841,8 @@ void WGSLCodeGenerator::writeStageInputStruct() {
             // but with members that have individual storage qualifiers?
             if (v.modifiers().fFlags & Modifiers::kIn_Flag) {
                 for (const auto& f : v.type().fields()) {
-                    this->writePipelineIODeclaration(f.fModifiers, *f.fType, f.fName);
+                    this->writePipelineIODeclaration(
+                            f.fModifiers, *f.fType, f.fName, Delimiter::kComma);
                     if (f.fModifiers.fLayout.fBuiltin == SK_FRAGCOORD_BUILTIN) {
                         declaredFragCoordsBuiltin = true;
                     }
@@ -801,7 +853,7 @@ void WGSLCodeGenerator::writeStageInputStruct() {
 
     if (ProgramConfig::IsFragment(fProgram.fConfig->fKind) &&
         fRequirements.mainNeedsCoordsArgument && !declaredFragCoordsBuiltin) {
-        this->writeLine("@builtin(position) sk_FragCoord: vec4<f32>;");
+        this->writeLine("@builtin(position) sk_FragCoord: vec4<f32>,");
     }
 
     fIndentation--;
@@ -822,12 +874,14 @@ void WGSLCodeGenerator::writeStageOutputStruct() {
 
     // TODO(skia:13092): Remember all variables that are added to the output struct here so they
     // can be referenced correctly when handling variable references.
+    bool declaredPositionBuiltin = false;
     for (const ProgramElement* e : fProgram.elements()) {
         if (e->is<GlobalVarDeclaration>()) {
             const Variable& v =
                     e->as<GlobalVarDeclaration>().declaration()->as<VarDeclaration>().var();
             if (v.modifiers().fFlags & Modifiers::kOut_Flag) {
-                this->writePipelineIODeclaration(v.modifiers(), v.type(), v.name());
+                this->writePipelineIODeclaration(
+                        v.modifiers(), v.type(), v.name(), Delimiter::kComma);
             }
         } else if (e->is<InterfaceBlock>()) {
             const Variable& v = e->as<InterfaceBlock>().variable();
@@ -838,10 +892,19 @@ void WGSLCodeGenerator::writeStageOutputStruct() {
             // but with members that have individual storage qualifiers?
             if (v.modifiers().fFlags & Modifiers::kOut_Flag) {
                 for (const auto& f : v.type().fields()) {
-                    this->writePipelineIODeclaration(f.fModifiers, *f.fType, f.fName);
+                    this->writePipelineIODeclaration(
+                            f.fModifiers, *f.fType, f.fName, Delimiter::kComma);
+                    if (f.fModifiers.fLayout.fBuiltin == SK_POSITION_BUILTIN) {
+                        declaredPositionBuiltin = true;
+                    }
                 }
             }
         }
+    }
+
+    // A vertex shader must include the `position` builtin in its return type.
+    if (ProgramConfig::IsVertex(fProgram.fConfig->fKind) && !declaredPositionBuiltin) {
+        this->writeLine("@builtin(position) sk_Position: vec4<f32>,");
     }
 
     fIndentation--;

@@ -38,12 +38,10 @@ struct DrawWriterAllocator {
         fInstances.reserve(reserveCount);
     }
 
-    VertexWriter append() {
-        // TODO (skbug.com/13056): Actually compute optimal minimum required index count based on
-        // PatchWriter's tracked segment count^4.
-        static constexpr unsigned int kMaxIndexCount =
-                3 * NumCurveTrianglesAtResolveLevel(tess::kMaxResolveLevel);
-        return fInstances.append(kMaxIndexCount, 1);
+    VertexWriter append(const LinearTolerances& tolerances) {
+        // TODO (skbug.com/13056): Converting tolerances into an index count for every instance is
+        // wasteful; it only has to be computed when we flush.
+        return fInstances.append(FixedCountCurves::VertexCount(tolerances), 1);
     }
 
     DrawWriter::DynamicInstances fInstances;
