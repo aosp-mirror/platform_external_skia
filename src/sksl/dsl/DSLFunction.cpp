@@ -52,12 +52,8 @@ void DSLFunction::init(DSLModifiers modifiers, const DSLType& returnType, std::s
     std::vector<std::unique_ptr<Variable>> paramVars;
     paramVars.reserve(params.size());
     for (DSLParameter* param : params) {
-        if (param->fDeclared) {
-            ThreadContext::ReportError("parameter has already been used in another function");
-        }
         SkASSERT(!param->fInitialValue.hasValue());
         SkASSERT(!param->fDeclaration);
-        param->fDeclared = true;
         std::unique_ptr<SkSL::Variable> paramVar = DSLWriter::CreateParameterVar(*param);
         if (!paramVar) {
             return;
@@ -70,7 +66,7 @@ void DSLFunction::init(DSLModifiers modifiers, const DSLType& returnType, std::s
                                                pos,
                                                modifiers.fPosition,
                                                ThreadContext::Modifiers(modifiers.fModifiers),
-                                               name == "main" ? name : DSLWriter::Name(name),
+                                               name,
                                                std::move(paramVars), returnType.fPosition,
                                                &returnType.skslType());
     ThreadContext::ReportErrors(pos);

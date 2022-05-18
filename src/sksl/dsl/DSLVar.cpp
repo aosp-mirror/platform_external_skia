@@ -10,22 +10,17 @@
 #include "include/core/SkTypes.h"
 #include "include/private/SkSLDefines.h"
 #include "include/private/SkSLStatement.h"
-#include "include/private/SkSLString.h"
 #include "include/private/SkSLSymbol.h"
 #include "include/sksl/DSLModifiers.h"
 #include "include/sksl/DSLType.h"
 #include "include/sksl/SkSLOperator.h"
 #include "src/sksl/SkSLThreadContext.h"
-#include "src/sksl/dsl/priv/DSLWriter.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
 #include "src/sksl/ir/SkSLFunctionCall.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
-#include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLVariable.h"
-
-#include <string>
 
 namespace SkSL {
 
@@ -47,20 +42,11 @@ DSLVarBase::DSLVarBase(const DSLModifiers& modifiers, DSLType type, std::string_
     : fModifiers(std::move(modifiers))
     , fType(std::move(type))
     , fNamePosition(namePos)
-    , fRawName(name)
-    , fName(fType.skslType().isOpaque() ? name : DSLWriter::Name(name))
+    , fName(name)
     , fInitialValue(std::move(initialValue))
-    , fDeclared(DSLWriter::MarkVarsDeclared())
     , fPosition(pos) {}
 
-DSLVarBase::~DSLVarBase() {
-    if (fDeclaration && !fDeclared) {
-        ThreadContext::ReportError(String::printf("variable '%.*s' was destroyed without being "
-                                                  "declared",
-                                                  (int)fRawName.length(),
-                                                  fRawName.data()).c_str());
-    }
-}
+DSLVarBase::~DSLVarBase() {}
 
 void DSLVarBase::swap(DSLVarBase& other) {
     SkASSERT(this->storage() == other.storage());
@@ -70,10 +56,8 @@ void DSLVarBase::swap(DSLVarBase& other) {
     std::swap(fDeclaration, other.fDeclaration);
     std::swap(fVar, other.fVar);
     std::swap(fNamePosition, other.fNamePosition);
-    std::swap(fRawName, other.fRawName);
     std::swap(fName, other.fName);
     std::swap(fInitialValue.fExpression, other.fInitialValue.fExpression);
-    std::swap(fDeclared, other.fDeclared);
     std::swap(fInitialized, other.fInitialized);
     std::swap(fPosition, other.fPosition);
 }
@@ -89,7 +73,6 @@ VariableStorage DSLVar::storage() const {
 DSLGlobalVar::DSLGlobalVar(const char* name)
     : INHERITED(kVoid_Type, name, DSLExpression(), Position(), Position()) {
     fName = name;
-    DSLWriter::MarkDeclared(*this);
     const SkSL::Symbol* result = (*ThreadContext::SymbolTable())[fName];
     SkASSERTF(result, "could not find '%.*s' in symbol table", (int)fName.length(), fName.data());
     fVar = &result->as<SkSL::Variable>();
