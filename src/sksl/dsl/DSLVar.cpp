@@ -52,7 +52,6 @@ void DSLVarBase::swap(DSLVarBase& other) {
     SkASSERT(this->storage() == other.storage());
     std::swap(fModifiers, other.fModifiers);
     std::swap(fType, other.fType);
-    std::swap(fUniformHandle, other.fUniformHandle);
     std::swap(fDeclaration, other.fDeclaration);
     std::swap(fVar, other.fVar);
     std::swap(fNamePosition, other.fNamePosition);
@@ -104,18 +103,6 @@ DSLPossibleExpression DSLVarBase::assign(DSLExpression expr) {
     return BinaryExpression::Convert(ThreadContext::Context(), Position(),
             DSLExpression(*this, Position()).release(), SkSL::Operator::Kind::EQ,
             expr.release());
-}
-
-DSLPossibleExpression DSLVar::operator=(DSLExpression expr) {
-    return this->assign(std::move(expr));
-}
-
-DSLPossibleExpression DSLGlobalVar::operator=(DSLExpression expr) {
-    return this->assign(std::move(expr));
-}
-
-DSLPossibleExpression DSLParameter::operator=(DSLExpression expr) {
-    return this->assign(std::move(expr));
 }
 
 std::unique_ptr<SkSL::Expression> DSLGlobalVar::methodCall(std::string_view methodName,
