@@ -31,6 +31,7 @@ class Context;
 class ConstructorCompound;
 class Expression;
 class ExpressionStatement;
+class FieldAccess;
 class FunctionDeclaration;
 class FunctionDefinition;
 class Literal;
@@ -40,8 +41,10 @@ class ReturnStatement;
 class Statement;
 class Type;
 class VarDeclaration;
+class VariableReference;
 struct Modifiers;
 struct Program;
+struct Swizzle;
 
 /**
  * Convert a Program into WGSL code.
@@ -130,14 +133,14 @@ private:
                                     const Type& type,
                                     std::string_view name,
                                     Delimiter delimiter);
-    void writeUserDefinedVariableDecl(const Type& type,
-                                      std::string_view name,
-                                      int location,
-                                      Delimiter delimiter);
-    void writeBuiltinVariableDecl(const Type& type,
-                                  std::string_view name,
-                                  Builtin kind,
-                                  Delimiter delimiter);
+    void writeUserDefinedIODecl(const Type& type,
+                                std::string_view name,
+                                int location,
+                                Delimiter delimiter);
+    void writeBuiltinIODecl(const Type& type,
+                            std::string_view name,
+                            Builtin builtin,
+                            Delimiter delimiter);
 
     // Write a function definition.
     void writeFunction(const FunctionDefinition& f);
@@ -157,7 +160,10 @@ private:
     // Writers for expressions.
     void writeExpression(const Expression& e, Precedence parentPrecedence);
     void writeBinaryExpression(const BinaryExpression& b, Precedence parentPrecedence);
+    void writeFieldAccess(const FieldAccess& f);
     void writeLiteral(const Literal& l);
+    void writeSwizzle(const Swizzle& swizzle);
+    void writeVariableReference(const VariableReference& r);
 
     // Constructor expressions
     void writeAnyConstructor(const AnyConstructor& c, Precedence parentPrecedence);

@@ -12,6 +12,7 @@
 #include "include/sksl/DSLCore.h"
 #include "include/sksl/DSLType.h"
 #include "include/sksl/DSLVar.h"
+#include "include/sksl/DSLWrapper.h"
 #include "include/sksl/SkSLOperator.h"
 #include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/dsl/priv/DSLWriter.h"
@@ -191,7 +192,7 @@ DSLExpression DSLExpression::field(std::string_view name, Position pos) {
             *ThreadContext::SymbolTable(), this->release(), name), pos);
 }
 
-DSLPossibleExpression DSLExpression::assign(DSLExpression right) {
+DSLPossibleExpression DSLExpression::operator=(DSLExpression right) {
     Position pos = this->position().rangeThrough(right.position());
     return BinaryExpression::Convert(ThreadContext::Context(), pos, this->release(),
             SkSL::Operator::Kind::EQ, right.release());
@@ -209,11 +210,12 @@ DSLExpression DSLExpression::index(DSLExpression index, Position pos) {
     return DSLExpression(std::move(result), pos);
 }
 
-DSLPossibleExpression DSLExpression::operator()(SkTArray<DSLExpression> args, Position pos) {
+DSLPossibleExpression DSLExpression::operator()(SkTArray<DSLWrapper<DSLExpression>> args,
+                                                Position pos) {
     ExpressionArray converted;
     converted.reserve_back(args.count());
-    for (DSLExpression& arg : args) {
-        converted.push_back(arg.release());
+    for (DSLWrapper<DSLExpression>& arg : args) {
+        converted.push_back(arg->release());
     }
     return (*this)(std::move(converted), pos);
 }
@@ -393,27 +395,27 @@ DSLExpression DSLPossibleExpression::field(std::string_view name, Position pos) 
     return DSLExpression(this->release()).field(name, pos);
 }
 
-DSLPossibleExpression DSLPossibleExpression::assign(DSLExpression expr) {
-    return DSLExpression(this->release()).assign(std::move(expr));
+DSLPossibleExpression DSLPossibleExpression::operator=(DSLExpression expr) {
+    return DSLExpression(this->release()) = std::move(expr);
 }
 
-DSLPossibleExpression DSLPossibleExpression::assign(int expr) {
-    return this->assign(DSLExpression(expr));
+DSLPossibleExpression DSLPossibleExpression::operator=(int expr) {
+    return this->operator=(DSLExpression(expr));
 }
 
-DSLPossibleExpression DSLPossibleExpression::assign(float expr) {
-    return this->assign(DSLExpression(expr));
+DSLPossibleExpression DSLPossibleExpression::operator=(float expr) {
+    return this->operator=(DSLExpression(expr));
 }
 
-DSLPossibleExpression DSLPossibleExpression::assign(double expr) {
-    return this->assign(DSLExpression(expr));
+DSLPossibleExpression DSLPossibleExpression::operator=(double expr) {
+    return this->operator=(DSLExpression(expr));
 }
 
 DSLPossibleExpression DSLPossibleExpression::operator[](DSLExpression index) {
     return DSLExpression(this->release())[std::move(index)];
 }
 
-DSLPossibleExpression DSLPossibleExpression::operator()(SkTArray<DSLExpression> args,
+DSLPossibleExpression DSLPossibleExpression::operator()(SkTArray<DSLWrapper<DSLExpression>> args,
                                                         Position pos) {
     return DSLExpression(this->release())(std::move(args), pos);
 }

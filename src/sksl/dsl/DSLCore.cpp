@@ -142,11 +142,7 @@ public:
     static DSLPossibleExpression Call(const char* name, Args... args) {
         SkSL::ExpressionArray argArray;
         argArray.reserve_back(sizeof...(args));
-
-        // in C++17, we could just do:
-        // (argArray.push_back(args.release()), ...);
-        int unused[] = {0, (static_cast<void>(argArray.push_back(args.release())), 0)...};
-        static_cast<void>(unused);
+        ((void)argArray.push_back(args.release()), ...);
 
         return SkSL::FunctionCall::Convert(ThreadContext::Context(), Position(),
                 ThreadContext::Compiler().convertIdentifier(Position(), name),
@@ -167,10 +163,6 @@ public:
     }
 
     static DSLStatement Declare(DSLVar& var, Position pos) {
-        if (var.fDeclared) {
-            ThreadContext::ReportError("variable has already been declared", pos);
-        }
-        var.fDeclared = true;
         return DSLWriter::Declaration(var);
     }
 
@@ -183,10 +175,6 @@ public:
     }
 
     static void Declare(DSLGlobalVar& var, Position pos) {
-        if (var.fDeclared) {
-            ThreadContext::ReportError("variable has already been declared", pos);
-        }
-        var.fDeclared = true;
         std::unique_ptr<SkSL::Statement> stmt = DSLWriter::Declaration(var);
         if (stmt) {
             if (!stmt->isEmpty()) {
@@ -280,11 +268,6 @@ public:
         DSLType varType = arraySize > 0 ? Array(structType, arraySize) : DSLType(structType);
         DSLGlobalVar var(modifiers, varType, !varName.empty() ? varName : typeName, DSLExpression(),
                 pos);
-        // Interface blocks can't be declared, so we always need to mark the var declared ourselves.
-        // We do this only when fDSLMarkVarDeclared is false, so we don't double-declare it.
-        if (!ThreadContext::Settings().fDSLMarkVarsDeclared) {
-            DSLWriter::MarkDeclared(var);
-        }
         const SkSL::Variable* skslVar = DSLWriter::Var(var);
         if (skslVar) {
             auto intf = std::make_unique<SkSL::InterfaceBlock>(pos, *skslVar, typeName, varName,

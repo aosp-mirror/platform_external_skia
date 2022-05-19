@@ -33,6 +33,7 @@ namespace dsl {
 class DSLPossibleExpression;
 class DSLType;
 class DSLVarBase;
+template <typename T> class DSLWrapper;
 
 /**
  * Represents an expression such as 'cos(x)' or 'a + b'.
@@ -105,7 +106,7 @@ public:
     /**
      * Overloads the '=' operator to create an SkSL assignment statement.
      */
-    DSLPossibleExpression assign(DSLExpression other);
+    DSLPossibleExpression operator=(DSLExpression other);
 
     DSLExpression x(Position pos = {});
 
@@ -133,9 +134,11 @@ public:
      */
     DSLPossibleExpression operator[](DSLExpression index);
 
-    DSLPossibleExpression operator()(SkTArray<DSLExpression> args, Position pos = {});
+    DSLPossibleExpression operator()(SkTArray<DSLWrapper<DSLExpression>> args,
+                                     Position pos = {});
 
-    DSLPossibleExpression operator()(ExpressionArray args, Position pos = {});
+    DSLPossibleExpression operator()(ExpressionArray args,
+                                     Position pos = {});
 
     /**
      * Invokes a prefix operator.
@@ -195,6 +198,7 @@ private:
     friend class DSLType;
     friend class DSLVarBase;
     friend class DSLWriter;
+    template<typename T> friend class DSLWrapper;
 };
 
 DSLPossibleExpression operator+(DSLExpression left, DSLExpression right);
@@ -289,19 +293,21 @@ public:
 
     DSLExpression field(std::string_view name, Position pos = {});
 
-    DSLPossibleExpression assign(DSLExpression expr);
+    DSLPossibleExpression operator=(DSLExpression expr);
 
-    DSLPossibleExpression assign(int expr);
+    DSLPossibleExpression operator=(int expr);
 
-    DSLPossibleExpression assign(float expr);
+    DSLPossibleExpression operator=(float expr);
 
-    DSLPossibleExpression assign(double expr);
+    DSLPossibleExpression operator=(double expr);
 
     DSLPossibleExpression operator[](DSLExpression index);
 
-    DSLPossibleExpression operator()(SkTArray<DSLExpression> args, Position pos = {});
+    DSLPossibleExpression operator()(SkTArray<DSLWrapper<DSLExpression>> args,
+                                     Position pos = {});
 
-    DSLPossibleExpression operator()(ExpressionArray args, Position pos = {});
+    DSLPossibleExpression operator()(ExpressionArray args,
+                                     Position pos = {});
 
     DSLPossibleExpression operator++();
 

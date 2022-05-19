@@ -14,6 +14,7 @@
 #include "include/private/SkSLString.h"
 #include "include/sksl/DSLType.h"
 #include "include/sksl/DSLVar.h"
+#include "include/sksl/DSLWrapper.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/dsl/priv/DSLWriter.h"
@@ -51,12 +52,8 @@ void DSLFunction::init(DSLModifiers modifiers, const DSLType& returnType, std::s
     std::vector<std::unique_ptr<Variable>> paramVars;
     paramVars.reserve(params.size());
     for (DSLParameter* param : params) {
-        if (param->fDeclared) {
-            ThreadContext::ReportError("parameter has already been used in another function");
-        }
         SkASSERT(!param->fInitialValue.hasValue());
         SkASSERT(!param->fDeclaration);
-        param->fDeclared = true;
         std::unique_ptr<SkSL::Variable> paramVar = DSLWriter::CreateParameterVar(*param);
         if (!paramVar) {
             return;
@@ -69,7 +66,7 @@ void DSLFunction::init(DSLModifiers modifiers, const DSLType& returnType, std::s
                                                pos,
                                                modifiers.fPosition,
                                                ThreadContext::Modifiers(modifiers.fModifiers),
-                                               name == "main" ? name : DSLWriter::Name(name),
+                                               name,
                                                std::move(paramVars), returnType.fPosition,
                                                &returnType.skslType());
     ThreadContext::ReportErrors(pos);
@@ -122,11 +119,11 @@ void DSLFunction::define(DSLBlock block, Position pos) {
     ThreadContext::ProgramElements().push_back(std::move(function));
 }
 
-DSLExpression DSLFunction::call(SkTArray<DSLExpression> args, Position pos) {
+DSLExpression DSLFunction::call(SkTArray<DSLWrapper<DSLExpression>> args, Position pos) {
     ExpressionArray released;
     released.reserve_back(args.size());
-    for (DSLExpression& arg : args) {
-        released.push_back(arg.release());
+    for (DSLWrapper<DSLExpression>& arg : args) {
+        released.push_back(arg->release());
     }
     return this->call(std::move(released));
 }
