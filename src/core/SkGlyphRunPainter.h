@@ -16,14 +16,16 @@
 #include "src/core/SkTextBlobPriv.h"
 
 #if SK_SUPPORT_GPU
-#include "src/gpu/ganesh/text/GrSDFTControl.h"
+#include "src/text/gpu/SDFTControl.h"
 class GrColorInfo;
 namespace skgpu { namespace v1 { class SurfaceDrawContext; }}
 #endif
 
 class SkGlyphRunPainterInterface;
 class SkStrikeSpec;
-class GrSDFTMatrixRange;
+namespace sktext {
+class SDFTMatrixRange;
+}
 
 // round and ignorePositionMask are used to calculate the subpixel position of a glyph.
 // The per component (x or y) calculation is:
@@ -85,20 +87,16 @@ private:
 #if SK_SUPPORT_GPU
 class SkGlyphRunListPainter {
 public:
-    SkGlyphRunListPainter(SkStrikeForGPUCacheInterface* strikeCache);
-
     // A nullptr for process means that the calls to the cache will be performed, but none of the
     // callbacks will be called.
     // N.B. The positionMatrix has already been translated to the glyph run list origin.
-    void categorizeGlyphRunList(SkGlyphRunPainterInterface* process,
-                                const SkGlyphRunList& glyphRunList,
-                                const SkMatrix& positionMatrix,
-                                const SkPaint& drawPaint,
-                                SkStrikeDeviceInfo strikeDeviceInfo,
-                                const char* tag = nullptr);
-
-private:
-    SkStrikeForGPUCacheInterface* const fStrikeCache;
+    static void CategorizeGlyphRunList(SkGlyphRunPainterInterface* process,
+                                       const SkGlyphRunList& glyphRunList,
+                                       const SkMatrix& positionMatrix,
+                                       const SkPaint& drawPaint,
+                                       SkStrikeDeviceInfo strikeDeviceInfo,
+                                       SkStrikeForGPUCacheInterface* strikeCache,
+                                       const char* tag = nullptr);
 };
 
 // SkGlyphRunPainterInterface are all the ways that Ganesh generates glyphs. The first
@@ -138,7 +136,7 @@ public:
                                    sk_sp<SkStrike>&& strike,
                                    SkScalar strikeToSourceScale,
                                    const SkFont& runFont,
-                                   const GrSDFTMatrixRange& matrixRange) = 0;
+                                   const sktext::gpu::SDFTMatrixRange& matrixRange) = 0;
 };
 #endif  // SK_SUPPORT_GPU
 #endif  // SkGlyphRunPainter_DEFINED

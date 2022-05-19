@@ -28,10 +28,10 @@
 #include "src/gpu/ganesh/geometry/GrStyledShape.h"
 
 #include "src/gpu/ganesh/text/GrAtlasManager.h"
-#include "src/gpu/ganesh/text/GrSDFTControl.h"
 #include "src/gpu/ganesh/text/GrTextBlob.h"
 #include "src/text/gpu/Glyph.h"
 #include "src/text/gpu/GlyphVector.h"
+#include "src/text/gpu/SDFTControl.h"
 #include "src/text/gpu/StrikeCache.h"
 #include "src/text/gpu/SubRunAllocator.h"
 
@@ -45,6 +45,7 @@ using MaskFormat = skgpu::MaskFormat;
 
 using Glyph = sktext::gpu::Glyph;
 using GlyphVector = sktext::gpu::GlyphVector;
+using SDFTMatrixRange = sktext::gpu::SDFTMatrixRange;
 using StrikeCache = sktext::gpu::StrikeCache;
 using SubRunAllocator = sktext::gpu::SubRunAllocator;
 
@@ -1731,7 +1732,7 @@ public:
     SDFTSubRun(const GrTextReferenceFrame* referenceFrame,
                bool useLCDText,
                bool antiAliased,
-               const GrSDFTMatrixRange& matrixRange,
+               const SDFTMatrixRange& matrixRange,
                TransformedMaskVertexFiller&& vertexFiller,
                GlyphVector&& glyphs);
 
@@ -1740,7 +1741,7 @@ public:
                               const SkFont& runFont,
                               sk_sp<SkStrike>&& strike,
                               SkScalar strikeToSourceScale,
-                              const GrSDFTMatrixRange& matrixRange,
+                              const SDFTMatrixRange& matrixRange,
                               SubRunAllocator* alloc);
 
     static GrSubRunOwner MakeFromBuffer(const GrTextReferenceFrame* referenceFrame,
@@ -1792,7 +1793,7 @@ private:
     const GrTextReferenceFrame* const fReferenceFrame;
     const bool fUseLCDText;
     const bool fAntiAliased;
-    const GrSDFTMatrixRange fMatrixRange;
+    const sktext::gpu::SDFTMatrixRange fMatrixRange;
 
     const TransformedMaskVertexFiller fVertexFiller;
 
@@ -1804,7 +1805,7 @@ private:
 SDFTSubRun::SDFTSubRun(const GrTextReferenceFrame* referenceFrame,
                        bool useLCDText,
                        bool antiAliased,
-                       const GrSDFTMatrixRange& matrixRange,
+                       const SDFTMatrixRange& matrixRange,
                        TransformedMaskVertexFiller&& vertexFiller,
                        GlyphVector&& glyphs)
         : fReferenceFrame{referenceFrame}
@@ -1825,7 +1826,7 @@ GrSubRunOwner SDFTSubRun::Make(const GrTextReferenceFrame* referenceFrame,
                                const SkFont& runFont,
                                sk_sp<SkStrike>&& strike,
                                SkScalar strikeToSourceScale,
-                               const GrSDFTMatrixRange& matrixRange,
+                               const SDFTMatrixRange& matrixRange,
                                SubRunAllocator* alloc) {
     auto vertexFiller = TransformedMaskVertexFiller::Make(
             MaskFormat::kA8,
@@ -1851,7 +1852,7 @@ GrSubRunOwner SDFTSubRun::MakeFromBuffer(const GrTextReferenceFrame* referenceFr
                                          const SkStrikeClient* client) {
     int useLCD = buffer.readInt();
     int isAntiAliased = buffer.readInt();
-    GrSDFTMatrixRange matrixRange = GrSDFTMatrixRange::MakeFromBuffer(buffer);
+    SDFTMatrixRange matrixRange = SDFTMatrixRange::MakeFromBuffer(buffer);
     auto vertexFiller = TransformedMaskVertexFiller::MakeFromBuffer(buffer, alloc);
     if (!buffer.validate(vertexFiller.has_value())) { return {}; }
     auto glyphVector = GlyphVector::MakeFromBuffer(buffer, client, alloc);
@@ -2173,7 +2174,7 @@ sk_sp<GrTextBlob> GrTextBlob::Make(const SkGlyphRunList& glyphRunList,
                                    const SkPaint& paint,
                                    const SkMatrix& positionMatrix,
                                    SkStrikeDeviceInfo strikeDeviceInfo,
-                                   SkGlyphRunListPainter* painter) {
+                                   SkStrikeForGPUCacheInterface* strikeCache) {
     // The difference in alignment from the per-glyph data to the SubRun;
     constexpr size_t alignDiff = alignof(DirectMaskSubRun) - alignof(DevicePosition);
     constexpr size_t vertexDataToSubRunPadding = alignDiff > 0 ? alignDiff : 0;
@@ -2191,8 +2192,9 @@ sk_sp<GrTextBlob> GrTextBlob::Make(const SkGlyphRunList& glyphRunList,
     sk_sp<GrTextBlob> blob = sk_sp<GrTextBlob>(initializer.initialize(
             std::move(alloc), totalMemoryAllocated, positionMatrix, initialLuminance));
 
-    painter->categorizeGlyphRunList(
-            blob.get(), glyphRunList, positionMatrix, paint, strikeDeviceInfo, "GrTextBlob");
+    SkGlyphRunListPainter::CategorizeGlyphRunList(
+            blob.get(), glyphRunList, positionMatrix, paint,
+            strikeDeviceInfo, strikeCache, "GrTextBlob");
 
     return blob;
 }
@@ -2297,7 +2299,7 @@ void GrTextBlob::processSourceSDFT(const SkZip<SkGlyphVariant, SkPoint>& accepte
                                    sk_sp<SkStrike>&& strike,
                                    SkScalar strikeToSourceScale,
                                    const SkFont& runFont,
-                                   const GrSDFTMatrixRange& matrixRange) {
+                                   const SDFTMatrixRange& matrixRange) {
     fSubRunList.append(SDFTSubRun::Make(
             this, accepted, runFont, std::move(strike), strikeToSourceScale, matrixRange, &fAlloc));
 }
@@ -2335,7 +2337,7 @@ public:
                             const SkPaint& initialPaint,
                             const SkPaint& drawingPaint,
                             SkStrikeDeviceInfo strikeDeviceInfo,
-                            SkGlyphRunListPainter* painter);
+                            SkStrikeForGPUCacheInterface* strikeCache);
     static sk_sp<GrSlug> MakeFromBuffer(SkReadBuffer& buffer,
                                         const SkStrikeClient* client);
 
@@ -2365,7 +2367,7 @@ public:
     void processSourceSDFT(
             const SkZip<SkGlyphVariant, SkPoint>& accepted, sk_sp<SkStrike>&& strike,
             SkScalar strikeToSourceScale, const SkFont& runFont,
-            const GrSDFTMatrixRange& matrixRange) override;
+            const SDFTMatrixRange& matrixRange) override;
 
     const SkMatrix& initialPositionMatrix() const override { return fInitialPositionMatrix; }
     SkPoint origin() const { return fOrigin; }
@@ -2489,7 +2491,7 @@ sk_sp<Slug> Slug::Make(const SkMatrixProvider& viewMatrix,
                        const SkPaint& initialPaint,
                        const SkPaint& drawingPaint,
                        SkStrikeDeviceInfo strikeDeviceInfo,
-                       SkGlyphRunListPainter* painter) {
+                       SkStrikeForGPUCacheInterface* strikeCache) {
     // The difference in alignment from the per-glyph data to the SubRun;
     constexpr size_t alignDiff = alignof(DirectMaskSubRun) - alignof(DevicePosition);
     constexpr size_t vertexDataToSubRunPadding = alignDiff > 0 ? alignDiff : 0;
@@ -2511,8 +2513,9 @@ sk_sp<Slug> Slug::Make(const SkMatrixProvider& viewMatrix,
             std::move(alloc), glyphRunList.sourceBounds(), initialPaint, positionMatrix,
             glyphRunList.origin()));
 
-    painter->categorizeGlyphRunList(
-            slug.get(), glyphRunList, positionMatrix, drawingPaint, strikeDeviceInfo, "Make Slug");
+    SkGlyphRunListPainter::CategorizeGlyphRunList(
+            slug.get(), glyphRunList, positionMatrix, drawingPaint,
+            strikeDeviceInfo, strikeCache, "Make Slug");
 
     // There is nothing to draw here. This is particularly a problem with RSX form blobs where a
     // single space becomes a run with no glyphs.
@@ -2545,7 +2548,7 @@ void Slug::processSourceSDFT(const SkZip<SkGlyphVariant, SkPoint>& accepted,
                                    sk_sp<SkStrike>&& strike,
                                    SkScalar strikeToSourceScale,
                                    const SkFont& runFont,
-                                   const GrSDFTMatrixRange& matrixRange) {
+                                   const SDFTMatrixRange& matrixRange) {
     fSubRuns.append(SDFTSubRun::Make(
         this, accepted, runFont, std::move(strike), strikeToSourceScale, matrixRange, &fAlloc));
 }
@@ -2578,7 +2581,7 @@ Device::convertGlyphRunListToSlug(const SkGlyphRunList& glyphRunList,
                       initialPaint,
                       drawingPaint,
                       this->strikeDeviceInfo(),
-                      fSurfaceDrawContext->glyphRunPainter());
+                      SkStrikeCache::GlobalStrikeCache());
 }
 
 void Device::drawSlug(SkCanvas* canvas, const GrSlug* grSlug, const SkPaint& drawingPaint) {
@@ -2604,9 +2607,9 @@ sk_sp<GrSlug> MakeSlug(const SkMatrixProvider& drawMatrix,
                        const SkPaint& initialPaint,
                        const SkPaint& drawingPaint,
                        SkStrikeDeviceInfo strikeDeviceInfo,
-                       SkGlyphRunListPainter* painter) {
+                       SkStrikeForGPUCacheInterface* strikeCache) {
     return Slug::Make(
-            drawMatrix, glyphRunList, initialPaint, drawingPaint, strikeDeviceInfo, painter);
+            drawMatrix, glyphRunList, initialPaint, drawingPaint, strikeDeviceInfo, strikeCache);
 }
 }  // namespace skgpu::v1
 

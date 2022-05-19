@@ -154,7 +154,7 @@ TextLine::TextLine(ParagraphImpl* owner,
     }
 
     // TODO: This is the fix for flutter. Must be removed...
-    for (auto cluster = &start; cluster != &end; ++cluster) {
+    for (auto cluster = &start; cluster <= &end; ++cluster) {
         if (!cluster->run().isPlaceholder()) {
             fShift += cluster->getHalfLetterSpacing();
             break;
@@ -916,11 +916,11 @@ SkScalar TextLine::iterateThroughSingleRunByStyles(const Run* run,
         // Measure the text
         ClipContext clipContext = this->measureTextInsideOneRun(runStyleTextRange, run, runOffset,
                                                                 textOffsetInRun, false, true);
+        textOffsetInRun += clipContext.clip.width();
         if (clipContext.clip.height() == 0) {
             continue;
         }
         visitor(runStyleTextRange, *prevStyle, clipContext);
-        textOffsetInRun += clipContext.clip.width();
 
         // Start all over again
         prevStyle = style;
