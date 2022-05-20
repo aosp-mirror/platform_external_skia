@@ -227,7 +227,7 @@ public:
                                   const SkPaint& paint,
                                   const SkMatrix& positionMatrix,
                                   SkStrikeDeviceInfo strikeDeviceInfo,
-                                  SkGlyphRunListPainter* painter);
+                                  SkStrikeForGPUCacheInterface* strikeCache);
 
     GrTextBlob(sktext::gpu::SubRunAllocator&& alloc,
                int totalMemorySize,
@@ -277,7 +277,7 @@ private:
                            sk_sp<SkStrike>&& strike,
                            SkScalar strikeToSourceScale,
                            const SkFont& runFont,
-                           const GrSDFTMatrixRange& matrixRange) override;
+                           const sktext::gpu::SDFTMatrixRange& matrixRange) override;
     void processSourceMasks(const SkZip<SkGlyphVariant, SkPoint>& accepted,
                             sk_sp<SkStrike>&& strike,
                             SkScalar strikeToSourceScale) override;
@@ -309,6 +309,6 @@ sk_sp<GrSlug> MakeSlug(const SkMatrixProvider& drawMatrix,
                        const SkPaint& initialPaint,
                        const SkPaint& drawingPaint,
                        SkStrikeDeviceInfo strikeDeviceInfo,
-                       SkGlyphRunListPainter* painter);
+                       SkStrikeForGPUCacheInterface* strikeCache);
 }  // namespace skgpu::v1
 #endif  // GrTextBlob_DEFINED

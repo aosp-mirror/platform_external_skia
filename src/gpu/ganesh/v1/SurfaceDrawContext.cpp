@@ -21,7 +21,6 @@
 #include "src/core/SkConvertPixels.h"
 #include "src/core/SkDrawProcs.h"
 #include "src/core/SkDrawShadowInfo.h"
-#include "src/core/SkGlyphRunPainter.h"
 #include "src/core/SkLatticeIter.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkMatrixProvider.h"
@@ -71,9 +70,9 @@
 #include "src/gpu/ganesh/ops/ShadowRRectOp.h"
 #include "src/gpu/ganesh/ops/StrokeRectOp.h"
 #include "src/gpu/ganesh/ops/TextureOp.h"
-#include "src/gpu/ganesh/text/GrSDFTControl.h"
 #include "src/gpu/ganesh/text/GrTextBlobRedrawCoordinator.h"
 #include "src/gpu/ganesh/v1/PathRenderer.h"
+#include "src/text/gpu/SDFTControl.h"
 
 #define ASSERT_OWNED_RESOURCE(R) SkASSERT(!(R) || (R)->getContext() == this->drawingManager()->getContext())
 #define ASSERT_SINGLE_OWNER        SKGPU_ASSERT_SINGLE_OWNER(this->singleOwner())
@@ -299,8 +298,7 @@ SurfaceDrawContext::SurfaceDrawContext(GrRecordingContext* rContext,
         , fSurfaceProps(surfaceProps)
         , fCanUseDynamicMSAA(
                 (fSurfaceProps.flags() & SkSurfaceProps::kDynamicMSAA_Flag) &&
-                rContext->priv().caps()->supportsDynamicMSAA(this->asRenderTargetProxy()))
-        , fGlyphPainter(SkStrikeCache::GlobalStrikeCache()) {
+                rContext->priv().caps()->supportsDynamicMSAA(this->asRenderTargetProxy())) {
     SkDEBUGCODE(this->validate();)
 }
 
