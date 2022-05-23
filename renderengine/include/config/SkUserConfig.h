@@ -31,6 +31,10 @@
 #define SK_IN_RENDERENGINE
 #endif
 
+#ifndef SK_SUPPORT_GPU
+#define SK_SUPPORT_GPU 1
+#endif
+
 #ifndef SK_USE_VMA
 #define SK_USE_VMA
 #endif
