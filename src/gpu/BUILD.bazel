@@ -23,6 +23,7 @@ cc_library(
         "//src/text/gpu:Slug_src",
         "//src/text/gpu:StrikeCache_src",
         "//src/text/gpu:SubRunAllocator_src",
+        "//src/text/gpu:TextBlobRedrawCoordinator_src",
         "//src/text/gpu:TextBlob_src",
     ],
 )
@@ -50,8 +51,8 @@ generated_cc_atom(
     deps = [
         "//include/core:SkRect_hdr",
         "//include/private:SkColorData_hdr",
-        "//include/private:SkNx_hdr",
         "//include/private:SkTemplates_hdr",
+        "//include/private:SkVx_hdr",
         "//src/core:SkConvertPixels_hdr",
     ],
 )

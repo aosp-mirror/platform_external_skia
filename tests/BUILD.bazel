@@ -281,7 +281,6 @@ CORE_TESTS = [
     "SkGlyphBufferTest.cpp",
     "SkGlyphTest.cpp",
     "SkImageTest.cpp",
-    "SkNxTest.cpp",
     "SkPathRangeIterTest.cpp",
     "SkRasterPipelineTest.cpp",
     "SkRemoteGlyphCacheTest.cpp",
@@ -1437,7 +1436,6 @@ generated_cc_atom(
         "//include/core:SkPoint_hdr",
         "//include/core:SkScalar_hdr",
         "//include/core:SkTypes_hdr",
-        "//include/private:SkNx_hdr",
         "//src/core:SkGeometry_hdr",
         "//src/pathops:SkPathOpsCubic_hdr",
     ],
@@ -5555,17 +5553,6 @@ generated_cc_atom(
 )
 
 generated_cc_atom(
-    name = "SkNxTest_src",
-    srcs = ["SkNxTest.cpp"],
-    visibility = ["//:__subpackages__"],
-    deps = [
-        ":Test_hdr",
-        "//include/private:SkNx_hdr",
-        "//include/utils:SkRandom_hdr",
-    ],
-)
-
-generated_cc_atom(
     name = "SkPathRangeIterTest_src",
     srcs = ["SkPathRangeIterTest.cpp"],
     visibility = ["//:__subpackages__"],
@@ -6541,7 +6528,7 @@ generated_cc_atom(
         "//src/core:SkGlyphRun_hdr",
         "//src/gpu/ganesh:GrDirectContextPriv_hdr",
         "//src/gpu/ganesh/text:GrAtlasManager_hdr",
-        "//src/gpu/ganesh/text:GrTextBlobRedrawCoordinator_hdr",
+        "//src/text/gpu:TextBlobRedrawCoordinator_hdr",
         "//tools:ToolUtils_hdr",
         "//tools/fonts:RandomScalerContext_hdr",
     ],
