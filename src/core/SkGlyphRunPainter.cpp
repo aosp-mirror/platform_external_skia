@@ -11,9 +11,9 @@
 #if SK_SUPPORT_GPU
 #include "src/gpu/ganesh/GrColorInfo.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
-#include "src/gpu/ganesh/text/GrTextBlobRedrawCoordinator.h"
 #include "src/gpu/ganesh/v1/SurfaceDrawContext_v1.h"
 #include "src/text/gpu/SDFTControl.h"
+#include "src/text/gpu/TextBlobRedrawCoordinator.h"
 #endif // SK_SUPPORT_GPU
 
 #include "include/core/SkBitmap.h"
@@ -250,7 +250,7 @@ void SkGlyphRunListPainterCPU::drawForBitmapDevice(
 }
 
 // -- SkGlyphRunListPainter ------------------------------------------------------------------------
-#if SK_SUPPORT_GPU
+#if SK_SUPPORT_GPU || defined(SK_GRAPHITE_ENABLED)
 // Use the following in your args.gn to dump telemetry for diagnosing chrome Renderer/GPU
 // differences.
 // extra_cflags = ["-D", "SK_TRACE_GLYPH_RUN_PROCESS"]
@@ -261,7 +261,7 @@ namespace {
     static const constexpr bool kTrace = false;
 #endif
 }
-void SkGlyphRunListPainter::CategorizeGlyphRunList(SkGlyphRunPainterInterface* process,
+bool SkGlyphRunListPainter::CategorizeGlyphRunList(SkGlyphRunPainterInterface* process,
                                                    const SkGlyphRunList& glyphRunList,
                                                    const SkMatrix& positionMatrix,
                                                    const SkPaint& runPaint,
@@ -286,7 +286,7 @@ void SkGlyphRunListPainter::CategorizeGlyphRunList(SkGlyphRunPainterInterface* p
 
     SkASSERT(strikeDeviceInfo.fSDFTControl != nullptr);
     if (strikeDeviceInfo.fSDFTControl == nullptr) {
-        return;
+        return true;
     }
 
     const SkSurfaceProps deviceProps = strikeDeviceInfo.fSurfaceProps;
@@ -295,6 +295,7 @@ void SkGlyphRunListPainter::CategorizeGlyphRunList(SkGlyphRunPainterInterface* p
 
     auto bufferScope = SkSubRunBuffers::EnsureBuffers(glyphRunList);
     auto [accepted, rejected] = bufferScope.buffers();
+    bool someGlyphExcluded = false;
     for (auto& glyphRun : glyphRunList) {
         rejected->setSource(glyphRun.source());
         const SkFont& runFont = glyphRun.font();
@@ -309,7 +310,7 @@ void SkGlyphRunListPainter::CategorizeGlyphRunList(SkGlyphRunPainterInterface* p
                 // Process SDFT - This should be the .009% case.
                 const auto& [strikeSpec, strikeToSourceScale, matrixRange] =
                     SkStrikeSpec::MakeSDFT(
-                                runFont, runPaint, deviceProps, positionMatrix, SDFTControl);
+                            runFont, runPaint, deviceProps, positionMatrix, SDFTControl);
 
                 if constexpr(kTrace) {
                     msg.appendf("  SDFT case:\n%s", strikeSpec.dump().c_str());
@@ -328,11 +329,12 @@ void SkGlyphRunListPainter::CategorizeGlyphRunList(SkGlyphRunPainterInterface* p
                     if (process && !accepted->empty()) {
                         // processSourceSDFT must be called even if there are no glyphs to make sure
                         // runs are set correctly.
-                        process->processSourceSDFT(accepted->accepted(),
-                                                   strike->getUnderlyingStrike(),
-                                                   strikeToSourceScale,
-                                                   runFont,
-                                                   matrixRange);
+                        someGlyphExcluded |=
+                                process->processSourceSDFT(accepted->accepted(),
+                                                           strike->getUnderlyingStrike(),
+                                                           strikeToSourceScale,
+                                                           runFont,
+                                                           matrixRange);
                     }
                 }
             }
@@ -362,8 +364,8 @@ void SkGlyphRunListPainter::CategorizeGlyphRunList(SkGlyphRunPainterInterface* p
                 if (process && !accepted->empty()) {
                     // processDeviceMasks must be called even if there are no glyphs to make sure
                     // runs are set correctly.
-                    process->processDeviceMasks(
-                            accepted->accepted(), strike->getUnderlyingStrike());
+                    someGlyphExcluded |= process->processDeviceMasks(accepted->accepted(),
+                                                                     strike->getUnderlyingStrike());
                 }
             }
         }
@@ -397,10 +399,11 @@ void SkGlyphRunListPainter::CategorizeGlyphRunList(SkGlyphRunPainterInterface* p
                 if (process && !accepted->empty()) {
                     // processSourceDrawables must be called even if there are no glyphs to make
                     // sure runs are set correctly.
-                    process->processSourceDrawables(accepted->accepted(),
-                                                    strike->getUnderlyingStrike(),
-                                                    strikeSpec.descriptor(),
-                                                    strikeToSourceScale);
+                    someGlyphExcluded |=
+                            process->processSourceDrawables(accepted->accepted(),
+                                                            strike->getUnderlyingStrike(),
+                                                            strikeSpec.descriptor(),
+                                                            strikeToSourceScale);
                 }
             }
         }
@@ -428,10 +431,10 @@ void SkGlyphRunListPainter::CategorizeGlyphRunList(SkGlyphRunPainterInterface* p
                 if (process && !accepted->empty()) {
                     // processSourcePaths must be called even if there are no glyphs to make sure
                     // runs are set correctly.
-                    process->processSourcePaths(accepted->accepted(),
-                                                runFont,
-                                                strikeSpec.descriptor(),
-                                                strikeToSourceScale);
+                    someGlyphExcluded |= process->processSourcePaths(accepted->accepted(),
+                                                                     runFont,
+                                                                     strikeSpec.descriptor(),
+                                                                     strikeToSourceScale);
                 }
             }
         }
@@ -458,8 +461,9 @@ void SkGlyphRunListPainter::CategorizeGlyphRunList(SkGlyphRunPainterInterface* p
                 SkASSERT(rejected->source().empty());
 
                 if (process && !accepted->empty()) {
-                    process->processSourceMasks(
-                        accepted->accepted(), strike->getUnderlyingStrike(), strikeToSourceScale);
+                    someGlyphExcluded |= process->processSourceMasks(accepted->accepted(),
+                                                                     strike->getUnderlyingStrike(),
+                                                                     strikeToSourceScale);
                 }
             }
         }
@@ -471,6 +475,7 @@ void SkGlyphRunListPainter::CategorizeGlyphRunList(SkGlyphRunPainterInterface* p
         }
         SkDebugf("%s\n", msg.c_str());
     }
+    return someGlyphExcluded;
 }
 #endif  // SK_SUPPORT_GPU
 

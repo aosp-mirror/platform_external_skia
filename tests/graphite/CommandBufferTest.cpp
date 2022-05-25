@@ -7,6 +7,7 @@
 
 #include "tests/Test.h"
 
+#include "include/core/SkCombinationBuilder.h"
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/gpu/graphite/mtl/MtlTypes.h"
@@ -255,12 +256,12 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(CommandBufferTest, reporter, context) {
 
         uniqueID = CreateKey(keyContext,
                              &builder,
-                             ShaderType::kSolidColor,
+                             SkShaderType::kSolidColor,
                              SkTileMode::kClamp,
                              SkBlendMode::kSrc);
     }
 
-    auto target = sk_sp<TextureProxy>(new TextureProxy(textureSize, textureInfo));
+    auto target = sk_sp<TextureProxy>(new TextureProxy(textureSize, textureInfo, SkBudgeted::kYes));
     REPORTER_ASSERT(reporter, target);
 
     RenderPassDesc renderPassDesc = {};

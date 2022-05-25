@@ -5,38 +5,53 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/ganesh/text/GrTextBlobRedrawCoordinator.h"
+#include "src/text/gpu/TextBlobRedrawCoordinator.h"
 
 #include "src/core/SkStrikeCache.h"
+#if SK_SUPPORT_GPU
 #include "src/gpu/ganesh/v1/SurfaceDrawContext_v1.h"
+#endif
 
-DECLARE_SKMESSAGEBUS_MESSAGE(GrTextBlobRedrawCoordinator::PurgeBlobMessage, uint32_t, true)
-
+// This needs to be outside the namespace so we can declare SkMessageBus properly
+DECLARE_SKMESSAGEBUS_MESSAGE(sktext::gpu::TextBlobRedrawCoordinator::PurgeBlobMessage,
+                             uint32_t, true)
+namespace sktext::gpu {
 // This function is captured by the above macro using implementations from SkMessageBus.h
 static inline bool SkShouldPostMessageToBus(
-        const GrTextBlobRedrawCoordinator::PurgeBlobMessage& msg, uint32_t msgBusUniqueID) {
+        const TextBlobRedrawCoordinator::PurgeBlobMessage& msg, uint32_t msgBusUniqueID) {
     return msg.fContextID == msgBusUniqueID;
 }
 
-GrTextBlobRedrawCoordinator::GrTextBlobRedrawCoordinator(uint32_t messageBusID)
+TextBlobRedrawCoordinator::TextBlobRedrawCoordinator(uint32_t messageBusID)
         : fSizeBudget(kDefaultBudget)
         , fMessageBusID(messageBusID)
         , fPurgeBlobInbox(messageBusID) { }
 
-void GrTextBlobRedrawCoordinator::drawGlyphRunList(SkCanvas* canvas,
-                                                   const GrClip* clip,
-                                                   const SkMatrixProvider& viewMatrix,
-                                                   const SkGlyphRunList& glyphRunList,
-                                                   const SkPaint& paint,
-                                                   SkStrikeDeviceInfo strikeDeviceInfo,
-                                                   skgpu::v1::SurfaceDrawContext* sdc) {
+#if SK_SUPPORT_GPU
+void TextBlobRedrawCoordinator::drawGlyphRunList(SkCanvas* canvas,
+                                                 const GrClip* clip,
+                                                 const SkMatrixProvider& viewMatrix,
+                                                 const SkGlyphRunList& glyphRunList,
+                                                 const SkPaint& paint,
+                                                 SkStrikeDeviceInfo strikeDeviceInfo,
+                                                 skgpu::v1::SurfaceDrawContext* sdc) {
+    sk_sp<TextBlob> blob = this->findOrCreateBlob(viewMatrix, glyphRunList, paint,
+                                                  strikeDeviceInfo);
 
+    blob->draw(canvas, clip, viewMatrix, glyphRunList.origin(), paint, sdc);
+}
+#endif
+
+sk_sp<TextBlob> TextBlobRedrawCoordinator::findOrCreateBlob(const SkMatrixProvider& viewMatrix,
+                                                            const SkGlyphRunList& glyphRunList,
+                                                            const SkPaint& paint,
+                                                            SkStrikeDeviceInfo strikeDeviceInfo) {
     SkMatrix positionMatrix{viewMatrix.localToDevice()};
     positionMatrix.preTranslate(glyphRunList.origin().x(), glyphRunList.origin().y());
 
-    auto [canCache, key] = GrTextBlob::Key::Make(
+    auto [canCache, key] = TextBlob::Key::Make(
             glyphRunList, paint, positionMatrix, strikeDeviceInfo);
-    sk_sp<GrTextBlob> blob;
+    sk_sp<TextBlob> blob;
     if (canCache) {
         blob = this->find(key);
     }
@@ -47,7 +62,7 @@ void GrTextBlobRedrawCoordinator::drawGlyphRunList(SkCanvas* canvas,
             this->remove(blob.get());
         }
 
-        blob = GrTextBlob::Make(
+        blob = TextBlob::Make(
                 glyphRunList, paint, positionMatrix,
                 strikeDeviceInfo, SkStrikeCache::GlobalStrikeCache());
 
@@ -59,26 +74,26 @@ void GrTextBlobRedrawCoordinator::drawGlyphRunList(SkCanvas* canvas,
         }
     }
 
-    blob->draw(canvas, clip, viewMatrix, glyphRunList.origin(), paint, sdc);
+    return blob;
 }
 
-sk_sp<GrTextBlob> GrTextBlobRedrawCoordinator::addOrReturnExisting(
-        const SkGlyphRunList& glyphRunList, sk_sp<GrTextBlob> blob) {
+sk_sp<TextBlob> TextBlobRedrawCoordinator::addOrReturnExisting(
+        const SkGlyphRunList& glyphRunList, sk_sp<TextBlob> blob) {
     SkAutoSpinlock lock{fSpinLock};
     blob = this->internalAdd(std::move(blob));
     glyphRunList.temporaryShuntBlobNotifyAddedToCache(fMessageBusID);
     return blob;
 }
 
-sk_sp<GrTextBlob> GrTextBlobRedrawCoordinator::find(const GrTextBlob::Key& key) {
+sk_sp<TextBlob> TextBlobRedrawCoordinator::find(const TextBlob::Key& key) {
     SkAutoSpinlock lock{fSpinLock};
     const BlobIDCacheEntry* idEntry = fBlobIDCache.find(key.fUniqueID);
     if (idEntry == nullptr) {
         return nullptr;
     }
 
-    sk_sp<GrTextBlob> blob = idEntry->find(key);
-    GrTextBlob* blobPtr = blob.get();
+    sk_sp<TextBlob> blob = idEntry->find(key);
+    TextBlob* blobPtr = blob.get();
     if (blobPtr != nullptr && blobPtr != fBlobList.head()) {
         fBlobList.remove(blobPtr);
         fBlobList.addToHead(blobPtr);
@@ -86,17 +101,17 @@ sk_sp<GrTextBlob> GrTextBlobRedrawCoordinator::find(const GrTextBlob::Key& key) 
     return blob;
 }
 
-void GrTextBlobRedrawCoordinator::remove(GrTextBlob* blob) {
+void TextBlobRedrawCoordinator::remove(TextBlob* blob) {
     SkAutoSpinlock lock{fSpinLock};
     this->internalRemove(blob);
 }
 
-void GrTextBlobRedrawCoordinator::internalRemove(GrTextBlob* blob) {
+void TextBlobRedrawCoordinator::internalRemove(TextBlob* blob) {
     auto  id      = blob->key().fUniqueID;
     auto* idEntry = fBlobIDCache.find(id);
 
     if (idEntry != nullptr) {
-        sk_sp<GrTextBlob> stillExists = idEntry->find(blob->key());
+        sk_sp<TextBlob> stillExists = idEntry->find(blob->key());
         if (blob == stillExists.get())  {
             fCurrentSize -= blob->size();
             fBlobList.remove(blob);
@@ -108,24 +123,24 @@ void GrTextBlobRedrawCoordinator::internalRemove(GrTextBlob* blob) {
     }
 }
 
-void GrTextBlobRedrawCoordinator::freeAll() {
+void TextBlobRedrawCoordinator::freeAll() {
     SkAutoSpinlock lock{fSpinLock};
     fBlobIDCache.reset();
     fBlobList.reset();
     fCurrentSize = 0;
 }
 
-void GrTextBlobRedrawCoordinator::PostPurgeBlobMessage(uint32_t blobID, uint32_t cacheID) {
+void TextBlobRedrawCoordinator::PostPurgeBlobMessage(uint32_t blobID, uint32_t cacheID) {
     SkASSERT(blobID != SK_InvalidGenID);
     SkMessageBus<PurgeBlobMessage, uint32_t>::Post(PurgeBlobMessage(blobID, cacheID));
 }
 
-void GrTextBlobRedrawCoordinator::purgeStaleBlobs() {
+void TextBlobRedrawCoordinator::purgeStaleBlobs() {
     SkAutoSpinlock lock{fSpinLock};
     this->internalPurgeStaleBlobs();
 }
 
-void GrTextBlobRedrawCoordinator::internalPurgeStaleBlobs() {
+void TextBlobRedrawCoordinator::internalPurgeStaleBlobs() {
     SkTArray<PurgeBlobMessage> msgs;
     fPurgeBlobInbox.poll(&msgs);
 
@@ -147,17 +162,17 @@ void GrTextBlobRedrawCoordinator::internalPurgeStaleBlobs() {
     }
 }
 
-size_t GrTextBlobRedrawCoordinator::usedBytes() const {
+size_t TextBlobRedrawCoordinator::usedBytes() const {
     SkAutoSpinlock lock{fSpinLock};
     return fCurrentSize;
 }
 
-bool GrTextBlobRedrawCoordinator::isOverBudget() const {
+bool TextBlobRedrawCoordinator::isOverBudget() const {
     SkAutoSpinlock lock{fSpinLock};
     return fCurrentSize > fSizeBudget;
 }
 
-void GrTextBlobRedrawCoordinator::internalCheckPurge(GrTextBlob* blob) {
+void TextBlobRedrawCoordinator::internalCheckPurge(TextBlob* blob) {
     // First, purge all stale blob IDs.
     this->internalPurgeStaleBlobs();
 
@@ -165,7 +180,7 @@ void GrTextBlobRedrawCoordinator::internalCheckPurge(GrTextBlob* blob) {
     if (fCurrentSize > fSizeBudget) {
         TextBlobList::Iter iter;
         iter.init(fBlobList, TextBlobList::Iter::kTail_IterStart);
-        GrTextBlob* lruBlob = nullptr;
+        TextBlob* lruBlob = nullptr;
         while (fCurrentSize > fSizeBudget && (lruBlob = iter.get()) && lruBlob != blob) {
             // Backup the iterator before removing and unrefing the blob
             iter.prev();
@@ -181,14 +196,14 @@ void GrTextBlobRedrawCoordinator::internalCheckPurge(GrTextBlob* blob) {
     }
 }
 
-sk_sp<GrTextBlob> GrTextBlobRedrawCoordinator::internalAdd(sk_sp<GrTextBlob> blob) {
+sk_sp<TextBlob> TextBlobRedrawCoordinator::internalAdd(sk_sp<TextBlob> blob) {
     auto  id      = blob->key().fUniqueID;
     auto* idEntry = fBlobIDCache.find(id);
     if (!idEntry) {
         idEntry = fBlobIDCache.set(id, BlobIDCacheEntry(id));
     }
 
-    if (sk_sp<GrTextBlob> alreadyIn = idEntry->find(blob->key()); alreadyIn) {
+    if (sk_sp<TextBlob> alreadyIn = idEntry->find(blob->key()); alreadyIn) {
         blob = std::move(alreadyIn);
     } else {
         fBlobList.addToHead(blob.get());
@@ -200,16 +215,16 @@ sk_sp<GrTextBlob> GrTextBlobRedrawCoordinator::internalAdd(sk_sp<GrTextBlob> blo
     return blob;
 }
 
-GrTextBlobRedrawCoordinator::BlobIDCacheEntry::BlobIDCacheEntry() : fID(SK_InvalidGenID) {}
+TextBlobRedrawCoordinator::BlobIDCacheEntry::BlobIDCacheEntry() : fID(SK_InvalidGenID) {}
 
-GrTextBlobRedrawCoordinator::BlobIDCacheEntry::BlobIDCacheEntry(uint32_t id) : fID(id) {}
+TextBlobRedrawCoordinator::BlobIDCacheEntry::BlobIDCacheEntry(uint32_t id) : fID(id) {}
 
-uint32_t GrTextBlobRedrawCoordinator::BlobIDCacheEntry::GetKey(
-        const GrTextBlobRedrawCoordinator::BlobIDCacheEntry& entry) {
+uint32_t TextBlobRedrawCoordinator::BlobIDCacheEntry::GetKey(
+        const TextBlobRedrawCoordinator::BlobIDCacheEntry& entry) {
     return entry.fID;
 }
 
-void GrTextBlobRedrawCoordinator::BlobIDCacheEntry::addBlob(sk_sp<GrTextBlob> blob) {
+void TextBlobRedrawCoordinator::BlobIDCacheEntry::addBlob(sk_sp<TextBlob> blob) {
     SkASSERT(blob);
     SkASSERT(blob->key().fUniqueID == fID);
     SkASSERT(!this->find(blob->key()));
@@ -217,7 +232,7 @@ void GrTextBlobRedrawCoordinator::BlobIDCacheEntry::addBlob(sk_sp<GrTextBlob> bl
     fBlobs.emplace_back(std::move(blob));
 }
 
-void GrTextBlobRedrawCoordinator::BlobIDCacheEntry::removeBlob(GrTextBlob* blob) {
+void TextBlobRedrawCoordinator::BlobIDCacheEntry::removeBlob(TextBlob* blob) {
     SkASSERT(blob);
     SkASSERT(blob->key().fUniqueID == fID);
 
@@ -227,13 +242,13 @@ void GrTextBlobRedrawCoordinator::BlobIDCacheEntry::removeBlob(GrTextBlob* blob)
     fBlobs.removeShuffle(index);
 }
 
-sk_sp<GrTextBlob>
-GrTextBlobRedrawCoordinator::BlobIDCacheEntry::find(const GrTextBlob::Key& key) const {
+sk_sp<TextBlob>
+TextBlobRedrawCoordinator::BlobIDCacheEntry::find(const TextBlob::Key& key) const {
     auto index = this->findBlobIndex(key);
     return index < 0 ? nullptr : fBlobs[index];
 }
 
-int GrTextBlobRedrawCoordinator::BlobIDCacheEntry::findBlobIndex(const GrTextBlob::Key& key) const {
+int TextBlobRedrawCoordinator::BlobIDCacheEntry::findBlobIndex(const TextBlob::Key& key) const {
     for (int i = 0; i < fBlobs.count(); ++i) {
         if (fBlobs[i]->key() == key) {
             return i;
@@ -241,3 +256,5 @@ int GrTextBlobRedrawCoordinator::BlobIDCacheEntry::findBlobIndex(const GrTextBlo
     }
     return -1;
 }
+
+}  // namespace sktext::gpu

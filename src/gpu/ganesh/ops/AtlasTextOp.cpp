@@ -108,13 +108,13 @@ AtlasTextOp::AtlasTextOp(MaskType maskType,
     this->setBounds(deviceRect, HasAABloat::kNo, IsHairline::kNo);
 }
 
-auto AtlasTextOp::Geometry::MakeForBlob(const GrAtlasSubRun& subRun,
-                                        const SkMatrix& drawMatrix,
-                                        SkPoint drawOrigin,
-                                        SkIRect clipRect,
-                                        sk_sp<SkRefCnt> supportData,
-                                        const SkPMColor4f& color,
-                                        SkArenaAlloc* alloc) -> Geometry* {
+auto AtlasTextOp::Geometry::Make(const sktext::gpu::AtlasSubRun& subRun,
+                                 const SkMatrix& drawMatrix,
+                                 SkPoint drawOrigin,
+                                 SkIRect clipRect,
+                                 sk_sp<SkRefCnt>&& supportData,
+                                 const SkPMColor4f& color,
+                                 SkArenaAlloc* alloc) -> Geometry* {
     // Bypass the automatic dtor behavior in SkArenaAlloc. I'm leaving this up to the Op to run
     // all geometry dtors for now.
     void* geo = alloc->makeBytesAlignedTo(sizeof(Geometry), alignof(Geometry));
@@ -281,7 +281,7 @@ void AtlasTextOp::onPrepareDraws(GrMeshDrawTarget* target) {
     resetVertexBuffer();
 
     for (const Geometry* geo = fHead; geo != nullptr; geo = geo->fNext) {
-        const GrAtlasSubRun& subRun = geo->fSubRun;
+        const sktext::gpu::AtlasSubRun& subRun = geo->fSubRun;
         SkASSERTF((int) subRun.vertexStride(geo->fDrawMatrix) == vertexStride,
                   "subRun stride: %d vertex buffer stride: %d\n",
                   (int)subRun.vertexStride(geo->fDrawMatrix), vertexStride);
@@ -511,17 +511,17 @@ GrOp::Owner AtlasTextOp::CreateOpTestingOnly(SurfaceDrawContext* sdc,
                                         SkScalerContextFlags::kBoostContrast,
                                         &control};
 
-    sk_sp<GrTextBlob> blob = GrTextBlob::Make(
+    sk_sp<sktext::gpu::TextBlob> blob = sktext::gpu::TextBlob::Make(
         glyphRunList, skPaint, drawMatrix, strikeDeviceInfo, SkStrikeCache::GlobalStrikeCache());
 
-    const GrAtlasSubRun* subRun = blob->testingOnlyFirstSubRun();
+    const sktext::gpu::AtlasSubRun* subRun = blob->testingOnlyFirstSubRun();
     if (!subRun) {
         return nullptr;
     }
 
     GrOp::Owner op;
     std::tie(std::ignore, op) = subRun->makeAtlasTextOp(
-            nullptr, mtxProvider, glyphRunList.origin(), skPaint, sdc);
+            nullptr, mtxProvider, glyphRunList.origin(), skPaint, blob, sdc);
     return op;
 }
 #endif

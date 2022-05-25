@@ -237,7 +237,6 @@ tests_sources = [
   "$_tests/SkGlyphBufferTest.cpp",
   "$_tests/SkGlyphTest.cpp",
   "$_tests/SkImageTest.cpp",
-  "$_tests/SkNxTest.cpp",
   "$_tests/SkPathRangeIterTest.cpp",
   "$_tests/SkRasterPipelineTest.cpp",
   "$_tests/SkRemoteGlyphCacheTest.cpp",
@@ -334,6 +333,7 @@ metal_tests_sources = [
 graphite_tests_sources = [
   "$_tests/graphite/BackendTextureTest.cpp",
   "$_tests/graphite/CommandBufferTest.cpp",
+  "$_tests/graphite/GraphiteResourceCacheTest.cpp",
   "$_tests/graphite/IntersectionTreeTest.cpp",
   "$_tests/graphite/KeyTest.cpp",
   "$_tests/graphite/PaintParamsKeyTest.cpp",

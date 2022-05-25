@@ -281,7 +281,6 @@ CORE_TESTS = [
     "SkGlyphBufferTest.cpp",
     "SkGlyphTest.cpp",
     "SkImageTest.cpp",
-    "SkNxTest.cpp",
     "SkPathRangeIterTest.cpp",
     "SkRasterPipelineTest.cpp",
     "SkRemoteGlyphCacheTest.cpp",
@@ -1437,7 +1436,6 @@ generated_cc_atom(
         "//include/core:SkPoint_hdr",
         "//include/core:SkScalar_hdr",
         "//include/core:SkTypes_hdr",
-        "//include/private:SkNx_hdr",
         "//src/core:SkGeometry_hdr",
         "//src/pathops:SkPathOpsCubic_hdr",
     ],
@@ -2582,7 +2580,7 @@ generated_cc_atom(
     deps = [
         ":Test_hdr",
         "//include/core:SkTextBlob_hdr",
-        "//include/private/chromium:GrSlug_hdr",
+        "//include/private/chromium:Slug_hdr",
         "//src/gpu/ganesh:GrDirectContextPriv_hdr",
         "//tools:ToolUtils_hdr",
     ],
@@ -2679,7 +2677,7 @@ generated_cc_atom(
         "//src/core:SkDevice_hdr",
         "//src/core:SkSurfacePriv_hdr",
         "//src/gpu/ganesh:GrColorInfo_hdr",
-        "//src/gpu/ganesh/text:GrTextBlob_hdr",
+        "//src/text/gpu:TextBlob_hdr",
         "//tools:ToolUtils_hdr",
     ],
 )
@@ -5555,18 +5553,6 @@ generated_cc_atom(
 )
 
 generated_cc_atom(
-    name = "SkNxTest_src",
-    srcs = ["SkNxTest.cpp"],
-    visibility = ["//:__subpackages__"],
-    deps = [
-        ":Test_hdr",
-        "//include/private:SkNx_hdr",
-        "//include/utils:SkRandom_hdr",
-        "//src/core:Sk4px_hdr",
-    ],
-)
-
-generated_cc_atom(
     name = "SkPathRangeIterTest_src",
     srcs = ["SkPathRangeIterTest.cpp"],
     visibility = ["//:__subpackages__"],
@@ -5602,8 +5588,8 @@ generated_cc_atom(
         "//include/core:SkTextBlob_hdr",
         "//include/gpu:GrDirectContext_hdr",
         "//include/private:SkMutex_hdr",
-        "//include/private/chromium:GrSlug_hdr",
         "//include/private/chromium:SkChromeRemoteGlyphCache_hdr",
+        "//include/private/chromium:Slug_hdr",
         "//src/core:SkDraw_hdr",
         "//src/core:SkFontPriv_hdr",
         "//src/core:SkReadBuffer_hdr",
@@ -6542,7 +6528,7 @@ generated_cc_atom(
         "//src/core:SkGlyphRun_hdr",
         "//src/gpu/ganesh:GrDirectContextPriv_hdr",
         "//src/gpu/ganesh/text:GrAtlasManager_hdr",
-        "//src/gpu/ganesh/text:GrTextBlobRedrawCoordinator_hdr",
+        "//src/text/gpu:TextBlobRedrawCoordinator_hdr",
         "//tools:ToolUtils_hdr",
         "//tools/fonts:RandomScalerContext_hdr",
     ],
