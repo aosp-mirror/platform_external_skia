@@ -3222,11 +3222,9 @@ cc_library_shared {
         "modules/particles/include/",
         "modules/skottie/include/",
         "modules/skparagraph/include/",
-        "modules/skresources/include/",
         "modules/sksg/include/",
         "modules/skshaper/include/",
         "modules/svg/include/",
-        "tools/timer/",
     ],
 
     export_include_dirs: [
@@ -3653,11 +3651,6 @@ cc_library_shared {
         "gm/ycbcrimage.cpp",
         "gm/yuv420_odd_dim.cpp",
         "gm/yuvtorgbsubset.cpp",
-        "modules/particles/src/SkParticleBinding.cpp",
-        "modules/particles/src/SkParticleDrawable.cpp",
-        "modules/particles/src/SkParticleEffect.cpp",
-        "modules/particles/src/SkReflected.cpp",
-        "modules/skresources/src/SkResources.cpp",
         "modules/sksg/src/SkSGClipEffect.cpp",
         "modules/sksg/src/SkSGColorFilter.cpp",
         "modules/sksg/src/SkSGDraw.cpp",
