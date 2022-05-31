@@ -1,4 +1,4 @@
-load("//bazel:macros.bzl", "cc_library", "exports_files_legacy", "py_binary", "requirement", "selects")
+load("//bazel:macros.bzl", "cc_library", "exports_files_legacy", "py_binary", "selects")
 
 licenses(["notice"])
 
@@ -159,6 +159,9 @@ ZLIB_DEFINES = ["ZLIB_IMPLEMENTATION"] + select({
 ZLIB_COPTS = [
     "-Wno-unused-function",
     "-Wno-deprecated-non-prototype",
+    # no-deprecated-non-prototype was added in Clang 14+, used in emscripten for CanvasKit, but
+    # it is not in Clang 13, currently used for Skia.
+    "-Wno-unknown-warning-option",
     # Make the headers in contrib available, without exposing them in hdrs.
     "-isystem third_party/externals/zlib/",
 ] + select({
@@ -299,7 +302,7 @@ JPEGTURBO_DEFINES = [
 })
 
 cc_library(
-    name = "libjpeg-turbo",
+    name = "libjpeg_turbo",
     srcs = JPEGTURBO_SRCS,
     hdrs = [
         "externals/libjpeg-turbo/jconfig.h",
@@ -764,7 +767,7 @@ cc_library(
     strip_include_prefix = "externals/dng_sdk/source/",
     visibility = ["//:__subpackages__"],
     deps = [
-        ":libjpeg-turbo",
+        ":libjpeg_turbo",
         ":zlib",
     ],
 )

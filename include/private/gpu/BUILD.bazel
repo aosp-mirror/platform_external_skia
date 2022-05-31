@@ -7,7 +7,7 @@ exports_files_legacy()
 filegroup(
     name = "srcs",
     srcs = [
-        "GrGLMakeNativeInterface_webgl.cpp",
-    ],
-    visibility = ["//src/gpu/ganesh/gl:__pkg__"],
+        "//include/private/gpu/ganesh:srcs",
+    ],  # TODO(kjlubick) add select for graphite
+    visibility = ["//include/private:__pkg__"],
 )
