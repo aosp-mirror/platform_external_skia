@@ -240,12 +240,12 @@ Position DSLParser::position(Token t) {
     }
 }
 
-void DSLParser::error(Token token, std::string msg) {
+void DSLParser::error(Token token, std::string_view msg) {
     this->error(this->position(token), msg);
 }
 
-void DSLParser::error(Position position, std::string msg) {
-    GetErrorReporter().error(msg.c_str(), position);
+void DSLParser::error(Position position, std::string_view msg) {
+    GetErrorReporter().error(position, msg);
 }
 
 Position DSLParser::rangeFrom(Position start) {
@@ -415,8 +415,7 @@ bool DSLParser::functionDeclarationEnd(Position start,
                                        const DSLModifiers& modifiers,
                                        DSLType type,
                                        const Token& name) {
-    // TODO(skia:13339): use SkSTArray<8, DSLParameter> once SkTArray is go/cfi compatible
-    std::vector<DSLParameter> parameters;
+    SkSTArray<8, DSLParameter> parameters;
     Token lookahead = this->peek();
     if (lookahead.fKind == Token::Kind::TK_RPAREN) {
         // `()` means no parameters at all.
@@ -424,7 +423,6 @@ bool DSLParser::functionDeclarationEnd(Position start,
         // `(void)` also means no parameters at all.
         this->nextToken();
     } else {
-        parameters.reserve(8);
         for (;;) {
             size_t paramIndex = parameters.size();
             std::optional<DSLParameter> parameter = this->parameter(paramIndex);
@@ -1948,7 +1946,7 @@ DSLExpression DSLParser::swizzle(Position pos, DSLExpression base,
 }
 
 dsl::DSLExpression DSLParser::call(Position pos, dsl::DSLExpression base, ExpressionArray args) {
-    return DSLExpression(base(std::move(args), pos), pos);
+    return base(std::move(args), pos);
 }
 
 /* LBRACKET expression? RBRACKET | DOT IDENTIFIER | LPAREN arguments RPAREN |
