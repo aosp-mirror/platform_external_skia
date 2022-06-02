@@ -356,17 +356,18 @@ def _CheckBuildifier(input_api, output_api):
   for affected_file in input_api.AffectedFiles(include_deletes=False):
     affected_file_path = affected_file.LocalPath()
     if affected_file_path.endswith('BUILD.bazel') or affected_file_path.endswith('.bzl'):
-      files.append(affected_file_path)
+      if not affected_file_path.endswith('public.bzl'):
+        files.append(affected_file_path)
   if not files:
     return []
   try:
     subprocess.check_output(
         ['buildifier', '--version'],
         stderr=subprocess.STDOUT)
-  except subprocess.CalledProcessError:
-    return output_api.PresubmitNotifyResult(
+  except:
+    return [output_api.PresubmitNotifyResult(
       'Skipping buildifier check because it is not on PATH. \n' +
-      'You can download it from https://github.com/bazelbuild/buildtools/releases')
+      'You can download it from https://github.com/bazelbuild/buildtools/releases')]
 
   return _RunCommandAndCheckGitDiff(
     # One can change --lint=warn to --lint=fix to have things automatically fixed where possible.
