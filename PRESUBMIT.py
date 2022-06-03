@@ -266,12 +266,12 @@ def _CheckBazelBUILDFiles(input_api, output_api):
     is_bazel = affected_file_path.endswith('BUILD.bazel')
     # This list lines up with the one in autoroller_lib.py (see G3).
     excluded_paths = ["infra/", "bazel/rbe/", "bazel/external/", "bazel/common_config_settings/",
-                      "modules/canvaskit/go/"]
+                      "modules/canvaskit/go/", "experimental/"]
     is_excluded = any(affected_file_path.startswith(n) for n in excluded_paths)
     if is_bazel and not is_excluded:
       with open(affected_file_path, 'r') as file:
         contents = file.read()
-        if 'exports_files_legacy()' not in contents:
+        if 'exports_files_legacy(' not in contents:
           results.append(output_api.PresubmitError(
             ('%s needs to call exports_files_legacy() to support legacy G3 ' +
              'rules.\nPut this near the top of the file, beneath ' +
@@ -356,17 +356,18 @@ def _CheckBuildifier(input_api, output_api):
   for affected_file in input_api.AffectedFiles(include_deletes=False):
     affected_file_path = affected_file.LocalPath()
     if affected_file_path.endswith('BUILD.bazel') or affected_file_path.endswith('.bzl'):
-      files.append(affected_file_path)
+      if not affected_file_path.endswith('public.bzl'):
+        files.append(affected_file_path)
   if not files:
     return []
   try:
     subprocess.check_output(
         ['buildifier', '--version'],
         stderr=subprocess.STDOUT)
-  except subprocess.CalledProcessError:
-    return output_api.PresubmitNotifyResult(
+  except:
+    return [output_api.PresubmitNotifyResult(
       'Skipping buildifier check because it is not on PATH. \n' +
-      'You can download it from https://github.com/bazelbuild/buildtools/releases')
+      'You can download it from https://github.com/bazelbuild/buildtools/releases')]
 
   return _RunCommandAndCheckGitDiff(
     # One can change --lint=warn to --lint=fix to have things automatically fixed where possible.

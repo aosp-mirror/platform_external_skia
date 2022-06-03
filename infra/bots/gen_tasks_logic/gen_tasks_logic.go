@@ -2099,6 +2099,9 @@ func (b *jobBuilder) runWasmGMTests() {
 // The reason we need this mapping is because Buildbucket build names cannot have / or : in them.
 var shorthandToLabel = map[string]string{
 	"modules_canvaskit_canvaskit_wasm": "//modules/canvaskit:canvaskit_wasm",
+	"example_hello_world_dawn":         "//example:hello_world_dawn",
+	"example_hello_world_gl":           "//example:hello_world_gl",
+	"example_hello_world_vulkan":       "//example:hello_world_vulkan",
 }
 
 // bazelBuild adds a task which builds the specified single-target label (//foo:bar) or
@@ -2111,12 +2114,13 @@ func (b *jobBuilder) bazelBuild() {
 		panic("unsupported Bazel label shorthand " + shorthand)
 	}
 	b.addTask(b.Name, func(b *taskBuilder) {
-		cmd := []string{"./bazel_build",
+		cmd := []string{"bazel_build_task_driver/bazel_build",
 			"--project_id=skia-swarming-bots",
 			"--task_id=" + specs.PLACEHOLDER_TASK_ID,
 			"--task_name=" + b.Name,
 			"--label=" + label,
 			"--config=" + config,
+			"--workdir=.",
 		}
 		if cross != "" {
 			// The cross (and host) platform is expected to be defined in
@@ -2126,7 +2130,13 @@ func (b *jobBuilder) bazelBuild() {
 		}
 		if host == "linux_x64" {
 			b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
-			b.dep(b.buildTaskDrivers("linux", "amd64"))
+			// Use a built task_driver from CIPD instead of building it from scratch. The
+			// task_driver should not need to change often, so using a CIPD version should reduce
+			// build latency.
+			// TODO(kjlubick) For now, this only has the linux version. We could build the task
+			//   driver for all hosts that we support running Bazel from in this CIPD package
+			//   if/when needed.
+			b.cipd(b.MustGetCipdPackageFromAsset("bazel_build_task_driver"))
 
 			// We want all Linux Bazel Builds to use RBE
 			cmd = append(cmd, "--bazel_arg=--config=linux_rbe")

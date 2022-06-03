@@ -82,9 +82,7 @@ enum TypeConstant : uint8_t {
 
 class DSLType {
 public:
-    DSLType(TypeConstant tc, Position pos = {})
-        : fTypeConstant(tc)
-        , fPosition(pos) {}
+    DSLType(TypeConstant tc, Position pos = {});
 
     DSLType(const SkSL::Type* type, Position pos = {});
 
@@ -93,6 +91,11 @@ public:
     DSLType(std::string_view name,
             DSLModifiers* modifiers,
             Position pos = {});
+
+    /**
+     * Returns true if the SkSL type is non-null.
+     */
+    bool hasValue() const { return fSkSLType != nullptr; }
 
     /**
      * Returns true if this type is a bool.
@@ -169,11 +172,12 @@ public:
     static DSLExpression Construct(DSLType type, SkSpan<DSLExpression> argArray);
 
 private:
-    const SkSL::Type& skslType() const;
+    const SkSL::Type& skslType() const {
+        SkASSERT(fSkSLType);
+        return *fSkSLType;
+    }
 
     const SkSL::Type* fSkSLType = nullptr;
-    TypeConstant fTypeConstant = kPoison_Type;
-    Position fPosition;
 
     friend DSLType Array(const DSLType& base, int count, Position pos);
     friend DSLType Struct(std::string_view name, SkSpan<DSLField> fields, Position pos);

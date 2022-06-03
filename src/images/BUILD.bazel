@@ -5,23 +5,15 @@ licenses(["notice"])
 exports_files_legacy()
 
 filegroup(
-    name = "encode_jpeg_srcs",
-    srcs = [
-        "SkJPEGWriteUtility.cpp",
-        "SkJPEGWriteUtility.h",
-        "SkJpegEncoder.cpp",
-    ],
-)
-
-filegroup(
     name = "srcs",
     srcs = [
         "SkImageEncoder.cpp",
-        "SkImageEncoderFns.h",
-        "SkImageEncoderPriv.h",
     ] + select_multi(
         {
-            "//bazel/common_config_settings:jpeg_encode_codec": [":encode_jpeg_srcs"],
+            "//bazel/common_config_settings:jpeg_encode_codec": [
+                "SkJPEGWriteUtility.cpp",
+                "SkJpegEncoder.cpp",
+            ],
             "//bazel/common_config_settings:png_encode_codec": ["SkPngEncoder.cpp"],
             "//bazel/common_config_settings:webp_encode_codec": ["SkWebpEncoder.cpp"],
         },
@@ -30,14 +22,26 @@ filegroup(
     visibility = ["//src:__pkg__"],
 )
 
+filegroup(
+    name = "private_hdrs",
+    srcs = [
+        "SkImageEncoderFns.h",
+        "SkImageEncoderPriv.h",
+    ] + select({
+        "//bazel/common_config_settings:jpeg_encode_codec": ["SkJPEGWriteUtility.h"],
+        "//conditions:default": [],
+    }),
+    visibility = ["//src:__pkg__"],
+)
+
 cc_library(
     name = "deps",
     visibility = ["//src:__pkg__"],
     deps = select_multi(
         {
-            "//bazel/common_config_settings:jpeg_encode_codec": ["//third_party:libjpeg_turbo"],
+            "//bazel/common_config_settings:jpeg_encode_codec": ["@libjpeg_turbo"],
             "//bazel/common_config_settings:png_encode_codec": ["@libpng"],
-            "//bazel/common_config_settings:webp_encode_codec": ["//third_party:libwebp"],
+            "//bazel/common_config_settings:webp_encode_codec": ["@libwebp"],
         },
         default = [],
     ),
