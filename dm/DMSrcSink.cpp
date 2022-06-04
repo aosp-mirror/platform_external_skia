@@ -2135,26 +2135,7 @@ Result RasterSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString*) co
 namespace {
 
 void precompile(skgpu::graphite::Context* context) {
-    SkCombinationBuilder builder(context);
 
-    {
-        builder.add(SkShaderCombo({SkShaderType::kSolidColor}, {SkTileMode::kRepeat}));
-        builder.add(SkBlendMode::kSrcOver);
-        builder.add(SkBlendMode::kSrc);
-
-        context->preCompile(builder);
-    }
-
-    builder.reset();
-
-    {
-        builder.add(SkShaderCombo({SkShaderType::kLinearGradient},
-                                  {SkTileMode::kRepeat, SkTileMode::kClamp}));
-        builder.add(SkBlendMode::kSrcOver);
-        builder.add(SkBlendMode::kSrc);
-
-        context->preCompile(builder);
-    }
 }
 
 } // anonymous namespace
