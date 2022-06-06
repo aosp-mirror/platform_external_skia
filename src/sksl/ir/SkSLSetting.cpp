@@ -7,10 +7,16 @@
 
 #include "src/sksl/ir/SkSLSetting.h"
 
+#include "include/core/SkTypes.h"
+#include "include/private/SkTHash.h"
 #include "include/sksl/SkSLErrorReporter.h"
+#include "src/sksl/SkSLBuiltinTypes.h"
+#include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLProgramSettings.h"
+#include "src/sksl/SkSLUtil.h"
 #include "src/sksl/ir/SkSLLiteral.h"
-#include "src/sksl/ir/SkSLVariableReference.h"
+
+#include <initializer_list>
 
 namespace SkSL {
 
@@ -81,20 +87,11 @@ static const CapsLookupTable& caps_lookup_table() {
     // Create a lookup table that converts strings into the equivalent ShaderCaps methods.
     static CapsLookupTable* sCapsLookupTable = new CapsLookupTable({
     #define CAP(T, name) CapsLookupTable::Pair{#name, new T##CapsLookup{&ShaderCaps::name}}
-        CAP(Bool, fbFetchSupport),
-        CAP(Bool, fbFetchNeedsCustomOutput),
-        CAP(Bool, flatInterpolationSupport),
-        CAP(Bool, noperspectiveInterpolationSupport),
-        CAP(Bool, externalTextureSupport),
-        CAP(Bool, mustEnableAdvBlendEqs),
-        CAP(Bool, mustDeclareFragmentShaderOutput),
         CAP(Bool, mustDoOpBetweenFloorAndAbs),
         CAP(Bool, mustGuardDivisionEvenAfterExplicitZeroCheck),
         CAP(Bool, atan2ImplementedAsAtanYOverX),
-        CAP(Bool, canUseAnyFunctionInShader),
         CAP(Bool, floatIs32Bits),
         CAP(Bool, integerSupport),
-        CAP(Bool, builtinFMASupport),
         CAP(Bool, builtinDeterminantSupport),
         CAP(Bool, rewriteMatrixVectorMultiply),
     #undef CAP
