@@ -354,6 +354,7 @@ SKSL_TEST(CPU + GPU + SkQP, Negation,                        "folding/Negation.s
 SKSL_TEST(CPU + SkQP,       PreserveSideEffects,             "folding/PreserveSideEffects.sksl")
 SKSL_TEST(CPU + GPU + SkQP, SelfAssignment,                  "folding/SelfAssignment.sksl")
 SKSL_TEST(CPU + GPU + SkQP, ShortCircuitBoolFolding,         "folding/ShortCircuitBoolFolding.sksl")
+SKSL_TEST(CPU + GPU + SkQP, StructFieldFolding,              "folding/StructFieldFolding.sksl")
 SKSL_TEST(CPU + GPU + SkQP, SwitchCaseFolding,               "folding/SwitchCaseFolding.sksl")
 SKSL_TEST(CPU + GPU + SkQP, SwizzleFolding,                  "folding/SwizzleFolding.sksl")
 SKSL_TEST(CPU + GPU + SkQP, TernaryFolding,                  "folding/TernaryFolding.sksl")
@@ -389,6 +390,7 @@ SKSL_TEST(CPU + GPU + SkQP, SwizzleCanBeInlinedDirectly,                      "i
 SKSL_TEST(CPU + GPU + SkQP, TernaryResultsCannotBeInlined,                    "inliner/TernaryResultsCannotBeInlined.sksl")
 SKSL_TEST(CPU + GPU + SkQP, TernaryTestCanBeInlined,                          "inliner/TernaryTestCanBeInlined.sksl")
 SKSL_TEST(CPU + GPU + SkQP, TrivialArgumentsInlineDirectly,                   "inliner/TrivialArgumentsInlineDirectly.sksl")
+SKSL_TEST(GPU_ES3,          TrivialArgumentsInlineDirectlyES3,                "inliner/TrivialArgumentsInlineDirectlyES3.sksl")
 SKSL_TEST(GPU_ES3,          WhileBodyMustBeInlinedIntoAScope,                 "inliner/WhileBodyMustBeInlinedIntoAScope.sksl")
 SKSL_TEST(GPU_ES3,          WhileTestCannotBeInlined,                         "inliner/WhileTestCannotBeInlined.sksl")
 

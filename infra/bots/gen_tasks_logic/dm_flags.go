@@ -176,10 +176,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	glPrefix := ""
 	if b.extraConfig("SwiftShader") {
 		configs = append(configs, "vk", "vkdmsaa")
-		// skbug.com/12820
-		skip(ALL, "gm", ALL, "ycbcrimage")
-		// skbug.com/12820
-		skip(ALL, "test", ALL, "VkYCbcrSampler_DrawImageWithYcbcrSampler")
 		// skbug.com/12826
 		skip(ALL, "test", ALL, "GrThreadSafeCache16Verts")
 		// skbug.com/12829
@@ -1015,7 +1011,11 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	}
 
 	if b.matchGpu("Adreno6") && !b.extraConfig("Vulkan") { // disable broken tests on Adreno 6xx GLSL
-		skip(ALL, "tests", ALL, "SkSLIntrinsicIsInf_GPU") // skia:12377
+		skip(ALL, "tests", ALL, "SkSLIntrinsicIsInf_GPU")     // skia:12377
+	}
+
+	if b.matchGpu("Adreno[56]") && !b.extraConfig("Vulkan") { // disable broken tests on Adreno 5/6xx GLSL
+		skip(ALL, "tests", ALL, "SkSLStructFieldFolding_GPU") // skia:13393
 	}
 
 	if b.matchGpu("Adreno[56]") && b.extraConfig("Vulkan") { // disable broken tests on Adreno 5/6xx Vulkan
@@ -1048,6 +1048,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "tests", ALL, "SkSLReturnsValueOnEveryPathES3_GPU")     // skia:12465
 		skip(ALL, "tests", ALL, "SkSLReturnsValueOnEveryPathES3_GPU")     // skia:12465
 		skip(ALL, "tests", ALL, "SkSLOutParamsAreDistinctFromGlobal_GPU") // skia:13115
+		skip(ALL, "tests", ALL, "SkSLStructFieldFolding_GPU")             // skia:13393
 	}
 
 	if b.extraConfig("Vulkan") && b.isLinux() && b.matchGpu("Intel") {
@@ -1115,10 +1116,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "tests", ALL, "SkSLMatrixConstructorsES3_GPU")
 	}
 
-	if b.extraConfig("Vulkan") && b.gpu("RadeonVega6") && b.matchOs("Win10") {
-		skip(ALL, "gm", ALL, "ycbcrimage")                                 // skia:13265
-		skip(ALL, "test", ALL, "VkYCbcrSampler_DrawImageWithYcbcrSampler") // skia:13265
-	}
 
 	if b.matchGpu("Intel") { // some Intel GPUs don't return zero for the derivative of a uniform
 		skip(ALL, "tests", ALL, "SkSLIntrinsicDFdy_GPU")
