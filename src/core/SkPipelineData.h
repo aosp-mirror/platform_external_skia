@@ -19,7 +19,6 @@
 
 #ifdef SK_GRAPHITE_ENABLED
 #include "include/private/SkVx.h"
-#include "src/gpu/Blend.h"
 #include "src/gpu/graphite/TextureProxy.h"
 #include "src/gpu/graphite/UniformManager.h"
 #endif
@@ -109,8 +108,6 @@ private:
 // The PipelineDataGatherer is just used to collect information for a given PaintParams object.
 //   The UniformData is added to a cache and uniquified. Only that unique ID is passed around.
 //   The TextureData is also added to a cache and uniquified. Only that ID is passed around.
-//   The BlendInfo is ultimately stored in the SkShaderCodeDictionary next to its associated
-//       PaintParamsKey
 
 // TODO: The current plan for fixing uniform padding is for the SkPipelineDataGatherer to hold a
 // persistent uniformManager. A stretch goal for this system would be for this combination
@@ -118,24 +115,6 @@ private:
 // obviously, vastly complicate uniform accumulation.
 class SkPipelineDataGatherer {
 public:
-#ifdef SK_GRAPHITE_ENABLED
-    struct BlendInfo {
-        bool operator==(const BlendInfo& other) const {
-            return fEquation == other.fEquation &&
-                   fSrcBlend == other.fSrcBlend &&
-                   fDstBlend == other.fDstBlend &&
-                   fBlendConstant == other.fBlendConstant &&
-                   fWritesColor == other.fWritesColor;
-        }
-
-        skgpu::BlendEquation fEquation = skgpu::BlendEquation::kAdd;
-        skgpu::BlendCoeff    fSrcBlend = skgpu::BlendCoeff::kOne;
-        skgpu::BlendCoeff    fDstBlend = skgpu::BlendCoeff::kZero;
-        SkPMColor4f          fBlendConstant = SK_PMColor4fTRANSPARENT;
-        bool                 fWritesColor = true;
-    };
-#endif
-
 #ifdef SK_GRAPHITE_ENABLED
     SkPipelineDataGatherer(skgpu::graphite::Layout layout);
 #endif
@@ -145,11 +124,6 @@ public:
     SkDEBUGCODE(void checkReset();)
 
 #ifdef SK_GRAPHITE_ENABLED
-    void setBlendInfo(const SkPipelineDataGatherer::BlendInfo& blendInfo) {
-        fBlendInfo = blendInfo;
-    }
-    const BlendInfo& blendInfo() const { return fBlendInfo; }
-
     void add(const SkSamplingOptions& sampling,
              const SkTileMode tileModes[2],
              sk_sp<skgpu::graphite::TextureProxy> proxy) {
@@ -190,7 +164,6 @@ private:
 #endif // SK_DEBUG
 
     SkTextureDataBlock                     fTextureDataBlock;
-    BlendInfo                              fBlendInfo;
     skgpu::graphite::UniformManager        fUniformManager;
 #endif // SK_GRAPHITE_ENABLED
     SkEnumBitMask<SnippetRequirementFlags> fSnippetRequirementFlags;
