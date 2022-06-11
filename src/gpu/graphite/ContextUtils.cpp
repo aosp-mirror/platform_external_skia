@@ -35,15 +35,19 @@ ExtractPaintData(Recorder* recorder,
 
     p.toKey(keyContext, builder, gatherer);
 
-    SkPaintParamsKey key = builder->lockAsKey();
-
     auto dict = recorder->priv().resourceProvider()->shaderCodeDictionary();
     UniformDataCache* uniformDataCache = recorder->priv().uniformDataCache();
     TextureDataCache* textureDataCache = recorder->priv().textureDataCache();
 
-    auto entry = dict->findOrCreate(key, builder->blendInfo());
-    UniformDataCache::Index uniformIndex = uniformDataCache->insert(gatherer->peekUniformData());
-    TextureDataCache::Index textureIndex = textureDataCache->insert(gatherer->textureDataBlock());
+    auto entry = dict->findOrCreate(builder);
+    UniformDataCache::Index uniformIndex;
+    if (gatherer->hasUniforms()) {
+        uniformIndex = uniformDataCache->insert(gatherer->peekUniformData());
+    }
+    TextureDataCache::Index textureIndex;
+    if (gatherer->hasTextures()) {
+        textureIndex = textureDataCache->insert(gatherer->textureDataBlock());
+    }
 
     gatherer->reset();
 
