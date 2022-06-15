@@ -11,6 +11,7 @@ _include_private = get_path_info("../include/private/gpu/graphite", "abspath")
 skia_graphite_public = [
   "$_include/BackendTexture.h",
   "$_include/Context.h",
+  "$_include/ContextOptions.h",
   "$_include/GraphiteTypes.h",
   "$_include/Recorder.h",
   "$_include/Recording.h",
@@ -39,6 +40,8 @@ skia_graphite_sources = [
   "$_src/CopyTask.h",
   "$_src/Device.cpp",
   "$_src/Device.h",
+  "$_src/DrawAtlas.cpp",
+  "$_src/DrawAtlas.h",
   "$_src/DrawBufferManager.cpp",
   "$_src/DrawBufferManager.h",
   "$_src/DrawContext.cpp",
@@ -127,6 +130,8 @@ skia_graphite_sources = [
   "$_src/render/TessellateStrokesRenderStep.h",
   "$_src/render/TessellateWedgesRenderStep.cpp",
   "$_src/render/TessellateWedgesRenderStep.h",
+  "$_src/text/AtlasManager.cpp",
+  "$_src/text/AtlasManager.h",
 ]
 
 skia_graphite_mtl_sources = [

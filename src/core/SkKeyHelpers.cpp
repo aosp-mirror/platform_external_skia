@@ -570,8 +570,10 @@ RuntimeShaderBlock::ShaderData::ShaderData(sk_sp<const SkRuntimeEffect> effect)
         : fEffect(std::move(effect)) {}
 
 RuntimeShaderBlock::ShaderData::ShaderData(sk_sp<const SkRuntimeEffect> effect,
+                                           const SkMatrix& localMatrix,
                                            sk_sp<const SkData> uniforms)
         : fEffect(std::move(effect))
+        , fLocalMatrix(localMatrix)
         , fUniforms(std::move(uniforms)) {}
 
 static bool skdata_matches(const SkData* a, const SkData* b) {
@@ -582,6 +584,7 @@ static bool skdata_matches(const SkData* a, const SkData* b) {
 
 bool RuntimeShaderBlock::ShaderData::operator==(const ShaderData& rhs) const {
     return fEffect == rhs.fEffect &&
+           fLocalMatrix == rhs.fLocalMatrix &&
            skdata_matches(fUniforms.get(), rhs.fUniforms.get());
 }
 
@@ -600,6 +603,13 @@ void RuntimeShaderBlock::BeginBlock(const SkKeyContext& keyContext,
                 [[maybe_unused]] const SkShaderCodeDictionary* dict = keyContext.dict();
                 VALIDATE_UNIFORMS(gatherer, dict, kCodeSnippetID)
                 gatherer->addFlags(dict->getSnippetRequirementFlags(kCodeSnippetID));
+
+                // Pass the local matrix inverse so we can use local coordinates.
+                SkMatrix inverseLocalMatrix;
+                if (!shaderData.fLocalMatrix.invert(&inverseLocalMatrix)) {
+                    inverseLocalMatrix.setIdentity();
+                }
+                gatherer->write(SkM44(inverseLocalMatrix));
             }
             // Use the combination of {SkSL program hash, uniform size} as our key.
             // In the unfortunate event of a hash collision, at least we'll have the right amount of
@@ -622,8 +632,8 @@ void RuntimeShaderBlock::BeginBlock(const SkKeyContext& keyContext,
     }
 }
 
-sk_sp<SkRuntimeEffect> TestingOnly_GetCommonRuntimeEffect() {
-    static sk_sp<SkRuntimeEffect> effect = SkMakeRuntimeEffect(SkRuntimeEffect::MakeForShader, R"(
+const SkRuntimeEffect* TestingOnly_GetCommonRuntimeEffect() {
+    static const SkRuntimeEffect* effect = SkMakeRuntimeEffect(SkRuntimeEffect::MakeForShader, R"(
         half4 main(float2 coords) {
             return half4(coords.xy01);
         }
@@ -715,9 +725,10 @@ SkUniquePaintParamsID CreateKey(const SkKeyContext& keyContext,
             break;
         case SkShaderType::kRuntimeShader:
             {
-                sk_sp<SkRuntimeEffect> effect = TestingOnly_GetCommonRuntimeEffect();
-                RuntimeShaderBlock::BeginBlock(keyContext, builder, nullptr,
-                                               {effect, /*uniforms=*/nullptr});
+                const SkRuntimeEffect* effect = TestingOnly_GetCommonRuntimeEffect();
+                RuntimeShaderBlock::BeginBlock(
+                        keyContext, builder, nullptr,
+                        {sk_ref_sp(effect), SkMatrix::I(), /*uniforms=*/nullptr});
                 builder->endBlock();
             }
             break;
