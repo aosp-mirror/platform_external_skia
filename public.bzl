@@ -223,6 +223,7 @@ BASE_SRCS_ALL = struct(
         "src/utils/win/**/*",
 
         # Exclude multiple definitions.
+        "src/gpu/ccpr/GrCoverageCountingPathRenderer_none.cpp",
         "src/gpu/gl/GrGLMakeNativeInterface_none.cpp",
         "src/pdf/SkDocument_PDF_None.cpp",  # We use src/pdf/SkPDFDocument.cpp.
 
@@ -268,10 +269,8 @@ def codec_srcs(limited):
 
 GL_SRCS_UNIX = struct(
     include = [
-        "src/gpu/gl/*.cpp",
-        "src/gpu/gl/*.h",
-        "src/gpu/gl/builders/*.cpp",
-        "src/gpu/gl/builders/*.h",
+        "src/gpu/gl/*",
+        "src/gpu/gl/builders/*",
     ],
     exclude = [],
 )
@@ -302,10 +301,8 @@ PORTS_SRCS_UNIX = struct(
 
 GL_SRCS_ANDROID = struct(
     include = [
-        "src/gpu/gl/*.cpp",
-        "src/gpu/gl/*.h",
-        "src/gpu/gl/builders/*.cpp",
-        "src/gpu/gl/builders/*.h",
+        "src/gpu/gl/*",
+        "src/gpu/gl/builders/*",
         "src/gpu/gl/android/*.cpp",
     ],
     exclude = [
@@ -338,37 +335,10 @@ PORTS_SRCS_ANDROID = struct(
     ],
 )
 
-PORTS_SRCS_ANDROID_NO_FONT = struct(
-    include = [
-        "src/ports/**/*.cpp",
-        "src/ports/**/*.h",
-    ],
-    exclude = [
-        "src/ports/*CG*",
-        "src/ports/*FontConfig*",
-        "src/ports/*WIC*",
-        "src/ports/*chromium*",
-        "src/ports/*fontconfig*",
-        "src/ports/*mac*",
-        "src/ports/*mozalloc*",
-        "src/ports/*nacl*",
-        "src/ports/*win*",
-        "src/ports/*NDK*",
-        "src/ports/SkDebug_stdio.cpp",
-        "src/ports/SkFontMgr_a*",
-        "src/ports/SkFontHost_Free*",
-        "src/ports/SkFontMgr_custom*",
-        "src/ports/SkFontMgr_fuchsia.cpp",
-        "src/ports/SkImageGenerator_none.cpp",
-    ],
-)
-
 GL_SRCS_IOS = struct(
     include = [
-        "src/gpu/gl/*.cpp",
-        "src/gpu/gl/*.h",
-        "src/gpu/gl/builders/*.cpp",
-        "src/gpu/gl/builders/*.h",
+        "src/gpu/gl/*",
+        "src/gpu/gl/builders/*",
         "src/gpu/gl/iOS/GrGLMakeNativeInterface_iOS.cpp",
     ],
     exclude = [
@@ -407,10 +377,8 @@ PORTS_SRCS_IOS = struct(
 
 GL_SRCS_WASM = struct(
     include = [
-        "src/gpu/gl/*.cpp",
-        "src/gpu/gl/*.h",
-        "src/gpu/gl/builders/*.cpp",
-        "src/gpu/gl/builders/*.h",
+        "src/gpu/gl/*",
+        "src/gpu/gl/builders/*",
         "src/gpu/gl/egl/GrGLMakeEGLInterface.cpp",
         "src/gpu/gl/egl/GrGLMakeNativeInterface_egl.cpp",
     ],
@@ -455,8 +423,7 @@ PORTS_SRCS_WASM = struct(
 
 GL_SRCS_FUCHSIA = struct(
     include = [
-        "src/gpu/vk/*.cpp",
-        "src/gpu/vk/*.h",
+        "src/gpu/vk/*",
     ],
     exclude = [],
 )
@@ -495,10 +462,8 @@ PORTS_SRCS_FUCHSIA = struct(
 
 GL_SRCS_MACOS = struct(
     include = [
-        "src/gpu/gl/*.cpp",
-        "src/gpu/gl/*.h",
-        "src/gpu/gl/builders/*.cpp",
-        "src/gpu/gl/builders/*.h",
+        "src/gpu/gl/*",
+        "src/gpu/gl/builders/*",
         "src/gpu/gl/mac/GrGLMakeNativeInterface_mac.cpp",
     ],
     exclude = [
@@ -520,7 +485,6 @@ def ports_srcs(os_conditions):
             skia_glob(PORTS_SRCS_WASM),
             skia_glob(PORTS_SRCS_FUCHSIA),
             skia_glob(PORTS_SRCS_MACOS),
-            skia_glob(PORTS_SRCS_ANDROID_NO_FONT),
         ],
     )
 
@@ -534,7 +498,6 @@ def gl_srcs(os_conditions):
             skia_glob(GL_SRCS_WASM),
             skia_glob(GL_SRCS_FUCHSIA),
             skia_glob(GL_SRCS_MACOS),
-            skia_glob(GL_SRCS_ANDROID),
         ],
     )
 
@@ -613,7 +576,22 @@ DM_SRCS_ALL = struct(
         "src/xml/*.cpp",
         "tests/*.cpp",
         "tests/*.h",
+        "tests/sksl/dslfp/GrDSLFPTest_DoStatement.dsl.cpp",
+        "tests/sksl/dslfp/GrDSLFPTest_DoStatement.h",
+        "tests/sksl/dslfp/GrDSLFPTest_ForStatement.dsl.cpp",
+        "tests/sksl/dslfp/GrDSLFPTest_ForStatement.h",
+        "tests/sksl/dslfp/GrDSLFPTest_IfStatement.dsl.cpp",
+        "tests/sksl/dslfp/GrDSLFPTest_IfStatement.h",
+        "tests/sksl/dslfp/GrDSLFPTest_SwitchStatement.dsl.cpp",
+        "tests/sksl/dslfp/GrDSLFPTest_SwitchStatement.h",
+        "tests/sksl/dslfp/GrDSLFPTest_Swizzle.dsl.cpp",
+        "tests/sksl/dslfp/GrDSLFPTest_Swizzle.h",
+        "tests/sksl/dslfp/GrDSLFPTest_Ternary.dsl.cpp",
+        "tests/sksl/dslfp/GrDSLFPTest_Ternary.h",
+        "tests/sksl/dslfp/GrDSLFPTest_WhileStatement.dsl.cpp",
+        "tests/sksl/dslfp/GrDSLFPTest_WhileStatement.h",
         "tools/AutoreleasePool.h",
+        "tools/BigPathBench.inc",
         "tools/BinaryAsset.h",
         "tools/CrashHandler.cpp",
         "tools/CrashHandler.h",
@@ -629,8 +607,6 @@ DM_SRCS_ALL = struct(
         "tools/ResourceFactory.h",
         "tools/Resources.cpp",
         "tools/Resources.h",
-        "tools/RuntimeBlendUtils.cpp",
-        "tools/RuntimeBlendUtils.h",
         "tools/SkMetaData.cpp",
         "tools/SkMetaData.h",
         "tools/SkSharingProc.cpp",
@@ -673,6 +649,7 @@ DM_SRCS_ALL = struct(
         "tests/FontMgrFontConfigTest.cpp",  # FontConfig-only.
         "tests/TypefaceMacTest.cpp",  # CoreText-only.
         "tests/SkParagraphTest.cpp",  # Skipping tests for now.
+        "tests/skia_test.cpp",  # Old main.
         "tools/gpu/d3d/*",
         "tools/gpu/dawn/*",
         "tools/gpu/gl/angle/*",
@@ -763,8 +740,10 @@ def base_defines(os_conditions):
         "SK_WEBP_ENCODER_USE_DEFAULT_METHOD",
         # Experiment to diagnose image diffs in Google3
         "SK_DISABLE_LOWP_RASTER_PIPELINE",
-        # JPEG is in codec_limited and is included in all
-        # builds except the no_codec android build
+        # JPEG is in codec_limited
+        "SK_CODEC_DECODES_JPEG",
+        "SK_ENCODE_JPEG",
+        "SK_HAS_ANDROID_CODEC",
     ] + skia_select(
         os_conditions,
         [
@@ -778,9 +757,6 @@ def base_defines(os_conditions):
                 "SK_ENCODE_WEBP",
                 "SK_R32_SHIFT=16",
                 "SK_GL",
-                "SK_CODEC_DECODES_JPEG",
-                "SK_ENCODE_JPEG",
-                "SK_HAS_ANDROID_CODEC",
             ],
             # ANDROID
             [
@@ -790,18 +766,13 @@ def base_defines(os_conditions):
                 "SK_ENCODE_PNG",
                 "SK_ENCODE_WEBP",
                 "SK_GL",
-                "SK_CODEC_DECODES_JPEG",
-                "SK_ENCODE_JPEG",
-                "SK_HAS_ANDROID_CODEC",
             ],
             # IOS
             [
                 "SK_BUILD_FOR_IOS",
+                "SKNX_NO_SIMD",
                 "SK_NO_COMMAND_BUFFER",  # Test tools that use thread_local.
                 "SK_GL",
-                "SK_CODEC_DECODES_JPEG",
-                "SK_ENCODE_JPEG",
-                "SK_HAS_ANDROID_CODEC",
             ],
             # WASM
             [
@@ -813,9 +784,6 @@ def base_defines(os_conditions):
                 "SK_DISABLE_EFFECT_DESERIALIZATION",
                 "SK_FORCE_8_BYTE_ALIGNMENT",
                 "SKNX_NO_SIMD",
-                "SK_CODEC_DECODES_JPEG",
-                "SK_ENCODE_JPEG",
-                "SK_HAS_ANDROID_CODEC",
             ],
             # FUCHSIA
             [
@@ -826,21 +794,10 @@ def base_defines(os_conditions):
                 "SK_ENCODE_WEBP",
                 "SK_R32_SHIFT=16",
                 "SK_VULKAN",
-                "SK_CODEC_DECODES_JPEG",
-                "SK_ENCODE_JPEG",
-                "SK_HAS_ANDROID_CODEC",
             ],
             # MACOS
             [
                 "SK_BUILD_FOR_MAC",
-                "SK_GL",
-                "SK_CODEC_DECODES_JPEG",
-                "SK_ENCODE_JPEG",
-                "SK_HAS_ANDROID_CODEC",
-            ],
-            # ANDROID W/ NO CODECS
-            [
-                "SK_BUILD_FOR_ANDROID",
                 "SK_GL",
             ],
         ],
@@ -905,6 +862,16 @@ def skparagraph_lib_hdrs():
 
 def skparagraph_lib_srcs():
     return native.glob(["modules/skparagraph/src/*.cpp"])
+
+################################################################################
+## experimental xform
+################################################################################
+
+def exp_xform_lib_hdrs():
+    return native.glob(["experimental/xform/*.h"])
+
+def exp_xform_lib_srcs():
+    return native.glob(["experimental/xform/*.cpp"])
 
 ################################################################################
 ## skresources_lib
@@ -986,26 +953,13 @@ SKOTTIE_TOOL_SRCS = [
 ## SkShaper
 ################################################################################
 
-# Stubs, pending SkUnicode fission
-SKUNICODE_ICU_BUILTIN_SRCS = [
-    "modules/skunicode/include/SkUnicode.h",
-    "modules/skunicode/src/SkUnicode_icu.cpp",
-    "modules/skunicode/src/SkUnicode_icu.h",
-    "modules/skunicode/src/SkUnicode_icu_builtin.cpp",
-]
-
-SKUNICODE_ICU_RUNTIME_SRCS = [
-    "modules/skunicode/include/SkUnicode.h",
-    "modules/skunicode/src/SkUnicode_icu.cpp",
-    "modules/skunicode/src/SkUnicode_icu.h",
-    "modules/skunicode/src/SkUnicode_icu_runtime.cpp",
-]
-
 SKSHAPER_HARFBUZZ_SRCS = [
     "modules/skshaper/include/SkShaper.h",
     "modules/skshaper/src/SkShaper.cpp",
     "modules/skshaper/src/SkShaper_harfbuzz.cpp",
     "modules/skshaper/src/SkShaper_primitive.cpp",
+    "modules/skshaper/src/SkUnicode.h",
+    "modules/skshaper/src/SkUnicode_icu.cpp",
 ]
 
 SKSHAPER_PRIMITIVE_SRCS = [

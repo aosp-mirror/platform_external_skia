@@ -352,7 +352,7 @@ class SimpleStroker : public Sample {
     float fWidth = 175;
     SkPaint fPtsPaint, fStrokePaint, fMirrorStrokePaint, fNewFillPaint, fHiddenPaint,
             fSkeletonPaint;
-    inline static constexpr int kN = 3;
+    static constexpr int kN = 3;
 
 public:
     SkPoint fPts[kN];

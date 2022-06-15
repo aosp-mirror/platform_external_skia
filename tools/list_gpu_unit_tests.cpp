@@ -11,17 +11,12 @@
 #include <vector>
 
 #include "tests/Test.h"
-#include "tests/TestHarness.h"
-
-TestHarness CurrentTestHarness() {
-    return TestHarness::kListGpuUnitTests;
-}
 
 int main() {
     std::vector<std::string> tests;
     for (const skiatest::Test& test : skiatest::TestRegistry::Range()) {
-        if (test.fNeedsGpu) {
-            tests.push_back(std::string(test.fName));
+        if (test.needsGpu) {
+            tests.push_back(std::string(test.name));
         }
     }
     std::sort(tests.begin(), tests.end());

@@ -9,18 +9,16 @@
 
 #include "src/gpu/GrAppliedClip.h"
 #include "src/gpu/GrCaps.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrSurfaceDrawContext.h"
 #include "src/gpu/GrXferProcessor.h"
-#include "src/gpu/KeyBuilder.h"
-#include "src/gpu/glsl/GrGLSLProgramDataManager.h"
-#include "src/gpu/glsl/GrGLSLUniformHandler.h"
+
+#include "src/gpu/ops/GrOp.h"
 
 GrPipeline::GrPipeline(const InitArgs& args,
                        sk_sp<const GrXferProcessor> xferProcessor,
                        const GrAppliedHardClip& hardClip)
-        : fDstProxy(args.fDstProxyView)
-        , fWindowRectsState(hardClip.windowRectsState())
-        , fXferProcessor(std::move(xferProcessor))
-        , fWriteSwizzle(args.fWriteSwizzle) {
+        : fWriteSwizzle(args.fWriteSwizzle) {
     fFlags = (Flags)args.fInputFlags;
     if (hardClip.hasStencilClip()) {
         fFlags |= Flags::kHasStencilClip;
@@ -28,8 +26,18 @@ GrPipeline::GrPipeline(const InitArgs& args,
     if (hardClip.scissorState().enabled()) {
         fFlags |= Flags::kScissorTestEnabled;
     }
-    // If we have any special dst sample flags we better also have a dst proxy
-    SkASSERT(this->dstSampleFlags() == GrDstSampleFlags::kNone || this->dstProxyView());
+
+    fWindowRectsState = hardClip.windowRectsState();
+
+    fXferProcessor = std::move(xferProcessor);
+
+    SkASSERT((args.fDstProxyView.dstSampleType() != GrDstSampleType::kNone) ==
+             SkToBool(args.fDstProxyView.proxy()));
+    if (args.fDstProxyView.proxy()) {
+        fDstProxyView = args.fDstProxyView.proxyView();
+        fDstTextureOffset = args.fDstProxyView.offset();
+    }
+    fDstSampleType = args.fDstProxyView.dstSampleType();
 }
 
 GrPipeline::GrPipeline(const InitArgs& args, GrProcessorSet&& processors,
@@ -56,7 +64,7 @@ GrPipeline::GrPipeline(const InitArgs& args, GrProcessorSet&& processors,
 }
 
 GrXferBarrierType GrPipeline::xferBarrierType(const GrCaps& caps) const {
-    if (this->dstSampleFlags() & GrDstSampleFlags::kRequiresTextureBarrier) {
+    if (fDstProxyView.proxy() && GrDstSampleTypeDirectlySamplesDst(fDstSampleType)) {
         return kTexture_GrXferBarrierType;
     }
     return this->getXferProcessor().xferBarrierType(caps);
@@ -64,7 +72,7 @@ GrXferBarrierType GrPipeline::xferBarrierType(const GrCaps& caps) const {
 
 GrPipeline::GrPipeline(GrScissorTest scissorTest,
                        sk_sp<const GrXferProcessor> xp,
-                       const skgpu::Swizzle& writeSwizzle,
+                       const GrSwizzle& writeSwizzle,
                        InputFlags inputFlags)
         : fWindowRectsState()
         , fFlags((Flags)inputFlags)
@@ -75,23 +83,37 @@ GrPipeline::GrPipeline(GrScissorTest scissorTest,
     }
 }
 
-void GrPipeline::genKey(skgpu::KeyBuilder* b, const GrCaps& caps) const {
+void GrPipeline::genKey(GrProcessorKeyBuilder* b, const GrCaps& caps) const {
     // kSnapVerticesToPixelCenters is implemented in a shader.
     InputFlags ignoredFlags = InputFlags::kSnapVerticesToPixelCenters;
-    b->add32((uint32_t)fFlags & ~(uint32_t)ignoredFlags, "flags");
+    if (!caps.multisampleDisableSupport()) {
+        // Ganesh will omit kHWAntialias regardless of multisampleDisableSupport.
+        ignoredFlags |= InputFlags::kHWAntialias;
+    }
+    b->add32((uint32_t)fFlags & ~(uint32_t)ignoredFlags);
 
     const GrXferProcessor::BlendInfo& blendInfo = this->getXferProcessor().getBlendInfo();
 
-    static constexpr uint32_t kBlendCoeffSize = 5;
-    static constexpr uint32_t kBlendEquationSize = 5;
-    static_assert(kLast_GrBlendCoeff < (1 << kBlendCoeffSize));
-    static_assert(kLast_GrBlendEquation < (1 << kBlendEquationSize));
+    static constexpr uint32_t kBlendWriteShift = 1;
+    static constexpr uint32_t kBlendCoeffShift = 5;
+    static constexpr uint32_t kBlendEquationShift = 5;
+    static constexpr uint32_t kDstSampleTypeInputShift = 1;
+    static_assert(kLast_GrBlendCoeff < (1 << kBlendCoeffShift));
+    static_assert(kLast_GrBlendEquation < (1 << kBlendEquationShift));
+    static_assert(kBlendWriteShift +
+                  2 * kBlendCoeffShift +
+                  kBlendEquationShift +
+                  kDstSampleTypeInputShift <= 32);
 
-    b->addBool(blendInfo.fWriteColor, "writeColor");
-    b->addBits(kBlendCoeffSize, blendInfo.fSrcBlend, "srcBlend");
-    b->addBits(kBlendCoeffSize, blendInfo.fDstBlend, "dstBlend");
-    b->addBits(kBlendEquationSize, blendInfo.fEquation, "equation");
-    b->addBool(this->usesDstInputAttachment(), "inputAttach");
+    uint32_t blendKey = blendInfo.fWriteColor;
+    blendKey |= (blendInfo.fSrcBlend << kBlendWriteShift);
+    blendKey |= (blendInfo.fDstBlend << (kBlendWriteShift + kBlendCoeffShift));
+    blendKey |= (blendInfo.fEquation << (kBlendWriteShift + 2 * kBlendCoeffShift));
+    // Note that we use the general fDstSampleType here and not localDstSampleType()
+    blendKey |= ((fDstSampleType == GrDstSampleType::kAsInputAttachment)
+                 << (kBlendWriteShift + 2 * kBlendCoeffShift + kBlendEquationShift));
+
+    b->add32(blendKey);
 }
 
 void GrPipeline::visitTextureEffects(
@@ -101,29 +123,12 @@ void GrPipeline::visitTextureEffects(
     }
 }
 
-void GrPipeline::visitProxies(const GrVisitProxyFunc& func) const {
+void GrPipeline::visitProxies(const GrOp::VisitProxyFunc& func) const {
     // This iteration includes any clip coverage FPs
     for (auto& fp : fFragmentProcessors) {
         fp->visitProxies(func);
     }
     if (this->usesDstTexture()) {
-        func(this->dstProxyView().proxy(), GrMipmapped::kNo);
-    }
-}
-
-void GrPipeline::setDstTextureUniforms(const GrGLSLProgramDataManager& pdm,
-                                       GrGLSLBuiltinUniformHandles* fBuiltinUniformHandles) const {
-    GrTexture* dstTexture = this->peekDstTexture();
-
-    if (dstTexture) {
-        if (fBuiltinUniformHandles->fDstTextureCoordsUni.isValid()) {
-            pdm.set4f(fBuiltinUniformHandles->fDstTextureCoordsUni,
-                      static_cast<float>(this->dstTextureOffset().fX),
-                      static_cast<float>(this->dstTextureOffset().fY),
-                      1.f / dstTexture->width(),
-                      1.f / dstTexture->height());
-        }
-    } else {
-        SkASSERT(!fBuiltinUniformHandles->fDstTextureCoordsUni.isValid());
+        func(fDstProxyView.proxy(), GrMipmapped::kNo);
     }
 }

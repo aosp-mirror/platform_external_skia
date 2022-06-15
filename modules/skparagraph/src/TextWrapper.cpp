@@ -58,7 +58,7 @@ void TextWrapper::lookAhead(SkScalar maxWidth, Cluster* endOfClusters) {
                 fClusters.extend(cluster);
                 fMinIntrinsicWidth = std::max(fMinIntrinsicWidth, getClustersTrimmedWidth());
                 fWords.extend(fClusters);
-                continue;
+                break;
             } else if (cluster->run().isPlaceholder()) {
                 if (!fClusters.empty()) {
                     // Placeholder ends the previous word
@@ -231,7 +231,7 @@ std::tuple<Cluster*, size_t, SkScalar> TextWrapper::trimStartSpaces(Cluster* end
         // End of line is always end of cluster, but need to skip \n
         auto width = fEndLine.width();
         auto cluster = fEndLine.endCluster() + 1;
-        while (cluster < fEndLine.breakCluster() && cluster->isWhitespaceBreak())  {
+        while (cluster < fEndLine.breakCluster() && cluster->isWhitespaceBreak()) {
             width += cluster->width();
             ++cluster;
         }
@@ -245,13 +245,6 @@ std::tuple<Cluster*, size_t, SkScalar> TextWrapper::trimStartSpaces(Cluster* end
     while (cluster < endOfClusters && cluster->isWhitespaceBreak()) {
         width += cluster->width();
         ++cluster;
-    }
-
-    if (fEndLine.breakCluster()->isWhitespaceBreak() && fEndLine.breakCluster() < endOfClusters) {
-        // In case of a soft line break by the whitespace
-        // fBreak should point to the beginning of the next line
-        // (it only matters when there are trailing spaces)
-        fEndLine.shiftBreak();
     }
 
     return std::make_tuple(cluster, 0, width);
@@ -342,12 +335,10 @@ void TextWrapper::breakTextIntoLines(ParagraphImpl* parent,
         }
 
         // TODO: keep start/end/break info for text and runs but in a better way that below
-        TextRange textExcludingSpaces(fEndLine.startCluster()->textRange().start, fEndLine.endCluster()->textRange().end);
-        TextRange text(fEndLine.startCluster()->textRange().start, fEndLine.breakCluster()->textRange().start);
-        TextRange textIncludingNewlines(fEndLine.startCluster()->textRange().start, startLine->textRange().start);
+        TextRange text(fEndLine.startCluster()->textRange().start, fEndLine.endCluster()->textRange().end);
+        TextRange textWithSpaces(fEndLine.startCluster()->textRange().start, startLine->textRange().start);
         if (startLine == end) {
-            textIncludingNewlines.end = parent->text().size();
-            text.end = parent->text().size();
+            textWithSpaces.end = parent->text().size();
         }
         ClusterRange clusters(fEndLine.startCluster() - start, fEndLine.endCluster() - start + 1);
         ClusterRange clustersWithGhosts(fEndLine.startCluster() - start, startLine - start);
@@ -364,16 +355,11 @@ void TextWrapper::breakTextIntoLines(ParagraphImpl* parent,
 
         if (fEndLine.empty()) {
             // Correct text and clusters (make it empty for an empty line)
-            textExcludingSpaces.end = textExcludingSpaces.start;
+            text.end = text.start;
             clusters.end = clusters.start;
         }
 
-        // In case of a force wrapping we don't have a break cluster and have to use the end cluster
-        text.end = std::max(text.end, textExcludingSpaces.end);
-
-        addLine(textExcludingSpaces,
-                text,
-                textIncludingNewlines, clusters, clustersWithGhosts, widthWithSpaces,
+        addLine(text, textWithSpaces, clusters, clustersWithGhosts, widthWithSpaces,
                 fEndLine.startPos(),
                 fEndLine.endPos(),
                 SkVector::Make(0, fHeight),
@@ -470,7 +456,6 @@ void TextWrapper::breakTextIntoLines(ParagraphImpl* parent,
 
         ClusterRange clusters(fEndLine.breakCluster() - start, fEndLine.endCluster() - start);
         addLine(fEndLine.breakCluster()->textRange(),
-                fEndLine.breakCluster()->textRange(),
                 fEndLine.endCluster()->textRange(),
                 clusters,
                 clusters,

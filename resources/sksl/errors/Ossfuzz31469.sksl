@@ -1,7 +1,3 @@
 half n() {}
 void S() { -n(); }
 void l() { S(); }
-
-/*%%*
-function 'n' can exit without returning a value
-*%%*/

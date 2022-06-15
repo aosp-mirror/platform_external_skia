@@ -114,7 +114,6 @@ std::unique_ptr<SkAndroidCodec> SkAndroidCodec::MakeFromData(sk_sp<SkData> data,
 
 SkColorType SkAndroidCodec::computeOutputColorType(SkColorType requestedColorType) {
     bool highPrecision = fCodec->getEncodedInfo().bitsPerComponent() > 8;
-    uint8_t colorDepth = fCodec->getEncodedInfo().getColorDepth();
     switch (requestedColorType) {
         case kARGB_4444_SkColorType:
             return kN32_SkColorType;
@@ -134,11 +133,6 @@ SkColorType SkAndroidCodec::computeOutputColorType(SkColorType requestedColorTyp
                 return kRGB_565_SkColorType;
             }
             break;
-        case kRGBA_1010102_SkColorType:
-            if (colorDepth == 10) {
-              return kRGBA_1010102_SkColorType;
-            }
-            break;
         case kRGBA_F16_SkColorType:
             return kRGBA_F16_SkColorType;
         default:
@@ -146,8 +140,7 @@ SkColorType SkAndroidCodec::computeOutputColorType(SkColorType requestedColorTyp
     }
 
     // F16 is the Android default for high precision images.
-    return highPrecision ? kRGBA_F16_SkColorType :
-        (colorDepth == 10 ? kRGBA_1010102_SkColorType : kN32_SkColorType);
+    return highPrecision ? kRGBA_F16_SkColorType : kN32_SkColorType;
 }
 
 SkAlphaType SkAndroidCodec::computeOutputAlphaType(bool requestedUnpremul) {
@@ -163,8 +156,7 @@ sk_sp<SkColorSpace> SkAndroidCodec::computeOutputColorSpace(SkColorType outputCo
         case kRGBA_F16_SkColorType:
         case kRGB_565_SkColorType:
         case kRGBA_8888_SkColorType:
-        case kBGRA_8888_SkColorType:
-        case kRGBA_1010102_SkColorType: {
+        case kBGRA_8888_SkColorType: {
             // If |prefColorSpace| is supplied, choose it.
             if (prefColorSpace) {
                 return prefColorSpace;

@@ -6,7 +6,6 @@ package gen_tasks_logic
 import (
 	"log"
 	"reflect"
-	"strings"
 	"time"
 
 	"go.skia.org/infra/go/cipd"
@@ -90,17 +89,8 @@ func (b *taskBuilder) cas(casSpec string) {
 	b.Spec.CasSpec = casSpec
 }
 
-// env sets the value for the given environment variable for the task.
-func (b *taskBuilder) env(key, value string) {
-	if b.Spec.Environment == nil {
-		b.Spec.Environment = map[string]string{}
-	}
-	b.Spec.Environment[key] = value
-}
-
-// envPrefixes appends the given values to the given environment variable for
-// the task.
-func (b *taskBuilder) envPrefixes(key string, values ...string) {
+// env appends the given values to the given environment variable for the task.
+func (b *taskBuilder) env(key string, values ...string) {
 	if b.Spec.EnvPrefixes == nil {
 		b.Spec.EnvPrefixes = map[string][]string{}
 	}
@@ -113,7 +103,7 @@ func (b *taskBuilder) envPrefixes(key string, values ...string) {
 
 // addToPATH adds the given locations to PATH for the task.
 func (b *taskBuilder) addToPATH(loc ...string) {
-	b.envPrefixes("PATH", loc...)
+	b.env("PATH", loc...)
 }
 
 // output adds the given paths as outputs to the task, which results in their
@@ -226,8 +216,6 @@ func (b *taskBuilder) usesGo() {
 		pkg.Path = "go"
 	}
 	b.cipd(pkg)
-	b.addToPATH(pkg.Path + "/go/bin")
-	b.envPrefixes("GOROOT", pkg.Path+"/go")
 }
 
 // usesDocker adds attributes to tasks which use docker.
@@ -257,14 +245,7 @@ func (b *taskBuilder) recipeProps(props map[string]string) {
 // after they have been added to the task.
 func (b *taskBuilder) getRecipeProps() string {
 	props := make(map[string]interface{}, len(b.recipeProperties)+2)
-	// TODO(borenet): I'm not sure why we supply the original task name
-	// and not the upload task name.  We should investigate whether this is
-	// needed.
-	buildername := b.Name
-	if b.role("Upload") {
-		buildername = strings.TrimPrefix(buildername, "Upload-")
-	}
-	props["buildername"] = buildername
+	props["buildername"] = b.Name
 	props["$kitchen"] = struct {
 		DevShell bool `json:"devshell"`
 		GitAuth  bool `json:"git_auth"`
@@ -284,14 +265,14 @@ func (b *taskBuilder) cipdPlatform() string {
 	if b.role("Upload") {
 		return cipd.PlatformLinuxAmd64
 	} else if b.matchOs("Win") || b.matchExtraConfig("Win") {
-		return cipd.PlatformWindowsAmd64
+		if b.matchArch("x86_64") {
+			return cipd.PlatformWindowsAmd64
+		} else {
+			return cipd.PlatformWindows386
+		}
 	} else if b.matchOs("Mac") {
 		return cipd.PlatformMacAmd64
 	} else if b.matchArch("Arm64") {
-		return cipd.PlatformLinuxArm64
-	} else if b.matchOs("Android", "ChromeOS") {
-		return cipd.PlatformLinuxArm64
-	} else if b.matchOs("iOS") {
 		return cipd.PlatformLinuxArm64
 	} else {
 		return cipd.PlatformLinuxAmd64
@@ -300,20 +281,21 @@ func (b *taskBuilder) cipdPlatform() string {
 
 // usesPython adds attributes to tasks which use python.
 func (b *taskBuilder) usesPython() {
+	// TODO(borenet): This handling of the Python package is hacky and bad.
 	pythonPkgs := cipd.PkgsPython[b.cipdPlatform()]
-	b.cipd(pythonPkgs...)
-	b.addToPATH(
-		"cipd_bin_packages/cpython",
-		"cipd_bin_packages/cpython/bin",
-		"cipd_bin_packages/cpython3",
-		"cipd_bin_packages/cpython3/bin",
-	)
+	b.cipd(pythonPkgs[1])
+	if b.os("Mac10.15") && b.model("VMware7.1") {
+		b.cipd(pythonPkgs[0])
+	}
+	if b.matchOs("Win") || b.matchExtraConfig("Win") {
+		b.cipd(pythonPkgs[0])
+	}
+
 	b.cache(&specs.Cache{
 		Name: "vpython",
 		Path: "cache/vpython",
 	})
-	b.envPrefixes("VPYTHON_VIRTUALENV_ROOT", "cache/vpython")
-	b.env("VPYTHON_LOG_TRACE", "1")
+	b.env("VPYTHON_VIRTUALENV_ROOT", "cache/vpython")
 }
 
 func (b *taskBuilder) usesNode() {

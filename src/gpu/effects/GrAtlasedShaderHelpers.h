@@ -11,10 +11,11 @@
 #include "src/gpu/GrDrawOpAtlas.h"
 #include "src/gpu/GrShaderCaps.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
 #include "src/gpu/glsl/GrGLSLVarying.h"
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
 
-static void append_index_uv_varyings(GrGeometryProcessor::ProgramImpl::EmitArgs& args,
+static void append_index_uv_varyings(GrGLSLGeometryProcessor::EmitArgs& args,
                                      int numTextureSamplers,
                                      const char* inTexCoordsName,
                                      const char* atlasDimensionsInvName,
@@ -55,29 +56,29 @@ static void append_index_uv_varyings(GrGeometryProcessor::ProgramImpl::EmitArgs&
     }
 
     // Multiply by 1/atlasDimensions to get normalized texture coordinates
-    uv->reset(SkSLType::kFloat2);
+    uv->reset(kFloat2_GrSLType);
     args.fVaryingHandler->addVarying("TextureCoords", uv);
     args.fVertBuilder->codeAppendf(
             "%s = unormTexCoords * %s;", uv->vsOut(), atlasDimensionsInvName);
 
     // On ANGLE there is a significant cost to using an int varying. We don't know of any case where
     // it is worse to use a float so for now we always do.
-    texIdx->reset(SkSLType::kFloat);
+    texIdx->reset(kFloat_GrSLType);
     // If we computed the local var "texIdx" as an int we will need to cast it to float
     const char* cast = args.fShaderCaps->integerSupport() ? "float" : "";
     args.fVaryingHandler->addVarying("TexIndex", texIdx, Interpolation::kCanBeFlat);
     args.fVertBuilder->codeAppendf("%s = %s(texIdx);", texIdx->vsOut(), cast);
 
     if (st) {
-        st->reset(SkSLType::kFloat2);
+        st->reset(kFloat2_GrSLType);
         args.fVaryingHandler->addVarying("IntTextureCoords", st);
         args.fVertBuilder->codeAppendf("%s = unormTexCoords;", st->vsOut());
     }
 }
 
-static void append_multitexture_lookup(GrGeometryProcessor::ProgramImpl::EmitArgs& args,
+static void append_multitexture_lookup(GrGLSLGeometryProcessor::EmitArgs& args,
                                        int numTextureSamplers,
-                                       const GrGLSLVarying& texIdx,
+                                       const GrGLSLVarying &texIdx,
                                        const char* coordName,
                                        const char* colorName) {
     SkASSERT(numTextureSamplers > 0);

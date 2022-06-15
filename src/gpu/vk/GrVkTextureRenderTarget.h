@@ -64,16 +64,16 @@ private:
     GrVkTextureRenderTarget(GrVkGpu* gpu,
                             SkBudgeted budgeted,
                             SkISize dimensions,
-                            sk_sp<GrVkImage> texture,
-                            sk_sp<GrVkImage> colorAttachment,
-                            sk_sp<GrVkImage> resolveAttachment,
+                            sk_sp<GrVkAttachment> texture,
+                            sk_sp<GrVkAttachment> colorAttachment,
+                            sk_sp<GrVkAttachment> resolveAttachment,
                             GrMipmapStatus);
 
     GrVkTextureRenderTarget(GrVkGpu* gpu,
                             SkISize dimensions,
-                            sk_sp<GrVkImage> texture,
-                            sk_sp<GrVkImage> colorAttachment,
-                            sk_sp<GrVkImage> resolveAttachment,
+                            sk_sp<GrVkAttachment> texture,
+                            sk_sp<GrVkAttachment> colorAttachment,
+                            sk_sp<GrVkAttachment> resolveAttachment,
                             GrMipmapStatus,
                             GrWrapCacheable);
 

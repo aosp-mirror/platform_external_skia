@@ -12,7 +12,6 @@
 
 #include "include/core/SkData.h"
 #include "src/core/SkOSFile.h"
-#include "src/utils/SkOSPath.h"
 #include "tools/Resources.h"
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -22,34 +21,20 @@ class StdAssetManager : public SkQPAssetManager {
 public:
     StdAssetManager(const char* p) : fPrefix(p) {
         SkASSERT(!fPrefix.empty());
+        //TODO(halcanary): does this need to be changed if I run SkQP in Windows?
+        fPrefix += "/";
     }
-
-    sk_sp<SkData> open(const char* subpath) override {
-        SkString path = SkOSPath::Join(fPrefix.c_str(), subpath);
-        return SkData::MakeFromFileName(path.c_str());
+    sk_sp<SkData> open(const char* path) override {
+        return SkData::MakeFromFileName((fPrefix + path).c_str());
     }
-
-    std::vector<std::string> iterateDir(const char* directory, const char* extension) override {
-        std::vector<std::string> paths;
-        SkString resourceDirectory = GetResourcePath(directory);
-        SkOSFile::Iter iter(resourceDirectory.c_str(), extension);
-        SkString name;
-
-        while (iter.next(&name, /*getDir=*/false)) {
-            SkString path(SkOSPath::Join(directory, name.c_str()));
-            paths.push_back(path.c_str());
-        }
-
-        return paths;
-    }
-
 private:
     std::string fPrefix;
 };
 
 struct Args {
-    char* assetDir;
-    char* outputDir;
+  char *assetDir;
+  char *renderTests;
+  char *outputDir;
 };
 }  // namespace
 
@@ -95,13 +80,15 @@ static bool should_skip(const char* const* rules, size_t count, const char* name
 }
 
 static void parse_args(int argc, char *argv[], Args *args) {
-  if (argc < 3) {
-      std::cerr << "Usage:\n  " << argv[0] << " ASSET_DIR OUTPUT_DIR [TEST_MATCH_RULES]\n"
+  if (argc < 4) {
+      std::cerr << "Usage:\n  " << argv[0]
+                << " ASSET_DIR RENDER_TESTS OUTPUT_DIR [TEST_MATCH_RULES]\n"
                 << kSkipUsage << '\n';
       exit(1);
   }
   args->assetDir = argv[1];
-  args->outputDir = argv[2];
+  args->renderTests = argv[2];
+  args->outputDir = argv[3];
 }
 
 int main(int argc, char *argv[]) {
@@ -113,33 +100,59 @@ int main(int argc, char *argv[]) {
         std::cerr << "sk_mkdir(" << args.outputDir << ") failed.\n";
         return 2;
     }
-
     StdAssetManager mgr(args.assetDir);
     SkQP skqp;
-    skqp.init(&mgr, args.outputDir);
+    skqp.init(&mgr, args.renderTests, args.outputDir);
     int ret = 0;
 
-    const char* const* matchRules = &argv[3];
-    size_t matchRulesCount = (size_t)(argc - 3);
+    const char* const* matchRules = &argv[4];
+    size_t matchRulesCount = (size_t)(argc - 4);
+
+    // Rendering Tests
+    std::ostream& out = std::cout;
+    for (auto backend : skqp.getSupportedBackends()) {
+        auto testPrefix = std::string(SkQP::GetBackendName(backend)) + "_";
+        for (auto gmFactory : skqp.getGMs()) {
+            auto testName = testPrefix + SkQP::GetGMName(gmFactory);
+            if (should_skip(matchRules, matchRulesCount, testName.c_str())) {
+                continue;
+            }
+            out << "Starting: " << testName << std::endl;
+            SkQP::RenderOutcome outcome;
+            std::string except;
+
+            std::tie(outcome, except) = skqp.evaluateGM(backend, gmFactory);
+            if (!except.empty()) {
+                out << "ERROR:    " << testName << " (" << except << ")\n";
+                ret = 1;
+            } else if (outcome.fMaxError != 0) {
+                out << "FAILED:   " << testName << " (" << outcome.fMaxError << ")\n";
+                ret = 1;
+            } else {
+                out << "Passed:   " << testName << "\n";
+            }
+            out.flush();
+        }
+    }
 
     // Unit Tests
-    for (SkQP::UnitTest test : skqp.getUnitTests()) {
-        auto testName = std::string("unitTest_") + SkQP::GetUnitTestName(test);
+    for (auto test : skqp.getUnitTests()) {
+        auto testName = std::string("unitTest_") +  SkQP::GetUnitTestName(test);
         if (should_skip(matchRules, matchRulesCount, testName.c_str())) {
             continue;
         }
-        std::cout << "Starting: " << testName << " ";
+        out << "Starting test: " << testName << std::endl;
         std::vector<std::string> errors = skqp.executeTest(test);
         if (!errors.empty()) {
-            std::cout << "[FAILED: " << errors.size() << " error(s)]" << std::endl;
+            out << "TEST FAILED (" << errors.size() << "): " << testName << "\n";
             for (const std::string& error : errors) {
-                std::cout << "  " <<  error << std::endl;
+                out << error << "\n";
             }
             ret = 1;
         } else {
-            std::cout << "[PASSED]" << std::endl;
+            out << "Test passed:   " << testName << "\n";
         }
-        std::cout.flush();
+        out.flush();
     }
     skqp.makeReport();
 

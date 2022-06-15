@@ -15,7 +15,6 @@ import string
 import subprocess
 import tempfile
 
-import skqp_gn_args
 import gn_to_bp_utils
 
 # First we start off with a template for Android.bp,
@@ -64,6 +63,7 @@ license {
         "SPDX-license-identifier-CC0-1.0",
         "SPDX-license-identifier-FTL",
         "SPDX-license-identifier-MIT",
+        "SPDX-license-identifier-MPL",
         "legacy_unencumbered",
     ],
     license_text: [
@@ -73,7 +73,23 @@ license {
 }
 
 cc_defaults {
-    name: "skia_arch_defaults",
+    name: "skia_defaults",
+    cflags: [
+        $cflags
+    ],
+
+    cppflags:[
+        $cflags_cc
+    ],
+
+    export_include_dirs: [
+        $export_includes
+    ],
+
+    local_include_dirs: [
+        $local_includes
+    ],
+
     arch: {
         arm: {
             srcs: [
@@ -118,26 +134,6 @@ cc_defaults {
     },
 }
 
-cc_defaults {
-    name: "skia_defaults",
-    defaults: ["skia_arch_defaults"],
-    cflags: [
-        $cflags
-    ],
-
-    cppflags:[
-        $cflags_cc
-    ],
-
-    export_include_dirs: [
-        $export_includes
-    ],
-
-    local_include_dirs: [
-        $local_includes
-    ]
-}
-
 cc_library_static {
     // Smaller version of Skia, without e.g. codecs, intended for use by RenderEngine.
     name: "libskia_renderengine",
@@ -180,7 +176,10 @@ cc_library_static {
           "android",
         ],
       },
-      host_linux: {
+      linux_glibc: {
+        cflags: [
+          "-mssse3",
+        ],
         srcs: [
           $linux_srcs
         ],
@@ -192,6 +191,9 @@ cc_library_static {
         ],
       },
       darwin: {
+        cflags: [
+          "-mssse3",
+        ],
         srcs: [
           $mac_srcs
         ],
@@ -205,6 +207,7 @@ cc_library_static {
       windows: {
         enabled: true,
         cflags: [
+          "-mssse3",
           "-Wno-unknown-pragmas",
         ],
         srcs: [
@@ -220,8 +223,35 @@ cc_library_static {
     },
 
     defaults: ["skia_deps",
+               "skia_pgo",
                "skia_defaults",
     ],
+}
+
+// Build libskia with PGO by default.
+// Location of PGO profile data is defined in build/soong/cc/pgo.go
+// and is separate from skia.
+// To turn it off, set ANDROID_PGO_NO_PROFILE_USE environment variable
+// or set enable_profile_use property to false.
+cc_defaults {
+    name: "skia_pgo",
+    pgo: {
+        instrumentation: true,
+        profile_file: "hwui/hwui.profdata",
+        benchmarks: ["hwui", "skia"],
+        enable_profile_use: true,
+    },
+}
+
+// "defaults" property to disable profile use for Skia tools and benchmarks.
+cc_defaults {
+    name: "skia_pgo_no_profile_use",
+    defaults: [
+        "skia_pgo",
+    ],
+    pgo: {
+        enable_profile_use: false,
+    },
 }
 
 cc_defaults {
@@ -240,6 +270,7 @@ cc_defaults {
     static_libs: [
         "libarect",
     ],
+    group_static_libs: true,
     target: {
       android: {
         shared_libs: [
@@ -269,7 +300,6 @@ cc_defaults {
         "libwebp-decode",
         "libwebp-encode",
         "libsfntly",
-        "libwuffs_mirror_release_c",
     ],
     target: {
       android: {
@@ -299,6 +329,7 @@ cc_defaults {
     name: "skia_tool_deps",
     defaults: [
         "skia_deps",
+        "skia_pgo_no_profile_use"
     ],
     shared_libs: [
         "libicu",
@@ -319,41 +350,13 @@ cc_defaults {
         enabled: true,
       },
     },
-
-    data: [
-        "resources/**/*",
-    ],
-}
-
-cc_defaults {
-    name: "skia_gm_srcs",
-    local_include_dirs: [
-        $gm_includes
-    ],
-
-    srcs: [
-        $gm_srcs
-    ],
-}
-
-cc_defaults {
-    name: "skia_test_minus_gm_srcs",
-    local_include_dirs: [
-        $test_minus_gm_includes
-    ],
-
-    srcs: [
-        $test_minus_gm_srcs
-    ],
 }
 
 cc_test {
     name: "skia_dm",
 
     defaults: [
-        "skia_gm_srcs",
-        "skia_test_minus_gm_srcs",
-        "skia_tool_deps",
+        "skia_tool_deps"
     ],
 
     local_include_dirs: [
@@ -374,7 +377,6 @@ cc_test {
     name: "skia_nanobench",
 
     defaults: [
-        "skia_gm_srcs",
         "skia_tool_deps"
     ],
 
@@ -386,88 +388,10 @@ cc_test {
         $nanobench_srcs
     ],
 
-    lto: {
-        never: true,
-    },
-}
-
-cc_library_shared {
-    name: "libskqp_jni",
-    sdk_version: "$skqp_sdk_version",
-    stl: "libc++_static",
-    compile_multilib: "both",
-
-    defaults: [
-        "skia_arch_defaults",
+    data: [
+        "resources/**/*",
     ],
-
-    cflags: [
-        $skqp_cflags
-        "-Wno-unused-parameter",
-        "-Wno-unused-variable",
-    ],
-
-    cppflags:[
-        $skqp_cflags_cc
-    ],
-
-    local_include_dirs: [
-        "skqp",
-        $skqp_includes
-    ],
-
-    export_include_dirs: [
-        "skqp",
-    ],
-
-    srcs: [
-        $skqp_srcs
-    ],
-
-    header_libs: ["jni_headers"],
-
-    shared_libs: [
-          "libandroid",
-          "libEGL",
-          "libGLESv2",
-          "liblog",
-          "libvulkan",
-          "libz",
-    ],
-    static_libs: [
-          "libexpat",
-          "libjpeg_static_ndk",
-          "libpng_ndk",
-          "libwebp-decode",
-          "libwebp-encode",
-          "libwuffs_mirror_release_c",
-    ]
-}
-
-android_test {
-    name: "CtsSkQPTestCases",
-    defaults: ["cts_defaults"],
-    test_suites: ["cts"],
-
-    libs: ["android.test.runner.stubs"],
-    jni_libs: ["libskqp_jni"],
-    compile_multilib: "both",
-
-    static_libs: [
-        "android-support-design",
-        "ctstestrunner-axt",
-    ],
-    manifest: "platform_tools/android/apps/skqp/src/main/AndroidManifest.xml",
-    test_config: "platform_tools/android/apps/skqp/src/main/AndroidTest.xml",
-
-    asset_dirs: ["platform_tools/android/apps/skqp/src/main/assets", "resources"],
-    resource_dirs: ["platform_tools/android/apps/skqp/src/main/res"],
-    srcs: ["platform_tools/android/apps/skqp/src/main/java/**/*.java"],
-
-    sdk_version: "test_current",
-
-}
-''')
+}''')
 
 # We'll run GN to get the main source lists and include directories for Skia.
 def generate_args(target_os, enable_gpu, renderengine = False):
@@ -491,6 +415,7 @@ def generate_args(target_os, enable_gpu, renderengine = False):
 
     'skia_use_fontconfig':                  'false',
     'skia_include_multiframe_procs':        'false',
+    'skia_libgifcodec_path':                '"third_party/libgifcodec"',
   }
   d['target_os'] = target_os
   if target_os == '"android"':
@@ -536,7 +461,6 @@ def generate_args(target_os, enable_gpu, renderengine = False):
     d['skia_use_freetype'] = 'true'
     d['skia_use_fixed_gamma_text'] = 'true'
     d['skia_enable_fontmgr_custom_empty'] = 'true'
-    d['skia_use_wuffs'] = 'true'
 
   return d
 
@@ -557,12 +481,6 @@ cflags_cc       = strip_slashes(js['targets']['//:skia']['cflags_cc'])
 local_includes  = strip_slashes(js['targets']['//:skia']['include_dirs'])
 export_includes = strip_slashes(js['targets']['//:public']['include_dirs'])
 
-gm_srcs         = strip_slashes(js['targets']['//:gm']['sources'])
-gm_includes     = strip_slashes(js['targets']['//:gm']['include_dirs'])
-
-test_srcs         = strip_slashes(js['targets']['//:tests']['sources'])
-test_includes     = strip_slashes(js['targets']['//:tests']['include_dirs'])
-
 dm_srcs         = strip_slashes(js['targets']['//:dm']['sources'])
 dm_includes     = strip_slashes(js['targets']['//:dm']['include_dirs'])
 
@@ -570,17 +488,13 @@ nanobench_target = js['targets']['//:nanobench']
 nanobench_srcs     = strip_slashes(nanobench_target['sources'])
 nanobench_includes = strip_slashes(nanobench_target['include_dirs'])
 
-
-gn_to_bp_utils.GrabDependentValues(js, '//:gm', 'sources', gm_srcs, '//:skia')
-gn_to_bp_utils.GrabDependentValues(js, '//:tests', 'sources', test_srcs, '//:skia')
-gn_to_bp_utils.GrabDependentValues(js, '//:dm', 'sources',
-                                   dm_srcs, ['//:skia', '//:gm', '//:tests'])
+gn_to_bp_utils.GrabDependentValues(js, '//:dm', 'sources', dm_srcs, 'skia')
 gn_to_bp_utils.GrabDependentValues(js, '//:nanobench', 'sources',
-                                   nanobench_srcs, ['//:skia', '//:gm'])
+                                   nanobench_srcs, 'skia')
 
 # skcms is a little special, kind of a second-party library.
 local_includes.add("include/third_party/skcms")
-gm_includes   .add("include/third_party/skcms")
+dm_includes   .add("include/third_party/skcms")
 
 # Android's build will choke if we list headers.
 def strip_headers(sources):
@@ -614,18 +528,6 @@ linux_srcs      =   linux_srcs.difference(srcs)
 mac_srcs        =     mac_srcs.difference(srcs)
 win_srcs        =     win_srcs.difference(srcs)
 
-gm_srcs         = strip_headers(gm_srcs)
-test_srcs       = strip_headers(test_srcs)
-dm_srcs         = strip_headers(dm_srcs).difference(gm_srcs).difference(test_srcs)
-nanobench_srcs  = strip_headers(nanobench_srcs).difference(gm_srcs)
-
-test_minus_gm_includes = test_includes.difference(gm_includes)
-test_minus_gm_srcs = test_srcs.difference(gm_srcs)
-
-cflags = gn_to_bp_utils.CleanupCFlags(cflags)
-cflags_cc = gn_to_bp_utils.CleanupCCFlags(cflags_cc)
-
-# Execute GN for specialized RenderEngine target
 js_renderengine   = gn_to_bp_utils.GenerateJSONFromGN(gn_args_renderengine)
 renderengine_srcs = strip_slashes(
     js_renderengine['targets']['//:skia']['sources'])
@@ -633,37 +535,11 @@ gn_to_bp_utils.GrabDependentValues(js_renderengine, '//:skia', 'sources',
                                    renderengine_srcs, None)
 renderengine_srcs = strip_headers(renderengine_srcs)
 
-# Execute GN for specialized SkQP target
-skqp_sdk_version = 26
-js_skqp = gn_to_bp_utils.GenerateJSONFromGN(skqp_gn_args.GetGNArgs(api_level=skqp_sdk_version,
-                                                                   debug=False,
-                                                                   is_android_bp=True))
-skqp_srcs      = strip_slashes(js_skqp['targets']['//:libskqp_app']['sources'])
-skqp_includes  = strip_slashes(js_skqp['targets']['//:libskqp_app']['include_dirs'])
-skqp_cflags    = strip_slashes(js_skqp['targets']['//:libskqp_app']['cflags'])
-skqp_cflags_cc = strip_slashes(js_skqp['targets']['//:libskqp_app']['cflags_cc'])
-skqp_defines   = strip_slashes(js_skqp['targets']['//:libskqp_app']['defines'])
+dm_srcs         = strip_headers(dm_srcs)
+nanobench_srcs  = strip_headers(nanobench_srcs)
 
-skqp_includes.update(strip_slashes(js_skqp['targets']['//:public']['include_dirs']))
-
-gn_to_bp_utils.GrabDependentValues(js_skqp, '//:libskqp_app', 'sources',
-                                   skqp_srcs, None)
-gn_to_bp_utils.GrabDependentValues(js_skqp, '//:libskqp_app', 'include_dirs',
-                                   skqp_includes, ['//:gif'])
-gn_to_bp_utils.GrabDependentValues(js_skqp, '//:libskqp_app', 'cflags',
-                                   skqp_cflags, None)
-gn_to_bp_utils.GrabDependentValues(js_skqp, '//:libskqp_app', 'cflags_cc',
-                                   skqp_cflags_cc, None)
-gn_to_bp_utils.GrabDependentValues(js_skqp, '//:libskqp_app', 'defines',
-                                   skqp_defines, None)
-
-skqp_defines.add("SK_ENABLE_DUMP_GPU")
-skqp_defines.add("SK_BUILD_FOR_SKQP")
-skqp_defines.add("SK_ALLOW_STATIC_GLOBAL_INITIALIZERS=1")
-
-skqp_srcs = strip_headers(skqp_srcs)
-skqp_cflags = gn_to_bp_utils.CleanupCFlags(skqp_cflags)
-skqp_cflags_cc = gn_to_bp_utils.CleanupCCFlags(skqp_cflags_cc)
+cflags = gn_to_bp_utils.CleanupCFlags(cflags)
+cflags_cc = gn_to_bp_utils.CleanupCCFlags(cflags_cc)
 
 here = os.path.dirname(__file__)
 defs = gn_to_bp_utils.GetArchSources(os.path.join(here, 'opts.gni'))
@@ -675,7 +551,6 @@ linux_defines        = get_defines(js_linux)
 mac_defines          = get_defines(js_mac)
 win_defines          = get_defines(js_win)
 renderengine_defines = get_defines(js_renderengine)
-renderengine_defines.add('SK_IN_RENDERENGINE')
 
 def mkdir_if_not_exists(path):
   if not os.path.exists(path):
@@ -685,7 +560,6 @@ mkdir_if_not_exists('linux/include/config/')
 mkdir_if_not_exists('mac/include/config/')
 mkdir_if_not_exists('win/include/config/')
 mkdir_if_not_exists('renderengine/include/config/')
-mkdir_if_not_exists('skqp/include/config/')
 
 platforms = { 'IOS', 'MAC', 'WIN', 'ANDROID', 'UNIX' }
 
@@ -707,7 +581,7 @@ def append_to_file(config, s):
   with open(config, 'a') as f:
     print(s, file=f)
 
-def write_android_config(config_path, defines, isNDKConfig = False):
+def write_android_config(config_path, defines):
   gn_to_bp_utils.WriteUserConfig(config_path, defines)
   append_to_file(config_path, '''
 #ifndef SK_BUILD_FOR_ANDROID
@@ -715,13 +589,8 @@ def write_android_config(config_path, defines, isNDKConfig = False):
 #endif''')
   disallow_platforms(config_path, 'ANDROID')
 
-  if isNDKConfig:
-    append_to_file(config_path, '''
-#undef SK_BUILD_FOR_ANDROID_FRAMEWORK''')
-
 write_android_config('android/include/config/SkUserConfig.h', android_defines)
 write_android_config('renderengine/include/config/SkUserConfig.h', renderengine_defines)
-write_android_config('skqp/include/config/SkUserConfig.h', skqp_defines, True)
 
 def write_config(config_path, defines, platform):
   gn_to_bp_utils.WriteUserConfig(config_path, defines)
@@ -767,23 +636,11 @@ with open('Android.bp', 'w') as Android_bp:
                                              defs['hsw'  ] +
                                              defs['skx'  ])),
 
-    'gm_includes'       : bpfmt(8, gm_includes),
-    'gm_srcs'           : bpfmt(8, gm_srcs),
-
-    'test_minus_gm_includes' : bpfmt(8, test_minus_gm_includes),
-    'test_minus_gm_srcs'     : bpfmt(8, test_minus_gm_srcs),
-
     'dm_includes'       : bpfmt(8, dm_includes),
     'dm_srcs'           : bpfmt(8, dm_srcs),
 
     'nanobench_includes'    : bpfmt(8, nanobench_includes),
     'nanobench_srcs'        : bpfmt(8, nanobench_srcs),
-
-    'skqp_sdk_version': skqp_sdk_version,
-    'skqp_includes':    bpfmt(8, skqp_includes),
-    'skqp_srcs':        bpfmt(8, skqp_srcs),
-    'skqp_cflags':      bpfmt(8, skqp_cflags, False),
-    'skqp_cflags_cc':   bpfmt(8, skqp_cflags_cc),
 
     'android_srcs':  bpfmt(10, android_srcs),
     'linux_srcs':    bpfmt(10, linux_srcs),

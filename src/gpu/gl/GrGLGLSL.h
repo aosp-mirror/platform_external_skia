@@ -15,6 +15,6 @@ struct GrGLDriverInfo;
 /**
  * Gets the most recent GLSL Generation compatible with the OpenGL context.
  */
-bool GrGLGetGLSLGeneration(const GrGLDriverInfo&, SkSL::GLSLGeneration* generation);
+bool GrGLGetGLSLGeneration(const GrGLDriverInfo&, GrGLSLGeneration* generation);
 
 #endif

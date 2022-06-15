@@ -8,7 +8,7 @@ OpName %sk_Clockwise "sk_Clockwise"
 OpName %_UniformBuffer "_UniformBuffer"
 OpMemberName %_UniformBuffer 0 "src"
 OpMemberName %_UniformBuffer 1 "dst"
-OpName %soft_light_component_Qhh2h2 "soft_light_component_Qhh2h2"
+OpName %_soft_light_component_hh2h2 "_soft_light_component_hh2h2"
 OpName %DSqd "DSqd"
 OpName %DCub "DCub"
 OpName %DaSqd "DaSqd"
@@ -225,7 +225,7 @@ OpDecorate %240 RelaxedPrecision
 %float_0 = OpConstant %float 0
 %_ptr_Function_v4float = OpTypePointer Function %v4float
 %int_0 = OpConstant %int 0
-%soft_light_component_Qhh2h2 = OpFunction %float None %15
+%_soft_light_component_hh2h2 = OpFunction %float None %15
 %17 = OpFunctionParameter %_ptr_Function_v2float
 %18 = OpFunctionParameter %_ptr_Function_v2float
 %19 = OpLabel
@@ -266,13 +266,13 @@ OpBranchConditional %26 %27 %28
 %52 = OpFAdd %float %44 %51
 %53 = OpLoad %v2float %18
 %54 = OpCompositeExtract %float %53 0
-%55 = OpLoad %v2float %17
-%56 = OpCompositeExtract %float %55 1
-%57 = OpFNegate %float %56
+%56 = OpLoad %v2float %17
+%57 = OpCompositeExtract %float %56 1
+%55 = OpFNegate %float %57
 %58 = OpLoad %v2float %17
 %59 = OpCompositeExtract %float %58 0
 %60 = OpFMul %float %float_2 %59
-%61 = OpFAdd %float %57 %60
+%61 = OpFAdd %float %55 %60
 %62 = OpFAdd %float %61 %float_1
 %63 = OpFMul %float %54 %62
 %64 = OpFAdd %float %52 %63
@@ -425,7 +425,7 @@ OpStore %203 %202
 %205 = OpLoad %v4float %204
 %206 = OpVectorShuffle %v2float %205 %205 0 3
 OpStore %207 %206
-%208 = OpFunctionCall %float %soft_light_component_Qhh2h2 %203 %207
+%208 = OpFunctionCall %float %_soft_light_component_hh2h2 %203 %207
 %209 = OpAccessChain %_ptr_Uniform_v4float %11 %int_0
 %210 = OpLoad %v4float %209
 %211 = OpVectorShuffle %v2float %210 %210 1 3
@@ -434,7 +434,7 @@ OpStore %212 %211
 %214 = OpLoad %v4float %213
 %215 = OpVectorShuffle %v2float %214 %214 1 3
 OpStore %216 %215
-%217 = OpFunctionCall %float %soft_light_component_Qhh2h2 %212 %216
+%217 = OpFunctionCall %float %_soft_light_component_hh2h2 %212 %216
 %218 = OpAccessChain %_ptr_Uniform_v4float %11 %int_0
 %219 = OpLoad %v4float %218
 %220 = OpVectorShuffle %v2float %219 %219 2 3
@@ -443,7 +443,7 @@ OpStore %221 %220
 %223 = OpLoad %v4float %222
 %224 = OpVectorShuffle %v2float %223 %223 2 3
 OpStore %225 %224
-%226 = OpFunctionCall %float %soft_light_component_Qhh2h2 %221 %225
+%226 = OpFunctionCall %float %_soft_light_component_hh2h2 %221 %225
 %227 = OpAccessChain %_ptr_Uniform_v4float %11 %int_0
 %228 = OpLoad %v4float %227
 %229 = OpCompositeExtract %float %228 3

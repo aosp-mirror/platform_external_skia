@@ -12,14 +12,13 @@
 
 #include "include/gpu/GrTypes.h"
 #include "src/core/SkOpts.h"
-#include "src/gpu/GrManagedResource.h"
 #include <atomic>
 
 class GrMtlGpu;
 class GrStencilSettings;
 
 // A wrapper for a MTLDepthStencilState object with caching support.
-class GrMtlDepthStencil : public GrManagedResource {
+class GrMtlDepthStencil : public SkRefCnt {
 public:
     static GrMtlDepthStencil* Create(const GrMtlGpu*, const GrStencilSettings&, GrSurfaceOrigin);
 
@@ -46,7 +45,7 @@ public:
         }
     };
 
-    // Helpers for hashing GrMtlDepthStencil
+    // Helpers for hashing GrMtlSampler
     static Key GenerateKey(const GrStencilSettings&, GrSurfaceOrigin);
 
     static const Key& GetKey(const GrMtlDepthStencil& depthStencil) { return depthStencil.fKey; }
@@ -54,25 +53,12 @@ public:
         return SkOpts::hash(reinterpret_cast<const uint32_t*>(&key), sizeof(Key));
     }
 
-#ifdef SK_TRACE_MANAGED_RESOURCES
-    /** output a human-readable dump of this resource's information
-     */
-    void dumpInfo() const override {
-        SkDebugf("GrMtlDepthStencil: %p (%ld refs)\n", fMtlDepthStencilState,
-                 CFGetRetainCount((CFTypeRef)fMtlDepthStencilState));
-    }
-#endif
-
-    void freeGPUData() const override {
-        fMtlDepthStencilState = nil;
-    }
-
 private:
     GrMtlDepthStencil(id<MTLDepthStencilState> mtlDepthStencilState, Key key)
         : fMtlDepthStencilState(mtlDepthStencilState)
         , fKey(key) {}
 
-    mutable id<MTLDepthStencilState> fMtlDepthStencilState;
+    id<MTLDepthStencilState> fMtlDepthStencilState;
     Key                      fKey;
 };
 

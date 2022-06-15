@@ -104,7 +104,7 @@ GrVkAMDMemoryAllocator::~GrVkAMDMemoryAllocator() {
 
 VkResult GrVkAMDMemoryAllocator::allocateImageMemory(VkImage image, AllocationPropertyFlags flags,
                                                      GrVkBackendMemory* backendMemory) {
-    TRACE_EVENT0_ALWAYS("skia.gpu", TRACE_FUNC);
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     VmaAllocationCreateInfo info;
     info.flags = 0;
     info.usage = VMA_MEMORY_USAGE_UNKNOWN;
@@ -119,7 +119,7 @@ VkResult GrVkAMDMemoryAllocator::allocateImageMemory(VkImage image, AllocationPr
     }
 
     if (AllocationPropertyFlags::kLazyAllocation & flags) {
-        info.requiredFlags |= VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT;
+        info.preferredFlags |= VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT;
     }
 
     if (AllocationPropertyFlags::kProtected & flags) {
@@ -170,7 +170,6 @@ VkResult GrVkAMDMemoryAllocator::allocateBufferMemory(VkBuffer buffer, BufferUsa
         case BufferUsage::kTransfersFromCpuToGpu:
             info.requiredFlags =
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-            info.preferredFlags = 0;
             break;
         case BufferUsage::kTransfersFromGpuToCpu:
             info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
@@ -226,9 +225,6 @@ void GrVkAMDMemoryAllocator::getAllocInfo(const GrVkBackendMemory& memoryHandle,
     }
     if (!SkToBool(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT & memFlags)) {
         flags |= GrVkAlloc::kNoncoherent_Flag;
-    }
-    if (VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT & memFlags) {
-        flags |= GrVkAlloc::kLazilyAllocated_Flag;
     }
 
     alloc->fMemory        = vmaInfo.deviceMemory;

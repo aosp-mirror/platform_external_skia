@@ -14,20 +14,15 @@
 #include "src/gpu/GrXferProcessor.h"
 #include "src/gpu/vk/GrVkManagedResource.h"
 
-#include <cinttypes>
-
 class GrPipeline;
 class GrProgramInfo;
 class GrRenderTarget;
 class GrStencilSettings;
+class GrSwizzle;
 class GrVkCommandBuffer;
 class GrVkGpu;
 class GrVkRenderPass;
 struct SkIRect;
-
-namespace skgpu {
-class Swizzle;
-}
 
 class GrVkPipeline : public GrVkManagedResource {
 public:
@@ -74,12 +69,12 @@ public:
                                         SkISize colorAttachmentDimensions);
     static void SetDynamicBlendConstantState(GrVkGpu*,
                                              GrVkCommandBuffer*,
-                                             const skgpu::Swizzle& writeSwizzle,
+                                             const GrSwizzle& writeSwizzle,
                                              const GrXferProcessor&);
 
 #ifdef SK_TRACE_MANAGED_RESOURCES
     void dumpInfo() const override {
-        SkDebugf("GrVkPipeline: %" PRIdPTR " (%d refs)\n", (intptr_t)fPipeline, this->getRefCnt());
+        SkDebugf("GrVkPipeline: %d (%d refs)\n", fPipeline, this->getRefCnt());
     }
 #endif
 

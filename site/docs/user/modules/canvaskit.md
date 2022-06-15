@@ -55,7 +55,7 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
   <figure>
     <canvas id=shaping width=500 height=500></canvas>
     <figcaption>
-      <a href="https://jsfiddle.skia.org/canvaskit/6a5c211a8cb4a7752297674b3533f7e1bbc2a78dd37f117c29a77bcc68411f31"
+      <a href="https://jsfiddle.skia.org/canvaskit/48c67bde53f66a2f1e578e14b88a85bd062fdcf80c143c5eb92071233d4d86ae"
           target=_blank rel=noopener>
         SkParagraph JSFiddle</a>
     </figcaption>
@@ -63,7 +63,7 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
   <figure>
     <canvas id=shader1 width=512 height=512></canvas>
     <figcaption>
-      <a href="https://jsfiddle.skia.org/canvaskit/b382d3b660c4f314eb6a6eae9c0f1e0aadc95c0a2747b707e0dbe3f65a8b0a14"
+      <a href="https://jsfiddle.skia.org/canvaskit/b9a8d33dc9853e491d5e464bc3b212560d9c546c44d71f00c9db15180ab6d5b8"
           target=_blank rel=noopener>
         Shader JSFiddle</a>
     </figcaption>
@@ -71,26 +71,26 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
   <figure>
     <canvas id=camera3d width=400 height=400></canvas>
     <figcaption>
-      <a href="https://jsfiddle.skia.org/canvaskit/55e66e892a5ae98175cc0b086fbac2100a4642105bb76bd938ed75ccce5af432"
+      <a href="https://jsfiddle.skia.org/canvaskit/a5f9e976f1af65ef13bd978a5e265bdcb92110f5e64699fba5e8871c54be22b6"
           target=_blank rel=noopener>
         3D Cube JSFiddle</a>
     </figcaption>
   </figure>
 
   <h3>Play back bodymovin lottie files with skottie (click for fiddles)</h3>
-  <a href="https://jsfiddle.skia.org/canvaskit/cb0b72eadb45f7e75b4015db7251e9da2cc202a2ce1cbec8eb2e453d83a619a6"
+  <a href="https://jsfiddle.skia.org/canvaskit/6f4540a485ecbb8f0663b5ab3e04d9f3626a45234595d65f1b87942b90678aff"
      target=_blank rel=noopener>
     <canvas id=sk_legos width=300 height=300></canvas>
   </a>
-  <a href="https://jsfiddle.skia.org/canvaskit/e77274c30d63645d3bb82fd366991e27c1e1c3df39def04e999b4fcce9f425a2"
+  <a href="https://jsfiddle.skia.org/canvaskit/2fdbd163e5a4ec55e38e84b6c3e069738d3b12fd858362265192109917f9dd2c"
      target=_blank rel=noopener>
     <canvas id=sk_drinks width=500 height=500></canvas>
   </a>
-  <a href="https://jsfiddle.skia.org/canvaskit/e42700132d80efd3470b0f08334556028490ac08d1938210fa618504c6109c99"
+  <a href="https://jsfiddle.skia.org/canvaskit/73624637ee6d96a8ce8ff8d523b90acdae3ec75b3fe16ddf3040990544c870ec"
      target=_blank rel=noopener>
     <canvas id=sk_party width=500 height=500></canvas>
   </a>
-  <a href="https://jsfiddle.skia.org/canvaskit/987b1f99f4703f9f44dbfb2f43a5ed107672334f68d6262cd53ba44ed7a09236"
+  <a href="https://jsfiddle.skia.org/canvaskit/d63a544b87ccbe6bf8f15c772355d1c6dbc5eafc355bcd27457eca41da843cb5"
      target=_blank rel=noopener>
     <canvas id=sk_onboarding width=500 height=500></canvas>
   </a>
@@ -99,7 +99,7 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
   <figure>
     <canvas id=patheffect width=400 height=400></canvas>
     <figcaption>
-      <a href="https://jsfiddle.skia.org/canvaskit/3588b3b0a7cc93f36d9fa4f08b397c38971dcb1f80a36107f9ad93c051f2cb28"
+      <a href="https://jsfiddle.skia.org/canvaskit/97d4b9ce527a7ffb0f4bed77d9b7f01f889c8dbe68ac053d56739a5122c65b53"
           target=_blank rel=noopener>
         Star JSFiddle</a>
     </figcaption>
@@ -107,7 +107,7 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
   <figure>
     <canvas id=ink width=400 height=400></canvas>
     <figcaption>
-      <a href="https://jsfiddle.skia.org/canvaskit/bd42c174a0dcb2f65ff1f3c803397df14014d1e66b92185e9980dc631a49f258"
+      <a href="https://jsfiddle.skia.org/canvaskit/07c83d37d8115413442fda2c8b7f1bc56823d1c597473970638480e95cba42ee"
           target=_blank rel=noopener>
         Ink JSFiddle</a>
     </figcaption>
@@ -202,6 +202,10 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
     if (!surface) {
       console.log('Could not make surface');
     }
+    const context = CanvasKit.currentContext();
+
+    const canvas = surface.getCanvas();
+
     const paint = new CanvasKit.Paint();
 
     const textPaint = new CanvasKit.Paint();
@@ -215,8 +219,9 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
     let X = 200;
     let Y = 200;
 
-    function drawFrame(canvas) {
+    function drawFrame() {
       const path = starPath(CanvasKit, X, Y);
+      CanvasKit.setCurrentContext(context);
       const dpe = CanvasKit.PathEffect.MakeDash([15, 5, 5, 10], i/5);
       i++;
 
@@ -230,11 +235,12 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
 
       canvas.drawPath(path, paint);
       canvas.drawText('Try Clicking!', 10, 380, textPaint, textFont);
+      canvas.flush();
       dpe.delete();
       path.delete();
-      surface.requestAnimationFrame(drawFrame);
+      window.requestAnimationFrame(drawFrame);
     }
-    surface.requestAnimationFrame(drawFrame);
+    window.requestAnimationFrame(drawFrame);
 
     // Make animation interactive
     let interact = (e) => {
@@ -258,6 +264,10 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
     if (!surface) {
       console.log('Could not make surface');
     }
+    const context = CanvasKit.currentContext();
+
+    const canvas = surface.getCanvas();
+
     let paint = new CanvasKit.Paint();
     paint.setAntiAlias(true);
     paint.setColor(CanvasKit.Color(0, 0, 0, 1.0));
@@ -285,12 +295,15 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
     let paths = [path];
     let paints = [paint];
 
-    function drawFrame(canvas) {
-      canvas.clear(CanvasKit.WHITE);
+    function drawFrame() {
+      CanvasKit.setCurrentContext(context);
+
       for (let i = 0; i < paints.length && i < paths.length; i++) {
         canvas.drawPath(paths[i], paints[i]);
       }
-      surface.requestAnimationFrame(drawFrame);
+      canvas.flush();
+
+      window.requestAnimationFrame(drawFrame);
     }
 
     let hold = false;
@@ -317,7 +330,7 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
     document.getElementById('ink').addEventListener('lostpointercapture', interact);
     document.getElementById('ink').addEventListener('pointerup', interact);
     preventScrolling(document.getElementById('ink'));
-    surface.requestAnimationFrame(drawFrame);
+    window.requestAnimationFrame(drawFrame);
   }
 
   function ShapingExample(CanvasKit) {
@@ -330,6 +343,7 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
     fetch('https://storage.googleapis.com/skia-cdn/google-web-fonts/Roboto-Regular.ttf').then((resp) => {
       resp.arrayBuffer().then((buffer) => {
         robotoData = buffer;
+        requestAnimationFrame(drawFrame);
       });
     });
 
@@ -337,21 +351,28 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
     fetch('https://storage.googleapis.com/skia-cdn/misc/NotoColorEmoji.ttf').then((resp) => {
       resp.arrayBuffer().then((buffer) => {
         emojiData = buffer;
+        requestAnimationFrame(drawFrame);
       });
     });
+
+    const skcanvas = surface.getCanvas();
 
     const font = new CanvasKit.Font(null, 18);
     const fontPaint = new CanvasKit.Paint();
     fontPaint.setStyle(CanvasKit.PaintStyle.Fill);
     fontPaint.setAntiAlias(true);
 
+    skcanvas.drawText(`Fetching Font data...`, 5, 450, fontPaint, font);
+    surface.flush();
+
+    const context = CanvasKit.currentContext();
+
     let paragraph = null;
-    let X = 250;
-    let Y = 250;
+    let X = 10;
+    let Y = 10;
     const str = 'The quick brown fox 🦊 ate a zesty hamburgerfons 🍔.\nThe 👩‍👩‍👧‍👧 laughed.';
 
-    function drawFrame(canvas) {
-      surface.requestAnimationFrame(drawFrame);
+    function drawFrame() {
       if (robotoData && emojiData && !paragraph) {
         const fontMgr = CanvasKit.FontMgr.FromData([robotoData, emojiData]);
 
@@ -371,25 +392,28 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
         paragraph = builder.build();
       }
       if (!paragraph) {
-        canvas.drawText(`Fetching Font data...`, 5, 450, fontPaint, font);
+        requestAnimationFrame(drawFrame);
         return;
       }
-      canvas.clear(CanvasKit.WHITE);
+      CanvasKit.setCurrentContext(context);
+      skcanvas.clear(CanvasKit.WHITE);
 
-      let wrapTo = 350 + 150 * Math.sin(Date.now() / 2000);
+      const wrapTo = 350 + 150 * Math.sin(Date.now() / 2000);
       paragraph.layout(wrapTo);
-      canvas.drawParagraph(paragraph, 0, 0);
-      canvas.drawLine(wrapTo, 0, wrapTo, 400, fontPaint);
+      skcanvas.drawParagraph(paragraph, 0, 0);
+      skcanvas.drawLine(wrapTo, 0, wrapTo, 400, fontPaint);
 
-      const posA = paragraph.getGlyphPositionAtCoordinate(X, Y);
+      let posA = paragraph.getGlyphPositionAtCoordinate(X, Y);
       const cp = str.codePointAt(posA.pos);
       if (cp) {
         const glyph = String.fromCodePoint(cp);
-        canvas.drawText(`At (${X.toFixed(2)}, ${Y.toFixed(2)}) glyph is '${glyph}'`, 5, 450, fontPaint, font);
+        skcanvas.drawText(`At (${X.toFixed(2)}, ${Y.toFixed(2)}) glyph is '${glyph}'`, 5, 450, fontPaint, font);
       }
+
+      surface.flush();
+      requestAnimationFrame(drawFrame);
     }
 
-    surface.requestAnimationFrame(drawFrame);
     // Make animation interactive
     let interact = (e) => {
       // multiply by 4/5 to account for the difference in the canvas width and the CSS width.
@@ -402,7 +426,7 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
     document.getElementById('shaping').addEventListener('lostpointercapture', interact);
     document.getElementById('shaping').addEventListener('pointerup', interact);
     preventScrolling(document.getElementById('shaping'));
-    surface.requestAnimationFrame(drawFrame);
+    window.requestAnimationFrame(drawFrame);
   }
 
   function starPath(CanvasKit, X=128, Y=128, R=116) {
@@ -429,18 +453,22 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
     if (!surface) {
       console.log('Could not make surface');
     }
+    const context = CanvasKit.currentContext();
+    const canvas = surface.getCanvas();
+
     let firstFrame = new Date().getTime();
 
-    function drawFrame(canvas) {
+    function drawFrame() {
       let now = new Date().getTime();
       let seek = ((now - firstFrame) / duration) % 1.0;
-
+      CanvasKit.setCurrentContext(context);
       animation.seek(seek);
-      animation.render(canvas, bounds);
 
-      surface.requestAnimationFrame(drawFrame);
+      animation.render(canvas, bounds);
+      canvas.flush();
+      window.requestAnimationFrame(drawFrame);
     }
-    surface.requestAnimationFrame(drawFrame);
+    window.requestAnimationFrame(drawFrame);
     //animation.delete();
   }
 
@@ -452,6 +480,7 @@ Skia's [Lottie animation](https://skia.org/docs/user/modules/skottie) support.
     if (!surface) {
       throw 'Could not make surface';
     }
+    const skcanvas = surface.getCanvas();
     const paint = new CanvasKit.Paint();
 
     const prog = `
@@ -472,21 +501,27 @@ half4 main(float2 p) {
 }
 `;
 
+    // If there are multiple contexts on the screen, we need to make sure
+    // we switch to this one before we draw.
+    const context = CanvasKit.currentContext();
     const fact = CanvasKit.RuntimeEffect.Make(prog);
-    function drawFrame(canvas) {
-      canvas.clear(CanvasKit.WHITE);
+    function drawFrame() {
+      CanvasKit.setCurrentContext(context);
+      skcanvas.clear(CanvasKit.WHITE);
       const shader = fact.makeShader([
         Math.sin(Date.now() / 2000) / 5,
         256, 256,
         1, 0, 0, 1,
-        0, 1, 0, 1]);
+        0, 1, 0, 1],
+        true/*=opaque*/);
 
       paint.setShader(shader);
-      canvas.drawRect(CanvasKit.LTRBRect(0, 0, 512, 512), paint);
+      skcanvas.drawRect(CanvasKit.LTRBRect(0, 0, 512, 512), paint);
+      surface.flush();
+      requestAnimationFrame(drawFrame);
       shader.delete();
-      surface.requestAnimationFrame(drawFrame);
     }
-    surface.requestAnimationFrame(drawFrame);
+    requestAnimationFrame(drawFrame);
   }
 
   function Camera3D(canvas, textureImgData, normalImgData) {
@@ -558,7 +593,7 @@ half4 main(float2 p) {
       }
 
       half4 main(float2 p) {
-        float3 norm = convert_normal_sample(normal_map.eval(p));
+        float3 norm = convert_normal_sample(sample(normal_map, p));
         float3 plane_norm = normalize(localToWorldAdjInv * float4(norm, 0)).xyz;
 
         float3 plane_pos = (localToWorld * float4(p, 0, 1)).xyz;
@@ -568,7 +603,7 @@ half4 main(float2 p) {
         float dp = dot(plane_norm, light_dir);
         float scale = min(ambient + max(dp, 0), 1);
 
-        return color_map.eval(p) * half4(float4(scale, scale, scale, 1));
+        return sample(color_map, p) * half4(float4(scale, scale, scale, 1));
       }
 `;
 
@@ -659,7 +694,7 @@ half4 main(float2 p) {
       const uniforms = [...lightWorldPos, ...localToWorld, ...normalMatrix(localToWorld)];
       const paint = new CanvasKit.Paint();
       paint.setAntiAlias(true);
-      const shader = fact.makeShaderWithChildren(uniforms, children);
+      const shader = fact.makeShaderWithChildren(uniforms, true /*=opaque*/, children);
       paint.setShader(shader);
       canvas.drawRRect(rr, paint);
     }
@@ -818,6 +853,6 @@ Test your code on our [CanvasKit Fiddle](https://jsfiddle.skia.org/canvaskit)
 Get [CanvasKit on NPM](https://www.npmjs.com/package/canvaskit-wasm).
 Documentation and Typescript definitions are available in the `types/` subfolder
 of the npm package or from the
-[Skia repo](https://github.com/google/skia/tree/main/modules/canvaskit/npm_build/types).
+[Skia repo](https://github.com/google/skia/tree/master/modules/canvaskit/npm_build/types).
 
 Check out the [quickstart guide](../quickstart) as well.

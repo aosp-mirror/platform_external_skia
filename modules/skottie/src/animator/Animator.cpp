@@ -49,7 +49,7 @@ void AnimatablePropertyContainer::shrink_to_fit() {
 
 bool AnimatablePropertyContainer::bindImpl(const AnimationBuilder& abuilder,
                                            const skjson::ObjectValue* jprop,
-                                           AnimatorBuilder& builder) {
+                                           KeyframeAnimatorBuilder& builder) {
     if (!jprop) {
         return false;
     }
@@ -57,21 +57,8 @@ bool AnimatablePropertyContainer::bindImpl(const AnimationBuilder& abuilder,
     const auto& jpropA = (*jprop)["a"];
     const auto& jpropK = (*jprop)["k"];
 
-    // Handle expressions on the property.
-    if (const skjson::StringValue* expr = (*jprop)["x"]) {
-        if (!abuilder.expression_manager()) {
-            abuilder.log(Logger::Level::kWarning, jprop,
-                         "Expression encountered but ExpressionManager not provided.");
-        } else {
-            builder.parseValue(abuilder, jpropK);
-            sk_sp<Animator> expression_animator = builder.makeFromExpression(
-                                                    *abuilder.expression_manager(),
-                                                    expr->begin());
-            if (expression_animator) {
-                fAnimators.push_back(std::move(expression_animator));
-                return true;
-            }
-        }
+    if (!(*jprop)["x"].is<skjson::NullValue>()) {
+        abuilder.log(Logger::Level::kWarning, nullptr, "Unsupported expression.");
     }
 
     // Older Json versions don't have an "a" animation marker.
@@ -93,7 +80,7 @@ bool AnimatablePropertyContainer::bindImpl(const AnimationBuilder& abuilder,
     sk_sp<KeyframeAnimator> animator;
     const skjson::ArrayValue* jkfs = jpropK;
     if (jkfs && jkfs->size() > 0) {
-        animator = builder.makeFromKeyframes(abuilder, *jkfs);
+        animator = builder.make(abuilder, *jkfs);
     }
 
     if (!animator) {

@@ -57,9 +57,8 @@ SkString PaintStringDump(const SkPaint& p) {
     if (d.getStyle() != p.getStyle()) {
         s.appendf("p.setStyle(%s);\n", str(p.getStyle()));
     }
-    if (d.asBlendMode() != p.asBlendMode()) {
-        s.appendf("p.setBlendMode(SkBlendMode::k%s);\n",
-                  SkBlendMode_Name(p.getBlendMode_or(SkBlendMode::kSrcOver)));
+    if (d.getBlendMode() != p.getBlendMode()) {
+        s.appendf("p.setBlendMode(SkBlendMode::k%s);\n", SkBlendMode_Name(p.getBlendMode()));
     }
     if (p.getPathEffect()) {
         s.appendf("p.setPathEffect(/*FIXME*/);\n");

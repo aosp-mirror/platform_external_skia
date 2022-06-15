@@ -9,20 +9,25 @@
 #include "include/core/SkImage.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "modules/canvaskit/WasmCommon.h"
 #include "modules/skottie/include/Skottie.h"
-#include "modules/skottie/include/SkottieProperty.h"
-#include "modules/skottie/utils/SkottieUtils.h"
-#include "modules/skresources/include/SkResources.h"
 #include "modules/sksg/include/SkSGInvalidationController.h"
 
 #include <string>
 #include <vector>
+
 #include <emscripten.h>
 #include <emscripten/bind.h>
+#include "modules/canvaskit/WasmCommon.h"
+
+#if SK_INCLUDE_MANAGED_SKOTTIE
+#include "modules/skottie/include/SkottieProperty.h"
+#include "modules/skottie/utils/SkottieUtils.h"
+#include "modules/skresources/include/SkResources.h"
+#endif // SK_INCLUDE_MANAGED_SKOTTIE
 
 using namespace emscripten;
 
+#if SK_INCLUDE_MANAGED_SKOTTIE
 namespace {
 
 // WebTrack wraps a JS object that has a 'seek' method.
@@ -135,8 +140,8 @@ private:
         fLogger.call<void>(func, std::string(msg), std::string(json));
     }
 
-    inline static constexpr char kWrnFunc[] = "onWarning",
-                                 kErrFunc[] = "onError";
+    static constexpr char kWrnFunc[] = "onWarning",
+                          kErrFunc[] = "onError";
 
     const emscripten::val fLogger;
 };
@@ -275,6 +280,7 @@ private:
 };
 
 } // anonymous ns
+#endif // SK_INCLUDE_MANAGED_SKOTTIE
 
 EMSCRIPTEN_BINDINGS(Skottie) {
     // Animation things (may eventually go in own library)
@@ -284,7 +290,7 @@ EMSCRIPTEN_BINDINGS(Skottie) {
             return std::string(self.version().c_str());
         }))
         .function("_size", optional_override([](skottie::Animation& self,
-                                                WASMPointerF32 oPtr)->void {
+                                                uintptr_t /* float* */ oPtr)->void {
             SkSize* output = reinterpret_cast<SkSize*>(oPtr);
             *output = self.size();
         }))
@@ -297,7 +303,7 @@ EMSCRIPTEN_BINDINGS(Skottie) {
             self.seekFrame(t);
         }))
         .function("_render", optional_override([](skottie::Animation& self, SkCanvas* canvas,
-                                                  WASMPointerF32 fPtr)->void {
+                                                  uintptr_t /* float* */ fPtr)->void {
             const SkRect* dst = reinterpret_cast<const SkRect*>(fPtr);
             self.render(canvas, dst);
         }), allow_raw_pointers());
@@ -307,33 +313,34 @@ EMSCRIPTEN_BINDINGS(Skottie) {
     }));
     constant("skottie", true);
 
+#if SK_INCLUDE_MANAGED_SKOTTIE
     class_<ManagedAnimation>("ManagedAnimation")
         .smart_ptr<sk_sp<ManagedAnimation>>("sk_sp<ManagedAnimation>")
         .function("version"   , &ManagedAnimation::version)
         .function("_size", optional_override([](ManagedAnimation& self,
-                                                WASMPointerF32 oPtr)->void {
+                                                uintptr_t /* float* */ oPtr)->void {
             SkSize* output = reinterpret_cast<SkSize*>(oPtr);
             *output = self.size();
         }))
         .function("duration"  , &ManagedAnimation::duration)
         .function("fps"       , &ManagedAnimation::fps)
         .function("_render", optional_override([](ManagedAnimation& self, SkCanvas* canvas,
-                                                  WASMPointerF32 fPtr)->void {
+                                                  uintptr_t /* float* */ fPtr)->void {
             const SkRect* dst = reinterpret_cast<const SkRect*>(fPtr);
             self.render(canvas, dst);
         }), allow_raw_pointers())
         .function("_seek", optional_override([](ManagedAnimation& self, SkScalar t,
-                                                WASMPointerF32 fPtr) {
+                                                uintptr_t /* float* */ fPtr) {
             SkRect* damageRect = reinterpret_cast<SkRect*>(fPtr);
             damageRect[0] = self.seek(t);
         }))
         .function("_seekFrame", optional_override([](ManagedAnimation& self, double frame,
-                                                     WASMPointerF32 fPtr) {
+                                                     uintptr_t /* float* */ fPtr) {
             SkRect* damageRect = reinterpret_cast<SkRect*>(fPtr);
             damageRect[0] = self.seekFrame(frame);
         }))
         .function("seekFrame" , &ManagedAnimation::seekFrame)
-        .function("_setColor"  , optional_override([](ManagedAnimation& self, const std::string& key, WASMPointerF32 cPtr) {
+        .function("_setColor"  , optional_override([](ManagedAnimation& self, const std::string& key, uintptr_t /* float* */ cPtr) {
             float* fourFloats = reinterpret_cast<float*>(cPtr);
             SkColor4f color = { fourFloats[0], fourFloats[1], fourFloats[2], fourFloats[3] };
             return self.setColor(key, color.toSkColor());
@@ -347,13 +354,14 @@ EMSCRIPTEN_BINDINGS(Skottie) {
 
     function("_MakeManagedAnimation", optional_override([](std::string json,
                                                            size_t assetCount,
-                                                           WASMPointerU32 nptr,
-                                                           WASMPointerU32 dptr,
-                                                           WASMPointerU32 sptr,
+                                                           uintptr_t /* char**     */ nptr,
+                                                           uintptr_t /* uint8_t**  */ dptr,
+                                                           uintptr_t /* size_t*    */ sptr,
                                                            std::string prop_prefix,
                                                            emscripten::val soundMap,
                                                            emscripten::val logger)
                                                         ->sk_sp<ManagedAnimation> {
+        // See the comment in canvaskit_bindings.cpp about the use of uintptr_t
         const auto assetNames = reinterpret_cast<char**   >(nptr);
         const auto assetDatas = reinterpret_cast<uint8_t**>(dptr);
         const auto assetSizes = reinterpret_cast<size_t*  >(sptr);
@@ -374,4 +382,5 @@ EMSCRIPTEN_BINDINGS(Skottie) {
                                       prop_prefix, std::move(logger));
     }));
     constant("managed_skottie", true);
+#endif // SK_INCLUDE_MANAGED_SKOTTIE
 }
