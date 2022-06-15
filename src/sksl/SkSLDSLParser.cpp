@@ -497,7 +497,11 @@ bool DSLParser::parseArrayDimensions(Position pos, DSLType* type) {
     Token next;
     while (this->checkNext(Token::Kind::TK_LBRACKET, &next)) {
         if (this->checkNext(Token::Kind::TK_RBRACKET)) {
-            this->error(this->rangeFrom(pos), "unsized arrays are not permitted here");
+            if (this->allowUnsizedArrays()) {
+                *type = UnsizedArray(*type, this->rangeFrom(pos));
+            } else {
+                this->error(this->rangeFrom(pos), "unsized arrays are not permitted here");
+            }
         } else {
             SKSL_INT size;
             if (!this->arraySize(&size)) {
@@ -724,7 +728,7 @@ DSLType DSLParser::structDeclaration() {
         this->error(this->rangeFrom(start), "struct '" + std::string(this->text(name)) +
                 "' must contain at least one field");
     }
-    return dsl::Struct(this->text(name), SkMakeSpan(fields), this->rangeFrom(start));
+    return dsl::Struct(this->text(name), SkSpan(fields), this->rangeFrom(start));
 }
 
 /* structDeclaration ((IDENTIFIER varDeclarationEnd) | SEMICOLON) */
@@ -975,7 +979,11 @@ DSLType DSLParser::type(DSLModifiers* modifiers) {
     Token bracket;
     while (this->checkNext(Token::Kind::TK_LBRACKET, &bracket)) {
         if (this->checkNext(Token::Kind::TK_RBRACKET)) {
-            this->error(this->rangeFrom(bracket), "unsized arrays are not permitted here");
+            if (this->allowUnsizedArrays()) {
+                result = UnsizedArray(result, this->rangeFrom(type));
+            } else {
+                this->error(this->rangeFrom(bracket), "unsized arrays are not permitted here");
+            }
         } else {
             SKSL_INT size;
             if (!this->arraySize(&size)) {

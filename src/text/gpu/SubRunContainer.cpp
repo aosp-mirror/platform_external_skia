@@ -11,11 +11,11 @@
 #include "src/core/SkDescriptor.h"
 #include "src/core/SkDistanceFieldGen.h"
 #include "src/core/SkGlyphBuffer.h"
-#include "src/core/SkGlyphRun.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkRectPriv.h"
 #include "src/core/SkStrikeCache.h"
 #include "src/gpu/AtlasTypes.h"
+#include "src/text/GlyphRun.h"
 #include "src/text/gpu/Glyph.h"
 #include "src/text/gpu/GlyphVector.h"
 #include "src/text/gpu/SubRunAllocator.h"
@@ -525,7 +525,7 @@ std::optional<PathOpSubmitter> PathOpSubmitter::MakeFromBuffer(SkReadBuffer& buf
     auto paths = alloc->makeUniqueArray<SkPath>(glyphCount);
     SkBulkGlyphMetricsAndPaths pathGetter{std::move(strike)};
 
-    for (auto [i, glyphID] : SkMakeEnumerate(SkMakeSpan(glyphIDs, glyphCount))) {
+    for (auto [i, glyphID] : SkMakeEnumerate(SkSpan(glyphIDs, glyphCount))) {
         const SkPath* path = pathGetter.glyph(glyphID)->path();
         // There should never be missing paths in a sub run.
         if (path == nullptr) { return {}; }
@@ -535,8 +535,8 @@ std::optional<PathOpSubmitter> PathOpSubmitter::MakeFromBuffer(SkReadBuffer& buf
     SkASSERT(buffer.isValid());
     return {PathOpSubmitter{isAntiAlias,
                             strikeToSourceScale,
-                            SkMakeSpan(positions, glyphCount),
-                            SkMakeSpan(glyphIDs, glyphCount),
+                            SkSpan(positions, glyphCount),
+                            SkSpan(glyphIDs, glyphCount),
                             std::move(paths),
                             *descriptor->getDesc()}};
 }
@@ -575,8 +575,8 @@ PathOpSubmitter PathOpSubmitter::Make(const SkZip<SkGlyphVariant, SkPoint>& acce
 
     return PathOpSubmitter{isAntiAliased,
                            strikeToSourceScale,
-                           SkMakeSpan(positions, glyphCount),
-                           SkMakeSpan(glyphIDs, glyphCount),
+                           SkSpan(positions, glyphCount),
+                           SkSpan(glyphIDs, glyphCount),
                            std::move(paths),
                            descriptor};
 }
@@ -793,7 +793,7 @@ std::optional<DrawableOpSubmitter> DrawableOpSubmitter::MakeFromBuffer(
 
     auto drawables = alloc->makePODArray<SkDrawable*>(glyphCount);
     SkBulkGlyphMetricsAndDrawables drawableGetter(sk_sp<SkStrike>{strike});
-    auto glyphs = drawableGetter.glyphs(SkMakeSpan(glyphIDs, glyphCount));
+    auto glyphs = drawableGetter.glyphs(SkSpan(glyphIDs, glyphCount));
 
     for (auto [i, glyph] : SkMakeEnumerate(glyphs)) {
         drawables[i] = glyph->drawable();
@@ -801,9 +801,9 @@ std::optional<DrawableOpSubmitter> DrawableOpSubmitter::MakeFromBuffer(
 
     SkASSERT(buffer.isValid());
     return {DrawableOpSubmitter{strikeToSourceScale,
-                                SkMakeSpan(positions, glyphCount),
-                                SkMakeSpan(glyphIDs, glyphCount),
-                                SkMakeSpan(drawables, glyphCount),
+                                SkSpan(positions, glyphCount),
+                                SkSpan(glyphIDs, glyphCount),
+                                SkSpan(drawables, glyphCount),
                                 std::move(strike),
                                 *descriptor->getDesc()}};
 }
@@ -840,9 +840,9 @@ DrawableOpSubmitter DrawableOpSubmitter::Make(const SkZip<SkGlyphVariant, SkPoin
     }
 
     return DrawableOpSubmitter{strikeToSourceScale,
-                               SkMakeSpan(positions, glyphCount),
-                               SkMakeSpan(glyphIDs, glyphCount),
-                               SkMakeSpan(drawables, glyphCount),
+                               SkSpan(positions, glyphCount),
+                               SkSpan(glyphIDs, glyphCount),
+                               SkSpan(drawables, glyphCount),
                                std::move(strike),
                                descriptor};
 }
@@ -2133,7 +2133,7 @@ SubRunContainerOwner SubRunContainer::MakeFromBufferInAlloc(SkReadBuffer& buffer
     return container;
 }
 
-size_t SubRunContainer::EstimateAllocSize(const SkGlyphRunList& glyphRunList) {
+size_t SubRunContainer::EstimateAllocSize(const GlyphRunList& glyphRunList) {
     // The difference in alignment from the per-glyph data to the SubRun;
     constexpr size_t alignDiff = alignof(DirectMaskSubRun) - alignof(DevicePosition);
     constexpr size_t vertexDataToSubRunPadding = alignDiff > 0 ? alignDiff : 0;
@@ -2146,7 +2146,7 @@ size_t SubRunContainer::EstimateAllocSize(const SkGlyphRunList& glyphRunList) {
 }
 
 std::tuple<bool, SubRunContainerOwner> SubRunContainer::MakeInAlloc(
-        const SkGlyphRunList& glyphRunList,
+        const GlyphRunList& glyphRunList,
         const SkMatrix& positionMatrix,
         const SkPaint& runPaint,
         SkStrikeDeviceInfo strikeDeviceInfo,

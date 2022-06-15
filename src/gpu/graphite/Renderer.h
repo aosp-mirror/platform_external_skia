@@ -27,9 +27,11 @@
 enum class SkPathFillType;
 class SkPipelineDataGatherer;
 
+namespace skgpu { enum class MaskFormat; }
+
 namespace skgpu::graphite {
 class DrawWriter;
-class DrawGeometry;
+class DrawParams;
 class ResourceProvider;
 
 class RenderStep {
@@ -39,7 +41,7 @@ public:
     // The DrawWriter is configured with the vertex and instance strides of the RenderStep, and its
     // primitive type. The recorded draws will be executed with a graphics pipeline compatible with
     // this RenderStep.
-    virtual void writeVertices(DrawWriter*, const DrawGeometry&) const = 0;
+    virtual void writeVertices(DrawWriter*, const DrawParams&) const = 0;
 
     // Write out the uniform values (aligned for the layout). These values will be de-duplicated
     // across all draws using the RenderStep before uploading to the GPU, but it can be assumed the
@@ -50,7 +52,7 @@ public:
     // nice if we could remember the offsets for the layout/gpu and reuse them across draws.
     // Similarly, it would be nice if this could write into reusable storage and then DrawPass or
     // UniformCache handles making an sk_sp if we need to assign a new unique ID to the uniform data
-    virtual void writeUniforms(const DrawGeometry&, SkPipelineDataGatherer*) const = 0;
+    virtual void writeUniforms(const DrawParams&, SkPipelineDataGatherer*) const = 0;
 
     // Returns a name formatted as "Subclass[variant]", where "Subclass" matches the C++ class name
     // and variant is a unique term describing instance's specific configuration.
@@ -95,9 +97,9 @@ public:
 
     // The uniforms of a RenderStep are bound to the kRenderStep slot, the rest of the pipeline
     // may still use uniforms bound to other slots.
-    SkSpan<const SkUniform> uniforms()           const { return SkMakeSpan(fUniforms);      }
-    SkSpan<const Attribute> vertexAttributes()   const { return SkMakeSpan(fVertexAttrs);   }
-    SkSpan<const Attribute> instanceAttributes() const { return SkMakeSpan(fInstanceAttrs); }
+    SkSpan<const SkUniform> uniforms()           const { return SkSpan(fUniforms);      }
+    SkSpan<const Attribute> vertexAttributes()   const { return SkSpan(fVertexAttrs);   }
+    SkSpan<const Attribute> instanceAttributes() const { return SkSpan(fInstanceAttrs); }
 
 
     // TODO: Actual API to do things
@@ -204,6 +206,10 @@ public:
     static const Renderer& ConvexTessellatedWedges();
 
     static const Renderer& TessellatedStrokes();
+
+    static const Renderer& TextDirect(MaskFormat);
+
+    static const Renderer& TextSDF(MaskFormat);
 
     // TODO: Add renderers for primitives (rect, rrect, etc.), special draws (atlas, vertices, text)
     // and support inverse filled strokes.

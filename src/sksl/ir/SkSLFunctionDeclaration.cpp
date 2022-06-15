@@ -292,6 +292,11 @@ static bool check_main_signature(const Context& context, Position pos, const Typ
         }
         case ProgramKind::kVertex:
         case ProgramKind::kGraphiteVertex:
+        case ProgramKind::kCompute:
+            if (!returnType.matches(*context.fTypes.fVoid)) {
+                errors.error(pos, "'main' must return 'void'");
+                return false;
+            }
             if (parameters.size()) {
                 errors.error(pos, "shader 'main' must have zero parameters");
                 return false;
@@ -335,11 +340,11 @@ static bool find_existing_declaration(const Context& context,
         const FunctionDeclaration* declPtr;
         switch (entry->kind()) {
             case Symbol::Kind::kUnresolvedFunction:
-                functions = SkMakeSpan(entry->as<UnresolvedFunction>().functions());
+                functions = SkSpan(entry->as<UnresolvedFunction>().functions());
                 break;
             case Symbol::Kind::kFunctionDeclaration:
                 declPtr = &entry->as<FunctionDeclaration>();
-                functions = SkMakeSpan(&declPtr, 1);
+                functions = SkSpan(&declPtr, 1);
                 break;
             default:
                 errors.error(pos, "symbol '" + std::string(name) + "' was already defined");

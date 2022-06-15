@@ -137,7 +137,7 @@ TextLine::TextLine(ParagraphImpl* owner,
         auto& run = fOwner->run(runIndex);
         runLevels[runLevelsIndex++] = run.fBidiLevel;
         fMaxRunMetrics.add(
-            InternalLineMetrics(run.fFontMetrics.fAscent, run.fFontMetrics.fDescent, run.fFontMetrics.fLeading));
+            InternalLineMetrics(run.correctAscent(), run.correctDescent(), run.fFontMetrics.fLeading));
     }
     SkASSERT(runLevelsIndex == numRuns);
 
@@ -424,6 +424,7 @@ void TextLine::paintShadow(SkCanvas* canvas,
         if (context.clippingNeeded) {
             canvas->save();
             SkRect clip = extendHeight(context);
+            clip.offset(x, y);
             clip.offset(this->offset());
             canvas->clipRect(clip);
         }

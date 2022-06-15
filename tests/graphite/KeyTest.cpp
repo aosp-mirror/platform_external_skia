@@ -16,13 +16,25 @@ namespace {
 
 SkPaintParamsKey create_key_with_data(SkPaintParamsKeyBuilder* builder,
                                       int snippetID,
-                                      SkSpan<const uint8_t> span) {
+                                      SkSpan<const uint8_t> dataPayload) {
     SkDEBUGCODE(builder->checkReset());
 
     builder->beginBlock(snippetID);
+    builder->addBytes(dataPayload.size(), dataPayload.data());
+    builder->endBlock();
 
-    builder->addBytes(span.size(), span.data());
+    return builder->lockAsKey();
+}
 
+SkPaintParamsKey create_key_with_ptr(SkPaintParamsKeyBuilder* builder,
+                                     int snippetID,
+                                     SkSpan<const uint8_t> dataPayload,
+                                     void* pointerData) {
+    SkDEBUGCODE(builder->checkReset());
+
+    builder->beginBlock(snippetID);
+    builder->addBytes(dataPayload.size(), dataPayload.data());
+    builder->addPointer(pointerData);
     builder->endBlock();
 
     return builder->lockAsKey();
@@ -31,7 +43,7 @@ SkPaintParamsKey create_key_with_data(SkPaintParamsKeyBuilder* builder,
 SkPaintParamsKey create_key(SkPaintParamsKeyBuilder* builder, int snippetID, int size) {
     SkASSERT(size <= 1024);
     static constexpr uint8_t kDummyData[1024] = {};
-    return create_key_with_data(builder, snippetID, SkMakeSpan(kDummyData, size));
+    return create_key_with_data(builder, snippetID, SkSpan(kDummyData, size));
 }
 
 } // anonymous namespace
@@ -59,7 +71,7 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(KeyValidBlockSizeTest, reporter, context) {
             {"data", SkPaintParamsKey::DataPayloadType::kByte, kMaxBlockDataSize},
     };
 
-    int userSnippetID = dict->addUserDefinedSnippet("keyAlmostTooBig", SkMakeSpan(kDataFields));
+    int userSnippetID = dict->addUserDefinedSnippet("keyAlmostTooBig", kDataFields);
     SkPaintParamsKey key = create_key(&builder, userSnippetID, kMaxBlockDataSize);
 
     // Key is created successfully.
@@ -78,7 +90,7 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(KeyTooLargeBlockSizeTest, reporter, context) {
             {"data", SkPaintParamsKey::DataPayloadType::kByte, kBlockDataSize},
     };
 
-    int userSnippetID = dict->addUserDefinedSnippet("keyTooBig", SkMakeSpan(kDataFields));
+    int userSnippetID = dict->addUserDefinedSnippet("keyTooBig", kDataFields);
     SkPaintParamsKey key = create_key(&builder, userSnippetID, kBlockDataSize);
 
     // Key creation fails.
@@ -93,8 +105,8 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(KeyEqualityChecksSnippetID, reporter, context) {
             {"data", SkPaintParamsKey::DataPayloadType::kByte, kBlockDataSize},
     };
 
-    int userSnippetID1 = dict->addUserDefinedSnippet("key1", SkMakeSpan(kDataFields));
-    int userSnippetID2 = dict->addUserDefinedSnippet("key2", SkMakeSpan(kDataFields));
+    int userSnippetID1 = dict->addUserDefinedSnippet("key1", kDataFields);
+    int userSnippetID2 = dict->addUserDefinedSnippet("key2", kDataFields);
 
     SkPaintParamsKeyBuilder builderA(dict, SkBackend::kGraphite);
     SkPaintParamsKeyBuilder builderB(dict, SkBackend::kGraphite);
@@ -118,7 +130,7 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(KeyEqualityChecksData, reporter, context) {
             {"data", SkPaintParamsKey::DataPayloadType::kByte, kBlockDataSize},
     };
 
-    int userSnippetID = dict->addUserDefinedSnippet("key", SkMakeSpan(kDataFields));
+    int userSnippetID = dict->addUserDefinedSnippet("key", kDataFields);
 
     static constexpr uint8_t kData [kBlockDataSize] = {1, 2, 3, 4};
     static constexpr uint8_t kData2[kBlockDataSize] = {1, 2, 3, 99};
@@ -126,15 +138,46 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(KeyEqualityChecksData, reporter, context) {
     SkPaintParamsKeyBuilder builderA(dict, SkBackend::kGraphite);
     SkPaintParamsKeyBuilder builderB(dict, SkBackend::kGraphite);
     SkPaintParamsKeyBuilder builderC(dict, SkBackend::kGraphite);
-    SkPaintParamsKey keyA = create_key_with_data(&builderA, userSnippetID, SkMakeSpan(kData));
-    SkPaintParamsKey keyB = create_key_with_data(&builderB, userSnippetID, SkMakeSpan(kData));
-    SkPaintParamsKey keyC = create_key_with_data(&builderC, userSnippetID, SkMakeSpan(kData2));
+    SkPaintParamsKey keyA = create_key_with_data(&builderA, userSnippetID, kData);
+    SkPaintParamsKey keyB = create_key_with_data(&builderB, userSnippetID, kData);
+    SkPaintParamsKey keyC = create_key_with_data(&builderC, userSnippetID, kData2);
 
     // Verify that keyA matches keyB, and that it does not match keyC.
     REPORTER_ASSERT(reporter, keyA == keyB);
     REPORTER_ASSERT(reporter, keyA != keyC);
     REPORTER_ASSERT(reporter, !(keyA == keyC));
     REPORTER_ASSERT(reporter, !(keyA != keyB));
+}
+
+DEF_GRAPHITE_TEST_FOR_CONTEXTS(KeyEqualityDoesNotCheckPointers, reporter, context) {
+
+    SkShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
+    static const int kBlockDataSize = 4;
+    static constexpr SkPaintParamsKey::DataPayloadField kDataFields[] = {
+            {"data", SkPaintParamsKey::DataPayloadType::kByte, kBlockDataSize},
+    };
+
+    int userSnippetID = dict->addUserDefinedSnippet("key", SkSpan(kDataFields), /*numPointers=*/1);
+
+    static constexpr uint8_t kData[kBlockDataSize] = {1, 2, 3, 4};
+    int arbitraryData1 = 1;
+    int arbitraryData2 = 2;
+
+    SkPaintParamsKeyBuilder builderA(dict, SkBackend::kGraphite);
+    SkPaintParamsKeyBuilder builderB(dict, SkBackend::kGraphite);
+    SkPaintParamsKeyBuilder builderC(dict, SkBackend::kGraphite);
+    SkPaintParamsKey keyA = create_key_with_ptr(&builderA, userSnippetID, SkSpan(kData),
+                                                &arbitraryData1);
+    SkPaintParamsKey keyB = create_key_with_ptr(&builderB, userSnippetID, SkSpan(kData),
+                                                &arbitraryData2);
+    SkPaintParamsKey keyC = create_key_with_ptr(&builderC, userSnippetID, SkSpan(kData),
+                                                nullptr);
+
+    // Verify that keyA, keyB, and keyC all match, even though the pointer data does not.
+    REPORTER_ASSERT(reporter, keyA == keyB);
+    REPORTER_ASSERT(reporter, keyB == keyC);
+    REPORTER_ASSERT(reporter, !(keyA != keyB));
+    REPORTER_ASSERT(reporter, !(keyB != keyC));
 }
 
 DEF_GRAPHITE_TEST_FOR_CONTEXTS(KeyBlockReaderWorks, reporter, context) {
@@ -147,7 +190,7 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(KeyBlockReaderWorks, reporter, context) {
             {"DataY", SkPaintParamsKey::DataPayloadType::kByte, kBlockDataSizeY},
     };
 
-    int userSnippetID = dict->addUserDefinedSnippet("key", SkMakeSpan(kDataFields));
+    int userSnippetID = dict->addUserDefinedSnippet("key", kDataFields);
 
     static constexpr uint8_t kDataX[kBlockDataSizeX] = {1, 2, 3};
     static constexpr uint8_t kDataY[kBlockDataSizeY] = {4, 5, 6, 7, 8, 9, 10};
