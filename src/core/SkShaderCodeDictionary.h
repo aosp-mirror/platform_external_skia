@@ -61,6 +61,7 @@ struct SkShaderSnippet {
                     const char* functionName,
                     GenerateGlueCodeForEntry glueCodeGenerator,
                     int numChildren,
+                    int numPointers,
                     SkSpan<const SkPaintParamsKey::DataPayloadField> dataPayloadExpectations)
             : fName(name)
             , fUniforms(uniforms)
@@ -69,16 +70,14 @@ struct SkShaderSnippet {
             , fStaticFunctionName(functionName)
             , fGlueCodeGenerator(glueCodeGenerator)
             , fNumChildren(numChildren)
-            , fDataPayloadExpectations(dataPayloadExpectations) {
-    }
+            , fNumPointers(numPointers)
+            , fDataPayloadExpectations(dataPayloadExpectations) {}
 
     std::string getMangledUniformName(int uniformIndex, int mangleId) const;
 
     bool needsLocalCoords() const {
         return fSnippetRequirementFlags & SnippetRequirementFlags::kLocalCoords;
     }
-
-    int numExpectedChildren() const { return fNumChildren; }
 
     const char* fName = nullptr;
     SkSpan<const SkUniform> fUniforms;
@@ -87,6 +86,7 @@ struct SkShaderSnippet {
     const char* fStaticFunctionName = nullptr;
     GenerateGlueCodeForEntry fGlueCodeGenerator = nullptr;
     int fNumChildren = 0;
+    int fNumPointers = 0;
     SkSpan<const SkPaintParamsKey::DataPayloadField> fDataPayloadExpectations;
 };
 
