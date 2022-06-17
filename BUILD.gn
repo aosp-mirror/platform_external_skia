@@ -632,6 +632,7 @@ if (skia_compile_modules || skia_compile_sksl_tests) {
   # Copy the module source files into the out directory.
   copy("sksl_pre_includes") {
     sources = [
+      "src/sksl/sksl_compute.sksl",
       "src/sksl/sksl_frag.sksl",
       "src/sksl/sksl_gpu.sksl",
       "src/sksl/sksl_graphite_frag.sksl",
@@ -1951,6 +1952,14 @@ if (skia_enable_tools) {
       "tools/trace/SkDebugfTracer.cpp",
       "tools/trace/SkDebugfTracer.h",
     ]
+    if (skia_use_perfetto) {
+      deps += [ "//third_party/perfetto" ]
+      sources += [
+        "tools/trace/SkPerfettoTrace.cpp",
+        "tools/trace/SkPerfettoTrace.h",
+      ]
+      defines = [ "SK_USE_PERFETTO" ]
+    }
   }
 
   test_lib("tool_utils") {
