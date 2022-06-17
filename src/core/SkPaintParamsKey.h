@@ -87,6 +87,7 @@ public:
         // is checked against the data payload's structure.
         SkSpan<const uint8_t> bytes(int fieldIndex) const;
         SkSpan<const SkColor4f> colors(int fieldIndex) const;
+        const void* pointer(int fieldIndex) const;
 
         const SkShaderSnippet* entry() const { return fEntry; }
 
@@ -100,6 +101,7 @@ public:
 
         BlockReader(const SkShaderCodeDictionary*,
                     SkSpan<const uint8_t> parentSpan,
+                    SkSpan<const void*> pointerSpan,
                     int offsetInParent);
 
         SkBuiltInCodeSnippetID codeSnippetId() const {
@@ -111,6 +113,7 @@ public:
         SkSpan<const uint8_t> dataPayload() const;
 
         SkSpan<const uint8_t> fBlock;
+        SkSpan<const void*> fPointerSpan;
         const SkShaderSnippet* fEntry;
     };
 
@@ -264,8 +267,6 @@ private:
         int fCurDataPayloadEntry = 0;
         int fNumExpectedChildren = 0;
         int fNumActualChildren = 0;
-        int fNumExpectedPointers = 0;
-        int fNumActualPointers = 0;
 #endif
     };
 
