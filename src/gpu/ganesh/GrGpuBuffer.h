@@ -80,13 +80,14 @@ public:
      */
     bool updateData(const void* src, size_t srcSizeInBytes);
 
+    GrGpuBufferType intendedType() const { return fIntendedType; }
+
 protected:
     GrGpuBuffer(GrGpu*,
                 size_t sizeInBytes,
                 GrGpuBufferType,
                 GrAccessPattern,
                 std::string_view label);
-    GrGpuBufferType intendedType() const { return fIntendedType; }
 
     void* fMapPtr;
 
@@ -103,12 +104,6 @@ private:
     size_t            fSizeInBytes;
     GrAccessPattern   fAccessPattern;
     GrGpuBufferType   fIntendedType;
-
-#ifdef SK_DEBUG
-    // Static and stream access buffers are only ever written to once. This is used to track that
-    // and assert it is true.
-    bool              fHasWrittenToBuffer = false;
-#endif
 };
 
 #endif
