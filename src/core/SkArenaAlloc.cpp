@@ -6,8 +6,12 @@
  */
 
 #include "src/core/SkArenaAlloc.h"
+
 #include <algorithm>
 #include <new>
+
+#include "include/private/SkMalloc.h"
+#include "src/core/SkASAN.h"
 
 static char* end_chain(char*) { return nullptr; }
 
@@ -23,6 +27,7 @@ SkArenaAlloc::SkArenaAlloc(char* block, size_t size, size_t firstHeapAllocation)
 
     if (fCursor != nullptr) {
         this->installFooter(end_chain, 0);
+        sk_asan_poison_memory_region(fCursor, fEnd - fCursor);
     }
 }
 
@@ -61,10 +66,9 @@ char* SkArenaAlloc::NextBlock(char* footerEnd) {
     char* next;
     memmove(&next, objEnd, sizeof(char*));
     RunDtorsOnBlock(next);
-    delete [] objEnd;
+    sk_free(objEnd);
     return nullptr;
 }
-
 
 void SkArenaAlloc::ensureSpace(uint32_t size, uint32_t alignment) {
     constexpr uint32_t headerSize = sizeof(Footer) + sizeof(ptrdiff_t);
@@ -88,12 +92,16 @@ void SkArenaAlloc::ensureSpace(uint32_t size, uint32_t alignment) {
         allocationSize = (allocationSize + mask) & ~mask;
     }
 
-    char* newBlock = new char[allocationSize];
+    char* newBlock = static_cast<char*>(sk_malloc_throw(allocationSize, 1));
 
     auto previousDtor = fDtorCursor;
     fCursor = newBlock;
     fDtorCursor = newBlock;
     fEnd = fCursor + allocationSize;
+
+    // poison the unused bytes in the block.
+    sk_asan_poison_memory_region(fCursor, fEnd - fCursor);
+
     this->installRaw(previousDtor);
     this->installFooter(NextBlock, 0);
 }
