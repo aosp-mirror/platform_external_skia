@@ -40,7 +40,9 @@
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/core/SkSpecialImage.h"
+#include "src/core/SkTraceEvent.h"
 #include "src/shaders/SkImageShader.h"
+#include "src/text/gpu/SubRunContainer.h"
 #include "src/text/gpu/TextBlobRedrawCoordinator.h"
 
 #include <unordered_map>
@@ -208,8 +210,7 @@ Device::Device(Recorder* recorder, sk_sp<DrawContext> dc)
         , fDisjointStencilSet(std::make_unique<IntersectionTreeSet>())
         , fCachedLocalToDevice(SkM44())
         , fCurrentDepth(DrawOrder::kClearDepth)
-        // TODO: set this up based on ContextOptions
-        , fSDFTControl(true, false, 18, 324, true)
+        , fSDFTControl(recorder->priv().getSDFTControl(false))
         , fDrawsOverlap(false) {
     SkASSERT(SkToBool(fDC) && SkToBool(fRecorder));
     fRecorder->registerDevice(this);
@@ -543,11 +544,48 @@ void Device::onDrawGlyphRunList(SkCanvas* canvas,
                                 const SkPaint& initialPaint,
                                 const SkPaint& drawingPaint) {
     fRecorder->priv().textBlobCache()->drawGlyphRunList(canvas,
-                                                        this->asMatrixProvider(),
+                                                        this->localToDevice(),
                                                         glyphRunList,
                                                         drawingPaint,
                                                         this->strikeDeviceInfo(),
                                                         this);
+}
+
+void Device::drawAtlasSubRun(const sktext::gpu::AtlasSubRun* subRun,
+                             const SkMatrix& viewMatrix,
+                             SkPoint drawOrigin,
+                             const SkPaint& paint,
+                             sk_sp<SkRefCnt> subRunStorage) {
+    // TODO: This exercises the glyph uploads but still needs work for rendering.
+    const int subRunEnd = subRun->glyphCount();
+    for (int subRunCursor = 0; subRunCursor < subRunEnd;) {
+        // For the remainder of the run, add any atlas uploads to the Recorder's AtlasManager
+        auto[ok, glyphsRegenerated] = subRun->regenerateAtlas(subRunCursor, subRunEnd, fRecorder);
+        // There was a problem allocating the glyph in the atlas. Bail.
+        if (!ok) {
+            return;
+        }
+#if 0
+        if (glyphsRegenerated) {
+            // TODO: create Geometry for SubRun, using subRunCursor and glyphsRegenerated.
+            // Geometry will draw glyphs in this range.
+            this->drawGeometry(geometry,
+                               paint,
+                               kFillStyle,
+                               DrawFlags::kIgnorePathEffect | DrawFlags::kIgnoreMaskFilter);
+        }
+#endif
+        subRunCursor += glyphsRegenerated;
+
+        if (subRunCursor < subRunEnd) {
+            // Flush if not all the glyphs are handled because the atlas is out of space.
+            // We flush every Device because the glyphs that are being flushed/referenced are not
+            // necessarily specific to this Device. This addresses both multiple SkSurfaces within
+            // a Recorder, and nested layers.
+            ATRACE_ANDROID_FRAMEWORK_ALWAYS("Atlas full");
+            fRecorder->priv().flushTrackedDevices();
+        }
+    }
 }
 
 void Device::drawGeometry(const Geometry& geometry,
@@ -687,8 +725,7 @@ void Device::drawGeometry(const Geometry& geometry,
     //                          shape.isRect() &&
     //                          localToDevice.type() <= Transform::Type::kRectStaysRect;
 
-    // Post-draw book keeping (update tokens, bounds manager, depth tracking, etc.)
-    fRecorder->priv().tokenTracker()->issueDrawToken();
+    // Post-draw book keeping (bounds manager, depth tracking, etc.)
     fColorDepthBoundsManager->recordDraw(clip.drawBounds(), order.paintOrder());
     fCurrentDepth = order.depth();
     fDrawsOverlap |= (prevDraw != DrawOrder::kNoIntersection);
@@ -813,8 +850,6 @@ void Device::flushPendingWorkToRecorder() {
     fCurrentDepth = DrawOrder::kClearDepth;
     // NOTE: fDrawsOverlap is not reset here because that is a persistent property of everything
     // drawn into the Device, and not just the currently accumulating pass.
-
-    fRecorder->priv().tokenTracker()->flushToken();
 }
 
 bool Device::needsFlushBeforeDraw(int numNewDraws) const {

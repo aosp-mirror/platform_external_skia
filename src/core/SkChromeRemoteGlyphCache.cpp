@@ -7,6 +7,7 @@
 
 #include "include/private/chromium/SkChromeRemoteGlyphCache.h"
 
+#include <algorithm>
 #include <bitset>
 #include <iterator>
 #include <memory>
@@ -22,6 +23,7 @@
 #include "src/core/SkDevice.h"
 #include "src/core/SkDraw.h"
 #include "src/core/SkEnumerate.h"
+#include "src/core/SkGlyph.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkScalerCache.h"
 #include "src/core/SkStrikeCache.h"
@@ -186,6 +188,8 @@ public:
     void prepareForDrawableDrawing(
             SkDrawableGlyphBuffer* accepted, SkSourceGlyphBuffer* rejected) override;
 
+    SkScalar findMaximumGlyphDimension(SkSpan<const SkGlyphID> glyphs) override;
+
     void onAboutToExitScope() override {}
 
     sk_sp<SkStrike> getUnderlyingStrike() const override { return nullptr; }
@@ -197,6 +201,8 @@ public:
     void resetScalerContext();
 
 private:
+    SkGlyphDigest digest(SkPackedGlyphID);
+
     template <typename Rejector>
     void commonMaskLoop(
             SkDrawableGlyphBuffer* accepted, SkSourceGlyphBuffer* rejected, Rejector&& reject);
@@ -399,24 +405,38 @@ void RemoteStrike::writeGlyphDrawable(const SkGlyph& glyph, Serializer* serializ
     memcpy(serializer->allocate(data->size(), kDrawableAlignment), data->data(), data->size());
 }
 
+SkGlyphDigest RemoteStrike::digest(SkPackedGlyphID packedID) {
+    SkGlyphDigest* digest = fSentGlyphs.find(packedID);
+    if (digest == nullptr) {
+        // Put the new SkGlyph in the glyphs to send.
+        this->ensureScalerContext();
+        fMasksToSend.emplace_back(fContext->makeGlyph(packedID, &fAlloc));
+        SkGlyph* glyph = &fMasksToSend.back();
+
+        SkGlyphDigest newDigest{0, *glyph};
+        digest = fSentGlyphs.set(packedID, newDigest);
+    }
+    return *digest;
+}
+
+SkScalar RemoteStrike::findMaximumGlyphDimension(SkSpan<const SkGlyphID> glyphs) {
+    SkScalar maxDimension = 0;
+    for (SkGlyphID glyphID : glyphs) {
+        SkGlyphDigest digest = this->digest(SkPackedGlyphID{glyphID});
+        maxDimension = std::max(static_cast<SkScalar>(digest.maxDimension()), maxDimension);
+    }
+
+    return maxDimension;
+}
+
 template <typename Rejector>
 void RemoteStrike::commonMaskLoop(
         SkDrawableGlyphBuffer* accepted, SkSourceGlyphBuffer* rejected, Rejector&& reject) {
     accepted->forEachInput(
             [&](size_t i, SkPackedGlyphID packedID, SkPoint position) {
-                SkGlyphDigest* digest = fSentGlyphs.find(packedID);
-                if (digest == nullptr) {
-                    // Put the new SkGlyph in the glyphs to send.
-                    this->ensureScalerContext();
-                    fMasksToSend.emplace_back(fContext->makeGlyph(packedID, &fAlloc));
-                    SkGlyph* glyph = &fMasksToSend.back();
-
-                    SkGlyphDigest newDigest{0, *glyph};
-                    digest = fSentGlyphs.set(packedID, newDigest);
-                }
-
+                SkGlyphDigest digest = this->digest(packedID);
                 // Reject things that are too big.
-                if (reject(*digest)) {
+                if (reject(digest)) {
                     rejected->reject(i);
                 }
             });
@@ -427,23 +447,12 @@ void RemoteStrike::prepareForMaskDrawing(
     for (auto [i, variant, _] : SkMakeEnumerate(accepted->input())) {
         SkPackedGlyphID packedID = variant.packedID();
 
-        SkGlyphDigest* digest = fSentGlyphs.find(packedID);
-        if (digest == nullptr) {
-
-            // Put the new SkGlyph in the glyphs to send.
-            this->ensureScalerContext();
-            fMasksToSend.emplace_back(fContext->makeGlyph(packedID, &fAlloc));
-            SkGlyph* glyph = &fMasksToSend.back();
-
-            SkGlyphDigest newDigest{0, *glyph};
-
-            digest = fSentGlyphs.set(packedID, newDigest);
-        }
+        SkGlyphDigest digest = this->digest(packedID);
 
         // Reject things that are too big.
         // N.B. this must have the same behavior as SkScalerCache::prepareForMaskDrawing.
-        if (!digest->canDrawAsMask()) {
-            rejected->reject(i, digest->maxDimension());
+        if (!digest.canDrawAsMask()) {
+            rejected->reject(i, digest.maxDimension());
         }
     }
 }
