@@ -22,6 +22,7 @@
 #include "src/gpu/graphite/GlobalCache.h"
 #include "src/gpu/graphite/Gpu.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
+#include "src/gpu/graphite/QueueManager.h"
 #include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/ResourceProvider.h"
 
@@ -31,9 +32,12 @@
 
 namespace skgpu::graphite {
 
+#define ASSERT_SINGLE_OWNER SKGPU_ASSERT_SINGLE_OWNER(this->singleOwner())
+
 //--------------------------------------------------------------------------------------------------
-Context::Context(sk_sp<Gpu> gpu, BackendApi backend)
+Context::Context(sk_sp<Gpu> gpu, std::unique_ptr<QueueManager> queueManager, BackendApi backend)
         : fGpu(std::move(gpu))
+        , fQueueManager(std::move(queueManager))
         , fGlobalCache(sk_make_sp<GlobalCache>())
         , fBackend(backend) {
 }
@@ -47,15 +51,38 @@ std::unique_ptr<Context> Context::MakeMetal(const MtlBackendContext& backendCont
         return nullptr;
     }
 
-    return std::unique_ptr<Context>(new Context(std::move(gpu), BackendApi::kMetal));
+    auto queueManager = MtlTrampoline::MakeQueueManager(gpu.get());
+    if (!queueManager) {
+        return nullptr;
+    }
+
+    auto context = std::unique_ptr<Context>(new Context(std::move(gpu),
+                                                        std::move(queueManager),
+                                                        BackendApi::kMetal));
+    SkASSERT(context);
+
+    // We have to create this after the Context because we need to pass in the Context's
+    // SingleOwner object.
+    auto resourceProvider = MtlTrampoline::MakeResourceProvider(context->fGpu.get(),
+                                                                context->fGlobalCache,
+                                                                context->singleOwner());
+    if (!resourceProvider) {
+        return nullptr;
+    }
+    context->fResourceProvider = std::move(resourceProvider);
+    return context;
 }
 #endif
 
 std::unique_ptr<Recorder> Context::makeRecorder() {
+    ASSERT_SINGLE_OWNER
+
     return std::unique_ptr<Recorder>(new Recorder(fGpu, fGlobalCache));
 }
 
 void Context::insertRecording(const InsertRecordingInfo& info) {
+    ASSERT_SINGLE_OWNER
+
     sk_sp<RefCntedCallback> callback;
     if (info.fFinishedProc) {
         callback = RefCntedCallback::Make(info.fFinishedProc, info.fFinishedContext);
@@ -69,26 +96,23 @@ void Context::insertRecording(const InsertRecordingInfo& info) {
         return;
     }
 
-    SkASSERT(!fCurrentCommandBuffer);
-    // For now we only allow one CommandBuffer. So we just ref it off the InsertRecordingInfo and
-    // hold onto it until we submit.
-    fCurrentCommandBuffer = info.fRecording->fCommandBuffer;
-    SkASSERT(fCurrentCommandBuffer);
+    fQueueManager->setCurrentCommandBuffer(info.fRecording->fCommandBuffer);
     if (callback) {
-        fCurrentCommandBuffer->addFinishedProc(std::move(callback));
+        info.fRecording->fCommandBuffer->addFinishedProc(std::move(callback));
     }
 }
 
 void Context::submit(SyncToCpu syncToCpu) {
-    SkASSERT(fCurrentCommandBuffer);
+    ASSERT_SINGLE_OWNER
 
-    fGpu->submit(std::move(fCurrentCommandBuffer));
-
-    fGpu->checkForFinishedWork(syncToCpu);
+    fQueueManager->submitToGpu();
+    fQueueManager->checkForFinishedWork(syncToCpu);
 }
 
 void Context::checkAsyncWorkCompletion() {
-    fGpu->checkForFinishedWork(SyncToCpu::kNo);
+    ASSERT_SINGLE_OWNER
+
+    fQueueManager->checkForFinishedWork(SyncToCpu::kNo);
 }
 
 SkBlenderID Context::addUserDefinedBlender(sk_sp<SkRuntimeEffect> effect) {
@@ -98,6 +122,8 @@ SkBlenderID Context::addUserDefinedBlender(sk_sp<SkRuntimeEffect> effect) {
 }
 
 void Context::precompile(SkCombinationBuilder* combinationBuilder) {
+    ASSERT_SINGLE_OWNER
+
     static const Renderer* kRenderers[] = {
             &Renderer::StencilTessellatedCurvesAndTris(SkPathFillType::kWinding),
             &Renderer::StencilTessellatedCurvesAndTris(SkPathFillType::kEvenOdd),
@@ -134,6 +160,8 @@ void Context::precompile(SkCombinationBuilder* combinationBuilder) {
 }
 
 BackendTexture Context::createBackendTexture(SkISize dimensions, const TextureInfo& info) {
+    ASSERT_SINGLE_OWNER
+
     if (!info.isValid() || info.backend() != this->backend()) {
         return {};
     }
@@ -141,6 +169,8 @@ BackendTexture Context::createBackendTexture(SkISize dimensions, const TextureIn
 }
 
 void Context::deleteBackendTexture(BackendTexture& texture) {
+    ASSERT_SINGLE_OWNER
+
     if (!texture.isValid() || texture.backend() != this->backend()) {
         return;
     }
