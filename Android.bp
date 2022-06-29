@@ -2978,6 +2978,8 @@ cc_defaults {
         "tests/Writer32Test.cpp",
         "tests/YUVCacheTest.cpp",
         "tests/YUVTest.cpp",
+        "tests/graphite/CombinationBuilderTest.cpp",
+        "tests/graphite/PaintParamsKeyTest.cpp",
     ],
 }
 
@@ -4846,6 +4848,8 @@ cc_library_shared {
         "tests/Writer32Test.cpp",
         "tests/YUVCacheTest.cpp",
         "tests/YUVTest.cpp",
+        "tests/graphite/CombinationBuilderTest.cpp",
+        "tests/graphite/PaintParamsKeyTest.cpp",
         "third_party/etc1/etc1.cpp",
         "third_party/skcms/skcms.cc",
         "tools/AndroidSkDebugToStdOut.cpp",
