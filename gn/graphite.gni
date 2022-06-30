@@ -20,6 +20,7 @@ skia_graphite_public = [
 ]
 
 skia_graphite_sources = [
+  "$_src/AttachmentTypes.h",
   "$_src/Attribute.h",
   "$_src/BackendTexture.cpp",
   "$_src/Buffer.cpp",
@@ -79,6 +80,7 @@ skia_graphite_sources = [
   "$_src/RecorderPriv.cpp",
   "$_src/RecorderPriv.h",
   "$_src/Recording.cpp",
+  "$_src/RecordingPriv.h",
   "$_src/RenderPassTask.cpp",
   "$_src/RenderPassTask.h",
   "$_src/Renderer.h",

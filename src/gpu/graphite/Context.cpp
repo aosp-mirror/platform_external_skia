@@ -23,6 +23,7 @@
 #include "src/gpu/graphite/Gpu.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
 #include "src/gpu/graphite/QueueManager.h"
+#include "src/gpu/graphite/RecordingPriv.h"
 #include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/ResourceProvider.h"
 
@@ -83,23 +84,7 @@ std::unique_ptr<Recorder> Context::makeRecorder() {
 void Context::insertRecording(const InsertRecordingInfo& info) {
     ASSERT_SINGLE_OWNER
 
-    sk_sp<RefCntedCallback> callback;
-    if (info.fFinishedProc) {
-        callback = RefCntedCallback::Make(info.fFinishedProc, info.fFinishedContext);
-    }
-
-    SkASSERT(info.fRecording);
-    if (!info.fRecording) {
-        if (callback) {
-            callback->setFailureResult();
-        }
-        return;
-    }
-
-    fQueueManager->setCurrentCommandBuffer(info.fRecording->fCommandBuffer);
-    if (callback) {
-        info.fRecording->fCommandBuffer->addFinishedProc(std::move(callback));
-    }
+    fQueueManager->addRecording(info, fResourceProvider.get());
 }
 
 void Context::submit(SyncToCpu syncToCpu) {
@@ -114,6 +99,8 @@ void Context::checkAsyncWorkCompletion() {
 
     fQueueManager->checkForFinishedWork(SyncToCpu::kNo);
 }
+
+#ifdef SK_ENABLE_PRECOMPILE
 
 SkBlenderID Context::addUserDefinedBlender(sk_sp<SkRuntimeEffect> effect) {
     auto dict = this->priv().shaderCodeDictionary();
@@ -158,6 +145,8 @@ void Context::precompile(SkCombinationBuilder* combinationBuilder) {
     // TODO: Iterate over the renderers and make descriptions for the steps that don't perform
     // shading, and just use ShaderType::kNone.
 }
+
+#endif // SK_ENABLE_PRECOMPILE
 
 BackendTexture Context::createBackendTexture(SkISize dimensions, const TextureInfo& info) {
     ASSERT_SINGLE_OWNER
