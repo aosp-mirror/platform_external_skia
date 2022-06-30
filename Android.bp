@@ -167,6 +167,7 @@ cc_library_static {
     defaults: ["skia_defaults",
                "skia_renderengine_deps"],
     srcs: [
+        "modules/skcms/skcms.cc",
         "src/android/SkAndroidFrameworkUtils.cpp",
         "src/android/SkAnimatedImage.cpp",
         "src/c/sk_effects.cpp",
@@ -925,7 +926,6 @@ cc_library_static {
         "src/utils/win/SkHRESULT.cpp",
         "src/utils/win/SkIStream.cpp",
         "src/utils/win/SkWGL_win.cpp",
-        "third_party/skcms/skcms.cc",
         "tools/SkSharingProc.cpp",
     ],
     local_include_dirs: [
@@ -949,6 +949,7 @@ cc_library_static {
     srcs: [
         "client_utils/android/BitmapRegionDecoder.cpp",
         "client_utils/android/FrontBufferedStream.cpp",
+        "modules/skcms/skcms.cc",
         "src/android/SkAndroidFrameworkUtils.cpp",
         "src/android/SkAnimatedImage.cpp",
         "src/c/sk_effects.cpp",
@@ -1459,7 +1460,6 @@ cc_library_static {
         "src/xml/SkDOM.cpp",
         "src/xml/SkXMLParser.cpp",
         "src/xml/SkXMLWriter.cpp",
-        "third_party/skcms/skcms.cc",
     ],
 
     target: {
@@ -3227,7 +3227,6 @@ cc_library_shared {
         "include/pathops/",
         "include/ports/",
         "include/svg/",
-        "include/third_party/skcms/",
         "include/third_party/vulkan/",
         "include/utils/",
         "include/utils/mac/",
@@ -3663,6 +3662,7 @@ cc_library_shared {
         "gm/ycbcrimage.cpp",
         "gm/yuv420_odd_dim.cpp",
         "gm/yuvtorgbsubset.cpp",
+        "modules/skcms/skcms.cc",
         "modules/sksg/src/SkSGClipEffect.cpp",
         "modules/sksg/src/SkSGColorFilter.cpp",
         "modules/sksg/src/SkSGDraw.cpp",
@@ -4851,7 +4851,6 @@ cc_library_shared {
         "tests/graphite/CombinationBuilderTest.cpp",
         "tests/graphite/PaintParamsKeyTest.cpp",
         "third_party/etc1/etc1.cpp",
-        "third_party/skcms/skcms.cc",
         "tools/AndroidSkDebugToStdOut.cpp",
         "tools/CrashHandler.cpp",
         "tools/DDLPromiseImageHelper.cpp",
