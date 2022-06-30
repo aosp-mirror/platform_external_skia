@@ -3,6 +3,14 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
+#ifndef SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
+#define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 1
+#endif
+
+#ifndef SK_BUILD_FOR_SKQP
+#define SK_BUILD_FOR_SKQP
+#endif
+
 #ifndef SK_CODEC_DECODES_JPEG
 #define SK_CODEC_DECODES_JPEG
 #endif
@@ -17,6 +25,10 @@
 
 #ifndef SK_ENABLE_DISCRETE_GPU
 #define SK_ENABLE_DISCRETE_GPU
+#endif
+
+#ifndef SK_ENABLE_DUMP_GPU
+#define SK_ENABLE_DUMP_GPU
 #endif
 
 #ifndef SK_ENABLE_SKSL
