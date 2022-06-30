@@ -51,6 +51,12 @@ static constexpr int32_t kInts[16] = { 1,  -2,  3,  -4,
                                        9, -10, 11, -12,
                                       13, -14, 15, -16 };
 
+static size_t element_size(Layout layout, SkSLType type) {
+    // Metal should encode half-precision uniforms in 16 bits.
+    // Other layouts should always encode uniforms in 32 bit.
+    return (layout == Layout::kMetal && !SkSLTypeIsFullPrecisionNumericType(type)) ? 2 : 4;
+}
+
 DEF_TEST(UniformManagerCheckSingleUniform, r) {
     // Verify that the uniform manager can hold all the basic uniform types, in every layout.
     for (Layout layout : kLayouts) {
@@ -59,7 +65,8 @@ DEF_TEST(UniformManagerCheckSingleUniform, r) {
         for (SkSLType type : kTypes) {
             const SkUniform expectations[] = {{"uniform", type}};
             mgr.setExpectedUniforms(SkSpan(expectations));
-            mgr.write(type, 1, kFloats);
+            mgr.write(type, SkUniform::kNonArray, kFloats);
+            mgr.doneWithExpectedUniforms();
             REPORTER_ASSERT(r, mgr.size() > 0);
             mgr.reset();
         }
@@ -74,31 +81,23 @@ DEF_TEST(UniformManagerCheckFloatEncoding, r) {
         for (SkSLType type : kTypes) {
             // Only test scalar and vector floats. (Matrices can introduce padding between values.)
             int vecLength = SkSLTypeVecLength(type);
-            if (!SkSLTypeIsFloatType(type) || vecLength < 0) {
+            if (!SkSLTypeIsFloatType(type) || vecLength < 1) {
                 continue;
             }
 
             // Write our uniform float scalar/vector.
             const SkUniform expectations[] = {{"uniform", type}};
             mgr.setExpectedUniforms(SkSpan(expectations));
-            mgr.write(type, 1, kFloats);
+            mgr.write(type, SkUniform::kNonArray, kFloats);
+            mgr.doneWithExpectedUniforms();
 
             // Read back the uniform data.
             SkUniformDataBlock uniformData = mgr.peekData();
-            if (layout == Layout::kMetal && !SkSLTypeIsFullPrecisionNumericType(type)) {
-                // Metal should encode half-precision float uniforms in 16-bit floats.
-                REPORTER_ASSERT(r, uniformData.size() >= vecLength * sizeof(SkHalf));
-                REPORTER_ASSERT(r, 0 == memcmp(kHalfs, uniformData.data(),
-                                               vecLength * sizeof(SkHalf)),
-                                "Layout:%d Type:%d encoding failed", (int)layout, (int)type);
-            } else {
-                // Other layouts should always encode float uniforms in full precision.
-                REPORTER_ASSERT(r, uniformData.size() >= vecLength * sizeof(float));
-                REPORTER_ASSERT(r, 0 == memcmp(kFloats, uniformData.data(),
-                                               vecLength * sizeof(float)),
-                                "Layout:%d Type:%d encoding failed", (int)layout, (int)type);
-            }
-
+            size_t elementSize = element_size(layout, type);
+            const void* validData = (elementSize == 4) ? (const void*)kFloats : (const void*)kHalfs;
+            REPORTER_ASSERT(r, uniformData.size() >= vecLength * elementSize);
+            REPORTER_ASSERT(r, 0 == memcmp(validData, uniformData.data(), vecLength * elementSize),
+                            "Layout:%d Type:%d float encoding failed", (int)layout, (int)type);
             mgr.reset();
         }
     }
@@ -117,25 +116,48 @@ DEF_TEST(UniformManagerCheckIntEncoding, r) {
             // Write our uniform int scalar/vector.
             const SkUniform expectations[] = {{"uniform", type}};
             mgr.setExpectedUniforms(SkSpan(expectations));
-            mgr.write(type, 1, kInts);
+            mgr.write(type, SkUniform::kNonArray, kInts);
+            mgr.doneWithExpectedUniforms();
 
             // Read back the uniform data.
             SkUniformDataBlock uniformData = mgr.peekData();
             int vecLength = SkSLTypeVecLength(type);
-            if (layout == Layout::kMetal && !SkSLTypeIsFullPrecisionNumericType(type)) {
-                // Metal should encode short uniforms in 16 bits.
-                REPORTER_ASSERT(r, uniformData.size() >= vecLength * sizeof(int16_t));
-                REPORTER_ASSERT(r, 0 == memcmp(kShorts, uniformData.data(),
-                                               vecLength * sizeof(int16_t)),
-                                "Layout:%d Type:%d encoding failed", (int)layout, (int)type);
-            } else {
-                // Other layouts should always encode int uniforms in 32 bits.
-                REPORTER_ASSERT(r, uniformData.size() >= vecLength * sizeof(int32_t));
-                REPORTER_ASSERT(r, 0 == memcmp(kInts, uniformData.data(),
-                                               vecLength * sizeof(int32_t)),
-                                "Layout:%d Type:%d encoding failed", (int)layout, (int)type);
+            size_t elementSize = element_size(layout, type);
+            const void* validData = (elementSize == 4) ? (const void*)kInts : (const void*)kShorts;
+            REPORTER_ASSERT(r, uniformData.size() >= vecLength * elementSize);
+            REPORTER_ASSERT(r, 0 == memcmp(validData, uniformData.data(), vecLength * elementSize),
+                            "Layout:%d Type:%d int encoding failed", (int)layout, (int)type);
+            mgr.reset();
+        }
+    }
+}
+
+DEF_TEST(UniformManagerCheckScalarVectorPacking, r) {
+    // Verify that the uniform manager can pack scalars and vectors of identical type correctly.
+    for (Layout layout : kLayouts) {
+        UniformManager mgr(layout);
+
+        for (SkSLType type : kTypes) {
+            int vecLength = SkSLTypeVecLength(type);
+            if (vecLength < 1) {
+                continue;
             }
 
+            // Write three matching uniforms.
+            const SkUniform expectations[] = {{"a", type}, {"b", type}, {"c", type}};
+            mgr.setExpectedUniforms(SkSpan(expectations));
+            mgr.write(type, SkUniform::kNonArray, kFloats);
+            mgr.write(type, SkUniform::kNonArray, kFloats);
+            mgr.write(type, SkUniform::kNonArray, kFloats);
+            mgr.doneWithExpectedUniforms();
+
+            // Verify that the uniform data was packed as tight as it should be.
+            SkUniformDataBlock uniformData = mgr.peekData();
+            size_t elementSize = element_size(layout, type);
+            // Vec3s should be packed as if they were vec4s.
+            size_t effectiveVecLength = (vecLength == 3) ? 4 : vecLength;
+            REPORTER_ASSERT(r, uniformData.size() == elementSize * effectiveVecLength * 3,
+                            "Layout:%d Type:%d tight packing failed", (int)layout, (int)type);
             mgr.reset();
         }
     }
