@@ -35,6 +35,10 @@
 #define SK_ENABLE_API_AVAILABLE
 #endif
 
+#ifndef SK_ENABLE_PRECOMPILE
+#define SK_ENABLE_PRECOMPILE
+#endif
+
 #ifndef SK_ENABLE_SKSL
 #define SK_ENABLE_SKSL
 #endif
