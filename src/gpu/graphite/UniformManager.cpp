@@ -79,17 +79,17 @@ struct Rules140 {
             SkASSERT(RowsOrVecLength > 1);
             return Rules140<BaseType, RowsOrVecLength>::Stride(1);
         }
+
+        // Get alignment of a single non-array vector of BaseType by Rule 1, 2, or 3.
+        int n = RowsOrVecLength == 3 ? 4 : RowsOrVecLength;
         if (count == 0) {
-            // Stride doesn't matter for a non-array.
-            return RowsOrVecLength * sizeof(BaseType);
+            return n * sizeof(BaseType);
         }
 
         // Rule 4.
 
         // Alignment of vec4 by Rule 2.
         constexpr size_t kVec4Alignment = tight_vec_size<float>(4);
-        // Get alignment of a single vector of BaseType by Rule 1, 2, or 3
-        int n = RowsOrVecLength == 3 ? 4 : RowsOrVecLength;
         size_t kElementAlignment = tight_vec_size<BaseType>(n);
         // Round kElementAlignment up to multiple of kVec4Alignment.
         size_t m = (kElementAlignment + kVec4Alignment - 1) / kVec4Alignment;
@@ -115,12 +115,15 @@ struct Rules430 {
             SkASSERT(RowsOrVecLength > 1);
             return Rules430<BaseType, RowsOrVecLength>::Stride(1);
         }
+
+        // Get alignment of a single non-array vector of BaseType by Rule 1, 2, or 3.
+        int n = RowsOrVecLength == 3 ? 4 : RowsOrVecLength;
         if (count == 0) {
-            // Stride doesn't matter for a non-array.
-            return RowsOrVecLength * sizeof(BaseType);
+            return n * sizeof(BaseType);
         }
+
         // Rule 4 without the round up to a multiple of align-of vec4.
-        return tight_vec_size<BaseType>(RowsOrVecLength == 3 ? 4 : RowsOrVecLength);
+        return tight_vec_size<BaseType>(n);
     }
 };
 
@@ -133,16 +136,20 @@ struct RulesMetal {
         SkASSERT(count >= 1 || count == SkUniform::kNonArray);
         static_assert(RowsOrVecLength >= 1 && RowsOrVecLength <= 4);
         static_assert(Cols >= 1 && Cols <= 4);
+
         if (Cols != 1) {
             // This is a matrix or array of matrices. We return the stride between columns.
             SkASSERT(RowsOrVecLength > 1);
             return RulesMetal<BaseType, RowsOrVecLength>::Stride(1);
         }
+
+        // Get alignment of a single non-array vector of BaseType by Rule 1, 2, or 3.
+        int n = RowsOrVecLength == 3 ? 4 : RowsOrVecLength;
         if (count == 0) {
-            // Stride doesn't matter for a non-array.
-            return RowsOrVecLength * sizeof(BaseType);
+            return n * sizeof(BaseType);
         }
-        return tight_vec_size<BaseType>(RowsOrVecLength == 3 ? 4 : RowsOrVecLength);
+
+        return tight_vec_size<BaseType>(n);
     }
 };
 
@@ -544,7 +551,6 @@ void UniformManager::reset() {
     fStorage.rewind();
 }
 
-#ifdef SK_DEBUG
 void UniformManager::checkReset() const {
     SkASSERT(fCurUBOOffset == 0);
     SkASSERT(fCurUBOMaxAlignment == 0);
@@ -553,8 +559,8 @@ void UniformManager::checkReset() const {
 }
 
 void UniformManager::setExpectedUniforms(SkSpan<const SkUniform> expectedUniforms) {
-    fExpectedUniforms = expectedUniforms;
-    fExpectedUniformIndex = 0;
+    SkDEBUGCODE(fExpectedUniforms = expectedUniforms;)
+    SkDEBUGCODE(fExpectedUniformIndex = 0;)
 }
 
 void UniformManager::checkExpected(SkSLType type, unsigned int count) {
@@ -564,6 +570,7 @@ void UniformManager::checkExpected(SkSLType type, unsigned int count) {
     SkASSERT(fExpectedUniforms[fExpectedUniformIndex].type() == type);
     SkASSERT((fExpectedUniforms[fExpectedUniformIndex].count() == 0 && count == 1) ||
              fExpectedUniforms[fExpectedUniformIndex].count() == count);
+#ifdef SK_DEBUG
     fExpectedUniformIndex++;
 
     SkSLType revisedType = this->getUniformTypeForLayout(type);
@@ -573,13 +580,13 @@ void UniformManager::checkExpected(SkSLType type, unsigned int count) {
                                                   revisedType,
                                                   count);
     SkASSERT(debugOffset == fOffset);
+#endif
 }
 
 void UniformManager::doneWithExpectedUniforms() {
     SkASSERT(fExpectedUniformIndex == static_cast<int>(fExpectedUniforms.size()));
-    fExpectedUniforms = {};
+    SkDEBUGCODE(fExpectedUniforms = {};)
 }
-#endif // SK_DEBUG
 
 void UniformManager::write(SkSLType type, unsigned int count, const void* src) {
     SkDEBUGCODE(this->checkExpected(type, (count == SkUniform::kNonArray) ? 1 : count);)
