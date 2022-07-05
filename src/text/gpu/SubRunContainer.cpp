@@ -32,6 +32,7 @@ using AtlasTextOp = skgpu::v1::AtlasTextOp;
 
 #ifdef SK_GRAPHITE_ENABLED
 #include "src/gpu/graphite/Device.h"
+#include "src/gpu/graphite/DrawWriter.h"
 #include "src/gpu/graphite/Renderer.h"
 #endif
 
@@ -56,6 +57,7 @@ using namespace sktext::gpu;
 
 #if defined(SK_GRAPHITE_ENABLED)
 using Device = skgpu::graphite::Device;
+using DrawWriter = skgpu::graphite::DrawWriter;
 using Rect = skgpu::graphite::Rect;
 using Recorder = skgpu::graphite::Recorder;
 using Renderer = skgpu::graphite::Renderer;
@@ -1156,6 +1158,11 @@ public:
                                                       SkPoint drawOrigin) const override;
 
     const Renderer* renderer() const override { return &Renderer::TextDirect(fMaskFormat); }
+
+    void fillVertexData(DrawWriter*,
+                        int offset, int count,
+                        SkColor color, SkScalar depth,
+                        const skgpu::graphite::Transform& transform) const override;
 #endif
 
     bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const override;
@@ -1545,33 +1552,126 @@ std::tuple<bool, int> DirectMaskSubRun::regenerateAtlas(int begin, int end,
 
 std::tuple<Rect, Transform> DirectMaskSubRun::boundsAndDeviceMatrix(const Transform& localToDevice,
                                                                     SkPoint drawOrigin) const {
-    SkM44 positionMatrix(localToDevice.matrix());
-    positionMatrix.preTranslate(drawOrigin.x(), drawOrigin.y());
-    SkM44 initialMatrix(fInitialPositionMatrix);
-    const SkPoint offset = {positionMatrix.rc(0,3) - initialMatrix.rc(0,3),
-                            positionMatrix.rc(1,3) - initialMatrix.rc(1,3)};
-
-    const bool compatibleMatrix = positionMatrix.rc(0,0) == initialMatrix.rc(0,0) &&
-                                  positionMatrix.rc(0,1) == initialMatrix.rc(0,1) &&
-                                  positionMatrix.rc(1,0) == initialMatrix.rc(1,0) &&
-                                  positionMatrix.rc(1,1) == initialMatrix.rc(1,1) &&
+    // The baked-in matrix differs from the current localToDevice by a translation if the upper 2x2
+    // remains the same, and there's no perspective. Since there's no projection, Z is irrelevant
+    // so it's okay that fInitialPositionMatrix is an SkMatrix and has discarded the 3rd row/col,
+    // and can ignore those values in localToDevice.
+    const SkM44& positionMatrix = localToDevice.matrix();
+    const bool compatibleMatrix = positionMatrix.rc(0,0) == fInitialPositionMatrix.rc(0,0) &&
+                                  positionMatrix.rc(0,1) == fInitialPositionMatrix.rc(0,1) &&
+                                  positionMatrix.rc(1,0) == fInitialPositionMatrix.rc(1,0) &&
+                                  positionMatrix.rc(1,1) == fInitialPositionMatrix.rc(1,1) &&
                                   localToDevice.type() != Transform::Type::kProjection &&
                                   !fInitialPositionMatrix.hasPerspective();
 
-    if (compatibleMatrix && SkScalarIsInt(offset.x()) && SkScalarIsInt(offset.y())) {
-        // Handle the integer offset case.
-        // The offset should be integer, but make sure.
-        SkM44 translate = SkM44::Translate(SkScalarRoundToInt(offset.x()),
-                                           SkScalarRoundToInt(offset.y()));
-        return {Rect(fGlyphDeviceBounds.rect()), Transform(translate)};
-    } else if (SkM44 inverse; initialMatrix.invert(&inverse)) {
-        SkM44 viewDifference = positionMatrix * inverse;
-        return {Rect(fGlyphDeviceBounds.rect()), Transform(viewDifference)};
+    if (compatibleMatrix) {
+        const SkV4 mappedOrigin = positionMatrix.map(drawOrigin.x(), drawOrigin.y(), 0.f, 1.f);
+        const SkV2 offset = {mappedOrigin.x - fInitialPositionMatrix.getTranslateX(),
+                             mappedOrigin.y - fInitialPositionMatrix.getTranslateY()};
+        if (SkScalarIsInt(offset.x) && SkScalarIsInt(offset.y)) {
+            // The offset is an integer (but make sure), which means the generated mask can be
+            // accessed without changing how texels would be sampled.
+            return {Rect(fGlyphDeviceBounds.rect()),
+                    Transform(SkM44::Translate(SkScalarRoundToInt(offset.x),
+                                               SkScalarRoundToInt(offset.y)))};
+        }
     }
 
-    // initialPositionMatrix is singular. Do nothing.
-    static const Transform kInvalid{SkM44(SkM44::kNaN_Constructor)};
-    return {Rect::InfiniteInverted(), kInvalid};
+    // Otherwise compute the relative transformation from fInitialPositionMatrix to localToDevice,
+    // with the drawOrigin applied. If fInitialPositionMatrix or the concatenation is not invertible
+    // the returned Transform is marked invalid and the draw will be automatically dropped.
+    return {Rect(fGlyphDeviceBounds.rect()),
+            localToDevice.preTranslate(drawOrigin.x(), drawOrigin.y())
+                         .concatInverse(SkM44(fInitialPositionMatrix))};
+}
+
+template<typename VertexData>
+void direct_2D_mask_dw(DrawWriter* dw,
+                       SkZip<const Glyph*, const VertexData> quadData,
+                       SkColor color, SkScalar depth) {
+    DrawWriter::Vertices verts{*dw};
+    for (auto [glyph, leftTop]: quadData) {
+        auto[al, at, ar, ab] = glyph->fAtlasLocator.getUVs();
+        SkScalar dl = leftTop[0],
+                 dt = leftTop[1],
+                 dr = dl + (ar - al),
+                 db = dt + (ab - at);
+        // TODO: this should be drawn with indices but there doesn't seem to be a way to do that.
+        // TODO: we should really use instances as well.
+        verts.append(6) << SkPoint{dl, dt} << depth << color << AtlasPt{al, at}  // L,T
+                        << SkPoint{dl, db} << depth << color << AtlasPt{al, ab}  // L,B
+                        << SkPoint{dr, dt} << depth << color << AtlasPt{ar, at}  // R,T
+                        << SkPoint{dl, db} << depth << color << AtlasPt{al, ab}  // L,B
+                        << SkPoint{dr, db} << depth << color << AtlasPt{ar, ab}  // R,B
+                        << SkPoint{dr, dt} << depth << color << AtlasPt{ar, at}; // R,T
+    }
+}
+
+template<typename VertexData>
+void direct_2D_rgba_dw(DrawWriter* dw,
+                       SkZip<const Glyph*, const VertexData> quadData,
+                       SkScalar depth) {
+    DrawWriter::Vertices verts{*dw};
+    for (auto [glyph, leftTop]: quadData) {
+        auto[al, at, ar, ab] = glyph->fAtlasLocator.getUVs();
+        SkScalar dl = leftTop[0],
+                 dt = leftTop[1],
+                 dr = dl + (ar - al),
+                 db = dt + (ab - at);
+        // TODO: this should be drawn with indices but there doesn't seem to be a way to do that.
+        // TODO: we should really use instances as well.
+        verts.append(6) << SkPoint{dl, dt} << depth << AtlasPt{al, at}  // L,T
+                        << SkPoint{dl, db} << depth << AtlasPt{al, ab}  // L,B
+                        << SkPoint{dr, dt} << depth << AtlasPt{ar, at}  // R,T
+                        << SkPoint{dl, db} << depth << AtlasPt{al, ab}  // L,B
+                        << SkPoint{dr, db} << depth << AtlasPt{ar, ab}  // R,B
+                        << SkPoint{dr, dt} << depth << AtlasPt{ar, at}; // R,T
+    }
+}
+
+template<typename VertexData>
+void transformed_direct_2D_mask_dw(DrawWriter* dw,
+                                   SkZip<const Glyph*, const VertexData> quadData,
+                                   SkColor color, SkScalar depth,
+                                   const Transform& transform) {
+    // TODO
+}
+
+template<typename VertexData>
+void transformed_direct_2D_rgba_dw(DrawWriter* dw,
+                                   SkZip<const Glyph*, const VertexData> quadData,
+                                   SkScalar depth,
+                                   const Transform& transform) {
+    // TODO
+}
+
+void DirectMaskSubRun::fillVertexData(DrawWriter* dw,
+                                      int offset, int count,
+                                      SkColor color, SkScalar depth,
+                                      const skgpu::graphite::Transform& toDevice) const {
+    auto quadData = [&]() {
+        return SkMakeZip(fGlyphs.glyphs().subspan(offset, count),
+                         fLeftTopDevicePos.subspan(offset, count));
+    };
+
+    bool noTransformNeeded = (toDevice.type() == Transform::Type::kIdentity);
+    if (noTransformNeeded) {
+        if (fMaskFormat != MaskFormat::kARGB) {
+            direct_2D_mask_dw(dw, quadData(), color, depth);
+        } else {
+            direct_2D_rgba_dw(dw, quadData(), depth);
+        }
+    } else {
+        if (toDevice.type() == Transform::Type::kProjection) {
+            // TODO: handle float3 position data
+        } else {
+            if (fMaskFormat != MaskFormat::kARGB) {
+                transformed_direct_2D_mask_dw(dw, quadData(), color, depth, toDevice);
+            } else {
+                transformed_direct_2D_rgba_dw(dw, quadData(), depth, toDevice);
+            }
+        }
+    }
 }
 #endif
 
@@ -1675,6 +1775,11 @@ public:
     const Renderer* renderer() const override {
         return &Renderer::TextDirect(fVertexFiller.grMaskType());
     }
+
+    void fillVertexData(DrawWriter*,
+                        int offset, int count,
+                        SkColor color, SkScalar depth,
+                        const skgpu::graphite::Transform& transform) const override;
 #endif
 
     int glyphCount() const override;
@@ -1848,9 +1953,15 @@ std::tuple<bool, int> TransformedMaskSubRun::regenerateAtlas(int begin, int end,
 
 std::tuple<Rect, Transform> TransformedMaskSubRun::boundsAndDeviceMatrix(
         const Transform& localToDevice, SkPoint drawOrigin) const {
-    SkM44 positionMatrix(localToDevice.matrix());
-    positionMatrix.preTranslate(drawOrigin.x(), drawOrigin.y());
-    return {Rect(fVertexFiller.localRect()), Transform(positionMatrix)};
+    return {Rect(fVertexFiller.localRect()),
+            localToDevice.preTranslate(drawOrigin.x(), drawOrigin.y())};
+}
+
+void TransformedMaskSubRun::fillVertexData(DrawWriter*,
+                                           int offset, int count,
+                                           SkColor color, SkScalar depth,
+                                           const skgpu::graphite::Transform& transform) const {
+    // TODO
 }
 #endif
 
@@ -1937,6 +2048,11 @@ public:
                                                       SkPoint drawOrigin) const override;
 
     const Renderer* renderer() const override { return &Renderer::TextSDF(fUseLCDText); }
+
+    void fillVertexData(DrawWriter*,
+                        int offset, int count,
+                        SkColor color, SkScalar depth,
+                        const skgpu::graphite::Transform& transform) const override;
 #endif
 
     int glyphCount() const override;
@@ -2173,9 +2289,15 @@ SDFTSubRun::regenerateAtlas(int begin, int end, Recorder *recorder) const {
 
 std::tuple<Rect, Transform> SDFTSubRun::boundsAndDeviceMatrix(const Transform& localToDevice,
                                                               SkPoint drawOrigin) const {
-    SkM44 positionMatrix(localToDevice.matrix());
-    positionMatrix.preTranslate(drawOrigin.x(), drawOrigin.y());
-    return {Rect(fVertexFiller.localRect()), Transform(positionMatrix)};
+    return {Rect(fVertexFiller.localRect()),
+            localToDevice.preTranslate(drawOrigin.x(), drawOrigin.y())};
+}
+
+void SDFTSubRun::fillVertexData(DrawWriter*,
+                                int offset, int count,
+                                SkColor color, SkScalar depth,
+                                const skgpu::graphite::Transform& transform) const {
+    // TODO
 }
 #endif
 

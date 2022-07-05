@@ -162,3 +162,87 @@ DEF_TEST(UniformManagerCheckScalarVectorPacking, r) {
         }
     }
 }
+
+DEF_TEST(UniformManagerCheckMatrixPacking, r) {
+    // Verify that the uniform manager can pack matrices correctly.
+    for (Layout layout : kLayouts) {
+        UniformManager mgr(layout);
+
+        for (SkSLType type : kTypes) {
+            int matrixSize = SkSLTypeMatrixSize(type);
+            if (matrixSize < 2) {
+                continue;
+            }
+
+            // Write three matching uniforms.
+            const SkUniform expectations[] = {{"a", type}, {"b", type}, {"c", type}};
+            mgr.setExpectedUniforms(SkSpan(expectations));
+            mgr.write(type, SkUniform::kNonArray, kFloats);
+            mgr.write(type, SkUniform::kNonArray, kFloats);
+            mgr.write(type, SkUniform::kNonArray, kFloats);
+            mgr.doneWithExpectedUniforms();
+
+            // Verify that the uniform data was packed as tight as it should be.
+            SkUniformDataBlock uniformData = mgr.peekData();
+            size_t elementSize = element_size(layout, type);
+            // In all layouts, mat3s should burn 12 elements, not 9.
+            size_t numElements = (matrixSize == 3) ? 12 : (matrixSize * matrixSize);
+            REPORTER_ASSERT(r, uniformData.size() == elementSize * numElements * 3,
+                            "Layout:%d Type:%d matrix packing failed", (int)layout, (int)type);
+            mgr.reset();
+        }
+    }
+}
+
+DEF_TEST(UniformManagerCheckPaddingScalarVector, r) {
+    // Verify that the uniform manager properly adds padding between pairs of scalar/vector.
+    // This test doesn't check mixed 16/32-bit padding yet.
+    for (Layout layout : kLayouts) {
+        UniformManager mgr(layout);
+
+        for (SkSLType type1 : kTypes) {
+            const int vecLength1 = SkSLTypeVecLength(type1);
+            if (vecLength1 < 1) {
+                continue;
+            }
+
+            for (SkSLType type2 : kTypes) {
+                const int vecLength2 = SkSLTypeVecLength(type2);
+                if (vecLength2 < 1) {
+                    continue;
+                }
+
+                // Write two scalar/vector uniforms.
+                const SkUniform expectations[] = {{"a", type1}, {"b", type2}};
+                mgr.setExpectedUniforms(SkSpan(expectations));
+                mgr.write(type1, SkUniform::kNonArray, kFloats);
+                mgr.write(type2, SkUniform::kNonArray, kFloats);
+                mgr.doneWithExpectedUniforms();
+
+                // Verify that all elements are the same size.
+                const size_t elementSize1 = element_size(layout, type1);
+                const size_t elementSize2 = element_size(layout, type2);
+                if (elementSize1 == elementSize2) {
+                    // The expected uniform layout is listed as strings below.
+                    // A/B: uniform values.
+                    // a/b: padding as part of the uniform type (vec3 takes 4 slots)
+                    // _  : padding between uniforms for alignment
+                    static constexpr const char* kExpectedLayout[5][5] = {
+                        { "", "",      "",       "",         ""         },
+                        { "", "AB",    "A_BB",   "A___BBBb", "A___BBBB" },
+                        { "", "AAB",   "AABB",   "AA__BBBb", "AA__BBBB" },
+                        { "", "AAAaB", "AAAaBB", "AAAaBBBb", "AAAaBBBB" },
+                        { "", "AAAAB", "AAAABB", "AAAABBBb", "AAAABBBB" },
+                    };
+                    const size_t size = strlen(kExpectedLayout[vecLength1][vecLength2]) *
+                                        elementSize1;
+                    SkUniformDataBlock uniformData = mgr.peekData();
+                    REPORTER_ASSERT(r, uniformData.size() == size,
+                                    "Layout:%d Types:%d %d padding test failed",
+                                    (int)layout, (int)type1, (int)type2);
+                }
+                mgr.reset();
+            }
+        }
+    }
+}
