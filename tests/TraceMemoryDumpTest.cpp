@@ -117,9 +117,13 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(SkTraceMemoryDump_unownedGLTexture, report
 
     auto params = sk_make_sp<GrGLTextureParameters>();
 
-    auto texture =
-            GrGLTexture::MakeWrapped(gpu, GrMipmapStatus::kNotAllocated, desc, std::move(params),
-                                     GrWrapCacheable::kNo, kRead_GrIOType);
+    auto texture = GrGLTexture::MakeWrapped(gpu,
+                                            GrMipmapStatus::kNotAllocated,
+                                            desc,
+                                            std::move(params),
+                                            GrWrapCacheable::kNo,
+                                            kRead_GrIOType,
+                                            /*label=*/{});
 
     ValidateMemoryDumps(reporter, dContext, 2, texture->gpuMemorySize(), false /* isOwned */);
 }
@@ -137,8 +141,13 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(SkTraceMemoryDump_ownedGLRenderTarget, rep
     rtIDs.fMSColorRenderbufferID = 0;
     rtIDs.fTotalMemorySamplesPerPixel = 1;
 
-    sk_sp<GrGLRenderTarget> rt =
-            GrGLRenderTarget::MakeWrapped(gpu, kSize, GrGLFormat::kRGBA8, 1, rtIDs, 0);
+    sk_sp<GrGLRenderTarget> rt = GrGLRenderTarget::MakeWrapped(gpu,
+                                                               kSize,
+                                                               GrGLFormat::kRGBA8,
+                                                               1,
+                                                               rtIDs,
+                                                               0,
+                                                               /*label=*/{});
 
     ValidateMemoryDumps(reporter, dContext, 2, rt->gpuMemorySize(), true /* isOwned */);
 }
@@ -156,8 +165,13 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(SkTraceMemoryDump_unownedGLRenderTarget, r
     rtIDs.fMSColorRenderbufferID = 0;
     rtIDs.fTotalMemorySamplesPerPixel = 4;
 
-    sk_sp<GrGLRenderTarget> rt =
-            GrGLRenderTarget::MakeWrapped(gpu, kSize, GrGLFormat::kRGBA8, 4, rtIDs, 0);
+    sk_sp<GrGLRenderTarget> rt = GrGLRenderTarget::MakeWrapped(gpu,
+                                                               kSize,
+                                                               GrGLFormat::kRGBA8,
+                                                               4,
+                                                               rtIDs,
+                                                               0,
+                                                               /*label=*/{});
 
     ValidateMemoryDumps(reporter, dContext, 2, rt->gpuMemorySize(), false /* isOwned */);
 }

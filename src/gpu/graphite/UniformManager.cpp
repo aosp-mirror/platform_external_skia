@@ -397,8 +397,8 @@ static uint32_t sksltype_to_alignment_mask(SkSLType type) {
     SK_ABORT("Unexpected type");
 }
 
-/** Returns the size in bytes taken up in Metal buffers for SkSLTypes. */
-inline uint32_t sksltype_to_mtl_size(SkSLType type) {
+/** Returns the size in bytes taken up in uniform buffers for SkSLTypes. */
+inline uint32_t sksltype_to_size(SkSLType type) {
     switch (type) {
         case SkSLType::kInt:
         case SkSLType::kUInt:
@@ -469,27 +469,23 @@ inline uint32_t sksltype_to_mtl_size(SkSLType type) {
 static uint32_t get_ubo_aligned_offset(uint32_t* currentOffset,
                                        SkSLType type,
                                        int arrayCount) {
-    // TODO(skia:13478): these alignments are currently Metal-specific; we are likely to need
-    // fixes for other Layout types.
     uint32_t alignmentMask = sksltype_to_alignment_mask(type);
     uint32_t offsetDiff = *currentOffset & alignmentMask;
     if (offsetDiff != 0) {
         offsetDiff = alignmentMask - offsetDiff + 1;
     }
     uint32_t uniformOffset = *currentOffset + offsetDiff;
-    SkASSERT(sizeof(float) == 4);
 
-    // TODO(skia:13478): these size calculations are currently Metal-specific; we are likely to need
-    // fixes for other Layout types.
     if (arrayCount) {
-        *currentOffset = uniformOffset + sksltype_to_mtl_size(type) * arrayCount;
+        // TODO(skia:13478): array size calculations currently do not honor std140 layout.
+        *currentOffset = uniformOffset + sksltype_to_size(type) * arrayCount;
     } else {
-        *currentOffset = uniformOffset + sksltype_to_mtl_size(type);
+        *currentOffset = uniformOffset + sksltype_to_size(type);
     }
     return uniformOffset;
 }
 
-SkSLType UniformManager::getUniformTypeForLayout(SkSLType type) {
+SkSLType UniformOffsetCalculator::getUniformTypeForLayout(SkSLType type) {
     if (fLayout != Layout::kMetal) {
         // GL/Vk expect uniforms in 32-bit precision. Convert lower-precision types to 32-bit.
         switch (type) {
@@ -520,7 +516,10 @@ SkSLType UniformManager::getUniformTypeForLayout(SkSLType type) {
     return type;
 }
 
-UniformManager::UniformManager(Layout layout) : fLayout(layout) {
+UniformOffsetCalculator::UniformOffsetCalculator(Layout layout, uint32_t startingOffset)
+        : fLayout(layout)
+        , fOffset(startingOffset)
+        , fCurUBOOffset(startingOffset) {
 
     switch (layout) {
         case Layout::kStd140:
@@ -533,8 +532,20 @@ UniformManager::UniformManager(Layout layout) : fLayout(layout) {
             fWriteUniform = Writer<RulesMetal>::WriteUniform;
             break;
     }
+}
 
-    this->reset();
+size_t UniformOffsetCalculator::calculateOffset(SkSLType type, unsigned int count) {
+    SkSLType revisedType = this->getUniformTypeForLayout(type);
+
+    // Insert padding as needed to get the correct uniform alignment.
+    uint32_t alignedOffset = get_ubo_aligned_offset(&fCurUBOOffset, revisedType, count);
+    SkASSERT(alignedOffset >= fOffset);
+
+    // Append the uniform size to our offset, then return the uniform start position.
+    uint32_t uniformSize = fWriteUniform(revisedType, CType::kDefault,
+                                         /*dest=*/nullptr, count, /*src=*/nullptr);
+    fOffset = alignedOffset + uniformSize;
+    return alignedOffset;
 }
 
 SkUniformDataBlock UniformManager::peekData() const {

@@ -98,9 +98,6 @@ void add_linear_gradient_uniform_data(const SkShaderCodeDictionary* dict,
     gatherer->write(gradData.fPoints[0]);
     gatherer->write(gradData.fPoints[1]);
     gatherer->write(static_cast<int>(gradData.fTM));
-    gatherer->write(0.0f);  // padding
-    gatherer->write(0.0f);
-    gatherer->write(0.0f);
 
     gatherer->addFlags(dict->getSnippetRequirementFlags(codeSnippetID));
 };
@@ -148,9 +145,6 @@ void add_sweep_gradient_uniform_data(const SkShaderCodeDictionary* dict,
     gatherer->write(gradData.fBias);
     gatherer->write(gradData.fScale);
     gatherer->write(static_cast<int>(gradData.fTM));
-    gatherer->write(0.0f);  // padding
-    gatherer->write(0.0f);
-    gatherer->write(0.0f);
 
     gatherer->addFlags(dict->getSnippetRequirementFlags(codeSnippetID));
 };
@@ -176,7 +170,6 @@ void add_conical_gradient_uniform_data(const SkShaderCodeDictionary* dict,
     gatherer->write(gradData.fRadii[0]);
     gatherer->write(gradData.fRadii[1]);
     gatherer->write(static_cast<int>(gradData.fTM));
-    gatherer->write(0.0f);  // padding
 
     gatherer->addFlags(dict->getSnippetRequirementFlags(codeSnippetID));
 };
@@ -439,9 +432,6 @@ void add_blendshader_uniform_data(const SkShaderCodeDictionary* dict,
                                   SkPipelineDataGatherer* gatherer) {
     VALIDATE_UNIFORMS(gatherer, dict, SkBuiltInCodeSnippetID::kBlendShader)
     gatherer->write(SkTo<int>(bm));
-    gatherer->write(0); // padding - remove
-    gatherer->write(0); // padding - remove
-    gatherer->write(0); // padding - remove
 
     gatherer->addFlags(dict->getSnippetRequirementFlags(SkBuiltInCodeSnippetID::kBlendShader));
 }
@@ -521,9 +511,6 @@ void add_shaderbasedblender_uniform_data(const SkShaderCodeDictionary* dict,
                                          SkPipelineDataGatherer* gatherer) {
     VALIDATE_UNIFORMS(gatherer, dict, SkBuiltInCodeSnippetID::kShaderBasedBlender)
     gatherer->write(SkTo<int>(bm));
-    gatherer->write(0); // padding - remove
-    gatherer->write(0); // padding - remove
-    gatherer->write(0); // padding - remove
 
     gatherer->addFlags(
             dict->getSnippetRequirementFlags(SkBuiltInCodeSnippetID::kShaderBasedBlender));
@@ -597,17 +584,18 @@ void RuntimeShaderBlock::BeginBlock(const SkKeyContext& keyContext,
 #ifdef SK_GRAPHITE_ENABLED
             // TODO(skia:13405): add support for child effects
 
-            static constexpr auto kCodeSnippetID = SkBuiltInCodeSnippetID::kRuntimeShader;
+            SkShaderCodeDictionary* dict = keyContext.dict();
+            int codeSnippetID = dict->findOrCreateRuntimeEffectSnippet(shaderData.fEffect.get());
 
-            // TODO(skia:13405): add the runtime effect to the recorder once we have distinct
-            // code-snippet IDs per unique SkRuntimeEffect.
-            //skgpu::graphite::Recorder* recorder = keyContext.recorder();
-            //recorder->priv().addRuntimeEffect(codeSnippetID, shaderData.fEffect);
+            skgpu::graphite::Recorder* recorder = keyContext.recorder();
+            recorder->priv().addRuntimeEffect(codeSnippetID, shaderData.fEffect);
 
             if (gatherer) {
-                [[maybe_unused]] const SkShaderCodeDictionary* dict = keyContext.dict();
-                VALIDATE_UNIFORMS(gatherer, dict, kCodeSnippetID)
-                gatherer->addFlags(dict->getSnippetRequirementFlags(kCodeSnippetID));
+                const SkShaderSnippet* entry = dict->getEntry(codeSnippetID);
+                SkASSERT(entry);
+
+                SkDEBUGCODE(UniformExpectationsValidator uev(gatherer, entry->fUniforms);)
+                gatherer->addFlags(entry->fSnippetRequirementFlags);
 
                 // Pass the local matrix inverse so we can use local coordinates.
                 SkMatrix inverseLocalMatrix;
@@ -615,16 +603,29 @@ void RuntimeShaderBlock::BeginBlock(const SkKeyContext& keyContext,
                     inverseLocalMatrix.setIdentity();
                 }
                 gatherer->write(SkM44(inverseLocalMatrix));
+
+                // Collect all the other uniforms from the provided SkData.
+                SkSpan<const SkRuntimeEffect::Uniform> rtsUniforms = shaderData.fEffect->uniforms();
+                const uint8_t* uniformBase = shaderData.fUniforms->bytes();
+                for (size_t index = 0; index < rtsUniforms.size(); ++index) {
+                    // The SkShaderSnippet burns index 0 on the local matrix, so adjust index by 1.
+                    const SkUniform& skUniform = entry->fUniforms[index + 1];
+                    // Get a pointer to the offset in our data for this uniform.
+                    const uint8_t* uniformData  = uniformBase + rtsUniforms[index].offset;
+                    // Pass the uniform data to the gatherer.
+                    gatherer->write(skUniform.type(), skUniform.count(), uniformData);
+                }
             }
+
             // Use the combination of {SkSL program hash, uniform size} as our key.
             // In the unfortunate event of a hash collision, at least we'll have the right amount of
             // uniform data available.
             uint32_t hash = SkRuntimeEffectPriv::Hash(*shaderData.fEffect);
             uint32_t uniformSize = shaderData.fEffect->uniformSize();
 
-            builder->beginBlock(kCodeSnippetID);
-            builder->addBytes(sizeof(hash), reinterpret_cast<const uint8_t*>(&hash));
-            builder->addBytes(sizeof(uniformSize), reinterpret_cast<const uint8_t*>(&uniformSize));
+            builder->beginBlock(codeSnippetID);
+            builder->addInt(hash);
+            builder->addInt(uniformSize);
 #endif  // SK_GRAPHITE_ENABLED
             break;
         }
@@ -635,13 +636,4 @@ void RuntimeShaderBlock::BeginBlock(const SkKeyContext& keyContext,
             SolidColorShaderBlock::BeginBlock(keyContext, builder, gatherer, kErrorColor);
             break;
     }
-}
-
-const SkRuntimeEffect* TestingOnly_GetCommonRuntimeEffect() {
-    static const SkRuntimeEffect* effect = SkMakeRuntimeEffect(SkRuntimeEffect::MakeForShader, R"(
-        half4 main(float2 coords) {
-            return half4(coords.xy01);
-        }
-    )");
-    return effect;
 }

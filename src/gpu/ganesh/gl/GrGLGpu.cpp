@@ -702,7 +702,10 @@ sk_sp<GrTexture> GrGLGpu::onWrapBackendTexture(const GrBackendTexture& backendTe
                                                           : GrMipmapStatus::kNotAllocated;
 
     auto texture = GrGLTexture::MakeWrapped(this, mipmapStatus, desc,
-                                            backendTex.getGLTextureParams(), cacheable, ioType);
+                                            backendTex.getGLTextureParams(),
+                                            cacheable,
+                                            ioType,
+                                            backendTex.getLabel());
     if (this->glCaps().isFormatRenderable(backendTex.getBackendFormat(), 1)) {
         // Pessimistically assume this external texture may have been bound to a FBO.
         texture->baseLevelWasBoundToFBO();
@@ -757,7 +760,7 @@ sk_sp<GrTexture> GrGLGpu::onWrapCompressedBackendTexture(const GrBackendTexture&
 
     auto texture = GrGLTexture::MakeWrapped(this, mipmapStatus, desc,
                                             backendTex.getGLTextureParams(), cacheable,
-                                            kRead_GrIOType);
+                                            kRead_GrIOType, backendTex.getLabel());
     return std::move(texture);
 }
 
@@ -799,7 +802,7 @@ sk_sp<GrTexture> GrGLGpu::onWrapRenderableBackendTexture(const GrBackendTexture&
 
     sk_sp<GrGLTextureRenderTarget> texRT(GrGLTextureRenderTarget::MakeWrapped(
             this, sampleCnt, desc, backendTex.getGLTextureParams(), rtIDs, cacheable,
-            mipmapStatus));
+            mipmapStatus, backendTex.getLabel()));
     texRT->baseLevelWasBoundToFBO();
     return std::move(texRT);
 }
@@ -834,8 +837,13 @@ sk_sp<GrRenderTarget> GrGLGpu::onWrapBackendRenderTarget(const GrBackendRenderTa
     rtIDs.fRTFBOOwnership = GrBackendObjectOwnership::kBorrowed;
     rtIDs.fTotalMemorySamplesPerPixel = sampleCount;
 
-    return GrGLRenderTarget::MakeWrapped(this, backendRT.dimensions(), format, sampleCount, rtIDs,
-                                         backendRT.stencilBits());
+    return GrGLRenderTarget::MakeWrapped(this,
+                                         backendRT.dimensions(),
+                                         format,
+                                         sampleCount,
+                                         rtIDs,
+                                         backendRT.stencilBits(),
+                                         /*label=*/"GLGpu_WrapBackendRenderTarget");
 }
 
 static bool check_write_and_transfer_input(GrGLTexture* glTex) {
