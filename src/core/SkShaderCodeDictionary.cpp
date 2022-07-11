@@ -10,8 +10,11 @@
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/private/SkSLString.h"
 #include "src/core/SkOpts.h"
+#include "src/core/SkRuntimeEffectDictionary.h"
 #include "src/core/SkRuntimeEffectPriv.h"
 #include "src/sksl/SkSLUtil.h"
+#include "src/sksl/codegen/SkSLPipelineStageCodeGenerator.h"
+#include "src/sksl/ir/SkSLVarDeclarations.h"
 
 #ifdef SK_GRAPHITE_ENABLED
 #include "include/gpu/graphite/Context.h"
@@ -26,8 +29,8 @@ using DataPayloadType = SkPaintParamsKey::DataPayloadType;
 
 namespace {
 
-std::string get_mangled_name(const char* baseName, int manglingSuffix) {
-    return std::string(baseName) + "_" + std::to_string(manglingSuffix);
+std::string get_mangled_name(const std::string& baseName, int manglingSuffix) {
+    return baseName + "_" + std::to_string(manglingSuffix);
 }
 
 void add_indent(std::string* result, int indent) {
@@ -142,8 +145,8 @@ std::string SkShaderInfo::emitGlueCodeForEntry(int* entryIndex,
     }
 
     (reader.entry()->fGlueCodeGenerator)(scopeOutputVar, curEntryIndex, reader,
-                                         priorStageOutputName, childOutputVarNames,
-                                         preamble, mainBody, indent + 1);
+                                         fRuntimeEffectDictionary, priorStageOutputName,
+                                         childOutputVarNames, preamble, mainBody, indent + 1);
     add_indent(mainBody, indent);
     *mainBody += "}\n";
 
@@ -305,6 +308,7 @@ namespace {
 void GenerateDefaultGlueCode(const std::string& resultName,
                              int entryIndex,
                              const SkPaintParamsKey::BlockReader& reader,
+                             const SkRuntimeEffectDictionary*,
                              const std::string& priorStageOutputName,
                              const std::vector<std::string>& childOutputVarNames,
                              std::string* preamble,
@@ -479,6 +483,7 @@ static constexpr char kImageShaderName[] = "sk_compute_coords";
 void GenerateImageShaderGlueCode(const std::string& resultName,
                                  int entryIndex,
                                  const SkPaintParamsKey::BlockReader& reader,
+                                 const SkRuntimeEffectDictionary*,
                                  const std::string& priorStageOutputName,
                                  const std::vector<std::string>& childNames,
                                  std::string* preamble,
@@ -527,28 +532,100 @@ static constexpr char kBlendShaderName[] = "sk_blend_shader";
 //--------------------------------------------------------------------------------------------------
 static constexpr char kRuntimeShaderName[] = "RuntimeEffect";
 
+#if defined(SK_GRAPHITE_ENABLED) && defined(SK_ENABLE_SKSL)
+
+class GraphitePipelineCallbacks : public SkSL::PipelineStage::Callbacks {
+public:
+    GraphitePipelineCallbacks(std::string* preamble, int entryIndex)
+            : fPreamble(preamble)
+            , fEntryIndex(entryIndex) {}
+
+    std::string declareUniform(const SkSL::VarDeclaration* decl) override {
+        return get_mangled_name(std::string(decl->var().name()), fEntryIndex);
+    }
+
+    void defineFunction(const char* decl, const char* body, bool isMain) override {
+        if (isMain) {
+            SkSL::String::appendf(fPreamble, "half4 %s_%d(float2 coords, half4 inColor) {\n%s}\n",
+                                  kRuntimeShaderName, fEntryIndex, body);
+        } else {
+            SkSL::String::appendf(fPreamble, "%s {\n%s}\n", decl, body);
+        }
+    }
+
+    void declareFunction(const char* decl) override {
+        *fPreamble += std::string(decl) + ";\n";
+    }
+
+    void defineStruct(const char* definition) override {
+        *fPreamble += std::string(definition) + ";\n";
+    }
+
+    void declareGlobal(const char* declaration) override {
+        *fPreamble += std::string(declaration) + ";\n";
+    }
+
+    std::string sampleShader(int index, std::string coords) override {
+        // TODO(skia:13508): implement child shaders
+        return "half4(0)";
+    }
+
+    std::string sampleColorFilter(int index, std::string color) override {
+        // TODO(skia:13508): implement child color-filters
+        return "half4(0)";
+    }
+
+    std::string sampleBlender(int index, std::string src, std::string dst) override {
+        // TODO(skia:13508): implement child blenders
+        return src;
+    }
+
+    std::string toLinearSrgb(std::string color) override {
+        // TODO(skia:13508): implement to-linear-SRGB child effect
+        return color;
+    }
+    std::string fromLinearSrgb(std::string color) override {
+        // TODO(skia:13508): implement from-linear-SRGB child effect
+        return color;
+    }
+
+    std::string getMangledName(const char* name) override {
+        return get_mangled_name(name, fEntryIndex);
+    }
+
+private:
+    std::string* fPreamble;
+    int fEntryIndex;
+};
+
+#endif
+
 void GenerateRuntimeShaderGlueCode(const std::string& resultName,
                                    int entryIndex,
                                    const SkPaintParamsKey::BlockReader& reader,
+                                   const SkRuntimeEffectDictionary* rteDict,
                                    const std::string& priorStageOutputName,
                                    const std::vector<std::string>& childOutputVarNames,
                                    std::string* preamble,
                                    std::string* mainBody,
                                    int indent) {
+#if defined(SK_GRAPHITE_ENABLED) && defined(SK_ENABLE_SKSL)
     const SkShaderSnippet* entry = reader.entry();
+
+    // Find this runtime effect in the runtime-effect dictionary.
+    const SkRuntimeEffect* effect = rteDict->find(reader.codeSnippetId());
+    SkASSERT(effect);
+    const SkSL::Program& program = SkRuntimeEffectPriv::Program(*effect);
+
+    GraphitePipelineCallbacks callbacks{preamble, entryIndex};
+    SkASSERT(std::string_view(entry->fName) == kRuntimeShaderName);  // the callbacks assume this
+    SkSL::PipelineStage::ConvertProgram(program, "coords", "inColor", "half4(1)", &callbacks);
 
     // We prepend a preLocalMatrix as the first uniform, ahead of the runtime effect's uniforms.
     // TODO: we can eliminate this uniform entirely if it's the identity matrix.
     // TODO: if we could inherit the parent's transform, this could be removed entirely.
     SkASSERT(entry->needsLocalCoords());
     SkASSERT(reader.entry()->fUniforms[0].type() == SkSLType::kFloat4x4);
-
-    SkSL::String::appendf(preamble, R"(
-half4 %s_%d(float2 coords, half4 color) {
-    // TODO: Runtime effect code goes here
-    return half4(0.75, 0.0, 1.0, 1.0);
-}
-)", entry->fName, entryIndex);
 
     std::string preLocalMatrixVarName = get_mangled_name("preLocal", entryIndex);
 
@@ -559,6 +636,10 @@ half4 %s_%d(float2 coords, half4 color) {
                           entry->fName, entryIndex,
                           preLocalMatrixVarName.c_str(),
                           priorStageOutputName.c_str());
+#else
+    add_indent(mainBody, indent);
+    SkSL::String::appendf(mainBody, "%s = %s;\n", resultName.c_str(), priorStageOutputName.c_str());
+#endif
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -570,6 +651,7 @@ static constexpr char kErrorName[] = "sk_error";
 void GenerateFixedFunctionBlenderGlueCode(const std::string& resultName,
                                           int entryIndex,
                                           const SkPaintParamsKey::BlockReader& reader,
+                                          const SkRuntimeEffectDictionary*,
                                           const std::string& priorStageOutputName,
                                           const std::vector<std::string>& childNames,
                                           std::string* preamble,
@@ -602,6 +684,7 @@ static constexpr char kBlendHelperName[] = "sk_blend";
 void GenerateShaderBasedBlenderGlueCode(const std::string& resultName,
                                         int entryIndex,
                                         const SkPaintParamsKey::BlockReader& reader,
+                                        const SkRuntimeEffectDictionary*,
                                         const std::string& priorStageOutputName,
                                         const std::vector<std::string>& childNames,
                                         std::string* preamble,
@@ -801,7 +884,6 @@ int SkShaderCodeDictionary::findOrCreateRuntimeEffectSnippet(const SkRuntimeEffe
             {"uniform data size (bytes)", DataPayloadType::kInt, 1},
     };
 
-    // TODO(skia:13405): arguments to `addUserDefinedSnippet` here are placeholder
     int newCodeSnippetID = this->addUserDefinedSnippet("RuntimeEffect",
                                                        this->convertUniforms(effect),
                                                        SnippetRequirementFlags::kLocalCoords,

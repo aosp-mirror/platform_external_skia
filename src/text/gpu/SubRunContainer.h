@@ -18,7 +18,6 @@ class SkMatrixProvider;
 class SkPaint;
 class SkReadBuffer;
 class SkStrikeClient;
-class SkStrikeForGPUCacheInterface;
 class SkWriteBuffer;
 
 namespace sktext {
@@ -26,6 +25,7 @@ class GlyphRunList;
     namespace gpu {
     class Glyph;
     class StrikeCache;
+    class StrikeForGPUCacheInterface;
     }
 }
 
@@ -111,7 +111,6 @@ public:
     virtual void fillVertexData(
             skgpu::graphite::DrawWriter*,
             int offset, int count,
-            SkColor color,
             SkScalar depth,
             const skgpu::graphite::Transform& transform) const = 0;
 #endif
@@ -242,7 +241,7 @@ public:
             const SkMatrix& positionMatrix,
             const SkPaint& runPaint,
             SkStrikeDeviceInfo strikeDeviceInfo,
-            SkStrikeForGPUCacheInterface* strikeCache,
+            StrikeForGPUCacheInterface* strikeCache,
             sktext::gpu::SubRunAllocator* alloc,
             SubRunCreationBehavior creationBehavior,
             const char* tag);

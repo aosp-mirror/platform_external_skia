@@ -27,9 +27,10 @@ class SkTypeface;
 struct SkGlyphPositionRoundingSpec;
 struct SkScalerContextEffects;
 
-class SkStrikeForGPU {
+namespace sktext::gpu {
+class StrikeForGPU {
 public:
-    virtual ~SkStrikeForGPU() = default;
+    virtual ~StrikeForGPU() = default;
     virtual const SkDescriptor& getDescriptor() const = 0;
 
     virtual void prepareForMaskDrawing(
@@ -63,17 +64,18 @@ public:
 
 
     struct Deleter {
-        void operator()(SkStrikeForGPU* ptr) const {
+        void operator()(StrikeForGPU* ptr) const {
             ptr->onAboutToExitScope();
         }
     };
 };
 
-using SkScopedStrikeForGPU = std::unique_ptr<SkStrikeForGPU, SkStrikeForGPU::Deleter>;
+using ScopedStrikeForGPU = std::unique_ptr<StrikeForGPU, StrikeForGPU::Deleter>;
 
-class SkStrikeForGPUCacheInterface {
+class StrikeForGPUCacheInterface {
 public:
-    virtual ~SkStrikeForGPUCacheInterface() = default;
-    virtual SkScopedStrikeForGPU findOrCreateScopedStrike(const SkStrikeSpec& strikeSpec) = 0;
+    virtual ~StrikeForGPUCacheInterface() = default;
+    virtual ScopedStrikeForGPU findOrCreateScopedStrike(const SkStrikeSpec& strikeSpec) = 0;
 };
+}  // namespace sktext::gpu
 #endif  //SkStrikeInterface_DEFINED
