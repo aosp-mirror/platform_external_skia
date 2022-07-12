@@ -309,7 +309,7 @@ SkSL::ProgramSettings SkRuntimeEffect::MakeSettings(const Options& options) {
     settings.fInlineThreshold = 0;
     settings.fForceNoInline = options.forceUnoptimized;
     settings.fOptimize = !options.forceUnoptimized;
-    settings.fEnforceES2Restrictions = options.enforceES2Restrictions;
+    settings.fMaxVersionAllowed = options.maxVersionAllowed;
     return settings;
 }
 
@@ -340,6 +340,14 @@ SkRuntimeEffect::Result SkRuntimeEffect::MakeInternal(std::unique_ptr<SkSL::Prog
                                                       const Options& options,
                                                       SkSL::ProgramKind kind) {
     SkSL::SharedCompiler compiler;
+
+    // TODO(skia:11209): Figure out a way to run ES3+ color filters on the CPU. This doesn't need
+    // to be fast - it could just be direct IR evaluation. But without it, there's no way for us
+    // to fully implement the SkColorFilter API (eg, `filterColor`)
+    if (kind == SkSL::ProgramKind::kRuntimeColorFilter &&
+        !SkRuntimeEffectPriv::CanDraw(SkCapabilities::RasterBackend().get(), program.get())) {
+        RETURN_FAILURE("SkSL color filters must target #version 100");
+    }
 
     // Find 'main', then locate the sample coords parameter. (It might not be present.)
     const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
@@ -456,7 +464,7 @@ sk_sp<SkRuntimeEffect> SkRuntimeEffect::makeUnoptimizedClone() {
     // from when it was initially made so we don't know what was originally requested.
     Options options;
     options.forceUnoptimized = true;
-    options.enforceES2Restrictions = false;
+    options.maxVersionAllowed = SkSL::Version::k300;
     options.usePrivateRTShaderModule = true;
 
     // We do know the original ProgramKind, so we don't need to re-derive it.
@@ -602,15 +610,16 @@ SkRuntimeEffect::SkRuntimeEffect(std::unique_ptr<SkSL::Program> baseProgram,
     // assert below to trigger, please incorporate your field into `fHash` and update KnownOptions
     // to match the layout of Options.
     struct KnownOptions {
-        bool forceUnoptimized, enforceES2Restrictions, usePrivateRTShaderModule;
+        bool forceUnoptimized, usePrivateRTShaderModule;
+        SkSL::Version maxVersionAllowed;
     };
     static_assert(sizeof(Options) == sizeof(KnownOptions));
     fHash = SkOpts::hash_fn(&options.forceUnoptimized,
                       sizeof(options.forceUnoptimized), fHash);
-    fHash = SkOpts::hash_fn(&options.enforceES2Restrictions,
-                      sizeof(options.enforceES2Restrictions), fHash);
     fHash = SkOpts::hash_fn(&options.usePrivateRTShaderModule,
                       sizeof(options.usePrivateRTShaderModule), fHash);
+    fHash = SkOpts::hash_fn(&options.maxVersionAllowed,
+                      sizeof(options.maxVersionAllowed), fHash);
 
     fFilterColorProgram = SkFilterColorProgram::Make(this);
 }
@@ -1018,6 +1027,9 @@ public:
     skvm::Color onProgram(skvm::Builder* p, skvm::Color c,
                           const SkColorInfo& colorInfo,
                           skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const override {
+        SkASSERT(
+                SkRuntimeEffectPriv::CanDraw(SkCapabilities::RasterBackend().get(), fEffect.get()));
+
         sk_sp<const SkData> inputs = SkRuntimeEffectPriv::TransformUniforms(
                 fEffect->uniforms(),
                 fUniforms,
@@ -1143,6 +1155,10 @@ public:
 
 #if SK_SUPPORT_GPU
     std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs& args) const override {
+        if (!SkRuntimeEffectPriv::CanDraw(args.fContext->priv().caps(), fEffect.get())) {
+            return nullptr;
+        }
+
         SkMatrix matrix;
         if (!this->totalLocalMatrix(args.fPreLocalMatrix)->invert(&matrix)) {
             return nullptr;
@@ -1186,6 +1202,10 @@ public:
                           const SkMatrixProvider& matrices, const SkMatrix* localM,
                           const SkColorInfo& colorInfo,
                           skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const override {
+        if (!SkRuntimeEffectPriv::CanDraw(SkCapabilities::RasterBackend().get(), fEffect.get())) {
+            return {};
+        }
+
         sk_sp<const SkData> inputs = SkRuntimeEffectPriv::TransformUniforms(fEffect->uniforms(),
                                                                             fUniforms,
                                                                             colorInfo.colorSpace());
@@ -1295,6 +1315,10 @@ public:
     skvm::Color onProgram(skvm::Builder* p, skvm::Color src, skvm::Color dst,
                           const SkColorInfo& colorInfo, skvm::Uniforms* uniforms,
                           SkArenaAlloc* alloc) const override {
+        if (!SkRuntimeEffectPriv::CanDraw(SkCapabilities::RasterBackend().get(), fEffect.get())) {
+            return {};
+        }
+
         sk_sp<const SkData> inputs = SkRuntimeEffectPriv::TransformUniforms(fEffect->uniforms(),
                                                                             fUniforms,
                                                                             colorInfo.colorSpace());
@@ -1316,6 +1340,10 @@ public:
             std::unique_ptr<GrFragmentProcessor> srcFP,
             std::unique_ptr<GrFragmentProcessor> dstFP,
             const GrFPArgs& args) const override {
+        if (!SkRuntimeEffectPriv::CanDraw(args.fContext->priv().caps(), fEffect.get())) {
+            return nullptr;
+        }
+
         sk_sp<const SkData> uniforms = SkRuntimeEffectPriv::TransformUniforms(
                 fEffect->uniforms(),
                 fUniforms,
