@@ -95,7 +95,7 @@ SkRuntimeEffect::Uniform SkRuntimeEffectPriv::VarAsUniform(const SkSL::Variable&
     using Uniform = SkRuntimeEffect::Uniform;
     SkASSERT(var.modifiers().fFlags & SkSL::Modifiers::kUniform_Flag);
     Uniform uni;
-    uni.name = SkString(var.name());
+    uni.name = var.name();
     uni.flags = 0;
     uni.count = 1;
 
@@ -418,7 +418,7 @@ SkRuntimeEffect::Result SkRuntimeEffect::MakeInternal(std::unique_ptr<SkSL::Prog
             // Child effects that can be sampled ('shader', 'colorFilter', 'blender')
             if (varType.isEffectChild()) {
                 Child c;
-                c.name  = SkString(var.name());
+                c.name  = var.name();
                 c.type  = child_type(varType);
                 c.index = children.size();
                 children.push_back(c);
@@ -635,20 +635,16 @@ size_t SkRuntimeEffect::uniformSize() const {
                              : SkAlign4(fUniforms.back().offset + fUniforms.back().sizeInBytes());
 }
 
-const SkRuntimeEffect::Uniform* SkRuntimeEffect::findUniform(const char* name) const {
-    SkASSERT(name);
-    size_t len = strlen(name);
-    auto iter = std::find_if(fUniforms.begin(), fUniforms.end(), [name, len](const Uniform& u) {
-        return u.name.equals(name, len);
+const SkRuntimeEffect::Uniform* SkRuntimeEffect::findUniform(std::string_view name) const {
+    auto iter = std::find_if(fUniforms.begin(), fUniforms.end(), [name](const Uniform& u) {
+        return u.name == name;
     });
     return iter == fUniforms.end() ? nullptr : &(*iter);
 }
 
-const SkRuntimeEffect::Child* SkRuntimeEffect::findChild(const char* name) const {
-    SkASSERT(name);
-    size_t len = strlen(name);
-    auto iter = std::find_if(fChildren.begin(), fChildren.end(), [name, len](const Child& c) {
-        return c.name.equals(name, len);
+const SkRuntimeEffect::Child* SkRuntimeEffect::findChild(std::string_view name) const {
+    auto iter = std::find_if(fChildren.begin(), fChildren.end(), [name](const Child& c) {
+        return c.name == name;
     });
     return iter == fChildren.end() ? nullptr : &(*iter);
 }
@@ -900,7 +896,7 @@ static GrFPResult make_effect_fp(sk_sp<SkRuntimeEffect> effect,
             // Convert a SkBlender into a child FP.
             auto childFP = as_BB(child.blender())->asFragmentProcessor(
                     /*srcFP=*/nullptr,
-                    GrFragmentProcessor::UseDestColorAsInput(/*dstFP=*/nullptr),
+                    GrFragmentProcessor::DestColor(),
                     childArgs);
             if (!childFP) {
                 return GrFPFailure(std::move(inputFP));
