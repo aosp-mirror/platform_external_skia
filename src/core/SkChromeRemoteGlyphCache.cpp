@@ -157,7 +157,7 @@ struct StrikeSpec {
 };
 
 // -- RemoteStrike ----------------------------------------------------------------------------
-class RemoteStrike final : public SkStrikeForGPU {
+class RemoteStrike final : public sktext::gpu::StrikeForGPU {
 public:
     // N.B. RemoteStrike is not valid until ensureScalerContext is called.
     RemoteStrike(const SkStrikeSpec& strikeSpec,
@@ -329,7 +329,7 @@ void RemoteStrike::writePendingGlyphs(Serializer* serializer) {
 
         write_glyph(glyph, serializer);
         auto imageSize = glyph.imageSize();
-        if (imageSize > 0 && FitsInAtlas(glyph)) {
+        if (imageSize > 0 && SkGlyphDigest::FitsInAtlas(glyph)) {
             glyph.setImage(serializer->allocate(imageSize, glyph.formatAlignment()));
             fContext->getImage(glyph);
         }
@@ -542,7 +542,7 @@ struct WireTypeface {
 }  // namespace
 
 // -- SkStrikeServerImpl ---------------------------------------------------------------------------
-class SkStrikeServerImpl final : public SkStrikeForGPUCacheInterface {
+class SkStrikeServerImpl final : public sktext::gpu::StrikeForGPUCacheInterface {
 public:
     explicit SkStrikeServerImpl(
             SkStrikeServer::DiscardableHandleManager* discardableHandleManager);
@@ -551,7 +551,7 @@ public:
     sk_sp<SkData> serializeTypeface(SkTypeface*);
     void writeStrikeData(std::vector<uint8_t>* memory);
 
-    SkScopedStrikeForGPU findOrCreateScopedStrike(const SkStrikeSpec& strikeSpec) override;
+    ScopedStrikeForGPU findOrCreateScopedStrike(const SkStrikeSpec& strikeSpec) override;
 
     // Methods for testing
     void setMaxEntriesInDescriptorMapForTesting(size_t count);
@@ -664,8 +664,9 @@ void SkStrikeServerImpl::writeStrikeData(std::vector<uint8_t>* memory) {
     #endif
 }
 
-SkScopedStrikeForGPU SkStrikeServerImpl::findOrCreateScopedStrike(const SkStrikeSpec& strikeSpec) {
-    return SkScopedStrikeForGPU{this->getOrCreateCache(strikeSpec)};
+sktext::gpu::ScopedStrikeForGPU SkStrikeServerImpl::findOrCreateScopedStrike(
+        const SkStrikeSpec& strikeSpec) {
+    return sktext::gpu::ScopedStrikeForGPU{this->getOrCreateCache(strikeSpec)};
 }
 
 void SkStrikeServerImpl::checkForDeletedEntries() {
@@ -1051,7 +1052,7 @@ bool SkStrikeClientImpl::readStrikeData(const volatile void* memory, size_t memo
             SkTLazy<SkGlyph> glyph;
             if (!ReadGlyph(glyph, &deserializer)) READ_FAILURE
 
-            if (!glyph->isEmpty() && SkStrikeForGPU::FitsInAtlas(*glyph)) {
+            if (!glyph->isEmpty() && SkGlyphDigest::FitsInAtlas(*glyph)) {
                 const volatile void* image =
                         deserializer.read(glyph->imageSize(), glyph->formatAlignment());
                 if (!image) READ_FAILURE

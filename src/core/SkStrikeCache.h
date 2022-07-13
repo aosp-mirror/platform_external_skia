@@ -39,7 +39,7 @@ public:
     virtual void assertValid() {}
 };
 
-class SkStrike final : public SkRefCnt, public SkStrikeForGPU {
+class SkStrike final : public SkRefCnt, public sktext::gpu::StrikeForGPU {
 public:
     SkStrike(SkStrikeCache* strikeCache,
              const SkStrikeSpec& strikeSpec,
@@ -189,7 +189,7 @@ public:
     bool                            fRemoved{false};
 };  // SkStrike
 
-class SkStrikeCache final : public SkStrikeForGPUCacheInterface {
+class SkStrikeCache final : public sktext::gpu::StrikeForGPUCacheInterface {
 public:
     SkStrikeCache() = default;
 
@@ -204,7 +204,7 @@ public:
 
     sk_sp<SkStrike> findOrCreateStrike(const SkStrikeSpec& strikeSpec) SK_EXCLUDES(fLock);
 
-    SkScopedStrikeForGPU findOrCreateScopedStrike(
+    sktext::gpu::ScopedStrikeForGPU findOrCreateScopedStrike(
             const SkStrikeSpec& strikeSpec) override SK_EXCLUDES(fLock);
 
     static void PurgeAll();
