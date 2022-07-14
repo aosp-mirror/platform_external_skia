@@ -8,11 +8,11 @@
 #ifndef SkLinearGradient_DEFINED
 #define SkLinearGradient_DEFINED
 
-#include "src/shaders/gradients/SkGradientShaderPriv.h"
+#include "src/shaders/gradients/SkGradientShaderBase.h"
 
 class SkShaderCodeDictionary;
 
-class SkLinearGradient : public SkGradientShaderBase {
+class SkLinearGradient final : public SkGradientShaderBase {
 public:
     SkLinearGradient(const SkPoint pts[2], const Descriptor&);
 

@@ -10,7 +10,7 @@
 
 #include "src/gpu/ganesh/GrFPArgs.h"
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
-#include "src/shaders/gradients/SkGradientShaderPriv.h"
+#include "src/shaders/gradients/SkGradientShaderBase.h"
 #include "src/shaders/gradients/SkLinearGradient.h"
 #include "src/shaders/gradients/SkRadialGradient.h"
 #include "src/shaders/gradients/SkSweepGradient.h"
@@ -21,6 +21,11 @@
 #endif
 
 namespace GrGradientShader {
+    std::unique_ptr<GrFragmentProcessor> MakeGradientFP(const SkGradientShaderBase& shader,
+                                                        const GrFPArgs& args,
+                                                        std::unique_ptr<GrFragmentProcessor> layout,
+                                                        const SkMatrix* overrideMatrix = nullptr);
+
     std::unique_ptr<GrFragmentProcessor> MakeLinear(const SkLinearGradient& shader,
                                                     const GrFPArgs& args);
 

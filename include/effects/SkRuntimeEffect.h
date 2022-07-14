@@ -25,6 +25,8 @@
 
 #ifdef SK_ENABLE_SKSL
 
+#include "include/sksl/SkSLVersion.h"
+
 class GrRecordingContext;
 class SkFilterColorProgram;
 class SkImage;
@@ -89,11 +91,11 @@ public:
             kHalfPrecision_Flag = 0x10,
         };
 
-        SkString  name;
-        size_t    offset;
-        Type      type;
-        int       count;
-        uint32_t  flags;
+        std::string_view name;
+        size_t           offset;
+        Type             type;
+        int              count;
+        uint32_t         flags;
 
         bool isArray() const { return SkToBool(this->flags & kArray_Flag); }
         bool isColor() const { return SkToBool(this->flags & kColor_Flag); }
@@ -108,9 +110,9 @@ public:
     };
 
     struct Child {
-        SkString  name;
-        ChildType type;
-        int       index;
+        std::string_view name;
+        ChildType        type;
+        int              index;
     };
 
     class Options {
@@ -124,17 +126,16 @@ public:
         friend class SkRuntimeEffect;
         friend class SkRuntimeEffectPriv;
 
+        // Public SkSL does not allow access to sk_FragCoord. The semantics of that variable are
+        // confusing, and expose clients to implementation details of saveLayer and image filters.
+        bool usePrivateRTShaderModule = false;
+
         // TODO(skia:11209) - Replace this with a promised SkCapabilities?
         // This flag lifts the ES2 restrictions on Runtime Effects that are gated by the
         // `strictES2Mode` check. Be aware that the software renderer and pipeline-stage effect are
         // still largely ES3-unaware and can still fail or crash if post-ES2 features are used.
         // This is only intended for use by tests and certain internally created effects.
-        bool enforceES2Restrictions = true;
-
-        // Similarly: Public SkSL does not allow access to sk_FragCoord. The semantics of that
-        // variable are confusing, and expose clients to implementation details of saveLayer and
-        // image filters.
-        bool usePrivateRTShaderModule = false;
+        SkSL::Version maxVersionAllowed = SkSL::Version::k100;
     };
 
     // If the effect is compiled successfully, `effect` will be non-null.
@@ -253,10 +254,10 @@ public:
     SkSpan<const Child> children() const { return SkSpan(fChildren); }
 
     // Returns pointer to the named uniform variable's description, or nullptr if not found
-    const Uniform* findUniform(const char* name) const;
+    const Uniform* findUniform(std::string_view name) const;
 
     // Returns pointer to the named child's description, or nullptr if not found
-    const Child* findChild(const char* name) const;
+    const Child* findChild(std::string_view name) const;
 
     static void RegisterFlattenables();
     ~SkRuntimeEffect() override;
@@ -409,11 +410,8 @@ public:
 
     const SkRuntimeEffect* effect() const { return fEffect.get(); }
 
-    BuilderUniform uniform(const char* name) { return { this, fEffect->findUniform(name) }; }
-    BuilderChild child(const char* name) {
-        const SkRuntimeEffect::Child* child = fEffect->findChild(name);
-        return { this, child };
-    }
+    BuilderUniform uniform(std::string_view name) { return { this, fEffect->findUniform(name) }; }
+    BuilderChild child(std::string_view name) { return { this, fEffect->findChild(name) }; }
 
 protected:
     SkRuntimeEffectBuilder() = delete;

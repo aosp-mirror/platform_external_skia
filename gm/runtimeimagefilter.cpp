@@ -23,6 +23,8 @@
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 
+#include <string_view>
+
 static sk_sp<SkImageFilter> make_filter() {
     sk_sp<SkRuntimeEffect> effect = SkRuntimeEffect::MakeForShader(SkString(R"(
         uniform shader child;
@@ -32,7 +34,7 @@ static sk_sp<SkImageFilter> make_filter() {
         }
     )")).effect;
     SkRuntimeShaderBuilder builder(std::move(effect));
-    return SkImageFilters::RuntimeShader(builder, /*childShaderName=*/nullptr, /*input=*/nullptr);
+    return SkImageFilters::RuntimeShader(builder, /*childShaderName=*/"", /*input=*/nullptr);
 }
 
 DEF_SIMPLE_GM_BG(rtif_distort, canvas, 500, 750, SK_ColorBLACK) {
@@ -89,7 +91,7 @@ DEF_SIMPLE_GM(rtif_unsharp, canvas, 512, 256) {
     auto image = GetResourceAsImage("images/mandrill_256.png");
     auto blurredSrc = SkImageFilters::Blur(1, 1, /*input=*/nullptr);
 
-    const char* childNames[] = { "content", "blurred" };
+    std::string_view childNames[] = { "content", "blurred" };
     sk_sp<SkImageFilter> childNodes[] = { nullptr, blurredSrc };
 
     auto sharpened = SkImageFilters::RuntimeShader(builder, childNames, childNodes, 2);
