@@ -95,6 +95,8 @@ public:
     // called, flatten can not be called.
     sk_sp<SkStrike> getStrikeAndSetToNullptr();
 
+    StrikeForGPU* asStrikeForGPU();
+
 private:
     friend class StrikeRefTestingPeer;
     // A StrikeRef can hold a pointer from a RemoteStrike which is of type SkStrikeForGPU,
@@ -108,6 +110,7 @@ class StrikeForGPUCacheInterface {
 public:
     virtual ~StrikeForGPUCacheInterface() = default;
     virtual ScopedStrikeForGPU findOrCreateScopedStrike(const SkStrikeSpec& strikeSpec) = 0;
+    virtual StrikeRef findOrCreateStrikeRef(const SkStrikeSpec& strikeSpec) = 0;
 };
 }  // namespace sktext
 #endif  // sktext_StrikeForGPU_DEFINED
