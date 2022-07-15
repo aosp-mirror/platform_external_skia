@@ -236,6 +236,7 @@ function colorFilterTests(CK: CanvasKit) {
     CK.ColorMatrix.postTranslate(cm, 20, 0, -10, 0);
 
     const filterSix = CK.ColorFilter.MakeMatrix(cm); // $ExpectType ColorFilter
+    const luma = CK.ColorFilter.MakeLumaColorFilter(); // $ExpectType ColorFilter
 }
 
 function contourMeasureTests(CK: CanvasKit, path?: Path) {
@@ -307,8 +308,8 @@ function imageTests(CK: CanvasKit, imgElement?: HTMLImageElement) {
     img.delete();
 }
 
-function imageFilterTests(CK: CanvasKit, colorFilter?: ColorFilter, img?: Image) {
-    if (!colorFilter || !img) return;
+function imageFilterTests(CK: CanvasKit, colorFilter?: ColorFilter, img?: Image, shader?: Shader) {
+    if (!colorFilter || !img || !shader) return;
     const imgf = CK.ImageFilter; // less typing
     const filter = imgf.MakeBlur(2, 4, CK.TileMode.Mirror, null); // $ExpectType ImageFilter
     const filter1 = imgf.MakeBlur(2, 4, CK.TileMode.Decal, filter); // $ExpectType ImageFilter
@@ -346,6 +347,7 @@ function imageFilterTests(CK: CanvasKit, colorFilter?: ColorFilter, img?: Image)
 
     let filter16 = imgf.MakeOffset(5, 3, null); // $ExpectType ImageFilter
     filter16 = imgf.MakeOffset(-100.3, -18, filter16);
+    imgf.MakeShader(shader); // $ExpectType ImageFilter
 }
 
 function fontTests(CK: CanvasKit, face?: Typeface, paint?: Paint) {
@@ -460,7 +462,6 @@ function pathTests(CK: CanvasKit) {
     const p5 = CK.Path.MakeFromOp(p4, p2!, CK.PathOp.ReverseDifference); // $ExpectType Path | null
     const p6 = CK.Path.MakeFromSVGString('M 205,5 L 795,5 z'); // $ExpectType Path | null
     const p7 = p3.makeAsWinding(); // $ExpectType Path | null
-
     const someRect = CK.LTRBRect(10, 20, 30, 40);
     // Making sure arrays are accepted as rrects.
     const someRRect = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -472,6 +473,7 @@ function pathTests(CK: CanvasKit) {
     path.addPoly([20, 20,  40, 40,  20, 40], true);
     path.addRect(someRect);
     path.addRect(someRect, true);
+    path.addCircle(10, 10, 10);
     path.addRRect(someRRect);
     path.addRRect(someRRect, true);
     path.addVerbsPointsWeights(verbs, [1, 2, 3, 4]);
@@ -528,6 +530,10 @@ function pathTests(CK: CanvasKit) {
     path.transform(CK.Matrix.identity());
     path.transform(1, 0, 0, 0, 1, 0, 0, 0, 1);
     path.trim(0.1, 0.7, false);
+
+    if (CK.Path.CanInterpolate(p3, p4)) {
+        const interpolated = CK.Path.MakeFromPathInterpolation(p3, p4, 0.5); // $ExpectType Path | null
+    }
 }
 
 function paragraphTests(CK: CanvasKit, p?: Paragraph) {
