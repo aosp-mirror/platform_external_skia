@@ -157,6 +157,11 @@ public:
         this->updateDelta(increase);
     }
 
+    void glyphIDsToPaths(SkSpan<sktext::IDOrPath> idsOrPaths) {
+        size_t increase = fScalerCache.glyphIDsToPaths(idsOrPaths);
+        this->updateDelta(increase);
+    }
+
     void prepareForDrawableDrawing(
             SkDrawableGlyphBuffer* accepted, SkSourceGlyphBuffer* rejected) override {
         size_t increase = fScalerCache.prepareForDrawableDrawing(accepted, rejected);
@@ -205,6 +210,9 @@ public:
     sk_sp<SkStrike> findOrCreateStrike(const SkStrikeSpec& strikeSpec) SK_EXCLUDES(fLock);
 
     sktext::ScopedStrikeForGPU findOrCreateScopedStrike(
+            const SkStrikeSpec& strikeSpec) override SK_EXCLUDES(fLock);
+
+    sktext::StrikeRef findOrCreateStrikeRef(
             const SkStrikeSpec& strikeSpec) override SK_EXCLUDES(fLock);
 
     static void PurgeAll();

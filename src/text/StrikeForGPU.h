@@ -69,6 +69,15 @@ public:
 // -- ScopedStrikeForGPU ---------------------------------------------------------------------------
 using ScopedStrikeForGPU = std::unique_ptr<StrikeForGPU, StrikeForGPU::Deleter>;
 
+// prepareForPathDrawing uses this union to convert glyph ids to paths.
+union IDOrPath {
+    SkGlyphID fGlyphID;
+    SkPath fPath;
+
+    // PathOpSubmitter takes care of destroying the paths.
+    ~IDOrPath() {}
+};
+
 // -- StrikeRef ------------------------------------------------------------------------------------
 // Hold a ref to either a RemoteStrike or an SkStrike. Use either to flatten a descriptor, but
 // when MakeFromBuffer runs look up the SkStrike associated with the descriptor.
@@ -95,6 +104,8 @@ public:
     // called, flatten can not be called.
     sk_sp<SkStrike> getStrikeAndSetToNullptr();
 
+    StrikeForGPU* asStrikeForGPU();
+
 private:
     friend class StrikeRefTestingPeer;
     // A StrikeRef can hold a pointer from a RemoteStrike which is of type SkStrikeForGPU,
@@ -108,6 +119,7 @@ class StrikeForGPUCacheInterface {
 public:
     virtual ~StrikeForGPUCacheInterface() = default;
     virtual ScopedStrikeForGPU findOrCreateScopedStrike(const SkStrikeSpec& strikeSpec) = 0;
+    virtual StrikeRef findOrCreateStrikeRef(const SkStrikeSpec& strikeSpec) = 0;
 };
 }  // namespace sktext
 #endif  // sktext_StrikeForGPU_DEFINED
