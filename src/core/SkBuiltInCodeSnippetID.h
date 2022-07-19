@@ -18,6 +18,7 @@ enum class SkBuiltInCodeSnippetID : int32_t {
     kError,
 
     // SkShader code snippets
+    kPassthroughShader,
     kSolidColorShader,
     kLinearGradientShader4,
     kLinearGradientShader8,
@@ -32,6 +33,9 @@ enum class SkBuiltInCodeSnippetID : int32_t {
     kImageShader,
     kBlendShader,     // aka ComposeShader
     kRuntimeShader,
+
+    // SkColorFilter code snippets
+    kMatrixColorFilter,
 
     // BlendMode code snippets
     kFixedFunctionBlender,
