@@ -1,12 +1,14 @@
 *.pyc
 *.swp
 *.iml
+*.perfetto-trace
 .DS_Store
 .android_config
 .gclient*
 .gradle
 .idea
 .cproject
+.clwb/
 .project
 .recipe_deps/
 .settings/
