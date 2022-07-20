@@ -180,6 +180,30 @@ public:
         return c ? fOuter->program(p, c, dst, uniforms, alloc) : skvm::Color{};
     }
 
+#if SK_SUPPORT_GPU
+    GrFPResult asFragmentProcessor(std::unique_ptr<GrFragmentProcessor> inputFP,
+                                   GrRecordingContext* context,
+                                   const GrColorInfo& dstColorInfo) const override {
+        // Unfortunately, we need to clone the input before we know we need it. This lets us return
+        // the original FP if either internal color filter fails.
+        auto inputClone = inputFP ? inputFP->clone() : nullptr;
+
+        auto [innerSuccess, innerFP] =
+                fInner->asFragmentProcessor(std::move(inputFP), context, dstColorInfo);
+        if (!innerSuccess) {
+            return GrFPFailure(std::move(inputClone));
+        }
+
+        auto [outerSuccess, outerFP] =
+                fOuter->asFragmentProcessor(std::move(innerFP), context, dstColorInfo);
+        if (!outerSuccess) {
+            return GrFPFailure(std::move(inputClone));
+        }
+
+        return GrFPSuccess(std::move(outerFP));
+    }
+#endif
+
     SK_FLATTENABLE_HOOKS(SkComposeColorFilter)
 
 protected:
@@ -213,22 +237,7 @@ sk_sp<SkColorFilter> SkColorFilter::makeComposed(sk_sp<SkColorFilter> inner) con
         return sk_ref_sp(this);
     }
 
-#ifdef SK_ENABLE_SKSL
-    sk_sp<SkRuntimeEffect> effect = SkMakeCachedRuntimeEffect(
-        SkRuntimeEffect::MakeForColorFilter,
-        "uniform colorFilter outer;"
-        "uniform colorFilter inner;"
-        "half4 main(half4 color) {"
-            "return outer.eval(inner.eval(color));"
-        "}"
-    );
-    SkASSERT(effect);
-
-    sk_sp<SkColorFilter> inputs[] = {sk_ref_sp(this), std::move(inner)};
-    return effect->makeColorFilter(/*uniforms=*/nullptr, inputs, std::size(inputs));
-#else
     return sk_sp<SkColorFilter>(new SkComposeColorFilter(sk_ref_sp(this), std::move(inner)));
-#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -477,7 +486,7 @@ sk_sp<SkColorFilter> SkColorFilters::Lerp(float weight, sk_sp<SkColorFilter> cf0
         return cf1;
     }
 
-    sk_sp<SkRuntimeEffect> effect = SkMakeCachedRuntimeEffect(
+    static const SkRuntimeEffect* effect = SkMakeCachedRuntimeEffect(
         SkRuntimeEffect::MakeForColorFilter,
         "uniform colorFilter cf0;"
         "uniform colorFilter cf1;"
@@ -485,7 +494,7 @@ sk_sp<SkColorFilter> SkColorFilters::Lerp(float weight, sk_sp<SkColorFilter> cf0
         "half4 main(half4 color) {"
             "return mix(cf0.eval(color), cf1.eval(color), weight);"
         "}"
-    );
+    ).release();
     SkASSERT(effect);
 
     sk_sp<SkColorFilter> inputs[] = {cf0,cf1};
