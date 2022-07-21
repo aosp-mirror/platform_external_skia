@@ -17,9 +17,7 @@ GRADIENT_FILES = [
     "SkLinearGradient.h",
     "SkRadialGradient.cpp",
     "SkSweepGradient.cpp",
-    "SkSweepGradient.h",
     "SkTwoPointConicalGradient.cpp",
-    "SkTwoPointConicalGradient.h",
 ]
 
 split_srcs_and_hdrs(

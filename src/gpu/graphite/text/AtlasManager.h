@@ -31,7 +31,9 @@ public:
     AtlasManager(Recorder*);
     ~AtlasManager();
 
-    // Used to get proxies for test rendering
+    // If getProxies returns nullptr, the client must not try to use other functions on the
+    // StrikeCache which use the atlas.  This function *must* be called first, before other
+    // functions which use the atlas.
     const sk_sp<TextureProxy>* getProxies(MaskFormat format,
                                           unsigned int* numActiveProxies) {
         format = this->resolveMaskFormat(format);
@@ -106,7 +108,7 @@ private:
     DrawAtlas::AllowMultitexturing fAllowMultitexturing;
     std::unique_ptr<DrawAtlas> fAtlases[kMaskFormatCount];
     static_assert(kMaskFormatCount == 3);
-    PadAllGlyphs fPadAllGlyphs;
+    bool fSupportBilerpAtlas;
     DrawAtlasConfig fAtlasConfig;
 };
 
