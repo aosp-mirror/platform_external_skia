@@ -30,7 +30,7 @@ static constexpr DepthStencilSettings kDirectShadingPass = {
 TextSDFRenderStep::TextSDFRenderStep(bool isA8)
         : RenderStep("TextSDFRenderStep",
                      isA8 ? "A8" : "565",
-                     Flags::kPerformsShading,
+                     Flags::kPerformsShading | Flags::kEmitsCoverage,
                      /*uniforms=*/{{"atlasSizeInv", SkSLType::kFloat2},
                                    {"distanceAdjust", SkSLType::kFloat}},
                      PrimitiveType::kTriangles,
@@ -68,8 +68,8 @@ void TextSDFRenderStep::writeVertices(DrawWriter* dw, const DrawParams& params) 
                                         params.order().depthAsFloat(), params.transform());
 }
 
-void TextSDFRenderStep::writeUniforms(const DrawParams& params,
-                                      SkPipelineDataGatherer* gatherer) const {
+void TextSDFRenderStep::writeUniformsAndTextures(const DrawParams& params,
+                                                 SkPipelineDataGatherer* gatherer) const {
     SkDEBUGCODE(UniformExpectationsValidator uev(gatherer, this->uniforms());)
 
     // TODO: get this from the actual texture size via the SubRunData
