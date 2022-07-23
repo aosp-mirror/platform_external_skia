@@ -25,6 +25,12 @@ namespace SkSL {
 struct ShaderCaps;
 }
 
+#ifdef SK_GRAPHITE_ENABLED
+namespace skgpu::graphite {
+class RenderStep;
+}
+#endif
+
 class SkBlenderID;
 class SkRuntimeEffect;
 class SkRuntimeEffectDictionary;
@@ -80,7 +86,8 @@ struct SkShaderSnippet {
             , fNumChildren(numChildren)
             , fDataPayloadExpectations(dataPayloadExpectations) {}
 
-    std::string getMangledUniformName(int uniformIndex, int mangleId) const;
+    std::string getMangledUniformName(int uniformIdx, int mangleId) const;
+    std::string getMangledSamplerName(int samplerIdx, int mangleId) const;
 
     bool needsLocalCoords() const {
         return fSnippetRequirementFlags & SnippetRequirementFlags::kLocalCoords;
@@ -136,7 +143,7 @@ public:
 #endif
 
 #if defined(SK_GRAPHITE_ENABLED) && defined(SK_METAL)
-    std::string toSkSL() const;
+    std::string toSkSL(const skgpu::graphite::RenderStep* step) const;
 #endif
 
 private:
