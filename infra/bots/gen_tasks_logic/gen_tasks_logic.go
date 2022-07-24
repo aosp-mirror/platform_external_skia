@@ -942,6 +942,8 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"IntelIris640":  "8086:5926",
 					"QuadroP400":    "10de:1cb3-510.60.02",
 					"RTX3060":       "10de:2489-460.91.03",
+					"IntelIrisXe":   "8086:9a49",
+					"RadeonVega6":   "1002:1636",
 				}[b.parts["cpu_or_gpu_value"]]
 				if !ok {
 					log.Fatalf("Entry %q not found in Ubuntu GPU mapping.", b.parts["cpu_or_gpu_value"])
@@ -953,6 +955,14 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				} else if b.matchOs("Debian") {
 					// The Debian10 machines in the skolo are 10.10, not 10.3.
 					d["os"] = DEFAULT_OS_DEBIAN
+				}
+				if b.parts["cpu_or_gpu_value"] == "IntelIrisXe" {
+					// The Intel Iris Xe devices are Debian 11.3.
+					d["os"] = "Debian-bookworm/sid"
+				}
+				if b.parts["cpu_or_gpu_value"] == "RadeonVega6" {
+					// The RadeonVega6 devices are Debian 11.4.
+					d["os"] = "Debian-11.4"
 				}
 
 			} else if b.matchOs("Mac") {
@@ -1003,8 +1013,8 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 		}
 	} else {
 		if d["os"] == DEBIAN_11_OS {
-			// The Debain11 compile machines in the skolo have GPUs, but we
-			// still use them for compiles also.
+			// The Debain11 compile machines in the skolo have
+			// GPUs, but we still use them for compiles also.
 		} else {
 			d["gpu"] = "none"
 		}
@@ -2146,7 +2156,10 @@ func (b *jobBuilder) bazelTest() {
 				"--git_commit="+specs.PLACEHOLDER_REVISION,
 				"--changelist_id="+specs.PLACEHOLDER_ISSUE,
 				"--patchset_order="+specs.PLACEHOLDER_PATCHSET,
-				"--tryjob_id="+specs.PLACEHOLDER_BUILDBUCKET_BUILD_ID)
+				"--tryjob_id="+specs.PLACEHOLDER_BUILDBUCKET_BUILD_ID,
+				 // It is unclear why this is needed, but it helps resolve issues like
+				 // Middleman ...tests-runfiles failed: missing input file 'external/npm/node_modules/karma-chrome-launcher/...'
+				"--expunge_cache")
 			b.cipd(CIPD_PKGS_GOLDCTL)
 			break
 		}

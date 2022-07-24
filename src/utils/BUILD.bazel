@@ -27,6 +27,7 @@ CORE_FILES = [
     "SkFloatToDecimal.cpp",
     "SkFloatToDecimal.h",
     "SkFloatUtils.h",
+    "SkGaussianColorFilter.cpp",
     "SkJSON.h",
     "SkJSONWriter.h",
     "SkMatrix22.cpp",
@@ -84,7 +85,7 @@ filegroup(
     srcs = [
         ":core_srcs",
     ] + select({
-        "//bazel/common_config_settings:needs_sksl": ["SkShaderUtils.cpp"],
+        "//src/sksl:needs_sksl": ["SkShaderUtils.cpp"],
         "//conditions:default": [],
     }),
     visibility = ["//src:__pkg__"],
@@ -95,7 +96,7 @@ filegroup(
     srcs = [
         ":core_hdrs",
     ] + select({
-        "//bazel/common_config_settings:needs_sksl": ["SkShaderUtils.h"],
+        "//src/sksl:needs_sksl": ["SkShaderUtils.h"],
         "//conditions:default": [],
     }),
     visibility = ["//src:__pkg__"],
