@@ -2481,6 +2481,7 @@ cc_defaults {
         "modules/skshaper/src/SkShaper.cpp",
         "modules/skshaper/src/SkShaper_harfbuzz.cpp",
         "modules/skshaper/src/SkShaper_primitive.cpp",
+        "modules/skunicode/src/SkUnicode.cpp",
         "modules/skunicode/src/SkUnicode_icu.cpp",
         "modules/skunicode/src/SkUnicode_icu_builtin.cpp",
         "modules/svg/src/SkSVGAttribute.cpp",
