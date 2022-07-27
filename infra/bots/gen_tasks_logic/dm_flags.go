@@ -1056,9 +1056,12 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "tests", ALL, "SkSLMatrixScalarMath") // skia:12681
 	}
 
-	if b.gpu("IntelIris6100", "IntelHD4400") && b.matchOs("Win") && !b.extraConfig("Vulkan") {
+	if b.gpu("IntelIris6100", "IntelHD4400") && b.matchOs("Win") && b.extraConfig("ANGLE") {
 		skip(ALL, "tests", ALL, "SkSLVectorToMatrixCast_GPU")             // skia:12179, vec4(mat2) crash
 		skip(ALL, "tests", ALL, "SkSLTrivialArgumentsInlineDirectly_GPU") // skia:12179 again
+	}
+
+	if b.gpu("IntelIris6100", "IntelHD4400") && b.matchOs("Win") && !b.extraConfig("Vulkan") {
 		skip(ALL, "tests", ALL, "SkSLVectorScalarMath_GPU")               // skia:11919
 		skip(ALL, "tests", ALL, "SkSLMatrixFoldingES2_GPU")               // skia:11919
 	}
@@ -1103,12 +1106,14 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		}
 	}
 
-	if b.model("MacBookAir7.2") && b.extraConfig("ANGLE") {
-		skip(ALL, "tests", ALL, "SkSLMatrixNoOpFolding_GPU") // https://anglebug.com/7514
+	if !b.extraConfig("Vulkan") && (b.gpu("RTX3060") ||
+									b.gpu("QuadroP400") ||
+									b.matchGpu("Radeon(R9|HD)")) {
+		skip(ALL, "tests", ALL, "SkSLMatrixScalarNoOpFolding_GPU")  // skia:13556
 	}
 
-	if b.matchOs("Win10") && b.matchGpu("Radeon(R9|HD)") && !b.extraConfig("Vulkan") {
-		skip(ALL, "tests", ALL, "SkSLMatrixNoOpFolding_GPU") // skia:13556
+	if b.matchOs("Mac") && b.extraConfig("ANGLE") {
+		skip(ALL, "tests", ALL, "SkSLMatrixScalarNoOpFolding_GPU")  // https://anglebug.com/7525
 	}
 
 	if b.gpu("RTX3060") && b.extraConfig("Vulkan") {
