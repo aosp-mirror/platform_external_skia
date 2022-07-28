@@ -12,6 +12,7 @@
 #include "include/private/SkTHash.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLProgramSettings.h"
+#include "src/sksl/analysis/SkSLProgramUsage.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
@@ -65,6 +66,8 @@ static bool eliminate_dead_local_variables(const Context& context,
                         fUsage->remove(stmt.get());
                         stmt = Nop::Make();
                     }
+                    // The variable is no longer referenced anywhere so it should be safe to change.
+                    const_cast<Variable*>(var)->markEliminated();
                     fMadeChanges = true;
                 }
                 return false;
