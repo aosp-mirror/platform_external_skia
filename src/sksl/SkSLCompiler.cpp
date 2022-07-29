@@ -40,6 +40,7 @@
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLFunctionReference.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
+#include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
 #include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLTypeReference.h"
@@ -73,6 +74,7 @@
 #if REHYDRATE
 
 // At runtime, we load the dehydrated sksl data files. The data is a (pointer, size) pair.
+#include "src/sksl/generated/sksl_shared.dehydrated.sksl"
 #include "src/sksl/generated/sksl_compute.dehydrated.sksl"
 #include "src/sksl/generated/sksl_frag.dehydrated.sksl"
 #include "src/sksl/generated/sksl_gpu.dehydrated.sksl"
@@ -96,6 +98,8 @@
 #endif
 
 namespace SkSL {
+
+class ProgramUsage;
 
 // These flags allow tools like Viewer or Nanobench to override the compiler's ProgramSettings.
 Compiler::OverrideFlag Compiler::sOptimizer = OverrideFlag::kDefault;
@@ -238,9 +242,18 @@ std::shared_ptr<SymbolTable> Compiler::makeRootSymbolTable() {
     return rootSymbolTable;
 }
 
+const ParsedModule& Compiler::loadSharedModule() {
+    if (!fSharedModule.fSymbols) {
+        fSharedModule = this->parseModule(ProgramKind::kFragment, MODULE_DATA(shared),
+                                          fRootModule);
+    }
+    return fSharedModule;
+}
+
 const ParsedModule& Compiler::loadGPUModule() {
     if (!fGPUModule.fSymbols) {
-        fGPUModule = this->parseModule(ProgramKind::kFragment, MODULE_DATA(gpu), fRootModule);
+        fGPUModule = this->parseModule(ProgramKind::kFragment, MODULE_DATA(gpu),
+                                       this->loadSharedModule());
     }
     return fGPUModule;
 }
@@ -339,7 +352,8 @@ std::shared_ptr<SymbolTable> Compiler::makeRootSymbolTableWithPublicTypes() {
 
 const ParsedModule& Compiler::loadPublicModule() {
     if (!fPublicModule.fSymbols) {
-        fPublicModule = this->parseModule(ProgramKind::kGeneric, MODULE_DATA(public), fRootModule);
+        fPublicModule = this->parseModule(ProgramKind::kGeneric, MODULE_DATA(public),
+                                          this->loadSharedModule());
         add_public_type_aliases(fPublicModule.fSymbols.get(), fContext->fTypes);
     }
     return fPublicModule;
@@ -388,7 +402,7 @@ LoadedModule Compiler::loadModule(ProgramKind kind,
     AutoModifiersPool autoPool(fContext, &fCoreModifiers);
 
     // Built-in modules always use default program settings.
-    Program::Settings settings;
+    ProgramSettings settings;
     settings.fReplaceSettings = !dehydrate;
 
 #if REHYDRATE
@@ -473,7 +487,7 @@ ParsedModule Compiler::parseModule(ProgramKind kind, ModuleData data, const Pars
 
 std::unique_ptr<Program> Compiler::convertProgram(ProgramKind kind,
                                                   std::string text,
-                                                  Program::Settings settings) {
+                                                  ProgramSettings settings) {
     TRACE_EVENT0("skia.shaders", "SkSL::Compiler::convertProgram");
 
     SkASSERT(!settings.fExternalFunctions || (kind == ProgramKind::kGeneric));

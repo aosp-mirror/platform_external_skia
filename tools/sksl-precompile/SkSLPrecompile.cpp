@@ -16,6 +16,7 @@
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLDehydrator.h"
 #include "src/sksl/SkSLFileOutputStream.h"
+#include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/ir/SkSLUnresolvedFunction.h"
@@ -65,7 +66,7 @@ ResultCode processCommand(const std::vector<std::string>& paths) {
         return ResultCode::kInputError;
     }
 
-    SkSL::Program::Settings settings;
+    SkSL::ProgramSettings settings;
     auto standaloneCaps = SkSL::ShaderCapsFactory::Standalone();
     const SkSL::ShaderCaps* caps = standaloneCaps.get();
 

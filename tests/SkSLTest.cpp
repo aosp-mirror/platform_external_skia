@@ -304,7 +304,7 @@ static void test_clone(skiatest::Reporter* r, const char* testFile, int flags) {
         return;
     }
     std::unique_ptr<SkSL::ShaderCaps> caps = SkSL::ShaderCapsFactory::Standalone();
-    SkSL::Program::Settings settings;
+    SkSL::ProgramSettings settings;
     settings.fAllowVarDeclarationCloneForTesting = true;
     // TODO(skia:11209): Can we just put the correct #version in the source files that need this?
     settings.fMaxVersionAllowed = is_strict_es2(flags) ? SkSL::Version::k100 : SkSL::Version::k300;
@@ -334,7 +334,7 @@ static void test_rehydrate(skiatest::Reporter* r, const char* testFile, int flag
     }
     std::unique_ptr<SkSL::ShaderCaps> caps = SkSL::ShaderCapsFactory::Default();
     SkSL::Compiler compiler(caps.get());
-    SkSL::Program::Settings settings;
+    SkSL::ProgramSettings settings;
     // TODO(skia:11209): Can we just put the correct #version in the source files that need this?
     settings.fMaxVersionAllowed = is_strict_es2(flags) ? SkSL::Version::k100 : SkSL::Version::k300;
     // Inlining causes problems because it can create expressions like bool(1) that can't be
@@ -559,6 +559,7 @@ SKSL_TEST(CPU + GPU + SkQP, Switch,                          "shared/Switch.sksl
 SKSL_TEST(CPU + GPU + SkQP, SwitchDefaultOnly,               "shared/SwitchDefaultOnly.sksl")
 SKSL_TEST(CPU + GPU + SkQP, SwitchWithFallthrough,           "shared/SwitchWithFallthrough.sksl")
 SKSL_TEST(CPU + GPU + SkQP, SwitchWithLoops,                 "shared/SwitchWithLoops.sksl")
+SKSL_TEST(GPU_ES3,          SwitchWithLoopsES3,              "shared/SwitchWithLoopsES3.sksl")
 SKSL_TEST(CPU + GPU + SkQP, SwizzleBoolConstants,            "shared/SwizzleBoolConstants.sksl")
 SKSL_TEST(CPU + GPU + SkQP, SwizzleByConstantIndex,          "shared/SwizzleByConstantIndex.sksl")
 SKSL_TEST(GPU_ES3,          SwizzleByIndex,                  "shared/SwizzleByIndex.sksl")
