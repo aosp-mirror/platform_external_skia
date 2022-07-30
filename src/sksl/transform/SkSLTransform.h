@@ -38,18 +38,23 @@ const Modifiers* AddConstToVarModifiers(const Context& context,
                                         const ProgramUsage* usage);
 
 /**
+ * Copies built-in functions from modules into the program. Relies on ProgramUsage to determine
+ * which functions are necessary.
+ */
+void FindAndDeclareBuiltinFunctions(Program& program);
+
+/**
  * Scans the finished program for built-in variables like `sk_FragColor` and adds them to the
  * program's shared elements.
  */
-void FindAndDeclareBuiltinVariables(const Context& context, ProgramKind programKind,
-                                    std::vector<const ProgramElement*>& sharedElements);
+void FindAndDeclareBuiltinVariables(Program& program);
 
 /**
  * Eliminates statements in a block which cannot be reached; for example, a statement
  * immediately after a `return` or `continue` can safely be eliminated.
  */
 void EliminateUnreachableCode(LoadedModule& module, ProgramUsage* usage);
-void EliminateUnreachableCode(Program& program, ProgramUsage* usage);
+void EliminateUnreachableCode(Program& program);
 
 /**
  * Eliminates empty statements in a module (Nops, or blocks holding only Nops). Not implemented for
@@ -60,15 +65,15 @@ void EliminateEmptyStatements(LoadedModule& module);
 /**
  * Eliminates functions in a program which are never called. Returns true if any changes were made.
  */
-bool EliminateDeadFunctions(Program& program, ProgramUsage* usage);
+bool EliminateDeadFunctions(Program& program);
 
 /**
  * Eliminates variables in a program which are never read or written (past their initializer).
  * Preserves side effects from initializers, if any. Returns true if any changes were made.
  */
 bool EliminateDeadLocalVariables(const Context& context, LoadedModule& module, ProgramUsage* usage);
-bool EliminateDeadLocalVariables(Program& program, ProgramUsage* usage);
-bool EliminateDeadGlobalVariables(Program& program, ProgramUsage* usage);
+bool EliminateDeadLocalVariables(Program& program);
+bool EliminateDeadGlobalVariables(Program& program);
 
 } // namespace Transform
 } // namespace SkSL

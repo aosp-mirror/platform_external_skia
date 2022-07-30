@@ -28,6 +28,7 @@
 #include "src/sksl/ir/SkSLUnresolvedFunction.h"
 #include "src/sksl/ir/SkSLVariable.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <initializer_list>
 #include <utility>
@@ -404,7 +405,10 @@ FunctionDeclaration::FunctionDeclaration(Position pos,
         , fReturnType(returnType)
         , fBuiltin(builtin)
         , fIsMain(name == "main")
-        , fIntrinsicKind(builtin ? identify_intrinsic(name) : kNotIntrinsic) {}
+        , fIntrinsicKind(builtin ? identify_intrinsic(name) : kNotIntrinsic) {
+    // None of the parameters are allowed to be be null.
+    SkASSERT(std::count(fParameters.begin(), fParameters.end(), nullptr) == 0);
+}
 
 const FunctionDeclaration* FunctionDeclaration::Convert(
         const Context& context,
@@ -449,7 +453,7 @@ std::string FunctionDeclaration::mangledName() const {
         // Builtins without a definition (like `sin` or `sqrt`) must use their real names.
         return std::string(this->name());
     }
-    // Built-in functions can have a $ prefix, which will fail to compile in GLSL/Metal. Remove the
+    // Built-in functions can have a $ prefix, which will fail to compile in GLSL. Remove the
     // $ and add a unique mangling specifier, so user code can't conflict with the name.
     std::string_view name = this->name();
     const char* builtinMarker = "";
