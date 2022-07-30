@@ -1,22 +1,22 @@
 OpCapability Shader
 %1 = OpExtInstImport "GLSL.std.450"
 OpMemoryModel Logical GLSL450
-OpEntryPoint Fragment %main "main" %sk_FragColor %sk_Clockwise
+OpEntryPoint Fragment %main "main" %sk_Clockwise %sk_FragColor
 OpExecutionMode %main OriginUpperLeft
-OpName %sk_FragColor "sk_FragColor"
 OpName %sk_Clockwise "sk_Clockwise"
+OpName %sk_FragColor "sk_FragColor"
 OpName %_UniformBuffer "_UniformBuffer"
 OpMemberName %_UniformBuffer 0 "ah"
 OpMemberName %_UniformBuffer 1 "bh"
 OpMemberName %_UniformBuffer 2 "af"
 OpMemberName %_UniformBuffer 3 "bf"
-OpName %cross_length_2d_hh2h2 "cross_length_2d_hh2h2"
 OpName %cross_length_2d_ff2f2 "cross_length_2d_ff2f2"
+OpName %cross_length_2d_hh2h2 "cross_length_2d_hh2h2"
 OpName %main "main"
+OpDecorate %sk_Clockwise BuiltIn FrontFacing
 OpDecorate %sk_FragColor RelaxedPrecision
 OpDecorate %sk_FragColor Location 0
 OpDecorate %sk_FragColor Index 0
-OpDecorate %sk_Clockwise BuiltIn FrontFacing
 OpMemberDecorate %_UniformBuffer 0 Offset 0
 OpMemberDecorate %_UniformBuffer 0 RelaxedPrecision
 OpMemberDecorate %_UniformBuffer 1 Offset 8
@@ -26,26 +26,26 @@ OpMemberDecorate %_UniformBuffer 3 Offset 24
 OpDecorate %_UniformBuffer Block
 OpDecorate %12 Binding 0
 OpDecorate %12 DescriptorSet 0
-OpDecorate %21 RelaxedPrecision
-OpDecorate %22 RelaxedPrecision
-OpDecorate %23 RelaxedPrecision
-OpDecorate %24 RelaxedPrecision
-OpDecorate %25 RelaxedPrecision
-OpDecorate %26 RelaxedPrecision
-OpDecorate %27 RelaxedPrecision
-OpDecorate %28 RelaxedPrecision
-OpDecorate %29 RelaxedPrecision
-OpDecorate %30 RelaxedPrecision
-OpDecorate %31 RelaxedPrecision
+OpDecorate %35 RelaxedPrecision
+OpDecorate %36 RelaxedPrecision
+OpDecorate %37 RelaxedPrecision
+OpDecorate %38 RelaxedPrecision
+OpDecorate %39 RelaxedPrecision
+OpDecorate %40 RelaxedPrecision
+OpDecorate %41 RelaxedPrecision
+OpDecorate %42 RelaxedPrecision
+OpDecorate %43 RelaxedPrecision
+OpDecorate %44 RelaxedPrecision
+OpDecorate %45 RelaxedPrecision
 OpDecorate %53 RelaxedPrecision
 OpDecorate %57 RelaxedPrecision
+%bool = OpTypeBool
+%_ptr_Input_bool = OpTypePointer Input %bool
+%sk_Clockwise = OpVariable %_ptr_Input_bool Input
 %float = OpTypeFloat 32
 %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
 %sk_FragColor = OpVariable %_ptr_Output_v4float Output
-%bool = OpTypeBool
-%_ptr_Input_bool = OpTypePointer Input %bool
-%sk_Clockwise = OpVariable %_ptr_Input_bool Input
 %v2float = OpTypeVector %float 2
 %_UniformBuffer = OpTypeStruct %v2float %v2float %v2float %v2float
 %_ptr_Uniform__UniformBuffer = OpTypePointer Uniform %_UniformBuffer
@@ -61,7 +61,7 @@ OpDecorate %57 RelaxedPrecision
 %_ptr_Output_float = OpTypePointer Output %float
 %int_2 = OpConstant %int 2
 %int_3 = OpConstant %int 3
-%cross_length_2d_hh2h2 = OpFunction %float None %17
+%cross_length_2d_ff2f2 = OpFunction %float None %17
 %18 = OpFunctionParameter %_ptr_Function_v2float
 %19 = OpFunctionParameter %_ptr_Function_v2float
 %20 = OpLabel
@@ -78,7 +78,7 @@ OpDecorate %57 RelaxedPrecision
 %31 = OpFSub %float %25 %30
 OpReturnValue %31
 OpFunctionEnd
-%cross_length_2d_ff2f2 = OpFunction %float None %17
+%cross_length_2d_hh2h2 = OpFunction %float None %17
 %32 = OpFunctionParameter %_ptr_Function_v2float
 %33 = OpFunctionParameter %_ptr_Function_v2float
 %34 = OpLabel
