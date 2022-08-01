@@ -87,6 +87,10 @@
 #define SK_TOOLS_REQUIRE_RESOURCES
 #endif
 
+#ifndef SK_USE_PERFETTO
+#define SK_USE_PERFETTO
+#endif
+
 #ifndef SK_USE_VMA
 #define SK_USE_VMA
 #endif

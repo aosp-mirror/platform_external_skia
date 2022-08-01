@@ -82,16 +82,6 @@ static const constexpr bool kTrace = true;
 static const constexpr bool kTrace = false;
 #endif
 
-template <typename T>
-bool pun_read(SkReadBuffer& buffer, T* dst) {
-    return buffer.readPad32(dst, sizeof(T));
-}
-
-template <typename T>
-void pun_write(SkWriteBuffer& buffer, const T& src) {
-    buffer.writePad32(&src, sizeof(T));
-}
-
 // -- TransformedMaskVertexFiller ------------------------------------------------------------------
 class TransformedMaskVertexFiller {
 public:
@@ -1168,7 +1158,7 @@ class DirectMaskSubRun final : public SubRun, public AtlasSubRun {
 public:
     DirectMaskSubRun(MaskFormat format,
                      const SkMatrix& initialPositionMatrix,
-                     SkGlyphRect deviceBounds,
+                     SkRect deviceBounds,
                      SkSpan<const SkPoint> devicePositions,
                      GlyphVector&& glyphs);
 
@@ -1263,7 +1253,7 @@ private:
     const SkMatrix& fInitialPositionMatrix;
 
     // The vertex bounds in device space. The bounds are the joined rectangles of all the glyphs.
-    const SkGlyphRect fGlyphDeviceBounds;
+    const SkRect fGlyphDeviceBounds;
     const SkSpan<const SkPoint> fLeftTopDevicePos;
 
     // The regenerateAtlas method mutates fGlyphs. It should be called from onPrepare which must
@@ -1273,7 +1263,7 @@ private:
 
 DirectMaskSubRun::DirectMaskSubRun(MaskFormat format,
                                    const SkMatrix& initialPositionMatrix,
-                                   SkGlyphRect deviceBounds,
+                                   SkRect deviceBounds,
                                    SkSpan<const SkPoint> devicePositions,
                                    GlyphVector&& glyphs)
         : fMaskFormat{format}
@@ -1301,7 +1291,7 @@ SubRunOwner DirectMaskSubRun::Make(const SkZip<SkGlyphVariant, SkPoint>& accepte
 
     SkSpan<const SkPoint> leftTop{glyphLeftTop, accepted.size()};
     return alloc->makeUnique<DirectMaskSubRun>(
-            format, initialPositionMatrix, runBounds, leftTop,
+            format, initialPositionMatrix, runBounds.rect(), leftTop,
             GlyphVector{std::move(strike), {glyphIDs, accepted.size()}});
 }
 
@@ -1315,21 +1305,24 @@ SubRunOwner DirectMaskSubRun::MakeFromBuffer(const SkMatrix& initialPositionMatr
                                              SubRunAllocator* alloc,
                                              const SkStrikeClient* client) {
     MaskFormat maskType = (MaskFormat)buffer.readInt();
-    SkGlyphRect runBounds;
-    pun_read(buffer, &runBounds);
+    SkRect runBounds = buffer.readRect();
 
-    int glyphCount = buffer.readInt();
-    if (!buffer.validate(check_glyph_count(buffer, glyphCount))) { return nullptr; }
-    if (!buffer.validateCanReadN<SkPoint>(glyphCount)) { return nullptr; }
+    uint32_t glyphCount = buffer.getArrayCount();
+
+    // Zero indicates a problem with serialization.
+    if (!buffer.validate(glyphCount != 0)) { return nullptr; }
+
+    // The arena can only handle kGlyphCountMax number of points.
+    static constexpr uint32_t kGlyphCountMax = INT_MAX / sizeof(SkPoint);
+    if (!buffer.validate(glyphCount < kGlyphCountMax)) { return nullptr; }
+
     SkPoint* positionsData = alloc->makePODArray<SkPoint>(glyphCount);
-    for (int i = 0; i < glyphCount; ++i) {
-        positionsData[i] = buffer.readPoint();
-    }
+    if (!buffer.readPointArray(positionsData, glyphCount)) { return nullptr; }
     SkSpan<SkPoint> positions(positionsData, glyphCount);
 
     auto glyphVector = GlyphVector::MakeFromBuffer(buffer, client, alloc);
     if (!buffer.validate(glyphVector.has_value())) { return nullptr; }
-    if (!buffer.validate(SkCount(glyphVector->glyphs()) == glyphCount)) { return nullptr; }
+    if (!buffer.validate(SkCount(glyphVector->glyphs()) == SkToInt(glyphCount))) { return nullptr; }
     SkASSERT(buffer.isValid());
     return alloc->makeUnique<DirectMaskSubRun>(
             maskType, initialPositionMatrix, runBounds, positions,
@@ -1338,12 +1331,8 @@ SubRunOwner DirectMaskSubRun::MakeFromBuffer(const SkMatrix& initialPositionMatr
 
 void DirectMaskSubRun::doFlatten(SkWriteBuffer& buffer) const {
     buffer.writeInt(static_cast<int>(fMaskFormat));
-    pun_write(buffer, fGlyphDeviceBounds);
-    int glyphCount = SkTo<int>(fLeftTopDevicePos.size());
-    buffer.writeInt(glyphCount);
-    for (auto pos : fLeftTopDevicePos) {
-        buffer.writePoint(pos);
-    }
+    buffer.writeRect(fGlyphDeviceBounds);
+    buffer.writePointArray(fLeftTopDevicePos.data(), SkCount(fLeftTopDevicePos));
     fGlyphs.flatten(buffer);
 }
 
@@ -1617,7 +1606,7 @@ std::tuple<Rect, Transform> DirectMaskSubRun::boundsAndDeviceMatrix(const Transf
         if (SkScalarIsInt(offset.x) && SkScalarIsInt(offset.y)) {
             // The offset is an integer (but make sure), which means the generated mask can be
             // accessed without changing how texels would be sampled.
-            return {Rect(fGlyphDeviceBounds.rect()),
+            return {Rect(fGlyphDeviceBounds),
                     Transform(SkM44::Translate(SkScalarRoundToInt(offset.x),
                                                SkScalarRoundToInt(offset.y)))};
         }
@@ -1626,7 +1615,7 @@ std::tuple<Rect, Transform> DirectMaskSubRun::boundsAndDeviceMatrix(const Transf
     // Otherwise compute the relative transformation from fInitialPositionMatrix to localToDevice,
     // with the drawOrigin applied. If fInitialPositionMatrix or the concatenation is not invertible
     // the returned Transform is marked invalid and the draw will be automatically dropped.
-    return {Rect(fGlyphDeviceBounds.rect()),
+    return {Rect(fGlyphDeviceBounds),
             localToDevice.preTranslate(drawOrigin.x(), drawOrigin.y())
                          .concatInverse(SkM44(fInitialPositionMatrix))};
 }
@@ -1716,11 +1705,10 @@ std::tuple<bool, SkRect> DirectMaskSubRun::deviceRectAndCheckTransform(
                                   !initialMatrix.hasPerspective();
 
     if (compatibleMatrix && SkScalarIsInt(offset.x()) && SkScalarIsInt(offset.y())) {
-        SkRect outBounds = fGlyphDeviceBounds.rect();
-        return {true, outBounds.makeOffset(offset)};
+        return {true, fGlyphDeviceBounds.makeOffset(offset)};
     } else if (SkMatrix inverse; fInitialPositionMatrix.invert(&inverse)) {
         SkMatrix viewDifference = SkMatrix::Concat(positionMatrix, inverse);
-        return {false, viewDifference.mapRect(fGlyphDeviceBounds.rect())};
+        return {false, viewDifference.mapRect(fGlyphDeviceBounds)};
     }
 
     // initialPositionMatrix is singular. Do nothing.

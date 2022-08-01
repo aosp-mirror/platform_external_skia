@@ -78,6 +78,9 @@ public:
                                  const char* name,
                                  SkEventTracer::Handle handle) = 0;
 
+    // Optional method that can be implemented to allow splitting up traces into different sections.
+    virtual void newTracingSection(const char*) {}
+
 protected:
     SkEventTracer() = default;
     SkEventTracer(const SkEventTracer&) = delete;
