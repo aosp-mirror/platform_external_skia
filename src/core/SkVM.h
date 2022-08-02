@@ -34,10 +34,6 @@ class SkWStream;
 #endif
 
 #if 0
-    #define SKVM_LLVM
-#endif
-
-#if 0
     #undef SKVM_JIT
 #endif
 
@@ -1079,7 +1075,7 @@ namespace skvm {
         bool hasJIT() const;         // Has this Program been JITted?
         bool hasTraceHooks() const;  // Is this program instrumented for debugging?
 
-        void visualize(SkWStream* output, const char* code) const;
+        void visualize(SkWStream* output) const;
         void dump(SkWStream* = nullptr) const;
         void disassemble(SkWStream* = nullptr) const;
         viz::Visualizer* visualizer();
@@ -1087,13 +1083,11 @@ namespace skvm {
     private:
         void setupInterpreter(const std::vector<OptimizedInstruction>&);
         void setupJIT        (const std::vector<OptimizedInstruction>&, const char* debug_name);
-        void setupLLVM       (const std::vector<OptimizedInstruction>&, const char* debug_name);
 
         bool jit(const std::vector<OptimizedInstruction>&,
                  int* stack_hint, uint32_t* registers_used,
                  Assembler*) const;
 
-        void waitForLLVM() const;
         void dropJIT();
 
         struct Impl;
