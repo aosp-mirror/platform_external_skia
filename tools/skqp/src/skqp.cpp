@@ -61,9 +61,9 @@ namespace {
 // Matches indicate tests that should be excluded. Lines may start with # to indicate a comment.
 class ExclusionList {
 public:
-    ExclusionList() {}
+    ExclusionList(int enforcedAndroidAPILevel) : fEnforcedAndroidAPILevel(enforcedAndroidAPILevel) {}
 
-    void initialize(SkQPAssetManager* assetManager, sk_sp<SkData> dat, int enforcedAndroidAPILevel);
+    void initialize(SkQPAssetManager* assetManager, sk_sp<SkData> dat);
 
     bool isExcluded(const std::string& name) const {
 #if defined(SK_BUILD_FOR_ANDROID) && defined(SK_BUILD_FOR_SKQP)
@@ -84,7 +84,7 @@ public:
     }
 
 private:
-    int fEnforcedAndroidAPILevel;
+    const int fEnforcedAndroidAPILevel;
 
     struct ExclusionEntry {
         std::regex regexPattern;
@@ -96,13 +96,13 @@ private:
 }
 
 // Returns a list of every unit test to be run.
-static std::vector<SkQP::UnitTest> get_unit_tests(const ExclusionList& exclusionList) {
+static std::vector<SkQP::UnitTest> get_unit_tests(const ExclusionList* exclusionList = nullptr) {
     std::vector<SkQP::UnitTest> unitTests;
     for (const skiatest::Test& test : skiatest::TestRegistry::Range()) {
         if (!test.fNeedsGpu) {
             continue;
         }
-        if (exclusionList.isExcluded(test.fName)) {
+        if (exclusionList && exclusionList->isExcluded(test.fName)) {
             continue;
         }
         unitTests.push_back(&test);
@@ -114,14 +114,14 @@ static std::vector<SkQP::UnitTest> get_unit_tests(const ExclusionList& exclusion
 
 // Returns a list of every SkSL error test to be run.
 static std::vector<SkQP::SkSLErrorTest> get_sksl_error_tests(SkQPAssetManager* assetManager,
-                                                             const ExclusionList& exclusionList) {
+                                                             const ExclusionList* exclusionList = nullptr) {
     std::vector<SkQP::SkSLErrorTest> skslErrorTests;
 
     auto iterateFn = [&](const char* directory, const char* extension) {
         std::vector<std::string> paths = assetManager->iterateDir(directory, extension);
         for (const std::string& path : paths) {
             SkString name = SkOSPath::Basename(path.c_str());
-            if (exclusionList.isExcluded(name.c_str())) {
+            if (exclusionList && exclusionList->isExcluded(name.c_str())) {
                 continue;
             }
             sk_sp<SkData> shaderText = GetResourceAsData(path.c_str());
@@ -147,16 +147,12 @@ static std::vector<SkQP::SkSLErrorTest> get_sksl_error_tests(SkQPAssetManager* a
 }
 
 void ExclusionList::initialize(SkQPAssetManager* assetManager,
-                               sk_sp<SkData> dat,
-                               int enforcedAndroidAPILevel) {
-    fEnforcedAndroidAPILevel = enforcedAndroidAPILevel;
+                               sk_sp<SkData> dat) {
     fEntries = {};
 
     //TODO: explore refactoring this code to collect the test lists only once in SkQP::init
-    ExclusionList noExclusions;
-    const std::vector<SkQP::UnitTest> unitTestList = get_unit_tests(noExclusions);
-    const std::vector<SkQP::SkSLErrorTest> skslTestList = get_sksl_error_tests(assetManager,
-                                                                               noExclusions);
+    const std::vector<SkQP::UnitTest> unitTestList = get_unit_tests();
+    const std::vector<SkQP::SkSLErrorTest> skslTestList = get_sksl_error_tests(assetManager);
 
     // function to check whether or not the provided regex matches an existing test
     auto testExists = [&unitTestList, &skslTestList](const std::regex& exclusionRegex) {
@@ -322,13 +318,13 @@ void SkQP::init(SkQPAssetManager* assetManager, const char* reportDirectory) {
 
     // Load the exclusion list `skqp/unittests.txt`, if it exists.
     // The list is checked in at platform_tools/android/apps/skqp/src/main/assets/skqp/unittests.txt
-    ExclusionList exclusionList;
+    ExclusionList exclusionList(minAndroidAPILevel);
     if (sk_sp<SkData> dat = assetManager->open(kUnitTestsPath)) {
-        exclusionList.initialize(assetManager, dat, minAndroidAPILevel);
+        exclusionList.initialize(assetManager, dat);
     }
 
-    fUnitTests = get_unit_tests(exclusionList);
-    fSkSLErrorTests = get_sksl_error_tests(assetManager, exclusionList);
+    fUnitTests = get_unit_tests(&exclusionList);
+    fSkSLErrorTests = get_sksl_error_tests(assetManager, &exclusionList);
     fSupportedBackends = get_backends();
 
     print_backend_info((fReportDirectory + "/grdump.txt").c_str(), fSupportedBackends);
