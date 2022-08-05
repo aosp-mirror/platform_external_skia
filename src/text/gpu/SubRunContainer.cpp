@@ -8,7 +8,7 @@
 #include "src/text/gpu/SubRunContainer.h"
 
 #include "include/core/SkScalar.h"
-#include "include/private/SkMutex.h"
+#include "include/private/SkOnce.h"
 #include "include/private/chromium/SkChromeRemoteGlyphCache.h"
 #include "src/core/SkDescriptor.h"
 #include "src/core/SkDistanceFieldGen.h"
@@ -204,14 +204,11 @@ TransformedMaskVertexFiller TransformedMaskVertexFiller::Make(
         SkScalar strikeToSourceScale,
         const SkZip<SkGlyphVariant, SkPoint>& accepted,
         SubRunAllocator* alloc) {
-    const SkPoint paddingInset = SkPoint::Make(strikePadding, strikePadding);
     SkSpan<SkPoint> leftTop = alloc->makePODArray<SkPoint>(
             accepted,
             [&](auto e) -> SkPoint {
                 auto [variant, pos] = e;
-                const SkGlyph* skGlyph = variant;
-                SkPoint leftTop = SkPoint::Make(skGlyph->left(), skGlyph->top());
-                return (leftTop + paddingInset) * strikeToSourceScale + pos;
+                return pos;
             });
     return TransformedMaskVertexFiller{maskType, strikeToSourceScale, sourceBounds, leftTop};
 }
@@ -540,6 +537,7 @@ private:
 
     // If fStrikeRef.getStrikeAndSetToNullptr() is nullptr, then fIDsOrPaths holds SkPaths.
     mutable StrikeRef fStrikeRef;
+    mutable SkOnce fConvertIDsToPaths;
 };
 
 int PathOpSubmitter::unflattenSize() const {
@@ -551,10 +549,7 @@ void PathOpSubmitter::flatten(SkWriteBuffer& buffer) const {
 
     buffer.writeInt(fIsAntiAliased);
     buffer.writeScalar(fStrikeToSourceScale);
-    buffer.writeInt(SkCount(fPositions));
-    for (auto pos : fPositions) {
-        buffer.writePoint(pos);
-    }
+    buffer.writePointArray(fPositions.data(), SkCount(fPositions));
     for (IDOrPath& idOrPath : fIDsOrPaths) {
         buffer.writeInt(idOrPath.fGlyphID);
     }
@@ -571,13 +566,18 @@ std::optional<PathOpSubmitter> PathOpSubmitter::MakeFromBuffer(SkReadBuffer& buf
     bool isAntiAlias = buffer.readInt();
     SkScalar strikeToSourceScale = buffer.readScalar();
 
-    int glyphCount = buffer.readInt();
-    if (!buffer.validate(check_glyph_count(buffer, glyphCount))) { return std::nullopt; }
-    if (!buffer.validateCanReadN<SkPoint>(glyphCount)) { return std::nullopt; }
-    SkPoint* positions = alloc->makePODArray<SkPoint>(glyphCount);
-    for (int i = 0; i < glyphCount; ++i) {
-        positions[i] = buffer.readPoint();
-    }
+    uint32_t glyphCount = buffer.getArrayCount();
+
+    // Zero indicates a problem with serialization.
+    if (!buffer.validate(glyphCount != 0)) { return std::nullopt; }
+
+    // Check that the count will not overflow the arena.
+    if (!buffer.validate(glyphCount <= INT_MAX &&
+                         BagOfBytes::WillCountFit<SkPoint>(glyphCount))) { return std::nullopt; }
+
+    SkPoint* positionsData = alloc->makePODArray<SkPoint>(glyphCount);
+    if (!buffer.readPointArray(positionsData, glyphCount)) { return std::nullopt; }
+    SkSpan<SkPoint> positions(positionsData, glyphCount);
 
     // Remember, we stored an int for glyph id.
     if (!buffer.validateCanReadN<int>(glyphCount)) { return std::nullopt; }
@@ -586,13 +586,11 @@ std::optional<PathOpSubmitter> PathOpSubmitter::MakeFromBuffer(SkReadBuffer& buf
         idOrPath.fGlyphID = SkTo<SkGlyphID>(buffer.readInt());
     }
 
-    if (!buffer.isValid()) {
-        return std::nullopt;
-    }
+    if (!buffer.isValid()) { return std::nullopt; }
 
     return PathOpSubmitter{isAntiAlias,
                            strikeToSourceScale,
-                           SkSpan(positions, glyphCount),
+                           positions,
                            idsOrPaths,
                            std::move(strikeRef.value())};
 }
@@ -645,16 +643,13 @@ PathOpSubmitter PathOpSubmitter::Make(const SkZip<SkPackedGlyphID, SkPoint>& acc
 void PathOpSubmitter::submitDraws(SkCanvas* canvas,
                                   SkPoint drawOrigin,
                                   const SkPaint& paint) const {
-    {
-        // Add a mutex to get trough DDL testing. If this ends up being a problem we can change
-        // over to using atomic pointers on the object.
-        static SkMutex mu;
-        SkAutoMutexExclusive lock{mu};
-        // Convert all the SkGlyphIDs to SkPaths
+
+    // Convert the glyph IDs to paths if it hasn't been done yet. This is thread safe.
+    fConvertIDsToPaths([&]() {
         if (sk_sp<SkStrike> strike = fStrikeRef.getStrikeAndSetToNullptr()) {
             strike->glyphIDsToPaths(fIDsOrPaths);
         }
-    }
+    });
 
     SkPaint runPaint{paint};
     runPaint.setAntiAlias(fIsAntiAliased);
@@ -1273,9 +1268,8 @@ SubRunOwner DirectMaskSubRun::Make(SkRect runBounds,
     auto glyphIDs = alloc->makePODArray<GlyphVector::Variant>(accepted.size());
 
     for (auto [i, variant, pos] : SkMakeEnumerate(accepted)) {
-        const SkGlyph* const skGlyph = variant;
-        glyphLeftTop[i] = SkPoint::Make(skGlyph->left(), skGlyph->top()) + pos;
-        glyphIDs[i].packedGlyphID = skGlyph->getPackedID();
+        glyphLeftTop[i] = pos;
+        glyphIDs[i].packedGlyphID = variant.packedID();
     }
 
     SkSpan<const SkPoint> leftTop{glyphLeftTop, accepted.size()};
