@@ -3252,7 +3252,6 @@ cc_library_shared {
     ],
 
     srcs: [
-        "dm/DMGpuTestProcs.cpp",
         "gm/3d.cpp",
         "gm/aaa.cpp",
         "gm/aaclip.cpp",
@@ -4905,6 +4904,7 @@ cc_library_shared {
         "tools/random_parse_path.cpp",
         "tools/skqp/src/jni_skqp.cpp",
         "tools/skqp/src/skqp.cpp",
+        "tools/skqp/src/skqp_GpuTestProcs.cpp",
         "tools/timer/Timer.cpp",
     ],
 
