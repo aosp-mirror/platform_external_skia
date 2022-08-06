@@ -167,6 +167,15 @@ public:
         SkASSERT(fAcceptedSize <= from);
         fPositions[fAcceptedSize] = fPositions[from];
         fMultiBuffer[fAcceptedSize] = glyph;
+        fFormats[fAcceptedSize] = glyph->maskFormat();
+        fAcceptedSize++;
+    }
+
+    void accept(SkPackedGlyphID glyphID, SkPoint position, SkMask::Format format) {
+        SkASSERT(fPhase == kProcess);
+        fPositions[fAcceptedSize] = position;
+        fMultiBuffer[fAcceptedSize] = glyphID;
+        fFormats[fAcceptedSize] = format;
         fAcceptedSize++;
     }
 
@@ -175,6 +184,13 @@ public:
         SkASSERT(fPhase == kProcess);
         SkDEBUGCODE(fPhase = kDraw);
         return SkZip<SkGlyphVariant, SkPoint>{fAcceptedSize, fMultiBuffer.get(), fPositions};
+    }
+
+    SkZip<SkGlyphVariant, SkPoint, SkMask::Format> acceptedWithMaskFormat() {
+        SkASSERT(fPhase == kProcess);
+        SkDEBUGCODE(fPhase = kDraw);
+        return SkZip<SkGlyphVariant, SkPoint, SkMask::Format>{
+                fAcceptedSize, fMultiBuffer.get(), fPositions, fFormats};
     }
 
     bool empty() const {
@@ -197,6 +213,7 @@ private:
     size_t fAcceptedSize{0};
     SkAutoTArray<SkGlyphVariant> fMultiBuffer;
     SkAutoTMalloc<SkPoint> fPositions;
+    SkAutoTMalloc<SkMask::Format> fFormats;
 
 #ifdef SK_DEBUG
     enum {
