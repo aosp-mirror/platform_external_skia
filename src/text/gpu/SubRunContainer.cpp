@@ -213,8 +213,21 @@ TransformedMaskVertexFiller TransformedMaskVertexFiller::Make(
     return TransformedMaskVertexFiller{maskType, strikeToSourceScale, sourceBounds, leftTop};
 }
 
-static bool check_glyph_count(SkReadBuffer& buffer, int glyphCount) {
-    return 0 < glyphCount && static_cast<size_t>(glyphCount) < (buffer.available() / 4);
+
+// Returns the empty span if there is a problem reading the positions.
+SkSpan<SkPoint> make_points_from_buffer(SkReadBuffer& buffer, SubRunAllocator* alloc) {
+    uint32_t glyphCount = buffer.getArrayCount();
+
+    // Zero indicates a problem with serialization.
+    if (!buffer.validate(glyphCount != 0)) { return {}; }
+
+    // Check that the count will not overflow the arena.
+    if (!buffer.validate(glyphCount <= INT_MAX &&
+                         BagOfBytes::WillCountFit<SkPoint>(glyphCount))) { return {}; }
+
+    SkPoint* positionsData = alloc->makePODArray<SkPoint>(glyphCount);
+    if (!buffer.readPointArray(positionsData, glyphCount)) { return {}; }
+    return {positionsData, glyphCount};
 }
 
 std::optional<TransformedMaskVertexFiller> TransformedMaskVertexFiller::MakeFromBuffer(
@@ -228,20 +241,11 @@ std::optional<TransformedMaskVertexFiller> TransformedMaskVertexFiller::MakeFrom
     if (!buffer.validate(0 < strikeToSourceScale)) { return std::nullopt; }
     SkRect sourceBounds = buffer.readRect();
 
-    uint32_t glyphCount = buffer.getArrayCount();
+    SkSpan<SkPoint> leftTop = make_points_from_buffer(buffer, alloc);
+    if (leftTop.empty()) { return std::nullopt; }
 
-    // Zero indicates a problem with serialization.
-    if (!buffer.validate(glyphCount != 0)) { return std::nullopt; }
-
-    // Check that the count will not overflow the arena.
-    if (!buffer.validate(glyphCount <= INT_MAX &&
-                         BagOfBytes::WillCountFit<SkPoint>(glyphCount))) { return std::nullopt; }
-
-    SkPoint* leftTopStorage = alloc->makePODArray<SkPoint>(glyphCount);
-    if (!buffer.readPointArray(leftTopStorage, glyphCount)) { return std::nullopt; }
-    SkSpan<SkPoint> topLeft(leftTopStorage, glyphCount);
     SkASSERT(buffer.isValid());
-    return {TransformedMaskVertexFiller{maskType, strikeToSourceScale, sourceBounds, topLeft}};
+    return {TransformedMaskVertexFiller{maskType, strikeToSourceScale, sourceBounds, leftTop}};
 }
 
 void TransformedMaskVertexFiller::flatten(SkWriteBuffer& buffer) const {
@@ -443,15 +447,16 @@ SkPMColor4f calculate_colors(skgpu::SurfaceContext* sc,
                              const SkPaint& paint,
                              const SkMatrixProvider& matrix,
                              MaskFormat maskFormat,
+                             const SkSurfaceProps& props,
                              GrPaint* grPaint) {
     GrRecordingContext* rContext = sc->recordingContext();
     const GrColorInfo& colorInfo = sc->colorInfo();
     if (maskFormat == MaskFormat::kARGB) {
-        SkPaintToGrPaintReplaceShader(rContext, colorInfo, paint, matrix, nullptr, grPaint);
+        SkPaintToGrPaintReplaceShader(rContext, colorInfo, paint, matrix, nullptr, props, grPaint);
         float a = grPaint->getColor4f().fA;
         return {a, a, a, a};
     }
-    SkPaintToGrPaint(rContext, colorInfo, paint, matrix, grPaint);
+    SkPaintToGrPaint(rContext, colorInfo, paint, matrix, props, grPaint);
     return grPaint->getColor4f();
 }
 
@@ -566,18 +571,9 @@ std::optional<PathOpSubmitter> PathOpSubmitter::MakeFromBuffer(SkReadBuffer& buf
     bool isAntiAlias = buffer.readInt();
     SkScalar strikeToSourceScale = buffer.readScalar();
 
-    uint32_t glyphCount = buffer.getArrayCount();
-
-    // Zero indicates a problem with serialization.
-    if (!buffer.validate(glyphCount != 0)) { return std::nullopt; }
-
-    // Check that the count will not overflow the arena.
-    if (!buffer.validate(glyphCount <= INT_MAX &&
-                         BagOfBytes::WillCountFit<SkPoint>(glyphCount))) { return std::nullopt; }
-
-    SkPoint* positionsData = alloc->makePODArray<SkPoint>(glyphCount);
-    if (!buffer.readPointArray(positionsData, glyphCount)) { return std::nullopt; }
-    SkSpan<SkPoint> positions(positionsData, glyphCount);
+    SkSpan<SkPoint> positions = make_points_from_buffer(buffer, alloc);
+    if (positions.empty()) { return std::nullopt; }
+    const int glyphCount = SkCount(positions);
 
     // Remember, we stored an int for glyph id.
     if (!buffer.validateCanReadN<int>(glyphCount)) { return std::nullopt; }
@@ -822,10 +818,7 @@ int DrawableOpSubmitter::unflattenSize() const {
 
 void DrawableOpSubmitter::flatten(SkWriteBuffer& buffer) const {
     buffer.writeScalar(fStrikeToSourceScale);
-    buffer.writeInt(SkCount(fPositions));
-    for (auto pos : fPositions) {
-        buffer.writePoint(pos);
-    }
+    buffer.writePointArray(fPositions.data(), SkCount(fPositions));
     for (SkGlyphID glyphID : fGlyphIDs) {
         buffer.writeInt(glyphID);
     }
@@ -836,18 +829,14 @@ std::optional<DrawableOpSubmitter> DrawableOpSubmitter::MakeFromBuffer(
         SkReadBuffer& buffer, SubRunAllocator* alloc, const SkStrikeClient* client) {
     SkScalar strikeToSourceScale = buffer.readScalar();
 
-    int glyphCount = buffer.readInt();
-    if (!buffer.validate(check_glyph_count(buffer, glyphCount))) { return std::nullopt; }
-    if (!buffer.validateCanReadN<SkPoint>(glyphCount)) { return std::nullopt; }
-    SkPoint* positions = alloc->makePODArray<SkPoint>(glyphCount);
-    for (int i = 0; i < glyphCount; ++i) {
-        positions[i] = buffer.readPoint();
-    }
+    SkSpan<SkPoint> positions = make_points_from_buffer(buffer, alloc);
+    if (positions.empty()) { return std::nullopt; }
+    const int glyphCount = SkCount(positions);
 
     // Remember, we stored an int for glyph id.
     if (!buffer.validateCanReadN<int>(glyphCount)) { return std::nullopt; }
     SkGlyphID* glyphIDs = alloc->makePODArray<SkGlyphID>(glyphCount);
-    for (int i = 0; i < glyphCount; ++i) {
+    for (int i = 0; i < SkToInt(glyphCount); ++i) {
         glyphIDs[i] = SkTo<SkGlyphID>(buffer.readInt());
     }
 
@@ -872,7 +861,7 @@ std::optional<DrawableOpSubmitter> DrawableOpSubmitter::MakeFromBuffer(
 
     SkASSERT(buffer.isValid());
     return {DrawableOpSubmitter{strikeToSourceScale,
-                                SkSpan(positions, glyphCount),
+                                positions,
                                 SkSpan(glyphIDs, glyphCount),
                                 SkSpan(drawables, glyphCount),
                                 std::move(strike),
@@ -1290,25 +1279,16 @@ SubRunOwner DirectMaskSubRun::MakeFromBuffer(const SkMatrix& initialPositionMatr
     MaskFormat maskType = (MaskFormat)buffer.readInt();
     SkRect runBounds = buffer.readRect();
 
-    uint32_t glyphCount = buffer.getArrayCount();
-
-    // Zero indicates a problem with serialization.
-    if (!buffer.validate(glyphCount != 0)) { return nullptr; }
-
-    // Check that the count will not overflow the arena.
-    if (!buffer.validate(glyphCount <= INT_MAX &&
-                         BagOfBytes::WillCountFit<SkPoint>(glyphCount))) { return nullptr; }
-
-    SkPoint* positionsData = alloc->makePODArray<SkPoint>(glyphCount);
-    if (!buffer.readPointArray(positionsData, glyphCount)) { return nullptr; }
-    SkSpan<SkPoint> positions(positionsData, glyphCount);
+    SkSpan<SkPoint> leftTop = make_points_from_buffer(buffer, alloc);
+    if (leftTop.empty()) { return nullptr; }
+    const int glyphCount = SkCount(leftTop);
 
     auto glyphVector = GlyphVector::MakeFromBuffer(buffer, client, alloc);
     if (!buffer.validate(glyphVector.has_value())) { return nullptr; }
-    if (!buffer.validate(SkCount(glyphVector->glyphs()) == SkToInt(glyphCount))) { return nullptr; }
+    if (!buffer.validate(SkCount(glyphVector->glyphs()) == glyphCount)) { return nullptr; }
     SkASSERT(buffer.isValid());
     return alloc->makeUnique<DirectMaskSubRun>(
-            maskType, initialPositionMatrix, runBounds, positions,
+            maskType, initialPositionMatrix, runBounds, leftTop,
             std::move(glyphVector.value()));
 }
 
@@ -1408,7 +1388,7 @@ std::tuple<const GrClip*, GrOp::Owner> DirectMaskSubRun::makeAtlasTextOp(
 
     GrPaint grPaint;
     const SkPMColor4f drawingColor =
-            calculate_colors(sdc, paint, viewMatrix, fMaskFormat, &grPaint);
+            calculate_colors(sdc, paint, viewMatrix, fMaskFormat, sdc->surfaceProps(), &grPaint);
 
     auto geometry = AtlasTextOp::Geometry::Make(*this,
                                                 drawMatrix,
@@ -1874,7 +1854,7 @@ TransformedMaskSubRun::makeAtlasTextOp(const GrClip* clip,
 
     GrPaint grPaint;
     SkPMColor4f drawingColor = calculate_colors(
-            sdc, paint, viewMatrix, fVertexFiller.grMaskType(), &grPaint);
+            sdc, paint, viewMatrix, fVertexFiller.grMaskType(), sdc->surfaceProps(), &grPaint);
 
     auto geometry = AtlasTextOp::Geometry::Make(*this,
                                                 drawMatrix,
@@ -2212,7 +2192,7 @@ SDFTSubRun::makeAtlasTextOp(const GrClip* clip,
 
     GrPaint grPaint;
     SkPMColor4f drawingColor = calculate_colors(sdc, paint, viewMatrix, MaskFormat::kA8,
-                                                &grPaint);
+                                                sdc->surfaceProps(), &grPaint);
 
     auto [maskType, DFGPFlags, useGammaCorrectDistanceTable] =
             calculate_sdf_parameters(*sdc, drawMatrix, fUseLCDText, fAntiAliased);

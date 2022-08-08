@@ -186,6 +186,7 @@ SKIA_PUBLIC_HDRS = [
     "include/gpu/graphite/BackendTexture.h",
     "include/gpu/graphite/Context.h",
     "include/gpu/graphite/GraphiteTypes.h",
+    "include/gpu/graphite/ImageProvider.h",
     "include/gpu/graphite/mtl/MtlBackendContext.h",
     "include/gpu/graphite/mtl/MtlTypes.h",
     "include/gpu/graphite/Recorder.h",
@@ -799,8 +800,6 @@ BASE_SRCS_ALL = [
     "src/gpu/Swizzle.cpp",
     "src/gpu/Swizzle.h",
     # We include the ganesh files, but leave out any specific backend (e.g. GL, Vulkan)
-    "src/gpu/ganesh/BaseDevice.cpp",
-    "src/gpu/ganesh/BaseDevice.h",
     "src/gpu/ganesh/GrAHardwareBufferImageGenerator.cpp",
     "src/gpu/ganesh/GrAHardwareBufferImageGenerator.h",
     "src/gpu/ganesh/GrAHardwareBufferUtils.cpp",
@@ -825,8 +824,8 @@ BASE_SRCS_ALL = [
     "src/gpu/ganesh/GrBuffer.h",
     "src/gpu/ganesh/GrBufferAllocPool.cpp",
     "src/gpu/ganesh/GrBufferAllocPool.h",
-    "src/gpu/ganesh/GrBufferTransferRenderTask.cpp"
-    "src/gpu/ganesh/GrBufferTransferRenderTask.h"
+    "src/gpu/ganesh/GrBufferTransferRenderTask.cpp",
+    "src/gpu/ganesh/GrBufferTransferRenderTask.h",
     "src/gpu/ganesh/GrCaps.cpp",
     "src/gpu/ganesh/GrCaps.h",
     "src/gpu/ganesh/GrClientMappedBufferManager.cpp",

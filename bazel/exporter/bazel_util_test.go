@@ -10,7 +10,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.skia.org/skia/bazel/exporter/build_proto/analysis_v2"
 	"go.skia.org/skia/bazel/exporter/build_proto/build"
+	"google.golang.org/protobuf/encoding/prototext"
 )
 
 func TestMakeCanonicalRuleName_ValidInput_Success(t *testing.T) {
@@ -58,6 +60,7 @@ func TestParseRule_ValidRules_Success(t *testing.T) {
 	test("PathWithFile", "@abseil_cpp//absl/algorithm:algorithm.h", "@abseil_cpp", "/absl/algorithm", "algorithm.h")
 	test("DirDefaultTarget", "//tools/flags", "", "/tools/flags", "flags")
 	test("RepoDefaultTarget", "@libpng", "@libpng", "/", "libpng")
+	test("TargetWithPath", "//src/sksl:generated/sksl_compute.dehydrated.sksl", "", "/src/sksl", "generated/sksl_compute.dehydrated.sksl")
 }
 
 func TestParseLocation_ValidInput_Success(t *testing.T) {
@@ -74,10 +77,10 @@ func TestGetLocationDir_ValidInput_Success(t *testing.T) {
 	assert.Equal(t, "/path/to", path)
 }
 
-func TestGetRuleCMakeName_ValidInput_Success(t *testing.T) {
+func TestGetRuleSimpleName_ValidInput_Success(t *testing.T) {
 	test := func(name, rule, expectedName string) {
 		t.Run(name, func(t *testing.T) {
-			cmakeName, err := getRuleCMakeName(rule)
+			cmakeName, err := getRuleSimpleName(rule)
 			require.NoError(t, err)
 			assert.Equal(t, expectedName, cmakeName)
 		})
@@ -106,4 +109,55 @@ func TestAppendUnique_NotPresent_Appended(t *testing.T) {
 func TestAppendUnique_Present_NotAppended(t *testing.T) {
 	slice := appendUnique([]string{"one", "two"}, "two")
 	assert.Equal(t, []string{"one", "two"}, slice)
+}
+
+func TestIsExternalRule_IsExternal_ExpectTrue(t *testing.T) {
+	assert.True(t, isExternalRule("@abseil_cpp//absl/algorithm:algorithm.h"))
+}
+
+func TestIsExternalRule_IsInternal_ExpectFalse(t *testing.T) {
+	assert.False(t, isExternalRule("//:skia_public"))
+}
+
+func TestIsFileRule_InvalidRule_ReturnsFalse(t *testing.T) {
+	assert.False(t, isFileTarget(""))
+}
+
+func TestIsFileRule_ValidFileRule_ReturnsTrue(t *testing.T) {
+	assert.True(t, isFileTarget("//dir/path:hello.c"))
+}
+
+func TestIsFileRule_ValidNonFileRule_ReturnsFalse(t *testing.T) {
+	assert.False(t, isFileTarget("//dir/path:hello"))
+}
+
+func TestFindRule_RuleExists_Success(t *testing.T) {
+	qr := analysis_v2.CqueryResult{}
+	err := prototext.Unmarshal([]byte(textProto), &qr)
+	require.NoError(t, err)
+
+	r, err := findRule(&qr, "//src/apps:hello")
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "//src/apps:hello", r.GetName())
+}
+
+func TestFindRule_RuleDoesntExists_ReturnsError(t *testing.T) {
+	qr := analysis_v2.CqueryResult{}
+	err := prototext.Unmarshal([]byte(textProto), &qr)
+	require.NoError(t, err)
+
+	r, err := findRule(&qr, "//path/to:nonexistent_rule")
+	assert.Error(t, err)
+	assert.Nil(t, r)
+}
+
+func TestFindRule_InvalidRule_ReturnsError(t *testing.T) {
+	qr := analysis_v2.CqueryResult{}
+	err := prototext.Unmarshal([]byte(textProto), &qr)
+	require.NoError(t, err)
+
+	r, err := findRule(&qr, "")
+	assert.Error(t, err)
+	assert.Nil(t, r)
 }

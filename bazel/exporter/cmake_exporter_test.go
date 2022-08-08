@@ -249,49 +249,6 @@ set_target_properties(src_apps_hello PROPERTIES INCLUDE_DIRECTORIES
 	assert.Equal(t, expected, contents.String())
 }
 
-func TestIsFileRule_InvalidRule_ReturnsFalse(t *testing.T) {
-	assert.False(t, isFileTarget(""))
-}
-
-func TestIsFileRule_ValidFileRule_ReturnsTrue(t *testing.T) {
-	assert.True(t, isFileTarget("//dir/path:hello.c"))
-}
-
-func TestIsFileRule_ValidNonFileRule_ReturnsFalse(t *testing.T) {
-	assert.False(t, isFileTarget("//dir/path:hello"))
-}
-
-func TestFindRule_RuleExists_Success(t *testing.T) {
-	qr := analysis_v2.CqueryResult{}
-	err := prototext.Unmarshal([]byte(textProto), &qr)
-	require.NoError(t, err)
-
-	r, err := findRule(&qr, "//src/apps:hello")
-	require.NoError(t, err)
-	require.NotNil(t, r)
-	assert.Equal(t, "//src/apps:hello", r.GetName())
-}
-
-func TestFindRule_RuleDoesntExists_ReturnsError(t *testing.T) {
-	qr := analysis_v2.CqueryResult{}
-	err := prototext.Unmarshal([]byte(textProto), &qr)
-	require.NoError(t, err)
-
-	r, err := findRule(&qr, "//path/to:nonexistent_rule")
-	assert.Error(t, err)
-	assert.Nil(t, r)
-}
-
-func TestFindRule_InvalidRule_ReturnsError(t *testing.T) {
-	qr := analysis_v2.CqueryResult{}
-	err := prototext.Unmarshal([]byte(textProto), &qr)
-	require.NoError(t, err)
-
-	r, err := findRule(&qr, "")
-	assert.Error(t, err)
-	assert.Nil(t, r)
-}
-
 func TestGetRuleCopts_CoptsExists_Success(t *testing.T) {
 	qr := analysis_v2.CqueryResult{}
 	err := prototext.Unmarshal([]byte(textProto), &qr)

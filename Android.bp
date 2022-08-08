@@ -445,7 +445,6 @@ cc_library_static {
         "src/gpu/ResourceKey.cpp",
         "src/gpu/ShaderErrorHandler.cpp",
         "src/gpu/Swizzle.cpp",
-        "src/gpu/ganesh/BaseDevice.cpp",
         "src/gpu/ganesh/GrAHardwareBufferImageGenerator.cpp",
         "src/gpu/ganesh/GrAHardwareBufferUtils.cpp",
         "src/gpu/ganesh/GrAttachment.cpp",
@@ -1482,7 +1481,6 @@ cc_library_static {
           "src/gpu/ResourceKey.cpp",
           "src/gpu/ShaderErrorHandler.cpp",
           "src/gpu/Swizzle.cpp",
-          "src/gpu/ganesh/BaseDevice.cpp",
           "src/gpu/ganesh/GrAHardwareBufferImageGenerator.cpp",
           "src/gpu/ganesh/GrAHardwareBufferUtils.cpp",
           "src/gpu/ganesh/GrAttachment.cpp",
@@ -3256,7 +3254,6 @@ cc_library_shared {
     ],
 
     srcs: [
-        "dm/DMGpuTestProcs.cpp",
         "gm/3d.cpp",
         "gm/aaa.cpp",
         "gm/aaclip.cpp",
@@ -3984,7 +3981,6 @@ cc_library_shared {
         "src/gpu/ResourceKey.cpp",
         "src/gpu/ShaderErrorHandler.cpp",
         "src/gpu/Swizzle.cpp",
-        "src/gpu/ganesh/BaseDevice.cpp",
         "src/gpu/ganesh/GrAHardwareBufferImageGenerator.cpp",
         "src/gpu/ganesh/GrAHardwareBufferUtils.cpp",
         "src/gpu/ganesh/GrAttachment.cpp",
@@ -4913,6 +4909,7 @@ cc_library_shared {
         "tools/random_parse_path.cpp",
         "tools/skqp/src/jni_skqp.cpp",
         "tools/skqp/src/skqp.cpp",
+        "tools/skqp/src/skqp_GpuTestProcs.cpp",
         "tools/timer/Timer.cpp",
     ],
 

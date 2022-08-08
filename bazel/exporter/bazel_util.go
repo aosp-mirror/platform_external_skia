@@ -14,12 +14,13 @@ import (
 
 	"go.skia.org/infra/go/skerr"
 	"go.skia.org/infra/go/util"
+	"go.skia.org/skia/bazel/exporter/build_proto/analysis_v2"
 	"go.skia.org/skia/bazel/exporter/build_proto/build"
 )
 
 const (
 	ruleOnlyRepoPattern = `^(@\w+)$`
-	rulePattern         = `^(?P<repo>@[^/]+)?/(?P<path>[^:]+)(?P<target>:[\w-\.]+)?$`
+	rulePattern         = `^(?P<repo>@[^/]+)?/(?P<path>[^:]+)(?P<target>:[^:]+)?$`
 	locationPattern     = `^(?P<path>[^:]+):(?P<line>[^:]+):(?P<pos>[^:]+)$`
 )
 
@@ -28,6 +29,23 @@ var (
 	ruleRegex         = regexp.MustCompile(rulePattern)
 	locRegex          = regexp.MustCompile(locationPattern)
 )
+
+// Return true if the given rule name represents an external repository.
+func isExternalRule(name string) bool {
+	return name[0] == '@'
+}
+
+// Given a Bazel rule name find that rule from within the
+// query results.
+func findRule(qr *analysis_v2.CqueryResult, name string) (*build.Rule, error) {
+	for _, result := range qr.GetResults() {
+		r := result.GetTarget().GetRule()
+		if r.GetName() == name {
+			return r, nil
+		}
+	}
+	return nil, skerr.Fmt(`cannot find rule %q`, name)
+}
 
 // Parse a rule into its constituent parts.
 // https://docs.bazel.build/versions/main/guide.html#specifying-targets-to-build
@@ -91,9 +109,22 @@ func makeCanonicalRuleName(bazelRuleName string) (string, error) {
 	return fmt.Sprintf("%s/%s:%s", repo, path, target), nil
 }
 
+// Determine if a target refers to a file, or a rule. target is of
+// the form:
+//
+// file: //include/private:SingleOwner.h
+// rule: //bazel/common_config_settings:has_gpu_backend
+func isFileTarget(target string) bool {
+	_, _, target, err := parseRule(target)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(target, ".")
+}
+
 // Create a string that uniquely identifies the rule and can be used
-// in the exported CMake file as a valid name.
-func getRuleCMakeName(bazelRuleName string) (string, error) {
+// in the exported project file as a valid name.
+func getRuleSimpleName(bazelRuleName string) (string, error) {
 	s, err := makeCanonicalRuleName(bazelRuleName)
 	if err != nil {
 		return "", skerr.Wrap(err)
