@@ -925,7 +925,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"RadeonR9M470X": "1002:6646-26.20.13031.18002",
 					"QuadroP400":    "10de:1cb3-30.0.15.1179",
 					"RadeonVega6":   "1002:1636-30.0.15021.1001",
-					"RTX3060":       "10de:2489-30.0.15.1165",
+					"RTX3060":       "10de:2489-30.0.15.1215",
 				}[b.parts["cpu_or_gpu_value"]]
 				if !ok {
 					log.Fatalf("Entry %q not found in Win GPU mapping.", b.parts["cpu_or_gpu_value"])
@@ -1505,6 +1505,8 @@ func (b *jobBuilder) codesize() {
 			// in this function; no changes to the task driver would be necessary.
 			"--binary_name", b.parts["binary_name"],
 			"--bloaty_cipd_version", bloatyCipdPkg.Version,
+			"--bloaty_binary", "bloaty/bloaty",
+			"--strip_binary", "binutils_linux_x64/strip",
 			"--repo", specs.PLACEHOLDER_REPO,
 			"--revision", specs.PLACEHOLDER_REVISION,
 			"--patch_issue", specs.PLACEHOLDER_ISSUE,
@@ -1515,6 +1517,7 @@ func (b *jobBuilder) codesize() {
 		b.cache(CACHES_WORKDIR...)
 		b.cipd(CIPD_PKG_LUCI_AUTH)
 		b.asset("bloaty")
+		b.asset("binutils_linux_x64")
 		b.serviceAccount("skia-external-codesize@skia-swarming-bots.iam.gserviceaccount.com")
 		b.timeout(20 * time.Minute)
 		b.attempts(1)
@@ -2161,7 +2164,6 @@ func (b *jobBuilder) bazelTest() {
 
 		switch taskdriverName {
 		case "canvaskit_gold":
-			// TODO(kjlubick) pass in appropriate keys (e.g. webgl vs webgpu vs cpu)
 			cmd = append(cmd,
 				"--goldctl_path=./cipd_bin_packages/goldctl",
 				"--git_commit="+specs.PLACEHOLDER_REVISION,
@@ -2172,7 +2174,18 @@ func (b *jobBuilder) bazelTest() {
 				// Middleman ...tests-runfiles failed: missing input file 'external/npm/node_modules/karma-chrome-launcher/...'
 				"--expunge_cache")
 			b.cipd(CIPD_PKGS_GOLDCTL)
-			break
+			switch config {
+			case "ck_full_cpu_release_chrome":
+				cmd = append(cmd, "--cpu_or_gpu=CPU", "--cpu_or_gpu_value=CPU",
+					"--compilation_mode=Release", "--browser=Chrome")
+			case "ck_full_webgl2_release_chrome":
+				cmd = append(cmd, "--cpu_or_gpu=GPU", "--cpu_or_gpu_value=WebGL2",
+					"--compilation_mode=Release", "--browser=Chrome")
+			default:
+				panic("Gold keys not specified for config " + config)
+			}
+		default:
+			panic("Unsupported Bazel taskdriver " + taskdriverName)
 		}
 
 		if cross != "" {

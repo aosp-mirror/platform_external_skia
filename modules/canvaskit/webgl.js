@@ -75,6 +75,8 @@
         }
         // This context is an index into the emscripten-provided GL wrapper.
         grCtx._context = ctx;
+        // Save this so it is easy to access (e.g. Image.readPixels)
+        GL.currentContext.grDirectContext = grCtx;
         return grCtx;
       }
 
@@ -142,11 +144,11 @@
           throw 'failed to create webgl context: err ' + ctx;
         }
 
-        var grcontext = this.MakeGrContext(ctx);
+        var grcontext = this.MakeWebGLContext(ctx);
 
         // Note that canvas.width/height here is used because it gives the size of the buffer we're
         // rendering into. This may not be the same size the element is displayed on the page, which
-        // constrolled by css, and available in canvas.clientWidth/height.
+        // controlled by css, and available in canvas.clientWidth/height.
         var surface = this.MakeOnScreenGLSurface(grcontext, canvas.width, canvas.height, colorSpace);
         if (!surface) {
           Debug('falling back from GPU implementation to a SW based one');
@@ -345,6 +347,13 @@
           return false;
         }
         return GL.makeContextCurrent(ctx);
+      };
+
+      CanvasKit.getCurrentGrDirectContext = function() {
+        if (GL.currentContext) {
+          return GL.currentContext.grDirectContext;
+        }
+        return null;
       };
     });
 }(Module)); // When this file is loaded in, the high level object is "Module";
