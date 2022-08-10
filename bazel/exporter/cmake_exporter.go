@@ -32,31 +32,6 @@ func NewCMakeExporter(workspaceDir string) *CMakeExporter {
 	}
 }
 
-// Determine if a target refers to a file, or a rule. target is of
-// the form:
-//
-// file: //include/private:SingleOwner.h
-// rule: //bazel/common_config_settings:has_gpu_backend
-func isFileTarget(target string) bool {
-	_, _, target, err := parseRule(target)
-	if err != nil {
-		return false
-	}
-	return strings.Contains(target, ".")
-}
-
-// Given a Bazel rule name find that rule from within the
-// query results.
-func findRule(qr *analysis_v2.CqueryResult, name string) (*build.Rule, error) {
-	for _, result := range qr.GetResults() {
-		r := result.GetTarget().GetRule()
-		if r.GetName() == name {
-			return r, nil
-		}
-	}
-	return nil, skerr.Fmt(`cannot find rule %q`, name)
-}
-
 // Return the default copts (COMPILE_FLAGS in CMake) for the macOS toolchain.
 func getMacPlatformRuleCopts() []string {
 	// TODO(crbug.com/skia/13586): Retrieve these values from Bazel.
@@ -124,6 +99,9 @@ func getRuleIncludes(r *build.Rule, qr *analysis_v2.CqueryResult) ([]string, err
 		return nil, skerr.Wrap(err)
 	}
 	ruleDir, err := getLocationDir(r.GetLocation())
+	if err != nil {
+		return nil, skerr.Wrap(err)
+	}
 	for idx, inc := range includes {
 		if inc == "." {
 			includes[idx] = ruleDir
@@ -133,6 +111,9 @@ func getRuleIncludes(r *build.Rule, qr *analysis_v2.CqueryResult) ([]string, err
 		dr, err := findRule(qr, d)
 		if err != nil {
 			return nil, skerr.Wrap(err)
+		}
+		if isExternalRule(dr.GetName()) {
+			continue
 		}
 		incs, err := getRuleIncludes(dr, qr)
 		if err != nil {
@@ -188,7 +169,7 @@ func (e *CMakeExporter) writeItems(r *cmakeRule, projectDir string, items []stri
 			absPath := filepath.Join(projectDir, target)
 			fmt.Fprintf(buffer, "    %q\n", e.absToWorkspaceRelativePath(absPath))
 		} else {
-			cmakeName, err := getRuleCMakeName(item)
+			cmakeName, err := getRuleSimpleName(item)
 			if err != nil {
 				return skerr.Wrap(err)
 			}
@@ -244,7 +225,7 @@ func (e *CMakeExporter) writeCompileFlags(r *build.Rule, buffer *bytes.Buffer) e
 		return nil
 	}
 	str := strings.Join(copts, " ")
-	cmakeName, err := getRuleCMakeName(r.GetName())
+	cmakeName, err := getRuleSimpleName(r.GetName())
 	if err != nil {
 		return skerr.Wrap(err)
 	}
@@ -264,7 +245,7 @@ func (e *CMakeExporter) writeCompileDefinitions(r *build.Rule, qr *analysis_v2.C
 		return nil
 	}
 	str := strings.Join(defines, ";")
-	cmakeName, err := getRuleCMakeName(r.GetName())
+	cmakeName, err := getRuleSimpleName(r.GetName())
 	if err != nil {
 		return skerr.Wrap(err)
 	}
@@ -283,7 +264,7 @@ func (e *CMakeExporter) writeIncludeDirectories(r *build.Rule, qr *analysis_v2.C
 		includes[i] = e.absToWorkspaceRelativePath(path)
 	}
 	str := strings.Join(includes, ";")
-	cmakeName, err := getRuleCMakeName(r.GetName())
+	cmakeName, err := getRuleSimpleName(r.GetName())
 	if err != nil {
 		return skerr.Wrap(err)
 	}
@@ -302,7 +283,7 @@ func (e *CMakeExporter) writeLinkFlags(r *build.Rule, buffer *bytes.Buffer) erro
 		return nil
 	}
 	str := strings.Join(defines, " ")
-	cmakeName, err := getRuleCMakeName(r.GetName())
+	cmakeName, err := getRuleSimpleName(r.GetName())
 	if err != nil {
 		return skerr.Wrap(err)
 	}
@@ -339,7 +320,7 @@ func (e *CMakeExporter) convertFilegroupRule(r *build.Rule) error {
 	var contents bytes.Buffer
 
 	targetName := r.GetName()
-	variableName, err := getRuleCMakeName(r.GetName())
+	variableName, err := getRuleSimpleName(r.GetName())
 	if err != nil {
 		return skerr.Wrap(err)
 	}
@@ -364,7 +345,7 @@ func (e *CMakeExporter) convertCCBinaryRule(r *build.Rule, qr *analysis_v2.Cquer
 	targetName := r.GetName()
 	var contents bytes.Buffer
 	fmt.Fprintf(&contents, "# %s\n", targetName)
-	cmakeName, err := getRuleCMakeName(r.GetName())
+	cmakeName, err := getRuleSimpleName(r.GetName())
 	if err != nil {
 		return skerr.Wrap(err)
 	}
@@ -393,7 +374,7 @@ func (e *CMakeExporter) convertCCLibraryRule(r *build.Rule, qr *analysis_v2.Cque
 	rule := e.workspace.createRule(r)
 
 	targetName := r.GetName()
-	cmakeName, err := getRuleCMakeName(r.GetName())
+	cmakeName, err := getRuleSimpleName(r.GetName())
 	if err != nil {
 		return skerr.Wrap(err)
 	}
@@ -444,6 +425,9 @@ func (e *CMakeExporter) Export(qcmd interfaces.QueryCommand, writer interfaces.W
 	for _, result := range qr.GetResults() {
 		t := result.GetTarget()
 		r := t.GetRule()
+		if isExternalRule(r.GetName()) {
+			continue
+		}
 		var err error = nil
 		switch {
 		case r.GetRuleClass() == "cc_binary":
