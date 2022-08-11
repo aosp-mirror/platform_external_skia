@@ -31,6 +31,10 @@
 #include "src/core/SkTInternalLList.h"
 #include "tools/SkMetaData.h"
 
+#ifdef SK_GRAPHITE_ENABLED
+#include "include/gpu/graphite/Recorder.h"
+#endif
+
 class SkBitmap;
 class SkCanvas;
 class SkFontStyle;
@@ -226,11 +230,11 @@ public:
 #endif
 
     // randomize the array
-    static void Shuffle(SkTArray<sk_sp<TopoTestNode>>* graph, SkRandom* rand) {
-        for (int i = graph->count() - 1; i > 0; --i) {
+    static void Shuffle(SkSpan<sk_sp<TopoTestNode>> graph, SkRandom* rand) {
+        for (int i = graph.size() - 1; i > 0; --i) {
             int swap = rand->nextU() % (i + 1);
 
-            (*graph)[i].swap((*graph)[swap]);
+            graph[i].swap(graph[swap]);
         }
     }
 
@@ -336,6 +340,10 @@ private:
     std::unique_ptr<SkFontArguments::VariationPosition::Coordinate[]> fCoords;
     static constexpr size_t kAxisVarsSize = 3;
 };
+
+#ifdef SK_GRAPHITE_ENABLED
+skgpu::graphite::RecorderOptions CreateTestingRecorderOptions();
+#endif
 
 }  // namespace ToolUtils
 
