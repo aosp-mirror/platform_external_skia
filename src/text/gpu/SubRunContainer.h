@@ -115,12 +115,8 @@ public:
     virtual void fillVertexData(
             skgpu::graphite::DrawWriter*,
             int offset, int count,
+            int ssboIndex,
             SkScalar depth,
-            const skgpu::graphite::Transform& transform) const = 0;
-    virtual void fillInstanceData(
-            skgpu::graphite::DrawWriter*,
-            int offset, int count,
-            uint16_t depth,
             const skgpu::graphite::Transform& transform) const = 0;
 
     virtual skgpu::MaskFormat maskFormat() const = 0;
