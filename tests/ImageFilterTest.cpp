@@ -26,6 +26,7 @@
 #include "src/core/SkSpecialSurface.h"
 #include "src/gpu/GrCaps.h"
 #include "src/gpu/GrRecordingContextPriv.h"
+#include "src/image/SkImage_Base.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
@@ -33,6 +34,8 @@
 static const int kBitmapSize = 4;
 
 namespace {
+
+static constexpr GrSurfaceOrigin kTestSurfaceOrigin = kTopLeft_GrSurfaceOrigin;
 
 class MatrixTestImageFilter : public SkImageFilter_Base {
 public:
@@ -331,21 +334,24 @@ static sk_sp<SkImageFilter> make_blue(sk_sp<SkImageFilter> input, const SkIRect*
 
 static sk_sp<SkSpecialSurface> create_empty_special_surface(GrRecordingContext* rContext,
                                                             int widthHeight) {
+
+    const SkImageInfo ii = SkImageInfo::Make({ widthHeight, widthHeight },
+                                             kRGBA_8888_SkColorType,
+                                             kPremul_SkAlphaType);
+
     if (rContext) {
-        return SkSpecialSurface::MakeRenderTarget(rContext, widthHeight, widthHeight,
-                                                  GrColorType::kRGBA_8888, nullptr,
-                                                  SkSurfaceProps());
+        return SkSpecialSurface::MakeRenderTarget(rContext, ii, SkSurfaceProps(),
+                                                  kTestSurfaceOrigin);
     } else {
-        const SkImageInfo info = SkImageInfo::MakeN32(widthHeight, widthHeight,
-                                                      kOpaque_SkAlphaType);
-        return SkSpecialSurface::MakeRaster(info, SkSurfaceProps());
+        return SkSpecialSurface::MakeRaster(ii, SkSurfaceProps());
     }
 }
 
 static sk_sp<SkSurface> create_surface(GrRecordingContext* rContext, int width, int height) {
     const SkImageInfo info = SkImageInfo::MakeN32(width, height, kOpaque_SkAlphaType);
     if (rContext) {
-        return SkSurface::MakeRenderTarget(rContext, SkBudgeted::kNo, info);
+        return SkSurface::MakeRenderTarget(rContext, SkBudgeted::kNo, info,
+                                           0, kTestSurfaceOrigin, nullptr);
     } else {
         return SkSurface::MakeRaster(info);
     }
@@ -489,8 +495,8 @@ static void test_cropRects(skiatest::Reporter* reporter, GrRecordingContext* rCo
         SkImageFilter_Base::Context ctx(SkMatrix::I(), SkIRect::MakeWH(100, 100), nullptr,
                                         kN32_SkColorType, nullptr, srcImg.get());
         sk_sp<SkSpecialImage> resultImg(as_IFB(filter)->filterImage(ctx).imageAndOffset(&offset));
-        REPORTER_ASSERT(reporter, resultImg, filters.getName(i));
-        REPORTER_ASSERT(reporter, offset.fX == 20 && offset.fY == 30, filters.getName(i));
+        REPORTER_ASSERT(reporter, resultImg, "%s", filters.getName(i));
+        REPORTER_ASSERT(reporter, offset.fX == 20 && offset.fY == 30, "%s", filters.getName(i));
     }
 }
 
@@ -808,7 +814,7 @@ DEF_TEST(ImageFilterDrawTiled, reporter) {
             }
 
             if (!ToolUtils::equal_pixels(untiledResult, tiledResult)) {
-                REPORTER_ASSERT(reporter, false, filters.getName(i));
+                ERRORF(reporter, "%s", filters.getName(i));
                 break;
             }
         }
@@ -1737,6 +1743,13 @@ static void test_make_with_filter(skiatest::Reporter* reporter, GrRecordingConte
         result = sourceImage->makeWithFilter(rContext, filter.get(), subset, clipBounds,
                                              &outSubset, &offset);
         REPORTER_ASSERT(reporter, result);
+
+        // In GPU-mode, we want the result image (and all intermediate steps) to have used the same
+        // origin as the original surface.
+        if (rContext) {
+            auto [proxyView, _] = as_IB(result)->asView(rContext, GrMipmapped::kNo);
+            REPORTER_ASSERT(reporter, proxyView && proxyView.origin() == kTestSurfaceOrigin);
+        }
     }
 }
 
@@ -1785,26 +1798,27 @@ DEF_TEST(ImageFilterComplexCTM, reporter) {
     sk_sp<SkColorFilter> cf = SkColorFilters::Blend(SK_ColorRED, SkBlendMode::kSrcATop);
     sk_sp<SkImageFilter> cfif = SkImageFilters::ColorFilter(cf, nullptr);    // can handle
     sk_sp<SkImageFilter> blif = SkImageFilters::Blur(3, 3, nullptr);         // cannot handle
+    using MatrixCapability = SkImageFilter_Base::MatrixCapability;
 
     struct {
         sk_sp<SkImageFilter> fFilter;
-        bool                 fExpectCanHandle;
+        MatrixCapability     fExpectCapability;
     } recs[] = {
-        { cfif,                                  true  },
-        { SkImageFilters::ColorFilter(cf, cfif), true  },
-        { SkImageFilters::Merge(cfif, cfif),     true  },
-        { SkImageFilters::Compose(cfif, cfif),   true  },
+        { cfif,                                  MatrixCapability::kComplex },
+        { SkImageFilters::ColorFilter(cf, cfif), MatrixCapability::kComplex },
+        { SkImageFilters::Merge(cfif, cfif),     MatrixCapability::kComplex },
+        { SkImageFilters::Compose(cfif, cfif),   MatrixCapability::kComplex },
 
-        { blif,                                  false },
-        { SkImageFilters::Blur(3, 3, cfif),      false },
-        { SkImageFilters::ColorFilter(cf, blif), false },
-        { SkImageFilters::Merge(cfif, blif),     false },
-        { SkImageFilters::Compose(blif, cfif),   false },
+        { blif,                                  MatrixCapability::kScaleTranslate },
+        { SkImageFilters::Blur(3, 3, cfif),      MatrixCapability::kScaleTranslate },
+        { SkImageFilters::ColorFilter(cf, blif), MatrixCapability::kScaleTranslate },
+        { SkImageFilters::Merge(cfif, blif),     MatrixCapability::kScaleTranslate },
+        { SkImageFilters::Compose(blif, cfif),   MatrixCapability::kScaleTranslate },
     };
 
     for (const auto& rec : recs) {
-        const bool canHandle = as_IFB(rec.fFilter)->canHandleComplexCTM();
-        REPORTER_ASSERT(reporter, canHandle == rec.fExpectCanHandle);
+        const MatrixCapability capability = as_IFB(rec.fFilter)->getCTMCapability();
+        REPORTER_ASSERT(reporter, capability == rec.fExpectCapability);
     }
 }
 
@@ -2054,4 +2068,16 @@ DEF_TEST(PictureImageSourceBounds, reporter) {
     REPORTER_ASSERT(reporter, input == source2->filterBounds(input, scale,
                                                              SkImageFilter::kReverse_MapDirection,
                                                              &input));
+}
+
+DEF_TEST(DropShadowImageFilter_Huge, reporter) {
+    // Successful if it doesn't crash or trigger ASAN. (crbug.com/1264705)
+    auto surf = SkSurface::MakeRasterN32Premul(300, 150);
+
+    SkPaint paint;
+    paint.setImageFilter(SkImageFilters::DropShadowOnly(
+            0.0f, 0.437009f, 14129.6f, 14129.6f, SK_ColorGRAY, nullptr));
+
+    surf->getCanvas()->saveLayer(nullptr, &paint);
+    surf->getCanvas()->restore();
 }

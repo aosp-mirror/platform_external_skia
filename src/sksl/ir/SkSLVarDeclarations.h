@@ -26,29 +26,36 @@ namespace dsl {
  */
 class VarDeclaration final : public Statement {
 public:
-    static constexpr Kind kStatementKind = Kind::kVarDeclaration;
+    inline static constexpr Kind kStatementKind = Kind::kVarDeclaration;
 
     VarDeclaration(const Variable* var,
                    const Type* baseType,
                    int arraySize,
-                   std::unique_ptr<Expression> value)
-            : INHERITED(var->fOffset, kStatementKind)
+                   std::unique_ptr<Expression> value,
+                   bool isClone = false)
+            : INHERITED(var->fLine, kStatementKind)
             , fVar(var)
             , fBaseType(*baseType)
             , fArraySize(arraySize)
-            , fValue(std::move(value)) {}
+            , fValue(std::move(value))
+            , fIsClone(isClone) {}
 
     ~VarDeclaration() override {
         // Unhook this VarDeclaration from its associated Variable, since we're being deleted.
-        if (fVar) {
+        if (fVar && !fIsClone) {
             fVar->detachDeadVarDeclaration();
         }
     }
 
+    // Checks the modifiers, baseType, and storage for compatibility with one another and reports
+    // errors if needed. This method is implicitly called during Convert(), but is also explicitly
+    // called while processing interface block fields.
+    static void ErrorCheck(const Context& context, int line, const Modifiers& modifiers,
+            const Type* baseType, Variable::Storage storage);
+
     // Does proper error checking and type coercion; reports errors via ErrorReporter.
-    static std::unique_ptr<Statement> Convert(const Context& context,
-                                              Variable* var,
-                                              std::unique_ptr<Expression> value);
+    static std::unique_ptr<Statement> Convert(const Context& context, std::unique_ptr<Variable> var,
+            std::unique_ptr<Expression> value, bool addToSymbolTable = true);
 
     // Reports errors via ASSERT.
     static std::unique_ptr<Statement> Make(const Context& context,
@@ -84,13 +91,18 @@ public:
 
     std::unique_ptr<Statement> clone() const override;
 
-    String description() const override;
+    std::string description() const override;
 
 private:
+    static bool ErrorCheckAndCoerce(const Context& context, const Variable& var,
+            std::unique_ptr<Expression>& value);
+
     const Variable* fVar;
     const Type& fBaseType;
-    int fArraySize;  // zero means "not an array", Type::kUnsizedArray means var[]
+    int fArraySize;  // zero means "not an array"
     std::unique_ptr<Expression> fValue;
+    // if this VarDeclaration is a clone, it doesn't actually own the associated variable
+    bool fIsClone;
 
     friend class IRGenerator;
 
@@ -103,10 +115,10 @@ private:
  */
 class GlobalVarDeclaration final : public ProgramElement {
 public:
-    static constexpr Kind kProgramElementKind = Kind::kGlobalVar;
+    inline static constexpr Kind kProgramElementKind = Kind::kGlobalVar;
 
     GlobalVarDeclaration(std::unique_ptr<Statement> decl)
-            : INHERITED(decl->fOffset, kProgramElementKind)
+            : INHERITED(decl->fLine, kProgramElementKind)
             , fDeclaration(std::move(decl)) {
         SkASSERT(this->declaration()->is<VarDeclaration>());
     }
@@ -123,7 +135,7 @@ public:
         return std::make_unique<GlobalVarDeclaration>(this->declaration()->clone());
     }
 
-    String description() const override {
+    std::string description() const override {
         return this->declaration()->description();
     }
 

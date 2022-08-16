@@ -3,6 +3,10 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
+#ifndef SK_ENABLE_SKSL
+#define SK_ENABLE_SKSL
+#endif
+
 #ifndef SK_ENCODE_PNG
 #define SK_ENCODE_PNG
 #endif
@@ -17,6 +21,10 @@
 
 #ifndef SK_HAS_ANDROID_CODEC
 #define SK_HAS_ANDROID_CODEC
+#endif
+
+#ifndef SK_IN_RENDERENGINE
+#define SK_IN_RENDERENGINE
 #endif
 
 #ifndef SK_USE_VMA
