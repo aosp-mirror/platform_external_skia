@@ -22,7 +22,7 @@ parser.add_argument('--gn', dest='gn_cmd', default='gn')
 args = parser.parse_args()
 
 def GenerateJSONFromGN(gn_args):
-  gn_args = ' '.join(sorted('%s=%s' % (k,v) for (k,v) in gn_args.iteritems()))
+  gn_args = ' '.join(sorted('%s=%s' % (k,v) for (k,v) in iter(gn_args.items())))
   tmp = tempfile.mkdtemp()
   subprocess.check_call([args.gn_cmd, 'gen', tmp, '--args=%s' % gn_args,
                          '--ide=json'])
@@ -39,8 +39,11 @@ def GrabDependentValues(js, name, value_type, list_to_extend, exclude):
       continue   # We've handled all third-party DEPS as static or shared_libs.
     if 'none' in dep:
       continue   # We'll handle all cpu-specific sources manually later.
-    if exclude and exclude in dep:
+    if exclude and isinstance(exclude, str) and exclude == dep:
       continue
+    if exclude and isinstance(exclude, list) and dep in exclude:
+      continue
+
     list_to_extend.update(_strip_slash(js['targets'][dep].get(value_type, [])))
     GrabDependentValues(js, dep, value_type, list_to_extend, exclude)
 
@@ -55,6 +58,7 @@ def CleanupCFlags(cflags):
     "-Wno-missing-field-initializers",
     "-Wno-sign-conversion",
     "-Wno-thread-safety-analysis",
+    "-Wno-unknown-warning-option",
     "-Wno-unused-parameter",
     "-Wno-unused-variable",
   ])
@@ -67,6 +71,10 @@ def CleanupCFlags(cflags):
     "-DATRACE_TAG=ATRACE_TAG_VIEW",
   ])
 
+  # Android does not want -Weverything set, it blocks toolchain updates.
+  if "-Weverything" in cflags:
+    cflags.remove("-Weverything")
+
   # We need to undefine FORTIFY_SOURCE before we define it. Insert it at the
   # beginning after sorting.
   cflags = sorted(cflags)
@@ -74,6 +82,10 @@ def CleanupCFlags(cflags):
   return cflags
 
 def CleanupCCFlags(cflags_cc):
+  # Android does not want -Weverything set, it blocks toolchain updates.
+  if "-Weverything" in cflags_cc:
+    cflags_cc.remove("-Weverything")
+
   # Only use the generated flags related to warnings.
   return {s for s in cflags_cc      if s.startswith('-W')}
 
@@ -91,7 +103,9 @@ def GetArchSources(opts_file):
   # that we can use execfile() if we supply definitions for GN builtins.
   builtins = { 'get_path_info': _get_path_info }
   defs = {}
-  execfile(opts_file, builtins, defs)
+  with open(opts_file) as f:
+    code = compile(f.read(), opts_file, 'exec')
+    exec(code, builtins, defs)
 
   # Perform any string substitutions.
   for arch in defs:
@@ -114,6 +128,7 @@ def WriteUserConfig(userConfigPath, defines):
     print('// If need to change a define, modify SkUserConfigManual.h', file=f)
     print('#pragma once', file=f)
     print('#include "SkUserConfigManual.h"', file=f)
+
     for define in sorted(defines):
       print('', file=f)
       print('#ifndef', define.split('=')[0], file=f)

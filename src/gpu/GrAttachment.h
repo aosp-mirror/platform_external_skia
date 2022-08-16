@@ -12,7 +12,6 @@
 #include "src/gpu/GrSurface.h"
 
 class GrRenderTarget;
-class GrResourceKey;
 
 /**
  * This is a generic attachment class for out GrSurfaces. It always represents a single gpu
@@ -54,7 +53,8 @@ public:
                                                  int sampleCnt,
                                                  GrMipmapped mipmapped,
                                                  GrProtected isProtected,
-                                                 GrUniqueKey* key);
+                                                 GrMemoryless memoryless,
+                                                 skgpu::UniqueKey* key);
 
     // TODO: Once attachments start having multiple usages, we'll need to figure out how to search
     // the cache for an attachment that simply contains the requested usage instead of equaling it.
@@ -65,20 +65,23 @@ public:
                                   int sampleCnt,
                                   GrMipmapped mipmapped,
                                   GrProtected,
-                                  GrScratchKey* key);
+                                  GrMemoryless,
+                                  skgpu::ScratchKey* key);
 
 protected:
     GrAttachment(GrGpu* gpu, SkISize dimensions, UsageFlags supportedUsages, int sampleCnt,
-                 GrMipmapped mipmapped, GrProtected isProtected)
+                 GrMipmapped mipmapped, GrProtected isProtected,
+                 GrMemoryless memoryless = GrMemoryless::kNo)
             : INHERITED(gpu, dimensions, isProtected)
             , fSupportedUsages(supportedUsages)
             , fSampleCnt(sampleCnt)
-            , fMipmapped(mipmapped) {}
+            , fMipmapped(mipmapped)
+            , fMemoryless(memoryless) {}
 
 private:
     size_t onGpuMemorySize() const final;
 
-    void computeScratchKey(GrScratchKey*) const final;
+    void computeScratchKey(skgpu::ScratchKey*) const final;
 
     const char* getResourceType() const override {
         if (fSupportedUsages == UsageFlags::kStencilAttachment) {
@@ -93,10 +96,11 @@ private:
     int fSampleCnt;
     GrMipmapped fMipmapped;
     bool fHasPerformedInitialClear = false;
+    GrMemoryless fMemoryless;
 
     using INHERITED = GrSurface;
 };
 
-GR_MAKE_BITFIELD_CLASS_OPS(GrAttachment::UsageFlags);
+GR_MAKE_BITFIELD_CLASS_OPS(GrAttachment::UsageFlags)
 
 #endif

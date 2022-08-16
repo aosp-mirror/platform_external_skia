@@ -20,9 +20,8 @@
 #include "src/codec/SkPngPriv.h"
 #include "src/codec/SkSwizzler.h"
 #include "src/core/SkOpts.h"
-#include "src/core/SkUtils.h"
 
-#include "png.h"
+#include <png.h>
 #include <algorithm>
 
 #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK

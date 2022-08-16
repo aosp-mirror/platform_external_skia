@@ -50,13 +50,16 @@
 #include "src/utils/SkUTF.h"
 #include "tools/flags/CommandLineFlags.h"
 
-#ifdef SK_GL
+#if SK_SUPPORT_GPU
 #include "include/gpu/GrDirectContext.h"
-#include "include/gpu/gl/GrGLFunctions.h"
 #include "src/gpu/GrDirectContextPriv.h"
+#include "tools/gpu/GrContextFactory.h"
+#endif
+
+#ifdef SK_GL
+#include "include/gpu/gl/GrGLFunctions.h"
 #include "src/gpu/gl/GrGLGpu.h"
 #include "src/gpu/gl/GrGLUtil.h"
-#include "tools/gpu/GrContextFactory.h"
 #endif
 
 // MISC
@@ -512,6 +515,20 @@ static sk_sp<SkImageFilter> make_fuzz_lighting_imagefilter(Fuzz* fuzz, int depth
 
 static void fuzz_paint(Fuzz* fuzz, SkPaint* paint, int depth);
 
+static SkSamplingOptions next_sampling(Fuzz* fuzz) {
+    if (fuzz->nextBool()) {
+        float B, C;
+        fuzz->next(&B, &C);
+        return SkSamplingOptions({B, C});
+    } else {
+        SkFilterMode fm;
+        SkMipmapMode mm;
+        fuzz->nextEnum(&fm, SkFilterMode::kLast);
+        fuzz->nextEnum(&mm, SkMipmapMode::kLast);
+        return SkSamplingOptions(fm, mm);
+    }
+}
+
 static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
     if (depth <= 0) {
         return nullptr;
@@ -536,9 +553,7 @@ static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
         case 2: {
             SkMatrix matrix;
             FuzzNiceMatrix(fuzz, &matrix);
-            SkFilterQuality quality;
-            fuzz->nextEnum(&quality, SkFilterQuality::kLast_SkFilterQuality);
-            auto sampling = SkSamplingOptions(quality);
+            const auto sampling = next_sampling(fuzz);
             sk_sp<SkImageFilter> input = make_fuzz_imageFilter(fuzz, depth - 1);
             return SkImageFilters::MatrixTransform(matrix, sampling, std::move(input));
         }
@@ -628,11 +643,8 @@ static sk_sp<SkImageFilter> make_fuzz_imageFilter(Fuzz* fuzz, int depth) {
         case 10: {
             sk_sp<SkImage> image = make_fuzz_image(fuzz);
             SkRect srcRect, dstRect;
-            SkFilterQuality filterQuality;
             fuzz->next(&srcRect, &dstRect);
-            fuzz->nextEnum(&filterQuality, SkFilterQuality::kLast_SkFilterQuality);
-            return SkImageFilters::Image(std::move(image), srcRect, dstRect,
-                                         SkSamplingOptions(filterQuality));
+            return SkImageFilters::Image(std::move(image), srcRect, dstRect, next_sampling(fuzz));
         }
         case 11:
             return make_fuzz_lighting_imagefilter(fuzz, depth - 1);
@@ -1004,7 +1016,7 @@ static void fuzz_canvas(Fuzz* fuzz, SkCanvas* canvas, int depth = 9) {
     SkAutoCanvasRestore autoCanvasRestore(canvas, false);
     unsigned N;
     fuzz->nextRange(&N, 0, 2000);
-    for (unsigned i = 0; i < N; ++i) {
+    for (unsigned loop = 0; loop < N; ++loop) {
         if (fuzz->exhausted()) {
             return;
         }
@@ -1394,8 +1406,8 @@ static void fuzz_canvas(Fuzz* fuzz, SkCanvas* canvas, int depth = 9) {
                 uint16_t indices[kMaxCount * 2];
                 if (make_fuzz_t<bool>(fuzz)) {
                     fuzz->nextRange(&indexCount, vertexCount, vertexCount + kMaxCount);
-                    for (int i = 0; i < indexCount; ++i) {
-                        fuzz->nextRange(&indices[i], 0, vertexCount - 1);
+                    for (int index = 0; index < indexCount; ++index) {
+                        fuzz->nextRange(&indices[index], 0, vertexCount - 1);
                     }
                 }
                 canvas->drawVertices(SkVertices::MakeCopy(vertexMode, vertexCount, vertices,
@@ -1611,8 +1623,24 @@ DEF_FUZZ(SerializedImageFilter, fuzz) {
     canvas.restore();
 }
 
-#ifdef SK_GL
+#if SK_SUPPORT_GPU
+static void fuzz_ganesh(Fuzz* fuzz, GrDirectContext* context) {
+    SkASSERT(context);
+    auto surface = SkSurface::MakeRenderTarget(
+            context,
+            SkBudgeted::kNo,
+            SkImageInfo::Make(kCanvasSize, kRGBA_8888_SkColorType, kPremul_SkAlphaType));
+    SkASSERT(surface && surface->getCanvas());
+    fuzz_canvas(fuzz, surface->getCanvas());
+}
 
+DEF_FUZZ(MockGPUCanvas, fuzz) {
+    sk_gpu_test::GrContextFactory f;
+    fuzz_ganesh(fuzz, f.get(sk_gpu_test::GrContextFactory::kMock_ContextType));
+}
+#endif
+
+#ifdef SK_GL
 static void dump_GPU_info(GrDirectContext* context) {
     const GrGLInterface* gl = static_cast<GrGLGpu*>(context->priv().getGpu())
                                     ->glInterface();
@@ -1627,16 +1655,6 @@ static void dump_GPU_info(GrDirectContext* context) {
     SkDebugf("GL_VERSION %s\n", (const char*) output);
 }
 
-static void fuzz_ganesh(Fuzz* fuzz, GrDirectContext* context) {
-    SkASSERT(context);
-    auto surface = SkSurface::MakeRenderTarget(
-            context,
-            SkBudgeted::kNo,
-            SkImageInfo::Make(kCanvasSize, kRGBA_8888_SkColorType, kPremul_SkAlphaType));
-    SkASSERT(surface && surface->getCanvas());
-    fuzz_canvas(fuzz, surface->getCanvas());
-}
-
 DEF_FUZZ(NativeGLCanvas, fuzz) {
     sk_gpu_test::GrContextFactory f;
     auto context = f.get(sk_gpu_test::GrContextFactory::kGL_ContextType);
@@ -1647,11 +1665,6 @@ DEF_FUZZ(NativeGLCanvas, fuzz) {
         dump_GPU_info(context);
     }
     fuzz_ganesh(fuzz, context);
-}
-
-DEF_FUZZ(MockGPUCanvas, fuzz) {
-    sk_gpu_test::GrContextFactory f;
-    fuzz_ganesh(fuzz, f.get(sk_gpu_test::GrContextFactory::kMock_ContextType));
 }
 #endif
 
