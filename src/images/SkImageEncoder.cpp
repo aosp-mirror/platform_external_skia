@@ -4,12 +4,23 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#include "include/core/SkImageEncoder.h"
 
 #include "include/core/SkBitmap.h"
+#include "include/core/SkData.h"
+#include "include/core/SkEncodedImageFormat.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkTypes.h"
+#include "include/encode/SkEncoder.h"
 #include "include/encode/SkJpegEncoder.h"
 #include "include/encode/SkPngEncoder.h"
 #include "include/encode/SkWebpEncoder.h"
+
+#if SK_ENABLE_NDK_IMAGES || SK_USE_CG_ENCODER || SK_USE_WIC_ENCODER
 #include "src/images/SkImageEncoderPriv.h"
+#endif
 
 #ifndef SK_ENCODE_JPEG
 bool SkJpegEncoder::Encode(SkWStream*, const SkPixmap&, const Options&) { return false; }
