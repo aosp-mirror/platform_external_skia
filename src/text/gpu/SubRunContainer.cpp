@@ -451,7 +451,7 @@ AtlasTextOp::MaskType op_mask_type(MaskFormat maskFormat) {
     SkUNREACHABLE;
 }
 
-SkPMColor4f calculate_colors(skgpu::SurfaceContext* sc,
+SkPMColor4f calculate_colors(skgpu::v1::SurfaceContext* sc,
                              const SkPaint& paint,
                              const SkMatrixProvider& matrix,
                              MaskFormat maskFormat,
@@ -2506,7 +2506,7 @@ std::tuple<bool, SubRunContainerOwner> SubRunContainer::MakeInAlloc(
         packedGlyphIDs.resize(positions.size());
 
         for (auto [packedGlyphID, variant] : SkMakeZip(packedGlyphIDs, good.get<0>())) {
-            packedGlyphID = variant.glyph()->getPackedID();
+            packedGlyphID = variant.packedID();
         }
         return SkMakeZip(packedGlyphIDs, positions);
     };

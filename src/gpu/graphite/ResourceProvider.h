@@ -23,6 +23,10 @@ namespace skgpu {
 class SingleOwner;
 }
 
+namespace SkSL {
+    class Compiler;
+}
+
 namespace skgpu::graphite {
 
 class BackendTexture;
@@ -31,12 +35,12 @@ class Caps;
 class ComputePipeline;
 class ComputePipelineDesc;
 class GlobalCache;
-class Gpu;
 class GraphicsPipeline;
 class GraphicsPipelineDesc;
 class GraphiteResourceKey;
 class ResourceCache;
 class Sampler;
+class SharedContext;
 class Texture;
 class TextureInfo;
 
@@ -70,17 +74,21 @@ public:
 
     SkRuntimeEffectDictionary* runtimeEffectDictionary() { return &fRuntimeEffectDictionary; }
 
+    SkSL::Compiler* skslCompiler() { return fCompiler.get(); }
+
     void resetAfterSnap();
 
 #if GRAPHITE_TEST_UTILS
     ResourceCache* resourceCache() { return fResourceCache.get(); }
-    const Gpu* gpu() { return fGpu; }
+    const SharedContext* sharedContext() { return fSharedContext; }
 #endif
 
 protected:
-    ResourceProvider(const Gpu* gpu, sk_sp<GlobalCache>, SingleOwner* singleOwner);
+    ResourceProvider(const SharedContext* sharedContext,
+                     sk_sp<GlobalCache>,
+                     SingleOwner* singleOwner);
 
-    const Gpu* fGpu;
+    const SharedContext* fSharedContext;
 
 private:
     virtual sk_sp<GraphicsPipeline> onCreateGraphicsPipeline(const GraphicsPipelineDesc&,
@@ -147,6 +155,9 @@ private:
     std::unique_ptr<ComputePipelineCache> fComputePipelineCache;
 
     SkRuntimeEffectDictionary fRuntimeEffectDictionary;
+    // Compiler used for compiling SkSL into backend shader code. We only want to create the
+    // compiler once, as there is significant overhead to the first compile.
+    std::unique_ptr<SkSL::Compiler> fCompiler;
 };
 
 } // namespace skgpu::graphite
