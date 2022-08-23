@@ -174,6 +174,13 @@ struct SkColor4fXformer {
     SkSTArray<4, SkColor4f, true> fStorage;
 };
 
+struct SkColorConverter {
+    SkColorConverter(const SkColor* colors, int count);
+
+    SkSTArray<2, SkColor4f, true> fColors4f;
+};
+
+void SkRegisterLinearGradientShaderFlattenable();
 void SkRegisterRadialGradientShaderFlattenable();
 void SkRegisterSweepGradientShaderFlattenable();
 void SkRegisterTwoPointConicalGradientShaderFlattenable();
