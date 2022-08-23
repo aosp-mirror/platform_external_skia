@@ -9,11 +9,9 @@
 #define skgpu_graphite_RecorderPriv_DEFINED
 
 #include "include/gpu/graphite/Recorder.h"
-#include "src/text/gpu/SDFTControl.h"
+#include "src/gpu/graphite/SharedContext.h"
 
-namespace skgpu {
-enum class MaskFormat : int;
-}
+class SkShaderCodeDictionary;
 
 namespace skgpu::graphite {
 
@@ -22,24 +20,36 @@ class TextureProxy;
 class RecorderPriv {
 public:
     void add(sk_sp<Task>);
-
-    ResourceProvider* resourceProvider() const;
-    UniformDataCache* uniformDataCache() const;
-    TextureDataCache* textureDataCache() const;
-    DrawBufferManager* drawBufferManager() const;
-    UploadBufferManager* uploadBufferManager() const;
-    AtlasManager* atlasManager();
-    TokenTracker* tokenTracker();
-    sktext::gpu::StrikeCache* strikeCache();
-    sktext::gpu::TextBlobRedrawCoordinator* textBlobCache();
-    sktext::gpu::SDFTControl getSDFTControl(bool useSDFTForSmallText) const;
-    const Caps* caps() const;
-    sk_sp<const Caps> refCaps() const;
-
-    const sk_sp<skgpu::graphite::TextureProxy>* getAtlasProxies(skgpu::MaskFormat maskformat,
-                                                                unsigned int* numActiveProxies);
-
     void flushTrackedDevices();
+
+    const Caps* caps() const { return fRecorder->fSharedContext->caps(); }
+
+    ResourceProvider* resourceProvider() { return fRecorder->fResourceProvider.get(); }
+
+    const SkRuntimeEffectDictionary* runtimeEffectDictionary() const {
+        return fRecorder->fRuntimeEffectDict.get();
+    }
+    SkRuntimeEffectDictionary* runtimeEffectDictionary() {
+        return fRecorder->fRuntimeEffectDict.get();
+    }
+    const SkShaderCodeDictionary* shaderCodeDictionary() const {
+        return fRecorder->fSharedContext->shaderCodeDictionary();
+    }
+    SkShaderCodeDictionary* shaderCodeDictionary() {
+        return fRecorder->fSharedContext->shaderCodeDictionary();
+    }
+
+    UniformDataCache* uniformDataCache() { return fRecorder->fUniformDataCache.get(); }
+    TextureDataCache* textureDataCache() { return fRecorder->fTextureDataCache.get(); }
+    DrawBufferManager* drawBufferManager() { return fRecorder->fDrawBufferManager.get(); }
+    UploadBufferManager* uploadBufferManager() { return fRecorder->fUploadBufferManager.get(); }
+
+    AtlasManager* atlasManager() { return fRecorder->fAtlasManager.get(); }
+    TokenTracker* tokenTracker() { return fRecorder->fTokenTracker.get(); }
+    sktext::gpu::StrikeCache* strikeCache() { return fRecorder->fStrikeCache.get(); }
+    sktext::gpu::TextBlobRedrawCoordinator* textBlobCache() {
+        return fRecorder->fTextBlobCache.get();
+    }
 
 private:
     explicit RecorderPriv(Recorder* recorder) : fRecorder(recorder) {}
@@ -52,7 +62,6 @@ private:
     Recorder* fRecorder;
 
     friend class Recorder;  // to construct/copy this type.
-
 };
 
 inline RecorderPriv Recorder::priv() {
