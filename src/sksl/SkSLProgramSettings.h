@@ -24,9 +24,6 @@ class ExternalFunction;
 struct ProgramSettings {
     // If true the destination fragment color is read sk_FragColor. It must be declared inout.
     bool fFragColorIsInOut = false;
-    // if true, Setting objects (e.g. sk_Caps.integerSupport) should be replaced with their
-    // constant equivalents during compilation
-    bool fReplaceSettings = true;
     // if true, all halfs are forced to be floats
     bool fForceHighPrecision = false;
     // if true, add -0.5 bias to LOD of all texture lookups
@@ -76,8 +73,12 @@ struct ProgramSettings {
     // every temporary value, even ones that would otherwise be optimized away entirely. The other
     // debug opcodes are much less invasive on the generated code.
     bool fAllowTraceVarInSkVMDebugTrace = true;
-    // If true, the DSL should install a memory pool when possible.
-    bool fDSLUseMemoryPool = true;
+    // If true, SkSL will use a memory pool for all IR nodes when compiling a program. This is
+    // usually a significant speed increase, but uses more memory, so it is a good idea for programs
+    // that will be freed shortly after compilation. It can also be useful to disable this flag when
+    // investigating memory corruption. (This controls behavior of the SkSL compiler, not the code
+    // we generate.)
+    bool fUseMemoryPool = true;
     // If true, VarDeclaration can be cloned for testing purposes. See VarDeclaration::clone for
     // more information.
     bool fAllowVarDeclarationCloneForTesting = false;

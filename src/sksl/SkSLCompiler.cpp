@@ -7,7 +7,7 @@
 
 #include "src/sksl/SkSLCompiler.h"
 
-#include "include/private/SkSLModifiers.h"
+#include "include/core/SkSpan.h"
 #include "include/private/SkSLStatement.h"
 #include "include/private/SkSLSymbol.h"
 #include "include/sksl/DSLCore.h"
@@ -20,6 +20,7 @@
 #include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLDSLParser.h"
 #include "src/sksl/SkSLInliner.h"
+#include "src/sksl/SkSLModuleLoader.h"
 #include "src/sksl/SkSLOutputStream.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLRehydrator.h"
@@ -99,6 +100,7 @@
 
 namespace SkSL {
 
+class ModifiersPool;
 class ProgramUsage;
 
 // These flags allow tools like Viewer or Nanobench to override the compiler's ProgramSettings.
@@ -138,6 +140,22 @@ public:
     ProgramConfig* fOldConfig;
 };
 
+class AutoShaderCaps {
+public:
+    AutoShaderCaps(std::shared_ptr<Context>& context, const ShaderCaps* caps)
+            : fContext(context.get())
+            , fOldCaps(fContext->fCaps) {
+        fContext->fCaps = caps;
+    }
+
+    ~AutoShaderCaps() {
+        fContext->fCaps = fOldCaps;
+    }
+
+    Context* fContext;
+    const ShaderCaps* fOldCaps;
+};
+
 class AutoModifiersPool {
 public:
     AutoModifiersPool(std::shared_ptr<Context>& context, ModifiersPool* modifiersPool)
@@ -153,95 +171,21 @@ public:
     Context* fContext;
 };
 
-Compiler::Compiler(const ShaderCaps* caps)
-        : fErrorReporter(this)
-        , fContext(std::make_shared<Context>(fErrorReporter, *caps, fMangler)) {
+Compiler::Compiler(const ShaderCaps* caps) : fErrorReporter(this), fCaps(caps) {
     SkASSERT(caps);
-    fRootModule.fSymbols = this->makeRootSymbolTable();
+
+    auto moduleLoader = ModuleLoader::Get();
+    fContext = std::make_shared<Context>(moduleLoader.builtinTypes(), /*caps=*/nullptr,
+                                         fErrorReporter, fMangler);
+    fRootModule = &moduleLoader.rootModule();
 }
 
 Compiler::~Compiler() {}
 
-#define TYPE(t) &BuiltinTypes::f ## t
-
-using BuiltinTypePtr = const std::unique_ptr<Type> BuiltinTypes::*;
-
-inline static constexpr BuiltinTypePtr kRootTypes[] = {
-    TYPE(Void),
-
-    TYPE( Float), TYPE( Float2), TYPE( Float3), TYPE( Float4),
-    TYPE(  Half), TYPE(  Half2), TYPE(  Half3), TYPE(  Half4),
-    TYPE(   Int), TYPE(   Int2), TYPE(   Int3), TYPE(   Int4),
-    TYPE(  UInt), TYPE(  UInt2), TYPE(  UInt3), TYPE(  UInt4),
-    TYPE( Short), TYPE( Short2), TYPE( Short3), TYPE( Short4),
-    TYPE(UShort), TYPE(UShort2), TYPE(UShort3), TYPE(UShort4),
-    TYPE(  Bool), TYPE(  Bool2), TYPE(  Bool3), TYPE(  Bool4),
-
-    TYPE(Float2x2), TYPE(Float2x3), TYPE(Float2x4),
-    TYPE(Float3x2), TYPE(Float3x3), TYPE(Float3x4),
-    TYPE(Float4x2), TYPE(Float4x3), TYPE(Float4x4),
-
-    TYPE(Half2x2),  TYPE(Half2x3),  TYPE(Half2x4),
-    TYPE(Half3x2),  TYPE(Half3x3),  TYPE(Half3x4),
-    TYPE(Half4x2),  TYPE(Half4x3),  TYPE(Half4x4),
-
-    TYPE(SquareMat), TYPE(SquareHMat),
-    TYPE(Mat),       TYPE(HMat),
-
-    // TODO(skia:12349): generic short/ushort
-    TYPE(GenType),   TYPE(GenIType), TYPE(GenUType),
-    TYPE(GenHType),   /* (GenSType)      (GenUSType) */
-    TYPE(GenBType),
-    TYPE(IntLiteral),
-    TYPE(FloatLiteral),
-
-    TYPE(Vec),     TYPE(IVec),     TYPE(UVec),
-    TYPE(HVec),    TYPE(SVec),     TYPE(USVec),
-    TYPE(BVec),
-
-    TYPE(ColorFilter),
-    TYPE(Shader),
-    TYPE(Blender),
-};
-
-inline static constexpr BuiltinTypePtr kPrivateTypes[] = {
-    TYPE(Sampler2D), TYPE(SamplerExternalOES), TYPE(Sampler2DRect),
-
-    TYPE(SubpassInput), TYPE(SubpassInputMS),
-
-    TYPE(Sampler),
-    TYPE(Texture2D),
-};
-
-#undef TYPE
-
-std::shared_ptr<SymbolTable> Compiler::makeRootSymbolTable() {
-    auto rootSymbolTable = std::make_shared<SymbolTable>(/*builtin=*/true);
-
-    for (BuiltinTypePtr rootType : kRootTypes) {
-        rootSymbolTable->addWithoutOwnership((fContext->fTypes.*rootType).get());
-    }
-
-    for (BuiltinTypePtr privateType : kPrivateTypes) {
-        rootSymbolTable->addWithoutOwnership((fContext->fTypes.*privateType).get());
-    }
-
-    // sk_Caps is "builtin", but all references to it are resolved to Settings, so we don't need to
-    // treat it as builtin (ie, no need to clone it into the Program).
-    rootSymbolTable->add(std::make_unique<Variable>(/*pos=*/Position(),
-                                                    /*modifiersPosition=*/Position(),
-                                                    fCoreModifiers.add(Modifiers{}),
-                                                    "sk_Caps",
-                                                    fContext->fTypes.fSkCaps.get(),
-                                                    /*builtin=*/false,
-                                                    Variable::Storage::kGlobal));
-    return rootSymbolTable;
-}
-
 const ParsedModule& Compiler::loadSharedModule() {
     if (!fSharedModule.fSymbols) {
         fSharedModule = this->parseModule(ProgramKind::kFragment, MODULE_DATA(shared),
-                                          fRootModule);
+                                          *fRootModule);
     }
     return fSharedModule;
 }
@@ -334,14 +278,14 @@ static void add_public_type_aliases(SkSL::SymbolTable* symbols, const SkSL::Buil
 
     // Hide all the private symbols by aliasing them all to "invalid". This will prevent code from
     // using built-in names like `sampler2D` as variable names.
-    for (BuiltinTypePtr privateType : kPrivateTypes) {
+    for (BuiltinTypePtr privateType : ModuleLoader::PrivateTypeList()) {
         symbols->add(Type::MakeAliasType((types.*privateType)->name(), *types.fInvalid));
     }
     symbols->add(Type::MakeAliasType("sk_Caps", *types.fInvalid));
 }
 
-std::shared_ptr<SymbolTable> Compiler::makeRootSymbolTableWithPublicTypes() {
-    auto result = std::make_shared<SymbolTable>(fRootModule.fSymbols, /*builtin=*/true);
+std::shared_ptr<SymbolTable> Compiler::makeRootSymbolTableWithPublicTypes() const {
+    auto result = std::make_shared<SymbolTable>(fRootModule->fSymbols, /*builtin=*/true);
     add_public_type_aliases(result.get(), fContext->fTypes);
     return result;
 }
@@ -390,22 +334,21 @@ LoadedModule Compiler::loadModule(ProgramKind kind,
         // we should use the root module. Child modules that depend on the earlier module will pass
         // `false` and pass the lower-level module's symbol table in `base`.
         SkASSERT(base == nullptr);
-        base = fRootModule.fSymbols;
+        base = fRootModule->fSymbols;
     }
     SkASSERT(base);
 
     // Put the core-module modifier pool into the context.
-    AutoModifiersPool autoPool(fContext, &fCoreModifiers);
+    auto moduleLoader = ModuleLoader::Get();
+    AutoModifiersPool autoPool(fContext, &moduleLoader.coreModifiers());
 
-    // Built-in modules always use default program settings.
-    ProgramSettings settings;
-    settings.fReplaceSettings = !dehydrate;
+    // Modules are shared and cannot rely on shader caps.
+    AutoShaderCaps autoCaps(fContext, nullptr);
 
 #if REHYDRATE
     ProgramConfig config;
     config.fIsBuiltinCode = true;
     config.fKind = kind;
-    config.fSettings = settings;
     AutoProgramConfig autoConfig(fContext, &config);
     SkASSERT(data.fData && (data.fSize != 0));
     Rehydrator rehydrator(*this, data.fData, data.fSize, std::move(base));
@@ -420,6 +363,8 @@ LoadedModule Compiler::loadModule(ProgramKind kind,
         abort();
     }
     ParsedModule baseModule = {std::move(base), /*fElements=*/nullptr};
+    // Built-in modules always use default program settings.
+    ProgramSettings settings;
     LoadedModule module = DSLParser(this, settings, kind, std::move(text))
                                   .moduleInheritingFrom(baseModule);
     if (this->errorCount()) {
@@ -529,6 +474,9 @@ std::unique_ptr<Program> Compiler::convertProgram(ProgramKind kind,
         settings.fAllowNarrowingConversions = true;
     }
 
+    // Put the ShaderCaps into the context while compiling a program.
+    AutoShaderCaps autoCaps(fContext, fCaps);
+
     this->resetErrors();
 
     return DSLParser(this, settings, kind, std::move(text)).program();
@@ -576,11 +524,13 @@ bool Compiler::optimizeRehydratedModule(LoadedModule& module, const ParsedModule
     SkASSERT(!this->errorCount());
 
     // Create a temporary program configuration with default settings.
+    auto moduleLoader = ModuleLoader::Get();
+
     ProgramConfig config;
     config.fIsBuiltinCode = true;
     config.fKind = module.fKind;
     AutoProgramConfig autoConfig(fContext, &config);
-    AutoModifiersPool autoPool(fContext, &fCoreModifiers);
+    AutoModifiersPool autoPool(fContext, &moduleLoader.coreModifiers());
 
     std::unique_ptr<ProgramUsage> usage = Analysis::GetUsage(module, base);
 
@@ -627,6 +577,8 @@ bool Compiler::optimize(Program& program) {
     if (!program.fConfig->fSettings.fOptimize) {
         return true;
     }
+
+    AutoShaderCaps autoCaps(fContext, fCaps);
 
     SkASSERT(!this->errorCount());
     ProgramUsage* usage = program.fUsage.get();
@@ -675,6 +627,8 @@ bool Compiler::runInliner(Inliner* inliner,
 }
 
 bool Compiler::finalize(Program& program) {
+    AutoShaderCaps autoCaps(fContext, fCaps);
+
     // Copy all referenced built-in functions into the Program.
     Transform::FindAndDeclareBuiltinFunctions(program);
 
@@ -739,8 +693,9 @@ static bool validate_spirv(ErrorReporter& reporter, std::string_view program) {
 bool Compiler::toSPIRV(Program& program, OutputStream& out) {
     TRACE_EVENT0("skia.shaders", "SkSL::Compiler::toSPIRV");
     AutoSource as(this, *program.fSource);
+    AutoShaderCaps autoCaps(fContext, fCaps);
     ProgramSettings settings;
-    settings.fDSLUseMemoryPool = false;
+    settings.fUseMemoryPool = false;
     dsl::Start(this, program.fConfig->fKind, settings);
     dsl::SetErrorReporter(&fErrorReporter);
     fSymbolTable = program.fSymbols;
@@ -774,6 +729,7 @@ bool Compiler::toSPIRV(Program& program, std::string* out) {
 bool Compiler::toGLSL(Program& program, OutputStream& out) {
     TRACE_EVENT0("skia.shaders", "SkSL::Compiler::toGLSL");
     AutoSource as(this, *program.fSource);
+    AutoShaderCaps autoCaps(fContext, fCaps);
     GLSLCodeGenerator cg(fContext.get(), &program, &out);
     bool result = cg.generateCode();
     return result;
@@ -815,6 +771,7 @@ bool Compiler::toHLSL(Program& program, std::string* out) {
 bool Compiler::toMetal(Program& program, OutputStream& out) {
     TRACE_EVENT0("skia.shaders", "SkSL::Compiler::toMetal");
     AutoSource as(this, *program.fSource);
+    AutoShaderCaps autoCaps(fContext, fCaps);
     MetalCodeGenerator cg(fContext.get(), &program, &out);
     bool result = cg.generateCode();
     return result;

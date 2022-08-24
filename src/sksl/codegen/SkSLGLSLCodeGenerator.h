@@ -41,7 +41,6 @@ class PostfixExpression;
 class PrefixExpression;
 class ProgramElement;
 class ReturnStatement;
-class Setting;
 class Statement;
 class StructDefinition;
 class SwitchStatement;
@@ -160,8 +159,6 @@ protected:
 
     virtual void writeLiteral(const Literal& l);
 
-    virtual void writeSetting(const Setting& s);
-
     void writeStatement(const Statement& s);
 
     void writeBlock(const Block& b);
@@ -180,7 +177,7 @@ protected:
 
     virtual void writeProgramElement(const ProgramElement& e);
 
-    const ShaderCaps& caps() const { return fContext.fCaps; }
+    const ShaderCaps& caps() const { return *fContext.fCaps; }
 
     StringStream fExtensions;
     StringStream fGlobals;
