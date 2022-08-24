@@ -212,7 +212,7 @@ Device::Device(Recorder* recorder, sk_sp<DrawContext> dc)
         , fDisjointStencilSet(std::make_unique<IntersectionTreeSet>())
         , fCachedLocalToDevice(SkM44())
         , fCurrentDepth(DrawOrder::kClearDepth)
-        , fSDFTControl(recorder->priv().getSDFTControl(false))
+        , fSDFTControl(recorder->priv().caps()->getSDFTControl(false))
         , fDrawsOverlap(false) {
     SkASSERT(SkToBool(fDC) && SkToBool(fRecorder));
     fRecorder->registerDevice(this);
@@ -898,6 +898,13 @@ void Device::flushPendingWorkToRecorder() {
     if (uploadTask) {
         fRecorder->priv().add(std::move(uploadTask));
     }
+
+#ifdef SK_ENABLE_PIET_GPU
+    auto pietTask = fDC->snapPietRenderTask(fRecorder);
+    if (pietTask) {
+        fRecorder->priv().add(std::move(pietTask));
+    }
+#endif
 
     fClip.recordDeferredClipDraws();
     auto drawTask = fDC->snapRenderPassTask(fRecorder);

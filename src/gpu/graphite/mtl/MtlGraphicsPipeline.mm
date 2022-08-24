@@ -11,6 +11,7 @@
 #include "include/gpu/ShaderErrorHandler.h"
 #include "include/gpu/graphite/TextureInfo.h"
 #include "src/core/SkPipelineData.h"
+#include "src/core/SkRuntimeEffectDictionary.h"
 #include "src/core/SkSLTypeShared.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
@@ -273,7 +274,9 @@ enum ShaderType {
 static const int kShaderTypeCount = kLast_ShaderType + 1;
 
 sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(
-        MtlResourceProvider* resourceProvider, const MtlSharedContext* sharedContext,
+        MtlResourceProvider* resourceProvider,
+        const MtlSharedContext* sharedContext,
+        const SkRuntimeEffectDictionary* runtimeDict,
         const GraphicsPipelineDesc& pipelineDesc,
         const RenderPassDesc& renderPassDesc) {
     sk_cfp<MTLRenderPipelineDescriptor*> psoDescriptor([[MTLRenderPipelineDescriptor alloc] init]);
@@ -289,10 +292,15 @@ sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(
 
     BlendInfo blendInfo;
     bool localCoordsNeeded = false;
-    auto dict = resourceProvider->shaderCodeDictionary();
+    bool shadingSsboIndexNeeded = false;
+    auto dict = sharedContext->shaderCodeDictionary();
     if (!SkSLToMSL(skslCompiler,
-                   GetSkSLFS(dict, resourceProvider->runtimeEffectDictionary(),
-                             pipelineDesc, &blendInfo, &localCoordsNeeded),
+                   GetSkSLFS(dict,
+                             runtimeDict,
+                             pipelineDesc,
+                             &blendInfo,
+                             &localCoordsNeeded,
+                             &shadingSsboIndexNeeded),
                    SkSL::ProgramKind::kGraphiteFragment,
                    settings,
                    &msl[kFragment_ShaderType],
@@ -302,7 +310,7 @@ sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(
     }
 
     if (!SkSLToMSL(skslCompiler,
-                   GetSkSLVS(pipelineDesc, localCoordsNeeded),
+                   GetSkSLVS(pipelineDesc, localCoordsNeeded, shadingSsboIndexNeeded),
                    SkSL::ProgramKind::kGraphiteVertex,
                    settings,
                    &msl[kVertex_ShaderType],

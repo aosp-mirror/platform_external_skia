@@ -22,6 +22,7 @@
 #include "src/gpu/graphite/GlobalCache.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
 #include "src/gpu/graphite/QueueManager.h"
+#include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/RecordingPriv.h"
 #include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/ResourceProvider.h"
@@ -103,9 +104,7 @@ void Context::checkAsyncWorkCompletion() {
 #ifdef SK_ENABLE_PRECOMPILE
 
 SkBlenderID Context::addUserDefinedBlender(sk_sp<SkRuntimeEffect> effect) {
-    auto dict = this->priv().shaderCodeDictionary();
-
-    return dict->addUserDefinedBlender(std::move(effect));
+    return fSharedContext->shaderCodeDictionary()->addUserDefinedBlender(std::move(effect));
 }
 
 void Context::precompile(SkCombinationBuilder* combinationBuilder) {
@@ -122,10 +121,8 @@ void Context::precompile(SkCombinationBuilder* combinationBuilder) {
             &Renderer::StencilTessellatedWedges(SkPathFillType::kInverseEvenOdd)
     };
 
-    SkShaderCodeDictionary* dict = fGlobalCache->shaderCodeDictionary();
-
     combinationBuilder->buildCombinations(
-            dict,
+            fSharedContext->shaderCodeDictionary(),
             [&](SkUniquePaintParamsID uniqueID) {
                 GraphicsPipelineDesc desc;
 
