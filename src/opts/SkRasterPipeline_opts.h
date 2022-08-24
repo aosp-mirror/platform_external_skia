@@ -2662,28 +2662,40 @@ SI F bicubic_wts(F t, float A, float B, float C, float D) {
 template <int kScale>
 SI void bicubic_x(SkRasterPipeline_SamplerCtx* ctx, F* x) {
     *x = sk_unaligned_load<F>(ctx->x) + (kScale * 0.5f);
-    F fx = sk_unaligned_load<F>(ctx->fx);
 
     F scalex;
-    const float* w = ctx->weights;
-    if (kScale == -3) { scalex = bicubic_wts(fx, w[0], w[4], w[ 8], w[12]); }
-    if (kScale == -1) { scalex = bicubic_wts(fx, w[1], w[5], w[ 9], w[13]); }
-    if (kScale == +1) { scalex = bicubic_wts(fx, w[2], w[6], w[10], w[14]); }
-    if (kScale == +3) { scalex = bicubic_wts(fx, w[3], w[7], w[11], w[15]); }
+    if (kScale == -3) { scalex = sk_unaligned_load<F>(ctx->wx[0]); }
+    if (kScale == -1) { scalex = sk_unaligned_load<F>(ctx->wx[1]); }
+    if (kScale == +1) { scalex = sk_unaligned_load<F>(ctx->wx[2]); }
+    if (kScale == +3) { scalex = sk_unaligned_load<F>(ctx->wx[3]); }
     sk_unaligned_store(ctx->scalex, scalex);
 }
 template <int kScale>
 SI void bicubic_y(SkRasterPipeline_SamplerCtx* ctx, F* y) {
     *y = sk_unaligned_load<F>(ctx->y) + (kScale * 0.5f);
-    F fy = sk_unaligned_load<F>(ctx->fy);
 
     F scaley;
-    const float* w = ctx->weights;
-    if (kScale == -3) { scaley = bicubic_wts(fy, w[0], w[4], w[ 8], w[12]); }
-    if (kScale == -1) { scaley = bicubic_wts(fy, w[1], w[5], w[ 9], w[13]); }
-    if (kScale == +1) { scaley = bicubic_wts(fy, w[2], w[6], w[10], w[14]); }
-    if (kScale == +3) { scaley = bicubic_wts(fy, w[3], w[7], w[11], w[15]); }
+    if (kScale == -3) { scaley = sk_unaligned_load<F>(ctx->wy[0]); }
+    if (kScale == -1) { scaley = sk_unaligned_load<F>(ctx->wy[1]); }
+    if (kScale == +1) { scaley = sk_unaligned_load<F>(ctx->wy[2]); }
+    if (kScale == +3) { scaley = sk_unaligned_load<F>(ctx->wy[3]); }
     sk_unaligned_store(ctx->scaley, scaley);
+}
+
+STAGE(bicubic_setup, SkRasterPipeline_SamplerCtx* ctx) {
+    const float* w = ctx->weights;
+
+    F fx = sk_unaligned_load<F>(ctx->fx);
+    sk_unaligned_store(ctx->wx[0], bicubic_wts(fx, w[0], w[4], w[ 8], w[12]));
+    sk_unaligned_store(ctx->wx[1], bicubic_wts(fx, w[1], w[5], w[ 9], w[13]));
+    sk_unaligned_store(ctx->wx[2], bicubic_wts(fx, w[2], w[6], w[10], w[14]));
+    sk_unaligned_store(ctx->wx[3], bicubic_wts(fx, w[3], w[7], w[11], w[15]));
+
+    F fy = sk_unaligned_load<F>(ctx->fy);
+    sk_unaligned_store(ctx->wy[0], bicubic_wts(fy, w[0], w[4], w[ 8], w[12]));
+    sk_unaligned_store(ctx->wy[1], bicubic_wts(fy, w[1], w[5], w[ 9], w[13]));
+    sk_unaligned_store(ctx->wy[2], bicubic_wts(fy, w[2], w[6], w[10], w[14]));
+    sk_unaligned_store(ctx->wy[3], bicubic_wts(fy, w[3], w[7], w[11], w[15]));
 }
 
 STAGE(bicubic_n3x, SkRasterPipeline_SamplerCtx* ctx) { bicubic_x<-3>(ctx, &r); }
@@ -2716,87 +2728,6 @@ STAGE(gauss_a_to_rgba, Ctx::None) {
     r = a;
     g = a;
     b = a;
-}
-
-SI F tile(F v, SkTileMode mode, float limit, float invLimit) {
-    // The ix_and_ptr() calls in sample() will clamp tile()'s output, so no need to clamp here.
-    switch (mode) {
-        case SkTileMode::kDecal:
-        case SkTileMode::kClamp:  return v;
-        case SkTileMode::kRepeat: return v - floor_(v*invLimit)*limit;
-        case SkTileMode::kMirror:
-            return abs_( (v-limit) - (limit+limit)*floor_((v-limit)*(invLimit*0.5f)) - limit );
-    }
-    SkUNREACHABLE;
-}
-
-SI void sample(const SkRasterPipeline_SamplerCtx2* ctx, F x, F y,
-               F* r, F* g, F* b, F* a) {
-    x = tile(x, ctx->tileX, ctx->width , ctx->invWidth );
-    y = tile(y, ctx->tileY, ctx->height, ctx->invHeight);
-
-    switch (ctx->ct) {
-        default: *r = *g = *b = *a = 0;
-                 break;
-
-        case kRGBA_8888_SkColorType:
-        case kBGRA_8888_SkColorType: {
-            const uint32_t* ptr;
-            U32 ix = ix_and_ptr(&ptr, ctx, x,y);
-            from_8888(gather(ptr, ix), r,g,b,a);
-            if (ctx->ct == kBGRA_8888_SkColorType) {
-                std::swap(*r,*b);
-            }
-        } break;
-    }
-}
-
-template <int D>
-SI void sampler(const SkRasterPipeline_SamplerCtx2* ctx,
-                F cx, F cy, const F (&wx)[D], const F (&wy)[D],
-                F* r, F* g, F* b, F* a) {
-
-    float start = -0.5f*(D-1);
-
-    *r = *g = *b = *a = 0;
-    F y = cy + start;
-    for (int j = 0; j < D; j++, y += 1.0f) {
-        F x = cx + start;
-        for (int i = 0; i < D; i++, x += 1.0f) {
-            F R,G,B,A;
-            sample(ctx, x,y, &R,&G,&B,&A);
-
-            F w = wx[i] * wy[j];
-            *r = mad(w,R,*r);
-            *g = mad(w,G,*g);
-            *b = mad(w,B,*b);
-            *a = mad(w,A,*a);
-        }
-    }
-}
-
-STAGE(bilinear, const SkRasterPipeline_SamplerCtx2* ctx) {
-    F x = r, fx = fract(x + 0.5f),
-      y = g, fy = fract(y + 0.5f);
-    const F wx[] = {1.0f - fx, fx};
-    const F wy[] = {1.0f - fy, fy};
-
-    sampler(ctx, x,y, wx,wy, &r,&g,&b,&a);
-}
-STAGE(bicubic, SkRasterPipeline_SamplerCtx2* ctx) {
-    F x = r, fx = fract(x + 0.5f),
-      y = g, fy = fract(y + 0.5f);
-    const float* w = ctx->weights;
-    const F wx[] = {bicubic_wts(fx, w[0], w[4], w[ 8], w[12]),
-                    bicubic_wts(fx, w[1], w[5], w[ 9], w[13]),
-                    bicubic_wts(fx, w[2], w[6], w[10], w[14]),
-                    bicubic_wts(fx, w[3], w[7], w[11], w[15])};
-    const F wy[] = {bicubic_wts(fy, w[0], w[4], w[ 8], w[12]),
-                    bicubic_wts(fy, w[1], w[5], w[ 9], w[13]),
-                    bicubic_wts(fy, w[2], w[6], w[10], w[14]),
-                    bicubic_wts(fy, w[3], w[7], w[11], w[15])};
-
-    sampler(ctx, x,y, wx,wy, &r,&g,&b,&a);
 }
 
 // A specialized fused image shader for clamp-x, clamp-y, non-sRGB sampling.
@@ -4342,13 +4273,12 @@ STAGE_PP(swizzle, void* ctx) {
     NOT_IMPLEMENTED(mirror_y)
     NOT_IMPLEMENTED(repeat_y)
     NOT_IMPLEMENTED(negate_x)
-    NOT_IMPLEMENTED(bilinear)
-    NOT_IMPLEMENTED(bicubic)
     NOT_IMPLEMENTED(bicubic_clamp_8888)
     NOT_IMPLEMENTED(bilinear_nx)
     NOT_IMPLEMENTED(bilinear_ny)
     NOT_IMPLEMENTED(bilinear_px)
     NOT_IMPLEMENTED(bilinear_py)
+    NOT_IMPLEMENTED(bicubic_setup)
     NOT_IMPLEMENTED(bicubic_n3x)
     NOT_IMPLEMENTED(bicubic_n1x)
     NOT_IMPLEMENTED(bicubic_p1x)

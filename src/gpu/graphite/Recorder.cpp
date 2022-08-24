@@ -13,6 +13,7 @@
 #include "include/gpu/graphite/ImageProvider.h"
 #include "include/gpu/graphite/Recording.h"
 #include "src/core/SkPipelineData.h"
+#include "src/core/SkRuntimeEffectDictionary.h"
 #include "src/gpu/AtlasTypes.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/CommandBuffer.h"
@@ -21,6 +22,7 @@
 #include "src/gpu/graphite/DrawBufferManager.h"
 #include "src/gpu/graphite/GlobalCache.h"
 #include "src/gpu/graphite/PipelineDataCache.h"
+#include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/ResourceProvider.h"
 #include "src/gpu/graphite/SharedContext.h"
 #include "src/gpu/graphite/TaskGraph.h"
@@ -33,6 +35,7 @@
 namespace skgpu::graphite {
 
 #define ASSERT_SINGLE_OWNER SKGPU_ASSERT_SINGLE_OWNER(this->singleOwner())
+#define ASSERT_SINGLE_OWNER_PRIV SKGPU_ASSERT_SINGLE_OWNER(fRecorder->singleOwner())
 
 /*
  * The default image provider doesn't perform any conversion so, by default, Graphite won't
@@ -73,6 +76,7 @@ Recorder::Recorder(sk_sp<SharedContext> sharedContext,
                    sk_sp<GlobalCache> globalCache,
                    const RecorderOptions& options)
         : fSharedContext(std::move(sharedContext))
+        , fRuntimeEffectDict(std::make_unique<SkRuntimeEffectDictionary>())
         , fGraph(new TaskGraph)
         , fUniformDataCache(new UniformDataCache)
         , fTextureDataCache(new TextureDataCache)
@@ -118,7 +122,7 @@ std::unique_ptr<Recording> Recorder::snap() {
     // TODO: fulfill all promise images in the TextureDataCache here
     // TODO: create all the samplers needed in the TextureDataCache here
 
-    if (!fGraph->prepareResources(fResourceProvider.get())) {
+    if (!fGraph->prepareResources(fResourceProvider.get(), fRuntimeEffectDict.get())) {
         // Leaving 'fTrackedDevices' alone since they were flushed earlier and could still be
         // attached to extant SkSurfaces.
         fDrawBufferManager.reset(
@@ -128,7 +132,7 @@ std::unique_ptr<Recording> Recorder::snap() {
         fTextureDataCache = std::make_unique<TextureDataCache>();
         // We leave the UniformDataCache alone
         fGraph->reset();
-        fResourceProvider->resetAfterSnap();
+        fRuntimeEffectDict->reset();
         return nullptr;
     }
 
@@ -137,7 +141,7 @@ std::unique_ptr<Recording> Recorder::snap() {
     fUploadBufferManager->transferToRecording(recording.get());
 
     fGraph = std::make_unique<TaskGraph>();
-    fResourceProvider->resetAfterSnap();
+    fRuntimeEffectDict->reset();
     fTextureDataCache = std::make_unique<TextureDataCache>();
     return recording;
 }
@@ -185,6 +189,18 @@ void Recorder::deleteBackendTexture(BackendTexture& texture) {
         return;
     }
     fResourceProvider->deleteBackendTexture(texture);
+}
+
+void RecorderPriv::add(sk_sp<Task> task) {
+    ASSERT_SINGLE_OWNER_PRIV
+    fRecorder->fGraph->add(std::move(task));
+}
+
+void RecorderPriv::flushTrackedDevices() {
+    ASSERT_SINGLE_OWNER_PRIV
+    for (Device* device : fRecorder->fTrackedDevices) {
+        device->flushPendingWorkToRecorder();
+    }
 }
 
 } // namespace skgpu::graphite
