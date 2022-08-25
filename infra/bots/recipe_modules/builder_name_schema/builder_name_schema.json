@@ -27,6 +27,18 @@
         "project"
       ]
     },
+    "CodeSize": {
+      "keys": [
+        "binary_name",
+        "os",
+        "compiler",
+        "target_arch",
+        "configuration"
+      ],
+      "optional_keys": [
+        "extra_config"
+      ]
+    },
     "Housekeeper": {
       "keys": [
         "frequency"
@@ -83,15 +95,6 @@
         "arch",
         "configuration",
         "test_filter"
-      ],
-      "optional_keys": [
-        "extra_config"
-      ]
-    },
-    "Fuzz": {
-      "keys": [
-        "os",
-        "compiler"
       ],
       "optional_keys": [
         "extra_config"

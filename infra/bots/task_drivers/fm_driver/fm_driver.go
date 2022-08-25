@@ -33,12 +33,13 @@ func main() {
 		output    = flag.String("o", "", "Dump JSON step data to the given file, or stdout if -.")
 		local     = flag.Bool("local", true, "Running locally (else on the bots)?")
 
-		resources = flag.String("resources", "resources", "Passed to fm -i.")
-		imgs      = flag.String("imgs", "", "Shorthand `directory` contents as 'imgs'.")
-		skps      = flag.String("skps", "", "Shorthand `directory` contents as 'skps'.")
-		svgs      = flag.String("svgs", "", "Shorthand `directory` contents as 'svgs'.")
-		script    = flag.String("script", "", "File (or - for stdin) with one job per line.")
-		gold      = flag.Bool("gold", false, "Fetch known hashes, upload to Gold, etc.?")
+		resources     = flag.String("resources", "resources", "Passed to fm -i.")
+		imgs          = flag.String("imgs", "", "Shorthand `directory` contents as 'imgs'.")
+		skps          = flag.String("skps", "", "Shorthand `directory` contents as 'skps'.")
+		svgs          = flag.String("svgs", "", "Shorthand `directory` contents as 'svgs'.")
+		script        = flag.String("script", "", "File (or - for stdin) with one job per line.")
+		gold          = flag.Bool("gold", false, "Fetch known hashes, upload to Gold, etc.?")
+		goldHashesURL = flag.String("gold_hashes_url", "", "URL from which to download pre-existing hashes")
 	)
 	flag.Parse()
 
@@ -162,8 +163,7 @@ func main() {
 	}
 	if *gold {
 		func() {
-			url := "https://storage.googleapis.com/skia-infra-gm/hash_files/gold-prod-hashes.txt"
-			resp, err := httpClient(ctx).Get(url)
+			resp, err := httpClient(ctx).Get(*goldHashesURL)
 			if err != nil {
 				fatal(ctx, err)
 			}
@@ -251,7 +251,7 @@ func main() {
 
 			// Only rerun sources from a batch (or we'd rerun failures over and over and over).
 			if len(sources) > 1 {
-				for name, _ := range reruns {
+				for name := range reruns {
 					failures += worker(ctx, []string{name}, flags)
 				}
 				return
@@ -473,7 +473,7 @@ func main() {
 			run(tests, F{"race": "0"}) // Several unit tests are not reentrant.
 
 			if model == "GCE" {
-				run(gms, F{"ct": "g8", "legacy": "true"})                     // --config g8
+				run(gms, F{"ct": "r8", "legacy": "true"})                     // --config r8
 				run(gms, F{"ct": "565", "legacy": "true"})                    // --config 565
 				run(gms, F{"ct": "8888", "legacy": "true"})                   // --config 8888
 				run(gms, F{"ct": "f16"})                                      // --config esrgb

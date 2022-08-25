@@ -5,64 +5,52 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/GrShaderCaps.h"
 #include "src/gpu/effects/GrBezierEffect.h"
+
+#include "src/gpu/GrShaderCaps.h"
+#include "src/gpu/KeyBuilder.h"
 #include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
-#include "src/gpu/glsl/GrGLSLGeometryProcessor.h"
 #include "src/gpu/glsl/GrGLSLProgramDataManager.h"
 #include "src/gpu/glsl/GrGLSLUniformHandler.h"
 #include "src/gpu/glsl/GrGLSLVarying.h"
 #include "src/gpu/glsl/GrGLSLVertexGeoBuilder.h"
 
-class GrGLConicEffect : public GrGLSLGeometryProcessor {
+class GrConicEffect::Impl : public ProgramImpl {
 public:
-    GrGLConicEffect(const GrGeometryProcessor&);
-
-    void onEmitCode(EmitArgs&, GrGPArgs*) override;
-
-    static inline void GenKey(const GrGeometryProcessor&,
-                              const GrShaderCaps&,
-                              GrProcessorKeyBuilder*);
-
     void setData(const GrGLSLProgramDataManager& pdman,
                  const GrShaderCaps& shaderCaps,
                  const GrGeometryProcessor& geomProc) override {
         const GrConicEffect& ce = geomProc.cast<GrConicEffect>();
 
-        SetTransform(pdman, shaderCaps,  fViewMatrixUniform,  ce.viewMatrix(), &fViewMatrix);
-        SetTransform(pdman, shaderCaps, fLocalMatrixUniform, ce.localMatrix(), &fLocalMatrix);
+        SetTransform(pdman, shaderCaps,  fViewMatrixUniform,  ce.fViewMatrix,  &fViewMatrix);
+        SetTransform(pdman, shaderCaps, fLocalMatrixUniform, ce.fLocalMatrix, &fLocalMatrix);
 
-        if (ce.color() != fColor) {
-            pdman.set4fv(fColorUniform, 1, ce.color().vec());
-            fColor = ce.color();
+        if (fColor != ce.fColor) {
+            pdman.set4fv(fColorUniform, 1, ce.fColor.vec());
+            fColor = ce.fColor;
         }
 
-        if (ce.coverageScale() != 0xff && ce.coverageScale() != fCoverageScale) {
-            pdman.set1f(fCoverageScaleUniform, GrNormalizeByteToFloat(ce.coverageScale()));
-            fCoverageScale = ce.coverageScale();
+        if (ce.fCoverageScale != 0xff && ce.fCoverageScale != fCoverageScale) {
+            pdman.set1f(fCoverageScaleUniform, GrNormalizeByteToFloat(ce.fCoverageScale));
+            fCoverageScale = ce.fCoverageScale;
         }
     }
 
 private:
-    SkMatrix fViewMatrix;
-    SkMatrix fLocalMatrix;
-    SkPMColor4f fColor;
-    uint8_t fCoverageScale;
+    void onEmitCode(EmitArgs&, GrGPArgs*) override;
+
+    SkMatrix    fViewMatrix    = SkMatrix::InvalidMatrix();
+    SkMatrix    fLocalMatrix   = SkMatrix::InvalidMatrix();
+    SkPMColor4f fColor         = SK_PMColor4fILLEGAL;
+    uint8_t     fCoverageScale = 0xFF;
+
     UniformHandle fColorUniform;
     UniformHandle fCoverageScaleUniform;
     UniformHandle fViewMatrixUniform;
     UniformHandle fLocalMatrixUniform;
-
-    using INHERITED = GrGLSLGeometryProcessor;
 };
 
-GrGLConicEffect::GrGLConicEffect(const GrGeometryProcessor& processor)
-        : fViewMatrix(SkMatrix::InvalidMatrix())
-        , fLocalMatrix(SkMatrix::InvalidMatrix())
-        , fColor(SK_PMColor4fILLEGAL)
-        , fCoverageScale(0xff) {}
-
-void GrGLConicEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
+void GrConicEffect::Impl::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     GrGLSLVertexBuilder* vertBuilder = args.fVertBuilder;
     const GrConicEffect& gp = args.fGeomProc.cast<GrConicEffect>();
     GrGLSLVaryingHandler* varyingHandler = args.fVaryingHandler;
@@ -71,7 +59,7 @@ void GrGLConicEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     // emit attributes
     varyingHandler->emitAttributes(gp);
 
-    GrGLSLVarying v(kFloat4_GrSLType);
+    GrGLSLVarying v(SkSLType::kFloat4);
     varyingHandler->addVarying("ConicCoeffs", &v);
     vertBuilder->codeAppendf("%s = %s;", v.vsOut(), gp.inConicCoeffs().name());
 
@@ -86,15 +74,15 @@ void GrGLConicEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
                         *args.fShaderCaps,
                         gpArgs,
                         gp.inPosition().name(),
-                        gp.viewMatrix(),
+                        gp.fViewMatrix,
                         &fViewMatrixUniform);
-    if (gp.usesLocalCoords()) {
+    if (gp.fUsesLocalCoords) {
         WriteLocalCoord(vertBuilder,
                         uniformHandler,
                         *args.fShaderCaps,
                         gpArgs,
                         gp.inPosition().asShaderVar(),
-                        gp.localMatrix(),
+                        gp.fLocalMatrix,
                         &fLocalMatrixUniform);
     }
 
@@ -102,14 +90,14 @@ void GrGLConicEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     // that suffices. Additionally we should assert that the upstream code only lets us get here if
     // either float or half provides the required number of bits.
 
-    GrShaderVar edgeAlpha("edgeAlpha", kHalf_GrSLType, 0);
-    GrShaderVar dklmdx("dklmdx", kFloat3_GrSLType, 0);
-    GrShaderVar dklmdy("dklmdy", kFloat3_GrSLType, 0);
-    GrShaderVar dfdx("dfdx", kFloat_GrSLType, 0);
-    GrShaderVar dfdy("dfdy", kFloat_GrSLType, 0);
-    GrShaderVar gF("gF", kFloat2_GrSLType, 0);
-    GrShaderVar gFM("gFM", kFloat_GrSLType, 0);
-    GrShaderVar func("func", kFloat_GrSLType, 0);
+    GrShaderVar edgeAlpha("edgeAlpha", SkSLType::kHalf, 0);
+    GrShaderVar dklmdx("dklmdx", SkSLType::kFloat3, 0);
+    GrShaderVar dklmdy("dklmdy", SkSLType::kFloat3, 0);
+    GrShaderVar dfdx("dfdx", SkSLType::kFloat, 0);
+    GrShaderVar dfdy("dfdy", SkSLType::kFloat, 0);
+    GrShaderVar gF("gF", SkSLType::kFloat2, 0);
+    GrShaderVar gFM("gFM", SkSLType::kFloat, 0);
+    GrShaderVar func("func", SkSLType::kFloat, 0);
 
     fragBuilder->declAppend(edgeAlpha);
     fragBuilder->declAppend(dklmdx);
@@ -147,11 +135,11 @@ void GrGLConicEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     // fragBuilder->codeAppend("edgeAlpha = edgeAlpha*edgeAlpha*(3.0-2.0*edgeAlpha);");
 
     // TODO should we really be doing this?
-    if (gp.coverageScale() != 0xff) {
+    if (gp.fCoverageScale != 0xff) {
         const char* coverageScale;
         fCoverageScaleUniform = uniformHandler->addUniform(nullptr,
                                                            kFragment_GrShaderFlag,
-                                                           kFloat_GrSLType,
+                                                           SkSLType::kFloat,
                                                            "Coverage",
                                                            &coverageScale);
         fragBuilder->codeAppendf("half4 %s = half4(half(%s) * %s);",
@@ -161,33 +149,24 @@ void GrGLConicEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     }
 }
 
-void GrGLConicEffect::GenKey(const GrGeometryProcessor& gp,
-                             const GrShaderCaps& shaderCaps,
-                             GrProcessorKeyBuilder* b) {
-    const GrConicEffect& ce = gp.cast<GrConicEffect>();
-    uint32_t key = ce.isAntiAliased() ? (ce.isFilled() ? 0x0 : 0x1) : 0x2;
-    key |= 0xff != ce.coverageScale() ? 0x8 : 0x0;
-    key |= ce.usesLocalCoords() ? 0x10 : 0x0;
-    key = AddMatrixKeys(shaderCaps,
-                        key,
-                        ce.viewMatrix(),
-                        ce.usesLocalCoords() ? ce.localMatrix() : SkMatrix::I());
+//////////////////////////////////////////////////////////////////////////////
+
+GrConicEffect::~GrConicEffect() = default;
+
+void GrConicEffect::addToKey(const GrShaderCaps& caps, skgpu::KeyBuilder* b) const {
+    uint32_t key = 0;
+    key |= fCoverageScale == 0xff ? 0x8  : 0x0;
+    key |= fUsesLocalCoords       ? 0x10 : 0x0;
+    key = ProgramImpl::AddMatrixKeys(caps,
+                                     key,
+                                     fViewMatrix,
+                                     fUsesLocalCoords ? fLocalMatrix : SkMatrix::I());
     b->add32(key);
 }
 
-//////////////////////////////////////////////////////////////////////////////
-
-constexpr GrGeometryProcessor::Attribute GrConicEffect::kAttributes[];
-
-GrConicEffect::~GrConicEffect() {}
-
-void GrConicEffect::getGLSLProcessorKey(const GrShaderCaps& caps,
-                                        GrProcessorKeyBuilder* b) const {
-    GrGLConicEffect::GenKey(*this, caps, b);
-}
-
-GrGLSLGeometryProcessor* GrConicEffect::createGLSLInstance(const GrShaderCaps&) const {
-    return new GrGLConicEffect(*this);
+std::unique_ptr<GrGeometryProcessor::ProgramImpl> GrConicEffect::makeProgramImpl(
+        const GrShaderCaps&) const {
+    return std::make_unique<Impl>();
 }
 
 GrConicEffect::GrConicEffect(const SkPMColor4f& color, const SkMatrix& viewMatrix, uint8_t coverage,
@@ -198,7 +177,7 @@ GrConicEffect::GrConicEffect(const SkPMColor4f& color, const SkMatrix& viewMatri
         , fLocalMatrix(viewMatrix)
         , fUsesLocalCoords(usesLocalCoords)
         , fCoverageScale(coverage) {
-    this->setVertexAttributes(kAttributes, SK_ARRAY_COUNT(kAttributes));
+    this->setVertexAttributesWithImplicitOffsets(kAttributes, SK_ARRAY_COUNT(kAttributes));
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -207,7 +186,7 @@ GR_DEFINE_GEOMETRY_PROCESSOR_TEST(GrConicEffect);
 
 #if GR_TEST_UTILS
 GrGeometryProcessor* GrConicEffect::TestCreate(GrProcessorTestData* d) {
-    GrColor color = GrRandomColor(d->fRandom);
+    GrColor color = GrTest::RandomColor(d->fRandom);
     SkMatrix viewMatrix = GrTest::TestMatrix(d->fRandom);
     SkMatrix localMatrix = GrTest::TestMatrix(d->fRandom);
     bool usesLocalCoords = d->fRandom->nextBool();
@@ -224,56 +203,42 @@ GrGeometryProcessor* GrConicEffect::TestCreate(GrProcessorTestData* d) {
 // Quad
 //////////////////////////////////////////////////////////////////////////////
 
-class GrGLQuadEffect : public GrGLSLGeometryProcessor {
+class GrQuadEffect::Impl : public ProgramImpl {
 public:
-    GrGLQuadEffect(const GrGeometryProcessor&);
-
-    void onEmitCode(EmitArgs&, GrGPArgs*) override;
-
-    static inline void GenKey(const GrGeometryProcessor&,
-                              const GrShaderCaps&,
-                              GrProcessorKeyBuilder*);
-
     void setData(const GrGLSLProgramDataManager& pdman,
                  const GrShaderCaps& shaderCaps,
                  const GrGeometryProcessor& geomProc) override {
         const GrQuadEffect& qe = geomProc.cast<GrQuadEffect>();
 
-        SetTransform(pdman, shaderCaps,  fViewMatrixUniform,  qe.viewMatrix(), &fViewMatrix);
-        SetTransform(pdman, shaderCaps, fLocalMatrixUniform, qe.localMatrix(), &fLocalMatrix);
+        SetTransform(pdman, shaderCaps,  fViewMatrixUniform,  qe.fViewMatrix, &fViewMatrix);
+        SetTransform(pdman, shaderCaps, fLocalMatrixUniform, qe.fLocalMatrix, &fLocalMatrix);
 
-        if (qe.color() != fColor) {
-            pdman.set4fv(fColorUniform, 1, qe.color().vec());
-            fColor = qe.color();
+        if (qe.fColor != fColor) {
+            pdman.set4fv(fColorUniform, 1, qe.fColor.vec());
+            fColor = qe.fColor;
         }
 
-        if (qe.coverageScale() != 0xff && qe.coverageScale() != fCoverageScale) {
-            pdman.set1f(fCoverageScaleUniform, GrNormalizeByteToFloat(qe.coverageScale()));
-            fCoverageScale = qe.coverageScale();
+        if (qe.fCoverageScale != 0xff && qe.fCoverageScale != fCoverageScale) {
+            pdman.set1f(fCoverageScaleUniform, GrNormalizeByteToFloat(qe.fCoverageScale));
+            fCoverageScale = qe.fCoverageScale;
         }
     }
 
 private:
-    SkMatrix fViewMatrix;
-    SkMatrix fLocalMatrix;
-    SkPMColor4f fColor;
-    uint8_t fCoverageScale;
+    void onEmitCode(EmitArgs&, GrGPArgs*) override;
+
+    SkMatrix    fViewMatrix     = SkMatrix::InvalidMatrix();
+    SkMatrix    fLocalMatrix    = SkMatrix::InvalidMatrix();
+    SkPMColor4f fColor          = SK_PMColor4fILLEGAL;
+    uint8_t     fCoverageScale  = 0xFF;
 
     UniformHandle fColorUniform;
     UniformHandle fCoverageScaleUniform;
     UniformHandle fViewMatrixUniform;
     UniformHandle fLocalMatrixUniform;
-
-    using INHERITED = GrGLSLGeometryProcessor;
 };
 
-GrGLQuadEffect::GrGLQuadEffect(const GrGeometryProcessor& processor)
-        : fViewMatrix(SkMatrix::InvalidMatrix())
-        , fLocalMatrix(SkMatrix::InvalidMatrix())
-        , fColor(SK_PMColor4fILLEGAL)
-        , fCoverageScale(0xff) {}
-
-void GrGLQuadEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
+void GrQuadEffect::Impl::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     GrGLSLVertexBuilder* vertBuilder = args.fVertBuilder;
     const GrQuadEffect& gp = args.fGeomProc.cast<GrQuadEffect>();
     GrGLSLVaryingHandler* varyingHandler = args.fVaryingHandler;
@@ -282,7 +247,7 @@ void GrGLQuadEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     // emit attributes
     varyingHandler->emitAttributes(gp);
 
-    GrGLSLVarying v(kHalf4_GrSLType);
+    GrGLSLVarying v(SkSLType::kHalf4);
     varyingHandler->addVarying("HairQuadEdge", &v);
     vertBuilder->codeAppendf("%s = %s;", v.vsOut(), gp.inHairQuadEdge().name());
 
@@ -297,15 +262,15 @@ void GrGLQuadEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
                         *args.fShaderCaps,
                         gpArgs,
                         gp.inPosition().name(),
-                        gp.viewMatrix(),
+                        gp.fViewMatrix,
                         &fViewMatrixUniform);
-    if (gp.usesLocalCoords()) {
+    if (gp.fUsesLocalCoords) {
         WriteLocalCoord(vertBuilder,
                         uniformHandler,
                         *args.fShaderCaps,
                         gpArgs,
                         gp.inPosition().asShaderVar(),
-                        gp.localMatrix(),
+                        gp.fLocalMatrix,
                         &fLocalMatrixUniform);
     }
 
@@ -323,11 +288,11 @@ void GrGLQuadEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     // Add line below for smooth cubic ramp
     // fragBuilder->codeAppend("edgeAlpha = edgeAlpha*edgeAlpha*(3.0-2.0*edgeAlpha);");
 
-    if (0xff != gp.coverageScale()) {
+    if (gp.fCoverageScale != 0xFF) {
         const char* coverageScale;
         fCoverageScaleUniform = uniformHandler->addUniform(nullptr,
                                                            kFragment_GrShaderFlag,
-                                                           kHalf_GrSLType,
+                                                           SkSLType::kHalf,
                                                            "Coverage",
                                                            &coverageScale);
         fragBuilder->codeAppendf("half4 %s = half4(%s * edgeAlpha);", args.fOutputCoverage,
@@ -337,33 +302,24 @@ void GrGLQuadEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     }
 }
 
-void GrGLQuadEffect::GenKey(const GrGeometryProcessor& gp,
-                            const GrShaderCaps& shaderCaps,
-                            GrProcessorKeyBuilder* b) {
-    const GrQuadEffect& ce = gp.cast<GrQuadEffect>();
-    uint32_t key = ce.isAntiAliased() ? (ce.isFilled() ? 0x0 : 0x1) : 0x2;
-    key |= ce.coverageScale() != 0xff ? 0x8 : 0x0;
-    key |= ce.usesLocalCoords()? 0x10 : 0x0;
-    key = AddMatrixKeys(shaderCaps,
-                        key,
-                        ce.viewMatrix(),
-                        ce.usesLocalCoords() ? ce.localMatrix() : SkMatrix::I());
+//////////////////////////////////////////////////////////////////////////////
+
+GrQuadEffect::~GrQuadEffect() = default;
+
+void GrQuadEffect::addToKey(const GrShaderCaps& caps, skgpu::KeyBuilder* b) const {
+    uint32_t key = 0;
+    key |= fCoverageScale != 0xff ? 0x8  : 0x0;
+    key |= fUsesLocalCoords       ? 0x10 : 0x0;
+    key = ProgramImpl::AddMatrixKeys(caps,
+                                     key,
+                                     fViewMatrix,
+                                     fUsesLocalCoords ? fLocalMatrix : SkMatrix::I());
     b->add32(key);
 }
 
-//////////////////////////////////////////////////////////////////////////////
-
-constexpr GrGeometryProcessor::Attribute GrQuadEffect::kAttributes[];
-
-GrQuadEffect::~GrQuadEffect() {}
-
-void GrQuadEffect::getGLSLProcessorKey(const GrShaderCaps& caps,
-                                       GrProcessorKeyBuilder* b) const {
-    GrGLQuadEffect::GenKey(*this, caps, b);
-}
-
-GrGLSLGeometryProcessor* GrQuadEffect::createGLSLInstance(const GrShaderCaps&) const {
-    return new GrGLQuadEffect(*this);
+std::unique_ptr<GrGeometryProcessor::ProgramImpl> GrQuadEffect::makeProgramImpl(
+        const GrShaderCaps&) const {
+    return std::make_unique<Impl>();
 }
 
 GrQuadEffect::GrQuadEffect(const SkPMColor4f& color, const SkMatrix& viewMatrix, uint8_t coverage,
@@ -374,7 +330,7 @@ GrQuadEffect::GrQuadEffect(const SkPMColor4f& color, const SkMatrix& viewMatrix,
     , fLocalMatrix(localMatrix)
     , fUsesLocalCoords(usesLocalCoords)
     , fCoverageScale(coverage) {
-    this->setVertexAttributes(kAttributes, SK_ARRAY_COUNT(kAttributes));
+    this->setVertexAttributesWithImplicitOffsets(kAttributes, SK_ARRAY_COUNT(kAttributes));
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -383,7 +339,7 @@ GR_DEFINE_GEOMETRY_PROCESSOR_TEST(GrQuadEffect);
 
 #if GR_TEST_UTILS
 GrGeometryProcessor* GrQuadEffect::TestCreate(GrProcessorTestData* d) {
-    GrColor color = GrRandomColor(d->fRandom);
+    GrColor color = GrTest::RandomColor(d->fRandom);
     SkMatrix viewMatrix = GrTest::TestMatrix(d->fRandom);
     SkMatrix localMatrix = GrTest::TestMatrix(d->fRandom);
     bool usesLocalCoords = d->fRandom->nextBool();

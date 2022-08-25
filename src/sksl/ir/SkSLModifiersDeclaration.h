@@ -20,7 +20,7 @@ namespace SkSL {
  */
 class ModifiersDeclaration final : public ProgramElement {
 public:
-    static constexpr Kind kProgramElementKind = Kind::kModifiers;
+    inline static constexpr Kind kProgramElementKind = Kind::kModifiers;
 
     ModifiersDeclaration(const Modifiers* modifiers)
         : INHERITED(-1, kProgramElementKind)
@@ -34,7 +34,7 @@ public:
         return std::make_unique<ModifiersDeclaration>(&this->modifiers());
     }
 
-    String description() const override {
+    std::string description() const override {
         return this->modifiers().description() + ";";
     }
 

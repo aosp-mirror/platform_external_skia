@@ -10,14 +10,14 @@
 
 #include "src/gpu/GrSurfaceProxy.h"
 
-#include "src/gpu/GrResourceProvider.h"
+class GrResourceProvider;
 
 /** Class that adds methods to GrSurfaceProxy that are only intended for use internal to Skia.
     This class is purely a privileged window into GrSurfaceProxy. It should never have additional
     data members or virtual methods. */
 class GrSurfaceProxyPriv {
 public:
-    void computeScratchKey(const GrCaps& caps, GrScratchKey* key) const {
+    void computeScratchKey(const GrCaps& caps, skgpu::ScratchKey* key) const {
         return fProxy->computeScratchKey(caps, key);
     }
 
@@ -46,7 +46,6 @@ public:
 
 private:
     explicit GrSurfaceProxyPriv(GrSurfaceProxy* proxy) : fProxy(proxy) {}
-    GrSurfaceProxyPriv(const GrSurfaceProxyPriv&) = delete;
     GrSurfaceProxyPriv& operator=(const GrSurfaceProxyPriv&) = delete;
 
     // No taking addresses of this type.
