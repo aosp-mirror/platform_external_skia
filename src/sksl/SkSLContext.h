@@ -8,11 +8,10 @@
 #ifndef SKSL_CONTEXT
 #define SKSL_CONTEXT
 
-#include "src/sksl/SkSLBuiltinTypes.h"
-
 namespace SkSL {
 
 class BuiltinMap;
+class BuiltinTypes;
 class ErrorReporter;
 class Mangler;
 class ModifiersPool;
@@ -24,14 +23,17 @@ struct ShaderCaps;
  */
 class Context {
 public:
-    Context(ErrorReporter& errors, const ShaderCaps& caps, Mangler& mangler);
+    Context(const BuiltinTypes& types,
+            const ShaderCaps* caps,
+            ErrorReporter& errors,
+            Mangler& mangler);
     ~Context();
 
-    // The Context holds all of the built-in types.
-    BuiltinTypes fTypes;
+    // The Context holds a reference to all of the built-in types.
+    const BuiltinTypes& fTypes;
 
     // The Context holds a reference to our shader caps bits.
-    const ShaderCaps& fCaps;
+    const ShaderCaps* fCaps;
 
     // The Context holds a pointer to our pool of modifiers.
     ModifiersPool* fModifiersPool = nullptr;
