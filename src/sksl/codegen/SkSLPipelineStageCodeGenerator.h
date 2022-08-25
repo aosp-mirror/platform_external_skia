@@ -22,13 +22,20 @@ namespace PipelineStage {
     public:
         virtual ~Callbacks() = default;
 
-        virtual String getMangledName(const char* name) { return name; }
+        virtual std::string getMainName() { return "main"; }
+        virtual std::string getMangledName(const char* name) { return name; }
         virtual void   defineFunction(const char* declaration, const char* body, bool isMain) = 0;
+        virtual void   declareFunction(const char* declaration) = 0;
         virtual void   defineStruct(const char* definition) = 0;
         virtual void   declareGlobal(const char* declaration) = 0;
 
-        virtual String declareUniform(const VarDeclaration*) = 0;
-        virtual String sampleChild(int index, String coords, String color) = 0;
+        virtual std::string declareUniform(const VarDeclaration*) = 0;
+        virtual std::string sampleShader(int index, std::string coords) = 0;
+        virtual std::string sampleColorFilter(int index, std::string color) = 0;
+        virtual std::string sampleBlender(int index, std::string src, std::string dst) = 0;
+
+        virtual std::string toLinearSrgb(std::string color) = 0;
+        virtual std::string fromLinearSrgb(std::string color) = 0;
     };
 
     /*
@@ -38,6 +45,8 @@ namespace PipelineStage {
      *
      * - Any reference to the main coords builtin variable will be replaced with 'sampleCoords'.
      * - Any reference to the input color builtin variable will be replaced with 'inputColor'.
+     * - Any reference to the dest color builtin variable will be replaced with 'destColor'.
+     *   Dest-color is used in blend programs.
      * - Each uniform variable declaration triggers a call to 'declareUniform', which should emit
      *   the declaration, and return the (possibly different) name to use for the variable.
      * - Each function definition triggers a call to 'defineFunction', which should emit the
@@ -48,6 +57,7 @@ namespace PipelineStage {
     void ConvertProgram(const Program& program,
                         const char* sampleCoords,
                         const char* inputColor,
+                        const char* destColor,
                         Callbacks* callbacks);
 }  // namespace PipelineStage
 

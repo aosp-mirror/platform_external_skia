@@ -8,8 +8,10 @@
 #ifndef GrEagerVertexAllocator_DEFINED
 #define GrEagerVertexAllocator_DEFINED
 
+#include "src/gpu/BufferWriter.h"
 #include "src/gpu/GrThreadSafeCache.h"
-#include "src/gpu/ops/GrMeshDrawOp.h"
+
+class GrMeshDrawTarget;
 
 // This interface is used to allocate and map GPU vertex data before the exact number of required
 // vertices is known. Usage pattern:
@@ -22,21 +24,23 @@
 // actual vertex count.
 class GrEagerVertexAllocator {
 public:
-    template<typename T> T* lock(int eagerCount) {
-        return static_cast<T*>(this->lock(sizeof(T), eagerCount));
-    }
     virtual void* lock(size_t stride, int eagerCount) = 0;
 
     virtual void unlock(int actualCount) = 0;
 
     virtual ~GrEagerVertexAllocator() {}
+
+    skgpu::VertexWriter lockWriter(size_t stride, int eagerCount) {
+        void* p = this->lock(stride, eagerCount);
+        return p ? skgpu::VertexWriter{p, stride * eagerCount} : skgpu::VertexWriter{};
+    }
 };
 
-// GrEagerVertexAllocator implementation that uses GrMeshDrawOp::Target::makeVertexSpace and
-// GrMeshDrawOp::Target::putBackVertices.
+// GrEagerVertexAllocator implementation that uses GrMeshDrawTarget::makeVertexSpace and
+// GrMeshDrawTarget::putBackVertices.
 class GrEagerDynamicVertexAllocator : public GrEagerVertexAllocator {
 public:
-    GrEagerDynamicVertexAllocator(GrMeshDrawOp::Target* target,
+    GrEagerDynamicVertexAllocator(GrMeshDrawTarget* target,
                                   sk_sp<const GrBuffer>* vertexBuffer,
                                   int* baseVertex)
             : fTarget(target)
@@ -50,37 +54,14 @@ public:
     }
 #endif
 
-    // Un-shadow GrEagerVertexAllocator::lock<T>.
-    using GrEagerVertexAllocator::lock;
+    // Mark "final" as a hint for the compiler to not use the vtable.
+    void* lock(size_t stride, int eagerCount) final;
 
     // Mark "final" as a hint for the compiler to not use the vtable.
-    void* lock(size_t stride, int eagerCount) final {
-        SkASSERT(!fLockCount);
-        SkASSERT(eagerCount);
-        if (void* data = fTarget->makeVertexSpace(stride, eagerCount, fVertexBuffer, fBaseVertex)) {
-            fLockStride = stride;
-            fLockCount = eagerCount;
-            return data;
-        }
-        fVertexBuffer->reset();
-        *fBaseVertex = 0;
-        return nullptr;
-    }
-
-    // Mark "final" as a hint for the compiler to not use the vtable.
-    void unlock(int actualCount) final {
-        SkASSERT(fLockCount);
-        SkASSERT(actualCount <= fLockCount);
-        fTarget->putBackVertices(fLockCount - actualCount, fLockStride);
-        if (!actualCount) {
-            fVertexBuffer->reset();
-            *fBaseVertex = 0;
-        }
-        fLockCount = 0;
-    }
+    void unlock(int actualCount) final;
 
 private:
-    GrMeshDrawOp::Target* const fTarget;
+    GrMeshDrawTarget* const fTarget;
     sk_sp<const GrBuffer>* const fVertexBuffer;
     int* const fBaseVertex;
 

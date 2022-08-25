@@ -10,7 +10,6 @@
 
 #include "include/private/SkSLModifiers.h"
 #include "include/private/SkSLSymbol.h"
-#include "src/sksl/SkSLPosition.h"
 #include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLVariable.h"
 
@@ -23,10 +22,10 @@ namespace SkSL {
  */
 class Field final : public Symbol {
 public:
-    static constexpr Kind kSymbolKind = Kind::kField;
+    inline static constexpr Kind kSymbolKind = Kind::kField;
 
-    Field(int offset, const Variable* owner, int fieldIndex)
-        : INHERITED(offset, kSymbolKind, owner->type().fields()[fieldIndex].fName,
+    Field(int line, const Variable* owner, int fieldIndex)
+        : INHERITED(line, kSymbolKind, owner->type().fields()[fieldIndex].fName,
                     owner->type().fields()[fieldIndex].fType)
         , fOwner(owner)
         , fFieldIndex(fieldIndex) {}
@@ -39,8 +38,8 @@ public:
         return *fOwner;
     }
 
-    String description() const override {
-        return this->owner().description() + "." + this->name();
+    std::string description() const override {
+        return this->owner().description() + "." + std::string(this->name());
     }
 
 private:

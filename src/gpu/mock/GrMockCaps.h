@@ -28,8 +28,7 @@ public:
         fMaxVertexAttributes = options.fMaxVertexAttributes;
         fSampleLocationsSupport = true;
 
-        fShaderCaps.reset(new GrShaderCaps(contextOptions));
-        fShaderCaps->fGeometryShaderSupport = options.fGeometryShaderSupport;
+        fShaderCaps = std::make_unique<GrShaderCaps>();
         fShaderCaps->fIntegerSupport = options.fIntegerSupport;
         fShaderCaps->fFlatInterpolationSupport = options.fFlatInterpolationSupport;
         fShaderCaps->fMaxFragmentSamplers = options.fMaxFragmentSamplers;
@@ -51,7 +50,7 @@ public:
         return GrGetColorTypeDesc(ct).encoding() == GrColorTypeEncoding::kSRGBUnorm;
     }
 
-    bool isFormatTexturable(const GrBackendFormat& format) const override {
+    bool isFormatTexturable(const GrBackendFormat& format, GrTextureType) const override {
         SkImage::CompressionType compression = format.asMockCompressionType();
         if (compression != SkImage::CompressionType::kNone) {
             return fOptions.fCompressedOptions[(int)compression].fTexturable;
@@ -84,19 +83,7 @@ public:
         return sampleCount <= this->maxRenderTargetSampleCount(format.asMockColorType());
     }
 
-    int getRenderTargetSampleCount(int requestCount, GrColorType ct) const {
-        requestCount = std::max(requestCount, 1);
-
-        switch (fOptions.fConfigOptions[(int)ct].fRenderability) {
-            case GrMockOptions::ConfigOptions::Renderability::kNo:
-                return 0;
-            case GrMockOptions::ConfigOptions::Renderability::kNonMSAA:
-                return requestCount > 1 ? 0 : 1;
-            case GrMockOptions::ConfigOptions::Renderability::kMSAA:
-                return requestCount > kMaxSampleCnt ? 0 : GrNextPow2(requestCount);
-        }
-        return 0;
-    }
+    int getRenderTargetSampleCount(int requestCount, GrColorType) const;
 
     int getRenderTargetSampleCount(int requestCount,
                                    const GrBackendFormat& format) const override {
@@ -143,9 +130,9 @@ public:
         return {};
     }
 
-    GrSwizzle getWriteSwizzle(const GrBackendFormat& format, GrColorType ct) const override {
+    skgpu::Swizzle getWriteSwizzle(const GrBackendFormat& format, GrColorType ct) const override {
         SkASSERT(this->areColorTypeAndFormatCompatible(ct, format));
-        return GrSwizzle("rgba");
+        return skgpu::Swizzle("rgba");
     }
 
     uint64_t computeFormatKey(const GrBackendFormat&) const override;
@@ -191,9 +178,9 @@ private:
         return SupportedRead{srcColorType, 1};
     }
 
-    GrSwizzle onGetReadSwizzle(const GrBackendFormat& format, GrColorType ct) const override {
+    skgpu::Swizzle onGetReadSwizzle(const GrBackendFormat& format, GrColorType ct) const override {
         SkASSERT(this->areColorTypeAndFormatCompatible(ct, format));
-        return GrSwizzle("rgba");
+        return skgpu::Swizzle("rgba");
     }
 
     static const int kMaxSampleCnt = 16;

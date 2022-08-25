@@ -22,10 +22,12 @@ using U8  = V<uint8_t>;
 #if defined(__GNUC__) && !defined(__clang__)
     // Once again, GCC is kind of weird, not allowing vector = scalar directly.
     static constexpr F F0 = F() + 0.0f,
-                       F1 = F() + 1.0f;
+                       F1 = F() + 1.0f,
+                       FInfBits = F() + 0x7f800000; // equals 2139095040, the bit pattern of +Inf
 #else
     static constexpr F F0 = 0.0f,
-                       F1 = 1.0f;
+                       F1 = 1.0f,
+                       FInfBits = 0x7f800000; // equals 2139095040, the bit pattern of +Inf
 #endif
 
 // Instead of checking __AVX__ below, we'll check USING_AVX.
@@ -67,7 +69,11 @@ using U8  = V<uint8_t>;
 // You'd see warnings like, "using AVX even though AVX is not enabled".
 // We stifle these warnings; our helpers that return U64 are always inlined.
 #if defined(__SSE__) && defined(__GNUC__)
-    #pragma GCC diagnostic ignored "-Wpsabi"
+    #if !defined(__has_warning)
+        #pragma GCC diagnostic ignored "-Wpsabi"
+    #elif __has_warning("-Wpsabi")
+        #pragma GCC diagnostic ignored "-Wpsabi"
+    #endif
 #endif
 
 #if defined(__clang__)
@@ -290,7 +296,7 @@ SI F approx_exp2(F x) {
     F fbits = (1.0f * (1<<23)) * (x + 121.274057500f
                                     -   1.490129070f*fract
                                     +  27.728023300f/(4.84252568f - fract));
-    I32 bits = cast<I32>(max_(fbits, F0));
+    I32 bits = cast<I32>(min_(max_(fbits, F0), FInfBits));
 
     return bit_pun<F>(bits);
 #endif

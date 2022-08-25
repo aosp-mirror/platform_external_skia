@@ -28,7 +28,10 @@
 class GrGLBuffer;
 class GrGLOpsRenderPass;
 class GrPipeline;
-class GrSwizzle;
+
+namespace skgpu {
+class Swizzle;
+}
 
 class GrGLGpu final : public GrGpu {
 public:
@@ -46,11 +49,11 @@ public:
     const GrGLContextInfo& ctxInfo() const { return *fGLContext; }
     GrGLStandard glStandard() const { return fGLContext->standard(); }
     GrGLVersion glVersion() const { return fGLContext->version(); }
-    GrGLSLGeneration glslGeneration() const { return fGLContext->glslGeneration(); }
+    SkSL::GLSLGeneration glslGeneration() const { return fGLContext->glslGeneration(); }
     const GrGLCaps& glCaps() const { return *fGLContext->caps(); }
 
     // Used by GrGLProgram to configure OpenGL state.
-    void bindTexture(int unitIdx, GrSamplerState samplerState, const GrSwizzle&, GrGLTexture*);
+    void bindTexture(int unitIdx, GrSamplerState samplerState, const skgpu::Swizzle&, GrGLTexture*);
 
     // These functions should be used to bind GL objects. They track the GL state and skip redundant
     // bindings. Making the equivalent glBind calls directly will confuse the state tracking.
@@ -92,7 +95,7 @@ public:
     // unchanged.
     //
     // NOTE: This binds the default VAO (ID=zero) unless we are on a core profile, in which case we
-    // use a dummy array instead.
+    // use a placeholder array instead.
     GrGLAttribArrayState* bindInternalVertexArray(const GrBuffer* indexBuffer, int numAttribs,
                                                   GrPrimitiveRestart primitiveRestart) {
         auto* attribState = fHWVertexArrayState.bindInternalVertexArray(this, indexBuffer);
@@ -103,13 +106,23 @@ public:
     // Applies any necessary workarounds and returns the GL primitive type to use in draw calls.
     GrGLenum prepareToDraw(GrPrimitiveType primitiveType);
 
-    enum class ResolveDirection : bool {
-        kSingleToMSAA,
-        kMSAAToSingle
-    };
+    using ResolveDirection = GrGLRenderTarget::ResolveDirection;
 
+    // Resolves the render target's single sample FBO into the MSAA, or vice versa.
+    // If glCaps.framebufferResolvesMustBeFullSize() is true, resolveRect must be equal the render
+    // target's bounds rect.
+    // If blitting single to MSAA, glCaps.canResolveSingleToMSAA() must be true.
     void resolveRenderFBOs(GrGLRenderTarget*, const SkIRect& resolveRect, ResolveDirection,
                            bool invalidateReadBufferAfterBlit = false);
+
+    // For loading a dynamic MSAA framebuffer when glCaps.canResolveSingleToMSAA() is false.
+    // NOTE: If glCaps.framebufferResolvesMustBeFullSize() is also true, the drawBounds should be
+    // equal to the proxy bounds. This is because the render pass will have to do a full size
+    // resolve back into the single sample FBO when rendering is complete.
+    void drawSingleIntoMSAAFBO(GrGLRenderTarget* rt, const SkIRect& drawBounds) {
+        this->copySurfaceAsDraw(rt, true/*drawToMultisampleFBO*/, rt, drawBounds,
+                                drawBounds.topLeft());
+    }
 
     // The GrGLOpsRenderPass does not buffer up draws before submitting them to the gpu.
     // Thus this is the implementation of the clear call for the corresponding passthrough function
@@ -142,7 +155,8 @@ public:
     sk_sp<GrAttachment> makeMSAAAttachment(SkISize dimensions,
                                            const GrBackendFormat& format,
                                            int numSamples,
-                                           GrProtected isProtected) override;
+                                           GrProtected isProtected,
+                                           GrMemoryless) override;
 
     void deleteBackendTexture(const GrBackendTexture&) override;
 
@@ -173,10 +187,9 @@ public:
     void deleteFence(GrFence) const override;
 
     std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT makeSemaphore(bool isOwned) override;
-    std::unique_ptr<GrSemaphore> wrapBackendSemaphore(
-            const GrBackendSemaphore& semaphore,
-            GrResourceProvider::SemaphoreWrapType wrapType,
-            GrWrapOwnership ownership) override;
+    std::unique_ptr<GrSemaphore> wrapBackendSemaphore(const GrBackendSemaphore&,
+                                                      GrSemaphoreWrapType,
+                                                      GrWrapOwnership) override;
     void insertSemaphore(GrSemaphore* semaphore) override;
     void waitSemaphore(GrSemaphore* semaphore) override;
 
@@ -287,7 +300,8 @@ private:
                            GrGLenum target,
                            GrRenderable,
                            GrGLTextureParameters::SamplerOverriddenState*,
-                           int mipLevelCount);
+                           int mipLevelCount,
+                           GrProtected isProtected);
 
     GrGLuint createCompressedTexture2D(SkISize dimensions,
                                        SkImage::CompressionType compression,
@@ -295,25 +309,42 @@ private:
                                        GrMipmapped,
                                        GrGLTextureParameters::SamplerOverriddenState*);
 
-    bool onReadPixels(GrSurface*, int left, int top, int width, int height,
-                      GrColorType surfaceColorType, GrColorType dstColorType, void* buffer,
+    bool onReadPixels(GrSurface*,
+                      SkIRect,
+                      GrColorType surfaceColorType,
+                      GrColorType dstColorType,
+                      void*,
                       size_t rowBytes) override;
 
-    bool onWritePixels(GrSurface*, int left, int top, int width, int height,
-                       GrColorType surfaceColorType, GrColorType srcColorType,
-                       const GrMipLevel texels[], int mipLevelCount,
+    bool onWritePixels(GrSurface*,
+                       SkIRect,
+                       GrColorType surfaceColorType,
+                       GrColorType srcColorType,
+                       const GrMipLevel[],
+                       int mipLevelCount,
                        bool prepForTexSampling) override;
 
-    bool onTransferPixelsTo(GrTexture*, int left, int top, int width, int height,
-                            GrColorType textureColorType, GrColorType bufferColorType,
-                            sk_sp<GrGpuBuffer> transferBuffer, size_t offset,
+    bool onTransferPixelsTo(GrTexture*,
+                            SkIRect,
+                            GrColorType textureColorType,
+                            GrColorType bufferColorType,
+                            sk_sp<GrGpuBuffer>,
+                            size_t offset,
                             size_t rowBytes) override;
-    bool onTransferPixelsFrom(GrSurface*, int left, int top, int width, int height,
-                              GrColorType surfaceColorType, GrColorType bufferColorType,
-                              sk_sp<GrGpuBuffer> transferBuffer, size_t offset) override;
-    bool readOrTransferPixelsFrom(GrSurface*, int left, int top, int width, int height,
-                                  GrColorType surfaceColorType, GrColorType dstColorType,
-                                  void* offsetOrPtr, int rowWidthInPixels);
+
+    bool onTransferPixelsFrom(GrSurface*,
+                              SkIRect,
+                              GrColorType surfaceColorType,
+                              GrColorType bufferColorType,
+                              sk_sp<GrGpuBuffer>,
+                              size_t offset) override;
+
+    bool readOrTransferPixelsFrom(GrSurface*,
+                                  SkIRect rect,
+                                  GrColorType surfaceColorType,
+                                  GrColorType dstColorType,
+                                  void* offsetOrPtr,
+                                  int rowWidthInPixels);
 
     // Unbinds xfer buffers from GL for operations that don't need them.
     // Before calling any variation of TexImage, TexSubImage, etc..., call this with
@@ -332,7 +363,8 @@ private:
     // binds texture unit in GL
     void setTextureUnit(int unitIdx);
 
-    void flushBlendAndColorWrite(const GrXferProcessor::BlendInfo& blendInfo, const GrSwizzle&);
+    void flushBlendAndColorWrite(const GrXferProcessor::BlendInfo& blendInfo,
+                                 const skgpu::Swizzle&);
 
     void addFinishedProc(GrGpuFinishedProc finishedProc,
                          GrGpuFinishedContext finishedContext) override;
@@ -351,8 +383,8 @@ private:
 
     bool waitSync(GrGLsync, uint64_t timeout, bool flush);
 
-    bool copySurfaceAsDraw(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
-                           const SkIPoint& dstPoint);
+    bool copySurfaceAsDraw(GrSurface* dst, bool drawToMultisampleFBO, GrSurface* src,
+                           const SkIRect& srcRect, const SkIPoint& dstPoint);
     void copySurfaceAsCopyTexSubImage(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
                                       const SkIPoint& dstPoint);
     bool copySurfaceAsBlitFramebuffer(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
@@ -427,9 +459,6 @@ private:
 
     void flushStencil(const GrStencilSettings&, GrSurfaceOrigin);
     void disableStencil();
-
-    // rt is used only if useHWAA is true.
-    void flushHWAAState(GrRenderTarget* rt, bool useHWAA);
 
     void flushConservativeRasterState(bool enable);
 
@@ -623,7 +652,7 @@ private:
         /**
          * Binds the vertex array that should be used for internal draws, and returns its attrib
          * state. This binds the default VAO (ID=zero) unless we are on a core profile, in which
-         * case we use a dummy array instead.
+         * case we use a placeholder array instead.
          *
          * If an index buffer is provided, it will be bound to the vertex array. Otherwise the
          * index buffer binding will be left unchanged.
@@ -692,7 +721,6 @@ private:
         }
     }                                       fHWBlendState;
 
-    TriState                                fMSAAEnabled;
     TriState                                fHWConservativeRasterEnabled;
 
     TriState                                fHWWireframeEnabled;

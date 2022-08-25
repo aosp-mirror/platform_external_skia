@@ -18,7 +18,6 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/utils/SkCamera.h"
 #include "samplecode/Sample.h"
-#include "src/core/SkClipOpPriv.h"
 #include "src/utils/SkUTF.h"
 
 static void make_paint(SkPaint* paint, const SkMatrix& localMatrix) {
@@ -34,9 +33,6 @@ static void test_fade(SkCanvas* canvas) {
     SkAutoCanvasRestore ar(canvas, true);
 
     SkRect r;
-
-    SkPaint p;
-    p.setAlpha(0x88);
 
     SkAutoCanvasRestore ar2(canvas, false);
 
@@ -54,7 +50,7 @@ static void test_fade(SkCanvas* canvas) {
 
     // now draw the "content"
 
-    if (true) {
+    if ((true)) {
         r.setWH(100, 100);
 
         canvas->saveLayerAlpha(&r, 0x80);
@@ -107,7 +103,7 @@ protected:
     void onDrawContent(SkCanvas* canvas) override {
         this->drawBG(canvas);
 
-        if (true) {
+        if ((true)) {
             SkRect r;
             r.setWH(220, 120);
             SkPaint p;
@@ -120,7 +116,7 @@ protected:
             return;
         }
 
-        if (false) {
+        if ((false)) {
             SkRect r;
             r.setWH(220, 120);
             SkPaint p;
@@ -139,7 +135,7 @@ protected:
             canvas->drawOval(r, p);
         }
 
-        if (false) {
+        if ((false)) {
             SkPaint p;
             p.setAlpha(0x88);
             p.setAntiAlias(true);
@@ -200,7 +196,7 @@ protected:
         m.postTranslate(fCenter.x(), fCenter.y());
         path.transform(m);
 
-        canvas->clipPath(path, kIntersect_SkClipOp, true);
+        canvas->clipPath(path, SkClipOp::kIntersect, true);
         const SkRect bounds = path.getBounds();
 
         SkPaint paint;

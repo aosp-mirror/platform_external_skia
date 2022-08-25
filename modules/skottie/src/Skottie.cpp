@@ -38,7 +38,7 @@
 #include <cmath>
 #include <memory>
 
-#include "stdlib.h"
+#include <stdlib.h>
 
 namespace skottie {
 
@@ -114,11 +114,10 @@ static SkBlendMode GetBlendMode(const skjson::ObjectValue& jobject,
         SkBlendMode::kPlus,       // 16:'add'
     };
 
-    const auto bm_index = ParseDefault<size_t>(jobject["bm"], 0);
+    const size_t bm_index = ParseDefault<size_t>(jobject["bm"], 0);
     if (bm_index >= SK_ARRAY_COUNT(kBlendModeMap)) {
-            abuilder->log(Logger::Level::kWarning, &jobject,
-                          "Unsupported blend mode %lu\n", bm_index);
-            return SkBlendMode::kSrcOver;
+        abuilder->log(Logger::Level::kWarning, &jobject, "Unsupported blend mode %zu\n", bm_index);
+        return SkBlendMode::kSrcOver;
     }
 
     return kBlendModeMap[bm_index];
@@ -161,6 +160,7 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachBlendMode(const skjson::ObjectVa
 AnimationBuilder::AnimationBuilder(sk_sp<ResourceProvider> rp, sk_sp<SkFontMgr> fontmgr,
                                    sk_sp<PropertyObserver> pobserver, sk_sp<Logger> logger,
                                    sk_sp<MarkerObserver> mobserver, sk_sp<PrecompInterceptor> pi,
+                                   sk_sp<ExpressionManager> expressionmgr,
                                    Animation::Builder::Stats* stats,
                                    const SkSize& comp_size, float duration, float framerate,
                                    uint32_t flags)
@@ -170,6 +170,7 @@ AnimationBuilder::AnimationBuilder(sk_sp<ResourceProvider> rp, sk_sp<SkFontMgr> 
     , fLogger(std::move(logger))
     , fMarkerObserver(std::move(mobserver))
     , fPrecompInterceptor(std::move(pi))
+    , fExpressionManager(std::move(expressionmgr))
     , fStats(stats)
     , fCompSize(comp_size)
     , fDuration(duration)
@@ -184,6 +185,7 @@ AnimationBuilder::AnimationInfo AnimationBuilder::parse(const skjson::ObjectValu
     this->parseFonts(jroot["fonts"], jroot["chars"]);
 
     AutoScope ascope(this);
+    AutoPropertyTracker apt(this, jroot, PropertyObserver::NodeType::COMPOSITION);
     auto root = CompositionBuilder(*this, fCompSize, jroot).build(*this);
 
     auto animators = ascope.release();
@@ -289,6 +291,10 @@ bool AnimationBuilder::dispatchTransformProperty(const sk_sp<TransformAdapter2D>
     return dispatched;
 }
 
+sk_sp<ExpressionManager> AnimationBuilder::expression_manager() const {
+    return fExpressionManager;
+}
+
 void AnimationBuilder::AutoPropertyTracker::updateContext(PropertyObserver* observer,
                                                           const skjson::ObjectValue& obj) {
 
@@ -331,6 +337,11 @@ Animation::Builder& Animation::Builder::setMarkerObserver(sk_sp<MarkerObserver> 
 
 Animation::Builder& Animation::Builder::setPrecompInterceptor(sk_sp<PrecompInterceptor> pi) {
     fPrecompInterceptor = std::move(pi);
+    return *this;
+}
+
+Animation::Builder& Animation::Builder::setExpressionManager(sk_sp<ExpressionManager> em) {
+    fExpressionManager = std::move(em);
     return *this;
 }
 
@@ -408,6 +419,7 @@ sk_sp<Animation> Animation::Builder::make(const char* data, size_t data_len) {
                                        std::move(fLogger),
                                        std::move(fMarkerObserver),
                                        std::move(fPrecompInterceptor),
+                                       std::move(fExpressionManager),
                                        &fStats, size, duration, fps, fFlags);
     auto ainfo = builder.parse(json);
 

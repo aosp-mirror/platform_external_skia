@@ -13,14 +13,14 @@
 #include "include/gpu/d3d/GrD3DTypes.h"
 #include "include/private/GrTypesPriv.h"
 
-#define GR_D3D_CALL_ERRCHECK(X)                                       \
-    do {                                                              \
-       HRESULT result = X;                                            \
-       SkASSERT(SUCCEEDED(result));                                   \
-       if (!SUCCEEDED(result)) {                                      \
-           SkDebugf("Failed Direct3D call. Error: 0x%08x\n", result); \
-       }                                                              \
-    } while(false)
+#define GR_D3D_CALL_ERRCHECK(X)                                         \
+    do {                                                                \
+        HRESULT result = X;                                             \
+        SkASSERT(SUCCEEDED(result));                                    \
+        if (!SUCCEEDED(result)) {                                       \
+            SkDebugf("Failed Direct3D call. Error: 0x%08lx\n", result); \
+        }                                                               \
+    } while (false)
 
 static constexpr bool operator==(const D3D12_CPU_DESCRIPTOR_HANDLE & first,
                                  const D3D12_CPU_DESCRIPTOR_HANDLE & second) {
@@ -53,6 +53,48 @@ static constexpr uint32_t GrDxgiFormatChannels(DXGI_FORMAT format) {
         case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:     return 0;
 
         default:                                   return 0;
+    }
+}
+
+static constexpr GrColorFormatDesc GrDxgiFormatDesc(DXGI_FORMAT format) {
+    switch (format) {
+        case DXGI_FORMAT_R8G8B8A8_UNORM:
+            return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kUnorm);
+        case DXGI_FORMAT_R8_UNORM:
+            return GrColorFormatDesc::MakeR(8, GrColorTypeEncoding::kUnorm);
+        case DXGI_FORMAT_B8G8R8A8_UNORM:
+            return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kUnorm);
+        case DXGI_FORMAT_B5G6R5_UNORM:
+            return GrColorFormatDesc::MakeRGB(5, 6, 5, GrColorTypeEncoding::kUnorm);
+        case DXGI_FORMAT_R16G16B16A16_FLOAT:
+            return GrColorFormatDesc::MakeRGBA(16, GrColorTypeEncoding::kFloat);
+        case DXGI_FORMAT_R16_FLOAT:
+            return GrColorFormatDesc::MakeR(16, GrColorTypeEncoding::kFloat);
+        case DXGI_FORMAT_R8G8_UNORM:
+            return GrColorFormatDesc::MakeRG(8, GrColorTypeEncoding::kUnorm);
+        case DXGI_FORMAT_R10G10B10A2_UNORM:
+            return GrColorFormatDesc::MakeRGBA(10, 2, GrColorTypeEncoding::kUnorm);
+        case DXGI_FORMAT_B4G4R4A4_UNORM:
+            return GrColorFormatDesc::MakeRGBA(4, GrColorTypeEncoding::kUnorm);
+        case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+            return GrColorFormatDesc::MakeRGBA(8, GrColorTypeEncoding::kSRGBUnorm);
+        case DXGI_FORMAT_R16_UNORM:
+            return GrColorFormatDesc::MakeR(16, GrColorTypeEncoding::kUnorm);
+        case DXGI_FORMAT_R16G16_UNORM:
+            return GrColorFormatDesc::MakeRG(16, GrColorTypeEncoding::kUnorm);
+        case DXGI_FORMAT_R16G16B16A16_UNORM:
+            return GrColorFormatDesc::MakeRGBA(16, GrColorTypeEncoding::kUnorm);
+        case DXGI_FORMAT_R16G16_FLOAT:
+            return GrColorFormatDesc::MakeRG(16, GrColorTypeEncoding::kFloat);
+
+        // Compressed texture formats are not expected to have a description.
+        case DXGI_FORMAT_BC1_UNORM: return GrColorFormatDesc::MakeInvalid();
+
+        // This type only describes color channels.
+        case DXGI_FORMAT_D24_UNORM_S8_UINT:    return GrColorFormatDesc::MakeInvalid();
+        case DXGI_FORMAT_D32_FLOAT_S8X24_UINT: return GrColorFormatDesc::MakeInvalid();
+
+        default: return GrColorFormatDesc::MakeInvalid();
     }
 }
 
