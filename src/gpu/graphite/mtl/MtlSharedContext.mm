@@ -35,26 +35,22 @@ sk_sp<skgpu::graphite::SharedContext> MtlSharedContext::Make(const MtlBackendCon
 
     sk_cfp<id<MTLDevice>> device = sk_ret_cfp((id<MTLDevice>)(context.fDevice.get()));
 
-    sk_sp<const MtlCaps> caps(new MtlCaps(device.get(), options));
+    std::unique_ptr<const MtlCaps> caps(new MtlCaps(device.get(), options));
 
     return sk_sp<skgpu::graphite::SharedContext>(new MtlSharedContext(std::move(device),
                                                                       std::move(caps)));
 }
 
 MtlSharedContext::MtlSharedContext(sk_cfp<id<MTLDevice>> device,
-                                   sk_sp<const MtlCaps> caps)
-    : skgpu::graphite::SharedContext(std::move(caps), BackendApi::kMetal)
-    , fDevice(std::move(device)) {
-}
+                                   std::unique_ptr<const MtlCaps> caps)
+        : skgpu::graphite::SharedContext(std::move(caps), BackendApi::kMetal)
+        , fDevice(std::move(device)) {}
 
 MtlSharedContext::~MtlSharedContext() {
 }
 
-std::unique_ptr<ResourceProvider> MtlSharedContext::makeResourceProvider(
-        sk_sp<GlobalCache> globalCache, SingleOwner* singleOwner) const {
-    return std::unique_ptr<ResourceProvider>(new MtlResourceProvider(this,
-                                                                     std::move(globalCache),
-                                                                     singleOwner));
+std::unique_ptr<ResourceProvider> MtlSharedContext::makeResourceProvider(SingleOwner* singleOwner) {
+    return std::unique_ptr<ResourceProvider>(new MtlResourceProvider(this, singleOwner));
 }
 
 } // namespace skgpu::graphite

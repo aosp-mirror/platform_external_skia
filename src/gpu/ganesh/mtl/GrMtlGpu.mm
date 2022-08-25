@@ -913,7 +913,8 @@ GrBackendTexture GrMtlGpu::onCreateBackendTexture(SkISize dimensions,
                                                   const GrBackendFormat& format,
                                                   GrRenderable renderable,
                                                   GrMipmapped mipmapped,
-                                                  GrProtected isProtected) {
+                                                  GrProtected isProtected,
+                                                  std::string_view label) {
     const MTLPixelFormat mtlFormat = GrBackendFormatAsMTLPixelFormat(format);
 
     GrMtlTextureInfo info;
@@ -1358,8 +1359,10 @@ bool GrMtlGpu::onReadPixels(GrSurface* surface,
 
     GrResourceProvider* resourceProvider = this->getContext()->priv().resourceProvider();
     sk_sp<GrGpuBuffer> transferBuffer = resourceProvider->createBuffer(
-            transBufferImageBytes, GrGpuBufferType::kXferGpuToCpu,
-            kDynamic_GrAccessPattern);
+            transBufferImageBytes,
+            GrGpuBufferType::kXferGpuToCpu,
+            kDynamic_GrAccessPattern,
+            GrResourceProvider::ZeroInit::kNo);
 
     if (!transferBuffer) {
         return false;

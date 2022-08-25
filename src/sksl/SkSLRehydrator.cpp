@@ -20,6 +20,7 @@
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLModifiersPool.h"
+#include "src/sksl/SkSLModuleLoader.h"
 #include "src/sksl/SkSLParsedModule.h"
 #include "src/sksl/SkSLPool.h"
 #include "src/sksl/SkSLProgramSettings.h"
@@ -100,7 +101,7 @@ private:
 };
 
 Rehydrator::Rehydrator(Compiler& compiler, const uint8_t* src, size_t length)
-        : Rehydrator(compiler, src, length, compiler.makeRootSymbolTableWithPublicTypes()) {}
+        : Rehydrator(compiler, src, length, ModuleLoader::Get().rootSymbolTableWithPublicTypes()) {}
 
 Rehydrator::Rehydrator(Compiler& compiler, const uint8_t* src, size_t length,
                        std::shared_ptr<SymbolTable> symbols)
@@ -582,7 +583,7 @@ std::unique_ptr<Expression> Rehydrator::expression() {
             return PrefixExpression::Make(this->context(), pos, op, std::move(operand));
         }
         case Rehydrator::kSetting_Command: {
-            std::string name(this->readString());
+            std::string_view name(this->readString());
             return Setting::Convert(this->context(), pos, name);
         }
         case Rehydrator::kSwizzle_Command: {

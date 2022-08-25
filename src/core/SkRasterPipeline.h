@@ -18,7 +18,6 @@
 
 #include <functional>
 
-class SkData;
 struct skcms_TransferFunction;
 
 /**
@@ -38,6 +37,7 @@ struct skcms_TransferFunction;
 
 #define SK_RASTER_PIPELINE_STAGES(M)                               \
     M(callback)                                                    \
+    M(stack_checkpoint) M(stack_rewind)                            \
     M(move_src_dst) M(move_dst_src) M(swap_src_dst)                \
     M(clamp_0) M(clamp_1) M(clamp_a) M(clamp_gamut)                \
     M(unpremul) M(premul) M(premul_dst)                            \
@@ -111,8 +111,12 @@ struct skcms_TransferFunction;
     M(emboss)                                                      \
     M(swizzle)
 
-// The largest number of pixels we handle at a time.
-static const int SkRasterPipeline_kMaxStride = 16;
+// The largest number of pixels we handle at a time. We have a separate value for the largest number
+// of pixels we handle in the highp pipeline. Many of the context structs in this file are only used
+// by stages that have no lowp implementation. They can therefore use the (smaller) highp value to
+// save memory in the arena.
+inline static constexpr int SkRasterPipeline_kMaxStride = 16;
+inline static constexpr int SkRasterPipeline_kMaxStride_highp = 8;
 
 // Structs representing the arguments to some common stages.
 
@@ -132,17 +136,17 @@ struct SkRasterPipeline_GatherCtx {
 
 // State shared by save_xy, accumulate, and bilinear_* / bicubic_*.
 struct SkRasterPipeline_SamplerCtx {
-    float      x[SkRasterPipeline_kMaxStride];
-    float      y[SkRasterPipeline_kMaxStride];
-    float     fx[SkRasterPipeline_kMaxStride];
-    float     fy[SkRasterPipeline_kMaxStride];
-    float scalex[SkRasterPipeline_kMaxStride];
-    float scaley[SkRasterPipeline_kMaxStride];
+    float      x[SkRasterPipeline_kMaxStride_highp];
+    float      y[SkRasterPipeline_kMaxStride_highp];
+    float     fx[SkRasterPipeline_kMaxStride_highp];
+    float     fy[SkRasterPipeline_kMaxStride_highp];
+    float scalex[SkRasterPipeline_kMaxStride_highp];
+    float scaley[SkRasterPipeline_kMaxStride_highp];
 
     // for bicubic_[np][13][xy]
     float weights[16];
-    float wx[4][SkRasterPipeline_kMaxStride];
-    float wy[4][SkRasterPipeline_kMaxStride];
+    float wx[4][SkRasterPipeline_kMaxStride_highp];
+    float wy[4][SkRasterPipeline_kMaxStride_highp];
 };
 
 struct SkRasterPipeline_TileCtx {
@@ -157,12 +161,26 @@ struct SkRasterPipeline_DecalTileCtx {
 };
 
 struct SkRasterPipeline_CallbackCtx {
-    void (*fn)(SkRasterPipeline_CallbackCtx* self, int active_pixels/*<= SkRasterPipeline_kMaxStride*/);
+    void (*fn)(SkRasterPipeline_CallbackCtx* self,
+               int active_pixels /*<= SkRasterPipeline_kMaxStride_highp*/);
 
     // When called, fn() will have our active pixels available in rgba.
     // When fn() returns, the pipeline will read back those active pixels from read_from.
-    float rgba[4*SkRasterPipeline_kMaxStride];
+    float rgba[4*SkRasterPipeline_kMaxStride_highp];
     float* read_from = rgba;
+};
+
+// state shared by stack_checkpoint and stack_rewind
+struct SkRasterPipeline_RewindCtx {
+    float  r[SkRasterPipeline_kMaxStride_highp];
+    float  g[SkRasterPipeline_kMaxStride_highp];
+    float  b[SkRasterPipeline_kMaxStride_highp];
+    float  a[SkRasterPipeline_kMaxStride_highp];
+    float dr[SkRasterPipeline_kMaxStride_highp];
+    float dg[SkRasterPipeline_kMaxStride_highp];
+    float db[SkRasterPipeline_kMaxStride_highp];
+    float da[SkRasterPipeline_kMaxStride_highp];
+    void** program;
 };
 
 struct SkRasterPipeline_GradientCtx {
@@ -180,7 +198,7 @@ struct SkRasterPipeline_EvenlySpaced2StopGradientCtx {
 };
 
 struct SkRasterPipeline_2PtConicalCtx {
-    uint32_t fMask[SkRasterPipeline_kMaxStride];
+    uint32_t fMask[SkRasterPipeline_kMaxStride_highp];
     float    fP0,
              fP1;
 };
@@ -194,6 +212,12 @@ struct SkRasterPipeline_EmbossCtx {
     SkRasterPipeline_MemoryCtx mul,
                                add;
 };
+
+#if __has_cpp_attribute(clang::musttail) && !defined(__EMSCRIPTEN__) && !defined(SK_CPU_ARM32)
+    #define SK_HAS_MUSTTAIL 1
+#else
+    #define SK_HAS_MUSTTAIL 0
+#endif
 
 class SkRasterPipeline {
 public:
@@ -254,6 +278,8 @@ public:
 
     void append_transfer_function(const skcms_TransferFunction&);
 
+    void append_stack_rewind();
+
     bool empty() const { return fStages == nullptr; }
 
 private:
@@ -267,10 +293,12 @@ private:
     StartPipelineFn build_pipeline(void**) const;
 
     void unchecked_append(StockStage, void*);
+    int slots_needed() const;
 
-    SkArenaAlloc* fAlloc;
-    StageList*    fStages;
-    int           fNumStages;
+    SkArenaAlloc*               fAlloc;
+    SkRasterPipeline_RewindCtx* fRewindCtx;
+    StageList*                  fStages;
+    int                         fNumStages;
 };
 
 template <size_t bytes>

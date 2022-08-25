@@ -43,12 +43,13 @@ public:
     BuiltinVariableScanner(const Context& context) : fContext(context) {}
 
     void addDeclaringElement(const std::string& name) {
-        // If this is the *first* time we've seen this builtin, findAndInclude will return the
-        // corresponding ProgramElement.
-        BuiltinMap& builtins = *fContext.fBuiltins;
-        if (const ProgramElement* decl = builtins.findAndInclude(name)) {
+        if (const ProgramElement* decl = fContext.fBuiltins->find(name)) {
+            // Make sure we only add a built-in variable once. We only have a small handful of
+            // built-in variables, so linear search here is good enough.
             SkASSERT(decl->is<GlobalVarDeclaration>() || decl->is<InterfaceBlock>());
-            fNewElements.push_back(decl);
+            if (std::find(fNewElements.begin(), fNewElements.end(), decl) == fNewElements.end()) {
+                fNewElements.push_back(decl);
+            }
         }
     }
 
@@ -129,7 +130,7 @@ void FindAndDeclareBuiltinVariables(Program& program) {
             // Set the FlipRT program input if we find sk_FragCoord or sk_Clockwise.
             switch (var->modifiers().fLayout.fBuiltin) {
                 case SK_FRAGCOORD_BUILTIN:
-                    if (context.fCaps.fCanUseFragCoord) {
+                    if (context.fCaps->fCanUseFragCoord) {
                         program.fInputs.fUseFlipRTUniform =
                                 !context.fConfig->fSettings.fForceNoRTFlip;
                     }

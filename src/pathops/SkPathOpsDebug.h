@@ -7,15 +7,12 @@
 #ifndef SkPathOpsDebug_DEFINED
 #define SkPathOpsDebug_DEFINED
 
-#include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
 #include "include/pathops/SkPathOps.h"
+#include "include/private/SkTDArray.h"
 
-#include <stdlib.h>
-#include <stdio.h>
+#include <cstddef>
 
-enum class SkOpPhase : char;
-struct SkDQuad;
 class SkOpAngle;
 class SkOpCoincidence;
 class SkOpContour;
@@ -24,30 +21,17 @@ class SkOpPtT;
 class SkOpSegment;
 class SkOpSpan;
 class SkOpSpanBase;
-struct SkDPoint;
-struct SkDLine;
-struct SkDQuad;
+class SkPath;
 struct SkDConic;
 struct SkDCubic;
-class SkTSect;
+struct SkDLine;
+struct SkDPoint;
+struct SkDQuad;
+
+enum class SkOpPhase : char;
 
 // define this when running fuzz
 // #define SK_BUILD_FOR_FUZZER
-
-// fake classes to fool msvs Visual Studio 2018 Immediate Window
-#define FakeClasses(a, b) \
-class SkDebugTCoincident##a##b; \
-class SkDebugTSect##a##b; \
-class SkDebugTSpan##a##b
-
-FakeClasses(Quad, Quad);
-FakeClasses(Conic, Quad);
-FakeClasses(Conic, Conic);
-FakeClasses(Cubic, Quad);
-FakeClasses(Cubic, Conic);
-FakeClasses(Cubic, Cubic);
-
-#undef FakeClasses
 
 #ifdef SK_RELEASE
 #define FORCE_RELEASE 1
@@ -115,12 +99,12 @@ FakeClasses(Cubic, Cubic);
 #define DEBUG_ANGLE 1
 #define DEBUG_ASSEMBLE 1
 #define DEBUG_COINCIDENCE 1
-#define DEBUG_COINCIDENCE_DUMP 0
-#define DEBUG_COINCIDENCE_ORDER 0  // tight arc quads may generate out-of-order coincidence spans
+#define DEBUG_COINCIDENCE_DUMP 1
+#define DEBUG_COINCIDENCE_ORDER 1  // tight arc quads may generate out-of-order coincidence spans
 #define DEBUG_COINCIDENCE_VERBOSE 1
 #define DEBUG_CUBIC_BINARY_SEARCH 0
 #define DEBUG_CUBIC_SPLIT 1
-#define DEBUG_DUMP_VERIFY 0
+#define DEBUG_DUMP_VERIFY 1
 #define DEBUG_DUMP_SEGMENTS 1
 #define DEBUG_FLOW 1
 #define DEBUG_LIMIT_WIND_SUM 15

@@ -177,6 +177,8 @@ public:
     bool updateBuffer(sk_sp<GrVkBuffer> buffer, const void* src, VkDeviceSize offset,
                       VkDeviceSize size);
 
+    bool zeroBuffer(sk_sp<GrGpuBuffer>);
+
     enum PersistentCacheKeyType : uint32_t {
         kShader_PersistentCacheKeyType = 0,
         kPipelineCache_PersistentCacheKeyType = 1,
@@ -213,7 +215,8 @@ private:
                                             const GrBackendFormat&,
                                             GrRenderable,
                                             GrMipmapped,
-                                            GrProtected) override;
+                                            GrProtected,
+                                            std::string_view label) override;
     GrBackendTexture onCreateCompressedBackendTexture(SkISize dimensions,
                                                       const GrBackendFormat&,
                                                       GrMipmapped,

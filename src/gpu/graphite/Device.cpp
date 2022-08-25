@@ -8,7 +8,6 @@
 #include "src/gpu/graphite/Device.h"
 
 #include "include/gpu/graphite/Recorder.h"
-#include "include/gpu/graphite/SkStuff.h"
 #include "src/gpu/AtlasTypes.h"
 #include "src/gpu/graphite/Buffer.h"
 #include "src/gpu/graphite/Caps.h"
@@ -154,7 +153,10 @@ private:
     SkSTArenaAllocWithReset<4 * sizeof(IntersectionTree)> fTreeStore;
 };
 
-sk_sp<Device> Device::Make(Recorder* recorder, const SkImageInfo& ii, SkBudgeted budgeted) {
+sk_sp<Device> Device::Make(Recorder* recorder,
+                           const SkImageInfo& ii,
+                           SkBudgeted budgeted,
+                           const SkSurfaceProps& props) {
     if (!recorder) {
         return nullptr;
     }
@@ -163,26 +165,18 @@ sk_sp<Device> Device::Make(Recorder* recorder, const SkImageInfo& ii, SkBudgeted
                                                                              Protected::kNo,
                                                                              Renderable::kYes);
     sk_sp<TextureProxy> target(new TextureProxy(ii.dimensions(), textureInfo, budgeted));
-    return Make(recorder,
-                std::move(target),
-                ii.refColorSpace(),
-                ii.colorType(),
-                ii.alphaType());
+    return Make(recorder, std::move(target), ii.colorInfo(), props);
 }
 
 sk_sp<Device> Device::Make(Recorder* recorder,
                            sk_sp<TextureProxy> target,
-                           sk_sp<SkColorSpace> colorSpace,
-                           SkColorType colorType,
-                           SkAlphaType alphaType) {
+                           const SkColorInfo& colorInfo,
+                           const SkSurfaceProps& props) {
     if (!recorder) {
         return nullptr;
     }
 
-    sk_sp<DrawContext> dc = DrawContext::Make(std::move(target),
-                                              std::move(colorSpace),
-                                              colorType,
-                                              alphaType);
+    sk_sp<DrawContext> dc = DrawContext::Make(std::move(target), colorInfo, props);
     if (!dc) {
         return nullptr;
     }
@@ -201,7 +195,7 @@ static constexpr int kGridCellSize = 16;
 static constexpr int kMaxBruteForceN = 64;
 
 Device::Device(Recorder* recorder, sk_sp<DrawContext> dc)
-        : SkBaseDevice(dc->imageInfo(), SkSurfaceProps())
+        : SkBaseDevice(dc->imageInfo(), dc->surfaceProps())
         , fRecorder(recorder)
         , fDC(std::move(dc))
         , fClip(this)
@@ -244,11 +238,12 @@ SkBaseDevice* Device::onCreateDevice(const CreateInfo& info, const SkPaint*) {
     // TODO: Inspect the paint and create info to determine if there's anything that has to be
     // modified to support inline subpasses.
     // TODO: onCreateDevice really should return sk_sp<SkBaseDevice>...
-    return Make(fRecorder, info.fInfo, SkBudgeted::kYes).release();
+    SkSurfaceProps props(this->surfaceProps().flags(), info.fPixelGeometry);
+    return Make(fRecorder, info.fInfo, SkBudgeted::kYes, props).release();
 }
 
 sk_sp<SkSurface> Device::makeSurface(const SkImageInfo& ii, const SkSurfaceProps& /* props */) {
-    return MakeGraphite(fRecorder, ii);
+    return SkSurface::MakeGraphite(fRecorder, ii);
 }
 
 bool Device::onReadPixels(const SkPixmap& pm, int x, int y) {
@@ -585,8 +580,6 @@ void Device::drawAtlasSubRun(const sktext::gpu::AtlasSubRun* subRun,
                              SkPoint drawOrigin,
                              const SkPaint& paint,
                              sk_sp<SkRefCnt> subRunStorage) {
-    // TODO: This exercises the glyph uploads but still needs work for rendering.
-
     const int subRunEnd = subRun->glyphCount();
     for (int subRunCursor = 0; subRunCursor < subRunEnd;) {
         // For the remainder of the run, add any atlas uploads to the Recorder's AtlasManager
@@ -598,11 +591,17 @@ void Device::drawAtlasSubRun(const sktext::gpu::AtlasSubRun* subRun,
         if (glyphsRegenerated) {
             auto [bounds, localToDevice] = subRun->boundsAndDeviceMatrix(
                                                    this->localToDeviceTransform(), drawOrigin);
+            SkPaint subRunPaint = paint;
+            // For color emoji, only the paint alpha affects the final color
+            if (subRun->maskFormat() == skgpu::MaskFormat::kARGB) {
+                subRunPaint.setColor(SK_ColorWHITE);
+                subRunPaint.setAlphaf(paint.getAlphaf());
+            }
             this->drawGeometry(localToDevice,
                                Geometry(SubRunData(subRun, std::move(subRunStorage),
                                                    bounds, subRunCursor, glyphsRegenerated,
                                                    fRecorder)),
-                               paint,
+                               subRunPaint,
                                kFillStyle,
                                DrawFlags::kIgnorePathEffect | DrawFlags::kIgnoreMaskFilter);
         }

@@ -4,10 +4,22 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "src/core/SkTSort.h"
 #include "src/pathops/SkOpAngle.h"
+
+#include "include/core/SkPoint.h"
+#include "include/core/SkScalar.h"
+#include "include/private/SkFloatingPoint.h"
+#include "src/core/SkTSort.h"
+#include "src/pathops/SkIntersections.h"
 #include "src/pathops/SkOpSegment.h"
+#include "src/pathops/SkOpSpan.h"
+#include "src/pathops/SkPathOpsCubic.h"
 #include "src/pathops/SkPathOpsCurve.h"
+#include "src/pathops/SkPathOpsLine.h"
+#include "src/pathops/SkPathOpsPoint.h"
+
+#include <algorithm>
+#include <cmath>
 
 /* Angles are sorted counterclockwise. The smallest angle has a positive x and the smallest
    positive y. The largest angle has a positive x and a zero y. */
@@ -63,10 +75,12 @@ bool SkOpAngle::after(SkOpAngle* test) {
     SkOpAngle* rh = lh->fNext;
     SkASSERT(lh != rh);
     fPart.fCurve = fOriginalCurvePart;
+    // Adjust lh and rh to share the same origin (floating point error in intersections can mean
+    // they aren't exactly the same).
     lh->fPart.fCurve = lh->fOriginalCurvePart;
-    lh->fPart.fCurve.offset(lh->segment()->verb(), fPart.fCurve[0] - lh->fPart.fCurve[0]);
+    lh->fPart.fCurve[0] = fPart.fCurve[0];
     rh->fPart.fCurve = rh->fOriginalCurvePart;
-    rh->fPart.fCurve.offset(rh->segment()->verb(), fPart.fCurve[0] - rh->fPart.fCurve[0]);
+    rh->fPart.fCurve[0] = fPart.fCurve[0];
 
 #if DEBUG_ANGLE
     SkString bugOut;

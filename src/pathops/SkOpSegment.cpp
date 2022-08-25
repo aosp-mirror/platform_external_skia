@@ -4,12 +4,18 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#include "src/pathops/SkOpSegment.h"
+
+#include "include/private/SkTDArray.h"
 #include "src/core/SkPointPriv.h"
+#include "src/pathops/SkIntersections.h"
 #include "src/pathops/SkOpCoincidence.h"
 #include "src/pathops/SkOpContour.h"
-#include "src/pathops/SkOpSegment.h"
+#include "src/pathops/SkPathOpsLine.h"
 #include "src/pathops/SkPathWriter.h"
 
+#include <cfloat>
+#include <algorithm>
 #include <utility>
 
 /*
@@ -636,7 +642,7 @@ SkOpSegment* SkOpSegment::findNextOp(SkTDArray<SkOpSpanBase*>* chase, SkOpSpanBa
     *nextEnd = foundAngle->end();
     nextSegment = foundAngle->segment();
 #if DEBUG_WINDING
-    SkDebugf("%s from:[%d] to:[%d] start=%d end=%d\n",
+    SkDebugf("%s from:[%d] to:[%d] start=%p end=%p\n",
             __FUNCTION__, debugID(), nextSegment->debugID(), *nextStart, *nextEnd);
  #endif
     return nextSegment;
@@ -732,7 +738,7 @@ SkOpSegment* SkOpSegment::findNextWinding(SkTDArray<SkOpSpanBase*>* chase,
     *nextEnd = foundAngle->end();
     nextSegment = foundAngle->segment();
 #if DEBUG_WINDING
-    SkDebugf("%s from:[%d] to:[%d] start=%d end=%d\n",
+    SkDebugf("%s from:[%d] to:[%d] start=%p end=%p\n",
             __FUNCTION__, debugID(), nextSegment->debugID(), *nextStart, *nextEnd);
  #endif
     return nextSegment;
@@ -803,7 +809,7 @@ SkOpSegment* SkOpSegment::findNextXor(SkOpSpanBase** nextStart, SkOpSpanBase** n
     *nextEnd = foundAngle->end();
     nextSegment = foundAngle->segment();
 #if DEBUG_WINDING
-    SkDebugf("%s from:[%d] to:[%d] start=%d end=%d\n",
+    SkDebugf("%s from:[%d] to:[%d] start=%p end=%p\n",
             __FUNCTION__, debugID(), nextSegment->debugID(), *nextStart, *nextEnd);
  #endif
     return nextSegment;
