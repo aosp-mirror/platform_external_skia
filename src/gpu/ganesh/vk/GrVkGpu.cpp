@@ -47,8 +47,8 @@
 #include "src/image/SkImage_Gpu.h"
 #include "src/image/SkSurface_Gpu.h"
 
-#include "include/gpu/vk/GrVkExtensions.h"
 #include "include/gpu/vk/GrVkTypes.h"
+#include "include/gpu/vk/VulkanExtensions.h"
 
 #include <utility>
 
@@ -114,7 +114,7 @@ sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
             return nullptr;
         }
     } else {
-        GrVkExtensions extensions;
+        skgpu::VulkanExtensions extensions;
         // The only extension flag that may effect the vulkan backend is the swapchain extension. We
         // need to know if this is enabled to know if we can transition to a present layout when
         // flushing a surface.
@@ -159,7 +159,7 @@ sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
         if (backendContext.fFeatures & kSampleRateShading_GrVkFeatureFlag) {
             features.features.sampleRateShading = true;
         }
-        GrVkExtensions extensions;
+        skgpu::VulkanExtensions extensions;
         // The only extension flag that may effect the vulkan backend is the swapchain extension. We
         // need to know if this is enabled to know if we can transition to a present layout when
         // flushing a surface.
@@ -536,20 +536,41 @@ bool GrVkGpu::onWritePixels(GrSurface* surface,
     return success;
 }
 
-// If dst is a vertex/index buffer then this functions inserts a mem barrier for that use case.
-// Otherwise, does nothing.
-static void add_dst_buffer_mem_barrier(GrVkGpu* gpu, GrVkBuffer* dst, size_t offset, size_t size) {
+// When we update vertex/index buffers via transfers we assume that they may have been used
+// previously in draws and will be used again in draws afterwards. So we put a barrier before and
+// after. If we had a mechanism for gathering the buffers that will be used in a GrVkOpsRenderPass
+// *before* we begin a subpass we could do this lazily and non-redundantly by tracking the "last
+// usage" on the GrVkBuffer. Then Pass 1 draw, xfer, xfer, xfer, Pass 2 draw  would insert just two
+// barriers: one before the first xfer and one before Pass 2. Currently, we'd use six barriers.
+// Pass false as "after" before the transfer and true after the transfer.
+static void add_transfer_dst_buffer_mem_barrier(GrVkGpu* gpu,
+                                                GrVkBuffer* dst,
+                                                size_t offset,
+                                                size_t size,
+                                                bool after) {
     if (dst->intendedType() != GrGpuBufferType::kIndex &&
         dst->intendedType() != GrGpuBufferType::kVertex) {
         return;
     }
-    VkAccessFlags dstAccessMask = dst->intendedType() == GrGpuBufferType::kIndex
-                                  ? VK_ACCESS_INDEX_READ_BIT
-                                  : VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+
+    VkAccessFlags srcAccessMask = dst->intendedType() == GrGpuBufferType::kIndex
+                                          ? VK_ACCESS_INDEX_READ_BIT
+                                          : VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    VkAccessFlags dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+    VkPipelineStageFlagBits srcPipelineStageFlags = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+    VkPipelineStageFlagBits dstPipelineStageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
+
+    if (after) {
+        using std::swap;
+        swap(srcAccessMask,         dstAccessMask        );
+        swap(srcPipelineStageFlags, dstPipelineStageFlags);
+    }
+
     VkBufferMemoryBarrier bufferMemoryBarrier = {
             VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,  // sType
             nullptr,                                  // pNext
-            VK_ACCESS_TRANSFER_WRITE_BIT,             // srcAccessMask
+            srcAccessMask,                            // srcAccessMask
             dstAccessMask,                            // dstAccessMask
             VK_QUEUE_FAMILY_IGNORED,                  // srcQueueFamilyIndex
             VK_QUEUE_FAMILY_IGNORED,                  // dstQueueFamilyIndex
@@ -558,11 +579,10 @@ static void add_dst_buffer_mem_barrier(GrVkGpu* gpu, GrVkBuffer* dst, size_t off
             size,                                     // size
     };
 
-    gpu->addBufferMemoryBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+    gpu->addBufferMemoryBarrier(srcPipelineStageFlags,
+                                dstPipelineStageFlags,
                                 /*byRegion=*/false,
                                 &bufferMemoryBarrier);
-
 }
 
 bool GrVkGpu::onTransferFromBufferToBuffer(sk_sp<GrGpuBuffer> src,
@@ -578,9 +598,18 @@ bool GrVkGpu::onTransferFromBufferToBuffer(sk_sp<GrGpuBuffer> src,
     copyRegion.srcOffset = srcOffset;
     copyRegion.dstOffset = dstOffset;
     copyRegion.size = size;
-    this->currentCommandBuffer()->copyBuffer(this, std::move(src), dst, 1, &copyRegion);
 
-    add_dst_buffer_mem_barrier(this, static_cast<GrVkBuffer*>(dst.get()), dstOffset, size);
+    add_transfer_dst_buffer_mem_barrier(this,
+                                        static_cast<GrVkBuffer*>(dst.get()),
+                                        dstOffset,
+                                        size,
+                                        /*after=*/false);
+    this->currentCommandBuffer()->copyBuffer(this, std::move(src), dst, 1, &copyRegion);
+    add_transfer_dst_buffer_mem_barrier(this,
+                                        static_cast<GrVkBuffer*>(dst.get()),
+                                        dstOffset,
+                                        size,
+                                        /*after=*/true);
 
     return true;
 }
@@ -1191,10 +1220,17 @@ bool GrVkGpu::updateBuffer(sk_sp<GrVkBuffer> buffer, const void* src,
     if (!this->currentCommandBuffer()) {
         return false;
     }
-    // Update the buffer
+    add_transfer_dst_buffer_mem_barrier(this,
+                                        static_cast<GrVkBuffer*>(buffer.get()),
+                                        offset,
+                                        size,
+                                        /*after=*/false);
     this->currentCommandBuffer()->updateBuffer(this, buffer, offset, size, src);
-
-    add_dst_buffer_mem_barrier(this, static_cast<GrVkBuffer*>(buffer.get()), offset, size);
+    add_transfer_dst_buffer_mem_barrier(this,
+                                        static_cast<GrVkBuffer*>(buffer.get()),
+                                        offset,
+                                        size,
+                                        /*after=*/true);
 
     return true;
 }
@@ -1204,16 +1240,21 @@ bool GrVkGpu::zeroBuffer(sk_sp<GrGpuBuffer> buffer) {
         return false;
     }
 
+    add_transfer_dst_buffer_mem_barrier(this,
+                                        static_cast<GrVkBuffer*>(buffer.get()),
+                                        /*offset=*/0,
+                                        buffer->size(),
+                                        /*after=*/false);
     this->currentCommandBuffer()->fillBuffer(this,
                                              buffer,
                                              /*offset=*/0,
                                              buffer->size(),
                                              /*data=*/0);
-
-    add_dst_buffer_mem_barrier(this,
-                               static_cast<GrVkBuffer*>(buffer.get()),
-                               /*offset=*/0,
-                               buffer->size());
+    add_transfer_dst_buffer_mem_barrier(this,
+                                        static_cast<GrVkBuffer*>(buffer.get()),
+                                        /*offset=*/0,
+                                        buffer->size(),
+                                        /*after=*/true);
 
     return true;
 }
@@ -1721,7 +1762,8 @@ GrBackendTexture GrVkGpu::onCreateBackendTexture(SkISize dimensions,
                                                  const GrBackendFormat& format,
                                                  GrRenderable renderable,
                                                  GrMipmapped mipmapped,
-                                                 GrProtected isProtected) {
+                                                 GrProtected isProtected,
+                                                 std::string_view label) {
     const GrVkCaps& caps = this->vkCaps();
 
     if (fProtectedContext != isProtected) {
@@ -1754,8 +1796,12 @@ GrBackendTexture GrVkGpu::onCreateBackendTexture(SkISize dimensions,
 GrBackendTexture GrVkGpu::onCreateCompressedBackendTexture(
         SkISize dimensions, const GrBackendFormat& format, GrMipmapped mipmapped,
         GrProtected isProtected) {
-    return this->onCreateBackendTexture(dimensions, format, GrRenderable::kNo, mipmapped,
-                                        isProtected);
+    return this->onCreateBackendTexture(dimensions,
+                                        format,
+                                        GrRenderable::kNo,
+                                        mipmapped,
+                                        isProtected,
+                                        /*label=*/"VkGpu_CreateCompressedBackendTexture");
 }
 
 bool GrVkGpu::onUpdateCompressedBackendTexture(const GrBackendTexture& backendTexture,
