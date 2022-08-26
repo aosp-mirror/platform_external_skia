@@ -1011,10 +1011,8 @@ PathOpSubmitter PathOpSubmitter::Make(const SkZip<SkPackedGlyphID, SkPoint>& acc
                            std::move(strikePromise)};
 }
 
-void PathOpSubmitter::submitDraws(SkCanvas* canvas,
-                                  SkPoint drawOrigin,
-                                  const SkPaint& paint) const {
-
+void
+PathOpSubmitter::submitDraws(SkCanvas* canvas, SkPoint drawOrigin, const SkPaint& paint) const {
     // Convert the glyph IDs to paths if it hasn't been done yet. This is thread safe.
     fConvertIDsToPaths([&]() {
         if (SkStrike* strike = fStrikePromise.strike()) {
@@ -1181,14 +1179,7 @@ public:
     static std::optional<DrawableOpSubmitter> MakeFromBuffer(SkReadBuffer& buffer,
                                                              SubRunAllocator* alloc,
                                                              const SkStrikeClient* client);
-#if SK_SUPPORT_GPU
-    void submitOps(SkCanvas*,
-                   const GrClip* clip,
-                   const SkMatrixProvider& viewMatrix,
-                   SkPoint drawOrigin,
-                   const SkPaint& paint,
-                   skgpu::v1::SurfaceDrawContext* sdc) const;
-#endif  // SK_SUPPORT_GPU
+    void submitDraws(SkCanvas* canvas, SkPoint drawOrigin, const SkPaint& paint) const;
 
 private:
     const SkScalar fStrikeToSourceScale;
@@ -1273,13 +1264,8 @@ DrawableOpSubmitter DrawableOpSubmitter::Make(const SkZip<SkPackedGlyphID, SkPoi
                                std::move(strikePromise)};
 }
 
-#if SK_SUPPORT_GPU
-void DrawableOpSubmitter::submitOps(SkCanvas* canvas,
-                                    const GrClip* clip,
-                                    const SkMatrixProvider& viewMatrix,
-                                    SkPoint drawOrigin,
-                                    const SkPaint& paint,
-                                    skgpu::v1::SurfaceDrawContext* sdc) const {
+void
+DrawableOpSubmitter::submitDraws(SkCanvas* canvas, SkPoint drawOrigin,const SkPaint& paint) const {
     // Convert glyph IDs to Drawables if it hasn't been done yet.
     fConvertIDsToDrawables([&]() {
         fStrikePromise.strike()->glyphIDsToDrawables(fIDsOrDrawables);
@@ -1307,7 +1293,6 @@ void DrawableOpSubmitter::submitOps(SkCanvas* canvas,
         drawable->draw(canvas, &pathMatrix);
     }
 }
-#endif  // SK_SUPPORT_GPU
 
 template <typename SubRunT>
 SubRunOwner make_drawable_sub_run(const SkZip<SkPackedGlyphID, SkPoint>& drawables,
@@ -1336,7 +1321,7 @@ public:
               const SkPaint& paint,
               sk_sp<SkRefCnt> subRunStorage,
               skgpu::v1::SurfaceDrawContext* sdc) const override {
-        fDrawingDrawing.submitOps(canvas, clip, viewMatrix, drawOrigin, paint, sdc);
+        fDrawingDrawing.submitDraws(canvas, drawOrigin, paint);
     }
 #endif  // SK_SUPPORT_GPU
 #if defined(SK_GRAPHITE_ENABLED)
@@ -1345,9 +1330,9 @@ public:
               const SkPaint& paint,
               sk_sp<SkRefCnt> subRunStorage,
               Device* device) const override {
-        // TODO
+        fDrawingDrawing.submitDraws(canvas, drawOrigin, paint);
     }
-#endif  // SK_SUPPORT_GPU
+#endif  // SK_GRAPHITE_ENABLED
 
     int unflattenSize() const override;
 
@@ -1539,6 +1524,7 @@ public:
     int unflattenSize() const override;
 
     int glyphCount() const override;
+    MaskFormat maskFormat() const override { return fMaskFormat; }
 
     void testingOnly_packedGlyphIDToGlyph(StrikeCache* cache) const override;
 
@@ -1582,8 +1568,6 @@ public:
                           int offset, int count,
                           int ssboIndex,
                           SkScalar depth) const override;
-
-    MaskFormat maskFormat() const override { return fMaskFormat; }
 #endif
 
     bool canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const override;
@@ -2150,6 +2134,7 @@ public:
     }
 
     int glyphCount() const override { return SkCount(fGlyphs.glyphs()); }
+    MaskFormat maskFormat() const override { return fVertexFiller.grMaskType(); }
 
 #if SK_SUPPORT_GPU
     void draw(SkCanvas*,
@@ -2261,7 +2246,6 @@ public:
                                      transform);
     }
 
-    MaskFormat maskFormat() const override { return fVertexFiller.grMaskType(); }
     void fillInstanceData(DrawWriter* dw,
                           int offset, int count,
                           int ssboIndex,
@@ -2378,11 +2362,10 @@ public:
                           int offset, int count,
                           int ssboIndex,
                           SkScalar depth) const override;
-
-    MaskFormat maskFormat() const override { return fVertexFiller.grMaskType(); }
 #endif
 
     int glyphCount() const override;
+    MaskFormat maskFormat() const override { return fVertexFiller.grMaskType(); }
 
 protected:
     SubRunType subRunType() const override { return kSDFT; }
@@ -2893,8 +2876,7 @@ SubRunContainerOwner SubRunContainer::MakeInAlloc(
                 }
             }
 
-            if (!rejected->source().empty() && !positionMatrix.hasPerspective() &&
-                !SDFTControl.forcePaths()) {
+            if (!rejected->source().empty() && !positionMatrix.hasPerspective()) {
                 // Process masks including ARGB - this should be the 99.99% case.
                 // This will handle medium size emoji that are sharing the run with SDFT drawn text.
                 // If things are too big they will be passed along to the drawing of last resort
