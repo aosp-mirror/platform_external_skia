@@ -20,13 +20,18 @@
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLCompiler.h"
-#include "src/sksl/SkSLSharedCompiler.h"
+#include "src/sksl/SkSLUtil.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/ir/SkSLVariable.h"
+
+#if SK_SUPPORT_GPU
+#include "src/gpu/ganesh/GrGpu.h"
+#include "src/gpu/ganesh/GrStagingBufferManager.h"
+#endif  // SK_SUPPORT_GPU
 
 #include <locale>
 #include <string>
@@ -328,15 +333,21 @@ SkMeshSpecification::Result SkMeshSpecification::MakeFromSourceWithStructs(
     std::vector<Uniform> uniforms;
     size_t offset = 0;
 
-    SkSL::SharedCompiler compiler;
+    std::unique_ptr<SkSL::ShaderCaps> caps = SkSL::ShaderCapsFactory::Standalone();
+    SkSL::Compiler compiler(caps.get());
+
+    // Disable memory pooling; this might slow down compilation slightly, but it will ensure that a
+    // long-lived mesh specification doesn't waste memory.
     SkSL::ProgramSettings settings;
+    settings.fUseMemoryPool = false;
+
     // TODO(skia:11209): Add SkCapabilities to the API, check against required version.
-    std::unique_ptr<SkSL::Program> vsProgram = compiler->convertProgram(
+    std::unique_ptr<SkSL::Program> vsProgram = compiler.convertProgram(
             SkSL::ProgramKind::kMeshVertex,
             std::string(vs.c_str()),
             settings);
     if (!vsProgram) {
-        RETURN_FAILURE("VS: %s", compiler->errorText().c_str());
+        RETURN_FAILURE("VS: %s", compiler.errorText().c_str());
     }
 
     if (auto [result, error] = gather_uniforms_and_check_for_main(
@@ -352,13 +363,13 @@ SkMeshSpecification::Result SkMeshSpecification::MakeFromSourceWithStructs(
         RETURN_FAILURE("Color transform intrinsics are not permitted in custom mesh shaders");
     }
 
-    std::unique_ptr<SkSL::Program> fsProgram = compiler->convertProgram(
+    std::unique_ptr<SkSL::Program> fsProgram = compiler.convertProgram(
             SkSL::ProgramKind::kMeshFragment,
             std::string(fs.c_str()),
             settings);
 
     if (!fsProgram) {
-        RETURN_FAILURE("FS: %s", compiler->errorText().c_str());
+        RETURN_FAILURE("FS: %s", compiler.errorText().c_str());
     }
 
     if (auto [result, error] = gather_uniforms_and_check_for_main(
@@ -671,21 +682,33 @@ bool SkMeshPriv::UpdateGpuBuffer(GrDirectContext* dc,
         return true;
     }
 
-    // TODO: Use staging buffer manager if available to be more efficient with buffer space.
-    auto tempBuffer = dc->priv().resourceProvider()->createBuffer(
-            size,
-            GrGpuBufferType::kXferCpuToGpu,
-            kDynamic_GrAccessPattern,
-            GrResourceProvider::ZeroInit::kNo);
-    if (!tempBuffer) {
-        return false;
+    sk_sp<GrGpuBuffer> tempBuffer;
+    size_t tempOffset = 0;
+    if (auto* sbm = dc->priv().getGpu()->stagingBufferManager()) {
+        auto alignment = dc->priv().caps()->transferFromBufferToBufferAlignment();
+        auto [sliceBuffer, sliceOffset, ptr] = sbm->allocateStagingBufferSlice(size, alignment);
+        if (sliceBuffer) {
+            std::memcpy(ptr, data, size);
+            tempBuffer.reset(SkRef(sliceBuffer));
+            tempOffset = sliceOffset;
+        }
     }
-    if (!tempBuffer->updateData(data, 0, size, /*preserve=*/false)) {
-        return false;
+
+    if (!tempBuffer) {
+        tempBuffer = dc->priv().resourceProvider()->createBuffer(size,
+                                                                 GrGpuBufferType::kXferCpuToGpu,
+                                                                 kDynamic_GrAccessPattern,
+                                                                 GrResourceProvider::ZeroInit::kNo);
+        if (!tempBuffer) {
+            return false;
+        }
+        if (!tempBuffer->updateData(data, 0, size, /*preserve=*/false)) {
+            return false;
+        }
     }
 
     dc->priv().drawingManager()->newBufferTransferTask(std::move(tempBuffer),
-                                                       /*srcOffset=*/0,
+                                                       tempOffset,
                                                        std::move(buffer),
                                                        offset,
                                                        size);
