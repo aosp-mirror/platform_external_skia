@@ -1,8 +1,13 @@
 
 out vec4 sk_FragColor;
-uniform float a;
-uniform float b;
-uniform float c;
-void main() {
-    sk_FragColor.x = ((a) * (b) + (c));
+uniform vec4 colorGreen;
+uniform vec4 colorRed;
+uniform float testArray[5];
+vec4 main() {
+    float one = testArray[0];
+    float two = testArray[1];
+    float three = testArray[2];
+    float four = testArray[3];
+    float five = testArray[4];
+    return ((one) * (two) + (three)) == 5.0 && ((three) * (four) + (five)) == 17.0 ? colorGreen : colorRed;
 }

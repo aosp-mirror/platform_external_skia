@@ -14,6 +14,7 @@
 #include "src/gpu/graphite/DrawParams.h"
 #include "src/gpu/graphite/DrawWriter.h"
 #include "src/gpu/graphite/RecorderPriv.h"
+#include "src/gpu/graphite/render/CommonDepthStencilSettings.h"
 #include "src/gpu/graphite/text/AtlasManager.h"
 #include "src/text/gpu/SubRunContainer.h"
 
@@ -22,28 +23,20 @@ using AtlasSubRun = sktext::gpu::AtlasSubRun;
 namespace skgpu::graphite {
 
 namespace {
-static constexpr DepthStencilSettings kDirectShadingPass = {
-        /*frontStencil=*/{},
-        /*backStencil=*/ {},
-        /*refValue=*/    0,
-        /*stencilTest=*/ false,
-        /*depthCompare=*/CompareOp::kGEqual,
-        /*depthTest=*/   true,
-        /*depthWrite=*/  true
-};
 
 // We are expecting to sample from up to 4 textures
 constexpr int kNumTextAtlasTextures = 4;
+
 }  // namespace
 
 BitmapTextRenderStep::BitmapTextRenderStep(bool isA8)
         : RenderStep("BitmapTextRenderStep",
-                     "",
+                     isA8 ? "A8" : "ARGB",
                      Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage,
                      /*uniforms=*/{{"deviceMatrix", SkSLType::kFloat4x4},
                                    {"atlasSizeInv", SkSLType::kFloat2}},
                      PrimitiveType::kTriangleStrip,
-                     kDirectShadingPass,
+                     kDirectDepthGEqualPass,
                      /*vertexAttrs=*/ {},
                      /*instanceAttrs=*/
                      {{"size", VertexAttribType::kUShort2, SkSLType::kUShort2},

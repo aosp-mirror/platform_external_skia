@@ -9,9 +9,9 @@
 
 #include "include/core/SkPathTypes.h"
 #include "include/core/SkVertices.h"
+#include "src/gpu/graphite/render/CommonDepthStencilSettings.h"
 #include "src/gpu/graphite/render/CoverBoundsRenderStep.h"
 #include "src/gpu/graphite/render/MiddleOutFanRenderStep.h"
-#include "src/gpu/graphite/render/StencilAndCoverDSS.h"
 #include "src/gpu/graphite/render/TessellateCurvesRenderStep.h"
 #include "src/gpu/graphite/render/TessellateWedgesRenderStep.h"
 #include "src/gpu/graphite/render/VerticesRenderStep.h"
@@ -29,16 +29,6 @@ const RenderStep* inverse_cover_step() {
     static const CoverBoundsRenderStep kInverseFill{true};
     return &kInverseFill;
 }
-
-static constexpr DepthStencilSettings kDirectShadingPass = {
-        /*frontStencil=*/{},
-        /*backStencil=*/ {},
-        /*refValue=*/    0,
-        /*stencilTest=*/ false,
-        /*depthCompare=*/CompareOp::kGreater,
-        /*depthTest=*/   true,
-        /*depthWrite=*/  true
-};
 
 }  // namespace
 
@@ -103,42 +93,34 @@ const Renderer& Renderer::StencilTessellatedWedges(SkPathFillType fillType) {
 }
 
 const Renderer& Renderer::ConvexTessellatedWedges() {
-    static const TessellateWedgesRenderStep kConvexWedges{"convex", kDirectShadingPass};
+    static const TessellateWedgesRenderStep kConvexWedges{"convex", kDirectDepthGreaterPass};
     static const Renderer kConvexWedgeRenderer{"ConvexTessellatedWedges", &kConvexWedges};
     return kConvexWedgeRenderer;
 }
 
 const Renderer& Renderer::Vertices(SkVertices::VertexMode mode, bool hasColors, bool hasTexCoords) {
     static const VerticesRenderStep kTrianglesStep{PrimitiveType::kTriangles,
-                                                   "triangles",
                                                    /*hasColor=*/false,
                                                    /*hasTexture=*/false};
     static const VerticesRenderStep kTrianglesColorStep{PrimitiveType::kTriangles,
-                                                        "triangles-color",
                                                         /*hasColor=*/true,
                                                         /*hasTexture=*/false};
     static const VerticesRenderStep kTrianglesTexStep{PrimitiveType::kTriangles,
-                                                      "triangles-tex",
                                                       /*hasColor=*/false,
                                                       /*hasTexture=*/true};
     static const VerticesRenderStep kTrianglesColorTexStep{PrimitiveType::kTriangles,
-                                                           "triangles-color-tex",
                                                            /*hasColor=*/true,
                                                            /*hasTexture=*/true};
     static const VerticesRenderStep kTriangleStripStep{PrimitiveType::kTriangleStrip,
-                                                       "triangle-strip",
                                                        /*hasColor=*/false,
                                                        /*hasTexture=*/false};
     static const VerticesRenderStep kTriangleStripColorStep{PrimitiveType::kTriangleStrip,
-                                                            "triangle-strip-color",
                                                             /*hasColor=*/true,
                                                             /*hasTexture=*/false};
     static const VerticesRenderStep kTriangleStripTexStep{PrimitiveType::kTriangleStrip,
-                                                          "triangle-strip-tex",
                                                           /*hasColor=*/false,
                                                           /*hasTexture=*/true};
     static const VerticesRenderStep kTriangleStripColorTexStep{PrimitiveType::kTriangleStrip,
-                                                               "triangle-strip-color-tex",
                                                                /*hasColor=*/true,
                                                                /*hasTexture=*/true};
 
