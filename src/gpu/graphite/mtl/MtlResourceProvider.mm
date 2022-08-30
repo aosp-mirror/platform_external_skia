@@ -37,6 +37,61 @@ const MtlSharedContext* MtlResourceProvider::mtlSharedContext() {
     return static_cast<const MtlSharedContext*>(fSharedContext);
 }
 
+sk_sp<MtlGraphicsPipeline> MtlResourceProvider::findOrCreateLoadMSAAPipeline(
+        const RenderPassDesc& renderPassDesc) {
+    uint64_t renderPassKey =
+            this->mtlSharedContext()->mtlCaps().getRenderPassDescKey(renderPassDesc);
+    sk_sp<MtlGraphicsPipeline> pipeline = fLoadMSAAPipelines[renderPassKey];
+    if (!pipeline) {
+        static const char* kLoadMSAAShaderText = R"(
+                #include <metal_stdlib>
+                #include <simd/simd.h>
+                using namespace metal;
+
+                typedef struct {
+                    float4 position [[position]];
+                } VertexOutput;
+
+                vertex VertexOutput vertexMain(uint vertexID [[vertex_id]]) {
+                    VertexOutput out;
+                    float2 position = float2(float(vertexID >> 1), float(vertexID & 1));
+                    out.position = float4(2.0 * position - 1.0, 0.0, 1.0);
+                    return out;
+                }
+
+                fragment float4 fragmentMain(VertexOutput in [[stage_in]],
+                                             texture2d<half> colorMap [[texture(0)]]) {
+                    uint2 coords = uint2(in.position.x, in.position.y);
+                    half4 colorSample   = colorMap.read(coords);
+                    return float4(colorSample);
+                }
+        )";
+
+        auto mtlLibrary = MtlCompileShaderLibrary(this->mtlSharedContext(),
+                                                  kLoadMSAAShaderText,
+                                                  fSharedContext->caps()->shaderErrorHandler());
+
+        BlendInfo noBlend{}; // default is equivalent to kSrc blending
+        sk_cfp<id<MTLDepthStencilState>> ignoreDS =
+                this->findOrCreateCompatibleDepthStencilState({});
+        pipeline = MtlGraphicsPipeline::Make(this->mtlSharedContext(),
+                                             "LoadMSAAFromResolve",
+                                             {mtlLibrary.get(), "vertexMain"},
+                                             /*vertexAttrs=*/{},
+                                             /*instanceAttrs=*/{},
+                                             {mtlLibrary.get(), "fragmentMain"},
+                                             std::move(ignoreDS),
+                                             /*stencilRefValue=*/0,
+                                             noBlend,
+                                             renderPassDesc);
+        if (pipeline) {
+            fLoadMSAAPipelines.set(renderPassKey, pipeline);
+        }
+    }
+
+    return pipeline;
+}
+
 sk_sp<GraphicsPipeline> MtlResourceProvider::createGraphicsPipeline(
         const SkRuntimeEffectDictionary* runtimeDict,
         const GraphicsPipelineDesc& pipelineDesc,
@@ -50,13 +105,17 @@ sk_sp<GraphicsPipeline> MtlResourceProvider::createGraphicsPipeline(
     auto skslCompiler = this->skslCompiler();
     ShaderErrorHandler* errorHandler = fSharedContext->caps()->shaderErrorHandler();
 
+    const RenderStep* step =
+            fSharedContext->rendererProvider()->lookup(pipelineDesc.renderStepID());
+
     BlendInfo blendInfo;
     bool localCoordsNeeded = false;
     bool shadingSsboIndexNeeded = false;
     if (!SkSLToMSL(skslCompiler,
                    GetSkSLFS(fSharedContext->shaderCodeDictionary(),
-                                     runtimeDict,
-                                     pipelineDesc,
+                             runtimeDict,
+                             step,
+                             pipelineDesc.paintParamsID(),
                              &blendInfo,
                              &localCoordsNeeded,
                              &shadingSsboIndexNeeded),
@@ -69,7 +128,7 @@ sk_sp<GraphicsPipeline> MtlResourceProvider::createGraphicsPipeline(
     }
 
     if (!SkSLToMSL(skslCompiler,
-                   GetSkSLVS(pipelineDesc, localCoordsNeeded, shadingSsboIndexNeeded),
+                   GetSkSLVS(step, localCoordsNeeded, shadingSsboIndexNeeded),
                    SkSL::ProgramKind::kGraphiteVertex,
                    settings,
                    &vsMSL,
@@ -81,19 +140,17 @@ sk_sp<GraphicsPipeline> MtlResourceProvider::createGraphicsPipeline(
     auto vsLibrary = MtlCompileShaderLibrary(this->mtlSharedContext(), vsMSL, errorHandler);
     auto fsLibrary = MtlCompileShaderLibrary(this->mtlSharedContext(), fsMSL, errorHandler);
 
-    const DepthStencilSettings& depthStencilSettings =
-            pipelineDesc.renderStep()->depthStencilSettings();
     sk_cfp<id<MTLDepthStencilState>> dss =
-            this->findOrCreateCompatibleDepthStencilState(depthStencilSettings);
+            this->findOrCreateCompatibleDepthStencilState(step->depthStencilSettings());
 
     return MtlGraphicsPipeline::Make(this->mtlSharedContext(),
-                                     pipelineDesc.renderStep()->name(),
+                                     step->name(),
                                      {vsLibrary.get(), "vertexMain"},
-                                     pipelineDesc.renderStep()->vertexAttributes(),
-                                     pipelineDesc.renderStep()->instanceAttributes(),
+                                     step->vertexAttributes(),
+                                     step->instanceAttributes(),
                                      {fsLibrary.get(), "fragmentMain"},
                                      std::move(dss),
-                                     depthStencilSettings.fStencilReferenceValue,
+                                     step->depthStencilSettings().fStencilReferenceValue,
                                      blendInfo,
                                      renderPassDesc);
 }
