@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#ifndef skgpu_Device_DEFINED
-#define skgpu_Device_DEFINED
+#ifndef skgpu_graphite_Device_DEFINED
+#define skgpu_graphite_Device_DEFINED
 
 #include "src/core/SkDevice.h"
 #include "src/core/SkEnumBitMask.h"
@@ -19,12 +19,6 @@
 #include "src/text/gpu/SubRunContainer.h"
 
 class SkStrokeRec;
-
-namespace {
-class DirectMaskSubRun;
-class TransformedMaskSubRun;
-class SDFTSubRun;
-}
 
 namespace sktext::gpu { class AtlasSubRun; }
 
@@ -41,6 +35,7 @@ class Renderer;
 class Shape;
 class StrokeStyle;
 class TextureProxy;
+class TextureProxyView;
 
 class Device final : public SkBaseDevice  {
 public:
@@ -75,6 +70,7 @@ public:
 #if GRAPHITE_TEST_UTILS
     TextureProxy* proxy();
 #endif
+    TextureProxyView readSurfaceView();
 
 private:
     class IntersectionTreeSet;
@@ -235,13 +231,11 @@ private:
     bool fDrawsOverlap;
 
     friend class ClipStack; // for recordDraw
-    friend class ::DirectMaskSubRun; // for drawAtlasSubRun
-    friend class ::TransformedMaskSubRun; // for drawAtlasSubRun
-    friend class ::SDFTSubRun; // for drawAtlasSubRun
+    friend class sktext::gpu::AtlasSubRun; // for drawAtlasSubRun
 };
 
 SK_MAKE_BITMASK_OPS(Device::DrawFlags)
 
-} // namespace skgpu
+} // namespace skgpu::graphite
 
-#endif // skgpu_Device_DEFINED
+#endif // skgpu_graphite_Device_DEFINED
