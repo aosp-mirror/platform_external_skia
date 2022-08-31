@@ -55,6 +55,18 @@ enum SubRun::SubRunType : int {
     kDrawable,
     kSubRunTypeCount,
 };
+
+#ifdef SK_GRAPHITE_ENABLED
+// AtlasSubRun provides a draw() function that grants the anonymous subclasses access to
+// Device::drawAtlasSubRun.
+void AtlasSubRun::draw(skgpu::graphite::Device* device,
+                       SkPoint drawOrigin,
+                       const SkPaint& paint,
+                       sk_sp<SkRefCnt> subRunStorage) const {
+    device->drawAtlasSubRun(this, drawOrigin, paint, std::move(subRunStorage));
+}
+#endif
+
 }  // namespace sktext::gpu
 
 using MaskFormat = skgpu::MaskFormat;
@@ -1282,6 +1294,14 @@ DrawableOpSubmitter::submitDraws(SkCanvas* canvas, SkPoint drawOrigin,const SkPa
     // draw effect, filter or shader paths.
     for (auto [i, position] : SkMakeEnumerate(fPositions)) {
         SkDrawable* drawable = fIDsOrDrawables[i].fDrawable;
+
+        if (drawable == nullptr) {
+            // This better be pinned to keep the drawable data alive.
+            fStrikePromise.strike()->verifyPinnedStrike();
+            SkDEBUGFAIL("Drawable should not be nullptr.");
+            continue;
+        }
+
         // Transform the glyph to source space.
         SkMatrix pathMatrix = strikeToSource;
         pathMatrix.postTranslate(position.x(), position.y());
@@ -1776,8 +1796,7 @@ void DirectMaskSubRun::draw(SkCanvas*,
                             const SkPaint& paint,
                             sk_sp<SkRefCnt> subRunStorage,
                             Device* device) const {
-    // TODO: see makeAtlasTextOp for Geometry set up
-    device->drawAtlasSubRun(this, drawOrigin, paint, std::move(subRunStorage));
+    this->AtlasSubRun::draw(device, drawOrigin, paint, std::move(subRunStorage));
 }
 #endif
 
@@ -2215,8 +2234,7 @@ public:
               const SkPaint& paint,
               sk_sp<SkRefCnt> subRunStorage,
               Device* device) const override {
-        // TODO: see makeAtlasTextOp for Geometry set up
-        device->drawAtlasSubRun(this, drawOrigin, paint, std::move(subRunStorage));
+        this->AtlasSubRun::draw(device, drawOrigin, paint, std::move(subRunStorage));
     }
 
     std::tuple<bool, int> regenerateAtlas(int begin, int end, Recorder* recorder) const override {
@@ -2552,8 +2570,7 @@ void SDFTSubRun::draw(SkCanvas*,
                       const SkPaint& paint,
                       sk_sp<SkRefCnt> subRunStorage,
                       Device* device) const {
-    // TODO: see makeAtlasTextOp for Geometry set up
-    device->drawAtlasSubRun(this, drawOrigin, paint, std::move(subRunStorage));
+    this->AtlasSubRun::draw(device, drawOrigin, paint, std::move(subRunStorage));
 }
 #endif
 

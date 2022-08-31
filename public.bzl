@@ -1400,8 +1400,6 @@ BASE_SRCS_ALL = [
     "src/sksl/SkSLConstantFolder.h",
     "src/sksl/SkSLContext.cpp",
     "src/sksl/SkSLContext.h",
-    "src/sksl/SkSLDSLParser.cpp",
-    "src/sksl/SkSLDSLParser.h",
     "src/sksl/SkSLDehydrator.cpp",
     "src/sksl/SkSLDehydrator.h",
     "src/sksl/SkSLErrorReporter.cpp",
@@ -1423,6 +1421,8 @@ BASE_SRCS_ALL = [
     "src/sksl/SkSLOutputStream.cpp",
     "src/sksl/SkSLOutputStream.h",
     "src/sksl/SkSLParsedModule.h",
+    "src/sksl/SkSLParser.cpp",
+    "src/sksl/SkSLParser.h",
     "src/sksl/SkSLPool.cpp",
     "src/sksl/SkSLPool.h",
     "src/sksl/SkSLPosition.cpp",
@@ -1896,7 +1896,6 @@ MTL_SRCS = [
 ]
 
 VULKAN_SRCS = [
-    "src/gpu/vk/VulkanExtensions.cpp",
     "src/gpu/ganesh/vk/GrVkAMDMemoryAllocator.cpp",
     "src/gpu/ganesh/vk/GrVkAMDMemoryAllocator.h",
     "src/gpu/ganesh/vk/GrVkBuffer.cpp",
@@ -1922,8 +1921,6 @@ VULKAN_SRCS = [
     "src/gpu/ganesh/vk/GrVkImageLayout.h",
     "src/gpu/ganesh/vk/GrVkImageView.cpp",
     "src/gpu/ganesh/vk/GrVkImageView.h",
-    "src/gpu/ganesh/vk/GrVkInterface.cpp",
-    "src/gpu/ganesh/vk/GrVkInterface.h",
     "src/gpu/ganesh/vk/GrVkManagedResource.h",
     "src/gpu/ganesh/vk/GrVkMemory.cpp",
     "src/gpu/ganesh/vk/GrVkMemory.h",
@@ -1965,6 +1962,9 @@ VULKAN_SRCS = [
     "src/gpu/ganesh/vk/GrVkUtil.h",
     "src/gpu/ganesh/vk/GrVkVaryingHandler.cpp",
     "src/gpu/ganesh/vk/GrVkVaryingHandler.h",
+    "src/gpu/vk/VulkanExtensions.cpp",
+    "src/gpu/vk/VulkanInterface.cpp",
+    "src/gpu/vk/VulkanInterface.h",
 ]
 
 ################################################################################

@@ -598,9 +598,8 @@ void Device::drawAtlasSubRun(const sktext::gpu::AtlasSubRun* subRun,
                 subRunPaint.setAlphaf(paint.getAlphaf());
             }
             this->drawGeometry(localToDevice,
-                               Geometry(SubRunData(subRun, std::move(subRunStorage),
-                                                   bounds, subRunCursor, glyphsRegenerated,
-                                                   fRecorder)),
+                               Geometry(SubRunData(subRun, subRunStorage, bounds, subRunCursor,
+                                                   glyphsRegenerated, fRecorder)),
                                subRunPaint,
                                kFillStyle,
                                DrawFlags::kIgnorePathEffect | DrawFlags::kIgnoreMaskFilter);
@@ -943,7 +942,10 @@ sk_sp<SkSpecialImage> Device::snapSpecial(const SkIRect& subset, bool forceCopy)
 TextureProxy* Device::proxy() {
     return fDC->target();
 }
-
 #endif
 
-} // namespace skgpu
+TextureProxyView Device::readSurfaceView() {
+    return fDC->readSurfaceView(fRecorder->priv().caps());
+}
+
+} // namespace skgpu::graphite

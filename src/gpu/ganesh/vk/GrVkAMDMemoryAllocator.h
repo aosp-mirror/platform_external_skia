@@ -11,9 +11,11 @@
 #include "include/gpu/vk/GrVkMemoryAllocator.h"
 
 class GrVkCaps;
-struct GrVkInterface;
 
-namespace skgpu { class VulkanExtensions; }
+namespace skgpu {
+class VulkanExtensions;
+struct VulkanInterface;
+}
 
 #ifndef SK_USE_VMA
 class GrVkAMDMemoryAllocator {
@@ -23,7 +25,7 @@ public:
                                            VkDevice device,
                                            uint32_t physicalDeviceVersion,
                                            const skgpu::VulkanExtensions* extensions,
-                                           sk_sp<const GrVkInterface> interface,
+                                           sk_sp<const skgpu::VulkanInterface> interface,
                                            const GrVkCaps* caps);
 };
 
@@ -38,41 +40,44 @@ public:
                                            VkDevice device,
                                            uint32_t physicalDeviceVersion,
                                            const skgpu::VulkanExtensions* extensions,
-                                           sk_sp<const GrVkInterface> interface,
+                                           sk_sp<const skgpu::VulkanInterface> interface,
                                            const GrVkCaps* caps);
 
     ~GrVkAMDMemoryAllocator() override;
 
     VkResult allocateImageMemory(VkImage image, AllocationPropertyFlags flags,
-                                 GrVkBackendMemory*) override;
+                                 skgpu::VulkanBackendMemory*) override;
 
-    VkResult allocateBufferMemory(VkBuffer buffer, BufferUsage usage,
-                                  AllocationPropertyFlags flags, GrVkBackendMemory*) override;
+    VkResult allocateBufferMemory(VkBuffer buffer,
+                                  BufferUsage usage,
+                                  AllocationPropertyFlags flags,
+                                  skgpu::VulkanBackendMemory*) override;
 
-    void freeMemory(const GrVkBackendMemory&) override;
+    void freeMemory(const skgpu::VulkanBackendMemory&) override;
 
-    void getAllocInfo(const GrVkBackendMemory&, GrVkAlloc*) const override;
+    void getAllocInfo(const skgpu::VulkanBackendMemory&, skgpu::VulkanAlloc*) const override;
 
-    VkResult mapMemory(const GrVkBackendMemory&, void** data) override;
-    void unmapMemory(const GrVkBackendMemory&) override;
+    VkResult mapMemory(const skgpu::VulkanBackendMemory&, void** data) override;
+    void unmapMemory(const skgpu::VulkanBackendMemory&) override;
 
-    VkResult flushMemory(const GrVkBackendMemory&, VkDeviceSize offset, VkDeviceSize size) override;
-    VkResult invalidateMemory(const GrVkBackendMemory&, VkDeviceSize offset,
+    VkResult flushMemory(const skgpu::VulkanBackendMemory&, VkDeviceSize offset,
+                         VkDeviceSize size) override;
+    VkResult invalidateMemory(const skgpu::VulkanBackendMemory&, VkDeviceSize offset,
                               VkDeviceSize size) override;
 
     uint64_t totalUsedMemory() const override;
     uint64_t totalAllocatedMemory() const override;
 
 private:
-    GrVkAMDMemoryAllocator(VmaAllocator allocator, sk_sp<const GrVkInterface> interface,
+    GrVkAMDMemoryAllocator(VmaAllocator allocator, sk_sp<const skgpu::VulkanInterface> interface,
                            bool mustUseCoherentHostVisibleMemory);
 
     VmaAllocator fAllocator;
 
     // If a future version of the AMD allocator has helper functions for flushing and invalidating
-    // memory, then we won't need to save the GrVkInterface here since we won't need to make direct
-    // vulkan calls.
-    sk_sp<const GrVkInterface> fInterface;
+    // memory, then we won't need to save the skgpu::VulkanInterface here since we won't need to
+    // make direct vulkan calls.
+    sk_sp<const skgpu::VulkanInterface> fInterface;
 
     // For host visible allocations do we require they are coherent or not. All devices are required
     // to support a host visible and coherent memory type. This is used to work around bugs for
