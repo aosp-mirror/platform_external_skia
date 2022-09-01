@@ -43,6 +43,23 @@ struct Varying {
     // TODO: add modifier (e.g., flat and noperspective) support
 };
 
+/**
+ * The actual technique for rasterizing a high-level draw recorded in a DrawList is handled by a
+ * specific Renderer. Each technique has an associated singleton Renderer that decomposes the
+ * technique into a series of RenderSteps that must be executed in the specified order for the draw.
+ * However, the RenderStep executions for multiple draws can be re-arranged so batches of each
+ * step can be performed in a larger GPU operation. This re-arranging relies on accurate
+ * determination of the DisjointStencilIndex for each draw so that stencil steps are not corrupted
+ * by another draw before its cover step is executed. It also relies on the CompressedPaintersOrder
+ * for each draw to ensure steps are not re-arranged in a way that violates the original draw order.
+ *
+ * Renderer itself is non-virtual since it simply has to point to a list of RenderSteps. RenderSteps
+ * on the other hand are virtual implement the technique specific functionality. It is entirely
+ * possible for certain types of steps, e.g. a bounding box cover, to be re-used across different
+ * Renderers even if the preceeding steps were different.
+ *
+ * All Renderers are accessed through the SharedContext's RendererProvider.
+ */
 class RenderStep {
 public:
     virtual ~RenderStep() = default;
@@ -94,6 +111,8 @@ public:
     // is true. When implemented, the returned SkSL fragment should write its color into a
     // 'half4 primitiveColor' variable (defined in the calling code).
     virtual const char* fragmentColorSkSL() const { return R"()"; }
+
+    uint32_t uniqueID() const { return fUniqueID; }
 
     // Returns a name formatted as "Subclass[variant]", where "Subclass" matches the C++ class name
     // and variant is a unique term describing instance's specific configuration.
@@ -160,29 +179,7 @@ protected:
                DepthStencilSettings depthStencilSettings,
                std::initializer_list<Attribute> vertexAttrs,
                std::initializer_list<Attribute> instanceAttrs,
-               std::initializer_list<Varying> varyings = {})
-            : fFlags(flags)
-            , fPrimitiveType(primitiveType)
-            , fDepthStencilSettings(depthStencilSettings)
-            , fUniforms(uniforms)
-            , fVertexAttrs(vertexAttrs)
-            , fInstanceAttrs(instanceAttrs)
-            , fVaryings(varyings)
-            , fVertexStride(0)
-            , fInstanceStride(0)
-            , fName(className) {
-        for (auto v : this->vertexAttributes()) {
-            fVertexStride += v.sizeAlign4();
-        }
-        for (auto i : this->instanceAttributes()) {
-            fInstanceStride += i.sizeAlign4();
-        }
-        if (variantName.size() > 0) {
-            fName += "[";
-            fName += variantName;
-            fName += "]";
-        }
-    }
+               std::initializer_list<Varying> varyings = {});
 
 private:
     friend class Renderer; // for Flags
@@ -191,6 +188,7 @@ private:
     RenderStep(const RenderStep&) = delete;
     RenderStep(RenderStep&&)      = delete;
 
+    uint32_t fUniqueID;
     SkEnumBitMask<Flags> fFlags;
     PrimitiveType        fPrimitiveType;
 
@@ -216,51 +214,19 @@ private:
 };
 SK_MAKE_BITMASK_OPS(RenderStep::Flags);
 
-/**
- * The actual technique for rasterizing a high-level draw recorded in a DrawList is handled by a
- * specific Renderer. Each technique has an associated singleton Renderer that decomposes the
- * technique into a series of RenderSteps that must be executed in the specified order for the draw.
- * However, the RenderStep executions for multiple draws can be re-arranged so batches of each
- * step can be performed in a larger GPU operation. This re-arranging relies on accurate
- * determination of the DisjointStencilIndex for each draw so that stencil steps are not corrupted
- * by another draw before its cover step is executed. It also relies on the CompressedPaintersOrder
- * for each draw to ensure steps are not re-arranged in a way that violates the original draw order.
- *
- * Renderer itself is non-virtual since it simply has to point to a list of RenderSteps. RenderSteps
- * on the other hand are virtual implement the technique specific functionality. It is entirely
- * possible for certain types of steps, e.g. a bounding box cover, to be re-used across different
- * Renderers even if the preceeding steps were different.
- */
 class Renderer {
     using StepFlags = RenderStep::Flags;
 public:
-    // Graphite defines a limited set of renderers in order to increase likelihood of batching
-    // across draw calls, and reduce the number of shader permutations required. These Renderers
-    // are stateless singletons and remain alive for the entire program. Each Renderer corresponds
-    // to a specific recording function on DrawList and fill type.
-    static const Renderer& StencilTessellatedCurvesAndTris(SkPathFillType);
-
-    static const Renderer& StencilTessellatedWedges(SkPathFillType);
-
-    static const Renderer& ConvexTessellatedWedges();
-
-    static const Renderer& TessellatedStrokes();
-
-    static const Renderer& TextDirect(bool isA8);
-
-    static const Renderer& TextSDF(bool useLCDText);
-
-    static const Renderer& Vertices(SkVertices::VertexMode, bool hasColors, bool hasTexCoords);
-
-
-    // TODO: Add renderers for primitives (rect, rrect, etc.) and atlas draws; add support for
-    // inverse filled strokes.
-
     // The maximum number of render steps that any Renderer is allowed to have.
     static constexpr int kMaxRenderSteps = 4;
 
+    const RenderStep& step(int i) const {
+        SkASSERT(i >= 0 && i < fStepCount);
+        return *fSteps[i];
+    }
     SkSpan<const RenderStep* const> steps() const {
-        return {&fSteps.front(), static_cast<size_t>(fStepCount) };
+        SkASSERT(fStepCount > 0); // steps() should only be called on valid Renderers.
+        return {fSteps.data(), static_cast<size_t>(fStepCount) };
     }
 
     const char* name()           const { return fName.c_str(); }
@@ -273,7 +239,9 @@ public:
     SkEnumBitMask<DepthStencilFlags> depthStencilFlags() const { return fDepthStencilFlags; }
 
 private:
-    // max render steps is 4, so just spell the options out for now...
+    friend class RendererProvider; // for ctors
+
+    // Max render steps is 4, so just spell the options out for now...
     Renderer(std::string_view name, const RenderStep* s1)
             : Renderer(name, std::array<const RenderStep*, 1>{s1}) {}
 
@@ -302,9 +270,10 @@ private:
         SkASSERT(fStepFlags & RenderStep::Flags::kPerformsShading);
     }
 
-    // Cannot move or copy
-    Renderer(const Renderer&) = delete;
-    Renderer(Renderer&&)      = delete;
+    // For RendererProvider to manage initialization; it will never expose a Renderer that is only
+    // default-initialized and not replaced because it's algorithm is disabled by caps/options.
+    Renderer() : fSteps(), fName(""), fStepCount(0) {}
+    Renderer& operator=(Renderer&&) = default;
 
     std::array<const RenderStep*, kMaxRenderSteps> fSteps;
     std::string fName;
