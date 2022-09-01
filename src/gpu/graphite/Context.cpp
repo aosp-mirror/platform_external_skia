@@ -102,31 +102,19 @@ SkBlenderID Context::addUserDefinedBlender(sk_sp<SkRuntimeEffect> effect) {
 void Context::precompile(SkCombinationBuilder* combinationBuilder) {
     ASSERT_SINGLE_OWNER
 
-    static const Renderer* kRenderers[] = {
-            &Renderer::StencilTessellatedCurvesAndTris(SkPathFillType::kWinding),
-            &Renderer::StencilTessellatedCurvesAndTris(SkPathFillType::kEvenOdd),
-            &Renderer::StencilTessellatedCurvesAndTris(SkPathFillType::kInverseWinding),
-            &Renderer::StencilTessellatedCurvesAndTris(SkPathFillType::kInverseEvenOdd),
-            &Renderer::StencilTessellatedWedges(SkPathFillType::kWinding),
-            &Renderer::StencilTessellatedWedges(SkPathFillType::kEvenOdd),
-            &Renderer::StencilTessellatedWedges(SkPathFillType::kInverseWinding),
-            &Renderer::StencilTessellatedWedges(SkPathFillType::kInverseEvenOdd)
-    };
-
     combinationBuilder->buildCombinations(
             fSharedContext->shaderCodeDictionary(),
             [&](SkUniquePaintParamsID uniqueID) {
-                GraphicsPipelineDesc desc;
-
-                for (const Renderer* r : kRenderers) {
+                for (const Renderer* r : fSharedContext->rendererProvider()->renderers()) {
                     for (auto&& s : r->steps()) {
                         if (s->performsShading()) {
-                            desc.setProgram(s, uniqueID);
+                            GraphicsPipelineDesc desc(s, uniqueID);
+                            (void) desc;
+                            // TODO: Combine with renderpass description set to generate full
+                            // GraphicsPipeline and MSL program. Cache that compiled pipeline on
+                            // the resource provider in a map from desc -> pipeline so that any
+                            // later desc created from equivalent RenderStep + Combination get it.
                         }
-                        // TODO: Combine with renderpass description set to generate full
-                        // GraphicsPipeline and MSL program. Cache that compiled pipeline on
-                        // the resource provider in a map from desc -> pipeline so that any
-                        // later desc created from equivalent RenderStep + Combination get it.
                     }
                 }
             });
