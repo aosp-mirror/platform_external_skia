@@ -742,20 +742,27 @@ bool colrv1_configure_skpaint(FT_Face face,
                 startOffset.scale(stops.front());
                 SkVector endOffset = startToEnd;
                 endOffset.scale(stops.back());
+
+                // The order of the following computations is important in order to avoid
+                // overwriting start or startRadius before the second reassignment.
+                end = start + endOffset;
                 start = start + startOffset;
-                end = end + endOffset;
-                startRadius = startRadius + radiusDiff * stops.front();
                 endRadius = startRadius + radiusDiff * stops.back();
+                startRadius = startRadius + radiusDiff * stops.front();
 
                 for (auto& stop : stops) {
                     stop = (stop - stopsStartOffset) * scaleFactor;
                 }
             }
 
-            // TODO(https://crbug.com/skia/13653): Interpolate a zero radius
-            // circle with manual color interpolation or upgrade the
-            // MakeTwoPointConical shader to understand negative radii.
-            if (startRadius < 0 || endRadius < 0) {
+            if (SkGraphics::GetVariableColrV1Enabled()) {
+                // When radii become negative through variations or interpolation, convert them to
+                // their absolute value. Resolution as discussed in
+                // https://github.com/googlefonts/colr-gradients-spec/issues/367.
+                startRadius = std::abs(startRadius);
+                endRadius = std::abs(endRadius);
+            } else if (startRadius < 0 || endRadius < 0) {
+                // TODO(drott): Remove else part when variable COLRv1 becomes the default.
                 paint->setColor(SK_ColorTRANSPARENT);
                 return true;
             }
