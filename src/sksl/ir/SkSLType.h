@@ -119,6 +119,13 @@ public:
         kNonnumeric
     };
 
+    enum class TextureAccess : int8_t {
+        kSample,  // `kSample` access level allows both sampling and reading
+        kRead,
+        kWrite,
+        kReadWrite,
+    };
+
     Type(const Type& other) = delete;
 
     /** Creates an array type. `columns` may be kUnsizedArray. */
@@ -169,9 +176,9 @@ public:
                                                 bool interfaceBlock = false);
 
     /** Create a texture type. */
-    static std::unique_ptr<Type> MakeTextureType(const char* name, SpvDim_ dimensions,
-                                                 bool isDepth, bool isArrayedTexture,
-                                                 bool isMultisampled, bool isSampled);
+    static std::unique_ptr<Type> MakeTextureType(const char* name, SpvDim_ dimensions, bool isDepth,
+                                                 bool isArrayedTexture, bool isMultisampled,
+                                                 TextureAccess textureAccess);
 
     /** Create a vector type. */
     static std::unique_ptr<Type> MakeVectorType(std::string_view name, const char* abbrev,
@@ -364,11 +371,11 @@ public:
     }
 
     /**
-     * For texturesamplers, returns the type of texture it samples (e.g., sampler2D has
+     * For texture samplers, returns the type of texture it samples (e.g., sampler2D has
      * a texture type of texture2D).
      */
     virtual const Type& textureType() const {
-        SkDEBUGFAIL("not a texture type");
+        SkDEBUGFAIL("not a sampler type");
         return *this;
     }
 
@@ -417,7 +424,7 @@ public:
      * For generic types, returns the types that this generic type can substitute for.
      */
     virtual SkSpan<const Type* const> coercibleTypes() const {
-        SkDEBUGFAILF("Internal error: not a generic type");
+        SkDEBUGFAIL("Internal error: not a generic type");
         return {};
     }
 
@@ -489,13 +496,13 @@ public:
     }
 
     virtual bool isMultisampled() const {
-        SkASSERT(false);
+        SkDEBUGFAIL("not a texture type");
         return false;
     }
 
-    virtual bool isSampled() const {
-        SkASSERT(false);
-        return false;
+    virtual TextureAccess textureAccess() const {
+        SkDEBUGFAIL("not a texture type");
+        return TextureAccess::kSample;
     }
 
     bool hasPrecision() const {
@@ -524,14 +531,15 @@ public:
     const Type& toCompound(const Context& context, int columns, int rows) const;
 
     /**
-     * Returns a type which honors the precision qualifiers set in Modifiers. e.g., kMediump_Flag
-     * when applied to `float2` will return `half2`. Generates an error if the precision qualifiers
-     * don't make sense, e.g. `highp bool` or `mediump MyStruct`.
+     * Returns a type which honors the precision and access-level qualifiers set in Modifiers. e.g.:
+     *  - Modifier `mediump` + Type `float2`:     Type `half2`
+     *  - Modifier `readonly` + Type `texture2D`: Type `readonlyTexture2D`
+     * Generates an error if the qualifiers don't make sense (`highp bool`, `writeonly MyStruct`)
      */
-    const Type* applyPrecisionQualifiers(const Context& context,
-                                         Modifiers* modifiers,
-                                         SymbolTable* symbols,
-                                         Position pos) const;
+    const Type* applyQualifiers(const Context& context,
+                                Modifiers* modifiers,
+                                SymbolTable* symbols,
+                                Position pos) const;
 
     /**
      * Coerces the passed-in expression to this type. If the types are incompatible, reports an
@@ -566,6 +574,16 @@ protected:
         SkASSERT(strlen(abbrev) <= kMaxAbbrevLength);
         strcpy(fAbbreviatedName, abbrev);
     }
+
+    const Type* applyPrecisionQualifiers(const Context& context,
+                                         Modifiers* modifiers,
+                                         SymbolTable* symbols,
+                                         Position pos) const;
+
+    const Type* applyAccessQualifiers(const Context& context,
+                                      Modifiers* modifiers,
+                                      SymbolTable* symbols,
+                                      Position pos) const;
 
 private:
     bool isTooDeeplyNested(int limit) const;
