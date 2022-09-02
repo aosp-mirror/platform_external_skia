@@ -32,9 +32,8 @@
     SKSL_INTRINSIC(dFdy)             \
     SKSL_INTRINSIC(distance)         \
     SKSL_INTRINSIC(dot)              \
-    SKSL_INTRINSIC(EmitVertex)       \
-    SKSL_INTRINSIC(EndPrimitive)     \
     SKSL_INTRINSIC(equal)            \
+    SKSL_INTRINSIC(eval)             \
     SKSL_INTRINSIC(exp2)             \
     SKSL_INTRINSIC(exp)              \
     SKSL_INTRINSIC(faceforward)      \
@@ -104,6 +103,7 @@
     SKSL_INTRINSIC(unpackSnorm4x8)   \
     SKSL_INTRINSIC(unpackUnorm2x16)  \
     SKSL_INTRINSIC(unpackUnorm4x8)   \
-    SKSL_INTRINSIC(unpremul)
+    SKSL_INTRINSIC(toLinearSrgb)     \
+    SKSL_INTRINSIC(fromLinearSrgb)
 
 #endif
