@@ -15,7 +15,7 @@
  */
 class GrTextureProxy::CacheAccess {
 private:
-    void setUniqueKey(GrProxyProvider* proxyProvider, const GrUniqueKey& key) {
+    void setUniqueKey(GrProxyProvider* proxyProvider, const skgpu::UniqueKey& key) {
         fTextureProxy->setUniqueKey(proxyProvider, key);
     }
 
@@ -24,7 +24,6 @@ private:
     }
 
     explicit CacheAccess(GrTextureProxy* textureProxy) : fTextureProxy(textureProxy) {}
-    CacheAccess(const CacheAccess&) = delete;
     CacheAccess& operator=(const CacheAccess&) = delete;
 
     // No taking addresses of this type.

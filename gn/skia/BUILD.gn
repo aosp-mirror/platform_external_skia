@@ -6,6 +6,9 @@
 if (is_fuchsia) {
   import("//build/fuchsia/sdk.gni")
 }
+if (is_wasm) {
+  import("//gn/toolchain/wasm.gni")
+}
 
 declare_args() {
   extra_asmflags = []
@@ -267,6 +270,14 @@ config("default") {
     }
   }
 
+  if (is_wasm) {
+    cflags += [
+      "--sysroot=$skia_emsdk_dir/upstream/emscripten/cache/sysroot",
+      "-sMAIN_MODULE=1",
+    ]
+    ldflags += [ "--sysroot=$skia_emsdk_dir/upstream/emscripten/cache/sysroot" ]
+  }
+
   if (sanitize != "" && sanitize != "MSVC") {
     # You can either pass the sanitizers directly, e.g. "address,undefined",
     # or pass one of the couple common aliases used by the bots.
@@ -280,6 +291,8 @@ config("default") {
         # TODO(mtklein): work out UBSAN link errors
         sanitizers = "address"
       }
+    } else if (sanitize == "HWASAN") {
+      sanitizers = "hwaddress"
     } else if (sanitize == "TSAN") {
       sanitizers = "thread"
     } else if (sanitize == "MSAN") {
@@ -410,6 +423,10 @@ config("warnings") {
       "-Weverything",
       "-Wno-unknown-warning-option",  # Let older Clangs ignore newer Clangs'
                                       # warnings.
+
+      # This was deprecated in Clang 14 and removed in Clang 15. It might still
+      # fire with older Clangs, so disable it explicitly.
+      "-Wno-weak-template-vtables",
     ]
 
     if (target_cpu == "arm" && is_ios) {
@@ -441,25 +458,21 @@ config("warnings") {
       "-Wno-double-promotion",
       "-Wno-exit-time-destructors",  # TODO: OK outside libskia
       "-Wno-float-equal",
-      "-Wno-format-nonliteral",
       "-Wno-global-constructors",  # TODO: OK outside libskia
       "-Wno-missing-prototypes",
       "-Wno-missing-variable-declarations",
       "-Wno-pedantic",
       "-Wno-reserved-id-macro",
-      "-Wno-shadow",
+      "-Wno-reserved-identifier",
       "-Wno-shift-sign-overflow",
       "-Wno-signed-enum-bitfield",
       "-Wno-switch-enum",
+      "-Wno-thread-safety-negative",
       "-Wno-undef",
-      "-Wno-unreachable-code",
       "-Wno-unreachable-code-break",
       "-Wno-unreachable-code-return",
       "-Wno-unused-macros",
       "-Wno-unused-member-function",
-      "-Wno-unused-template",
-      "-Wno-zero-as-null-pointer-constant",
-      "-Wno-thread-safety-negative",
       "-Wno-non-c-typedef-for-linkage",  # Dawn, not Skia per se.
     ]
     cflags_cc += [
@@ -473,8 +486,11 @@ config("warnings") {
       "-Wno-deprecated",
       "-Wno-missing-noreturn",
       "-Wno-old-style-cast",
-      "-Wno-padded",
       "-Wno-newline-eof",
+      "-Wno-padded",
+      "-Wno-shadow-field-in-constructor",
+      "-Wno-shadow-uncaptured-local",
+      "-Wno-zero-as-null-pointer-constant",  # VK_NULL_HANDLE is defined as 0
 
       # https://quuxplusone.github.io/blog/2020/08/26/wrange-loop-analysis/
       # https://bugzilla.mozilla.org/show_bug.cgi?id=1683213
@@ -589,19 +605,12 @@ config("optimize") {
     cflags = [ "-O3" ]
     if (is_mac || is_ios) {
       ldflags = [ "-dead_strip" ]
-    } else {
+    } else if (!is_wasm) {
       cflags += [
         "-fdata-sections",
         "-ffunction-sections",
       ]
       ldflags = [ "-Wl,--gc-sections" ]
-    }
-    if (target_cpu == "wasm") {
-      # The compiler asks us to add an optimization flag to both cflags
-      # and ldflags to cut down on the local variables,
-      # for performance reasons.
-      # The "linking" step is the conversion to javascript.
-      ldflags += [ "-O3" ]
     }
   }
 }

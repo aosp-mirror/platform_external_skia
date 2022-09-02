@@ -10,8 +10,9 @@
 
 #include "include/core/SkString.h"
 #include "include/private/GrTypesPriv.h"
+#include "src/core/SkSLTypeShared.h"
 
-class GrShaderCaps;
+struct GrShaderCaps;
 
 /**
  * Represents a variable in a shader
@@ -29,38 +30,37 @@ public:
     /** Values for array count that have special meaning. We allow 1-sized arrays. */
     enum {
         kNonArray     =  0, // not an array
-        kUnsizedArray = -1, // an unsized array (declared with [])
     };
 
     /** Defaults to a void with no type modifier or layout qualifier. */
     GrShaderVar()
-            : fType(kVoid_GrSLType)
+            : fType(SkSLType::kVoid)
             , fTypeModifier(TypeModifier::None)
             , fCount(kNonArray) {}
 
-    GrShaderVar(SkString name, GrSLType type, int arrayCount = kNonArray)
+    GrShaderVar(SkString name, SkSLType type, int arrayCount = kNonArray)
             : fType(type)
             , fTypeModifier(TypeModifier::None)
             , fCount(arrayCount)
             , fName(std::move(name)) {}
-    GrShaderVar(const char* name, GrSLType type, int arrayCount = kNonArray)
+    GrShaderVar(const char* name, SkSLType type, int arrayCount = kNonArray)
         : GrShaderVar(SkString(name), type, arrayCount) {}
 
-    GrShaderVar(SkString name, GrSLType type, TypeModifier typeModifier)
+    GrShaderVar(SkString name, SkSLType type, TypeModifier typeModifier)
             : fType(type)
             , fTypeModifier(typeModifier)
             , fCount(kNonArray)
             , fName(std::move(name)) {}
-    GrShaderVar(const char* name, GrSLType type, TypeModifier typeModifier)
+    GrShaderVar(const char* name, SkSLType type, TypeModifier typeModifier)
         : GrShaderVar(SkString(name), type, typeModifier) {}
 
-    GrShaderVar(SkString name, GrSLType type, TypeModifier typeModifier, int arrayCount)
+    GrShaderVar(SkString name, SkSLType type, TypeModifier typeModifier, int arrayCount)
             : fType(type)
             , fTypeModifier(typeModifier)
             , fCount(arrayCount)
             , fName(std::move(name)) {}
 
-    GrShaderVar(SkString name, GrSLType type, TypeModifier typeModifier, int arrayCount,
+    GrShaderVar(SkString name, SkSLType type, TypeModifier typeModifier, int arrayCount,
                 SkString layoutQualifier, SkString extraModifier)
             : fType(type)
             , fTypeModifier(typeModifier)
@@ -75,18 +75,14 @@ public:
     GrShaderVar& operator=(GrShaderVar&&) = default;
 
     /** Sets as a non-array. */
-    void set(GrSLType type,
-             const char* name) {
-        SkASSERT(kVoid_GrSLType != type);
+    void set(SkSLType type, const char* name) {
+        SkASSERT(SkSLType::kVoid != type);
         fType = type;
         fName = name;
     }
 
     /** Is the var an array. */
     bool isArray() const { return kNonArray != fCount; }
-
-    /** Is this an unsized array, (i.e. declared with []). */
-    bool isUnsizedArray() const { return kUnsizedArray == fCount; }
 
     /** Get the array length. */
     int getArrayCount() const { return fCount; }
@@ -98,7 +94,7 @@ public:
     const char* c_str() const { return this->getName().c_str(); }
 
     /** Get the type. */
-    GrSLType getType() const { return fType; }
+    SkSLType getType() const { return fType; }
 
     TypeModifier getTypeModifier() const { return fTypeModifier; }
     void setTypeModifier(TypeModifier type) { fTypeModifier = type; }
@@ -131,7 +127,7 @@ public:
     void appendDecl(const GrShaderCaps*, SkString* out) const;
 
 private:
-    GrSLType        fType;
+    SkSLType        fType;
     TypeModifier    fTypeModifier;
     int             fCount;
 
