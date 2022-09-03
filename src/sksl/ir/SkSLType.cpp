@@ -11,6 +11,7 @@
 #include "include/private/SkStringView.h"
 #include "include/private/SkTFitsIn.h"
 #include "include/sksl/SkSLErrorReporter.h"
+#include "src/core/SkMathPriv.h"
 #include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/SkSLContext.h"
@@ -22,8 +23,8 @@
 #include "src/sksl/ir/SkSLSymbolTable.h"
 
 #include <algorithm>
-#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string_view>
 
@@ -77,6 +78,10 @@ public:
         return fTargetType.slotCount();
     }
 
+    SpvDim_ dimensions() const override {
+        return fTargetType.dimensions();
+    }
+
     bool isDepth() const override {
         return fTargetType.isDepth();
     }
@@ -115,6 +120,14 @@ public:
 
     bool isInterfaceBlock() const override {
         return fTargetType.isInterfaceBlock();
+    }
+
+    bool isMultisampled() const override {
+        return fTargetType.isMultisampled();
+    }
+
+    TextureAccess textureAccess() const override {
+        return fTargetType.textureAccess();
     }
 
     SkSpan<const Type* const> coercibleTypes() const override {
@@ -236,6 +249,14 @@ public:
         return fScalarType.bitWidth();
     }
 
+    double minimumValue() const override {
+        return fScalarType.minimumValue();
+    }
+
+    double maximumValue() const override {
+        return fScalarType.maximumValue();
+    }
+
     bool isScalar() const override {
         return true;
     }
@@ -303,6 +324,45 @@ public:
         return 1;
     }
 
+    using int_limits = std::numeric_limits<int32_t>;
+    using short_limits = std::numeric_limits<int16_t>;
+    using uint_limits = std::numeric_limits<uint32_t>;
+    using ushort_limits = std::numeric_limits<uint16_t>;
+    using float_limits = std::numeric_limits<float>;
+
+    /** Returns the maximum value that can fit in the type. */
+    double minimumValue() const override {
+        switch (this->numberKind()) {
+            case NumberKind::kSigned:
+                return this->highPrecision() ? int_limits::lowest()
+                                             : short_limits::lowest();
+
+            case NumberKind::kUnsigned:
+                return 0;
+
+            case NumberKind::kFloat:
+            default:
+                return float_limits::lowest();
+        }
+    }
+
+    /** Returns the maximum value that can fit in the type. */
+    double maximumValue() const override {
+        switch (this->numberKind()) {
+            case NumberKind::kSigned:
+                return this->highPrecision() ? int_limits::max()
+                                             : short_limits::max();
+
+            case NumberKind::kUnsigned:
+                return this->highPrecision() ? uint_limits::max()
+                                             : ushort_limits::max();
+
+            case NumberKind::kFloat:
+            default:
+                return float_limits::max();
+        }
+    }
+
 private:
     using INHERITED = Type;
 
@@ -366,13 +426,13 @@ public:
     inline static constexpr TypeKind kTypeKind = TypeKind::kTexture;
 
     TextureType(const char* name, SpvDim_ dimensions, bool isDepth, bool isArrayed,
-                bool isMultisampled, bool isSampled)
+                bool isMultisampled, TextureAccess textureAccess)
         : INHERITED(name, "T", kTypeKind)
         , fDimensions(dimensions)
         , fIsDepth(isDepth)
         , fIsArrayed(isArrayed)
         , fIsMultisampled(isMultisampled)
-        , fIsSampled(isSampled) {}
+        , fTextureAccess(textureAccess) {}
 
     SpvDim_ dimensions() const override {
         return fDimensions;
@@ -390,8 +450,8 @@ public:
         return fIsMultisampled;
     }
 
-    bool isSampled() const override {
-        return fIsSampled;
+    TextureAccess textureAccess() const override {
+        return fTextureAccess;
     }
 
 private:
@@ -401,7 +461,7 @@ private:
     bool fIsDepth;
     bool fIsArrayed;
     bool fIsMultisampled;
-    bool fIsSampled;
+    TextureAccess fTextureAccess;
 };
 
 class SamplerType final : public Type {
@@ -432,8 +492,8 @@ public:
         return fTextureType.isMultisampled();
     }
 
-    bool isSampled() const override {
-        return fTextureType.isSampled();
+    TextureAccess textureAccess() const override {
+        return fTextureType.textureAccess();
     }
 
 private:
@@ -592,9 +652,9 @@ std::unique_ptr<Type> Type::MakeStructType(Position pos, std::string_view name,
 
 std::unique_ptr<Type> Type::MakeTextureType(const char* name, SpvDim_ dimensions, bool isDepth,
                                             bool isArrayedTexture, bool isMultisampled,
-                                            bool isSampled) {
+                                            TextureAccess textureAccess) {
     return std::make_unique<TextureType>(name, dimensions, isDepth, isArrayedTexture,
-                                         isMultisampled, isSampled);
+                                         isMultisampled, textureAccess);
 }
 
 std::unique_ptr<Type> Type::MakeVectorType(std::string_view name, const char* abbrev,
@@ -639,16 +699,24 @@ CoercionCost Type::coercionCost(const Type& other) const {
     return CoercionCost::Impossible();
 }
 
+const Type* Type::applyQualifiers(const Context& context,
+                                  Modifiers* modifiers,
+                                  SymbolTable* symbols,
+                                  Position pos) const {
+    const Type* type;
+    type = this->applyPrecisionQualifiers(context, modifiers, symbols, pos);
+    type = type->applyAccessQualifiers(context, modifiers, symbols, pos);
+    return type;
+}
+
 const Type* Type::applyPrecisionQualifiers(const Context& context,
                                            Modifiers* modifiers,
                                            SymbolTable* symbols,
                                            Position pos) const {
-    // SkSL doesn't support low precision, so `lowp` is interpreted as medium precision.
-    bool highp   = modifiers->fFlags & Modifiers::kHighp_Flag;
-    bool mediump = modifiers->fFlags & Modifiers::kMediump_Flag;
-    bool lowp    = modifiers->fFlags & Modifiers::kLowp_Flag;
-
-    if (!lowp && !mediump && !highp) {
+    int precisionQualifiers = modifiers->fFlags & (Modifiers::kHighp_Flag |
+                                                   Modifiers::kMediump_Flag |
+                                                   Modifiers::kLowp_Flag);
+    if (!precisionQualifiers) {
         // No precision qualifiers here. Return the type as-is.
         return this;
     }
@@ -660,7 +728,7 @@ const Type* Type::applyPrecisionQualifiers(const Context& context,
         return context.fTypes.fPoison.get();
     }
 
-    if ((int(lowp) + int(mediump) + int(highp)) != 1) {
+    if (SkPopCount(precisionQualifiers) > 1) {
         context.fErrors->error(pos, "only one precision qualifier can be used");
         return context.fTypes.fPoison.get();
     }
@@ -672,11 +740,12 @@ const Type* Type::applyPrecisionQualifiers(const Context& context,
 
     const Type& component = this->componentType();
     if (component.highPrecision()) {
-        if (highp) {
+        if (precisionQualifiers & Modifiers::kHighp_Flag) {
             // Type is already high precision, and we are requesting high precision. Return as-is.
             return this;
         }
 
+        // SkSL doesn't support low precision, so `lowp` is interpreted as medium precision.
         // Ascertain the mediump equivalent type for this type, if any.
         const Type* mediumpType;
         switch (component.numberKind()) {
@@ -706,8 +775,43 @@ const Type* Type::applyPrecisionQualifiers(const Context& context,
     }
 
     context.fErrors->error(pos, "type '" + this->displayName() +
-                                 "' does not support precision qualifiers");
+                                "' does not support precision qualifiers");
     return context.fTypes.fPoison.get();
+}
+
+const Type* Type::applyAccessQualifiers(const Context& context,
+                                        Modifiers* modifiers,
+                                        SymbolTable* symbols,
+                                        Position pos) const {
+    int accessQualifiers = modifiers->fFlags & (Modifiers::kReadOnly_Flag |
+                                                Modifiers::kWriteOnly_Flag);
+    if (!accessQualifiers) {
+        // No access qualifiers here. Return the type as-is.
+        return this;
+    }
+
+    // We're going to return a whole new type, so the modifier bits can be cleared out.
+    modifiers->fFlags &= ~(Modifiers::kReadOnly_Flag |
+                           Modifiers::kWriteOnly_Flag);
+
+    if (this->matches(*context.fTypes.fReadWriteTexture2D)) {
+        switch (accessQualifiers) {
+            case Modifiers::kReadOnly_Flag:
+                return context.fTypes.fReadOnlyTexture2D.get();
+
+            case Modifiers::kWriteOnly_Flag:
+                return context.fTypes.fWriteOnlyTexture2D.get();
+
+            default:
+                context.fErrors->error(pos, "'readonly' and 'writeonly' qualifiers "
+                                            "cannot be combined");
+                return this;
+        }
+    }
+
+    context.fErrors->error(pos, "type '" + this->displayName() + "' does not support qualifier '" +
+                                Modifiers::DescribeFlags(accessQualifiers) + "'");
+    return this;
 }
 
 const Type& Type::toCompound(const Context& context, int columns, int rows) const {
@@ -948,7 +1052,7 @@ bool Type::isAllowedInES2(const Context& context) const {
 bool Type::checkForOutOfRangeLiteral(const Context& context, const Expression& expr) const {
     bool foundError = false;
     const Type& baseType = this->componentType();
-    if (baseType.isInteger()) {
+    if (baseType.isNumber()) {
         // Replace constant expressions with their corresponding values.
         const Expression* valueExpr = ConstantFolder::GetConstantValueForVariable(expr);
         if (valueExpr->supportsConstantValues()) {
@@ -971,16 +1075,16 @@ bool Type::checkForOutOfRangeLiteral(const Context& context, const Expression& e
 
 bool Type::checkForOutOfRangeLiteral(const Context& context, double value, Position pos) const {
     SkASSERT(this->isScalar());
-    if (!this->isInteger()) {
-        return false;
+    if (!this->isNumber()) {
+       return false;
     }
     if (value >= this->minimumValue() && value <= this->maximumValue()) {
         return false;
     }
-    // We found a value that can't fit in our integral type. Flag it as an error.
-    context.fErrors->error(pos, SkSL::String::printf("integer is out of range for type '%s': %.0f",
+    // We found a value that can't fit in our type. Flag it as an error.
+    context.fErrors->error(pos, SkSL::String::printf("value is out of range for type '%s': %.0f",
                                                      this->displayName().c_str(),
-                                                     std::floor(value)));
+                                                     value));
     return true;
 }
 

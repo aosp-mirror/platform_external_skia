@@ -23,7 +23,7 @@
 
 namespace skgpu::graphite {
 
-std::tuple<SkUniquePaintParamsID, UniformDataCache::Index, TextureDataCache::Index>
+std::tuple<SkUniquePaintParamsID, const SkUniformDataBlock*, const SkTextureDataBlock*>
 ExtractPaintData(Recorder* recorder,
                  SkPipelineDataGatherer* gatherer,
                  SkPaintParamsKeyBuilder* builder,
@@ -42,22 +42,21 @@ ExtractPaintData(Recorder* recorder,
     TextureDataCache* textureDataCache = recorder->priv().textureDataCache();
 
     auto entry = dict->findOrCreate(builder);
-    UniformDataCache::Index uniformIndex;
-    if (gatherer->hasUniforms()) {
-        uniformIndex = uniformDataCache->insert(gatherer->finishUniformDataBlock());
-    }
-    TextureDataCache::Index textureIndex;
-    if (gatherer->hasTextures()) {
-        textureIndex = textureDataCache->insert(gatherer->textureDataBlock());
-    }
+
+    const SkUniformDataBlock* uniforms =
+            gatherer->hasUniforms() ? uniformDataCache->insert(gatherer->finishUniformDataBlock())
+                                    : nullptr;
+    const SkTextureDataBlock* textures =
+            gatherer->hasTextures() ? textureDataCache->insert(gatherer->textureDataBlock())
+                                    : nullptr;
 
     gatherer->reset();
 
-    return { entry->uniqueID(), uniformIndex, textureIndex };
+    return { entry->uniqueID(), uniforms, textures };
 }
 
-std::tuple<UniformDataCache::Index, TextureDataCache::Index>
-ExtractRenderStepData(UniformDataCache* geometryUniformDataCache,
+std::tuple<const SkUniformDataBlock*, const SkTextureDataBlock*>
+ExtractRenderStepData(UniformDataCache* uniformDataCache,
                       TextureDataCache* textureDataCache,
                       SkPipelineDataGatherer* gatherer,
                       const RenderStep* step,
@@ -66,17 +65,16 @@ ExtractRenderStepData(UniformDataCache* geometryUniformDataCache,
 
     step->writeUniformsAndTextures(params, gatherer);
 
-    UniformDataCache::Index uIndex =
-            geometryUniformDataCache->insert(gatherer->finishUniformDataBlock());
-
-    TextureDataCache::Index textureIndex;
-    if (step->hasTextures()) {
-        textureIndex = textureDataCache->insert(gatherer->textureDataBlock());
-    }
+    const SkUniformDataBlock* uniforms =
+            gatherer->hasUniforms() ? uniformDataCache->insert(gatherer->finishUniformDataBlock())
+                                    : nullptr;
+    const SkTextureDataBlock* textures =
+            gatherer->hasTextures() ? textureDataCache->insert(gatherer->textureDataBlock())
+                                    : nullptr;
 
     gatherer->reset();
 
-    return { uIndex, textureIndex };
+    return { uniforms, textures };
 }
 
 namespace {
@@ -264,22 +262,22 @@ std::string emit_attributes(SkSpan<const Attribute> vertexAttrs,
 
 std::string EmitVaryings(const RenderStep* step,
                          const char* direction,
-                         bool emitLocalCoordsVarying,
-                         bool emitShadingSsboIndexVarying) {
+                         bool emitShadingSsboIndexVarying,
+                         bool emitLocalCoordsVarying) {
     std::string result;
     int location = 0;
-
-    if (emitLocalCoordsVarying) {
-        SkSL::String::appendf(&result, "    layout(location=%d) %s ", location++, direction);
-        result.append(SkSLTypeString(SkSLType::kFloat2));
-        SkSL::String::appendf(&result, " localCoordsVar;\n");
-    }
 
     if (emitShadingSsboIndexVarying) {
         SkSL::String::appendf(&result,
                               "    layout(location=%d) %s int shadingSsboIndexVar;\n",
                               location++,
                               direction);
+    }
+
+    if (emitLocalCoordsVarying) {
+        SkSL::String::appendf(&result, "    layout(location=%d) %s ", location++, direction);
+        result.append(SkSLTypeString(SkSLType::kFloat2));
+        SkSL::String::appendf(&result, " localCoordsVar;\n");
     }
 
     for (auto v : step->varyings()) {
@@ -292,8 +290,8 @@ std::string EmitVaryings(const RenderStep* step,
 }
 
 std::string GetSkSLVS(const RenderStep* step,
-                      bool defineLocalCoordsVarying,
-                      bool defineShadingSsboIndexVarying) {
+                      bool defineShadingSsboIndexVarying,
+                      bool defineLocalCoordsVarying) {
     // TODO: To more completely support end-to-end rendering, this will need to be updated so that
     // the RenderStep shader snippet can produce a device coord, a local coord, and depth.
     // If the paint combination doesn't need the local coord it can be ignored, otherwise we need
@@ -321,7 +319,7 @@ std::string GetSkSLVS(const RenderStep* step,
     }
 
     // Varyings needed by RenderStep
-    sksl += EmitVaryings(step, "out", defineLocalCoordsVarying, defineShadingSsboIndexVarying);
+    sksl += EmitVaryings(step, "out", defineShadingSsboIndexVarying, defineLocalCoordsVarying);
 
     // Vertex shader function declaration
     sksl += "void main() {\n";
@@ -332,14 +330,14 @@ std::string GetSkSLVS(const RenderStep* step,
     sksl += "sk_Position = float4(devPosition.xy * rtAdjust.xy + devPosition.ww * rtAdjust.zw,"
             "                     devPosition.zw);\n";
 
-    if (defineLocalCoordsVarying) {
-        // Assign Render Step's stepLocalCoords to the localCoordsVar varying.
-        sksl += "localCoordsVar = stepLocalCoords;\n";
-    }
-
     if (defineShadingSsboIndexVarying) {
         // Assign SSBO index value to the SSBO index varying
         SkSL::String::appendf(&sksl, "shadingSsboIndexVar = %s;\n", step->ssboIndex());
+    }
+
+    if (defineLocalCoordsVarying) {
+        // Assign Render Step's stepLocalCoords to the localCoordsVar varying.
+        sksl += "localCoordsVar = stepLocalCoords;\n";
     }
     sksl += "}\n";
 
@@ -350,17 +348,15 @@ std::string GetSkSLFS(const SkShaderCodeDictionary* dict,
                       const SkRuntimeEffectDictionary* rteDict,
                       const RenderStep* step,
                       SkUniquePaintParamsID paintID,
+                      bool useStorageBuffers,
                       BlendInfo* blendInfo,
-                      bool* requiresLocalCoordsVarying,
-                      bool* requiresShadingSsboIndexVarying) {
+                      bool* requiresLocalCoordsVarying) {
     if (!paintID.isValid()) {
         // TODO: we should return the error shader code here
         return {};
     }
 
-    *requiresShadingSsboIndexVarying = step->ssboIndex() && step->performsShading();
-    const char* shadingSsboIndexVar =
-            *requiresShadingSsboIndexVarying ? "shadingSsboIndexVar" : nullptr;
+    const char* shadingSsboIndexVar = useStorageBuffers ? "shadingSsboIndexVar" : nullptr;
     SkShaderInfo shaderInfo(rteDict, shadingSsboIndexVar);
 
     dict->getShaderInfo(paintID, &shaderInfo);
@@ -368,8 +364,7 @@ std::string GetSkSLFS(const SkShaderCodeDictionary* dict,
     *requiresLocalCoordsVarying = shaderInfo.needsLocalCoords();
 
     std::string sksl;
-    sksl += shaderInfo.toSkSL(
-            step, *requiresLocalCoordsVarying, *requiresShadingSsboIndexVarying);
+    sksl += shaderInfo.toSkSL(step, useStorageBuffers, *requiresLocalCoordsVarying);
 
     return sksl;
 }
