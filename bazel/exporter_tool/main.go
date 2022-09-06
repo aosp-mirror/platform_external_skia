@@ -140,6 +140,36 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/utils:sksl_srcs",
 			}}},
 	},
+	{GNI: "gn/utils.gni", Vars: []exporter.GNIFileListExportDesc{
+		{Var: "skia_utils_public",
+			Rules: []string{
+				"//include/utils:public_hdrs",
+				"//include/utils/mac:public_hdrs"}},
+		{Var: "skia_utils_sources",
+			Rules: []string{
+				"//src/utils:core_hdrs",
+				"//src/utils:core_skslc_hdrs",
+				"//src/utils:core_skslc_srcs",
+				"//src/utils:core_srcs",
+				"//src/utils:json_hdrs",
+				"//src/utils:json_srcs",
+				"//src/utils:sksl_hdrs",
+				"//src/utils:sksl_srcs",
+				"//src/utils/mac:core_hdrs",
+				"//src/utils/mac:core_srcs",
+				"//src/utils/win:core_hdrs",
+				"//src/utils/win:core_srcs",
+			}}},
+	},
+	{GNI: "gn/xps.gni", Vars: []exporter.GNIFileListExportDesc{
+		{Var: "skia_xps_public",
+			Rules: []string{"//include/docs:xps_hdrs"}},
+		{Var: "skia_xps_sources",
+			Rules: []string{
+				"//src/xps:core_hdrs",
+				"//src/xps:core_srcs",
+			}}},
+	},
 }
 
 const (
