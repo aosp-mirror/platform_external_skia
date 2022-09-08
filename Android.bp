@@ -156,7 +156,7 @@ cc_defaults {
 
     local_include_dirs: [
         "",
-        "include/third_party/skcms",
+        "modules/skcms",
         "modules/skottie/include/",
         "modules/skresources/include/",
         "modules/sksg/include/",
@@ -2033,9 +2033,9 @@ cc_defaults {
     name: "skia_gm_srcs",
     local_include_dirs: [
         "",
-        "include/third_party/skcms",
         "include/third_party/vulkan/",
         "modules/particles/include/",
+        "modules/skcms",
         "modules/skottie/include/",
         "modules/skparagraph/include/",
         "modules/skparagraph/utils/",
