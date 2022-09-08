@@ -232,6 +232,7 @@ SKIA_PUBLIC_HDRS = [
     "include/utils/SkShadowUtils.h",
     "include/utils/SkTextUtils.h",
     "include/utils/SkTraceEventPhase.h",
+    "include/utils/mac/SkCGUtils.h",
 ]
 
 ################################################################################
@@ -1655,8 +1656,6 @@ BASE_SRCS_ALL = [
     "src/utils/SkShadowUtils.cpp",
     "src/utils/SkTestCanvas.h",
     "src/utils/SkTextUtils.cpp",
-    "src/utils/SkThreadUtils_pthread.cpp",
-    "src/utils/SkThreadUtils_win.cpp",
     "src/utils/SkUTF.cpp",
     "src/utils/SkUTF.h",
     "src/utils/SkVMVisualizer.cpp",
