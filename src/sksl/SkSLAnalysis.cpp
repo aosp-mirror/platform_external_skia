@@ -22,6 +22,7 @@
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/SkSLContext.h"
+#include "src/sksl/SkSLIntrinsicList.h"
 #include "src/sksl/analysis/SkSLNoOpErrorReporter.h"
 #include "src/sksl/analysis/SkSLProgramUsage.h"
 #include "src/sksl/analysis/SkSLProgramVisitor.h"
@@ -56,6 +57,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace SkSL {
 
@@ -362,6 +364,24 @@ bool Analysis::CallsColorTransformIntrinsics(const Program& program) {
 bool Analysis::ReturnsOpaqueColor(const FunctionDefinition& function) {
     ReturnsNonOpaqueColorVisitor visitor;
     return !visitor.visitProgramElement(function);
+}
+
+bool Analysis::ContainsRTAdjust(const Expression& expr) {
+    class ContainsRTAdjustVisitor : public ProgramVisitor {
+    public:
+        bool visitExpression(const Expression& expr) override {
+            if (expr.is<VariableReference>() &&
+                expr.as<VariableReference>().variable()->name() == Compiler::RTADJUST_NAME) {
+                return true;
+            }
+            return INHERITED::visitExpression(expr);
+        }
+
+        using INHERITED = ProgramVisitor;
+    };
+
+    ContainsRTAdjustVisitor visitor;
+    return visitor.visitExpression(expr);
 }
 
 bool Analysis::DetectVarDeclarationWithoutScope(const Statement& stmt, ErrorReporter* errors) {

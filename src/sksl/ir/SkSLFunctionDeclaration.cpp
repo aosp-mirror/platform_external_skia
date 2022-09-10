@@ -14,7 +14,6 @@
 #include "include/private/SkSLModifiers.h"
 #include "include/private/SkSLProgramKind.h"
 #include "include/private/SkStringView.h"
-#include "include/private/SkTHash.h"
 #include "include/sksl/SkSLErrorReporter.h"
 #include "include/sksl/SkSLPosition.h"
 #include "src/sksl/SkSLBuiltinTypes.h"
@@ -29,25 +28,9 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <initializer_list>
 #include <utility>
 
 namespace SkSL {
-
-static IntrinsicKind identify_intrinsic(std::string_view functionName) {
-    #define SKSL_INTRINSIC(name) {#name, k_##name##_IntrinsicKind},
-    static const auto* kAllIntrinsics = new SkTHashMap<std::string_view, IntrinsicKind>{
-        SKSL_INTRINSIC_LIST
-    };
-    #undef SKSL_INTRINSIC
-
-    if (skstd::starts_with(functionName, '$')) {
-        functionName.remove_prefix(1);
-    }
-
-    IntrinsicKind* kind = kAllIntrinsics->find(functionName);
-    return kind ? *kind : kNotIntrinsic;
-}
 
 static bool check_modifiers(const Context& context,
                             Position pos,
@@ -465,7 +448,7 @@ FunctionDeclaration::FunctionDeclaration(Position pos,
         , fReturnType(returnType)
         , fBuiltin(builtin)
         , fIsMain(name == "main")
-        , fIntrinsicKind(builtin ? identify_intrinsic(name) : kNotIntrinsic) {
+        , fIntrinsicKind(builtin ? FindIntrinsicKind(name) : kNotIntrinsic) {
     // None of the parameters are allowed to be be null.
     SkASSERT(std::count(fParameters.begin(), fParameters.end(), nullptr) == 0);
 }

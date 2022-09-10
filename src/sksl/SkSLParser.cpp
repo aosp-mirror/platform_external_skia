@@ -443,7 +443,7 @@ bool Parser::declaration() {
 
 /* (RPAREN | VOID RPAREN | parameter (COMMA parameter)* RPAREN) (block | SEMICOLON) */
 bool Parser::functionDeclarationEnd(Position start,
-                                    const DSLModifiers& modifiers,
+                                    DSLModifiers& modifiers,
                                     DSLType type,
                                     const Token& name) {
     SkSTArray<8, DSLParameter> parameters;
@@ -474,9 +474,12 @@ bool Parser::functionDeclarationEnd(Position start,
     for (DSLParameter& param : parameters) {
         parameterPointers.push_back(&param);
     }
-    DSLFunction result(modifiers, type, this->text(name), parameterPointers,
+
+    DSLFunction result(this->text(name), modifiers, type, parameterPointers,
                        this->rangeFrom(start));
-    if (!this->checkNext(Token::Kind::TK_SEMICOLON)) {
+
+    const bool hasFunctionBody = !this->checkNext(Token::Kind::TK_SEMICOLON);
+    if (hasFunctionBody) {
         AutoSymbolTable symbols;
         for (DSLParameter* var : parameterPointers) {
             AddToSymbolTable(*var);
@@ -487,6 +490,8 @@ bool Parser::functionDeclarationEnd(Position start,
             return false;
         }
         result.define(std::move(*body), this->rangeFrom(bodyStart));
+    } else {
+        result.prototype();
     }
     return true;
 }

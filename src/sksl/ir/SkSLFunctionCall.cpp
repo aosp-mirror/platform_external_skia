@@ -22,6 +22,7 @@
 #include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/SkSLContext.h"
+#include "src/sksl/SkSLIntrinsicList.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/ir/SkSLChildCall.h"
 #include "src/sksl/ir/SkSLConstructor.h"
@@ -840,19 +841,6 @@ static std::unique_ptr<Expression> optimize_intrinsic_call(const Context& contex
         default:
             return nullptr;
     }
-}
-
-bool FunctionCall::hasProperty(Property property) const {
-    if (property == Property::kSideEffects &&
-        (this->function().modifiers().fFlags & Modifiers::kHasSideEffects_Flag)) {
-        return true;
-    }
-    for (const auto& arg : this->arguments()) {
-        if (arg->hasProperty(property)) {
-            return true;
-        }
-    }
-    return false;
 }
 
 std::unique_ptr<Expression> FunctionCall::clone(Position pos) const {

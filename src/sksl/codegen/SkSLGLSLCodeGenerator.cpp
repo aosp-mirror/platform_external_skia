@@ -22,6 +22,7 @@
 #include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLGLSL.h"
+#include "src/sksl/SkSLIntrinsicList.h"
 #include "src/sksl/SkSLOutputStream.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLUtil.h"
@@ -984,7 +985,7 @@ void GLSLCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
                               op.isAssignment() &&
                               left.is<FieldAccess>() &&
                               is_sk_position(left.as<FieldAccess>()) &&
-                              !right.containsRTAdjust() &&
+                              !Analysis::ContainsRTAdjust(right) &&
                               !this->caps().fCanUseFragCoord;
     if (positionWorkaround) {
         this->write("sk_FragCoord_Workaround = (");
@@ -1467,7 +1468,7 @@ void GLSLCodeGenerator::writeDoStatement(const DoStatement& d) {
 }
 
 void GLSLCodeGenerator::writeExpressionStatement(const ExpressionStatement& s) {
-    if (fProgram.fConfig->fSettings.fOptimize && !s.expression()->hasSideEffects()) {
+    if (fProgram.fConfig->fSettings.fOptimize && !Analysis::HasSideEffects(*s.expression())) {
         // Don't emit dead expressions.
         return;
     }

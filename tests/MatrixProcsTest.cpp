@@ -85,27 +85,22 @@ DEF_TEST(MatrixProcs_pack_clamp_out_of_range, r) {
         uint32_t expectedOutput;
     };
 
+    // None of these should crash or cause UBSAN errors, although if they were used in drawing,
+    // they might be incorrect due to packing 16 bits of SkFixed into 14 bits of space.
     static constexpr unsigned MAX_PACKED_VALUE = (1 << 14) - 1;
     TestCase tests[] = {
         {"16000.42=>{0xff, 6, 0xff}", SkFloatToFixed(16000.42f), 255, 0x3fd80ff},
-        // As an implementation detail, the input is clamped, tossing out the lerp value.
-        // This shouldn't affect linear interpolation as the lerp value means nothing when the
-        // two endpoints are the same.
-        {"17000.42=>{0xff, 0, 0xff}", SkFloatToFixed(17000.42f), 255, 0x3fc00ff},
-        {"18000.42=>{0xff, 0, 0xff}", SkFloatToFixed(18000.42f), 255, 0x3fc00ff},
+        {"17000.42=>{0xff, 6, 0xff}", SkFloatToFixed(17000.42f), 255, 0x3fd80ff},
+        {"18000.42=>{0xff, 6, 0xff}", SkFloatToFixed(18000.42f), 255, 0x3fd80ff},
 
-        // This is a sensible result
         {"16000.42=>{0x3e80, 6, 0x3e81}", SkFloatToFixed(16000.42f), MAX_PACKED_VALUE, 0xfa01be81},
         {"16382.00=>{0x3ffe, 0, 0x3fff}", SkFloatToFixed(16382.00f), MAX_PACKED_VALUE, 0xfff83fff},
-        // To avoid possible overflows (see later test case), we change anything over 2^14-2 to
-        // 2^14-1.
-        {"16382.51=>{0x3fff, 0, 0x3fff}", SkFloatToFixed(16382.51f), MAX_PACKED_VALUE, 0xfffc3fff},
-        // These are bigger than 2^14, which is outside the range of our packed integer.
-        // Thus, we clamp them to that biggest supported value.
-        {"17000.42=>{0x3fff, 0, 0x3fff}", SkFloatToFixed(17000.42f), MAX_PACKED_VALUE, 0xfffc3fff},
-        {"18000.42=>{0x3fff, 0, 0x3fff}", SkFloatToFixed(18000.42f), MAX_PACKED_VALUE, 0xfffc3fff},
-        // Adding 1 to this would overflow the SkFixed value if not accounted for.
-        {"32767.90=>{0x3fff, 0, 0x3fff}", SkFloatToFixed(32767.90f), MAX_PACKED_VALUE, 0xfffc3fff},
+        {"16382.51=>{0x3ffe, 8, 0x3fff}}", SkFloatToFixed(16382.51f), MAX_PACKED_VALUE, 0xfffa3fff},
+        {"17000.42=>{0x3fff, 6, 0x3fff}", SkFloatToFixed(17000.42f), MAX_PACKED_VALUE, 0xfffdbfff},
+        {"18000.42=>{0x3fff, 6, 0x3fff}", SkFloatToFixed(18000.42f), MAX_PACKED_VALUE, 0xfffdbfff},
+        // Adding 1 to this would overflow and cause an UBSAN issue, if it were not suppressed.
+        // We suppress the warning and it wraps around.
+        {"32767.90=>{0x3fff, e, 0x0}", SkFloatToFixed(32767.90f), MAX_PACKED_VALUE, 0xffff8000},
     };
 
     constexpr size_t NUM_TESTS = sizeof(tests) / sizeof(TestCase);
