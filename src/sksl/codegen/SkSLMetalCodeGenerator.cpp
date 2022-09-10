@@ -21,6 +21,7 @@
 #include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLContext.h"
+#include "src/sksl/SkSLIntrinsicList.h"
 #include "src/sksl/SkSLMemoryLayout.h"
 #include "src/sksl/SkSLOutputStream.h"
 #include "src/sksl/SkSLProgramSettings.h"
@@ -1783,7 +1784,7 @@ void MetalCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
         this->writeExpression(left, precedence);
     }
     if (op.kind() != Operator::Kind::EQ && op.isAssignment() &&
-        left.kind() == Expression::Kind::kSwizzle && !left.hasSideEffects()) {
+        left.kind() == Expression::Kind::kSwizzle && !Analysis::HasSideEffects(left)) {
         // This doesn't compile in Metal:
         // float4 x = float4(1);
         // x.xy *= float2x2(...);
@@ -2447,7 +2448,7 @@ void MetalCodeGenerator::writeDoStatement(const DoStatement& d) {
 }
 
 void MetalCodeGenerator::writeExpressionStatement(const ExpressionStatement& s) {
-    if (fProgram.fConfig->fSettings.fOptimize && !s.expression()->hasSideEffects()) {
+    if (fProgram.fConfig->fSettings.fOptimize && !Analysis::HasSideEffects(*s.expression())) {
         // Don't emit dead expressions.
         return;
     }
