@@ -54,14 +54,10 @@ cc_defaults {
     name: "skia_arch_defaults",
     arch: {
         arm: {
-            srcs: [
-                
-            ],
+            srcs: [],
 
             neon: {
-                srcs: [
-                    
-                ],
+                srcs: [],
             },
         },
 
@@ -76,7 +72,6 @@ cc_defaults {
                 "src/opts/SkOpts_avx.cpp",
                 "src/opts/SkOpts_hsw.cpp",
                 "src/opts/SkOpts_skx.cpp",
-                "src/opts/SkOpts_sse41.cpp",
                 "src/opts/SkOpts_sse42.cpp",
                 "src/opts/SkOpts_ssse3.cpp",
             ],
@@ -87,7 +82,6 @@ cc_defaults {
                 "src/opts/SkOpts_avx.cpp",
                 "src/opts/SkOpts_hsw.cpp",
                 "src/opts/SkOpts_skx.cpp",
-                "src/opts/SkOpts_sse41.cpp",
                 "src/opts/SkOpts_sse42.cpp",
                 "src/opts/SkOpts_ssse3.cpp",
             ],
