@@ -607,17 +607,17 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::Rect(
         "uniform int edgeType;"  // GrClipEdgeType, specialized
         "uniform float4 rectUniform;"
 
-        "half4 main(float2 xy, half4 inColor) {"
+        "half4 main(float2 xy) {"
             "half coverage;"
             "if (edgeType == kFillBW || edgeType == kInverseFillBW) {"
                 // non-AA
-                "coverage = all(greaterThan(float4(sk_FragCoord.xy, rectUniform.zw),"
-                                           "float4(rectUniform.xy, sk_FragCoord.xy))) ? 1 : 0;"
+                "coverage = half(all(greaterThan(float4(sk_FragCoord.xy, rectUniform.zw),"
+                                                "float4(rectUniform.xy, sk_FragCoord.xy))));"
             "} else {"
                 // compute coverage relative to left and right edges, add, then subtract 1 to
                 // account for double counting. And similar for top/bottom.
-                "half4 dists4 = clamp(half4(1, 1, -1, -1) *"
-                                     "half4(sk_FragCoord.xyxy - rectUniform), 0, 1);"
+                "half4 dists4 = saturate(half4(1, 1, -1, -1) *"
+                                        "half4(sk_FragCoord.xyxy - rectUniform));"
                 "half2 dists2 = dists4.xy + dists4.zw - 1;"
                 "coverage = dists2.x * dists2.y;"
             "}"
@@ -626,7 +626,7 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::Rect(
                 "coverage = 1.0 - coverage;"
             "}"
 
-            "return inColor * coverage;"
+            "return half4(coverage);"
         "}"
     );
 
@@ -635,10 +635,12 @@ std::unique_ptr<GrFragmentProcessor> GrFragmentProcessor::Rect(
     // to interpolate from 0 at a half pixel inset and 1 at a half pixel outset of rect.
     SkRect rectUniform = GrClipEdgeTypeIsAA(edgeType) ? rect.makeOutset(.5f, .5f) : rect;
 
-    return GrSkSLFP::Make(effect, "Rect", std::move(inputFP),
-                          GrSkSLFP::OptFlags::kCompatibleWithCoverageAsAlpha,
-                          "edgeType", GrSkSLFP::Specialize(static_cast<int>(edgeType)),
-                          "rectUniform", rectUniform);
+    auto rectFP = GrSkSLFP::Make(effect, "Rect", /*inputFP=*/nullptr,
+                                 GrSkSLFP::OptFlags::kCompatibleWithCoverageAsAlpha,
+                                "edgeType", GrSkSLFP::Specialize(static_cast<int>(edgeType)),
+                                "rectUniform", rectUniform);
+    return GrBlendFragmentProcessor::Make<SkBlendMode::kModulate>(std::move(rectFP),
+                                                                  std::move(inputFP));
 }
 
 GrFPResult GrFragmentProcessor::Circle(std::unique_ptr<GrFragmentProcessor> inputFP,
@@ -658,7 +660,7 @@ GrFPResult GrFragmentProcessor::Circle(std::unique_ptr<GrFragmentProcessor> inpu
         // fills and (..., radius - 0.5, 1 / (radius - 0.5)) for inverse fills.
         "uniform float4 circle;"
 
-        "half4 main(float2 xy, half4 inColor) {"
+        "half4 main(float2 xy) {"
             // TODO: Right now the distance to circle calculation is performed in a space normalized
             // to the radius and then denormalized. This is to mitigate overflow on devices that
             // don't have full float.
@@ -666,13 +668,11 @@ GrFPResult GrFragmentProcessor::Circle(std::unique_ptr<GrFragmentProcessor> inpu
             "if (edgeType == kInverseFillBW || edgeType == kInverseFillAA) {"
                 "d = half((length((circle.xy - sk_FragCoord.xy) * circle.w) - 1.0) * circle.z);"
             "} else {"
-                "d = half((1.0 - length((circle.xy - sk_FragCoord.xy) *  circle.w)) * circle.z);"
+                "d = half((1.0 - length((circle.xy - sk_FragCoord.xy) * circle.w)) * circle.z);"
             "}"
-            "if (edgeType == kFillAA || edgeType == kInverseFillAA) {"
-                "return inColor * saturate(d);"
-            "} else {"
-                "return d > 0.5 ? inColor : half4(0);"
-            "}"
+            "return half4((edgeType == kFillAA || edgeType == kInverseFillAA)"
+                              "? saturate(d)"
+                              ": (d > 0.5 ? 1 : 0));"
         "}"
     );
 
@@ -686,10 +686,12 @@ GrFPResult GrFragmentProcessor::Circle(std::unique_ptr<GrFragmentProcessor> inpu
     }
     SkV4 circle = {center.fX, center.fY, effectiveRadius, SkScalarInvert(effectiveRadius)};
 
-    return GrFPSuccess(GrSkSLFP::Make(effect, "Circle", std::move(inputFP),
-                                      GrSkSLFP::OptFlags::kCompatibleWithCoverageAsAlpha,
-                                      "edgeType", GrSkSLFP::Specialize(static_cast<int>(edgeType)),
-                                      "circle", circle));
+    auto circleFP = GrSkSLFP::Make(effect, "Circle", /*inputFP=*/nullptr,
+                                   GrSkSLFP::OptFlags::kCompatibleWithCoverageAsAlpha,
+                                   "edgeType", GrSkSLFP::Specialize(static_cast<int>(edgeType)),
+                                   "circle", circle);
+    return GrFPSuccess(GrBlendFragmentProcessor::Make<SkBlendMode::kModulate>(std::move(circleFP),
+                                                                              std::move(inputFP)));
 }
 
 GrFPResult GrFragmentProcessor::Ellipse(std::unique_ptr<GrFragmentProcessor> inputFP,
@@ -720,7 +722,7 @@ GrFPResult GrFragmentProcessor::Ellipse(std::unique_ptr<GrFragmentProcessor> inp
         "uniform float4 ellipse;"
         "uniform float2 scale;"    // only for medPrecision
 
-        "half4 main(float2 xy, half4 inColor) {"
+        "half4 main(float2 xy) {"
             // d is the offset to the ellipse center
             "float2 d = sk_FragCoord.xy - ellipse.xy;"
             // If we're on a device with a "real" mediump then we'll do the distance computation in
@@ -756,7 +758,7 @@ GrFPResult GrFragmentProcessor::Ellipse(std::unique_ptr<GrFragmentProcessor> inp
             "} else {"  // edgeType == kInverseFillAA
                 "alpha = saturate(0.5 + half(approx_dist));"
             "}"
-            "return inColor * alpha;"
+            "return half4(alpha);"
         "}"
     );
 
@@ -781,12 +783,14 @@ GrFPResult GrFragmentProcessor::Ellipse(std::unique_ptr<GrFragmentProcessor> inp
     }
     SkV4 ellipse = {center.fX, center.fY, invRXSqd, invRYSqd};
 
-    return GrFPSuccess(GrSkSLFP::Make(effect, "Ellipse", std::move(inputFP),
-                                      GrSkSLFP::OptFlags::kCompatibleWithCoverageAsAlpha,
-                                      "edgeType", GrSkSLFP::Specialize(static_cast<int>(edgeType)),
-                                      "medPrecision",  GrSkSLFP::Specialize<int>(medPrecision),
-                                      "ellipse", ellipse,
-                                      "scale", scale));
+    auto ellipseFP = GrSkSLFP::Make(effect, "Ellipse", /*inputFP=*/nullptr,
+                                    GrSkSLFP::OptFlags::kCompatibleWithCoverageAsAlpha,
+                                    "edgeType", GrSkSLFP::Specialize(static_cast<int>(edgeType)),
+                                    "medPrecision",  GrSkSLFP::Specialize<int>(medPrecision),
+                                    "ellipse", ellipse,
+                                    "scale", scale);
+    return GrFPSuccess(GrBlendFragmentProcessor::Make<SkBlendMode::kModulate>(std::move(ellipseFP),
+                                                                              std::move(inputFP)));
 }
 
 //////////////////////////////////////////////////////////////////////////////
