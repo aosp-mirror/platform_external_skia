@@ -120,14 +120,6 @@ public:
     const AnyConstructor& asAnyConstructor() const;
 
     /**
-     * Returns true if this expression is constant. compareConstant must be implemented for all
-     * constants!
-     */
-    virtual bool isCompileTimeConstant() const {
-        return false;
-    }
-
-    /**
      * Returns true if this expression is incomplete. Specifically, dangling function/method-call
      * references that were never invoked, or type references that were never constructed, are
      * considered incomplete expressions and should result in an error.
@@ -148,7 +140,7 @@ public:
         return ComparisonResult::kUnknown;
     }
 
-    virtual CoercionCost coercionCost(const Type& target) const {
+    CoercionCost coercionCost(const Type& target) const {
         return this->type().coercionCost(target);
     }
 

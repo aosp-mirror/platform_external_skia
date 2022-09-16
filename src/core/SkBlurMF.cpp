@@ -32,6 +32,7 @@
 #include "src/gpu/ganesh/GrTextureProxy.h"
 #include "src/gpu/ganesh/GrThreadSafeCache.h"
 #include "src/gpu/ganesh/SkGr.h"
+#include "src/gpu/ganesh/effects/GrBlendFragmentProcessor.h"
 #include "src/gpu/ganesh/effects/GrMatrixEffect.h"
 #include "src/gpu/ganesh/effects/GrSkSLFP.h"
 #include "src/gpu/ganesh/effects/GrTextureEffect.h"
@@ -845,20 +846,23 @@ static std::unique_ptr<GrFragmentProcessor> make_circle_blur(GrRecordingContext*
         "uniform shader blurProfile;"
         "uniform half4 circleData;"
 
-        "half4 main(float2 xy, half4 inColor) {"
+        "half4 main(float2 xy) {"
             // We just want to compute "(length(vec) - circleData.z + 0.5) * circleData.w" but need
             // to rearrange to avoid passing large values to length() that would overflow.
             "half2 vec = half2((sk_FragCoord.xy - circleData.xy) * circleData.w);"
             "half dist = length(vec) + (0.5 - circleData.z) * circleData.w;"
-            "return inColor * blurProfile.eval(half2(dist, 0.5)).a;"
+            "return blurProfile.eval(half2(dist, 0.5)).aaaa;"
         "}"
     );
 
     SkV4 circleData = {circle.centerX(), circle.centerY(), solidRadius, 1.f / textureRadius};
-    return GrSkSLFP::Make(effect, "CircleBlur", /*inputFP=*/nullptr,
-                          GrSkSLFP::OptFlags::kCompatibleWithCoverageAsAlpha,
-                          "blurProfile", GrSkSLFP::IgnoreOptFlags(std::move(profile)),
-                          "circleData", circleData);
+    auto circleBlurFP = GrSkSLFP::Make(effect, "CircleBlur", /*inputFP=*/nullptr,
+                                       GrSkSLFP::OptFlags::kCompatibleWithCoverageAsAlpha,
+                                       "blurProfile", GrSkSLFP::IgnoreOptFlags(std::move(profile)),
+                                       "circleData", circleData);
+    // Modulate blur with the input color.
+    return GrBlendFragmentProcessor::Make<SkBlendMode::kModulate>(std::move(circleBlurFP),
+                                                                  /*dst=*/nullptr);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -985,7 +989,7 @@ static std::unique_ptr<GrFragmentProcessor> make_rect_blur(GrRecordingContext* c
         "uniform float4 rect;"
         "uniform int isFast;"  // specialized
 
-        "half4 main(float2 pos, half4 inColor) {"
+        "half4 main(float2 pos) {"
             "half xCoverage, yCoverage;"
             "if (bool(isFast)) {"
                 // Get the smaller of the signed distance from the frag coord to the left and right
@@ -1018,7 +1022,7 @@ static std::unique_ptr<GrFragmentProcessor> make_rect_blur(GrRecordingContext* c
                 "yCoverage = 1 - integral.eval(half2(rect.T, 0.5)).a"
                               "- integral.eval(half2(rect.B, 0.5)).a;"
             "}"
-            "return inColor * xCoverage * yCoverage;"
+            "return half4(xCoverage * yCoverage);"
         "}"
     );
 
@@ -1028,6 +1032,9 @@ static std::unique_ptr<GrFragmentProcessor> make_rect_blur(GrRecordingContext* c
                            "integral", GrSkSLFP::IgnoreOptFlags(std::move(integral)),
                            "rect", insetRect,
                            "isFast", GrSkSLFP::Specialize<int>(isFast));
+    // Modulate blur with the input color.
+    fp = GrBlendFragmentProcessor::Make<SkBlendMode::kModulate>(std::move(fp),
+                                                                /*dst=*/nullptr);
     if (!invM.isIdentity()) {
         fp = GrMatrixEffect::Make(invM, std::move(fp));
     }
@@ -1389,7 +1396,7 @@ static std::unique_ptr<GrFragmentProcessor> make_rrect_blur(GrRecordingContext* 
         "uniform float4 proxyRect;"
         "uniform half blurRadius;"
 
-        "half4 main(float2 xy, half4 inColor) {"
+        "half4 main(float2 xy) {"
             // Warp the fragment position to the appropriate part of the 9-patch blur texture by
             // snipping out the middle section of the proxy rect.
             "float2 translatedFragPosFloat = sk_FragCoord.xy - proxyRect.LT;"
@@ -1426,7 +1433,7 @@ static std::unique_ptr<GrFragmentProcessor> make_rrect_blur(GrRecordingContext* 
             "half2 proxyDims = half2(2.0 * edgeSize);"
             "half2 texCoord = translatedFragPosHalf / proxyDims;"
 
-            "return inColor * ninePatchFP.eval(texCoord).a;"
+            "return ninePatchFP.eval(texCoord).aaaa;"
         "}"
     );
 
@@ -1434,12 +1441,15 @@ static std::unique_ptr<GrFragmentProcessor> make_rrect_blur(GrRecordingContext* 
     float blurRadius = 3.f * SkScalarCeilToScalar(xformedSigma - 1 / 6.0f);
     SkRect proxyRect = devRRect.getBounds().makeOutset(blurRadius, blurRadius);
 
-    return GrSkSLFP::Make(effect, "RRectBlur", /*inputFP=*/nullptr,
-                          GrSkSLFP::OptFlags::kCompatibleWithCoverageAsAlpha,
-                          "ninePatchFP", GrSkSLFP::IgnoreOptFlags(std::move(maskFP)),
-                          "cornerRadius", cornerRadius,
-                          "proxyRect", proxyRect,
-                          "blurRadius", blurRadius);
+    auto rrectBlurFP = GrSkSLFP::Make(effect, "RRectBlur", /*inputFP=*/nullptr,
+                                      GrSkSLFP::OptFlags::kCompatibleWithCoverageAsAlpha,
+                                      "ninePatchFP", GrSkSLFP::IgnoreOptFlags(std::move(maskFP)),
+                                      "cornerRadius", cornerRadius,
+                                      "proxyRect", proxyRect,
+                                      "blurRadius", blurRadius);
+    // Modulate blur with the input color.
+    return GrBlendFragmentProcessor::Make<SkBlendMode::kModulate>(std::move(rrectBlurFP),
+                                                                  /*dst=*/nullptr);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
