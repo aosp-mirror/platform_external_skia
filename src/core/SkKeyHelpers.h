@@ -20,7 +20,6 @@
 #include "include/core/SkTileMode.h"
 #include "include/private/SkColorData.h"
 
-enum class SkShaderType : uint32_t;
 class SkData;
 class SkPaintParamsKeyBuilder;
 class SkPipelineDataGatherer;
@@ -28,9 +27,23 @@ class SkRuntimeEffect;
 class SkUniquePaintParamsID;
 class SkKeyContext;
 
+#ifdef SK_ENABLE_PRECOMPILE
+namespace skgpu::graphite {
+enum class ShaderType : uint32_t;
+}
+#endif
+
 // The KeyHelpers can be used to manually construct an SkPaintParamsKey
 
 struct PassthroughShaderBlock {
+
+    static void BeginBlock(const SkKeyContext&,
+                           SkPaintParamsKeyBuilder*,
+                           SkPipelineDataGatherer*);
+
+};
+
+struct PassthroughBlenderBlock {
 
     static void BeginBlock(const SkKeyContext&,
                            SkPaintParamsKeyBuilder*,
@@ -296,6 +309,11 @@ struct RuntimeColorFilterBlock {
                            SkPaintParamsKeyBuilder*,
                            SkPipelineDataGatherer*,
                            const ColorFilterData&);
+};
+
+struct RuntimeBlenderBlock : public RuntimeColorFilterBlock {
+    // Runtime Blenders use the same key builder as runtime color filters.
+    using BlenderData = ColorFilterData;
 };
 
 #endif // SkKeyHelpers_DEFINED

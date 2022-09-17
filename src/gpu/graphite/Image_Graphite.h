@@ -40,7 +40,9 @@ public:
                                 int srcX,
                                 int srcY);
 
-    bool onHasMipmaps() const override { return false; }
+    bool onHasMipmaps() const override {
+        return fTextureProxyView.proxy()->mipmapped() == Mipmapped::kYes;
+    }
 
     bool isGraphiteBacked() const override { return true; }
 
@@ -70,9 +72,8 @@ private:
             const SkTileMode[2],
             const SkMatrix&,
             const SkRect* subset,
-            const SkRect* domain) const override {
-        return nullptr;
-    }
+            const SkRect* domain) const override;
+
     std::tuple<GrSurfaceProxyView, GrColorType> onAsView(
             GrRecordingContext*,
             GrMipmapped,

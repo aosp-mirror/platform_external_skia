@@ -15,6 +15,10 @@
 #include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/TextureUtils.h"
 
+#if SK_SUPPORT_GPU
+#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#endif
+
 namespace skgpu::graphite {
 
 Image::Image(uint32_t uniqueID,
@@ -62,26 +66,41 @@ sk_sp<SkImage> Image::onReinterpretColorSpace(sk_sp<SkColorSpace>) const {
     return nullptr;
 }
 
+#if SK_SUPPORT_GPU
+std::unique_ptr<GrFragmentProcessor> Image::onAsFragmentProcessor(
+        GrRecordingContext*,
+        SkSamplingOptions,
+        const SkTileMode[2],
+        const SkMatrix&,
+        const SkRect* subset,
+        const SkRect* domain) const {
+    return nullptr;
+}
+#endif
+
 sk_sp<SkImage> Image::onMakeTextureImage(Recorder*, RequiredImageProperties requiredProps) const {
     SkASSERT(requiredProps.fMipmapped == Mipmapped::kYes && !this->hasMipmaps());
-    // TODO: copy the base layer into a new image that has mip levels
+    // TODO: copy the base layer into a new image that has mip levels. For now we just return
+    // the un-mipmapped version and allow the sampling to be downgraded to linear
     SKGPU_LOG_W("Graphite does not yet allow explicit mipmap level addition");
-    return nullptr;
+    return sk_ref_sp(this);
 }
 
 } // namespace skgpu::graphite
 
 sk_sp<SkImage> SkImage::makeTextureImage(skgpu::graphite::Recorder* recorder,
                                          RequiredImageProperties requiredProps) const {
+    using namespace skgpu::graphite;
+
     if (!recorder) {
         return nullptr;
     }
     if (this->dimensions().area() <= 1) {
-        requiredProps.fMipmapped = skgpu::graphite::Mipmapped::kNo;
+        requiredProps.fMipmapped = Mipmapped::kNo;
     }
 
     if (as_IB(this)->isGraphiteBacked()) {
-        if (requiredProps.fMipmapped == skgpu::graphite::Mipmapped::kNo || this->hasMipmaps()) {
+        if (requiredProps.fMipmapped == Mipmapped::kNo || this->hasMipmaps()) {
             const SkImage* image = this;
             return sk_ref_sp(const_cast<SkImage*>(image));
         }

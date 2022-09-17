@@ -24,7 +24,7 @@
 #endif
 
 #ifdef SK_ENABLE_PRECOMPILE
-#include "include/core/SkCombinationBuilder.h"
+#include "include/gpu/graphite/CombinationBuilder.h"
 #endif
 
 #include <new>
@@ -690,8 +690,8 @@ public:
     }
 
     std::string sampleBlender(int index, std::string src, std::string dst) override {
-        // TODO(skia:13508): implement child blenders
-        return src;
+        return emit_expression_for_entry(fShaderInfo, fChildEntryIndices[index],
+                                         {src, dst, "coords", "float4x4(1.0)"});
     }
 
     std::string toLinearSrgb(std::string color) override {
@@ -844,7 +844,10 @@ static constexpr char kGaussianColorFilterName[] = "sk_gaussian_colorfilter";
 static constexpr char kErrorName[] = "sk_error";
 
 //--------------------------------------------------------------------------------------------------
-static constexpr char kPassthroughName[] = "sk_passthrough";
+static constexpr char kPassthroughShaderName[] = "sk_passthrough";
+
+//--------------------------------------------------------------------------------------------------
+static constexpr char kPassthroughBlenderName[] = "blend_src_over";
 
 //--------------------------------------------------------------------------------------------------
 static constexpr SkPaintParamsKey::DataPayloadField kFixedFunctionDataFields[] = {
@@ -961,8 +964,9 @@ int SkShaderCodeDictionary::addUserDefinedSnippet(
                                        dataPayloadExpectations);
 }
 
-#ifdef SK_ENABLE_PRECOMPILE
-SkBlenderID SkShaderCodeDictionary::addUserDefinedBlender(sk_sp<SkRuntimeEffect> effect) {
+#if defined(SK_ENABLE_PRECOMPILE) && defined(SK_GRAPHITE_ENABLED)
+skgpu::graphite::BlenderID SkShaderCodeDictionary::addUserDefinedBlender(
+            sk_sp<SkRuntimeEffect> effect) {
     if (!effect) {
         return {};
     }
@@ -980,10 +984,10 @@ SkBlenderID SkShaderCodeDictionary::addUserDefinedBlender(sk_sp<SkRuntimeEffect>
                                                     GenerateDefaultPreamble,
                                                     kNoChildren,
                                                     /*dataPayloadExpectations=*/{});
-    return SkBlenderID(codeSnippetID);
+    return skgpu::graphite::BlenderID(codeSnippetID);
 }
 
-const SkShaderSnippet* SkShaderCodeDictionary::getEntry(SkBlenderID id) const {
+const SkShaderSnippet* SkShaderCodeDictionary::getEntry(skgpu::graphite::BlenderID id) const {
     return this->getEntry(id.asUInt());
 }
 
@@ -1115,15 +1119,26 @@ SkShaderCodeDictionary::SkShaderCodeDictionary() {
             { }      // no data payload
     };
     fBuiltInCodeSnippets[(int) SkBuiltInCodeSnippetID::kPassthroughShader] = {
-            "Passthrough",
+            "PassthroughShader",
             { },     // no uniforms
             SnippetRequirementFlags::kPriorStageOutput,
             { },     // no samplers
-            kPassthroughName,
+            kPassthroughShaderName,
             GenerateDefaultExpression,
             GenerateDefaultPreamble,
             kNoChildren,
             { }      // no data payload
+    };
+    fBuiltInCodeSnippets[(int)SkBuiltInCodeSnippetID::kPassthroughBlender] = {
+            "PassthroughBlender",
+            {},      // no uniforms
+            SnippetRequirementFlags::kPriorStageOutput | SnippetRequirementFlags::kDestColor,
+            {},      // no samplers
+            kPassthroughBlenderName,
+            GenerateDefaultExpression,
+            GenerateDefaultPreamble,
+            kNoChildren,
+            {}       // no data payload
     };
     fBuiltInCodeSnippets[(int) SkBuiltInCodeSnippetID::kSolidColorShader] = {
             "SolidColor",
