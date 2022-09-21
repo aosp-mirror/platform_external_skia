@@ -493,38 +493,38 @@ half4 sk_blend(int blendMode, half4 src, half4 dst) {
         case kClear:      { return blend_clear(src, dst); }
         case kSrc:        { return blend_src(src, dst); }
         case kDst:        { return blend_dst(src, dst); }
-        case kSrcOver:    { return blend_porter_duff(src, dst, half4(1, 0,  0, -1)); }
-        case kDstOver:    { return blend_porter_duff(src, dst, half4(0, 1, -1,  0)); }
-        case kSrcIn:      { return blend_porter_duff(src, dst, half4(0, 0,  1,  0)); }
-        case kDstIn:      { return blend_porter_duff(src, dst, half4(0, 0,  0,  1)); }
-        case kSrcOut:     { return blend_porter_duff(src, dst, half4(0, 0, -1,  0)); }
-        case kDstOut:     { return blend_porter_duff(src, dst, half4(0, 0,  0, -1)); }
-        case kSrcATop:    { return blend_porter_duff(src, dst, half4(0, 0,  1, -1)); }
-        case kDstATop:    { return blend_porter_duff(src, dst, half4(0, 0, -1,  1)); }
-        case kXor:        { return blend_porter_duff(src, dst, half4(0, 0, -1, -1)); }
-        case kPlus:       { return blend_porter_duff(src, dst, half4(1, 1,  0,  0)); }
+        case kSrcOver:    { return blend_porter_duff(half4(1, 0,  0, -1), src, dst); }
+        case kDstOver:    { return blend_porter_duff(half4(0, 1, -1,  0), src, dst); }
+        case kSrcIn:      { return blend_porter_duff(half4(0, 0,  1,  0), src, dst); }
+        case kDstIn:      { return blend_porter_duff(half4(0, 0,  0,  1), src, dst); }
+        case kSrcOut:     { return blend_porter_duff(half4(0, 0, -1,  0), src, dst); }
+        case kDstOut:     { return blend_porter_duff(half4(0, 0,  0, -1), src, dst); }
+        case kSrcATop:    { return blend_porter_duff(half4(0, 0,  1, -1), src, dst); }
+        case kDstATop:    { return blend_porter_duff(half4(0, 0, -1,  1), src, dst); }
+        case kXor:        { return blend_porter_duff(half4(0, 0, -1, -1), src, dst); }
+        case kPlus:       { return blend_porter_duff(half4(1, 1,  0,  0), src, dst); }
         case kModulate:   { return blend_modulate(src, dst); }
         case kScreen:     { return blend_screen(src, dst); }
-        case kOverlay:    { return blend_overlay(src, dst, /*flip=*/0); }
-        case kDarken:     { return blend_darken(src, dst, /*mode=*/1); }
-        case kLighten:    { return blend_darken(src, dst, /*mode=*/-1); }
+        case kOverlay:    { return blend_overlay(/*flip=*/0, src, dst); }
+        case kDarken:     { return blend_darken(/*mode=*/1, src, dst); }
+        case kLighten:    { return blend_darken(/*mode=*/-1, src, dst); }
         case kColorDodge: { return blend_color_dodge(src, dst); }
         case kColorBurn:  { return blend_color_burn(src, dst); }
-        case kHardLight:  { return blend_overlay(src, dst, /*flip=*/1); }
+        case kHardLight:  { return blend_overlay(/*flip=*/1, src, dst); }
         case kSoftLight:  { return blend_soft_light(src, dst); }
         case kDifference: { return blend_difference(src, dst); }
         case kExclusion:  { return blend_exclusion(src, dst); }
         case kMultiply:   { return blend_multiply(src, dst); }
-        case kHue:        { return blend_hslc(src, dst, /*flipSat=*/half2(0, 1)); }
-        case kSaturation: { return blend_hslc(src, dst, /*flipSat=*/half2(1)); }
-        case kColor:      { return blend_hslc(src, dst, /*flipSat=*/half2(0)); }
-        case kLuminosity: { return blend_hslc(src, dst, /*flipSat=*/half2(1, 0)); }
+        case kHue:        { return blend_hslc(/*flipSat=*/half2(0, 1), src, dst); }
+        case kSaturation: { return blend_hslc(/*flipSat=*/half2(1), src, dst); }
+        case kColor:      { return blend_hslc(/*flipSat=*/half2(0), src, dst); }
+        case kLuminosity: { return blend_hslc(/*flipSat=*/half2(1, 0), src, dst); }
         default: return half4(0);  // Avoids 'blend can exit without returning a value' error
     }
 }
 
-half4 sk_blend_shader(int blendMode, half4 child0, half4 child1) {
-    return sk_blend(blendMode, child1, child0);
+half4 sk_blend_shader(int blendMode, half4 src, half4 dst) {
+    return sk_blend(blendMode, src, dst);
 }
 
 half4 sk_blend_colorfilter(half4 dstColor, int blendMode, float4 srcColor) {
@@ -532,7 +532,7 @@ half4 sk_blend_colorfilter(half4 dstColor, int blendMode, float4 srcColor) {
 }
 
 half4 sk_table_colorfilter(half4 inColor, sampler2D s) {
-    half4 coords = unpremul(inColor) * 255.0/256.0 + 0.5/256.0; 
+    half4 coords = unpremul(inColor) * 255.0/256.0 + 0.5/256.0;
     half4 color = half4(sample(s, half2(coords.r, 3.0/8.0)).r,
                         sample(s, half2(coords.g, 5.0/8.0)).r,
                         sample(s, half2(coords.b, 7.0/8.0)).r,
