@@ -18,7 +18,7 @@
 #include <tuple>
 #include <utility>
 
-class SkTDStorage {
+class SK_SPI SkTDStorage {
 public:
     SkTDStorage() = default;
     SkTDStorage(const SkTDStorage& that) = delete;

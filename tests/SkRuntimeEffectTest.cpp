@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkBitmap.h"
 #include "include/core/SkBlender.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorFilter.h"
@@ -14,6 +13,7 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
 #include "include/effects/SkBlenders.h"
+#include "include/effects/SkGradientShader.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/sksl/SkSLDebugTrace.h"
@@ -488,18 +488,17 @@ private:
     SkTLazy<SkRuntimeBlendBuilder> fBuilder;
 };
 
-// Produces a 2x2 bitmap shader, with opaque colors:
+// Produces a shader which will paint these opaque colors in a 2x2 rectangle:
 // [  Red, Green ]
 // [ Blue, White ]
 static sk_sp<SkShader> make_RGBW_shader() {
-    SkBitmap bmp;
-    bmp.allocPixels(SkImageInfo::Make(2, 2, kRGBA_8888_SkColorType, kPremul_SkAlphaType));
-    SkIRect topLeft = SkIRect::MakeWH(1, 1);
-    bmp.pixmap().erase(SK_ColorRED,   topLeft);
-    bmp.pixmap().erase(SK_ColorGREEN, topLeft.makeOffset(1, 0));
-    bmp.pixmap().erase(SK_ColorBLUE,  topLeft.makeOffset(0, 1));
-    bmp.pixmap().erase(SK_ColorWHITE, topLeft.makeOffset(1, 1));
-    return bmp.makeShader(SkSamplingOptions());
+    static constexpr SkColor colors[] = {SK_ColorWHITE, SK_ColorWHITE,
+                                         SK_ColorBLUE, SK_ColorBLUE,
+                                         SK_ColorRED, SK_ColorRED,
+                                         SK_ColorGREEN, SK_ColorGREEN};
+    static constexpr SkScalar   pos[] = { 0, .25f, .25f, .50f, .50f, .75, .75, 1 };
+    static_assert(std::size(colors) == std::size(pos), "size mismatch");
+    return SkGradientShader::MakeSweep(1, 1, colors, pos, std::size(colors));
 }
 
 static void test_RuntimeEffect_Shaders(skiatest::Reporter* r, GrRecordingContext* rContext) {
@@ -617,10 +616,10 @@ DEF_TEST(SkRuntimeEffectSimple, r) {
     test_RuntimeEffect_Shaders(r, nullptr);
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkRuntimeEffectSimple_GPU,
-                                   r,
-                                   ctxInfo,
-                                   CtsEnforcement::kApiLevel_T) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRuntimeEffectSimple_GPU,
+                                       r,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     test_RuntimeEffect_Shaders(r, ctxInfo.directContext());
 }
 
@@ -730,10 +729,10 @@ DEF_TEST(SkRuntimeEffectObeysCapabilities_CPU, r) {
     test_RuntimeEffectObeysCapabilities(r, surface.get());
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkRuntimeEffectObeysCapabilities_GPU,
-                                   r,
-                                   ctxInfo,
-                                   CtsEnforcement::kApiLevel_T) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRuntimeEffectObeysCapabilities_GPU,
+                                       r,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     SkImageInfo info = SkImageInfo::Make(2, 2, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
     sk_sp<SkSurface> surface =
             SkSurface::MakeRenderTarget(ctxInfo.directContext(), SkBudgeted::kNo, info);
@@ -1008,16 +1007,16 @@ static void test_RuntimeEffect_Blenders(skiatest::Reporter* r, GrRecordingContex
                  "uniform half2 pos;"
                  "half4 main(half4 s, half4 d) { return child.eval(pos); }");
     effect.child("child") = make_RGBW_shader();
-    effect.uniform("pos") = float2{0, 0};
+    effect.uniform("pos") = float2{0.5, 0.5};
     effect.test(0xFF0000FF);
 
-    effect.uniform("pos") = float2{1, 0};
+    effect.uniform("pos") = float2{1.5, 0.5};
     effect.test(0xFF00FF00);
 
-    effect.uniform("pos") = float2{0, 1};
+    effect.uniform("pos") = float2{0.5, 1.5};
     effect.test(0xFFFF0000);
 
-    effect.uniform("pos") = float2{1, 1};
+    effect.uniform("pos") = float2{1.5, 1.5};
     effect.test(0xFFFFFFFF);
 
     // Sampling a color filter
@@ -1047,10 +1046,10 @@ DEF_TEST(SkRuntimeEffect_Blender_CPU, r) {
     test_RuntimeEffect_Blenders(r, /*rContext=*/nullptr);
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkRuntimeEffect_Blender_GPU,
-                                   r,
-                                   ctxInfo,
-                                   CtsEnforcement::kApiLevel_T) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRuntimeEffect_Blender_GPU,
+                                       r,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     test_RuntimeEffect_Blenders(r, ctxInfo.directContext());
 }
 
@@ -1194,10 +1193,10 @@ DEF_TEST(SkRuntimeStructNameReuse, r) {
     test_RuntimeEffectStructNameReuse(r, nullptr);
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkRuntimeStructNameReuse_GPU,
-                                   r,
-                                   ctxInfo,
-                                   CtsEnforcement::kApiLevel_T) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRuntimeStructNameReuse_GPU,
+                                       r,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     test_RuntimeEffectStructNameReuse(r, ctxInfo.directContext());
 }
 
@@ -1358,7 +1357,7 @@ DEF_TEST(SkRuntimeShaderIsOpaque, r) {
     test("return cOnes.eval(xy);", false);
 }
 
-DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSkSLFP_Specialized, r, ctxInfo, CtsEnforcement::kApiLevel_T) {
+DEF_GANESH_TEST_FOR_ALL_CONTEXTS(GrSkSLFP_Specialized, r, ctxInfo, CtsEnforcement::kApiLevel_T) {
     struct FpAndKey {
         std::unique_ptr<GrFragmentProcessor> fp;
         SkTArray<uint32_t, true>             key;
@@ -1394,7 +1393,10 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(GrSkSLFP_Specialized, r, ctxInfo, CtsEnforcement::k
     SkASSERT(sRed.key != sGreen.key);
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrSkSLFP_UniformArray, r, ctxInfo, CtsEnforcement::kApiLevel_T) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrSkSLFP_UniformArray,
+                                       r,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     // Make a fill-context to draw into.
     GrDirectContext* directContext = ctxInfo.directContext();
     SkImageInfo info = SkImageInfo::Make(1, 1, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
