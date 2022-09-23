@@ -8,7 +8,6 @@ OpName %sk_FragColor "sk_FragColor"
 OpName %_entrypoint_v "_entrypoint_v"
 OpName %userfunc_ff "userfunc_ff"
 OpName %main "main"
-OpName %a "a"
 OpName %b "b"
 OpName %c "c"
 OpName %x "x"
@@ -17,11 +16,11 @@ OpDecorate %sk_Clockwise BuiltIn FrontFacing
 OpDecorate %sk_FragColor RelaxedPrecision
 OpDecorate %sk_FragColor Location 0
 OpDecorate %sk_FragColor Index 0
-OpDecorate %67 RelaxedPrecision
+OpDecorate %64 RelaxedPrecision
+OpDecorate %66 RelaxedPrecision
 OpDecorate %69 RelaxedPrecision
 OpDecorate %72 RelaxedPrecision
-OpDecorate %75 RelaxedPrecision
-OpDecorate %76 RelaxedPrecision
+OpDecorate %73 RelaxedPrecision
 %bool = OpTypeBool
 %_ptr_Input_bool = OpTypePointer Input %bool
 %sk_Clockwise = OpVariable %_ptr_Input_bool Input
@@ -67,63 +66,59 @@ OpFunctionEnd
 %main = OpFunction %v4float None %28
 %29 = OpFunctionParameter %_ptr_Function_v2float
 %30 = OpLabel
-%a = OpVariable %_ptr_Function_float Function
 %b = OpVariable %_ptr_Function_float Function
 %c = OpVariable %_ptr_Function_float Function
-%44 = OpVariable %_ptr_Function_float Function
-%47 = OpVariable %_ptr_Function_float Function
+%40 = OpVariable %_ptr_Function_float Function
+%43 = OpVariable %_ptr_Function_float Function
 %x = OpVariable %_ptr_Function_int Function
 %d = OpVariable %_ptr_Function_float Function
-OpStore %a %float_1
 OpStore %b %float_2
 OpStore %c %float_3
-%37 = OpFAdd %float %float_3 %float_77
-OpStore %a %37
+OpStore %b %float_2
+%36 = OpFAdd %float %float_3 %float_77
+OpStore %b %36
 %38 = OpFAdd %float %float_3 %float_77
-OpStore %b %38
-%40 = OpFAdd %float %float_3 %float_77
-%39 = OpExtInst %float %1 Sin %40
-OpStore %a %39
+%37 = OpExtInst %float %1 Sin %38
+OpStore %b %37
+%39 = OpFAdd %float %float_3 %float_77
+OpStore %40 %39
+%41 = OpFunctionCall %float %userfunc_ff %40
 %42 = OpFAdd %float %float_3 %float_77
-%41 = OpExtInst %float %1 Sin %42
-OpStore %b %41
-%43 = OpFAdd %float %float_3 %float_77
-OpStore %44 %43
-%45 = OpFunctionCall %float %userfunc_ff %44
-OpStore %a %45
-%46 = OpFAdd %float %float_3 %float_77
-OpStore %47 %46
-%48 = OpFunctionCall %float %userfunc_ff %47
-OpStore %b %48
+OpStore %43 %42
+%44 = OpFunctionCall %float %userfunc_ff %43
+OpStore %b %44
+%45 = OpExtInst %float %1 Cos %float_3
+OpStore %b %45
+OpStore %b %45
 OpStore %x %int_0
+OpBranch %50
+%50 = OpLabel
+OpLoopMerge %54 %53 None
+OpBranch %51
+%51 = OpLabel
+%55 = OpLoad %int %x
+%57 = OpSLessThan %bool %55 %int_1
+OpBranchConditional %57 %52 %54
+%52 = OpLabel
 OpBranch %53
 %53 = OpLabel
-OpLoopMerge %57 %56 None
-OpBranch %54
-%54 = OpLabel
 %58 = OpLoad %int %x
-%60 = OpSLessThan %bool %58 %int_1
-OpBranchConditional %60 %55 %57
-%55 = OpLabel
-OpBranch %56
-%56 = OpLabel
-%61 = OpLoad %int %x
-%62 = OpIAdd %int %61 %int_1
-OpStore %x %62
-OpBranch %53
-%57 = OpLabel
-%64 = OpLoad %float %c
-OpStore %d %64
+%59 = OpIAdd %int %58 %int_1
+OpStore %x %59
+OpBranch %50
+%54 = OpLabel
+%61 = OpLoad %float %c
+OpStore %d %61
 OpStore %b %float_3
-%65 = OpFAdd %float %64 %float_1
-OpStore %d %65
-%66 = OpFOrdEqual %bool %float_3 %float_2
-%67 = OpSelect %float %66 %float_1 %float_0
-%69 = OpSelect %float %true %float_1 %float_0
-%71 = OpFOrdEqual %bool %65 %float_5
+%62 = OpFAdd %float %61 %float_1
+OpStore %d %62
+%63 = OpFOrdEqual %bool %float_3 %float_2
+%64 = OpSelect %float %63 %float_1 %float_0
+%66 = OpSelect %float %true %float_1 %float_0
+%68 = OpFOrdEqual %bool %62 %float_5
+%69 = OpSelect %float %68 %float_1 %float_0
+%71 = OpFOrdEqual %bool %62 %float_4
 %72 = OpSelect %float %71 %float_1 %float_0
-%74 = OpFOrdEqual %bool %65 %float_4
-%75 = OpSelect %float %74 %float_1 %float_0
-%76 = OpCompositeConstruct %v4float %67 %69 %72 %75
-OpReturnValue %76
+%73 = OpCompositeConstruct %v4float %64 %66 %69 %72
+OpReturnValue %73
 OpFunctionEnd
