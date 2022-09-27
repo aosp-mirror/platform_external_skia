@@ -7,6 +7,7 @@
 
 #include "src/sksl/SkSLCompiler.h"
 
+#include "include/private/SkSLDefines.h"
 #include "include/private/SkSLStatement.h"
 #include "include/private/SkSLSymbol.h"
 #include "include/sksl/DSLCore.h"
@@ -185,8 +186,8 @@ LoadedModule Compiler::loadModule(ProgramKind kind,
     config.fIsBuiltinCode = true;
     config.fKind = kind;
     AutoProgramConfig autoConfig(fContext, &config);
-    SkASSERT(data.fData && (data.fSize != 0));
-    Rehydrator rehydrator(*this, data.fData, data.fSize, std::move(base));
+    SkASSERT(!data.fData.empty());
+    Rehydrator rehydrator(*this, data.fData, std::move(base));
     LoadedModule module = {kind, rehydrator.symbolTable(), rehydrator.elements()};
 #else
     SkASSERT(this->errorCount() == 0);

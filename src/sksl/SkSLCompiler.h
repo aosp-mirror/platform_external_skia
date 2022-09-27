@@ -9,8 +9,8 @@
 #define SKSL_COMPILER
 
 #include "include/core/SkSize.h"
+#include "include/core/SkSpan.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkSLDefines.h"
 #include "include/private/SkSLProgramElement.h"
 #include "include/private/SkSLProgramKind.h"
 #include "include/sksl/SkSLErrorReporter.h"
@@ -19,13 +19,11 @@
 #include "src/sksl/SkSLParsedModule.h"
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <unordered_set>
 #include <vector>
 
 #define SK_FRAGCOLOR_BUILTIN           10001
@@ -51,7 +49,6 @@ namespace dsl {
 }
 
 class Expression;
-class IRNode;
 class Inliner;
 class ModifiersPool;
 class OutputStream;
@@ -101,7 +98,7 @@ public:
     }
 
     /**
-     * Uniform values  by the compiler to implement origin-neutral dFdy, sk_Clockwise, and
+     * Uniform values used by the compiler to implement origin-neutral dFdy, sk_Clockwise, and
      * sk_FragCoord.
      */
     static std::array<float, 2> GetRTFlipVector(int rtHeight, bool flipY) {
@@ -110,19 +107,6 @@ public:
         result[1] = flipY ?     -1.f : 1.f;
         return result;
     }
-
-    struct OptimizationContext {
-        // nodes we have already reported errors for and should not error on again
-        std::unordered_set<const IRNode*> fSilences;
-        // true if we have updated the CFG during this pass
-        bool fUpdated = false;
-        // true if we need to completely regenerate the CFG
-        bool fNeedsRescan = false;
-        // Metadata about function and variable usage within the program
-        ProgramUsage* fUsage = nullptr;
-        // Nodes which we can't throw away until the end of optimization
-        StatementArray fOwnedStatements;
-    };
 
     Compiler(const ShaderCaps* caps);
 
@@ -195,20 +179,18 @@ public:
         return fSymbolTable;
     }
 
-    // When  SKSL_STANDALONE, fPath is used. (fData, fSize) will be (nullptr, 0)
-    // When !SKSL_STANDALONE, fData and fSize are used. fPath will be nullptr.
+    // When  SKSL_STANDALONE, fPath is used. fData will be empty.
+    // When !SKSL_STANDALONE, fData is used. fPath will be nullptr.
     struct ModuleData {
-        const char*    fPath;
-
-        const uint8_t* fData;
-        size_t         fSize;
+        const char*           fPath;
+        SkSpan<const uint8_t> fData;
     };
 
     static ModuleData MakeModulePath(const char* path) {
-        return ModuleData{path, /*fData=*/nullptr, /*fSize=*/0};
+        return ModuleData{path, /*fData=*/{}};
     }
-    static ModuleData MakeModuleData(const uint8_t* data, size_t size) {
-        return ModuleData{/*fPath=*/nullptr, data, size};
+    static ModuleData MakeModuleData(SkSpan<const uint8_t> data) {
+        return ModuleData{/*fPath=*/nullptr, data};
     }
 
     LoadedModule loadModule(ProgramKind kind, ModuleData data, ModifiersPool& modifiersPool,
