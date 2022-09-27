@@ -59,7 +59,6 @@ struct ShaderCaps;
 class SymbolTable;
 
 struct LoadedModule {
-    ProgramKind                                  fKind;
     std::shared_ptr<SymbolTable>                 fSymbols;
     std::vector<std::unique_ptr<ProgramElement>> fElements;
 };
@@ -179,8 +178,15 @@ public:
         return fSymbolTable;
     }
 
-    // When  SKSL_STANDALONE, fPath is used. fData will be empty.
-    // When !SKSL_STANDALONE, fData is used. fPath will be nullptr.
+    // When SKSL_STANDALONE is true:
+    // - fPath contains a path on disk containing the SkSL module
+    // - fData will be empty
+    // When SKSL_STANDALONE is false and SK_ENABLE_OPTIMIZE_SIZE is false:
+    // - fData contains SkSL module code in dehydrated IR form
+    // - fPath will be nullptr
+    // When SKSL_STANDALONE is false and SK_ENABLE_OPTIMIZE_SIZE is true:
+    // - fData contains SkSL module code in minified text form
+    // - fPath will be nullptr
     struct ModuleData {
         const char*           fPath;
         SkSpan<const uint8_t> fData;
@@ -191,6 +197,10 @@ public:
     }
     static ModuleData MakeModuleData(SkSpan<const uint8_t> data) {
         return ModuleData{/*fPath=*/nullptr, data};
+    }
+    static ModuleData MakeModuleSource(std::string_view source) {
+        return ModuleData{nullptr, /*fData=*/{reinterpret_cast<const uint8_t*>(source.data()),
+                                              source.size()}};
     }
 
     LoadedModule loadModule(ProgramKind kind, ModuleData data, ModifiersPool& modifiersPool,
@@ -220,12 +230,15 @@ private:
     /** Performs final checks to confirm that a fully-assembled/optimized is valid. */
     bool finalize(Program& program);
 
-    /** Optimize a module in preparation for dehydration. */
-    bool optimizeModuleForDehydration(LoadedModule& module, const ParsedModule& base);
-
-    /** Optimize a module after rehydrating it. */
-    bool optimizeRehydratedModule(LoadedModule& module, const ParsedModule& base,
-                                  ModifiersPool& modifiersPool);
+    /**
+     * Optimize a module after loading it. This should be called at runtime, not during
+     * dehydration, because it runs the inliner (which clones lots of IR nodes), and this
+     * would impact the dehydrated file size.
+     */
+    bool optimizeModuleAfterLoading(ProgramKind kind,
+                                    LoadedModule& module,
+                                    const ParsedModule& base,
+                                    ModifiersPool& modifiersPool);
 
     /** Flattens out function calls when it is safe to do so. */
     bool runInliner(Inliner* inliner,
