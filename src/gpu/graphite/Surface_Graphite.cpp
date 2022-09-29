@@ -37,17 +37,17 @@ sk_sp<SkSurface> Surface::onNewSurface(const SkImageInfo& ii) {
 }
 
 sk_sp<SkImage> Surface::onNewImageSnapshot(const SkIRect* subset) {
-    SkImageInfo ii = subset ? this->imageInfo().makeDimensions(subset->size())
-                            : this->imageInfo();
-
-    // TODO: we need to resolve Graphite's Surface/Image story then expand the handling
-    // in here.
     TextureProxyView srcView = fDevice->readSurfaceView();
     if (!srcView) {
         return nullptr;
     }
 
-    return sk_sp<Image>(new Image(std::move(srcView), ii.colorInfo()));
+    srcView = fDevice->createCopy(subset, srcView.mipmapped());
+    if (!srcView) {
+        return nullptr;
+    }
+
+    return sk_sp<Image>(new Image(std::move(srcView), this->imageInfo().colorInfo()));
 }
 
 void Surface::onWritePixels(const SkPixmap& pixmap, int x, int y) {
@@ -62,6 +62,38 @@ bool Surface::onReadPixels(Context* context,
                            int srcX,
                            int srcY) {
     return fDevice->readPixels(context, recorder, dst, srcX, srcY);
+}
+
+void Surface::onAsyncRescaleAndReadPixels(const SkImageInfo& info,
+                                          const SkIRect& srcRect,
+                                          RescaleGamma rescaleGamma,
+                                          RescaleMode rescaleMode,
+                                          ReadPixelsCallback callback,
+                                          ReadPixelsContext context) {
+    fDevice->asyncRescaleAndReadPixels(info,
+                                       srcRect,
+                                       rescaleGamma,
+                                       rescaleMode,
+                                       callback,
+                                       context);
+}
+
+void Surface::onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSpace,
+                                                sk_sp<SkColorSpace> dstColorSpace,
+                                                const SkIRect& srcRect,
+                                                const SkISize& dstSize,
+                                                RescaleGamma rescaleGamma,
+                                                RescaleMode rescaleMode,
+                                                ReadPixelsCallback callback,
+                                                ReadPixelsContext context) {
+    fDevice->asyncRescaleAndReadPixelsYUV420(yuvColorSpace,
+                                             dstColorSpace,
+                                             srcRect,
+                                             dstSize,
+                                             rescaleGamma,
+                                             rescaleMode,
+                                             callback,
+                                             context);
 }
 
 sk_sp<const SkCapabilities> Surface::onCapabilities() {
