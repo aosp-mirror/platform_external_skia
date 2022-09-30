@@ -107,10 +107,10 @@ int GrAAConvexTessellator::addPt(const SkPoint& pt,
 void GrAAConvexTessellator::popLastPt() {
     this->validate();
 
-    fPts.pop();
-    fCoverages.pop();
-    fMovable.pop();
-    fCurveState.pop();
+    fPts.pop_back();
+    fCoverages.pop_back();
+    fMovable.pop_back();
+    fCurveState.pop_back();
 
     this->validate();
 }
@@ -148,12 +148,12 @@ void GrAAConvexTessellator::addTri(int i0, int i1, int i2) {
 }
 
 void GrAAConvexTessellator::rewind() {
-    fPts.rewind();
-    fCoverages.rewind();
-    fMovable.rewind();
-    fIndices.rewind();
-    fNorms.rewind();
-    fCurveState.rewind();
+    fPts.clear();
+    fCoverages.clear();
+    fMovable.clear();
+    fIndices.clear();
+    fNorms.clear();
+    fCurveState.clear();
     fInitialRing.rewind();
     fCandidateVerts.rewind();
 #if GR_AA_CONVEX_TESSELLATOR_VIZ
@@ -186,7 +186,7 @@ void GrAAConvexTessellator::computeNormals() {
 }
 
 void GrAAConvexTessellator::computeBisectors() {
-    fBisectors.setCount(fNorms.count());
+    fBisectors.resize(fNorms.count());
 
     int prev = fBisectors.count() - 1;
     for (int cur = 0; cur < fBisectors.count(); prev = cur, ++cur) {
@@ -278,7 +278,7 @@ bool GrAAConvexTessellator::tessellate(const SkMatrix& m, const SkPath& path) {
                               &outerStrokeAndAARing);
 
         // discard all the triangles added between the originating ring and the new outer ring
-        fIndices.rewind();
+        fIndices.clear();
 
         outerStrokeAndAARing.init(*this);
 
@@ -286,14 +286,14 @@ bool GrAAConvexTessellator::tessellate(const SkMatrix& m, const SkPath& path) {
 
         // Add the outer stroke ring's normals to the originating ring's normals
         // so it can also act as an originating ring
-        fNorms.setCount(fNorms.count() + outerStrokeAndAARing.numPts());
+        fNorms.resize(fNorms.count() + outerStrokeAndAARing.numPts());
         for (int i = 0; i < outerStrokeAndAARing.numPts(); ++i) {
             SkASSERT(outerStrokeAndAARing.index(i) < fNorms.count());
             fNorms[outerStrokeAndAARing.index(i)] = outerStrokeAndAARing.norm(i);
         }
 
         // the bisectors are only needed for the computation of the outer ring
-        fBisectors.rewind();
+        fBisectors.clear();
 
         Ring* insetAARing;
         this->createInsetRings(outerStrokeAndAARing,
@@ -321,7 +321,7 @@ bool GrAAConvexTessellator::tessellate(const SkMatrix& m, const SkPath& path) {
     }
 
     // the bisectors are only needed for the computation of the outer ring
-    fBisectors.rewind();
+    fBisectors.clear();
     if (SkStrokeRec::kStroke_Style == fStyle && fInitialRing.numPts() > 2) {
         SkASSERT(fStrokeWidth >= 0.0f);
         SkScalar effectiveStrokeWidth = scaleFactor * fStrokeWidth;
@@ -737,7 +737,7 @@ bool GrAAConvexTessellator::createInsetRing(const Ring& lastRing, Ring* nextRing
     // 'dst' stores where each point in the last ring maps to/transforms into
     // in the next ring.
     SkTDArray<int> dst;
-    dst.setCount(lastRing.numPts());
+    dst.resize(lastRing.numPts());
 
     // Create the first point (who compares with no one)
     if (!this->computePtAlongBisector(lastRing.index(0),
@@ -963,11 +963,11 @@ void GrAAConvexTessellator::lineTo(const SkMatrix& m, const SkPoint& p, CurveSta
 
 void GrAAConvexTessellator::quadTo(const SkPoint pts[3]) {
     int maxCount = GrPathUtils::quadraticPointCount(pts, kQuadTolerance);
-    fPointBuffer.setCount(maxCount);
+    fPointBuffer.resize(maxCount);
     SkPoint* target = fPointBuffer.begin();
     int count = GrPathUtils::generateQuadraticPoints(pts[0], pts[1], pts[2],
                                                      kQuadToleranceSqd, &target, maxCount);
-    fPointBuffer.setCount(count);
+    fPointBuffer.resize(count);
     for (int i = 0; i < count - 1; i++) {
         this->lineTo(fPointBuffer[i], kCurve_CurveState);
     }
@@ -984,11 +984,11 @@ void GrAAConvexTessellator::cubicTo(const SkMatrix& m, const SkPoint srcPts[4]) 
     SkPoint pts[4];
     m.mapPoints(pts, srcPts, 4);
     int maxCount = GrPathUtils::cubicPointCount(pts, kCubicTolerance);
-    fPointBuffer.setCount(maxCount);
+    fPointBuffer.resize(maxCount);
     SkPoint* target = fPointBuffer.begin();
     int count = GrPathUtils::generateCubicPoints(pts[0], pts[1], pts[2], pts[3],
             kCubicToleranceSqd, &target, maxCount);
-    fPointBuffer.setCount(count);
+    fPointBuffer.resize(count);
     for (int i = 0; i < count - 1; i++) {
         this->lineTo(fPointBuffer[i], kCurve_CurveState);
     }

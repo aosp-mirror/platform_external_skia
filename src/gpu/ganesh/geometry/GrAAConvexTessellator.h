@@ -60,7 +60,7 @@ public:
     void draw(SkCanvas* canvas) const;
 #endif
 
-    // The tessellator can be reused for multiple paths by rewinding in between
+    // The tessellator can be reused for multiple paths by clearing in between
     void rewind();
 
 private:
@@ -69,7 +69,7 @@ private:
     class CandidateVerts {
     public:
         void setReserve(int numPts) { fPts.reserve(numPts); }
-        void rewind() { fPts.rewind(); }
+        void rewind() { fPts.clear(); }
 
         int numPts() const { return fPts.count(); }
 
@@ -105,7 +105,7 @@ private:
 
         int fuseWithBoth() {
             if (fPts.count() > 1) {
-                fPts.pop();
+                fPts.pop_back();
             }
 
             fPts[0].fOriginatingIdx = -1;
@@ -129,7 +129,7 @@ private:
     class Ring {
     public:
         void setReserve(int numPts) { fPts.reserve(numPts); }
-        void rewind() { fPts.rewind(); }
+        void rewind() { fPts.clear(); }
 
         int numPts() const { return fPts.count(); }
 

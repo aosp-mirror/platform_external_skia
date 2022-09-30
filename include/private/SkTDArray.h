@@ -152,13 +152,13 @@ public:
     int count() const { return fStorage.size(); }
     int size()  const { return fStorage.size(); }
 
-     // Return the total number of elements allocated.
-     // reserved() - count() gives you the number of elements you can add
-     // without causing an allocation.
-    int reserved() const { return fStorage.capacity(); }
+    // Return the total number of elements allocated.
+    // Note: capacity() - size() gives you the number of elements you can add without causing an
+    // allocation.
+    int capacity() const { return fStorage.capacity(); }
 
     // return the number of bytes in the array: count * sizeof(T)
-    size_t bytes() const { return fStorage.size_bytes(); }
+    size_t size_bytes() const { return fStorage.size_bytes(); }
 
     T*       data() { return reinterpret_cast<T*>(fStorage.data()); }
     const T* data() const { return reinterpret_cast<const T*>(fStorage.data()); }
@@ -176,8 +176,6 @@ public:
         return this->data()[index];
     }
 
-    T& getAt(int index) { return (*this)[index]; }
-
     const T& back() const {
         SkASSERT(this->size() > 0);
         return this->data()[this->size() - 1];
@@ -191,7 +189,7 @@ public:
         fStorage.reset();
     }
 
-    void rewind() {
+    void clear() {
         fStorage.clear();
     }
 
@@ -199,7 +197,7 @@ public:
      // If the array does not have space for count elements, it will increase
      // the storage allocated to some amount greater than that required.
      // It will never shrink the storage.
-    void setCount(int count) {
+    void resize(int count) {
         fStorage.resize(count);
     }
 
@@ -242,16 +240,8 @@ public:
     }
 
     // routines to treat the array like a stack
-    void push_back(const T& v) {
-        *reinterpret_cast<T*>(fStorage.push_back()) = v;
-    }
-
-    void pop(T* elem = nullptr) {
-        if (elem != nullptr) {
-            *elem = this->back();
-        }
-        fStorage.pop_back();
-    }
+    void push_back(const T& v) { *reinterpret_cast<T*>(fStorage.push_back()) = v; }
+    void pop_back() { fStorage.pop_back(); }
 
     void deleteAll() {
         for (T p : *this) {
@@ -275,7 +265,7 @@ public:
         this->reset();
     }
 
-    void shrinkToFit() {
+    void shrink_to_fit() {
         fStorage.shrink_to_fit();
     }
 
