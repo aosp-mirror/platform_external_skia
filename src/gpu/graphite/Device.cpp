@@ -13,6 +13,7 @@
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/CommandBuffer.h"
 #include "src/gpu/graphite/ContextPriv.h"
+#include "src/gpu/graphite/CopyTask.h"
 #include "src/gpu/graphite/DrawContext.h"
 #include "src/gpu/graphite/DrawList.h"
 #include "src/gpu/graphite/DrawParams.h"
@@ -55,6 +56,11 @@
 
 // TODO: This will be removed once the AnalyticRRectRenderStep is finished being developed.
 #define ENABLE_ANALYTIC_RRECT_RENDERER 0
+
+using RescaleGamma       = SkImage::RescaleGamma;
+using RescaleMode        = SkImage::RescaleMode;
+using ReadPixelsCallback = SkImage::ReadPixelsCallback;
+using ReadPixelsContext  = SkImage::ReadPixelsContext;
 
 namespace skgpu::graphite {
 
@@ -203,23 +209,17 @@ sk_sp<Device> Device::Make(Recorder* recorder,
         return nullptr;
     }
 
-    if (ii.dimensions().width() < 1 || ii.dimensions().height() < 1) {
+    sk_sp<TextureProxy> target = TextureProxy::Make(recorder->priv().caps(),
+                                                    ii.dimensions(),
+                                                    ii.colorType(),
+                                                    mipmapped,
+                                                    Protected::kNo,
+                                                    Renderable::kYes,
+                                                    budgeted);
+    if (!target) {
         return nullptr;
     }
 
-    int mipLevelCount = (mipmapped == Mipmapped::kYes)
-                            ? SkMipmap::ComputeLevelCount(ii.width(), ii.height()) + 1
-                            : 1;
-
-    auto textureInfo = recorder->priv().caps()->getDefaultSampledTextureInfo(ii.colorType(),
-                                                                             mipLevelCount,
-                                                                             Protected::kNo,
-                                                                             Renderable::kYes);
-    if (!textureInfo.isValid()) {
-        return nullptr;
-    }
-
-    sk_sp<TextureProxy> target(new TextureProxy(ii.dimensions(), textureInfo, budgeted));
     return Make(recorder, std::move(target), ii.colorInfo(), props, addInitialClear);
 }
 
@@ -311,6 +311,41 @@ sk_sp<SkSurface> Device::makeSurface(const SkImageInfo& ii, const SkSurfaceProps
     return SkSurface::MakeGraphite(fRecorder, ii, Mipmapped::kNo, &props);
 }
 
+TextureProxyView Device::createCopy(const SkIRect* subset, Mipmapped mipmapped) {
+    this->flushPendingWorkToRecorder();
+
+    TextureProxyView srcView = this->readSurfaceView();
+    if (!srcView) {
+        return {};
+    }
+
+    SkIRect srcRect = subset ? *subset : SkIRect::MakeSize(this->imageInfo().dimensions());
+    SkASSERT(SkIRect::MakeSize(this->imageInfo().dimensions()).contains(srcRect));
+
+    sk_sp<TextureProxy> dest = TextureProxy::Make(this->recorder()->priv().caps(),
+                                                  srcRect.size(),
+                                                  this->imageInfo().colorType(),
+                                                  mipmapped,
+                                                  srcView.proxy()->textureInfo().isProtected(),
+                                                  Renderable::kNo,
+                                                  SkBudgeted::kNo);
+    if (!dest) {
+        return {};
+    }
+
+    sk_sp<CopyTextureToTextureTask> copyTask = CopyTextureToTextureTask::Make(srcView.refProxy(),
+                                                                              srcRect,
+                                                                              dest,
+                                                                              {0, 0});
+    if (!copyTask) {
+        return {};
+    }
+
+    this->recorder()->priv().add(std::move(copyTask));
+
+    return { std::move(dest), srcView.swizzle() };
+}
+
 bool Device::onReadPixels(const SkPixmap& pm, int x, int y) {
     // We have no access to a context to do a read pixels here.
     return false;
@@ -332,6 +367,28 @@ bool Device::readPixels(Context* context,
                             pm.rowBytes(),
                             srcX,
                             srcY);
+}
+
+void Device::asyncRescaleAndReadPixels(const SkImageInfo& info,
+                                       SkIRect srcRect,
+                                       RescaleGamma rescaleGamma,
+                                       RescaleMode rescaleMode,
+                                       ReadPixelsCallback callback,
+                                       ReadPixelsContext context) {
+    // TODO: implement for Graphite
+    callback(context, nullptr);
+}
+
+void Device::asyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSpace,
+                                             sk_sp<SkColorSpace> dstColorSpace,
+                                             SkIRect srcRect,
+                                             SkISize dstSize,
+                                             RescaleGamma rescaleGamma,
+                                             RescaleMode rescaleMode,
+                                             ReadPixelsCallback callback,
+                                             ReadPixelsContext context) {
+    // TODO: implement for Graphite
+    callback(context, nullptr);
 }
 
 bool Device::onWritePixels(const SkPixmap& src, int x, int y) {

@@ -1230,8 +1230,6 @@ BASE_SRCS_ALL = [
     "src/images/SkJpegEncoder.cpp",
     "src/images/SkPngEncoder.cpp",
     "src/images/SkWebpEncoder.cpp",
-    "src/lazy/SkDiscardableMemoryPool.cpp",
-    "src/lazy/SkDiscardableMemoryPool.h",
     "src/opts/SkBitmapProcState_opts.h",
     "src/opts/SkBlitMask_opts.h",
     "src/opts/SkBlitRow_opts.h",
@@ -1550,6 +1548,7 @@ BASE_SRCS_ALL = [
     "src/sksl/ir/SkSLIndexExpression.cpp",
     "src/sksl/ir/SkSLIndexExpression.h",
     "src/sksl/ir/SkSLInterfaceBlock.h",
+    "src/sksl/ir/SkSLLiteral.cpp",
     "src/sksl/ir/SkSLLiteral.h",
     "src/sksl/ir/SkSLMethodReference.h",
     "src/sksl/ir/SkSLModifiers.cpp",
@@ -1594,6 +1593,7 @@ BASE_SRCS_ALL = [
     "src/sksl/transform/SkSLEliminateDeadFunctions.cpp",
     "src/sksl/transform/SkSLEliminateDeadGlobalVariables.cpp",
     "src/sksl/transform/SkSLEliminateDeadLocalVariables.cpp",
+    "src/sksl/transform/SkSLEliminateEmptyStatements.cpp",
     "src/sksl/transform/SkSLEliminateUnreachableCode.cpp",
     "src/sksl/transform/SkSLFindAndDeclareBuiltinFunctions.cpp",
     "src/sksl/transform/SkSLFindAndDeclareBuiltinVariables.cpp",
@@ -1759,7 +1759,6 @@ GL_SRCS_UNIX_EGL = base_gl_srcs + [
 
 PORTS_SRCS_UNIX = [
     "src/ports/SkDebug_stdio.cpp",
-    "src/ports/SkDiscardableMemory_none.cpp",
     "src/ports/SkFontConfigInterface.cpp",
     "src/ports/SkFontConfigInterface_direct.cpp",
     "src/ports/SkFontConfigInterface_direct_factory.cpp",
@@ -1791,7 +1790,6 @@ GL_SRCS_ANDROID = base_gl_srcs + [
 
 PORTS_SRCS_ANDROID = [
     "src/ports/SkDebug_android.cpp",
-    "src/ports/SkDiscardableMemory_none.cpp",
     "src/ports/SkFontHost_FreeType_common.cpp",
     "src/ports/SkFontHost_FreeType_common.h",
     "src/ports/SkFontHost_FreeType.cpp",
@@ -1815,7 +1813,6 @@ PORTS_SRCS_ANDROID = [
 
 PORTS_SRCS_ANDROID_NO_FONT = [
     "src/ports/SkDebug_android.cpp",
-    "src/ports/SkDiscardableMemory_none.cpp",
     "src/ports/SkFontMgr_empty_factory.cpp",
     "src/ports/SkGlobalInitialization_default.cpp",
     "src/ports/SkImageGenerator_skia.cpp",
@@ -1832,7 +1829,6 @@ GL_SRCS_IOS = base_gl_srcs + [
 
 PORTS_SRCS_IOS = [
     "src/ports/SkDebug_stdio.cpp",
-    "src/ports/SkDiscardableMemory_none.cpp",
     "src/ports/SkFontMgr_custom.h",
     "src/ports/SkFontMgr_mac_ct.cpp",
     "src/ports/SkFontMgr_mac_ct_factory.cpp",
@@ -1860,7 +1856,6 @@ PORTS_SRCS_IOS = [
 
 PORTS_SRCS_FUCHSIA = [
     "src/ports/SkDebug_stdio.cpp",
-    "src/ports/SkDiscardableMemory_none.cpp",
     "src/ports/SkFontHost_FreeType_common.cpp",
     "src/ports/SkFontHost_FreeType_common.h",
     "src/ports/SkFontHost_FreeType.cpp",
@@ -1885,7 +1880,6 @@ PORTS_SRCS_MACOS = PORTS_SRCS_IOS
 
 PORTS_SRCS_WASM = [
     "src/ports/SkDebug_stdio.cpp",
-    "src/ports/SkDiscardableMemory_none.cpp",
     "src/ports/SkFontHost_FreeType_common.cpp",
     "src/ports/SkFontHost_FreeType_common.h",
     "src/ports/SkFontHost_FreeType.cpp",

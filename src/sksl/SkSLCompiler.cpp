@@ -167,11 +167,12 @@ const ParsedModule& Compiler::moduleForProgramKind(ProgramKind kind) {
     SkUNREACHABLE;
 }
 
-ParsedModule Compiler::compileModule(ProgramKind kind,
+LoadedModule Compiler::compileModule(ProgramKind kind,
                                      const char* moduleName,
                                      std::string moduleSource,
                                      const ParsedModule& base,
-                                     ModifiersPool& modifiersPool) {
+                                     ModifiersPool& modifiersPool,
+                                     bool shouldInline) {
     SkASSERT(!moduleSource.empty());
     SkASSERT(base.fSymbols);
     SkASSERT(this->errorCount() == 0);
@@ -188,19 +189,24 @@ ParsedModule Compiler::compileModule(ProgramKind kind,
     if (this->errorCount() != 0) {
         SK_ABORT("Unexpected errors compiling %s:\n\n%s\n", moduleName, this->errorText().c_str());
     }
-    this->optimizeModuleAfterLoading(kind, module, base);
+    if (shouldInline) {
+        this->optimizeModuleAfterLoading(kind, module, base);
+    }
+    return module;
+}
 
+ParsedModule LoadedModule::parse(const ParsedModule& base) {
     // For modules that just declare (but don't define) intrinsic functions, there will be no new
     // program elements. In that case, we can share our parent's element map:
-    if (module.fElements.empty()) {
-        return ParsedModule{module.fSymbols, base.fElements};
+    if (fElements.empty()) {
+        return ParsedModule{fSymbols, base.fElements};
     }
 
     auto elements = std::make_shared<BuiltinMap>(base.fElements.get());
 
     // Now, transfer all of the program elements to a builtin element map. This maps certain types
     // of global objects to the declaring ProgramElement.
-    for (std::unique_ptr<ProgramElement>& element : module.fElements) {
+    for (std::unique_ptr<ProgramElement>& element : fElements) {
         switch (element->kind()) {
             case ProgramElement::Kind::kFunction: {
                 const FunctionDefinition& f = element->as<FunctionDefinition>();
@@ -231,7 +237,7 @@ ParsedModule Compiler::compileModule(ProgramKind kind,
         }
     }
 
-    return ParsedModule{std::move(module.fSymbols), std::move(elements)};
+    return ParsedModule{fSymbols, std::move(elements)};
 }
 
 std::unique_ptr<Program> Compiler::convertProgram(ProgramKind kind,
@@ -328,9 +334,9 @@ std::unique_ptr<Expression> Compiler::convertIdentifier(Position pos, std::strin
     }
 }
 
-bool Compiler::optimizeModuleAfterLoading(ProgramKind kind,
-                                          LoadedModule& module,
-                                          const ParsedModule& base) {
+bool Compiler::optimizeModuleBeforeMinifying(ProgramKind kind,
+                                             LoadedModule& module,
+                                             const ParsedModule& base) {
     SkASSERT(this->errorCount() == 0);
 
     // Create a temporary program configuration with default settings.
@@ -348,14 +354,36 @@ bool Compiler::optimizeModuleAfterLoading(ProgramKind kind,
         // Removing dead variables may cause more variables to become unreferenced. Try again.
     }
 
-    // Note that we intentionally don't attempt to eliminate unreferenced global variables or
-    // functions here, since those can be referenced by the finished program even if they're
-    // unreferenced now.
+    // We only eliminate private globals (prefixed with `$`) to avoid changing the meaning of the
+    // module code.
+    while (Transform::EliminateDeadGlobalVariables(this->context(), module, usage.get(),
+                                                   /*onlyPrivateGlobals=*/true)) {
+        // Repeat until no changes occur.
+    }
+
+    // We eliminate empty statements to avoid runs of `;;;;;;` caused by the previous passes.
+    SkSL::Transform::EliminateEmptyStatements(module);
+
+    return this->errorCount() == 0;
+}
+
+bool Compiler::optimizeModuleAfterLoading(ProgramKind kind,
+                                          LoadedModule& module,
+                                          const ParsedModule& base) {
+    SkASSERT(this->errorCount() == 0);
 
 #ifndef SK_ENABLE_OPTIMIZE_SIZE
+    // Create a temporary program configuration with default settings.
+    ProgramConfig config;
+    config.fIsBuiltinCode = true;
+    config.fKind = kind;
+    AutoProgramConfig autoConfig(this->context(), &config);
+
+    std::unique_ptr<ProgramUsage> usage = Analysis::GetUsage(module, base);
+
     // Perform inline-candidate analysis and inline any functions deemed suitable.
+    Inliner inliner(fContext.get());
     while (this->errorCount() == 0) {
-        Inliner inliner(fContext.get());
         if (!this->runInliner(&inliner, module.fElements, module.fSymbols, usage.get())) {
             break;
         }

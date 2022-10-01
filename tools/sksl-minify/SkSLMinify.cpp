@@ -18,6 +18,7 @@
 #include "src/sksl/SkSLModuleLoader.h"
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/SkSLUtil.h"
+#include "src/sksl/transform/SkSLTransform.h"
 
 #include <cctype>
 #include <fstream>
@@ -71,70 +72,48 @@ static bool maybe_identifier(char c) {
     return std::isalnum(c) || c == '$' || c == '_';
 }
 
-static std::list<SkSL::ParsedModule> compile_module_list(SkSpan<const std::string> paths) {
+static std::optional<SkSL::LoadedModule> compile_module_list(SkSpan<const std::string> paths) {
     // Load in each input as a module, from right to left.
     // Each module inherits the symbols from its parent module.
     SkSL::Compiler compiler(SkSL::ShaderCapsFactory::Standalone());
-    std::list<SkSL::ParsedModule> compiledModules = {
-            {SkSL::ModuleLoader::Get().rootModule().fSymbols,
-             /*fElements=*/nullptr}};
+    SkSL::LoadedModule loadedModule;
+    std::list<SkSL::ParsedModule> modules = {{SkSL::ModuleLoader::Get().rootModule().fSymbols,
+                                              /*fElements=*/nullptr}};
     for (auto modulePath = paths.rbegin(); modulePath != paths.rend(); ++modulePath) {
         std::ifstream in(*modulePath);
         std::string moduleSource{std::istreambuf_iterator<char>(in),
                                  std::istreambuf_iterator<char>()};
         if (in.rdstate()) {
             printf("error reading '%s'\n", modulePath->c_str());
-            return {};
+            return std::nullopt;
+        }
+
+        // If we have a loaded module, parse it and put it on the list.
+        if (loadedModule.fSymbols) {
+            modules.push_front(loadedModule.parse(modules.front()));
         }
 
         // TODO(skia:13778): We don't know the module's ProgramKind here, so we always pass
         // kFragment. For minification purposes, the ProgramKind doesn't really make a difference
         // as long as it doesn't limit what we can do.
-        compiledModules.push_front(
-                compiler.compileModule(SkSL::ProgramKind::kFragment,
-                                       modulePath->c_str(),
-                                       std::move(moduleSource),
-                                       compiledModules.front(),
-                                       SkSL::ModuleLoader::Get().coreModifiers()));
+        loadedModule = compiler.compileModule(SkSL::ProgramKind::kFragment,
+                                              modulePath->c_str(),
+                                              std::move(moduleSource),
+                                              modules.front(),
+                                              SkSL::ModuleLoader::Get().coreModifiers(),
+                                              /*shouldInline=*/false);
     }
-    return compiledModules;
+    // Run an optimization pass on the target module before returning it.
+    compiler.optimizeModuleBeforeMinifying(SkSL::ProgramKind::kFragment,
+                                           loadedModule,
+                                           modules.front());
+    return std::move(loadedModule);
 }
 
-ResultCode processCommand(const std::vector<std::string>& args) {
+static bool generate_minified_text(std::string_view inputPath,
+                                   std::string_view text,
+                                   SkSL::FileOutputStream& out) {
     using TokenKind = SkSL::Token::Kind;
-
-    if (args.size() < 2) {
-        show_usage();
-        return ResultCode::kInputError;
-    }
-
-    // Compile the original SkSL from the input path.
-    SkSpan inputPaths(args);
-    inputPaths = inputPaths.subspan(1);
-    std::list<SkSL::ParsedModule> modules = compile_module_list(inputPaths);
-    if (modules.empty()) {
-        return ResultCode::kInputError;
-    }
-
-    // Emit the minified SkSL into our output path.
-    const std::string& outputPath = args[0];
-    SkSL::FileOutputStream out(outputPath.c_str());
-    if (!out.isValid()) {
-        printf("error writing '%s'\n", outputPath.c_str());
-        return ResultCode::kOutputError;
-    }
-
-    std::string baseName = remove_extension(base_name(inputPaths.front()));
-    out.printf("static constexpr char SKSL_MINIFIED_%s[] =\n\"", baseName.c_str());
-
-    // Re-read the first input module so it can be minified via lexing.
-    // TODO(skia:13775): minify the compiled, optimized IR instead
-    std::ifstream in(inputPaths.front());
-    std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
-    if (in.rdstate()) {
-        printf("error reading '%s'\n", inputPaths.front().c_str());
-        return {};
-    }
 
     SkSL::Lexer lexer;
     lexer.start(text);
@@ -154,25 +133,25 @@ ResultCode processCommand(const std::vector<std::string>& args) {
         }
         std::string_view thisTokenText = stringize(token, text);
         if (token.fKind == TokenKind::TK_INVALID) {
-            printf("%s: unable to parse '%.*s' at offset %d\n",
-                   inputPaths.front().c_str(),
+            printf("%.*s: unable to parse '%.*s' at offset %d\n",
+                   (int)inputPath.size(), inputPath.data(),
                    (int)thisTokenText.size(), thisTokenText.data(),
                    token.fOffset);
-            return ResultCode::kInputError;
+            return false;
         }
         if (thisTokenText.empty()) {
             continue;
         }
         if (token.fKind == TokenKind::TK_FLOAT_LITERAL) {
-            // If we have a floating point number that doesn't use exponential notation...
-            if (!skstd::contains(thisTokenText, "e") && !skstd::contains(thisTokenText, "E")) {
-                // ... and has a decimal point...
-                if (skstd::contains(thisTokenText, ".")) {
-                    // ... strip any trailing zeros to save space.
-                    while (thisTokenText.back() == '0' && thisTokenText.size() > 2) {
-                        thisTokenText.remove_suffix(1);
-                    }
+            // We can reduce `3.0` to `3.` safely.
+            if (skstd::contains(thisTokenText, '.')) {
+                while (thisTokenText.back() == '0' && thisTokenText.size() >= 3) {
+                    thisTokenText.remove_suffix(1);
                 }
+            }
+            // We can reduce `0.5` to `.5` safely.
+            if (skstd::starts_with(thisTokenText, "0.") && thisTokenText.size() >= 3) {
+                thisTokenText.remove_prefix(1);
             }
         }
         SkASSERT(!lastTokenText.empty());
@@ -190,6 +169,45 @@ ResultCode processCommand(const std::vector<std::string>& args) {
         out.write(thisTokenText.data(), thisTokenText.size());
         lineWidth += thisTokenText.size();
         lastTokenText = thisTokenText;
+    }
+
+    return true;
+}
+
+ResultCode processCommand(const std::vector<std::string>& args) {
+    if (args.size() < 2) {
+        show_usage();
+        return ResultCode::kInputError;
+    }
+
+    // Compile the original SkSL from the input path.
+    SkSpan inputPaths(args);
+    inputPaths = inputPaths.subspan(1);
+    std::optional<SkSL::LoadedModule> module = compile_module_list(inputPaths);
+    if (!module.has_value()) {
+        return ResultCode::kInputError;
+    }
+
+    // Emit the minified SkSL into our output path.
+    const std::string& outputPath = args[0];
+    SkSL::FileOutputStream out(outputPath.c_str());
+    if (!out.isValid()) {
+        printf("error writing '%s'\n", outputPath.c_str());
+        return ResultCode::kOutputError;
+    }
+
+    std::string baseName = remove_extension(base_name(inputPaths.front()));
+    out.printf("static constexpr char SKSL_MINIFIED_%s[] =\n\"", baseName.c_str());
+
+    // Generate the program text by getting the program's description.
+    std::string text;
+    for (const std::unique_ptr<SkSL::ProgramElement>& element : module->fElements) {
+        text += element->description();
+    }
+
+    // Eliminate whitespace and perform other basic simplifications via a lexer pass.
+    if (!generate_minified_text(inputPaths.front(), text, out)) {
+        return ResultCode::kInputError;
     }
 
     out.writeText("\";\n");
