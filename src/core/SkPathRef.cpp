@@ -50,9 +50,9 @@ void SkPath::shrinkToFit() {
         pr->copy(*fPathRef, 0, 0);
         fPathRef.reset(pr);
     }
-    fPathRef->fPoints.shrinkToFit();
-    fPathRef->fVerbs.shrinkToFit();
-    fPathRef->fConicWeights.shrinkToFit();
+    fPathRef->fPoints.shrink_to_fit();
+    fPathRef->fVerbs.shrink_to_fit();
+    fPathRef->fConicWeights.shrink_to_fit();
     SkDEBUGCODE(fPathRef->validate();)
 }
 
@@ -60,9 +60,9 @@ void SkPath::shrinkToFit() {
 
 size_t SkPathRef::approximateBytesUsed() const {
     return sizeof(SkPathRef)
-         + fPoints      .reserved() * sizeof(fPoints      [0])
-         + fVerbs       .reserved() * sizeof(fVerbs       [0])
-         + fConicWeights.reserved() * sizeof(fConicWeights[0]);
+         + fPoints      .capacity() * sizeof(fPoints      [0])
+         + fVerbs       .capacity() * sizeof(fVerbs       [0])
+         + fConicWeights.capacity() * sizeof(fConicWeights[0]);
 }
 
 SkPathRef::~SkPathRef() {
@@ -168,7 +168,7 @@ void SkPathRef::CreateTransformedCopy(sk_sp<SkPathRef>* dst,
         (*dst)->callGenIDChangeListeners();
         (*dst)->fGenerationID = 0;  // mark as dirty
         // don't copy, just allocate the points
-        (*dst)->fPoints.setCount(src.fPoints.count());
+        (*dst)->fPoints.resize(src.fPoints.count());
     }
     matrix.mapPoints((*dst)->fPoints.begin(), src.fPoints.begin(), src.fPoints.count());
 
@@ -228,9 +228,9 @@ void SkPathRef::Rewind(sk_sp<SkPathRef>* pathRef) {
         (*pathRef)->callGenIDChangeListeners();
         (*pathRef)->fBoundsIsDirty = true;  // this also invalidates fIsFinite
         (*pathRef)->fGenerationID = 0;
-        (*pathRef)->fPoints.rewind();
-        (*pathRef)->fVerbs.rewind();
-        (*pathRef)->fConicWeights.rewind();
+        (*pathRef)->fPoints.clear();
+        (*pathRef)->fVerbs.clear();
+        (*pathRef)->fConicWeights.clear();
         (*pathRef)->fSegmentMask = 0;
         (*pathRef)->fIsOval = false;
         (*pathRef)->fIsRRect = false;
@@ -290,9 +290,9 @@ void SkPathRef::writeToBuffer(SkWBuffer* buffer) const {
     buffer->write32(fVerbs.count());
     buffer->write32(fPoints.count());
     buffer->write32(fConicWeights.count());
-    buffer->write(fVerbs.begin(), fVerbs.bytes());
-    buffer->write(fPoints.begin(), fVerbs.bytes());
-    buffer->write(fConicWeights.begin(), fConicWeights.bytes());
+    buffer->write(fVerbs.begin(), fVerbs.size_bytes());
+    buffer->write(fPoints.begin(), fVerbs.size_bytes());
+    buffer->write(fConicWeights.begin(), fConicWeights.size_bytes());
     buffer->write(&bounds, sizeof(bounds));
 
     SkASSERT(buffer->pos() - beforePos == (size_t) this->writeSize());
@@ -300,7 +300,7 @@ void SkPathRef::writeToBuffer(SkWBuffer* buffer) const {
 
 uint32_t SkPathRef::writeSize() const {
     return uint32_t(5 * sizeof(uint32_t) +
-                    fVerbs.bytes() + fPoints.bytes() + fConicWeights.bytes() +
+                    fVerbs.size_bytes() + fPoints.size_bytes() + fConicWeights.size_bytes() +
                     sizeof(SkRect));
 }
 

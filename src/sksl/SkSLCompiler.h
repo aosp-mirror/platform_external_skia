@@ -59,6 +59,13 @@ class SymbolTable;
 struct LoadedModule {
     std::shared_ptr<SymbolTable>                 fSymbols;
     std::vector<std::unique_ptr<ProgramElement>> fElements;
+
+    /**
+     * Converts a compiled LoadedModule (containing symbols and ProgramElements) into a ParsedModule
+     * (containing a BuiltinMap, useful for looking up symbols quickly by name). Most elements of
+     * `fElements` from this LoadedModule will be moved into the BuiltinMap.
+     */
+    ParsedModule parse(const ParsedModule& base);
 };
 
 /**
@@ -176,11 +183,17 @@ public:
         return fSymbolTable;
     }
 
-    ParsedModule compileModule(ProgramKind kind,
+    LoadedModule compileModule(ProgramKind kind,
                                const char* moduleName,
                                std::string moduleSource,
                                const ParsedModule& base,
-                               ModifiersPool& modifiersPool);
+                               ModifiersPool& modifiersPool,
+                               bool shouldInline);
+
+    /** Optimize a module at minification time, before writing it out. */
+    bool optimizeModuleBeforeMinifying(ProgramKind kind,
+                                       LoadedModule& module,
+                                       const ParsedModule& base);
 
     const ParsedModule& moduleForProgramKind(ProgramKind kind);
 
@@ -204,7 +217,7 @@ private:
     /** Performs final checks to confirm that a fully-assembled/optimized is valid. */
     bool finalize(Program& program);
 
-    /** Optimize a module after loading it. */
+    /** Optimize a module at Skia runtime, after loading it. */
     bool optimizeModuleAfterLoading(ProgramKind kind,
                                     LoadedModule& module,
                                     const ParsedModule& base);
