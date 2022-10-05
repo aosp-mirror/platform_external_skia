@@ -13,10 +13,6 @@
 
 namespace SkSL {
 
-const Symbol* SymbolTable::operator[](std::string_view name) const {
-    return this->lookup(MakeSymbolKey(name));
-}
-
 bool SymbolTable::isType(std::string_view name) const {
     const Symbol* symbol = (*this)[name];
     return symbol && symbol->is<Type>();
@@ -29,14 +25,19 @@ bool SymbolTable::isBuiltinType(std::string_view name) const {
     return this->isType(name);
 }
 
-const Symbol* SymbolTable::lookup(const SymbolKey& key) const {
-    const Symbol** symbolPPtr = fSymbols.find(key);
+Symbol* SymbolTable::lookup(const SymbolKey& key) const {
+    Symbol** symbolPPtr = fSymbols.find(key);
     if (symbolPPtr) {
         return *symbolPPtr;
     }
 
     // The symbol wasn't found; recurse into the parent symbol table.
     return fParent ? fParent->lookup(key) : nullptr;
+}
+
+void SymbolTable::renameSymbol(Symbol* symbol, std::string_view newName) {
+    symbol->setName(newName);
+    this->addWithoutOwnership(symbol);
 }
 
 const std::string* SymbolTable::takeOwnershipOfString(std::string str) {
@@ -61,11 +62,7 @@ void SymbolTable::addWithoutOwnership(Symbol* symbol) {
         }
     }
 
-    return this->addWithoutOwnership(symbol, key);
-}
-
-void SymbolTable::addWithoutOwnership(const Symbol* symbol, const SymbolKey& key) {
-    const Symbol*& refInSymbolTable = fSymbols[key];
+    Symbol*& refInSymbolTable = fSymbols[key];
 
     if (refInSymbolTable == nullptr) {
         refInSymbolTable = symbol;
