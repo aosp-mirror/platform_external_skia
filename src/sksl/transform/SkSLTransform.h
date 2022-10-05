@@ -81,6 +81,12 @@ bool EliminateDeadGlobalVariables(const Context& context,
                                   bool onlyPrivateGlobals);
 bool EliminateDeadGlobalVariables(Program& program);
 
+/** Renames function-local variables to minimize code size. */
+void RenameLocalVariables(Context& context, LoadedModule& module, ProgramUsage* usage);
+
+/** Replaces constant variables in a program with their equivalent values. */
+void ReplaceConstVarsWithLiterals(LoadedModule& module, ProgramUsage* usage);
+
 } // namespace Transform
 } // namespace SkSL
 

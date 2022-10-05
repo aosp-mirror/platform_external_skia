@@ -203,8 +203,8 @@ bool GrVkCaps::canCopyAsResolve(VkFormat dstFormat, int dstSampleCnt, bool dstHa
     return true;
 }
 
-bool GrVkCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
-                                const SkIRect& srcRect, const SkIPoint& dstPoint) const {
+bool GrVkCaps::onCanCopySurface(const GrSurfaceProxy* dst, const SkIRect& dstRect,
+                                const GrSurfaceProxy* src, const SkIRect& srcRect) const {
     if (src->isProtected() == GrProtected::kYes && dst->isProtected() != GrProtected::kYes) {
         return false;
     }
@@ -267,12 +267,18 @@ bool GrVkCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy*
     SkAssertResult(dst->backendFormat().asVkFormat(&dstFormat));
     SkAssertResult(src->backendFormat().asVkFormat(&srcFormat));
 
-    return this->canCopyImage(dstFormat, dstSampleCnt, dstHasYcbcr,
-                              srcFormat, srcSampleCnt, srcHasYcbcr) ||
-           this->canCopyAsBlit(dstFormat, dstSampleCnt, dstIsLinear, dstHasYcbcr,
-                               srcFormat, srcSampleCnt, srcIsLinear, srcHasYcbcr) ||
-           this->canCopyAsResolve(dstFormat, dstSampleCnt, dstHasYcbcr,
-                                  srcFormat, srcSampleCnt, srcHasYcbcr);
+    // Only blits support scaling, but since we've already clamped the src and dst rects,
+    // the dimensions of the scaled blit aren't important to know if it's allowed.
+    const bool copyScales = srcRect.size() != dstRect.size();
+    if (!copyScales && (this->canCopyImage(dstFormat, dstSampleCnt, dstHasYcbcr,
+                                           srcFormat, srcSampleCnt, srcHasYcbcr) ||
+                        this->canCopyAsResolve(dstFormat, dstSampleCnt, dstHasYcbcr,
+                                               srcFormat, srcSampleCnt, srcHasYcbcr))) {
+        return true;
+    }
+    return this->canCopyAsBlit(dstFormat, dstSampleCnt, dstIsLinear, dstHasYcbcr,
+                               srcFormat, srcSampleCnt, srcIsLinear, srcHasYcbcr);
+
 }
 
 template<typename T> T* get_extension_feature_struct(const VkPhysicalDeviceFeatures2& features,
@@ -1489,14 +1495,14 @@ int GrVkCaps::getRenderTargetSampleCount(int requestedCount, VkFormat format) co
 
     const FormatInfo& info = this->getFormatInfo(format);
 
-    int count = info.fColorSampleCounts.count();
+    int count = info.fColorSampleCounts.size();
 
     if (!count) {
         return 0;
     }
 
     if (1 == requestedCount) {
-        SkASSERT(info.fColorSampleCounts.count() && info.fColorSampleCounts[0] == 1);
+        SkASSERT(info.fColorSampleCounts.size() && info.fColorSampleCounts[0] == 1);
         return 1;
     }
 
@@ -1520,10 +1526,10 @@ int GrVkCaps::maxRenderTargetSampleCount(VkFormat format) const {
     const FormatInfo& info = this->getFormatInfo(format);
 
     const auto& table = info.fColorSampleCounts;
-    if (!table.count()) {
+    if (!table.size()) {
         return 0;
     }
-    return table[table.count() - 1];
+    return table[table.size() - 1];
 }
 
 static inline size_t align_to_4(size_t v) {

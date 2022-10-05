@@ -52,6 +52,13 @@ public:
     }
 
     /**
+     *  Don't call this directly--use SymbolTable::renameSymbol instead!
+     */
+    void setName(std::string_view newName) {
+        fName = newName;
+    }
+
+    /**
      *  Use is<T> to check the type of a symbol.
      *  e.g. replace `sym.kind() == Symbol::Kind::kVariable` with `sym.is<Variable>()`.
      */
@@ -80,8 +87,6 @@ private:
     const Type* fType;
 
     using INHERITED = IRNode;
-
-    friend class Type;
 };
 
 }  // namespace SkSL

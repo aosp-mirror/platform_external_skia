@@ -99,8 +99,12 @@ bool GrD3DCaps::canCopyAsResolve(DXGI_FORMAT dstFormat, int dstSampleCnt,
     return true;
 }
 
-bool GrD3DCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
-                                 const SkIRect& srcRect, const SkIPoint& dstPoint) const {
+bool GrD3DCaps::onCanCopySurface(const GrSurfaceProxy* dst, const SkIRect& dstRect,
+                                 const GrSurfaceProxy* src, const SkIRect& srcRect) const {
+    // D3D12 does not support scaling copies
+    if (srcRect.size() != dstRect.size()) {
+        return false;
+    }
     if (src->isProtected() == GrProtected::kYes && dst->isProtected() != GrProtected::kYes) {
         return false;
     }
@@ -851,14 +855,14 @@ int GrD3DCaps::getRenderTargetSampleCount(int requestedCount, DXGI_FORMAT format
 
     const FormatInfo& info = this->getFormatInfo(format);
 
-    int count = info.fColorSampleCounts.count();
+    int count = info.fColorSampleCounts.size();
 
     if (!count) {
         return 0;
     }
 
     if (1 == requestedCount) {
-        SkASSERT(info.fColorSampleCounts.count() && info.fColorSampleCounts[0] == 1);
+        SkASSERT(info.fColorSampleCounts.size() && info.fColorSampleCounts[0] == 1);
         return 1;
     }
 
@@ -882,10 +886,10 @@ int GrD3DCaps::maxRenderTargetSampleCount(DXGI_FORMAT format) const {
     const FormatInfo& info = this->getFormatInfo(format);
 
     const auto& table = info.fColorSampleCounts;
-    if (!table.count()) {
+    if (!table.size()) {
         return 0;
     }
-    return table[table.count() - 1];
+    return table[table.size() - 1];
 }
 
 GrColorType GrD3DCaps::getFormatColorType(DXGI_FORMAT format) const {

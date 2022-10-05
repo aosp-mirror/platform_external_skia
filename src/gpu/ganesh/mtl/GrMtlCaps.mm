@@ -286,8 +286,13 @@ bool GrMtlCaps::canCopyAsResolve(MTLPixelFormat dstFormat, int dstSampleCount,
     return true;
 }
 
-bool GrMtlCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
-                                 const SkIRect& srcRect, const SkIPoint& dstPoint) const {
+bool GrMtlCaps::onCanCopySurface(const GrSurfaceProxy* dst, const SkIRect& dstRect,
+                                 const GrSurfaceProxy* src, const SkIRect& srcRect) const {
+    // Metal does not support scaling copies
+    if (srcRect.size() != dstRect.size()) {
+        return false;
+    }
+
     int dstSampleCnt = 1;
     int srcSampleCnt = 1;
     if (const GrRenderTargetProxy* rtProxy = dst->asRenderTargetProxy()) {
@@ -299,6 +304,7 @@ bool GrMtlCaps::onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy
 
     // TODO: need some way to detect whether the proxy is framebufferOnly
 
+    const SkIPoint dstPoint = dstRect.topLeft();
     if (this->canCopyAsBlit(GrBackendFormatAsMTLPixelFormat(dst->backendFormat()), dstSampleCnt,
                             GrBackendFormatAsMTLPixelFormat(src->backendFormat()), srcSampleCnt,
                             srcRect, dstPoint, dst == src)) {
@@ -465,7 +471,7 @@ int GrMtlCaps::maxRenderTargetSampleCount(const GrBackendFormat& format) const {
 int GrMtlCaps::maxRenderTargetSampleCount(MTLPixelFormat format) const {
     const FormatInfo& formatInfo = this->getFormatInfo(format);
     if (formatInfo.fFlags & FormatInfo::kMSAA_Flag) {
-        return fSampleCounts[fSampleCounts.count() - 1];
+        return fSampleCounts[fSampleCounts.size() - 1];
     } else if (formatInfo.fFlags & FormatInfo::kRenderable_Flag) {
         return 1;
     }
@@ -486,7 +492,7 @@ int GrMtlCaps::getRenderTargetSampleCount(int requestedCount, MTLPixelFormat for
         return 0;
     }
     if (formatInfo.fFlags & FormatInfo::kMSAA_Flag) {
-        int count = fSampleCounts.count();
+        int count = fSampleCounts.size();
         for (int i = 0; i < count; ++i) {
             if (fSampleCounts[i] >= requestedCount) {
                 return fSampleCounts[i];
