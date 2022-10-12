@@ -241,6 +241,8 @@ SPIRVCodeGenerator::Intrinsic SPIRVCodeGenerator::getIntrinsic(IntrinsicKind ik)
         case k_makeSampler2D_IntrinsicKind: return SPECIAL(SampledImage);
 
         case k_sample_IntrinsicKind:      return SPECIAL(Texture);
+        case k_sampleGrad_IntrinsicKind:  return SPECIAL(TextureGrad);
+        case k_sampleLod_IntrinsicKind:   return SPECIAL(TextureLod);
         case k_subpassLoad_IntrinsicKind: return SPECIAL(SubpassLoad);
 
         case k_floatBitsToInt_IntrinsicKind:  return ALL_SPIRV(Bitcast);
@@ -1460,6 +1462,43 @@ SpvId SPIRVCodeGenerator::writeSpecialIntrinsic(const FunctionCall& c, SpecialIn
             }
             break;
         }
+        case kTextureGrad_SpecialIntrinsic: {
+            SpvOp_ op = SpvOpImageSampleExplicitLod;
+            SkASSERT(arguments.size() == 4);
+            SkASSERT(arguments[0]->type().dimensions() == SpvDim2D);
+            SkASSERT(arguments[1]->type().matches(*fContext.fTypes.fFloat2));
+            SkASSERT(arguments[2]->type().matches(*fContext.fTypes.fFloat2));
+            SkASSERT(arguments[3]->type().matches(*fContext.fTypes.fFloat2));
+            SpvId type = this->getType(callType);
+            SpvId sampler = this->writeExpression(*arguments[0], out);
+            SpvId uv = this->writeExpression(*arguments[1], out);
+            this->writeInstruction(op, type, result, sampler, uv,
+                                   SpvImageOperandsGradMask,
+                                   this->writeExpression(*arguments[2], out),
+                                   this->writeExpression(*arguments[3], out),
+                                   out);
+            break;
+        }
+        case kTextureLod_SpecialIntrinsic: {
+            SpvOp_ op = SpvOpImageSampleExplicitLod;
+            SkASSERT(arguments.size() == 3);
+            SkASSERT(arguments[0]->type().dimensions() == SpvDim2D);
+            SkASSERT(arguments[2]->type().matches(*fContext.fTypes.fFloat));
+            const Type& arg1Type = arguments[1]->type();
+            if (arg1Type.matches(*fContext.fTypes.fFloat3)) {
+                op = SpvOpImageSampleProjExplicitLod;
+            } else {
+                SkASSERT(arg1Type.matches(*fContext.fTypes.fFloat2));
+            }
+            SpvId type = this->getType(callType);
+            SpvId sampler = this->writeExpression(*arguments[0], out);
+            SpvId uv = this->writeExpression(*arguments[1], out);
+            this->writeInstruction(op, type, result, sampler, uv,
+                                   SpvImageOperandsLodMask,
+                                   this->writeExpression(*arguments[2], out),
+                                   out);
+            break;
+        }
         case kMod_SpecialIntrinsic: {
             SkTArray<SpvId> args = this->vectorize(arguments, out);
             SkASSERT(args.size() == 2);
@@ -2413,7 +2452,7 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
             // underlying fragcoords directly without flipping it".
             DSLExpression rtFlip(ThreadContext::Compiler().convertIdentifier(Position(),
                     SKSL_RTFLIP_NAME));
-            if (!symbols[DEVICE_COORDS_NAME]) {
+            if (!symbols.find(DEVICE_COORDS_NAME)) {
                 AutoAttachPoolToThread attach(fProgram.fPool.get());
                 Modifiers modifiers;
                 modifiers.fLayout.fBuiltin = DEVICE_FRAGCOORDS_BUILTIN;
@@ -2453,7 +2492,7 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
             // underlying FrontFacing directly".
             DSLExpression rtFlip(ThreadContext::Compiler().convertIdentifier(Position(),
                     SKSL_RTFLIP_NAME));
-            if (!symbols[DEVICE_CLOCKWISE_NAME]) {
+            if (!symbols.find(DEVICE_CLOCKWISE_NAME)) {
                 AutoAttachPoolToThread attach(fProgram.fPool.get());
                 Modifiers modifiers;
                 modifiers.fLayout.fBuiltin = DEVICE_CLOCKWISE_BUILTIN;
@@ -3748,7 +3787,7 @@ SPIRVCodeGenerator::EntrypointAdapter SPIRVCodeGenerator::writeEntrypointAdapter
     std::shared_ptr<SymbolTable> symbolTable = get_top_level_symbol_table(main);
 
     // Get `sk_FragColor` as a writable reference.
-    const Symbol* skFragColorSymbol = (*symbolTable)["sk_FragColor"];
+    const Symbol* skFragColorSymbol = symbolTable->find("sk_FragColor");
     SkASSERT(skFragColorSymbol);
     const Variable& skFragColorVar = skFragColorSymbol->as<Variable>();
     auto skFragColorRef = std::make_unique<VariableReference>(Position(), &skFragColorVar,
