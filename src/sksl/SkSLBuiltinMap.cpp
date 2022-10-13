@@ -7,12 +7,8 @@
 
 #include "include/core/SkTypes.h"
 #include "include/private/SkSLProgramElement.h"
-#include "include/private/SkSLStatement.h"
 #include "src/sksl/SkSLBuiltinMap.h"
-#include "src/sksl/ir/SkSLFunctionDeclaration.h"
-#include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
-#include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/ir/SkSLVariable.h"
 
 #include <string>
@@ -32,23 +28,16 @@ BuiltinMap::BuiltinMap(const BuiltinMap* parent,
     // global symbols to the declaring ProgramElement.
     for (std::unique_ptr<ProgramElement>& element : elements) {
         switch (element->kind()) {
-            case ProgramElement::Kind::kFunction: {
-                const FunctionDeclaration& decl = element->as<FunctionDefinition>().declaration();
-                SkASSERT(decl.isBuiltin());
-                this->insertOrDie(&decl, std::move(element));
+            case ProgramElement::Kind::kFunction:
+            case ProgramElement::Kind::kGlobalVar:
+                // We don't look these up from the BuiltinMap anymore, but we can't delete them.
+                fUnmappedElements.push_back(std::move(element));
                 break;
-            }
-            case ProgramElement::Kind::kFunctionPrototype: {
+
+            case ProgramElement::Kind::kFunctionPrototype:
                 // These are already in the symbol table.
                 break;
-            }
-            case ProgramElement::Kind::kGlobalVar: {
-                const GlobalVarDeclaration& global = element->as<GlobalVarDeclaration>();
-                const Variable& var = global.declaration()->as<VarDeclaration>().var();
-                SkASSERT(var.isBuiltin());
-                this->insertOrDie(&var, std::move(element));
-                break;
-            }
+
             case ProgramElement::Kind::kInterfaceBlock: {
                 const Variable& var = element->as<InterfaceBlock>().variable();
                 SkASSERT(var.isBuiltin());
@@ -74,10 +63,13 @@ const ProgramElement* BuiltinMap::find(const Symbol* symbol) const {
     return fParent ? fParent->find(symbol) : nullptr;
 }
 
-void BuiltinMap::foreach(const std::function<void(const Symbol*,const ProgramElement&)>& fn) const {
+void BuiltinMap::foreach(const std::function<void(const ProgramElement&)>& fn) const {
     fElements.foreach([&](const Symbol* symbol, const std::unique_ptr<ProgramElement>& elem) {
-        fn(symbol, *elem);
+        fn(*elem);
     });
+    for (const std::unique_ptr<ProgramElement>& elem : fUnmappedElements) {
+        fn(*elem);
+    }
     if (fParent) {
         fParent->foreach(fn);
     }
