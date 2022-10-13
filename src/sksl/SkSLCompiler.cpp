@@ -7,8 +7,8 @@
 
 #include "src/sksl/SkSLCompiler.h"
 
+#include "include/core/SkSpan.h"
 #include "include/private/SkSLDefines.h"
-#include "include/private/SkSLStatement.h"
 #include "include/private/SkSLSymbol.h"
 #include "include/sksl/DSLCore.h"
 #include "include/sksl/DSLModifiers.h"
@@ -29,12 +29,9 @@
 #include "src/sksl/ir/SkSLField.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
-#include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLFunctionReference.h"
-#include "src/sksl/ir/SkSLInterfaceBlock.h"
 #include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLTypeReference.h"
-#include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/ir/SkSLVariable.h"
 #include "src/sksl/ir/SkSLVariableReference.h"
 #include "src/sksl/transform/SkSLTransform.h"
@@ -147,7 +144,7 @@ Compiler::Compiler(const ShaderCaps* caps) : fErrorReporter(this), fCaps(caps) {
 
 Compiler::~Compiler() {}
 
-const ParsedModule& Compiler::moduleForProgramKind(ProgramKind kind) {
+const BuiltinMap* Compiler::moduleForProgramKind(ProgramKind kind) {
     auto m = ModuleLoader::Get();
     switch (kind) {
         case ProgramKind::kVertex:               return m.loadVertexModule(this);           break;
@@ -169,11 +166,11 @@ const ParsedModule& Compiler::moduleForProgramKind(ProgramKind kind) {
 LoadedModule Compiler::compileModule(ProgramKind kind,
                                      const char* moduleName,
                                      std::string moduleSource,
-                                     const ParsedModule& base,
+                                     const BuiltinMap* base,
                                      ModifiersPool& modifiersPool,
                                      bool shouldInline) {
+    SkASSERT(base);
     SkASSERT(!moduleSource.empty());
-    SkASSERT(base.fSymbols);
     SkASSERT(this->errorCount() == 0);
 
     // Modules are shared and cannot rely on shader caps.
@@ -183,8 +180,7 @@ LoadedModule Compiler::compileModule(ProgramKind kind,
     // Compile the module from source, using default program settings.
     ProgramSettings settings;
     SkSL::Parser parser{this, settings, kind, std::move(moduleSource)};
-    LoadedModule module = parser.moduleInheritingFrom(ParsedModule{base.fSymbols,
-                                                                   /*fElements=*/nullptr});
+    LoadedModule module = parser.moduleInheritingFrom(base);
     if (this->errorCount() != 0) {
         SK_ABORT("Unexpected errors compiling %s:\n\n%s\n", moduleName, this->errorText().c_str());
     }
@@ -194,49 +190,11 @@ LoadedModule Compiler::compileModule(ProgramKind kind,
     return module;
 }
 
-ParsedModule LoadedModule::parse(const ParsedModule& base) {
-    // For modules that just declare (but don't define) intrinsic functions, there will be no new
-    // program elements. In that case, we can share our parent's element map:
-    if (fElements.empty()) {
-        return ParsedModule{fSymbols, base.fElements};
-    }
+std::unique_ptr<BuiltinMap> LoadedModule::convertToBuiltinMap(const BuiltinMap* parent) {
+    auto elements = std::make_unique<BuiltinMap>(parent, std::move(fSymbols), SkSpan(fElements));
+    fElements = std::vector<std::unique_ptr<ProgramElement>>{};
 
-    auto elements = std::make_shared<BuiltinMap>(base.fElements.get());
-
-    // Now, transfer all of the program elements to a builtin element map. This maps certain types
-    // of global objects to the declaring ProgramElement.
-    for (std::unique_ptr<ProgramElement>& element : fElements) {
-        switch (element->kind()) {
-            case ProgramElement::Kind::kFunction: {
-                const FunctionDefinition& f = element->as<FunctionDefinition>();
-                SkASSERT(f.declaration().isBuiltin());
-                elements->insertOrDie(f.declaration().description(), std::move(element));
-                break;
-            }
-            case ProgramElement::Kind::kFunctionPrototype: {
-                // These are already in the symbol table.
-                break;
-            }
-            case ProgramElement::Kind::kGlobalVar: {
-                const GlobalVarDeclaration& global = element->as<GlobalVarDeclaration>();
-                const Variable& var = global.declaration()->as<VarDeclaration>().var();
-                SkASSERT(var.isBuiltin());
-                elements->insertOrDie(std::string(var.name()), std::move(element));
-                break;
-            }
-            case ProgramElement::Kind::kInterfaceBlock: {
-                const Variable& var = element->as<InterfaceBlock>().variable();
-                SkASSERT(var.isBuiltin());
-                elements->insertOrDie(std::string(var.name()), std::move(element));
-                break;
-            }
-            default:
-                SkDEBUGFAILF("Unsupported element: %s\n", element->description().c_str());
-                break;
-        }
-    }
-
-    return ParsedModule{fSymbols, std::move(elements)};
+    return elements;
 }
 
 std::unique_ptr<Program> Compiler::convertProgram(ProgramKind kind,
@@ -335,7 +293,7 @@ std::unique_ptr<Expression> Compiler::convertIdentifier(Position pos, std::strin
 
 bool Compiler::optimizeModuleBeforeMinifying(ProgramKind kind,
                                              LoadedModule& module,
-                                             const ParsedModule& base) {
+                                             const BuiltinMap* base) {
     SkASSERT(this->errorCount() == 0);
 
     auto m = SkSL::ModuleLoader::Get();
@@ -377,7 +335,7 @@ bool Compiler::optimizeModuleBeforeMinifying(ProgramKind kind,
 
 bool Compiler::optimizeModuleAfterLoading(ProgramKind kind,
                                           LoadedModule& module,
-                                          const ParsedModule& base) {
+                                          const BuiltinMap* base) {
     SkASSERT(this->errorCount() == 0);
 
 #ifndef SK_ENABLE_OPTIMIZE_SIZE
