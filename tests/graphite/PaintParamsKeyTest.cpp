@@ -62,6 +62,7 @@ std::tuple<SkPaint, int> create_paint(Recorder* recorder,
     int numTextures = 0;
     switch (shaderType) {
         case ShaderType::kSolidColor:
+            s = SkShaders::Color(SK_ColorYELLOW);
             break;
         case ShaderType::kLinearGradient:
             s = SkGradientShader::MakeLinear(pts, colors, offsets, 2, tm);
@@ -171,7 +172,7 @@ SkUniquePaintParamsID create_key(Context* context,
 //   call Context::precompile and, somehow, get the created SkPaintParamsKey
 //           - maybe via a testing only callback on SkShaderCodeDictionary::findOrCreate
 //   draw w/ the SkPaint and, again, somehow, intercept the created SkPaintParamsKey
-DEF_GRAPHITE_TEST_FOR_CONTEXTS(PaintParamsKeyTest, reporter, context) {
+DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest, reporter, context) {
     auto recorder = context->makeRecorder();
     SkKeyContext keyContext(recorder.get(), {});
     auto dict = keyContext.dict();
