@@ -51,9 +51,6 @@
 #include <vector>
 
 namespace SkSL {
-
-class BuiltinMap;
-
 namespace dsl {
 
 void Start(SkSL::Compiler* compiler, ProgramKind kind) {
@@ -69,9 +66,9 @@ void Start(SkSL::Compiler* compiler, ProgramKind kind, const ProgramSettings& se
 void StartModule(SkSL::Compiler* compiler,
                  ProgramKind kind,
                  const ProgramSettings& settings,
-                 const SkSL::BuiltinMap* baseModule) {
+                 const SkSL::Module* parent) {
     ThreadContext::SetInstance(std::make_unique<ThreadContext>(compiler, kind, settings,
-                                                               baseModule, /*isModule=*/true));
+                                                               parent, /*isModule=*/true));
 }
 
 void End() {
@@ -260,7 +257,7 @@ public:
                         pos, typeName, std::move(skslFields), /*interfaceBlock=*/true));
         DSLType varType = arraySize > 0 ? Array(structType, arraySize) : DSLType(structType);
         DSLGlobalVar var(modifiers, varType, !varName.empty() ? varName : typeName, DSLExpression(),
-                pos);
+                         pos);
         SkSL::Variable* skslVar = DSLWriter::Var(var);
         if (skslVar) {
             auto intf = std::make_unique<SkSL::InterfaceBlock>(pos, skslVar, typeName,
