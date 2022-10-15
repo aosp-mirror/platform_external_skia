@@ -46,7 +46,6 @@ config("skia_public") {
     defines += [
       "SK_ENABLE_OPTIMIZE_SIZE",
       "SK_DISABLE_AAA",
-      "SK_DISABLE_TRACING",
     ]
   }
   if (skia_enable_sksl) {
@@ -2769,6 +2768,12 @@ if (skia_enable_tools) {
       } else if (is_mac) {
         if (dawn_enable_metal) {
           sources += [ "tools/sk_app/mac/DawnMTLWindowContext_mac.mm" ]
+        }
+        if (skia_enable_graphite) {
+          sources +=
+              [ "tools/sk_app/mac/GraphiteDawnMetalWindowContext_mac.mm" ]
+          sources += [ "tools/sk_app/GraphiteDawnWindowContext.cpp" ]
+          sources += [ "tools/sk_app/GraphiteDawnWindowContext.h" ]
         }
       }
     }
