@@ -219,46 +219,12 @@ public:
         fStorage.removeShuffle(index);
     }
 
-    int find(const T& elem) const {
-        const T* iter = this->begin();
-        const T* stop = this->end();
-
-        for (; iter < stop; iter++) {
-            if (*iter == elem) {
-                return SkToInt(iter - this->begin());
-            }
-        }
-        return -1;
-    }
-
     // routines to treat the array like a stack
     void push_back(const T& v) {
         this->append();
         this->back() = v;
     }
     void pop_back() { fStorage.pop_back(); }
-
-    void deleteAll() {
-        for (T p : *this) {
-            delete p;
-        }
-        this->reset();
-    }
-
-    void freeAll() {
-        for (T p : *this) {
-            sk_free(p);
-        }
-
-        this->reset();
-    }
-
-    void unrefAll() {
-        for (T p : *this) {
-            p->unref();
-        }
-        this->reset();
-    }
 
     void shrink_to_fit() {
         fStorage.shrink_to_fit();

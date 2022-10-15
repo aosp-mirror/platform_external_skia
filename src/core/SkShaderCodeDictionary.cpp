@@ -161,7 +161,8 @@ std::string SkShaderInfo::toSkSL(const skgpu::graphite::RenderStep* step,
         mainBody += "float2 coords = (dev2LocalUni * sk_FragCoord).xy;";
     }
 
-    // TODO: what is the correct initial color to feed in?
+    // Set initial color. This will typically be optimized out by SkSL in favor of the paint
+    // specifying a color with a solid color shader.
     std::string lastOutputVar = "initialColor";
     mainBody += "half4 initialColor = half4(0);";
 
@@ -658,7 +659,7 @@ public:
             , fPreamble(preamble) {}
 
     std::string declareUniform(const SkSL::VarDeclaration* decl) override {
-        std::string result = get_mangled_name(std::string(decl->var().name()), fEntryIndex);
+        std::string result = get_mangled_name(std::string(decl->var()->name()), fEntryIndex);
         if (fShaderInfo.ssboIndex()) {
             result = skgpu::graphite::EmitStorageBufferAccess(
                     "fs", fShaderInfo.ssboIndex(), result.c_str());

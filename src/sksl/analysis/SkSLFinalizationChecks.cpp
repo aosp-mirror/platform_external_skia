@@ -71,20 +71,20 @@ public:
         const VarDeclaration& decl = globalDecl.declaration()->as<VarDeclaration>();
 
         size_t prevSlotsUsed = fGlobalSlotsUsed;
-        fGlobalSlotsUsed = SkSafeMath::Add(fGlobalSlotsUsed, decl.var().type().slotCount());
+        fGlobalSlotsUsed = SkSafeMath::Add(fGlobalSlotsUsed, decl.var()->type().slotCount());
         // To avoid overzealous error reporting, only trigger the error at the first place where the
         // global limit is exceeded.
         if (prevSlotsUsed < kVariableSlotLimit && fGlobalSlotsUsed >= kVariableSlotLimit) {
             fContext.fErrors->error(decl.fPosition,
-                                    "global variable '" + std::string(decl.var().name()) +
+                                    "global variable '" + std::string(decl.var()->name()) +
                                     "' exceeds the size limit");
         }
     }
 
     void checkBindUniqueness(const InterfaceBlock& block) {
-        const Variable& var = block.variable();
-        int32_t set = var.modifiers().fLayout.fSet;
-        int32_t binding = var.modifiers().fLayout.fBinding;
+        const Variable* var = block.var();
+        int32_t set = var->modifiers().fLayout.fSet;
+        int32_t binding = var->modifiers().fLayout.fBinding;
         if (binding != -1) {
             // TODO(skia:13664): This should map a `set` value of -1 to the default settings value
             // used by codegen backends to prevent duplicates that may arise from the effective

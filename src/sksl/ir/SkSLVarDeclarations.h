@@ -33,14 +33,14 @@ struct Modifiers;
  */
 class VarDeclaration final : public Statement {
 public:
-    inline static constexpr Kind kStatementKind = Kind::kVarDeclaration;
+    inline static constexpr Kind kIRNodeKind = Kind::kVarDeclaration;
 
-    VarDeclaration(const Variable* var,
+    VarDeclaration(Variable* var,
                    const Type* baseType,
                    int arraySize,
                    std::unique_ptr<Expression> value,
                    bool isClone = false)
-            : INHERITED(var->fPosition, kStatementKind)
+            : INHERITED(var->fPosition, kIRNodeKind)
             , fVar(var)
             , fBaseType(*baseType)
             , fArraySize(arraySize)
@@ -74,13 +74,11 @@ public:
         return fBaseType;
     }
 
-    const Variable& var() const {
-        // This should never be called after the Variable has been deleted.
-        SkASSERT(fVar);
-        return *fVar;
+    Variable* var() const {
+        return fVar;
     }
 
-    void setVar(const Variable* var) {
+    void setVar(Variable* var) {
         fVar = var;
     }
 
@@ -101,10 +99,11 @@ public:
     std::string description() const override;
 
 private:
-    static bool ErrorCheckAndCoerce(const Context& context, const Variable& var,
-            std::unique_ptr<Expression>& value);
+    static bool ErrorCheckAndCoerce(const Context& context,
+                                    const Variable& var,
+                                    std::unique_ptr<Expression>& value);
 
-    const Variable* fVar;
+    Variable* fVar;
     const Type& fBaseType;
     int fArraySize;  // zero means "not an array"
     std::unique_ptr<Expression> fValue;
@@ -120,12 +119,13 @@ private:
  */
 class GlobalVarDeclaration final : public ProgramElement {
 public:
-    inline static constexpr Kind kProgramElementKind = Kind::kGlobalVar;
+    inline static constexpr Kind kIRNodeKind = Kind::kGlobalVar;
 
     GlobalVarDeclaration(std::unique_ptr<Statement> decl)
-            : INHERITED(decl->fPosition, kProgramElementKind)
+            : INHERITED(decl->fPosition, kIRNodeKind)
             , fDeclaration(std::move(decl)) {
         SkASSERT(this->declaration()->is<VarDeclaration>());
+        this->declaration()->as<VarDeclaration>().var()->setGlobalVarDeclaration(this);
     }
 
     std::unique_ptr<Statement>& declaration() {

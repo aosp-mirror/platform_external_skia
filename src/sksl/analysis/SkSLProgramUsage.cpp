@@ -30,7 +30,6 @@
 
 namespace SkSL {
 
-class Symbol;
 struct Program;
 
 namespace {
@@ -49,7 +48,7 @@ public:
             }
         } else if (pe.is<InterfaceBlock>()) {
             // Ensure interface-block variables exist in the variable usage map.
-            fUsage->fVariableCounts[&pe.as<InterfaceBlock>().variable()];
+            fUsage->fVariableCounts[pe.as<InterfaceBlock>().var()];
         }
         return INHERITED::visitProgramElement(pe);
     }
@@ -58,7 +57,7 @@ public:
         if (s.is<VarDeclaration>()) {
             // Add all declared variables to the usage map (even if never otherwise accessed).
             const VarDeclaration& vd = s.as<VarDeclaration>();
-            ProgramUsage::VariableCounts& counts = fUsage->fVariableCounts[&vd.var()];
+            ProgramUsage::VariableCounts& counts = fUsage->fVariableCounts[vd.var()];
             counts.fVarExists += fDelta;
             SkASSERT(counts.fVarExists >= 0 && counts.fVarExists <= 1);
             if (vd.value()) {
@@ -120,7 +119,7 @@ std::unique_ptr<ProgramUsage> Analysis::GetUsage(const LoadedModule& module,
         addRefs.visitProgramElement(*element);
     }
     if (base) {
-        base->foreach([&](const Symbol*, const ProgramElement& element) {
+        base->foreach([&](const ProgramElement& element) {
             addRefs.visitProgramElement(element);
         });
     }
