@@ -53,7 +53,7 @@ VarDeclaration* Variable::varDeclaration() const {
     SkASSERT(fDeclaringElement->is<VarDeclaration>() ||
              fDeclaringElement->is<GlobalVarDeclaration>());
     return fDeclaringElement->is<GlobalVarDeclaration>()
-               ? &fDeclaringElement->as<GlobalVarDeclaration>().declaration()->as<VarDeclaration>()
+               ? &fDeclaringElement->as<GlobalVarDeclaration>().varDeclaration()
                : &fDeclaringElement->as<VarDeclaration>();
 }
 
@@ -76,7 +76,7 @@ void Variable::setVarDeclaration(VarDeclaration* declaration) {
 }
 
 void Variable::setGlobalVarDeclaration(GlobalVarDeclaration* global) {
-    SkASSERT(!fDeclaringElement || this == global->declaration()->as<VarDeclaration>().var());
+    SkASSERT(!fDeclaringElement || this == global->varDeclaration().var());
     fDeclaringElement = global;
 }
 
@@ -107,9 +107,6 @@ std::unique_ptr<Variable> Variable::Convert(const Context& context,
         ProgramConfig::IsFragment(context.fConfig->fKind) && name != Compiler::FRAGCOLOR_NAME) {
         context.fErrors->error(modifiersPos,
                                "out location=0, index=0 is reserved for sk_FragColor");
-    }
-    if (!context.fConfig->fIsBuiltinCode && skstd::starts_with(name, '$')) {
-        context.fErrors->error(namePos, "name '" + std::string(name) + "' is reserved");
     }
     if (baseType->isUnsizedArray() && storage != Variable::Storage::kInterfaceBlock) {
         context.fErrors->error(pos, "unsized arrays are not permitted here");

@@ -5,18 +5,37 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkBlendMode.h"
 #include "include/core/SkBlender.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkCapabilities.h"
+#include "include/core/SkColor.h"
 #include "include/core/SkColorFilter.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkData.h"
+#include "include/core/SkImageInfo.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkSpan.h"
 #include "include/core/SkStream.h"
+#include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
 #include "include/effects/SkBlenders.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/private/SkColorData.h"
+#include "include/private/SkSLSampleUsage.h"
+#include "include/private/SkSLString.h"
+#include "include/private/SkTArray.h"
 #include "include/sksl/SkSLDebugTrace.h"
+#include "include/sksl/SkSLVersion.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkRuntimeEffectPriv.h"
 #include "src/core/SkTLazy.h"
@@ -26,12 +45,24 @@
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
 #include "src/gpu/ganesh/GrImageInfo.h"
+#include "src/gpu/ganesh/GrPixmap.h"
 #include "src/gpu/ganesh/SurfaceFillContext.h"
 #include "src/gpu/ganesh/effects/GrSkSLFP.h"
+#include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 
-#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <functional>
+#include <initializer_list>
+#include <memory>
+#include <string>
 #include <thread>
+#include <utility>
+
+class GrRecordingContext;
+struct GrContextOptions;
+struct SkIPoint;
 
 #ifdef SK_GRAPHITE_ENABLED
 #include "include/gpu/graphite/Context.h"
@@ -301,7 +332,7 @@ DEF_TEST(SkRuntimeEffectForShader, r) {
     // The 'half4 main(float2, half4|float4)' signature is disallowed on both public and private
     // runtime effects.
     SkRuntimeEffect::Options options;
-    SkRuntimeEffectPriv::UsePrivateRTShaderModule(&options);
+    SkRuntimeEffectPriv::AllowPrivateAccess(&options);
     test_invalid("half4  main(float2 p, half4  c) { return c; }", "'main' parameter");
     test_invalid("half4  main(float2 p, half4  c) { return c; }", "'main' parameter", options);
 
@@ -430,7 +461,7 @@ public:
 
     void build(const char* src) {
         SkRuntimeEffect::Options options;
-        SkRuntimeEffectPriv::UsePrivateRTShaderModule(&options);
+        SkRuntimeEffectPriv::AllowPrivateAccess(&options);
         auto [effect, errorText] = SkRuntimeEffect::MakeForShader(SkString(src), options);
         if (!effect) {
             ERRORF(fReporter, "Effect didn't compile: %s", errorText.c_str());
@@ -1190,9 +1221,8 @@ DEF_TEST(SkRuntimeShaderBuilderSetUniforms, r) {
 }
 
 DEF_TEST(SkRuntimeEffectThreaded, r) {
-    // SkRuntimeEffect uses a single compiler instance, but it's mutex locked.
-    // This tests that we can safely use it from more than one thread, and also
-    // that programs don't refer to shared structures owned by the compiler.
+    // This tests that we can safely use SkRuntimeEffect::MakeForShader from more than one thread,
+    // and also that programs don't refer to shared structures owned by the compiler.
     // skbug.com/10589
     static constexpr char kSource[] = "half4 main(float2 p) { return sk_FragCoord.xyxy; }";
 
@@ -1200,7 +1230,7 @@ DEF_TEST(SkRuntimeEffectThreaded, r) {
     for (auto& thread : threads) {
         thread = std::thread([r]() {
             SkRuntimeEffect::Options options;
-            SkRuntimeEffectPriv::UsePrivateRTShaderModule(&options);
+            SkRuntimeEffectPriv::AllowPrivateAccess(&options);
             auto [effect, error] = SkRuntimeEffect::MakeForShader(SkString(kSource), options);
             REPORTER_ASSERT(r, effect);
         });
@@ -1208,6 +1238,48 @@ DEF_TEST(SkRuntimeEffectThreaded, r) {
 
     for (auto& thread : threads) {
         thread.join();
+    }
+}
+
+DEF_TEST(SkRuntimeEffectAllowsPrivateAccess, r) {
+    SkRuntimeEffect::Options defaultOptions;
+    SkRuntimeEffect::Options optionsWithAccess;
+    SkRuntimeEffectPriv::AllowPrivateAccess(&optionsWithAccess);
+
+    // Confirm that shaders can only access $private_functions when private access is allowed.
+    {
+        static constexpr char kShader[] =
+                "half4 main(float2 p) { return $hsl_to_rgb(p.xxx, p.y); }";
+        SkRuntimeEffect::Result normal =
+                SkRuntimeEffect::MakeForShader(SkString(kShader), defaultOptions);
+        REPORTER_ASSERT(r, !normal.effect);
+        SkRuntimeEffect::Result privileged =
+                SkRuntimeEffect::MakeForShader(SkString(kShader), optionsWithAccess);
+        REPORTER_ASSERT(r, privileged.effect, "%s", privileged.errorText.c_str());
+    }
+
+    // Confirm that color filters can only access $private_functions when private access is allowed.
+    {
+        static constexpr char kColorFilter[] =
+                "half4 main(half4 c)  { return $hsl_to_rgb(c.rgb, c.a); }";
+        SkRuntimeEffect::Result normal =
+                SkRuntimeEffect::MakeForColorFilter(SkString(kColorFilter), defaultOptions);
+        REPORTER_ASSERT(r, !normal.effect);
+        SkRuntimeEffect::Result privileged =
+                SkRuntimeEffect::MakeForColorFilter(SkString(kColorFilter), optionsWithAccess);
+        REPORTER_ASSERT(r, privileged.effect, "%s", privileged.errorText.c_str());
+    }
+
+    // Confirm that blenders can only access $private_functions when private access is allowed.
+    {
+        static constexpr char kBlender[] =
+                "half4 main(half4 s, half4 d) { return $hsl_to_rgb(s.rgb, d.a); }";
+        SkRuntimeEffect::Result normal =
+                SkRuntimeEffect::MakeForBlender(SkString(kBlender), defaultOptions);
+        REPORTER_ASSERT(r, !normal.effect);
+        SkRuntimeEffect::Result privileged =
+                SkRuntimeEffect::MakeForBlender(SkString(kBlender), optionsWithAccess);
+        REPORTER_ASSERT(r, privileged.effect, "%s", privileged.errorText.c_str());
     }
 }
 
