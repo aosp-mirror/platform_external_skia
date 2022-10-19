@@ -604,10 +604,7 @@ func marshalJson(data interface{}) string {
 // recipe bundle.
 func (b *taskBuilder) kitchenTaskNoBundle(recipe string, outputDir string) {
 	b.cipd(CIPD_PKG_LUCI_AUTH)
-	kitchenCipd := cipd.MustGetPackage("infra/tools/luci/kitchen/${platform}")
-	// Temporarily override the Kitchen version.
-	kitchenCipd.Version = "git_revision:1db56b0f2cfb7d6f68dbb2b79f23251f7b9f9ea9"
-	b.cipd(kitchenCipd)
+	b.cipd(cipd.MustGetPackage("infra/tools/luci/kitchen/${platform}"))
 	b.env("RECIPES_USE_PY3", "true")
 	b.envPrefixes("VPYTHON_DEFAULT_SPEC", "skia/.vpython")
 	b.usesPython()
@@ -1749,9 +1746,8 @@ func (b *jobBuilder) fm() {
 				// Occasional false positives may crop up in the standard library without this.
 				b.envPrefixes("LD_LIBRARY_PATH", "clang_linux/tsan")
 			} else {
-				// This isn't strictly required, but we usually get better sanitizer
-				// diagnostics from libc++ than the default OS-provided libstdc++.
-				b.envPrefixes("LD_LIBRARY_PATH", "clang_linux/lib")
+				// The machines we run on may not have libstdc++ installed.
+				b.envPrefixes("LD_LIBRARY_PATH", "clang_linux/lib/x86_64-unknown-linux-gnu")
 			}
 		}
 	})
