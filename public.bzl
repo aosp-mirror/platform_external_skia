@@ -752,7 +752,6 @@ BASE_SRCS_ALL = [
     "src/gpu/Blend.cpp",
     "src/gpu/Blend.h",
     "src/gpu/BufferWriter.h",
-    "src/gpu/ClientMappedBufferManager.h",
     "src/gpu/GrAHardwareBufferUtils.h",
     "src/gpu/GrRectanizer.h",
     "src/gpu/KeyBuilder.h",
@@ -769,6 +768,7 @@ BASE_SRCS_ALL = [
     "src/gpu/SkRenderEngineAbortf.h",
     "src/gpu/Swizzle.cpp",
     "src/gpu/Swizzle.h",
+    "src/gpu/TClientMappedBufferManager.h",
     # We include the ganesh files, but leave out any specific backend (e.g. GL, Vulkan)
     "src/gpu/ganesh/ClipStack.cpp",
     "src/gpu/ganesh/ClipStack.h",
@@ -1547,6 +1547,7 @@ BASE_SRCS_ALL = [
     "src/sksl/ir/SkSLIfStatement.h",
     "src/sksl/ir/SkSLIndexExpression.cpp",
     "src/sksl/ir/SkSLIndexExpression.h",
+    "src/sksl/ir/SkSLInterfaceBlock.cpp",
     "src/sksl/ir/SkSLInterfaceBlock.h",
     "src/sksl/ir/SkSLLiteral.cpp",
     "src/sksl/ir/SkSLLiteral.h",
@@ -2030,6 +2031,7 @@ VULKAN_SRCS = [
     "src/gpu/vk/VulkanExtensions.cpp",
     "src/gpu/vk/VulkanInterface.cpp",
     "src/gpu/vk/VulkanInterface.h",
+    "src/gpu/vk/VulkanUtils.h",
 ]
 
 ################################################################################

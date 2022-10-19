@@ -357,6 +357,10 @@ public:
      */
     void reset();
 
+    bool isInitialEmptyPathRef() const {
+        return fGenerationID == kEmptyGenID;
+    }
+
 private:
     enum SerializationOffsets {
         kLegacyRRectOrOvalStartIdx_SerializationShift = 28, // requires 3 bits, ignored.
@@ -408,8 +412,10 @@ private:
     /** Makes additional room but does not change the counts or change the genID */
     void incReserve(int additionalVerbs, int additionalPoints) {
         SkDEBUGCODE(this->validate();)
-        fPoints.reserve_back(additionalPoints);
-        fVerbs.reserve_back(additionalVerbs);
+        if (additionalPoints > 0)
+            fPoints.reserve_back(additionalPoints);
+        if (additionalVerbs > 0)
+            fVerbs.reserve_back(additionalVerbs);
         SkDEBUGCODE(this->validate();)
     }
 
