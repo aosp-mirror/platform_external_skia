@@ -35,12 +35,14 @@ namespace SkSL {
 class Compiler;
 struct Module;
 struct Program;
+class SymbolTable;
 
 namespace dsl {
 class DSLBlock;
 class DSLCase;
 class DSLGlobalVar;
 class DSLParameter;
+class DSLVarBase;
 }
 
 /**
@@ -60,6 +62,7 @@ public:
 
 private:
     class AutoDepth;
+    class AutoSymbolTable;
 
     /**
      * Return the next token, including whitespace tokens, from the parse stream.
@@ -275,6 +278,10 @@ private:
     bool boolLiteral(bool* dest);
 
     bool identifier(std::string_view* dest);
+
+    std::shared_ptr<SymbolTable>& symbolTable();
+
+    void addToSymbolTable(dsl::DSLVarBase& var, Position pos = {});
 
     class Checkpoint {
     public:

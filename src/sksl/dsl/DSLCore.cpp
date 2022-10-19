@@ -13,7 +13,6 @@
 #include "include/private/SkSLStatement.h"
 #include "include/private/SkSLSymbol.h"
 #include "include/sksl/DSLModifiers.h"
-#include "include/sksl/DSLSymbols.h"
 #include "include/sksl/DSLType.h"
 #include "include/sksl/DSLVar.h"
 #include "include/sksl/SkSLPosition.h"
@@ -228,20 +227,24 @@ public:
                                        SkTArray<DSLField> fields, std::string_view varName,
                                        int arraySize, Position pos) {
         std::shared_ptr<SymbolTable> symbols = ThreadContext::SymbolTable();
-        const bool anonymous = varName.empty();
+
+        // Build a struct type corresponding to the passed-in fields and array size.
         DSLType dslStructType = StructType(typeName, fields, /*interfaceBlock=*/true, pos);
         const SkSL::Type* structType = &dslStructType.skslType();
         DSLType varType = arraySize > 0 ? Array(structType, arraySize)
                                         : std::move(dslStructType);
-        DSLGlobalVar var(modifiers, varType, anonymous ? typeName : varName, DSLExpression(), pos);
+
+        // Create a global variable to attach our interface block to. (The variable doesn't actually
+        // get a program element, though; the interface block does instead.)
+        DSLGlobalVar var(modifiers, varType, varName, DSLExpression(), pos);
         SkSL::Variable* skslVar = DSLWriter::Var(var);
         if (skslVar) {
             auto intf = std::make_unique<SkSL::InterfaceBlock>(pos, skslVar, typeName,
                                                                varName, arraySize, symbols);
             FindRTAdjust(*intf, pos);
             ThreadContext::ProgramElements().push_back(std::move(intf));
-            if (anonymous) {
-                // Add each field to the top-level symbols.
+            if (varName.empty()) {
+                // This interface block is anonymous. Add each field to the top-level symbols.
                 const std::vector<SkSL::Type::Field>& structFields = structType->fields();
                 for (size_t i = 0; i < structFields.size(); ++i) {
                     symbols->add(std::make_unique<SkSL::Field>(structFields[i].fPosition,
@@ -249,7 +252,7 @@ public:
                 }
             } else {
                 // Add the global variable to the top-level symbols.
-                AddToSymbolTable(var);
+                symbols->addWithoutOwnership(skslVar);
             }
         }
         return var;
