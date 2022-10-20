@@ -15,7 +15,6 @@
 #include "include/sksl/DSLBlock.h"
 #include "include/sksl/DSLCase.h"
 #include "include/sksl/DSLFunction.h"
-#include "include/sksl/DSLSymbols.h"
 #include "include/sksl/DSLVar.h"
 #include "include/sksl/SkSLOperator.h"
 #include "include/sksl/SkSLVersion.h"
@@ -26,6 +25,8 @@
 #include "src/sksl/dsl/priv/DSL_priv.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLProgram.h"
+#include "src/sksl/ir/SkSLSymbolTable.h"
+#include "src/sksl/ir/SkSLVariable.h"
 
 #include <algorithm>
 #include <climits>
@@ -92,15 +93,18 @@ private:
     int fDepth;
 };
 
-class AutoSymbolTable {
+class Parser::AutoSymbolTable {
 public:
-    AutoSymbolTable() {
-        dsl::PushSymbolTable();
+    AutoSymbolTable(Parser* p) : fParser(p) {
+        SymbolTable::Push(&fParser->symbolTable());
     }
 
     ~AutoSymbolTable() {
-        dsl::PopSymbolTable();
+        SymbolTable::Pop(&fParser->symbolTable());
     }
+
+private:
+    Parser* fParser;
 };
 
 Parser::Parser(Compiler* compiler,
@@ -113,6 +117,16 @@ Parser::Parser(Compiler* compiler,
         , fText(std::make_unique<std::string>(std::move(text)))
         , fPushback(Token::Kind::TK_NONE, /*offset=*/-1, /*length=*/-1) {
     fLexer.start(*fText);
+}
+
+std::shared_ptr<SymbolTable>& Parser::symbolTable() {
+    return fCompiler.symbolTable();
+}
+
+void Parser::addToSymbolTable(DSLVarBase& var, Position pos) {
+    if (SkSL::Variable* skslVar = DSLWriter::Var(var)) {
+        this->symbolTable()->addWithoutOwnership(skslVar);
+    }
 }
 
 Token Parser::nextRawToken() {
@@ -235,7 +249,7 @@ bool Parser::expectIdentifier(Token* result) {
     if (!this->expect(Token::Kind::TK_IDENTIFIER, "an identifier", result)) {
         return false;
     }
-    if (CurrentSymbolTable()->isBuiltinType(this->text(*result))) {
+    if (this->symbolTable()->isBuiltinType(this->text(*result))) {
         this->error(*result, "expected an identifier, but found type '" +
                              std::string(this->text(*result)) + "'");
         this->fEncounteredFatalError = true;
@@ -248,7 +262,7 @@ bool Parser::checkIdentifier(Token* result) {
     if (!this->checkNext(Token::Kind::TK_IDENTIFIER, result)) {
         return false;
     }
-    if (CurrentSymbolTable()->isBuiltinType(this->text(*result))) {
+    if (this->symbolTable()->isBuiltinType(this->text(*result))) {
         this->pushback(std::move(*result));
         return false;
     }
@@ -307,10 +321,10 @@ std::unique_ptr<SkSL::Module> Parser::moduleInheritingFrom(const SkSL::Module* p
     SetErrorReporter(errorReporter);
     errorReporter->setSource(*fText);
     this->declarations();
-    CurrentSymbolTable()->takeOwnershipOfString(std::move(*fText));
+    this->symbolTable()->takeOwnershipOfString(std::move(*fText));
     auto result = std::make_unique<SkSL::Module>();
     result->fParent = parent;
-    result->fSymbols = CurrentSymbolTable();
+    result->fSymbols = this->symbolTable();
     result->fElements = std::move(ThreadContext::ProgramElements());
     errorReporter->setSource(std::string_view());
     End();
@@ -421,7 +435,7 @@ bool Parser::declaration() {
     DSLModifiers modifiers = this->modifiers();
     Token lookahead = this->peek();
     if (lookahead.fKind == Token::Kind::TK_IDENTIFIER &&
-        !CurrentSymbolTable()->isType(this->text(lookahead))) {
+        !this->symbolTable()->isType(this->text(lookahead))) {
         // we have an identifier that's not a type, could be the start of an interface block
         return this->interfaceBlock(modifiers);
     }
@@ -489,10 +503,10 @@ bool Parser::functionDeclarationEnd(Position start,
 
     const bool hasFunctionBody = !this->checkNext(Token::Kind::TK_SEMICOLON);
     if (hasFunctionBody) {
-        AutoSymbolTable symbols;
+        AutoSymbolTable symbols(this);
         for (DSLParameter* var : parameterPointers) {
             if (!var->name().empty()) {
-                AddToSymbolTable(*var);
+                this->addToSymbolTable(*var);
             }
         }
         Token bodyStart = this->peek();
@@ -590,9 +604,9 @@ void Parser::globalVarDeclarationEnd(Position pos,
         return;
     }
     DSLGlobalVar first(mods, type, this->text(name), std::move(initializer), this->rangeFrom(pos),
-            this->position(name));
+                       this->position(name));
     Declare(first);
-    AddToSymbolTable(first);
+    this->addToSymbolTable(first);
 
     while (this->checkNext(Token::Kind::TK_COMMA)) {
         type = baseType;
@@ -608,9 +622,9 @@ void Parser::globalVarDeclarationEnd(Position pos,
             return;
         }
         DSLGlobalVar next(mods, type, this->text(identifierName), std::move(anotherInitializer),
-                this->rangeFrom(identifierName));
+                          this->rangeFrom(identifierName));
         Declare(next);
-        AddToSymbolTable(next, this->position(identifierName));
+        this->addToSymbolTable(next, this->position(identifierName));
     }
     this->expect(Token::Kind::TK_SEMICOLON, "';'");
 }
@@ -631,9 +645,9 @@ DSLStatement Parser::localVarDeclarationEnd(Position pos,
         return {};
     }
     DSLVar first(mods, type, this->text(name), std::move(initializer), this->rangeFrom(pos),
-            this->position(name));
+                 this->position(name));
     DSLStatement result = Declare(first);
-    AddToSymbolTable(first);
+    this->addToSymbolTable(first);
 
     while (this->checkNext(Token::Kind::TK_COMMA)) {
         type = baseType;
@@ -649,9 +663,9 @@ DSLStatement Parser::localVarDeclarationEnd(Position pos,
             return result;
         }
         DSLVar next(mods, type, this->text(identifierName), std::move(anotherInitializer),
-                this->rangeFrom(identifierName), this->position(identifierName));
+                    this->rangeFrom(identifierName), this->position(identifierName));
         DSLWriter::AddVarDeclaration(result, next);
-        AddToSymbolTable(next, this->position(identifierName));
+        this->addToSymbolTable(next, this->position(identifierName));
     }
     this->expect(Token::Kind::TK_SEMICOLON, "';'");
     result.setPosition(this->rangeFrom(pos));
@@ -670,7 +684,7 @@ DSLStatement Parser::varDeclarationsOrExpressionStatement() {
     if (nextToken.fKind == Token::Kind::TK_HIGHP ||
         nextToken.fKind == Token::Kind::TK_MEDIUMP ||
         nextToken.fKind == Token::Kind::TK_LOWP ||
-        CurrentSymbolTable()->isType(this->text(nextToken))) {
+        this->symbolTable()->isType(this->text(nextToken))) {
         // Statements that begin with a typename are most often variable declarations, but
         // occasionally the type is part of a constructor, and these are actually expression-
         // statements in disguise. First, attempt the common case: parse it as a vardecl.
@@ -1023,7 +1037,7 @@ DSLType Parser::type(DSLModifiers* modifiers) {
     if (!this->expect(Token::Kind::TK_IDENTIFIER, "a type", &type)) {
         return DSLType(nullptr);
     }
-    if (!CurrentSymbolTable()->isType(this->text(type))) {
+    if (!this->symbolTable()->isType(this->text(type))) {
         this->error(type, "no type named '" + std::string(this->text(type)) + "'");
         return DSLType(nullptr);
     }
@@ -1324,7 +1338,7 @@ dsl::DSLStatement Parser::forStatement() {
     if (!this->expect(Token::Kind::TK_LPAREN, "'('", &lparen)) {
         return {};
     }
-    AutoSymbolTable symbols;
+    AutoSymbolTable symbols(this);
     dsl::DSLStatement initializer;
     Token nextToken = this->peek();
     int firstSemicolonOffset;
@@ -1446,14 +1460,13 @@ std::optional<DSLBlock> Parser::block() {
     if (!depth.increase()) {
         return std::nullopt;
     }
-    AutoSymbolTable symbols;
+    AutoSymbolTable symbols(this);
     StatementArray statements;
     for (;;) {
         switch (this->peek().fKind) {
             case Token::Kind::TK_RBRACE:
                 this->nextToken();
-                return DSLBlock(std::move(statements), CurrentSymbolTable(),
-                        this->rangeFrom(start));
+                return DSLBlock(std::move(statements), this->symbolTable(), this->rangeFrom(start));
             case Token::Kind::TK_END_OF_FILE:
                 this->error(this->peek(), "expected '}', but found end of file");
                 return std::nullopt;
@@ -2110,7 +2123,8 @@ DSLExpression Parser::term() {
         case Token::Kind::TK_IDENTIFIER: {
             std::string_view text;
             if (this->identifier(&text)) {
-                return dsl::Symbol(text, this->position(t));
+                Position pos = this->position(t);
+                return DSLExpression(fCompiler.convertIdentifier(pos, text), pos);
             }
             break;
         }
