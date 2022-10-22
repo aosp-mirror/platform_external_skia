@@ -1017,6 +1017,7 @@ optional("gpu") {
 
   cflags_objcc = []
   if (skia_use_metal) {
+    public_defines += [ "SK_METAL" ]
     sources += skia_metal_sources
     if (skia_enable_metal_debug_info) {
       public_defines += [ "SK_ENABLE_MTL_DEBUG_INFO" ]
@@ -1129,6 +1130,7 @@ optional("graphite") {
     sources += skia_graphite_dawn_sources
   }
   if (skia_use_metal) {
+    public_defines += [ "SK_METAL" ]
     sources += skia_graphite_mtl_sources
     if (skia_enable_metal_debug_info) {
       public_defines += [ "SK_ENABLE_MTL_DEBUG_INFO" ]
@@ -2931,15 +2933,14 @@ if (skia_enable_tools) {
     ]
   }
 
-  if (skia_use_icu && skia_use_harfbuzz) {
-    test_app("editor") {
-      is_shared_library = is_android
-      deps = [ "modules/skplaintexteditor:editor_app" ]
-    }
-    test_app("text_editor") {
-      is_shared_library = is_android
-      deps = [ "experimental/sktext:text_editor" ]
-    }
+  test_app("editor") {
+    is_shared_library = is_android
+    deps = [ "modules/skplaintexteditor:editor_app" ]
+  }
+
+  test_app("text_editor") {
+    is_shared_library = is_android
+    deps = [ "experimental/sktext:text_editor" ]
   }
 
   skia_executable("image_diff_metric") {
