@@ -15,12 +15,14 @@
 #include "src/sksl/ir/SkSLVariable.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 
 namespace SkSL {
 
+class Context;
 class SymbolTable;
 
 /**
@@ -39,23 +41,37 @@ public:
 
     InterfaceBlock(Position pos,
                    Variable* var,
-                   std::string_view typeName,
-                   std::string_view instanceName,
-                   int arraySize,
                    std::shared_ptr<SymbolTable> typeOwner)
             : INHERITED(pos, kIRNodeKind)
             , fVariable(var)
-            , fTypeName(typeName)
-            , fInstanceName(instanceName)
-            , fArraySize(arraySize)
             , fTypeOwner(std::move(typeOwner)) {
-        SkASSERT(fVariable->type().isInterfaceBlock() ||
-                 (fVariable->type().isArray() &&
-                  fVariable->type().componentType().isInterfaceBlock()));
+        SkASSERT(fVariable->type().componentType().isInterfaceBlock());
         fVariable->setInterfaceBlock(this);
     }
 
     ~InterfaceBlock() override;
+
+    // Returns an InterfaceBlock; errors are reported to the ErrorReporter.
+    // The caller is responsible for adding the InterfaceBlock to the program elements.
+    // The program's RTAdjustData will be updated if the InterfaceBlock contains sk_RTAdjust.
+    // The passed-in symbol table will be updated with a reference to the interface block variable
+    // (if it is named) or each of the interface block fields (if it is anonymous).
+    static std::unique_ptr<InterfaceBlock> Convert(const Context& context,
+                                                   Position pos,
+                                                   Variable* variable,
+                                                   std::shared_ptr<SymbolTable> symbols);
+
+    // Returns an InterfaceBlock; errors are reported via SkASSERT.
+    // The caller is responsible for adding the InterfaceBlock to the program elements.
+    // If the InterfaceBlock contains sk_RTAdjust, the caller is responsible for passing its field
+    // index in `rtAdjustIndex`.
+    // The passed-in symbol table will be updated with a reference to the interface block variable
+    // (if it is named) or each of the interface block fields (if it is anonymous).
+    static std::unique_ptr<InterfaceBlock> Make(const Context& context,
+                                                Position pos,
+                                                Variable* variable,
+                                                std::optional<int> rtAdjustIndex,
+                                                std::shared_ptr<SymbolTable> symbols);
 
     Variable* var() const {
         return fVariable;
@@ -66,11 +82,11 @@ public:
     }
 
     std::string_view typeName() const {
-        return fTypeName;
+        return fVariable->type().componentType().name();
     }
 
     std::string_view instanceName() const {
-        return fInstanceName;
+        return fVariable->name();
     }
 
     const std::shared_ptr<SymbolTable>& typeOwner() const {
@@ -78,7 +94,7 @@ public:
     }
 
     int arraySize() const {
-        return fArraySize;
+        return fVariable->type().isArray() ? fVariable->type().columns() : 0;
     }
 
     std::unique_ptr<ProgramElement> clone() const override;
@@ -87,9 +103,6 @@ public:
 
 private:
     Variable* fVariable;
-    std::string_view fTypeName;
-    std::string_view fInstanceName;
-    int fArraySize;
     std::shared_ptr<SymbolTable> fTypeOwner;
 
     using INHERITED = ProgramElement;
