@@ -50,8 +50,6 @@ struct SkMeshSpecificationPriv {
 
     static SkAlphaType AlphaType(const SkMeshSpecification& spec) { return spec.fAlphaType; }
 
-    static bool HasLocalCoords(const SkMeshSpecification& spec) { return spec.fHasLocalCoords; }
-
     static SkSLType VaryingTypeAsSLType(Varying::Type type) {
         switch (type) {
             case Varying::Type::kFloat:  return SkSLType::kFloat;
@@ -88,6 +86,10 @@ struct SkMeshSpecificationPriv {
             case Attribute::Type::kUByte4_unorm: return SkSLType::kHalf4;
         }
         SkUNREACHABLE;
+    }
+
+    static int PassthroughLocalCoordsVaryingIndex(const SkMeshSpecification& spec) {
+        return spec.fPassthroughLocalCoordsVaryingIndex;
     }
 };
 

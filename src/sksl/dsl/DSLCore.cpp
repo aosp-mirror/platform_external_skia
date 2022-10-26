@@ -11,14 +11,11 @@
 #include "include/private/SkSLDefines.h"
 #include "include/private/SkSLProgramElement.h"
 #include "include/private/SkSLStatement.h"
-#include "include/private/SkSLSymbol.h"
 #include "include/sksl/DSLModifiers.h"
 #include "include/sksl/DSLType.h"
 #include "include/sksl/DSLVar.h"
 #include "include/sksl/SkSLPosition.h"
-#include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLCompiler.h"
-#include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLPool.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLThreadContext.h"
@@ -30,7 +27,6 @@
 #include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLExtension.h"
-#include "src/sksl/ir/SkSLField.h"
 #include "src/sksl/ir/SkSLForStatement.h"
 #include "src/sksl/ir/SkSLFunctionCall.h"
 #include "src/sksl/ir/SkSLIfStatement.h"
@@ -41,17 +37,14 @@
 #include "src/sksl/ir/SkSLSwitchStatement.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
 #include "src/sksl/ir/SkSLTernaryExpression.h"
-#include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
-#include "src/sksl/ir/SkSLVariable.h"
 
-#include <cstddef>
 #include <type_traits>
 #include <vector>
 
 namespace SkSL {
 
-class SymbolTable;
+class Variable;
 
 namespace dsl {
 
@@ -156,20 +149,9 @@ public:
 
     static void Declare(DSLGlobalVar& var, Position pos) {
         std::unique_ptr<SkSL::Statement> stmt = DSLWriter::Declaration(var);
-        if (stmt) {
-            if (!stmt->isEmpty()) {
-                ThreadContext::ProgramElements().push_back(
-                        std::make_unique<SkSL::GlobalVarDeclaration>(std::move(stmt)));
-            }
-        } else if (var.fName == SkSL::Compiler::FRAGCOLOR_NAME) {
-            // sk_FragColor can end up with a null declaration despite no error occurring due to
-            // specific treatment in the compiler. Ignore the null and just grab the existing
-            // variable from the symbol table.
-            SkSL::Symbol* alreadyDeclared = ThreadContext::SymbolTable()->findMutable(var.fName);
-            if (alreadyDeclared && alreadyDeclared->is<Variable>()) {
-                var.fVar = &alreadyDeclared->as<Variable>();
-                var.fInitialized = true;
-            }
+        if (stmt && !stmt->isEmpty()) {
+            ThreadContext::ProgramElements().push_back(
+                    std::make_unique<SkSL::GlobalVarDeclaration>(std::move(stmt)));
         }
     }
 
@@ -180,12 +162,12 @@ public:
     }
 
     static DSLStatement Discard(Position pos) {
-        return SkSL::DiscardStatement::Make(pos);
+        return DSLStatement(SkSL::DiscardStatement::Convert(ThreadContext::Context(), pos), pos);
     }
 
     static DSLStatement Do(DSLStatement stmt, DSLExpression test, Position pos) {
         return DSLStatement(DoStatement::Convert(ThreadContext::Context(), pos, stmt.release(),
-                test.release()), pos);
+                                                 test.release()), pos);
     }
 
     static DSLStatement For(DSLStatement initializer, DSLExpression test,
@@ -201,63 +183,38 @@ public:
 
     static DSLStatement If(DSLExpression test, DSLStatement ifTrue, DSLStatement ifFalse,
             bool isStatic, Position pos) {
-        return DSLStatement(IfStatement::Convert(ThreadContext::Context(), pos, isStatic,
-                test.release(), ifTrue.release(), ifFalse.releaseIfPossible()), pos);
-    }
-
-    static void FindRTAdjust(SkSL::InterfaceBlock& intf, Position pos) {
-        const std::vector<SkSL::Type::Field>& fields = intf.var()->type().componentType().fields();
-        const Context& context = ThreadContext::Context();
-        for (size_t i = 0; i < fields.size(); ++i) {
-            const SkSL::Type::Field& f = fields[i];
-            if (f.fName == SkSL::Compiler::RTADJUST_NAME) {
-                if (f.fType->matches(*context.fTypes.fFloat4)) {
-                    ThreadContext::RTAdjustData& rtAdjust = ThreadContext::RTAdjustState();
-                    rtAdjust.fInterfaceBlock = intf.var();
-                    rtAdjust.fFieldIndex = i;
-                } else {
-                    ThreadContext::ReportError("sk_RTAdjust must have type 'float4'", pos);
-                }
-                break;
-            }
-        }
+        return DSLStatement(IfStatement::Convert(ThreadContext::Context(),
+                                                 pos,
+                                                 isStatic,
+                                                 test.release(),
+                                                 ifTrue.release(),
+                                                 ifFalse.releaseIfPossible()), pos);
     }
 
     static DSLExpression InterfaceBlock(const DSLModifiers& modifiers, std::string_view typeName,
                                         SkTArray<DSLField> fields, std::string_view varName,
                                         int arraySize, Position pos) {
-        std::shared_ptr<SymbolTable> symbols = ThreadContext::SymbolTable();
-
         // Build a struct type corresponding to the passed-in fields and array size.
-        DSLType dslStructType = StructType(typeName, fields, /*interfaceBlock=*/true, pos);
-        const SkSL::Type* structType = &dslStructType.skslType();
-        DSLType varType = arraySize > 0 ? Array(structType, arraySize)
-                                        : std::move(dslStructType);
+        DSLType varType = StructType(typeName, fields, /*interfaceBlock=*/true, pos);
+        if (arraySize > 0) {
+            varType = Array(varType, arraySize);
+        }
 
         // Create a global variable to attach our interface block to. (The variable doesn't actually
         // get a program element, though; the interface block does instead.)
         DSLGlobalVar var(modifiers, varType, varName, DSLExpression(), pos);
-        SkSL::Variable* skslVar = DSLWriter::Var(var);
-        if (skslVar) {
-            auto intf = std::make_unique<SkSL::InterfaceBlock>(pos, skslVar, typeName,
-                                                               varName, arraySize, symbols);
-            FindRTAdjust(*intf, pos);
-            ThreadContext::ProgramElements().push_back(std::move(intf));
-            if (varName.empty()) {
-                // This interface block is anonymous. Add each field to the top-level symbols.
-                const std::vector<SkSL::Type::Field>& structFields = structType->fields();
-                for (size_t i = 0; i < structFields.size(); ++i) {
-                    symbols->add(std::make_unique<SkSL::Field>(structFields[i].fPosition,
-                                                               skslVar, i));
-                }
-            } else {
-                // Add the global variable to the top-level symbols.
-                symbols->addWithoutOwnership(skslVar);
+        if (SkSL::Variable* skslVar = DSLWriter::Var(var)) {
+            // Add an InterfaceBlock program element to the program.
+            if (std::unique_ptr<SkSL::InterfaceBlock> intf = SkSL::InterfaceBlock::Convert(
+                        ThreadContext::Context(), pos, skslVar, ThreadContext::SymbolTable())) {
+                ThreadContext::ProgramElements().push_back(std::move(intf));
+                // Return a VariableReference to the global variable tied to the interface block.
+                return DSLExpression(var);
             }
-            return DSLExpression(var);
-        } else {
-            return DSLExpression(nullptr);
         }
+
+        // The InterfaceBlock couldn't be created; return poison.
+        return DSLExpression(nullptr);
     }
 
     static DSLStatement Return(DSLExpression value, Position pos) {
@@ -291,8 +248,8 @@ public:
                                  SkSL::SwizzleComponent::Type c,
                                  Position pos,
                                  Position maskPos) {
-        return DSLExpression(Swizzle::Convert(ThreadContext::Context(), pos, maskPos, base.release(),
-                                              ComponentArray{a, b, c}),
+        return DSLExpression(Swizzle::Convert(ThreadContext::Context(), pos, maskPos,
+                                              base.release(), ComponentArray{a, b, c}),
                              pos);
     }
 
@@ -303,8 +260,8 @@ public:
                                  SkSL::SwizzleComponent::Type d,
                                  Position pos,
                                  Position maskPos) {
-        return DSLExpression(Swizzle::Convert(ThreadContext::Context(), pos, maskPos, base.release(),
-                                              ComponentArray{a,b,c,d}),
+        return DSLExpression(Swizzle::Convert(ThreadContext::Context(), pos, maskPos,
+                                              base.release(), ComponentArray{a, b, c, d}),
                              pos);
     }
 
@@ -398,9 +355,6 @@ void Declare(SkTArray<DSLGlobalVar>& vars, Position pos) {
 }
 
 DSLStatement Discard(Position pos) {
-    if (!ProgramConfig::IsFragment(ThreadContext::GetProgramConfig()->fKind)) {
-        ThreadContext::ReportError("discard statement is only permitted in fragment shaders", pos);
-    }
     return DSLCore::Discard(pos);
 }
 
@@ -422,12 +376,6 @@ DSLStatement If(DSLExpression test, DSLStatement ifTrue, DSLStatement ifFalse, P
 DSLExpression InterfaceBlock(const DSLModifiers& modifiers, std::string_view typeName,
                              SkTArray<DSLField> fields, std::string_view varName, int arraySize,
                              Position pos) {
-    SkSL::ProgramKind kind = ThreadContext::GetProgramConfig()->fKind;
-    if (!ProgramConfig::IsFragment(kind) && !ProgramConfig::IsVertex(kind) &&
-        !ProgramConfig::IsCompute(kind)) {
-        ThreadContext::ReportError("interface blocks are not allowed in this kind of program", pos);
-        return DSLExpression(nullptr);
-    }
     return DSLCore::InterfaceBlock(modifiers, typeName, std::move(fields), varName, arraySize, pos);
 }
 

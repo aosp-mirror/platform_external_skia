@@ -1,6 +1,17 @@
 Skia Graphics Release Notes
 
 This file includes a list of high level updates for each milestone release.
+Milestone 108
+-------------
+  * SkMesh buffer factories added that make copies of CPU-backed buffers.
+
+* * *
+
+Milestone 109
+-------------
+  * SkMesh vertex and fragment main() signatures have changed. See docs on SkMeshSpecification.
+
+* * *
 
 Milestone 108
 -------------
