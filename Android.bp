@@ -2541,6 +2541,7 @@ cc_defaults {
         "modules/skparagraph/src/ParagraphBuilderImpl.cpp",
         "modules/skparagraph/src/ParagraphCache.cpp",
         "modules/skparagraph/src/ParagraphImpl.cpp",
+        "modules/skparagraph/src/ParagraphPainterImpl.cpp",
         "modules/skparagraph/src/ParagraphStyle.cpp",
         "modules/skparagraph/src/Run.cpp",
         "modules/skparagraph/src/TextLine.cpp",
