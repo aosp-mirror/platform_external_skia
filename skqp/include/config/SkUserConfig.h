@@ -79,6 +79,10 @@
 #define SK_HAS_WUFFS_LIBRARY
 #endif
 
+#ifndef SK_PDF_USE_HARFBUZZ_SUBSET
+#define SK_PDF_USE_HARFBUZZ_SUBSET
+#endif
+
 #ifndef SK_SUPPORT_GPU
 #define SK_SUPPORT_GPU 1
 #endif

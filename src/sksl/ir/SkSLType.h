@@ -11,6 +11,7 @@
 #include "include/core/SkSpan.h"
 #include "include/core/SkTypes.h"
 #include "include/private/SkSLDefines.h"
+#include "include/private/SkSLIRNode.h"
 #include "include/private/SkSLModifiers.h"
 #include "include/private/SkSLSymbol.h"
 #include "include/sksl/SkSLPosition.h"
@@ -166,8 +167,12 @@ public:
     static std::unique_ptr<Type> MakeSpecialType(const char* name, const char* abbrev,
                                                  Type::TypeKind typeKind);
 
-    /** Creates a struct type with the given fields. */
-    static std::unique_ptr<Type> MakeStructType(Position pos,
+    /**
+     * Creates a struct type with the given fields. Reports an error if the struct is not
+     * well-formed.
+     */
+    static std::unique_ptr<Type> MakeStructType(const Context& context,
+                                                Position pos,
                                                 std::string_view name,
                                                 std::vector<Field> fields,
                                                 bool interfaceBlock = false);
@@ -226,9 +231,6 @@ public:
     virtual bool isAllowedInES2() const {
         return true;
     }
-
-    /** Returns true if this type is either private, or contains a private field (recursively). */
-    virtual bool isPrivate() const;
 
     /** If this is an alias, returns the underlying type, otherwise returns this. */
     virtual const Type& resolve() const {
@@ -518,11 +520,6 @@ public:
     bool isOrContainsUnsizedArray() const;
 
     /**
-     * Returns true if this type is a struct that is too deeply nested.
-     */
-    bool isTooDeeplyNested() const;
-
-    /**
      * Returns the corresponding vector or matrix type with the specified number of columns and
      * rows.
      */
@@ -584,8 +581,6 @@ protected:
                                       Position pos) const;
 
 private:
-    bool isTooDeeplyNested(int limit) const;
-
     using INHERITED = Symbol;
 
     char fAbbreviatedName[kMaxAbbrevLength + 1] = {};
