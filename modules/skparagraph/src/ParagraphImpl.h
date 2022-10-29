@@ -175,7 +175,11 @@ public:
     Block& block(BlockIndex blockIndex);
     SkTArray<ResolvedFontDescriptor> resolvedFonts() const { return fFontSwitches; }
 
-    void markDirty() override { fState = kIndexed; }
+    void markDirty() override {
+        if (fState > kIndexed) {
+            fState = kIndexed;
+        }
+    }
 
     int32_t unresolvedGlyphs() override;
 
