@@ -101,6 +101,18 @@ class AndroidFlavor(default.DefaultFlavor):
                  timeout=180, abort_on_failure=False,
                  fail_build_on_failure=False)
       self.m.run(self.m.step,
+                 'adb reconnect offline after failure of \'%s\' (attempt %d)' % (
+                     title, attempt),
+                 cmd=[self.ADB_BINARY, 'reconnect', 'offline'],
+                 infra_step=True, timeout=30, abort_on_failure=False,
+                 fail_build_on_failure=False)
+      self.m.run(self.m.step,
+                 'wait for device after failure of \'%s\' (attempt %d)' % (
+                     title, attempt),
+                 cmd=[self.ADB_BINARY, 'wait-for-device'], infra_step=True,
+                 timeout=180, abort_on_failure=False,
+                 fail_build_on_failure=False)
+      self.m.run(self.m.step,
                  'adb reconnect device after failure of \'%s\' (attempt %d)' % (
                      title, attempt),
                  cmd=[self.ADB_BINARY, 'reconnect', 'device'],
@@ -112,11 +124,20 @@ class AndroidFlavor(default.DefaultFlavor):
                  cmd=[self.ADB_BINARY, 'wait-for-device'], infra_step=True,
                  timeout=180, abort_on_failure=False,
                  fail_build_on_failure=False)
-
+      self.m.run(self.m.step,
+                 'adb reboot after failure of \'%s\' (attempt %d)' % (
+                     title, attempt),
+                 cmd=[self.ADB_BINARY, 'reboot'],
+                 infra_step=True, timeout=30, abort_on_failure=False,
+                 fail_build_on_failure=False)
+      self.m.run(self.m.step,
+                 'wait for device after failure of \'%s\' (attempt %d)' % (
+                     title, attempt),
+                 cmd=[self.ADB_BINARY, 'wait-for-device'], infra_step=True,
+                 timeout=180, abort_on_failure=False,
+                 fail_build_on_failure=False)
     with self.m.context(cwd=self.m.path['start_dir'].join('skia')):
-      with self.m.env({'ADB_VENDOR_KEYS': self.ADB_PUB_KEY,
-        # https://developer.android.com/studio/command-line/variables#adb_trace
-                       'ADB_TRACE': 'all'}):
+      with self.m.env({'ADB_VENDOR_KEYS': self.ADB_PUB_KEY}):
         return self.m.run.with_retry(self.m.step, title, attempts,
                                      cmd=[self.ADB_BINARY]+list(cmd),
                                      between_attempts_fn=wait_for_device,

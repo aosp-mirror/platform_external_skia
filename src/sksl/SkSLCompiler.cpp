@@ -308,8 +308,8 @@ bool Compiler::optimizeModuleBeforeMinifying(ProgramKind kind, Module& module) {
 
     std::unique_ptr<ProgramUsage> usage = Analysis::GetUsage(module);
 
-    // Look for local variables in functions and give them shorter names.
-    Transform::RenamePrivateSymbols(this->context(), module, usage.get());
+    // Assign shorter names to symbols as long as it won't change the external meaning of the code.
+    Transform::RenamePrivateSymbols(this->context(), module, usage.get(), kind);
 
     // Replace constant variables with their literal values to save space.
     Transform::ReplaceConstVarsWithLiterals(module, usage.get());
@@ -317,14 +317,25 @@ bool Compiler::optimizeModuleBeforeMinifying(ProgramKind kind, Module& module) {
     // Remove any unreachable code.
     Transform::EliminateUnreachableCode(module, usage.get());
 
+    // We can only remove dead functions from runtime shaders, since runtime-effect helper functions
+    // are isolated from other parts of the program. In a module, an unreferenced function is
+    // intended to be called by the code that includes the module.
+    if (kind == ProgramKind::kRuntimeShader) {
+        while (Transform::EliminateDeadFunctions(this->context(), module, usage.get())) {
+            // Removing dead functions may cause more functions to become unreferenced. Try again.
+        }
+    }
+
     while (Transform::EliminateDeadLocalVariables(this->context(), module, usage.get())) {
         // Removing dead variables may cause more variables to become unreferenced. Try again.
     }
 
-    // We only eliminate private globals (prefixed with `$`) to avoid changing the meaning of the
-    // module code.
+    // Runtime shaders are isolated from other parts of the program via name mangling, so we can
+    // eliminate public globals if they aren't referenced. Otherwise, we only eliminate private
+    // globals (prefixed with `$`) to avoid changing the meaning of the module code.
+    bool onlyPrivateGlobals = !ProgramConfig::IsRuntimeEffect(kind);
     while (Transform::EliminateDeadGlobalVariables(this->context(), module, usage.get(),
-                                                   /*onlyPrivateGlobals=*/true)) {
+                                                   onlyPrivateGlobals)) {
         // Repeat until no changes occur.
     }
 
