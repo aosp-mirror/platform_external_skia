@@ -20,7 +20,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -37,7 +36,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -171,7 +169,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -189,7 +186,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -207,7 +203,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -223,7 +218,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -236,11 +230,41 @@
     "cmd": [
       "/opt/infra-android/tools/adb",
       "reconnect",
+      "offline"
+    ],
+    "cwd": "[START_DIR]/skia",
+    "env": {
+      "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "adb reconnect offline after failure of 'mkdir /sdcard/revenge_of_the_skiabot/resources' (attempt 1)",
+    "timeout": 30
+  },
+  {
+    "cmd": [
+      "/opt/infra-android/tools/adb",
+      "wait-for-device"
+    ],
+    "cwd": "[START_DIR]/skia",
+    "env": {
+      "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "wait for device after failure of 'mkdir /sdcard/revenge_of_the_skiabot/resources' (attempt 1) (2)",
+    "timeout": 180
+  },
+  {
+    "cmd": [
+      "/opt/infra-android/tools/adb",
+      "reconnect",
       "device"
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -256,13 +280,42 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
     },
     "infra_step": true,
-    "name": "wait for device after failure of 'mkdir /sdcard/revenge_of_the_skiabot/resources' (attempt 1) (2)",
+    "name": "wait for device after failure of 'mkdir /sdcard/revenge_of_the_skiabot/resources' (attempt 1) (3)",
+    "timeout": 180
+  },
+  {
+    "cmd": [
+      "/opt/infra-android/tools/adb",
+      "reboot"
+    ],
+    "cwd": "[START_DIR]/skia",
+    "env": {
+      "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "adb reboot after failure of 'mkdir /sdcard/revenge_of_the_skiabot/resources' (attempt 1)",
+    "timeout": 30
+  },
+  {
+    "cmd": [
+      "/opt/infra-android/tools/adb",
+      "wait-for-device"
+    ],
+    "cwd": "[START_DIR]/skia",
+    "env": {
+      "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "wait for device after failure of 'mkdir /sdcard/revenge_of_the_skiabot/resources' (attempt 1) (4)",
     "timeout": 180
   },
   {
@@ -275,7 +328,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -666,7 +718,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -704,7 +755,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -757,7 +807,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -863,7 +912,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -901,7 +949,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -918,7 +965,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -971,7 +1017,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -1077,7 +1122,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -1115,7 +1159,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -1132,7 +1175,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -1185,7 +1227,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -1291,7 +1332,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -1329,7 +1369,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -1346,7 +1385,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -1381,7 +1419,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -1397,7 +1434,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -1442,7 +1478,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -1551,7 +1586,6 @@
     ],
     "cwd": "[START_DIR]/skia",
     "env": {
-      "ADB_TRACE": "all",
       "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
       "CHROME_HEADLESS": "1",
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
