@@ -1584,6 +1584,7 @@ skia_static_library("pathkit") {
   sources += [
     "src/core/SkAnalyticEdge.cpp",
     "src/core/SkArenaAlloc.cpp",
+    "src/core/SkContainers.cpp",
     "src/core/SkContourMeasure.cpp",
     "src/core/SkCubicMap.cpp",
     "src/core/SkEdge.cpp",
@@ -1953,6 +1954,10 @@ if (skia_enable_tools) {
       sources += [ "tools/graphite/ContextFactory.cpp" ]
       sources += [ "tools/graphite/GraphiteTestContext.h" ]
       sources += [ "tools/graphite/GraphiteTestContext.cpp" ]
+      if (skia_use_dawn) {
+        sources += [ "tools/graphite/dawn/DawnTestContext.cpp" ]
+        sources += [ "tools/graphite/dawn/GraphiteDawnTestContext.h" ]
+      }
       if (skia_use_metal) {
         sources += [ "tools/graphite/mtl/GraphiteMtlTestContext.h" ]
         sources += [ "tools/graphite/mtl/MtlTestContext.mm" ]
