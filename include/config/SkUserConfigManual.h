@@ -33,8 +33,4 @@
   // TODO (b/239048372): Remove this flag when we can safely migrate apps to the
   // new behavior.
   #define SK_SUPPORT_LEGACY_ALPHA_BITMAP_AS_COVERAGE
-
-  // TODO(b/250054842): Remove this flag before the code it guards is totally removed
-  // (deprecation started in http://review.skia.org/585964).
-  #define SK_SUPPORT_LEGACY_RASTER_GRADIENTS
 #endif // SkUserConfigManual_DEFINED
