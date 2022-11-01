@@ -81,7 +81,7 @@ struct Rules140 {
 
         // Get alignment of a single non-array vector of BaseType by Rule 1, 2, or 3.
         int n = RowsOrVecLength == 3 ? 4 : RowsOrVecLength;
-        if (count == 0) {
+        if (count == SkUniform::kNonArray) {
             return n * sizeof(BaseType);
         }
 
@@ -117,7 +117,7 @@ struct Rules430 {
 
         // Get alignment of a single non-array vector of BaseType by Rule 1, 2, or 3.
         int n = RowsOrVecLength == 3 ? 4 : RowsOrVecLength;
-        if (count == 0) {
+        if (count == SkUniform::kNonArray) {
             return n * sizeof(BaseType);
         }
 
@@ -405,13 +405,18 @@ static uint32_t sksltype_to_alignment_mask(SkSLType type) {
 // Given the current offset into the ubo, calculate the offset for the uniform we're trying to add
 // taking into consideration all alignment requirements. Returns the aligned start offset for the
 // new uniform.
-static uint32_t get_ubo_aligned_offset(uint32_t currentOffset, SkSLType type, int arrayCount) {
-    uint32_t alignmentMask = sksltype_to_alignment_mask(type);
-    uint32_t offsetDiff = currentOffset & alignmentMask;
-    if (offsetDiff != 0) {
-        offsetDiff = alignmentMask - offsetDiff + 1;
+static uint32_t get_ubo_aligned_offset(Layout layout,
+                                       uint32_t currentOffset,
+                                       SkSLType type,
+                                       bool isArray) {
+    uint32_t alignmentMask;
+    if (layout == Layout::kStd140 && isArray) {
+        // std140 array element alignment always equals the base alignment of a vec4.
+        alignmentMask = sksltype_to_alignment_mask(SkSLType::kFloat4);
+    } else {
+        alignmentMask = sksltype_to_alignment_mask(type);
     }
-    return currentOffset + offsetDiff;
+    return (currentOffset + alignmentMask) & ~alignmentMask;
 }
 
 SkSLType UniformOffsetCalculator::getUniformTypeForLayout(SkSLType type) {
@@ -464,7 +469,10 @@ size_t UniformOffsetCalculator::advanceOffset(SkSLType type, unsigned int count)
     SkSLType revisedType = this->getUniformTypeForLayout(type);
 
     // Insert padding as needed to get the correct uniform alignment.
-    uint32_t alignedOffset = get_ubo_aligned_offset(fOffset, revisedType, count);
+    uint32_t alignedOffset = get_ubo_aligned_offset(fLayout,
+                                                    fOffset,
+                                                    revisedType,
+                                                    /*isArray=*/count != SkUniform::kNonArray);
     SkASSERT(alignedOffset >= fOffset);
 
     // Append the uniform size to our offset, then return the uniform start position.
@@ -513,9 +521,7 @@ void UniformManager::doneWithExpectedUniforms() {
     SkDEBUGCODE(fExpectedUniforms = {};)
 }
 
-void UniformManager::write(SkSLType type, unsigned int count, const void* src) {
-    this->checkExpected(type, (count == SkUniform::kNonArray) ? 1 : count);
-
+void UniformManager::writeInternal(SkSLType type, unsigned int count, const void* src) {
     SkSLType revisedType = this->getUniformTypeForLayout(type);
 
     const uint32_t startOffset = fOffset;
@@ -535,49 +541,78 @@ void UniformManager::write(SkSLType type, unsigned int count, const void* src) {
     fReqAlignment = std::max(fReqAlignment, sksltype_to_alignment_mask(revisedType) + 1);
 }
 
+void UniformManager::write(SkSLType type, const void* src) {
+    this->checkExpected(type, 1);
+    this->writeInternal(type, SkUniform::kNonArray, src);
+}
+
+void UniformManager::writeArray(SkSLType type, const void* src, unsigned int count) {
+    // Don't write any elements if count is 0. Since SkUniform::kNonArray == 0, passing count
+    // directly would cause a one-element non-array write.
+    if (count > 0) {
+        this->checkExpected(type, count);
+        this->writeInternal(type, count, src);
+    }
+}
+
+void UniformManager::write(const SkUniform& u, const uint8_t* src) {
+    this->checkExpected(u.type(), (u.count() == SkUniform::kNonArray) ? 1 : u.count());
+    this->writeInternal(u.type(), u.count(), src);
+}
+
 void UniformManager::write(const SkM44& mat) {
     static constexpr SkSLType kType = SkSLType::kFloat4x4;
-    this->write(kType, 1, &mat);
+    this->write(kType, &mat);
 }
 
-void UniformManager::write(const SkColor4f* colors, int count) {
+void UniformManager::write(const SkPMColor4f& color) {
     static constexpr SkSLType kType = SkSLType::kFloat4;
-    this->write(kType, count, colors);
-}
-
-void UniformManager::write(const SkPMColor4f* premulColors, int count) {
-    static constexpr SkSLType kType = SkSLType::kFloat4;
-    this->write(kType, count, premulColors);
+    this->write(kType, &color);
 }
 
 void UniformManager::write(const SkRect& rect) {
     static constexpr SkSLType kType = SkSLType::kFloat4;
-    this->write(kType, 1, &rect);
+    this->write(kType, &rect);
 }
 
 void UniformManager::write(SkPoint point) {
     static constexpr SkSLType kType = SkSLType::kFloat2;
-    this->write(kType, 1, &point);
+    this->write(kType, &point);
 }
 
-void UniformManager::write(const float* floats, int count) {
+void UniformManager::write(float f) {
     static constexpr SkSLType kType = SkSLType::kFloat;
-    this->write(kType, count, floats);
+    this->write(kType, &f);
 }
 
 void UniformManager::write(int i) {
     static constexpr SkSLType kType = SkSLType::kInt;
-    this->write(kType, 1, &i);
+    this->write(kType, &i);
 }
 
 void UniformManager::write(skvx::float2 v) {
     static constexpr SkSLType kType = SkSLType::kFloat2;
-    this->write(kType, 1, &v);
+    this->write(kType, &v);
 }
 
 void UniformManager::write(skvx::float4 v) {
     static constexpr SkSLType kType = SkSLType::kFloat4;
-    this->write(kType, 1, &v);
+    this->write(kType, &v);
+}
+
+void UniformManager::writeArray(SkSpan<const SkColor4f> arr) {
+    static constexpr SkSLType kType = SkSLType::kFloat4;
+    this->writeArray(kType, arr.data(), arr.size());
+}
+
+void UniformManager::writeArray(SkSpan<const SkPMColor4f> arr) {
+    static constexpr SkSLType kType = SkSLType::kFloat4;
+    this->writeArray(kType, arr.data(), arr.size());
+}
+
+void UniformManager::writeArray(SkSpan<const float> arr) {
+    static constexpr SkSLType kType = SkSLType::kFloat;
+    this->writeArray(kType, arr.data(), arr.size());
 }
 
 } // namespace skgpu::graphite
