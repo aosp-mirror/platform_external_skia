@@ -55,10 +55,7 @@ SkSpan<std::byte> SkContainerAllocator::allocate(int capacity, double growthFact
     SkASSERT_RELEASE(capacity <= fMaxCapacity);
 
     if (growthFactor > 1.0 && capacity > 0) {
-        size_t bytes = this->growthFactorCapacity(capacity, growthFactor) * fSizeOfT;
-        if (SkSpan<std::byte> span = sk_allocate_canfail(bytes); !span.empty()) {
-            return span;
-        }
+        capacity = this->growthFactorCapacity(capacity, growthFactor);
     }
 
     return sk_allocate_throw(capacity * fSizeOfT);
