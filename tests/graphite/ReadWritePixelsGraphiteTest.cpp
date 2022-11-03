@@ -259,21 +259,19 @@ static void graphite_read_pixels_test_driver(skiatest::Reporter* reporter,
             REPORTER_ASSERT(reporter, result != Result::kSuccess);
         } else if (readCT == kUnknown_SkColorType) {
             REPORTER_ASSERT(reporter, result != Result::kSuccess);
-        } else if ((readAT == kUnknown_SkAlphaType) != (srcAT == kUnknown_SkAlphaType)) {
+        } else if (readAT == kUnknown_SkAlphaType || srcAT == kUnknown_SkAlphaType) {
             REPORTER_ASSERT(reporter, result != Result::kSuccess);
         } else if (!rules.fUncontainedRectSucceeds && !surfBounds.contains(rect)) {
             REPORTER_ASSERT(reporter, result != Result::kSuccess);
         } else if (result == Result::kFail) {
             // TODO: Support RGB/BGR 101010x, BGRA 1010102 on the GPU.
-            if (readCT != kUnknown_SkColorType) {
-                ERRORF(reporter,
-                       "Read failed. %sSrc CT: %s, Src AT: %s Read CT: %s, Read AT: %s, "
-                       "Rect [%d, %d, %d, %d], CS conversion: %d\n",
-                       label.c_str(),
-                       ToolUtils::colortype_name(srcCT), ToolUtils::alphatype_name(srcAT),
-                       ToolUtils::colortype_name(readCT), ToolUtils::alphatype_name(readAT),
-                       rect.fLeft, rect.fTop, rect.fRight, rect.fBottom, csConversion);
-            }
+            ERRORF(reporter,
+                   "Read failed. %sSrc CT: %s, Src AT: %s Read CT: %s, Read AT: %s, "
+                   "Rect [%d, %d, %d, %d], CS conversion: %d\n",
+                   label.c_str(),
+                   ToolUtils::colortype_name(srcCT), ToolUtils::alphatype_name(srcAT),
+                   ToolUtils::colortype_name(readCT), ToolUtils::alphatype_name(readAT),
+                   rect.fLeft, rect.fTop, rect.fRight, rect.fBottom, csConversion);
             return result;
         }
 
@@ -334,11 +332,11 @@ static void graphite_read_pixels_test_driver(skiatest::Reporter* reporter,
                 SkPixmap unpremulRef(refInfo.makeAlphaType(kUnpremul_SkAlphaType),
                                      ref.addr(),
                                      ref.rowBytes());
-                SkPixmap unpremulSRc(srcPixels.info().makeAlphaType(kUnpremul_SkAlphaType),
+                SkPixmap unpremulSrc(srcPixels.info().makeAlphaType(kUnpremul_SkAlphaType),
                                      srcPixels.addr(),
                                      srcPixels.rowBytes());
 
-                unpremulSRc.readPixels(unpremulRef, srcReadRect.x(), srcReadRect.y());
+                unpremulSrc.readPixels(unpremulRef, srcReadRect.x(), srcReadRect.y());
             } else {
                 srcPixels.readPixels(ref, srcReadRect.x(), srcReadRect.y());
             }
@@ -390,7 +388,7 @@ static void graphite_read_pixels_test_driver(skiatest::Reporter* reporter,
     // and full complement of alpha types with one successful read in the loop.
     std::array<bool, kLastEnum_SkColorType + 1> srcCTTestedThoroughly  = {},
                                                 readCTTestedThoroughly = {};
-    for (int sat = 0; sat < kLastEnum_SkAlphaType; ++sat) {
+    for (int sat = 0; sat <= kLastEnum_SkAlphaType; ++sat) {
         const auto srcAT = static_cast<SkAlphaType>(sat);
         if (srcAT == kUnpremul_SkAlphaType && !rules.fAllowUnpremulSrc) {
             continue;
@@ -443,6 +441,12 @@ static void graphite_read_pixels_test_driver(skiatest::Reporter* reporter,
             }
             for (int rct = 0; rct <= kLastEnum_SkColorType; ++rct) {
                 const auto readCT = static_cast<SkColorType>(rct);
+                // ComparePixels will end up converting these types to kUnknown
+                // because there's no corresponding GrColorType, and hence it will fail
+                if (readCT == kRGB_101010x_SkColorType ||
+                    readCT == kBGR_101010x_SkColorType) {
+                    continue;
+                }
                 for (const sk_sp<SkColorSpace>& readCS :
                      {SkColorSpace::MakeSRGB(), SkColorSpace::MakeSRGBLinear()}) {
                     for (int at = 0; at <= kLastEnum_SkAlphaType; ++at) {
@@ -461,12 +465,6 @@ static void graphite_read_pixels_test_driver(skiatest::Reporter* reporter,
                              kUnknown_SkAlphaType  == readAT)) {
                             continue;
                         }
-
-                        // TODO : fix color and alpha conversion
-                        if (srcPixels.colorType() != readCT || srcAT != readAT) {
-                            continue;
-                        }
-
                         const auto& rects =
                                 srcCTTestedThoroughly[sct] && readCTTestedThoroughly[rct]
                                         ? shortRectArray
@@ -474,10 +472,6 @@ static void graphite_read_pixels_test_driver(skiatest::Reporter* reporter,
                         for (const auto& rect : rects) {
                             const auto readInfo = SkImageInfo::Make(rect.width(), rect.height(),
                                                                     readCT, readAT, readCS);
-                            // TODO: fix colorspace conversion
-                            if (srcPixels.colorSpace() != readInfo.colorSpace()) {
-                                continue;
-                            }
                             const SkIPoint offset = rect.topLeft();
                             Result r = runTest(src, srcPixels, readInfo, offset);
                             if (r == Result::kSuccess) {
@@ -532,7 +526,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixelsGraphite,
             return Result::kExcusedFailure;
         }
 
-        context->asyncReadPixels(image.get(), pixels.colorType(), rect,
+        context->asyncReadPixels(image.get(), pixels.info().colorInfo(), rect,
                                  async_callback, &asyncContext);
         if (!asyncContext.fCalled) {
             context->submit();
@@ -553,10 +547,10 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixelsGraphite,
     rules.fAllowUnpremulSrc = true;
     rules.fUncontainedRectSucceeds = false;
 
+    std::unique_ptr<Recorder> recorder = context->makeRecorder();
+
     for (auto renderable : {Renderable::kNo, Renderable::kYes}) {
         auto factory = std::function<GraphiteSrcFactory<Image>>([&](const SkPixmap& src) {
-            std::unique_ptr<Recorder> recorder = context->makeRecorder();
-
             // TODO: put this in the equivalent of sk_gpu_test::MakeBackendTextureImage
             TextureInfo info = recorder->priv().caps()->getDefaultSampledTextureInfo(
                     src.colorType(),
@@ -584,6 +578,63 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixelsGraphite,
         auto label = SkStringPrintf("Renderable: %d", (int)renderable);
         graphite_read_pixels_test_driver(reporter, rules, factory, reader, label);
     }
+
+    // It's possible that we've created an Image using the factory, but then don't try to do
+    // readPixels on it, leaving a hanging command buffer. So we submit here to clean up.
+    context->submit();
+}
+
+DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(SurfaceAsyncReadPixelsGraphite,
+                                         reporter,
+                                         context) {
+    using Recorder = skgpu::graphite::Recorder;
+    using Surface = sk_sp<SkSurface>;
+
+    auto reader = std::function<GraphiteReadSrcFn<Surface>>([context](const Surface& surface,
+                                                                      const SkIPoint& offset,
+                                                                      const SkPixmap& pixels) {
+        AsyncContext asyncContext;
+        auto rect = SkIRect::MakeSize(pixels.dimensions()).makeOffset(offset);
+
+        context->asyncReadPixels(surface.get(), pixels.info().colorInfo(), rect,
+                                 async_callback, &asyncContext);
+        if (!asyncContext.fCalled) {
+            context->submit();
+        }
+        while (!asyncContext.fCalled) {
+            context->checkAsyncWorkCompletion();
+        }
+        if (!asyncContext.fResult) {
+            return Result::kFail;
+        }
+        SkRectMemcpy(pixels.writable_addr(), pixels.rowBytes(), asyncContext.fResult->data(0),
+                     asyncContext.fResult->rowBytes(0), pixels.info().minRowBytes(),
+                     pixels.height());
+        return Result::kSuccess;
+    });
+
+    GraphiteReadPixelTestRules rules;
+    rules.fAllowUnpremulSrc = true;
+    rules.fUncontainedRectSucceeds = false;
+
+    std::unique_ptr<Recorder> recorder = context->makeRecorder();
+    auto factory = std::function<GraphiteSrcFactory<Surface>>([&](const SkPixmap& src) {
+        Surface surface = SkSurface::MakeGraphite(recorder.get(),
+                                                  src.info(),
+                                                  skgpu::graphite::Mipmapped::kNo,
+                                                  /*surfaceProps=*/nullptr);
+        if (surface) {
+            surface->writePixels(src, 0, 0);
+
+            std::unique_ptr<skgpu::graphite::Recording> recording = recorder->snap();
+            skgpu::graphite::InsertRecordingInfo recordingInfo;
+            recordingInfo.fRecording = recording.get();
+            context->insertRecording(recordingInfo);
+        }
+
+        return surface;
+    });
+    graphite_read_pixels_test_driver(reporter, rules, factory, reader, {});
 
     // It's possible that we've created an Image using the factory, but then don't try to do
     // readPixels on it, leaving a hanging command buffer. So we submit here to clean up.

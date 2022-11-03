@@ -158,23 +158,67 @@ void Context::submit(SyncToCpu syncToCpu) {
 }
 
 void Context::asyncReadPixels(const SkImage* image,
-                              SkColorType dstColorType,
+                              const SkColorInfo& dstColorInfo,
                               const SkIRect& srcRect,
                               SkImage::ReadPixelsCallback callback,
                               SkImage::ReadPixelsContext callbackContext) {
-    if (dstColorType == kUnknown_SkColorType) {
+    if (!as_IB(image)->isGraphiteBacked()) {
         callback(callbackContext, nullptr);
         return;
     }
-
-    if (!SkIRect::MakeSize(image->dimensions()).contains(srcRect)) {
-        callback(callbackContext, nullptr);
-        return;
-    }
-
     auto graphiteImage = reinterpret_cast<const skgpu::graphite::Image*>(image);
     TextureProxyView proxyView = graphiteImage->textureProxyView();
     TextureProxy* proxy = proxyView.proxy();
+
+    this->asyncReadPixels(proxy,
+                          image->imageInfo(),
+                          dstColorInfo,
+                          srcRect,
+                          callback,
+                          callbackContext);
+}
+
+void Context::asyncReadPixels(const SkSurface* surface,
+                              const SkColorInfo& dstColorInfo,
+                              const SkIRect& srcRect,
+                              SkImage::ReadPixelsCallback callback,
+                              SkImage::ReadPixelsContext callbackContext) {
+    if (!static_cast<const SkSurface_Base*>(surface)->isGraphiteBacked()) {
+        callback(callbackContext, nullptr);
+        return;
+    }
+    auto graphiteSurface = reinterpret_cast<const skgpu::graphite::Surface*>(surface);
+    TextureProxyView proxyView = graphiteSurface->readSurfaceView();
+    TextureProxy* proxy = proxyView.proxy();
+
+    this->asyncReadPixels(proxy,
+                          const_cast<SkSurface*>(surface)->imageInfo(), // TODO: remove const_cast
+                          dstColorInfo,
+                          srcRect,
+                          callback,
+                          callbackContext);
+}
+
+void Context::asyncReadPixels(TextureProxy* proxy,
+                              const SkImageInfo& srcImageInfo,
+                              const SkColorInfo& dstColorInfo,
+                              const SkIRect& srcRect,
+                              SkImage::ReadPixelsCallback callback,
+                              SkImage::ReadPixelsContext callbackContext) {
+    if (!proxy) {
+        callback(callbackContext, nullptr);
+        return;
+    }
+
+    if (!SkImageInfoIsValid(srcImageInfo) || !SkColorInfoIsValid(dstColorInfo)) {
+        callback(callbackContext, nullptr);
+        return;
+    }
+
+    if (!SkIRect::MakeSize(srcImageInfo.dimensions()).contains(srcRect)) {
+        callback(callbackContext, nullptr);
+        return;
+    }
 
     std::unique_ptr<Recorder> recorder = this->makeRecorder();
     const Caps* caps = recorder->priv().caps();
@@ -186,7 +230,7 @@ void Context::asyncReadPixels(const SkImage* image,
 
     using PixelTransferResult = RecorderPriv::PixelTransferResult;
     PixelTransferResult transferResult =
-            recorder->priv().transferPixels(proxy, image->imageInfo(), dstColorType, srcRect);
+            recorder->priv().transferPixels(proxy, srcImageInfo, dstColorInfo, srcRect);
 
     if (!transferResult.fTransferBuffer) {
         // TODO: try to do a synchronous readPixels instead
@@ -204,7 +248,7 @@ void Context::asyncReadPixels(const SkImage* image,
         PixelTransferResult fTransferResult;
     };
     size_t rowBytes = recorder->priv().caps()->getAlignedTextureDataRowBytes(
-            srcRect.width() * SkColorTypeBytesPerPixel(dstColorType));
+            srcRect.width() * SkColorTypeBytesPerPixel(dstColorInfo.colorType()));
     auto* finishContext = new FinishContext{callback,
                                             callbackContext,
                                             srcRect.size(),

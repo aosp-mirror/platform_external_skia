@@ -27,12 +27,13 @@ std::tuple<SkUniquePaintParamsID, const SkUniformDataBlock*, const SkTextureData
 ExtractPaintData(Recorder* recorder,
                  SkPipelineDataGatherer* gatherer,
                  SkPaintParamsKeyBuilder* builder,
+                 const SkM44& local2Dev,
                  const PaintParams& p) {
 
     SkDEBUGCODE(gatherer->checkReset());
     SkDEBUGCODE(builder->checkReset());
 
-    SkKeyContext keyContext(recorder);
+    SkKeyContext keyContext(recorder, local2Dev);
 
     p.toKey(keyContext, builder, gatherer);
 
@@ -90,8 +91,9 @@ std::string get_uniforms(SkSpan<const SkUniform> uniforms, int* offset, int mang
     UniformOffsetCalculator offsetter(Layout::kMetal, *offset);
 
     for (const SkUniform& u : uniforms) {
-        SkSL::String::appendf(&result, "    layout(offset=%zu) %s %s",
-                              offsetter.calculateOffset(u.type(), u.count()),
+        SkSL::String::appendf(&result,
+                              "    layout(offset=%zu) %s %s",
+                              offsetter.advanceOffset(u.type(), u.count()),
                               SkSLTypeString(u.type()),
                               u.name());
         if (manglingSuffix >= 0) {

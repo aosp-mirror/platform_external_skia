@@ -134,6 +134,7 @@ skia_sksl_sources = [
   "$_src/sksl/ir/SkSLIndexExpression.h",
   "$_src/sksl/ir/SkSLInterfaceBlock.cpp",
   "$_src/sksl/ir/SkSLInterfaceBlock.h",
+  "$_src/sksl/ir/SkSLLayout.cpp",
   "$_src/sksl/ir/SkSLLiteral.cpp",
   "$_src/sksl/ir/SkSLLiteral.h",
   "$_src/sksl/ir/SkSLMethodReference.h",
@@ -238,6 +239,7 @@ skia_sksl_gpu_sources = [
 skslc_deps = [
   "$_src/core/SkArenaAlloc.cpp",
   "$_src/core/SkBlockAllocator.cpp",
+  "$_src/core/SkContainers.cpp",
   "$_src/core/SkCpu.cpp",
   "$_src/core/SkData.cpp",
   "$_src/core/SkHalf.cpp",

@@ -10,6 +10,8 @@
 
 #include "src/image/SkSurface_Base.h"
 
+#include "src/gpu/graphite/TextureProxyView.h"
+
 namespace skgpu::graphite {
 
 class Context;
@@ -31,6 +33,8 @@ public:
     SkCanvas* onNewCanvas() override;
     sk_sp<SkSurface> onNewSurface(const SkImageInfo&) override;
     sk_sp<SkImage> onNewImageSnapshot(const SkIRect* subset) override;
+    sk_sp<SkImage> onAsImage() override;
+    sk_sp<SkImage> onMakeImageCopy(const SkIRect* subset, Mipmapped) override;
     void onWritePixels(const SkPixmap&, int x, int y) override;
     void onAsyncReadPixels(const SkImageInfo& info,
                            SkIRect srcRect,
@@ -53,6 +57,9 @@ public:
     bool onCopyOnWrite(ContentChangeMode) override;
     bool onReadPixels(Context*, Recorder*, const SkPixmap& dst, int srcX, int srcY);
     sk_sp<const SkCapabilities> onCapabilities() override;
+    bool isGraphiteBacked() const override { return true; }
+
+    TextureProxyView readSurfaceView() const;
 
 #if GRAPHITE_TEST_UTILS && SK_SUPPORT_GPU
     // TODO: The long-term for the public API around surfaces and flushing/submitting will likely

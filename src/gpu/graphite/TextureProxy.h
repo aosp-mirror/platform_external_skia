@@ -52,6 +52,7 @@ public:
      */
     static bool InstantiateIfNonVolatile(ResourceProvider*, TextureProxy*);
     bool isInstantiated() const { return SkToBool(fTexture); }
+    void deinstantiate();
     sk_sp<Texture> refTexture() const;
     const Texture* texture() const;
 
@@ -63,7 +64,7 @@ public:
                                     Renderable,
                                     SkBudgeted);
 
-    using LazyInstantiateCallback = std::function<sk_sp<Texture> (ResourceProvider*, Volatile)>;
+    using LazyInstantiateCallback = std::function<sk_sp<Texture> (ResourceProvider*)>;
 
     static sk_sp<TextureProxy> MakeLazy(SkISize dimensions,
                                         const TextureInfo&,

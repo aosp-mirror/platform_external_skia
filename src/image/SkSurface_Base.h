@@ -66,6 +66,15 @@ public:
      */
     virtual sk_sp<SkImage> onNewImageSnapshot(const SkIRect* subset = nullptr) { return nullptr; }
 
+#ifdef SK_GRAPHITE_ENABLED
+    virtual sk_sp<SkImage> onAsImage() { return nullptr; }
+
+    virtual sk_sp<SkImage> onMakeImageCopy(const SkIRect* /* subset */,
+                                           skgpu::graphite::Mipmapped) {
+        return nullptr;
+    }
+#endif
+
     virtual void onWritePixels(const SkPixmap&, int x, int y) = 0;
 
     /**
@@ -155,6 +164,9 @@ public:
     // TODO: Remove this (make it pure virtual) after updating Android (which has a class derived
     // from SkSurface_Base).
     virtual sk_sp<const SkCapabilities> onCapabilities();
+
+    // True for surfaces instantiated by Graphite in GPU memory
+    virtual bool isGraphiteBacked() const { return false; }
 
     inline SkCanvas* getCachedCanvas();
     inline sk_sp<SkImage> refCachedImage();

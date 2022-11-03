@@ -777,7 +777,7 @@ void Device::drawGeometry(const Transform& localToDevice,
         if (paint.getPathEffect()->filterPath(&dst, geometry.shape().asPath(), &newStyle,
                                               nullptr, localToDevice)) {
             // Recurse using the path and new style, while disabling downstream path effect handling
-            this->drawGeometry(localToDevice, Geometry(Shape(dst)), paint, style,
+            this->drawGeometry(localToDevice, Geometry(Shape(dst)), paint, newStyle,
                                flags | DrawFlags::kIgnorePathEffect, std::move(primitiveBlender),
                                skipColorXform);
             return;
@@ -1149,7 +1149,10 @@ TextureProxy* Device::proxy() {
 }
 #endif
 
-TextureProxyView Device::readSurfaceView() {
+TextureProxyView Device::readSurfaceView() const {
+    if (!fRecorder) {
+        return {};
+    }
     return fDC->readSurfaceView(fRecorder->priv().caps());
 }
 
