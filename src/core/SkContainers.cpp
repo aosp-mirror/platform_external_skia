@@ -30,21 +30,21 @@ SkSpan<std::byte> complete_size(void* ptr, size_t size) {
 
     size_t completeSize = size;
 
-    // Check Skia's standard hook for usable size. If it returns 0 then it's not implemented.
-    if (size_t allocatedSize = sk_malloc_usable_size(ptr)) {
-        completeSize = allocatedSize;
-    } else {
-        // Use the OS specific calls to find the actual capacity.
-        #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
-            completeSize = malloc_size(ptr);
-        #elif defined(SK_BUILD_FOR_ANDROID) || defined(SK_BUILD_FOR_UNIX)
-            completeSize = malloc_usable_size(ptr);
-        #elif defined(SK_BUILD_FOR_WIN)
-            completeSize = _msize(ptr);
-        #endif
-        // If none of the above apply, then size is just leastCapacity, or growthCapacity.
-    }
-    SkASSERT(completeSize >= size);
+    // Use the OS specific calls to find the actual capacity.
+    #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
+        // TODO: remove the max, when the chrome implementation of malloc_size doesn't return 0.
+        completeSize = std::max(malloc_size(ptr), size);
+    #elif defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 17
+        completeSize = malloc_usable_size(ptr);
+        SkASSERT(completeSize >= size);
+    #elif defined(SK_BUILD_FOR_UNIX)
+        completeSize = malloc_usable_size(ptr);
+        SkASSERT(completeSize >= size);
+    #elif defined(SK_BUILD_FOR_WIN)
+        completeSize = _msize(ptr);
+        SkASSERT(completeSize >= size);
+    #endif
+
     return {static_cast<std::byte*>(ptr), completeSize};
 }
 }  // namespace
@@ -55,10 +55,7 @@ SkSpan<std::byte> SkContainerAllocator::allocate(int capacity, double growthFact
     SkASSERT_RELEASE(capacity <= fMaxCapacity);
 
     if (growthFactor > 1.0 && capacity > 0) {
-        size_t bytes = this->growthFactorCapacity(capacity, growthFactor) * fSizeOfT;
-        if (SkSpan<std::byte> span = sk_allocate_canfail(bytes); !span.empty()) {
-            return span;
-        }
+        capacity = this->growthFactorCapacity(capacity, growthFactor);
     }
 
     return sk_allocate_throw(capacity * fSizeOfT);
@@ -91,9 +88,6 @@ SkSpan<std::byte> sk_allocate_canfail(size_t size) {
     // Make sure to ask for at least the minimum number of bytes.
     const size_t adjustedSize = std::max(size, kMinBytes);
     void* ptr = sk_malloc_canfail(adjustedSize);
-    if (ptr == nullptr) {
-        return {};
-    }
     return complete_size(ptr, adjustedSize);
 }
 
