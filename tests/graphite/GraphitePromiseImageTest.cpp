@@ -14,6 +14,7 @@
 #include "include/gpu/graphite/Recording.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/ContextPriv.h"
+#include "src/gpu/graphite/RecordingPriv.h"
 #include "tests/Test.h"
 
 using namespace skgpu::graphite;
@@ -25,25 +26,44 @@ struct PromiseTextureChecker {
 
     explicit PromiseTextureChecker(const BackendTexture& backendTex,
                                    skiatest::Reporter* reporter)
-            : fBackendTex(backendTex)
-            , fReporter(reporter) {
+            : fReporter(reporter) {
+        fBackendTextures[0] = backendTex;
+    }
+
+    explicit PromiseTextureChecker(const BackendTexture& backendTex0,
+                                   const BackendTexture& backendTex1,
+                                   skiatest::Reporter* reporter)
+            : fReporter(reporter)
+            , fHasTwoBackendTextures(true) {
+        fBackendTextures[0] = backendTex0;
+        fBackendTextures[1] = backendTex1;
     }
 
     void checkImageReleased(skiatest::Reporter* reporter, int expectedReleaseCnt) {
         REPORTER_ASSERT(reporter, expectedReleaseCnt == fImageReleaseCount);
     }
 
-    BackendTexture fBackendTex;
+    int totalReleaseCount() const { return fTextureReleaseCounts[0] + fTextureReleaseCounts[1]; }
+
     skiatest::Reporter* fReporter = nullptr;
+    bool fHasTwoBackendTextures = false;
+    BackendTexture fBackendTextures[2];
     int fFulfillCount = 0;
     int fImageReleaseCount = 0;
-    int fTextureReleaseCount = 0;
+    int fTextureReleaseCounts[2] = { 0, 0 };
 
     static std::tuple<BackendTexture, void*> Fulfill(void* self) {
         auto checker = reinterpret_cast<PromiseTextureChecker*>(self);
 
         checker->fFulfillCount++;
-        return { checker->fBackendTex, self };
+
+        if (checker->fHasTwoBackendTextures) {
+            int whichToUse = checker->fFulfillCount % 2;
+            return { checker->fBackendTextures[whichToUse],
+                     &checker->fTextureReleaseCounts[whichToUse] };
+        } else {
+            return { checker->fBackendTextures[0], &checker->fTextureReleaseCounts[0] };
+        }
     }
 
     static void ImageRelease(void* self) {
@@ -52,10 +72,10 @@ struct PromiseTextureChecker {
         checker->fImageReleaseCount++;
     }
 
-    static void TextureRelease(void* self) {
-        auto checker = reinterpret_cast<PromiseTextureChecker*>(self);
+    static void TextureRelease(void* context) {
+        int* releaseCount = reinterpret_cast<int*>(context);
 
-        checker->fTextureReleaseCount++;
+        (*releaseCount)++;
     }
 };
 
@@ -75,11 +95,11 @@ void check_fulfill_and_release_cnts(skiatest::Reporter* reporter,
     if (!expectedFulfillCnt) {
         // Release should only ever be called after Fulfill.
         REPORTER_ASSERT(reporter, !promiseChecker.fImageReleaseCount);
-        REPORTER_ASSERT(reporter, !promiseChecker.fTextureReleaseCount);
+        REPORTER_ASSERT(reporter, !promiseChecker.totalReleaseCount());
         return;
     }
 
-    int releaseDiff = promiseChecker.fFulfillCount - promiseChecker.fTextureReleaseCount;
+    int releaseDiff = promiseChecker.fFulfillCount - promiseChecker.totalReleaseCount();
     switch (releaseBalanceExpectation) {
         case ReleaseBalanceExpectation::kBalanced:
             SkASSERT(!releaseDiff);
@@ -94,7 +114,7 @@ void check_fulfill_and_release_cnts(skiatest::Reporter* reporter,
             REPORTER_ASSERT(reporter, releaseDiff == 2);
             break;
         case ReleaseBalanceExpectation::kFulfillsOnly:
-            REPORTER_ASSERT(reporter, promiseChecker.fTextureReleaseCount == 0);
+            REPORTER_ASSERT(reporter, promiseChecker.totalReleaseCount() == 0);
             break;
     }
 }
@@ -136,8 +156,17 @@ void check_fulfills_only(skiatest::Reporter* reporter,
 struct TestCtx {
     TestCtx() {}
 
+    ~TestCtx() {
+        for (int i = 0; i < 2; ++i) {
+            if (fBackendTextures[i].isValid()) {
+                fContext->deleteBackendTexture(fBackendTextures[i]);
+            }
+        }
+    }
+
+    Context* fContext;
     std::unique_ptr<Recorder> fRecorder;
-    BackendTexture fBackendTex;
+    BackendTexture fBackendTextures[2];
     PromiseTextureChecker fPromiseChecker;
     sk_sp<SkImage> fImg;
     sk_sp<SkSurface> fSurface;
@@ -149,6 +178,8 @@ void setup_test_context(Context* context,
                         SkISize dimensions,
                         Volatile isVolatile,
                         bool invalidBackendTex) {
+    testCtx->fContext = context;
+
     const Caps* caps = context->priv().caps();
     testCtx->fRecorder = context->makeRecorder();
 
@@ -158,15 +189,29 @@ void setup_test_context(Context* context,
                                                                  Renderable::kYes);
 
     if (invalidBackendTex) {
-        // This will invalidate all fulfill calls
-        testCtx->fBackendTex = {};
-        REPORTER_ASSERT(reporter, !testCtx->fBackendTex.isValid());
+        // Having invalid backend textures will invalidate all the fulfill calls
+        REPORTER_ASSERT(reporter, !testCtx->fBackendTextures[0].isValid());
+        REPORTER_ASSERT(reporter, !testCtx->fBackendTextures[1].isValid());
     } else {
-        testCtx->fBackendTex = testCtx->fRecorder->createBackendTexture(dimensions, textureInfo);
-        REPORTER_ASSERT(reporter, testCtx->fBackendTex.isValid());
+        testCtx->fBackendTextures[0] = testCtx->fRecorder->createBackendTexture(dimensions,
+                                                                                textureInfo);
+        REPORTER_ASSERT(reporter, testCtx->fBackendTextures[0].isValid());
+
+        if (isVolatile == Volatile::kYes) {
+            testCtx->fBackendTextures[1] = testCtx->fRecorder->createBackendTexture(dimensions,
+                                                                                    textureInfo);
+            REPORTER_ASSERT(reporter, testCtx->fBackendTextures[1].isValid());
+        }
     }
 
-    testCtx->fPromiseChecker = PromiseTextureChecker(testCtx->fBackendTex, reporter);
+    if (isVolatile == Volatile::kYes) {
+        testCtx->fPromiseChecker = PromiseTextureChecker(testCtx->fBackendTextures[0],
+                                                         testCtx->fBackendTextures[1],
+                                                         reporter);
+    } else {
+        testCtx->fPromiseChecker = PromiseTextureChecker(testCtx->fBackendTextures[0],
+                                                         reporter);
+    }
 
     SkImageInfo ii = SkImageInfo::Make(dimensions.fWidth,
                                        dimensions.fHeight,
@@ -206,7 +251,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageTest,
         std::unique_ptr<Recording> recording = testContext.fRecorder->snap();
         check_unfulfilled(testContext.fPromiseChecker, reporter); // NVPIs not fulfilled at snap
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, context->insertRecording({ recording.get() }));
         check_fulfilled_ahead_by_one(reporter, testContext.fPromiseChecker,
                                      /* expectedFulfillCnt= */ 1); // NVPIs fulfilled at insert
     }
@@ -231,7 +276,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageTest,
         check_fulfilled_ahead_by_one(reporter, testContext.fPromiseChecker,
                                      /* expectedFulfillCnt= */ 1); // No new fulfill
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, context->insertRecording({ recording.get() }));
         // testContext.fImg should still be fulfilled from the first time we inserted a Recording.
         check_fulfilled_ahead_by_one(reporter, testContext.fPromiseChecker,
                                      /* expectedFulfillCnt= */ 1);
@@ -252,7 +297,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageTest,
         check_fulfilled_ahead_by_one(reporter, testContext.fPromiseChecker,
                                      /* expectedFulfillCnt= */ 1);
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, context->insertRecording({ recording.get() }));
         check_fulfilled_ahead_by_one(reporter, testContext.fPromiseChecker,
                                      /* expectedFulfillCnt= */ 1);
     }
@@ -269,8 +314,6 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageTest,
 
     // Now TextureRelease should definitely have been called.
     check_all_done(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 1);
-
-    context->deleteBackendTexture(testContext.fBackendTex);
 }
 
 DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageFulfillFailureTest,
@@ -292,12 +335,12 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageFulfillF
         std::unique_ptr<Recording> recording = testContext.fRecorder->snap();
         check_unfulfilled(testContext.fPromiseChecker, reporter);
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, !context->insertRecording({ recording.get() }));
         check_fulfilled_ahead_by_one(reporter, testContext.fPromiseChecker,
                                      /* expectedFulfillCnt= */ 1);
 
         // Test that reinserting gives uninstantiated PromiseImages a second chance
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, !context->insertRecording({ recording.get() }));
         check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 2);
     }
 
@@ -311,7 +354,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageFulfillF
         std::unique_ptr<Recording> recording = testContext.fRecorder->snap();
         check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 2);
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, !context->insertRecording({ recording.get() }));
         check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 3);
     }
 
@@ -328,7 +371,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageFulfillF
         std::unique_ptr<Recording> recording = testContext.fRecorder->snap();
         check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 3);
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, !context->insertRecording({ recording.get() }));
         check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 4);
     }
 
@@ -358,7 +401,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(NonVolatileGraphitePromiseImageCreation
     // Despite MakeGraphitePromiseTexture failing, ImageRelease is called
     REPORTER_ASSERT(reporter, testContext.fPromiseChecker.fFulfillCount == 0);
     REPORTER_ASSERT(reporter, testContext.fPromiseChecker.fImageReleaseCount == 1);
-    REPORTER_ASSERT(reporter, testContext.fPromiseChecker.fTextureReleaseCount == 0);
+    REPORTER_ASSERT(reporter, testContext.fPromiseChecker.totalReleaseCount() == 0);
 }
 
 DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageTest,
@@ -380,18 +423,21 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageTest,
         // Nothing happens at snap time for VPIs
         check_unfulfilled(testContext.fPromiseChecker, reporter);
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, context->insertRecording({ recording.get() }));
         check_fulfilled_ahead_by_one(reporter, testContext.fPromiseChecker,
                                      /* expectedFulfillCnt= */ 1);  // VPIs fulfilled on insert
 
         // Test that multiple insertions will clobber prior fulfills
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, context->insertRecording({ recording.get() }));
         check_fulfilled_ahead_by_two(reporter, testContext.fPromiseChecker,
                                      /* expectedFulfillCnt= */ 2);
     }
 
     context->submit(SyncToCpu::kYes);
     check_all_done(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 2);
+
+    REPORTER_ASSERT(reporter, testContext.fPromiseChecker.fTextureReleaseCounts[0] == 1);
+    REPORTER_ASSERT(reporter, testContext.fPromiseChecker.fTextureReleaseCounts[1] == 1);
 
     {
         SkCanvas* canvas = testContext.fSurface->getCanvas();
@@ -403,17 +449,20 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageTest,
         // Nothing happens at snap time for volatile images
         check_all_done(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 2);
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, context->insertRecording({ recording.get() }));
         check_fulfilled_ahead_by_one(reporter, testContext.fPromiseChecker,
                                      /* expectedFulfillCnt= */ 3);
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, context->insertRecording({ recording.get() }));
         check_fulfilled_ahead_by_two(reporter, testContext.fPromiseChecker,
                                      /* expectedFulfillCnt= */ 4);
     }
 
     context->submit(SyncToCpu::kYes);
     check_all_done(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 4);
+
+    REPORTER_ASSERT(reporter, testContext.fPromiseChecker.fTextureReleaseCounts[0] == 2);
+    REPORTER_ASSERT(reporter, testContext.fPromiseChecker.fTextureReleaseCounts[1] == 2);
 
     {
         SkCanvas* canvas = testContext.fSurface->getCanvas();
@@ -425,11 +474,11 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageTest,
         // Nothing happens at snap time for volatile images
         check_all_done(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 4);
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, context->insertRecording({ recording.get() }));
         check_fulfilled_ahead_by_one(reporter, testContext.fPromiseChecker,
                                      /* expectedFulfillCnt= */ 5);
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, context->insertRecording({ recording.get() }));
         check_fulfilled_ahead_by_two(reporter, testContext.fPromiseChecker,
                                      /* expectedFulfillCnt= */ 6);
     }
@@ -443,7 +492,8 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageTest,
     // Now all Releases should definitely have been called.
     check_all_done(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 6);
 
-    context->deleteBackendTexture(testContext.fBackendTex);
+    REPORTER_ASSERT(reporter, testContext.fPromiseChecker.fTextureReleaseCounts[0] == 3);
+    REPORTER_ASSERT(reporter, testContext.fPromiseChecker.fTextureReleaseCounts[1] == 3);
 }
 
 DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageFulfillFailureTest,
@@ -465,10 +515,10 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageFulfillFail
         std::unique_ptr<Recording> recording = testContext.fRecorder->snap();
         check_unfulfilled(testContext.fPromiseChecker, reporter);
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, !context->insertRecording({ recording.get() }));
         check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 1);
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, !context->insertRecording({ recording.get() }));
         check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 2);
     }
 
@@ -482,10 +532,10 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageFulfillFail
         std::unique_ptr<Recording> recording = testContext.fRecorder->snap();
         check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 2);
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, !context->insertRecording({ recording.get() }));
         check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 3);
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, !context->insertRecording({ recording.get() }));
         check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 4);
     }
 
@@ -502,10 +552,10 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(VolatileGraphitePromiseImageFulfillFail
         std::unique_ptr<Recording> recording = testContext.fRecorder->snap();
         check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 4);
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, !context->insertRecording({ recording.get() }));
         check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 5);
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, !context->insertRecording({ recording.get() }));
         check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 6);
     }
 
@@ -537,7 +587,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(GraphitePromiseImageRecorderLoss,
 
         testContext.fRecorder.reset();  // Recorder drop
 
-        context->insertRecording({ recording.get() });
+        REPORTER_ASSERT(reporter, context->insertRecording({ recording.get() }));
         check_fulfills_only(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 1);
 
         context->submit(SyncToCpu::kYes);
@@ -547,7 +597,76 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(GraphitePromiseImageRecorderLoss,
         recording.reset();
 
         check_all_done(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 1);
+    }
+}
 
-        context->deleteBackendTexture(testContext.fBackendTex);
+// Test out PromiseImages appearing in multiple Recordings. In particular, test that
+// previous instantiations don't impact the Recording's collection of PromiseImages.
+DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(GraphitePromiseImageMultipleImgUses,
+                                         reporter,
+                                         context) {
+    constexpr SkISize kDimensions{ 16, 16 };
+
+    static constexpr int kNumRecordings = 3;
+
+    for (Volatile isVolatile : { Volatile::kNo, Volatile::kYes }) {
+        int expectedVolatile = (isVolatile == Volatile::kYes) ? 1 : 0;
+        int expectedNonVolatile = 1 - expectedVolatile;
+
+        TestCtx testContext;
+        setup_test_context(context, reporter, &testContext,
+                           kDimensions, isVolatile, /* invalidBackendTex= */ false);
+
+        std::unique_ptr<Recording> recordings[kNumRecordings];
+
+        SkCanvas* canvas = testContext.fSurface->getCanvas();
+
+        for (int i = 0; i < kNumRecordings; ++i) {
+            canvas->drawImage(testContext.fImg, 0, 0);
+
+            recordings[i] = testContext.fRecorder->snap();
+
+            if (isVolatile == Volatile::kYes) {
+                check_fulfills_only(reporter, testContext.fPromiseChecker,
+                                    /* expectedFulfillCnt= */ i);
+            } else {
+                check_fulfills_only(reporter, testContext.fPromiseChecker,
+                                    /* expectedFulfillCnt= */ i > 0 ? 1 : 0);
+            }
+
+            REPORTER_ASSERT(reporter,
+                            recordings[i]->priv().numVolatilePromiseImages() == expectedVolatile);
+            REPORTER_ASSERT(reporter,
+                            recordings[i]->priv().numNonVolatilePromiseImages() ==
+                            expectedNonVolatile);
+
+            REPORTER_ASSERT(reporter, context->insertRecording({ recordings[i].get() }));
+
+            if (isVolatile == Volatile::kYes) {
+                check_fulfills_only(reporter, testContext.fPromiseChecker,
+                                    /* expectedFulfillCnt= */ i+1);
+            } else {
+                check_fulfills_only(reporter, testContext.fPromiseChecker,
+                                    /* expectedFulfillCnt= */ 1);
+            }
+
+            // Non-volatiles are cleared out after a successful insertion
+            REPORTER_ASSERT(reporter, recordings[i]->priv().numNonVolatilePromiseImages() == 0);
+        }
+
+        context->submit(SyncToCpu::kYes);
+
+        testContext.fSurface.reset();
+        testContext.fImg.reset();
+        for (int i = 0; i < kNumRecordings; ++i) {
+            recordings[i].reset();
+        }
+
+        if (isVolatile == Volatile::kYes) {
+            check_all_done(reporter, testContext.fPromiseChecker,
+                           /* expectedFulfillCnt= */ kNumRecordings);
+        } else {
+            check_all_done(reporter, testContext.fPromiseChecker, /* expectedFulfillCnt= */ 1);
+        }
     }
 }
