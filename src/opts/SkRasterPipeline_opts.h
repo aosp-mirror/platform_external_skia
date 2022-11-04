@@ -1360,6 +1360,74 @@ SI F clamp(F v, F limit) {
     return min(max(0, v), inclusive);
 }
 
+// Bhaskara I's sine approximation
+// 16x(pi - x) / (5*pi^2 - 4x(pi - x)
+// ... divide by 4
+// 4x(pi - x) / 5*pi^2/4 - x(pi - x)
+//
+// This is a good approximation only for 0 <= x <= pi, so we use symmetries to get
+// radians into that range first.
+SI F sin_(F v) {
+    constexpr float Pi = SK_ScalarPI;
+    F x = fract(v * (0.5f/Pi)) * (2*Pi);
+    I32 neg = x > Pi;
+    x = if_then_else(neg, x - Pi, x);
+
+    F pair = x * (Pi - x);
+    x = 4.0f * pair / ((5*Pi*Pi/4) - pair);
+    x = if_then_else(neg, -x, x);
+    return x;
+}
+
+SI F cos_(F v) {
+    return sin_(v + (SK_ScalarPI/2));
+}
+
+/*  "GENERATING ACCURATE VALUES FOR THE TANGENT FUNCTION"
+     https://mae.ufl.edu/~uhk/ACCURATE-TANGENT.pdf
+
+    approx = x + (1/3)x^3 + (2/15)x^5 + (17/315)x^7 + (62/2835)x^9
+
+    Some simplifications:
+    1. tan(x) is periodic, -PI/2 < x < PI/2
+    2. tan(x) is odd, so tan(-x) = -tan(x)
+    3. Our polynomial approximation is best near zero, so we use the following identity
+                    tan(x) + tan(y)
+       tan(x + y) = -----------------
+                   1 - tan(x)*tan(y)
+       tan(PI/4) = 1
+
+       So for x > PI/8, we do the following refactor:
+       x' = x - PI/4
+
+                1 + tan(x')
+       tan(x) = ------------
+                1 - tan(x')
+ */
+SI F tan_(F x) {
+    constexpr float Pi = SK_ScalarPI;
+    // periodic between -pi/2 ... pi/2
+    // shift to 0...Pi, scale 1/Pi to get into 0...1, then fract, scale-up, shift-back
+    x = fract((1/Pi)*x + 0.5f) * Pi - (Pi/2);
+
+    I32 neg = (x < 0.0f);
+    x = if_then_else(neg, -x, x);
+
+    // minimize total error by shifting if x > pi/8
+    I32 use_quotient = (x > (Pi/8));
+    x = if_then_else(use_quotient, x - (Pi/4), x);
+
+    // 9th order poly = 4th order(x^2) * x
+    F x2 = x * x;
+    x *= 1 + x2 * (1/3.0f    +
+             x2 * (2/15.0f   +
+             x2 * (17/315.0f +
+             x2 * (62/2835.0f))));
+    x = if_then_else(use_quotient, (1+x)/(1-x), x);
+    x = if_then_else(neg, -x, x);
+    return x;
+}
+
 // Used by gather_ stages to calculate the base pointer and a vector of indices to load.
 template <typename T>
 SI U32 ix_and_ptr(T** ptr, const SkRasterPipeline_GatherCtx* ctx, F x, F y) {
