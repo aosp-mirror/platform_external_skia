@@ -135,6 +135,8 @@ namespace SK_OPTS_NS {
     SI U8  pack(U16 v)          { return  (U8)v; }
 
     SI F if_then_else(I32 c, F t, F e) { return c ? t : e; }
+    SI bool any(I32 c)                 { return c != 0; }
+    SI bool all(I32 c)                 { return c != 0; }
 
     template <typename T>
     SI T gather(const T* p, U32 ix) { return p[ix]; }
@@ -210,11 +212,17 @@ namespace SK_OPTS_NS {
     SI F if_then_else(I32 c, F t, F e) { return vbslq_f32((U32)c,t,e); }
 
     #if defined(SK_CPU_ARM64)
+        SI bool any(I32 c) { return vmaxvq_u32((U32)c) != 0; }
+        SI bool all(I32 c) { return vminvq_u32((U32)c) != 0; }
+
         SI F     mad(F f, F m, F a) { return vfmaq_f32(a,f,m); }
         SI F  floor_(F v) { return vrndmq_f32(v); }
         SI F   sqrt_(F v) { return vsqrtq_f32(v); }
         SI U32 round(F v, F scale) { return vcvtnq_u32_f32(v*scale); }
     #else
+        SI bool any(I32 c) { return c[0] | c[1] | c[2] | c[3]; }
+        SI bool all(I32 c) { return c[0] & c[1] & c[2] & c[3]; }
+
         SI F mad(F f, F m, F a) { return vmlaq_f32(a,f,m); }
         SI F floor_(F v) {
             F roundtrip = vcvtq_f32_s32(vcvtq_s32_f32(v));
@@ -387,6 +395,9 @@ namespace SK_OPTS_NS {
     }
 
     SI F if_then_else(I32 c, F t, F e) { return _mm256_blendv_ps(e,t,c); }
+    // NOTE: This version of 'all' only works with mask values (true == all bits set)
+    SI bool any(I32 c) { return !_mm256_testz_si256(c, _mm256_set1_epi32(-1)); }
+    SI bool all(I32 c) { return  _mm256_testc_si256(c, _mm256_set1_epi32(-1)); }
 
     template <typename T>
     SI V<T> gather(const T* p, U32 ix) {
@@ -728,6 +739,9 @@ template <typename T> using V = T __attribute__((ext_vector_type(4)));
     SI F if_then_else(I32 c, F t, F e) {
         return _mm_or_ps(_mm_and_ps(c, t), _mm_andnot_ps(c, e));
     }
+    // NOTE: This only checks the top bit of each lane, and is incorrect with non-mask values.
+    SI bool any(I32 c) { return _mm_movemask_ps(c) != 0b0000; }
+    SI bool all(I32 c) { return _mm_movemask_ps(c) == 0b1111; }
 
     SI F floor_(F v) {
     #if defined(JUMPER_IS_SSE41) || defined(JUMPER_IS_AVX)
@@ -1344,6 +1358,74 @@ SI T* ptr_at_xy(const SkRasterPipeline_MemoryCtx* ctx, size_t dx, size_t dy) {
 SI F clamp(F v, F limit) {
     F inclusive = sk_bit_cast<F>( sk_bit_cast<U32>(limit) - 1 );  // Exclusive -> inclusive.
     return min(max(0, v), inclusive);
+}
+
+// Bhaskara I's sine approximation
+// 16x(pi - x) / (5*pi^2 - 4x(pi - x)
+// ... divide by 4
+// 4x(pi - x) / 5*pi^2/4 - x(pi - x)
+//
+// This is a good approximation only for 0 <= x <= pi, so we use symmetries to get
+// radians into that range first.
+SI F sin_(F v) {
+    constexpr float Pi = SK_ScalarPI;
+    F x = fract(v * (0.5f/Pi)) * (2*Pi);
+    I32 neg = x > Pi;
+    x = if_then_else(neg, x - Pi, x);
+
+    F pair = x * (Pi - x);
+    x = 4.0f * pair / ((5*Pi*Pi/4) - pair);
+    x = if_then_else(neg, -x, x);
+    return x;
+}
+
+SI F cos_(F v) {
+    return sin_(v + (SK_ScalarPI/2));
+}
+
+/*  "GENERATING ACCURATE VALUES FOR THE TANGENT FUNCTION"
+     https://mae.ufl.edu/~uhk/ACCURATE-TANGENT.pdf
+
+    approx = x + (1/3)x^3 + (2/15)x^5 + (17/315)x^7 + (62/2835)x^9
+
+    Some simplifications:
+    1. tan(x) is periodic, -PI/2 < x < PI/2
+    2. tan(x) is odd, so tan(-x) = -tan(x)
+    3. Our polynomial approximation is best near zero, so we use the following identity
+                    tan(x) + tan(y)
+       tan(x + y) = -----------------
+                   1 - tan(x)*tan(y)
+       tan(PI/4) = 1
+
+       So for x > PI/8, we do the following refactor:
+       x' = x - PI/4
+
+                1 + tan(x')
+       tan(x) = ------------
+                1 - tan(x')
+ */
+SI F tan_(F x) {
+    constexpr float Pi = SK_ScalarPI;
+    // periodic between -pi/2 ... pi/2
+    // shift to 0...Pi, scale 1/Pi to get into 0...1, then fract, scale-up, shift-back
+    x = fract((1/Pi)*x + 0.5f) * Pi - (Pi/2);
+
+    I32 neg = (x < 0.0f);
+    x = if_then_else(neg, -x, x);
+
+    // minimize total error by shifting if x > pi/8
+    I32 use_quotient = (x > (Pi/8));
+    x = if_then_else(use_quotient, x - (Pi/4), x);
+
+    // 9th order poly = 4th order(x^2) * x
+    F x2 = x * x;
+    x *= 1 + x2 * (1/3.0f    +
+             x2 * (2/15.0f   +
+             x2 * (17/315.0f +
+             x2 * (62/2835.0f))));
+    x = if_then_else(use_quotient, (1+x)/(1-x), x);
+    x = if_then_else(neg, -x, x);
+    return x;
 }
 
 // Used by gather_ stages to calculate the base pointer and a vector of indices to load.

@@ -36,7 +36,7 @@
     Modern implementations of std::vector<T> will generally provide similar performance
     characteristics when used with appropriate care. Consider using std::vector<T> in new code.
 */
-template <typename T, bool MEM_MOVE = sk_is_trivially_relocatable<T>::value> class SkTArray {
+template <typename T, bool MEM_MOVE = sk_is_trivially_relocatable_v<T>> class SkTArray {
 private:
     enum ReallocType { kExactFit, kGrowing };
 
@@ -567,12 +567,14 @@ private:
      *  In the following move methods, 'src' is destroyed leaving behind uninitialized raw storage.
      */
     void copy(const T* src) {
-        // Some types may be trivially copyable, in which case we *could* use memcopy; but
-        // MEM_MOVE == true implies that the type is trivially movable, and not necessarily
-        // trivially copyable (think sk_sp<>).  So short of adding another template arg, we
-        // must be conservative and use copy construction.
-        for (int i = 0; i < this->count(); ++i) {
-            new (fItemArray + i) T(src[i]);
+        if constexpr (std::is_trivially_copyable_v<T>) {
+            if (!this->empty() && src != nullptr) {
+                sk_careful_memcpy(fItemArray, src, this->size_bytes());
+            }
+        } else {
+            for (int i = 0; i < this->count(); ++i) {
+                new (fItemArray + i) T(src[i]);
+            }
         }
     }
 
@@ -651,7 +653,7 @@ template<typename T, bool MEM_MOVE> constexpr int SkTArray<T, MEM_MOVE>::kMinHea
 /**
  * Subclass of SkTArray that contains a preallocated memory block for the array.
  */
-template <int N, typename T, bool MEM_MOVE = sk_is_trivially_relocatable<T>::value>
+template <int N, typename T, bool MEM_MOVE = sk_is_trivially_relocatable_v<T>>
 class SkSTArray : private SkAlignedSTStorage<N,T>, public SkTArray<T, MEM_MOVE> {
 private:
     using STORAGE   = SkAlignedSTStorage<N,T>;
