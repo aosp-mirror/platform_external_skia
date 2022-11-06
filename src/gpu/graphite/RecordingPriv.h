@@ -14,12 +14,21 @@ namespace skgpu::graphite {
 
 class RecordingPriv {
 public:
-    bool hasVolatileProxies() const;
-    bool instantiateVolatileProxies(ResourceProvider*);
-    void deinstantiateVolatileProxies();
+    bool hasVolatileLazyProxies() const;
+    bool instantiateVolatileLazyProxies(ResourceProvider*);
+    void deinstantiateVolatileLazyProxies();
+
+    bool hasNonVolatileLazyProxies() const;
+    bool instantiateNonVolatileLazyProxies(ResourceProvider*);
+
+#if GR_TEST_UTILS
+    int numVolatilePromiseImages() const;
+    int numNonVolatilePromiseImages() const;
+#endif
 
     bool addCommands(ResourceProvider*, CommandBuffer*);
     void addResourceRef(sk_sp<Resource> resource);
+
 
 private:
     explicit RecordingPriv(Recording* recorder) : fRecording(recorder) {}
