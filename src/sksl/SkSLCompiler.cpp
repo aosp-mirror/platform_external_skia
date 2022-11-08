@@ -469,9 +469,7 @@ static bool validate_spirv(ErrorReporter& reporter, std::string_view program) {
     spvtools::SpirvTools tools(SPV_ENV_VULKAN_1_0);
     std::string errors;
     auto msgFn = [&errors](spv_message_level_t, const char*, const spv_position_t&, const char* m) {
-        errors += "SPIR-V validation error: ";
-        errors += m;
-        errors += '\n';
+        String::appendf(&errors, "SPIR-V validation error: %s\n", m);
     };
     tools.SetMessageConsumer(msgFn);
 

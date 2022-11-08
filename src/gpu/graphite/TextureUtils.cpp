@@ -182,9 +182,7 @@ bool ReadPixelsHelper(FlushPendingWorkCallback&& flushPendingWork,
     }
     InsertRecordingInfo info;
     info.fRecording = recording.get();
-    if (!context->insertRecording(info)) {
-        return false;
-    }
+    context->insertRecording(info);
     context->submit(SyncToCpu::kYes);
 
     void* mappedMemory = dstBuffer->map();

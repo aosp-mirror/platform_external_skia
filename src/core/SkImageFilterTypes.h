@@ -353,7 +353,6 @@ public:
     LayerSpace() = default;
     explicit LayerSpace(const SkIRect& geometry) : fData(geometry) {}
     explicit LayerSpace(SkIRect&& geometry) : fData(std::move(geometry)) {}
-    explicit LayerSpace(const SkISize& size) : fData(SkIRect::MakeSize(size)) {}
     explicit operator const SkIRect&() const { return fData; }
 
     static LayerSpace<SkIRect> Empty() { return LayerSpace<SkIRect>(SkIRect::MakeEmpty()); }
@@ -601,9 +600,10 @@ public:
             : fImage(std::move(image))
             , fSamplingOptions(kDefaultSampling)
             , fTransform(SkMatrix::Translate(origin.x(), origin.y()))
-            , fLayerBounds(
-                    fTransform.mapRect(LayerSpace<SkIRect>(fImage ? fImage->dimensions()
-                                                                  : SkISize{0, 0}))) {}
+            , fLayerBounds(SkIRect::MakeXYWH(origin.x(),
+                                             origin.y(),
+                                             fImage ? fImage->width() : 0,
+                                             fImage ? fImage->height() : 0)) {}
 
     explicit operator bool() const { return SkToBool(fImage); }
 

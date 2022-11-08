@@ -8,13 +8,13 @@
 #include "tools/SkGetExecutablePath.h"
 #include <mach-o/dyld.h>
 
-std::string SkGetExecutablePath() {
+SkString SkGetExecutablePath() {
     uint32_t size = 0;
     _NSGetExecutablePath(nullptr, &size);
 
-    std::string result(size, '\0');
+    SkString result(/*text=*/nullptr, size);
     if (_NSGetExecutablePath(result.data(), &size) != 0) {
-        result.clear();
+        result.reset();
     }
     return result;
 }

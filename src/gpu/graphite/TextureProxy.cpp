@@ -59,13 +59,15 @@ bool TextureProxy::isVolatile() const {
 
 
 bool TextureProxy::instantiate(ResourceProvider* resourceProvider) {
-    SkASSERT(!this->isLazy());
-
     if (fTexture) {
         return true;
     }
-
-    fTexture = resourceProvider->findOrCreateScratchTexture(fDimensions, fInfo, fBudgeted);
+    if (this->isLazy()) {
+        SkASSERT(!this->isVolatile());  // this must be instantiated via volatileInstantiate
+        fTexture = fLazyInstantiateCallback(resourceProvider);
+    } else {
+        fTexture = resourceProvider->findOrCreateScratchTexture(fDimensions, fInfo, fBudgeted);
+    }
     if (!fTexture) {
         return false;
     }
@@ -73,12 +75,9 @@ bool TextureProxy::instantiate(ResourceProvider* resourceProvider) {
     return true;
 }
 
-bool TextureProxy::lazyInstantiate(ResourceProvider* resourceProvider) {
-    SkASSERT(this->isLazy());
-
-    if (fTexture) {
-        return true;
-    }
+bool TextureProxy::volatileInstantiate(ResourceProvider* resourceProvider) {
+    SkASSERT(this->isLazy() && this->isVolatile());
+    SkASSERT(!fTexture);
 
     fTexture = fLazyInstantiateCallback(resourceProvider);
     if (!fTexture) {
@@ -88,9 +87,9 @@ bool TextureProxy::lazyInstantiate(ResourceProvider* resourceProvider) {
     return true;
 }
 
-bool TextureProxy::InstantiateIfNotLazy(ResourceProvider* resourceProvider,
+bool TextureProxy::InstantiateIfNonVolatile(ResourceProvider* resourceProvider,
                                             TextureProxy* textureProxy) {
-    if (textureProxy->isLazy()) {
+    if (textureProxy->isVolatile()) {
         return true;
     }
 

@@ -58,10 +58,6 @@ constexpr SkColor4f kMutationColors[kNumMutations] = {
  *  b) They use separate recorders
  * The latter, obviously, requires more synchronization.
  */
-
-// Base class for the 3 mutation methods.
-//    init   - should create the SkImage that is going to be changing
-//    mutate - should change the contents of the SkImage
 class Mutator {
 public:
     Mutator(skiatest::Reporter* reporter, Recorder* recorder, bool withMips)
@@ -87,9 +83,6 @@ protected:
     sk_sp<SkImage> fMutatingImg; // needs to be created in the 'init' method
 };
 
-// This class puts the 3 mutation use cases through their paces.
-//    init - creates the single Recording that draws the mutator's image
-//    checkResult - verifies that replaying the Recording results in the expected/mutated color
 class Redrawer {
 public:
     Redrawer(skiatest::Reporter* reporter, Recorder* recorder)
@@ -194,8 +187,6 @@ void update_backend_texture(skiatest::Reporter* reporter,
 }
 
 // case 1 (AHBs)
-// To simulate the AHB use case this Mutator creates a BackendTexture and an SkImage that wraps
-// it. To mutate the SkImage it simply updates the BackendTexture.
 class UpdateBackendTextureMutator : public Mutator {
 public:
     static std::unique_ptr<Mutator> Make(skiatest::Reporter* reporter,
@@ -249,9 +240,6 @@ private:
 };
 
 // case 2 (Volatile Promise Images)
-// To simulate the hardware video decoder use case this Mutator creates a set of BackendTextures
-// and fills them w/ different colors. A single volatile Promise Image is created and is
-// fulfilled by the different BackendTextures.
 class VolatilePromiseImageMutator : public Mutator {
 public:
     static std::unique_ptr<Mutator> Make(skiatest::Reporter* reporter,
@@ -407,8 +395,6 @@ private:
 };
 
 // case 3 (Surface/Image pair)
-// This mutator creates an SkSurface/SkImage pair that share the same backend object.
-// Mutation is accomplished by simply drawing to the SkSurface.
 class SurfaceMutator : public Mutator {
 public:
     static std::unique_ptr<Mutator> Make(skiatest::Reporter* reporter,
@@ -471,7 +457,7 @@ void run_test(skiatest::Reporter* reporter,
 
     {
         std::unique_ptr<Recording> imgCreationRecording = mutator->init(caps);
-        REPORTER_ASSERT(reporter, context->insertRecording({ imgCreationRecording.get() }));
+        context->insertRecording({ imgCreationRecording.get() });
     }
 
     {
@@ -479,7 +465,7 @@ void run_test(skiatest::Reporter* reporter,
 
         redrawer.init(mutator->getMutatingImage());
 
-        REPORTER_ASSERT(reporter, context->insertRecording({ redrawer.imgDrawRecording() }));
+        context->insertRecording({ redrawer.imgDrawRecording() });
         redrawer.checkResult(context, mutator->getCase(),
                              useTwoRecorders, withMips, kInitialColor);
 
@@ -487,12 +473,11 @@ void run_test(skiatest::Reporter* reporter,
             {
                 std::unique_ptr<Recording> imgMutationRecording = mutator->mutate(i);
                 if (imgMutationRecording) {
-                    REPORTER_ASSERT(reporter,
-                                    context->insertRecording({imgMutationRecording.get()}));
+                    context->insertRecording({imgMutationRecording.get()});
                 }
             }
 
-            REPORTER_ASSERT(reporter, context->insertRecording({ redrawer.imgDrawRecording() }));
+            context->insertRecording({ redrawer.imgDrawRecording() });
             redrawer.checkResult(context, mutator->getCase(),
                                  useTwoRecorders, withMips, kMutationColors[i]);
         }

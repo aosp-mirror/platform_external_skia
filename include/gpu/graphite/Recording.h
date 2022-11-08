@@ -40,9 +40,7 @@ private:
         }
     };
 
-    Recording(std::unique_ptr<TaskGraph>,
-              std::unordered_set<sk_sp<TextureProxy>, ProxyHash>&& nonVolatileLazyProxies,
-              std::unordered_set<sk_sp<TextureProxy>, ProxyHash>&& volatileLazyProxies);
+    Recording(std::unique_ptr<TaskGraph>, std::unordered_set<sk_sp<TextureProxy>, ProxyHash>&&);
 
     bool addCommands(CommandBuffer*, ResourceProvider*);
     void addResourceRef(sk_sp<Resource>);
@@ -54,8 +52,10 @@ private:
     // when the Recording adds its commands.
     std::vector<sk_sp<Resource>> fExtraResourceRefs;
 
-    std::unordered_set<sk_sp<TextureProxy>, ProxyHash> fNonVolatileLazyProxies;
-    std::unordered_set<sk_sp<TextureProxy>, ProxyHash> fVolatileLazyProxies;
+    // TODO: Once things have settled down, reconsider this data structure based on Chrome's
+    // usage. If all Chrome's images are fulfilled at insert time, this data structure may be
+    // warranted otherwise a uniquified std::vector may suffice.
+    std::unordered_set<sk_sp<TextureProxy>, ProxyHash> fVolatileProxies;
 };
 
 } // namespace skgpu::graphite

@@ -39,15 +39,18 @@ public:
 
     bool instantiate(ResourceProvider*);
     /*
-     * We currently only instantiate lazy proxies at insertion-time. Snap-time 'instantiate'
-     * calls should be wrapped in 'InstantiateIfNotLazy'
+     * Volatile instantiation is kept separate from normal instantiation due to their different
+     * calling patterns. We don't ever want to instantiate a volatile proxy at snap time (with
+     * the normal instantiate call) but also only ever want to instantiate volatile proxies
+     * at insertion time. The two entry points isolate those two cases. Snap-time 'instantiate'
+     * calls should be wrapped in 'InstantiateIfNonVolatile'
      */
-    bool lazyInstantiate(ResourceProvider*);
+    bool volatileInstantiate(ResourceProvider*);
     /*
-     * For Lazy proxies this will return true. Otherwise, it will return the result of
+     * For Volatile proxies this will return true. Otherwise, it will return the result of
      * calling instantiate on the texture proxy.
      */
-    static bool InstantiateIfNotLazy(ResourceProvider*, TextureProxy*);
+    static bool InstantiateIfNonVolatile(ResourceProvider*, TextureProxy*);
     bool isInstantiated() const { return SkToBool(fTexture); }
     void deinstantiate();
     sk_sp<Texture> refTexture() const;
@@ -80,17 +83,15 @@ private:
     void validateTexture(const Texture*);
 #endif
 
-    // In the following, 'fVolatile' and 'fLazyInstantiateCallback' can be accessed from
-    // multiple threads so need to remain immutable.
     SkISize fDimensions;
-    const TextureInfo fInfo;
+    TextureInfo fInfo;
 
     SkBudgeted fBudgeted;
-    const Volatile fVolatile;
+    Volatile fVolatile;
 
     sk_sp<Texture> fTexture;
 
-    const LazyInstantiateCallback fLazyInstantiateCallback;
+    LazyInstantiateCallback fLazyInstantiateCallback;
 };
 
 } // namepsace skgpu::graphite

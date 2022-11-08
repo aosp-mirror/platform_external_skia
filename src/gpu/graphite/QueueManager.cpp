@@ -31,7 +31,7 @@ QueueManager::~QueueManager() {
     this->checkForFinishedWork(SyncToCpu::kYes);
 }
 
-bool QueueManager::addRecording(const InsertRecordingInfo& info,
+void QueueManager::addRecording(const InsertRecordingInfo& info,
                                 ResourceProvider* resourceProvider) {
     sk_sp<RefCntedCallback> callback;
     if (info.fFinishedProc) {
@@ -43,8 +43,8 @@ bool QueueManager::addRecording(const InsertRecordingInfo& info,
         if (callback) {
             callback->setFailureResult();
         }
-        SKGPU_LOG_E("No valid Recording passed into addRecording call");
-        return false;
+        SKGPU_LOG_W("No valid Recording passed into addRecording call");
+        return;
     }
 
     if (!fCurrentCommandBuffer) {
@@ -63,28 +63,16 @@ bool QueueManager::addRecording(const InsertRecordingInfo& info,
         if (callback) {
             callback->setFailureResult();
         }
-        SKGPU_LOG_E("CommandBuffer creation failed");
-        return false;
+        return;
     }
 
-    if (info.fRecording->priv().hasNonVolatileLazyProxies()) {
-        if (!info.fRecording->priv().instantiateNonVolatileLazyProxies(resourceProvider)) {
+    if (info.fRecording->priv().hasVolatileProxies()) {
+        if (!info.fRecording->priv().instantiateVolatileProxies(resourceProvider)) {
             if (callback) {
                 callback->setFailureResult();
             }
-            SKGPU_LOG_E("Non-volatile PromiseImage instantiation has failed");
-            return false;
-        }
-    }
-
-    if (info.fRecording->priv().hasVolatileLazyProxies()) {
-        if (!info.fRecording->priv().instantiateVolatileLazyProxies(resourceProvider)) {
-            if (callback) {
-                callback->setFailureResult();
-            }
-            info.fRecording->priv().deinstantiateVolatileLazyProxies();
-            SKGPU_LOG_E("Volatile PromiseImage instantiation has failed");
-            return false;
+            info.fRecording->priv().deinstantiateVolatileProxies();
+            return;
         }
     }
 
@@ -92,17 +80,15 @@ bool QueueManager::addRecording(const InsertRecordingInfo& info,
         if (callback) {
             callback->setFailureResult();
         }
-        info.fRecording->priv().deinstantiateVolatileLazyProxies();
-        SKGPU_LOG_E("Adding commands to the CommandBuffer has failed");
-        return false;
+        info.fRecording->priv().deinstantiateVolatileProxies();
+        return;
     }
 
     if (callback) {
         fCurrentCommandBuffer->addFinishedProc(std::move(callback));
     }
 
-    info.fRecording->priv().deinstantiateVolatileLazyProxies();
-    return true;
+    info.fRecording->priv().deinstantiateVolatileProxies();
 }
 
 bool QueueManager::submitToGpu() {

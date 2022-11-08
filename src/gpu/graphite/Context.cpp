@@ -144,10 +144,10 @@ std::unique_ptr<Recorder> Context::makeRecorder(const RecorderOptions& options) 
     return std::unique_ptr<Recorder>(new Recorder(fSharedContext, options));
 }
 
-bool Context::insertRecording(const InsertRecordingInfo& info) {
+void Context::insertRecording(const InsertRecordingInfo& info) {
     ASSERT_SINGLE_OWNER
 
-    return fQueueManager->addRecording(info, fResourceProvider.get());
+    fQueueManager->addRecording(info, fResourceProvider.get());
 }
 
 void Context::submit(SyncToCpu syncToCpu) {
@@ -192,7 +192,7 @@ void Context::asyncReadPixels(const SkSurface* surface,
     TextureProxy* proxy = proxyView.proxy();
 
     this->asyncReadPixels(proxy,
-                          surface->imageInfo(),
+                          const_cast<SkSurface*>(surface)->imageInfo(), // TODO: remove const_cast
                           dstColorInfo,
                           srcRect,
                           callback,

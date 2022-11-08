@@ -63,7 +63,6 @@ public:
 
     int width() const { return fSubset.width(); }
     int height() const { return fSubset.height(); }
-    SkISize dimensions() const { return { this->width(), this->height() }; }
     const SkIRect& subset() const { return fSubset; }
 
     uint32_t uniqueID() const { return fUniqueID; }

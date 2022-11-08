@@ -19,44 +19,23 @@
 namespace skgpu::graphite {
 
 Recording::Recording(std::unique_ptr<TaskGraph> graph,
-                     std::unordered_set<sk_sp<TextureProxy>, ProxyHash>&& nonVolatileLazyProxies,
-                     std::unordered_set<sk_sp<TextureProxy>, ProxyHash>&& volatileLazyProxies)
+                     std::unordered_set<sk_sp<TextureProxy>, ProxyHash>&& volatileProxies)
         : fGraph(std::move(graph))
-        , fNonVolatileLazyProxies(std::move(nonVolatileLazyProxies))
-        , fVolatileLazyProxies(std::move(volatileLazyProxies)) {
+        , fVolatileProxies(std::move(volatileProxies)) {
 }
 
 Recording::~Recording() {}
 
 ////////////////////////////////////////////////////////////////////////////////
-bool RecordingPriv::hasNonVolatileLazyProxies() const {
-    return !fRecording->fNonVolatileLazyProxies.empty();
+bool RecordingPriv::hasVolatileProxies() const {
+    return !fRecording->fVolatileProxies.empty();
 }
 
-bool RecordingPriv::instantiateNonVolatileLazyProxies(ResourceProvider* resourceProvider) {
-    SkASSERT(this->hasNonVolatileLazyProxies());
+bool RecordingPriv::instantiateVolatileProxies(ResourceProvider* resourceProvider) {
+    SkASSERT(this->hasVolatileProxies());
 
-    for (auto proxy : fRecording->fNonVolatileLazyProxies) {
-        if (!proxy->lazyInstantiate(resourceProvider)) {
-            return false;
-        }
-    }
-
-    // Note: once all the lazy proxies have been instantiated, that's it - there are no more
-    // chances to instantiate.
-    fRecording->fNonVolatileLazyProxies.clear();
-    return true;
-}
-
-bool RecordingPriv::hasVolatileLazyProxies() const {
-    return !fRecording->fVolatileLazyProxies.empty();
-}
-
-bool RecordingPriv::instantiateVolatileLazyProxies(ResourceProvider* resourceProvider) {
-    SkASSERT(this->hasVolatileLazyProxies());
-
-    for (auto proxy : fRecording->fVolatileLazyProxies) {
-        if (!proxy->lazyInstantiate(resourceProvider)) {
+    for (auto proxy : fRecording->fVolatileProxies) {
+        if (!proxy->volatileInstantiate(resourceProvider)) {
             return false;
         }
     }
@@ -64,26 +43,16 @@ bool RecordingPriv::instantiateVolatileLazyProxies(ResourceProvider* resourcePro
     return true;
 }
 
-void RecordingPriv::deinstantiateVolatileLazyProxies() {
-    if (!this->hasVolatileLazyProxies()) {
+void RecordingPriv::deinstantiateVolatileProxies() {
+    if (!this->hasVolatileProxies()) {
         return;
     }
 
-    for (auto proxy : fRecording->fVolatileLazyProxies) {
+    for (auto proxy : fRecording->fVolatileProxies) {
         SkASSERT(proxy->isVolatile());
         proxy->deinstantiate();
     }
 }
-
-#if GR_TEST_UTILS
-int RecordingPriv::numVolatilePromiseImages() const {
-    return fRecording->fVolatileLazyProxies.size();
-}
-
-int RecordingPriv::numNonVolatilePromiseImages() const {
-    return fRecording->fNonVolatileLazyProxies.size();
-}
-#endif
 
 bool RecordingPriv::addCommands(ResourceProvider* resourceProvider, CommandBuffer* commandBuffer) {
     if (!fRecording->fGraph->addCommands(resourceProvider, commandBuffer)) {

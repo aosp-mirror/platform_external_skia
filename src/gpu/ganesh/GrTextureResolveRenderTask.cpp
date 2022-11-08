@@ -18,37 +18,24 @@ void GrTextureResolveRenderTask::addProxy(GrDrawingManager* drawingMgr,
                                           sk_sp<GrSurfaceProxy> proxyRef,
                                           GrSurfaceProxy::ResolveFlags flags,
                                           const GrCaps& caps) {
-    GrSurfaceProxy::ResolveFlags newFlags = flags;
+    Resolve& resolve = fResolves.emplace_back(flags);
     GrSurfaceProxy* proxy = proxyRef.get();
-    Resolve* resolve;
-    bool newProxy = false;
 
-    // We might just need to update the flags for an existing dependency.
-    if (auto found = std::find(fTargets.begin(), fTargets.end(), proxyRef);
-        found != fTargets.end()) {
-        size_t index = found - fTargets.begin();
-        resolve = &fResolves[index];
-        newFlags = ~resolve->fFlags & flags;
-        resolve->fFlags |= flags;
-    } else {
-        // Ensure the last render task that operated on the proxy is closed. That's where msaa and
-        // mipmaps should have been marked dirty.
-        SkASSERT(!drawingMgr->getLastRenderTask(proxy)
-                 || drawingMgr->getLastRenderTask(proxy)->isClosed());
-        SkASSERT(GrSurfaceProxy::ResolveFlags::kNone != flags);
-        resolve = &fResolves.emplace_back(flags);
-        newProxy = true;
-    }
+    // Ensure the last render task that operated on the proxy is closed. That's where msaa and
+    // mipmaps should have been marked dirty.
+    SkASSERT(!drawingMgr->getLastRenderTask(proxy)
+             || drawingMgr->getLastRenderTask(proxy)->isClosed());
+    SkASSERT(GrSurfaceProxy::ResolveFlags::kNone != flags);
 
-    if (GrSurfaceProxy::ResolveFlags::kMSAA & newFlags) {
+    if (GrSurfaceProxy::ResolveFlags::kMSAA & flags) {
         GrRenderTargetProxy* renderTargetProxy = proxy->asRenderTargetProxy();
         SkASSERT(renderTargetProxy);
         SkASSERT(renderTargetProxy->isMSAADirty());
-        resolve->fMSAAResolveRect = renderTargetProxy->msaaDirtyRect();
+        resolve.fMSAAResolveRect = renderTargetProxy->msaaDirtyRect();
         renderTargetProxy->markMSAAResolved();
     }
 
-    if (GrSurfaceProxy::ResolveFlags::kMipMaps & newFlags) {
+    if (GrSurfaceProxy::ResolveFlags::kMipMaps & flags) {
         GrTextureProxy* textureProxy = proxy->asTextureProxy();
         SkASSERT(GrMipmapped::kYes == textureProxy->mipmapped());
         SkASSERT(textureProxy->mipmapsAreDirty());
@@ -56,18 +43,11 @@ void GrTextureResolveRenderTask::addProxy(GrDrawingManager* drawingMgr,
         SkDEBUGCODE(textureProxy->needsMipmapRegen(drawingMgr->flushNumber());)
     }
 
-    // We must do this after updating the proxy state because of assertions that the proxy isn't
-    // dirty.
-    if (newProxy) {
-        // Add the proxy as a dependency: We will read the existing contents of this texture while
-        // generating mipmap levels and/or resolving MSAA.
-        this->addDependency(drawingMgr,
-                            proxy,
-                            GrMipmapped::kNo,
-                            GrTextureResolveManager(nullptr),
-                            caps);
-        this->addTarget(drawingMgr, GrSurfaceProxyView(std::move(proxyRef)));
-    }
+    // Add the proxy as a dependency: We will read the existing contents of this texture while
+    // generating mipmap levels and/or resolving MSAA.
+    this->addDependency(drawingMgr, proxy, GrMipmapped::kNo,
+                        GrTextureResolveManager(nullptr), caps);
+    this->addTarget(drawingMgr, GrSurfaceProxyView(std::move(proxyRef)));
 }
 
 void GrTextureResolveRenderTask::gatherProxyIntervals(GrResourceAllocator* alloc) const {
@@ -117,15 +97,4 @@ bool GrTextureResolveRenderTask::onExecute(GrOpFlushState* flushState) {
 
 #ifdef SK_DEBUG
 void GrTextureResolveRenderTask::visitProxies_debugOnly(const GrVisitProxyFunc&) const {}
-#endif
-
-#if GR_TEST_UTILS
-GrSurfaceProxy::ResolveFlags
-GrTextureResolveRenderTask::flagsForProxy(sk_sp<GrSurfaceProxy> proxy) const {
-    if (auto found = std::find(fTargets.begin(), fTargets.end(), proxy);
-        found != fTargets.end()) {
-        return fResolves[found - fTargets.begin()].fFlags;
-    }
-    return GrSurfaceProxy::ResolveFlags::kNone;
-}
 #endif

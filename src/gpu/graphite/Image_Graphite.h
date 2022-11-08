@@ -89,7 +89,8 @@ public:
 
     TextureProxyView textureProxyView() const { return fTextureProxyView; }
 
-    static sk_sp<TextureProxy> MakePromiseImageLazyProxy(SkISize dimensions,
+    static sk_sp<TextureProxy> MakePromiseImageLazyProxy(Recorder*,
+                                                         SkISize dimensions,
                                                          TextureInfo,
                                                          Volatile,
                                                          GraphitePromiseImageFulfillProc,

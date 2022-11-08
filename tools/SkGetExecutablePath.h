@@ -11,6 +11,6 @@
 #include "include/core/SkString.h"
 
 /** Returns a fully-qualified path to the currently-running executable. */
-std::string SkGetExecutablePath();
+SkString SkGetExecutablePath();
 
 #endif
