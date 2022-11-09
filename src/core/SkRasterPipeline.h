@@ -144,8 +144,8 @@ struct SkRasterPipeline_GatherCtx {
     int         stride;
     float       width;
     float       height;
-
     float       weights[16];  // for bicubic and bicubic_clamp_8888
+    int         coordBiasInULPs = 0;
 };
 
 // State shared by save_xy, accumulate, and bilinear_* / bicubic_*.
@@ -225,6 +225,10 @@ struct SkRasterPipeline_EmbossCtx {
                                add;
 };
 
+struct SkRasterPipeline_TablesCtx {
+    const uint8_t *r, *g, *b, *a;
+};
+
 class SkRasterPipeline {
 public:
     explicit SkRasterPipeline(SkArenaAlloc*);
@@ -300,6 +304,9 @@ private:
         Stage      stage;
         void*      ctx;
     };
+
+    bool build_lowp_pipeline(void** ip) const;
+    void build_highp_pipeline(void** ip) const;
 
     using StartPipelineFn = void(*)(size_t,size_t,size_t,size_t, void** program);
     StartPipelineFn build_pipeline(void**) const;
