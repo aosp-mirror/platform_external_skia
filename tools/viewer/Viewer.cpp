@@ -319,10 +319,6 @@ static Window::BackendType backend_type_for_window(Window::BackendType backendTy
 }
 
 class NullSlide : public Slide {
-    SkISize getDimensions() const override {
-        return SkISize::Make(640, 480);
-    }
-
     void draw(SkCanvas* canvas) override {
         canvas->clear(0xffff11ff);
     }
@@ -775,12 +771,12 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
 }
 
 void Viewer::initSlides() {
-    using SlideFactory = sk_sp<Slide>(*)(const SkString& name, const SkString& path);
+    using SlideMaker = sk_sp<Slide> (*)(const SkString& name, const SkString& path);
     static const struct {
         const char*                            fExtension;
         const char*                            fDirName;
         const CommandLineFlags::StringArray&   fFlags;
-        const SlideFactory                     fFactory;
+        const SlideMaker                       fFactory;
     } gExternalSlidesInfo[] = {
         { ".mskp", "mskp-dir", FLAGS_mskps,
           [](const SkString& name, const SkString& path) -> sk_sp<Slide> {
@@ -818,17 +814,16 @@ void Viewer::initSlides() {
 
     SkTArray<sk_sp<Slide>> dirSlides;
 
-    const auto addSlide =
-            [&](const SkString& name, const SkString& path, const SlideFactory& fact) {
-                if (CommandLineFlags::ShouldSkip(FLAGS_match, name.c_str())) {
-                    return;
-                }
+    const auto addSlide = [&](const SkString& name, const SkString& path, const SlideMaker& fact) {
+        if (CommandLineFlags::ShouldSkip(FLAGS_match, name.c_str())) {
+            return;
+        }
 
-                if (auto slide = fact(name, path)) {
-                    dirSlides.push_back(slide);
-                    fSlides.push_back(std::move(slide));
-                }
-            };
+        if (auto slide = fact(name, path)) {
+            dirSlides.push_back(slide);
+            fSlides.push_back(std::move(slide));
+        }
+    };
 
     if (!FLAGS_file.isEmpty()) {
         // single file mode
@@ -887,16 +882,15 @@ void Viewer::initSlides() {
         }
     }
 
-    std::sort(fSlides.begin() + firstSample, fSlides.end(), orderBySlideName);
-
-    // Particle demo
-    {
-        // TODO: Convert this to a sample
-        auto slide = sk_make_sp<ParticlesSlide>();
+    // Registered slides are replacing Samples.
+    for (const SlideFactory& factory : SlideRegistry::Range()) {
+        auto slide = sk_sp<Slide>(factory());
         if (!CommandLineFlags::ShouldSkip(FLAGS_match, slide->getName().c_str())) {
-            fSlides.push_back(std::move(slide));
+            fSlides.push_back(slide);
         }
     }
+
+    std::sort(fSlides.begin() + firstSample, fSlides.end(), orderBySlideName);
 
     // Runtime shader editor
     {
@@ -1194,14 +1188,20 @@ void Viewer::setCurrentSlide(int slide) {
     this->setupCurrentSlide();
 }
 
+SkISize Viewer::currentSlideSize() const {
+    if (auto size = fSlides[fCurrentSlide]->getDimensions(); !size.isEmpty()) {
+        return size;
+    }
+    return {fWindow->width(), fWindow->height()};
+}
+
 void Viewer::setupCurrentSlide() {
     if (fCurrentSlide >= 0) {
         // prepare dimensions for image slides
         fGesture.resetTouchState();
         fDefaultMatrix.reset();
 
-        const SkISize slideSize = fSlides[fCurrentSlide]->getDimensions();
-        const SkRect slideBounds = SkRect::MakeIWH(slideSize.width(), slideSize.height());
+        const SkRect slideBounds = SkRect::Make(this->currentSlideSize());
         const SkRect windowRect = SkRect::MakeIWH(fWindow->width(), fWindow->height());
 
         // Start with a matrix that scales the slide to the available screen space
@@ -1235,8 +1235,7 @@ void Viewer::changeZoomLevel(float delta) {
 
 void Viewer::preTouchMatrixChanged() {
     // Update the trans limit as the transform changes.
-    const SkISize slideSize = fSlides[fCurrentSlide]->getDimensions();
-    const SkRect slideBounds = SkRect::MakeIWH(slideSize.width(), slideSize.height());
+    const SkRect slideBounds = SkRect::Make(this->currentSlideSize());
     const SkRect windowRect = SkRect::MakeIWH(fWindow->width(), fWindow->height());
     fGesture.setTransLimit(slideBounds, windowRect, this->computePreTouchMatrix());
 }
@@ -1265,7 +1264,7 @@ SkMatrix Viewer::computePreTouchMatrix() {
     m.preTranslate((fOffset.x() - 0.5f) * 2.0f, (fOffset.y() - 0.5f) * 2.0f);
     m.preScale(zoomScale, zoomScale);
 
-    const SkISize slideSize = fSlides[fCurrentSlide]->getDimensions();
+    const SkISize slideSize = this->currentSlideSize();
     m.preRotate(fRotation, slideSize.width() * 0.5f, slideSize.height() * 0.5f);
 
     if (kPerspective_Real == fPerspectiveMode) {
@@ -1540,8 +1539,7 @@ void Viewer::drawSlide(SkSurface* surface) {
 
     if (fSaveToSKP) {
         SkPictureRecorder recorder;
-        SkCanvas* recorderCanvas = recorder.beginRecording(
-                SkRect::Make(fSlides[fCurrentSlide]->getDimensions()));
+        SkCanvas* recorderCanvas = recorder.beginRecording(SkRect::Make(this->currentSlideSize()));
         fSlides[fCurrentSlide]->draw(fWindow->graphiteContext(), recorderCanvas);
         sk_sp<SkPicture> picture(recorder.finishRecordingAsPicture());
         SkFILEWStream stream("sample_app.skp");
@@ -1596,8 +1594,7 @@ void Viewer::drawSlide(SkSurface* surface) {
     SkCanvas* recorderRestoreCanvas = nullptr;
     if (fDrawViaSerialize) {
         recorderRestoreCanvas = slideCanvas;
-        slideCanvas = recorder.beginRecording(
-                SkRect::Make(fSlides[fCurrentSlide]->getDimensions()));
+        slideCanvas = recorder.beginRecording(SkRect::Make(this->currentSlideSize()));
     }
 
     int count = slideCanvas->save();
@@ -1677,7 +1674,7 @@ void Viewer::drawSlide(SkSurface* surface) {
         SkCanvas* canvas = surface->getCanvas();
         SkAutoCanvasRestore acr(canvas, true);
         canvas->concat(this->computeMatrix());
-        SkRect r = SkRect::Make(fSlides[fCurrentSlide]->getDimensions());
+        SkRect r = SkRect::Make(this->currentSlideSize());
         SkPaint paint;
         paint.setColor(0x40FFFF00);
         canvas->drawRect(r, paint);
