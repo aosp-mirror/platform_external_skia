@@ -359,17 +359,9 @@ bool Device::readPixels(Context* context,
                         const SkPixmap& pm,
                         int srcX,
                         int srcY) {
-    return ReadPixelsHelper([this]() {
-                                this->flushPendingWorkToRecorder();
-                            },
-                            context,
-                            recorder,
-                            fDC->target(),
-                            pm.info(),
-                            pm.writable_addr(),
-                            pm.rowBytes(),
-                            srcX,
-                            srcY);
+    this->flushPendingWorkToRecorder();
+    return context->priv().readPixels(recorder, pm, fDC->target(), this->imageInfo(),
+                                      srcX, srcY);
 }
 
 void Device::asyncRescaleAndReadPixels(const SkImageInfo& info,
@@ -859,6 +851,15 @@ void Device::drawGeometry(const Transform& localToDevice,
 
     // A draw's order always depends on the clips that must be drawn before it
     order.dependsOnPaintersOrder(clipOrder);
+
+    // A primitive blender should be ignored if there is no primitive color to blend against.
+    // Additionally, if a renderer emits a primitive color, then a null primitive blender should
+    // be interpreted as SrcOver blending mode.
+    if (!renderer->emitsPrimitiveColor()) {
+        primitiveBlender = nullptr;
+    } else if (!SkToBool(primitiveBlender)) {
+        primitiveBlender = SkBlender::Mode(SkBlendMode::kSrcOver);
+    }
 
     // If a draw is not opaque, it must be drawn after the most recent draw it intersects with in
     // order to blend correctly. We always query the most recent draw (even when opaque) because it
