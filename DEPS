@@ -4,7 +4,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling different
   # dependencies without interference from each other.
-  'sk_tool_revision': 'git_revision:08cd03bf8928e05f1a26790a31ae7d87d895fda5',
+  'sk_tool_revision': 'git_revision:8435dd2eee4a9280f3420fdc0b85162942979aa1',
 }
 
 # If you modify this file, you will need to regenerate the Bazel version of this file (bazel/deps.bzl).
@@ -52,7 +52,7 @@ deps = {
   "third_party/externals/vulkanmemoryallocator"  : "https://chromium.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator@7de5cc00de50e71a3aab22dea52fbb7ff4efceb6",
   # vulkan-deps is a meta-repo containing several interdependent Khronos Vulkan repositories.
   # When the vulkan-deps revision is updated, those repos (spirv-*, vulkan-*) should be updated as well.
-  "third_party/externals/vulkan-deps"            : "https://chromium.googlesource.com/vulkan-deps@69432a484d62fcdd56ca848a62374a06a448281e",
+  "third_party/externals/vulkan-deps"            : "https://chromium.googlesource.com/vulkan-deps@fa88fa5cf547ebe3b927a7323a380f4701a56aca",
   "third_party/externals/spirv-cross"            : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@edd66a2fc9e932ad0d3dce78f2627eeae91c2660",
   "third_party/externals/spirv-headers"          : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@47f2465ee3e78ec5ec38f00b2c405d9475797228",
   "third_party/externals/spirv-tools"            : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@a8647f59c0b903454b4453acfd8c30e6da6797a8",
