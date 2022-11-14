@@ -15,6 +15,7 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/SkHalf.h"
+#include "include/private/SkSLProgramKind.h"
 #include "include/private/SkTemplates.h"
 #include "include/private/SkTo.h"
 #include "src/core/SkAutoMalloc.h"
@@ -44,6 +45,7 @@
 #include "src/gpu/ganesh/gl/GrGLTextureRenderTarget.h"
 #include "src/gpu/ganesh/gl/builders/GrGLShaderStringBuilder.h"
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLProgramSettings.h"
 
 #include <cmath>
 #include <memory>
@@ -1105,7 +1107,7 @@ bool GrGLGpu::uploadColorToTex(GrGLFormat textureFormat,
         }
     }
     this->uploadTexData(texDims, target, SkIRect::MakeSize(texDims), externalFormat, externalType,
-                        bpp, levels.begin(), levels.count());
+                        bpp, levels.begin(), levels.size());
     return true;
 }
 
@@ -1713,7 +1715,7 @@ int GrGLGpu::getCompatibleStencilIndex(GrGLFormat format) {
         GL_CALL(GenRenderbuffers(1, &sbRBID));
 
         // look over formats till I find a compatible one
-        int stencilFmtCnt = this->glCaps().stencilFormats().count();
+        int stencilFmtCnt = this->glCaps().stencilFormats().size();
         if (sbRBID) {
             GL_CALL(BindRenderbuffer(GR_GL_RENDERBUFFER, sbRBID));
             for (int i = 0; i < stencilFmtCnt && sbRBID; ++i) {
@@ -2179,11 +2181,11 @@ void GrGLGpu::endCommandBuffer(GrGLRenderTarget* rt, bool useMultisampleFBO,
 
         if (!discardAttachments.empty()) {
             if (GrGLCaps::kInvalidate_InvalidateFBType == this->glCaps().invalidateFBType()) {
-                GL_CALL(InvalidateFramebuffer(GR_GL_FRAMEBUFFER, discardAttachments.count(),
+                GL_CALL(InvalidateFramebuffer(GR_GL_FRAMEBUFFER, discardAttachments.size(),
                                               discardAttachments.begin()));
             } else {
                 SkASSERT(GrGLCaps::kDiscard_InvalidateFBType == this->glCaps().invalidateFBType());
-                GL_CALL(DiscardFramebuffer(GR_GL_FRAMEBUFFER, discardAttachments.count(),
+                GL_CALL(DiscardFramebuffer(GR_GL_FRAMEBUFFER, discardAttachments.size(),
                                            discardAttachments.begin()));
             }
         }

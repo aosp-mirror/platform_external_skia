@@ -18,10 +18,10 @@
 #include "src/core/SkVM.h"
 #include "src/core/SkWriteBuffer.h"
 
-#ifdef SK_ENABLE_SKSL
+#ifdef SK_GRAPHITE_ENABLED
 #include "src/core/SkKeyHelpers.h"
-#include "src/core/SkPaintParamsKey.h"
-#endif // SK_ENABLE_SKSL
+#include "src/gpu/graphite/PaintParamsKey.h"
+#endif // SK_GRAPHITE_ENABLED
 
 static bool is_alpha_unchanged(const float matrix[20]) {
     const float* srcA = matrix + 15;
@@ -47,10 +47,10 @@ public:
                                    const GrColorInfo&,
                                    const SkSurfaceProps&) const override;
 #endif
-#ifdef SK_ENABLE_SKSL
+#ifdef SK_GRAPHITE_ENABLED
     void addToKey(const SkKeyContext&,
-                  SkPaintParamsKeyBuilder*,
-                  SkPipelineDataGatherer*) const override;
+                  skgpu::graphite::PaintParamsKeyBuilder*,
+                  skgpu::graphite::PipelineDataGatherer*) const override;
 #endif
 
 private:
@@ -210,17 +210,17 @@ GrFPResult SkColorFilter_Matrix::asFragmentProcessor(std::unique_ptr<GrFragmentP
 
 #endif // SK_SUPPORT_GPU
 
-#ifdef SK_ENABLE_SKSL
+#ifdef SK_GRAPHITE_ENABLED
 void SkColorFilter_Matrix::addToKey(const SkKeyContext& keyContext,
-                                    SkPaintParamsKeyBuilder* builder,
-                                    SkPipelineDataGatherer* gatherer) const {
+                                    skgpu::graphite::PaintParamsKeyBuilder* builder,
+                                    skgpu::graphite::PipelineDataGatherer* gatherer) const {
     MatrixColorFilterBlock::MatrixColorFilterData matrixCFData(fMatrix,
                                                                fDomain == Domain::kHSLA);
 
     MatrixColorFilterBlock::BeginBlock(keyContext, builder, gatherer, matrixCFData);
     builder->endBlock();
 }
-#endif // SK_ENABLE_SKSL
+#endif // SK_GRAPHITE_ENABLED
 
 ///////////////////////////////////////////////////////////////////////////////
 

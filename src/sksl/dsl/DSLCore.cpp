@@ -16,6 +16,7 @@
 #include "include/sksl/DSLVar.h"
 #include "include/sksl/SkSLPosition.h"
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLModifiersPool.h"  // IWYU pragma: keep
 #include "src/sksl/SkSLPool.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLThreadContext.h"
@@ -273,9 +274,9 @@ public:
 
     static DSLStatement Switch(DSLExpression value, SkTArray<DSLCase> cases, Position pos) {
         ExpressionArray values;
-        values.reserve_back(cases.count());
+        values.reserve_back(cases.size());
         StatementArray caseBlocks;
-        caseBlocks.reserve_back(cases.count());
+        caseBlocks.reserve_back(cases.size());
         for (DSLCase& c : cases) {
             values.push_back(c.fValue.releaseIfPossible());
             caseBlocks.push_back(SkSL::Block::Make(Position(), std::move(c.fStatements),

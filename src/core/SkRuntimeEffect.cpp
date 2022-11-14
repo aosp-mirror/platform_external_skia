@@ -22,7 +22,6 @@
 #include "src/core/SkLRUCache.h"
 #include "src/core/SkMatrixProvider.h"
 #include "src/core/SkOpts.h"
-#include "src/core/SkPaintParamsKey.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkRuntimeEffectPriv.h"
@@ -31,7 +30,9 @@
 #include "src/core/SkWriteBuffer.h"
 #include "src/shaders/SkLocalMatrixShader.h"
 #include "src/sksl/SkSLAnalysis.h"
+#include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/analysis/SkSLProgramUsage.h"
 #include "src/sksl/codegen/SkSLVMCodeGenerator.h"
@@ -50,6 +51,10 @@
 #include "src/gpu/ganesh/effects/GrMatrixEffect.h"
 #include "src/gpu/ganesh/effects/GrSkSLFP.h"
 #include "src/image/SkImage_Gpu.h"
+#endif
+
+#ifdef SK_GRAPHITE_ENABLED
+#include "src/gpu/graphite/PaintParamsKey.h"
 #endif
 
 #include <algorithm>
@@ -373,11 +378,11 @@ SkRuntimeEffect::Result SkRuntimeEffect::MakeInternal(std::unique_ptr<SkSL::Prog
     }
 
     // Find 'main', then locate the sample coords parameter. (It might not be present.)
-    const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
+    const SkSL::FunctionDeclaration* main = program->getFunction("main");
     if (!main) {
         RETURN_FAILURE("missing 'main' function");
     }
-    const auto& mainParams = main->declaration().parameters();
+    const auto& mainParams = main->parameters();
     auto iter = std::find_if(mainParams.begin(), mainParams.end(), [](const SkSL::Variable* p) {
         return p->modifiers().fLayout.fBuiltin == SK_MAIN_COORDS_BUILTIN;
     });
@@ -408,7 +413,7 @@ SkRuntimeEffect::Result SkRuntimeEffect::MakeInternal(std::unique_ptr<SkSL::Prog
     }
 
     // Shaders are the only thing that cares about this, but it's inexpensive (and safe) to call.
-    if (SkSL::Analysis::ReturnsOpaqueColor(*main)) {
+    if (SkSL::Analysis::ReturnsOpaqueColor(*main->definition())) {
         flags |= kAlwaysOpaque_Flag;
     }
 
@@ -464,7 +469,7 @@ SkRuntimeEffect::Result SkRuntimeEffect::MakeInternal(std::unique_ptr<SkSL::Prog
 
     sk_sp<SkRuntimeEffect> effect(new SkRuntimeEffect(std::move(program),
                                                       options,
-                                                      *main,
+                                                      *main->definition(),
                                                       std::move(uniforms),
                                                       std::move(children),
                                                       std::move(sampleUsages),
@@ -938,11 +943,12 @@ static GrFPResult make_effect_fp(sk_sp<SkRuntimeEffect> effect,
 }
 #endif
 
+#ifdef SK_GRAPHITE_ENABLED
 static void add_children_to_key(SkSpan<const SkRuntimeEffect::ChildPtr> children,
                                 SkSpan<const SkRuntimeEffect::Child> childInfo,
                                 const SkKeyContext& keyContext,
-                                SkPaintParamsKeyBuilder* builder,
-                                SkPipelineDataGatherer* gatherer) {
+                                skgpu::graphite::PaintParamsKeyBuilder* builder,
+                                skgpu::graphite::PipelineDataGatherer* gatherer) {
     SkASSERT(children.size() == childInfo.size());
 
     for (size_t index = 0; index < children.size(); ++index) {
@@ -974,6 +980,7 @@ static void add_children_to_key(SkSpan<const SkRuntimeEffect::ChildPtr> children
         }
     }
 }
+#endif
 
 class RuntimeEffectVMCallbacks : public SkSL::SkVMCallbacks {
 public:
@@ -1073,15 +1080,17 @@ public:
     }
 #endif
 
+#ifdef SK_GRAPHITE_ENABLED
     void addToKey(const SkKeyContext& keyContext,
-                  SkPaintParamsKeyBuilder* builder,
-                  SkPipelineDataGatherer* gatherer) const override {
+                  skgpu::graphite::PaintParamsKeyBuilder* builder,
+                  skgpu::graphite::PipelineDataGatherer* gatherer) const override {
         RuntimeEffectBlock::BeginBlock(keyContext, builder, gatherer, {fEffect, fUniforms});
 
         add_children_to_key(fChildren, fEffect->children(), keyContext, builder, gatherer);
 
         builder->endBlock();
     }
+#endif
 
     bool onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override {
         return false;
@@ -1249,15 +1258,17 @@ public:
     }
 #endif
 
+#ifdef SK_GRAPHITE_ENABLED
     void addToKey(const SkKeyContext& keyContext,
-                  SkPaintParamsKeyBuilder* builder,
-                  SkPipelineDataGatherer* gatherer) const override {
+                  skgpu::graphite::PaintParamsKeyBuilder* builder,
+                  skgpu::graphite::PipelineDataGatherer* gatherer) const override {
         RuntimeEffectBlock::BeginBlock(keyContext, builder, gatherer, {fEffect, fUniforms});
 
         add_children_to_key(fChildren, fEffect->children(), keyContext, builder, gatherer);
 
         builder->endBlock();
     }
+#endif
 
     bool onAppendStages(const SkStageRec& rec) const override {
         return false;
@@ -1419,9 +1430,10 @@ public:
     }
 #endif
 
+#ifdef SK_GRAPHITE_ENABLED
     void addToKey(const SkKeyContext& keyContext,
-                  SkPaintParamsKeyBuilder* builder,
-                  SkPipelineDataGatherer* gatherer,
+                  skgpu::graphite::PaintParamsKeyBuilder* builder,
+                  skgpu::graphite::PipelineDataGatherer* gatherer,
                   bool primitiveColorBlender) const override {
         RuntimeEffectBlock::BeginBlock(keyContext, builder, gatherer, {fEffect, fUniforms});
 
@@ -1429,6 +1441,7 @@ public:
 
         builder->endBlock();
     }
+#endif
 
     void flatten(SkWriteBuffer& buffer) const override {
         buffer.writeString(fEffect->source().c_str());
