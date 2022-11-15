@@ -10,6 +10,7 @@
 #include "include/private/SkSLString.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
+#include "src/sksl/SkSLProgramSettings.h"
 
 namespace GrPersistentCacheUtils {
 
@@ -52,7 +53,7 @@ sk_sp<SkData> PackCachedShaders(SkFourByteTag shaderType,
             writer.writeBool(meta->fSettings->fUsePushConstants);
         }
 
-        writer.writeInt(meta->fAttributeNames.count());
+        writer.writeInt(meta->fAttributeNames.size());
         for (const auto& attr : meta->fAttributeNames) {
             writer.writeByteArray(attr.c_str(), attr.size());
         }

@@ -30,10 +30,10 @@ public:
 #if SK_SUPPORT_GPU
     std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs&) const override;
 #endif
-#ifdef SK_ENABLE_SKSL
+#ifdef SK_GRAPHITE_ENABLED
     void addToKey(const SkKeyContext&,
-                  SkPaintParamsKeyBuilder*,
-                  SkPipelineDataGatherer*) const override;
+                  skgpu::graphite::PaintParamsKeyBuilder*,
+                  skgpu::graphite::PipelineDataGatherer*) const override;
 #endif
 
     SkPictureShader(sk_sp<SkPicture>, SkTileMode, SkTileMode, SkFilterMode, const SkRect*);

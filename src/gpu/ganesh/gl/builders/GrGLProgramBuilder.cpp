@@ -8,6 +8,7 @@
 #include "src/gpu/ganesh/gl/builders/GrGLProgramBuilder.h"
 
 #include "include/gpu/GrDirectContext.h"
+#include "include/private/SkSLProgramKind.h"
 #include "src/core/SkAutoMalloc.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkTraceEvent.h"
@@ -24,6 +25,7 @@
 #include "src/gpu/ganesh/gl/GrGLGpu.h"
 #include "src/gpu/ganesh/gl/GrGLProgram.h"
 #include "src/gpu/ganesh/gl/builders/GrGLProgramBuilder.h"
+#include "src/sksl/SkSLProgramSettings.h"
 #include "src/utils/SkShaderUtils.h"
 
 #include <memory>
@@ -535,7 +537,7 @@ bool GrGLProgramBuilder::PrecompileProgram(GrDirectContext* dContext,
         return false;
     }
 
-    for (int i = 0; i < meta.fAttributeNames.count(); ++i) {
+    for (int i = 0; i < meta.fAttributeNames.size(); ++i) {
         GR_GL_CALL(glGpu->glInterface(), BindAttribLocation(programID, i,
                                                           meta.fAttributeNames[i].c_str()));
     }

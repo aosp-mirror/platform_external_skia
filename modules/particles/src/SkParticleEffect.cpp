@@ -9,6 +9,7 @@
 
 #include "include/core/SkPaint.h"
 #include "include/private/SkOnce.h"
+#include "include/private/SkSLProgramKind.h"
 #include "include/private/SkTPin.h"
 #include "modules/particles/include/SkParticleBinding.h"
 #include "modules/particles/include/SkParticleDrawable.h"
@@ -18,8 +19,10 @@
 #include "src/core/SkPaintPriv.h"
 #include "src/core/SkVM.h"
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/codegen/SkSLVMCodeGenerator.h"
+#include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLProgram.h"
 
 // Cached state for a single program (either all Effect code, or all Particle code)
@@ -170,7 +173,7 @@ void SkParticleEffectParams::prepare(const skresources::ResourceProvider* resour
         // For each entry point, convert to an skvm::Program. We need a fresh Builder and uniform
         // IDs (though we can reuse the Uniforms object, thanks to how it works).
         auto buildFunction = [&](const char* name){
-            auto fn = SkSL::Program_GetFunction(*program, name);
+            const SkSL::FunctionDeclaration* fn = program->getFunction(name);
             if (!fn) {
                 return skvm::Program{};
             }
@@ -184,7 +187,7 @@ void SkParticleEffectParams::prepare(const skresources::ResourceProvider* resour
             for (int i = 0; i < uniformInfo->fUniformSlotCount; ++i) {
                 uniformIDs.push_back(b.uniform32(skslUniformPtr, i * sizeof(int)).id);
             }
-            if (!SkSL::ProgramToSkVM(*program, *fn, &b, /*debugTrace=*/nullptr,
+            if (!SkSL::ProgramToSkVM(*program, *fn->definition(), &b, /*debugTrace=*/nullptr,
                                      SkSpan(uniformIDs))) {
                 return skvm::Program{};
             }
@@ -233,8 +236,8 @@ void SkParticleEffect::updateStorage() {
     // Ensure our storage block for uniforms is large enough
     if (this->uniformInfo()) {
         int newCount = this->uniformInfo()->fUniformSlotCount;
-        if (newCount > fUniforms.count()) {
-            fUniforms.push_back_n(newCount - fUniforms.count(), 0.0f);
+        if (newCount > fUniforms.size()) {
+            fUniforms.push_back_n(newCount - fUniforms.size(), 0.0f);
         } else {
             fUniforms.resize(newCount);
         }
