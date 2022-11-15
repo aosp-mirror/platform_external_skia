@@ -16,9 +16,9 @@
 #include "src/gpu/ganesh/effects/GrMatrixEffect.h"
 #endif
 
-#ifdef SK_ENABLE_SKSL
+#ifdef SK_GRAPHITE_ENABLED
 #include "src/core/SkKeyHelpers.h"
-#include "src/core/SkPaintParamsKey.h"
+#include "src/gpu/graphite/PaintParamsKey.h"
 #endif
 
 SkShaderBase::GradientType SkLocalMatrixShader::asGradient(GradientInfo* info,
@@ -38,12 +38,12 @@ std::unique_ptr<GrFragmentProcessor> SkLocalMatrixShader::asFragmentProcessor(
 }
 #endif
 
-#ifdef SK_ENABLE_SKSL
+#ifdef SK_GRAPHITE_ENABLED
 #include "src/core/SkKeyContext.h"
 
 void SkLocalMatrixShader::addToKey(const SkKeyContext& keyContext,
-                                   SkPaintParamsKeyBuilder* builder,
-                                   SkPipelineDataGatherer* gatherer) const {
+                                   skgpu::graphite::PaintParamsKeyBuilder* builder,
+                                   skgpu::graphite::PipelineDataGatherer* gatherer) const {
     LocalMatrixShaderBlock::LMShaderData lmShaderData(fLocalMatrix);
 
     SkKeyContextWithLocalMatrix newContext(keyContext, fLocalMatrix);

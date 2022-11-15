@@ -25,9 +25,9 @@
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
 #endif
 
-#ifdef SK_ENABLE_SKSL
+#ifdef SK_GRAPHITE_ENABLED
 #include "src/core/SkKeyHelpers.h"
-#include "src/core/SkPaintParamsKey.h"
+#include "src/gpu/graphite/PaintParamsKey.h"
 #endif
 
 SkShaderBase::SkShaderBase() = default;
@@ -119,11 +119,11 @@ SkUpdatableShader* SkShaderBase::onUpdatableShader(SkArenaAlloc* alloc) const {
     return nullptr;
 }
 
-#ifdef SK_ENABLE_SKSL
+#ifdef SK_GRAPHITE_ENABLED
 // TODO: add implementations for derived classes
 void SkShaderBase::addToKey(const SkKeyContext& keyContext,
-                            SkPaintParamsKeyBuilder* builder,
-                            SkPipelineDataGatherer* gatherer) const {
+                            skgpu::graphite::PaintParamsKeyBuilder* builder,
+                            skgpu::graphite::PipelineDataGatherer* gatherer) const {
     SolidColorShaderBlock::BeginBlock(keyContext, builder, gatherer, {1, 0, 0, 1});
     builder->endBlock();
 }

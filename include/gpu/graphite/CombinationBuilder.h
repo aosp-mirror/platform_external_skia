@@ -23,8 +23,6 @@
 
 class SkArenaAllocWithReset;
 class SkKeyContext;
-class SkPaintParamsKeyBuilder;
-class SkShaderCodeDictionary;
 class SkUniquePaintParamsID;
 
 namespace skgpu::graphite {
@@ -33,6 +31,8 @@ class CombinationBuilder;
 class CombinationBuilderTestAccess;
 class Context;
 class Option;
+class PaintParamsKeyBuilder;
+class ShaderCodeDictionary;
 
 enum class ShaderType : uint32_t {
     kSolidColor,
@@ -76,8 +76,8 @@ public:
     }
 
 private:
-    friend class ::SkShaderCodeDictionary;   // for ctor and asUInt access
-    friend class CombinationBuilder;         // for asUInt access
+    friend class ShaderCodeDictionary;   // for ctor and asUInt access
+    friend class CombinationBuilder;     // for asUInt access
 
     BlenderID(uint32_t id) : fID(id) {}
 
@@ -128,7 +128,7 @@ public:
         kAll
     };
 
-    CombinationBuilder(SkShaderCodeDictionary*);
+    CombinationBuilder(ShaderCodeDictionary*);
     ~CombinationBuilder();
 
     // Blend Modes
@@ -158,7 +158,7 @@ private:
     }
 
     // 'desiredCombination' must be less than numCombinations
-    void createKey(const SkKeyContext&, int desiredCombination, SkPaintParamsKeyBuilder*);
+    void createKey(const SkKeyContext&, int desiredCombination, PaintParamsKeyBuilder*);
 
 #ifdef SK_DEBUG
     void dump() const;
@@ -174,10 +174,10 @@ private:
     Option* addOptionInternal(ShaderType, int minNumStops, int maxNumStops);
     Option* addOptionInternal(ShaderType, SkSpan<TileModePair> tileModes);
 
-    void buildCombinations(SkShaderCodeDictionary*,
+    void buildCombinations(ShaderCodeDictionary*,
                            const std::function<void(SkUniquePaintParamsID)>&);
 
-    SkShaderCodeDictionary* fDictionary;
+    ShaderCodeDictionary* fDictionary;
     std::unique_ptr<SkArenaAllocWithReset> fArena;
     SkTArray<Option*> fShaderOptions;
 
