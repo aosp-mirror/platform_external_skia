@@ -6,7 +6,7 @@
  */
 
 #include "src/core/SkArenaAlloc.h"
-#include "src/core/SkEffectPriv.h"
+#include "src/core/SkOpts.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/sksl/codegen/SkSLRasterPipelineBuilder.h"
 #include "tests/Test.h"
@@ -22,6 +22,12 @@ static SkSL::RP::SlotRange two_slots_at(SkSL::RP::Slot index) {
 
 static SkSL::RP::SlotRange four_slots_at(SkSL::RP::Slot index) {
     return SkSL::RP::SlotRange{index, 4};
+}
+
+template <typename T>
+static bool contains_value(void* ctx, T val) {
+    static_assert(sizeof(T) <= sizeof(void*));
+    return 0 == memcmp(&ctx, &val, sizeof(T));
 }
 
 DEF_TEST(RasterPipelineBuilder, r) {
@@ -62,7 +68,7 @@ DEF_TEST(RasterPipelineBuilder, r) {
     // they are all where we expect them to be.
     const auto* firstStage = stages;
     const float* slot0 = (const float*)firstStage->ctx;
-    constexpr int N = SkRasterPipeline_kMaxStride_highp;
+    const int N = SkOpts::raster_pipeline_highp_stride;
 
     stages = TestingOnly_SkRasterPipelineInspector::GetStageList(&pipeline);
     REPORTER_ASSERT(r, stages->ctx == slot0 + (3 * N));
@@ -78,4 +84,61 @@ DEF_TEST(RasterPipelineBuilder, r) {
     stages = stages->prev;
 
     REPORTER_ASSERT(r, stages->ctx == slot0 + (0 * N));
+}
+
+DEF_TEST(RasterPipelineBuilderImmediate, r) {
+    // Create a very simple nonsense program.
+    SkSL::RP::Builder builder;
+    builder.immediate_f(333.0f);
+    builder.immediate_f(0.0f);
+    builder.immediate_f(-5555.0f);
+    SkSL::RP::Program program = builder.finish();
+
+    // Instantiate this program.
+    SkArenaAlloc alloc(/*firstHeapAllocation=*/1000);
+    SkRasterPipeline pipeline(&alloc);
+    program.appendStages(&pipeline, &alloc);
+
+    // Double check that the resulting stage list contains the expected immediate values.
+    const auto* stages = TestingOnly_SkRasterPipelineInspector::GetStageList(&pipeline);
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::immediate_f);
+    REPORTER_ASSERT(r, contains_value<float>(stages->ctx, -5555.0f));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::immediate_f);
+    REPORTER_ASSERT(r, contains_value<float>(stages->ctx, 0.0f));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::immediate_f);
+    REPORTER_ASSERT(r, contains_value<float>(stages->ctx, 333.0f));
+}
+
+DEF_TEST(RasterPipelineBuilderStoreUnmasked, r) {
+    // Create a very simple nonsense program.
+    SkSL::RP::Builder builder;
+    builder.store_unmasked(12);
+    builder.store_unmasked(34);
+    builder.store_unmasked(0);
+    SkSL::RP::Program program = builder.finish();
+
+    // Instantiate this program.
+    SkArenaAlloc alloc(/*firstHeapAllocation=*/1000);
+    SkRasterPipeline pipeline(&alloc);
+    program.appendStages(&pipeline, &alloc);
+
+    // Double check that the resulting stage list contains the expected stores.
+    const auto* stages = TestingOnly_SkRasterPipelineInspector::GetStageList(&pipeline);
+    const float* slot0 = (const float*)stages->ctx;
+    const int N = SkOpts::raster_pipeline_highp_stride;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::store_unmasked);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (0 * N));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::store_unmasked);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (34 * N));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::store_unmasked);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (12 * N));
 }
