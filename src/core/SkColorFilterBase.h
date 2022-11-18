@@ -12,6 +12,8 @@
 #include "include/private/SkColorData.h"
 #include "src/core/SkVM_fwd.h"
 
+#include <memory>
+
 class GrColorInfo;
 class GrFragmentProcessor;
 class GrRecordingContext;
@@ -19,13 +21,13 @@ class SkArenaAlloc;
 class SkBitmap;
 class SkColorInfo;
 class SkColorSpace;
-class SkKeyContext;
 class SkRuntimeEffect;
 class SkSurfaceProps;
 struct SkStageRec;
 using GrFPResult = std::tuple<bool, std::unique_ptr<GrFragmentProcessor>>;
 
 namespace skgpu::graphite {
+class KeyContext;
 class PaintParamsKeyBuilder;
 class PipelineDataGatherer;
 }
@@ -91,7 +93,7 @@ public:
         @param builder    builder for creating the key for this SkShader
         @param gatherer   if non-null, storage for this colorFilter's data
     */
-    virtual void addToKey(const SkKeyContext& keyContext,
+    virtual void addToKey(const skgpu::graphite::KeyContext& keyContext,
                           skgpu::graphite::PaintParamsKeyBuilder* builder,
                           skgpu::graphite::PipelineDataGatherer* gatherer) const;
 #endif
