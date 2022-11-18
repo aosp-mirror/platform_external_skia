@@ -99,6 +99,8 @@ DEF_TEST(RasterPipelineBuilderImmediate, r) {
     builder.immediate_f(333.0f);
     builder.immediate_f(0.0f);
     builder.immediate_f(-5555.0f);
+    builder.immediate_i(-123);
+    builder.immediate_u(456);
     std::unique_ptr<SkSL::RP::Program> program = builder.finish();
 
     // Instantiate this program.
@@ -108,6 +110,14 @@ DEF_TEST(RasterPipelineBuilderImmediate, r) {
 
     // Double check that the resulting stage list contains the expected immediate values.
     const auto* stages = TestingOnly_SkRasterPipelineInspector::GetStageList(&pipeline);
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::immediate_f);
+    REPORTER_ASSERT(r, contains_value<uint32_t>(stages->ctx, 456));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::immediate_f);
+    REPORTER_ASSERT(r, contains_value<int32_t>(stages->ctx, -123));
+    stages = stages->prev;
+
     REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::immediate_f);
     REPORTER_ASSERT(r, contains_value<float>(stages->ctx, -5555.0f));
     stages = stages->prev;
@@ -120,11 +130,12 @@ DEF_TEST(RasterPipelineBuilderImmediate, r) {
     REPORTER_ASSERT(r, contains_value<float>(stages->ctx, 333.0f));
 }
 
-DEF_TEST(RasterPipelineBuilderStoreUnmasked, r) {
+DEF_TEST(RasterPipelineBuilderLoadStoreUnmasked, r) {
     // Create a very simple nonsense program.
     SkSL::RP::Builder builder;
-    builder.store_unmasked(12);
+    builder.load_unmasked(12);
     builder.store_unmasked(34);
+    builder.store_unmasked(56);
     builder.store_unmasked(0);
     std::unique_ptr<SkSL::RP::Program> program = builder.finish();
 
@@ -143,9 +154,89 @@ DEF_TEST(RasterPipelineBuilderStoreUnmasked, r) {
     stages = stages->prev;
 
     REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::store_unmasked);
-    REPORTER_ASSERT(r, stages->ctx == slot0 + (34 * N));
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (56 * N));
     stages = stages->prev;
 
     REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::store_unmasked);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (34 * N));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::load_unmasked);
     REPORTER_ASSERT(r, stages->ctx == slot0 + (12 * N));
+}
+
+DEF_TEST(RasterPipelineBuilderPushPopConditionMask, r) {
+    // Create a very simple nonsense program.
+    SkSL::RP::Builder builder;
+    builder.push_condition_mask(); // push into 100
+    builder.push_condition_mask(); // push into 101
+    builder.push_condition_mask(); // push into 102
+    builder.pop_condition_mask();  // pop  from 102
+    builder.push_condition_mask(); // push into 102
+    builder.pop_condition_mask();  // pop  from 102
+    builder.pop_condition_mask();  // pop  from 101
+    builder.pop_condition_mask();  // pop  from 100
+    builder.push_condition_mask(); // push into 100
+    builder.pop_condition_mask();  // pop  from 100
+    builder.store_unmasked(99);    // reserve slots 0-99 for values
+    builder.store_unmasked(0);     // make it easy to find the first slot
+    std::unique_ptr<SkSL::RP::Program> program = builder.finish();
+
+    // Instantiate this program.
+    SkArenaAlloc alloc(/*firstHeapAllocation=*/1000);
+    SkRasterPipeline pipeline(&alloc);
+    program->appendStages(&pipeline, &alloc);
+
+    // Double check that the resulting stage list contains the expected pushes and pops.
+    // (Note that, as always, stage lists are in reverse order.)
+    const auto* stages = TestingOnly_SkRasterPipelineInspector::GetStageList(&pipeline);
+    const float* slot0 = (const float*)stages->ctx;
+    const int N = SkOpts::raster_pipeline_highp_stride;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::store_unmasked);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (0 * N));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::store_unmasked);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (99 * N));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::load_condition_mask);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (100 * N));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::store_condition_mask);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (100 * N));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::load_condition_mask);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (100 * N));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::load_condition_mask);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (101 * N));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::load_condition_mask);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (102 * N));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::store_condition_mask);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (102 * N));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::load_condition_mask);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (102 * N));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::store_condition_mask);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (102 * N));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::store_condition_mask);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (101 * N));
+    stages = stages->prev;
+
+    REPORTER_ASSERT(r, stages->stage == SkRasterPipeline::store_condition_mask);
+    REPORTER_ASSERT(r, stages->ctx == slot0 + (100 * N));
 }

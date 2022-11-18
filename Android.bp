@@ -2681,6 +2681,7 @@ cc_defaults {
         "modules/skottie/tests/Expression.cpp",
         "modules/skottie/tests/Image.cpp",
         "modules/skottie/tests/Keyframe.cpp",
+        "modules/skottie/tests/Shaper.cpp",
         "modules/skottie/tests/Text.cpp",
         "modules/skparagraph/tests/SkParagraphTest.cpp",
         "modules/skparagraph/tests/SkShaperJSONWriter.cpp",
