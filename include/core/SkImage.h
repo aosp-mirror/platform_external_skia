@@ -21,7 +21,9 @@
 #if defined(SK_GRAPHITE_ENABLED)
 #include "include/gpu/graphite/GraphiteTypes.h"
 #endif
-#include <functional>  // std::function
+
+#include <memory>
+#include <functional>
 #include <optional>
 
 #if defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26
@@ -56,7 +58,7 @@ class BackendTexture;
 class Recorder;
 class TextureInfo;
 enum class Volatile : bool;
-};
+}
 #endif
 
 /** \class SkImage
