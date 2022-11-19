@@ -130,6 +130,7 @@ skia_graphite_sources = [
   "$_src/TextureProxyView.h",
   "$_src/TextureUtils.cpp",
   "$_src/TextureUtils.h",
+  "$_src/Uniform.h",
   "$_src/UniformManager.cpp",
   "$_src/UniformManager.h",
   "$_src/UploadBufferManager.cpp",
@@ -255,5 +256,7 @@ skia_graphite_precompile_sources = [
   "$_src/CombinationBuilder.cpp",
   "$_src/FactoryFunctions.cpp",
   "$_src/FactoryFunctions.h",
+  "$_src/PaintOptionsPriv.h",
+  "$_src/Precompile.cpp",
   "$_src/Precompile.h",
 ]
