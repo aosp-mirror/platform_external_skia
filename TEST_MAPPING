@@ -4,6 +4,9 @@
       "name": "CtsGraphicsTestCases"
     },
     {
+      "name": "hwui_unit_tests"
+    },
+    {
       "name": "minikin_tests"
     },
     {

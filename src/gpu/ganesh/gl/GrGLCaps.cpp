@@ -16,10 +16,12 @@
 #include "src/core/SkTSearch.h"
 #include "src/gpu/ganesh/GrBackendUtils.h"
 #include "src/gpu/ganesh/GrProgramDesc.h"
+#include "src/gpu/ganesh/GrRenderTargetProxy.h"
 #include "src/gpu/ganesh/GrShaderCaps.h"
 #include "src/gpu/ganesh/GrSurfaceProxyPriv.h"
 #include "src/gpu/ganesh/GrTextureProxyPriv.h"
 #include "src/gpu/ganesh/SkGr.h"
+#include "src/gpu/ganesh/TestFormatColorTypeCombination.h"
 #include "src/gpu/ganesh/gl/GrGLContext.h"
 #include "src/gpu/ganesh/gl/GrGLRenderTarget.h"
 #include "src/gpu/ganesh/gl/GrGLTexture.h"
@@ -4994,8 +4996,8 @@ GrProgramDesc GrGLCaps::makeDesc(GrRenderTarget* /* rt */,
 }
 
 #if GR_TEST_UTILS
-std::vector<GrCaps::TestFormatColorTypeCombination> GrGLCaps::getTestingCombinations() const {
-    std::vector<GrCaps::TestFormatColorTypeCombination> combos = {
+std::vector<GrTest::TestFormatColorTypeCombination> GrGLCaps::getTestingCombinations() const {
+    std::vector<GrTest::TestFormatColorTypeCombination> combos = {
         { GrColorType::kAlpha_8,
           GrBackendFormat::MakeGL(GR_GL_ALPHA8, GR_GL_TEXTURE_2D) },
         { GrColorType::kAlpha_8,

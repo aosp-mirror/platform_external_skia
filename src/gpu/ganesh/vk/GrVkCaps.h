@@ -271,7 +271,7 @@ public:
     bool supportsMemorylessAttachments() const { return fSupportsMemorylessAttachments; }
 
 #if GR_TEST_UTILS
-    std::vector<TestFormatColorTypeCombination> getTestingCombinations() const override;
+    std::vector<GrTest::TestFormatColorTypeCombination> getTestingCombinations() const override;
 #endif
 
 private:
@@ -330,7 +330,8 @@ private:
                     const skgpu::VulkanExtensions&);
     void initShaderCaps(const VkPhysicalDeviceProperties&, const VkPhysicalDeviceFeatures2&);
 
-    void initFormatTable(const skgpu::VulkanInterface*,
+    void initFormatTable(const GrContextOptions&,
+                         const skgpu::VulkanInterface*,
                          VkPhysicalDevice,
                          const VkPhysicalDeviceProperties&);
     void initStencilFormat(const skgpu::VulkanInterface* iface, VkPhysicalDevice physDev);
@@ -382,12 +383,14 @@ private:
             return 0;
         }
 
-        void init(const skgpu::VulkanInterface*,
+        void init(const GrContextOptions&,
+                  const skgpu::VulkanInterface*,
                   VkPhysicalDevice,
                   const VkPhysicalDeviceProperties&,
                   VkFormat);
         static void InitFormatFlags(VkFormatFeatureFlags, uint16_t* flags);
-        void initSampleCounts(const skgpu::VulkanInterface*,
+        void initSampleCounts(const GrContextOptions&,
+                              const skgpu::VulkanInterface*,
                               VkPhysicalDevice,
                               const VkPhysicalDeviceProperties&,
                               VkFormat);

@@ -27,6 +27,12 @@ supported_files_or_dirs=(
   "src/utils/"
   "tools/debugger/"
   "tests/"
+  "src/gpu/ganesh/GrProcessor.cpp"
+  "src/gpu/ganesh/GrCaps.cpp"
+  "src/gpu/ganesh/GrSurfaceProxy.cpp"
+  "src/gpu/ganesh/GrRenderTargetProxy.cpp"
+  "src/gpu/ganesh/GrSurfaceProxyView.cpp"
+  "src/gpu/ganesh/GrTextureProxy.cpp"
 
   # See //bazel/generate_cpp_files_for_headers.bzl and //include/BUILD.bazel for more.
   "include/gen/"
