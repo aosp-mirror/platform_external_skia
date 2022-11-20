@@ -110,6 +110,7 @@ struct SPIRVCodeGenerator::Word {
         kDefaultPrecisionResult,
         kRelaxedPrecisionResult,
         kUniqueResult,
+        kKeyedResult,
     };
 
     Word(SpvId id) : fValue(id), fKind(Kind::kSpvId) {}
@@ -134,6 +135,11 @@ struct SPIRVCodeGenerator::Word {
     static Word Result() {
         return Word{(int32_t)NA, kDefaultPrecisionResult};
     }
+
+    // Unlike a Result (where the result ID is always deduplicated to its first instruction) or a
+    // UniqueResult (which always produces a new instruction), a KeyedResult allows an instruction
+    // to be deduplicated among those that share the same `key`.
+    static Word KeyedResult(int32_t key) { return Word{key, Kind::kKeyedResult}; }
 
     bool isResult() const { return fKind >= Kind::kDefaultPrecisionResult; }
 
@@ -635,6 +641,9 @@ SpvId SPIRVCodeGenerator::writeInstruction(SpvOp_ opCode,
             precision = Precision::kRelaxed;
             [[fallthrough]];
 
+        case Word::Kind::kKeyedResult:
+            [[fallthrough]];
+
         case Word::Kind::kDefaultPrecisionResult:
             // Consume a new SpvId.
             result = this->nextId(precision);
@@ -1089,14 +1098,15 @@ SpvId SPIRVCodeGenerator::getType(const Type& rawType, const MemoryLayout& layou
                 fContext.fErrors->error(type->fPosition, "runtime-sized arrays are not supported");
                 return NA;
             }
+            size_t stride = layout.stride(*type);
             SpvId typeId = this->getType(type->componentType(), layout);
             SpvId countId = this->writeLiteral(type->columns(), *fContext.fTypes.fInt);
-            SpvId result = this->writeInstruction(
-                    SpvOpTypeArray, Words{Word::Result(), typeId, countId}, fConstantBuffer);
-            this->writeInstruction(
-                    SpvOpDecorate,
-                    {result, SpvDecorationArrayStride, Word::Number(layout.stride(*type))},
-                    fDecorationBuffer);
+            SpvId result = this->writeInstruction(SpvOpTypeArray,
+                                                  Words{Word::KeyedResult(stride), typeId, countId},
+                                                  fConstantBuffer);
+            this->writeInstruction(SpvOpDecorate,
+                                   {result, SpvDecorationArrayStride, Word::Number(stride)},
+                                   fDecorationBuffer);
             return result;
         }
         case Type::TypeKind::kStruct: {
@@ -1191,14 +1201,15 @@ SpvId SPIRVCodeGenerator::getFunctionParameterType(const Type& parameterType) {
 }
 
 SpvId SPIRVCodeGenerator::getPointerType(const Type& type, SpvStorageClass_ storageClass) {
-    return this->getPointerType(type, fDefaultLayout, storageClass);
+    return this->getPointerType(
+            type, this->memoryLayoutForStorageClass(storageClass), storageClass);
 }
 
 SpvId SPIRVCodeGenerator::getPointerType(const Type& type, const MemoryLayout& layout,
                                          SpvStorageClass_ storageClass) {
     return this->writeInstruction(
             SpvOpTypePointer,
-            Words{Word::Result(), Word::Number(storageClass), this->getType(type)},
+            Words{Word::Result(), Word::Number(storageClass), this->getType(type, layout)},
             fConstantBuffer);
 }
 
@@ -2379,10 +2390,13 @@ std::unique_ptr<SPIRVCodeGenerator::LValue> SPIRVCodeGenerator::getLValue(const 
                 SpvId uniformIdxId = this->writeLiteral((double)uniformIdx, *fContext.fTypes.fInt);
                 this->writeInstruction(SpvOpAccessChain, typeId, memberId, fUniformBufferId,
                                        uniformIdxId, out);
-                return std::make_unique<PointerLValue>(*this, memberId,
-                                                       /*isMemoryObjectPointer=*/true,
-                                                       this->getType(type), precision,
-                                                       SpvStorageClassUniform);
+                return std::make_unique<PointerLValue>(
+                        *this,
+                        memberId,
+                        /*isMemoryObjectPointer=*/true,
+                        this->getType(type, this->memoryLayoutForVariable(var)),
+                        precision,
+                        SpvStorageClassUniform);
             }
             SpvId typeId = this->getType(type, this->memoryLayoutForVariable(var));
             SpvId* entry = fVariableMap.find(&var);
@@ -2402,8 +2416,13 @@ std::unique_ptr<SPIRVCodeGenerator::LValue> SPIRVCodeGenerator::getLValue(const 
             for (SpvId idx : chain) {
                 this->writeWord(idx, out);
             }
-            return std::make_unique<PointerLValue>(*this, member, /*isMemoryObjectPointer=*/false,
-                                                   this->getType(type), precision, storageClass);
+            return std::make_unique<PointerLValue>(
+                    *this,
+                    member,
+                    /*isMemoryObjectPointer=*/false,
+                    this->getType(type, this->memoryLayoutForStorageClass(storageClass)),
+                    precision,
+                    storageClass);
         }
         case Expression::Kind::kSwizzle: {
             const Swizzle& swizzle = expr.as<Swizzle>();
@@ -3417,6 +3436,11 @@ void SPIRVCodeGenerator::writeFieldLayout(const Layout& layout, SpvId target, in
     }
 }
 
+MemoryLayout SPIRVCodeGenerator::memoryLayoutForStorageClass(SpvStorageClass_ storageClass) {
+    return storageClass == SpvStorageClassPushConstant ? MemoryLayout(MemoryLayout::Standard::k430)
+                                                       : fDefaultLayout;
+}
+
 MemoryLayout SPIRVCodeGenerator::memoryLayoutForVariable(const Variable& v) const {
     bool pushConstant = ((v.modifiers().fLayout.fFlags & Layout::kPushConstant_Flag) != 0);
     return pushConstant ? MemoryLayout(MemoryLayout::Standard::k430) : fDefaultLayout;
@@ -3511,8 +3535,19 @@ bool SPIRVCodeGenerator::isDead(const Variable& var) const {
              (Modifiers::kIn_Flag | Modifiers::kOut_Flag | Modifiers::kUniform_Flag));
 }
 
+// This function determines whether to skip an OpVariable (of pointer type) declaration for
+// compile-time constant scalars and vectors which we turn into OpConstant/OpConstantComposite and
+// always reference by value.
+//
+// Accessing a matrix or array member with a dynamic index requires the use of OpAccessChain which
+// requires a base operand of pointer type. However, a vector can always be accessed by value using
+// OpVectorExtractDynamic (see writeIndexExpression).
+//
+// This is why we always emit an OpVariable for all non-scalar and non-vector types in case they get
+// accessed via a dynamic index.
 static bool is_vardecl_compile_time_constant(const VarDeclaration& varDecl) {
     return varDecl.var()->modifiers().fFlags & Modifiers::kConst_Flag &&
+           (varDecl.var()->type().isScalar() || varDecl.var()->type().isVector()) &&
            (ConstantFolder::GetConstantValueOrNullForVariable(*varDecl.value()) ||
             Analysis::IsCompileTimeConstant(*varDecl.value()));
 }
