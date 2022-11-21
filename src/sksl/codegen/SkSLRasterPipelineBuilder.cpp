@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 
+#include "include/private/SkMalloc.h"
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkOpts.h"
 #include "src/sksl/codegen/SkSLRasterPipelineBuilder.h"
@@ -41,20 +42,25 @@ int Program::numTempStackSlots() {
     int current = 0;
     for (const Instruction& inst : fInstructions) {
         switch (inst.fOp) {
-            case BuilderOp::push_temp_f:
+            case BuilderOp::push_literal_f:
                 ++current;
                 largest = std::max(current, largest);
                 break;
 
-            case BuilderOp::discard_temp:
-                --current;
-                SkASSERTF(current >= 0, "unbalanced temp stack push/pop");
+            case BuilderOp::push_slots:
+                current += inst.fImmA;
+                largest = std::max(current, largest);
+                break;
+
+            case BuilderOp::discard_stack:
+                current -= inst.fImmA;
                 break;
 
             default:
                 // This op doesn't affect the stack.
                 break;
         }
+        SkASSERTF(current >= 0, "unbalanced temp stack push/pop");
     }
 
     SkASSERTF(current == 0, "unbalanced temp stack push/pop");
@@ -66,12 +72,12 @@ int Program::numConditionMaskSlots() {
     int current = 0;
     for (const Instruction& inst : fInstructions) {
         switch (inst.fOp) {
-            case SkRasterPipeline::store_condition_mask:
+            case BuilderOp::store_condition_mask:
                 ++current;
                 largest = std::max(current, largest);
                 break;
 
-            case SkRasterPipeline::load_condition_mask:
+            case BuilderOp::load_condition_mask:
                 --current;
                 SkASSERTF(current >= 0, "unbalanced condition-mask push/pop");
                 break;
@@ -106,8 +112,11 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc) {
 #if !defined(SKSL_STANDALONE)
     // Allocate a contiguous slab of slot data.
     const int N = SkOpts::raster_pipeline_highp_stride;
-    int totalSlots = fNumValueSlots + fNumTempStackSlots + fNumConditionMaskSlots;
-    float* slotPtr = alloc->makeArray<float>(N * totalSlots);
+    const int totalSlots = fNumValueSlots + fNumTempStackSlots + fNumConditionMaskSlots;
+    const int vectorWidth = N * sizeof(float);
+    const int allocSize = vectorWidth * totalSlots;
+    float* slotPtr = static_cast<float*>(alloc->makeBytesAlignedTo(allocSize, vectorWidth));
+    sk_bzero(slotPtr, allocSize);
 
     // Store the stacks immediately after the values.
     float* tempStackPtr = slotPtr + (N * fNumValueSlots);
@@ -115,66 +124,85 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc) {
 
     for (const Instruction& inst : fInstructions) {
         auto SlotA = [&]() { return &slotPtr[N * inst.fSlotA]; };
+        auto SlotB = [&]() { return &slotPtr[N * inst.fSlotB]; };
 
         switch (inst.fOp) {
-            case SkRP::init_lane_masks:
+            case BuilderOp::init_lane_masks:
                 pipeline->append(SkRP::init_lane_masks);
                 break;
 
-            case SkRP::store_src_rg:
+            case BuilderOp::store_src_rg:
                 pipeline->append(SkRP::store_src_rg, SlotA());
                 break;
 
-            case SkRP::store_src:
+            case BuilderOp::store_src:
                 pipeline->append(SkRP::store_src, SlotA());
                 break;
 
-            case SkRP::store_dst:
+            case BuilderOp::store_dst:
                 pipeline->append(SkRP::store_dst, SlotA());
                 break;
 
-            case SkRP::load_src:
+            case BuilderOp::load_src:
                 pipeline->append(SkRP::load_src, SlotA());
                 break;
 
-            case SkRP::load_dst:
+            case BuilderOp::load_dst:
                 pipeline->append(SkRP::load_dst, SlotA());
                 break;
 
-            case SkRP::immediate_f: {
-                pipeline->append(SkRP::immediate_f, context_bit_pun(inst.fImmF32));
+            case BuilderOp::immediate_f: {
+                pipeline->append(SkRP::immediate_f, context_bit_pun(inst.fImmA));
                 break;
             }
-            case SkRP::load_unmasked:
+            case BuilderOp::load_unmasked:
                 pipeline->append(SkRP::load_unmasked, SlotA());
                 break;
 
-            case SkRP::store_unmasked:
+            case BuilderOp::store_unmasked:
                 pipeline->append(SkRP::store_unmasked, SlotA());
                 break;
 
-            case SkRP::store_masked:
+            case BuilderOp::store_masked:
                 pipeline->append(SkRP::store_masked, SlotA());
                 break;
 
-            case SkRP::store_condition_mask:
+            case BuilderOp::copy_slot_masked:
+                pipeline->append_copy_slots_masked(alloc, SlotA(), SlotB(), inst.fImmA);
+                break;
+
+            case BuilderOp::copy_slot_unmasked:
+                pipeline->append_copy_slots_unmasked(alloc, SlotA(), SlotB(), inst.fImmA);
+                break;
+
+            case BuilderOp::push_slots:
+                pipeline->append_copy_slots_unmasked(alloc, tempStackPtr, SlotA(), inst.fImmA);
+                tempStackPtr += N * inst.fImmA;
+                break;
+
+            case BuilderOp::store_condition_mask:
                 pipeline->append(SkRP::store_condition_mask, conditionStackPtr);
                 conditionStackPtr += N;
                 break;
 
-            case SkRP::load_condition_mask:
+            case BuilderOp::load_condition_mask:
                 conditionStackPtr -= N;
                 pipeline->append(SkRP::load_condition_mask, conditionStackPtr);
                 break;
 
-            case BuilderOp::push_temp_f:
-                pipeline->append(SkRP::immediate_f, context_bit_pun(inst.fImmF32));
+            case BuilderOp::push_literal_f:
+                pipeline->append(SkRP::immediate_f, context_bit_pun(inst.fImmA));
                 pipeline->append(SkRP::store_unmasked, tempStackPtr);
                 tempStackPtr += N;
                 break;
 
-            case BuilderOp::discard_temp:
-                tempStackPtr -= N;
+            case BuilderOp::copy_stack_to_slots: {
+                float* src = tempStackPtr - N * inst.fImmA;
+                pipeline->append_copy_slots_masked(alloc, SlotA(), src, inst.fImmA);
+                break;
+            }
+            case BuilderOp::discard_stack:
+                tempStackPtr -= N * inst.fImmA;
                 break;
 
             default:
