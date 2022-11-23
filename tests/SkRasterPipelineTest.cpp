@@ -12,6 +12,8 @@
 #include "src/gpu/Swizzle.h"
 #include "tests/Test.h"
 
+#include <numeric>
+
 DEF_TEST(SkRasterPipeline, r) {
     // Build and run a simple pipeline to exercise SkRasterPipeline,
     // drawing 50% transparent blue over opaque red in half-floats.
@@ -38,7 +40,7 @@ DEF_TEST(SkRasterPipeline, r) {
 }
 
 DEF_TEST(SkRasterPipeline_ImmediateStoreUnmasked, r) {
-    float val[SkRasterPipeline_kMaxStride_highp + 1] = {};
+    alignas(64) float val[SkRasterPipeline_kMaxStride_highp + 1] = {};
 
     float immVal = 123.0f;
     const void* immValCtx = nullptr;
@@ -63,8 +65,8 @@ DEF_TEST(SkRasterPipeline_ImmediateStoreUnmasked, r) {
 }
 
 DEF_TEST(SkRasterPipeline_LoadStoreUnmasked, r) {
-    float val[SkRasterPipeline_kMaxStride_highp] = {};
-    float data[] = {123.0f, 456.0f, 789.0f, -876.0f, -543.0f, -210.0f, 12.0f, -3.0f};
+    alignas(64) float val[SkRasterPipeline_kMaxStride_highp] = {};
+    alignas(64) float data[] = {123.0f, 456.0f, 789.0f, -876.0f, -543.0f, -210.0f, 12.0f, -3.0f};
     static_assert(std::size(data) == SkRasterPipeline_kMaxStride_highp);
 
     SkRasterPipeline_<256> p;
@@ -87,9 +89,9 @@ DEF_TEST(SkRasterPipeline_LoadStoreUnmasked, r) {
 
 DEF_TEST(SkRasterPipeline_LoadStoreMasked, r) {
     for (size_t width = 0; width < SkOpts::raster_pipeline_highp_stride; ++width) {
-        float val[] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
-        float data[] = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
-        const int32_t mask[] = {0, ~0, ~0, ~0, ~0, ~0, 0, ~0};
+        alignas(64) float val[] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+        alignas(64) float data[] = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
+        alignas(64) const int32_t mask[] = {0, ~0, ~0, ~0, ~0, ~0, 0, ~0};
         static_assert(std::size(val) == SkRasterPipeline_kMaxStride_highp);
         static_assert(std::size(data) == SkRasterPipeline_kMaxStride_highp);
         static_assert(std::size(mask) == SkRasterPipeline_kMaxStride_highp);
@@ -119,8 +121,8 @@ DEF_TEST(SkRasterPipeline_LoadStoreMasked, r) {
 }
 
 DEF_TEST(SkRasterPipeline_LoadStoreConditionMask, r) {
-    int32_t val[SkRasterPipeline_kMaxStride_highp] = {};
-    int32_t data[] = {~0, 0, ~0, 0, ~0, ~0, ~0, 0};
+    alignas(64) int32_t val[SkRasterPipeline_kMaxStride_highp] = {};
+    alignas(64) int32_t data[] = {~0, 0, ~0, 0, ~0, ~0, ~0, 0};
     static_assert(std::size(data) == SkRasterPipeline_kMaxStride_highp);
 
     SkRasterPipeline_<256> p;
@@ -157,7 +159,7 @@ DEF_TEST(SkRasterPipeline_InitLaneMasks, r) {
         p.append(SkRasterPipeline::init_lane_masks);
 
         // Use the store_dst command to write out dRGBA for inspection.
-        int32_t dRGBA[4 * SkRasterPipeline_kMaxStride_highp] = {};
+        alignas(64) int32_t dRGBA[4 * SkRasterPipeline_kMaxStride_highp] = {};
         p.append(SkRasterPipeline::store_dst, dRGBA);
 
         // Execute our program.
@@ -183,6 +185,124 @@ DEF_TEST(SkRasterPipeline_InitLaneMasks, r) {
             REPORTER_ASSERT(r, *channelG++ == 0);
             REPORTER_ASSERT(r, *channelB++ == 0);
             REPORTER_ASSERT(r, *channelA++ == 0);
+        }
+    }
+}
+
+DEF_TEST(SkRasterPipeline_CopySlotsMasked, r) {
+    // Allocate space for 20 source slots and 20 dest slots.
+    alignas(64) float slots[40 * SkRasterPipeline_kMaxStride_highp];
+    const int srcIndex = 0, dstIndex = 20;
+
+    static_assert(SkRasterPipeline_kMaxStride_highp == 8);
+    alignas(64) const int32_t kMask1[8] = {~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0};
+    alignas(64) const int32_t kMask2[8] = { 0,  0,  0,  0,  0,  0,  0,  0};
+    alignas(64) const int32_t kMask3[8] = {~0,  0, ~0, ~0, ~0, ~0,  0, ~0};
+    alignas(64) const int32_t kMask4[8] = { 0, ~0,  0,  0,  0, ~0, ~0,  0};
+
+    const int N = SkOpts::raster_pipeline_highp_stride;
+
+    for (int slotCount = 0; slotCount < 20; ++slotCount) {
+        for (const int32_t* mask : {kMask1, kMask2, kMask3, kMask4}) {
+            // Initialize the destination slots to 0,1,2.. and the source slots to 1000,1001,1002...
+            std::iota(&slots[N * dstIndex],  &slots[N * (dstIndex + 20)], 0.0f);
+            std::iota(&slots[N * srcIndex],  &slots[N * (srcIndex + 20)], 1000.0f);
+
+            // Run `copy_slots_masked` over our data.
+            SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
+            SkRasterPipeline p(&alloc);
+            p.append(SkRasterPipeline::init_lane_masks);
+            p.append(SkRasterPipeline::load_condition_mask, mask);
+            p.append_copy_slots_masked(&alloc, &slots[N * dstIndex], &slots[N * srcIndex],
+                                       slotCount);
+            p.run(0,0,20,1);
+
+            // Verify that the destination has been overwritten in the mask-on fields, and has not
+            // been overwritten in the mask-off fields, for each destination slot.
+            float expectedUnchanged = 0.0f, expectedChanged = 1000.0f;
+            float* destPtr = &slots[N * dstIndex];
+            for (int checkSlot = 0; checkSlot < 20; ++checkSlot) {
+                for (int checkMask = 0; checkMask < N; ++checkMask) {
+                    if (checkSlot < slotCount && mask[checkMask]) {
+                        REPORTER_ASSERT(r, *destPtr == expectedChanged);
+                    } else {
+                        REPORTER_ASSERT(r, *destPtr == expectedUnchanged);
+                    }
+
+                    ++destPtr;
+                    expectedUnchanged += 1.0f;
+                    expectedChanged += 1.0f;
+                }
+            }
+        }
+    }
+}
+
+DEF_TEST(SkRasterPipeline_CopySlotsUnmasked, r) {
+    // Allocate space for 20 source slots and 20 dest slots.
+    alignas(64) float slots[40 * SkRasterPipeline_kMaxStride_highp];
+    const int srcIndex = 0, dstIndex = 20;
+    const int N = SkOpts::raster_pipeline_highp_stride;
+
+    for (int slotCount = 0; slotCount < 20; ++slotCount) {
+        // Initialize the destination slots to 0,1,2.. and the source slots to 1000,1001,1002...
+        std::iota(&slots[N * dstIndex],  &slots[N * (dstIndex + 20)], 0.0f);
+        std::iota(&slots[N * srcIndex],  &slots[N * (srcIndex + 20)], 1000.0f);
+
+        // Run `copy_slots_unmasked` over our data.
+        SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
+        SkRasterPipeline p(&alloc);
+        p.append_copy_slots_unmasked(&alloc, &slots[N * dstIndex], &slots[N * srcIndex], slotCount);
+        p.run(0,0,20,1);
+
+        // Verify that the destination has been overwritten in each slot.
+        float expectedUnchanged = 0.0f, expectedChanged = 1000.0f;
+        float* destPtr = &slots[N * dstIndex];
+        for (int checkSlot = 0; checkSlot < 20; ++checkSlot) {
+            for (int checkLane = 0; checkLane < N; ++checkLane) {
+                if (checkSlot < slotCount) {
+                    REPORTER_ASSERT(r, *destPtr == expectedChanged);
+                } else {
+                    REPORTER_ASSERT(r, *destPtr == expectedUnchanged);
+                }
+
+                ++destPtr;
+                expectedUnchanged += 1.0f;
+                expectedChanged += 1.0f;
+            }
+        }
+    }
+}
+
+DEF_TEST(SkRasterPipeline_ZeroSlotsUnmasked, r) {
+    // Allocate space for 20 dest slots.
+    alignas(64) float slots[20 * SkRasterPipeline_kMaxStride_highp];
+    const int N = SkOpts::raster_pipeline_highp_stride;
+
+    for (int slotCount = 0; slotCount < 20; ++slotCount) {
+        // Initialize the destination slots to 1,2,3...
+        std::iota(&slots[0], &slots[20 * N], 1.0f);
+
+        // Run `zero_slots_unmasked` over our data.
+        SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
+        SkRasterPipeline p(&alloc);
+        p.append_zero_slots_unmasked(&slots[0], slotCount);
+        p.run(0,0,20,1);
+
+        // Verify that the destination has been zeroed out in each slot.
+        float expectedUnchanged = 1.0f;
+        float* destPtr = &slots[0];
+        for (int checkSlot = 0; checkSlot < 20; ++checkSlot) {
+            for (int checkLane = 0; checkLane < N; ++checkLane) {
+                if (checkSlot < slotCount) {
+                    REPORTER_ASSERT(r, *destPtr == 0.0f);
+                } else {
+                    REPORTER_ASSERT(r, *destPtr == expectedUnchanged);
+                }
+
+                ++destPtr;
+                expectedUnchanged += 1.0f;
+            }
         }
     }
 }
