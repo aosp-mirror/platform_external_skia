@@ -10,6 +10,7 @@
 
 #include "include/core/SkData.h"
 #include "include/core/SkTypes.h"
+#include "include/private/SkMalloc.h"
 #include "modules/skcms/skcms.h"
 #include "src/core/SkUtils.h"  // unaligned_{load,store}
 #include <cstdint>
@@ -3010,6 +3011,66 @@ STAGE(immediate_f, void* ctx) {
     float val;
     memcpy(&val, &ctx, sizeof(val));
     r = F(val);
+}
+
+STAGE(zero_slot_unmasked, F* dst) {
+    // We don't even bother masking off the tail; we're filling slots, not the destination surface.
+    sk_bzero(dst, sizeof(F) * 1);
+}
+STAGE(zero_2_slots_unmasked, F* dst) {
+    sk_bzero(dst, sizeof(F) * 2);
+}
+STAGE(zero_3_slots_unmasked, F* dst) {
+    sk_bzero(dst, sizeof(F) * 3);
+}
+STAGE(zero_4_slots_unmasked, F* dst) {
+    sk_bzero(dst, sizeof(F) * 4);
+}
+
+STAGE(copy_slot_unmasked, SkRasterPipeline_CopySlotsCtx* ctx) {
+    // We don't even bother masking off the tail; we're filling slots, not the destination surface.
+    memcpy(ctx->dst, ctx->src, sizeof(F) * 1);
+}
+STAGE(copy_2_slots_unmasked, SkRasterPipeline_CopySlotsCtx* ctx) {
+    memcpy(ctx->dst, ctx->src, sizeof(F) * 2);
+}
+STAGE(copy_3_slots_unmasked, SkRasterPipeline_CopySlotsCtx* ctx) {
+    memcpy(ctx->dst, ctx->src, sizeof(F) * 3);
+}
+STAGE(copy_4_slots_unmasked, SkRasterPipeline_CopySlotsCtx* ctx) {
+    memcpy(ctx->dst, ctx->src, sizeof(F) * 4);
+}
+
+template <int NumSlots>
+SI void copy_n_slots_masked_fn(SkRasterPipeline_CopySlotsCtx* ctx, F& dr, F& dg, F& db) {
+    // Compute the mask; if it's completely zero, we can stop here.
+    I32 mask = sk_bit_cast<I32>(dr) & sk_bit_cast<I32>(dg) & sk_bit_cast<I32>(db);
+    if (any(mask)) {
+        // Get pointers to our slots.
+        F* dst  = (F*) ctx->dst;
+        F* src  = (F*) ctx->src;
+
+        // Mask off and copy slots.
+        for (int count = 0; count < NumSlots; ++count) {
+            sk_unaligned_store(dst, if_then_else(mask, sk_unaligned_load<F>(src),
+                                                       sk_unaligned_load<F>(dst)));
+            dst += 1;
+            src += 1;
+        }
+    }
+}
+
+STAGE(copy_slot_masked, SkRasterPipeline_CopySlotsCtx* ctx) {
+    copy_n_slots_masked_fn<1>(ctx, dr, dg, db);
+}
+STAGE(copy_2_slots_masked, SkRasterPipeline_CopySlotsCtx* ctx) {
+    copy_n_slots_masked_fn<2>(ctx, dr, dg, db);
+}
+STAGE(copy_3_slots_masked, SkRasterPipeline_CopySlotsCtx* ctx) {
+    copy_n_slots_masked_fn<3>(ctx, dr, dg, db);
+}
+STAGE(copy_4_slots_masked, SkRasterPipeline_CopySlotsCtx* ctx) {
+    copy_n_slots_masked_fn<4>(ctx, dr, dg, db);
 }
 
 STAGE(gauss_a_to_rgba, NoCtx) {

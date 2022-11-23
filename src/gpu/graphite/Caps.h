@@ -77,6 +77,12 @@ public:
     // to a draw.
     size_t requiredStorageBufferAlignment() const { return fRequiredStorageBufferAlignment; }
 
+    // Returns the required data layout rules for the contents of a uniform buffer.
+    Layout uniformBufferLayout() const { return fUniformBufferLayout; }
+
+    // Returns the required data layout rules for the contents of a storage buffer.
+    Layout storageBufferLayout() const { return fStorageBufferLayout; }
+
     // Returns the alignment in bytes for the offset into a Buffer when using it
     // to transfer to or from a Texture with the given bytes per pixel.
     virtual size_t getTransferBufferAlignment(size_t bytesPerPixel) const = 0;
@@ -162,6 +168,25 @@ protected:
     // TODO: This value should be set by some context option. For now just making it 4.
     uint32_t defaultMSAASamples() const { return 4; }
 
+    // There are only a few possible valid sample counts (1, 2, 4, 8, 16). So we can key on those 5
+    // options instead of the actual sample value.
+    static inline uint32_t SamplesToKey(uint32_t numSamples) {
+        switch (numSamples) {
+            case 1:
+                return 0;
+            case 2:
+                return 1;
+            case 4:
+                return 2;
+            case 8:
+                return 3;
+            case 16:
+                return 4;
+            default:
+                SkUNREACHABLE;
+        }
+    }
+
     // ColorTypeInfo for a specific format.
     // Used in format tables.
     struct ColorTypeInfo {
@@ -183,6 +208,8 @@ protected:
     size_t fRequiredUniformBufferAlignment = 0;
     size_t fRequiredStorageBufferAlignment = 0;
     size_t fTextureDataRowBytesAlignment = 1;
+    Layout fUniformBufferLayout = Layout::kInvalid;
+    Layout fStorageBufferLayout = Layout::kInvalid;
 
     std::unique_ptr<SkSL::ShaderCaps> fShaderCaps;
 
