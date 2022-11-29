@@ -41,6 +41,7 @@ enum class BuilderOp {
     push_slots,
     copy_stack_to_slots,
     discard_stack,
+    duplicate,
 };
 
 // Represents a single raster-pipeline SkSL instruction.
@@ -70,7 +71,7 @@ struct Instruction {
 
 class Program {
 public:
-    Program(SkTArray<Instruction> instrs);
+    Program(SkTArray<Instruction> instrs, int numValueSlots);
 
     void appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc);
 
@@ -89,7 +90,7 @@ private:
 class Builder {
 public:
     /** Finalizes and optimizes the program. */
-    std::unique_ptr<Program> finish();
+    std::unique_ptr<Program> finish(int numValueSlots);
 
     /** Assemble a program from the Raster Pipeline instructions below. */
     void init_lane_masks() {
@@ -167,6 +168,12 @@ public:
         // shrinks the temp stack.
         this->copy_stack_to_slots(dst);
         this->discard_stack(dst.count);
+    }
+
+    void duplicate(int count) {
+        // Creates duplicates of the top item on the temp stack.
+        SkASSERT(count >= 0);
+        fInstructions.push_back({BuilderOp::duplicate, {}, count});
     }
 
     void load_unmasked(Slot slot) {
