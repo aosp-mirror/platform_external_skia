@@ -19,13 +19,16 @@
 #include "src/sksl/codegen/SkSLRasterPipelineCodeGenerator.h"
 #include "src/sksl/ir/SkSLBlock.h"
 #include "src/sksl/ir/SkSLConstructorCompound.h"
+#include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLLiteral.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
 #include "src/sksl/ir/SkSLType.h"
+#include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/ir/SkSLVariable.h"
+#include "src/sksl/ir/SkSLVariableReference.h"
 
 #include <optional>
 #include <string>
@@ -61,6 +64,9 @@ public:
     /** Looks up the slots associated with an SkSL variable; creates the slot if necessary. */
     SlotRange getSlots(const Variable& v);
 
+    /** Returns the number of slots needed by the program. */
+    int slotCount() const { return fSlotCount; }
+
     /**
      * Looks up the slots associated with an SkSL function's return value; creates the range if
      * necessary. Note that recursion is never supported, so we don't need to maintain return values
@@ -75,14 +81,21 @@ public:
     bool writeStatement(const Statement& s);
     bool writeBlock(const Block& b);
     bool writeReturnStatement(const ReturnStatement& r);
+    bool writeVarDeclaration(const VarDeclaration& v);
 
     /** Pushes an expression to the value stack. */
     bool pushExpression(const Expression& e);
     bool pushConstructorCompound(const ConstructorCompound& c);
+    bool pushConstructorSplat(const ConstructorSplat& c);
     bool pushLiteral(const Literal& l);
+    bool pushVariableReference(const VariableReference& v);
 
     /** Pops an expression from the value stack and copies it into slots. */
     void popToSlotRange(SlotRange r) { fBuilder.pop_slots(r); }
+    void popToSlotRangeUnmasked(SlotRange r) { fBuilder.pop_slots_unmasked(r); }
+
+    /** Zeroes out a range of slots. */
+    void zeroSlotRangeUnmasked(SlotRange r) { fBuilder.zero_slots_unmasked(r); }
 
 private:
     [[maybe_unused]] const SkSL::Program& fProgram;
@@ -154,11 +167,14 @@ bool Generator::writeStatement(const Statement& s) {
         case Statement::Kind::kBlock:
             return this->writeBlock(s.as<Block>());
 
+        case Statement::Kind::kNop:
+            return true;
+
         case Statement::Kind::kReturn:
             return this->writeReturnStatement(s.as<ReturnStatement>());
 
-        case Statement::Kind::kNop:
-            return true;
+        case Statement::Kind::kVarDeclaration:
+            return this->writeVarDeclaration(s.as<VarDeclaration>());
 
         default:
             // Unsupported statement
@@ -186,13 +202,31 @@ bool Generator::writeReturnStatement(const ReturnStatement& r) {
     return true;
 }
 
+bool Generator::writeVarDeclaration(const VarDeclaration& v) {
+    if (v.value()) {
+        if (!this->pushExpression(*v.value())) {
+            return false;
+        }
+        this->popToSlotRangeUnmasked(this->getSlots(*v.var()));
+    } else {
+        this->zeroSlotRangeUnmasked(this->getSlots(*v.var()));
+    }
+    return true;
+}
+
 bool Generator::pushExpression(const Expression& e) {
     switch (e.kind()) {
         case Expression::Kind::kConstructorCompound:
             return this->pushConstructorCompound(e.as<ConstructorCompound>());
 
+        case Expression::Kind::kConstructorSplat:
+            return this->pushConstructorSplat(e.as<ConstructorSplat>());
+
         case Expression::Kind::kLiteral:
             return this->pushLiteral(e.as<Literal>());
+
+        case Expression::Kind::kVariableReference:
+            return this->pushVariableReference(e.as<VariableReference>());
 
         default:
             // Unsupported expression
@@ -206,6 +240,14 @@ bool Generator::pushConstructorCompound(const ConstructorCompound& c) {
             return false;
         }
     }
+    return true;
+}
+
+bool Generator::pushConstructorSplat(const ConstructorSplat& c) {
+    if (!this->pushExpression(*c.argument())) {
+        return false;
+    }
+    fBuilder.duplicate(c.type().slotCount() - 1);
     return true;
 }
 
@@ -230,6 +272,11 @@ bool Generator::pushLiteral(const Literal& l) {
         default:
             SkUNREACHABLE;
     }
+}
+
+bool Generator::pushVariableReference(const VariableReference& v) {
+    fBuilder.push_slots(this->getSlots(*v.variable()));
+    return true;
 }
 
 bool Generator::writeProgram(const FunctionDefinition& function) {
@@ -292,7 +339,7 @@ std::unique_ptr<RP::Program> MakeRasterPipelineProgram(const SkSL::Program& prog
     if (!generator.writeProgram(function)) {
         return nullptr;
     }
-    return generator.builder()->finish();
+    return generator.builder()->finish(generator.slotCount());
 }
 
 }  // namespace SkSL

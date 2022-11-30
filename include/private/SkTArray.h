@@ -303,10 +303,11 @@ public:
     void pop_back_n(int n) {
         SkASSERT(n >= 0);
         SkASSERT(this->size() >= n);
-        fSize -= n;
-        for (int i = 0; i < n; ++i) {
-            fData[fSize + i].~T();
+        T* const end = this->end();
+        for (T* ptr = end - n; ptr < end; ++ptr) {
+            ptr->~T();
         }
+        fSize -= n;
     }
 
     /**
@@ -686,6 +687,10 @@ public:
         INHERITED::operator=(std::move(that));
         return *this;
     }
+
+    // Force the use of SkTArray for data() and size().
+    using INHERITED::data;
+    using INHERITED::size;
 };
 
 #endif

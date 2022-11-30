@@ -91,8 +91,8 @@ sk_sp<SkFlattenable> SkSweepGradient::CreateProc(SkReadBuffer& buffer) {
     return SkGradientShader::MakeSweep(center.x(), center.y(),
                                        desc.fColors,
                                        std::move(desc.fColorSpace),
-                                       desc.fPos,
-                                       desc.fCount,
+                                       desc.fPositions,
+                                       desc.fColorCount,
                                        desc.fTileMode,
                                        startAngle,
                                        endAngle,
@@ -147,6 +147,7 @@ skvm::F32 SkSweepGradient::transformT(skvm::Builder* p, skvm::Uniforms* uniforms
 #if SK_SUPPORT_GPU
 
 #include "src/core/SkRuntimeEffectPriv.h"
+#include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
 #include "src/gpu/ganesh/effects/GrSkSLFP.h"
 #include "src/gpu/ganesh/gradients/GrGradientShader.h"
@@ -199,8 +200,8 @@ void SkSweepGradient::addToKey(const skgpu::graphite::KeyContext& keyContext,
                                             fTBias, fTScale,
                                             fTileMode,
                                             fColorCount,
-                                            fOrigColors4f,
-                                            fOrigPos);
+                                            fColors,
+                                            fPositions);
 
     GradientShaderBlocks::BeginBlock(keyContext, builder, gatherer, data);
     builder->endBlock();
