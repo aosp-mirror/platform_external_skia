@@ -126,12 +126,23 @@ struct skcms_TransferFunction;
     M(init_lane_masks) M(store_src_rg) M(immediate_f)              \
     M(load_unmasked) M(store_unmasked) M(store_masked)             \
     M(load_condition_mask) M(store_condition_mask)                 \
+    M(bitwise_and) M(bitwise_or) M(bitwise_xor) M(bitwise_not)     \
     M(copy_slot_masked)    M(copy_2_slots_masked)                  \
     M(copy_3_slots_masked) M(copy_4_slots_masked)                  \
     M(copy_slot_unmasked)    M(copy_2_slots_unmasked)              \
     M(copy_3_slots_unmasked) M(copy_4_slots_unmasked)              \
     M(zero_slot_unmasked)    M(zero_2_slots_unmasked)              \
-    M(zero_3_slots_unmasked) M(zero_4_slots_unmasked)
+    M(zero_3_slots_unmasked) M(zero_4_slots_unmasked)              \
+    M(add_n_floats) M(add_float) M(add_2_floats) M(add_3_floats) M(add_4_floats) \
+    M(add_n_ints)   M(add_int)   M(add_2_ints)   M(add_3_ints)   M(add_4_ints)   \
+    M(cmplt_n_floats) M(cmplt_float) M(cmplt_2_floats) M(cmplt_3_floats) M(cmplt_4_floats) \
+    M(cmplt_n_ints)   M(cmplt_int)   M(cmplt_2_ints)   M(cmplt_3_ints)   M(cmplt_4_ints)   \
+    M(cmple_n_floats) M(cmple_float) M(cmple_2_floats) M(cmple_3_floats) M(cmple_4_floats) \
+    M(cmple_n_ints)   M(cmple_int)   M(cmple_2_ints)   M(cmple_3_ints)   M(cmple_4_ints)   \
+    M(cmpeq_n_floats) M(cmpeq_float) M(cmpeq_2_floats) M(cmpeq_3_floats) M(cmpeq_4_floats) \
+    M(cmpeq_n_ints)   M(cmpeq_int)   M(cmpeq_2_ints)   M(cmpeq_3_ints)   M(cmpeq_4_ints)   \
+    M(cmpne_n_floats) M(cmpne_float) M(cmpne_2_floats) M(cmpne_3_floats) M(cmpne_4_floats) \
+    M(cmpne_n_ints)   M(cmpne_int)   M(cmpne_2_ints)   M(cmpne_3_ints)   M(cmpne_4_ints)
 
 // The combined list of all stages:
 #define SK_RASTER_PIPELINE_STAGES_ALL(M) \
@@ -323,6 +334,21 @@ public:
 
     // Appends one or more `zero_n_slots_unmasked` stages, based on `numSlots`.
     void append_zero_slots_unmasked(float* dst, int numSlots);
+
+    // Appends a multi-slot math operation. `src` must be _immediately_ after `dst` in memory.
+    // `baseStage` must refer to an unbounded "apply_to_n_slots" stage, which must be immediately
+    // followed by specializations for 1-4 slots. For instance, {`add_n_floats`, `add_float`,
+    // `add_2_floats`, `add_3_floats`, `add_4_floats`} must be contiguous ops in the stage list,
+    // listed in that order; pass `add_n_floats` and we pick the appropriate op based on `numSlots`.
+    void append_adjacent_multi_slot_op(SkArenaAlloc* alloc,
+                                       SkRasterPipeline::Stage baseStage,
+                                       float* dst,
+                                       float* src,
+                                       int numSlots);
+
+    // Appends a math operation with two inputs (dst op src) and one output (dst).
+    // `src` must be _immediately_ after `dst` in memory.
+    void append_adjacent_single_slot_op(SkRasterPipeline::Stage stage, float* dst, float* src);
 
     void append_load    (SkColorType, const SkRasterPipeline_MemoryCtx*);
     void append_load_dst(SkColorType, const SkRasterPipeline_MemoryCtx*);

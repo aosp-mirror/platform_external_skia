@@ -3047,8 +3047,8 @@ SI void copy_n_slots_masked_fn(SkRasterPipeline_CopySlotsCtx* ctx, F& dr, F& dg,
     I32 mask = sk_bit_cast<I32>(dr) & sk_bit_cast<I32>(dg) & sk_bit_cast<I32>(db);
     if (any(mask)) {
         // Get pointers to our slots.
-        F* dst  = (F*) ctx->dst;
-        F* src  = (F*) ctx->src;
+        F* dst = (F*)ctx->dst;
+        F* src = (F*)ctx->src;
 
         // Mask off and copy slots.
         for (int count = 0; count < NumSlots; ++count) {
@@ -3072,6 +3072,86 @@ STAGE(copy_3_slots_masked, SkRasterPipeline_CopySlotsCtx* ctx) {
 STAGE(copy_4_slots_masked, SkRasterPipeline_CopySlotsCtx* ctx) {
     copy_n_slots_masked_fn<4>(ctx, dr, dg, db);
 }
+
+STAGE(bitwise_and, I32* dst) {
+    dst[0] &= dst[1];
+}
+STAGE(bitwise_or, I32* dst) {
+    dst[0] |= dst[1];
+}
+STAGE(bitwise_xor, I32* dst) {
+    dst[0] ^= dst[1];
+}
+STAGE(bitwise_not, I32* dst) {
+    dst[0] = ~dst[0];
+}
+
+template <typename T, void (*ApplyFn)(T*, T*)>
+SI void apply_to_adjacent(T* dst, T* src) {
+    T* end = src;
+    while (dst != end) {
+        ApplyFn(dst, src);
+        dst += 1;
+        src += 1;
+    }
+}
+
+template <typename T>
+SI void add_fn(T* dst, T* src) {
+    *dst += *src;
+}
+
+template <typename T>
+SI void cmplt_fn(T* dst, T* src) {
+    static_assert(sizeof(T) == sizeof(I32));
+    I32 result = cond_to_mask(*dst < *src);
+    memcpy(dst, &result, sizeof(I32));
+}
+
+template <typename T>
+SI void cmple_fn(T* dst, T* src) {
+    static_assert(sizeof(T) == sizeof(I32));
+    I32 result = cond_to_mask(*dst <= *src);
+    memcpy(dst, &result, sizeof(I32));
+}
+
+template <typename T>
+SI void cmpeq_fn(T* dst, T* src) {
+    static_assert(sizeof(T) == sizeof(I32));
+    I32 result = cond_to_mask(*dst == *src);
+    memcpy(dst, &result, sizeof(I32));
+}
+
+template <typename T>
+SI void cmpne_fn(T* dst, T* src) {
+    static_assert(sizeof(T) == sizeof(I32));
+    I32 result = cond_to_mask(*dst != *src);
+    memcpy(dst, &result, sizeof(I32));
+}
+
+#define DECLARE_BINARY_STAGES(name)                                                      \
+    STAGE(name##_float, F* dst) { apply_to_adjacent<F, &name##_fn>(dst, dst + 1); }      \
+    STAGE(name##_2_floats, F* dst) { apply_to_adjacent<F, &name##_fn>(dst, dst + 2); }   \
+    STAGE(name##_3_floats, F* dst) { apply_to_adjacent<F, &name##_fn>(dst, dst + 3); }   \
+    STAGE(name##_4_floats, F* dst) { apply_to_adjacent<F, &name##_fn>(dst, dst + 4); }   \
+    STAGE(name##_n_floats, SkRasterPipeline_CopySlotsCtx* ctx) {                         \
+        apply_to_adjacent<F, &name##_fn>((F*)ctx->dst, (F*)ctx->src);                    \
+    }                                                                                    \
+    STAGE(name##_int, I32* dst) { apply_to_adjacent<I32, &name##_fn>(dst, dst + 1); }    \
+    STAGE(name##_2_ints, I32* dst) { apply_to_adjacent<I32, &name##_fn>(dst, dst + 2); } \
+    STAGE(name##_3_ints, I32* dst) { apply_to_adjacent<I32, &name##_fn>(dst, dst + 3); } \
+    STAGE(name##_4_ints, I32* dst) { apply_to_adjacent<I32, &name##_fn>(dst, dst + 4); } \
+    STAGE(name##_n_ints, SkRasterPipeline_CopySlotsCtx* ctx) {                           \
+        apply_to_adjacent<I32, &name##_fn>((I32*)ctx->dst, (I32*)ctx->src);              \
+    }
+
+DECLARE_BINARY_STAGES(add)
+DECLARE_BINARY_STAGES(cmplt)
+DECLARE_BINARY_STAGES(cmple)
+DECLARE_BINARY_STAGES(cmpeq)
+DECLARE_BINARY_STAGES(cmpne)
+
+#undef DECLARE_BINARY_STAGES
 
 STAGE(gauss_a_to_rgba, NoCtx) {
     // x = 1 - x;
