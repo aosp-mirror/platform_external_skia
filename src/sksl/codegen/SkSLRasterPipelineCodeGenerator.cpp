@@ -26,6 +26,7 @@
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
+#include "src/sksl/ir/SkSLIfStatement.h"
 #include "src/sksl/ir/SkSLLiteral.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
 #include "src/sksl/ir/SkSLType.h"
@@ -83,7 +84,8 @@ public:
     /** Appends a statement to the program. */
     bool writeStatement(const Statement& s);
     bool writeBlock(const Block& b);
-    bool writeExpressionStatement(const ExpressionStatement& b);
+    bool writeExpressionStatement(const ExpressionStatement& e);
+    bool writeIfStatement(const IfStatement& i);
     bool writeReturnStatement(const ReturnStatement& r);
     bool writeVarDeclaration(const VarDeclaration& v);
 
@@ -110,8 +112,16 @@ public:
     void zeroSlotRangeUnmasked(SlotRange r) { fBuilder.zero_slots_unmasked(r); }
 
     /** Expression utilities. */
-    void add(SkSL::Type::NumberKind numberKind, int slots);
+    struct BinaryOps {
+        BuilderOp fFloatOp;
+        BuilderOp fSignedOp;
+        BuilderOp fUnsignedOp;
+        BuilderOp fBooleanOp;
+    };
+
     bool assign(const Expression& e);
+    bool binaryOp(SkSL::Type::NumberKind numberKind, int slots, const BinaryOps& ops);
+    void foldWithOp(BuilderOp op, int elements);
 
 private:
     [[maybe_unused]] const SkSL::Program& fProgram;
@@ -218,6 +228,9 @@ bool Generator::writeStatement(const Statement& s) {
         case Statement::Kind::kExpression:
             return this->writeExpressionStatement(s.as<ExpressionStatement>());
 
+        case Statement::Kind::kIf:
+            return this->writeIfStatement(s.as<IfStatement>());
+
         case Statement::Kind::kNop:
             return true;
 
@@ -247,6 +260,34 @@ bool Generator::writeExpressionStatement(const ExpressionStatement& e) {
         return false;
     }
     this->discardExpression(e.expression()->type().slotCount());
+    return true;
+}
+
+bool Generator::writeIfStatement(const IfStatement& i) {
+    if (!this->pushExpression(*i.test())) {
+        return false;
+    }
+
+    // Apply the test-expression as a condition, then run the if-true branch.
+    fBuilder.push_condition_mask();
+    if (!this->writeStatement(*i.ifTrue())) {
+        return false;
+    }
+    fBuilder.pop_condition_mask();
+
+    if (i.ifFalse()) {
+        // The test condition is still at the top of the stack. Negate it, apply it as a condition
+        // mask again, and run the if-false branch.
+        fBuilder.unary_op(BuilderOp::bitwise_not, /*slots=*/1);
+        fBuilder.push_condition_mask();
+        if (!this->writeStatement(*i.ifFalse())) {
+            return false;
+        }
+        fBuilder.pop_condition_mask();
+    }
+
+    // Jettison the test condition.
+    this->discardExpression(/*slots=*/1);
     return true;
 }
 
@@ -296,23 +337,32 @@ bool Generator::pushExpression(const Expression& e) {
     }
 }
 
-void Generator::add(SkSL::Type::NumberKind numberKind, int slots) {
+bool Generator::binaryOp(SkSL::Type::NumberKind numberKind, int slots, const BinaryOps& ops) {
+    BuilderOp op = BuilderOp::unsupported;
     switch (numberKind) {
-        case Type::NumberKind::kFloat:
-            fBuilder.binary_op(BuilderOp::add_n_floats, slots);
-            return;
-        case Type::NumberKind::kSigned:
-        case Type::NumberKind::kUnsigned:
-            fBuilder.binary_op(BuilderOp::add_n_ints, slots);
-            return;
-        default:
-            SkUNREACHABLE;
+        case Type::NumberKind::kFloat:    op = ops.fFloatOp;    break;
+        case Type::NumberKind::kSigned:   op = ops.fSignedOp;   break;
+        case Type::NumberKind::kUnsigned: op = ops.fUnsignedOp; break;
+        case Type::NumberKind::kBoolean:  op = ops.fBooleanOp;  break;
+        default:                          SkUNREACHABLE;
     }
+    if (op == BuilderOp::unsupported) {
+        return false;
+    }
+    fBuilder.binary_op(op, slots);
+    return true;
 }
 
 bool Generator::assign(const Expression& e) {
     std::unique_ptr<LValue> lvalue = LValue::Make(e);
     return lvalue && lvalue->store(this);
+}
+
+void Generator::foldWithOp(BuilderOp op, int elements) {
+    // Fold the top N elements on the stack using an op, e.g. (A && (B && C)) -> D.
+    for (; elements > 1; elements--) {
+        fBuilder.binary_op(op, /*slots=*/1);
+    }
 }
 
 bool Generator::pushBinaryExpression(const BinaryExpression& e) {
@@ -328,16 +378,82 @@ bool Generator::pushBinaryExpression(const BinaryExpression& e) {
     }
 
     const Type& type = e.left()->type();
-
-    this->pushExpression(*e.left());
-    this->pushExpression(*e.right());
     Type::NumberKind numberKind = type.componentType().numberKind();
+    Operator basicOp = e.getOperator().removeAssignment();
 
-    switch (e.getOperator().removeAssignment().kind()) {
-        case OperatorKind::PLUS:
-            this->add(numberKind, type.slotCount());
+    switch (basicOp.kind()) {
+        case OperatorKind::GT:
+        case OperatorKind::GTEQ:
+            // We replace `x > y` with `y < x`, and `x >= y` with `y <= x`.
+            this->pushExpression(*e.right());
+            this->pushExpression(*e.left());
             break;
 
+        default:
+            this->pushExpression(*e.left());
+            this->pushExpression(*e.right());
+            break;
+    }
+
+    switch (basicOp.kind()) {
+        case OperatorKind::PLUS: {
+            static constexpr auto kPlus = BinaryOps{BuilderOp::add_n_floats,
+                                                    BuilderOp::add_n_ints,
+                                                    BuilderOp::add_n_ints,
+                                                    BuilderOp::unsupported};
+            if (!this->binaryOp(numberKind, type.slotCount(), kPlus)) {
+                return false;
+            }
+            break;
+        }
+        case OperatorKind::LT:
+        case OperatorKind::GT: {
+            // TODO(skia:13676): add support for unsigned <
+            static constexpr auto kLessThan = BinaryOps{BuilderOp::cmplt_n_floats,
+                                                        BuilderOp::cmplt_n_ints,
+                                                        BuilderOp::unsupported,
+                                                        BuilderOp::unsupported};
+            if (!this->binaryOp(numberKind, type.slotCount(), kLessThan)) {
+                return false;
+            }
+            SkASSERT(type.slotCount() == 1);  // operator< only works with scalar types
+            break;
+        }
+        case OperatorKind::LTEQ:
+        case OperatorKind::GTEQ: {
+            // TODO(skia:13676): add support for unsigned <=
+            static constexpr auto kLessThanEquals = BinaryOps{BuilderOp::cmple_n_floats,
+                                                              BuilderOp::cmple_n_ints,
+                                                              BuilderOp::unsupported,
+                                                              BuilderOp::unsupported};
+            if (!this->binaryOp(numberKind, type.slotCount(), kLessThanEquals)) {
+                return false;
+            }
+            SkASSERT(type.slotCount() == 1);  // operator<= only works with scalar types
+            break;
+        }
+        case OperatorKind::EQEQ: {
+            static constexpr auto kEquals = BinaryOps{BuilderOp::cmpeq_n_floats,
+                                                      BuilderOp::cmpeq_n_ints,
+                                                      BuilderOp::cmpeq_n_ints,
+                                                      BuilderOp::cmpeq_n_ints};
+            if (!this->binaryOp(numberKind, type.slotCount(), kEquals)) {
+                return false;
+            }
+            this->foldWithOp(BuilderOp::bitwise_and, type.slotCount());  // fold vector result
+            break;
+        }
+        case OperatorKind::NEQ: {
+            static constexpr auto kNotEquals = BinaryOps{BuilderOp::cmpne_n_floats,
+                                                         BuilderOp::cmpne_n_ints,
+                                                         BuilderOp::cmpne_n_ints,
+                                                         BuilderOp::cmpne_n_ints};
+            if (!this->binaryOp(numberKind, type.slotCount(), kNotEquals)) {
+                return false;
+            }
+            this->foldWithOp(BuilderOp::bitwise_or, type.slotCount());  // fold vector result
+            break;
+        }
         default:
             return false;
     }
