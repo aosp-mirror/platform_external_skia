@@ -1102,32 +1102,39 @@ static void start_pipeline(size_t dx, size_t dy,
 }
 
 #if JUMPER_NARROW_STAGES
-    #define STAGE(name, ARG)                                                         \
-        SI void name##_k(ARG, size_t dx, size_t dy, size_t tail,                     \
-                         F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da);        \
+    #define DECLARE_STAGE(name, ARG, STAGE_RET, INC, OFFSET)                         \
+        SI STAGE_RET name##_k(ARG, size_t dx, size_t dy, size_t tail,                \
+                              F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da);   \
         static void ABI name(Params* params, SkRasterPipelineStage* program,         \
                              F r, F g, F b, F a) {                                   \
-            name##_k(Ctx{program},params->dx,params->dy,params->tail, r,g,b,a,       \
-                     params->dr, params->dg, params->db, params->da);                \
-            auto fn = (Stage)(++program)->fn;                                        \
+            OFFSET name##_k(Ctx{program},params->dx,params->dy,params->tail, r,g,b,a,\
+                            params->dr, params->dg, params->db, params->da);         \
+            INC;                                                                     \
+            auto fn = (Stage)program->fn;                                            \
             fn(params, program, r,g,b,a);                                            \
         }                                                                            \
-        SI void name##_k(ARG, size_t dx, size_t dy, size_t tail,                     \
-                         F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da)
+        SI STAGE_RET name##_k(ARG, size_t dx, size_t dy, size_t tail,                \
+                              F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da)
 #else
-    #define STAGE(name, ARG)                                                                    \
-        SI void name##_k(ARG, size_t dx, size_t dy, size_t tail,                                \
-                         F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da);                   \
+    #define DECLARE_STAGE(name, ARG, STAGE_RET, INC, OFFSET)                                    \
+        SI STAGE_RET name##_k(ARG, size_t dx, size_t dy, size_t tail,                           \
+                              F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da);              \
         static void ABI name(size_t tail, SkRasterPipelineStage* program, size_t dx, size_t dy, \
                              F r, F g, F b, F a, F dr, F dg, F db, F da) {                      \
-            name##_k(Ctx{program},dx,dy,tail, r,g,b,a, dr,dg,db,da);                            \
-            auto fn = (Stage)(++program)->fn;                                                   \
+            OFFSET name##_k(Ctx{program},dx,dy,tail, r,g,b,a, dr,dg,db,da);                     \
+            INC;                                                                                \
+            auto fn = (Stage)program->fn;                                                       \
             fn(tail, program, dx,dy, r,g,b,a, dr,dg,db,da);                                     \
         }                                                                                       \
-        SI void name##_k(ARG, size_t dx, size_t dy, size_t tail,                                \
-                         F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da)
+        SI STAGE_RET name##_k(ARG, size_t dx, size_t dy, size_t tail,                           \
+                              F& r, F& g, F& b, F& a, F& dr, F& dg, F& db, F& da)
 #endif
 
+// A typical stage returns void, and always increments the program counter by 1.
+#define STAGE(name, arg)        DECLARE_STAGE(name, arg, void, ++program, /*no offset*/)
+
+// A branch stage returns an integer, which is added directly to the program counter.
+#define STAGE_BRANCH(name, arg) DECLARE_STAGE(name, arg, int, /*no increment*/, program +=)
 
 // just_return() is a simple no-op stage that only exists to end the chain,
 // returning back up to start_pipeline(), and from there to the caller.
@@ -2977,11 +2984,18 @@ STAGE(callback, SkRasterPipeline_CallbackCtx* c) {
 // All control flow stages used by SkSL maintain some state in the common registers:
 //   dr: condition mask
 //   dg: loop mask
-//   db: returned mask
+//   db: return mask
+//   da: execution mask (intersection of all three masks)
+// After updating dr/dg/db, you must invoke update_execution_mask().
+#define execution_mask()        sk_bit_cast<I32>(da)
+#define update_execution_mask() da = sk_bit_cast<F>(sk_bit_cast<I32>(dr) & \
+                                                    sk_bit_cast<I32>(dg) & \
+                                                    sk_bit_cast<I32>(db))
+
 STAGE(init_lane_masks, NoCtx) {
     uint32_t iota[] = {0,1,2,3,4,5,6,7};
     I32 mask = tail ? cond_to_mask(sk_unaligned_load<U32>(iota) < tail) : I32(~0);
-    dr = dg = db = sk_bit_cast<F>(mask);
+    dr = dg = db = da = sk_bit_cast<F>(mask);
 }
 
 STAGE(load_unmasked, float* ctx) {
@@ -2995,12 +3009,12 @@ STAGE(store_unmasked, float* ctx) {
 STAGE(store_masked, float* ctx) {
     // We should probably dedicate a register (da?) to holding "dr & dg & db" so we don't need to
     // recompute this bitmask every time we perform a masked operation.
-    I32 mask = sk_bit_cast<I32>(dr) & sk_bit_cast<I32>(dg) & sk_bit_cast<I32>(db);
-    sk_unaligned_store(ctx, if_then_else(mask, r, sk_unaligned_load<F>(ctx)));
+    sk_unaligned_store(ctx, if_then_else(execution_mask(), r, sk_unaligned_load<F>(ctx)));
 }
 
 STAGE(load_condition_mask, F* ctx) {
     dr = sk_unaligned_load<F>(ctx);
+    update_execution_mask();
 }
 
 STAGE(store_condition_mask, F* ctx) {
@@ -3013,6 +3027,26 @@ STAGE(combine_condition_mask, I32* stack) {
 
     // Intersect the current condition-mask with the condition-mask on the stack.
     dr = sk_bit_cast<F>(stack[0] & stack[1]);
+    update_execution_mask();
+}
+
+STAGE(update_return_mask, NoCtx) {
+    // We encountered a return statement. If a lane was active, it should be masked off now, and
+    // stay masked-off until the end of the function.
+    db = sk_bit_cast<F>(sk_bit_cast<I32>(db) & ~execution_mask());
+    update_execution_mask();
+}
+
+STAGE_BRANCH(branch_if_any_active_lanes, int* offset) {
+    return any(sk_bit_cast<I32>(da)) ? *offset : 1;
+}
+
+STAGE_BRANCH(branch_if_no_active_lanes, int* offset) {
+    return any(sk_bit_cast<I32>(da)) ? 1 : *offset;
+}
+
+STAGE_BRANCH(jump, int* offset) {
+    return *offset;
 }
 
 STAGE(immediate_f, void* ctx) {
@@ -3050,9 +3084,7 @@ STAGE(copy_4_slots_unmasked, SkRasterPipeline_CopySlotsCtx* ctx) {
 }
 
 template <int NumSlots>
-SI void copy_n_slots_masked_fn(SkRasterPipeline_CopySlotsCtx* ctx, F& dr, F& dg, F& db) {
-    // Compute the mask; if it's completely zero, we can stop here.
-    I32 mask = sk_bit_cast<I32>(dr) & sk_bit_cast<I32>(dg) & sk_bit_cast<I32>(db);
+SI void copy_n_slots_masked_fn(SkRasterPipeline_CopySlotsCtx* ctx, I32 mask) {
     if (any(mask)) {
         // Get pointers to our slots.
         F* dst = (F*)ctx->dst;
@@ -3060,8 +3092,7 @@ SI void copy_n_slots_masked_fn(SkRasterPipeline_CopySlotsCtx* ctx, F& dr, F& dg,
 
         // Mask off and copy slots.
         for (int count = 0; count < NumSlots; ++count) {
-            sk_unaligned_store(dst, if_then_else(mask, sk_unaligned_load<F>(src),
-                                                       sk_unaligned_load<F>(dst)));
+            *dst = if_then_else(mask, *src, *dst);
             dst += 1;
             src += 1;
         }
@@ -3069,16 +3100,16 @@ SI void copy_n_slots_masked_fn(SkRasterPipeline_CopySlotsCtx* ctx, F& dr, F& dg,
 }
 
 STAGE(copy_slot_masked, SkRasterPipeline_CopySlotsCtx* ctx) {
-    copy_n_slots_masked_fn<1>(ctx, dr, dg, db);
+    copy_n_slots_masked_fn<1>(ctx, execution_mask());
 }
 STAGE(copy_2_slots_masked, SkRasterPipeline_CopySlotsCtx* ctx) {
-    copy_n_slots_masked_fn<2>(ctx, dr, dg, db);
+    copy_n_slots_masked_fn<2>(ctx, execution_mask());
 }
 STAGE(copy_3_slots_masked, SkRasterPipeline_CopySlotsCtx* ctx) {
-    copy_n_slots_masked_fn<3>(ctx, dr, dg, db);
+    copy_n_slots_masked_fn<3>(ctx, execution_mask());
 }
 STAGE(copy_4_slots_masked, SkRasterPipeline_CopySlotsCtx* ctx) {
-    copy_n_slots_masked_fn<4>(ctx, dr, dg, db);
+    copy_n_slots_masked_fn<4>(ctx, execution_mask());
 }
 
 STAGE(bitwise_and, I32* dst) {
