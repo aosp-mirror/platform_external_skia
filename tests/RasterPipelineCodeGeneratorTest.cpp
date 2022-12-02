@@ -144,3 +144,32 @@ DEF_TEST(SkSLRasterPipelineCodeGeneratorAdditionTest, r) {
          )__SkSL__",
          SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
 }
+
+DEF_TEST(SkSLRasterPipelineCodeGeneratorIfElseTest, r) {
+    // Add in your SkSL here.
+    test(r,
+         R"__SkSL__(
+             half4 main(float2 coords) {
+                 half4 colorBlue  = half4(0,0,1,1),
+                       colorGreen = half4(0,1,0,1),
+                       colorRed   = half4(1,0,0,1),
+                       colorWhite = half4(1);
+                 half4 result = half4(0);
+                 if (colorWhite != colorBlue) {    // TRUE
+                     if (colorGreen == colorRed) { // FALSE
+                         result = colorRed;
+                     } else {
+                         result = colorGreen;
+                     }
+                 } else {
+                     if (colorRed != colorGreen) { // TRUE, but in a false branch
+                         result = colorBlue;
+                     } else {                      // FALSE, and in a false branch
+                         result = colorWhite;
+                     }
+                 }
+                 return result;
+             }
+         )__SkSL__",
+         SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
+}

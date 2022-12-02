@@ -43,6 +43,9 @@ enum class BuilderOp {
     copy_stack_to_slots_unmasked,
     discard_stack,
     duplicate,
+    push_condition_mask,
+    pop_condition_mask,
+    unsupported
 };
 
 // Represents a single raster-pipeline SkSL instruction.
@@ -80,12 +83,10 @@ private:
     void optimize();
     int numValueSlots();
     int numTempStackSlots();
-    int numConditionMaskSlots();
 
     SkTArray<Instruction> fInstructions;
     int fNumValueSlots = 0;
     int fNumTempStackSlots = 0;
-    int fNumConditionMaskSlots = 0;
 };
 
 class Builder {
@@ -225,13 +226,11 @@ public:
     }
 
     void push_condition_mask() {
-        // Raster pipeline uses a "store" op, and the builder manages the stack position.
-        fInstructions.push_back({BuilderOp::store_condition_mask, {}});
+        fInstructions.push_back({BuilderOp::push_condition_mask, {}});
     }
 
     void pop_condition_mask() {
-        // Raster pipeline uses a "load" op, and the builder manages the stack position.
-        fInstructions.push_back({BuilderOp::load_condition_mask, {}});
+        fInstructions.push_back({BuilderOp::pop_condition_mask, {}});
     }
 
 private:
