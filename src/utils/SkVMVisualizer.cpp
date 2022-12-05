@@ -11,6 +11,7 @@
 #include "src/core/SkStreamPriv.h"
 
 #if defined(SK_ENABLE_SKSL)
+#include "src/sksl/tracing/SkSLDebugInfo.h"
 #include "src/sksl/tracing/SkVMDebugTrace.h"
 #endif
 
