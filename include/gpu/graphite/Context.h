@@ -32,6 +32,7 @@ class ContextPriv;
 struct DawnBackendContext;
 class GlobalCache;
 struct MtlBackendContext;
+class PaintOptions;
 class QueueManager;
 class Recording;
 class ResourceProvider;
@@ -92,6 +93,8 @@ public:
     // TODO: add "ColorFilterID addUserDefinedColorFilter(sk_sp<SkRuntimeEffect>)" here
     BlenderID addUserDefinedBlender(sk_sp<SkRuntimeEffect>);
 
+    void precompile(const PaintOptions&);
+
     void precompile(CombinationBuilder*);
 #endif
 
@@ -137,13 +140,28 @@ private:
 
     SingleOwner* singleOwner() const { return &fSingleOwner; }
 
-    void asyncReadPixels(Recorder* recorder,
-                         const TextureProxy* textureProxy,
+    void asyncReadPixels(const TextureProxy* textureProxy,
                          const SkImageInfo& srcImageInfo,
                          const SkColorInfo& dstColorInfo,
                          const SkIRect& srcRect,
                          SkImage::ReadPixelsCallback callback,
                          SkImage::ReadPixelsContext context);
+
+    // Inserts a texture to buffer transfer task, used by asyncReadPixels methods
+    struct PixelTransferResult {
+        using ConversionFn = void(void* dst, const void* mappedBuffer);
+        // If null then the transfer could not be performed. Otherwise this buffer will contain
+        // the pixel data when the transfer is complete.
+        sk_sp<Buffer> fTransferBuffer;
+        // If this is null then the transfer buffer will contain the data in the requested
+        // color type. Otherwise, when the transfer is done this must be called to convert
+        // from the transfer buffer's color type to the requested color type.
+        std::function<ConversionFn> fPixelConverter;
+    };
+    PixelTransferResult transferPixels(const TextureProxy*,
+                                       const SkImageInfo& srcImageInfo,
+                                       const SkColorInfo& dstColorInfo,
+                                       const SkIRect& srcRect);
 
     sk_sp<SharedContext> fSharedContext;
     std::unique_ptr<ResourceProvider> fResourceProvider;
