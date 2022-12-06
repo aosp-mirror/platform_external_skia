@@ -17,7 +17,13 @@ namespace skgpu::graphite {
     data members or virtual methods. */
 class PrecompileBasePriv {
 public:
-    // This class will be used in future CLs
+    int numChildCombinations() const {
+        return fPrecompileBase->numChildCombinations();
+    }
+
+    int numCombinations() const {
+        return fPrecompileBase->numCombinations();
+    }
 
 private:
     friend class PrecompileBase; // to construct/copy this type.

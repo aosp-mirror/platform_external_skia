@@ -42,7 +42,7 @@ private:
     void add(const void* buffer, size_t len, const SkBitmap&);
 
     void fillGradient(const SkPMColor4f* colors, const SkScalar* positions, int count,
-                      SkBitmap* bitmap);
+                      SkColorType colorType, SkBitmap* bitmap);
 
 #ifdef SK_DEBUG
     void validate() const;

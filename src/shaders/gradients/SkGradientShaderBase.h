@@ -43,6 +43,8 @@ public:
         int                 fColorCount;  // length of fColors (and fPositions, if not nullptr)
         SkTileMode          fTileMode;
         Interpolation       fInterpolation;
+
+        void flatten(SkWriteBuffer&) const;
     };
 
     class DescriptorScope : public Descriptor {
@@ -88,6 +90,9 @@ public:
     static constexpr SkScalar kDegenerateThreshold = SK_Scalar1 / (1 << 15);
 
 protected:
+    class GradientShaderBase4fContext;
+
+    SkGradientShaderBase(SkReadBuffer& );
     void flatten(SkWriteBuffer&) const override;
 
     void commonAsAGradient(GradientInfo*) const;
@@ -111,12 +116,6 @@ protected:
     SkTileMode     fTileMode;
 
 public:
-    static void AppendGradientFillStages(SkRasterPipeline* p,
-                                         SkArenaAlloc* alloc,
-                                         const SkPMColor4f* colors,
-                                         const SkScalar* positions,
-                                         int count);
-
     SkScalar getPos(int i) const {
         SkASSERT(i < fColorCount);
         return fPositions ? fPositions[i] : SkIntToScalar(i) / (fColorCount - 1);
@@ -132,8 +131,6 @@ public:
     int                 fColorCount;   // length of fColors (and fPositions, if not nullptr)
     sk_sp<SkColorSpace> fColorSpace;   // color space of gradient stops
     Interpolation       fInterpolation;
-    bool                fFirstStopIsImplicit;
-    bool                fLastStopIsImplicit;
 
     bool colorsAreOpaque() const { return fColorsAreOpaque; }
 

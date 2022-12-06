@@ -14,62 +14,58 @@
 
 namespace skgpu::graphite {
 
-//--------------------------------------------------------------------------------------------------
-int PaintOptions::numShaderCombinations() const {
-    int numShaderCombinations = 0;
-    for (const sk_sp<PrecompileShader>& s : fShaderOptions) {
-        numShaderCombinations += s->numCombinations();
+int PaintOptions::numCombinations() const {
+    int numShaderCombos = 0;
+    if (fShaders.empty()) {
+        numShaderCombos = 1; // just going to use the SkPaint's color here
+    } else {
+        for (auto s : fShaders) {
+            numShaderCombos += s->priv().numCombinations();
+        }
     }
 
-    // If no shader option is specified we will add a solid color shader option
-    return numShaderCombinations ? numShaderCombinations : 1;
-}
-
-int PaintOptions::numMaskFilterCombinations() const {
-    int numMaskFilterCombinations = 0;
-    for (const sk_sp<PrecompileMaskFilter>& mf : fMaskFilterOptions) {
-        numMaskFilterCombinations += mf->numCombinations();
+    int numMaskFilterCombos = 0;
+    if (fMaskFilters.empty()) {
+        numMaskFilterCombos = 1;
+    } else {
+        for (auto mf : fMaskFilters) {
+            numMaskFilterCombos += mf->priv().numCombinations();
+        }
     }
 
-    // If no mask filter options are specified we will use the geometry's coverage
-    return numMaskFilterCombinations ? numMaskFilterCombinations : 1;
-}
-
-int PaintOptions::numColorFilterCombinations() const {
-    int numColorFilterCombinations = 0;
-    for (const sk_sp<PrecompileColorFilter>& cf : fColorFilterOptions) {
-        numColorFilterCombinations += cf->numCombinations();
+    int numColorFilterCombos = 0;
+    if (fColorFilters.empty()) {
+        numColorFilterCombos = 1;
+    } else {
+        for (auto cf : fColorFilters) {
+            numColorFilterCombos += cf->priv().numCombinations();
+        }
     }
 
-    // If no color filter options are specified we will use the unmodified result color
-    return numColorFilterCombinations ? numColorFilterCombinations : 1;
+    // TODO: handle ImageFilters separately
+
+    int numBlenderCombos = CountBlenderCombos(fBlenders);
+
+    return numShaderCombos * numMaskFilterCombos * numColorFilterCombos * numBlenderCombos;
 }
 
-int PaintOptions::numBlendModeCombinations() const {
+int CountBlenderCombos(const std::vector<sk_sp<PrecompileBlender>>& blenders) {
     bool bmBased = false;
     int numBlendCombos = 0;
-    for (auto b: fBlenderOptions) {
+    for (auto b: blenders) {
         if (b->asBlendMode().has_value()) {
             bmBased = true;
         } else {
-            numBlendCombos += b->numChildCombinations();
+            numBlendCombos += b->priv().numChildCombinations();
         }
     }
 
     if (bmBased || !numBlendCombos) {
-        // If numBlendCombos is zero we will fallback to kSrcOver blending
+        // If numBlendCombos is zero we will fallback kSrcOver blending
         ++numBlendCombos;
     }
 
     return numBlendCombos;
-}
-
-int PaintOptions::numCombinations() const {
-    // TODO: we need to handle ImageFilters separately
-    return this->numShaderCombinations() *
-           this->numMaskFilterCombinations() *
-           this->numColorFilterCombinations() *
-           this->numBlendModeCombinations();
 }
 
 } // namespace skgpu::graphite

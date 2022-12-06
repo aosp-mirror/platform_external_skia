@@ -47,20 +47,8 @@ TextureProxy::TextureProxy(SkISize dimensions,
 
 TextureProxy::~TextureProxy() {}
 
-SkISize TextureProxy::dimensions() const {
-    SkASSERT(!this->isFullyLazy() || this->isInstantiated());
-    return this->isInstantiated() ? fTexture->dimensions() : fDimensions;
-}
-
 bool TextureProxy::isLazy() const {
     return SkToBool(fLazyInstantiateCallback);
-}
-
-bool TextureProxy::isFullyLazy() const {
-    bool result = fDimensions.width() < 0;
-    SkASSERT(result == (fDimensions.height() < 0));
-    SkASSERT(!result || this->isLazy());
-    return result;
 }
 
 bool TextureProxy::isVolatile() const {
@@ -156,16 +144,9 @@ sk_sp<TextureProxy> TextureProxy::MakeLazy(SkISize dimensions,
                                                 isVolatile, std::move(callback)));
 }
 
-sk_sp<TextureProxy> TextureProxy::MakeFullyLazy(const TextureInfo& textureInfo,
-                                                SkBudgeted budgeted,
-                                                Volatile isVolatile,
-                                                LazyInstantiateCallback&& callback) {
-    return MakeLazy(SkISize::Make(-1, -1), textureInfo, budgeted, isVolatile, std::move(callback));
-}
-
 #ifdef SK_DEBUG
 void TextureProxy::validateTexture(const Texture* texture) {
-    SkASSERT(this->isFullyLazy() || fDimensions == texture->dimensions());
+    SkASSERT(fDimensions == texture->dimensions());
     SkASSERT(fInfo == texture->textureInfo());
 }
 #endif

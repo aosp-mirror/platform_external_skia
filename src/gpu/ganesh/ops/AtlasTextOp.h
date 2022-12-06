@@ -13,7 +13,6 @@
 #include "src/gpu/ganesh/ops/GrMeshDrawOp.h"
 #include "src/text/gpu/TextBlob.h"
 
-class GrProgramInfo;
 class GrRecordingContext;
 
 namespace skgpu::ganesh {

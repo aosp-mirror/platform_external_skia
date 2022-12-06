@@ -156,11 +156,10 @@ struct ImageShaderBlock {
         sk_sp<TextureProxy> fTextureProxy;
     };
 
-    // The gatherer and imageData should be null or non-null together
     static void BeginBlock(const KeyContext&,
                            PaintParamsKeyBuilder*,
                            PipelineDataGatherer*,
-                           const ImageData*);
+                           const ImageData&);
 
 };
 
@@ -212,11 +211,10 @@ struct MatrixColorFilterBlock {
         bool         fInHSLA;
     };
 
-    // The gatherer and matrixCFData should be null or non-null together
     static void BeginBlock(const KeyContext&,
                            PaintParamsKeyBuilder*,
                            PipelineDataGatherer*,
-                           const MatrixColorFilterData*);
+                           const MatrixColorFilterData&);
 };
 
 struct BlendColorFilterBlock {

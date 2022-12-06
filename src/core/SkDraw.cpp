@@ -27,7 +27,6 @@
 #include "src/core/SkBlitter.h"
 #include "src/core/SkDevice.h"
 #include "src/core/SkDrawProcs.h"
-#include "src/core/SkImagePriv.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkMatrixUtils.h"
 #include "src/core/SkPathEffectBase.h"

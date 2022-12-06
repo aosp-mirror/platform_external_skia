@@ -53,27 +53,16 @@ public:
 
 private:
     int numChildCombinations() const override {
-        // TODO (robertphillips): This computation for blender combinations isn't quite correct but
-        // good enough for now. In particular, the 'fBlenders' array could contain a bunch of
-        // mode-based blenders that would all reduce to just one or two combinations
-        // (PorterDuff and full shader-based blending). Please see the PrecompileBlendShader in
-        // https://skia-review.googlesource.com/c/skia/+/606897/ for how I intend to solve this.
-        int numBlenderCombos = 0;
-        for (auto b : fBlenders) {
-            numBlenderCombos += b->numCombinations();
-        }
-        if (!numBlenderCombos) {
-            numBlenderCombos = 1; // fallback to kSrcOver
-        }
+        int numBlenderCombos = CountBlenderCombos(fBlenders);
 
         int numDstCombos = 0;
         for (auto d : fDsts) {
-            numDstCombos += d->numCombinations();
+            numDstCombos += d->priv().numChildCombinations();
         }
 
         int numSrcCombos = 0;
         for (auto s : fSrcs) {
-            numSrcCombos += s->numCombinations();
+            numSrcCombos += s->priv().numChildCombinations();
         }
 
         return numBlenderCombos * numDstCombos * numSrcCombos;

@@ -40,21 +40,20 @@ public:
 
     Type type() const { return fType; }
 
-    // TODO: Maybe convert these two to be parameters passed into PrecompileBase from all the
-    // derived classes and then make them non-virtual.
-    virtual int numIntrinsicCombinations() const { return 1; }
-    virtual int numChildCombinations() const { return 1; }
-
-    int numCombinations() const {
-        return this->numIntrinsicCombinations() * this->numChildCombinations();
-    }
-
     // Provides access to functions that aren't part of the public API.
     PrecompileBasePriv priv();
     const PrecompileBasePriv priv() const;  // NOLINT(readability-const-return-type)
 
 private:
     friend class PrecompileBasePriv;
+
+    // TODO: make these two pure virtual.
+    virtual int numIntrinsicCombinations() const { return 1; }
+    virtual int numChildCombinations() const { return 1; }
+
+    int numCombinations() const {
+        return this->numIntrinsicCombinations() * this->numChildCombinations();
+    }
 
     Type fType;
 };
@@ -95,29 +94,29 @@ class PaintOptionsPriv;
 class PaintOptions {
 public:
     void setShaders(SkSpan<const sk_sp<PrecompileShader>> shaders) {
-        fShaderOptions.assign(shaders.begin(), shaders.end());
+        fShaders.assign(shaders.begin(), shaders.end());
     }
 
     void setMaskFilters(SkSpan<const sk_sp<PrecompileMaskFilter>> maskFilters) {
-        fMaskFilterOptions.assign(maskFilters.begin(), maskFilters.end());
+        fMaskFilters.assign(maskFilters.begin(), maskFilters.end());
     }
 
     void setColorFilters(SkSpan<const sk_sp<PrecompileColorFilter>> colorFilters) {
-        fColorFilterOptions.assign(colorFilters.begin(), colorFilters.end());
+        fColorFilters.assign(colorFilters.begin(), colorFilters.end());
     }
 
     void setImageFilters(SkSpan<const sk_sp<PrecompileImageFilter>> imageFilters) {
-        fImageFilterOptions.assign(imageFilters.begin(), imageFilters.end());
+        fImageFilters.assign(imageFilters.begin(), imageFilters.end());
     }
 
     void setBlendModes(SkSpan<SkBlendMode> blendModes) {
-        fBlenderOptions.reserve(blendModes.size());
+        fBlenders.reserve(blendModes.size());
         for (SkBlendMode bm : blendModes) {
-            fBlenderOptions.emplace_back(PrecompileBlender::Mode(bm));
+            fBlenders.emplace_back(PrecompileBlender::Mode(bm));
         }
     }
     void setBlenders(SkSpan<const sk_sp<PrecompileBlender>> blenders) {
-        fBlenderOptions.assign(blenders.begin(), blenders.end());
+        fBlenders.assign(blenders.begin(), blenders.end());
     }
 
     // Provides access to functions that aren't part of the public API.
@@ -127,19 +126,13 @@ public:
 private:
     friend class PaintOptionsPriv;
 
-    int numShaderCombinations() const;
-    int numMaskFilterCombinations() const;
-    int numColorFilterCombinations() const;
-    // TODO: need to decompose imagefilters into component draws
-    int numBlendModeCombinations() const;
-
     int numCombinations() const;
 
-    std::vector<sk_sp<PrecompileShader>> fShaderOptions;
-    std::vector<sk_sp<PrecompileMaskFilter>> fMaskFilterOptions;
-    std::vector<sk_sp<PrecompileColorFilter>> fColorFilterOptions;
-    std::vector<sk_sp<PrecompileImageFilter>> fImageFilterOptions;
-    std::vector<sk_sp<PrecompileBlender>> fBlenderOptions;
+    std::vector<sk_sp<PrecompileShader>> fShaders;
+    std::vector<sk_sp<PrecompileMaskFilter>> fMaskFilters;
+    std::vector<sk_sp<PrecompileColorFilter>> fColorFilters;
+    std::vector<sk_sp<PrecompileImageFilter>> fImageFilters;
+    std::vector<sk_sp<PrecompileBlender>> fBlenders;
 };
 
 } // namespace skgpu::graphite

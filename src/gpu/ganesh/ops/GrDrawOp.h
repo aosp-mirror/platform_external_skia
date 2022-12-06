@@ -9,7 +9,6 @@
 #define GrDrawOp_DEFINED
 
 #include <functional>
-#include "src/core/SkAAClip.h"
 #include "src/core/SkIPoint16.h"
 #include "src/gpu/ganesh/GrDeferredUpload.h"
 #include "src/gpu/ganesh/GrPipeline.h"

@@ -23,10 +23,6 @@ struct GrTextureSetEntry;
 struct SkRect;
 class SkMatrix;
 
-namespace skgpu::v1 {
-class SurfaceDrawContext;
-}
-
 namespace skgpu::ganesh {
 
 class SurfaceDrawContext;
