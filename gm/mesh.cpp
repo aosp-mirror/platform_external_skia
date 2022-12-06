@@ -145,11 +145,11 @@ protected:
             for (uint8_t alpha  : {0xFF , 0x40})
             for (bool    colors : {false, true})
             for (bool    shader : {false, true}) {
-                SkMesh mesh;
+                SkMesh::Result result;
                 // Rather than pile onto the combinatorics we draw every other test case indexed.
                 if ((i & 1) == 0) {
                     if (colors) {
-                        mesh = SkMesh::Make(fSpecWithColor,
+                        result = SkMesh::Make(fSpecWithColor,
                                             SkMesh::Mode::kTriangleStrip,
                                             fColorVB,
                                             /*vertexCount= */4,
@@ -157,7 +157,7 @@ protected:
                                             /*uniforms=    */nullptr,
                                             kRect);
                     } else {
-                        mesh = SkMesh::Make(fSpecWithNoColor,
+                        result = SkMesh::Make(fSpecWithNoColor,
                                             SkMesh::Mode::kTriangleStrip,
                                             fNoColorVB,
                                             /*vertexCount=*/4,
@@ -169,7 +169,7 @@ protected:
                     // Alternate between CPU and GPU-backend index buffers.
                     auto ib = (i%4 == 0) ? fIB[0] : fIB[1];
                     if (colors) {
-                        mesh = SkMesh::MakeIndexed(fSpecWithColor,
+                        result = SkMesh::MakeIndexed(fSpecWithColor,
                                                    SkMesh::Mode::kTriangles,
                                                    fColorIndexedVB,
                                                    /*vertexCount=*/6,
@@ -180,7 +180,7 @@ protected:
                                                    /*uniforms=*/nullptr,
                                                    kRect);
                     } else {
-                        mesh = SkMesh::MakeIndexed(fSpecWithNoColor,
+                        result = SkMesh::MakeIndexed(fSpecWithNoColor,
                                                    SkMesh::Mode::kTriangles,
                                                    fNoColorIndexedVB,
                                                    /*vertexCount=*/6,
@@ -192,6 +192,15 @@ protected:
                                                    kRect);
                     }
                 }
+#ifdef SK_LEGACY_MESH_MAKE
+                const SkMesh& mesh = result;
+#else
+                if (!result.mesh.isValid()) {
+                    SkDebugf("Mesh creation failed: %s\n", result.error.c_str());
+                    return DrawResult::kFail;
+                }
+                const SkMesh& mesh = result.mesh;
+#endif
                 SkPaint paint;
                 paint.setColor(SK_ColorGREEN);
                 paint.setShader(shader ? fShader : nullptr);
@@ -422,13 +431,22 @@ protected:
         for (bool unpremul  : {false, true}) {
             c->save();
             for (bool spin : {false, true}) {
-                SkMesh mesh = SkMesh::Make(fSpecs[SpecIndex(unpremul, spin)],
+                auto result = SkMesh::Make(fSpecs[SpecIndex(unpremul, spin)],
                                            SkMesh::Mode::kTriangleStrip,
                                            fVB,
                                            /*vertexCount= */4,
                                            /*vertexOffset=*/0,
                                            /*uniforms=    */nullptr,
                                            kRect);
+#ifdef SK_LEGACY_MESH_MAKE
+                const SkMesh& mesh = result;
+#else
+                if (!result.mesh.isValid()) {
+                    SkDebugf("Mesh creation failed: %s\n", result.error.c_str());
+                    return DrawResult::kFail;
+                }
+                const SkMesh& mesh = result.mesh;
+#endif
 
                 SkPaint paint;
                 paint.setShader(useShader ? fShader : nullptr);
@@ -572,13 +590,23 @@ protected:
                         fColor.vec(),
                         4*sizeof(float));
 
-            SkMesh mesh = SkMesh::Make(fSpec,
+            auto result = SkMesh::Make(fSpec,
                                        SkMesh::Mode::kTriangleStrip,
                                        fVB,
                                        /*vertexCount= */4,
                                        /*vertexOffset=*/0,
                                        /*uniforms=    */std::move(unis),
                                        kRect);
+
+#ifdef SK_LEGACY_MESH_MAKE
+            const SkMesh& mesh = result;
+#else
+            if (!result.mesh.isValid()) {
+                SkDebugf("Mesh creation failed: %s\n", result.error.c_str());
+                return DrawResult::kFail;
+            }
+            const SkMesh& mesh = result.mesh;
+#endif
 
             SkPaint paint;
             paint.setShader(fShader);
@@ -745,13 +773,23 @@ protected:
                 std::memset(vertices, 0, sizeof(vertices));
 
                 int rectCount = std::min(i + 1, kVBRects);
-                auto mesh = SkMesh::Make(fSpec,
-                                         SkMesh::Mode::kTriangles,
-                                         vb,
-                                         /*vertexCount=*/6*rectCount,
-                                         /*vertexOffset=*/0,
-                                         nullptr,
-                                         bounds);
+                auto result = SkMesh::Make(fSpec,
+                                           SkMesh::Mode::kTriangles,
+                                           vb,
+                                           /*vertexCount=*/6*rectCount,
+                                           /*vertexOffset=*/0,
+                                           nullptr,
+                                           bounds);
+
+#ifdef SK_LEGACY_MESH_MAKE
+                const SkMesh& mesh = result;
+#else
+                if (!result.mesh.isValid()) {
+                    SkDebugf("Mesh creation failed: %s\n", result.error.c_str());
+                    return DrawResult::kFail;
+                }
+                const SkMesh& mesh = result.mesh;
+#endif
 
                 canvas->drawMesh(mesh, SkBlender::Mode(SkBlendMode::kDst), paint);
 
@@ -801,16 +839,26 @@ protected:
                 SkAssertResult(ib->update(ctx, indices, offset, 6*sizeof(uint16_t)));
                 std::memset(indices, 0, 6*sizeof(uint16_t));
 
-                auto mesh = SkMesh::MakeIndexed(fSpec,
-                                                SkMesh::Mode::kTriangles,
-                                                vb,
-                                                /*vertexCount= */ 4*kNumIBUpdates,
-                                                /*vertexOffset=*/0,
-                                                ib,
-                                                /*indexCount= */ 6,
-                                                /*indexOffset=*/offset,
-                                                /*uniforms=   */ nullptr,
-                                                bounds);
+                auto result = SkMesh::MakeIndexed(fSpec,
+                                                  SkMesh::Mode::kTriangles,
+                                                  vb,
+                                                  /*vertexCount= */ 4*kNumIBUpdates,
+                                                  /*vertexOffset=*/0,
+                                                  ib,
+                                                  /*indexCount= */ 6,
+                                                  /*indexOffset=*/offset,
+                                                  /*uniforms=   */ nullptr,
+                                                  bounds);
+
+#ifdef SK_LEGACY_MESH_MAKE
+                const SkMesh& mesh = result;
+#else
+                if (!result.mesh.isValid()) {
+                    SkDebugf("Mesh creation failed: %s\n", result.error.c_str());
+                    return DrawResult::kFail;
+                }
+                const SkMesh& mesh = result.mesh;
+#endif
 
                 canvas->drawMesh(mesh, SkBlender::Mode(SkBlendMode::kDst), paint);
             }
@@ -935,16 +983,25 @@ protected:
 
                 SkRect bounds;
                 bounds.setBounds(kTri, std::size(kTri));
-                auto mesh = SkMesh::MakeIndexed(spec,
-                                                SkMesh::Mode::kTriangles,
-                                                std::move(vb),
-                                                /*vertexCount=*/ std::size(kTri),
-                                                /*vertexOffset=*/0,
-                                                std::move(ib),
-                                                /*indexCount=*/std::size(kTiIndices) + 1,
-                                                indexMeshOffset,
-                                                /*uniforms=*/nullptr,
-                                                bounds);
+                auto result = SkMesh::MakeIndexed(spec,
+                                                  SkMesh::Mode::kTriangles,
+                                                  std::move(vb),
+                                                  /*vertexCount=*/ std::size(kTri),
+                                                  /*vertexOffset=*/0,
+                                                  std::move(ib),
+                                                  /*indexCount=*/std::size(kTiIndices) + 1,
+                                                  indexMeshOffset,
+                                                  /*uniforms=*/nullptr,
+                                                  bounds);
+#ifdef SK_LEGACY_MESH_MAKE
+                SkMesh& mesh = result;
+#else
+                if (!result.mesh.isValid()) {
+                    SkDebugf("Mesh creation failed: %s\n", result.error.c_str());
+                    return DrawResult::kFail;
+                }
+                SkMesh& mesh = result.mesh;
+#endif
 
                 SkPaint paint;
                 // The color will be transparent black. Set the blender to kDstOver so when combined

@@ -126,6 +126,8 @@ struct skcms_TransferFunction;
     M(init_lane_masks) M(store_src_rg) M(immediate_f)                                      \
     M(load_unmasked) M(store_unmasked) M(store_masked)                                     \
     M(load_condition_mask) M(store_condition_mask) M(combine_condition_mask)               \
+    M(update_return_mask)                                                                  \
+    M(branch_if_any_active_lanes) M(branch_if_no_active_lanes) M(jump)                     \
     M(bitwise_and) M(bitwise_or) M(bitwise_xor) M(bitwise_not)                             \
     M(copy_slot_masked)    M(copy_2_slots_masked)                                          \
     M(copy_3_slots_masked) M(copy_4_slots_masked)                                          \
@@ -292,6 +294,8 @@ public:
     static constexpr int kNumLowpStages  = SK_RASTER_PIPELINE_STAGES_LOWP(M);
     static constexpr int kNumHighpStages = SK_RASTER_PIPELINE_STAGES_ALL(M);
 #undef M
+
+    static const char* GetStageName(Stage stage);
 
     void append(Stage, void* = nullptr);
     void append(Stage stage, const void* ctx) { this->append(stage, const_cast<void*>(ctx)); }

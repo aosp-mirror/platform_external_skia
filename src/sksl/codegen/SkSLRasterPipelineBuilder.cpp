@@ -9,6 +9,7 @@
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkOpts.h"
 #include "src/sksl/codegen/SkSLRasterPipelineBuilder.h"
+#include "src/sksl/tracing/SkRPDebugTrace.h"
 
 #include <algorithm>
 #include <cstring>
@@ -68,49 +69,44 @@ void Builder::binary_op(BuilderOp op, int32_t slots) {
     }
 }
 
-std::unique_ptr<Program> Builder::finish(int numValueSlots) {
-    return std::make_unique<Program>(std::move(fInstructions), numValueSlots);
+std::unique_ptr<Program> Builder::finish(int numValueSlots, SkRPDebugTrace* debugTrace) {
+    return std::make_unique<Program>(std::move(fInstructions), numValueSlots, debugTrace);
 }
 
 void Program::optimize() {
     // TODO(johnstiles): perform any last-minute cleanup of the instruction stream here
 }
 
+static int stack_usage(const Instruction& inst) {
+    switch (inst.fOp) {
+        case BuilderOp::push_literal_f:
+        case BuilderOp::push_condition_mask:
+            return 1;
+
+        case BuilderOp::push_slots:
+        case BuilderOp::duplicate:
+            return inst.fImmA;
+
+        case ALL_SINGLE_SLOT_BINARY_OP_CASES:
+        case BuilderOp::pop_condition_mask:
+            return -1;
+
+        case ALL_MULTI_SLOT_BINARY_OP_CASES:
+        case BuilderOp::discard_stack:
+            return -inst.fImmA;
+
+        case ALL_SINGLE_SLOT_UNARY_OP_CASES:
+        default:
+            return 0;
+    }
+}
+
 int Program::numTempStackSlots() {
     int largest = 0;
     int current = 0;
     for (const Instruction& inst : fInstructions) {
-        switch (inst.fOp) {
-            case BuilderOp::push_literal_f:
-            case BuilderOp::push_condition_mask:
-                ++current;
-                largest = std::max(current, largest);
-                break;
-
-            case BuilderOp::push_slots:
-                current += inst.fImmA;
-                largest = std::max(current, largest);
-                break;
-
-            case BuilderOp::duplicate:
-                current += inst.fImmA;
-                largest = std::max(current, largest);
-                break;
-
-            case BuilderOp::pop_condition_mask:
-            case ALL_SINGLE_SLOT_BINARY_OP_CASES:
-                current -= 1;
-                break;
-
-            case ALL_MULTI_SLOT_BINARY_OP_CASES:
-            case BuilderOp::discard_stack:
-                current -= inst.fImmA;
-                break;
-
-            default:
-                // This op doesn't affect the stack.
-                break;
-        }
+        current += stack_usage(inst);
+        largest = std::max(current, largest);
         SkASSERTF(current >= 0, "unbalanced temp stack push/pop");
     }
 
@@ -118,11 +114,18 @@ int Program::numTempStackSlots() {
     return largest;
 }
 
-Program::Program(SkTArray<Instruction> instrs, int numValueSlots)
+Program::Program(SkTArray<Instruction> instrs, int numValueSlots, SkRPDebugTrace* debugTrace)
         : fInstructions(std::move(instrs))
-        , fNumValueSlots(numValueSlots) {
+        , fNumValueSlots(numValueSlots)
+        , fDebugTrace(debugTrace) {
     this->optimize();
     fNumTempStackSlots = this->numTempStackSlots();
+}
+
+void Program::dump(SkWStream* s) {
+    if (fDebugTrace) {
+        fDebugTrace->dump(s);
+    }
 }
 
 template <typename T>
@@ -196,21 +199,21 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc) {
                 break;
 
             case ALL_SINGLE_SLOT_UNARY_OP_CASES: {
-                float* dst = tempStackPtr - N;  // overwrite the dest value
+                float* dst = tempStackPtr - (1 * N);
                 pipeline->append((SkRP::Stage)inst.fOp, dst);
                 break;
             }
             case ALL_SINGLE_SLOT_BINARY_OP_CASES: {
-                tempStackPtr -= N;              // pop the source value
-                float* dst = tempStackPtr - N;  // overwrite the dest value
-                pipeline->append_adjacent_single_slot_op((SkRP::Stage)inst.fOp, dst, tempStackPtr);
+                float* src = tempStackPtr - (1 * N);
+                float* dst = tempStackPtr - (2 * N);
+                pipeline->append_adjacent_single_slot_op((SkRP::Stage)inst.fOp, dst, src);
                 break;
             }
             case ALL_MULTI_SLOT_BINARY_OP_CASES: {
-                tempStackPtr -= N * inst.fImmA;              // pop the source value
-                float* dst = tempStackPtr - N * inst.fImmA;  // overwrite the dest value
+                float* src = tempStackPtr - (inst.fImmA * N);
+                float* dst = tempStackPtr - (inst.fImmA * 2 * N);
                 pipeline->append_adjacent_multi_slot_op(alloc, (SkRP::Stage)inst.fOp,
-                                                        dst, tempStackPtr, inst.fImmA);
+                                                        dst, src, inst.fImmA);
                 break;
             }
             case BuilderOp::copy_slot_masked:
@@ -225,57 +228,64 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc) {
                 pipeline->append_zero_slots_unmasked(SlotA(), inst.fImmA);
                 break;
 
-            case BuilderOp::push_slots:
-                pipeline->append_copy_slots_unmasked(alloc, tempStackPtr, SlotA(), inst.fImmA);
-                tempStackPtr += N * inst.fImmA;
+            case BuilderOp::push_slots: {
+                float* dst = tempStackPtr;
+                pipeline->append_copy_slots_unmasked(alloc, dst, SlotA(), inst.fImmA);
                 break;
-
-            case BuilderOp::push_condition_mask:
-                pipeline->append(SkRP::combine_condition_mask, tempStackPtr - N);
-                tempStackPtr += N;
+            }
+            case BuilderOp::push_condition_mask: {
+                float* dst = tempStackPtr - (1 * N);
+                pipeline->append(SkRP::combine_condition_mask, dst);
                 break;
-
-            case BuilderOp::pop_condition_mask:
-                tempStackPtr -= N;
-                pipeline->append(SkRP::load_condition_mask, tempStackPtr);
+            }
+            case BuilderOp::pop_condition_mask: {
+                float* src = tempStackPtr - (1 * N);
+                pipeline->append(SkRP::load_condition_mask, src);
                 break;
-
-            case BuilderOp::push_literal_f:
+            }
+            case BuilderOp::push_literal_f: {
+                float* dst = tempStackPtr;
                 if (inst.fImmA == 0) {
-                    pipeline->append_zero_slots_unmasked(tempStackPtr, /*numSlots=*/1);
+                    pipeline->append_zero_slots_unmasked(dst, /*numSlots=*/1);
                 } else {
                     pipeline->append(SkRP::immediate_f, context_bit_pun(inst.fImmA));
-                    pipeline->append(SkRP::store_unmasked, tempStackPtr);
+                    pipeline->append(SkRP::store_unmasked, dst);
                 }
-                tempStackPtr += N;
                 break;
-
+            }
             case BuilderOp::copy_stack_to_slots: {
-                float* src = tempStackPtr - N * inst.fImmA;
+                float* src = tempStackPtr - (inst.fImmA * N);
                 pipeline->append_copy_slots_masked(alloc, SlotA(), src, inst.fImmA);
                 break;
             }
             case BuilderOp::copy_stack_to_slots_unmasked: {
-                float* src = tempStackPtr - N * inst.fImmA;
+                float* src = tempStackPtr - (inst.fImmA * N);
                 pipeline->append_copy_slots_unmasked(alloc, SlotA(), src, inst.fImmA);
                 break;
             }
-            case BuilderOp::duplicate:
-                pipeline->append(SkRP::load_unmasked, tempStackPtr - N);
+            case BuilderOp::duplicate: {
+                float* src = tempStackPtr - (1 * N);
+                float* dst = tempStackPtr;
+                pipeline->append(SkRP::load_unmasked, src);
                 for (int index = 0; index < inst.fImmA; ++index) {
-                    pipeline->append(SkRP::store_unmasked, tempStackPtr);
-                    tempStackPtr += N;
+                    pipeline->append(SkRP::store_unmasked, dst);
+                    dst += N;
                 }
                 break;
-
+            }
             case BuilderOp::discard_stack:
-                tempStackPtr -= N * inst.fImmA;
+                break;
+
+            case BuilderOp::update_return_mask:
+                pipeline->append(SkRP::update_return_mask);
                 break;
 
             default:
                 SkDEBUGFAILF("Raster Pipeline: unsupported instruction %d", (int)inst.fOp);
                 break;
         }
+
+        tempStackPtr += stack_usage(inst) * N;
         SkASSERT(tempStackPtr >= tempStackBase);
         SkASSERT(tempStackPtr <= tempStackEnd);
     }

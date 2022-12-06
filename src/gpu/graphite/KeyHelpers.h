@@ -16,6 +16,7 @@
 #include "include/core/SkTileMode.h"
 #include "include/gpu/graphite/Context.h"
 #include "include/private/SkColorData.h"
+#include "src/core/SkColorSpaceXformSteps.h"
 #include "src/gpu/graphite/TextureProxy.h"
 #include "src/shaders/SkShaderBase.h"
 
@@ -156,10 +157,11 @@ struct ImageShaderBlock {
         sk_sp<TextureProxy> fTextureProxy;
     };
 
+    // The gatherer and imageData should be null or non-null together
     static void BeginBlock(const KeyContext&,
                            PaintParamsKeyBuilder*,
                            PipelineDataGatherer*,
-                           const ImageData&);
+                           const ImageData*);
 
 };
 
@@ -211,10 +213,11 @@ struct MatrixColorFilterBlock {
         bool         fInHSLA;
     };
 
+    // The gatherer and matrixCFData should be null or non-null together
     static void BeginBlock(const KeyContext&,
                            PaintParamsKeyBuilder*,
                            PipelineDataGatherer*,
-                           const MatrixColorFilterData&);
+                           const MatrixColorFilterData*);
 };
 
 struct BlendColorFilterBlock {
@@ -260,6 +263,21 @@ struct GaussianColorFilterBlock {
     static void BeginBlock(const KeyContext&,
                            PaintParamsKeyBuilder*,
                            PipelineDataGatherer*);
+};
+
+struct ColorSpaceTransformBlock {
+    struct ColorSpaceTransformData {
+        ColorSpaceTransformData(const SkColorSpace* src,
+                                SkAlphaType srcAT,
+                                const SkColorSpace* dst,
+                                SkAlphaType dstAT);
+        SkColorSpaceXformSteps fSteps;
+    };
+
+    static void BeginBlock(const KeyContext&,
+                           PaintParamsKeyBuilder*,
+                           PipelineDataGatherer*,
+                           const ColorSpaceTransformData*);
 };
 
 struct BlendModeBlock {
