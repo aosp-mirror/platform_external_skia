@@ -16,10 +16,14 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSpan.h"
 
+#include <functional>
 #include <optional>
 #include <vector>
 
 class SkRuntimeEffect;
+
+// TODO: move SkUniquePaintParamsID to the skgpu::graphite namespace
+class SkUniquePaintParamsID;
 
 namespace skgpu::graphite {
 
@@ -66,6 +70,8 @@ private:
     friend class PaintOptions;
     friend class PrecompileBasePriv;
 
+    virtual bool isALocalMatrixShader() const { return false; }
+
     virtual void addToKey(const KeyContext&,
                           int desiredCombination,
                           PaintParamsKeyBuilder*) const = 0;
@@ -90,9 +96,15 @@ void PrecompileBase::AddToKey(const KeyContext& keyContext,
 }
 
 //--------------------------------------------------------------------------------------------------
+class PrecompileColorFilter;
+
 class PrecompileShader : public PrecompileBase {
 public:
     PrecompileShader() : PrecompileBase(Type::kShader) {}
+
+    sk_sp<PrecompileShader> makeWithLocalMatrix();
+
+    sk_sp<PrecompileShader> makeWithColorFilter(sk_sp<PrecompileColorFilter>);
 };
 
 class PrecompileMaskFilter : public PrecompileBase {
@@ -166,7 +178,9 @@ private:
     int numCombinations() const;
     // 'desiredCombination' must be less than the result of the numCombinations call
     void createKey(const KeyContext&, int desiredCombination, PaintParamsKeyBuilder*) const;
-    void buildCombinations(ShaderCodeDictionary*) const;
+    void buildCombinations(
+        ShaderCodeDictionary*,
+        const std::function<void(SkUniquePaintParamsID)>& processCombination) const;
 
     std::vector<sk_sp<PrecompileShader>> fShaderOptions;
     std::vector<sk_sp<PrecompileMaskFilter>> fMaskFilterOptions;
