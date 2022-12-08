@@ -77,7 +77,8 @@ void Builder::binary_op(BuilderOp op, int32_t slots) {
 }
 
 std::unique_ptr<Program> Builder::finish(int numValueSlots, SkRPDebugTrace* debugTrace) {
-    return std::make_unique<Program>(std::move(fInstructions), numValueSlots, debugTrace);
+    return std::make_unique<Program>(std::move(fInstructions), numValueSlots,
+                                     fNumLabels, fNumBranches, debugTrace);
 }
 
 void Program::optimize() {
@@ -100,6 +101,7 @@ static int stack_usage(const Instruction& inst) {
 
         case ALL_MULTI_SLOT_BINARY_OP_CASES:
         case BuilderOp::discard_stack:
+        case BuilderOp::select:
             return -inst.fImmA;
 
         case ALL_SINGLE_SLOT_UNARY_OP_CASES:
@@ -108,25 +110,47 @@ static int stack_usage(const Instruction& inst) {
     }
 }
 
-int Program::numTempStackSlots() {
-    int largest = 0;
-    int current = 0;
+Program::StackDepthMap Program::tempStackMaxDepths() {
+    StackDepthMap largest;
+    StackDepthMap current;
+
+    int curIdx = 0;
     for (const Instruction& inst : fInstructions) {
-        current += stack_usage(inst);
-        largest = std::max(current, largest);
-        SkASSERTF(current >= 0, "unbalanced temp stack push/pop");
+        if (inst.fOp == BuilderOp::change_stack) {
+            curIdx = inst.fImmA;
+        }
+        current[curIdx] += stack_usage(inst);
+        largest[curIdx] = std::max(current[curIdx], largest[curIdx]);
+        SkASSERTF(current[curIdx] >= 0, "unbalanced temp stack push/pop on stack %d", curIdx);
     }
 
-    SkASSERTF(current == 0, "unbalanced temp stack push/pop");
+    for (const auto& [stackIdx, depth] : current) {
+        (void)stackIdx;
+        SkASSERTF(depth == 0, "unbalanced temp stack push/pop");
+    }
+
     return largest;
 }
 
-Program::Program(SkTArray<Instruction> instrs, int numValueSlots, SkRPDebugTrace* debugTrace)
+Program::Program(SkTArray<Instruction> instrs,
+                 int numValueSlots,
+                 int numLabels,
+                 int numBranches,
+                 SkRPDebugTrace* debugTrace)
         : fInstructions(std::move(instrs))
         , fNumValueSlots(numValueSlots)
+        , fNumLabels(numLabels)
+        , fNumBranches(numBranches)
         , fDebugTrace(debugTrace) {
     this->optimize();
-    fNumTempStackSlots = this->numTempStackSlots();
+
+    fTempStackMaxDepths = this->tempStackMaxDepths();
+
+    fNumTempStackSlots = 0;
+    for (const auto& [stackIdx, depth] : fTempStackMaxDepths) {
+        (void)stackIdx;
+        fNumTempStackSlots += depth;
+    }
 }
 
 template <typename T>
@@ -162,14 +186,56 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, floa
     const int N = SkOpts::raster_pipeline_highp_stride;
     float* slotPtrEnd = slotPtr + (N * fNumValueSlots);
     float* tempStackBase = slotPtrEnd;
-    float* tempStackPtr = tempStackBase;
     [[maybe_unused]] float* tempStackEnd = tempStackBase + (N * fNumTempStackSlots);
+    StackDepthMap tempStackDepth;
+    int currentStack = 0;
 
+    // Allocate buffers for branch targets (used when running the program) and labels (only needed
+    // during initial program construction).
+    int* branchTargets = alloc->makeArrayDefault<int>(fNumBranches);
+    SkTArray<int> labelOffsets;
+    labelOffsets.resize(fNumLabels);
+    SkTArray<int> branchGoesToLabel;
+    branchGoesToLabel.resize(fNumBranches);
+    int currentBranchOp = 0;
+
+    // Assemble a map holding the current stack-top for each temporary stack. Position each temp
+    // stack immediately after the previous temp stack; temp stacks are never allowed to overlap.
+    int pos = 0;
+    SkTHashMap<int, float*> tempStackMap;
+    for (auto& [idx, depth] : fTempStackMaxDepths) {
+        tempStackMap[idx] = tempStackBase + (pos * N);
+        pos += depth;
+    }
+
+    // Write each BuilderOp to the pipeline.
     for (const Instruction& inst : fInstructions) {
         auto SlotA = [&]() { return &slotPtr[N * inst.fSlotA]; };
         auto SlotB = [&]() { return &slotPtr[N * inst.fSlotB]; };
+        float*& tempStackPtr = tempStackMap[currentStack];
 
         switch (inst.fOp) {
+            case BuilderOp::label:
+                // Write the absolute pipeline position into the label offset list. We will go over
+                // the branch targets at the end and fix them up.
+                SkASSERT(inst.fImmA >= 0 && inst.fImmA < fNumLabels);
+                labelOffsets[inst.fImmA] = pipeline->getNumStages();
+                break;
+
+            case BuilderOp::jump:
+            case BuilderOp::branch_if_any_active_lanes:
+            case BuilderOp::branch_if_no_active_lanes:
+                // For now, write the absolute pipeline position into the branch targets, because
+                // the associated label might not have been reached yet. We will go back over the
+                // branch targets at the end and fix them up.
+                SkASSERT(inst.fImmA >= 0 && inst.fImmA < fNumLabels);
+                SkASSERT(currentBranchOp >= 0 && currentBranchOp < fNumBranches);
+                branchTargets[currentBranchOp] = pipeline->getNumStages();
+                branchGoesToLabel[currentBranchOp] = inst.fImmA;
+                pipeline->append((SkRP::Stage)inst.fOp, &branchTargets[currentBranchOp]);
+                ++currentBranchOp;
+                break;
+
             case BuilderOp::init_lane_masks:
                 pipeline->append(SkRP::init_lane_masks);
                 break;
@@ -226,6 +292,12 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, floa
                 float* dst = tempStackPtr - (inst.fImmA * 2 * N);
                 pipeline->append_adjacent_multi_slot_op(alloc, (SkRP::Stage)inst.fOp,
                                                         dst, src, inst.fImmA);
+                break;
+            }
+            case BuilderOp::select: {
+                float* src = tempStackPtr - (inst.fImmA * N);
+                float* dst = tempStackPtr - (inst.fImmA * 2 * N);
+                pipeline->append_copy_slots_masked(alloc, dst, src, inst.fImmA);
                 break;
             }
             case BuilderOp::copy_slot_masked:
@@ -288,6 +360,10 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, floa
             case BuilderOp::discard_stack:
                 break;
 
+            case BuilderOp::change_stack:
+                currentStack = inst.fImmA;
+                break;
+
             case BuilderOp::update_return_mask:
                 pipeline->append(SkRP::update_return_mask);
                 break;
@@ -301,6 +377,14 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, floa
         SkASSERT(tempStackPtr >= tempStackBase);
         SkASSERT(tempStackPtr <= tempStackEnd);
     }
+
+    // Fix up every branch target.
+    for (int index = 0; index < fNumBranches; ++index) {
+        int branchFromIdx = branchTargets[index];
+        int branchToIdx = labelOffsets[branchGoesToLabel[index]];
+        branchTargets[index] = branchToIdx - branchFromIdx;
+    }
+
 #endif
 }
 
@@ -338,6 +422,12 @@ void Program::dump(SkWStream* out) {
     // Emit the program's instruction list.
     for (int index = 0; index < stages.size(); ++index) {
         const Stage& stage = stages[index];
+
+        // Interpret the context value as a branch offset.
+        auto BranchOffset = [&](void* ctx) -> std::string {
+            int *ctxAsInt = static_cast<int*>(ctx);
+            return SkSL::String::printf("%+d (#%d)", *ctxAsInt, *ctxAsInt + index + 1);
+        };
 
         // Interpret the context value as a 32-bit immediate value of unknown type (int/float).
         auto ImmCtx = [&](void* ctx) -> std::string {
@@ -519,10 +609,17 @@ void Program::dump(SkWStream* out) {
                 std::tie(opArg1, opArg2) = AdjacentCopySlotsCtx(stage.ctx);
                 break;
 
+            case SkRP::jump:
+            case SkRP::branch_if_any_active_lanes:
+            case SkRP::branch_if_no_active_lanes:
+                opArg1 = BranchOffset(stage.ctx);
+                break;
+
             default:
                 break;
         }
 
+        const char* opName = SkRasterPipeline::GetStageName(stage.op);
         std::string opText;
         switch (stage.op) {
             case SkRP::init_lane_masks:
@@ -645,12 +742,17 @@ void Program::dump(SkWStream* out) {
                 opText = opArg1 + " = notEqual(" + opArg1 + ", " + opArg2 + ")";
                 break;
 
+            case SkRP::jump:
+            case SkRP::branch_if_any_active_lanes:
+            case SkRP::branch_if_no_active_lanes:
+                opText = std::string(opName) + " " + opArg1;
+                break;
+
             default:
                 break;
         }
 
-        const char* opName = SkRasterPipeline::GetStageName(stage.op);
-        auto line = SkSL::String::printf("% 5d. %-25s %s\n", index + 1, opName, opText.c_str());
+        auto line = SkSL::String::printf("% 5d. %-30s %s\n", index + 1, opName, opText.c_str());
         out->writeText(line.c_str());
     }
 #endif
