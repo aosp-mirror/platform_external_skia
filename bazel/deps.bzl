@@ -22,7 +22,7 @@ def git_repos_from_deps():
     new_git_repository(
         name = "dawn",
         build_file = "@//bazel/external/dawn:BUILD.bazel",
-        commit = "3c4fddf3e3a23242dce031881fa319d01462e545",
+        commit = "c9949ac59e50cec45f8bfceaef4358fa2e929971",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -165,7 +165,7 @@ def git_repos_from_deps():
     new_git_repository(
         name = "vulkan_headers",
         build_file = "@//bazel/external/vulkan_headers:BUILD.bazel",
-        commit = "891c40de1ae1a02b6e2475e1e9684e0fc94fff27",
+        commit = "bf3b3fb14e088c189be88edfc70f514b7d679656",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Headers",
     )
 
