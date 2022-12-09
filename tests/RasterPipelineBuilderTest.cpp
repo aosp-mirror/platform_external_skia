@@ -22,6 +22,10 @@ static void check(skiatest::Reporter* r, SkSL::RP::Program& program, std::string
                     (int)actual.size(), actual.data());
 }
 
+static SkSL::RP::SlotRange one_slot_at(SkSL::RP::Slot index) {
+    return SkSL::RP::SlotRange{index, 1};
+}
+
 static SkSL::RP::SlotRange two_slots_at(SkSL::RP::Slot index) {
     return SkSL::RP::SlotRange{index, 2};
 }
@@ -45,7 +49,9 @@ DEF_TEST(RasterPipelineBuilder, r) {
     builder.store_src(four_slots_at(2));
     builder.store_dst(four_slots_at(6));
     builder.init_lane_masks();
-    builder.update_return_mask();
+    builder.mask_off_return_mask();
+    builder.mask_off_loop_mask();
+    builder.reenable_loop_mask(one_slot_at(4));
     builder.load_src(four_slots_at(1));
     builder.load_dst(four_slots_at(3));
     std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/10);
@@ -55,9 +61,11 @@ R"(    1. store_src_rg                   v0..1 = src.rg
     2. store_src                      v2..5 = src.rgba
     3. store_dst                      v6..9 = dst.rgba
     4. init_lane_masks                CondMask = LoopMask = RetMask = true
-    5. update_return_mask             RetMask &= ~(CondMask & LoopMask & RetMask)
-    6. load_src                       src.rgba = v1..4
-    7. load_dst                       dst.rgba = v3..6
+    5. mask_off_return_mask           RetMask &= ~(CondMask & LoopMask & RetMask)
+    6. mask_off_loop_mask             LoopMask &= ~(CondMask & LoopMask & RetMask)
+    7. reenable_loop_mask             LoopMask |= v4
+    8. load_src                       src.rgba = v1..4
+    9. load_dst                       dst.rgba = v3..6
 )");
 }
 
@@ -97,54 +105,53 @@ R"(    1. load_unmasked                  src.r = v12
 )");
 }
 
-DEF_TEST(RasterPipelineBuilderPushPopConditionMask, r) {
+DEF_TEST(RasterPipelineBuilderPushPopMaskRegisters, r) {
     // Create a very simple nonsense program.
     SkSL::RP::Builder builder;
-    builder.push_literal_f(0);     // push into 98 with a temp
-    builder.push_literal_f(0);     // push into 99 with a temp
-    builder.push_condition_mask(); // combine from 99 into 100
-    builder.push_condition_mask(); // combine from 100 into 101
-    builder.push_condition_mask(); // combine from 101 into 102
-    builder.pop_condition_mask();  // pop from 102
-    builder.push_condition_mask(); // combine from 101 into 102
-    builder.pop_condition_mask();  // pop from 102
-    builder.pop_condition_mask();  // pop from 101
-    builder.pop_condition_mask();  // pop from 100
-    builder.push_condition_mask(); // combine from 99 into 100
-    builder.pop_condition_mask();  // pop from 100
-    builder.discard_stack(2);      // balance temp stack
-    std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/98);
+    builder.push_condition_mask();  // push into 0
+    builder.push_loop_mask();       // push into 1
+    builder.push_return_mask();     // push into 2
+    builder.merge_condition_mask(); // set the condition-mask to 1 & 2
+    builder.pop_condition_mask();   // pop from 2
+    builder.merge_loop_mask();      // mask off the loop-mask against 1
+    builder.push_condition_mask();  // push into 2
+    builder.pop_condition_mask();   // pop from 2
+    builder.pop_loop_mask();        // pop from 1
+    builder.pop_return_mask();      // pop from 0
+    builder.push_condition_mask();  // push into 0
+    builder.pop_condition_mask();   // pop from 0
+    std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/0);
 
     check(r, *program,
-R"(    1. zero_slot_unmasked             $0 = 0
-    2. zero_slot_unmasked             $1 = 0
-    3. combine_condition_mask         $2 = CondMask;  CondMask &= $1
-    4. combine_condition_mask         $3 = CondMask;  CondMask &= $2
-    5. combine_condition_mask         $4 = CondMask;  CondMask &= $3
-    6. load_condition_mask            CondMask = $4
-    7. combine_condition_mask         $4 = CondMask;  CondMask &= $3
-    8. load_condition_mask            CondMask = $4
-    9. load_condition_mask            CondMask = $3
-   10. load_condition_mask            CondMask = $2
-   11. combine_condition_mask         $2 = CondMask;  CondMask &= $1
-   12. load_condition_mask            CondMask = $2
+R"(    1. store_condition_mask           $0 = CondMask
+    2. store_loop_mask                $1 = LoopMask
+    3. store_return_mask              $2 = RetMask
+    4. merge_condition_mask           CondMask = $1 & $2
+    5. load_condition_mask            CondMask = $2
+    6. merge_loop_mask                LoopMask &= $1
+    7. store_condition_mask           $2 = CondMask
+    8. load_condition_mask            CondMask = $2
+    9. load_loop_mask                 LoopMask = $1
+   10. load_return_mask               RetMask = $0
+   11. store_condition_mask           $0 = CondMask
+   12. load_condition_mask            CondMask = $0
 )");
 }
 
 DEF_TEST(RasterPipelineBuilderPushPopTempImmediates, r) {
     // Create a very simple nonsense program.
     SkSL::RP::Builder builder;
-    builder.change_stack(1);
+    builder.set_current_stack(1);
     builder.push_literal_i(999);   // push into 2
-    builder.change_stack(0);
+    builder.set_current_stack(0);
     builder.push_literal_f(13.5f); // push into 0
     builder.push_literal_i(-246);  // push into 1
     builder.discard_stack();       // discard 2
     builder.push_literal_u(357);   // push into 2
-    builder.change_stack(1);
+    builder.set_current_stack(1);
     builder.push_literal_i(999);   // push into 3
     builder.discard_stack(2);      // discard 2 and 3
-    builder.change_stack(0);
+    builder.set_current_stack(0);
     builder.discard_stack(2);      // discard 0 and 1
     std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/1);
 
@@ -249,12 +256,14 @@ DEF_TEST(RasterPipelineBuilderBranches, r) {
     std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/1);
 
     check(r, *program,
-R"(    1. jump                           jump +4 (#5)
+R"(    1. jump                           jump +5 (#6)
     2. immediate_f                    src.r = 0x3F800000 (1.0)
     3. immediate_f                    src.r = 0x40000000 (2.0)
-    4. branch_if_no_active_lanes      branch_if_no_active_lanes -1 (#3)
-    5. immediate_f                    src.r = 0x40400000 (3.0)
-    6. branch_if_any_active_lanes     branch_if_any_active_lanes -4 (#2)
+    4. stack_rewind
+    5. branch_if_no_active_lanes      branch_if_no_active_lanes -2 (#3)
+    6. immediate_f                    src.r = 0x40400000 (3.0)
+    7. stack_rewind
+    8. branch_if_any_active_lanes     branch_if_any_active_lanes -6 (#2)
 )");
 }
 

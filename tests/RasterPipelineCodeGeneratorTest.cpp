@@ -222,3 +222,42 @@ DEF_TEST(SkSLRasterPipelineCodeGeneratorTernaryTest, r) {
          )__SkSL__",
          SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
 }
+
+DEF_TEST(SkSLRasterPipelineCodeGeneratorNestedTernaryTest, r) {
+    // Add in your SkSL here.
+    test(r,
+         R"__SkSL__(
+             half4 main(float2 coords) {
+                 half three = 3, one = 1, two = 2;
+                 half result = (three > (one > two ? 2.0 : 5.0)) ? 1.0 : 0.499;
+                 return half4(result);
+             }
+         )__SkSL__",
+         SkColor4f{0.499f, 0.499f, 0.499f, 0.499f});
+}
+
+DEF_TEST(SkSLRasterPipelineCodeGeneratorDoWhileTest, r) {
+    // This is based on shared/DoWhileControlFlow.sksl (but avoids swizzles).
+    test(r,
+         R"__SkSL__(
+            half4 main(float2 coords) {
+                half r = 1.0, g = 1.0, b = 1.0, a = 1.0;
+
+                // Verify that break is allowed in a do-while loop.
+                do {
+                    r += -0.25;
+                    if (r <= 0) break;
+                } while (a == 1.0);
+
+                // Verify that continue is allowed in a do-while loop.
+                do {
+                    b += -0.25;
+                    if (a == 1) continue; // should always happen
+                    g = 0;
+                } while (b > 0.0);
+
+                return half4(r, g, b, a);
+            }
+         )__SkSL__",
+         SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
+}

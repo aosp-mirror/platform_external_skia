@@ -89,6 +89,8 @@ static int stack_usage(const Instruction& inst) {
     switch (inst.fOp) {
         case BuilderOp::push_literal_f:
         case BuilderOp::push_condition_mask:
+        case BuilderOp::push_loop_mask:
+        case BuilderOp::push_return_mask:
             return 1;
 
         case BuilderOp::push_slots:
@@ -97,6 +99,8 @@ static int stack_usage(const Instruction& inst) {
 
         case ALL_SINGLE_SLOT_BINARY_OP_CASES:
         case BuilderOp::pop_condition_mask:
+        case BuilderOp::pop_loop_mask:
+        case BuilderOp::pop_return_mask:
             return -1;
 
         case ALL_MULTI_SLOT_BINARY_OP_CASES:
@@ -116,7 +120,7 @@ Program::StackDepthMap Program::tempStackMaxDepths() {
 
     int curIdx = 0;
     for (const Instruction& inst : fInstructions) {
-        if (inst.fOp == BuilderOp::change_stack) {
+        if (inst.fOp == BuilderOp::set_current_stack) {
             curIdx = inst.fImmA;
         }
         current[curIdx] += stack_usage(inst);
@@ -194,9 +198,9 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, floa
     // during initial program construction).
     int* branchTargets = alloc->makeArrayDefault<int>(fNumBranches);
     SkTArray<int> labelOffsets;
-    labelOffsets.resize(fNumLabels);
+    labelOffsets.push_back_n(fNumLabels, -1);
     SkTArray<int> branchGoesToLabel;
-    branchGoesToLabel.resize(fNumBranches);
+    branchGoesToLabel.push_back_n(fNumBranches, -1);
     int currentBranchOp = 0;
 
     // Assemble a map holding the current stack-top for each temporary stack. Position each temp
@@ -225,9 +229,16 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, floa
             case BuilderOp::jump:
             case BuilderOp::branch_if_any_active_lanes:
             case BuilderOp::branch_if_no_active_lanes:
-                // For now, write the absolute pipeline position into the branch targets, because
-                // the associated label might not have been reached yet. We will go back over the
-                // branch targets at the end and fix them up.
+                // If we have already encountered the label associated with this branch, this is a
+                // backwards branch. Add a stack-rewind immediately before the branch to ensure that
+                // long-running loops don't use an unbounded amount of stack space.
+                if (labelOffsets[inst.fImmA] >= 0) {
+                    pipeline->append_stack_rewind();
+                }
+
+                // Write the absolute pipeline position into the branch targets, because the
+                // associated label might not have been reached yet. We will go back over the branch
+                // targets at the end and fix them up.
                 SkASSERT(inst.fImmA >= 0 && inst.fImmA < fNumLabels);
                 SkASSERT(currentBranchOp >= 0 && currentBranchOp < fNumBranches);
                 branchTargets[currentBranchOp] = pipeline->getNumStages();
@@ -318,8 +329,8 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, floa
                 break;
             }
             case BuilderOp::push_condition_mask: {
-                float* dst = tempStackPtr - (1 * N);
-                pipeline->append(SkRP::combine_condition_mask, dst);
+                float* dst = tempStackPtr;
+                pipeline->append(SkRP::store_condition_mask, dst);
                 break;
             }
             case BuilderOp::pop_condition_mask: {
@@ -327,6 +338,48 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, floa
                 pipeline->append(SkRP::load_condition_mask, src);
                 break;
             }
+            case BuilderOp::merge_condition_mask: {
+                float* ptr = tempStackPtr - (2 * N);
+                pipeline->append(SkRP::merge_condition_mask, ptr);
+                break;
+            }
+            case BuilderOp::push_loop_mask: {
+                float* dst = tempStackPtr;
+                pipeline->append(SkRP::store_loop_mask, dst);
+                break;
+            }
+            case BuilderOp::pop_loop_mask: {
+                float* src = tempStackPtr - (1 * N);
+                pipeline->append(SkRP::load_loop_mask, src);
+                break;
+            }
+            case BuilderOp::mask_off_loop_mask:
+                pipeline->append(SkRP::mask_off_loop_mask);
+                break;
+
+            case BuilderOp::reenable_loop_mask:
+                pipeline->append(SkRP::reenable_loop_mask, SlotA());
+                break;
+
+            case BuilderOp::merge_loop_mask: {
+                float* src = tempStackPtr - (1 * N);
+                pipeline->append(SkRP::merge_loop_mask, src);
+                break;
+            }
+            case BuilderOp::push_return_mask: {
+                float* dst = tempStackPtr;
+                pipeline->append(SkRP::store_return_mask, dst);
+                break;
+            }
+            case BuilderOp::pop_return_mask: {
+                float* src = tempStackPtr - (1 * N);
+                pipeline->append(SkRP::load_return_mask, src);
+                break;
+            }
+            case BuilderOp::mask_off_return_mask:
+                pipeline->append(SkRP::mask_off_return_mask);
+                break;
+
             case BuilderOp::push_literal_f: {
                 float* dst = tempStackPtr;
                 if (inst.fImmA == 0) {
@@ -360,12 +413,8 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, floa
             case BuilderOp::discard_stack:
                 break;
 
-            case BuilderOp::change_stack:
+            case BuilderOp::set_current_stack:
                 currentStack = inst.fImmA;
-                break;
-
-            case BuilderOp::update_return_mask:
-                pipeline->append(SkRP::update_return_mask);
                 break;
 
             default:
@@ -523,6 +572,13 @@ void Program::dump(SkWStream* out) {
 
             case SkRP::load_unmasked:
             case SkRP::load_condition_mask:
+            case SkRP::store_condition_mask:
+            case SkRP::load_loop_mask:
+            case SkRP::store_loop_mask:
+            case SkRP::merge_loop_mask:
+            case SkRP::reenable_loop_mask:
+            case SkRP::load_return_mask:
+            case SkRP::store_return_mask:
             case SkRP::store_masked:
             case SkRP::store_unmasked:
             case SkRP::bitwise_not:
@@ -567,7 +623,7 @@ void Program::dump(SkWStream* out) {
                 std::tie(opArg1, opArg2) = CopySlotsCtx(stage.ctx, 4);
                 break;
 
-            case SkRP::combine_condition_mask:
+            case SkRP::merge_condition_mask:
             case SkRP::bitwise_and: case SkRP::bitwise_or: case SkRP::bitwise_xor:
             case SkRP::add_float:   case SkRP::add_int:
             case SkRP::cmplt_float: case SkRP::cmplt_int:
@@ -626,16 +682,48 @@ void Program::dump(SkWStream* out) {
                 opText = "CondMask = LoopMask = RetMask = true";
                 break;
 
-            case SkRP::update_return_mask:
-                opText = "RetMask &= ~(CondMask & LoopMask & RetMask)";
-                break;
-
-            case SkRP::combine_condition_mask:
-                opText = opArg2 + " = CondMask;  CondMask &= " + opArg1;
-                break;
-
             case SkRP::load_condition_mask:
                 opText = "CondMask = " + opArg1;
+                break;
+
+            case SkRP::store_condition_mask:
+                opText = opArg1 + " = CondMask";
+                break;
+
+            case SkRP::merge_condition_mask:
+                opText = "CondMask = " + opArg1 + " & " + opArg2;
+                break;
+
+            case SkRP::load_loop_mask:
+                opText = "LoopMask = " + opArg1;
+                break;
+
+            case SkRP::store_loop_mask:
+                opText = opArg1 + " = LoopMask";
+                break;
+
+            case SkRP::mask_off_loop_mask:
+                opText = "LoopMask &= ~(CondMask & LoopMask & RetMask)";
+                break;
+
+            case SkRP::reenable_loop_mask:
+                opText = "LoopMask |= " + opArg1;
+                break;
+
+            case SkRP::merge_loop_mask:
+                opText = "LoopMask &= " + opArg1;
+                break;
+
+            case SkRP::load_return_mask:
+                opText = "RetMask = " + opArg1;
+                break;
+
+            case SkRP::store_return_mask:
+                opText = opArg1 + " = RetMask";
+                break;
+
+            case SkRP::mask_off_return_mask:
+                opText = "RetMask &= ~(CondMask & LoopMask & RetMask)";
                 break;
 
             case SkRP::immediate_f:
@@ -752,7 +840,10 @@ void Program::dump(SkWStream* out) {
                 break;
         }
 
-        auto line = SkSL::String::printf("% 5d. %-30s %s\n", index + 1, opName, opText.c_str());
+        std::string line = !opText.empty()
+                ? SkSL::String::printf("% 5d. %-30s %s\n", index + 1, opName, opText.c_str())
+                : SkSL::String::printf("% 5d. %s\n", index + 1, opName);
+
         out->writeText(line.c_str());
     }
 #endif
