@@ -137,19 +137,23 @@ template <typename T>
     return contextBits;
 }
 
-void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc) {
-    // skslc and sksl-minify do not actually include SkRasterPipeline.
+float* Program::allocateSlotData(SkArenaAlloc* alloc) {
+    float* slotPtr = nullptr;
+
 #if !defined(SKSL_STANDALONE)
     // Allocate a contiguous slab of slot data.
     const int N = SkOpts::raster_pipeline_highp_stride;
-    const int totalSlots = fNumValueSlots + fNumTempStackSlots;
     const int vectorWidth = N * sizeof(float);
-    const int allocSize = vectorWidth * totalSlots;
-    float* slotPtr = static_cast<float*>(alloc->makeBytesAlignedTo(allocSize, vectorWidth));
+    const int allocSize = vectorWidth * (fNumValueSlots + fNumTempStackSlots);
+    slotPtr = static_cast<float*>(alloc->makeBytesAlignedTo(allocSize, vectorWidth));
     sk_bzero(slotPtr, allocSize);
-
-    this->appendStages(pipeline, alloc, slotPtr);
 #endif
+
+    return slotPtr;
+}
+
+void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc) {
+    this->appendStages(pipeline, alloc, this->allocateSlotData(alloc));
 }
 
 void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, float* slotPtr) {
@@ -305,17 +309,17 @@ void Program::dump(SkWStream* out) {
     // SkRasterPipeline into skslc for this to work properly.
 
 #if !defined(SKSL_STANDALONE)
-    // We never execute the program, so we don't actually need to allocate slots for its
-    // execution. The program does require a pointer range for storing its data, though.
-    // Any location will do, so just pick a spot on the stack for the starting point.
+    // Allocate a block of memory for the slot data, even though the program won't ever be executed.
+    // The program requires a pointer range for managing its data, and ASAN will report errors if
+    // those pointers are pointing at unallocated memory.
+    SkArenaAlloc alloc(/*firstHeapAllocation=*/1000);
     const int N = SkOpts::raster_pipeline_highp_stride;
-    float slotBase[1];
+    float* slotBase = this->allocateSlotData(&alloc);
     const float* slotEnd = slotBase + (N * fNumValueSlots);
     const float* tempStackBase = slotEnd;
     const float* tempStackEnd = tempStackBase + (N * fNumTempStackSlots);
 
     // Instantiate this program.
-    SkArenaAlloc alloc(/*firstHeapAllocation=*/1000);
     SkRasterPipeline pipeline(&alloc);
     this->appendStages(&pipeline, &alloc, slotBase);
     const SkRP::StageList* st = pipeline.getStageList();
