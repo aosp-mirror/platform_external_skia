@@ -21,8 +21,12 @@
 #include "src/sksl/codegen/SkSLRasterPipelineCodeGenerator.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBlock.h"
+#include "src/sksl/ir/SkSLBreakStatement.h"
+#include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLConstructorCompound.h"
 #include "src/sksl/ir/SkSLConstructorSplat.h"
+#include "src/sksl/ir/SkSLContinueStatement.h"
+#include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
@@ -83,7 +87,7 @@ public:
     int getDebugFunctionInfo(const FunctionDeclaration& decl);
 
     /** Implements low-level slot creation; slots will not be known to the debugger. */
-    SlotRange createSlots(int numSlots);
+    SlotRange createSlots(int slots);
 
     /** Creates slots associated with an SkSL variable or return value. */
     SlotRange createSlots(std::string name,
@@ -110,6 +114,9 @@ public:
     /** Appends a statement to the program. */
     bool writeStatement(const Statement& s);
     bool writeBlock(const Block& b);
+    bool writeBreakStatement(const BreakStatement& b);
+    bool writeContinueStatement(const ContinueStatement& b);
+    bool writeDoStatement(const DoStatement& d);
     bool writeExpressionStatement(const ExpressionStatement& e);
     bool writeIfStatement(const IfStatement& i);
     bool writeReturnStatement(const ReturnStatement& r);
@@ -118,6 +125,7 @@ public:
     /** Pushes an expression to the value stack. */
     bool pushAssignmentExpression(const BinaryExpression& e);
     bool pushBinaryExpression(const BinaryExpression& e);
+    bool pushConstructorCast(const AnyConstructor& c);
     bool pushConstructorCompound(const ConstructorCompound& c);
     bool pushConstructorSplat(const ConstructorSplat& c);
     bool pushExpression(const Expression& e);
@@ -149,6 +157,12 @@ public:
     bool assign(const Expression& e);
     bool binaryOp(SkSL::Type::NumberKind numberKind, int slots, const BinaryOps& ops);
     void foldWithOp(BuilderOp op, int elements);
+    void nextTempStack() {
+        fBuilder.set_current_stack(++fCurrentTempStack);
+    }
+    void previousTempStack() {
+        fBuilder.set_current_stack(--fCurrentTempStack);
+    }
 
 private:
     const SkSL::Program& fProgram;
@@ -159,9 +173,8 @@ private:
     int fSlotCount = 0;
 
     SkTArray<SlotRange> fFunctionStack;
-
-    static constexpr int kPrimaryStack = 0;
-    static constexpr int kTernaryStack = 1;
+    SlotRange fCurrentContinueMask;
+    int fCurrentTempStack = 0;
 };
 
 struct LValue {
@@ -261,9 +274,9 @@ void Generator::addDebugSlotInfo(const std::string& varName,
     SkASSERT((size_t)groupIndex == type.slotCount());
 }
 
-SlotRange Generator::createSlots(int numSlots) {
-    SlotRange range = {fSlotCount, numSlots};
-    fSlotCount += numSlots;
+SlotRange Generator::createSlots(int slots) {
+    SlotRange range = {fSlotCount, slots};
+    fSlotCount += slots;
     return range;
 }
 
@@ -372,6 +385,15 @@ bool Generator::writeStatement(const Statement& s) {
         case Statement::Kind::kBlock:
             return this->writeBlock(s.as<Block>());
 
+        case Statement::Kind::kBreak:
+            return this->writeBreakStatement(s.as<BreakStatement>());
+
+        case Statement::Kind::kContinue:
+            return this->writeContinueStatement(s.as<ContinueStatement>());
+
+        case Statement::Kind::kDo:
+            return this->writeDoStatement(s.as<DoStatement>());
+
         case Statement::Kind::kExpression:
             return this->writeExpressionStatement(s.as<ExpressionStatement>());
 
@@ -401,6 +423,63 @@ bool Generator::writeBlock(const Block& b) {
     return true;
 }
 
+bool Generator::writeBreakStatement(const BreakStatement&) {
+    fBuilder.mask_off_loop_mask();
+    return true;
+}
+
+bool Generator::writeContinueStatement(const ContinueStatement&) {
+    // This could be written as one hand-tuned RasterPipeline op, but for now, we reuse existing ops
+    // to assemble a continue op.
+
+    // Set any currently-executing lanes in the continue-mask to true via push-pop.
+    SkASSERT(fCurrentContinueMask.count == 1);
+    fBuilder.push_literal_i(~0);
+    this->popToSlotRange(fCurrentContinueMask);
+
+    // Disable any currently-executing lanes from the loop mask.
+    fBuilder.mask_off_loop_mask();
+    return true;
+}
+
+bool Generator::writeDoStatement(const DoStatement& d) {
+    // Save off the original loop mask.
+    fBuilder.push_loop_mask();
+
+    // Create a dedicated slot for continue-mask storage.
+    SlotRange previousContinueMask = fCurrentContinueMask;
+    fCurrentContinueMask = this->createSlots(/*slots=*/1);
+
+    // Write the do-loop body.
+    int labelID = fBuilder.nextLabelID();
+    fBuilder.label(labelID);
+
+    fBuilder.zero_slots_unmasked(fCurrentContinueMask);
+    if (!this->writeStatement(*d.statement())) {
+        return false;
+    }
+    fBuilder.reenable_loop_mask(fCurrentContinueMask);
+
+    // Emit the test-expression, in order to combine it with the loop mask.
+    if (!this->pushExpression(*d.test())) {
+        return false;
+    }
+
+    // Mask off any lanes in the loop mask where the test-expression is false; this breaks the loop.
+    // We don't use the test expression for anything else, so jettison it.
+    fBuilder.merge_loop_mask();
+    this->discardExpression(/*slots=*/1);
+
+    // If any lanes are still running, go back to the top and run the loop body again.
+    fBuilder.branch_if_any_active_lanes(labelID);
+
+    // Restore the loop and continue masks.
+    fBuilder.pop_loop_mask();
+    fCurrentContinueMask = previousContinueMask;
+
+    return true;
+}
+
 bool Generator::writeExpressionStatement(const ExpressionStatement& e) {
     if (!this->pushExpression(*e.expression())) {
         return unsupported();
@@ -410,30 +489,33 @@ bool Generator::writeExpressionStatement(const ExpressionStatement& e) {
 }
 
 bool Generator::writeIfStatement(const IfStatement& i) {
+    // Save the current condition-mask.
+    fBuilder.push_condition_mask();
+
+    // Push the test condition mask.
     if (!this->pushExpression(*i.test())) {
         return unsupported();
     }
 
-    // Apply the test-expression as a condition, then run the if-true branch.
-    fBuilder.push_condition_mask();
+    // Merge the current condition-mask with the test condition, then run the if-true branch.
+    fBuilder.merge_condition_mask();
     if (!this->writeStatement(*i.ifTrue())) {
         return unsupported();
     }
-    fBuilder.pop_condition_mask();
 
     if (i.ifFalse()) {
-        // The test condition is still at the top of the stack. Negate it, apply it as a condition
-        // mask again, and run the if-false branch.
+        // Negate the test-condition, then reapply it to the condition-mask.
+        // Then, run the if-false branch.
         fBuilder.unary_op(BuilderOp::bitwise_not, /*slots=*/1);
-        fBuilder.push_condition_mask();
+        fBuilder.merge_condition_mask();
         if (!this->writeStatement(*i.ifFalse())) {
             return unsupported();
         }
-        fBuilder.pop_condition_mask();
     }
 
-    // Jettison the test condition.
+    // Jettison the test-expression, and restore the the condition-mask.
     this->discardExpression(/*slots=*/1);
+    fBuilder.pop_condition_mask();
     return true;
 }
 
@@ -444,7 +526,7 @@ bool Generator::writeReturnStatement(const ReturnStatement& r) {
         }
         this->popToSlotRange(fFunctionStack.back());
     }
-    fBuilder.update_return_mask();
+    fBuilder.mask_off_return_mask();
     return true;
 }
 
@@ -467,6 +549,10 @@ bool Generator::pushExpression(const Expression& e) {
 
         case Expression::Kind::kConstructorCompound:
             return this->pushConstructorCompound(e.as<ConstructorCompound>());
+
+        case Expression::Kind::kConstructorCompoundCast:
+        case Expression::Kind::kConstructorScalarCast:
+            return this->pushConstructorCast(e.asAnyConstructor());
 
         case Expression::Kind::kConstructorSplat:
             return this->pushConstructorSplat(e.as<ConstructorSplat>());
@@ -545,11 +631,43 @@ bool Generator::pushBinaryExpression(const BinaryExpression& e) {
 
     switch (basicOp.kind()) {
         case OperatorKind::PLUS: {
-            static constexpr auto kPlus = BinaryOps{BuilderOp::add_n_floats,
-                                                    BuilderOp::add_n_ints,
-                                                    BuilderOp::add_n_ints,
-                                                    BuilderOp::unsupported};
-            if (!this->binaryOp(numberKind, type.slotCount(), kPlus)) {
+            static constexpr auto kAdd = BinaryOps{BuilderOp::add_n_floats,
+                                                   BuilderOp::add_n_ints,
+                                                   BuilderOp::add_n_ints,
+                                                   BuilderOp::unsupported};
+            if (!this->binaryOp(numberKind, type.slotCount(), kAdd)) {
+                return unsupported();
+            }
+            break;
+        }
+        case OperatorKind::MINUS: {
+            static constexpr auto kSubtract = BinaryOps{BuilderOp::sub_n_floats,
+                                                        BuilderOp::sub_n_ints,
+                                                        BuilderOp::sub_n_ints,
+                                                        BuilderOp::unsupported};
+            if (!this->binaryOp(numberKind, type.slotCount(), kSubtract)) {
+                return unsupported();
+            }
+            break;
+        }
+        case OperatorKind::STAR: {
+            // TODO(skia:13676): add support for unsigned *
+            static constexpr auto kMultiply = BinaryOps{BuilderOp::mul_n_floats,
+                                                        BuilderOp::mul_n_ints,
+                                                        BuilderOp::unsupported,
+                                                        BuilderOp::unsupported};
+            if (!this->binaryOp(numberKind, type.slotCount(), kMultiply)) {
+                return unsupported();
+            }
+            break;
+        }
+        case OperatorKind::SLASH: {
+            // TODO(skia:13676): add support for unsigned /
+            static constexpr auto kDivide = BinaryOps{BuilderOp::div_n_floats,
+                                                      BuilderOp::div_n_ints,
+                                                      BuilderOp::unsupported,
+                                                      BuilderOp::unsupported};
+            if (!this->binaryOp(numberKind, type.slotCount(), kDivide)) {
                 return unsupported();
             }
             break;
@@ -623,6 +741,22 @@ bool Generator::pushConstructorCompound(const ConstructorCompound& c) {
     return true;
 }
 
+bool Generator::pushConstructorCast(const AnyConstructor& c) {
+    SkASSERT(c.argumentSpan().size() == 1);
+    const Expression& inner = *c.argumentSpan().front();
+
+    if (!this->pushExpression(inner)) {
+        return unsupported();
+    }
+    if (inner.type().componentType().numberKind() == c.type().componentType().numberKind()) {
+        // Since we ignore type precision, this cast is effectively a no-op.
+        return true;
+    }
+
+    // TODO: add RP op to convert values on stack from the inner type to the outer type
+    return unsupported();
+}
+
 bool Generator::pushConstructorSplat(const ConstructorSplat& c) {
     if (!this->pushExpression(*c.argument())) {
         return unsupported();
@@ -655,40 +789,42 @@ bool Generator::pushLiteral(const Literal& l) {
 }
 
 bool Generator::pushTernaryExpression(const TernaryExpression& t) {
-    // Apply the test-expression as a condition on its own separate stack.
-    fBuilder.change_stack(kTernaryStack);
+    // Merge the current condition-mask with the test-expression in a separate stack.
+    this->nextTempStack();
+    fBuilder.push_condition_mask();
     if (!this->pushExpression(*t.test())) {
         return unsupported();
     }
-    fBuilder.push_condition_mask();
-    fBuilder.change_stack(kPrimaryStack);
+    fBuilder.merge_condition_mask();
+    this->previousTempStack();
 
     // Push the true-expression onto the primary stack.
     if (!this->pushExpression(*t.ifTrue())) {
         return unsupported();
     }
 
-    // Negate the test condition.
-    fBuilder.change_stack(kTernaryStack);
-    fBuilder.pop_condition_mask();
+    // Switch back to the test-expression stack temporarily, and negate the test condition.
+    this->nextTempStack();
     fBuilder.unary_op(BuilderOp::bitwise_not, /*slots=*/1);
-    fBuilder.push_condition_mask();
-    fBuilder.change_stack(kPrimaryStack);
+    fBuilder.merge_condition_mask();
+    this->previousTempStack();
 
-    // Push the false-expression onto the main stack after the true-expression.
+    // Push the false-expression onto the primary stack, immediately after the true-expression.
     if (!this->pushExpression(*t.ifFalse())) {
         return unsupported();
     }
 
-    // Use select to mask-merge the false results on top of the true results; the mask is already
-    // set up for this.
+    // Use a select to conditionally mask-merge the true-expression and false-expression lanes;
+    // the mask is already set up for this.
     fBuilder.select(/*slots=*/t.ifTrue()->type().slotCount());
 
-    // Jettison the test condition.
-    fBuilder.change_stack(kTernaryStack);
-    fBuilder.pop_condition_mask();
+    // Switch back to the test-expression stack one last time, in order to restore the
+    // condition-mask to its original state and jettison the test-expression.
+    this->nextTempStack();
     this->discardExpression(/*slots=*/1);
-    fBuilder.change_stack(kPrimaryStack);
+    fBuilder.pop_condition_mask();
+    this->previousTempStack();
+
     return true;
 }
 
