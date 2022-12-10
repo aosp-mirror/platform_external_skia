@@ -7,6 +7,7 @@
 
 #include "include/core/SkTypes.h"
 #include "include/private/SkTArray.h"
+#include "include/private/SkTHash.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkUtils.h"
 
@@ -47,8 +48,11 @@ enum class BuilderOp {
     copy_stack_to_slots_unmasked,
     discard_stack,
     duplicate,
+    select,
     push_condition_mask,
     pop_condition_mask,
+    change_stack,
+    label,
     unsupported
 };
 
@@ -79,21 +83,30 @@ struct Instruction {
 
 class Program {
 public:
-    Program(SkTArray<Instruction> instrs, int numValueSlots, SkRPDebugTrace* debugTrace);
+    Program(SkTArray<Instruction> instrs,
+            int numValueSlots,
+            int numLabels,
+            int numBranches,
+            SkRPDebugTrace* debugTrace);
 
     void appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc);
     void dump(SkWStream* s);
 
 private:
+    using StackDepthMap = SkTHashMap<int, int>; // <stack index, depth of stack>
+
     float* allocateSlotData(SkArenaAlloc* alloc);
     void appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, float* slotPtr);
     void optimize();
     int numValueSlots();
-    int numTempStackSlots();
+    StackDepthMap tempStackMaxDepths();
 
     SkTArray<Instruction> fInstructions;
     int fNumValueSlots = 0;
     int fNumTempStackSlots = 0;
+    int fNumLabels = 0;
+    int fNumBranches = 0;
+    SkTHashMap<int, int> fTempStackMaxDepths;
     SkRPDebugTrace* fDebugTrace = nullptr;
 };
 
@@ -101,6 +114,15 @@ class Builder {
 public:
     /** Finalizes and optimizes the program. */
     std::unique_ptr<Program> finish(int numValueSlots, SkRPDebugTrace* debugTrace = nullptr);
+
+    /**
+     * Peels off a label ID for use in the program. Set the label's position in the program with
+     * the `label` instruction. Actually branch to the target with an instruction like
+     * `branch_if_any_active_lanes` or `jump`.
+     */
+    int nextLabelID() {
+        return fNumLabels++;
+    }
 
     /** Assemble a program from the Raster Pipeline instructions below. */
     void init_lane_masks() {
@@ -132,7 +154,34 @@ public:
         fInstructions.push_back({BuilderOp::load_dst, {slots.index}});
     }
 
-    // Use the same SkRasterPipeline op regardless of the literal type.
+    void change_stack(int stackIdx) {
+        fInstructions.push_back({BuilderOp::change_stack, {}, stackIdx});
+    }
+
+    void label(int labelID) {
+        SkASSERT(labelID >= 0 && labelID < fNumLabels);
+        fInstructions.push_back({BuilderOp::label, {}, labelID});
+    }
+
+    void jump(int labelID) {
+        SkASSERT(labelID >= 0 && labelID < fNumLabels);
+        fInstructions.push_back({BuilderOp::jump, {}, labelID});
+        ++fNumBranches;
+    }
+
+    void branch_if_any_active_lanes(int labelID) {
+        SkASSERT(labelID >= 0 && labelID < fNumLabels);
+        fInstructions.push_back({BuilderOp::branch_if_any_active_lanes, {}, labelID});
+        ++fNumBranches;
+    }
+
+    void branch_if_no_active_lanes(int labelID) {
+        SkASSERT(labelID >= 0 && labelID < fNumLabels);
+        fInstructions.push_back({BuilderOp::branch_if_no_active_lanes, {}, labelID});
+        ++fNumBranches;
+    }
+
+    // We use the same SkRasterPipeline op regardless of the literal type, and bitcast the value.
     void immediate_f(float val) {
         fInstructions.push_back({BuilderOp::immediate_f, {}, sk_bit_cast<int32_t>(val)});
     }
@@ -200,6 +249,13 @@ public:
         fInstructions.push_back({BuilderOp::duplicate, {}, count});
     }
 
+    void select(int slots) {
+        // Overlays the top two entries on the stack, making one hybrid entry. The execution mask
+        // is used to select which lanes are preserved.
+        SkASSERT(slots > 0);
+        fInstructions.push_back({BuilderOp::select, {}, slots});
+    }
+
     void pop_slots_unmasked(SlotRange dst) {
         // The opposite of push_slots; copies values from the temp stack into value slots, then
         // shrinks the temp stack.
@@ -247,6 +303,8 @@ public:
 
 private:
     SkTArray<Instruction> fInstructions;
+    int fNumLabels = 0;
+    int fNumBranches = 0;
 };
 
 }  // namespace RP
