@@ -3021,16 +3021,51 @@ STAGE(store_condition_mask, F* ctx) {
     sk_unaligned_store(ctx, dr);
 }
 
-STAGE(combine_condition_mask, I32* stack) {
-    // Store off the current condition-mask in the following stack slot.
-    stack[1] = sk_bit_cast<I32>(dr);
-
-    // Intersect the current condition-mask with the condition-mask on the stack.
-    dr = sk_bit_cast<F>(stack[0] & stack[1]);
+STAGE(merge_condition_mask, I32* ptr) {
+    // Set the condition-mask to the intersection of two adjacent masks at the pointer.
+    dr = sk_bit_cast<F>(ptr[0] & ptr[1]);
     update_execution_mask();
 }
 
-STAGE(update_return_mask, NoCtx) {
+STAGE(load_loop_mask, F* ctx) {
+    dg = sk_unaligned_load<F>(ctx);
+    update_execution_mask();
+}
+
+STAGE(store_loop_mask, F* ctx) {
+    sk_unaligned_store(ctx, dg);
+}
+
+STAGE(mask_off_loop_mask, NoCtx) {
+    // We encountered a break statement. If a lane was active, it should be masked off now, and stay
+    // masked-off until the termination of the loop.
+    dg = sk_bit_cast<F>(sk_bit_cast<I32>(dg) & ~execution_mask());
+    update_execution_mask();
+}
+
+STAGE(reenable_loop_mask, I32* ptr) {
+    // Set the loop-mask to the union of the current loop-mask with the mask at the pointer.
+    dg = sk_bit_cast<F>(sk_bit_cast<I32>(dg) | ptr[0]);
+    update_execution_mask();
+}
+
+STAGE(merge_loop_mask, I32* ptr) {
+    // Set the loop-mask to the intersection of the current loop-mask with the mask at the pointer.
+    // (Note: this behavior subtly differs from merge_condition_mask!)
+    dg = sk_bit_cast<F>(sk_bit_cast<I32>(dg) & ptr[0]);
+    update_execution_mask();
+}
+
+STAGE(load_return_mask, F* ctx) {
+    db = sk_unaligned_load<F>(ctx);
+    update_execution_mask();
+}
+
+STAGE(store_return_mask, F* ctx) {
+    sk_unaligned_store(ctx, db);
+}
+
+STAGE(mask_off_return_mask, NoCtx) {
     // We encountered a return statement. If a lane was active, it should be masked off now, and
     // stay masked-off until the end of the function.
     db = sk_bit_cast<F>(sk_bit_cast<I32>(db) & ~execution_mask());
@@ -3038,11 +3073,11 @@ STAGE(update_return_mask, NoCtx) {
 }
 
 STAGE_BRANCH(branch_if_any_active_lanes, int* offset) {
-    return any(sk_bit_cast<I32>(da)) ? *offset : 1;
+    return any(execution_mask()) ? *offset : 1;
 }
 
 STAGE_BRANCH(branch_if_no_active_lanes, int* offset) {
-    return any(sk_bit_cast<I32>(da)) ? 1 : *offset;
+    return any(execution_mask()) ? 1 : *offset;
 }
 
 STAGE_BRANCH(jump, int* offset) {
@@ -3141,6 +3176,21 @@ SI void add_fn(T* dst, T* src) {
 }
 
 template <typename T>
+SI void sub_fn(T* dst, T* src) {
+    *dst -= *src;
+}
+
+template <typename T>
+SI void mul_fn(T* dst, T* src) {
+    *dst *= *src;
+}
+
+template <typename T>
+SI void div_fn(T* dst, T* src) {
+    *dst /= *src;
+}
+
+template <typename T>
 SI void cmplt_fn(T* dst, T* src) {
     static_assert(sizeof(T) == sizeof(I32));
     I32 result = cond_to_mask(*dst < *src);
@@ -3185,6 +3235,9 @@ SI void cmpne_fn(T* dst, T* src) {
     }
 
 DECLARE_BINARY_STAGES(add)
+DECLARE_BINARY_STAGES(sub)
+DECLARE_BINARY_STAGES(mul)
+DECLARE_BINARY_STAGES(div)
 DECLARE_BINARY_STAGES(cmplt)
 DECLARE_BINARY_STAGES(cmple)
 DECLARE_BINARY_STAGES(cmpeq)
