@@ -236,6 +236,7 @@ SKIA_PUBLIC_HDRS = [
 BASE_SRCS_ALL = [
     "include/core/SkOpenTypeSVGDecoder.h",
     "include/private/SingleOwner.h",
+    "include/private/SkAlignedStorage.h",
     "include/private/SkBitmaskEnum.h",
     "include/private/SkChecksum.h",
     "include/private/SkColorData.h",
@@ -281,6 +282,7 @@ BASE_SRCS_ALL = [
     "include/private/SkThreadAnnotations.h",
     "include/private/SkThreadID.h",
     "include/private/SkTo.h",
+    "include/private/SkTypeTraits.h",
     "include/private/SkUniquePaintParamsID.h",
     "include/private/SkVx.h",
     "include/private/SkWeakRefCnt.h",
