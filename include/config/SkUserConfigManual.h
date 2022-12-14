@@ -22,6 +22,7 @@
   // Staging flags
   #define SK_LEGACY_PATH_ARCTO_ENDPOINT
   #define SK_SUPPORT_STROKEANDFILL
+  #define SK_LEGACY_GET_FILL_PATH
 
   // Needed until we fix https://bug.skia.org/2440
   #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
