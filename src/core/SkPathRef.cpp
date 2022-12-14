@@ -7,14 +7,15 @@
 
 #include "include/private/SkPathRef.h"
 
+#include "include/core/SkMatrix.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkRRect.h"
 #include "include/private/SkOnce.h"
-#include "include/private/SkTo.h"
 #include "include/private/SkVx.h"
 #include "src/core/SkBuffer.h"
 #include "src/core/SkPathPriv.h"
-#include "src/core/SkSafeMath.h"
+
+#include <cstring>
 
 //////////////////////////////////////////////////////////////////////////////
 SkPathRef::Editor::Editor(sk_sp<SkPathRef>* pathRef,
@@ -702,9 +703,9 @@ bool SkPathRef::isValid() const {
 
 void SkPathRef::reset() {
     commonReset();
-    fPoints.resize(0);
-    fVerbs.resize(0);
-    fConicWeights.resize(0);
+    fPoints.clear();
+    fVerbs.clear();
+    fConicWeights.clear();
     SkDEBUGCODE(validate();)
 }
 
