@@ -108,6 +108,8 @@ skia_graphite_sources = [
   "$_src/ResourceProvider.cpp",
   "$_src/ResourceProvider.h",
   "$_src/ResourceTypes.h",
+  "$_src/RuntimeEffectDictionary.cpp",
+  "$_src/RuntimeEffectDictionary.h",
   "$_src/Sampler.cpp",
   "$_src/Sampler.h",
   "$_src/ShaderCodeDictionary.cpp",
@@ -134,6 +136,7 @@ skia_graphite_sources = [
   "$_src/Uniform.h",
   "$_src/UniformManager.cpp",
   "$_src/UniformManager.h",
+  "$_src/UniquePaintParamsID.h",
   "$_src/UploadBufferManager.cpp",
   "$_src/UploadBufferManager.h",
   "$_src/UploadTask.cpp",
@@ -270,4 +273,5 @@ skia_graphite_precompile_sources = [
   "$_src/PaintOptionsPriv.h",
   "$_src/Precompile.cpp",
   "$_src/Precompile.h",
+  "$_src/PrecompileBasePriv.h",
 ]

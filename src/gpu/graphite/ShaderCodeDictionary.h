@@ -15,12 +15,12 @@
 #include "include/private/SkTHash.h"
 #include "include/private/SkThreadAnnotations.h"
 #include "include/private/SkTo.h"
-#include "include/private/SkUniquePaintParamsID.h"
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkEnumBitMask.h"
 #include "src/gpu/graphite/BuiltInCodeSnippetID.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #include "src/gpu/graphite/Uniform.h"
+#include "src/gpu/graphite/UniquePaintParamsID.h"
 
 #include <array>
 #include <cstddef>
@@ -31,12 +31,12 @@
 #include <vector>
 
 class SkRuntimeEffect;
-class SkRuntimeEffectDictionary;
 
 namespace skgpu::graphite {
 
 enum class Layout;
 class RenderStep;
+class RuntimeEffectDictionary;
 
 #ifdef SK_ENABLE_PRECOMPILE
 class BlenderID;
@@ -128,7 +128,7 @@ struct ShaderSnippet {
 // for program creation and its invocation.
 class ShaderInfo {
 public:
-    ShaderInfo(const SkRuntimeEffectDictionary* rteDict = nullptr,
+    ShaderInfo(const RuntimeEffectDictionary* rteDict = nullptr,
                const char* ssboIndex = nullptr)
             : fRuntimeEffectDictionary(rteDict)
             , fSsboIndex(ssboIndex) {}
@@ -150,7 +150,7 @@ public:
     const PaintParamsKey::BlockReader& blockReader(int index) const {
         return fBlockReaders[index];
     }
-    const SkRuntimeEffectDictionary* runtimeEffectDictionary() const {
+    const RuntimeEffectDictionary* runtimeEffectDictionary() const {
         return fRuntimeEffectDictionary;
     }
     const char* ssboIndex() const { return fSsboIndex; }
@@ -170,7 +170,7 @@ private:
     std::vector<PaintParamsKey::BlockReader> fBlockReaders;
 
     SkEnumBitMask<SnippetRequirementFlags> fSnippetRequirementFlags{SnippetRequirementFlags::kNone};
-    const SkRuntimeEffectDictionary* fRuntimeEffectDictionary = nullptr;
+    const RuntimeEffectDictionary* fRuntimeEffectDictionary = nullptr;
 
     const char* fSsboIndex;
 
@@ -185,7 +185,7 @@ public:
 
     struct Entry {
     public:
-        SkUniquePaintParamsID uniqueID() const {
+        UniquePaintParamsID uniqueID() const {
             SkASSERT(fUniqueID.isValid());
             return fUniqueID;
         }
@@ -202,10 +202,10 @@ public:
 
         void setUniqueID(uint32_t newID) {
             SkASSERT(!fUniqueID.isValid());
-            fUniqueID = SkUniquePaintParamsID(newID);
+            fUniqueID = UniquePaintParamsID(newID);
         }
 
-        SkUniquePaintParamsID fUniqueID;  // fixed-size (uint32_t) unique ID assigned to a key
+        UniquePaintParamsID fUniqueID;  // fixed-size (uint32_t) unique ID assigned to a key
         PaintParamsKey fKey; // variable-length paint key descriptor
 
         // The BlendInfo isn't used in the hash (that is the key's job) but it does directly vary
@@ -216,7 +216,7 @@ public:
 
     const Entry* findOrCreate(PaintParamsKeyBuilder*) SK_EXCLUDES(fSpinLock);
 
-    const Entry* lookup(SkUniquePaintParamsID) const SK_EXCLUDES(fSpinLock);
+    const Entry* lookup(UniquePaintParamsID) const SK_EXCLUDES(fSpinLock);
 
     SkSpan<const Uniform> getUniforms(BuiltInCodeSnippetID) const;
     SkEnumBitMask<SnippetRequirementFlags> getSnippetRequirementFlags(
@@ -234,7 +234,7 @@ public:
         return this->getEntry(SkTo<int>(codeSnippetID));
     }
 
-    void getShaderInfo(SkUniquePaintParamsID, ShaderInfo*) const;
+    void getShaderInfo(UniquePaintParamsID, ShaderInfo*) const;
 
     int findOrCreateRuntimeEffectSnippet(const SkRuntimeEffect* effect);
 

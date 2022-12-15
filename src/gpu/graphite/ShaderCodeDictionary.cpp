@@ -15,11 +15,11 @@
 #include "include/private/SkSLString.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkColorSpaceXformSteps.h"
-#include "src/core/SkRuntimeEffectDictionary.h"
 #include "src/core/SkRuntimeEffectPriv.h"
 #include "src/core/SkSLTypeShared.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/Renderer.h"
+#include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/sksl/codegen/SkSLPipelineStageCodeGenerator.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 
@@ -216,7 +216,7 @@ const ShaderCodeDictionary::Entry* ShaderCodeDictionary::findOrCreate(
 }
 
 const ShaderCodeDictionary::Entry* ShaderCodeDictionary::lookup(
-        SkUniquePaintParamsID codeID) const {
+        UniquePaintParamsID codeID) const {
 
     if (!codeID.isValid()) {
         return nullptr;
@@ -256,7 +256,7 @@ const ShaderSnippet* ShaderCodeDictionary::getEntry(int codeSnippetID) const {
     return nullptr;
 }
 
-void ShaderCodeDictionary::getShaderInfo(SkUniquePaintParamsID uniqueID,
+void ShaderCodeDictionary::getShaderInfo(UniquePaintParamsID uniqueID,
                                          ShaderInfo* info) const {
     auto entry = this->lookup(uniqueID);
 
