@@ -1165,7 +1165,7 @@ void path_to_quads(const SkPath& path, SkPath* quadPath) {
                 quadPath->quadTo(pts[1].fX, pts[1].fY, pts[2].fX, pts[2].fY);
                 break;
             case SkPathVerb::kCubic:
-                qPts.reset();
+                qPts.clear();
                 convertCubicToQuads(pts, SK_Scalar1, &qPts);
                 for (int i = 0; i < qPts.size(); i += 3) {
                     quadPath->quadTo(
@@ -1317,7 +1317,7 @@ public:
 
         // Apply the path effect.
         if (paint.getPathEffect() || paint.getStyle() != SkPaint::kFill_Style) {
-            bool fill = FillPathWithPaint(path, paint, &path);
+            bool fill = skpathutils::FillPathWithPaint(path, paint, &path);
 
             paint.setPathEffect(nullptr);
             if (fill) {

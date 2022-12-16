@@ -24,9 +24,9 @@ public:
     }
 
     void buildCombinations(
-            ShaderCodeDictionary* dict,
-            const std::function<void(SkUniquePaintParamsID)>& processCombination) const {
-        fPaintOptions->buildCombinations(dict, processCombination);
+            const KeyContext& keyContext,
+            const std::function<void(UniquePaintParamsID)>& processCombination) const {
+        fPaintOptions->buildCombinations(keyContext, processCombination);
     }
 
 private:

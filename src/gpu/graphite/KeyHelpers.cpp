@@ -11,7 +11,6 @@
 #include "include/effects/SkRuntimeEffect.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkDebugUtils.h"
-#include "src/core/SkRuntimeEffectDictionary.h"
 #include "src/core/SkRuntimeEffectPriv.h"
 #include "src/gpu/Blend.h"
 #include "src/gpu/graphite/KeyContext.h"
@@ -19,6 +18,7 @@
 #include "src/gpu/graphite/PipelineData.h"
 #include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/ResourceProvider.h"
+#include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/gpu/graphite/ShaderCodeDictionary.h"
 #include "src/gpu/graphite/Texture.h"
 #include "src/gpu/graphite/TextureProxy.h"
@@ -670,12 +670,6 @@ bool RuntimeEffectBlock::ShaderData::operator==(const ShaderData& rhs) const {
     return fEffect == rhs.fEffect && skdata_matches(fUniforms.get(), rhs.fUniforms.get());
 }
 
-static void add_effect_to_recorder(skgpu::graphite::Recorder* recorder,
-                                   int codeSnippetID,
-                                   sk_sp<const SkRuntimeEffect> effect) {
-    recorder->priv().runtimeEffectDictionary()->set(codeSnippetID, std::move(effect));
-}
-
 static void gather_runtime_effect_uniforms(SkSpan<const SkRuntimeEffect::Uniform> rtsUniforms,
                                            SkSpan<const Uniform> graphiteUniforms,
                                            const SkData* uniformData,
@@ -698,9 +692,7 @@ void RuntimeEffectBlock::BeginBlock(const KeyContext& keyContext,
     ShaderCodeDictionary* dict = keyContext.dict();
     int codeSnippetID = dict->findOrCreateRuntimeEffectSnippet(shaderData.fEffect.get());
 
-    if (keyContext.recorder()) {
-        add_effect_to_recorder(keyContext.recorder(), codeSnippetID, shaderData.fEffect);
-    }
+    keyContext.rtEffectDict()->set(codeSnippetID, shaderData.fEffect);
 
     if (gatherer) {
         const ShaderSnippet* entry = dict->getEntry(codeSnippetID);

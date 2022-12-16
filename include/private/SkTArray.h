@@ -126,13 +126,6 @@ public:
     }
 
     /**
-     * Resets to size() == 0.
-     */
-    void reset() {
-        this->clear();
-    }
-
-    /**
      * Resets to size() = n newly constructed T objects and resets any reserve count.
      */
     void reset(int n) {
