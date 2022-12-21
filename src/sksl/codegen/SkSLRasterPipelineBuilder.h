@@ -95,11 +95,49 @@ public:
 private:
     using StackDepthMap = SkTHashMap<int, int>; // <stack index, depth of stack>
 
-    float* allocateSlotData(SkArenaAlloc* alloc);
-    void appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, float* slotPtr);
+    struct SlotData {
+        SkSpan<float> values;
+        SkSpan<float> stack;
+    };
+    SlotData allocateSlotData(SkArenaAlloc* alloc);
+    void appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, const SlotData& slots);
     void optimize();
     int numValueSlots();
     StackDepthMap tempStackMaxDepths();
+
+    // These methods currently wrap SkRasterPipeline directly. TODO: add a layer of abstraction;
+    // we should assemble our own list of program stages and contexts, instead of immediately
+    // pushing stages into the SkRasterPipeline.
+    void append(SkRasterPipeline* pipeline, SkRasterPipeline::Stage stage, void* ctx = nullptr);
+    void rewindPipeline(SkRasterPipeline* pipeline);
+    int getNumPipelineStages(SkRasterPipeline* pipeline);
+
+    // These methods are used to split up large multi-slot operations into multiple ops as needed.
+    void appendCopy(SkRasterPipeline* pipeline, SkArenaAlloc* alloc,
+                    SkRasterPipeline::Stage baseStage,
+                    float* dst, int dstStride, const float* src, int srcStride, int numSlots);
+    void appendCopySlotsUnmasked(SkRasterPipeline* pipeline, SkArenaAlloc* alloc,
+                                 float* dst, const float* src, int numSlots);
+    void appendCopySlotsMasked(SkRasterPipeline* pipeline, SkArenaAlloc* alloc,
+                               float* dst, const float* src, int numSlots);
+    void appendCopyConstants(SkRasterPipeline* pipeline, SkArenaAlloc* alloc,
+                             float* dst, const float* src, int numSlots);
+    void appendZeroSlotsUnmasked(SkRasterPipeline* pipeline, float* dst, int numSlots);
+
+    // Appends a math operation with two inputs (dst op src) and one output (dst) to the pipeline.
+    // `src` must be _immediately_ after `dst` in memory.
+    void appendAdjacentSingleSlotOp(SkRasterPipeline* pipeline, SkRasterPipeline::Stage stage,
+                                    float* dst, const float* src);
+
+    // Appends a multi-slot math operation to the pipeline. `src` must be _immediately_ after `dst`
+    // in memory. `baseStage` must refer to an unbounded "apply_to_n_slots" stage, which must be
+    // immediately followed by specializations for 1-4 slots. For instance, {`add_n_floats`,
+    // `add_float`, `add_2_floats`, `add_3_floats`, `add_4_floats`} must be contiguous ops in the
+    // stage list, listed in that order; pass `add_n_floats` and we pick the appropriate op based on
+    // `numSlots`.
+    void appendAdjacentMultiSlotOp(SkRasterPipeline* pipeline, SkArenaAlloc* alloc,
+                                   SkRasterPipeline::Stage baseStage,
+                                   float* dst, const float* src, int numSlots);
 
     SkTArray<Instruction> fInstructions;
     int fNumValueSlots = 0;
