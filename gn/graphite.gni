@@ -207,6 +207,7 @@ skia_graphite_dawn_sources = [
 skia_graphite_mtl_sources = [
   "$_include/mtl/MtlBackendContext.h",
   "$_include/mtl/MtlTypes.h",
+  "$_include/mtl/MtlUtils.h",
   "$_include_private/MtlTypesPriv.h",
   "$_src/mtl/MtlBlitCommandEncoder.h",
   "$_src/mtl/MtlBuffer.h",
@@ -231,15 +232,14 @@ skia_graphite_mtl_sources = [
   "$_src/mtl/MtlSharedContext.mm",
   "$_src/mtl/MtlTexture.h",
   "$_src/mtl/MtlTexture.mm",
-  "$_src/mtl/MtlTrampoline.h",
-  "$_src/mtl/MtlTrampoline.mm",
   "$_src/mtl/MtlTypesPriv.mm",
-  "$_src/mtl/MtlUtils.h",
   "$_src/mtl/MtlUtils.mm",
+  "$_src/mtl/MtlUtilsPriv.h",
 ]
 
 skia_graphite_vk_sources = [
   "$_include/vk/VulkanGraphiteTypes.h",
+  "$_include/vk/VulkanGraphiteUtils.h",
   "$_include_private/VulkanGraphiteTypesPriv.h",
   "$_src/vk/VulkanBuffer.cpp",
   "$_src/vk/VulkanBuffer.h",
@@ -248,7 +248,8 @@ skia_graphite_vk_sources = [
   "$_src/vk/VulkanCommandBuffer.cpp",
   "$_src/vk/VulkanCommandBuffer.h",
   "$_src/vk/VulkanGraphiteTypes.cpp",
-  "$_src/vk/VulkanGraphiteUtils.h",
+  "$_src/vk/VulkanGraphiteUtils.cpp",
+  "$_src/vk/VulkanGraphiteUtilsPriv.h",
   "$_src/vk/VulkanQueueManager.cpp",
   "$_src/vk/VulkanQueueManager.h",
   "$_src/vk/VulkanResourceProvider.cpp",

@@ -44,16 +44,6 @@
 #include "src/gpu/graphite/dawn/DawnSharedContext.h"
 #endif
 
-#ifdef SK_METAL
-#include "src/gpu/graphite/mtl/MtlTrampoline.h"
-#endif
-
-#ifdef SK_VULKAN
-#include "include/gpu/vk/VulkanBackendContext.h"
-#include "src/gpu/graphite/vk/VulkanQueueManager.h"
-#include "src/gpu/graphite/vk/VulkanSharedContext.h"
-#endif
-
 #ifdef SK_ENABLE_PRECOMPILE
 #include "src/gpu/graphite/PaintOptionsPriv.h"
 #endif
@@ -108,49 +98,6 @@ std::unique_ptr<Context> Context::MakeDawn(const DawnBackendContext& backendCont
 
     auto queueManager =
             std::make_unique<DawnQueueManager>(backendContext.fQueue, sharedContext.get());
-    if (!queueManager) {
-        return nullptr;
-    }
-
-    auto context = std::unique_ptr<Context>(new Context(std::move(sharedContext),
-                                                        std::move(queueManager),
-                                                        options));
-    SkASSERT(context);
-    return context;
-}
-#endif
-
-#ifdef SK_METAL
-std::unique_ptr<Context> Context::MakeMetal(const MtlBackendContext& backendContext,
-                                            const ContextOptions& options) {
-    sk_sp<SharedContext> sharedContext = MtlTrampoline::MakeSharedContext(backendContext, options);
-    if (!sharedContext) {
-        return nullptr;
-    }
-
-    auto queueManager = MtlTrampoline::MakeQueueManager(backendContext, sharedContext.get());
-    if (!queueManager) {
-        return nullptr;
-    }
-
-    auto context = std::unique_ptr<Context>(new Context(std::move(sharedContext),
-                                                        std::move(queueManager),
-                                                        options));
-    SkASSERT(context);
-    return context;
-}
-#endif
-
-#ifdef SK_VULKAN
-std::unique_ptr<Context> Context::MakeVulkan(const VulkanBackendContext& backendContext,
-                                             const ContextOptions& options) {
-    sk_sp<SharedContext> sharedContext = VulkanSharedContext::Make(backendContext, options);
-    if (!sharedContext) {
-        return nullptr;
-    }
-
-    std::unique_ptr<QueueManager> queueManager(new VulkanQueueManager(backendContext.fQueue,
-                                                                      sharedContext.get()));
     if (!queueManager) {
         return nullptr;
     }
@@ -382,7 +329,7 @@ void Context::checkAsyncWorkCompletion() {
 
 #ifdef SK_ENABLE_PRECOMPILE
 
-void Context::precompile(const PaintOptions& options) {
+void Context::precompile(const PaintOptions& options, DrawTypeFlags drawTypes) {
     ASSERT_SINGLE_OWNER
 
     auto rtEffectDict = std::make_unique<RuntimeEffectDictionary>();
@@ -413,6 +360,10 @@ void Context::precompile(const PaintOptions& options) {
         keyContext,
         [&](UniquePaintParamsID uniqueID) {
             for (const Renderer* r : fSharedContext->rendererProvider()->renderers()) {
+                if (!(r->drawTypes() & drawTypes)) {
+                    continue;
+                }
+
                 for (auto&& s : r->steps()) {
                     if (s->performsShading()) {
                         GraphicsPipelineDesc pipelineDesc(s, uniqueID);
