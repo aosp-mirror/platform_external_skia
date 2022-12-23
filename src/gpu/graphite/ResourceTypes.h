@@ -9,6 +9,7 @@
 #define skgpu_graphite_ResourceTypes_DEFINED
 
 #include "include/gpu/graphite/GraphiteTypes.h"
+#include "include/private/SkTo.h"
 #include "src/core/SkEnumBitMask.h"
 
 namespace skgpu::graphite {
@@ -34,7 +35,7 @@ SK_MAKE_BITMASK_OPS(DepthStencilFlags);
 /**
  * What a GPU buffer will be used for
  */
-enum class BufferType {
+enum class BufferType : int {
     kVertex,
     kIndex,
     kXferCpuToGpu,
