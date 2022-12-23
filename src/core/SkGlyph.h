@@ -8,26 +8,17 @@
 #ifndef SkGlyph_DEFINED
 #define SkGlyph_DEFINED
 
-#include "include/core/SkDrawable.h"
 #include "include/core/SkPath.h"
-#include "include/core/SkPoint.h"
-#include "include/core/SkRect.h"
-#include "include/core/SkRefCnt.h"
-#include "include/core/SkScalar.h"
-#include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
 #include "include/private/SkChecksum.h"
 #include "include/private/SkFixed.h"
+#include "include/private/SkTo.h"
 #include "include/private/SkVx.h"
 #include "src/core/SkMask.h"
-
-#include <algorithm>
-#include <cmath>
-#include <cstddef>
-#include <cstdint>
-#include <limits>
+#include "src/core/SkMathPriv.h"
 
 class SkArenaAlloc;
+class SkDrawable;
 class SkScalerContext;
 
 // -- SkPackedGlyphID ------------------------------------------------------------------------------

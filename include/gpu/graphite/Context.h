@@ -51,6 +51,13 @@ public:
 #ifdef SK_DAWN
     static std::unique_ptr<Context> MakeDawn(const DawnBackendContext&, const ContextOptions&);
 #endif
+#ifdef SK_METAL
+    static std::unique_ptr<Context> MakeMetal(const MtlBackendContext&, const ContextOptions&);
+#endif
+
+#ifdef SK_VULKAN
+    static std::unique_ptr<Context> MakeVulkan(const VulkanBackendContext&, const ContextOptions&);
+#endif
 
     BackendApi backend() const;
 
@@ -77,16 +84,7 @@ public:
     void checkAsyncWorkCompletion();
 
 #ifdef SK_ENABLE_PRECOMPILE
-    /**
-     * Precompilation allows clients to create pipelines ahead of time based on what they expect
-     * to draw. This can reduce performance hitches, due to inline compilation, during the actual
-     * drawing. Graphite will always be able to perform an inline compilation if some SkPaint
-     * combination was omitted from precompilation.
-     *
-     *   @param paintOptions   captures a set of SkPaints that will be drawn
-     *   @param drawTypes      communicates which primitives those paints will be drawn with
-     */
-    void precompile(const PaintOptions&, DrawTypeFlags = kMostCommon);
+    void precompile(const PaintOptions&);
 #endif
 
     /**
@@ -128,12 +126,6 @@ protected:
 
 private:
     friend class ContextPriv;
-
-    // For ctors
-    friend std::unique_ptr<Context> MakeMetalContext(const MtlBackendContext&,
-                                                     const ContextOptions&);
-    friend std::unique_ptr<Context> MakeVulkanContext(const VulkanBackendContext&,
-                                                      const ContextOptions&);
 
     SingleOwner* singleOwner() const { return &fSingleOwner; }
 

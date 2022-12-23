@@ -291,8 +291,7 @@ struct SkRasterPipeline_TablesCtx {
 };
 
 struct SkRasterPipeline_CopySlotsCtx {
-    float *dst;
-    const float *src;
+    float *dst, *src;
 };
 
 struct SkRasterPipeline_SwizzleCtx {

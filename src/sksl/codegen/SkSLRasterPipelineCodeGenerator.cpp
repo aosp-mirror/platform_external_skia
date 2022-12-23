@@ -58,20 +58,38 @@
 namespace SkSL {
 namespace RP {
 
-class SlotManager {
+class Generator {
 public:
-    SlotManager(std::vector<SlotDebugInfo>* i) : fSlotDebugInfo(i) {}
+    Generator(const SkSL::Program& program, SkRPDebugTrace* debugTrace)
+            : fProgram(program)
+            , fDebugTrace(debugTrace) {}
 
-    /** Used by `create` to add this variable to SlotDebugInfo inside SkRPDebugTrace. */
-    void addSlotDebugInfoForGroup(const std::string& varName,
+    /** Converts the SkSL main() function into a set of Instructions. */
+    bool writeProgram(const FunctionDefinition& function);
+
+    /**
+     * Converts an SkSL function into a set of Instructions. Returns nullopt if the function
+     * contained unsupported statements or expressions.
+     */
+    std::optional<SlotRange> writeFunction(const IRNode& callSite,
+                                           const FunctionDefinition& function,
+                                           SkSpan<const SlotRange> args);
+
+    /** Used by `createSlots` to add this variable to SlotDebugInfo inside SkRPDebugTrace. */
+    void addDebugSlotInfoForGroup(const std::string& varName,
                                   const Type& type,
                                   Position pos,
                                   int* groupIndex,
                                   bool isFunctionReturnValue);
-    void addSlotDebugInfo(const std::string& varName,
+    void addDebugSlotInfo(const std::string& varName,
                           const Type& type,
                           Position pos,
                           bool isFunctionReturnValue);
+    /**
+     * Returns the slot index of this function inside the FunctionDebugInfo array in SkRPDebugTrace.
+     * The FunctionDebugInfo slot will be created if it doesn't already exist.
+     */
+    int getDebugFunctionInfo(const FunctionDeclaration& decl);
 
     /** Implements low-level slot creation; slots will not be known to the debugger. */
     SlotRange createSlots(int slots);
@@ -83,7 +101,10 @@ public:
                           bool isFunctionReturnValue);
 
     /** Looks up the slots associated with an SkSL variable; creates the slot if necessary. */
-    SlotRange getVariableSlots(const Variable& v);
+    SlotRange getSlots(const Variable& v);
+
+    /** Returns the number of slots needed by the program. */
+    int slotCount() const { return fSlotCount; }
 
     /**
      * Looks up the slots associated with an SkSL function's return value; creates the range if
@@ -91,64 +112,6 @@ public:
      * in a stack; we can just statically allocate one slot per function call-site.
      */
     SlotRange getFunctionSlots(const IRNode& callSite, const FunctionDeclaration& f);
-
-    /** Returns the total number of slots consumed. */
-    int slotCount() const { return fSlotCount; }
-
-private:
-    SkTHashMap<const IRNode*, SlotRange> fSlotMap;
-    int fSlotCount = 0;
-    std::vector<SlotDebugInfo>* fSlotDebugInfo;
-};
-
-class Generator {
-public:
-    Generator(const SkSL::Program& program, SkRPDebugTrace* debugTrace)
-            : fProgram(program)
-            , fDebugTrace(debugTrace)
-            , fProgramSlots(debugTrace ? &debugTrace->fSlotInfo : nullptr)
-            , fUniformSlots(debugTrace ? &debugTrace->fUniformInfo : nullptr) {}
-
-    /** Converts the SkSL main() function into a set of Instructions. */
-    bool writeProgram(const FunctionDefinition& function);
-
-    /** Returns the generated program. */
-    std::unique_ptr<RP::Program> finish();
-
-    /**
-     * Converts an SkSL function into a set of Instructions. Returns nullopt if the function
-     * contained unsupported statements or expressions.
-     */
-    std::optional<SlotRange> writeFunction(const IRNode& callSite,
-                                           const FunctionDefinition& function,
-                                           SkSpan<const SlotRange> args);
-
-    /**
-     * Returns the slot index of this function inside the FunctionDebugInfo array in SkRPDebugTrace.
-     * The FunctionDebugInfo slot will be created if it doesn't already exist.
-     */
-    int getFunctionDebugInfo(const FunctionDeclaration& decl);
-
-    /** Looks up the slots associated with an SkSL variable; creates the slot if necessary. */
-    SlotRange getVariableSlots(const Variable& v) {
-        SkASSERT(!IsUniform(v));
-        return fProgramSlots.getVariableSlots(v);
-    }
-
-    /** Looks up the slots associated with an SkSL uniform; creates the slot if necessary. */
-    SlotRange getUniformSlots(const Variable& v) {
-        SkASSERT(IsUniform(v));
-        return fUniformSlots.getVariableSlots(v);
-    }
-
-    /**
-     * Looks up the slots associated with an SkSL function's return value; creates the range if
-     * necessary. Note that recursion is never supported, so we don't need to maintain return values
-     * in a stack; we can just statically allocate one slot per function call-site.
-     */
-    SlotRange getFunctionSlots(const IRNode& callSite, const FunctionDeclaration& f) {
-        return fProgramSlots.getFunctionSlots(callSite, f);
-    }
 
     /** The Builder stitches our instructions together into Raster Pipeline code. */
     Builder* builder() { return &fBuilder; }
@@ -207,17 +170,14 @@ public:
     void previousTempStack() {
         fBuilder.set_current_stack(--fCurrentTempStack);
     }
-    static bool IsUniform(const Variable& var) {
-       return var.modifiers().fFlags & Modifiers::kUniform_Flag;
-    }
 
 private:
     const SkSL::Program& fProgram;
     Builder fBuilder;
     SkRPDebugTrace* fDebugTrace = nullptr;
 
-    SlotManager fProgramSlots;
-    SlotManager fUniformSlots;
+    SkTHashMap<const IRNode*, SlotRange> fSlotMap;
+    int fSlotCount = 0;
 
     SkTArray<SlotRange> fFunctionStack;
     SlotRange fCurrentContinueMask;
@@ -252,7 +212,7 @@ struct VariableLValue : public LValue {
     SlotMap getSlotMap(Generator* gen) override {
         // Map every slot in the variable, in consecutive order, e.g. a half4 at slot 5 = {5,6,7,8}.
         SlotMap out;
-        SlotRange range = gen->getVariableSlots(*fVariable);
+        SlotRange range = gen->getSlots(*fVariable);
         out.slots.resize(range.count);
         std::iota(out.slots.begin(), out.slots.end(), range.index);
         return out;
@@ -332,25 +292,25 @@ static bool unsupported() {
     return false;
 }
 
-void SlotManager::addSlotDebugInfoForGroup(const std::string& varName,
-                                           const Type& type,
-                                           Position pos,
-                                           int* groupIndex,
-                                           bool isFunctionReturnValue) {
-    SkASSERT(fSlotDebugInfo);
+void Generator::addDebugSlotInfoForGroup(const std::string& varName,
+                                         const Type& type,
+                                         Position pos,
+                                         int* groupIndex,
+                                         bool isFunctionReturnValue) {
+    SkASSERT(fDebugTrace);
     switch (type.typeKind()) {
         case Type::TypeKind::kArray: {
             int nslots = type.columns();
             const Type& elemType = type.componentType();
             for (int slot = 0; slot < nslots; ++slot) {
-                this->addSlotDebugInfoForGroup(varName + "[" + std::to_string(slot) + "]", elemType,
+                this->addDebugSlotInfoForGroup(varName + "[" + std::to_string(slot) + "]", elemType,
                                                pos, groupIndex, isFunctionReturnValue);
             }
             break;
         }
         case Type::TypeKind::kStruct: {
             for (const Type::Field& field : type.fields()) {
-                this->addSlotDebugInfoForGroup(varName + "." + std::string(field.fName),
+                this->addDebugSlotInfoForGroup(varName + "." + std::string(field.fName),
                                                *field.fType, pos, groupIndex,
                                                isFunctionReturnValue);
             }
@@ -376,52 +336,52 @@ void SlotManager::addSlotDebugInfoForGroup(const std::string& varName,
                 slotInfo.numberKind = numberKind;
                 slotInfo.pos = pos;
                 slotInfo.fnReturnValue = isFunctionReturnValue ? 1 : -1;
-                fSlotDebugInfo->push_back(std::move(slotInfo));
+                fDebugTrace->fSlotInfo.push_back(std::move(slotInfo));
             }
             break;
         }
     }
 }
 
-void SlotManager::addSlotDebugInfo(const std::string& varName,
-                                   const Type& type,
-                                   Position pos,
-                                   bool isFunctionReturnValue) {
+void Generator::addDebugSlotInfo(const std::string& varName,
+                                 const Type& type,
+                                 Position pos,
+                                 bool isFunctionReturnValue) {
     int groupIndex = 0;
-    this->addSlotDebugInfoForGroup(varName, type, pos, &groupIndex, isFunctionReturnValue);
+    this->addDebugSlotInfoForGroup(varName, type, pos, &groupIndex, isFunctionReturnValue);
     SkASSERT((size_t)groupIndex == type.slotCount());
 }
 
-SlotRange SlotManager::createSlots(int slots) {
+SlotRange Generator::createSlots(int slots) {
     SlotRange range = {fSlotCount, slots};
     fSlotCount += slots;
     return range;
 }
 
-SlotRange SlotManager::createSlots(std::string name,
-                                   const Type& type,
-                                   Position pos,
-                                   bool isFunctionReturnValue) {
+SlotRange Generator::createSlots(std::string name,
+                                 const Type& type,
+                                 Position pos,
+                                 bool isFunctionReturnValue) {
     size_t nslots = type.slotCount();
     if (nslots == 0) {
         return {};
     }
-    if (fSlotDebugInfo) {
+    if (fDebugTrace) {
         // Our debug slot-info table should have the same length as the actual slot table.
-        SkASSERT(fSlotDebugInfo->size() == (size_t)fSlotCount);
+        SkASSERT(fDebugTrace->fSlotInfo.size() == (size_t)fSlotCount);
 
         // Append slot names and types to our debug slot-info table.
-        fSlotDebugInfo->reserve(fSlotCount + nslots);
-        this->addSlotDebugInfo(name, type, pos, isFunctionReturnValue);
+        fDebugTrace->fSlotInfo.reserve(fSlotCount + nslots);
+        this->addDebugSlotInfo(name, type, pos, isFunctionReturnValue);
 
         // Confirm that we added the expected number of slots.
-        SkASSERT(fSlotDebugInfo->size() == (size_t)(fSlotCount + nslots));
+        SkASSERT(fDebugTrace->fSlotInfo.size() == (size_t)(fSlotCount + nslots));
     }
 
     return this->createSlots(nslots);
 }
 
-SlotRange SlotManager::getVariableSlots(const Variable& v) {
+SlotRange Generator::getSlots(const Variable& v) {
     SlotRange* entry = fSlotMap.find(&v);
     if (entry != nullptr) {
         return *entry;
@@ -434,7 +394,7 @@ SlotRange SlotManager::getVariableSlots(const Variable& v) {
     return range;
 }
 
-SlotRange SlotManager::getFunctionSlots(const IRNode& callSite, const FunctionDeclaration& f) {
+SlotRange Generator::getFunctionSlots(const IRNode& callSite, const FunctionDeclaration& f) {
     SlotRange* entry = fSlotMap.find(&callSite);
     if (entry != nullptr) {
         return *entry;
@@ -447,7 +407,7 @@ SlotRange SlotManager::getFunctionSlots(const IRNode& callSite, const FunctionDe
     return range;
 }
 
-int Generator::getFunctionDebugInfo(const FunctionDeclaration& decl) {
+int Generator::getDebugFunctionInfo(const FunctionDeclaration& decl) {
     SkASSERT(fDebugTrace);
 
     std::string name = decl.description();
@@ -477,7 +437,7 @@ std::optional<SlotRange> Generator::writeFunction(const IRNode& callSite,
                                                   SkSpan<const SlotRange> args) {
     [[maybe_unused]] int funcIndex = -1;
     if (fDebugTrace) {
-        funcIndex = this->getFunctionDebugInfo(function.declaration());
+        funcIndex = this->getDebugFunctionInfo(function.declaration());
         SkASSERT(funcIndex >= 0);
         // TODO(debugger): add trace for function-enter
     }
@@ -514,12 +474,14 @@ bool Generator::writeGlobals() {
             // Of those, only child processors are legal variables.
             SkASSERT(!var->type().isVoid());
             SkASSERT(!var->type().isOpaque());
+            [[maybe_unused]] SlotRange r = this->getSlots(*var);
 
             // builtin variables are system-defined, with special semantics. The only builtin
             // variable exposed to runtime effects is sk_FragCoord.
             if (int builtin = var->modifiers().fLayout.fBuiltin; builtin >= 0) {
                 switch (builtin) {
                     case SK_FRAGCOORD_BUILTIN:
+                        SkASSERT(r.count == 4);
                         // TODO: populate slots with device coordinates xy01
                         return unsupported();
 
@@ -529,10 +491,8 @@ bool Generator::writeGlobals() {
                 }
             }
 
-            if (IsUniform(*var)) {
-                // Create the uniform slot map in first-to-last order.
-                (void)this->getUniformSlots(*var);
-                continue;
+            if (var->modifiers().fFlags & Modifiers::kUniform_Flag) {
+                return unsupported();
             }
 
             // Other globals are treated as normal variable declarations.
@@ -613,7 +573,7 @@ bool Generator::writeDoStatement(const DoStatement& d) {
 
     // Create a dedicated slot for continue-mask storage.
     SlotRange previousContinueMask = fCurrentContinueMask;
-    fCurrentContinueMask = fProgramSlots.createSlots(/*slots=*/1);
+    fCurrentContinueMask = this->createSlots(/*slots=*/1);
 
     // Write the do-loop body.
     int labelID = fBuilder.nextLabelID();
@@ -700,9 +660,9 @@ bool Generator::writeVarDeclaration(const VarDeclaration& v) {
         if (!this->pushExpression(*v.value())) {
             return unsupported();
         }
-        this->popToSlotRangeUnmasked(this->getVariableSlots(*v.var()));
+        this->popToSlotRangeUnmasked(this->getSlots(*v.var()));
     } else {
-        this->zeroSlotRangeUnmasked(this->getVariableSlots(*v.var()));
+        this->zeroSlotRangeUnmasked(this->getSlots(*v.var()));
     }
     return true;
 }
@@ -1092,14 +1052,7 @@ bool Generator::pushTernaryExpression(const Expression& test,
 }
 
 bool Generator::pushVariableReference(const VariableReference& v) {
-    const Variable& var = *v.variable();
-    if (IsUniform(var)) {
-        [[maybe_unused]] SlotRange r = this->getUniformSlots(var);
-        SkASSERT(r.count == (int)var.type().slotCount());
-        // TODO(skia:13676): push value from the uniform map onto the stack
-        return unsupported();
-    }
-    fBuilder.push_slots(this->getVariableSlots(var));
+    fBuilder.push_slots(this->getSlots(*v.variable()));
     return true;
 }
 
@@ -1114,7 +1067,7 @@ bool Generator::writeProgram(const FunctionDefinition& function) {
         switch (param->modifiers().fLayout.fBuiltin) {
             case SK_MAIN_COORDS_BUILTIN: {
                 // Coordinates are passed via RG.
-                SlotRange fragCoord = this->getVariableSlots(*param);
+                SlotRange fragCoord = this->getSlots(*param);
                 SkASSERT(fragCoord.count == 2);
                 fBuilder.store_src_rg(fragCoord);
                 args.push_back(fragCoord);
@@ -1122,7 +1075,7 @@ bool Generator::writeProgram(const FunctionDefinition& function) {
             }
             case SK_INPUT_COLOR_BUILTIN: {
                 // Input colors are passed via RGBA.
-                SlotRange srcColor = this->getVariableSlots(*param);
+                SlotRange srcColor = this->getSlots(*param);
                 SkASSERT(srcColor.count == 4);
                 fBuilder.store_src(srcColor);
                 args.push_back(srcColor);
@@ -1130,7 +1083,7 @@ bool Generator::writeProgram(const FunctionDefinition& function) {
             }
             case SK_DEST_COLOR_BUILTIN: {
                 // Dest colors are passed via dRGBA.
-                SlotRange destColor = this->getVariableSlots(*param);
+                SlotRange destColor = this->getSlots(*param);
                 SkASSERT(destColor.count == 4);
                 fBuilder.store_dst(destColor);
                 args.push_back(destColor);
@@ -1163,11 +1116,6 @@ bool Generator::writeProgram(const FunctionDefinition& function) {
     return true;
 }
 
-
-std::unique_ptr<RP::Program> Generator::finish() {
-    return fBuilder.finish(fProgramSlots.slotCount(), fDebugTrace);
-}
-
 }  // namespace RP
 
 std::unique_ptr<RP::Program> MakeRasterPipelineProgram(const SkSL::Program& program,
@@ -1178,7 +1126,7 @@ std::unique_ptr<RP::Program> MakeRasterPipelineProgram(const SkSL::Program& prog
     if (!generator.writeProgram(function)) {
         return nullptr;
     }
-    return generator.finish();
+    return generator.builder()->finish(generator.slotCount(), debugTrace);
 }
 
 }  // namespace SkSL

@@ -13,7 +13,7 @@
 #include "src/gpu/MutableTextureStateRef.h"
 #include "src/gpu/graphite/mtl/MtlCaps.h"
 #include "src/gpu/graphite/mtl/MtlSharedContext.h"
-#include "src/gpu/graphite/mtl/MtlUtilsPriv.h"
+#include "src/gpu/graphite/mtl/MtlUtils.h"
 
 namespace skgpu::graphite {
 

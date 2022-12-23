@@ -185,9 +185,6 @@ void DawnCaps::initCaps(const wgpu::Device& device) {
     fRequiredUniformBufferAlignment = 256;
     fRequiredStorageBufferAlignment = fRequiredUniformBufferAlignment;
 
-    // Dawn requires 256 bytes per row alignment for buffer texture copies.
-    fTextureDataRowBytesAlignment = 256;
-
     fUniformBufferLayout = Layout::kStd140;
     fStorageBufferLayout = Layout::kStd430;
 

@@ -971,8 +971,7 @@ void GrAAConvexTessellator::quadTo(const SkPoint pts[3]) {
     for (int i = 0; i < count - 1; i++) {
         this->lineTo(fPointBuffer[i], kCurve_CurveState);
     }
-    this->lineTo(fPointBuffer[count - 1],
-                 count == 1 ? kSharp_CurveState : kIndeterminate_CurveState);
+    this->lineTo(fPointBuffer[count - 1], kIndeterminate_CurveState);
 }
 
 void GrAAConvexTessellator::quadTo(const SkMatrix& m, const SkPoint srcPts[3]) {
@@ -993,8 +992,7 @@ void GrAAConvexTessellator::cubicTo(const SkMatrix& m, const SkPoint srcPts[4]) 
     for (int i = 0; i < count - 1; i++) {
         this->lineTo(fPointBuffer[i], kCurve_CurveState);
     }
-    this->lineTo(fPointBuffer[count - 1],
-                 count == 1 ? kSharp_CurveState : kIndeterminate_CurveState);
+    this->lineTo(fPointBuffer[count - 1], kIndeterminate_CurveState);
 }
 
 // include down here to avoid compilation errors caused by "-" overload in SkGeometry.h
