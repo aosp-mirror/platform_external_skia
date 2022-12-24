@@ -8,10 +8,6 @@
 #ifndef skgpu_graphite_Precompile_DEFINED
 #define skgpu_graphite_Precompile_DEFINED
 
-#include "include/core/SkTypes.h"
-
-#ifdef SK_ENABLE_PRECOMPILE
-
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSpan.h"
@@ -176,9 +172,11 @@ private:
 
     int numCombinations() const;
     // 'desiredCombination' must be less than the result of the numCombinations call
-    void createKey(const KeyContext&, int desiredCombination, PaintParamsKeyBuilder*) const;
+    void createKey(const KeyContext&, int desiredCombination,
+                   PaintParamsKeyBuilder*, bool addPrimitiveBlender) const;
     void buildCombinations(
         const KeyContext&,
+        bool addPrimitiveBlender,
         const std::function<void(UniquePaintParamsID)>& processCombination) const;
 
     std::vector<sk_sp<PrecompileShader>> fShaderOptions;
@@ -189,7 +187,5 @@ private:
 };
 
 } // namespace skgpu::graphite
-
-#endif // SK_ENABLE_PRECOMPILE
 
 #endif // skgpu_graphite_Precompile_DEFINED

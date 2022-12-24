@@ -8,6 +8,7 @@
 #include "include/core/SkStream.h"
 #include "include/private/SkMalloc.h"
 #include "include/private/SkSLString.h"
+#include "include/private/SkTo.h"
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkOpts.h"
 #include "src/sksl/codegen/SkSLRasterPipelineBuilder.h"
@@ -27,7 +28,7 @@ namespace RP {
 
 using SkRP = SkRasterPipeline;
 
-#define ALL_SINGLE_SLOT_UNARY_OP_CASES \
+#define ALL_MULTI_SLOT_UNARY_OP_CASES   \
          BuilderOp::bitwise_not
 
 #define ALL_SINGLE_SLOT_BINARY_OP_CASES \
@@ -35,28 +36,27 @@ using SkRP = SkRasterPipeline;
     case BuilderOp::bitwise_or:         \
     case BuilderOp::bitwise_xor
 
-#define ALL_MULTI_SLOT_BINARY_OP_CASES \
-         BuilderOp::add_n_floats:      \
-    case BuilderOp::add_n_ints:        \
-    case BuilderOp::sub_n_floats:      \
-    case BuilderOp::sub_n_ints:        \
-    case BuilderOp::mul_n_floats:      \
-    case BuilderOp::mul_n_ints:        \
-    case BuilderOp::div_n_floats:      \
-    case BuilderOp::div_n_ints:        \
-    case BuilderOp::cmple_n_floats:    \
-    case BuilderOp::cmple_n_ints:      \
-    case BuilderOp::cmplt_n_floats:    \
-    case BuilderOp::cmplt_n_ints:      \
-    case BuilderOp::cmpeq_n_floats:    \
-    case BuilderOp::cmpeq_n_ints:      \
-    case BuilderOp::cmpne_n_floats:    \
+#define ALL_MULTI_SLOT_BINARY_OP_CASES  \
+         BuilderOp::add_n_floats:       \
+    case BuilderOp::add_n_ints:         \
+    case BuilderOp::sub_n_floats:       \
+    case BuilderOp::sub_n_ints:         \
+    case BuilderOp::mul_n_floats:       \
+    case BuilderOp::mul_n_ints:         \
+    case BuilderOp::div_n_floats:       \
+    case BuilderOp::div_n_ints:         \
+    case BuilderOp::cmple_n_floats:     \
+    case BuilderOp::cmple_n_ints:       \
+    case BuilderOp::cmplt_n_floats:     \
+    case BuilderOp::cmplt_n_ints:       \
+    case BuilderOp::cmpeq_n_floats:     \
+    case BuilderOp::cmpeq_n_ints:       \
+    case BuilderOp::cmpne_n_floats:     \
     case BuilderOp::cmpne_n_ints
 
 void Builder::unary_op(BuilderOp op, int32_t slots) {
     switch (op) {
-        case ALL_SINGLE_SLOT_UNARY_OP_CASES:
-            SkASSERT(slots == 1);
+        case ALL_MULTI_SLOT_UNARY_OP_CASES:
             fInstructions.push_back({op, {}, slots});
             break;
 
@@ -82,8 +82,10 @@ void Builder::binary_op(BuilderOp op, int32_t slots) {
     }
 }
 
-std::unique_ptr<Program> Builder::finish(int numValueSlots, SkRPDebugTrace* debugTrace) {
-    return std::make_unique<Program>(std::move(fInstructions), numValueSlots,
+std::unique_ptr<Program> Builder::finish(int numValueSlots,
+                                         int numUniformSlots,
+                                         SkRPDebugTrace* debugTrace) {
+    return std::make_unique<Program>(std::move(fInstructions), numValueSlots, numUniformSlots,
                                      fNumLabels, fNumBranches, debugTrace);
 }
 
@@ -100,6 +102,7 @@ static int stack_usage(const Instruction& inst) {
             return 1;
 
         case BuilderOp::push_slots:
+        case BuilderOp::push_uniform:
             return inst.fImmA;
 
         case ALL_SINGLE_SLOT_BINARY_OP_CASES:
@@ -122,7 +125,7 @@ static int stack_usage(const Instruction& inst) {
         case BuilderOp::swizzle_4:
             return 4 - inst.fImmA;
 
-        case ALL_SINGLE_SLOT_UNARY_OP_CASES:
+        case ALL_MULTI_SLOT_UNARY_OP_CASES:
         default:
             return 0;
     }
@@ -152,11 +155,13 @@ Program::StackDepthMap Program::tempStackMaxDepths() {
 
 Program::Program(SkTArray<Instruction> instrs,
                  int numValueSlots,
+                 int numUniformSlots,
                  int numLabels,
                  int numBranches,
                  SkRPDebugTrace* debugTrace)
         : fInstructions(std::move(instrs))
         , fNumValueSlots(numValueSlots)
+        , fNumUniformSlots(numUniformSlots)
         , fNumLabels(numLabels)
         , fNumBranches(numBranches)
         , fDebugTrace(debugTrace) {
@@ -169,6 +174,10 @@ Program::Program(SkTArray<Instruction> instrs,
         (void)stackIdx;
         fNumTempStackSlots += depth;
     }
+
+    // These are not used in SKSL_STANDALONE yet.
+    (void)fDebugTrace;
+    (void)fNumUniformSlots;
 }
 
 void Program::append(SkRasterPipeline* pipeline, SkRasterPipeline::Stage stage, void* ctx) {
@@ -251,40 +260,31 @@ void Program::appendCopyConstants(SkRasterPipeline* pipeline,
                      numSlots);
 }
 
-void Program::appendZeroSlotsUnmasked(SkRasterPipeline* pipeline, float* dst, int numSlots) {
+void Program::appendMultiSlotUnaryOp(SkRasterPipeline* pipeline, SkRasterPipeline::Stage baseStage,
+                                     float* dst, int numSlots) {
     SkASSERT(numSlots >= 0);
     while (numSlots > 4) {
-        this->appendZeroSlotsUnmasked(pipeline, dst, /*numSlots=*/4);
+        this->appendMultiSlotUnaryOp(pipeline, baseStage, dst, /*numSlots=*/4);
         dst += 4 * SkOpts::raster_pipeline_highp_stride;
         numSlots -= 4;
     }
 
-    SkRasterPipeline::Stage stage;
-    switch (numSlots) {
-        case 0:  return;
-        case 1:  stage = SkRasterPipeline::zero_slot_unmasked;     break;
-        case 2:  stage = SkRasterPipeline::zero_2_slots_unmasked;  break;
-        case 3:  stage = SkRasterPipeline::zero_3_slots_unmasked;  break;
-        case 4:  stage = SkRasterPipeline::zero_4_slots_unmasked;  break;
-        default: SkUNREACHABLE;
-    }
-
+    SkASSERT(numSlots <= 4);
+    auto stage = (SkRasterPipeline::Stage)((int)baseStage + numSlots - 1);
     this->append(pipeline, stage, dst);
 }
 
-void Program::appendAdjacentSingleSlotOp(SkRasterPipeline* pipeline, SkRasterPipeline::Stage stage,
-                                         float* dst, const float* src) {
+void Program::appendAdjacentSingleSlotBinaryOp(SkRasterPipeline* pipeline,
+                                               SkRasterPipeline::Stage stage,
+                                               float* dst, const float* src) {
     // The source and destination must be directly next to one another.
     SkASSERT((dst + SkOpts::raster_pipeline_highp_stride) == src);
     this->append(pipeline, stage, dst);
 }
 
-void Program::appendAdjacentMultiSlotOp(SkRasterPipeline* pipeline,
-                                        SkArenaAlloc* alloc,
-                                        SkRasterPipeline::Stage baseStage,
-                                        float* dst,
-                                        const float* src,
-                                        int numSlots) {
+void Program::appendAdjacentMultiSlotBinaryOp(SkRasterPipeline* pipeline, SkArenaAlloc* alloc,
+                                              SkRasterPipeline::Stage baseStage,
+                                              float* dst, const float* src, int numSlots) {
     // The source and destination must be directly next to one another.
     SkASSERT(numSlots >= 0);
     SkASSERT((dst + SkOpts::raster_pipeline_highp_stride * numSlots) == src);
@@ -325,11 +325,18 @@ Program::SlotData Program::allocateSlotData(SkArenaAlloc* alloc) {
     return s;
 }
 
-void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc) {
-    this->appendStages(pipeline, alloc, this->allocateSlotData(alloc));
+void Program::appendStages(SkRasterPipeline* pipeline,
+                           SkArenaAlloc* alloc,
+                           SkSpan<const float> uniforms) {
+    this->appendStages(pipeline, alloc, uniforms, this->allocateSlotData(alloc));
 }
 
-void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, const SlotData& slots) {
+void Program::appendStages(SkRasterPipeline* pipeline,
+                           SkArenaAlloc* alloc,
+                           SkSpan<const float> uniforms,
+                           const SlotData& slots) {
+    SkASSERT(fNumUniformSlots == SkToInt(uniforms.size()));
+
     const int N = SkOpts::raster_pipeline_highp_stride;
     StackDepthMap tempStackDepth;
     int currentStack = 0;
@@ -357,8 +364,9 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, cons
 
     // Write each BuilderOp to the pipeline.
     for (const Instruction& inst : fInstructions) {
-        auto SlotA = [&]() { return &slots.values[N * inst.fSlotA]; };
-        auto SlotB = [&]() { return &slots.values[N * inst.fSlotB]; };
+        auto SlotA    = [&]() { return &slots.values[N * inst.fSlotA]; };
+        auto SlotB    = [&]() { return &slots.values[N * inst.fSlotB]; };
+        auto UniformA = [&]() { return &uniforms[inst.fSlotA]; };
         float*& tempStackPtr = tempStackMap[currentStack];
 
         switch (inst.fOp) {
@@ -430,22 +438,22 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, cons
                 this->append(pipeline, SkRP::store_masked, SlotA());
                 break;
 
-            case ALL_SINGLE_SLOT_UNARY_OP_CASES: {
-                float* dst = tempStackPtr - (1 * N);
-                this->append(pipeline, (SkRP::Stage)inst.fOp, dst);
+            case ALL_MULTI_SLOT_UNARY_OP_CASES: {
+                float* dst = tempStackPtr - (inst.fImmA * N);
+                this->appendMultiSlotUnaryOp(pipeline, (SkRP::Stage)inst.fOp, dst, inst.fImmA);
                 break;
             }
             case ALL_SINGLE_SLOT_BINARY_OP_CASES: {
                 float* src = tempStackPtr - (1 * N);
                 float* dst = tempStackPtr - (2 * N);
-                this->appendAdjacentSingleSlotOp(pipeline, (SkRP::Stage)inst.fOp, dst, src);
+                this->appendAdjacentSingleSlotBinaryOp(pipeline, (SkRP::Stage)inst.fOp, dst, src);
                 break;
             }
             case ALL_MULTI_SLOT_BINARY_OP_CASES: {
                 float* src = tempStackPtr - (inst.fImmA * N);
                 float* dst = tempStackPtr - (inst.fImmA * 2 * N);
-                this->appendAdjacentMultiSlotOp(pipeline, alloc, (SkRP::Stage)inst.fOp,
-                                                dst, src, inst.fImmA);
+                this->appendAdjacentMultiSlotBinaryOp(pipeline, alloc, (SkRP::Stage)inst.fOp,
+                                                      dst, src, inst.fImmA);
                 break;
             }
             case BuilderOp::select: {
@@ -463,7 +471,8 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, cons
                 break;
 
             case BuilderOp::zero_slot_unmasked:
-                this->appendZeroSlotsUnmasked(pipeline, SlotA(), inst.fImmA);
+                this->appendMultiSlotUnaryOp(pipeline, SkRP::zero_slot_unmasked,
+                                             SlotA(), inst.fImmA);
                 break;
 
             case BuilderOp::swizzle_1:
@@ -484,6 +493,11 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, cons
             case BuilderOp::push_slots: {
                 float* dst = tempStackPtr;
                 this->appendCopySlotsUnmasked(pipeline, alloc, dst, SlotA(), inst.fImmA);
+                break;
+            }
+            case BuilderOp::push_uniform: {
+                float* dst = tempStackPtr;
+                this->appendCopyConstants(pipeline, alloc, dst, UniformA(), inst.fImmA);
                 break;
             }
             case BuilderOp::push_condition_mask: {
@@ -541,7 +555,7 @@ void Program::appendStages(SkRasterPipeline* pipeline, SkArenaAlloc* alloc, cons
             case BuilderOp::push_literal_f: {
                 float* dst = tempStackPtr;
                 if (inst.fImmA == 0) {
-                    this->appendZeroSlotsUnmasked(pipeline, dst, /*numSlots=*/1);
+                    this->append(pipeline, SkRP::zero_slot_unmasked, dst);
                     break;
                 }
                 int* constantPtr;
@@ -595,16 +609,18 @@ void Program::dump(SkWStream* out) {
     // SkRasterPipeline into skslc for this to work properly.
 
 #if !defined(SKSL_STANDALONE)
-    // Allocate a block of memory for the slot data, even though the program won't ever be executed.
-    // The program requires a pointer range for managing its data, and ASAN will report errors if
-    // those pointers are pointing at unallocated memory.
+    // Allocate memory for the slot and uniform data, even though the program won't ever be
+    // executed. The program requires pointer ranges for managing its data, and ASAN will report
+    // errors if those pointers are pointing at unallocated memory.
     SkArenaAlloc alloc(/*firstHeapAllocation=*/1000);
     const int N = SkOpts::raster_pipeline_highp_stride;
     SlotData slots = this->allocateSlotData(&alloc);
+    float* uniformPtr = alloc.makeArray<float>(fNumUniformSlots);
+    SkSpan<float> uniforms = SkSpan(uniformPtr, fNumUniformSlots);
 
     // Instantiate this program.
     SkRasterPipeline pipeline(&alloc);
-    this->appendStages(&pipeline, &alloc, slots);
+    this->appendStages(&pipeline, &alloc, uniforms, slots);
     const SkRP::StageList* st = pipeline.getStageList();
 
     // The stage list is in reverse order, so let's flip it.
@@ -651,8 +667,80 @@ void Program::dump(SkWStream* out) {
             return Imm(f);
         };
 
+        // Print `1` for single slots and `1..3` for ranges of slots.
+        auto AsRange = [](int first, int count) -> std::string {
+            std::string text = std::to_string(first);
+            if (count > 1) {
+                text += ".." + std::to_string(first + count - 1);
+            }
+            return text;
+        };
+
+        // Attempts to interpret the passed-in pointer as a uniform range.
+        auto UniformPtrCtx = [&](const float* ptr, int numSlots) -> std::string {
+            if (fDebugTrace) {
+                // Handle pointers to named uniform slots.
+                if (ptr >= uniforms.begin() && ptr < uniforms.end()) {
+                    int slotIdx = ptr - uniforms.begin();
+                    if (slotIdx < (int)fDebugTrace->fUniformInfo.size()) {
+                        const SlotDebugInfo& slotInfo = fDebugTrace->fUniformInfo[slotIdx];
+                        if (!slotInfo.name.empty()) {
+                            // If we're covering the entire uniform, return `uniName`.
+                            if (numSlots == slotInfo.columns * slotInfo.rows) {
+                                return slotInfo.name;
+                            }
+                            // If we are only covering part of the uniform, return `uniName(1..2)`.
+                            return slotInfo.name + "(" +
+                                   AsRange(slotInfo.componentIndex, numSlots) + ")";
+                        }
+                    }
+                }
+            }
+            // Handle pointers to uniforms (when no debug info exists).
+            if (ptr >= uniforms.begin() && ptr < uniforms.end()) {
+                int uniformIdx = ptr - uniforms.begin();
+                return "u" + AsRange(uniformIdx, numSlots);
+            }
+            return {};
+        };
+
+        // Attempts to interpret the passed-in pointer as a value slot range.
+        auto ValuePtrCtx = [&](const float* ptr, int numSlots) -> std::string {
+            if (fDebugTrace) {
+                // Handle pointers to named value slots.
+                if (ptr >= slots.values.begin() && ptr < slots.values.end()) {
+                    int slotIdx = ptr - slots.values.begin();
+                    SkASSERT((slotIdx % N) == 0);
+                    slotIdx /= N;
+                    if (slotIdx < (int)fDebugTrace->fSlotInfo.size()) {
+                        const SlotDebugInfo& slotInfo = fDebugTrace->fSlotInfo[slotIdx];
+                        if (!slotInfo.name.empty()) {
+                            // If we're covering the entire slot, return `valueName`.
+                            if (numSlots == slotInfo.columns * slotInfo.rows) {
+                                return slotInfo.name;
+                            }
+                            // If we are only covering part of the slot, return `valueName(1..2)`.
+                            return slotInfo.name + "(" +
+                                   AsRange(slotInfo.componentIndex, numSlots) + ")";
+                        }
+                    }
+                }
+            }
+            // Handle pointers to value slots (when no debug info exists).
+            if (ptr >= slots.values.begin() && ptr < slots.values.end()) {
+                int valueIdx = ptr - slots.values.begin();
+                SkASSERT((valueIdx % N) == 0);
+                return "v" + AsRange(valueIdx / N, numSlots);
+            }
+            return {};
+        };
+
         // Interpret the context value as a pointer to `count` immediate values.
         auto MultiImmCtx = [&](const float* ptr, int count) -> std::string {
+            // If this is a uniform, print it by name.
+            if (std::string text = UniformPtrCtx(ptr, count); !text.empty()) {
+                return text;
+            }
             // Emit a single unbracketed immediate.
             if (count == 1) {
                 return Imm(*ptr);
@@ -667,43 +755,15 @@ void Program::dump(SkWStream* out) {
             return text + "]";
         };
 
-        // Print `1` for single slots and `1..3` for ranges of slots.
-        auto AsRange = [](int first, int count) -> std::string {
-            std::string text = std::to_string(first);
-            if (count > 1) {
-                text += ".." + std::to_string(first + count - 1);
-            }
-            return text;
-        };
-
-        // Interpret the context value as a pointer, most likely to a slot range.
+        // Interpret the context value as a generic pointer.
         auto PtrCtx = [&](const void* ctx, int numSlots) -> std::string {
             const float *ctxAsSlot = static_cast<const float*>(ctx);
-            if (fDebugTrace) {
-                // Handle pointers to named slots.
-                if (ctxAsSlot >= slots.values.begin() && ctxAsSlot < slots.values.end()) {
-                    int slotIdx = ctxAsSlot - slots.values.begin();
-                    SkASSERT((slotIdx % N) == 0);
-                    slotIdx /= N;
-                    if (slotIdx < (int)fDebugTrace->fSlotInfo.size()) {
-                        const SlotDebugInfo& slotInfo = fDebugTrace->fSlotInfo[slotIdx];
-                        if (!slotInfo.name.empty()) {
-                            // If we're covering the entire slot, return `name`.
-                            if (numSlots == slotInfo.columns * slotInfo.rows) {
-                                return slotInfo.name;
-                            }
-                            // If we are only covering part of the slot, return `name(1..2)`.
-                            return slotInfo.name + "(" +
-                                   AsRange(slotInfo.componentIndex, numSlots) + ")";
-                        }
-                    }
-                }
+            // Check for uniform and value pointers.
+            if (std::string uniform = UniformPtrCtx(ctxAsSlot, numSlots); !uniform.empty()) {
+                return uniform;
             }
-            // Handle pointers to value slots (when no debug info exists).
-            if (ctxAsSlot >= slots.values.begin() && ctxAsSlot < slots.values.end()) {
-                int valueIdx = ctxAsSlot - slots.values.begin();
-                SkASSERT((valueIdx % N) == 0);
-                return "v" + AsRange(valueIdx / N, numSlots);
+            if (std::string value = ValuePtrCtx(ctxAsSlot, numSlots); !value.empty()) {
+                return value;
             }
             // Handle pointers to temporary stack slots.
             if (ctxAsSlot >= slots.stack.begin() && ctxAsSlot < slots.stack.end()) {
@@ -711,7 +771,7 @@ void Program::dump(SkWStream* out) {
                 SkASSERT((stackIdx % N) == 0);
                 return "$" + AsRange(stackIdx / N, numSlots);
             }
-            // This pointer is out of our expected bounds; this might happen at the program edges.
+            // This pointer is out of our expected bounds; this generally isn't expected to happen.
             return "ExternalPtr(" + AsRange(0, numSlots) + ")";
         };
 
@@ -784,6 +844,14 @@ void Program::dump(SkWStream* out) {
                 opArg1 = ImmCtx(stage.ctx);
                 break;
 
+            case SkRP::swizzle_1:
+            case SkRP::swizzle_2:
+            case SkRP::swizzle_3:
+            case SkRP::swizzle_4: {
+                std::tie(opArg1, opArg2) = SwizzleCtx(stage.op, stage.ctx);
+                break;
+            }
+
             case SkRP::load_unmasked:
             case SkRP::load_condition_mask:
             case SkRP::store_condition_mask:
@@ -800,19 +868,13 @@ void Program::dump(SkWStream* out) {
                 opArg1 = PtrCtx(stage.ctx, 1);
                 break;
 
-            case SkRP::swizzle_1:
-            case SkRP::swizzle_2:
-            case SkRP::swizzle_3:
-            case SkRP::swizzle_4: {
-                std::tie(opArg1, opArg2) = SwizzleCtx(stage.op, stage.ctx);
-                break;
-            }
-
             case SkRP::store_src_rg:
+            case SkRP::bitwise_not_2:
             case SkRP::zero_2_slots_unmasked:
                 opArg1 = PtrCtx(stage.ctx, 2);
                 break;
 
+            case SkRP::bitwise_not_3:
             case SkRP::zero_3_slots_unmasked:
                 opArg1 = PtrCtx(stage.ctx, 3);
                 break;
@@ -821,6 +883,7 @@ void Program::dump(SkWStream* out) {
             case SkRP::load_dst:
             case SkRP::store_src:
             case SkRP::store_dst:
+            case SkRP::bitwise_not_4:
             case SkRP::zero_4_slots_unmasked:
                 opArg1 = PtrCtx(stage.ctx, 4);
                 break;
@@ -1025,6 +1088,9 @@ void Program::dump(SkWStream* out) {
                 break;
 
             case SkRP::bitwise_not:
+            case SkRP::bitwise_not_2:
+            case SkRP::bitwise_not_3:
+            case SkRP::bitwise_not_4:
                 opText = opArg1 + " = ~" + opArg1;
                 break;
 

@@ -19,6 +19,7 @@
 #include "include/sksl/SkSLPosition.h"
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLIntrinsicList.h"
 #include "src/sksl/codegen/SkSLRasterPipelineBuilder.h"
 #include "src/sksl/codegen/SkSLRasterPipelineCodeGenerator.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
@@ -31,10 +32,12 @@
 #include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
+#include "src/sksl/ir/SkSLFunctionCall.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLIfStatement.h"
 #include "src/sksl/ir/SkSLLiteral.h"
+#include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
@@ -168,11 +171,18 @@ public:
     /** Pushes an expression to the value stack. */
     [[nodiscard]] bool pushAssignmentExpression(const BinaryExpression& e);
     [[nodiscard]] bool pushBinaryExpression(const BinaryExpression& e);
+    [[nodiscard]] bool pushBinaryExpression(const Expression& left,
+                                            Operator op,
+                                            const Expression& right);
     [[nodiscard]] bool pushConstructorCast(const AnyConstructor& c);
     [[nodiscard]] bool pushConstructorCompound(const ConstructorCompound& c);
     [[nodiscard]] bool pushConstructorSplat(const ConstructorSplat& c);
     [[nodiscard]] bool pushExpression(const Expression& e);
+    [[nodiscard]] bool pushFunctionCall(const FunctionCall& e);
+    [[nodiscard]] bool pushIntrinsic(const FunctionCall& e);
     [[nodiscard]] bool pushLiteral(const Literal& l);
+    [[nodiscard]] bool pushPrefixExpression(const PrefixExpression& p);
+    [[nodiscard]] bool pushPrefixExpression(Operator op, const Expression& expr);
     [[nodiscard]] bool pushSwizzle(const Swizzle& s);
     [[nodiscard]] bool pushTernaryExpression(const TernaryExpression& t);
     [[nodiscard]] bool pushTernaryExpression(const Expression& test,
@@ -200,6 +210,7 @@ public:
 
     [[nodiscard]] bool assign(const Expression& e);
     [[nodiscard]] bool binaryOp(SkSL::Type::NumberKind numberKind, int slots, const BinaryOps& ops);
+    void foldWithMultiOp(BuilderOp op, int elements);
     void foldWithOp(BuilderOp op, int elements);
     void nextTempStack() {
         fBuilder.set_current_stack(++fCurrentTempStack);
@@ -722,8 +733,14 @@ bool Generator::pushExpression(const Expression& e) {
         case Expression::Kind::kConstructorSplat:
             return this->pushConstructorSplat(e.as<ConstructorSplat>());
 
+        case Expression::Kind::kFunctionCall:
+            return this->pushFunctionCall(e.as<FunctionCall>());
+
         case Expression::Kind::kLiteral:
             return this->pushLiteral(e.as<Literal>());
+
+        case Expression::Kind::kPrefix:
+            return this->pushPrefixExpression(e.as<PrefixExpression>());
 
         case Expression::Kind::kSwizzle:
             return this->pushSwizzle(e.as<Swizzle>());
@@ -760,49 +777,89 @@ bool Generator::assign(const Expression& e) {
     return lvalue && lvalue->store(this);
 }
 
+void Generator::foldWithMultiOp(BuilderOp op, int elements) {
+    // Fold the top N elements on the stack using an op that supports multiple slots, e.g.:
+    // (A + B + C + D) -> add_2_floats $0..1 += $2..3
+    //                    add_float    $0    += $1
+    for (; elements >= 8; elements -= 4) {
+        fBuilder.binary_op(op, /*slots=*/4);
+    }
+    for (; elements >= 6; elements -= 3) {
+        fBuilder.binary_op(op, /*slots=*/3);
+    }
+    for (; elements >= 4; elements -= 2) {
+        fBuilder.binary_op(op, /*slots=*/2);
+    }
+    this->foldWithOp(op, elements);
+}
+
 void Generator::foldWithOp(BuilderOp op, int elements) {
-    // Fold the top N elements on the stack using an op, e.g. (A && (B && C)) -> D.
-    for (; elements > 1; elements--) {
+    // Fold the top N elements on the stack using an single-slot-only op, e.g.:
+    // (A && B && C) -> bitwise_and   $1 &= $2
+    //                  bitwise_and   $0 &= $1
+    for (; elements >= 2; elements -= 1) {
         fBuilder.binary_op(op, /*slots=*/1);
     }
 }
 
 bool Generator::pushBinaryExpression(const BinaryExpression& e) {
-    // TODO: add support for non-matching types (e.g. matrix-vector ops)
-    if (!e.left()->type().matches(e.right()->type())) {
+    return this->pushBinaryExpression(*e.left(), e.getOperator(), *e.right());
+}
+
+bool Generator::pushBinaryExpression(const Expression& left, Operator op, const Expression& right) {
+    const Type& type = left.type();
+
+    // Handle binary expressions with mismatched types.
+    if (!type.matches(right.type())) {
+        if (type.componentType().numberKind() != right.type().componentType().numberKind()) {
+            return unsupported();
+        }
+
+        if (left.type().isScalar() && right.type().isVector()) {
+            // SxV becomes VxV via an implicit splat.
+            ConstructorSplat leftAsVector(left.fPosition, right.type(), left.clone());
+            return this->pushBinaryExpression(leftAsVector, op, right);
+        }
+
+        if (left.type().isVector() && right.type().isScalar()) {
+            // VxS becomes VxV via an implicit splat.
+            ConstructorSplat rightAsVector(right.fPosition, left.type(), right.clone());
+            return this->pushBinaryExpression(left, op, rightAsVector);
+        }
+
+        // TODO: add support for other non-matching types (matrix-vector and matrix-matrix ops)
         return unsupported();
     }
 
     // Handle simple assignment (`var = expr`).
-    if (e.getOperator().kind() == OperatorKind::EQ) {
-        return this->pushExpression(*e.right()) &&
-               this->assign(*e.left());
+    if (op.kind() == OperatorKind::EQ) {
+        return this->pushExpression(right) &&
+               this->assign(left);
     }
 
-    const Type& type = e.left()->type();
     Type::NumberKind numberKind = type.componentType().numberKind();
-    Operator basicOp = e.getOperator().removeAssignment();
+    Operator basicOp = op.removeAssignment();
 
     // Handle binary ops which require short-circuiting.
     switch (basicOp.kind()) {
         case OperatorKind::LOGICALAND:
-            if (Analysis::HasSideEffects(*e.right())) {
+            if (Analysis::HasSideEffects(right)) {
                 // If the RHS has side effects, we rewrite `a && b` as `a ? b : false`. This
                 // generates pretty solid code and gives us the required short-circuit behavior.
-                SkASSERT(!e.getOperator().isAssignment());
+                SkASSERT(!op.isAssignment());
                 SkASSERT(numberKind == Type::NumberKind::kBoolean);
-                Literal falseLiteral{Position{}, 0.0, &e.right()->type()};
-                return this->pushTernaryExpression(*e.left(), *e.right(), falseLiteral);
+                Literal falseLiteral{Position{}, 0.0, &right.type()};
+                return this->pushTernaryExpression(left, right, falseLiteral);
             }
             break;
 
         case OperatorKind::LOGICALOR:
-            if (Analysis::HasSideEffects(*e.right())) {
+            if (Analysis::HasSideEffects(right)) {
                 // If the RHS has side effects, we rewrite `a || b` as `a ? true : b`.
-                SkASSERT(!e.getOperator().isAssignment());
+                SkASSERT(!op.isAssignment());
                 SkASSERT(numberKind == Type::NumberKind::kBoolean);
-                Literal trueLiteral{Position{}, 1.0, &e.right()->type()};
-                return this->pushTernaryExpression(*e.left(), trueLiteral, *e.right());
+                Literal trueLiteral{Position{}, 1.0, &right.type()};
+                return this->pushTernaryExpression(left, trueLiteral, right);
             }
             break;
 
@@ -815,15 +872,15 @@ bool Generator::pushBinaryExpression(const BinaryExpression& e) {
         case OperatorKind::GT:
         case OperatorKind::GTEQ:
             // We replace `x > y` with `y < x`, and `x >= y` with `y <= x`.
-            if (!this->pushExpression(*e.right()) ||
-                !this->pushExpression(*e.left())) {
+            if (!this->pushExpression(right) ||
+                !this->pushExpression(left)) {
                 return false;
             }
             break;
 
         default:
-            if (!this->pushExpression(*e.left()) ||
-                !this->pushExpression(*e.right())) {
+            if (!this->pushExpression(left) ||
+                !this->pushExpression(right)) {
                 return false;
             }
             break;
@@ -940,8 +997,8 @@ bool Generator::pushBinaryExpression(const BinaryExpression& e) {
     }
 
     // Handle compound assignment (`var *= expr`).
-    if (e.getOperator().isAssignment()) {
-        return this->assign(*e.left());
+    if (op.isAssignment()) {
+        return this->assign(left);
     }
 
     return true;
@@ -980,6 +1037,39 @@ bool Generator::pushConstructorSplat(const ConstructorSplat& c) {
     return true;
 }
 
+bool Generator::pushFunctionCall(const FunctionCall& c) {
+    if (c.function().isIntrinsic()) {
+        return this->pushIntrinsic(c);
+    }
+    return unsupported();
+}
+
+bool Generator::pushIntrinsic(const FunctionCall& c) {
+    const ExpressionArray& args = c.arguments();
+
+    switch (c.function().intrinsicKind()) {
+        case IntrinsicKind::k_dot_IntrinsicKind:
+            SkASSERT(args.size() == 2);
+            SkASSERT(args[0]->type().matches(args[1]->type()));
+
+            if (!this->pushExpression(*args[0]) ||
+                !this->pushExpression(*args[1])) {
+                return unsupported();
+            }
+            fBuilder.binary_op(BuilderOp::mul_n_floats, args[0]->type().slotCount());
+            this->foldWithMultiOp(BuilderOp::add_n_floats, args[0]->type().slotCount());
+            return true;
+
+        case IntrinsicKind::k_not_IntrinsicKind:
+            SkASSERT(args.size() == 1);
+            return this->pushPrefixExpression(OperatorKind::LOGICALNOT, *args[0]);
+
+        default:
+            break;
+    }
+    return unsupported();
+}
+
 bool Generator::pushLiteral(const Literal& l) {
     switch (l.type().numberKind()) {
         case Type::NumberKind::kFloat:
@@ -1003,8 +1093,30 @@ bool Generator::pushLiteral(const Literal& l) {
     }
 }
 
+bool Generator::pushPrefixExpression(const PrefixExpression& p) {
+    return this->pushPrefixExpression(p.getOperator(), *p.operand());
+}
+
+bool Generator::pushPrefixExpression(Operator op, const Expression& expr) {
+    switch (op.kind()) {
+        case OperatorKind::BITWISENOT:
+        case OperatorKind::LOGICALNOT:
+            // Handle operators ! and ~.
+            if (!this->pushExpression(expr)) {
+                return false;
+            }
+            fBuilder.unary_op(BuilderOp::bitwise_not, expr.type().slotCount());
+            return true;
+
+        default:
+            break;
+    }
+
+    return unsupported();
+}
+
 bool Generator::pushSwizzle(const Swizzle& s) {
-    // Push the input expression.
+    // Push the base expression.
     if (!this->pushExpression(*s.base())) {
         return false;
     }
@@ -1020,20 +1132,26 @@ bool Generator::pushTernaryExpression(const TernaryExpression& t) {
 bool Generator::pushTernaryExpression(const Expression& test,
                                       const Expression& ifTrue,
                                       const Expression& ifFalse) {
-    if (!Analysis::HasSideEffects(ifTrue) && !Analysis::HasSideEffects(ifFalse)) {
-        // We can take some shortcuts if the true- and false-expressions are side-effect free.
-        // First, push the false-expression onto the primary stack.
+    // First, push the current condition-mask and the test-expression into a separate stack.
+    this->nextTempStack();
+    fBuilder.push_condition_mask();
+    if (!this->pushExpression(test)) {
+        return unsupported();
+    }
+    this->previousTempStack();
+
+    // We can take some shortcuts with condition-mask handling if the false-expression is entirely
+    // side-effect free. (We can evaluate it without masking off its effects.) We always handle the
+    // condition mask properly for the test-expression and true-expression properly.
+    if (!Analysis::HasSideEffects(ifFalse)) {
+        // Push the false-expression onto the primary stack.
         int cleanupLabelID = fBuilder.nextLabelID();
         if (!this->pushExpression(ifFalse)) {
             return unsupported();
         }
 
-        // Next, merge the current condition-mask with the test-expression in a separate stack.
+        // Next, merge the condition mask (on the separate stack) with the test expression.
         this->nextTempStack();
-        fBuilder.push_condition_mask();
-        if (!this->pushExpression(test)) {
-            return unsupported();
-        }
         fBuilder.merge_condition_mask();
         this->previousTempStack();
 
@@ -1052,12 +1170,8 @@ bool Generator::pushTernaryExpression(const Expression& test,
         fBuilder.select(/*slots=*/ifTrue.type().slotCount());
         fBuilder.label(cleanupLabelID);
     } else {
-        // Merge the current condition-mask with the test-expression in a separate stack.
+        // Merge the condition mask (on the separate stack) with the test expression.
         this->nextTempStack();
-        fBuilder.push_condition_mask();
-        if (!this->pushExpression(test)) {
-            return unsupported();
-        }
         fBuilder.merge_condition_mask();
         this->previousTempStack();
 
@@ -1094,10 +1208,10 @@ bool Generator::pushTernaryExpression(const Expression& test,
 bool Generator::pushVariableReference(const VariableReference& v) {
     const Variable& var = *v.variable();
     if (IsUniform(var)) {
-        [[maybe_unused]] SlotRange r = this->getUniformSlots(var);
+        SlotRange r = this->getUniformSlots(var);
         SkASSERT(r.count == (int)var.type().slotCount());
-        // TODO(skia:13676): push value from the uniform map onto the stack
-        return unsupported();
+        fBuilder.push_uniform(r);
+        return true;
     }
     fBuilder.push_slots(this->getVariableSlots(var));
     return true;
@@ -1163,9 +1277,8 @@ bool Generator::writeProgram(const FunctionDefinition& function) {
     return true;
 }
 
-
 std::unique_ptr<RP::Program> Generator::finish() {
-    return fBuilder.finish(fProgramSlots.slotCount(), fDebugTrace);
+    return fBuilder.finish(fProgramSlots.slotCount(), fUniformSlots.slotCount(), fDebugTrace);
 }
 
 }  // namespace RP

@@ -20,8 +20,6 @@
 
 class SkRuntimeEffect;
 
-namespace skgpu { struct VulkanBackendContext; }
-
 namespace skgpu::graphite {
 
 class BackendTexture;
@@ -29,9 +27,7 @@ class Buffer;
 class ClientMappedBufferManager;
 class Context;
 class ContextPriv;
-struct DawnBackendContext;
 class GlobalCache;
-struct MtlBackendContext;
 class PaintOptions;
 class QueueManager;
 class Recording;
@@ -47,10 +43,6 @@ public:
     Context& operator=(Context&&) = delete;
 
     ~Context();
-
-#ifdef SK_DAWN
-    static std::unique_ptr<Context> MakeDawn(const DawnBackendContext&, const ContextOptions&);
-#endif
 
     BackendApi backend() const;
 
@@ -75,19 +67,6 @@ public:
      * Checks whether any asynchronous work is complete and if so calls related callbacks.
      */
     void checkAsyncWorkCompletion();
-
-#ifdef SK_ENABLE_PRECOMPILE
-    /**
-     * Precompilation allows clients to create pipelines ahead of time based on what they expect
-     * to draw. This can reduce performance hitches, due to inline compilation, during the actual
-     * drawing. Graphite will always be able to perform an inline compilation if some SkPaint
-     * combination was omitted from precompilation.
-     *
-     *   @param paintOptions   captures a set of SkPaints that will be drawn
-     *   @param drawTypes      communicates which primitives those paints will be drawn with
-     */
-    void precompile(const PaintOptions&, DrawTypeFlags = kMostCommon);
-#endif
 
     /**
      * Called to delete the passed in BackendTexture. This should only be called if the
@@ -128,12 +107,7 @@ protected:
 
 private:
     friend class ContextPriv;
-
-    // For ctors
-    friend std::unique_ptr<Context> MakeMetalContext(const MtlBackendContext&,
-                                                     const ContextOptions&);
-    friend std::unique_ptr<Context> MakeVulkanContext(const VulkanBackendContext&,
-                                                      const ContextOptions&);
+    friend class ContextCtorAccessor;
 
     SingleOwner* singleOwner() const { return &fSingleOwner; }
 
