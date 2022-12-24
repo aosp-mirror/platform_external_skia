@@ -3152,25 +3152,25 @@ STAGE(zero_4_slots_unmasked, F* dst) {
 }
 
 STAGE(copy_constant, SkRasterPipeline_CopySlotsCtx* ctx) {
-    float* src = ctx->src;
+    const float* src = ctx->src;
     F* dst = (F*)ctx->dst;
     dst[0] = src[0];
 }
 STAGE(copy_2_constants, SkRasterPipeline_CopySlotsCtx* ctx) {
-    float* src = ctx->src;
+    const float* src = ctx->src;
     F* dst = (F*)ctx->dst;
     dst[0] = src[0];
     dst[1] = src[1];
 }
 STAGE(copy_3_constants, SkRasterPipeline_CopySlotsCtx* ctx) {
-    float* src = ctx->src;
+    const float* src = ctx->src;
     F* dst = (F*)ctx->dst;
     dst[0] = src[0];
     dst[1] = src[1];
     dst[2] = src[2];
 }
 STAGE(copy_4_constants, SkRasterPipeline_CopySlotsCtx* ctx) {
-    float* src = ctx->src;
+    const float* src = ctx->src;
     F* dst = (F*)ctx->dst;
     dst[0] = src[0];
     dst[1] = src[1];
@@ -3255,6 +3255,21 @@ STAGE(bitwise_xor, I32* dst) {
 }
 STAGE(bitwise_not, I32* dst) {
     dst[0] = ~dst[0];
+}
+STAGE(bitwise_not_2, I32* dst) {
+    dst[0] = ~dst[0];
+    dst[1] = ~dst[1];
+}
+STAGE(bitwise_not_3, I32* dst) {
+    dst[0] = ~dst[0];
+    dst[1] = ~dst[1];
+    dst[2] = ~dst[2];
+}
+STAGE(bitwise_not_4, I32* dst) {
+    dst[0] = ~dst[0];
+    dst[1] = ~dst[1];
+    dst[2] = ~dst[2];
+    dst[3] = ~dst[3];
 }
 
 template <typename T, void (*ApplyFn)(T*, T*)>

@@ -5,11 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/graphite/mtl/MtlUtils.h"
+#include "include/gpu/graphite/mtl/MtlUtils.h"
+#include "src/gpu/graphite/mtl/MtlUtilsPriv.h"
 
 #include "include/gpu/ShaderErrorHandler.h"
+#include "include/gpu/graphite/Context.h"
 #include "include/private/SkSLString.h"
 #include "src/core/SkTraceEvent.h"
+#include "src/gpu/graphite/ContextPriv.h"
+#include "src/gpu/graphite/mtl/MtlQueueManager.h"
 #include "src/gpu/graphite/mtl/MtlSharedContext.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLProgramSettings.h"
@@ -20,6 +24,29 @@
 #endif
 
 namespace skgpu::graphite {
+
+namespace ContextFactory {
+std::unique_ptr<Context> MakeMetal(const MtlBackendContext& backendContext,
+                                   const ContextOptions& options) {
+    sk_sp<SharedContext> sharedContext = MtlSharedContext::Make(backendContext, options);
+    if (!sharedContext) {
+        return nullptr;
+    }
+
+    sk_cfp<id<MTLCommandQueue>> queue =
+            sk_ret_cfp((id<MTLCommandQueue>)(backendContext.fQueue.get()));
+    auto queueManager = std::make_unique<MtlQueueManager>(std::move(queue), sharedContext.get());
+    if (!queueManager) {
+        return nullptr;
+    }
+
+    auto context = ContextCtorAccessor::MakeContext(std::move(sharedContext),
+                                                    std::move(queueManager),
+                                                    options);
+    SkASSERT(context);
+    return context;
+}
+} // namespace ContextFactory
 
 bool MtlFormatIsDepthOrStencil(MTLPixelFormat format) {
     switch (format) {

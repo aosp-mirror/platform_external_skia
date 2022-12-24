@@ -19,6 +19,7 @@
 #include "include/sksl/SkSLPosition.h"
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLIntrinsicList.h"
 #include "src/sksl/codegen/SkSLRasterPipelineBuilder.h"
 #include "src/sksl/codegen/SkSLRasterPipelineCodeGenerator.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
@@ -31,10 +32,12 @@
 #include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
+#include "src/sksl/ir/SkSLFunctionCall.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLIfStatement.h"
 #include "src/sksl/ir/SkSLLiteral.h"
+#include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
@@ -58,38 +61,20 @@
 namespace SkSL {
 namespace RP {
 
-class Generator {
+class SlotManager {
 public:
-    Generator(const SkSL::Program& program, SkRPDebugTrace* debugTrace)
-            : fProgram(program)
-            , fDebugTrace(debugTrace) {}
+    SlotManager(std::vector<SlotDebugInfo>* i) : fSlotDebugInfo(i) {}
 
-    /** Converts the SkSL main() function into a set of Instructions. */
-    bool writeProgram(const FunctionDefinition& function);
-
-    /**
-     * Converts an SkSL function into a set of Instructions. Returns nullopt if the function
-     * contained unsupported statements or expressions.
-     */
-    std::optional<SlotRange> writeFunction(const IRNode& callSite,
-                                           const FunctionDefinition& function,
-                                           SkSpan<const SlotRange> args);
-
-    /** Used by `createSlots` to add this variable to SlotDebugInfo inside SkRPDebugTrace. */
-    void addDebugSlotInfoForGroup(const std::string& varName,
+    /** Used by `create` to add this variable to SlotDebugInfo inside SkRPDebugTrace. */
+    void addSlotDebugInfoForGroup(const std::string& varName,
                                   const Type& type,
                                   Position pos,
                                   int* groupIndex,
                                   bool isFunctionReturnValue);
-    void addDebugSlotInfo(const std::string& varName,
+    void addSlotDebugInfo(const std::string& varName,
                           const Type& type,
                           Position pos,
                           bool isFunctionReturnValue);
-    /**
-     * Returns the slot index of this function inside the FunctionDebugInfo array in SkRPDebugTrace.
-     * The FunctionDebugInfo slot will be created if it doesn't already exist.
-     */
-    int getDebugFunctionInfo(const FunctionDeclaration& decl);
 
     /** Implements low-level slot creation; slots will not be known to the debugger. */
     SlotRange createSlots(int slots);
@@ -101,10 +86,7 @@ public:
                           bool isFunctionReturnValue);
 
     /** Looks up the slots associated with an SkSL variable; creates the slot if necessary. */
-    SlotRange getSlots(const Variable& v);
-
-    /** Returns the number of slots needed by the program. */
-    int slotCount() const { return fSlotCount; }
+    SlotRange getVariableSlots(const Variable& v);
 
     /**
      * Looks up the slots associated with an SkSL function's return value; creates the range if
@@ -112,6 +94,64 @@ public:
      * in a stack; we can just statically allocate one slot per function call-site.
      */
     SlotRange getFunctionSlots(const IRNode& callSite, const FunctionDeclaration& f);
+
+    /** Returns the total number of slots consumed. */
+    int slotCount() const { return fSlotCount; }
+
+private:
+    SkTHashMap<const IRNode*, SlotRange> fSlotMap;
+    int fSlotCount = 0;
+    std::vector<SlotDebugInfo>* fSlotDebugInfo;
+};
+
+class Generator {
+public:
+    Generator(const SkSL::Program& program, SkRPDebugTrace* debugTrace)
+            : fProgram(program)
+            , fDebugTrace(debugTrace)
+            , fProgramSlots(debugTrace ? &debugTrace->fSlotInfo : nullptr)
+            , fUniformSlots(debugTrace ? &debugTrace->fUniformInfo : nullptr) {}
+
+    /** Converts the SkSL main() function into a set of Instructions. */
+    bool writeProgram(const FunctionDefinition& function);
+
+    /** Returns the generated program. */
+    std::unique_ptr<RP::Program> finish();
+
+    /**
+     * Converts an SkSL function into a set of Instructions. Returns nullopt if the function
+     * contained unsupported statements or expressions.
+     */
+    std::optional<SlotRange> writeFunction(const IRNode& callSite,
+                                           const FunctionDefinition& function,
+                                           SkSpan<const SlotRange> args);
+
+    /**
+     * Returns the slot index of this function inside the FunctionDebugInfo array in SkRPDebugTrace.
+     * The FunctionDebugInfo slot will be created if it doesn't already exist.
+     */
+    int getFunctionDebugInfo(const FunctionDeclaration& decl);
+
+    /** Looks up the slots associated with an SkSL variable; creates the slot if necessary. */
+    SlotRange getVariableSlots(const Variable& v) {
+        SkASSERT(!IsUniform(v));
+        return fProgramSlots.getVariableSlots(v);
+    }
+
+    /** Looks up the slots associated with an SkSL uniform; creates the slot if necessary. */
+    SlotRange getUniformSlots(const Variable& v) {
+        SkASSERT(IsUniform(v));
+        return fUniformSlots.getVariableSlots(v);
+    }
+
+    /**
+     * Looks up the slots associated with an SkSL function's return value; creates the range if
+     * necessary. Note that recursion is never supported, so we don't need to maintain return values
+     * in a stack; we can just statically allocate one slot per function call-site.
+     */
+    SlotRange getFunctionSlots(const IRNode& callSite, const FunctionDeclaration& f) {
+        return fProgramSlots.getFunctionSlots(callSite, f);
+    }
 
     /** The Builder stitches our instructions together into Raster Pipeline code. */
     Builder* builder() { return &fBuilder; }
@@ -131,11 +171,18 @@ public:
     /** Pushes an expression to the value stack. */
     [[nodiscard]] bool pushAssignmentExpression(const BinaryExpression& e);
     [[nodiscard]] bool pushBinaryExpression(const BinaryExpression& e);
+    [[nodiscard]] bool pushBinaryExpression(const Expression& left,
+                                            Operator op,
+                                            const Expression& right);
     [[nodiscard]] bool pushConstructorCast(const AnyConstructor& c);
     [[nodiscard]] bool pushConstructorCompound(const ConstructorCompound& c);
     [[nodiscard]] bool pushConstructorSplat(const ConstructorSplat& c);
     [[nodiscard]] bool pushExpression(const Expression& e);
+    [[nodiscard]] bool pushFunctionCall(const FunctionCall& e);
+    [[nodiscard]] bool pushIntrinsic(const FunctionCall& e);
     [[nodiscard]] bool pushLiteral(const Literal& l);
+    [[nodiscard]] bool pushPrefixExpression(const PrefixExpression& p);
+    [[nodiscard]] bool pushPrefixExpression(Operator op, const Expression& expr);
     [[nodiscard]] bool pushSwizzle(const Swizzle& s);
     [[nodiscard]] bool pushTernaryExpression(const TernaryExpression& t);
     [[nodiscard]] bool pushTernaryExpression(const Expression& test,
@@ -163,6 +210,7 @@ public:
 
     [[nodiscard]] bool assign(const Expression& e);
     [[nodiscard]] bool binaryOp(SkSL::Type::NumberKind numberKind, int slots, const BinaryOps& ops);
+    void foldWithMultiOp(BuilderOp op, int elements);
     void foldWithOp(BuilderOp op, int elements);
     void nextTempStack() {
         fBuilder.set_current_stack(++fCurrentTempStack);
@@ -170,14 +218,17 @@ public:
     void previousTempStack() {
         fBuilder.set_current_stack(--fCurrentTempStack);
     }
+    static bool IsUniform(const Variable& var) {
+       return var.modifiers().fFlags & Modifiers::kUniform_Flag;
+    }
 
 private:
     const SkSL::Program& fProgram;
     Builder fBuilder;
     SkRPDebugTrace* fDebugTrace = nullptr;
 
-    SkTHashMap<const IRNode*, SlotRange> fSlotMap;
-    int fSlotCount = 0;
+    SlotManager fProgramSlots;
+    SlotManager fUniformSlots;
 
     SkTArray<SlotRange> fFunctionStack;
     SlotRange fCurrentContinueMask;
@@ -212,7 +263,7 @@ struct VariableLValue : public LValue {
     SlotMap getSlotMap(Generator* gen) override {
         // Map every slot in the variable, in consecutive order, e.g. a half4 at slot 5 = {5,6,7,8}.
         SlotMap out;
-        SlotRange range = gen->getSlots(*fVariable);
+        SlotRange range = gen->getVariableSlots(*fVariable);
         out.slots.resize(range.count);
         std::iota(out.slots.begin(), out.slots.end(), range.index);
         return out;
@@ -292,25 +343,25 @@ static bool unsupported() {
     return false;
 }
 
-void Generator::addDebugSlotInfoForGroup(const std::string& varName,
-                                         const Type& type,
-                                         Position pos,
-                                         int* groupIndex,
-                                         bool isFunctionReturnValue) {
-    SkASSERT(fDebugTrace);
+void SlotManager::addSlotDebugInfoForGroup(const std::string& varName,
+                                           const Type& type,
+                                           Position pos,
+                                           int* groupIndex,
+                                           bool isFunctionReturnValue) {
+    SkASSERT(fSlotDebugInfo);
     switch (type.typeKind()) {
         case Type::TypeKind::kArray: {
             int nslots = type.columns();
             const Type& elemType = type.componentType();
             for (int slot = 0; slot < nslots; ++slot) {
-                this->addDebugSlotInfoForGroup(varName + "[" + std::to_string(slot) + "]", elemType,
+                this->addSlotDebugInfoForGroup(varName + "[" + std::to_string(slot) + "]", elemType,
                                                pos, groupIndex, isFunctionReturnValue);
             }
             break;
         }
         case Type::TypeKind::kStruct: {
             for (const Type::Field& field : type.fields()) {
-                this->addDebugSlotInfoForGroup(varName + "." + std::string(field.fName),
+                this->addSlotDebugInfoForGroup(varName + "." + std::string(field.fName),
                                                *field.fType, pos, groupIndex,
                                                isFunctionReturnValue);
             }
@@ -336,52 +387,52 @@ void Generator::addDebugSlotInfoForGroup(const std::string& varName,
                 slotInfo.numberKind = numberKind;
                 slotInfo.pos = pos;
                 slotInfo.fnReturnValue = isFunctionReturnValue ? 1 : -1;
-                fDebugTrace->fSlotInfo.push_back(std::move(slotInfo));
+                fSlotDebugInfo->push_back(std::move(slotInfo));
             }
             break;
         }
     }
 }
 
-void Generator::addDebugSlotInfo(const std::string& varName,
-                                 const Type& type,
-                                 Position pos,
-                                 bool isFunctionReturnValue) {
+void SlotManager::addSlotDebugInfo(const std::string& varName,
+                                   const Type& type,
+                                   Position pos,
+                                   bool isFunctionReturnValue) {
     int groupIndex = 0;
-    this->addDebugSlotInfoForGroup(varName, type, pos, &groupIndex, isFunctionReturnValue);
+    this->addSlotDebugInfoForGroup(varName, type, pos, &groupIndex, isFunctionReturnValue);
     SkASSERT((size_t)groupIndex == type.slotCount());
 }
 
-SlotRange Generator::createSlots(int slots) {
+SlotRange SlotManager::createSlots(int slots) {
     SlotRange range = {fSlotCount, slots};
     fSlotCount += slots;
     return range;
 }
 
-SlotRange Generator::createSlots(std::string name,
-                                 const Type& type,
-                                 Position pos,
-                                 bool isFunctionReturnValue) {
+SlotRange SlotManager::createSlots(std::string name,
+                                   const Type& type,
+                                   Position pos,
+                                   bool isFunctionReturnValue) {
     size_t nslots = type.slotCount();
     if (nslots == 0) {
         return {};
     }
-    if (fDebugTrace) {
+    if (fSlotDebugInfo) {
         // Our debug slot-info table should have the same length as the actual slot table.
-        SkASSERT(fDebugTrace->fSlotInfo.size() == (size_t)fSlotCount);
+        SkASSERT(fSlotDebugInfo->size() == (size_t)fSlotCount);
 
         // Append slot names and types to our debug slot-info table.
-        fDebugTrace->fSlotInfo.reserve(fSlotCount + nslots);
-        this->addDebugSlotInfo(name, type, pos, isFunctionReturnValue);
+        fSlotDebugInfo->reserve(fSlotCount + nslots);
+        this->addSlotDebugInfo(name, type, pos, isFunctionReturnValue);
 
         // Confirm that we added the expected number of slots.
-        SkASSERT(fDebugTrace->fSlotInfo.size() == (size_t)(fSlotCount + nslots));
+        SkASSERT(fSlotDebugInfo->size() == (size_t)(fSlotCount + nslots));
     }
 
     return this->createSlots(nslots);
 }
 
-SlotRange Generator::getSlots(const Variable& v) {
+SlotRange SlotManager::getVariableSlots(const Variable& v) {
     SlotRange* entry = fSlotMap.find(&v);
     if (entry != nullptr) {
         return *entry;
@@ -394,7 +445,7 @@ SlotRange Generator::getSlots(const Variable& v) {
     return range;
 }
 
-SlotRange Generator::getFunctionSlots(const IRNode& callSite, const FunctionDeclaration& f) {
+SlotRange SlotManager::getFunctionSlots(const IRNode& callSite, const FunctionDeclaration& f) {
     SlotRange* entry = fSlotMap.find(&callSite);
     if (entry != nullptr) {
         return *entry;
@@ -407,7 +458,7 @@ SlotRange Generator::getFunctionSlots(const IRNode& callSite, const FunctionDecl
     return range;
 }
 
-int Generator::getDebugFunctionInfo(const FunctionDeclaration& decl) {
+int Generator::getFunctionDebugInfo(const FunctionDeclaration& decl) {
     SkASSERT(fDebugTrace);
 
     std::string name = decl.description();
@@ -437,7 +488,7 @@ std::optional<SlotRange> Generator::writeFunction(const IRNode& callSite,
                                                   SkSpan<const SlotRange> args) {
     [[maybe_unused]] int funcIndex = -1;
     if (fDebugTrace) {
-        funcIndex = this->getDebugFunctionInfo(function.declaration());
+        funcIndex = this->getFunctionDebugInfo(function.declaration());
         SkASSERT(funcIndex >= 0);
         // TODO(debugger): add trace for function-enter
     }
@@ -474,14 +525,12 @@ bool Generator::writeGlobals() {
             // Of those, only child processors are legal variables.
             SkASSERT(!var->type().isVoid());
             SkASSERT(!var->type().isOpaque());
-            [[maybe_unused]] SlotRange r = this->getSlots(*var);
 
             // builtin variables are system-defined, with special semantics. The only builtin
             // variable exposed to runtime effects is sk_FragCoord.
             if (int builtin = var->modifiers().fLayout.fBuiltin; builtin >= 0) {
                 switch (builtin) {
                     case SK_FRAGCOORD_BUILTIN:
-                        SkASSERT(r.count == 4);
                         // TODO: populate slots with device coordinates xy01
                         return unsupported();
 
@@ -491,8 +540,10 @@ bool Generator::writeGlobals() {
                 }
             }
 
-            if (var->modifiers().fFlags & Modifiers::kUniform_Flag) {
-                return unsupported();
+            if (IsUniform(*var)) {
+                // Create the uniform slot map in first-to-last order.
+                (void)this->getUniformSlots(*var);
+                continue;
             }
 
             // Other globals are treated as normal variable declarations.
@@ -573,7 +624,7 @@ bool Generator::writeDoStatement(const DoStatement& d) {
 
     // Create a dedicated slot for continue-mask storage.
     SlotRange previousContinueMask = fCurrentContinueMask;
-    fCurrentContinueMask = this->createSlots(/*slots=*/1);
+    fCurrentContinueMask = fProgramSlots.createSlots(/*slots=*/1);
 
     // Write the do-loop body.
     int labelID = fBuilder.nextLabelID();
@@ -660,9 +711,9 @@ bool Generator::writeVarDeclaration(const VarDeclaration& v) {
         if (!this->pushExpression(*v.value())) {
             return unsupported();
         }
-        this->popToSlotRangeUnmasked(this->getSlots(*v.var()));
+        this->popToSlotRangeUnmasked(this->getVariableSlots(*v.var()));
     } else {
-        this->zeroSlotRangeUnmasked(this->getSlots(*v.var()));
+        this->zeroSlotRangeUnmasked(this->getVariableSlots(*v.var()));
     }
     return true;
 }
@@ -682,8 +733,14 @@ bool Generator::pushExpression(const Expression& e) {
         case Expression::Kind::kConstructorSplat:
             return this->pushConstructorSplat(e.as<ConstructorSplat>());
 
+        case Expression::Kind::kFunctionCall:
+            return this->pushFunctionCall(e.as<FunctionCall>());
+
         case Expression::Kind::kLiteral:
             return this->pushLiteral(e.as<Literal>());
+
+        case Expression::Kind::kPrefix:
+            return this->pushPrefixExpression(e.as<PrefixExpression>());
 
         case Expression::Kind::kSwizzle:
             return this->pushSwizzle(e.as<Swizzle>());
@@ -720,49 +777,89 @@ bool Generator::assign(const Expression& e) {
     return lvalue && lvalue->store(this);
 }
 
+void Generator::foldWithMultiOp(BuilderOp op, int elements) {
+    // Fold the top N elements on the stack using an op that supports multiple slots, e.g.:
+    // (A + B + C + D) -> add_2_floats $0..1 += $2..3
+    //                    add_float    $0    += $1
+    for (; elements >= 8; elements -= 4) {
+        fBuilder.binary_op(op, /*slots=*/4);
+    }
+    for (; elements >= 6; elements -= 3) {
+        fBuilder.binary_op(op, /*slots=*/3);
+    }
+    for (; elements >= 4; elements -= 2) {
+        fBuilder.binary_op(op, /*slots=*/2);
+    }
+    this->foldWithOp(op, elements);
+}
+
 void Generator::foldWithOp(BuilderOp op, int elements) {
-    // Fold the top N elements on the stack using an op, e.g. (A && (B && C)) -> D.
-    for (; elements > 1; elements--) {
+    // Fold the top N elements on the stack using an single-slot-only op, e.g.:
+    // (A && B && C) -> bitwise_and   $1 &= $2
+    //                  bitwise_and   $0 &= $1
+    for (; elements >= 2; elements -= 1) {
         fBuilder.binary_op(op, /*slots=*/1);
     }
 }
 
 bool Generator::pushBinaryExpression(const BinaryExpression& e) {
-    // TODO: add support for non-matching types (e.g. matrix-vector ops)
-    if (!e.left()->type().matches(e.right()->type())) {
+    return this->pushBinaryExpression(*e.left(), e.getOperator(), *e.right());
+}
+
+bool Generator::pushBinaryExpression(const Expression& left, Operator op, const Expression& right) {
+    const Type& type = left.type();
+
+    // Handle binary expressions with mismatched types.
+    if (!type.matches(right.type())) {
+        if (type.componentType().numberKind() != right.type().componentType().numberKind()) {
+            return unsupported();
+        }
+
+        if (left.type().isScalar() && right.type().isVector()) {
+            // SxV becomes VxV via an implicit splat.
+            ConstructorSplat leftAsVector(left.fPosition, right.type(), left.clone());
+            return this->pushBinaryExpression(leftAsVector, op, right);
+        }
+
+        if (left.type().isVector() && right.type().isScalar()) {
+            // VxS becomes VxV via an implicit splat.
+            ConstructorSplat rightAsVector(right.fPosition, left.type(), right.clone());
+            return this->pushBinaryExpression(left, op, rightAsVector);
+        }
+
+        // TODO: add support for other non-matching types (matrix-vector and matrix-matrix ops)
         return unsupported();
     }
 
     // Handle simple assignment (`var = expr`).
-    if (e.getOperator().kind() == OperatorKind::EQ) {
-        return this->pushExpression(*e.right()) &&
-               this->assign(*e.left());
+    if (op.kind() == OperatorKind::EQ) {
+        return this->pushExpression(right) &&
+               this->assign(left);
     }
 
-    const Type& type = e.left()->type();
     Type::NumberKind numberKind = type.componentType().numberKind();
-    Operator basicOp = e.getOperator().removeAssignment();
+    Operator basicOp = op.removeAssignment();
 
     // Handle binary ops which require short-circuiting.
     switch (basicOp.kind()) {
         case OperatorKind::LOGICALAND:
-            if (Analysis::HasSideEffects(*e.right())) {
+            if (Analysis::HasSideEffects(right)) {
                 // If the RHS has side effects, we rewrite `a && b` as `a ? b : false`. This
                 // generates pretty solid code and gives us the required short-circuit behavior.
-                SkASSERT(!e.getOperator().isAssignment());
+                SkASSERT(!op.isAssignment());
                 SkASSERT(numberKind == Type::NumberKind::kBoolean);
-                Literal falseLiteral{Position{}, 0.0, &e.right()->type()};
-                return this->pushTernaryExpression(*e.left(), *e.right(), falseLiteral);
+                Literal falseLiteral{Position{}, 0.0, &right.type()};
+                return this->pushTernaryExpression(left, right, falseLiteral);
             }
             break;
 
         case OperatorKind::LOGICALOR:
-            if (Analysis::HasSideEffects(*e.right())) {
+            if (Analysis::HasSideEffects(right)) {
                 // If the RHS has side effects, we rewrite `a || b` as `a ? true : b`.
-                SkASSERT(!e.getOperator().isAssignment());
+                SkASSERT(!op.isAssignment());
                 SkASSERT(numberKind == Type::NumberKind::kBoolean);
-                Literal trueLiteral{Position{}, 1.0, &e.right()->type()};
-                return this->pushTernaryExpression(*e.left(), trueLiteral, *e.right());
+                Literal trueLiteral{Position{}, 1.0, &right.type()};
+                return this->pushTernaryExpression(left, trueLiteral, right);
             }
             break;
 
@@ -775,15 +872,15 @@ bool Generator::pushBinaryExpression(const BinaryExpression& e) {
         case OperatorKind::GT:
         case OperatorKind::GTEQ:
             // We replace `x > y` with `y < x`, and `x >= y` with `y <= x`.
-            if (!this->pushExpression(*e.right()) ||
-                !this->pushExpression(*e.left())) {
+            if (!this->pushExpression(right) ||
+                !this->pushExpression(left)) {
                 return false;
             }
             break;
 
         default:
-            if (!this->pushExpression(*e.left()) ||
-                !this->pushExpression(*e.right())) {
+            if (!this->pushExpression(left) ||
+                !this->pushExpression(right)) {
                 return false;
             }
             break;
@@ -900,8 +997,8 @@ bool Generator::pushBinaryExpression(const BinaryExpression& e) {
     }
 
     // Handle compound assignment (`var *= expr`).
-    if (e.getOperator().isAssignment()) {
-        return this->assign(*e.left());
+    if (op.isAssignment()) {
+        return this->assign(left);
     }
 
     return true;
@@ -940,6 +1037,39 @@ bool Generator::pushConstructorSplat(const ConstructorSplat& c) {
     return true;
 }
 
+bool Generator::pushFunctionCall(const FunctionCall& c) {
+    if (c.function().isIntrinsic()) {
+        return this->pushIntrinsic(c);
+    }
+    return unsupported();
+}
+
+bool Generator::pushIntrinsic(const FunctionCall& c) {
+    const ExpressionArray& args = c.arguments();
+
+    switch (c.function().intrinsicKind()) {
+        case IntrinsicKind::k_dot_IntrinsicKind:
+            SkASSERT(args.size() == 2);
+            SkASSERT(args[0]->type().matches(args[1]->type()));
+
+            if (!this->pushExpression(*args[0]) ||
+                !this->pushExpression(*args[1])) {
+                return unsupported();
+            }
+            fBuilder.binary_op(BuilderOp::mul_n_floats, args[0]->type().slotCount());
+            this->foldWithMultiOp(BuilderOp::add_n_floats, args[0]->type().slotCount());
+            return true;
+
+        case IntrinsicKind::k_not_IntrinsicKind:
+            SkASSERT(args.size() == 1);
+            return this->pushPrefixExpression(OperatorKind::LOGICALNOT, *args[0]);
+
+        default:
+            break;
+    }
+    return unsupported();
+}
+
 bool Generator::pushLiteral(const Literal& l) {
     switch (l.type().numberKind()) {
         case Type::NumberKind::kFloat:
@@ -963,8 +1093,30 @@ bool Generator::pushLiteral(const Literal& l) {
     }
 }
 
+bool Generator::pushPrefixExpression(const PrefixExpression& p) {
+    return this->pushPrefixExpression(p.getOperator(), *p.operand());
+}
+
+bool Generator::pushPrefixExpression(Operator op, const Expression& expr) {
+    switch (op.kind()) {
+        case OperatorKind::BITWISENOT:
+        case OperatorKind::LOGICALNOT:
+            // Handle operators ! and ~.
+            if (!this->pushExpression(expr)) {
+                return false;
+            }
+            fBuilder.unary_op(BuilderOp::bitwise_not, expr.type().slotCount());
+            return true;
+
+        default:
+            break;
+    }
+
+    return unsupported();
+}
+
 bool Generator::pushSwizzle(const Swizzle& s) {
-    // Push the input expression.
+    // Push the base expression.
     if (!this->pushExpression(*s.base())) {
         return false;
     }
@@ -980,20 +1132,26 @@ bool Generator::pushTernaryExpression(const TernaryExpression& t) {
 bool Generator::pushTernaryExpression(const Expression& test,
                                       const Expression& ifTrue,
                                       const Expression& ifFalse) {
-    if (!Analysis::HasSideEffects(ifTrue) && !Analysis::HasSideEffects(ifFalse)) {
-        // We can take some shortcuts if the true- and false-expressions are side-effect free.
-        // First, push the false-expression onto the primary stack.
+    // First, push the current condition-mask and the test-expression into a separate stack.
+    this->nextTempStack();
+    fBuilder.push_condition_mask();
+    if (!this->pushExpression(test)) {
+        return unsupported();
+    }
+    this->previousTempStack();
+
+    // We can take some shortcuts with condition-mask handling if the false-expression is entirely
+    // side-effect free. (We can evaluate it without masking off its effects.) We always handle the
+    // condition mask properly for the test-expression and true-expression properly.
+    if (!Analysis::HasSideEffects(ifFalse)) {
+        // Push the false-expression onto the primary stack.
         int cleanupLabelID = fBuilder.nextLabelID();
         if (!this->pushExpression(ifFalse)) {
             return unsupported();
         }
 
-        // Next, merge the current condition-mask with the test-expression in a separate stack.
+        // Next, merge the condition mask (on the separate stack) with the test expression.
         this->nextTempStack();
-        fBuilder.push_condition_mask();
-        if (!this->pushExpression(test)) {
-            return unsupported();
-        }
         fBuilder.merge_condition_mask();
         this->previousTempStack();
 
@@ -1012,12 +1170,8 @@ bool Generator::pushTernaryExpression(const Expression& test,
         fBuilder.select(/*slots=*/ifTrue.type().slotCount());
         fBuilder.label(cleanupLabelID);
     } else {
-        // Merge the current condition-mask with the test-expression in a separate stack.
+        // Merge the condition mask (on the separate stack) with the test expression.
         this->nextTempStack();
-        fBuilder.push_condition_mask();
-        if (!this->pushExpression(test)) {
-            return unsupported();
-        }
         fBuilder.merge_condition_mask();
         this->previousTempStack();
 
@@ -1052,7 +1206,14 @@ bool Generator::pushTernaryExpression(const Expression& test,
 }
 
 bool Generator::pushVariableReference(const VariableReference& v) {
-    fBuilder.push_slots(this->getSlots(*v.variable()));
+    const Variable& var = *v.variable();
+    if (IsUniform(var)) {
+        SlotRange r = this->getUniformSlots(var);
+        SkASSERT(r.count == (int)var.type().slotCount());
+        fBuilder.push_uniform(r);
+        return true;
+    }
+    fBuilder.push_slots(this->getVariableSlots(var));
     return true;
 }
 
@@ -1067,7 +1228,7 @@ bool Generator::writeProgram(const FunctionDefinition& function) {
         switch (param->modifiers().fLayout.fBuiltin) {
             case SK_MAIN_COORDS_BUILTIN: {
                 // Coordinates are passed via RG.
-                SlotRange fragCoord = this->getSlots(*param);
+                SlotRange fragCoord = this->getVariableSlots(*param);
                 SkASSERT(fragCoord.count == 2);
                 fBuilder.store_src_rg(fragCoord);
                 args.push_back(fragCoord);
@@ -1075,7 +1236,7 @@ bool Generator::writeProgram(const FunctionDefinition& function) {
             }
             case SK_INPUT_COLOR_BUILTIN: {
                 // Input colors are passed via RGBA.
-                SlotRange srcColor = this->getSlots(*param);
+                SlotRange srcColor = this->getVariableSlots(*param);
                 SkASSERT(srcColor.count == 4);
                 fBuilder.store_src(srcColor);
                 args.push_back(srcColor);
@@ -1083,7 +1244,7 @@ bool Generator::writeProgram(const FunctionDefinition& function) {
             }
             case SK_DEST_COLOR_BUILTIN: {
                 // Dest colors are passed via dRGBA.
-                SlotRange destColor = this->getSlots(*param);
+                SlotRange destColor = this->getVariableSlots(*param);
                 SkASSERT(destColor.count == 4);
                 fBuilder.store_dst(destColor);
                 args.push_back(destColor);
@@ -1116,6 +1277,10 @@ bool Generator::writeProgram(const FunctionDefinition& function) {
     return true;
 }
 
+std::unique_ptr<RP::Program> Generator::finish() {
+    return fBuilder.finish(fProgramSlots.slotCount(), fUniformSlots.slotCount(), fDebugTrace);
+}
+
 }  // namespace RP
 
 std::unique_ptr<RP::Program> MakeRasterPipelineProgram(const SkSL::Program& program,
@@ -1126,7 +1291,7 @@ std::unique_ptr<RP::Program> MakeRasterPipelineProgram(const SkSL::Program& prog
     if (!generator.writeProgram(function)) {
         return nullptr;
     }
-    return generator.builder()->finish(generator.slotCount(), debugTrace);
+    return generator.finish();
 }
 
 }  // namespace SkSL

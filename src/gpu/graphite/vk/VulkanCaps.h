@@ -11,7 +11,7 @@
 #include "include/private/SkTDArray.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/vk/VulkanInterface.h"
-#include "src/gpu/vk/VulkanUtils.h"
+#include "src/gpu/vk/VulkanUtilsPriv.h"
 
 namespace skgpu::graphite {
 struct ContextOptions;
@@ -97,8 +97,6 @@ private:
     }
 
     bool onIsTexturable(const TextureInfo&) const override { return false; }
-
-    size_t getTransferBufferAlignment(size_t bytesPerPixel) const override { return 0; }
 
     bool supportsWritePixels(const TextureInfo&) const override { return false; }
     bool supportsReadPixels(const TextureInfo&) const override { return false; }
@@ -207,4 +205,3 @@ private:
 } // namespace skgpu::graphite
 
 #endif // skgpu_graphite_VulkanCaps_DEFINED
-

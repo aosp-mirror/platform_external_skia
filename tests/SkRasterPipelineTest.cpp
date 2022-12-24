@@ -9,7 +9,6 @@
 #include "include/private/SkTo.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkRasterPipeline.h"
-#include "src/core/SkRasterPipelineUtils.h"
 #include "src/gpu/Swizzle.h"
 #include "tests/Test.h"
 
@@ -447,9 +446,21 @@ DEF_TEST(SkRasterPipeline_InitLaneMasks, r) {
 }
 
 DEF_TEST(SkRasterPipeline_CopySlotsMasked, r) {
-    // Allocate space for 20 source slots and 20 dest slots.
-    alignas(64) float slots[40 * SkRasterPipeline_kMaxStride_highp];
-    const int srcIndex = 0, dstIndex = 20;
+    // Allocate space for 5 source slots and 5 dest slots.
+    alignas(64) float slots[10 * SkRasterPipeline_kMaxStride_highp];
+    const int srcIndex = 0, dstIndex = 5;
+
+    struct CopySlotsOp {
+        SkRasterPipeline::Stage stage;
+        int numSlotsAffected;
+    };
+
+    static const CopySlotsOp kCopyOps[] = {
+        {SkRasterPipeline::Stage::copy_slot_masked,    1},
+        {SkRasterPipeline::Stage::copy_2_slots_masked, 2},
+        {SkRasterPipeline::Stage::copy_3_slots_masked, 3},
+        {SkRasterPipeline::Stage::copy_4_slots_masked, 4},
+    };
 
     static_assert(SkRasterPipeline_kMaxStride_highp == 8);
     alignas(64) const int32_t kMask1[8] = {~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0};
@@ -459,28 +470,31 @@ DEF_TEST(SkRasterPipeline_CopySlotsMasked, r) {
 
     const int N = SkOpts::raster_pipeline_highp_stride;
 
-    for (int slotCount = 0; slotCount < 20; ++slotCount) {
+    for (const CopySlotsOp& op : kCopyOps) {
         for (const int32_t* mask : {kMask1, kMask2, kMask3, kMask4}) {
             // Initialize the destination slots to 0,1,2.. and the source slots to 1000,1001,1002...
-            std::iota(&slots[N * dstIndex],  &slots[N * (dstIndex + 20)], 0.0f);
-            std::iota(&slots[N * srcIndex],  &slots[N * (srcIndex + 20)], 1000.0f);
+            std::iota(&slots[N * dstIndex],  &slots[N * (dstIndex + 5)], 0.0f);
+            std::iota(&slots[N * srcIndex],  &slots[N * (srcIndex + 5)], 1000.0f);
 
             // Run `copy_slots_masked` over our data.
             SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
             SkRasterPipeline p(&alloc);
+            auto* ctx = alloc.make<SkRasterPipeline_CopySlotsCtx>();
+            ctx->dst = &slots[N * dstIndex];
+            ctx->src = &slots[N * srcIndex];
+
             p.append(SkRasterPipeline::init_lane_masks);
             p.append(SkRasterPipeline::load_condition_mask, mask);
-            SkRasterPipelineUtils(p).appendCopySlotsMasked(
-                    &alloc, &slots[N * dstIndex], &slots[N * srcIndex], slotCount);
-            p.run(0,0,20,1);
+            p.append(op.stage, ctx);
+            p.run(0,0,N,1);
 
             // Verify that the destination has been overwritten in the mask-on fields, and has not
             // been overwritten in the mask-off fields, for each destination slot.
             float expectedUnchanged = 0.0f, expectedChanged = 1000.0f;
             float* destPtr = &slots[N * dstIndex];
-            for (int checkSlot = 0; checkSlot < 20; ++checkSlot) {
+            for (int checkSlot = 0; checkSlot < 5; ++checkSlot) {
                 for (int checkMask = 0; checkMask < N; ++checkMask) {
-                    if (checkSlot < slotCount && mask[checkMask]) {
+                    if (checkSlot < op.numSlotsAffected && mask[checkMask]) {
                         REPORTER_ASSERT(r, *destPtr == expectedChanged);
                     } else {
                         REPORTER_ASSERT(r, *destPtr == expectedUnchanged);
@@ -496,29 +510,43 @@ DEF_TEST(SkRasterPipeline_CopySlotsMasked, r) {
 }
 
 DEF_TEST(SkRasterPipeline_CopySlotsUnmasked, r) {
-    // Allocate space for 20 source slots and 20 dest slots.
-    alignas(64) float slots[40 * SkRasterPipeline_kMaxStride_highp];
-    const int srcIndex = 0, dstIndex = 20;
+    // Allocate space for 5 source slots and 5 dest slots.
+    alignas(64) float slots[10 * SkRasterPipeline_kMaxStride_highp];
+    const int srcIndex = 0, dstIndex = 5;
     const int N = SkOpts::raster_pipeline_highp_stride;
 
-    for (int slotCount = 0; slotCount < 20; ++slotCount) {
+    struct CopySlotsOp {
+        SkRasterPipeline::Stage stage;
+        int numSlotsAffected;
+    };
+
+    static const CopySlotsOp kCopyOps[] = {
+        {SkRasterPipeline::Stage::copy_slot_unmasked,    1},
+        {SkRasterPipeline::Stage::copy_2_slots_unmasked, 2},
+        {SkRasterPipeline::Stage::copy_3_slots_unmasked, 3},
+        {SkRasterPipeline::Stage::copy_4_slots_unmasked, 4},
+    };
+
+    for (const CopySlotsOp& op : kCopyOps) {
         // Initialize the destination slots to 0,1,2.. and the source slots to 1000,1001,1002...
-        std::iota(&slots[N * dstIndex],  &slots[N * (dstIndex + 20)], 0.0f);
-        std::iota(&slots[N * srcIndex],  &slots[N * (srcIndex + 20)], 1000.0f);
+        std::iota(&slots[N * dstIndex],  &slots[N * (dstIndex + 5)], 0.0f);
+        std::iota(&slots[N * srcIndex],  &slots[N * (srcIndex + 5)], 1000.0f);
 
         // Run `copy_slots_unmasked` over our data.
         SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
         SkRasterPipeline p(&alloc);
-        SkRasterPipelineUtils(p).appendCopySlotsUnmasked(
-                &alloc, &slots[N * dstIndex], &slots[N * srcIndex], slotCount);
-        p.run(0,0,20,1);
+        auto* ctx = alloc.make<SkRasterPipeline_CopySlotsCtx>();
+        ctx->dst = &slots[N * dstIndex];
+        ctx->src = &slots[N * srcIndex];
+        p.append(op.stage, ctx);
+        p.run(0,0,1,1);
 
         // Verify that the destination has been overwritten in each slot.
         float expectedUnchanged = 0.0f, expectedChanged = 1000.0f;
         float* destPtr = &slots[N * dstIndex];
-        for (int checkSlot = 0; checkSlot < 20; ++checkSlot) {
+        for (int checkSlot = 0; checkSlot < 5; ++checkSlot) {
             for (int checkLane = 0; checkLane < N; ++checkLane) {
-                if (checkSlot < slotCount) {
+                if (checkSlot < op.numSlotsAffected) {
                     REPORTER_ASSERT(r, *destPtr == expectedChanged);
                 } else {
                     REPORTER_ASSERT(r, *destPtr == expectedUnchanged);
@@ -533,26 +561,38 @@ DEF_TEST(SkRasterPipeline_CopySlotsUnmasked, r) {
 }
 
 DEF_TEST(SkRasterPipeline_ZeroSlotsUnmasked, r) {
-    // Allocate space for 20 dest slots.
-    alignas(64) float slots[20 * SkRasterPipeline_kMaxStride_highp];
+    // Allocate space for 5 dest slots.
+    alignas(64) float slots[5 * SkRasterPipeline_kMaxStride_highp];
     const int N = SkOpts::raster_pipeline_highp_stride;
 
-    for (int slotCount = 0; slotCount < 20; ++slotCount) {
+    struct ZeroSlotsOp {
+        SkRasterPipeline::Stage stage;
+        int numSlotsAffected;
+    };
+
+    static const ZeroSlotsOp kZeroOps[] = {
+        {SkRasterPipeline::Stage::zero_slot_unmasked,    1},
+        {SkRasterPipeline::Stage::zero_2_slots_unmasked, 2},
+        {SkRasterPipeline::Stage::zero_3_slots_unmasked, 3},
+        {SkRasterPipeline::Stage::zero_4_slots_unmasked, 4},
+    };
+
+    for (const ZeroSlotsOp& op : kZeroOps) {
         // Initialize the destination slots to 1,2,3...
-        std::iota(&slots[0], &slots[20 * N], 1.0f);
+        std::iota(&slots[0], &slots[5 * N], 1.0f);
 
         // Run `zero_slots_unmasked` over our data.
         SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
         SkRasterPipeline p(&alloc);
-        SkRasterPipelineUtils(p).appendZeroSlotsUnmasked(&slots[0], slotCount);
-        p.run(0,0,20,1);
+        p.append(op.stage, &slots[0]);
+        p.run(0,0,1,1);
 
         // Verify that the destination has been zeroed out in each slot.
         float expectedUnchanged = 1.0f;
         float* destPtr = &slots[0];
-        for (int checkSlot = 0; checkSlot < 20; ++checkSlot) {
+        for (int checkSlot = 0; checkSlot < 5; ++checkSlot) {
             for (int checkLane = 0; checkLane < N; ++checkLane) {
-                if (checkSlot < slotCount) {
+                if (checkSlot < op.numSlotsAffected) {
                     REPORTER_ASSERT(r, *destPtr == 0.0f);
                 } else {
                     REPORTER_ASSERT(r, *destPtr == expectedUnchanged);
@@ -566,30 +606,45 @@ DEF_TEST(SkRasterPipeline_ZeroSlotsUnmasked, r) {
 }
 
 DEF_TEST(SkRasterPipeline_CopyConstants, r) {
-    // Allocate space for 20 dest slots.
-    alignas(64) float slots[20 * SkRasterPipeline_kMaxStride_highp];
-    float constants[20];
+    // Allocate space for 5 dest slots.
+    alignas(64) float slots[5 * SkRasterPipeline_kMaxStride_highp];
+    float constants[5];
     const int N = SkOpts::raster_pipeline_highp_stride;
 
-    for (int slotCount = 0; slotCount < 20; ++slotCount) {
+    struct CopySlotsOp {
+        SkRasterPipeline::Stage stage;
+        int numSlotsAffected;
+    };
+
+    static const CopySlotsOp kCopyOps[] = {
+        {SkRasterPipeline::Stage::copy_constant,    1},
+        {SkRasterPipeline::Stage::copy_2_constants, 2},
+        {SkRasterPipeline::Stage::copy_3_constants, 3},
+        {SkRasterPipeline::Stage::copy_4_constants, 4},
+    };
+
+    for (const CopySlotsOp& op : kCopyOps) {
         // Initialize the destination slots to 1,2,3...
-        std::iota(&slots[0], &slots[20 * N], 1.0f);
+        std::iota(&slots[0], &slots[5 * N], 1.0f);
         // Initialize the constant buffer to 1000,1001,1002...
-        std::iota(&constants[0], &constants[20], 1000.0f);
+        std::iota(&constants[0], &constants[5], 1000.0f);
 
         // Run `copy_constants` over our data.
         SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
         SkRasterPipeline p(&alloc);
-        SkRasterPipelineUtils(p).appendCopyConstants(&alloc, &slots[0], constants, slotCount);
-        p.run(0,0,20,1);
+        auto* ctx = alloc.make<SkRasterPipeline_CopySlotsCtx>();
+        ctx->dst = slots;
+        ctx->src = constants;
+        p.append(op.stage, ctx);
+        p.run(0,0,1,1);
 
         // Verify that our constants have been broadcast into each slot.
         float expectedUnchanged = 1.0f;
         float expectedChanged = 1000.0f;
         float* destPtr = &slots[0];
-        for (int checkSlot = 0; checkSlot < 20; ++checkSlot) {
+        for (int checkSlot = 0; checkSlot < 5; ++checkSlot) {
             for (int checkLane = 0; checkLane < N; ++checkLane) {
-                if (checkSlot < slotCount) {
+                if (checkSlot < op.numSlotsAffected) {
                     REPORTER_ASSERT(r, *destPtr == expectedChanged);
                 } else {
                     REPORTER_ASSERT(r, *destPtr == expectedUnchanged);
@@ -650,9 +705,9 @@ DEF_TEST(SkRasterPipeline_Swizzle, r) {
     }
 }
 
-DEF_TEST(SkRasterPipeline_FloatArithmetic, r) {
-    // Allocate space for 20 dest slots.
-    alignas(64) float slots[20 * SkRasterPipeline_kMaxStride_highp];
+DEF_TEST(SkRasterPipeline_FloatArithmeticWithNSlots, r) {
+    // Allocate space for 5 dest and 5 source slots.
+    alignas(64) float slots[10 * SkRasterPipeline_kMaxStride_highp];
     const int N = SkOpts::raster_pipeline_highp_stride;
 
     struct ArithmeticOp {
@@ -668,24 +723,26 @@ DEF_TEST(SkRasterPipeline_FloatArithmetic, r) {
     };
 
     for (const ArithmeticOp& op : kArithmeticOps) {
-        for (int slotCount = 0; slotCount < 10; ++slotCount) {
+        for (int numSlotsAffected = 1; numSlotsAffected <= 5; ++numSlotsAffected) {
             // Initialize the slot values to 1,2,3...
-            std::iota(&slots[0], &slots[20 * N], 1.0f);
+            std::iota(&slots[0], &slots[10 * N], 1.0f);
 
             // Run the arithmetic op over our data.
             SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
             SkRasterPipeline p(&alloc);
-            SkRasterPipelineUtils(p).appendAdjacentMultiSlotOp(
-                    &alloc, op.stage, &slots[0], &slots[slotCount * N], slotCount);
+            auto* ctx = alloc.make<SkRasterPipeline_CopySlotsCtx>();
+            ctx->dst = &slots[0];
+            ctx->src = &slots[numSlotsAffected * N];
+            p.append(op.stage, ctx);
             p.run(0,0,1,1);
 
             // Verify that the affected slots now equal (1,2,3...) op (4,5,6...).
             float leftValue = 1.0f;
-            float rightValue = float(slotCount * N) + 1.0f;
+            float rightValue = float(numSlotsAffected * N) + 1.0f;
             float* destPtr = &slots[0];
-            for (int checkSlot = 0; checkSlot < 20; ++checkSlot) {
+            for (int checkSlot = 0; checkSlot < 10; ++checkSlot) {
                 for (int checkLane = 0; checkLane < N; ++checkLane) {
-                    if (checkSlot < slotCount) {
+                    if (checkSlot < numSlotsAffected) {
                         REPORTER_ASSERT(r, *destPtr == op.verify(leftValue, rightValue));
                     } else {
                         REPORTER_ASSERT(r, *destPtr == leftValue);
@@ -700,9 +757,72 @@ DEF_TEST(SkRasterPipeline_FloatArithmetic, r) {
     }
 }
 
-DEF_TEST(SkRasterPipeline_IntArithmetic, r) {
-    // Allocate space for 20 dest slots.
-    alignas(64) int slots[20 * SkRasterPipeline_kMaxStride_highp];
+DEF_TEST(SkRasterPipeline_FloatArithmeticWithHardcodedSlots, r) {
+    // Allocate space for 5 dest and 5 source slots.
+    alignas(64) float slots[10 * SkRasterPipeline_kMaxStride_highp];
+    const int N = SkOpts::raster_pipeline_highp_stride;
+
+    struct ArithmeticOp {
+        SkRasterPipeline::Stage stage;
+        int numSlotsAffected;
+        std::function<float(float, float)> verify;
+    };
+
+    static const ArithmeticOp kArithmeticOps[] = {
+        {SkRasterPipeline::Stage::add_float,    1, [](float a, float b) { return a + b; }},
+        {SkRasterPipeline::Stage::sub_float,    1, [](float a, float b) { return a - b; }},
+        {SkRasterPipeline::Stage::mul_float,    1, [](float a, float b) { return a * b; }},
+        {SkRasterPipeline::Stage::div_float,    1, [](float a, float b) { return a / b; }},
+
+        {SkRasterPipeline::Stage::add_2_floats, 2, [](float a, float b) { return a + b; }},
+        {SkRasterPipeline::Stage::sub_2_floats, 2, [](float a, float b) { return a - b; }},
+        {SkRasterPipeline::Stage::mul_2_floats, 2, [](float a, float b) { return a * b; }},
+        {SkRasterPipeline::Stage::div_2_floats, 2, [](float a, float b) { return a / b; }},
+
+        {SkRasterPipeline::Stage::add_3_floats, 3, [](float a, float b) { return a + b; }},
+        {SkRasterPipeline::Stage::sub_3_floats, 3, [](float a, float b) { return a - b; }},
+        {SkRasterPipeline::Stage::mul_3_floats, 3, [](float a, float b) { return a * b; }},
+        {SkRasterPipeline::Stage::div_3_floats, 3, [](float a, float b) { return a / b; }},
+
+        {SkRasterPipeline::Stage::add_4_floats, 4, [](float a, float b) { return a + b; }},
+        {SkRasterPipeline::Stage::sub_4_floats, 4, [](float a, float b) { return a - b; }},
+        {SkRasterPipeline::Stage::mul_4_floats, 4, [](float a, float b) { return a * b; }},
+        {SkRasterPipeline::Stage::div_4_floats, 4, [](float a, float b) { return a / b; }},
+    };
+
+    for (const ArithmeticOp& op : kArithmeticOps) {
+        // Initialize the slot values to 1,2,3...
+        std::iota(&slots[0], &slots[10 * N], 1.0f);
+
+        // Run the arithmetic op over our data.
+        SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
+        SkRasterPipeline p(&alloc);
+        p.append(op.stage, &slots[0]);
+        p.run(0,0,1,1);
+
+        // Verify that the affected slots now equal (1,2,3...) op (4,5,6...).
+        float leftValue = 1.0f;
+        float rightValue = float(op.numSlotsAffected * N) + 1.0f;
+        float* destPtr = &slots[0];
+        for (int checkSlot = 0; checkSlot < 10; ++checkSlot) {
+            for (int checkLane = 0; checkLane < N; ++checkLane) {
+                if (checkSlot < op.numSlotsAffected) {
+                    REPORTER_ASSERT(r, *destPtr == op.verify(leftValue, rightValue));
+                } else {
+                    REPORTER_ASSERT(r, *destPtr == leftValue);
+                }
+
+                ++destPtr;
+                leftValue += 1.0f;
+                rightValue += 1.0f;
+            }
+        }
+    }
+}
+
+DEF_TEST(SkRasterPipeline_IntArithmeticWithNSlots, r) {
+    // Allocate space for 5 dest and 5 source slots.
+    alignas(64) int slots[10 * SkRasterPipeline_kMaxStride_highp];
     const int N = SkOpts::raster_pipeline_highp_stride;
 
     struct ArithmeticOp {
@@ -718,24 +838,26 @@ DEF_TEST(SkRasterPipeline_IntArithmetic, r) {
     };
 
     for (const ArithmeticOp& op : kArithmeticOps) {
-        for (int slotCount = 0; slotCount < 10; ++slotCount) {
+        for (int numSlotsAffected = 1; numSlotsAffected <= 5; ++numSlotsAffected) {
             // Initialize the slot values to 1,2,3...
-            std::iota(&slots[0], &slots[20 * N], 1);
+            std::iota(&slots[0], &slots[10 * N], 1);
 
             // Run `add_n_ints` over our data.
             SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
             SkRasterPipeline p(&alloc);
-            SkRasterPipelineUtils(p).appendAdjacentMultiSlotOp(
-                    &alloc, op.stage, (float*)&slots[0], (float*)&slots[slotCount * N], slotCount);
+            auto* ctx = alloc.make<SkRasterPipeline_CopySlotsCtx>();
+            ctx->dst = (float*)&slots[0];
+            ctx->src = (float*)&slots[numSlotsAffected * N];
+            p.append(op.stage, ctx);
             p.run(0,0,1,1);
 
-            // Verify that the affected slots now equal (1,2,3...) + (4,5,6...).
+            // Verify that the affected slots now equal (1,2,3...) op (4,5,6...).
             int leftValue = 1;
-            int rightValue = float(slotCount * N) + 1;
+            int rightValue = float(numSlotsAffected * N) + 1;
             int* destPtr = &slots[0];
-            for (int checkSlot = 0; checkSlot < 20; ++checkSlot) {
+            for (int checkSlot = 0; checkSlot < 10; ++checkSlot) {
                 for (int checkLane = 0; checkLane < N; ++checkLane) {
-                    if (checkSlot < slotCount) {
+                    if (checkSlot < numSlotsAffected) {
                         REPORTER_ASSERT(r, *destPtr == op.verify(leftValue, rightValue));
                     } else {
                         REPORTER_ASSERT(r, *destPtr == leftValue);
@@ -750,9 +872,72 @@ DEF_TEST(SkRasterPipeline_IntArithmetic, r) {
     }
 }
 
-DEF_TEST(SkRasterPipeline_CompareFloats, r) {
-    // Allocate space for 20 dest slots.
-    alignas(64) float slots[20 * SkRasterPipeline_kMaxStride_highp];
+DEF_TEST(SkRasterPipeline_IntArithmeticWithHardcodedSlots, r) {
+    // Allocate space for 5 dest and 5 source slots.
+    alignas(64) int slots[10 * SkRasterPipeline_kMaxStride_highp];
+    const int N = SkOpts::raster_pipeline_highp_stride;
+
+    struct ArithmeticOp {
+        SkRasterPipeline::Stage stage;
+        int numSlotsAffected;
+        std::function<int(int, int)> verify;
+    };
+
+    static const ArithmeticOp kArithmeticOps[] = {
+        {SkRasterPipeline::Stage::add_int,    1, [](int a, int b) { return a + b; }},
+        {SkRasterPipeline::Stage::sub_int,    1, [](int a, int b) { return a - b; }},
+        {SkRasterPipeline::Stage::mul_int,    1, [](int a, int b) { return a * b; }},
+        {SkRasterPipeline::Stage::div_int,    1, [](int a, int b) { return a / b; }},
+
+        {SkRasterPipeline::Stage::add_2_ints, 2, [](int a, int b) { return a + b; }},
+        {SkRasterPipeline::Stage::sub_2_ints, 2, [](int a, int b) { return a - b; }},
+        {SkRasterPipeline::Stage::mul_2_ints, 2, [](int a, int b) { return a * b; }},
+        {SkRasterPipeline::Stage::div_2_ints, 2, [](int a, int b) { return a / b; }},
+
+        {SkRasterPipeline::Stage::add_3_ints, 3, [](int a, int b) { return a + b; }},
+        {SkRasterPipeline::Stage::sub_3_ints, 3, [](int a, int b) { return a - b; }},
+        {SkRasterPipeline::Stage::mul_3_ints, 3, [](int a, int b) { return a * b; }},
+        {SkRasterPipeline::Stage::div_3_ints, 3, [](int a, int b) { return a / b; }},
+
+        {SkRasterPipeline::Stage::add_4_ints, 4, [](int a, int b) { return a + b; }},
+        {SkRasterPipeline::Stage::sub_4_ints, 4, [](int a, int b) { return a - b; }},
+        {SkRasterPipeline::Stage::mul_4_ints, 4, [](int a, int b) { return a * b; }},
+        {SkRasterPipeline::Stage::div_4_ints, 4, [](int a, int b) { return a / b; }},
+    };
+
+    for (const ArithmeticOp& op : kArithmeticOps) {
+        // Initialize the slot values to 1,2,3...
+        std::iota(&slots[0], &slots[10 * N], 1);
+
+        // Run `add_n_ints` over our data.
+        SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
+        SkRasterPipeline p(&alloc);
+        p.append(op.stage, &slots[0]);
+        p.run(0,0,1,1);
+
+        // Verify that the affected slots now equal (1,2,3...) op (4,5,6...).
+        int leftValue = 1;
+        int rightValue = float(op.numSlotsAffected * N) + 1;
+        int* destPtr = &slots[0];
+        for (int checkSlot = 0; checkSlot < 10; ++checkSlot) {
+            for (int checkLane = 0; checkLane < N; ++checkLane) {
+                if (checkSlot < op.numSlotsAffected) {
+                    REPORTER_ASSERT(r, *destPtr == op.verify(leftValue, rightValue));
+                } else {
+                    REPORTER_ASSERT(r, *destPtr == leftValue);
+                }
+
+                ++destPtr;
+                leftValue += 1;
+                rightValue += 1;
+            }
+        }
+    }
+}
+
+DEF_TEST(SkRasterPipeline_CompareFloatsWithNSlots, r) {
+    // Allocate space for 5 dest and 5 source slots.
+    alignas(64) float slots[10 * SkRasterPipeline_kMaxStride_highp];
     const int N = SkOpts::raster_pipeline_highp_stride;
 
     struct CompareOp {
@@ -768,27 +953,29 @@ DEF_TEST(SkRasterPipeline_CompareFloats, r) {
     };
 
     for (const CompareOp& op : kCompareOps) {
-        for (int slotCount = 0; slotCount < 10; ++slotCount) {
+        for (int numSlotsAffected = 1; numSlotsAffected <= 5; ++numSlotsAffected) {
             // Initialize the slot values to 0,1,2,0,1,2,0,1,2...
-            for (int index = 0; index < 20 * N; ++index) {
+            for (int index = 0; index < 10 * N; ++index) {
                 slots[index] = std::fmod(index, 3.0f);
             }
 
-            float leftValue = slots[0];
-            float rightValue = slots[slotCount * N];
+            float leftValue  = slots[0];
+            float rightValue = slots[numSlotsAffected * N];
 
             // Run the comparison op over our data.
             SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
             SkRasterPipeline p(&alloc);
-            SkRasterPipelineUtils(p).appendAdjacentMultiSlotOp(
-                    &alloc, op.stage, &slots[0], &slots[slotCount * N], slotCount);
+            auto* ctx = alloc.make<SkRasterPipeline_CopySlotsCtx>();
+            ctx->dst = &slots[0];
+            ctx->src = &slots[numSlotsAffected * N];
+            p.append(op.stage, ctx);
             p.run(0, 0, 1, 1);
 
             // Verify that the affected slots now contain "(0,1,2,0...) op (1,2,0,1...)".
             float* destPtr = &slots[0];
-            for (int checkSlot = 0; checkSlot < 20; ++checkSlot) {
+            for (int checkSlot = 0; checkSlot < 10; ++checkSlot) {
                 for (int checkLane = 0; checkLane < N; ++checkLane) {
-                    if (checkSlot < slotCount) {
+                    if (checkSlot < numSlotsAffected) {
                         bool compareIsTrue = op.verify(leftValue, rightValue);
                         REPORTER_ASSERT(r, *(int*)destPtr == (compareIsTrue ? ~0 : 0));
                     } else {
@@ -804,9 +991,76 @@ DEF_TEST(SkRasterPipeline_CompareFloats, r) {
     }
 }
 
-DEF_TEST(SkRasterPipeline_CompareInts, r) {
-    // Allocate space for 20 dest slots.
-    alignas(64) int slots[20 * SkRasterPipeline_kMaxStride_highp];
+DEF_TEST(SkRasterPipeline_CompareFloatsWithHardcodedSlots, r) {
+    // Allocate space for 5 dest and 5 source slots.
+    alignas(64) float slots[10 * SkRasterPipeline_kMaxStride_highp];
+    const int N = SkOpts::raster_pipeline_highp_stride;
+
+    struct CompareOp {
+        SkRasterPipeline::Stage stage;
+        int numSlotsAffected;
+        std::function<bool(float, float)> verify;
+    };
+
+    static const CompareOp kCompareOps[] = {
+        {SkRasterPipeline::Stage::cmpeq_float,    1, [](float a, float b) { return a == b; }},
+        {SkRasterPipeline::Stage::cmpne_float,    1, [](float a, float b) { return a != b; }},
+        {SkRasterPipeline::Stage::cmplt_float,    1, [](float a, float b) { return a <  b; }},
+        {SkRasterPipeline::Stage::cmple_float,    1, [](float a, float b) { return a <= b; }},
+
+        {SkRasterPipeline::Stage::cmpeq_2_floats, 2, [](float a, float b) { return a == b; }},
+        {SkRasterPipeline::Stage::cmpne_2_floats, 2, [](float a, float b) { return a != b; }},
+        {SkRasterPipeline::Stage::cmplt_2_floats, 2, [](float a, float b) { return a <  b; }},
+        {SkRasterPipeline::Stage::cmple_2_floats, 2, [](float a, float b) { return a <= b; }},
+
+        {SkRasterPipeline::Stage::cmpeq_3_floats, 3, [](float a, float b) { return a == b; }},
+        {SkRasterPipeline::Stage::cmpne_3_floats, 3, [](float a, float b) { return a != b; }},
+        {SkRasterPipeline::Stage::cmplt_3_floats, 3, [](float a, float b) { return a <  b; }},
+        {SkRasterPipeline::Stage::cmple_3_floats, 3, [](float a, float b) { return a <= b; }},
+
+        {SkRasterPipeline::Stage::cmpeq_4_floats, 4, [](float a, float b) { return a == b; }},
+        {SkRasterPipeline::Stage::cmpne_4_floats, 4, [](float a, float b) { return a != b; }},
+        {SkRasterPipeline::Stage::cmplt_4_floats, 4, [](float a, float b) { return a <  b; }},
+        {SkRasterPipeline::Stage::cmple_4_floats, 4, [](float a, float b) { return a <= b; }},
+    };
+
+    for (const CompareOp& op : kCompareOps) {
+        // Initialize the slot values to 0,1,2,0,1,2,0,1,2...
+        for (int index = 0; index < 10 * N; ++index) {
+            slots[index] = std::fmod(index, 3.0f);
+        }
+
+        float leftValue  = slots[0];
+        float rightValue = slots[op.numSlotsAffected * N];
+
+        // Run the comparison op over our data.
+        SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
+        SkRasterPipeline p(&alloc);
+        p.append(op.stage, &slots[0]);
+        p.run(0, 0, 1, 1);
+
+        // Verify that the affected slots now contain "(0,1,2,0...) op (1,2,0,1...)".
+        float* destPtr = &slots[0];
+        for (int checkSlot = 0; checkSlot < 10; ++checkSlot) {
+            for (int checkLane = 0; checkLane < N; ++checkLane) {
+                if (checkSlot < op.numSlotsAffected) {
+                    bool compareIsTrue = op.verify(leftValue, rightValue);
+                    REPORTER_ASSERT(r, *(int*)destPtr == (compareIsTrue ? ~0 : 0));
+                } else {
+                    REPORTER_ASSERT(r, *destPtr == leftValue);
+                }
+
+                ++destPtr;
+                leftValue = std::fmod(leftValue + 1.0f, 3.0f);
+                rightValue = std::fmod(rightValue + 1.0f, 3.0f);
+            }
+        }
+    }
+}
+
+DEF_TEST(SkRasterPipeline_CompareIntsWithNSlots, r) {
+    // Allocate space for 5 dest and 5 source slots.
+    alignas(64) int slots[10 * SkRasterPipeline_kMaxStride_highp];
     const int N = SkOpts::raster_pipeline_highp_stride;
 
     struct CompareOp {
@@ -822,27 +1076,29 @@ DEF_TEST(SkRasterPipeline_CompareInts, r) {
     };
 
     for (const CompareOp& op : kCompareOps) {
-        for (int slotCount = 0; slotCount < 10; ++slotCount) {
+        for (int numSlotsAffected = 1; numSlotsAffected <= 5; ++numSlotsAffected) {
             // Initialize the slot values to 0,1,2,0,1,2,0,1,2...
-            for (int index = 0; index < 20 * N; ++index) {
+            for (int index = 0; index < 10 * N; ++index) {
                 slots[index] = index % 3;
             }
 
             int leftValue = slots[0];
-            int rightValue = slots[slotCount * N];
+            int rightValue = slots[numSlotsAffected * N];
 
             // Run the comparison op over our data.
             SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
             SkRasterPipeline p(&alloc);
-            SkRasterPipelineUtils(p).appendAdjacentMultiSlotOp(
-                    &alloc, op.stage, (float*)&slots[0], (float*)&slots[slotCount * N], slotCount);
+            auto* ctx = alloc.make<SkRasterPipeline_CopySlotsCtx>();
+            ctx->dst = (float*)&slots[0];
+            ctx->src = (float*)&slots[numSlotsAffected * N];
+            p.append(op.stage, ctx);
             p.run(0, 0, 1, 1);
 
             // Verify that the affected slots now contain "(0,1,2,0...) op (1,2,0,1...)".
             int* destPtr = &slots[0];
-            for (int checkSlot = 0; checkSlot < 20; ++checkSlot) {
+            for (int checkSlot = 0; checkSlot < 10; ++checkSlot) {
                 for (int checkLane = 0; checkLane < N; ++checkLane) {
-                    if (checkSlot < slotCount) {
+                    if (checkSlot < numSlotsAffected) {
                         bool compareIsTrue = op.verify(leftValue, rightValue);
                         REPORTER_ASSERT(r, *destPtr == (compareIsTrue ? ~0 : 0));
                     } else {
@@ -853,6 +1109,73 @@ DEF_TEST(SkRasterPipeline_CompareInts, r) {
                     leftValue = (leftValue + 1) % 3;
                     rightValue = (rightValue + 1) % 3;
                 }
+            }
+        }
+    }
+}
+
+DEF_TEST(SkRasterPipeline_CompareIntsWithHardcodedSlots, r) {
+    // Allocate space for 5 dest and 5 source slots.
+    alignas(64) int slots[10 * SkRasterPipeline_kMaxStride_highp];
+    const int N = SkOpts::raster_pipeline_highp_stride;
+
+    struct CompareOp {
+        SkRasterPipeline::Stage stage;
+        int numSlotsAffected;
+        std::function<bool(int, int)> verify;
+    };
+
+    static const CompareOp kCompareOps[] = {
+        {SkRasterPipeline::Stage::cmpeq_int,    1, [](int a, int b) { return a == b; }},
+        {SkRasterPipeline::Stage::cmpne_int,    1, [](int a, int b) { return a != b; }},
+        {SkRasterPipeline::Stage::cmplt_int,    1, [](int a, int b) { return a <  b; }},
+        {SkRasterPipeline::Stage::cmple_int,    1, [](int a, int b) { return a <= b; }},
+
+        {SkRasterPipeline::Stage::cmpeq_2_ints, 2, [](int a, int b) { return a == b; }},
+        {SkRasterPipeline::Stage::cmpne_2_ints, 2, [](int a, int b) { return a != b; }},
+        {SkRasterPipeline::Stage::cmplt_2_ints, 2, [](int a, int b) { return a <  b; }},
+        {SkRasterPipeline::Stage::cmple_2_ints, 2, [](int a, int b) { return a <= b; }},
+
+        {SkRasterPipeline::Stage::cmpeq_3_ints, 3, [](int a, int b) { return a == b; }},
+        {SkRasterPipeline::Stage::cmpne_3_ints, 3, [](int a, int b) { return a != b; }},
+        {SkRasterPipeline::Stage::cmplt_3_ints, 3, [](int a, int b) { return a <  b; }},
+        {SkRasterPipeline::Stage::cmple_3_ints, 3, [](int a, int b) { return a <= b; }},
+
+        {SkRasterPipeline::Stage::cmpeq_4_ints, 4, [](int a, int b) { return a == b; }},
+        {SkRasterPipeline::Stage::cmpne_4_ints, 4, [](int a, int b) { return a != b; }},
+        {SkRasterPipeline::Stage::cmplt_4_ints, 4, [](int a, int b) { return a <  b; }},
+        {SkRasterPipeline::Stage::cmple_4_ints, 4, [](int a, int b) { return a <= b; }},
+    };
+
+    for (const CompareOp& op : kCompareOps) {
+        // Initialize the slot values to 0,1,2,0,1,2,0,1,2...
+        for (int index = 0; index < 10 * N; ++index) {
+            slots[index] = index % 3;
+        }
+
+        int leftValue = slots[0];
+        int rightValue = slots[op.numSlotsAffected * N];
+
+        // Run the comparison op over our data.
+        SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
+        SkRasterPipeline p(&alloc);
+        p.append(op.stage, &slots[0]);
+        p.run(0, 0, 1, 1);
+
+        // Verify that the affected slots now contain "(0,1,2,0...) op (1,2,0,1...)".
+        int* destPtr = &slots[0];
+        for (int checkSlot = 0; checkSlot < 10; ++checkSlot) {
+            for (int checkLane = 0; checkLane < N; ++checkLane) {
+                if (checkSlot < op.numSlotsAffected) {
+                    bool compareIsTrue = op.verify(leftValue, rightValue);
+                    REPORTER_ASSERT(r, *destPtr == (compareIsTrue ? ~0 : 0));
+                } else {
+                    REPORTER_ASSERT(r, *destPtr == leftValue);
+                }
+
+                ++destPtr;
+                leftValue = (leftValue + 1) % 3;
+                rightValue = (rightValue + 1) % 3;
             }
         }
     }
@@ -883,8 +1206,7 @@ DEF_TEST(SkRasterPipeline_BinaryBitwiseOps, r) {
         // Run the bitwise op over our data.
         SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
         SkRasterPipeline p(&alloc);
-        SkRasterPipelineUtils(p).appendAdjacentSingleSlotOp(
-                op.stage, (float*)&slots[0], (float*)&slots[N]);
+        p.append(op.stage, (float*)&slots[0]);
         p.run(0, 0, 1, 1);
 
         // Verify that the destination slots have been updated.
@@ -907,22 +1229,26 @@ DEF_TEST(SkRasterPipeline_BinaryBitwiseOps, r) {
 }
 
 DEF_TEST(SkRasterPipeline_UnaryBitwiseOps, r) {
-    // Allocate space for 1 slot.
-    alignas(64) int slots[SkRasterPipeline_kMaxStride_highp];
+    // Allocate space for 5 slots.
+    alignas(64) int slots[5 * SkRasterPipeline_kMaxStride_highp];
     const int N = SkOpts::raster_pipeline_highp_stride;
 
     struct BitwiseOp {
         SkRasterPipeline::Stage stage;
+        int numSlotsAffected;
         std::function<int(int)> verify;
     };
 
     static const BitwiseOp kBitwiseOps[] = {
-        {SkRasterPipeline::Stage::bitwise_not, [](int a) { return ~a; }},
+        {SkRasterPipeline::Stage::bitwise_not,   1, [](int a) { return ~a; }},
+        {SkRasterPipeline::Stage::bitwise_not_2, 2, [](int a) { return ~a; }},
+        {SkRasterPipeline::Stage::bitwise_not_3, 3, [](int a) { return ~a; }},
+        {SkRasterPipeline::Stage::bitwise_not_4, 4, [](int a) { return ~a; }},
     };
 
     for (const BitwiseOp& op : kBitwiseOps) {
         // Initialize the slot values to -3,-2,-1...
-        std::iota(&slots[0], &slots[N], -3);
+        std::iota(&slots[0], &slots[5 * N], -3);
         int inputValue = slots[0];
 
         // Run the bitwise op over our data.
@@ -933,12 +1259,18 @@ DEF_TEST(SkRasterPipeline_UnaryBitwiseOps, r) {
 
         // Verify that the destination slots have been updated.
         int* destPtr = &slots[0];
-        for (int checkLane = 0; checkLane < N; ++checkLane) {
-            int expected = op.verify(inputValue);
-            REPORTER_ASSERT(r, *destPtr == expected);
+        for (int checkSlot = 0; checkSlot < 5; ++checkSlot) {
+            for (int checkLane = 0; checkLane < N; ++checkLane) {
+                if (checkSlot < op.numSlotsAffected) {
+                    int expected = op.verify(inputValue);
+                    REPORTER_ASSERT(r, *destPtr == expected);
+                } else {
+                    REPORTER_ASSERT(r, *destPtr == inputValue);
+                }
 
-            ++destPtr;
-            ++inputValue;
+                ++destPtr;
+                ++inputValue;
+            }
         }
     }
 }

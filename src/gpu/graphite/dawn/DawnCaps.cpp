@@ -15,7 +15,7 @@
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
 #include "src/gpu/graphite/GraphiteResourceKey.h"
 #include "src/gpu/graphite/UniformManager.h"
-#include "src/gpu/graphite/dawn/DawnUtils.h"
+#include "src/gpu/graphite/dawn/DawnUtilsPriv.h"
 
 
 namespace {
@@ -147,10 +147,6 @@ const Caps::ColorTypeInfo* DawnCaps::getColorTypeInfo(SkColorType colorType,
     return nullptr;
 }
 
-size_t DawnCaps::getTransferBufferAlignment(size_t bytesPerPixel) const {
-    return std::max(bytesPerPixel, this->getMinBufferAlignment());
-}
-
 bool DawnCaps::supportsWritePixels(const TextureInfo& textureInfo) const {
     const auto& spec = textureInfo.dawnTextureSpec();
     return spec.fUsage & wgpu::TextureUsage::CopyDst;
@@ -182,8 +178,12 @@ void DawnCaps::initCaps(const wgpu::Device& device) {
     }
     fMaxTextureSize = limits.limits.maxTextureDimension2D;
 
+    fRequiredTransferBufferAlignment = 4;
     fRequiredUniformBufferAlignment = 256;
     fRequiredStorageBufferAlignment = fRequiredUniformBufferAlignment;
+
+    // Dawn requires 256 bytes per row alignment for buffer texture copies.
+    fTextureDataRowBytesAlignment = 256;
 
     fUniformBufferLayout = Layout::kStd140;
     fStorageBufferLayout = Layout::kStd430;
@@ -431,4 +431,3 @@ void DawnCaps::buildKeyForTexture(SkISize dimensions,
 }
 
 } // namespace skgpu::graphite
-

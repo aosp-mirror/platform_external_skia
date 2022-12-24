@@ -20,8 +20,6 @@
 
 class SkRuntimeEffect;
 
-namespace skgpu { struct VulkanBackendContext; }
-
 namespace skgpu::graphite {
 
 class BackendTexture;
@@ -29,9 +27,7 @@ class Buffer;
 class ClientMappedBufferManager;
 class Context;
 class ContextPriv;
-struct DawnBackendContext;
 class GlobalCache;
-struct MtlBackendContext;
 class PaintOptions;
 class QueueManager;
 class Recording;
@@ -47,17 +43,6 @@ public:
     Context& operator=(Context&&) = delete;
 
     ~Context();
-
-#ifdef SK_DAWN
-    static std::unique_ptr<Context> MakeDawn(const DawnBackendContext&, const ContextOptions&);
-#endif
-#ifdef SK_METAL
-    static std::unique_ptr<Context> MakeMetal(const MtlBackendContext&, const ContextOptions&);
-#endif
-
-#ifdef SK_VULKAN
-    static std::unique_ptr<Context> MakeVulkan(const VulkanBackendContext&, const ContextOptions&);
-#endif
 
     BackendApi backend() const;
 
@@ -82,10 +67,6 @@ public:
      * Checks whether any asynchronous work is complete and if so calls related callbacks.
      */
     void checkAsyncWorkCompletion();
-
-#ifdef SK_ENABLE_PRECOMPILE
-    void precompile(const PaintOptions&);
-#endif
 
     /**
      * Called to delete the passed in BackendTexture. This should only be called if the
@@ -126,6 +107,7 @@ protected:
 
 private:
     friend class ContextPriv;
+    friend class ContextCtorAccessor;
 
     SingleOwner* singleOwner() const { return &fSingleOwner; }
 
