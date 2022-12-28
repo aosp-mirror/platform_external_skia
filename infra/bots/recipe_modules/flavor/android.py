@@ -116,9 +116,25 @@ class AndroidFlavor(default.DefaultFlavor):
       self.m.run(self.m.step,
                  'wait for device after failure of \'%s\' (attempt %d)' % (
                      title, attempt),
-                 cmd=[self.ADB_BINARY, 'wait-for-device'], infra_step=True,
+                  cmd=[
+                     self.ADB_BINARY, 'wait-for-device', 'shell',
+                     # Wait until the boot is actually complete.
+                     # https://android.stackexchange.com/a/164050
+                     'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done',
+                  ],
                  timeout=180, abort_on_failure=False,
                  fail_build_on_failure=False)
+      device = self.m.vars.builder_cfg.get('model')
+      if (device in self.cant_root): # pragma: nocover
+        return
+      self.m.run(self.m.step,
+                 'adb root',
+                  cmd=[
+                    self.ADB_BINARY, 'root'
+                  ],
+                 timeout=180, abort_on_failure=False,
+                 fail_build_on_failure=False)
+
     with self.m.context(cwd=self.m.path['start_dir'].join('skia')):
       with self.m.env({'ADB_VENDOR_KEYS': self.ADB_PUB_KEY}):
         return self.m.run.with_retry(self.m.step, title, attempts,
