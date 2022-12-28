@@ -646,6 +646,24 @@ DEF_TEST(SkSLRasterPipelineCodeGeneratorVectorScalarFoldingTest, r) {
          /*expectedResult=*/SkColor4f{0.0, 1.0, 0.0, 1.0});
 }
 
+DEF_TEST(SkSLRasterPipelineCodeGeneratorIdentitySwizzle, r) {
+    static constexpr float kUniforms[] = {0.0, 1.0, 0.0, 1.0,
+                                          1.0, 0.0, 0.0, 1.0};
+    test(r,
+         R"__SkSL__(
+            uniform half4 colorGreen, colorRed;
+            half4 main(vec4 color) {
+                return (color.r   == 0.5             &&
+                        color.rg  == half2(0.5, 1.0) &&
+                        color.rgb == half3(0.5, 1.0, 0.0)) ? colorGreen : colorRed;
+            }
+         )__SkSL__",
+         kUniforms,
+         /*startingColor=*/SkColor4f{0.5, 1.0, 0.0, 0.25},
+         /*expectedResult=*/SkColor4f{0.0, 1.0, 0.0, 1.0});
+
+}
+
 DEF_TEST(SkSLRasterPipelineCodeGeneratorLumaTernaryTest, r) {
     test(r,
          R"__SkSL__(
@@ -790,6 +808,39 @@ DEF_TEST(SkSLRasterPipelineCodeGeneratorBitwiseNotTest, r) {
             }
          )__SkSL__",
          SkSpan((const float*)kUniforms, std::size(kUniforms)),
+         /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 0.0},
+         /*expectedResult=*/SkColor4f{0.0, 1.0, 0.0, 1.0});
+}
+
+DEF_TEST(SkSLRasterPipelineCodeGeneratorComparisonIntrinsicTest, r) {
+    test(r,
+         R"__SkSL__(
+            half4 main(vec4) {
+                const half4 colorGreen = half4(0,1,0,1), colorRed = half4(1,0,0,1);
+                half4 a = half4(1, 2, 0, 1),
+                      b = half4(2, 2, 1, 0);
+                int3  c = int3(1111, 3333, 5555),
+                      d = int3(1111, 5555, 3333);
+                uint2 e = uint2(1234, 5678),
+                      f = uint2(5678, 5678);
+                // TODO: unsigned < <= > >= RP stages are not yet implemented
+                return (lessThan(a, b)         == bool4(true, false, true, false)  &&
+                        lessThan(c, d)         == bool3(false, true, false)        &&
+                        greaterThan(a, b)      == bool4(false, false, false, true) &&
+                        greaterThan(c, d)      == bool3(false, false, true)        &&
+                        lessThanEqual(a, b)    == bool4(true, true, true, false)   &&
+                        lessThanEqual(c, d)    == bool3(true, true, false)         &&
+                        greaterThanEqual(a, b) == bool4(false, true, false, true)  &&
+                        greaterThanEqual(c, d) == bool3(true, false, true)         &&
+                        equal(a, b)            == bool4(false, true, false, false) &&
+                        equal(c, d)            == bool3(true, false, false)        &&
+                        equal(e, f)            == bool2(false, true)               &&
+                        notEqual(a, b)         == bool4(true, false, true, true)   &&
+                        notEqual(c, d)         == bool3(false, true, true)         &&
+                        notEqual(e, f)         == bool2(true, false)) ? colorGreen : colorRed;
+            }
+         )__SkSL__",
+         /*uniforms=*/{},
          /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 0.0},
          /*expectedResult=*/SkColor4f{0.0, 1.0, 0.0, 1.0});
 }
