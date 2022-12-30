@@ -249,25 +249,21 @@ private:
                                                    BuilderOp::sub_n_ints,
                                                    BuilderOp::sub_n_ints,
                                                    BuilderOp::unsupported};
-    // TODO(skia:13676): add support for unsigned *
     static constexpr auto kMultiplyOps = BinaryOps{BuilderOp::mul_n_floats,
                                                    BuilderOp::mul_n_ints,
-                                                   BuilderOp::unsupported,
+                                                   BuilderOp::mul_n_ints,
                                                    BuilderOp::unsupported};
-    // TODO(skia:13676): add support for unsigned /
     static constexpr auto kDivideOps = BinaryOps{BuilderOp::div_n_floats,
                                                  BuilderOp::div_n_ints,
-                                                 BuilderOp::unsupported,
+                                                 BuilderOp::div_n_uints,
                                                  BuilderOp::unsupported};
-    // TODO(skia:13676): add support for uint <
     static constexpr auto kLessThanOps = BinaryOps{BuilderOp::cmplt_n_floats,
                                                    BuilderOp::cmplt_n_ints,
-                                                   BuilderOp::unsupported,
+                                                   BuilderOp::cmplt_n_uints,
                                                    BuilderOp::unsupported};
-    // TODO(skia:13676): add support for uint <=
     static constexpr auto kLessThanEqualOps = BinaryOps{BuilderOp::cmple_n_floats,
                                                         BuilderOp::cmple_n_ints,
-                                                        BuilderOp::unsupported,
+                                                        BuilderOp::cmple_n_uints,
                                                         BuilderOp::unsupported};
     static constexpr auto kEqualOps = BinaryOps{BuilderOp::cmpeq_n_floats,
                                                 BuilderOp::cmpeq_n_ints,
@@ -277,6 +273,14 @@ private:
                                                    BuilderOp::cmpne_n_ints,
                                                    BuilderOp::cmpne_n_ints,
                                                    BuilderOp::cmpne_n_ints};
+    static constexpr auto kMinOps = BinaryOps{BuilderOp::min_n_floats,
+                                              BuilderOp::min_n_ints,
+                                              BuilderOp::min_n_uints,
+                                              BuilderOp::min_n_uints};
+    static constexpr auto kMaxOps = BinaryOps{BuilderOp::max_n_floats,
+                                              BuilderOp::max_n_ints,
+                                              BuilderOp::max_n_uints,
+                                              BuilderOp::max_n_uints};
 };
 
 struct LValue {
@@ -1145,6 +1149,34 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic,
                 return unsupported();
             }
             if (!this->binaryOp(arg0.type(), kLessThanEqualOps)) {
+                return unsupported();
+            }
+            return true;
+
+        case IntrinsicKind::k_min_IntrinsicKind:
+            SkASSERT(arg0.type().componentType().matches(arg1.type().componentType()));
+            if (!this->pushExpression(arg0) || !this->pushExpression(arg1)) {
+                return unsupported();
+            }
+            if (arg1.type().slotCount() < arg0.type().slotCount()) {
+                // If we have min(vec, scal), splat the scalar into a vector.
+                fBuilder.duplicate(arg0.type().slotCount() - 1);
+            }
+            if (!this->binaryOp(arg0.type(), kMinOps)) {
+                return unsupported();
+            }
+            return true;
+
+        case IntrinsicKind::k_max_IntrinsicKind:
+            SkASSERT(arg0.type().componentType().matches(arg1.type().componentType()));
+            if (!this->pushExpression(arg0) || !this->pushExpression(arg1)) {
+                return unsupported();
+            }
+            if (arg1.type().slotCount() < arg0.type().slotCount()) {
+                // If we have max(vec, scal), splat the scalar into a vector.
+                fBuilder.duplicate(arg0.type().slotCount() - 1);
+            }
+            if (!this->binaryOp(arg0.type(), kMaxOps)) {
                 return unsupported();
             }
             return true;

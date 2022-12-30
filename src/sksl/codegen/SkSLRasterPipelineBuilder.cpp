@@ -45,10 +45,19 @@ using SkRP = SkRasterPipeline;
     case BuilderOp::mul_n_ints:         \
     case BuilderOp::div_n_floats:       \
     case BuilderOp::div_n_ints:         \
+    case BuilderOp::div_n_uints:        \
+    case BuilderOp::min_n_floats:       \
+    case BuilderOp::min_n_ints:         \
+    case BuilderOp::min_n_uints:        \
+    case BuilderOp::max_n_floats:       \
+    case BuilderOp::max_n_ints:         \
+    case BuilderOp::max_n_uints:        \
     case BuilderOp::cmple_n_floats:     \
     case BuilderOp::cmple_n_ints:       \
+    case BuilderOp::cmple_n_uints:      \
     case BuilderOp::cmplt_n_floats:     \
     case BuilderOp::cmplt_n_ints:       \
+    case BuilderOp::cmplt_n_uints:      \
     case BuilderOp::cmpeq_n_floats:     \
     case BuilderOp::cmpeq_n_ints:       \
     case BuilderOp::cmpne_n_floats:     \
@@ -802,7 +811,7 @@ void Program::dump(SkWStream* out) {
         // Interpret the context value as a CopySlots structure.
         auto AdjacentCopySlotsCtx = [&](const void* v) -> std::tuple<std::string, std::string> {
             const auto *ctx = static_cast<const SkRasterPipeline_CopySlotsCtx*>(v);
-            int numSlots = ctx->src - ctx->dst;
+            int numSlots = (ctx->src - ctx->dst) / N;
             return std::make_tuple(PtrCtx(ctx->dst, numSlots),
                                    PtrCtx(ctx->src, numSlots));
         };
@@ -929,9 +938,11 @@ void Program::dump(SkWStream* out) {
             case SkRP::add_float:   case SkRP::add_int:
             case SkRP::sub_float:   case SkRP::sub_int:
             case SkRP::mul_float:   case SkRP::mul_int:
-            case SkRP::div_float:   case SkRP::div_int:
-            case SkRP::cmplt_float: case SkRP::cmplt_int:
-            case SkRP::cmple_float: case SkRP::cmple_int:
+            case SkRP::div_float:   case SkRP::div_int:   case SkRP::div_uint:
+            case SkRP::min_float:   case SkRP::min_int:   case SkRP::min_uint:
+            case SkRP::max_float:   case SkRP::max_int:   case SkRP::max_uint:
+            case SkRP::cmplt_float: case SkRP::cmplt_int: case SkRP::cmplt_uint:
+            case SkRP::cmple_float: case SkRP::cmple_int: case SkRP::cmple_uint:
             case SkRP::cmpeq_float: case SkRP::cmpeq_int:
             case SkRP::cmpne_float: case SkRP::cmpne_int:
                 std::tie(opArg1, opArg2) = AdjacentPtrCtx(stage.ctx, 1);
@@ -940,9 +951,11 @@ void Program::dump(SkWStream* out) {
             case SkRP::add_2_floats:   case SkRP::add_2_ints:
             case SkRP::sub_2_floats:   case SkRP::sub_2_ints:
             case SkRP::mul_2_floats:   case SkRP::mul_2_ints:
-            case SkRP::div_2_floats:   case SkRP::div_2_ints:
-            case SkRP::cmplt_2_floats: case SkRP::cmplt_2_ints:
-            case SkRP::cmple_2_floats: case SkRP::cmple_2_ints:
+            case SkRP::div_2_floats:   case SkRP::div_2_ints:   case SkRP::div_2_uints:
+            case SkRP::min_2_floats:   case SkRP::min_2_ints:   case SkRP::min_2_uints:
+            case SkRP::max_2_floats:   case SkRP::max_2_ints:   case SkRP::max_2_uints:
+            case SkRP::cmplt_2_floats: case SkRP::cmplt_2_ints: case SkRP::cmplt_2_uints:
+            case SkRP::cmple_2_floats: case SkRP::cmple_2_ints: case SkRP::cmple_2_uints:
             case SkRP::cmpeq_2_floats: case SkRP::cmpeq_2_ints:
             case SkRP::cmpne_2_floats: case SkRP::cmpne_2_ints:
                 std::tie(opArg1, opArg2) = AdjacentPtrCtx(stage.ctx, 2);
@@ -951,9 +964,11 @@ void Program::dump(SkWStream* out) {
             case SkRP::add_3_floats:   case SkRP::add_3_ints:
             case SkRP::sub_3_floats:   case SkRP::sub_3_ints:
             case SkRP::mul_3_floats:   case SkRP::mul_3_ints:
-            case SkRP::div_3_floats:   case SkRP::div_3_ints:
-            case SkRP::cmplt_3_floats: case SkRP::cmplt_3_ints:
-            case SkRP::cmple_3_floats: case SkRP::cmple_3_ints:
+            case SkRP::div_3_floats:   case SkRP::div_3_ints:   case SkRP::div_3_uints:
+            case SkRP::min_3_floats:   case SkRP::min_3_ints:   case SkRP::min_3_uints:
+            case SkRP::max_3_floats:   case SkRP::max_3_ints:   case SkRP::max_3_uints:
+            case SkRP::cmplt_3_floats: case SkRP::cmplt_3_ints: case SkRP::cmplt_3_uints:
+            case SkRP::cmple_3_floats: case SkRP::cmple_3_ints: case SkRP::cmple_3_uints:
             case SkRP::cmpeq_3_floats: case SkRP::cmpeq_3_ints:
             case SkRP::cmpne_3_floats: case SkRP::cmpne_3_ints:
                 std::tie(opArg1, opArg2) = AdjacentPtrCtx(stage.ctx, 3);
@@ -962,9 +977,11 @@ void Program::dump(SkWStream* out) {
             case SkRP::add_4_floats:   case SkRP::add_4_ints:
             case SkRP::sub_4_floats:   case SkRP::sub_4_ints:
             case SkRP::mul_4_floats:   case SkRP::mul_4_ints:
-            case SkRP::div_4_floats:   case SkRP::div_4_ints:
-            case SkRP::cmplt_4_floats: case SkRP::cmplt_4_ints:
-            case SkRP::cmple_4_floats: case SkRP::cmple_4_ints:
+            case SkRP::div_4_floats:   case SkRP::div_4_ints:   case SkRP::div_4_uints:
+            case SkRP::min_4_floats:   case SkRP::min_4_ints:   case SkRP::min_4_uints:
+            case SkRP::max_4_floats:   case SkRP::max_4_ints:   case SkRP::max_4_uints:
+            case SkRP::cmplt_4_floats: case SkRP::cmplt_4_ints: case SkRP::cmplt_4_uints:
+            case SkRP::cmple_4_floats: case SkRP::cmple_4_ints: case SkRP::cmple_4_uints:
             case SkRP::cmpeq_4_floats: case SkRP::cmpeq_4_ints:
             case SkRP::cmpne_4_floats: case SkRP::cmpne_4_ints:
                 std::tie(opArg1, opArg2) = AdjacentPtrCtx(stage.ctx, 4);
@@ -973,9 +990,11 @@ void Program::dump(SkWStream* out) {
             case SkRP::add_n_floats:   case SkRP::add_n_ints:
             case SkRP::sub_n_floats:   case SkRP::sub_n_ints:
             case SkRP::mul_n_floats:   case SkRP::mul_n_ints:
-            case SkRP::div_n_floats:   case SkRP::div_n_ints:
-            case SkRP::cmplt_n_floats: case SkRP::cmplt_n_ints:
-            case SkRP::cmple_n_floats: case SkRP::cmple_n_ints:
+            case SkRP::div_n_floats:   case SkRP::div_n_ints:   case SkRP::div_n_uints:
+            case SkRP::min_n_floats:   case SkRP::min_n_ints:   case SkRP::min_n_uints:
+            case SkRP::max_n_floats:   case SkRP::max_n_ints:   case SkRP::max_n_uints:
+            case SkRP::cmplt_n_floats: case SkRP::cmplt_n_ints: case SkRP::cmplt_n_uints:
+            case SkRP::cmple_n_floats: case SkRP::cmple_n_ints: case SkRP::cmple_n_uints:
             case SkRP::cmpeq_n_floats: case SkRP::cmpeq_n_ints:
             case SkRP::cmpne_n_floats: case SkRP::cmpne_n_ints:
                 std::tie(opArg1, opArg2) = AdjacentCopySlotsCtx(stage.ctx);
@@ -1137,27 +1156,43 @@ void Program::dump(SkWStream* out) {
                 opText = opArg1 + " *= " + opArg2;
                 break;
 
-            case SkRP::div_float:    case SkRP::div_int:
-            case SkRP::div_2_floats: case SkRP::div_2_ints:
-            case SkRP::div_3_floats: case SkRP::div_3_ints:
-            case SkRP::div_4_floats: case SkRP::div_4_ints:
-            case SkRP::div_n_floats: case SkRP::div_n_ints:
+            case SkRP::div_float:    case SkRP::div_int:    case SkRP::div_uint:
+            case SkRP::div_2_floats: case SkRP::div_2_ints: case SkRP::div_2_uints:
+            case SkRP::div_3_floats: case SkRP::div_3_ints: case SkRP::div_3_uints:
+            case SkRP::div_4_floats: case SkRP::div_4_ints: case SkRP::div_4_uints:
+            case SkRP::div_n_floats: case SkRP::div_n_ints: case SkRP::div_n_uints:
                 opText = opArg1 + " /= " + opArg2;
                 break;
 
-            case SkRP::cmplt_float:    case SkRP::cmplt_int:
-            case SkRP::cmplt_2_floats: case SkRP::cmplt_2_ints:
-            case SkRP::cmplt_3_floats: case SkRP::cmplt_3_ints:
-            case SkRP::cmplt_4_floats: case SkRP::cmplt_4_ints:
-            case SkRP::cmplt_n_floats: case SkRP::cmplt_n_ints:
+            case SkRP::min_float:    case SkRP::min_int:    case SkRP::min_uint:
+            case SkRP::min_2_floats: case SkRP::min_2_ints: case SkRP::min_2_uints:
+            case SkRP::min_3_floats: case SkRP::min_3_ints: case SkRP::min_3_uints:
+            case SkRP::min_4_floats: case SkRP::min_4_ints: case SkRP::min_4_uints:
+            case SkRP::min_n_floats: case SkRP::min_n_ints: case SkRP::min_n_uints:
+                opText = opArg1 + " = min(" + opArg1 + ", " + opArg2 + ")";
+                break;
+
+            case SkRP::max_float:    case SkRP::max_int:    case SkRP::max_uint:
+            case SkRP::max_2_floats: case SkRP::max_2_ints: case SkRP::max_2_uints:
+            case SkRP::max_3_floats: case SkRP::max_3_ints: case SkRP::max_3_uints:
+            case SkRP::max_4_floats: case SkRP::max_4_ints: case SkRP::max_4_uints:
+            case SkRP::max_n_floats: case SkRP::max_n_ints: case SkRP::max_n_uints:
+                opText = opArg1 + " = max(" + opArg1 + ", " + opArg2 + ")";
+                break;
+
+            case SkRP::cmplt_float:    case SkRP::cmplt_int:    case SkRP::cmplt_uint:
+            case SkRP::cmplt_2_floats: case SkRP::cmplt_2_ints: case SkRP::cmplt_2_uints:
+            case SkRP::cmplt_3_floats: case SkRP::cmplt_3_ints: case SkRP::cmplt_3_uints:
+            case SkRP::cmplt_4_floats: case SkRP::cmplt_4_ints: case SkRP::cmplt_4_uints:
+            case SkRP::cmplt_n_floats: case SkRP::cmplt_n_ints: case SkRP::cmplt_n_uints:
                 opText = opArg1 + " = lessThan(" + opArg1 + ", " + opArg2 + ")";
                 break;
 
-            case SkRP::cmple_float:    case SkRP::cmple_int:
-            case SkRP::cmple_2_floats: case SkRP::cmple_2_ints:
-            case SkRP::cmple_3_floats: case SkRP::cmple_3_ints:
-            case SkRP::cmple_4_floats: case SkRP::cmple_4_ints:
-            case SkRP::cmple_n_floats: case SkRP::cmple_n_ints:
+            case SkRP::cmple_float:    case SkRP::cmple_int:    case SkRP::cmple_uint:
+            case SkRP::cmple_2_floats: case SkRP::cmple_2_ints: case SkRP::cmple_2_uints:
+            case SkRP::cmple_3_floats: case SkRP::cmple_3_ints: case SkRP::cmple_3_uints:
+            case SkRP::cmple_4_floats: case SkRP::cmple_4_ints: case SkRP::cmple_4_uints:
+            case SkRP::cmple_n_floats: case SkRP::cmple_n_ints: case SkRP::cmple_n_uints:
                 opText = opArg1 + " = lessThanEqual(" + opArg1 + ", " + opArg2 + ")";
                 break;
 
