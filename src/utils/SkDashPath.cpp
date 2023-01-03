@@ -7,6 +7,7 @@
 
 #include "src/utils/SkDashPathPriv.h"
 
+#include "include/base/SkAlign.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkPathEffect.h"
@@ -16,7 +17,7 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkStrokeRec.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkPathRef.h"
+#include "include/private/SkPathEnums.h"
 #include "include/private/SkTo.h"
 #include "src/core/SkPathPriv.h"
 #include "src/core/SkPointPriv.h"

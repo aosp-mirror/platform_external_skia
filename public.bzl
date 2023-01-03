@@ -234,6 +234,13 @@ SKIA_PUBLIC_HDRS = [
 
 # All platform-independent sources and private headers.
 BASE_SRCS_ALL = [
+    "include/base/SkAPI.h",
+    "include/base/SkAlign.h",
+    "include/base/SkAssert.h",
+    "include/base/SkAttributes.h",
+    "include/base/SkDebug.h",
+    "include/base/SkFeatures.h",
+    "include/base/SkLoadUserConfig.h",
     "include/core/SkOpenTypeSVGDecoder.h",
     "include/private/SingleOwner.h",
     "include/private/SkAlignedStorage.h",
@@ -255,6 +262,7 @@ BASE_SRCS_ALL = [
     "include/private/SkNoncopyable.h",
     "include/private/SkOnce.h",
     "include/private/SkOpts_spi.h",
+    "include/private/SkPathEnums.h",
     "include/private/SkPathRef.h",
     "include/private/SkSLDefines.h",
     "include/private/SkSLIRNode.h",
