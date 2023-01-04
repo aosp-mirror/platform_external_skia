@@ -14,6 +14,7 @@
 #include "include/private/SkFloatBits.h"
 #include "include/private/SkFloatingPoint.h"
 #include "include/private/SkMalloc.h"
+#include "include/private/SkPathEnums.h"
 #include "include/private/SkPathRef.h"
 #include "include/private/SkTArray.h"
 #include "include/private/SkTDArray.h"
@@ -28,7 +29,6 @@
 #include "src/core/SkPointPriv.h"
 #include "src/core/SkStringUtils.h"
 #include "src/core/SkTLazy.h"
-#include "src/pathops/SkPathOpsPoint.h"
 
 #include <algorithm>
 #include <cmath>
@@ -355,12 +355,7 @@ bool SkPath::conservativelyContainsRect(const SkRect& rect) const {
 }
 
 uint32_t SkPath::getGenerationID() const {
-    uint32_t genID = fPathRef->genID();
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-    SkASSERT((unsigned)fFillType < (1 << (32 - SkPathPriv::kPathRefGenIDBitCnt)));
-    genID |= static_cast<uint32_t>(fFillType) << SkPathPriv::kPathRefGenIDBitCnt;
-#endif
-    return genID;
+    return fPathRef->genID(fFillType);
 }
 
 SkPath& SkPath::reset() {
@@ -1401,22 +1396,25 @@ SkPath& SkPath::arcTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2, SkScal
     this->getLastPt(&start);
 
     // need double precision for these calcs.
-    SkDVector befored, afterd;
-    befored.set({x1 - start.fX, y1 - start.fY}).normalize();
-    afterd.set({x2 - x1, y2 - y1}).normalize();
-    double cosh = befored.dot(afterd);
-    double sinh = befored.cross(afterd);
+    skvx::double2 befored = normalize(skvx::double2{x1 - start.fX, y1 - start.fY});
+    skvx::double2 afterd = normalize(skvx::double2{x2 - x1, y2 - y1});
+    double cosh = dot(befored, afterd);
+    double sinh = cross(befored, afterd);
 
-    if (!befored.isFinite() || !afterd.isFinite() || SkScalarNearlyZero(SkDoubleToScalar(sinh))) {
+    // If the previous point equals the first point, befored will be denormalized.
+    // If the two points equal, afterd will be denormalized.
+    // If the second point equals the first point, sinh will be zero.
+    // In all these cases, we cannot construct an arc, so we construct a line to the first point.
+    if (!isfinite(befored) || !isfinite(afterd) || SkScalarNearlyZero(SkDoubleToScalar(sinh))) {
         return this->lineTo(x1, y1);
     }
 
     // safe to convert back to floats now
-    SkVector before = befored.asSkVector();
-    SkVector after = afterd.asSkVector();
     SkScalar dist = SkScalarAbs(SkDoubleToScalar(radius * (1 - cosh) / sinh));
-    SkScalar xx = x1 - dist * before.fX;
-    SkScalar yy = y1 - dist * before.fY;
+    SkScalar xx = x1 - dist * befored[0];
+    SkScalar yy = y1 - dist * befored[1];
+
+    SkVector after = SkVector::Make(afterd[0], afterd[1]);
     after.setLength(dist);
     this->lineTo(xx, yy);
     SkScalar weight = SkScalarSqrt(SkDoubleToScalar(SK_ScalarHalf + cosh * 0.5));
@@ -3131,6 +3129,25 @@ bool SkPath::contains(SkScalar x, SkScalar y) const {
     return SkToBool(tangents.size()) ^ isInverse;
 }
 
+// Sort of like makeSpace(0) but the the additional requirement that we actively shrink the
+// allocations to just fit the current needs. makeSpace() will only grow, but never shrinks.
+//
+void SkPath::shrinkToFit() {
+    // Since this can relocate the allocated arrays, we have to defensively copy ourselves if
+    // we're not the only owner of the pathref... since relocating the arrays will invalidate
+    // any existing iterators.
+    if (!fPathRef->unique()) {
+        SkPathRef* pr = new SkPathRef;
+        pr->copy(*fPathRef, 0, 0);
+        fPathRef.reset(pr);
+    }
+    fPathRef->fPoints.shrink_to_fit();
+    fPathRef->fVerbs.shrink_to_fit();
+    fPathRef->fConicWeights.shrink_to_fit();
+    SkDEBUGCODE(fPathRef->validate();)
+}
+
+
 int SkPath::ConvertConicToQuads(const SkPoint& p0, const SkPoint& p1, const SkPoint& p2,
                                 SkScalar w, SkPoint pts[], int pow2) {
     const SkConic conic(p0, p1, p2, w);
@@ -3876,4 +3893,20 @@ bool SkPathPriv::IsAxisAligned(const SkPath& path) {
         }
     }
     return true;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////
+
+SkPathEdgeIter::SkPathEdgeIter(const SkPath& path) {
+    fMoveToPtr = fPts = path.fPathRef->points();
+    fVerbs = path.fPathRef->verbsBegin();
+    fVerbsStop = path.fPathRef->verbsEnd();
+    fConicWeights = path.fPathRef->conicWeights();
+    if (fConicWeights) {
+        fConicWeights -= 1;  // begin one behind
+    }
+
+    fNeedsCloseLine = false;
+    fNextIsNewContour = false;
+    SkDEBUGCODE(fIsConic = false;)
 }
