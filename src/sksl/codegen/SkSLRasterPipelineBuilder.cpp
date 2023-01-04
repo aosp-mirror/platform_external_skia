@@ -28,8 +28,14 @@ namespace RP {
 
 using SkRP = SkRasterPipeline;
 
-#define ALL_MULTI_SLOT_UNARY_OP_CASES   \
-         BuilderOp::bitwise_not_int
+#define ALL_MULTI_SLOT_UNARY_OP_CASES        \
+         BuilderOp::abs_float:               \
+    case BuilderOp::abs_int:                 \
+    case BuilderOp::bitwise_not_int:         \
+    case BuilderOp::cast_to_float_from_int:  \
+    case BuilderOp::cast_to_float_from_uint: \
+    case BuilderOp::cast_to_int_from_float:  \
+    case BuilderOp::cast_to_uint_from_float
 
 #define ALL_MULTI_SLOT_BINARY_OP_CASES  \
          BuilderOp::add_n_floats:       \
@@ -209,7 +215,9 @@ void Program::append(SkRasterPipeline* pipeline, SkRasterPipeline::Stage stage, 
 
 void Program::rewindPipeline(SkRasterPipeline* pipeline) {
 #if !defined(SKSL_STANDALONE)
+#if !SK_HAS_MUSTTAIL
     pipeline->append_stack_rewind();
+#endif
 #endif
 }
 
@@ -375,6 +383,7 @@ void Program::appendStages(SkRasterPipeline* pipeline,
     const int N = SkOpts::raster_pipeline_highp_stride;
     StackDepthMap tempStackDepth;
     int currentStack = 0;
+    int mostRecentRewind = 0;
 
     // Allocate buffers for branch targets (used when running the program) and labels (only needed
     // during initial program construction).
@@ -420,6 +429,7 @@ void Program::appendStages(SkRasterPipeline* pipeline,
                 // long-running loops don't use an unbounded amount of stack space.
                 if (labelOffsets[inst.fImmA] >= 0) {
                     this->rewindPipeline(pipeline);
+                    mostRecentRewind = this->getNumPipelineStages(pipeline);
                 }
 
                 // Write the absolute pipeline position into the branch targets, because the
@@ -636,6 +646,16 @@ void Program::appendStages(SkRasterPipeline* pipeline,
         tempStackPtr += stack_usage(inst) * N;
         SkASSERT(tempStackPtr >= slots.stack.begin());
         SkASSERT(tempStackPtr <= slots.stack.end());
+
+        // Periodically rewind the stack every 500 instructions. When SK_HAS_MUSTTAIL is set,
+        // rewinds are not actually used; the rewindPipeline call becomes a no-op. On platforms that
+        // don't support SK_HAS_MUSTTAIL, rewinding the stack periodically can prevent a potential
+        // stack overflow when running a long program.
+        int numPipelineStages = this->getNumPipelineStages(pipeline);
+        if (numPipelineStages - mostRecentRewind > 500) {
+            this->rewindPipeline(pipeline);
+            mostRecentRewind = numPipelineStages;
+        }
     }
 
     // Fix up every branch target.
@@ -925,19 +945,28 @@ void Program::dump(SkWStream* out) {
             case SkRP::store_return_mask:
             case SkRP::store_masked:
             case SkRP::store_unmasked:
-            case SkRP::bitwise_not_int:
             case SkRP::zero_slot_unmasked:
+            case SkRP::bitwise_not_int:
+            case SkRP::cast_to_float_from_int: case SkRP::cast_to_float_from_uint:
+            case SkRP::cast_to_int_from_float: case SkRP::cast_to_uint_from_float:
+            case SkRP::abs_float:              case SkRP::abs_int:
                 opArg1 = PtrCtx(stage.ctx, 1);
                 break;
 
             case SkRP::store_src_rg:
-            case SkRP::bitwise_not_2_ints:
             case SkRP::zero_2_slots_unmasked:
+            case SkRP::bitwise_not_2_ints:
+            case SkRP::cast_to_float_from_2_ints: case SkRP::cast_to_float_from_2_uints:
+            case SkRP::cast_to_int_from_2_floats: case SkRP::cast_to_uint_from_2_floats:
+            case SkRP::abs_2_floats:              case SkRP::abs_2_ints:
                 opArg1 = PtrCtx(stage.ctx, 2);
                 break;
 
-            case SkRP::bitwise_not_3_ints:
             case SkRP::zero_3_slots_unmasked:
+            case SkRP::bitwise_not_3_ints:
+            case SkRP::cast_to_float_from_3_ints: case SkRP::cast_to_float_from_3_uints:
+            case SkRP::cast_to_int_from_3_floats: case SkRP::cast_to_uint_from_3_floats:
+            case SkRP::abs_3_floats:              case SkRP::abs_3_ints:
                 opArg1 = PtrCtx(stage.ctx, 3);
                 break;
 
@@ -945,8 +974,11 @@ void Program::dump(SkWStream* out) {
             case SkRP::load_dst:
             case SkRP::store_src:
             case SkRP::store_dst:
-            case SkRP::bitwise_not_4_ints:
             case SkRP::zero_4_slots_unmasked:
+            case SkRP::bitwise_not_4_ints:
+            case SkRP::cast_to_float_from_4_ints: case SkRP::cast_to_float_from_4_uints:
+            case SkRP::cast_to_int_from_4_floats: case SkRP::cast_to_uint_from_4_floats:
+            case SkRP::abs_4_floats:              case SkRP::abs_4_ints:
                 opArg1 = PtrCtx(stage.ctx, 4);
                 break;
 
@@ -1212,6 +1244,34 @@ void Program::dump(SkWStream* out) {
                 opText = opArg1 + " = ~" + opArg1;
                 break;
 
+            case SkRP::cast_to_float_from_int:
+            case SkRP::cast_to_float_from_2_ints:
+            case SkRP::cast_to_float_from_3_ints:
+            case SkRP::cast_to_float_from_4_ints:
+                opText = opArg1 + " = IntToFloat(" + opArg1 + ")";
+                break;
+
+            case SkRP::cast_to_float_from_uint:
+            case SkRP::cast_to_float_from_2_uints:
+            case SkRP::cast_to_float_from_3_uints:
+            case SkRP::cast_to_float_from_4_uints:
+                opText = opArg1 + " = UintToFloat(" + opArg1 + ")";
+                break;
+
+            case SkRP::cast_to_int_from_float:
+            case SkRP::cast_to_int_from_2_floats:
+            case SkRP::cast_to_int_from_3_floats:
+            case SkRP::cast_to_int_from_4_floats:
+                opText = opArg1 + " = FloatToInt(" + opArg1 + ")";
+                break;
+
+            case SkRP::cast_to_uint_from_float:
+            case SkRP::cast_to_uint_from_2_floats:
+            case SkRP::cast_to_uint_from_3_floats:
+            case SkRP::cast_to_uint_from_4_floats:
+                opText = opArg1 + " = FloatToUint(" + opArg1 + ")";
+                break;
+
             case SkRP::copy_slot_masked:      case SkRP::copy_2_slots_masked:
             case SkRP::copy_3_slots_masked:   case SkRP::copy_4_slots_masked:
                 opText = opArg1 + " = Mask(" + opArg2 + ")";
@@ -1229,6 +1289,13 @@ void Program::dump(SkWStream* out) {
             case SkRP::zero_slot_unmasked:    case SkRP::zero_2_slots_unmasked:
             case SkRP::zero_3_slots_unmasked: case SkRP::zero_4_slots_unmasked:
                 opText = opArg1 + " = 0";
+                break;
+
+            case SkRP::abs_float:    case SkRP::abs_int:
+            case SkRP::abs_2_floats: case SkRP::abs_2_ints:
+            case SkRP::abs_3_floats: case SkRP::abs_3_ints:
+            case SkRP::abs_4_floats: case SkRP::abs_4_ints:
+                opText = opArg1 + " = abs(" + opArg1 + ")";
                 break;
 
             case SkRP::add_float:    case SkRP::add_int:
