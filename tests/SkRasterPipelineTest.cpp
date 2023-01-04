@@ -9,6 +9,7 @@
 #include "include/private/SkTo.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkRasterPipeline.h"
+#include "src/core/SkUtils.h"
 #include "src/gpu/Swizzle.h"
 #include "tests/Test.h"
 
@@ -835,15 +836,18 @@ DEF_TEST(SkRasterPipeline_IntArithmeticWithNSlots, r) {
     };
 
     static const ArithmeticOp kArithmeticOps[] = {
-        {SkRasterPipeline::Stage::add_n_ints,  [](int a, int b) { return a + b; }},
-        {SkRasterPipeline::Stage::sub_n_ints,  [](int a, int b) { return a - b; }},
-        {SkRasterPipeline::Stage::mul_n_ints,  [](int a, int b) { return a * b; }},
-        {SkRasterPipeline::Stage::div_n_ints,  [](int a, int b) { return a / b; }},
-        {SkRasterPipeline::Stage::div_n_uints, divide_unsigned},
-        {SkRasterPipeline::Stage::min_n_ints,  [](int a, int b) { return a < b ? a : b; }},
-        {SkRasterPipeline::Stage::min_n_uints, min_unsigned},
-        {SkRasterPipeline::Stage::max_n_ints,  [](int a, int b) { return a > b ? a : b; }},
-        {SkRasterPipeline::Stage::max_n_uints, max_unsigned},
+        {SkRasterPipeline::Stage::add_n_ints,         [](int a, int b) { return a + b; }},
+        {SkRasterPipeline::Stage::sub_n_ints,         [](int a, int b) { return a - b; }},
+        {SkRasterPipeline::Stage::mul_n_ints,         [](int a, int b) { return a * b; }},
+        {SkRasterPipeline::Stage::div_n_ints,         [](int a, int b) { return a / b; }},
+        {SkRasterPipeline::Stage::div_n_uints,        divide_unsigned},
+        {SkRasterPipeline::Stage::bitwise_and_n_ints, [](int a, int b) { return a & b; }},
+        {SkRasterPipeline::Stage::bitwise_or_n_ints,  [](int a, int b) { return a | b; }},
+        {SkRasterPipeline::Stage::bitwise_xor_n_ints, [](int a, int b) { return a ^ b; }},
+        {SkRasterPipeline::Stage::min_n_ints,         [](int a, int b) { return a < b ? a : b; }},
+        {SkRasterPipeline::Stage::min_n_uints,        min_unsigned},
+        {SkRasterPipeline::Stage::max_n_ints,         [](int a, int b) { return a > b ? a : b; }},
+        {SkRasterPipeline::Stage::max_n_uints,        max_unsigned},
     };
 
     for (const ArithmeticOp& op : kArithmeticOps) {
@@ -893,45 +897,57 @@ DEF_TEST(SkRasterPipeline_IntArithmeticWithHardcodedSlots, r) {
     };
 
     static const ArithmeticOp kArithmeticOps[] = {
-        {SkRasterPipeline::Stage::add_int,     1, [](int a, int b) { return a + b; }},
-        {SkRasterPipeline::Stage::sub_int,     1, [](int a, int b) { return a - b; }},
-        {SkRasterPipeline::Stage::mul_int,     1, [](int a, int b) { return a * b; }},
-        {SkRasterPipeline::Stage::div_int,     1, [](int a, int b) { return a / b; }},
-        {SkRasterPipeline::Stage::div_uint,    1, divide_unsigned},
-        {SkRasterPipeline::Stage::min_int,     1, [](int a, int b) { return a < b ? a : b; }},
-        {SkRasterPipeline::Stage::min_uint,    1, min_unsigned},
-        {SkRasterPipeline::Stage::max_int,     1, [](int a, int b) { return a > b ? a : b; }},
-        {SkRasterPipeline::Stage::max_uint,    1, max_unsigned},
+        {SkRasterPipeline::Stage::add_int,            1, [](int a, int b) { return a + b; }},
+        {SkRasterPipeline::Stage::sub_int,            1, [](int a, int b) { return a - b; }},
+        {SkRasterPipeline::Stage::mul_int,            1, [](int a, int b) { return a * b; }},
+        {SkRasterPipeline::Stage::div_int,            1, [](int a, int b) { return a / b; }},
+        {SkRasterPipeline::Stage::div_uint,           1, divide_unsigned},
+        {SkRasterPipeline::Stage::bitwise_and_int,    1, [](int a, int b) { return a & b; }},
+        {SkRasterPipeline::Stage::bitwise_or_int,     1, [](int a, int b) { return a | b; }},
+        {SkRasterPipeline::Stage::bitwise_xor_int,    1, [](int a, int b) { return a ^ b; }},
+        {SkRasterPipeline::Stage::min_int,            1, [](int a, int b) { return a < b ? a: b; }},
+        {SkRasterPipeline::Stage::min_uint,           1, min_unsigned},
+        {SkRasterPipeline::Stage::max_int,            1, [](int a, int b) { return a > b ? a: b; }},
+        {SkRasterPipeline::Stage::max_uint,           1, max_unsigned},
 
-        {SkRasterPipeline::Stage::add_2_ints,  2, [](int a, int b) { return a + b; }},
-        {SkRasterPipeline::Stage::sub_2_ints,  2, [](int a, int b) { return a - b; }},
-        {SkRasterPipeline::Stage::mul_2_ints,  2, [](int a, int b) { return a * b; }},
-        {SkRasterPipeline::Stage::div_2_ints,  2, [](int a, int b) { return a / b; }},
-        {SkRasterPipeline::Stage::div_2_uints, 2, divide_unsigned},
-        {SkRasterPipeline::Stage::min_2_ints,  2, [](int a, int b) { return a < b ? a : b; }},
-        {SkRasterPipeline::Stage::min_2_uints, 2, min_unsigned},
-        {SkRasterPipeline::Stage::max_2_ints,  2, [](int a, int b) { return a > b ? a : b; }},
-        {SkRasterPipeline::Stage::max_2_uints, 2, max_unsigned},
+        {SkRasterPipeline::Stage::add_2_ints,         2, [](int a, int b) { return a + b; }},
+        {SkRasterPipeline::Stage::sub_2_ints,         2, [](int a, int b) { return a - b; }},
+        {SkRasterPipeline::Stage::mul_2_ints,         2, [](int a, int b) { return a * b; }},
+        {SkRasterPipeline::Stage::div_2_ints,         2, [](int a, int b) { return a / b; }},
+        {SkRasterPipeline::Stage::div_2_uints,        2, divide_unsigned},
+        {SkRasterPipeline::Stage::bitwise_and_2_ints, 2, [](int a, int b) { return a & b; }},
+        {SkRasterPipeline::Stage::bitwise_or_2_ints,  2, [](int a, int b) { return a | b; }},
+        {SkRasterPipeline::Stage::bitwise_xor_2_ints, 2, [](int a, int b) { return a ^ b; }},
+        {SkRasterPipeline::Stage::min_2_ints,         2, [](int a, int b) { return a < b ? a: b; }},
+        {SkRasterPipeline::Stage::min_2_uints,        2, min_unsigned},
+        {SkRasterPipeline::Stage::max_2_ints,         2, [](int a, int b) { return a > b ? a: b; }},
+        {SkRasterPipeline::Stage::max_2_uints,        2, max_unsigned},
 
-        {SkRasterPipeline::Stage::add_3_ints,  3, [](int a, int b) { return a + b; }},
-        {SkRasterPipeline::Stage::sub_3_ints,  3, [](int a, int b) { return a - b; }},
-        {SkRasterPipeline::Stage::mul_3_ints,  3, [](int a, int b) { return a * b; }},
-        {SkRasterPipeline::Stage::div_3_ints,  3, [](int a, int b) { return a / b; }},
-        {SkRasterPipeline::Stage::div_3_uints, 3, divide_unsigned},
-        {SkRasterPipeline::Stage::min_3_ints,  3, [](int a, int b) { return a < b ? a : b; }},
-        {SkRasterPipeline::Stage::min_3_uints, 3, min_unsigned},
-        {SkRasterPipeline::Stage::max_3_ints,  3, [](int a, int b) { return a > b ? a : b; }},
-        {SkRasterPipeline::Stage::max_3_uints, 3, max_unsigned},
+        {SkRasterPipeline::Stage::add_3_ints,         3, [](int a, int b) { return a + b; }},
+        {SkRasterPipeline::Stage::sub_3_ints,         3, [](int a, int b) { return a - b; }},
+        {SkRasterPipeline::Stage::mul_3_ints,         3, [](int a, int b) { return a * b; }},
+        {SkRasterPipeline::Stage::div_3_ints,         3, [](int a, int b) { return a / b; }},
+        {SkRasterPipeline::Stage::div_3_uints,        3, divide_unsigned},
+        {SkRasterPipeline::Stage::bitwise_and_3_ints, 3, [](int a, int b) { return a & b; }},
+        {SkRasterPipeline::Stage::bitwise_or_3_ints,  3, [](int a, int b) { return a | b; }},
+        {SkRasterPipeline::Stage::bitwise_xor_3_ints, 3, [](int a, int b) { return a ^ b; }},
+        {SkRasterPipeline::Stage::min_3_ints,         3, [](int a, int b) { return a < b ? a: b; }},
+        {SkRasterPipeline::Stage::min_3_uints,        3, min_unsigned},
+        {SkRasterPipeline::Stage::max_3_ints,         3, [](int a, int b) { return a > b ? a: b; }},
+        {SkRasterPipeline::Stage::max_3_uints,        3, max_unsigned},
 
-        {SkRasterPipeline::Stage::add_4_ints,  4, [](int a, int b) { return a + b; }},
-        {SkRasterPipeline::Stage::sub_4_ints,  4, [](int a, int b) { return a - b; }},
-        {SkRasterPipeline::Stage::mul_4_ints,  4, [](int a, int b) { return a * b; }},
-        {SkRasterPipeline::Stage::div_4_ints,  4, [](int a, int b) { return a / b; }},
-        {SkRasterPipeline::Stage::div_4_uints, 4, divide_unsigned},
-        {SkRasterPipeline::Stage::min_4_ints,  4, [](int a, int b) { return a < b ? a : b; }},
-        {SkRasterPipeline::Stage::min_4_uints, 4, min_unsigned},
-        {SkRasterPipeline::Stage::max_4_ints,  4, [](int a, int b) { return a > b ? a : b; }},
-        {SkRasterPipeline::Stage::max_4_uints, 4, max_unsigned},
+        {SkRasterPipeline::Stage::add_4_ints,         4, [](int a, int b) { return a + b; }},
+        {SkRasterPipeline::Stage::sub_4_ints,         4, [](int a, int b) { return a - b; }},
+        {SkRasterPipeline::Stage::mul_4_ints,         4, [](int a, int b) { return a * b; }},
+        {SkRasterPipeline::Stage::div_4_ints,         4, [](int a, int b) { return a / b; }},
+        {SkRasterPipeline::Stage::div_4_uints,        4, divide_unsigned},
+        {SkRasterPipeline::Stage::bitwise_and_4_ints, 4, [](int a, int b) { return a & b; }},
+        {SkRasterPipeline::Stage::bitwise_or_4_ints,  4, [](int a, int b) { return a | b; }},
+        {SkRasterPipeline::Stage::bitwise_xor_4_ints, 4, [](int a, int b) { return a ^ b; }},
+        {SkRasterPipeline::Stage::min_4_ints,         4, [](int a, int b) { return a < b ? a: b; }},
+        {SkRasterPipeline::Stage::min_4_uints,        4, min_unsigned},
+        {SkRasterPipeline::Stage::max_4_ints,         4, [](int a, int b) { return a > b ? a: b; }},
+        {SkRasterPipeline::Stage::max_4_uints,        4, max_unsigned},
     };
 
     for (const ArithmeticOp& op : kArithmeticOps) {
@@ -1231,77 +1247,37 @@ DEF_TEST(SkRasterPipeline_CompareIntsWithHardcodedSlots, r) {
     }
 }
 
-DEF_TEST(SkRasterPipeline_BinaryBitwiseOps, r) {
-    // Allocate space for 2 slots.
-    alignas(64) int slots[2 * SkRasterPipeline_kMaxStride_highp];
-    const int N = SkOpts::raster_pipeline_highp_stride;
+static int to_float(int a) { return sk_bit_cast<int>((float)a); }
 
-    struct BitwiseOp {
-        SkRasterPipeline::Stage stage;
-        std::function<int(int, int)> verify;
-    };
-
-    static const BitwiseOp kBitwiseOps[] = {
-        {SkRasterPipeline::Stage::bitwise_and, [](int a, int b) { return a & b; }},
-        {SkRasterPipeline::Stage::bitwise_or,  [](int a, int b) { return a | b; }},
-        {SkRasterPipeline::Stage::bitwise_xor, [](int a, int b) { return a ^ b; }},
-    };
-
-    for (const BitwiseOp& op : kBitwiseOps) {
-        // Initialize the slot values to -5,-4,-3,-2...
-        std::iota(&slots[0], &slots[2 * N], -5);
-        int leftValue = slots[0];
-        int rightValue = slots[N];
-
-        // Run the bitwise op over our data.
-        SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
-        SkRasterPipeline p(&alloc);
-        p.append(op.stage, (float*)&slots[0]);
-        p.run(0, 0, 1, 1);
-
-        // Verify that the destination slots have been updated.
-        int* destPtr = &slots[0];
-        for (int checkSlot = 0; checkSlot < 2; ++checkSlot) {
-            for (int checkLane = 0; checkLane < N; ++checkLane) {
-                if (checkSlot == 0) {
-                    int expected = op.verify(leftValue, rightValue);
-                    REPORTER_ASSERT(r, *destPtr == expected);
-                } else {
-                    REPORTER_ASSERT(r, *destPtr == leftValue);
-                }
-
-                ++destPtr;
-                ++leftValue;
-                ++rightValue;
-            }
-        }
-    }
-}
-
-DEF_TEST(SkRasterPipeline_UnaryBitwiseOps, r) {
+DEF_TEST(SkRasterPipeline_UnaryIntOps, r) {
     // Allocate space for 5 slots.
     alignas(64) int slots[5 * SkRasterPipeline_kMaxStride_highp];
     const int N = SkOpts::raster_pipeline_highp_stride;
 
-    struct BitwiseOp {
+    struct UnaryOp {
         SkRasterPipeline::Stage stage;
         int numSlotsAffected;
         std::function<int(int)> verify;
     };
 
-    static const BitwiseOp kBitwiseOps[] = {
-        {SkRasterPipeline::Stage::bitwise_not,   1, [](int a) { return ~a; }},
-        {SkRasterPipeline::Stage::bitwise_not_2, 2, [](int a) { return ~a; }},
-        {SkRasterPipeline::Stage::bitwise_not_3, 3, [](int a) { return ~a; }},
-        {SkRasterPipeline::Stage::bitwise_not_4, 4, [](int a) { return ~a; }},
+    static const UnaryOp kUnaryOps[] = {
+        {SkRasterPipeline::Stage::bitwise_not_int,    1, [](int a) { return ~a; }},
+        {SkRasterPipeline::Stage::bitwise_not_2_ints, 2, [](int a) { return ~a; }},
+        {SkRasterPipeline::Stage::bitwise_not_3_ints, 3, [](int a) { return ~a; }},
+        {SkRasterPipeline::Stage::bitwise_not_4_ints, 4, [](int a) { return ~a; }},
+
+        {SkRasterPipeline::Stage::cast_to_float_from_int,    1, to_float},
+        {SkRasterPipeline::Stage::cast_to_float_from_2_ints, 2, to_float},
+        {SkRasterPipeline::Stage::cast_to_float_from_3_ints, 3, to_float},
+        {SkRasterPipeline::Stage::cast_to_float_from_4_ints, 4, to_float},
     };
 
-    for (const BitwiseOp& op : kBitwiseOps) {
+    for (const UnaryOp& op : kUnaryOps) {
         // Initialize the slot values to -3,-2,-1...
         std::iota(&slots[0], &slots[5 * N], -3);
         int inputValue = slots[0];
 
-        // Run the bitwise op over our data.
+        // Run the unary op over our data.
         SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
         SkRasterPipeline p(&alloc);
         p.append(op.stage, &slots[0]);
@@ -1314,6 +1290,61 @@ DEF_TEST(SkRasterPipeline_UnaryBitwiseOps, r) {
                 if (checkSlot < op.numSlotsAffected) {
                     int expected = op.verify(inputValue);
                     REPORTER_ASSERT(r, *destPtr == expected);
+                } else {
+                    REPORTER_ASSERT(r, *destPtr == inputValue);
+                }
+
+                ++destPtr;
+                ++inputValue;
+            }
+        }
+    }
+}
+
+static float to_int(float a)  { return sk_bit_cast<float>((int)a); }
+static float to_uint(float a) { return sk_bit_cast<float>((unsigned int)a); }
+
+DEF_TEST(SkRasterPipeline_UnaryFloatOps, r) {
+    // Allocate space for 5 slots.
+    alignas(64) float slots[5 * SkRasterPipeline_kMaxStride_highp];
+    const int N = SkOpts::raster_pipeline_highp_stride;
+
+    struct UnaryOp {
+        SkRasterPipeline::Stage stage;
+        int numSlotsAffected;
+        std::function<float(float)> verify;
+    };
+
+    static const UnaryOp kUnaryOps[] = {
+        {SkRasterPipeline::Stage::cast_to_int_from_float,    1, to_int},
+        {SkRasterPipeline::Stage::cast_to_int_from_2_floats, 2, to_int},
+        {SkRasterPipeline::Stage::cast_to_int_from_3_floats, 3, to_int},
+        {SkRasterPipeline::Stage::cast_to_int_from_4_floats, 4, to_int},
+
+        {SkRasterPipeline::Stage::cast_to_uint_from_float,    1, to_uint},
+        {SkRasterPipeline::Stage::cast_to_uint_from_2_floats, 2, to_uint},
+        {SkRasterPipeline::Stage::cast_to_uint_from_3_floats, 3, to_uint},
+        {SkRasterPipeline::Stage::cast_to_uint_from_4_floats, 4, to_uint},
+    };
+
+    for (const UnaryOp& op : kUnaryOps) {
+        // Initialize the slot values to 1,2,3...
+        std::iota(&slots[0], &slots[5 * N], 1);
+        float inputValue = slots[0];
+
+        // Run the unary op over our data.
+        SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
+        SkRasterPipeline p(&alloc);
+        p.append(op.stage, &slots[0]);
+        p.run(0, 0, 1, 1);
+
+        // Verify that the destination slots have been updated.
+        float* destPtr = &slots[0];
+        for (int checkSlot = 0; checkSlot < 5; ++checkSlot) {
+            for (int checkLane = 0; checkLane < N; ++checkLane) {
+                if (checkSlot < op.numSlotsAffected) {
+                    float expected = op.verify(inputValue);
+                    REPORTER_ASSERT(r, 0 == memcmp(destPtr, &expected, sizeof(float)));
                 } else {
                     REPORTER_ASSERT(r, *destPtr == inputValue);
                 }

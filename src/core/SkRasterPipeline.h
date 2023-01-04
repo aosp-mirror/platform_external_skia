@@ -132,8 +132,21 @@ struct skcms_TransferFunction;
     M(reenable_loop_mask)  M(merge_loop_mask)                                                 \
     M(load_return_mask)    M(store_return_mask)    M(mask_off_return_mask)                    \
     M(branch_if_any_active_lanes) M(branch_if_no_active_lanes) M(jump)                        \
-    M(bitwise_and) M(bitwise_or) M(bitwise_xor)                                               \
-    M(bitwise_not) M(bitwise_not_2) M(bitwise_not_3) M(bitwise_not_4)                         \
+    M(bitwise_and_n_ints)                                                                     \
+    M(bitwise_and_int) M(bitwise_and_2_ints) M(bitwise_and_3_ints) M(bitwise_and_4_ints)      \
+    M(bitwise_or_n_ints)                                                                      \
+    M(bitwise_or_int)  M(bitwise_or_2_ints)  M(bitwise_or_3_ints)  M(bitwise_or_4_ints)       \
+    M(bitwise_xor_n_ints)                                                                     \
+    M(bitwise_xor_int) M(bitwise_xor_2_ints) M(bitwise_xor_3_ints) M(bitwise_xor_4_ints)      \
+    M(bitwise_not_int) M(bitwise_not_2_ints) M(bitwise_not_3_ints) M(bitwise_not_4_ints)      \
+    M(cast_to_float_from_int)     M(cast_to_float_from_2_ints)                                \
+    M(cast_to_float_from_3_ints)  M(cast_to_float_from_4_ints)                                \
+    M(cast_to_float_from_uint)    M(cast_to_float_from_2_uints)                               \
+    M(cast_to_float_from_3_uints) M(cast_to_float_from_4_uints)                               \
+    M(cast_to_int_from_float)     M(cast_to_int_from_2_floats)                                \
+    M(cast_to_int_from_3_floats)  M(cast_to_int_from_4_floats)                                \
+    M(cast_to_uint_from_float)    M(cast_to_uint_from_2_floats)                               \
+    M(cast_to_uint_from_3_floats) M(cast_to_uint_from_4_floats)                               \
     M(copy_constant)    M(copy_2_constants)    M(copy_3_constants)    M(copy_4_constants)     \
     M(copy_slot_masked) M(copy_2_slots_masked) M(copy_3_slots_masked) M(copy_4_slots_masked)  \
     M(copy_slot_unmasked)    M(copy_2_slots_unmasked)                                         \
