@@ -328,7 +328,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "gm", ALL, "verylargebitmap")
 			skip(ALL, "gm", ALL, "verylarge_picture_image")
 
-			if (b.extraConfig("Metal")) {
+			if b.extraConfig("Metal") {
 				configs = []string{"grmtl"}
 			}
 		}
@@ -350,6 +350,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				if b.model("NUC5i7RYH") {
 					// skbug.com/7376
 					skip(ALL, "test", ALL, "ProcessorCloneTest")
+				}
+				if b.matchGpu("Intel") {
+					// anglebug.com/5588
+					skip(ALL, "test", ALL, "SkSLIntrinsicFloor_GPU")
 				}
 			} else if b.matchOs("Mac") {
 				configs = []string{"angle_mtl_es2", "angle_mtl_es3"}
@@ -416,7 +420,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				configs = append(configs, "mtlmsaa4")
 			}
 		}
-        if b.extraConfig("Slug") {
+		if b.extraConfig("Slug") {
 			// Test slug drawing
 			configs = []string{"glslug", "glserializeslug", "glremoteslug"}
 		}
@@ -1005,6 +1009,11 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	if b.matchGpu("Mali400") {
 		skip(ALL, "tests", ALL, "SkSLCross")
+	}
+
+	if b.matchOs("Mac") && b.extraConfig("Metal") && (b.gpu("IntelIrisPlus") ||
+                                                      b.gpu("IntelHD6000")) {
+		skip(ALL, "tests", ALL, "SkSLIntrinsicNot_GPU") // skia:14025
 	}
 
 	if b.gpu("IntelIris6100", "IntelHD4400") && b.matchOs("Win") && b.extraConfig("ANGLE") {

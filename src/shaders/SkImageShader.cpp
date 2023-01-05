@@ -394,6 +394,15 @@ void SkImageShader::addToKey(const skgpu::graphite::KeyContext& keyContext,
 
     ImageShaderBlock::ImageData imgData(fSampling, fTileModeX, fTileModeY, fSubset);
 
+    if (!fRaw) {
+        imgData.fSteps = SkColorSpaceXformSteps(fImage->colorSpace(),
+                                                fImage->alphaType(),
+                                                keyContext.dstColorInfo().colorSpace(),
+                                                keyContext.dstColorInfo().alphaType());
+
+        // TODO: add alpha-only image handling here
+    }
+
     auto [ imageToDraw, newSampling ] = skgpu::graphite::GetGraphiteBacked(keyContext.recorder(),
                                                                            fImage.get(),
                                                                            fSampling);

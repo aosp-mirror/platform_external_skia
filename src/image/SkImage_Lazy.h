@@ -9,7 +9,7 @@
 #define SkImage_Lazy_DEFINED
 
 #include "include/private/SkIDChangeListener.h"
-#include "include/private/SkMutex.h"
+#include "include/private/base/SkMutex.h"
 #include "src/image/SkImage_Base.h"
 
 #if SK_SUPPORT_GPU
@@ -80,7 +80,7 @@ private:
                                                                const SkRect*,
                                                                const SkRect*) const override;
 
-    GrSurfaceProxyView textureProxyViewFromPlanes(GrRecordingContext*, SkBudgeted) const;
+    GrSurfaceProxyView textureProxyViewFromPlanes(GrRecordingContext*, skgpu::Budgeted) const;
     sk_sp<SkCachedData> getPlanes(const SkYUVAPixmapInfo::SupportedDataTypes& supportedDataTypes,
                                   SkYUVAPixmaps* pixmaps) const;
 #endif

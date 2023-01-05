@@ -16,11 +16,11 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrDirectContext.h"
-#include "include/private/SkDeque.h"
-#include "include/private/SkMutex.h"
 #include "include/private/SkNoncopyable.h"
 #include "include/private/SkTemplates.h"
-#include "include/private/SkThreadID.h"
+#include "include/private/base/SkDeque.h"
+#include "include/private/base/SkMutex.h"
+#include "include/private/base/SkThreadID.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/image/SkImage_Gpu.h"
 #include "tools/gpu/GrContextFactory.h"
@@ -118,7 +118,7 @@ DDLFuzzer::DDLFuzzer(Fuzz* fuzz, ContextType contextType) : fFuzz(fuzz) {
     SkISize canvasSize = kPromiseImageSize;
     canvasSize.fWidth *= kPromiseImagesPerDDL;
     SkImageInfo ii = SkImageInfo::Make(canvasSize, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-    fSurface = SkSurface::MakeRenderTarget(fContext, SkBudgeted::kNo, ii);
+    fSurface = SkSurface::MakeRenderTarget(fContext, skgpu::Budgeted::kNo, ii);
     if (!fSurface || !fSurface->characterize(&fSurfaceCharacterization)) {
         return;
     }

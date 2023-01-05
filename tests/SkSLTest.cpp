@@ -19,6 +19,7 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
 #include "include/effects/SkRuntimeEffect.h"
+#include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/private/SkSLProgramElement.h"
 #include "include/private/SkSLProgramKind.h"
@@ -172,7 +173,7 @@ static bool gpu_generates_nan(skiatest::Reporter* r, GrDirectContext* ctx) {
     REPORTER_ASSERT(r, effect);
 
     const SkImageInfo info = SkImageInfo::MakeN32Premul(kWidth, kHeight);
-    sk_sp<SkSurface> surface(SkSurface::MakeRenderTarget(ctx, SkBudgeted::kNo, info));
+    sk_sp<SkSurface> surface(SkSurface::MakeRenderTarget(ctx, skgpu::Budgeted::kNo, info));
 
     SkBitmap bitmap = bitmap_from_shader(r, surface.get(), effect);
     REPORTER_ASSERT(r, !bitmap.empty());
@@ -291,7 +292,7 @@ static void test_gpu(skiatest::Reporter* r, GrDirectContext* ctx, const char* te
 
     // Create a GPU-backed surface.
     const SkImageInfo info = SkImageInfo::MakeN32Premul(kWidth, kHeight);
-    sk_sp<SkSurface> surface(SkSurface::MakeRenderTarget(ctx, SkBudgeted::kNo, info));
+    sk_sp<SkSurface> surface(SkSurface::MakeRenderTarget(ctx, skgpu::Budgeted::kNo, info));
 
     if (shouldRunGPU) {
         test_permutations(r, surface.get(), testFile, /*strictES2=*/true);
@@ -554,6 +555,7 @@ SKSL_TEST(GPU_ES3,   kNever,      IntrinsicDFdx,                   "intrinsics/D
 SKSL_TEST(GPU_ES3,   kNever,      IntrinsicDFdy,                   "intrinsics/DFdy.sksl")
 SKSL_TEST(GPU_ES3,   kNever,      IntrinsicFloatBitsToInt,         "intrinsics/FloatBitsToInt.sksl")
 SKSL_TEST(GPU_ES3,   kNever,      IntrinsicFloatBitsToUint,        "intrinsics/FloatBitsToUint.sksl")
+SKSL_TEST(CPU + GPU, kNever,      IntrinsicFloor,                  "intrinsics/Floor.sksl")
 SKSL_TEST(GPU_ES3,   kNever,      IntrinsicFwidth,                 "intrinsics/Fwidth.sksl")
 SKSL_TEST(GPU_ES3,   kNever,      IntrinsicIntBitsToFloat,         "intrinsics/IntBitsToFloat.sksl")
 SKSL_TEST(GPU_ES3,   kNever,      IntrinsicIsInf,                  "intrinsics/IsInf.sksl")
@@ -561,6 +563,7 @@ SKSL_TEST(GPU_ES3,   kNever,      IntrinsicClampInt,               "intrinsics/C
 SKSL_TEST(GPU_ES3,   kNever,      IntrinsicClampUInt,              "intrinsics/ClampUInt.sksl")
 SKSL_TEST(CPU + GPU, kApiLevel_T, IntrinsicClampFloat,             "intrinsics/ClampFloat.sksl")
 SKSL_TEST(CPU + GPU, kNever,      IntrinsicDot,                    "intrinsics/Dot.sksl")
+SKSL_TEST(CPU + GPU, kNever,      IntrinsicFract,                  "intrinsics/Fract.sksl")
 SKSL_TEST(CPU + GPU, kApiLevel_T, IntrinsicMatrixCompMultES2,      "intrinsics/MatrixCompMultES2.sksl")
 SKSL_TEST(GPU_ES3,   kNever,      IntrinsicMatrixCompMultES3,      "intrinsics/MatrixCompMultES3.sksl")
 SKSL_TEST(CPU + GPU, kApiLevel_T, IntrinsicMaxFloat,               "intrinsics/MaxFloat.sksl")

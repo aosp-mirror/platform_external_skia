@@ -6,7 +6,7 @@
  */
 
 #include "include/private/SkHalf.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTo.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkUtils.h"
@@ -1335,6 +1335,16 @@ DEF_TEST(SkRasterPipeline_UnaryFloatOps, r) {
         {SkRasterPipeline::Stage::abs_2_floats, 2, [](float a) { return a < 0 ? -a : a; }},
         {SkRasterPipeline::Stage::abs_3_floats, 3, [](float a) { return a < 0 ? -a : a; }},
         {SkRasterPipeline::Stage::abs_4_floats, 4, [](float a) { return a < 0 ? -a : a; }},
+
+        {SkRasterPipeline::Stage::floor_float,    1, [](float a) { return floorf(a); }},
+        {SkRasterPipeline::Stage::floor_2_floats, 2, [](float a) { return floorf(a); }},
+        {SkRasterPipeline::Stage::floor_3_floats, 3, [](float a) { return floorf(a); }},
+        {SkRasterPipeline::Stage::floor_4_floats, 4, [](float a) { return floorf(a); }},
+
+        {SkRasterPipeline::Stage::ceil_float,    1, [](float a) { return ceilf(a); }},
+        {SkRasterPipeline::Stage::ceil_2_floats, 2, [](float a) { return ceilf(a); }},
+        {SkRasterPipeline::Stage::ceil_3_floats, 3, [](float a) { return ceilf(a); }},
+        {SkRasterPipeline::Stage::ceil_4_floats, 4, [](float a) { return ceilf(a); }},
     };
 
     for (const UnaryOp& op : kUnaryOps) {
@@ -1344,9 +1354,9 @@ DEF_TEST(SkRasterPipeline_UnaryFloatOps, r) {
                              op.stage == SkRasterPipeline::Stage::cast_to_uint_from_3_floats ||
                              op.stage == SkRasterPipeline::Stage::cast_to_uint_from_4_floats);
 
-        float iotaStart = positiveOnly ? 1.0f : -10.0f;
+        float iotaStart = positiveOnly ? 1.0f : -9.75f;
         std::iota(&slots[0], &slots[5 * N], iotaStart);
-        int inputValue = slots[0];
+        float inputValue = slots[0];
 
         // Run the unary op over our data.
         SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
@@ -1360,7 +1370,14 @@ DEF_TEST(SkRasterPipeline_UnaryFloatOps, r) {
             for (int checkLane = 0; checkLane < N; ++checkLane) {
                 if (checkSlot < op.numSlotsAffected) {
                     float expected = op.verify(inputValue);
-                    REPORTER_ASSERT(r, 0 == memcmp(destPtr, &expected, sizeof(float)));
+                    // The casting tests can generate NaN, depending on the input value, so a value
+                    // match (via ==) might not succeed.
+                    // The ceil tests can generate negative zeros _sometimes_, depending on the
+                    // exact implementation of ceil(), so a bitwise match might not succeed.
+                    // Because of this, we allow either a value match or a bitwise match.
+                    bool bitwiseMatch = (0 == memcmp(destPtr, &expected, sizeof(float)));
+                    bool valueMatch   = (*destPtr == expected);
+                    REPORTER_ASSERT(r, valueMatch || bitwiseMatch);
                 } else {
                     REPORTER_ASSERT(r, *destPtr == inputValue);
                 }

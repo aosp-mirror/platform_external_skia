@@ -12,10 +12,10 @@
 #include "include/private/SkSLModifiers.h"
 #include "include/private/SkSLProgramElement.h"
 #include "include/private/SkSLStatement.h"
-#include "include/private/SkStringView.h"
 #include "include/private/SkTArray.h"
 #include "include/private/SkTHash.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkStringView.h"
+#include "include/private/base/SkTo.h"
 #include "include/sksl/SkSLOperator.h"
 #include "include/sksl/SkSLPosition.h"
 #include "src/sksl/SkSLAnalysis.h"
@@ -1213,6 +1213,20 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0) {
                 return unsupported();
             }
             return this->unaryOp(arg0.type(), kAbsOps);
+
+        case IntrinsicKind::k_ceil_IntrinsicKind:
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            fBuilder.unary_op(BuilderOp::ceil_float, arg0.type().slotCount());
+            return true;
+
+        case IntrinsicKind::k_floor_IntrinsicKind:
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            fBuilder.unary_op(BuilderOp::floor_float, arg0.type().slotCount());
+            return true;
 
         case IntrinsicKind::k_not_IntrinsicKind:
             return this->pushPrefixExpression(OperatorKind::LOGICALNOT, arg0);
