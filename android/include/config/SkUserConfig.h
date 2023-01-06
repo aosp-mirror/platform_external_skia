@@ -11,6 +11,10 @@
 #define SK_CODEC_DECODES_JPEG
 #endif
 
+#ifndef SK_CODEC_DECODES_JPEGR
+#define SK_CODEC_DECODES_JPEGR
+#endif
+
 #ifndef SK_CODEC_DECODES_PNG
 #define SK_CODEC_DECODES_PNG
 #endif

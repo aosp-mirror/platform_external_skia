@@ -15,7 +15,6 @@
 #include "include/private/SkTArray.h"
 #include "include/private/SkTHash.h"
 #include "include/private/base/SkStringView.h"
-#include "include/private/base/SkTo.h"
 #include "include/sksl/SkSLOperator.h"
 #include "include/sksl/SkSLPosition.h"
 #include "src/sksl/SkSLAnalysis.h"
@@ -50,10 +49,9 @@
 #include "src/sksl/tracing/SkRPDebugTrace.h"
 #include "src/sksl/tracing/SkSLDebugInfo.h"
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
+#include <float.h>
 #include <numeric>
 #include <optional>
 #include <string>
@@ -225,6 +223,7 @@ public:
     [[nodiscard]] bool binaryOp(const SkSL::Type& type, const TypedOps& ops);
     [[nodiscard]] bool ternaryOp(const SkSL::Type& type, const TypedOps& ops);
     [[nodiscard]] bool pushVectorizedExpression(const Expression& expr, const Type& vectorType);
+    [[nodiscard]] bool pushVariableReferencePartial(const VariableReference& v, SlotRange subset);
 
     void foldWithMultiOp(BuilderOp op, int elements);
     void nextTempStack() {
@@ -1090,7 +1089,7 @@ bool Generator::pushConstructorCast(const AnyConstructor& c) {
             SkDEBUGFAILF("unexpected cast from bool to %s", c.type().description().c_str());
             return unsupported();
         }
-        fBuilder.duplicate(c.type().slotCount() - 1);
+        fBuilder.push_duplicates(c.type().slotCount() - 1);
         fBuilder.binary_op(BuilderOp::bitwise_and_n_ints, c.type().slotCount());
         return true;
     }
@@ -1124,7 +1123,7 @@ bool Generator::pushConstructorSplat(const ConstructorSplat& c) {
     if (!this->pushExpression(*c.argument())) {
         return unsupported();
     }
-    fBuilder.duplicate(c.type().slotCount() - 1);
+    fBuilder.push_duplicates(c.type().slotCount() - 1);
     return true;
 }
 
@@ -1201,7 +1200,7 @@ bool Generator::pushVectorizedExpression(const Expression& expr, const Type& vec
     }
     if (vectorType.slotCount() > expr.type().slotCount()) {
         SkASSERT(expr.type().slotCount() == 1);
-        fBuilder.duplicate(vectorType.slotCount() - expr.type().slotCount());
+        fBuilder.push_duplicates(vectorType.slotCount() - expr.type().slotCount());
     }
     return true;
 }
@@ -1228,6 +1227,15 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0) {
             fBuilder.unary_op(BuilderOp::floor_float, arg0.type().slotCount());
             return true;
 
+        case IntrinsicKind::k_fract_IntrinsicKind:
+            // Implement fract as `x - floor(x)`.
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            fBuilder.push_clone(arg0.type().slotCount());
+            fBuilder.unary_op(BuilderOp::floor_float, arg0.type().slotCount());
+            return this->binaryOp(arg0.type(), kSubtractOps);
+
         case IntrinsicKind::k_not_IntrinsicKind:
             return this->pushPrefixExpression(OperatorKind::LOGICALNOT, arg0);
 
@@ -1236,6 +1244,37 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0) {
             Literal zeroLiteral{Position{}, 0.0, &arg0.type().componentType()};
             Literal oneLiteral{Position{}, 1.0, &arg0.type().componentType()};
             return this->pushIntrinsic(k_clamp_IntrinsicKind, arg0, zeroLiteral, oneLiteral);
+        }
+        case IntrinsicKind::k_sign_IntrinsicKind: {
+            // Implement floating-point sign() as `clamp(arg * FLT_MAX, -1, 1)`.
+            // FLT_MIN * FLT_MAX evaluates to 4, so multiplying any float value against FLT_MAX is
+            // sufficient to ensure that |value| is always 1 or greater (excluding zero and nan).
+            // Integer sign() doesn't need to worry about fractional values or nans, and can simply
+            // be `clamp(arg, -1, 1)`.
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            if (arg0.type().componentType().isFloat()) {
+                Literal fltMaxLiteral{Position{}, FLT_MAX, &arg0.type().componentType()};
+                if (!this->pushVectorizedExpression(fltMaxLiteral, arg0.type())) {
+                    return unsupported();
+                }
+                if (!this->binaryOp(arg0.type(), kMultiplyOps)) {
+                    return unsupported();
+                }
+            }
+            Literal neg1Literal{Position{}, -1.0, &arg0.type().componentType()};
+            if (!this->pushVectorizedExpression(neg1Literal, arg0.type())) {
+                return unsupported();
+            }
+            if (!this->binaryOp(arg0.type(), kMaxOps)) {
+                return unsupported();
+            }
+            Literal pos1Literal{Position{}, 1.0, &arg0.type().componentType()};
+            if (!this->pushVectorizedExpression(pos1Literal, arg0.type())) {
+                return unsupported();
+            }
+            return this->binaryOp(arg0.type(), kMinOps);
         }
         default:
             break;
@@ -1399,11 +1438,29 @@ bool Generator::pushPrefixExpression(Operator op, const Expression& expr) {
         case OperatorKind::LOGICALNOT:
             // Handle operators ! and ~.
             if (!this->pushExpression(expr)) {
-                return false;
+                return unsupported();
             }
             fBuilder.unary_op(BuilderOp::bitwise_not_int, expr.type().slotCount());
             return true;
 
+        case OperatorKind::MINUS:
+            // Handle negation as a componentwise `0 - expr`.
+            fBuilder.push_zeros(expr.type().slotCount());
+            if (!this->pushExpression(expr)) {
+                return unsupported();
+            }
+            return this->binaryOp(expr.type(), kSubtractOps);
+
+        case OperatorKind::PLUSPLUS: {
+            // Rewrite as `expr += 1`.
+            Literal oneLiteral{Position{}, 1.0, &expr.type().componentType()};
+            return this->pushBinaryExpression(expr, OperatorKind::PLUSEQ, oneLiteral);
+        }
+        case OperatorKind::MINUSMINUS: {
+            // Rewrite as `expr -= 1`.
+            Literal oneLiteral{Position{}, 1.0, &expr.type().componentType()};
+            return this->pushBinaryExpression(expr, OperatorKind::MINUSEQ, oneLiteral);
+        }
         default:
             break;
     }
@@ -1412,14 +1469,33 @@ bool Generator::pushPrefixExpression(Operator op, const Expression& expr) {
 }
 
 bool Generator::pushSwizzle(const Swizzle& s) {
+    SkASSERT(s.components().size() >= 1 && s.components().size() <= 4);
+
+    // Determine if the swizzle rearranges its elements, or if it's a simple subset of its elements.
+    // (A simple subset would be a sequential non-repeating range of components, like `.xyz` or
+    // `.yzw` or `.z`, but not `.xx` or `.xz`.)
+    bool isSimpleSubset = true;
+    for (int index = 1; index < s.components().size(); ++index) {
+        if (s.components()[index] != s.components()[0] + index) {
+            isSimpleSubset = false;
+            break;
+        }
+    }
+    // If this is a simple subset of a variable's slots...
+    if (isSimpleSubset && s.base()->is<VariableReference>()) {
+        // ... we can just push part of the variable directly onto the stack, rather than pushing
+        // the whole expression and then immediately cutting it down. (Either way works, but this
+        // saves a step.)
+        return this->pushVariableReferencePartial(
+                s.base()->as<VariableReference>(),
+                SlotRange{/*index=*/s.components()[0], /*count=*/s.components().size()});
+    }
     // Push the base expression.
     if (!this->pushExpression(*s.base())) {
         return false;
     }
-    // A identity swizzle doesn't rearrange the data; it just (potentially) discards tail elements.
-    static constexpr int8_t kIdentitySwizzle[] = {0, 1, 2, 3};
-    SkASSERT(s.components().size() <= SkToInt(std::size(kIdentitySwizzle)));
-    if (std::equal(s.components().begin(), s.components().end(), std::begin(kIdentitySwizzle))) {
+    // An identity swizzle doesn't rearrange the data; it just (potentially) discards tail elements.
+    if (isSimpleSubset && s.components()[0] == 0) {
         int discardedElements = s.base()->type().slotCount() - s.components().size();
         SkASSERT(discardedElements >= 0);
         fBuilder.discard_stack(discardedElements);
@@ -1511,14 +1587,25 @@ bool Generator::pushTernaryExpression(const Expression& test,
 }
 
 bool Generator::pushVariableReference(const VariableReference& v) {
+    return this->pushVariableReferencePartial(v, SlotRange{0, (int)v.type().slotCount()});
+}
+
+bool Generator::pushVariableReferencePartial(const VariableReference& v, SlotRange subset) {
     const Variable& var = *v.variable();
+    SlotRange r;
     if (IsUniform(var)) {
-        SlotRange r = this->getUniformSlots(var);
+        r = this->getUniformSlots(var);
         SkASSERT(r.count == (int)var.type().slotCount());
+        r.index += subset.index;
+        r.count = subset.count;
         fBuilder.push_uniform(r);
-        return true;
+    } else {
+        r = this->getVariableSlots(var);
+        SkASSERT(r.count == (int)var.type().slotCount());
+        r.index += subset.index;
+        r.count = subset.count;
+        fBuilder.push_slots(r);
     }
-    fBuilder.push_slots(this->getVariableSlots(var));
     return true;
 }
 

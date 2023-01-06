@@ -1559,6 +1559,7 @@ cc_library_static {
       android: {
         srcs: [
           "src/codec/SkHeifCodec.cpp",
+          "src/codec/SkJpegRCodec.cpp",
           "src/codec/SkRawCodec.cpp",
           "src/gpu/AtlasTypes.cpp",
           "src/gpu/Blend.cpp",
@@ -1971,6 +1972,12 @@ cc_defaults {
         shared_libs: [
             "libandroidicu",
             "libheif",
+            "libimage_io",
+        ],
+        static_libs: [
+            "libjpegrecoverymap",
+            "libjpegdecoder",
+            "libjpegencoder",
         ],
         export_shared_lib_headers: [
             "libandroidicu",
