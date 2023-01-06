@@ -448,7 +448,7 @@ public:
                        const GrTextureType* srcTypeIfTexture,
                        const SkRect& srcBounds, bool srcBoundsExact,
                        const SkIRect& srcRect, const SkIRect& dstRect) const;
-    bool canCopyAsDraw(GrGLFormat dstFormat, bool srcIsTexturable) const;
+    bool canCopyAsDraw(GrGLFormat dstFormat, bool srcIsTexturable, bool scalingCopy) const;
 
     DstCopyRestrictions getDstCopyRestrictions(const GrRenderTargetProxy* src,
                                                GrColorType) const override;
@@ -475,7 +475,10 @@ public:
     /* Is there support for enabling/disabling sRGB writes for sRGB-capable color buffers? */
     bool srgbWriteControl() const { return fSRGBWriteControl; }
 
-    /** Skip checks for GL errors, shader compilation success, program link success. */
+    /**
+     * Skip checks for GL errors and framebuffer completeness. Note that this does not skip
+     *  checking shader compilation and program linking status.
+     */
     bool skipErrorChecks() const { return fSkipErrorChecks; }
 
     bool supportsProtected() const { return fSupportsProtected; }
@@ -613,6 +616,7 @@ private:
     bool fBindTexture0WhenChangingTextureFBOMultisampleCount : 1;
     bool fRebindColorAttachmentAfterCheckFramebufferStatus : 1;
     bool fFlushBeforeWritePixels : 1;
+    bool fDisableScalingCopyAsDraws : 1;
     int fMaxInstancesPerDrawWithoutCrashing = 0;
 
     uint32_t fBlitFramebufferFlags = kNoSupport_BlitFramebufferFlag;
