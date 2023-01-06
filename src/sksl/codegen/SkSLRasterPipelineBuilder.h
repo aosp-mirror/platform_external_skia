@@ -47,6 +47,7 @@ enum class BuilderOp {
     push_literal_f,
     push_slots,
     push_uniform,
+    push_zeros,
     copy_stack_to_slots,
     copy_stack_to_slots_unmasked,
     discard_stack,
@@ -136,11 +137,6 @@ private:
     // pick the appropriate op based on `numSlots`.
     void appendMultiSlotUnaryOp(SkRasterPipeline* pipeline, SkRasterPipeline::Stage baseStage,
                                 float* dst, int numSlots);
-
-    // Appends a math operation with two inputs (dst op src) and one output (dst) to the pipeline.
-    // `src` must be _immediately_ after `dst` in memory.
-    void appendAdjacentSingleSlotBinaryOp(SkRasterPipeline* pipeline, SkRasterPipeline::Stage stage,
-                                          float* dst, const float* src);
 
     // Appends a multi-slot two-input math operation to the pipeline. `src` must be _immediately_
     // after `dst` in memory. `baseStage` must refer to an unbounded "apply_to_n_slots" stage, which
@@ -270,6 +266,11 @@ public:
     void push_uniform(SlotRange src) {
         // Translates into copy_constants (from uniforms into temp stack) in Raster Pipeline.
         fInstructions.push_back({BuilderOp::push_uniform, {src.index}, src.count});
+    }
+
+    void push_zeros(int count) {
+        // Translates into zero_slot_unmasked in Raster Pipeline.
+        fInstructions.push_back({BuilderOp::push_zeros, {}, count});
     }
 
     void push_slots(SlotRange src) {
