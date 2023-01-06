@@ -22,7 +22,7 @@ def git_repos_from_deps():
     new_git_repository(
         name = "dawn",
         build_file = "@//bazel/external/dawn:BUILD.bazel",
-        commit = "f7e6e8c900c7f86c65247f41d9ec3923c35cfcc7",
+        commit = "582ce0b0b4c828f7a8c158a45a24a28662cfa0e4",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -49,7 +49,7 @@ def git_repos_from_deps():
     new_git_repository(
         name = "freetype",
         build_file = "@//bazel/external/freetype:BUILD.bazel",
-        commit = "0bcb664de8ea44299f57c45d01433328596bc2a7",
+        commit = "ebe7e9128cdf81cb0a0d27fe293ecff96f6c98a8",
         remote = "https://chromium.googlesource.com/chromium/src/third_party/freetype2.git",
     )
 
