@@ -13,8 +13,8 @@
 #include "include/private/SkMacros.h"
 #include "include/private/SkSpinlock.h"
 #include "include/private/SkTHash.h"
-#include "include/private/SkThreadAnnotations.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkThreadAnnotations.h"
+#include "include/private/base/SkTo.h"
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkEnumBitMask.h"
 #include "src/gpu/graphite/BuiltInCodeSnippetID.h"
@@ -34,9 +34,10 @@ class SkRuntimeEffect;
 
 namespace skgpu::graphite {
 
-enum class Layout;
 class RenderStep;
 class RuntimeEffectDictionary;
+
+struct ResourceBindingRequirements;
 
 // TODO: How to represent the type (e.g., 2D) of texture being sampled?
 class TextureAndSampler {
@@ -156,10 +157,9 @@ public:
     }
     const skgpu::BlendInfo& blendInfo() const { return fBlendInfo; }
 
-    std::string toSkSL(const Layout paintUniformsLayout,
-                       const Layout renderStepUniformsLayout,
+    std::string toSkSL(const ResourceBindingRequirements& bindingReqs,
                        const RenderStep* step,
-                       const bool defineShadingSsboIndexVarying,
+                       const bool useStorageBuffers,
                        const bool defineLocalCoordsVarying) const;
 
 private:

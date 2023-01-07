@@ -9,7 +9,7 @@
 #define GrMtlGpu_DEFINED
 
 #include "include/gpu/mtl/GrMtlBackendContext.h"
-#include "include/private/SkDeque.h"
+#include "include/private/base/SkDeque.h"
 #include "include/private/gpu/ganesh/GrMtlTypesPriv.h"
 
 #include "src/gpu/ganesh/GrFinishCallbacks.h"
@@ -161,17 +161,18 @@ private:
                                      const GrBackendFormat&,
                                      GrRenderable,
                                      int renderTargetSampleCnt,
-                                     SkBudgeted,
+                                     skgpu::Budgeted,
                                      GrProtected,
                                      int mipLevelCount,
                                      uint32_t levelClearMask,
                                      std::string_view label) override;
     sk_sp<GrTexture> onCreateCompressedTexture(SkISize dimensions,
                                                const GrBackendFormat&,
-                                               SkBudgeted,
+                                               skgpu::Budgeted,
                                                GrMipmapped,
                                                GrProtected,
-                                               const void* data, size_t dataSize) override;
+                                               const void* data,
+                                               size_t dataSize) override;
 
     sk_sp<GrTexture> onWrapBackendTexture(const GrBackendTexture&,
                                           GrWrapOwnership,

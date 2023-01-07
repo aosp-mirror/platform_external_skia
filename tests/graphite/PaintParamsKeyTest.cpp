@@ -35,6 +35,7 @@
 #include "src/gpu/graphite/PublicPrecompile.h"
 #include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/ResourceProvider.h"
+#include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/gpu/graphite/ShaderCodeDictionary.h"
 #include "src/gpu/graphite/UniquePaintParamsID.h"
 #include "src/shaders/SkImageShader.h"
@@ -193,8 +194,11 @@ ColorFilterType random_colorfiltertype(SkRandom* rand) {
 }
 
 sk_sp<SkImage> make_image(SkRandom* rand, Recorder* recorder) {
-    SkImageInfo info = SkImageInfo::Make(32, 32, SkColorType::kRGBA_8888_SkColorType,
-                                         kPremul_SkAlphaType);
+    // TODO: add alpha-only images too
+    SkImageInfo info = SkImageInfo::Make(32, 32,
+                                         SkColorType::kRGBA_8888_SkColorType,
+                                         kPremul_SkAlphaType,
+                                         random_colorspace(rand));
 
     SkBitmap bitmap;
     bitmap.allocPixels(info);
@@ -630,8 +634,15 @@ void check_draw(skiatest::Reporter* reporter,
 // TODO: keep this as a smoke test but add a fuzzer that reuses all the helpers
 DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest, reporter, context) {
     auto recorder = context->makeRecorder();
-    KeyContext keyContext(recorder.get(), {});
-    auto dict = keyContext.dict();
+    ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
+
+    SkColorInfo ci = SkColorInfo(kRGBA_8888_SkColorType, kPremul_SkAlphaType,
+                                 SkColorSpace::MakeSRGB());
+
+    KeyContext extractPaintKeyContext(recorder.get(), {}, ci);
+
+    std::unique_ptr<RuntimeEffectDictionary> rtDict = std::make_unique<RuntimeEffectDictionary>();
+    KeyContext precompileKeyContext(dict, rtDict.get(), ci);
 
     SkFont font(ToolUtils::create_portable_typeface(), 16);
     const char text[] = "hambur";
@@ -695,10 +706,11 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest, reporter, context) {
                                 recorder.get(), &gatherer, &builder, Layout::kMetal, {},
                                 PaintParams(paint,
                                             std::move(primitiveBlender),
-                                            /* skipColorXform= */ false));
+                                            /* skipColorXform= */ false),
+                                extractPaintKeyContext.dstColorInfo());
 
                         std::vector<UniquePaintParamsID> precompileIDs;
-                        paintOptions.priv().buildCombinations(keyContext,
+                        paintOptions.priv().buildCombinations(precompileKeyContext,
                                                               withPrimitiveBlender,
                                                               [&](UniquePaintParamsID id) {
                                                                   precompileIDs.push_back(id);

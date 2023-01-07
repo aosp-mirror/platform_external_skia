@@ -11,7 +11,7 @@
 #include "include/core/SkPoint3.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/private/SkFloatingPoint.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTo.h"
 #include "src/core/SkBlendModePriv.h"
 #include "src/core/SkMathPriv.h"
 #include "src/core/SkMatrixPriv.h"
@@ -1411,7 +1411,7 @@ GR_DRAW_OP_TEST_DEFINE(TextureOpImpl) {
                                                              1,
                                                              mipmapped,
                                                              fit,
-                                                             SkBudgeted::kNo,
+                                                             skgpu::Budgeted::kNo,
                                                              GrProtected::kNo,
                                                              /*label=*/"TextureOp",
                                                              GrInternalSurfaceFlags::kNone);
