@@ -41,6 +41,10 @@
 #include "src/codec/SkHeifCodec.h"
 #endif
 
+#ifdef SK_CODEC_DECODES_JPEGR
+#include "src/codec/SkJpegRCodec.h"
+#endif
+
 #ifdef SK_CODEC_DECODES_JPEG
 #include "src/codec/SkJpegCodec.h"
 #endif
@@ -73,6 +77,11 @@ struct DecoderProc {
 
 static std::vector<DecoderProc>* decoders() {
     static auto* decoders = new std::vector<DecoderProc> {
+
+    // JPEGR Decoder should be checked before JPEG, because JPEGR is an extension of JPEG
+    #ifdef SK_CODEC_DECODES_JPEGR
+        { SkJpegRCodec::IsJpegR, SkJpegRCodec::MakeFromStream },
+    #endif
     #ifdef SK_CODEC_DECODES_JPEG
         { SkJpegCodec::IsJpeg, SkJpegCodec::MakeFromStream },
     #endif
@@ -193,19 +202,18 @@ std::unique_ptr<SkCodec> SkCodec::MakeFromData(sk_sp<SkData> data, SkPngChunkRea
     return MakeFromStream(SkMemoryStream::Make(std::move(data)), nullptr, reader);
 }
 
-SkCodec::SkCodec(SkEncodedInfo&& info, XformFormat srcFormat, std::unique_ptr<SkStream> stream,
-                 SkEncodedOrigin origin)
-    : fEncodedInfo(std::move(info))
-    , fSrcXformFormat(srcFormat)
-    , fStream(std::move(stream))
-    , fNeedsRewind(false)
-    , fOrigin(origin)
-    , fDstInfo()
-    , fOptions()
-    , fCurrScanline(-1)
-    , fStartedIncrementalDecode(false)
-    , fAndroidCodecHandlesFrameIndex(false)
-{}
+SkCodec::SkCodec(SkEncodedInfo&& info,
+                 XformFormat srcFormat,
+                 std::unique_ptr<SkStream> stream,
+                 SkEncodedOrigin origin,
+                 sk_sp<const SkData> xmpMetadata)
+        : fEncodedInfo(std::move(info))
+        , fSrcXformFormat(srcFormat)
+        , fStream(std::move(stream))
+        , fOrigin(origin)
+        , fXmpMetadata(std::move(xmpMetadata))
+        , fDstInfo()
+        , fOptions() {}
 
 SkCodec::~SkCodec() {}
 

@@ -23,10 +23,16 @@ rolldeps() {
   git add DEPS
 }
 
+rollbazel() {
+  STEP="roll-bazel" &&
+  sed -i'' -e "s!commit = \"${FT_PREVIOUS_REV}\",!commit = \"${FT_NEXT_REV}\",!" bazel/deps.bzl &&
+  git add bazel/deps.bzl
+}
+
 mergeinclude() {
   SKIA_INCLUDE="include/$1/$2" &&
   STEP="merge ${SKIA_INCLUDE}: check for merge conflicts" &&
-  FT_INCLUDE="include/freetype/config/$2" &&
+  FT_INCLUDE="include/$2" &&
   TMPFILE="$(mktemp)" &&
   git -C "${FT_GIT_DIR}" cat-file blob "${FT_PREVIOUS_REV}:${FT_INCLUDE}" >> "${TMPFILE}" &&
   git merge-file "${FT_BUILD_DIR}/${SKIA_INCLUDE}" "${TMPFILE}" "${FT_GIT_DIR}/${FT_INCLUDE}" &&
@@ -49,9 +55,10 @@ Disable: treat-URL-as-trailer"
 previousrev &&
 nextrev &&
 rolldeps "$@" &&
-mergeinclude freetype-android ftoption.h &&
-mergeinclude freetype-android ftmodule.h &&
-mergeinclude freetype-no-type1 ftoption.h &&
-mergeinclude freetype-no-type1 ftmodule.h &&
+rollbazel &&
+mergeinclude freetype-android freetype/config/ftoption.h &&
+mergeinclude freetype-android freetype/config/ftmodule.h &&
+mergeinclude freetype-no-type1 freetype/config/ftoption.h &&
+mergeinclude freetype-no-type1 freetype/config/ftmodule.h &&
 commit &&
 true || { echo "Failed step ${STEP}"; exit 1; }

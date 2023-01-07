@@ -20,7 +20,7 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/private/SkTemplates.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTo.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "include/utils/SkBase64.h"
 #include "src/core/SkAutoPixmapStorage.h"
@@ -112,7 +112,7 @@ void TestCopyFromSurface(skiatest::Reporter* reporter,
                                      origin,
                                      GrMipmapped::kNo,
                                      SkBackingFit::kExact,
-                                     SkBudgeted::kYes,
+                                     skgpu::Budgeted::kYes,
                                      /*label=*/"CopyFromSurface_Test");
     SkASSERT(copy && copy->asTextureProxy());
     auto swizzle = dContext->priv().caps()->getReadSwizzle(copy->backendFormat(), colorType);
@@ -287,7 +287,7 @@ std::unique_ptr<skgpu::v1::SurfaceContext> CreateSurfaceContext(GrRecordingConte
                                                                 int sampleCount,
                                                                 GrMipmapped mipmapped,
                                                                 GrProtected isProtected,
-                                                                SkBudgeted budgeted) {
+                                                                skgpu::Budgeted budgeted) {
     GrBackendFormat format = rContext->priv().caps()->getDefaultBackendFormat(info.colorType(),
                                                                               renderable);
     return rContext->priv().makeSC(info,

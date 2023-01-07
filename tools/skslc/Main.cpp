@@ -8,7 +8,7 @@
 #define SK_OPTS_NS skslc_standalone
 #include "include/core/SkGraphics.h"
 #include "include/core/SkStream.h"
-#include "include/private/SkStringView.h"
+#include "include/private/base/SkStringView.h"
 #include "src/core/SkCpu.h"
 #include "src/core/SkOpts.h"
 #include "src/opts/SkChecksum_opts.h"
@@ -435,6 +435,9 @@ static bool detect_shader_settings(const std::string& text,
                 if (consume_suffix(&settingsText, " SkVMDebugTrace")) {
                     settings->fOptimize = false;
                     *debugTrace = std::make_unique<SkSL::SkVMDebugTrace>();
+                }
+                if (consume_suffix(&settingsText, " SPIRVDawnCompatMode")) {
+                    settings->fSPIRVDawnCompatMode = true;
                 }
 
                 if (settingsText.empty()) {

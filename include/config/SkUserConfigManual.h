@@ -20,7 +20,6 @@
   #define GR_GL_CHECK_ALLOC_WITH_GET_ERROR 0
 
   // Staging flags
-  #define SK_LEGACY_PATH_ARCTO_ENDPOINT
   #define SK_SUPPORT_STROKEANDFILL
 
   // Needed until we fix https://bug.skia.org/2440

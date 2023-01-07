@@ -27,6 +27,7 @@
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
+#include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
@@ -36,6 +37,7 @@
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkConvertPixels.h"
 #include "src/core/SkImageInfoPriv.h"
+#include "src/gpu/SkBackingFit.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrDataUtils.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
@@ -565,7 +567,7 @@ DEF_GANESH_TEST_FOR_ALL_CONTEXTS(ReadPixels_InvalidRowBytes_Gpu,
                                  ctxInfo,
                                  CtsEnforcement::kApiLevel_T) {
     auto srcII = SkImageInfo::Make({10, 10}, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-    auto surf = SkSurface::MakeRenderTarget(ctxInfo.directContext(), SkBudgeted::kYes, srcII);
+    auto surf = SkSurface::MakeRenderTarget(ctxInfo.directContext(), skgpu::Budgeted::kYes, srcII);
     for (int ct = 0; ct < kLastEnum_SkColorType + 1; ++ct) {
         auto colorType = static_cast<SkColorType>(ct);
         size_t bpp = SkColorTypeBytesPerPixel(colorType);
@@ -584,7 +586,7 @@ DEF_GANESH_TEST_FOR_ALL_CONTEXTS(WritePixels_InvalidRowBytes_Gpu,
                                  ctxInfo,
                                  CtsEnforcement::kApiLevel_T) {
     auto dstII = SkImageInfo::Make({10, 10}, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-    auto surf = SkSurface::MakeRenderTarget(ctxInfo.directContext(), SkBudgeted::kYes, dstII);
+    auto surf = SkSurface::MakeRenderTarget(ctxInfo.directContext(), skgpu::Budgeted::kYes, dstII);
     for (int ct = 0; ct < kLastEnum_SkColorType + 1; ++ct) {
         auto colorType = static_cast<SkColorType>(ct);
         size_t bpp = SkColorTypeBytesPerPixel(colorType);
@@ -656,7 +658,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceAsyncReadPixels,
         auto factory = std::function<GpuSrcFactory<Surface>>(
                 [context = ctxInfo.directContext(), origin](const SkPixmap& src) {
                     auto surf = SkSurface::MakeRenderTarget(context,
-                                                            SkBudgeted::kYes,
+                                                            skgpu::Budgeted::kYes,
                                                             src.info(),
                                                             1,
                                                             origin,
@@ -788,7 +790,8 @@ DEF_GANESH_TEST(AsyncReadPixelsContextShutdown, reporter, options, CtsEnforcemen
                 if (!direct->priv().caps()->transferFromSurfaceToBufferSupport()) {
                     continue;
                 }
-                auto surf = SkSurface::MakeRenderTarget(direct, SkBudgeted::kYes, ii, 1, nullptr);
+                auto surf = SkSurface::MakeRenderTarget(direct, skgpu::Budgeted::kYes, ii, 1,
+                                                        nullptr);
                 if (!surf) {
                     continue;
                 }

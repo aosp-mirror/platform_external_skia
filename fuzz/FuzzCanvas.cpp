@@ -33,7 +33,7 @@
 #include "include/effects/SkImageFilters.h"
 #include "include/effects/SkLumaColorFilter.h"
 #include "include/effects/SkPerlinNoiseShader.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTo.h"
 #include "include/svg/SkSVGCanvas.h"
 #include "include/utils/SkNullCanvas.h"
 #include "src/core/SkOSFile.h"
@@ -1611,7 +1611,7 @@ static void fuzz_ganesh(Fuzz* fuzz, GrDirectContext* context) {
     SkASSERT(context);
     auto surface = SkSurface::MakeRenderTarget(
             context,
-            SkBudgeted::kNo,
+            skgpu::Budgeted::kNo,
             SkImageInfo::Make(kCanvasSize, kRGBA_8888_SkColorType, kPremul_SkAlphaType));
     SkASSERT(surface && surface->getCanvas());
     fuzz_canvas(fuzz, surface->getCanvas());

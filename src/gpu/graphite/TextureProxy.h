@@ -11,7 +11,7 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSize.h"
 #include "include/gpu/graphite/TextureInfo.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTo.h"
 
 #include <functional>
 
@@ -26,7 +26,7 @@ class Texture;
 
 class TextureProxy : public SkRefCnt {
 public:
-    TextureProxy(SkISize dimensions, const TextureInfo& info, SkBudgeted budgeted);
+    TextureProxy(SkISize dimensions, const TextureInfo& info, skgpu::Budgeted budgeted);
     TextureProxy(sk_sp<Texture>);
 
     TextureProxy() = delete;
@@ -70,24 +70,24 @@ public:
                                     Mipmapped,
                                     Protected,
                                     Renderable,
-                                    SkBudgeted);
+                                    skgpu::Budgeted);
 
     using LazyInstantiateCallback = std::function<sk_sp<Texture> (ResourceProvider*)>;
 
     static sk_sp<TextureProxy> MakeLazy(SkISize dimensions,
                                         const TextureInfo&,
-                                        SkBudgeted,
+                                        skgpu::Budgeted,
                                         Volatile,
                                         LazyInstantiateCallback&&);
     static sk_sp<TextureProxy> MakeFullyLazy(const TextureInfo&,
-                                             SkBudgeted,
+                                             skgpu::Budgeted,
                                              Volatile,
                                              LazyInstantiateCallback&&);
 
 private:
     TextureProxy(SkISize dimensions,
                  const TextureInfo&,
-                 SkBudgeted,
+                 skgpu::Budgeted,
                  Volatile,
                  LazyInstantiateCallback&&);
 
@@ -100,7 +100,7 @@ private:
     SkISize fDimensions;
     const TextureInfo fInfo;
 
-    SkBudgeted fBudgeted;
+    skgpu::Budgeted fBudgeted;
     const Volatile fVolatile;
 
     sk_sp<Texture> fTexture;

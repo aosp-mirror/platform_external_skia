@@ -12,8 +12,8 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkTypes.h"
 #include "include/gpu/GrTypes.h"
-#include "include/private/SkTo.h"
 #include "include/private/SkTypeTraits.h"
+#include "include/private/base/SkTo.h"
 #include "src/gpu/Swizzle.h"
 #include "src/gpu/ganesh/GrSurfaceProxy.h"
 
@@ -24,7 +24,11 @@
 class GrRecordingContext;
 class GrRenderTargetProxy;
 class GrTextureProxy;
+enum class SkBackingFit;
 struct SkIRect;
+namespace skgpu {
+enum class Budgeted : bool;
+}
 
 class GrSurfaceProxyView {
 public:
@@ -81,14 +85,14 @@ public:
                                    GrMipmapped mipmapped,
                                    SkIRect srcRect,
                                    SkBackingFit fit,
-                                   SkBudgeted budgeted,
+                                   skgpu::Budgeted budgeted,
                                    std::string_view label);
 
     static GrSurfaceProxyView Copy(GrRecordingContext* rContext,
                                    GrSurfaceProxyView src,
                                    GrMipmapped mipmapped,
                                    SkBackingFit fit,
-                                   SkBudgeted budgeted,
+                                   skgpu::Budgeted budgeted,
                                    std::string_view label);
 
     // This does not reset the origin or swizzle, so the View can still be used to access those
