@@ -7,6 +7,7 @@
 #   //include/private/BUILD.bazel
 #   //include/private/base/BUILD.bazel
 #   //include/private/chromium/BUILD.bazel
+#   //src/base/BUILD.bazel
 #   //src/core/BUILD.bazel
 #   //src/image/BUILD.bazel
 #   //src/images/BUILD.bazel
@@ -124,6 +125,7 @@ skia_core_public = [
 #  //include/private/base:shared_gpu_private_hdrs
 #  //include/private/chromium:private_hdrs
 #  //include/private/chromium:shared_private_hdrs
+#  //src/base:private_hdrs
 #  //src/core:core_hdrs
 #  //src/core:core_skslc_hdrs
 #  //src/core:core_skslc_srcs
@@ -162,7 +164,6 @@ skia_core_sources = [
   "$_include/private/SkSpinlock.h",
   "$_include/private/SkTArray.h",
   "$_include/private/SkTDArray.h",
-  "$_include/private/SkTHash.h",
   "$_include/private/SkTLogic.h",
   "$_include/private/SkTPin.h",
   "$_include/private/SkTemplates.h",
@@ -182,13 +183,13 @@ skia_core_sources = [
   "$_include/private/base/SkMutex.h",
   "$_include/private/base/SkOnce.h",
   "$_include/private/base/SkSemaphore.h",
-  "$_include/private/base/SkStringView.h",
   "$_include/private/base/SkTFitsIn.h",
   "$_include/private/base/SkThreadAnnotations.h",
   "$_include/private/base/SkThreadID.h",
   "$_include/private/base/SkTo.h",
   "$_include/private/chromium/SkChromeRemoteGlyphCache.h",
   "$_include/private/chromium/Slug.h",
+  "$_src/base/SkStringView.h",
   "$_src/core/Sk4px.h",
   "$_src/core/SkAAClip.cpp",
   "$_src/core/SkAAClip.h",
@@ -310,6 +311,7 @@ skia_core_sources = [
   "$_src/core/SkExecutor.cpp",
   "$_src/core/SkFDot6.h",
   "$_src/core/SkFlattenable.cpp",
+  "$_src/core/SkFloatingPoint.cpp",
   "$_src/core/SkFont.cpp",
   "$_src/core/SkFontDescriptor.cpp",
   "$_src/core/SkFontDescriptor.h",
@@ -505,6 +507,7 @@ skia_core_sources = [
   "$_src/core/SkTDArray.cpp",
   "$_src/core/SkTDPQueue.h",
   "$_src/core/SkTDynamicHash.h",
+  "$_src/core/SkTHash.h",
   "$_src/core/SkTInternalLList.h",
   "$_src/core/SkTLazy.h",
   "$_src/core/SkTMultiMap.h",
