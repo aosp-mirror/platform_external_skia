@@ -166,6 +166,7 @@ cc_library_static {
                "skia_renderengine_deps"],
     srcs: [
         "modules/skcms/skcms.cc",
+        "src/android/SkAndroidFrameworkPerfettoStaticStorage.cpp",
         "src/android/SkAndroidFrameworkUtils.cpp",
         "src/android/SkAnimatedImage.cpp",
         "src/codec/SkAndroidCodec.cpp",
@@ -1562,6 +1563,7 @@ cc_library_static {
     target: {
       android: {
         srcs: [
+          "src/android/SkAndroidFrameworkPerfettoStaticStorage.cpp",
           "src/codec/SkHeifCodec.cpp",
           "src/codec/SkJpegRCodec.cpp",
           "src/codec/SkRawCodec.cpp",
@@ -1940,6 +1942,9 @@ cc_defaults {
             "libGLESv2",
             "libvulkan",
             "libnativewindow",
+        ],
+        static_libs: [
+            "libperfetto_client_experimental",
         ],
         export_shared_lib_headers: [
             "libvulkan",
