@@ -1280,6 +1280,20 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0) {
             }
             return this->unaryOp(arg0.type(), kAbsOps);
 
+        case IntrinsicKind::k_any_IntrinsicKind:
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            this->foldWithMultiOp(BuilderOp::bitwise_or_n_ints, arg0.type().slotCount());
+            return true;
+
+        case IntrinsicKind::k_all_IntrinsicKind:
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            this->foldWithMultiOp(BuilderOp::bitwise_and_n_ints, arg0.type().slotCount());
+            return true;
+
         case IntrinsicKind::k_ceil_IntrinsicKind:
             if (!this->pushExpression(arg0)) {
                 return unsupported();
@@ -1434,6 +1448,24 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic,
                 return unsupported();
             }
             return this->binaryOp(arg0.type(), kMultiplyOps);
+
+        case IntrinsicKind::k_step_IntrinsicKind: {
+            // Compute step as `float(lessThan(edge, x))`. We convert from boolean 0/~0 to floating
+            // point zero/one by using a bitwise-and against the bit-pattern of 1.0.
+            SkASSERT(arg0.type().componentType().matches(arg1.type().componentType()));
+            if (!this->pushVectorizedExpression(arg0, arg1.type()) || !this->pushExpression(arg1)) {
+                return unsupported();
+            }
+            if (!this->binaryOp(arg1.type(), kLessThanOps)) {
+                return unsupported();
+            }
+            Literal pos1Literal{Position{}, 1.0, &arg1.type().componentType()};
+            if (!this->pushVectorizedExpression(pos1Literal, arg1.type())) {
+                return unsupported();
+            }
+            fBuilder.binary_op(BuilderOp::bitwise_and_n_ints, arg1.type().slotCount());
+            return true;
+        }
 
         default:
             break;
