@@ -13,10 +13,10 @@
 #include "include/private/SkSLProgramElement.h"
 #include "include/private/SkSLStatement.h"
 #include "include/private/SkTArray.h"
-#include "include/private/SkTHash.h"
-#include "include/private/base/SkStringView.h"
 #include "include/sksl/SkSLOperator.h"
 #include "include/sksl/SkSLPosition.h"
+#include "src/base/SkStringView.h"
+#include "src/core/SkTHash.h"
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLIntrinsicList.h"
@@ -27,6 +27,7 @@
 #include "src/sksl/ir/SkSLBreakStatement.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLConstructorCompound.h"
+#include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 #include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLContinueStatement.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
@@ -37,6 +38,7 @@
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLIfStatement.h"
 #include "src/sksl/ir/SkSLLiteral.h"
+#include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
@@ -169,15 +171,15 @@ public:
     [[nodiscard]] bool writeVarDeclaration(const VarDeclaration& v);
 
     /** Pushes an expression to the value stack. */
-    [[nodiscard]] bool pushAssignmentExpression(const BinaryExpression& e);
     [[nodiscard]] bool pushBinaryExpression(const BinaryExpression& e);
     [[nodiscard]] bool pushBinaryExpression(const Expression& left,
                                             Operator op,
                                             const Expression& right);
     [[nodiscard]] bool pushConstructorCast(const AnyConstructor& c);
     [[nodiscard]] bool pushConstructorCompound(const ConstructorCompound& c);
+    [[nodiscard]] bool pushConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c);
     [[nodiscard]] bool pushConstructorSplat(const ConstructorSplat& c);
-    [[nodiscard]] bool pushExpression(const Expression& e);
+    [[nodiscard]] bool pushExpression(const Expression& e, bool usesResult = true);
     [[nodiscard]] bool pushFunctionCall(const FunctionCall& e);
     [[nodiscard]] bool pushIntrinsic(const FunctionCall& c);
     [[nodiscard]] bool pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0);
@@ -189,6 +191,7 @@ public:
                                      const Expression& arg1,
                                      const Expression& arg2);
     [[nodiscard]] bool pushLiteral(const Literal& l);
+    [[nodiscard]] bool pushPostfixExpression(const PostfixExpression& p, bool usesResult);
     [[nodiscard]] bool pushPrefixExpression(const PrefixExpression& p);
     [[nodiscard]] bool pushPrefixExpression(Operator op, const Expression& expr);
     [[nodiscard]] bool pushSwizzle(const Swizzle& s);
@@ -744,7 +747,7 @@ bool Generator::writeDoStatement(const DoStatement& d) {
 }
 
 bool Generator::writeExpressionStatement(const ExpressionStatement& e) {
-    if (!this->pushExpression(*e.expression())) {
+    if (!this->pushExpression(*e.expression(), /*usesResult=*/false)) {
         return unsupported();
     }
     this->discardExpression(e.expression()->type().slotCount());
@@ -805,7 +808,7 @@ bool Generator::writeVarDeclaration(const VarDeclaration& v) {
     return true;
 }
 
-bool Generator::pushExpression(const Expression& e) {
+bool Generator::pushExpression(const Expression& e, bool usesResult) {
     switch (e.kind()) {
         case Expression::Kind::kBinary:
             return this->pushBinaryExpression(e.as<BinaryExpression>());
@@ -816,6 +819,9 @@ bool Generator::pushExpression(const Expression& e) {
         case Expression::Kind::kConstructorCompoundCast:
         case Expression::Kind::kConstructorScalarCast:
             return this->pushConstructorCast(e.asAnyConstructor());
+
+        case Expression::Kind::kConstructorDiagonalMatrix:
+            return this->pushConstructorDiagonalMatrix(e.as<ConstructorDiagonalMatrix>());
 
         case Expression::Kind::kConstructorSplat:
             return this->pushConstructorSplat(e.as<ConstructorSplat>());
@@ -828,6 +834,9 @@ bool Generator::pushExpression(const Expression& e) {
 
         case Expression::Kind::kPrefix:
             return this->pushPrefixExpression(e.as<PrefixExpression>());
+
+        case Expression::Kind::kPostfix:
+            return this->pushPostfixExpression(e.as<PostfixExpression>(), usesResult);
 
         case Expression::Kind::kSwizzle:
             return this->pushSwizzle(e.as<Swizzle>());
@@ -1153,6 +1162,30 @@ bool Generator::pushConstructorCast(const AnyConstructor& c) {
     return unsupported();
 }
 
+bool Generator::pushConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c) {
+    if (!this->pushExpression(*c.argument())) {
+        return unsupported();
+    }
+
+    const int slotsPerElement = 1; // matrices are composed of scalars
+    int distanceFromStackTop = 0;
+    for (int col = 0; col < c.type().columns(); ++col) {
+        // Skip position (0,0); we've pushed it already.
+        int startingRow = (col == 0) ? 1 : 0;
+        for (int row = startingRow; row < c.type().rows(); ++row) {
+            if (col == row) {
+                fBuilder.push_clone(slotsPerElement, distanceFromStackTop);
+            } else {
+                fBuilder.push_zeros(slotsPerElement);
+            }
+
+            distanceFromStackTop += slotsPerElement;
+        }
+    }
+
+    return true;
+}
+
 bool Generator::pushConstructorSplat(const ConstructorSplat& c) {
     if (!this->pushExpression(*c.argument())) {
         return unsupported();
@@ -1460,6 +1493,53 @@ bool Generator::pushLiteral(const Literal& l) {
         default:
             SkUNREACHABLE;
     }
+}
+
+bool Generator::pushPostfixExpression(const PostfixExpression& p, bool usesResult) {
+    // If the result is ignored...
+    if (!usesResult) {
+        // ... just emit a prefix expression instead.
+        return this->pushPrefixExpression(p.getOperator(), *p.operand());
+    }
+    // Get the operand as an lvalue, and push it onto the stack as-is.
+    std::unique_ptr<LValue> lvalue = LValue::Make(*p.operand());
+    if (!lvalue) {
+        return unsupported();
+    }
+    lvalue->push(this);
+
+    // Push a scratch copy of the operand.
+    fBuilder.push_clone(p.type().slotCount());
+
+    // Increment or decrement the scratch copy by one.
+    Literal oneLiteral{Position{}, 1.0, &p.type().componentType()};
+    if (!this->pushVectorizedExpression(oneLiteral, p.type())) {
+        return unsupported();
+    }
+
+    switch (p.getOperator().kind()) {
+        case OperatorKind::PLUSPLUS:
+            if (!this->binaryOp(p.type(), kAddOps)) {
+                return unsupported();
+            }
+            break;
+
+        case OperatorKind::MINUSMINUS:
+            if (!this->binaryOp(p.type(), kSubtractOps)) {
+                return unsupported();
+            }
+            break;
+
+        default:
+            SkUNREACHABLE;
+    }
+
+    // Write the new value back to the operand.
+    lvalue->store(this);
+
+    // Discard the scratch copy, leaving only the original value as-is.
+    this->discardExpression(p.type().slotCount());
+    return true;
 }
 
 bool Generator::pushPrefixExpression(const PrefixExpression& p) {

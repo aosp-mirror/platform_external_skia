@@ -8,8 +8,8 @@
 #include "include/core/SkSpan.h"
 #include "include/core/SkTypes.h"
 #include "include/private/SkTArray.h"
-#include "include/private/SkTHash.h"
 #include "src/core/SkRasterPipeline.h"
+#include "src/core/SkTHash.h"
 #include "src/core/SkUtils.h"
 
 #include <cstdint>
@@ -269,7 +269,12 @@ public:
 
     void push_zeros(int count) {
         // Translates into zero_slot_unmasked in Raster Pipeline.
-        fInstructions.push_back({BuilderOp::push_zeros, {}, count});
+        if (!fInstructions.empty() && fInstructions.back().fOp == BuilderOp::push_zeros) {
+            // Coalesce adjacent push_zero ops into a single op.
+            fInstructions.back().fImmA += count;
+        } else {
+            fInstructions.push_back({BuilderOp::push_zeros, {}, count});
+        }
     }
 
     void push_slots(SlotRange src) {
