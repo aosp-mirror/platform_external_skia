@@ -12,12 +12,14 @@
 #include "include/private/SkSLModifiers.h"
 #include "include/private/SkSLProgramElement.h"
 #include "include/private/SkSLStatement.h"
+#include "include/private/SkSLString.h"
 #include "include/private/SkTArray.h"
 #include "include/sksl/SkSLOperator.h"
 #include "include/sksl/SkSLPosition.h"
 #include "src/base/SkStringView.h"
 #include "src/core/SkTHash.h"
 #include "src/sksl/SkSLAnalysis.h"
+#include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLIntrinsicList.h"
 #include "src/sksl/codegen/SkSLRasterPipelineBuilder.h"
@@ -33,6 +35,7 @@
 #include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
+#include "src/sksl/ir/SkSLForStatement.h"
 #include "src/sksl/ir/SkSLFunctionCall.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
@@ -166,6 +169,7 @@ public:
     [[nodiscard]] bool writeContinueStatement(const ContinueStatement& b);
     [[nodiscard]] bool writeDoStatement(const DoStatement& d);
     [[nodiscard]] bool writeExpressionStatement(const ExpressionStatement& e);
+    [[nodiscard]] bool writeForStatement(const ForStatement& f);
     [[nodiscard]] bool writeGlobals();
     [[nodiscard]] bool writeIfStatement(const IfStatement& i);
     [[nodiscard]] bool writeReturnStatement(const ReturnStatement& r);
@@ -236,7 +240,17 @@ public:
     void previousTempStack() {
         fBuilder.set_current_stack(--fCurrentTempStack);
     }
+    void pushCloneFromNextTempStack(int slots) {
+        fBuilder.push_clone_from_stack(slots, fCurrentTempStack + 1);
+    }
+    void pushCloneFromPreviousTempStack(int slots) {
+        fBuilder.push_clone_from_stack(slots, fCurrentTempStack - 1);
+    }
     BuilderOp getTypedOp(const SkSL::Type& type, const TypedOps& ops) const;
+
+    std::string makeMaskName(const char* name) {
+        return SkSL::String::printf("[%s %d]", name, fTempNameIndex++);
+    }
 
     static bool IsUniform(const Variable& var) {
        return var.modifiers().fFlags & Modifiers::kUniform_Flag;
@@ -253,6 +267,7 @@ private:
     SkTArray<SlotRange> fFunctionStack;
     SlotRange fCurrentContinueMask;
     int fCurrentTempStack = 0;
+    int fTempNameIndex = 0;
 
     static constexpr auto kAbsOps = TypedOps{BuilderOp::abs_float,
                                              BuilderOp::abs_int,
@@ -729,6 +744,9 @@ bool Generator::writeStatement(const Statement& s) {
         case Statement::Kind::kExpression:
             return this->writeExpressionStatement(s.as<ExpressionStatement>());
 
+        case Statement::Kind::kFor:
+            return this->writeForStatement(s.as<ForStatement>());
+
         case Statement::Kind::kIf:
             return this->writeIfStatement(s.as<IfStatement>());
 
@@ -780,8 +798,10 @@ bool Generator::writeDoStatement(const DoStatement& d) {
 
     // Create a dedicated slot for continue-mask storage.
     SlotRange previousContinueMask = fCurrentContinueMask;
-    fCurrentContinueMask = fProgramSlots.createSlots(/*slots=*/1);
-
+    fCurrentContinueMask = fProgramSlots.createSlots(this->makeMaskName("do-loop continue mask"),
+                                                     *fProgram.fContext->fTypes.fBool,
+                                                     Position{},
+                                                     /*isFunctionReturnValue=*/false);
     // Write the do-loop body.
     int labelID = fBuilder.nextLabelID();
     fBuilder.label(labelID);
@@ -811,6 +831,71 @@ bool Generator::writeDoStatement(const DoStatement& d) {
 
     return true;
 }
+
+bool Generator::writeForStatement(const ForStatement& f) {
+    // If we've determined that the loop does not run, omit its code entirely.
+    if (f.unrollInfo() && f.unrollInfo()->fCount == 0) {
+        return true;
+    }
+
+    // Run the loop initializer.
+    if (f.initializer() && !this->writeStatement(*f.initializer())) {
+        return unsupported();
+    }
+
+    // Save off the original loop mask.
+    fBuilder.push_loop_mask();
+
+    // Create a dedicated slot for continue-mask storage.
+    SlotRange previousContinueMask = fCurrentContinueMask;
+    fCurrentContinueMask = fProgramSlots.createSlots(this->makeMaskName("for-loop continue mask"),
+                                                     *fProgram.fContext->fTypes.fBool,
+                                                     Position{},
+                                                     /*isFunctionReturnValue=*/false);
+    int loopTestID = fBuilder.nextLabelID();
+    int loopBodyID = fBuilder.nextLabelID();
+
+    // Jump down to the loop test so we can fall out of the loop immediately if it's zero-iteration.
+    fBuilder.jump(loopTestID);
+
+    // Write the for-loop body.
+    fBuilder.label(loopBodyID);
+    fBuilder.zero_slots_unmasked(fCurrentContinueMask);
+    if (!this->writeStatement(*f.statement())) {
+        return unsupported();
+    }
+    fBuilder.reenable_loop_mask(fCurrentContinueMask);
+
+    // Run the next-expression. Immediately discard its result.
+    if (f.next()) {
+        if (!this->pushExpression(*f.next(), /*usesResult=*/false)) {
+            return unsupported();
+        }
+        this->discardExpression(f.next()->type().slotCount());
+    }
+
+    fBuilder.label(loopTestID);
+    if (f.test()) {
+        // Emit the test-expression, in order to combine it with the loop mask.
+        if (!this->pushExpression(*f.test())) {
+            return unsupported();
+        }
+        // Mask off any lanes in the loop mask where the test-expression is false; this breaks the
+        // loop. We don't use the test expression for anything else, so jettison it.
+        fBuilder.merge_loop_mask();
+        this->discardExpression(/*slots=*/1);
+    }
+
+    // If any lanes are still running, go back to the top and run the loop body again.
+    fBuilder.branch_if_any_active_lanes(loopBodyID);
+
+    // Restore the loop and continue masks.
+    fBuilder.pop_loop_mask();
+    fCurrentContinueMask = previousContinueMask;
+
+    return true;
+}
+
 
 bool Generator::writeExpressionStatement(const ExpressionStatement& e) {
     if (!this->pushExpression(*e.expression(), /*usesResult=*/false)) {
@@ -1444,6 +1529,14 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0) {
             }
             return this->binaryOp(arg0.type(), kMinOps);
         }
+        case IntrinsicKind::k_transpose_IntrinsicKind:
+            SkASSERT(arg0.type().isMatrix());
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            fBuilder.transpose(arg0.type().columns(), arg0.type().rows());
+            return true;
+
         default:
             break;
     }
@@ -1454,6 +1547,52 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic,
                               const Expression& arg0,
                               const Expression& arg1) {
     switch (intrinsic) {
+        case IntrinsicKind::k_cross_IntrinsicKind:
+            // Implement cross as `arg0.yzx * arg1.zxy - arg0.zxy * arg1.yzx`. We use two stacks so
+            // that each subexpression can be multiplied separately.
+            SkASSERT(arg0.type().matches(arg1.type()));
+            SkASSERT(arg0.type().slotCount() == 3);
+            SkASSERT(arg1.type().slotCount() == 3);
+
+            // Push `arg0.yzx` onto this stack and `arg0.zxy` onto the next stack.
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+
+            this->nextTempStack();
+            this->pushCloneFromPreviousTempStack(3);
+            fBuilder.swizzle(/*inputSlots=*/3, {2, 0, 1});
+            this->previousTempStack();
+
+            fBuilder.swizzle(/*inputSlots=*/3, {1, 2, 0});
+
+            // Push `arg1.zxy` onto this stack and `arg1.yzx` onto the next stack. Perform the
+            // multiply on each subexpression (`arg0.yzx * arg1.zxy` on the first stack, and
+            // `arg0.zxy * arg1.yzx` on the next).
+            if (!this->pushExpression(arg1)) {
+                return unsupported();
+            }
+
+            this->nextTempStack();
+            this->pushCloneFromPreviousTempStack(3);
+            fBuilder.swizzle(/*inputSlots=*/3, {1, 2, 0});
+            fBuilder.binary_op(BuilderOp::mul_n_floats, 3);
+            this->previousTempStack();
+
+            fBuilder.swizzle(/*inputSlots=*/3, {2, 0, 1});
+            fBuilder.binary_op(BuilderOp::mul_n_floats, 3);
+
+            // Migrate the result of the second subexpression (`arg0.zxy * arg1.yzx`) back onto the
+            // main stack and subtract it from the first subexpression (`arg0.yzx * arg1.zxy`).
+            this->pushCloneFromNextTempStack(3);
+            fBuilder.binary_op(BuilderOp::sub_n_floats, 3);
+
+            // Now that the calculation is complete, discard the subexpression on the next stack.
+            this->nextTempStack();
+            this->discardExpression(/*slots=*/3);
+            this->previousTempStack();
+            return true;
+
         case IntrinsicKind::k_dot_IntrinsicKind:
             // Implement dot as `a*b`, followed by folding via addition.
             SkASSERT(arg0.type().matches(arg1.type()));

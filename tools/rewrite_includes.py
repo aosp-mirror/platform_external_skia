@@ -47,9 +47,10 @@ ignorelist = [
   'node_modules',
   'include/third_party/skcms',
   # Temporary (hopefully) shims for Android
-  'SkDeque.h',
   'SkMalloc.h',
-  'SkTo.h',
+  # Temporary shims for Chromium
+  'SkDiscardableMemory.h',
+  'GrVkSecondaryCBDrawContext.h',
 ]
 
 assert '/' in [os.sep, os.altsep]
