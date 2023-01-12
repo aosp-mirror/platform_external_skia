@@ -116,10 +116,28 @@ declare_args() {
   skia_enable_skshaper_tests = skia_enable_skshaper
 }`
 
+// The footer written to gn/gpu.gni.
+const gpuGNIFooter = `
+# TODO(kjlubick) Update clients to use the individual targets
+# instead of the monolithic ones.
+skia_gpu_sources = skia_gpu_public + skia_gpu_private
+skia_gl_gpu_sources = skia_gpu_gl_public + skia_gpu_gl_private + skia_gpu_chromium_public
+skia_vk_sources = skia_gpu_vk_public + skia_gpu_vk_private
+`
+
+// The footer written to gn/utils.gni.
+const utilsGNIFooter = `
+# TODO(kjlubick) Update pdfium to use the individual target
+# instead of the monolithic ones.
+skia_utils_sources = skia_utils_private + skia_utils_chromium
+`
+
 // Map of GNI file names to footer text to be appended to the end of the file.
 var footerMap = map[string]string{
 	"gn/core.gni":                   coreGNIFooter,
+	"gn/gpu.gni":                    gpuGNIFooter,
 	"gn/sksl_tests.gni":             skslTestsFooter,
+	"gn/utils.gni":                  utilsGNIFooter,
 	"modules/skshaper/skshaper.gni": skshaperFooter,
 }
 
@@ -290,18 +308,21 @@ func writeGNFileHeader(writer interfaces.Writer, gniFile *gniFileContents, pathT
 	}
 }
 
-// Find the first duplicated file in a sorted list of file paths.
-// The file paths are case insensitive.
-func findDuplicate(files []string) (path string, hasDuplicate bool) {
-	for i, e := range files {
-		if i == len(files)-1 {
-			continue
-		}
-		if strings.EqualFold(e, files[i+1]) {
-			return e, true
+// removeDuplicates returns the list of files after it has been sorted and
+// all duplicate values have been removed.
+func removeDuplicates(files []string) []string {
+	if len(files) <= 1 {
+		return files
+	}
+	sort.Strings(files)
+	rv := make([]string, 0, len(files))
+	rv = append(rv, files[0])
+	for _, f := range files {
+		if rv[len(rv)-1] != f {
+			rv = append(rv, f)
 		}
 	}
-	return "", false
+	return rv
 }
 
 // Retrieve all sources ("srcs" attribute) and headers ("hdrs" attribute)
@@ -473,12 +494,7 @@ func (e *GNIExporter) convertGNIFileList(desc GNIFileListExportDesc, qr *build.Q
 		return gniFileContents{}, skerr.Wrap(err)
 	}
 
-	sort.Slice(files, func(i, j int) bool {
-		return strings.ToLower(files[i]) < strings.ToLower(files[j])
-	})
-	if dup, hasDup := findDuplicate(files); hasDup {
-		return gniFileContents{}, skerr.Fmt("%q is included in two or more rules.", dup)
-	}
+	files = removeDuplicates(files)
 
 	for i := range files {
 		if strings.HasPrefix(files[i], "$_src/") {

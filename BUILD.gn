@@ -1052,7 +1052,8 @@ optional("gpu") {
   public_configs = []
   public_deps = []
 
-  sources = skia_gpu_sources
+  public = skia_gpu_public
+  sources = skia_gpu_private
 
   libs = []
   frameworks = []
@@ -1095,11 +1096,13 @@ optional("gpu") {
     } else {
       sources += [ "src/gpu/ganesh/gl/GrGLMakeNativeInterface_none.cpp" ]
     }
-    sources += skia_gl_gpu_sources
+    public += skia_gpu_gl_public
+    sources += skia_gpu_gl_private
   }
 
   if (skia_use_vulkan) {
-    sources += skia_vk_sources
+    public += skia_gpu_vk_public
+    sources += skia_gpu_vk_private
     if (is_fuchsia) {
       if (using_fuchsia_sdk) {
         public_deps += [ "$fuchsia_sdk_root/pkg:vulkan" ]
@@ -1424,6 +1427,8 @@ if (skia_enable_gpu && skia_generate_workarounds) {
   }
 }
 
+import("gn/codec.gni")
+
 skia_component("skia") {
   public_configs = [ ":skia_public" ]
   configs = skia_library_configs
@@ -1483,27 +1488,16 @@ skia_component("skia") {
   sources += skia_utils_sources
   sources += skia_effects_sources
   sources += skia_effects_imagefilter_sources
+  sources += skia_codec_core
+  sources += skia_codec_decode_bmp
   sources += [
     "src/android/SkAndroidFrameworkUtils.cpp",
     "src/android/SkAnimatedImage.cpp",
     "src/codec/SkAndroidCodec.cpp",
     "src/codec/SkAndroidCodecAdapter.cpp",
-    "src/codec/SkBmpBaseCodec.cpp",
-    "src/codec/SkBmpCodec.cpp",
-    "src/codec/SkBmpMaskCodec.cpp",
-    "src/codec/SkBmpRLECodec.cpp",
-    "src/codec/SkBmpStandardCodec.cpp",
-    "src/codec/SkCodec.cpp",
-    "src/codec/SkCodecImageGenerator.cpp",
-    "src/codec/SkColorTable.cpp",
     "src/codec/SkEncodedInfo.cpp",
-    "src/codec/SkMaskSwizzler.cpp",
-    "src/codec/SkMasks.cpp",
     "src/codec/SkParseEncodedOrigin.cpp",
     "src/codec/SkSampledCodec.cpp",
-    "src/codec/SkSampler.cpp",
-    "src/codec/SkSwizzler.cpp",
-    "src/codec/SkWbmpCodec.cpp",
     "src/images/SkImageEncoder.cpp",
     "src/ports/SkDiscardableMemory_none.cpp",
     "src/ports/SkGlobalInitialization_default.cpp",
@@ -1617,6 +1611,13 @@ skia_component("skia") {
 
   if (skia_include_multiframe_procs) {
     sources += [ "tools/SkSharingProc.cpp" ]
+  }
+
+  # Overrides TRACE_EVENT0..2 macros (etc) to map to Perfetto's tracing macros.
+  # Currently only supported in Android framework.
+  if (skia_android_framework_use_perfetto) {
+    defines += [ "SK_ANDROID_FRAMEWORK_USE_PERFETTO" ]
+    sources += [ "src/android/SkAndroidFrameworkPerfettoStaticStorage.cpp" ]
   }
 }
 
@@ -3168,7 +3169,10 @@ if (skia_enable_tools) {
           ":gpu_tool_utils",
           ":skia",
         ]
-        defines = [ "SK_BUILD_FOR_LIBFUZZER" ]
+        defines = [
+          "SK_BUILD_FOR_LIBFUZZER",
+          "SK_BUILD_FOR_FUZZER",
+        ]
         if (skia_use_libfuzzer_defaults) {
           cflags = [ "-fsanitize=fuzzer" ]
           ldflags = [ "-fsanitize=fuzzer" ]
