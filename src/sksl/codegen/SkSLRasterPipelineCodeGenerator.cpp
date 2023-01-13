@@ -240,11 +240,11 @@ public:
     void previousTempStack() {
         fBuilder.set_current_stack(--fCurrentTempStack);
     }
-    void pushCloneFromNextTempStack(int slots) {
-        fBuilder.push_clone_from_stack(slots, fCurrentTempStack + 1);
+    void pushCloneFromNextTempStack(int slots, int offsetFromStackTop = 0) {
+        fBuilder.push_clone_from_stack(slots, fCurrentTempStack + 1, offsetFromStackTop);
     }
-    void pushCloneFromPreviousTempStack(int slots) {
-        fBuilder.push_clone_from_stack(slots, fCurrentTempStack - 1);
+    void pushCloneFromPreviousTempStack(int slots, int offsetFromStackTop = 0) {
+        fBuilder.push_clone_from_stack(slots, fCurrentTempStack - 1, offsetFromStackTop);
     }
     BuilderOp getTypedOp(const SkSL::Type& type, const TypedOps& ops) const;
 
@@ -1073,6 +1073,17 @@ bool Generator::pushBinaryExpression(const Expression& left, Operator op, const 
         return this->pushBinaryExpression(right, OperatorKind::LTEQ, left);
     }
 
+    // Emit comma expressions.
+    if (op.kind() == OperatorKind::COMMA) {
+        if (Analysis::HasSideEffects(left)) {
+            if (!this->pushExpression(left, /*usesResult=*/false)) {
+                return unsupported();
+            }
+            this->discardExpression(left.type().slotCount());
+        }
+        return this->pushExpression(right);
+    }
+
     // Handle binary expressions with mismatched types.
     const Type& type = left.type();
     if (!type.matches(right.type())) {
@@ -1116,6 +1127,11 @@ bool Generator::pushBinaryExpression(const Expression& left, Operator op, const 
 
         // Strip off the assignment from the op (turning += into +).
         op = op.removeAssignment();
+    }
+
+    // Matrix * matrix is a matrix multiply, NOT a componentwise op.
+    if (op.kind() == OperatorKind::STAR && type.isMatrix() && right.type().isMatrix()) {
+        return unsupported();
     }
 
     // Handle binary ops which require short-circuiting.
@@ -1317,25 +1333,11 @@ bool Generator::pushConstructorCast(const AnyConstructor& c) {
 }
 
 bool Generator::pushConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c) {
+    fBuilder.push_zeros(1);
     if (!this->pushExpression(*c.argument())) {
         return unsupported();
     }
-
-    const int slotsPerElement = 1; // matrices are composed of scalars
-    int distanceFromStackTop = 0;
-    for (int col = 0; col < c.type().columns(); ++col) {
-        // Skip position (0,0); we've pushed it already.
-        int startingRow = (col == 0) ? 1 : 0;
-        for (int row = startingRow; row < c.type().rows(); ++row) {
-            if (col == row) {
-                fBuilder.push_clone(slotsPerElement, distanceFromStackTop);
-            } else {
-                fBuilder.push_zeros(slotsPerElement);
-            }
-
-            distanceFromStackTop += slotsPerElement;
-        }
-    }
+    fBuilder.diagonal_matrix(c.type().columns(), c.type().rows());
 
     return true;
 }
@@ -1561,10 +1563,10 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic,
 
             this->nextTempStack();
             this->pushCloneFromPreviousTempStack(3);
-            fBuilder.swizzle(/*inputSlots=*/3, {2, 0, 1});
+            fBuilder.swizzle(/*consumedSlots=*/3, {2, 0, 1});
             this->previousTempStack();
 
-            fBuilder.swizzle(/*inputSlots=*/3, {1, 2, 0});
+            fBuilder.swizzle(/*consumedSlots=*/3, {1, 2, 0});
 
             // Push `arg1.zxy` onto this stack and `arg1.yzx` onto the next stack. Perform the
             // multiply on each subexpression (`arg0.yzx * arg1.zxy` on the first stack, and
@@ -1575,11 +1577,11 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic,
 
             this->nextTempStack();
             this->pushCloneFromPreviousTempStack(3);
-            fBuilder.swizzle(/*inputSlots=*/3, {1, 2, 0});
+            fBuilder.swizzle(/*consumedSlots=*/3, {1, 2, 0});
             fBuilder.binary_op(BuilderOp::mul_n_floats, 3);
             this->previousTempStack();
 
-            fBuilder.swizzle(/*inputSlots=*/3, {2, 0, 1});
+            fBuilder.swizzle(/*consumedSlots=*/3, {2, 0, 1});
             fBuilder.binary_op(BuilderOp::mul_n_floats, 3);
 
             // Migrate the result of the second subexpression (`arg0.zxy * arg1.yzx`) back onto the
