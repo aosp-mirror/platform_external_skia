@@ -228,12 +228,24 @@ public:
 
     void branch_if_any_active_lanes(int labelID) {
         SkASSERT(labelID >= 0 && labelID < fNumLabels);
+        if (!fInstructions.empty() &&
+            fInstructions.back().fOp == BuilderOp::branch_if_any_active_lanes) {
+            // The previous instruction was also `branch_if_any_active_lanes`, so this branch could
+            // never possibly occur.
+            return;
+        }
         fInstructions.push_back({BuilderOp::branch_if_any_active_lanes, {}, labelID});
         ++fNumBranches;
     }
 
     void branch_if_no_active_lanes(int labelID) {
         SkASSERT(labelID >= 0 && labelID < fNumLabels);
+        if (!fInstructions.empty() &&
+            fInstructions.back().fOp == BuilderOp::branch_if_no_active_lanes) {
+            // The previous instruction was also `branch_if_no_active_lanes`, so this branch could
+            // never possibly occur.
+            return;
+        }
         fInstructions.push_back({BuilderOp::branch_if_no_active_lanes, {}, labelID});
         ++fNumBranches;
     }
@@ -390,6 +402,11 @@ public:
 
     // Consumes `inputSlots` elements on the stack, then generates `components.size()` elements.
     void swizzle(int inputSlots, SkSpan<const int8_t> components);
+
+    // Transposes a matrix of size CxR on the stack (into a matrix of size RxC).
+    void transpose(int columns, int rows) {
+        fInstructions.push_back({BuilderOp::transpose, {}, columns, rows});
+    }
 
     void push_condition_mask() {
         fInstructions.push_back({BuilderOp::push_condition_mask, {}});
