@@ -75,7 +75,10 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/shaders:skpicture_srcs",
 			}},
 		{Var: "src_images_srcs",
-			Rules: []string{"//src/images:srcs"}}},
+			Rules: []string{"//src/images:srcs"}},
+		{Var: "skia_discardable_memory_chromium",
+			Rules: []string{"//include/private/chromium:discardable_memory_hdrs"}},
+		},
 	},
 	{GNI: "gn/effects.gni", Vars: []exporter.GNIFileListExportDesc{
 		{Var: "skia_effects_public",
@@ -204,8 +207,9 @@ var gniExportDescs = []exporter.GNIExportDesc{
 	{GNI: "gn/gpu.gni", Vars: []exporter.GNIFileListExportDesc{
 		{Var: "skia_gpu_public",
 			Rules: []string{
-				"//include/gpu:public_hdrs",
 				"//include/gpu/mock:public_hdrs",
+				"//include/gpu:public_hdrs",
+				"//include/gpu:shared_public_hdrs",
 			}},
 		{Var: "skia_gpu_private",
 			Rules: []string{
@@ -263,13 +267,20 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			Rules: []string{
 				"//include/gpu/vk:public_hdrs",
 			}},
+		{Var: "skia_gpu_vk_chromium_public",
+			Rules: []string{
+				"//include/private/chromium:vk_chromium_hdrs",
+			}},
 		{Var: "skia_gpu_vk_private",
 			Rules: []string{
 				"//include/gpu/vk:public_hdrs",
 				"//include/private/gpu/ganesh:vk_private_hdrs",
 				"//src/gpu/ganesh/vk:vk_hdrs",
 				"//src/gpu/ganesh/vk:vk_srcs",
-				"//src/gpu/vk:impl_vk_hdrs",
+			}},
+		{Var: "skia_gpu_vk_chromium_private",
+			Rules: []string{
+				"//src/gpu/ganesh/vk:vk_chromium_srcs",
 			}},
 		{Var: "skia_direct3d_sources",
 			Rules: []string{
@@ -278,16 +289,22 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/gpu/ganesh/d3d:d3d_hdrs",
 				"//src/gpu/ganesh/d3d:d3d_srcs",
 			}},
-		{Var: "skia_dawn_sources",
+		{Var: "skia_gpu_dawn_public",
 			Rules: []string{
 				"//include/gpu/dawn:public_hdrs",
+			}},
+		{Var: "skia_gpu_dawn_private",
+			Rules: []string{
 				"//include/private/gpu/ganesh:dawn_private_hdrs",
 				"//src/gpu/ganesh/dawn:dawn_hdrs",
 				"//src/gpu/ganesh/dawn:dawn_srcs",
 			}},
-		{Var: "skia_metal_sources",
+		{Var: "skia_gpu_metal_public",
 			Rules: []string{
 				"//include/gpu/mtl:public_hdrs",
+			}},
+		{Var: "skia_gpu_metal_private",
+			Rules: []string{
 				"//src/gpu/ganesh/mtl:mtl_hdrs",
 				"//src/gpu/ganesh/mtl:mtl_srcs",
 				"//src/image:mtl_srcs",

@@ -1120,7 +1120,8 @@ optional("gpu") {
   }
 
   if (skia_use_dawn) {
-    sources += skia_dawn_sources
+    public += skia_gpu_dawn_public
+    sources += skia_gpu_dawn_private
   }
 
   if (skia_use_direct3d) {
@@ -1140,7 +1141,8 @@ optional("gpu") {
   cflags_objcc = []
   if (skia_use_metal) {
     public_defines += [ "SK_METAL" ]
-    sources += skia_metal_sources
+    public += skia_gpu_metal_public
+    sources += skia_gpu_metal_private
     if (skia_enable_metal_debug_info) {
       public_defines += [ "SK_ENABLE_MTL_DEBUG_INFO" ]
     }
@@ -1206,10 +1208,17 @@ optional("jpeg_decode") {
   sources = [
     "src/codec/SkJpegCodec.cpp",
     "src/codec/SkJpegDecoderMgr.cpp",
-    "src/codec/SkJpegMultiPicture.cpp",
-    "src/codec/SkJpegSegmentScan.cpp",
     "src/codec/SkJpegUtility.cpp",
   ]
+  if (skia_use_jpeg_gainmaps) {
+    defines = [ "SK_CODEC_DECODES_JPEG_GAINMAPS" ]
+    deps += [ ":xml" ]
+    sources += [
+      "src/codec/SkJpegGainmap.cpp",
+      "src/codec/SkJpegMultiPicture.cpp",
+      "src/codec/SkJpegSegmentScan.cpp",
+    ]
+  }
 }
 
 optional("jpeg_encode") {
@@ -1386,7 +1395,7 @@ optional("wuffs") {
 }
 
 optional("xml") {
-  enabled = skia_use_expat
+  enabled = skia_use_expat || skia_use_jpeg_gainmaps
   public_defines = [ "SK_XML" ]
 
   deps = [ "//third_party/expat" ]
@@ -2240,8 +2249,15 @@ if (skia_enable_tools) {
       cflags_objcc = [ "-fobjc-arc" ]
       frameworks += [ "MetalKit.framework" ]
     }
+    if (skia_use_jpeg_gainmaps) {
+      sources += jpeg_gainmap_tests_sources
+    }
     if (skia_use_gl) {
       sources += gl_tests_sources
+    }
+    if (skia_use_vulkan) {
+      sources += skia_gpu_vk_chromium_public
+      sources += skia_gpu_vk_chromium_private
     }
     if (skia_enable_graphite) {
       sources += graphite_tests_sources
