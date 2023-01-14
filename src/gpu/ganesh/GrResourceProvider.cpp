@@ -10,7 +10,7 @@
 #include "include/core/SkAlphaType.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
-#include "include/core/SkMath.h"
+#include "include/private/base/SkMath.h"
 #include "include/core/SkRect.h"
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrBackendSurface.h"
@@ -39,6 +39,8 @@
 #include <utility>
 
 struct SkImageInfo;
+
+using namespace skia_private;
 
 const int GrResourceProvider::kMinScratchTextureSize = 16;
 
@@ -493,7 +495,7 @@ sk_sp<const GrGpuBuffer> GrResourceProvider::findOrMakeStaticBuffer(
 
     // Map the buffer. Use a staging buffer on the heap if mapping isn't supported.
     skgpu::VertexWriter vertexWriter = {buffer->map(), size};
-    SkAutoTMalloc<char> stagingBuffer;
+    AutoTMalloc<char> stagingBuffer;
     if (!vertexWriter) {
         SkASSERT(!buffer->isMapped());
         vertexWriter = {stagingBuffer.reset(size), size};

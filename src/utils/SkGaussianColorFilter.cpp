@@ -13,6 +13,7 @@
 #include "src/core/SkColorFilterPriv.h"
 #include "src/core/SkEffectPriv.h"
 #include "src/core/SkRasterPipeline.h"
+#include "src/core/SkRasterPipelineOpList.h"
 #include "src/core/SkVM.h"
 
 #if SK_SUPPORT_GPU
@@ -65,7 +66,7 @@ public:
 protected:
     void flatten(SkWriteBuffer&) const override {}
     bool onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override {
-        rec.fPipeline->append(SkRasterPipeline::gauss_a_to_rgba);
+        rec.fPipeline->append(SkRasterPipelineOp::gauss_a_to_rgba);
         return true;
     }
 

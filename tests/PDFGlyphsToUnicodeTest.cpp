@@ -10,8 +10,8 @@
 #ifdef SK_SUPPORT_PDF
 
 #include "include/core/SkStream.h"
-#include "include/private/SkTDArray.h"
 #include "include/private/SkTemplates.h"
+#include "include/private/base/SkTDArray.h"
 #include "include/private/base/SkTo.h"
 #include "src/pdf/SkPDFGlyphUse.h"
 #include "src/pdf/SkPDFMakeToUnicodeCmap.h"
@@ -20,6 +20,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+
+using namespace skia_private;
 
 static constexpr SkGlyphID kMaximumGlyphIndex = UINT16_MAX;
 
@@ -35,7 +37,7 @@ static bool stream_equals(const SkDynamicMemoryWStream& stream, size_t offset,
         return false;
     }
 
-    SkAutoTMalloc<char> data(streamSize);
+    AutoTMalloc<char> data(streamSize);
     stream.copyTo(data.get());
     return memcmp(data.get() + offset, buffer, len) == 0;
 }

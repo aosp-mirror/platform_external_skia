@@ -8,9 +8,9 @@
 
 #include "src/gpu/ganesh/gradients/GrGradientBitmapCache.h"
 
-#include "include/private/SkFloatBits.h"
 #include "include/private/SkHalf.h"
 #include "include/private/SkTemplates.h"
+#include "include/private/base/SkFloatBits.h"
 #include "include/private/base/SkMalloc.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/shaders/gradients/SkGradientShaderBase.h"
@@ -131,7 +131,7 @@ void GrGradientBitmapCache::fillGradient(const SkPMColor4f* colors, const SkScal
     SkRasterPipeline p(&alloc);
     SkRasterPipeline_MemoryCtx ctx = { bitmap->getPixels(), 0 };
 
-    p.append(SkRasterPipeline::seed_shader);
+    p.append(SkRasterPipelineOp::seed_shader);
     p.append_matrix(&alloc, SkMatrix::Scale(1.0f / bitmap->width(), 1.0f));
     SkGradientShaderBase::AppendGradientFillStages(&p, &alloc, colors, positions, count);
     p.append_store(bitmap->colorType(), &ctx);
