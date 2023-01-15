@@ -66,8 +66,8 @@ enum class BuilderOp {
 
 // Represents a single raster-pipeline SkSL instruction.
 struct Instruction {
-    Instruction(BuilderOp op, std::initializer_list<Slot> slots, int a = 0, int b = 0)
-            : fOp(op), fImmA(a), fImmB(b) {
+    Instruction(BuilderOp op, std::initializer_list<Slot> slots, int a = 0, int b = 0, int c = 0)
+            : fOp(op), fImmA(a), fImmB(b), fImmC(c) {
         auto iter = slots.begin();
         if (iter != slots.end()) { fSlotA = *iter++; }
         if (iter != slots.end()) { fSlotB = *iter++; }
@@ -81,6 +81,7 @@ struct Instruction {
     Slot      fSlotC = NA;
     int       fImmA = 0;
     int       fImmB = 0;
+    int       fImmC = 0;
 };
 
 class Program {
@@ -356,8 +357,9 @@ public:
 
     // Creates a single clone from an item on any temp stack. The cloned item can consist of any
     // number of slots.
-    void push_clone_from_stack(int numSlots, int otherStackIndex) {
-        fInstructions.push_back({BuilderOp::push_clone_from_stack, {}, numSlots, otherStackIndex});
+    void push_clone_from_stack(int numSlots, int otherStackIndex, int offsetFromStackTop = 0) {
+        fInstructions.push_back({BuilderOp::push_clone_from_stack, {}, numSlots, otherStackIndex,
+                                 numSlots + offsetFromStackTop});
     }
 
     void select(int slots) {
@@ -400,13 +402,15 @@ public:
         fInstructions.push_back({BuilderOp::zero_slot_unmasked, {dst.index}, dst.count});
     }
 
-    // Consumes `inputSlots` elements on the stack, then generates `components.size()` elements.
-    void swizzle(int inputSlots, SkSpan<const int8_t> components);
+    // Consumes `consumedSlots` elements on the stack, then generates `components.size()` elements.
+    void swizzle(int consumedSlots, SkSpan<const int8_t> components);
 
     // Transposes a matrix of size CxR on the stack (into a matrix of size RxC).
-    void transpose(int columns, int rows) {
-        fInstructions.push_back({BuilderOp::transpose, {}, columns, rows});
-    }
+    void transpose(int columns, int rows);
+
+    // Generates a CxR diagonal matrix from the top two scalars on the stack. The second scalar is
+    // used as the diagonal value; the first scalar (usually zero) fills in the rest of the slots.
+    void diagonal_matrix(int columns, int rows);
 
     void push_condition_mask() {
         fInstructions.push_back({BuilderOp::push_condition_mask, {}});
