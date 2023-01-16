@@ -18,6 +18,7 @@
 #include "src/core/SkColorFilterBase.h"
 #include "src/core/SkEffectPriv.h"
 #include "src/core/SkRasterPipeline.h"
+#include "src/core/SkRasterPipelineOpList.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
 
@@ -100,7 +101,7 @@ public:
     bool onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override {
         SkRasterPipeline* p = rec.fPipeline;
         if (!shaderIsOpaque) {
-            p->append(SkRasterPipeline::unpremul);
+            p->append(SkRasterPipelineOp::unpremul);
         }
 
         SkRasterPipeline_TablesCtx* tables = rec.fAlloc->make<SkRasterPipeline_TablesCtx>();
@@ -108,11 +109,11 @@ public:
         tables->r = fBitmap.getAddr8(0, 1);
         tables->g = fBitmap.getAddr8(0, 2);
         tables->b = fBitmap.getAddr8(0, 3);
-        p->append(SkRasterPipeline::byte_tables, tables);
+        p->append(SkRasterPipelineOp::byte_tables, tables);
 
         bool definitelyOpaque = shaderIsOpaque && tables->a[0xff] == 0xff;
         if (!definitelyOpaque) {
-            p->append(SkRasterPipeline::premul);
+            p->append(SkRasterPipelineOp::premul);
         }
         return true;
     }

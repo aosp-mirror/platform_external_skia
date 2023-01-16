@@ -12,8 +12,8 @@
 #include "include/core/SkPoint.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkString.h"
-#include "include/private/SkTArray.h"
 #include "include/private/SkTemplates.h"
+#include "include/private/base/SkTArray.h"
 #include "modules/particles/include/SkParticleData.h"
 
 #include <memory>
@@ -226,7 +226,7 @@ private:
     EffectState fState;
 
     SkParticles          fParticles;
-    SkAutoTMalloc<float> fStableRandoms;
+    skia_private::AutoTMalloc<float> fStableRandoms;
 
     // Cached
     int fCapacity = 0;

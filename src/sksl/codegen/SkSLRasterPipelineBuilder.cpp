@@ -11,6 +11,7 @@
 #include "include/private/base/SkTo.h"
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkOpts.h"
+#include "src/core/SkRasterPipeline.h"
 #include "src/sksl/codegen/SkSLRasterPipelineBuilder.h"
 #include "src/sksl/tracing/SkRPDebugTrace.h"
 #include "src/sksl/tracing/SkSLDebugInfo.h"
@@ -28,6 +29,7 @@ namespace SkSL {
 namespace RP {
 
 using SkRP = SkRasterPipeline;
+using RPOp = SkRasterPipelineOp;
 
 #define ALL_MULTI_SLOT_UNARY_OP_CASES        \
          BuilderOp::abs_float:               \
@@ -140,32 +142,62 @@ static int pack_nybbles(SkSpan<const int8_t> components) {
     return packed;
 }
 
-void Builder::swizzle(int consumedSlots, SkSpan<const int8_t> components) {
-    // Consumes `consumedSlots` elements on the stack, then generates `components.size()` elements.
-    SkASSERT(components.size() >= 1);
+void Builder::swizzle(int consumedSlots, SkSpan<const int8_t> elementSpan) {
+    // Consumes `consumedSlots` elements on the stack, then generates `elementSpan.size()` elements.
+    SkASSERT(consumedSlots >= 0);
 
-    if (consumedSlots <= 4 && components.size() <= 4) {
-        // We can fit everything into a little swizzle.
-        int op = (int)BuilderOp::swizzle_1 + components.size() - 1;
-        fInstructions.push_back({(BuilderOp)op, {}, consumedSlots, pack_nybbles(components)});
+    // We only allow up to 16 elements, and they can only reach 0-15 slots, due to nybble packing.
+    int numElements = elementSpan.size();
+    SkASSERT(numElements <= 16);
+    SkASSERT(std::all_of(elementSpan.begin(), elementSpan.end(), [](int8_t e){ return e >= 0; }));
+    SkASSERT(std::all_of(elementSpan.begin(), elementSpan.end(), [](int8_t e){ return e <= 0xF; }));
+
+    // Make a local copy of the element array.
+    int8_t elements[16] = {};
+    std::copy(elementSpan.begin(), elementSpan.end(), std::begin(elements));
+
+    while (numElements > 0) {
+        // If the first element of the swizzle is zero...
+        if (elements[0] != 0) {
+            break;
+        }
+        // ...and zero isn't used elsewhere in the swizzle...
+        if (std::any_of(&elements[1], &elements[numElements], [](int8_t e) { return e == 0; })) {
+            break;
+        }
+        // We can omit the first slot from the swizzle entirely.
+        // Slide everything forward by one slot, and reduce the element index by one.
+        for (int index = 1; index < numElements; ++index) {
+            elements[index - 1] = elements[index] - 1;
+        }
+        --consumedSlots;
+        --numElements;
+    }
+
+    // A completely empty swizzle is a no-op.
+    if (numElements == 0) {
+        this->discard_stack(consumedSlots);
         return;
     }
 
-    // This is a big swizzle. We use the `transpose` op to handle these.
-    // Transpose always wants a full 16 elements, so copy into a 16-wide array.
-    SkASSERT(components.size() <= 16);
-    int8_t transposeArray[16] = {};
-    std::copy(components.begin(), components.end(), std::begin(transposeArray));
+    if (consumedSlots <= 4 && numElements <= 4) {
+        // We can fit everything into a little swizzle.
+        int op = (int)BuilderOp::swizzle_1 + numElements - 1;
+        fInstructions.push_back({(BuilderOp)op, {}, consumedSlots,
+                                 pack_nybbles(SkSpan(elements, numElements))});
+        return;
+    }
 
-    // Pack slot usage into immA.
-    // The top 16 bits of immA count consumed slots; the bottom 16 bits count generated slots.
+    // This is a big swizzle. We use the `shuffle` op to handle these.
+    // Slot usage is packed into immA. The top 16 bits of immA count the consumed slots; the bottom
+    // 16 bits count the generated slots.
     int slotUsage = consumedSlots << 16;
-    slotUsage |= components.size();
+    slotUsage |= numElements;
 
-    // Pack immB and immC with the transpose list in packed-nybble form.
-    fInstructions.push_back({BuilderOp::transpose, {}, slotUsage,
-                             pack_nybbles(SkSpan(&transposeArray[0], 8)),
-                             pack_nybbles(SkSpan(&transposeArray[8], 8))});
+    // Pack immB and immC with the shuffle list in packed-nybble form.
+    fInstructions.push_back({BuilderOp::shuffle, {}, slotUsage,
+                             pack_nybbles(SkSpan(&elements[0], 8)),
+                             pack_nybbles(SkSpan(&elements[8], 8))});
 }
 
 void Builder::transpose(int columns, int rows) {
@@ -174,7 +206,7 @@ void Builder::transpose(int columns, int rows) {
     size_t index = 0;
     for (int r = 0; r < rows; ++r) {
         for (int c = 0; c < columns; ++c) {
-            elements[index++] = ((c * rows) + r);
+            elements[index++] = (c * rows) + r;
         }
     }
     this->swizzle(/*consumedSlots=*/columns * rows, SkSpan(elements, index));
@@ -190,6 +222,42 @@ void Builder::diagonal_matrix(int columns, int rows) {
         }
     }
     this->swizzle(/*consumedSlots=*/2, SkSpan(elements, index));
+}
+
+void Builder::matrix_resize(int origColumns, int origRows, int newColumns, int newRows) {
+    // Resizes a CxR matrix at the top of the stack to C'xR'.
+    int8_t elements[16] = {};
+    size_t index = 0;
+
+    size_t consumedSlots = origColumns * origRows;
+    size_t zeroOffset = 0, oneOffset = 0;
+
+    for (int c = 0; c < newColumns; ++c) {
+        for (int r = 0; r < newRows; ++r) {
+            if (c < origColumns && r < origRows) {
+                // Push an element from the original matrix.
+                elements[index++] = (c * origRows) + r;
+            } else {
+                // This element is outside the original matrix; push 1 or 0.
+                if (c == r) {
+                    // We need to synthesize a literal 1.
+                    if (oneOffset == 0) {
+                        this->push_literal_f(1.0f);
+                        oneOffset = consumedSlots++;
+                    }
+                    elements[index++] = oneOffset;
+                } else {
+                    // We need to synthesize a literal 0.
+                    if (zeroOffset == 0) {
+                        this->push_zeros(1);
+                        zeroOffset = consumedSlots++;
+                    }
+                    elements[index++] = zeroOffset;
+                }
+            }
+        }
+    }
+    this->swizzle(consumedSlots, SkSpan(elements, index));
 }
 
 std::unique_ptr<Program> Builder::finish(int numValueSlots,
@@ -240,7 +308,7 @@ static int stack_usage(const Instruction& inst) {
         case BuilderOp::swizzle_4:
             return 4 - inst.fImmA;
 
-        case BuilderOp::transpose: {
+        case BuilderOp::shuffle: {
             int consumed = inst.fImmA >> 16;
             int generated = inst.fImmA & 0xFFFF;
             return generated - consumed;
@@ -294,37 +362,11 @@ Program::Program(SkTArray<Instruction> instrs,
         (void)stackIdx;
         fNumTempStackSlots += depth;
     }
-
-    // These are not used in SKSL_STANDALONE yet.
-    (void)fDebugTrace;
-    (void)fNumUniformSlots;
 }
 
-void Program::append(SkRasterPipeline* pipeline, SkRasterPipeline::Stage stage, void* ctx) {
-#if !defined(SKSL_STANDALONE)
-    pipeline->append(stage, ctx);
-#endif
-}
-
-void Program::rewindPipeline(SkRasterPipeline* pipeline) {
-#if !defined(SKSL_STANDALONE)
-#if !SK_HAS_MUSTTAIL
-    pipeline->append_stack_rewind();
-#endif
-#endif
-}
-
-int Program::getNumPipelineStages(SkRasterPipeline* pipeline) {
-#if !defined(SKSL_STANDALONE)
-    return pipeline->getNumStages();
-#else
-    return 0;
-#endif
-}
-
-void Program::appendCopy(SkRasterPipeline* pipeline,
+void Program::appendCopy(SkTArray<Stage>* pipeline,
                          SkArenaAlloc* alloc,
-                         SkRasterPipeline::Stage baseStage,
+                         SkRasterPipelineOp baseStage,
                          float* dst, int dstStride,
                          const float* src, int srcStride,
                          int numSlots) {
@@ -338,51 +380,51 @@ void Program::appendCopy(SkRasterPipeline* pipeline,
 
     if (numSlots > 0) {
         SkASSERT(numSlots <= 4);
-        auto stage = (SkRasterPipeline::Stage)((int)baseStage + numSlots - 1);
+        auto stage = (SkRasterPipelineOp)((int)baseStage + numSlots - 1);
         auto* ctx = alloc->make<SkRasterPipeline_BinaryOpCtx>();
         ctx->dst = dst;
         ctx->src = src;
-        this->append(pipeline, stage, ctx);
+        pipeline->push_back({stage, ctx});
     }
 }
 
-void Program::appendCopySlotsUnmasked(SkRasterPipeline* pipeline,
+void Program::appendCopySlotsUnmasked(SkTArray<Stage>* pipeline,
                                       SkArenaAlloc* alloc,
                                       float* dst,
                                       const float* src,
                                       int numSlots) {
     this->appendCopy(pipeline, alloc,
-                     SkRasterPipeline::copy_slot_unmasked,
+                     SkRasterPipelineOp::copy_slot_unmasked,
                      dst, /*dstStride=*/SkOpts::raster_pipeline_highp_stride,
                      src, /*srcStride=*/SkOpts::raster_pipeline_highp_stride,
                      numSlots);
 }
 
-void Program::appendCopySlotsMasked(SkRasterPipeline* pipeline,
+void Program::appendCopySlotsMasked(SkTArray<Stage>* pipeline,
                                     SkArenaAlloc* alloc,
                                     float* dst,
                                     const float* src,
                                     int numSlots) {
     this->appendCopy(pipeline, alloc,
-                     SkRasterPipeline::copy_slot_masked,
+                     SkRasterPipelineOp::copy_slot_masked,
                      dst, /*dstStride=*/SkOpts::raster_pipeline_highp_stride,
                      src, /*srcStride=*/SkOpts::raster_pipeline_highp_stride,
                      numSlots);
 }
 
-void Program::appendCopyConstants(SkRasterPipeline* pipeline,
+void Program::appendCopyConstants(SkTArray<Stage>* pipeline,
                                   SkArenaAlloc* alloc,
                                   float* dst,
                                   const float* src,
                                   int numSlots) {
     this->appendCopy(pipeline, alloc,
-                     SkRasterPipeline::copy_constant,
+                     SkRasterPipelineOp::copy_constant,
                      dst, /*dstStride=*/SkOpts::raster_pipeline_highp_stride,
                      src, /*srcStride=*/1,
                      numSlots);
 }
 
-void Program::appendMultiSlotUnaryOp(SkRasterPipeline* pipeline, SkRasterPipeline::Stage baseStage,
+void Program::appendMultiSlotUnaryOp(SkTArray<Stage>* pipeline, SkRasterPipelineOp baseStage,
                                      float* dst, int numSlots) {
     SkASSERT(numSlots >= 0);
     while (numSlots > 4) {
@@ -392,12 +434,12 @@ void Program::appendMultiSlotUnaryOp(SkRasterPipeline* pipeline, SkRasterPipelin
     }
 
     SkASSERT(numSlots <= 4);
-    auto stage = (SkRasterPipeline::Stage)((int)baseStage + numSlots - 1);
-    this->append(pipeline, stage, dst);
+    auto stage = (SkRasterPipelineOp)((int)baseStage + numSlots - 1);
+    pipeline->push_back({stage, dst});
 }
 
-void Program::appendAdjacentMultiSlotBinaryOp(SkRasterPipeline* pipeline, SkArenaAlloc* alloc,
-                                              SkRasterPipeline::Stage baseStage,
+void Program::appendAdjacentMultiSlotBinaryOp(SkTArray<Stage>* pipeline, SkArenaAlloc* alloc,
+                                              SkRasterPipelineOp baseStage,
                                               float* dst, const float* src, int numSlots) {
     // The source and destination must be directly next to one another.
     SkASSERT(numSlots >= 0);
@@ -407,17 +449,17 @@ void Program::appendAdjacentMultiSlotBinaryOp(SkRasterPipeline* pipeline, SkAren
         auto ctx = alloc->make<SkRasterPipeline_BinaryOpCtx>();
         ctx->dst = dst;
         ctx->src = src;
-        this->append(pipeline, baseStage, ctx);
+        pipeline->push_back({baseStage, ctx});
         return;
     }
     if (numSlots > 0) {
-        auto specializedStage = (SkRasterPipeline::Stage)((int)baseStage + numSlots);
-        this->append(pipeline, specializedStage, dst);
+        auto specializedStage = (SkRasterPipelineOp)((int)baseStage + numSlots);
+        pipeline->push_back({specializedStage, dst});
     }
 }
 
-void Program::appendAdjacentMultiSlotTernaryOp(SkRasterPipeline* pipeline, SkArenaAlloc* alloc,
-                                               SkRasterPipeline::Stage baseStage, float* dst,
+void Program::appendAdjacentMultiSlotTernaryOp(SkTArray<Stage>* pipeline, SkArenaAlloc* alloc,
+                                               SkRasterPipelineOp baseStage, float* dst,
                                                const float* src0, const float* src1, int numSlots) {
     // The float pointers must all be immediately adjacent to each other.
     SkASSERT(numSlots >= 0);
@@ -429,17 +471,23 @@ void Program::appendAdjacentMultiSlotTernaryOp(SkRasterPipeline* pipeline, SkAre
         ctx->dst = dst;
         ctx->src0 = src0;
         ctx->src1 = src1;
-        this->append(pipeline, baseStage, ctx);
+        pipeline->push_back({baseStage, ctx});
         return;
     }
     if (numSlots > 0) {
-        auto specializedStage = (SkRasterPipeline::Stage)((int)baseStage + numSlots);
-        this->append(pipeline, specializedStage, dst);
+        auto specializedStage = (SkRasterPipelineOp)((int)baseStage + numSlots);
+        pipeline->push_back({specializedStage, dst});
     }
 }
 
+void Program::appendStackRewind(SkTArray<Stage>* pipeline) {
+#if defined(SKSL_STANDALONE) || !SK_HAS_MUSTTAIL
+    pipeline->push_back({RPOp::stack_rewind, nullptr});
+#endif
+}
+
 template <typename T>
-[[maybe_unused]] static void* context_bit_pun(T val) {
+static void* context_bit_pun(T val) {
     static_assert(sizeof(T) <= sizeof(void*));
     void* contextBits = nullptr;
     memcpy(&contextBits, &val, sizeof(val));
@@ -461,16 +509,26 @@ Program::SlotData Program::allocateSlotData(SkArenaAlloc* alloc) {
     return s;
 }
 
+#if !defined(SKSL_STANDALONE)
 void Program::appendStages(SkRasterPipeline* pipeline,
                            SkArenaAlloc* alloc,
                            SkSpan<const float> uniforms) {
-    this->appendStages(pipeline, alloc, uniforms, this->allocateSlotData(alloc));
-}
+    SkTArray<Stage> stages;
+    this->makeStages(&stages, alloc, uniforms, this->allocateSlotData(alloc));
 
-void Program::appendStages(SkRasterPipeline* pipeline,
-                           SkArenaAlloc* alloc,
-                           SkSpan<const float> uniforms,
-                           const SlotData& slots) {
+    for (const Stage& stage : stages) {
+        switch (stage.op) {
+            case RPOp::stack_rewind: pipeline->append_stack_rewind();       break;
+            default:                 pipeline->append(stage.op, stage.ctx); break;
+        }
+    }
+}
+#endif
+
+void Program::makeStages(SkTArray<Stage>* pipeline,
+                         SkArenaAlloc* alloc,
+                         SkSpan<const float> uniforms,
+                         const SlotData& slots) {
     SkASSERT(fNumUniformSlots == SkToInt(uniforms.size()));
 
     const int N = SkOpts::raster_pipeline_highp_stride;
@@ -499,7 +557,8 @@ void Program::appendStages(SkRasterPipeline* pipeline,
     // We can reuse constants from our arena by placing them in this map.
     SkTHashMap<int, int*> constantLookupMap; // <constant value, pointer into arena>
 
-    // Write each BuilderOp to the pipeline.
+    // Write each BuilderOp to the pipeline array.
+    pipeline->reserve_back(fInstructions.size());
     for (const Instruction& inst : fInstructions) {
         auto SlotA    = [&]() { return &slots.values[N * inst.fSlotA]; };
         auto SlotB    = [&]() { return &slots.values[N * inst.fSlotB]; };
@@ -511,7 +570,7 @@ void Program::appendStages(SkRasterPipeline* pipeline,
                 // Write the absolute pipeline position into the label offset list. We will go over
                 // the branch targets at the end and fix them up.
                 SkASSERT(inst.fImmA >= 0 && inst.fImmA < fNumLabels);
-                labelOffsets[inst.fImmA] = this->getNumPipelineStages(pipeline);
+                labelOffsets[inst.fImmA] = pipeline->size();
                 break;
 
             case BuilderOp::jump:
@@ -521,8 +580,8 @@ void Program::appendStages(SkRasterPipeline* pipeline,
                 // backwards branch. Add a stack-rewind immediately before the branch to ensure that
                 // long-running loops don't use an unbounded amount of stack space.
                 if (labelOffsets[inst.fImmA] >= 0) {
-                    this->rewindPipeline(pipeline);
-                    mostRecentRewind = this->getNumPipelineStages(pipeline);
+                    this->appendStackRewind(pipeline);
+                    mostRecentRewind = pipeline->size();
                 }
 
                 // Write the absolute pipeline position into the branch targets, because the
@@ -530,61 +589,61 @@ void Program::appendStages(SkRasterPipeline* pipeline,
                 // targets at the end and fix them up.
                 SkASSERT(inst.fImmA >= 0 && inst.fImmA < fNumLabels);
                 SkASSERT(currentBranchOp >= 0 && currentBranchOp < fNumBranches);
-                branchTargets[currentBranchOp] = this->getNumPipelineStages(pipeline);
+                branchTargets[currentBranchOp] = pipeline->size();
                 branchGoesToLabel[currentBranchOp] = inst.fImmA;
-                this->append(pipeline, (SkRP::Stage)inst.fOp, &branchTargets[currentBranchOp]);
+                pipeline->push_back({(RPOp)inst.fOp, &branchTargets[currentBranchOp]});
                 ++currentBranchOp;
                 break;
 
             case BuilderOp::init_lane_masks:
-                this->append(pipeline, SkRP::init_lane_masks);
+                pipeline->push_back({RPOp::init_lane_masks, nullptr});
                 break;
 
             case BuilderOp::store_src_rg:
-                this->append(pipeline, SkRP::store_src_rg, SlotA());
+                pipeline->push_back({RPOp::store_src_rg, SlotA()});
                 break;
 
             case BuilderOp::store_src:
-                this->append(pipeline, SkRP::store_src, SlotA());
+                pipeline->push_back({RPOp::store_src, SlotA()});
                 break;
 
             case BuilderOp::store_dst:
-                this->append(pipeline, SkRP::store_dst, SlotA());
+                pipeline->push_back({RPOp::store_dst, SlotA()});
                 break;
 
             case BuilderOp::load_src:
-                this->append(pipeline, SkRP::load_src, SlotA());
+                pipeline->push_back({RPOp::load_src, SlotA()});
                 break;
 
             case BuilderOp::load_dst:
-                this->append(pipeline, SkRP::load_dst, SlotA());
+                pipeline->push_back({RPOp::load_dst, SlotA()});
                 break;
 
             case BuilderOp::immediate_f: {
-                this->append(pipeline, SkRP::immediate_f, context_bit_pun(inst.fImmA));
+                pipeline->push_back({RPOp::immediate_f, context_bit_pun(inst.fImmA)});
                 break;
             }
             case BuilderOp::load_unmasked:
-                this->append(pipeline, SkRP::load_unmasked, SlotA());
+                pipeline->push_back({RPOp::load_unmasked, SlotA()});
                 break;
 
             case BuilderOp::store_unmasked:
-                this->append(pipeline, SkRP::store_unmasked, SlotA());
+                pipeline->push_back({RPOp::store_unmasked, SlotA()});
                 break;
 
             case BuilderOp::store_masked:
-                this->append(pipeline, SkRP::store_masked, SlotA());
+                pipeline->push_back({RPOp::store_masked, SlotA()});
                 break;
 
             case ALL_MULTI_SLOT_UNARY_OP_CASES: {
                 float* dst = tempStackPtr - (inst.fImmA * N);
-                this->appendMultiSlotUnaryOp(pipeline, (SkRP::Stage)inst.fOp, dst, inst.fImmA);
+                this->appendMultiSlotUnaryOp(pipeline, (RPOp)inst.fOp, dst, inst.fImmA);
                 break;
             }
             case ALL_MULTI_SLOT_BINARY_OP_CASES: {
                 float* src = tempStackPtr - (inst.fImmA * N);
                 float* dst = tempStackPtr - (inst.fImmA * 2 * N);
-                this->appendAdjacentMultiSlotBinaryOp(pipeline, alloc, (SkRP::Stage)inst.fOp,
+                this->appendAdjacentMultiSlotBinaryOp(pipeline, alloc, (RPOp)inst.fOp,
                                                       dst, src, inst.fImmA);
                 break;
             }
@@ -592,7 +651,7 @@ void Program::appendStages(SkRasterPipeline* pipeline,
                 float* src1 = tempStackPtr - (inst.fImmA * N);
                 float* src0 = tempStackPtr - (inst.fImmA * 2 * N);
                 float* dst  = tempStackPtr - (inst.fImmA * 3 * N);
-                this->appendAdjacentMultiSlotTernaryOp(pipeline, alloc, (SkRP::Stage)inst.fOp,
+                this->appendAdjacentMultiSlotTernaryOp(pipeline, alloc, (RPOp)inst.fOp,
                                                        dst, src0, src1, inst.fImmA);
                 break;
             }
@@ -611,7 +670,7 @@ void Program::appendStages(SkRasterPipeline* pipeline,
                 break;
 
             case BuilderOp::zero_slot_unmasked:
-                this->appendMultiSlotUnaryOp(pipeline, SkRP::zero_slot_unmasked,
+                this->appendMultiSlotUnaryOp(pipeline, RPOp::zero_slot_unmasked,
                                              SlotA(), inst.fImmA);
                 break;
 
@@ -627,14 +686,14 @@ void Program::appendStages(SkRasterPipeline* pipeline,
                     ctx->offsets[index] = (components & 3) * N * sizeof(float);
                     components >>= 4;
                 }
-                this->append(pipeline, (SkRP::Stage)inst.fOp, ctx);
+                pipeline->push_back({(RPOp)inst.fOp, ctx});
                 break;
             }
-            case BuilderOp::transpose: {
+            case BuilderOp::shuffle: {
                 int consumed = inst.fImmA >> 16;
                 int generated = inst.fImmA & 0xFFFF;
 
-                auto* ctx = alloc->make<SkRasterPipeline_TransposeCtx>();
+                auto* ctx = alloc->make<SkRasterPipeline_ShuffleCtx>();
                 ctx->ptr = tempStackPtr - (N * consumed);
                 ctx->count = generated;
                 // Unpack immB and immC from nybble form into an offset array.
@@ -648,7 +707,7 @@ void Program::appendStages(SkRasterPipeline* pipeline,
                     ctx->offsets[index] = (packed & 0xF) * N * sizeof(float);
                     packed >>= 4;
                 }
-                this->append(pipeline, SkRP::Stage::transpose, ctx);
+                pipeline->push_back({RPOp::shuffle, ctx});
                 break;
             }
             case BuilderOp::push_slots: {
@@ -663,65 +722,65 @@ void Program::appendStages(SkRasterPipeline* pipeline,
             }
             case BuilderOp::push_zeros: {
                 float* dst = tempStackPtr;
-                this->appendMultiSlotUnaryOp(pipeline, SkRP::zero_slot_unmasked, dst, inst.fImmA);
+                this->appendMultiSlotUnaryOp(pipeline, RPOp::zero_slot_unmasked, dst, inst.fImmA);
                 break;
             }
             case BuilderOp::push_condition_mask: {
                 float* dst = tempStackPtr;
-                this->append(pipeline, SkRP::store_condition_mask, dst);
+                pipeline->push_back({RPOp::store_condition_mask, dst});
                 break;
             }
             case BuilderOp::pop_condition_mask: {
                 float* src = tempStackPtr - (1 * N);
-                this->append(pipeline, SkRP::load_condition_mask, src);
+                pipeline->push_back({RPOp::load_condition_mask, src});
                 break;
             }
             case BuilderOp::merge_condition_mask: {
                 float* ptr = tempStackPtr - (2 * N);
-                this->append(pipeline, SkRP::merge_condition_mask, ptr);
+                pipeline->push_back({RPOp::merge_condition_mask, ptr});
                 break;
             }
             case BuilderOp::push_loop_mask: {
                 float* dst = tempStackPtr;
-                this->append(pipeline, SkRP::store_loop_mask, dst);
+                pipeline->push_back({RPOp::store_loop_mask, dst});
                 break;
             }
             case BuilderOp::pop_loop_mask: {
                 float* src = tempStackPtr - (1 * N);
-                this->append(pipeline, SkRP::load_loop_mask, src);
+                pipeline->push_back({RPOp::load_loop_mask, src});
                 break;
             }
             case BuilderOp::mask_off_loop_mask:
-                this->append(pipeline, SkRP::mask_off_loop_mask);
+                pipeline->push_back({RPOp::mask_off_loop_mask, nullptr});
                 break;
 
             case BuilderOp::reenable_loop_mask:
-                this->append(pipeline, SkRP::reenable_loop_mask, SlotA());
+                pipeline->push_back({RPOp::reenable_loop_mask, SlotA()});
                 break;
 
             case BuilderOp::merge_loop_mask: {
                 float* src = tempStackPtr - (1 * N);
-                this->append(pipeline, SkRP::merge_loop_mask, src);
+                pipeline->push_back({RPOp::merge_loop_mask, src});
                 break;
             }
             case BuilderOp::push_return_mask: {
                 float* dst = tempStackPtr;
-                this->append(pipeline, SkRP::store_return_mask, dst);
+                pipeline->push_back({RPOp::store_return_mask, dst});
                 break;
             }
             case BuilderOp::pop_return_mask: {
                 float* src = tempStackPtr - (1 * N);
-                this->append(pipeline, SkRP::load_return_mask, src);
+                pipeline->push_back({RPOp::load_return_mask, src});
                 break;
             }
             case BuilderOp::mask_off_return_mask:
-                this->append(pipeline, SkRP::mask_off_return_mask);
+                pipeline->push_back({RPOp::mask_off_return_mask, nullptr});
                 break;
 
             case BuilderOp::push_literal_f: {
                 float* dst = tempStackPtr;
                 if (inst.fImmA == 0) {
-                    this->append(pipeline, SkRP::zero_slot_unmasked, dst);
+                    pipeline->push_back({RPOp::zero_slot_unmasked, dst});
                     break;
                 }
                 int* constantPtr;
@@ -775,12 +834,12 @@ void Program::appendStages(SkRasterPipeline* pipeline,
         SkASSERT(tempStackPtr <= slots.stack.end());
 
         // Periodically rewind the stack every 500 instructions. When SK_HAS_MUSTTAIL is set,
-        // rewinds are not actually used; the rewindPipeline call becomes a no-op. On platforms that
-        // don't support SK_HAS_MUSTTAIL, rewinding the stack periodically can prevent a potential
-        // stack overflow when running a long program.
-        int numPipelineStages = this->getNumPipelineStages(pipeline);
+        // rewinds are not actually used; the appendStackRewind call becomes a no-op. On platforms
+        // that don't support SK_HAS_MUSTTAIL, rewinding the stack periodically can prevent a
+        // potential stack overflow when running a long program.
+        int numPipelineStages = pipeline->size();
         if (numPipelineStages - mostRecentRewind > 500) {
-            this->rewindPipeline(pipeline);
+            this->appendStackRewind(pipeline);
             mostRecentRewind = numPipelineStages;
         }
     }
@@ -794,10 +853,6 @@ void Program::appendStages(SkRasterPipeline* pipeline,
 }
 
 void Program::dump(SkWStream* out) {
-    // TODO: skslc will want to dump these programs; we'll need to include some portion of
-    // SkRasterPipeline into skslc for this to work properly.
-
-#if !defined(SKSL_STANDALONE)
     // Allocate memory for the slot and uniform data, even though the program won't ever be
     // executed. The program requires pointer ranges for managing its data, and ASAN will report
     // errors if those pointers are pointing at unallocated memory.
@@ -807,21 +862,9 @@ void Program::dump(SkWStream* out) {
     float* uniformPtr = alloc.makeArray<float>(fNumUniformSlots);
     SkSpan<float> uniforms = SkSpan(uniformPtr, fNumUniformSlots);
 
-    // Instantiate this program.
-    SkRasterPipeline pipeline(&alloc);
-    this->appendStages(&pipeline, &alloc, uniforms, slots);
-    const SkRP::StageList* st = pipeline.getStageList();
-
-    // The stage list is in reverse order, so let's flip it.
-    struct Stage {
-        SkRP::Stage op;
-        void*       ctx;
-    };
+    // Turn this program into an array of Raster Pipeline stages.
     SkTArray<Stage> stages;
-    for (; st != nullptr; st = st->prev) {
-        stages.push_back(Stage{st->stage, st->ctx});
-    }
-    std::reverse(stages.begin(), stages.end());
+    this->makeStages(&stages, &alloc, uniforms, slots);
 
     // Emit the program's instruction list.
     for (int index = 0; index < stages.size(); ++index) {
@@ -1019,11 +1062,10 @@ void Program::dump(SkWStream* out) {
         // Interpret the context value as a Swizzle structure. Note that the slot-width of the
         // source expression is not preserved in the instruction encoding, so we need to do our best
         // using the data we have. (e.g., myFloat4.y would be indistinguishable from myFloat2.y.)
-        auto SwizzleCtx = [&](SkRP::Stage op,
-                              const void* v) -> std::tuple<std::string, std::string> {
+        auto SwizzleCtx = [&](RPOp op, const void* v) -> std::tuple<std::string, std::string> {
             const auto* ctx = static_cast<const SkRasterPipeline_SwizzleCtx*>(v);
 
-            int destSlots = (int)op - (int)SkRP::swizzle_1 + 1;
+            int destSlots = (int)op - (int)RPOp::swizzle_1 + 1;
             int highestComponent =
                     *std::max_element(std::begin(ctx->offsets), std::end(ctx->offsets)) /
                     (N * sizeof(float));
@@ -1047,10 +1089,9 @@ void Program::dump(SkWStream* out) {
             return std::make_tuple(PtrCtx(ctx->ptr, destSlots), src);
         };
 
-        // Interpret the context value as a Transpose structure.
-        auto TransposeCtx = [&](SkRP::Stage op,
-                                const void* v) -> std::tuple<std::string, std::string> {
-            const auto* ctx = static_cast<const SkRasterPipeline_TransposeCtx*>(v);
+        // Interpret the context value as a Shuffle structure.
+        auto ShuffleCtx = [&](RPOp op, const void* v) -> std::tuple<std::string, std::string> {
+            const auto* ctx = static_cast<const SkRasterPipeline_ShuffleCtx*>(v);
 
             std::string dst = PtrCtx(ctx->ptr, ctx->count);
             std::string src = "(" + dst + ")[";
@@ -1068,217 +1109,217 @@ void Program::dump(SkWStream* out) {
 
         std::string opArg1, opArg2, opArg3;
         switch (stage.op) {
-            case SkRP::immediate_f:
+            case RPOp::immediate_f:
                 opArg1 = ImmCtx(stage.ctx);
                 break;
 
-            case SkRP::swizzle_1:
-            case SkRP::swizzle_2:
-            case SkRP::swizzle_3:
-            case SkRP::swizzle_4:
+            case RPOp::swizzle_1:
+            case RPOp::swizzle_2:
+            case RPOp::swizzle_3:
+            case RPOp::swizzle_4:
                 std::tie(opArg1, opArg2) = SwizzleCtx(stage.op, stage.ctx);
                 break;
 
-            case SkRP::transpose:
-                std::tie(opArg1, opArg2) = TransposeCtx(stage.op, stage.ctx);
+            case RPOp::shuffle:
+                std::tie(opArg1, opArg2) = ShuffleCtx(stage.op, stage.ctx);
                 break;
 
-            case SkRP::load_unmasked:
-            case SkRP::load_condition_mask:
-            case SkRP::store_condition_mask:
-            case SkRP::load_loop_mask:
-            case SkRP::store_loop_mask:
-            case SkRP::merge_loop_mask:
-            case SkRP::reenable_loop_mask:
-            case SkRP::load_return_mask:
-            case SkRP::store_return_mask:
-            case SkRP::store_masked:
-            case SkRP::store_unmasked:
-            case SkRP::zero_slot_unmasked:
-            case SkRP::bitwise_not_int:
-            case SkRP::cast_to_float_from_int: case SkRP::cast_to_float_from_uint:
-            case SkRP::cast_to_int_from_float: case SkRP::cast_to_uint_from_float:
-            case SkRP::abs_float:              case SkRP::abs_int:
-            case SkRP::ceil_float:
-            case SkRP::floor_float:
+            case RPOp::load_unmasked:
+            case RPOp::load_condition_mask:
+            case RPOp::store_condition_mask:
+            case RPOp::load_loop_mask:
+            case RPOp::store_loop_mask:
+            case RPOp::merge_loop_mask:
+            case RPOp::reenable_loop_mask:
+            case RPOp::load_return_mask:
+            case RPOp::store_return_mask:
+            case RPOp::store_masked:
+            case RPOp::store_unmasked:
+            case RPOp::zero_slot_unmasked:
+            case RPOp::bitwise_not_int:
+            case RPOp::cast_to_float_from_int: case RPOp::cast_to_float_from_uint:
+            case RPOp::cast_to_int_from_float: case RPOp::cast_to_uint_from_float:
+            case RPOp::abs_float:              case RPOp::abs_int:
+            case RPOp::ceil_float:
+            case RPOp::floor_float:
                 opArg1 = PtrCtx(stage.ctx, 1);
                 break;
 
-            case SkRP::store_src_rg:
-            case SkRP::zero_2_slots_unmasked:
-            case SkRP::bitwise_not_2_ints:
-            case SkRP::cast_to_float_from_2_ints: case SkRP::cast_to_float_from_2_uints:
-            case SkRP::cast_to_int_from_2_floats: case SkRP::cast_to_uint_from_2_floats:
-            case SkRP::abs_2_floats:              case SkRP::abs_2_ints:
-            case SkRP::ceil_2_floats:
-            case SkRP::floor_2_floats:
+            case RPOp::store_src_rg:
+            case RPOp::zero_2_slots_unmasked:
+            case RPOp::bitwise_not_2_ints:
+            case RPOp::cast_to_float_from_2_ints: case RPOp::cast_to_float_from_2_uints:
+            case RPOp::cast_to_int_from_2_floats: case RPOp::cast_to_uint_from_2_floats:
+            case RPOp::abs_2_floats:              case RPOp::abs_2_ints:
+            case RPOp::ceil_2_floats:
+            case RPOp::floor_2_floats:
                 opArg1 = PtrCtx(stage.ctx, 2);
                 break;
 
-            case SkRP::zero_3_slots_unmasked:
-            case SkRP::bitwise_not_3_ints:
-            case SkRP::cast_to_float_from_3_ints: case SkRP::cast_to_float_from_3_uints:
-            case SkRP::cast_to_int_from_3_floats: case SkRP::cast_to_uint_from_3_floats:
-            case SkRP::abs_3_floats:              case SkRP::abs_3_ints:
-            case SkRP::ceil_3_floats:
-            case SkRP::floor_3_floats:
+            case RPOp::zero_3_slots_unmasked:
+            case RPOp::bitwise_not_3_ints:
+            case RPOp::cast_to_float_from_3_ints: case RPOp::cast_to_float_from_3_uints:
+            case RPOp::cast_to_int_from_3_floats: case RPOp::cast_to_uint_from_3_floats:
+            case RPOp::abs_3_floats:              case RPOp::abs_3_ints:
+            case RPOp::ceil_3_floats:
+            case RPOp::floor_3_floats:
                 opArg1 = PtrCtx(stage.ctx, 3);
                 break;
 
-            case SkRP::load_src:
-            case SkRP::load_dst:
-            case SkRP::store_src:
-            case SkRP::store_dst:
-            case SkRP::zero_4_slots_unmasked:
-            case SkRP::bitwise_not_4_ints:
-            case SkRP::cast_to_float_from_4_ints: case SkRP::cast_to_float_from_4_uints:
-            case SkRP::cast_to_int_from_4_floats: case SkRP::cast_to_uint_from_4_floats:
-            case SkRP::abs_4_floats:              case SkRP::abs_4_ints:
-            case SkRP::ceil_4_floats:
-            case SkRP::floor_4_floats:
+            case RPOp::load_src:
+            case RPOp::load_dst:
+            case RPOp::store_src:
+            case RPOp::store_dst:
+            case RPOp::zero_4_slots_unmasked:
+            case RPOp::bitwise_not_4_ints:
+            case RPOp::cast_to_float_from_4_ints: case RPOp::cast_to_float_from_4_uints:
+            case RPOp::cast_to_int_from_4_floats: case RPOp::cast_to_uint_from_4_floats:
+            case RPOp::abs_4_floats:              case RPOp::abs_4_ints:
+            case RPOp::ceil_4_floats:
+            case RPOp::floor_4_floats:
                 opArg1 = PtrCtx(stage.ctx, 4);
                 break;
 
-            case SkRP::copy_constant:
+            case RPOp::copy_constant:
                 std::tie(opArg1, opArg2) = CopyConstantCtx(stage.ctx, 1);
                 break;
 
-            case SkRP::copy_2_constants:
+            case RPOp::copy_2_constants:
                 std::tie(opArg1, opArg2) = CopyConstantCtx(stage.ctx, 2);
                 break;
 
-            case SkRP::copy_3_constants:
+            case RPOp::copy_3_constants:
                 std::tie(opArg1, opArg2) = CopyConstantCtx(stage.ctx, 3);
                 break;
 
-            case SkRP::copy_4_constants:
+            case RPOp::copy_4_constants:
                 std::tie(opArg1, opArg2) = CopyConstantCtx(stage.ctx, 4);
                 break;
 
-            case SkRP::copy_slot_masked:
-            case SkRP::copy_slot_unmasked:
+            case RPOp::copy_slot_masked:
+            case RPOp::copy_slot_unmasked:
                 std::tie(opArg1, opArg2) = BinaryOpCtx(stage.ctx, 1);
                 break;
 
-            case SkRP::copy_2_slots_masked:
-            case SkRP::copy_2_slots_unmasked:
+            case RPOp::copy_2_slots_masked:
+            case RPOp::copy_2_slots_unmasked:
                 std::tie(opArg1, opArg2) = BinaryOpCtx(stage.ctx, 2);
                 break;
 
-            case SkRP::copy_3_slots_masked:
-            case SkRP::copy_3_slots_unmasked:
+            case RPOp::copy_3_slots_masked:
+            case RPOp::copy_3_slots_unmasked:
                 std::tie(opArg1, opArg2) = BinaryOpCtx(stage.ctx, 3);
                 break;
 
-            case SkRP::copy_4_slots_masked:
-            case SkRP::copy_4_slots_unmasked:
+            case RPOp::copy_4_slots_masked:
+            case RPOp::copy_4_slots_unmasked:
                 std::tie(opArg1, opArg2) = BinaryOpCtx(stage.ctx, 4);
                 break;
 
-            case SkRP::merge_condition_mask:
-            case SkRP::add_float:   case SkRP::add_int:
-            case SkRP::sub_float:   case SkRP::sub_int:
-            case SkRP::mul_float:   case SkRP::mul_int:
-            case SkRP::div_float:   case SkRP::div_int:   case SkRP::div_uint:
-                                    case SkRP::bitwise_and_int:
-                                    case SkRP::bitwise_or_int:
-                                    case SkRP::bitwise_xor_int:
-            case SkRP::min_float:   case SkRP::min_int:   case SkRP::min_uint:
-            case SkRP::max_float:   case SkRP::max_int:   case SkRP::max_uint:
-            case SkRP::cmplt_float: case SkRP::cmplt_int: case SkRP::cmplt_uint:
-            case SkRP::cmple_float: case SkRP::cmple_int: case SkRP::cmple_uint:
-            case SkRP::cmpeq_float: case SkRP::cmpeq_int:
-            case SkRP::cmpne_float: case SkRP::cmpne_int:
+            case RPOp::merge_condition_mask:
+            case RPOp::add_float:   case RPOp::add_int:
+            case RPOp::sub_float:   case RPOp::sub_int:
+            case RPOp::mul_float:   case RPOp::mul_int:
+            case RPOp::div_float:   case RPOp::div_int:   case RPOp::div_uint:
+                                    case RPOp::bitwise_and_int:
+                                    case RPOp::bitwise_or_int:
+                                    case RPOp::bitwise_xor_int:
+            case RPOp::min_float:   case RPOp::min_int:   case RPOp::min_uint:
+            case RPOp::max_float:   case RPOp::max_int:   case RPOp::max_uint:
+            case RPOp::cmplt_float: case RPOp::cmplt_int: case RPOp::cmplt_uint:
+            case RPOp::cmple_float: case RPOp::cmple_int: case RPOp::cmple_uint:
+            case RPOp::cmpeq_float: case RPOp::cmpeq_int:
+            case RPOp::cmpne_float: case RPOp::cmpne_int:
                 std::tie(opArg1, opArg2) = AdjacentPtrCtx(stage.ctx, 1);
                 break;
 
-            case SkRP::mix_float:
+            case RPOp::mix_float:
                 std::tie(opArg1, opArg2, opArg3) = Adjacent3PtrCtx(stage.ctx, 1);
                 break;
 
-            case SkRP::add_2_floats:   case SkRP::add_2_ints:
-            case SkRP::sub_2_floats:   case SkRP::sub_2_ints:
-            case SkRP::mul_2_floats:   case SkRP::mul_2_ints:
-            case SkRP::div_2_floats:   case SkRP::div_2_ints:   case SkRP::div_2_uints:
-                                       case SkRP::bitwise_and_2_ints:
-                                       case SkRP::bitwise_or_2_ints:
-                                       case SkRP::bitwise_xor_2_ints:
-            case SkRP::min_2_floats:   case SkRP::min_2_ints:   case SkRP::min_2_uints:
-            case SkRP::max_2_floats:   case SkRP::max_2_ints:   case SkRP::max_2_uints:
-            case SkRP::cmplt_2_floats: case SkRP::cmplt_2_ints: case SkRP::cmplt_2_uints:
-            case SkRP::cmple_2_floats: case SkRP::cmple_2_ints: case SkRP::cmple_2_uints:
-            case SkRP::cmpeq_2_floats: case SkRP::cmpeq_2_ints:
-            case SkRP::cmpne_2_floats: case SkRP::cmpne_2_ints:
+            case RPOp::add_2_floats:   case RPOp::add_2_ints:
+            case RPOp::sub_2_floats:   case RPOp::sub_2_ints:
+            case RPOp::mul_2_floats:   case RPOp::mul_2_ints:
+            case RPOp::div_2_floats:   case RPOp::div_2_ints:   case RPOp::div_2_uints:
+                                       case RPOp::bitwise_and_2_ints:
+                                       case RPOp::bitwise_or_2_ints:
+                                       case RPOp::bitwise_xor_2_ints:
+            case RPOp::min_2_floats:   case RPOp::min_2_ints:   case RPOp::min_2_uints:
+            case RPOp::max_2_floats:   case RPOp::max_2_ints:   case RPOp::max_2_uints:
+            case RPOp::cmplt_2_floats: case RPOp::cmplt_2_ints: case RPOp::cmplt_2_uints:
+            case RPOp::cmple_2_floats: case RPOp::cmple_2_ints: case RPOp::cmple_2_uints:
+            case RPOp::cmpeq_2_floats: case RPOp::cmpeq_2_ints:
+            case RPOp::cmpne_2_floats: case RPOp::cmpne_2_ints:
                 std::tie(opArg1, opArg2) = AdjacentPtrCtx(stage.ctx, 2);
                 break;
 
-            case SkRP::mix_2_floats:
+            case RPOp::mix_2_floats:
                 std::tie(opArg1, opArg2, opArg3) = Adjacent3PtrCtx(stage.ctx, 2);
                 break;
 
-            case SkRP::add_3_floats:   case SkRP::add_3_ints:
-            case SkRP::sub_3_floats:   case SkRP::sub_3_ints:
-            case SkRP::mul_3_floats:   case SkRP::mul_3_ints:
-            case SkRP::div_3_floats:   case SkRP::div_3_ints:   case SkRP::div_3_uints:
-                                       case SkRP::bitwise_and_3_ints:
-                                       case SkRP::bitwise_or_3_ints:
-                                       case SkRP::bitwise_xor_3_ints:
-            case SkRP::min_3_floats:   case SkRP::min_3_ints:   case SkRP::min_3_uints:
-            case SkRP::max_3_floats:   case SkRP::max_3_ints:   case SkRP::max_3_uints:
-            case SkRP::cmplt_3_floats: case SkRP::cmplt_3_ints: case SkRP::cmplt_3_uints:
-            case SkRP::cmple_3_floats: case SkRP::cmple_3_ints: case SkRP::cmple_3_uints:
-            case SkRP::cmpeq_3_floats: case SkRP::cmpeq_3_ints:
-            case SkRP::cmpne_3_floats: case SkRP::cmpne_3_ints:
+            case RPOp::add_3_floats:   case RPOp::add_3_ints:
+            case RPOp::sub_3_floats:   case RPOp::sub_3_ints:
+            case RPOp::mul_3_floats:   case RPOp::mul_3_ints:
+            case RPOp::div_3_floats:   case RPOp::div_3_ints:   case RPOp::div_3_uints:
+                                       case RPOp::bitwise_and_3_ints:
+                                       case RPOp::bitwise_or_3_ints:
+                                       case RPOp::bitwise_xor_3_ints:
+            case RPOp::min_3_floats:   case RPOp::min_3_ints:   case RPOp::min_3_uints:
+            case RPOp::max_3_floats:   case RPOp::max_3_ints:   case RPOp::max_3_uints:
+            case RPOp::cmplt_3_floats: case RPOp::cmplt_3_ints: case RPOp::cmplt_3_uints:
+            case RPOp::cmple_3_floats: case RPOp::cmple_3_ints: case RPOp::cmple_3_uints:
+            case RPOp::cmpeq_3_floats: case RPOp::cmpeq_3_ints:
+            case RPOp::cmpne_3_floats: case RPOp::cmpne_3_ints:
                 std::tie(opArg1, opArg2) = AdjacentPtrCtx(stage.ctx, 3);
                 break;
 
-            case SkRP::mix_3_floats:
+            case RPOp::mix_3_floats:
                 std::tie(opArg1, opArg2, opArg3) = Adjacent3PtrCtx(stage.ctx, 3);
                 break;
 
-            case SkRP::add_4_floats:   case SkRP::add_4_ints:
-            case SkRP::sub_4_floats:   case SkRP::sub_4_ints:
-            case SkRP::mul_4_floats:   case SkRP::mul_4_ints:
-            case SkRP::div_4_floats:   case SkRP::div_4_ints:   case SkRP::div_4_uints:
-                                       case SkRP::bitwise_and_4_ints:
-                                       case SkRP::bitwise_or_4_ints:
-                                       case SkRP::bitwise_xor_4_ints:
-            case SkRP::min_4_floats:   case SkRP::min_4_ints:   case SkRP::min_4_uints:
-            case SkRP::max_4_floats:   case SkRP::max_4_ints:   case SkRP::max_4_uints:
-            case SkRP::cmplt_4_floats: case SkRP::cmplt_4_ints: case SkRP::cmplt_4_uints:
-            case SkRP::cmple_4_floats: case SkRP::cmple_4_ints: case SkRP::cmple_4_uints:
-            case SkRP::cmpeq_4_floats: case SkRP::cmpeq_4_ints:
-            case SkRP::cmpne_4_floats: case SkRP::cmpne_4_ints:
+            case RPOp::add_4_floats:   case RPOp::add_4_ints:
+            case RPOp::sub_4_floats:   case RPOp::sub_4_ints:
+            case RPOp::mul_4_floats:   case RPOp::mul_4_ints:
+            case RPOp::div_4_floats:   case RPOp::div_4_ints:   case RPOp::div_4_uints:
+                                       case RPOp::bitwise_and_4_ints:
+                                       case RPOp::bitwise_or_4_ints:
+                                       case RPOp::bitwise_xor_4_ints:
+            case RPOp::min_4_floats:   case RPOp::min_4_ints:   case RPOp::min_4_uints:
+            case RPOp::max_4_floats:   case RPOp::max_4_ints:   case RPOp::max_4_uints:
+            case RPOp::cmplt_4_floats: case RPOp::cmplt_4_ints: case RPOp::cmplt_4_uints:
+            case RPOp::cmple_4_floats: case RPOp::cmple_4_ints: case RPOp::cmple_4_uints:
+            case RPOp::cmpeq_4_floats: case RPOp::cmpeq_4_ints:
+            case RPOp::cmpne_4_floats: case RPOp::cmpne_4_ints:
                 std::tie(opArg1, opArg2) = AdjacentPtrCtx(stage.ctx, 4);
                 break;
 
-            case SkRP::mix_4_floats:
+            case RPOp::mix_4_floats:
                 std::tie(opArg1, opArg2, opArg3) = Adjacent3PtrCtx(stage.ctx, 4);
                 break;
 
-            case SkRP::add_n_floats:   case SkRP::add_n_ints:
-            case SkRP::sub_n_floats:   case SkRP::sub_n_ints:
-            case SkRP::mul_n_floats:   case SkRP::mul_n_ints:
-            case SkRP::div_n_floats:   case SkRP::div_n_ints:   case SkRP::div_n_uints:
-                                       case SkRP::bitwise_and_n_ints:
-                                       case SkRP::bitwise_or_n_ints:
-                                       case SkRP::bitwise_xor_n_ints:
-            case SkRP::min_n_floats:   case SkRP::min_n_ints:   case SkRP::min_n_uints:
-            case SkRP::max_n_floats:   case SkRP::max_n_ints:   case SkRP::max_n_uints:
-            case SkRP::cmplt_n_floats: case SkRP::cmplt_n_ints: case SkRP::cmplt_n_uints:
-            case SkRP::cmple_n_floats: case SkRP::cmple_n_ints: case SkRP::cmple_n_uints:
-            case SkRP::cmpeq_n_floats: case SkRP::cmpeq_n_ints:
-            case SkRP::cmpne_n_floats: case SkRP::cmpne_n_ints:
+            case RPOp::add_n_floats:   case RPOp::add_n_ints:
+            case RPOp::sub_n_floats:   case RPOp::sub_n_ints:
+            case RPOp::mul_n_floats:   case RPOp::mul_n_ints:
+            case RPOp::div_n_floats:   case RPOp::div_n_ints:   case RPOp::div_n_uints:
+                                       case RPOp::bitwise_and_n_ints:
+                                       case RPOp::bitwise_or_n_ints:
+                                       case RPOp::bitwise_xor_n_ints:
+            case RPOp::min_n_floats:   case RPOp::min_n_ints:   case RPOp::min_n_uints:
+            case RPOp::max_n_floats:   case RPOp::max_n_ints:   case RPOp::max_n_uints:
+            case RPOp::cmplt_n_floats: case RPOp::cmplt_n_ints: case RPOp::cmplt_n_uints:
+            case RPOp::cmple_n_floats: case RPOp::cmple_n_ints: case RPOp::cmple_n_uints:
+            case RPOp::cmpeq_n_floats: case RPOp::cmpeq_n_ints:
+            case RPOp::cmpne_n_floats: case RPOp::cmpne_n_ints:
                 std::tie(opArg1, opArg2) = AdjacentBinaryOpCtx(stage.ctx);
                 break;
 
-            case SkRP::mix_n_floats:
+            case RPOp::mix_n_floats:
                 std::tie(opArg1, opArg2, opArg3) = AdjacentTernaryOpCtx(stage.ctx);
                 break;
 
-            case SkRP::jump:
-            case SkRP::branch_if_any_active_lanes:
-            case SkRP::branch_if_no_active_lanes:
+            case RPOp::jump:
+            case RPOp::branch_if_any_active_lanes:
+            case RPOp::branch_if_no_active_lanes:
                 opArg1 = BranchOffset(stage.ctx);
                 break;
 
@@ -1286,281 +1327,287 @@ void Program::dump(SkWStream* out) {
                 break;
         }
 
-        const char* opName = SkRasterPipeline::GetStageName(stage.op);
+        const char* opName = "";
+        switch (stage.op) {
+        #define M(x) case RPOp::x: opName = #x; break;
+            SK_RASTER_PIPELINE_OPS_ALL(M)
+        #undef M
+        }
+
         std::string opText;
         switch (stage.op) {
-            case SkRP::init_lane_masks:
+            case RPOp::init_lane_masks:
                 opText = "CondMask = LoopMask = RetMask = true";
                 break;
 
-            case SkRP::load_condition_mask:
+            case RPOp::load_condition_mask:
                 opText = "CondMask = " + opArg1;
                 break;
 
-            case SkRP::store_condition_mask:
+            case RPOp::store_condition_mask:
                 opText = opArg1 + " = CondMask";
                 break;
 
-            case SkRP::merge_condition_mask:
+            case RPOp::merge_condition_mask:
                 opText = "CondMask = " + opArg1 + " & " + opArg2;
                 break;
 
-            case SkRP::load_loop_mask:
+            case RPOp::load_loop_mask:
                 opText = "LoopMask = " + opArg1;
                 break;
 
-            case SkRP::store_loop_mask:
+            case RPOp::store_loop_mask:
                 opText = opArg1 + " = LoopMask";
                 break;
 
-            case SkRP::mask_off_loop_mask:
+            case RPOp::mask_off_loop_mask:
                 opText = "LoopMask &= ~(CondMask & LoopMask & RetMask)";
                 break;
 
-            case SkRP::reenable_loop_mask:
+            case RPOp::reenable_loop_mask:
                 opText = "LoopMask |= " + opArg1;
                 break;
 
-            case SkRP::merge_loop_mask:
+            case RPOp::merge_loop_mask:
                 opText = "LoopMask &= " + opArg1;
                 break;
 
-            case SkRP::load_return_mask:
+            case RPOp::load_return_mask:
                 opText = "RetMask = " + opArg1;
                 break;
 
-            case SkRP::store_return_mask:
+            case RPOp::store_return_mask:
                 opText = opArg1 + " = RetMask";
                 break;
 
-            case SkRP::mask_off_return_mask:
+            case RPOp::mask_off_return_mask:
                 opText = "RetMask &= ~(CondMask & LoopMask & RetMask)";
                 break;
 
-            case SkRP::immediate_f:
-            case SkRP::load_unmasked:
+            case RPOp::immediate_f:
+            case RPOp::load_unmasked:
                 opText = "src.r = " + opArg1;
                 break;
 
-            case SkRP::store_unmasked:
+            case RPOp::store_unmasked:
                 opText = opArg1 + " = src.r";
                 break;
 
-            case SkRP::store_src_rg:
+            case RPOp::store_src_rg:
                 opText = opArg1 + " = src.rg";
                 break;
 
-            case SkRP::store_src:
+            case RPOp::store_src:
                 opText = opArg1 + " = src.rgba";
                 break;
 
-            case SkRP::store_dst:
+            case RPOp::store_dst:
                 opText = opArg1 + " = dst.rgba";
                 break;
 
-            case SkRP::load_src:
+            case RPOp::load_src:
                 opText = "src.rgba = " + opArg1;
                 break;
 
-            case SkRP::load_dst:
+            case RPOp::load_dst:
                 opText = "dst.rgba = " + opArg1;
                 break;
 
-            case SkRP::store_masked:
+            case RPOp::store_masked:
                 opText = opArg1 + " = Mask(src.r)";
                 break;
 
-            case SkRP::bitwise_and_int:
-            case SkRP::bitwise_and_2_ints:
-            case SkRP::bitwise_and_3_ints:
-            case SkRP::bitwise_and_4_ints:
-            case SkRP::bitwise_and_n_ints:
+            case RPOp::bitwise_and_int:
+            case RPOp::bitwise_and_2_ints:
+            case RPOp::bitwise_and_3_ints:
+            case RPOp::bitwise_and_4_ints:
+            case RPOp::bitwise_and_n_ints:
                 opText = opArg1 + " &= " + opArg2;
                 break;
 
-            case SkRP::bitwise_or_int:
-            case SkRP::bitwise_or_2_ints:
-            case SkRP::bitwise_or_3_ints:
-            case SkRP::bitwise_or_4_ints:
-            case SkRP::bitwise_or_n_ints:
+            case RPOp::bitwise_or_int:
+            case RPOp::bitwise_or_2_ints:
+            case RPOp::bitwise_or_3_ints:
+            case RPOp::bitwise_or_4_ints:
+            case RPOp::bitwise_or_n_ints:
                 opText = opArg1 + " |= " + opArg2;
                 break;
 
-            case SkRP::bitwise_xor_int:
-            case SkRP::bitwise_xor_2_ints:
-            case SkRP::bitwise_xor_3_ints:
-            case SkRP::bitwise_xor_4_ints:
-            case SkRP::bitwise_xor_n_ints:
+            case RPOp::bitwise_xor_int:
+            case RPOp::bitwise_xor_2_ints:
+            case RPOp::bitwise_xor_3_ints:
+            case RPOp::bitwise_xor_4_ints:
+            case RPOp::bitwise_xor_n_ints:
                 opText = opArg1 + " ^= " + opArg2;
                 break;
 
-            case SkRP::bitwise_not_int:
-            case SkRP::bitwise_not_2_ints:
-            case SkRP::bitwise_not_3_ints:
-            case SkRP::bitwise_not_4_ints:
+            case RPOp::bitwise_not_int:
+            case RPOp::bitwise_not_2_ints:
+            case RPOp::bitwise_not_3_ints:
+            case RPOp::bitwise_not_4_ints:
                 opText = opArg1 + " = ~" + opArg1;
                 break;
 
-            case SkRP::cast_to_float_from_int:
-            case SkRP::cast_to_float_from_2_ints:
-            case SkRP::cast_to_float_from_3_ints:
-            case SkRP::cast_to_float_from_4_ints:
+            case RPOp::cast_to_float_from_int:
+            case RPOp::cast_to_float_from_2_ints:
+            case RPOp::cast_to_float_from_3_ints:
+            case RPOp::cast_to_float_from_4_ints:
                 opText = opArg1 + " = IntToFloat(" + opArg1 + ")";
                 break;
 
-            case SkRP::cast_to_float_from_uint:
-            case SkRP::cast_to_float_from_2_uints:
-            case SkRP::cast_to_float_from_3_uints:
-            case SkRP::cast_to_float_from_4_uints:
+            case RPOp::cast_to_float_from_uint:
+            case RPOp::cast_to_float_from_2_uints:
+            case RPOp::cast_to_float_from_3_uints:
+            case RPOp::cast_to_float_from_4_uints:
                 opText = opArg1 + " = UintToFloat(" + opArg1 + ")";
                 break;
 
-            case SkRP::cast_to_int_from_float:
-            case SkRP::cast_to_int_from_2_floats:
-            case SkRP::cast_to_int_from_3_floats:
-            case SkRP::cast_to_int_from_4_floats:
+            case RPOp::cast_to_int_from_float:
+            case RPOp::cast_to_int_from_2_floats:
+            case RPOp::cast_to_int_from_3_floats:
+            case RPOp::cast_to_int_from_4_floats:
                 opText = opArg1 + " = FloatToInt(" + opArg1 + ")";
                 break;
 
-            case SkRP::cast_to_uint_from_float:
-            case SkRP::cast_to_uint_from_2_floats:
-            case SkRP::cast_to_uint_from_3_floats:
-            case SkRP::cast_to_uint_from_4_floats:
+            case RPOp::cast_to_uint_from_float:
+            case RPOp::cast_to_uint_from_2_floats:
+            case RPOp::cast_to_uint_from_3_floats:
+            case RPOp::cast_to_uint_from_4_floats:
                 opText = opArg1 + " = FloatToUint(" + opArg1 + ")";
                 break;
 
-            case SkRP::copy_slot_masked:      case SkRP::copy_2_slots_masked:
-            case SkRP::copy_3_slots_masked:   case SkRP::copy_4_slots_masked:
+            case RPOp::copy_slot_masked:      case RPOp::copy_2_slots_masked:
+            case RPOp::copy_3_slots_masked:   case RPOp::copy_4_slots_masked:
                 opText = opArg1 + " = Mask(" + opArg2 + ")";
                 break;
 
-            case SkRP::copy_constant:         case SkRP::copy_2_constants:
-            case SkRP::copy_3_constants:      case SkRP::copy_4_constants:
-            case SkRP::copy_slot_unmasked:    case SkRP::copy_2_slots_unmasked:
-            case SkRP::copy_3_slots_unmasked: case SkRP::copy_4_slots_unmasked:
-            case SkRP::swizzle_1:             case SkRP::swizzle_2:
-            case SkRP::swizzle_3:             case SkRP::swizzle_4:
-            case SkRP::transpose:
+            case RPOp::copy_constant:         case RPOp::copy_2_constants:
+            case RPOp::copy_3_constants:      case RPOp::copy_4_constants:
+            case RPOp::copy_slot_unmasked:    case RPOp::copy_2_slots_unmasked:
+            case RPOp::copy_3_slots_unmasked: case RPOp::copy_4_slots_unmasked:
+            case RPOp::swizzle_1:             case RPOp::swizzle_2:
+            case RPOp::swizzle_3:             case RPOp::swizzle_4:
+            case RPOp::shuffle:
                 opText = opArg1 + " = " + opArg2;
                 break;
 
-            case SkRP::zero_slot_unmasked:    case SkRP::zero_2_slots_unmasked:
-            case SkRP::zero_3_slots_unmasked: case SkRP::zero_4_slots_unmasked:
+            case RPOp::zero_slot_unmasked:    case RPOp::zero_2_slots_unmasked:
+            case RPOp::zero_3_slots_unmasked: case RPOp::zero_4_slots_unmasked:
                 opText = opArg1 + " = 0";
                 break;
 
-            case SkRP::abs_float:    case SkRP::abs_int:
-            case SkRP::abs_2_floats: case SkRP::abs_2_ints:
-            case SkRP::abs_3_floats: case SkRP::abs_3_ints:
-            case SkRP::abs_4_floats: case SkRP::abs_4_ints:
+            case RPOp::abs_float:    case RPOp::abs_int:
+            case RPOp::abs_2_floats: case RPOp::abs_2_ints:
+            case RPOp::abs_3_floats: case RPOp::abs_3_ints:
+            case RPOp::abs_4_floats: case RPOp::abs_4_ints:
                 opText = opArg1 + " = abs(" + opArg1 + ")";
                 break;
 
-            case SkRP::ceil_float:
-            case SkRP::ceil_2_floats:
-            case SkRP::ceil_3_floats:
-            case SkRP::ceil_4_floats:
+            case RPOp::ceil_float:
+            case RPOp::ceil_2_floats:
+            case RPOp::ceil_3_floats:
+            case RPOp::ceil_4_floats:
                 opText = opArg1 + " = ceil(" + opArg1 + ")";
                 break;
 
-            case SkRP::floor_float:
-            case SkRP::floor_2_floats:
-            case SkRP::floor_3_floats:
-            case SkRP::floor_4_floats:
+            case RPOp::floor_float:
+            case RPOp::floor_2_floats:
+            case RPOp::floor_3_floats:
+            case RPOp::floor_4_floats:
                 opText = opArg1 + " = floor(" + opArg1 + ")";
                 break;
 
-            case SkRP::add_float:    case SkRP::add_int:
-            case SkRP::add_2_floats: case SkRP::add_2_ints:
-            case SkRP::add_3_floats: case SkRP::add_3_ints:
-            case SkRP::add_4_floats: case SkRP::add_4_ints:
-            case SkRP::add_n_floats: case SkRP::add_n_ints:
+            case RPOp::add_float:    case RPOp::add_int:
+            case RPOp::add_2_floats: case RPOp::add_2_ints:
+            case RPOp::add_3_floats: case RPOp::add_3_ints:
+            case RPOp::add_4_floats: case RPOp::add_4_ints:
+            case RPOp::add_n_floats: case RPOp::add_n_ints:
                 opText = opArg1 + " += " + opArg2;
                 break;
 
-            case SkRP::sub_float:    case SkRP::sub_int:
-            case SkRP::sub_2_floats: case SkRP::sub_2_ints:
-            case SkRP::sub_3_floats: case SkRP::sub_3_ints:
-            case SkRP::sub_4_floats: case SkRP::sub_4_ints:
-            case SkRP::sub_n_floats: case SkRP::sub_n_ints:
+            case RPOp::sub_float:    case RPOp::sub_int:
+            case RPOp::sub_2_floats: case RPOp::sub_2_ints:
+            case RPOp::sub_3_floats: case RPOp::sub_3_ints:
+            case RPOp::sub_4_floats: case RPOp::sub_4_ints:
+            case RPOp::sub_n_floats: case RPOp::sub_n_ints:
                 opText = opArg1 + " -= " + opArg2;
                 break;
 
-            case SkRP::mul_float:    case SkRP::mul_int:
-            case SkRP::mul_2_floats: case SkRP::mul_2_ints:
-            case SkRP::mul_3_floats: case SkRP::mul_3_ints:
-            case SkRP::mul_4_floats: case SkRP::mul_4_ints:
-            case SkRP::mul_n_floats: case SkRP::mul_n_ints:
+            case RPOp::mul_float:    case RPOp::mul_int:
+            case RPOp::mul_2_floats: case RPOp::mul_2_ints:
+            case RPOp::mul_3_floats: case RPOp::mul_3_ints:
+            case RPOp::mul_4_floats: case RPOp::mul_4_ints:
+            case RPOp::mul_n_floats: case RPOp::mul_n_ints:
                 opText = opArg1 + " *= " + opArg2;
                 break;
 
-            case SkRP::div_float:    case SkRP::div_int:    case SkRP::div_uint:
-            case SkRP::div_2_floats: case SkRP::div_2_ints: case SkRP::div_2_uints:
-            case SkRP::div_3_floats: case SkRP::div_3_ints: case SkRP::div_3_uints:
-            case SkRP::div_4_floats: case SkRP::div_4_ints: case SkRP::div_4_uints:
-            case SkRP::div_n_floats: case SkRP::div_n_ints: case SkRP::div_n_uints:
+            case RPOp::div_float:    case RPOp::div_int:    case RPOp::div_uint:
+            case RPOp::div_2_floats: case RPOp::div_2_ints: case RPOp::div_2_uints:
+            case RPOp::div_3_floats: case RPOp::div_3_ints: case RPOp::div_3_uints:
+            case RPOp::div_4_floats: case RPOp::div_4_ints: case RPOp::div_4_uints:
+            case RPOp::div_n_floats: case RPOp::div_n_ints: case RPOp::div_n_uints:
                 opText = opArg1 + " /= " + opArg2;
                 break;
 
-            case SkRP::min_float:    case SkRP::min_int:    case SkRP::min_uint:
-            case SkRP::min_2_floats: case SkRP::min_2_ints: case SkRP::min_2_uints:
-            case SkRP::min_3_floats: case SkRP::min_3_ints: case SkRP::min_3_uints:
-            case SkRP::min_4_floats: case SkRP::min_4_ints: case SkRP::min_4_uints:
-            case SkRP::min_n_floats: case SkRP::min_n_ints: case SkRP::min_n_uints:
+            case RPOp::min_float:    case RPOp::min_int:    case RPOp::min_uint:
+            case RPOp::min_2_floats: case RPOp::min_2_ints: case RPOp::min_2_uints:
+            case RPOp::min_3_floats: case RPOp::min_3_ints: case RPOp::min_3_uints:
+            case RPOp::min_4_floats: case RPOp::min_4_ints: case RPOp::min_4_uints:
+            case RPOp::min_n_floats: case RPOp::min_n_ints: case RPOp::min_n_uints:
                 opText = opArg1 + " = min(" + opArg1 + ", " + opArg2 + ")";
                 break;
 
-            case SkRP::max_float:    case SkRP::max_int:    case SkRP::max_uint:
-            case SkRP::max_2_floats: case SkRP::max_2_ints: case SkRP::max_2_uints:
-            case SkRP::max_3_floats: case SkRP::max_3_ints: case SkRP::max_3_uints:
-            case SkRP::max_4_floats: case SkRP::max_4_ints: case SkRP::max_4_uints:
-            case SkRP::max_n_floats: case SkRP::max_n_ints: case SkRP::max_n_uints:
+            case RPOp::max_float:    case RPOp::max_int:    case RPOp::max_uint:
+            case RPOp::max_2_floats: case RPOp::max_2_ints: case RPOp::max_2_uints:
+            case RPOp::max_3_floats: case RPOp::max_3_ints: case RPOp::max_3_uints:
+            case RPOp::max_4_floats: case RPOp::max_4_ints: case RPOp::max_4_uints:
+            case RPOp::max_n_floats: case RPOp::max_n_ints: case RPOp::max_n_uints:
                 opText = opArg1 + " = max(" + opArg1 + ", " + opArg2 + ")";
                 break;
 
-            case SkRP::cmplt_float:    case SkRP::cmplt_int:    case SkRP::cmplt_uint:
-            case SkRP::cmplt_2_floats: case SkRP::cmplt_2_ints: case SkRP::cmplt_2_uints:
-            case SkRP::cmplt_3_floats: case SkRP::cmplt_3_ints: case SkRP::cmplt_3_uints:
-            case SkRP::cmplt_4_floats: case SkRP::cmplt_4_ints: case SkRP::cmplt_4_uints:
-            case SkRP::cmplt_n_floats: case SkRP::cmplt_n_ints: case SkRP::cmplt_n_uints:
+            case RPOp::cmplt_float:    case RPOp::cmplt_int:    case RPOp::cmplt_uint:
+            case RPOp::cmplt_2_floats: case RPOp::cmplt_2_ints: case RPOp::cmplt_2_uints:
+            case RPOp::cmplt_3_floats: case RPOp::cmplt_3_ints: case RPOp::cmplt_3_uints:
+            case RPOp::cmplt_4_floats: case RPOp::cmplt_4_ints: case RPOp::cmplt_4_uints:
+            case RPOp::cmplt_n_floats: case RPOp::cmplt_n_ints: case RPOp::cmplt_n_uints:
                 opText = opArg1 + " = lessThan(" + opArg1 + ", " + opArg2 + ")";
                 break;
 
-            case SkRP::cmple_float:    case SkRP::cmple_int:    case SkRP::cmple_uint:
-            case SkRP::cmple_2_floats: case SkRP::cmple_2_ints: case SkRP::cmple_2_uints:
-            case SkRP::cmple_3_floats: case SkRP::cmple_3_ints: case SkRP::cmple_3_uints:
-            case SkRP::cmple_4_floats: case SkRP::cmple_4_ints: case SkRP::cmple_4_uints:
-            case SkRP::cmple_n_floats: case SkRP::cmple_n_ints: case SkRP::cmple_n_uints:
+            case RPOp::cmple_float:    case RPOp::cmple_int:    case RPOp::cmple_uint:
+            case RPOp::cmple_2_floats: case RPOp::cmple_2_ints: case RPOp::cmple_2_uints:
+            case RPOp::cmple_3_floats: case RPOp::cmple_3_ints: case RPOp::cmple_3_uints:
+            case RPOp::cmple_4_floats: case RPOp::cmple_4_ints: case RPOp::cmple_4_uints:
+            case RPOp::cmple_n_floats: case RPOp::cmple_n_ints: case RPOp::cmple_n_uints:
                 opText = opArg1 + " = lessThanEqual(" + opArg1 + ", " + opArg2 + ")";
                 break;
 
-            case SkRP::cmpeq_float:    case SkRP::cmpeq_int:
-            case SkRP::cmpeq_2_floats: case SkRP::cmpeq_2_ints:
-            case SkRP::cmpeq_3_floats: case SkRP::cmpeq_3_ints:
-            case SkRP::cmpeq_4_floats: case SkRP::cmpeq_4_ints:
-            case SkRP::cmpeq_n_floats: case SkRP::cmpeq_n_ints:
+            case RPOp::cmpeq_float:    case RPOp::cmpeq_int:
+            case RPOp::cmpeq_2_floats: case RPOp::cmpeq_2_ints:
+            case RPOp::cmpeq_3_floats: case RPOp::cmpeq_3_ints:
+            case RPOp::cmpeq_4_floats: case RPOp::cmpeq_4_ints:
+            case RPOp::cmpeq_n_floats: case RPOp::cmpeq_n_ints:
                 opText = opArg1 + " = equal(" + opArg1 + ", " + opArg2 + ")";
                 break;
 
-            case SkRP::cmpne_float:    case SkRP::cmpne_int:
-            case SkRP::cmpne_2_floats: case SkRP::cmpne_2_ints:
-            case SkRP::cmpne_3_floats: case SkRP::cmpne_3_ints:
-            case SkRP::cmpne_4_floats: case SkRP::cmpne_4_ints:
-            case SkRP::cmpne_n_floats: case SkRP::cmpne_n_ints:
+            case RPOp::cmpne_float:    case RPOp::cmpne_int:
+            case RPOp::cmpne_2_floats: case RPOp::cmpne_2_ints:
+            case RPOp::cmpne_3_floats: case RPOp::cmpne_3_ints:
+            case RPOp::cmpne_4_floats: case RPOp::cmpne_4_ints:
+            case RPOp::cmpne_n_floats: case RPOp::cmpne_n_ints:
                 opText = opArg1 + " = notEqual(" + opArg1 + ", " + opArg2 + ")";
                 break;
 
-            case SkRP::mix_float:
-            case SkRP::mix_2_floats:
-            case SkRP::mix_3_floats:
-            case SkRP::mix_4_floats:
-            case SkRP::mix_n_floats:
+            case RPOp::mix_float:
+            case RPOp::mix_2_floats:
+            case RPOp::mix_3_floats:
+            case RPOp::mix_4_floats:
+            case RPOp::mix_n_floats:
                 opText = opArg1 + " = mix(" + opArg1 + ", " + opArg2 + ", " + opArg3 + ")";
                 break;
 
-            case SkRP::jump:
-            case SkRP::branch_if_any_active_lanes:
-            case SkRP::branch_if_no_active_lanes:
+            case RPOp::jump:
+            case RPOp::branch_if_any_active_lanes:
+            case RPOp::branch_if_no_active_lanes:
                 opText = std::string(opName) + " " + opArg1;
                 break;
 
@@ -1574,7 +1621,6 @@ void Program::dump(SkWStream* out) {
 
         out->writeText(line.c_str());
     }
-#endif
 }
 
 }  // namespace RP

@@ -28,8 +28,8 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
 #include "include/pathops/SkPathOps.h"
-#include "include/private/SkTDArray.h"
 #include "include/private/SkTemplates.h"
+#include "include/private/base/SkTDArray.h"
 #include "include/utils/SkNoDrawCanvas.h"
 #include "modules/svg/include/SkSVGDOM.h"
 #include "modules/svg/include/SkSVGNode.h"
@@ -48,6 +48,8 @@
 #include "tools/Resources.h"
 
 #include <utility>
+
+using namespace skia_private;
 
 class SkDescriptor;
 
@@ -1444,7 +1446,7 @@ void TestSVGTypeface::exportTtxColr(SkWStream* out) const {
     out->writeText("  </COLR>\n");
 
     // The colors must be written in order, the 'index' is ignored by ttx.
-    SkAutoTMalloc<SkColor> colorsInOrder(colors.count());
+    AutoTMalloc<SkColor> colorsInOrder(colors.count());
     colors.foreach ([&colorsInOrder](const SkColor& c, const int* i) { colorsInOrder[*i] = c; });
     out->writeText("  <CPAL>\n");
     out->writeText("    <version value=\"0\"/>\n");

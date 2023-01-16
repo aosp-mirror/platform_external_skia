@@ -23,11 +23,12 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/private/SkSLProgramElement.h"
 #include "include/private/SkSLProgramKind.h"
-#include "include/private/SkTArray.h"
+#include "include/private/base/SkTArray.h"
 #include "include/sksl/DSLCore.h"
 #include "include/sksl/SkSLVersion.h"
 #include "src/core/SkArenaAlloc.h"
 #include "src/core/SkRasterPipeline.h"
+#include "src/core/SkRasterPipelineOpList.h"
 #include "src/core/SkRuntimeEffectPriv.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
@@ -429,7 +430,7 @@ static void test_raster_pipeline(skiatest::Reporter* r, const char* testFile, in
     // Move the float values from RGBA into an 8888 memory buffer.
     uint32_t out[SkRasterPipeline_kMaxStride_highp] = {};
     SkRasterPipeline_MemoryCtx outCtx{/*pixels=*/out, /*stride=*/SkRasterPipeline_kMaxStride_highp};
-    pipeline.append(SkRasterPipeline::store_8888, &outCtx);
+    pipeline.append(SkRasterPipelineOp::store_8888, &outCtx);
     pipeline.run(0, 0, 1, 1);
 
     // Make sure the first pixel (exclusively) of `out` is green. If the program compiled
@@ -656,8 +657,8 @@ SKSL_TEST(VM + GPU,          kApiLevel_T, OutParams,                       "shar
 SKSL_TEST(VM + GPU,          kApiLevel_T, OutParamsAreDistinct,            "shared/OutParamsAreDistinct.sksl")
 SKSL_TEST(VM + GPU,          kApiLevel_T, OutParamsAreDistinctFromGlobal,  "shared/OutParamsAreDistinctFromGlobal.sksl")
 SKSL_TEST(VM + GPU,          kApiLevel_T, OutParamsTricky,                 "shared/OutParamsTricky.sksl")
-SKSL_TEST(VM + GPU,          kApiLevel_T, ResizeMatrix,                    "shared/ResizeMatrix.sksl")
-SKSL_TEST(GPU_ES3,           kNever,      ResizeMatrixNonsquare,           "shared/ResizeMatrixNonsquare.sksl")
+SKSL_TEST(RP + VM + GPU,     kApiLevel_T, ResizeMatrix,                    "shared/ResizeMatrix.sksl")
+SKSL_TEST(RP + GPU_ES3,      kNever,      ResizeMatrixNonsquare,           "shared/ResizeMatrixNonsquare.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, ReturnsValueOnEveryPathES2,      "shared/ReturnsValueOnEveryPathES2.sksl")
 SKSL_TEST(GPU_ES3,           kNever,      ReturnsValueOnEveryPathES3,      "shared/ReturnsValueOnEveryPathES3.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, ScalarConversionConstructorsES2, "shared/ScalarConversionConstructorsES2.sksl")
@@ -689,7 +690,7 @@ SKSL_TEST(RP + VM + GPU,     kApiLevel_T, TernaryAsLValueFoldableTest,     "shar
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, TernaryExpression,               "shared/TernaryExpression.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, UnaryPositiveNegative,           "shared/UnaryPositiveNegative.sksl")
 SKSL_TEST(VM + GPU,          kApiLevel_T, UniformArray,                    "shared/UniformArray.sksl")
-SKSL_TEST(VM + GPU,          kApiLevel_T, UniformMatrixResize,             "shared/UniformMatrixResize.sksl")
+SKSL_TEST(RP + VM + GPU,     kApiLevel_T, UniformMatrixResize,             "shared/UniformMatrixResize.sksl")
 SKSL_TEST(VM + GPU,          kApiLevel_T, UnusedVariables,                 "shared/UnusedVariables.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, VectorConstructors,              "shared/VectorConstructors.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, VectorToMatrixCast,              "shared/VectorToMatrixCast.sksl")
