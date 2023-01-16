@@ -24,8 +24,8 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrTypes.h"
-#include "include/private/SkFloatBits.h"
 #include "include/private/SkTemplates.h"
+#include "include/private/base/SkFloatBits.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "include/utils/SkRandom.h"
 #include "src/core/SkArenaAlloc.h"
@@ -57,6 +57,8 @@
 #include <map>
 #include <memory>
 #include <utility>
+
+using namespace skia_private;
 
 class GrRecordingContext;
 class SkShader;
@@ -916,7 +918,7 @@ public:
     }
     void unlock(int actualCount) override {}
     SkPoint operator[](int idx) const { return fPoints[idx]; }
-    SkAutoTMalloc<SkPoint> fPoints;
+    AutoTMalloc<SkPoint> fPoints;
 };
 
 class SimplerVertexAllocator : public GrEagerVertexAllocator {
@@ -931,7 +933,7 @@ public:
 
     void unlock(int) override {}
 
-    SkAutoTMalloc<char> fVertexData;
+    AutoTMalloc<char> fVertexData;
     size_t fVertexAllocSize = 0;
 };
 

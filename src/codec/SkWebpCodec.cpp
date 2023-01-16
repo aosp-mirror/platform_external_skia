@@ -13,7 +13,7 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkImageInfo.h"
-#include "include/core/SkMath.h"
+#include "include/private/base/SkMath.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
@@ -25,6 +25,7 @@
 #include "src/codec/SkParseEncodedOrigin.h"
 #include "src/codec/SkSampler.h"
 #include "src/core/SkRasterPipeline.h"
+#include "src/core/SkRasterPipelineOpList.h"
 #include "src/core/SkStreamPriv.h"
 
 #include <algorithm>
@@ -339,18 +340,18 @@ static void blend_line(SkColorType dstCT, void* dst,
 
     p.append_load_dst(dstCT, &dst_ctx);
     if (kUnpremul_SkAlphaType == dstAt) {
-        p.append(SkRasterPipeline::premul_dst);
+        p.append(SkRasterPipelineOp::premul_dst);
     }
 
     p.append_load(srcCT, &src_ctx);
     if (srcHasAlpha) {
-        p.append(SkRasterPipeline::premul);
+        p.append(SkRasterPipelineOp::premul);
     }
 
-    p.append(SkRasterPipeline::srcover);
+    p.append(SkRasterPipelineOp::srcover);
 
     if (kUnpremul_SkAlphaType == dstAt) {
-        p.append(SkRasterPipeline::unpremul);
+        p.append(SkRasterPipelineOp::unpremul);
     }
     p.append_store(dstCT, &dst_ctx);
 

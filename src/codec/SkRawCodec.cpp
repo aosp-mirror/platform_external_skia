@@ -15,9 +15,9 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkTypes.h"
 #include "include/private/SkEncodedInfo.h"
-#include "include/private/SkTArray.h"
 #include "include/private/SkTemplates.h"
 #include "include/private/base/SkMutex.h"
+#include "include/private/base/SkTArray.h"
 #include "modules/skcms/skcms.h"
 #include "src/codec/SkCodecPriv.h"
 #include "src/codec/SkJpegCodec.h"
@@ -57,6 +57,8 @@
 
 #include "src/piex.h"
 #include "src/piex_types.h"
+
+using namespace skia_private;
 
 template <typename T> struct sk_is_trivially_relocatable;
 template <> struct sk_is_trivially_relocatable<dng_exception> : std::true_type {};
@@ -725,7 +727,7 @@ SkCodec::Result SkRawCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst,
     }
 
     void* dstRow = dst;
-    SkAutoTMalloc<uint8_t> srcRow(width * 3);
+    AutoTMalloc<uint8_t> srcRow(width * 3);
 
     dng_pixel_buffer buffer;
     buffer.fData = &srcRow[0];

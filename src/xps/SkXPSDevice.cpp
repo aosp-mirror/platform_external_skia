@@ -36,7 +36,7 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkVertices.h"
 #include "include/pathops/SkPathOps.h"
-#include "include/private/SkTDArray.h"
+#include "include/private/base/SkTDArray.h"
 #include "include/private/base/SkTo.h"
 #include "src/core/SkDraw.h"
 #include "src/core/SkEndian.h"
@@ -57,6 +57,8 @@
 #include "src/utils/win/SkIStream.h"
 #include "src/utils/win/SkTScopedComPtr.h"
 #include "src/xps/SkXPSDevice.h"
+
+using namespace skia_private;
 
 //Windows defines a FLOAT type,
 //make it clear when converting a scalar that this is what is wanted.
@@ -356,7 +358,7 @@ static HRESULT subset_typeface(const SkXPSDevice::TypefaceUse& current) {
         sk_realloc_throw,
         sk_free,
         nullptr);
-    SkAutoTMalloc<unsigned char> fontPackageBuffer(fontPackageBufferRaw);
+    AutoTMalloc<unsigned char> fontPackageBuffer(fontPackageBufferRaw);
     if (result != NO_ERROR) {
         SkDEBUGF("CreateFontPackage Error %lu", result);
         return E_UNEXPECTED;

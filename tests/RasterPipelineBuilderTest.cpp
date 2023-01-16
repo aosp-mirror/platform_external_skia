@@ -252,11 +252,10 @@ R"(    1. copy_constant                  $0 = 0x3F800000 (1.0)
     9. copy_slot_masked               $3 = Mask($4)
    10. swizzle_4                      $0..3 = ($0..3).wzyx
    11. swizzle_2                      $0..1 = ($0..2).yz
-   12. swizzle_1                      $0 = ($0).x
 )");
 }
 
-DEF_TEST(RasterPipelineBuilderTransposeSlots, r) {
+DEF_TEST(RasterPipelineBuilderTransposeMatrix, r) {
     // Create a very simple nonsense program.
     SkSL::RP::Builder builder;
     builder.push_literal_f(1.0f);           // push into 0
@@ -275,11 +274,11 @@ R"(    1. copy_constant                  $0 = 0x3F800000 (1.0)
     3. copy_4_slots_unmasked          $4..7 = $0..3
     4. copy_4_slots_unmasked          $8..11 = $4..7
     5. copy_4_slots_unmasked          $12..15 = $8..11
-    6. swizzle_4                      $12..15 = ($12..15).xzyw
-    7. transpose                      $7..15 = ($7..15)[0 3 6 1 4 7 2 5 8]
-    8. transpose                      $0..15 = ($0..15)[0 4 8 12 1 5 9 13 2 6 10 14 3 7 11 15]
-    9. transpose                      $8..15 = ($8..15)[0 4 1 5 2 6 3 7]
-   10. transpose                      $4..15 = ($4..15)[0 3 6 9 1 4 7 10 2 5 8 11]
+    6. swizzle_3                      $13..15 = ($13..15).yxz
+    7. shuffle                        $8..15 = ($8..15)[2 5 0 3 6 1 4 7]
+    8. shuffle                        $1..15 = ($1..15)[3 7 11 0 4 8 12 1 5 9 13 2 6 10 14]
+    9. shuffle                        $9..15 = ($9..15)[3 0 4 1 5 2 6]
+   10. shuffle                        $5..15 = ($5..15)[2 5 8 0 3 6 9 1 4 7 10]
 )");
 }
 
@@ -306,10 +305,44 @@ R"(    1. zero_slot_unmasked             $0 = 0
     3. swizzle_4                      $0..3 = ($0..3).yxxy
     4. zero_slot_unmasked             $0 = 0
     5. copy_constant                  $1 = 0x40000000 (2.0)
-    6. transpose                      $0..15 = ($0..15)[1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1]
+    6. shuffle                        $0..15 = ($0..15)[1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1]
     7. zero_slot_unmasked             $0 = 0
     8. copy_constant                  $1 = 0x40400000 (3.0)
-    9. transpose                      $0..5 = ($0..5)[1 0 0 0 1 0]
+    9. shuffle                        $0..5 = ($0..5)[1 0 0 0 1 0]
+)");
+}
+
+DEF_TEST(RasterPipelineBuilderMatrixResize, r) {
+    // Create a very simple nonsense program.
+    SkSL::RP::Builder builder;
+    builder.push_literal_f(1.0f);           // synthesize a 2x2 matrix
+    builder.push_literal_f(2.0f);
+    builder.push_literal_f(3.0f);
+    builder.push_literal_f(4.0f);
+    builder.matrix_resize(2, 2, 4, 4);      // resize 2x2 matrix into 4x4
+    builder.matrix_resize(4, 4, 2, 2);      // resize 4x4 matrix back into 2x2
+    builder.matrix_resize(2, 2, 2, 4);      // resize 2x2 matrix into 2x4
+    builder.matrix_resize(2, 4, 4, 2);      // resize 2x4 matrix into 4x2
+    builder.matrix_resize(4, 2, 3, 3);      // resize 4x2 matrix into 3x3
+    builder.discard_stack(9);               // balance stack
+    std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/0,
+                                                                /*numUniformSlots=*/0);
+    check(r, *program,
+R"(    1. copy_constant                  $0 = 0x3F800000 (1.0)
+    2. copy_constant                  $1 = 0x40000000 (2.0)
+    3. copy_constant                  $2 = 0x40400000 (3.0)
+    4. copy_constant                  $3 = 0x40800000 (4.0)
+    5. zero_slot_unmasked             $4 = 0
+    6. copy_constant                  $5 = 0x3F800000 (1.0)
+    7. shuffle                        $2..15 = ($2..15)[2 2 0 1 2 2 2 2 3 2 2 2 2 3]
+    8. shuffle                        $2..3 = ($2..3)[2 3]
+    9. zero_slot_unmasked             $4 = 0
+   10. shuffle                        $2..7 = ($2..7)[2 2 0 1 2 2]
+   11. zero_slot_unmasked             $8 = 0
+   12. shuffle                        $2..7 = ($2..7)[2 3 6 6 6 6]
+   13. zero_slot_unmasked             $8 = 0
+   14. copy_constant                  $9 = 0x3F800000 (1.0)
+   15. shuffle                        $2..8 = ($2..8)[6 0 1 6 2 3 7]
 )");
 }
 
