@@ -115,6 +115,92 @@ void Builder::ternary_op(BuilderOp op, int32_t slots) {
     }
 }
 
+void Builder::discard_stack(int32_t count) {
+    // If we pushed something onto the stack and then immediately discarded part of it, we can
+    // shrink or eliminate the push.
+    while (count > 0 && !fInstructions.empty()) {
+        Instruction& lastInstruction = fInstructions.back();
+
+        switch (lastInstruction.fOp) {
+            case BuilderOp::discard_stack:
+                // Our last op was actually a separate discard_stack; combine the discards.
+                lastInstruction.fImmA += count;
+                return;
+
+            case BuilderOp::push_zeros:
+            case BuilderOp::push_clone:
+            case BuilderOp::push_clone_from_stack:
+            case BuilderOp::push_slots:
+            case BuilderOp::push_uniform:
+                // Our last op was a multi-slot push; cancel out one discard and eliminate the op
+                // if its count reached zero.
+                --count;
+                --lastInstruction.fImmA;
+                if (lastInstruction.fImmA == 0) {
+                    fInstructions.pop_back();
+                }
+                continue;
+
+            case BuilderOp::push_literal_f:
+            case BuilderOp::push_condition_mask:
+            case BuilderOp::push_loop_mask:
+            case BuilderOp::push_return_mask:
+                // Our last op was a single-slot push; cancel out one discard and eliminate the op.
+                --count;
+                fInstructions.pop_back();
+                continue;
+
+            default:
+                break;
+        }
+
+        // This instruction wasn't a push.
+        break;
+    }
+
+    if (count > 0) {
+        fInstructions.push_back({BuilderOp::discard_stack, {}, count});
+    }
+}
+
+void Builder::push_slots(SlotRange src) {
+    SkASSERT(src.count >= 0);
+    if (!fInstructions.empty()) {
+        Instruction& lastInstruction = fInstructions.back();
+
+        // If the previous instruction was pushing slots contiguous to this range, we can collapse
+        // the two pushes into one larger push.
+        if (lastInstruction.fOp == BuilderOp::push_slots &&
+            lastInstruction.fSlotA + lastInstruction.fImmA == src.index) {
+            lastInstruction.fImmA += src.count;
+            return;
+        }
+    }
+
+    if (src.count > 0) {
+        fInstructions.push_back({BuilderOp::push_slots, {src.index}, src.count});
+    }
+}
+
+void Builder::push_uniform(SlotRange src) {
+    SkASSERT(src.count >= 0);
+    if (!fInstructions.empty()) {
+        Instruction& lastInstruction = fInstructions.back();
+
+        // If the previous instruction was pushing uniforms contiguous to this range, we can
+        // collapse the two pushes into one larger push.
+        if (lastInstruction.fOp == BuilderOp::push_uniform &&
+            lastInstruction.fSlotA + lastInstruction.fImmA == src.index) {
+            lastInstruction.fImmA += src.count;
+            return;
+        }
+    }
+
+    if (src.count > 0) {
+        fInstructions.push_back({BuilderOp::push_uniform, {src.index}, src.count});
+    }
+}
+
 void Builder::push_duplicates(int count) {
     SkASSERT(count >= 0);
     if (count >= 3) {
@@ -144,6 +230,27 @@ static int pack_nybbles(SkSpan<const int8_t> components) {
         packed |= *iter;
     }
     return packed;
+}
+
+void Builder::copy_stack_to_slots(SlotRange dst, int offsetFromStackTop) {
+    // If the last instruction copied the previous stack slots, just extend it.
+    if (!fInstructions.empty()) {
+        Instruction& lastInstruction = fInstructions.back();
+
+        // If the last op is copy-stack-to-slots...
+        if (lastInstruction.fOp == BuilderOp::copy_stack_to_slots &&
+            // and this op's destination is immediately after the last copy-slots-op's destination
+            lastInstruction.fSlotA + lastInstruction.fImmA == dst.index &&
+            // and this op's source is immediately after the last copy-slots-op's source
+            lastInstruction.fImmB - lastInstruction.fImmA == offsetFromStackTop) {
+            // then we can just extend the copy!
+            lastInstruction.fImmA += dst.count;
+            return;
+        }
+    }
+
+    fInstructions.push_back({BuilderOp::copy_stack_to_slots, {dst.index},
+                             dst.count, offsetFromStackTop});
 }
 
 void Builder::swizzle(int consumedSlots, SkSpan<const int8_t> elementSpan) {
