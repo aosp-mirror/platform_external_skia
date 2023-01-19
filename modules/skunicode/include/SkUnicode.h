@@ -139,7 +139,8 @@ class SKUNICODE_API SkUnicode {
                                     int utf8Units,
                                     TextDirection dir,
                                     std::vector<BidiRegion>* results) = 0;
-        virtual bool getWords(const char utf8[], int utf8Units, std::vector<Position>* results) = 0;
+        virtual bool getWords(const char utf8[], int utf8Units, const char* locale,
+                              std::vector<Position>* results) = 0;
         virtual bool computeCodeUnitFlags(char utf8[], int utf8Units, bool replaceTabs,
                                       SkTArray<SkUnicode::CodeUnitFlags, true>* results) = 0;
         virtual bool computeCodeUnitFlags(char16_t utf16[], int utf16Units, bool replaceTabs,
@@ -264,16 +265,14 @@ class SKUNICODE_API SkUnicode {
 
         static std::unique_ptr<SkUnicode> Make();
 
-#ifdef SKUNICODE_IMPLEMENTATION
-        static std::unique_ptr<SkUnicode> MakeClientBasedUnicode
-                  (SkSpan<char> text,
-                   std::vector<SkUnicode::BidiRegion> bidiRegions,
-                   std::vector<SkUnicode::Position> words,
-                   std::vector<SkUnicode::Position> graphemeBreaks,
-                   std::vector<SkUnicode::LineBreakBefore> lineBreaks);
-
         static std::unique_ptr<SkUnicode> MakeIcuBasedUnicode();
-#endif
+
+        static std::unique_ptr<SkUnicode> MakeClientBasedUnicode(
+                SkSpan<char> text,
+                std::vector<SkUnicode::BidiRegion> bidiRegions,
+                std::vector<SkUnicode::Position> words,
+                std::vector<SkUnicode::Position> graphemeBreaks,
+                std::vector<SkUnicode::LineBreakBefore> lineBreaks);
 };
 
 namespace sknonstd {

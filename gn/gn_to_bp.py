@@ -291,9 +291,6 @@ cc_defaults {
             "libjpegdecoder",
             "libjpegencoder",
         ],
-        export_shared_lib_headers: [
-            "libandroidicu",
-        ],
       },
       host: {
         shared_libs: [

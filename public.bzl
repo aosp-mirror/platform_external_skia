@@ -56,7 +56,6 @@ SKIA_PUBLIC_HDRS = [
     "include/core/SkM44.h",
     "include/core/SkMallocPixelRef.h",
     "include/core/SkMaskFilter.h",
-    "include/core/SkMath.h",
     "include/core/SkMatrix.h",
     "include/core/SkMilestone.h",
     "include/core/SkOverdrawCanvas.h",
@@ -562,6 +561,7 @@ BASE_SRCS_ALL = [
     "src/core/SkRasterPipeline.cpp",
     "src/core/SkRasterPipeline.h",
     "src/core/SkRasterPipelineBlitter.cpp",
+    "src/core/SkRasterPipelineOpContexts.h",
     "src/core/SkRasterPipelineOpList.h",
     "src/core/SkReadBuffer.cpp",
     "src/core/SkReadBuffer.h",
@@ -2366,7 +2366,6 @@ SKOTTIE_SHAPER_SRCS = [
 # Stubs, pending SkUnicode fission
 SKUNICODE_ICU_BUILTIN_SRCS = [
     "modules/skunicode/src/SkUnicode.cpp",
-    "modules/skunicode/src/SkUnicode_client.cpp",
     "modules/skunicode/src/SkUnicode_icu.cpp",
     "modules/skunicode/src/SkUnicode_icu.h",
     "modules/skunicode/src/SkUnicode_icu_builtin.cpp",
@@ -2374,13 +2373,12 @@ SKUNICODE_ICU_BUILTIN_SRCS = [
 
 SKUNICODE_ICU_RUNTIME_SRCS = [
     "modules/skunicode/src/SkUnicode.cpp",
-    "modules/skunicode/src/SkUnicode_client.cpp",
     "modules/skunicode/src/SkUnicode_icu.cpp",
     "modules/skunicode/src/SkUnicode_icu.h",
     "modules/skunicode/src/SkUnicode_icu_runtime.cpp",
 ]
 
-SKUNICODE_NO_ICU_SRCS = [
+SKUNICODE_CLIENT_SRCS = [
     "modules/skunicode/src/SkUnicode.cpp",
     "modules/skunicode/src/SkUnicode_client.cpp",
 ]

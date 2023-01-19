@@ -48,10 +48,6 @@ ignorelist = [
   'include/third_party/skcms',
   # Temporary (hopefully) shims for Android
   'SkMalloc.h',
-  'SkMath.h',
-  # Temporary shims for Chromium
-  'SkDiscardableMemory.h',
-  'GrVkSecondaryCBDrawContext.h',
 ]
 
 assert '/' in [os.sep, os.altsep]
