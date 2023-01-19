@@ -12,7 +12,6 @@
 // They should also be able to be included in any order.
 // IWYU pragma: begin_exports
 #include "include/private/base/SkAPI.h"
-#include "include/private/base/SkAttributes.h"
 #include "include/private/base/SkFeatures.h"
 
 // Load and verify defines from the user config file.
@@ -20,6 +19,7 @@
 
 // Any includes or defines below can be configured by the user config file.
 #include "include/private/base/SkAssert.h"
+#include "include/private/base/SkAttributes.h"
 #include "include/private/base/SkDebug.h"
 // IWYU pragma: end_exports
 
@@ -181,17 +181,6 @@
       #define GR_GPU_STATS    0
   #endif
 #endif
-
-////////////////////////////////////////////////////////////////////////////////
-static constexpr int16_t SK_MaxS16 = INT16_MAX;
-static constexpr int16_t SK_MinS16 = -SK_MaxS16;
-
-static constexpr int32_t SK_MaxS32 = INT32_MAX;
-static constexpr int32_t SK_MinS32 = -SK_MaxS32;
-static constexpr int32_t SK_NaN32  = INT32_MIN;
-
-static constexpr int64_t SK_MaxS64 = INT64_MAX;
-static constexpr int64_t SK_MinS64 = -SK_MaxS64;
 
 ////////////////////////////////////////////////////////////////////////////////
 
