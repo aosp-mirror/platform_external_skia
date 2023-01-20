@@ -25,7 +25,7 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkTextBlob.h"
 #include "include/private/SkColorData.h"
-#include "include/private/SkFloatingPoint.h"
+#include "include/private/base/SkFloatingPoint.h"
 #include "src/core/SkFontPriv.h"
 
 #include <cmath>
@@ -52,6 +52,8 @@
 #ifdef SK_BUILD_FOR_WIN
 #include "include/ports/SkTypeface_win.h"
 #endif
+
+using namespace skia_private;
 
 namespace ToolUtils {
 
@@ -271,7 +273,7 @@ void get_text_path(const SkFont&  font,
                    const SkPoint  pos[]) {
     SkAutoToGlyphs        atg(font, text, length, encoding);
     const int             count = atg.count();
-    SkAutoTArray<SkPoint> computedPos;
+    AutoTArray<SkPoint> computedPos;
     if (pos == nullptr) {
         computedPos.reset(count);
         font.getPos(atg.glyphs(), count, &computedPos[0]);

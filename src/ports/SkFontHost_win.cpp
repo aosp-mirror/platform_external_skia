@@ -15,16 +15,16 @@
 #include "include/core/SkString.h"
 #include "include/ports/SkTypeface_win.h"
 #include "include/private/SkColorData.h"
-#include "include/private/SkMacros.h"
-#include "include/private/SkTemplates.h"
+#include "include/private/base/SkMacros.h"
 #include "include/private/base/SkOnce.h"
+#include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
 #include "include/utils/SkBase64.h"
+#include "src/base/SkLeanWindows.h"
 #include "src/core/SkAdvancedTypefaceMetrics.h"
 #include "src/core/SkDescriptor.h"
 #include "src/core/SkFontDescriptor.h"
 #include "src/core/SkGlyph.h"
-#include "src/core/SkLeanWindows.h"
 #include "src/core/SkMaskGamma.h"
 #include "src/core/SkStrikeCache.h"
 #include "src/core/SkTypefaceCache.h"
@@ -413,9 +413,9 @@ static void populate_glyph_to_unicode(HDC fontHdc, const unsigned glyphCount,
         // we can't just use the first and last entry of the range to compute
         // result. We need to enumerate them one by one.
         int count = glyphSet->ranges[i].cGlyphs;
-        SkAutoTArray<WCHAR> chars(count + 1);
+        AutoTArray<WCHAR> chars(count + 1);
         chars[count] = 0;  // termintate string
-        SkAutoTArray<WORD> glyph(count);
+        AutoTArray<WORD> glyph(count);
         for (USHORT j = 0; j < count; ++j) {
             chars[j] = glyphSet->ranges[i].wcLow + j;
         }

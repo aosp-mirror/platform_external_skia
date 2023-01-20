@@ -15,7 +15,7 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkTemplates.h"
+#include "include/private/base/SkTemplates.h"
 #include "src/core/SkAutoMalloc.h"
 #include "src/core/SkEndian.h"
 #include "src/core/SkFontStream.h"
@@ -84,7 +84,7 @@ static void test_countGlyphs(skiatest::Reporter* reporter, const sk_sp<SkTypefac
 
 static void test_fontstream(skiatest::Reporter* reporter, SkStream* stream, int ttcIndex) {
     int n = SkFontStream::GetTableTags(stream, ttcIndex, nullptr);
-    SkAutoTArray<SkFontTableTag> array(n);
+    AutoTArray<SkFontTableTag> array(n);
 
     int n2 = SkFontStream::GetTableTags(stream, ttcIndex, array.get());
     REPORTER_ASSERT(reporter, n == n2);

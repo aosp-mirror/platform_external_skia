@@ -26,11 +26,13 @@
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkTemplates.h"
+#include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
 #include "tools/ToolUtils.h"
 
 #include <string.h>
+
+using namespace skia_private;
 
 class DFTextGM : public skiagm::GM {
 public:
@@ -130,9 +132,9 @@ protected:
 
             canvas->scale(2.0f, 2.0f);
 
-            SkAutoTArray<SkGlyphID> glyphs(SkToInt(textLen));
+            AutoTArray<SkGlyphID> glyphs(SkToInt(textLen));
             int count = font.textToGlyphs(text, textLen, SkTextEncoding::kUTF8, glyphs.get(), textLen);
-            SkAutoTArray<SkPoint>  pos(count);
+            AutoTArray<SkPoint>  pos(count);
             font.setSize(textSizes[0]);
             font.getPos(glyphs.get(), count, pos.get(), {340, 75});
 

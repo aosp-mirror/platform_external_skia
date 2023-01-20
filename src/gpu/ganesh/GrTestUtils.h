@@ -14,8 +14,8 @@
 
 #include "include/core/SkStrokeRec.h"
 #include "include/core/SkSurfaceProps.h"
-#include "include/private/SkMacros.h"
-#include "include/private/SkTemplates.h"
+#include "include/private/base/SkMacros.h"
+#include "include/private/base/SkTemplates.h"
 #include "include/utils/SkRandom.h"
 #include "src/core/SkMatrixProvider.h"
 #include "src/core/SkPathEffectBase.h"
@@ -91,12 +91,12 @@ private:
 
     bool computeFastBounds(SkRect* bounds) const override { return true; }
 
-    int                     fCount;
-    SkAutoTArray<SkScalar>  fIntervals;
-    SkScalar                fPhase;
-    SkScalar                fInitialDashLength;
-    int                     fInitialDashIndex;
-    SkScalar                fIntervalLength;
+    int                                 fCount;
+    skia_private::AutoTArray<SkScalar>  fIntervals;
+    SkScalar                            fPhase;
+    SkScalar                            fInitialDashLength;
+    int                                 fInitialDashIndex;
+    SkScalar                            fIntervalLength;
 };
 
 }  // namespace GrTest

@@ -24,7 +24,7 @@
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrTypes.h"
-#include "include/private/SkTemplates.h"
+#include "include/private/base/SkTemplates.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "tests/CtsEnforcement.h"
@@ -57,6 +57,8 @@ namespace skgpu { struct VulkanInterface; }
 #undef CreateSemaphore
 #endif
 #endif
+
+using namespace skia_private;
 
 struct GrContextOptions;
 
@@ -156,7 +158,7 @@ void surface_semaphore_test(skiatest::Reporter* reporter,
     blueSurface.reset();
     mainCanvas->drawImage(blueImage, 0, 0);
 
-    SkAutoTArray<GrBackendSemaphore> semaphores(2);
+    AutoTArray<GrBackendSemaphore> semaphores(2);
 #ifdef SK_VULKAN
     if (GrBackendApi::kVulkan == mainInfo.backend()) {
         // Initialize the secondary semaphore instead of having Ganesh create one internally

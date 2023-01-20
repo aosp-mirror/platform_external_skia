@@ -10,7 +10,7 @@
 #include "include/core/SkColorType.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkMatrix.h"
-#include "include/private/SkTemplates.h"
+#include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkVx.h"
 #include "modules/skcms/skcms.h"
 #include "src/core/SkImageInfoPriv.h"
@@ -393,7 +393,7 @@ bool SkRasterPipeline::build_lowp_pipeline(SkRasterPipelineStage* ip) const {
     prepend_to_pipeline(ip, SkOpts::just_return_lowp, /*ctx=*/nullptr);
     for (const StageList* st = fStages; st; st = st->prev) {
         int opIndex = (int)st->stage;
-        if (opIndex >= kNumLowpOps || !SkOpts::ops_lowp[opIndex]) {
+        if (opIndex >= kNumRasterPipelineLowpOps || !SkOpts::ops_lowp[opIndex]) {
             // This program contains a stage that doesn't exist in lowp.
             return false;
         }

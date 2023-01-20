@@ -34,8 +34,8 @@
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/private/SkSpinlock.h"
-#include "include/private/SkTemplates.h"
 #include "include/private/base/SkTArray.h"
+#include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/text/GrAtlasManager.h"
@@ -52,6 +52,8 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+
+using namespace skia_private;
 
 struct GrContextOptions;
 
@@ -113,7 +115,7 @@ static void text_blob_cache_inner(skiatest::Reporter* reporter, GrDirectContext*
     int count = std::min(fm->countFamilies(), maxFamilies);
 
     // make a ton of text
-    SkAutoTArray<uint16_t> text(maxTotalText);
+    AutoTArray<uint16_t> text(maxTotalText);
     for (int i = 0; i < maxTotalText; i++) {
         text[i] = i % maxGlyphID;
     }

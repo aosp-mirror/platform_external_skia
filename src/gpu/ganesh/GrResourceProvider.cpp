@@ -10,12 +10,13 @@
 #include "include/core/SkAlphaType.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
-#include "include/private/base/SkMath.h"
 #include "include/core/SkRect.h"
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/base/SingleOwner.h"
+#include "include/private/base/SkMath.h"
+#include "include/private/base/SkTemplates.h"
 #include "src/core/SkMathPriv.h"
 #include "src/core/SkMipmap.h"
 #include "src/gpu/BufferWriter.h"
@@ -528,7 +529,7 @@ sk_sp<const GrGpuBuffer> GrResourceProvider::createPatternedIndexBuffer(
         return nullptr;
     }
     uint16_t* data = (uint16_t*) buffer->map();
-    SkAutoTArray<uint16_t> temp;
+    AutoTArray<uint16_t> temp;
     if (!data) {
         temp.reset(reps * patternSize);
         data = temp.get();

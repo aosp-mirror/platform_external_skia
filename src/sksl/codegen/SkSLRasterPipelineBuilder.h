@@ -281,10 +281,8 @@ public:
         fInstructions.push_back({BuilderOp::push_literal_f, {}, sk_bit_cast<int32_t>(val)});
     }
 
-    void push_uniform(SlotRange src) {
-        // Translates into copy_constants (from uniforms into temp stack) in Raster Pipeline.
-        fInstructions.push_back({BuilderOp::push_uniform, {src.index}, src.count});
-    }
+    // Translates into copy_constants (from uniforms into temp stack) in Raster Pipeline.
+    void push_uniform(SlotRange src);
 
     void push_zeros(int count) {
         // Translates into zero_slot_unmasked in Raster Pipeline.
@@ -296,24 +294,16 @@ public:
         }
     }
 
-    void push_slots(SlotRange src) {
-        SkASSERT(src.count >= 0);
-        if (src.count > 0) {
-            // Translates into copy_slots_unmasked (from values into temp stack) in Raster Pipeline.
-            fInstructions.push_back({BuilderOp::push_slots, {src.index}, src.count});
-        }
-    }
+    // Translates into copy_slots_unmasked (from values into temp stack) in Raster Pipeline.
+    void push_slots(SlotRange src);
 
+    // Translates into copy_slots_masked (from temp stack to values) in Raster Pipeline.
+    // Does not discard any values on the temp stack.
     void copy_stack_to_slots(SlotRange dst) {
         this->copy_stack_to_slots(dst, /*offsetFromStackTop=*/dst.count);
     }
 
-    void copy_stack_to_slots(SlotRange dst, int offsetFromStackTop) {
-        // Translates into copy_slots_masked (from temp stack to values) in Raster Pipeline.
-        // Does not discard any values on the temp stack.
-        fInstructions.push_back({BuilderOp::copy_stack_to_slots, {dst.index},
-                                 dst.count, offsetFromStackTop});
-    }
+    void copy_stack_to_slots(SlotRange dst, int offsetFromStackTop);
 
     void copy_stack_to_slots_unmasked(SlotRange dst) {
         this->copy_stack_to_slots_unmasked(dst, /*offsetFromStackTop=*/dst.count);
@@ -338,10 +328,8 @@ public:
     // `slots`. Three n-slot input values are consumed, and the result is pushed onto the stack.
     void ternary_op(BuilderOp op, int32_t slots);
 
-    void discard_stack(int32_t count = 1) {
-        // Shrinks the temp stack, discarding values on top.
-        fInstructions.push_back({BuilderOp::discard_stack, {}, count});
-    }
+    // Shrinks the temp stack, discarding values on top.
+    void discard_stack(int32_t count = 1);
 
     void pop_slots(SlotRange dst) {
         // The opposite of push_slots; copies values from the temp stack into value slots, then
