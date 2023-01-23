@@ -7,14 +7,6 @@
 
 #include "include/private/chromium/SkChromeRemoteGlyphCache.h"
 
-#include <algorithm>
-#include <bitset>
-#include <iterator>
-#include <memory>
-#include <new>
-#include <string>
-#include <tuple>
-
 #include "include/core/SkDrawable.h"
 #include "include/core/SkSpan.h"
 #include "include/core/SkTypeface.h"
@@ -26,13 +18,22 @@
 #include "src/core/SkEnumerate.h"
 #include "src/core/SkGlyph.h"
 #include "src/core/SkReadBuffer.h"
-#include "src/core/SkScalerCache.h"
+#include "src/core/SkStrike.h"
 #include "src/core/SkStrikeCache.h"
 #include "src/core/SkTHash.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/core/SkTypeface_remote.h"
 #include "src/text/GlyphRun.h"
 #include "src/text/StrikeForGPU.h"
+
+#include <algorithm>
+#include <bitset>
+#include <iterator>
+#include <memory>
+#include <new>
+#include <string>
+#include <tuple>
+#include <unordered_map>
 
 #if SK_SUPPORT_GPU
 #include "include/gpu/GrContextOptions.h"
