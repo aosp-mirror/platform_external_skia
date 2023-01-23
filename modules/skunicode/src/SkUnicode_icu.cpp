@@ -16,8 +16,8 @@
 #include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
 #include "modules/skunicode/include/SkUnicode.h"
+#include "src/base/SkUTF.h"
 #include "src/core/SkTHash.h"
-#include "src/utils/SkUTF.h"
 
 #include <functional>
 #include <string>
@@ -28,6 +28,8 @@
 #if defined(SK_USING_THIRD_PARTY_ICU)
 #include "SkLoadICU.h"
 #endif
+
+using namespace skia_private;
 
 static const SkICULib* ICULib() {
     static const auto gICU = SkLoadICULib();
@@ -434,7 +436,7 @@ public:
             return SkString();
         }
 
-        SkAutoSTArray<128, uint16_t> upper16(upper16len);
+        AutoSTArray<128, uint16_t> upper16(upper16len);
         icu_err = U_ZERO_ERROR;
         sk_u_strToUpper((UChar*)(upper16.get()), SkToS32(upper16.size()),
                         (UChar*)(str16.c_str()), str16.size(),

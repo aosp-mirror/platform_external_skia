@@ -9,7 +9,7 @@
 #include "include/private/SkSLString.h"
 #include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkTo.h"
-#include "src/core/SkArenaAlloc.h"
+#include "src/base/SkArenaAlloc.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkRasterPipelineOpContexts.h"
 #include "src/core/SkRasterPipelineOpList.h"
@@ -267,6 +267,20 @@ void Builder::copy_stack_to_slots(SlotRange dst, int offsetFromStackTop) {
 
     fInstructions.push_back({BuilderOp::copy_stack_to_slots, {dst.index},
                              dst.count, offsetFromStackTop});
+}
+
+void Builder::pop_return_mask() {
+    // This instruction is going to overwrite the return mask. If the previous instruction was
+    // masking off the return mask, that's wasted work and it can be eliminated.
+    if (!fInstructions.empty()) {
+        Instruction& lastInstruction = fInstructions.back();
+
+        if (lastInstruction.fOp == BuilderOp::mask_off_return_mask) {
+            fInstructions.pop_back();
+        }
+    }
+
+    fInstructions.push_back({BuilderOp::pop_return_mask, {}});
 }
 
 void Builder::swizzle(int consumedSlots, SkSpan<const int8_t> elementSpan) {
