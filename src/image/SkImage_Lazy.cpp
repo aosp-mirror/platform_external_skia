@@ -639,4 +639,29 @@ sk_sp<SkImage> SkImage_Lazy::onMakeTextureImage(skgpu::graphite::Recorder* recor
 
     return nullptr;
 }
+
+sk_sp<SkImage> SkImage_Lazy::onMakeColorTypeAndColorSpace(
+        SkColorType targetCT,
+        sk_sp<SkColorSpace> targetCS,
+        skgpu::graphite::Recorder* recorder,
+        RequiredImageProperties requiredProps) const {
+    SkAutoMutexExclusive autoAquire(fOnMakeColorTypeAndSpaceMutex);
+    if (fOnMakeColorTypeAndSpaceResult &&
+        targetCT == fOnMakeColorTypeAndSpaceResult->colorType() &&
+        SkColorSpace::Equals(targetCS.get(), fOnMakeColorTypeAndSpaceResult->colorSpace())) {
+        return fOnMakeColorTypeAndSpaceResult;
+    }
+    Validator validator(fSharedGenerator, &targetCT, targetCS);
+    sk_sp<SkImage> result = validator ? sk_sp<SkImage>(new SkImage_Lazy(&validator)) : nullptr;
+    if (result) {
+        fOnMakeColorTypeAndSpaceResult = result;
+    }
+
+    if (recorder) {
+        return result->makeTextureImage(recorder, requiredProps);
+    } else {
+        return result;
+    }
+}
+
 #endif

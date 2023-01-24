@@ -17,6 +17,7 @@ if [[ "$@" != *DSKIA_ENFORCE_IWYU* || "$@" == *use-ld* ]]; then
 fi
 
 supported_files_or_dirs=(
+  "include/private/base/"
   "modules/skunicode/"
   "src/base/"
   "src/codec/"
@@ -28,7 +29,6 @@ supported_files_or_dirs=(
   "src/utils/"
   "tools/debugger/"
   "tests/"
-  "src/core/SkArenaAlloc.cpp"
   "src/core/SkColor.cpp"
   "src/core/SkColorSpace.cpp"
   "src/core/SkCubicClipper.cpp"
@@ -53,6 +53,7 @@ supported_files_or_dirs=(
   "src/core/SkStream.cpp"
   "src/core/SkString.cpp"
   "src/gpu/ganesh/GrCaps.cpp"
+  "src/gpu/ganesh/GrMemoryPool.cpp"
   "src/gpu/ganesh/GrProcessor.cpp"
   "src/gpu/ganesh/GrRenderTargetProxy.cpp"
   "src/gpu/ganesh/GrResourceProvider.cpp"

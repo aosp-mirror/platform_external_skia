@@ -11,7 +11,7 @@
 #include "include/core/SkTraceMemoryDump.h"
 #include "include/gpu/GrBackendSemaphore.h"
 #include "include/gpu/GrContextThreadSafeProxy.h"
-#include "src/core/SkAutoMalloc.h"
+#include "src/base/SkAutoMalloc.h"
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/core/SkTraceEvent.h"
@@ -56,6 +56,8 @@
 #       include <sanitizer/lsan_interface.h>
 #   endif
 #endif
+
+using namespace skia_private;
 
 #define ASSERT_SINGLE_OWNER SKGPU_ASSERT_SINGLE_OWNER(this->singleOwner())
 
@@ -550,7 +552,7 @@ static bool update_texture_with_pixmaps(GrDirectContext* context,
     skgpu::Swizzle swizzle = context->priv().caps()->getReadSwizzle(format, ct);
     GrSurfaceProxyView view(std::move(proxy), textureOrigin, swizzle);
     skgpu::v1::SurfaceContext surfaceContext(context, std::move(view), src[0].info().colorInfo());
-    SkAutoSTArray<15, GrCPixmap> tmpSrc(numLevels);
+    AutoSTArray<15, GrCPixmap> tmpSrc(numLevels);
     for (int i = 0; i < numLevels; ++i) {
         tmpSrc[i] = src[i];
     }

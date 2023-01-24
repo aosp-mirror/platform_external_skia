@@ -7,6 +7,25 @@
 
 #include "include/private/chromium/SkChromeRemoteGlyphCache.h"
 
+#include "include/core/SkDrawable.h"
+#include "include/core/SkSpan.h"
+#include "include/core/SkTypeface.h"
+#include "include/private/SkChecksum.h"
+#include "src/base/SkTLazy.h"
+#include "src/core/SkDevice.h"
+#include "src/core/SkDistanceFieldGen.h"
+#include "src/core/SkDraw.h"
+#include "src/core/SkEnumerate.h"
+#include "src/core/SkGlyph.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkStrike.h"
+#include "src/core/SkStrikeCache.h"
+#include "src/core/SkTHash.h"
+#include "src/core/SkTraceEvent.h"
+#include "src/core/SkTypeface_remote.h"
+#include "src/text/GlyphRun.h"
+#include "src/text/StrikeForGPU.h"
+
 #include <algorithm>
 #include <bitset>
 #include <iterator>
@@ -14,25 +33,7 @@
 #include <new>
 #include <string>
 #include <tuple>
-
-#include "include/core/SkDrawable.h"
-#include "include/core/SkSpan.h"
-#include "include/core/SkTypeface.h"
-#include "include/private/SkChecksum.h"
-#include "src/core/SkDevice.h"
-#include "src/core/SkDistanceFieldGen.h"
-#include "src/core/SkDraw.h"
-#include "src/core/SkEnumerate.h"
-#include "src/core/SkGlyph.h"
-#include "src/core/SkReadBuffer.h"
-#include "src/core/SkScalerCache.h"
-#include "src/core/SkStrikeCache.h"
-#include "src/core/SkTHash.h"
-#include "src/core/SkTLazy.h"
-#include "src/core/SkTraceEvent.h"
-#include "src/core/SkTypeface_remote.h"
-#include "src/text/GlyphRun.h"
-#include "src/text/StrikeForGPU.h"
+#include <unordered_map>
 
 #if SK_SUPPORT_GPU
 #include "include/gpu/GrContextOptions.h"
@@ -200,8 +201,6 @@ public:
     SkScalar findMaximumGlyphDimension(SkSpan<const SkGlyphID> glyphs) override;
 
     void onAboutToExitScope() override {}
-
-    sk_sp<SkStrike> getUnderlyingStrike() const override { return nullptr; }
 
     bool hasPendingGlyphs() const {
         return !fMasksToSend.empty() || !fPathsToSend.empty() || !fDrawablesToSend.empty();
