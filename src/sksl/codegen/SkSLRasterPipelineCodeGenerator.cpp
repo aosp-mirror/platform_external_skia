@@ -254,6 +254,15 @@ public:
         return SkSL::String::printf("[%s %d]", name, fTempNameIndex++);
     }
 
+    bool needsReturnMask() {
+        Analysis::ReturnComplexity* complexity = fReturnComplexityMap.find(fCurrentFunction);
+        if (!complexity) {
+            complexity = fReturnComplexityMap.set(fCurrentFunction,
+                                                  Analysis::GetReturnComplexity(*fCurrentFunction));
+        }
+        return *complexity >= Analysis::ReturnComplexity::kEarlyReturns;
+    }
+
     static bool IsUniform(const Variable& var) {
        return var.modifiers().fFlags & Modifiers::kUniform_Flag;
     }
@@ -277,9 +286,12 @@ private:
     SlotManager fUniformSlots;
 
     SkTArray<SlotRange> fFunctionStack;
+    const FunctionDefinition* fCurrentFunction = nullptr;
     SlotRange fCurrentContinueMask;
     int fCurrentTempStack = 0;
     int fTempNameIndex = 0;
+
+    SkTHashMap<const FunctionDefinition*, Analysis::ReturnComplexity> fReturnComplexityMap;
 
     static constexpr auto kAbsOps = TypedOps{BuilderOp::abs_float,
                                              BuilderOp::abs_int,
@@ -772,6 +784,7 @@ bool Generator::writeContinueStatement(const ContinueStatement&) {
 
 bool Generator::writeDoStatement(const DoStatement& d) {
     // Save off the original loop mask.
+    fBuilder.enableExecutionMaskWrites();
     fBuilder.push_loop_mask();
 
     // Create a dedicated slot for continue-mask storage.
@@ -805,6 +818,7 @@ bool Generator::writeDoStatement(const DoStatement& d) {
 
     // Restore the loop and continue masks.
     fBuilder.pop_loop_mask();
+    fBuilder.disableExecutionMaskWrites();
     fCurrentContinueMask = previousContinueMask;
 
     return true;
@@ -822,6 +836,7 @@ bool Generator::writeForStatement(const ForStatement& f) {
     }
 
     // Save off the original loop mask.
+    fBuilder.enableExecutionMaskWrites();
     fBuilder.push_loop_mask();
 
     // Create a dedicated slot for continue-mask storage.
@@ -869,6 +884,7 @@ bool Generator::writeForStatement(const ForStatement& f) {
 
     // Restore the loop and continue masks.
     fBuilder.pop_loop_mask();
+    fBuilder.disableExecutionMaskWrites();
     fCurrentContinueMask = previousContinueMask;
 
     return true;
@@ -885,6 +901,7 @@ bool Generator::writeExpressionStatement(const ExpressionStatement& e) {
 
 bool Generator::writeIfStatement(const IfStatement& i) {
     // Save the current condition-mask.
+    fBuilder.enableExecutionMaskWrites();
     fBuilder.push_condition_mask();
 
     // Push the test condition mask.
@@ -911,6 +928,8 @@ bool Generator::writeIfStatement(const IfStatement& i) {
     // Jettison the test-expression, and restore the the condition-mask.
     this->discardExpression(/*slots=*/1);
     fBuilder.pop_condition_mask();
+    fBuilder.disableExecutionMaskWrites();
+
     return true;
 }
 
@@ -921,7 +940,9 @@ bool Generator::writeReturnStatement(const ReturnStatement& r) {
         }
         this->popToSlotRange(fFunctionStack.back());
     }
-    fBuilder.mask_off_return_mask();
+    if (fBuilder.executionMaskWritesAreEnabled() && this->needsReturnMask()) {
+        fBuilder.mask_off_return_mask();
+    }
     return true;
 }
 
@@ -1005,6 +1026,7 @@ bool Generator::unaryOp(const SkSL::Type& type, const TypedOps& ops) {
     fBuilder.unary_op(op, type.slotCount());
     return true;
 }
+
 bool Generator::binaryOp(const SkSL::Type& type, const TypedOps& ops) {
     BuilderOp op = GetTypedOp(type, ops);
     if (op == BuilderOp::unsupported) {
@@ -1216,14 +1238,22 @@ bool Generator::pushBinaryExpression(const Expression& left, Operator op, const 
             break;
 
         case OperatorKind::LOGICALAND:
-            // We verified above that the RHS does not have side effects, so we don't need to worry
-            // about short-circuiting side effects.
-            fBuilder.binary_op(BuilderOp::bitwise_and_n_ints, /*slots=*/1);
+        case OperatorKind::BITWISEAND:
+            // For logical-and, we verified above that the RHS does not have side effects, so we
+            // don't need to worry about short-circuiting side effects.
+            fBuilder.binary_op(BuilderOp::bitwise_and_n_ints, type.slotCount());
             break;
 
         case OperatorKind::LOGICALOR:
-            // We verified above that the RHS does not have side effects.
-            fBuilder.binary_op(BuilderOp::bitwise_and_n_ints, /*slots=*/1);
+        case OperatorKind::BITWISEOR:
+            // For logical-or, we verified above that the RHS does not have side effects.
+            fBuilder.binary_op(BuilderOp::bitwise_and_n_ints, type.slotCount());
+            break;
+
+        case OperatorKind::LOGICALXOR:
+        case OperatorKind::BITWISEXOR:
+            // Logical-xor does not short circuit.
+            fBuilder.binary_op(BuilderOp::bitwise_xor_n_ints, type.slotCount());
             break;
 
         default:
@@ -1347,6 +1377,10 @@ bool Generator::pushFunctionCall(const FunctionCall& c) {
         return this->pushIntrinsic(c);
     }
 
+    // Keep track of the current function.
+    const FunctionDefinition* lastFunction = fCurrentFunction;
+    fCurrentFunction = c.function().definition();
+
     // Skip over the function body entirely if there are no active lanes.
     // (If the function call was trivial, it would likely have been inlined in the frontend, so this
     // is likely to save a significant amount of work if the lanes are all dead.)
@@ -1354,7 +1388,10 @@ bool Generator::pushFunctionCall(const FunctionCall& c) {
     fBuilder.branch_if_no_active_lanes(skipLabelID);
 
     // Save off the return mask.
-    fBuilder.push_return_mask();
+    if (this->needsReturnMask()) {
+        fBuilder.enableExecutionMaskWrites();
+        fBuilder.push_return_mask();
+    }
 
     // Write all the arguments into their parameter's variable slots. Because we never allow
     // recursion, we don't need to worry about overwriting any existing values in those slots.
@@ -1388,13 +1425,19 @@ bool Generator::pushFunctionCall(const FunctionCall& c) {
     }
 
     // Emit the function body.
-    std::optional<SlotRange> r = this->writeFunction(c, *c.function().definition());
+    std::optional<SlotRange> r = this->writeFunction(c, *fCurrentFunction);
     if (!r.has_value()) {
         return unsupported();
     }
 
     // Restore the original return mask.
-    fBuilder.pop_return_mask();
+    if (this->needsReturnMask()) {
+        fBuilder.pop_return_mask();
+        fBuilder.disableExecutionMaskWrites();
+    }
+
+    // We've returned back to the last function.
+    fCurrentFunction = lastFunction;
 
     // Copy out-parameters and inout-parameters back to their homes.
     for (int index = 0; index < c.arguments().size(); ++index) {
@@ -1484,6 +1527,17 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0) {
             fBuilder.unary_op(BuilderOp::ceil_float, arg0.type().slotCount());
             return true;
 
+        case IntrinsicKind::k_cos_IntrinsicKind:
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            fBuilder.unary_op(BuilderOp::cos_float, arg0.type().slotCount());
+            return true;
+
+        case IntrinsicKind::k_degrees_IntrinsicKind: {
+            Literal lit180OverPi{Position{}, 57.2957795131f, &arg0.type().componentType()};
+            return this->pushBinaryExpression(arg0, OperatorKind::STAR, lit180OverPi);
+        }
         case IntrinsicKind::k_floatBitsToInt_IntrinsicKind:
         case IntrinsicKind::k_floatBitsToUint_IntrinsicKind:
         case IntrinsicKind::k_intBitsToFloat_IntrinsicKind:
@@ -1512,6 +1566,10 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0) {
         case IntrinsicKind::k_not_IntrinsicKind:
             return this->pushPrefixExpression(OperatorKind::LOGICALNOT, arg0);
 
+        case IntrinsicKind::k_radians_IntrinsicKind: {
+            Literal litPiOver180{Position{}, 0.01745329251f, &arg0.type().componentType()};
+            return this->pushBinaryExpression(arg0, OperatorKind::STAR, litPiOver180);
+        }
         case IntrinsicKind::k_saturate_IntrinsicKind: {
             // Implement saturate as clamp(arg, 0, 1).
             Literal zeroLiteral{Position{}, 0.0, &arg0.type().componentType()};
@@ -1549,6 +1607,27 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0) {
             }
             return this->binaryOp(arg0.type(), kMinOps);
         }
+        case IntrinsicKind::k_sin_IntrinsicKind:
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            fBuilder.unary_op(BuilderOp::sin_float, arg0.type().slotCount());
+            return true;
+
+        case IntrinsicKind::k_sqrt_IntrinsicKind:
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            fBuilder.unary_op(BuilderOp::sqrt_float, arg0.type().slotCount());
+            return true;
+
+        case IntrinsicKind::k_tan_IntrinsicKind:
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            fBuilder.unary_op(BuilderOp::tan_float, arg0.type().slotCount());
+            return true;
+
         case IntrinsicKind::k_transpose_IntrinsicKind:
             SkASSERT(arg0.type().isMatrix());
             if (!this->pushExpression(arg0)) {
@@ -1912,6 +1991,8 @@ bool Generator::pushTernaryExpression(const TernaryExpression& t) {
 bool Generator::pushTernaryExpression(const Expression& test,
                                       const Expression& ifTrue,
                                       const Expression& ifFalse) {
+    fBuilder.enableExecutionMaskWrites();
+
     // First, push the current condition-mask and the test-expression into a separate stack.
     this->nextTempStack();
     fBuilder.push_condition_mask();
@@ -1982,6 +2063,7 @@ bool Generator::pushTernaryExpression(const Expression& test,
     fBuilder.pop_condition_mask();
     this->previousTempStack();
 
+    fBuilder.disableExecutionMaskWrites();
     return true;
 }
 
@@ -2009,6 +2091,8 @@ bool Generator::pushVariableReferencePartial(const VariableReference& v, SlotRan
 }
 
 bool Generator::writeProgram(const FunctionDefinition& function) {
+    fCurrentFunction = &function;
+
     if (fDebugTrace) {
         // Copy the program source into the debug info so that it will be written in the trace file.
         fDebugTrace->setSource(*fProgram.fSource);
@@ -2053,9 +2137,17 @@ bool Generator::writeProgram(const FunctionDefinition& function) {
     }
 
     // Invoke main().
+    if (this->needsReturnMask()) {
+        fBuilder.enableExecutionMaskWrites();
+    }
+
     std::optional<SlotRange> mainResult = this->writeFunction(function, function);
     if (!mainResult.has_value()) {
         return unsupported();
+    }
+
+    if (this->needsReturnMask()) {
+        fBuilder.disableExecutionMaskWrites();
     }
 
     // Move the result of main() from slots into RGBA. Allow dRGBA to remain in a trashed state.

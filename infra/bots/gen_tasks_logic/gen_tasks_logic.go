@@ -951,7 +951,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"GTX660":        "10de:11c0-26.21.14.4120",
 					"GTX960":        "10de:1401-31.0.15.1694",
 					"IntelHD4400":   "8086:0a16-20.19.15.4963",
-					"IntelIris540":  "8086:1926-26.20.100.7529",
+					"IntelIris540":  "8086:1926-31.0.101.2115",
 					"IntelIris6100": "8086:162b-20.19.15.4963",
 					"IntelIris655":  "8086:3ea5-26.20.100.7463",
 					"IntelIrisXe":   "8086:9a49-31.0.101.3222",
@@ -2131,6 +2131,7 @@ func (b *jobBuilder) runWasmGMTests() {
 // label or "target pattern" https://bazel.build/docs/build#specifying-build-targets
 // The reason we need this mapping is because Buildbucket build names cannot have / or : in them.
 var shorthandToLabel = map[string]string{
+	"base":                       "//src:base",
 	"example_hello_world_dawn":   "//example:hello_world_dawn",
 	"example_hello_world_gl":     "//example:hello_world_gl",
 	"example_hello_world_vulkan": "//example:hello_world_vulkan",
