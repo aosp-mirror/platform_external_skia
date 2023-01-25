@@ -11,6 +11,7 @@
 #include "src/base/SkTLazy.h"
 #include "src/core/SkDraw.h"
 #include "src/core/SkFontPriv.h"
+#include "src/core/SkStrike.h"
 #include "src/core/SkStrikeCache.h"
 
 #if SK_SUPPORT_GPU || defined(SK_GRAPHITE_ENABLED)
@@ -167,11 +168,6 @@ SkStrikeSpec::MakeSDFT(const SkFont& font, const SkPaint& paint,
     SkStrikeSpec strikeSpec(dfFont, dfPaint, surfaceProps, flags, SkMatrix::I());
 
     return std::make_tuple(std::move(strikeSpec), strikeToSourceScale, matrixRange);
-}
-
-sk_sp<sktext::gpu::TextStrike> SkStrikeSpec::findOrCreateTextStrike(
-            sktext::gpu::StrikeCache* cache) const {
-    return cache->findOrCreateStrike(*this);
 }
 #endif
 
