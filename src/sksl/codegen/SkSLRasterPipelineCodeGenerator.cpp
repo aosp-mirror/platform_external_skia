@@ -175,6 +175,7 @@ public:
     [[nodiscard]] bool writeForStatement(const ForStatement& f);
     [[nodiscard]] bool writeGlobals();
     [[nodiscard]] bool writeIfStatement(const IfStatement& i);
+    [[nodiscard]] bool writeDynamicallyUniformIfStatement(const IfStatement& i);
     [[nodiscard]] bool writeReturnStatement(const ReturnStatement& r);
     [[nodiscard]] bool writeVarDeclaration(const VarDeclaration& v);
 
@@ -209,6 +210,9 @@ public:
     [[nodiscard]] bool pushTernaryExpression(const Expression& test,
                                              const Expression& ifTrue,
                                              const Expression& ifFalse);
+    [[nodiscard]] bool pushDynamicallyUniformTernaryExpression(const Expression& test,
+                                                               const Expression& ifTrue,
+                                                               const Expression& ifFalse);
     [[nodiscard]] bool pushVariableReference(const VariableReference& v);
 
     /** Pops an expression from the value stack and copies it into slots. */
@@ -293,8 +297,8 @@ private:
     SlotManager fProgramSlots;
     SlotManager fUniformSlots;
 
-    SkTArray<SlotRange> fFunctionStack;
     const FunctionDefinition* fCurrentFunction = nullptr;
+    SlotRange fCurrentFunctionResult;
     SlotRange fCurrentContinueMask;
     int fCurrentTempStack = 0;
     int fTempNameIndex = 0;
@@ -673,14 +677,15 @@ std::optional<SlotRange> Generator::writeFunction(const IRNode& callSite,
         // TODO(debugger): add trace for function-enter
     }
 
-    fFunctionStack.push_back(this->getFunctionSlots(callSite, function.declaration()));
+    SlotRange lastFunctionResult = fCurrentFunctionResult;
+    fCurrentFunctionResult = this->getFunctionSlots(callSite, function.declaration());
 
     if (!this->writeStatement(*function.body())) {
         return std::nullopt;
     }
 
-    SlotRange functionResult = fFunctionStack.back();
-    fFunctionStack.pop_back();
+    SlotRange functionResult = fCurrentFunctionResult;
+    fCurrentFunctionResult = lastFunctionResult;
 
     if (fDebugTrace) {
         // TODO(debugger): add trace for function-exit
@@ -853,10 +858,16 @@ bool Generator::writeForStatement(const ForStatement& f) {
 
     // Create a dedicated slot for continue-mask storage.
     SlotRange previousContinueMask = fCurrentContinueMask;
-    fCurrentContinueMask = fProgramSlots.createSlots(this->makeMaskName("for-loop continue mask"),
-                                                     *fProgram.fContext->fTypes.fBool,
-                                                     Position{},
-                                                     /*isFunctionReturnValue=*/false);
+
+    Analysis::ContinueOrBreakInfo loopInfo = Analysis::HasContinueOrBreak(*f.statement());
+    if (loopInfo.fHasContinue) {
+        fCurrentContinueMask =
+                fProgramSlots.createSlots(this->makeMaskName("for-loop continue mask"),
+                                          *fProgram.fContext->fTypes.fBool,
+                                          Position{},
+                                          /*isFunctionReturnValue=*/false);
+    }
+
     int loopTestID = fBuilder.nextLabelID();
     int loopBodyID = fBuilder.nextLabelID();
 
@@ -865,11 +876,16 @@ bool Generator::writeForStatement(const ForStatement& f) {
 
     // Write the for-loop body.
     fBuilder.label(loopBodyID);
-    fBuilder.zero_slots_unmasked(fCurrentContinueMask);
+
+    if (loopInfo.fHasContinue) {
+        fBuilder.zero_slots_unmasked(fCurrentContinueMask);
+    }
     if (!this->writeStatement(*f.statement())) {
         return unsupported();
     }
-    fBuilder.reenable_loop_mask(fCurrentContinueMask);
+    if (loopInfo.fHasContinue) {
+        fBuilder.reenable_loop_mask(fCurrentContinueMask);
+    }
 
     // Run the next-expression. Immediately discard its result.
     if (f.next()) {
@@ -911,7 +927,51 @@ bool Generator::writeExpressionStatement(const ExpressionStatement& e) {
     return true;
 }
 
+bool Generator::writeDynamicallyUniformIfStatement(const IfStatement& i) {
+    SkASSERT(Analysis::IsDynamicallyUniformExpression(*i.test()));
+
+    int falseLabelID = fBuilder.nextLabelID();
+    int exitLabelID = fBuilder.nextLabelID();
+
+    if (!this->pushExpression(*i.test())) {
+        return unsupported();
+    }
+
+    fBuilder.branch_if_stack_top_equals(0, falseLabelID);
+
+    if (!this->writeStatement(*i.ifTrue())) {
+        return unsupported();
+    }
+
+    if (!i.ifFalse()) {
+        // We don't have an if-false condition at all.
+        fBuilder.label(falseLabelID);
+    } else {
+        // We do have an if-false condition. We've just completed the if-true block, so we need to
+        // jump past the if-false block to avoid executing it.
+        fBuilder.jump(exitLabelID);
+
+        // The if-false block starts here.
+        fBuilder.label(falseLabelID);
+
+        if (!this->writeStatement(*i.ifFalse())) {
+            return unsupported();
+        }
+
+        fBuilder.label(exitLabelID);
+    }
+
+    // Jettison the test-expression.
+    this->discardExpression(/*slots=*/1);
+    return true;
+}
+
 bool Generator::writeIfStatement(const IfStatement& i) {
+    // If the test condition is known to be uniform, we can skip over the untrue portion entirely.
+    if (Analysis::IsDynamicallyUniformExpression(*i.test())) {
+        return this->writeDynamicallyUniformIfStatement(i);
+    }
+
     // Save the current condition-mask.
     fBuilder.enableExecutionMaskWrites();
     fBuilder.push_condition_mask();
@@ -950,7 +1010,7 @@ bool Generator::writeReturnStatement(const ReturnStatement& r) {
         if (!this->pushExpression(*r.expression())) {
             return unsupported();
         }
-        this->popToSlotRange(fFunctionStack.back());
+        this->popToSlotRange(fCurrentFunctionResult);
     }
     if (fBuilder.executionMaskWritesAreEnabled() && this->needsReturnMask()) {
         fBuilder.mask_off_return_mask();
@@ -1659,6 +1719,22 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0) {
             fBuilder.unary_op(BuilderOp::floor_float, arg0.type().slotCount());
             return this->binaryOp(arg0.type(), kSubtractOps);
 
+        case IntrinsicKind::k_length_IntrinsicKind:
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            // Implement length as `sqrt(dot(x, x))`.
+            if (arg0.type().slotCount() > 1) {
+                fBuilder.push_clone(arg0.type().slotCount());
+                fBuilder.binary_op(BuilderOp::mul_n_floats, arg0.type().slotCount());
+                this->foldWithMultiOp(BuilderOp::add_n_floats, arg0.type().slotCount());
+                fBuilder.unary_op(BuilderOp::sqrt_float, 1);
+            } else {
+                // The length of a scalar is `sqrt(x^2)`, which is equivalent to `abs(x)`.
+                fBuilder.unary_op(BuilderOp::abs_float, 1);
+            }
+            return true;
+
         case IntrinsicKind::k_not_IntrinsicKind:
             return this->pushPrefixExpression(OperatorKind::LOGICALNOT, arg0);
 
@@ -2084,9 +2160,61 @@ bool Generator::pushTernaryExpression(const TernaryExpression& t) {
     return this->pushTernaryExpression(*t.test(), *t.ifTrue(), *t.ifFalse());
 }
 
+bool Generator::pushDynamicallyUniformTernaryExpression(const Expression& test,
+                                                        const Expression& ifTrue,
+                                                        const Expression& ifFalse) {
+    SkASSERT(Analysis::IsDynamicallyUniformExpression(test));
+
+    int falseLabelID = fBuilder.nextLabelID();
+    int exitLabelID = fBuilder.nextLabelID();
+
+    // First, push the test-expression into a separate stack.
+    this->nextTempStack();
+    if (!this->pushExpression(test)) {
+        return unsupported();
+    }
+
+    // Branch to the true- or false-expression based on the test-expression. We can skip the
+    // non-true path entirely since the test is known to be uniform.
+    fBuilder.branch_if_stack_top_equals(0, falseLabelID);
+    this->previousTempStack();
+
+    if (!this->pushExpression(ifTrue)) {
+        return unsupported();
+    }
+
+    fBuilder.jump(exitLabelID);
+
+    // The builder doesn't understand control flow, and assumes that every push moves the stack-top
+    // forwards. We need to manually balance out the `pushExpression` from the if-true path by
+    // moving the stack position backwards, so that the if-false path pushes its expression into the
+    // same as the if-true result.
+    this->discardExpression(/*slots=*/ifTrue.type().slotCount());
+
+    fBuilder.label(falseLabelID);
+
+    if (!this->pushExpression(ifFalse)) {
+        return unsupported();
+    }
+
+    fBuilder.label(exitLabelID);
+
+    // Jettison the text-expression from the separate stack.
+    this->nextTempStack();
+    this->discardExpression(/*slots=*/1);
+    this->previousTempStack();
+    return true;
+}
+
 bool Generator::pushTernaryExpression(const Expression& test,
                                       const Expression& ifTrue,
                                       const Expression& ifFalse) {
+    // If the test-expression is dynamically-uniform, we can skip over the non-true expressions
+    // entirely, and not need to involve the condition mask.
+    if (Analysis::IsDynamicallyUniformExpression(test)) {
+        return this->pushDynamicallyUniformTernaryExpression(test, ifTrue, ifFalse);
+    }
+
     fBuilder.enableExecutionMaskWrites();
 
     // First, push the current condition-mask and the test-expression into a separate stack.
@@ -2261,7 +2389,6 @@ std::unique_ptr<RP::Program> Generator::finish() {
 std::unique_ptr<RP::Program> MakeRasterPipelineProgram(const SkSL::Program& program,
                                                        const FunctionDefinition& function,
                                                        SkRPDebugTrace* debugTrace) {
-    // TODO(skia:13676): add mechanism for uniform passing
     RP::Generator generator(program, debugTrace);
     if (!generator.writeProgram(function)) {
         return nullptr;
