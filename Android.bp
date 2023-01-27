@@ -1469,7 +1469,6 @@ cc_library_static {
           "src/codec/SkHeifCodec.cpp",
           "src/codec/SkJpegGainmap.cpp",
           "src/codec/SkJpegMultiPicture.cpp",
-          "src/codec/SkJpegRCodec.cpp",
           "src/codec/SkJpegSegmentScan.cpp",
           "src/codec/SkRawCodec.cpp",
           "src/gpu/AtlasTypes.cpp",
@@ -1877,12 +1876,6 @@ cc_defaults {
       android: {
         shared_libs: [
             "libheif",
-            "libimage_io",
-        ],
-        static_libs: [
-            "libjpegrecoverymap",
-            "libjpegdecoder",
-            "libjpegencoder",
         ],
       },
       darwin: {
