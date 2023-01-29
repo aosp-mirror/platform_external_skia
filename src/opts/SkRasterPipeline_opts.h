@@ -1638,6 +1638,11 @@ STAGE(store_src_rg, float* ptr) {
     sk_unaligned_store(ptr + 0*N, r);
     sk_unaligned_store(ptr + 1*N, g);
 }
+// load registers r,g from context
+STAGE(load_src_rg, float* ptr) {
+    r = sk_unaligned_load<F>(ptr + 0*N);
+    g = sk_unaligned_load<F>(ptr + 1*N);
+}
 // store register a into context
 STAGE(store_src_a, float* ptr) {
     sk_unaligned_store(ptr, a);
@@ -3186,6 +3191,10 @@ STAGE_BRANCH(branch_if_no_active_lanes, SkRasterPipeline_BranchCtx* ctx) {
 
 STAGE_BRANCH(jump, SkRasterPipeline_BranchCtx* ctx) {
     return ctx->offset;
+}
+
+STAGE_BRANCH(branch_if_all_lanes_equal, SkRasterPipeline_BranchIfEqualCtx* ctx) {
+    return all(cond_to_mask(*(I32*)ctx->ptr == ctx->value)) ? ctx->offset : 1;
 }
 
 STAGE_TAIL(immediate_f, void* ctx) {
