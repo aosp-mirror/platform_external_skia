@@ -8,6 +8,7 @@
 #include "include/core/SkSpan.h"
 #include "include/core/SkTypes.h"
 #include "include/private/base/SkFloatingPoint.h"
+#include "src/base/SkBezierCurves.h"
 #include "src/pathops/SkPathOpsCubic.h"
 #include "src/pathops/SkPathOpsPoint.h"
 #include "tests/Test.h"
@@ -15,7 +16,8 @@
 #include <cstring>
 #include <string>
 
-struct DoublePoint{
+// Grouping the test inputs into DoublePoints makes the test cases easier to read.
+struct DoublePoint {
     double x;
     double y;
 };
@@ -40,17 +42,36 @@ static void testChopCubicAtT(skiatest::Reporter* reporter, std::string name,
                     "Invalid test case. Should have 7 output points.");
 
 
-    SkDCubic input;
-    std::memcpy(&input.fPts[0], curveInputs.begin(), 8 * sizeof(double));
-    SkDCubicPair output = input.chopAt(t);
+    {
+        skiatest::ReporterContext subsubtest(reporter, "Pathops Implementation");
+        SkDCubic input;
+        std::memcpy(&input.fPts[0], curveInputs.begin(), 8 * sizeof(double));
+        SkDCubicPair output = input.chopAt(t);
 
-    for (int i = 0; i < 7; ++i) {
-        REPORTER_ASSERT(reporter,
-                        nearly_equal(expectedOutputs[i].x, output.pts[i].fX) &&
-                        nearly_equal(expectedOutputs[i].y, output.pts[i].fY),
-                        "(%.16f, %.16f) != (%.16f, %.16f) at index %d",
-                        expectedOutputs[i].x, expectedOutputs[i].y,
-                        output.pts[i].fX, output.pts[i].fY, i);
+        for (int i = 0; i < 7; ++i) {
+            REPORTER_ASSERT(reporter,
+                            nearly_equal(expectedOutputs[i].x, output.pts[i].fX) &&
+                            nearly_equal(expectedOutputs[i].y, output.pts[i].fY),
+                            "(%.16f, %.16f) != (%.16f, %.16f) at index %d",
+                            expectedOutputs[i].x, expectedOutputs[i].y,
+                            output.pts[i].fX, output.pts[i].fY, i);
+        }
+    }
+    {
+        skiatest::ReporterContext subsubtest(reporter, "SkBezier Implementation");
+        double input[8];
+        double output[14];
+        std::memcpy(input, curveInputs.begin(), 8 * sizeof(double));
+        SkBezierCubic::Subdivide(input, t, output);
+
+        for (int i = 0; i < 7; ++i) {
+            REPORTER_ASSERT(reporter,
+                            nearly_equal(expectedOutputs[i].x, output[i*2]) &&
+                            nearly_equal(expectedOutputs[i].y, output[i*2 + 1]),
+                            "(%.16f, %.16f) != (%.16f, %.16f) at index %d",
+                            expectedOutputs[i].x, expectedOutputs[i].y,
+                            output[i*2], output[i*2 + 1], i);
+        }
     }
 }
 
@@ -179,5 +200,50 @@ DEF_TEST(ChopCubicAtT_ArbitraryCubic, reporter) {
          {  5.22892800000000,   9.63054950000000 },
          {  4.35850000000000,  11.14750000000000 },
          {  3.00000000000000,  13.00000000000000 }}
+    );
+}
+
+static void testConvertToPolynomial(skiatest::Reporter* reporter, std::string name,
+                                    SkSpan<const DoublePoint> curveInputs, bool yValues,
+                                    double expectedA, double expectedB,
+                                    double expectedC, double expectedD) {
+    skiatest::ReporterContext subtest(reporter, name);
+    REPORTER_ASSERT(reporter, curveInputs.size() == 4,
+                    "Invalid test case. Need 4 points (start, control, control, end)");
+
+    {
+        skiatest::ReporterContext subsubtest(reporter, "Pathops Implementation");
+        const double* input = &curveInputs[0].x;
+        if (yValues) {
+            input = &curveInputs[0].y;
+        }
+        double A, B, C, D;
+        SkDCubic::Coefficients(input, &A, &B, &C, &D);
+
+        REPORTER_ASSERT(reporter, nearly_equal(expectedA, A), "%f != %f", expectedA, A);
+        REPORTER_ASSERT(reporter, nearly_equal(expectedB, B), "%f != %f", expectedB, B);
+        REPORTER_ASSERT(reporter, nearly_equal(expectedC, C), "%f != %f", expectedC, C);
+        REPORTER_ASSERT(reporter, nearly_equal(expectedD, D), "%f != %f", expectedD, D);
+    }
+    {
+        skiatest::ReporterContext subsubtest(reporter, "SkBezierCurve Implementation");
+        const double* input = &curveInputs[0].x;
+        auto [A, B, C, D] = SkBezierCubic::ConvertToPolynomial(input, yValues);
+
+        REPORTER_ASSERT(reporter, nearly_equal(expectedA, A), "%f != %f", expectedA, A);
+        REPORTER_ASSERT(reporter, nearly_equal(expectedB, B), "%f != %f", expectedB, B);
+        REPORTER_ASSERT(reporter, nearly_equal(expectedC, C), "%f != %f", expectedC, C);
+        REPORTER_ASSERT(reporter, nearly_equal(expectedD, D), "%f != %f", expectedD, D);
+    }
+}
+
+DEF_TEST(BezierCurvesToPolynomials, reporter) {
+    testConvertToPolynomial(reporter, "Arbitrary control points X direction",
+        {{1, 2}, {-3, 4}, {5, -6}, {7, 8}}, false, /*=yValues*/
+        -18, 36, -12, 1
+    );
+    testConvertToPolynomial(reporter, "Arbitrary control points Y direction",
+        {{1, 2}, {-3, 4}, {5, -6}, {7, 8}}, true, /*=yValues*/
+        36, -36, 6, 2
     );
 }
