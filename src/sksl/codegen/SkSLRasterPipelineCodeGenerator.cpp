@@ -86,14 +86,19 @@ public:
                           Position pos,
                           bool isFunctionReturnValue);
 
-    /** Implements low-level slot creation; slots will not be known to the debugger. */
-    SlotRange createSlots(int slots);
-
     /** Creates slots associated with an SkSL variable or return value. */
     SlotRange createSlots(std::string name,
                           const Type& type,
                           Position pos,
                           bool isFunctionReturnValue);
+
+    /**
+     * Creates a single temporary slot for scratch storage. Temporary slots can be recycled, which
+     * frees them up for reuse. Temporary slots are not assigned a name and have an arbitrary type.
+     */
+    SlotRange createTemporarySlot(const Type& type);
+    void recycleTemporarySlot(SlotRange temporarySlot);
+
 
     /** Looks up the slots associated with an SkSL variable; creates the slot if necessary. */
     SlotRange getVariableSlots(const Variable& v);
@@ -109,8 +114,12 @@ public:
     int slotCount() const { return fSlotCount; }
 
 private:
+    std::string makeTempName() { return SkSL::String::printf("[temporary %d]", fTemporaryCount++); }
+
     SkTHashMap<const IRNode*, SlotRange> fSlotMap;
+    SkTArray<Slot> fRecycledSlots;
     int fSlotCount = 0;
+    int fTemporaryCount = 0;
     std::vector<SlotDebugInfo>* fSlotDebugInfo;
 };
 
@@ -172,6 +181,7 @@ public:
     [[nodiscard]] bool writeContinueStatement(const ContinueStatement& b);
     [[nodiscard]] bool writeDoStatement(const DoStatement& d);
     [[nodiscard]] bool writeExpressionStatement(const ExpressionStatement& e);
+    [[nodiscard]] bool writeMasklessForStatement(const ForStatement& f);
     [[nodiscard]] bool writeForStatement(const ForStatement& f);
     [[nodiscard]] bool writeGlobals();
     [[nodiscard]] bool writeIfStatement(const IfStatement& i);
@@ -262,10 +272,6 @@ public:
     }
     BuilderOp getTypedOp(const SkSL::Type& type, const TypedOps& ops) const;
 
-    std::string makeMaskName(const char* name) {
-        return SkSL::String::printf("[%s %d]", name, fTempNameIndex++);
-    }
-
     bool needsReturnMask() {
         Analysis::ReturnComplexity* complexity = fReturnComplexityMap.find(fCurrentFunction);
         if (!complexity) {
@@ -301,7 +307,6 @@ private:
     SlotRange fCurrentFunctionResult;
     SlotRange fCurrentContinueMask;
     int fCurrentTempStack = 0;
-    int fTempNameIndex = 0;
 
     SkTHashMap<const FunctionDefinition*, Analysis::ReturnComplexity> fReturnComplexityMap;
 
@@ -588,10 +593,38 @@ void SlotManager::addSlotDebugInfo(const std::string& varName,
     SkASSERT((size_t)groupIndex == type.slotCount());
 }
 
-SlotRange SlotManager::createSlots(int slots) {
-    SlotRange range = {fSlotCount, slots};
-    fSlotCount += slots;
-    return range;
+SlotRange SlotManager::createTemporarySlot(const Type& type) {
+    SkASSERT(type.slotCount() == 1);
+
+    // If we have an available slot to reclaim, take it now.
+    if (!fRecycledSlots.empty()) {
+        SlotRange result = {fRecycledSlots.back(), 1};
+        fRecycledSlots.pop_back();
+        return result;
+    }
+
+    // Synthesize a new temporary slot.
+    if (fSlotDebugInfo) {
+        // Our debug slot-info table should have the same length as the actual slot table.
+        SkASSERT(fSlotDebugInfo->size() == (size_t)fSlotCount);
+
+        // Add this temporary slot to the debug slot-info table. It's just scratch space which can
+        // be reused over the course of execution, so it doesn't get a name or type (uint will do).
+        this->addSlotDebugInfo(this->makeTempName(), type, Position{},
+                               /*isFunctionReturnValue=*/false);
+
+        // Confirm that we added the expected number of slots.
+        SkASSERT(fSlotDebugInfo->size() == (size_t)(fSlotCount + 1));
+    }
+
+    SlotRange result = {fSlotCount, 1};
+    ++fSlotCount;
+    return result;
+}
+
+void SlotManager::recycleTemporarySlot(SlotRange temporarySlot) {
+    SkASSERT(temporarySlot.count == 1);
+    fRecycledSlots.push_back(temporarySlot.index);
 }
 
 SlotRange SlotManager::createSlots(std::string name,
@@ -614,7 +647,9 @@ SlotRange SlotManager::createSlots(std::string name,
         SkASSERT(fSlotDebugInfo->size() == (size_t)(fSlotCount + nslots));
     }
 
-    return this->createSlots(nslots);
+    SlotRange result = {fSlotCount, (int)nslots};
+    fSlotCount += nslots;
+    return result;
 }
 
 SlotRange SlotManager::getVariableSlots(const Variable& v) {
@@ -804,21 +839,27 @@ bool Generator::writeDoStatement(const DoStatement& d) {
     fBuilder.enableExecutionMaskWrites();
     fBuilder.push_loop_mask();
 
-    // Create a dedicated slot for continue-mask storage.
-    SlotRange previousContinueMask = fCurrentContinueMask;
-    fCurrentContinueMask = fProgramSlots.createSlots(this->makeMaskName("do-loop continue mask"),
-                                                     *fProgram.fContext->fTypes.fBool,
-                                                     Position{},
-                                                     /*isFunctionReturnValue=*/false);
+    // Acquire a temporary slot for continue-mask storage.
+    Analysis::LoopControlFlowInfo loopInfo = Analysis::GetLoopControlFlowInfo(*d.statement());
+    SlotRange previousContinueMask;
+    if (loopInfo.fHasContinue) {
+        previousContinueMask = fCurrentContinueMask;
+        fCurrentContinueMask = fProgramSlots.createTemporarySlot(*fProgram.fContext->fTypes.fUInt);
+    }
+
     // Write the do-loop body.
     int labelID = fBuilder.nextLabelID();
     fBuilder.label(labelID);
 
-    fBuilder.zero_slots_unmasked(fCurrentContinueMask);
+    if (loopInfo.fHasContinue) {
+        fBuilder.zero_slots_unmasked(fCurrentContinueMask);
+    }
     if (!this->writeStatement(*d.statement())) {
         return false;
     }
-    fBuilder.reenable_loop_mask(fCurrentContinueMask);
+    if (loopInfo.fHasContinue) {
+        fBuilder.reenable_loop_mask(fCurrentContinueMask);
+    }
 
     // Emit the test-expression, in order to combine it with the loop mask.
     if (!this->pushExpression(*d.test())) {
@@ -836,8 +877,61 @@ bool Generator::writeDoStatement(const DoStatement& d) {
     // Restore the loop and continue masks.
     fBuilder.pop_loop_mask();
     fBuilder.disableExecutionMaskWrites();
-    fCurrentContinueMask = previousContinueMask;
+    if (loopInfo.fHasContinue) {
+        fProgramSlots.recycleTemporarySlot(fCurrentContinueMask);
+        fCurrentContinueMask = previousContinueMask;
+    }
 
+    return true;
+}
+
+bool Generator::writeMasklessForStatement(const ForStatement& f) {
+    SkASSERT(f.unrollInfo());
+    SkASSERT(f.unrollInfo()->fCount > 0);
+    SkASSERT(f.initializer());
+    SkASSERT(f.test());
+    SkASSERT(f.next());
+
+    // If no lanes are active, skip over the loop entirely. This guards against looping forever;
+    // with no lanes active, we wouldn't be able to write the loop variable back to its slot, so
+    // we'd never make forward progress.
+    int loopExitID = fBuilder.nextLabelID();
+    int loopBodyID = fBuilder.nextLabelID();
+    fBuilder.branch_if_no_active_lanes(loopExitID);
+
+    // Run the loop initializer.
+    if (!this->writeStatement(*f.initializer())) {
+        return unsupported();
+    }
+
+    // Write the for-loop body. We know the for-loop has a standard ES2 unrollable structure, and
+    // that it runs for at least one iteration, so we can plow straight ahead into the loop body
+    // instead of running the loop-test first.
+    fBuilder.label(loopBodyID);
+
+    if (!this->writeStatement(*f.statement())) {
+        return unsupported();
+    }
+
+    // If the loop only runs for a single iteration, we are already done. If not...
+    if (f.unrollInfo()->fCount > 1) {
+        // ... run the next-expression, and immediately discard its result.
+        if (!this->pushExpression(*f.next(), /*usesResult=*/false)) {
+            return unsupported();
+        }
+        this->discardExpression(f.next()->type().slotCount());
+
+        // Run the test-expression, and repeat the loop until the test-expression evaluates false.
+        if (!this->pushExpression(*f.test())) {
+            return unsupported();
+        }
+        fBuilder.branch_if_no_active_lanes_on_stack_top_equal(0, loopBodyID);
+
+        // Jettison the test-expression.
+        this->discardExpression(/*slots=*/1);
+    }
+
+    fBuilder.label(loopExitID);
     return true;
 }
 
@@ -847,26 +941,29 @@ bool Generator::writeForStatement(const ForStatement& f) {
         return true;
     }
 
+    // If the loop doesn't escape early due to a `continue`, `break` or `return`, and the loop
+    // conforms to ES2 structure, we know that we will run the full number of iterations across all
+    // lanes and don't need to use a loop mask.
+    Analysis::LoopControlFlowInfo loopInfo = Analysis::GetLoopControlFlowInfo(*f.statement());
+    if (!loopInfo.fHasContinue && !loopInfo.fHasBreak && !loopInfo.fHasReturn && f.unrollInfo()) {
+        return this->writeMasklessForStatement(f);
+    }
+
     // Run the loop initializer.
     if (f.initializer() && !this->writeStatement(*f.initializer())) {
         return unsupported();
     }
 
+    // Acquire a temporary slot for continue-mask storage.
+    SlotRange previousContinueMask;
+    if (loopInfo.fHasContinue) {
+        previousContinueMask = fCurrentContinueMask;
+        fCurrentContinueMask = fProgramSlots.createTemporarySlot(*fProgram.fContext->fTypes.fUInt);
+    }
+
     // Save off the original loop mask.
     fBuilder.enableExecutionMaskWrites();
     fBuilder.push_loop_mask();
-
-    // Create a dedicated slot for continue-mask storage.
-    SlotRange previousContinueMask = fCurrentContinueMask;
-
-    Analysis::ContinueOrBreakInfo loopInfo = Analysis::HasContinueOrBreak(*f.statement());
-    if (loopInfo.fHasContinue) {
-        fCurrentContinueMask =
-                fProgramSlots.createSlots(this->makeMaskName("for-loop continue mask"),
-                                          *fProgram.fContext->fTypes.fBool,
-                                          Position{},
-                                          /*isFunctionReturnValue=*/false);
-    }
 
     int loopTestID = fBuilder.nextLabelID();
     int loopBodyID = fBuilder.nextLabelID();
@@ -913,7 +1010,10 @@ bool Generator::writeForStatement(const ForStatement& f) {
     // Restore the loop and continue masks.
     fBuilder.pop_loop_mask();
     fBuilder.disableExecutionMaskWrites();
-    fCurrentContinueMask = previousContinueMask;
+    if (loopInfo.fHasContinue) {
+        fProgramSlots.recycleTemporarySlot(fCurrentContinueMask);
+        fCurrentContinueMask = previousContinueMask;
+    }
 
     return true;
 }
@@ -937,7 +1037,7 @@ bool Generator::writeDynamicallyUniformIfStatement(const IfStatement& i) {
         return unsupported();
     }
 
-    fBuilder.branch_if_stack_top_equals(0, falseLabelID);
+    fBuilder.branch_if_no_active_lanes_on_stack_top_equal(~0, falseLabelID);
 
     if (!this->writeStatement(*i.ifTrue())) {
         return unsupported();
@@ -2176,7 +2276,7 @@ bool Generator::pushDynamicallyUniformTernaryExpression(const Expression& test,
 
     // Branch to the true- or false-expression based on the test-expression. We can skip the
     // non-true path entirely since the test is known to be uniform.
-    fBuilder.branch_if_stack_top_equals(0, falseLabelID);
+    fBuilder.branch_if_no_active_lanes_on_stack_top_equal(~0, falseLabelID);
     this->previousTempStack();
 
     if (!this->pushExpression(ifTrue)) {
