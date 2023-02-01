@@ -281,8 +281,8 @@ static void TestBitmapSerialization(const SkBitmap& validBitmap,
                               std::move(validBitmapSource), nullptr));
 
     sk_sp<SkImageFilter> deserializedFilter(
-        TestFlattenableSerialization<SkImageFilter>(
-            xfermodeImageFilter.get(), shouldSucceed, reporter));
+        TestFlattenableSerialization<SkImageFilter_Base>(
+            (SkImageFilter_Base*)xfermodeImageFilter.get(), shouldSucceed, reporter));
 
     // Try to render a small bitmap using the invalid deserialized filter
     // to make sure we don't crash while trying to render it
@@ -354,7 +354,7 @@ static sk_sp<SkTypeface> deserialize_typeface_proc(const void* data, size_t leng
     }
     memcpy(&stream, data, sizeof(stream));
 
-    SkFontID id;
+    SkTypefaceID id;
     if (!stream->read(&id, sizeof(id))) {
         return nullptr;
     }

@@ -9,12 +9,13 @@
 #define GrProxyProvider_DEFINED
 
 #include "include/gpu/GrTypes.h"
-#include "include/private/GrResourceKey.h"
 #include "src/core/SkTDynamicHash.h"
 #include "src/gpu/GrTextureProxy.h"
+#include "src/gpu/ResourceKey.h"
 
 class GrImageContext;
 class GrBackendRenderTarget;
+struct GrVkDrawableInfo;
 class SkBitmap;
 class SkImage;
 
@@ -33,7 +34,7 @@ public:
      * Assigns a unique key to a proxy. The proxy will be findable via this key using
      * findProxyByUniqueKey(). It is an error if an existing proxy already has a key.
      */
-    bool assignUniqueKeyToProxy(const GrUniqueKey&, GrTextureProxy*);
+    bool assignUniqueKeyToProxy(const skgpu::UniqueKey&, GrTextureProxy*);
 
     /*
      * Sets the unique key of the provided proxy to the unique key of the surface. The surface must
@@ -50,22 +51,22 @@ public:
     /*
      * Finds a proxy by unique key.
      */
-    sk_sp<GrTextureProxy> findProxyByUniqueKey(const GrUniqueKey&);
+    sk_sp<GrTextureProxy> findProxyByUniqueKey(const skgpu::UniqueKey&);
 
     /*
      * Finds a proxy by unique key or creates a new one that wraps a resource matching the unique
      * key.
      */
-    sk_sp<GrTextureProxy> findOrCreateProxyByUniqueKey(const GrUniqueKey&,
+    sk_sp<GrTextureProxy> findOrCreateProxyByUniqueKey(const skgpu::UniqueKey&,
                                                        UseAllocator = UseAllocator::kYes);
 
     /**
-     * A helper that uses findOrCreateProxyByUniqueKey() to find a proxy and if found creates a view
+     * A helper that uses findOrCreateProxyByUniqueKey() to find a proxy and, if found, creates
      * a view for the found proxy using the passed in origin and color type. It is assumed that if
-     * the proxy is renderable then it was created by GrSurfaceDrawContext::MakeWithFallback and
-     * the fallback color type will be used to create the view.
+     * the proxy is renderable then it was created via a fallback code path so the fallback
+     * color type will be used to create the view.
      */
-    GrSurfaceProxyView findCachedProxyWithColorTypeFallback(const GrUniqueKey&,
+    GrSurfaceProxyView findCachedProxyWithColorTypeFallback(const skgpu::UniqueKey&,
                                                             GrSurfaceOrigin,
                                                             GrColorType,
                                                             int sampleCnt);
@@ -222,7 +223,7 @@ public:
      * (in which case we don't want it cluttering up the hash table) or the client has indicated
      * that it will never refer to the unique key again.
      */
-    void processInvalidUniqueKey(const GrUniqueKey&, GrTextureProxy*, InvalidateGPUResource);
+    void processInvalidUniqueKey(const skgpu::UniqueKey&, GrTextureProxy*, InvalidateGPUResource);
 
     GrDDLProvider isDDLProvider() const;
 
@@ -277,7 +278,7 @@ private:
     // processInvalidUniqueKey() with control over removing hash table entries,
     // which is not safe while iterating with foreach().
     enum class RemoveTableEntry { kNo, kYes };
-    void processInvalidUniqueKeyImpl(const GrUniqueKey&, GrTextureProxy*,
+    void processInvalidUniqueKeyImpl(const skgpu::UniqueKey&, GrTextureProxy*,
                                      InvalidateGPUResource, RemoveTableEntry);
 
     bool isAbandoned() const;
@@ -295,11 +296,11 @@ private:
     sk_sp<GrTextureProxy> createWrapped(sk_sp<GrTexture> tex, UseAllocator useAllocator);
 
     struct UniquelyKeyedProxyHashTraits {
-        static const GrUniqueKey& GetKey(const GrTextureProxy& p) { return p.getUniqueKey(); }
+        static const skgpu::UniqueKey& GetKey(const GrTextureProxy& p) { return p.getUniqueKey(); }
 
-        static uint32_t Hash(const GrUniqueKey& key) { return key.hash(); }
+        static uint32_t Hash(const skgpu::UniqueKey& key) { return key.hash(); }
     };
-    typedef SkTDynamicHash<GrTextureProxy, GrUniqueKey, UniquelyKeyedProxyHashTraits> UniquelyKeyedProxyHash;
+    typedef SkTDynamicHash<GrTextureProxy, skgpu::UniqueKey, UniquelyKeyedProxyHashTraits> UniquelyKeyedProxyHash;
 
     // This holds the texture proxies that have unique keys. The resourceCache does not get a ref
     // on these proxies but they must send a message to the resourceCache when they are deleted.

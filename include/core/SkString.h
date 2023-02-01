@@ -19,6 +19,7 @@
 #include <string.h>
 #include <atomic>
 #include <string>
+#include <string_view>
 
 /*  Some helper functions for C strings */
 static inline bool SkStrStartsWith(const char string[], const char prefixStr[]) {
@@ -122,6 +123,7 @@ public:
                 SkString(const SkString&);
                 SkString(SkString&&);
     explicit    SkString(const std::string&);
+    explicit    SkString(std::string_view);
                 ~SkString();
 
     bool        isEmpty() const { return 0 == fRec->fLength; }
@@ -215,11 +217,11 @@ public:
     void prependScalar(SkScalar value) { this->insertScalar((size_t)-1, value); }
 
     void printf(const char format[], ...) SK_PRINTF_LIKE(2, 3);
-    void printVAList(const char format[], va_list);
+    void printVAList(const char format[], va_list) SK_PRINTF_LIKE(2, 0);
     void appendf(const char format[], ...) SK_PRINTF_LIKE(2, 3);
-    void appendVAList(const char format[], va_list);
+    void appendVAList(const char format[], va_list) SK_PRINTF_LIKE(2, 0);
     void prependf(const char format[], ...) SK_PRINTF_LIKE(2, 3);
-    void prependVAList(const char format[], va_list);
+    void prependVAList(const char format[], va_list) SK_PRINTF_LIKE(2, 0);
 
     void remove(size_t offset, size_t length);
 
@@ -238,17 +240,20 @@ private:
     public:
         constexpr Rec(uint32_t len, int32_t refCnt) : fLength(len), fRefCnt(refCnt) {}
         static sk_sp<Rec> Make(const char text[], size_t len);
-        char* data() { return &fBeginningOfData; }
-        const char* data() const { return &fBeginningOfData; }
+        char* data() { return fBeginningOfData; }
+        const char* data() const { return fBeginningOfData; }
         void ref() const;
         void unref() const;
         bool unique() const;
-
+#ifdef SK_DEBUG
+        int32_t getRefCnt() const;
+#endif
         uint32_t fLength; // logically size_t, but we want it to stay 32 bits
-        mutable std::atomic<int32_t> fRefCnt;
-        char fBeginningOfData = '\0';
 
     private:
+        mutable std::atomic<int32_t> fRefCnt;
+        char fBeginningOfData[1] = {'\0'};
+
         // Ensure the unsized delete is called.
         void operator delete(void* p) { ::operator delete(p); }
     };
