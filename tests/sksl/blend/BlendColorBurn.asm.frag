@@ -1,44 +1,40 @@
 OpCapability Shader
 %1 = OpExtInstImport "GLSL.std.450"
 OpMemoryModel Logical GLSL450
-OpEntryPoint Fragment %main "main" %sk_FragColor %sk_Clockwise
+OpEntryPoint Fragment %main "main" %sk_Clockwise %sk_FragColor
 OpExecutionMode %main OriginUpperLeft
-OpName %sk_FragColor "sk_FragColor"
+OpName %_kGuardedDivideEpsilon "$kGuardedDivideEpsilon"
 OpName %sk_Clockwise "sk_Clockwise"
+OpName %sk_FragColor "sk_FragColor"
 OpName %_UniformBuffer "_UniformBuffer"
 OpMemberName %_UniformBuffer 0 "src"
 OpMemberName %_UniformBuffer 1 "dst"
 OpName %color_burn_component_Qhh2h2 "color_burn_component_Qhh2h2"
 OpName %delta "delta"
 OpName %main "main"
+OpDecorate %_kGuardedDivideEpsilon RelaxedPrecision
+OpDecorate %sk_Clockwise BuiltIn FrontFacing
 OpDecorate %sk_FragColor RelaxedPrecision
 OpDecorate %sk_FragColor Location 0
 OpDecorate %sk_FragColor Index 0
-OpDecorate %sk_Clockwise BuiltIn FrontFacing
 OpMemberDecorate %_UniformBuffer 0 Offset 0
 OpMemberDecorate %_UniformBuffer 0 RelaxedPrecision
 OpMemberDecorate %_UniformBuffer 1 Offset 16
 OpMemberDecorate %_UniformBuffer 1 RelaxedPrecision
 OpDecorate %_UniformBuffer Block
-OpDecorate %11 Binding 0
-OpDecorate %11 DescriptorSet 0
-OpDecorate %20 RelaxedPrecision
-OpDecorate %21 RelaxedPrecision
-OpDecorate %22 RelaxedPrecision
-OpDecorate %23 RelaxedPrecision
+OpDecorate %17 Binding 0
+OpDecorate %17 DescriptorSet 0
+OpDecorate %26 RelaxedPrecision
+OpDecorate %27 RelaxedPrecision
 OpDecorate %28 RelaxedPrecision
 OpDecorate %29 RelaxedPrecision
-OpDecorate %30 RelaxedPrecision
-OpDecorate %31 RelaxedPrecision
-OpDecorate %32 RelaxedPrecision
-OpDecorate %33 RelaxedPrecision
 OpDecorate %34 RelaxedPrecision
+OpDecorate %35 RelaxedPrecision
 OpDecorate %36 RelaxedPrecision
 OpDecorate %37 RelaxedPrecision
 OpDecorate %38 RelaxedPrecision
 OpDecorate %39 RelaxedPrecision
 OpDecorate %40 RelaxedPrecision
-OpDecorate %41 RelaxedPrecision
 OpDecorate %42 RelaxedPrecision
 OpDecorate %43 RelaxedPrecision
 OpDecorate %44 RelaxedPrecision
@@ -47,18 +43,19 @@ OpDecorate %46 RelaxedPrecision
 OpDecorate %47 RelaxedPrecision
 OpDecorate %48 RelaxedPrecision
 OpDecorate %49 RelaxedPrecision
+OpDecorate %50 RelaxedPrecision
+OpDecorate %51 RelaxedPrecision
+OpDecorate %52 RelaxedPrecision
+OpDecorate %53 RelaxedPrecision
+OpDecorate %54 RelaxedPrecision
 OpDecorate %55 RelaxedPrecision
-OpDecorate %56 RelaxedPrecision
-OpDecorate %57 RelaxedPrecision
-OpDecorate %58 RelaxedPrecision
-OpDecorate %59 RelaxedPrecision
 OpDecorate %60 RelaxedPrecision
-OpDecorate %delta RelaxedPrecision
+OpDecorate %61 RelaxedPrecision
+OpDecorate %62 RelaxedPrecision
+OpDecorate %63 RelaxedPrecision
 OpDecorate %64 RelaxedPrecision
 OpDecorate %65 RelaxedPrecision
-OpDecorate %66 RelaxedPrecision
-OpDecorate %67 RelaxedPrecision
-OpDecorate %68 RelaxedPrecision
+OpDecorate %delta RelaxedPrecision
 OpDecorate %69 RelaxedPrecision
 OpDecorate %70 RelaxedPrecision
 OpDecorate %71 RelaxedPrecision
@@ -86,186 +83,199 @@ OpDecorate %92 RelaxedPrecision
 OpDecorate %93 RelaxedPrecision
 OpDecorate %94 RelaxedPrecision
 OpDecorate %95 RelaxedPrecision
-OpDecorate %103 RelaxedPrecision
-OpDecorate %104 RelaxedPrecision
-OpDecorate %108 RelaxedPrecision
+OpDecorate %96 RelaxedPrecision
+OpDecorate %97 RelaxedPrecision
+OpDecorate %98 RelaxedPrecision
+OpDecorate %99 RelaxedPrecision
+OpDecorate %100 RelaxedPrecision
+OpDecorate %101 RelaxedPrecision
 OpDecorate %109 RelaxedPrecision
-OpDecorate %113 RelaxedPrecision
+OpDecorate %110 RelaxedPrecision
 OpDecorate %114 RelaxedPrecision
-OpDecorate %117 RelaxedPrecision
-OpDecorate %118 RelaxedPrecision
-OpDecorate %122 RelaxedPrecision
+OpDecorate %115 RelaxedPrecision
+OpDecorate %119 RelaxedPrecision
+OpDecorate %120 RelaxedPrecision
 OpDecorate %123 RelaxedPrecision
-OpDecorate %126 RelaxedPrecision
-OpDecorate %127 RelaxedPrecision
-OpDecorate %131 RelaxedPrecision
+OpDecorate %124 RelaxedPrecision
+OpDecorate %128 RelaxedPrecision
+OpDecorate %129 RelaxedPrecision
 OpDecorate %132 RelaxedPrecision
-OpDecorate %134 RelaxedPrecision
-OpDecorate %135 RelaxedPrecision
-OpDecorate %136 RelaxedPrecision
+OpDecorate %133 RelaxedPrecision
+OpDecorate %137 RelaxedPrecision
 OpDecorate %138 RelaxedPrecision
-OpDecorate %139 RelaxedPrecision
 OpDecorate %140 RelaxedPrecision
 OpDecorate %141 RelaxedPrecision
 OpDecorate %142 RelaxedPrecision
+OpDecorate %144 RelaxedPrecision
+OpDecorate %145 RelaxedPrecision
+OpDecorate %146 RelaxedPrecision
+OpDecorate %147 RelaxedPrecision
+OpDecorate %148 RelaxedPrecision
 %float = OpTypeFloat 32
+%_ptr_Private_float = OpTypePointer Private %float
+%_kGuardedDivideEpsilon = OpVariable %_ptr_Private_float Private
+%bool = OpTypeBool
+%false = OpConstantFalse %bool
+%float_9_99999994en09 = OpConstant %float 9.99999994e-09
+%float_0 = OpConstant %float 0
+%_ptr_Input_bool = OpTypePointer Input %bool
+%sk_Clockwise = OpVariable %_ptr_Input_bool Input
 %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
 %sk_FragColor = OpVariable %_ptr_Output_v4float Output
-%bool = OpTypeBool
-%_ptr_Input_bool = OpTypePointer Input %bool
-%sk_Clockwise = OpVariable %_ptr_Input_bool Input
 %_UniformBuffer = OpTypeStruct %v4float %v4float
 %_ptr_Uniform__UniformBuffer = OpTypePointer Uniform %_UniformBuffer
-%11 = OpVariable %_ptr_Uniform__UniformBuffer Uniform
+%17 = OpVariable %_ptr_Uniform__UniformBuffer Uniform
 %v2float = OpTypeVector %float 2
 %_ptr_Function_v2float = OpTypePointer Function %v2float
-%15 = OpTypeFunction %float %_ptr_Function_v2float %_ptr_Function_v2float
+%22 = OpTypeFunction %float %_ptr_Function_v2float %_ptr_Function_v2float
 %float_1 = OpConstant %float 1
-%float_0 = OpConstant %float 0
 %_ptr_Function_float = OpTypePointer Function %float
 %void = OpTypeVoid
-%97 = OpTypeFunction %void
+%103 = OpTypeFunction %void
 %_ptr_Uniform_v4float = OpTypePointer Uniform %v4float
 %int = OpTypeInt 32 1
 %int_0 = OpConstant %int 0
 %int_1 = OpConstant %int 1
-%color_burn_component_Qhh2h2 = OpFunction %float None %15
-%17 = OpFunctionParameter %_ptr_Function_v2float
-%18 = OpFunctionParameter %_ptr_Function_v2float
-%19 = OpLabel
-%delta = OpVariable %_ptr_Function_float Function
-%20 = OpLoad %v2float %18
-%21 = OpCompositeExtract %float %20 1
-%22 = OpLoad %v2float %18
-%23 = OpCompositeExtract %float %22 0
-%24 = OpFOrdEqual %bool %21 %23
-OpSelectionMerge %27 None
-OpBranchConditional %24 %25 %26
+%color_burn_component_Qhh2h2 = OpFunction %float None %22
+%23 = OpFunctionParameter %_ptr_Function_v2float
+%24 = OpFunctionParameter %_ptr_Function_v2float
 %25 = OpLabel
-%28 = OpLoad %v2float %17
-%29 = OpCompositeExtract %float %28 1
-%30 = OpLoad %v2float %18
-%31 = OpCompositeExtract %float %30 1
-%32 = OpFMul %float %29 %31
-%33 = OpLoad %v2float %17
-%34 = OpCompositeExtract %float %33 0
-%36 = OpLoad %v2float %18
+%delta = OpVariable %_ptr_Function_float Function
+%26 = OpLoad %v2float %24
+%27 = OpCompositeExtract %float %26 1
+%28 = OpLoad %v2float %24
+%29 = OpCompositeExtract %float %28 0
+%30 = OpFOrdEqual %bool %27 %29
+OpSelectionMerge %33 None
+OpBranchConditional %30 %31 %32
+%31 = OpLabel
+%34 = OpLoad %v2float %23
+%35 = OpCompositeExtract %float %34 1
+%36 = OpLoad %v2float %24
 %37 = OpCompositeExtract %float %36 1
-%38 = OpFSub %float %float_1 %37
-%39 = OpFMul %float %34 %38
-%40 = OpFAdd %float %32 %39
-%41 = OpLoad %v2float %18
-%42 = OpCompositeExtract %float %41 0
-%43 = OpLoad %v2float %17
-%44 = OpCompositeExtract %float %43 1
-%45 = OpFSub %float %float_1 %44
-%46 = OpFMul %float %42 %45
-%47 = OpFAdd %float %40 %46
-OpReturnValue %47
-%26 = OpLabel
-%48 = OpLoad %v2float %17
-%49 = OpCompositeExtract %float %48 0
-%51 = OpFOrdEqual %bool %49 %float_0
-OpSelectionMerge %54 None
-OpBranchConditional %51 %52 %53
-%52 = OpLabel
-%55 = OpLoad %v2float %18
-%56 = OpCompositeExtract %float %55 0
-%57 = OpLoad %v2float %17
-%58 = OpCompositeExtract %float %57 1
-%59 = OpFSub %float %float_1 %58
-%60 = OpFMul %float %56 %59
-OpReturnValue %60
-%53 = OpLabel
-%64 = OpLoad %v2float %18
-%65 = OpCompositeExtract %float %64 1
-%66 = OpLoad %v2float %18
-%67 = OpCompositeExtract %float %66 1
-%68 = OpLoad %v2float %18
-%69 = OpCompositeExtract %float %68 0
-%70 = OpFSub %float %67 %69
-%71 = OpLoad %v2float %17
+%38 = OpFMul %float %35 %37
+%39 = OpLoad %v2float %23
+%40 = OpCompositeExtract %float %39 0
+%42 = OpLoad %v2float %24
+%43 = OpCompositeExtract %float %42 1
+%44 = OpFSub %float %float_1 %43
+%45 = OpFMul %float %40 %44
+%46 = OpFAdd %float %38 %45
+%47 = OpLoad %v2float %24
+%48 = OpCompositeExtract %float %47 0
+%49 = OpLoad %v2float %23
+%50 = OpCompositeExtract %float %49 1
+%51 = OpFSub %float %float_1 %50
+%52 = OpFMul %float %48 %51
+%53 = OpFAdd %float %46 %52
+OpReturnValue %53
+%32 = OpLabel
+%54 = OpLoad %v2float %23
+%55 = OpCompositeExtract %float %54 0
+%56 = OpFOrdEqual %bool %55 %float_0
+OpSelectionMerge %59 None
+OpBranchConditional %56 %57 %58
+%57 = OpLabel
+%60 = OpLoad %v2float %24
+%61 = OpCompositeExtract %float %60 0
+%62 = OpLoad %v2float %23
+%63 = OpCompositeExtract %float %62 1
+%64 = OpFSub %float %float_1 %63
+%65 = OpFMul %float %61 %64
+OpReturnValue %65
+%58 = OpLabel
+%69 = OpLoad %v2float %24
+%70 = OpCompositeExtract %float %69 1
+%71 = OpLoad %v2float %24
 %72 = OpCompositeExtract %float %71 1
-%73 = OpFMul %float %70 %72
-%74 = OpLoad %v2float %17
-%75 = OpCompositeExtract %float %74 0
-%76 = OpFDiv %float %73 %75
-%77 = OpFSub %float %65 %76
-%63 = OpExtInst %float %1 FMax %float_0 %77
-OpStore %delta %63
-%78 = OpLoad %float %delta
-%79 = OpLoad %v2float %17
-%80 = OpCompositeExtract %float %79 1
-%81 = OpFMul %float %78 %80
-%82 = OpLoad %v2float %17
-%83 = OpCompositeExtract %float %82 0
-%84 = OpLoad %v2float %18
-%85 = OpCompositeExtract %float %84 1
-%86 = OpFSub %float %float_1 %85
-%87 = OpFMul %float %83 %86
-%88 = OpFAdd %float %81 %87
-%89 = OpLoad %v2float %18
-%90 = OpCompositeExtract %float %89 0
-%91 = OpLoad %v2float %17
-%92 = OpCompositeExtract %float %91 1
-%93 = OpFSub %float %float_1 %92
-%94 = OpFMul %float %90 %93
-%95 = OpFAdd %float %88 %94
-OpReturnValue %95
-%54 = OpLabel
-OpBranch %27
-%27 = OpLabel
+%73 = OpLoad %v2float %24
+%74 = OpCompositeExtract %float %73 0
+%75 = OpFSub %float %72 %74
+%76 = OpLoad %v2float %23
+%77 = OpCompositeExtract %float %76 1
+%78 = OpFMul %float %75 %77
+%79 = OpLoad %v2float %23
+%80 = OpCompositeExtract %float %79 0
+%81 = OpLoad %float %_kGuardedDivideEpsilon
+%82 = OpFAdd %float %80 %81
+%83 = OpFDiv %float %78 %82
+%84 = OpFSub %float %70 %83
+%68 = OpExtInst %float %1 FMax %float_0 %84
+OpStore %delta %68
+%85 = OpLoad %v2float %23
+%86 = OpCompositeExtract %float %85 1
+%87 = OpFMul %float %68 %86
+%88 = OpLoad %v2float %23
+%89 = OpCompositeExtract %float %88 0
+%90 = OpLoad %v2float %24
+%91 = OpCompositeExtract %float %90 1
+%92 = OpFSub %float %float_1 %91
+%93 = OpFMul %float %89 %92
+%94 = OpFAdd %float %87 %93
+%95 = OpLoad %v2float %24
+%96 = OpCompositeExtract %float %95 0
+%97 = OpLoad %v2float %23
+%98 = OpCompositeExtract %float %97 1
+%99 = OpFSub %float %float_1 %98
+%100 = OpFMul %float %96 %99
+%101 = OpFAdd %float %94 %100
+OpReturnValue %101
+%59 = OpLabel
+OpBranch %33
+%33 = OpLabel
 OpUnreachable
 OpFunctionEnd
-%main = OpFunction %void None %97
-%98 = OpLabel
-%105 = OpVariable %_ptr_Function_v2float Function
-%110 = OpVariable %_ptr_Function_v2float Function
-%115 = OpVariable %_ptr_Function_v2float Function
-%119 = OpVariable %_ptr_Function_v2float Function
-%124 = OpVariable %_ptr_Function_v2float Function
-%128 = OpVariable %_ptr_Function_v2float Function
-%99 = OpAccessChain %_ptr_Uniform_v4float %11 %int_0
-%103 = OpLoad %v4float %99
-%104 = OpVectorShuffle %v2float %103 %103 0 3
-OpStore %105 %104
-%106 = OpAccessChain %_ptr_Uniform_v4float %11 %int_1
-%108 = OpLoad %v4float %106
-%109 = OpVectorShuffle %v2float %108 %108 0 3
-OpStore %110 %109
-%111 = OpFunctionCall %float %color_burn_component_Qhh2h2 %105 %110
-%112 = OpAccessChain %_ptr_Uniform_v4float %11 %int_0
-%113 = OpLoad %v4float %112
-%114 = OpVectorShuffle %v2float %113 %113 1 3
-OpStore %115 %114
-%116 = OpAccessChain %_ptr_Uniform_v4float %11 %int_1
-%117 = OpLoad %v4float %116
-%118 = OpVectorShuffle %v2float %117 %117 1 3
-OpStore %119 %118
-%120 = OpFunctionCall %float %color_burn_component_Qhh2h2 %115 %119
-%121 = OpAccessChain %_ptr_Uniform_v4float %11 %int_0
-%122 = OpLoad %v4float %121
-%123 = OpVectorShuffle %v2float %122 %122 2 3
-OpStore %124 %123
-%125 = OpAccessChain %_ptr_Uniform_v4float %11 %int_1
-%126 = OpLoad %v4float %125
-%127 = OpVectorShuffle %v2float %126 %126 2 3
-OpStore %128 %127
-%129 = OpFunctionCall %float %color_burn_component_Qhh2h2 %124 %128
-%130 = OpAccessChain %_ptr_Uniform_v4float %11 %int_0
-%131 = OpLoad %v4float %130
-%132 = OpCompositeExtract %float %131 3
-%133 = OpAccessChain %_ptr_Uniform_v4float %11 %int_0
-%134 = OpLoad %v4float %133
-%135 = OpCompositeExtract %float %134 3
-%136 = OpFSub %float %float_1 %135
-%137 = OpAccessChain %_ptr_Uniform_v4float %11 %int_1
-%138 = OpLoad %v4float %137
-%139 = OpCompositeExtract %float %138 3
-%140 = OpFMul %float %136 %139
-%141 = OpFAdd %float %132 %140
-%142 = OpCompositeConstruct %v4float %111 %120 %129 %141
-OpStore %sk_FragColor %142
+%main = OpFunction %void None %103
+%104 = OpLabel
+%111 = OpVariable %_ptr_Function_v2float Function
+%116 = OpVariable %_ptr_Function_v2float Function
+%121 = OpVariable %_ptr_Function_v2float Function
+%125 = OpVariable %_ptr_Function_v2float Function
+%130 = OpVariable %_ptr_Function_v2float Function
+%134 = OpVariable %_ptr_Function_v2float Function
+%9 = OpSelect %float %false %float_9_99999994en09 %float_0
+OpStore %_kGuardedDivideEpsilon %9
+%105 = OpAccessChain %_ptr_Uniform_v4float %17 %int_0
+%109 = OpLoad %v4float %105
+%110 = OpVectorShuffle %v2float %109 %109 0 3
+OpStore %111 %110
+%112 = OpAccessChain %_ptr_Uniform_v4float %17 %int_1
+%114 = OpLoad %v4float %112
+%115 = OpVectorShuffle %v2float %114 %114 0 3
+OpStore %116 %115
+%117 = OpFunctionCall %float %color_burn_component_Qhh2h2 %111 %116
+%118 = OpAccessChain %_ptr_Uniform_v4float %17 %int_0
+%119 = OpLoad %v4float %118
+%120 = OpVectorShuffle %v2float %119 %119 1 3
+OpStore %121 %120
+%122 = OpAccessChain %_ptr_Uniform_v4float %17 %int_1
+%123 = OpLoad %v4float %122
+%124 = OpVectorShuffle %v2float %123 %123 1 3
+OpStore %125 %124
+%126 = OpFunctionCall %float %color_burn_component_Qhh2h2 %121 %125
+%127 = OpAccessChain %_ptr_Uniform_v4float %17 %int_0
+%128 = OpLoad %v4float %127
+%129 = OpVectorShuffle %v2float %128 %128 2 3
+OpStore %130 %129
+%131 = OpAccessChain %_ptr_Uniform_v4float %17 %int_1
+%132 = OpLoad %v4float %131
+%133 = OpVectorShuffle %v2float %132 %132 2 3
+OpStore %134 %133
+%135 = OpFunctionCall %float %color_burn_component_Qhh2h2 %130 %134
+%136 = OpAccessChain %_ptr_Uniform_v4float %17 %int_0
+%137 = OpLoad %v4float %136
+%138 = OpCompositeExtract %float %137 3
+%139 = OpAccessChain %_ptr_Uniform_v4float %17 %int_0
+%140 = OpLoad %v4float %139
+%141 = OpCompositeExtract %float %140 3
+%142 = OpFSub %float %float_1 %141
+%143 = OpAccessChain %_ptr_Uniform_v4float %17 %int_1
+%144 = OpLoad %v4float %143
+%145 = OpCompositeExtract %float %144 3
+%146 = OpFMul %float %142 %145
+%147 = OpFAdd %float %138 %146
+%148 = OpCompositeConstruct %v4float %117 %126 %135 %147
+OpStore %sk_FragColor %148
 OpReturn
 OpFunctionEnd

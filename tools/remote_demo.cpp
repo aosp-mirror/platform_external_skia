@@ -6,7 +6,6 @@
  */
 
 #include <chrono>
-#include <err.h>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -16,6 +15,7 @@
 #include <thread>
 #include <unistd.h>
 
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkGraphics.h"
 #include "include/core/SkSurface.h"
 #include "include/private/chromium/SkChromeRemoteGlyphCache.h"
@@ -74,14 +74,12 @@ static bool write_SkData(int fd, const SkData& data) {
     size_t size = data.size();
     ssize_t bytesWritten = ::write(fd, &size, sizeof(size));
     if (bytesWritten < 0) {
-        err(1,"Failed write %zu", size);
-        return false;
+        SK_ABORT("Failed write %zu", size);
     }
 
     bytesWritten = ::write(fd, data.data(), data.size());
     if (bytesWritten < 0) {
-        err(1,"Failed write %zu", size);
-        return false;
+        SK_ABORT("Failed write %zu", size);
     }
 
     return true;
@@ -92,7 +90,7 @@ static sk_sp<SkData> read_SkData(int fd) {
     ssize_t readSize = ::read(fd, &size, sizeof(size));
     if (readSize <= 0) {
         if (readSize < 0) {
-            err(1, "Failed read %zu", size);
+            SK_ABORT("Failed read %zu", size);
         }
         return nullptr;
     }
@@ -106,7 +104,7 @@ static sk_sp<SkData> read_SkData(int fd) {
         sizeRead = ::read(fd, &data[totalRead], size - totalRead);
         if (sizeRead <= 0) {
             if (readSize < 0) {
-                err(1, "Failed read %zu", size);
+                SK_ABORT("Failed read %zu", size);
             }
             return nullptr;
         }
@@ -141,7 +139,7 @@ static bool push_font_data(const SkPicture& pic, SkStrikeServer* strikeServer,
     const SkIRect bounds = pic.cullRect().round();
     const SkSurfaceProps props(0, kRGB_H_SkPixelGeometry);
     std::unique_ptr<SkCanvas> filter = strikeServer->makeAnalysisCanvas(
-            bounds.width(), bounds.height(), props, std::move(colorSpace), true);
+            bounds.width(), bounds.height(), props, std::move(colorSpace), true, true);
     pic.playback(filter.get());
 
     std::vector<uint8_t> fontData;

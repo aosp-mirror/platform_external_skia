@@ -8,27 +8,25 @@
 #ifndef SkLinearGradient_DEFINED
 #define SkLinearGradient_DEFINED
 
-#include "src/shaders/gradients/SkGradientShaderPriv.h"
+#include "src/shaders/gradients/SkGradientShaderBase.h"
 
-class SkLinearGradient : public SkGradientShaderBase {
+class SkLinearGradient final : public SkGradientShaderBase {
 public:
     SkLinearGradient(const SkPoint pts[2], const Descriptor&);
 
-    GradientType asAGradient(GradientInfo* info) const override;
+    GradientType asGradient(GradientInfo* info, SkMatrix* localMatrix) const override;
 #if SK_SUPPORT_GPU
     std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs&) const override;
 #endif
-    void addToKey(SkShaderCodeDictionary*,
-                  SkBackend,
-                  SkPaintParamsKeyBuilder*,
-                  SkUniformBlock*) const override;
+#ifdef SK_GRAPHITE_ENABLED
+    void addToKey(const skgpu::graphite::KeyContext&,
+                  skgpu::graphite::PaintParamsKeyBuilder*,
+                  skgpu::graphite::PipelineDataGatherer*) const override;
+#endif
 
 protected:
     SkLinearGradient(SkReadBuffer& buffer);
     void flatten(SkWriteBuffer& buffer) const override;
-#ifdef SK_ENABLE_LEGACY_SHADERCONTEXT
-    Context* onMakeContext(const ContextRec&, SkArenaAlloc*) const override;
-#endif
 
     void appendGradientStages(SkArenaAlloc* alloc, SkRasterPipeline* tPipeline,
                               SkRasterPipeline* postPipeline) const final;
@@ -37,6 +35,7 @@ protected:
                          skvm::Coord coord, skvm::I32* mask) const final;
 
 private:
+    friend void ::SkRegisterLinearGradientShaderFlattenable();
     SK_FLATTENABLE_HOOKS(SkLinearGradient)
 
     class LinearGradient4fContext;

@@ -10,9 +10,12 @@
 
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkNoncopyable.h"
 #include "include/private/SkOpts_spi.h"
-#include "include/private/SkTLogic.h"
+#include "include/private/base/SkNoncopyable.h"
+#include "include/private/base/SkTLogic.h"
+
+#include <string>
+#include <string_view>
 
 class SkChecksum : SkNoncopyable {
 public:
@@ -60,6 +63,14 @@ struct SkGoodHash {
 
     uint32_t operator()(const SkString& k) const {
         return SkOpts::hash_fn(k.c_str(), k.size(), 0);
+    }
+
+    uint32_t operator()(const std::string& k) const {
+        return SkOpts::hash_fn(k.c_str(), k.size(), 0);
+    }
+
+    uint32_t operator()(std::string_view k) const {
+        return SkOpts::hash_fn(k.data(), k.size(), 0);
     }
 };
 

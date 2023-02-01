@@ -6,11 +6,32 @@
  */
 
 #include "include/codec/SkAndroidCodec.h"
+
 #include "include/codec/SkCodec.h"
-#include "include/core/SkPixmap.h"
-#include "src/codec/SkAndroidCodecAdapter.h"
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkData.h"
+#include "include/core/SkEncodedImageFormat.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkStream.h"
+#include "include/private/base/SkTemplates.h"
+#include "modules/skcms/skcms.h"
 #include "src/codec/SkCodecPriv.h"
 #include "src/codec/SkSampledCodec.h"
+
+#if defined(SK_CODEC_DECODES_WEBP) || defined(SK_CODEC_DECODES_RAW) || \
+        defined(SK_HAS_WUFFS_LIBRARY) || defined(SK_CODEC_DECODES_AVIF)
+#include "src/codec/SkAndroidCodecAdapter.h"
+#endif
+
+#include <algorithm>
+#include <cstdint>
+#include <utility>
+
+class SkPngChunkReader;
+struct SkGainmapInfo;
 
 static bool is_valid_sample_size(int sampleSize) {
     // FIXME: As Leon has mentioned elsewhere, surely there is also a maximum sampleSize?
@@ -83,7 +104,9 @@ std::unique_ptr<SkAndroidCodec> SkAndroidCodec::MakeFromCodec(std::unique_ptr<Sk
         case SkEncodedImageFormat::kBMP:
         case SkEncodedImageFormat::kWBMP:
         case SkEncodedImageFormat::kHEIF:
+#ifndef SK_CODEC_DECODES_AVIF
         case SkEncodedImageFormat::kAVIF:
+#endif
             return std::make_unique<SkSampledCodec>(codec.release());
 #ifdef SK_HAS_WUFFS_LIBRARY
         case SkEncodedImageFormat::kGIF:
@@ -94,7 +117,11 @@ std::unique_ptr<SkAndroidCodec> SkAndroidCodec::MakeFromCodec(std::unique_ptr<Sk
 #ifdef SK_CODEC_DECODES_RAW
         case SkEncodedImageFormat::kDNG:
 #endif
-#if defined(SK_CODEC_DECODES_WEBP) || defined(SK_CODEC_DECODES_RAW) || defined(SK_HAS_WUFFS_LIBRARY)
+#ifdef SK_CODEC_DECODES_AVIF
+        case SkEncodedImageFormat::kAVIF:
+#endif
+#if defined(SK_CODEC_DECODES_WEBP) || defined(SK_CODEC_DECODES_RAW) || \
+        defined(SK_HAS_WUFFS_LIBRARY) || defined(SK_CODEC_DECODES_AVIF)
             return std::make_unique<SkAndroidCodecAdapter>(codec.release());
 #endif
 
@@ -371,4 +398,9 @@ SkCodec::Result SkAndroidCodec::getAndroidPixels(const SkImageInfo& requestInfo,
 SkCodec::Result SkAndroidCodec::getAndroidPixels(const SkImageInfo& info, void* pixels,
         size_t rowBytes) {
     return this->getAndroidPixels(info, pixels, rowBytes, nullptr);
+}
+
+bool SkAndroidCodec::getAndroidGainmap(SkGainmapInfo* info,
+                                       std::unique_ptr<SkStream>* outGainmapImageStream) {
+    return fCodec->onGetGainmapInfo(info, outGainmapImageStream);
 }

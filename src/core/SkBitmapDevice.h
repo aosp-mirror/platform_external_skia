@@ -30,8 +30,9 @@ class SkRRect;
 class SkSurface;
 class SkSurfaceProps;
 struct SkPoint;
-struct SkCustomMesh;
-
+#ifdef SK_ENABLE_SKSL
+class SkMesh;
+#endif
 ///////////////////////////////////////////////////////////////////////////////
 class SkBitmapDevice : public SkBaseDevice {
 public:
@@ -86,9 +87,9 @@ protected:
                        const SkSamplingOptions&, const SkPaint&,
                        SkCanvas::SrcRectConstraint) override;
 
-    void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&) override;
+    void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&, bool) override;
 #ifdef SK_ENABLE_SKSL
-    void drawCustomMesh(SkCustomMesh, sk_sp<SkBlender>, const SkPaint&) override;
+    void drawMesh(const SkMesh&, sk_sp<SkBlender>, const SkPaint&) override;
 #endif
 
     void drawAtlas(const SkRSXform[], const SkRect[], const SkColor[], int count, sk_sp<SkBlender>,
@@ -102,12 +103,15 @@ protected:
 
     sk_sp<SkSpecialImage> makeSpecial(const SkBitmap&) override;
     sk_sp<SkSpecialImage> makeSpecial(const SkImage*) override;
-    sk_sp<SkSpecialImage> snapSpecial(const SkIRect&, bool = false) override;
+    sk_sp<SkSpecialImage> snapSpecial(const SkIRect&, bool forceCopy = false) override;
     void setImmutable() override { fBitmap.setImmutable(); }
 
     ///////////////////////////////////////////////////////////////////////////
 
-    void onDrawGlyphRunList(SkCanvas*, const SkGlyphRunList&, const SkPaint&) override;
+    void onDrawGlyphRunList(SkCanvas*,
+                            const sktext::GlyphRunList&,
+                            const SkPaint& initialPaint,
+                            const SkPaint& drawingPaint) override;
     bool onReadPixels(const SkPixmap&, int x, int y) override;
     bool onWritePixels(const SkPixmap&, int, int) override;
     bool onPeekPixels(SkPixmap*) override;
@@ -153,7 +157,7 @@ private:
     SkBitmap    fBitmap;
     void*       fRasterHandle = nullptr;
     SkRasterClipStack  fRCStack;
-    SkGlyphRunListPainter fGlyphPainter;
+    SkGlyphRunListPainterCPU fGlyphPainter;
 
 
     using INHERITED = SkBaseDevice;

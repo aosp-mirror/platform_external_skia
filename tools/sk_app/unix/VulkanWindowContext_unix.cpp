@@ -6,10 +6,7 @@
  * found in the LICENSE file.
  */
 
-#include "include/gpu/vk/GrVkVulkan.h"
-
-#include "src/gpu/vk/GrVkInterface.h"
-#include "src/gpu/vk/GrVkUtil.h"
+#include "src/gpu/ganesh/vk/GrVkUtil.h"
 
 #include "tools/gpu/vk/VkTestUtils.h"
 
@@ -26,6 +23,7 @@ std::unique_ptr<WindowContext> MakeVulkanForXlib(const XlibWindowInfo& info,
                                                  const DisplayParams& displayParams) {
     PFN_vkGetInstanceProcAddr instProc;
     if (!sk_gpu_test::LoadVkLibraryAndGetProcAddrFuncs(&instProc)) {
+        SkDebugf("Could not load vulkan library\n");
         return nullptr;
     }
 
@@ -64,9 +62,9 @@ std::unique_ptr<WindowContext> MakeVulkanForXlib(const XlibWindowInfo& info,
                     instProc(instance, "vkGetPhysicalDeviceXcbPresentationSupportKHR");
         }
 
-
         Display* display = info.fDisplay;
-        VisualID visualID = info.fVisualInfo->visualid;
+        VisualID visualID = XVisualIDFromVisual(DefaultVisual(info.fDisplay,
+                                                              DefaultScreen(info.fDisplay)));
         VkBool32 check = getPhysicalDeviceXcbPresentationSupportKHR(physDev,
                                                                     queueFamilyIndex,
                                                                     XGetXCBConnection(display),

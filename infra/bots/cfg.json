@@ -10,7 +10,7 @@
     "ASAN",
     "AbandonGpuContext",
     "Coverage",
-    "Graphite",
+    "NoPrecompile",
     "MSAN",
     "TSAN",
     "Valgrind",

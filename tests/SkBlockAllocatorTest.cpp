@@ -5,10 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "src/core/SkBlockAllocator.h"
+#include "include/core/SkTypes.h"
+#include "src/base/SkBlockAllocator.h"
 #include "tests/Test.h"
 
+#include <cstdint>
 #include <cstring>
+#include <new>
+#include <vector>
 
 using Block = SkBlockAllocator::Block;
 using GrowthPolicy = SkBlockAllocator::GrowthPolicy;

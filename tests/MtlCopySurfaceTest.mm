@@ -7,18 +7,18 @@
 
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/mtl/GrMtlGpu.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrProxyProvider.h"
+#include "src/gpu/ganesh/mtl/GrMtlGpu.h"
 #include "tests/Test.h"
 
 #import <Metal/Metal.h>
 #import <MetalKit/MTKView.h>
 
-#include "src/gpu/mtl/GrMtlCaps.h"
-#include "src/gpu/mtl/GrMtlTextureRenderTarget.h"
+#include "src/gpu/ganesh/mtl/GrMtlCaps.h"
+#include "src/gpu/ganesh/mtl/GrMtlTextureRenderTarget.h"
 
-DEF_GPUTEST_FOR_METAL_CONTEXT(MtlCopySurfaceTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_METAL_CONTEXT(MtlCopySurfaceTest, reporter, ctxInfo) {
     if (@available(macOS 11.0, iOS 9.0, *)) {
         static const int kWidth = 1024;
         static const int kHeight = 768;
@@ -50,7 +50,8 @@ DEF_GPUTEST_FOR_METAL_CONTEXT(MtlCopySurfaceTest, reporter, ctxInfo) {
                                              kTopLeft_GrSurfaceOrigin,
                                              GrMipmapped::kNo,
                                              SkBackingFit::kExact,
-                                             SkBudgeted::kYes);
+                                             skgpu::Budgeted::kYes,
+                                             /*label=*/{});
 
         // TODO: GrSurfaceProxy::Copy doesn't check to see if the framebufferOnly bit is set yet.
         // Update this when it does -- it should fail.
@@ -63,11 +64,14 @@ DEF_GPUTEST_FOR_METAL_CONTEXT(MtlCopySurfaceTest, reporter, ctxInfo) {
         GrSurface* src = srcProxy->peekSurface();
         sk_sp<GrTexture> dst =
                 gpu->createTexture({kWidth, kHeight}, backendFormat, GrTextureType::k2D,
-                                   GrRenderable::kNo, 1, GrMipmapped::kNo, SkBudgeted::kNo,
-                                   GrProtected::kNo);
+                                   GrRenderable::kNo, 1, GrMipmapped::kNo, skgpu::Budgeted::kNo,
+                                   GrProtected::kNo, /*label=*/"MtlCopySurfaceTest");
 
-        bool result = gpu->copySurface(dst.get(), src, SkIRect::MakeXYWH(0, 0, kWidth, kHeight),
-                                       SkIPoint::Make(0, 0));
+        bool result = gpu->copySurface(dst.get(),
+                                       SkIRect::MakeWH(kWidth, kHeight),
+                                       src,
+                                       SkIRect::MakeWH(kWidth, kHeight),
+                                       GrSamplerState::Filter::kNearest);
         REPORTER_ASSERT(reporter, !result);
     }
 }

@@ -5,9 +5,10 @@
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
-#include "include/private/SkTArray.h"
+#include "include/private/base/SkTArray.h"
 #include "modules/skparagraph/include/DartTypes.h"
 #include "modules/skparagraph/include/Metrics.h"
+#include "modules/skparagraph/include/ParagraphPainter.h"
 #include "modules/skparagraph/include/TextStyle.h"
 #include "modules/skparagraph/src/Run.h"
 
@@ -16,7 +17,6 @@
 #include <memory>
 #include <vector>
 
-class SkCanvas;
 class SkString;
 
 namespace skia {
@@ -70,7 +70,6 @@ public:
     SkScalar width() const {
         return fAdvance.fX + (fEllipsis != nullptr ? fEllipsis->fAdvance.fX : 0);
     }
-    SkScalar shift() const { return fShift; }
     SkVector offset() const;
 
     SkScalar alphabeticBaseline() const { return fSizes.alphabeticBaseline(); }
@@ -87,7 +86,7 @@ public:
     void iterateThroughClustersInGlyphsOrder(bool reverse, bool includeGhosts, const ClustersVisitor& visitor) const;
 
     void format(TextAlign align, SkScalar maxWidth);
-    SkRect paint(SkCanvas* canvas, SkScalar x, SkScalar y);
+    void paint(ParagraphPainter* painter, SkScalar x, SkScalar y);
     void visit(SkScalar x, SkScalar y);
     void ensureTextBlobCachePopulated();
 
@@ -99,8 +98,8 @@ public:
     void setMaxRunMetrics(const InternalLineMetrics& metrics) { fMaxRunMetrics = metrics; }
     InternalLineMetrics getMaxRunMetrics() const { return fMaxRunMetrics; }
 
-    bool isFirstLine();
-    bool isLastLine();
+    bool isFirstLine() const;
+    bool isLastLine() const;
     void getRectsForRange(TextRange textRange, RectHeightStyle rectHeightStyle, RectWidthStyle rectWidthStyle, std::vector<TextBox>& boxes);
     void getRectsForPlaceholders(std::vector<TextBox>& boxes);
     PositionWithAffinity getGlyphPositionAtCoordinate(SkScalar dx);
@@ -116,20 +115,36 @@ public:
 
     SkRect extendHeight(const ClipContext& context) const;
 
-    SkScalar metricsWithoutMultiplier(TextHeightBehavior correction);
     void shiftVertically(SkScalar shift) { fOffset.fY += shift; }
+
+    void setAscentStyle(LineMetricStyle style) { fAscentStyle = style; }
+    void setDescentStyle(LineMetricStyle style) { fDescentStyle = style; }
 
     bool endsWithHardLineBreak() const;
 
 private:
-
-    std::unique_ptr<Run> shapeEllipsis(const SkString& ellipsis, const Run& run);
+    std::unique_ptr<Run> shapeEllipsis(const SkString& ellipsis, const Cluster* cluster);
     void justify(SkScalar maxWidth);
 
     void buildTextBlob(TextRange textRange, const TextStyle& style, const ClipContext& context);
-    void paintBackground(SkCanvas* canvas, SkScalar x, SkScalar y, TextRange textRange, const TextStyle& style, const ClipContext& context) const;
-    SkRect paintShadow(SkCanvas* canvas, SkScalar x, SkScalar y, TextRange textRange, const TextStyle& style, const ClipContext& context) const;
-    void paintDecorations(SkCanvas* canvas, SkScalar x, SkScalar y, TextRange textRange, const TextStyle& style, const ClipContext& context) const;
+    void paintBackground(ParagraphPainter* painter,
+                         SkScalar x,
+                         SkScalar y,
+                         TextRange textRange,
+                         const TextStyle& style,
+                         const ClipContext& context) const;
+    void paintShadow(ParagraphPainter* painter,
+                     SkScalar x,
+                     SkScalar y,
+                     TextRange textRange,
+                     const TextStyle& style,
+                     const ClipContext& context) const;
+    void paintDecorations(ParagraphPainter* painter,
+                          SkScalar x,
+                          SkScalar y,
+                          TextRange textRange,
+                          const TextStyle& style,
+                          const ClipContext& context) const;
 
     void shiftCluster(const Cluster* cluster, SkScalar shift, SkScalar prevShift);
 
@@ -157,11 +172,11 @@ private:
     LineMetricStyle fDescentStyle;
 
     struct TextBlobRecord {
-        void paint(SkCanvas* canvas, SkScalar x, SkScalar y);
+        void paint(ParagraphPainter* painter, SkScalar x, SkScalar y);
 
         sk_sp<SkTextBlob> fBlob;
         SkPoint fOffset = SkPoint::Make(0.0f, 0.0f);
-        SkPaint fPaint;
+        ParagraphPainter::SkPaintOrID fPaint;
         SkRect fBounds = SkRect::MakeEmpty();
         bool fClippingNeeded = false;
         SkRect fClipRect = SkRect::MakeEmpty();

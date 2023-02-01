@@ -2,6 +2,7 @@
 #ifndef TextStyle_DEFINED
 #define TextStyle_DEFINED
 
+#include <optional>
 #include <vector>
 #include "include/core/SkColor.h"
 #include "include/core/SkFont.h"
@@ -10,6 +11,8 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkScalar.h"
 #include "modules/skparagraph/include/DartTypes.h"
+#include "modules/skparagraph/include/FontArguments.h"
+#include "modules/skparagraph/include/ParagraphPainter.h"
 #include "modules/skparagraph/include/TextShadow.h"
 
 // TODO: Make it external so the other platforms (Android) could use it
@@ -148,7 +151,10 @@ struct PlaceholderStyle {
 class TextStyle {
 public:
     TextStyle() = default;
-    TextStyle(const TextStyle& other, bool placeholder);
+    TextStyle(const TextStyle& other) = default;
+    TextStyle& operator=(const TextStyle& other) = default;
+
+    TextStyle cloneForPlaceholder();
 
     bool equals(const TextStyle& other) const;
     bool equalsByFonts(const TextStyle& that) const;
@@ -160,18 +166,40 @@ public:
     void setColor(SkColor color) { fColor = color; }
 
     bool hasForeground() const { return fHasForeground; }
-    SkPaint getForeground() const { return fForeground; }
+    SkPaint getForeground() const {
+        const SkPaint* paint = std::get_if<SkPaint>(&fForeground);
+        return paint ? *paint : SkPaint();
+    }
+    ParagraphPainter::SkPaintOrID getForegroundPaintOrID() const {
+        return fForeground;
+    }
     void setForegroundColor(SkPaint paint) {
         fHasForeground = true;
         fForeground = std::move(paint);
     }
+    // Set the foreground to a paint ID.  This is intended for use by clients
+    // that implement a custom ParagraphPainter that can not accept an SkPaint.
+    void setForegroundPaintID(ParagraphPainter::PaintID paintID) {
+        fHasForeground = true;
+        fForeground = paintID;
+    }
     void clearForegroundColor() { fHasForeground = false; }
 
     bool hasBackground() const { return fHasBackground; }
-    SkPaint getBackground() const { return fBackground; }
+    SkPaint getBackground() const {
+        const SkPaint* paint = std::get_if<SkPaint>(&fBackground);
+        return paint ? *paint : SkPaint();
+    }
+    ParagraphPainter::SkPaintOrID getBackgroundPaintOrID() const {
+        return fBackground;
+    }
     void setBackgroundColor(SkPaint paint) {
         fHasBackground = true;
         fBackground = std::move(paint);
+    }
+    void setBackgroundPaintID(ParagraphPainter::PaintID paintID) {
+        fHasBackground = true;
+        fBackground = paintID;
     }
     void clearBackgroundColor() { fHasBackground = false; }
 
@@ -206,6 +234,12 @@ public:
     void addFontFeature(const SkString& fontFeature, int value)
         { fFontFeatures.emplace_back(fontFeature, value); }
     void resetFontFeatures() { fFontFeatures.clear(); }
+
+    // Font arguments
+    const std::optional<FontArguments>& getFontArguments() const { return fFontArguments; }
+    // The contents of the SkFontArguments will be copied into the TextStyle,
+    // and the SkFontArguments can be safely deleted after setFontArguments returns.
+    void setFontArguments(const std::optional<SkFontArguments>& args);
 
     SkScalar getFontSize() const { return fFontSize; }
     void setFontSize(SkScalar size) { fFontSize = size; }
@@ -249,7 +283,7 @@ public:
     void setPlaceholder() { fIsPlaceholder = true; }
 
 private:
-    static const std::vector<SkString> kDefaultFontFamilies;
+    static const std::vector<SkString>* kDefaultFontFamilies;
 
     Decoration fDecoration = {
             TextDecoration::kNoDecoration,
@@ -263,7 +297,7 @@ private:
 
     SkFontStyle fFontStyle;
 
-    std::vector<SkString> fFontFamilies = kDefaultFontFamilies;
+    std::vector<SkString> fFontFamilies = *kDefaultFontFamilies;
 
     SkScalar fFontSize = 14.0;
     SkScalar fHeight = 1.0;
@@ -280,9 +314,9 @@ private:
 
     SkColor fColor = SK_ColorWHITE;
     bool fHasBackground = false;
-    SkPaint fBackground;
+    ParagraphPainter::SkPaintOrID fBackground;
     bool fHasForeground = false;
-    SkPaint fForeground;
+    ParagraphPainter::SkPaintOrID fForeground;
 
     std::vector<TextShadow> fTextShadows;
 
@@ -290,6 +324,8 @@ private:
     bool fIsPlaceholder = false;
 
     std::vector<FontFeature> fFontFeatures;
+
+    std::optional<FontArguments> fFontArguments;
 };
 
 typedef size_t TextIndex;

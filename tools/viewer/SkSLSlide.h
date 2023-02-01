@@ -16,9 +16,6 @@ class SkSLSlide : public Slide {
 public:
     SkSLSlide();
 
-    // TODO: We need a way for primarily interactive slides to always be as large as the window
-    SkISize getDimensions() const override { return SkISize::MakeEmpty(); }
-
     void draw(SkCanvas* canvas) override;
     bool animate(double nanos) override;
 
@@ -37,7 +34,7 @@ private:
     SkString fSkSL;
     bool fCodeIsDirty;
     sk_sp<SkRuntimeEffect> fEffect;
-    SkAutoTMalloc<char> fInputs;
+    skia_private::AutoTMalloc<char> fInputs;
     SkTArray<sk_sp<SkShader>> fChildren;
     float fSeconds = 0.0f;
 

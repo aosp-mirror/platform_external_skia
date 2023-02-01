@@ -14,9 +14,9 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkRegion.h"
 #include "include/core/SkShader.h"
-#include "include/private/SkDeque.h"
+#include "include/private/base/SkDeque.h"
+#include "src/base/SkTLazy.h"
 #include "src/core/SkMessageBus.h"
-#include "src/core/SkTLazy.h"
 
 #if SK_SUPPORT_GPU
 class GrProxyProvider;

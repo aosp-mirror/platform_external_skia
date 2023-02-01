@@ -6,21 +6,35 @@
  */
 
 #include "include/codec/SkCodec.h"
+
+#include "include/codec/SkCodecAnimation.h"
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
+#include "include/core/SkColorPriv.h"
 #include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkData.h"
-#include "include/core/SkImage.h"
+#include "include/core/SkImage.h" // IWYU pragma: keep
+#include "include/core/SkMatrix.h"
 #include "include/core/SkStream.h"
-#include "include/private/SkHalf.h"
+#include "include/private/base/SkTemplates.h"
+#include "modules/skcms/skcms.h"
 #include "src/codec/SkCodecPriv.h"
 #include "src/codec/SkFrameHolder.h"
+#include "src/codec/SkSampler.h"
 
 // We always include and compile in these BMP codecs
 #include "src/codec/SkBmpCodec.h"
 #include "src/codec/SkWbmpCodec.h"
 
+#include <utility>
+
 #ifdef SK_HAS_ANDROID_CODEC
 #include "include/codec/SkAndroidCodec.h"
+#endif
+
+#ifdef SK_CODEC_DECODES_AVIF
+#include "src/codec/SkAvifCodec.h"
 #endif
 
 #ifdef SK_HAS_HEIF_LIBRARY
@@ -50,8 +64,6 @@
 
 #ifdef SK_HAS_WUFFS_LIBRARY
 #include "src/codec/SkWuffsCodec.h"
-#elif defined(SK_USE_LIBGIFCODEC)
-#include "SkGifCodec.h"
 #endif
 
 struct DecoderProc {
@@ -69,14 +81,15 @@ static std::vector<DecoderProc>* decoders() {
     #endif
     #ifdef SK_HAS_WUFFS_LIBRARY
         { SkWuffsCodec_IsFormat, SkWuffsCodec_MakeFromStream },
-    #elif defined(SK_USE_LIBGIFCODEC)
-        { SkGifCodec::IsGif, SkGifCodec::MakeFromStream },
     #endif
     #ifdef SK_CODEC_DECODES_PNG
         { SkIcoCodec::IsIco, SkIcoCodec::MakeFromStream },
     #endif
         { SkBmpCodec::IsBmp, SkBmpCodec::MakeFromStream },
         { SkWbmpCodec::IsWbmp, SkWbmpCodec::MakeFromStream },
+    #ifdef SK_CODEC_DECODES_AVIF
+        { SkAvifCodec::IsAvif, SkAvifCodec::MakeFromStream },
+    #endif
     #ifdef SK_CODEC_DECODES_JPEGXL
         { SkJpegxlCodec::IsJpegxl, SkJpegxlCodec::MakeFromStream },
     #endif
@@ -180,19 +193,18 @@ std::unique_ptr<SkCodec> SkCodec::MakeFromData(sk_sp<SkData> data, SkPngChunkRea
     return MakeFromStream(SkMemoryStream::Make(std::move(data)), nullptr, reader);
 }
 
-SkCodec::SkCodec(SkEncodedInfo&& info, XformFormat srcFormat, std::unique_ptr<SkStream> stream,
-                 SkEncodedOrigin origin)
-    : fEncodedInfo(std::move(info))
-    , fSrcXformFormat(srcFormat)
-    , fStream(std::move(stream))
-    , fNeedsRewind(false)
-    , fOrigin(origin)
-    , fDstInfo()
-    , fOptions()
-    , fCurrScanline(-1)
-    , fStartedIncrementalDecode(false)
-    , fAndroidCodecHandlesFrameIndex(false)
-{}
+SkCodec::SkCodec(SkEncodedInfo&& info,
+                 XformFormat srcFormat,
+                 std::unique_ptr<SkStream> stream,
+                 SkEncodedOrigin origin,
+                 sk_sp<const SkData> xmpMetadata)
+        : fEncodedInfo(std::move(info))
+        , fSrcXformFormat(srcFormat)
+        , fStream(std::move(stream))
+        , fOrigin(origin)
+        , fXmpMetadata(std::move(xmpMetadata))
+        , fDstInfo()
+        , fOptions() {}
 
 SkCodec::~SkCodec() {}
 

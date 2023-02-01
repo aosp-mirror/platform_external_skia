@@ -5,8 +5,12 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPath.h"
 #include "src/gpu/tessellate/Tessellation.h"
 #include "tests/Test.h"
+
+namespace skgpu::tess {
 
 DEF_TEST(PreChopPathCurves, reporter) {
     // These particular test cases can get stuck in infinite recursion due to limited fp32
@@ -28,11 +32,13 @@ DEF_TEST(PreChopPathCurves, reporter) {
                                 1e6f);
 
     SkMatrix m = SkMatrix::Scale(138.68622826903837f, 74192976757580.44189f);
-    skgpu::PreChopPathCurves(1/16.f, p, m, {1000, -74088852800000.f, 3000, -74088852700000.f});
+    PreChopPathCurves(1/16.f, p, m, {1000, -74088852800000.f, 3000, -74088852700000.f});
 
     m = SkMatrix::Scale(138.68622826903837f, 74192976757580.44189f*.3f);
-    skgpu::PreChopPathCurves(.25f, p, m, {1000, -22226658140000.f, 3000, -22226658130000.f});
+    PreChopPathCurves(.25f, p, m, {1000, -22226658140000.f, 3000, -22226658130000.f});
 
     m = SkMatrix::Scale(138.68622826903837f, 74192976757580.44189f/4);
-    skgpu::PreChopPathCurves(.25f, p, m, {1000, -18522213200000.f, 3000, -18522213100000.f});
+    PreChopPathCurves(.25f, p, m, {1000, -18522213200000.f, 3000, -18522213100000.f});
 }
+
+}  // namespace skgpu::tess

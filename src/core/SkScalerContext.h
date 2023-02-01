@@ -16,11 +16,10 @@
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkTypeface.h"
-#include "include/private/SkMacros.h"
+#include "include/private/base/SkMacros.h"
 #include "src/core/SkGlyph.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskGamma.h"
-#include "src/core/SkStrikeForGPU.h"
 #include "src/core/SkSurfacePriv.h"
 #include "src/core/SkWriteBuffer.h"
 
@@ -31,18 +30,13 @@ class SkPathEffect;
 class SkScalerContext;
 class SkScalerContext_DW;
 
-enum SkScalerContextFlags : uint32_t {
+enum class SkScalerContextFlags : uint32_t {
     kNone                      = 0,
     kFakeGamma                 = 1 << 0,
     kBoostContrast             = 1 << 1,
     kFakeGammaAndBoostContrast = kFakeGamma | kBoostContrast,
 };
-
-enum SkAxisAlignment : uint32_t {
-    kNone_SkAxisAlignment,
-    kX_SkAxisAlignment,
-    kY_SkAxisAlignment
-};
+SK_MAKE_BITFIELD_OPS(SkScalerContextFlags)
 
 /*
  *  To allow this to be forward-declared, it must be its own typename, rather
@@ -150,10 +144,10 @@ public:
     void    getSingleMatrix(SkMatrix*) const;
 
     /** The kind of scale which will be applied by the underlying port (pre-matrix). */
-    enum PreMatrixScale {
-        kFull_PreMatrixScale,  // The underlying port can apply both x and y scale.
-        kVertical_PreMatrixScale,  // The underlying port can only apply a y scale.
-        kVerticalInteger_PreMatrixScale  // The underlying port can only apply an integer y scale.
+    enum class PreMatrixScale {
+        kFull,  // The underlying port can apply both x and y scale.
+        kVertical,  // The underlying port can only apply a y scale.
+        kVerticalInteger  // The underlying port can only apply an integer y scale.
     };
     /**
      *  Compute useful matrices for use with sizing in underlying libraries.
@@ -356,7 +350,7 @@ public:
 
     /**
     *  Return the axis (if any) that the baseline for horizontal text should land on.
-    *  As an example, the identity matrix will return kX_SkAxisAlignment
+    *  As an example, the identity matrix will return SkAxisAlignment::kX.
     */
     SkAxisAlignment computeAxisAlignmentForHText() const;
 
@@ -379,6 +373,9 @@ protected:
      *  The fMaskFormat will already be set to a requested format but may be changed.
      */
     virtual void generateMetrics(SkGlyph* glyph, SkArenaAlloc*) = 0;
+    static bool GenerateMetricsFromPath(
+        SkGlyph* glyph, const SkPath& path, SkMask::Format format,
+        bool verticalLCD, bool a8FromLCD, bool hairline);
 
     /** Generates the contents of glyph.fImage.
      *  When called, glyph.fImage will be pointing to a pre-allocated,
@@ -389,6 +386,9 @@ protected:
      *  generateMetrics will be called before generateImage.
      */
     virtual void generateImage(const SkGlyph& glyph) = 0;
+    static void GenerateImageFromPath(
+        const SkMask& mask, const SkPath& path, const SkMaskGamma::PreBlend& maskPreBlend,
+        bool doBGR, bool verticalLCD, bool a8FromLCD, bool hairline);
 
     /** Sets the passed path to the glyph outline.
      *  If this cannot be done the path is set to empty;
@@ -433,12 +433,11 @@ private:
     // calling generateImage.
     bool fGenerateImageFromPath;
 
-    /** Returns false if the glyph has no path at all. */
     void internalGetPath(SkGlyph&, SkArenaAlloc*);
     SkGlyph internalMakeGlyph(SkPackedGlyphID, SkMask::Format, SkArenaAlloc*);
 
-    // SkMaskGamma::PreBlend converts linear masks to gamma correcting masks.
 protected:
+    // SkMaskGamma::PreBlend converts linear masks to gamma correcting masks.
     // Visible to subclasses so that generateImage can apply the pre-blend directly.
     const SkMaskGamma::PreBlend fPreBlend;
 };

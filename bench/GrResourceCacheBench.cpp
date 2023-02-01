@@ -9,11 +9,11 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrGpu.h"
-#include "src/gpu/GrGpuResource.h"
-#include "src/gpu/GrGpuResourcePriv.h"
-#include "src/gpu/GrResourceCache.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrGpu.h"
+#include "src/gpu/ganesh/GrGpuResource.h"
+#include "src/gpu/ganesh/GrGpuResourcePriv.h"
+#include "src/gpu/ganesh/GrResourceCache.h"
 
 enum {
     CACHE_SIZE_COUNT = 4096,
@@ -21,9 +21,9 @@ enum {
 
 class BenchResource : public GrGpuResource {
 public:
-    BenchResource (GrGpu* gpu)
-        : INHERITED(gpu) {
-        this->registerWithCache(SkBudgeted::kYes);
+    BenchResource(GrGpu* gpu, std::string_view label)
+        : INHERITED(gpu, label) {
+        this->registerWithCache(skgpu::Budgeted::kYes);
     }
 
     static void ComputeKey(int i, int keyData32Count, skgpu::UniqueKey* key) {
@@ -36,6 +36,7 @@ public:
 
 private:
     size_t onGpuMemorySize() const override { return 100; }
+    void onSetLabel() override{}
     const char* getResourceType() const override { return "bench"; }
     using INHERITED = GrGpuResource;
 };
@@ -44,7 +45,7 @@ static void populate_cache(GrGpu* gpu, int resourceCount, int keyData32Count) {
     for (int i = 0; i < resourceCount; ++i) {
         skgpu::UniqueKey key;
         BenchResource::ComputeKey(i, keyData32Count, &key);
-        GrGpuResource* resource = new BenchResource(gpu);
+        GrGpuResource* resource = new BenchResource(gpu, /*label=*/"BenchResource");
         resource->resourcePriv().setUniqueKey(key);
         resource->unref();
     }

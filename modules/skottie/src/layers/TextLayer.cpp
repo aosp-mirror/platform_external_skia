@@ -19,7 +19,7 @@
 #include "modules/sksg/include/SkSGPaint.h"
 #include "modules/sksg/include/SkSGPath.h"
 #include "modules/sksg/include/SkSGText.h"
-#include "src/core/SkTSearch.h"
+#include "src/base/SkTSearch.h"
 
 #include <string.h>
 
@@ -99,70 +99,6 @@ SkFontStyle FontStyle(const AnimationBuilder* abuilder, const char* style) {
     return SkFontStyle(weight, SkFontStyle::kNormal_Width, slant);
 }
 
-bool parse_glyph_path(const skjson::ObjectValue* jdata,
-                      const AnimationBuilder* abuilder,
-                      SkPath* path) {
-    // Glyph path encoding:
-    //
-    //   "data": {
-    //       "shapes": [                         // follows the shape layer format
-    //           {
-    //               "ty": "gr",                 // group shape type
-    //               "it": [                     // group items
-    //                   {
-    //                       "ty": "sh",         // actual shape
-    //                       "ks": <path data>   // animatable path format, but always static
-    //                   },
-    //                   ...
-    //               ]
-    //           },
-    //           ...
-    //       ]
-    //   }
-
-    if (!jdata) {
-        return false;
-    }
-
-    const skjson::ArrayValue* jshapes = (*jdata)["shapes"];
-    if (!jshapes) {
-        // Space/empty glyph.
-        return true;
-    }
-
-    for (const skjson::ObjectValue* jgrp : *jshapes) {
-        if (!jgrp) {
-            return false;
-        }
-
-        const skjson::ArrayValue* jit = (*jgrp)["it"];
-        if (!jit) {
-            return false;
-        }
-
-        for (const skjson::ObjectValue* jshape : *jit) {
-            if (!jshape) {
-                return false;
-            }
-
-            // Glyph paths should never be animated.  But they are encoded as
-            // animatable properties, so we use the appropriate helpers.
-            AnimationBuilder::AutoScope ascope(abuilder);
-            auto path_node = abuilder->attachPath((*jshape)["ks"]);
-            auto animators = ascope.release();
-
-            if (!path_node || !animators.empty()) {
-                return false;
-            }
-
-            // Successfully parsed a static path.  Whew.
-            path->addPath(path_node->getPath());
-        }
-    }
-
-    return true;
-}
-
 } // namespace
 
 bool AnimationBuilder::FontInfo::matches(const char family[], const char style[]) const {
@@ -220,13 +156,39 @@ void AnimationBuilder::parseFonts(const skjson::ObjectValue* jfonts,
                       jpath ? SkString(  jpath->begin(),   jpath->size()) : SkString(),
                       ParseDefault((*jfont)["ascent"] , 0.0f),
                       nullptr, // placeholder
-                      SkCustomTypefaceBuilder()
+                      CustomFont::Builder()
                   });
     }
 
+    const auto has_comp_glyphs = [](const skjson::ArrayValue* jchars) {
+        if (!jchars) {
+            return false;
+        }
+
+        for (const skjson::ObjectValue* jchar : *jchars) {
+            if (!jchar) {
+                continue;
+            }
+            if (ParseDefault<int>((*jchar)["t"], 0) == 1) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    // Historically, Skottie has been loading native fonts before embedded glyphs, unless
+    // the opposite is explicitly requested via kPreferEmbeddedFonts.  That's mostly because
+    // embedded glyphs used to be just a path representation of system fonts at export time,
+    // (and thus lower quality).
+    //
+    // OTOH embedded glyph *compositions* must be prioritized, as they are presumably more
+    // expressive than the system font equivalent.
+    const auto prioritize_embedded_fonts =
+            (fFlags & Animation::Builder::kPreferEmbeddedFonts) || has_comp_glyphs(jchars);
+
     // Optional pass.
-    if (jchars && (fFlags & Animation::Builder::kPreferEmbeddedFonts) &&
-        this->resolveEmbeddedTypefaces(*jchars)) {
+    if (jchars && prioritize_embedded_fonts && this->resolveEmbeddedTypefaces(*jchars)) {
         return;
     }
 
@@ -236,8 +198,8 @@ void AnimationBuilder::parseFonts(const skjson::ObjectValue* jfonts,
     }
 
     // Embedded typeface fallback.
-    if (jchars && !(fFlags & Animation::Builder::kPreferEmbeddedFonts) &&
-        this->resolveEmbeddedTypefaces(*jchars)) {
+    if (jchars && !prioritize_embedded_fonts) {
+        this->resolveEmbeddedTypefaces(*jchars);
     }
 }
 
@@ -291,14 +253,9 @@ bool AnimationBuilder::resolveEmbeddedTypefaces(const skjson::ArrayValue& jchars
     // Optional array of glyphs, to be associated with one of the declared fonts. E.g.
     // "chars": [
     //     {
-    //         "ch": "t",
-    //         "data": {
-    //             "shapes": [...]        // shape-layer-like geometry
-    //         },
     //         "fFamily": "Roboto",       // part of the font key
-    //         "size": 50,                // apparently ignored
     //         "style": "Regular",        // part of the font key
-    //         "w": 32.67                 // width/advance (1/100 units)
+    //         ...                        // glyph data
     //    }
     // ]
     FontInfo* current_font = nullptr;
@@ -308,32 +265,13 @@ bool AnimationBuilder::resolveEmbeddedTypefaces(const skjson::ArrayValue& jchars
             continue;
         }
 
-        const skjson::StringValue* jch = (*jchar)["ch"];
-        if (!jch) {
-            continue;
-        }
-
         const skjson::StringValue* jfamily = (*jchar)["fFamily"];
         const skjson::StringValue* jstyle  = (*jchar)["style"]; // "style", not "fStyle"...
 
-        const auto* ch_ptr = jch->begin();
-        const auto  ch_len = jch->size();
-
-        if (!jfamily || !jstyle || (SkUTF::CountUTF8(ch_ptr, ch_len) != 1)) {
+        if (!jfamily || !jstyle) {
             this->log(Logger::Level::kError, jchar, "Invalid glyph.");
             continue;
         }
-
-        const auto uni = SkUTF::NextUTF8(&ch_ptr, ch_ptr + ch_len);
-        SkASSERT(uni != -1);
-        if (!SkTFitsIn<SkGlyphID>(uni)) {
-            // Custom font keys are SkGlyphIDs.  We could implement a remapping scheme if needed,
-            // but for now direct mapping seems to work well enough.
-            this->log(Logger::Level::kError, jchar, "Unsupported glyph ID.");
-            continue;
-        }
-        const auto glyph_id = SkTo<SkGlyphID>(uni);
-
         const auto* family = jfamily->begin();
         const auto* style  = jstyle->begin();
 
@@ -351,39 +289,40 @@ bool AnimationBuilder::resolveEmbeddedTypefaces(const skjson::ArrayValue& jchars
             });
             if (!current_font) {
                 this->log(Logger::Level::kError, nullptr,
-                          "Font not found for codepoint (%d, %s, %s).", uni, family, style);
+                          "Font not found (%s, %s).", family, style);
                 continue;
             }
         }
 
-        SkPath path;
-        if (!parse_glyph_path((*jchar)["data"], this, &path)) {
-            continue;
+        if (!current_font->fCustomFontBuilder.parseGlyph(this, *jchar)) {
+            this->log(Logger::Level::kError, jchar, "Invalid glyph.");
         }
-
-        const auto advance = ParseDefault((*jchar)["w"], 0.0f);
-
-        // Interestingly, glyph paths are defined in a percentage-based space,
-        // regardless of declared glyph size...
-        static constexpr float kPtScale = 0.01f;
-
-        // Normalize the path and advance for 1pt.
-        path.transform(SkMatrix::Scale(kPtScale, kPtScale));
-
-        current_font->fCustomBuilder.setGlyph(glyph_id, advance * kPtScale, path);
     }
 
     // Final pass to commit custom typefaces.
     auto has_unresolved = false;
-    fFonts.foreach([&has_unresolved](const SkString&, FontInfo* finfo) {
+    std::vector<std::unique_ptr<CustomFont>> custom_fonts;
+    fFonts.foreach([&has_unresolved, &custom_fonts](const SkString&, FontInfo* finfo) {
         if (finfo->fTypeface) {
             return; // already resolved
         }
 
-        finfo->fTypeface = finfo->fCustomBuilder.detach();
+        auto font = finfo->fCustomFontBuilder.detach();
+
+        finfo->fTypeface = font->typeface();
+
+        if (font->glyphCompCount() > 0) {
+            custom_fonts.push_back(std::move(font));
+        }
 
         has_unresolved |= !finfo->fTypeface;
     });
+
+    // Stash custom font data for later use.
+    if (!custom_fonts.empty()) {
+        custom_fonts.shrink_to_fit();
+        fCustomGlyphMapper = sk_make_sp<CustomFont::GlyphCompMapper>(std::move(custom_fonts));
+    }
 
     return !has_unresolved;
 }
@@ -393,6 +332,7 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachTextLayer(const skjson::ObjectVa
     return this->attachDiscardableAdapter<TextAdapter>(jlayer,
                                                        this,
                                                        fLazyFontMgr.getMaybeNull(),
+                                                       fCustomGlyphMapper,
                                                        fLogger);
 }
 

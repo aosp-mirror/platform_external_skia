@@ -9,7 +9,7 @@
 #define sk_tools_Registry_DEFINED
 
 #include "include/core/SkTypes.h"
-#include "include/private/SkNoncopyable.h"
+#include "include/private/base/SkNoncopyable.h"
 
 namespace sk_tools {
 
@@ -45,18 +45,6 @@ public:
 
 private:
     void linkToRegistryHead() {
-#ifdef SK_BUILD_FOR_ANDROID
-        // work-around for double-initialization bug
-        {
-            Registry* reg = gHead;
-            while (reg) {
-                if (reg == this) {
-                    return;
-                }
-                reg = reg->fChain;
-            }
-        }
-#endif
         fChain = gHead;
         gHead  = this;
     }

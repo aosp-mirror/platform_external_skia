@@ -24,8 +24,9 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkDashPathEffect.h"
 #include "include/effects/SkGradientShader.h"
-#include "include/private/SkTPin.h"
+#include "include/private/base/SkTPin.h"
 #include "src/core/SkColorSpaceXformSteps.h"
+#include "src/core/SkImageInfoPriv.h"
 
 #include <math.h>
 #include <string.h>
@@ -201,7 +202,7 @@ DEF_SIMPLE_GM(p3, canvas, 450, 1300) {
 
         SkPaint paint;
         paint.setShader(SkGradientShader::MakeLinear(points, colors, p3,
-                                                     nullptr, SK_ARRAY_COUNT(colors),
+                                                     nullptr, std::size(colors),
                                                      SkTileMode::kClamp));
         canvas->drawRect({10,10,70,70}, paint);
         canvas->save();
@@ -228,7 +229,7 @@ DEF_SIMPLE_GM(p3, canvas, 450, 1300) {
         SkPaint paint;
         paint.setShader(
                 SkGradientShader::MakeLinear(points, colors, p3,
-                                             nullptr, SK_ARRAY_COUNT(colors),
+                                             nullptr, std::size(colors),
                                              SkTileMode::kClamp,
                                              SkGradientShader::kInterpolateColorsInPremul_Flag,
                                              nullptr/*local matrix*/));
@@ -256,7 +257,7 @@ DEF_SIMPLE_GM(p3, canvas, 450, 1300) {
 
         SkPaint paint;
         paint.setShader(SkGradientShader::MakeLinear(points, colors, srgb,
-                                                     nullptr, SK_ARRAY_COUNT(colors),
+                                                     nullptr, std::size(colors),
                                                      SkTileMode::kClamp));
         canvas->drawRect({10,10,70,70}, paint);
         canvas->save();
@@ -283,7 +284,7 @@ DEF_SIMPLE_GM(p3, canvas, 450, 1300) {
         SkPaint paint;
         paint.setShader(
                 SkGradientShader::MakeLinear(points, colors, srgb,
-                                             nullptr, SK_ARRAY_COUNT(colors),
+                                             nullptr, std::size(colors),
                                              SkTileMode::kClamp,
                                              SkGradientShader::kInterpolateColorsInPremul_Flag,
                                              nullptr/*local matrix*/));
@@ -311,7 +312,7 @@ DEF_SIMPLE_GM(p3, canvas, 450, 1300) {
         SkPaint paint;
         paint.setShader(
                 SkGradientShader::MakeLinear(points, colors, p3,
-                                             nullptr, SK_ARRAY_COUNT(colors),
+                                             nullptr, std::size(colors),
                                              SkTileMode::kClamp,
                                              SkGradientShader::kInterpolateColorsInPremul_Flag,
                                              nullptr/*local matrix*/));

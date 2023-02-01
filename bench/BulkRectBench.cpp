@@ -13,9 +13,9 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/utils/SkRandom.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/gpu/GrOpsTypes.h"
-#include "src/gpu/SkGr.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include "src/gpu/ganesh/GrOpsTypes.h"
+#include "src/gpu/ganesh/SkGr.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
 
 // Benchmarks that exercise the bulk image and solid color quad APIs, under a variety of patterns:
 enum class ImageMode {
@@ -149,9 +149,10 @@ protected:
         auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
         SkMatrix view = canvas->getLocalToDeviceAs3x3();
         SkMatrixProvider matrixProvider(view);
+        SkSurfaceProps props;
         GrPaint grPaint;
-        SkPaintToGrPaint(context, sdc->colorInfo(), paint, matrixProvider, &grPaint);
-        sdc->drawQuadSet(nullptr, std::move(grPaint), GrAA::kYes, view, batch, kRectCount);
+        SkPaintToGrPaint(context, sdc->colorInfo(), paint, matrixProvider, props, &grPaint);
+        sdc->drawQuadSet(nullptr, std::move(grPaint), view, batch, kRectCount);
     }
 
     void drawSolidColorsRef(SkCanvas* canvas) const {

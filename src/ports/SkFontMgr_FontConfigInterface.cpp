@@ -11,12 +11,14 @@
 #include "include/core/SkTypeface.h"
 #include "include/ports/SkFontConfigInterface.h"
 #include "include/ports/SkFontMgr_FontConfigInterface.h"
-#include "include/private/SkMutex.h"
+#include "include/private/base/SkMutex.h"
 #include "src/core/SkFontDescriptor.h"
 #include "src/core/SkResourceCache.h"
 #include "src/core/SkTypefaceCache.h"
 #include "src/ports/SkFontConfigTypeface.h"
 #include <new>
+
+using namespace skia_private;
 
 std::unique_ptr<SkStreamAsset> SkTypeface_FCI::onOpenStream(int* ttcIndex) const {
     *ttcIndex =  this->getIdentity().fTTCIndex;
@@ -269,7 +271,7 @@ protected:
             return nullptr;
         }
 
-        SkAutoSTMalloc<4, SkFixed> axisValues(axisDefinitions.count());
+        AutoSTMalloc<4, SkFixed> axisValues(axisDefinitions.size());
         Scanner::computeAxisValues(axisDefinitions, args.getVariationDesignPosition(),
                                    axisValues, name);
 
@@ -277,7 +279,7 @@ protected:
                                                      args.getCollectionIndex(),
                                                      args.getPalette().index,
                                                      axisValues.get(),
-                                                     axisDefinitions.count(),
+                                                     axisDefinitions.size(),
                                                      args.getPalette().overrides,
                                                      args.getPalette().overrideCount);
         return sk_sp<SkTypeface>(SkTypeface_FCI::Create(std::move(fontData), std::move(name),

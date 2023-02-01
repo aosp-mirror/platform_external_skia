@@ -7,17 +7,18 @@
 
 #include "src/core/SkGlyphBuffer.h"
 #include "src/core/SkGlyphRunPainter.h"
-#include "src/core/SkStrikeForGPU.h"
+#include "src/text/StrikeForGPU.h"
 
 void SkSourceGlyphBuffer::reset() {
-    fRejectedGlyphIDs.reset();
-    fRejectedPositions.reset();
+    fRejectedGlyphIDs.clear();
+    fRejectedPositions.clear();
 }
 
-void SkDrawableGlyphBuffer::ensureSize(size_t size) {
+void SkDrawableGlyphBuffer::ensureSize(int size) {
     if (size > fMaxSize) {
         fMultiBuffer.reset(size);
         fPositions.reset(size);
+        fFormats.reset(size);
         fMaxSize = size;
     }
 
@@ -40,49 +41,37 @@ void SkDrawableGlyphBuffer::startSource(const SkZip<const SkGlyphID, const SkPoi
     SkDEBUGCODE(fPhase = kInput);
 }
 
-void SkDrawableGlyphBuffer::startBitmapDevice(
-        const SkZip<const SkGlyphID, const SkPoint>& source,
-        SkPoint origin, const SkMatrix& viewMatrix,
-        const SkGlyphPositionRoundingSpec& roundingSpec) {
+void SkDrawableGlyphBuffer::startSourceWithMatrixAdjustment(
+        const SkZip<const SkGlyphID, const SkPoint>& source, const SkMatrix& creationMatrix) {
     fInputSize = source.size();
     fAcceptedSize = 0;
 
-    // Map the positions including subpixel position.
     auto positions = source.get<1>();
-    SkMatrix matrix = viewMatrix;
-    matrix.preTranslate(origin.x(), origin.y());
-    SkPoint halfSampleFreq = roundingSpec.halfAxisSampleFreq;
-    matrix.postTranslate(halfSampleFreq.x(), halfSampleFreq.y());
-    matrix.mapPoints(fPositions, positions.data(), positions.size());
+    creationMatrix.mapPoints(fPositions, positions.data(), positions.size());
 
-    // Mask for controlling axis alignment.
-    SkIPoint mask = roundingSpec.ignorePositionFieldMask;
-
-    // Convert glyph ids and positions to packed glyph ids.
-    SkZip<const SkGlyphID, const SkPoint> withMappedPos =
-            SkMakeZip(source.get<0>(), fPositions.get());
+    // Convert from SkGlyphIDs to SkPackedGlyphIDs.
     SkGlyphVariant* packedIDCursor = fMultiBuffer.get();
-    for (auto [glyphID, pos] : withMappedPos) {
-        *packedIDCursor++ = SkPackedGlyphID{glyphID, pos, mask};
+    for (auto t : source) {
+        *packedIDCursor++ = SkPackedGlyphID{std::get<0>(t)};
     }
     SkDEBUGCODE(fPhase = kInput);
 }
 
-void SkDrawableGlyphBuffer::startGPUDevice(
+void SkDrawableGlyphBuffer::startDevicePositioning(
         const SkZip<const SkGlyphID, const SkPoint>& source,
-        const SkMatrix& drawMatrix,
+        const SkMatrix& positionMatrix,
         const SkGlyphPositionRoundingSpec& roundingSpec) {
     fInputSize = source.size();
     fAcceptedSize = 0;
 
     // Build up the mapping from source space to device space. Add the rounding constant
-    // halfSampleFreq so we just need to floor to get the device result.
-    SkMatrix device = drawMatrix;
+    // halfSampleFreq, so we just need to floor to get the device result.
+    SkMatrix positionMatrixWithRounding = positionMatrix;
     SkPoint halfSampleFreq = roundingSpec.halfAxisSampleFreq;
-    device.postTranslate(halfSampleFreq.x(), halfSampleFreq.y());
+    positionMatrixWithRounding.postTranslate(halfSampleFreq.x(), halfSampleFreq.y());
 
     auto positions = source.get<1>();
-    device.mapPoints(fPositions, positions.data(), positions.size());
+    positionMatrixWithRounding.mapPoints(fPositions, positions.data(), positions.size());
 
     auto floor = [](SkPoint pt) -> SkPoint {
         return {SkScalarFloorToScalar(pt.x()), SkScalarFloorToScalar(pt.y())};
@@ -103,7 +92,8 @@ SkString SkDrawableGlyphBuffer::dumpInput() const {
 
     SkString msg;
     for (auto [packedGlyphID, pos]
-            : SkZip<SkGlyphVariant, SkPoint>{fInputSize, fMultiBuffer.get(), fPositions.get()}) {
+            : SkZip<SkGlyphVariant, SkPoint>{
+                 SkToSizeT(fInputSize), fMultiBuffer.get(), fPositions.get()}) {
         msg.appendf("%s:(%a,%a), ", packedGlyphID.packedID().shortDump().c_str(), pos.x(), pos.y());
     }
     return msg;
@@ -114,6 +104,7 @@ void SkDrawableGlyphBuffer::reset() {
     if (fMaxSize > 200) {
         fMultiBuffer.reset();
         fPositions.reset();
+        fFormats.reset();
         fMaxSize = 0;
     }
     fInputSize = 0;

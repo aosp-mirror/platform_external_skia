@@ -11,7 +11,7 @@
 #include "tools/viewer/Slide.h"
 
 #include "include/core/SkPath.h"
-#include "include/private/SkTArray.h"
+#include "include/private/base/SkTArray.h"
 #include "include/utils/SkRandom.h"
 
 class SkParticleEffect;
@@ -23,9 +23,6 @@ class ParticlesSlide : public Slide {
 public:
     ParticlesSlide();
 
-    // TODO: We need a way for primarily interactive slides to always be as large as the window
-    SkISize getDimensions() const override { return SkISize::MakeEmpty(); }
-
     void load(SkScalar winWidth, SkScalar winHeight) override;
     void draw(SkCanvas* canvas) override;
     bool animate(double) override;
@@ -34,6 +31,8 @@ public:
                  skui::ModifierKey modifiers) override;
 
 private:
+    class TestingResourceProvider;
+
     void loadEffects(const char* dirname);
 
     SkRandom fRandom;
@@ -54,7 +53,9 @@ private:
     };
     SkTArray<RunningEffect> fRunning;
 
-    sk_sp<skresources::ResourceProvider> fResourceProvider;
+    sk_sp<TestingResourceProvider> fResourceProvider;
 };
+
+DEF_SLIDE(return new ParticlesSlide;)
 
 #endif

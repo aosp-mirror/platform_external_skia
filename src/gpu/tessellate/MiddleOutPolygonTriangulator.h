@@ -10,12 +10,12 @@
 
 #include "include/core/SkPath.h"
 #include "include/core/SkPoint.h"
-#include "include/private/SkTemplates.h"
-#include "src/core/SkMathPriv.h"
+#include "include/private/base/SkTemplates.h"
+#include "src/base/SkMathPriv.h"
 #include "src/core/SkPathPriv.h"
 #include <tuple>
 
-namespace skgpu {
+namespace skgpu::tess {
 
 // This class generates a middle-out triangulation of a polygon. Conceptually, middle-out emits one
 // large triangle with vertices on both endpoints and a middle point, then recurses on both sides of
@@ -184,7 +184,7 @@ public:
 
 private:
     constexpr static int kStackPreallocCount = 32;
-    SkAutoSTMalloc<kStackPreallocCount, StackVertex> fVertexStack;
+    skia_private::AutoSTMalloc<kStackPreallocCount, StackVertex> fVertexStack;
     SkDEBUGCODE(int fStackAllocCount;)
     StackVertex* fTop;
 };
@@ -237,6 +237,6 @@ private:
     bool fDone = false;
 };
 
-}  // namespace skgpu
+}  // namespace skgpu::tess
 
 #endif  // skgpu_tessellate_MiddleOutPolygonTriangulator_DEFINED

@@ -1,7 +1,7 @@
 // Adds compile-time JS functions to augment the CanvasKit interface.
 // Implementations in this file are considerate of GPU builds, i.e. some
 // behavior is predicated on whether or not this is being compiled alongside
-// gpu.js.
+// webgl.js or webgpu.js.
 (function(CanvasKit){
   CanvasKit._extraInitializations = CanvasKit._extraInitializations || [];
   CanvasKit._extraInitializations.push(function() {
@@ -103,6 +103,11 @@
 
     CanvasKit.setCurrentContext = CanvasKit.setCurrentContext || function() {
        // no op if this is a cpu-only build.
+    };
+
+    CanvasKit.getCurrentGrDirectContext = CanvasKit.getCurrentGrDirectContext || function() {
+      // No GrDirectContexts without a GPU backend.
+      return null;
     };
   });
 }(Module)); // When this file is loaded in, the high level object is "Module";

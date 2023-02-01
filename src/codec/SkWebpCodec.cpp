@@ -7,16 +7,32 @@
 
 #include "src/codec/SkWebpCodec.h"
 
+#include "include/codec/SkCodec.h"
 #include "include/codec/SkCodecAnimation.h"
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
-#include "include/core/SkCanvas.h"
-#include "include/private/SkTemplates.h"
-#include "include/private/SkTo.h"
-#include "src/codec/SkCodecPriv.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkStream.h"
+#include "include/private/base/SkAlign.h"
+#include "include/private/base/SkMath.h"
+#include "include/private/base/SkTFitsIn.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkTo.h"
+#include "modules/skcms/skcms.h"
 #include "src/codec/SkParseEncodedOrigin.h"
 #include "src/codec/SkSampler.h"
 #include "src/core/SkRasterPipeline.h"
+#include "src/core/SkRasterPipelineOpContexts.h"
+#include "src/core/SkRasterPipelineOpList.h"
 #include "src/core/SkStreamPriv.h"
+
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <utility>
 
 // A WebP decoder on top of (subset of) libwebp
 // For more information on WebP image format, and libwebp library, see:
@@ -28,7 +44,7 @@
 // updated accordingly. Here, we enforce using local copy in webp sub-directory.
 #include "webp/decode.h"
 #include "webp/demux.h"
-#include "webp/encode.h"
+#include "webp/mux_types.h"
 
 bool SkWebpCodec::IsWebp(const void* buf, size_t bytesRead) {
     // WEBP starts with the following:
@@ -325,18 +341,18 @@ static void blend_line(SkColorType dstCT, void* dst,
 
     p.append_load_dst(dstCT, &dst_ctx);
     if (kUnpremul_SkAlphaType == dstAt) {
-        p.append(SkRasterPipeline::premul_dst);
+        p.append(SkRasterPipelineOp::premul_dst);
     }
 
     p.append_load(srcCT, &src_ctx);
     if (srcHasAlpha) {
-        p.append(SkRasterPipeline::premul);
+        p.append(SkRasterPipelineOp::premul);
     }
 
-    p.append(SkRasterPipeline::srcover);
+    p.append(SkRasterPipelineOp::srcover);
 
     if (kUnpremul_SkAlphaType == dstAt) {
-        p.append(SkRasterPipeline::unpremul);
+        p.append(SkRasterPipelineOp::unpremul);
     }
     p.append_store(dstCT, &dst_ctx);
 

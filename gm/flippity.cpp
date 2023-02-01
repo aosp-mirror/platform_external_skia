@@ -26,9 +26,9 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/GrTypes.h"
-#include "include/private/SkTArray.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrPixmap.h"
+#include "include/private/base/SkTArray.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrPixmap.h"
 #include "src/image/SkImage_Base.h"
 #include "src/image/SkImage_Gpu.h"
 #include "tools/ToolUtils.h"
@@ -113,7 +113,7 @@ static sk_sp<SkImage> make_text_image(GrDirectContext* dContext, const char* tex
 static sk_sp<SkImage> make_reference_image(GrDirectContext* dContext,
                                            const SkTArray<sk_sp<SkImage>>& labels,
                                            bool bottomLeftOrigin) {
-    SkASSERT(kNumLabels == labels.count());
+    SkASSERT(kNumLabels == labels.size());
 
     SkImageInfo ii =
             SkImageInfo::Make(kImageSize, kImageSize, kRGBA_8888_SkColorType, kOpaque_SkAlphaType);
@@ -229,7 +229,7 @@ private:
     }
 
     void makeLabels(GrDirectContext* dContext) {
-        if (fLabels.count()) {
+        if (fLabels.size()) {
             return;
         }
 
@@ -245,7 +245,7 @@ private:
         for (int i = 0; i < kNumLabels; ++i) {
             fLabels.push_back(make_text_image(dContext, kLabelText[i], kLabelColors[i]));
         }
-        SkASSERT(kNumLabels == fLabels.count());
+        SkASSERT(kNumLabels == fLabels.size());
     }
 
     DrawResult onGpuSetup(GrDirectContext* dContext, SkString* errorMsg) override {
@@ -266,7 +266,7 @@ private:
     }
 
     void onGpuTeardown() override {
-        fLabels.reset();
+        fLabels.clear();
         fReferenceImages[0] = fReferenceImages[1] = nullptr;
     }
 

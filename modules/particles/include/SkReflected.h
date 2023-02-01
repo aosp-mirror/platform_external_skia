@@ -10,7 +10,7 @@
 
 #include "include/core/SkColor.h"
 #include "include/core/SkRefCnt.h"
-#include "include/private/SkTArray.h"
+#include "include/private/base/SkTArray.h"
 
 #include <functional>   // std::function
 #include <string.h>
@@ -157,8 +157,8 @@ public:
     // (remove a single element). Each element of the array is visited as normal.
     template <typename T, bool MEM_MOVE>
     void visit(const char* name, SkTArray<T, MEM_MOVE>& arr) {
-        arr.resize_back(this->enterArray(name, arr.count()));
-        for (int i = 0; i < arr.count(); ++i) {
+        arr.resize_back(this->enterArray(name, arr.size()));
+        for (int i = 0; i < arr.size(); ++i) {
             this->visit(nullptr, arr[i]);
         }
         this->exitArray().apply(arr);
@@ -206,7 +206,7 @@ protected:
             case Verb::kNone:
                 break;
             case Verb::kRemove:
-                for (int i = fIndex; i < arr.count() - 1; ++i) {
+                for (int i = fIndex; i < arr.size() - 1; ++i) {
                     arr[i] = arr[i + 1];
                 }
                 arr.pop_back();

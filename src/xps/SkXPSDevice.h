@@ -23,15 +23,16 @@
 #include "include/core/SkShader.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkTypeface.h"
-#include "include/private/SkTArray.h"
+#include "include/private/base/SkTArray.h"
 #include "src/core/SkBitmapDevice.h"
 #include "src/core/SkClipStackDevice.h"
 #include "src/utils/SkBitSet.h"
 #include "src/utils/win/SkAutoCoInitialize.h"
 #include "src/utils/win/SkTScopedComPtr.h"
 
-class SkGlyphRunList;
-
+namespace sktext {
+class GlyphRunList;
+}
 //#define SK_XPS_USE_DETERMINISTIC_IDS
 
 /** \class SkXPSDevice
@@ -92,9 +93,10 @@ protected:
                        const SkRect* srcOrNull, const SkRect& dst,
                        const SkSamplingOptions&, const SkPaint& paint,
                        SkCanvas::SrcRectConstraint) override;
-    void onDrawGlyphRunList(SkCanvas*, const SkGlyphRunList&, const SkPaint&) override;
-    void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&) override;
-    void drawCustomMesh(SkCustomMesh, sk_sp<SkBlender>, const SkPaint&) override;
+    void onDrawGlyphRunList(
+            SkCanvas*, const sktext::GlyphRunList&, const SkPaint&, const SkPaint&) override;
+    void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&, bool) override;
+    void drawMesh(const SkMesh&, sk_sp<SkBlender>, const SkPaint&) override;
     void drawDevice(SkBaseDevice*, const SkSamplingOptions&, const SkPaint&) override;
 
 private:
@@ -171,14 +173,14 @@ private:
         IXpsOMTileBrush** xpsBrush);
 
     HRESULT createXpsLinearGradient(
-        SkShader::GradientInfo info,
+        SkShaderBase::GradientInfo info,
         const SkAlpha alpha,
         const SkMatrix& localMatrix,
         IXpsOMMatrixTransform* xpsMatrixToUse,
         IXpsOMBrush** xpsBrush);
 
     HRESULT createXpsRadialGradient(
-        SkShader::GradientInfo info,
+        SkShaderBase::GradientInfo info,
         const SkAlpha alpha,
         const SkMatrix& localMatrix,
         IXpsOMMatrixTransform* xpsMatrixToUse,

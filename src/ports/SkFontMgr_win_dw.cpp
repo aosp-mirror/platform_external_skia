@@ -13,13 +13,13 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkMutex.h"
-#include "include/private/SkTPin.h"
+#include "include/private/base/SkMutex.h"
+#include "include/private/base/SkTPin.h"
+#include "src/base/SkUTF.h"
 #include "src/core/SkEndian.h"
 #include "src/core/SkFontDescriptor.h"
 #include "src/core/SkTypefaceCache.h"
 #include "src/ports/SkTypeface_win_dw.h"
-#include "src/utils/SkUTF.h"
 #include "src/utils/win/SkDWrite.h"
 #include "src/utils/win/SkDWriteFontFileStream.h"
 #include "src/utils/win/SkHRESULT.h"
@@ -29,6 +29,8 @@
 #include <dwrite.h>
 #include <dwrite_2.h>
 #include <dwrite_3.h>
+
+using namespace skia_private;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -531,7 +533,8 @@ sk_sp<SkTypeface> SkFontMgr_DirectWrite::makeTypefaceFromDWriteFont(
     ProtoDWriteTypeface spec = { fontFace, font, fontFamily };
     sk_sp<SkTypeface> face = fTFCache.findByProcAndRef(FindByDWriteFont, &spec);
     if (nullptr == face) {
-        face = DWriteFontTypeface::Make(fFactory.get(), fontFace, font, fontFamily, nullptr);
+        face = DWriteFontTypeface::Make(fFactory.get(), fontFace, font, fontFamily, nullptr,
+                                        SkFontArguments::Palette{0, nullptr, 0});
         if (face) {
             fTFCache.add(face);
         }
@@ -1036,7 +1039,7 @@ static HRESULT apply_fontargument_variation(SkTScopedComPtr<IDWriteFontFace>& fo
 
     UINT32 fontAxisCount = fontFace5->GetFontAxisValueCount();
     UINT32 argsCoordCount = args.getVariationDesignPosition().coordinateCount;
-    SkAutoSTMalloc<8, DWRITE_FONT_AXIS_VALUE> variation(fontAxisCount);
+    AutoSTMalloc<8, DWRITE_FONT_AXIS_VALUE> variation(fontAxisCount);
     SkTScopedComPtr<IDWriteFontResource> fontResource;
     HR(fontFace5->GetFontResource(&fontResource));
     HR(fontResource->GetDefaultFontAxisValues(variation, fontAxisCount));
@@ -1113,7 +1116,8 @@ sk_sp<SkTypeface> SkFontMgr_DirectWrite::onMakeFromStreamArgs(std::unique_ptr<Sk
                     sk_make_sp<DWriteFontTypeface::Loaders>(
                         fFactory.get(),
                         autoUnregisterFontFileLoader.detatch(),
-                        autoUnregisterFontCollectionLoader.detatch()));
+                        autoUnregisterFontCollectionLoader.detatch()),
+                    args.getPalette());
         }
     }
 

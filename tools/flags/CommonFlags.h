@@ -7,7 +7,7 @@
 #pragma once
 
 #include "include/core/SkString.h"
-#include "include/private/SkTArray.h"
+#include "include/private/base/SkTArray.h"
 #include "tools/flags/CommandLineFlags.h"
 
 namespace CommonFlags {
@@ -32,12 +32,12 @@ bool CollectImages(CommandLineFlags::StringArray dir, SkTArray<SkString>* output
  *     --allPathsVolatile
  *     --(no)gs
  *     --(no)ts
- *     --maxTessellationSegments
  *     --pr
  *     --internalSamples
  *     --disableDriverCorrectnessWorkarounds
  *     --reduceOpsTaskSplitting
  *     --dontReduceOpsTaskSplitting
+ *     --allowMSAAOnNewIntel
  */
 void SetCtxOptions(struct GrContextOptions*);
 

@@ -4,28 +4,43 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#include "include/core/SkImageEncoder.h"
 
 #include "include/core/SkBitmap.h"
+#include "include/core/SkData.h"
+#include "include/core/SkEncodedImageFormat.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkTypes.h"
+#include "include/encode/SkEncoder.h"
 #include "include/encode/SkJpegEncoder.h"
 #include "include/encode/SkPngEncoder.h"
 #include "include/encode/SkWebpEncoder.h"
-#include "src/images/SkImageEncoderPriv.h"
 
-#ifndef SK_ENCODE_JPEG
+#if SK_ENABLE_NDK_IMAGES || SK_USE_CG_ENCODER || SK_USE_WIC_ENCODER
+#include "src/images/SkImageEncoderPriv.h"
+#endif
+
+#if !defined(SK_ENCODE_JPEG)|| !defined(SK_ENCODE_PNG) || !defined(SK_ENCODE_WEBP)
+#include <memory>
+#endif
+
+#if !defined(SK_ENCODE_JPEG)
 bool SkJpegEncoder::Encode(SkWStream*, const SkPixmap&, const Options&) { return false; }
 std::unique_ptr<SkEncoder> SkJpegEncoder::Make(SkWStream*, const SkPixmap&, const Options&) {
     return nullptr;
 }
 #endif
 
-#ifndef SK_ENCODE_PNG
+#if !defined(SK_ENCODE_PNG)
 bool SkPngEncoder::Encode(SkWStream*, const SkPixmap&, const Options&) { return false; }
 std::unique_ptr<SkEncoder> SkPngEncoder::Make(SkWStream*, const SkPixmap&, const Options&) {
     return nullptr;
 }
 #endif
 
-#ifndef SK_ENCODE_WEBP
+#if !defined(SK_ENCODE_WEBP)
 bool SkWebpEncoder::Encode(SkWStream*, const SkPixmap&, const Options&) { return false; }
 #endif
 

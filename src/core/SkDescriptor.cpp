@@ -6,17 +6,16 @@
  */
 
 #include "src/core/SkDescriptor.h"
-#include <string.h>
-
-#include <new>
 
 #include "include/core/SkTypes.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTo.h"
 #include "include/private/chromium/SkChromeRemoteGlyphCache.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
-#include "src/gpu/GrResourceProvider.h"
+
+#include <string.h>
+#include <new>
 
 std::unique_ptr<SkDescriptor> SkDescriptor::Alloc(size_t length) {
     SkASSERT(length >= sizeof(SkDescriptor) && SkAlign4(length) == length);
@@ -193,7 +192,14 @@ std::optional<SkAutoDescriptor> SkAutoDescriptor::MakeFromBuffer(SkReadBuffer& b
         return {};
     }
 
+// If the fuzzer produces data but the checksum does not match, let it continue. This will boost
+// fuzzing speed. We leave the actual checksum computation in for fuzzing builds to make sure
+// the ComputeChecksum function is covered.
+#if defined(SK_BUILD_FOR_FUZZER)
+    SkDescriptor::ComputeChecksum(ad.getDesc());
+#else
     if (SkDescriptor::ComputeChecksum(ad.getDesc()) != ad.getDesc()->fChecksum) { return {}; }
+#endif
     if (!ad.getDesc()->isValid()) { return {}; }
 
     return {ad};

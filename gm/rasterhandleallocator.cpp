@@ -154,7 +154,7 @@ using MyAllocator = CGAllocator;
 
 #elif defined(SK_BUILD_FOR_WIN)
 
-#include "src/core/SkLeanWindows.h"
+#include "src/base/SkLeanWindows.h"
 
 static RECT toRECT(const SkIRect& r) {
     return { r.left(), r.top(), r.right(), r.bottom() };
@@ -255,7 +255,7 @@ public:
 
         RECT clip_bounds_RECT = toRECT(clip_bounds);
         HRGN hrgn = CreateRectRgnIndirect(&clip_bounds_RECT);
-        SK_MAYBE_UNUSED int result = SelectClipRgn(hdc, hrgn);
+        [[maybe_unused]] int result = SelectClipRgn(hdc, hrgn);
         SkASSERT(result != ERROR);
         result = DeleteObject(hrgn);
         SkASSERT(result != 0);

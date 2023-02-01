@@ -9,9 +9,10 @@
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypeface.h"
-#include "include/private/SkMutex.h"
-#include "include/private/SkOnce.h"
+#include "include/private/base/SkMutex.h"
+#include "include/private/base/SkOnce.h"
 #include "include/utils/SkCustomTypeface.h"
+#include "src/base/SkUTF.h"
 #include "src/core/SkAdvancedTypefaceMetrics.h"
 #include "src/core/SkEndian.h"
 #include "src/core/SkFontDescriptor.h"
@@ -20,7 +21,8 @@
 #include "src/core/SkSurfacePriv.h"
 #include "src/core/SkTypefaceCache.h"
 #include "src/sfnt/SkOTTable_OS_2.h"
-#include "src/utils/SkUTF.h"
+
+using namespace skia_private;
 
 SkTypeface::SkTypeface(const SkFontStyle& style, bool isFixedPitch)
     : fUniqueID(SkTypefaceCache::NewTypefaceID()), fStyle(style), fIsFixedPitch(isFixedPitch) { }
@@ -355,7 +357,7 @@ public:
     }
 
 private:
-    SkAutoSTMalloc<256, SkUnichar> fStorage;
+    AutoSTMalloc<256, SkUnichar> fStorage;
 };
 }
 

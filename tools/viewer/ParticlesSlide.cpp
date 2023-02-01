@@ -8,13 +8,14 @@
 #include "tools/viewer/ParticlesSlide.h"
 
 #include "include/core/SkCanvas.h"
-#include "include/private/SkStringView.h"
 #include "modules/particles/include/SkParticleEffect.h"
 #include "modules/particles/include/SkParticleSerialization.h"
 #include "modules/particles/include/SkReflected.h"
 #include "modules/skresources/include/SkResources.h"
+#include "src/base/SkStringView.h"
 #include "src/core/SkOSFile.h"
 #include "src/sksl/codegen/SkSLVMCodeGenerator.h"
+#include "src/sksl/ir/SkSLProgram.h"
 #include "src/utils/SkOSPath.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
@@ -27,7 +28,23 @@
 
 using namespace sk_app;
 
-class TestingResourceProvider : public skresources::ResourceProvider {
+class MultiFrameAssetDriver {
+public:
+    MultiFrameAssetDriver(sk_sp<skresources::MultiFrameImageAsset> asset,
+                          std::unique_ptr<SkCanvas> canvas)
+            : fMultiFrameImage(std::move(asset))
+            , fImageCanvas(std::move(canvas)) {}
+
+    void update(double now) {
+        auto image = fMultiFrameImage->getFrame(now);
+        fImageCanvas->drawImage(image, 0, 0);
+    }
+private:
+    sk_sp<skresources::MultiFrameImageAsset> fMultiFrameImage;
+    std::unique_ptr<SkCanvas> fImageCanvas;
+};
+
+class ParticlesSlide::TestingResourceProvider : public skresources::ResourceProvider {
 public:
     TestingResourceProvider() {}
 
@@ -40,11 +57,51 @@ public:
         }
     }
 
+// This asset wraps a preallocated SkImage for our hacky mutable SkImages for multiframe bindings
+// It depends on a canvas attached to it with SkCanvas::MakeRasterDirect to draw to the pixels
+class WrapperAsset final : public skresources::ImageAsset {
+public:
+    static sk_sp<WrapperAsset> Make(sk_sp<SkImage> image) {
+        return sk_sp<WrapperAsset>(new WrapperAsset(image));
+    }
+    bool isMultiFrame() override { return true; }
+    sk_sp<SkImage> getFrame(float) override { return fImage; }
+private:
+    explicit WrapperAsset(sk_sp<SkImage> image)
+        : fImage(std::move(image)) {
+    }
+    sk_sp<SkImage> fImage;
+};
+
     sk_sp<skresources::ImageAsset> loadImageAsset(const char resource_path[],
                                                   const char resource_name[],
                                                   const char /*resource_id*/[]) const override {
         auto data = this->load(resource_path, resource_name);
-        return skresources::MultiFrameImageAsset::Make(data);
+        auto asset = skresources::MultiFrameImageAsset::Make(data);
+        // Demo impl. of hijacking pixels of SkImage for multiframe sampling
+        if (asset && asset->isMultiFrame()) {
+            // make imageCanvas to draw directly to allocated pixels
+            auto info = SkImageInfo::MakeN32Premul(asset->getFrame(0)->width(),
+                                                   asset->getFrame(0)->height());
+            auto storage = SkData::MakeUninitialized(info.computeMinByteSize());
+            auto imageCanvas = SkCanvas::MakeRasterDirect(info, storage->writable_data(),
+                                                          info.minRowBytes());
+            // binding needs to make a shader from this image, so we wrap it in a special asset
+            // that always returns the image made from storage
+            auto image = SkImage::MakeRasterData(info, storage, info.minRowBytes());
+            auto wrapper = WrapperAsset::Make(image);
+
+            auto driver = std::make_unique<MultiFrameAssetDriver>(asset, std::move(imageCanvas));
+            fDrivers.push_back(std::move(driver));
+            return std::move(wrapper);
+        }
+        return std::move(asset);
+    }
+
+    void update(double t) {
+        for (auto& driver : fDrivers) {
+            driver->update(t);
+        }
     }
 
     void addPath(const char resource_name[], const SkPath& path) {
@@ -53,6 +110,7 @@ public:
 
 private:
     std::unordered_map<std::string, sk_sp<SkData>> fResources;
+    mutable std::vector<std::unique_ptr<MultiFrameAssetDriver>> fDrivers;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -60,10 +118,10 @@ private:
 static int InputTextCallback(ImGuiInputTextCallbackData* data) {
     if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
         SkString* s = (SkString*)data->UserData;
-        SkASSERT(data->Buf == s->writable_str());
+        SkASSERT(data->Buf == s->data());
         SkString tmp(data->Buf, data->BufTextLen);
         s->swap(tmp);
-        data->Buf = s->writable_str();
+        data->Buf = s->data();
     }
     return 0;
 }
@@ -101,11 +159,11 @@ public:
             if (lines > 1) {
                 ImGui::LabelText("##Label", "%s", name);
                 ImVec2 boxSize(-1.0f, ImGui::GetTextLineHeight() * (lines + 1));
-                fDirty = ImGui::InputTextMultiline(item(name), s.writable_str(), s.size() + 1,
+                fDirty = ImGui::InputTextMultiline(item(name), s.data(), s.size() + 1,
                                                    boxSize, flags, InputTextCallback, &s)
                       || fDirty;
             } else {
-                fDirty = ImGui::InputText(item(name), s.writable_str(), s.size() + 1, flags,
+                fDirty = ImGui::InputText(item(name), s.data(), s.size() + 1, flags,
                                           InputTextCallback, &s)
                       || fDirty;
             }
@@ -212,8 +270,8 @@ ParticlesSlide::ParticlesSlide() {
 }
 
 void ParticlesSlide::loadEffects(const char* dirname) {
-    fLoaded.reset();
-    fRunning.reset();
+    fLoaded.clear();
+    fRunning.clear();
     SkOSFile::Iter iter(dirname, ".json");
     for (SkString file; iter.next(&file); ) {
         LoadedEffect effect;
@@ -246,7 +304,7 @@ void ParticlesSlide::draw(SkCanvas* canvas) {
 
         static SkString dirname = GetResourcePath("particles");
         ImGuiInputTextFlags textFlags = ImGuiInputTextFlags_CallbackResize;
-        ImGui::InputText("Directory", dirname.writable_str(), dirname.size() + 1, textFlags,
+        ImGui::InputText("Directory", dirname.data(), dirname.size() + 1, textFlags,
                          InputTextCallback, &dirname);
 
         if (ImGui::Button("New")) {
@@ -280,7 +338,7 @@ void ParticlesSlide::draw(SkCanvas* canvas) {
         }
 
         SkGuiVisitor gui;
-        for (int i = 0; i < fLoaded.count(); ++i) {
+        for (int i = 0; i < fLoaded.size(); ++i) {
             ImGui::PushID(i);
             if (fAnimated && ImGui::Button("Play")) {
                 sk_sp<SkParticleEffect> effect(new SkParticleEffect(fLoaded[i].fParams));
@@ -290,7 +348,7 @@ void ParticlesSlide::draw(SkCanvas* canvas) {
             }
             ImGui::SameLine();
 
-            ImGui::InputText("##Name", fLoaded[i].fName.writable_str(), fLoaded[i].fName.size() + 1,
+            ImGui::InputText("##Name", fLoaded[i].fName.data(), fLoaded[i].fName.size() + 1,
                              textFlags, InputTextCallback, &fLoaded[i].fName);
 
             if (ImGui::TreeNode("##Details")) {
@@ -312,7 +370,7 @@ void ParticlesSlide::draw(SkCanvas* canvas) {
 
     // Another window to show all the running effects
     if (ImGui::Begin("Running")) {
-        for (int i = 0; i < fRunning.count(); ++i) {
+        for (int i = 0; i < fRunning.size(); ++i) {
             SkParticleEffect* effect = fRunning[i].fEffect.get();
             ImGui::PushID(effect);
 
@@ -399,6 +457,7 @@ void ParticlesSlide::draw(SkCanvas* canvas) {
 bool ParticlesSlide::animate(double nanos) {
     fAnimated = true;
     fAnimationTime = 1e-9 * nanos;
+    fResourceProvider->update(fAnimationTime);
     for (const auto& effect : fRunning) {
         effect.fEffect->update(fAnimationTime);
     }

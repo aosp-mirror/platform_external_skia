@@ -8,6 +8,12 @@
 #ifndef SKSL_INTRINSIC_LIST_DEFINED
 #define SKSL_INTRINSIC_LIST_DEFINED
 
+#include "src/core/SkTHash.h"
+
+#include <cstdint>
+#include <initializer_list>
+#include <string_view>
+
 // A list of every intrinsic supported by SkSL.
 // Using an X-Macro (https://en.wikipedia.org/wiki/X_Macro) to manage the list.
 #define SKSL_INTRINSIC_LIST          \
@@ -20,6 +26,9 @@
     SKSL_INTRINSIC(asin)             \
     SKSL_INTRINSIC(atanh)            \
     SKSL_INTRINSIC(atan)             \
+    SKSL_INTRINSIC(atomicAdd)        \
+    SKSL_INTRINSIC(atomicLoad)       \
+    SKSL_INTRINSIC(atomicStore)      \
     SKSL_INTRINSIC(bitCount)         \
     SKSL_INTRINSIC(ceil)             \
     SKSL_INTRINSIC(clamp)            \
@@ -45,9 +54,11 @@
     SKSL_INTRINSIC(fma)              \
     SKSL_INTRINSIC(fract)            \
     SKSL_INTRINSIC(frexp)            \
+    SKSL_INTRINSIC(fromLinearSrgb)   \
     SKSL_INTRINSIC(fwidth)           \
     SKSL_INTRINSIC(greaterThanEqual) \
     SKSL_INTRINSIC(greaterThan)      \
+    SKSL_INTRINSIC(height)           \
     SKSL_INTRINSIC(intBitsToFloat)   \
     SKSL_INTRINSIC(inversesqrt)      \
     SKSL_INTRINSIC(inverse)          \
@@ -79,11 +90,14 @@
     SKSL_INTRINSIC(packUnorm4x8)     \
     SKSL_INTRINSIC(pow)              \
     SKSL_INTRINSIC(radians)          \
+    SKSL_INTRINSIC(read)             \
     SKSL_INTRINSIC(reflect)          \
     SKSL_INTRINSIC(refract)          \
     SKSL_INTRINSIC(roundEven)        \
     SKSL_INTRINSIC(round)            \
     SKSL_INTRINSIC(sample)           \
+    SKSL_INTRINSIC(sampleGrad)       \
+    SKSL_INTRINSIC(sampleLod)        \
     SKSL_INTRINSIC(saturate)         \
     SKSL_INTRINSIC(sign)             \
     SKSL_INTRINSIC(sinh)             \
@@ -91,9 +105,11 @@
     SKSL_INTRINSIC(smoothstep)       \
     SKSL_INTRINSIC(sqrt)             \
     SKSL_INTRINSIC(step)             \
+    SKSL_INTRINSIC(storageBarrier)   \
     SKSL_INTRINSIC(subpassLoad)      \
     SKSL_INTRINSIC(tanh)             \
     SKSL_INTRINSIC(tan)              \
+    SKSL_INTRINSIC(toLinearSrgb)     \
     SKSL_INTRINSIC(transpose)        \
     SKSL_INTRINSIC(trunc)            \
     SKSL_INTRINSIC(uintBitsToFloat)  \
@@ -103,7 +119,27 @@
     SKSL_INTRINSIC(unpackSnorm4x8)   \
     SKSL_INTRINSIC(unpackUnorm2x16)  \
     SKSL_INTRINSIC(unpackUnorm4x8)   \
-    SKSL_INTRINSIC(toLinearSrgb)     \
-    SKSL_INTRINSIC(fromLinearSrgb)
+    SKSL_INTRINSIC(width)            \
+    SKSL_INTRINSIC(workgroupBarrier) \
+    SKSL_INTRINSIC(write)
+
+namespace SkSL {
+
+// The `IntrinsicKind` enum holds every intrinsic supported by SkSL.
+#define SKSL_INTRINSIC(name) k_##name##_IntrinsicKind,
+enum IntrinsicKind : int8_t {
+    kNotIntrinsic = -1,
+    SKSL_INTRINSIC_LIST
+};
+#undef SKSL_INTRINSIC
+
+// Returns a map which allows IntrinsicKind values to be looked up by name.
+using IntrinsicMap = SkTHashMap<std::string_view, IntrinsicKind>;
+const IntrinsicMap& GetIntrinsicMap();
+
+// Looks up intrinsic functions by name.
+IntrinsicKind FindIntrinsicKind(std::string_view functionName);
+
+}
 
 #endif

@@ -7,35 +7,18 @@
 
 #include "src/sksl/ir/SkSLVariableReference.h"
 
-#include "src/sksl/ir/SkSLConstructor.h"
-#include "src/sksl/ir/SkSLLiteral.h"
-#include "src/sksl/ir/SkSLSetting.h"
 #include "src/sksl/ir/SkSLVariable.h"
 
 namespace SkSL {
 
-VariableReference::VariableReference(int line, const Variable* variable, RefKind refKind)
-    : INHERITED(line, kExpressionKind, &variable->type())
+VariableReference::VariableReference(Position pos, const Variable* variable, RefKind refKind)
+    : INHERITED(pos, kIRNodeKind, &variable->type())
     , fVariable(variable)
     , fRefKind(refKind) {
     SkASSERT(this->variable());
 }
 
-bool VariableReference::hasProperty(Property property) const {
-    switch (property) {
-        case Property::kSideEffects:      return false;
-        case Property::kContainsRTAdjust: return this->variable()->name() == "sk_RTAdjust";
-        default:
-            SkASSERT(false);
-            return false;
-    }
-}
-
-bool VariableReference::isConstantOrUniform() const {
-    return (this->variable()->modifiers().fFlags & Modifiers::kUniform_Flag) != 0;
-}
-
-std::string VariableReference::description() const {
+std::string VariableReference::description(OperatorPrecedence) const {
     return std::string(this->variable()->name());
 }
 

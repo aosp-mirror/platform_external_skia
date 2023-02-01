@@ -8,13 +8,21 @@
 #ifndef SkottieShaper_DEFINED
 #define SkottieShaper_DEFINED
 
+#include "include/core/SkFont.h"
 #include "include/core/SkPoint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTextBlob.h"
+#include "include/private/base/SkTypeTraits.h"
 #include "include/utils/SkTextUtils.h"
 
 #include <vector>
 
+class SkCanvas;
 class SkFontMgr;
-class SkTextBlob;
+class SkTypeface;
+class SkString;
+
+struct SkRect;
 
 namespace skottie {
 
@@ -22,21 +30,52 @@ namespace skottie {
 
 class Shaper final {
 public:
+    struct RunRec {
+        SkFont fFont;
+        size_t fSize;
+
+        static_assert(::sk_is_trivially_relocatable<decltype(fFont)>::value);
+
+        using sk_is_trivially_relocatable = std::true_type;
+    };
+
+    struct ShapedGlyphs {
+        std::vector<RunRec>    fRuns;
+
+        // Consolidated storage for all runs.
+        std::vector<SkGlyphID> fGlyphIDs;
+        std::vector<SkPoint>   fGlyphPos;
+
+        // fClusters[i] is an input string index, pointing to the start of the UTF sequence
+        // associated with fGlyphs[i].  The number of entries matches the number of glyphs.
+        // Only available with Flags::kClusters.
+        std::vector<size_t>    fClusters;
+
+        enum class BoundsType { kConservative, kTight };
+        SkRect computeBounds(BoundsType) const;
+
+        void draw(SkCanvas*, const SkPoint& origin, const SkPaint&) const;
+    };
+
     struct Fragment {
-        sk_sp<SkTextBlob> fBlob;
-        SkPoint           fPos;
+        ShapedGlyphs fGlyphs;
+        SkPoint      fOrigin;
 
         // Only valid for kFragmentGlyphs
-        float             fAdvance,
-                          fAscent;
-        uint32_t          fLineIndex;    // 0-based index for the line this fragment belongs to.
-        bool              fIsWhitespace; // True if the first code point in the corresponding
-                                         // cluster is whitespace.
+        float        fAdvance,
+                     fAscent;
+        uint32_t     fLineIndex;    // 0-based index for the line this fragment belongs to.
+        bool         fIsWhitespace; // True if the first code point in the corresponding
+                                    // cluster is whitespace.
     };
 
     struct Result {
         std::vector<Fragment> fFragments;
         size_t                fMissingGlyphCount = 0;
+        // Relative text size scale, when using an auto-scaling ResizePolicy
+        // (otherwise 1.0).  This is informative of the final text size, and is
+        // not required to render the Result.
+        float                 fScale = 1.0f;
 
         SkRect computeVisualBounds() const;
     };
@@ -100,23 +139,27 @@ public:
 
         // Compute the advance and ascent for each fragment.
         kTrackFragmentAdvanceAscent = 0x02,
+
+        // Return cluster information.
+        kClusters                   = 0x04,
     };
 
     struct TextDesc {
         const sk_sp<SkTypeface>&  fTypeface;
-        SkScalar                  fTextSize,
-                                  fMinTextSize,
-                                  fMaxTextSize,
-                                  fLineHeight,
-                                  fLineShift,
-                                  fAscent;
-        SkTextUtils::Align        fHAlign;
-        VAlign                    fVAlign;
-        ResizePolicy              fResize;
-        LinebreakPolicy           fLinebreak;
-        Direction                 fDirection;
-        Capitalization            fCapitalization;
-        uint32_t                  fFlags;
+        SkScalar                  fTextSize       = 0,
+                                  fMinTextSize    = 0,  // when auto-sizing
+                                  fMaxTextSize    = 0,  // when auto-sizing
+                                  fLineHeight     = 0,
+                                  fLineShift      = 0,
+                                  fAscent         = 0;
+        SkTextUtils::Align        fHAlign         = SkTextUtils::kLeft_Align;
+        VAlign                    fVAlign         = Shaper::VAlign::kTop;
+        ResizePolicy              fResize         = Shaper::ResizePolicy::kNone;
+        LinebreakPolicy           fLinebreak      = Shaper::LinebreakPolicy::kExplicit;
+        Direction                 fDirection      = Shaper::Direction::kLTR ;
+        Capitalization            fCapitalization = Shaper::Capitalization::kNone;
+        size_t                    fMaxLines       = 0;  // when auto-sizing, 0 -> no max
+        uint32_t                  fFlags          = 0;
     };
 
     // Performs text layout along an infinite horizontal line, starting at |textPoint|.

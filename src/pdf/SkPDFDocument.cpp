@@ -10,7 +10,8 @@
 
 #include "include/core/SkStream.h"
 #include "include/docs/SkPDFDocument.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkUTF.h"
 #include "src/pdf/SkPDFDevice.h"
 #include "src/pdf/SkPDFFont.h"
 #include "src/pdf/SkPDFGradientShader.h"
@@ -18,7 +19,6 @@
 #include "src/pdf/SkPDFShader.h"
 #include "src/pdf/SkPDFTag.h"
 #include "src/pdf/SkPDFUtils.h"
-#include "src/utils/SkUTF.h"
 
 #include <utility>
 
@@ -237,11 +237,11 @@ SkPDFIndirectReference SkPDFDocument::emit(const SkPDFObject& object, SkPDFIndir
 SkWStream* SkPDFDocument::beginObject(SkPDFIndirectReference ref) SK_REQUIRES(fMutex) {
     begin_indirect_object(&fOffsetMap, ref, this->getStream());
     return this->getStream();
-};
+}
 
 void SkPDFDocument::endObject() SK_REQUIRES(fMutex) {
     end_indirect_object(this->getStream());
-};
+}
 
 static SkSize operator*(SkISize u, SkScalar s) { return SkSize{u.width() * s, u.height() * s}; }
 static SkSize operator*(SkSize u, SkScalar s) { return SkSize{u.width() * s, u.height() * s}; }
@@ -326,7 +326,8 @@ std::unique_ptr<SkPDFArray> SkPDFDocument::getAnnotations() {
         if (link->fType == SkPDFLink::Type::kUrl) {
             std::unique_ptr<SkPDFDict> action = SkPDFMakeDict("Action");
             action->insertName("S", "URI");
-            action->insertString("URI", ToValidUtf8String(*link->fData));
+            // This is documented to be a 7 bit ASCII (byte) string.
+            action->insertByteString("URI", ToValidUtf8String(*link->fData));
             annotation.insertObject("A", std::move(action));
         } else if (link->fType == SkPDFLink::Type::kNamedDestination) {
             annotation.insertName("Dest", ToValidUtf8String(*link->fData));
@@ -500,17 +501,17 @@ static SkPDFIndirectReference make_srgb_color_profile(SkPDFDocument* doc) {
     std::unique_ptr<SkPDFDict> dict = SkPDFMakeDict();
     dict->insertInt("N", 3);
     dict->insertObject("Range", SkPDFMakeArray(0, 1, 0, 1, 0, 1));
-    return SkPDFStreamOut(std::move(dict), SkMemoryStream::Make(SkSrgbIcm()), doc, true);
+    return SkPDFStreamOut(std::move(dict), SkMemoryStream::Make(SkSrgbIcm()),
+                          doc, SkPDFSteamCompressionEnabled::Yes);
 }
 
 static std::unique_ptr<SkPDFArray> make_srgb_output_intents(SkPDFDocument* doc) {
     // sRGB is specified by HTML, CSS, and SVG.
     auto outputIntent = SkPDFMakeDict("OutputIntent");
     outputIntent->insertName("S", "GTS_PDFA1");
-    outputIntent->insertString("RegistryName", "http://www.color.org");
-    outputIntent->insertString("OutputConditionIdentifier",
-                               "Custom");
-    outputIntent->insertString("Info","sRGB IEC61966-2.1");
+    outputIntent->insertTextString("RegistryName", "http://www.color.org");
+    outputIntent->insertTextString("OutputConditionIdentifier", "Custom");
+    outputIntent->insertTextString("Info", "sRGB IEC61966-2.1");
     outputIntent->insertRef("DestOutputProfile", make_srgb_color_profile(doc));
     auto intentArray = SkPDFMakeArray();
     intentArray->appendObject(std::move(outputIntent));
@@ -555,7 +556,7 @@ SkString SkPDFDocument::nextFontSubsetTag() {
     fNextFontSubsetTag = (fNextFontSubsetTag + 1u) % 308915776u;
 
     SkString subsetTag(7);
-    char* subsetTagData = subsetTag.writable_str();
+    char* subsetTagData = subsetTag.data();
     for (size_t i = 0; i < 6; ++i) {
         subsetTagData[i] = 'A' + (thisFontSubsetTag % 26);
         thisFontSubsetTag /= 26;

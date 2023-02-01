@@ -284,7 +284,8 @@ function copy4x4MatrixToWasm(matr) {
     // skip col 2
     wasm4x4Matrix[7] = matr[5];
 
-    // skip row 2
+    // row2 == identity
+    wasm4x4Matrix[10] = 1;
 
     wasm4x4Matrix[12] = matr[6];
     wasm4x4Matrix[13] = matr[7];
@@ -376,6 +377,16 @@ function copyRectToWasm(fourFloats, ptr) {
 // passed into ptr, callers do NOT need to free the returned pointer.
 function copyIRectToWasm(fourInts, ptr) {
   return copy1dArray(fourInts, 'HEAP32', ptr || _scratchIRectPtr);
+}
+
+// copies the four ints at the given pointer into a JS Int32Array
+function copyIRectFromWasm(rectMalloc, outputArray) {
+  var ta = rectMalloc['toTypedArray']();
+  if (outputArray) {
+    outputArray.set(ta);
+    return outputArray;
+  }
+  return ta.slice();
 }
 
 // copies the given floats into the wasm heap as an SkRRect. Unless a non-scratch pointer is

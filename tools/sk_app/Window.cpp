@@ -20,7 +20,7 @@ Window::~Window() {}
 void Window::detach() { fWindowContext = nullptr; }
 
 void Window::visitLayers(std::function<void(Layer*)> visitor) {
-    for (int i = 0; i < fLayers.count(); ++i) {
+    for (int i = 0; i < fLayers.size(); ++i) {
         if (fLayers[i]->fActive) {
             visitor(fLayers[i]);
         }
@@ -28,7 +28,7 @@ void Window::visitLayers(std::function<void(Layer*)> visitor) {
 }
 
 bool Window::signalLayers(std::function<bool(Layer*)> visitor) {
-    for (int i = fLayers.count() - 1; i >= 0; --i) {
+    for (int i = fLayers.size() - 1; i >= 0; --i) {
         if (fLayers[i]->fActive && visitor(fLayers[i])) {
             return true;
         }
@@ -153,6 +153,17 @@ GrDirectContext* Window::directContext() const {
     }
     return fWindowContext->directContext();
 }
+
+#ifdef SK_GRAPHITE_ENABLED
+skgpu::graphite::Context* Window::graphiteContext() const {
+    if (!fWindowContext) {
+        return nullptr;
+    }
+    return fWindowContext->graphiteContext();
+}
+#else
+skgpu::graphite::Context* Window::graphiteContext() const { return nullptr; }
+#endif
 
 void Window::inval() {
     if (!fWindowContext) {

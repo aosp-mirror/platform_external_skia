@@ -21,17 +21,19 @@
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkPathEffect.h"
+#include "include/core/SkPathUtils.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkRRect.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
 #include "include/pathops/SkPathOps.h"
-#include "include/private/SkTDArray.h"
-#include "include/private/SkTemplates.h"
+#include "include/private/base/SkTDArray.h"
+#include "include/private/base/SkTemplates.h"
 #include "include/utils/SkNoDrawCanvas.h"
 #include "modules/svg/include/SkSVGDOM.h"
 #include "modules/svg/include/SkSVGNode.h"
+#include "src/base/SkUtils.h"
 #include "src/core/SkAdvancedTypefaceMetrics.h"
 #include "src/core/SkFontDescriptor.h"
 #include "src/core/SkFontPriv.h"
@@ -42,11 +44,12 @@
 #include "src/core/SkPathPriv.h"
 #include "src/core/SkPointPriv.h"
 #include "src/core/SkScalerContext.h"
-#include "src/core/SkUtils.h"
 #include "src/sfnt/SkOTUtils.h"
 #include "tools/Resources.h"
 
 #include <utility>
+
+using namespace skia_private;
 
 class SkDescriptor;
 
@@ -344,7 +347,7 @@ sk_sp<TestSVGTypeface> TestSVGTypeface::Default() {
     return sk_make_sp<DefaultTypeface>("Emoji",
                                        1000,
                                        metrics,
-                                       SkMakeSpan(glyphs),
+                                       glyphs,
                                        SkFontStyle::Normal());
 }
 
@@ -394,7 +397,7 @@ sk_sp<TestSVGTypeface> TestSVGTypeface::Planets() {
     return sk_make_sp<PlanetTypeface>("Planets",
                                       200,
                                       metrics,
-                                      SkMakeSpan(glyphs),
+                                      glyphs,
                                       SkFontStyle::Normal());
 }
 
@@ -410,7 +413,7 @@ void TestSVGTypeface::exportTtxCommon(SkWStream*                out,
     }
     if (glyfInfo) {
         for (int i = 0; i < fGlyphCount; ++i) {
-            for (int j = 0; j < (*glyfInfo)[i].fLayers.count(); ++j) {
+            for (int j = 0; j < (*glyfInfo)[i].fLayers.size(); ++j) {
                 out->writeText("    <GlyphID name=\"glyf");
                 out->writeHexAsText(i, 4);
                 out->writeText("l");
@@ -643,7 +646,7 @@ void TestSVGTypeface::exportTtxCommon(SkWStream*                out,
     }
     if (glyfInfo) {
         for (int i = 0; i < fGlyphCount; ++i) {
-            for (int j = 0; j < (*glyfInfo)[i].fLayers.count(); ++j) {
+            for (int j = 0; j < (*glyfInfo)[i].fLayers.size(); ++j) {
                 out->writeText("    <mtx name=\"glyf");
                 out->writeHexAsText(i, 4);
                 out->writeText("l");
@@ -778,7 +781,7 @@ void TestSVGTypeface::exportTtxCbdt(SkWStream* out, SkSpan<unsigned> strikeSizes
 
     out->writeText("  <CBDT>\n");
     out->writeText("    <header version=\"2.0\"/>\n");
-    for (size_t strikeIndex = 0; strikeIndex < goodStrikeSizes.size(); ++strikeIndex) {
+    for (int strikeIndex = 0; strikeIndex < goodStrikeSizes.size(); ++strikeIndex) {
         font.setSize(goodStrikeSizes[strikeIndex]);
 
         out->writeText("    <strikedata index=\"");
@@ -852,7 +855,7 @@ void TestSVGTypeface::exportTtxCbdt(SkWStream* out, SkSpan<unsigned> strikeSizes
     SkFontMetrics fm;
     out->writeText("  <CBLC>\n");
     out->writeText("    <header version=\"2.0\"/>\n");
-    for (size_t strikeIndex = 0; strikeIndex < goodStrikeSizes.size(); ++strikeIndex) {
+    for (int strikeIndex = 0; strikeIndex < goodStrikeSizes.size(); ++strikeIndex) {
         font.setSize(goodStrikeSizes[strikeIndex]);
         font.getMetrics(&fm);
         out->writeText("    <strike index=\"");
@@ -1164,9 +1167,9 @@ void path_to_quads(const SkPath& path, SkPath* quadPath) {
                 quadPath->quadTo(pts[1].fX, pts[1].fY, pts[2].fX, pts[2].fY);
                 break;
             case SkPathVerb::kCubic:
-                qPts.reset();
+                qPts.clear();
                 convertCubicToQuads(pts, SK_Scalar1, &qPts);
-                for (int i = 0; i < qPts.count(); i += 3) {
+                for (int i = 0; i < qPts.size(); i += 3) {
                     quadPath->quadTo(
                             qPts[i + 1].fX, qPts[i + 1].fY, qPts[i + 2].fX, qPts[i + 2].fY);
                 }
@@ -1316,7 +1319,7 @@ public:
 
         // Apply the path effect.
         if (paint.getPathEffect() || paint.getStyle() != SkPaint::kFill_Style) {
-            bool fill = paint.getFillPath(path, &path);
+            bool fill = skpathutils::FillPathWithPaint(path, paint, &path);
 
             paint.setPathEffect(nullptr);
             if (fill) {
@@ -1428,7 +1431,7 @@ void TestSVGTypeface::exportTtxColr(SkWStream* out) const {
         out->writeText("    <ColorGlyph name=\"glyf");
         out->writeHexAsText(i, 4);
         out->writeText("\">\n");
-        for (int j = 0; j < glyfInfos[i].fLayers.count(); ++j) {
+        for (int j = 0; j < glyfInfos[i].fLayers.size(); ++j) {
             const int colorIndex = glyfInfos[i].fLayers[j].fLayerColorIndex;
             out->writeText("      <layer colorID=\"");
             out->writeDecAsText(colorIndex);
@@ -1443,7 +1446,7 @@ void TestSVGTypeface::exportTtxColr(SkWStream* out) const {
     out->writeText("  </COLR>\n");
 
     // The colors must be written in order, the 'index' is ignored by ttx.
-    SkAutoTMalloc<SkColor> colorsInOrder(colors.count());
+    AutoTMalloc<SkColor> colorsInOrder(colors.count());
     colors.foreach ([&colorsInOrder](const SkColor& c, const int* i) { colorsInOrder[*i] = c; });
     out->writeText("  <CPAL>\n");
     out->writeText("    <version value=\"0\"/>\n");

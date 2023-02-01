@@ -10,6 +10,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkColorFilter.h"
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkMatrix.h"
@@ -144,7 +145,7 @@ private:
             setPaint.setBlendMode(SkBlendMode::kSrcOver);
             SkSamplingOptions sampling(fm);
 
-            for (size_t m = 0; m < SK_ARRAY_COUNT(matrices); ++m) {
+            for (size_t m = 0; m < std::size(matrices); ++m) {
                 // Draw grid of red lines at interior tile boundaries.
                 static constexpr SkScalar kLineOutset = 10.f;
                 SkPaint paint;
@@ -244,7 +245,7 @@ private:
         for (SkScalar frac : {0.f, 0.5f}) {
             canvas->save();
             canvas->translate(frac, frac);
-            for (size_t m = 0; m < SK_ARRAY_COUNT(matrices); ++m) {
+            for (size_t m = 0; m < std::size(matrices); ++m) {
                 canvas->save();
                 canvas->concat(matrices[m]);
                 canvas->experimental_DrawEdgeAAImageSet(fSet, kM * kN, nullptr, nullptr,
@@ -268,7 +269,7 @@ private:
                 scaledSet[i].fDstRect.fBottom *= scale.fY;
                 scaledSet[i].fAlpha = 0 == (i % 3) ? 0.4f : 1.f;
             }
-            for (size_t m = 0; m < SK_ARRAY_COUNT(matrices); ++m) {
+            for (size_t m = 0; m < std::size(matrices); ++m) {
                 canvas->save();
                 canvas->concat(matrices[m]);
                 canvas->experimental_DrawEdgeAAImageSet(scaledSet, kM * kN, nullptr, nullptr,
@@ -309,6 +310,7 @@ private:
                 int i = y * kM + x;
                 fSet[i].fAlpha = (kM - x) / (float) kM;
                 if (y % 2 == 0) {
+                    // TODO: allow making Graphite images here
                     fSet[i].fImage = fSet[i].fImage->makeColorTypeAndColorSpace(
                             kAlpha_8_SkColorType, alphaSpace, direct);
                 }
@@ -337,7 +339,9 @@ private:
                 int i = y * kM + x;
                 SkPaint entryPaint = paint;
                 entryPaint.setAlphaf(fSet[i].fAlpha * paint.getAlphaf());
-                canvas->drawImageRect(fSet[i].fImage.get(), fSet[i].fSrcRect, fSet[i].fDstRect,
+                sk_sp<SkImage> orig = sk_ref_sp(const_cast<SkImage*>(fSet[i].fImage.get()));
+                canvas->drawImageRect(ToolUtils::MakeTextureImage(canvas, std::move(orig)),
+                                      fSet[i].fSrcRect, fSet[i].fDstRect,
                                       SkSamplingOptions(), &entryPaint,
                                       SkCanvas::kFast_SrcRectConstraint);
             }

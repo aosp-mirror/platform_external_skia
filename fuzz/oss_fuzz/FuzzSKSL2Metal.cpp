@@ -5,15 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/GrShaderCaps.h"
+#include "include/private/SkSLProgramKind.h"
+#include "src/gpu/ganesh/GrShaderCaps.h"
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLProgramSettings.h"
+#include "src/sksl/ir/SkSLProgram.h"
 
 #include "fuzz/Fuzz.h"
 
 bool FuzzSKSL2Metal(sk_sp<SkData> bytes) {
-    std::unique_ptr<SkSL::ShaderCaps> caps = SkSL::ShaderCapsFactory::Default();
-    SkSL::Compiler compiler(caps.get());
-    SkSL::Program::Settings settings;
+    SkSL::Compiler compiler(SkSL::ShaderCapsFactory::Default());
+    SkSL::ProgramSettings settings;
     std::unique_ptr<SkSL::Program> program = compiler.convertProgram(
                                                     SkSL::ProgramKind::kFragment,
                                                     std::string((const char*) bytes->data(),

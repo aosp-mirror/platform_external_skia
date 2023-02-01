@@ -6,27 +6,64 @@
  * found in the LICENSE file.
  */
 
-#include "src/gpu/v1/ClipStack.h"
-#include "tests/Test.h"
-
+#include "include/core/SkClipOp.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkMatrix.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkPathTypes.h"
+#include "include/core/SkPoint.h"
 #include "include/core/SkRRect.h"
 #include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkRegion.h"
+#include "include/core/SkScalar.h"
 #include "include/core/SkShader.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GrContextOptions.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/mock/GrMockTypes.h"
+#include "include/private/base/SkTo.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/core/SkMatrixProvider.h"
 #include "src/core/SkRRectPriv.h"
-#include "src/core/SkRectPriv.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/ops/GrDrawOp.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include "src/gpu/ResourceKey.h"
+#include "src/gpu/SkBackingFit.h"
+#include "src/gpu/ganesh/ClipStack.h"
+#include "src/gpu/ganesh/GrAppliedClip.h"
+#include "src/gpu/ganesh/GrClip.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrPaint.h"
+#include "src/gpu/ganesh/GrProcessorSet.h"
+#include "src/gpu/ganesh/GrProxyProvider.h"
+#include "src/gpu/ganesh/GrResourceCache.h"
+#include "src/gpu/ganesh/GrScissorState.h"
+#include "src/gpu/ganesh/GrWindowRectsState.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
+#include "src/gpu/ganesh/geometry/GrShape.h"
+#include "src/gpu/ganesh/ops/GrDrawOp.h"
+#include "src/gpu/ganesh/ops/GrOp.h"
+#include "tests/CtsEnforcement.h"
+#include "tests/Test.h"
+
+#include <cstddef>
+#include <initializer_list>
+#include <memory>
+#include <tuple>
+#include <utility>
+#include <vector>
+
+class GrCaps;
+class GrDstProxyView;
+class GrOpFlushState;
+class GrRecordingContext;
+class GrSurfaceProxyView;
+enum class GrXferBarrierFlags;
 
 namespace {
 
 class TestCaseBuilder;
-class ElementsBuilder;
 
 enum class SavePolicy {
     kNever,
@@ -1724,7 +1761,8 @@ DEF_TEST(ClipStack_DiffRects, r) {
     sk_sp<GrDirectContext> context = GrDirectContext::MakeMock(&options);
     std::unique_ptr<SurfaceDrawContext> sdc = SurfaceDrawContext::Make(
             context.get(), GrColorType::kRGBA_8888, SkColorSpace::MakeSRGB(),
-            SkBackingFit::kExact, kDeviceBounds.size(), SkSurfaceProps());
+            SkBackingFit::kExact, kDeviceBounds.size(), SkSurfaceProps(),
+            /*label=*/{});
 
     ClipStack cs(kDeviceBounds, &matrixProvider, false);
 
@@ -1878,7 +1916,8 @@ DEF_TEST(ClipStack_Shader, r) {
     sk_sp<GrDirectContext> context = GrDirectContext::MakeMock(nullptr);
     std::unique_ptr<SurfaceDrawContext> sdc = SurfaceDrawContext::Make(
             context.get(), GrColorType::kRGBA_8888, SkColorSpace::MakeSRGB(),
-            SkBackingFit::kExact, kDeviceBounds.size(), SkSurfaceProps());
+            SkBackingFit::kExact, kDeviceBounds.size(), SkSurfaceProps(),
+            /*label=*/{});
 
     ClipStack cs(kDeviceBounds, &matrixProvider, false);
     cs.save();
@@ -1931,7 +1970,8 @@ DEF_TEST(ClipStack_SimpleApply, r) {
     sk_sp<GrDirectContext> context = GrDirectContext::MakeMock(nullptr);
     std::unique_ptr<SurfaceDrawContext> sdc = SurfaceDrawContext::Make(
             context.get(), GrColorType::kRGBA_8888, SkColorSpace::MakeSRGB(),
-            SkBackingFit::kExact, kDeviceBounds.size(), SkSurfaceProps());
+            SkBackingFit::kExact, kDeviceBounds.size(), SkSurfaceProps(),
+            /*label=*/{});
 
     ClipStack cs(kDeviceBounds, &matrixProvider, false);
 
@@ -2055,16 +2095,19 @@ static void disable_tessellation_atlas(GrContextOptions* options) {
     options->fAvoidStencilBuffers = true;
 }
 
-DEF_GPUTEST_FOR_CONTEXTS(ClipStack_SWMask,
-                         sk_gpu_test::GrContextFactory::IsRenderingContext,
-                         r, ctxInfo, disable_tessellation_atlas) {
+DEF_GANESH_TEST_FOR_CONTEXTS(ClipStack_SWMask,
+                             sk_gpu_test::GrContextFactory::IsRenderingContext,
+                             r,
+                             ctxInfo,
+                             disable_tessellation_atlas,
+                             CtsEnforcement::kNever) {
     using ClipStack = skgpu::v1::ClipStack;
     using SurfaceDrawContext = skgpu::v1::SurfaceDrawContext;
 
     GrDirectContext* context = ctxInfo.directContext();
     std::unique_ptr<SurfaceDrawContext> sdc = SurfaceDrawContext::Make(
             context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact, kDeviceBounds.size(),
-            SkSurfaceProps());
+            SkSurfaceProps(), /*label=*/{});
 
     SkMatrixProvider matrixProvider = SkMatrix::I();
     std::unique_ptr<ClipStack> cs(new ClipStack(kDeviceBounds, &matrixProvider, false));

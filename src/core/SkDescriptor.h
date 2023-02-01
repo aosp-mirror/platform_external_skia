@@ -11,9 +11,9 @@
 #include <memory>
 #include <new>
 
-#include "include/private/SkMacros.h"
-#include "include/private/SkNoncopyable.h"
-#include "src/core/SkBuffer.h"
+#include "include/private/base/SkMacros.h"
+#include "include/private/base/SkNoncopyable.h"
+#include "src/base/SkBuffer.h"
 #include "src/core/SkFontPriv.h"
 #include "src/core/SkScalerContext.h"
 
@@ -63,9 +63,7 @@ public:
         uint32_t fLen;
     };
 
-#ifdef SK_DEBUG
     uint32_t getCount() const { return fCount; }
-#endif
 
     SkString dumpRec() const;
 

@@ -13,14 +13,16 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkTArray.h"
-#include "include/private/SkTemplates.h"
+#include "include/private/base/SkTArray.h"
+#include "include/private/base/SkTemplates.h"
 #include "src/core/SkFontDescriptor.h"
 #include "src/ports/SkFontHost_FreeType_common.h"
 #include "src/ports/SkFontMgr_custom.h"
 
 #include <limits>
 #include <memory>
+
+using namespace skia_private;
 
 class SkData;
 
@@ -137,11 +139,11 @@ void SkFontStyleSet_Custom::appendTypeface(sk_sp<SkTypeface_Custom> typeface) {
 }
 
 int SkFontStyleSet_Custom::count() {
-    return fStyles.count();
+    return fStyles.size();
 }
 
 void SkFontStyleSet_Custom::getStyle(int index, SkFontStyle* style, SkString* name) {
-    SkASSERT(index < fStyles.count());
+    SkASSERT(index < fStyles.size());
     if (style) {
         *style = fStyles[index]->fontStyle();
     }
@@ -151,7 +153,7 @@ void SkFontStyleSet_Custom::getStyle(int index, SkFontStyle* style, SkString* na
 }
 
 SkTypeface* SkFontStyleSet_Custom::createTypeface(int index) {
-    SkASSERT(index < fStyles.count());
+    SkASSERT(index < fStyles.size());
     return SkRef(fStyles[index].get());
 }
 
@@ -167,9 +169,9 @@ SkFontMgr_Custom::SkFontMgr_Custom(const SystemFontLoader& loader) : fDefaultFam
 
     // Try to pick a default font.
     static const char* defaultNames[] = {
-        "Arial", "Verdana", "Times New Roman", "Droid Sans", nullptr
+        "Arial", "Verdana", "Times New Roman", "Droid Sans", "DejaVu Serif", nullptr
     };
-    for (size_t i = 0; i < SK_ARRAY_COUNT(defaultNames); ++i) {
+    for (size_t i = 0; i < std::size(defaultNames); ++i) {
         sk_sp<SkFontStyleSet_Custom> set(this->onMatchFamily(defaultNames[i]));
         if (nullptr == set) {
             continue;
@@ -191,21 +193,21 @@ SkFontMgr_Custom::SkFontMgr_Custom(const SystemFontLoader& loader) : fDefaultFam
 }
 
 int SkFontMgr_Custom::onCountFamilies() const {
-    return fFamilies.count();
+    return fFamilies.size();
 }
 
 void SkFontMgr_Custom::onGetFamilyName(int index, SkString* familyName) const {
-    SkASSERT(index < fFamilies.count());
+    SkASSERT(index < fFamilies.size());
     familyName->set(fFamilies[index]->getFamilyName());
 }
 
 SkFontStyleSet_Custom* SkFontMgr_Custom::onCreateStyleSet(int index) const {
-    SkASSERT(index < fFamilies.count());
+    SkASSERT(index < fFamilies.size());
     return SkRef(fFamilies[index].get());
 }
 
 SkFontStyleSet_Custom* SkFontMgr_Custom::onMatchFamily(const char familyName[]) const {
-    for (int i = 0; i < fFamilies.count(); ++i) {
+    for (int i = 0; i < fFamilies.size(); ++i) {
         if (fFamilies[i]->getFamilyName().equals(familyName)) {
             return SkRef(fFamilies[i].get());
         }
@@ -250,12 +252,12 @@ sk_sp<SkTypeface> SkFontMgr_Custom::onMakeFromStreamArgs(std::unique_ptr<SkStrea
     }
 
     const SkFontArguments::VariationPosition position = args.getVariationDesignPosition();
-    SkAutoSTMalloc<4, SkFixed> axisValues(axisDefinitions.count());
+    AutoSTMalloc<4, SkFixed> axisValues(axisDefinitions.size());
     Scanner::computeAxisValues(axisDefinitions, position, axisValues, name);
 
     auto data = std::make_unique<SkFontData>(
         std::move(stream), args.getCollectionIndex(), args.getPalette().index,
-        axisValues.get(), axisDefinitions.count(),
+        axisValues.get(), axisDefinitions.size(),
         args.getPalette().overrides, args.getPalette().overrideCount);
     return sk_sp<SkTypeface>(new SkTypeface_Stream(std::move(data), style, isFixedPitch, false, name));
 }

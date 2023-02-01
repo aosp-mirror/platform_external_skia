@@ -10,6 +10,10 @@
 #include "include/core/SkImage.h"
 #include "src/core/SkNextID.h"
 
+#if SK_SUPPORT_GPU
+#include "include/gpu/GrRecordingContext.h"
+#endif
+
 SkImageGenerator::SkImageGenerator(const SkImageInfo& info, uint32_t uniqueID)
     : fInfo(info)
     , fUniqueID(kNeedNewImageUniqueID == uniqueID ? SkNextID::ImageID() : uniqueID)
@@ -43,28 +47,50 @@ bool SkImageGenerator::getYUVAPlanes(const SkYUVAPixmaps& yuvaPixmaps) {
 }
 
 #if SK_SUPPORT_GPU
-#include "src/gpu/GrSurfaceProxyView.h"
+#include "src/gpu/ganesh/GrSurfaceProxyView.h"
 
 GrSurfaceProxyView SkImageGenerator::generateTexture(GrRecordingContext* ctx,
                                                      const SkImageInfo& info,
-                                                     const SkIPoint& origin,
-                                                     GrMipmapped mipMapped,
+                                                     GrMipmapped mipmapped,
                                                      GrImageTexGenPolicy texGenPolicy) {
-    SkIRect srcRect = SkIRect::MakeXYWH(origin.x(), origin.y(), info.width(), info.height());
-    if (!SkIRect::MakeWH(fInfo.width(), fInfo.height()).contains(srcRect)) {
+    SkASSERT_RELEASE(fInfo.dimensions() == info.dimensions());
+
+    if (!ctx || ctx->abandoned()) {
         return {};
     }
-    return this->onGenerateTexture(ctx, info, origin, mipMapped, texGenPolicy);
+
+    return this->onGenerateTexture(ctx, info, mipmapped, texGenPolicy);
 }
 
 GrSurfaceProxyView SkImageGenerator::onGenerateTexture(GrRecordingContext*,
                                                        const SkImageInfo&,
-                                                       const SkIPoint&,
                                                        GrMipmapped,
                                                        GrImageTexGenPolicy) {
     return {};
 }
-#endif
+#endif // SK_SUPPORT_GPU
+
+#if SK_GRAPHITE_ENABLED
+#include "src/gpu/graphite/Image_Graphite.h"
+
+sk_sp<SkImage> SkImageGenerator::makeTextureImage(skgpu::graphite::Recorder* recorder,
+                                                  const SkImageInfo& info,
+                                                  skgpu::graphite::Mipmapped mipmapped) {
+    // This still allows for a difference in colorType and colorSpace. Just no subsetting.
+    if (fInfo.dimensions() != info.dimensions()) {
+        return nullptr;
+    }
+
+    return this->onMakeTextureImage(recorder, info, mipmapped);
+}
+
+sk_sp<SkImage> SkImageGenerator::onMakeTextureImage(skgpu::graphite::Recorder*,
+                                                    const SkImageInfo&,
+                                                    skgpu::graphite::Mipmapped) {
+    return nullptr;
+}
+
+#endif // SK_GRAPHITE_ENABLED
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 

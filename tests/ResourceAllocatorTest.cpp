@@ -5,20 +5,46 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkCanvas.h"
-#include "include/core/SkSpan.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrGpu.h"
-#include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrResourceAllocator.h"
-#include "src/gpu/GrResourceProviderPriv.h"
-#include "src/gpu/GrSurfaceProxyPriv.h"
-#include "src/gpu/GrTexture.h"
-#include "src/gpu/GrTextureProxy.h"
+#include "include/gpu/GrTypes.h"
+#include "include/private/base/SkTArray.h"
+#include "include/private/base/SkTo.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/gpu/ResourceKey.h"
+#include "src/gpu/SkBackingFit.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrProxyProvider.h"
+#include "src/gpu/ganesh/GrResourceAllocator.h"
+#include "src/gpu/ganesh/GrResourceCache.h"
+#include "src/gpu/ganesh/GrResourceProvider.h"
+#include "src/gpu/ganesh/GrSurface.h"
+#include "src/gpu/ganesh/GrSurfaceProxy.h"
+#include "src/gpu/ganesh/GrSurfaceProxyPriv.h"
+#include "src/gpu/ganesh/GrTexture.h"
+#include "src/gpu/ganesh/GrTextureProxy.h"
+#include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tools/gpu/ManagedBackendTexture.h"
+
+#include <array>
+#include <cstddef>
+#include <functional>
+#include <utility>
+
+class GrRecordingContext;
+struct GrContextOptions;
 
 namespace {
 struct ProxyParams {
@@ -27,7 +53,7 @@ struct ProxyParams {
     GrColorType     fColorType;
     SkBackingFit    fFit;
     int             fSampleCnt;
-    SkBudgeted      fBudgeted;
+    skgpu::Budgeted fBudgeted;
     enum Kind {
         kDeferred,
         kBackend,
@@ -49,21 +75,22 @@ constexpr GrColorType kAlpha = GrColorType::kAlpha_8;
 constexpr SkBackingFit kE = SkBackingFit::kExact;
 constexpr SkBackingFit kA = SkBackingFit::kApprox;
 
-constexpr SkBudgeted kNotB = SkBudgeted::kNo;
-constexpr SkBudgeted kB = SkBudgeted::kYes;
+constexpr skgpu::Budgeted kNotB = skgpu::Budgeted::kNo;
+constexpr skgpu::Budgeted kB = skgpu::Budgeted::kYes;
 
 constexpr ProxyParams::Kind kDeferred = ProxyParams::Kind::kDeferred;
 constexpr ProxyParams::Kind kBackend = ProxyParams::Kind::kBackend;
 constexpr ProxyParams::Kind kInstantiated = ProxyParams::Kind::kInstantiated;
 constexpr ProxyParams::Kind kLazy = ProxyParams::Kind::kLazy;
 constexpr ProxyParams::Kind kFullyLazy = ProxyParams::Kind::kFullyLazy;
-};
+}
 
 static sk_sp<GrSurfaceProxy> make_deferred(GrProxyProvider* proxyProvider, const GrCaps* caps,
                                            const ProxyParams& p) {
     const GrBackendFormat format = caps->getDefaultBackendFormat(p.fColorType, p.fRenderable);
     return proxyProvider->createProxy(format, {p.fSize, p.fSize}, p.fRenderable, p.fSampleCnt,
-                                      GrMipmapped::kNo, p.fFit, p.fBudgeted, GrProtected::kNo);
+                                      GrMipmapped::kNo, p.fFit, p.fBudgeted, GrProtected::kNo,
+                                      /*label=*/"ResourceAllocatorTest_Deffered");
 }
 
 static sk_sp<GrSurfaceProxy> make_backend(GrDirectContext* dContext, const ProxyParams& p) {
@@ -90,11 +117,15 @@ static sk_sp<GrSurfaceProxy> make_fully_lazy(GrProxyProvider* proxyProvider, con
                                              const ProxyParams& p) {
     const GrBackendFormat format = caps->getDefaultBackendFormat(p.fColorType, p.fRenderable);
     auto cb = [p](GrResourceProvider* provider, const GrSurfaceProxy::LazySurfaceDesc& desc) {
-        auto tex = provider->createTexture({p.fSize, p.fSize}, desc.fFormat,
+        auto tex = provider->createTexture({p.fSize, p.fSize},
+                                           desc.fFormat,
                                            desc.fTextureType,
-                                           desc.fRenderable, desc.fSampleCnt,
-                                           desc.fMipmapped, desc.fBudgeted,
-                                           desc.fProtected);
+                                           desc.fRenderable,
+                                           desc.fSampleCnt,
+                                           desc.fMipmapped,
+                                           desc.fBudgeted,
+                                           desc.fProtected,
+                                           /*label=*/"ResourceAllocatorTest_FullLazy");
         return GrSurfaceProxy::LazyCallbackResult(std::move(tex));
     };
     return GrProxyProvider::MakeFullyLazyProxy(std::move(cb), format, p.fRenderable, p.fSampleCnt,
@@ -106,18 +137,22 @@ static sk_sp<GrSurfaceProxy> make_lazy(GrProxyProvider* proxyProvider, const GrC
                                        const ProxyParams& p) {
     const GrBackendFormat format = caps->getDefaultBackendFormat(p.fColorType, p.fRenderable);
     auto cb = [](GrResourceProvider* provider, const GrSurfaceProxy::LazySurfaceDesc& desc) {
-        auto tex = provider->createTexture(desc.fDimensions, desc.fFormat,
+        auto tex = provider->createTexture(desc.fDimensions,
+                                           desc.fFormat,
                                            desc.fTextureType,
-                                           desc.fRenderable, desc.fSampleCnt,
-                                           desc.fMipmapped, desc.fBudgeted,
-                                           desc.fProtected);
+                                           desc.fRenderable,
+                                           desc.fSampleCnt,
+                                           desc.fMipmapped,
+                                           desc.fBudgeted,
+                                           desc.fProtected,
+                                           /*label=*/"ResourceAllocatorTest_Lazy");
         return GrSurfaceProxy::LazyCallbackResult(std::move(tex));
     };
     return proxyProvider->createLazyProxy(std::move(cb), format, {p.fSize, p.fSize},
                                           GrMipmapped::kNo, GrMipmapStatus::kNotAllocated,
                                           GrInternalSurfaceFlags::kNone,
                                           p.fFit, p.fBudgeted, GrProtected::kNo,
-                                          GrSurfaceProxy::UseAllocator::kYes);
+                                          GrSurfaceProxy::UseAllocator::kYes, /*label=*/{});
 }
 
 static sk_sp<GrSurfaceProxy> make_proxy(GrDirectContext* dContext, const ProxyParams& p) {
@@ -201,7 +236,10 @@ static void non_overlap_test(skiatest::Reporter* reporter, GrDirectContext* dCon
     REPORTER_ASSERT(reporter, expectedResult == doTheBackingStoresMatch);
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorTest,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kNever) {
     auto dContext = ctxInfo.directContext();
     const GrCaps* caps = dContext->priv().caps();
 
@@ -229,7 +267,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorTest, reporter, ctxInfo) {
          kDontShare},
     };
 
-    for (size_t i = 0; i < SK_ARRAY_COUNT(overlappingTests); i++) {
+    for (size_t i = 0; i < std::size(overlappingTests); i++) {
         const TestCase& test = overlappingTests[i];
         sk_sp<GrSurfaceProxy> p1 = make_proxy(dContext, test.fP1);
         sk_sp<GrSurfaceProxy> p2 = make_proxy(dContext, test.fP2);
@@ -242,7 +280,9 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorTest, reporter, ctxInfo) {
     int k2 = caps->getRenderTargetSampleCount(2, beFormat);
     int k4 = caps->getRenderTargetSampleCount(4, beFormat);
 
-    static const TestCase nonOverlappingTests[] = {
+    // This cannot be made static as some of the members depend on non static variables like
+    // kConditionallyShare, k2, and k4.
+    const TestCase nonOverlappingTests[] = {
         // Two non-overlapping intervals w/ compatible proxies should share
         // both same size & approx
         {{64, kRT, kRGBA, kA, 1, kNotB, kDeferred},
@@ -298,7 +338,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorTest, reporter, ctxInfo) {
          kDontShare}
     };
 
-    for (size_t i = 0; i < SK_ARRAY_COUNT(nonOverlappingTests); i++) {
+    for (size_t i = 0; i < std::size(nonOverlappingTests); i++) {
         const TestCase& test = nonOverlappingTests[i];
         sk_sp<GrSurfaceProxy> p1 = make_proxy(dContext, test.fP1);
         sk_sp<GrSurfaceProxy> p2 = make_proxy(dContext, test.fP2);
@@ -317,16 +357,18 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorTest, reporter, ctxInfo) {
 static void draw(GrRecordingContext* rContext) {
     SkImageInfo ii = SkImageInfo::Make(1024, 1024, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
 
-    sk_sp<SkSurface> s = SkSurface::MakeRenderTarget(rContext, SkBudgeted::kYes,
-                                                     ii, 1, kTopLeft_GrSurfaceOrigin, nullptr);
+    sk_sp<SkSurface> s = SkSurface::MakeRenderTarget(
+            rContext, skgpu::Budgeted::kYes, ii, 1, kTopLeft_GrSurfaceOrigin, nullptr);
 
     SkCanvas* c = s->getCanvas();
 
     c->clear(SK_ColorBLACK);
 }
 
-
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorStressTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorStressTest,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     auto context = ctxInfo.directContext();
 
     size_t maxBytes = context->getResourceCacheLimit();
@@ -376,7 +418,7 @@ static void memory_budget_test(skiatest::Reporter* reporter,
         expectedPurgeableBytes += proxy->gpuMemorySize();
         purgeableSurfaces.push_back(sk_ref_sp(proxy->peekSurface()));
     }
-    purgeableSurfaces.reset();
+    purgeableSurfaces.clear();
     REPORTER_ASSERT(reporter, expectedPurgeableBytes == cache->getPurgeableBytes(),
                     "%zu", cache->getPurgeableBytes());
 
@@ -408,7 +450,10 @@ static void memory_budget_test(skiatest::Reporter* reporter,
     REPORTER_ASSERT(reporter, alloc.makeBudgetHeadroom() == test.fShouldFit);
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorMemoryBudgetTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorMemoryBudgetTest,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     auto dContext = ctxInfo.directContext();
 
     constexpr bool    kUnder               = true;
@@ -487,7 +532,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorMemoryBudgetTest, reporter, 
             }},
     };
     SkString match("");
-    for (size_t i = 0; i < SK_ARRAY_COUNT(tests); i++) {
+    for (size_t i = 0; i < std::size(tests); i++) {
         TestCase& test = tests[i];
         if (match.isEmpty() || match == SkString(test.fName)) {
             // Create proxies
@@ -500,4 +545,3 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ResourceAllocatorMemoryBudgetTest, reporter, 
         }
     }
 }
-

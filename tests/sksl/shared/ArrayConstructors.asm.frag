@@ -1,10 +1,10 @@
 OpCapability Shader
 %1 = OpExtInstImport "GLSL.std.450"
 OpMemoryModel Logical GLSL450
-OpEntryPoint Fragment %_entrypoint_v "_entrypoint" %sk_FragColor %sk_Clockwise
+OpEntryPoint Fragment %_entrypoint_v "_entrypoint" %sk_Clockwise %sk_FragColor
 OpExecutionMode %_entrypoint_v OriginUpperLeft
-OpName %sk_FragColor "sk_FragColor"
 OpName %sk_Clockwise "sk_Clockwise"
+OpName %sk_FragColor "sk_FragColor"
 OpName %_UniformBuffer "_UniformBuffer"
 OpMemberName %_UniformBuffer 0 "colorGreen"
 OpMemberName %_UniformBuffer 1 "colorRed"
@@ -13,10 +13,10 @@ OpName %main "main"
 OpName %test1 "test1"
 OpName %test2 "test2"
 OpName %test3 "test3"
+OpDecorate %sk_Clockwise BuiltIn FrontFacing
 OpDecorate %sk_FragColor RelaxedPrecision
 OpDecorate %sk_FragColor Location 0
 OpDecorate %sk_FragColor Index 0
-OpDecorate %sk_Clockwise BuiltIn FrontFacing
 OpMemberDecorate %_UniformBuffer 0 Offset 0
 OpMemberDecorate %_UniformBuffer 0 RelaxedPrecision
 OpMemberDecorate %_UniformBuffer 1 Offset 16
@@ -30,20 +30,20 @@ OpDecorate %_arr_mat4v4float_int_1 ArrayStride 64
 OpDecorate %77 RelaxedPrecision
 OpDecorate %79 RelaxedPrecision
 OpDecorate %80 RelaxedPrecision
+%bool = OpTypeBool
+%_ptr_Input_bool = OpTypePointer Input %bool
+%sk_Clockwise = OpVariable %_ptr_Input_bool Input
 %float = OpTypeFloat 32
 %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
 %sk_FragColor = OpVariable %_ptr_Output_v4float Output
-%bool = OpTypeBool
-%_ptr_Input_bool = OpTypePointer Input %bool
-%sk_Clockwise = OpVariable %_ptr_Input_bool Input
 %_UniformBuffer = OpTypeStruct %v4float %v4float
 %_ptr_Uniform__UniformBuffer = OpTypePointer Uniform %_UniformBuffer
 %10 = OpVariable %_ptr_Uniform__UniformBuffer Uniform
 %void = OpTypeVoid
 %15 = OpTypeFunction %void
-%v2float = OpTypeVector %float 2
 %float_0 = OpConstant %float 0
+%v2float = OpTypeVector %float 2
 %19 = OpConstantComposite %v2float %float_0 %float_0
 %_ptr_Function_v2float = OpTypePointer Function %v2float
 %23 = OpTypeFunction %v4float %_ptr_Function_v2float
@@ -65,6 +65,11 @@ OpDecorate %80 RelaxedPrecision
 %_arr_mat4v4float_int_1 = OpTypeArray %mat4v4float %int_1
 %_ptr_Function__arr_mat4v4float_int_1 = OpTypePointer Function %_arr_mat4v4float_int_1
 %float_16 = OpConstant %float 16
+%49 = OpConstantComposite %v4float %float_16 %float_0 %float_0 %float_0
+%50 = OpConstantComposite %v4float %float_0 %float_16 %float_0 %float_0
+%51 = OpConstantComposite %v4float %float_0 %float_0 %float_16 %float_0
+%52 = OpConstantComposite %v4float %float_0 %float_0 %float_0 %float_16
+%53 = OpConstantComposite %mat4v4float %49 %50 %51 %52
 %int_3 = OpConstant %int 3
 %_ptr_Function_float = OpTypePointer Function %float
 %int_0 = OpConstant %int 0
@@ -90,12 +95,7 @@ OpFunctionEnd
 OpStore %test1 %35
 %42 = OpCompositeConstruct %_arr_v2float_int_2 %40 %41
 OpStore %test2 %42
-%50 = OpCompositeConstruct %v4float %float_16 %float_0 %float_0 %float_0
-%51 = OpCompositeConstruct %v4float %float_0 %float_16 %float_0 %float_0
-%52 = OpCompositeConstruct %v4float %float_0 %float_0 %float_16 %float_0
-%53 = OpCompositeConstruct %v4float %float_0 %float_0 %float_0 %float_16
-%49 = OpCompositeConstruct %mat4v4float %50 %51 %52 %53
-%54 = OpCompositeConstruct %_arr_mat4v4float_int_1 %49
+%54 = OpCompositeConstruct %_arr_mat4v4float_int_1 %53
 OpStore %test3 %54
 %56 = OpAccessChain %_ptr_Function_float %test1 %int_3
 %58 = OpLoad %float %56

@@ -8,11 +8,11 @@
 #ifndef SkFixed_DEFINED
 #define SkFixed_DEFINED
 
-#include "include/core/SkScalar.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkSafe_math.h"
-#include "include/private/SkTPin.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkMath.h" // IWYU pragma: keep
+#include "include/private/base/SkTPin.h" // IWYU pragma: keep
+
+#include <cstdint>
 
 /** \file SkFixed.h
 
@@ -86,7 +86,6 @@ static inline SkFixed SkFixedFloorToFixed(SkFixed x) {
     return (SkFixed)( (uint32_t)x & 0xFFFF0000 );
 }
 
-#define SkFixedAbs(x)       SkAbs32(x)
 #define SkFixedAve(a, b)    (((a) + (b)) >> 1)
 
 // The divide may exceed 32 bits. Clamp to a signed 32 bit result.
@@ -102,6 +101,8 @@ static inline SkFixed SkFixedMul(SkFixed a, SkFixed b) {
 
 // The VCVT float-to-fixed instruction is part of the VFPv3 instruction set.
 #if defined(__ARM_VFPV3__)
+    #include <cstring>
+
     /* This does not handle NaN or other obscurities, but is faster than
        than (int)(x*65536).  When built on Android with -Os, needs forcing
        to inline or we lose the speed benefit.
@@ -110,7 +111,7 @@ static inline SkFixed SkFixedMul(SkFixed a, SkFixed b) {
     {
         int32_t y;
         asm("vcvt.s32.f32 %0, %0, #16": "+w"(x));
-        memcpy(&y, &x, sizeof(y));
+        std::memcpy(&y, &x, sizeof(y));
         return y;
     }
     #undef SkFloatToFixed

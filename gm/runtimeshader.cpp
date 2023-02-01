@@ -6,6 +6,7 @@
  */
 
 #include "gm/gm.h"
+#include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkData.h"
 #include "include/core/SkPaint.h"
@@ -413,13 +414,13 @@ public:
         // Now draw the image with an identity color cube - it should look like the original
         SkRuntimeEffect::ChildPtr children[] = {fIdentityCube->makeShader(sampling, normalize)};
         paint.setColorFilter(fEffect->makeColorFilter(
-                SkData::MakeWithCopy(uniforms, sizeof(uniforms)), SkMakeSpan(children)));
+                SkData::MakeWithCopy(uniforms, sizeof(uniforms)), SkSpan(children)));
         canvas->drawImage(fMandrill, 256, 0, sampling, &paint);
 
         // ... and with a sepia-tone color cube. This should match the sepia-toned image.
         children[0] = fSepiaCube->makeShader(sampling, normalize);
         paint.setColorFilter(fEffect->makeColorFilter(
-                SkData::MakeWithCopy(uniforms, sizeof(uniforms)), SkMakeSpan(children)));
+                SkData::MakeWithCopy(uniforms, sizeof(uniforms)), SkSpan(children)));
         canvas->drawImage(fMandrill, 256, 256, sampling, &paint);
     }
 };
@@ -888,4 +889,164 @@ DEF_SIMPLE_GM(lit_shader_linear_rt, canvas, 512, 256) {
 
     // Now draw the offscreen surface back to our original canvas:
     canvas->drawImage(surface->makeImageSnapshot(), 0, 0);
+}
+
+// skbug.com/13598 GPU was double applying the local matrix.
+DEF_SIMPLE_GM(local_matrix_shader_rt, canvas, 256, 256) {
+    SkString passthrough(R"(
+        uniform shader s;
+        half4 main(float2 p) { return s.eval(p); }
+    )");
+    auto [rte, error] = SkRuntimeEffect::MakeForShader(passthrough, {});
+    if (!rte) {
+        SkDebugf("%s\n", error.c_str());
+        return;
+    }
+
+    auto image     = GetResourceAsImage("images/mandrill_128.png");
+    auto imgShader = image->makeShader(SkSamplingOptions{});
+
+    auto r = SkRect::MakeWH(image->width(), image->height());
+
+    auto lm = SkMatrix::RotateDeg(90.f, {image->width()/2.f, image->height()/2.f});
+
+    SkPaint paint;
+
+    // image
+    paint.setShader(imgShader);
+    canvas->drawRect(r, paint);
+
+    // passthrough(image)
+    canvas->save();
+    canvas->translate(image->width(), 0);
+    paint.setShader(rte->makeShader(nullptr, &imgShader, 1));
+    canvas->drawRect(r, paint);
+    canvas->restore();
+
+    // localmatrix(image)
+    canvas->save();
+    canvas->translate(0, image->height());
+    paint.setShader(imgShader->makeWithLocalMatrix(lm));
+    canvas->drawRect(r, paint);
+    canvas->restore();
+
+    // localmatrix(passthrough(image)) This was the bug.
+    canvas->save();
+    canvas->translate(image->width(), image->height());
+    paint.setShader(rte->makeShader(nullptr, &imgShader, 1)->makeWithLocalMatrix(lm));
+    canvas->drawRect(r, paint);
+    canvas->restore();
+}
+
+DEF_SIMPLE_GM(null_child_rt, canvas, 150, 100) {
+    using ChildPtr = SkRuntimeEffect::ChildPtr;
+
+    // Every swatch should evaluate to the same shade of purple.
+    // Paint with a shader evaluating a null shader.
+    // Point passed to eval() is ignored; paint color is returned.
+    {
+        const SkString kEvalShader{R"(
+            uniform shader s;
+            half4 main(float2 p) { return s.eval(p); }
+        )"};
+        auto [rtShader, error] = SkRuntimeEffect::MakeForShader(kEvalShader);
+        SkASSERT(rtShader);
+
+        SkPaint paint;
+        ChildPtr children[1] = {ChildPtr{sk_sp<SkShader>{nullptr}}};
+        paint.setShader(rtShader->makeShader(/*uniforms=*/nullptr, children));
+        paint.setColor(SkColorSetARGB(0xFF, 0x80, 0x00, 0x80));  // purple (contributes)
+        canvas->drawRect({0, 0, 48, 48}, paint);
+        canvas->translate(50, 0);
+    }
+    // Paint with a shader evaluating a null color filter.
+    // Color passed to eval() is returned; paint color is ignored.
+    {
+        const SkString kEvalColorFilter{R"(
+            uniform colorFilter cf;
+            half4 main(float2 p) { return cf.eval(half4(0.5, 0, 0.5, 1)); }
+        )"};
+        auto [rtShader, error] = SkRuntimeEffect::MakeForShader(kEvalColorFilter);
+        SkASSERT(rtShader);
+
+        SkPaint paint;
+        ChildPtr children[1] = {ChildPtr{sk_sp<SkColorFilter>{nullptr}}};
+        paint.setShader(rtShader->makeShader(/*uniforms=*/nullptr, children));
+        paint.setColor(SkColorSetARGB(0xFF, 0x00, 0x00, 0xFF));  // green (does not contribute)
+        canvas->drawRect({0, 0, 48, 48}, paint);
+        canvas->translate(50, 0);
+    }
+    // Paint with a shader evaluating a null blender.
+    // Colors passed to eval() are blended via src-over; paint color is ignored.
+    {
+        const SkString kEvalBlender{R"(
+            uniform blender b;
+            half4 main(float2 p) { return b.eval(half4(0.5, 0, 0, 0.5), half4(0, 0, 1, 1)); }
+        )"};
+        auto [rtShader, error] = SkRuntimeEffect::MakeForShader(kEvalBlender);
+        SkASSERT(rtShader);
+
+        SkPaint paint;
+        ChildPtr children[1] = {ChildPtr{sk_sp<SkBlender>{nullptr}}};
+        paint.setShader(rtShader->makeShader(/*uniforms=*/nullptr, children));
+        paint.setColor(SkColorSetARGB(0xFF, 0x00, 0x00, 0xFF));  // green (does not contribute)
+        canvas->drawRect({0, 0, 48, 48}, paint);
+        canvas->translate(50, 0);
+    }
+
+    canvas->translate(-150, 50);
+
+    // Paint with a color filter evaluating a null shader.
+    // Point passed to eval() is ignored; previous-stage color (the paint color) is returned.
+    {
+        const SkString kEvalShader{R"(
+            uniform shader s;
+            half4 main(half4 c) { return s.eval(float2(0)); }
+        )"};
+        auto [rtFilter, error] = SkRuntimeEffect::MakeForColorFilter(kEvalShader);
+        SkASSERT(rtFilter);
+
+        SkPaint paint;
+        ChildPtr children[1] = {ChildPtr{sk_sp<SkShader>{nullptr}}};
+        paint.setColorFilter(rtFilter->makeColorFilter(/*uniforms=*/nullptr, children));
+        paint.setColor(SkColorSetARGB(0xFF, 0x80, 0x00, 0x80));  // purple (contributes)
+        canvas->drawRect({0, 0, 48, 48}, paint);
+        canvas->translate(50, 0);
+    }
+    // Paint with a color filter evaluating a null color filter.
+    // Color passed to eval() is returned; paint color is ignored.
+    {
+        const SkString kEvalColorFilter{R"(
+            uniform colorFilter cf;
+            half4 main(half4 c) { return cf.eval(half4(0.5, 0, 0.5, 1)); }
+        )"};
+        auto [rtFilter, error] = SkRuntimeEffect::MakeForColorFilter(kEvalColorFilter);
+        SkASSERT(rtFilter);
+
+        SkPaint paint;
+        ChildPtr children[1] = {ChildPtr{sk_sp<SkColorFilter>{nullptr}}};
+        paint.setColorFilter(rtFilter->makeColorFilter(/*uniforms=*/nullptr, children));
+        paint.setColor(SkColorSetARGB(0xFF, 0x00, 0x00, 0xFF));  // green (does not contribute)
+        canvas->drawRect({0, 0, 48, 48}, paint);
+        canvas->translate(50, 0);
+    }
+    // Paint with a color filter evaluating a null blender.
+    // Colors passed to eval() are blended via src-over; paint color is ignored.
+    {
+        const SkString kEvalBlender{R"(
+            uniform blender b;
+            half4 main(half4 c) { return b.eval(half4(0.5, 0, 0, 0.5), half4(0, 0, 1, 1)); }
+        )"};
+        auto [rtFilter, error] = SkRuntimeEffect::MakeForColorFilter(kEvalBlender);
+        SkASSERT(rtFilter);
+
+        SkPaint paint;
+        ChildPtr children[1] = {ChildPtr{sk_sp<SkBlender>{nullptr}}};
+        paint.setColorFilter(rtFilter->makeColorFilter(/*uniforms=*/nullptr, children));
+        paint.setColor(SkColorSetARGB(0xFF, 0x00, 0x00, 0xFF));  // green (does not contribute)
+        canvas->drawRect({0, 0, 48, 48}, paint);
+        canvas->translate(50, 0);
+    }
+
+    canvas->translate(-150, 50);
 }

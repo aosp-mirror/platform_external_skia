@@ -32,7 +32,7 @@
       "EnableVertexAttribArray", "Finish", "Flush",
       "FrontFace", "GenBuffers",
       "GenTextures", "GetBufferParameteriv", "GetError",
-      "GetIntegerv", "GetProgramInfoLog",
+      "GetFloatv", "GetIntegerv", "GetProgramInfoLog",
       "GetProgramiv", "GetShaderInfoLog",
       "GetShaderiv", "GetString",
       "GetUniformLocation", "IsTexture", "LineWidth", "LinkProgram", "PixelStorei",
@@ -511,14 +511,13 @@
   },
 
   {
-    "GL":    [{"ext": "GL_NV_framebuffer_mixed_samples"}],
-    "GLES":  [{"ext": "GL_CHROMIUM_framebuffer_mixed_samples"},
-              {"ext": "GL_NV_framebuffer_mixed_samples"}],
-    "WebGL": null,
+    "GL":    [{"min_version": [3, 1], "ext": "<core>"},
+              {/*    else if      */  "ext": "GL_ARB_copy_buffer"}],
+    "GLES":  [{"min_version": [3, 0], "ext": "<core>"},
+              {/*    else if      */  "ext": "GL_NV_copy_buffer"}],
+    "WebGL": [{"min_version": [2, 0], "ext": "<core>"},],
 
-    "functions": [
-      "CoverageModulation",
-    ],
+    "functions": ["CopyBufferSubData",],
   },
 
   {
@@ -610,7 +609,7 @@
 
     "functions": [
       "BindSampler", "DeleteSamplers", "GenSamplers",
-      "SamplerParameteri", "SamplerParameteriv",
+      "SamplerParameterf", "SamplerParameteri", "SamplerParameteriv",
     ],
   },
 

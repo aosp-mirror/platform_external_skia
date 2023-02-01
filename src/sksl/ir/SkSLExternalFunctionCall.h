@@ -8,7 +8,9 @@
 #ifndef SKSL_EXTERNALFUNCTIONCALL
 #define SKSL_EXTERNALFUNCTIONCALL
 
-#include "include/private/SkTArray.h"
+#include "include/private/SkSLString.h"
+#include "include/private/base/SkTArray.h"
+#include "include/sksl/SkSLOperator.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLExternalFunction.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
@@ -20,10 +22,10 @@ namespace SkSL {
  */
 class ExternalFunctionCall final : public Expression {
 public:
-    inline static constexpr Kind kExpressionKind = Kind::kExternalFunctionCall;
+    inline static constexpr Kind kIRNodeKind = Kind::kExternalFunctionCall;
 
-    ExternalFunctionCall(int line, const ExternalFunction* function, ExpressionArray arguments)
-        : INHERITED(line, kExpressionKind, &function->type())
+    ExternalFunctionCall(Position pos, const ExternalFunction* function, ExpressionArray arguments)
+        : INHERITED(pos, kIRNodeKind, &function->type())
         , fFunction(*function)
         , fArguments(std::move(arguments)) {}
 
@@ -39,30 +41,17 @@ public:
         return fFunction;
     }
 
-    bool hasProperty(Property property) const override {
-        if (property == Property::kSideEffects) {
-            return true;
-        }
-        for (const auto& arg : this->arguments()) {
-            if (arg->hasProperty(property)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    std::unique_ptr<Expression> clone() const override {
-        return std::make_unique<ExternalFunctionCall>(fLine, &this->function(),
+    std::unique_ptr<Expression> clone(Position pos) const override {
+        return std::make_unique<ExternalFunctionCall>(pos, &this->function(),
                                                       this->arguments().clone());
     }
 
-    std::string description() const override {
+    std::string description(OperatorPrecedence) const override {
         std::string result = std::string(this->function().name()) + "(";
-        std::string separator;
+        auto separator = SkSL::String::Separator();
         for (const std::unique_ptr<Expression>& arg : this->arguments()) {
-            result += separator;
-            result += arg->description();
-            separator = ", ";
+            result += separator();
+            result += arg->description(OperatorPrecedence::kSequence);
         }
         result += ")";
         return result;

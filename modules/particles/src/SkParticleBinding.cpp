@@ -7,10 +7,12 @@
 
 #include "modules/particles/include/SkParticleBinding.h"
 
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkContourMeasure.h"
+#include "include/core/SkFont.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkPath.h"
-#include "include/private/SkTPin.h"
+#include "include/private/base/SkTPin.h"
 #include "include/utils/SkParsePath.h"
 #include "include/utils/SkTextUtils.h"
 #include "modules/particles/include/SkReflected.h"
@@ -18,6 +20,7 @@
 #include "src/core/SkMatrixProvider.h"
 #include "src/core/SkVM.h"
 #include "src/shaders/SkShaderBase.h"
+#include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLCompiler.h"
 
 void SkParticleBinding::visitFields(SkFieldVisitor* v) {
@@ -184,13 +187,15 @@ public:
               skvm::I32 mask) const override {
         skvm::Coord coord = {arguments[0], arguments[1]};
         skvm::F32 zero = builder->splat(0.0f);
-        SkOverrideDeviceMatrixProvider matrixProvider(SkMatrix::I());
         SkColorInfo colorInfo(kRGBA_8888_SkColorType, kPremul_SkAlphaType, /*cs=*/nullptr);
 
-        skvm::Color result = as_SB(fShader)->program(
-                builder, /*device=*/coord, /*local=*/coord, /*paint=*/{zero, zero, zero, zero},
-                matrixProvider, /*localM=*/nullptr, colorInfo, fUniforms,
-                fAlloc);
+        skvm::Color result = as_SB(fShader)->rootProgram(builder,
+                                                         /*device=*/coord,
+                                                         /*paint=*/{zero, zero, zero, zero},
+                                                         /*ctm=*/SkMatrix::I(),
+                                                         colorInfo,
+                                                         fUniforms,
+                                                         fAlloc);
         SkASSERT(result);
         outResult[0] = result.r;
         outResult[1] = result.g;
@@ -235,7 +240,6 @@ public:
                 return;
             }
         }
-
         fShader = SkShaders::Color(SK_ColorWHITE);
     }
 

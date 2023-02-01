@@ -10,34 +10,30 @@
 
 #include "tools/graphite/GraphiteTestContext.h"
 
-#ifdef SK_METAL
+#include "include/gpu/graphite/mtl/MtlBackendContext.h"
 
-#include "experimental/graphite/include/mtl/MtlBackendContext.h"
+namespace skiatest::graphite {
 
-namespace skiatest::graphite::mtl {
-
-class TestContext : public GraphiteTestContext {
+class MtlTestContext : public GraphiteTestContext {
 public:
-    ~TestContext() override {}
+    ~MtlTestContext() override {}
 
     static std::unique_ptr<GraphiteTestContext> Make();
 
     skgpu::BackendApi backend() override { return skgpu::BackendApi::kMetal; }
 
-    std::unique_ptr<skgpu::Context> makeContext() override;
+    std::unique_ptr<skgpu::graphite::Context> makeContext() override;
 
-    const skgpu::mtl::BackendContext& getBackendContext() const {
+    const skgpu::graphite::MtlBackendContext& getBackendContext() const {
         return fMtl;
     }
 
 protected:
-    TestContext(const skgpu::mtl::BackendContext& mtl) : fMtl(mtl) {}
+    MtlTestContext(const skgpu::graphite::MtlBackendContext& mtl) : fMtl(mtl) {}
 
-    skgpu::mtl::BackendContext fMtl;
+    skgpu::graphite::MtlBackendContext fMtl;
 };
 
-}  // namespace skiatest::graphite::mtl
-
-#endif // SK_METAL
+}  // namespace skiatest::graphite
 
 #endif // skiatest_graphite_MtlTestContext_DEFINED

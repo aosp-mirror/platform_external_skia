@@ -8,10 +8,8 @@
 #ifndef SKSL_DSL_LAYOUT
 #define SKSL_DSL_LAYOUT
 
-#include "include/sksl/DSLLayout.h"
-
 #include "include/private/SkSLLayout.h"
-#include "include/sksl/SkSLErrorReporter.h"
+#include "include/sksl/SkSLPosition.h"
 
 namespace SkSL {
 
@@ -21,66 +19,92 @@ class DSLLayout {
 public:
     DSLLayout() {}
 
-    DSLLayout& originUpperLeft(PositionInfo pos = PositionInfo::Capture()) {
+    DSLLayout& originUpperLeft(Position pos = {}) {
         return this->flag(SkSL::Layout::kOriginUpperLeft_Flag, "origin_upper_left", pos);
     }
 
-    DSLLayout& pushConstant(PositionInfo pos = PositionInfo::Capture()) {
+    DSLLayout& pushConstant(Position pos = {}) {
         return this->flag(SkSL::Layout::kPushConstant_Flag, "push_constant", pos);
     }
 
-    DSLLayout& blendSupportAllEquations(PositionInfo pos = PositionInfo::Capture()) {
+    DSLLayout& blendSupportAllEquations(Position pos = {}) {
         return this->flag(SkSL::Layout::kBlendSupportAllEquations_Flag,
                           "blend_support_all_equations", pos);
     }
 
-    DSLLayout& color(PositionInfo pos = PositionInfo::Capture()) {
+    DSLLayout& color(Position pos = {}) {
         return this->flag(SkSL::Layout::kColor_Flag, "color", pos);
     }
 
-    DSLLayout& location(int location, PositionInfo pos = PositionInfo::Capture()) {
+    DSLLayout& location(int location, Position pos = {}) {
         return this->intValue(&fSkSLLayout.fLocation, location, SkSL::Layout::kLocation_Flag,
                               "location", pos);
     }
 
-    DSLLayout& offset(int offset, PositionInfo pos = PositionInfo::Capture()) {
+    DSLLayout& offset(int offset, Position pos = {}) {
         return this->intValue(&fSkSLLayout.fOffset, offset, SkSL::Layout::kOffset_Flag, "offset",
                               pos);
     }
 
-    DSLLayout& binding(int binding, PositionInfo pos = PositionInfo::Capture()) {
+    DSLLayout& binding(int binding, Position pos = {}) {
         return this->intValue(&fSkSLLayout.fBinding, binding, SkSL::Layout::kBinding_Flag,
                               "binding", pos);
     }
 
-    DSLLayout& index(int index, PositionInfo pos = PositionInfo::Capture()) {
+    DSLLayout& texture(int texture, Position pos = {}) {
+        return this->intValue(&fSkSLLayout.fTexture, texture, SkSL::Layout::kTexture_Flag,
+                              "texture", pos);
+    }
+
+    DSLLayout& sampler(int sampler, Position pos = {}) {
+        return this->intValue(&fSkSLLayout.fSampler, sampler, SkSL::Layout::kSampler_Flag,
+                              "sampler", pos);
+    }
+
+    DSLLayout& index(int index, Position pos = {}) {
         return this->intValue(&fSkSLLayout.fIndex, index, SkSL::Layout::kIndex_Flag, "index", pos);
     }
 
-    DSLLayout& set(int set, PositionInfo pos = PositionInfo::Capture()) {
+    DSLLayout& set(int set, Position pos = {}) {
         return this->intValue(&fSkSLLayout.fSet, set, SkSL::Layout::kSet_Flag, "set", pos);
     }
 
-    DSLLayout& builtin(int builtin, PositionInfo pos = PositionInfo::Capture()) {
+    DSLLayout& builtin(int builtin, Position pos = {}) {
         return this->intValue(&fSkSLLayout.fBuiltin, builtin, SkSL::Layout::kBuiltin_Flag,
                               "builtin", pos);
     }
 
     DSLLayout& inputAttachmentIndex(int inputAttachmentIndex,
-                                    PositionInfo pos = PositionInfo::Capture()) {
+                                    Position pos = {}) {
         return this->intValue(&fSkSLLayout.fInputAttachmentIndex, inputAttachmentIndex,
                               SkSL::Layout::kInputAttachmentIndex_Flag, "input_attachment_index",
                               pos);
+    }
+
+    DSLLayout& spirv(Position pos = {}) {
+        return this->flag(SkSL::Layout::kSPIRV_Flag, "spirv", pos);
+    }
+
+    DSLLayout& metal(Position pos = {}) {
+        return this->flag(SkSL::Layout::kMetal_Flag, "metal", pos);
+    }
+
+    DSLLayout& gl(Position pos = {}) {
+        return this->flag(SkSL::Layout::kGL_Flag, "gl", pos);
+    }
+
+    DSLLayout& wgsl(Position pos = {}) {
+        return this->flag(SkSL::Layout::kWGSL_Flag, "wgsl", pos);
     }
 
 private:
     explicit DSLLayout(SkSL::Layout skslLayout)
         : fSkSLLayout(skslLayout) {}
 
-    DSLLayout& flag(SkSL::Layout::Flag mask, const char* name, PositionInfo pos);
+    DSLLayout& flag(SkSL::Layout::Flag mask, const char* name, Position pos);
 
     DSLLayout& intValue(int* target, int value, SkSL::Layout::Flag flag, const char* name,
-                        PositionInfo pos);
+                        Position pos);
 
     SkSL::Layout fSkSLLayout;
 

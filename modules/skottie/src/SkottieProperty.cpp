@@ -22,6 +22,7 @@ bool TextPropertyValue::operator==(const TextPropertyValue& other) const {
         && fLineHeight == other.fLineHeight
         && fLineShift == other.fLineShift
         && fAscent == other.fAscent
+        && fMaxLines == other.fMaxLines
         && fHAlign == other.fHAlign
         && fVAlign == other.fVAlign
         && fResize == other.fResize
@@ -31,8 +32,11 @@ bool TextPropertyValue::operator==(const TextPropertyValue& other) const {
         && fBox == other.fBox
         && fFillColor == other.fFillColor
         && fStrokeColor == other.fStrokeColor
+        && fPaintOrder == other.fPaintOrder
+        && fStrokeJoin == other.fStrokeJoin
         && fHasFill == other.fHasFill
-        && fHasStroke == other.fHasStroke;
+        && fHasStroke == other.fHasStroke
+        && fDecorator == other.fDecorator;
 }
 
 bool TextPropertyValue::operator!=(const TextPropertyValue& other) const {

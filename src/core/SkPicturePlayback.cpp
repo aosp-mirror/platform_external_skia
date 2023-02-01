@@ -9,19 +9,23 @@
 #include "include/core/SkRSXform.h"
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkTDArray.h"
+#include "include/private/base/SkTDArray.h"
+#include "include/private/chromium/Slug.h"
+#include "src/base/SkSafeMath.h"
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkDrawShadowInfo.h"
 #include "src/core/SkFontPriv.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/core/SkPictureData.h"
+#include "src/core/SkPictureFlat.h"
 #include "src/core/SkPicturePlayback.h"
 #include "src/core/SkPictureRecord.h"
 #include "src/core/SkReadBuffer.h"
-#include "src/core/SkSafeMath.h"
 #include "src/core/SkSamplingPriv.h"
 #include "src/core/SkVerticesPriv.h"
 #include "src/utils/SkPatchUtils.h"
+
+using namespace skia_private;
 
 static const SkRect* get_rect_ptr(SkReadBuffer* reader, SkRect* storage) {
     if (reader->readBool()) {
@@ -40,6 +44,7 @@ void SkPicturePlayback::draw(SkCanvas* canvas,
 
     SkReadBuffer reader(fPictureData->opData()->bytes(),
                         fPictureData->opData()->size());
+    reader.setVersion(fPictureData->info().getVersion());
 
     // Record this, so we can concat w/ it if we encounter a setMatrix()
     SkM44 initialMatrix = canvas->getLocalToDevice();
@@ -345,7 +350,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             // the entries.
             int expectedClips = 0;
             int maxMatrixIndex = -1;
-            SkAutoTArray<SkCanvas::ImageSetEntry> set(cnt);
+            AutoTArray<SkCanvas::ImageSetEntry> set(cnt);
             for (int i = 0; i < cnt && reader->isValid(); ++i) {
                 set[i].fImage = sk_ref_sp(fPictureData->getImage(reader));
                 reader->readRect(&set[i].fSrcRect);
@@ -363,8 +368,9 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
 
             int dstClipCount = reader->readInt();
             SkPoint* dstClips = nullptr;
-            if (!reader->validate(expectedClips <= dstClipCount)) {
-                // Entries request more dstClip points than are provided in the buffer
+            if (!reader->validate(dstClipCount >= 0) ||
+                !reader->validate(expectedClips <= dstClipCount)) {
+                // A bad dstClipCount (either negative, or not enough to satisfy entries).
                 break;
             } else if (dstClipCount > 0) {
                 dstClips = (SkPoint*) reader->skip(dstClipCount, sizeof(SkPoint));
@@ -374,7 +380,8 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
                 }
             }
             int matrixCount = reader->readInt();
-            if (!reader->validate((maxMatrixIndex + 1) <= matrixCount) ||
+            if (!reader->validate(matrixCount >= 0) ||
+                !reader->validate(maxMatrixIndex <= (matrixCount - 1)) ||
                 !reader->validate(
                     SkSafeMath::Mul(matrixCount, kMatrixSize) <= reader->available())) {
                 // Entries access out-of-bound matrix indices, given provided matrices or
@@ -600,6 +607,14 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             BREAK_ON_READ_ERROR(reader);
 
             canvas->drawTextBlob(blob, x, y, paint);
+        } break;
+        case DRAW_SLUG: {
+#if SK_SUPPORT_GPU
+            const sktext::gpu::Slug* slug = fPictureData->getSlug(reader);
+            BREAK_ON_READ_ERROR(reader);
+
+            slug->draw(canvas);
+#endif
         } break;
         case DRAW_VERTICES_OBJECT: {
             const SkPaint& paint = fPictureData->requiredPaint(reader);

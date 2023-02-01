@@ -1,6 +1,6 @@
 {
   "name": "canvaskit-wasm",
-  "version": "0.33.0",
+  "version": "0.38.0",
   "description": "A WASM version of Skia's Canvas API",
   "main": "bin/canvaskit.js",
   "homepage": "https://github.com/google/skia/tree/main/modules/canvaskit",
@@ -17,7 +17,9 @@
   "types": "./types/index.d.ts",
   "license": "BSD-3-Clause",
   "devDependencies": {
-    "dtslint": "^4.0.4",
-    "typescript": "^4.0.3"
+    "dtslint": "4.2.1",
+    "typescript": "4.7.4",
+    "@definitelytyped/header-parser": "0.0.121",
+    "@webgpu/types": "0.1.21"
   }
 }

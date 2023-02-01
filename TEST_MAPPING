@@ -4,13 +4,27 @@
       "name": "CtsGraphicsTestCases"
     },
     {
+      "name": "hwui_unit_tests"
+    },
+    {
       "name": "minikin_tests"
     },
     {
       "name": "librenderengine_test"
     },
     {
-      "name": "SurfaceFlinger_test"
+      "name": "SurfaceFlinger_test",
+      // TODO (b/242858942): Remove these filters. They were added in
+      // Ifb136292cfacc36dd66835a50a6128e7b1306aae to work around b/242755851.
+      // Once that is fixed, we should re-enable these tests.
+      "options": [
+        {
+          "exclude-filter": "*LayerRenderTypeTransactionTests*"
+        },
+        {
+          "exclude-filter": "*LayerTypeAndRenderTypeTransactionTests*"
+        }
+      ]
     }
   ],
   "imports": [

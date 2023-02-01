@@ -8,10 +8,44 @@
 #ifndef SkPaintFilterCanvas_DEFINED
 #define SkPaintFilterCanvas_DEFINED
 
+#include "include/core/SkCanvas.h"
 #include "include/core/SkCanvasVirtualEnforcer.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkTDArray.h"
 #include "include/utils/SkNWayCanvas.h"
 
-class SkAndroidFrameworkUtils;
+#include <cstddef>
+
+namespace sktext {
+class GlyphRunList;
+}
+
+class GrRecordingContext;
+class SkData;
+class SkDrawable;
+class SkImage;
+class SkMatrix;
+class SkPaint;
+class SkPath;
+class SkPicture;
+class SkPixmap;
+class SkRRect;
+class SkRegion;
+class SkSurface;
+class SkSurfaceProps;
+class SkTextBlob;
+class SkVertices;
+enum class SkBlendMode;
+struct SkDrawShadowRec;
+struct SkPoint;
+struct SkRSXform;
+struct SkRect;
 
 /** \class SkPaintFilterCanvas
 
@@ -74,7 +108,7 @@ protected:
     void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*) override;
     void onDrawDrawable(SkDrawable*, const SkMatrix*) override;
 
-    void onDrawGlyphRunList(const SkGlyphRunList&, const SkPaint&) override;
+    void onDrawGlyphRunList(const sktext::GlyphRunList&, const SkPaint&) override;
     void onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                         const SkPaint& paint) override;
     void onDrawAnnotation(const SkRect& rect, const char key[], SkData* value) override;
@@ -90,12 +124,12 @@ protected:
     bool onPeekPixels(SkPixmap* pixmap) override;
     bool onAccessTopLayerPixels(SkPixmap* pixmap) override;
     SkImageInfo onImageInfo() const override;
-    bool onGetProps(SkSurfaceProps* props) const override;
+    bool onGetProps(SkSurfaceProps* props, bool top) const override;
 
 private:
     class AutoPaintFilter;
 
-    SkCanvas* proxy() const { SkASSERT(fList.count() == 1); return fList[0]; }
+    SkCanvas* proxy() const { SkASSERT(fList.size() == 1); return fList[0]; }
 
     SkPaintFilterCanvas* internal_private_asPaintFilterCanvas() const override {
         return const_cast<SkPaintFilterCanvas*>(this);

@@ -8,26 +8,52 @@
 #ifndef SkImage_Base_DEFINED
 #define SkImage_Base_DEFINED
 
+#include "include/core/SkData.h"
 #include "include/core/SkImage.h"
-#include "include/core/SkSurface.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkTypes.h"
 #include "src/core/SkMipmap.h"
+
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string_view>
+#include <tuple>
 
 #if SK_SUPPORT_GPU
-#include "include/private/SkTDArray.h"
-#include "src/gpu/GrSurfaceProxyView.h"
-#include "src/gpu/GrTextureProxy.h"
-#include "src/gpu/SkGr.h"
-
-class GrTexture;
+#include "include/gpu/GrTypes.h"
+#include "src/gpu/ganesh/SkGr.h"
 #endif
 
-#include <new>
+#if defined(SK_GRAPHITE_ENABLED)
+namespace skgpu {
+namespace graphite {
+class TextureProxyView;
+}
+}
+#endif
 
+class GrBackendTexture;
 class GrDirectContext;
+class GrFragmentProcessor;
 class GrImageContext;
-class GrSamplerState;
-class SkCachedData;
+class GrRecordingContext;
+class GrSurfaceProxyView;
+class SkBitmap;
+class SkColorSpace;
+class SkMatrix;
+class SkPixmap;
+enum SkAlphaType : int;
+enum SkColorType : int;
+enum SkYUVColorSpace : int;
+enum class GrColorType;
+enum class SkTileMode;
+struct SkIRect;
+struct SkISize;
+struct SkImageInfo;
+struct SkRect;
 
 enum {
     kNeedNewImageUniqueID = 0
@@ -61,7 +87,7 @@ public:
      * Default implementation does a rescale/read and then calls the callback.
      */
     virtual void onAsyncRescaleAndReadPixels(const SkImageInfo&,
-                                             const SkIRect& srcRect,
+                                             SkIRect srcRect,
                                              RescaleGamma,
                                              RescaleMode,
                                              ReadPixelsCallback,
@@ -71,8 +97,8 @@ public:
      */
     virtual void onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace,
                                                    sk_sp<SkColorSpace> dstColorSpace,
-                                                   const SkIRect& srcRect,
-                                                   const SkISize& dstSize,
+                                                   SkIRect srcRect,
+                                                   SkISize dstSize,
                                                    RescaleGamma,
                                                    RescaleMode,
                                                    ReadPixelsCallback,
@@ -121,6 +147,15 @@ public:
     virtual GrBackendTexture onGetBackendTexture(bool flushPendingGrContextIO,
                                                  GrSurfaceOrigin* origin) const;
 #endif
+#ifdef SK_GRAPHITE_ENABLED
+    // Returns a TextureProxyView representation of the image, if possible. This also returns
+    // a color type. This may be different than the image's color type when the image is not
+    // texture-backed and the capabilities of the GPU require a data type conversion to put
+    // the data in a texture.
+    std::tuple<skgpu::graphite::TextureProxyView, SkColorType> asView(
+            skgpu::graphite::Recorder*,
+            skgpu::graphite::Mipmapped) const;
+#endif
 
     virtual bool onPinAsTexture(GrRecordingContext*) const { return false; }
     virtual void onUnpinAsTexture(GrRecordingContext*) const {}
@@ -140,8 +175,11 @@ public:
     // True for picture-backed and codec-backed
     virtual bool onIsLazyGenerated() const { return false; }
 
-    // True for images instantiated in GPU memory
-    virtual bool onIsTextureBacked() const { return false; }
+    // True for images instantiated by Ganesh in GPU memory
+    virtual bool isGaneshBacked() const { return false; }
+
+    // True for images instantiated by Graphite in GPU memory
+    virtual bool isGraphiteBacked() const { return false; }
 
     // Amount of texture memory used by texture-backed images.
     virtual size_t onTextureSize() const { return 0; }
@@ -164,6 +202,18 @@ public:
         return nullptr;
     }
 
+#ifdef SK_GRAPHITE_ENABLED
+    virtual sk_sp<SkImage> onMakeTextureImage(skgpu::graphite::Recorder*,
+                                              RequiredImageProperties) const = 0;
+    virtual sk_sp<SkImage> onMakeSubset(const SkIRect&,
+                                        skgpu::graphite::Recorder*,
+                                        RequiredImageProperties) const = 0;
+    virtual sk_sp<SkImage> onMakeColorTypeAndColorSpace(SkColorType,
+                                                        sk_sp<SkColorSpace>,
+                                                        skgpu::graphite::Recorder*,
+                                                        RequiredImageProperties) const = 0;
+#endif
+
 protected:
     SkImage_Base(const SkImageInfo& info, uint32_t uniqueID);
 
@@ -172,7 +222,8 @@ protected:
     static GrSurfaceProxyView CopyView(GrRecordingContext*,
                                        GrSurfaceProxyView src,
                                        GrMipmapped,
-                                       GrImageTexGenPolicy);
+                                       GrImageTexGenPolicy,
+                                       std::string_view label);
 
     static std::unique_ptr<GrFragmentProcessor> MakeFragmentProcessorFromView(GrRecordingContext*,
                                                                               GrSurfaceProxyView,
@@ -210,10 +261,9 @@ private:
             const SkRect* subset,
             const SkRect* domain) const = 0;
 #endif
+
     // Set true by caches when they cache content that's derived from the current pixels.
     mutable std::atomic<bool> fAddedToRasterCache;
-
-    using INHERITED = SkImage;
 };
 
 static inline SkImage_Base* as_IB(SkImage* image) {
@@ -227,21 +277,5 @@ static inline SkImage_Base* as_IB(const sk_sp<SkImage>& image) {
 static inline const SkImage_Base* as_IB(const SkImage* image) {
     return static_cast<const SkImage_Base*>(image);
 }
-
-#if SK_SUPPORT_GPU
-inline GrSurfaceProxyView SkImage_Base::CopyView(GrRecordingContext* context,
-                                                 GrSurfaceProxyView src,
-                                                 GrMipmapped mipmapped,
-                                                 GrImageTexGenPolicy policy) {
-    SkBudgeted budgeted = policy == GrImageTexGenPolicy::kNew_Uncached_Budgeted
-                          ? SkBudgeted::kYes
-                          : SkBudgeted::kNo;
-    return GrSurfaceProxyView::Copy(context,
-                                    std::move(src),
-                                    mipmapped,
-                                    SkBackingFit::kExact,
-                                    budgeted);
-}
-#endif
 
 #endif

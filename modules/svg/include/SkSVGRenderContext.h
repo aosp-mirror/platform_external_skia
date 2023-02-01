@@ -18,7 +18,8 @@
 #include "modules/skresources/include/SkResources.h"
 #include "modules/svg/include/SkSVGAttribute.h"
 #include "modules/svg/include/SkSVGIDMapper.h"
-#include "src/core/SkTLazy.h"
+#include "src/base/SkTLazy.h"
+#include "src/core/SkTHash.h"
 
 class SkCanvas;
 class SkSVGLength;
@@ -50,6 +51,8 @@ struct SkSVGPresentationContext {
     SkSVGPresentationContext();
     SkSVGPresentationContext(const SkSVGPresentationContext&)            = default;
     SkSVGPresentationContext& operator=(const SkSVGPresentationContext&) = default;
+
+    const SkTHashMap<SkString, SkSVGColorType>* fNamedColors = nullptr;
 
     // Inherited presentation attributes, computed for the current node.
     SkSVGPresentationAttributes fInherited;

@@ -126,6 +126,11 @@ bool Window_mac::attach(BackendType attachType) {
         case kDawn_BackendType:
             fWindowContext = MakeDawnMTLForMac(info, fRequestedDisplayParams);
             break;
+#ifdef SK_GRAPHITE_ENABLED
+        case kGraphiteDawn_BackendType:
+            fWindowContext = MakeGraphiteDawnMetalForMac(info, fRequestedDisplayParams);
+            break;
+#endif
 #endif
 #ifdef SK_VULKAN
         case kVulkan_BackendType:
@@ -237,7 +242,7 @@ static skui::Key get_key(unsigned short vk) {
         { kVK_ANSI_Z,        skui::Key::kZ },
     };
 
-    for (size_t i = 0; i < SK_ARRAY_COUNT(gPair); i++) {
+    for (size_t i = 0; i < std::size(gPair); i++) {
         if (gPair[i].fVK == vk) {
             return gPair[i].fKey;
         }

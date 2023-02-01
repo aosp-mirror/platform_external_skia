@@ -7,20 +7,32 @@
 
 // This is a GPU-backend specific test.
 
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/gpu/SkBackingFit.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrPixmap.h"
+#include "src/gpu/ganesh/GrRenderTargetProxy.h"
+#include "src/gpu/ganesh/GrTextureProxy.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
+#include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 
-#include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrImageInfo.h"
-#include "src/gpu/GrTextureProxy.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include <memory>
+
+class GrRecordingContext;
+struct GrContextOptions;
 
 static const int kSize = 64;
 
 static std::unique_ptr<skgpu::v1::SurfaceDrawContext> get_sdc(GrRecordingContext* rContext) {
     return skgpu::v1::SurfaceDrawContext::Make(rContext, GrColorType::kRGBA_8888, nullptr,
                                                SkBackingFit::kExact, {kSize, kSize},
-                                               SkSurfaceProps());
+                                               SkSurfaceProps(), /*label=*/{});
 }
 
 static void check_instantiation_status(skiatest::Reporter* reporter,
@@ -34,7 +46,10 @@ static void check_instantiation_status(skiatest::Reporter* reporter,
     REPORTER_ASSERT(reporter, tProxy->isInstantiated() == wrappedExpectation);
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceDrawContextTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceDrawContextTest,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     auto dContext = ctxInfo.directContext();
 
     // Calling instantiate on a SurfaceDrawContext's textureProxy also instantiates the

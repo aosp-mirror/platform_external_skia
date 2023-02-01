@@ -7,24 +7,22 @@
 
 #include "include/codec/SkAndroidCodec.h"
 #include "include/codec/SkCodec.h"
-#include "include/core/SkBitmap.h"
-#include "include/core/SkColor.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
 #include "include/core/SkEncodedImageFormat.h"
-#include "include/core/SkImageGenerator.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/third_party/skcms/skcms.h"
-#include "src/codec/SkCodecImageGenerator.h"
-#include "src/core/SkPixmapPriv.h"
+#include "include/private/SkGainmapInfo.h"  // IWYU pragma: keep
+#include "modules/skcms/skcms.h"
+#include "src/core/SkMD5.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
 
-#include <string.h>
+#include <cstdint>
+#include <cstring>
 #include <initializer_list>
 #include <memory>
 #include <utility>
@@ -201,4 +199,42 @@ DEF_TEST(AndroidCodec_P3, r) {
         { 0.0116729736f, 0.0950927734f, 0.71812439f   },
     }};
     REPORTER_ASSERT(r, 0 == memcmp(&matrix, &kExpected, sizeof(skcms_Matrix3x3)));
+}
+
+DEF_TEST(AndroidCodec_xmpMetadata, r) {
+    const struct Rec {
+        const char* path;
+        SkMD5::Digest digest;
+    } recs[] = {
+            {"images/wide_gamut_yellow_224_224_64.jpeg",
+             {0x36, 0x62, 0xa2, 0xeb, 0x29, 0xbe, 0x6e, 0x6d,
+              0x0a, 0x09, 0x15, 0x38, 0x65, 0xa2, 0x19, 0x0b}},
+    };
+
+    for (const auto& rec : recs) {
+        auto data = GetResourceAsData(rec.path);
+        if (!data) {
+            continue;
+        }
+
+        auto codec = SkAndroidCodec::MakeFromCodec(SkCodec::MakeFromData(std::move(data)));
+        if (!codec) {
+            ERRORF(r, "Failed to create a codec from %s", rec.path);
+            continue;
+        }
+
+        const auto xmpMetadata = codec->getXmpMetadata();
+        if (!xmpMetadata) {
+            ERRORF(r, "Expected %s to have XMP metadata", rec.path);
+            continue;
+        }
+
+        SkMD5 md5;
+        md5.write(xmpMetadata->data(), xmpMetadata->size());
+
+        if (md5.finish() != rec.digest) {
+            ERRORF(r, "XMP metadata for %s didn't match expected value", rec.path);
+            continue;
+        }
+    }
 }

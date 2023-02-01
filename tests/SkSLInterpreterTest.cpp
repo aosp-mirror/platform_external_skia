@@ -5,24 +5,52 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkColor.h"
+#include "include/core/SkData.h"
 #include "include/core/SkM44.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSpan.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkSLProgramKind.h"
+#include "include/private/SkSLString.h"
+#include "include/private/base/SkFloatingPoint.h"
+#include "include/private/base/SkTemplates.h"
+#include "src/core/SkVM.h"
+#include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLContext.h"
+#include "src/sksl/SkSLProgramSettings.h"
+#include "src/sksl/SkSLUtil.h"
 #include "src/sksl/codegen/SkSLVMCodeGenerator.h"
 #include "src/sksl/ir/SkSLExternalFunction.h"
+#include "src/sksl/ir/SkSLFunctionDeclaration.h"
+#include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/tracing/SkVMDebugTrace.h"
-#include "src/utils/SkJSON.h"
-
 #include "tests/Test.h"
+
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace SkSL { class FunctionDefinition; }
+namespace SkSL { class Type; }
 
 struct ProgramBuilder {
     ProgramBuilder(skiatest::Reporter* r, const char* src)
             : fCompiler(&fCaps) {
-        SkSL::Program::Settings settings;
+        SkSL::ProgramSettings settings;
         // The SkSL inliner is well tested in other contexts. Here, we disable inlining entirely,
         // to stress-test the VM generator's handling of function calls with varying signatures.
         settings.fInlineThreshold = 0;
-        // For convenience, so we can test functions other than (and not called by) main.
-        settings.fRemoveDeadFunctions = false;
 
         fProgram = fCompiler.convertProgram(SkSL::ProgramKind::kGeneric, std::string(src),
                                             settings);
@@ -33,6 +61,7 @@ struct ProgramBuilder {
 
     explicit operator bool() const { return fProgram != nullptr; }
     SkSL::Program& operator*() { return *fProgram; }
+    SkSL::Program* operator->() { return fProgram.get(); }
 
     SkSL::ShaderCaps fCaps;
     SkSL::Compiler fCompiler;
@@ -47,7 +76,7 @@ static void verify_values(skiatest::Reporter* r,
                           bool exactCompare) {
     auto exact_equiv = [](float x, float y) {
         return x == y
-            || (isnan(x) && isnan(y));
+            || (std::isnan(x) && std::isnan(y));
     };
 
     bool valid = true;
@@ -63,16 +92,18 @@ static void verify_values(skiatest::Reporter* r,
     if (!valid) {
         printf("for program: %s\n", src);
         printf("    expected (");
-        const char* separator = "";
-        for (int i = 0; i < N; ++i) {
-            printf("%s%f", separator, expected[i]);
-            separator = ", ";
+        {
+            auto separator = SkSL::String::Separator();
+            for (int i = 0; i < N; ++i) {
+                printf("%s%f", separator().c_str(), expected[i]);
+            }
         }
         printf("), but received (");
-        separator = "";
-        for (int i = 0; i < N; ++i) {
-            printf("%s%f", separator, actual[i]);
-            separator = ", ";
+        {
+            auto separator = SkSL::String::Separator();
+            for (int i = 0; i < N; ++i) {
+                printf("%s%f", separator().c_str(), actual[i]);
+            }
         }
         printf(")\n");
     }
@@ -84,12 +115,13 @@ void test(skiatest::Reporter* r, const char* src, float* in, const float* expect
     ProgramBuilder program(r, src);
     if (!program) { return; }
 
-    const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
+    const SkSL::FunctionDeclaration* main = program->getFunction("main");
     REPORTER_ASSERT(r, main);
 
     skvm::Builder b;
     SkSL::SkVMSignature sig;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{}, &sig);
+    SkSL::ProgramToSkVM(*program, *main->definition(), &b, /*debugTrace=*/nullptr,
+                        /*uniforms=*/{}, &sig);
     skvm::Program p = b.done();
 
     REPORTER_ASSERT(r, p.nargs() == (int)(sig.fParameterSlots + sig.fReturnSlots));
@@ -115,11 +147,11 @@ void test(skiatest::Reporter* r, const char* src,
     ProgramBuilder program(r, src);
     if (!program) { return; }
 
-    const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
+    const SkSL::FunctionDeclaration* main = program->getFunction("main");
     REPORTER_ASSERT(r, main);
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main->definition(), &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     // TODO: Test with and without JIT?
@@ -517,12 +549,12 @@ DEF_TEST(SkSLInterpreterCompound, r) {
 
     ProgramBuilder program(r, src);
 
-    auto rect_height    = SkSL::Program_GetFunction(*program, "rect_height"),
-         make_blue_rect = SkSL::Program_GetFunction(*program, "make_blue_rect"),
-         median         = SkSL::Program_GetFunction(*program, "median"),
-         sums           = SkSL::Program_GetFunction(*program, "sums"),
-         get_rect_2     = SkSL::Program_GetFunction(*program, "get_rect_2"),
-         fill_rects     = SkSL::Program_GetFunction(*program, "fill_rects");
+    const SkSL::FunctionDeclaration *rect_height    = program->getFunction("rect_height"),
+                                    *make_blue_rect = program->getFunction("make_blue_rect"),
+                                    *median         = program->getFunction("median"),
+                                    *sums           = program->getFunction("sums"),
+                                    *get_rect_2     = program->getFunction("get_rect_2"),
+                                    *fill_rects     = program->getFunction("fill_rects");
 
     SkIRect gRects[4] = { { 1,2,3,4 }, { 5,6,7,8 }, { 9,10,11,12 }, { 13,14,15,16 } };
 
@@ -533,7 +565,7 @@ DEF_TEST(SkSLInterpreterCompound, r) {
         for (int i = 0; i < 16; ++i) {
             uniforms[i] = b.uniform32(uniformPtr, i * sizeof(int)).id;
         }
-        SkSL::ProgramToSkVM(*program, *fn, &b, /*debugTrace=*/nullptr, SkMakeSpan(uniforms));
+        SkSL::ProgramToSkVM(*program, *fn, &b, /*debugTrace=*/nullptr, SkSpan(uniforms));
         return b.done();
     };
 
@@ -550,7 +582,7 @@ DEF_TEST(SkSLInterpreterCompound, r) {
     {
         SkIRect in = SkIRect::MakeXYWH(10, 10, 20, 30);
         int out = 0;
-        skvm::Program p = build(rect_height);
+        skvm::Program p = build(rect_height->definition());
         Args args(gRects);
         args.add(&in, 4);
         args.add(&out, 1);
@@ -561,7 +593,7 @@ DEF_TEST(SkSLInterpreterCompound, r) {
     {
         int in[2] = { 15, 25 };
         RectAndColor out;
-        skvm::Program p = build(make_blue_rect);
+        skvm::Program p = build(make_blue_rect->definition());
         Args args(gRects);
         args.add(&in, 2);
         args.add(&out, 8);
@@ -575,7 +607,7 @@ DEF_TEST(SkSLInterpreterCompound, r) {
     {
         int in[15] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
         int out = 0;
-        skvm::Program p = build(median);
+        skvm::Program p = build(median->definition());
         Args args(gRects);
         args.add(&in, 15);
         args.add(&out, 1);
@@ -586,7 +618,7 @@ DEF_TEST(SkSLInterpreterCompound, r) {
     {
         float in[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
         float out = 0;
-        skvm::Program p = build(sums);
+        skvm::Program p = build(sums->definition());
         Args args(gRects);
         args.add(&in, 8);
         args.add(&out, 1);
@@ -596,7 +628,7 @@ DEF_TEST(SkSLInterpreterCompound, r) {
 
     {
         SkIRect out = SkIRect::MakeEmpty();
-        skvm::Program p = build(get_rect_2);
+        skvm::Program p = build(get_rect_2->definition());
         Args args(gRects);
         args.add(&out, 4);
         p.eval(1, args.fArgs.data());
@@ -607,7 +639,7 @@ DEF_TEST(SkSLInterpreterCompound, r) {
         ManyRects in;
         memset(&in, 0, sizeof(in));
         in.fNumRects = 2;
-        skvm::Program p = build(fill_rects);
+        skvm::Program p = build(fill_rects->definition());
         Args args(gRects);
         args.add(&in, 33);
         p.eval(1, args.fArgs.data());
@@ -626,7 +658,7 @@ DEF_TEST(SkSLInterpreterCompound, r) {
 static void expect_failure(skiatest::Reporter* r, const char* src) {
     SkSL::ShaderCaps caps;
     SkSL::Compiler compiler(&caps);
-    SkSL::Program::Settings settings;
+    SkSL::ProgramSettings settings;
     auto program = compiler.convertProgram(SkSL::ProgramKind::kGeneric,
                                            std::string(src), settings);
     REPORTER_ASSERT(r, !program);
@@ -648,11 +680,11 @@ DEF_TEST(SkSLInterpreterReturnThenCall, r) {
     )";
 
     ProgramBuilder program(r, src);
-    const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
+    const SkSL::FunctionDeclaration* main = program->getFunction("main");
     REPORTER_ASSERT(r, main);
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main->definition(), &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float xs[] = { -2.0f, 0.0f, 3.0f, -1.0f };
@@ -670,11 +702,11 @@ DEF_TEST(SkSLInterpreterEarlyReturn, r) {
 
     ProgramBuilder program(r, src);
 
-    const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
+    const SkSL::FunctionDeclaration* main = program->getFunction("main");
     REPORTER_ASSERT(r, main);
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main->definition(), &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float xs[] = { 1.0f, 3.0f },
@@ -693,19 +725,19 @@ DEF_TEST(SkSLInterpreterFunctions, r) {
         "float main(float x) { return sub(sqr(x), x); }\n"
 
         // Different signatures
-        "float dot(float2 a, float2 b) { return a.x*b.x + a.y*b.y; }\n"
-        "float dot(float3 a, float3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }\n"
-        "float dot3_test(float x) { return dot(float3(x, x + 1, x + 2), float3(1, -1, 2)); }\n"
-        "float dot2_test(float x) { return dot(float2(x, x + 1), float2(1, -1)); }\n";
+        "float Dot(float2 a, float2 b) { return a.x*b.x + a.y*b.y; }\n"
+        "float Dot(float3 a, float3 b) { return a.x*b.x + a.y*b.y + a.z*b.z; }\n"
+        "float Dot3_test(float x) { return dot(float3(x, x + 1, x + 2), float3(1, -1, 2)); }\n"
+        "float Dot2_test(float x) { return dot(float2(x, x + 1), float2(1, -1)); }\n";
 
     ProgramBuilder program(r, src);
 
-    auto sub  = SkSL::Program_GetFunction(*program, "sub");
-    auto sqr  = SkSL::Program_GetFunction(*program, "sqr");
-    auto main = SkSL::Program_GetFunction(*program, "main");
-    auto tan  = SkSL::Program_GetFunction(*program, "tan");
-    auto dot3 = SkSL::Program_GetFunction(*program, "dot3_test");
-    auto dot2 = SkSL::Program_GetFunction(*program, "dot2_test");
+    const SkSL::FunctionDeclaration* sub  = program->getFunction("sub");
+    const SkSL::FunctionDeclaration* sqr  = program->getFunction("sqr");
+    const SkSL::FunctionDeclaration* main = program->getFunction("main");
+    const SkSL::FunctionDeclaration* tan  = program->getFunction("tan");
+    const SkSL::FunctionDeclaration* dot3 = program->getFunction("Dot3_test");
+    const SkSL::FunctionDeclaration* dot2 = program->getFunction("Dot2_test");
 
     REPORTER_ASSERT(r, sub);
     REPORTER_ASSERT(r, sqr);
@@ -714,9 +746,10 @@ DEF_TEST(SkSLInterpreterFunctions, r) {
     REPORTER_ASSERT(r, dot3);
     REPORTER_ASSERT(r, dot2);
 
-    auto test_fn = [&](const SkSL::FunctionDefinition* fn, float in, float expected) {
+    auto test_fn = [&](const SkSL::FunctionDeclaration* fn, float in, float expected) {
         skvm::Builder b;
-        SkSL::ProgramToSkVM(*program, *fn, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
+        SkSL::ProgramToSkVM(*program, *fn->definition(), &b,
+                            /*debugTrace=*/nullptr, /*uniforms=*/{});
         skvm::Program p = b.done();
 
         float out = 0.0f;
@@ -894,7 +927,7 @@ private:
 DEF_TEST(SkSLInterpreterExternalFunction, r) {
     SkSL::ShaderCaps caps;
     SkSL::Compiler compiler(&caps);
-    SkSL::Program::Settings settings;
+    SkSL::ProgramSettings settings;
     const char* src = "float main() { return externalSqrt(25); }";
     std::vector<std::unique_ptr<SkSL::ExternalFunction>> externalFunctions;
     externalFunctions.push_back(std::make_unique<ExternalSqrt>("externalSqrt", compiler));
@@ -903,10 +936,10 @@ DEF_TEST(SkSLInterpreterExternalFunction, r) {
             SkSL::ProgramKind::kGeneric, std::string(src), settings);
     REPORTER_ASSERT(r, program);
 
-    const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
+    const SkSL::FunctionDeclaration* main = program->getFunction("main");
 
     skvm::Builder b;
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main->definition(), &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float out;
@@ -948,7 +981,7 @@ private:
 DEF_TEST(SkSLInterpreterExternalTable, r) {
     SkSL::ShaderCaps caps;
     SkSL::Compiler compiler(&caps);
-    SkSL::Program::Settings settings;
+    SkSL::ProgramSettings settings;
     const char* src =
             "float4 main() { return float4(table(2), table(-1), table(0.4), table(0.6)); }";
     std::vector<std::unique_ptr<SkSL::ExternalFunction>> externalFunctions;
@@ -962,9 +995,9 @@ DEF_TEST(SkSLInterpreterExternalTable, r) {
             SkSL::ProgramKind::kGeneric, std::string(src), settings);
     REPORTER_ASSERT(r, program);
 
-    const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
+    const SkSL::FunctionDeclaration* main = program->getFunction("main");
 
-    SkSL::ProgramToSkVM(*program, *main, &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main->definition(), &b, /*debugTrace=*/nullptr, /*uniforms=*/{});
     skvm::Program p = b.done();
 
     float out[4];
@@ -978,7 +1011,7 @@ DEF_TEST(SkSLInterpreterExternalTable, r) {
 DEF_TEST(SkSLInterpreterTrace, r) {
     SkSL::ShaderCaps caps;
     SkSL::Compiler compiler(&caps);
-    SkSL::Program::Settings settings;
+    SkSL::ProgramSettings settings;
     settings.fOptimize = false;
 
     constexpr const char kSrc[] =
@@ -1007,9 +1040,9 @@ int main() {
                                                                      std::string(kSrc), settings);
     REPORTER_ASSERT(r, program);
 
-    const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
+    const SkSL::FunctionDeclaration* main = program->getFunction("main");
     SkSL::SkVMDebugTrace debugTrace;
-    SkSL::ProgramToSkVM(*program, *main, &b, &debugTrace, /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main->definition(), &b, &debugTrace, /*uniforms=*/{});
     skvm::Program p = b.done();
     REPORTER_ASSERT(r, p.nargs() == 1);
 

@@ -1,33 +1,31 @@
 OpCapability Shader
 %1 = OpExtInstImport "GLSL.std.450"
 OpMemoryModel Logical GLSL450
-OpEntryPoint Fragment %main "main" %sk_FragColor %sk_Clockwise
+OpEntryPoint Fragment %main "main" %sk_Clockwise %sk_FragColor
 OpExecutionMode %main OriginUpperLeft
-OpName %sk_FragColor "sk_FragColor"
 OpName %sk_Clockwise "sk_Clockwise"
+OpName %sk_FragColor "sk_FragColor"
 OpName %main "main"
 OpName %array "array"
 OpName %x "x"
 OpName %y "y"
 OpName %z "z"
 OpName %w "w"
+OpDecorate %sk_Clockwise BuiltIn FrontFacing
 OpDecorate %sk_FragColor RelaxedPrecision
 OpDecorate %sk_FragColor Location 0
 OpDecorate %sk_FragColor Index 0
-OpDecorate %sk_Clockwise BuiltIn FrontFacing
 OpDecorate %_arr_float_int_4 ArrayStride 16
 OpDecorate %x RelaxedPrecision
 OpDecorate %y RelaxedPrecision
-OpDecorate %34 RelaxedPrecision
-OpDecorate %38 RelaxedPrecision
-OpDecorate %47 RelaxedPrecision
+OpDecorate %43 RelaxedPrecision
+%bool = OpTypeBool
+%_ptr_Input_bool = OpTypePointer Input %bool
+%sk_Clockwise = OpVariable %_ptr_Input_bool Input
 %float = OpTypeFloat 32
 %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
 %sk_FragColor = OpVariable %_ptr_Output_v4float Output
-%bool = OpTypeBool
-%_ptr_Input_bool = OpTypePointer Input %bool
-%sk_Clockwise = OpVariable %_ptr_Input_bool Input
 %void = OpTypeVoid
 %11 = OpTypeFunction %void
 %int = OpTypeInt 32 1
@@ -59,19 +57,15 @@ OpStore %x %int_0
 OpStore %y %uint_1
 OpStore %z %int_2
 OpStore %w %uint_3
-%34 = OpLoad %int %x
-%35 = OpAccessChain %_ptr_Function_float %array %34
-%37 = OpLoad %float %35
-%38 = OpLoad %uint %y
-%39 = OpAccessChain %_ptr_Function_float %array %38
+%34 = OpAccessChain %_ptr_Function_float %array %int_0
+%36 = OpLoad %float %34
+%37 = OpAccessChain %_ptr_Function_float %array %uint_1
+%38 = OpLoad %float %37
+%39 = OpAccessChain %_ptr_Function_float %array %int_2
 %40 = OpLoad %float %39
-%41 = OpLoad %int %z
-%42 = OpAccessChain %_ptr_Function_float %array %41
-%43 = OpLoad %float %42
-%44 = OpLoad %uint %w
-%45 = OpAccessChain %_ptr_Function_float %array %44
-%46 = OpLoad %float %45
-%47 = OpCompositeConstruct %v4float %37 %40 %43 %46
-OpStore %sk_FragColor %47
+%41 = OpAccessChain %_ptr_Function_float %array %uint_3
+%42 = OpLoad %float %41
+%43 = OpCompositeConstruct %v4float %36 %38 %40 %42
+OpStore %sk_FragColor %43
 OpReturn
 OpFunctionEnd

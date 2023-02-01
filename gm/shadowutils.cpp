@@ -18,8 +18,8 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypes.h"
 #include "include/private/SkShadowFlags.h"
-#include "include/private/SkTArray.h"
-#include "include/private/SkTDArray.h"
+#include "include/private/base/SkTArray.h"
+#include "include/private/base/SkTDArray.h"
 #include "include/utils/SkShadowUtils.h"
 
 #include <initializer_list>
@@ -90,8 +90,8 @@ void draw_paths(SkCanvas* canvas, ShadowMode mode) {
     SkScalar x = 0;
     SkScalar dy = 0;
     SkTDArray<SkMatrix> matrices;
-    matrices.push()->reset();
-    matrices.push()->setRotate(33.f, 25.f, 25.f).postScale(1.2f, 0.8f, 25.f, 25.f);
+    matrices.append()->reset();
+    matrices.append()->setRotate(33.f, 25.f, 25.f).postScale(1.2f, 0.8f, 25.f, 25.f);
     for (auto& m : matrices) {
         for (int flags : { kNone_ShadowFlag, kTransparentOccluder_ShadowFlag }) {
             int pathCounter = 0;
@@ -242,7 +242,7 @@ DEF_SIMPLE_GM(shadow_utils_gaussian_colorfilter, canvas, 512, 256) {
 
     const SkColor colors[] = { 0, 0xFF000000 };
     auto sh = SkGradientShader::MakeRadial({r.centerX(), r.centerY()}, r.width(),
-                                           colors, nullptr, SK_ARRAY_COUNT(colors),
+                                           colors, nullptr, std::size(colors),
                                            SkTileMode::kClamp);
 
     SkPaint redPaint;

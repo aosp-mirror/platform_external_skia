@@ -8,7 +8,7 @@
 #ifndef SkBitmapProcState_opts_DEFINED
 #define SkBitmapProcState_opts_DEFINED
 
-#include "include/private/SkVx.h"
+#include "include/private/base/SkVx.h"
 #include "src/core/SkBitmapProcState.h"
 #include "src/core/SkMSAN.h"
 
@@ -534,5 +534,12 @@ static void decode_packed_coordinates_and_weight(U32 packed, Out* v0, Out* v1, O
 #endif
 
 }  // namespace SK_OPTS_NS
+
+namespace sktests {
+    template <typename U32, typename Out>
+    void decode_packed_coordinates_and_weight(U32 packed, Out* v0, Out* v1, Out* w) {
+        SK_OPTS_NS::decode_packed_coordinates_and_weight<U32, Out>(packed, v0, v1, w);
+    }
+}
 
 #endif

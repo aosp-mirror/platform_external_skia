@@ -8,33 +8,39 @@
 #ifndef SkCodec_DEFINED
 #define SkCodec_DEFINED
 
-#include "include/codec/SkCodecAnimation.h"
 #include "include/codec/SkEncodedOrigin.h"
-#include "include/core/SkColor.h"
-#include "include/core/SkEncodedImageFormat.h"
+#include "include/core/SkData.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPixmap.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkSize.h"
-#include "include/core/SkStream.h"
 #include "include/core/SkTypes.h"
 #include "include/core/SkYUVAPixmaps.h"
 #include "include/private/SkEncodedInfo.h"
-#include "include/private/SkNoncopyable.h"
-#include "include/private/SkTemplates.h"
+#include "include/private/base/SkNoncopyable.h"
+#include "modules/skcms/skcms.h"
 
+#include <cstddef>
+#include <memory>
+#include <tuple>
 #include <vector>
 
+// TODO(kjlubick, bungeman) replace these includes with forward declares.
+#include "include/codec/SkCodecAnimation.h" // IWYU pragma: keep
+#include "include/core/SkAlphaType.h" // IWYU pragma: keep
+#include "include/core/SkEncodedImageFormat.h" // IWYU pragma: keep
+
 class SkAndroidCodec;
-class SkColorSpace;
-class SkData;
 class SkFrameHolder;
 class SkImage;
 class SkPngChunkReader;
 class SkSampler;
+class SkStream;
+struct SkGainmapInfo;
 
 namespace DM {
 class CodecSrc;
-class ColorCodecSrc;
 } // namespace DM
 
 /**
@@ -756,13 +762,18 @@ protected:
     SkCodec(SkEncodedInfo&&,
             XformFormat srcFormat,
             std::unique_ptr<SkStream>,
-            SkEncodedOrigin = kTopLeft_SkEncodedOrigin);
+            SkEncodedOrigin = kTopLeft_SkEncodedOrigin,
+            sk_sp<const SkData> xmpMetadata = nullptr);
 
     void setSrcXformFormat(XformFormat pixelFormat);
 
     XformFormat getSrcXformFormat() const {
         return fSrcXformFormat;
     }
+
+    sk_sp<const SkData> getXmpMetadata() const { return fXmpMetadata; }
+
+    virtual bool onGetGainmapInfo(SkGainmapInfo*, std::unique_ptr<SkStream>*) { return false; }
 
     virtual SkISize onGetScaledDimensions(float /*desiredScale*/) const {
         // By default, scaling is not supported.
@@ -884,8 +895,9 @@ private:
     const SkEncodedInfo                fEncodedInfo;
     XformFormat                        fSrcXformFormat;
     std::unique_ptr<SkStream>          fStream;
-    bool                               fNeedsRewind;
+    bool fNeedsRewind = false;
     const SkEncodedOrigin              fOrigin;
+    const sk_sp<const SkData> fXmpMetadata;
 
     SkImageInfo                        fDstInfo;
     Options                            fOptions;
@@ -901,13 +913,13 @@ private:
     skcms_AlphaFormat                  fDstXformAlphaFormat;
 
     // Only meaningful during scanline decodes.
-    int                                fCurrScanline;
+    int fCurrScanline = -1;
 
-    bool                               fStartedIncrementalDecode;
+    bool fStartedIncrementalDecode = false;
 
     // Allows SkAndroidCodec to call handleFrameIndex (potentially decoding a prior frame and
     // clearing to transparent) without SkCodec calling it, too.
-    bool                               fAndroidCodecHandlesFrameIndex;
+    bool fAndroidCodecHandlesFrameIndex = false;
 
     bool initializeColorXform(const SkImageInfo& dstInfo, SkEncodedInfo::Alpha, bool srcIsOpaque);
 

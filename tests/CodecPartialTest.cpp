@@ -18,6 +18,7 @@
 #include "tests/Test.h"
 #include "tools/Resources.h"
 
+#include <algorithm>
 #include <cstring>
 #include <initializer_list>
 #include <memory>

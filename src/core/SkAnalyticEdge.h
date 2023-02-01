@@ -8,7 +8,7 @@
 #ifndef SkAnalyticEdge_DEFINED
 #define SkAnalyticEdge_DEFINED
 
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTo.h"
 #include "src/core/SkEdge.h"
 
 #include <utility>
@@ -40,6 +40,8 @@ struct SkAnalyticEdge {
     SkFixed fSavedX;        // For deferred blitting
     SkFixed fSavedY;        // For deferred blitting
     SkFixed fSavedDY;       // For deferred blitting
+
+    Type    fEdgeType;      // Remembers the *initial* edge type
 
     int8_t  fCurveCount;    // only used by kQuad(+) and kCubic(-)
     uint8_t fCurveShift;    // appled to all Dx/DDx/DDDx except for fCubicDShift exception

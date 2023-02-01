@@ -9,19 +9,21 @@
 #define SkBlenderBase_DEFINED
 
 #include "include/core/SkBlender.h"
-#include "include/core/SkColorSpace.h"
-#include "src/core/SkArenaAlloc.h"
+#include "src/base/SkArenaAlloc.h"
 #include "src/core/SkVM.h"
 
 #include <optional>
 
-enum class SkBackend : uint8_t;
 struct GrFPArgs;
 class GrFragmentProcessor;
-class SkPaintParamsKeyBuilder;
+class SkColorInfo;
 class SkRuntimeEffect;
-class SkShaderCodeDictionary;
-class SkUniformBlock;
+
+namespace skgpu::graphite {
+class KeyContext;
+class PaintParamsKeyBuilder;
+class PipelineDataGatherer;
+}
 
 /**
  * Encapsulates a blend function, including non-public APIs.
@@ -57,11 +59,18 @@ public:
 
     virtual SkRuntimeEffect* asRuntimeEffect() const { return nullptr; }
 
-    // TODO: make pure virtual
-    virtual void addToKey(SkShaderCodeDictionary*,
-                          SkBackend,
-                          SkPaintParamsKeyBuilder*,
-                          SkUniformBlock*) const;
+#ifdef SK_GRAPHITE_ENABLED
+    /**
+     * TODO: Make pure virtual.
+     * primitiveColorBlender = true when blending the result of the paint evaluation with a
+     * primitive color (which is supplied by certain geometries). primitiveColorBlender = false when
+     * blending the result of the paint evaluation with the back buffer.
+     */
+    virtual void addToKey(const skgpu::graphite::KeyContext&,
+                          skgpu::graphite::PaintParamsKeyBuilder*,
+                          skgpu::graphite::PipelineDataGatherer*,
+                          bool primitiveColorBlender) const;
+#endif
 
     static SkFlattenable::Type GetFlattenableType() { return kSkBlender_Type; }
     Type getFlattenableType() const override { return GetFlattenableType(); }

@@ -11,7 +11,7 @@
 #include "modules/particles/include/SkReflected.h"
 
 #include "include/core/SkString.h"
-#include "include/private/SkTArray.h"
+#include "include/private/base/SkTArray.h"
 #include "src/utils/SkJSON.h"
 #include "src/utils/SkJSONWriter.h"
 
@@ -35,17 +35,17 @@ public:
             SkStrSplit(s.c_str(), "\n", kStrict_SkStrSplitMode, &lines);
             fWriter.beginArray(name);
             for (const auto& line : lines) {
-                fWriter.appendString(line.c_str());
+                fWriter.appendString(line);
             }
             fWriter.endArray();
         } else {
-            fWriter.appendString(name, s.c_str());
+            fWriter.appendString(name, s);
         }
     }
 
     // Compound types
     void visit(sk_sp<SkReflected>& e, const SkReflected::Type* baseType) override {
-        fWriter.appendString("Type", e ? e->getType()->fName : "Null");
+        fWriter.appendCString("Type", e ? e->getType()->fName : "Null");
     }
 
     void enterObject(const char* name) override { fWriter.beginObject(name); }

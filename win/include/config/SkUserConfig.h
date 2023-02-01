@@ -7,6 +7,10 @@
 #define NOMINMAX
 #endif
 
+#ifndef SKSL_ENABLE_TRACING
+#define SKSL_ENABLE_TRACING
+#endif
+
 #ifndef SK_CODEC_DECODES_JPEG
 #define SK_CODEC_DECODES_JPEG
 #endif
@@ -21,6 +25,10 @@
 
 #ifndef SK_ENABLE_ANDROID_UTILS
 #define SK_ENABLE_ANDROID_UTILS
+#endif
+
+#ifndef SK_ENABLE_PRECOMPILE
+#define SK_ENABLE_PRECOMPILE
 #endif
 
 #ifndef SK_ENABLE_SKSL

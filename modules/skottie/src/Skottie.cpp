@@ -14,9 +14,9 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkStream.h"
-#include "include/private/SkTArray.h"
-#include "include/private/SkTPin.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTArray.h"
+#include "include/private/base/SkTPin.h"
+#include "include/private/base/SkTo.h"
 #include "modules/skottie/include/ExternalLayer.h"
 #include "modules/skottie/include/SkottieProperty.h"
 #include "modules/skottie/src/Composition.h"
@@ -92,37 +92,6 @@ private:
     using INHERITED = DiscardableAdapterBase<OpacityAdapter, sksg::OpacityEffect>;
 };
 
-static SkBlendMode GetBlendMode(const skjson::ObjectValue& jobject,
-                                const AnimationBuilder* abuilder) {
-    static constexpr SkBlendMode kBlendModeMap[] = {
-        SkBlendMode::kSrcOver,    // 0:'normal'
-        SkBlendMode::kMultiply,   // 1:'multiply'
-        SkBlendMode::kScreen,     // 2:'screen'
-        SkBlendMode::kOverlay,    // 3:'overlay
-        SkBlendMode::kDarken,     // 4:'darken'
-        SkBlendMode::kLighten,    // 5:'lighten'
-        SkBlendMode::kColorDodge, // 6:'color-dodge'
-        SkBlendMode::kColorBurn,  // 7:'color-burn'
-        SkBlendMode::kHardLight,  // 8:'hard-light'
-        SkBlendMode::kSoftLight,  // 9:'soft-light'
-        SkBlendMode::kDifference, // 10:'difference'
-        SkBlendMode::kExclusion,  // 11:'exclusion'
-        SkBlendMode::kHue,        // 12:'hue'
-        SkBlendMode::kSaturation, // 13:'saturation'
-        SkBlendMode::kColor,      // 14:'color'
-        SkBlendMode::kLuminosity, // 15:'luminosity'
-        SkBlendMode::kPlus,       // 16:'add'
-    };
-
-    const size_t bm_index = ParseDefault<size_t>(jobject["bm"], 0);
-    if (bm_index >= SK_ARRAY_COUNT(kBlendModeMap)) {
-        abuilder->log(Logger::Level::kWarning, &jobject, "Unsupported blend mode %zu\n", bm_index);
-        return SkBlendMode::kSrcOver;
-    }
-
-    return kBlendModeMap[bm_index];
-}
-
 } // namespace
 
 sk_sp<sksg::RenderNode> AnimationBuilder::attachOpacity(const skjson::ObjectValue& jobject,
@@ -144,17 +113,6 @@ sk_sp<sksg::RenderNode> AnimationBuilder::attachOpacity(const skjson::ObjectValu
     }
 
     return adapter->node();
-}
-
-sk_sp<sksg::RenderNode> AnimationBuilder::attachBlendMode(const skjson::ObjectValue& jobject,
-                                                          sk_sp<sksg::RenderNode> child) const {
-    const auto bm = GetBlendMode(jobject, this);
-    if (bm != SkBlendMode::kSrcOver) {
-        fHasNontrivialBlending = true;
-        child = sksg::BlendModeEffect::Make(std::move(child), bm);
-    }
-
-    return child;
 }
 
 AnimationBuilder::AnimationBuilder(sk_sp<ResourceProvider> rp, sk_sp<SkFontMgr> fontmgr,
@@ -181,11 +139,12 @@ AnimationBuilder::AnimationBuilder(sk_sp<ResourceProvider> rp, sk_sp<SkFontMgr> 
 AnimationBuilder::AnimationInfo AnimationBuilder::parse(const skjson::ObjectValue& jroot) {
     this->dispatchMarkers(jroot["markers"]);
 
+    AutoScope ascope(this);
+    AutoPropertyTracker apt(this, jroot, PropertyObserver::NodeType::COMPOSITION);
+
     this->parseAssets(jroot["assets"]);
     this->parseFonts(jroot["fonts"], jroot["chars"]);
 
-    AutoScope ascope(this);
-    AutoPropertyTracker apt(this, jroot, PropertyObserver::NodeType::COMPOSITION);
     auto root = CompositionBuilder(*this, fCompSize, jroot).build(*this);
 
     auto animators = ascope.release();

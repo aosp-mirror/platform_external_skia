@@ -10,8 +10,11 @@
 
 #include "include/core/SkRefCnt.h"
 
+#include <memory>
+
 class SkData;
 class SkImageGenerator;
+class SkOpenTypeSVGDecoder;
 class SkTraceMemoryDump;
 
 class SK_API SkGraphics {
@@ -136,6 +139,27 @@ public:
      */
     static ImageGeneratorFromEncodedDataFactory
                     SetImageGeneratorFromEncodedDataFactory(ImageGeneratorFromEncodedDataFactory);
+
+    /**
+     *  To draw OpenType SVG data, Skia will look at this runtime function pointer. If this function
+     *  pointer is set, the SkTypeface implementations which support OpenType SVG will call this
+     *  function to create an SkOpenTypeSVGDecoder to decode the OpenType SVG and draw it as needed.
+     *  If this function is not set, the SkTypeface implementations will generally not support
+     *  OpenType SVG and attempt to use other glyph representations if available.
+     */
+    using OpenTypeSVGDecoderFactory =
+            std::unique_ptr<SkOpenTypeSVGDecoder> (*)(const uint8_t* svg, size_t length);
+    static OpenTypeSVGDecoderFactory SetOpenTypeSVGDecoderFactory(OpenTypeSVGDecoderFactory);
+    static OpenTypeSVGDecoderFactory GetOpenTypeSVGDecoderFactory();
+
+    /**
+     *  Temporarily (until variable COLRv1 is released) pass a feature switch function for whether
+     *  variable COLRv1 is enabled. Needed for initializing FreeType with a property setting so that
+     *  variable COLRv1 can be enabled in Chrome Canaries during development.
+     */
+    using VariableColrV1EnabledFunc = bool (*)();
+    static VariableColrV1EnabledFunc SetVariableColrV1EnabledFunc(VariableColrV1EnabledFunc);
+    static bool GetVariableColrV1Enabled();
 
     /**
      *  Call early in main() to allow Skia to use a JIT to accelerate CPU-bound operations.

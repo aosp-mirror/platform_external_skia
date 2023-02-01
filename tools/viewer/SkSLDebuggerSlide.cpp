@@ -8,6 +8,7 @@
 #include "tools/viewer/SkSLDebuggerSlide.h"
 
 #include "include/core/SkCanvas.h"
+#include "include/core/SkStream.h"
 #include "tools/viewer/Viewer.h"
 
 #include <algorithm>
@@ -33,7 +34,7 @@ void SkSLDebuggerSlide::unload() {
 }
 
 void SkSLDebuggerSlide::showLoadTraceGUI() {
-    ImGui::InputText("Trace Path", fTraceFile, SK_ARRAY_COUNT(fTraceFile));
+    ImGui::InputText("Trace Path", fTraceFile, std::size(fTraceFile));
     bool load = ImGui::Button("Load Debug Trace");
 
     if (load) {
@@ -201,7 +202,7 @@ void SkSLDebuggerSlide::showStackTraceTable() {
             for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
                 int funcIdx = callStack.rbegin()[row];
                 SkASSERT(funcIdx >= 0 && (size_t)funcIdx < fTrace->fFuncInfo.size());
-                const SkSL::SkVMFunctionInfo& funcInfo = fTrace->fFuncInfo[funcIdx];
+                const SkSL::FunctionDebugInfo& funcInfo = fTrace->fFuncInfo[funcIdx];
 
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
@@ -242,7 +243,7 @@ void SkSLDebuggerSlide::showVariableTable() {
                     const SkSL::SkVMDebugTracePlayer::VariableData& var = vars.at(row);
                     SkASSERT(var.fSlotIndex >= 0);
                     SkASSERT((size_t)var.fSlotIndex < fTrace->fSlotInfo.size());
-                    const SkSL::SkVMSlotInfo& slotInfo = fTrace->fSlotInfo[var.fSlotIndex];
+                    const SkSL::SlotDebugInfo& slotInfo = fTrace->fSlotInfo[var.fSlotIndex];
 
                     ImGui::TableNextRow();
                     if (var.fDirty) {

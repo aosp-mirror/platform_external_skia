@@ -5,34 +5,47 @@
  * found in the LICENSE file.
  */
 
-#include <algorithm>
-
 #include "include/core/SkBitmap.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkFlattenable.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
 #include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
 #include "include/effects/SkImageFilters.h"
-#include "include/private/SkColorData.h"
-#include "include/private/SkTFitsIn.h"
-#include "include/private/SkTPin.h"
-#include "include/private/SkVx.h"
-#include "src/core/SkArenaAlloc.h"
-#include "src/core/SkAutoPixmapStorage.h"
-#include "src/core/SkGpuBlurUtils.h"
+#include "include/private/base/SkFloatingPoint.h"
+#include "include/private/base/SkVx.h"
+#include "include/private/base/SkMalloc.h"
+#include "src/base/SkArenaAlloc.h"
 #include "src/core/SkImageFilter_Base.h"
-#include "src/core/SkOpts.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkWriteBuffer.h"
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <memory>
+#include <utility>
+
 #if SK_SUPPORT_GPU
-#include "src/gpu/GrTextureProxy.h"
-#include "src/gpu/SkGr.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/core/SkGpuBlurUtils.h"
+#include "src/gpu/ganesh/GrSurfaceProxyView.h"
 #if SK_GPU_V1
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
 #endif // SK_GPU_V1
 #endif // SK_SUPPORT_GPU
 
 #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE1
-    #include <immintrin.h>
+    #include <xmmintrin.h>
     #define SK_PREFETCH(ptr) _mm_prefetch(reinterpret_cast<const char*>(ptr), _MM_HINT_T0)
 #elif defined(__GNUC__)
     #define SK_PREFETCH(ptr) __builtin_prefetch(ptr)
@@ -989,7 +1002,6 @@ sk_sp<SkSpecialImage> SkBlurImageFilter::gpuFilter(
     }
     SkASSERT(inputView.asTextureProxy());
 
-    // TODO (michaelludwig) - The color space choice is odd, should it just be ctx.refColorSpace()?
     dstBounds.offset(input->subset().topLeft());
     inputBounds.offset(input->subset().topLeft());
     auto sdc = SkGpuBlurUtils::GaussianBlur(
@@ -997,7 +1009,7 @@ sk_sp<SkSpecialImage> SkBlurImageFilter::gpuFilter(
             std::move(inputView),
             SkColorTypeToGrColorType(input->colorType()),
             input->alphaType(),
-            ctx.colorSpace() ? sk_ref_sp(input->getColorSpace()) : nullptr,
+            ctx.refColorSpace(),
             dstBounds,
             inputBounds,
             sigma.x(),
@@ -1011,8 +1023,7 @@ sk_sp<SkSpecialImage> SkBlurImageFilter::gpuFilter(
                                                SkIRect::MakeSize(dstBounds.size()),
                                                kNeedNewImageUniqueID_SpecialImage,
                                                sdc->readSurfaceView(),
-                                               sdc->colorInfo().colorType(),
-                                               sk_ref_sp(input->getColorSpace()),
+                                               sdc->colorInfo(),
                                                ctx.surfaceProps());
 #else // SK_GPU_V1
     return nullptr;
