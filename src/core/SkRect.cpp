@@ -7,6 +7,7 @@
 
 #include "include/core/SkRect.h"
 
+#include "include/private/base/SkDebug.h"
 #include "src/core/SkRectPriv.h"
 
 bool SkIRect::intersect(const SkIRect& a, const SkIRect& b) {
@@ -51,7 +52,7 @@ void SkRect::toQuad(SkPoint quad[4]) const {
     quad[3].set(fLeft, fBottom);
 }
 
-#include "include/private/base/SkVx.h"
+#include "src/base/SkVx.h"
 
 bool SkRect::setBoundsCheck(const SkPoint pts[], int count) {
     SkASSERT((pts && count > 0) || count == 0);
