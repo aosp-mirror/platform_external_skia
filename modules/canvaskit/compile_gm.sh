@@ -21,15 +21,13 @@ fi
 pushd $BASE_DIR/../..
 
 source $EMSDK/emsdk_env.sh
-EMCC=`which emcc`
 EMCXX=`which em++`
-EMAR=`which emar`
 
 if [[ $@ == *debug* ]]; then
   echo "Building a Debug build"
   DEBUG=true
   EXTRA_CFLAGS="\"-DSK_DEBUG\", \"-DGR_TEST_UTILS\", "
-  RELEASE_CONF="-O1 --js-opts 0 -s DEMANGLE_SUPPORT=1 -frtti -s ASSERTIONS=1 -s GL_ASSERTIONS=1 -g \
+  RELEASE_CONF="-O1 --js-opts 0 -sDEMANGLE_SUPPORT=1 -frtti -sASSERTIONS=1 -sGL_ASSERTIONS=1 -g \
                 -DSK_DEBUG --pre-js $BASE_DIR/debug.js"
   BUILD_DIR=${BUILD_DIR:="out/wasm_gm_tests_debug"}
 else
@@ -52,7 +50,7 @@ GN_GPU="skia_enable_gpu=true skia_gl_standard = \"webgl\""
 GN_GPU_FLAGS="\"-DSK_DISABLE_LEGACY_SHADERCONTEXT\","
 WASM_GPU="-lGL -DSK_SUPPORT_GPU=1 -DSK_GL \
           -DSK_DISABLE_LEGACY_SHADERCONTEXT --pre-js $BASE_DIR/cpu.js --pre-js $BASE_DIR/gpu.js\
-          -s USE_WEBGL2=1"
+          -sUSE_WEBGL2=1"
 
 GM_LIB="$BUILD_DIR/libgm_wasm.a"
 
@@ -85,11 +83,9 @@ echo "Compiling bitcode"
 
 # Inspired by https://github.com/Zubnix/skia-wasm-port/blob/master/build_bindings.sh
 ./bin/gn gen ${BUILD_DIR} \
-  --args="cc=\"${EMCC}\" \
-  cxx=\"${EMCXX}\" \
-  ar=\"${EMAR}\" \
+  --args="skia_emsdk_dir=\"${EMSDK}\" \
   extra_cflags_cc=[\"-frtti\"] \
-  extra_cflags=[\"-s\", \"WARN_UNALIGNED=1\", \"-s\", \"MAIN_MODULE=1\",
+  extra_cflags=[\"-sMAIN_MODULE=1\",
     \"-DSKNX_NO_SIMD\", \"-DSK_DISABLE_AAA\",
     \"-DSK_FORCE_8_BYTE_ALIGNMENT\",
     ${GN_GPU_FLAGS}
@@ -128,8 +124,6 @@ echo "Compiling bitcode"
   ${GN_GPU} \
   ${GN_FONT} \
   skia_use_expat=true \
-  skia_enable_ccpr=true \
-  skia_enable_nga=false \
   skia_enable_svg=true \
   skia_enable_skshaper=true \
   skia_enable_skparagraph=true \
@@ -141,8 +135,8 @@ parse_targets() {
     basename $LIBPATH
   done
 }
-${NINJA} -C ${BUILD_DIR} libskia.a libskshaper.a \
-  $(parse_targets $SHAPER_LIB $GM_LIB)
+${NINJA} -C ${BUILD_DIR} libskia.a libskshaper.a libskunicode.a \
+  $(parse_targets $GM_LIB)
 
 echo "Generating final wasm"
 
@@ -163,26 +157,8 @@ SKIA_DEFINES="
 -DSK_UNICODE_AVAILABLE \
 -DSK_ENABLE_SVG"
 
-# Disable '-s STRICT=1' outside of Linux until
-# https://github.com/emscripten-core/emscripten/issues/12118 is resovled.
-STRICTNESS="-s STRICT=1"
-if [[ `uname` != "Linux" ]]; then
-  echo "Disabling '-s STRICT=1'. See: https://github.com/emscripten-core/emscripten/issues/12118"
-  STRICTNESS=""
-fi
-
 GMS_TO_BUILD="gm/*.cpp"
 TESTS_TO_BUILD="tests/*.cpp"
-
-# DSL FP tests need to include compiled test shaders from the `dslfp` subdirectory.
-TESTS_TO_BUILD+=\
-" tests/sksl/dslfp/GrDSLFPTest_DoStatement.dsl.cpp"\
-" tests/sksl/dslfp/GrDSLFPTest_ForStatement.dsl.cpp"\
-" tests/sksl/dslfp/GrDSLFPTest_IfStatement.dsl.cpp"\
-" tests/sksl/dslfp/GrDSLFPTest_SwitchStatement.dsl.cpp"\
-" tests/sksl/dslfp/GrDSLFPTest_Swizzle.dsl.cpp"\
-" tests/sksl/dslfp/GrDSLFPTest_Ternary.dsl.cpp"\
-" tests/sksl/dslfp/GrDSLFPTest_WhileStatement.dsl.cpp"
 
 # When developing locally, it can be faster to focus only on the gms or tests you care about
 # (since they all have to be recompiled/relinked) every time. To do so, mark the following as true
@@ -196,7 +172,6 @@ GLOBIGNORE="gm/cgms.cpp:"\
 "gm/compressed_textures.cpp:"\
 "gm/fiddle.cpp:"\
 "gm/particles.cpp:"\
-"gm/xform.cpp:"\
 "gm/video_decoder.cpp:"
 
 # These tests do not compile with the WASM code (require other deps).
@@ -242,18 +217,19 @@ EMCC_DEBUG=1 ${EMCXX} \
     $TESTS_TO_BUILD \
     $GM_LIB \
     $BUILD_DIR/libskshaper.a \
+    $BUILD_DIR/libskunicode.a \
     $BUILD_DIR/libsvg.a \
     $BUILD_DIR/libskia.a \
     $BUILTIN_FONT \
-    -s LLD_REPORT_UNDEFINED \
-    -s ALLOW_MEMORY_GROWTH=1 \
-    -s EXPORT_NAME="InitWasmGMTests" \
-    -s EXPORTED_FUNCTIONS=['_malloc','_free'] \
-    -s FORCE_FILESYSTEM=1 \
-    -s FILESYSTEM=1 \
-    -s MODULARIZE=1 \
-    -s NO_EXIT_RUNTIME=1 \
-    -s INITIAL_MEMORY=256MB \
-    -s WASM=1 \
-    $STRICTNESS \
+    -sLLD_REPORT_UNDEFINED \
+    -sALLOW_MEMORY_GROWTH=1 \
+    -sEXPORT_NAME="InitWasmGMTests" \
+    -sEXPORTED_FUNCTIONS=['_malloc','_free'] \
+    -sFORCE_FILESYSTEM=1 \
+    -sFILESYSTEM=1 \
+    -sMODULARIZE=1 \
+    -sNO_EXIT_RUNTIME=1 \
+    -sINITIAL_MEMORY=256MB \
+    -sWASM=1 \
+    -sSTRICT=1 \
     -o $BUILD_DIR/wasm_gm_tests.js

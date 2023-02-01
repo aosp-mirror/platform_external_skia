@@ -20,8 +20,10 @@
 #include "src/gpu/GrShaderCaps.h"
 #include "src/gpu/GrStencilSettings.h"
 #include "src/gpu/GrUtil.h"
+#include "src/gpu/KeyBuilder.h"
 #include "src/gpu/SkGr.h"
 #include "src/gpu/vk/GrVkGpu.h"
+#include "src/gpu/vk/GrVkImage.h"
 #include "src/gpu/vk/GrVkInterface.h"
 #include "src/gpu/vk/GrVkRenderTarget.h"
 #include "src/gpu/vk/GrVkTexture.h"
@@ -66,7 +68,7 @@ GrVkCaps::GrVkCaps(const GrContextOptions& contextOptions, const GrVkInterface* 
 
     fTextureBarrierSupport = true;
 
-    fShaderCaps.reset(new GrShaderCaps(contextOptions));
+    fShaderCaps = std::make_unique<GrShaderCaps>();
 
     this->init(contextOptions, vkInterface, physDev, features, physicalDeviceVersion, extensions,
                isProtected);
@@ -382,6 +384,10 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
         fShouldAlwaysUseDedicatedImageMemory = true;
     }
 
+    if (extensions.hasExtension(VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME, 1)) {
+        fSupportsDRMFormatModifiers = true;
+    }
+
     fMaxInputAttachmentDescriptors = properties.limits.maxDescriptorSetInputAttachments;
 
     // On desktop GPUs we have found that this does not provide much benefit. The perf results show
@@ -395,13 +401,14 @@ void GrVkCaps::init(const GrContextOptions& contextOptions, const GrVkInterface*
     // On ARM devices we are seeing an average perf win of around 50%-60% across the board.
     if (kARM_VkVendor == properties.vendorID) {
         fPreferDiscardableMSAAAttachment = true;
+        fSupportsMemorylessAttachments = true;
     }
 
     this->initGrCaps(vkInterface, physDev, properties, memoryProperties, features, extensions);
     this->initShaderCaps(properties, features);
 
     if (kQualcomm_VkVendor == properties.vendorID) {
-        // A "clear" load for the CCPR atlas runs faster on QC than a "discard" load followed by a
+        // A "clear" load for atlases runs faster on QC than a "discard" load followed by a
         // scissored clear.
         // On NVIDIA and Intel, the discard load followed by clear is faster.
         // TODO: Evaluate on ARM, Imagination, and ATI.
@@ -515,6 +522,7 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
     // feature for those devices.
     if (properties.vendorID == kQualcomm_VkVendor && androidAPIVersion <= 28) {
         fPreferDiscardableMSAAAttachment = false;
+        fSupportsDiscardableMSAAForDMSAA = false;
     }
 
     // On Mali G series GPUs, applying transfer functions in the fragment shader with half-floats
@@ -602,7 +610,8 @@ void GrVkCaps::initGrCaps(const GrVkInterface* vkInterface,
     // attribs timeout looping over that many. For now, we'll cap this at 64 max and can raise it if
     // we ever find that need.
     static const uint32_t kMaxVertexAttributes = 64;
-    fMaxVertexAttributes = std::min(properties.limits.maxVertexInputAttributes, kMaxVertexAttributes);
+    fMaxVertexAttributes = std::min(properties.limits.maxVertexInputAttributes,
+                                    kMaxVertexAttributes);
 
     // GrCaps::fSampleLocationsSupport refers to the ability to *query* the sample locations (not
     // program them). For now we just set this to true if the device uses standard locations, and
@@ -610,14 +619,6 @@ void GrVkCaps::initGrCaps(const GrVkInterface* vkInterface,
     if (properties.limits.standardSampleLocations) {
         fSampleLocationsSupport = true;
     }
-
-    // See skbug.com/10346
-#if 0
-    if (extensions.hasExtension(VK_EXT_SAMPLE_LOCATIONS_EXTENSION_NAME, 1)) {
-        // We "disable" multisample by colocating all samples at pixel center.
-        fMultisampleDisableSupport = true;
-    }
-#endif
 
     if (extensions.hasExtension(VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME, 1)) {
         fConservativeRasterSupport = true;
@@ -678,13 +679,6 @@ void GrVkCaps::initGrCaps(const GrVkInterface* vkInterface,
     if (kARM_VkVendor == properties.vendorID) {
         fShouldCollapseSrcOverToSrcWhenAble = true;
     }
-
-    // We're seeing vkCmdClearAttachments take a lot of cpu time when clearing the color attachment.
-    // We really should only be getting in there for partial clears. So instead we will do all
-    // partial clears as draws.
-    if (kQualcomm_VkVendor == properties.vendorID) {
-        fPerformPartialClearsAsDraws = true;
-    }
 }
 
 void GrVkCaps::initShaderCaps(const VkPhysicalDeviceProperties& properties,
@@ -707,16 +701,15 @@ void GrVkCaps::initShaderCaps(const VkPhysicalDeviceProperties& properties,
     // RelaxedPrecision. Rewriting the multiply as a sum of vector*scalar fixes this. (skia:11769)
     shaderCaps->fRewriteMatrixVectorMultiply = (kARM_VkVendor == properties.vendorID);
 
-    // FIXME: http://skbug.com/7733: Disable geometry shaders until Intel/Radeon GMs draw correctly.
-    // shaderCaps->fGeometryShaderSupport =
-    //         shaderCaps->fGSInvocationsSupport = features.features.geometryShader;
-
     shaderCaps->fDualSourceBlendingSupport = features.features.dualSrcBlend;
 
     shaderCaps->fIntegerSupport = true;
     shaderCaps->fNonsquareMatrixSupport = true;
+    shaderCaps->fInverseHyperbolicSupport = true;
     shaderCaps->fVertexIDSupport = true;
-    shaderCaps->fFPManipulationSupport = true;
+    shaderCaps->fInfinitySupport = true;
+    shaderCaps->fNonconstantArrayIndexSupport = true;
+    shaderCaps->fBitManipulationSupport = true;
 
     // Assume the minimum precisions mandated by the SPIR-V spec.
     shaderCaps->fFloatIs32Bits = true;
@@ -866,7 +859,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 ctInfo.fColorType = ct;
                 ctInfo.fTransferColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag;
-                ctInfo.fReadSwizzle = GrSwizzle::RGB1();
+                ctInfo.fReadSwizzle = skgpu::Swizzle::RGB1();
             }
         }
     }
@@ -877,9 +870,17 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
         auto& info = this->getFormatInfo(format);
         info.init(interface, physDev, properties, format);
         if (SkToBool(info.fOptimalFlags & FormatInfo::kTexturable_Flag)) {
-            info.fColorTypeInfoCount = 2;
+            info.fColorTypeInfoCount = 3;
             info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
+            // Format: VK_FORMAT_R8_UNORM, Surface: kR_8
+            {
+                constexpr GrColorType ct = GrColorType::kR_8;
+                auto& ctInfo = info.fColorTypeInfos[ctIdx++];
+                ctInfo.fColorType = ct;
+                ctInfo.fTransferColorType = ct;
+                ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
+            }
             // Format: VK_FORMAT_R8_UNORM, Surface: kAlpha_8
             {
                 constexpr GrColorType ct = GrColorType::kAlpha_8;
@@ -887,8 +888,8 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 ctInfo.fColorType = ct;
                 ctInfo.fTransferColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-                ctInfo.fReadSwizzle = GrSwizzle("000r");
-                ctInfo.fWriteSwizzle = GrSwizzle("a000");
+                ctInfo.fReadSwizzle = skgpu::Swizzle("000r");
+                ctInfo.fWriteSwizzle = skgpu::Swizzle("a000");
             }
             // Format: VK_FORMAT_R8_UNORM, Surface: kGray_8
             {
@@ -897,7 +898,7 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 ctInfo.fColorType = ct;
                 ctInfo.fTransferColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag;
-                ctInfo.fReadSwizzle = GrSwizzle("rrr1");
+                ctInfo.fReadSwizzle = skgpu::Swizzle("rrr1");
             }
         }
     }
@@ -982,8 +983,8 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 ctInfo.fColorType = ct;
                 ctInfo.fTransferColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-                ctInfo.fReadSwizzle = GrSwizzle("000r");
-                ctInfo.fWriteSwizzle = GrSwizzle("a000");
+                ctInfo.fReadSwizzle = skgpu::Swizzle("000r");
+                ctInfo.fWriteSwizzle = skgpu::Swizzle("a000");
             }
         }
     }
@@ -1080,8 +1081,8 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 ctInfo.fColorType = ct;
                 ctInfo.fTransferColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-                ctInfo.fReadSwizzle = GrSwizzle::BGRA();
-                ctInfo.fWriteSwizzle = GrSwizzle::BGRA();
+                ctInfo.fReadSwizzle = skgpu::Swizzle::BGRA();
+                ctInfo.fWriteSwizzle = skgpu::Swizzle::BGRA();
             }
         }
     }
@@ -1140,8 +1141,8 @@ void GrVkCaps::initFormatTable(const GrVkInterface* interface, VkPhysicalDevice 
                 ctInfo.fColorType = ct;
                 ctInfo.fTransferColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
-                ctInfo.fReadSwizzle = GrSwizzle("000r");
-                ctInfo.fWriteSwizzle = GrSwizzle("a000");
+                ctInfo.fReadSwizzle = skgpu::Swizzle("000r");
+                ctInfo.fWriteSwizzle = skgpu::Swizzle("a000");
             }
         }
     }
@@ -1391,7 +1392,7 @@ static bool backend_format_is_external(const GrBackendFormat& format) {
 #ifdef SK_DEBUG
         VkFormat vkFormat;
         SkAssertResult(format.asVkFormat(&vkFormat));
-        SkASSERT(vkFormat == VK_NULL_HANDLE);
+        SkASSERT(vkFormat == VK_FORMAT_UNDEFINED);
 #endif
         return true;
     }
@@ -1410,7 +1411,7 @@ bool GrVkCaps::isFormatSRGB(const GrBackendFormat& format) const {
     return format_is_srgb(vkFormat);
 }
 
-bool GrVkCaps::isFormatTexturable(const GrBackendFormat& format) const {
+bool GrVkCaps::isFormatTexturable(const GrBackendFormat& format, GrTextureType) const {
     VkFormat vkFormat;
     if (!format.asVkFormat(&vkFormat)) {
         return false;
@@ -1552,13 +1553,16 @@ GrCaps::SurfaceReadPixelsSupport GrVkCaps::surfaceSupportsReadPixels(
         return SurfaceReadPixelsSupport::kUnsupported;
     }
     if (auto tex = static_cast<const GrVkTexture*>(surface->asTexture())) {
-        auto texAttachment = tex->textureAttachment();
+        auto texImage = tex->textureImage();
+        if (!texImage) {
+            return SurfaceReadPixelsSupport::kUnsupported;
+        }
         // We can't directly read from a VkImage that has a ycbcr sampler.
-        if (texAttachment->ycbcrConversionInfo().isValid()) {
+        if (texImage->ycbcrConversionInfo().isValid()) {
             return SurfaceReadPixelsSupport::kCopyToTexture2D;
         }
         // We can't directly read from a compressed format
-        if (GrVkFormatIsCompressed(texAttachment->imageFormat())) {
+        if (GrVkFormatIsCompressed(texImage->imageFormat())) {
             return SurfaceReadPixelsSupport::kCopyToTexture2D;
         }
         return SurfaceReadPixelsSupport::kSupported;
@@ -1587,8 +1591,12 @@ bool GrVkCaps::onSurfaceSupportsWritePixels(const GrSurface* surface) const {
     }
     // We can't write to a texture that has a ycbcr sampler.
     if (auto tex = static_cast<const GrVkTexture*>(surface->asTexture())) {
+        auto texImage = tex->textureImage();
+        if (!texImage) {
+            return false;
+        }
         // We can't directly read from a VkImage that has a ycbcr sampler.
-        if (tex->textureAttachment()->ycbcrConversionInfo().isValid()) {
+        if (texImage->ycbcrConversionInfo().isValid()) {
             return false;
         }
     }
@@ -1629,6 +1637,29 @@ GrBackendFormat GrVkCaps::onGetDefaultBackendFormat(GrColorType ct) const {
     return GrBackendFormat::MakeVk(format);
 }
 
+bool GrVkCaps::onSupportsDynamicMSAA(const GrRenderTargetProxy* rtProxy) const {
+    // We must be able to use the rtProxy as an input attachment to load into the discardable msaa
+    // attachment. Also the rtProxy should have a sample count of 1 so that it can be used as a
+    // resolve attachment.
+    return this->supportsDiscardableMSAAForDMSAA() &&
+           rtProxy->supportsVkInputAttachment() &&
+           rtProxy->numSamples() == 1;
+}
+
+bool GrVkCaps::renderTargetSupportsDiscardableMSAA(const GrVkRenderTarget* rt) const {
+    return rt->resolveAttachment() &&
+           rt->resolveAttachment()->supportsInputAttachmentUsage() &&
+           ((rt->numSamples() > 1 && this->preferDiscardableMSAAAttachment()) ||
+            (rt->numSamples() == 1 && this->supportsDiscardableMSAAForDMSAA()));
+}
+
+bool GrVkCaps::programInfoWillUseDiscardableMSAA(const GrProgramInfo& programInfo) const {
+    return programInfo.targetHasVkResolveAttachmentWithInput() &&
+           programInfo.numSamples() > 1 &&
+           ((programInfo.targetsNumSamples() > 1 && this->preferDiscardableMSAAAttachment()) ||
+            (programInfo.targetsNumSamples() == 1 && this->supportsDiscardableMSAAForDMSAA()));
+}
+
 GrBackendFormat GrVkCaps::getBackendFormatFromCompressionType(
         SkImage::CompressionType compressionType) const {
     switch (compressionType) {
@@ -1654,7 +1685,8 @@ GrBackendFormat GrVkCaps::getBackendFormatFromCompressionType(
     SkUNREACHABLE;
 }
 
-GrSwizzle GrVkCaps::onGetReadSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
+skgpu::Swizzle GrVkCaps::onGetReadSwizzle(const GrBackendFormat& format,
+                                          GrColorType colorType) const {
     VkFormat vkFormat;
     SkAssertResult(format.asVkFormat(&vkFormat));
     const auto* ycbcrInfo = format.getVkYcbcrConversionInfo();
@@ -1662,7 +1694,7 @@ GrSwizzle GrVkCaps::onGetReadSwizzle(const GrBackendFormat& format, GrColorType 
     if (ycbcrInfo->isValid() && ycbcrInfo->fExternalFormat != 0) {
         // We allow these to work with any color type and never swizzle. See
         // onAreColorTypeAndFormatCompatible.
-        return GrSwizzle{"rgba"};
+        return skgpu::Swizzle{"rgba"};
     }
 
     const auto& info = this->getFormatInfo(vkFormat);
@@ -1672,11 +1704,13 @@ GrSwizzle GrVkCaps::onGetReadSwizzle(const GrBackendFormat& format, GrColorType 
             return ctInfo.fReadSwizzle;
         }
     }
-    SkDEBUGFAILF("Illegal color type (%d) and format (%d) combination.", colorType, vkFormat);
+    SkDEBUGFAILF("Illegal color type (%d) and format (%d) combination.",
+                 (int)colorType, (int)vkFormat);
     return {};
 }
 
-GrSwizzle GrVkCaps::getWriteSwizzle(const GrBackendFormat& format, GrColorType colorType) const {
+skgpu::Swizzle GrVkCaps::getWriteSwizzle(const GrBackendFormat& format,
+                                         GrColorType colorType) const {
     VkFormat vkFormat;
     SkAssertResult(format.asVkFormat(&vkFormat));
     const auto& info = this->getFormatInfo(vkFormat);
@@ -1686,19 +1720,20 @@ GrSwizzle GrVkCaps::getWriteSwizzle(const GrBackendFormat& format, GrColorType c
             return ctInfo.fWriteSwizzle;
         }
     }
-    SkDEBUGFAILF("Illegal color type (%d) and format (%d) combination.", colorType, vkFormat);
+    SkDEBUGFAILF("Illegal color type (%d) and format (%d) combination.",
+                 (int)colorType, (int)vkFormat);
     return {};
 }
 
-GrDstSampleType GrVkCaps::onGetDstSampleTypeForProxy(const GrRenderTargetProxy* rt) const {
+GrDstSampleFlags GrVkCaps::onGetDstSampleFlagsForProxy(const GrRenderTargetProxy* rt) const {
     bool isMSAAWithResolve = rt->numSamples() > 1 && rt->asTextureProxy();
     // TODO: Currently if we have an msaa rt with a resolve, the supportsVkInputAttachment call
     // references whether the resolve is supported as an input attachment. We need to add a check to
     // allow checking the color attachment (msaa or not) supports input attachment specifically.
     if (!isMSAAWithResolve && rt->supportsVkInputAttachment()) {
-        return GrDstSampleType::kAsInputAttachment;
+        return GrDstSampleFlags::kRequiresTextureBarrier | GrDstSampleFlags::kAsInputAttachment;
     }
-    return GrDstSampleType::kAsTextureCopy;
+    return GrDstSampleFlags::kNone;
 }
 
 uint64_t GrVkCaps::computeFormatKey(const GrBackendFormat& format) const {
@@ -1755,7 +1790,7 @@ int GrVkCaps::getFragmentUniformSet() const {
     return GrVkUniformHandler::kUniformBufferDescSet;
 }
 
-void GrVkCaps::addExtraSamplerKey(GrProcessorKeyBuilder* b,
+void GrVkCaps::addExtraSamplerKey(skgpu::KeyBuilder* b,
                                   GrSamplerState samplerState,
                                   const GrBackendFormat& format) const {
     const GrVkYcbcrConversionInfo* ycbcrInfo = format.getVkYcbcrConversionInfo();
@@ -1793,7 +1828,7 @@ GrProgramDesc GrVkCaps::makeDesc(GrRenderTarget* rt,
     GrProgramDesc desc;
     GrProgramDesc::Build(&desc, programInfo, *this);
 
-    GrProcessorKeyBuilder b(desc.key());
+    skgpu::KeyBuilder b(desc.key());
 
     // This will become part of the sheared off key used to persistently cache
     // the SPIRV code. It needs to be added right after the base key so that,
@@ -1810,8 +1845,7 @@ GrProgramDesc GrVkCaps::makeDesc(GrRenderTarget* rt,
         selfDepFlags |= GrVkRenderPass::SelfDependencyFlags::kForInputAttachment;
     }
 
-    bool needsResolve = programInfo.targetSupportsVkResolveLoad() &&
-                        this->preferDiscardableMSAAAttachment();
+    bool needsResolve = this->programInfoWillUseDiscardableMSAA(programInfo);
 
     bool forceLoadFromResolve =
             overrideFlags & GrCaps::ProgramDescOverrideFlags::kVulkanHasResolveLoadSubpass;
@@ -1882,9 +1916,6 @@ GrInternalSurfaceFlags GrVkCaps::getExtraSurfaceFlagsForDeferredRT() const {
 
 VkShaderStageFlags GrVkCaps::getPushConstantStageFlags() const {
     VkShaderStageFlags stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    if (this->shaderCaps()->geometryShaderSupport()) {
-        stageFlags |= VK_SHADER_STAGE_GEOMETRY_BIT;
-    }
     return stageFlags;
 }
 

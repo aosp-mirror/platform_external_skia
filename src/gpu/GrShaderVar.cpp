@@ -30,17 +30,13 @@ void GrShaderVar::appendDecl(const GrShaderCaps* shaderCaps, SkString* out) cons
     if (this->getTypeModifier() != TypeModifier::None) {
         out->appendf("%s ", type_modifier_string(this->getTypeModifier()));
     }
-    GrSLType effectiveType = this->getType();
+    SkSLType effectiveType = this->getType();
     if (this->isArray()) {
-        if (this->isUnsizedArray()) {
-            out->appendf("%s %s[]", GrGLSLTypeString(effectiveType), this->getName().c_str());
-        } else {
-            SkASSERT(this->getArrayCount() > 0);
-            out->appendf("%s %s[%d]",
-                         GrGLSLTypeString(effectiveType),
-                         this->getName().c_str(),
-                         this->getArrayCount());
-        }
+        SkASSERT(this->getArrayCount() > 0);
+        out->appendf("%s %s[%d]",
+                     GrGLSLTypeString(effectiveType),
+                     this->getName().c_str(),
+                     this->getArrayCount());
     } else {
         out->appendf("%s %s", GrGLSLTypeString(effectiveType), this->getName().c_str());
     }

@@ -20,10 +20,10 @@ namespace SkSL {
  */
 class CodeStringExpression final : public Expression {
 public:
-    static constexpr Kind kExpressionKind = Kind::kCodeString;
+    inline static constexpr Kind kExpressionKind = Kind::kCodeString;
 
-    CodeStringExpression(String code, const Type* type)
-        : INHERITED(/*offset=*/-1, kExpressionKind, type)
+    CodeStringExpression(std::string code, const Type* type)
+        : INHERITED(/*line=*/-1, kExpressionKind, type)
         , fCode(std::move(code)) {}
 
     bool hasProperty(Property property) const override {
@@ -34,12 +34,12 @@ public:
         return std::make_unique<CodeStringExpression>(fCode, &this->type());
     }
 
-    String description() const override {
+    std::string description() const override {
         return fCode;
     }
 
 private:
-    String fCode;
+    std::string fCode;
 
     using INHERITED = Expression;
 };
