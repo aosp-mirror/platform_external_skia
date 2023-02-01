@@ -60,6 +60,10 @@ enum class BuilderOp {
     pop_loop_mask,
     push_return_mask,
     pop_return_mask,
+    push_src_rgba,
+    pop_src_rg,
+    pop_src_rgba,
+    pop_dst_rgba,
     set_current_stack,
     label,
     branch_if_no_active_lanes_on_stack_top_equal,
@@ -147,6 +151,14 @@ private:
     // pick the appropriate op based on `numSlots`.
     void appendMultiSlotUnaryOp(SkTArray<Stage>* pipeline, SkRasterPipelineOp baseStage,
                                 float* dst, int numSlots);
+
+    // Appends a two-input math operation to the pipeline. `src` must be _immediately_ after `dst`
+    // in memory. `baseStage` must refer to an unbounded "apply_to_n_slots" stage. A BinaryOpCtx
+    // will be used to pass pointers to the destination and source; the delta between the two
+    // pointers implicitly gives the number of slots.
+    void appendAdjacentNWayBinaryOp(SkTArray<Stage>* pipeline, SkArenaAlloc* alloc,
+                                    SkRasterPipelineOp stage,
+                                    float* dst, const float* src, int numSlots);
 
     // Appends a multi-slot two-input math operation to the pipeline. `src` must be _immediately_
     // after `dst` in memory. `baseStage` must refer to an unbounded "apply_to_n_slots" stage, which
@@ -487,6 +499,22 @@ public:
     void pop_loop_mask() {
         SkASSERT(this->executionMaskWritesAreEnabled());
         fInstructions.push_back({BuilderOp::pop_loop_mask, {}});
+    }
+
+    void push_src_rgba() {
+        fInstructions.push_back({BuilderOp::push_src_rgba, {}});
+    }
+
+    void pop_src_rg() {
+        fInstructions.push_back({BuilderOp::pop_src_rg, {}});
+    }
+
+    void pop_src_rgba() {
+        fInstructions.push_back({BuilderOp::pop_src_rgba, {}});
+    }
+
+    void pop_dst_rgba() {
+        fInstructions.push_back({BuilderOp::pop_dst_rgba, {}});
     }
 
     void mask_off_loop_mask() {
