@@ -36,7 +36,8 @@ namespace RP {
 using RPOp = SkRasterPipelineOp;
 
 #define ALL_SINGLE_SLOT_UNARY_OP_CASES  \
-         BuilderOp::cos_float:          \
+         BuilderOp::atan_float:         \
+    case BuilderOp::cos_float:          \
     case BuilderOp::sin_float:          \
     case BuilderOp::sqrt_float:         \
     case BuilderOp::tan_float
@@ -51,6 +52,9 @@ using RPOp = SkRasterPipelineOp;
     case BuilderOp::cast_to_uint_from_float: \
     case BuilderOp::ceil_float:              \
     case BuilderOp::floor_float              \
+
+#define ALL_N_WAY_BINARY_OP_CASES  \
+         BuilderOp::atan2_n_floats
 
 #define ALL_MULTI_SLOT_BINARY_OP_CASES  \
          BuilderOp::add_n_floats:       \
@@ -100,6 +104,7 @@ void Builder::unary_op(BuilderOp op, int32_t slots) {
 
 void Builder::binary_op(BuilderOp op, int32_t slots) {
     switch (op) {
+        case ALL_N_WAY_BINARY_OP_CASES:
         case ALL_MULTI_SLOT_BINARY_OP_CASES:
             fInstructions.push_back({op, {}, slots});
             break;
@@ -551,6 +556,9 @@ static int stack_usage(const Instruction& inst) {
         case BuilderOp::push_return_mask:
             return 1;
 
+        case BuilderOp::push_src_rgba:
+            return 4;
+
         case BuilderOp::push_slots:
         case BuilderOp::push_uniform:
         case BuilderOp::push_zeros:
@@ -563,6 +571,14 @@ static int stack_usage(const Instruction& inst) {
         case BuilderOp::pop_return_mask:
             return -1;
 
+        case BuilderOp::pop_src_rg:
+            return -2;
+
+        case BuilderOp::pop_src_rgba:
+        case BuilderOp::pop_dst_rgba:
+            return -4;
+
+        case ALL_N_WAY_BINARY_OP_CASES:
         case ALL_MULTI_SLOT_BINARY_OP_CASES:
         case BuilderOp::discard_stack:
         case BuilderOp::select:
@@ -720,6 +736,22 @@ void Program::appendMultiSlotUnaryOp(SkTArray<Stage>* pipeline, SkRasterPipeline
     pipeline->push_back({stage, dst});
 }
 
+void Program::appendAdjacentNWayBinaryOp(SkTArray<Stage>* pipeline, SkArenaAlloc* alloc,
+                                         SkRasterPipelineOp stage,
+                                         float* dst, const float* src, int numSlots) {
+    // The source and destination must be directly next to one another.
+    SkASSERT(numSlots >= 0);
+    SkASSERT((dst + SkOpts::raster_pipeline_highp_stride * numSlots) == src);
+
+    if (numSlots > 0) {
+        auto ctx = alloc->make<SkRasterPipeline_BinaryOpCtx>();
+        ctx->dst = dst;
+        ctx->src = src;
+        pipeline->push_back({stage, ctx});
+        return;
+    }
+}
+
 void Program::appendAdjacentMultiSlotBinaryOp(SkTArray<Stage>* pipeline, SkArenaAlloc* alloc,
                                               SkRasterPipelineOp baseStage,
                                               float* dst, const float* src, int numSlots) {
@@ -728,10 +760,7 @@ void Program::appendAdjacentMultiSlotBinaryOp(SkTArray<Stage>* pipeline, SkArena
     SkASSERT((dst + SkOpts::raster_pipeline_highp_stride * numSlots) == src);
 
     if (numSlots > 4) {
-        auto ctx = alloc->make<SkRasterPipeline_BinaryOpCtx>();
-        ctx->dst = dst;
-        ctx->src = src;
-        pipeline->push_back({baseStage, ctx});
+        this->appendAdjacentNWayBinaryOp(pipeline, alloc, baseStage, dst, src, numSlots);
         return;
     }
     if (numSlots > 0) {
@@ -943,6 +972,13 @@ void Program::makeStages(SkTArray<Stage>* pipeline,
                 this->appendMultiSlotUnaryOp(pipeline, (RPOp)inst.fOp, dst, inst.fImmA);
                 break;
             }
+            case ALL_N_WAY_BINARY_OP_CASES: {
+                float* src = tempStackPtr - (inst.fImmA * N);
+                float* dst = tempStackPtr - (inst.fImmA * 2 * N);
+                this->appendAdjacentNWayBinaryOp(pipeline, alloc, (RPOp)inst.fOp,
+                                                 dst, src, inst.fImmA);
+                break;
+            }
             case ALL_MULTI_SLOT_BINARY_OP_CASES: {
                 float* src = tempStackPtr - (inst.fImmA * N);
                 float* dst = tempStackPtr - (inst.fImmA * 2 * N);
@@ -1011,6 +1047,26 @@ void Program::makeStages(SkTArray<Stage>* pipeline,
                     packed >>= 4;
                 }
                 pipeline->push_back({RPOp::shuffle, ctx});
+                break;
+            }
+            case BuilderOp::push_src_rgba: {
+                float* dst = tempStackPtr;
+                pipeline->push_back({RPOp::store_src, dst});
+                break;
+            }
+            case BuilderOp::pop_src_rg: {
+                float* dst = tempStackPtr - (2 * N);
+                pipeline->push_back({RPOp::load_src_rg, dst});
+                break;
+            }
+            case BuilderOp::pop_src_rgba: {
+                float* dst = tempStackPtr - (4 * N);
+                pipeline->push_back({RPOp::load_src, dst});
+                break;
+            }
+            case BuilderOp::pop_dst_rgba: {
+                float* dst = tempStackPtr - (4 * N);
+                pipeline->push_back({RPOp::load_dst, dst});
                 break;
             }
             case BuilderOp::push_slots: {
@@ -1439,6 +1495,7 @@ void Program::dump(SkWStream* out) {
             case RPOp::cast_to_float_from_int: case RPOp::cast_to_float_from_uint:
             case RPOp::cast_to_int_from_float: case RPOp::cast_to_uint_from_float:
             case RPOp::abs_float:              case RPOp::abs_int:
+            case RPOp::atan_float:
             case RPOp::ceil_float:
             case RPOp::cos_float:
             case RPOp::floor_float:
@@ -1448,9 +1505,9 @@ void Program::dump(SkWStream* out) {
                 opArg1 = PtrCtx(stage.ctx, 1);
                 break;
 
-            case RPOp::store_src_rg:
             case RPOp::zero_2_slots_unmasked:
             case RPOp::bitwise_not_2_ints:
+            case RPOp::load_src_rg:               case RPOp::store_src_rg:
             case RPOp::cast_to_float_from_2_ints: case RPOp::cast_to_float_from_2_uints:
             case RPOp::cast_to_int_from_2_floats: case RPOp::cast_to_uint_from_2_floats:
             case RPOp::abs_2_floats:              case RPOp::abs_2_ints:
@@ -1613,6 +1670,7 @@ void Program::dump(SkWStream* out) {
             case RPOp::cmple_n_floats: case RPOp::cmple_n_ints: case RPOp::cmple_n_uints:
             case RPOp::cmpeq_n_floats: case RPOp::cmpeq_n_ints:
             case RPOp::cmpne_n_floats: case RPOp::cmpne_n_ints:
+            case RPOp::atan2_n_floats:
                 std::tie(opArg1, opArg2) = AdjacentBinaryOpCtx(stage.ctx);
                 break;
 
@@ -1715,6 +1773,10 @@ void Program::dump(SkWStream* out) {
                 opText = opArg1 + " = dst.rgba";
                 break;
 
+            case RPOp::load_src_rg:
+                opText = "src.rg = " + opArg1;
+                break;
+
             case RPOp::load_src:
                 opText = "src.rgba = " + opArg1;
                 break;
@@ -1811,6 +1873,14 @@ void Program::dump(SkWStream* out) {
             case RPOp::abs_3_floats: case RPOp::abs_3_ints:
             case RPOp::abs_4_floats: case RPOp::abs_4_ints:
                 opText = opArg1 + " = abs(" + opArg1 + ")";
+                break;
+
+            case RPOp::atan_float:
+                opText = opArg1 + " = atan(" + opArg1 + ")";
+                break;
+
+            case RPOp::atan2_n_floats:
+                opText = opArg1 + " = atan2(" + opArg1 + ", " + opArg2 + ")";
                 break;
 
             case RPOp::ceil_float:

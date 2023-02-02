@@ -67,6 +67,13 @@ cc_defaults {
             ],
         },
 
+        riscv64: {
+            // TODO(b/254713216): Re-enable thinlto for targets failing the build
+            lto: {
+                thin: false,
+            },
+        },
+
         x86: {
             srcs: [
                 "src/opts/SkOpts_avx.cpp",
@@ -165,6 +172,7 @@ cc_library_static {
         "src/android/SkAndroidFrameworkUtils.cpp",
         "src/android/SkAnimatedImage.cpp",
         "src/base/SkArenaAlloc.cpp",
+        "src/base/SkBezierCurves.cpp",
         "src/base/SkBlockAllocator.cpp",
         "src/base/SkBuffer.cpp",
         "src/base/SkContainers.cpp",
@@ -949,6 +957,7 @@ cc_library_static {
         "src/android/SkAndroidFrameworkUtils.cpp",
         "src/android/SkAnimatedImage.cpp",
         "src/base/SkArenaAlloc.cpp",
+        "src/base/SkBezierCurves.cpp",
         "src/base/SkBlockAllocator.cpp",
         "src/base/SkBuffer.cpp",
         "src/base/SkContainers.cpp",
@@ -3717,6 +3726,7 @@ cc_library_shared {
         "src/android/SkAndroidFrameworkUtils.cpp",
         "src/android/SkAnimatedImage.cpp",
         "src/base/SkArenaAlloc.cpp",
+        "src/base/SkBezierCurves.cpp",
         "src/base/SkBlockAllocator.cpp",
         "src/base/SkBuffer.cpp",
         "src/base/SkContainers.cpp",
