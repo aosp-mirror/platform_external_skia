@@ -107,6 +107,13 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		}
 		return rv
 	}
+	prefix := func(slice []string, pfx string) []string {
+		rv := make([]string, 0, len(slice))
+		for _, e := range slice {
+			rv = append(rv, pfx+e)
+		}
+		return rv
+	}
 
 	// When matching skip logic, _ is a wildcard that matches all parts for the field.
 	// For example, "8888 _ _ _" means everything that is part of an 8888 config and
@@ -566,6 +573,38 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			args = append(args, "--skpViewportSize", "2048")
 			args = append(args, "--gpuThreads", "0")
 		}
+	}
+
+	if b.matchExtraConfig("ColorSpaces") {
+		// base configs that each specific backend will run its own version of
+		csConfigs := []string{"f16"}
+
+		configPrefix := ""
+		if b.gpu() {
+			if b.extraConfig("Graphite") {
+				if b.extraConfig("GL") {
+					configPrefix = "grgl"
+				} else if b.extraConfig("GLES") {
+					configPrefix = "grgles"
+				} else if b.extraConfig("Metal") {
+					configPrefix = "grmtl"
+				} else if b.extraConfig("Vulkan") {
+					configPrefix = "grvk"
+				}
+			} else {
+				if b.extraConfig("GL") {
+					configPrefix = "gl"
+				} else if b.extraConfig("GLES") {
+					configPrefix = "gles"
+				} else if b.extraConfig("Metal") {
+					configPrefix = "mtl"
+				} else if b.extraConfig("Vulkan") {
+					configPrefix = "vk"
+				}
+			}
+		}
+
+		configs = prefix(csConfigs, configPrefix)
 	}
 
 	// Sharding.
@@ -1295,6 +1334,29 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	if b.matchExtraConfig("Graphite") {
 		// skia:12813
 		match = append(match, "~async_rescale_and_read")
+	}
+
+	if b.matchExtraConfig("ColorSpaces") {
+		// Here we reset the 'match' and 'skipped' strings bc the ColorSpaces job only
+		// runs a very specific subset of the GMs.
+		skipped = []string{}
+		match = []string{}
+		match = append(match, "async_rescale_and_read_dog_up")
+		match = append(match, "bug6783")
+		match = append(match, "colorspace")
+		match = append(match, "colorspace2")
+		match = append(match, "composeCF")
+		match = append(match, "crbug_224618")
+		match = append(match, "drawlines_with_local_matrix")
+		match = append(match, "gradients_interesting")
+		match = append(match, "manypathatlases_2048")
+		match = append(match, "paint_alpha_normals_rt")
+		match = append(match, "runtimefunctions")
+		match = append(match, "savelayer_f16")
+		match = append(match, "spiral_rt")
+		match = append(match, "srgb_colorfilter")
+		match = append(match, "strokedlines")
+		match = append(match, "sweep_tiling")
 	}
 
 	if len(skipped) > 0 {
