@@ -47,9 +47,14 @@ protected:
     SkShader_Blend(SkReadBuffer&);
     void flatten(SkWriteBuffer&) const override;
     bool appendStages(const SkStageRec&, const MatrixRec&) const override;
-    skvm::Color onProgram(skvm::Builder*, skvm::Coord device, skvm::Coord local, skvm::Color paint,
-                          const SkMatrixProvider&, const SkMatrix* localM, const SkColorInfo& dst,
-                          skvm::Uniforms*, SkArenaAlloc*) const override;
+    skvm::Color program(skvm::Builder*,
+                        skvm::Coord device,
+                        skvm::Coord local,
+                        skvm::Color paint,
+                        const MatrixRec& mRec,
+                        const SkColorInfo& dst,
+                        skvm::Uniforms*,
+                        SkArenaAlloc*) const override;
 
 private:
     friend void ::SkRegisterComposeShaderFlattenable();
@@ -100,18 +105,23 @@ static float* append_two_shaders(const SkStageRec& rec,
         float   fRes0  [4 * SkRasterPipeline_kMaxStride];
     };
     auto storage = rec.fAlloc->make<Storage>();
-    std::optional<SkShaderBase::MatrixRec> childMRec = mRec.apply(rec);
-    if (!childMRec.has_value()) {
-        return nullptr;
+
+    // Note we cannot simply apply mRec here and then unconditionally store the coordinates. When
+    // building for Android Framework it would interrupt the backwards local matrix concatenation if
+    // mRec had a pending local matrix and either of the children also had a local matrix.
+    // b/256873449
+    if (mRec.rasterPipelineCoordsAreSeeded()) {
+        rec.fPipeline->append(SkRasterPipelineOp::store_src_rg, storage->fCoords);
     }
-    rec.fPipeline->append(SkRasterPipelineOp::store_src_rg, storage->fCoords);
-    if (!as_SB(s0)->appendStages(rec, *childMRec)) {
+    if (!as_SB(s0)->appendStages(rec, mRec)) {
         return nullptr;
     }
     rec.fPipeline->append(SkRasterPipelineOp::store_src, storage->fRes0);
 
-    rec.fPipeline->append(SkRasterPipelineOp::load_src_rg, storage->fCoords);
-    if (!as_SB(s1)->appendStages(rec, *childMRec)) {
+    if (mRec.rasterPipelineCoordsAreSeeded()) {
+        rec.fPipeline->append(SkRasterPipelineOp::load_src_rg, storage->fCoords);
+    }
+    if (!as_SB(s1)->appendStages(rec, mRec)) {
         return nullptr;
     }
     return storage->fRes0;
@@ -128,14 +138,17 @@ bool SkShader_Blend::appendStages(const SkStageRec& rec, const MatrixRec& mRec) 
     return true;
 }
 
-skvm::Color SkShader_Blend::onProgram(skvm::Builder* p,
-                                      skvm::Coord device, skvm::Coord local, skvm::Color paint,
-                                      const SkMatrixProvider& mats, const SkMatrix* localM,
-                                      const SkColorInfo& cinfo,
-                                      skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const {
+skvm::Color SkShader_Blend::program(skvm::Builder* p,
+                                    skvm::Coord device,
+                                    skvm::Coord local,
+                                    skvm::Color paint,
+                                    const MatrixRec& mRec,
+                                    const SkColorInfo& cinfo,
+                                    skvm::Uniforms* uniforms,
+                                    SkArenaAlloc* alloc) const {
     skvm::Color d,s;
-    if ((d = as_SB(fDst)->program(p, device,local, paint, mats,localM, cinfo, uniforms,alloc)) &&
-        (s = as_SB(fSrc)->program(p, device,local, paint, mats,localM, cinfo, uniforms,alloc))) {
+    if ((d = as_SB(fDst)->program(p, device, local, paint, mRec, cinfo, uniforms, alloc)) &&
+        (s = as_SB(fSrc)->program(p, device, local, paint, mRec, cinfo, uniforms, alloc))) {
         return p->blend(fMode, s,d);
     }
     return {};
