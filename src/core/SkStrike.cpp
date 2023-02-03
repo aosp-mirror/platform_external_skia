@@ -189,76 +189,6 @@ void SkStrike::prepareForDrawingMasksCPU(SkDrawableGlyphBuffer* accepted) {
     }
 }
 
-void SkStrike::prepareForPathDrawing(SkDrawableGlyphBuffer* accepted,
-                                     SkSourceGlyphBuffer* rejected) {
-    Monitor m{this};
-    for (auto [i, packedID, pos] : SkMakeEnumerate(accepted->input())) {
-        if (SkScalarsAreFinite(pos.x(), pos.y())) {
-            SkGlyphDigest* digestPtr = this->digestPtr(packedID);
-            if (digestPtr->pathAction() == GlyphAction::kUnset) {
-                GlyphAction action;
-                if (digestPtr->isEmpty()) {
-                    action = GlyphAction::kDrop;
-                } else {
-                    SkGlyph* glyph = fGlyphForIndex[digestPtr->index()];
-                    this->preparePath(glyph);
-                    if (glyph->path() != nullptr) {
-                        action = GlyphAction::kAccept;
-                    } else {
-                        action = GlyphAction::kReject;
-                    }
-                }
-                digestPtr->setPathAction(action);
-            }
-            switch (digestPtr->pathAction()) {
-                case GlyphAction::kAccept:
-                    accepted->accept(packedID, pos);
-                    break;
-                case GlyphAction::kReject:
-                    rejected->reject(i);
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
-}
-
-void SkStrike::prepareForDrawableDrawing(SkDrawableGlyphBuffer* accepted,
-                                         SkSourceGlyphBuffer* rejected) {
-    Monitor m{this};
-    for (auto [i, packedID, pos] : SkMakeEnumerate(accepted->input())) {
-        if (SkScalarsAreFinite(pos.x(), pos.y())) {
-            SkGlyphDigest* digestPtr = this->digestPtr(packedID);
-            if (digestPtr->drawableAction() == GlyphAction::kUnset) {
-                GlyphAction action;
-                if (digestPtr->isEmpty()) {
-                    action = GlyphAction::kDrop;
-                } else {
-                    SkGlyph* glyph = fGlyphForIndex[digestPtr->index()];
-                    this->prepareDrawable(glyph);
-                    if (glyph->drawable() != nullptr) {
-                        action = GlyphAction::kAccept;
-                    } else {
-                        action = GlyphAction::kReject;
-                    }
-                }
-                digestPtr->setDrawableAction(action);
-            }
-            switch (digestPtr->drawableAction()) {
-                case GlyphAction::kAccept:
-                    accepted->accept(packedID, pos);
-                    break;
-                case GlyphAction::kReject:
-                    rejected->reject(i);
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
-}
-
 void SkStrike::glyphIDsToPaths(SkSpan<sktext::IDOrPath> idsOrPaths) {
     Monitor m{this};
     for (sktext::IDOrPath& idOrPath : idsOrPaths) {
@@ -342,6 +272,52 @@ SkGlyphDigest* SkStrike::digestPtr(SkPackedGlyphID packedGlyphID) {
     SkGlyph* glyph = fAlloc.make<SkGlyph>(fScalerContext->makeGlyph(packedGlyphID, &fAlloc));
     fMemoryIncrease += sizeof(SkGlyph);
     return this->addGlyph(glyph);
+}
+
+skglyph::GlyphAction SkStrike::pathAction(SkGlyphID glyphID) {
+    SkGlyphDigest* const digestPtr = this->digestPtr(SkPackedGlyphID{glyphID});
+    if (const GlyphAction action = digestPtr->pathAction(); action != GlyphAction::kUnset) {
+        return action;
+    }
+
+    GlyphAction action;
+    if (digestPtr->isEmpty()) {
+        action = GlyphAction::kDrop;
+    } else {
+        SkGlyph* glyph = fGlyphForIndex[digestPtr->index()];
+        this->preparePath(glyph);
+        if (glyph->path() != nullptr) {
+            action = GlyphAction::kAccept;
+        } else {
+            action = GlyphAction::kReject;
+        }
+    }
+
+    digestPtr->setPathAction(action);
+    return digestPtr->pathAction();
+}
+
+skglyph::GlyphAction SkStrike::drawableAction(SkGlyphID glyphID) {
+    SkGlyphDigest* const digestPtr = this->digestPtr(SkPackedGlyphID{glyphID});
+    if (const GlyphAction action = digestPtr->drawableAction(); action != GlyphAction::kUnset) {
+        return action;
+    }
+
+    GlyphAction action;
+    if (digestPtr->isEmpty()) {
+        action = GlyphAction::kDrop;
+    } else {
+        SkGlyph* glyph = fGlyphForIndex[digestPtr->index()];
+        this->prepareDrawable(glyph);
+        if (glyph->drawable()  != nullptr) {
+            action = GlyphAction::kAccept;
+        } else {
+            action = GlyphAction::kReject;
+        }
+    }
+
+    digestPtr->setDrawableAction(action);
+    return digestPtr->drawableAction();
 }
 
 SkGlyphDigest* SkStrike::addGlyph(SkGlyph* glyph) {
