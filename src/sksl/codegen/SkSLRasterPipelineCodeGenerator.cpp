@@ -1400,21 +1400,21 @@ bool Generator::pushBinaryExpression(const Expression& left, Operator op, const 
     // Handle matrix multiplication (MxM/MxV/VxM).
     if (op.kind() == OperatorKind::STAR) {
         // Matrix * matrix:
-        if (type.isMatrix() && right.type().isMatrix()) {
+        if (left.type().isMatrix() && right.type().isMatrix()) {
             return this->pushMatrixMultiply(lvalue.get(), left, right,
                                             left.type().columns(), left.type().rows(),
                                             right.type().columns(), right.type().rows());
         }
 
         // Vector * matrix:
-        if (type.isVector() && right.type().isMatrix()) {
+        if (left.type().isVector() && right.type().isMatrix()) {
             return this->pushMatrixMultiply(lvalue.get(), left, right,
                                             left.type().columns(), 1,
                                             right.type().columns(), right.type().rows());
         }
 
         // Matrix * vector:
-        if (type.isMatrix() && right.type().isVector()) {
+        if (left.type().isMatrix() && right.type().isVector()) {
             return this->pushMatrixMultiply(lvalue.get(), left, right,
                                             left.type().columns(), left.type().rows(),
                                             1, right.type().columns());
@@ -1536,7 +1536,7 @@ bool Generator::pushBinaryExpression(const Expression& left, Operator op, const 
         case OperatorKind::LOGICALOR:
         case OperatorKind::BITWISEOR:
             // For logical-or, we verified above that the RHS does not have side effects.
-            fBuilder.binary_op(BuilderOp::bitwise_and_n_ints, type.slotCount());
+            fBuilder.binary_op(BuilderOp::bitwise_or_n_ints, type.slotCount());
             break;
 
         case OperatorKind::LOGICALXOR:
