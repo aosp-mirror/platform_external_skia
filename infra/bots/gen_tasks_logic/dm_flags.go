@@ -193,7 +193,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			configs = []string{
 				"r8", "565",
 				"pic-8888", "serialize-8888",
-				"linear-f16", "srgb-rgba", "srgb-f16", "narrow-rgba", "narrow-f16",
+				"linear-f16", "srgb-rgba", "srgb-f16",
 				"p3-rgba", "p3-f16", "rec2020-rgba", "rec2020-f16"}
 		}
 
@@ -565,6 +565,57 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			configs = suffix(filter(configs, "gl", "vk", "mtl"), "ooprddl")
 			args = append(args, "--skpViewportSize", "2048")
 			args = append(args, "--gpuThreads", "0")
+		}
+	}
+
+	if b.matchExtraConfig("ColorSpaces") {
+		// Here we're going to generate a bunch of configs with the format:
+		//        <colorspace> <backend> <targetFormat>
+		// Where: <colorspace> is one of:   "", "narrow-"
+		//        <backend> is one of: "gl, "gles", "mtl", "vk"
+		//                             their "gr" prefixed versions
+		//                             and "" (for raster)
+		//        <targetFormat> is one of: "f16", { "" (for gpus) or "rgba" (for raster) }
+		colorSpaces := []string{"", "narrow-"}
+
+		backendStr := ""
+		if b.gpu() {
+			if b.extraConfig("Graphite") {
+				if b.extraConfig("GL") {
+					backendStr = "grgl"
+				} else if b.extraConfig("GLES") {
+					backendStr = "grgles"
+				} else if b.extraConfig("Metal") {
+					backendStr = "grmtl"
+				} else if b.extraConfig("Vulkan") {
+					backendStr = "grvk"
+				}
+			} else {
+				if b.extraConfig("GL") {
+					backendStr = "gl"
+				} else if b.extraConfig("GLES") {
+					backendStr = "gles"
+				} else if b.extraConfig("Metal") {
+					backendStr = "mtl"
+				} else if b.extraConfig("Vulkan") {
+					backendStr = "vk"
+				}
+			}
+		}
+
+		targetFormats := []string{"f16"}
+		if b.gpu() {
+			targetFormats = append(targetFormats, "")
+		} else {
+			targetFormats = append(targetFormats, "rgba")
+		}
+
+		configs = []string{}
+
+		for _, cs := range colorSpaces {
+			for _, tf := range targetFormats {
+				configs = append(configs, cs+backendStr+tf)
+			}
 		}
 	}
 
@@ -1295,6 +1346,29 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	if b.matchExtraConfig("Graphite") {
 		// skia:12813
 		match = append(match, "~async_rescale_and_read")
+	}
+
+	if b.matchExtraConfig("ColorSpaces") {
+		// Here we reset the 'match' and 'skipped' strings bc the ColorSpaces job only
+		// runs a very specific subset of the GMs.
+		skipped = []string{}
+		match = []string{}
+		match = append(match, "async_rescale_and_read_dog_up")
+		match = append(match, "bug6783")
+		match = append(match, "colorspace")
+		match = append(match, "colorspace2")
+		match = append(match, "composeCF")
+		match = append(match, "crbug_224618")
+		match = append(match, "drawlines_with_local_matrix")
+		match = append(match, "gradients_interesting")
+		match = append(match, "manypathatlases_2048")
+		match = append(match, "paint_alpha_normals_rt")
+		match = append(match, "runtimefunctions")
+		match = append(match, "savelayer_f16")
+		match = append(match, "spiral_rt")
+		match = append(match, "srgb_colorfilter")
+		match = append(match, "strokedlines")
+		match = append(match, "sweep_tiling")
 	}
 
 	if len(skipped) > 0 {
