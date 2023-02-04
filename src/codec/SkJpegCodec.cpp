@@ -7,6 +7,8 @@
 
 #include "src/codec/SkJpegCodec.h"
 
+#include "include/core/SkTypes.h"
+
 #ifdef SK_CODEC_DECODES_JPEG
 #include "include/codec/SkCodec.h"
 #include "include/core/SkAlphaType.h"
@@ -16,7 +18,6 @@
 #include "include/core/SkPixmap.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkStream.h"
-#include "include/core/SkTypes.h"
 #include "include/core/SkYUVAInfo.h"
 #include "include/private/base/SkAlign.h"
 #include "include/private/base/SkTemplates.h"
@@ -1099,7 +1100,7 @@ bool SkJpegCodec::onGetGainmapInfo(SkGainmapInfo* info,
                                    std::unique_ptr<SkStream>* gainmapImageStream) {
 #ifdef SK_CODEC_DECODES_JPEG_GAINMAPS
     // Attempt to extract SkGainmapInfo from the HDRGM XMP.
-    if (SkJpegGetHDRGMGainmapInfo(getXmpMetadata(), stream(), info)) {
+    if (SkJpegGetHDRGMGainmapInfo(getXmpMetadata(), info)) {
         auto gainmapData = read_metadata(fDecoderMgr->dinfo(),
                                          kGainmapMarker,
                                          kGainmapSig,
@@ -1117,13 +1118,15 @@ bool SkJpegCodec::onGetGainmapInfo(SkGainmapInfo* info,
     }
 
     // Attempt to extract JpegR gainmap formats.
-    if (SkJpegGetJpegRGainmap(getXmpMetadata(), stream(), info, gainmapImageStream)) {
+    if (SkJpegGetJpegRGainmap(
+                getXmpMetadata(), fDecoderMgr->getSourceMgr(), info, gainmapImageStream)) {
         return true;
     }
 
     // Attempt to extract Multi-Picture Format gainmap formats.
     auto mpfMetadata = read_metadata(fDecoderMgr->dinfo(), kMpfMarker, kMpfSig, sizeof(kMpfSig));
-    if (SkJpegGetMultiPictureGainmap(mpfMetadata, stream(), info, gainmapImageStream)) {
+    if (SkJpegGetMultiPictureGainmap(
+                mpfMetadata, fDecoderMgr->getSourceMgr(), info, gainmapImageStream)) {
         return true;
     }
 #endif  // SK_CODEC_DECODES_JPEG_GAINMAPS

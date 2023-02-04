@@ -44,7 +44,11 @@ struct ProgramSettings;
 
 namespace skvm {
 class Program;
-}  // namespace skvm
+}
+
+namespace SkSL::RP {
+class Program;
+}
 
 /*
  * SkRuntimeEffect supports creating custom SkShader and SkColorFilter objects using Skia's SkSL
@@ -304,13 +308,14 @@ private:
     bool alwaysOpaque()       const { return (fFlags & kAlwaysOpaque_Flag);       }
 
     const SkFilterColorProgram* getFilterColorProgram() const;
+    const SkSL::RP::Program* getRPProgram() const;
 
 #if SK_SUPPORT_GPU
     friend class GrSkSLFP;             // fBaseProgram, fSampleUsages
     friend class GrGLSLSkSLFP;         //
 #endif
 
-    friend class SkRTShader;            // fBaseProgram, fMain
+    friend class SkRTShader;            // fBaseProgram, fMain, fSampleUsages, getRPProgram()
     friend class SkRuntimeBlender;      //
     friend class SkRuntimeColorFilter;  //
 
@@ -320,6 +325,8 @@ private:
     uint32_t fHash;
 
     std::unique_ptr<SkSL::Program> fBaseProgram;
+    std::unique_ptr<SkSL::RP::Program> fRPProgram;
+    mutable SkOnce fCompileRPProgramOnce;
     const SkSL::FunctionDefinition& fMain;
     std::vector<Uniform> fUniforms;
     std::vector<Child> fChildren;
@@ -491,6 +498,23 @@ private:
             : INHERITED(std::move(effect), std::move(uniforms)) {}
 
     friend class SkRuntimeImageFilter;
+};
+
+/**
+ * SkRuntimeColorFilterBuilder makes it easy to setup and assign uniforms to runtime color filters.
+ */
+class SK_API SkRuntimeColorFilterBuilder : public SkRuntimeEffectBuilder {
+public:
+    explicit SkRuntimeColorFilterBuilder(sk_sp<SkRuntimeEffect>);
+    ~SkRuntimeColorFilterBuilder();
+
+    SkRuntimeColorFilterBuilder(const SkRuntimeColorFilterBuilder&) = delete;
+    SkRuntimeColorFilterBuilder& operator=(const SkRuntimeColorFilterBuilder&) = delete;
+
+    sk_sp<SkColorFilter> makeColorFilter();
+
+private:
+    using INHERITED = SkRuntimeEffectBuilder;
 };
 
 /**
