@@ -1487,6 +1487,7 @@ cc_library_static {
           "src/codec/SkJpegGainmap.cpp",
           "src/codec/SkJpegMultiPicture.cpp",
           "src/codec/SkJpegSegmentScan.cpp",
+          "src/codec/SkJpegXmp.cpp",
           "src/codec/SkRawCodec.cpp",
           "src/gpu/AtlasTypes.cpp",
           "src/gpu/Blend.cpp",
