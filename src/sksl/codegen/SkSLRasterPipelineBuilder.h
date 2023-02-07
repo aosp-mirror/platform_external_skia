@@ -293,6 +293,11 @@ public:
         fInstructions.push_back({BuilderOp::store_dst, {slots.index}});
     }
 
+    void store_device_xy01(SlotRange slots) {
+        SkASSERT(slots.count == 4);
+        fInstructions.push_back({BuilderOp::store_device_xy01, {slots.index}});
+    }
+
     void load_src(SlotRange slots) {
         SkASSERT(slots.count == 4);
         fInstructions.push_back({BuilderOp::load_src, {slots.index}});
@@ -492,10 +497,7 @@ public:
         fInstructions.push_back({BuilderOp::copy_slot_masked, {dst.index, src.index}, dst.count});
     }
 
-    void copy_slots_unmasked(SlotRange dst, SlotRange src) {
-        SkASSERT(dst.count == src.count);
-        fInstructions.push_back({BuilderOp::copy_slot_unmasked, {dst.index, src.index}, dst.count});
-    }
+    void copy_slots_unmasked(SlotRange dst, SlotRange src);
 
     void copy_constant(Slot slot, int constantValue) {
         fInstructions.push_back({BuilderOp::copy_constant, {slot}, constantValue});

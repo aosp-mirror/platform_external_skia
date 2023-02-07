@@ -1593,7 +1593,7 @@ SI I32 cond_to_mask(I32 cond) {
 // Now finally, normal Stages!
 
 STAGE(seed_shader, NoCtx) {
-    static const float iota[] = {
+    static constexpr float iota[] = {
         0.5f, 1.5f, 2.5f, 3.5f, 4.5f, 5.5f, 6.5f, 7.5f,
         8.5f, 9.5f,10.5f,11.5f,12.5f,13.5f,14.5f,15.5f,
     };
@@ -1604,6 +1604,19 @@ STAGE(seed_shader, NoCtx) {
     g = cast(dy) + 0.5f;
     b = 1.0f;  // This is w=1 for matrix multiplies by the device coords.
     a = 0;
+}
+
+STAGE(store_device_xy01, F* dst) {
+    // This is very similar to `seed_shader + store_src`, but b/a are backwards.
+    // (sk_FragCoord actually puts w=1 in the w slot.)
+    static constexpr float iota[] = {
+        0.5f, 1.5f, 2.5f, 3.5f, 4.5f, 5.5f, 6.5f, 7.5f,
+        8.5f, 9.5f,10.5f,11.5f,12.5f,13.5f,14.5f,15.5f,
+    };
+    dst[0] = cast(dx) + sk_unaligned_load<F>(iota);
+    dst[1] = cast(dy) + 0.5f;
+    dst[2] = 0.0f;
+    dst[3] = 1.0f;
 }
 
 STAGE(dither, const float* rate) {
@@ -3517,6 +3530,7 @@ STAGE_TAIL(cos_float, F* dst)  { *dst = cos_(*dst); }
 STAGE_TAIL(tan_float, F* dst)  { *dst = tan_(*dst); }
 STAGE_TAIL(atan_float, F* dst) { *dst = atan_(*dst); }
 STAGE_TAIL(sqrt_float, F* dst) { *dst = sqrt_(*dst); }
+STAGE_TAIL(exp_float, F* dst)  { *dst = approx_exp(*dst); }
 
 // Binary operations take two adjacent inputs, and write their output in the first position.
 template <typename T, void (*ApplyFn)(T*, T*)>
@@ -3603,6 +3617,10 @@ SI void atan2_fn(F* dst, F* src) {
     *dst = atan2_(*dst, *src);
 }
 
+SI void pow_fn(F* dst, F* src) {
+    *dst = approx_powf(*dst, *src);
+}
+
 #define DECLARE_N_WAY_BINARY_FLOAT(name)                                  \
     STAGE_TAIL(name##_n_floats, SkRasterPipeline_BinaryOpCtx* ctx) {      \
         apply_adjacent_binary<F, &name##_fn>((F*)ctx->dst, (F*)ctx->src); \
@@ -3658,6 +3676,7 @@ DECLARE_BINARY_FLOAT(cmpne)  DECLARE_BINARY_INT(cmpne)
 // Sufficiently complex ops only provide an N-way version, to avoid code bloat from the dedicated
 // 1-4 slot versions.
 DECLARE_N_WAY_BINARY_FLOAT(atan2)
+DECLARE_N_WAY_BINARY_FLOAT(pow)
 
 #undef DECLARE_BINARY_FLOAT
 #undef DECLARE_BINARY_INT
@@ -4220,7 +4239,7 @@ SI F abs_(F x) { return sk_bit_cast<F>( sk_bit_cast<I32>(x) & 0x7fffffff ); }
 // ~~~~~~ Basic / misc. stages ~~~~~~ //
 
 STAGE_GG(seed_shader, NoCtx) {
-    static const float iota[] = {
+    static constexpr float iota[] = {
         0.5f, 1.5f, 2.5f, 3.5f, 4.5f, 5.5f, 6.5f, 7.5f,
         8.5f, 9.5f,10.5f,11.5f,12.5f,13.5f,14.5f,15.5f,
     };

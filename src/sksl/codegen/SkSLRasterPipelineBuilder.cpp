@@ -39,6 +39,7 @@ namespace RP {
 #define ALL_SINGLE_SLOT_UNARY_OP_CASES  \
          BuilderOp::atan_float:         \
     case BuilderOp::cos_float:          \
+    case BuilderOp::exp_float:          \
     case BuilderOp::sin_float:          \
     case BuilderOp::sqrt_float:         \
     case BuilderOp::tan_float
@@ -54,8 +55,9 @@ namespace RP {
     case BuilderOp::ceil_float:              \
     case BuilderOp::floor_float              \
 
-#define ALL_N_WAY_BINARY_OP_CASES  \
-         BuilderOp::atan2_n_floats
+#define ALL_N_WAY_BINARY_OP_CASES   \
+         BuilderOp::atan2_n_floats: \
+    case BuilderOp::pow_n_floats
 
 #define ALL_MULTI_SLOT_BINARY_OP_CASES  \
          BuilderOp::add_n_floats:       \
@@ -316,6 +318,29 @@ void Builder::simplifyPopSlotsUnmasked(SlotRange* dst) {
         this->zero_slots_unmasked({destinationSlot, 1});
         return;
     }
+
+    // If the last instruction is pushing a slot, we can just copy that slot.
+    if (lastInstruction.fOp == BuilderOp::push_slots) {
+        // Get the last slot.
+        Slot sourceSlot = lastInstruction.fSlotA + lastInstruction.fImmA - 1;
+        lastInstruction.fImmA--;
+        if (lastInstruction.fImmA == 0) {
+            fInstructions.pop_back();
+        }
+
+        // Consume one destination slot.
+        dst->count--;
+        Slot destinationSlot = dst->index + dst->count;
+
+        // Try once more.
+        this->simplifyPopSlotsUnmasked(dst);
+
+        // Copy the slot directly.
+        if (destinationSlot != sourceSlot) {
+            this->copy_slots_unmasked({destinationSlot, 1}, {sourceSlot, 1});
+        }
+        return;
+    }
 }
 
 void Builder::pop_slots_unmasked(SlotRange dst) {
@@ -357,6 +382,35 @@ void Builder::copy_stack_to_slots(SlotRange dst, int offsetFromStackTop) {
 
     fInstructions.push_back({BuilderOp::copy_stack_to_slots, {dst.index},
                              dst.count, offsetFromStackTop});
+}
+
+static bool slot_ranges_overlap(SlotRange x, SlotRange y) {
+    return x.index < y.index + y.count &&
+           y.index < x.index + x.count;
+}
+
+void Builder::copy_slots_unmasked(SlotRange dst, SlotRange src) {
+    // If the last instruction copied adjacent slots, just extend it.
+    if (!fInstructions.empty()) {
+        Instruction& lastInstr = fInstructions.back();
+
+        // If the last op is copy-slots-unmasked...
+        if (lastInstr.fOp == BuilderOp::copy_slot_unmasked &&
+            // and this op's destination is immediately after the last copy-slots-op's destination
+            lastInstr.fSlotA + lastInstr.fImmA == dst.index &&
+            // and this op's source is immediately after the last copy-slots-op's source
+            lastInstr.fSlotB + lastInstr.fImmA == src.index &&
+            // and the source/dest ranges will not overlap
+            !slot_ranges_overlap({lastInstr.fSlotB, lastInstr.fImmA + dst.count},
+                                 {lastInstr.fSlotA, lastInstr.fImmA + dst.count})) {
+            // then we can just extend the copy!
+            lastInstr.fImmA += dst.count;
+            return;
+        }
+    }
+
+    SkASSERT(dst.count == src.count);
+    fInstructions.push_back({BuilderOp::copy_slot_unmasked, {dst.index, src.index}, dst.count});
 }
 
 void Builder::copy_stack_to_slots_unmasked(SlotRange dst, int offsetFromStackTop) {
@@ -1012,6 +1066,10 @@ void Program::makeStages(SkTArray<Stage>* pipeline,
                 pipeline->push_back({ProgramOp::store_dst, SlotA()});
                 break;
 
+            case BuilderOp::store_device_xy01:
+                pipeline->push_back({ProgramOp::store_device_xy01, SlotA()});
+                break;
+
             case BuilderOp::load_src:
                 pipeline->push_back({ProgramOp::load_src, SlotA()});
                 break;
@@ -1655,6 +1713,7 @@ void Program::dump(SkWStream* out) const {
             case POp::atan_float:
             case POp::ceil_float:
             case POp::cos_float:
+            case POp::exp_float:
             case POp::floor_float:
             case POp::sin_float:
             case POp::sqrt_float:
@@ -1687,6 +1746,7 @@ void Program::dump(SkWStream* out) const {
             case POp::load_dst:
             case POp::store_src:
             case POp::store_dst:
+            case POp::store_device_xy01:
             case POp::zero_4_slots_unmasked:
             case POp::bitwise_not_4_ints:
             case POp::cast_to_float_from_4_ints: case POp::cast_to_float_from_4_uints:
@@ -1828,6 +1888,7 @@ void Program::dump(SkWStream* out) const {
             case POp::cmpeq_n_floats: case POp::cmpeq_n_ints:
             case POp::cmpne_n_floats: case POp::cmpne_n_ints:
             case POp::atan2_n_floats:
+            case POp::pow_n_floats:
                 std::tie(opArg1, opArg2) = AdjacentBinaryOpCtx(stage.ctx);
                 break;
 
@@ -1932,6 +1993,10 @@ void Program::dump(SkWStream* out) const {
 
             case POp::store_dst:
                 opText = opArg1 + " = dst.rgba";
+                break;
+
+            case POp::store_device_xy01:
+                opText = opArg1 + " = DeviceCoords.xy01";
                 break;
 
             case POp::load_src_rg:
@@ -2053,6 +2118,14 @@ void Program::dump(SkWStream* out) const {
 
             case POp::cos_float:
                 opText = opArg1 + " = cos(" + opArg1 + ")";
+                break;
+
+            case POp::exp_float:
+                opText = opArg1 + " = exp(" + opArg1 + ")";
+                break;
+
+            case POp::pow_n_floats:
+                opText = opArg1 + " = pow(" + opArg1 + ", " + opArg2 + ")";
                 break;
 
             case POp::sin_float:
