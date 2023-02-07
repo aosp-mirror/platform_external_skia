@@ -38,7 +38,7 @@ public:
 };
 
 // This class holds the results of an SkScalerContext, and owns a references to that scaler.
-class SkStrike final : public SkRefCnt, public sktext::StrikeForGPU {
+class SkStrike final : public sktext::StrikeForGPU {
 public:
     SkStrike(SkStrikeCache* strikeCache,
              const SkStrikeSpec& strikeSpec,
@@ -102,10 +102,6 @@ public:
         return fRoundingSpec;
     }
 
-    void onAboutToExitScope() override {
-        this->unref();
-    }
-
     sktext::SkStrikePromise strikePromise() override {
         return sktext::SkStrikePromise(sk_ref_sp<SkStrike>(this));
     }
@@ -137,10 +133,10 @@ private:
     // advances using a scaler.
     SkGlyph* glyph(SkPackedGlyphID) SK_REQUIRES(fStrikeLock);
 
-    SkGlyphDigest* digestPtr(SkPackedGlyphID) SK_REQUIRES(fStrikeLock);
+    SkGlyphDigest* digestPtr(SkPackedGlyphID, skglyph::ActionType) SK_REQUIRES(fStrikeLock);
 
     // Generate the glyph digest information and update structures to add the glyph.
-    SkGlyphDigest* addGlyph(SkGlyph* glyph) SK_REQUIRES(fStrikeLock);
+    SkGlyphDigest* addGlyphAndDigest(SkGlyph* glyph) SK_REQUIRES(fStrikeLock);
 
     const void* prepareImage(SkGlyph* glyph) SK_REQUIRES(fStrikeLock);
 
