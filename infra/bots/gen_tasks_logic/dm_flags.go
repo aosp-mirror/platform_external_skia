@@ -193,7 +193,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			configs = []string{
 				"r8", "565",
 				"pic-8888", "serialize-8888",
-				"linear-f16", "srgb-rgba", "srgb-f16",
+				"linear-f16",
 				"p3-rgba", "p3-f16", "rec2020-rgba", "rec2020-f16"}
 		}
 
@@ -241,7 +241,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		if b.extraConfig("NativeFonts") {
 			configs = append(configs, glPrefix)
 		} else {
-			configs = append(configs, glPrefix, glPrefix+"dft", "srgb-"+glPrefix)
+			configs = append(configs, glPrefix, glPrefix+"dft")
 			if sampleCount > 0 {
 				configs = append(configs, fmt.Sprintf("%smsaa%d", glPrefix, sampleCount))
 				// Temporarily limit the bots we test dynamic MSAA on.
@@ -265,7 +265,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		// Also do the Ganesh threading verification test (render with and without
 		// worker threads, using only the SW path renderer, and compare the results).
 		if b.matchGpu("Intel") && b.isLinux() {
-			configs = append(configs, "gles", "glesdft", "srgb-gles", "gltestthreading")
+			configs = append(configs, "gles", "glesdft", "gltestthreading")
 			// skbug.com/6333, skbug.com/6419, skbug.com/6702
 			skip("gltestthreading", "gm", ALL, "lcdblendmodes")
 			skip("gltestthreading", "gm", ALL, "lcdoverlap")
@@ -531,9 +531,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		}
 
 		// Test rendering to wrapped dsts on a few bots
-		// Also test "narrow-glf16", which hits F16 surfaces and F16 vertex colors.
 		if b.extraConfig("BonusConfigs") {
-			configs = []string{"glbetex", "glbert", "narrow-glf16", "glreducedshaders", "glr8"}
+			configs = []string{"glbetex", "glbert", "glreducedshaders", "glr8"}
 		}
 
 		if b.os("ChromeOS") {
@@ -560,23 +559,17 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			args = append(args, "--skpViewportSize", "2048")
 			args = append(args, "--gpuThreads", "0")
 		}
-		if b.extraConfig("OOPRDDL") {
-			// This bot generates the real oopr/DDL images for the large skps and the GMs
-			configs = suffix(filter(configs, "gl", "vk", "mtl"), "ooprddl")
-			args = append(args, "--skpViewportSize", "2048")
-			args = append(args, "--gpuThreads", "0")
-		}
 	}
 
 	if b.matchExtraConfig("ColorSpaces") {
 		// Here we're going to generate a bunch of configs with the format:
 		//        <colorspace> <backend> <targetFormat>
-		// Where: <colorspace> is one of:   "", "narrow-"
+		// Where: <colorspace> is one of:   "", "narrow-", "srgb2-"
 		//        <backend> is one of: "gl, "gles", "mtl", "vk"
 		//                             their "gr" prefixed versions
 		//                             and "" (for raster)
 		//        <targetFormat> is one of: "f16", { "" (for gpus) or "rgba" (for raster) }
-		colorSpaces := []string{"", "narrow-"}
+		colorSpaces := []string{"", "narrow-", "srgb2-"}
 
 		backendStr := ""
 		if b.gpu() {
@@ -717,8 +710,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	// TODO: ???
 	skip("f16", ALL, ALL, "dstreadshuffle")
-	skip("srgb-gl", "image", ALL, ALL)
-	skip("srgb-gles", "image", ALL, ALL)
 
 	// --src image --config r8 means "decode into R8", which isn't supported.
 	skip("r8", "image", ALL, ALL)
@@ -1349,8 +1340,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	}
 
 	if b.matchExtraConfig("ColorSpaces") {
-		// Here we reset the 'match' and 'skipped' strings bc the ColorSpaces job only
-		// runs a very specific subset of the GMs.
+		// Here we reset the 'match' and 'skipped' strings bc the ColorSpaces job only runs
+		// a very specific subset of the GMs.
 		skipped = []string{}
 		match = []string{}
 		match = append(match, "async_rescale_and_read_dog_up")
