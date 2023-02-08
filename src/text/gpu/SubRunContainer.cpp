@@ -516,7 +516,7 @@ AtlasTextOp::MaskType op_mask_type(MaskFormat maskFormat) {
 
 SkPMColor4f calculate_colors(skgpu::v1::SurfaceDrawContext* sdc,
                              const SkPaint& paint,
-                             const SkMatrixProvider& matrix,
+                             const SkMatrix& matrix,
                              MaskFormat maskFormat,
                              GrPaint* grPaint) {
     GrRecordingContext* rContext = sdc->recordingContext();
@@ -1449,8 +1449,11 @@ std::tuple<const GrClip*, GrOp::Owner> DirectMaskSubRun::makeAtlasTextOp(
     }
 
     GrPaint grPaint;
-    const SkPMColor4f drawingColor =
-            calculate_colors(sdc, paint, viewMatrix, fMaskFormat, &grPaint);
+    const SkPMColor4f drawingColor = calculate_colors(sdc,
+                                                      paint,
+                                                      drawMatrix,
+                                                      fMaskFormat,
+                                                      &grPaint);
 
     auto geometry = AtlasTextOp::Geometry::Make(*this,
                                                 drawMatrix,
@@ -1787,8 +1790,11 @@ public:
         const SkMatrix& drawMatrix = viewMatrix.localToDevice();
 
         GrPaint grPaint;
-        SkPMColor4f drawingColor = calculate_colors(
-                sdc, paint, viewMatrix, fVertexFiller.grMaskType(), &grPaint);
+        SkPMColor4f drawingColor = calculate_colors(sdc,
+                                                    paint,
+                                                    drawMatrix,
+                                                    fVertexFiller.grMaskType(),
+                                                    &grPaint);
 
         auto geometry = AtlasTextOp::Geometry::Make(*this,
                                                     drawMatrix,
@@ -2043,8 +2049,11 @@ public:
         const SkMatrix& drawMatrix = viewMatrix.localToDevice();
 
         GrPaint grPaint;
-        SkPMColor4f drawingColor =
-                calculate_colors(sdc, paint, viewMatrix, MaskFormat::kA8, &grPaint);
+        SkPMColor4f drawingColor = calculate_colors(sdc,
+                                                    paint,
+                                                    drawMatrix,
+                                                    MaskFormat::kA8,
+                                                    &grPaint);
 
         auto [maskType, DFGPFlags, useGammaCorrectDistanceTable] =
                 calculate_sdf_parameters(*sdc, drawMatrix, fUseLCDText, fAntiAliased);
@@ -2412,7 +2421,7 @@ SkRect prepare_for_mask_drawing(StrikeForGPU* strike,
 
         const SkGlyphID glyphID = packedID.packedID().glyphID();
         const SkGlyphDigest digest = strike->maskDigest(glyphID);
-        switch (digest.directMaskAction()) {
+        switch (digest.maskAction()) {
             case GlyphAction::kAccept: {
                 const SkPoint mappedPos = creationMatrix.mapPoint(pos);
                 const SkGlyphRect glyphBounds = digest.bounds().offset(mappedPos);
@@ -2438,7 +2447,7 @@ void prepare_for_path_drawing(StrikeForGPU* strike,
     StrikeMutationMonitor m{strike};
     for (auto [i, packedID, pos] : SkMakeEnumerate(accepted->input())) {
         if (SkScalarsAreFinite(pos.x(), pos.y())) {
-            switch (strike->pathAction(packedID.packedID().glyphID())) {
+            switch (strike->pathDigest(packedID.packedID().glyphID()).pathAction()) {
                 case GlyphAction::kAccept:
                     accepted->accept(packedID, pos);
                     break;
@@ -2458,7 +2467,7 @@ void prepare_for_drawable_drawing(StrikeForGPU* strike,
     StrikeMutationMonitor m{strike};
     for (auto [i, packedID, pos] : SkMakeEnumerate(accepted->input())) {
         if (SkScalarsAreFinite(pos.x(), pos.y())) {
-            switch (strike->drawableAction(packedID.packedID().glyphID())) {
+            switch (strike->drawableDigest(packedID.packedID().glyphID()).drawableAction()) {
                 case GlyphAction::kAccept:
                     accepted->accept(packedID, pos);
                     break;

@@ -170,8 +170,8 @@ public:
 
     void lock() override {}
     void unlock() override {}
-    GlyphAction pathAction(SkGlyphID) override;
-    GlyphAction drawableAction(SkGlyphID) override;
+    SkGlyphDigest pathDigest(SkGlyphID) override;
+    SkGlyphDigest drawableDigest(SkGlyphID) override;
     SkGlyphDigest directMaskDigest(SkPackedGlyphID) override;
     SkGlyphDigest sdftDigest(SkGlyphID) override;
     SkGlyphDigest maskDigest(SkGlyphID) override;
@@ -200,7 +200,7 @@ public:
     void resetScalerContext();
 
 private:
-    SkGlyphDigest* digestPtr(SkPackedGlyphID);
+    SkGlyphDigest* digestPtr(SkPackedGlyphID, ActionType);
     void writeGlyphPath(const SkGlyph& glyph, Serializer* serializer) const;
     void writeGlyphDrawable(const SkGlyph& glyph, Serializer* serializer) const;
     void ensureScalerContext();
@@ -222,8 +222,6 @@ private:
 
     // The masks and paths that currently reside in the GPU process.
     SkTHashMap<SkPackedGlyphID, SkGlyphDigest, SkPackedGlyphID::Hash> fSentGlyphs;
-    SkTHashMap<SkGlyphID, GlyphAction> fSentPaths;
-    SkTHashMap<SkGlyphID, GlyphAction> fSentDrawables;
 
     // The Masks, SDFT Mask, and Paths that need to be sent to the GPU task for the processed
     // TextBlobs. Cleared after diffs are serialized.
@@ -366,131 +364,98 @@ void RemoteStrike::writeGlyphDrawable(const SkGlyph& glyph, Serializer* serializ
     memcpy(serializer->allocate(data->size(), kDrawableAlignment), data->data(), data->size());
 }
 
-SkGlyphDigest* RemoteStrike::digestPtr(SkPackedGlyphID packedGlyphID) {
+SkGlyphDigest* RemoteStrike::digestPtr(SkPackedGlyphID packedGlyphID, ActionType actionType) {
     SkGlyphDigest* digestPtr = fSentGlyphs.find(packedGlyphID);
-    if (digestPtr != nullptr) {
+    if (digestPtr != nullptr && digestPtr->action(actionType) != GlyphAction::kUnset) {
         return digestPtr;
     }
 
-    // Put the new SkGlyph in the glyphs to send.
+    SkGlyph* glyph;
     this->ensureScalerContext();
-    fMasksToSend.emplace_back(fContext->makeGlyph(packedGlyphID, &fAlloc));
-    SkGlyph* glyph = &fMasksToSend.back();
-
-    SkGlyphDigest newDigest{0, *glyph};
-    return fSentGlyphs.set(packedGlyphID, newDigest);
-}
-
-GlyphAction RemoteStrike::pathAction(SkGlyphID glyphID) {
-    GlyphAction* decision = fSentPaths.find(glyphID);
-    if (decision == nullptr) {
-        // Put the new SkGlyph in the glyphs to send.
-        this->ensureScalerContext();
-        fPathsToSend.emplace_back(fContext->makeGlyph(SkPackedGlyphID{glyphID}, &fAlloc));
-        SkGlyph* glyph = &fPathsToSend.back();
-
-        glyph->setPath(&fAlloc, fContext.get());
-
-        GlyphAction glyphDecision;
-        if (glyph->isEmpty()) {
-            glyphDecision = GlyphAction::kDrop;
-        } else if (glyph->path() != nullptr) {
-            glyphDecision = GlyphAction::kAccept;
-        } else {
-            glyphDecision = GlyphAction::kReject;
+    switch (actionType) {
+        case kPath: {
+            fPathsToSend.emplace_back(fContext->makeGlyph(packedGlyphID, &fAlloc));
+            glyph = &fPathsToSend.back();
+            break;
         }
-        decision = fSentPaths.set(glyphID, glyphDecision);
+        case kDrawable: {
+            fDrawablesToSend.emplace_back(fContext->makeGlyph(packedGlyphID, &fAlloc));
+            glyph = &fDrawablesToSend.back();
+            break;
+        }
+        default: {
+            fMasksToSend.emplace_back(fContext->makeGlyph(packedGlyphID, &fAlloc));
+            glyph = &fMasksToSend.back();
+            break;
+        }
     }
 
-    return *decision;
+    if (digestPtr == nullptr) {
+        digestPtr = fSentGlyphs.set(packedGlyphID, SkGlyphDigest{0, *glyph});
+    }
+
+    // We don't have to do any more if the glyph is marked as kDrop because it was isEmpty().
+    if (digestPtr->action(actionType) == GlyphAction::kUnset) {
+        GlyphAction action = GlyphAction::kReject;
+        switch (actionType) {
+            case kPath: {
+                glyph->setPath(&fAlloc, fContext.get());
+                if (glyph->path() != nullptr) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+            case kDrawable: {
+                glyph->setDrawable(&fAlloc, fContext.get());
+                if (glyph->drawable() != nullptr) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+            case kMask: {
+                if (digestPtr->fitsInAtlasInterpolated()) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+            case kSDFT: {
+                if (digestPtr->fitsInAtlasDirect() &&
+                    digestPtr->maskFormat() == SkMask::Format::kSDF_Format) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+            case kDirectMask: {
+                if (digestPtr->fitsInAtlasDirect()) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+        }
+        digestPtr->setAction(actionType, action);
+    }
+
+    return digestPtr;
 }
 
-GlyphAction RemoteStrike::drawableAction(SkGlyphID glyphID) {
-    GlyphAction* decision = fSentDrawables.find(glyphID);
-    if (decision == nullptr) {
-        // Put the new SkGlyph in the glyphs to send.
-        this->ensureScalerContext();
-        fDrawablesToSend.emplace_back(fContext->makeGlyph(SkPackedGlyphID{glyphID}, &fAlloc));
-        SkGlyph* glyph = &fDrawablesToSend.back();
+SkGlyphDigest RemoteStrike::pathDigest(SkGlyphID glyphID) {
+    return *this->digestPtr(SkPackedGlyphID{glyphID}, kPath);
+}
 
-        glyph->setDrawable(&fAlloc, fContext.get());
-
-        GlyphAction glyphDecision;
-        if (glyph->isEmpty()) {
-            glyphDecision = GlyphAction::kDrop;
-        } else if (glyph->drawable() != nullptr) {
-            glyphDecision = GlyphAction::kAccept;
-        } else {
-            glyphDecision = GlyphAction::kReject;
-        }
-
-        decision = fSentDrawables.set(glyphID, glyphDecision);
-    }
-    return *decision;
+SkGlyphDigest RemoteStrike::drawableDigest(SkGlyphID glyphID) {
+    return *this->digestPtr(SkPackedGlyphID{glyphID}, kDrawable);
 }
 
 SkGlyphDigest RemoteStrike::directMaskDigest(SkPackedGlyphID packedGlyphID) {
-    SkGlyphDigest* const digestPtr = this->digestPtr(packedGlyphID);
-    if (digestPtr->directMaskAction() != GlyphAction::kUnset) {
-        return *digestPtr;
-    }
-
-    GlyphAction action;
-    if (digestPtr->isEmpty()) {
-        action = GlyphAction::kDrop;
-    } else {
-        if (digestPtr->fitsInAtlasDirect()) {
-            action = GlyphAction::kAccept;
-        } else {
-            action = GlyphAction::kReject;
-        }
-    }
-
-    digestPtr->setDirectMaskAction(action);
-    return *digestPtr;
+    return *this->digestPtr(packedGlyphID, kDirectMask);
 }
 
 SkGlyphDigest RemoteStrike::sdftDigest(SkGlyphID glyphID) {
-    SkGlyphDigest* const digestPtr = this->digestPtr(SkPackedGlyphID{glyphID});
-    if (digestPtr->SDFTAction() != GlyphAction::kUnset) {
-        return *digestPtr;
-    }
-
-    GlyphAction action;
-    if (digestPtr->isEmpty()) {
-        action = GlyphAction::kDrop;
-    } else {
-        if (digestPtr->fitsInAtlasDirect() &&
-            digestPtr->maskFormat() == SkMask::Format::kSDF_Format) {
-            action = GlyphAction::kAccept;
-        } else {
-            action = GlyphAction::kReject;
-        }
-    }
-
-    digestPtr->setSDFTAction(action);
-    return *digestPtr;
+    return *this->digestPtr(SkPackedGlyphID{glyphID}, kSDFT);
 }
 
 SkGlyphDigest RemoteStrike::maskDigest(SkGlyphID glyphID) {
-    SkGlyphDigest* const digestPtr = this->digestPtr(SkPackedGlyphID{glyphID});
-    if (digestPtr->maskAction() != GlyphAction::kUnset) {
-        return *digestPtr;
-    }
-
-    GlyphAction action;
-    if (digestPtr->isEmpty()) {
-        action = GlyphAction::kDrop;
-    } else {
-        if (digestPtr->fitsInAtlasInterpolated()) {
-            action = GlyphAction::kAccept;
-        } else {
-            action = GlyphAction::kReject;
-        }
-    }
-
-    digestPtr->setMaskAction(action);
-    return *digestPtr;
+    return *this->digestPtr(SkPackedGlyphID{glyphID}, kMask);
 }
 
 sktext::SkStrikePromise RemoteStrike::strikePromise() {
