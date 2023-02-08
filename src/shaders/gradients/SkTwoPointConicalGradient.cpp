@@ -15,6 +15,7 @@
 #include <utility>
 
 #ifdef SK_GRAPHITE_ENABLED
+#include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #endif
@@ -60,7 +61,8 @@ public:
 
     GradientType asGradient(GradientInfo* info, SkMatrix* localMatrix) const override;
 #if SK_SUPPORT_GPU
-    std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs&) const override;
+    std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs&,
+                                                             const MatrixRec&) const override;
 #endif
 #ifdef SK_GRAPHITE_ENABLED
     void addToKey(const skgpu::graphite::KeyContext&,
@@ -376,8 +378,8 @@ skvm::F32 SkTwoPointConicalGradient::transformT(skvm::Builder* p, skvm::Uniforms
 #include "src/gpu/ganesh/effects/GrSkSLFP.h"
 #include "src/gpu/ganesh/gradients/GrGradientShader.h"
 
-std::unique_ptr<GrFragmentProcessor> SkTwoPointConicalGradient::asFragmentProcessor(
-        const GrFPArgs& args) const {
+std::unique_ptr<GrFragmentProcessor>
+SkTwoPointConicalGradient::asFragmentProcessor(const GrFPArgs& args, const MatrixRec& mRec) const {
     // The 2 point conical gradient can reject a pixel so it does change opacity even if the input
     // was opaque. Thus, all of these layout FPs disable that optimization.
     std::unique_ptr<GrFragmentProcessor> fp;
@@ -525,7 +527,11 @@ std::unique_ptr<GrFragmentProcessor> SkTwoPointConicalGradient::asFragmentProces
                                 "fx", focalData.fFocalX);
         } break;
     }
-    return GrGradientShader::MakeGradientFP(*this, args, std::move(fp), matrix.getMaybeNull());
+    return GrGradientShader::MakeGradientFP(*this,
+                                            args,
+                                            mRec,
+                                            std::move(fp),
+                                            matrix.getMaybeNull());
 }
 
 #endif
@@ -536,13 +542,17 @@ void SkTwoPointConicalGradient::addToKey(const skgpu::graphite::KeyContext& keyC
                                          skgpu::graphite::PipelineDataGatherer* gatherer) const {
     using namespace skgpu::graphite;
 
+    // TODO: respect the interpolateInPremul setting
+    SkColor4fXformer xformedColors(this, keyContext.dstColorInfo().colorSpace());
+    const SkPMColor4f* colors = xformedColors.fColors.begin();
+
     GradientShaderBlocks::GradientData data(GradientType::kConical,
                                             fCenter1, fCenter2,
                                             fRadius1, fRadius2,
                                             0.0f, 0.0f,
                                             fTileMode,
                                             fColorCount,
-                                            fColors,
+                                            colors,
                                             fPositions);
 
     GradientShaderBlocks::BeginBlock(keyContext, builder, gatherer, data);

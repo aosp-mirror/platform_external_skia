@@ -9,6 +9,7 @@
 #include "include/private/SkSLString.h"
 #include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkTo.h"
+#include "include/sksl/SkSLPosition.h"
 #include "src/base/SkArenaAlloc.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkRasterPipelineOpContexts.h"
@@ -27,6 +28,7 @@
 #include <cstring>
 #include <iterator>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -37,6 +39,7 @@ namespace RP {
 #define ALL_SINGLE_SLOT_UNARY_OP_CASES  \
          BuilderOp::atan_float:         \
     case BuilderOp::cos_float:          \
+    case BuilderOp::exp_float:          \
     case BuilderOp::sin_float:          \
     case BuilderOp::sqrt_float:         \
     case BuilderOp::tan_float
@@ -52,8 +55,9 @@ namespace RP {
     case BuilderOp::ceil_float:              \
     case BuilderOp::floor_float              \
 
-#define ALL_N_WAY_BINARY_OP_CASES  \
-         BuilderOp::atan2_n_floats
+#define ALL_N_WAY_BINARY_OP_CASES   \
+         BuilderOp::atan2_n_floats: \
+    case BuilderOp::pow_n_floats
 
 #define ALL_MULTI_SLOT_BINARY_OP_CASES  \
          BuilderOp::add_n_floats:       \
@@ -257,56 +261,96 @@ void Builder::push_duplicates(int count) {
     }
 }
 
+void Builder::pop_slots(SlotRange dst) {
+    if (!this->executionMaskWritesAreEnabled()) {
+        this->pop_slots_unmasked(dst);
+        return;
+    }
+
+    this->copy_stack_to_slots(dst);
+    this->discard_stack(dst.count);
+}
+
+void Builder::simplifyPopSlotsUnmasked(SlotRange* dst) {
+    if (!dst->count || fInstructions.empty()) {
+        // There's nothing left to simplify.
+        return;
+    }
+
+    Instruction& lastInstruction = fInstructions.back();
+
+    // If the last instruction is pushing a constant, we can simplify it by copying the constant
+    // directly into the destination slot.
+    if (lastInstruction.fOp == BuilderOp::push_literal) {
+        // Remove the constant-push instruction.
+        int value = lastInstruction.fImmA;
+        fInstructions.pop_back();
+
+        // Consume one destination slot.
+        dst->count--;
+        Slot destinationSlot = dst->index + dst->count;
+
+        // Continue simplifying if possible.
+        this->simplifyPopSlotsUnmasked(dst);
+
+        // Write the constant directly to the destination slot.
+        this->copy_constant(destinationSlot, value);
+        return;
+    }
+
+    // If the last instruction is pushing a zero, we can save a step by directly zeroing out
+    // the destination slot.
+    if (lastInstruction.fOp == BuilderOp::push_zeros) {
+        // Remove one zero-push.
+        lastInstruction.fImmA--;
+        if (lastInstruction.fImmA == 0) {
+            fInstructions.pop_back();
+        }
+
+        // Consume one destination slot.
+        dst->count--;
+        Slot destinationSlot = dst->index + dst->count;
+
+        // Continue simplifying if possible.
+        this->simplifyPopSlotsUnmasked(dst);
+
+        // Zero the destination slot directly.
+        this->zero_slots_unmasked({destinationSlot, 1});
+        return;
+    }
+
+    // If the last instruction is pushing a slot, we can just copy that slot.
+    if (lastInstruction.fOp == BuilderOp::push_slots) {
+        // Get the last slot.
+        Slot sourceSlot = lastInstruction.fSlotA + lastInstruction.fImmA - 1;
+        lastInstruction.fImmA--;
+        if (lastInstruction.fImmA == 0) {
+            fInstructions.pop_back();
+        }
+
+        // Consume one destination slot.
+        dst->count--;
+        Slot destinationSlot = dst->index + dst->count;
+
+        // Try once more.
+        this->simplifyPopSlotsUnmasked(dst);
+
+        // Copy the slot directly.
+        if (destinationSlot != sourceSlot) {
+            this->copy_slots_unmasked({destinationSlot, 1}, {sourceSlot, 1});
+        }
+        return;
+    }
+}
+
 void Builder::pop_slots_unmasked(SlotRange dst) {
     SkASSERT(dst.count >= 0);
 
-    SkTArray<int32_t> constantsToPush;
-    while (!fInstructions.empty() && dst.count > 0) {
-        Instruction& lastInstruction = fInstructions.back();
+    // If we are popping immediately after a push, we can simplify the code by writing the pushed
+    // value directly to the destination range.
+    this->simplifyPopSlotsUnmasked(&dst);
 
-        // If the last instructions is pushing a constant, we can save a step by copying those
-        // constants directly into the destination slot.
-        if (lastInstruction.fOp == BuilderOp::push_literal) {
-            int immValue = lastInstruction.fImmA;
-            fInstructions.pop_back();
-
-            // We need to fill the _last_ slot of the passed-in slot range.
-            constantsToPush.push_back(immValue);
-            continue;
-        }
-
-        // If the last instruction is pushing a zero, we can save a step by directly zeroing out
-        // the destination slot.
-        if (lastInstruction.fOp == BuilderOp::push_zeros) {
-            lastInstruction.fImmA--;
-            if (lastInstruction.fImmA == 0) {
-                fInstructions.pop_back();
-            }
-
-            // We need to zero the _last_ slot of the passed-in slot range.
-            constantsToPush.push_back(0);
-            continue;
-        }
-
-        break;
-    }
-
-    if (!constantsToPush.empty()) {
-        // Write constants directly to their destination (avoiding a trip through the stack).
-        dst.count -= constantsToPush.size();
-        Slot constantWriteSlot = dst.index + dst.count;
-
-        for (int index = constantsToPush.size(); index--;) {
-            int constantValue = constantsToPush[index];
-            if (constantValue != 0) {
-                this->copy_constant(constantWriteSlot++, constantValue);
-            } else {
-                this->zero_slots_unmasked({constantWriteSlot++, 1});
-            }
-        }
-    }
-
-    // Copy non-constants from the stack to their destination.
+    // Pop from the stack normally.
     if (dst.count > 0) {
         this->copy_stack_to_slots_unmasked(dst);
         this->discard_stack(dst.count);
@@ -338,6 +382,35 @@ void Builder::copy_stack_to_slots(SlotRange dst, int offsetFromStackTop) {
 
     fInstructions.push_back({BuilderOp::copy_stack_to_slots, {dst.index},
                              dst.count, offsetFromStackTop});
+}
+
+static bool slot_ranges_overlap(SlotRange x, SlotRange y) {
+    return x.index < y.index + y.count &&
+           y.index < x.index + x.count;
+}
+
+void Builder::copy_slots_unmasked(SlotRange dst, SlotRange src) {
+    // If the last instruction copied adjacent slots, just extend it.
+    if (!fInstructions.empty()) {
+        Instruction& lastInstr = fInstructions.back();
+
+        // If the last op is copy-slots-unmasked...
+        if (lastInstr.fOp == BuilderOp::copy_slot_unmasked &&
+            // and this op's destination is immediately after the last copy-slots-op's destination
+            lastInstr.fSlotA + lastInstr.fImmA == dst.index &&
+            // and this op's source is immediately after the last copy-slots-op's source
+            lastInstr.fSlotB + lastInstr.fImmA == src.index &&
+            // and the source/dest ranges will not overlap
+            !slot_ranges_overlap({lastInstr.fSlotB, lastInstr.fImmA + dst.count},
+                                 {lastInstr.fSlotA, lastInstr.fImmA + dst.count})) {
+            // then we can just extend the copy!
+            lastInstr.fImmA += dst.count;
+            return;
+        }
+    }
+
+    SkASSERT(dst.count == src.count);
+    fInstructions.push_back({BuilderOp::copy_slot_unmasked, {dst.index, src.index}, dst.count});
 }
 
 void Builder::copy_stack_to_slots_unmasked(SlotRange dst, int offsetFromStackTop) {
@@ -993,6 +1066,10 @@ void Program::makeStages(SkTArray<Stage>* pipeline,
                 pipeline->push_back({ProgramOp::store_dst, SlotA()});
                 break;
 
+            case BuilderOp::store_device_xy01:
+                pipeline->push_back({ProgramOp::store_device_xy01, SlotA()});
+                break;
+
             case BuilderOp::load_src:
                 pipeline->push_back({ProgramOp::load_src, SlotA()});
                 break;
@@ -1268,6 +1345,44 @@ void Program::makeStages(SkTArray<Stage>* pipeline,
     }
 }
 
+// Finds duplicate names in the program and disambiguates them with subscripts.
+SkTArray<std::string> build_unique_slot_name_list(const SkRPDebugTrace* debugTrace) {
+    SkTArray<std::string> slotName;
+    if (debugTrace) {
+        slotName.reserve_back(debugTrace->fSlotInfo.size());
+
+        // The map consists of <variable name, <source position, unique name>>.
+        SkTHashMap<std::string_view, SkTHashMap<int, std::string>> uniqueNameMap;
+
+        for (const SlotDebugInfo& slotInfo : debugTrace->fSlotInfo) {
+            // Look up this variable by its name and source position.
+            int pos = slotInfo.pos.valid() ? slotInfo.pos.startOffset() : 0;
+            SkTHashMap<int, std::string>& positionMap = uniqueNameMap[slotInfo.name];
+            std::string& uniqueName = positionMap[pos];
+
+            // Have we seen this variable name/position combination before?
+            if (uniqueName.empty()) {
+                // This is a unique name/position pair.
+                uniqueName = slotInfo.name;
+
+                // But if it's not a unique _name_, it deserves a subscript to disambiguate it.
+                int subscript = positionMap.count() - 1;
+                if (subscript > 0) {
+                    for (char digit : std::to_string(subscript)) {
+                        // U+2080 through U+2089 (₀₁₂₃₄₅₆₇₈₉) in UTF8:
+                        uniqueName.push_back((char)0xE2);
+                        uniqueName.push_back((char)0x82);
+                        uniqueName.push_back((char)(0x80 + digit - '0'));
+                    }
+                }
+            }
+
+            slotName.push_back(uniqueName);
+        }
+    }
+    return slotName;
+}
+
 void Program::dump(SkWStream* out) const {
     // Allocate memory for the slot and uniform data, even though the program won't ever be
     // executed. The program requires pointer ranges for managing its data, and ASAN will report
@@ -1291,6 +1406,10 @@ void Program::dump(SkWStream* out) const {
             labelToStageMap[labelID] = index;
         }
     }
+
+    // Assign unique names to each variable slot; our trace might have multiple variables with the
+    // same name, which can make a dump hard to read.
+    SkTArray<std::string> slotName = build_unique_slot_name_list(fDebugTrace);
 
     // Emit the program's instruction list.
     for (int index = 0; index < stages.size(); ++index) {
@@ -1338,29 +1457,52 @@ void Program::dump(SkWStream* out) const {
             return text;
         };
 
+        // Come up with a reasonable name for a range of slots, e.g.:
+        // `val`: slot range points at one variable, named val
+        // `val(0..1)`: slot range points at the first and second slot of val (which has 3+ slots)
+        // `foo, bar`: slot range fully covers two variables, named foo and bar
+        // `foo(3), bar(0)`: slot range covers the fourth slot of foo and the first slot of bar
+        auto SlotName = [&](SkSpan<const SlotDebugInfo> debugInfo,
+                            SkSpan<const std::string> names,
+                            SlotRange range) -> std::string {
+            SkASSERT(range.index >= 0 && (range.index + range.count) <= (int)debugInfo.size());
+
+            std::string text;
+            auto separator = SkSL::String::Separator();
+            while (range.count > 0) {
+                const SlotDebugInfo& slotInfo = debugInfo[range.index];
+                text += separator();
+                text += names.empty() ? slotInfo.name : names[range.index];
+
+                // Figure out how many slots we can chomp in this iteration.
+                int entireVariable = slotInfo.columns * slotInfo.rows;
+                int slotsToChomp = std::min(range.count, entireVariable - slotInfo.componentIndex);
+                // If we aren't consuming an entire variable, from first slot to last...
+                if (slotsToChomp != entireVariable) {
+                    // ... decorate it with a range suffix.
+                    text += "(" + AsRange(slotInfo.componentIndex, slotsToChomp) + ")";
+                }
+                range.index += slotsToChomp;
+                range.count -= slotsToChomp;
+            }
+
+            return text;
+        };
+
         // Attempts to interpret the passed-in pointer as a uniform range.
         auto UniformPtrCtx = [&](const float* ptr, int numSlots) -> std::string {
-            if (fDebugTrace) {
-                // Handle pointers to named uniform slots.
-                if (ptr >= uniforms.begin() && ptr < uniforms.end()) {
-                    int slotIdx = ptr - uniforms.begin();
-                    if (slotIdx < (int)fDebugTrace->fUniformInfo.size()) {
-                        const SlotDebugInfo& slotInfo = fDebugTrace->fUniformInfo[slotIdx];
-                        if (!slotInfo.name.empty()) {
-                            // If we're covering the entire uniform, return `uniName`.
-                            if (numSlots == slotInfo.columns * slotInfo.rows) {
-                                return slotInfo.name;
-                            }
-                            // If we are only covering part of the uniform, return `uniName(1..2)`.
-                            return slotInfo.name + "(" +
-                                   AsRange(slotInfo.componentIndex, numSlots) + ")";
-                        }
+            const float* end = ptr + numSlots;
+            if (ptr >= uniforms.begin() && end <= uniforms.end()) {
+                int uniformIdx = ptr - uniforms.begin();
+                if (fDebugTrace) {
+                    // Handle pointers to named uniform slots.
+                    std::string name = SlotName(fDebugTrace->fUniformInfo, /*names=*/{},
+                                                {uniformIdx, numSlots});
+                    if (!name.empty()) {
+                        return name;
                     }
                 }
-            }
-            // Handle pointers to uniforms (when no debug info exists).
-            if (ptr >= uniforms.begin() && ptr < uniforms.end()) {
-                int uniformIdx = ptr - uniforms.begin();
+                // Handle pointers to uniforms (when no debug info exists).
                 return "u" + AsRange(uniformIdx, numSlots);
             }
             return {};
@@ -1368,31 +1510,21 @@ void Program::dump(SkWStream* out) const {
 
         // Attempts to interpret the passed-in pointer as a value slot range.
         auto ValuePtrCtx = [&](const float* ptr, int numSlots) -> std::string {
-            if (fDebugTrace) {
-                // Handle pointers to named value slots.
-                if (ptr >= slots.values.begin() && ptr < slots.values.end()) {
-                    int slotIdx = ptr - slots.values.begin();
-                    SkASSERT((slotIdx % N) == 0);
-                    slotIdx /= N;
-                    if (slotIdx < (int)fDebugTrace->fSlotInfo.size()) {
-                        const SlotDebugInfo& slotInfo = fDebugTrace->fSlotInfo[slotIdx];
-                        if (!slotInfo.name.empty()) {
-                            // If we're covering the entire slot, return `valueName`.
-                            if (numSlots == slotInfo.columns * slotInfo.rows) {
-                                return slotInfo.name;
-                            }
-                            // If we are only covering part of the slot, return `valueName(1..2)`.
-                            return slotInfo.name + "(" +
-                                   AsRange(slotInfo.componentIndex, numSlots) + ")";
-                        }
-                    }
-                }
-            }
-            // Handle pointers to value slots (when no debug info exists).
-            if (ptr >= slots.values.begin() && ptr < slots.values.end()) {
+            const float* end = ptr + (N * numSlots);
+            if (ptr >= slots.values.begin() && end <= slots.values.end()) {
                 int valueIdx = ptr - slots.values.begin();
                 SkASSERT((valueIdx % N) == 0);
-                return "v" + AsRange(valueIdx / N, numSlots);
+                valueIdx /= N;
+                if (fDebugTrace) {
+                    // Handle pointers to named value slots.
+                    std::string name = SlotName(fDebugTrace->fSlotInfo, slotName,
+                                                {valueIdx, numSlots});
+                    if (!name.empty()) {
+                        return name;
+                    }
+                }
+                // Handle pointers to value slots (when no debug info exists).
+                return "v" + AsRange(valueIdx, numSlots);
             }
             return {};
         };
@@ -1581,6 +1713,7 @@ void Program::dump(SkWStream* out) const {
             case POp::atan_float:
             case POp::ceil_float:
             case POp::cos_float:
+            case POp::exp_float:
             case POp::floor_float:
             case POp::sin_float:
             case POp::sqrt_float:
@@ -1613,6 +1746,7 @@ void Program::dump(SkWStream* out) const {
             case POp::load_dst:
             case POp::store_src:
             case POp::store_dst:
+            case POp::store_device_xy01:
             case POp::zero_4_slots_unmasked:
             case POp::bitwise_not_4_ints:
             case POp::cast_to_float_from_4_ints: case POp::cast_to_float_from_4_uints:
@@ -1754,6 +1888,7 @@ void Program::dump(SkWStream* out) const {
             case POp::cmpeq_n_floats: case POp::cmpeq_n_ints:
             case POp::cmpne_n_floats: case POp::cmpne_n_ints:
             case POp::atan2_n_floats:
+            case POp::pow_n_floats:
                 std::tie(opArg1, opArg2) = AdjacentBinaryOpCtx(stage.ctx);
                 break;
 
@@ -1858,6 +1993,10 @@ void Program::dump(SkWStream* out) const {
 
             case POp::store_dst:
                 opText = opArg1 + " = dst.rgba";
+                break;
+
+            case POp::store_device_xy01:
+                opText = opArg1 + " = DeviceCoords.xy01";
                 break;
 
             case POp::load_src_rg:
@@ -1979,6 +2118,14 @@ void Program::dump(SkWStream* out) const {
 
             case POp::cos_float:
                 opText = opArg1 + " = cos(" + opArg1 + ")";
+                break;
+
+            case POp::exp_float:
+                opText = opArg1 + " = exp(" + opArg1 + ")";
+                break;
+
+            case POp::pow_n_floats:
+                opText = opArg1 + " = pow(" + opArg1 + ", " + opArg2 + ")";
                 break;
 
             case POp::sin_float:

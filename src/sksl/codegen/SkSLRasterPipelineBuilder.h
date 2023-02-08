@@ -293,6 +293,11 @@ public:
         fInstructions.push_back({BuilderOp::store_dst, {slots.index}});
     }
 
+    void store_device_xy01(SlotRange slots) {
+        SkASSERT(slots.count == 4);
+        fInstructions.push_back({BuilderOp::store_device_xy01, {slots.index}});
+    }
+
     void load_src(SlotRange slots) {
         SkASSERT(slots.count == 4);
         fInstructions.push_back({BuilderOp::load_src, {slots.index}});
@@ -444,12 +449,8 @@ public:
     // Shrinks the temp stack, discarding values on top.
     void discard_stack(int32_t count = 1);
 
-    void pop_slots(SlotRange dst) {
-        // The opposite of push_slots; copies values from the temp stack into value slots, then
-        // shrinks the temp stack.
-        this->copy_stack_to_slots(dst);
-        this->discard_stack(dst.count);
-    }
+    // Copies vales from the temp stack into slots, and then shrinks the temp stack.
+    void pop_slots(SlotRange dst);
 
     // Creates many clones of the top single-slot item on the temp stack.
     void push_duplicates(int count);
@@ -496,10 +497,7 @@ public:
         fInstructions.push_back({BuilderOp::copy_slot_masked, {dst.index, src.index}, dst.count});
     }
 
-    void copy_slots_unmasked(SlotRange dst, SlotRange src) {
-        SkASSERT(dst.count == src.count);
-        fInstructions.push_back({BuilderOp::copy_slot_unmasked, {dst.index, src.index}, dst.count});
-    }
+    void copy_slots_unmasked(SlotRange dst, SlotRange src);
 
     void copy_constant(Slot slot, int constantValue) {
         fInstructions.push_back({BuilderOp::copy_constant, {slot}, constantValue});
@@ -607,6 +605,8 @@ public:
     }
 
 private:
+    void simplifyPopSlotsUnmasked(SlotRange* dst);
+
     SkTArray<Instruction> fInstructions;
     int fNumLabels = 0;
     int fExecutionMaskWritesEnabled = 0;

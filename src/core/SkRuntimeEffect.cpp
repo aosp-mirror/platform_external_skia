@@ -57,6 +57,7 @@
 #endif
 
 #ifdef SK_GRAPHITE_ENABLED
+#include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #endif
@@ -995,7 +996,9 @@ static GrFPResult make_effect_fp(sk_sp<SkRuntimeEffect> effect,
         std::optional<ChildType> type = child.type();
         if (type == ChildType::kShader) {
             // Convert a SkShader into a child FP.
-            auto childFP = as_SB(child.shader())->asFragmentProcessor(childArgs);
+            SkShaderBase::MatrixRec mRec(SkMatrix::I());
+            mRec.markTotalMatrixInvalid();
+            auto childFP = as_SB(child.shader())->asFragmentProcessor(childArgs, mRec);
             if (!childFP) {
                 return GrFPFailure(std::move(inputFP));
             }
@@ -1179,8 +1182,7 @@ public:
                 colorInfo.colorSpace());
         SkASSERT(uniforms);
 
-        SkMatrixProvider matrixProvider(SkMatrix::I());
-        GrFPArgs childArgs(context, matrixProvider, &colorInfo, props);
+        GrFPArgs childArgs(context, &colorInfo, props);
         return make_effect_fp(fEffect,
                               "runtime_color_filter",
                               std::move(uniforms),
@@ -1197,7 +1199,14 @@ public:
                   skgpu::graphite::PipelineDataGatherer* gatherer) const override {
         using namespace skgpu::graphite;
 
-        RuntimeEffectBlock::BeginBlock(keyContext, builder, gatherer, {fEffect, fUniforms});
+        sk_sp<const SkData> uniforms = SkRuntimeEffectPriv::TransformUniforms(
+                fEffect->uniforms(),
+                fUniforms,
+                keyContext.dstColorInfo().colorSpace());
+        SkASSERT(uniforms);
+
+        RuntimeEffectBlock::BeginBlock(keyContext, builder, gatherer,
+                                       { fEffect, std::move(uniforms) });
 
         add_children_to_key(fChildren, fEffect->children(), keyContext, builder, gatherer);
 
@@ -1357,13 +1366,9 @@ public:
     bool isOpaque() const override { return fEffect->alwaysOpaque(); }
 
 #if SK_SUPPORT_GPU
-    std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs& args) const override {
+    std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs& args,
+                                                             const MatrixRec& mRec) const override {
         if (!SkRuntimeEffectPriv::CanDraw(args.fContext->priv().caps(), fEffect.get())) {
-            return nullptr;
-        }
-
-        SkMatrix matrix;
-        if (args.fLocalMatrix && !args.fLocalMatrix->invert(&matrix)) {
             return nullptr;
         }
 
@@ -1373,21 +1378,24 @@ public:
                 args.fDstColorInfo->colorSpace());
         SkASSERT(uniforms);
 
-        // We handle the local matrix at this level so strip it out.
-        GrFPArgs fpArgs = args;
-        fpArgs.fLocalMatrix = nullptr;
-        auto [success, fp] = make_effect_fp(fEffect,
-                                            "runtime_shader",
-                                            std::move(uniforms),
-                                            /*inputFP=*/nullptr,
-                                            /*destColorFP=*/nullptr,
-                                            SkSpan(fChildren),
-                                            fpArgs);
+        bool success;
+        std::unique_ptr<GrFragmentProcessor> fp;
+        std::tie(success, fp) = make_effect_fp(fEffect,
+                                               "runtime_shader",
+                                               std::move(uniforms),
+                                               /*inputFP=*/nullptr,
+                                               /*destColorFP=*/nullptr,
+                                               SkSpan(fChildren),
+                                               args);
         if (!success) {
             return nullptr;
         }
 
-        return GrMatrixEffect::Make(matrix, std::move(fp));
+        std::tie(success, fp) = mRec.apply(std::move(fp));
+        if (!success) {
+            return nullptr;
+        }
+        return fp;
     }
 #endif
 
@@ -1397,7 +1405,14 @@ public:
                   skgpu::graphite::PipelineDataGatherer* gatherer) const override {
         using namespace skgpu::graphite;
 
-        RuntimeEffectBlock::BeginBlock(keyContext, builder, gatherer, {fEffect, fUniforms});
+        sk_sp<const SkData> uniforms = SkRuntimeEffectPriv::TransformUniforms(
+                fEffect->uniforms(),
+                fUniforms,
+                keyContext.dstColorInfo().colorSpace());
+        SkASSERT(uniforms);
+
+        RuntimeEffectBlock::BeginBlock(keyContext, builder, gatherer,
+                                       { fEffect, std::move(uniforms) });
 
         add_children_to_key(fChildren, fEffect->children(), keyContext, builder, gatherer);
 
@@ -1611,7 +1626,14 @@ public:
                   bool primitiveColorBlender) const override {
         using namespace skgpu::graphite;
 
-        RuntimeEffectBlock::BeginBlock(keyContext, builder, gatherer, {fEffect, fUniforms});
+        sk_sp<const SkData> uniforms = SkRuntimeEffectPriv::TransformUniforms(
+                fEffect->uniforms(),
+                fUniforms,
+                keyContext.dstColorInfo().colorSpace());
+        SkASSERT(uniforms);
+
+        RuntimeEffectBlock::BeginBlock(keyContext, builder, gatherer,
+                                       { fEffect, std::move(uniforms) });
 
         add_children_to_key(fChildren, fEffect->children(), keyContext, builder, gatherer);
 
