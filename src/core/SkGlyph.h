@@ -330,47 +330,12 @@ public:
     bool isEmpty()       const { return fIsEmpty; }
     bool isColor()       const { return fFormat == SkMask::kARGB32_Format; }
     SkMask::Format maskFormat() const { return static_cast<SkMask::Format>(fFormat); }
-    skglyph::GlyphAction pathAction() const {
-        return this->action(skglyph::ActionType::kPath);
-    }
-    void setPathAction(skglyph::GlyphAction action) {
-        this->setAction(skglyph::ActionType::kPath, action);
-    }
-    skglyph::GlyphAction drawableAction() const {
-        return this->action(skglyph::ActionType::kDrawable);
-    }
-    void setDrawableAction(skglyph::GlyphAction action) {
-        this->setAction(skglyph::ActionType::kDrawable, action);
-    }
-    skglyph::GlyphAction directMaskAction() const {
-        return this->action(skglyph::ActionType::kDirectMask);
-    }
-    void setDirectMaskAction(skglyph::GlyphAction action) {
-        this->setAction(skglyph::ActionType::kDirectMask, action);
-    }
-    skglyph::GlyphAction SDFTAction() const {
-        return this->action(skglyph::ActionType::kSDFT);
-    }
-    void setSDFTAction(skglyph::GlyphAction action) {
-        this->setAction(skglyph::ActionType::kSDFT, action);
-    }
-    skglyph::GlyphAction maskAction() const {
-        return this->action(skglyph::ActionType::kMask);
-    }
-    void setMaskAction(skglyph::GlyphAction action) {
-        this->setAction(skglyph::ActionType::kMask, action);
-    }
-    skglyph::GlyphAction action(skglyph::ActionType actionType) const {
+
+    skglyph::GlyphAction actionFor(skglyph::ActionType actionType) const {
         return static_cast<skglyph::GlyphAction>((fActions >> actionType) & 0b11);
     }
-    void setAction(skglyph::ActionType actionType, skglyph::GlyphAction action) {
-        using namespace skglyph;
-        SkASSERT(action != GlyphAction::kUnset);
-        SkASSERT(this->action(actionType) == GlyphAction::kUnset);
-        const uint32_t mask = 0b11 << actionType;
-        fActions &= ~mask;
-        fActions |= SkTo<uint32_t>(action) << actionType;
-    }
+
+    void setActionFor(skglyph::ActionType, SkGlyph*, SkScalerContext*, SkArenaAlloc*);
 
     uint16_t maxDimension() const {
         return std::max(fWidth, fHeight);
@@ -392,6 +357,15 @@ public:
     static bool FitsInAtlas(const SkGlyph& glyph);
 
 private:
+    void setAction(skglyph::ActionType actionType, skglyph::GlyphAction action) {
+        using namespace skglyph;
+        SkASSERT(action != GlyphAction::kUnset);
+        SkASSERT(this->actionFor(actionType) == GlyphAction::kUnset);
+        const uint32_t mask = 0b11 << actionType;
+        fActions &= ~mask;
+        fActions |= SkTo<uint32_t>(action) << actionType;
+    }
+
     static_assert(SkPackedGlyphID::kEndData == 20);
     static_assert(SkMask::kCountMaskFormats <= 8);
     static_assert(SkTo<int>(skglyph::GlyphAction::kSize) <= 4);
