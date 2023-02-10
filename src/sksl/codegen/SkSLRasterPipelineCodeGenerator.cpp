@@ -21,6 +21,7 @@
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/SkSLIntrinsicList.h"
 #include "src/sksl/codegen/SkSLRasterPipelineBuilder.h"
 #include "src/sksl/codegen/SkSLRasterPipelineCodeGenerator.h"
@@ -29,7 +30,6 @@
 #include "src/sksl/ir/SkSLBreakStatement.h"
 #include "src/sksl/ir/SkSLChildCall.h"
 #include "src/sksl/ir/SkSLConstructor.h"
-#include "src/sksl/ir/SkSLConstructorCompound.h"
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 #include "src/sksl/ir/SkSLConstructorMatrixResize.h"
 #include "src/sksl/ir/SkSLConstructorSplat.h"
@@ -234,11 +234,12 @@ public:
                                             const Expression& right);
     [[nodiscard]] bool pushChildCall(const ChildCall& c);
     [[nodiscard]] bool pushConstructorCast(const AnyConstructor& c);
-    [[nodiscard]] bool pushConstructorCompound(const ConstructorCompound& c);
+    [[nodiscard]] bool pushConstructorCompound(const AnyConstructor& c);
     [[nodiscard]] bool pushConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c);
     [[nodiscard]] bool pushConstructorMatrixResize(const ConstructorMatrixResize& c);
     [[nodiscard]] bool pushConstructorSplat(const ConstructorSplat& c);
     [[nodiscard]] bool pushExpression(const Expression& e, bool usesResult = true);
+    [[nodiscard]] bool pushFieldAccess(const FieldAccess& e);
     [[nodiscard]] bool pushFunctionCall(const FunctionCall& e);
     [[nodiscard]] bool pushIndexExpression(const IndexExpression& i);
     [[nodiscard]] bool pushIntrinsic(const FunctionCall& c);
@@ -487,11 +488,11 @@ public:
     const ComponentArray& fComponents;
 };
 
-class IndexLValue final : public LValue {
+class FixedIndexLValue final : public LValue {
 public:
-    IndexLValue(std::unique_ptr<LValue> p, const Expression& i, const Type& ti)
+    FixedIndexLValue(std::unique_ptr<LValue> p, SKSL_INT v, const Type& ti)
             : fParent(std::move(p))
-            , fIndexExpr(i)
+            , fIndexValue(v)
             , fIndexedType(ti) {}
 
     SlotMap getSlotMap(Generator* gen) const override {
@@ -499,9 +500,8 @@ public:
         SlotMap in = fParent->getSlotMap(gen);
 
         // Take a subset of the parent's slots.
-        // TODO(skia:13676): support non-constant indices
         int numElements = fIndexedType.slotCount();
-        int startingIndex = numElements * fIndexExpr.as<Literal>().intValue();
+        int startingIndex = numElements * fIndexValue;
 
         SlotMap out;
         out.slots.push_back_n(numElements, &in.slots[startingIndex]);
@@ -513,7 +513,7 @@ public:
     }
 
     std::unique_ptr<LValue> fParent;
-    const Expression& fIndexExpr;
+    SKSL_INT fIndexValue;
     const Type& fIndexedType;
 };
 
@@ -560,14 +560,15 @@ std::unique_ptr<LValue> LValue::Make(const Expression& e) {
     }
     if (e.is<IndexExpression>()) {
         const IndexExpression& indexExpr = e.as<IndexExpression>();
-
-        // TODO(skia:13676): support non-constant indices
-        if (indexExpr.index()->is<Literal>()) {
-            if (std::unique_ptr<LValue> base = LValue::Make(*indexExpr.base())) {
-                return std::make_unique<IndexLValue>(std::move(base),
-                                                     *indexExpr.index(),
-                                                     indexExpr.type());
+        if (std::unique_ptr<LValue> base = LValue::Make(*indexExpr.base())) {
+            // If the index is a compile-time constant, we can generate simpler code.
+            SKSL_INT indexValue;
+            if (ConstantFolder::GetConstantInt(*indexExpr.index(), &indexValue)) {
+                return std::make_unique<FixedIndexLValue>(std::move(base), indexValue,
+                                                          indexExpr.type());
             }
+
+            // TODO(skia:13676): support non-constant indices
         }
     }
     // TODO(skia:13676): add support for other kinds of lvalues
@@ -1209,7 +1210,8 @@ bool Generator::pushExpression(const Expression& e, bool usesResult) {
             return this->pushChildCall(e.as<ChildCall>());
 
         case Expression::Kind::kConstructorCompound:
-            return this->pushConstructorCompound(e.as<ConstructorCompound>());
+        case Expression::Kind::kConstructorStruct:
+            return this->pushConstructorCompound(e.asAnyConstructor());
 
         case Expression::Kind::kConstructorCompoundCast:
         case Expression::Kind::kConstructorScalarCast:
@@ -1223,6 +1225,9 @@ bool Generator::pushExpression(const Expression& e, bool usesResult) {
 
         case Expression::Kind::kConstructorSplat:
             return this->pushConstructorSplat(e.as<ConstructorSplat>());
+
+        case Expression::Kind::kFieldAccess:
+            return this->pushFieldAccess(e.as<FieldAccess>());
 
         case Expression::Kind::kFunctionCall:
             return this->pushFunctionCall(e.as<FunctionCall>());
@@ -1595,8 +1600,8 @@ bool Generator::pushBinaryExpression(const Expression& left, Operator op, const 
     return true;
 }
 
-bool Generator::pushConstructorCompound(const ConstructorCompound& c) {
-    for (const std::unique_ptr<Expression> &arg : c.arguments()) {
+bool Generator::pushConstructorCompound(const AnyConstructor& c) {
+    for (const std::unique_ptr<Expression> &arg : c.argumentSpan()) {
         if (!this->pushExpression(*arg)) {
             return unsupported();
         }
@@ -1763,6 +1768,34 @@ bool Generator::pushConstructorSplat(const ConstructorSplat& c) {
         return unsupported();
     }
     fBuilder.push_duplicates(c.type().slotCount() - 1);
+    return true;
+}
+
+bool Generator::pushFieldAccess(const FieldAccess& f) {
+    // If possible, get direct field access via the lvalue.
+    std::unique_ptr<LValue> lvalue = LValue::Make(f);
+    if (lvalue) {
+        lvalue->push(this);
+        return true;
+    }
+    // Push the entire base expression onto a separate stack.
+    this->nextTempStack();
+    if (!this->pushExpression(*f.base())) {
+        return unsupported();
+    }
+    this->previousTempStack();
+
+    // Copy the field we want onto the primary stack.
+    int totalSlots = f.base()->type().slotCount();
+    int fieldOffset = f.initialSlot();
+    int fieldSlots = f.type().slotCount();
+
+    this->pushCloneFromNextTempStack(fieldSlots, totalSlots - fieldOffset - fieldSlots);
+
+    // The rest of the base expression, on the separate stack, can now be jettisoned.
+    this->nextTempStack();
+    this->discardExpression(totalSlots);
+    this->previousTempStack();
     return true;
 }
 
