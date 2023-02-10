@@ -86,7 +86,7 @@ void RecordingPriv::deinstantiateVolatileLazyProxies() {
     }
 }
 
-#if GR_TEST_UTILS
+#if GRAPHITE_TEST_UTILS
 int RecordingPriv::numVolatilePromiseImages() const {
     return fRecording->fVolatileLazyProxies.size();
 }
@@ -94,6 +94,8 @@ int RecordingPriv::numVolatilePromiseImages() const {
 int RecordingPriv::numNonVolatilePromiseImages() const {
     return fRecording->fNonVolatileLazyProxies.size();
 }
+
+bool RecordingPriv::hasTasks() const { return fRecording->fGraph->hasTasks(); }
 #endif
 
 bool RecordingPriv::addCommands(Context* context,
