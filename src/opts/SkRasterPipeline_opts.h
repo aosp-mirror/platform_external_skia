@@ -3211,18 +3211,6 @@ STAGE_TAIL(init_lane_masks, NoCtx) {
     dr = dg = db = da = sk_bit_cast<F>(mask);
 }
 
-STAGE_TAIL(load_unmasked, float* ctx) {
-    r = sk_unaligned_load<F>(ctx);
-}
-
-STAGE_TAIL(store_unmasked, float* ctx) {
-    sk_unaligned_store(ctx, r);
-}
-
-STAGE_TAIL(store_masked, float* ctx) {
-    sk_unaligned_store(ctx, if_then_else(execution_mask(), r, sk_unaligned_load<F>(ctx)));
-}
-
 STAGE_TAIL(load_condition_mask, F* ctx) {
     dr = sk_unaligned_load<F>(ctx);
     update_execution_mask();
@@ -3302,12 +3290,6 @@ STAGE_BRANCH(branch_if_no_active_lanes_eq, SkRasterPipeline_BranchIfEqualCtx* ct
     match &= execution_mask();
     // If any lanes matched, don't take the branch.
     return any(match) ? 1 : ctx->offset;
-}
-
-STAGE_TAIL(immediate_f, void* ctx) {
-    float val;
-    memcpy(&val, &ctx, sizeof(val));
-    r = F(val);
 }
 
 STAGE_TAIL(zero_slot_unmasked, F* dst) {

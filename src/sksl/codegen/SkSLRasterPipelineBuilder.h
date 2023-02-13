@@ -374,18 +374,6 @@ public:
     }
 
     // We use the same SkRasterPipeline op regardless of the literal type, and bitcast the value.
-    void immediate_f(float val) {
-        fInstructions.push_back({BuilderOp::immediate_f, {}, sk_bit_cast<int32_t>(val)});
-    }
-
-    void immediate_i(int32_t val) {
-        fInstructions.push_back({BuilderOp::immediate_f, {}, val});
-    }
-
-    void immediate_u(uint32_t val) {
-        fInstructions.push_back({BuilderOp::immediate_f, {}, sk_bit_cast<int32_t>(val)});
-    }
-
     void push_literal_f(float val) {
         this->push_literal_i(sk_bit_cast<int32_t>(val));
     }
@@ -483,18 +471,6 @@ public:
     // The opposite of push_slots; copies values from the temp stack into value slots, then
     // shrinks the temp stack.
     void pop_slots_unmasked(SlotRange dst);
-
-    void load_unmasked(Slot slot) {
-        fInstructions.push_back({BuilderOp::load_unmasked, {slot}});
-    }
-
-    void store_unmasked(Slot slot) {
-        fInstructions.push_back({BuilderOp::store_unmasked, {slot}});
-    }
-
-    void store_masked(Slot slot) {
-        fInstructions.push_back({BuilderOp::store_masked, {slot}});
-    }
 
     void copy_slots_masked(SlotRange dst, SlotRange src) {
         SkASSERT(dst.count == src.count);
