@@ -11,7 +11,7 @@
 #include "include/core/SkSpan.h"
 #include "include/core/SkTypes.h"
 #include "include/private/base/SkDebug.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #include "src/core/SkGeometry.h"
 #include "src/core/SkPointPriv.h"
 #include "tests/Test.h"
@@ -822,6 +822,10 @@ static void testChopMonoCubicAtX(skiatest::Reporter* reporter, std::string name,
                                  SkSpan<const SkPoint> curveInputs, SkScalar xToChopAt,
                                  SkSpan<const SkPoint> expectedOutputs) {
     skiatest::ReporterContext subtest(reporter, name);
+    REPORTER_ASSERT(reporter, curveInputs.size() == 4,
+                    "Invalid test case. Input curve should have 4 points");
+    REPORTER_ASSERT(reporter, expectedOutputs.size() == 7,
+                    "Invalid test case. Outputs should have 7 points");
     REPORTER_ASSERT(reporter, SkScalarNearlyEqual(expectedOutputs[3].x(), xToChopAt),
                     "Invalid test case. 4th point's X should be %f", xToChopAt);
 
