@@ -1887,12 +1887,39 @@ bool Generator::pushFunctionCall(const FunctionCall& c) {
 }
 
 bool Generator::pushIndexExpression(const IndexExpression& i) {
+    // If possible, get direct access via the lvalue.
     std::unique_ptr<LValue> lvalue = LValue::Make(i);
-    if (!lvalue) {
-        return unsupported();
+    if (lvalue) {
+        lvalue->push(this);
+        return true;
     }
-    lvalue->push(this);
-    return true;
+
+    // Handle fixed-index lookups into temporary values.
+    SKSL_INT indexValue;
+    if (ConstantFolder::GetConstantInt(*i.index(), &indexValue)) {
+        // Push the temporary array onto a separate stack.
+        this->nextTempStack();
+        if (!this->pushExpression(*i.base())) {
+            return unsupported();
+        }
+        this->previousTempStack();
+
+        // Clone the indexed item from the array onto the main stack.
+        int totalSlots = i.base()->type().slotCount();
+        int perItemSlots = i.type().slotCount();
+
+        this->pushCloneFromNextTempStack(perItemSlots,
+                                         totalSlots - ((indexValue + 1) * perItemSlots));
+
+        // The rest of the array, on the separate stack, can now be jettisoned.
+        this->nextTempStack();
+        this->discardExpression(totalSlots);
+        this->previousTempStack();
+        return true;
+    }
+
+    // TODO: implement dynamic-index lookups.
+    return unsupported();
 }
 
 bool Generator::pushIntrinsic(const FunctionCall& c) {
@@ -2240,19 +2267,23 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic,
             return true;
 
         case IntrinsicKind::k_mix_IntrinsicKind:
+            // Note: our SkRP mix op takes the interpolation point first, not the interpolants.
             SkASSERT(arg0.type().matches(arg1.type()));
-            if (!this->pushExpression(arg0) || !this->pushExpression(arg1)) {
-                return unsupported();
-            }
             if (arg2.type().componentType().isFloat()) {
                 SkASSERT(arg0.type().componentType().matches(arg2.type().componentType()));
                 if (!this->pushVectorizedExpression(arg2, arg0.type())) {
+                    return unsupported();
+                }
+                if (!this->pushExpression(arg0) || !this->pushExpression(arg1)) {
                     return unsupported();
                 }
                 return this->ternaryOp(arg0.type(), kMixOps);
             }
             if (arg2.type().componentType().isBoolean()) {
                 if (!this->pushExpression(arg2)) {
+                    return unsupported();
+                }
+                if (!this->pushExpression(arg0) || !this->pushExpression(arg1)) {
                     return unsupported();
                 }
                 // The `mix_int` op isn't doing a lerp; it uses the third argument to select values
@@ -2476,9 +2507,33 @@ bool Generator::pushTernaryExpression(const Expression& test,
         return this->pushDynamicallyUniformTernaryExpression(test, ifTrue, ifFalse);
     }
 
-    fBuilder.enableExecutionMaskWrites();
+    // Analyze the ternary to see which corners we can safely cut.
+    bool ifFalseHasSideEffects = Analysis::HasSideEffects(ifFalse);
+    bool ifTrueHasSideEffects  = Analysis::HasSideEffects(ifTrue);
+    bool ifTrueIsTrivial       = Analysis::IsTrivialExpression(ifTrue);
+    int  cleanupLabelID        = fBuilder.nextLabelID();
+
+    // If the true- and false-expressions both lack side effects, we evaluate both of them safely
+    // without masking off their effects. In that case, we can emit both sides and use boolean mix
+    // to select the correct result without using the condition mask at all.
+    if (!ifFalseHasSideEffects && !ifTrueHasSideEffects && ifTrueIsTrivial) {
+        // Push all of the arguments to mix.
+        if (!this->pushVectorizedExpression(test, ifTrue.type())) {
+            return unsupported();
+        }
+        if (!this->pushExpression(ifFalse)) {
+            return unsupported();
+        }
+        if (!this->pushExpression(ifTrue)) {
+            return unsupported();
+        }
+        // Use boolean mix to select the true- or false-expression via the test-expression.
+        fBuilder.ternary_op(BuilderOp::mix_n_ints, ifTrue.type().slotCount());
+        return true;
+    }
 
     // First, push the current condition-mask and the test-expression into a separate stack.
+    fBuilder.enableExecutionMaskWrites();
     this->nextTempStack();
     fBuilder.push_condition_mask();
     if (!this->pushExpression(test)) {
@@ -2489,9 +2544,8 @@ bool Generator::pushTernaryExpression(const Expression& test,
     // We can take some shortcuts with condition-mask handling if the false-expression is entirely
     // side-effect free. (We can evaluate it without masking off its effects.) We always handle the
     // condition mask properly for the test-expression and true-expression properly.
-    if (!Analysis::HasSideEffects(ifFalse)) {
+    if (!ifFalseHasSideEffects) {
         // Push the false-expression onto the primary stack.
-        int cleanupLabelID = fBuilder.nextLabelID();
         if (!this->pushExpression(ifFalse)) {
             return unsupported();
         }
@@ -2503,7 +2557,7 @@ bool Generator::pushTernaryExpression(const Expression& test,
 
         // If no lanes are active, we can skip the true-expression entirely. This isn't super likely
         // to happen, so it's probably only a win for non-trivial true-expressions.
-        if (!Analysis::IsTrivialExpression(ifTrue)) {
+        if (!ifTrueIsTrivial) {
             fBuilder.branch_if_no_active_lanes(cleanupLabelID);
         }
 
