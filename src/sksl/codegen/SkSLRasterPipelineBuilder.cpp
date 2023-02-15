@@ -530,6 +530,7 @@ void Builder::swizzle(int consumedSlots, SkSpan<const int8_t> elementSpan) {
         for (int index = 1; index < numElements; ++index) {
             elements[index - 1] = elements[index] - 1;
         }
+        elements[numElements - 1] = 0;
         --consumedSlots;
         --numElements;
     }
@@ -1097,22 +1098,6 @@ void Program::makeStages(SkTArray<Stage>* pipeline,
 
             case BuilderOp::load_dst:
                 pipeline->push_back({ProgramOp::load_dst, SlotA()});
-                break;
-
-            case BuilderOp::immediate_f: {
-                pipeline->push_back({ProgramOp::immediate_f, context_bit_pun(inst.fImmA)});
-                break;
-            }
-            case BuilderOp::load_unmasked:
-                pipeline->push_back({ProgramOp::load_unmasked, SlotA()});
-                break;
-
-            case BuilderOp::store_unmasked:
-                pipeline->push_back({ProgramOp::store_unmasked, SlotA()});
-                break;
-
-            case BuilderOp::store_masked:
-                pipeline->push_back({ProgramOp::store_masked, SlotA()});
                 break;
 
             case ALL_SINGLE_SLOT_UNARY_OP_CASES: {
@@ -1700,10 +1685,6 @@ void Program::dump(SkWStream* out) const {
         std::string opArg1, opArg2, opArg3;
         using POp = ProgramOp;
         switch (stage.op) {
-            case POp::immediate_f:
-                opArg1 = ImmCtx(stage.ctx);
-                break;
-
             case POp::label:
             case POp::invoke_shader:
             case POp::invoke_color_filter:
@@ -1737,7 +1718,6 @@ void Program::dump(SkWStream* out) const {
                 std::tie(opArg1, opArg2) = ShuffleCtx(stage.ctx);
                 break;
 
-            case POp::load_unmasked:
             case POp::load_condition_mask:
             case POp::store_condition_mask:
             case POp::load_loop_mask:
@@ -1746,8 +1726,6 @@ void Program::dump(SkWStream* out) const {
             case POp::reenable_loop_mask:
             case POp::load_return_mask:
             case POp::store_return_mask:
-            case POp::store_masked:
-            case POp::store_unmasked:
             case POp::zero_slot_unmasked:
             case POp::bitwise_not_int:
             case POp::cast_to_float_from_int: case POp::cast_to_float_from_uint:
@@ -2017,15 +1995,6 @@ void Program::dump(SkWStream* out) const {
                 opText = "RetMask &= ~(CondMask & LoopMask & RetMask)";
                 break;
 
-            case POp::immediate_f:
-            case POp::load_unmasked:
-                opText = "src.r = " + opArg1;
-                break;
-
-            case POp::store_unmasked:
-                opText = opArg1 + " = src.r";
-                break;
-
             case POp::store_src_rg:
                 opText = opArg1 + " = src.rg";
                 break;
@@ -2052,10 +2021,6 @@ void Program::dump(SkWStream* out) const {
 
             case POp::load_dst:
                 opText = "dst.rgba = " + opArg1;
-                break;
-
-            case POp::store_masked:
-                opText = opArg1 + " = Mask(src.r)";
                 break;
 
             case POp::bitwise_and_int:
@@ -2281,7 +2246,7 @@ void Program::dump(SkWStream* out) const {
             case POp::mix_3_floats:   case POp::mix_3_ints:
             case POp::mix_4_floats:   case POp::mix_4_ints:
             case POp::mix_n_floats:   case POp::mix_n_ints:
-                opText = opArg1 + " = mix(" + opArg1 + ", " + opArg2 + ", " + opArg3 + ")";
+                opText = opArg1 + " = mix(" + opArg2 + ", " + opArg3 + ", " + opArg1 + ")";
                 break;
 
             case POp::jump:
