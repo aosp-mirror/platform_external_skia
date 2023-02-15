@@ -155,7 +155,7 @@ public:
                       SkSpan<const float> uniforms) const;
 #endif
 
-    void dump(SkWStream* s) const;
+    void dump(SkWStream* out) const;
 
 private:
     using StackDepthMap = SkTHashMap<int, int>; // <stack index, depth of stack>
@@ -293,6 +293,11 @@ public:
         fInstructions.push_back({BuilderOp::store_dst, {slots.index}});
     }
 
+    void store_device_xy01(SlotRange slots) {
+        SkASSERT(slots.count == 4);
+        fInstructions.push_back({BuilderOp::store_device_xy01, {slots.index}});
+    }
+
     void load_src(SlotRange slots) {
         SkASSERT(slots.count == 4);
         fInstructions.push_back({BuilderOp::load_src, {slots.index}});
@@ -369,18 +374,6 @@ public:
     }
 
     // We use the same SkRasterPipeline op regardless of the literal type, and bitcast the value.
-    void immediate_f(float val) {
-        fInstructions.push_back({BuilderOp::immediate_f, {}, sk_bit_cast<int32_t>(val)});
-    }
-
-    void immediate_i(int32_t val) {
-        fInstructions.push_back({BuilderOp::immediate_f, {}, val});
-    }
-
-    void immediate_u(uint32_t val) {
-        fInstructions.push_back({BuilderOp::immediate_f, {}, sk_bit_cast<int32_t>(val)});
-    }
-
     void push_literal_f(float val) {
         this->push_literal_i(sk_bit_cast<int32_t>(val));
     }
@@ -441,15 +434,15 @@ public:
     // `slots`. Three n-slot input values are consumed, and the result is pushed onto the stack.
     void ternary_op(BuilderOp op, int32_t slots);
 
+    // Computes a dot product on the stack. The slots consumed (`slots`) must be between 1 and 4.
+    // Two n-slot input vectors are consumed, and a scalar result is pushed onto the stack.
+    void dot_floats(int32_t slots);
+
     // Shrinks the temp stack, discarding values on top.
     void discard_stack(int32_t count = 1);
 
-    void pop_slots(SlotRange dst) {
-        // The opposite of push_slots; copies values from the temp stack into value slots, then
-        // shrinks the temp stack.
-        this->copy_stack_to_slots(dst);
-        this->discard_stack(dst.count);
-    }
+    // Copies vales from the temp stack into slots, and then shrinks the temp stack.
+    void pop_slots(SlotRange dst);
 
     // Creates many clones of the top single-slot item on the temp stack.
     void push_duplicates(int count);
@@ -479,27 +472,12 @@ public:
     // shrinks the temp stack.
     void pop_slots_unmasked(SlotRange dst);
 
-    void load_unmasked(Slot slot) {
-        fInstructions.push_back({BuilderOp::load_unmasked, {slot}});
-    }
-
-    void store_unmasked(Slot slot) {
-        fInstructions.push_back({BuilderOp::store_unmasked, {slot}});
-    }
-
-    void store_masked(Slot slot) {
-        fInstructions.push_back({BuilderOp::store_masked, {slot}});
-    }
-
     void copy_slots_masked(SlotRange dst, SlotRange src) {
         SkASSERT(dst.count == src.count);
         fInstructions.push_back({BuilderOp::copy_slot_masked, {dst.index, src.index}, dst.count});
     }
 
-    void copy_slots_unmasked(SlotRange dst, SlotRange src) {
-        SkASSERT(dst.count == src.count);
-        fInstructions.push_back({BuilderOp::copy_slot_unmasked, {dst.index, src.index}, dst.count});
-    }
+    void copy_slots_unmasked(SlotRange dst, SlotRange src);
 
     void copy_constant(Slot slot, int constantValue) {
         fInstructions.push_back({BuilderOp::copy_constant, {slot}, constantValue});
@@ -607,6 +585,8 @@ public:
     }
 
 private:
+    void simplifyPopSlotsUnmasked(SlotRange* dst);
+
     SkTArray<Instruction> fInstructions;
     int fNumLabels = 0;
     int fExecutionMaskWritesEnabled = 0;

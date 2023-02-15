@@ -38,7 +38,7 @@ public:
 };
 
 // This class holds the results of an SkScalerContext, and owns a references to that scaler.
-class SkStrike final : public SkRefCnt, public sktext::StrikeForGPU {
+class SkStrike final : public sktext::StrikeForGPU {
 public:
     SkStrike(SkStrikeCache* strikeCache,
              const SkStrikeSpec& strikeSpec,
@@ -48,11 +48,10 @@ public:
 
     void lock() override SK_ACQUIRE(fStrikeLock);
     void unlock() override SK_RELEASE_CAPABILITY(fStrikeLock);
-    skglyph::GlyphAction pathAction(SkGlyphID) override SK_REQUIRES(fStrikeLock);
-    skglyph::GlyphAction drawableAction(SkGlyphID) override SK_REQUIRES(fStrikeLock);
-    SkGlyphDigest directMaskDigest(SkPackedGlyphID) override SK_REQUIRES(fStrikeLock);
-    SkGlyphDigest sdftDigest(SkGlyphID) override SK_REQUIRES(fStrikeLock);
-    SkGlyphDigest maskDigest(SkGlyphID) override SK_REQUIRES(fStrikeLock);
+    SkGlyphDigest digestFor(skglyph::ActionType, SkPackedGlyphID) override SK_REQUIRES(fStrikeLock);
+    bool prepareForImage(SkGlyph* glyph) override SK_REQUIRES(fStrikeLock);
+    bool prepareForPath(SkGlyph*) override SK_REQUIRES(fStrikeLock);
+    bool prepareForDrawable(SkGlyph*) override SK_REQUIRES(fStrikeLock);
 
     // Lookup (or create if needed) the returned glyph using toID. If that glyph is not initialized
     // with an image, then use the information in fromGlyph to initialize the width, height top,
@@ -91,8 +90,6 @@ public:
     SkSpan<const SkGlyph*> prepareDrawables(
             SkSpan<const SkGlyphID> glyphIDs, const SkGlyph* results[]) SK_EXCLUDES(fStrikeLock);
 
-    void prepareForDrawingMasksCPU(SkDrawableGlyphBuffer* accepted) SK_EXCLUDES(fStrikeLock);
-
     // SkStrikeForGPU APIs
     const SkDescriptor& getDescriptor() const override {
         return fStrikeSpec.descriptor();
@@ -100,10 +97,6 @@ public:
 
     const SkGlyphPositionRoundingSpec& roundingSpec() const override {
         return fRoundingSpec;
-    }
-
-    void onAboutToExitScope() override {
-        this->unref();
     }
 
     sktext::SkStrikePromise strikePromise() override {
@@ -129,6 +122,8 @@ public:
     void dump() const SK_EXCLUDES(fStrikeLock);
     void dumpMemoryStatistics(SkTraceMemoryDump* dump) const SK_EXCLUDES(fStrikeLock);
 
+    SkGlyph* glyph(SkGlyphDigest) SK_REQUIRES(fStrikeLock);
+
 private:
     friend class SkStrikeCache;
     class Monitor;
@@ -137,18 +132,8 @@ private:
     // advances using a scaler.
     SkGlyph* glyph(SkPackedGlyphID) SK_REQUIRES(fStrikeLock);
 
-    SkGlyphDigest* digestPtr(SkPackedGlyphID) SK_REQUIRES(fStrikeLock);
-
     // Generate the glyph digest information and update structures to add the glyph.
-    SkGlyphDigest* addGlyph(SkGlyph* glyph) SK_REQUIRES(fStrikeLock);
-
-    const void* prepareImage(SkGlyph* glyph) SK_REQUIRES(fStrikeLock);
-
-    // If the path has never been set, then use the scaler context to add the glyph.
-    void preparePath(SkGlyph*) SK_REQUIRES(fStrikeLock);
-
-    // If the drawable has never been set, then use the scaler context to add the glyph.
-    void prepareDrawable(SkGlyph*) SK_REQUIRES(fStrikeLock);
+    SkGlyphDigest* addGlyphAndDigest(SkGlyph* glyph) SK_REQUIRES(fStrikeLock);
 
     // Maintain memory use statistics.
     void updateMemoryUsage(size_t increase) SK_EXCLUDES(fStrikeLock);

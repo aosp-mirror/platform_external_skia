@@ -337,8 +337,6 @@ extern bool gUseSkVMBlitter;
 extern bool gSkVMAllowJIT;
 extern bool gSkVMJITViaDylib;
 
-static bool ColrV1VariationsEnabledForTest() { return true; }
-
 Viewer::Viewer(int argc, char** argv, void* platformData)
     : fCurrentSlide(-1)
     , fRefresh(false)
@@ -372,7 +370,6 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
 #if defined(SK_ENABLE_SVG)
     SkGraphics::SetOpenTypeSVGDecoderFactory(SkSVGOpenTypeSVGDecoder::Make);
 #endif
-    SkGraphics::SetVariableColrV1EnabledFunc(ColrV1VariationsEnabledForTest);
 
     gPathRendererNames[GpuPathRenderers::kDefault] = "Default Path Renderers";
     gPathRendererNames[GpuPathRenderers::kAtlas] = "Atlas (tessellation)";
@@ -1527,7 +1524,7 @@ void Viewer::drawSlide(SkSurface* surface) {
     if (fSaveToSKP) {
         SkPictureRecorder recorder;
         SkCanvas* recorderCanvas = recorder.beginRecording(SkRect::Make(this->currentSlideSize()));
-        fSlides[fCurrentSlide]->draw(fWindow->graphiteContext(), recorderCanvas);
+        fSlides[fCurrentSlide]->draw(recorderCanvas);
         sk_sp<SkPicture> picture(recorder.finishRecordingAsPicture());
         SkFILEWStream stream("sample_app.skp");
         picture->serialize(&stream);
@@ -1595,7 +1592,7 @@ void Viewer::drawSlide(SkSurface* surface) {
             for (int x = 0; x < fWindow->width(); x += tileW) {
                 SkAutoCanvasRestore acr(slideCanvas, true);
                 slideCanvas->clipRect(SkRect::MakeXYWH(x, y, tileW, tileH));
-                fSlides[fCurrentSlide]->draw(fWindow->graphiteContext(), slideCanvas);
+                fSlides[fCurrentSlide]->draw(slideCanvas);
             }
         }
 
@@ -1619,9 +1616,9 @@ void Viewer::drawSlide(SkSurface* surface) {
             OveridePaintFilterCanvas filterCanvas(slideCanvas,
                                                   &fPaint, &fPaintOverrides,
                                                   &fFont, &fFontOverrides);
-            fSlides[fCurrentSlide]->draw(fWindow->graphiteContext(), &filterCanvas);
+            fSlides[fCurrentSlide]->draw(&filterCanvas);
         } else {
-            fSlides[fCurrentSlide]->draw(fWindow->graphiteContext(), slideCanvas);
+            fSlides[fCurrentSlide]->draw(slideCanvas);
         }
     }
     fStatsLayer.endTiming(fPaintTimer);

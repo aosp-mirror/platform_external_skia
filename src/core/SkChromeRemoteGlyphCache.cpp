@@ -44,6 +44,7 @@
 #include "src/text/gpu/TextBlob.h"
 #endif
 
+using namespace sktext;
 using namespace sktext::gpu;
 using namespace skglyph;
 
@@ -170,11 +171,22 @@ public:
 
     void lock() override {}
     void unlock() override {}
-    GlyphAction pathAction(SkGlyphID) override;
-    GlyphAction drawableAction(SkGlyphID) override;
-    SkGlyphDigest directMaskDigest(SkPackedGlyphID) override;
-    SkGlyphDigest sdftDigest(SkGlyphID) override;
-    SkGlyphDigest maskDigest(SkGlyphID) override;
+    SkGlyphDigest digestFor(skglyph::ActionType, SkPackedGlyphID) override;
+    bool prepareForImage(SkGlyph* glyph) override {
+        this->ensureScalerContext();
+        glyph->setImage(&fAlloc, fContext.get());
+        return glyph->image() != nullptr;
+    }
+    bool prepareForPath(SkGlyph* glyph) override {
+        this->ensureScalerContext();
+        glyph->setPath(&fAlloc, fContext.get());
+        return glyph->path() != nullptr;
+    }
+    bool prepareForDrawable(SkGlyph* glyph) override {
+        this->ensureScalerContext();
+        glyph->setDrawable(&fAlloc, fContext.get());
+        return glyph->drawable() != nullptr;
+    }
 
     void writePendingGlyphs(Serializer* serializer);
     SkDiscardableHandleId discardableHandleId() const { return fDiscardableHandleId; }
@@ -191,8 +203,6 @@ public:
 
     sktext::SkStrikePromise strikePromise() override;
 
-    void onAboutToExitScope() override {}
-
     bool hasPendingGlyphs() const {
         return !fMasksToSend.empty() || !fPathsToSend.empty() || !fDrawablesToSend.empty();
     }
@@ -200,7 +210,6 @@ public:
     void resetScalerContext();
 
 private:
-    SkGlyphDigest* digestPtr(SkPackedGlyphID);
     void writeGlyphPath(const SkGlyph& glyph, Serializer* serializer) const;
     void writeGlyphDrawable(const SkGlyph& glyph, Serializer* serializer) const;
     void ensureScalerContext();
@@ -222,8 +231,6 @@ private:
 
     // The masks and paths that currently reside in the GPU process.
     SkTHashMap<SkPackedGlyphID, SkGlyphDigest, SkPackedGlyphID::Hash> fSentGlyphs;
-    SkTHashMap<SkGlyphID, GlyphAction> fSentPaths;
-    SkTHashMap<SkGlyphID, GlyphAction> fSentDrawables;
 
     // The Masks, SDFT Mask, and Paths that need to be sent to the GPU task for the processed
     // TextBlobs. Cleared after diffs are serialized.
@@ -366,130 +373,38 @@ void RemoteStrike::writeGlyphDrawable(const SkGlyph& glyph, Serializer* serializ
     memcpy(serializer->allocate(data->size(), kDrawableAlignment), data->data(), data->size());
 }
 
-SkGlyphDigest* RemoteStrike::digestPtr(SkPackedGlyphID packedGlyphID) {
+SkGlyphDigest RemoteStrike::digestFor(ActionType actionType, SkPackedGlyphID packedGlyphID) {
     SkGlyphDigest* digestPtr = fSentGlyphs.find(packedGlyphID);
-    if (digestPtr != nullptr) {
-        return digestPtr;
+    if (digestPtr != nullptr && digestPtr->actionFor(actionType) != GlyphAction::kUnset) {
+        return *digestPtr;
     }
 
-    // Put the new SkGlyph in the glyphs to send.
+    SkGlyph* glyph;
     this->ensureScalerContext();
-    fMasksToSend.emplace_back(fContext->makeGlyph(packedGlyphID, &fAlloc));
-    SkGlyph* glyph = &fMasksToSend.back();
-
-    SkGlyphDigest newDigest{0, *glyph};
-    return fSentGlyphs.set(packedGlyphID, newDigest);
-}
-
-GlyphAction RemoteStrike::pathAction(SkGlyphID glyphID) {
-    GlyphAction* decision = fSentPaths.find(glyphID);
-    if (decision == nullptr) {
-        // Put the new SkGlyph in the glyphs to send.
-        this->ensureScalerContext();
-        fPathsToSend.emplace_back(fContext->makeGlyph(SkPackedGlyphID{glyphID}, &fAlloc));
-        SkGlyph* glyph = &fPathsToSend.back();
-
-        glyph->setPath(&fAlloc, fContext.get());
-
-        GlyphAction glyphDecision;
-        if (glyph->isEmpty()) {
-            glyphDecision = GlyphAction::kDrop;
-        } else if (glyph->path() != nullptr) {
-            glyphDecision = GlyphAction::kAccept;
-        } else {
-            glyphDecision = GlyphAction::kReject;
+    switch (actionType) {
+        case kPath: {
+            fPathsToSend.emplace_back(fContext->makeGlyph(packedGlyphID, &fAlloc));
+            glyph = &fPathsToSend.back();
+            break;
         }
-        decision = fSentPaths.set(glyphID, glyphDecision);
-    }
-
-    return *decision;
-}
-
-GlyphAction RemoteStrike::drawableAction(SkGlyphID glyphID) {
-    GlyphAction* decision = fSentDrawables.find(glyphID);
-    if (decision == nullptr) {
-        // Put the new SkGlyph in the glyphs to send.
-        this->ensureScalerContext();
-        fDrawablesToSend.emplace_back(fContext->makeGlyph(SkPackedGlyphID{glyphID}, &fAlloc));
-        SkGlyph* glyph = &fDrawablesToSend.back();
-
-        glyph->setDrawable(&fAlloc, fContext.get());
-
-        GlyphAction glyphDecision;
-        if (glyph->isEmpty()) {
-            glyphDecision = GlyphAction::kDrop;
-        } else if (glyph->drawable() != nullptr) {
-            glyphDecision = GlyphAction::kAccept;
-        } else {
-            glyphDecision = GlyphAction::kReject;
+        case kDrawable: {
+            fDrawablesToSend.emplace_back(fContext->makeGlyph(packedGlyphID, &fAlloc));
+            glyph = &fDrawablesToSend.back();
+            break;
         }
-
-        decision = fSentDrawables.set(glyphID, glyphDecision);
-    }
-    return *decision;
-}
-
-SkGlyphDigest RemoteStrike::directMaskDigest(SkPackedGlyphID packedGlyphID) {
-    SkGlyphDigest* const digestPtr = this->digestPtr(packedGlyphID);
-    if (digestPtr->directMaskAction() != GlyphAction::kUnset) {
-        return *digestPtr;
-    }
-
-    GlyphAction action;
-    if (digestPtr->isEmpty()) {
-        action = GlyphAction::kDrop;
-    } else {
-        if (digestPtr->fitsInAtlasDirect()) {
-            action = GlyphAction::kAccept;
-        } else {
-            action = GlyphAction::kReject;
+        default: {
+            fMasksToSend.emplace_back(fContext->makeGlyph(packedGlyphID, &fAlloc));
+            glyph = &fMasksToSend.back();
+            break;
         }
     }
 
-    digestPtr->setDirectMaskAction(action);
-    return *digestPtr;
-}
-
-SkGlyphDigest RemoteStrike::sdftDigest(SkGlyphID glyphID) {
-    SkGlyphDigest* const digestPtr = this->digestPtr(SkPackedGlyphID{glyphID});
-    if (digestPtr->SDFTAction() != GlyphAction::kUnset) {
-        return *digestPtr;
+    if (digestPtr == nullptr) {
+        digestPtr = fSentGlyphs.set(packedGlyphID, SkGlyphDigest{0, *glyph});
     }
 
-    GlyphAction action;
-    if (digestPtr->isEmpty()) {
-        action = GlyphAction::kDrop;
-    } else {
-        if (digestPtr->fitsInAtlasDirect() &&
-            digestPtr->maskFormat() == SkMask::Format::kSDF_Format) {
-            action = GlyphAction::kAccept;
-        } else {
-            action = GlyphAction::kReject;
-        }
-    }
+    digestPtr->setActionFor(actionType, glyph, this);
 
-    digestPtr->setSDFTAction(action);
-    return *digestPtr;
-}
-
-SkGlyphDigest RemoteStrike::maskDigest(SkGlyphID glyphID) {
-    SkGlyphDigest* const digestPtr = this->digestPtr(SkPackedGlyphID{glyphID});
-    if (digestPtr->maskAction() != GlyphAction::kUnset) {
-        return *digestPtr;
-    }
-
-    GlyphAction action;
-    if (digestPtr->isEmpty()) {
-        action = GlyphAction::kDrop;
-    } else {
-        if (digestPtr->fitsInAtlasInterpolated()) {
-            action = GlyphAction::kAccept;
-        } else {
-            action = GlyphAction::kReject;
-        }
-    }
-
-    digestPtr->setMaskAction(action);
     return *digestPtr;
 }
 
@@ -526,7 +441,7 @@ public:
     sk_sp<SkData> serializeTypeface(SkTypeface*);
     void writeStrikeData(std::vector<uint8_t>* memory);
 
-    sktext::ScopedStrikeForGPU findOrCreateScopedStrike(const SkStrikeSpec& strikeSpec) override;
+    sk_sp<sktext::StrikeForGPU> findOrCreateScopedStrike(const SkStrikeSpec& strikeSpec) override;
 
     // Methods for testing
     void setMaxEntriesInDescriptorMapForTesting(size_t count);
@@ -537,7 +452,7 @@ private:
 
     void checkForDeletedEntries();
 
-    RemoteStrike* getOrCreateCache(const SkStrikeSpec& strikeSpec);
+    sk_sp<RemoteStrike> getOrCreateCache(const SkStrikeSpec& strikeSpec);
 
     struct MapOps {
         size_t operator()(const SkDescriptor* key) const {
@@ -549,7 +464,7 @@ private:
     };
 
     using DescToRemoteStrike =
-    std::unordered_map<const SkDescriptor*, std::unique_ptr<RemoteStrike>, MapOps, MapOps>;
+    std::unordered_map<const SkDescriptor*, sk_sp<RemoteStrike>, MapOps, MapOps>;
     DescToRemoteStrike fDescToRemoteStrike;
 
     SkStrikeServer::DiscardableHandleManager* const fDiscardableHandleManager;
@@ -639,9 +554,9 @@ void SkStrikeServerImpl::writeStrikeData(std::vector<uint8_t>* memory) {
     #endif
 }
 
-sktext::ScopedStrikeForGPU SkStrikeServerImpl::findOrCreateScopedStrike(
+sk_sp<StrikeForGPU> SkStrikeServerImpl::findOrCreateScopedStrike(
         const SkStrikeSpec& strikeSpec) {
-    return sktext::ScopedStrikeForGPU{this->getOrCreateCache(strikeSpec)};
+    return this->getOrCreateCache(strikeSpec);
 }
 
 void SkStrikeServerImpl::checkForDeletedEntries() {
@@ -661,7 +576,7 @@ void SkStrikeServerImpl::checkForDeletedEntries() {
     }
 }
 
-RemoteStrike* SkStrikeServerImpl::getOrCreateCache(const SkStrikeSpec& strikeSpec) {
+sk_sp<RemoteStrike> SkStrikeServerImpl::getOrCreateCache(const SkStrikeSpec& strikeSpec) {
     // In cases where tracing is turned off, make sure not to get an unused function warning.
     // Lambdaize the function.
     TRACE_EVENT1("skia", "RecForDesc", "rec",
@@ -680,9 +595,9 @@ RemoteStrike* SkStrikeServerImpl::getOrCreateCache(const SkStrikeSpec& strikeSpe
         it != fDescToRemoteStrike.end())
     {
         // We have processed the RemoteStrike before. Reuse it.
-        RemoteStrike* strike = it->second.get();
+        sk_sp<RemoteStrike> strike = it->second;
         strike->setStrikeSpec(strikeSpec);
-        if (fRemoteStrikesToSend.contains(strike)) {
+        if (fRemoteStrikesToSend.contains(strike.get())) {
             // Already tracking
             return strike;
         }
@@ -690,7 +605,7 @@ RemoteStrike* SkStrikeServerImpl::getOrCreateCache(const SkStrikeSpec& strikeSpe
         // Strike is in unknown state on GPU. Start tracking strike on GPU by locking it.
         bool locked = fDiscardableHandleManager->lockHandle(it->second->discardableHandleId());
         if (locked) {
-            fRemoteStrikesToSend.add(strike);
+            fRemoteStrikesToSend.add(strike.get());
             return strike;
         }
 
@@ -711,16 +626,15 @@ RemoteStrike* SkStrikeServerImpl::getOrCreateCache(const SkStrikeSpec& strikeSpe
 
     auto context = strikeSpec.createScalerContext();
     auto newHandle = fDiscardableHandleManager->createHandle();  // Locked on creation
-    auto remoteStrike = std::make_unique<RemoteStrike>(strikeSpec, std::move(context), newHandle);
+    auto remoteStrike = sk_make_sp<RemoteStrike>(strikeSpec, std::move(context), newHandle);
     remoteStrike->setStrikeSpec(strikeSpec);
-    auto remoteStrikePtr = remoteStrike.get();
-    fRemoteStrikesToSend.add(remoteStrikePtr);
+    fRemoteStrikesToSend.add(remoteStrike.get());
     auto d = &remoteStrike->getDescriptor();
-    fDescToRemoteStrike[d] = std::move(remoteStrike);
+    fDescToRemoteStrike[d] = remoteStrike;
 
     checkForDeletedEntries();
 
-    return remoteStrikePtr;
+    return remoteStrike;
 }
 
 // -- GlyphTrackingDevice --------------------------------------------------------------------------

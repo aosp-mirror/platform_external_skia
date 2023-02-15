@@ -17,7 +17,7 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkImageFilters.h"
 #include "include/effects/SkRuntimeEffect.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "tools/Resources.h"
 
@@ -161,7 +161,7 @@ public:
     void onDraw(SkCanvas* canvas) override {
         SkRuntimeShaderBuilder builder(fEffect);
 
-        builder.uniform("cutoff") = sin(fSecs) * 0.55f + 0.5f;
+        builder.uniform("cutoff") = sinf(fSecs) * 0.55f + 0.5f;
         builder.uniform("slope")  = 10.0f;
 
         builder.child("before_map")    = fBefore;

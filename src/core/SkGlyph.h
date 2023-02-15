@@ -17,7 +17,7 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
 #include "include/private/SkChecksum.h"
-#include "include/private/SkFixed.h"
+#include "include/private/base/SkFixed.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkVx.h"
@@ -32,6 +32,9 @@
 class SkArenaAlloc;
 class SkGlyph;
 class SkScalerContext;
+namespace sktext {
+class StrikeForGPU;
+}  // namespace sktext
 
 // -- SkPackedGlyphID ------------------------------------------------------------------------------
 // A combination of SkGlyphID and sub-pixel position information.
@@ -303,13 +306,16 @@ enum class GlyphAction {
 
 enum ActionType {
     kDirectMask = 0,
-    kPath = 2,
-    kDrawable = 4,
+    kDirectMaskCPU = 2,
+    kMask = 4,
     kSDFT = 6,
-    kMask = 8,
-    kTotalBits = 10,
+    kPath = 8,
+    kDrawable = 10,
 };
 
+enum ActionTypeSize {
+    kTotalBits = 12
+};
 }  // namespace skglyph
 
 // SkGlyphDigest contains a digest of information for making GPU drawing decisions. It can be
@@ -328,47 +334,12 @@ public:
     bool isEmpty()       const { return fIsEmpty; }
     bool isColor()       const { return fFormat == SkMask::kARGB32_Format; }
     SkMask::Format maskFormat() const { return static_cast<SkMask::Format>(fFormat); }
-    skglyph::GlyphAction pathAction() const {
-        return this->action(skglyph::ActionType::kPath);
-    }
-    void setPathAction(skglyph::GlyphAction action) {
-        this->setAction(skglyph::ActionType::kPath, action);
-    }
-    skglyph::GlyphAction drawableAction() const {
-        return this->action(skglyph::ActionType::kDrawable);
-    }
-    void setDrawableAction(skglyph::GlyphAction action) {
-        this->setAction(skglyph::ActionType::kDrawable, action);
-    }
-    skglyph::GlyphAction directMaskAction() const {
-        return this->action(skglyph::ActionType::kDirectMask);
-    }
-    void setDirectMaskAction(skglyph::GlyphAction action) {
-        this->setAction(skglyph::ActionType::kDirectMask, action);
-    }
-    skglyph::GlyphAction SDFTAction() const {
-        return this->action(skglyph::ActionType::kSDFT);
-    }
-    void setSDFTAction(skglyph::GlyphAction action) {
-        this->setAction(skglyph::ActionType::kSDFT, action);
-    }
-    skglyph::GlyphAction maskAction() const {
-        return this->action(skglyph::ActionType::kMask);
-    }
-    void setMaskAction(skglyph::GlyphAction action) {
-        this->setAction(skglyph::ActionType::kMask, action);
-    }
-    skglyph::GlyphAction action(skglyph::ActionType actionType) const {
+
+    skglyph::GlyphAction actionFor(skglyph::ActionType actionType) const {
         return static_cast<skglyph::GlyphAction>((fActions >> actionType) & 0b11);
     }
-    void setAction(skglyph::ActionType actionType, skglyph::GlyphAction action) {
-        using namespace skglyph;
-        SkASSERT(action != GlyphAction::kUnset);
-        SkASSERT(this->action(actionType) == GlyphAction::kUnset);
-        const uint32_t mask = 0b11 << actionType;
-        fActions &= ~mask;
-        fActions |= SkTo<uint32_t>(action) << actionType;
-    }
+
+    void setActionFor(skglyph::ActionType, SkGlyph*, sktext::StrikeForGPU*);
 
     uint16_t maxDimension() const {
         return std::max(fWidth, fHeight);
@@ -390,6 +361,15 @@ public:
     static bool FitsInAtlas(const SkGlyph& glyph);
 
 private:
+    void setAction(skglyph::ActionType actionType, skglyph::GlyphAction action) {
+        using namespace skglyph;
+        SkASSERT(action != GlyphAction::kUnset);
+        SkASSERT(this->actionFor(actionType) == GlyphAction::kUnset);
+        const uint32_t mask = 0b11 << actionType;
+        fActions &= ~mask;
+        fActions |= SkTo<uint32_t>(action) << actionType;
+    }
+
     static_assert(SkPackedGlyphID::kEndData == 20);
     static_assert(SkMask::kCountMaskFormats <= 8);
     static_assert(SkTo<int>(skglyph::GlyphAction::kSize) <= 4);
@@ -397,7 +377,7 @@ private:
         uint32_t fIndex            : SkPackedGlyphID::kEndData;
         uint16_t fIsEmpty          : 1;
         uint32_t fFormat           : 3;
-        uint32_t fActions          : skglyph::ActionType::kTotalBits;
+        uint32_t fActions          : skglyph::ActionTypeSize::kTotalBits;
     };
     int16_t fLeft, fTop;
     uint16_t fWidth, fHeight;

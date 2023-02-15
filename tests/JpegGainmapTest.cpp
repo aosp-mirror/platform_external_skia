@@ -11,6 +11,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkImageEncoder.h"
+#include "include/core/SkShader.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypes.h"
@@ -168,6 +169,28 @@ DEF_TEST(Codec_jpegSegmentScan, r) {
     }
 }
 
+static bool find_mp_params_segment(SkStream* stream,
+                                   std::unique_ptr<SkJpegMultiPictureParameters>* outMpParams,
+                                   SkJpegSegment* outMpParamsSegment) {
+    auto sourceMgr = SkJpegSourceMgr::Make(stream);
+    for (const auto& segment : sourceMgr->getAllSegments()) {
+        static constexpr uint32_t kMpfMarker = 0xE2;
+        if (segment.marker != kMpfMarker) {
+            continue;
+        }
+        auto parameterData = sourceMgr->getSegmentParameters(segment);
+        if (!parameterData) {
+            continue;
+        }
+        *outMpParams = SkJpegMultiPictureParameters::Make(parameterData);
+        if (*outMpParams) {
+            *outMpParamsSegment = segment;
+            return true;
+        }
+    }
+    return false;
+}
+
 DEF_TEST(Codec_jpegMultiPicture, r) {
     const char* path = "images/iphone_13_pro.jpeg";
     auto stream = GetResourceAsStream(path);
@@ -175,22 +198,23 @@ DEF_TEST(Codec_jpegMultiPicture, r) {
 
     // Search and parse the MPF header.
     std::unique_ptr<SkJpegMultiPictureParameters> mpParams;
+    SkJpegSegment mpParamsSegment;
+    REPORTER_ASSERT(r, find_mp_params_segment(stream.get(), &mpParams, &mpParamsSegment));
+
+    // Verify that we get the same parameters when we re-serialize and de-serialize them
     {
-        auto sourceMgr = SkJpegSourceMgr::Make(stream.get());
-        for (const auto& segment : sourceMgr->getAllSegments()) {
-            static constexpr uint32_t kMpfMarker = 0xE2;
-            static constexpr uint8_t kMpfSig[] = {'M', 'P', 'F', '\0'};
-            if (segment.marker != kMpfMarker) {
-                continue;
-            }
-            auto parameterData = sourceMgr->copyParameters(segment, kMpfSig, sizeof(kMpfSig));
-            if (!parameterData) {
-                continue;
-            }
-            mpParams = SkJpegParseMultiPicture(parameterData);
+        auto mpParamsSerialized = mpParams->serialize();
+        REPORTER_ASSERT(r, mpParamsSerialized);
+        auto mpParamsRoundTripped = SkJpegMultiPictureParameters::Make(mpParamsSerialized);
+        REPORTER_ASSERT(r, mpParamsRoundTripped);
+        REPORTER_ASSERT(r, mpParamsRoundTripped->images.size() == mpParams->images.size());
+        for (size_t i = 0; i < mpParamsRoundTripped->images.size(); ++i) {
+            REPORTER_ASSERT(r, mpParamsRoundTripped->images[i].size == mpParams->images[i].size);
+            REPORTER_ASSERT(
+                    r,
+                    mpParamsRoundTripped->images[i].dataOffset == mpParams->images[i].dataOffset);
         }
     }
-    REPORTER_ASSERT(r, mpParams);
 
     const struct Rec {
         const TestStream::Type streamType;
@@ -214,36 +238,29 @@ DEF_TEST(Codec_jpegMultiPicture, r) {
             {TestStream::Type::kUnseekable, true, 1024 * 1024 * 16},
     };
     for (const auto& rec : recs) {
-        SkJpegMultiPictureParameters testMpParams = *mpParams;
-        if (rec.skipFirstImage) {
-            testMpParams.images[1].size = 0;
-            testMpParams.images[1].dataOffset = 0;
-        }
         stream->rewind();
         TestStream testStream(rec.streamType, stream.get());
-
         auto sourceMgr = SkJpegSourceMgr::Make(&testStream, rec.bufferSize);
 
-        // Extract the streams for the MultiPicture images.
-        auto mpStreams = SkJpegExtractMultiPictureStreams(&testMpParams, sourceMgr.get());
-        REPORTER_ASSERT(r, mpStreams);
-        size_t numberOfImages = mpStreams->images.size();
-
-        // Decode them into bitmaps.
+        // Decode the images into bitmaps.
+        size_t numberOfImages = mpParams->images.size();
         std::vector<SkBitmap> bitmaps(numberOfImages);
         for (size_t i = 0; i < numberOfImages; ++i) {
-            auto imageStream = std::move(mpStreams->images[i].stream);
             if (i == 0) {
-                REPORTER_ASSERT(r, !imageStream);
+                REPORTER_ASSERT(r, mpParams->images[i].dataOffset == 0);
                 continue;
             }
             if (i == 1 && rec.skipFirstImage) {
-                REPORTER_ASSERT(r, !imageStream);
                 continue;
-            }
-            REPORTER_ASSERT(r, imageStream);
+            };
+            auto imageData = sourceMgr->getSubsetData(
+                    SkJpegMultiPictureParameters::GetAbsoluteOffset(mpParams->images[i].dataOffset,
+                                                                    mpParamsSegment.offset),
+                    mpParams->images[i].size);
+            REPORTER_ASSERT(r, imageData);
 
-            std::unique_ptr<SkCodec> codec = SkCodec::MakeFromStream(std::move(imageStream));
+            std::unique_ptr<SkCodec> codec =
+                    SkCodec::MakeFromStream(SkMemoryStream::Make(imageData));
             REPORTER_ASSERT(r, codec);
 
             SkBitmap bm;

@@ -7,10 +7,12 @@
 
 #include "src/base/SkCubics.h"
 
+#include "include/private/base/SkAssert.h"
 #include "include/private/base/SkFloatingPoint.h"
 #include "include/private/base/SkTPin.h"
 #include "src/base/SkQuads.h"
 
+#include <algorithm>
 #include <cmath>
 
 static constexpr double PI = 3.141592653589793;
@@ -22,8 +24,19 @@ static bool nearly_equal(double x, double y) {
     return sk_doubles_nearly_equal_ulps(x, y);
 }
 
+// When the A coefficient of a cubic is close to 0, there can be floating point error
+// that arises from computing a very large root. In those cases, we would rather be
+// precise about the smaller 2 roots, so we have this arbitrary cutoff for when A is
+// really small or small compared to B.
+static bool close_to_a_quadratic(double A, double B) {
+    if (sk_double_nearly_zero(B)) {
+        return sk_double_nearly_zero(A);
+    }
+    return std::abs(A / B) < 1.0e-7;
+}
+
 int SkCubics::RootsReal(double A, double B, double C, double D, double solution[3]) {
-    if (sk_double_nearly_zero(A)) {  // we're just a quadratic
+    if (close_to_a_quadratic(A, B)) {
         return SkQuads::RootsReal(B, C, D, solution);
     }
     if (sk_double_nearly_zero(D)) {  // 0 is one root
@@ -48,7 +61,10 @@ int SkCubics::RootsReal(double A, double B, double C, double D, double solution[
     }
     double a, b, c;
     {
-        double invA = 1 / A;
+        // If A is zero (e.g. B was nan and thus close_to_a_quadratic was false), we will
+        // temporarily have infinities rolling about, but will catch that when checking
+        // R2MinusQ3.
+        double invA = sk_ieee_double_divide(1, A);
         a = B * invA;
         b = C * invA;
         c = D * invA;
@@ -109,26 +125,116 @@ int SkCubics::RootsReal(double A, double B, double C, double D, double solution[
 }
 
 int SkCubics::RootsValidT(double A, double B, double C, double D,
-                          double t[3]) {
-    double solution[3] = {0, 0, 0};
-    int realRoots = SkCubics::RootsReal(A, B, C, D, solution);
+                          double solution[3]) {
+    double allRoots[3] = {0, 0, 0};
+    int realRoots = SkCubics::RootsReal(A, B, C, D, allRoots);
     int foundRoots = 0;
     for (int index = 0; index < realRoots; ++index) {
-        double tValue = solution[index];
+        double tValue = allRoots[index];
         if (tValue >= 1.0 && tValue <= 1.00005) {
             // Make sure we do not already have 1 (or something very close) in the list of roots.
-            if ((foundRoots < 1 || !sk_doubles_nearly_equal_ulps(t[0], 1)) &&
-                (foundRoots < 2 || !sk_doubles_nearly_equal_ulps(t[1], 1))) {
-                t[foundRoots++] = 1;
+            if ((foundRoots < 1 || !sk_doubles_nearly_equal_ulps(solution[0], 1)) &&
+                (foundRoots < 2 || !sk_doubles_nearly_equal_ulps(solution[1], 1))) {
+                solution[foundRoots++] = 1;
             }
         } else if (tValue >= -0.00005 && (tValue <= 0.0 || sk_double_nearly_zero(tValue))) {
             // Make sure we do not already have 0 (or something very close) in the list of roots.
-            if ((foundRoots < 1 || !sk_double_nearly_zero(t[0])) &&
-                (foundRoots < 2 || !sk_double_nearly_zero(t[1]))) {
-                t[foundRoots++] = 0;
+            if ((foundRoots < 1 || !sk_double_nearly_zero(solution[0])) &&
+                (foundRoots < 2 || !sk_double_nearly_zero(solution[1]))) {
+                solution[foundRoots++] = 0;
             }
         } else if (tValue > 0.0 && tValue < 1.0) {
-            t[foundRoots++] = tValue;
+            solution[foundRoots++] = tValue;
+        }
+    }
+    return foundRoots;
+}
+
+static bool approximately_zero(double x) {
+    // This cutoff for our binary search hopefully strikes a good balance between
+    // performance and accuracy.
+    return std::abs(x) < 0.00000001;
+}
+
+static int find_extrema_valid_t(double A, double B, double C,
+                                double t[2]) {
+    // To find the local min and max of a cubic, we take the derivative and
+    // solve when that is equal to 0.
+    // d/dt (A*t^3 + B*t^2 + C*t + D) = 3A*t^2 + 2B*t + C
+    double roots[2] = {0, 0};
+    int numRoots = SkQuads::RootsReal(3*A, 2*B, C, roots);
+    int validRoots = 0;
+    for (int i = 0; i < numRoots; i++) {
+        double tValue = roots[i];
+        if (tValue >= 0 && tValue <= 1.0) {
+            t[validRoots++] = tValue;
+        }
+    }
+    return validRoots;
+}
+
+static double binary_search(double A, double B, double C, double D, double start, double stop) {
+    SkASSERT(start <= stop);
+    double left = SkCubics::EvalAt(A, B, C, D, start);
+    if (approximately_zero(left)) {
+        return start;
+    }
+    double right = SkCubics::EvalAt(A, B, C, D, stop);
+    if (!std::isfinite(left) || !std::isfinite(right)) {
+        return -1; // Not going to deal with one or more endpoints being non-finite.
+    }
+    if ((left > 0 && right > 0) || (left < 0 && right < 0)) {
+        return -1; // We can only have a root if one is above 0 and the other is below 0.
+    }
+
+    constexpr int maxIterations = 1000; // prevent infinite loop
+    for (int i = 0; i < maxIterations; i++) {
+        double step = (start + stop) / 2;
+        double curr = SkCubics::EvalAt(A, B, C, D, step);
+        if (approximately_zero(curr)) {
+            return step;
+        }
+        if ((curr < 0 && left < 0) || (curr > 0 && left > 0)) {
+            // go right
+            start = step;
+        } else {
+            // go left
+            stop = step;
+        }
+    }
+    return -1;
+}
+
+int SkCubics::BinarySearchRootsValidT(double A, double B, double C, double D,
+                                      double solution[3]) {
+    if (!std::isfinite(A) || !std::isfinite(B) || !std::isfinite(C) || !std::isfinite(D)) {
+        return 0;
+    }
+    double regions[4] = {0, 0, 0, 1};
+    // Find local minima and maxima
+    double minMax[2] = {0, 0};
+    int extremaCount = find_extrema_valid_t(A, B, C, minMax);
+    int startIndex = 2 - extremaCount;
+    if (extremaCount == 1) {
+        regions[startIndex + 1] = minMax[0];
+    }
+    if (extremaCount == 2) {
+        // While the roots will be in the range 0 to 1 inclusive, they might not be sorted.
+        regions[startIndex + 1] = std::min(minMax[0], minMax[1]);
+        regions[startIndex + 2] = std::max(minMax[0], minMax[1]);
+    }
+    // Starting at regions[startIndex] and going up through regions[3], we have
+    // an ascending list of numbers in the range 0 to 1.0, between which are the possible
+    // locations of a root.
+    int foundRoots = 0;
+    for (;startIndex < 3; startIndex++) {
+        double root = binary_search(A, B, C, D, regions[startIndex], regions[startIndex + 1]);
+        if (root >= 0) {
+            // Check for duplicates
+            if ((foundRoots < 1 || !approximately_zero(solution[0] - root)) &&
+                (foundRoots < 2 || !approximately_zero(solution[1] - root))) {
+                solution[foundRoots++] = root;
+            }
         }
     }
     return foundRoots;

@@ -23,18 +23,35 @@ namespace skgpu::graphite {
 
 namespace {
 using IntrinsicConstant = float[4];
-}
 
-std::unique_ptr<DawnCommandBuffer> DawnCommandBuffer::Make(const DawnSharedContext* sharedContext) {
-    std::unique_ptr<DawnCommandBuffer> cmdBuffer(new DawnCommandBuffer(sharedContext));
+uint64_t clamp_ubo_binding_size(uint64_t offset, uint64_t bufferSize) {
+    // Dawn's limit
+    constexpr uint32_t kMaxUniformBufferBindingSize = 64 * 1024;
+
+    SkASSERT(offset <= bufferSize);
+    auto remainSize = bufferSize - offset;
+    if (remainSize > kMaxUniformBufferBindingSize) {
+        return kMaxUniformBufferBindingSize;
+    }
+
+    return wgpu::kWholeSize;
+}
+}  // namespace
+
+std::unique_ptr<DawnCommandBuffer> DawnCommandBuffer::Make(const DawnSharedContext* sharedContext,
+                                                           DawnResourceProvider* resourceProvider) {
+    std::unique_ptr<DawnCommandBuffer> cmdBuffer(
+            new DawnCommandBuffer(sharedContext, resourceProvider));
     if (!cmdBuffer->setNewCommandBufferResources()) {
         return {};
     }
     return cmdBuffer;
 }
 
-DawnCommandBuffer::DawnCommandBuffer(const DawnSharedContext* sharedContext)
-        : fSharedContext(sharedContext) {}
+DawnCommandBuffer::DawnCommandBuffer(const DawnSharedContext* sharedContext,
+                                     DawnResourceProvider* resourceProvider)
+        : fSharedContext(sharedContext)
+        , fResourceProvider(resourceProvider) {}
 
 DawnCommandBuffer::~DawnCommandBuffer() {}
 
@@ -200,17 +217,118 @@ bool DawnCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
         SkASSERT(!depthStencilInfo.fTextureInfo.isValid());
     }
 
-    fActiveRenderPassEncoder = fCommandEncoder.BeginRenderPass(&wgpuRenderPass);
-
     if (loadMSAAFromResolve) {
         // Manually load the contents of the resolve texture into the MSAA attachment as a draw,
         // so the actual load op for the MSAA attachment had better have been discard.
 
-        // TODO: https://b.corp.google.com/issues/258652999
-        SKGPU_LOG_W("DawnCommandBuffer::beginRenderPass: "
-                    "Can't manually load resolve texture at this time,"
-                    "rendering results could be undefined.");
+        if (!this->loadMSAAFromResolveAndBeginRenderPassEncoder(
+                    renderPassDesc,
+                    wgpuRenderPass,
+                    static_cast<const DawnTexture*>(colorTexture))) {
+            return false;
+        }
     }
+    else {
+        fActiveRenderPassEncoder = fCommandEncoder.BeginRenderPass(&wgpuRenderPass);
+    }
+
+    return true;
+}
+
+bool DawnCommandBuffer::loadMSAAFromResolveAndBeginRenderPassEncoder(
+        const RenderPassDesc& frontendRenderPassDesc,
+        const wgpu::RenderPassDescriptor& wgpuRenderPassDesc,
+        const DawnTexture* msaaTexture) {
+    SkASSERT(!fActiveRenderPassEncoder);
+
+    // Copy from resolve texture to an intermediate texture. Using blit with draw
+    // pipeline because the resolveTexture might be created from a swapchain, and it
+    // is possible that only its texture view is available. So onCopyTextureToTexture()
+    // which operates on wgpu::Texture instead of wgpu::TextureView cannot be used in that case.
+    auto msaaLoadTexture = fResourceProvider->findOrCreateDiscardableMSAALoadTexture(
+            msaaTexture->dimensions(), msaaTexture->textureInfo());
+    if (!msaaLoadTexture) {
+        SKGPU_LOG_E("DawnCommandBuffer::loadMSAAFromResolveAndBeginRenderPassEncoder: "
+                    "Can't create MSAA Load Texture.");
+        return false;
+    }
+
+    // Creating intermediate render pass (copy from resolve texture -> MSAA load texture)
+    RenderPassDesc intermediateRenderPassDesc = {};
+    intermediateRenderPassDesc.fColorAttachment.fLoadOp = LoadOp::kDiscard;
+    intermediateRenderPassDesc.fColorAttachment.fStoreOp = StoreOp::kStore;
+    intermediateRenderPassDesc.fColorAttachment.fTextureInfo =
+            frontendRenderPassDesc.fColorResolveAttachment.fTextureInfo;
+
+    wgpu::RenderPassColorAttachment wgpuIntermediateColorAttachment;
+     // Dawn doesn't support actual DontCare so use LoadOp::Clear.
+    wgpuIntermediateColorAttachment.loadOp = wgpu::LoadOp::Clear;
+    wgpuIntermediateColorAttachment.clearValue = {1, 1, 1, 1};
+    wgpuIntermediateColorAttachment.storeOp = wgpu::StoreOp::Store;
+    wgpuIntermediateColorAttachment.view = msaaLoadTexture->dawnTextureView();
+
+    wgpu::RenderPassDescriptor wgpuIntermediateRenderPassDesc;
+    wgpuIntermediateRenderPassDesc.colorAttachmentCount = 1;
+    wgpuIntermediateRenderPassDesc.colorAttachments = &wgpuIntermediateColorAttachment;
+
+    fActiveRenderPassEncoder = fCommandEncoder.BeginRenderPass(&wgpuIntermediateRenderPassDesc);
+
+    if (!this->doBlitWithDraw(
+                intermediateRenderPassDesc,
+                /*sourceTextureView=*/wgpuRenderPassDesc.colorAttachments[0].resolveTarget,
+                msaaTexture->dimensions().width(),
+                msaaTexture->dimensions().height())) {
+        return false;
+    }
+
+    fActiveRenderPassEncoder.End();
+
+    // Start actual render pass (blit from MSAA load texture -> MSAA texture)
+    fActiveRenderPassEncoder = fCommandEncoder.BeginRenderPass(&wgpuRenderPassDesc);
+
+    return this->doBlitWithDraw(frontendRenderPassDesc,
+                                /*sourceTextureView=*/msaaLoadTexture->dawnTextureView(),
+                                msaaTexture->dimensions().width(),
+                                msaaTexture->dimensions().height());
+}
+
+bool DawnCommandBuffer::doBlitWithDraw(const RenderPassDesc& frontendRenderPassDesc,
+                                       const wgpu::TextureView& sourceTextureView,
+                                       int width,
+                                       int height) {
+    auto loadPipeline = fResourceProvider->findOrCreateBlitWithDrawPipeline(frontendRenderPassDesc);
+    if (!loadPipeline) {
+        SKGPU_LOG_E("Unable to create pipeline to blit with draw");
+        return false;
+    }
+
+    SkASSERT(fActiveRenderPassEncoder);
+
+    fActiveRenderPassEncoder.SetPipeline(loadPipeline);
+
+    // The load msaa pipeline takes no uniforms, no vertex/instance attributes and only uses
+    // one texture that does not require a sampler.
+
+    // TODO: b/260368758
+    // cache single texture's bind group creation.
+    wgpu::BindGroupEntry entry;
+    entry.binding = 0;
+    entry.textureView = sourceTextureView;
+
+    wgpu::BindGroupDescriptor desc;
+    desc.layout = loadPipeline.GetBindGroupLayout(0);
+    desc.entryCount = 1;
+    desc.entries = &entry;
+
+    auto bindGroup = fSharedContext->device().CreateBindGroup(&desc);
+
+    fActiveRenderPassEncoder.SetBindGroup(0, bindGroup);
+
+    fActiveRenderPassEncoder.SetScissorRect(0, 0, width, height);
+    fActiveRenderPassEncoder.SetViewport(0, 0, width, height, 0, 1);
+
+    // Fullscreen triangle
+    fActiveRenderPassEncoder.Draw(3);
 
     return true;
 }
@@ -394,25 +512,34 @@ void DawnCommandBuffer::syncUniformBuffers() {
 
         if (fActiveGraphicsPipeline->hasStepUniforms() &&
             fBoundUniformBuffers[DawnGraphicsPipeline::kRenderStepUniformBufferIndex]) {
+            auto boundBuffer =
+                    fBoundUniformBuffers[DawnGraphicsPipeline::kRenderStepUniformBufferIndex];
+
             entries[numBuffers].binding = DawnGraphicsPipeline::kRenderStepUniformBufferIndex;
-            entries[numBuffers].buffer =
-                    fBoundUniformBuffers[DawnGraphicsPipeline::kRenderStepUniformBufferIndex]
-                            ->dawnBuffer();
+            entries[numBuffers].buffer = boundBuffer->dawnBuffer();
+
             entries[numBuffers].offset =
                     fBoundUniformBufferOffsets[DawnGraphicsPipeline::kRenderStepUniformBufferIndex];
-            entries[numBuffers].size = wgpu::kWholeSize;
+
+            entries[numBuffers].size =
+                    clamp_ubo_binding_size(entries[numBuffers].offset, boundBuffer->size());
+
             ++numBuffers;
         }
 
         if (fActiveGraphicsPipeline->hasFragment() &&
             fBoundUniformBuffers[DawnGraphicsPipeline::kPaintUniformBufferIndex]) {
+            auto boundBuffer = fBoundUniformBuffers[DawnGraphicsPipeline::kPaintUniformBufferIndex];
+
             entries[numBuffers].binding = DawnGraphicsPipeline::kPaintUniformBufferIndex;
-            entries[numBuffers].buffer =
-                    fBoundUniformBuffers[DawnGraphicsPipeline::kPaintUniformBufferIndex]
-                            ->dawnBuffer();
+            entries[numBuffers].buffer = boundBuffer->dawnBuffer();
+
             entries[numBuffers].offset =
                     fBoundUniformBufferOffsets[DawnGraphicsPipeline::kPaintUniformBufferIndex];
-            entries[numBuffers].size = wgpu::kWholeSize;
+
+            entries[numBuffers].size =
+                    clamp_ubo_binding_size(entries[numBuffers].offset, boundBuffer->size());
+
             ++numBuffers;
         }
 

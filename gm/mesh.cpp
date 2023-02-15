@@ -16,7 +16,7 @@
 #include "include/core/SkSurface.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/gpu/GrDirectContext.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkMeshPriv.h"
 #include "tools/timer/TimeUtils.h"
@@ -114,7 +114,8 @@ protected:
                                                SkTileMode::kMirror);
     }
 
-    DrawResult onGpuSetup(GrDirectContext* dc, SkString* string) override {
+    DrawResult onGpuSetup(SkCanvas* canvas, SkString* string) override {
+        auto dc = GrAsDirectContext(canvas->recordingContext());
         this->ensureBuffers();
         if (!dc || dc->abandoned()) {
             return DrawResult::kOk;

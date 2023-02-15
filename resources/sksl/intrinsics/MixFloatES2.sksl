@@ -1,5 +1,8 @@
 uniform half4 colorGreen, colorRed, colorBlack, colorWhite, testInputs;
 
+// This test covers mix(vec, vec, vec) and mix(vec, vec, scalar).
+// See MixFloatES3 and MixBool for additional forms of mix.
+
 half4 main(float2 coords) {
     const half4 constBlack = half4(0, 0, 0, 1);
     const half4 constWhite = half4(1);

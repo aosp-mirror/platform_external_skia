@@ -708,8 +708,8 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 			ignore := []string{
 				"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind", "FailFlushTimeCallbacks",
 				"ReleaseAndAbandonGpuContext", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI",
-				"NoGPUThreads", "DDL1", "DDL3", "OOPRDDL", "T8888",
-				"DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "ColorSpaces", "SkottieTracing", "SkottieWASM",
+				"NoGPUThreads", "DDL1", "DDL3", "T8888",
+				"DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "ColorSpaces", "GL", "SkottieTracing", "SkottieWASM",
 				"GpuTess", "DMSAAStats", "Mskp", "Docker", "PDF", "SkVM", "Puppeteer",
 				"SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile", "WebGL2", "i5",
 				"OldestSupportedSkpVersion"}
@@ -2183,8 +2183,6 @@ func (b *jobBuilder) bazelBuild() {
 			cmd = append(cmd, "--bazel_arg=--config=for_linux_x64_with_rbe")
 			cmd = append(cmd, "--bazel_arg=--jobs=100")
 			cmd = append(cmd, "--bazel_arg=--remote_download_minimal")
-			// https://bazel.build/docs/user-manual#build-runfile-manifests
-			cmd = append(cmd, "--bazel_arg=--nobuild_runfile_manifests", "--bazel_arg=--nobuild_runfile_links")
 		} else {
 			panic("unsupported Bazel host " + host)
 		}

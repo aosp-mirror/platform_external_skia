@@ -15,10 +15,11 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkSamplingOptions.h"
 #include "include/core/SkScalar.h"
+#include "include/core/SkShader.h" // IWYU pragma: keep
 #include "include/core/SkSize.h"
 #include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #include "src/core/SkMatrixUtils.h"
 #include "tests/Test.h"
 

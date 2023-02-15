@@ -18,9 +18,11 @@
 #include "include/core/SkPixmap.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
+#include "include/core/SkTileMode.h"
 #include "include/core/SkTypes.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
@@ -142,7 +144,8 @@ protected:
         return resultSurface->makeImageSnapshot();
     }
 
-    DrawResult onGpuSetup(GrDirectContext* dContext, SkString* errorMsg) override {
+    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg) override {
+        auto dContext = GrAsDirectContext(canvas->recordingContext());
         if (!dContext || dContext->abandoned()) {
             *errorMsg = "DirectContext required to create YUV images";
             return DrawResult::kSkip;
