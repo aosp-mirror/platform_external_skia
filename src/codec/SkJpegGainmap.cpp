@@ -14,6 +14,7 @@
 #include "include/private/SkGainmapInfo.h"
 #include "include/private/base/SkFloatingPoint.h"
 #include "src/codec/SkCodecPriv.h"
+#include "src/codec/SkJpegConstants.h"
 #include "src/codec/SkJpegMultiPicture.h"
 #include "src/codec/SkJpegPriv.h"
 #include "src/codec/SkJpegSegmentScan.h"
@@ -60,11 +61,7 @@ bool SkJpegGetMultiPictureGainmap(const SkJpegMultiPictureParameters* mpParams,
             if (segment.marker != kXMPMarker) {
                 continue;
             }
-            auto parameters = SkData::MakeSubset(
-                    mpImage.get(),
-                    segment.offset + SkJpegSegmentScanner::kMarkerCodeSize +
-                            SkJpegSegmentScanner::kParameterLengthSize,
-                    segment.parameterLength - SkJpegSegmentScanner::kParameterLengthSize);
+            auto parameters = SkJpegSegmentScanner::GetParameters(mpImage.get(), segment);
             if (!parameters) {
                 continue;
             }
