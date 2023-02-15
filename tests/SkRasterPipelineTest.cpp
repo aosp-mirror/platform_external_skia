@@ -41,87 +41,6 @@ DEF_TEST(SkRasterPipeline, r) {
     REPORTER_ASSERT(r, ((result >> 48) & 0xffff) == 0x3c00);
 }
 
-DEF_TEST(SkRasterPipeline_ImmediateStoreUnmasked, r) {
-    alignas(64) float val[SkRasterPipeline_kMaxStride_highp + 1] = {};
-
-    float immVal = 123.0f;
-    const void* immValCtx = nullptr;
-    memcpy(&immValCtx, &immVal, sizeof(float));
-
-    SkRasterPipeline_<256> p;
-    p.append(SkRasterPipelineOp::immediate_f, immValCtx);
-    p.append(SkRasterPipelineOp::store_unmasked, val);
-    p.run(0,0,1,1);
-
-    // `val` should be populated with `123.0` in the frontmost positions
-    // (depending on the architecture that SkRasterPipeline is targeting).
-    size_t index = 0;
-    for (; index < SkOpts::raster_pipeline_highp_stride; ++index) {
-        REPORTER_ASSERT(r, val[index] == immVal);
-    }
-
-    // The remaining slots should have been left alone.
-    for (; index < std::size(val); ++index) {
-        REPORTER_ASSERT(r, val[index] == 0.0f);
-    }
-}
-
-DEF_TEST(SkRasterPipeline_LoadStoreUnmasked, r) {
-    alignas(64) float val[SkRasterPipeline_kMaxStride_highp] = {};
-    alignas(64) float data[] = {123.0f, 456.0f, 789.0f, -876.0f, -543.0f, -210.0f, 12.0f, -3.0f};
-    static_assert(std::size(data) == SkRasterPipeline_kMaxStride_highp);
-
-    SkRasterPipeline_<256> p;
-    p.append(SkRasterPipelineOp::load_unmasked, data);
-    p.append(SkRasterPipelineOp::store_unmasked, val);
-    p.run(0,0,1,1);
-
-    // `val` should be populated with `data` in the frontmost positions
-    // (depending on the architecture that SkRasterPipeline is targeting).
-    size_t index = 0;
-    for (; index < SkOpts::raster_pipeline_highp_stride; ++index) {
-        REPORTER_ASSERT(r, val[index] == data[index]);
-    }
-
-    // The remaining slots should have been left alone.
-    for (; index < std::size(val); ++index) {
-        REPORTER_ASSERT(r, val[index] == 0.0f);
-    }
-}
-
-DEF_TEST(SkRasterPipeline_LoadStoreMasked, r) {
-    for (size_t width = 0; width < SkOpts::raster_pipeline_highp_stride; ++width) {
-        alignas(64) float val[] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
-        alignas(64) float data[] = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
-        alignas(64) const int32_t mask[] = {0, ~0, ~0, ~0, ~0, ~0, 0, ~0};
-        static_assert(std::size(val) == SkRasterPipeline_kMaxStride_highp);
-        static_assert(std::size(data) == SkRasterPipeline_kMaxStride_highp);
-        static_assert(std::size(mask) == SkRasterPipeline_kMaxStride_highp);
-
-        SkRasterPipeline_<256> p;
-        p.append(SkRasterPipelineOp::init_lane_masks);
-        p.append(SkRasterPipelineOp::load_condition_mask, mask);
-        p.append(SkRasterPipelineOp::load_unmasked, data);
-        p.append(SkRasterPipelineOp::store_masked, val);
-        p.run(0, 0, width, 1);
-
-        // Where the mask is set, and the width is sufficient, `val` should be populated.
-        size_t index = 0;
-        for (; index < width; ++index) {
-            if (mask[index]) {
-                REPORTER_ASSERT(r, val[index] == 2.0f);
-            } else {
-                REPORTER_ASSERT(r, val[index] == 1.0f);
-            }
-        }
-
-        // The remaining slots should have been left alone.
-        for (; index < std::size(val); ++index) {
-            REPORTER_ASSERT(r, val[index] == 1.0f);
-        }
-    }
-}
-
 DEF_TEST(SkRasterPipeline_LoadStoreConditionMask, r) {
     alignas(64) int32_t mask[]  = {~0, 0, ~0,  0, ~0, ~0, ~0,  0};
     alignas(64) int32_t maskCopy[SkRasterPipeline_kMaxStride_highp] = {};
@@ -1489,12 +1408,12 @@ DEF_TEST(SkRasterPipeline_MixTest, r) {
         // Initialize the values to 1,2,3...
         std::iota(&slots[0], &slots[15 * N], 1.0f);
 
-        float fromValue   = slots[0];
-        float toValue     = slots[1 * op.numSlotsAffected * N];
-        float weightValue = slots[2 * op.numSlotsAffected * N];
+        float weightValue = slots[0];
+        float fromValue   = slots[1 * op.numSlotsAffected * N];
+        float toValue     = slots[2 * op.numSlotsAffected * N];
 
-        // The third group of values (the weight) must be between zero and one.
-        for (int idx = 2 * op.numSlotsAffected * N; idx < 3 * op.numSlotsAffected * N; ++idx) {
+        // The first group of values (the weights) must be between zero and one.
+        for (int idx = 0; idx < 1 * op.numSlotsAffected * N; ++idx) {
             slots[idx] = to_mix_weight(slots[idx]);
         }
 
@@ -1504,7 +1423,7 @@ DEF_TEST(SkRasterPipeline_MixTest, r) {
         op.append(&p, &alloc);
         p.run(0,0,1,1);
 
-        // Verify that the affected slots now equal mix({1,2...}, {3,4...}, {0.25, 0.3125...).
+        // Verify that the affected slots now equal mix({0.25, 0.3125...}, {3,4...}, {5,6...}, ).
         float* destPtr = &slots[0];
         for (int checkSlot = 0; checkSlot < op.numSlotsAffected; ++checkSlot) {
             for (int checkLane = 0; checkLane < N; ++checkLane) {

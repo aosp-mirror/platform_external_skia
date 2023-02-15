@@ -614,7 +614,7 @@ void ParagraphImpl::breakShapedTextIntoLines(SkScalar maxWidth) {
                 // TODO: Take in account clipped edges
                 auto& line = this->addLine(offset, advance, textExcludingSpaces, text, textWithNewlines, clusters, clustersWithGhosts, widthWithSpaces, metrics);
                 if (addEllipsis) {
-                    line.createEllipsis(maxWidth, getEllipsis(), true);
+                    line.createEllipsis(maxWidth, this->getEllipsis(), true);
                 }
                 fLongestLine = std::max(fLongestLine, nearlyZero(advance.fX) ? widthWithSpaces : advance.fX);
             });
@@ -1029,7 +1029,7 @@ void ParagraphImpl::updateFontSize(size_t from, size_t to, SkScalar fontSize) {
     textStyle.fStyle.setFontSize(fontSize);
   }
 
-  fState = kIndexed;
+  fState = std::min(fState, kIndexed);
   fOldWidth = 0;
   fOldHeight = 0;
 }
