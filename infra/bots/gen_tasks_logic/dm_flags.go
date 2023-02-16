@@ -294,9 +294,12 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("gltestthreading", "gm", ALL, "persp_shaders_aa")
 			skip("gltestthreading", "gm", ALL, "rtif_distort")
 			skip("gltestthreading", "gm", ALL, "skbug_8664")
+			skip("gltestthreading", "gm", ALL, "teenystrokes")
 			skip("gltestthreading", "gm", ALL, "texel_subset_linear_mipmap_nearest_down")
 			skip("gltestthreading", "gm", ALL, "yuv420_odd_dim_repeat")
 
+			skip("gltestthreading", "svg", ALL, "filters-offset-01-b.svg")
+			skip("gltestthreading", "svg", ALL, "gallardo.svg")
 			skip("gltestthreading", "svg", ALL, "masking-filter-01-f.svg")
 
 		}
@@ -442,9 +445,11 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "test", ALL, "TestMockContext")
 			skip(ALL, "test", ALL, "TestGpuRenderingContexts")
 			skip(ALL, "test", ALL, "TestGpuAllContexts")
+			skip(ALL, "test", ALL, "TextBlobCache")
 			skip(ALL, "test", ALL, "OverdrawSurface_Gpu")
 			skip(ALL, "test", ALL, "ReplaceSurfaceBackendTexture")
 			skip(ALL, "test", ALL, "SurfaceAttachStencil_Gpu")
+			skip(ALL, "test", ALL, "SurfacePartialDraw_Gpu")
 			skip(ALL, "test", ALL, "SurfaceWrappedWithRelease_Gpu")
 		}
 
@@ -558,6 +563,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("mtltestprecompile", "svg", ALL, "Ghostscript_Tiger.svg")
 			skip("mtltestprecompile", "svg", ALL, "Seal_of_American_Samoa.svg")
 			skip("mtltestprecompile", "svg", ALL, "Seal_of_Illinois.svg")
+			skip("mtltestprecompile", "svg", ALL, "cartman.svg")
 			skip("mtltestprecompile", "svg", ALL, "desk_motionmark_paths.svg")
 			skip("mtltestprecompile", "svg", ALL, "rg1024_green_grapes.svg")
 			skip("mtltestprecompile", "svg", ALL, "shapes-intro-02-f.svg")
@@ -698,6 +704,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	// Eventually I'd like these to pass, but for now just skip 'em.
 	if b.extraConfig("SK_FORCE_RASTER_PIPELINE_BLITTER") {
+		removeFromArgs("tests")
+	}
+
+	if b.model("Spin513") {
 		removeFromArgs("tests")
 	}
 
