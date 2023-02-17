@@ -20,6 +20,7 @@
 #include "include/private/base/SkNoncopyable.h"
 #include "include/private/base/SkTemplates.h"
 #include "src/base/SkMSAN.h"
+#include "src/codec/SkJpegConstants.h"
 #include "src/codec/SkJpegPriv.h"
 #include "src/images/SkImageEncoderFns.h"
 #include "src/images/SkImageEncoderPriv.h"
@@ -203,6 +204,9 @@ std::unique_ptr<SkEncoder> SkJpegEncoder::Make(SkWStream* dst,
     jpeg_start_compress(encoderMgr->cinfo(), TRUE);
 
     for (size_t i = 0; i < segmentCount; ++i) {
+        if (!segmentData[i] || segmentData[i]->isEmpty()) {
+            continue;
+        }
         SkASSERT(segmentData[i]->size() <= kSegmentDataMaxSize);
         jpeg_write_marker(encoderMgr->cinfo(),
                           segmentMarkers[i],
