@@ -104,11 +104,8 @@ public:
         return fVariation.get();
     }
     int getPaletteEntryOverrideCount() const { return fPaletteEntryOverrideCount; }
-    const SkFontArguments::Palette::Override* getPaletteEntryOverrides() const {
+    const SkFontArguments::Palette::Override* getPaletteEntryOverrides() {
         return fPaletteEntryOverrides.get();
-    }
-    SkTypeface::FactoryId getFactoryId() {
-        return fFactoryId;
     }
 
     std::unique_ptr<SkStreamAsset> detachStream() { return std::move(fStream); }
@@ -123,18 +120,7 @@ public:
         fPaletteEntryOverrideCount = paletteEntryOverrideCount;
         return fPaletteEntryOverrides.reset(paletteEntryOverrideCount);
     }
-    void setFactoryId(SkTypeface::FactoryId factoryId) {
-        fFactoryId = factoryId;
-    }
 
-    SkFontArguments getFontArguments() const {
-        return SkFontArguments()
-            .setCollectionIndex(this->getCollectionIndex())
-            .setVariationDesignPosition({this->getVariation(),this->getVariationCoordinateCount()})
-            .setPalette({this->getPaletteIndex(),
-                         this->getPaletteEntryOverrides(),
-                         this->getPaletteEntryOverrideCount()});
-    }
     static SkFontStyle::Width SkFontStyleWidthForWidthAxisValue(SkScalar width);
 
 private:
@@ -152,7 +138,6 @@ private:
     int fPaletteIndex = 0;
     int fPaletteEntryOverrideCount = 0;
     skia_private::AutoTMalloc<SkFontArguments::Palette::Override> fPaletteEntryOverrides;
-    SkTypeface::FactoryId fFactoryId = 0;
 };
 
 #endif // SkFontDescriptor_DEFINED

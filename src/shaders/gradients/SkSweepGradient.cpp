@@ -196,6 +196,7 @@ void SkSweepGradient::addToKey(const skgpu::graphite::KeyContext& keyContext,
                                skgpu::graphite::PipelineDataGatherer* gatherer) const {
     using namespace skgpu::graphite;
 
+    // TODO: respect the interpolateInPremul setting
     SkColor4fXformer xformedColors(this, keyContext.dstColorInfo().colorSpace());
     const SkPMColor4f* colors = xformedColors.fColors.begin();
 
@@ -206,13 +207,10 @@ void SkSweepGradient::addToKey(const skgpu::graphite::KeyContext& keyContext,
                                             fTileMode,
                                             fColorCount,
                                             colors,
-                                            fPositions,
-                                            fInterpolation);
+                                            fPositions);
 
-    MakeInterpolatedToDst(keyContext, builder, gatherer,
-                          data, fInterpolation,
-                          xformedColors.fIntermediateColorSpace.get());
-
+    GradientShaderBlocks::BeginBlock(keyContext, builder, gatherer, data);
+    builder->endBlock();
 }
 #endif
 

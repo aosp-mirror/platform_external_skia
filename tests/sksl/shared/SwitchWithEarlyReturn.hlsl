@@ -166,6 +166,9 @@ bool return_with_fallthrough_bi(int _113)
     switch (_113)
     {
         case 1:
+        {
+            return true;
+        }
         case 2:
         {
             return true;
@@ -183,6 +186,9 @@ bool fallthrough_ends_in_break_bi(int _120)
     switch (_120)
     {
         case 1:
+        {
+            break;
+        }
         case 2:
         {
             break;
@@ -202,6 +208,14 @@ bool fallthrough_to_default_with_break_bi(int _130)
     int val = 0;
     switch (_130)
     {
+        case 1:
+        {
+            break;
+        }
+        case 2:
+        {
+            break;
+        }
         default:
         {
             break;
@@ -216,6 +230,14 @@ bool fallthrough_to_default_with_return_bi(int _140)
 {
     switch (_140)
     {
+        case 1:
+        {
+            return true;
+        }
+        case 2:
+        {
+            return true;
+        }
         default:
         {
             return true;
@@ -237,6 +259,10 @@ bool fallthrough_with_loop_break_bi(int _147)
             }
             return true;
         }
+        case 2:
+        {
+            return true;
+        }
         default:
         {
             return true;
@@ -255,6 +281,10 @@ bool fallthrough_with_loop_continue_bi(int _168)
             {
                 val++;
             }
+            return true;
+        }
+        case 2:
+        {
             return true;
         }
         default:

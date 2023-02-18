@@ -303,14 +303,7 @@ private:
         GradientShaderBlocks::GradientData gradData(fType, kStopVariants[intrinsicCombination]);
 
         // TODO: we may need SkLocalMatrixShader-wrapped versions too
-        ColorFilterShaderBlock::BeginBlock(keyContext, builder, /* gatherer= */ nullptr);
-            GradientShaderBlocks::BeginBlock(keyContext, builder,
-                                             /* gatherer= */ nullptr, gradData);
-            builder->endBlock();
-
-            ColorSpaceTransformBlock::BeginBlock(keyContext, builder,
-                                                 /* gatherer= */ nullptr, /* data= */ nullptr);
-            builder->endBlock();
+        GradientShaderBlocks::BeginBlock(keyContext, builder, /* gatherer= */ nullptr, gradData);
         builder->endBlock();
     }
 

@@ -83,6 +83,10 @@ bool switch_fallthrough_b()
         {
             return true;
         }
+        case 2:
+        {
+            return false;
+        }
         default:
         {
             return false;
@@ -94,6 +98,14 @@ bool switch_fallthrough_twice_b()
 {
     switch (int(_22_unknownInput))
     {
+        case 1:
+        {
+            return true;
+        }
+        case 2:
+        {
+            return true;
+        }
         default:
         {
             return true;

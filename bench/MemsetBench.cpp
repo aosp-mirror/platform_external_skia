@@ -32,19 +32,19 @@ private:
 
 template <> void MemsetBench<uint64_t>::onDraw(int loops, SkCanvas*) {
     for (int i = 0; i < 1000*loops; i++) {
-        SkOpts::memset64(fBuffer.get(), 0xFACEFACEFACEFACE, fN);
+        sk_memset64(fBuffer.get(), 0xFACEFACEFACEFACE, fN);
     }
 }
 
 template <> void MemsetBench<uint32_t>::onDraw(int loops, SkCanvas*) {
     for (int i = 0; i < 1000*loops; i++) {
-        SkOpts::memset32(fBuffer.get(), 0xFACEB004, fN);
+        sk_memset32(fBuffer.get(), 0xFACEB004, fN);
     }
 }
 
 template <> void MemsetBench<uint16_t>::onDraw(int loops, SkCanvas*) {
     for (int i = 0; i < 1000*loops; i++) {
-        SkOpts::memset16(fBuffer.get(), 0x4973, fN);
+        sk_memset16(fBuffer.get(), 0x4973, fN);
     }
 }
 

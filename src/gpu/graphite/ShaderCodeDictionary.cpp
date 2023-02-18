@@ -433,66 +433,54 @@ void GenerateDefaultPreamble(const ShaderInfo& shaderInfo,
 static constexpr int kFourStopGradient = 4;
 static constexpr int kEightStopGradient = 8;
 
-static constexpr Uniform kLinearGradientUniforms4[7] = {
+static constexpr Uniform kLinearGradientUniforms4[] = {
         { "colors",      SkSLType::kFloat4, kFourStopGradient },
         { "offsets",     SkSLType::kFloat,  kFourStopGradient },
         { "point0",      SkSLType::kFloat2 },
         { "point1",      SkSLType::kFloat2 },
         { "tilemode",    SkSLType::kInt },
-        { "colorSpace",  SkSLType::kInt },
-        { "doUnPremul",  SkSLType::kInt },
 };
-static constexpr Uniform kLinearGradientUniforms8[7] = {
+static constexpr Uniform kLinearGradientUniforms8[] = {
         { "colors",      SkSLType::kFloat4, kEightStopGradient },
         { "offsets",     SkSLType::kFloat,  kEightStopGradient },
         { "point0",      SkSLType::kFloat2 },
         { "point1",      SkSLType::kFloat2 },
         { "tilemode",    SkSLType::kInt },
-        { "colorSpace",  SkSLType::kInt },
-        { "doUnPremul",  SkSLType::kInt },
 };
 
-static constexpr Uniform kRadialGradientUniforms4[7] = {
+static constexpr Uniform kRadialGradientUniforms4[] = {
         { "colors",      SkSLType::kFloat4, kFourStopGradient },
         { "offsets",     SkSLType::kFloat,  kFourStopGradient },
         { "center",      SkSLType::kFloat2 },
         { "radius",      SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
-        { "colorSpace",  SkSLType::kInt },
-        { "doUnPremul",  SkSLType::kInt },
 };
-static constexpr Uniform kRadialGradientUniforms8[7] = {
+static constexpr Uniform kRadialGradientUniforms8[] = {
         { "colors",      SkSLType::kFloat4, kEightStopGradient },
         { "offsets",     SkSLType::kFloat,  kEightStopGradient },
         { "center",      SkSLType::kFloat2 },
         { "radius",      SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
-        { "colorSpace",  SkSLType::kInt },
-        { "doUnPremul",  SkSLType::kInt },
 };
 
-static constexpr Uniform kSweepGradientUniforms4[8] = {
+static constexpr Uniform kSweepGradientUniforms4[] = {
         { "colors",      SkSLType::kFloat4, kFourStopGradient },
         { "offsets",     SkSLType::kFloat,  kFourStopGradient },
         { "center",      SkSLType::kFloat2 },
         { "bias",        SkSLType::kFloat },
         { "scale",       SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
-        { "colorSpace",  SkSLType::kInt },
-        { "doUnPremul",  SkSLType::kInt },
 };
-static constexpr Uniform kSweepGradientUniforms8[8] = {
+static constexpr Uniform kSweepGradientUniforms8[] = {
         { "colors",      SkSLType::kFloat4, kEightStopGradient },
         { "offsets",     SkSLType::kFloat,  kEightStopGradient },
         { "center",      SkSLType::kFloat2 },
         { "bias",        SkSLType::kFloat },
         { "scale",       SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
-        { "colorSpace",  SkSLType::kInt },
-        { "doUnPremul",  SkSLType::kInt },
 };
 
-static constexpr Uniform kConicalGradientUniforms4[9] = {
+static constexpr Uniform kConicalGradientUniforms4[] = {
         { "colors",      SkSLType::kFloat4, kFourStopGradient },
         { "offsets",     SkSLType::kFloat,  kFourStopGradient },
         { "point0",      SkSLType::kFloat2 },
@@ -500,10 +488,8 @@ static constexpr Uniform kConicalGradientUniforms4[9] = {
         { "radius0",     SkSLType::kFloat },
         { "radius1",     SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
-        { "colorSpace",  SkSLType::kInt },
-        { "doUnPremul",  SkSLType::kInt },
 };
-static constexpr Uniform kConicalGradientUniforms8[9] = {
+static constexpr Uniform kConicalGradientUniforms8[] = {
         { "colors",      SkSLType::kFloat4, kEightStopGradient },
         { "offsets",     SkSLType::kFloat,  kEightStopGradient },
         { "point0",      SkSLType::kFloat2 },
@@ -511,8 +497,6 @@ static constexpr Uniform kConicalGradientUniforms8[9] = {
         { "radius0",     SkSLType::kFloat },
         { "radius1",     SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
-        { "colorSpace",  SkSLType::kInt },
-        { "doUnPremul",  SkSLType::kInt },
 };
 
 static constexpr char kLinearGradient4Name[] = "sk_linear_grad_4_shader";

@@ -74,10 +74,15 @@ DEF_TEST(FontHostStream, reporter) {
         SkFont font(SkTypeface::MakeFromName("Georgia", SkFontStyle()), 30);
         font.setEdging(SkFont::Edging::kAlias);
 
-        const SkIRect origRect = SkIRect::MakeWH(64, 64);
+        SkIRect origRect = SkIRect::MakeWH(64, 64);
         SkBitmap origBitmap;
         create(&origBitmap, origRect);
         SkCanvas origCanvas(origBitmap);
+
+        SkIRect streamRect = SkIRect::MakeWH(64, 64);
+        SkBitmap streamBitmap;
+        create(&streamBitmap, streamRect);
+        SkCanvas streamCanvas(streamBitmap);
 
         SkPoint point = SkPoint::Make(24, 32);
 
@@ -86,63 +91,27 @@ DEF_TEST(FontHostStream, reporter) {
         origCanvas.drawString("A", point.fX, point.fY, font, paint);
 
         sk_sp<SkTypeface> typeface = font.refTypefaceOrDefault();
-
-        {
-            SkDynamicMemoryWStream wstream;
-            typeface->serialize(&wstream, SkTypeface::SerializeBehavior::kDoIncludeData);
-            std::unique_ptr<SkStreamAsset> stream = wstream.detachAsStream();
-            sk_sp<SkTypeface> deserializedTypeface = SkTypeface::MakeDeserialize(&*stream);
-            if (!deserializedTypeface) {
-                REPORTER_ASSERT(reporter, deserializedTypeface);
-                return;
-            }
-
-            SkFontDescriptor desc;
-            bool mustSerializeData = false;
-            deserializedTypeface->getFontDescriptor(&desc, &mustSerializeData);
-            REPORTER_ASSERT(reporter, mustSerializeData);
-
-            SkBitmap deserializedBitmap;
-            create(&deserializedBitmap, origRect);
-            SkCanvas deserializedCanvas(deserializedBitmap);
-
-            font.setTypeface(deserializedTypeface);
-            drawBG(&deserializedCanvas);
-            deserializedCanvas.drawString("A", point.fX, point.fY, font, paint);
-
-            REPORTER_ASSERT(reporter, compare(origBitmap, origRect, deserializedBitmap, origRect));
+        int ttcIndex;
+        std::unique_ptr<SkStreamAsset> fontData = typeface->openStream(&ttcIndex);
+        if (!fontData) {
+            // We're using a SkTypeface that can't give us a stream.
+            // This happens with portable or system fonts.  End the test now.
+            return;
         }
 
-        {
-            int ttcIndex;
-            std::unique_ptr<SkStreamAsset> fontData = typeface->openStream(&ttcIndex);
-            if (!fontData) {
-                REPORTER_ASSERT(reporter, fontData);
-                return;
-            }
+        sk_sp<SkTypeface> streamTypeface(SkTypeface::MakeFromStream(std::move(fontData)));
 
-            sk_sp<SkTypeface> streamTypeface(SkTypeface::MakeFromStream(std::move(fontData)));
-            if (!streamTypeface) {
-                // TODO: enable assert after SkTypeface::MakeFromStream uses factories
-                //REPORTER_ASSERT(reporter, streamTypeface);
-                return;
-            }
+        SkFontDescriptor desc;
+        bool isLocalStream = false;
+        streamTypeface->getFontDescriptor(&desc, &isLocalStream);
+        REPORTER_ASSERT(reporter, isLocalStream);
 
-            SkBitmap streamBitmap;
-            create(&streamBitmap, origRect);
-            SkCanvas streamCanvas(streamBitmap);
+        font.setTypeface(streamTypeface);
+        drawBG(&streamCanvas);
+        streamCanvas.drawString("A", point.fX, point.fY, font, paint);
 
-            SkFontDescriptor desc;
-            bool mustSerializeData = false;
-            streamTypeface->getFontDescriptor(&desc, &mustSerializeData);
-            REPORTER_ASSERT(reporter, mustSerializeData);
-
-            font.setTypeface(streamTypeface);
-            drawBG(&streamCanvas);
-            streamCanvas.drawString("A", point.fX, point.fY, font, paint);
-
-            REPORTER_ASSERT(reporter, compare(origBitmap, origRect, streamBitmap, origRect));
-        }
+        REPORTER_ASSERT(reporter,
+                        compare(origBitmap, origRect, streamBitmap, streamRect));
     }
     //Make sure the typeface is deleted and removed.
     SkGraphics::PurgeFontCache();

@@ -144,8 +144,6 @@ WARNINGS = [
     "-Wdeprecated-volatile",
     "-Wdeprecated-writable-strings",
     "-Wc++98-compat-extra-semi",
-    # A catch-all for when the version of clang we are using does not have the prior options
-    "-Wno-unknown-warning-option",
 ] + select({
     "//bazel/common_config_settings:compile_generated_cpp_files_for_headers_true": [
         # These warnings show up when we compile generated .cpp files when enforcing IWYU
