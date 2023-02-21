@@ -626,6 +626,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		//                             their "gr" prefixed versions
 		//                             and "" (for raster)
 		//        <targetFormat> is one of: "f16", { "" (for gpus) or "rgba" (for raster) }
+		//
+		// We also add on two configs with the format:
+		//        narrow-<backend>f16norm
+		//        linear-<backend>srgba
 		colorSpaces := []string{"", "linear-", "narrow-", "p3-", "rec2020-", "srgb2-"}
 
 		backendStr := ""
@@ -667,6 +671,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				configs = append(configs, cs+backendStr+tf)
 			}
 		}
+
+		configs = append(configs, "narrow-"+backendStr+"f16norm")
+		configs = append(configs, "linear-"+backendStr+"srgba")
 	}
 
 	// Sharding.
@@ -763,8 +770,13 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		// skbug.com/10848
 		removeFromArgs("svg")
 		// skbug.com/12900 avoid OOM on
-		// Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-TSAN_Vulkan
-		if b.Name == "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-TSAN_Vulkan" {
+		//   Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-TSAN_Vulkan
+		// Avoid lots of spurious TSAN failures on
+		//   Test-Debian11-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-TSAN_Vulkan
+		//   Test-Debian11-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-DDL3_TSAN_Vulkan
+		if b.Name == "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-TSAN_Vulkan" ||
+		   b.Name == "Test-Debian11-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-TSAN_Vulkan" ||
+		   b.Name == "Test-Debian11-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-DDL3_TSAN_Vulkan" {
 			skip("_", "test", "_", "_")
 		}
 	}

@@ -90,18 +90,18 @@ DEF_TEST(RasterPipelineBuilderPushPopMaskRegisters, r) {
     builder.enableExecutionMaskWrites();
     REPORTER_ASSERT(r, builder.executionMaskWritesAreEnabled());
 
-    builder.push_condition_mask();  // push into 0
-    builder.push_loop_mask();       // push into 1
-    builder.push_return_mask();     // push into 2
-    builder.merge_condition_mask(); // set the condition-mask to 1 & 2
-    builder.pop_condition_mask();   // pop from 2
-    builder.merge_loop_mask();      // mask off the loop-mask against 1
-    builder.push_condition_mask();  // push into 2
-    builder.pop_condition_mask();   // pop from 2
-    builder.pop_loop_mask();        // pop from 1
-    builder.pop_return_mask();      // pop from 0
-    builder.push_condition_mask();  // push into 0
-    builder.pop_condition_mask();   // pop from 0
+    builder.push_condition_mask();         // push into 0
+    builder.push_loop_mask();              // push into 1
+    builder.push_return_mask();            // push into 2
+    builder.merge_condition_mask();        // set the condition-mask to 1 & 2
+    builder.pop_condition_mask();          // pop from 2
+    builder.merge_loop_mask();             // mask off the loop-mask against 1
+    builder.push_condition_mask();         // push into 2
+    builder.pop_condition_mask();          // pop from 2
+    builder.pop_loop_mask();               // pop from 1
+    builder.pop_return_mask();             // pop from 0
+    builder.push_condition_mask();         // push into 0
+    builder.pop_and_reenable_loop_mask();  // pop from 0
 
     REPORTER_ASSERT(r, builder.executionMaskWritesAreEnabled());
     builder.disableExecutionMaskWrites();
@@ -121,7 +121,28 @@ R"(    1. store_condition_mask           $0 = CondMask
     9. load_loop_mask                 LoopMask = $1
    10. load_return_mask               RetMask = $0
    11. store_condition_mask           $0 = CondMask
-   12. load_condition_mask            CondMask = $0
+   12. reenable_loop_mask             LoopMask |= $0
+)");
+}
+
+
+DEF_TEST(RasterPipelineBuilderCaseOp, r) {
+    // Create a very simple nonsense program.
+    SkSL::RP::Builder builder;
+
+    builder.push_literal_i(123);    // push a test value
+    builder.push_literal_i(~0);     // push an all-on default mask
+    builder.case_op(123);           // do `case 123:`
+    builder.case_op(124);           // do `case 124:`
+    builder.discard_stack(2);
+
+    std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/0,
+                                                                /*numUniformSlots=*/0);
+    check(r, *program,
+R"(    1. copy_constant                  $0 = 0x0000007B (1.723597e-43)
+    2. copy_constant                  $1 = 0xFFFFFFFF
+    3. case_op                        if ($0 == 0x0000007B) { LoopMask = true; $1 = false; }
+    4. case_op                        if ($0 == 0x0000007C) { LoopMask = true; $1 = false; }
 )");
 }
 
