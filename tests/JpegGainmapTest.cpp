@@ -191,6 +191,74 @@ static bool find_mp_params_segment(SkStream* stream,
     return false;
 }
 
+DEF_TEST(Codec_multiPictureParams, r) {
+    // Little-endian test.
+    {
+        const uint8_t bytes[] = {
+                0x4d, 0x50, 0x46, 0x00, 0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x03,
+                0x00, 0x00, 0xb0, 0x07, 0x00, 0x04, 0x00, 0x00, 0x00, 0x30, 0x31, 0x30, 0x30,
+                0x01, 0xb0, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02,
+                0xb0, 0x07, 0x00, 0x20, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x20, 0xcf, 0x49, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xee, 0x28, 0x01, 0x00,
+                0xf9, 0xb7, 0x3c, 0x00, 0x00, 0x00, 0x00, 0x00,
+        };
+        auto mpParams =
+                SkJpegMultiPictureParameters::Make(SkData::MakeWithoutCopy(bytes, sizeof(bytes)));
+        REPORTER_ASSERT(r, mpParams);
+        REPORTER_ASSERT(r, mpParams->images.size() == 2);
+        REPORTER_ASSERT(r, mpParams->images[0].dataOffset == 0);
+        REPORTER_ASSERT(r, mpParams->images[0].size == 4837152);
+        REPORTER_ASSERT(r, mpParams->images[1].dataOffset == 3979257);
+        REPORTER_ASSERT(r, mpParams->images[1].size == 76014);
+    }
+
+    // Big-endian test.
+    {
+        const uint8_t bytes[] = {
+                0x4d, 0x50, 0x46, 0x00, 0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08, 0x00,
+                0x03, 0xb0, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x04, 0x30, 0x31, 0x30, 0x30,
+                0xb0, 0x01, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0xb0,
+                0x02, 0x00, 0x07, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00,
+                0x00, 0x00, 0x20, 0x03, 0x00, 0x00, 0x00, 0x56, 0xda, 0x2f, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x14, 0xc6, 0x01,
+                0x00, 0x55, 0x7c, 0x1f, 0x00, 0x00, 0x00, 0x00,
+        };
+        auto mpParams =
+                SkJpegMultiPictureParameters::Make(SkData::MakeWithoutCopy(bytes, sizeof(bytes)));
+        REPORTER_ASSERT(r, mpParams);
+        REPORTER_ASSERT(r, mpParams->images.size() == 2);
+        REPORTER_ASSERT(r, mpParams->images[0].dataOffset == 0);
+        REPORTER_ASSERT(r, mpParams->images[0].size == 5691951);
+        REPORTER_ASSERT(r, mpParams->images[1].dataOffset == 5602335);
+        REPORTER_ASSERT(r, mpParams->images[1].size == 1361409);
+    }
+
+    // Three entry test.
+    {
+        const uint8_t bytes[] = {
+                0x4d, 0x50, 0x46, 0x00, 0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08, 0x00,
+                0x03, 0xb0, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x04, 0x30, 0x31, 0x30, 0x30,
+                0xb0, 0x01, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0xb0,
+                0x02, 0x00, 0x07, 0x00, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x1f, 0x1c, 0xc2, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x05, 0xb0,
+                0x00, 0x1f, 0x12, 0xec, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x96, 0x6b, 0x00, 0x22, 0x18, 0x9c, 0x00, 0x00, 0x00, 0x00,
+        };
+        auto mpParams =
+                SkJpegMultiPictureParameters::Make(SkData::MakeWithoutCopy(bytes, sizeof(bytes)));
+        REPORTER_ASSERT(r, mpParams);
+        REPORTER_ASSERT(r, mpParams->images.size() == 3);
+        REPORTER_ASSERT(r, mpParams->images[0].dataOffset == 0);
+        REPORTER_ASSERT(r, mpParams->images[0].size == 2038978);
+        REPORTER_ASSERT(r, mpParams->images[1].dataOffset == 2036460);
+        REPORTER_ASSERT(r, mpParams->images[1].size == 198064);
+        REPORTER_ASSERT(r, mpParams->images[2].dataOffset == 2234524);
+        REPORTER_ASSERT(r, mpParams->images[2].size == 38507);
+    }
+}
+
 DEF_TEST(Codec_jpegMultiPicture, r) {
     const char* path = "images/iphone_13_pro.jpeg";
     auto stream = GetResourceAsStream(path);
@@ -406,15 +474,6 @@ DEF_TEST(AndroidCodec_jpegGainmapDecode, r) {
              1.f,
              2.71828f,
              SkGainmapInfo::Type::kMultiPicture},
-            {"images/jpegr.jpg",
-             SkISize::Make(1008, 756),
-             0xFFCACACA,
-             0xFFC8C8C8,
-             -2.3669f,
-             2.3669f,
-             1.f,
-             10.6643f,
-             SkGainmapInfo::Type::kJpegR_HLG},
             {"images/hdrgm.jpg",
              SkISize::Make(188, 250),
              0xFFE9E9E9,
@@ -541,45 +600,33 @@ DEF_TEST(AndroidCodec_jpegGainmapTranscode, r) {
                                                              gainmapInfo[0]);
         }
         REPORTER_ASSERT(r, encodeResult);
+        auto encodeData = encodeStream.detachAsData();
 
-        // Decode the just-encoded JpegR or HDRGM.
-        auto decodeStream = std::make_unique<SkMemoryStream>(encodeStream.detachAsData());
+        // Decode the just-encoded image.
+        auto decodeStream = std::make_unique<SkMemoryStream>(encodeData);
         decode_all(r, std::move(decodeStream), baseBitmap[1], gainmapBitmap[1], gainmapInfo[1]);
 
-        // Verify that the representations are different.
-        REPORTER_ASSERT(r, gainmapInfo[0].fType != gainmapInfo[1].fType);
-        if (i == 0) {
-            // JpegR will have different rendering parameters.
-            REPORTER_ASSERT(r, gainmapInfo[0].fLogRatioMin != gainmapInfo[1].fLogRatioMin);
-        } else {
-            // HDRGM will have the same rendering parameters.
-            REPORTER_ASSERT(
-                    r,
-                    approx_eq_rgb(
-                            gainmapInfo[0].fLogRatioMin, gainmapInfo[1].fLogRatioMin, kEpsilon));
-            REPORTER_ASSERT(
-                    r,
-                    approx_eq_rgb(
-                            gainmapInfo[0].fLogRatioMax, gainmapInfo[1].fLogRatioMax, kEpsilon));
-            REPORTER_ASSERT(
-                    r,
-                    approx_eq_rgb(
-                            gainmapInfo[0].fGainmapGamma, gainmapInfo[1].fGainmapGamma, kEpsilon));
-            REPORTER_ASSERT(r,
-                            approx_eq(gainmapInfo[0].fEpsilonSdr.fR,
-                                      gainmapInfo[1].fEpsilonSdr.fR,
-                                      kEpsilon));
-            REPORTER_ASSERT(r,
-                            approx_eq(gainmapInfo[0].fEpsilonHdr.fR,
-                                      gainmapInfo[1].fEpsilonHdr.fR,
-                                      kEpsilon));
-            REPORTER_ASSERT(
-                    r,
-                    approx_eq(gainmapInfo[0].fHdrRatioMin, gainmapInfo[1].fHdrRatioMin, kEpsilon));
-            REPORTER_ASSERT(
-                    r,
-                    approx_eq(gainmapInfo[0].fHdrRatioMax, gainmapInfo[1].fHdrRatioMax, kEpsilon));
-        }
+        // HDRGM will have the same rendering parameters.
+        REPORTER_ASSERT(
+                r,
+                approx_eq_rgb(gainmapInfo[0].fLogRatioMin, gainmapInfo[1].fLogRatioMin, kEpsilon));
+        REPORTER_ASSERT(
+                r,
+                approx_eq_rgb(gainmapInfo[0].fLogRatioMax, gainmapInfo[1].fLogRatioMax, kEpsilon));
+        REPORTER_ASSERT(
+                r,
+                approx_eq_rgb(
+                        gainmapInfo[0].fGainmapGamma, gainmapInfo[1].fGainmapGamma, kEpsilon));
+        REPORTER_ASSERT(
+                r,
+                approx_eq(gainmapInfo[0].fEpsilonSdr.fR, gainmapInfo[1].fEpsilonSdr.fR, kEpsilon));
+        REPORTER_ASSERT(
+                r,
+                approx_eq(gainmapInfo[0].fEpsilonHdr.fR, gainmapInfo[1].fEpsilonHdr.fR, kEpsilon));
+        REPORTER_ASSERT(
+                r, approx_eq(gainmapInfo[0].fHdrRatioMin, gainmapInfo[1].fHdrRatioMin, kEpsilon));
+        REPORTER_ASSERT(
+                r, approx_eq(gainmapInfo[0].fHdrRatioMax, gainmapInfo[1].fHdrRatioMax, kEpsilon));
 
 #ifdef SK_ENABLE_SKSL
         // Render a few pixels and verify that they come out the same. Rendering requires SkSL.
