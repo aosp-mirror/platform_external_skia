@@ -192,6 +192,88 @@ void Builder::discard_stack(int32_t count) {
     }
 }
 
+void Builder::label(int labelID) {
+    SkASSERT(labelID >= 0 && labelID < fNumLabels);
+
+    // If the previous instruction was a branch to this label, it's a no-op; jumping to the very
+    // next instruction is effectively meaningless.
+    while (!fInstructions.empty()) {
+        Instruction& lastInstruction = fInstructions.back();
+        switch (lastInstruction.fOp) {
+            case BuilderOp::jump:
+            case BuilderOp::branch_if_any_active_lanes:
+            case BuilderOp::branch_if_no_active_lanes:
+            case BuilderOp::branch_if_no_active_lanes_on_stack_top_equal:
+                if (lastInstruction.fImmA == labelID) {
+                    fInstructions.pop_back();
+                    continue;
+                }
+                break;
+
+            default:
+                break;
+        }
+        break;
+    }
+    fInstructions.push_back({BuilderOp::label, {}, labelID});
+}
+
+void Builder::jump(int labelID) {
+    SkASSERT(labelID >= 0 && labelID < fNumLabels);
+    if (!fInstructions.empty() && fInstructions.back().fOp == BuilderOp::jump) {
+        // The previous instruction was also `jump`, so this branch could never possibly occur.
+        return;
+    }
+    fInstructions.push_back({BuilderOp::jump, {}, labelID});
+}
+
+void Builder::branch_if_any_active_lanes(int labelID) {
+    if (!this->executionMaskWritesAreEnabled()) {
+        this->jump(labelID);
+        return;
+    }
+
+    SkASSERT(labelID >= 0 && labelID < fNumLabels);
+    if (!fInstructions.empty() &&
+        (fInstructions.back().fOp == BuilderOp::branch_if_any_active_lanes ||
+         fInstructions.back().fOp == BuilderOp::jump)) {
+        // The previous instruction was `jump` or `branch_if_any_active_lanes`, so this branch
+        // could never possibly occur.
+        return;
+    }
+    fInstructions.push_back({BuilderOp::branch_if_any_active_lanes, {}, labelID});
+}
+
+void Builder::branch_if_no_active_lanes(int labelID) {
+    if (!this->executionMaskWritesAreEnabled()) {
+        return;
+    }
+
+    SkASSERT(labelID >= 0 && labelID < fNumLabels);
+    if (!fInstructions.empty() &&
+        (fInstructions.back().fOp == BuilderOp::branch_if_no_active_lanes ||
+         fInstructions.back().fOp == BuilderOp::jump)) {
+        // The previous instruction was `jump` or `branch_if_no_active_lanes`, so this branch
+        // could never possibly occur.
+        return;
+    }
+    fInstructions.push_back({BuilderOp::branch_if_no_active_lanes, {}, labelID});
+}
+
+void Builder::branch_if_no_active_lanes_on_stack_top_equal(int value, int labelID) {
+    SkASSERT(labelID >= 0 && labelID < fNumLabels);
+    if (!fInstructions.empty() &&
+        (fInstructions.back().fOp == BuilderOp::jump ||
+         (fInstructions.back().fOp == BuilderOp::branch_if_no_active_lanes_on_stack_top_equal &&
+          fInstructions.back().fImmB == value))) {
+        // The previous instruction was `jump` or `branch_if_no_active_lanes_on_stack_top_equal`
+        // (checking against the same value), so this branch could never possibly occur.
+        return;
+    }
+    fInstructions.push_back({BuilderOp::branch_if_no_active_lanes_on_stack_top_equal,
+                             {}, labelID, value});
+}
+
 void Builder::push_slots(SlotRange src) {
     SkASSERT(src.count >= 0);
     if (!fInstructions.empty()) {
@@ -273,6 +355,28 @@ void Builder::push_duplicates(int count) {
         case 1:  this->push_clone(/*numSlots=*/1);              break;
         default: break;
     }
+}
+
+void Builder::push_clone_from_stack(int numSlots, int otherStackIndex, int offsetFromStackTop) {
+    offsetFromStackTop += numSlots;
+
+    if (!fInstructions.empty()) {
+        Instruction& lastInstruction = fInstructions.back();
+
+        // If the previous op is also pushing a clone...
+        if (lastInstruction.fOp == BuilderOp::push_clone_from_stack &&
+            // ... from the same stack...
+            lastInstruction.fImmB == otherStackIndex &&
+            // ... and this clone starts at the same place that the last clone ends...
+            lastInstruction.fImmC - lastInstruction.fImmA == offsetFromStackTop) {
+            // ... just extend the existing clone-op.
+            lastInstruction.fImmA += numSlots;
+            return;
+        }
+    }
+
+    fInstructions.push_back({BuilderOp::push_clone_from_stack, {},
+                             numSlots, otherStackIndex, offsetFromStackTop});
 }
 
 void Builder::pop_slots(SlotRange dst) {
@@ -502,19 +606,19 @@ static int pack_nybbles(SkSpan<const int8_t> components) {
     return packed;
 }
 
-void Builder::swizzle(int consumedSlots, SkSpan<const int8_t> elementSpan) {
+void Builder::swizzle(int consumedSlots, SkSpan<const int8_t> components) {
     // Consumes `consumedSlots` elements on the stack, then generates `elementSpan.size()` elements.
     SkASSERT(consumedSlots >= 0);
 
     // We only allow up to 16 elements, and they can only reach 0-15 slots, due to nybble packing.
-    int numElements = elementSpan.size();
+    int numElements = components.size();
     SkASSERT(numElements <= 16);
-    SkASSERT(std::all_of(elementSpan.begin(), elementSpan.end(), [](int8_t e){ return e >= 0; }));
-    SkASSERT(std::all_of(elementSpan.begin(), elementSpan.end(), [](int8_t e){ return e <= 0xF; }));
+    SkASSERT(std::all_of(components.begin(), components.end(), [](int8_t e){ return e >= 0; }));
+    SkASSERT(std::all_of(components.begin(), components.end(), [](int8_t e){ return e <= 0xF; }));
 
     // Make a local copy of the element array.
     int8_t elements[16] = {};
-    std::copy(elementSpan.begin(), elementSpan.end(), std::begin(elements));
+    std::copy(components.begin(), components.end(), std::begin(elements));
 
     while (numElements > 0) {
         // If the first element of the swizzle is zero...
@@ -530,6 +634,7 @@ void Builder::swizzle(int consumedSlots, SkSpan<const int8_t> elementSpan) {
         for (int index = 1; index < numElements; ++index) {
             elements[index - 1] = elements[index] - 1;
         }
+        elements[numElements - 1] = 0;
         --consumedSlots;
         --numElements;
     }
@@ -655,6 +760,7 @@ static int stack_usage(const Instruction& inst) {
 
         case BuilderOp::pop_condition_mask:
         case BuilderOp::pop_loop_mask:
+        case BuilderOp::pop_and_reenable_loop_mask:
         case BuilderOp::pop_return_mask:
             return -1;
 
@@ -1099,22 +1205,6 @@ void Program::makeStages(SkTArray<Stage>* pipeline,
                 pipeline->push_back({ProgramOp::load_dst, SlotA()});
                 break;
 
-            case BuilderOp::immediate_f: {
-                pipeline->push_back({ProgramOp::immediate_f, context_bit_pun(inst.fImmA)});
-                break;
-            }
-            case BuilderOp::load_unmasked:
-                pipeline->push_back({ProgramOp::load_unmasked, SlotA()});
-                break;
-
-            case BuilderOp::store_unmasked:
-                pipeline->push_back({ProgramOp::store_unmasked, SlotA()});
-                break;
-
-            case BuilderOp::store_masked:
-                pipeline->push_back({ProgramOp::store_masked, SlotA()});
-                break;
-
             case ALL_SINGLE_SLOT_UNARY_OP_CASES: {
                 float* dst = tempStackPtr - (inst.fImmA * N);
                 this->appendSingleSlotUnaryOp(pipeline, (ProgramOp)inst.fOp, dst, inst.fImmA);
@@ -1275,12 +1365,17 @@ void Program::makeStages(SkTArray<Stage>* pipeline,
                 pipeline->push_back({ProgramOp::load_loop_mask, src});
                 break;
             }
-            case BuilderOp::mask_off_loop_mask:
-                pipeline->push_back({ProgramOp::mask_off_loop_mask, nullptr});
+            case BuilderOp::pop_and_reenable_loop_mask: {
+                float* src = tempStackPtr - (1 * N);
+                pipeline->push_back({ProgramOp::reenable_loop_mask, src});
                 break;
-
+            }
             case BuilderOp::reenable_loop_mask:
                 pipeline->push_back({ProgramOp::reenable_loop_mask, SlotA()});
+                break;
+
+            case BuilderOp::mask_off_loop_mask:
+                pipeline->push_back({ProgramOp::mask_off_loop_mask, nullptr});
                 break;
 
             case BuilderOp::merge_loop_mask: {
@@ -1337,6 +1432,13 @@ void Program::makeStages(SkTArray<Stage>* pipeline,
                 float* src = sourceStackPtr - (inst.fImmC * N);
                 float* dst = tempStackPtr;
                 this->appendCopySlotsUnmasked(pipeline, alloc, dst, src, inst.fImmA);
+                break;
+            }
+            case BuilderOp::case_op: {
+                auto* ctx = alloc->make<SkRasterPipeline_CaseOpCtx>();
+                ctx->ptr = reinterpret_cast<int*>(tempStackPtr - 2 * N);
+                ctx->expectedValue = inst.fImmA;
+                pipeline->push_back({ProgramOp::case_op, ctx});
                 break;
             }
             case BuilderOp::discard_stack:
@@ -1700,10 +1802,6 @@ void Program::dump(SkWStream* out) const {
         std::string opArg1, opArg2, opArg3;
         using POp = ProgramOp;
         switch (stage.op) {
-            case POp::immediate_f:
-                opArg1 = ImmCtx(stage.ctx);
-                break;
-
             case POp::label:
             case POp::invoke_shader:
             case POp::invoke_color_filter:
@@ -1711,6 +1809,13 @@ void Program::dump(SkWStream* out) const {
                 opArg1 = ImmCtx(stage.ctx, /*showAsFloat=*/false);
                 break;
 
+            case POp::case_op: {
+                const auto* ctx = static_cast<SkRasterPipeline_CaseOpCtx*>(stage.ctx);
+                opArg1 = PtrCtx(ctx->ptr, 1);
+                opArg2 = PtrCtx(ctx->ptr + N, 1);
+                opArg3 = Imm(sk_bit_cast<float>(ctx->expectedValue), /*showAsFloat=*/false);
+                break;
+            }
             case POp::swizzle_1:
             case POp::swizzle_2:
             case POp::swizzle_3:
@@ -1737,7 +1842,6 @@ void Program::dump(SkWStream* out) const {
                 std::tie(opArg1, opArg2) = ShuffleCtx(stage.ctx);
                 break;
 
-            case POp::load_unmasked:
             case POp::load_condition_mask:
             case POp::store_condition_mask:
             case POp::load_loop_mask:
@@ -1746,8 +1850,6 @@ void Program::dump(SkWStream* out) const {
             case POp::reenable_loop_mask:
             case POp::load_return_mask:
             case POp::store_return_mask:
-            case POp::store_masked:
-            case POp::store_unmasked:
             case POp::zero_slot_unmasked:
             case POp::bitwise_not_int:
             case POp::cast_to_float_from_int: case POp::cast_to_float_from_uint:
@@ -2017,15 +2119,6 @@ void Program::dump(SkWStream* out) const {
                 opText = "RetMask &= ~(CondMask & LoopMask & RetMask)";
                 break;
 
-            case POp::immediate_f:
-            case POp::load_unmasked:
-                opText = "src.r = " + opArg1;
-                break;
-
-            case POp::store_unmasked:
-                opText = opArg1 + " = src.r";
-                break;
-
             case POp::store_src_rg:
                 opText = opArg1 + " = src.rg";
                 break;
@@ -2052,10 +2145,6 @@ void Program::dump(SkWStream* out) const {
 
             case POp::load_dst:
                 opText = "dst.rgba = " + opArg1;
-                break;
-
-            case POp::store_masked:
-                opText = opArg1 + " = Mask(src.r)";
                 break;
 
             case POp::bitwise_and_int:
@@ -2281,7 +2370,7 @@ void Program::dump(SkWStream* out) const {
             case POp::mix_3_floats:   case POp::mix_3_ints:
             case POp::mix_4_floats:   case POp::mix_4_ints:
             case POp::mix_n_floats:   case POp::mix_n_ints:
-                opText = opArg1 + " = mix(" + opArg1 + ", " + opArg2 + ", " + opArg3 + ")";
+                opText = opArg1 + " = mix(" + opArg2 + ", " + opArg3 + ", " + opArg1 + ")";
                 break;
 
             case POp::jump:
@@ -2301,6 +2390,11 @@ void Program::dump(SkWStream* out) const {
                 opText = "label " + opArg1;
                 break;
 
+            case POp::case_op: {
+                opText = "if (" + opArg1 + " == " + opArg3 +
+                         ") { LoopMask = true; " + opArg2 + " = false; }";
+                break;
+            }
             default:
                 break;
         }

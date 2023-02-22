@@ -13,17 +13,18 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypes.h"
-#include "include/encode/SkEncoder.h"
 #include "include/encode/SkJpegEncoder.h"
 #include "include/encode/SkPngEncoder.h"
 #include "include/encode/SkWebpEncoder.h"
 
 #if SK_ENABLE_NDK_IMAGES || SK_USE_CG_ENCODER || SK_USE_WIC_ENCODER
-#include "src/images/SkImageEncoderPriv.h"
+#include "src/encode/SkImageEncoderPriv.h"
 #endif
 
 #if !defined(SK_ENCODE_JPEG)|| !defined(SK_ENCODE_PNG) || !defined(SK_ENCODE_WEBP)
 #include <memory>
+
+class SkEncoder;
 #endif
 
 #if !defined(SK_ENCODE_JPEG)
@@ -96,25 +97,6 @@ bool SkEncodeImage(SkWStream* dst, const SkPixmap& src,
                 return false;
         }
     #endif
-}
-
-bool SkEncoder::encodeRows(int numRows) {
-    SkASSERT(numRows > 0 && fCurrRow < fSrc.height());
-    if (numRows <= 0 || fCurrRow >= fSrc.height()) {
-        return false;
-    }
-
-    if (fCurrRow + numRows > fSrc.height()) {
-        numRows = fSrc.height() - fCurrRow;
-    }
-
-    if (!this->onEncodeRows(numRows)) {
-        // If we fail, short circuit any future calls.
-        fCurrRow = fSrc.height();
-        return false;
-    }
-
-    return true;
 }
 
 sk_sp<SkData> SkEncodePixmap(const SkPixmap& src, SkEncodedImageFormat format, int quality) {

@@ -25,10 +25,10 @@
 #include "include/private/base/SkNoncopyable.h"
 #include "include/private/base/SkTemplates.h"
 #include "modules/skcms/skcms.h"
+#include "src/base/SkMSAN.h"
 #include "src/codec/SkPngPriv.h"
-#include "src/core/SkMSAN.h"
-#include "src/images/SkImageEncoderFns.h"
-#include "src/images/SkImageEncoderPriv.h"
+#include "src/encode/SkImageEncoderFns.h"
+#include "src/encode/SkImageEncoderPriv.h"
 
 #include <algorithm>
 #include <csetjmp>

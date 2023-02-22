@@ -100,11 +100,10 @@
     M(mask_2pt_conical_nan)                                        \
     M(mask_2pt_conical_degenerates) M(apply_vector_mask)           \
     /* Dedicated SkSL stages begin here: */                                                   \
-    M(init_lane_masks) M(store_device_xy01) M(immediate_f)                                    \
-    M(load_unmasked) M(store_unmasked) M(store_masked)                                        \
+    M(init_lane_masks) M(store_device_xy01)                                                   \
     M(load_condition_mask) M(store_condition_mask) M(merge_condition_mask)                    \
     M(load_loop_mask)      M(store_loop_mask)      M(mask_off_loop_mask)                      \
-    M(reenable_loop_mask)  M(merge_loop_mask)                                                 \
+    M(reenable_loop_mask)  M(merge_loop_mask)      M(case_op)                                 \
     M(load_return_mask)    M(store_return_mask)    M(mask_off_return_mask)                    \
     M(branch_if_any_active_lanes) M(branch_if_no_active_lanes)                                \
     M(branch_if_no_active_lanes_eq)  M(jump)                                                  \

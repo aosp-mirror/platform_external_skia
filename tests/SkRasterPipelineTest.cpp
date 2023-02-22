@@ -41,87 +41,6 @@ DEF_TEST(SkRasterPipeline, r) {
     REPORTER_ASSERT(r, ((result >> 48) & 0xffff) == 0x3c00);
 }
 
-DEF_TEST(SkRasterPipeline_ImmediateStoreUnmasked, r) {
-    alignas(64) float val[SkRasterPipeline_kMaxStride_highp + 1] = {};
-
-    float immVal = 123.0f;
-    const void* immValCtx = nullptr;
-    memcpy(&immValCtx, &immVal, sizeof(float));
-
-    SkRasterPipeline_<256> p;
-    p.append(SkRasterPipelineOp::immediate_f, immValCtx);
-    p.append(SkRasterPipelineOp::store_unmasked, val);
-    p.run(0,0,1,1);
-
-    // `val` should be populated with `123.0` in the frontmost positions
-    // (depending on the architecture that SkRasterPipeline is targeting).
-    size_t index = 0;
-    for (; index < SkOpts::raster_pipeline_highp_stride; ++index) {
-        REPORTER_ASSERT(r, val[index] == immVal);
-    }
-
-    // The remaining slots should have been left alone.
-    for (; index < std::size(val); ++index) {
-        REPORTER_ASSERT(r, val[index] == 0.0f);
-    }
-}
-
-DEF_TEST(SkRasterPipeline_LoadStoreUnmasked, r) {
-    alignas(64) float val[SkRasterPipeline_kMaxStride_highp] = {};
-    alignas(64) float data[] = {123.0f, 456.0f, 789.0f, -876.0f, -543.0f, -210.0f, 12.0f, -3.0f};
-    static_assert(std::size(data) == SkRasterPipeline_kMaxStride_highp);
-
-    SkRasterPipeline_<256> p;
-    p.append(SkRasterPipelineOp::load_unmasked, data);
-    p.append(SkRasterPipelineOp::store_unmasked, val);
-    p.run(0,0,1,1);
-
-    // `val` should be populated with `data` in the frontmost positions
-    // (depending on the architecture that SkRasterPipeline is targeting).
-    size_t index = 0;
-    for (; index < SkOpts::raster_pipeline_highp_stride; ++index) {
-        REPORTER_ASSERT(r, val[index] == data[index]);
-    }
-
-    // The remaining slots should have been left alone.
-    for (; index < std::size(val); ++index) {
-        REPORTER_ASSERT(r, val[index] == 0.0f);
-    }
-}
-
-DEF_TEST(SkRasterPipeline_LoadStoreMasked, r) {
-    for (size_t width = 0; width < SkOpts::raster_pipeline_highp_stride; ++width) {
-        alignas(64) float val[] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
-        alignas(64) float data[] = {2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f, 2.0f};
-        alignas(64) const int32_t mask[] = {0, ~0, ~0, ~0, ~0, ~0, 0, ~0};
-        static_assert(std::size(val) == SkRasterPipeline_kMaxStride_highp);
-        static_assert(std::size(data) == SkRasterPipeline_kMaxStride_highp);
-        static_assert(std::size(mask) == SkRasterPipeline_kMaxStride_highp);
-
-        SkRasterPipeline_<256> p;
-        p.append(SkRasterPipelineOp::init_lane_masks);
-        p.append(SkRasterPipelineOp::load_condition_mask, mask);
-        p.append(SkRasterPipelineOp::load_unmasked, data);
-        p.append(SkRasterPipelineOp::store_masked, val);
-        p.run(0, 0, width, 1);
-
-        // Where the mask is set, and the width is sufficient, `val` should be populated.
-        size_t index = 0;
-        for (; index < width; ++index) {
-            if (mask[index]) {
-                REPORTER_ASSERT(r, val[index] == 2.0f);
-            } else {
-                REPORTER_ASSERT(r, val[index] == 1.0f);
-            }
-        }
-
-        // The remaining slots should have been left alone.
-        for (; index < std::size(val); ++index) {
-            REPORTER_ASSERT(r, val[index] == 1.0f);
-        }
-    }
-}
-
 DEF_TEST(SkRasterPipeline_LoadStoreConditionMask, r) {
     alignas(64) int32_t mask[]  = {~0, 0, ~0,  0, ~0, ~0, ~0,  0};
     alignas(64) int32_t maskCopy[SkRasterPipeline_kMaxStride_highp] = {};
@@ -339,6 +258,61 @@ DEF_TEST(SkRasterPipeline_ReenableLoopMask, r) {
 
         // `da` should contain `dr & dg & gb`.
         REPORTER_ASSERT(r, dst[da + index] == (dst[dr+index] & dst[dg+index] & dst[db+index]));
+    }
+}
+
+DEF_TEST(SkRasterPipeline_CaseOp, r) {
+    alignas(64) int32_t initial[]        = {~0, ~0, ~0, ~0, ~0,  0, ~0, ~0,  // dr (condition)
+                                             0, ~0, ~0,  0, ~0, ~0,  0, ~0,  // dg (loop)
+                                            ~0,  0, ~0, ~0,  0,  0,  0, ~0,  // db (return)
+                                             0,  0, ~0,  0,  0,  0,  0, ~0}; // da (combined)
+    alignas(64) int32_t dst[4 * SkRasterPipeline_kMaxStride_highp] = {};
+    static_assert(std::size(initial) == (4 * SkRasterPipeline_kMaxStride_highp));
+
+    constexpr int32_t actualValues[] = { 2,  1,  2,  4,  5,  2,  2,  8};
+    static_assert(std::size(actualValues) == SkRasterPipeline_kMaxStride_highp);
+
+    alignas(64) int32_t caseOpData[2 * SkRasterPipeline_kMaxStride_highp];
+    for (size_t index = 0; index < SkOpts::raster_pipeline_highp_stride; ++index) {
+        caseOpData[0 * SkOpts::raster_pipeline_highp_stride + index] = actualValues[index];
+        caseOpData[1 * SkOpts::raster_pipeline_highp_stride + index] = ~0;
+    }
+
+    SkRasterPipeline_CaseOpCtx ctx;
+    ctx.ptr = caseOpData;
+    ctx.expectedValue = 2;
+
+    SkRasterPipeline_<256> p;
+    p.append(SkRasterPipelineOp::load_dst, initial);
+    p.append(SkRasterPipelineOp::case_op, &ctx);
+    p.append(SkRasterPipelineOp::store_dst, dst);
+    p.run(0,0,SkOpts::raster_pipeline_highp_stride,1);
+
+    const int dr = 0 * SkOpts::raster_pipeline_highp_stride;
+    const int dg = 1 * SkOpts::raster_pipeline_highp_stride;
+    const int db = 2 * SkOpts::raster_pipeline_highp_stride;
+    const int da = 3 * SkOpts::raster_pipeline_highp_stride;
+    const int actualValueIdx = 0 * SkOpts::raster_pipeline_highp_stride;
+    const int defaultMaskIdx = 1 * SkOpts::raster_pipeline_highp_stride;
+
+    for (size_t index = 0; index < SkOpts::raster_pipeline_highp_stride; ++index) {
+        // `dg` should have been set to true for each lane containing 2.
+        int32_t expected = (actualValues[index] == 2) ? ~0 : initial[dg + index];
+        REPORTER_ASSERT(r, dst[dg + index] == expected);
+
+        // `dr` and `db` should be unchanged.
+        REPORTER_ASSERT(r, dst[dr + index] == initial[dr + index]);
+        REPORTER_ASSERT(r, dst[db + index] == initial[db + index]);
+
+        // `da` should contain `dr & dg & gb`.
+        REPORTER_ASSERT(r, dst[da + index] == (dst[dr+index] & dst[dg+index] & dst[db+index]));
+
+        // The actual-value part of `caseOpData` should be unchanged from the inputs.
+        REPORTER_ASSERT(r, caseOpData[actualValueIdx + index] == actualValues[index]);
+
+        // The default-mask part of `caseOpData` should have been zeroed where the values matched.
+        expected = (actualValues[index] == 2) ? 0 : ~0;
+        REPORTER_ASSERT(r, caseOpData[defaultMaskIdx + index] == expected);
     }
 }
 
@@ -1489,12 +1463,12 @@ DEF_TEST(SkRasterPipeline_MixTest, r) {
         // Initialize the values to 1,2,3...
         std::iota(&slots[0], &slots[15 * N], 1.0f);
 
-        float fromValue   = slots[0];
-        float toValue     = slots[1 * op.numSlotsAffected * N];
-        float weightValue = slots[2 * op.numSlotsAffected * N];
+        float weightValue = slots[0];
+        float fromValue   = slots[1 * op.numSlotsAffected * N];
+        float toValue     = slots[2 * op.numSlotsAffected * N];
 
-        // The third group of values (the weight) must be between zero and one.
-        for (int idx = 2 * op.numSlotsAffected * N; idx < 3 * op.numSlotsAffected * N; ++idx) {
+        // The first group of values (the weights) must be between zero and one.
+        for (int idx = 0; idx < 1 * op.numSlotsAffected * N; ++idx) {
             slots[idx] = to_mix_weight(slots[idx]);
         }
 
@@ -1504,7 +1478,7 @@ DEF_TEST(SkRasterPipeline_MixTest, r) {
         op.append(&p, &alloc);
         p.run(0,0,1,1);
 
-        // Verify that the affected slots now equal mix({1,2...}, {3,4...}, {0.25, 0.3125...).
+        // Verify that the affected slots now equal mix({0.25, 0.3125...}, {3,4...}, {5,6...}, ).
         float* destPtr = &slots[0];
         for (int checkSlot = 0; checkSlot < op.numSlotsAffected; ++checkSlot) {
             for (int checkLane = 0; checkLane < N; ++checkLane) {

@@ -294,9 +294,12 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("gltestthreading", "gm", ALL, "persp_shaders_aa")
 			skip("gltestthreading", "gm", ALL, "rtif_distort")
 			skip("gltestthreading", "gm", ALL, "skbug_8664")
+			skip("gltestthreading", "gm", ALL, "teenystrokes")
 			skip("gltestthreading", "gm", ALL, "texel_subset_linear_mipmap_nearest_down")
 			skip("gltestthreading", "gm", ALL, "yuv420_odd_dim_repeat")
 
+			skip("gltestthreading", "svg", ALL, "filters-offset-01-b.svg")
+			skip("gltestthreading", "svg", ALL, "gallardo.svg")
 			skip("gltestthreading", "svg", ALL, "masking-filter-01-f.svg")
 
 		}
@@ -352,6 +355,32 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				skip(ALL, "test", ALL, "ImageProviderTest_Graphite_Testing")
 				skip(ALL, "test", ALL, "SurfaceAsyncReadPixelsGraphite")
 				skip(ALL, "test", ALL, "UpdateImageBackendTextureTest")
+				if b.matchOs("Win") {
+					// Async read call failed
+					skip(ALL, "gm", ALL, "async_rescale_and_read_no_bleed")
+					skip(ALL, "gm", ALL, "async_rescale_and_read_text_up")
+					skip(ALL, "gm", ALL, "async_rescale_and_read_dog_down")
+					skip(ALL, "gm", ALL, "async_rescale_and_read_rose")
+					// Crashes
+					skip(ALL, "gm", ALL, "blurrect")
+					skip(ALL, "gm", ALL, "circular_arcs_fill")
+					skip(ALL, "gm", ALL, "circular_arcs_hairline")
+					skip(ALL, "gm", ALL, "circular_arcs_stroke_butt")
+					skip(ALL, "gm", ALL, "circular_arcs_stroke_square")
+					skip(ALL, "gm", ALL, "circular_arcs_stroke_round")
+					skip(ALL, "gm", ALL, "circular_arcs_stroke_and_fill_butt")
+					skip(ALL, "gm", ALL, "circular_arcs_stroke_and_fill_square")
+					skip(ALL, "gm", ALL, "circular_arcs_stroke_and_fill_round")
+					skip(ALL, "gm", ALL, "circular_arcs")
+					skip(ALL, "gm", ALL, "manycircles")
+					skip(ALL, "gm", ALL, "nested_aa")
+					skip(ALL, "gm", ALL, "nested_bw")
+					skip(ALL, "gm", ALL, "nested_flipY_aa")
+					skip(ALL, "gm", ALL, "nested_flipY_bw")
+					skip(ALL, "gm", ALL, "simplerect")
+					skip(ALL, "gm", ALL, "wacky_yuv_formats_imggen")
+					skip(ALL, "gm", ALL, "xfermodes")
+				}
                         }
 		}
 
@@ -416,9 +445,11 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "test", ALL, "TestMockContext")
 			skip(ALL, "test", ALL, "TestGpuRenderingContexts")
 			skip(ALL, "test", ALL, "TestGpuAllContexts")
+			skip(ALL, "test", ALL, "TextBlobCache")
 			skip(ALL, "test", ALL, "OverdrawSurface_Gpu")
 			skip(ALL, "test", ALL, "ReplaceSurfaceBackendTexture")
 			skip(ALL, "test", ALL, "SurfaceAttachStencil_Gpu")
+			skip(ALL, "test", ALL, "SurfacePartialDraw_Gpu")
 			skip(ALL, "test", ALL, "SurfaceWrappedWithRelease_Gpu")
 		}
 
@@ -532,6 +563,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("mtltestprecompile", "svg", ALL, "Ghostscript_Tiger.svg")
 			skip("mtltestprecompile", "svg", ALL, "Seal_of_American_Samoa.svg")
 			skip("mtltestprecompile", "svg", ALL, "Seal_of_Illinois.svg")
+			skip("mtltestprecompile", "svg", ALL, "cartman.svg")
 			skip("mtltestprecompile", "svg", ALL, "desk_motionmark_paths.svg")
 			skip("mtltestprecompile", "svg", ALL, "rg1024_green_grapes.svg")
 			skip("mtltestprecompile", "svg", ALL, "shapes-intro-02-f.svg")
@@ -594,6 +626,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		//                             their "gr" prefixed versions
 		//                             and "" (for raster)
 		//        <targetFormat> is one of: "f16", { "" (for gpus) or "rgba" (for raster) }
+		//
+		// We also add on two configs with the format:
+		//        narrow-<backend>f16norm
+		//        linear-<backend>srgba
 		colorSpaces := []string{"", "linear-", "narrow-", "p3-", "rec2020-", "srgb2-"}
 
 		backendStr := ""
@@ -635,6 +671,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				configs = append(configs, cs+backendStr+tf)
 			}
 		}
+
+		configs = append(configs, "narrow-"+backendStr+"f16norm")
+		configs = append(configs, "linear-"+backendStr+"srgba")
 	}
 
 	// Sharding.
@@ -672,6 +711,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	// Eventually I'd like these to pass, but for now just skip 'em.
 	if b.extraConfig("SK_FORCE_RASTER_PIPELINE_BLITTER") {
+		removeFromArgs("tests")
+	}
+
+	if b.model("Spin513") {
 		removeFromArgs("tests")
 	}
 
@@ -727,8 +770,13 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		// skbug.com/10848
 		removeFromArgs("svg")
 		// skbug.com/12900 avoid OOM on
-		// Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-TSAN_Vulkan
-		if b.Name == "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-TSAN_Vulkan" {
+		//   Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-TSAN_Vulkan
+		// Avoid lots of spurious TSAN failures on
+		//   Test-Debian11-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-TSAN_Vulkan
+		//   Test-Debian11-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-DDL3_TSAN_Vulkan
+		if b.Name == "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-TSAN_Vulkan" ||
+		   b.Name == "Test-Debian11-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-TSAN_Vulkan" ||
+		   b.Name == "Test-Debian11-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-DDL3_TSAN_Vulkan" {
 			skip("_", "test", "_", "_")
 		}
 	}
@@ -1084,6 +1132,12 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	if b.matchGpu("Mali400") {
 		skip(ALL, "tests", ALL, "SkSLCross")
+	}
+
+	if (b.matchOs("Mac") || b.matchOs("iOS")) && !b.extraConfig("Metal") {
+		// MacOS/iOS do not handle short-circuit evaluation properly in OpenGL (chromium:307751)
+		skip(ALL, "tests", ALL, "SkSLLogicalAndShortCircuit_GPU")
+		skip(ALL, "tests", ALL, "SkSLLogicalOrShortCircuit_GPU")
 	}
 
 	if b.matchOs("Mac") && b.extraConfig("Metal") && (b.gpu("IntelIrisPlus") ||

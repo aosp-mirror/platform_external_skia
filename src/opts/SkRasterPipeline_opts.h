@@ -3211,18 +3211,6 @@ STAGE_TAIL(init_lane_masks, NoCtx) {
     dr = dg = db = da = sk_bit_cast<F>(mask);
 }
 
-STAGE_TAIL(load_unmasked, float* ctx) {
-    r = sk_unaligned_load<F>(ctx);
-}
-
-STAGE_TAIL(store_unmasked, float* ctx) {
-    sk_unaligned_store(ctx, r);
-}
-
-STAGE_TAIL(store_masked, float* ctx) {
-    sk_unaligned_store(ctx, if_then_else(execution_mask(), r, sk_unaligned_load<F>(ctx)));
-}
-
 STAGE_TAIL(load_condition_mask, F* ctx) {
     dr = sk_unaligned_load<F>(ctx);
     update_execution_mask();
@@ -3267,6 +3255,20 @@ STAGE_TAIL(merge_loop_mask, I32* ptr) {
     update_execution_mask();
 }
 
+STAGE_TAIL(case_op, SkRasterPipeline_CaseOpCtx* ctx) {
+    // Check each lane to see if the case value matches the expectation.
+    I32* actualValue = (I32*)ctx->ptr;
+    I32 caseMatches = cond_to_mask(*actualValue == ctx->expectedValue);
+
+    // In lanes where we found a match, enable the loop mask...
+    dg = sk_bit_cast<F>(sk_bit_cast<I32>(dg) | caseMatches);
+    update_execution_mask();
+
+    // ... and clear the default-case mask.
+    I32* defaultMask = actualValue + 1;
+    *defaultMask &= ~caseMatches;
+}
+
 STAGE_TAIL(load_return_mask, F* ctx) {
     db = sk_unaligned_load<F>(ctx);
     update_execution_mask();
@@ -3302,12 +3304,6 @@ STAGE_BRANCH(branch_if_no_active_lanes_eq, SkRasterPipeline_BranchIfEqualCtx* ct
     match &= execution_mask();
     // If any lanes matched, don't take the branch.
     return any(match) ? 1 : ctx->offset;
-}
-
-STAGE_TAIL(immediate_f, void* ctx) {
-    float val;
-    memcpy(&val, &ctx, sizeof(val));
-    r = F(val);
 }
 
 STAGE_TAIL(zero_slot_unmasked, F* dst) {
@@ -3717,12 +3713,14 @@ SI void apply_adjacent_ternary(T* dst, T* src0, T* src1) {
     } while (dst != end);
 }
 
-SI void mix_fn(F* a, F* b, F* c) {
-    *a = lerp(*a, *b, *c);
+SI void mix_fn(F* a, F* x, F* y) {
+    // We reorder the arguments here to match lerp's GLSL-style order (interpolation point last).
+    *a = lerp(*x, *y, *a);
 }
 
-SI void mix_fn(I32* a, I32* b, I32* c) {
-    *a = if_then_else(*c, *b, *a);
+SI void mix_fn(I32* a, I32* x, I32* y) {
+    // We reorder the arguments here to match if_then_else's expected order (y before x).
+    *a = if_then_else(*a, *y, *x);
 }
 
 #define DECLARE_TERNARY_FLOAT(name)                                                           \

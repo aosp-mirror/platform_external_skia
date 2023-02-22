@@ -7,11 +7,11 @@
 
 #include "include/core/SkImageInfo.h"
 
+#include "include/core/SkColor.h"
 #include "include/core/SkColorSpace.h"
+#include "include/private/base/SkAssert.h"
 #include "src/base/SkSafeMath.h"
 #include "src/core/SkImageInfoPriv.h"
-#include "src/core/SkReadBuffer.h"
-#include "src/core/SkWriteBuffer.h"
 
 int SkColorTypeBytesPerPixel(SkColorType ct) {
     switch (ct) {
@@ -230,79 +230,5 @@ bool SkColorTypeValidateAlphaType(SkColorType colorType, SkAlphaType alphaType,
     if (canonical) {
         *canonical = alphaType;
     }
-    return true;
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-#include "src/image/SkReadPixelsRec.h"
-
-bool SkReadPixelsRec::trim(int srcWidth, int srcHeight) {
-    if (nullptr == fPixels || fRowBytes < fInfo.minRowBytes()) {
-        return false;
-    }
-    if (0 >= fInfo.width() || 0 >= fInfo.height()) {
-        return false;
-    }
-
-    int x = fX;
-    int y = fY;
-    SkIRect srcR = SkIRect::MakeXYWH(x, y, fInfo.width(), fInfo.height());
-    if (!srcR.intersect({0, 0, srcWidth, srcHeight})) {
-        return false;
-    }
-
-    // if x or y are negative, then we have to adjust pixels
-    if (x > 0) {
-        x = 0;
-    }
-    if (y > 0) {
-        y = 0;
-    }
-    // here x,y are either 0 or negative
-    // we negate and add them so UBSAN (pointer-overflow) doesn't get confused.
-    fPixels = ((char*)fPixels + -y*fRowBytes + -x*fInfo.bytesPerPixel());
-    // the intersect may have shrunk info's logical size
-    fInfo = fInfo.makeDimensions(srcR.size());
-    fX = srcR.x();
-    fY = srcR.y();
-
-    return true;
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-#include "src/core/SkWritePixelsRec.h"
-
-bool SkWritePixelsRec::trim(int dstWidth, int dstHeight) {
-    if (nullptr == fPixels || fRowBytes < fInfo.minRowBytes()) {
-        return false;
-    }
-    if (0 >= fInfo.width() || 0 >= fInfo.height()) {
-        return false;
-    }
-
-    int x = fX;
-    int y = fY;
-    SkIRect dstR = SkIRect::MakeXYWH(x, y, fInfo.width(), fInfo.height());
-    if (!dstR.intersect({0, 0, dstWidth, dstHeight})) {
-        return false;
-    }
-
-    // if x or y are negative, then we have to adjust pixels
-    if (x > 0) {
-        x = 0;
-    }
-    if (y > 0) {
-        y = 0;
-    }
-    // here x,y are either 0 or negative
-    // we negate and add them so UBSAN (pointer-overflow) doesn't get confused.
-    fPixels = ((const char*)fPixels + -y*fRowBytes + -x*fInfo.bytesPerPixel());
-    // the intersect may have shrunk info's logical size
-    fInfo = fInfo.makeDimensions(dstR.size());
-    fX = dstR.x();
-    fY = dstR.y();
-
     return true;
 }
