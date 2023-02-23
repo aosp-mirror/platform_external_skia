@@ -1496,7 +1496,6 @@ cc_library_static {
         srcs: [
           "src/android/SkAndroidFrameworkPerfettoStaticStorage.cpp",
           "src/codec/SkHeifCodec.cpp",
-          "src/codec/SkJpegGainmap.cpp",
           "src/codec/SkJpegMultiPicture.cpp",
           "src/codec/SkJpegSegmentScan.cpp",
           "src/codec/SkJpegXmp.cpp",
