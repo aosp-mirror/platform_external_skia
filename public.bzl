@@ -1544,9 +1544,6 @@ BASE_SRCS_ALL = [
     "src/sksl/ir/SkSLExpressionStatement.cpp",
     "src/sksl/ir/SkSLExpressionStatement.h",
     "src/sksl/ir/SkSLExtension.h",
-    "src/sksl/ir/SkSLExternalFunction.h",
-    "src/sksl/ir/SkSLExternalFunctionCall.h",
-    "src/sksl/ir/SkSLExternalFunctionReference.h",
     "src/sksl/ir/SkSLField.h",
     "src/sksl/ir/SkSLFieldAccess.cpp",
     "src/sksl/ir/SkSLFieldAccess.h",
@@ -2388,6 +2385,8 @@ SKUNICODE_ICU_BUILTIN_SRCS = [
     "modules/skunicode/src/SkUnicode.cpp",
     "modules/skunicode/src/SkUnicode_icu.cpp",
     "modules/skunicode/src/SkUnicode_icu.h",
+    "modules/skunicode/src/SkUnicode_icu_bidi.cpp",
+    "modules/skunicode/src/SkUnicode_icu_bidi.h",
     "modules/skunicode/src/SkUnicode_icu_builtin.cpp",
 ]
 
@@ -2395,12 +2394,16 @@ SKUNICODE_ICU_RUNTIME_SRCS = [
     "modules/skunicode/src/SkUnicode.cpp",
     "modules/skunicode/src/SkUnicode_icu.cpp",
     "modules/skunicode/src/SkUnicode_icu.h",
+    "modules/skunicode/src/SkUnicode_icu_bidi.cpp",
+    "modules/skunicode/src/SkUnicode_icu_bidi.h",
     "modules/skunicode/src/SkUnicode_icu_runtime.cpp",
 ]
 
 SKUNICODE_CLIENT_SRCS = [
     "modules/skunicode/src/SkUnicode.cpp",
     "modules/skunicode/src/SkUnicode_client.cpp",
+    "modules/skunicode/src/SkUnicode_icu_bidi.cpp",
+    "modules/skunicode/src/SkUnicode_icu_bidi.h",
 ]
 
 SKUNICODE_HDRS = [
