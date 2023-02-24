@@ -539,6 +539,7 @@ optional("fontmgr_fuchsia") {
 optional("fontmgr_mac_ct") {
   enabled = skia_use_fonthost_mac
 
+  public_defines = [ "SK_TYPEFACE_FACTORY_CORETEXT" ]
   public = [
     "include/ports/SkFontMgr_mac_ct.h",
     "include/ports/SkTypeface_mac.h",
@@ -580,6 +581,7 @@ optional("fontmgr_mac_ct_factory") {
 optional("fontmgr_win") {
   enabled = skia_enable_fontmgr_win
 
+  public_defines = [ "SK_TYPEFACE_FACTORY_DIRECTWRITE" ]
   public = [ "include/ports/SkTypeface_win.h" ]
   sources = [
     "include/ports/SkFontMgr_indirect.h",
@@ -1381,6 +1383,7 @@ optional("raw") {
 optional("typeface_freetype") {
   enabled = skia_use_freetype
 
+  public_defines = [ "SK_TYPEFACE_FACTORY_FREETYPE" ]
   deps = [ "//third_party/freetype2" ]
   sources = [
     "src/ports/SkFontHost_FreeType.cpp",
@@ -1737,7 +1740,6 @@ skia_static_library("pathkit") {
 
 group("modules") {
   deps = [
-    "modules/particles",
     "modules/skottie",
     "modules/skparagraph",
     "modules/skshaper",
@@ -1774,7 +1776,6 @@ if (skia_enable_tools) {
     "include/svg",
     "include/utils",
     "include/utils/mac",
-    "modules/particles/include",
     "modules/skottie/include",
     "modules/skparagraph/include",
     "modules/skshaper/include",
@@ -1822,7 +1823,6 @@ if (skia_enable_tools) {
         ":gpu_tool_utils",
         ":skia",
         ":skia.h",
-        "modules/particles",
         "modules/skottie",
         "modules/skparagraph",
         "modules/skshaper",
@@ -2220,7 +2220,6 @@ if (skia_enable_tools) {
       ":flags",
       ":skia",
       ":tool_utils",
-      "modules/particles",
       "modules/skottie",
       "modules/skottie:gm",
       "modules/skparagraph",
@@ -2971,7 +2970,6 @@ if (skia_enable_tools) {
       deps = [
         ":skia",
         ":skia.h",
-        "modules/particles",
         "modules/skottie",
         "modules/skparagraph",
         "modules/skshaper",
@@ -3027,8 +3025,6 @@ if (skia_enable_tools) {
         "tools/viewer/MaterialShadowsSlide.cpp",
         "tools/viewer/MegaStrokeSlide.cpp",
         "tools/viewer/MixerSlide.cpp",
-        "tools/viewer/ParticlesSlide.cpp",
-        "tools/viewer/ParticlesSlide.h",
         "tools/viewer/PatchSlide.cpp",
         "tools/viewer/PathClipSlide.cpp",
         "tools/viewer/PathEffectsSlide.cpp",
@@ -3094,7 +3090,6 @@ if (skia_enable_tools) {
         "experimental/sktext",
         "experimental/sktext:slides",
         "modules/audioplayer",
-        "modules/particles",
         "modules/skottie",
         "modules/skottie:utils",
         "modules/skparagraph:slides",
@@ -3147,14 +3142,6 @@ if (skia_enable_tools) {
       sources = [ "$ndk/$ndk_gdbserver" ]
       outputs = [ "$root_out_dir/gdbserver" ]
     }
-  }
-
-  skia_executable("cpu_modules") {
-    sources = [ "tools/cpu_modules.cpp" ]
-    deps = [
-      ":skia",
-      "modules/particles",
-    ]
   }
 
   test_app("editor") {
