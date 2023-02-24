@@ -9,15 +9,12 @@
 #define SKSL_WGSLCODEGENERATOR
 
 #include "include/private/SkSLDefines.h"
-#include "include/private/base/SkTArray.h"
 #include "src/core/SkTHash.h"
-#include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/codegen/SkSLCodeGenerator.h"
 #include "src/sksl/ir/SkSLType.h"
 
 #include <cstdint>
 #include <initializer_list>
-#include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -35,7 +32,6 @@ class BinaryExpression;
 class Block;
 class Context;
 class ConstructorCompound;
-class ConstructorDiagonalMatrix;
 class Expression;
 class ExpressionStatement;
 class FieldAccess;
@@ -43,7 +39,6 @@ class FunctionCall;
 class FunctionDeclaration;
 class FunctionDefinition;
 class GlobalVarDeclaration;
-class IfStatement;
 class Literal;
 class MemoryLayout;
 class OutputStream;
@@ -54,10 +49,8 @@ class Statement;
 class StructDefinition;
 class TernaryExpression;
 class VarDeclaration;
-class Variable;
 class VariableReference;
 enum class OperatorPrecedence : uint8_t;
-struct IndexExpression;
 struct Modifiers;
 struct Program;
 struct Swizzle;
@@ -133,7 +126,6 @@ public:
                               "FSOut",
                               "_globalUniforms",
                               "_GlobalUniforms",
-                              "_return",
                               "_stageIn",
                               "_stageOut",
                               "VSIn",
@@ -181,7 +173,6 @@ private:
     void writeStatements(const StatementArray& statements);
     void writeBlock(const Block& b);
     void writeExpressionStatement(const ExpressionStatement& s);
-    void writeIfStatement(const IfStatement& s);
     void writeReturnStatement(const ReturnStatement& s);
     void writeVarDeclaration(const VarDeclaration& varDecl);
 
@@ -190,7 +181,6 @@ private:
     void writeBinaryExpression(const BinaryExpression& b, Precedence parentPrecedence);
     void writeFieldAccess(const FieldAccess& f);
     void writeFunctionCall(const FunctionCall&);
-    void writeIndexExpression(const IndexExpression& i);
     void writeLiteral(const Literal& l);
     void writeSwizzle(const Swizzle& swizzle);
     void writeTernaryExpression(const TernaryExpression& t, Precedence parentPrecedence);
@@ -200,11 +190,6 @@ private:
     void writeAnyConstructor(const AnyConstructor& c, Precedence parentPrecedence);
     void writeConstructorCompound(const ConstructorCompound& c, Precedence parentPrecedence);
     void writeConstructorCompoundVector(const ConstructorCompound& c, Precedence parentPrecedence);
-    void writeConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c,
-                                        Precedence parentPrecedence);
-
-    // Synthesized helper functions for comparison operators that are not supported by WGSL.
-    void writeMatrixEquality(const Expression& left, const Expression& right);
 
     // Generic recursive ProgramElement visitor.
     void writeProgramElement(const ProgramElement& e);
@@ -241,34 +226,17 @@ private:
     // the first parameters for a function that requires them. Returns true if any arguments were
     // written.
     bool writeFunctionDependencyArgs(const FunctionDeclaration&);
-    bool writeFunctionDependencyParams(const FunctionDeclaration&);
-
-    // Generate an out-parameter helper function for the given call and return its name.
-    std::string writeOutParamHelper(const FunctionCall&,
-                                    const ExpressionArray& args,
-                                    const SkTArray<VariableReference*>& outVars);
 
     // Stores the disallowed identifier names.
+    // TODO(skia:13092): populate this
     SkTHashSet<std::string_view> fReservedWords;
     ProgramRequirements fRequirements;
     int fPipelineInputCount = 0;
     bool fDeclaredUniformsStruct = false;
 
-    // Out-parameters to functions are declared as pointers. While we process the arguments to a
-    // out-parameter helper function, we need to temporarily track that they are re-declared as
-    // pointer-parameters in the helper, so that expression-tree processing can know to correctly
-    // dereference them when the variable is referenced. The contents of this set are expected to
-    // be uniquely scoped for each out-param helper and will be cleared every time a new out-param
-    // helper function has been emitted.
-    SkTHashSet<const Variable*> fOutParamArgVars;
-
     // Output processing state.
     int fIndentation = 0;
     bool fAtLineStart = false;
-
-    int fSwizzleHelperCount = 0;
-    StringStream fExtraFunctions;      // all internally synthesized helpers are written here
-    SkTHashSet<std::string> fHelpers;  // all synthesized helper functions, by name
 };
 
 }  // namespace SkSL

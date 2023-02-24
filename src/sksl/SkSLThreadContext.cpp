@@ -12,6 +12,7 @@
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLModifiersPool.h"
 #include "src/sksl/SkSLPool.h"
+#include "src/sksl/ir/SkSLExternalFunction.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
 
 #include <type_traits>
@@ -70,6 +71,13 @@ void ThreadContext::setupSymbolTable() {
 
     SkSL::SymbolTable& symbolTable = *fCompiler->fSymbolTable;
     symbolTable.markModuleBoundary();
+
+    if (fSettings.fExternalFunctions) {
+        // Add any external values to the new symbol table, so they're only visible to this Program.
+        for (const std::unique_ptr<ExternalFunction>& ef : *fSettings.fExternalFunctions) {
+            symbolTable.addWithoutOwnership(ef.get());
+        }
+    }
 }
 
 SkSL::Context& ThreadContext::Context() {

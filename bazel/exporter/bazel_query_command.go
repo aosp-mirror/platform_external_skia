@@ -30,6 +30,7 @@ var allSkiaFlags = []string{
 	"--ck_enable_embedded_font",
 	"--ck_enable_fonts",
 	"--ck_enable_matrix_js",
+	"--ck_enable_particles",
 	"--ck_enable_runtime_effect",
 	"--ck_enable_skottie",
 	"--ck_enable_skp_serialization",
@@ -109,9 +110,6 @@ func (c *BazelQueryCommand) Read() ([]byte, error) {
 	_ = os.Chdir(pwd)
 	data, err := cmd.Output()
 	if err != nil {
-	    if exiterr, ok := err.(*exec.ExitError); ok {
-	        fmt.Printf("Stderr: %s\n", exiterr.Stderr)
-	    }
 		return nil, skerr.Wrapf(err, `error running %v`, cmd)
 	}
 	return data, nil

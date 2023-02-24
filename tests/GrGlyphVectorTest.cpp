@@ -13,6 +13,7 @@
 #include "src/base/SkZip.h"
 #include "src/core/SkDescriptor.h"
 #include "src/core/SkGlyph.h"
+#include "src/core/SkGlyphBuffer.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkStrike.h"
 #include "src/core/SkStrikeSpec.h"
@@ -48,7 +49,7 @@ DEF_TEST(GlyphVector_Serialization, r) {
     SubRunAllocator alloc;
 
     const int N = 10;
-    SkPackedGlyphID* glyphs = alloc.makePODArray<SkPackedGlyphID>(N);
+    SkGlyphVariant* glyphs = alloc.makePODArray<SkGlyphVariant>(N);
     for (int i = 0; i < N; i++) {
         glyphs[i] = SkPackedGlyphID(SkGlyphID(i));
     }

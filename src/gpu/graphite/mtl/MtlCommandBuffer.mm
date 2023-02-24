@@ -264,15 +264,6 @@ void MtlCommandBuffer::endRenderPass() {
 }
 
 void MtlCommandBuffer::addDrawPass(const DrawPass* drawPass) {
-    SkIRect replayPassBounds = drawPass->bounds().makeOffset(fReplayTranslation.x(),
-                                                             fReplayTranslation.y());
-    if (!SkIRect::Intersects(replayPassBounds, SkIRect::MakeSize(fRenderPassSize))) {
-        // The entire DrawPass is offscreen given the replay translation so skip adding any
-        // commands. When the DrawPass is partially offscreen individual draw commands will be
-        // culled while preserving state changing commands.
-        return;
-    }
-
     drawPass->addResourceRefs(this);
 
     for (auto[type, cmdPtr] : drawPass->commands()) {
@@ -307,8 +298,7 @@ void MtlCommandBuffer::addDrawPass(const DrawPass* drawPass) {
             }
             case DrawPassCommands::Type::kBindDrawBuffers: {
                 auto bdb = static_cast<DrawPassCommands::BindDrawBuffers*>(cmdPtr);
-                this->bindDrawBuffers(
-                        bdb->fVertices, bdb->fInstances, bdb->fIndices, bdb->fIndirect);
+                this->bindDrawBuffers(bdb->fVertices, bdb->fInstances, bdb->fIndices);
                 break;
             }
             case DrawPassCommands::Type::kBindTexturesAndSamplers: {
@@ -356,16 +346,6 @@ void MtlCommandBuffer::addDrawPass(const DrawPass* drawPass) {
                                            draw->fBaseVertex,
                                            draw->fBaseInstance,
                                            draw->fInstanceCount);
-                break;
-            }
-            case DrawPassCommands::Type::kDrawIndirect: {
-                auto draw = static_cast<DrawPassCommands::DrawIndirect*>(cmdPtr);
-                this->drawIndirect(draw->fType);
-                break;
-            }
-            case DrawPassCommands::Type::kDrawIndexedIndirect: {
-                auto draw = static_cast<DrawPassCommands::DrawIndexedIndirect*>(cmdPtr);
-                this->drawIndexedIndirect(draw->fType);
                 break;
             }
         }
@@ -436,14 +416,12 @@ void MtlCommandBuffer::bindUniformBuffer(const BindBufferInfo& info, UniformSlot
 
 void MtlCommandBuffer::bindDrawBuffers(const BindBufferInfo& vertices,
                                        const BindBufferInfo& instances,
-                                       const BindBufferInfo& indices,
-                                       const BindBufferInfo& indirect) {
+                                       const BindBufferInfo& indices) {
     this->bindVertexBuffers(vertices.fBuffer,
                             vertices.fOffset,
                             instances.fBuffer,
                             instances.fOffset);
     this->bindIndexBuffer(indices.fBuffer, indices.fOffset);
-    this->bindIndirectBuffer(indirect.fBuffer, indirect.fOffset);
 }
 
 void MtlCommandBuffer::bindVertexBuffers(const Buffer* vertexBuffer,
@@ -475,16 +453,6 @@ void MtlCommandBuffer::bindIndexBuffer(const Buffer* indexBuffer, size_t offset)
     } else {
         fCurrentIndexBuffer = nil;
         fCurrentIndexBufferOffset = 0;
-    }
-}
-
-void MtlCommandBuffer::bindIndirectBuffer(const Buffer* indirectBuffer, size_t offset) {
-    if (indirectBuffer) {
-        fCurrentIndirectBuffer = static_cast<const MtlBuffer*>(indirectBuffer)->mtlBuffer();
-        fCurrentIndirectBufferOffset = offset;
-    } else {
-        fCurrentIndirectBuffer = nil;
-        fCurrentIndirectBufferOffset = 0;
     }
 }
 
@@ -582,6 +550,7 @@ void MtlCommandBuffer::drawIndexed(PrimitiveType type, unsigned int baseIndex,
                                                            indexOffset, 1, baseVertex, 0);
 
     } else {
+        // TODO: Do nothing, fatal failure, or just the regular graphite error reporting?
         SKGPU_LOG_E("Skipping unsupported draw call.");
     }
 }
@@ -614,37 +583,8 @@ void MtlCommandBuffer::drawIndexedInstanced(PrimitiveType type,
                                                            indexOffset, instanceCount,
                                                            baseVertex, baseInstance);
     } else {
-        SKGPU_LOG_E("Skipping unsupported draw call.");
-    }
-}
-
-void MtlCommandBuffer::drawIndirect(PrimitiveType type) {
-    SkASSERT(fActiveRenderCommandEncoder);
-    SkASSERT(fCurrentIndirectBuffer);
-
-    if (@available(macOS 10.11, iOS 9.0, *)) {
-        auto mtlPrimitiveType = graphite_to_mtl_primitive(type);
-        fActiveRenderCommandEncoder->drawPrimitives(
-                mtlPrimitiveType, fCurrentIndirectBuffer, fCurrentIndirectBufferOffset);
-    } else {
-        SKGPU_LOG_E("Skipping unsupported draw call.");
-    }
-}
-
-void MtlCommandBuffer::drawIndexedIndirect(PrimitiveType type) {
-    SkASSERT(fActiveRenderCommandEncoder);
-    SkASSERT(fCurrentIndirectBuffer);
-
-    if (@available(macOS 10.11, iOS 9.0, *)) {
-        auto mtlPrimitiveType = graphite_to_mtl_primitive(type);
-        fActiveRenderCommandEncoder->drawIndexedPrimitives(mtlPrimitiveType,
-                                                           MTLIndexTypeUInt32,
-                                                           fCurrentIndexBuffer,
-                                                           fCurrentIndexBufferOffset,
-                                                           fCurrentIndirectBuffer,
-                                                           fCurrentIndirectBufferOffset);
-    } else {
-        SKGPU_LOG_E("Skipping unsupported draw call.");
+        // TODO: Do nothing, fatal failure, or just the regular graphite error reporting?
+        SKGPU_LOG_W("Skipping unsupported draw call.");
     }
 }
 

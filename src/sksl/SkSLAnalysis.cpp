@@ -35,6 +35,7 @@
 #include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
+#include "src/sksl/ir/SkSLExternalFunctionCall.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
 #include "src/sksl/ir/SkSLForStatement.h"
 #include "src/sksl/ir/SkSLFunctionCall.h"
@@ -538,6 +539,7 @@ bool ProgramVisitor::visit(const Program& program) {
 
 template <typename T> bool TProgramVisitor<T>::visitExpression(typename T::Expression& e) {
     switch (e.kind()) {
+        case Expression::Kind::kExternalFunctionReference:
         case Expression::Kind::kFunctionReference:
         case Expression::Kind::kLiteral:
         case Expression::Kind::kMethodReference:
@@ -572,6 +574,13 @@ template <typename T> bool TProgramVisitor<T>::visitExpression(typename T::Expre
         case Expression::Kind::kConstructorStruct: {
             auto& c = e.asAnyConstructor();
             for (auto& arg : c.argumentSpan()) {
+                if (this->visitExpressionPtr(arg)) { return true; }
+            }
+            return false;
+        }
+        case Expression::Kind::kExternalFunctionCall: {
+            auto& c = e.template as<ExternalFunctionCall>();
+            for (auto& arg : c.arguments()) {
                 if (this->visitExpressionPtr(arg)) { return true; }
             }
             return false;

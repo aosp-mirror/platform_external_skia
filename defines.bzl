@@ -101,22 +101,15 @@ CODEC_DEFINES = [
         "//src/codec:avif_decode_codec": ["SK_CODEC_DECODES_AVIF"],
         "//src/codec:gif_decode_codec": ["SK_HAS_WUFFS_LIBRARY"],
         "//src/codec:jpeg_decode_codec": ["SK_CODEC_DECODES_JPEG"],
-        "//src/encode:jpeg_encode_codec": ["SK_ENCODE_JPEG"],
+        "//src/images:jpeg_encode_codec": ["SK_ENCODE_JPEG"],
         "//src/codec:png_decode_codec": ["SK_CODEC_DECODES_PNG"],
-        "//src/encode:png_encode_codec": ["SK_ENCODE_PNG"],
+        "//src/images:png_encode_codec": ["SK_ENCODE_PNG"],
         "//src/codec:raw_decode_codec": [
             "SK_CODEC_DECODES_RAW",
             "SK_CODEC_DECODES_JPEG",
         ],
         "//src/codec:webp_decode_codec": ["SK_CODEC_DECODES_WEBP"],
-        "//src/encode:webp_encode_codec": ["SK_ENCODE_WEBP"],
-    },
-)
-
-TYPEFACE_DEFINES = select_multi(
-    {
-        "//src/ports:uses_freetype": ["SK_TYPEFACE_FACTORY_FREETYPE"],
-        #TODO: others when they become available
+        "//src/images:webp_encode_codec": ["SK_ENCODE_WEBP"],
     },
 )
 
@@ -134,6 +127,6 @@ PLATFORM_DEFINES = select({
 # building the library but not exporting it for clients, so they can use whatever vulkan they want.
 GENERAL_LOCAL_DEFINES = ["SKIA_IMPLEMENTATION=1"]
 
-DEFAULT_DEFINES = GENERAL_DEFINES + GPU_DEFINES + CODEC_DEFINES + TYPEFACE_DEFINES + PLATFORM_DEFINES + EXTRA_DEFINES
+DEFAULT_DEFINES = GENERAL_DEFINES + GPU_DEFINES + CODEC_DEFINES + PLATFORM_DEFINES + EXTRA_DEFINES
 
 DEFAULT_LOCAL_DEFINES = GENERAL_LOCAL_DEFINES

@@ -16,10 +16,6 @@
 #include "src/core/SkVM.h"
 #include "src/shaders/SkShaderBase.h"
 
-#ifdef SK_GRAPHITE_ENABLED
-#include "src/gpu/graphite/KeyHelpers.h"
-#endif
-
 class SkArenaAlloc;
 class SkColorSpace;
 class SkRasterPipeline;
@@ -118,15 +114,6 @@ protected:
 
     const SkMatrix fPtsToUnit;
     SkTileMode     fTileMode;
-
-#ifdef SK_GRAPHITE_ENABLED
-    static void MakeInterpolatedToDst(const skgpu::graphite::KeyContext&,
-                                      skgpu::graphite::PaintParamsKeyBuilder*,
-                                      skgpu::graphite::PipelineDataGatherer*,
-                                      const skgpu::graphite::GradientShaderBlocks::GradientData&,
-                                      const SkGradientShaderBase::Interpolation&,
-                                      SkColorSpace* intermediateCS);
-#endif
 
 public:
     static void AppendGradientFillStages(SkRasterPipeline* p,

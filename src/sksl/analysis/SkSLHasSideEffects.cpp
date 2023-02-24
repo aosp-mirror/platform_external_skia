@@ -46,6 +46,8 @@ bool Analysis::HasSideEffects(const Expression& expr) {
                     }
                     break;
                 }
+                case Expression::Kind::kExternalFunctionCall:
+                case Expression::Kind::kExternalFunctionReference:
                 case Expression::Kind::kPostfix:
                     return true;
 

@@ -135,6 +135,7 @@ public:
                 }
                 break;
             }
+            case Expression::Kind::kExternalFunctionReference:
             case Expression::Kind::kFunctionReference:
             case Expression::Kind::kMethodReference:
             case Expression::Kind::kTypeReference:

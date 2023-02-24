@@ -52,6 +52,7 @@ var CanvasKit = {
   MakePicture: function() {},
   MakeSWCanvasSurface: function() {},
   MakeManagedAnimation: function() {},
+  MakeParticles: function() {},
   MakeVertices: function() {},
   MakeSurface: function() {},
   MakeGPUDeviceContext: function() {},
@@ -86,6 +87,7 @@ var CanvasKit = {
   _MakeImage: function() {},
   _MakeManagedAnimation: function() {},
   _MakeOnScreenGLSurface: function() {},
+  _MakeParticles: function() {},
   _MakePicture: function() {},
   _MakeRenderTargetII: function() {},
   _MakeRenderTargetWH: function() {},
@@ -169,6 +171,8 @@ var CanvasKit = {
     addText: function() {},
     build: function() {},
 
+    setBidiRegionsUtf8: function() {},
+    setBidiRegionsUtf16: function() {},
     setWordsUtf8: function() {},
     setWordsUtf16: function() {},
     setGraphemeBreaksUtf8: function() {},
@@ -194,6 +198,8 @@ var CanvasKit = {
     _pushPaintStyle: function() {},
     _addPlaceholder: function() {},
 
+    _setBidiRegionsUtf8: function() {},
+    _setBidiRegionsUtf16: function() {},
     _setWordsUtf8: function() {},
     _setWordsUtf16: function() {},
     _setGraphemeBreaksUtf8: function() {},
@@ -555,6 +561,27 @@ var CanvasKit = {
     _MakeDash: function() {},
     _MakeLine2D: function() {},
     _MakePath2D: function() {},
+  },
+
+  ParticleEffect: {
+    // public API (from C++ bindings)
+    draw: function() {},
+    getUniform: function() {},
+    getUniformCount: function() {},
+    getUniformFloatCount: function() {},
+    getUniformName: function() {},
+    setRate: function() {},
+    start: function() {},
+    update: function() {},
+
+    prototype: {
+      setPosition: function() {},
+      uniforms: function() {},
+    },
+
+    // private API (from C++ bindings)
+    _uniformPtr: function() {},
+    _setPosition: function() {},
   },
 
   Path: {

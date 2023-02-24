@@ -36,6 +36,7 @@
 #include "src/sksl/ir/SkSLConstructorStruct.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
+#include "src/sksl/ir/SkSLExternalFunctionCall.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
 #include "src/sksl/ir/SkSLForStatement.h"
 #include "src/sksl/ir/SkSLFunctionCall.h"
@@ -249,6 +250,13 @@ std::unique_ptr<Expression> Inliner::inlineExpression(Position pos,
                                            *ctor.type().clone(symbolTableForExpression),
                                            argList(ctor.arguments()));
         }
+        case Expression::Kind::kExternalFunctionCall: {
+            const ExternalFunctionCall& externalCall = expression.as<ExternalFunctionCall>();
+            return std::make_unique<ExternalFunctionCall>(pos, &externalCall.function(),
+                                                          argList(externalCall.arguments()));
+        }
+        case Expression::Kind::kExternalFunctionReference:
+            return expression.clone();
         case Expression::Kind::kFieldAccess: {
             const FieldAccess& f = expression.as<FieldAccess>();
             return FieldAccess::Make(*fContext, pos, expr(f.base()), f.fieldIndex(), f.ownerKind());
@@ -781,6 +789,7 @@ public:
         }
 
         switch ((*expr)->kind()) {
+            case Expression::Kind::kExternalFunctionReference:
             case Expression::Kind::kFieldAccess:
             case Expression::Kind::kFunctionReference:
             case Expression::Kind::kLiteral:
@@ -829,6 +838,13 @@ public:
             case Expression::Kind::kConstructorStruct: {
                 AnyConstructor& constructorExpr = (*expr)->asAnyConstructor();
                 for (std::unique_ptr<Expression>& arg : constructorExpr.argumentSpan()) {
+                    this->visitExpression(&arg);
+                }
+                break;
+            }
+            case Expression::Kind::kExternalFunctionCall: {
+                ExternalFunctionCall& funcCallExpr = (*expr)->as<ExternalFunctionCall>();
+                for (std::unique_ptr<Expression>& arg : funcCallExpr.arguments()) {
                     this->visitExpression(&arg);
                 }
                 break;

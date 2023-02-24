@@ -11,18 +11,14 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
 #include "include/private/SkOpts_spi.h"
+#include "include/private/base/SkNoncopyable.h"
 #include "include/private/base/SkTLogic.h"
 
 #include <string>
 #include <string_view>
 
-class SkChecksum {
+class SkChecksum : SkNoncopyable {
 public:
-    SkChecksum() = default;
-    // Make noncopyable
-    SkChecksum(const SkChecksum&) = delete;
-    SkChecksum& operator=(const SkChecksum&) = delete;
-
     /**
      * uint32_t -> uint32_t hash, useful for when you're about to trucate this hash but you
      * suspect its low bits aren't well mixed.

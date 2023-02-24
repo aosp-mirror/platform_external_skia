@@ -157,8 +157,7 @@ DEF_TEST(AndroidCodec_wide, r) {
         return;
     }
 
-    // This image has a gamut that is VERY close to sRGB, so SkColorSpace::MakeRGB snaps to sRGB.
-    auto expected = SkColorSpace::MakeSRGB();
+    auto expected = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDisplayP3);
     REPORTER_ASSERT(r, SkColorSpace::Equals(cs.get(), expected.get()));
 }
 

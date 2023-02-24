@@ -128,6 +128,10 @@ func main() {
 		td.Fatal(ctx, err)
 	}
 
+	if err := buildPush(ctx, "particles", wasmProductsDir, checkoutDir, *skiaRevision, topic); err != nil {
+		td.Fatal(ctx, err)
+	}
+
 	if err := buildPush(ctx, "shaders", wasmProductsDir, checkoutDir, *skiaRevision, topic); err != nil {
 		td.Fatal(ctx, err)
 	}

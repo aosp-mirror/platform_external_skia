@@ -7,6 +7,8 @@
 #ifndef SkUnicode_icu_DEFINED
 #define SkUnicode_icu_DEFINED
 
+#include <cstdint>
+#include <memory>
 #include <unicode/ubidi.h>
 #include <unicode/ubrk.h>
 #include <unicode/uchar.h>
@@ -15,8 +17,6 @@
 #include <unicode/ustring.h>
 #include <unicode/utext.h>
 #include <unicode/utypes.h>
-#include <cstdint>
-#include <memory>
 
 #define SKICU_EMIT_FUNCS              \
     SKICU_FUNC(u_errorName)           \

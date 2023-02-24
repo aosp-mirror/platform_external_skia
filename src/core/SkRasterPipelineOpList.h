@@ -67,7 +67,6 @@
     M(load_f32)    M(load_f32_dst)  M(store_f32)   M(gather_f32)   \
     M(load_rgf32)                   M(store_rgf32)                 \
     M(load_1010102) M(load_1010102_dst) M(store_1010102) M(gather_1010102) \
-    M(load_1010102_xr) M(load_1010102_xr_dst) M(store_1010102_xr) \
     M(store_u16_be)                                                \
     M(store_src_rg) M(load_src_rg)                                 \
     M(byte_tables)                                                 \
@@ -131,13 +130,10 @@
     M(atan2_n_floats)   M(sqrt_float)          M(pow_n_floats)        M(exp_float)            \
     M(copy_constant)    M(copy_2_constants)    M(copy_3_constants)    M(copy_4_constants)     \
     M(copy_slot_masked) M(copy_2_slots_masked) M(copy_3_slots_masked) M(copy_4_slots_masked)  \
-    M(copy_from_indirect_masked)                                                              \
-    M(copy_slot_unmasked)          M(copy_2_slots_unmasked)                                   \
-    M(copy_3_slots_unmasked)       M(copy_4_slots_unmasked)                                   \
-    M(zero_slot_unmasked)          M(zero_2_slots_unmasked)                                   \
-    M(zero_3_slots_unmasked)       M(zero_4_slots_unmasked)                                   \
-    M(swizzle_copy_slot_masked)    M(swizzle_copy_2_slots_masked)                             \
-    M(swizzle_copy_3_slots_masked) M(swizzle_copy_4_slots_masked)                             \
+    M(copy_slot_unmasked)    M(copy_2_slots_unmasked)                                         \
+    M(copy_3_slots_unmasked) M(copy_4_slots_unmasked)                                         \
+    M(zero_slot_unmasked)    M(zero_2_slots_unmasked)                                         \
+    M(zero_3_slots_unmasked) M(zero_4_slots_unmasked)                                         \
     M(swizzle_1) M(swizzle_2) M(swizzle_3) M(swizzle_4) M(shuffle)                            \
     M(add_n_floats)   M(add_float)   M(add_2_floats)   M(add_3_floats)   M(add_4_floats)      \
     M(add_n_ints)     M(add_int)     M(add_2_ints)     M(add_3_ints)     M(add_4_ints)        \

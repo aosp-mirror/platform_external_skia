@@ -6,9 +6,8 @@
  */
 #include "modules/jetski/src/SurfaceThread.h"
 
-#include "tools/window/SkDisplayParams.h"
-#include "tools/window/SkWindowContext.h"
-#include "tools/window/android/SkWindowContextFactory_android.h"
+#include "tools/sk_app/WindowContext.h"
+#include "tools/sk_app/android/WindowContextFactory_android.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkTypes.h"
@@ -39,8 +38,8 @@ int SurfaceThread::message_callback(int /* fd */, int /* events */, void* data) 
 
     switch (message.fType) {
         case kInitialize: {
-            SkDisplayParams params;
-            auto winctx = window_context_factory::MakeGLForAndroid(message.fNativeWindow, params);
+            sk_app::DisplayParams params;
+            auto winctx = sk_app::window_context_factory::MakeGLForAndroid(message.fNativeWindow, params);
             if (!winctx) {
                 break;
             }

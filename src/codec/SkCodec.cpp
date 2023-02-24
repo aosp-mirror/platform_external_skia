@@ -243,7 +243,6 @@ bool SkCodec::conversionSupported(const SkImageInfo& dst, bool srcIsOpaque, bool
         case kBGRA_8888_SkColorType:
         case kRGBA_F16_SkColorType:
             return true;
-        case kBGR_101010x_XR_SkColorType:
         case kRGB_565_SkColorType:
             return srcIsOpaque;
         case kGray_8_SkColorType:
@@ -721,9 +720,6 @@ bool sk_select_xform_format(SkColorType colorType, bool forColorTable,
         case kRGBA_F16_SkColorType:
             *outFormat = skcms_PixelFormat_RGBA_hhhh;
             break;
-        case kBGR_101010x_XR_SkColorType:
-            *outFormat = skcms_PixelFormat_BGR_101010x_XR;
-            break;
         case kGray_8_SkColorType:
             *outFormat = skcms_PixelFormat_G_8;
             break;
@@ -738,8 +734,7 @@ bool SkCodec::initializeColorXform(const SkImageInfo& dstInfo, SkEncodedInfo::Al
     fXformTime = kNo_XformTime;
     bool needsColorXform = false;
     if (this->usesColorXform()) {
-        if (kRGBA_F16_SkColorType == dstInfo.colorType() ||
-                kBGR_101010x_XR_SkColorType == dstInfo.colorType()) {
+        if (kRGBA_F16_SkColorType == dstInfo.colorType()) {
             needsColorXform = true;
             if (dstInfo.colorSpace()) {
                 dstInfo.colorSpace()->toProfile(&fDstProfile);

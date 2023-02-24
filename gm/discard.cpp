@@ -42,30 +42,20 @@ protected:
     }
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
+        auto dContext = GrAsDirectContext(canvas->recordingContext());
+        if (!dContext || dContext->abandoned()) {
+            *errorMsg = "GM relies on having access to a live direct context.";
+            return DrawResult::kSkip;
+        }
 
         SkISize size = this->getISize();
         size.fWidth /= 10;
         size.fHeight /= 10;
         SkImageInfo info = SkImageInfo::MakeN32Premul(size);
-        sk_sp<SkSurface> surface;
-
-        auto dContext = GrAsDirectContext(canvas->recordingContext());
-        if (dContext && !dContext->abandoned()) {
-            surface = SkSurface::MakeRenderTarget(dContext, skgpu::Budgeted::kNo, info);
-        }
-
-#ifdef SK_GRAPHITE_ENABLED
-        auto recorder = canvas->recorder();
-        if (recorder) {
-            surface = SkSurface::MakeGraphite(recorder, info);
-        }
-#endif
-
-        if (!surface) {
-            surface = SkSurface::MakeRaster(info);
-        }
-        if (!surface) {
-            *errorMsg = "Could not create surface.";
+        sk_sp<SkSurface> surface =
+                SkSurface::MakeRenderTarget(dContext, skgpu::Budgeted::kNo, info);
+        if (nullptr == surface) {
+            *errorMsg = "Could not create render target.";
             return DrawResult::kFail;
         }
 
@@ -97,6 +87,9 @@ protected:
         surface->getCanvas()->discard();
         return DrawResult::kOk;
     }
+
+private:
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////

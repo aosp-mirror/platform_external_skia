@@ -11,6 +11,9 @@
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkFloatingPoint.h"
 
+#undef SK_SCALAR_IS_FLOAT
+#define SK_SCALAR_IS_FLOAT  1
+
 typedef float SkScalar;
 
 #define SK_Scalar1                  1.0f

@@ -755,15 +755,6 @@ BASE_SRCS_ALL = [
     "src/effects/imagefilters/SkRuntimeImageFilter.h",
     "src/effects/imagefilters/SkShaderImageFilter.cpp",
     "src/effects/imagefilters/SkTileImageFilter.cpp",
-    "src/encode/SkEncoder.cpp",
-    "src/encode/SkImageEncoder.cpp",
-    "src/encode/SkImageEncoderFns.h",
-    "src/encode/SkImageEncoderPriv.h",
-    "src/encode/SkJPEGWriteUtility.cpp",
-    "src/encode/SkJPEGWriteUtility.h",
-    "src/encode/SkJpegEncoder.cpp",
-    "src/encode/SkPngEncoder.cpp",
-    "src/encode/SkWebpEncoder.cpp",
     "src/fonts/SkFontMgr_indirect.cpp",
     "src/fonts/SkRemotableFontMgr.cpp",
     "src/gpu/AsyncReadTypes.h",
@@ -1245,6 +1236,15 @@ BASE_SRCS_ALL = [
     "src/image/SkSurface_Gpu.cpp",
     "src/image/SkSurface_Gpu.h",
     "src/image/SkSurface_Raster.cpp",
+    "src/images/SkEncoder.cpp",
+    "src/images/SkImageEncoder.cpp",
+    "src/images/SkImageEncoderFns.h",
+    "src/images/SkImageEncoderPriv.h",
+    "src/images/SkJPEGWriteUtility.cpp",
+    "src/images/SkJPEGWriteUtility.h",
+    "src/images/SkJpegEncoder.cpp",
+    "src/images/SkPngEncoder.cpp",
+    "src/images/SkWebpEncoder.cpp",
     "src/opts/SkBitmapProcState_opts.h",
     "src/opts/SkBlitMask_opts.h",
     "src/opts/SkBlitRow_opts.h",
@@ -1544,6 +1544,9 @@ BASE_SRCS_ALL = [
     "src/sksl/ir/SkSLExpressionStatement.cpp",
     "src/sksl/ir/SkSLExpressionStatement.h",
     "src/sksl/ir/SkSLExtension.h",
+    "src/sksl/ir/SkSLExternalFunction.h",
+    "src/sksl/ir/SkSLExternalFunctionCall.h",
+    "src/sksl/ir/SkSLExternalFunctionReference.h",
     "src/sksl/ir/SkSLField.h",
     "src/sksl/ir/SkSLFieldAccess.cpp",
     "src/sksl/ir/SkSLFieldAccess.h",
@@ -2385,8 +2388,6 @@ SKUNICODE_ICU_BUILTIN_SRCS = [
     "modules/skunicode/src/SkUnicode.cpp",
     "modules/skunicode/src/SkUnicode_icu.cpp",
     "modules/skunicode/src/SkUnicode_icu.h",
-    "modules/skunicode/src/SkUnicode_icu_bidi.cpp",
-    "modules/skunicode/src/SkUnicode_icu_bidi.h",
     "modules/skunicode/src/SkUnicode_icu_builtin.cpp",
 ]
 
@@ -2394,16 +2395,12 @@ SKUNICODE_ICU_RUNTIME_SRCS = [
     "modules/skunicode/src/SkUnicode.cpp",
     "modules/skunicode/src/SkUnicode_icu.cpp",
     "modules/skunicode/src/SkUnicode_icu.h",
-    "modules/skunicode/src/SkUnicode_icu_bidi.cpp",
-    "modules/skunicode/src/SkUnicode_icu_bidi.h",
     "modules/skunicode/src/SkUnicode_icu_runtime.cpp",
 ]
 
 SKUNICODE_CLIENT_SRCS = [
     "modules/skunicode/src/SkUnicode.cpp",
     "modules/skunicode/src/SkUnicode_client.cpp",
-    "modules/skunicode/src/SkUnicode_icu_bidi.cpp",
-    "modules/skunicode/src/SkUnicode_icu_bidi.h",
 ]
 
 SKUNICODE_HDRS = [

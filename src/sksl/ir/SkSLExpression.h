@@ -47,7 +47,7 @@ public:
 
     bool isAnyConstructor() const {
         static_assert((int)Kind::kConstructorArray - 1 == (int)Kind::kChildCall);
-        static_assert((int)Kind::kConstructorStruct + 1 == (int)Kind::kFieldAccess);
+        static_assert((int)Kind::kConstructorStruct + 1 == (int)Kind::kExternalFunctionCall);
         return this->kind() >= Kind::kConstructorArray && this->kind() <= Kind::kConstructorStruct;
     }
 

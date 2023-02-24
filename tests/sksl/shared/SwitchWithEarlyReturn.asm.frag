@@ -231,7 +231,9 @@ OpFunctionEnd
 %114 = OpLabel
 %115 = OpLoad %int %113
 OpSelectionMerge %116 None
-OpSwitch %115 %119 1 %118 2 %118
+OpSwitch %115 %119 1 %117 2 %118
+%117 = OpLabel
+OpBranch %118
 %118 = OpLabel
 OpReturnValue %true
 %119 = OpLabel
@@ -246,7 +248,9 @@ OpFunctionEnd
 OpStore %val_4 %int_0
 %123 = OpLoad %int %120
 OpSelectionMerge %124 None
-OpSwitch %123 %127 1 %126 2 %126
+OpSwitch %123 %127 1 %125 2 %126
+%125 = OpLabel
+OpBranch %126
 %126 = OpLabel
 OpBranch %124
 %127 = OpLabel
@@ -264,7 +268,11 @@ OpFunctionEnd
 OpStore %val_5 %int_0
 %133 = OpLoad %int %130
 OpSelectionMerge %134 None
-OpSwitch %133 %137 1 %137 2 %137
+OpSwitch %133 %137 1 %135 2 %136
+%135 = OpLabel
+OpBranch %136
+%136 = OpLabel
+OpBranch %137
 %137 = OpLabel
 OpBranch %134
 %134 = OpLabel
@@ -278,7 +286,11 @@ OpFunctionEnd
 %141 = OpLabel
 %142 = OpLoad %int %140
 OpSelectionMerge %143 None
-OpSwitch %142 %146 1 %146 2 %146
+OpSwitch %142 %146 1 %144 2 %145
+%144 = OpLabel
+OpBranch %145
+%145 = OpLabel
+OpBranch %146
 %146 = OpLabel
 OpReturnValue %true
 %143 = OpLabel
@@ -292,7 +304,7 @@ OpFunctionEnd
 OpStore %val_6 %int_0
 %150 = OpLoad %int %147
 OpSelectionMerge %151 None
-OpSwitch %150 %154 1 %152 2 %154
+OpSwitch %150 %154 1 %152 2 %153
 %152 = OpLabel
 OpStore %i %int_0
 OpBranch %156
@@ -314,6 +326,8 @@ OpBranch %160
 OpStore %i %167
 OpBranch %156
 %160 = OpLabel
+OpBranch %153
+%153 = OpLabel
 OpBranch %154
 %154 = OpLabel
 OpReturnValue %true
@@ -328,7 +342,7 @@ OpFunctionEnd
 OpStore %val_7 %int_0
 %171 = OpLoad %int %168
 OpSelectionMerge %172 None
-OpSwitch %171 %175 1 %173 2 %175
+OpSwitch %171 %175 1 %173 2 %174
 %173 = OpLabel
 OpStore %i_0 %int_0
 OpBranch %177
@@ -350,6 +364,8 @@ OpBranch %180
 OpStore %i_0 %187
 OpBranch %177
 %181 = OpLabel
+OpBranch %174
+%174 = OpLabel
 OpBranch %175
 %175 = OpLabel
 OpReturnValue %true

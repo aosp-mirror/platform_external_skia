@@ -298,7 +298,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("gltestthreading", "gm", ALL, "texel_subset_linear_mipmap_nearest_down")
 			skip("gltestthreading", "gm", ALL, "yuv420_odd_dim_repeat")
 
-			skip("gltestthreading", "svg", ALL, "filters-conv-01-f.svg")
 			skip("gltestthreading", "svg", ALL, "filters-offset-01-b.svg")
 			skip("gltestthreading", "svg", ALL, "gallardo.svg")
 			skip("gltestthreading", "svg", ALL, "masking-filter-01-f.svg")
@@ -627,10 +626,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		//                             their "gr" prefixed versions
 		//                             and "" (for raster)
 		//        <targetFormat> is one of: "f16", { "" (for gpus) or "rgba" (for raster) }
-		//
-		// We also add on two configs with the format:
-		//        narrow-<backend>f16norm
-		//        linear-<backend>srgba
 		colorSpaces := []string{"", "linear-", "narrow-", "p3-", "rec2020-", "srgb2-"}
 
 		backendStr := ""
@@ -672,9 +667,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				configs = append(configs, cs+backendStr+tf)
 			}
 		}
-
-		configs = append(configs, "narrow-"+backendStr+"f16norm")
-		configs = append(configs, "linear-"+backendStr+"srgba")
 	}
 
 	// Sharding.
@@ -1160,13 +1152,13 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	if b.matchGpu("Intel") && b.matchOs("Win") && !b.extraConfig("Vulkan") {
 		skip(ALL, "tests", ALL, "SkSLReturnsValueOnEveryPathES3_GPU")     // skia:12465
+		skip(ALL, "tests", ALL, "SkSLReturnsValueOnEveryPathES3_GPU")     // skia:12465
 		skip(ALL, "tests", ALL, "SkSLOutParamsAreDistinctFromGlobal_GPU") // skia:13115
 		skip(ALL, "tests", ALL, "SkSLStructFieldFolding_GPU")             // skia:13393
 	}
 
 	if b.extraConfig("Vulkan") && b.isLinux() && b.matchGpu("Intel") {
-		skip(ALL, "tests", ALL, "SkSLSwitchDefaultOnly_GPU")          // skia:12465
-		skip(ALL, "tests", ALL, "SkSLReturnsValueOnEveryPathES3_GPU") // skia:14131
+		skip(ALL, "tests", ALL, "SkSLSwitchDefaultOnly_GPU") // skia:12465
 	}
 
 	if b.extraConfig("ANGLE") && b.matchOs("Win") && b.matchGpu("IntelIris(540|655|Xe)") {

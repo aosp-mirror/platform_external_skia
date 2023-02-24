@@ -12,6 +12,8 @@
 #include <android/looper.h>
 #include <android/native_window.h>
 
+#include "tools/sk_app/DisplayParams.h"
+
 #include "include/core/SkPictureRecorder.h"
 
 class WindowSurface;

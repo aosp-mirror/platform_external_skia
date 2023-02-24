@@ -83,7 +83,6 @@ bool empty_default_bi(int x) {
         case 2:
             return true;
         default:
-            break;
     }
     ++val;
     return val == 1;

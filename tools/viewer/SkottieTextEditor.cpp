@@ -11,9 +11,6 @@
 #include "include/core/SkColor.h"
 #include "include/core/SkM44.h"
 #include "include/core/SkPath.h"
-#include "include/core/SkString.h"
-#include "include/private/base/SkAssert.h"
-#include "src/base/SkUTF.h"
 
 namespace {
 
@@ -33,35 +30,6 @@ SkPath make_cursor_path() {
     return p;
 }
 
-size_t next_utf8(const SkString& str, size_t index) {
-    SkASSERT(index < str.size());
-
-    const char* utf8_ptr = str.c_str() + index;
-
-    if (SkUTF::NextUTF8(&utf8_ptr, str.c_str() + str.size()) < 0){
-        // Invalid UTF sequence.
-        return index;
-    }
-
-    return utf8_ptr - str.c_str();
-}
-
-size_t prev_utf8(const SkString& str, size_t index) {
-    SkASSERT(index > 0);
-
-    // Find the previous utf8 index by probing the preceding 4 offsets.  Utf8 leading bytes are
-    // always distinct from continuation bytes, so only one of these probes will succeed.
-    for (unsigned i = 1; i <= SkUTF::kMaxBytesInUTF8Sequence && i <= index; ++i) {
-        const char* utf8_ptr = str.c_str() + index - i;
-        if (SkUTF::NextUTF8(&utf8_ptr, str.c_str() + str.size()) >= 0) {
-            return index - i;
-        }
-    }
-
-    // Invalid UTF sequence.
-    return index;
-}
-
 } // namespace
 
 SkottieTextEditor::SkottieTextEditor(
@@ -71,6 +39,7 @@ SkottieTextEditor::SkottieTextEditor(
     , fDependentProps(std::move(deps))
     , fCursorPath(make_cursor_path())
     , fCursorBounds(fCursorPath.computeTightBounds())
+    , fCursorIndex(fTextProp->get().fText.size())
 {}
 
 SkottieTextEditor::~SkottieTextEditor() = default;
@@ -81,11 +50,6 @@ void SkottieTextEditor::toggleEnabled() {
     auto txt = fTextProp->get();
     txt.fDecorator = fEnabled ? sk_ref_sp(this) : nullptr;
     fTextProp->set(txt);
-
-    if (fEnabled) {
-        // Always reset the cursor position to the end.
-        fCursorIndex = txt.fText.size();
-    }
 
     fTimeBase = std::chrono::steady_clock::now();
 }
@@ -122,15 +86,15 @@ void SkottieTextEditor::drawCursor(SkCanvas* canvas, const GlyphInfo glyphs[], s
     }
 
     auto txt_prop  = fTextProp->get();
+    const auto txt = txt_prop.fText;
 
     const auto glyph_index = [&]() -> size_t {
         if (!fCursorIndex) {
             return 0;
         }
 
-        const auto prev_index = prev_utf8(txt_prop.fText, fCursorIndex);
         for (size_t i = 0; i < size; ++i) {
-            if (glyphs[i].fCluster >= prev_index) {
+            if (glyphs[i].fCluster >= fCursorIndex - 1) {
                 return i;
             }
         }
@@ -179,11 +143,8 @@ void SkottieTextEditor::updateDeps(const SkString& txt) {
 
 void SkottieTextEditor::insertChar(SkUnichar c) {
     auto txt = fTextProp->get();
-    const auto initial_size = txt.fText.size();
 
-    txt.fText.insertUnichar(fCursorIndex, c);
-    fCursorIndex += txt.fText.size() - initial_size;
-
+    txt.fText.insertUnichar(fCursorIndex++, c);
     fTextProp->set(txt);
     this->updateDeps(txt.fText);
 }
@@ -195,24 +156,9 @@ void SkottieTextEditor::deleteChars(size_t offset, size_t count) {
     fTextProp->set(txt);
     this->updateDeps(txt.fText);
 
-    fCursorIndex = offset;
-}
-
-bool SkottieTextEditor::deleteSelection() {
-    const auto [glyph_sel_start, glyph_sel_end] = this->currentSelection();
-    if (glyph_sel_start == glyph_sel_end) {
-        return false;
+    if (fCursorIndex >= offset) {
+        fCursorIndex -= count;
     }
-
-    const auto utf8_sel_start = fGlyphData[glyph_sel_start].fCluster,
-               utf8_sel_end   = fGlyphData[glyph_sel_end  ].fCluster;
-    SkASSERT(utf8_sel_start < utf8_sel_end);
-
-    this->deleteChars(utf8_sel_start, utf8_sel_end - utf8_sel_start);
-
-    fSelection = {0,0};
-
-    return true;
 }
 
 void SkottieTextEditor::onDecorate(SkCanvas* canvas, const GlyphInfo glyphs[], size_t size) {
@@ -227,10 +173,7 @@ void SkottieTextEditor::onDecorate(SkCanvas* canvas, const GlyphInfo glyphs[], s
         canvas->concat(ginfo.fMatrix);
 
         // Stash some glyph info, for later use.
-        fGlyphData.push_back({
-            canvas->getLocalToDevice().asM33().mapRect(ginfo.fBounds),
-            ginfo.fCluster
-        });
+        fGlyphData.push_back({canvas->getLocalToDevice().asM33().mapRect(ginfo.fBounds)});
 
         if (i < sel_start || i >= sel_end) {
             continue;
@@ -282,35 +225,33 @@ bool SkottieTextEditor::onCharInput(SkUnichar c) {
         return false;
     }
 
-    const auto& txt_str = fTextProp->get().fText;
-
     // Natural editor bindings are currently intercepted by Viewer, so we use these instead.
     switch (c) {
     case '|':     // commit changes and exit editing mode
         this->toggleEnabled();
         break;
     case ']': {   // move right
-        if (fCursorIndex < txt_str.size()) {
-            fCursorIndex = next_utf8(txt_str, fCursorIndex);
+        if (fCursorIndex < fTextProp->get().fText.size()) {
+            fCursorIndex++;
         }
     } break;
     case '[':     // move left
         if (fCursorIndex > 0) {
-            fCursorIndex = prev_utf8(txt_str, fCursorIndex);
+            fCursorIndex--;
         }
         break;
     case '\\': {  // delete
-        if (!this->deleteSelection() && fCursorIndex > 0) {
-            // Delete preceding char.
-            const auto del_index = prev_utf8(txt_str, fCursorIndex),
-                       del_count = fCursorIndex - del_index;
-
-            this->deleteChars(del_index, del_count);
+        const auto [sel_start, sel_end] = this->currentSelection();
+        if (sel_start != sel_end) {
+            this->deleteChars(sel_start, sel_end - sel_start);
+            fSelection = {0,0};
+        } else {
+            if (fCursorIndex) {
+                this->deleteChars(fCursorIndex - 1, 1);
+            }
         }
     }   break;
     default:
-        // Delete any selection on insert.
-        this->deleteSelection();
         this->insertChar(c);
         break;
     }

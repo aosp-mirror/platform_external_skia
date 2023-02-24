@@ -60,18 +60,14 @@ public:
     bool prepareResources(ResourceProvider*);
 
     // Adds upload command to the given CommandBuffer
-    void addCommand(Context*, CommandBuffer*, Task::ReplayTargetData) const;
+    void addCommand(Context*, CommandBuffer*) const;
 
 private:
     UploadInstance() {}
-    UploadInstance(const Buffer*,
-                   size_t bytesPerPixel,
-                   sk_sp<TextureProxy>,
-                   std::vector<BufferTextureCopyData>,
+    UploadInstance(const Buffer*, sk_sp<TextureProxy>, std::vector<BufferTextureCopyData>,
                    std::unique_ptr<ConditionalUploadContext>);
 
     const Buffer* fBuffer;
-    size_t fBytesPerPixel;
     sk_sp<TextureProxy> fTextureProxy;
     std::vector<BufferTextureCopyData> fCopyData;
     std::unique_ptr<ConditionalUploadContext> fConditionalContext;

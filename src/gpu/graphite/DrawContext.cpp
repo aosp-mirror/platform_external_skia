@@ -115,8 +115,7 @@ bool DrawContext::recordUpload(Recorder* recorder,
                                const SkIRect& dstRect,
                                std::unique_ptr<ConditionalUploadContext> condContext) {
     // Our caller should have clipped to the bounds of the surface already.
-    SkASSERT(targetProxy->isFullyLazy() ||
-             SkIRect::MakeSize(targetProxy->dimensions()).contains(dstRect));
+    SkASSERT(SkIRect::MakeSize(targetProxy->dimensions()).contains(dstRect));
     return fPendingUploads->recordUpload(recorder,
                                          std::move(targetProxy),
                                          srcColorInfo,

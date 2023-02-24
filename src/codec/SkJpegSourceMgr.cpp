@@ -16,7 +16,6 @@
 #include "src/codec/SkCodecPriv.h"
 
 #ifdef SK_CODEC_DECODES_JPEG_GAINMAPS
-#include "src/codec/SkJpegConstants.h"
 #include "src/codec/SkJpegSegmentScan.h"
 #endif  // SK_CODEC_DECODES_JPEG_GAINMAPS
 
@@ -81,7 +80,7 @@ public:
         if (fScanner) {
             return fScanner->getSegments();
         }
-        fScanner = std::make_unique<SkJpegSegmentScanner>(kJpegMarkerEndOfImage);
+        fScanner = std::make_unique<SkJpegSegmentScanner>(SkJpegSegmentScanner::kMarkerEndOfImage);
         fScanner->onBytes(fStream->getMemoryBase(), fStream->getLength());
         return fScanner->getSegments();
     }
@@ -96,10 +95,12 @@ public:
                 reinterpret_cast<const uint8_t*>(fStream->getMemoryBase()) + offset, size);
     }
     sk_sp<SkData> getSegmentParameters(const SkJpegSegment& segment) override {
+        constexpr size_t kParameterLengthSize = SkJpegSegmentScanner::kParameterLengthSize;
+        constexpr size_t kMarkerCodeSize = SkJpegSegmentScanner::kMarkerCodeSize;
         const uint8_t* base =
                 reinterpret_cast<const uint8_t*>(fStream->getMemoryBase()) + segment.offset;
         SkASSERT(segment.offset < fStream->getLength());
-        SkASSERT(kJpegMarkerCodeSize + segment.parameterLength <=
+        SkASSERT(kMarkerCodeSize + segment.parameterLength <=
                  fStream->getLength() - segment.offset);
 
         // Read the marker and verify it matches `segment`.
@@ -108,13 +109,13 @@ public:
 
         // Read the parameter length and verify it matches `segment`.
         SkASSERT(256 * base[2] + base[3] == segment.parameterLength);
-        if (segment.parameterLength <= kJpegSegmentParameterLengthSize) {
+        if (segment.parameterLength <= SkJpegSegmentScanner::kParameterLengthSize) {
             return nullptr;
         }
 
         // Read the remainder of the segment.
-        return SkData::MakeWithoutCopy(base + kJpegMarkerCodeSize + kJpegSegmentParameterLengthSize,
-                                       segment.parameterLength - kJpegSegmentParameterLengthSize);
+        return SkData::MakeWithoutCopy(base + kMarkerCodeSize + kParameterLengthSize,
+                                       segment.parameterLength - kParameterLengthSize);
     }
 #endif  // SK_CODEC_DECODES_JPEG_GAINMAPS
 };
@@ -171,7 +172,7 @@ public:
             return fScanner->getSegments();
         }
         ScopedSkStreamRestorer streamRestorer(fStream);
-        fScanner = std::make_unique<SkJpegSegmentScanner>(kJpegMarkerEndOfImage);
+        fScanner = std::make_unique<SkJpegSegmentScanner>(SkJpegSegmentScanner::kMarkerEndOfImage);
         while (!fScanner->isDone() && !fScanner->hadError()) {
             constexpr size_t kBufferSize = 1024;
             uint8_t buffer[kBufferSize];
@@ -201,9 +202,11 @@ public:
         return data;
     }
     sk_sp<SkData> getSegmentParameters(const SkJpegSegment& segment) override {
+        constexpr size_t kParameterLengthSize = SkJpegSegmentScanner::kParameterLengthSize;
+        constexpr size_t kMarkerCodeSize = SkJpegSegmentScanner::kMarkerCodeSize;
         // If the segment's parameter length isn't longer than the two bytes for the length,
         // early-out early-out.
-        if (segment.parameterLength <= kJpegSegmentParameterLengthSize) {
+        if (segment.parameterLength <= kParameterLengthSize) {
             return nullptr;
         }
 
@@ -215,8 +218,8 @@ public:
         }
 
         // Read the marker and verify it matches `segment`.
-        uint8_t markerCode[kJpegMarkerCodeSize] = {0};
-        if (fStream->read(markerCode, kJpegMarkerCodeSize) != kJpegMarkerCodeSize) {
+        uint8_t markerCode[kMarkerCodeSize] = {0};
+        if (fStream->read(markerCode, kMarkerCodeSize) != kMarkerCodeSize) {
             SkCodecPrintf("Failed to read segment marker code\n");
             return nullptr;
         }
@@ -224,16 +227,15 @@ public:
         SkASSERT(markerCode[1] == segment.marker);
 
         // Read the parameter length and verify it matches `segment`.
-        uint8_t parameterLength[kJpegSegmentParameterLengthSize] = {0};
-        if (fStream->read(parameterLength, kJpegSegmentParameterLengthSize) !=
-            kJpegSegmentParameterLengthSize) {
+        uint8_t parameterLength[kParameterLengthSize] = {0};
+        if (fStream->read(parameterLength, kParameterLengthSize) != kParameterLengthSize) {
             SkCodecPrintf("Failed to read parameter length\n");
             return nullptr;
         }
         SkASSERT(256 * parameterLength[0] + parameterLength[1] == segment.parameterLength);
 
         // Read the remainder of the segment.
-        size_t sizeToRead = segment.parameterLength - kJpegSegmentParameterLengthSize;
+        size_t sizeToRead = segment.parameterLength - kParameterLengthSize;
         auto result = SkData::MakeUninitialized(sizeToRead);
         if (fStream->read(result->writable_data(), sizeToRead) != sizeToRead) {
             return nullptr;
@@ -261,7 +263,7 @@ class SkJpegUnseekableSourceMgr : public SkJpegSourceMgr {
 public:
     SkJpegUnseekableSourceMgr(SkStream* stream, size_t bufferSize) : SkJpegSourceMgr(stream) {
         fBuffer = SkData::MakeUninitialized(bufferSize);
-        fScanner = std::make_unique<SkJpegSegmentScanner>(kJpegMarkerEndOfImage);
+        fScanner = std::make_unique<SkJpegSegmentScanner>(SkJpegSegmentScanner::kMarkerEndOfImage);
     }
     ~SkJpegUnseekableSourceMgr() override {}
 

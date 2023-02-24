@@ -459,8 +459,9 @@ bool Device::onWritePixels(const SkPixmap& src, int x, int y) {
     // TODO: check for flips and either handle here or pass info to UploadTask
 
     // Determine rect to copy
+    auto bounds = SkIRect::MakeSize(target->dimensions());
     SkIRect dstRect = SkIRect::MakePtSize({x, y}, src.dimensions());
-    if (!target->isFullyLazy() && !dstRect.intersect(SkIRect::MakeSize(target->dimensions()))) {
+    if (!dstRect.intersect(bounds)) {
         return false;
     }
 
@@ -686,28 +687,6 @@ void Device::drawPoints(SkCanvas::PointMode mode, size_t count,
                                paint, stroke);
         }
     }
-}
-
-void Device::drawEdgeAAQuad(const SkRect& rect,
-                            const SkPoint clip[4],
-                            SkCanvas::QuadAAFlags aaFlags,
-                            const SkColor4f& color,
-                            SkBlendMode mode) {
-    SkPaint solidColorPaint;
-    solidColorPaint.setColor4f(color, /*colorSpace=*/nullptr);
-    solidColorPaint.setBlendMode(mode);
-
-    auto flags = SkEnumBitMask<EdgeAAQuad::Flags>(static_cast<EdgeAAQuad::Flags>(aaFlags));
-    EdgeAAQuad quad = clip ? EdgeAAQuad(clip, flags) : EdgeAAQuad(rect, flags);
-    this->drawGeometry(this->localToDeviceTransform(), Geometry(quad), solidColorPaint, kFillStyle,
-                       DrawFlags::kIgnoreMaskFilter | DrawFlags::kIgnorePathEffect);
-}
-
-void Device::drawEdgeAAImageSet(const SkCanvas::ImageSetEntry[], int count,
-                                const SkPoint dstClips[], const SkMatrix preViewMatrices[],
-                                const SkSamplingOptions&, const SkPaint&,
-                                SkCanvas::SrcRectConstraint) {
-    // TODO: Implement this by merging the logic of drawImageRect and drawEdgeAAQuad.
 }
 
 void Device::drawImageRect(const SkImage* image, const SkRect* src, const SkRect& dst,
@@ -1041,9 +1020,6 @@ const Renderer* Device::chooseRenderer(const Geometry& geometry,
     } else if (geometry.isVertices()) {
         SkVerticesPriv info(geometry.vertices()->priv());
         return renderers->vertices(info.mode(), info.hasColors(), info.hasTexCoords());
-    } else if (geometry.isEdgeAAQuad()) {
-        SkASSERT(!requireMSAA && style.isFillStyle());
-        return renderers->analyticRRect(); // handled by the same system as rects and round rects
     } else if (!geometry.isShape()) {
         // We must account for new Geometry types with specific Renderers
         return nullptr;

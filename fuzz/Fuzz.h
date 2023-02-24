@@ -21,14 +21,9 @@
 #include <signal.h>
 #include <limits>
 
-class Fuzz {
+class Fuzz : SkNoncopyable {
 public:
     explicit Fuzz(sk_sp<SkData> bytes) : fBytes(bytes), fNextByte(0) {}
-    Fuzz() = delete;
-
-    // Make noncopyable
-    Fuzz(Fuzz&) = delete;
-    Fuzz& operator=(Fuzz&) = delete;
 
     // Returns the total number of "random" bytes available.
     size_t size() { return fBytes->size(); }
