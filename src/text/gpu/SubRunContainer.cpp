@@ -148,14 +148,9 @@ public:
     static TransformedMaskVertexFiller Make(MaskFormat maskType,
                                             const SkMatrix& creationMatrix,
                                             SkRect creationBounds,
-                                            const SkZip<SkPackedGlyphID, SkPoint>& accepted,
+                                            SkSpan<const SkPoint> positions,
                                             SubRunAllocator* alloc) {
-        SkSpan<SkPoint> leftTop = alloc->makePODArray<SkPoint>(
-                accepted,
-                [&](auto e) -> SkPoint {
-                    auto [variant, pos] = e;
-                    return pos;
-                });
+        SkSpan<SkPoint> leftTop = alloc->makePODSpan<SkPoint>(positions);
         return TransformedMaskVertexFiller{maskType, creationMatrix, creationBounds, leftTop};
     }
 
@@ -546,6 +541,19 @@ std::tuple<bool, SkVector> can_use_direct(
             translation};
 }
 
+SkSpan<const SkPackedGlyphID> get_packedIDs(SkZip<const SkPackedGlyphID, const SkPoint> accepted) {
+    return accepted.get<0>();
+}
+
+SkSpan<const SkGlyphID> get_glyphIDs(SkZip<const SkGlyphID, const SkPoint> accepted) {
+    return accepted.get<0>();
+}
+
+template <typename U>
+SkSpan<const SkPoint> get_positions(SkZip<U, const SkPoint> accepted) {
+    return accepted.template get<1>();
+}
+
 // -- PathOpSubmitter ------------------------------------------------------------------------------
 // PathOpSubmitter holds glyph ids until ready to draw. During drawing, the glyph ids are
 // converted to SkPaths. PathOpSubmitter can only be serialized when it is holding glyph ids;
@@ -576,7 +584,7 @@ public:
 
     ~PathOpSubmitter();
 
-    static PathOpSubmitter Make(const SkZip<SkPackedGlyphID, SkPoint>& accepted,
+    static PathOpSubmitter Make(SkZip<const SkPackedGlyphID, const SkPoint> accepted,
                                 bool isAntiAliased,
                                 SkScalar strikeToSourceScale,
                                 SkStrikePromise&& strikePromise,
@@ -679,25 +687,22 @@ PathOpSubmitter::~PathOpSubmitter() {
     }
 }
 
-PathOpSubmitter PathOpSubmitter::Make(const SkZip<SkPackedGlyphID, SkPoint>& accepted,
+PathOpSubmitter PathOpSubmitter::Make(SkZip<const SkPackedGlyphID, const SkPoint> accepted,
                                       bool isAntiAliased,
                                       SkScalar strikeToSourceScale,
                                       SkStrikePromise&& strikePromise,
                                       SubRunAllocator* alloc) {
-    int glyphCount = SkCount(accepted);
-    SkPoint* positions = alloc->makePODArray<SkPoint>(glyphCount);
-    IDOrPath* idsOrPaths = alloc->makeUniqueArray<IDOrPath>(glyphCount).release();
+    auto mapToIDOrPath = [](SkPackedGlyphID packedID) {
+        return IDOrPath{packedID.glyphID()};
+    };
 
-    for (auto [dstIdOrPath, dstPosition, srcPackedGlyphID, srcPosition] :
-            SkMakeZip(idsOrPaths, positions, accepted.get<0>(), accepted.get<1>())) {
-        dstPosition = srcPosition;
-        dstIdOrPath.fGlyphID = srcPackedGlyphID.glyphID();
-    }
+    IDOrPath* const rawIDsOrPaths =
+            alloc->makeUniqueArray<IDOrPath>(get_packedIDs(accepted), mapToIDOrPath).release();
 
     return PathOpSubmitter{isAntiAliased,
                            strikeToSourceScale,
-                           SkSpan(positions, glyphCount),
-                           SkSpan(idsOrPaths, glyphCount),
+                           alloc->makePODSpan(get_positions(accepted)),
+                           SkSpan(rawIDsOrPaths, accepted.size()),
                            std::move(strikePromise)};
 }
 
@@ -770,7 +775,7 @@ class PathSubRun final : public SubRun {
 public:
     PathSubRun(PathOpSubmitter&& pathDrawing) : fPathDrawing(std::move(pathDrawing)) {}
 
-    static SubRunOwner Make(const SkZip<SkPackedGlyphID, SkPoint>& accepted,
+    static SubRunOwner Make(SkZip<const SkPackedGlyphID, const SkPoint> accepted,
                             bool isAntiAliased,
                             SkScalar strikeToSourceScale,
                             SkStrikePromise&& strikePromise,
@@ -859,10 +864,20 @@ public:
                         SkSpan<IDOrDrawable> idsOrDrawables,
                         SkStrikePromise&& strikePromise);
 
-    static DrawableOpSubmitter Make(const SkZip<SkPackedGlyphID, SkPoint>& accepted,
+    static DrawableOpSubmitter Make(SkZip<const SkPackedGlyphID, const SkPoint> accepted,
                                     SkScalar strikeToSourceScale,
                                     SkStrikePromise&& strikePromise,
-                                    SubRunAllocator* alloc);
+                                    SubRunAllocator* alloc) {
+        auto mapToIDOrDrawable = [](const SkPackedGlyphID packedID) {
+            return IDOrDrawable{packedID.glyphID()};
+        };
+
+        return DrawableOpSubmitter{
+            strikeToSourceScale,
+            alloc->makePODSpan(get_positions(accepted)),
+            alloc->makePODArray<IDOrDrawable>(get_packedIDs(accepted), mapToIDOrDrawable),
+            std::move(strikePromise)};
+    }
 
     int unflattenSize() const;
     void flatten(SkWriteBuffer& buffer) const;
@@ -936,24 +951,6 @@ DrawableOpSubmitter::DrawableOpSubmitter(
     SkASSERT(!fPositions.empty());
 }
 
-DrawableOpSubmitter DrawableOpSubmitter::Make(const SkZip<SkPackedGlyphID, SkPoint>& accepted,
-                                              SkScalar strikeToSourceScale,
-                                              SkStrikePromise&& strikePromise,
-                                              SubRunAllocator* alloc) {
-    int glyphCount = SkCount(accepted);
-    SkPoint* positions = alloc->makePODArray<SkPoint>(glyphCount);
-    IDOrDrawable* idsOrDrawables = alloc->makePODArray<IDOrDrawable>(glyphCount);
-    for (auto [i, variant, pos] : SkMakeEnumerate(accepted)) {
-        positions[i] = pos;
-        idsOrDrawables[i].fGlyphID = variant.glyphID();
-    }
-
-    return DrawableOpSubmitter{strikeToSourceScale,
-                               SkSpan(positions, glyphCount),
-                               SkSpan(idsOrDrawables, glyphCount),
-                               std::move(strikePromise)};
-}
-
 void
 DrawableOpSubmitter::submitDraws(SkCanvas* canvas, SkPoint drawOrigin,const SkPaint& paint) const {
     // Convert glyph IDs to Drawables if it hasn't been done yet.
@@ -992,20 +989,22 @@ DrawableOpSubmitter::submitDraws(SkCanvas* canvas, SkPoint drawOrigin,const SkPa
     }
 }
 
-template <typename SubRunT>
-SubRunOwner make_drawable_sub_run(const SkZip<SkPackedGlyphID, SkPoint>& drawables,
-                                  SkScalar strikeToSourceScale,
-                                  SkStrikePromise&& strikePromise,
-                                  SubRunAllocator* alloc) {
-    return alloc->makeUnique<SubRunT>(
-        DrawableOpSubmitter::Make(drawables, strikeToSourceScale, std::move(strikePromise), alloc));
-}
-
 // -- DrawableSubRun -------------------------------------------------------------------------------
 class DrawableSubRun : public SubRun {
 public:
     DrawableSubRun(DrawableOpSubmitter&& drawingDrawing)
             : fDrawingDrawing(std::move(drawingDrawing)) {}
+
+    static SubRunOwner Make(SkZip<const SkPackedGlyphID, const SkPoint> drawables,
+                            SkScalar strikeToSourceScale,
+                            SkStrikePromise&& strikePromise,
+                            SubRunAllocator* alloc) {
+        return alloc->makeUnique<DrawableSubRun>(
+                DrawableOpSubmitter::Make(drawables,
+                                          strikeToSourceScale,
+                                          std::move(strikePromise),
+                                          alloc));
+    }
 
     static SubRunOwner MakeFromBuffer(const SkMatrix&,
                                       SkReadBuffer& buffer,
@@ -1696,7 +1695,7 @@ public:
             , fVertexFiller{std::move(vertexFiller)}
             , fGlyphs{std::move(glyphs)} {}
 
-    static SubRunOwner Make(const SkZip<SkPackedGlyphID, SkPoint>& accepted,
+    static SubRunOwner Make(SkZip<const SkPackedGlyphID, const SkPoint> accepted,
                             const SkMatrix& initialPositionMatrix,
                             SkStrikePromise&& strikePromise,
                             SkMatrix creationMatrix,
@@ -1704,9 +1703,10 @@ public:
                             MaskFormat maskType,
                             SubRunAllocator* alloc) {
         auto vertexFiller = TransformedMaskVertexFiller::Make(
-                maskType, creationMatrix, creationBounds, accepted, alloc);
+                maskType, creationMatrix, creationBounds, get_positions(accepted), alloc);
 
-        auto glyphVector = GlyphVector::Make(std::move(strikePromise), accepted.get<0>(), alloc);
+        auto glyphVector =
+                GlyphVector::Make(std::move(strikePromise), get_packedIDs(accepted), alloc);
 
         return alloc->makeUnique<TransformedMaskSubRun>(
                 initialPositionMatrix, std::move(vertexFiller), std::move(glyphVector));
@@ -1951,7 +1951,7 @@ public:
         , fVertexFiller{std::move(vertexFiller)}
         , fGlyphs{std::move(glyphs)} { }
 
-    static SubRunOwner Make(const SkZip<SkPackedGlyphID, SkPoint>& accepted,
+    static SubRunOwner Make(SkZip<const SkPackedGlyphID, const SkPoint> accepted,
                             const SkFont& runFont,
                             SkStrikePromise&& strikePromise,
                             const SkMatrix& creationMatrix,
@@ -1962,10 +1962,11 @@ public:
                 MaskFormat::kA8,
                 creationMatrix,
                 creationBounds,
-                accepted,
+                get_positions(accepted),
                 alloc);
 
-        auto glyphVector = GlyphVector::Make(std::move(strikePromise), accepted.get<0>(), alloc);
+        auto glyphVector =
+                GlyphVector::Make(std::move(strikePromise), get_packedIDs(accepted), alloc);
 
         return alloc->makeUnique<SDFTSubRun>(
                 runFont.getEdging() == SkFont::Edging::kSubpixelAntiAlias,
@@ -2609,7 +2610,7 @@ SubRunContainerOwner SubRunContainer::MakeInAlloc(
                 rejected->flipRejectsToSource();
 
                 if (creationBehavior == kAddSubRuns && !accepted->empty()) {
-                    container->fSubRuns.append(make_drawable_sub_run<DrawableSubRun>(
+                    container->fSubRuns.append(DrawableSubRun::Make(
                             accepted->accepted(),
                             strikeToSourceScale,
                             strike->strikePromise(),
@@ -2675,7 +2676,7 @@ SubRunContainerOwner SubRunContainer::MakeInAlloc(
 
             // Get the raw glyph IDs to simulate device drawing to figure the maximum device
             // dimension.
-            const SkSpan<const SkGlyphID> glyphs = rejected->source().get<0>();
+            const SkSpan<const SkGlyphID> glyphs = get_glyphIDs(rejected->source());
 
             // maxGlyphDimension always returns an integer even though the return type is SkScalar.
             auto maxGlyphDimension = [&](const SkMatrix& m) {

@@ -480,9 +480,11 @@ static void test_raster_pipeline(skiatest::Reporter* r, const char* testFile, in
 using namespace SkSLTestFlags;
 
 constexpr auto kApiLevel_T = CtsEnforcement::kApiLevel_T;
+constexpr auto kApiLevel_U = CtsEnforcement::kApiLevel_U;
 constexpr auto kNever = CtsEnforcement::kNever;
-constexpr auto kNextRelease = CtsEnforcement::kNextRelease;
+[[maybe_unused]] constexpr auto kNextRelease = CtsEnforcement::kNextRelease;
 
+SKSL_TEST(RP + GPU_ES3,  kApiLevel_T, ArrayFolding,                    "folding/ArrayFolding.sksl")
 SKSL_TEST(RP + VM + GPU, kApiLevel_T, ArraySizeFolding,                "folding/ArraySizeFolding.rts")
 SKSL_TEST(RP + VM + GPU, kApiLevel_T, AssignmentOps,                   "folding/AssignmentOps.rts")
 SKSL_TEST(RP + VM + GPU, kApiLevel_T, BoolFolding,                     "folding/BoolFolding.rts")
@@ -607,7 +609,7 @@ SKSL_TEST(RP + GPU_ES3 + UsesNaN, kNever, RecursiveComparison_Vectors, "runtime/
 
 SKSL_TEST(GPU_ES3,           kNever,      ArrayCast,                       "shared/ArrayCast.sksl")
 SKSL_TEST(GPU_ES3,           kNever,      ArrayComparison,                 "shared/ArrayComparison.sksl")
-SKSL_TEST(GPU_ES3,           kNever,      ArrayConstructors,               "shared/ArrayConstructors.sksl")
+SKSL_TEST(RP + GPU_ES3,      kNever,      ArrayConstructors,               "shared/ArrayConstructors.sksl")
 SKSL_TEST(RP + VM + GPU_ES3, kNever,      ArrayFollowedByScalar,           "shared/ArrayFollowedByScalar.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, ArrayTypes,                      "shared/ArrayTypes.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, Assignment,                      "shared/Assignment.sksl")
@@ -616,7 +618,7 @@ SKSL_TEST(RP + VM + GPU,     kApiLevel_T, CommaMixedTypes,                 "shar
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, CommaSideEffects,                "shared/CommaSideEffects.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, CompileTimeConstantVariables,    "shared/CompileTimeConstantVariables.sksl")
 SKSL_TEST(GPU_ES3,           kNever,      ConstantCompositeAccessViaConstantIndex, "shared/ConstantCompositeAccessViaConstantIndex.sksl")
-SKSL_TEST(GPU_ES3,           kNever,      ConstantCompositeAccessViaDynamicIndex,  "shared/ConstantCompositeAccessViaDynamicIndex.sksl")
+SKSL_TEST(RP + GPU_ES3,      kNever,      ConstantCompositeAccessViaDynamicIndex,  "shared/ConstantCompositeAccessViaDynamicIndex.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, ConstantIf,                      "shared/ConstantIf.sksl")
 SKSL_TEST(RP + GPU_ES3,      kNever,      ConstArray,                      "shared/ConstArray.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, ConstVariableComparison,         "shared/ConstVariableComparison.sksl")
@@ -645,8 +647,8 @@ SKSL_TEST(RP + GPU_ES3,      kNever,      HexUnsigned,                     "shar
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, InoutParameters,                 "shared/InoutParameters.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, InoutParamsAreDistinct,          "shared/InoutParamsAreDistinct.sksl")
 SKSL_TEST(RP + GPU_ES3,      kApiLevel_T, IntegerDivisionES3,              "shared/IntegerDivisionES3.sksl")
-SKSL_TEST(RP + VM + GPU,     kNextRelease,LogicalAndShortCircuit,          "shared/LogicalAndShortCircuit.sksl")
-SKSL_TEST(RP + VM + GPU,     kNextRelease,LogicalOrShortCircuit,           "shared/LogicalOrShortCircuit.sksl")
+SKSL_TEST(RP + VM + GPU,     kApiLevel_U, LogicalAndShortCircuit,          "shared/LogicalAndShortCircuit.sksl")
+SKSL_TEST(RP + VM + GPU,     kApiLevel_U, LogicalOrShortCircuit,           "shared/LogicalOrShortCircuit.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, Matrices,                        "shared/Matrices.sksl")
 SKSL_TEST(RP + GPU_ES3,      kNever,      MatricesNonsquare,               "shared/MatricesNonsquare.sksl")
 // TODO(skia:12443) The MatrixConstructors tests actually don't work on MANY devices. The GLSL SkQP
@@ -654,8 +656,9 @@ SKSL_TEST(RP + GPU_ES3,      kNever,      MatricesNonsquare,               "shar
 SKSL_TEST(RP + VM,           kNever,      MatrixConstructorsES2,           "shared/MatrixConstructorsES2.sksl")
 SKSL_TEST(RP,                kNever,      MatrixConstructorsES3,           "shared/MatrixConstructorsES3.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, MatrixEquality,                  "shared/MatrixEquality.sksl")
-SKSL_TEST(RP + VM + GPU,     kNextRelease,MatrixOpEqualsES2,               "shared/MatrixOpEqualsES2.sksl")
-SKSL_TEST(RP + GPU_ES3,      kNextRelease,MatrixOpEqualsES3,               "shared/MatrixOpEqualsES3.sksl")
+SKSL_TEST(RP + GPU_ES3,      kNextRelease,MatrixIndexLookup,               "shared/MatrixIndexLookup.sksl")
+SKSL_TEST(RP + VM + GPU,     kApiLevel_U, MatrixOpEqualsES2,               "shared/MatrixOpEqualsES2.sksl")
+SKSL_TEST(RP + GPU_ES3,      kApiLevel_U, MatrixOpEqualsES3,               "shared/MatrixOpEqualsES3.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, MatrixScalarMath,                "shared/MatrixScalarMath.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, MatrixToVectorCast,              "shared/MatrixToVectorCast.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, MultipleAssignments,             "shared/MultipleAssignments.sksl")
@@ -688,7 +691,7 @@ SKSL_TEST(RP + GPU_ES3,      kNever,      SwitchWithLoopsES3,              "shar
 SKSL_TEST(RP + VM + GPU,     kNever,      SwizzleAsLValue,                 "shared/SwizzleAsLValue.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, SwizzleBoolConstants,            "shared/SwizzleBoolConstants.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, SwizzleByConstantIndex,          "shared/SwizzleByConstantIndex.sksl")
-SKSL_TEST(GPU_ES3,           kNever,      SwizzleByIndex,                  "shared/SwizzleByIndex.sksl")
+SKSL_TEST(RP + GPU_ES3,      kNever,      SwizzleByIndex,                  "shared/SwizzleByIndex.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, SwizzleConstants,                "shared/SwizzleConstants.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, SwizzleLTRB,                     "shared/SwizzleLTRB.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, SwizzleOpt,                      "shared/SwizzleOpt.sksl")
@@ -698,7 +701,7 @@ SKSL_TEST(RP + VM + GPU,     kApiLevel_T, SwizzleScalarInt,                "shar
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, TernaryAsLValueEntirelyFoldable, "shared/TernaryAsLValueEntirelyFoldable.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, TernaryAsLValueFoldableTest,     "shared/TernaryAsLValueFoldableTest.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, TernaryExpression,               "shared/TernaryExpression.sksl")
-SKSL_TEST(RP + VM + GPU,     kNextRelease,TernarySideEffects,              "shared/TernarySideEffects.sksl")
+SKSL_TEST(RP + VM + GPU,     kApiLevel_U, TernarySideEffects,              "shared/TernarySideEffects.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, UnaryPositiveNegative,           "shared/UnaryPositiveNegative.sksl")
 SKSL_TEST(VM + GPU,          kApiLevel_T, UniformArray,                    "shared/UniformArray.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, UniformMatrixResize,             "shared/UniformMatrixResize.sksl")
