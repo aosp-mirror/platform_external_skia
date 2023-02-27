@@ -91,6 +91,10 @@
 #define SK_SUPPORT_PDF
 #endif
 
+#ifndef SK_TYPEFACE_FACTORY_FREETYPE
+#define SK_TYPEFACE_FACTORY_FREETYPE
+#endif
+
 #ifndef SK_USE_VMA
 #define SK_USE_VMA
 #endif
