@@ -14,6 +14,7 @@
 #include "include/core/SkShader.h"
 #include "include/core/SkSpan.h"
 #include "include/core/SkTileMode.h"
+#include "include/effects/SkGradientShader.h"
 #include "include/gpu/graphite/Context.h"
 #include "include/private/SkColorData.h"
 #include "src/core/SkColorSpaceXformSteps.h"
@@ -29,6 +30,7 @@ class KeyContext;
 class PaintParamsKeyBuilder;
 class PipelineDataGatherer;
 class UniquePaintParamsID;
+enum class ReadSwizzle;
 
 /**
  * The KeyHelpers can be used to manually construct an SkPaintParamsKey.
@@ -83,7 +85,8 @@ struct GradientShaderBlocks {
                      SkTileMode,
                      int numStops,
                      const SkPMColor4f* colors,
-                     float* offsets);
+                     float* offsets,
+                     const SkGradientShader::Interpolation&);
 
         bool operator==(const GradientData& rhs) const {
             return fType == rhs.fType &&
@@ -113,6 +116,8 @@ struct GradientShaderBlocks {
         int                    fNumStops;
         SkPMColor4f            fColors[kMaxStops];
         float                  fOffsets[kMaxStops];
+
+        SkGradientShader::Interpolation fInterpolation;
     };
 
     static void BeginBlock(const KeyContext&,
@@ -145,11 +150,13 @@ struct ImageShaderBlock {
         ImageData(const SkSamplingOptions& sampling,
                   SkTileMode tileModeX,
                   SkTileMode tileModeY,
-                  SkRect subset);
+                  SkRect subset,
+                  ReadSwizzle readSwizzle);
 
         SkSamplingOptions fSampling;
         SkTileMode fTileModes[2];
         SkRect fSubset;
+        ReadSwizzle fReadSwizzle;
 
         SkColorSpaceXformSteps fSteps;
 
