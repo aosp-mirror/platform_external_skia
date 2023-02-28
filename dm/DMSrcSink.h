@@ -351,7 +351,7 @@ public:
 
 private:
     Path fPath;
-    mutable SkTArray<SkDocumentPage> fPages;
+    mutable skia_private::TArray<SkDocumentPage> fPages;
 };
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
@@ -580,7 +580,7 @@ private:
     int fPageIndex;
 };
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 
 class GraphiteSink : public Sink {
 public:

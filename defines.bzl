@@ -59,21 +59,16 @@ GENERAL_DEFINES = [
 GPU_DEFINES = select_multi({
     "//src/gpu:gl_backend": [
         "SK_GL",
-        "SK_SUPPORT_GPU=1",
+        "SK_GANESH",
     ],
     "//src/gpu:vulkan_backend": [
         "SK_VULKAN",
-        "SK_SUPPORT_GPU=1",
+        "SK_GANESH",
     ],
     "//src/gpu:dawn_backend": [
         "SK_DAWN",
-        "SK_SUPPORT_GPU=1",
+        "SK_GANESH",
         "VK_USE_PLATFORM_XCB_KHR",  # TODO(kjlubick) support dawn's dawn_enable_vulkan etc
-    ],
-}) + select({
-    "//src/gpu:has_gpu_backend": [],
-    "//conditions:default": [
-        "SK_SUPPORT_GPU=0",
     ],
 }) + select({
     "//src/gpu:gl_standard": [
@@ -94,24 +89,20 @@ GPU_DEFINES = select_multi({
     "//conditions:default": [],
 })
 
-CODEC_DEFINES = [
-    "SK_HAS_ANDROID_CODEC",
-] + select_multi(
-    {
-        "//src/codec:avif_decode_codec": ["SK_CODEC_DECODES_AVIF"],
-        "//src/codec:gif_decode_codec": ["SK_HAS_WUFFS_LIBRARY"],
-        "//src/codec:jpeg_decode_codec": ["SK_CODEC_DECODES_JPEG"],
-        "//src/encode:jpeg_encode_codec": ["SK_ENCODE_JPEG"],
-        "//src/codec:png_decode_codec": ["SK_CODEC_DECODES_PNG"],
-        "//src/encode:png_encode_codec": ["SK_ENCODE_PNG"],
-        "//src/codec:raw_decode_codec": [
-            "SK_CODEC_DECODES_RAW",
-            "SK_CODEC_DECODES_JPEG",
-        ],
-        "//src/codec:webp_decode_codec": ["SK_CODEC_DECODES_WEBP"],
-        "//src/encode:webp_encode_codec": ["SK_ENCODE_WEBP"],
-    },
-)
+CODEC_DEFINES = select_multi({
+    "//src/codec:avif_decode_codec": ["SK_CODEC_DECODES_AVIF"],
+    "//src/codec:gif_decode_codec": ["SK_HAS_WUFFS_LIBRARY"],
+    "//src/codec:jpeg_decode_codec": ["SK_CODEC_DECODES_JPEG"],
+    "//src/encode:jpeg_encode_codec": ["SK_ENCODE_JPEG"],
+    "//src/codec:png_decode_codec": ["SK_CODEC_DECODES_PNG"],
+    "//src/encode:png_encode_codec": ["SK_ENCODE_PNG"],
+    "//src/codec:raw_decode_codec": [
+        "SK_CODEC_DECODES_RAW",
+        "SK_CODEC_DECODES_JPEG",
+    ],
+    "//src/codec:webp_decode_codec": ["SK_CODEC_DECODES_WEBP"],
+    "//src/encode:webp_encode_codec": ["SK_ENCODE_WEBP"],
+})
 
 TYPEFACE_DEFINES = select_multi(
     {

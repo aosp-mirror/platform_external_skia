@@ -99,14 +99,6 @@ public:
                           Position pos,
                           bool isFunctionReturnValue);
 
-    /**
-     * Creates a single temporary slot for scratch storage. Temporary slots can be recycled, which
-     * frees them up for reuse. Temporary slots are not assigned a name and have an arbitrary type.
-     */
-    SlotRange createTemporarySlot(const Type& type);
-    void recycleTemporarySlot(SlotRange temporarySlot);
-
-
     /** Looks up the slots associated with an SkSL variable; creates the slot if necessary. */
     SlotRange getVariableSlots(const Variable& v);
 
@@ -124,48 +116,12 @@ private:
     std::string makeTempName() { return SkSL::String::printf("[temporary %d]", fTemporaryCount++); }
 
     SkTHashMap<const IRNode*, SlotRange> fSlotMap;
-    SkTArray<Slot> fRecycledSlots;
     int fSlotCount = 0;
     int fTemporaryCount = 0;
     std::vector<SlotDebugInfo>* fSlotDebugInfo;
 };
 
-class AutoContinueMask {
-public:
-    AutoContinueMask() = default;
-
-    ~AutoContinueMask() {
-        if (fSlotRange) {
-            fSlotManager->recycleTemporarySlot(*fSlotRange);
-            *fSlotRange = fPreviousSlotRange;
-        }
-    }
-
-    void enable(SlotManager* mgr, const Type& type, SlotRange* range) {
-        fSlotManager = mgr;
-        fSlotRange = range;
-        fPreviousSlotRange = *fSlotRange;
-        *fSlotRange = fSlotManager->createTemporarySlot(type);
-    }
-
-    void enterLoopBody(Builder& builder) {
-        if (fSlotRange) {
-            builder.zero_slots_unmasked(*fSlotRange);
-        }
-    }
-
-    void exitLoopBody(Builder& builder) {
-        if (fSlotRange) {
-            builder.reenable_loop_mask(*fSlotRange);
-        }
-    }
-
-private:
-    SlotManager* fSlotManager = nullptr;
-    SlotRange* fSlotRange = nullptr;
-    SlotRange fPreviousSlotRange;
-};
-
+class AutoContinueMask;
 class LValue;
 
 class Generator {
@@ -351,13 +307,23 @@ public:
 
     BuilderOp getTypedOp(const SkSL::Type& type, const TypedOps& ops) const;
 
-    bool needsReturnMask() {
+    Analysis::ReturnComplexity returnComplexity(const FunctionDefinition* func) {
         Analysis::ReturnComplexity* complexity = fReturnComplexityMap.find(fCurrentFunction);
         if (!complexity) {
             complexity = fReturnComplexityMap.set(fCurrentFunction,
                                                   Analysis::GetReturnComplexity(*fCurrentFunction));
         }
-        return *complexity >= Analysis::ReturnComplexity::kEarlyReturns;
+        return *complexity;
+    }
+
+    bool needsReturnMask() {
+        return this->returnComplexity(fCurrentFunction) >=
+               Analysis::ReturnComplexity::kEarlyReturns;
+    }
+
+    bool needsFunctionResultSlots() {
+        return this->returnComplexity(fCurrentFunction) >
+               Analysis::ReturnComplexity::kSingleSafeReturn;
     }
 
     static bool IsUniform(const Variable& var) {
@@ -385,7 +351,7 @@ private:
 
     const FunctionDefinition* fCurrentFunction = nullptr;
     SlotRange fCurrentFunctionResult;
-    SlotRange fCurrentContinueMask;
+    AutoContinueMask* fCurrentContinueMask = nullptr;
     int fCurrentStack = 0;
     int fNextStackID = 0;
     SkTArray<int> fRecycledStacks;
@@ -440,6 +406,7 @@ private:
                                              BuilderOp::unsupported,
                                              BuilderOp::unsupported,
                                              BuilderOp::unsupported};
+    friend class AutoContinueMask;
 };
 
 class AutoStack {
@@ -462,8 +429,17 @@ public:
         fGenerator->setCurrentStack(fParentStackID);
     }
 
-    void pushClone(int slots, int offsetFromStackTop = 0) {
-        fGenerator->builder()->push_clone_from_stack(slots, fStackID, offsetFromStackTop);
+    void pushClone(int slots) {
+        this->pushClone(SlotRange{0, slots}, /*offsetFromStackTop=*/slots);
+    }
+
+    void pushClone(SlotRange range, int offsetFromStackTop) {
+        fGenerator->builder()->push_clone_from_stack(range, fStackID, offsetFromStackTop);
+    }
+
+    void pushCloneIndirect(SlotRange range, int dynamicStackID, int offsetFromStackTop) {
+        fGenerator->builder()->push_clone_indirect_from_stack(
+                range, dynamicStackID, /*otherStackID=*/fStackID, offsetFromStackTop);
     }
 
     int stackID() const {
@@ -474,6 +450,56 @@ private:
     Generator* fGenerator;
     int fStackID = 0;
     int fParentStackID = 0;
+};
+
+class AutoContinueMask {
+public:
+    AutoContinueMask(Generator* gen) : fGenerator(gen) {}
+
+    ~AutoContinueMask() {
+        if (fPreviousContinueMask) {
+            fGenerator->fCurrentContinueMask = fPreviousContinueMask;
+        }
+    }
+
+    void enable() {
+        SkASSERT(!fContinueMaskStack.has_value());
+
+        fContinueMaskStack.emplace(fGenerator);
+        fPreviousContinueMask = fGenerator->fCurrentContinueMask;
+        fGenerator->fCurrentContinueMask = this;
+    }
+
+    void enter() {
+        SkASSERT(fContinueMaskStack.has_value());
+        fContinueMaskStack->enter();
+    }
+
+    void exit() {
+        SkASSERT(fContinueMaskStack.has_value());
+        fContinueMaskStack->exit();
+    }
+
+    void enterLoopBody() {
+        if (fContinueMaskStack.has_value()) {
+            fContinueMaskStack->enter();
+            fGenerator->builder()->push_literal_i(0);
+            fContinueMaskStack->exit();
+        }
+    }
+
+    void exitLoopBody() {
+        if (fContinueMaskStack.has_value()) {
+            fContinueMaskStack->enter();
+            fGenerator->builder()->pop_and_reenable_loop_mask();
+            fContinueMaskStack->exit();
+        }
+    }
+
+private:
+    std::optional<AutoStack> fContinueMaskStack;
+    Generator* fGenerator = nullptr;
+    AutoContinueMask* fPreviousContinueMask = nullptr;
 };
 
 class LValue {
@@ -552,11 +578,9 @@ public:
         }
 
         if (dynamicOffset) {
-            // TODO: implement indirect access inside scratch lvalues
-            return unsupported();
+            fDedicatedStack->pushCloneIndirect(fixedOffset, dynamicOffset->stackID(), fNumSlots);
         } else {
-            fDedicatedStack->pushClone(fixedOffset.count,
-                                       fNumSlots - fixedOffset.count - fixedOffset.index);
+            fDedicatedStack->pushClone(fixedOffset, fNumSlots);
         }
         if (!swizzle.empty()) {
             gen->builder()->swizzle(fixedOffset.count, swizzle);
@@ -900,40 +924,6 @@ void SlotManager::addSlotDebugInfo(const std::string& varName,
     SkASSERT((size_t)groupIndex == type.slotCount());
 }
 
-SlotRange SlotManager::createTemporarySlot(const Type& type) {
-    SkASSERT(type.slotCount() == 1);
-
-    // If we have an available slot to reclaim, take it now.
-    if (!fRecycledSlots.empty()) {
-        SlotRange result = {fRecycledSlots.back(), 1};
-        fRecycledSlots.pop_back();
-        return result;
-    }
-
-    // Synthesize a new temporary slot.
-    if (fSlotDebugInfo) {
-        // Our debug slot-info table should have the same length as the actual slot table.
-        SkASSERT(fSlotDebugInfo->size() == (size_t)fSlotCount);
-
-        // Add this temporary slot to the debug slot-info table. It's just scratch space which can
-        // be reused over the course of execution, so it doesn't get a name or type (uint will do).
-        this->addSlotDebugInfo(this->makeTempName(), type, Position{},
-                               /*isFunctionReturnValue=*/false);
-
-        // Confirm that we added the expected number of slots.
-        SkASSERT(fSlotDebugInfo->size() == (size_t)(fSlotCount + 1));
-    }
-
-    SlotRange result = {fSlotCount, 1};
-    ++fSlotCount;
-    return result;
-}
-
-void SlotManager::recycleTemporarySlot(SlotRange temporarySlot) {
-    SkASSERT(temporarySlot.count == 1);
-    fRecycledSlots.push_back(temporarySlot.index);
-}
-
 SlotRange SlotManager::createSlots(std::string name,
                                    const Type& type,
                                    Position pos,
@@ -1242,13 +1232,15 @@ bool Generator::writeContinueStatement(const ContinueStatement&) {
     // This could be written as one hand-tuned RasterPipeline op, but for now, we reuse existing ops
     // to assemble a continue op.
 
-    // Set any currently-executing lanes in the continue-mask to true via push-pop.
-    SkASSERT(fCurrentContinueMask.count == 1);
+    // Set any currently-executing lanes in the continue-mask to true via `select.`
+    fCurrentContinueMask->enter();
     fBuilder.push_literal_i(~0);
-    this->popToSlotRange(fCurrentContinueMask);
+    fBuilder.select(/*slots=*/1);
 
     // Disable any currently-executing lanes from the loop mask.
     fBuilder.mask_off_loop_mask();
+    fCurrentContinueMask->exit();
+
     return true;
 }
 
@@ -1259,24 +1251,23 @@ bool Generator::writeDoStatement(const DoStatement& d) {
 
     // If `continue` is used in the loop...
     Analysis::LoopControlFlowInfo loopInfo = Analysis::GetLoopControlFlowInfo(*d.statement());
-    AutoContinueMask autoContinueMask;
+    AutoContinueMask autoContinueMask(this);
     if (loopInfo.fHasContinue) {
         // ... create a temporary slot for continue-mask storage.
-        autoContinueMask.enable(&fProgramSlots, *fProgram.fContext->fTypes.fUInt,
-                                &fCurrentContinueMask);
+        autoContinueMask.enable();
     }
 
     // Write the do-loop body.
     int labelID = fBuilder.nextLabelID();
     fBuilder.label(labelID);
 
-    autoContinueMask.enterLoopBody(fBuilder);
+    autoContinueMask.enterLoopBody();
 
     if (!this->writeStatement(*d.statement())) {
         return false;
     }
 
-    autoContinueMask.exitLoopBody(fBuilder);
+    autoContinueMask.exitLoopBody();
 
     // Emit the test-expression, in order to combine it with the loop mask.
     if (!this->pushExpression(*d.test())) {
@@ -1367,11 +1358,10 @@ bool Generator::writeForStatement(const ForStatement& f) {
         return unsupported();
     }
 
-    AutoContinueMask autoContinueMask;
+    AutoContinueMask autoContinueMask(this);
     if (loopInfo.fHasContinue) {
         // Acquire a temporary slot for continue-mask storage.
-        autoContinueMask.enable(&fProgramSlots, *fProgram.fContext->fTypes.fUInt,
-                                &fCurrentContinueMask);
+        autoContinueMask.enable();
     }
 
     // Save off the original loop mask.
@@ -1387,13 +1377,13 @@ bool Generator::writeForStatement(const ForStatement& f) {
     // Write the for-loop body.
     fBuilder.label(loopBodyID);
 
-    autoContinueMask.enterLoopBody(fBuilder);
+    autoContinueMask.enterLoopBody();
 
     if (!this->writeStatement(*f.statement())) {
         return unsupported();
     }
 
-    autoContinueMask.exitLoopBody(fBuilder);
+    autoContinueMask.exitLoopBody();
 
     // Run the next-expression. Immediately discard its result.
     if (f.next()) {
@@ -1516,7 +1506,9 @@ bool Generator::writeReturnStatement(const ReturnStatement& r) {
         if (!this->pushExpression(*r.expression())) {
             return unsupported();
         }
-        this->popToSlotRange(fCurrentFunctionResult);
+        if (this->needsFunctionResultSlots()) {
+            this->popToSlotRange(fCurrentFunctionResult);
+        }
     }
     if (fBuilder.executionMaskWritesAreEnabled() && this->needsReturnMask()) {
         fBuilder.mask_off_return_mask();
@@ -1746,8 +1738,8 @@ bool Generator::pushMatrixMultiply(LValue* lvalue,
     matrixStack.exit();
 
     // Calculate the offsets of the left- and right-matrix, relative to the stack-top.
-    int leftMtxBase  = left.type().slotCount() + right.type().slotCount() - leftColumns;
-    int rightMtxBase = right.type().slotCount() - leftColumns;
+    int leftMtxBase  = left.type().slotCount() + right.type().slotCount();
+    int rightMtxBase = right.type().slotCount();
 
     // Emit each matrix element.
     for (int c = 0; c < outColumns; ++c) {
@@ -1755,8 +1747,8 @@ bool Generator::pushMatrixMultiply(LValue* lvalue,
             // Dot a vector from left[*][r] with right[c][*].
             // (Because the left=matrix has been transposed, we actually pull left[r][*], which
             // allows us to clone a column at once instead of cloning each slot individually.)
-            matrixStack.pushClone(leftColumns, leftMtxBase  - r * leftColumns);
-            matrixStack.pushClone(leftColumns, rightMtxBase - c * leftColumns);
+            matrixStack.pushClone(SlotRange{r * leftColumns, leftColumns}, leftMtxBase);
+            matrixStack.pushClone(SlotRange{c * leftColumns, leftColumns}, rightMtxBase);
             fBuilder.dot_floats(leftColumns);
         }
     }
@@ -2330,6 +2322,11 @@ bool Generator::pushFunctionCall(const FunctionCall& c) {
         fBuilder.disableExecutionMaskWrites();
     }
 
+    // If the function uses result slots, move its result from slots onto the stack.
+    if (this->needsFunctionResultSlots()) {
+        fBuilder.push_slots(*r);
+    }
+
     // We've returned back to the last function.
     fCurrentFunction = lastFunction;
 
@@ -2350,7 +2347,6 @@ bool Generator::pushFunctionCall(const FunctionCall& c) {
     }
 
     // Copy the function result from its slots onto the stack.
-    fBuilder.push_slots(*r);
     fBuilder.label(skipLabelID);
     return true;
 }
@@ -2534,6 +2530,31 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0) {
             fBuilder.transpose(arg0.type().columns(), arg0.type().rows());
             return true;
 
+        case IntrinsicKind::k_fromLinearSrgb_IntrinsicKind:
+        case IntrinsicKind::k_toLinearSrgb_IntrinsicKind: {
+            // The argument must be a half3.
+            SkASSERT(arg0.type().matches(*fProgram.fContext->fTypes.fHalf3));
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            // The intrinsics accept a three-component value; add alpha for the push/pop_src_rgba
+            fBuilder.push_literal_f(1.0f);
+            // Copy arguments from the stack into src
+            fBuilder.pop_src_rgba();
+
+            if (intrinsic == IntrinsicKind::k_fromLinearSrgb_IntrinsicKind) {
+                fBuilder.invoke_from_linear_srgb();
+            } else {
+                fBuilder.invoke_to_linear_srgb();
+            }
+
+            // The xform has left the result color in src.rgba; push it onto the stack
+            fBuilder.push_src_rgba();
+            // The intrinsic returns a three-component value; discard alpha
+            this->discardExpression(/*slots=*/1);
+            return true;
+        }
+
         default:
             break;
     }
@@ -2576,7 +2597,7 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic,
                 return unsupported();
             }
             subexpressionStack.exit();
-            subexpressionStack.pushClone(3);
+            subexpressionStack.pushClone(/*slots=*/3);
 
             fBuilder.swizzle(/*consumedSlots=*/3, {1, 2, 0});
             subexpressionStack.enter();
@@ -2591,7 +2612,7 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic,
                 return unsupported();
             }
             subexpressionStack.exit();
-            subexpressionStack.pushClone(3);
+            subexpressionStack.pushClone(/*slots=*/3);
 
             fBuilder.swizzle(/*consumedSlots=*/3, {2, 0, 1});
             fBuilder.binary_op(BuilderOp::mul_n_floats, 3);
@@ -2603,7 +2624,7 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic,
 
             // Migrate the result of the second subexpression (`arg0.zxy * arg1.yzx`) back onto the
             // main stack and subtract it from the first subexpression (`arg0.yzx * arg1.zxy`).
-            subexpressionStack.pushClone(3);
+            subexpressionStack.pushClone(/*slots=*/3);
             fBuilder.binary_op(BuilderOp::sub_n_floats, 3);
 
             // Now that the calculation is complete, discard the subexpression on the next stack.
@@ -3127,7 +3148,11 @@ bool Generator::writeProgram(const FunctionDefinition& function) {
 
     // Move the result of main() from slots into RGBA. Allow dRGBA to remain in a trashed state.
     SkASSERT(mainResult->count == 4);
-    fBuilder.load_src(*mainResult);
+    if (this->needsFunctionResultSlots()) {
+        fBuilder.load_src(*mainResult);
+    } else {
+        fBuilder.pop_src_rgba();
+    }
     return true;
 }
 

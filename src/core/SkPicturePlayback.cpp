@@ -390,7 +390,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
                 // there aren't enough bytes to provide that many matrices
                 break;
             }
-            SkTArray<SkMatrix> matrices(matrixCount);
+            TArray<SkMatrix> matrices(matrixCount);
             for (int i = 0; i < matrixCount && reader->isValid(); ++i) {
                 reader->readMatrix(&matrices.push_back());
             }
@@ -611,7 +611,7 @@ void SkPicturePlayback::handleOp(SkReadBuffer* reader,
             canvas->drawTextBlob(blob, x, y, paint);
         } break;
         case DRAW_SLUG: {
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
             const sktext::gpu::Slug* slug = fPictureData->getSlug(reader);
             BREAK_ON_READ_ERROR(reader);
 

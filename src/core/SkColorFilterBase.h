@@ -13,6 +13,7 @@
 #include "src/core/SkVM_fwd.h"
 
 #include <memory>
+#include <tuple>
 
 class GrColorInfo;
 class GrFragmentProcessor;
@@ -45,7 +46,7 @@ public:
     */
     virtual bool onIsAlphaUnchanged() const { return false; }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     /**
      *  A subclass may implement this factory function to work with the GPU backend. It returns
      *  a GrFragmentProcessor that implements the color filter in GPU shader code.
@@ -84,7 +85,7 @@ public:
 
     virtual SkPMColor4f onFilterColor4f(const SkPMColor4f& color, SkColorSpace* dstCS) const;
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
     /**
         Add implementation details, for the specified backend, of this SkColorFilter to the
         provided key.

@@ -17,7 +17,7 @@
 #include "include/private/base/SkTemplates.h"
 #include "src/core/SkStrike.h"
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "src/text/gpu/StrikeCache.h"
 #endif
 

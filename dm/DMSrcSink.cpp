@@ -82,7 +82,7 @@
     #include "src/xml/SkXMLWriter.h"
 #endif
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/gpu/graphite/Recording.h"
@@ -99,6 +99,8 @@
 
 #include <cmath>
 #include <functional>
+
+using namespace skia_private;
 
 static DEFINE_bool(multiPage, false,
                    "For document-type backends, render the source into multiple pages");
@@ -1098,12 +1100,12 @@ Result SKPSrc::draw(SkCanvas* canvas) const {
 
     struct DeserializationContext {
         GrDirectContext*           fDirectContext = nullptr;
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
         skgpu::graphite::Recorder* fRecorder = nullptr;
 #endif
     } ctx {
         GrAsDirectContext(canvas->recordingContext()),
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
         canvas->recorder()
 #endif
     };
@@ -1178,14 +1180,14 @@ Result BisectSrc::draw(SkCanvas* canvas) const {
     class PathFindingCanvas : public SkCanvas {
     public:
         PathFindingCanvas(int width, int height) : SkCanvas(width, height, nullptr) {}
-        const SkTArray<FoundPath>& foundPaths() const { return fFoundPaths; }
+        const TArray<FoundPath>& foundPaths() const { return fFoundPaths; }
 
     private:
         void onDrawPath(const SkPath& path, const SkPaint& paint) override {
             fFoundPaths.push_back() = {path, paint, this->getTotalMatrix()};
         }
 
-        SkTArray<FoundPath> fFoundPaths;
+        TArray<FoundPath> fFoundPaths;
     };
 
     PathFindingCanvas pathFinder(canvas->getBaseLayerSize().width(),
@@ -2096,7 +2098,7 @@ Result RasterSink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString*) co
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 
 GraphiteSink::GraphiteSink(const SkCommandLineConfigGraphite* config)
         : fContextType(config->getContextType())
