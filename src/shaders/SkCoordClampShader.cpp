@@ -14,23 +14,32 @@
 #include "src/core/SkWriteBuffer.h"
 #include "src/shaders/SkShaderBase.h"
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/ganesh/GrFPArgs.h"
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
-#include "src/gpu/ganesh/effects/GrMatrixEffect.h"
 #include "src/gpu/ganesh/effects/GrSkSLFP.h"
 #endif
+
+#if defined(SK_GRAPHITE)
+#include "src/gpu/graphite/KeyHelpers.h"
+#include "src/gpu/graphite/PaintParamsKey.h"
+#endif // SK_GRAPHITE
 
 class SkShader_CoordClamp final : public SkShaderBase {
 public:
     SkShader_CoordClamp(sk_sp<SkShader> shader, const SkRect& subset)
             : fShader(std::move(shader)), fSubset(subset) {}
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs&,
                                                              const MatrixRec&) const override;
+#endif
+#if defined(SK_GRAPHITE)
+    void addToKey(const skgpu::graphite::KeyContext&,
+                  skgpu::graphite::PaintParamsKeyBuilder*,
+                  skgpu::graphite::PipelineDataGatherer*) const override;
 #endif
 
 protected:
@@ -107,7 +116,7 @@ skvm::Color SkShader_CoordClamp::program(skvm::Builder* p,
     return as_SB(fShader)->program(p, device, local, paint, *childMRec, cinfo, uniforms, alloc);
 }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 std::unique_ptr<GrFragmentProcessor> SkShader_CoordClamp::asFragmentProcessor(
         const GrFPArgs& args, const MatrixRec& mRec) const {
     static const SkRuntimeEffect* effect = SkMakeRuntimeEffect(SkRuntimeEffect::MakeForShader,
@@ -139,7 +148,21 @@ std::unique_ptr<GrFragmentProcessor> SkShader_CoordClamp::asFragmentProcessor(
     std::tie(success, fp) = mRec.apply(std::move(fp));
     return success ? std::move(fp) : nullptr;
 }
-#endif  // SK_SUPPORT_GPU
+#endif  // defined(SK_GANESH)
+
+#if defined(SK_GRAPHITE)
+void SkShader_CoordClamp::addToKey(const skgpu::graphite::KeyContext& keyContext,
+                                   skgpu::graphite::PaintParamsKeyBuilder* builder,
+                                   skgpu::graphite::PipelineDataGatherer* gatherer) const {
+    using namespace skgpu::graphite;
+
+    CoordClampShaderBlock::CoordClampData data(fSubset);
+
+    CoordClampShaderBlock::BeginBlock(keyContext, builder, gatherer, &data);
+        as_SB(fShader)->addToKey(keyContext, builder, gatherer);
+    builder->endBlock();
+}
+#endif // SK_GRAPHITE
 
 void SkRegisterCoordClampShaderFlattenable() { SK_REGISTER_FLATTENABLE(SkShader_CoordClamp); }
 

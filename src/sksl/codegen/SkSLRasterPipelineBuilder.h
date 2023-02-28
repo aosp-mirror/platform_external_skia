@@ -48,10 +48,14 @@ enum class ProgramOp {
     // ... has branch targets...
     label,
 
-    // ... and can invoke child programs.
+    // ... can invoke child programs ...
     invoke_shader,
     invoke_color_filter,
     invoke_blender,
+
+    // ... and can invoke color space transforms.
+    invoke_to_linear_srgb,
+    invoke_from_linear_srgb,
 };
 
 // BuilderOps are a superset of ProgramOps. They are used by the RP::Builder, which works in terms
@@ -74,6 +78,10 @@ enum class BuilderOp {
     invoke_color_filter,
     invoke_blender,
 
+    // ... can invoke color space transforms ...
+    invoke_to_linear_srgb,
+    invoke_from_linear_srgb,
+
     // ... and also has Builder-specific ops. These ops generally interface with the stack, and are
     // converted into ProgramOps during `makeStages`.
     push_literal,
@@ -84,6 +92,7 @@ enum class BuilderOp {
     push_zeros,
     push_clone,
     push_clone_from_stack,
+    push_clone_indirect_from_stack,
     copy_stack_to_slots,
     copy_stack_to_slots_unmasked,
     swizzle_copy_stack_to_slots,
@@ -107,29 +116,31 @@ enum class BuilderOp {
 };
 
 // If the child-invocation enums are not in sync between enums, program creation will not work.
-static_assert((int)ProgramOp::label               == (int)BuilderOp::label);
-static_assert((int)ProgramOp::invoke_shader       == (int)BuilderOp::invoke_shader);
-static_assert((int)ProgramOp::invoke_color_filter == (int)BuilderOp::invoke_color_filter);
-static_assert((int)ProgramOp::invoke_blender      == (int)BuilderOp::invoke_blender);
+static_assert((int)ProgramOp::label                   == (int)BuilderOp::label);
+static_assert((int)ProgramOp::invoke_shader           == (int)BuilderOp::invoke_shader);
+static_assert((int)ProgramOp::invoke_color_filter     == (int)BuilderOp::invoke_color_filter);
+static_assert((int)ProgramOp::invoke_blender          == (int)BuilderOp::invoke_blender);
+static_assert((int)ProgramOp::invoke_to_linear_srgb   == (int)BuilderOp::invoke_to_linear_srgb);
+static_assert((int)ProgramOp::invoke_from_linear_srgb == (int)BuilderOp::invoke_from_linear_srgb);
 
 // Represents a single raster-pipeline SkSL instruction.
 struct Instruction {
-    Instruction(BuilderOp op, std::initializer_list<Slot> slots, int a = 0, int b = 0, int c = 0)
-            : fOp(op), fImmA(a), fImmB(b), fImmC(c) {
+    Instruction(BuilderOp op, std::initializer_list<Slot> slots,
+                int a = 0, int b = 0, int c = 0, int d = 0)
+            : fOp(op), fImmA(a), fImmB(b), fImmC(c), fImmD(d) {
         auto iter = slots.begin();
         if (iter != slots.end()) { fSlotA = *iter++; }
         if (iter != slots.end()) { fSlotB = *iter++; }
-        if (iter != slots.end()) { fSlotC = *iter++; }
         SkASSERT(iter == slots.end());
     }
 
     BuilderOp fOp;
     Slot      fSlotA = NA;
     Slot      fSlotB = NA;
-    Slot      fSlotC = NA;
     int       fImmA = 0;
     int       fImmB = 0;
     int       fImmC = 0;
+    int       fImmD = 0;
 };
 
 class Callbacks {
@@ -430,9 +441,16 @@ public:
                                  numSlots + offsetFromStackTop});
     }
 
-    // Creates a single clone from an item on any temp stack. The cloned item can consist of any
-    // number of slots.
-    void push_clone_from_stack(int numSlots, int otherStackIndex, int offsetFromStackTop = 0);
+    // Clones a range of slots from another stack onto this stack.
+    void push_clone_from_stack(SlotRange range, int otherStackID, int offsetFromStackTop);
+
+    // Translates into copy_from_indirect_unmasked (from one temp stack to another) in Raster
+    // Pipeline. `fixedOffset` denotes a range of slots within the top `offsetFromStackTop` slots of
+    // `otherStackID`. This range is pushed forward by the value at the top of `dynamicStackID`.
+    void push_clone_indirect_from_stack(SlotRange fixedOffset,
+                                        int dynamicStackID,
+                                        int otherStackID,
+                                        int offsetFromStackTop);
 
     // Compares the stack top with the passed-in value; if it matches, enables the loop mask.
     void case_op(int value) {
@@ -565,6 +583,14 @@ public:
 
     void invoke_blender(int childIdx) {
         fInstructions.push_back({BuilderOp::invoke_blender, {}, childIdx});
+    }
+
+    void invoke_to_linear_srgb() {
+        fInstructions.push_back({BuilderOp::invoke_to_linear_srgb, {}});
+    }
+
+    void invoke_from_linear_srgb() {
+        fInstructions.push_back({BuilderOp::invoke_from_linear_srgb, {}});
     }
 
 private:
