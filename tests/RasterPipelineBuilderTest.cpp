@@ -125,6 +125,27 @@ R"(    1. store_condition_mask           $0 = CondMask
 )");
 }
 
+
+DEF_TEST(RasterPipelineBuilderCaseOp, r) {
+    // Create a very simple nonsense program.
+    SkSL::RP::Builder builder;
+
+    builder.push_literal_i(123);    // push a test value
+    builder.push_literal_i(~0);     // push an all-on default mask
+    builder.case_op(123);           // do `case 123:`
+    builder.case_op(124);           // do `case 124:`
+    builder.discard_stack(2);
+
+    std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/0,
+                                                                /*numUniformSlots=*/0);
+    check(r, *program,
+R"(    1. copy_constant                  $0 = 0x0000007B (1.723597e-43)
+    2. copy_constant                  $1 = 0xFFFFFFFF
+    3. case_op                        if ($0 == 0x0000007B) { LoopMask = true; $1 = false; }
+    4. case_op                        if ($0 == 0x0000007C) { LoopMask = true; $1 = false; }
+)");
+}
+
 DEF_TEST(RasterPipelineBuilderPushPopSrcDst, r) {
     // Create a very simple nonsense program.
     SkSL::RP::Builder builder;
@@ -255,11 +276,13 @@ DEF_TEST(RasterPipelineBuilderDuplicateSelectAndSwizzleSlots, r) {
     builder.select(4);                      // select from 4~7 and 8~11 into 4~7
     builder.select(3);                      // select from 2~4 and 5~7 into 2~4
     builder.select(1);                      // select from 3 and 4 into 3
+    builder.swizzle_copy_stack_to_slots(four_slots_at(1), {3, 2, 1, 0}, 4);
+    builder.swizzle_copy_stack_to_slots(four_slots_at(0), {0, 1, 3}, 3);
     builder.swizzle(4, {3, 2, 1, 0});       // reverse the order of 0~3 (value.wzyx)
     builder.swizzle(4, {1, 2});             // eliminate elements 0 and 3 (value.yz)
     builder.swizzle(2, {0});                // eliminate element 1 (value.x)
     builder.discard_stack(1);               // balance stack
-    std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/1,
+    std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/6,
                                                                 /*numUniformSlots=*/0);
     check(r, *program,
 R"(    1. copy_constant                  $0 = 0x3F800000 (1.0)
@@ -271,8 +294,10 @@ R"(    1. copy_constant                  $0 = 0x3F800000 (1.0)
     7. copy_4_slots_masked            $4..7 = Mask($8..11)
     8. copy_3_slots_masked            $2..4 = Mask($5..7)
     9. copy_slot_masked               $3 = Mask($4)
-   10. swizzle_4                      $0..3 = ($0..3).wzyx
-   11. swizzle_2                      $0..1 = ($0..2).yz
+   10. swizzle_copy_4_slots_masked    (v1..4).wzyx = Mask($0..3)
+   11. swizzle_copy_3_slots_masked    (v0..3).xyw = Mask($1..3)
+   12. swizzle_4                      $0..3 = ($0..3).wzyx
+   13. swizzle_2                      $0..1 = ($0..2).yz
 )");
 }
 
