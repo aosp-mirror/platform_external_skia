@@ -76,35 +76,6 @@ private:
     SkSTArray<4, SkPoint> fRejectedPositions;
 };
 
-// A memory format that allows an SkPackedGlyphID, SkGlyph*, and SkPath* to occupy the same
-// memory. This allows SkPackedGlyphIDs as input, and SkGlyph*/SkPath* as output using the same
-// memory.
-class SkGlyphVariant {
-public:
-    SkGlyphVariant() { }
-    SkGlyphVariant& operator= (SkPackedGlyphID packedID) {
-        fPackedID = packedID;
-        SkDEBUGCODE(fTag = kPackedID);
-        return *this;
-    }
-    SkPackedGlyphID packedID() const {
-        SkASSERT(fTag == kPackedID);
-        return fPackedID;
-    }
-
-    operator SkPackedGlyphID()  const { return this->packedID(); }
-
-private:
-    SkPackedGlyphID fPackedID;
-
-#ifdef SK_DEBUG
-    enum {
-        kEmpty,
-        kPackedID,
-    } fTag{kEmpty};
-#endif
-};
-
 // A buffer for converting SkPackedGlyph to SkGlyph*s. Initially the buffer contains
 // SkPackedGlyphIDs, but those are used to lookup SkGlyph*s which are then copied over the
 // SkPackedGlyphIDs.
@@ -119,17 +90,17 @@ public:
     SkString dumpInput() const;
 
     // The input of SkPackedGlyphIDs
-    SkZip<SkGlyphVariant, SkPoint> input() {
+    SkZip<SkPackedGlyphID, SkPoint> input() {
         SkASSERT(fPhase == kInput);
         SkDEBUGCODE(fPhase = kProcess);
-        return SkZip<SkGlyphVariant, SkPoint>{
-                SkToSizeT(fInputSize), fMultiBuffer.get(), fPositions};
+        return SkZip<SkPackedGlyphID, SkPoint>{
+                SkToSizeT(fInputSize), fPackedGlyphIDs.get(), fPositions};
     }
 
     void accept(SkPackedGlyphID glyphID, SkPoint position, SkMask::Format format) {
         SkASSERT(fPhase == kProcess);
         fPositions[fAcceptedSize] = position;
-        fMultiBuffer[fAcceptedSize] = glyphID;
+        fPackedGlyphIDs[fAcceptedSize] = glyphID;
         fFormats[fAcceptedSize] = format;
         fAcceptedSize++;
     }
@@ -137,23 +108,23 @@ public:
     void accept(SkPackedGlyphID glyphID, SkPoint position) {
         SkASSERT(fPhase == kProcess);
         fPositions[fAcceptedSize] = position;
-        fMultiBuffer[fAcceptedSize] = glyphID;
+        fPackedGlyphIDs[fAcceptedSize] = glyphID;
         fAcceptedSize++;
     }
 
     // The result after a series of `accept` of accepted SkGlyph* or SkPath*.
-    SkZip<SkGlyphVariant, SkPoint> accepted() {
+    SkZip<SkPackedGlyphID, SkPoint> accepted() {
         SkASSERT(fPhase == kProcess);
         SkDEBUGCODE(fPhase = kDraw);
-        return SkZip<SkGlyphVariant, SkPoint>{
-                SkToSizeT(fAcceptedSize), fMultiBuffer.get(), fPositions};
+        return SkZip<SkPackedGlyphID, SkPoint>{
+                SkToSizeT(fAcceptedSize), fPackedGlyphIDs.get(), fPositions};
     }
 
-    SkZip<SkGlyphVariant, SkPoint, SkMask::Format> acceptedWithMaskFormat() {
+    SkZip<SkPackedGlyphID, SkPoint, SkMask::Format> acceptedWithMaskFormat() {
         SkASSERT(fPhase == kProcess);
         SkDEBUGCODE(fPhase = kDraw);
-        return SkZip<SkGlyphVariant, SkPoint, SkMask::Format>{
-                SkToSizeT(fAcceptedSize), fMultiBuffer.get(), fPositions, fFormats};
+        return SkZip<SkPackedGlyphID, SkPoint, SkMask::Format>{
+                SkToSizeT(fAcceptedSize), fPackedGlyphIDs.get(), fPositions, fFormats};
     }
 
     bool empty() const {
@@ -166,7 +137,7 @@ public:
     template <typename Fn>
     void forEachInput(Fn&& fn) {
         for (auto [i, packedID, pos] : SkMakeEnumerate(this->input())) {
-            fn(i, packedID.packedID(), pos);
+            fn(i, packedID, pos);
         }
     }
 
@@ -174,7 +145,7 @@ private:
     int fMaxSize{0};
     int fInputSize{0};
     int fAcceptedSize{0};
-    skia_private::AutoTArray<SkGlyphVariant> fMultiBuffer;
+    skia_private::AutoTArray<SkPackedGlyphID> fPackedGlyphIDs;
     skia_private::AutoTMalloc<SkPoint> fPositions;
     skia_private::AutoTMalloc<SkMask::Format> fFormats;
 
