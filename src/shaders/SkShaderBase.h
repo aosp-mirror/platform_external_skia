@@ -8,6 +8,7 @@
 #ifndef SkShaderBase_DEFINED
 #define SkShaderBase_DEFINED
 
+#include "include/core/SkColor.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkSamplingOptions.h"
@@ -131,15 +132,14 @@ public:
      *  ContextRec acts as a parameter bundle for creating Contexts.
      */
     struct ContextRec {
-        ContextRec(const SkPaint& paint, const SkMatrix& matrix, const SkMatrix* localM,
+        ContextRec(const SkColor4f& paintColor, const SkMatrix& matrix, const SkMatrix* localM,
                    SkColorType dstColorType, SkColorSpace* dstColorSpace, SkSurfaceProps props)
             : fMatrix(&matrix)
             , fLocalMatrix(localM)
             , fDstColorType(dstColorType)
             , fDstColorSpace(dstColorSpace)
             , fProps(props) {
-                fPaintAlpha = paint.getAlpha();
-                fPaintDither = paint.isDither();
+                fPaintAlpha = SkColorGetA(paintColor.toSkColor());
             }
 
         const SkMatrix* fMatrix;           // the current matrix in the canvas
@@ -148,7 +148,6 @@ public:
         SkColorSpace*   fDstColorSpace;    // the color space of the dest surface (if any)
         SkSurfaceProps  fProps;            // props of the dest surface
         SkAlpha         fPaintAlpha;
-        bool            fPaintDither;
 
         bool isLegacyCompatible(SkColorSpace* shadersColorSpace) const;
     };
