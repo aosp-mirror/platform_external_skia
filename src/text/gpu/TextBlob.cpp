@@ -130,7 +130,6 @@ private:
     SubRunContainerOwner fSubRuns;
     const SkRect fSourceBounds;
     const SkPaint fInitialPaint;
-    const SkMatrix fInitialPositionMatrix;
     const SkPoint fOrigin;
 };
 
@@ -353,10 +352,6 @@ sk_sp<TextBlob> TextBlob::Make(const GlyphRunList& glyphRunList,
 
 void TextBlob::addKey(const Key& key) {
     fKey = key;
-}
-
-bool TextBlob::hasPerspective() const {
-    return fSubRuns->initialPosition().hasPerspective();
 }
 
 bool TextBlob::canReuse(const SkPaint& paint, const SkMatrix& positionMatrix) const {

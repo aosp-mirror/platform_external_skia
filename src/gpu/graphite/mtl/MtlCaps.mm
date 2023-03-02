@@ -8,13 +8,14 @@
 #include "src/gpu/graphite/mtl/MtlCaps.h"
 
 #include "include/gpu/graphite/TextureInfo.h"
-#include "include/gpu/graphite/mtl/MtlTypes.h"
+#include "include/gpu/graphite/mtl/MtlGraphiteTypes.h"
 #include "src/gpu/graphite/CommandBuffer.h"
 #include "src/gpu/graphite/ComputePipelineDesc.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
 #include "src/gpu/graphite/GraphiteResourceKey.h"
 #include "src/gpu/graphite/TextureProxy.h"
-#include "src/gpu/graphite/mtl/MtlUtilsPriv.h"
+#include "src/gpu/graphite/mtl/MtlGraphiteUtilsPriv.h"
+#include "src/gpu/mtl/MtlUtilsPriv.h"
 #include "src/sksl/SkSLUtil.h"
 
 namespace skgpu::graphite {
@@ -710,6 +711,10 @@ UniqueKey MtlCaps::makeComputePipelineKey(const ComputePipelineDesc& pipelineDes
         builder.finish();
     }
     return pipelineKey;
+}
+
+uint32_t MtlCaps::channelMask(const TextureInfo& info) const {
+    return skgpu::MtlFormatChannels((MTLPixelFormat)info.mtlTextureSpec().fFormat);
 }
 
 bool MtlCaps::onIsTexturable(const TextureInfo& info) const {
