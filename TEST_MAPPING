@@ -2,13 +2,7 @@
   // TODO (b/242858942): periodically re-enable tests on case-by-case basis when they're fixed.
   "presubmit": [
     {
-      "name": "CtsGraphicsTestCases",
-      "options": [
-        {
-          // b/266850944
-          "exclude-filter": "android.graphics.cts.ColorTest#resourceColor"
-        }
-      ]
+      "name": "CtsGraphicsTestCases"
     },
     {
       "name": "hwui_unit_tests"
