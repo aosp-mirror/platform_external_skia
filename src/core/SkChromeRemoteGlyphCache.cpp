@@ -513,6 +513,7 @@ void SkStrikeServerImpl::writeStrikeData(std::vector<uint8_t>* memory) {
         SkString msg;
         msg.appendf("\nBegin send strike differences\n");
     #endif
+
     size_t strikesToSend = 0;
     fRemoteStrikesToSend.foreach ([&](RemoteStrike* strike) {
         if (strike->hasPendingGlyphs()) {
@@ -748,7 +749,7 @@ std::unique_ptr<SkCanvas> SkStrikeServer::makeAnalysisCanvas(int width, int heig
     return std::make_unique<SkCanvas>(std::move(trackingDevice));
 }
 
-sk_sp<SkData> SkStrikeServer::serializeTypeface(SkTypeface* tf) {
+sk_sp<SkData> SkStrikeServer::serializeTypefaceForTest(SkTypeface* tf) {
     return fImpl->serializeTypeface(tf);
 }
 
@@ -792,6 +793,7 @@ public:
 
     bool readStrikeData(const volatile void* memory, size_t memorySize);
     bool translateTypefaceID(SkAutoDescriptor* descriptor) const;
+    sk_sp<SkTypeface> retrieveTypefaceUsingServerID(SkTypefaceID) const;
 
 private:
     class PictureBackedGlyphDrawable final : public SkDrawable {
@@ -1034,6 +1036,11 @@ bool SkStrikeClientImpl::translateTypefaceID(SkAutoDescriptor* toChange) const {
     return true;
 }
 
+sk_sp<SkTypeface> SkStrikeClientImpl::retrieveTypefaceUsingServerID(SkTypefaceID typefaceID) const {
+    auto* tfPtr = fRemoteTypefaceIdToTypeface.find(typefaceID);
+    return tfPtr != nullptr ? *tfPtr : nullptr;
+}
+
 sk_sp<SkTypeface> SkStrikeClientImpl::deserializeTypeface(const void* buf, size_t len) {
     WireTypeface wire;
     if (len != sizeof(wire)) return nullptr;
@@ -1064,8 +1071,13 @@ bool SkStrikeClient::readStrikeData(const volatile void* memory, size_t memorySi
     return fImpl->readStrikeData(memory, memorySize);
 }
 
-sk_sp<SkTypeface> SkStrikeClient::deserializeTypeface(const void* buf, size_t len) {
+sk_sp<SkTypeface> SkStrikeClient::deserializeTypefaceForTest(const void* buf, size_t len) {
     return fImpl->deserializeTypeface(buf, len);
+}
+
+sk_sp<SkTypeface> SkStrikeClient::retrieveTypefaceUsingServerIDForTest(
+        SkTypefaceID typefaceID) const {
+    return fImpl->retrieveTypefaceUsingServerID(typefaceID);
 }
 
 bool SkStrikeClient::translateTypefaceID(SkAutoDescriptor* descriptor) const {
@@ -1073,7 +1085,7 @@ bool SkStrikeClient::translateTypefaceID(SkAutoDescriptor* descriptor) const {
 }
 
 #if defined(SK_GANESH)
-sk_sp<sktext::gpu::Slug> SkStrikeClient::deserializeSlug(const void* data, size_t size) const {
+sk_sp<sktext::gpu::Slug> SkStrikeClient::deserializeSlugForTest(const void* data, size_t size) const {
     return sktext::gpu::Slug::Deserialize(data, size, this);
 }
 #endif  // defined(SK_GANESH)

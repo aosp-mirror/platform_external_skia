@@ -59,10 +59,6 @@
 #include <memory>
 #include <vector>
 
-// Since SkRemoteGlyphCache is not re-entrant, we can't use it while drawing slugs to simulate
-// text blobs in the GPU stack.
-#if !defined(SK_EXPERIMENTAL_SIMULATE_DRAWGLYPHRUNLIST_WITH_SLUG_STRIKE_SERIALIZE)
-
 using Slug = sktext::gpu::Slug;
 
 class DiscardableManager : public SkStrikeServer::DiscardableHandleManager,
@@ -254,23 +250,6 @@ SkBitmap RasterSlug(sk_sp<Slug> slug, int width, int height, const SkPaint& pain
     return bitmap;
 }
 
-DEF_TEST(SkRemoteGlyphCache_TypefaceSerialization, reporter) {
-    sk_sp<DiscardableManager> discardableManager = sk_make_sp<DiscardableManager>();
-    SkStrikeServer server(discardableManager.get());
-    SkStrikeClient client(discardableManager, false);
-
-    auto server_tf = SkTypeface::MakeDefault();
-    auto tf_data = server.serializeTypeface(server_tf.get());
-
-    auto client_tf = client.deserializeTypeface(tf_data->data(), tf_data->size());
-    REPORTER_ASSERT(reporter, client_tf);
-    REPORTER_ASSERT(reporter, static_cast<SkTypefaceProxy*>(client_tf.get())->remoteTypefaceID() ==
-                                      server_tf->uniqueID());
-
-    // Must unlock everything on termination, otherwise valgrind complains about memory leaks.
-    discardableManager->unlockAndDeleteAll();
-}
-
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_StrikeSerialization,
                                        reporter,
                                        ctxInfo,
@@ -282,25 +261,31 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_StrikeSerialization,
     const SkPaint paint;
 
     // Server.
-    auto serverTf = SkTypeface::MakeFromName("monospace", SkFontStyle());
-    auto serverTfData = server.serializeTypeface(serverTf.get());
+    auto serverTypeface = SkTypeface::MakeFromName("monospace", SkFontStyle());
+    SkTypefaceID serverTypefaceID = serverTypeface->uniqueID();
 
     int glyphCount = 10;
-    auto serverBlob = buildTextBlob(serverTf, glyphCount);
+    auto serverBlob = buildTextBlob(serverTypeface, glyphCount);
     auto props = FindSurfaceProps(dContext);
-    std::unique_ptr<SkCanvas> cache_diff_canvas = server.makeAnalysisCanvas(
+    std::unique_ptr<SkCanvas> analysisCanvas = server.makeAnalysisCanvas(
             10, 10, props, nullptr, dContext->supportsDistanceFieldText(),
             !dContext->priv().caps()->disablePerspectiveSDFText());
-    cache_diff_canvas->drawTextBlob(serverBlob.get(), 0, 0, paint);
+    analysisCanvas->drawTextBlob(serverBlob.get(), 0, 0, paint);
 
     std::vector<uint8_t> serverStrikeData;
     server.writeStrikeData(&serverStrikeData);
 
     // Client.
-    auto clientTf = client.deserializeTypeface(serverTfData->data(), serverTfData->size());
     REPORTER_ASSERT(reporter,
                     client.readStrikeData(serverStrikeData.data(), serverStrikeData.size()));
-    auto clientBlob = buildTextBlob(clientTf, glyphCount);
+    auto clientTypeface = client.retrieveTypefaceUsingServerIDForTest(serverTypefaceID);
+
+    // Ensure typeface serialization/deserialization worked.
+    REPORTER_ASSERT(reporter,
+                    static_cast<SkTypefaceProxy*>(clientTypeface.get())->remoteTypefaceID() ==
+                        serverTypefaceID);
+
+    auto clientBlob = buildTextBlob(clientTypeface, glyphCount);
 
     SkBitmap expected = RasterBlob(serverBlob, 10, 10, paint, dContext);
     SkBitmap actual = RasterBlob(clientBlob, 10, 10, paint, dContext);
@@ -329,7 +314,7 @@ DEF_GANESH_TEST_FOR_CONTEXTS(SkRemoteGlyphCache_StrikeSerializationSlug,
 
     // Server.
     auto serverTf = SkTypeface::MakeFromName("monospace", SkFontStyle());
-    auto serverTfData = server.serializeTypeface(serverTf.get());
+    auto serverTfData = server.serializeTypefaceForTest(serverTf.get());
 
     int glyphCount = 10;
     auto serverBlob = buildTextBlob(serverTf, glyphCount);
@@ -345,7 +330,7 @@ DEF_GANESH_TEST_FOR_CONTEXTS(SkRemoteGlyphCache_StrikeSerializationSlug,
     server.writeStrikeData(&serverStrikeData);
 
     // Client.
-    auto clientTf = client.deserializeTypeface(serverTfData->data(), serverTfData->size());
+    auto clientTf = client.deserializeTypefaceForTest(serverTfData->data(), serverTfData->size());
     REPORTER_ASSERT(reporter,
                     client.readStrikeData(serverStrikeData.data(), serverStrikeData.size()));
     auto clientBlob = buildTextBlob(clientTf, glyphCount);
@@ -373,7 +358,7 @@ DEF_GANESH_TEST_FOR_CONTEXTS(SkRemoteGlyphCache_StrikeSerializationSlugForcePath
 
     // Server.
     auto serverTf = SkTypeface::MakeFromName("monospace", SkFontStyle());
-    auto serverTfData = server.serializeTypeface(serverTf.get());
+    auto serverTfData = server.serializeTypefaceForTest(serverTf.get());
 
     int glyphCount = 10;
     auto serverBlob = buildTextBlob(serverTf, glyphCount, 360);
@@ -389,7 +374,7 @@ DEF_GANESH_TEST_FOR_CONTEXTS(SkRemoteGlyphCache_StrikeSerializationSlugForcePath
     server.writeStrikeData(&serverStrikeData);
 
     // Client.
-    auto clientTf = client.deserializeTypeface(serverTfData->data(), serverTfData->size());
+    auto clientTf = client.deserializeTypefaceForTest(serverTfData->data(), serverTfData->size());
     REPORTER_ASSERT(reporter,
                     client.readStrikeData(serverStrikeData.data(), serverStrikeData.size()));
     auto clientBlob = buildTextBlob(clientTf, glyphCount, 360);
@@ -417,7 +402,7 @@ DEF_GANESH_TEST_FOR_CONTEXTS(SkRemoteGlyphCache_SlugSerialization,
 
     // Server.
     auto serverTf = SkTypeface::MakeFromName("monospace", SkFontStyle());
-    auto serverTfData = server.serializeTypeface(serverTf.get());
+    auto serverTfData = server.serializeTypefaceForTest(serverTf.get());
 
     int glyphCount = 10;
     auto serverBlob = buildTextBlob(serverTf, glyphCount);
@@ -438,7 +423,7 @@ DEF_GANESH_TEST_FOR_CONTEXTS(SkRemoteGlyphCache_SlugSerialization,
                     client.readStrikeData(serverStrikeData.data(), serverStrikeData.size()));
 
     SkBitmap expected = RasterSlug(srcSlug, 10, 10, paint, dContext);
-    auto dstSlug = client.deserializeSlug(dstSlugData->data(), dstSlugData->size());
+    auto dstSlug = client.deserializeSlugForTest(dstSlugData->data(), dstSlugData->size());
     REPORTER_ASSERT(reporter, dstSlug != nullptr);
     SkBitmap actual = RasterSlug(dstSlug, 10, 10, paint, dContext);
     compare_blobs(expected, actual, reporter);
@@ -458,7 +443,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_ReleaseTypeFace,
 
     // Server.
     auto serverTf     = TestEmptyTypeface::Make();
-    auto serverTfData = server.serializeTypeface(serverTf.get());
+    auto serverTfData = server.serializeTypefaceForTest(serverTf.get());
     REPORTER_ASSERT(reporter, serverTf->unique());
 
     {
@@ -487,7 +472,7 @@ DEF_TEST(SkRemoteGlyphCache_StrikeLockingServer, reporter) {
     SkStrikeClient client(discardableManager, false);
 
     auto serverTf = SkTypeface::MakeFromName("monospace", SkFontStyle());
-    server.serializeTypeface(serverTf.get());
+    server.serializeTypefaceForTest(serverTf.get());
     int glyphCount = 10;
     auto serverBlob = buildTextBlob(serverTf, glyphCount);
 
@@ -522,7 +507,7 @@ DEF_TEST(SkRemoteGlyphCache_StrikeDeletionServer, reporter) {
     SkStrikeClient client(discardableManager, false);
 
     auto serverTf = SkTypeface::MakeFromName("monospace", SkFontStyle());
-    server.serializeTypeface(serverTf.get());
+    server.serializeTypefaceForTest(serverTf.get());
     int glyphCount = 10;
     auto serverBlob = buildTextBlob(serverTf, glyphCount);
 
@@ -559,7 +544,7 @@ DEF_TEST(SkRemoteGlyphCache_StrikePinningClient, reporter) {
 
     // Server.
     auto serverTf = SkTypeface::MakeFromName("monospace", SkFontStyle());
-    auto serverTfData = server.serializeTypeface(serverTf.get());
+    auto serverTfData = server.serializeTypefaceForTest(serverTf.get());
 
     int glyphCount = 10;
     auto serverBlob = buildTextBlob(serverTf, glyphCount);
@@ -576,7 +561,7 @@ DEF_TEST(SkRemoteGlyphCache_StrikePinningClient, reporter) {
     // Client.
     REPORTER_ASSERT(reporter,
                     client.readStrikeData(serverStrikeData.data(), serverStrikeData.size()));
-    auto* clientTf = client.deserializeTypeface(serverTfData->data(), serverTfData->size()).get();
+    auto* clientTf = client.deserializeTypefaceForTest(serverTfData->data(), serverTfData->size()).get();
 
     // The cache remains alive until it is pinned in the discardable manager.
     SkGraphics::PurgeFontCache();
@@ -599,7 +584,7 @@ DEF_TEST(SkRemoteGlyphCache_ClientMemoryAccounting, reporter) {
 
     // Server.
     auto serverTf = SkTypeface::MakeFromName("monospace", SkFontStyle());
-    auto serverTfData = server.serializeTypeface(serverTf.get());
+    auto serverTfData = server.serializeTypefaceForTest(serverTf.get());
 
     int glyphCount = 10;
     auto serverBlob = buildTextBlob(serverTf, glyphCount);
@@ -683,7 +668,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_DrawTextAsPath,
 
     // Server.
     auto serverTf = SkTypeface::MakeFromName("monospace", SkFontStyle());
-    auto serverTfData = server.serializeTypeface(serverTf.get());
+    auto serverTfData = server.serializeTypefaceForTest(serverTf.get());
 
     int glyphCount = 10;
     auto serverBlob = buildTextBlob(serverTf, glyphCount);
@@ -697,7 +682,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_DrawTextAsPath,
     server.writeStrikeData(&serverStrikeData);
 
     // Client.
-    auto clientTf = client.deserializeTypeface(serverTfData->data(), serverTfData->size());
+    auto clientTf = client.deserializeTypefaceForTest(serverTfData->data(), serverTfData->size());
     REPORTER_ASSERT(reporter,
                     client.readStrikeData(serverStrikeData.data(), serverStrikeData.size()));
     auto clientBlob = buildTextBlob(clientTf, glyphCount);
@@ -762,7 +747,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_DrawTextAsMaskWithPath
     if (serverTf == nullptr) {
         return;
     }
-    auto serverTfData = server.serializeTypeface(serverTf.get());
+    auto serverTfData = server.serializeTypefaceForTest(serverTf.get());
 
     auto serverBlob = make_blob_causing_fallback(serverTf, serverTf.get(), reporter);
 
@@ -776,7 +761,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_DrawTextAsMaskWithPath
     server.writeStrikeData(&serverStrikeData);
 
     // Client.
-    auto clientTf = client.deserializeTypeface(serverTfData->data(), serverTfData->size());
+    auto clientTf = client.deserializeTypefaceForTest(serverTfData->data(), serverTfData->size());
     REPORTER_ASSERT(reporter,
                     client.readStrikeData(serverStrikeData.data(), serverStrikeData.size()));
 
@@ -807,7 +792,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_DrawTextAsSDFTWithAllA
     if (serverTf == nullptr) {
         return;
     }
-    auto serverTfData = server.serializeTypeface(serverTf.get());
+    auto serverTfData = server.serializeTypefaceForTest(serverTf.get());
 
     auto makeBlob = [&reporter](sk_sp<SkTypeface> typeface) {
         SkFont font;
@@ -847,7 +832,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_DrawTextAsSDFTWithAllA
     server.writeStrikeData(&serverStrikeData);
 
     // Client.
-    auto clientTf = client.deserializeTypeface(serverTfData->data(), serverTfData->size());
+    auto clientTf = client.deserializeTypefaceForTest(serverTfData->data(), serverTfData->size());
     REPORTER_ASSERT(reporter,
                     client.readStrikeData(serverStrikeData.data(), serverStrikeData.size()));
 
@@ -879,7 +864,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_DrawTextXY,
 
     // Server.
     auto serverTf = SkTypeface::MakeFromName("monospace", SkFontStyle());
-    auto serverTfData = server.serializeTypeface(serverTf.get());
+    auto serverTfData = server.serializeTypefaceForTest(serverTf.get());
 
     int glyphCount = 10;
     auto serverBlob = buildTextBlob(serverTf, glyphCount);
@@ -893,7 +878,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_DrawTextXY,
     server.writeStrikeData(&serverStrikeData);
 
     // Client.
-    auto clientTf = client.deserializeTypeface(serverTfData->data(), serverTfData->size());
+    auto clientTf = client.deserializeTypefaceForTest(serverTfData->data(), serverTfData->size());
     REPORTER_ASSERT(reporter,
                     client.readStrikeData(serverStrikeData.data(), serverStrikeData.size()));
     auto clientBlob = buildTextBlob(clientTf, glyphCount);
@@ -932,7 +917,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_DrawTextAsDFT,
 
     // Server.
     auto serverTf = SkTypeface::MakeFromName("monospace", SkFontStyle());
-    auto serverTfData = server.serializeTypeface(serverTf.get());
+    auto serverTfData = server.serializeTypefaceForTest(serverTf.get());
 
     int glyphCount = 10;
     auto serverBlob = buildTextBlob(serverTf, glyphCount);
@@ -947,7 +932,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_DrawTextAsDFT,
     server.writeStrikeData(&serverStrikeData);
 
     // Client.
-    auto clientTf = client.deserializeTypeface(serverTfData->data(), serverTfData->size());
+    auto clientTf = client.deserializeTypefaceForTest(serverTfData->data(), serverTfData->size());
     REPORTER_ASSERT(reporter,
                     client.readStrikeData(serverStrikeData.data(), serverStrikeData.size()));
     auto clientBlob = buildTextBlob(clientTf, glyphCount);
@@ -971,8 +956,8 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_CacheMissReporting,
     SkStrikeClient client(discardableManager, false);
 
     auto serverTf = SkTypeface::MakeFromName("monospace", SkFontStyle());
-    auto tfData = server.serializeTypeface(serverTf.get());
-    auto clientTf = client.deserializeTypeface(tfData->data(), tfData->size());
+    auto tfData = server.serializeTypefaceForTest(serverTf.get());
+    auto clientTf = client.deserializeTypefaceForTest(tfData->data(), tfData->size());
     REPORTER_ASSERT(reporter, clientTf);
     int glyphCount = 10;
     auto clientBlob = buildTextBlob(clientTf, glyphCount);
@@ -1029,8 +1014,8 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_TypefaceWithNoPaths,
     SkStrikeClient client(discardableManager, false);
 
     auto serverTf = ToolUtils::emoji_typeface();
-    auto serverTfData = server.serializeTypeface(serverTf.get());
-    auto clientTf = client.deserializeTypeface(serverTfData->data(), serverTfData->size());
+    auto serverTfData = server.serializeTypefaceForTest(serverTf.get());
+    auto clientTf = client.deserializeTypefaceForTest(serverTfData->data(), serverTfData->size());
 
     auto props = FindSurfaceProps(direct);
     std::unique_ptr<SkCanvas> cache_diff_canvas = server.makeAnalysisCanvas(
@@ -1104,8 +1089,8 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_TypefaceWithPaths_Mask
     SkStrikeClient client(discardableManager, true);
 
     auto serverTf = ToolUtils::create_portable_typeface();
-    auto serverTfData = server.serializeTypeface(serverTf.get());
-    auto clientTf = client.deserializeTypeface(serverTfData->data(), serverTfData->size());
+    auto serverTfData = server.serializeTypefaceForTest(serverTf.get());
+    auto clientTf = client.deserializeTypefaceForTest(serverTfData->data(), serverTfData->size());
 
     auto props = FindSurfaceProps(direct);
     std::unique_ptr<SkCanvas> cache_diff_canvas = server.makeAnalysisCanvas(
@@ -1161,8 +1146,8 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_TypefaceWithPaths_Path
     SkStrikeClient client(discardableManager, true);
 
     auto serverTf = ToolUtils::create_portable_typeface();
-    auto serverTfData = server.serializeTypeface(serverTf.get());
-    auto clientTf = client.deserializeTypeface(serverTfData->data(), serverTfData->size());
+    auto serverTfData = server.serializeTypefaceForTest(serverTf.get());
+    auto clientTf = client.deserializeTypefaceForTest(serverTfData->data(), serverTfData->size());
 
     auto props = FindSurfaceProps(direct);
     std::unique_ptr<SkCanvas> cache_diff_canvas = server.makeAnalysisCanvas(
@@ -1207,4 +1192,3 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkRemoteGlyphCache_TypefaceWithPaths_Path
     // Must unlock everything on termination, otherwise valgrind complains about memory leaks.
     discardableManager->unlockAndDeleteAll();
 }
-#endif
