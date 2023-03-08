@@ -294,10 +294,10 @@ static std::string append_default_snippet_arguments(const ShaderInfo& shaderInfo
         separator = ", ";
     }
 
-    // Append destination color.
-    if (entry->needsDestColor()) {
+    // Append runtime shader destination color.
+    if (entry->needsRuntimeShaderDstColor()) {
         code += separator;
-        code += args.fDestColor;
+        code += args.fRuntimeShaderDstColor;
         separator = ", ";
     }
 
@@ -399,11 +399,12 @@ std::string GenerateDefaultExpression(const ShaderInfo& shaderInfo,
     } else {
         // Return an expression which invokes the helper function from the preamble.
         std::string helperFnName = get_mangled_name(entry->fStaticFunctionName, entryIndex);
-        return SkSL::String::printf("%s(%.*s, %.*s, %.*s)",
-                                  helperFnName.c_str(),
-                                  (int)args.fPriorStageOutput.size(), args.fPriorStageOutput.data(),
-                                  (int)args.fDestColor.size(),        args.fDestColor.data(),
-                                  (int)args.fFragCoord.size(),        args.fFragCoord.data());
+        return SkSL::String::printf(
+                "%s(%.*s, %.*s, %.*s)",
+                helperFnName.c_str(),
+                (int)args.fPriorStageOutput.size(),      args.fPriorStageOutput.data(),
+                (int)args.fRuntimeShaderDstColor.size(), args.fRuntimeShaderDstColor.data(),
+                (int)args.fFragCoord.size(),             args.fFragCoord.data());
     }
 }
 
@@ -834,12 +835,13 @@ std::string GenerateRuntimeShaderExpression(const ShaderInfo& shaderInfo,
                                             const PaintParamsKey::BlockReader& reader,
                                             const ShaderSnippet::Args& args) {
     const ShaderSnippet* entry = reader.entry();
-    return SkSL::String::printf("%s_%d(%.*s, %.*s, %.*s)",
-                                entry->fName,
-                                entryIndex,
-                                (int)args.fPriorStageOutput.size(), args.fPriorStageOutput.data(),
-                                (int)args.fDestColor.size(),        args.fDestColor.data(),
-                                (int)args.fFragCoord.size(),        args.fFragCoord.data());
+    return SkSL::String::printf(
+            "%s_%d(%.*s, %.*s, %.*s)",
+            entry->fName,
+            entryIndex,
+            (int)args.fPriorStageOutput.size(),      args.fPriorStageOutput.data(),
+            (int)args.fRuntimeShaderDstColor.size(), args.fRuntimeShaderDstColor.data(),
+            (int)args.fFragCoord.size(),             args.fFragCoord.data());
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -992,7 +994,7 @@ std::string GenerateShaderBasedBlenderExpression(const ShaderInfo& shaderInfo,
                                                  int entryIndex,
                                                  const PaintParamsKey::BlockReader& reader,
                                                  const ShaderSnippet::Args& args) {
-    const bool usePrimitiveColorAsDst = reader.entry()->needsDestColor();
+    const bool usePrimitiveColorAsDst = reader.entry()->blendAgainstPrimitiveColor();
 
     SkASSERT(reader.entry()->fUniforms.size() == 1);
     SkASSERT(reader.numDataPayloadFields() == 0);
@@ -1156,7 +1158,7 @@ int ShaderCodeDictionary::findOrCreateRuntimeEffectSnippet(const SkRuntimeEffect
         snippetFlags |= SnippetRequirementFlags::kLocalCoords;
     }
     if (effect->allowBlender()) {
-        snippetFlags |= SnippetRequirementFlags::kDestColor;
+        snippetFlags |= SnippetRequirementFlags::kRuntimeShaderDstColor;
     }
     int newCodeSnippetID = this->addUserDefinedSnippet("RuntimeEffect",
                                                        this->convertUniforms(effect),
@@ -1200,7 +1202,8 @@ ShaderCodeDictionary::ShaderCodeDictionary() {
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kPassthroughBlender] = {
             "PassthroughBlender",
             {},      // no uniforms
-            SnippetRequirementFlags::kPriorStageOutput | SnippetRequirementFlags::kDestColor,
+            SnippetRequirementFlags::kPriorStageOutput |
+                    SnippetRequirementFlags::kRuntimeShaderDstColor,
             {},      // no samplers
             kPassthroughBlenderName,
             GenerateDefaultExpression,
@@ -1480,7 +1483,7 @@ ShaderCodeDictionary::ShaderCodeDictionary() {
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kPrimitiveColorShaderBasedBlender] = {
             "PrimitiveColorShaderBasedBlender",
             SkSpan(kShaderBasedBlenderUniforms),
-            SnippetRequirementFlags::kDestColor,
+            SnippetRequirementFlags::kBlendAgainstPrimitiveColor,
             { },     // no samplers
             kBlendHelperName,
             GenerateShaderBasedBlenderExpression,
