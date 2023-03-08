@@ -27,11 +27,12 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkFixed.h"
+#include "include/private/base/SkFixed.h"
 #include "include/private/base/SkAlign.h"
 #include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkTo.h"
 #include "src/core/SkAdvancedTypefaceMetrics.h" // IWYU pragma: keep
+#include "src/core/SkFontDescriptor.h"
 #include "src/core/SkGlyph.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkScalerContext.h"
@@ -45,7 +46,6 @@
 
 class SkArenaAlloc;
 class SkDescriptor;
-class SkFontDescriptor;
 
 namespace {
 static inline const constexpr bool kSkShowTextBlitCoverage = false;
@@ -214,12 +214,13 @@ std::unique_ptr<SkAdvancedTypefaceMetrics> SkUserTypeface::onGetAdvancedMetrics(
 }
 
 void SkUserTypeface::onGetFontDescriptor(SkFontDescriptor* desc, bool* isLocal) const {
+    desc->setFactoryId(SkCustomTypefaceBuilder::FactoryId);
     *isLocal = true;
 }
 
-void SkUserTypeface::onCharsToGlyphs(const SkUnichar uni[], int count, SkGlyphID glyphs[]) const {
+void SkUserTypeface::onCharsToGlyphs(const SkUnichar* chars, int count, SkGlyphID glyphs[]) const {
     for (int i = 0; i < count; ++i) {
-        glyphs[i] = uni[i] < this->glyphCount() ? SkTo<SkGlyphID>(uni[i]) : 0;
+        glyphs[i] = chars[i] < this->glyphCount() ? SkTo<SkGlyphID>(chars[i]) : 0;
     }
 }
 
@@ -514,4 +515,9 @@ sk_sp<SkTypeface> SkCustomTypefaceBuilder::Deserialize(SkStream* stream) {
 
     arp.markDone();
     return builder.detach();
+}
+
+sk_sp<SkTypeface> SkCustomTypefaceBuilder::MakeFromStream(std::unique_ptr<SkStreamAsset> stream,
+                                                          const SkFontArguments&) {
+    return Deserialize(stream.get());
 }

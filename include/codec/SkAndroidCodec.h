@@ -10,7 +10,6 @@
 
 #include "include/codec/SkCodec.h"
 #include "include/core/SkColorSpace.h"
-#include "include/core/SkData.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSize.h"
@@ -27,6 +26,7 @@
 #include <cstddef>
 #include <memory>
 
+class SkData;
 class SkPngChunkReader;
 class SkStream;
 struct SkGainmapInfo;
@@ -92,11 +92,6 @@ public:
     }
 
     /**
-     * Return the XMP metadata from the image.
-     */
-    sk_sp<const SkData> getXmpMetadata() const { return fCodec->fXmpMetadata; }
-
-    /**
      *  Format of the encoded data.
      */
     SkEncodedImageFormat getEncodedFormat() const { return fCodec->getEncodedFormat(); }
@@ -126,10 +121,8 @@ public:
     /**
      *  @param outputColorType Color type that the client will decode to.
      *  @param prefColorSpace  Preferred color space to decode to.
-     *                         This may not return |prefColorSpace| for a couple reasons.
-     *                         (1) Android Principles: 565 must be sRGB, F16 must be
-     *                             linear sRGB, transfer function must be parametric.
-     *                         (2) Codec Limitations: F16 requires a linear color space.
+     *                         This may not return |prefColorSpace| for
+     *                         specific color types.
      *
      *  Returns the appropriate color space to decode to.
      */

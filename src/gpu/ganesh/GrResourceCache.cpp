@@ -11,7 +11,7 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/private/base/SingleOwner.h"
 #include "include/private/base/SkTo.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #include "src/base/SkScopeExit.h"
 #include "src/base/SkTSort.h"
 #include "src/core/SkMessageBus.h"
@@ -440,7 +440,7 @@ void GrResourceCache::didChangeBudgetStatus(GrGpuResource* resource) {
 void GrResourceCache::purgeAsNeeded() {
     SkTArray<skgpu::UniqueKeyInvalidatedMessage> invalidKeyMsgs;
     fInvalidUniqueKeyInbox.poll(&invalidKeyMsgs);
-    if (invalidKeyMsgs.size()) {
+    if (!invalidKeyMsgs.empty()) {
         SkASSERT(fProxyProvider);
 
         for (int i = 0; i < invalidKeyMsgs.size(); ++i) {

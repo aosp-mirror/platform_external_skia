@@ -14,8 +14,9 @@
 #include "include/core/SkRegion.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypes.h"
-#include "include/utils/SkRandom.h"
+#include "include/private/base/SkDebug.h"
 #include "src/base/SkAutoMalloc.h"
+#include "src/base/SkRandom.h"
 #include "tests/Test.h"
 
 #include <array>

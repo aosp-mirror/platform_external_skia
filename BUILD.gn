@@ -128,6 +128,12 @@ config("skia_private") {
   if (skia_enable_winuwp) {
     defines += [ "SK_WINUWP" ]
   }
+  if (skia_print_sksl_shaders) {
+    defines += [ "SK_PRINT_SKSL_SHADERS" ]
+  }
+  if (skia_print_native_shaders) {
+    defines += [ "SK_PRINT_NATIVE_SHADERS" ]
+  }
 }
 
 # Any code that's linked into Skia-the-library should use this config via += skia_library_configs.
@@ -533,6 +539,7 @@ optional("fontmgr_fuchsia") {
 optional("fontmgr_mac_ct") {
   enabled = skia_use_fonthost_mac
 
+  public_defines = [ "SK_TYPEFACE_FACTORY_CORETEXT" ]
   public = [
     "include/ports/SkFontMgr_mac_ct.h",
     "include/ports/SkTypeface_mac.h",
@@ -574,6 +581,7 @@ optional("fontmgr_mac_ct_factory") {
 optional("fontmgr_win") {
   enabled = skia_enable_fontmgr_win
 
+  public_defines = [ "SK_TYPEFACE_FACTORY_DIRECTWRITE" ]
   public = [ "include/ports/SkTypeface_win.h" ]
   sources = [
     "include/ports/SkFontMgr_indirect.h",
@@ -1200,6 +1208,15 @@ optional("avif") {
   sources = [ "src/codec/SkAvifCodec.cpp" ]
 }
 
+optional("jpeg_mpf") {
+  enabled = skia_use_jpeg_gainmaps &&
+            (skia_use_libjpeg_turbo_encode || skia_use_libjpeg_turbo_decode)
+  sources = [
+    "src/codec/SkJpegMultiPicture.cpp",
+    "src/codec/SkJpegSegmentScan.cpp",
+  ]
+}
+
 optional("jpeg_decode") {
   enabled = skia_use_libjpeg_turbo_decode
   public_defines = [ "SK_CODEC_DECODES_JPEG" ]
@@ -1208,18 +1225,18 @@ optional("jpeg_decode") {
   sources = [
     "src/codec/SkJpegCodec.cpp",
     "src/codec/SkJpegDecoderMgr.cpp",
+    "src/codec/SkJpegSourceMgr.cpp",
     "src/codec/SkJpegUtility.cpp",
   ]
   if (skia_use_jpeg_gainmaps) {
     # Theoretically this doesn't need to be public, but this allows gn_to_bp.py to see it, and seems
     # to align with other codec support. See b/265939413
     public_defines += [ "SK_CODEC_DECODES_JPEG_GAINMAPS" ]
-    deps += [ ":xml" ]
-    sources += [
-      "src/codec/SkJpegGainmap.cpp",
-      "src/codec/SkJpegMultiPicture.cpp",
-      "src/codec/SkJpegSegmentScan.cpp",
+    deps += [
+      ":jpeg_mpf",
+      ":xml",
     ]
+    sources += [ "src/codec/SkJpegXmp.cpp" ]
   }
 }
 
@@ -1229,13 +1246,11 @@ optional("jpeg_encode") {
 
   deps = [ "//third_party/libjpeg-turbo:libjpeg" ]
   public = [ "include/encode/SkJpegEncoder.h" ]
-  sources = [
-    "src/images/SkJPEGWriteUtility.cpp",
-    "src/images/SkJpegEncoder.cpp",
-  ]
+  sources = skia_encode_jpeg_srcs
 
   if (skia_use_jpeg_gainmaps) {
-    sources += [ "src/images/SkJpegGainmapEncoder.cpp" ]
+    deps += [ ":jpeg_mpf" ]
+    sources += [ "src/encode/SkJpegGainmapEncoder.cpp" ]
   }
 }
 
@@ -1345,7 +1360,7 @@ optional("png_encode") {
   public_defines = [ "SK_ENCODE_PNG" ]
 
   deps = [ "//third_party/libpng" ]
-  sources = [ "src/images/SkPngEncoder.cpp" ]
+  sources = skia_encode_png_srcs
 }
 
 optional("raw") {
@@ -1368,6 +1383,7 @@ optional("raw") {
 optional("typeface_freetype") {
   enabled = skia_use_freetype
 
+  public_defines = [ "SK_TYPEFACE_FACTORY_FREETYPE" ]
   deps = [ "//third_party/freetype2" ]
   sources = [
     "src/ports/SkFontHost_FreeType.cpp",
@@ -1389,7 +1405,7 @@ optional("webp_encode") {
   public_defines = [ "SK_ENCODE_WEBP" ]
 
   deps = [ "//third_party/libwebp" ]
-  sources = [ "src/images/SkWebpEncoder.cpp" ]
+  sources = skia_encode_webp_srcs
 }
 
 optional("wuffs") {
@@ -1504,6 +1520,7 @@ skia_component("skia") {
   sources += skia_effects_imagefilter_sources
   sources += skia_codec_core
   sources += skia_codec_decode_bmp
+  sources += skia_encode_srcs
   sources += [
     "src/android/SkAndroidFrameworkUtils.cpp",
     "src/android/SkAnimatedImage.cpp",
@@ -1512,7 +1529,6 @@ skia_component("skia") {
     "src/codec/SkEncodedInfo.cpp",
     "src/codec/SkParseEncodedOrigin.cpp",
     "src/codec/SkSampledCodec.cpp",
-    "src/images/SkImageEncoder.cpp",
     "src/ports/SkDiscardableMemory_none.cpp",
     "src/ports/SkGlobalInitialization_default.cpp",
     "src/ports/SkImageGenerator_skia.cpp",
@@ -1724,7 +1740,6 @@ skia_static_library("pathkit") {
 
 group("modules") {
   deps = [
-    "modules/particles",
     "modules/skottie",
     "modules/skparagraph",
     "modules/skshaper",
@@ -1761,7 +1776,6 @@ if (skia_enable_tools) {
     "include/svg",
     "include/utils",
     "include/utils/mac",
-    "modules/particles/include",
     "modules/skottie/include",
     "modules/skparagraph/include",
     "modules/skshaper/include",
@@ -1809,7 +1823,6 @@ if (skia_enable_tools) {
         ":gpu_tool_utils",
         ":skia",
         ":skia.h",
-        "modules/particles",
         "modules/skottie",
         "modules/skparagraph",
         "modules/skshaper",
@@ -2169,15 +2182,11 @@ if (skia_enable_tools) {
     if (is_ios) {
       sources += [ "tools/ios_utils.m" ]
       sources += [ "tools/ios_utils.h" ]
-      if (skia_use_metal) {
-        sources += [ "tools/AutoreleasePool.mm" ]
-      }
+      sources += [ "tools/AutoreleasePool.mm" ]
       frameworks += [ "Foundation.framework" ]
     } else if (is_mac) {
-      if (skia_use_metal) {
-        sources += [ "tools/AutoreleasePool.mm" ]
-        frameworks += [ "Foundation.framework" ]
-      }
+      sources += [ "tools/AutoreleasePool.mm" ]
+      frameworks += [ "Foundation.framework" ]
     } else if (is_win && !skia_enable_winuwp) {
       libs += [ "DbgHelp.lib" ]
     }
@@ -2211,7 +2220,6 @@ if (skia_enable_tools) {
       ":flags",
       ":skia",
       ":tool_utils",
-      "modules/particles",
       "modules/skottie",
       "modules/skottie:gm",
       "modules/skparagraph",
@@ -2962,7 +2970,6 @@ if (skia_enable_tools) {
       deps = [
         ":skia",
         ":skia.h",
-        "modules/particles",
         "modules/skottie",
         "modules/skparagraph",
         "modules/skshaper",
@@ -3018,8 +3025,6 @@ if (skia_enable_tools) {
         "tools/viewer/MaterialShadowsSlide.cpp",
         "tools/viewer/MegaStrokeSlide.cpp",
         "tools/viewer/MixerSlide.cpp",
-        "tools/viewer/ParticlesSlide.cpp",
-        "tools/viewer/ParticlesSlide.h",
         "tools/viewer/PatchSlide.cpp",
         "tools/viewer/PathClipSlide.cpp",
         "tools/viewer/PathEffectsSlide.cpp",
@@ -3085,7 +3090,6 @@ if (skia_enable_tools) {
         "experimental/sktext",
         "experimental/sktext:slides",
         "modules/audioplayer",
-        "modules/particles",
         "modules/skottie",
         "modules/skottie:utils",
         "modules/skparagraph:slides",
@@ -3138,14 +3142,6 @@ if (skia_enable_tools) {
       sources = [ "$ndk/$ndk_gdbserver" ]
       outputs = [ "$root_out_dir/gdbserver" ]
     }
-  }
-
-  skia_executable("cpu_modules") {
-    sources = [ "tools/cpu_modules.cpp" ]
-    deps = [
-      ":skia",
-      "modules/particles",
-    ]
   }
 
   test_app("editor") {

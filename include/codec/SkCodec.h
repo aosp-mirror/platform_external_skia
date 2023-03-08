@@ -9,7 +9,6 @@
 #define SkCodec_DEFINED
 
 #include "include/codec/SkEncodedOrigin.h"
-#include "include/core/SkData.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkRect.h"
@@ -26,18 +25,22 @@
 #include <tuple>
 #include <vector>
 
-// TODO(kjlubick, bungeman) replace these includes with forward declares.
-#include "include/codec/SkCodecAnimation.h" // IWYU pragma: keep
-#include "include/core/SkAlphaType.h" // IWYU pragma: keep
-#include "include/core/SkEncodedImageFormat.h" // IWYU pragma: keep
-
 class SkAndroidCodec;
+class SkData;
 class SkFrameHolder;
 class SkImage;
 class SkPngChunkReader;
 class SkSampler;
 class SkStream;
 struct SkGainmapInfo;
+enum SkAlphaType : int;
+enum class SkEncodedImageFormat;
+
+namespace SkCodecAnimation {
+enum class Blend;
+enum class DisposalMethod;
+}
+
 
 namespace DM {
 class CodecSrc;
@@ -762,16 +765,13 @@ protected:
     SkCodec(SkEncodedInfo&&,
             XformFormat srcFormat,
             std::unique_ptr<SkStream>,
-            SkEncodedOrigin = kTopLeft_SkEncodedOrigin,
-            sk_sp<const SkData> xmpMetadata = nullptr);
+            SkEncodedOrigin = kTopLeft_SkEncodedOrigin);
 
     void setSrcXformFormat(XformFormat pixelFormat);
 
     XformFormat getSrcXformFormat() const {
         return fSrcXformFormat;
     }
-
-    sk_sp<const SkData> getXmpMetadata() const { return fXmpMetadata; }
 
     virtual bool onGetGainmapInfo(SkGainmapInfo*, std::unique_ptr<SkStream>*) { return false; }
 
@@ -896,8 +896,7 @@ private:
     XformFormat                        fSrcXformFormat;
     std::unique_ptr<SkStream>          fStream;
     bool fNeedsRewind = false;
-    const SkEncodedOrigin              fOrigin;
-    const sk_sp<const SkData> fXmpMetadata;
+    const SkEncodedOrigin fOrigin;
 
     SkImageInfo                        fDstInfo;
     Options                            fOptions;

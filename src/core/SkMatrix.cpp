@@ -7,7 +7,6 @@
 
 #include "include/core/SkMatrix.h"
 
-#include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkPoint3.h"
 #include "include/core/SkRSXform.h"
@@ -16,9 +15,10 @@
 #include "include/private/base/SkFloatBits.h"
 #include "include/private/base/SkFloatingPoint.h"
 #include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkMath.h"
 #include "include/private/base/SkTo.h"
-#include "include/private/base/SkVx.h"
+#include "src/base/SkVx.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkMatrixUtils.h"
 #include "src/core/SkSamplingPriv.h"
@@ -982,22 +982,25 @@ void SkMatrix::Affine_vpts(const SkMatrix& m, SkPoint dst[], const SkPoint src[]
         SkScalar sy = m.getScaleY();
         SkScalar kx = m.getSkewX();
         SkScalar ky = m.getSkewY();
-        if (count & 1) {
-            dst->set(src->fX * sx + src->fY * kx + tx,
-                     src->fX * ky + src->fY * sy + ty);
-            src += 1;
-            dst += 1;
-        }
         skvx::float4 trans4(tx, ty, tx, ty);
         skvx::float4 scale4(sx, sy, sx, sy);
         skvx::float4  skew4(kx, ky, kx, ky);    // applied to swizzle of src4
+        bool trailingElement = (count & 1);
         count >>= 1;
+        skvx::float4 src4;
         for (int i = 0; i < count; ++i) {
-            skvx::float4 src4 = skvx::float4::Load(src);
+            src4 = skvx::float4::Load(src);
             skvx::float4 swz4 = skvx::shuffle<1,0,3,2>(src4);  // y0 x0, y1 x1
             (src4 * scale4 + swz4 * skew4 + trans4).store(dst);
             src += 2;
             dst += 2;
+        }
+        if (trailingElement) {
+            // We use the same logic here to ensure that the math stays consistent throughout, even
+            // though the high float2 is ignored.
+            src4.lo = skvx::float2::Load(src);
+            skvx::float4 swz4 = skvx::shuffle<1,0,3,2>(src4);  // y0 x0, y1 x1
+            (src4 * scale4 + swz4 * skew4 + trans4).lo.store(dst);
         }
     }
 }
@@ -1605,7 +1608,7 @@ void SkMatrix::dump() const {
 ///////////////////////////////////////////////////////////////////////////////
 
 bool SkTreatAsSprite(const SkMatrix& mat, const SkISize& size, const SkSamplingOptions& sampling,
-                     const SkPaint& paint) {
+                     bool isAntiAlias) {
     if (!SkSamplingPriv::NoChangeWithIdentityMatrix(sampling)) {
         return false;
     }
@@ -1615,7 +1618,7 @@ bool SkTreatAsSprite(const SkMatrix& mat, const SkISize& size, const SkSamplingO
     // more slightly fractional cases to fall into the fast (sprite) case.
     static const unsigned kAntiAliasSubpixelBits = 4;
 
-    const unsigned subpixelBits = paint.isAntiAlias() ? kAntiAliasSubpixelBits : 0;
+    const unsigned subpixelBits = isAntiAlias ? kAntiAliasSubpixelBits : 0;
 
     // quick reject on affine or perspective
     if (mat.getType() & ~(SkMatrix::kScale_Mask | SkMatrix::kTranslate_Mask)) {
@@ -1763,46 +1766,6 @@ bool SkDecomposeUpper2x2(const SkMatrix& matrix,
     }
 
     return true;
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////
-
-void SkRSXform::toQuad(SkScalar width, SkScalar height, SkPoint quad[4]) const {
-#if 0
-    // This is the slow way, but it documents what we're doing
-    quad[0].set(0, 0);
-    quad[1].set(width, 0);
-    quad[2].set(width, height);
-    quad[3].set(0, height);
-    SkMatrix m;
-    m.setRSXform(*this).mapPoints(quad, quad, 4);
-#else
-    const SkScalar m00 = fSCos;
-    const SkScalar m01 = -fSSin;
-    const SkScalar m02 = fTx;
-    const SkScalar m10 = -m01;
-    const SkScalar m11 = m00;
-    const SkScalar m12 = fTy;
-
-    quad[0].set(m02, m12);
-    quad[1].set(m00 * width + m02, m10 * width + m12);
-    quad[2].set(m00 * width + m01 * height + m02, m10 * width + m11 * height + m12);
-    quad[3].set(m01 * height + m02, m11 * height + m12);
-#endif
-}
-
-void SkRSXform::toTriStrip(SkScalar width, SkScalar height, SkPoint strip[4]) const {
-    const SkScalar m00 = fSCos;
-    const SkScalar m01 = -fSSin;
-    const SkScalar m02 = fTx;
-    const SkScalar m10 = -m01;
-    const SkScalar m11 = m00;
-    const SkScalar m12 = fTy;
-
-    strip[0].set(m02, m12);
-    strip[1].set(m01 * height + m02, m11 * height + m12);
-    strip[2].set(m00 * width + m02, m10 * width + m12);
-    strip[3].set(m00 * width + m01 * height + m02, m10 * width + m11 * height + m12);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

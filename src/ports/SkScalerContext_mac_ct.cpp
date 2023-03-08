@@ -30,7 +30,7 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypeface.h"
 #include "include/private/SkColorData.h"
-#include "include/private/SkFixed.h"
+#include "include/private/base/SkFixed.h"
 #include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkAutoMalloc.h"
@@ -65,7 +65,7 @@ static void sk_memset_rect32(uint32_t* ptr, uint32_t value,
 
     if (width >= 32) {
         while (height) {
-            sk_memset32(ptr, value, width);
+            SkOpts::memset32(ptr, value, width);
             ptr = (uint32_t*)((char*)ptr + rowBytes);
             height -= 1;
         }

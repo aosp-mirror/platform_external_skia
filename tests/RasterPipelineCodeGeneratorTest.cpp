@@ -76,7 +76,7 @@ static void test(skiatest::Reporter* r,
 #endif
 
     // Append the SkSL program to the raster pipeline.
-    rasterProg->appendStages(&pipeline, &alloc, uniforms);
+    rasterProg->appendStages(&pipeline, &alloc, /*callbacks=*/nullptr, uniforms);
 
     // Move the float values from RGBA into an 8888 memory buffer.
     uint32_t out[SkRasterPipeline_kMaxStride_highp] = {};
@@ -101,49 +101,6 @@ static void test(skiatest::Reporter* r,
     for (size_t i = 1; i < std::size(out); ++i) {
         REPORTER_ASSERT(r, out[i] == 0);
     }
-}
-
-DEF_TEST(SkSLRasterPipelineCodeGeneratorPassthroughTest, r) {
-    test(r,
-         R"__SkSL__(
-             half4 main(half4 startingColor) {
-                 return startingColor;
-             }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{1.0f, 1.0f, 0.0f, 1.0f},
-         /*expectedResult=*/SkColor4f{1.0f, 1.0f, 0.0f, 1.0f});
-}
-
-DEF_TEST(SkSLRasterPipelineCodeGeneratorVariableGreenTest, r) {
-    // Add in your SkSL here.
-    test(r,
-         R"__SkSL__(
-             half4 main(half4) {
-                 half2 zeroOne = half2(0, 1);
-                 half one = zeroOne.y, zero = zeroOne.x;
-                 return half4(zero, zeroOne.yx, one);
-             }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 0.0},
-         /*expectedResult=*/SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
-}
-
-DEF_TEST(SkSLRasterPipelineCodeGeneratorAdditionTest, r) {
-    // Add in your SkSL here.
-    test(r,
-         R"__SkSL__(
-             half4 main(half4 y) {
-                 half4 x = half4(-1, 0, 1, 0);
-                 half4 z = x.wzyx;
-                 z += y.000w;
-                 return y + z;
-             }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 1.0},
-         /*expectedResult=*/SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
 }
 
 DEF_TEST(SkSLRasterPipelineCodeGeneratorIfElseTest, r) {
@@ -214,34 +171,6 @@ DEF_TEST(SkSLRasterPipelineCodeGeneratorTernaryTest, r) {
          /*expectedResult=*/SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
 }
 
-DEF_TEST(SkSLRasterPipelineCodeGeneratorTernarySideEffectTest, r) {
-    // Add in your SkSL here.
-    test(r,
-         R"__SkSL__(
-             const half4 colorGreen = half4(0,1,0,1),
-                         colorRed   = half4(1,0,0,1);
-             half4 main(half4) {
-                 half x = 1, y = 1;
-                 (x == y) ? (x += 1) : (y += 1);  // TRUE,   x=2 y=1
-                 (x == y) ? (x += 3) : (y += 3);  // FALSE,  x=2 y=4
-                 (x <  y) ? (x += 5) : (y += 5);  // TRUE,   x=7 y=4
-                 (y >= x) ? (x += 9) : (y += 9);  // FALSE,  x=7 y=13
-                 (x != y) ? (x += 1) : (y     );  // TRUE,   x=8 y=13
-                 (x == y) ? (x += 2) : (y     );  // FALSE,  x=8 y=13
-                 (x != y) ? (x     ) : (y += 3);  // TRUE,   x=8 y=13
-                 (x == y) ? (x     ) : (y += 4);  // FALSE,  x=8 y=17
-
-                 bool b = true;
-                 bool c = (b = false) ? false : b;
-
-                 return c ? colorRed : (x == 8 && y == 17) ? colorGreen : colorRed;
-             }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 0.0},
-         /*expectedResult=*/SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
-}
-
 DEF_TEST(SkSLRasterPipelineCodeGeneratorNestedTernaryTest, r) {
     // Add in your SkSL here.
     test(r,
@@ -255,34 +184,6 @@ DEF_TEST(SkSLRasterPipelineCodeGeneratorNestedTernaryTest, r) {
          /*uniforms=*/{},
          /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 0.0},
          /*expectedResult=*/SkColor4f{0.499f, 0.499f, 0.499f, 0.499f});
-}
-
-DEF_TEST(SkSLRasterPipelineCodeGeneratorDoWhileTest, r) {
-    // This is based on shared/DoWhileControlFlow.sksl (but avoids swizzles).
-    test(r,
-         R"__SkSL__(
-            half r = 1.0, g = 1.0, b = 1.0;
-            half4 main(half4) {
-                half a = 1.0;
-                // Verify that break is allowed in a do-while loop.
-                do {
-                    r -= 0.25;
-                    if (r <= 0) break;
-                } while (a == 1.0);
-
-                // Verify that continue is allowed in a do-while loop.
-                do {
-                    b -= 0.25;
-                    if (a == 1) continue; // should always happen
-                    g = 0;
-                } while (b > 0.0);
-
-                return half4(r, g, b, a);
-            }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 0.0},
-         /*expectedResult=*/SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
 }
 
 DEF_TEST(SkSLRasterPipelineCodeGeneratorArithmeticTest, r) {
@@ -300,138 +201,6 @@ DEF_TEST(SkSLRasterPipelineCodeGeneratorArithmeticTest, r) {
                 }
 
                 return colorRed;
-            }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 0.0},
-         /*expectedResult=*/SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
-}
-
-DEF_TEST(SkSLRasterPipelineCodeGeneratorShortCircuitLogicalOr, r) {
-    test(r,
-         R"__SkSL__(
-            const half4 colorGreen = half4(0,1,0,1), colorRed = half4(1,0,0,1);
-            half4 main(half4) {
-                int x = 1, y = 1;
-                if ((x == 1) || ((y += 1) == 2)) { // LHS true, RHS not executed but would be true
-                    return (x == 1 && y == 1) ? colorGreen : colorRed;
-                } else {
-                    return colorRed;
-                }
-            }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 0.0},
-         /*expectedResult=*/SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
-
-    test(r,
-         R"__SkSL__(
-            const half4 colorGreen = half4(0,1,0,1), colorRed = half4(1,0,0,1);
-            half4 main(half4) {
-                int x = 1, y = 1;
-                if ((x == 1) || ((y += 1) == 3)) { // LHS true, RHS not executed but would be false
-                    return (x == 1 && y == 1) ? colorGreen : colorRed;
-                } else {
-                    return colorRed;
-                }
-            }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 0.0},
-         /*expectedResult=*/SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
-
-    test(r,
-         R"__SkSL__(
-            const half4 colorGreen = half4(0,1,0,1), colorRed = half4(1,0,0,1);
-            half4 main(half4) {
-                int x = 1, y = 1;
-                if ((x == 2) || ((y += 1) == 2)) { // LHS false, RHS is executed and is true
-                    return (x == 1 && y == 2) ? colorGreen : colorRed;
-                } else {
-                    return colorRed;
-                }
-            }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 0.0},
-         /*expectedResult=*/SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
-
-    test(r,
-         R"__SkSL__(
-            const half4 colorGreen = half4(0,1,0,1), colorRed = half4(1,0,0,1);
-            half4 main(half4) {
-                int x = 1, y = 1;
-                if ((x == 2) || ((y += 1) == 3)) { // LHS false, RHS is executed and is false
-                    return colorRed;
-                } else {
-                    return (x == 1 && y == 2) ? colorGreen : colorRed;
-                }
-            }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 0.0},
-         /*expectedResult=*/SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
-}
-
-DEF_TEST(SkSLRasterPipelineCodeGeneratorShortCircuitLogicalAnd, r) {
-    test(r,
-         R"__SkSL__(
-            const half4 colorGreen = half4(0,1,0,1), colorRed = half4(1,0,0,1);
-            half4 main(half4) {
-                int x = 1, y = 1;
-                if ((x == 1) && ((y += 1) == 2)) { // LHS true, RHS is executed and is true
-                    return (x == 1 && y == 2) ? colorGreen : colorRed;
-                } else {
-                    return colorRed;
-                }
-            }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 0.0},
-         /*expectedResult=*/SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
-
-    test(r,
-         R"__SkSL__(
-            const half4 colorGreen = half4(0,1,0,1), colorRed = half4(1,0,0,1);
-            half4 main(half4) {
-                int x = 1, y = 1;
-                if ((x == 1) && ((y += 1) == 3)) { // LHS true, RHS is executed and is false
-                    return colorRed;
-                } else {
-                    return (x == 1 && y == 2) ? colorGreen : colorRed;
-                }
-            }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 0.0},
-         /*expectedResult=*/SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
-
-    test(r,
-         R"__SkSL__(
-            const half4 colorGreen = half4(0,1,0,1), colorRed = half4(1,0,0,1);
-            half4 main(half4) {
-                int x = 1, y = 1;
-                if ((x == 2) && ((y += 1) == 2)) { // LHS false, RHS not executed but would be true
-                    return colorRed;
-                } else {
-                    return (x == 1 && y == 1) ? colorGreen : colorRed;
-                }
-            }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 0.0},
-         /*expectedResult=*/SkColor4f{0.0f, 1.0f, 0.0f, 1.0f});
-
-    test(r,
-         R"__SkSL__(
-            const half4 colorGreen = half4(0,1,0,1), colorRed = half4(1,0,0,1);
-            half4 main(half4) {
-                int x = 1, y = 1;
-                if ((x == 2) && ((y += 1) == 3)) { // LHS false, RHS not executed but would be false
-                    return colorRed;
-                } else {
-                    return (x == 1 && y == 1) ? colorGreen : colorRed;
-                }
             }
          )__SkSL__",
          /*uniforms=*/{},
@@ -472,69 +241,6 @@ DEF_TEST(SkSLRasterPipelineCodeGeneratorIdentitySwizzle, r) {
          /*startingColor=*/SkColor4f{0.5, 1.0, 0.0, 0.25},
          /*expectedResult=*/SkColor4f{0.0, 1.0, 0.0, 1.0});
 
-}
-
-DEF_TEST(SkSLRasterPipelineCodeGeneratorLumaTernaryTest, r) {
-    test(r,
-         R"__SkSL__(
-            half4 main(vec4 color) {
-                half luma = dot(color.rgb, half3(0.3, 0.6, 0.1));
-
-                half scale = luma < 0.33333 ? 0.5
-                           : luma < 0.66666 ? (0.166666 + 2.0 * (luma - 0.33333)) / luma
-                           :   /* else */     (0.833333 + 0.5 * (luma - 0.66666)) / luma;
-                return half4(color.rgb * scale, color.a);
-            }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.25, 0.00, 0.75, 1.0},
-         /*expectedResult=*/SkColor4f{0.125, 0.0, 0.375, 1.0});
-
-}
-
-DEF_TEST(SkSLRasterPipelineCodeGeneratorLumaIfNoEarlyReturnTest, r) {
-    test(r,
-         R"__SkSL__(
-            half4 main(vec4 color) {
-                half luma = dot(color.rgb, half3(0.3, 0.6, 0.1));
-
-                half scale = 0;
-                if (luma < 0.33333) {
-                    scale = 0.5;
-                } else if (luma < 0.66666) {
-                    scale = (0.166666 + 2.0 * (luma - 0.33333)) / luma;
-                } else {
-                    scale = (0.833333 + 0.5 * (luma - 0.66666)) / luma;
-                }
-                return half4(color.rgb * scale, color.a);
-            }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.25, 0.00, 0.75, 1.0},
-         /*expectedResult=*/SkColor4f{0.125, 0.0, 0.375, 1.0});
-
-}
-
-DEF_TEST(SkSLRasterPipelineCodeGeneratorLumaWithEarlyReturnTest, r) {
-    test(r,
-         R"__SkSL__(
-            half4 main(half4 color) {
-                half luma = dot(color.rgb, half3(0.3, 0.6, 0.1));
-
-                half scale = 0;
-                if (luma < 0.33333) {
-                    return half4(color.rgb * 0.5, color.a);
-                } else if (luma < 0.66666) {
-                    scale = 0.166666 + 2.0 * (luma - 0.33333);
-                } else {
-                    scale = 0.833333 + 0.5 * (luma - 0.66666);
-                }
-                return half4(color.rgb * (scale/luma), color.a);
-            }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.25, 0.00, 0.75, 1.0},
-         /*expectedResult=*/SkColor4f{0.125, 0.0, 0.375, 1.0});
 }
 
 DEF_TEST(SkSLRasterPipelineCodeGeneratorBitwiseNotTest, r) {
@@ -603,21 +309,4 @@ DEF_TEST(SkSLRasterPipelineCodeGeneratorComparisonIntrinsicTest, r) {
          /*uniforms=*/{},
          /*startingColor=*/SkColor4f{0.0, 0.0, 0.0, 0.0},
          /*expectedResult=*/SkColor4f{0.0, 1.0, 0.0, 1.0});
-}
-
-DEF_TEST(SkSLRasterPipelineCodeGeneratorUnpremulTest, r) {
-    test(r,
-         R"__SkSL__(
-            // This is `unpremul` verbatim from sksl_shared, but marked noinline.
-            noinline half4 MyUnpremul(half4 color) {
-                return half4(color.rgb / max(color.a, 0.0001), color.a);
-            }
-
-            half4 main(vec4 color) {
-                return MyUnpremul(color);
-            }
-         )__SkSL__",
-         /*uniforms=*/{},
-         /*startingColor=*/SkColor4f{0.5, 0.25, 0.125, 0.5},
-         /*expectedResult=*/SkColor4f{1.0, 0.5, 0.25, 0.5});
 }

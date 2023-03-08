@@ -671,37 +671,23 @@ static std::unique_ptr<GrFragmentProcessor> make_interpolated_to_dst(
         bool allOpaque) {
     using ColorSpace = SkGradientShader::Interpolation::ColorSpace;
 
-    static_assert(static_cast<int>(ColorSpace::kLab)   == 2);
-    static_assert(static_cast<int>(ColorSpace::kOKLab) == 3);
-    static_assert(static_cast<int>(ColorSpace::kLCH)   == 4);
-    static_assert(static_cast<int>(ColorSpace::kOKLCH) == 5);
-    static_assert(static_cast<int>(ColorSpace::kHSL)   == 7);
-    static_assert(static_cast<int>(ColorSpace::kHWB)   == 8);
+    // If these values change, you will need to edit sksl_shared
+    static_assert(static_cast<int>(ColorSpace::kDestination) == 0);
+    static_assert(static_cast<int>(ColorSpace::kSRGBLinear)  == 1);
+    static_assert(static_cast<int>(ColorSpace::kLab)         == 2);
+    static_assert(static_cast<int>(ColorSpace::kOKLab)       == 3);
+    static_assert(static_cast<int>(ColorSpace::kLCH)         == 4);
+    static_assert(static_cast<int>(ColorSpace::kOKLCH)       == 5);
+    static_assert(static_cast<int>(ColorSpace::kSRGB)        == 6);
+    static_assert(static_cast<int>(ColorSpace::kHSL)         == 7);
+    static_assert(static_cast<int>(ColorSpace::kHWB)         == 8);
 
     static const SkRuntimeEffect* effect = SkMakeRuntimeEffect(SkRuntimeEffect::MakeForColorFilter,
         "uniform int colorSpace;"    // specialized
         "uniform int do_unpremul;"   // specialized
 
         "half4 main(half4 color) {"
-            "if (bool(do_unpremul)) {"
-                "switch (colorSpace) {"
-                    /* kLab   */ "case 2:"
-                    /* kOKLab */ "case 3: color = unpremul(color); break;"
-                    /* kLCH   */ "case 4:"
-                    /* kOKLCH */ "case 5:"
-                    /* kHSL   */ "case 7:"
-                    /* kHWB   */ "case 8: color = $unpremul_polar(color); break;"
-                "}"
-            "}"
-            "switch (colorSpace) {"
-                /* kLab   */ "case 2: color.rgb = $css_lab_to_xyz(color.rgb); break;"
-                /* kOKLab */ "case 3: color.rgb = $css_oklab_to_linear_srgb(color.rgb); break;"
-                /* kLCH   */ "case 4: color.rgb = $css_hcl_to_xyz(color.rgb); break;"
-                /* kOKLCH */ "case 5: color.rgb = $css_okhcl_to_linear_srgb(color.rgb); break;"
-                /* kHSL   */ "case 7: color.rgb = $css_hsl_to_srgb(color.rgb); break;"
-                /* kHWB   */ "case 8: color.rgb = $css_hwb_to_srgb(color.rgb); break;"
-            "}"
-            "return color;"
+            "return $interpolated_to_rgb_unpremul(color, colorSpace, do_unpremul);"
         "}"
     );
 
@@ -768,6 +754,7 @@ namespace GrGradientShader {
 // gradient's tile mode
 std::unique_ptr<GrFragmentProcessor> MakeGradientFP(const SkGradientShaderBase& shader,
                                                     const GrFPArgs& args,
+                                                    const SkShaderBase::MatrixRec& mRec,
                                                     std::unique_ptr<GrFragmentProcessor> layout,
                                                     const SkMatrix* overrideMatrix) {
     // No shader is possible if a layout couldn't be created, e.g. a layout-specific Make() returned
@@ -776,14 +763,16 @@ std::unique_ptr<GrFragmentProcessor> MakeGradientFP(const SkGradientShaderBase& 
         return nullptr;
     }
 
-    // Wrap the layout in a matrix effect to apply the gradient's matrix:
-    SkMatrix matrix;
-    if (args.fLocalMatrix && !args.fLocalMatrix->invert(&matrix)) {
+    // Some two-point conical gradients use a custom matrix here. Otherwise, use
+    // SkGradientShaderBase's matrix;
+    if (!overrideMatrix) {
+        overrideMatrix = &shader.getGradientMatrix();
+    }
+    bool success;
+    std::tie(success, layout) = mRec.apply(std::move(layout), *overrideMatrix);
+    if (!success) {
         return nullptr;
     }
-    // Some two-point conical gradients use a custom matrix here
-    matrix.postConcat(overrideMatrix ? *overrideMatrix : shader.getGradientMatrix());
-    layout = GrMatrixEffect::Make(matrix, std::move(layout));
 
     // Convert all colors into destination space and into SkPMColor4fs, and handle
     // premul issues depending on the interpolation mode
@@ -860,7 +849,8 @@ std::unique_ptr<GrFragmentProcessor> MakeGradientFP(const SkGradientShaderBase& 
 }
 
 std::unique_ptr<GrFragmentProcessor> MakeLinear(const SkLinearGradient& shader,
-                                                const GrFPArgs& args) {
+                                                const GrFPArgs& args,
+                                                const SkShaderBase::MatrixRec& mRec) {
     // We add a tiny delta to t. When gradient stops are set up so that a hard stop in a vertically
     // or horizontally oriented gradient falls exactly at a column or row of pixel centers we can
     // get slightly different interpolated t values along the column/row. By adding the delta
@@ -876,7 +866,7 @@ std::unique_ptr<GrFragmentProcessor> MakeLinear(const SkLinearGradient& shader,
     // The linear gradient never rejects a pixel so it doesn't change opacity
     auto fp = GrSkSLFP::Make(effect, "LinearLayout", /*inputFP=*/nullptr,
                              GrSkSLFP::OptFlags::kPreservesOpaqueInput);
-    return MakeGradientFP(shader, args, std::move(fp));
+    return MakeGradientFP(shader, args, mRec, std::move(fp));
 }
 
 #if GR_TEST_UTILS

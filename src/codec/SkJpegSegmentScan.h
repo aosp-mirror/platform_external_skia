@@ -9,6 +9,7 @@
 #define SkJpegSegmentScan_codec_DEFINED
 
 #include "include/core/SkRefCnt.h"
+#include "src/codec/SkJpegConstants.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -37,7 +38,7 @@ struct SkJpegSegment {
  */
 class SkJpegSegmentScanner {
 public:
-    SkJpegSegmentScanner(uint8_t stopMarker = kMarkerEndOfImage);
+    SkJpegSegmentScanner(uint8_t stopMarker = kJpegMarkerEndOfImage);
 
     bool isDone() const { return fState == State::kDone; }
     bool hadError() const { return fState == State::kError; }
@@ -45,24 +46,13 @@ public:
     // Provide more bytes of data to the state machine.
     void onBytes(const void* data, size_t size);
 
-    // Return the number of bytes that have been received via OnBytes since the marker that caused
-    // the transition to kDone was read. This will assert that the state is kDone.
-    size_t bytesSinceDone() const;
-
-    // Return the segments that have been retrieved so far. This will assert that no errors have
-    // been encountered.
+    // Return the segments that have been retrieved so far. If an error was encountered, this will
+    // include all segments up to the error.
     const std::vector<SkJpegSegment>& getSegments() const;
 
-    // Convenient markers to know.
-    static constexpr uint8_t kMarkerStartOfImage = 0xD8;
-    static constexpr uint8_t kMarkerEndOfImage = 0xD9;
-    static constexpr uint8_t kMarkerStartOfScan = 0xDA;
-
-    // The number of bytes in a marker code is two.
-    static constexpr size_t kMarkerCodeSize = 2;
-
-    // The number of bytes used to specify the length of a segment's parameters is two.
-    static constexpr size_t kParameterLengthSize = 2;
+    // Helper function to retrieve the parameters for a segment. ScannedData must be the data that
+    // was scanned to produce segment, starting at StartOfImage.
+    static sk_sp<SkData> GetParameters(const SkData* scannedData, const SkJpegSegment& segment);
 
 private:
     // The scanner is a state machine. State transitions happen when a byte is read.
@@ -140,41 +130,6 @@ private:
     uint8_t fCurrentSegmentMarker = 0;
 
     std::vector<SkJpegSegment> fSegments;
-};
-
-/*
- * This class will return the segment structure for a JPEG file represented by a seekable SkStream.
- * It can then be used to extract the parameters for any segment, as long as the original SkStream
- * is still valid.
- */
-class SkJpegSeekableScan {
-public:
-    // Scan the stream, starting at its current position (not rewinding first), and stopping when
-    // the specified stop marker is reached. This will return nullptr if the stop marker is not
-    // reached.
-    static std::unique_ptr<SkJpegSeekableScan> Create(
-            SkStream* stream, uint8_t stopMarker = SkJpegSegmentScanner::kMarkerStartOfScan);
-
-    // Return the list of segments from a scan.
-    const std::vector<SkJpegSegment>& segments() { return fSegments; }
-
-    // Copy the parameters from a segment. Return nullptr if the initial bytes of the parameters
-    // section do not match the specified signature. Return the parameters starting from end of the
-    // signature (so, kParameterLengthSize + signatureLength bytes into the parameter data).
-    sk_sp<SkData> copyParameters(const SkJpegSegment& segment,
-                                 const void* signature,
-                                 const size_t signatureLength);
-
-    // Return a stream for a subset of the original stream, starting at the specified offset, and
-    // with the specified length.
-    std::unique_ptr<SkStream> getSubsetStream(size_t offset, size_t size);
-
-private:
-    SkJpegSeekableScan(SkStream* stream, size_t initialPosition, std::vector<SkJpegSegment>&&);
-
-    SkStream* const fStream;
-    const size_t fInitialPosition;
-    const std::vector<SkJpegSegment> fSegments;
 };
 
 #endif

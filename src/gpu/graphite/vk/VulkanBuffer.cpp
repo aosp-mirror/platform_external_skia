@@ -31,7 +31,11 @@ sk_sp<Buffer> VulkanBuffer::Make(const VulkanSharedContext* sharedContext,
                             !sharedContext->vulkanCaps().gpuOnlyBuffersMorePerformant();
 
     using BufferUsage = skgpu::VulkanMemoryAllocator::BufferUsage;
-    BufferUsage allocUsage;
+
+    // The default usage captures use cases besides transfer buffers. GPU-only buffers are preferred
+    // unless mappability is required.
+    BufferUsage allocUsage =
+            requiresMappable ? BufferUsage::kCpuWritesGpuReads : BufferUsage::kGpuOnly;
 
     // Create the buffer object
     VkBufferCreateInfo bufInfo;
@@ -45,11 +49,26 @@ sk_sp<Buffer> VulkanBuffer::Make(const VulkanSharedContext* sharedContext,
     switch (type) {
         case BufferType::kVertex:
             bufInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-            allocUsage = requiresMappable ? BufferUsage::kCpuWritesGpuReads : BufferUsage::kGpuOnly;
             break;
         case BufferType::kIndex:
             bufInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-            allocUsage = requiresMappable ? BufferUsage::kCpuWritesGpuReads : BufferUsage::kGpuOnly;
+            break;
+        case BufferType::kStorage:
+            bufInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            break;
+        case BufferType::kIndirect:
+            bufInfo.usage =
+                    VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            break;
+        case BufferType::kVertexStorage:
+            bufInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            break;
+        case BufferType::kIndexStorage:
+            bufInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            break;
+        case BufferType::kUniform:
+            bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+            allocUsage = BufferUsage::kCpuWritesGpuReads;
             break;
         case BufferType::kXferCpuToGpu:
             bufInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
@@ -58,14 +77,6 @@ sk_sp<Buffer> VulkanBuffer::Make(const VulkanSharedContext* sharedContext,
         case BufferType::kXferGpuToCpu:
             bufInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
             allocUsage = BufferUsage::kTransfersFromGpuToCpu;
-            break;
-        case BufferType::kUniform:
-            bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-            allocUsage = BufferUsage::kCpuWritesGpuReads;
-            break;
-        case BufferType::kStorage:
-            bufInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-            allocUsage = BufferUsage::kCpuWritesGpuReads;
             break;
     }
 
@@ -153,6 +164,31 @@ VulkanBuffer::VulkanBuffer(const VulkanSharedContext* sharedContext,
         // We assume a buffer is used for CPU reads only in the case of GPU->CPU transfer buffers.
         , fBufferUsedForCPURead(type == BufferType::kXferGpuToCpu) {}
 
+void VulkanBuffer::freeGpuData() {
+    if (fMapPtr) {
+        this->internalUnmap(0, this->size());
+        fMapPtr = nullptr;
+    }
+
+    // TODO: If this is a uniform buffer, we must clean up the descriptor set.
+    //if (fUniformDescriptorSet) {
+    //    fUniformDescriptorSet->recycle();
+    //    fUniformDescriptorSet = nullptr;
+    //}
+
+    const VulkanSharedContext* sharedContext =
+            static_cast<const VulkanSharedContext*>(this->sharedContext());
+    SkASSERT(fBuffer);
+    SkASSERT(fAlloc.fMemory && fAlloc.fBackendMemory);
+    VULKAN_CALL(sharedContext->interface(),
+                DestroyBuffer(sharedContext->device(), fBuffer, nullptr));
+    fBuffer = VK_NULL_HANDLE;
+
+    skgpu::VulkanMemory::FreeBufferMemory(sharedContext->memoryAllocator(), fAlloc);
+    fAlloc.fMemory = VK_NULL_HANDLE;
+    fAlloc.fBackendMemory = 0;
+}
+
 void VulkanBuffer::internalMap(size_t readOffset, size_t readSize) {
     SkASSERT(!fMapPtr);
     if (this->isMappable()) {
@@ -169,7 +205,10 @@ void VulkanBuffer::internalMap(size_t readOffset, size_t readSize) {
         const VulkanSharedContext* sharedContext = this->vulkanSharedContext();
 
         auto allocator = sharedContext->memoryAllocator();
-        fMapPtr = skgpu::VulkanMemory::MapAlloc(allocator, fAlloc, nullptr);
+        auto checkResult = [sharedContext](VkResult result) {
+            return sharedContext->checkVkResult(result);
+        };
+        fMapPtr = skgpu::VulkanMemory::MapAlloc(allocator, fAlloc, checkResult);
         if (fMapPtr && readSize != 0) {
             // "Invalidate" here means make device writes visible to the host. That is, it makes
             // sure any GPU writes are finished in the range we might read from.

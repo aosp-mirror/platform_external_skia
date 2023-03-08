@@ -10,7 +10,6 @@ CORE_SKSLC_FILES = [
     "SkCpu.cpp",
     "SkCpu.h",
     "SkData.cpp",
-    "SkHalf.cpp",
     "SkMatrixInvert.cpp",
     "SkMatrixInvert.h",
     "SkStream.cpp",
@@ -181,7 +180,6 @@ CORE_FILES = [
     "SkM44.cpp",
     "SkMD5.cpp",
     "SkMD5.h",
-    "SkMSAN.h",
     "SkMallocPixelRef.cpp",
     "SkMask.cpp",
     "SkMask.h",
@@ -231,7 +229,7 @@ CORE_FILES = [
     "SkPixelRef.cpp",
     "SkPixelRefPriv.h",
     "SkPixmap.cpp",
-    "SkPixmapPriv.h",
+    "SkPixmapDraw.cpp",
     "SkPoint.cpp",
     "SkPoint3.cpp",
     "SkPointPriv.h",
@@ -242,6 +240,7 @@ CORE_FILES = [
     "SkQuadClipper.h",
     "SkRRect.cpp",
     "SkRRectPriv.h",
+    "SkRSXform.cpp",
     "SkRTree.cpp",
     "SkRTree.h",
     "SkRasterClip.cpp",
@@ -254,6 +253,8 @@ CORE_FILES = [
     "SkRasterPipelineOpList.h",
     "SkReadBuffer.cpp",
     "SkReadBuffer.h",
+    "SkReadPixelsRec.cpp",
+    "SkReadPixelsRec.h",
     "SkRecord.cpp",
     "SkRecord.h",
     "SkRecordDraw.cpp",
@@ -309,6 +310,7 @@ CORE_FILES = [
     "SkSurfaceCharacterization.cpp",
     "SkSurfacePriv.h",
     "SkSwizzle.cpp",
+    "SkSwizzlePriv.h",
     "SkTDynamicHash.h",
     "SkTHash.h",
     "SkTMultiMap.h",
@@ -338,6 +340,7 @@ CORE_FILES = [
     "SkVerticesPriv.h",
     "SkWriteBuffer.cpp",
     "SkWriteBuffer.h",
+    "SkWritePixelsRec.cpp",
     "SkWritePixelsRec.h",
     "SkWriter32.cpp",
     "SkWriter32.h",
@@ -425,5 +428,60 @@ skia_filegroup(
         ],
         "//conditions:default": [],
     }),
+    visibility = ["//src:__pkg__"],
+)
+
+skia_filegroup(
+    name = "buffet_hdrs",
+    srcs = [
+        # By putting headers here, we are explicitly stating we want to use them
+        # in places other than core. They still count as "private" headers.
+        "SkGeometry.h",
+        "SkMatrixPriv.h",
+        "SkMatrixInvert.h",
+        "SkMatrixUtils.h",
+        "SkPathPriv.h",
+        "SkPointPriv.h",
+        "SkRRectPriv.h",
+        "SkRectPriv.h",
+        "SkSamplingPriv.h",
+        "SkStreamPriv.h",
+    ],
+    visibility = ["//src:__pkg__"],
+)
+
+skia_filegroup(
+    name = "buffet_srcs",
+    srcs = [
+        # Private Headers
+        "SkCubicClipper.h",
+        "SkEdgeClipper.h",
+        "SkLineClipper.h",
+        "SkOSFile.h",  # TODO(kjlubick) probably need platform-specific .cpp files
+        "SkPathMakers.h",
+        "SkScaleToSides.h",
+        "SkStringUtils.h",
+    ] + [
+        # Implementation of public and private headers
+        "SkColor.cpp",
+        "SkCubicClipper.cpp",
+        "SkEdgeClipper.cpp",
+        "SkGeometry.cpp",
+        "SkIDChangeListener.cpp",
+        "SkLineClipper.cpp",
+        "SkM44.cpp",
+        "SkMatrix.cpp",
+        "SkPath.cpp",
+        "SkPathBuilder.cpp",
+        "SkPathRef.cpp",
+        "SkPoint.cpp",
+        "SkPoint3.cpp",
+        "SkRRect.cpp",
+        "SkRSXform.cpp",
+        "SkRect.cpp",
+        "SkStream.cpp",
+        "SkString.cpp",
+        "SkStringUtils.cpp",
+    ],
     visibility = ["//src:__pkg__"],
 )

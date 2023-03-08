@@ -5,7 +5,7 @@ generate:
 	echo "You do not need to run this any more for C++ code, only if you modify go code"
 
 generate_go:
-	cd .. && bazelisk run //:gazelle -- update infra/bots/task_drivers modules/canvaskit/go \
+	cd .. && bazelisk run //infra:gazelle -- update infra/bots/task_drivers modules/canvaskit/go \
        bazel/exporter  bazel/deps_parser tools/gpu/gl/interface
 
 .PHONY: generate_cmake
@@ -37,7 +37,7 @@ mocks:
 
 # This target should be run after the go.mod file is updated (e.g. version rolls or new updates)
 gazelle_update_repo:
-	cd .. && bazelisk run //:gazelle -- update-repos -from_file=go.mod -to_macro=go_repositories.bzl%go_repositories
+	cd .. && bazelisk run //infra:gazelle -- update-repos -from_file=go.mod -to_macro=go_repositories.bzl%go_repositories -prune
 
 # Run this target to test all known working Bazel builds
 known_good_builds:
@@ -80,16 +80,13 @@ rbe_known_good_tests:
 
 iwyu_rbe:
 	bazelisk build //:skia_public --config=for_linux_x64_with_rbe \
-		--config=enforce_iwyu --remote_download_minimal --nobuild_runfile_manifests
+		--config=enforce_iwyu --remote_download_minimal
 	bazelisk build //modules/skottie:skottie_tool_gpu --config=for_linux_x64_with_rbe \
-		--config=enforce_iwyu --remote_download_minimal --nobuild_runfile_manifests
+		--config=enforce_iwyu --remote_download_minimal
 	bazelisk build //tests/... --config=for_linux_x64_with_rbe \
-		--config=enforce_iwyu --remote_download_minimal --nobuild_runfile_manifests
+		--config=enforce_iwyu --remote_download_minimal
 
 iwyu:
-	bazelisk build //:skia_public --config=enforce_iwyu \
-		--nobuild_runfile_manifests
-	bazelisk build //modules/skottie:skottie_tool_gpu --config=enforce_iwyu \
-		--nobuild_runfile_manifests
-	bazelisk build //tests/... --config=enforce_iwyu \
-		--nobuild_runfile_manifests
+	bazelisk build //:skia_public --config=enforce_iwyu
+	bazelisk build //modules/skottie:skottie_tool_gpu --config=enforce_iwyu
+	bazelisk build //tests/... --config=enforce_iwyu

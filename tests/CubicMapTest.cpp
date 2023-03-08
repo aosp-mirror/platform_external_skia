@@ -9,8 +9,9 @@
 #include "include/core/SkPoint.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypes.h"
-#include "include/private/base/SkVx.h"
+#include "include/private/base/SkDebug.h"
 #include "src/base/SkCubics.h"
+#include "src/base/SkVx.h"
 #include "src/core/SkGeometry.h"
 #include "tests/Test.h"
 

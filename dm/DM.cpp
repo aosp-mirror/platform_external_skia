@@ -16,8 +16,8 @@
 #include "include/core/SkDocument.h"
 #include "include/core/SkGraphics.h"
 #include "include/private/SkChecksum.h"
-#include "include/private/SkHalf.h"
 #include "include/private/SkSpinlock.h"
+#include "src/base/SkHalf.h"
 #include "src/base/SkLeanWindows.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkMD5.h"
@@ -934,7 +934,7 @@ static void push_sink(const SkCommandLineConfig& config, Sink* s) {
 
     // Try a simple Src as a canary.  If it fails, skip this sink.
     struct : public Src {
-        Result draw(GrDirectContext*, SkCanvas* c) const override {
+        Result draw(SkCanvas* c) const override {
             c->drawRect(SkRect::MakeWH(1,1), SkPaint());
             return Result::Ok();
         }
@@ -974,8 +974,6 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
                 return new GPUPrecompileTestingSink(gpuConfig, grCtxOptions);
             } else if (gpuConfig->getUseDDLSink()) {
                 return new GPUDDLSink(gpuConfig, grCtxOptions);
-            } else if (gpuConfig->getOOPRish()) {
-                return new GPUOOPRSink(gpuConfig, grCtxOptions);
             } else if (gpuConfig->getSlug()) {
                 return new GPUSlugSink(gpuConfig, grCtxOptions);
             } else if (gpuConfig->getSerializedSlug()) {
@@ -1542,8 +1540,6 @@ TestHarness CurrentTestHarness() {
 
 /*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-static bool ColrV1VariationsEnabledForTest() { return true; }
-
 int main(int argc, char** argv) {
 #if defined(__MSVC_RUNTIME_CHECKS)
     _RTC_SetErrorFunc(RuntimeCheckErrorFunc);
@@ -1589,7 +1585,6 @@ int main(int argc, char** argv) {
 #if defined(SK_ENABLE_SVG)
     SkGraphics::SetOpenTypeSVGDecoderFactory(SkSVGOpenTypeSVGDecoder::Make);
 #endif
-    SkGraphics::SetVariableColrV1EnabledFunc(ColrV1VariationsEnabledForTest);
     SkTaskGroup::Enabler enabled(FLAGS_threads);
 
     if (nullptr == GetResourceAsData("images/color_wheel.png")) {

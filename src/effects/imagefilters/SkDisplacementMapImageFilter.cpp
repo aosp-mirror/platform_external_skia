@@ -35,6 +35,7 @@
 #include <utility>
 
 #if SK_SUPPORT_GPU
+#include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
@@ -60,7 +61,7 @@ struct GrShaderCaps;
 #endif
 
 #if GR_TEST_UTILS
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #endif
 
 namespace {

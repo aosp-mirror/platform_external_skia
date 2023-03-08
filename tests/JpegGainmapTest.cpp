@@ -11,6 +11,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkImageEncoder.h"
+#include "include/core/SkShader.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypes.h"
@@ -18,8 +19,12 @@
 #include "include/private/SkGainmapInfo.h"
 #include "include/private/SkGainmapShader.h"
 #include "include/private/SkJpegGainmapEncoder.h"
+#include "src/codec/SkJpegCodec.h"
+#include "src/codec/SkJpegConstants.h"
 #include "src/codec/SkJpegMultiPicture.h"
 #include "src/codec/SkJpegSegmentScan.h"
+#include "src/codec/SkJpegSourceMgr.h"
+#include "src/codec/SkJpegXmp.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
 
@@ -28,6 +33,82 @@
 #include <memory>
 #include <utility>
 #include <vector>
+
+namespace {
+
+// A test stream to stress the different SkJpegSourceMgr sub-classes.
+class TestStream : public SkStream {
+public:
+    enum class Type {
+        kUnseekable,    // SkJpegUnseekableSourceMgr
+        kSeekable,      // SkJpegBufferedSourceMgr
+        kMemoryMapped,  // SkJpegMemorySourceMgr
+    };
+    TestStream(Type type, SkStream* stream)
+            : fStream(stream)
+            , fSeekable(type != Type::kUnseekable)
+            , fMemoryMapped(type == Type::kMemoryMapped) {}
+    ~TestStream() override {}
+
+    size_t read(void* buffer, size_t size) override { return fStream->read(buffer, size); }
+    size_t peek(void* buffer, size_t size) const override { return fStream->peek(buffer, size); }
+    bool isAtEnd() const override { return fStream->isAtEnd(); }
+    bool rewind() override {
+        if (!fSeekable) {
+            return false;
+        }
+        return fStream->rewind();
+    }
+    bool hasPosition() const override {
+        if (!fSeekable) {
+            return false;
+        }
+        return fStream->hasPosition();
+    }
+    size_t getPosition() const override {
+        if (!fSeekable) {
+            return 0;
+        }
+        return fStream->hasPosition();
+    }
+    bool seek(size_t position) override {
+        if (!fSeekable) {
+            return 0;
+        }
+        return fStream->seek(position);
+    }
+    bool move(long offset) override {
+        if (!fSeekable) {
+            return 0;
+        }
+        return fStream->move(offset);
+    }
+    bool hasLength() const override {
+        if (!fMemoryMapped) {
+            return false;
+        }
+        return fStream->hasLength();
+    }
+    size_t getLength() const override {
+        if (!fMemoryMapped) {
+            return 0;
+        }
+        return fStream->getLength();
+    }
+    const void* getMemoryBase() override {
+        if (!fMemoryMapped) {
+            return nullptr;
+        }
+        return fStream->getMemoryBase();
+    }
+
+private:
+    SkStream* const fStream;
+    bool fSeekable = false;
+    bool fMemoryMapped = false;
+};
+
+}  // namespace
 
 DEF_TEST(Codec_jpegSegmentScan, r) {
     const struct Rec {
@@ -67,21 +148,115 @@ DEF_TEST(Codec_jpegSegmentScan, r) {
             continue;
         }
 
-        // Ensure that we get the expected number of segments for a scan that stops at StartOfScan.
-        auto sosSegmentScan = SkJpegSeekableScan::Create(stream.get());
-        REPORTER_ASSERT(r, rec.sosSegmentCount == sosSegmentScan->segments().size());
+        // Scan all the way to EndOfImage.
+        auto sourceMgr = SkJpegSourceMgr::Make(stream.get());
+        const auto& segments = sourceMgr->getAllSegments();
 
-        // Rewind and now go all the way to EndOfImage.
-        stream->rewind();
-        auto eoiSegmentScan =
-                SkJpegSeekableScan::Create(stream.get(), SkJpegSegmentScanner::kMarkerEndOfImage);
-        REPORTER_ASSERT(r, rec.eoiSegmentCount == eoiSegmentScan->segments().size());
+        // Verify we got the expected number of segments at EndOfImage
+        REPORTER_ASSERT(r, rec.eoiSegmentCount == segments.size());
+
+        // Verify we got the expected number of segments before StartOfScan
+        for (size_t i = 0; i < segments.size(); ++i) {
+            if (segments[i].marker == kJpegMarkerStartOfScan) {
+                REPORTER_ASSERT(r, rec.sosSegmentCount == i + 1);
+                break;
+            }
+        }
 
         // Verify the values for a randomly pre-selected segment index.
-        const auto& segment = eoiSegmentScan->segments()[rec.testSegmentIndex];
+        const auto& segment = segments[rec.testSegmentIndex];
         REPORTER_ASSERT(r, rec.testSegmentMarker == segment.marker);
         REPORTER_ASSERT(r, rec.testSegmentOffset == segment.offset);
         REPORTER_ASSERT(r, rec.testSegmentParameterLength == segment.parameterLength);
+    }
+}
+
+static bool find_mp_params_segment(SkStream* stream,
+                                   std::unique_ptr<SkJpegMultiPictureParameters>* outMpParams,
+                                   SkJpegSegment* outMpParamsSegment) {
+    auto sourceMgr = SkJpegSourceMgr::Make(stream);
+    for (const auto& segment : sourceMgr->getAllSegments()) {
+        if (segment.marker != kMpfMarker) {
+            continue;
+        }
+        auto parameterData = sourceMgr->getSegmentParameters(segment);
+        if (!parameterData) {
+            continue;
+        }
+        *outMpParams = SkJpegMultiPictureParameters::Make(parameterData);
+        if (*outMpParams) {
+            *outMpParamsSegment = segment;
+            return true;
+        }
+    }
+    return false;
+}
+
+DEF_TEST(Codec_multiPictureParams, r) {
+    // Little-endian test.
+    {
+        const uint8_t bytes[] = {
+                0x4d, 0x50, 0x46, 0x00, 0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x03,
+                0x00, 0x00, 0xb0, 0x07, 0x00, 0x04, 0x00, 0x00, 0x00, 0x30, 0x31, 0x30, 0x30,
+                0x01, 0xb0, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02,
+                0xb0, 0x07, 0x00, 0x20, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x20, 0xcf, 0x49, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xee, 0x28, 0x01, 0x00,
+                0xf9, 0xb7, 0x3c, 0x00, 0x00, 0x00, 0x00, 0x00,
+        };
+        auto mpParams =
+                SkJpegMultiPictureParameters::Make(SkData::MakeWithoutCopy(bytes, sizeof(bytes)));
+        REPORTER_ASSERT(r, mpParams);
+        REPORTER_ASSERT(r, mpParams->images.size() == 2);
+        REPORTER_ASSERT(r, mpParams->images[0].dataOffset == 0);
+        REPORTER_ASSERT(r, mpParams->images[0].size == 4837152);
+        REPORTER_ASSERT(r, mpParams->images[1].dataOffset == 3979257);
+        REPORTER_ASSERT(r, mpParams->images[1].size == 76014);
+    }
+
+    // Big-endian test.
+    {
+        const uint8_t bytes[] = {
+                0x4d, 0x50, 0x46, 0x00, 0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08, 0x00,
+                0x03, 0xb0, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x04, 0x30, 0x31, 0x30, 0x30,
+                0xb0, 0x01, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0xb0,
+                0x02, 0x00, 0x07, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00,
+                0x00, 0x00, 0x20, 0x03, 0x00, 0x00, 0x00, 0x56, 0xda, 0x2f, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x14, 0xc6, 0x01,
+                0x00, 0x55, 0x7c, 0x1f, 0x00, 0x00, 0x00, 0x00,
+        };
+        auto mpParams =
+                SkJpegMultiPictureParameters::Make(SkData::MakeWithoutCopy(bytes, sizeof(bytes)));
+        REPORTER_ASSERT(r, mpParams);
+        REPORTER_ASSERT(r, mpParams->images.size() == 2);
+        REPORTER_ASSERT(r, mpParams->images[0].dataOffset == 0);
+        REPORTER_ASSERT(r, mpParams->images[0].size == 5691951);
+        REPORTER_ASSERT(r, mpParams->images[1].dataOffset == 5602335);
+        REPORTER_ASSERT(r, mpParams->images[1].size == 1361409);
+    }
+
+    // Three entry test.
+    {
+        const uint8_t bytes[] = {
+                0x4d, 0x50, 0x46, 0x00, 0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08, 0x00,
+                0x03, 0xb0, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x04, 0x30, 0x31, 0x30, 0x30,
+                0xb0, 0x01, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0xb0,
+                0x02, 0x00, 0x07, 0x00, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x1f, 0x1c, 0xc2, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x05, 0xb0,
+                0x00, 0x1f, 0x12, 0xec, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x96, 0x6b, 0x00, 0x22, 0x18, 0x9c, 0x00, 0x00, 0x00, 0x00,
+        };
+        auto mpParams =
+                SkJpegMultiPictureParameters::Make(SkData::MakeWithoutCopy(bytes, sizeof(bytes)));
+        REPORTER_ASSERT(r, mpParams);
+        REPORTER_ASSERT(r, mpParams->images.size() == 3);
+        REPORTER_ASSERT(r, mpParams->images[0].dataOffset == 0);
+        REPORTER_ASSERT(r, mpParams->images[0].size == 2038978);
+        REPORTER_ASSERT(r, mpParams->images[1].dataOffset == 2036460);
+        REPORTER_ASSERT(r, mpParams->images[1].size == 198064);
+        REPORTER_ASSERT(r, mpParams->images[2].dataOffset == 2234524);
+        REPORTER_ASSERT(r, mpParams->images[2].size == 38507);
     }
 }
 
@@ -90,41 +265,91 @@ DEF_TEST(Codec_jpegMultiPicture, r) {
     auto stream = GetResourceAsStream(path);
     REPORTER_ASSERT(r, stream);
 
-    auto segmentScan = SkJpegSeekableScan::Create(stream.get());
-    REPORTER_ASSERT(r, segmentScan);
+    // Search and parse the MPF header.
+    std::unique_ptr<SkJpegMultiPictureParameters> mpParams;
+    SkJpegSegment mpParamsSegment;
+    REPORTER_ASSERT(r, find_mp_params_segment(stream.get(), &mpParams, &mpParamsSegment));
 
-    // Extract the streams for the MultiPicture images.
-    auto mpStreams = SkJpegExtractMultiPictureStreams(segmentScan.get());
-    REPORTER_ASSERT(r, mpStreams);
-    size_t numberOfImages = mpStreams->images.size();
-
-    // Decode them into bitmaps.
-    std::vector<SkBitmap> bitmaps(numberOfImages);
-    for (size_t i = 0; i < numberOfImages; ++i) {
-        auto imageStream = std::move(mpStreams->images[i].stream);
-        if (i == 0) {
-            REPORTER_ASSERT(r, !imageStream);
-            continue;
+    // Verify that we get the same parameters when we re-serialize and de-serialize them
+    {
+        auto mpParamsSerialized = mpParams->serialize();
+        REPORTER_ASSERT(r, mpParamsSerialized);
+        auto mpParamsRoundTripped = SkJpegMultiPictureParameters::Make(mpParamsSerialized);
+        REPORTER_ASSERT(r, mpParamsRoundTripped);
+        REPORTER_ASSERT(r, mpParamsRoundTripped->images.size() == mpParams->images.size());
+        for (size_t i = 0; i < mpParamsRoundTripped->images.size(); ++i) {
+            REPORTER_ASSERT(r, mpParamsRoundTripped->images[i].size == mpParams->images[i].size);
+            REPORTER_ASSERT(
+                    r,
+                    mpParamsRoundTripped->images[i].dataOffset == mpParams->images[i].dataOffset);
         }
-        REPORTER_ASSERT(r, imageStream);
-
-        std::unique_ptr<SkCodec> codec = SkCodec::MakeFromStream(std::move(imageStream));
-        REPORTER_ASSERT(r, codec);
-
-        SkBitmap bm;
-        bm.allocPixels(codec->getInfo());
-        REPORTER_ASSERT(
-                r, SkCodec::kSuccess == codec->getPixels(bm.info(), bm.getPixels(), bm.rowBytes()));
-        bitmaps[i] = bm;
     }
 
-    // Spot-check the image size and pixels.
-    REPORTER_ASSERT(r, bitmaps[1].dimensions() == SkISize::Make(1512, 2016));
-    REPORTER_ASSERT(r, bitmaps[1].getColor(0, 0) == 0xFF3B3B3B);
-    REPORTER_ASSERT(r, bitmaps[1].getColor(1511, 2015) == 0xFF101010);
-    REPORTER_ASSERT(r, bitmaps[2].dimensions() == SkISize::Make(576, 768));
-    REPORTER_ASSERT(r, bitmaps[2].getColor(0, 0) == 0xFF010101);
-    REPORTER_ASSERT(r, bitmaps[2].getColor(575, 767) == 0xFFB5B5B5);
+    const struct Rec {
+        const TestStream::Type streamType;
+        const bool skipFirstImage;
+        const size_t bufferSize;
+    } recs[] = {
+            {TestStream::Type::kMemoryMapped, false, 1024},
+            {TestStream::Type::kMemoryMapped, true, 1024},
+            {TestStream::Type::kSeekable, false, 1024},
+            {TestStream::Type::kSeekable, true, 1024},
+            {TestStream::Type::kSeekable, false, 7},
+            {TestStream::Type::kSeekable, true, 13},
+            {TestStream::Type::kSeekable, true, 1024 * 1024 * 16},
+            {TestStream::Type::kUnseekable, false, 1024},
+            {TestStream::Type::kUnseekable, true, 1024},
+            {TestStream::Type::kUnseekable, false, 1},
+            {TestStream::Type::kUnseekable, true, 1},
+            {TestStream::Type::kUnseekable, false, 7},
+            {TestStream::Type::kUnseekable, true, 13},
+            {TestStream::Type::kUnseekable, false, 1024 * 1024 * 16},
+            {TestStream::Type::kUnseekable, true, 1024 * 1024 * 16},
+    };
+    for (const auto& rec : recs) {
+        stream->rewind();
+        TestStream testStream(rec.streamType, stream.get());
+        auto sourceMgr = SkJpegSourceMgr::Make(&testStream, rec.bufferSize);
+
+        // Decode the images into bitmaps.
+        size_t numberOfImages = mpParams->images.size();
+        std::vector<SkBitmap> bitmaps(numberOfImages);
+        for (size_t i = 0; i < numberOfImages; ++i) {
+            if (i == 0) {
+                REPORTER_ASSERT(r, mpParams->images[i].dataOffset == 0);
+                continue;
+            }
+            if (i == 1 && rec.skipFirstImage) {
+                continue;
+            }
+            auto imageData = sourceMgr->getSubsetData(
+                    SkJpegMultiPictureParameters::GetAbsoluteOffset(mpParams->images[i].dataOffset,
+                                                                    mpParamsSegment.offset),
+                    mpParams->images[i].size);
+            REPORTER_ASSERT(r, imageData);
+
+            std::unique_ptr<SkCodec> codec =
+                    SkCodec::MakeFromStream(SkMemoryStream::Make(imageData));
+            REPORTER_ASSERT(r, codec);
+
+            SkBitmap bm;
+            bm.allocPixels(codec->getInfo());
+            REPORTER_ASSERT(r,
+                            SkCodec::kSuccess ==
+                                    codec->getPixels(bm.info(), bm.getPixels(), bm.rowBytes()));
+            bitmaps[i] = bm;
+        }
+
+        // Spot-check the image size and pixels.
+        if (!rec.skipFirstImage) {
+            REPORTER_ASSERT(r, bitmaps[1].dimensions() == SkISize::Make(1512, 2016));
+            REPORTER_ASSERT(r, bitmaps[1].getColor(0, 0) == 0xFF3B3B3B);
+            REPORTER_ASSERT(r, bitmaps[1].getColor(1511, 2015) == 0xFF101010);
+        }
+        REPORTER_ASSERT(r, bitmaps[2].dimensions() == SkISize::Make(576, 768));
+        REPORTER_ASSERT(r, bitmaps[2].getColor(0, 0) == 0xFF010101);
+        REPORTER_ASSERT(r, bitmaps[2].getColor(575, 767) == 0xFFB5B5B5);
+    }
 }
 
 // Decode an image and its gainmap.
@@ -135,7 +360,8 @@ void decode_all(Reporter& r,
                 SkBitmap& gainmapBitmap,
                 SkGainmapInfo& gainmapInfo) {
     // Decode the base bitmap.
-    std::unique_ptr<SkCodec> baseCodec = SkCodec::MakeFromStream(std::move(stream));
+    SkCodec::Result result = SkCodec::kSuccess;
+    std::unique_ptr<SkCodec> baseCodec = SkJpegCodec::MakeFromStream(std::move(stream), &result);
     REPORTER_ASSERT(r, baseCodec);
     baseBitmap.allocPixels(baseCodec->getInfo());
     REPORTER_ASSERT(r,
@@ -207,6 +433,142 @@ SkBitmap render_gainmap(const SkImageInfo& renderInfo,
     return result;
 }
 
+DEF_TEST(AndroidCodec_xmpHdrgmAsFieldValue, r) {
+    // Expose HDRM values as fields. Also place the HDRGM namespace in the rdf:RDF node.
+    const char xmpData[] =
+            "http://ns.adobe.com/xap/1.0/\0"
+            "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"XMP Core 6.0.0\">\n"
+            "   <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"\n"
+            "            xmlns:hdrgm=\"http://ns.adobe.com/hdr-gain-map/1.0/\">\n"
+            "      <rdf:Description rdf:about=\"\">\n"
+            "         <hdrgm:Version>1.0</hdrgm:Version>\n"
+            "         <hdrgm:GainMapMax>3</hdrgm:GainMapMax>\n"
+            "         <hdrgm:HDRCapacityMax>4</hdrgm:HDRCapacityMax>\n"
+            "      </rdf:Description>\n"
+            "   </rdf:RDF>\n"
+            "</x:xmpmeta>\n";
+
+    std::vector<sk_sp<SkData>> app1Params;
+    app1Params.push_back(SkData::MakeWithoutCopy(xmpData, sizeof(xmpData) - 1));
+
+    auto xmp = SkJpegXmp::Make(app1Params);
+    REPORTER_ASSERT(r, xmp);
+
+    SkGainmapInfo info;
+    REPORTER_ASSERT(r, xmp->getGainmapInfoHDRGM(&info));
+    REPORTER_ASSERT(r, info.fGainmapRatioMax.fR == 8.f);
+    REPORTER_ASSERT(r, info.fDisplayRatioHdr == 16.f);
+}
+
+DEF_TEST(AndroidCodec_xmpHdrgmAsDescriptionPropertyAttributes, r) {
+    // Expose HDRGM values as attributes on an rdf:Description node.
+    const char xmpData[] =
+            "http://ns.adobe.com/xap/1.0/\0"
+            "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"XMP Core 6.0.0\">\n"
+            "   <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n"
+            "      <rdf:Description rdf:about=\"\"\n"
+            "            xmlns:hdrgm=\"http://ns.adobe.com/hdr-gain-map/1.0/\"\n"
+            "         hdrgm:Version=\"1.0\"\n"
+            "         hdrgm:GainMapMax=\"3\"\n"
+            "         hdrgm:HDRCapacityMax=\"4\"/>\n"
+            "   </rdf:RDF>\n"
+            "</x:xmpmeta>\n";
+
+    std::vector<sk_sp<SkData>> app1Params;
+    app1Params.push_back(SkData::MakeWithoutCopy(xmpData, sizeof(xmpData) - 1));
+
+    auto xmp = SkJpegXmp::Make(app1Params);
+    REPORTER_ASSERT(r, xmp);
+
+    SkGainmapInfo info;
+    REPORTER_ASSERT(r, xmp->getGainmapInfoHDRGM(&info));
+    REPORTER_ASSERT(r, info.fGainmapRatioMax.fR == 8.f);
+    REPORTER_ASSERT(r, info.fDisplayRatioHdr == 16.f);
+}
+
+DEF_TEST(AndroidCodec_xmpContainerTypedNode, r) {
+    // Container and Item using a node of type Container:Item.
+    const char xmpData[] =
+            "http://ns.adobe.com/xap/1.0/\0"
+            "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"XMP Core 5.5.0\">\n"
+            " <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n"
+            "  <rdf:Description rdf:about=\"\"\n"
+            "    xmlns:Container=\"http://ns.google.com/photos/1.0/container/\"\n"
+            "    xmlns:Item=\"http://ns.google.com/photos/1.0/container/item/\">\n"
+            "   <Container:Directory>\n"
+            "    <rdf:Seq>\n"
+            "     <rdf:li rdf:parseType=\"Resource\">\n"
+            "      <Container:Item>\n"
+            "       <Item:Mime>image/jpeg</Item:Mime>\n"
+            "       <Item:Semantic>Primary</Item:Semantic>\n"
+            "      </Container:Item>\n"
+            "     </rdf:li>\n"
+            "     <rdf:li rdf:parseType=\"Resource\">\n"
+            "      <Container:Item\n"
+            "         Item:Semantic=\"RecoveryMap\"\n"
+            "         Item:Mime=\"image/jpeg\"\n"
+            "         Item:Length=\"49035\"/>\n"
+            "     </rdf:li>\n"
+            "    </rdf:Seq>\n"
+            "   </Container:Directory>\n"
+            "  </rdf:Description>\n"
+            " </rdf:RDF>\n"
+            "</x:xmpmeta>\n";
+    std::vector<sk_sp<SkData>> app1Params;
+    app1Params.push_back(SkData::MakeWithoutCopy(xmpData, sizeof(xmpData) - 1));
+
+    auto xmp = SkJpegXmp::Make(app1Params);
+    REPORTER_ASSERT(r, xmp);
+
+    size_t offset = 999;
+    size_t size = 999;
+    REPORTER_ASSERT(r, xmp->getContainerGainmapLocation(&offset, &size));
+    REPORTER_ASSERT(r, size == 49035);
+}
+
+DEF_TEST(AndroidCodec_xmpContainerTypedNodeRdfEquivalent, r) {
+    // Container and Item using rdf:value and rdf:type pairs.
+    const char xmpData[] =
+            "http://ns.adobe.com/xap/1.0/\0"
+            "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"XMP Core 5.5.0\">\n"
+            " <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n"
+            "  <rdf:Description rdf:about=\"\"\n"
+            "    xmlns:Container=\"http://ns.google.com/photos/1.0/container/\"\n"
+            "    xmlns:Item=\"http://ns.google.com/photos/1.0/container/item/\">\n"
+            "   <Container:Directory>\n"
+            "    <rdf:Seq>\n"
+            "     <rdf:li rdf:parseType=\"Resource\">\n"
+            "      <rdf:value rdf:parseType=\"Resource\">\n"
+            "       <Item:Mime>image/jpeg</Item:Mime>\n"
+            "       <Item:Semantic>Primary</Item:Semantic>\n"
+            "      </rdf:value>\n"
+            "      <rdf:type rdf:resource=\"Item\"/>\n"
+            "     </rdf:li>\n"
+            "     <rdf:li rdf:parseType=\"Resource\">\n"
+            "      <rdf:value rdf:parseType=\"Resource\">\n"
+            "       <Item:Semantic>RecoveryMap</Item:Semantic>\n"
+            "       <Item:Mime>image/jpeg</Item:Mime>\n"
+            "       <Item:Length>49035</Item:Length>\n"
+            "      </rdf:value>\n"
+            "      <rdf:type rdf:resource=\"Item\"/>\n"
+            "     </rdf:li>\n"
+            "    </rdf:Seq>\n"
+            "   </Container:Directory>\n"
+            "  </rdf:Description>\n"
+            " </rdf:RDF>\n"
+            "</x:xmpmeta>\n";
+    std::vector<sk_sp<SkData>> app1Params;
+    app1Params.push_back(SkData::MakeWithoutCopy(xmpData, sizeof(xmpData) - 1));
+
+    auto xmp = SkJpegXmp::Make(app1Params);
+    REPORTER_ASSERT(r, xmp);
+
+    size_t offset = 999;
+    size_t size = 999;
+    REPORTER_ASSERT(r, xmp->getContainerGainmapLocation(&offset, &size));
+    REPORTER_ASSERT(r, size == 49035);
+}
+
 // Render a single pixel of an applied gainmap and return it.
 SkColor4f render_gainmap_pixel(float renderHdrRatio,
                                const SkBitmap& baseBitmap,
@@ -228,7 +590,7 @@ static bool approx_eq_rgb(const SkColor4f& x, const SkColor4f& y, float epsilon)
            approx_eq(x.fB, y.fB, epsilon);
 }
 
-DEF_TEST(AndroidCodec_jpegGainmap, r) {
+DEF_TEST(AndroidCodec_jpegGainmapDecode, r) {
     const struct Rec {
         const char* path;
         SkISize dimensions;
@@ -249,15 +611,6 @@ DEF_TEST(AndroidCodec_jpegGainmap, r) {
              1.f,
              2.71828f,
              SkGainmapInfo::Type::kMultiPicture},
-            {"images/jpegr.jpg",
-             SkISize::Make(1008, 756),
-             0xFFCACACA,
-             0xFFC8C8C8,
-             -2.3669f,
-             2.3669f,
-             1.f,
-             10.6643f,
-             SkGainmapInfo::Type::kJpegR_HLG},
             {"images/hdrgm.jpg",
              SkISize::Make(188, 250),
              0xFFE9E9E9,
@@ -269,19 +622,22 @@ DEF_TEST(AndroidCodec_jpegGainmap, r) {
              SkGainmapInfo::Type::kHDRGM},
     };
 
-    for (bool useFileStream : {false, true}) {
+    TestStream::Type kStreamTypes[] = {
+            TestStream::Type::kUnseekable,
+            TestStream::Type::kSeekable,
+            TestStream::Type::kMemoryMapped,
+    };
+    for (const auto& streamType : kStreamTypes) {
+        bool useFileStream = streamType != TestStream::Type::kMemoryMapped;
         for (const auto& rec : recs) {
             auto stream = GetResourceAsStream(rec.path, useFileStream);
             REPORTER_ASSERT(r, stream);
+            auto testStream = std::make_unique<TestStream>(streamType, stream.get());
 
             SkBitmap baseBitmap;
             SkBitmap gainmapBitmap;
             SkGainmapInfo gainmapInfo;
-            decode_all(r,
-                       GetResourceAsStream(rec.path, useFileStream),
-                       baseBitmap,
-                       gainmapBitmap,
-                       gainmapInfo);
+            decode_all(r, std::move(testStream), baseBitmap, gainmapBitmap, gainmapInfo);
 
             // Spot-check the image size and pixels.
             REPORTER_ASSERT(r, gainmapBitmap.dimensions() == rec.dimensions);
@@ -306,6 +662,45 @@ DEF_TEST(AndroidCodec_jpegGainmap, r) {
 
             REPORTER_ASSERT(r, gainmapInfo.fType == rec.type);
         }
+    }
+}
+
+DEF_TEST(AndroidCodec_jpegNoGainmap, r) {
+    // This test image has a large APP16 segment that will stress the various SkJpegSourceMgrs'
+    // data skipping paths.
+    const char* path = "images/icc-v2-gbr.jpg";
+
+    TestStream::Type kStreamTypes[] = {
+            TestStream::Type::kUnseekable,
+            TestStream::Type::kSeekable,
+            TestStream::Type::kMemoryMapped,
+    };
+    for (const auto& streamType : kStreamTypes) {
+        bool useFileStream = streamType != TestStream::Type::kMemoryMapped;
+        auto stream = GetResourceAsStream(path, useFileStream);
+        REPORTER_ASSERT(r, stream);
+        auto testStream = std::make_unique<TestStream>(streamType, stream.get());
+
+        // Decode the base bitmap.
+        SkCodec::Result result = SkCodec::kSuccess;
+        std::unique_ptr<SkCodec> baseCodec =
+                SkJpegCodec::MakeFromStream(std::move(testStream), &result);
+        REPORTER_ASSERT(r, baseCodec);
+        SkBitmap baseBitmap;
+        baseBitmap.allocPixels(baseCodec->getInfo());
+        REPORTER_ASSERT(r,
+                        SkCodec::kSuccess == baseCodec->getPixels(baseBitmap.info(),
+                                                                  baseBitmap.getPixels(),
+                                                                  baseBitmap.rowBytes()));
+
+        std::unique_ptr<SkAndroidCodec> androidCodec =
+                SkAndroidCodec::MakeFromCodec(std::move(baseCodec));
+        REPORTER_ASSERT(r, androidCodec);
+
+        // Try to extract the gainmap info and stream. It should fail.
+        SkGainmapInfo gainmapInfo;
+        std::unique_ptr<SkStream> gainmapStream;
+        REPORTER_ASSERT(r, !androidCodec->getAndroidGainmap(&gainmapInfo, &gainmapStream));
     }
 }
 
@@ -342,41 +737,33 @@ DEF_TEST(AndroidCodec_jpegGainmapTranscode, r) {
                                                              gainmapInfo[0]);
         }
         REPORTER_ASSERT(r, encodeResult);
+        auto encodeData = encodeStream.detachAsData();
 
-        // Decode the just-encoded JpegR or HDRGM.
-        auto decodeStream = std::make_unique<SkMemoryStream>(encodeStream.detachAsData());
+        // Decode the just-encoded image.
+        auto decodeStream = std::make_unique<SkMemoryStream>(encodeData);
         decode_all(r, std::move(decodeStream), baseBitmap[1], gainmapBitmap[1], gainmapInfo[1]);
 
-        // Verify that the representations are different.
-        REPORTER_ASSERT(r, gainmapInfo[0].fType != gainmapInfo[1].fType);
-        if (i == 0) {
-            // JpegR will have different rendering parameters.
-            REPORTER_ASSERT(r, gainmapInfo[0].fLogRatioMin != gainmapInfo[1].fLogRatioMin);
-        } else {
-            // HDRGM will have the same rendering parameters.
-            REPORTER_ASSERT(
-                    r,
-                    approx_eq_rgb(
-                            gainmapInfo[0].fLogRatioMin, gainmapInfo[1].fLogRatioMin, kEpsilon));
-            REPORTER_ASSERT(
-                    r,
-                    approx_eq_rgb(
-                            gainmapInfo[0].fLogRatioMax, gainmapInfo[1].fLogRatioMax, kEpsilon));
-            REPORTER_ASSERT(
-                    r,
-                    approx_eq_rgb(
-                            gainmapInfo[0].fGainmapGamma, gainmapInfo[1].fGainmapGamma, kEpsilon));
-            REPORTER_ASSERT(
-                    r, approx_eq(gainmapInfo[0].fEpsilonSdr, gainmapInfo[1].fEpsilonSdr, kEpsilon));
-            REPORTER_ASSERT(
-                    r, approx_eq(gainmapInfo[0].fEpsilonHdr, gainmapInfo[1].fEpsilonHdr, kEpsilon));
-            REPORTER_ASSERT(
-                    r,
-                    approx_eq(gainmapInfo[0].fHdrRatioMin, gainmapInfo[1].fHdrRatioMin, kEpsilon));
-            REPORTER_ASSERT(
-                    r,
-                    approx_eq(gainmapInfo[0].fHdrRatioMax, gainmapInfo[1].fHdrRatioMax, kEpsilon));
-        }
+        // HDRGM will have the same rendering parameters.
+        REPORTER_ASSERT(
+                r,
+                approx_eq_rgb(gainmapInfo[0].fLogRatioMin, gainmapInfo[1].fLogRatioMin, kEpsilon));
+        REPORTER_ASSERT(
+                r,
+                approx_eq_rgb(gainmapInfo[0].fLogRatioMax, gainmapInfo[1].fLogRatioMax, kEpsilon));
+        REPORTER_ASSERT(
+                r,
+                approx_eq_rgb(
+                        gainmapInfo[0].fGainmapGamma, gainmapInfo[1].fGainmapGamma, kEpsilon));
+        REPORTER_ASSERT(
+                r,
+                approx_eq(gainmapInfo[0].fEpsilonSdr.fR, gainmapInfo[1].fEpsilonSdr.fR, kEpsilon));
+        REPORTER_ASSERT(
+                r,
+                approx_eq(gainmapInfo[0].fEpsilonHdr.fR, gainmapInfo[1].fEpsilonHdr.fR, kEpsilon));
+        REPORTER_ASSERT(
+                r, approx_eq(gainmapInfo[0].fHdrRatioMin, gainmapInfo[1].fHdrRatioMin, kEpsilon));
+        REPORTER_ASSERT(
+                r, approx_eq(gainmapInfo[0].fHdrRatioMax, gainmapInfo[1].fHdrRatioMax, kEpsilon));
 
 #ifdef SK_ENABLE_SKSL
         // Render a few pixels and verify that they come out the same. Rendering requires SkSL.
@@ -385,14 +772,34 @@ DEF_TEST(AndroidCodec_jpegGainmapTranscode, r) {
             int y;
             float hdrRatio;
             SkColor4f expectedColor;
+            SkColorType forcedColorType;
         } recs[] = {
-                {1446, 1603, 1.05f, {0.984375f, 1.004883f, 1.008789f, 1.f}},
-                {1446, 1603, 100.f, {1.147461f, 1.170898f, 1.174805f, 1.f}},
+                {1446, 1603, 1.05f, {0.984375f, 1.004883f, 1.008789f, 1.f}, kUnknown_SkColorType},
+                {1446, 1603, 100.f, {1.147461f, 1.170898f, 1.174805f, 1.f}, kUnknown_SkColorType},
+                {1446, 1603, 100.f, {1.147461f, 1.170898f, 1.174805f, 1.f}, kGray_8_SkColorType},
+                {1446, 1603, 100.f, {1.147461f, 1.170898f, 1.174805f, 1.f}, kAlpha_8_SkColorType},
+                {1446, 1603, 100.f, {1.147461f, 1.170898f, 1.174805f, 1.f}, kR8_unorm_SkColorType},
         };
 
         for (const auto& rec : recs) {
+            SkBitmap gainmapBitmap0;
+            SkASSERT(gainmapBitmap[0].colorType() == kGray_8_SkColorType);
+
+            // Force various different single-channel formats, to ensure that they all work. Note
+            // that when the color type is forced to kAlpha_8_SkColorType, the shader will always
+            // read (0,0,0,1) if the alpha type is kOpaque_SkAlphaType.
+            if (rec.forcedColorType == kUnknown_SkColorType) {
+                gainmapBitmap0 = gainmapBitmap[0];
+            } else {
+                gainmapBitmap0.installPixels(gainmapBitmap[0]
+                                                     .info()
+                                                     .makeColorType(rec.forcedColorType)
+                                                     .makeAlphaType(kPremul_SkAlphaType),
+                                             gainmapBitmap[0].getPixels(),
+                                             gainmapBitmap[0].rowBytes());
+            }
             SkColor4f p0 = render_gainmap_pixel(
-                    rec.hdrRatio, baseBitmap[0], gainmapBitmap[0], gainmapInfo[0], rec.x, rec.y);
+                    rec.hdrRatio, baseBitmap[0], gainmapBitmap0, gainmapInfo[0], rec.x, rec.y);
             SkColor4f p1 = render_gainmap_pixel(
                     rec.hdrRatio, baseBitmap[1], gainmapBitmap[1], gainmapInfo[1], rec.x, rec.y);
 

@@ -8,10 +8,10 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkTypes.h"
 #include "include/private/SkColorData.h"
-#include "include/private/SkHalf.h"
 #include "include/private/base/SkTo.h"
-#include "include/private/base/SkVx.h"
+#include "src/base/SkHalf.h"
 #include "src/base/SkMathPriv.h"
+#include "src/base/SkVx.h"
 #include "src/core/SkImageInfoPriv.h"
 #include "src/core/SkMipmap.h"
 #include "src/core/SkMipmapBuilder.h"
@@ -546,6 +546,7 @@ SkMipmap* SkMipmap::Build(const SkPixmap& src, SkDiscardableFactoryProc fact,
         case kRGB_888x_SkColorType:     // TODO: use 8888?
         case kRGB_101010x_SkColorType:  // TODO: use 1010102?
         case kBGR_101010x_SkColorType:  // TODO: use 1010102?
+        case kBGR_101010x_XR_SkColorType:  // TODO: use 1010102?
         case kRGBA_F32_SkColorType:
             return nullptr;
 

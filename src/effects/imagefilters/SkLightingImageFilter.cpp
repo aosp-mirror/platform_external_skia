@@ -36,6 +36,7 @@
 #include <utility>
 
 #if SK_SUPPORT_GPU
+#include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/SkSLSampleUsage.h"
@@ -65,7 +66,7 @@ typedef GrGLSLProgramDataManager::UniformHandle UniformHandle;
 #endif
 
 #if GR_TEST_UTILS
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #endif
 
 const SkScalar gOneThird = SkIntToScalar(1) / 3;
@@ -524,7 +525,7 @@ sk_sp<SkSpecialImage> SkLightingImageFilterInternal::filterImageGPU(
                                         "LightingImageFilterInternal_FilterImageGPU",
                                         SkBackingFit::kApprox,
                                         1,
-                                        GrMipmapped::kNo,
+                                        skgpu::Mipmapped::kNo,
                                         inputView.proxy()->isProtected(),
                                         kBottomLeft_GrSurfaceOrigin);
     if (!sfc) {

@@ -31,11 +31,12 @@
 #include "include/encode/SkPngEncoder.h"
 #include "include/encode/SkWebpEncoder.h"
 #include "include/private/base/SkAlign.h"
+#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkMalloc.h"
-#include "include/utils/SkRandom.h"
 #include "modules/skcms/skcms.h"
 #include "src/base/SkAutoMalloc.h"
+#include "src/base/SkRandom.h"
 #include "src/codec/SkCodecImageGenerator.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkMD5.h"
@@ -1938,4 +1939,21 @@ DEF_TEST(Codec_noConversion, r) {
         }
         REPORTER_ASSERT(r, bm.getColor(0, 0) == rec.color);
     }
+}
+
+DEF_TEST(Codec_kBGR_101010x_XR_SkColorType_supported, r) {
+    SkBitmap srcBm;
+    SkImageInfo srcInfo = SkImageInfo()
+            .makeWH(100, 100)
+            .makeColorSpace(SkColorSpace::MakeSRGB())
+            .makeColorType(kBGRA_8888_SkColorType)
+            .makeAlphaType(kOpaque_SkAlphaType);
+    SkImageInfo dstInfo = srcInfo.makeColorType(kBGR_101010x_XR_SkColorType);
+    srcBm.allocPixels(srcInfo);
+    auto data = SkEncodeBitmap(srcBm, SkEncodedImageFormat::kPNG, 100);
+    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(data));
+    SkBitmap dstBm;
+    dstBm.allocPixels(dstInfo);
+    bool success = codec->getPixels(dstInfo, dstBm.getPixels(), dstBm.rowBytes());
+    REPORTER_ASSERT(r, SkCodec::kSuccess == success);
 }

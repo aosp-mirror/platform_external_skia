@@ -192,9 +192,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		if b.extraConfig("BonusConfigs") {
 			configs = []string{
 				"r8", "565",
-				"pic-8888", "serialize-8888",
-				"linear-f16", "srgb-rgba", "srgb-f16", "narrow-rgba", "narrow-f16",
-				"p3-rgba", "p3-f16", "rec2020-rgba", "rec2020-f16"}
+				"pic-8888", "serialize-8888"}
 		}
 
 		if b.extraConfig("PDF") {
@@ -241,7 +239,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		if b.extraConfig("NativeFonts") {
 			configs = append(configs, glPrefix)
 		} else {
-			configs = append(configs, glPrefix, glPrefix+"dft", "srgb-"+glPrefix)
+			configs = append(configs, glPrefix, glPrefix+"dft")
 			if sampleCount > 0 {
 				configs = append(configs, fmt.Sprintf("%smsaa%d", glPrefix, sampleCount))
 				// Temporarily limit the bots we test dynamic MSAA on.
@@ -265,7 +263,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		// Also do the Ganesh threading verification test (render with and without
 		// worker threads, using only the SW path renderer, and compare the results).
 		if b.matchGpu("Intel") && b.isLinux() {
-			configs = append(configs, "gles", "glesdft", "srgb-gles", "gltestthreading")
+			configs = append(configs, "gles", "glesdft", "gltestthreading")
 			// skbug.com/6333, skbug.com/6419, skbug.com/6702
 			skip("gltestthreading", "gm", ALL, "lcdblendmodes")
 			skip("gltestthreading", "gm", ALL, "lcdoverlap")
@@ -296,15 +294,19 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("gltestthreading", "gm", ALL, "persp_shaders_aa")
 			skip("gltestthreading", "gm", ALL, "rtif_distort")
 			skip("gltestthreading", "gm", ALL, "skbug_8664")
+			skip("gltestthreading", "gm", ALL, "teenystrokes")
 			skip("gltestthreading", "gm", ALL, "texel_subset_linear_mipmap_nearest_down")
 			skip("gltestthreading", "gm", ALL, "yuv420_odd_dim_repeat")
 
+			skip("gltestthreading", "svg", ALL, "filters-conv-01-f.svg")
+			skip("gltestthreading", "svg", ALL, "filters-offset-01-b.svg")
+			skip("gltestthreading", "svg", ALL, "gallardo.svg")
 			skip("gltestthreading", "svg", ALL, "masking-filter-01-f.svg")
 
 		}
 
 		// Dawn bot *only* runs the dawn config
-		if b.extraConfig("Dawn") {
+		if b.extraConfig("Dawn") && !b.extraConfig("Graphite") {
 			// tint:1045: Tint doesn't implement MatrixInverse yet.
 			skip(ALL, "gm", ALL, "runtime_intrinsics_matrix")
 			configs = []string{"dawn"}
@@ -315,7 +317,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			configs = []string{"gl"}
 		}
 
-		// Graphite bot *only* runs the grmtl config
+		// Graphite bot *only* runs the gr*** configs
 		if b.extraConfig("Graphite") {
 			args = append(args, "--nogpu") // disable non-Graphite tests
 
@@ -331,6 +333,56 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			if b.extraConfig("Metal") {
 				configs = []string{"grmtl"}
 			}
+                        if b.extraConfig("Dawn") {
+				configs = []string{"grdawn"}
+                                // Could not readback from surface
+                                // https://skbug/14105
+				skip(ALL, "gm", ALL, "tall_stretched_bitmaps")
+				// Shader doesn't compile
+                                // https://skbug/14105
+				skip(ALL, "gm", ALL, "runtime_intrinsics_matrix")
+                                // Crashes
+                                // https://skbug/14105
+                                skip(ALL, "test", ALL, "BackendTextureTest")
+                                skip(ALL, "test", ALL, "GraphitePromiseImageMultipleImgUses")
+                                skip(ALL, "test", ALL, "GraphitePromiseImageRecorderLoss")
+				skip(ALL, "test", ALL, "MutableImagesTest")
+				skip(ALL, "test", ALL, "PaintParamsKeyTest")
+				skip(ALL, "test", ALL, "VolatileGraphitePromiseImageTest")
+                                // Fails
+                                // https://skbug/14105
+				skip(ALL, "test", ALL, "ImageAsyncReadPixelsGraphite")
+				skip(ALL, "test", ALL, "ImageProviderTest_Graphite_Default")
+				skip(ALL, "test", ALL, "ImageProviderTest_Graphite_Testing")
+				skip(ALL, "test", ALL, "SurfaceAsyncReadPixelsGraphite")
+				skip(ALL, "test", ALL, "UpdateImageBackendTextureTest")
+				if b.matchOs("Win") {
+					// Async read call failed
+					skip(ALL, "gm", ALL, "async_rescale_and_read_no_bleed")
+					skip(ALL, "gm", ALL, "async_rescale_and_read_text_up")
+					skip(ALL, "gm", ALL, "async_rescale_and_read_dog_down")
+					skip(ALL, "gm", ALL, "async_rescale_and_read_rose")
+					// Crashes
+					skip(ALL, "gm", ALL, "blurrect")
+					skip(ALL, "gm", ALL, "circular_arcs_fill")
+					skip(ALL, "gm", ALL, "circular_arcs_hairline")
+					skip(ALL, "gm", ALL, "circular_arcs_stroke_butt")
+					skip(ALL, "gm", ALL, "circular_arcs_stroke_square")
+					skip(ALL, "gm", ALL, "circular_arcs_stroke_round")
+					skip(ALL, "gm", ALL, "circular_arcs_stroke_and_fill_butt")
+					skip(ALL, "gm", ALL, "circular_arcs_stroke_and_fill_square")
+					skip(ALL, "gm", ALL, "circular_arcs_stroke_and_fill_round")
+					skip(ALL, "gm", ALL, "circular_arcs")
+					skip(ALL, "gm", ALL, "manycircles")
+					skip(ALL, "gm", ALL, "nested_aa")
+					skip(ALL, "gm", ALL, "nested_bw")
+					skip(ALL, "gm", ALL, "nested_flipY_aa")
+					skip(ALL, "gm", ALL, "nested_flipY_bw")
+					skip(ALL, "gm", ALL, "simplerect")
+					skip(ALL, "gm", ALL, "wacky_yuv_formats_imggen")
+					skip(ALL, "gm", ALL, "xfermodes")
+				}
+                        }
 		}
 
 		// ANGLE bot *only* runs the angle configs
@@ -360,6 +412,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 				// anglebug.com/7145
 				skip(ALL, "test", ALL, "SkSLOutParamsAreDistinctFromGlobal_GPU")
+
+				// b/268720489
+				skip(ALL, "test", ALL, "SkSLIntrinsicMixFloatES3_GPU")
 
 				// anglebug.com/7245
 				skip("angle_mtl_es3", "gm", ALL, "runtime_intrinsics_common_es3")
@@ -391,9 +446,11 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(ALL, "test", ALL, "TestMockContext")
 			skip(ALL, "test", ALL, "TestGpuRenderingContexts")
 			skip(ALL, "test", ALL, "TestGpuAllContexts")
+			skip(ALL, "test", ALL, "TextBlobCache")
 			skip(ALL, "test", ALL, "OverdrawSurface_Gpu")
 			skip(ALL, "test", ALL, "ReplaceSurfaceBackendTexture")
 			skip(ALL, "test", ALL, "SurfaceAttachStencil_Gpu")
+			skip(ALL, "test", ALL, "SurfacePartialDraw_Gpu")
 			skip(ALL, "test", ALL, "SurfaceWrappedWithRelease_Gpu")
 		}
 
@@ -507,6 +564,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("mtltestprecompile", "svg", ALL, "Ghostscript_Tiger.svg")
 			skip("mtltestprecompile", "svg", ALL, "Seal_of_American_Samoa.svg")
 			skip("mtltestprecompile", "svg", ALL, "Seal_of_Illinois.svg")
+			skip("mtltestprecompile", "svg", ALL, "cartman.svg")
 			skip("mtltestprecompile", "svg", ALL, "desk_motionmark_paths.svg")
 			skip("mtltestprecompile", "svg", ALL, "rg1024_green_grapes.svg")
 			skip("mtltestprecompile", "svg", ALL, "shapes-intro-02-f.svg")
@@ -531,9 +589,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		}
 
 		// Test rendering to wrapped dsts on a few bots
-		// Also test "narrow-glf16", which hits F16 surfaces and F16 vertex colors.
 		if b.extraConfig("BonusConfigs") {
-			configs = []string{"glbetex", "glbert", "narrow-glf16", "glreducedshaders", "glr8"}
+			configs = []string{"glbetex", "glbert", "glreducedshaders", "glr8"}
 		}
 
 		if b.os("ChromeOS") {
@@ -560,12 +617,64 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			args = append(args, "--skpViewportSize", "2048")
 			args = append(args, "--gpuThreads", "0")
 		}
-		if b.extraConfig("OOPRDDL") {
-			// This bot generates the real oopr/DDL images for the large skps and the GMs
-			configs = suffix(filter(configs, "gl", "vk", "mtl"), "ooprddl")
-			args = append(args, "--skpViewportSize", "2048")
-			args = append(args, "--gpuThreads", "0")
+	}
+
+	if b.matchExtraConfig("ColorSpaces") {
+		// Here we're going to generate a bunch of configs with the format:
+		//        <colorspace> <backend> <targetFormat>
+		// Where: <colorspace> is one of:   "", "linear-", "narrow-", p3-", "rec2020-", "srgb2-"
+		//        <backend> is one of: "gl, "gles", "mtl", "vk"
+		//                             their "gr" prefixed versions
+		//                             and "" (for raster)
+		//        <targetFormat> is one of: "f16", { "" (for gpus) or "rgba" (for raster) }
+		//
+		// We also add on two configs with the format:
+		//        narrow-<backend>f16norm
+		//        linear-<backend>srgba
+		colorSpaces := []string{"", "linear-", "narrow-", "p3-", "rec2020-", "srgb2-"}
+
+		backendStr := ""
+		if b.gpu() {
+			if b.extraConfig("Graphite") {
+				if b.extraConfig("GL") {
+					backendStr = "grgl"
+				} else if b.extraConfig("GLES") {
+					backendStr = "grgles"
+				} else if b.extraConfig("Metal") {
+					backendStr = "grmtl"
+				} else if b.extraConfig("Vulkan") {
+					backendStr = "grvk"
+				}
+			} else {
+				if b.extraConfig("GL") {
+					backendStr = "gl"
+				} else if b.extraConfig("GLES") {
+					backendStr = "gles"
+				} else if b.extraConfig("Metal") {
+					backendStr = "mtl"
+				} else if b.extraConfig("Vulkan") {
+					backendStr = "vk"
+				}
+			}
 		}
+
+		targetFormats := []string{"f16"}
+		if b.gpu() {
+			targetFormats = append(targetFormats, "")
+		} else {
+			targetFormats = append(targetFormats, "rgba")
+		}
+
+		configs = []string{}
+
+		for _, cs := range colorSpaces {
+			for _, tf := range targetFormats {
+				configs = append(configs, cs+backendStr+tf)
+			}
+		}
+
+		configs = append(configs, "narrow-"+backendStr+"f16norm")
+		configs = append(configs, "linear-"+backendStr+"srgba")
 	}
 
 	// Sharding.
@@ -603,6 +712,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	// Eventually I'd like these to pass, but for now just skip 'em.
 	if b.extraConfig("SK_FORCE_RASTER_PIPELINE_BLITTER") {
+		removeFromArgs("tests")
+	}
+
+	if b.model("Spin513") {
 		removeFromArgs("tests")
 	}
 
@@ -658,16 +771,19 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		// skbug.com/10848
 		removeFromArgs("svg")
 		// skbug.com/12900 avoid OOM on
-		// Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-TSAN_Vulkan
-		if b.Name == "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-TSAN_Vulkan" {
+		//   Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-TSAN_Vulkan
+		// Avoid lots of spurious TSAN failures on
+		//   Test-Debian11-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-TSAN_Vulkan
+		//   Test-Debian11-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-DDL3_TSAN_Vulkan
+		if b.Name == "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-TSAN_Vulkan" ||
+		   b.Name == "Test-Debian11-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-TSAN_Vulkan" ||
+		   b.Name == "Test-Debian11-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-DDL3_TSAN_Vulkan" {
 			skip("_", "test", "_", "_")
 		}
 	}
 
 	// TODO: ???
 	skip("f16", ALL, ALL, "dstreadshuffle")
-	skip("srgb-gl", "image", ALL, ALL)
-	skip("srgb-gles", "image", ALL, ALL)
 
 	// --src image --config r8 means "decode into R8", which isn't supported.
 	skip("r8", "image", ALL, ALL)
@@ -973,7 +1089,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "tests", ALL, "SkSLArrayCast_GPU")       // skia:12332
 		skip(ALL, "tests", ALL, "SkSLArrayComparison_GPU") // skia:12332
 		skip(ALL, "tests", ALL, "SkSLCommaSideEffects_GPU")
-		skip(ALL, "tests", ALL, "SkSLIntrinsicMixFloat_GPU")
+		skip(ALL, "tests", ALL, "SkSLIntrinsicMixFloatES2_GPU")
 		skip(ALL, "tests", ALL, "SkSLIntrinsicClampFloat_GPU")
 	}
 
@@ -1019,9 +1135,16 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "tests", ALL, "SkSLCross")
 	}
 
+	if (b.matchOs("Mac") || b.matchOs("iOS")) && !b.extraConfig("Metal") {
+		// MacOS/iOS do not handle short-circuit evaluation properly in OpenGL (chromium:307751)
+		skip(ALL, "tests", ALL, "SkSLLogicalAndShortCircuit_GPU")
+		skip(ALL, "tests", ALL, "SkSLLogicalOrShortCircuit_GPU")
+	}
+
 	if b.matchOs("Mac") && b.extraConfig("Metal") && (b.gpu("IntelIrisPlus") ||
                                                       b.gpu("IntelHD6000")) {
-		skip(ALL, "tests", ALL, "SkSLIntrinsicNot_GPU") // skia:14025
+		skip(ALL, "tests", ALL, "SkSLIntrinsicNot_GPU")         // skia:14025
+		skip(ALL, "tests", ALL, "SkSLIntrinsicMixFloatES3_GPU") // skia:14025
 	}
 
 	if b.gpu("IntelIris6100", "IntelHD4400") && b.matchOs("Win") && b.extraConfig("ANGLE") {
@@ -1037,13 +1160,13 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	if b.matchGpu("Intel") && b.matchOs("Win") && !b.extraConfig("Vulkan") {
 		skip(ALL, "tests", ALL, "SkSLReturnsValueOnEveryPathES3_GPU")     // skia:12465
-		skip(ALL, "tests", ALL, "SkSLReturnsValueOnEveryPathES3_GPU")     // skia:12465
 		skip(ALL, "tests", ALL, "SkSLOutParamsAreDistinctFromGlobal_GPU") // skia:13115
 		skip(ALL, "tests", ALL, "SkSLStructFieldFolding_GPU")             // skia:13393
 	}
 
 	if b.extraConfig("Vulkan") && b.isLinux() && b.matchGpu("Intel") {
-		skip(ALL, "tests", ALL, "SkSLSwitchDefaultOnly_GPU") // skia:12465
+		skip(ALL, "tests", ALL, "SkSLSwitchDefaultOnly_GPU")          // skia:12465
+		skip(ALL, "tests", ALL, "SkSLReturnsValueOnEveryPathES3_GPU") // skia:14131
 	}
 
 	if b.extraConfig("ANGLE") && b.matchOs("Win") && b.matchGpu("IntelIris(540|655|Xe)") {
@@ -1093,8 +1216,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "tests", ALL, "SkSLMatrixScalarNoOpFolding_GPU")  // https://anglebug.com/7525
 	}
 
-	if b.gpu("RTX3060") && b.extraConfig("Vulkan") {
+	if b.gpu("RTX3060") && b.extraConfig("Vulkan") && b.matchOs("Win") {
 		skip(ALL, "gm", ALL, "blurcircles2") // skia:13342
+		skip(ALL, "tests", ALL, "SkSLIntrinsicMixFloatES3_GPU")
 	}
 
 	if b.gpu("Tegra3") {
@@ -1295,6 +1419,29 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	if b.matchExtraConfig("Graphite") {
 		// skia:12813
 		match = append(match, "~async_rescale_and_read")
+	}
+
+	if b.matchExtraConfig("ColorSpaces") {
+		// Here we reset the 'match' and 'skipped' strings bc the ColorSpaces job only runs
+		// a very specific subset of the GMs.
+		skipped = []string{}
+		match = []string{}
+		match = append(match, "async_rescale_and_read_dog_up")
+		match = append(match, "bug6783")
+		match = append(match, "colorspace")
+		match = append(match, "colorspace2")
+		match = append(match, "composeCF")
+		match = append(match, "crbug_224618")
+		match = append(match, "drawlines_with_local_matrix")
+		match = append(match, "gradients_interesting")
+		match = append(match, "manypathatlases_2048")
+		match = append(match, "paint_alpha_normals_rt")
+		match = append(match, "runtimefunctions")
+		match = append(match, "savelayer_f16")
+		match = append(match, "spiral_rt")
+		match = append(match, "srgb_colorfilter")
+		match = append(match, "strokedlines")
+		match = append(match, "sweep_tiling")
 	}
 
 	if len(skipped) > 0 {

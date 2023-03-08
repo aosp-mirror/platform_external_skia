@@ -86,7 +86,7 @@ void RecordingPriv::deinstantiateVolatileLazyProxies() {
     }
 }
 
-#if GR_TEST_UTILS
+#if GRAPHITE_TEST_UTILS
 int RecordingPriv::numVolatilePromiseImages() const {
     return fRecording->fVolatileLazyProxies.size();
 }
@@ -94,22 +94,26 @@ int RecordingPriv::numVolatilePromiseImages() const {
 int RecordingPriv::numNonVolatilePromiseImages() const {
     return fRecording->fNonVolatileLazyProxies.size();
 }
+
+bool RecordingPriv::hasTasks() const { return fRecording->fGraph->hasTasks(); }
 #endif
 
 bool RecordingPriv::addCommands(Context* context,
                                 CommandBuffer* commandBuffer,
-                                Surface* targetSurface) {
+                                Surface* replaySurface,
+                                SkIVector replayTranslation) {
     AutoDeinstantiateTextureProxy autoDeinstantiateTargetProxy(
             fRecording->fTargetProxyData ? fRecording->fTargetProxyData->lazyProxy() : nullptr);
 
-    SkASSERT(SkToBool(fRecording->fTargetProxyData) == SkToBool(targetSurface));
+    const Texture* replayTarget = nullptr;
+    SkASSERT(SkToBool(fRecording->fTargetProxyData) == SkToBool(replaySurface));
     ResourceProvider* resourceProvider = context->priv().resourceProvider();
     if (fRecording->fTargetProxyData) {
-        if (!targetSurface) {
+        if (!replaySurface) {
             SKGPU_LOG_E("No surface provided to instantiate target texture proxy.");
             return false;
         }
-        TextureProxy* surfaceTexture = targetSurface->backingTextureProxy();
+        TextureProxy* surfaceTexture = replaySurface->backingTextureProxy();
         if (!surfaceTexture->instantiate(resourceProvider)) {
             SKGPU_LOG_E("Could not instantiate target texture proxy.");
             return false;
@@ -119,9 +123,11 @@ bool RecordingPriv::addCommands(Context* context,
             SKGPU_LOG_E("Could not instantiate deferred texture proxy.");
             return false;
         }
+        replayTarget = surfaceTexture->texture();
     }
 
-    if (!fRecording->fGraph->addCommands(context, commandBuffer)) {
+    if (!fRecording->fGraph->addCommands(
+                context, commandBuffer, {replayTarget, replayTranslation})) {
         return false;
     }
     for (size_t i = 0; i < fRecording->fExtraResourceRefs.size(); ++i) {

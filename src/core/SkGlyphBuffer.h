@@ -76,50 +76,6 @@ private:
     SkSTArray<4, SkPoint> fRejectedPositions;
 };
 
-// A memory format that allows an SkPackedGlyphID, SkGlyph*, and SkPath* to occupy the same
-// memory. This allows SkPackedGlyphIDs as input, and SkGlyph*/SkPath* as output using the same
-// memory.
-class SkGlyphVariant {
-public:
-    SkGlyphVariant() : fV{nullptr} { }
-    SkGlyphVariant& operator= (SkPackedGlyphID packedID) {
-        fV.packedID = packedID;
-        SkDEBUGCODE(fTag = kPackedID);
-        return *this;
-    }
-    SkGlyphVariant& operator= (const SkGlyph* glyph) {
-        fV.glyph = glyph;
-        SkDEBUGCODE(fTag = kGlyph);
-        return *this;
-    }
-
-    const SkGlyph* glyph() const {
-        SkASSERT(fTag == kGlyph);
-        return fV.glyph;
-    }
-    SkPackedGlyphID packedID() const {
-        SkASSERT(fTag == kPackedID);
-        return fV.packedID;
-    }
-
-    operator SkPackedGlyphID()  const { return this->packedID(); }
-    operator const SkGlyph*()   const { return this->glyph();    }
-
-private:
-    union {
-        const SkGlyph* glyph;
-        SkPackedGlyphID packedID;
-    } fV;
-
-#ifdef SK_DEBUG
-    enum {
-        kEmpty,
-        kPackedID,
-        kGlyph,
-    } fTag{kEmpty};
-#endif
-};
-
 // A buffer for converting SkPackedGlyph to SkGlyph*s. Initially the buffer contains
 // SkPackedGlyphIDs, but those are used to lookup SkGlyph*s which are then copied over the
 // SkPackedGlyphIDs.
@@ -131,54 +87,20 @@ public:
     // during drawing.
     void startSource(const SkZip<const SkGlyphID, const SkPoint>& source);
 
-    void startSourceWithMatrixAdjustment(
-            const SkZip<const SkGlyphID, const SkPoint>& source, const SkMatrix& creationMatrix);
-
-    // Load the buffer with SkPackedGlyphIDs, calculating positions, so they can be constant.
-    //
-    // The positions are calculated integer positions in devices space, and the mapping of
-    // the source origin through the initial matrix is returned. It is given that these positions
-    // are only reused when the blob is translated by an integral amount. Thus, the shifted
-    // positions are given by the following equation where (ix, iy) is the integer positions of
-    // the glyph, initialMappedOrigin is (0,0) in source mapped to the device using the initial
-    // matrix, and newMappedOrigin is (0,0) in source mapped to the device using the current
-    // drawing matrix.
-    //
-    //    (ix', iy') = (ix, iy) + round(newMappedOrigin - initialMappedOrigin)
-    //
-    // In theory, newMappedOrigin - initialMappedOrigin should be integer, but the vagaries of
-    // floating point don't guarantee that, so force it to integer.
-    //
-    // N.B. The positionMatrix is already translated by the origin of the glyph run list.
-    void startDevicePositioning(
-            const SkZip<const SkGlyphID, const SkPoint>& source,
-            const SkMatrix& positionMatrix,
-            const SkGlyphPositionRoundingSpec& roundingSpec);
-
     SkString dumpInput() const;
 
     // The input of SkPackedGlyphIDs
-    SkZip<SkGlyphVariant, SkPoint> input() {
+    SkZip<SkPackedGlyphID, SkPoint> input() {
         SkASSERT(fPhase == kInput);
         SkDEBUGCODE(fPhase = kProcess);
-        return SkZip<SkGlyphVariant, SkPoint>{
-                SkToSizeT(fInputSize), fMultiBuffer.get(), fPositions};
-    }
-
-    // Store the glyph in the next slot, using the position information located at index from.
-    void accept(SkGlyph* glyph, int from) {
-        SkASSERT(fPhase == kProcess);
-        SkASSERT(fAcceptedSize <= from);
-        fPositions[fAcceptedSize] = fPositions[from];
-        fMultiBuffer[fAcceptedSize] = glyph;
-        fFormats[fAcceptedSize] = glyph->maskFormat();
-        fAcceptedSize++;
+        return SkZip<SkPackedGlyphID, SkPoint>{
+                SkToSizeT(fInputSize), fPackedGlyphIDs.get(), fPositions};
     }
 
     void accept(SkPackedGlyphID glyphID, SkPoint position, SkMask::Format format) {
         SkASSERT(fPhase == kProcess);
         fPositions[fAcceptedSize] = position;
-        fMultiBuffer[fAcceptedSize] = glyphID;
+        fPackedGlyphIDs[fAcceptedSize] = glyphID;
         fFormats[fAcceptedSize] = format;
         fAcceptedSize++;
     }
@@ -186,23 +108,23 @@ public:
     void accept(SkPackedGlyphID glyphID, SkPoint position) {
         SkASSERT(fPhase == kProcess);
         fPositions[fAcceptedSize] = position;
-        fMultiBuffer[fAcceptedSize] = glyphID;
+        fPackedGlyphIDs[fAcceptedSize] = glyphID;
         fAcceptedSize++;
     }
 
     // The result after a series of `accept` of accepted SkGlyph* or SkPath*.
-    SkZip<SkGlyphVariant, SkPoint> accepted() {
+    SkZip<SkPackedGlyphID, SkPoint> accepted() {
         SkASSERT(fPhase == kProcess);
         SkDEBUGCODE(fPhase = kDraw);
-        return SkZip<SkGlyphVariant, SkPoint>{
-                SkToSizeT(fAcceptedSize), fMultiBuffer.get(), fPositions};
+        return SkZip<SkPackedGlyphID, SkPoint>{
+                SkToSizeT(fAcceptedSize), fPackedGlyphIDs.get(), fPositions};
     }
 
-    SkZip<SkGlyphVariant, SkPoint, SkMask::Format> acceptedWithMaskFormat() {
+    SkZip<SkPackedGlyphID, SkPoint, SkMask::Format> acceptedWithMaskFormat() {
         SkASSERT(fPhase == kProcess);
         SkDEBUGCODE(fPhase = kDraw);
-        return SkZip<SkGlyphVariant, SkPoint, SkMask::Format>{
-                SkToSizeT(fAcceptedSize), fMultiBuffer.get(), fPositions, fFormats};
+        return SkZip<SkPackedGlyphID, SkPoint, SkMask::Format>{
+                SkToSizeT(fAcceptedSize), fPackedGlyphIDs.get(), fPositions, fFormats};
     }
 
     bool empty() const {
@@ -215,7 +137,7 @@ public:
     template <typename Fn>
     void forEachInput(Fn&& fn) {
         for (auto [i, packedID, pos] : SkMakeEnumerate(this->input())) {
-            fn(i, packedID.packedID(), pos);
+            fn(i, packedID, pos);
         }
     }
 
@@ -223,7 +145,7 @@ private:
     int fMaxSize{0};
     int fInputSize{0};
     int fAcceptedSize{0};
-    skia_private::AutoTArray<SkGlyphVariant> fMultiBuffer;
+    skia_private::AutoTArray<SkPackedGlyphID> fPackedGlyphIDs;
     skia_private::AutoTMalloc<SkPoint> fPositions;
     skia_private::AutoTMalloc<SkMask::Format> fFormats;
 

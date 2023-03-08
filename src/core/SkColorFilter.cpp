@@ -109,10 +109,11 @@ SkPMColor4f SkColorFilterBase::onFilterColor4f(const SkPMColor4f& color,
     SkSTArenaAlloc<kEnoughForCommonFilters> alloc;
     SkRasterPipeline    pipeline(&alloc);
     pipeline.append_constant_color(&alloc, color.vec());
-    SkPaint blankPaint;
+    SkPaint solidPaint;
+    solidPaint.setColor4f(color.unpremul());
     SkMatrixProvider matrixProvider(SkMatrix::I());
     SkSurfaceProps props{}; // default OK; colorFilters don't render text
-    SkStageRec rec = {&pipeline, &alloc, kRGBA_F32_SkColorType, dstCS, blankPaint, props};
+    SkStageRec rec = {&pipeline, &alloc, kRGBA_F32_SkColorType, dstCS, solidPaint, props};
 
     if (as_CFB(this)->appendStages(rec, color.fA == 1)) {
         SkPMColor4f dst;
@@ -455,7 +456,31 @@ public:
     }
 #endif
 
-    bool appendStages(const SkStageRec&, bool) const override { return false; }
+    bool appendStages(const SkStageRec& rec, bool shaderIsOpaque) const override {
+        sk_sp<SkColorSpace> dstCS = sk_ref_sp(rec.fDstCS);
+
+        if (!dstCS) { dstCS = SkColorSpace::MakeSRGB(); }
+
+        SkAlphaType workingAT;
+        sk_sp<SkColorSpace> workingCS = this->workingFormat(dstCS, &workingAT);
+
+        SkColorInfo dst = {rec.fDstColorType, kPremul_SkAlphaType, dstCS},
+                working = {rec.fDstColorType, workingAT, workingCS};
+
+        SkStageRec workingRec = {rec.fPipeline,
+                                 rec.fAlloc,
+                                 rec.fDstColorType,
+                                 workingCS.get(),
+                                 rec.fPaint,
+                                 rec.fSurfaceProps};
+
+        rec.fAlloc->make<SkColorSpaceXformSteps>(dst, working)->apply(rec.fPipeline);
+        if (!as_CFB(fChild)->appendStages(workingRec, shaderIsOpaque)) {
+            return false;
+        }
+        rec.fAlloc->make<SkColorSpaceXformSteps>(working, dst)->apply(rec.fPipeline);
+        return true;
+    }
 
     skvm::Color onProgram(skvm::Builder* p, skvm::Color c, const SkColorInfo& rawDst,
                           skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const override {

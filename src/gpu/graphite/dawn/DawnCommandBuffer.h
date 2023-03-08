@@ -25,13 +25,14 @@ class DawnTexture;
 
 class DawnCommandBuffer final : public CommandBuffer {
 public:
-    static std::unique_ptr<DawnCommandBuffer> Make(const DawnSharedContext* d);
+    static std::unique_ptr<DawnCommandBuffer> Make(const DawnSharedContext*, DawnResourceProvider*);
     ~DawnCommandBuffer() override;
 
     wgpu::CommandBuffer finishEncoding();
 
 private:
-    DawnCommandBuffer(const DawnSharedContext* sharedContext);
+    DawnCommandBuffer(const DawnSharedContext* sharedContext,
+                      DawnResourceProvider* resourceProvider);
 
     void onResetCommandBuffer() override;
     bool setNewCommandBufferResources() override;
@@ -51,6 +52,14 @@ private:
                          const Texture* colorTexture,
                          const Texture* resolveTexture,
                          const Texture* depthStencilTexture);
+    bool loadMSAAFromResolveAndBeginRenderPassEncoder(
+            const RenderPassDesc& frontendRenderPassDesc,
+            const wgpu::RenderPassDescriptor& wgpuRenderPassDesc,
+            const DawnTexture* msaaTexture);
+    bool doBlitWithDraw(const RenderPassDesc& frontendRenderPassDesc,
+                        const wgpu::TextureView& sourceTextureView,
+                        int width,
+                        int height);
     void endRenderPass();
 
     void addDrawPass(const DrawPass*);
@@ -61,7 +70,8 @@ private:
     void bindUniformBuffer(const BindBufferInfo& info, UniformSlot);
     void bindDrawBuffers(const BindBufferInfo& vertices,
                          const BindBufferInfo& instances,
-                         const BindBufferInfo& indices);
+                         const BindBufferInfo& indices,
+                         const BindBufferInfo& indirect);
 
     void bindTextureAndSamplers(const DrawPass& drawPass,
                                 const DrawPassCommands::BindTexturesAndSamplers& command);
@@ -86,6 +96,8 @@ private:
                               unsigned int baseVertex,
                               unsigned int baseInstance,
                               unsigned int instanceCount);
+    void drawIndirect(PrimitiveType type);
+    void drawIndexedIndirect(PrimitiveType type);
 
     // Methods for populating a Dawn ComputePassEncoder:
     void beginComputePass();
@@ -128,10 +140,14 @@ private:
     wgpu::RenderPassEncoder fActiveRenderPassEncoder;
     wgpu::ComputePassEncoder fActiveComputePassEncoder;
 
+    wgpu::Buffer fCurrentIndirectBuffer;
+    size_t fCurrentIndirectBufferOffset = 0;
+
     wgpu::Buffer fInstrinsicConstantBuffer;
 
     const DawnGraphicsPipeline* fActiveGraphicsPipeline = nullptr;
     const DawnSharedContext* fSharedContext;
+    DawnResourceProvider* fResourceProvider;
 };
 
 }  // namespace skgpu::graphite

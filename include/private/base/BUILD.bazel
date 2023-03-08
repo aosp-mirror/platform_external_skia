@@ -22,6 +22,7 @@ IWYU_HDRS = [
     "SkCPUTypes.h",
     "SkDebug.h",
     "SkFeatures.h",
+    "SkFixed.h",
     "SkFloatBits.h",
     "SkLoadUserConfig.h",
     "SkMacros.h",
@@ -71,7 +72,6 @@ skia_filegroup(
         "SkSemaphore.h",
         "SkTDArray.h",
         "SkThreadID.h",
-        "SkVx.h",  # Causes IWYU to crash when compiling the .cpp of this
         ":shared_gpu_private_hdrs",
     ],
     visibility = [

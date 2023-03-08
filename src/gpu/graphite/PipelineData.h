@@ -9,13 +9,13 @@
 #define skgpu_graphite_PipelineData_DEFINED
 
 #include <vector>
+#include "include/core/SkM44.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSamplingOptions.h"
 #include "include/core/SkSpan.h"
 #include "include/core/SkTileMode.h"
 #include "include/private/SkColorData.h"
-#include "include/private/base/SkVx.h"
 #include "src/core/SkEnumBitMask.h"
 #include "src/gpu/graphite/DrawTypes.h"
 #include "src/gpu/graphite/TextureProxy.h"
@@ -112,16 +112,18 @@ public:
     void write(const SkM44& mat) { fUniformManager.write(mat); }
     void write(const SkPMColor4f& premulColor) { fUniformManager.write(premulColor); }
     void write(const SkRect& rect) { fUniformManager.write(rect); }
-    void write(SkPoint point) { fUniformManager.write(point); }
+    void write(const SkV2& v) { fUniformManager.write(v); }
+    void write(const SkV4& v) { fUniformManager.write(v); }
+    void write(const SkPoint& point) { fUniformManager.write(point); }
     void write(float f) { fUniformManager.write(f); }
     void write(int i) { fUniformManager.write(i); }
-    void write(skvx::float2 v) { fUniformManager.write(v); }
-    void write(skvx::float4 v) { fUniformManager.write(v); }
+
 
     void write(SkSLType t, const void* data) { fUniformManager.write(t, data); }
     void write(const Uniform& u, const uint8_t* data) { fUniformManager.write(u, data); }
 
     void writeArray(SkSpan<const SkColor4f> colors) { fUniformManager.writeArray(colors); }
+    void writeArray(SkSpan<const SkPMColor4f> colors) { fUniformManager.writeArray(colors); }
     void writeArray(SkSpan<const float> floats) { fUniformManager.writeArray(floats); }
 
     void writeHalf(const SkMatrix& mat) { fUniformManager.writeHalf(mat); }

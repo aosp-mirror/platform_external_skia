@@ -6,17 +6,24 @@
  */
 
 #include "include/core/SkICC.h"
+
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkData.h"
 #include "include/core/SkStream.h"
-#include "include/private/SkFixed.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkFixed.h"
+#include "include/private/base/SkFloatingPoint.h"
+#include "modules/skcms/skcms.h"
 #include "src/base/SkAutoMalloc.h"
 #include "src/base/SkUtils.h"
-#include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkEndian.h"
 #include "src/core/SkICCPriv.h"
 #include "src/core/SkMD5.h"
 
 #include <cmath>
+#include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 // The number of input and output channels.
@@ -62,7 +69,12 @@ struct ICCHeader {
     uint32_t pcs = SkEndian_SwapBE32(kXYZ_PCSSpace);
 
     // Date and time (ignored)
-    uint8_t creation_date_time[12] = {0};
+    uint16_t creation_date_year = SkEndian_SwapBE16(2016);
+    uint16_t creation_date_month = SkEndian_SwapBE16(1);  // 1-12
+    uint16_t creation_date_day = SkEndian_SwapBE16(1);  // 1-31
+    uint16_t creation_date_hours = 0;  // 0-23
+    uint16_t creation_date_minutes = 0;  // 0-59
+    uint16_t creation_date_seconds = 0;  // 0-59
 
     // Profile signature
     uint32_t signature = SkEndian_SwapBE32(kACSP_Signature);

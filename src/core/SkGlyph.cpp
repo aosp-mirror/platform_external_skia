@@ -16,12 +16,14 @@
 #include "src/pathops/SkPathOpsCubic.h"
 #include "src/pathops/SkPathOpsPoint.h"
 #include "src/pathops/SkPathOpsQuad.h"
+#include "src/text/StrikeForGPU.h"
 
 #include <cstring>
 #include <tuple>
 #include <utility>
 
 using namespace skglyph;
+using namespace sktext;
 
 //-- SkGlyph ---------------------------------------------------------------------------------------
 SkGlyph::SkGlyph(const SkGlyph&) = default;
@@ -406,31 +408,79 @@ void SkGlyph::ensureIntercepts(const SkScalar* bounds, SkScalar scale, SkScalar 
     offsetResults(intercept, array, count);
 }
 
+namespace {
+uint32_t init_actions(const SkGlyph& glyph) {
+    constexpr uint32_t kAllUnset = 0;
+    constexpr uint32_t kDrop = SkTo<uint32_t>(GlyphAction::kDrop);
+    constexpr uint32_t kAllDrop =
+            kDrop << kDirectMask |
+            kDrop << kDirectMaskCPU |
+            kDrop << kMask |
+            kDrop << kSDFT |
+            kDrop << kPath |
+            kDrop << kDrawable;
+    return glyph.isEmpty() ? kAllDrop : kAllUnset;
+}
+}  // namespace
+
 // -- SkGlyphDigest --------------------------------------------------------------------------------
 SkGlyphDigest::SkGlyphDigest(size_t index, const SkGlyph& glyph)
         : fIndex{SkTo<uint32_t>(index)}
         , fIsEmpty(glyph.isEmpty())
-        , fCanDrawAsMask{CanDrawAsMask(glyph)}
-        , fCanDrawAsSDFT{CanDrawAsSDFT(glyph)}
         , fFormat(glyph.maskFormat())
-        , fPathAction{SkTo<uint32_t>(GlyphAction::kUnset)}
-        , fDrawableAction{SkTo<uint32_t>(GlyphAction::kUnset)}
+        , fActions{init_actions(glyph)}
         , fLeft{SkTo<int16_t>(glyph.left())}
         , fTop{SkTo<int16_t>(glyph.top())}
         , fWidth{SkTo<uint16_t>(glyph.width())}
         , fHeight{SkTo<uint16_t>(glyph.height())} {}
 
-bool SkGlyphDigest::CanDrawAsMask(const SkGlyph& glyph) {
-    return FitsInAtlas(glyph);
-}
-
-bool SkGlyphDigest::CanDrawAsSDFT(const SkGlyph& glyph) {
-    return FitsInAtlas(glyph) && glyph.maskFormat() == SkMask::kSDF_Format;
-}
-
-bool SkGlyphDigest::CanDrawAsPath(const SkGlyph& glyph) {
-    SkASSERT(glyph.setPathHasBeenCalled());
-    return glyph.path() != nullptr;
+void SkGlyphDigest::setActionFor(skglyph::ActionType actionType,
+                                 SkGlyph* glyph,
+                                 StrikeForGPU* strike) {
+    // We don't have to do any more if the glyph is marked as kDrop because it was isEmpty().
+    if (this->actionFor(actionType) == GlyphAction::kUnset) {
+        GlyphAction action = GlyphAction::kReject;
+        switch (actionType) {
+            case kDirectMask: {
+                if (this->fitsInAtlasDirect()) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+            case kDirectMaskCPU: {
+                if (strike->prepareForImage(glyph)) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+            case kMask: {
+                if (this->fitsInAtlasInterpolated()) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+            case kSDFT: {
+                if (this->fitsInAtlasDirect() &&
+                    this->maskFormat() == SkMask::Format::kSDF_Format) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+            case kPath: {
+                if (strike->prepareForPath(glyph)) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+            case kDrawable: {
+                if (strike->prepareForDrawable(glyph)) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+        }
+        this->setAction(actionType, action);
+    }
 }
 
 bool SkGlyphDigest::FitsInAtlas(const SkGlyph& glyph) {

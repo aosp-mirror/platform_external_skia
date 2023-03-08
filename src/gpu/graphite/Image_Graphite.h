@@ -28,7 +28,7 @@ public:
     ~Image() override;
 
     bool onHasMipmaps() const override {
-        return fTextureProxyView.proxy()->mipmapped() == Mipmapped::kYes;
+        return fTextureProxyView.proxy()->mipmapped() == skgpu::Mipmapped::kYes;
     }
 
     using Image_Base::onMakeSubset;
@@ -44,7 +44,7 @@ public:
                                                          sk_sp<RefCntedCallback>,
                                                          GraphitePromiseTextureReleaseProc);
 
-protected:
+private:
     sk_sp<SkImage> onMakeTextureImage(Recorder*, RequiredImageProperties) const override;
     sk_sp<SkImage> copyImage(const SkIRect& subset, Recorder*, RequiredImageProperties) const;
     sk_sp<SkImage> onMakeSubset(const SkIRect&, Recorder*, RequiredImageProperties) const override;
@@ -54,7 +54,6 @@ protected:
                                                 Recorder*,
                                                 RequiredImageProperties) const override;
 
-private:
     TextureProxyView fTextureProxyView;
 };
 
