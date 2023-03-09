@@ -15,7 +15,7 @@
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
 #include "src/gpu/graphite/GraphiteResourceKey.h"
 #include "src/gpu/graphite/UniformManager.h"
-#include "src/gpu/graphite/dawn/DawnUtilsPriv.h"
+#include "src/gpu/graphite/dawn/DawnGraphiteUtilsPriv.h"
 #include "src/sksl/SkSLUtil.h"
 
 namespace {
@@ -49,6 +49,11 @@ DawnCaps::DawnCaps(const wgpu::Device& device, const ContextOptions& options)
 }
 
 DawnCaps::~DawnCaps() = default;
+
+uint32_t DawnCaps::channelMask(const TextureInfo&) const {
+    // TODO(b/238756380): Move GrDawnFormatChannels() to shared loc and use
+    return 0;
+}
 
 bool DawnCaps::onIsTexturable(const TextureInfo& info) const {
     if (!(info.dawnTextureSpec().fUsage & wgpu::TextureUsage::TextureBinding)) {
