@@ -10,7 +10,9 @@
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypes.h"
 #include "include/private/base/SkTDArray.h"
+#if SK_SUPPORT_GPU
 #include "include/private/chromium/Slug.h"
+#endif
 #include "src/base/SkSafeMath.h"
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkDrawShadowInfo.h"

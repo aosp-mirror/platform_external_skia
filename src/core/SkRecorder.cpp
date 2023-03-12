@@ -12,7 +12,9 @@
 #include "include/core/SkPicture.h"
 #include "include/core/SkSurface.h"
 #include "include/private/base/SkTo.h"
+#if SK_SUPPORT_GPU
 #include "include/private/chromium/Slug.h"
+#endif
 #include "src/core/SkBigPicture.h"
 #include "src/core/SkCanvasPriv.h"
 #include "src/text/GlyphRun.h"
