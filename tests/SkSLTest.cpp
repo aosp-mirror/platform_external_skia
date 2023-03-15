@@ -594,7 +594,7 @@ SKSL_TEST(RP + GPU_ES3,  kNever,      IntrinsicTrunc,                  "intrinsi
 SKSL_TEST(RP + GPU_ES3,  kNever,      IntrinsicTranspose,              "intrinsics/Transpose.sksl")
 SKSL_TEST(RP + GPU_ES3,  kNever,      IntrinsicUintBitsToFloat,        "intrinsics/UintBitsToFloat.sksl")
 
-SKSL_TEST(GPU_ES3,       kNever,      ArrayNarrowingConversions,       "runtime/ArrayNarrowingConversions.rts")
+SKSL_TEST(RP + GPU_ES3,  kNever,      ArrayNarrowingConversions,       "runtime/ArrayNarrowingConversions.rts")
 SKSL_TEST(RP + GPU_ES3,  kNever,      Commutative,                     "runtime/Commutative.rts")
 SKSL_TEST(RP,            kNever,      DivideByZero,                    "runtime/DivideByZero.rts")
 SKSL_TEST(RP + VM + GPU, kApiLevel_T, LoopFloat,                       "runtime/LoopFloat.rts")
@@ -608,7 +608,7 @@ SKSL_TEST(RP + GPU_ES3 + UsesNaN, kNever, RecursiveComparison_Structs, "runtime/
 SKSL_TEST(RP + GPU_ES3 + UsesNaN, kNever, RecursiveComparison_Types,   "runtime/RecursiveComparison_Types.rts")
 SKSL_TEST(RP + GPU_ES3 + UsesNaN, kNever, RecursiveComparison_Vectors, "runtime/RecursiveComparison_Vectors.rts")
 
-SKSL_TEST(GPU_ES3,           kNever,      ArrayCast,                       "shared/ArrayCast.sksl")
+SKSL_TEST(RP + GPU_ES3,      kNever,      ArrayCast,                       "shared/ArrayCast.sksl")
 SKSL_TEST(GPU_ES3,           kNever,      ArrayComparison,                 "shared/ArrayComparison.sksl")
 SKSL_TEST(RP + GPU_ES3,      kNever,      ArrayConstructors,               "shared/ArrayConstructors.sksl")
 SKSL_TEST(RP + VM + GPU_ES3, kNever,      ArrayFollowedByScalar,           "shared/ArrayFollowedByScalar.sksl")
@@ -698,8 +698,8 @@ SKSL_TEST(RP + VM + GPU,     kApiLevel_T, SwizzleBoolConstants,            "shar
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, SwizzleByConstantIndex,          "shared/SwizzleByConstantIndex.sksl")
 SKSL_TEST(RP + GPU_ES3,      kNever,      SwizzleByIndex,                  "shared/SwizzleByIndex.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, SwizzleConstants,                "shared/SwizzleConstants.sksl")
-SKSL_TEST(VM + GPU,          kNextRelease,SwizzleIndexLookup,              "shared/SwizzleIndexLookup.sksl")
-SKSL_TEST(VM + GPU,          kNextRelease,SwizzleIndexStore,               "shared/SwizzleIndexStore.sksl")
+SKSL_TEST(RP + VM + GPU,     kNextRelease,SwizzleIndexLookup,              "shared/SwizzleIndexLookup.sksl")
+SKSL_TEST(RP + VM + GPU,     kNextRelease,SwizzleIndexStore,               "shared/SwizzleIndexStore.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, SwizzleLTRB,                     "shared/SwizzleLTRB.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, SwizzleOpt,                      "shared/SwizzleOpt.sksl")
 SKSL_TEST(RP + VM + GPU,     kApiLevel_T, SwizzleScalar,                   "shared/SwizzleScalar.sksl")

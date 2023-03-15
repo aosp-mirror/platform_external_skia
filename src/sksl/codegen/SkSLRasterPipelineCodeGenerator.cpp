@@ -21,7 +21,9 @@
 #include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLConstantFolder.h"
+#include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLIntrinsicList.h"
+#include "src/sksl/SkSLModifiersPool.h"
 #include "src/sksl/codegen/SkSLRasterPipelineBuilder.h"
 #include "src/sksl/codegen/SkSLRasterPipelineCodeGenerator.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
@@ -58,6 +60,7 @@
 #include "src/sksl/ir/SkSLVariableReference.h"
 #include "src/sksl/tracing/SkRPDebugTrace.h"
 #include "src/sksl/tracing/SkSLDebugInfo.h"
+#include "src/sksl/transform/SkSLTransform.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -124,9 +127,16 @@ class Generator {
 public:
     Generator(const SkSL::Program& program, SkRPDebugTrace* debugTrace)
             : fProgram(program)
+            , fContext(fProgram.fContext->fTypes,
+                       fProgram.fContext->fCaps,
+                       *fProgram.fContext->fErrors)
             , fDebugTrace(debugTrace)
             , fProgramSlots(debugTrace ? &debugTrace->fSlotInfo : nullptr)
-            , fUniformSlots(debugTrace ? &debugTrace->fUniformInfo : nullptr) {}
+            , fUniformSlots(debugTrace ? &debugTrace->fUniformInfo : nullptr) {
+        fContext.fModifiersPool = &fModifiersPool;
+        fContext.fConfig = fProgram.fConfig.get();
+        fContext.fModule = fProgram.fContext->fModule;
+    }
 
     /** Converts the SkSL main() function into a set of Instructions. */
     bool writeProgram(const FunctionDefinition& function);
@@ -338,6 +348,8 @@ public:
 
 private:
     const SkSL::Program& fProgram;
+    SkSL::Context fContext;
+    SkSL::ModifiersPool fModifiersPool;
     Builder fBuilder;
     SkRPDebugTrace* fDebugTrace = nullptr;
     SkTHashMap<const Variable*, int> fChildEffectMap;
@@ -556,6 +568,11 @@ public:
                                      SlotRange fixedOffset,
                                      AutoStack* dynamicOffset,
                                      SkSpan<const int8_t> swizzle) = 0;
+    /**
+     * Some lvalues refer to a temporary expression; these temps can be held in the
+     * scratch-expression field to ensure that they exist for the lifetime of the lvalue.
+     */
+    std::unique_ptr<Expression> fScratchExpression;
 };
 
 class ScratchLValue final : public LValue {
@@ -834,8 +851,8 @@ public:
         fGenerator = gen;
         fDedicatedStack.emplace(fGenerator);
 
-        // TODO: add support for dynamically indexing into a swizzle
         if (!fParent->swizzle().empty()) {
+            SkDEBUGFAIL("an indexed-swizzle should have been handled by RewriteIndexedSwizzle");
             return unsupported();
         }
 
@@ -1049,6 +1066,20 @@ std::unique_ptr<LValue> Generator::makeLValue(const Expression& e, bool allowScr
     }
     if (e.is<IndexExpression>()) {
         const IndexExpression& indexExpr = e.as<IndexExpression>();
+
+        // If the index base is swizzled (`vec.zyx[idx]`), rewrite it into an equivalent
+        // non-swizzled form (`vec[uint3(2,1,0)[idx]]`).
+        if (std::unique_ptr<Expression> rewritten = Transform::RewriteIndexedSwizzle(fContext,
+                                                                                     indexExpr)) {
+            // Convert the rewritten expression into an lvalue.
+            std::unique_ptr<LValue> lvalue = this->makeLValue(*rewritten, allowScratch);
+            if (!lvalue) {
+                return nullptr;
+            }
+            // We need to hold onto the rewritten expression for the lifetime of the lvalue.
+            lvalue->fScratchExpression = std::move(rewritten);
+            return lvalue;
+        }
         if (std::unique_ptr<LValue> base = this->makeLValue(*indexExpr.base(),
                                                             allowScratch)) {
             // If the index is a compile-time constant, we can represent it with a fixed slice.
@@ -1652,6 +1683,7 @@ bool Generator::pushExpression(const Expression& e, bool usesResult) {
             return this->pushChildCall(e.as<ChildCall>());
 
         case Expression::Kind::kConstructorArray:
+        case Expression::Kind::kConstructorArrayCast:
         case Expression::Kind::kConstructorCompound:
         case Expression::Kind::kConstructorStruct:
             return this->pushConstructorCompound(e.asAnyConstructor());
@@ -2161,7 +2193,7 @@ bool Generator::pushChildCall(const ChildCall& c) {
         case Type::TypeKind::kShader: {
             // The argument must be a float2.
             SkASSERT(c.arguments().size() == 1);
-            SkASSERT(arg->type().matches(*fProgram.fContext->fTypes.fFloat2));
+            SkASSERT(arg->type().matches(*fContext.fTypes.fFloat2));
             fBuilder.pop_src_rg();
             fBuilder.invoke_shader(*childIdx);
             break;
@@ -2169,8 +2201,8 @@ bool Generator::pushChildCall(const ChildCall& c) {
         case Type::TypeKind::kColorFilter: {
             // The argument must be a half4/float4.
             SkASSERT(c.arguments().size() == 1);
-            SkASSERT(arg->type().matches(*fProgram.fContext->fTypes.fHalf4) ||
-                     arg->type().matches(*fProgram.fContext->fTypes.fFloat4));
+            SkASSERT(arg->type().matches(*fContext.fTypes.fHalf4) ||
+                     arg->type().matches(*fContext.fTypes.fFloat4));
             fBuilder.pop_src_rgba();
             fBuilder.invoke_color_filter(*childIdx);
             break;
@@ -2178,13 +2210,13 @@ bool Generator::pushChildCall(const ChildCall& c) {
         case Type::TypeKind::kBlender: {
             // The first argument must be a half4/float4.
             SkASSERT(c.arguments().size() == 2);
-            SkASSERT(arg->type().matches(*fProgram.fContext->fTypes.fHalf4) ||
-                     arg->type().matches(*fProgram.fContext->fTypes.fFloat4));
+            SkASSERT(arg->type().matches(*fContext.fTypes.fHalf4) ||
+                     arg->type().matches(*fContext.fTypes.fFloat4));
 
             // The second argument must also be a half4/float4.
             arg = c.arguments()[1].get();
-            SkASSERT(arg->type().matches(*fProgram.fContext->fTypes.fHalf4) ||
-                     arg->type().matches(*fProgram.fContext->fTypes.fFloat4));
+            SkASSERT(arg->type().matches(*fContext.fTypes.fHalf4) ||
+                     arg->type().matches(*fContext.fTypes.fFloat4));
 
             if (!this->pushExpression(*arg)) {
                 return unsupported();
@@ -2595,7 +2627,7 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0) {
         case IntrinsicKind::k_fromLinearSrgb_IntrinsicKind:
         case IntrinsicKind::k_toLinearSrgb_IntrinsicKind: {
             // The argument must be a half3.
-            SkASSERT(arg0.type().matches(*fProgram.fContext->fTypes.fHalf3));
+            SkASSERT(arg0.type().matches(*fContext.fTypes.fHalf3));
             if (!this->pushExpression(arg0)) {
                 return unsupported();
             }
