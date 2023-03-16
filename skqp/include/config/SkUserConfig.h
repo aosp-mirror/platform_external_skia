@@ -67,6 +67,10 @@
 #define SK_GAMMA_EXPONENT 1.4
 #endif
 
+#ifndef SK_GANESH
+#define SK_GANESH
+#endif
+
 #ifndef SK_GL
 #define SK_GL
 #endif
@@ -81,10 +85,6 @@
 
 #ifndef SK_PDF_USE_HARFBUZZ_SUBSET
 #define SK_PDF_USE_HARFBUZZ_SUBSET
-#endif
-
-#ifndef SK_SUPPORT_GPU
-#define SK_SUPPORT_GPU 1
 #endif
 
 #ifndef SK_TOOLS_REQUIRE_RESOURCES
