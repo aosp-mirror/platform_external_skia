@@ -408,6 +408,10 @@
   { symbol: ["SK_DEBUG", "private", "\"include/private/base/SkDebug.h\"", "public"] },
   { symbol: ["SK_DEBUG", "private", "\"include/private/base/SkLoadUserConfig.h\"", "public"] },
 
+  # Pretend SK_GANESH is defined in any of these
+  { symbol: ["SK_GANESH", "private", "\"include/private/base/SkLoadUserConfig.h\"", "public"] },
+  { symbol: ["SK_GANESH", "private", "\"include/core/SkTypes.h\"", "public"] },
+
   { symbol: ["SkScalar", "private", "\"include/core/SkScalar.h\"", "public"] },
 
   # IWYU seems to get confused on where the namespace sktext is "defined". Any files in
