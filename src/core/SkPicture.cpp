@@ -22,7 +22,7 @@
 
 #include <atomic>
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "include/private/chromium/Slug.h"
 #endif
 
