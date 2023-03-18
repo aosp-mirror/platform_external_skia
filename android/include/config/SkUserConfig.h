@@ -67,6 +67,10 @@
 #define SK_GAMMA_EXPONENT 1.4
 #endif
 
+#ifndef SK_GANESH
+#define SK_GANESH
+#endif
+
 #ifndef SK_GL
 #define SK_GL
 #endif
@@ -81,10 +85,6 @@
 
 #ifndef SK_HAS_WUFFS_LIBRARY
 #define SK_HAS_WUFFS_LIBRARY
-#endif
-
-#ifndef SK_SUPPORT_GPU
-#define SK_SUPPORT_GPU 1
 #endif
 
 #ifndef SK_SUPPORT_PDF

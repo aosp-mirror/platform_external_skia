@@ -71,10 +71,6 @@
 #define SK_R32_SHIFT 16
 #endif
 
-#ifndef SK_SUPPORT_GPU
-#define SK_SUPPORT_GPU 0
-#endif
-
 #ifndef SK_SUPPORT_PDF
 #define SK_SUPPORT_PDF
 #endif

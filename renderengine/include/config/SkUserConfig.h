@@ -27,6 +27,10 @@
 #define SK_GAMMA_APPLY_TO_A8
 #endif
 
+#ifndef SK_GANESH
+#define SK_GANESH
+#endif
+
 #ifndef SK_GL
 #define SK_GL
 #endif
@@ -37,10 +41,6 @@
 
 #ifndef SK_IN_RENDERENGINE
 #define SK_IN_RENDERENGINE
-#endif
-
-#ifndef SK_SUPPORT_GPU
-#define SK_SUPPORT_GPU 1
 #endif
 
 #ifndef SK_USE_VMA
