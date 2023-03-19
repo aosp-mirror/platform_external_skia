@@ -37,9 +37,13 @@ namespace SkSL {
 namespace RP {
 
 #define ALL_SINGLE_SLOT_UNARY_OP_CASES  \
-         BuilderOp::atan_float:         \
+         BuilderOp::acos_float:         \
+    case BuilderOp::asin_float:         \
+    case BuilderOp::atan_float:         \
     case BuilderOp::cos_float:          \
     case BuilderOp::exp_float:          \
+    case BuilderOp::log_float:          \
+    case BuilderOp::log2_float:         \
     case BuilderOp::sin_float:          \
     case BuilderOp::sqrt_float:         \
     case BuilderOp::tan_float
@@ -397,7 +401,7 @@ void Builder::push_duplicates(int count) {
     switch (count) {
         case 3:  this->swizzle(/*consumedSlots=*/1, {0, 0, 0, 0}); break;
         case 2:  this->swizzle(/*consumedSlots=*/1, {0, 0, 0});    break;
-        case 1:  this->push_clone(/*numSlots=*/1);              break;
+        case 1:  this->push_clone(/*numSlots=*/1);                 break;
         default: break;
     }
 }
@@ -689,12 +693,51 @@ static void unpack_nybbles_to_offsets(uint32_t components, SkSpan<uint16_t> offs
     }
 }
 
+static int max_packed_nybble(uint32_t components, size_t numComponents) {
+    int largest = 0;
+    for (size_t index = 0; index < numComponents; ++index) {
+        largest = std::max<int>(largest, components & 0xF);
+        components >>= 4;
+    }
+    return largest;
+}
+
 void Builder::swizzle_copy_stack_to_slots(SlotRange dst,
                                           SkSpan<const int8_t> components,
                                           int offsetFromStackTop) {
-    // An unmasked version of this op could squeeze out a little bit of extra speed, if needed.
+    // When the execution-mask writes-enabled flag is off, we could squeeze out a little bit of
+    // extra speed here by implementing and using an unmasked version of this op.
+
+    // SlotA: fixed-range start
+    // immA: number of swizzle components
+    // immB: swizzle components
+    // immC: offset from stack top
     fInstructions.push_back({BuilderOp::swizzle_copy_stack_to_slots, {dst.index},
-                             (int)components.size(), offsetFromStackTop, pack_nybbles(components)});
+                             (int)components.size(),
+                             pack_nybbles(components),
+                             offsetFromStackTop});
+}
+
+void Builder::swizzle_copy_stack_to_slots_indirect(SlotRange fixedRange,
+                                                   int dynamicStackID,
+                                                   SlotRange limitRange,
+                                                   SkSpan<const int8_t> components,
+                                                   int offsetFromStackTop) {
+    // When the execution-mask writes-enabled flag is off, we could squeeze out a little bit of
+    // extra speed here by implementing and using an unmasked version of this op.
+
+    // SlotA: fixed-range start
+    // SlotB: limit-range end
+    // immA: number of swizzle components
+    // immB: swizzle components
+    // immC: offset from stack top
+    // immD: dynamic stack ID
+    fInstructions.push_back({BuilderOp::swizzle_copy_stack_to_slots_indirect,
+                             {fixedRange.index, limitRange.index + limitRange.count},
+                             (int)components.size(),
+                             pack_nybbles(components),
+                             offsetFromStackTop,
+                             dynamicStackID});
 }
 
 void Builder::swizzle(int consumedSlots, SkSpan<const int8_t> components) {
@@ -1549,11 +1592,15 @@ void Program::makeStages(SkTArray<Stage>* pipeline,
                 break;
             }
             case BuilderOp::swizzle_copy_stack_to_slots: {
+                // SlotA: fixed-range start
+                // immA: number of swizzle components
+                // immB: swizzle components
+                // immC: offset from stack top
                 auto stage = (ProgramOp)((int)ProgramOp::swizzle_copy_slot_masked + inst.fImmA - 1);
                 auto* ctx = alloc->make<SkRasterPipeline_SwizzleCopyCtx>();
-                ctx->src = tempStackPtr - (inst.fImmB * N);
+                ctx->src = tempStackPtr - (inst.fImmC * N);
                 ctx->dst = SlotA();
-                unpack_nybbles_to_offsets(inst.fImmC, SkSpan(ctx->offsets));
+                unpack_nybbles_to_offsets(inst.fImmB, SkSpan(ctx->offsets));
                 pipeline->push_back({stage, ctx});
                 break;
             }
@@ -1588,6 +1635,25 @@ void Program::makeStages(SkTArray<Stage>* pipeline,
                 ctx->indirectLimit = inst.fImmC - inst.fImmA;
                 ctx->slots = inst.fImmA;
                 pipeline->push_back({ProgramOp::copy_from_indirect_unmasked, ctx});
+                break;
+            }
+            case BuilderOp::swizzle_copy_stack_to_slots_indirect: {
+                // SlotA: fixed-range start
+                // SlotB: limit-range end
+                // immA: number of swizzle components
+                // immB: swizzle components
+                // immC: offset from stack top
+                // immD: dynamic stack ID
+                auto* ctx = alloc->make<SkRasterPipeline_SwizzleCopyIndirectCtx>();
+                ctx->src = tempStackPtr - (inst.fImmC * N);
+                ctx->dst = SlotA();
+                ctx->indirectOffset =
+                        reinterpret_cast<const uint32_t*>(tempStackMap[inst.fImmD]) - (1 * N);
+                ctx->indirectLimit =
+                        inst.fSlotB - inst.fSlotA - (max_packed_nybble(inst.fImmB, inst.fImmA) + 1);
+                ctx->slots = inst.fImmA;
+                unpack_nybbles_to_offsets(inst.fImmB, SkSpan(ctx->offsets));
+                pipeline->push_back({ProgramOp::swizzle_copy_to_indirect_masked, ctx});
                 break;
             }
             case BuilderOp::case_op: {
@@ -1912,15 +1978,9 @@ void Program::dump(SkWStream* out) const {
             return Adjacent3PtrCtx(ctx->dst, numSlots);
         };
 
-        // Stringize a swizzled pointer. Note that the slot-width of the original expression is not
-        // preserved in the instruction encoding, so we need to do our best using the data we have.
-        // (e.g., myFloat4.y would be indistinguishable from myFloat2.y.)
-        auto SwizzlePtr = [&](const float* ptr, SkSpan<const uint16_t> offsets) {
-            size_t highestComponent = *std::max_element(offsets.begin(), offsets.end()) /
-                                      (N * sizeof(float));
-
-            std::string src = "(" + PtrCtx(ptr, std::max(offsets.size(), highestComponent + 1)) +
-                              ").";
+        // Stringize a span of swizzle offsets to the textual equivalent (`xyzw`).
+        auto SwizzleOffsetSpan = [&](SkSpan<const uint16_t> offsets) {
+            std::string src;
             for (uint16_t offset : offsets) {
                 if (offset == (0 * N * sizeof(float))) {
                     src.push_back('x');
@@ -1935,6 +1995,21 @@ void Program::dump(SkWStream* out) const {
                 }
             }
             return src;
+        };
+
+        // When we decode a swizzle, we don't know the slot width of the original value; that's not
+        // preserved in the instruction encoding. (e.g., myFloat4.y would be indistinguishable from
+        // myFloat2.y.) We do our best to make a readable dump using the data we have.
+        auto SwizzleWidth = [&](SkSpan<const uint16_t> offsets) {
+            size_t highestComponent = *std::max_element(offsets.begin(), offsets.end()) /
+                                      (N * sizeof(float));
+            size_t swizzleWidth = offsets.size();
+            return std::max(swizzleWidth, highestComponent + 1);
+        };
+
+        // Stringize a swizzled pointer.
+        auto SwizzlePtr = [&](const float* ptr, SkSpan<const uint16_t> offsets) {
+            return "(" + PtrCtx(ptr, SwizzleWidth(offsets)) + ")." + SwizzleOffsetSpan(offsets);
         };
 
         // Interpret the context value as a Swizzle structure.
@@ -1974,7 +2049,7 @@ void Program::dump(SkWStream* out) const {
             return std::make_tuple(dst, src);
         };
 
-        std::string opArg1, opArg2, opArg3;
+        std::string opArg1, opArg2, opArg3, opSwizzle;
         using POp = ProgramOp;
         switch (stage.op) {
             case POp::label:
@@ -2037,10 +2112,14 @@ void Program::dump(SkWStream* out) const {
             case POp::cast_to_float_from_int: case POp::cast_to_float_from_uint:
             case POp::cast_to_int_from_float: case POp::cast_to_uint_from_float:
             case POp::abs_float:              case POp::abs_int:
+            case POp::acos_float:
+            case POp::asin_float:
             case POp::atan_float:
             case POp::ceil_float:
             case POp::cos_float:
             case POp::exp_float:
+            case POp::log_float:
+            case POp::log2_float:
             case POp::floor_float:
             case POp::sin_float:
             case POp::sqrt_float:
@@ -2134,6 +2213,14 @@ void Program::dump(SkWStream* out) const {
                 opArg1 = PtrCtx(ctx->dst, ctx->slots);
                 opArg2 = UniformPtrCtx(ctx->src, ctx->slots);
                 opArg3 = PtrCtx(ctx->indirectOffset, 1);
+                break;
+            }
+            case POp::swizzle_copy_to_indirect_masked: {
+                const auto* ctx = static_cast<SkRasterPipeline_SwizzleCopyIndirectCtx*>(stage.ctx);
+                opArg1 = PtrCtx(ctx->dst, SwizzleWidth(SkSpan(ctx->offsets, ctx->slots)));
+                opArg2 = PtrCtx(ctx->src, ctx->slots);
+                opArg3 = PtrCtx(ctx->indirectOffset, 1);
+                opSwizzle = SwizzleOffsetSpan(SkSpan(ctx->offsets, ctx->slots));
                 break;
             }
             case POp::merge_condition_mask:
@@ -2433,6 +2520,11 @@ void Program::dump(SkWStream* out) const {
                 opText = "Indirect(" + opArg1 + " + " + opArg3 + ") = Mask(" + opArg2 + ")";
                 break;
 
+            case POp::swizzle_copy_to_indirect_masked:
+                opText = "Indirect(" + opArg1 + " + " + opArg3 + ")." + opSwizzle + " = Mask(" +
+                         opArg2 + ")";
+                break;
+
             case POp::zero_slot_unmasked:    case POp::zero_2_slots_unmasked:
             case POp::zero_3_slots_unmasked: case POp::zero_4_slots_unmasked:
                 opText = opArg1 + " = 0";
@@ -2443,6 +2535,14 @@ void Program::dump(SkWStream* out) const {
             case POp::abs_3_floats: case POp::abs_3_ints:
             case POp::abs_4_floats: case POp::abs_4_ints:
                 opText = opArg1 + " = abs(" + opArg1 + ")";
+                break;
+
+            case POp::acos_float:
+                opText = opArg1 + " = acos(" + opArg1 + ")";
+                break;
+
+            case POp::asin_float:
+                opText = opArg1 + " = asin(" + opArg1 + ")";
                 break;
 
             case POp::atan_float:
@@ -2472,6 +2572,14 @@ void Program::dump(SkWStream* out) const {
 
             case POp::exp_float:
                 opText = opArg1 + " = exp(" + opArg1 + ")";
+                break;
+
+            case POp::log_float:
+                opText = opArg1 + " = log(" + opArg1 + ")";
+                break;
+
+            case POp::log2_float:
+                opText = opArg1 + " = log2(" + opArg1 + ")";
                 break;
 
             case POp::pow_n_floats:

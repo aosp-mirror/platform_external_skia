@@ -1035,7 +1035,7 @@ SI U16 bswap(U16 x) {
 
 SI F fract(F v) { return v - floor_(v); }
 
-// See http://www.machinedlearnings.com/2011/06/fast-approximate-logarithm-exponential.html.
+// See http://www.machinedlearnings.com/2011/06/fast-approximate-logarithm-exponential.html
 SI F approx_log2(F x) {
     // e - 127 is a fair approximation of log2(x) in its own right...
     F e = cast(sk_bit_cast<U32>(x)) * (1.0f / (1<<23));
@@ -1559,6 +1559,23 @@ SI F atan_(F x) {
     x = if_then_else(flip, SK_ScalarPI/2 - x, x);
     x = if_then_else(neg, -x, x);
     return x;
+}
+
+
+// Handbook of Mathematical Functions, by Milton Abramowitz and Irene Stegun:
+// https://books.google.com/books/content?id=ZboM5tOFWtsC&pg=PA81&img=1&zoom=3&hl=en&bul=1&sig=ACfU3U2M75tG_iGVOS92eQspr14LTq02Nw&ci=0%2C15%2C999%2C1279&edge=0
+// http://screen/8YGJxUGFQ49bVX6
+SI F asin_(F x) {
+    I32 neg = (x < 0.0f);
+    x = if_then_else(neg, -x, x);
+    F poly = x * (x * (x * -0.0187293f + 0.0742610f) - 0.2121144f) + 1.5707288f;
+    x = SK_ScalarPI/2 - sqrt_(1 - x) * poly;
+    x = if_then_else(neg, -x, x);
+    return x;
+}
+
+SI F acos_(F x) {
+    return SK_ScalarPI/2 - asin_(x);
 }
 
 /*  Use identity atan(x) = pi/2 - atan(1/x) for x > 1
@@ -3585,6 +3602,32 @@ STAGE_TAIL(copy_to_indirect_masked, SkRasterPipeline_CopyIndirectCtx* ctx) {
     } while (src != end);
 }
 
+STAGE_TAIL(swizzle_copy_to_indirect_masked, SkRasterPipeline_SwizzleCopyIndirectCtx* ctx) {
+    // Clamp the indirect offsets to stay within the limit.
+    U32 offsets = *(U32*)ctx->indirectOffset;
+    offsets = min(offsets, ctx->indirectLimit);
+
+    // Scale up the offsets to account for the N lanes per value.
+    offsets *= N;
+
+    // Adjust the offsets forward so that they store into the correct lane.
+    static constexpr uint32_t iota[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+    offsets += sk_unaligned_load<I32>(iota);
+
+    // Perform indirect, masked, swizzled writes into `dst`.
+    const F*        src     = (F*)ctx->src;
+    const F*        end     = src + ctx->slots;
+    std::byte*      dstB    = (std::byte*)ctx->dst;
+    const uint16_t* swizzle = ctx->offsets;
+    I32             mask    = execution_mask();
+    do {
+        float* dst = (float*)(dstB + *swizzle);
+        scatter_masked(*src, dst, offsets, mask);
+        swizzle += 1;
+        src     += 1;
+    } while (src != end);
+}
+
 // Unary operations take a single input, and overwrite it with their output.
 // Unlike binary or ternary operations, we provide variations of 1-4 slots, but don't provide
 // an arbitrary-width "n-slot" variation; the Builder can chain together longer sequences manually.
@@ -3671,9 +3714,13 @@ DECLARE_UNARY_FLOAT(ceil)
 STAGE_TAIL(sin_float, F* dst)  { *dst = sin_(*dst); }
 STAGE_TAIL(cos_float, F* dst)  { *dst = cos_(*dst); }
 STAGE_TAIL(tan_float, F* dst)  { *dst = tan_(*dst); }
+STAGE_TAIL(asin_float, F* dst) { *dst = asin_(*dst); }
+STAGE_TAIL(acos_float, F* dst) { *dst = acos_(*dst); }
 STAGE_TAIL(atan_float, F* dst) { *dst = atan_(*dst); }
 STAGE_TAIL(sqrt_float, F* dst) { *dst = sqrt_(*dst); }
 STAGE_TAIL(exp_float, F* dst)  { *dst = approx_exp(*dst); }
+STAGE_TAIL(log_float, F* dst)  { *dst = approx_log(*dst); }
+STAGE_TAIL(log2_float, F* dst) { *dst = approx_log2(*dst); }
 
 // Binary operations take two adjacent inputs, and write their output in the first position.
 template <typename T, void (*ApplyFn)(T*, T*)>

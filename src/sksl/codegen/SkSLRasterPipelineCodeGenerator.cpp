@@ -295,6 +295,7 @@ public:
     [[nodiscard]] bool pushIntrinsic(BuilderOp builderOp,
                                      const Expression& arg0,
                                      const Expression& arg1);
+    [[nodiscard]] bool pushLengthIntrinsic(int slotCount);
     [[nodiscard]] bool pushVectorizedExpression(const Expression& expr, const Type& vectorType);
     [[nodiscard]] bool pushVariableReferencePartial(const VariableReference& v, SlotRange subset);
     [[nodiscard]] bool pushLValueOrExpression(LValue* lvalue, const Expression& expr);
@@ -2460,6 +2461,19 @@ bool Generator::pushIntrinsic(const FunctionCall& c) {
     return unsupported();
 }
 
+bool Generator::pushLengthIntrinsic(int slotCount) {
+    if (slotCount > 1) {
+        // Implement `length(vec)` as `sqrt(dot(x, x))`.
+        fBuilder.push_clone(slotCount);
+        fBuilder.dot_floats(slotCount);
+        fBuilder.unary_op(BuilderOp::sqrt_float, 1);
+    } else {
+        // `length(scalar)` is `sqrt(x^2)`, which is equivalent to `abs(x)`.
+        fBuilder.unary_op(BuilderOp::abs_float, 1);
+    }
+    return true;
+}
+
 bool Generator::pushVectorizedExpression(const Expression& expr, const Type& vectorType) {
     if (!this->pushExpression(expr)) {
         return unsupported();
@@ -2505,6 +2519,12 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0) {
             this->foldWithMultiOp(BuilderOp::bitwise_and_n_ints, arg0.type().slotCount());
             return true;
 
+        case IntrinsicKind::k_acos_IntrinsicKind:
+            return this->pushIntrinsic(BuilderOp::acos_float, arg0);
+
+        case IntrinsicKind::k_asin_IntrinsicKind:
+            return this->pushIntrinsic(BuilderOp::asin_float, arg0);
+
         case IntrinsicKind::k_atan_IntrinsicKind:
             return this->pushIntrinsic(BuilderOp::atan_float, arg0);
 
@@ -2539,20 +2559,44 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0) {
             fBuilder.unary_op(BuilderOp::floor_float, arg0.type().slotCount());
             return this->binaryOp(arg0.type(), kSubtractOps);
 
+        case IntrinsicKind::k_inversesqrt_IntrinsicKind: {
+            // Implement inversesqrt as `1.0 / sqrt(x)`.
+            Literal oneLiteral{Position{}, 1.0, &arg0.type().componentType()};
+            return this->pushVectorizedExpression(oneLiteral, arg0.type()) &&
+                   this->pushIntrinsic(k_sqrt_IntrinsicKind, arg0) &&
+                   this->binaryOp(arg0.type(), kDivideOps);
+        }
         case IntrinsicKind::k_length_IntrinsicKind:
+            return this->pushExpression(arg0) &&
+                   this->pushLengthIntrinsic(arg0.type().slotCount());
+
+        case IntrinsicKind::k_log_IntrinsicKind:
             if (!this->pushExpression(arg0)) {
                 return unsupported();
             }
-            // Implement length as `sqrt(dot(x, x))`.
-            if (arg0.type().slotCount() > 1) {
-                fBuilder.push_clone(arg0.type().slotCount());
-                fBuilder.dot_floats(arg0.type().slotCount());
-                fBuilder.unary_op(BuilderOp::sqrt_float, 1);
-            } else {
-                // The length of a scalar is `sqrt(x^2)`, which is equivalent to `abs(x)`.
-                fBuilder.unary_op(BuilderOp::abs_float, 1);
-            }
+            fBuilder.unary_op(BuilderOp::log_float, arg0.type().slotCount());
             return true;
+
+        case IntrinsicKind::k_log2_IntrinsicKind:
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            fBuilder.unary_op(BuilderOp::log2_float, arg0.type().slotCount());
+            return true;
+
+        case IntrinsicKind::k_normalize_IntrinsicKind:
+            // Implement normalize as `x / length(x)`. First, push the expression.
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            // Clone the expression and calculate its length.
+            fBuilder.push_clone(arg0.type().slotCount());
+            if (!this->pushLengthIntrinsic(arg0.type().slotCount())) {
+                return unsupported();
+            }
+            // Finally, vectorize the length and divide.
+            fBuilder.push_duplicates(arg0.type().slotCount() - 1);
+            return this->binaryOp(arg0.type(), kDivideOps);
 
         case IntrinsicKind::k_not_IntrinsicKind:
             return this->pushPrefixExpression(OperatorKind::LOGICALNOT, arg0);
@@ -2727,8 +2771,13 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic,
             subexpressionStack.exit();
             return true;
         }
+        case IntrinsicKind::k_distance_IntrinsicKind:
+            // Implement distance as `length(a - b)`.
+            SkASSERT(arg0.type().slotCount() == arg1.type().slotCount());
+            return this->pushBinaryExpression(arg0, OperatorKind::MINUS, arg1) &&
+                   this->pushLengthIntrinsic(arg0.type().slotCount());
+
         case IntrinsicKind::k_dot_IntrinsicKind:
-            // Implement dot as `a*b`, followed by folding via addition.
             SkASSERT(arg0.type().matches(arg1.type()));
             if (!this->pushExpression(arg0) || !this->pushExpression(arg1)) {
                 return unsupported();
@@ -2776,6 +2825,32 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic,
             SkASSERT(arg0.type().matches(arg1.type()));
             return this->pushIntrinsic(BuilderOp::pow_n_floats, arg0, arg1);
 
+        case IntrinsicKind::k_reflect_IntrinsicKind: {
+            // Implement reflect as `I - (N * dot(I,N) * 2)`.
+            SkASSERT(arg0.type().matches(arg1.type()));
+            SkASSERT(arg0.type().slotCount() == arg1.type().slotCount());
+            SkASSERT(arg0.type().componentType().isFloat());
+            int slotCount = arg0.type().slotCount();
+
+            // Stack: I, N.
+            if (!this->pushExpression(arg0) || !this->pushExpression(arg1)) {
+                return unsupported();
+            }
+            // Stack: I, N, I, N.
+            fBuilder.push_clone(2 * slotCount);
+            // Stack: I, N, dot(I,N)
+            fBuilder.dot_floats(slotCount);
+            // Stack: I, N, dot(I,N), 2
+            fBuilder.push_literal_f(2.0);
+            // Stack: I, N, dot(I,N) * 2
+            fBuilder.binary_op(BuilderOp::mul_n_floats, 1);
+            // Stack: I, N * dot(I,N) * 2
+            fBuilder.push_duplicates(slotCount - 1);
+            fBuilder.binary_op(BuilderOp::mul_n_floats, slotCount);
+            // Stack: I - (N * dot(I,N) * 2)
+            fBuilder.binary_op(BuilderOp::sub_n_floats, slotCount);
+            return true;
+        }
         case IntrinsicKind::k_step_IntrinsicKind: {
             // Compute step as `float(lessThan(edge, x))`. We convert from boolean 0/~0 to floating
             // point zero/one by using a bitwise-and against the bit-pattern of 1.0.
@@ -2823,6 +2898,35 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic,
             }
             return true;
 
+        case IntrinsicKind::k_faceforward_IntrinsicKind: {
+            // Implement faceforward as `N ^ ((0 <= dot(I, NRef)) & 0x80000000)`.
+            // In other words, flip the sign bit of N if `0 <= dot(I, NRef)`.
+            SkASSERT(arg0.type().matches(arg1.type()));
+            SkASSERT(arg0.type().matches(arg2.type()));
+            int slotCount = arg0.type().slotCount();
+
+            // Stack: N, 0, I, Nref
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            fBuilder.push_literal_f(0.0);
+            if (!this->pushExpression(arg1) || !this->pushExpression(arg2)) {
+                return unsupported();
+            }
+            // Stack: N, 0, dot(I,NRef)
+            fBuilder.dot_floats(slotCount);
+            // Stack: N, (0 <= dot(I,NRef))
+            fBuilder.binary_op(BuilderOp::cmple_n_floats, 1);
+            // Stack: N, (0 <= dot(I,NRef)), 0x80000000
+            fBuilder.push_literal_i(0x80000000);
+            // Stack: N, (0 <= dot(I,NRef)) & 0x80000000)
+            fBuilder.binary_op(BuilderOp::bitwise_and_n_ints, 1);
+            // Stack: N, vec(0 <= dot(I,NRef)) & 0x80000000)
+            fBuilder.push_duplicates(slotCount - 1);
+            // Stack: N ^ vec((0 <= dot(I,NRef)) & 0x80000000)
+            fBuilder.binary_op(BuilderOp::bitwise_xor_n_ints, slotCount);
+            return true;
+        }
         case IntrinsicKind::k_mix_IntrinsicKind:
             // Note: our SkRP mix op takes the interpolation point first, not the interpolants.
             SkASSERT(arg0.type().matches(arg1.type()));
