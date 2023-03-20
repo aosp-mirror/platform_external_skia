@@ -38,6 +38,11 @@ CORE_COPTS = [
 ] + select({
     # SkRawCodec catches any exceptions thrown by dng_sdk, insulating the rest of Skia.
     "//src/codec:raw_decode_codec": [],
+    "@platforms//os:windows": [
+        # Temporary Windows workaround (https://bugs.chromium.org/p/skia/issues/detail?id=14203):
+        "-Wno-nonportable-system-include-path",
+        "-Wno-unknown-argument",
+    ],
     "//conditions:default": ["-fno-exceptions"],
 })
 
