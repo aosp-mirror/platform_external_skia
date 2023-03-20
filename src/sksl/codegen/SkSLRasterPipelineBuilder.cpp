@@ -76,6 +76,7 @@ namespace RP {
     case BuilderOp::bitwise_and_n_ints: \
     case BuilderOp::bitwise_or_n_ints:  \
     case BuilderOp::bitwise_xor_n_ints: \
+    case BuilderOp::mod_n_floats:       \
     case BuilderOp::min_n_floats:       \
     case BuilderOp::min_n_ints:         \
     case BuilderOp::min_n_uints:        \
@@ -92,6 +93,9 @@ namespace RP {
     case BuilderOp::cmpeq_n_ints:       \
     case BuilderOp::cmpne_n_floats:     \
     case BuilderOp::cmpne_n_ints
+
+#define ALL_N_WAY_TERNARY_OP_CASES       \
+         BuilderOp::smoothstep_n_floats
 
 #define ALL_MULTI_SLOT_TERNARY_OP_CASES \
          BuilderOp::mix_n_floats:       \
@@ -125,6 +129,7 @@ void Builder::binary_op(BuilderOp op, int32_t slots) {
 
 void Builder::ternary_op(BuilderOp op, int32_t slots) {
     switch (op) {
+        case ALL_N_WAY_TERNARY_OP_CASES:
         case ALL_MULTI_SLOT_TERNARY_OP_CASES:
             fInstructions.push_back({op, {}, slots});
             break;
@@ -146,6 +151,10 @@ void Builder::dot_floats(int32_t slots) {
             SkDEBUGFAIL("invalid number of slots");
             break;
     }
+}
+
+void Builder::refract_floats() {
+    fInstructions.push_back({BuilderOp::refract_4_floats, {}});
 }
 
 void Builder::discard_stack(int32_t count) {
@@ -914,6 +923,7 @@ static int stack_usage(const Instruction& inst) {
         case BuilderOp::select:
             return -inst.fImmA;
 
+        case ALL_N_WAY_TERNARY_OP_CASES:
         case ALL_MULTI_SLOT_TERNARY_OP_CASES:
             return 2 * -inst.fImmA;
 
@@ -932,6 +942,9 @@ static int stack_usage(const Instruction& inst) {
             return -5;  // consumes two 3-slot vectors and emits one scalar
         case BuilderOp::dot_4_floats:
             return -7;  // consumes two 4-slot vectors and emits one scalar
+
+        case BuilderOp::refract_4_floats:
+            return -5;  // consumes nine slots (N + I + eta) and emits a 4-slot vector (R)
 
         case BuilderOp::shuffle: {
             int consumed = inst.fImmA >> 16;
@@ -1083,7 +1096,6 @@ void Program::appendAdjacentNWayBinaryOp(SkTArray<Stage>* pipeline, SkArenaAlloc
         ctx->dst = dst;
         ctx->src = src;
         pipeline->push_back({stage, ctx});
-        return;
     }
 }
 
@@ -1104,6 +1116,23 @@ void Program::appendAdjacentMultiSlotBinaryOp(SkTArray<Stage>* pipeline, SkArena
     }
 }
 
+void Program::appendAdjacentNWayTernaryOp(SkTArray<Stage>* pipeline, SkArenaAlloc* alloc,
+                                          ProgramOp stage, float* dst, const float* src0,
+                                          const float* src1, int numSlots) const {
+    // The float pointers must all be immediately adjacent to each other.
+    SkASSERT(numSlots >= 0);
+    SkASSERT((dst  + SkOpts::raster_pipeline_highp_stride * numSlots) == src0);
+    SkASSERT((src0 + SkOpts::raster_pipeline_highp_stride * numSlots) == src1);
+
+    if (numSlots > 0) {
+        auto ctx = alloc->make<SkRasterPipeline_TernaryOpCtx>();
+        ctx->dst = dst;
+        ctx->src0 = src0;
+        ctx->src1 = src1;
+        pipeline->push_back({stage, ctx});
+    }
+}
+
 void Program::appendAdjacentMultiSlotTernaryOp(SkTArray<Stage>* pipeline, SkArenaAlloc* alloc,
                                                ProgramOp baseStage, float* dst, const float* src0,
                                                const float* src1, int numSlots) const {
@@ -1113,11 +1142,7 @@ void Program::appendAdjacentMultiSlotTernaryOp(SkTArray<Stage>* pipeline, SkAren
     SkASSERT((src0 + SkOpts::raster_pipeline_highp_stride * numSlots) == src1);
 
     if (numSlots > 4) {
-        auto ctx = alloc->make<SkRasterPipeline_TernaryOpCtx>();
-        ctx->dst = dst;
-        ctx->src0 = src0;
-        ctx->src1 = src1;
-        pipeline->push_back({baseStage, ctx});
+        this->appendAdjacentNWayTernaryOp(pipeline, alloc, baseStage, dst, src0, src1, numSlots);
         return;
     }
     if (numSlots > 0) {
@@ -1382,6 +1407,14 @@ void Program::makeStages(SkTArray<Stage>* pipeline,
                                                       dst, src, inst.fImmA);
                 break;
             }
+            case ALL_N_WAY_TERNARY_OP_CASES: {
+                float* src1 = tempStackPtr - (inst.fImmA * N);
+                float* src0 = tempStackPtr - (inst.fImmA * 2 * N);
+                float* dst  = tempStackPtr - (inst.fImmA * 3 * N);
+                this->appendAdjacentNWayTernaryOp(pipeline, alloc, (ProgramOp)inst.fOp,
+                                                  dst, src0, src1, inst.fImmA);
+                break;
+            }
             case ALL_MULTI_SLOT_TERNARY_OP_CASES: {
                 float* src1 = tempStackPtr - (inst.fImmA * N);
                 float* src0 = tempStackPtr - (inst.fImmA * 2 * N);
@@ -1409,6 +1442,11 @@ void Program::makeStages(SkTArray<Stage>* pipeline,
                                              SlotA(), inst.fImmA);
                 break;
 
+            case BuilderOp::refract_4_floats: {
+                float* dst = tempStackPtr - (9 * N);
+                pipeline->push_back({ProgramOp::refract_4_floats, dst});
+                break;
+            }
             case BuilderOp::dot_2_floats:
             case BuilderOp::dot_3_floats:
             case BuilderOp::dot_4_floats: {
@@ -2080,6 +2118,11 @@ void Program::dump(SkWStream* out) const {
                 std::tie(opArg1, opArg2) = SwizzleCopyCtx(stage.op, stage.ctx);
                 break;
 
+            case POp::refract_4_floats:
+                std::tie(opArg1, opArg2) = AdjacentPtrCtx(stage.ctx, 4);
+                opArg3 = PtrCtx((const float*)(stage.ctx) + (8 * N), 1);
+                break;
+
             case POp::dot_2_floats:
                 opArg1 = PtrCtx(stage.ctx, 1);
                 std::tie(opArg2, opArg3) = AdjacentPtrCtx(stage.ctx, 2);
@@ -2231,6 +2274,7 @@ void Program::dump(SkWStream* out) const {
                                    case POp::bitwise_and_int:
                                    case POp::bitwise_or_int:
                                    case POp::bitwise_xor_int:
+            case POp::mod_float:
             case POp::min_float:   case POp::min_int:   case POp::min_uint:
             case POp::max_float:   case POp::max_int:   case POp::max_uint:
             case POp::cmplt_float: case POp::cmplt_int: case POp::cmplt_uint:
@@ -2251,6 +2295,7 @@ void Program::dump(SkWStream* out) const {
                                       case POp::bitwise_and_2_ints:
                                       case POp::bitwise_or_2_ints:
                                       case POp::bitwise_xor_2_ints:
+            case POp::mod_2_floats:
             case POp::min_2_floats:   case POp::min_2_ints:   case POp::min_2_uints:
             case POp::max_2_floats:   case POp::max_2_ints:   case POp::max_2_uints:
             case POp::cmplt_2_floats: case POp::cmplt_2_ints: case POp::cmplt_2_uints:
@@ -2271,6 +2316,7 @@ void Program::dump(SkWStream* out) const {
                                       case POp::bitwise_and_3_ints:
                                       case POp::bitwise_or_3_ints:
                                       case POp::bitwise_xor_3_ints:
+            case POp::mod_3_floats:
             case POp::min_3_floats:   case POp::min_3_ints:   case POp::min_3_uints:
             case POp::max_3_floats:   case POp::max_3_ints:   case POp::max_3_uints:
             case POp::cmplt_3_floats: case POp::cmplt_3_ints: case POp::cmplt_3_uints:
@@ -2291,6 +2337,7 @@ void Program::dump(SkWStream* out) const {
                                       case POp::bitwise_and_4_ints:
                                       case POp::bitwise_or_4_ints:
                                       case POp::bitwise_xor_4_ints:
+            case POp::mod_4_floats:
             case POp::min_4_floats:   case POp::min_4_ints:   case POp::min_4_uints:
             case POp::max_4_floats:   case POp::max_4_ints:   case POp::max_4_uints:
             case POp::cmplt_4_floats: case POp::cmplt_4_ints: case POp::cmplt_4_uints:
@@ -2311,6 +2358,7 @@ void Program::dump(SkWStream* out) const {
                                       case POp::bitwise_and_n_ints:
                                       case POp::bitwise_or_n_ints:
                                       case POp::bitwise_xor_n_ints:
+            case POp::mod_n_floats:
             case POp::min_n_floats:   case POp::min_n_ints:   case POp::min_n_uints:
             case POp::max_n_floats:   case POp::max_n_ints:   case POp::max_n_uints:
             case POp::cmplt_n_floats: case POp::cmplt_n_ints: case POp::cmplt_n_uints:
@@ -2322,7 +2370,8 @@ void Program::dump(SkWStream* out) const {
                 std::tie(opArg1, opArg2) = AdjacentBinaryOpCtx(stage.ctx);
                 break;
 
-            case POp::mix_n_floats:   case POp::mix_n_ints:
+            case POp::mix_n_floats:        case POp::mix_n_ints:
+            case POp::smoothstep_n_floats:
                 std::tie(opArg1, opArg2, opArg3) = AdjacentTernaryOpCtx(stage.ctx);
                 break;
 
@@ -2564,6 +2613,10 @@ void Program::dump(SkWStream* out) const {
                 opText = opArg1 + " = cos(" + opArg1 + ")";
                 break;
 
+            case POp::refract_4_floats:
+                opText = opArg1 + " = refract(" + opArg1 + ", " + opArg2 + ", " + opArg3 + ")";
+                break;
+
             case POp::dot_2_floats:
             case POp::dot_3_floats:
             case POp::dot_4_floats:
@@ -2637,6 +2690,14 @@ void Program::dump(SkWStream* out) const {
                 opText = opArg1 + " /= " + opArg2;
                 break;
 
+            case POp::mod_float:
+            case POp::mod_2_floats:
+            case POp::mod_3_floats:
+            case POp::mod_4_floats:
+            case POp::mod_n_floats:
+                opText = opArg1 + " = mod(" + opArg1 + ", " + opArg2 + ")";
+                break;
+
             case POp::min_float:    case POp::min_int:    case POp::min_uint:
             case POp::min_2_floats: case POp::min_2_ints: case POp::min_2_uints:
             case POp::min_3_floats: case POp::min_3_ints: case POp::min_3_uints:
@@ -2691,6 +2752,10 @@ void Program::dump(SkWStream* out) const {
             case POp::mix_4_floats:   case POp::mix_4_ints:
             case POp::mix_n_floats:   case POp::mix_n_ints:
                 opText = opArg1 + " = mix(" + opArg2 + ", " + opArg3 + ", " + opArg1 + ")";
+                break;
+
+            case POp::smoothstep_n_floats:
+                opText = opArg1 + " = smoothstep(" + opArg1 + ", " + opArg2 + ", " + opArg3 + ")";
                 break;
 
             case POp::jump:

@@ -518,6 +518,7 @@ std::string AnalyticRRectRenderStep::vertexSkSL() const {
         bool bidirectionalCoverage = center.z <= 0.0;
         bool deviceSpaceDistances = false;
         float4 xs, ys; // ordered TL, TR, BR, BL
+        float4 edgeAA = float4(1.0); // ordered L,T,R,B. 1 = AA, 0 = no AA
         if (xRadiiOrFlags.x < -1.0) {
             // Stroked rect or round rect
             xs = ltrbOrQuadYs.LRRL;
@@ -556,6 +557,7 @@ std::string AnalyticRRectRenderStep::vertexSkSL() const {
             // quad's edges.
             xs = radiiOrQuadXs;
             ys = ltrbOrQuadYs;
+            edgeAA = -xRadiiOrFlags; // AA flags needed to be < 0 on upload, so flip the sign.
 
             xRadii = float4(0.0);
             yRadii = float4(0.0);
@@ -597,12 +599,34 @@ std::string AnalyticRRectRenderStep::vertexSkSL() const {
         // Calculate the local edge vectors, ordered L, T, R, B starting from the bottom left point.
         // For quadrilaterals these are not necessarily axis-aligned, but in all cases they orient
         // the +X/+Y normalized vertex template for each corner.
-        // TODO: Correct edge vectors for points, lines, and triangles.
         float4 dx = xs - xs.wxyz;
         float4 dy = ys - ys.wxyz;
-        float4 invEdgeLen = inversesqrt(dx*dx + dy*dy);
-        dx *= invEdgeLen;
-        dy *= invEdgeLen;
+        float4 edgeLen = sqrt(dx*dx + dy*dy);
+
+        float4 edgeMask = sign(edgeLen); // 0 for zero-length edge, 1 for non-zero edge.
+        if (any(equal(edgeMask, float4(0.0)))) {
+            // Must clean up (dx,dy) depending on the empty edge configuration
+            if (all(equal(edgeMask, float4(0.0)))) {
+                // A point so use the canonical basis
+                dx = float4( 0.0, 1.0, 0.0, -1.0);
+                dy = float4(-1.0, 0.0, 1.0,  0.0);
+                edgeLen = float4(1.0);
+            } else {
+                // Triangles (3 non-zero edges) copy the adjacent edge. Otherwise it's a line so
+                // replace empty edges with the left-hand normal vector of the adjacent edge.
+                bool triangle = (edgeMask[0] + edgeMask[1] + edgeMask[2] + edgeMask[3]) > 2.5;
+                float4 edgeX = triangle ? dx.yzwx :  dy.yzwx;
+                float4 edgeY = triangle ? dy.yzwx : -dx.yzwx;
+
+                dx = mix(edgeX, dx, edgeMask);
+                dy = mix(edgeY, dy, edgeMask);
+                edgeLen = mix(edgeLen.yzwx, edgeLen, edgeMask);
+                edgeAA = mix(edgeAA.yzwx, edgeAA, edgeMask);
+            }
+        }
+
+        dx /= edgeLen;
+        dy /= edgeLen;
 
         // Calculate local coordinate for the vertex (relative to xAxis and yAxis at first).
         float2 xAxis = -float2(dx.yzwx[cornerID], dy.yzwx[cornerID]);
@@ -668,10 +692,22 @@ std::string AnalyticRRectRenderStep::vertexSkSL() const {
             // 1/w in the fragment shader. The same goes for the encoded coverage scale.
             edgeDistances *= inversesqrt(gx*gx + gy*gy);
 
-            float2 dim = edgeDistances.xy + edgeDistances.zw;
-            // TODO: Mixed AA flags should always use the (1,0.5) scale and bias since the set of
-            // tiled quads forms a larger shape that would not get subpixel treatment.
-            perPixelControl.y = 1.0 + min(min(dim.x, dim.y), abs(devPos.z));
+            // Bias non-AA edge distances by device W so its coverage contribution is >= 1.0
+            edgeDistances += (1 - edgeAA)*abs(devPos.z);
+
+            // Mixed edge AA shapes do not use subpixel scale+bias for coverage, since they tile
+            // to a large shape of unknown--but likely not subpixel--size. Triangles and quads do
+            // not use subpixel coverage since the scale+bias is not constant over the shape, but
+            // we can't evaluate per-fragment since we aren't passing down their arbitrary normals.
+            bool subpixelCoverage = edgeAA == float4(1.0) &&
+                                    dot(abs(dx*dx.yzwx + dy*dy.yzwx), float4(1.0)) < kEpsilon;
+            if (subpixelCoverage) {
+                // Reconstructs the actual device-space width and height for all rectangle vertices.
+                float2 dim = edgeDistances.xy + edgeDistances.zw;
+                perPixelControl.y = 1.0 + min(min(dim.x, dim.y), abs(devPos.z));
+            } else {
+                perPixelControl.y = 1.0 + abs(devPos.z); // standard 1px width pre W division.
+            }
         }
 
         // Only outset for a vertex that is in front of the w=0 plane to avoid dealing with outset
@@ -681,10 +717,12 @@ std::string AnalyticRRectRenderStep::vertexSkSL() const {
             // matrix (inverse transpose), but produces correct results when there's perspective
             // because it accounts for the position's influence on a line's projected direction.
             float2x2 J = float2x2(jacobian.xy, jacobian.zw);
-            float2 nx = cornerAspectRatio.x * normal.x * perp(-yAxis) * J;
-            float2 ny = cornerAspectRatio.y * normal.y * perp( xAxis) * J;
 
-            bool isMidVertex = normal.x != 0.0 && normal.y != 0.0;
+            float2 edgeAANormal = float2(edgeAA[cornerID], edgeAA.yzwx[cornerID]) * normal;
+            float2 nx = cornerAspectRatio.x * edgeAANormal.x * perp(-yAxis) * J;
+            float2 ny = cornerAspectRatio.y * edgeAANormal.y * perp( xAxis) * J;
+
+            bool isMidVertex = edgeAANormal.x != 0.0 && edgeAANormal.y != 0.0;
             if (joinScale == kMiterScale && isMidVertex) {
                 // Produce a bisecting vector in device space (ignoring 'normal' since that was
                 // previously corrected to match the mitered edge normals).
@@ -704,6 +742,11 @@ std::string AnalyticRRectRenderStep::vertexSkSL() const {
             //
             // We multiply by W so that after perspective division the new point is offset by the
             // now-unit normal.
+            // NOTE: (nx + ny) can become the zero vector if the device outset is for an edge
+            // marked as non-AA. In this case normalize() could produce the zero vector or NaN.
+            // Until a counter-example is found, GPUs seem to discard triangles with NaN vertices,
+            // which has the same effect as outsetting by the zero vector with this mesh, so we
+            // don't bother guarding the normalize() (yet).
             devPos.xy += devPos.z * normalize(nx + ny);
 
             // By construction these points are 1px away from the outer edge in device space.
@@ -824,6 +867,7 @@ void AnalyticRRectRenderStep::writeVertices(DrawWriter* writer,
 
     // The bounds of a rect is the rect, and the bounds of a rrect is tight (== SkRRect::getRect()).
     Rect bounds = params.geometry().bounds();
+    const skvx::float2 size = bounds.size();
 
     // aaRadius will be set to a negative value to signal a complex self-intersection that has to
     // be calculated in the vertex shader.
@@ -838,8 +882,8 @@ void AnalyticRRectRenderStep::writeVertices(DrawWriter* writer,
         SkASSERT(shape.isRect() || params.strokeStyle().halfWidth() == 0.f ||
                  (shape.isRRect() && SkRRectPriv::AllCornersCircular(shape.rrect())));
 
-        const float strokeRadius = params.strokeStyle().halfWidth();
-        skvx::float2 innerGap = bounds.size() - 2.f * params.strokeStyle().halfWidth();
+        float strokeRadius = params.strokeStyle().halfWidth();
+        skvx::float2 innerGap = size - 2.f * params.strokeStyle().halfWidth();
         if (any(innerGap <= 0.f)) {
             // AA inset intersections are measured from the *outset*
             strokeInset = -strokeRadius;
@@ -850,7 +894,7 @@ void AnalyticRRectRenderStep::writeVertices(DrawWriter* writer,
         }
 
         skvx::float4 xRadii = shape.isRRect() ? load_x_radii(shape.rrect()) : skvx::float4(0.f);
-        if (params.strokeStyle().halfWidth() > 0.f) {
+        if (strokeRadius > 0.f) {
             float joinStyle = params.strokeStyle().joinLimit();
             if (params.strokeStyle().isMiterJoin()) {
                 // All corners are 90-degrees so become beveled if the miter limit is < sqrt(2).
@@ -861,6 +905,33 @@ void AnalyticRRectRenderStep::writeVertices(DrawWriter* writer,
                     joinStyle = 1.f;
                 }
             }
+            // Stroked lines or point needs some upfront cleanup for the vertex shader to work.
+            auto empty = size == 0.f;
+            if (all(empty)) {
+                // A point, so update join style based on the cap geometry. Butt caps should have
+                // been discarded earlier.
+                SkASSERT(params.strokeStyle().cap() != SkPaint::kButt_Cap);
+                joinStyle = params.strokeStyle().cap() == SkPaint::kRound_Cap ? -1.f : 1.f;
+            } else if (any(empty) && joinStyle >= 0.f) {
+                // A line with miter or bevel joins, but "corners" are now 180 degree turns so the
+                // miter limit is always exceeded and the bevel matches that of a butt cap. The
+                // vertex shader can't handle that so manually inset the uploaded geometry so a
+                // stroke-radius miter join produces the expected line.
+                float strokeDelta = std::min(0.f, std::max(innerGap.x(), innerGap.y()));
+                auto adjust = strokeDelta + if_then_else(empty, skvx::float2(0.f),
+                                                                skvx::float2(strokeRadius));
+                bounds.inset(adjust);
+                strokeRadius += strokeDelta;
+                joinStyle = 1.f;
+
+                // Since we are distorting the uploaded geometry, the normal catch-all complex
+                // interior check doesn't work.
+                if (opposite_insets_intersect(bounds, strokeRadius, aaRadius)) {
+                    aaRadius = kComplexAAInsets;
+                    SkASSERT(centerWeight == kSolidInterior);
+                }
+            } // Else a non-empty or line+round join, which do not need any style cleanup
+
             // Write a negative value outside [-1, 0] to signal a stroked shape, then the style
             // params, followed by corner radii and bounds.
             vw << -2.f << 0.f << strokeRadius << joinStyle << xRadii << bounds.ltrb();
@@ -872,6 +943,9 @@ void AnalyticRRectRenderStep::writeVertices(DrawWriter* writer,
             vw << (-2.f - xRadii) << yRadii << bounds.ltrb();
         }
     } else {
+        // Empty fills should not have been recorded at all.
+        SkASSERT(!bounds.isEmptyNegativeOrNaN());
+
         if (params.geometry().isEdgeAAQuad()) {
             // NOTE: If quad.isRect() && quad.edgeFlags() == kAll, the written data is identical to
             // Shape.isRect() case below.

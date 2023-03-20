@@ -404,6 +404,10 @@ private:
                                                   BuilderOp::cmpne_n_ints,
                                                   BuilderOp::cmpne_n_ints,
                                                   BuilderOp::cmpne_n_ints};
+    static constexpr auto kModOps = TypedOps{BuilderOp::mod_n_floats,
+                                             BuilderOp::unsupported,
+                                             BuilderOp::unsupported,
+                                             BuilderOp::unsupported};
     static constexpr auto kMinOps = TypedOps{BuilderOp::min_n_floats,
                                              BuilderOp::min_n_ints,
                                              BuilderOp::min_n_uints,
@@ -2824,6 +2828,10 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic,
             SkASSERT(arg0.type().componentType().matches(arg1.type().componentType()));
             return this->pushIntrinsic(kMaxOps, arg0, arg1);
 
+        case IntrinsicKind::k_mod_IntrinsicKind:
+            SkASSERT(arg0.type().componentType().matches(arg1.type().componentType()));
+            return this->pushIntrinsic(kModOps, arg0, arg1);
+
         case IntrinsicKind::k_pow_IntrinsicKind:
             SkASSERT(arg0.type().matches(arg1.type()));
             return this->pushIntrinsic(BuilderOp::pow_n_floats, arg0, arg1);
@@ -2957,6 +2965,42 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic,
                 return true;
             }
             return unsupported();
+
+        case IntrinsicKind::k_refract_IntrinsicKind: {
+            // We always calculate refraction using vec4s, so we pad out unused N/I slots with zero.
+            int padding = 4 - arg0.type().slotCount();
+            if (!this->pushExpression(arg0)) {
+                return unsupported();
+            }
+            fBuilder.push_zeros(padding);
+
+            if (!this->pushExpression(arg1)) {
+                return unsupported();
+            }
+            fBuilder.push_zeros(padding);
+
+            // eta is always a scalar and doesn't need padding.
+            if (!this->pushExpression(arg2)) {
+                return unsupported();
+            }
+            fBuilder.refract_floats();
+
+            // The result vector was returned as a vec4, so discard the extra columns.
+            fBuilder.discard_stack(padding);
+            return true;
+        }
+        case IntrinsicKind::k_smoothstep_IntrinsicKind:
+            SkASSERT(arg0.type().componentType().isFloat());
+            SkASSERT(arg1.type().matches(arg0.type()));
+            SkASSERT(arg2.type().componentType().isFloat());
+
+            if (!this->pushVectorizedExpression(arg0, arg2.type()) ||
+                !this->pushVectorizedExpression(arg1, arg2.type()) ||
+                !this->pushExpression(arg2)) {
+                return unsupported();
+            }
+            fBuilder.ternary_op(BuilderOp::smoothstep_n_floats, arg2.type().slotCount());
+            return true;
 
         default:
             break;

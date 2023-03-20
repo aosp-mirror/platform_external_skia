@@ -269,8 +269,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("gltestthreading", "gm", ALL, "lcdoverlap")
 			skip("gltestthreading", "gm", ALL, "textbloblooper")
 			// All of these GMs are flaky, too:
-			skip("gltestthreading", "gm", ALL, "savelayer_with_backdrop")
-			skip("gltestthreading", "gm", ALL, "persp_shaders_bw")
 			skip("gltestthreading", "gm", ALL, "dftext_blob_persp")
 			skip("gltestthreading", "gm", ALL, "dftext")
 			skip("gltestthreading", "gm", ALL, "gpu_blur_utils")
@@ -284,16 +282,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip("gltestthreading", "gm", ALL, "draw_image_set")
 
 			// Fail on Iris Xe.
-			skip("gltestthreading", "gm", ALL, "anisotropic_image_scale_mip")
-			skip("gltestthreading", "gm", ALL, "bleed_downscale")
 			skip("gltestthreading", "gm", ALL, "degeneratesegments")
-			skip("gltestthreading", "gm", ALL, "mipmap_srgb")
-			skip("gltestthreading", "gm", ALL, "mipmap")
 			skip("gltestthreading", "gm", ALL, "ovals")
 			skip("gltestthreading", "gm", ALL, "persp_images")
-			skip("gltestthreading", "gm", ALL, "persp_shaders_aa")
 			skip("gltestthreading", "gm", ALL, "rtif_distort")
-			skip("gltestthreading", "gm", ALL, "skbug_8664")
 			skip("gltestthreading", "gm", ALL, "teenystrokes")
 			skip("gltestthreading", "gm", ALL, "texel_subset_linear_mipmap_nearest_down")
 			skip("gltestthreading", "gm", ALL, "yuv420_odd_dim_repeat")
@@ -333,24 +325,24 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			if b.extraConfig("Metal") {
 				configs = []string{"grmtl"}
 			}
-                        if b.extraConfig("Dawn") {
+			if b.extraConfig("Dawn") {
 				configs = []string{"grdawn"}
-                                // Could not readback from surface
-                                // https://skbug/14105
+				// Could not readback from surface
+				// https://skbug/14105
 				skip(ALL, "gm", ALL, "tall_stretched_bitmaps")
 				// Shader doesn't compile
-                                // https://skbug/14105
+				// https://skbug/14105
 				skip(ALL, "gm", ALL, "runtime_intrinsics_matrix")
-                                // Crashes
-                                // https://skbug/14105
-                                skip(ALL, "test", ALL, "BackendTextureTest")
-                                skip(ALL, "test", ALL, "GraphitePromiseImageMultipleImgUses")
-                                skip(ALL, "test", ALL, "GraphitePromiseImageRecorderLoss")
+				// Crashes
+				// https://skbug/14105
+				skip(ALL, "test", ALL, "BackendTextureTest")
+				skip(ALL, "test", ALL, "GraphitePromiseImageMultipleImgUses")
+				skip(ALL, "test", ALL, "GraphitePromiseImageRecorderLoss")
 				skip(ALL, "test", ALL, "MutableImagesTest")
 				skip(ALL, "test", ALL, "PaintParamsKeyTest")
 				skip(ALL, "test", ALL, "VolatileGraphitePromiseImageTest")
-                                // Fails
-                                // https://skbug/14105
+				// Fails
+				// https://skbug/14105
 				skip(ALL, "test", ALL, "ImageAsyncReadPixelsGraphite")
 				skip(ALL, "test", ALL, "ImageProviderTest_Graphite_Default")
 				skip(ALL, "test", ALL, "ImageProviderTest_Graphite_Testing")
@@ -382,7 +374,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 					skip(ALL, "gm", ALL, "wacky_yuv_formats_imggen")
 					skip(ALL, "gm", ALL, "xfermodes")
 				}
-                        }
+			}
 		}
 
 		// ANGLE bot *only* runs the angle configs
@@ -1135,6 +1127,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	if b.matchGpu("Mali400") {
 		skip(ALL, "tests", ALL, "SkSLCross")
+		skip(ALL, "tests", ALL, "SkSLMatrixSwizzleStore_GPU")
 	}
 
 	if (b.matchOs("Mac") || b.matchOs("iOS")) && !b.extraConfig("Metal") {

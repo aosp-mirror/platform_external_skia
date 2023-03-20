@@ -245,6 +245,14 @@ private:
                                           ProgramOp stage, float* dst,
                                           const float* src0, const float* src1, int numSlots) const;
 
+    // Appends a math operation having three inputs (dst, src0, src1) and one output (dst) to the
+    // pipeline. The three inputs must be _immediately_ adjacent in memory. `baseStage` must refer
+    // to an unbounded "apply_to_n_slots" stage. A TernaryOpCtx will be used to pass pointers to the
+    // destination and sources; the delta between the each pointer implicitly gives the slot count.
+    void appendAdjacentNWayTernaryOp(SkTArray<Stage>* pipeline, SkArenaAlloc* alloc,
+                                     ProgramOp stage, float* dst,
+                                     const float* src0, const float* src1, int numSlots) const;
+
     // Appends a stack_rewind op on platforms where it is needed (when SK_HAS_MUSTTAIL is not set).
     void appendStackRewind(SkTArray<Stage>* pipeline) const;
 
@@ -375,11 +383,14 @@ public:
 
     void push_zeros(int count) {
         // Translates into zero_slot_unmasked in Raster Pipeline.
-        if (!fInstructions.empty() && fInstructions.back().fOp == BuilderOp::push_zeros) {
-            // Coalesce adjacent push_zero ops into a single op.
-            fInstructions.back().fImmA += count;
-        } else {
-            fInstructions.push_back({BuilderOp::push_zeros, {}, count});
+        SkASSERT(count >= 0);
+        if (count > 0) {
+            if (!fInstructions.empty() && fInstructions.back().fOp == BuilderOp::push_zeros) {
+                // Coalesce adjacent push_zero ops into a single op.
+                fInstructions.back().fImmA += count;
+            } else {
+                fInstructions.push_back({BuilderOp::push_zeros, {}, count});
+            }
         }
     }
 
@@ -451,6 +462,10 @@ public:
     // Computes a dot product on the stack. The slots consumed (`slots`) must be between 1 and 4.
     // Two n-slot input vectors are consumed, and a scalar result is pushed onto the stack.
     void dot_floats(int32_t slots);
+
+    // Computes refract(N, I, eta) on the stack. N and I are assumed to be 4-slot vectors, and can
+    // be padded with zeros for smaller inputs. Eta is a scalar. The result is a 4-slot vector.
+    void refract_floats();
 
     // Shrinks the temp stack, discarding values on top.
     void discard_stack(int32_t count = 1);

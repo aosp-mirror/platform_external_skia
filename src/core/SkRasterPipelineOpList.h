@@ -130,7 +130,7 @@
     M(sin_float)        M(cos_float)           M(tan_float)                                   \
     M(asin_float)       M(acos_float)          M(atan_float)          M(atan2_n_floats)       \
     M(sqrt_float)       M(pow_n_floats)        M(exp_float)                                   \
-    M(log_float)        M(log2_float)                                                         \
+    M(log_float)        M(log2_float)          M(refract_4_floats)                            \
     M(copy_constant)    M(copy_2_constants)    M(copy_3_constants)    M(copy_4_constants)     \
     M(copy_slot_masked) M(copy_2_slots_masked) M(copy_3_slots_masked) M(copy_4_slots_masked)  \
     M(copy_from_indirect_unmasked) M(copy_from_indirect_uniform_unmasked)                     \
@@ -157,9 +157,10 @@
     M(min_n_floats)   M(min_float)   M(min_2_floats)   M(min_3_floats)   M(min_4_floats)      \
     M(min_n_ints)     M(min_int)     M(min_2_ints)     M(min_3_ints)     M(min_4_ints)        \
     M(min_n_uints)    M(min_uint)    M(min_2_uints)    M(min_3_uints)    M(min_4_uints)       \
+    M(mod_n_floats)   M(mod_float)   M(mod_2_floats)   M(mod_3_floats)   M(mod_4_floats)      \
     M(mix_n_floats)   M(mix_float)   M(mix_2_floats)   M(mix_3_floats)   M(mix_4_floats)      \
     M(mix_n_ints)     M(mix_int)     M(mix_2_ints)     M(mix_3_ints)     M(mix_4_ints)        \
-                                     M(dot_2_floats)   M(dot_3_floats)   M(dot_4_floats)      \
+    M(smoothstep_n_floats)           M(dot_2_floats)   M(dot_3_floats)   M(dot_4_floats)      \
     M(cmplt_n_floats) M(cmplt_float) M(cmplt_2_floats) M(cmplt_3_floats) M(cmplt_4_floats)    \
     M(cmplt_n_ints)   M(cmplt_int)   M(cmplt_2_ints)   M(cmplt_3_ints)   M(cmplt_4_ints)      \
     M(cmplt_n_uints)  M(cmplt_uint)  M(cmplt_2_uints)  M(cmplt_3_uints)  M(cmplt_4_uints)     \

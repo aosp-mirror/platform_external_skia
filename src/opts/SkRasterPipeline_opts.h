@@ -1561,7 +1561,6 @@ SI F atan_(F x) {
     return x;
 }
 
-
 // Handbook of Mathematical Functions, by Milton Abramowitz and Irene Stegun:
 // https://books.google.com/books/content?id=ZboM5tOFWtsC&pg=PA81&img=1&zoom=3&hl=en&bul=1&sig=ACfU3U2M75tG_iGVOS92eQspr14LTq02Nw&ci=0%2C15%2C999%2C1279&edge=0
 // http://screen/8YGJxUGFQ49bVX6
@@ -3816,6 +3815,10 @@ SI void pow_fn(F* dst, F* src) {
     *dst = approx_powf(*dst, *src);
 }
 
+SI void mod_fn(F* dst, F* src) {
+    *dst = *dst - *src * floor_(*dst / *src);
+}
+
 #define DECLARE_N_WAY_BINARY_FLOAT(name)                                  \
     STAGE_TAIL(name##_n_floats, SkRasterPipeline_BinaryOpCtx* ctx) {      \
         apply_adjacent_binary<F, &name##_fn>((F*)ctx->dst, (F*)ctx->src); \
@@ -3861,6 +3864,7 @@ DECLARE_BINARY_FLOAT(div)    DECLARE_BINARY_INT(div)    DECLARE_BINARY_UINT(div)
                              DECLARE_BINARY_INT(bitwise_and)
                              DECLARE_BINARY_INT(bitwise_or)
                              DECLARE_BINARY_INT(bitwise_xor)
+DECLARE_BINARY_FLOAT(mod)
 DECLARE_BINARY_FLOAT(min)    DECLARE_BINARY_INT(min)    DECLARE_BINARY_UINT(min)
 DECLARE_BINARY_FLOAT(max)    DECLARE_BINARY_INT(max)    DECLARE_BINARY_UINT(max)
 DECLARE_BINARY_FLOAT(cmplt)  DECLARE_BINARY_INT(cmplt)  DECLARE_BINARY_UINT(cmplt)
@@ -3900,6 +3904,29 @@ STAGE_TAIL(dot_4_floats, F* dst) {
                  dst[3] * dst[7])));
 }
 
+// Refract always operates on 4-wide incident and normal vectors; for narrower inputs, the code
+// generator fills in the input columns with zero, and discards the extra output columns.
+STAGE_TAIL(refract_4_floats, F* dst) {
+    // Algorithm adapted from https://registry.khronos.org/OpenGL-Refpages/gl4/html/refract.xhtml
+    F *incident = dst + 0;
+    F *normal = dst + 4;
+    F eta = dst[8];
+
+    F dotNI = mad(normal[0],  incident[0],
+              mad(normal[1],  incident[1],
+              mad(normal[2],  incident[2],
+                  normal[3] * incident[3])));
+
+    F k = 1.0 - eta * eta * (1.0 - dotNI * dotNI);
+    F sqrt_k = sqrt_(k);
+
+    for (int idx = 0; idx < 4; ++idx) {
+        dst[idx] = if_then_else(k >= 0,
+                                eta * incident[idx] - (eta * dotNI + sqrt_k) * normal[idx],
+                                0.0);
+    }
+}
+
 // Ternary operations work like binary ops (see immediately above) but take two source inputs.
 template <typename T, void (*ApplyFn)(T*, T*, T*)>
 SI void apply_adjacent_ternary(T* dst, T* src0, T* src1) {
@@ -3922,14 +3949,22 @@ SI void mix_fn(I32* a, I32* x, I32* y) {
     *a = if_then_else(*a, *y, *x);
 }
 
+SI void smoothstep_fn(F* edge0, F* edge1, F* x) {
+    F t = clamp_01_((*x - *edge0) / (*edge1 - *edge0));
+    *edge0 = t * t * (3.0 - 2.0 * t);
+}
+
+#define DECLARE_N_WAY_TERNARY_FLOAT(name)                                                  \
+    STAGE_TAIL(name##_n_floats, SkRasterPipeline_TernaryOpCtx* ctx) {                      \
+        apply_adjacent_ternary<F, &name##_fn>((F*)ctx->dst, (F*)ctx->src0, (F*)ctx->src1); \
+    }
+
 #define DECLARE_TERNARY_FLOAT(name)                                                           \
     STAGE_TAIL(name##_float, F* p) { apply_adjacent_ternary<F, &name##_fn>(p, p+1, p+2); }    \
     STAGE_TAIL(name##_2_floats, F* p) { apply_adjacent_ternary<F, &name##_fn>(p, p+2, p+4); } \
     STAGE_TAIL(name##_3_floats, F* p) { apply_adjacent_ternary<F, &name##_fn>(p, p+3, p+6); } \
     STAGE_TAIL(name##_4_floats, F* p) { apply_adjacent_ternary<F, &name##_fn>(p, p+4, p+8); } \
-    STAGE_TAIL(name##_n_floats, SkRasterPipeline_TernaryOpCtx* ctx) {                         \
-        apply_adjacent_ternary<F, &name##_fn>((F*)ctx->dst, (F*)ctx->src0, (F*)ctx->src1);    \
-    }
+    DECLARE_N_WAY_TERNARY_FLOAT(name)
 
 #define DECLARE_TERNARY_INT(name)                                                                  \
     STAGE_TAIL(name##_int, I32* p) { apply_adjacent_ternary<I32, &name##_fn>(p, p+1, p+2); }       \
@@ -3940,9 +3975,11 @@ SI void mix_fn(I32* a, I32* x, I32* y) {
         apply_adjacent_ternary<I32, &name##_fn>((I32*)ctx->dst, (I32*)ctx->src0, (I32*)ctx->src1); \
     }
 
+DECLARE_N_WAY_TERNARY_FLOAT(smoothstep)
 DECLARE_TERNARY_FLOAT(mix)
 DECLARE_TERNARY_INT(mix)
 
+#undef DECLARE_N_WAY_TERNARY_FLOAT
 #undef DECLARE_TERNARY_FLOAT
 #undef DECLARE_TERNARY_INT
 
