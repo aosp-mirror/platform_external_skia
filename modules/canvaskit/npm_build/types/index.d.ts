@@ -461,6 +461,7 @@ export interface CanvasKit {
     // Factories, i.e. things made with CanvasKit.Foo.MakeTurboEncabulator()
     readonly ParagraphBuilder: ParagraphBuilderFactory;
     readonly ColorFilter: ColorFilterFactory;
+    readonly FontCollection: FontCollectionFactory;
     readonly FontMgr: FontMgrFactory;
     readonly ImageFilter: ImageFilterFactory;
     readonly MaskFilter: MaskFilterFactory;
@@ -2130,6 +2131,12 @@ export interface Paint extends EmbindObject<Paint> {
     setColorInt(color: ColorInt, colorSpace?: ColorSpace): void;
 
     /**
+     * Requests, but does not require, to distribute color error.
+     * @param shouldDither
+     */
+    setDither(shouldDither: boolean): void;
+
+    /**
      * Sets the current image filter, replacing the existing one if there was one.
      * @param filter
      */
@@ -3042,6 +3049,23 @@ export interface TypefaceFontProvider extends EmbindObject<TypefaceFontProvider>
     registerFont(bytes: ArrayBuffer | Uint8Array, family: string): void;
 }
 
+/**
+ * See FontCollection.h in SkParagraph for more details
+ */
+export interface FontCollection extends EmbindObject<FontCollection> {
+    /**
+     * Enable fallback to dynamically discovered fonts for characters that are not handled
+     * by the text style's fonts.
+     */
+    enableFontFallback(): void;
+
+    /**
+     * Set the default provider used to locate fonts.
+     */
+    setDefaultFontManager(fontManager: TypefaceFontProvider | null): void;
+}
+
+
 export interface URange {
     start: number;
     end: number;
@@ -3305,6 +3329,13 @@ export interface ParagraphBuilderFactory {
      * @param fontSrc
      */
     MakeFromFontProvider(style: ParagraphStyle, fontSrc: TypefaceFontProvider): ParagraphBuilder;
+
+    /**
+     * Creates a ParagraphBuilder using the given font collection.
+     * @param style
+     * @param fontCollection
+     */
+    MakeFromFontCollection(style: ParagraphStyle, fontCollection: FontCollection): ParagraphBuilder;
 
     /**
      * Return a shaped array of lines
@@ -3955,6 +3986,13 @@ export interface TypefaceFontProviderFactory {
      * Return an empty TypefaceFontProvider
      */
     Make(): TypefaceFontProvider;
+}
+
+export interface FontCollectionFactory {
+    /**
+     * Return an empty FontCollection
+     */
+    Make(): FontCollection;
 }
 
 /**

@@ -436,6 +436,7 @@ function paintTests(CK: CanvasKit, colorFilter?: ColorFilter, imageFilter?: Imag
     paint.setColorFilter(colorFilter);
     paint.setColorInt(CK.ColorAsInt(20, 30, 40));
     paint.setColorInt(CK.ColorAsInt(20, 30, 40), CK.ColorSpace.SRGB);
+    paint.setDither(true);
     paint.setImageFilter(imageFilter);
     paint.setMaskFilter(maskFilter);
     paint.setPathEffect(pathEffect);
@@ -617,6 +618,14 @@ function paragraphBuilderTests(CK: CanvasKit, fontMgr?: FontMgr, paint?: Paint) 
     builder.setGraphemeBreaksUtf16(new Uint32Array(10));
     builder.setLineBreaksUtf16(new Uint32Array(10));
     const paragraph3 = builder.build(); // $ExpectType Paragraph
+
+    const fontCollection = CK.FontCollection.Make(); // $ExpectType FontCollection
+    fontCollection.enableFontFallback();
+    fontCollection.setDefaultFontManager(fontSrc);
+    const fcBuilder = CK.ParagraphBuilder.MakeFromFontCollection(// $ExpectType ParagraphBuilder
+        paraStyle, fontCollection);
+    fcBuilder.addText('12345');
+    const fcParagraph = fcBuilder.build();
 }
 
 function pathEffectTests(CK: CanvasKit, path?: Path) {

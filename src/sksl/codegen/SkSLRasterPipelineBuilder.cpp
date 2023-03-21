@@ -57,7 +57,8 @@ namespace RP {
     case BuilderOp::cast_to_int_from_float:  \
     case BuilderOp::cast_to_uint_from_float: \
     case BuilderOp::ceil_float:              \
-    case BuilderOp::floor_float              \
+    case BuilderOp::floor_float:             \
+    case BuilderOp::invsqrt_float
 
 #define ALL_N_WAY_BINARY_OP_CASES   \
          BuilderOp::atan2_n_floats: \
@@ -155,6 +156,15 @@ void Builder::dot_floats(int32_t slots) {
 
 void Builder::refract_floats() {
     fInstructions.push_back({BuilderOp::refract_4_floats, {}});
+}
+
+void Builder::inverse_matrix(int32_t n) {
+    switch (n) {
+        case 2:  fInstructions.push_back({BuilderOp::inverse_mat2, {}, 4});  break;
+        case 3:  fInstructions.push_back({BuilderOp::inverse_mat3, {}, 9});  break;
+        case 4:  fInstructions.push_back({BuilderOp::inverse_mat4, {}, 16}); break;
+        default: SkUNREACHABLE;
+    }
 }
 
 void Builder::discard_stack(int32_t count) {
@@ -1447,6 +1457,13 @@ void Program::makeStages(SkTArray<Stage>* pipeline,
                 pipeline->push_back({ProgramOp::refract_4_floats, dst});
                 break;
             }
+            case BuilderOp::inverse_mat2:
+            case BuilderOp::inverse_mat3:
+            case BuilderOp::inverse_mat4: {
+                float* dst = tempStackPtr - (inst.fImmA * N);
+                pipeline->push_back({(ProgramOp)inst.fOp, dst});
+                break;
+            }
             case BuilderOp::dot_2_floats:
             case BuilderOp::dot_3_floats:
             case BuilderOp::dot_4_floats: {
@@ -2164,6 +2181,7 @@ void Program::dump(SkWStream* out) const {
             case POp::log_float:
             case POp::log2_float:
             case POp::floor_float:
+            case POp::invsqrt_float:
             case POp::sin_float:
             case POp::sqrt_float:
             case POp::tan_float:
@@ -2178,6 +2196,7 @@ void Program::dump(SkWStream* out) const {
             case POp::abs_2_floats:              case POp::abs_2_ints:
             case POp::ceil_2_floats:
             case POp::floor_2_floats:
+            case POp::invsqrt_2_floats:
                 opArg1 = PtrCtx(stage.ctx, 2);
                 break;
 
@@ -2188,6 +2207,7 @@ void Program::dump(SkWStream* out) const {
             case POp::abs_3_floats:              case POp::abs_3_ints:
             case POp::ceil_3_floats:
             case POp::floor_3_floats:
+            case POp::invsqrt_3_floats:
                 opArg1 = PtrCtx(stage.ctx, 3);
                 break;
 
@@ -2203,8 +2223,19 @@ void Program::dump(SkWStream* out) const {
             case POp::abs_4_floats:              case POp::abs_4_ints:
             case POp::ceil_4_floats:
             case POp::floor_4_floats:
+            case POp::invsqrt_4_floats:
+            case POp::inverse_mat2:
                 opArg1 = PtrCtx(stage.ctx, 4);
                 break;
+
+            case POp::inverse_mat3:
+                opArg1 = PtrCtx(stage.ctx, 9);
+                break;
+
+            case POp::inverse_mat4:
+                opArg1 = PtrCtx(stage.ctx, 16);
+                break;
+
 
             case POp::copy_constant:
                 std::tie(opArg1, opArg2) = CopyConstantCtx(stage.ctx, 1);
@@ -2656,6 +2687,19 @@ void Program::dump(SkWStream* out) const {
             case POp::floor_3_floats:
             case POp::floor_4_floats:
                 opText = opArg1 + " = floor(" + opArg1 + ")";
+                break;
+
+            case POp::invsqrt_float:
+            case POp::invsqrt_2_floats:
+            case POp::invsqrt_3_floats:
+            case POp::invsqrt_4_floats:
+                opText = opArg1 + " = inversesqrt(" + opArg1 + ")";
+                break;
+
+            case POp::inverse_mat2:
+            case POp::inverse_mat3:
+            case POp::inverse_mat4:
+                opText = opArg1 + " = inverse(" + opArg1 + ")";
                 break;
 
             case POp::add_float:    case POp::add_int:

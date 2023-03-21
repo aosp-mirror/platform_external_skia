@@ -22,7 +22,7 @@ def git_repos_from_deps():
     new_git_repository(
         name = "dawn",
         build_file = "@//bazel/external/dawn:BUILD.bazel",
-        commit = "9a56b25a310cb0c40004669136c0b0c6f3edd82f",
+        commit = "73c5a01b1bd6f91614b331721281665bca645d16",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -146,7 +146,7 @@ def git_repos_from_deps():
     new_git_repository(
         name = "spirv_cross",
         build_file = "@//bazel/external/spirv_cross:BUILD.bazel",
-        commit = "d26c233e1c2629fec1ae1b6fdf538958e5d52bff",
+        commit = "763dbe14abc116744cfa385bfe6e83bc89eefd64",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross",
     )
 
@@ -158,7 +158,7 @@ def git_repos_from_deps():
 
     git_repository(
         name = "spirv_tools",
-        commit = "ae435df4a6a9e36a9aaa928d1e8cbfbfdd2d9053",
+        commit = "4dc3edeb94d96fe2760f28f6a0caff7563e5cc0e",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git",
     )
 
