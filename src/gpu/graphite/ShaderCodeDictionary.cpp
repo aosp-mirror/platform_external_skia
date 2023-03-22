@@ -17,9 +17,10 @@
 #include "src/core/SkColorSpaceXformSteps.h"
 #include "src/core/SkRuntimeEffectPriv.h"
 #include "src/core/SkSLTypeShared.h"
+#include "src/gpu/Swizzle.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/ContextUtils.h"
-#include "src/gpu/graphite/ReadWriteSwizzle.h"
+#include "src/gpu/graphite/ReadSwizzle.h"
 #include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/sksl/codegen/SkSLPipelineStageCodeGenerator.h"
@@ -113,7 +114,8 @@ std::string ShaderInfo::toSkSL(const ResourceBindingRequirements& bindingReqs,
                                const RenderStep* step,
                                const bool useStorageBuffers,
                                const bool defineLocalCoordsVarying,
-                               int* numTexturesAndSamplersUsed) const {
+                               int* numTexturesAndSamplersUsed,
+                               Swizzle writeSwizzle) const {
     std::string preamble = EmitVaryings(step,
                                         /*direction=*/"in",
                                         /*emitShadingSsboIndexVarying=*/useStorageBuffers,
@@ -177,6 +179,11 @@ std::string ShaderInfo::toSkSL(const ResourceBindingRequirements& bindingReqs,
         emit_preamble_for_entry(*this, &entryIndex, &preamble);
     }
 
+    if (writeSwizzle != Swizzle::RGBA()) {
+        SkSL::String::appendf(&mainBody, "%s = %s.%s;", lastOutputVar.c_str(),
+                                                        lastOutputVar.c_str(),
+                                                        writeSwizzle.asString().c_str());
+    }
     if (step->emitsCoverage()) {
         mainBody += "half4 outputCoverage;";
         mainBody += step->fragmentCoverageSkSL();
@@ -726,6 +733,18 @@ void GenerateCoordClampPreamble(const ShaderInfo& shaderInfo,
                           subsetUni.c_str(),
                           childExpr.c_str());
 }
+
+
+//--------------------------------------------------------------------------------------------------
+static constexpr Uniform kDitherShaderUniforms[] = {
+        { "range", SkSLType::kFloat },
+};
+
+static constexpr TextureAndSampler kDitherTexturesAndSamplers[] = {
+        {"sampler"},
+};
+
+static constexpr char kDitherShaderName[] = "sk_dither_shader";
 
 //--------------------------------------------------------------------------------------------------
 static constexpr Uniform kPerlinNoiseShaderUniforms[] = {
@@ -1437,6 +1456,17 @@ ShaderCodeDictionary::ShaderCodeDictionary() {
             GenerateDefaultExpression,
             GenerateCoordClampPreamble,
             kNumCoordClampShaderChildren,
+            { }      // no data payload
+    };
+    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kDitherShader] = {
+            "DitherShader",
+            SkSpan(kDitherShaderUniforms),
+            (SnippetRequirementFlags::kPriorStageOutput | SnippetRequirementFlags::kLocalCoords),
+            SkSpan(kDitherTexturesAndSamplers),
+            kDitherShaderName,
+            GenerateDefaultExpression,
+            GenerateDefaultPreamble,
+            kNoChildren,
             { }      // no data payload
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kPerlinNoiseShader] = {

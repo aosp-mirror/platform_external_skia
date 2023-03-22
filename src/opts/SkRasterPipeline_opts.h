@@ -1876,7 +1876,12 @@ BLEND_MODE(softlight) {
 // Anything extra we add beyond that is to make the math work with premul inputs.
 
 SI F sat(F r, F g, F b) { return max(r, max(g,b)) - min(r, min(g,b)); }
+
+#if defined(SK_USE_LEGACY_RP_LUMINANCE)
 SI F lum(F r, F g, F b) { return r*0.30f + g*0.59f + b*0.11f; }
+#else
+SI F lum(F r, F g, F b) { return mad(r, 0.30f, mad(g, 0.59f, b*0.11f)); }
+#endif
 
 SI void set_sat(F* r, F* g, F* b, F s) {
     F mn  = min(*r, min(*g,*b)),
@@ -3731,6 +3736,7 @@ STAGE_TAIL(acos_float, F* dst) { *dst = acos_(*dst); }
 STAGE_TAIL(atan_float, F* dst) { *dst = atan_(*dst); }
 STAGE_TAIL(sqrt_float, F* dst) { *dst = sqrt_(*dst); }
 STAGE_TAIL(exp_float, F* dst)  { *dst = approx_exp(*dst); }
+STAGE_TAIL(exp2_float, F* dst) { *dst = approx_pow2(*dst); }
 STAGE_TAIL(log_float, F* dst)  { *dst = approx_log(*dst); }
 STAGE_TAIL(log2_float, F* dst) { *dst = approx_log2(*dst); }
 
