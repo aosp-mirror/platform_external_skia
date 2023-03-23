@@ -26,10 +26,22 @@ skia_filegroup(
     name = "srcs",
     srcs = [
         "SkRPDebugTrace.cpp",
+        "SkSLTraceHook.cpp",
         "SkVMDebugTrace.cpp",
         ":enabled_srcs",
     ],
     visibility = ["//src/sksl:__pkg__"],
+)
+
+skia_filegroup(
+    name = "skopts_hdrs",
+    srcs = [
+        "SkSLTraceHook.h",
+    ],
+    visibility = [
+        "//src:__pkg__",
+        "//src/opts:__pkg__",
+    ],
 )
 
 skia_filegroup(
@@ -39,6 +51,7 @@ skia_filegroup(
         "SkSLDebugInfo.h",
         "SkVMDebugTrace.h",
         ":enabled_hdrs",
+        ":skopts_hdrs",
     ],
     visibility = ["//src/sksl:__pkg__"],
 )
