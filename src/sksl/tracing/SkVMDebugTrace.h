@@ -11,8 +11,8 @@
 #include "include/sksl/SkSLDebugTrace.h"
 
 #include "include/core/SkPoint.h"
-#include "src/core/SkVM.h"
 #include "src/sksl/tracing/SkSLDebugInfo.h"
+#include "src/sksl/tracing/SkSLTraceHook.h"
 
 #include <cstdint>
 #include <memory>
@@ -23,18 +23,6 @@ class SkStream;
 class SkWStream;
 
 namespace SkSL {
-
-struct SkVMTraceInfo {
-    enum class Op {
-        kLine,  /** data: line number, (unused) */
-        kVar,   /** data: slot, value */
-        kEnter, /** data: function index, (unused) */
-        kExit,  /** data: function index, (unused) */
-        kScope, /** data: scope delta, (unused) */
-    };
-    Op op;
-    int32_t data[2];
-};
 
 class SkVMDebugTrace : public DebugTrace {
 public:
@@ -73,7 +61,7 @@ public:
     std::vector<FunctionDebugInfo> fFuncInfo;
 
     /** The SkSL debug trace. */
-    std::vector<SkVMTraceInfo> fTraceInfo;
+    std::vector<TraceInfo> fTraceInfo;
 
     /** The SkSL code, split line-by-line. */
     std::vector<std::string> fSource;
@@ -82,7 +70,7 @@ public:
      * A trace hook which populates fTraceInfo during SkVM program evaluation. This will be created
      * automatically by the SkSLVMCodeGenerator.
      */
-    std::unique_ptr<skvm::TraceHook> fTraceHook;
+    std::unique_ptr<SkSL::TraceHook> fTraceHook;
 };
 
 }  // namespace SkSL
