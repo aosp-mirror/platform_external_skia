@@ -5,22 +5,40 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkFlattenable.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkM44.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
 #include "include/effects/SkImageFilters.h"
-#include "include/private/SkColorData.h"
-#include "include/private/SkTPin.h"
+#include "include/effects/SkRuntimeEffect.h"
+#include "include/private/base/SkTPin.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkValidationUtils.h"
 #include "src/core/SkWriteBuffer.h"
 
-////////////////////////////////////////////////////////////////////////////////
+#include <algorithm>
+#include <memory>
+#include <utility>
+
 #if SK_SUPPORT_GPU
 #include "src/core/SkRuntimeEffectPriv.h"
-#include "src/gpu/GrColorSpaceXform.h"
-#include "src/gpu/effects/GrSkSLFP.h"
-#include "src/gpu/effects/GrTextureEffect.h"
+#include "src/gpu/ganesh/GrColorSpaceXform.h"
+#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/GrSurfaceProxy.h"
+#include "src/gpu/ganesh/GrSurfaceProxyView.h"
+#include "src/gpu/ganesh/effects/GrSkSLFP.h"
+#include "src/gpu/ganesh/effects/GrTextureEffect.h"
 #endif
 
 namespace {
@@ -100,35 +118,35 @@ static std::unique_ptr<GrFragmentProcessor> make_magnifier_fp(
         float yInvZoom,
         float xInvInset,
         float yInvInset) {
-    static auto effect = SkMakeRuntimeEffect(SkRuntimeEffect::MakeForShader, R"(
-        uniform shader src;
-        uniform float4 boundsUniform;
-        uniform float  xInvZoom;
-        uniform float  yInvZoom;
-        uniform float  xInvInset;
-        uniform float  yInvInset;
-        uniform half2  offset;
+    static const SkRuntimeEffect* effect = SkMakeRuntimeEffect(SkRuntimeEffect::MakeForShader,
+        "uniform shader src;"
+        "uniform float4 boundsUniform;"
+        "uniform float  xInvZoom;"
+        "uniform float  yInvZoom;"
+        "uniform float  xInvInset;"
+        "uniform float  yInvInset;"
+        "uniform half2  offset;"
 
-        half4 main(float2 coord) {
-            float2 zoom_coord = offset + coord * float2(xInvZoom, yInvZoom);
-            float2 delta = (coord - boundsUniform.xy) * boundsUniform.zw;
-            delta = min(delta, float2(1.0) - delta);
-            delta *= float2(xInvInset, yInvInset);
+        "half4 main(float2 coord) {"
+            "float2 zoom_coord = offset + coord * float2(xInvZoom, yInvZoom);"
+            "float2 delta = (coord - boundsUniform.xy) * boundsUniform.zw;"
+            "delta = min(delta, float2(1.0) - delta);"
+            "delta *= float2(xInvInset, yInvInset);"
 
-            float weight = 0.0;
-            if (delta.s < 2.0 && delta.t < 2.0) {
-                delta = float2(2.0) - delta;
-                float dist = length(delta);
-                dist = max(2.0 - dist, 0.0);
-                weight = min(dist * dist, 1.0);
-            } else {
-                float2 delta_squared = delta * delta;
-                weight = min(min(delta_squared.x, delta_squared.y), 1.0);
-            }
+            "float weight = 0.0;"
+            "if (delta.s < 2.0 && delta.t < 2.0) {"
+                "delta = float2(2.0) - delta;"
+                "float dist = length(delta);"
+                "dist = max(2.0 - dist, 0.0);"
+                "weight = min(dist * dist, 1.0);"
+            "} else {"
+                "float2 delta_squared = delta * delta;"
+                "weight = min(min(delta_squared.x, delta_squared.y), 1.0);"
+            "}"
 
-            return src.eval(mix(coord, zoom_coord, weight));
-        }
-    )");
+            "return src.eval(mix(coord, zoom_coord, weight));"
+        "}"
+    );
 
     SkV4 boundsUniform = {static_cast<float>(bounds.x()),
                           static_cast<float>(bounds.y()),

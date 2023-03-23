@@ -5,14 +5,25 @@
  * found in the LICENSE file.
  */
 
+#include "include/codec/SkEncodedOrigin.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
 #include "include/core/SkData.h"
-#include "include/core/SkImageGenerator.h"
+#include "include/core/SkDocument.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
+#include "include/core/SkTypes.h"
 #include "include/docs/SkPDFDocument.h"
-
+#include "include/private/SkEncodedInfo.h"
+#include "src/pdf/SkJpegInfo.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
+
+#include <array>
+#include <cstdint>
+#include <cstring>
 
 static bool is_subset_of(SkData* smaller, SkData* larger) {
     SkASSERT(smaller && larger);
@@ -81,8 +92,6 @@ DEF_TEST(SkPDF_JpegEmbedTest, r) {
 
 #ifdef SK_SUPPORT_PDF
 
-#include "src/pdf/SkJpegInfo.h"
-
 struct SkJFIFInfo {
     SkISize fSize;
     enum Type {
@@ -118,7 +127,7 @@ DEF_TEST(SkPDF_JpegIdentification, r) {
                   {"images/grayscale.jpg", true, SkJFIFInfo::kGrayscale},
                   {"images/mandrill_512_q075.jpg", true, SkJFIFInfo::kYCbCr},
                   {"images/randPixels.jpg", true, SkJFIFInfo::kYCbCr}};
-    for (size_t i = 0; i < SK_ARRAY_COUNT(kTests); ++i) {
+    for (size_t i = 0; i < std::size(kTests); ++i) {
         sk_sp<SkData> data(load_resource(r, "JpegIdentification", kTests[i].path));
         if (!data) {
             continue;

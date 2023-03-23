@@ -9,18 +9,18 @@
 #define SkCanvasPriv_DEFINED
 
 #include "include/core/SkCanvas.h"
-#include "include/private/SkNoncopyable.h"
+#include "include/private/base/SkNoncopyable.h"
 
 class SkReadBuffer;
 class SkWriteBuffer;
 
 #if GR_TEST_UTILS
-namespace skgpu {
-    class SurfaceFillContext;
 #if SK_GPU_V1
-    namespace v1 { class SurfaceDrawContext; }
-#endif // SK_GPU_V1
+namespace skgpu::v1 {
+    class SurfaceDrawContext;
+    class SurfaceFillContext;
 }
+#endif // SK_GPU_V1
 #endif // GR_TEST_UTILS
 
 // This declaration must match the one in SkDeferredDisplayList.h
@@ -29,6 +29,12 @@ class GrRenderTargetProxy;
 #else
 using GrRenderTargetProxy = SkRefCnt;
 #endif // SK_SUPPORT_GPU
+
+#if GRAPHITE_TEST_UTILS
+namespace skgpu::graphite {
+    class TextureProxy;
+}
+#endif
 
 class SkAutoCanvasMatrixPaint : SkNoncopyable {
 public:
@@ -63,13 +69,21 @@ public:
         canvas->internal_private_resetClip();
     }
 
+    static SkBaseDevice* TopDevice(SkCanvas* canvas) {
+        return canvas->topDevice();
+    }
+
 #if GR_TEST_UTILS
 #if SK_GPU_V1
     static skgpu::v1::SurfaceDrawContext* TopDeviceSurfaceDrawContext(SkCanvas*);
+    static skgpu::v1::SurfaceFillContext* TopDeviceSurfaceFillContext(SkCanvas*);
 #endif
-    static skgpu::SurfaceFillContext* TopDeviceSurfaceFillContext(SkCanvas*);
 #endif // GR_TEST_UTILS
     static GrRenderTargetProxy* TopDeviceTargetProxy(SkCanvas*);
+
+#if GRAPHITE_TEST_UTILS
+    static skgpu::graphite::TextureProxy* TopDeviceGraphiteTargetProxy(SkCanvas*);
+#endif
 
     // The experimental_DrawEdgeAAImageSet API accepts separate dstClips and preViewMatrices arrays,
     // where entries refer into them, but no explicit size is provided. Given a set of entries,
@@ -92,11 +106,6 @@ public:
     static void SetBackdropScaleFactor(SkCanvas::SaveLayerRec* rec, SkScalar scale) {
         rec->fExperimentalBackdropScale = scale;
     }
-
-    static void DrawCustomMesh(SkCanvas*,
-                               SkCustomMesh cm,
-                               sk_sp<SkBlender> blender,
-                               const SkPaint& paint);
 };
 
 /**

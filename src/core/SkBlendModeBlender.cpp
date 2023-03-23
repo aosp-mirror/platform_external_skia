@@ -6,13 +6,17 @@
  */
 
 #include "src/core/SkBlendModeBlender.h"
-#include "src/core/SkKeyHelpers.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
 
 #if SK_SUPPORT_GPU
-#include "src/gpu/GrFragmentProcessor.h"
-#include "src/gpu/effects/GrBlendFragmentProcessor.h"
+#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/effects/GrBlendFragmentProcessor.h"
+#endif
+
+#ifdef SK_GRAPHITE_ENABLED
+#include "src/gpu/graphite/KeyHelpers.h"
+#include "src/gpu/graphite/PaintParamsKey.h"
 #endif
 
 sk_sp<SkBlender> SkBlender::Mode(SkBlendMode mode) {
@@ -60,17 +64,24 @@ sk_sp<SkBlender> SkBlender::Mode(SkBlendMode mode) {
 #undef RETURN_SINGLETON_BLENDER
 }
 
-void SkBlenderBase::addToKey(SkShaderCodeDictionary* dict,
-                             SkBackend backend,
-                             SkPaintParamsKeyBuilder* builder,
-                             SkUniformBlock* uniformBlock) const {
+#ifdef SK_GRAPHITE_ENABLED
+void SkBlenderBase::addToKey(const skgpu::graphite::KeyContext& keyContext,
+                             skgpu::graphite::PaintParamsKeyBuilder* builder,
+                             skgpu::graphite::PipelineDataGatherer* gatherer,
+                             bool primitiveColorBlender) const {
+    using namespace skgpu::graphite;
 
-    if (std::optional<SkBlendMode> bm = as_BB(this)->asBlendMode(); bm.has_value()) {
-        BlendModeBlock::AddToKey(dict, backend, builder, uniformBlock, bm.value());
-    } else {
-        BlendModeBlock::AddToKey(dict, backend, builder, uniformBlock, SkBlendMode::kSrcOver);
+    std::optional<SkBlendMode> bm = as_BB(this)->asBlendMode();
+    if (primitiveColorBlender && bm.has_value()) {
+        PrimitiveBlendModeBlock::BeginBlock(keyContext, builder, gatherer, bm.value());
+        builder->endBlock();
+    } else if (!primitiveColorBlender) {
+        BlendModeBlock::BeginBlock(keyContext, builder, gatherer,
+                                   bm.value_or(SkBlendMode::kSrcOver));
+        builder->endBlock();
     }
 }
+#endif
 
 sk_sp<SkFlattenable> SkBlendModeBlender::CreateProc(SkReadBuffer& buffer) {
     SkBlendMode mode = buffer.read32LE(SkBlendMode::kLastMode);

@@ -10,7 +10,7 @@
 
 #include "include/core/SkRect.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkTDArray.h"
+#include "include/private/base/SkTDArray.h"
 #include "tools/sk_app/DisplayParams.h"
 #include "tools/skui/InputState.h"
 #include "tools/skui/Key.h"
@@ -24,7 +24,7 @@ class SkSurface;
 class SkSurfaceProps;
 class SkString;
 
-namespace skgpu {
+namespace skgpu::graphite {
 class Context;
 }
 
@@ -64,6 +64,9 @@ public:
 #endif
 #ifdef SK_DAWN
         kDawn_BackendType,
+#ifdef SK_GRAPHITE_ENABLED
+        kGraphiteDawn_BackendType,
+#endif
 #endif
 #ifdef SK_VULKAN
         kVulkan_BackendType,
@@ -151,7 +154,7 @@ public:
 
     // Returns null if there is not a GPU backend or if the backend is not yet created.
     GrDirectContext* directContext() const;
-    skgpu::Context* graphiteContext() const;
+    skgpu::graphite::Context* graphiteContext() const;
 
 protected:
     Window();

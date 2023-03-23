@@ -9,13 +9,16 @@
 
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTypes.h"
-#include "src/core/SkArenaAlloc.h"
+#include "src/base/SkArenaAlloc.h"
+
 #include <utility>
+
 class SkSurfaceCharacterization;
 
 #if SK_SUPPORT_GPU
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrRenderTask.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrRenderTargetProxy.h"
+#include "src/gpu/ganesh/GrRenderTask.h"
 #endif
 
 SkDeferredDisplayList::SkDeferredDisplayList(const SkSurfaceCharacterization& characterization,

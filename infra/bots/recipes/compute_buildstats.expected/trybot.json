@@ -2,7 +2,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nfrom __future__ import print_function\nimport subprocess\nimport sys\n\nwhich = 'where' if sys.platform == 'win32' else 'which'\ngit = subprocess.check_output([which, 'git']).decode('utf-8')\nprint('git was found at %s' % git)\nif 'cipd_bin_packages' not in git:\n  print('Git must be obtained through CIPD.', file=sys.stderr)\n  sys.exit(1)\n"
     ],
     "env": {
@@ -27,7 +26,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -42,7 +41,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -56,7 +55,6 @@
   {
     "cmd": [
       "vpython",
-      "-u",
       "RECIPE_REPO[depot_tools]/gerrit_client.py",
       "changes",
       "--host",
@@ -99,7 +97,7 @@
   },
   {
     "cmd": [
-      "python",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[depot_tools::bot_update]/resources/bot_update.py",
       "--spec-path",
@@ -119,7 +117,8 @@
       "--patch_ref",
       "https://skia.googlesource.com/skia.git@abc123:refs/changes/89/456789/12",
       "--revision",
-      "skia@abc123"
+      "skia@abc123",
+      "--download_topics"
     ],
     "cwd": "[START_DIR]/cache/work",
     "env": {
@@ -177,7 +176,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -192,7 +191,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -212,7 +211,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "import os\nprint(os.environ.get('SWARMING_BOT_ID', ''))\n"
     ],
     "cwd": "[START_DIR]/build",
@@ -226,7 +224,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "import os\nprint(os.environ.get('SWARMING_TASK_ID', ''))\n"
     ],
     "cwd": "[START_DIR]/build",
@@ -240,7 +237,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "[START_DIR]/cache/work/skia/infra/bots/buildstats/buildstats_wasm.py",
       "[START_DIR]/build/pathkit.wasm",
       "[START_DIR]/[SWARM_OUT_DIR]",
@@ -286,7 +282,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -306,7 +302,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "[START_DIR]/cache/work/skia/infra/bots/buildstats/buildstats_web.py",
       "[START_DIR]/build/pathkit.js",
       "[START_DIR]/[SWARM_OUT_DIR]",
@@ -324,7 +319,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -344,7 +339,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "[START_DIR]/cache/work/skia/infra/bots/buildstats/buildstats_web.py",
       "[START_DIR]/build/pathkit.js.mem",
       "[START_DIR]/[SWARM_OUT_DIR]",
@@ -379,7 +373,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -399,7 +393,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "[START_DIR]/cache/work/skia/infra/bots/buildstats/buildstats_flutter.py",
       "[START_DIR]/build/libflutter_stripped.so",
       "[START_DIR]/[SWARM_OUT_DIR]",
@@ -457,7 +450,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -477,7 +470,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "[START_DIR]/cache/work/skia/infra/bots/buildstats/buildstats_cpp.py",
       "[START_DIR]/build/libskia.so",
       "[START_DIR]/[SWARM_OUT_DIR]",
@@ -513,7 +505,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -533,7 +525,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "[START_DIR]/cache/work/skia/infra/bots/buildstats/make_treemap.py",
       "[START_DIR]/build/skottie_tool",
       "[START_DIR]/[SWARM_OUT_DIR]"
@@ -548,7 +539,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -568,7 +559,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "[START_DIR]/cache/work/skia/infra/bots/buildstats/make_treemap.py",
       "[START_DIR]/build/dm",
       "[START_DIR]/[SWARM_OUT_DIR]"

@@ -8,18 +8,42 @@
 #ifndef SkSurface_Gpu_DEFINED
 #define SkSurface_Gpu_DEFINED
 
-#include "include/private/GrTypesPriv.h"
-#include "src/image/SkSurface_Base.h"
+#include "include/core/SkTypes.h"
 
 #if SK_SUPPORT_GPU
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkScalar.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "src/image/SkSurface_Base.h"
 
-class GrBackendFormat;
-namespace skgpu { class BaseDevice; }
+class GrBackendSemaphore;
+class GrRecordingContext;
+class SkCanvas;
+class SkCapabilities;
+class SkColorSpace;
+class SkDeferredDisplayList;
+class SkImage;
+class SkPaint;
+class SkPixmap;
+class SkSurface;
+class SkSurfaceCharacterization;
+enum GrSurfaceOrigin : int;
+enum class GrSemaphoresSubmitted : bool;
+namespace skgpu { class MutableTextureState; }
+namespace skgpu { namespace v1 { class Device; } }
+struct GrFlushInfo;
+struct SkIPoint;
+struct SkIRect;
+struct SkISize;
 
 class SkSurface_Gpu : public SkSurface_Base {
 public:
-    SkSurface_Gpu(sk_sp<skgpu::BaseDevice>);
+    SkSurface_Gpu(sk_sp<skgpu::v1::Device>);
     ~SkSurface_Gpu() override;
+
+    SkImageInfo imageInfo() const override;
 
     GrRecordingContext* onGetRecordingContext() override;
 
@@ -32,14 +56,14 @@ public:
     sk_sp<SkSurface> onNewSurface(const SkImageInfo&) override;
     sk_sp<SkImage> onNewImageSnapshot(const SkIRect* subset) override;
     void onWritePixels(const SkPixmap&, int x, int y) override;
-    void onAsyncRescaleAndReadPixels(const SkImageInfo& info, const SkIRect& srcRect,
+    void onAsyncRescaleAndReadPixels(const SkImageInfo& info, SkIRect srcRect,
                                      RescaleGamma rescaleGamma, RescaleMode,
                                      ReadPixelsCallback callback,
                                      ReadPixelsContext context) override;
     void onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSpace,
                                            sk_sp<SkColorSpace> dstColorSpace,
-                                           const SkIRect& srcRect,
-                                           const SkISize& dstSize,
+                                           SkIRect srcRect,
+                                           SkISize dstSize,
                                            RescaleGamma rescaleGamma,
                                            RescaleMode,
                                            ReadPixelsCallback callback,
@@ -48,7 +72,7 @@ public:
     void onDiscard() override;
     void onResolveMSAA() override;
     GrSemaphoresSubmitted onFlush(BackendSurfaceAccess access, const GrFlushInfo& info,
-                                  const GrBackendSurfaceMutableState*) override;
+                                  const skgpu::MutableTextureState*) override;
     bool onWait(int numSemaphores, const GrBackendSemaphore* waitSemaphores,
                  bool deleteSemaphoresAfterWait) override;
     bool onCharacterize(SkSurfaceCharacterization*) const override;
@@ -57,10 +81,11 @@ public:
                 const SkPaint* paint) override;
     bool onDraw(sk_sp<const SkDeferredDisplayList>, SkIPoint offset) override;
 
-    skgpu::BaseDevice* getDevice();
+    sk_sp<const SkCapabilities> onCapabilities() override;
+    skgpu::v1::Device* getDevice();
 
 private:
-    sk_sp<skgpu::BaseDevice> fDevice;
+    sk_sp<skgpu::v1::Device> fDevice;
 
     using INHERITED = SkSurface_Base;
 };

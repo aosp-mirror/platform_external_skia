@@ -5,27 +5,57 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkFlattenable.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkRegion.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
 #include "include/effects/SkImageFilters.h"
-#include "include/private/SkTPin.h"
+#include "include/effects/SkRuntimeEffect.h"
+#include "include/private/SkColorData.h"
+#include "include/private/base/SkCPUTypes.h"
+#include "include/private/base/SkTPin.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkReadBuffer.h"
+#include "src/core/SkRuntimeEffectPriv.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkWriteBuffer.h"
 
+#include <cstdint>
+#include <memory>
+#include <utility>
+
 #if SK_SUPPORT_GPU
-#include "include/gpu/GrRecordingContext.h"
-#include "src/core/SkRuntimeEffectPriv.h"
-#include "src/gpu/GrCaps.h"
-#include "src/gpu/GrColorSpaceXform.h"
-#include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrTextureProxy.h"
-#include "src/gpu/effects/GrSkSLFP.h"
-#include "src/gpu/effects/GrTextureEffect.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/gpu/SkBackingFit.h"
+#include "src/gpu/ganesh/GrColorSpaceXform.h"
+#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/GrPaint.h"
+#include "src/gpu/ganesh/GrSurfaceProxy.h"
+#include "src/gpu/ganesh/GrSurfaceProxyView.h"
+#include "src/gpu/ganesh/effects/GrSkSLFP.h"
+#include "src/gpu/ganesh/effects/GrTextureEffect.h"
+
 #if SK_GPU_V1
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
 #endif // SK_GPU_V1
+
+class GrRecordingContext;
+class SkSurfaceProps;
+enum GrSurfaceOrigin : int;
+enum class GrProtected : bool;
+
 #endif // SK_SUPPORT_GPU
 
 namespace {
@@ -63,7 +93,7 @@ private:
     using INHERITED = SkImageFilter_Base;
 };
 
-}; // end namespace
+} // end namespace
 
 sk_sp<SkImageFilter> SkImageFilters::AlphaThreshold(
         const SkRegion& region, SkScalar innerMin, SkScalar outerMax, sk_sp<SkImageFilter> input,
@@ -139,32 +169,35 @@ static std::unique_ptr<GrFragmentProcessor> make_alpha_threshold_fp(
         std::unique_ptr<GrFragmentProcessor> maskFP,
         float innerThreshold,
         float outerThreshold) {
-    static auto effect = SkMakeRuntimeEffect(SkRuntimeEffect::MakeForShader, R"(
-        uniform shader maskFP;
-        uniform half innerThreshold;
-        uniform half outerThreshold;
+    static const SkRuntimeEffect* effect = SkMakeRuntimeEffect(SkRuntimeEffect::MakeForShader,
+        "uniform shader maskFP;"
+        "uniform shader inputFP;"
+        "uniform half innerThreshold;"
+        "uniform half outerThreshold;"
 
-        half4 main(float2 xy, half4 color) {
-            half4 mask_color = maskFP.eval(xy);
-            if (mask_color.a < 0.5) {
-                if (color.a > outerThreshold) {
-                    half scale = outerThreshold / color.a;
-                    color.rgb *= scale;
-                    color.a = outerThreshold;
-                }
-            } else if (color.a < innerThreshold) {
-                half scale = innerThreshold / max(0.001, color.a);
-                color.rgb *= scale;
-                color.a = innerThreshold;
-            }
-            return color;
-        }
-    )");
+        "half4 main(float2 xy) {"
+            "half4 color = inputFP.eval(xy);"
+            "half4 mask_color = maskFP.eval(xy);"
+            "if (mask_color.a < 0.5) {"
+                "if (color.a > outerThreshold) {"
+                    "half scale = outerThreshold / color.a;"
+                    "color.rgb *= scale;"
+                    "color.a = outerThreshold;"
+                "}"
+            "} else if (color.a < innerThreshold) {"
+                "half scale = innerThreshold / max(0.001, color.a);"
+                "color.rgb *= scale;"
+                "color.a = innerThreshold;"
+            "}"
+            "return color;"
+        "}"
+    );
 
-    return GrSkSLFP::Make(effect, "AlphaThreshold", std::move(inputFP),
+    return GrSkSLFP::Make(effect, "AlphaThreshold", /*inputFP=*/nullptr,
                           (outerThreshold >= 1.0f) ? GrSkSLFP::OptFlags::kPreservesOpaqueInput
                                                    : GrSkSLFP::OptFlags::kNone,
                           "maskFP", GrSkSLFP::IgnoreOptFlags(std::move(maskFP)),
+                          "inputFP", std::move(inputFP),
                           "innerThreshold", innerThreshold,
                           "outerThreshold", outerThreshold);
 }

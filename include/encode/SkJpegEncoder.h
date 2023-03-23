@@ -9,9 +9,15 @@
 #define SkJpegEncoder_DEFINED
 
 #include "include/encode/SkEncoder.h"
+#include "include/private/base/SkAPI.h"
 
+#include <memory>
+
+class SkData;
 class SkJpegEncoderMgr;
+class SkPixmap;
 class SkWStream;
+struct skcms_ICCProfile;
 
 class SK_API SkJpegEncoder : public SkEncoder {
 public:
@@ -61,6 +67,16 @@ public:
          *  In the second case, the encoder supports linear or legacy blending.
          */
         AlphaOption fAlphaOption = AlphaOption::kIgnore;
+
+        /**
+         * An optional ICC profile to override the default behavior.
+         *
+         * The default behavior is to generate an ICC profile using a primary matrix and
+         * analytic transfer function. If the color space of |src| cannot be represented
+         * in this way (e.g, it is HLG or PQ), then no profile will be embedded.
+         */
+        const skcms_ICCProfile* fICCProfile = nullptr;
+        const char* fICCProfileDescription = nullptr;
     };
 
     /**
@@ -88,7 +104,28 @@ protected:
     bool onEncodeRows(int numRows) override;
 
 private:
+    friend class SkJpegGainmapEncoder;
     SkJpegEncoder(std::unique_ptr<SkJpegEncoderMgr>, const SkPixmap& src);
+
+    /**
+     *  Create a jpeg encoder that will encode the |src| pixels and |segmentData| to the |dst|
+     *  stream. |options| may be used to control the encoding behavior. |optionsPrivate| may be
+     *  used to include metadata that is not in a public interface yet.
+     *
+     *  This returns nullptr on an invalid or unsupported |src|.
+     */
+    struct OptionsPrivate {
+        // The XMP metadata.
+        const SkData* xmpMetadata = nullptr;
+
+        // The fully-formed MPF metadata segment.
+        const SkData* mpfSegment = nullptr;
+    };
+
+    static std::unique_ptr<SkEncoder> Make(SkWStream* dst,
+                                           const SkPixmap& src,
+                                           const Options& options,
+                                           const OptionsPrivate& optionsPrivate);
 
     std::unique_ptr<SkJpegEncoderMgr> fEncoderMgr;
     using INHERITED = SkEncoder;

@@ -4,9 +4,28 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#include "include/core/SkPath.h"
+#include "include/core/SkPathTypes.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/pathops/SkPathOps.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkFloatBits.h"
+#include "include/utils/SkParsePath.h"
+#include "src/core/SkGeometry.h"
+#include "src/pathops/SkPathOpsCubic.h"
+#include "src/pathops/SkPathOpsPoint.h"
+#include "src/pathops/SkPathOpsQuad.h"
 #include "tests/PathOpsDebug.h"
 #include "tests/PathOpsExtendedTest.h"
 #include "tests/PathOpsTestCommon.h"
+#include "tests/Test.h"
+
+#include <cstddef>
+#include <iterator>
 
 class PathTest_Private {
 public:
@@ -3590,8 +3609,6 @@ static void loop1(skiatest::Reporter* reporter, const char* filename) {
     testPathOp(reporter, path, pathB, kIntersect_SkPathOp, filename);
 }
 
-#include "src/pathops/SkPathOpsCubic.h"
-
 static void loop1asQuad(skiatest::Reporter* reporter, const char* filename) {
     CubicPts cubic1 = {{{0,1}, {1,5}, {-5.66666651f,3.33333349f}, {8.83333302f,2.33333349f}}};
     CubicPts cubic2 = {{{1,5}, {-5.66666651f,3.33333349f}, {8.83333302f,2.33333349f}, {0,1}}};
@@ -3655,8 +3672,6 @@ static void loop4(skiatest::Reporter* reporter, const char* filename) {
     pathB.close();
     testPathOp(reporter, path, pathB, kIntersect_SkPathOp, filename);
 }
-
-#include "include/utils/SkParsePath.h"
 
 static void issue3517(skiatest::Reporter* reporter, const char* filename) {
     SkPath path, pathB;
@@ -3847,8 +3862,6 @@ static void cubicOp130(skiatest::Reporter* reporter, const char* filename) {
     pathB.close();
     testPathOp(reporter, path, pathB, kDifference_SkPathOp, filename);
 }
-
-#include "src/core/SkGeometry.h"
 
 static void complex_to_quads(const SkPoint pts[], SkPath* path) {
     SkScalar loopT[3];
@@ -9474,7 +9487,7 @@ static struct TestDesc tests[] = {
     TEST(cubicOp1d),
 };
 
-static const size_t testCount = SK_ARRAY_COUNT(tests);
+static const size_t testCount = std::size(tests);
 
 static struct TestDesc subTests[] = {
     TEST(loops47i),
@@ -9483,7 +9496,7 @@ static struct TestDesc subTests[] = {
     TEST(issue3517),
 };
 
-static const size_t subTestCount = SK_ARRAY_COUNT(subTests);
+static const size_t subTestCount = std::size(subTests);
 
 static void (*firstSubTest)(skiatest::Reporter* , const char* filename) = nullptr;
 
@@ -12523,7 +12536,7 @@ static struct TestDesc failTests[] = {
     TEST(bufferOverflow),
 };
 
-static const size_t failTestCount = SK_ARRAY_COUNT(failTests);
+static const size_t failTestCount = std::size(failTests);
 
 DEF_TEST(PathOpsFailOp, reporter) {
     RunTestSet(reporter, failTests, failTestCount, nullptr, nullptr, nullptr, false);
@@ -12538,5 +12551,5 @@ DEF_TEST(PathOpsRepOp, reporter) {
         return;
     }
   for (int index = 0; index < 1; ++index)
-    RunTestSet(reporter, repTests, SK_ARRAY_COUNT(repTests), nullptr, nullptr, nullptr, false);
+    RunTestSet(reporter, repTests, std::size(repTests), nullptr, nullptr, nullptr, false);
 }
