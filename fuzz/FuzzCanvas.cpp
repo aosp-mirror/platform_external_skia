@@ -8,6 +8,7 @@
 #include "fuzz/Fuzz.h"
 #include "fuzz/FuzzCommon.h"
 #include "include/core/SkBitmap.h"
+#include "include/core/SkBlurTypes.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorFilter.h"
 #include "include/core/SkFontMgr.h"
@@ -807,8 +808,8 @@ static sk_sp<SkImage> make_fuzz_image(Fuzz* fuzz) {
         data[i] = SkPreMultiplyColor(c);
     }
     (void)data.release();
-    return SkImage::MakeFromRaster(pixmap, [](const void* p, void*) { sk_free((void*)p); },
-                                   nullptr);
+    return SkImages::RasterFromPixmap(
+            pixmap, [](const void* p, void*) { sk_free((void*)p); }, nullptr);
 }
 
 template <typename T>

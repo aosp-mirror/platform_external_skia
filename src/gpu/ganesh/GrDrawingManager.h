@@ -179,7 +179,7 @@ public:
                        sk_sp<GrRenderTargetProxy> newDest,
                        SkIPoint offset);
 
-    // This is public so it can be called by an SkImage factory (in sk_image_factory namespace).
+    // This is public so it can be called by an SkImage factory (in SkImages namespace).
     // It is not meant to be directly called in other situations.
     bool flush(SkSpan<GrSurfaceProxy*> proxies,
                SkSurface::BackendSurfaceAccess access,
@@ -229,7 +229,7 @@ private:
     // flushes.
     sk_sp<GrBufferAllocPool::CpuBufferCache>   fCpuBufferCache;
 
-    SkTArray<sk_sp<GrRenderTask>>              fDAG;
+    skia_private::TArray<sk_sp<GrRenderTask>>  fDAG;
     std::vector<int>                           fReorderBlockerTaskIndices;
     skgpu::ganesh::OpsTask*                    fActiveOpsTask = nullptr;
 
@@ -241,7 +241,7 @@ private:
     bool                                       fFlushing = false;
     const bool                                 fReduceOpsTaskSplitting;
 
-    SkTArray<GrOnFlushCallbackObject*>         fOnFlushCBObjects;
+    skia_private::TArray<GrOnFlushCallbackObject*> fOnFlushCBObjects;
 
     struct SurfaceIDKeyTraits {
         static uint32_t GetInvalidKey() {
