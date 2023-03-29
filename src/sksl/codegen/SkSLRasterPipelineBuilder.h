@@ -23,6 +23,7 @@ class SkWStream;
 namespace SkSL {
 
 class DebugTracePriv;
+class TraceHook;
 
 namespace RP {
 
@@ -155,6 +156,7 @@ public:
             int numUniformSlots,
             int numLabels,
             DebugTracePriv* debugTrace);
+    ~Program();
 
 #if !defined(SKSL_STANDALONE)
     bool appendStages(SkRasterPipeline* pipeline,
@@ -255,6 +257,7 @@ private:
     int fNumLabels = 0;
     SkTHashMap<int, int> fTempStackMaxDepths;
     DebugTracePriv* fDebugTrace = nullptr;
+    std::unique_ptr<SkSL::TraceHook> fTraceHook;
 };
 
 class Builder {
@@ -638,8 +641,8 @@ public:
         fInstructions.push_back({BuilderOp::trace_line, {}, traceMaskStackID, line});
     }
 
-    void trace_var(int traceMaskStackID, Slot slot) {
-        fInstructions.push_back({BuilderOp::trace_var, {slot}, traceMaskStackID});
+    void trace_var(int traceMaskStackID, SlotRange r) {
+        fInstructions.push_back({BuilderOp::trace_var, {r.index}, traceMaskStackID, r.count});
     }
 
     void trace_enter(int traceMaskStackID, int funcID) {
