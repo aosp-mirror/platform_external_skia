@@ -389,22 +389,21 @@ public:
     BuilderOp getTypedOp(const SkSL::Type& type, const TypedOps& ops) const;
 
     Analysis::ReturnComplexity returnComplexity(const FunctionDefinition* func) {
-        Analysis::ReturnComplexity* complexity = fReturnComplexityMap.find(fCurrentFunction);
+        Analysis::ReturnComplexity* complexity = fReturnComplexityMap.find(func);
         if (!complexity) {
             complexity = fReturnComplexityMap.set(fCurrentFunction,
-                                                  Analysis::GetReturnComplexity(*fCurrentFunction));
+                                                  Analysis::GetReturnComplexity(*func));
         }
         return *complexity;
     }
 
-    bool needsReturnMask() {
-        return this->returnComplexity(fCurrentFunction) >=
-               Analysis::ReturnComplexity::kEarlyReturns;
+    bool needsReturnMask(const FunctionDefinition* func) {
+        return this->returnComplexity(func) >= Analysis::ReturnComplexity::kEarlyReturns;
     }
 
-    bool needsFunctionResultSlots() {
-        return this->returnComplexity(fCurrentFunction) >
-               Analysis::ReturnComplexity::kSingleSafeReturn;
+    bool needsFunctionResultSlots(const FunctionDefinition* func) {
+        return this->shouldWriteTraceOps() || (this->returnComplexity(func) >
+                                               Analysis::ReturnComplexity::kSingleSafeReturn);
     }
 
     static bool IsUniform(const Variable& var) {
@@ -1261,25 +1260,46 @@ void Generator::setCurrentStack(int stackID) {
 
 std::optional<SlotRange> Generator::writeFunction(const IRNode& callSite,
                                                   const FunctionDefinition& function) {
-    [[maybe_unused]] int funcIndex = -1;
+    // Generate debug information and emit a trace-enter op.
+    int funcIndex = -1;
     if (fDebugTrace) {
         funcIndex = this->getFunctionDebugInfo(function.declaration());
         SkASSERT(funcIndex >= 0);
-        if (fWriteTraceOps) {
+        if (this->shouldWriteTraceOps()) {
             fBuilder.trace_enter(fTraceMask->stackID(), funcIndex);
         }
     }
 
+    // Set up a slot range dedicated to this function's return value.
     SlotRange lastFunctionResult = fCurrentFunctionResult;
     fCurrentFunctionResult = this->getFunctionSlots(callSite, function.declaration());
 
+    // Save off the return mask.
+    if (this->needsReturnMask(&function)) {
+        fBuilder.enableExecutionMaskWrites();
+        if (!function.declaration().isMain()) {
+            fBuilder.push_return_mask();
+        }
+    }
+
+    // Emit the function body.
     if (!this->writeStatement(*function.body())) {
         return std::nullopt;
     }
 
+    // Restore the original return mask.
+    if (this->needsReturnMask(&function)) {
+        if (!function.declaration().isMain()) {
+            fBuilder.pop_return_mask();
+        }
+        fBuilder.disableExecutionMaskWrites();
+    }
+
+    // Restore the function-result slot range.
     SlotRange functionResult = fCurrentFunctionResult;
     fCurrentFunctionResult = lastFunctionResult;
 
+    // Emit a trace-exit op.
     if (fDebugTrace && fWriteTraceOps) {
         fBuilder.trace_exit(fTraceMask->stackID(), funcIndex);
     }
@@ -1365,9 +1385,19 @@ bool Generator::writeGlobals() {
 }
 
 bool Generator::writeStatement(const Statement& s) {
-    // The debugger should stop on all types of statements, except for Blocks.
-    if (!s.is<Block>()) {
-        this->emitTraceLine(s.fPosition);
+    switch (s.kind()) {
+        case Statement::Kind::kBlock:
+            // The debugger will stop on statements inside Blocks; there's no need for an additional
+            // stop on the block's initial open-brace.
+        case Statement::Kind::kFor:
+            // The debugger will stop on the init-statement of a for statement, so we don't need to
+            // stop on the outer for-statement itself as well.
+            break;
+
+        default:
+            // The debugger should stop on other statements.
+            this->emitTraceLine(s.fPosition);
+            break;
     }
 
     switch (s.kind()) {
@@ -1598,8 +1628,12 @@ bool Generator::writeForStatement(const ForStatement& f) {
     AutoLoopTarget breakTarget(this, &fCurrentBreakTarget);
 
     // Run the loop initializer.
-    if (f.initializer() && !this->writeStatement(*f.initializer())) {
-        return unsupported();
+    if (f.initializer()) {
+        if (!this->writeStatement(*f.initializer())) {
+            return unsupported();
+        }
+    } else {
+        this->emitTraceLine(f.fPosition);
     }
 
     AutoContinueMask autoContinueMask(this);
@@ -1764,11 +1798,11 @@ bool Generator::writeReturnStatement(const ReturnStatement& r) {
         if (!this->pushExpression(*r.expression())) {
             return unsupported();
         }
-        if (this->needsFunctionResultSlots()) {
+        if (this->needsFunctionResultSlots(fCurrentFunction)) {
             this->popToSlotRange(fCurrentFunctionResult);
         }
     }
-    if (fBuilder.executionMaskWritesAreEnabled() && this->needsReturnMask()) {
+    if (fBuilder.executionMaskWritesAreEnabled() && this->needsReturnMask(fCurrentFunction)) {
         fBuilder.mask_off_return_mask();
     }
     return true;
@@ -2531,16 +2565,10 @@ bool Generator::pushFunctionCall(const FunctionCall& c) {
     fCurrentFunction = c.function().definition();
 
     // Skip over the function body entirely if there are no active lanes.
-    // (If the function call was trivial, it would likely have been inlined in the frontend, so this
-    // is likely to save a significant amount of work if the lanes are all dead.)
+    // (If the function call was trivial, it would likely have been inlined in the frontend, so we
+    // assume here that function calls generally represent a significant amount of work.)
     int skipLabelID = fBuilder.nextLabelID();
     fBuilder.branch_if_no_lanes_active(skipLabelID);
-
-    // Save off the return mask.
-    if (this->needsReturnMask()) {
-        fBuilder.enableExecutionMaskWrites();
-        fBuilder.push_return_mask();
-    }
 
     // Write all the arguments into their parameter's variable slots. Because we never allow
     // recursion, we don't need to worry about overwriting any existing values in those slots.
@@ -2581,14 +2609,8 @@ bool Generator::pushFunctionCall(const FunctionCall& c) {
         return unsupported();
     }
 
-    // Restore the original return mask.
-    if (this->needsReturnMask()) {
-        fBuilder.pop_return_mask();
-        fBuilder.disableExecutionMaskWrites();
-    }
-
     // If the function uses result slots, move its result from slots onto the stack.
-    if (this->needsFunctionResultSlots()) {
+    if (this->needsFunctionResultSlots(fCurrentFunction)) {
         fBuilder.push_slots(*r);
     }
 
@@ -3590,22 +3612,14 @@ bool Generator::writeProgram(const FunctionDefinition& function) {
     }
 
     // Invoke main().
-    if (this->needsReturnMask()) {
-        fBuilder.enableExecutionMaskWrites();
-    }
-
     std::optional<SlotRange> mainResult = this->writeFunction(function, function);
     if (!mainResult.has_value()) {
         return unsupported();
     }
 
-    if (this->needsReturnMask()) {
-        fBuilder.disableExecutionMaskWrites();
-    }
-
     // Move the result of main() from slots into RGBA. Allow dRGBA to remain in a trashed state.
     SkASSERT(mainResult->count == 4);
-    if (this->needsFunctionResultSlots()) {
+    if (this->needsFunctionResultSlots(fCurrentFunction)) {
         fBuilder.load_src(*mainResult);
     } else {
         fBuilder.pop_src_rgba();
