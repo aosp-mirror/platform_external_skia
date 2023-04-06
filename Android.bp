@@ -1842,7 +1842,6 @@ cc_library_static {
         srcs: [
           "src/codec/SkRawCodec.cpp",
           "src/ports/SkDebug_stdio.cpp",
-          "src/ports/SkImageEncoder_CG.cpp",
           "src/ports/SkImageGeneratorCG.cpp",
           "src/ports/SkOSFile_posix.cpp",
           "src/ports/SkOSLibrary_posix.cpp",
@@ -1861,7 +1860,6 @@ cc_library_static {
         ],
         srcs: [
           "src/ports/SkDebug_win.cpp",
-          "src/ports/SkImageEncoder_WIC.cpp",
           "src/ports/SkImageGeneratorWIC.cpp",
           "src/ports/SkOSFile_win.cpp",
           "src/ports/SkOSLibrary_win.cpp",
