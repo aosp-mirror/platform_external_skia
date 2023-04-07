@@ -21,6 +21,8 @@
 
   // Staging flags
   #define SK_SUPPORT_STROKEANDFILL
+  #define SK_DISABLE_LEGACY_IMAGE_FLUSH
+  #define SK_DISABLE_LEGACY_GET_BACKEND_TEXTURE
 
   // Needed until we fix https://bug.skia.org/2440
   #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
