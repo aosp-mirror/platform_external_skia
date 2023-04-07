@@ -135,10 +135,10 @@ DEF_TEST(RasterPipelineBuilderCaseOp, r) {
     // Create a very simple nonsense program.
     SkSL::RP::Builder builder;
 
-    builder.push_literal_i(123);    // push a test value
-    builder.push_literal_i(~0);     // push an all-on default mask
-    builder.case_op(123);           // do `case 123:`
-    builder.case_op(124);           // do `case 124:`
+    builder.push_constant_i(123);  // push a test value
+    builder.push_constant_i(~0);   // push an all-on default mask
+    builder.case_op(123);          // do `case 123:`
+    builder.case_op(124);          // do `case 124:`
     builder.discard_stack(2);
 
     std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/0,
@@ -197,13 +197,13 @@ DEF_TEST(RasterPipelineBuilderPushPopTempImmediates, r) {
     // Create a very simple nonsense program.
     SkSL::RP::Builder builder;
     builder.set_current_stack(1);
-    builder.push_literal_i(999);                                          // push into 2
+    builder.push_constant_i(999);                                         // push into 2
     builder.set_current_stack(0);
-    builder.push_literal_f(13.5f);                                        // push into 0
+    builder.push_constant_f(13.5f);                                       // push into 0
     builder.push_clone_from_stack(one_slot_at(0), /*otherStackID=*/1, /*offsetFromStackTop=*/1);
                                                                           // push into 1 from 2
     builder.discard_stack();                                              // discard 2
-    builder.push_literal_u(357);                                          // push into 2
+    builder.push_constant_u(357);                                         // push into 2
     builder.set_current_stack(1);
     builder.push_clone_from_stack(one_slot_at(0), /*otherStackID=*/0, /*offsetFromStackTop=*/1);
                                                                           // push into 3 from 0
@@ -223,7 +223,7 @@ DEF_TEST(RasterPipelineBuilderPushPopIndirect, r) {
     // Create a very simple nonsense program.
     SkSL::RP::Builder builder;
     builder.set_current_stack(1);
-    builder.push_literal_i(3);
+    builder.push_constant_i(3);
     builder.set_current_stack(0);
     builder.push_slots_indirect(two_slots_at(0), /*dynamicStack=*/1, ten_slots_at(0));
     builder.push_slots_indirect(four_slots_at(10), /*dynamicStack=*/1, ten_slots_at(10));
@@ -307,7 +307,7 @@ R"(    1. copy_4_slots_unmasked          $0..3 = v10..13
 DEF_TEST(RasterPipelineBuilderDuplicateSelectAndSwizzleSlots, r) {
     // Create a very simple nonsense program.
     SkSL::RP::Builder builder;
-    builder.push_literal_f(1.0f);           // push into 0
+    builder.push_constant_f(1.0f);          // push into 0
     builder.push_duplicates(1);             // duplicate into 1
     builder.push_duplicates(2);             // duplicate into 2~3
     builder.push_duplicates(3);             // duplicate into 4~6
@@ -324,26 +324,23 @@ DEF_TEST(RasterPipelineBuilderDuplicateSelectAndSwizzleSlots, r) {
     std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/6,
                                                                 /*numUniformSlots=*/0);
     check(r, *program,
-R"(    1. copy_constant                  $0 = 0x3F800000 (1.0)
-    2. copy_slot_unmasked             $1 = $0
-    3. swizzle_3                      $1..3 = ($1..3).xxx
-    4. swizzle_4                      $3..6 = ($3..6).xxxx
-    5. swizzle_4                      $6..9 = ($6..9).xxxx
-    6. swizzle_3                      $9..11 = ($9..11).xxx
-    7. copy_4_slots_masked            $4..7 = Mask($8..11)
-    8. copy_3_slots_masked            $2..4 = Mask($5..7)
-    9. copy_slot_masked               $3 = Mask($4)
-   10. swizzle_copy_4_slots_masked    (v1..4).wzyx = Mask($0..3)
-   11. swizzle_copy_3_slots_masked    (v0..3).xyw = Mask($1..3)
-   12. swizzle_4                      $0..3 = ($0..3).wzyx
-   13. swizzle_2                      $0..1 = ($0..2).yz
+R"(    1. splat_4_constants              $0..3 = 0x3F800000 (1.0)
+    2. splat_4_constants              $4..7 = 0x3F800000 (1.0)
+    3. splat_4_constants              $8..11 = 0x3F800000 (1.0)
+    4. copy_4_slots_masked            $4..7 = Mask($8..11)
+    5. copy_3_slots_masked            $2..4 = Mask($5..7)
+    6. copy_slot_masked               $3 = Mask($4)
+    7. swizzle_copy_4_slots_masked    (v1..4).wzyx = Mask($0..3)
+    8. swizzle_copy_3_slots_masked    (v0..3).xyw = Mask($1..3)
+    9. swizzle_4                      $0..3 = ($0..3).wzyx
+   10. swizzle_2                      $0..1 = ($0..2).yz
 )");
 }
 
 DEF_TEST(RasterPipelineBuilderTransposeMatrix, r) {
     // Create a very simple nonsense program.
     SkSL::RP::Builder builder;
-    builder.push_literal_f(1.0f);           // push into 0
+    builder.push_constant_f(1.0f);          // push into 0
     builder.push_duplicates(15);            // duplicate into 1~15
     builder.transpose(2, 2);                // transpose a 2x2 matrix
     builder.transpose(3, 3);                // transpose a 3x3 matrix
@@ -354,32 +351,31 @@ DEF_TEST(RasterPipelineBuilderTransposeMatrix, r) {
     std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/0,
                                                                 /*numUniformSlots=*/0);
     check(r, *program,
-R"(    1. copy_constant                  $0 = 0x3F800000 (1.0)
-    2. swizzle_4                      $0..3 = ($0..3).xxxx
-    3. copy_4_slots_unmasked          $4..7 = $0..3
-    4. copy_4_slots_unmasked          $8..11 = $4..7
-    5. copy_4_slots_unmasked          $12..15 = $8..11
-    6. swizzle_3                      $13..15 = ($13..15).yxz
-    7. shuffle                        $8..15 = ($8..15)[2 5 0 3 6 1 4 7]
-    8. shuffle                        $1..15 = ($1..15)[3 7 11 0 4 8 12 1 5 9 13 2 6 10 14]
-    9. shuffle                        $9..15 = ($9..15)[3 0 4 1 5 2 6]
-   10. shuffle                        $5..15 = ($5..15)[2 5 8 0 3 6 9 1 4 7 10]
+R"(    1. splat_4_constants              $0..3 = 0x3F800000 (1.0)
+    2. splat_4_constants              $4..7 = 0x3F800000 (1.0)
+    3. splat_4_constants              $8..11 = 0x3F800000 (1.0)
+    4. splat_4_constants              $12..15 = 0x3F800000 (1.0)
+    5. swizzle_3                      $13..15 = ($13..15).yxz
+    6. shuffle                        $8..15 = ($8..15)[2 5 0 3 6 1 4 7]
+    7. shuffle                        $1..15 = ($1..15)[3 7 11 0 4 8 12 1 5 9 13 2 6 10 14]
+    8. shuffle                        $9..15 = ($9..15)[3 0 4 1 5 2 6]
+    9. shuffle                        $5..15 = ($5..15)[2 5 8 0 3 6 9 1 4 7 10]
 )");
 }
 
 DEF_TEST(RasterPipelineBuilderDiagonalMatrix, r) {
     // Create a very simple nonsense program.
     SkSL::RP::Builder builder;
-    builder.push_literal_f(0.0f);           // push into 0
-    builder.push_literal_f(1.0f);           // push into 1
+    builder.push_constant_f(0.0f);          // push into 0
+    builder.push_constant_f(1.0f);          // push into 1
     builder.diagonal_matrix(2, 2);          // generate a 2x2 diagonal matrix
     builder.discard_stack(4);               // balance stack
-    builder.push_literal_f(0.0f);           // push into 0
-    builder.push_literal_f(2.0f);           // push into 1
+    builder.push_constant_f(0.0f);          // push into 0
+    builder.push_constant_f(2.0f);          // push into 1
     builder.diagonal_matrix(4, 4);          // generate a 4x4 diagonal matrix
     builder.discard_stack(16);              // balance stack
-    builder.push_literal_f(0.0f);           // push into 0
-    builder.push_literal_f(3.0f);           // push into 1
+    builder.push_constant_f(0.0f);          // push into 0
+    builder.push_constant_f(3.0f);          // push into 1
     builder.diagonal_matrix(2, 3);          // generate a 2x3 diagonal matrix
     builder.discard_stack(6);               // balance stack
     std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/0,
@@ -400,10 +396,10 @@ R"(    1. zero_slot_unmasked             $0 = 0
 DEF_TEST(RasterPipelineBuilderMatrixResize, r) {
     // Create a very simple nonsense program.
     SkSL::RP::Builder builder;
-    builder.push_literal_f(1.0f);           // synthesize a 2x2 matrix
-    builder.push_literal_f(2.0f);
-    builder.push_literal_f(3.0f);
-    builder.push_literal_f(4.0f);
+    builder.push_constant_f(1.0f);          // synthesize a 2x2 matrix
+    builder.push_constant_f(2.0f);
+    builder.push_constant_f(3.0f);
+    builder.push_constant_f(4.0f);
     builder.matrix_resize(2, 2, 4, 4);      // resize 2x2 matrix into 4x4
     builder.matrix_resize(4, 4, 2, 2);      // resize 4x4 matrix back into 2x2
     builder.matrix_resize(2, 2, 2, 4);      // resize 2x2 matrix into 2x4
@@ -552,7 +548,7 @@ DEF_TEST(RasterPipelineBuilderBinaryFloatOps, r) {
     using BuilderOp = SkSL::RP::BuilderOp;
 
     SkSL::RP::Builder builder;
-    builder.push_literal_f(10.0f);
+    builder.push_constant_f(10.0f);
     builder.push_duplicates(30);
     builder.binary_op(BuilderOp::add_n_floats, 1);
     builder.binary_op(BuilderOp::sub_n_floats, 2);
@@ -568,25 +564,24 @@ DEF_TEST(RasterPipelineBuilderBinaryFloatOps, r) {
     std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/0,
                                                                 /*numUniformSlots=*/0);
     check(r, *program,
-R"(    1. copy_constant                  $0 = 0x41200000 (10.0)
-    2. swizzle_4                      $0..3 = ($0..3).xxxx
-    3. copy_4_slots_unmasked          $4..7 = $0..3
-    4. copy_4_slots_unmasked          $8..11 = $4..7
-    5. copy_4_slots_unmasked          $12..15 = $8..11
-    6. copy_4_slots_unmasked          $16..19 = $12..15
-    7. copy_4_slots_unmasked          $20..23 = $16..19
-    8. copy_4_slots_unmasked          $24..27 = $20..23
-    9. swizzle_4                      $27..30 = ($27..30).xxxx
-   10. add_float                      $29 += $30
-   11. sub_2_floats                   $26..27 -= $28..29
-   12. mul_3_floats                   $22..24 *= $25..27
-   13. div_4_floats                   $17..20 /= $21..24
-   14. max_3_floats                   $15..17 = max($15..17, $18..20)
-   15. min_2_floats                   $14..15 = min($14..15, $16..17)
-   16. cmplt_n_floats                 $6..10 = lessThan($6..10, $11..15)
-   17. cmple_4_floats                 $3..6 = lessThanEqual($3..6, $7..10)
-   18. cmpeq_3_floats                 $1..3 = equal($1..3, $4..6)
-   19. cmpne_2_floats                 $0..1 = notEqual($0..1, $2..3)
+R"(    1. splat_4_constants              $0..3 = 0x41200000 (10.0)
+    2. splat_4_constants              $4..7 = 0x41200000 (10.0)
+    3. splat_4_constants              $8..11 = 0x41200000 (10.0)
+    4. splat_4_constants              $12..15 = 0x41200000 (10.0)
+    5. splat_4_constants              $16..19 = 0x41200000 (10.0)
+    6. splat_4_constants              $20..23 = 0x41200000 (10.0)
+    7. splat_4_constants              $24..27 = 0x41200000 (10.0)
+    8. splat_3_constants              $28..30 = 0x41200000 (10.0)
+    9. add_float                      $29 += $30
+   10. sub_2_floats                   $26..27 -= $28..29
+   11. mul_3_floats                   $22..24 *= $25..27
+   12. div_4_floats                   $17..20 /= $21..24
+   13. max_3_floats                   $15..17 = max($15..17, $18..20)
+   14. min_2_floats                   $14..15 = min($14..15, $16..17)
+   15. cmplt_n_floats                 $6..10 = lessThan($6..10, $11..15)
+   16. cmple_4_floats                 $3..6 = lessThanEqual($3..6, $7..10)
+   17. cmpeq_3_floats                 $1..3 = equal($1..3, $4..6)
+   18. cmpne_2_floats                 $0..1 = notEqual($0..1, $2..3)
 )");
 }
 
@@ -594,7 +589,7 @@ DEF_TEST(RasterPipelineBuilderBinaryIntOps, r) {
     using BuilderOp = SkSL::RP::BuilderOp;
 
     SkSL::RP::Builder builder;
-    builder.push_literal_i(123);
+    builder.push_constant_i(123);
     builder.push_duplicates(40);
     builder.binary_op(BuilderOp::bitwise_and_n_ints, 1);
     builder.binary_op(BuilderOp::bitwise_xor_n_ints, 2);
@@ -613,31 +608,30 @@ DEF_TEST(RasterPipelineBuilderBinaryIntOps, r) {
     std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/0,
                                                                 /*numUniformSlots=*/0);
     check(r, *program,
-R"(    1. copy_constant                  $0 = 0x0000007B (1.723597e-43)
-    2. swizzle_4                      $0..3 = ($0..3).xxxx
-    3. copy_4_slots_unmasked          $4..7 = $0..3
-    4. copy_4_slots_unmasked          $8..11 = $4..7
-    5. copy_4_slots_unmasked          $12..15 = $8..11
-    6. copy_4_slots_unmasked          $16..19 = $12..15
-    7. copy_4_slots_unmasked          $20..23 = $16..19
-    8. copy_4_slots_unmasked          $24..27 = $20..23
-    9. copy_4_slots_unmasked          $28..31 = $24..27
-   10. copy_4_slots_unmasked          $32..35 = $28..31
-   11. copy_4_slots_unmasked          $36..39 = $32..35
-   12. copy_slot_unmasked             $40 = $39
-   13. bitwise_and_int                $39 &= $40
-   14. bitwise_xor_2_ints             $36..37 ^= $38..39
-   15. bitwise_or_3_ints              $32..34 |= $35..37
-   16. add_2_ints                     $31..32 += $33..34
-   17. sub_3_ints                     $27..29 -= $30..32
-   18. mul_4_ints                     $22..25 *= $26..29
-   19. div_n_ints                     $16..20 /= $21..25
-   20. max_4_ints                     $13..16 = max($13..16, $17..20)
-   21. min_3_ints                     $11..13 = min($11..13, $14..16)
-   22. cmplt_int                      $12 = lessThan($12, $13)
-   23. cmple_2_ints                   $9..10 = lessThanEqual($9..10, $11..12)
-   24. cmpeq_3_ints                   $5..7 = equal($5..7, $8..10)
-   25. cmpne_4_ints                   $0..3 = notEqual($0..3, $4..7)
+R"(    1. splat_4_constants              $0..3 = 0x0000007B (1.723597e-43)
+    2. splat_4_constants              $4..7 = 0x0000007B (1.723597e-43)
+    3. splat_4_constants              $8..11 = 0x0000007B (1.723597e-43)
+    4. splat_4_constants              $12..15 = 0x0000007B (1.723597e-43)
+    5. splat_4_constants              $16..19 = 0x0000007B (1.723597e-43)
+    6. splat_4_constants              $20..23 = 0x0000007B (1.723597e-43)
+    7. splat_4_constants              $24..27 = 0x0000007B (1.723597e-43)
+    8. splat_4_constants              $28..31 = 0x0000007B (1.723597e-43)
+    9. splat_4_constants              $32..35 = 0x0000007B (1.723597e-43)
+   10. splat_4_constants              $36..39 = 0x0000007B (1.723597e-43)
+   11. copy_constant                  $40 = 0x0000007B (1.723597e-43)
+   12. bitwise_and_int                $39 &= $40
+   13. bitwise_xor_2_ints             $36..37 ^= $38..39
+   14. bitwise_or_3_ints              $32..34 |= $35..37
+   15. add_2_ints                     $31..32 += $33..34
+   16. sub_3_ints                     $27..29 -= $30..32
+   17. mul_4_ints                     $22..25 *= $26..29
+   18. div_n_ints                     $16..20 /= $21..25
+   19. max_4_ints                     $13..16 = max($13..16, $17..20)
+   20. min_3_ints                     $11..13 = min($11..13, $14..16)
+   21. cmplt_int                      $12 = lessThan($12, $13)
+   22. cmple_2_ints                   $9..10 = lessThanEqual($9..10, $11..12)
+   23. cmpeq_3_ints                   $5..7 = equal($5..7, $8..10)
+   24. cmpne_4_ints                   $0..3 = notEqual($0..3, $4..7)
 )");
 }
 
@@ -645,7 +639,7 @@ DEF_TEST(RasterPipelineBuilderBinaryUIntOps, r) {
     using BuilderOp = SkSL::RP::BuilderOp;
 
     SkSL::RP::Builder builder;
-    builder.push_literal_u(456);
+    builder.push_constant_u(456);
     builder.push_duplicates(21);
     builder.binary_op(BuilderOp::div_n_uints, 6);
     builder.binary_op(BuilderOp::cmplt_n_uints, 5);
@@ -656,18 +650,17 @@ DEF_TEST(RasterPipelineBuilderBinaryUIntOps, r) {
     std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/0,
                                                                 /*numUniformSlots=*/0);
     check(r, *program,
-R"(    1. copy_constant                  $0 = 0x000001C8 (6.389921e-43)
-    2. swizzle_4                      $0..3 = ($0..3).xxxx
-    3. copy_4_slots_unmasked          $4..7 = $0..3
-    4. copy_4_slots_unmasked          $8..11 = $4..7
-    5. copy_4_slots_unmasked          $12..15 = $8..11
-    6. copy_4_slots_unmasked          $16..19 = $12..15
-    7. swizzle_3                      $19..21 = ($19..21).xxx
-    8. div_n_uints                    $10..15 /= $16..21
-    9. cmplt_n_uints                  $6..10 = lessThan($6..10, $11..15)
-   10. cmple_4_uints                  $3..6 = lessThanEqual($3..6, $7..10)
-   11. max_3_uints                    $1..3 = max($1..3, $4..6)
-   12. min_2_uints                    $0..1 = min($0..1, $2..3)
+R"(    1. splat_4_constants              $0..3 = 0x000001C8 (6.389921e-43)
+    2. splat_4_constants              $4..7 = 0x000001C8 (6.389921e-43)
+    3. splat_4_constants              $8..11 = 0x000001C8 (6.389921e-43)
+    4. splat_4_constants              $12..15 = 0x000001C8 (6.389921e-43)
+    5. splat_4_constants              $16..19 = 0x000001C8 (6.389921e-43)
+    6. splat_2_constants              $20..21 = 0x000001C8 (6.389921e-43)
+    7. div_n_uints                    $10..15 /= $16..21
+    8. cmplt_n_uints                  $6..10 = lessThan($6..10, $11..15)
+    9. cmple_4_uints                  $3..6 = lessThanEqual($3..6, $7..10)
+   10. max_3_uints                    $1..3 = max($1..3, $4..6)
+   11. min_2_uints                    $0..1 = min($0..1, $2..3)
 )");
 }
 
@@ -675,7 +668,7 @@ DEF_TEST(RasterPipelineBuilderUnaryOps, r) {
     using BuilderOp = SkSL::RP::BuilderOp;
 
     SkSL::RP::Builder builder;
-    builder.push_literal_i(456);
+    builder.push_constant_i(456);
     builder.push_duplicates(4);
     builder.unary_op(BuilderOp::cast_to_float_from_int, 1);
     builder.unary_op(BuilderOp::cast_to_float_from_uint, 2);
@@ -694,30 +687,29 @@ DEF_TEST(RasterPipelineBuilderUnaryOps, r) {
     std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/0,
                                                                 /*numUniformSlots=*/0);
     check(r, *program,
-R"(    1. copy_constant                  $0 = 0x000001C8 (6.389921e-43)
-    2. swizzle_4                      $0..3 = ($0..3).xxxx
-    3. copy_slot_unmasked             $4 = $3
-    4. cast_to_float_from_int         $4 = IntToFloat($4)
-    5. cast_to_float_from_2_uints     $3..4 = UintToFloat($3..4)
-    6. cast_to_int_from_3_floats      $2..4 = FloatToInt($2..4)
-    7. cast_to_uint_from_4_floats     $1..4 = FloatToUint($1..4)
-    8. bitwise_not_4_ints             $0..3 = ~$0..3
-    9. bitwise_not_int                $4 = ~$4
-   10. cos_float                      $1 = cos($1)
-   11. cos_float                      $2 = cos($2)
-   12. cos_float                      $3 = cos($3)
-   13. cos_float                      $4 = cos($4)
-   14. tan_float                      $2 = tan($2)
-   15. tan_float                      $3 = tan($3)
-   16. tan_float                      $4 = tan($4)
-   17. sin_float                      $3 = sin($3)
-   18. sin_float                      $4 = sin($4)
-   19. sqrt_float                     $4 = sqrt($4)
-   20. abs_2_floats                   $3..4 = abs($3..4)
-   21. abs_3_ints                     $2..4 = abs($2..4)
-   22. floor_4_floats                 $1..4 = floor($1..4)
-   23. ceil_4_floats                  $0..3 = ceil($0..3)
-   24. ceil_float                     $4 = ceil($4)
+R"(    1. splat_4_constants              $0..3 = 0x000001C8 (6.389921e-43)
+    2. copy_constant                  $4 = 0x000001C8 (6.389921e-43)
+    3. cast_to_float_from_int         $4 = IntToFloat($4)
+    4. cast_to_float_from_2_uints     $3..4 = UintToFloat($3..4)
+    5. cast_to_int_from_3_floats      $2..4 = FloatToInt($2..4)
+    6. cast_to_uint_from_4_floats     $1..4 = FloatToUint($1..4)
+    7. bitwise_not_4_ints             $0..3 = ~$0..3
+    8. bitwise_not_int                $4 = ~$4
+    9. cos_float                      $1 = cos($1)
+   10. cos_float                      $2 = cos($2)
+   11. cos_float                      $3 = cos($3)
+   12. cos_float                      $4 = cos($4)
+   13. tan_float                      $2 = tan($2)
+   14. tan_float                      $3 = tan($3)
+   15. tan_float                      $4 = tan($4)
+   16. sin_float                      $3 = sin($3)
+   17. sin_float                      $4 = sin($4)
+   18. sqrt_float                     $4 = sqrt($4)
+   19. abs_2_floats                   $3..4 = abs($3..4)
+   20. abs_3_ints                     $2..4 = abs($2..4)
+   21. floor_4_floats                 $1..4 = floor($1..4)
+   22. ceil_4_floats                  $0..3 = ceil($0..3)
+   23. ceil_float                     $4 = ceil($4)
 )");
 }
 
@@ -736,11 +728,11 @@ DEF_TEST(RasterPipelineBuilderUniforms, r) {
     std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/0,
                                                                 /*numUniformSlots=*/10);
     check(r, *program,
-R"(    1. copy_4_constants               $0..3 = u0..3
-    2. copy_4_constants               $4..7 = u4..7
-    3. copy_2_constants               $8..9 = u8..9
-    4. copy_4_constants               $10..13 = u0..3
-    5. copy_constant                  $14 = u4
+R"(    1. copy_4_uniforms                $0..3 = u0..3
+    2. copy_4_uniforms                $4..7 = u4..7
+    3. copy_2_uniforms                $8..9 = u8..9
+    4. copy_4_uniforms                $10..13 = u0..3
+    5. copy_uniform                   $14 = u4
     6. abs_int                        $14 = abs($14)
 )");
 }
@@ -772,18 +764,17 @@ DEF_TEST(RasterPipelineBuilderTernaryFloatOps, r) {
     using BuilderOp = SkSL::RP::BuilderOp;
 
     SkSL::RP::Builder builder;
-    builder.push_literal_f(0.75f);
+    builder.push_constant_f(0.75f);
     builder.push_duplicates(8);
     builder.ternary_op(BuilderOp::mix_n_floats, 3);
     builder.discard_stack(3);
     std::unique_ptr<SkSL::RP::Program> program = builder.finish(/*numValueSlots=*/0,
                                                                 /*numUniformSlots=*/0);
     check(r, *program,
-R"(    1. copy_constant                  $0 = 0x3F400000 (0.75)
-    2. swizzle_4                      $0..3 = ($0..3).xxxx
-    3. copy_4_slots_unmasked          $4..7 = $0..3
-    4. copy_slot_unmasked             $8 = $7
-    5. mix_3_floats                   $0..2 = mix($3..5, $6..8, $0..2)
+R"(    1. splat_4_constants              $0..3 = 0x3F400000 (0.75)
+    2. splat_4_constants              $4..7 = 0x3F400000 (0.75)
+    3. copy_constant                  $8 = 0x3F400000 (0.75)
+    4. mix_3_floats                   $0..2 = mix($3..5, $6..8, $0..2)
 )");
 }
 
@@ -791,7 +782,7 @@ DEF_TEST(RasterPipelineBuilderAutomaticStackRewinding, r) {
     using BuilderOp = SkSL::RP::BuilderOp;
 
     SkSL::RP::Builder builder;
-    builder.push_literal_i(1);
+    builder.push_constant_i(1);
     builder.push_duplicates(2000);
     builder.unary_op(BuilderOp::abs_int, 1);  // perform work so the program isn't eliminated
     builder.discard_stack(2001);
@@ -814,7 +805,7 @@ DEF_TEST(RasterPipelineBuilderTraceOps, r) {
         SkSL::RP::Builder builder;
         // Create a trace mask stack on stack-ID 123.
         builder.set_current_stack(123);
-        builder.push_literal_i(~0);
+        builder.push_constant_i(~0);
         // Emit trace ops.
         builder.trace_enter(123, 2);
         builder.trace_scope(123, +1);
