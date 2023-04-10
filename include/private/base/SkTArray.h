@@ -514,7 +514,7 @@ private:
     // unpredictable location in memory. Of course, TArray won't actually use fItemArray in this
     // way, and we don't want to construct a T before the user requests one. There's no real risk
     // here, so disable CFI when doing these casts.
-    SK_NO_SANITIZE("cfi")
+    SK_CLANG_NO_SANITIZE("cfi")
     static T* TCast(void* buffer) {
         return (T*)buffer;
     }
@@ -691,8 +691,4 @@ public:
     using TArray<T, MEM_MOVE>::size;
 };
 }  // namespace skia_private
-
-template <int N, typename T, bool MEM_MOVE = sk_is_trivially_relocatable_v<T>>
-using SkSTArray = skia_private::STArray<N, T, MEM_MOVE>;
-
-#endif
+#endif  // SkTArray_DEFINED
