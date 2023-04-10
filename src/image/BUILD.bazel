@@ -1,4 +1,4 @@
-load("//bazel:macros.bzl", "exports_files_legacy", "skia_filegroup", "split_srcs_and_hdrs")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup", "split_srcs_and_hdrs")
 
 licenses(["notice"])
 
@@ -10,7 +10,6 @@ CORE_FILES = [
     "SkImage_Lazy.cpp",
     "SkImage_Lazy.h",
     "SkImage_Raster.cpp",
-    "SkReadPixelsRec.h",
     "SkRescaleAndReadPixels.cpp",
     "SkRescaleAndReadPixels.h",
     "SkSurface.cpp",

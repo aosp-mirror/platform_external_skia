@@ -9,9 +9,10 @@
 #define SkAutoBlitterChoose_DEFINED
 
 #include "include/private/base/SkMacros.h"
-#include "src/core/SkArenaAlloc.h"
+#include "src/base/SkArenaAlloc.h"
 #include "src/core/SkBlitter.h"
 #include "src/core/SkDraw.h"
+#include "src/core/SkMatrixProvider.h"
 #include "src/core/SkRasterClip.h"
 #include "src/core/SkSurfacePriv.h"
 
@@ -36,7 +37,11 @@ public:
         if (!matrixProvider) {
             matrixProvider = draw.fMatrixProvider;
         }
-        fBlitter = SkBlitter::Choose(draw.fDst, *matrixProvider, paint, &fAlloc, drawCoverage,
+        fBlitter = SkBlitter::Choose(draw.fDst,
+                                     matrixProvider->localToDevice(),
+                                     paint,
+                                     &fAlloc,
+                                     drawCoverage,
                                      draw.fRC->clipShader(),
                                      SkSurfacePropsCopyOrDefault(draw.fProps));
         return fBlitter;

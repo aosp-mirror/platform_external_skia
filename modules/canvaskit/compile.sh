@@ -39,12 +39,12 @@ mkdir -p $BUILD_DIR
 # we get a fresh build.
 rm -f $BUILD_DIR/*.a
 
-ENABLE_GPU="true"
+ENABLE_GANESH="true"
 ENABLE_WEBGL="false"
 ENABLE_WEBGPU="false"
 if [[ $@ == *cpu* ]]; then
   echo "Using the CPU backend instead of the GPU backend"
-  ENABLE_GPU="false"
+  ENABLE_GANESH="false"
 elif [[ $@ == *webgpu* ]]; then
   echo "Using WebGPU instead of WebGL"
   ENABLE_WEBGPU="true"
@@ -78,12 +78,6 @@ if [[ $@ == *viewer* ]]; then
   INCLUDE_VIEWER="true"
   USE_EXPAT="true"
   IS_OFFICIAL_BUILD="false"
-fi
-
-ENABLE_PARTICLES="true"
-if [[ $@ == *no_particles* ]]; then
-  echo "Omitting Particles"
-  ENABLE_PARTICLES="false"
 fi
 
 ENABLE_PATHOPS="true"
@@ -233,7 +227,7 @@ echo "Compiling"
   skia_use_vulkan=false \
   skia_use_wuffs=true \
   skia_use_zlib=true \
-  skia_enable_gpu=${ENABLE_GPU} \
+  skia_enable_ganesh=${ENABLE_GANESH} \
   skia_build_for_debugger=${DEBUGGER_ENABLED} \
   skia_enable_sksl_tracing=${ENABLE_SKSL_TRACE} \
   \
@@ -250,7 +244,6 @@ echo "Compiling"
   skia_canvaskit_enable_effects_deserialization=${DESERIALIZE_EFFECTS} \
   skia_canvaskit_enable_skottie=${ENABLE_SKOTTIE} \
   skia_canvaskit_include_viewer=${INCLUDE_VIEWER} \
-  skia_canvaskit_enable_particles=${ENABLE_PARTICLES} \
   skia_canvaskit_enable_pathops=${ENABLE_PATHOPS} \
   skia_canvaskit_enable_rt_shader=${ENABLE_RT_SHADER} \
   skia_canvaskit_enable_matrix_helper=${ENABLE_MATRIX} \

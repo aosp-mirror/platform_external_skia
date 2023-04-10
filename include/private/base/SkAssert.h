@@ -43,6 +43,12 @@
     } while (false)
 #endif
 
+#if defined(SK_BUILD_FOR_ANDROID_FRAMEWORK)
+#  define SK_ABORT_IN_ANDROID_FRAMEWORK(message, ...) SK_ABORT(message, ##__VA_ARGS__)
+#else
+#  define SK_ABORT_IN_ANDROID_FRAMEWORK(message, ...)
+#endif
+
 // SkASSERT, SkASSERTF and SkASSERT_RELEASE can be used as stand alone assertion expressions, e.g.
 //    uint32_t foo(int x) {
 //        SkASSERT(x > 4);
@@ -74,6 +80,19 @@
     // unlike SkASSERT, this macro executes its condition in the non-debug build.
     // The if is present so that this can be used with functions marked SK_WARN_UNUSED_RESULT.
     #define SkAssertResult(cond)         if (cond) {} do {} while(false)
+#endif
+
+#if !defined(SkUNREACHABLE)
+#  if defined(_MSC_VER) && !defined(__clang__)
+#    include <intrin.h>
+#    define FAST_FAIL_INVALID_ARG                 5
+// See https://developercommunity.visualstudio.com/content/problem/1128631/code-flow-doesnt-see-noreturn-with-extern-c.html
+// for why this is wrapped. Hopefully removable after msvc++ 19.27 is no longer supported.
+[[noreturn]] static inline void sk_fast_fail() { __fastfail(FAST_FAIL_INVALID_ARG); }
+#    define SkUNREACHABLE sk_fast_fail()
+#  else
+#    define SkUNREACHABLE __builtin_trap()
+#  endif
 #endif
 
 #endif

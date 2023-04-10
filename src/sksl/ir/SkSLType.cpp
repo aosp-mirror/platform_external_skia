@@ -11,7 +11,7 @@
 #include "include/private/SkSLString.h"
 #include "include/private/base/SkTFitsIn.h"
 #include "include/sksl/SkSLErrorReporter.h"
-#include "src/core/SkMathPriv.h"
+#include "src/base/SkMathPriv.h"
 #include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/SkSLContext.h"
@@ -194,7 +194,7 @@ public:
     GenericType(const char* name, SkSpan<const Type* const> coercibleTypes)
         : INHERITED(name, "G", kTypeKind) {
         fNumTypes = coercibleTypes.size();
-        SkASSERT(fNumTypes <= SK_ARRAY_COUNT(fCoercibleTypes));
+        SkASSERT(fNumTypes <= std::size(fCoercibleTypes));
         std::copy(coercibleTypes.begin(), coercibleTypes.end(), fCoercibleTypes);
     }
 

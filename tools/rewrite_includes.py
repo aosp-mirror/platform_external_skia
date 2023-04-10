@@ -47,8 +47,9 @@ ignorelist = [
   'node_modules',
   'include/third_party/skcms',
   # Temporary (hopefully) shims for Android
+  'SkFixed.h',
   'SkMalloc.h',
-  'SkTemplates.h',
+  'SkTSearch.h',
 ]
 
 assert '/' in [os.sep, os.altsep]
@@ -85,7 +86,9 @@ for file_path in to_rewrite():
       'tests/sksl/' in file_path or
       'third_party/skcms' in file_path or
       'modules/skcms' in file_path or
-      file_path.startswith('bazel/rbe')):
+      file_path.startswith('bazel/rbe') or
+      # We intentionally list SkUserConfig.h not from the root in this file.
+      file_path == 'include/private/base/SkLoadUserConfig.h'):
     continue
   if (file_path.endswith('.h') or
       file_path.endswith('.c') or

@@ -1,4 +1,4 @@
-load("//bazel:macros.bzl", "exports_files_legacy", "skia_filegroup")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup")
 
 licenses(["notice"])
 
@@ -20,7 +20,6 @@ skia_filegroup(
         "SkPaintFilterCanvas.h",
         "SkParse.h",
         "SkParsePath.h",
-        "SkRandom.h",
         "SkShadowUtils.h",
         "SkTextUtils.h",
         "SkTraceEventPhase.h",

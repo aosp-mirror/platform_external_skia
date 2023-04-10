@@ -69,7 +69,6 @@ public:
                            int                       testPersistentCache,
                            bool                      testPrecompile,
                            bool                      useDDLSink,
-                           bool                      OOPRish,
                            bool                      slug,
                            bool                      serializedSlug,
                            bool                      remoteSlug,
@@ -87,7 +86,6 @@ public:
     int           getTestPersistentCache() const { return fTestPersistentCache; }
     bool          getTestPrecompile() const { return fTestPrecompile; }
     bool          getUseDDLSink() const { return fUseDDLSink; }
-    bool          getOOPRish() const { return fOOPRish; }
     bool          getSlug() const { return fSlug; }
     bool          getSerializedSlug() const { return fSerializeSlug; }
     bool          getRemoteSlug() const { return fRemoteSlug; }
@@ -105,7 +103,6 @@ private:
     int                 fTestPersistentCache;
     bool                fTestPrecompile;
     bool                fUseDDLSink;
-    bool                fOOPRish;
     bool                fSlug;
     bool                fSerializeSlug;
     bool                fRemoteSlug;
@@ -113,7 +110,7 @@ private:
     SurfType            fSurfType;
 };
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 
 #include "tools/graphite/ContextFactory.h"
 
@@ -143,7 +140,7 @@ private:
     SkAlphaType         fAlphaType;
 };
 
-#endif // SK_GRAPHITE_ENABLED
+#endif // SK_GRAPHITE
 
 // SkCommandLineConfigSvg is a SkCommandLineConfig that extracts information out of the backend
 // part of the tag. It is constructed tags that have:

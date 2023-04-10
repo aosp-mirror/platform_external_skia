@@ -8,26 +8,29 @@
 #ifndef SkImage_DEFINED
 #define SkImage_DEFINED
 
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkImageInfo.h"
+#include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
-#include "include/core/SkSamplingOptions.h"
-#include "include/core/SkScalar.h"
-#include "include/core/SkShader.h"
-#include "include/core/SkSurfaceProps.h"
-#include "include/core/SkTileMode.h"
-#if SK_SUPPORT_GPU
+#include "include/core/SkSize.h"
+#include "include/core/SkTypes.h"
+
+#if defined(SK_GANESH)
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrTypes.h"
 #endif
-#if defined(SK_GRAPHITE_ENABLED)
+#if defined(SK_GRAPHITE)
 #include "include/gpu/graphite/GraphiteTypes.h"
 #endif
 
-#include <memory>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 
 #if defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26
+#include "include/gpu/GrTypes.h"
 #include <android/hardware_buffer.h>
 #endif
 
@@ -38,22 +41,27 @@ class GrDirectContext;
 class GrRecordingContext;
 class GrYUVABackendTextureInfo;
 class GrYUVABackendTextures;
-class SkCanvas;
+class SkBitmap;
+class SkColorSpace;
 class SkData;
-class SkImage;
 class SkImageFilter;
 class SkImageGenerator;
+class SkMatrix;
 class SkMipmap;
 class SkPaint;
 class SkPicture;
 class SkPixmap;
 class SkPromiseImageTexture;
-class SkSurface;
+class SkShader;
+class SkSurfaceProps;
 class SkYUVAPixmaps;
-
+enum SkColorType : int;
 enum class SkEncodedImageFormat;
+enum class SkTileMode;
+struct SkIPoint;
+struct SkSamplingOptions;
 
-#if defined(SK_GRAPHITE_ENABLED)
+#if defined(SK_GRAPHITE)
 namespace skgpu::graphite {
 class BackendTexture;
 class Recorder;
@@ -266,9 +274,12 @@ public:
     static sk_sp<SkImage> MakeFromPicture(sk_sp<SkPicture> picture, const SkISize& dimensions,
                                           const SkMatrix* matrix, const SkPaint* paint,
                                           BitDepth bitDepth, sk_sp<SkColorSpace> colorSpace,
-                                          SkSurfaceProps props = {});
+                                          SkSurfaceProps props);
+    static sk_sp<SkImage> MakeFromPicture(sk_sp<SkPicture> picture, const SkISize& dimensions,
+                                          const SkMatrix* matrix, const SkPaint* paint,
+                                          BitDepth bitDepth, sk_sp<SkColorSpace> colorSpace);
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
         /** Creates a GPU-backed SkImage from compressed data.
 
         This method will return an SkImage representing the compressed data.
@@ -439,9 +450,11 @@ public:
     */
     static sk_sp<SkImage> MakeFromYUVATextures(GrRecordingContext* context,
                                                const GrYUVABackendTextures& yuvaTextures,
-                                               sk_sp<SkColorSpace> imageColorSpace = nullptr,
+                                               sk_sp<SkColorSpace> imageColorSpace,
                                                TextureReleaseProc textureReleaseProc = nullptr,
                                                ReleaseContext releaseContext = nullptr);
+    static sk_sp<SkImage> MakeFromYUVATextures(GrRecordingContext* context,
+                                               const GrYUVABackendTextures& yuvaTextures);
 
     /** Creates SkImage from SkYUVAPixmaps.
 
@@ -468,9 +481,13 @@ public:
     */
     static sk_sp<SkImage> MakeFromYUVAPixmaps(GrRecordingContext* context,
                                               const SkYUVAPixmaps& pixmaps,
+                                              GrMipmapped buildMips,
+                                              bool limitToMaxTextureSize,
+                                              sk_sp<SkColorSpace> imageColorSpace);
+    static sk_sp<SkImage> MakeFromYUVAPixmaps(GrRecordingContext* context,
+                                              const SkYUVAPixmaps& pixmaps,
                                               GrMipmapped buildMips = GrMipmapped::kNo,
-                                              bool limitToMaxTextureSize = false,
-                                              sk_sp<SkColorSpace> imageColorSpace = nullptr);
+                                              bool limitToMaxTextureSize = false);
 
     using PromiseImageTextureContext = void*;
     using PromiseImageTextureFulfillProc =
@@ -549,7 +566,7 @@ public:
                                                  PromiseImageTextureReleaseProc textureReleaseProc,
                                                  PromiseImageTextureContext textureContexts[]);
 
-#endif // SK_SUPPORT_GPU
+#endif // defined(SK_GANESH)
 
 #if defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26
     /** (See Skia bug 7447)
@@ -564,8 +581,11 @@ public:
     */
     static sk_sp<SkImage> MakeFromAHardwareBuffer(
             AHardwareBuffer* hardwareBuffer,
-            SkAlphaType alphaType = kPremul_SkAlphaType,
-            sk_sp<SkColorSpace> colorSpace = nullptr,
+            SkAlphaType alphaType = kPremul_SkAlphaType);
+    static sk_sp<SkImage> MakeFromAHardwareBuffer(
+            AHardwareBuffer* hardwareBuffer,
+            SkAlphaType alphaType,
+            sk_sp<SkColorSpace> colorSpace,
             GrSurfaceOrigin surfaceOrigin = kTopLeft_GrSurfaceOrigin);
 
     /** Creates SkImage from Android hardware buffer and uploads the data from the SkPixmap to it.
@@ -694,18 +714,12 @@ public:
      */
     sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy, const SkSamplingOptions&,
                                const SkMatrix* localMatrix = nullptr) const;
-
     sk_sp<SkShader> makeShader(SkTileMode tmx, SkTileMode tmy, const SkSamplingOptions& sampling,
-                               const SkMatrix& lm) const {
-        return this->makeShader(tmx, tmy, sampling, &lm);
-    }
-    sk_sp<SkShader> makeShader(const SkSamplingOptions& sampling, const SkMatrix& lm) const {
-        return this->makeShader(SkTileMode::kClamp, SkTileMode::kClamp, sampling, &lm);
-    }
+                               const SkMatrix& lm) const;
+    /** Defaults to clamp in both X and Y. */
+    sk_sp<SkShader> makeShader(const SkSamplingOptions& sampling, const SkMatrix& lm) const;
     sk_sp<SkShader> makeShader(const SkSamplingOptions& sampling,
-                               const SkMatrix* lm = nullptr) const {
-        return this->makeShader(SkTileMode::kClamp, SkTileMode::kClamp, sampling, lm);
-    }
+                               const SkMatrix* lm = nullptr) const;
 
     /**
      *  makeRawShader functions like makeShader, but for images that contain non-color data.
@@ -722,20 +736,12 @@ public:
      */
     sk_sp<SkShader> makeRawShader(SkTileMode tmx, SkTileMode tmy, const SkSamplingOptions&,
                                   const SkMatrix* localMatrix = nullptr) const;
-
     sk_sp<SkShader> makeRawShader(SkTileMode tmx, SkTileMode tmy, const SkSamplingOptions& sampling,
-                                  const SkMatrix& lm) const {
-        return this->makeRawShader(tmx, tmy, sampling, &lm);
-    }
-    sk_sp<SkShader> makeRawShader(const SkSamplingOptions& sampling, const SkMatrix& lm) const {
-        return this->makeRawShader(SkTileMode::kClamp, SkTileMode::kClamp, sampling, &lm);
-    }
+                                  const SkMatrix& lm) const;
+    /** Defaults to clamp in both X and Y. */
+    sk_sp<SkShader> makeRawShader(const SkSamplingOptions& sampling, const SkMatrix& lm) const;
     sk_sp<SkShader> makeRawShader(const SkSamplingOptions& sampling,
-                                  const SkMatrix* lm = nullptr) const {
-        return this->makeRawShader(SkTileMode::kClamp, SkTileMode::kClamp, sampling, lm);
-    }
-
-    using CubicResampler = SkCubicResampler;
+                                  const SkMatrix* lm = nullptr) const;
 
     /** Copies SkImage pixel address, row bytes, and SkImageInfo to pixmap, if address
         is available, and returns true. If pixel address is not available, return
@@ -777,7 +783,7 @@ public:
     */
     bool isValid(GrRecordingContext* context) const;
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     /** Flushes any pending uses of texture-backed images in the GPU backend. If the image is not
         texture-backed (including promise texture images) or if the GrDirectContext does not
         have the same context ID as the context backing the image then this is a no-op.
@@ -811,7 +817,7 @@ public:
     */
     GrBackendTexture getBackendTexture(bool flushPendingGrContextIO,
                                        GrSurfaceOrigin* origin = nullptr) const;
-#endif // SK_SUPPORT_GPU
+#endif // defined(SK_GANESH)
 
     /** \enum SkImage::CachingHint
         CachingHint selects whether Skia may internally cache SkBitmap generated by
@@ -1125,7 +1131,7 @@ public:
      */
     sk_sp<SkImage> withDefaultMipmaps() const;
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     /** Returns SkImage backed by GPU texture associated with context. Returned SkImage is
         compatible with SkSurface created with dstColorSpace. The returned SkImage respects
         mipmapped setting; if mipmapped equals GrMipmapped::kYes, the backing texture
@@ -1150,9 +1156,9 @@ public:
     sk_sp<SkImage> makeTextureImage(GrDirectContext*,
                                     GrMipmapped = GrMipmapped::kNo,
                                     skgpu::Budgeted = skgpu::Budgeted::kYes) const;
-#endif // SK_SUPPORT_GPU
+#endif // defined(SK_GANESH)
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 
     // Passed to both fulfill and imageRelease
     using GraphitePromiseImageContext = void*;
@@ -1244,7 +1250,7 @@ public:
                                                          sk_sp<SkColorSpace> colorSpace);
 
     struct RequiredImageProperties {
-        skgpu::graphite::Mipmapped fMipmapped;
+        skgpu::Mipmapped fMipmapped;
     };
 
     /** Graphite version of makeTextureImage.
@@ -1292,7 +1298,46 @@ public:
                               skgpu::graphite::Recorder*,
                               RequiredImageProperties = {}) const;
 
-#endif // SK_GRAPHITE_ENABLED
+    /** Creates SkImage in target SkColorSpace.
+        Returns nullptr if SkImage could not be created.
+
+        Returns original SkImage if it is in target SkColorSpace.
+        Otherwise, converts pixels from SkImage SkColorSpace to target SkColorSpace.
+        If SkImage colorSpace() returns nullptr, SkImage SkColorSpace is assumed to be sRGB.
+
+        If this image is graphite-backed, the recorder parameter is required.
+
+        @param targetColorSpace         SkColorSpace describing color range of returned SkImage
+        @param recorder                 The Recorder in which to create the new image
+        @param RequiredImageProperties  properties the returned SkImage must possess (e.g.,
+                                        mipmaps)
+        @return                         created SkImage in target SkColorSpace
+    */
+    sk_sp<SkImage> makeColorSpace(sk_sp<SkColorSpace> targetColorSpace,
+                                  skgpu::graphite::Recorder*,
+                                  RequiredImageProperties = {}) const;
+
+    /** Experimental.
+        Creates SkImage in target SkColorType and SkColorSpace.
+        Returns nullptr if SkImage could not be created.
+
+        Returns original SkImage if it is in target SkColorType and SkColorSpace.
+
+        If this image is graphite-backed, the recorder parameter is required.
+
+        @param targetColorType          SkColorType of returned SkImage
+        @param targetColorSpace         SkColorSpace of returned SkImage
+        @param recorder                 The Recorder in which to create the new image
+        @param RequiredImageProperties  properties the returned SkImage must possess (e.g.,
+                                        mipmaps)
+        @return                         created SkImage in target SkColorType and SkColorSpace
+    */
+    sk_sp<SkImage> makeColorTypeAndColorSpace(SkColorType targetColorType,
+                                              sk_sp<SkColorSpace> targetColorSpace,
+                                              skgpu::graphite::Recorder*,
+                                              RequiredImageProperties = {}) const;
+
+#endif // SK_GRAPHITE
 
     /** Returns raster image or lazy image. Copies SkImage backed by GPU texture into
         CPU memory if needed. Returns original SkImage if decoded in raster bitmap,
@@ -1355,7 +1400,7 @@ public:
     */
     typedef std::function<void(GrBackendTexture)> BackendTextureReleaseProc;
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     /** Creates a GrBackendTexture from the provided SkImage. Returns true and
         stores result in backendTexture and backendTextureReleaseProc if
         texture is created; otherwise, returns false and leaves

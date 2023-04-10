@@ -1,4 +1,4 @@
-load("//bazel:macros.bzl", "exports_files_legacy", "skia_filegroup")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup")
 
 licenses(["notice"])
 
@@ -114,4 +114,41 @@ skia_filegroup(
         ":skpicture_public_hdrs",
     ],
     visibility = ["//include:__pkg__"],
+)
+
+# This filegroup is for the (experimental) buffet build
+skia_filegroup(
+    name = "core_hdrs",
+    srcs = [
+        "SkAlphaType.h",
+        "SkBlendMode.h",
+        "SkBlender.h",
+        "SkColor.h",
+        "SkColorPriv.h",
+        "SkData.h",
+        "SkFlattenable.h",
+        "SkImageFilter.h",
+        "SkM44.h",
+        "SkMaskFilter.h",
+        "SkMatrix.h",
+        "SkPath.h",
+        "SkPathBuilder.h",
+        "SkPathEffect.h",
+        "SkPathTypes.h",
+        "SkPoint.h",
+        "SkPoint3.h",
+        "SkRRect.h",
+        "SkRSXform.h",
+        "SkRect.h",
+        "SkRefCnt.h",
+        "SkSamplingOptions.h",
+        "SkScalar.h",
+        "SkShader.h",
+        "SkSize.h",
+        "SkStream.h",
+        "SkString.h",
+        "SkStrokeRec.h",
+        "SkTypes.h",
+    ],
+    visibility = ["//src:__pkg__"],
 )

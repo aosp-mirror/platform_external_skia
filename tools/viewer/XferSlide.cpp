@@ -10,11 +10,12 @@
 #include "include/core/SkFont.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkRSXform.h"
+#include "include/core/SkSamplingOptions.h"
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
 #include "include/effects/SkGradientShader.h"
-#include "include/utils/SkRandom.h"
 #include "include/utils/SkTextUtils.h"
+#include "src/base/SkRandom.h"
 #include "tools/viewer/ClickHandlerSlide.h"
 
 const SkBlendMode gModes[] = {
@@ -297,9 +298,9 @@ private:
         }
     };
 
-    std::vector<Rec>        fRecs;
-    SkRect                  fDomain;
-    SkImage::CubicResampler fCubic;
+    std::vector<Rec>  fRecs;
+    SkRect            fDomain;
+    SkCubicResampler  fCubic;
 };
 
 DEF_SLIDE( return new CubicResamplerSlide; )

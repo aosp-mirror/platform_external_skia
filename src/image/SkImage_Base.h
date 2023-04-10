@@ -22,12 +22,12 @@
 #include <string_view>
 #include <tuple>
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "include/gpu/GrTypes.h"
 #include "src/gpu/ganesh/SkGr.h"
 #endif
 
-#if defined(SK_GRAPHITE_ENABLED)
+#if defined(SK_GRAPHITE)
 namespace skgpu {
 namespace graphite {
 class TextureProxyView;
@@ -109,7 +109,7 @@ public:
     /** this->context() try-casted to GrDirectContext. Useful for migrations – avoid otherwise! */
     GrDirectContext* directContext() const;
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     virtual GrSemaphoresSubmitted onFlush(GrDirectContext*, const GrFlushInfo&) const {
         return GrSemaphoresSubmitted::kNo;
     }
@@ -138,8 +138,6 @@ public:
                                                              const SkRect* subset = nullptr,
                                                              const SkRect* domain = nullptr) const;
 
-    virtual bool isYUVA() const { return false; }
-
     // If this image is the current cached image snapshot of a surface then this is called when the
     // surface is destroyed to indicate no further writes may happen to surface backing store.
     virtual void generatingSurfaceIsDeleted() {}
@@ -147,18 +145,18 @@ public:
     virtual GrBackendTexture onGetBackendTexture(bool flushPendingGrContextIO,
                                                  GrSurfaceOrigin* origin) const;
 #endif
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
     // Returns a TextureProxyView representation of the image, if possible. This also returns
     // a color type. This may be different than the image's color type when the image is not
     // texture-backed and the capabilities of the GPU require a data type conversion to put
     // the data in a texture.
     std::tuple<skgpu::graphite::TextureProxyView, SkColorType> asView(
             skgpu::graphite::Recorder*,
-            skgpu::graphite::Mipmapped) const;
+            skgpu::Mipmapped) const;
 
-    virtual sk_sp<SkImage> onMakeSubset(const SkIRect&,
-                                        skgpu::graphite::Recorder*,
-                                        RequiredImageProperties) const = 0;
+#endif
+#if defined(SK_GANESH) || defined(SK_GRAPHITE)
+    virtual bool isYUVA() const { return false; }
 #endif
 
     virtual bool onPinAsTexture(GrRecordingContext*) const { return false; }
@@ -206,15 +204,22 @@ public:
         return nullptr;
     }
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
     virtual sk_sp<SkImage> onMakeTextureImage(skgpu::graphite::Recorder*,
                                               RequiredImageProperties) const = 0;
+    virtual sk_sp<SkImage> onMakeSubset(const SkIRect&,
+                                        skgpu::graphite::Recorder*,
+                                        RequiredImageProperties) const = 0;
+    virtual sk_sp<SkImage> onMakeColorTypeAndColorSpace(SkColorType,
+                                                        sk_sp<SkColorSpace>,
+                                                        skgpu::graphite::Recorder*,
+                                                        RequiredImageProperties) const = 0;
 #endif
 
 protected:
     SkImage_Base(const SkImageInfo& info, uint32_t uniqueID);
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     // Utility for making a copy of an existing view when the GrImageTexGenPolicy is not kDraw.
     static GrSurfaceProxyView CopyView(GrRecordingContext*,
                                        GrSurfaceProxyView src,
@@ -244,7 +249,7 @@ protected:
 #endif
 
 private:
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     virtual std::tuple<GrSurfaceProxyView, GrColorType> onAsView(
             GrRecordingContext*,
             GrMipmapped,

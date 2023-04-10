@@ -10,7 +10,7 @@
 #include "include/core/SkImage.h"
 #include "src/core/SkNextID.h"
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "include/gpu/GrRecordingContext.h"
 #endif
 
@@ -46,7 +46,7 @@ bool SkImageGenerator::getYUVAPlanes(const SkYUVAPixmaps& yuvaPixmaps) {
     return this->onGetYUVAPlanes(yuvaPixmaps);
 }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "src/gpu/ganesh/GrSurfaceProxyView.h"
 
 GrSurfaceProxyView SkImageGenerator::generateTexture(GrRecordingContext* ctx,
@@ -68,14 +68,14 @@ GrSurfaceProxyView SkImageGenerator::onGenerateTexture(GrRecordingContext*,
                                                        GrImageTexGenPolicy) {
     return {};
 }
-#endif // SK_SUPPORT_GPU
+#endif // defined(SK_GANESH)
 
-#if SK_GRAPHITE_ENABLED
+#if SK_GRAPHITE
 #include "src/gpu/graphite/Image_Graphite.h"
 
 sk_sp<SkImage> SkImageGenerator::makeTextureImage(skgpu::graphite::Recorder* recorder,
                                                   const SkImageInfo& info,
-                                                  skgpu::graphite::Mipmapped mipmapped) {
+                                                  skgpu::Mipmapped mipmapped) {
     // This still allows for a difference in colorType and colorSpace. Just no subsetting.
     if (fInfo.dimensions() != info.dimensions()) {
         return nullptr;
@@ -86,11 +86,11 @@ sk_sp<SkImage> SkImageGenerator::makeTextureImage(skgpu::graphite::Recorder* rec
 
 sk_sp<SkImage> SkImageGenerator::onMakeTextureImage(skgpu::graphite::Recorder*,
                                                     const SkImageInfo&,
-                                                    skgpu::graphite::Mipmapped) {
+                                                    skgpu::Mipmapped) {
     return nullptr;
 }
 
-#endif // SK_GRAPHITE_ENABLED
+#endif // SK_GRAPHITE
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 

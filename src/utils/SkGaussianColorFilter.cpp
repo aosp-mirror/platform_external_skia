@@ -16,9 +16,10 @@
 #include "src/core/SkRasterPipelineOpList.h"
 #include "src/core/SkVM.h"
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
-
+// This shouldn't be needed but IWYU needs both (identical) defs of GrFPResult.
+#include "src/shaders/SkShaderBase.h"
 #include <memory>
 #include <utility>
 
@@ -32,7 +33,7 @@ class SkColorInfo;
 class SkReadBuffer;
 class SkWriteBuffer;
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
@@ -50,14 +51,19 @@ class SkGaussianColorFilter final : public SkColorFilterBase {
 public:
     SkGaussianColorFilter() : SkColorFilterBase() {}
 
-#if SK_SUPPORT_GPU
+    bool appendStages(const SkStageRec& rec, bool shaderIsOpaque) const override {
+        rec.fPipeline->append(SkRasterPipelineOp::gauss_a_to_rgba);
+        return true;
+    }
+
+#if defined(SK_GANESH)
     GrFPResult asFragmentProcessor(std::unique_ptr<GrFragmentProcessor> inputFP,
                                    GrRecordingContext*,
                                    const GrColorInfo&,
                                    const SkSurfaceProps&) const override;
 #endif
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
     void addToKey(const skgpu::graphite::KeyContext&,
                   skgpu::graphite::PaintParamsKeyBuilder*,
                   skgpu::graphite::PipelineDataGatherer*) const override;
@@ -65,10 +71,6 @@ public:
 
 protected:
     void flatten(SkWriteBuffer&) const override {}
-    bool onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override {
-        rec.fPipeline->append(SkRasterPipelineOp::gauss_a_to_rgba);
-        return true;
-    }
 
     skvm::Color onProgram(skvm::Builder* p, skvm::Color c, const SkColorInfo& dst, skvm::Uniforms*,
                           SkArenaAlloc*) const override {
@@ -92,7 +94,7 @@ sk_sp<SkFlattenable> SkGaussianColorFilter::CreateProc(SkReadBuffer&) {
     return SkColorFilterPriv::MakeGaussian();
 }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 
 #include "include/effects/SkRuntimeEffect.h"
 #include "src/core/SkRuntimeEffectPriv.h"
@@ -115,7 +117,7 @@ GrFPResult SkGaussianColorFilter::asFragmentProcessor(std::unique_ptr<GrFragment
 }
 #endif
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 
 void SkGaussianColorFilter::addToKey(const skgpu::graphite::KeyContext& keyContext,
                                      skgpu::graphite::PaintParamsKeyBuilder* builder,

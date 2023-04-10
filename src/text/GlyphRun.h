@@ -19,8 +19,8 @@
 #include "include/core/SkSpan.h"
 #include "include/core/SkTypes.h"
 #include "include/private/base/SkTemplates.h"
+#include "src/base/SkZip.h"
 #include "src/core/SkGlyphBuffer.h"
-#include "src/core/SkZip.h"
 
 class SkBaseDevice;
 class SkCanvas;
@@ -112,6 +112,13 @@ public:
             glyphCount += run.runSize();
         }
         return glyphCount;
+    }
+    size_t maxGlyphRunSize() const {
+        size_t size = 0;
+        for (const GlyphRun& run : *this) {
+            size = std::max(run.runSize(), size);
+        }
+        return size;
     }
 
     bool hasRSXForm() const {

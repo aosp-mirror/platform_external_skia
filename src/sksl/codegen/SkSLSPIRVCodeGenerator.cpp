@@ -71,8 +71,8 @@
 #include "src/sksl/ir/SkSLTernaryExpression.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/ir/SkSLVariableReference.h"
+#include "src/utils/SkBitSet.h"
 
-#include <cmath>
 #include <cstring>
 #include <set>
 #include <string>
@@ -3134,17 +3134,6 @@ SpvId SPIRVCodeGenerator::mergeComparisons(SpvId comparison, SpvId allComparison
     return logicalOp;
 }
 
-static float division_by_literal_value(Operator op, const Expression& right) {
-    // If this is a division by a literal value, returns that literal value. Otherwise, returns 0.
-    if (op.kind() == Operator::Kind::SLASH && right.isFloatLiteral()) {
-        float rhsValue = right.as<Literal>().floatValue();
-        if (std::isfinite(rhsValue)) {
-            return rhsValue;
-        }
-    }
-    return 0.0f;
-}
-
 SpvId SPIRVCodeGenerator::writeBinaryExpression(const BinaryExpression& b, OutputStream& out) {
     const Expression* left = b.left().get();
     const Expression* right = b.right().get();
@@ -3179,19 +3168,7 @@ SpvId SPIRVCodeGenerator::writeBinaryExpression(const BinaryExpression& b, Outpu
         lhs = this->writeExpression(*left, out);
     }
 
-    SpvId rhs;
-    float rhsValue = division_by_literal_value(op, *right);
-    if (rhsValue != 0.0f) {
-        // Rewrite floating-point division by a literal into multiplication by the reciprocal.
-        // This converts `expr / 2` into `expr * 0.5`
-        // This improves codegen, especially for certain types of divides (e.g. vector/scalar).
-        op = Operator(Operator::Kind::STAR);
-        rhs = this->writeLiteral(1.0 / rhsValue, right->type());
-    } else {
-        // Write the right-hand side expression normally.
-        rhs = this->writeExpression(*right, out);
-    }
-
+    SpvId rhs = this->writeExpression(*right, out);
     SpvId result = this->writeBinaryExpression(left->type(), lhs, op.removeAssignment(),
                                                right->type(), rhs, b.type(), out);
     if (lvalue) {
@@ -3933,14 +3910,14 @@ void SPIRVCodeGenerator::writeSwitchStatement(const SwitchStatement& s, OutputSt
 
     // The store cache isn't trustworthy in the presence of branches; store caching only makes sense
     // in the context of linear straight-line execution. If we wanted to be more clever, we could
-    // only invalidate store cache entries for variables affected by the loop body, but for now we
+    // only invalidate store cache entries for variables affected by the switch body, but for now we
     // simply clear the entire cache whenever branching occurs.
     SkTArray<SpvId> labels;
     SpvId end = this->nextId(nullptr);
     SpvId defaultLabel = end;
     fBreakTarget.push_back(end);
     int size = 3;
-    auto& cases = s.cases();
+    const StatementArray& cases = s.cases();
     for (const std::unique_ptr<Statement>& stmt : cases) {
         const SwitchCase& c = stmt->as<SwitchCase>();
         SpvId label = this->nextId(nullptr);
@@ -3951,7 +3928,23 @@ void SPIRVCodeGenerator::writeSwitchStatement(const SwitchStatement& s, OutputSt
             defaultLabel = label;
         }
     }
+
+    // We should have exactly one label for each case.
+    SkASSERT(labels.size() == cases.size());
+
+    // Collapse adjacent switch-cases into one; that is, reduce `case 1: case 2: case 3:` into a
+    // single OpLabel. The Tint SPIR-V reader does not support switch-case fallthrough, but it
+    // does support multiple switch-cases branching to the same label.
+    SkBitSet caseIsCollapsed(cases.size());
+    for (int index = cases.size() - 2; index >= 0; index--) {
+        if (cases[index]->as<SwitchCase>().statement()->isEmpty()) {
+            caseIsCollapsed.set(index);
+            labels[index] = labels[index + 1];
+        }
+    }
+
     labels.push_back(end);
+
     this->writeInstruction(SpvOpSelectionMerge, end, SpvSelectionControlMaskNone, out);
     this->writeOpCode(SpvOpSwitch, size, out);
     this->writeWord(value, out);
@@ -3965,6 +3958,9 @@ void SPIRVCodeGenerator::writeSwitchStatement(const SwitchStatement& s, OutputSt
         this->writeWord(labels[i], out);
     }
     for (int i = 0; i < cases.size(); ++i) {
+        if (caseIsCollapsed.test(i)) {
+            continue;
+        }
         const SwitchCase& c = cases[i]->as<SwitchCase>();
         if (i == 0) {
             this->writeLabel(labels[i], kBranchIsOnPreviousLine, out);

@@ -14,7 +14,7 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypes.h"
-#include "include/private/base/SkVx.h"
+#include "src/base/SkVx.h"
 
 #include <cstdint>
 #include <cstring>
@@ -187,6 +187,13 @@ public:
     //
     // Returns positive infinity if the transformed homogeneous point has w <= 0.
     static SkScalar DifferentialAreaScale(const SkMatrix& m, const SkPoint& p);
+
+    // Determines if the transformation m applied to the bounds can be approximated by
+    // an affine transformation, i.e., the perspective part of the transformation has little
+    // visible effect.
+    static bool NearlyAffine(const SkMatrix& m,
+                             const SkRect& bounds,
+                             SkScalar tolerance = SK_ScalarNearlyZero);
 
     static SkScalar ComputeResScaleForStroking(const SkMatrix& matrix);
 };

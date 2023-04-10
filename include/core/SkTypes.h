@@ -11,27 +11,29 @@
 // All of these files should be independent of things users can set via the user config file.
 // They should also be able to be included in any order.
 // IWYU pragma: begin_exports
-#include "include/private/base/SkAPI.h"
 #include "include/private/base/SkFeatures.h"
 
 // Load and verify defines from the user config file.
 #include "include/private/base/SkLoadUserConfig.h"
 
 // Any includes or defines below can be configured by the user config file.
+#include "include/private/base/SkAPI.h"
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkAttributes.h"
 #include "include/private/base/SkDebug.h"
 // IWYU pragma: end_exports
 
 #include <climits>
-#include <cstddef>
 #include <cstdint>
 
-#if !defined(SK_SUPPORT_GPU)
-#  define SK_SUPPORT_GPU 1
+// Legacy flag
+#if defined(SK_SUPPORT_GPU)
+#if SK_SUPPORT_GPU && !defined(SK_GANESH)
+#  define SK_GANESH
+#endif
 #endif
 
-#if SK_SUPPORT_GPU || defined(SK_GRAPHITE_ENABLED)
+#if defined(SK_GANESH) || defined(SK_GRAPHITE)
 #  if !defined(SK_ENABLE_SKSL)
 #    define SK_ENABLE_SKSL
 #  endif
@@ -41,19 +43,6 @@
 #  undef SK_METAL
 #  undef SK_DAWN
 #  undef SK_DIRECT3D
-#endif
-
-#if !defined(SkUNREACHABLE)
-#  if defined(_MSC_VER) && !defined(__clang__)
-#    include <intrin.h>
-#    define FAST_FAIL_INVALID_ARG                 5
-// See https://developercommunity.visualstudio.com/content/problem/1128631/code-flow-doesnt-see-noreturn-with-extern-c.html
-// for why this is wrapped. Hopefully removable after msvc++ 19.27 is no longer supported.
-[[noreturn]] static inline void sk_fast_fail() { __fastfail(FAST_FAIL_INVALID_ARG); }
-#    define SkUNREACHABLE sk_fast_fail()
-#  else
-#    define SkUNREACHABLE __builtin_trap()
-#  endif
 #endif
 
 // If SK_R32_SHIFT is set, we'll use that to choose RGBA or BGRA.
@@ -112,11 +101,6 @@
 #  define GR_TEST_UTILS 0
 #endif
 
-#if !SK_SUPPORT_GPU
-   #define SK_GPU_V1 0 // always false if Ganesh is disabled
-#elif !defined(SK_GPU_V1)
-#  define SK_GPU_V1 1   // otherwise default to v1 enabled
-#endif
 
 #if defined(SK_HISTOGRAM_ENUMERATION)  || \
     defined(SK_HISTOGRAM_BOOLEAN)      || \
@@ -181,22 +165,6 @@
       #define GR_GPU_STATS    0
   #endif
 #endif
-
-////////////////////////////////////////////////////////////////////////////////
-
-/** @return the number of entries in an array (not a pointer)
-*/
-// The SkArrayCountHelper template returns a type 'char (&)[N]', a reference to an array of
-// char with N elements, where N is deduced using function parameter type deduction. This is then
-// used in the sizeof operator in SK_ARRAY_COUNT. The sizeof operator ignores the reference, and
-// just evaluates the size of the array type.
-//
-// DEPRECATED: use std::size() instead.
-// Note: Rarely, std::size(z) can't deduce the type of z during compile time for static_assert
-// while SK_ARRAY_COUNT can. It can't be deduced because z is part of class, and the class' this
-// pointer is not a valid constexpr expression. Use SkASSERT instead.
-template <typename T, size_t N> char (&SkArrayCountHelper(T (&array)[N]))[N];
-#define SK_ARRAY_COUNT(array) (sizeof(SkArrayCountHelper(array)))
 
 ////////////////////////////////////////////////////////////////////////////////
 

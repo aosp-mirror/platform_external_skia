@@ -10,9 +10,9 @@
 
 #include "include/core/SkRefCnt.h"
 #include "include/private/SkSpinlock.h"
-#include "src/core/SkArenaAlloc.h"
+#include "src/base/SkArenaAlloc.h"
+#include "src/base/SkTInternalLList.h"
 #include "src/core/SkTDynamicHash.h"
-#include "src/core/SkTInternalLList.h"
 #include "src/gpu/ganesh/GrGpuBuffer.h"
 #include "src/gpu/ganesh/GrSurfaceProxy.h"
 #include "src/gpu/ganesh/GrSurfaceProxyView.h"

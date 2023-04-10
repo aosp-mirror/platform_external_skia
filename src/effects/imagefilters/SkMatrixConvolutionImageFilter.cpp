@@ -35,7 +35,7 @@
 #include <utility>
 class SkMatrix;
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
@@ -44,6 +44,8 @@ class SkMatrix;
 #include "src/gpu/ganesh/SkGr.h"
 #include "src/gpu/ganesh/effects/GrMatrixConvolutionEffect.h"
 #endif
+
+using namespace skia_private;
 
 namespace {
 
@@ -216,7 +218,7 @@ sk_sp<SkFlattenable> SkMatrixConvolutionImageFilter::CreateProc(SkReadBuffer& bu
     if (!buffer.validateCanReadN<SkScalar>(count)) {
         return nullptr;
     }
-    SkAutoSTArray<16, SkScalar> kernel(count);
+    AutoSTArray<16, SkScalar> kernel(count);
     if (!buffer.readScalarArray(kernel.get(), count)) {
         return nullptr;
     }
@@ -378,7 +380,7 @@ sk_sp<SkSpecialImage> SkMatrixConvolutionImageFilter::onFilterImage(const Contex
         }
     }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     if (ctx.gpuBacked()) {
         auto context = ctx.getContext();
 

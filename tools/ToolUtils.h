@@ -27,11 +27,11 @@
 #include "include/core/SkTypes.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTDArray.h"
-#include "include/utils/SkRandom.h"
-#include "src/core/SkTInternalLList.h"
+#include "src/base/SkRandom.h"
+#include "src/base/SkTInternalLList.h"
 #include "tools/SkMetaData.h"
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 #include "include/gpu/graphite/Recorder.h"
 #endif
 
@@ -317,7 +317,7 @@ using PathSniffCallback = void(const SkMatrix&, const SkPath&, const SkPaint&);
 // Supported file formats are .svg and .skp.
 void sniff_paths(const char filepath[], std::function<PathSniffCallback>);
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 sk_sp<SkImage> MakeTextureImage(SkCanvas* canvas, sk_sp<SkImage> orig);
 #endif
 
@@ -353,7 +353,7 @@ private:
     static constexpr size_t kAxisVarsSize = 3;
 };
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 skgpu::graphite::RecorderOptions CreateTestingRecorderOptions();
 #endif
 

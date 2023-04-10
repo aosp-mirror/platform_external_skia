@@ -15,6 +15,8 @@
 #include <cstdint>
 class GrBackendSemaphore;
 
+namespace skgpu { enum class Mipmapped : bool; }
+
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -121,12 +123,10 @@ static constexpr GrBackendApi kMock_GrBackend = GrBackendApi::kMock;
 /**
  * Used to say whether a texture has mip levels allocated or not.
  */
-enum class GrMipmapped : bool {
-    kNo = false,
-    kYes = true
-};
-/** Deprecated legacy alias of GrMipmapped. */
-using GrMipMapped = GrMipmapped;
+/** Deprecated legacy alias of skgpu::Mipmapped. */
+using GrMipmapped = skgpu::Mipmapped;
+/** Deprecated legacy alias of skgpu::Mipmapped. */
+using GrMipMapped = skgpu::Mipmapped;
 
 /*
  * Can a GrBackendObject be rendered to?
@@ -186,6 +186,9 @@ typedef void (*GrGpuFinishedProc)(GrGpuFinishedContext finishedContext);
 
 typedef void* GrGpuSubmittedContext;
 typedef void (*GrGpuSubmittedProc)(GrGpuSubmittedContext submittedContext, bool success);
+
+typedef void* GrDirectContextDestroyedContext;
+typedef void (*GrDirectContextDestroyedProc)(GrDirectContextDestroyedContext destroyedContext);
 
 /**
  * Struct to supply options to flush calls.

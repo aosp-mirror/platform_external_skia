@@ -88,6 +88,18 @@ cc_defaults {
             srcs: [
                 $arm64_srcs
             ],
+            // TODO(b/267542007): Re-enable stack tagging when miscompile is
+            // fixed
+            sanitize: {
+                memtag_stack: false,
+            },
+        },
+
+        riscv64: {
+            // TODO(b/254713216): Re-enable thinlto for targets failing the build
+            lto: {
+                thin: false,
+            },
         },
 
         x86: {
@@ -265,13 +277,6 @@ cc_defaults {
         "libpiex",
         "libexpat",
         "libft2",
-        // Required by Skottie
-        "libharfbuzz_ng",
-    ],
-    // Required by Skottie
-    cflags: [
-        "-DSK_SHAPER_HARFBUZZ_AVAILABLE",
-        "-DSK_UNICODE_AVAILABLE",
     ],
     static_libs: [
         "libwebp-decode",
@@ -282,24 +287,7 @@ cc_defaults {
     target: {
       android: {
         shared_libs: [
-            "libandroidicu",
             "libheif",
-            "libimage_io",
-        ],
-        static_libs: [
-            "libjpegrecoverymap",
-            "libjpegdecoder",
-            "libjpegencoder",
-        ],
-      },
-      host: {
-        shared_libs: [
-            "libicui18n",
-            "libicuuc",
-        ],
-        export_shared_lib_headers: [
-            "libicui18n",
-            "libicuuc",
         ],
       },
       darwin: {
@@ -536,10 +524,11 @@ def generate_args(target_os, enable_gpu, renderengine = False):
     d['skia_android_framework_use_perfetto'] = 'true'
 
   if enable_gpu:
-    d['skia_use_vulkan']   = 'true'
+    d['skia_use_vulkan']    = 'true'
+    d['skia_enable_ganesh'] = 'true'
   else:
-    d['skia_use_vulkan']   = 'false'
-    d['skia_enable_gpu']   = 'false'
+    d['skia_use_vulkan']    = 'false'
+    d['skia_enable_ganesh'] = 'false'
 
   if target_os == '"win"':
     # The Android Windows build system does not provide FontSub.h
@@ -554,11 +543,9 @@ def generate_args(target_os, enable_gpu, renderengine = False):
 
   if target_os == '"android"' and not renderengine:
     d['skia_use_libheif']  = 'true'
-    d['skia_use_jpegr'] = 'true'
     d['skia_use_jpeg_gainmaps'] = 'true'
   else:
     d['skia_use_libheif']  = 'false'
-    d['skia_use_jpegr'] = 'false'
 
   if renderengine:
     d['skia_use_libpng_decode'] = 'false'
@@ -578,7 +565,6 @@ def generate_args(target_os, enable_gpu, renderengine = False):
     d['skia_use_fixed_gamma_text'] = 'true'
     d['skia_enable_fontmgr_custom_empty'] = 'true'
     d['skia_use_wuffs'] = 'true'
-    d['skia_enable_skottie'] = 'true'
 
   return d
 
@@ -651,18 +637,6 @@ win_srcs        = strip_headers(win_srcs)
 
 srcs = android_srcs.intersection(linux_srcs).intersection(mac_srcs)
 srcs = srcs.intersection(win_srcs)
-
-if (gn_args['skia_enable_skottie']):
-  # Skottie sits on top of skia, so we need to specify these sources to be built
-  # Python sets handle duplicate flags, source files, and includes for us
-  srcs.update(strip_slashes(js['targets']['//modules/skottie:skottie']['sources']))
-  gn_to_bp_utils.GrabDependentValues(js, '//modules/skottie:skottie', 'sources',
-                                     srcs, '//:skia')
-  srcs = strip_headers(srcs)
-
-  local_includes.update(strip_slashes(js['targets']['//modules/skottie:skottie']['include_dirs']))
-  gn_to_bp_utils.GrabDependentValues(js, '//modules/skottie:skottie', 'include_dirs',
-                                     local_includes, '//:skia')
 
 android_srcs    = android_srcs.difference(srcs)
 linux_srcs      =   linux_srcs.difference(srcs)

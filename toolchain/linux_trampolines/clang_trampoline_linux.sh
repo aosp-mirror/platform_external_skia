@@ -17,28 +17,36 @@ if [[ "$@" != *DSKIA_ENFORCE_IWYU* || "$@" == *use-ld* ]]; then
 fi
 
 supported_files_or_dirs=(
+  "include/private/base/"
   "modules/skunicode/"
   "src/base/"
   "src/codec/"
   "src/effects/"
-  "src/images/"
+  "src/image/"
+  "src/encode/"
   "src/pathops/"
   "src/sksl/"
   "src/svg/"
   "src/utils/"
   "tools/debugger/"
   "tests/"
-  "src/core/SkArenaAlloc.cpp"
+  "src/core/SkBitmap.cpp"
+  "src/core/SkCanvas.cpp"
   "src/core/SkColor.cpp"
   "src/core/SkColorSpace.cpp"
   "src/core/SkCubicClipper.cpp"
   "src/core/SkCubicMap.cpp"
+  "src/core/SkData.cpp"
+  "src/core/SkDataTable.cpp"
   "src/core/SkEdgeBuilder.cpp"
   "src/core/SkEdgeClipper.cpp"
   "src/core/SkFlattenable.cpp"
   "src/core/SkGeometry.cpp"
   "src/core/SkGlyph.cpp"
+  "src/core/SkICC.cpp"
+  "src/core/SkImageInfo.cpp"
   "src/core/SkLineClipper.cpp"
+  "src/core/SkMD5.cpp"
   "src/core/SkMaskFilter.cpp"
   "src/core/SkMatrix.cpp"
   "src/core/SkPaint.cpp"
@@ -46,13 +54,24 @@ supported_files_or_dirs=(
   "src/core/SkPathBuilder.cpp"
   "src/core/SkPathRef.cpp"
   "src/core/SkPathUtils.cpp"
+  "src/core/SkPictureData.cpp"
+  "src/core/SkPicturePlayback.cpp"
+  "src/core/SkPixmap.cpp"
+  "src/core/SkPixmapDraw.cpp"
   "src/core/SkPoint.cpp"
   "src/core/SkRRect.cpp"
+  "src/core/SkReadBuffer.cpp"
+  "src/core/SkReadPixelsRec.cpp"
+  "src/core/SkRecorder.cpp"
   "src/core/SkRect.cpp"
   "src/core/SkScalar.cpp"
   "src/core/SkStream.cpp"
   "src/core/SkString.cpp"
+  "src/core/SkWriteBuffer.cpp"
+  "src/core/SkWritePixelsRec.cpp"
+  "src/gpu/ganesh/Device.cpp"
   "src/gpu/ganesh/GrCaps.cpp"
+  "src/gpu/ganesh/GrMemoryPool.cpp"
   "src/gpu/ganesh/GrProcessor.cpp"
   "src/gpu/ganesh/GrRenderTargetProxy.cpp"
   "src/gpu/ganesh/GrResourceProvider.cpp"
@@ -67,9 +86,10 @@ supported_files_or_dirs=(
 )
 
 excluded_files=(
-# Causes IWYU 8.17 to assert
+# Causes IWYU 8.17 to assert because it includes SkVX.h
 # "iwyu.cc:1977: Assertion failed: TODO(csilvers): for objc and clang lang extensions"
   "tests/SkVxTest.cpp"
+  "src/base/SkHalf.cpp"
 )
 
 function opted_in_to_IWYU_checks() {
@@ -116,6 +136,7 @@ else
   # not consistent with detecting that.
   external/clang_linux_amd64/bin/include-what-you-use $@ \
       -Xiwyu --keep="include/core/SkTypes.h" \
+      -Xiwyu --keep="include/private/base/SkDebug.h" \
       -Xiwyu --no_default_mappings \
       -Xiwyu --error=3 \
       -Xiwyu --mapping_file=$MAPPING_FILE 2>/dev/null
@@ -128,6 +149,7 @@ else
     # analysis. If we aren't sure why IWYU wants to include something, try changing verbose to 3.
     external/clang_linux_amd64/bin/include-what-you-use $@ \
         -Xiwyu --keep="include/core/SkTypes.h" \
+        -Xiwyu --keep="include/private/base/SkDebug.h" \
         -Xiwyu --no_default_mappings \
         -Xiwyu --mapping_file=$MAPPING_FILE -Xiwyu --no_comments \
         -Xiwyu --quoted_includes_first -Xiwyu --verbose=3

@@ -14,7 +14,8 @@
 
 #include <utility>
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
+#include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #endif
@@ -59,10 +60,11 @@ public:
                                   const Descriptor&, const SkMatrix* localMatrix);
 
     GradientType asGradient(GradientInfo* info, SkMatrix* localMatrix) const override;
-#if SK_SUPPORT_GPU
-    std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs&) const override;
+#if defined(SK_GANESH)
+    std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs&,
+                                                             const MatrixRec&) const override;
 #endif
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
     void addToKey(const skgpu::graphite::KeyContext&,
                   skgpu::graphite::PaintParamsKeyBuilder*,
                   skgpu::graphite::PipelineDataGatherer*) const override;
@@ -319,7 +321,7 @@ skvm::F32 SkTwoPointConicalGradient::transformT(skvm::Builder* p, skvm::Uniforms
                                                 skvm::Coord coord, skvm::I32* mask) const {
     auto mag = [](skvm::F32 x, skvm::F32 y) { return sqrt(x*x + y*y); };
 
-    // See https://skia.org/dev/design/conical, and onAppendStages() above.
+    // See https://skia.org/dev/design/conical, and appendStages() above.
     // There's a lot going on here, and I'm not really sure what's independent
     // or disjoint, what can be reordered, simplified, etc.  Tweak carefully.
 
@@ -370,14 +372,14 @@ skvm::F32 SkTwoPointConicalGradient::transformT(skvm::Builder* p, skvm::Uniforms
 
 /////////////////////////////////////////////////////////////////////
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 
 #include "src/core/SkRuntimeEffectPriv.h"
 #include "src/gpu/ganesh/effects/GrSkSLFP.h"
 #include "src/gpu/ganesh/gradients/GrGradientShader.h"
 
-std::unique_ptr<GrFragmentProcessor> SkTwoPointConicalGradient::asFragmentProcessor(
-        const GrFPArgs& args) const {
+std::unique_ptr<GrFragmentProcessor>
+SkTwoPointConicalGradient::asFragmentProcessor(const GrFPArgs& args, const MatrixRec& mRec) const {
     // The 2 point conical gradient can reject a pixel so it does change opacity even if the input
     // was opaque. Thus, all of these layout FPs disable that optimization.
     std::unique_ptr<GrFragmentProcessor> fp;
@@ -525,16 +527,23 @@ std::unique_ptr<GrFragmentProcessor> SkTwoPointConicalGradient::asFragmentProces
                                 "fx", focalData.fFocalX);
         } break;
     }
-    return GrGradientShader::MakeGradientFP(*this, args, std::move(fp), matrix.getMaybeNull());
+    return GrGradientShader::MakeGradientFP(*this,
+                                            args,
+                                            mRec,
+                                            std::move(fp),
+                                            matrix.getMaybeNull());
 }
 
 #endif
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 void SkTwoPointConicalGradient::addToKey(const skgpu::graphite::KeyContext& keyContext,
                                          skgpu::graphite::PaintParamsKeyBuilder* builder,
                                          skgpu::graphite::PipelineDataGatherer* gatherer) const {
     using namespace skgpu::graphite;
+
+    SkColor4fXformer xformedColors(this, keyContext.dstColorInfo().colorSpace());
+    const SkPMColor4f* colors = xformedColors.fColors.begin();
 
     GradientShaderBlocks::GradientData data(GradientType::kConical,
                                             fCenter1, fCenter2,
@@ -542,11 +551,13 @@ void SkTwoPointConicalGradient::addToKey(const skgpu::graphite::KeyContext& keyC
                                             0.0f, 0.0f,
                                             fTileMode,
                                             fColorCount,
-                                            fColors,
-                                            fPositions);
+                                            colors,
+                                            fPositions,
+                                            fInterpolation);
 
-    GradientShaderBlocks::BeginBlock(keyContext, builder, gatherer, data);
-    builder->endBlock();
+    MakeInterpolatedToDst(keyContext, builder, gatherer,
+                          data, fInterpolation,
+                          xformedColors.fIntermediateColorSpace.get());
 }
 #endif
 

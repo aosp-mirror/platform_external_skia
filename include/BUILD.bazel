@@ -1,4 +1,4 @@
-load("//bazel:macros.bzl", "exports_files_legacy", "generate_cpp_files_for_headers", "skia_filegroup")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "generate_cpp_files_for_headers", "skia_filegroup")
 
 licenses(["notice"])
 
@@ -9,7 +9,6 @@ skia_filegroup(
     srcs = [
         "//include/android:public_hdrs",
         "//include/codec:public_hdrs",
-        "//include/config:public_hdrs",
         "//include/core:public_hdrs",
         "//include/docs:public_hdrs",
         "//include/effects:public_hdrs",
@@ -69,7 +68,6 @@ generate_cpp_files_for_headers(
     # generated that is a copy of the header file just with a .cpp suffix so Bazel will try to
     # compile it. This allows us to run IWYU on these files.
     to_generate = [
-        "include/config/SkUserConfig.h",
         "include/core/SkAlphaType.h",
         "include/core/SkBlendMode.h",
         "include/core/SkBlurTypes.h",
@@ -81,42 +79,12 @@ generate_cpp_files_for_headers(
         "include/core/SkScalar.h",
         "include/core/SkSize.h",
         "include/core/SkTypes.h",
+        "include/encode/SkEncoder.h",
+        "include/encode/SkJpegEncoder.h",
+        "include/encode/SkPngEncoder.h",
+        "include/encode/SkWebpEncoder.h",
         "include/gpu/GrTypes.h",
-        "include/private/SkFixed.h",
         "include/private/SkIDChangeListener.h",
-        "include/private/SkNoncopyable.h",
         "include/private/SkWeakRefCnt.h",
-        "include/private/base/SingleOwner.h",
-        "include/private/base/SkAPI.h",
-        "include/private/base/SkAlign.h",
-        "include/private/base/SkAlignedStorage.h",
-        "include/private/base/SkAssert.h",
-        "include/private/base/SkAttributes.h",
-        "include/private/base/SkDebug.h",
-        "include/private/base/SkDeque.h",
-        "include/private/base/SkFeatures.h",
-        "include/private/base/SkFloatBits.h",
-        "include/private/base/SkFloatingPoint.h",
-        "include/private/base/SkLoadUserConfig.h",
-        "include/private/base/SkMacros.h",
-        "include/private/base/SkMalloc.h",
-        "include/private/base/SkMath.h",
-        "include/private/base/SkMutex.h",
-        "include/private/base/SkOnce.h",
-        "include/private/base/SkSafe32.h",
-        "include/private/base/SkSemaphore.h",
-        "include/private/base/SkSpan_impl.h",
-        "include/private/base/SkTArray.h",
-        "include/private/base/SkTDArray.h",
-        "include/private/base/SkTFitsIn.h",
-        "include/private/base/SkTLogic.h",
-        "include/private/base/SkTPin.h",
-        "include/private/base/SkTemplates.h",
-        "include/private/base/SkThreadAnnotations.h",
-        "include/private/base/SkThreadID.h",
-        "include/private/base/SkTo.h",
-        "include/private/base/SkTypeTraits.h",
-        # IWYU chokes on the following file:
-        # "include/private/base/SkVx.h",
     ],
 )

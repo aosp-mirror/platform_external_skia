@@ -40,8 +40,6 @@
 #include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
-#include "src/sksl/ir/SkSLExternalFunction.h"
-#include "src/sksl/ir/SkSLExternalFunctionCall.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
 #include "src/sksl/ir/SkSLForStatement.h"
 #include "src/sksl/ir/SkSLFunctionCall.h"
@@ -290,7 +288,6 @@ private:
         return result;
     }
 
-    size_t fieldSlotOffset(const FieldAccess& expr);
     size_t indexSlotOffset(const IndexExpression& expr);
 
     Value writeExpression(const Expression& expr);
@@ -302,7 +299,6 @@ private:
     Value writeConstructorCast(const AnyConstructor& c);
     Value writeConstructorSplat(const ConstructorSplat& c);
     Value writeFunctionCall(const FunctionCall& c);
-    Value writeExternalFunctionCall(const ExternalFunctionCall& c);
     Value writeFieldAccess(const FieldAccess& expr);
     Value writeLiteral(const Literal& l);
     Value writeIndexExpression(const IndexExpression& expr);
@@ -1155,18 +1151,10 @@ Value SkVMGenerator::writeConstructorMatrixResize(const ConstructorMatrixResize&
     return dst;
 }
 
-size_t SkVMGenerator::fieldSlotOffset(const FieldAccess& expr) {
-    size_t offset = 0;
-    for (int i = 0; i < expr.fieldIndex(); ++i) {
-        offset += (*expr.base()->type().fields()[i].fType).slotCount();
-    }
-    return offset;
-}
-
 Value SkVMGenerator::writeFieldAccess(const FieldAccess& expr) {
     Value base = this->writeExpression(*expr.base());
     Value field(expr.type().slotCount());
-    size_t offset = this->fieldSlotOffset(expr);
+    size_t offset = expr.initialSlot();
     for (size_t i = 0; i < field.slots(); ++i) {
         field[i] = base[offset + i];
     }
@@ -1635,31 +1623,6 @@ Value SkVMGenerator::writeFunctionCall(const FunctionCall& call) {
     return this->getSlotValue(returnSlot, call.type().slotCount());
 }
 
-Value SkVMGenerator::writeExternalFunctionCall(const ExternalFunctionCall& c) {
-    // Evaluate all arguments, gather the results into a contiguous list of F32
-    std::vector<skvm::F32> args;
-    for (const auto& arg : c.arguments()) {
-        Value v = this->writeExpression(*arg);
-        for (size_t i = 0; i < v.slots(); ++i) {
-            args.push_back(f32(v[i]));
-        }
-    }
-
-    // Create storage for the return value
-    size_t nslots = c.type().slotCount();
-    std::vector<skvm::F32> result(nslots, fBuilder->splat(0.0f));
-
-    c.function().call(fBuilder, args.data(), result.data(), this->mask());
-
-    // Convert from 'vector of F32' to Value
-    Value resultVal(nslots);
-    for (size_t i = 0; i < nslots; ++i) {
-        resultVal[i] = result[i];
-    }
-
-    return resultVal;
-}
-
 Value SkVMGenerator::writeLiteral(const Literal& l) {
     if (l.type().isFloat()) {
         return fBuilder->splat(l.as<Literal>().floatValue());
@@ -1804,8 +1767,6 @@ Value SkVMGenerator::writeExpression(const Expression& e) {
             return this->writeLiteral(e.as<Literal>());
         case Expression::Kind::kFunctionCall:
             return this->writeFunctionCall(e.as<FunctionCall>());
-        case Expression::Kind::kExternalFunctionCall:
-            return this->writeExternalFunctionCall(e.as<ExternalFunctionCall>());
         case Expression::Kind::kPrefix:
             return this->writePrefixExpression(e.as<PrefixExpression>());
         case Expression::Kind::kPostfix:
@@ -1814,7 +1775,6 @@ Value SkVMGenerator::writeExpression(const Expression& e) {
             return this->writeSwizzle(e.as<Swizzle>());
         case Expression::Kind::kTernary:
             return this->writeTernaryExpression(e.as<TernaryExpression>());
-        case Expression::Kind::kExternalFunctionReference:
         default:
             SkDEBUGFAIL("Unsupported expression");
             return {};
@@ -1847,7 +1807,7 @@ Value SkVMGenerator::writeStore(const Expression& lhs, const Value& rhs) {
         switch (expr->kind()) {
             case Expression::Kind::kFieldAccess: {
                 const FieldAccess& fld = expr->as<FieldAccess>();
-                size_t offset = this->fieldSlotOffset(fld);
+                size_t offset = fld.initialSlot();
                 for (size_t& s : slots) {
                     s += offset;
                 }

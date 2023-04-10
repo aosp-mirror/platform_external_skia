@@ -2,6 +2,5 @@
     2. init_lane_masks                CondMask = LoopMask = RetMask = true
     3. copy_4_constants               $0..3 = colorRed
     4. swizzle_4                      $0..3 = ($0..3).zwyx
-    5. copy_4_slots_masked            [main].result = Mask($0..3)
-    6. mask_off_return_mask           RetMask &= ~(CondMask & LoopMask & RetMask)
-    7. load_src                       src.rgba = [main].result
+    5. copy_4_slots_unmasked          [main].result = $0..3
+    6. load_src                       src.rgba = [main].result

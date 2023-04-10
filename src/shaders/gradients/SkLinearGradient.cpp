@@ -11,7 +11,8 @@
 #include "src/core/SkWriteBuffer.h"
 #include "src/shaders/SkLocalMatrixShader.h"
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
+#include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #endif
@@ -88,22 +89,25 @@ SkShaderBase::GradientType SkLinearGradient::asGradient(GradientInfo* info,
 
 /////////////////////////////////////////////////////////////////////
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 
 #include "src/gpu/ganesh/gradients/GrGradientShader.h"
 
 std::unique_ptr<GrFragmentProcessor> SkLinearGradient::asFragmentProcessor(
-        const GrFPArgs& args) const {
-    return GrGradientShader::MakeLinear(*this, args);
+        const GrFPArgs& args, const MatrixRec& mRec) const {
+    return GrGradientShader::MakeLinear(*this, args, mRec);
 }
 
 #endif
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 void SkLinearGradient::addToKey(const skgpu::graphite::KeyContext& keyContext,
                                 skgpu::graphite::PaintParamsKeyBuilder* builder,
                                 skgpu::graphite::PipelineDataGatherer* gatherer) const {
     using namespace skgpu::graphite;
+
+    SkColor4fXformer xformedColors(this, keyContext.dstColorInfo().colorSpace());
+    const SkPMColor4f* colors = xformedColors.fColors.begin();
 
     GradientShaderBlocks::GradientData data(GradientType::kLinear,
                                             fStart, fEnd,
@@ -111,11 +115,13 @@ void SkLinearGradient::addToKey(const skgpu::graphite::KeyContext& keyContext,
                                             0.0f, 0.0f,
                                             fTileMode,
                                             fColorCount,
-                                            fColors,
-                                            fPositions);
+                                            colors,
+                                            fPositions,
+                                            fInterpolation);
 
-    GradientShaderBlocks::BeginBlock(keyContext, builder, gatherer, data);
-    builder->endBlock();
+    MakeInterpolatedToDst(keyContext, builder, gatherer,
+                          data, fInterpolation,
+                          xformedColors.fIntermediateColorSpace.get());
 }
 #endif
 

@@ -546,6 +546,7 @@ func GenTasks(cfg *Config) {
 			"skia/WORKSPACE.bazel",
 			"skia/bazel",
 			"skia/go_repositories.bzl",
+			"skia/include/config", // There's a WORKSPACE.bazel in here
 			"skia/requirements.txt",
 			"skia/toolchain",
 			// Actually needed to build the task drivers
@@ -708,8 +709,8 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 			ignore := []string{
 				"Skpbench", "AbandonGpuContext", "PreAbandonGpuContext", "Valgrind", "FailFlushTimeCallbacks",
 				"ReleaseAndAbandonGpuContext", "FSAA", "FAAA", "FDAA", "NativeFonts", "GDI",
-				"NoGPUThreads", "DDL1", "DDL3", "OOPRDDL", "T8888",
-				"DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "SkottieTracing", "SkottieWASM",
+				"NoGPUThreads", "DDL1", "DDL3", "T8888",
+				"DDLTotal", "DDLRecord", "9x9", "BonusConfigs", "ColorSpaces", "GL", "SkottieTracing", "SkottieWASM",
 				"GpuTess", "DMSAAStats", "Mskp", "Docker", "PDF", "SkVM", "Puppeteer",
 				"SkottieFrames", "RenderSKP", "CanvasPerf", "AllPathsVolatile", "WebGL2", "i5",
 				"OldestSupportedSkpVersion"}
@@ -755,6 +756,8 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 		}
 		if b.extraConfig("PathKit") {
 			ec = []string{"PathKit"}
+			// We prefer to compile this in the cloud because we have more resources there
+			jobNameMap["os"] = "Debian10"
 		}
 		if b.extraConfig("CanvasKit", "SkottieWASM", "Puppeteer") {
 			if b.cpu() {
@@ -762,7 +765,8 @@ func (b *jobBuilder) deriveCompileTaskName() string {
 			} else {
 				ec = []string{"CanvasKit"}
 			}
-
+			// We prefer to compile this in the cloud because we have more resources there
+			jobNameMap["os"] = "Debian10"
 		}
 		if len(ec) > 0 {
 			jobNameMap["extra_config"] = strings.Join(ec, "_")
@@ -917,6 +921,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"MacBookPro11.5": "x86-64-i7-4870HQ",
 					"MacMini7.1":     "x86-64-i5-4278U",
 					"NUC5i7RYH":      "x86-64-i7-5557U",
+					"NUC9i7QN":       "x86-64-i7-9750H",
 				},
 				"AVX512": {
 					"GCE":  "x86-64-Skylake_GCE",
@@ -951,7 +956,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"GTX660":        "10de:11c0-26.21.14.4120",
 					"GTX960":        "10de:1401-31.0.15.1694",
 					"IntelHD4400":   "8086:0a16-20.19.15.4963",
-					"IntelIris540":  "8086:1926-26.20.100.7529",
+					"IntelIris540":  "8086:1926-31.0.101.2115",
 					"IntelIris6100": "8086:162b-20.19.15.4963",
 					"IntelIris655":  "8086:3ea5-26.20.100.7463",
 					"IntelIrisXe":   "8086:9a49-31.0.101.3222",
@@ -1959,7 +1964,7 @@ func (b *jobBuilder) perf() {
 		b.kitchenTask(recipe, OUTPUT_PERF)
 		b.cas(cas)
 		b.swarmDimensions()
-		if b.extraConfig("CanvasKit", "Docker", "PathKit") {
+		if b.extraConfig("Docker") {
 			b.usesDocker()
 		}
 		if compileTaskName != "" {
@@ -2131,6 +2136,7 @@ func (b *jobBuilder) runWasmGMTests() {
 // label or "target pattern" https://bazel.build/docs/build#specifying-build-targets
 // The reason we need this mapping is because Buildbucket build names cannot have / or : in them.
 var shorthandToLabel = map[string]string{
+	"base":                       "//src:base",
 	"example_hello_world_dawn":   "//example:hello_world_dawn",
 	"example_hello_world_gl":     "//example:hello_world_gl",
 	"example_hello_world_vulkan": "//example:hello_world_vulkan",
@@ -2178,8 +2184,6 @@ func (b *jobBuilder) bazelBuild() {
 			cmd = append(cmd, "--bazel_arg=--config=for_linux_x64_with_rbe")
 			cmd = append(cmd, "--bazel_arg=--jobs=100")
 			cmd = append(cmd, "--bazel_arg=--remote_download_minimal")
-			// https://bazel.build/docs/user-manual#build-runfile-manifests
-			cmd = append(cmd, "--bazel_arg=--nobuild_runfile_manifests", "--bazel_arg=--nobuild_runfile_links")
 		} else {
 			panic("unsupported Bazel host " + host)
 		}

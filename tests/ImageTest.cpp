@@ -40,6 +40,7 @@
 #include "include/gpu/GrTypes.h"
 #include "include/private/SkColorData.h"
 #include "include/private/base/SkCPUTypes.h"
+#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkFloatingPoint.h"
 #include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
@@ -746,24 +747,24 @@ static void image_test_read_pixels(GrDirectContext* dContext, skiatest::Reporter
                                                  0, image->height()));
 
     // top-left should succeed
-    sk_memset32(pixels, notExpected, w*h);
+    SkOpts::memset32(pixels, notExpected, w*h);
     REPORTER_ASSERT(reporter, image->readPixels(dContext, info, pixels, rowBytes, 0, 0));
     REPORTER_ASSERT(reporter, has_pixels(pixels, w*h, expected));
 
     // bottom-right should succeed
-    sk_memset32(pixels, notExpected, w*h);
+    SkOpts::memset32(pixels, notExpected, w*h);
     REPORTER_ASSERT(reporter, image->readPixels(dContext, info, pixels, rowBytes,
                                                 image->width() - w, image->height() - h));
     REPORTER_ASSERT(reporter, has_pixels(pixels, w*h, expected));
 
     // partial top-left should succeed
-    sk_memset32(pixels, notExpected, w*h);
+    SkOpts::memset32(pixels, notExpected, w*h);
     REPORTER_ASSERT(reporter, image->readPixels(dContext, info, pixels, rowBytes, -1, -1));
     REPORTER_ASSERT(reporter, pixels[3] == expected);
     REPORTER_ASSERT(reporter, has_pixels(pixels, w*h - 1, notExpected));
 
     // partial bottom-right should succeed
-    sk_memset32(pixels, notExpected, w*h);
+    SkOpts::memset32(pixels, notExpected, w*h);
     REPORTER_ASSERT(reporter, image->readPixels(dContext, info, pixels, rowBytes,
                                                 image->width() - 1, image->height() - 1));
     REPORTER_ASSERT(reporter, pixels[0] == expected);
@@ -1310,7 +1311,7 @@ DEF_TEST(Image_makeColorSpace, r) {
     *srgbBitmap.getAddr32(0, 0) = SkSwizzle_RGBA_to_PMColor(0xFF604020);
     srgbBitmap.setImmutable();
     sk_sp<SkImage> srgbImage = srgbBitmap.asImage();
-    sk_sp<SkImage> p3Image = srgbImage->makeColorSpace(p3, nullptr);
+    sk_sp<SkImage> p3Image = srgbImage->makeColorSpace(p3);
     SkBitmap p3Bitmap;
     bool success = p3Image->asLegacyBitmap(&p3Bitmap);
 
@@ -1321,7 +1322,7 @@ DEF_TEST(Image_makeColorSpace, r) {
     REPORTER_ASSERT(r, almost_equal(0x40, SkGetPackedG32(*p3Bitmap.getAddr32(0, 0))));
     REPORTER_ASSERT(r, almost_equal(0x5E, SkGetPackedB32(*p3Bitmap.getAddr32(0, 0))));
 
-    sk_sp<SkImage> adobeImage = srgbImage->makeColorSpace(adobeGamut, nullptr);
+    sk_sp<SkImage> adobeImage = srgbImage->makeColorSpace(adobeGamut);
     SkBitmap adobeBitmap;
     success = adobeImage->asLegacyBitmap(&adobeBitmap);
     REPORTER_ASSERT(r, success);
@@ -1330,7 +1331,7 @@ DEF_TEST(Image_makeColorSpace, r) {
     REPORTER_ASSERT(r, almost_equal(0x4C, SkGetPackedB32(*adobeBitmap.getAddr32(0, 0))));
 
     srgbImage = GetResourceAsImage("images/1x1.png");
-    p3Image = srgbImage->makeColorSpace(p3, nullptr);
+    p3Image = srgbImage->makeColorSpace(p3);
     success = p3Image->asLegacyBitmap(&p3Bitmap);
     REPORTER_ASSERT(r, success);
     REPORTER_ASSERT(r, almost_equal(0x8B, SkGetPackedR32(*p3Bitmap.getAddr32(0, 0))));

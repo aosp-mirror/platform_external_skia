@@ -11,7 +11,7 @@
 #include <windows.h>
 #include <windowsx.h>
 
-#include "src/utils/SkUTF.h"
+#include "src/base/SkUTF.h"
 #include "tools/sk_app/WindowContext.h"
 #include "tools/sk_app/win/WindowContextFactory_win.h"
 #include "tools/skui/ModifierKey.h"
@@ -364,7 +364,7 @@ bool Window_win::attach(BackendType attachType) {
             fWindowContext =
                     window_context_factory::MakeDawnD3D12ForWin(fHWnd, fRequestedDisplayParams);
             break;
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
         case kGraphiteDawn_BackendType:
             fWindowContext = window_context_factory::MakeGraphiteDawnD3D12ForWin(
                     fHWnd, fRequestedDisplayParams);

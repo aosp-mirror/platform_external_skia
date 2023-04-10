@@ -10,7 +10,7 @@
 #include "include/core/SkColorSpace.h"
 #include "src/gpu/graphite/Log.h"
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
 #endif
 
@@ -24,6 +24,7 @@ sk_sp<SkImage> Image_Base::onMakeSubset(const SkIRect&, GrDirectContext*) const 
 sk_sp<SkImage> Image_Base::onMakeColorTypeAndColorSpace(SkColorType,
                                                         sk_sp<SkColorSpace>,
                                                         GrDirectContext*) const {
+    SKGPU_LOG_W("Cannot convert Graphite-backed image to Ganesh");
     return nullptr;
 }
 
@@ -49,7 +50,7 @@ void Image_Base::onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace yuvColorSpace
     callback(context, nullptr);
 }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 std::unique_ptr<GrFragmentProcessor> Image_Base::onAsFragmentProcessor(
         GrRecordingContext*,
         SkSamplingOptions,
@@ -71,7 +72,7 @@ sk_sp<SkImage> SkImage::makeTextureImage(Recorder* recorder,
         return nullptr;
     }
     if (this->dimensions().area() <= 1) {
-        requiredProps.fMipmapped = Mipmapped::kNo;
+        requiredProps.fMipmapped = skgpu::Mipmapped::kNo;
     }
 
     return as_IB(this)->onMakeTextureImage(recorder, requiredProps);
@@ -91,4 +92,3 @@ sk_sp<SkImage> SkImage::makeSubset(const SkIRect& subset,
 
     return as_IB(this)->onMakeSubset(subset, recorder, requiredProps);
 }
-

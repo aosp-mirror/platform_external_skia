@@ -5,29 +5,54 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
-#include "include/core/SkCanvas.h"
 #include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkData.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
 #include "include/core/SkPixelRef.h"
-#include "include/core/SkSurface.h"
-#include "src/codec/SkColorTable.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkMath.h"
+#include "include/private/base/SkTo.h"
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkConvertPixels.h"
 #include "src/core/SkImageInfoPriv.h"
 #include "src/core/SkImagePriv.h"
-#include "src/core/SkTLazy.h"
+#include "src/core/SkMipmap.h"
 #include "src/image/SkImage_Base.h"
-#include "src/shaders/SkBitmapProcShader.h"
 
-#if SK_SUPPORT_GPU
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <tuple>
+#include <utility>
+
+class GrDirectContext;
+class GrFragmentProcessor;
+class SkMatrix;
+enum class SkTileMode;
+
+#if defined(SK_GANESH)
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrRecordingContext.h"
+#include "include/gpu/GrTypes.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/gpu/SkBackingFit.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/GrSurfaceProxyView.h"
 #include "src/gpu/ganesh/SkGr.h"
-#include "src/gpu/ganesh/effects/GrBicubicEffect.h"
-#include "src/gpu/ganesh/effects/GrTextureEffect.h"
 #endif
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 #include "include/gpu/graphite/GraphiteTypes.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "src/gpu/graphite/Buffer.h"
@@ -99,7 +124,7 @@ public:
 
     bool getROPixels(GrDirectContext*, SkBitmap*, CachingHint) const override;
     sk_sp<SkImage> onMakeSubset(const SkIRect&, GrDirectContext*) const override;
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
     sk_sp<SkImage> onMakeSubset(const SkIRect&,
                                 skgpu::graphite::Recorder*,
                                 RequiredImageProperties) const override;
@@ -130,7 +155,7 @@ public:
         fBitmap.pixelRef()->notifyAddedToCache();
     }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     bool onPinAsTexture(GrRecordingContext*) const override;
     void onUnpinAsTexture(GrRecordingContext*) const override;
     bool isPinnedOnContext(GrRecordingContext*) const override;
@@ -158,7 +183,7 @@ public:
     }
 
 private:
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     std::tuple<GrSurfaceProxyView, GrColorType> onAsView(GrRecordingContext*,
                                                          GrMipmapped,
                                                          GrImageTexGenPolicy) const override;
@@ -170,14 +195,18 @@ private:
                                                                const SkRect*,
                                                                const SkRect*) const override;
 #endif
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
     sk_sp<SkImage> onMakeTextureImage(skgpu::graphite::Recorder*,
                                       RequiredImageProperties) const override;
+    sk_sp<SkImage> onMakeColorTypeAndColorSpace(SkColorType targetCT,
+                                                sk_sp<SkColorSpace> targetCS,
+                                                skgpu::graphite::Recorder*,
+                                                RequiredImageProperties) const override;
 #endif
 
     SkBitmap fBitmap;
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     mutable GrSurfaceProxyView fPinnedView;
     mutable int32_t fPinnedCount = 0;
     mutable uint32_t fPinnedUniqueID = SK_InvalidUniqueID;
@@ -205,7 +234,7 @@ SkImage_Raster::SkImage_Raster(const SkImageInfo& info, sk_sp<SkData> data, size
 }
 
 SkImage_Raster::~SkImage_Raster() {
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     SkASSERT(!fPinnedView);  // want the caller to have manually unpinned
 #endif
 }
@@ -230,7 +259,7 @@ bool SkImage_Raster::getROPixels(GrDirectContext*, SkBitmap* dst, CachingHint) c
     return true;
 }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 bool SkImage_Raster::onPinAsTexture(GrRecordingContext* rContext) const {
     if (fPinnedView) {
         SkASSERT(fPinnedCount > 0);
@@ -311,7 +340,7 @@ sk_sp<SkImage> SkImage_Raster::onMakeSubset(const SkIRect& subset, GrDirectConte
     }
 }
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 static sk_sp<SkMipmap> copy_mipmaps(const SkBitmap& src, SkMipmap* srcMips) {
     if (!srcMips) {
         return nullptr;
@@ -334,7 +363,7 @@ sk_sp<SkImage> SkImage_Raster::onMakeSubset(const SkIRect& subset,
                                             RequiredImageProperties requiredProperties) const {
     sk_sp<SkImage> img;
 
-    if (requiredProperties.fMipmapped == skgpu::graphite::Mipmapped::kYes) {
+    if (requiredProperties.fMipmapped == skgpu::Mipmapped::kYes) {
         bool fullCopy = subset == SkIRect::MakeSize(fBitmap.dimensions());
 
         sk_sp<SkMipmap> mips = fullCopy ? copy_mipmaps(fBitmap, fBitmap.fMips.get()) : nullptr;
@@ -368,7 +397,7 @@ sk_sp<SkImage> SkImage_Raster::onMakeSubset(const SkIRect& subset,
         return img;
     }
 }
-#endif // SK_GRAPHITE_ENABLED
+#endif // SK_GRAPHITE
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -513,7 +542,7 @@ sk_sp<SkImage> SkImage_Raster::onReinterpretColorSpace(sk_sp<SkColorSpace> newCS
     return SkImage::MakeRasterCopy(pixmap);
 }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 std::tuple<GrSurfaceProxyView, GrColorType> SkImage_Raster::onAsView(
         GrRecordingContext* rContext,
         GrMipmapped mipmapped,
@@ -576,7 +605,7 @@ std::unique_ptr<GrFragmentProcessor> SkImage_Raster::onAsFragmentProcessor(
 }
 #endif
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 sk_sp<SkImage> SkImage_Raster::onMakeTextureImage(skgpu::graphite::Recorder* recorder,
                                                   RequiredImageProperties requiredProps) const {
     return skgpu::graphite::MakeFromBitmap(recorder,
@@ -586,4 +615,29 @@ sk_sp<SkImage> SkImage_Raster::onMakeTextureImage(skgpu::graphite::Recorder* rec
                                            skgpu::Budgeted::kNo,
                                            requiredProps);
 }
+
+sk_sp<SkImage> SkImage_Raster::onMakeColorTypeAndColorSpace(
+        SkColorType targetCT,
+        sk_sp<SkColorSpace> targetCS,
+        skgpu::graphite::Recorder* recorder,
+        RequiredImageProperties requiredProps) const {
+    SkPixmap src;
+    SkAssertResult(fBitmap.peekPixels(&src));
+
+    SkBitmap dst;
+    if (!dst.tryAllocPixels(fBitmap.info().makeColorType(targetCT).makeColorSpace(targetCS))) {
+        return nullptr;
+    }
+
+    SkAssertResult(dst.writePixels(src));
+    dst.setImmutable();
+
+    sk_sp<SkImage> tmp = dst.asImage();
+    if (recorder) {
+        return tmp->makeTextureImage(recorder, requiredProps);
+    } else {
+        return tmp;
+    }
+}
+
 #endif

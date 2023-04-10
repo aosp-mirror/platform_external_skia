@@ -10,12 +10,12 @@
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 #include "tools/viewer/Slide.h"
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "include/gpu/GrDirectContext.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 
@@ -139,7 +139,7 @@ public:
         paint.setColor(0xDE000000);
 
         if (fAfterFirstFrame) {
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
             auto direct = GrAsDirectContext(canvas->recordingContext());
             if (direct) {
                 sk_sp<SkImage> image = direct->priv().testingOnly_getFontAtlasImage(MaskFormat::kA8,

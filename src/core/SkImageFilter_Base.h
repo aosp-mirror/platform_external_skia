@@ -303,7 +303,7 @@ protected:
     // other filters to need to call it.
     Context mapContext(const Context& ctx) const;
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     static sk_sp<SkSpecialImage> DrawWithFP(GrRecordingContext* context,
                                             std::unique_ptr<GrFragmentProcessor> fp,
                                             const SkIRect& bounds,
@@ -428,7 +428,7 @@ private:
     virtual skif::LayerSpace<SkIRect> onGetOutputLayerBounds(
             const skif::Mapping& mapping, const skif::LayerSpace<SkIRect>& contentBounds) const;
 
-    SkAutoSTArray<2, sk_sp<SkImageFilter>> fInputs;
+    skia_private::AutoSTArray<2, sk_sp<SkImageFilter>> fInputs;
 
     bool fUsesSrcInput;
     CropRect fCropRect;

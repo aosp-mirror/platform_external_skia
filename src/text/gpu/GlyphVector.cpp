@@ -8,6 +8,7 @@
 #include "src/text/gpu/GlyphVector.h"
 
 #include "src/core/SkReadBuffer.h"
+#include "src/core/SkStrike.h"
 #include "src/core/SkStrikeCache.h"
 #include "src/core/SkWriteBuffer.h"
 #include "src/text/StrikeForGPU.h"
@@ -27,16 +28,16 @@ GlyphVector::GlyphVector(SkStrikePromise&& strikePromise, SkSpan<Variant> glyphs
 }
 
 GlyphVector::Variant*
-GlyphVector::MakeGlyphs(SkSpan<SkGlyphVariant> glyphs, sktext::gpu::SubRunAllocator* alloc) {
+GlyphVector::MakeGlyphs(SkSpan<SkPackedGlyphID> glyphs, sktext::gpu::SubRunAllocator* alloc) {
     Variant* variants = alloc->makePODArray<Variant>(glyphs.size());
     for (auto [i, gv] : SkMakeEnumerate(glyphs)) {
-        variants[i] = gv.packedID();
+        variants[i] = gv;
     }
     return variants;
 }
 
 GlyphVector GlyphVector::Make(
-        SkStrikePromise&& promise, SkSpan<SkGlyphVariant> glyphs, SubRunAllocator* alloc) {
+        SkStrikePromise&& promise, SkSpan<SkPackedGlyphID> glyphs, SubRunAllocator* alloc) {
     SkASSERT(glyphs.size() > 0);
     Variant* variants = MakeGlyphs(glyphs, alloc);
     return GlyphVector{std::move(promise), SkSpan(variants, glyphs.size())};

@@ -7,7 +7,7 @@
 
 #include "tests/Test.h"
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 
 #include "include/core/SkImage.h"
 #include "include/gpu/GpuTypes.h"
@@ -25,6 +25,7 @@
 #include "tools/ToolUtils.h"
 
 using namespace skgpu::graphite;
+using Mipmapped = skgpu::Mipmapped;
 
 namespace {
 
@@ -519,4 +520,4 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(MutableImagesTest, reporter, context) {
     }
 }
 
-#endif // SK_GRAPHITE_ENABLED
+#endif // SK_GRAPHITE

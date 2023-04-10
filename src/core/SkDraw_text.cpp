@@ -6,14 +6,14 @@
  */
 
 #include "include/core/SkBitmap.h"
+#include "src/base/SkUtils.h"
 #include "src/core/SkDraw.h"
 #include "src/core/SkFontPriv.h"
 #include "src/core/SkMatrixProvider.h"
 #include "src/core/SkPaintPriv.h"
 #include "src/core/SkRasterClip.h"
-#include "src/core/SkScalerCache.h"
 #include "src/core/SkScalerContext.h"
-#include "src/core/SkUtils.h"
+#include "src/core/SkStrike.h"
 #include "src/text/GlyphRun.h"
 #include <climits>
 
@@ -36,12 +36,16 @@ static bool check_glyph_position(SkPoint position) {
              lt(position.fY, INT_MIN - (INT16_MIN + 0 /*UINT16_MIN*/)));
 }
 
-void SkDraw::paintMasks(SkDrawableGlyphBuffer* accepted, const SkPaint& paint) const {
-
+void SkDraw::paintMasks(SkZip<const SkGlyph*, SkPoint> accepted, const SkPaint& paint) const {
     // The size used for a typical blitter.
     SkSTArenaAlloc<3308> alloc;
-    SkBlitter* blitter = SkBlitter::Choose(fDst, *fMatrixProvider, paint, &alloc, false,
-                                           fRC->clipShader(), SkSurfacePropsCopyOrDefault(fProps));
+    SkBlitter* blitter = SkBlitter::Choose(fDst,
+                                           fMatrixProvider->localToDevice(),
+                                           paint,
+                                           &alloc,
+                                           false,
+                                           fRC->clipShader(),
+                                           SkSurfacePropsCopyOrDefault(fProps));
 
     SkAAClipBlitterWrapper wrapper{*fRC, blitter};
     blitter = wrapper.getBlitter();
@@ -49,8 +53,7 @@ void SkDraw::paintMasks(SkDrawableGlyphBuffer* accepted, const SkPaint& paint) c
     bool useRegion = fRC->isBW() && !fRC->isRect();
 
     if (useRegion) {
-        for (auto [variant, pos] : accepted->accepted()) {
-            const SkGlyph* glyph = variant.glyph();
+        for (auto [glyph, pos] : accepted) {
             if (check_glyph_position(pos)) {
                 SkMask mask = glyph->mask(pos);
 
@@ -76,8 +79,7 @@ void SkDraw::paintMasks(SkDrawableGlyphBuffer* accepted, const SkPaint& paint) c
     } else {
         SkIRect clipBounds = fRC->isBW() ? fRC->bwRgn().getBounds()
                                          : fRC->aaRgn().getBounds();
-        for (auto [variant, pos] : accepted->accepted()) {
-            const SkGlyph* glyph = variant.glyph();
+        for (auto [glyph, pos] : accepted) {
             if (check_glyph_position(pos)) {
                 SkMask mask = glyph->mask(pos);
                 SkIRect storage;

@@ -22,8 +22,8 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrDirectContext.h"
-#include "include/utils/SkRandom.h"
-#include "src/core/SkAutoMalloc.h"
+#include "src/base/SkAutoMalloc.h"
+#include "src/base/SkRandom.h"
 #include "src/core/SkColorFilterBase.h"
 #include "src/core/SkColorFilterPriv.h"
 #include "src/core/SkReadBuffer.h"
@@ -157,7 +157,7 @@ struct FailureColorFilter final : public SkColorFilterBase {
         return {};
     }
 
-    bool onAppendStages(const SkStageRec&, bool) const override { return false; }
+    bool appendStages(const SkStageRec&, bool) const override { return false; }
 
     // Only created here, should never be flattened / unflattened.
     Factory getFactory() const override { return nullptr; }

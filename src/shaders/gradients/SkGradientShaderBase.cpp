@@ -8,7 +8,7 @@
 #include "src/shaders/gradients/SkGradientShaderBase.h"
 
 #include "include/core/SkColorSpace.h"
-#include "include/private/base/SkVx.h"
+#include "src/base/SkVx.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkColorSpaceXformSteps.h"
 #include "src/core/SkConvertPixels.h"
@@ -17,6 +17,13 @@
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkVM.h"
 #include "src/core/SkWriteBuffer.h"
+
+#if defined(SK_GRAPHITE)
+#include "src/core/SkColorSpacePriv.h"
+#include "src/gpu/graphite/KeyContext.h"
+#include "src/gpu/graphite/KeyHelpers.h"
+#include "src/gpu/graphite/PaintParamsKey.h"
+#endif
 
 #include <cmath>
 
@@ -376,21 +383,18 @@ void SkGradientShaderBase::AppendGradientFillStages(SkRasterPipeline* p,
     }
 }
 
-bool SkGradientShaderBase::onAppendStages(const SkStageRec& rec) const {
+bool SkGradientShaderBase::appendStages(const SkStageRec& rec, const MatrixRec& mRec) const {
     SkRasterPipeline* p = rec.fPipeline;
     SkArenaAlloc* alloc = rec.fAlloc;
     SkRasterPipeline_DecalTileCtx* decal_ctx = nullptr;
 
-    SkMatrix matrix;
-    if (!this->computeTotalInverse(rec.fMatrixProvider.localToDevice(), rec.fLocalM, &matrix)) {
+    std::optional<MatrixRec> newMRec = mRec.apply(rec, fPtsToUnit);
+    if (!newMRec.has_value()) {
         return false;
     }
-    matrix.postConcat(fPtsToUnit);
 
     SkRasterPipeline_<256> postPipeline;
 
-    p->append(SkRasterPipelineOp::seed_shader);
-    p->append_matrix(alloc, matrix);
     this->appendGradientStages(alloc, p, &postPipeline);
 
     switch(fTileMode) {
@@ -586,20 +590,17 @@ static skvm::Color css_hwb_to_srgb(skvm::Color hwb, skvm::Builder* p) {
     };
 }
 
-skvm::Color SkGradientShaderBase::onProgram(skvm::Builder* p,
-                                            skvm::Coord device, skvm::Coord local,
-                                            skvm::Color /*paint*/,
-                                            const SkMatrixProvider& mats, const SkMatrix* localM,
-                                            const SkColorInfo& dstInfo,
-                                            skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const {
-    SkMatrix inv;
-    if (!this->computeTotalInverse(mats.localToDevice(), localM, &inv)) {
+skvm::Color SkGradientShaderBase::program(skvm::Builder* p,
+                                          skvm::Coord device,
+                                          skvm::Coord local,
+                                          skvm::Color /*paint*/,
+                                          const MatrixRec& mRec,
+                                          const SkColorInfo& dstInfo,
+                                          skvm::Uniforms* uniforms,
+                                          SkArenaAlloc* alloc) const {
+    if (!mRec.apply(p, &local, uniforms, fPtsToUnit).has_value()) {
         return {};
     }
-    inv.postConcat(fPtsToUnit);
-    inv.normalizePerspective();
-
-    local = SkShaderBase::ApplyMatrix(p, inv, local, uniforms);
 
     skvm::I32 mask = p->splat(~0);
     skvm::F32 t = this->transformT(p,uniforms, local, &mask);
@@ -801,7 +802,6 @@ skvm::Color SkGradientShaderBase::onProgram(skvm::Builder* p,
         pun_to_F32(mask & pun_to_I32(color.a)),
     };
 }
-
 
 bool SkGradientShaderBase::isOpaque() const {
     return fColorsAreOpaque && (this->getTileMode() != SkTileMode::kDecal);
@@ -1269,3 +1269,57 @@ SkGradientShaderBase::ColorStopOptimizer::ColorStopOptimizer(const SkColor4f* co
         }
     }
 }
+
+#if defined(SK_GRAPHITE)
+// Please see GrGradientShader.cpp::make_interpolated_to_dst for substantial comments
+// as to why this code is structured this way.
+void SkGradientShaderBase::MakeInterpolatedToDst(
+        const skgpu::graphite::KeyContext& keyContext,
+        skgpu::graphite::PaintParamsKeyBuilder* builder,
+        skgpu::graphite::PipelineDataGatherer* gatherer,
+        const skgpu::graphite::GradientShaderBlocks::GradientData& gradData,
+        const SkGradientShaderBase::Interpolation& interp,
+        SkColorSpace* intermediateCS) {
+    using ColorSpace = SkGradientShader::Interpolation::ColorSpace;
+    using namespace skgpu::graphite;
+
+    bool inputPremul = static_cast<bool>(interp.fInPremul);
+
+    switch (interp.fColorSpace) {
+        case ColorSpace::kLab:
+        case ColorSpace::kOKLab:
+        case ColorSpace::kLCH:
+        case ColorSpace::kOKLCH:
+        case ColorSpace::kHSL:
+        case ColorSpace::kHWB:
+            inputPremul = false;
+            break;
+        default:
+            break;
+    }
+
+    const SkColorInfo& dstColorInfo = keyContext.dstColorInfo();
+
+    SkColorSpace* dstColorSpace = dstColorInfo.colorSpace() ? dstColorInfo.colorSpace()
+                                                            : sk_srgb_singleton();
+
+    SkAlphaType intermediateAlphaType = inputPremul ? kPremul_SkAlphaType
+                                                    : kUnpremul_SkAlphaType;
+
+    ColorSpaceTransformBlock::ColorSpaceTransformData data(intermediateCS, intermediateAlphaType,
+                                                           dstColorSpace, dstColorInfo.alphaType());
+
+    // The gradient block and colorSpace conversion block need to be combined together
+    // (via the colorFilterShader block) so that the localMatrix block can treat them as
+    // one child.
+    ColorFilterShaderBlock::BeginBlock(keyContext, builder, gatherer);
+
+        GradientShaderBlocks::BeginBlock(keyContext, builder, gatherer, gradData);
+        builder->endBlock();
+
+        ColorSpaceTransformBlock::BeginBlock(keyContext, builder, gatherer, &data);
+        builder->endBlock();
+
+    builder->endBlock();
+}
+#endif

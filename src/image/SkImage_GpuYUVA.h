@@ -8,14 +8,35 @@
 #ifndef SkImage_GpuYUVA_DEFINED
 #define SkImage_GpuYUVA_DEFINED
 
-#include "include/gpu/GrBackendSurface.h"
-#include "src/core/SkCachedData.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
 #include "src/gpu/ganesh/GrYUVATextureProxies.h"
 #include "src/image/SkImage_GpuBase.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <tuple>
+
 class GrDirectContext;
+class GrFragmentProcessor;
+class GrImageContext;
 class GrRecordingContext;
-class GrTexture;
+class GrSurfaceProxyView;
+class SkMatrix;
+enum SkColorType : int;
+enum class GrColorType;
+enum class GrImageTexGenPolicy : int;
+enum class GrSemaphoresSubmitted : bool;
+enum class SkTileMode;
+struct GrFlushInfo;
+struct SkRect;
+
+namespace skgpu {
+enum class Mipmapped : bool;
+}
 
 // Wraps the 1 to 4 planes of a YUVA image for consumption by the GPU.
 // Initially any direct rendering will be done by passing the individual planes to a shader.
@@ -36,6 +57,7 @@ public:
 
     size_t onTextureSize() const override;
 
+    using SkImage_GpuBase::onMakeColorTypeAndColorSpace;
     sk_sp<SkImage> onMakeColorTypeAndColorSpace(SkColorType, sk_sp<SkColorSpace>,
                                                 GrDirectContext*) const final;
 
@@ -50,7 +72,7 @@ private:
     SkImage_GpuYUVA(sk_sp<GrImageContext>, const SkImage_GpuYUVA* image, sk_sp<SkColorSpace>);
 
     std::tuple<GrSurfaceProxyView, GrColorType> onAsView(GrRecordingContext*,
-                                                         GrMipmapped,
+                                                         skgpu::Mipmapped,
                                                          GrImageTexGenPolicy) const override;
 
     std::unique_ptr<GrFragmentProcessor> onAsFragmentProcessor(GrRecordingContext*,

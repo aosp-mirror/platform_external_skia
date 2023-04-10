@@ -7,7 +7,7 @@
 
 #include "include/core/SkColorFilter.h"
 #include "include/private/SkColorData.h"
-#include "src/core/SkArenaAlloc.h"
+#include "src/base/SkArenaAlloc.h"
 #include "src/core/SkBlendModePriv.h"
 #include "src/core/SkBlitRow.h"
 #include "src/core/SkColorFilterBase.h"
@@ -19,7 +19,8 @@
 #include "src/core/SkValidationUtils.h"
 #include "src/core/SkWriteBuffer.h"
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
+#include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #endif
@@ -38,15 +39,17 @@ class SkModeColorFilter final : public SkColorFilterBase {
 public:
     SkModeColorFilter(const SkColor4f& color, SkBlendMode mode);
 
+    bool appendStages(const SkStageRec& rec, bool shaderIsOpaque) const override;
+
     bool onIsAlphaUnchanged() const override;
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     GrFPResult asFragmentProcessor(std::unique_ptr<GrFragmentProcessor> inputFP,
                                    GrRecordingContext*,
                                    const GrColorInfo&,
                                    const SkSurfaceProps&) const override;
 #endif
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
     void addToKey(const skgpu::graphite::KeyContext&,
                   skgpu::graphite::PaintParamsKeyBuilder*,
                   skgpu::graphite::PipelineDataGatherer*) const override;
@@ -59,7 +62,6 @@ private:
     void flatten(SkWriteBuffer&) const override;
     bool onAsAColorMode(SkColor*, SkBlendMode*) const override;
 
-    bool onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override;
     skvm::Color onProgram(skvm::Builder*, skvm::Color,
                           const SkColorInfo&, skvm::Uniforms*, SkArenaAlloc*) const override;
 
@@ -113,7 +115,7 @@ sk_sp<SkFlattenable> SkModeColorFilter::CreateProc(SkReadBuffer& buffer) {
     }
 }
 
-bool SkModeColorFilter::onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const {
+bool SkModeColorFilter::appendStages(const SkStageRec& rec, bool shaderIsOpaque) const {
     rec.fPipeline->append(SkRasterPipelineOp::move_src_dst);
     SkPMColor4f color = map_color(fColor, sk_srgb_singleton(), rec.fDstCS);
     rec.fPipeline->append_constant_color(rec.fAlloc, color.vec());
@@ -132,7 +134,7 @@ skvm::Color SkModeColorFilter::onProgram(skvm::Builder* p, skvm::Color c,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "src/gpu/Blend.h"
 #include "src/gpu/ganesh/GrColorInfo.h"
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
@@ -175,14 +177,14 @@ GrFPResult SkModeColorFilter::asFragmentProcessor(std::unique_ptr<GrFragmentProc
 
 #endif
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 void SkModeColorFilter::addToKey(const skgpu::graphite::KeyContext& keyContext,
                                  skgpu::graphite::PaintParamsKeyBuilder* builder,
                                  skgpu::graphite::PipelineDataGatherer* gatherer) const {
     using namespace skgpu::graphite;
 
-    // TODO: Take into account the render target color space once graphite has color management.
-    SkPMColor4f color = map_color(fColor, sk_srgb_singleton(), nullptr);
+    SkPMColor4f color = map_color(fColor, sk_srgb_singleton(),
+                                  keyContext.dstColorInfo().colorSpace());
     BlendColorFilterBlock::BlendColorFilterData data(fMode, color);
 
     BlendColorFilterBlock::BeginBlock(keyContext, builder, gatherer, &data);

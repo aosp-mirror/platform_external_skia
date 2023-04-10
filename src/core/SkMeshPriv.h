@@ -14,12 +14,11 @@
 #include "include/core/SkData.h"
 #include "src/core/SkSLTypeShared.h"
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "include/gpu/GrDirectContext.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrDrawingManager.h"
-#include "src/gpu/ganesh/GrGpuBuffer.h"
 #include "src/gpu/ganesh/GrGpuBuffer.h"
 #include "src/gpu/ganesh/GrResourceCache.h"
 #include "src/gpu/ganesh/GrResourceProvider.h"
@@ -64,7 +63,7 @@ struct SkMeshSpecificationPriv {
         SkUNREACHABLE;
     }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     static GrVertexAttribType AttrTypeAsVertexAttribType(Attribute::Type type) {
         switch (type) {
             case Attribute::Type::kFloat:        return kFloat_GrVertexAttribType;
@@ -116,7 +115,7 @@ struct SkMeshPriv {
 
         virtual const void* peek() const { return nullptr; }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
         virtual sk_sp<const GrGpuBuffer> asGpuBuffer() const { return nullptr; }
 #endif
     };
@@ -145,7 +144,7 @@ struct SkMeshPriv {
     using CpuIndexBuffer  = CpuBuffer<IB>;
     using CpuVertexBuffer = CpuBuffer<VB>;
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     template <typename Base, GrGpuBufferType> class GpuBuffer final : public Base {
     public:
         GpuBuffer() = default;
@@ -167,10 +166,10 @@ struct SkMeshPriv {
 
     using GpuIndexBuffer  = GpuBuffer<IB, GrGpuBufferType::kIndex >;
     using GpuVertexBuffer = GpuBuffer<VB, GrGpuBufferType::kVertex>;
-#endif  // SK_SUPPORT_GPU
+#endif  // defined(SK_GANESH)
 
 private:
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     static bool UpdateGpuBuffer(GrDirectContext*,
                                 sk_sp<GrGpuBuffer>,
                                 const void*,
@@ -204,7 +203,7 @@ template <typename Base> bool SkMeshPriv::CpuBuffer<Base>::onUpdate(GrDirectCont
     return true;
 }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 
 template <typename Base, GrGpuBufferType Type> SkMeshPriv::GpuBuffer<Base, Type>::~GpuBuffer() {
     GrResourceCache::ReturnResourceFromThread(std::move(fBuffer), fContextID);
@@ -244,7 +243,7 @@ bool SkMeshPriv::GpuBuffer<Base, Type>::onUpdate(GrDirectContext* dc,
     return UpdateGpuBuffer(dc, fBuffer, data, offset, size);
 }
 
-#endif  // SK_SUPPORT_GPU
+#endif  // defined(SK_GANESH)
 
 #endif  // SK_ENABLE_SKSL
 

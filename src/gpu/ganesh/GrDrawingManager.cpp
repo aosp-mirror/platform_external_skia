@@ -14,8 +14,8 @@
 #include "include/gpu/GrBackendSemaphore.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
+#include "src/base/SkTInternalLList.h"
 #include "src/core/SkDeferredDisplayListPriv.h"
-#include "src/core/SkTInternalLList.h"
 #include "src/gpu/ganesh/GrBufferTransferRenderTask.h"
 #include "src/gpu/ganesh/GrBufferUpdateRenderTask.h"
 #include "src/gpu/ganesh/GrClientMappedBufferManager.h"
@@ -317,7 +317,7 @@ void GrDrawingManager::sortTasks() {
         }));
         SkASSERT(span.end() == fDAG.end() || fDAG[end]->blocksReordering());
 
-#if SK_GPU_V1 && defined(SK_DEBUG)
+#if defined(SK_GANESH) && defined(SK_DEBUG)
         // In order to partition the dag array like this it must be the case that each partition
         // only depends on nodes in the partition or earlier partitions.
         auto check = [&](const GrRenderTask* task, auto&& check) -> void {

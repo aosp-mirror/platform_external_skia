@@ -31,7 +31,7 @@
 #include <cmath>
 #include <cstring>
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 #include "include/gpu/graphite/ImageProvider.h"
 #include <unordered_map>
 #endif
@@ -42,7 +42,7 @@
 #include "src/xml/SkDOM.h"
 #endif
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/ganesh/GrCaps.h"
@@ -83,6 +83,7 @@ const char* colortype_name(SkColorType ct) {
         case kBGRA_1010102_SkColorType:       return "BGRA_1010102";
         case kRGB_101010x_SkColorType:        return "RGB_101010x";
         case kBGR_101010x_SkColorType:        return "BGR_101010x";
+        case kBGR_101010x_XR_SkColorType:     return "BGR_101010x_XR";
         case kGray_8_SkColorType:             return "Gray_8";
         case kRGBA_F16Norm_SkColorType:       return "RGBA_F16Norm";
         case kRGBA_F16_SkColorType:           return "RGBA_F16";
@@ -112,6 +113,7 @@ const char* colortype_depth(SkColorType ct) {
         case kBGRA_1010102_SkColorType:       return "1010102";
         case kRGB_101010x_SkColorType:        return "101010";
         case kBGR_101010x_SkColorType:        return "101010";
+        case kBGR_101010x_XR_SkColorType:     return "101010";
         case kGray_8_SkColorType:             return "G8";
         case kRGBA_F16Norm_SkColorType:       return "F16Norm";
         case kRGBA_F16_SkColorType:           return "F16";
@@ -564,7 +566,7 @@ void sniff_paths(const char filepath[], std::function<PathSniffCallback> callbac
     }
 }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 sk_sp<SkImage> MakeTextureImage(SkCanvas* canvas, sk_sp<SkImage> orig) {
     if (!orig) {
         return nullptr;
@@ -583,7 +585,7 @@ sk_sp<SkImage> MakeTextureImage(SkCanvas* canvas, sk_sp<SkImage> orig) {
 
         return orig->makeTextureImage(dContext);
     }
-#if defined(SK_GRAPHITE_ENABLED)
+#if defined(SK_GRAPHITE)
     else if (canvas->recorder()) {
         return orig->makeTextureImage(canvas->recorder());
     }
@@ -676,7 +678,7 @@ SkSpan<const SkFontArguments::VariationPosition::Coordinate> VariationSliders::g
                                                                         fAxisSliders.size()};
 }
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 
 // Currently, we give each new Recorder its own ImageProvider. This means we don't have to deal
 // w/ any threading issues.
@@ -690,7 +692,7 @@ public:
     sk_sp<SkImage> findOrCreate(skgpu::graphite::Recorder* recorder,
                                 const SkImage* image,
                                 SkImage::RequiredImageProperties requiredProps) override {
-        if (requiredProps.fMipmapped == skgpu::graphite::Mipmapped::kNo) {
+        if (requiredProps.fMipmapped == skgpu::Mipmapped::kNo) {
             // If no mipmaps are required, check to see if we have a mipmapped version anyway -
             // since it can be used in that case.
             // TODO: we could get fancy and, if ever a mipmapped key eclipsed a non-mipmapped
@@ -703,7 +705,7 @@ public:
         }
 
         uint64_t key = ((uint64_t)image->uniqueID() << 32) |
-                       (requiredProps.fMipmapped == skgpu::graphite::Mipmapped::kYes ? 0x1 : 0x0);
+                       (requiredProps.fMipmapped == skgpu::Mipmapped::kYes ? 0x1 : 0x0);
 
         auto result = fCache.find(key);
         if (result != fCache.end()) {
@@ -733,6 +735,6 @@ skgpu::graphite::RecorderOptions CreateTestingRecorderOptions() {
     return options;
 }
 
-#endif // SK_GRAPHITE_ENABLED
+#endif // SK_GRAPHITE
 
 }  // namespace ToolUtils

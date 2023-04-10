@@ -37,9 +37,9 @@
 #include "include/private/base/SkTArray.h"
 #include "include/sksl/SkSLDebugTrace.h"
 #include "include/sksl/SkSLVersion.h"
+#include "src/base/SkTLazy.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkRuntimeEffectPriv.h"
-#include "src/core/SkTLazy.h"
 #include "src/gpu/KeyBuilder.h"
 #include "src/gpu/SkBackingFit.h"
 #include "src/gpu/ganesh/GrCaps.h"
@@ -66,7 +66,7 @@ class GrRecordingContext;
 struct GrContextOptions;
 struct SkIPoint;
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/gpu/graphite/Recording.h"
@@ -427,7 +427,7 @@ static sk_sp<SkSurface> make_surface(GrRecordingContext* grContext,
     const SkImageInfo info = SkImageInfo::Make(size, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
     sk_sp<SkSurface> surface;
     if (graphite) {
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
         surface = SkSurface::MakeGraphite(graphite->recorder, info);
 #endif
     } else if (grContext) {
@@ -712,7 +712,7 @@ DEF_TEST(SkRuntimeEffectSimple, r) {
     test_RuntimeEffect_Shaders(r, /*grContext=*/nullptr, /*graphite=*/nullptr);
 }
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(SkRuntimeEffectSimple_Graphite, r, context) {
     std::unique_ptr<skgpu::graphite::Recorder> recorder = context->makeRecorder();
     GraphiteInfo graphite = {context, recorder.get()};

@@ -25,7 +25,7 @@
 #include "include/private/base/SkTPin.h"
 #include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #include "src/core/SkBlurMask.h"
 #include "src/core/SkColorFilterPriv.h"
 #include "src/core/SkDevice.h"
@@ -38,7 +38,7 @@
 #include "src/utils/SkShadowTessellator.h"
 #endif
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "src/gpu/ganesh/GrStyle.h"
 #include "src/gpu/ganesh/geometry/GrStyledShape.h"
 #endif
@@ -49,6 +49,8 @@
 #include <memory>
 #include <new>
 #include <utility>
+
+using namespace skia_private;
 
 class SkRRect;
 
@@ -345,14 +347,14 @@ public:
     ShadowedPath(const SkPath* path, const SkMatrix* viewMatrix)
             : fPath(path)
             , fViewMatrix(viewMatrix)
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
             , fShapeForKey(*path, GrStyle::SimpleFill())
 #endif
     {}
 
     const SkPath& path() const { return *fPath; }
     const SkMatrix& viewMatrix() const { return *fViewMatrix; }
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     /** Negative means the vertices should not be cached for this path. */
     int keyBytes() const { return fShapeForKey.unstyledKeySize() * sizeof(uint32_t); }
     void writeKey(void* key) const {
@@ -368,7 +370,7 @@ public:
 private:
     const SkPath* fPath;
     const SkMatrix* fViewMatrix;
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     GrStyledShape fShapeForKey;
 #endif
 };
@@ -412,7 +414,7 @@ bool draw_shadow(const FACTORY& factory,
     FindContext<FACTORY> context(&path.viewMatrix(), &factory);
 
     SkResourceCache::Key* key = nullptr;
-    SkAutoSTArray<32 * 4, uint8_t> keyStorage;
+    AutoSTArray<32 * 4, uint8_t> keyStorage;
     int keyDataBytes = path.keyBytes();
     if (keyDataBytes >= 0) {
         keyStorage.reset(keyDataBytes + sizeof(SkResourceCache::Key));

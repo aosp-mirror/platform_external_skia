@@ -10,7 +10,8 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkSpan.h"
 #include "include/core/SkTypes.h"
-#include "include/utils/SkRandom.h"
+#include "include/private/base/SkDebug.h"
+#include "src/base/SkRandom.h"
 #include "src/core/SkGeometry.h"
 #include "src/core/SkPointPriv.h"
 #include "tests/Test.h"
@@ -796,6 +797,15 @@ DEF_TEST(GeometryChopMonoCubicAtY_Successful, reporter) {
          { 48.633648f, 0.000000f },
          { 61.859592f, -1.237192f }, { 78.650871f, -1.573017f }, {100.000000f, -2.000000f }}
     );
+
+    testChopMonoCubicAtY(reporter, "ossfuzz:55680 curve barely crosses Y axis",
+        {{-250.121582f, -1180.09509f}, {10.007843f, -1180.09509f},
+         {20.015685f, -786.041259f}, {40.0313721f, 2.0664072f}},
+        0.f,
+        {{-250.121582f, -1180.095093f}, {9.780392f, -1180.095093f}, {19.997992f, -786.730042f},
+         {39.978889f, 0.000000f},
+         {39.996376f, 0.688501f}, {40.013870f, 1.377304f}, {40.031372f, 2.066407f}}
+    );
 }
 
 DEF_TEST(GeometryChopMonoCubicAtY_OutOfRangeReturnFalse, reporter) {
@@ -812,6 +822,10 @@ static void testChopMonoCubicAtX(skiatest::Reporter* reporter, std::string name,
                                  SkSpan<const SkPoint> curveInputs, SkScalar xToChopAt,
                                  SkSpan<const SkPoint> expectedOutputs) {
     skiatest::ReporterContext subtest(reporter, name);
+    REPORTER_ASSERT(reporter, curveInputs.size() == 4,
+                    "Invalid test case. Input curve should have 4 points");
+    REPORTER_ASSERT(reporter, expectedOutputs.size() == 7,
+                    "Invalid test case. Outputs should have 7 points");
     REPORTER_ASSERT(reporter, SkScalarNearlyEqual(expectedOutputs[3].x(), xToChopAt),
                     "Invalid test case. 4th point's X should be %f", xToChopAt);
 

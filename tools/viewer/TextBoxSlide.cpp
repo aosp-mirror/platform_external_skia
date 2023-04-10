@@ -17,10 +17,10 @@
 #include "include/core/SkTime.h"
 #include "include/core/SkTypeface.h"
 #include "include/effects/SkGradientShader.h"
-#include "include/utils/SkRandom.h"
 #include "modules/skshaper/include/SkShaper.h"
+#include "src/base/SkRandom.h"
+#include "src/base/SkUTF.h"
 #include "src/core/SkOSFile.h"
-#include "src/utils/SkUTF.h"
 #include "tools/viewer/Slide.h"
 
 typedef std::unique_ptr<SkShaper> (*ShaperFactory)();

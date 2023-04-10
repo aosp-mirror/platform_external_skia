@@ -12,11 +12,11 @@
 #include "include/core/SkImage.h"
 #include "include/core/SkTime.h"
 #include "include/core/SkTypeface.h"
-#include "include/utils/SkRandom.h"
-#include "src/utils/SkUTF.h"
+#include "src/base/SkRandom.h"
+#include "src/base/SkUTF.h"
 #include "tools/viewer/Slide.h"
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "include/gpu/GrDirectContext.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 
@@ -69,7 +69,7 @@ public:
 
         canvas->save();
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
         auto direct = GrAsDirectContext(canvas->recordingContext());
         if (direct) {
             SkSamplingOptions sampling(SkFilterMode::kLinear, SkMipmapMode::kNearest);

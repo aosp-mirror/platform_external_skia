@@ -19,8 +19,10 @@ namespace skgpu { class MutableTextureStateRef; }
 namespace skgpu::graphite {
 
 class VulkanSharedContext;
+class VulkanCommandBuffer;
 
 class VulkanTexture : public Texture {
+public:
     struct CreatedImageInfo {
         VkImage fImage = VK_NULL_HANDLE;
         VulkanAlloc fMemoryAlloc;
@@ -47,6 +49,29 @@ class VulkanTexture : public Texture {
     ~VulkanTexture() override {}
 
     VkImage vkImage() const { return fImage; }
+
+   void setImageLayout(VulkanCommandBuffer* buffer,
+                       VkImageLayout newLayout,
+                       VkAccessFlags dstAccessMask,
+                       VkPipelineStageFlags dstStageMask,
+                       bool byRegion) {
+        this->setImageLayoutAndQueueIndex(buffer, newLayout, dstAccessMask, dstStageMask, byRegion,
+                                          VK_QUEUE_FAMILY_IGNORED);
+    }
+
+    void setImageLayoutAndQueueIndex(VulkanCommandBuffer*,
+                                     VkImageLayout newLayout,
+                                     VkAccessFlags dstAccessMask,
+                                     VkPipelineStageFlags dstStageMask,
+                                     bool byRegion,
+                                     uint32_t newQueueFamilyIndex);
+
+    VkImageLayout currentLayout() const;
+    uint32_t currentQueueFamilyIndex() const;
+
+    // Helpers to use for setting the layout of the VkImage
+    static VkPipelineStageFlags LayoutToPipelineSrcStageFlags(const VkImageLayout layout);
+    static VkAccessFlags LayoutToSrcAccessMask(const VkImageLayout layout);
 
 private:
     VulkanTexture(const VulkanSharedContext* sharedContext,

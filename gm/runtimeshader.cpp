@@ -17,8 +17,9 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkImageFilters.h"
 #include "include/effects/SkRuntimeEffect.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #include "src/core/SkColorSpacePriv.h"
+#include "src/core/SkRuntimeEffectPriv.h"
 #include "tools/Resources.h"
 
 enum RT_Flags {
@@ -161,7 +162,7 @@ public:
     void onDraw(SkCanvas* canvas) override {
         SkRuntimeShaderBuilder builder(fEffect);
 
-        builder.uniform("cutoff") = sin(fSecs) * 0.55f + 0.5f;
+        builder.uniform("cutoff") = sinf(fSecs) * 0.55f + 0.5f;
         builder.uniform("slope")  = 10.0f;
 
         builder.child("before_map")    = fBefore;
@@ -390,6 +391,8 @@ public:
     }
 
     void onDraw(SkCanvas* canvas) override {
+        SkRuntimeColorFilterBuilder builder(fEffect);
+
         // First we draw the unmodified image, and a copy that was sepia-toned in Photoshop:
         canvas->drawImage(fMandrill,      0,   0);
         canvas->drawImage(fMandrillSepia, 0, 256);
@@ -399,12 +402,10 @@ public:
 
         const SkSamplingOptions sampling(SkFilterMode::kLinear);
 
-        float uniforms[] = {
-                (kSize - 1) / kSize,  // rg_scale
-                0.5f / kSize,         // rg_bias
-                kSize - 1,            // b_scale
-                1.0f / kSize,         // inv_size
-        };
+        builder.uniform("rg_scale")     = (kSize - 1) / kSize;
+        builder.uniform("rg_bias")      = 0.5f / kSize;
+        builder.uniform("b_scale")      = kSize - 1;
+        builder.uniform("inv_size")     = 1.0f / kSize;
 
         SkPaint paint;
 
@@ -412,15 +413,15 @@ public:
         SkMatrix normalize = SkMatrix::Scale(1.0f / (kSize * kSize), 1.0f / kSize);
 
         // Now draw the image with an identity color cube - it should look like the original
-        SkRuntimeEffect::ChildPtr children[] = {fIdentityCube->makeShader(sampling, normalize)};
-        paint.setColorFilter(fEffect->makeColorFilter(
-                SkData::MakeWithCopy(uniforms, sizeof(uniforms)), SkSpan(children)));
+        builder.child("color_cube") = fIdentityCube->makeShader(sampling, normalize);
+
+        paint.setColorFilter(builder.makeColorFilter());
         canvas->drawImage(fMandrill, 256, 0, sampling, &paint);
 
         // ... and with a sepia-tone color cube. This should match the sepia-toned image.
-        children[0] = fSepiaCube->makeShader(sampling, normalize);
-        paint.setColorFilter(fEffect->makeColorFilter(
-                SkData::MakeWithCopy(uniforms, sizeof(uniforms)), SkSpan(children)));
+        builder.child("color_cube") = fSepiaCube->makeShader(sampling, normalize);
+
+        paint.setColorFilter(builder.makeColorFilter());
         canvas->drawImage(fMandrill, 256, 256, sampling, &paint);
     }
 };
@@ -1049,4 +1050,41 @@ DEF_SIMPLE_GM(null_child_rt, canvas, 150, 100) {
     }
 
     canvas->translate(-150, 50);
+}
+
+DEF_SIMPLE_GM_CAN_FAIL(deferred_shader_rt, canvas, errorMsg, 150, 50) {
+    // Skip this GM on recording devices. It actually works okay on serialize-8888, but pic-8888
+    // does not. Ultimately, behavior on CPU is potentially strange (especially with SkVM), because
+    // SkVM will build the shader more than once per draw.
+    if (canvas->imageInfo().colorType() == kUnknown_SkColorType) {
+        return skiagm::DrawResult::kSkip;
+    }
+
+    const SkString kShader{R"(
+        uniform half4 color;
+        half4 main(float2 p) { return color; }
+    )"};
+    auto [effect, error] = SkRuntimeEffect::MakeForShader(kShader);
+    SkASSERT(effect);
+
+    SkColor4f color = SkColors::kRed;
+    auto makeUniforms = [color](const SkRuntimeEffectPriv::UniformsCallbackContext&) mutable {
+        auto result = SkData::MakeWithCopy(&color, sizeof(color));
+        color = {color.fB, color.fR, color.fG, color.fA};
+        return result;
+    };
+
+    auto shader =
+            SkRuntimeEffectPriv::MakeDeferredShader(effect.get(), makeUniforms, /*children=*/{});
+    SkASSERT(shader);
+
+    SkPaint paint;
+    paint.setShader(shader);
+
+    for (int i = 0; i < 3; ++i) {
+        canvas->drawRect({0, 0, 50, 50}, paint);
+        canvas->translate(50, 0);
+    }
+
+    return skiagm::DrawResult::kOk;
 }

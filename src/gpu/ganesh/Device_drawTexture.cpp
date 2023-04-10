@@ -8,6 +8,7 @@
 #include "src/gpu/ganesh/Device_v1.h"
 
 #include "include/core/SkBitmap.h"
+#include "include/core/SkColorSpace.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/private/base/SkTPin.h"
@@ -515,8 +516,9 @@ void draw_image(GrRecordingContext* rContext,
                                        sdc->colorInfo());
     if (image.isAlphaOnly()) {
         if (const auto* shader = as_SB(paint.getShader())) {
-            auto shaderFP = shader->asFragmentProcessor(
-                    GrFPArgs(rContext, matrixProvider, &sdc->colorInfo(), sdc->surfaceProps()));
+            auto shaderFP = shader->asRootFragmentProcessor(
+                    GrFPArgs(rContext, &sdc->colorInfo(), sdc->surfaceProps()),
+                    matrixProvider.localToDevice());
             if (!shaderFP) {
                 return;
             }
@@ -529,8 +531,13 @@ void draw_image(GrRecordingContext* rContext,
     }
 
     GrPaint grPaint;
-    if (!SkPaintToGrPaintReplaceShader(rContext, sdc->colorInfo(), paint, matrixProvider,
-                                       std::move(fp), sdc->surfaceProps(), &grPaint)) {
+    if (!SkPaintToGrPaintReplaceShader(rContext,
+                                       sdc->colorInfo(),
+                                       paint,
+                                       ctm,
+                                       std::move(fp),
+                                       sdc->surfaceProps(),
+                                       &grPaint)) {
         return;
     }
 
@@ -727,7 +734,7 @@ void Device::drawSpecial(SkSpecialImage* special,
                       special->colorInfo());
     // In most cases this ought to hit draw_texture since there won't be a color filter,
     // alpha-only texture+shader, or a high filter quality.
-    SkOverrideDeviceMatrixProvider matrixProvider(localToDevice);
+    SkMatrixProvider matrixProvider(localToDevice);
     draw_image(fContext.get(),
                fSurfaceDrawContext.get(),
                this->clip(),

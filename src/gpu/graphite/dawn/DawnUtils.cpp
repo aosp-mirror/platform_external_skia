@@ -90,12 +90,11 @@ wgpu::TextureFormat DawnDepthStencilFlagsToFormat(SkEnumBitMask<DepthStencilFlag
 }
 
 // Print the source code for all shaders generated.
-#if defined(SK_DEBUG)
+#ifdef SK_PRINT_SKSL_SHADERS
 static constexpr bool gPrintSKSL  = true;
 #else
 static constexpr bool gPrintSKSL  = false;
 #endif
-
 bool SkSLToSPIRV(SkSL::Compiler* compiler,
                  const std::string& sksl,
                  SkSL::ProgramKind programKind,
@@ -133,8 +132,16 @@ wgpu::ShaderModule DawnCompileSPIRVShaderModule(const DawnSharedContext* sharedC
     spirvDesc.codeSize = spirv.size() / 4;
     spirvDesc.code = reinterpret_cast<const uint32_t*>(spirv.c_str());
 
+    // Skia often generates shaders that select a texture/sampler conditionally based on an
+    // attribute (specifically in the case of texture atlas indexing). We disable derivative
+    // uniformity warnings as we expect Skia's behavior to result in well-defined values.
+    wgpu::DawnShaderModuleSPIRVOptionsDescriptor dawnSpirvOptions;
+    dawnSpirvOptions.allowNonUniformDerivatives = true;
+
     wgpu::ShaderModuleDescriptor desc;
     desc.nextInChain = &spirvDesc;
+    spirvDesc.nextInChain = &dawnSpirvOptions;
+
     return sharedContext->device().CreateShaderModule(&desc);
 }
 

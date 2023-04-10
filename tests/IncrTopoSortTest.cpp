@@ -8,9 +8,10 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
+#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTDArray.h"
-#include "src/core/SkTSort.h"
+#include "src/base/SkTSort.h"
 #include "tests/Test.h"
 
 #include <algorithm>

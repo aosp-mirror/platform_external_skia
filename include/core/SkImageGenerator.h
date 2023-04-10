@@ -29,13 +29,6 @@ class SkPicture;
 
 enum class GrImageTexGenPolicy : int;
 
-#if SK_GRAPHITE_ENABLED
-namespace skgpu::graphite {
-enum class Mipmapped : bool;
-class Recorder;
-}
-#endif
-
 class SK_API SkImageGenerator {
 public:
     /**
@@ -122,7 +115,7 @@ public:
      */
     bool getYUVAPlanes(const SkYUVAPixmaps& yuvaPixmaps);
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     /**
      *  If the generator can natively/efficiently return its pixels as a GPU image (backed by a
      *  texture) this will return that image. If not, this will return NULL.
@@ -144,14 +137,14 @@ public:
      */
     GrSurfaceProxyView generateTexture(GrRecordingContext*,
                                        const SkImageInfo& info,
-                                       GrMipmapped mipmapped,
+                                       skgpu::Mipmapped mipmapped,
                                        GrImageTexGenPolicy);
 #endif
 
-#if SK_GRAPHITE_ENABLED
+#if SK_GRAPHITE
     sk_sp<SkImage> makeTextureImage(skgpu::graphite::Recorder*,
                                     const SkImageInfo&,
-                                    skgpu::graphite::Mipmapped);
+                                    skgpu::Mipmapped);
 #endif
 
     /**
@@ -188,7 +181,7 @@ protected:
     virtual bool onQueryYUVAInfo(const SkYUVAPixmapInfo::SupportedDataTypes&,
                                  SkYUVAPixmapInfo*) const { return false; }
     virtual bool onGetYUVAPlanes(const SkYUVAPixmaps&) { return false; }
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     // returns nullptr
     virtual GrSurfaceProxyView onGenerateTexture(GrRecordingContext*, const SkImageInfo&,
                                                  GrMipmapped, GrImageTexGenPolicy);
@@ -200,10 +193,10 @@ protected:
     virtual GrSurfaceOrigin origin() const { return kTopLeft_GrSurfaceOrigin; }
 #endif
 
-#if SK_GRAPHITE_ENABLED
+#if SK_GRAPHITE
     virtual sk_sp<SkImage> onMakeTextureImage(skgpu::graphite::Recorder*,
                                               const SkImageInfo&,
-                                              skgpu::graphite::Mipmapped);
+                                              skgpu::Mipmapped);
 #endif
 
 private:

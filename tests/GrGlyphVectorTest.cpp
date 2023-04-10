@@ -10,14 +10,13 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSpan.h"
 #include "include/core/SkTypes.h"
+#include "src/base/SkZip.h"
 #include "src/core/SkDescriptor.h"
 #include "src/core/SkGlyph.h"
-#include "src/core/SkGlyphBuffer.h"
 #include "src/core/SkReadBuffer.h"
-#include "src/core/SkStrikeCache.h"
+#include "src/core/SkStrike.h"
 #include "src/core/SkStrikeSpec.h"
 #include "src/core/SkWriteBuffer.h"
-#include "src/core/SkZip.h"
 #include "src/text/StrikeForGPU.h"
 #include "src/text/gpu/GlyphVector.h"
 #include "src/text/gpu/SubRunAllocator.h"
@@ -49,7 +48,7 @@ DEF_TEST(GlyphVector_Serialization, r) {
     SubRunAllocator alloc;
 
     const int N = 10;
-    SkGlyphVariant* glyphs = alloc.makePODArray<SkGlyphVariant>(N);
+    SkPackedGlyphID* glyphs = alloc.makePODArray<SkPackedGlyphID>(N);
     for (int i = 0; i < N; i++) {
         glyphs[i] = SkPackedGlyphID(SkGlyphID(i));
     }

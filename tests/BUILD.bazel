@@ -1,4 +1,5 @@
-load("//bazel:macros.bzl", "bool_flag", "selects", "skia_cc_library")
+load("//bazel:skia_rules.bzl", "skia_cc_library")
+load("//bazel:flags.bzl", "bool_flag", "selects")
 load(":tests.bzl", "skia_cpu_tests", "skia_ganesh_tests")
 
 CODEC_TESTS = [
@@ -26,6 +27,7 @@ CPU_ONLY_TESTS = [
     "AvifTest.cpp",
     "BRDTest.cpp",
     "BadIcoTest.cpp",
+    "BezierCurveTest.cpp",
     "BitSetTest.cpp",
     "BitmapCopyTest.cpp",
     "BitmapGetColorTest.cpp",
@@ -43,6 +45,7 @@ CPU_ONLY_TESTS = [
     "ColorTest.cpp",
     "CtsEnforcement.cpp",
     "CubicMapTest.cpp",
+    "CubicRootsTest.cpp",
     "DashPathEffectTest.cpp",
     "DataRefTest.cpp",
     "DequeTest.cpp",
@@ -115,6 +118,7 @@ CPU_ONLY_TESTS = [
     "Point3Test.cpp",
     "PointTest.cpp",
     "PolyUtilsTest.cpp",
+    "QuadRootsTest.cpp",
     "QuickRejectTest.cpp",
     "RRectInPathTest.cpp",
     "RTreeTest.cpp",
@@ -152,15 +156,16 @@ CPU_ONLY_TESTS = [
     "SkGlyphBufferTest.cpp",
     "SkGlyphTest.cpp",
     "SkImageTest.cpp",
+    "SkMallocTest.cpp",
     "SkPathRangeIterTest.cpp",
     "SkSLErrorTest.cpp",
     "SkSLInterpreterTest.cpp",
     "SkSLMemoryLayoutTest.cpp",
     "SkSLTypeTest.cpp",
-    "SkScalerCacheTest.cpp",
     "SkSharedMutexTest.cpp",
     "SkSpanTest.cpp",
     "SkStrikeCacheTest.cpp",
+    "SkStrikeTest.cpp",
     "SkStringViewTest.cpp",
     "SkTBlockListTest.cpp",
     "SkUTFTest.cpp",
@@ -228,6 +233,7 @@ GANESH_TESTS = [
     "FindCubicConvex180ChopsTest.cpp",
     "FloatingPointTextureTest.cpp",
     "GLBackendSurfaceTest.cpp",
+    "GainmapShaderTest.cpp",
     "GpuDrawPathTest.cpp",
     "GpuRectanizerTest.cpp",
     "GrAHardwareBufferTest.cpp",
@@ -325,7 +331,7 @@ GANESH_TESTS = [
 ]
 
 PATHOPS_TESTS = [
-    "CubicRootsTest.cpp",
+    "CubicChopTest.cpp",
     "PathOpsAngleIdeas.cpp",
     "PathOpsAngleTest.cpp",
     "PathOpsAsWindingTest.cpp",
@@ -376,7 +382,6 @@ PATHOPS_TESTS = [
     "PathOpsTigerTest.cpp",
     "PathOpsTightBoundsTest.cpp",
     "PathOpsTypesTest.cpp",
-    "QuadRootsTest.cpp",
     "StrokerTest.cpp",
 ]
 

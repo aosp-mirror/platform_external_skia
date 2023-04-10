@@ -12,10 +12,10 @@
 #include "include/core/SkPaint.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
+#include "src/base/SkTLazy.h"
 #include "src/core/SkDraw.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkMatrixProvider.h"
-#include "src/core/SkTLazy.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/GrFixedClip.h"
@@ -576,7 +576,11 @@ void GrBlurUtils::drawShapeWithMaskFilter(GrRecordingContext* rContext,
     }
 
     GrPaint grPaint;
-    if (!SkPaintToGrPaint(rContext, sdc->colorInfo(), paint, matrixProvider, sdc->surfaceProps(),
+    if (!SkPaintToGrPaint(rContext,
+                          sdc->colorInfo(),
+                          paint,
+                          matrixProvider.localToDevice(),
+                          sdc->surfaceProps(),
                           &grPaint)) {
         return;
     }

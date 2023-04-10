@@ -7,7 +7,7 @@
 
 #include "tests/Test.h"
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
@@ -21,7 +21,7 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/graphite/Recorder.h"
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #include "src/core/SkRuntimeEffectPriv.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/ContextUtils.h"
@@ -207,7 +207,7 @@ sk_sp<SkImage> make_image(SkRandom* rand, Recorder* recorder) {
     sk_sp<SkImage> img = bitmap.asImage();
 
     // TODO: fuzz mipmappedness
-    return img->makeTextureImage(recorder, { Mipmapped::kNo });
+    return img->makeTextureImage(recorder, { skgpu::Mipmapped::kNo });
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -755,4 +755,4 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest, reporter, context) {
     }
 }
 
-#endif // SK_GRAPHITE_ENABLED
+#endif // SK_GRAPHITE

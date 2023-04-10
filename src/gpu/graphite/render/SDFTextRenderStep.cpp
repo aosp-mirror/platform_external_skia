@@ -7,6 +7,7 @@
 
 #include "src/gpu/graphite/render/SDFTextRenderStep.h"
 
+#include "include/core/SkM44.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/private/SkSLString.h"
 #include "src/gpu/graphite/ContextUtils.h"
@@ -70,11 +71,11 @@ std::string SDFTextRenderStep::vertexSkSL() const {
 }
 
 std::string SDFTextRenderStep::texturesAndSamplersSkSL(
-        const ResourceBindingRequirements& bindingReqs, int binding) const {
+        const ResourceBindingRequirements& bindingReqs, int* nextBindingIndex) const {
     std::string result;
 
     for (unsigned int i = 0; i < kNumSDFAtlasTextures; ++i) {
-        result += EmitSamplerLayout(bindingReqs, &binding);
+        result += EmitSamplerLayout(bindingReqs, nextBindingIndex);
         SkSL::String::appendf(&result, " uniform sampler2D sdf_atlas_%d;\n", i);
     }
 
@@ -160,8 +161,8 @@ void SDFTextRenderStep::writeUniformsAndTextures(const DrawParams& params,
 
     // write uniforms
     gatherer->write(params.transform());
-    skvx::float2 atlasDimensionsInverse = {1.f/proxies[0]->dimensions().width(),
-                                           1.f/proxies[0]->dimensions().height()};
+    SkV2 atlasDimensionsInverse = {1.f/proxies[0]->dimensions().width(),
+                                   1.f/proxies[0]->dimensions().height()};
     gatherer->write(atlasDimensionsInverse);
 
     // TODO: get this from DistanceFieldAdjustTable and luminance color (set in SubRunData?)

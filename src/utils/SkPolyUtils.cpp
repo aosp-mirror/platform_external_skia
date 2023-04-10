@@ -9,16 +9,17 @@
 
 #include "include/core/SkRect.h"
 #include "include/core/SkTypes.h"
+#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkFloatingPoint.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTDArray.h"
 #include "include/private/base/SkTemplates.h"
-#include "include/private/base/SkVx.h"
+#include "src/base/SkVx.h"
 #include "include/private/base/SkMalloc.h"
+#include "src/base/SkTDPQueue.h"
+#include "src/base/SkTInternalLList.h"
 #include "src/core/SkPointPriv.h"
 #include "src/core/SkRectPriv.h"
-#include "src/core/SkTDPQueue.h"
-#include "src/core/SkTInternalLList.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -1652,7 +1653,7 @@ bool SkTriangulateSimplePolygon(const SkPoint* polygonVerts, uint16_t* indexMap,
     }
 
     // Set up vertices
-    SkAutoSTArray<64, TriangulationVertex> triangulationVertices(polygonSize);
+    AutoSTArray<64, TriangulationVertex> triangulationVertices(polygonSize);
     int prevIndex = polygonSize - 1;
     SkVector v0 = polygonVerts[0] - polygonVerts[prevIndex];
     for (int currIndex = 0; currIndex < polygonSize; ++currIndex) {

@@ -11,9 +11,9 @@
 #include <memory>
 
 #include "include/gpu/GrContextOptions.h"
+#include "src/base/SkMathPriv.h"
+#include "src/base/SkTSearch.h"
 #include "src/core/SkCompressedDataUtils.h"
-#include "src/core/SkMathPriv.h"
-#include "src/core/SkTSearch.h"
 #include "src/gpu/ganesh/GrBackendUtils.h"
 #include "src/gpu/ganesh/GrProgramDesc.h"
 #include "src/gpu/ganesh/GrRenderTargetProxy.h"
@@ -4448,11 +4448,6 @@ void GrGLCaps::applyDriverCorrectnessWorkarounds(const GrGLContextInfo& ctxInfo,
         ctxInfo.renderer() == GrGLRenderer::kAdreno640) &&
         ctxInfo.driverVersion() < GR_GL_DRIVER_VER(571, 0, 0)) {
         fAvoidReorderingRenderTasks = true;
-    }
-
-    // http://skbug.com/11965
-    if (ctxInfo.renderer() == GrGLRenderer::kGoogleSwiftShader) {
-        fShaderCaps->fVertexIDSupport = false;
     }
 
     // http://crbug.com/1197152

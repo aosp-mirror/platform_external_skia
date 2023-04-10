@@ -19,6 +19,7 @@
 #include "src/core/SkSLTypeShared.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/ContextUtils.h"
+#include "src/gpu/graphite/ReadWriteSwizzle.h"
 #include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/sksl/codegen/SkSLPipelineStageCodeGenerator.h"
@@ -111,7 +112,8 @@ static void emit_preamble_for_entry(const ShaderInfo& shaderInfo,
 std::string ShaderInfo::toSkSL(const ResourceBindingRequirements& bindingReqs,
                                const RenderStep* step,
                                const bool useStorageBuffers,
-                               const bool defineLocalCoordsVarying) const {
+                               const bool defineLocalCoordsVarying,
+                               int* numTexturesAndSamplersUsed) const {
     std::string preamble = EmitVaryings(step,
                                         /*direction=*/"in",
                                         /*emitShadingSsboIndexVarying=*/useStorageBuffers,
@@ -135,10 +137,18 @@ std::string ShaderInfo::toSkSL(const ResourceBindingRequirements& bindingReqs,
                                   : bindingReqs.fUniformBufferLayout,
                 fBlockReaders);
     }
-    int binding = 0;
-    preamble += EmitTexturesAndSamplers(bindingReqs, fBlockReaders, &binding);
-    if (step->hasTextures()) {
-        preamble += step->texturesAndSamplersSkSL(bindingReqs, binding);
+
+    {
+        int binding = 0;
+        preamble += EmitTexturesAndSamplers(bindingReqs, fBlockReaders, &binding);
+        if (step->hasTextures()) {
+            preamble += step->texturesAndSamplersSkSL(bindingReqs, &binding);
+        }
+
+        // Report back to the caller how many textures and samplers are used.
+        if (numTexturesAndSamplersUsed) {
+            *numTexturesAndSamplersUsed = binding;
+        }
     }
 
     std::string mainBody = "void main() {";
@@ -424,54 +434,66 @@ void GenerateDefaultPreamble(const ShaderInfo& shaderInfo,
 static constexpr int kFourStopGradient = 4;
 static constexpr int kEightStopGradient = 8;
 
-static constexpr Uniform kLinearGradientUniforms4[] = {
+static constexpr Uniform kLinearGradientUniforms4[7] = {
         { "colors",      SkSLType::kFloat4, kFourStopGradient },
         { "offsets",     SkSLType::kFloat,  kFourStopGradient },
         { "point0",      SkSLType::kFloat2 },
         { "point1",      SkSLType::kFloat2 },
         { "tilemode",    SkSLType::kInt },
+        { "colorSpace",  SkSLType::kInt },
+        { "doUnPremul",  SkSLType::kInt },
 };
-static constexpr Uniform kLinearGradientUniforms8[] = {
+static constexpr Uniform kLinearGradientUniforms8[7] = {
         { "colors",      SkSLType::kFloat4, kEightStopGradient },
         { "offsets",     SkSLType::kFloat,  kEightStopGradient },
         { "point0",      SkSLType::kFloat2 },
         { "point1",      SkSLType::kFloat2 },
         { "tilemode",    SkSLType::kInt },
+        { "colorSpace",  SkSLType::kInt },
+        { "doUnPremul",  SkSLType::kInt },
 };
 
-static constexpr Uniform kRadialGradientUniforms4[] = {
+static constexpr Uniform kRadialGradientUniforms4[7] = {
         { "colors",      SkSLType::kFloat4, kFourStopGradient },
         { "offsets",     SkSLType::kFloat,  kFourStopGradient },
         { "center",      SkSLType::kFloat2 },
         { "radius",      SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
+        { "colorSpace",  SkSLType::kInt },
+        { "doUnPremul",  SkSLType::kInt },
 };
-static constexpr Uniform kRadialGradientUniforms8[] = {
+static constexpr Uniform kRadialGradientUniforms8[7] = {
         { "colors",      SkSLType::kFloat4, kEightStopGradient },
         { "offsets",     SkSLType::kFloat,  kEightStopGradient },
         { "center",      SkSLType::kFloat2 },
         { "radius",      SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
+        { "colorSpace",  SkSLType::kInt },
+        { "doUnPremul",  SkSLType::kInt },
 };
 
-static constexpr Uniform kSweepGradientUniforms4[] = {
+static constexpr Uniform kSweepGradientUniforms4[8] = {
         { "colors",      SkSLType::kFloat4, kFourStopGradient },
         { "offsets",     SkSLType::kFloat,  kFourStopGradient },
         { "center",      SkSLType::kFloat2 },
         { "bias",        SkSLType::kFloat },
         { "scale",       SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
+        { "colorSpace",  SkSLType::kInt },
+        { "doUnPremul",  SkSLType::kInt },
 };
-static constexpr Uniform kSweepGradientUniforms8[] = {
+static constexpr Uniform kSweepGradientUniforms8[8] = {
         { "colors",      SkSLType::kFloat4, kEightStopGradient },
         { "offsets",     SkSLType::kFloat,  kEightStopGradient },
         { "center",      SkSLType::kFloat2 },
         { "bias",        SkSLType::kFloat },
         { "scale",       SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
+        { "colorSpace",  SkSLType::kInt },
+        { "doUnPremul",  SkSLType::kInt },
 };
 
-static constexpr Uniform kConicalGradientUniforms4[] = {
+static constexpr Uniform kConicalGradientUniforms4[9] = {
         { "colors",      SkSLType::kFloat4, kFourStopGradient },
         { "offsets",     SkSLType::kFloat,  kFourStopGradient },
         { "point0",      SkSLType::kFloat2 },
@@ -479,8 +501,10 @@ static constexpr Uniform kConicalGradientUniforms4[] = {
         { "radius0",     SkSLType::kFloat },
         { "radius1",     SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
+        { "colorSpace",  SkSLType::kInt },
+        { "doUnPremul",  SkSLType::kInt },
 };
-static constexpr Uniform kConicalGradientUniforms8[] = {
+static constexpr Uniform kConicalGradientUniforms8[9] = {
         { "colors",      SkSLType::kFloat4, kEightStopGradient },
         { "offsets",     SkSLType::kFloat,  kEightStopGradient },
         { "point0",      SkSLType::kFloat2 },
@@ -488,6 +512,8 @@ static constexpr Uniform kConicalGradientUniforms8[] = {
         { "radius0",     SkSLType::kFloat },
         { "radius1",     SkSLType::kFloat },
         { "tilemode",    SkSLType::kInt },
+        { "colorSpace",  SkSLType::kInt },
+        { "doUnPremul",  SkSLType::kInt },
 };
 
 static constexpr char kLinearGradient4Name[] = "sk_linear_grad_4_shader";
@@ -564,6 +590,7 @@ static constexpr Uniform kImageShaderUniforms[] = {
         { "filterMode",            SkSLType::kInt },
         { "useCubic",              SkSLType::kInt },
         { "cubicCoeffs",           SkSLType::kFloat4x4 },
+        { "readSwizzle",           SkSLType::kInt },
         // The next 6 uniforms are for the color space transformation
         { "csXformFlags",          SkSLType::kInt },
         { "csXformSrcKind",        SkSLType::kInt },
@@ -586,6 +613,17 @@ static_assert(0 == static_cast<int>(SkFilterMode::kNearest),
               "ImageShader code depends on SkFilterMode");
 static_assert(1 == static_cast<int>(SkFilterMode::kLinear),
               "ImageShader code depends on SkFilterMode");
+
+static_assert(0 == static_cast<int>(ReadSwizzle::kRGBA),
+              "ImageShader code depends on ReadSwizzle");
+static_assert(1 == static_cast<int>(ReadSwizzle::kRGB1),
+              "ImageShader code depends on ReadSwizzle");
+static_assert(2 == static_cast<int>(ReadSwizzle::kRRRR),
+              "ImageShader code depends on ReadSwizzle");
+static_assert(3 == static_cast<int>(ReadSwizzle::kRRR1),
+              "ImageShader code depends on ReadSwizzle");
+static_assert(4 == static_cast<int>(ReadSwizzle::kBGRA),
+              "ImageShader code depends on ReadSwizzle");
 
 static constexpr char kImageShaderName[] = "sk_image_shader";
 

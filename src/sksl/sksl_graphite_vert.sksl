@@ -533,16 +533,3 @@ $pure float4 tessellate_stroked_curve(float edgeID, float maxEdges,
         return float4(affineMatrix * strokeCoord + translate, strokeCoord);
     }
 }
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-// Support functions for analytic round rectangles
-
-float2 ortho(float2 v) {
-    return float2(-v.y, v.x);
-}
-
-// Calculate line equation for a line along 'v' that goes through 'p'
-float3 calc_line_eq(float2 v, float2 p) {
-    float2 n = ortho(v);
-    return float3(n, -dot(n,p));
-}

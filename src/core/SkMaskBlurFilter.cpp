@@ -10,10 +10,10 @@
 #include "include/core/SkColorPriv.h"
 #include "include/private/base/SkTPin.h"
 #include "include/private/base/SkTemplates.h"
-#include "include/private/base/SkVx.h"
+#include "src/base/SkVx.h"
 #include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkTo.h"
-#include "src/core/SkArenaAlloc.h"
+#include "src/base/SkArenaAlloc.h"
 #include "src/core/SkGaussFilter.h"
 
 #include <cmath>

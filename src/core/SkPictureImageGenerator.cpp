@@ -12,10 +12,10 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkPicture.h"
 #include "include/core/SkSurface.h"
-#include "src/core/SkTLazy.h"
+#include "src/base/SkTLazy.h"
 #include "src/image/SkImage_Base.h"
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "src/gpu/ganesh/GrTextureProxy.h"
 #endif
 
@@ -27,15 +27,15 @@ public:
 protected:
     bool onGetPixels(const SkImageInfo&, void* pixels, size_t rowBytes, const Options&) override;
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     GrSurfaceProxyView onGenerateTexture(GrRecordingContext*, const SkImageInfo&,
                                          GrMipmapped, GrImageTexGenPolicy) override;
 #endif
 
-#if SK_GRAPHITE_ENABLED
+#if SK_GRAPHITE
     sk_sp<SkImage> onMakeTextureImage(skgpu::graphite::Recorder*,
                                       const SkImageInfo&,
-                                      skgpu::graphite::Mipmapped) override;
+                                      skgpu::Mipmapped) override;
 #endif
 
 private:
@@ -102,7 +102,7 @@ bool SkPictureImageGenerator::onGetPixels(const SkImageInfo& info, void* pixels,
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
 #include "src/gpu/ganesh/SkGr.h"
@@ -135,16 +135,16 @@ GrSurfaceProxyView SkPictureImageGenerator::onGenerateTexture(GrRecordingContext
     return view;
 }
 
-#endif // SK_SUPPORT_GPU
+#endif // defined(SK_GANESH)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#if SK_GRAPHITE_ENABLED
+#if SK_GRAPHITE
 #include "src/gpu/graphite/Log.h"
 
 sk_sp<SkImage> SkPictureImageGenerator::onMakeTextureImage(skgpu::graphite::Recorder* recorder,
                                                            const SkImageInfo& info,
-                                                           skgpu::graphite::Mipmapped mipmapped) {
+                                                           skgpu::Mipmapped mipmapped) {
     using namespace skgpu::graphite;
 
     sk_sp<SkSurface> surface = SkSurface::MakeGraphite(recorder, info, mipmapped);
@@ -158,4 +158,4 @@ sk_sp<SkImage> SkPictureImageGenerator::onMakeTextureImage(skgpu::graphite::Reco
     return surface->asImage();
 }
 
-#endif // SK_GRAPHITE_ENABLED
+#endif // SK_GRAPHITE

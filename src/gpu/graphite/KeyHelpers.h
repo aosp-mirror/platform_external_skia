@@ -14,6 +14,7 @@
 #include "include/core/SkShader.h"
 #include "include/core/SkSpan.h"
 #include "include/core/SkTileMode.h"
+#include "include/effects/SkGradientShader.h"
 #include "include/gpu/graphite/Context.h"
 #include "include/private/SkColorData.h"
 #include "src/core/SkColorSpaceXformSteps.h"
@@ -29,6 +30,7 @@ class KeyContext;
 class PaintParamsKeyBuilder;
 class PipelineDataGatherer;
 class UniquePaintParamsID;
+enum class ReadSwizzle;
 
 /**
  * The KeyHelpers can be used to manually construct an SkPaintParamsKey.
@@ -82,8 +84,9 @@ struct GradientShaderBlocks {
                      float bias, float scale,
                      SkTileMode,
                      int numStops,
-                     SkColor4f* colors,
-                     float* offsets);
+                     const SkPMColor4f* colors,
+                     float* offsets,
+                     const SkGradientShader::Interpolation&);
 
         bool operator==(const GradientData& rhs) const {
             return fType == rhs.fType &&
@@ -95,7 +98,7 @@ struct GradientShaderBlocks {
                    fScale == rhs.fScale &&
                    fTM == rhs.fTM &&
                    fNumStops == rhs.fNumStops &&
-                   !memcmp(fColor4fs, rhs.fColor4fs, sizeof(fColor4fs)) &&
+                   !memcmp(fColors, rhs.fColors, sizeof(fColors)) &&
                    !memcmp(fOffsets, rhs.fOffsets, sizeof(fOffsets));
         }
         bool operator!=(const GradientData& rhs) const { return !(*this == rhs); }
@@ -111,8 +114,10 @@ struct GradientShaderBlocks {
 
         SkTileMode             fTM;
         int                    fNumStops;
-        SkColor4f              fColor4fs[kMaxStops];
+        SkPMColor4f            fColors[kMaxStops];
         float                  fOffsets[kMaxStops];
+
+        SkGradientShader::Interpolation fInterpolation;
     };
 
     static void BeginBlock(const KeyContext&,
@@ -145,11 +150,13 @@ struct ImageShaderBlock {
         ImageData(const SkSamplingOptions& sampling,
                   SkTileMode tileModeX,
                   SkTileMode tileModeY,
-                  SkRect subset);
+                  SkRect subset,
+                  ReadSwizzle readSwizzle);
 
         SkSamplingOptions fSampling;
         SkTileMode fTileModes[2];
         SkRect fSubset;
+        ReadSwizzle fReadSwizzle;
 
         SkColorSpaceXformSteps fSteps;
 
@@ -206,13 +213,13 @@ struct MatrixColorFilterBlock {
                           matrix[ 5], matrix[ 6], matrix[ 7], matrix[ 8],
                           matrix[10], matrix[11], matrix[12], matrix[13],
                           matrix[15], matrix[16], matrix[17], matrix[18])
-                , fTranslate(matrix[4], matrix[9], matrix[14], matrix[19])
+                , fTranslate{matrix[4], matrix[9], matrix[14], matrix[19]}
                 , fInHSLA(inHSLA) {
         }
 
-        SkM44        fMatrix;
-        skvx::float4 fTranslate;
-        bool         fInHSLA;
+        SkM44 fMatrix;
+        SkV4  fTranslate;
+        bool  fInHSLA;
     };
 
     // The gatherer and matrixCFData should be null or non-null together

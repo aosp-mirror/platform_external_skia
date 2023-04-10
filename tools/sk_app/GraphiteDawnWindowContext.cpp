@@ -45,8 +45,10 @@ void GraphiteDawnWindowContext::initializeContext(int width, int height) {
     skgpu::graphite::DawnBackendContext backendContext;
     backendContext.fDevice = fDevice;
     backendContext.fQueue = fDevice.GetQueue();
+    skgpu::graphite::ContextOptions contextOptions;
+    contextOptions.fStoreContextRefInRecorder = true; // Needed to make synchronous readPixels work
     fGraphiteContext = skgpu::graphite::ContextFactory::MakeDawn(backendContext,
-                                                                 skgpu::graphite::ContextOptions());
+                                                                 contextOptions);
     if (!fGraphiteContext) {
         SkASSERT(false);
         return;
@@ -76,7 +78,7 @@ void GraphiteDawnWindowContext::destroyContext() {
 sk_sp<SkSurface> GraphiteDawnWindowContext::getBackbufferSurface() {
     auto textureView = fSwapChain.GetCurrentTextureView();
     skgpu::graphite::DawnTextureInfo info(/*sampleCount=*/1,
-                                          skgpu::graphite::Mipmapped::kNo,
+                                          skgpu::Mipmapped::kNo,
                                           fSwapChainFormat,
                                           kTextureUsage);
     skgpu::graphite::BackendTexture backendTex(this->dimensions(),

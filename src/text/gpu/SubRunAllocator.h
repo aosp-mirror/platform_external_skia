@@ -11,7 +11,7 @@
 #include "include/core/SkSpan.h"
 #include "include/private/base/SkMath.h"
 #include "include/private/base/SkTemplates.h"
-#include "src/core/SkArenaAlloc.h"
+#include "src/base/SkArenaAlloc.h"
 
 #include <algorithm>
 #include <climits>
@@ -253,6 +253,18 @@ public:
     template<typename T> T* makePODArray(int n) {
         static_assert(HasNoDestructor<T>, "This is not POD. Use makeUniqueArray.");
         return reinterpret_cast<T*>(fAlloc.template allocateBytesFor<T>(n));
+    }
+
+    template<typename T>
+    SkSpan<T> makePODSpan(SkSpan<const T> s) {
+        static_assert(HasNoDestructor<T>, "This is not POD. Use makeUniqueArray.");
+        if (s.empty()) {
+            return SkSpan<T>{};
+        }
+
+        T* result = this->makePODArray<T>(SkTo<int>(s.size()));
+        memcpy(result, s.data(), s.size_bytes());
+        return {result, s.size()};
     }
 
     template<typename T, typename Src, typename Map>

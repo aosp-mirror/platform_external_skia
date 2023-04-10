@@ -16,6 +16,10 @@
 #include "src/core/SkVM.h"
 #include "src/shaders/SkShaderBase.h"
 
+#if defined(SK_GRAPHITE)
+#include "src/gpu/graphite/KeyHelpers.h"
+#endif
+
 class SkArenaAlloc;
 class SkColorSpace;
 class SkRasterPipeline;
@@ -94,11 +98,16 @@ protected:
 
     bool onAsLuminanceColor(SkColor*) const override;
 
-    bool onAppendStages(const SkStageRec&) const override;
+    bool appendStages(const SkStageRec&, const MatrixRec&) const override;
 
-    skvm::Color onProgram(skvm::Builder*, skvm::Coord device, skvm::Coord local, skvm::Color paint,
-                          const SkMatrixProvider&, const SkMatrix* localM, const SkColorInfo& dstCS,
-                          skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const override;
+    skvm::Color program(skvm::Builder*,
+                        skvm::Coord device,
+                        skvm::Coord local,
+                        skvm::Color paint,
+                        const MatrixRec&,
+                        const SkColorInfo& dstCS,
+                        skvm::Uniforms* uniforms,
+                        SkArenaAlloc* alloc) const override;
 
     virtual void appendGradientStages(SkArenaAlloc* alloc, SkRasterPipeline* tPipeline,
                                       SkRasterPipeline* postPipeline) const = 0;
@@ -109,6 +118,15 @@ protected:
 
     const SkMatrix fPtsToUnit;
     SkTileMode     fTileMode;
+
+#if defined(SK_GRAPHITE)
+    static void MakeInterpolatedToDst(const skgpu::graphite::KeyContext&,
+                                      skgpu::graphite::PaintParamsKeyBuilder*,
+                                      skgpu::graphite::PipelineDataGatherer*,
+                                      const skgpu::graphite::GradientShaderBlocks::GradientData&,
+                                      const SkGradientShaderBase::Interpolation&,
+                                      SkColorSpace* intermediateCS);
+#endif
 
 public:
     static void AppendGradientFillStages(SkRasterPipeline* p,

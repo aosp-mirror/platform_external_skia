@@ -121,6 +121,10 @@ std::tuple<TextureProxyView, SkColorType> MakeBitmapProxyView(Recorder* recorder
     recorder->priv().add(UploadTask::Make(std::move(upload)));
 
     Swizzle swizzle = caps->getReadSwizzle(ct, textureInfo);
+    // If the color type is alpha-only, propagate the alpha value to the other channels.
+    if (colorInfo.colorType() == kAlpha_8_SkColorType) {
+        swizzle = Swizzle::Concat(swizzle, Swizzle("aaaa"));
+    }
     return {{std::move(proxy), swizzle}, ct};
 }
 
@@ -136,8 +140,8 @@ sk_sp<SkImage> MakeFromBitmap(Recorder* recorder,
         return nullptr;
     }
 
-    SkASSERT(requiredProps.fMipmapped == skgpu::graphite::Mipmapped::kNo ||
-             view.proxy()->mipmapped() == skgpu::graphite::Mipmapped::kYes);
+    SkASSERT(requiredProps.fMipmapped == skgpu::Mipmapped::kNo ||
+             view.proxy()->mipmapped() == skgpu::Mipmapped::kYes);
     return sk_make_sp<skgpu::graphite::Image>(std::move(view),
                                               colorInfo.makeColorType(ct));
 }

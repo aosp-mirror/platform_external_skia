@@ -80,7 +80,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SpecialSurface_Gpu1,
     }
 }
 
-#if SK_GRAPHITE_ENABLED
+#if SK_GRAPHITE
 
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/TextureInfo.h"
@@ -95,7 +95,7 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(SpecialSurface_Graphite, reporter, cont
 
     for (auto colorType : { kRGBA_8888_SkColorType, kRGBA_1010102_SkColorType }) {
         TextureInfo info = caps->getDefaultSampledTextureInfo(colorType,
-                                                              /*mipmapped=*/ Mipmapped::kNo,
+                                                              skgpu::Mipmapped::kNo,
                                                               skgpu::Protected::kNo,
                                                               Renderable::kYes);
         if (!info.isValid()) {
@@ -110,4 +110,4 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(SpecialSurface_Graphite, reporter, cont
     }
 }
 
-#endif // SK_GRAPHITE_ENABLED
+#endif // SK_GRAPHITE

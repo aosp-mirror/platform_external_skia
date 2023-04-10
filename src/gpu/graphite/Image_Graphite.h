@@ -28,11 +28,10 @@ public:
     ~Image() override;
 
     bool onHasMipmaps() const override {
-        return fTextureProxyView.proxy()->mipmapped() == Mipmapped::kYes;
+        return fTextureProxyView.proxy()->mipmapped() == skgpu::Mipmapped::kYes;
     }
 
     using Image_Base::onMakeSubset;
-    sk_sp<SkImage> onMakeSubset(const SkIRect&, Recorder*, RequiredImageProperties) const override;
 
     sk_sp<SkImage> onReinterpretColorSpace(sk_sp<SkColorSpace>) const override;
 
@@ -48,6 +47,12 @@ public:
 private:
     sk_sp<SkImage> onMakeTextureImage(Recorder*, RequiredImageProperties) const override;
     sk_sp<SkImage> copyImage(const SkIRect& subset, Recorder*, RequiredImageProperties) const;
+    sk_sp<SkImage> onMakeSubset(const SkIRect&, Recorder*, RequiredImageProperties) const override;
+    using Image_Base::onMakeColorTypeAndColorSpace;
+    sk_sp<SkImage> onMakeColorTypeAndColorSpace(SkColorType targetCT,
+                                                sk_sp<SkColorSpace> targetCS,
+                                                Recorder*,
+                                                RequiredImageProperties) const override;
 
     TextureProxyView fTextureProxyView;
 };

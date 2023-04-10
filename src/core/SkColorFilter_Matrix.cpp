@@ -18,10 +18,10 @@
 #include "src/core/SkVM.h"
 #include "src/core/SkWriteBuffer.h"
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 #include "src/gpu/graphite/KeyHelpers.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
-#endif // SK_GRAPHITE_ENABLED
+#endif // SK_GRAPHITE
 
 static bool is_alpha_unchanged(const float matrix[20]) {
     const float* srcA = matrix + 15;
@@ -39,15 +39,17 @@ public:
 
     explicit SkColorFilter_Matrix(const float array[20], Domain);
 
+    bool appendStages(const SkStageRec& rec, bool shaderIsOpaque) const override;
+
     bool onIsAlphaUnchanged() const override { return fAlphaIsUnchanged; }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     GrFPResult asFragmentProcessor(std::unique_ptr<GrFragmentProcessor> inputFP,
                                    GrRecordingContext*,
                                    const GrColorInfo&,
                                    const SkSurfaceProps&) const override;
 #endif
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
     void addToKey(const skgpu::graphite::KeyContext&,
                   skgpu::graphite::PaintParamsKeyBuilder*,
                   skgpu::graphite::PipelineDataGatherer*) const override;
@@ -60,7 +62,6 @@ private:
     void flatten(SkWriteBuffer&) const override;
     bool onAsAColorMatrix(float matrix[20]) const override;
 
-    bool onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const override;
     skvm::Color onProgram(skvm::Builder*, skvm::Color,
                           const SkColorInfo& dst,
                           skvm::Uniforms* uniforms, SkArenaAlloc*) const override;
@@ -102,7 +103,7 @@ bool SkColorFilter_Matrix::onAsAColorMatrix(float matrix[20]) const {
     return true;
 }
 
-bool SkColorFilter_Matrix::onAppendStages(const SkStageRec& rec, bool shaderIsOpaque) const {
+bool SkColorFilter_Matrix::appendStages(const SkStageRec& rec, bool shaderIsOpaque) const {
     const bool willStayOpaque = shaderIsOpaque && fAlphaIsUnchanged,
                          hsla = fDomain == Domain::kHSLA;
 
@@ -158,7 +159,7 @@ skvm::Color SkColorFilter_Matrix::onProgram(skvm::Builder* p, skvm::Color c,
     return premul(clamp01(c));
 }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "src/gpu/ganesh/effects/GrSkSLFP.h"
 
 static std::unique_ptr<GrFragmentProcessor> rgb_to_hsl(std::unique_ptr<GrFragmentProcessor> child) {
@@ -208,9 +209,9 @@ GrFPResult SkColorFilter_Matrix::asFragmentProcessor(std::unique_ptr<GrFragmentP
     return GrFPSuccess(std::move(fp));
 }
 
-#endif // SK_SUPPORT_GPU
+#endif // defined(SK_GANESH)
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 void SkColorFilter_Matrix::addToKey(const skgpu::graphite::KeyContext& keyContext,
                                     skgpu::graphite::PaintParamsKeyBuilder* builder,
                                     skgpu::graphite::PipelineDataGatherer* gatherer) const {
@@ -222,7 +223,7 @@ void SkColorFilter_Matrix::addToKey(const skgpu::graphite::KeyContext& keyContex
     MatrixColorFilterBlock::BeginBlock(keyContext, builder, gatherer, &matrixCFData);
     builder->endBlock();
 }
-#endif // SK_GRAPHITE_ENABLED
+#endif // SK_GRAPHITE
 
 ///////////////////////////////////////////////////////////////////////////////
 

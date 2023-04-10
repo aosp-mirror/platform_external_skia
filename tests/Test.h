@@ -9,13 +9,13 @@
 
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkNoncopyable.h"
+#include "include/private/base/SkNoncopyable.h"
 #include "include/private/base/SkTArray.h"
 #include "src/core/SkTraceEvent.h"
 #include "tests/CtsEnforcement.h"
 #include "tools/Registry.h"
 
-#if SK_GPU_V1
+#if defined(SK_GANESH)
 #include "tools/gpu/GrContextFactory.h" // IWYU pragma: export (because it is used by a macro)
 #else
 namespace sk_gpu_test { class ContextInfo; }
@@ -174,7 +174,7 @@ private:
 
 using TestRegistry = sk_tools::Registry<Test>;
 
-#if SK_GPU_V1
+#if defined(SK_GANESH)
 using GrContextFactoryContextType = sk_gpu_test::GrContextFactory::ContextType;
 #else
 using GrContextFactoryContextType = nullptr_t;

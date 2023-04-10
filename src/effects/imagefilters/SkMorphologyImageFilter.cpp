@@ -34,7 +34,8 @@
 #include <memory>
 #include <utility>
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
+#include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/GrTypes.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
@@ -58,11 +59,15 @@ struct GrShaderCaps;
 #endif
 
 #if GR_TEST_UTILS
-#include "include/utils/SkRandom.h"
+#include "src/base/SkRandom.h"
 #endif
 
 #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE2
     #include <emmintrin.h>
+#endif
+
+#if defined(SK_ARM_HAS_NEON)
+    #include <arm_neon.h>
 #endif
 
 namespace {
@@ -200,7 +205,7 @@ SkIRect SkMorphologyImageFilter::onFilterNodeBounds(
     return src.makeOutset(SkScalarCeilToInt(radius.width()), SkScalarCeilToInt(radius.height()));
 }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 
 ///////////////////////////////////////////////////////////////////////////////
 /**
@@ -688,7 +693,7 @@ sk_sp<SkSpecialImage> SkMorphologyImageFilter::onFilterImage(const Context& ctx,
         return input->makeSubset(srcBounds);
     }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     if (ctx.gpuBacked()) {
         auto context = ctx.getContext();
 

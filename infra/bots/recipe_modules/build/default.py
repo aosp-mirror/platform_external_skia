@@ -190,6 +190,7 @@ def compile_fn(api, checkout_root, out_dir):
     args.update({
       'skia_use_runtime_icu': 'true',
       'skia_enable_optimize_size': 'true',
+      'skia_use_jpeg_gainmaps': 'false',
     })
 
   if 'Exceptions' in extra_tokens:
@@ -234,12 +235,12 @@ def compile_fn(api, checkout_root, out_dir):
   if 'Graphite' in extra_tokens:
     args['skia_enable_graphite'] = 'true'
   if 'NoGpu' in extra_tokens:
-    args['skia_enable_gpu'] = 'false'
+    args['skia_enable_ganesh'] = 'false'
   if 'NoDEPS' in extra_tokens:
     args.update({
       'is_official_build':             'true',
       'skia_enable_fontmgr_empty':     'true',
-      'skia_enable_gpu':               'true',
+      'skia_enable_ganesh':            'true',
 
       'skia_enable_pdf':               'false',
       'skia_use_expat':                'false',

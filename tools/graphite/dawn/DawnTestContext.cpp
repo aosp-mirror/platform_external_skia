@@ -64,19 +64,19 @@ std::unique_ptr<GraphiteTestContext> DawnTestContext::Make() {
     desc.requiredFeatures      = features.data();
 
 #if !defined(SK_DEBUG)
-        wgpu::DawnTogglesDeviceDescriptor togglesDeviceDesc;
+        wgpu::DawnTogglesDescriptor deviceTogglesDesc;
         std::array<const char*, 1> toggles = {
             "skip_validation",
         };
-        togglesDeviceDesc.forceEnabledTogglesCount = toggles.size();
-        togglesDeviceDesc.forceEnabledToggles      = toggles.data();
-        desc.nextInChain                           = &togglesDeviceDesc;
+        deviceTogglesDesc.enabledTogglesCount = toggles.size();
+        deviceTogglesDesc.enabledToggles      = toggles.data();
+        desc.nextInChain                      = &deviceTogglesDesc;
 #endif
     auto device = wgpu::Device::Acquire(gAdapter.CreateDevice(&desc));
     SkASSERT(device);
     device.SetUncapturedErrorCallback(
             [](WGPUErrorType type, const char* message, void*) {
-                SK_ABORT("Device error: %s\n", message);
+                SkDebugf("Device error: %s\n", message);
             },
             0);
     device.SetDeviceLostCallback(
@@ -94,8 +94,10 @@ std::unique_ptr<GraphiteTestContext> DawnTestContext::Make() {
 }
 
 std::unique_ptr<skgpu::graphite::Context> DawnTestContext::makeContext() {
+    skgpu::graphite::ContextOptions contextOptions;
+    contextOptions.fStoreContextRefInRecorder = true; // Needed to make synchronous readPixels work
     return skgpu::graphite::ContextFactory::MakeDawn(fBackendContext,
-                                                     skgpu::graphite::ContextOptions{});
+                                                     contextOptions);
 }
 
 }  // namespace skiatest::graphite

@@ -19,7 +19,7 @@
 #include "modules/skparagraph/src/Run.h"
 #include "modules/skparagraph/src/TextLine.h"
 #include "modules/skparagraph/src/TextWrapper.h"
-#include "src/utils/SkUTF.h"
+#include "src/base/SkUTF.h"
 #include <math.h>
 #include <algorithm>
 #include <utility>
@@ -466,6 +466,11 @@ void ParagraphImpl::buildClusterTable() {
     for (auto& run : fRuns) {
         cluster_count += run.isPlaceholder() ? 1 : run.size();
         fCodeUnitProperties[run.fTextRange.start] |= SkUnicode::CodeUnitFlags::kGraphemeStart;
+        fCodeUnitProperties[run.fTextRange.start] |= SkUnicode::CodeUnitFlags::kGlyphClusterStart;
+    }
+    if (!fRuns.empty()) {
+        fCodeUnitProperties[fRuns.back().textRange().end] |= SkUnicode::CodeUnitFlags::kGraphemeStart;
+        fCodeUnitProperties[fRuns.back().textRange().end] |= SkUnicode::CodeUnitFlags::kGlyphClusterStart;
     }
     fClusters.reserve_back(cluster_count);
 
@@ -497,8 +502,10 @@ void ParagraphImpl::buildClusterTable() {
                 }
                 SkSpan<const char> text(fText.c_str() + charStart, charEnd - charStart);
                 fClusters.emplace_back(this, runIndex, glyphStart, glyphEnd, text, width, height);
+                fCodeUnitProperties[charStart] |= SkUnicode::CodeUnitFlags::kGlyphClusterStart;
             });
         }
+        fCodeUnitProperties[run.textRange().start] |= SkUnicode::CodeUnitFlags::kGlyphClusterStart;
 
         run.setClusterRange(runStart, fClusters.size());
         fMaxIntrinsicWidth += run.advance().fX;
@@ -607,7 +614,7 @@ void ParagraphImpl::breakShapedTextIntoLines(SkScalar maxWidth) {
                 // TODO: Take in account clipped edges
                 auto& line = this->addLine(offset, advance, textExcludingSpaces, text, textWithNewlines, clusters, clustersWithGhosts, widthWithSpaces, metrics);
                 if (addEllipsis) {
-                    line.createEllipsis(maxWidth, getEllipsis(), true);
+                    line.createEllipsis(maxWidth, this->getEllipsis(), true);
                 }
                 fLongestLine = std::max(fLongestLine, nearlyZero(advance.fX) ? widthWithSpaces : advance.fX);
             });
@@ -623,8 +630,10 @@ void ParagraphImpl::breakShapedTextIntoLines(SkScalar maxWidth) {
 
 void ParagraphImpl::formatLines(SkScalar maxWidth) {
     auto effectiveAlign = fParagraphStyle.effective_align();
+    const bool isLeftAligned = effectiveAlign == TextAlign::kLeft
+        || (effectiveAlign == TextAlign::kJustify && fParagraphStyle.getTextDirection() == TextDirection::kLtr);
 
-    if (!SkScalarIsFinite(maxWidth) && effectiveAlign != TextAlign::kLeft) {
+    if (!SkScalarIsFinite(maxWidth) && !isLeftAligned) {
         // Special case: clean all text in case of maxWidth == INF & align != left
         // We had to go through shaping though because we need all the measurement numbers
         fLines.clear();
@@ -751,10 +760,10 @@ std::vector<TextBox> ParagraphImpl::getRectsForRange(unsigned start,
         if (start > 0 && fUTF8IndexForUTF16Index[start - 1] == utf8) {
             utf8 = fUTF8IndexForUTF16Index[start + 1];
         }
-        text.start = findNextGraphemeBoundary(utf8);
+        text.start = this->findNextGraphemeBoundary(utf8);
     }
     if (end < SkToSizeT(fUTF8IndexForUTF16Index.size())) {
-        auto utf8 = findPreviousGraphemeBoundary(fUTF8IndexForUTF16Index[end]);
+        auto utf8 = this->findPreviousGraphemeBoundary(fUTF8IndexForUTF16Index[end]);
         text.end = utf8;
     }
     //SkDebugf("getRectsForRange(%d,%d) -> (%d:%d)\n", start, end, text.start, text.end);
@@ -1020,7 +1029,7 @@ void ParagraphImpl::updateFontSize(size_t from, size_t to, SkScalar fontSize) {
     textStyle.fStyle.setFontSize(fontSize);
   }
 
-  fState = kIndexed;
+  fState = std::min(fState, kIndexed);
   fOldWidth = 0;
   fOldHeight = 0;
 }
@@ -1067,6 +1076,22 @@ TextIndex ParagraphImpl::findNextGraphemeBoundary(TextIndex utf8) {
     while (utf8 < fText.size() &&
           (fCodeUnitProperties[utf8] & SkUnicode::CodeUnitFlags::kGraphemeStart) == 0) {
         ++utf8;
+    }
+    return utf8;
+}
+
+TextIndex ParagraphImpl::findNextGlyphClusterBoundary(TextIndex utf8) {
+    while (utf8 < fText.size() &&
+          (fCodeUnitProperties[utf8] & SkUnicode::CodeUnitFlags::kGlyphClusterStart) == 0) {
+        ++utf8;
+    }
+    return utf8;
+}
+
+TextIndex ParagraphImpl::findPreviousGlyphClusterBoundary(TextIndex utf8) {
+    while (utf8 > 0 &&
+          (fCodeUnitProperties[utf8] & SkUnicode::CodeUnitFlags::kGlyphClusterStart) == 0) {
+        --utf8;
     }
     return utf8;
 }
