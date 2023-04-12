@@ -19,10 +19,6 @@
 #define SK_ENABLE_SKSL
 #endif
 
-#ifndef SK_ENCODE_PNG
-#define SK_ENCODE_PNG
-#endif
-
 #ifndef SK_GAMMA_APPLY_TO_A8
 #define SK_GAMMA_APPLY_TO_A8
 #endif

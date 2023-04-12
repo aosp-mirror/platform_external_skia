@@ -24,11 +24,6 @@
 #include "include/encode/SkWebpEncoder.h"
 #include "tools/Resources.h"
 
-#if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS) || defined(SK_BUILD_FOR_WIN) \
- || defined(SK_ENABLE_NDK_IMAGES)
-#include "src/encode/SkImageEncoderPriv.h"
-#endif
-
 namespace {
 
 static const struct {
@@ -51,26 +46,26 @@ static sk_sp<SkData> encode_data(SkEncodedImageFormat type, const SkBitmap& bitm
         return nullptr;
     }
     SkDynamicMemoryWStream buf;
-    #if defined(SK_ENABLE_NDK_IMAGES)
-        return SkEncodeImageWithNDK(&buf, src, type, quality) ? buf.detachAsData() : nullptr;
-    #else
-        switch (type) {
-            case SkEncodedImageFormat::kPNG: {
-                bool success = SkPngEncoder::Encode(&buf, src, SkPngEncoder::Options());
-                return success ? buf.detachAsData() : nullptr;
-            }
-            case SkEncodedImageFormat::kJPEG: {
-                bool success = SkJpegEncoder::Encode(&buf, src, SkJpegEncoder::Options());
-                return success ? buf.detachAsData() : nullptr;
-            }
-            case SkEncodedImageFormat::kWEBP: {
-                bool success = SkWebpEncoder::Encode(&buf, src, SkWebpEncoder::Options());
-                return success ? buf.detachAsData() : nullptr;
-            }
-            default:
-                SkUNREACHABLE;
+    switch (type) {
+        case SkEncodedImageFormat::kPNG: {
+            bool success = SkPngEncoder::Encode(&buf, src, {});
+            return success ? buf.detachAsData() : nullptr;
         }
-    #endif
+        case SkEncodedImageFormat::kJPEG: {
+            SkJpegEncoder::Options opts;
+            opts.fQuality = quality;
+            bool success = SkJpegEncoder::Encode(&buf, src, opts);
+            return success ? buf.detachAsData() : nullptr;
+        }
+        case SkEncodedImageFormat::kWEBP: {
+            SkWebpEncoder::Options opts;
+            opts.fQuality = quality;
+            bool success = SkWebpEncoder::Encode(&buf, src, opts);
+            return success ? buf.detachAsData() : nullptr;
+        }
+        default:
+            SkUNREACHABLE;
+    }
 }
 
 namespace skiagm {

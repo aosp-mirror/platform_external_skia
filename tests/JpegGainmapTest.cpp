@@ -10,7 +10,6 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
-#include "include/core/SkImageEncoder.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
@@ -585,11 +584,6 @@ SkColor4f render_gainmap_pixel(float renderHdrRatio,
 
 static bool approx_eq(float x, float y, float epsilon) { return std::abs(x - y) < epsilon; }
 
-static bool approx_eq_rgb(const SkColor4f& x, const SkColor4f& y, float epsilon) {
-    return approx_eq(x.fR, y.fR, epsilon) && approx_eq(x.fG, y.fG, epsilon) &&
-           approx_eq(x.fB, y.fB, epsilon);
-}
-
 DEF_TEST(AndroidCodec_jpegGainmapDecode, r) {
     const struct Rec {
         const char* path;
@@ -704,7 +698,13 @@ DEF_TEST(AndroidCodec_jpegNoGainmap, r) {
     }
 }
 
-#ifdef SK_ENCODE_JPEG
+#if !defined(SK_ENABLE_NDK_IMAGES)
+
+static bool approx_eq_rgb(const SkColor4f& x, const SkColor4f& y, float epsilon) {
+    return approx_eq(x.fR, y.fR, epsilon) && approx_eq(x.fG, y.fG, epsilon) &&
+           approx_eq(x.fB, y.fB, epsilon);
+}
+
 DEF_TEST(AndroidCodec_jpegGainmapTranscode, r) {
     const char* path = "images/iphone_13_pro.jpeg";
     SkBitmap baseBitmap[2];
@@ -765,7 +765,7 @@ DEF_TEST(AndroidCodec_jpegGainmapTranscode, r) {
         REPORTER_ASSERT(
                 r, approx_eq(gainmapInfo[0].fHdrRatioMax, gainmapInfo[1].fHdrRatioMax, kEpsilon));
 
-#ifdef SK_ENABLE_SKSL
+#if defined(SK_ENABLE_SKSL)
         // Render a few pixels and verify that they come out the same. Rendering requires SkSL.
         const struct Rec {
             int x;
@@ -805,7 +805,7 @@ DEF_TEST(AndroidCodec_jpegGainmapTranscode, r) {
 
             REPORTER_ASSERT(r, approx_eq_rgb(p0, p1, kEpsilon));
         }
-#endif  // SK_ENABLE_SKSL
+#endif  // !defined(SK_ENABLE_SKSL)
     }
 }
-#endif  // SK_ENCODE_JPEG
+#endif  // !defined(SK_ENABLE_NDK_IMAGES)

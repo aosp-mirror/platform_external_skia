@@ -5,9 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkTypes.h"
-
-#ifdef SK_ENCODE_WEBP
+#include "include/encode/SkWebpEncoder.h"
 
 #include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
@@ -19,15 +17,18 @@
 #include "include/core/SkSpan.h"
 #include "include/core/SkStream.h"
 #include "include/encode/SkEncoder.h"
-#include "include/encode/SkWebpEncoder.h"
 #include "include/private/base/SkTemplates.h"
 #include "src/core/SkImageInfoPriv.h"
 #include "src/encode/SkImageEncoderFns.h"
 #include "src/encode/SkImageEncoderPriv.h"
+#include "src/image/SkImage_Base.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+
+class GrDirectContext;
+class SkImage;
 
 // A WebP encoder only, on top of (subset of) libwebp
 // For more information on WebP image format, and libwebp library, see:
@@ -43,13 +44,12 @@ extern "C" {
 #include "webp/mux_types.h"
 }
 
-static int stream_writer(const uint8_t* data, size_t data_size,
-                         const WebPPicture* const picture) {
-  SkWStream* const stream = (SkWStream*)picture->custom_ptr;
-  return stream->write(data, data_size) ? 1 : 0;
+static int stream_writer(const uint8_t* data, size_t data_size, const WebPPicture* const picture) {
+    SkWStream* const stream = (SkWStream*)picture->custom_ptr;
+    return stream->write(data, data_size) ? 1 : 0;
 }
 
-using WebPPictureImportProc = int (*) (WebPPicture* picture, const uint8_t* pixels, int stride);
+using WebPPictureImportProc = int (*)(WebPPicture* picture, const uint8_t* pixels, int stride);
 
 static bool preprocess_webp_picture(WebPPicture* pic,
                                     WebPConfig* webp_config,
@@ -125,7 +125,9 @@ static bool preprocess_webp_picture(WebPPicture* pic,
     return true;
 }
 
-bool SkWebpEncoder::Encode(SkWStream* stream, const SkPixmap& pixmap, const Options& opts) {
+namespace SkWebpEncoder {
+
+bool Encode(SkWStream* stream, const SkPixmap& pixmap, const Options& opts) {
     if (!stream) {
         return false;
     }
@@ -158,8 +160,8 @@ bool SkWebpEncoder::Encode(SkWStream* stream, const SkPixmap& pixmap, const Opti
 
     if (icc) {
         sk_sp<SkData> encodedData = tmp.detachAsData();
-        WebPData encoded = { encodedData->bytes(), encodedData->size() };
-        WebPData iccChunk = { icc->bytes(), icc->size() };
+        WebPData encoded = {encodedData->bytes(), encodedData->size()};
+        WebPData iccChunk = {icc->bytes(), icc->size()};
 
         SkAutoTCallVProc<WebPMux, WebPMuxDelete> mux(WebPMuxNew());
         if (WEBP_MUX_OK != WebPMuxSetImage(mux, &encoded, 0)) {
@@ -182,9 +184,7 @@ bool SkWebpEncoder::Encode(SkWStream* stream, const SkPixmap& pixmap, const Opti
     return true;
 }
 
-bool SkWebpEncoder::EncodeAnimated(SkWStream* stream,
-                                   SkSpan<const SkEncoder::Frame> frames,
-                                   const Options& opts) {
+bool EncodeAnimated(SkWStream* stream, SkSpan<const SkEncoder::Frame> frames, const Options& opts) {
     if (!stream || !frames.size()) {
         return false;
     }
@@ -246,4 +246,19 @@ bool SkWebpEncoder::EncodeAnimated(SkWStream* stream,
     return stream->write(assembled.bytes, assembled.size);
 }
 
-#endif
+sk_sp<SkData> Encode(GrDirectContext* ctx, const SkImage* img, const Options& options) {
+    if (!img) {
+        return nullptr;
+    }
+    SkBitmap bm;
+    if (!as_IB(img)->getROPixels(ctx, &bm)) {
+        return nullptr;
+    }
+    SkDynamicMemoryWStream stream;
+    if (Encode(&stream, bm.pixmap(), options)) {
+        return stream.detachAsData();
+    }
+    return nullptr;
+}
+
+}  // namespace SkWebpEncoder
