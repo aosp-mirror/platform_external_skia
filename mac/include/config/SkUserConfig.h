@@ -75,10 +75,6 @@
 #define SK_HAS_WUFFS_LIBRARY
 #endif
 
-#ifndef SK_SUPPORT_GPU
-#define SK_SUPPORT_GPU 0
-#endif
-
 #ifndef SK_SUPPORT_PDF
 #define SK_SUPPORT_PDF
 #endif
