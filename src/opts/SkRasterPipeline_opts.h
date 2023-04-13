@@ -14,8 +14,11 @@
 #include "modules/skcms/skcms.h"
 #include "src/base/SkUtils.h"  // unaligned_{load,store}
 #include "src/core/SkRasterPipeline.h"
+#include "src/core/SkRasterPipelineContextUtils.h"
 #include "src/sksl/tracing/SkSLTraceHook.h"
+
 #include <cstdint>
+#include <type_traits>
 
 // Every function in this file should be marked static and inline using SI.
 #if defined(__clang__)
@@ -1346,7 +1349,7 @@ static void start_pipeline(size_t dx, size_t dy,
         sk_unaligned_store(ctx->dg, dg);
         sk_unaligned_store(ctx->db, db);
         sk_unaligned_store(ctx->da, da);
-        ctx->base = ctx->base;
+        ctx->base  = base;
         ctx->stage = program;
     }
 #endif
@@ -3474,20 +3477,6 @@ STAGE_TAIL(trace_var, SkRasterPipeline_TraceVarCtx* ctx) {
     }
 }
 
-STAGE_TAIL(zero_slot_unmasked, F* dst) {
-    // We don't even bother masking off the tail; we're filling slots, not the destination surface.
-    sk_bzero(dst, sizeof(F) * 1);
-}
-STAGE_TAIL(zero_2_slots_unmasked, F* dst) {
-    sk_bzero(dst, sizeof(F) * 2);
-}
-STAGE_TAIL(zero_3_slots_unmasked, F* dst) {
-    sk_bzero(dst, sizeof(F) * 3);
-}
-STAGE_TAIL(zero_4_slots_unmasked, F* dst) {
-    sk_bzero(dst, sizeof(F) * 4);
-}
-
 STAGE_TAIL(copy_uniform, SkRasterPipeline_UniformCtx* ctx) {
     const float* src = ctx->src;
     F* dst = (F*)ctx->dst;
@@ -3515,68 +3504,76 @@ STAGE_TAIL(copy_4_uniforms, SkRasterPipeline_UniformCtx* ctx) {
     dst[3] = src[3];
 }
 
-STAGE_TAIL(copy_constant, SkRasterPipeline_ConstantCtx* ctx) {
-    F* dst = (F*)ctx->dst;
-    F value = ctx->value;
+STAGE_TAIL(copy_constant, SkRasterPipeline_ConstantCtx* packed) {
+    auto ctx = SkRPCtxUtils::Unpack(packed);
+    F* dst = (F*)(base + ctx.dst);
+    F value = ctx.value;
     dst[0] = value;
 }
-STAGE_TAIL(splat_2_constants, SkRasterPipeline_ConstantCtx* ctx) {
-    F* dst = (F*)ctx->dst;
-    F value = ctx->value;
+STAGE_TAIL(splat_2_constants, SkRasterPipeline_ConstantCtx* packed) {
+    auto ctx = SkRPCtxUtils::Unpack(packed);
+    F* dst = (F*)(base + ctx.dst);
+    F value = ctx.value;
     dst[0] = dst[1] = value;
 }
-STAGE_TAIL(splat_3_constants, SkRasterPipeline_ConstantCtx* ctx) {
-    F* dst = (F*)ctx->dst;
-    F value = ctx->value;
+STAGE_TAIL(splat_3_constants, SkRasterPipeline_ConstantCtx* packed) {
+    auto ctx = SkRPCtxUtils::Unpack(packed);
+    F* dst = (F*)(base + ctx.dst);
+    F value = ctx.value;
     dst[0] = dst[1] = dst[2] = value;
 }
-STAGE_TAIL(splat_4_constants, SkRasterPipeline_ConstantCtx* ctx) {
-    F* dst = (F*)ctx->dst;
-    F value = ctx->value;
+STAGE_TAIL(splat_4_constants, SkRasterPipeline_ConstantCtx* packed) {
+    auto ctx = SkRPCtxUtils::Unpack(packed);
+    F* dst = (F*)(base + ctx.dst);
+    F value = ctx.value;
     dst[0] = dst[1] = dst[2] = dst[3] = value;
 }
 
-STAGE_TAIL(copy_slot_unmasked, SkRasterPipeline_BinaryOpCtx* ctx) {
+template <int NumSlots>
+SI void copy_n_slots_unmasked_fn(SkRasterPipeline_BinaryOpCtx* packed, std::byte* base) {
+    auto ctx = SkRPCtxUtils::Unpack(packed);
+    F* dst = (F*)(base + ctx.dst);
+    F* src = (F*)(base + ctx.src);
     // We don't even bother masking off the tail; we're filling slots, not the destination surface.
-    memcpy(ctx->dst, ctx->src, sizeof(F) * 1);
+    memcpy(dst, src, sizeof(F) * NumSlots);
 }
-STAGE_TAIL(copy_2_slots_unmasked, SkRasterPipeline_BinaryOpCtx* ctx) {
-    memcpy(ctx->dst, ctx->src, sizeof(F) * 2);
+
+STAGE_TAIL(copy_slot_unmasked, SkRasterPipeline_BinaryOpCtx* packed) {
+    copy_n_slots_unmasked_fn<1>(packed, base);
 }
-STAGE_TAIL(copy_3_slots_unmasked, SkRasterPipeline_BinaryOpCtx* ctx) {
-    memcpy(ctx->dst, ctx->src, sizeof(F) * 3);
+STAGE_TAIL(copy_2_slots_unmasked, SkRasterPipeline_BinaryOpCtx* packed) {
+    copy_n_slots_unmasked_fn<2>(packed, base);
 }
-STAGE_TAIL(copy_4_slots_unmasked, SkRasterPipeline_BinaryOpCtx* ctx) {
-    memcpy(ctx->dst, ctx->src, sizeof(F) * 4);
+STAGE_TAIL(copy_3_slots_unmasked, SkRasterPipeline_BinaryOpCtx* packed) {
+    copy_n_slots_unmasked_fn<3>(packed, base);
+}
+STAGE_TAIL(copy_4_slots_unmasked, SkRasterPipeline_BinaryOpCtx* packed) {
+    copy_n_slots_unmasked_fn<4>(packed, base);
 }
 
 template <int NumSlots>
-SI void copy_n_slots_masked_fn(SkRasterPipeline_BinaryOpCtx* ctx, I32 mask) {
-    if (any(mask)) {
-        // Get pointers to our slots.
-        F* dst = (F*)ctx->dst;
-        F* src = (F*)ctx->src;
-
-        // Mask off and copy slots.
-        for (int count = 0; count < NumSlots; ++count) {
-            *dst = if_then_else(mask, *src, *dst);
-            dst += 1;
-            src += 1;
-        }
+SI void copy_n_slots_masked_fn(SkRasterPipeline_BinaryOpCtx* packed, std::byte* base, I32 mask) {
+    auto ctx = SkRPCtxUtils::Unpack(packed);
+    F* dst = (F*)(base + ctx.dst);
+    F* src = (F*)(base + ctx.src);
+    for (int count = 0; count < NumSlots; ++count) {
+        *dst = if_then_else(mask, *src, *dst);
+        dst += 1;
+        src += 1;
     }
 }
 
-STAGE_TAIL(copy_slot_masked, SkRasterPipeline_BinaryOpCtx* ctx) {
-    copy_n_slots_masked_fn<1>(ctx, execution_mask());
+STAGE_TAIL(copy_slot_masked, SkRasterPipeline_BinaryOpCtx* packed) {
+    copy_n_slots_masked_fn<1>(packed, base, execution_mask());
 }
-STAGE_TAIL(copy_2_slots_masked, SkRasterPipeline_BinaryOpCtx* ctx) {
-    copy_n_slots_masked_fn<2>(ctx, execution_mask());
+STAGE_TAIL(copy_2_slots_masked, SkRasterPipeline_BinaryOpCtx* packed) {
+    copy_n_slots_masked_fn<2>(packed, base, execution_mask());
 }
-STAGE_TAIL(copy_3_slots_masked, SkRasterPipeline_BinaryOpCtx* ctx) {
-    copy_n_slots_masked_fn<3>(ctx, execution_mask());
+STAGE_TAIL(copy_3_slots_masked, SkRasterPipeline_BinaryOpCtx* packed) {
+    copy_n_slots_masked_fn<3>(packed, base, execution_mask());
 }
-STAGE_TAIL(copy_4_slots_masked, SkRasterPipeline_BinaryOpCtx* ctx) {
-    copy_n_slots_masked_fn<4>(ctx, execution_mask());
+STAGE_TAIL(copy_4_slots_masked, SkRasterPipeline_BinaryOpCtx* packed) {
+    copy_n_slots_masked_fn<4>(packed, base, execution_mask());
 }
 
 template <int LoopCount>
@@ -3931,6 +3928,14 @@ SI void apply_adjacent_binary(T* dst, T* src) {
     } while (dst != end);
 }
 
+template <typename T, void (*ApplyFn)(T*, T*)>
+SI void apply_adjacent_binary_packed(SkRasterPipeline_BinaryOpCtx* packed, std::byte* base) {
+    auto ctx = SkRPCtxUtils::Unpack(packed);
+    T* dst = (T*)(base + ctx.dst);
+    T* src = (T*)(base + ctx.src);
+    apply_adjacent_binary<T, ApplyFn>(dst, src);
+}
+
 template <typename T>
 SI void add_fn(T* dst, T* src) {
     *dst += *src;
@@ -4018,9 +4023,9 @@ SI void mod_fn(F* dst, F* src) {
     *dst = *dst - *src * floor_(*dst / *src);
 }
 
-#define DECLARE_N_WAY_BINARY_FLOAT(name)                                  \
-    STAGE_TAIL(name##_n_floats, SkRasterPipeline_BinaryOpCtx* ctx) {      \
-        apply_adjacent_binary<F, &name##_fn>((F*)ctx->dst, (F*)ctx->src); \
+#define DECLARE_N_WAY_BINARY_FLOAT(name)                                \
+    STAGE_TAIL(name##_n_floats, SkRasterPipeline_BinaryOpCtx* packed) { \
+        apply_adjacent_binary_packed<F, &name##_fn>(packed, base);      \
     }
 
 #define DECLARE_BINARY_FLOAT(name)                                                              \
@@ -4030,9 +4035,9 @@ SI void mod_fn(F* dst, F* src) {
     STAGE_TAIL(name##_4_floats, F* dst) { apply_adjacent_binary<F, &name##_fn>(dst, dst + 4); } \
     DECLARE_N_WAY_BINARY_FLOAT(name)
 
-#define DECLARE_N_WAY_BINARY_INT(name)                                          \
-    STAGE_TAIL(name##_n_ints, SkRasterPipeline_BinaryOpCtx* ctx) {              \
-        apply_adjacent_binary<I32, &name##_fn>((I32*)ctx->dst, (I32*)ctx->src); \
+#define DECLARE_N_WAY_BINARY_INT(name)                                \
+    STAGE_TAIL(name##_n_ints, SkRasterPipeline_BinaryOpCtx* packed) { \
+        apply_adjacent_binary_packed<I32, &name##_fn>(packed, base);  \
     }
 
 #define DECLARE_BINARY_INT(name)                                                                  \
@@ -4042,9 +4047,9 @@ SI void mod_fn(F* dst, F* src) {
     STAGE_TAIL(name##_4_ints, I32* dst) { apply_adjacent_binary<I32, &name##_fn>(dst, dst + 4); } \
     DECLARE_N_WAY_BINARY_INT(name)
 
-#define DECLARE_N_WAY_BINARY_UINT(name)                                         \
-    STAGE_TAIL(name##_n_uints, SkRasterPipeline_BinaryOpCtx* ctx) {             \
-        apply_adjacent_binary<U32, &name##_fn>((U32*)ctx->dst, (U32*)ctx->src); \
+#define DECLARE_N_WAY_BINARY_UINT(name)                                \
+    STAGE_TAIL(name##_n_uints, SkRasterPipeline_BinaryOpCtx* packed) { \
+        apply_adjacent_binary_packed<U32, &name##_fn>(packed, base);   \
     }
 
 #define DECLARE_BINARY_UINT(name)                                                                  \
