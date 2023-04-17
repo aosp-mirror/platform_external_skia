@@ -206,13 +206,13 @@ sk_sp<sksg::RenderNode> AttachMask(const skjson::ArrayValue* jmask,
     if (!has_effect) {
         sk_sp<sksg::GeometryNode> clip_node;
 
-        if (mask_stack.count() == 1) {
+        if (mask_stack.size() == 1) {
             // Single path -> just clip.
             clip_node = std::move(mask_stack.front().mask_path);
         } else {
             // Multiple clip paths -> merge.
             std::vector<sksg::Merge::Rec> merge_recs;
-            merge_recs.reserve(SkToSizeT(mask_stack.count()));
+            merge_recs.reserve(SkToSizeT(mask_stack.size()));
 
             for (auto& mask : mask_stack) {
                 merge_recs.push_back({std::move(mask.mask_path), mask.merge_mode });
@@ -225,13 +225,13 @@ sk_sp<sksg::RenderNode> AttachMask(const skjson::ArrayValue* jmask,
 
     // Complex masks (non-opaque or blurred) turn into a mask node stack.
     sk_sp<sksg::RenderNode> maskNode;
-    if (mask_stack.count() == 1) {
+    if (mask_stack.size() == 1) {
         // no group needed for single mask
         const auto rec = mask_stack.front();
         maskNode = rec.mask_adapter->makeMask(std::move(rec.mask_path));
     } else {
         std::vector<sk_sp<sksg::RenderNode>> masks;
-        masks.reserve(SkToSizeT(mask_stack.count()));
+        masks.reserve(SkToSizeT(mask_stack.size()));
         for (auto& rec : mask_stack) {
             masks.push_back(rec.mask_adapter->makeMask(std::move(rec.mask_path)));
         }
@@ -364,12 +364,9 @@ sk_sp<sksg::Transform> LayerBuilder::getParentTransform(const AnimationBuilder& 
         return parent_builder->getTransform(abuilder, cbuilder, ttype);
     }
 
-    if (ttype == TransformType::k3D) {
-        // During camera transform attachment, cbuilder->getCameraTransform() is null.
-        // This prevents camera->camera transform chain cycles.
-        SkASSERT(!this->isCamera() || !cbuilder->getCameraTransform());
-
-        // 3D transform chains are implicitly rooted onto the camera.
+    // Camera layers have no implicit parent transform,
+    // while regular 3D transform chains are implicitly rooted onto the camera.
+    if (ttype == TransformType::k3D && !this->isCamera()) {
         return cbuilder->getCameraTransform();
     }
 
@@ -450,7 +447,7 @@ sk_sp<sksg::RenderNode> LayerBuilder::buildRenderTree(const AnimationBuilder& ab
         { nullptr                              ,                 0 },  // 'ty': 14 -> light
     };
 
-    if (fType < 0 || static_cast<size_t>(fType) >= SK_ARRAY_COUNT(gLayerBuildInfo)) {
+    if (fType < 0 || static_cast<size_t>(fType) >= std::size(gLayerBuildInfo)) {
         return nullptr;
     }
 
@@ -472,7 +469,11 @@ sk_sp<sksg::RenderNode> LayerBuilder::buildRenderTree(const AnimationBuilder& ab
     if (Parse<float>(fJlayer["w"], &w) && Parse<float>(fJlayer["h"], &h)) {
         layer = sksg::ClipEffect::Make(std::move(layer),
                                        sksg::Rect::Make(SkRect::MakeWH(w, h)),
-                                       true);
+#ifdef SK_LEGACY_SKOTTIE_CLIPPING
+                                       /*aa=*/true, /*force_clip=*/false);
+#else
+                                       /*aa=*/true, /*force_clip=*/true);
+#endif
     }
 
     // Optional layer mask.
@@ -557,7 +558,7 @@ sk_sp<sksg::RenderNode> LayerBuilder::buildRenderTree(const AnimationBuilder& ab
             sksg::MaskEffect::Mode::kLumaInvert,  // tt: 4
         };
 
-        if (matte_mode <= SK_ARRAY_COUNT(gMatteModes)) {
+        if (matte_mode <= std::size(gMatteModes)) {
             // The current layer is masked with the previous layer *content*.
             layer = sksg::MaskEffect::Make(std::move(layer),
                                            prev_layer->fContentTree,

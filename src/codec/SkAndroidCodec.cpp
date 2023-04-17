@@ -6,53 +6,35 @@
  */
 
 #include "include/codec/SkAndroidCodec.h"
+
 #include "include/codec/SkCodec.h"
-#include "include/core/SkPixmap.h"
-#include "src/codec/SkAndroidCodecAdapter.h"
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkData.h"
+#include "include/core/SkEncodedImageFormat.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkStream.h"
+#include "include/private/SkGainmapInfo.h"
+#include "include/private/base/SkFloatingPoint.h"
+#include "modules/skcms/skcms.h"
 #include "src/codec/SkCodecPriv.h"
 #include "src/codec/SkSampledCodec.h"
+
+#if defined(SK_CODEC_DECODES_WEBP) || defined(SK_CODEC_DECODES_RAW) || \
+        defined(SK_HAS_WUFFS_LIBRARY) || defined(SK_CODEC_DECODES_AVIF)
+#include "src/codec/SkAndroidCodecAdapter.h"
+#endif
+
+#include <algorithm>
+#include <cstdint>
+#include <utility>
+
+class SkPngChunkReader;
 
 static bool is_valid_sample_size(int sampleSize) {
     // FIXME: As Leon has mentioned elsewhere, surely there is also a maximum sampleSize?
     return sampleSize > 0;
-}
-
-/**
- *  Loads the gamut as a set of three points (triangle).
- */
-static void load_gamut(SkPoint rgb[], const skcms_Matrix3x3& xyz) {
-    // rx = rX / (rX + rY + rZ)
-    // ry = rY / (rX + rY + rZ)
-    // gx, gy, bx, and gy are calulcated similarly.
-    for (int rgbIdx = 0; rgbIdx < 3; rgbIdx++) {
-        float sum = xyz.vals[rgbIdx][0] + xyz.vals[rgbIdx][1] + xyz.vals[rgbIdx][2];
-        rgb[rgbIdx].fX = xyz.vals[rgbIdx][0] / sum;
-        rgb[rgbIdx].fY = xyz.vals[rgbIdx][1] / sum;
-    }
-}
-
-/**
- *  Calculates the area of the triangular gamut.
- */
-static float calculate_area(SkPoint abc[]) {
-    SkPoint a = abc[0];
-    SkPoint b = abc[1];
-    SkPoint c = abc[2];
-    return 0.5f * SkTAbs(a.fX*b.fY + b.fX*c.fY - a.fX*c.fY - c.fX*b.fY - b.fX*a.fY);
-}
-
-static constexpr float kSRGB_D50_GamutArea = 0.084f;
-
-static bool is_wide_gamut(const skcms_ICCProfile& profile) {
-    // Determine if the source image has a gamut that is wider than sRGB.  If so, we
-    // will use P3 as the output color space to avoid clipping the gamut.
-    if (profile.has_toXYZD50) {
-        SkPoint rgb[3];
-        load_gamut(rgb, profile.toXYZD50);
-        return calculate_area(rgb) > kSRGB_D50_GamutArea;
-    }
-
-    return false;
 }
 
 SkAndroidCodec::SkAndroidCodec(SkCodec* codec)
@@ -83,7 +65,9 @@ std::unique_ptr<SkAndroidCodec> SkAndroidCodec::MakeFromCodec(std::unique_ptr<Sk
         case SkEncodedImageFormat::kBMP:
         case SkEncodedImageFormat::kWBMP:
         case SkEncodedImageFormat::kHEIF:
+#ifndef SK_CODEC_DECODES_AVIF
         case SkEncodedImageFormat::kAVIF:
+#endif
             return std::make_unique<SkSampledCodec>(codec.release());
 #ifdef SK_HAS_WUFFS_LIBRARY
         case SkEncodedImageFormat::kGIF:
@@ -94,7 +78,11 @@ std::unique_ptr<SkAndroidCodec> SkAndroidCodec::MakeFromCodec(std::unique_ptr<Sk
 #ifdef SK_CODEC_DECODES_RAW
         case SkEncodedImageFormat::kDNG:
 #endif
-#if defined(SK_CODEC_DECODES_WEBP) || defined(SK_CODEC_DECODES_RAW) || defined(SK_HAS_WUFFS_LIBRARY)
+#ifdef SK_CODEC_DECODES_AVIF
+        case SkEncodedImageFormat::kAVIF:
+#endif
+#if defined(SK_CODEC_DECODES_WEBP) || defined(SK_CODEC_DECODES_RAW) || \
+        defined(SK_HAS_WUFFS_LIBRARY) || defined(SK_CODEC_DECODES_AVIF)
             return std::make_unique<SkAndroidCodecAdapter>(codec.release());
 #endif
 
@@ -114,6 +102,7 @@ std::unique_ptr<SkAndroidCodec> SkAndroidCodec::MakeFromData(sk_sp<SkData> data,
 
 SkColorType SkAndroidCodec::computeOutputColorType(SkColorType requestedColorType) {
     bool highPrecision = fCodec->getEncodedInfo().bitsPerComponent() > 8;
+    uint8_t colorDepth = fCodec->getEncodedInfo().getColorDepth();
     switch (requestedColorType) {
         case kARGB_4444_SkColorType:
             return kN32_SkColorType;
@@ -134,7 +123,10 @@ SkColorType SkAndroidCodec::computeOutputColorType(SkColorType requestedColorTyp
             }
             break;
         case kRGBA_1010102_SkColorType:
-            return kRGBA_1010102_SkColorType;
+            if (colorDepth == 10) {
+              return kRGBA_1010102_SkColorType;
+            }
+            break;
         case kRGBA_F16_SkColorType:
             return kRGBA_F16_SkColorType;
         default:
@@ -142,10 +134,8 @@ SkColorType SkAndroidCodec::computeOutputColorType(SkColorType requestedColorTyp
     }
 
     // F16 is the Android default for high precision images.
-    // TODO: b/217378990, b/217378477
-    // Check the bit-depth of the input source. For 10-bit color input sources, change
-    // default to kRGBA_1010102_SkColorType instead of kN32_SkColorType.
-    return highPrecision ? kRGBA_F16_SkColorType : kN32_SkColorType;
+    return highPrecision ? kRGBA_F16_SkColorType :
+        (colorDepth == 10 ? kRGBA_1010102_SkColorType : kN32_SkColorType);
 }
 
 SkAlphaType SkAndroidCodec::computeOutputAlphaType(bool requestedUnpremul) {
@@ -176,8 +166,9 @@ sk_sp<SkColorSpace> SkAndroidCodec::computeOutputColorSpace(SkColorType outputCo
                     return encodedSpace;
                 }
 
-                if (is_wide_gamut(*encodedProfile)) {
-                    return SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDisplayP3);
+                if (encodedProfile->has_toXYZD50) {
+                    return SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB,
+                                                 encodedProfile->toXYZD50);
                 }
             }
 
@@ -369,4 +360,22 @@ SkCodec::Result SkAndroidCodec::getAndroidPixels(const SkImageInfo& requestInfo,
 SkCodec::Result SkAndroidCodec::getAndroidPixels(const SkImageInfo& info, void* pixels,
         size_t rowBytes) {
     return this->getAndroidPixels(info, pixels, rowBytes, nullptr);
+}
+
+bool SkAndroidCodec::getAndroidGainmap(SkGainmapInfo* info,
+                                       std::unique_ptr<SkStream>* outGainmapImageStream) {
+    if (!fCodec->onGetGainmapInfo(info, outGainmapImageStream)) {
+        return false;
+    }
+    // Convert old parameter names to new parameter names.
+    // TODO(ccameron): Remove these parameters.
+    info->fLogRatioMin.fR = sk_float_log(info->fGainmapRatioMin.fR);
+    info->fLogRatioMin.fG = sk_float_log(info->fGainmapRatioMin.fG);
+    info->fLogRatioMin.fB = sk_float_log(info->fGainmapRatioMin.fB);
+    info->fLogRatioMax.fR = sk_float_log(info->fGainmapRatioMax.fR);
+    info->fLogRatioMax.fG = sk_float_log(info->fGainmapRatioMax.fG);
+    info->fLogRatioMax.fB = sk_float_log(info->fGainmapRatioMax.fB);
+    info->fHdrRatioMin = info->fDisplayRatioSdr;
+    info->fHdrRatioMax = info->fDisplayRatioHdr;
+    return true;
 }

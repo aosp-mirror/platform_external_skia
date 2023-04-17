@@ -11,14 +11,7 @@
 #include "include/core/SkTypes.h"
 
 #ifdef SK_IN_RENDERENGINE
-    #include "log/log_main.h"
-
-    #ifdef LOG_TAG
-        #undef LOG_TAG
-    #endif
-    #define LOG_TAG "Skia_in_RenderEngine"
-
-    #define RENDERENGINE_ABORTF(...) LOG_ALWAYS_FATAL(__VA_ARGS__)
+    #define RENDERENGINE_ABORTF(...) SK_ABORT(__VA_ARGS__)
 #else
     #define RENDERENGINE_ABORTF(...)
 #endif

@@ -9,8 +9,11 @@
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTime.h"
+#include "modules/skresources/include/SkResources.h"
 #include <jni.h>
 #include <math.h>
 #include <string>
@@ -104,6 +107,20 @@ Java_org_skia_skottie_SkottieRunner_nDeleteProxy(JNIEnv *env, jclass clazz, jlon
     delete skottie;
 }
 
+
+extern "C" JNIEXPORT void
+JNICALL
+Java_org_skia_skottie_SkottieRunner_nSetMaxCacheSize(JNIEnv *env, jclass clazz, jint maxCacheSize,
+                                                                                jlong nativeProxy) {
+    if (!nativeProxy) {
+            return;
+    }
+    SkottieRunner* skottie = reinterpret_cast<SkottieRunner*>(nativeProxy);
+    if (skottie->mDContext) {
+        skottie->mDContext->setResourceCacheLimit(maxCacheSize);
+    }
+}
+
 struct SkottieAnimation {
     SkottieRunner *mRunner;
     std::unique_ptr<SkStream> mStream;
@@ -148,7 +165,9 @@ Java_org_skia_skottie_SkottieAnimation_nCreateProxy(JNIEnv *env,
     skottieAnimation->mRunner = skottieRunner;
     skottieAnimation->mStream = std::move(stream);
 
-    skottieAnimation->mAnimation = skottie::Animation::Make(skottieAnimation->mStream.get());
+    skottieAnimation->mAnimation = skottie::Animation::Builder()
+        .setResourceProvider(skresources::DataURIResourceProviderProxy::Make(nullptr))
+        .make(skottieAnimation->mStream.get());
     skottieAnimation->mTimeBase  = 0.0f; // force a time reset
     skottieAnimation->mDuration = 1000 * skottieAnimation->mAnimation->duration();
 

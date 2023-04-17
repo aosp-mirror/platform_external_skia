@@ -11,8 +11,8 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkRSXform.h"
 #include "include/core/SkSpan.h"
-#include "include/private/SkTDArray.h"
-#include "src/core/SkZip.h"
+#include "include/private/base/SkTDArray.h"
+#include "src/base/SkZip.h"
 #include "tools/ToolUtils.h"
 
 static const char gText[] = "Call me Ishmael. Some years ago—never mind how long precisely";
@@ -32,7 +32,7 @@ public:
 
         fPositions.append(fGlyphCount);
         fFont.getPos(fGlyphs.begin(), fGlyphCount, fPositions.begin());
-        auto positions = SkMakeSpan(fPositions.begin(), fGlyphCount);
+        auto positions = SkSpan(fPositions.begin(), fGlyphCount);
 
         fLength = positions.back().x() - positions.front().x();
         fRadius = fLength / SK_FloatPI;
