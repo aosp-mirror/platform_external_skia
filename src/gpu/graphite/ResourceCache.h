@@ -60,9 +60,19 @@ public:
 #if GRAPHITE_TEST_UTILS
     void forceProcessReturnedResources() { this->processReturnedResources(); }
 
+    void forcePurgeAsNeeded() { this->purgeAsNeeded(); }
+
     // Returns the numbers of Resources that can currently be found in the cache. This includes all
     // shared Resources and all non-shareable resources that have been returned to the cache.
     int numFindableResources() const;
+
+    // This will probably end up being a public function to change the current budget size, but for
+    // now just making this a testing only function.
+    void setMaxBudget(size_t bytes);
+
+    size_t currentBudgetedBytes() const { return fBudgetedBytes; }
+
+    Resource* topOfPurgeableQueue();
 #endif
 
     ProxyCache* proxyCache() { return fProxyCache.get(); }
@@ -81,8 +91,12 @@ private:
     void returnResourceToCache(Resource*, LastRemovedRef);
 
     uint32_t getNextTimestamp();
+    void setResourceTimestamp(Resource*, uint32_t timestamp);
 
     bool inPurgeableQueue(Resource*) const;
+
+    bool overbudget() const { return fBudgetedBytes > fMaxBytes; }
+    void purgeAsNeeded();
 
 #ifdef SK_DEBUG
     bool isInCache(const Resource* r) const;
@@ -108,7 +122,12 @@ private:
     // Whenever a resource is added to the cache or the result of a cache lookup, fTimestamp is
     // assigned as the resource's timestamp and then incremented. fPurgeableQueue orders the
     // purgeable resources by this value, and thus is used to purge resources in LRU order.
+    // Resources with a size of zero are set to have max uint32_t value. This will also put them at
+    // the end of the LRU priority queue. This will allow us to not purge these resources even when
+    // we are over budget.
     uint32_t fTimestamp = 0;
+    static const uint32_t kMaxTimestamp = 0xFFFFFFFF;
+
     PurgeableQueue fPurgeableQueue;
     ResourceArray fNonpurgeableResources;
     std::unique_ptr<ProxyCache> fProxyCache;
@@ -117,6 +136,11 @@ private:
 
     ResourceMap fResourceMap;
 
+    // Default maximum number of bytes of gpu memory of budgeted resources in the cache.
+    static const size_t kDefaultMaxSize = 256 * (1 << 20);
+
+    // Our budget
+    size_t fMaxBytes = kDefaultMaxSize;
     size_t fBudgetedBytes = 0;
 
     SingleOwner* fSingleOwner = nullptr;
