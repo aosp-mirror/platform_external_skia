@@ -43,10 +43,6 @@
 #define SK_ENABLE_SKSL
 #endif
 
-#ifndef SK_ENABLE_SKVM
-#define SK_ENABLE_SKVM
-#endif
-
 #ifndef SK_GAMMA_APPLY_TO_A8
 #define SK_GAMMA_APPLY_TO_A8
 #endif
