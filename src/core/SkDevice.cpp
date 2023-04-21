@@ -33,7 +33,7 @@
 #include "src/shaders/SkLocalMatrixShader.h"
 #include "src/text/GlyphRun.h"
 #include "src/utils/SkPatchUtils.h"
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "include/private/chromium/Slug.h"
 #endif
 
@@ -224,7 +224,7 @@ void SkBaseDevice::drawAtlas(const SkRSXform xform[],
         vTex = quad_to_tris(vTex, tmp);
 
         if (colors) {
-            sk_memset32(vCol, colors[i], 6);
+            SkOpts::memset32(vCol, colors[i], 6);
             vCol += 6;
         }
     }
@@ -477,7 +477,7 @@ void SkBaseDevice::simplifyGlyphRunRSXFormAndRedraw(SkCanvas* canvas,
     }
 }
 
-#if (SK_SUPPORT_GPU || defined(SK_GRAPHITE_ENABLED))
+#if (defined(SK_GANESH) || defined(SK_GRAPHITE))
 sk_sp<sktext::gpu::Slug> SkBaseDevice::convertGlyphRunListToSlug(
         const sktext::GlyphRunList& glyphRunList,
         const SkPaint& initialPaint,

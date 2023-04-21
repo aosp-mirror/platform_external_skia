@@ -1,4 +1,4 @@
-load("//bazel:macros.bzl", "exports_files_legacy", "skia_filegroup", "split_srcs_and_hdrs")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup", "split_srcs_and_hdrs")
 
 licenses(["notice"])
 
@@ -42,9 +42,6 @@ IR_FILES = [
     "SkSLExpressionStatement.cpp",
     "SkSLExpressionStatement.h",
     "SkSLExtension.h",
-    "SkSLExternalFunction.h",
-    "SkSLExternalFunctionCall.h",
-    "SkSLExternalFunctionReference.h",
     "SkSLField.h",
     "SkSLFieldAccess.cpp",
     "SkSLFieldAccess.h",

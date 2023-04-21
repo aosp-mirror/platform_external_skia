@@ -20,7 +20,7 @@
 
 class SkExecutor;
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 struct SK_API GrContextOptions {
     enum class Enable {
         /** Forces an option to be disabled. */
@@ -288,6 +288,15 @@ struct SK_API GrContextOptions {
      * This flag has no impact on non GL backends.
      */
     bool fAlwaysUseTexStorageWhenAvailable = false;
+
+    /**
+     * Optional callback that can be passed into the GrDirectContext which will be called when the
+     * GrDirectContext is about to be destroyed. When this call is made, it will be safe for the
+     * client to delete the GPU backend context that is backing the GrDirectContext. The
+     * GrDirectContextDestroyedContext will be passed back to the client in the callback.
+     */
+    GrDirectContextDestroyedContext fContextDeleteContext = nullptr;
+    GrDirectContextDestroyedProc fContextDeleteProc = nullptr;
 
 #if GR_TEST_UTILS
     /**

@@ -11,7 +11,7 @@
 #include "src/core/SkWriteBuffer.h"
 #include "src/shaders/SkLocalMatrixShader.h"
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
@@ -89,7 +89,7 @@ SkShaderBase::GradientType SkLinearGradient::asGradient(GradientInfo* info,
 
 /////////////////////////////////////////////////////////////////////
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 
 #include "src/gpu/ganesh/gradients/GrGradientShader.h"
 
@@ -100,13 +100,12 @@ std::unique_ptr<GrFragmentProcessor> SkLinearGradient::asFragmentProcessor(
 
 #endif
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 void SkLinearGradient::addToKey(const skgpu::graphite::KeyContext& keyContext,
                                 skgpu::graphite::PaintParamsKeyBuilder* builder,
                                 skgpu::graphite::PipelineDataGatherer* gatherer) const {
     using namespace skgpu::graphite;
 
-    // TODO: respect the interpolateInPremul setting
     SkColor4fXformer xformedColors(this, keyContext.dstColorInfo().colorSpace());
     const SkPMColor4f* colors = xformedColors.fColors.begin();
 
@@ -117,10 +116,12 @@ void SkLinearGradient::addToKey(const skgpu::graphite::KeyContext& keyContext,
                                             fTileMode,
                                             fColorCount,
                                             colors,
-                                            fPositions);
+                                            fPositions,
+                                            fInterpolation);
 
-    GradientShaderBlocks::BeginBlock(keyContext, builder, gatherer, data);
-    builder->endBlock();
+    MakeInterpolatedToDst(keyContext, builder, gatherer,
+                          data, fInterpolation,
+                          xformedColors.fIntermediateColorSpace.get());
 }
 #endif
 

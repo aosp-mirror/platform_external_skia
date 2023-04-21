@@ -311,7 +311,7 @@ private:
     const SkFilterColorProgram* getFilterColorProgram() const;
     const SkSL::RP::Program* getRPProgram() const;
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     friend class GrSkSLFP;             // fBaseProgram, fSampleUsages
     friend class GrGLSLSkSLFP;         //
 #endif
@@ -424,6 +424,11 @@ public:
     BuilderUniform uniform(std::string_view name) { return { this, fEffect->findUniform(name) }; }
     BuilderChild child(std::string_view name) { return { this, fEffect->findChild(name) }; }
 
+    // Get access to the collated uniforms and children (in the order expected by APIs like
+    // makeShader on the effect):
+    sk_sp<const SkData> uniforms() { return fUniforms; }
+    SkSpan<SkRuntimeEffect::ChildPtr> children() { return fChildren; }
+
 protected:
     SkRuntimeEffectBuilder() = delete;
     explicit SkRuntimeEffectBuilder(sk_sp<SkRuntimeEffect> effect)
@@ -440,10 +445,6 @@ protected:
 
     SkRuntimeEffectBuilder& operator=(SkRuntimeEffectBuilder&&) = delete;
     SkRuntimeEffectBuilder& operator=(const SkRuntimeEffectBuilder&) = delete;
-
-    sk_sp<const SkData> uniforms() { return fUniforms; }
-    SkRuntimeEffect::ChildPtr* children() { return fChildren.data(); }
-    size_t numChildren() { return fChildren.size(); }
 
 private:
     void* writableUniformData() {
