@@ -14,6 +14,8 @@
 
 template <typename T> class SkSpan;
 
+#if defined(SK_ENABLE_SKVM)
+
 namespace SkSL {
 
 class FunctionDefinition;
@@ -76,4 +78,5 @@ bool testingOnly_ProgramToSkVMShader(const Program& program,
 
 }  // namespace SkSL
 
-#endif
+#endif  // defined(SK_ENABLE_SKVM)
+#endif  // SKSL_VMGENERATOR

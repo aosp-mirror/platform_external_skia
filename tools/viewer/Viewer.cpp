@@ -7,44 +7,58 @@
 
 #include "tools/viewer/Viewer.h"
 
+#include "gm/gm.h"
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkData.h"
+#include "include/core/SkFontTypes.h"
 #include "include/core/SkGraphics.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPicture.h"
 #include "include/core/SkPictureRecorder.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkSamplingOptions.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/core/SkTextBlob.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkTPin.h"
 #include "include/private/base/SkTo.h"
 #include "include/utils/SkBase64.h"
 #include "include/utils/SkPaintFilterCanvas.h"
+#include "src/base/SkTLazy.h"
 #include "src/base/SkTSort.h"
+#include "src/base/SkUTF.h"
 #include "src/core/SkAutoPixmapStorage.h"
-#include "src/core/SkColorSpacePriv.h"
-#include "src/core/SkImagePriv.h"
+#include "src/core/SkLRUCache.h"
 #include "src/core/SkMD5.h"
 #include "src/core/SkOSFile.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkScan.h"
 #include "src/core/SkStringUtils.h"
-#include "src/core/SkSurfacePriv.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/core/SkTextBlobPriv.h"
-#include "src/core/SkVMBlitter.h"
-#include "src/gpu/ganesh/GrDirectContextPriv.h"
-#include "src/gpu/ganesh/GrGpu.h"
-#include "src/gpu/ganesh/GrPersistentCacheUtils.h"
-#include "src/image/SkImage_Base.h"
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLString.h"
 #include "src/text/GlyphRun.h"
 #include "src/utils/SkJSONWriter.h"
 #include "src/utils/SkOSPath.h"
 #include "src/utils/SkShaderUtils.h"
 #include "tools/Resources.h"
 #include "tools/RuntimeBlendUtils.h"
-#include "tools/ToolUtils.h"
+#include "tools/SkMetaData.h"
 #include "tools/flags/CommandLineFlags.h"
 #include "tools/flags/CommonFlags.h"
+#include "tools/skui/InputState.h"
+#include "tools/skui/Key.h"
+#include "tools/skui/ModifierKey.h"
 #include "tools/trace/EventTracingPriv.h"
 #include "tools/viewer/BisectSlide.h"
 #include "tools/viewer/GMSlide.h"
@@ -53,17 +67,36 @@
 #include "tools/viewer/SKPSlide.h"
 #include "tools/viewer/SkSLDebuggerSlide.h"
 #include "tools/viewer/SkSLSlide.h"
+#include "tools/viewer/Slide.h"
 #include "tools/viewer/SlideDir.h"
-#include "tools/viewer/SvgSlide.h"
+
+#include <algorithm>
+#include <cfloat>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <initializer_list>
+#include <map>
+#include <memory>
+#include <optional>
+#include <ratio>
+#include <regex>
+#include <tuple>
+#include <utility>
+#include <vector>
 
 #if defined(SK_GANESH)
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrGpu.h"
+#include "src/gpu/ganesh/GrPersistentCacheUtils.h"
+#include "src/gpu/ganesh/GrShaderCaps.h"
 #include "src/gpu/ganesh/ops/AtlasPathRenderer.h"
 #include "src/gpu/ganesh/ops/TessellationPathRenderer.h"
 #endif
-
-#include <cstdlib>
-#include <map>
-#include <regex>
 
 #include "imgui.h"
 #include "misc/cpp/imgui_stdlib.h"  // For ImGui support of std::string
@@ -78,6 +111,7 @@
 
 #if defined(SK_ENABLE_SVG)
 #include "modules/svg/include/SkSVGOpenTypeSVGDecoder.h"
+#include "tools/viewer/SvgSlide.h"
 #endif
 
 using namespace skia_private;
@@ -187,9 +221,6 @@ static DEFINE_int_2(threads, j, -1,
 static DEFINE_bool(redraw, false, "Toggle continuous redraw.");
 
 static DEFINE_bool(offscreen, false, "Force rendering to an offscreen surface.");
-static DEFINE_bool(skvm, false, "Force skvm blitters for raster.");
-static DEFINE_bool(jit, true, "JIT SkVM?");
-static DEFINE_bool(dylib, false, "JIT via dylib (much slower compile but easier to debug/profile)");
 static DEFINE_bool(stats, false, "Display stats overlay on startup.");
 static DEFINE_bool(binaryarchive, false, "Enable MTLBinaryArchive use (if available).");
 
@@ -336,10 +367,6 @@ static const char kSoftkeyHint[] = "Please select a softkey";
 static const char kON[] = "ON";
 static const char kRefreshStateName[] = "Refresh";
 
-extern bool gUseSkVMBlitter;
-extern bool gSkVMAllowJIT;
-extern bool gSkVMJITViaDylib;
-
 Viewer::Viewer(int argc, char** argv, void* platformData)
     : fCurrentSlide(-1)
     , fRefresh(false)
@@ -391,10 +418,6 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
 #ifdef SK_BUILD_FOR_ANDROID
     SetResourcePath("/data/local/tmp/resources");
 #endif
-
-    gUseSkVMBlitter = FLAGS_skvm;
-    gSkVMAllowJIT = FLAGS_jit;
-    gSkVMJITViaDylib = FLAGS_dylib;
 
     CommonFlags::SetDefaultFontMgr();
 
@@ -734,16 +757,6 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
         this->updateTitle();
         fWindow->inval();
     });
-    fCommands.addCommand('!', "SkVM", "Toggle SkVM blitter", [this]() {
-        gUseSkVMBlitter = !gUseSkVMBlitter;
-        this->updateTitle();
-        fWindow->inval();
-    });
-    fCommands.addCommand('@', "SkVM", "Toggle SkVM JIT", [this]() {
-        gSkVMAllowJIT = !gSkVMAllowJIT;
-        this->updateTitle();
-        fWindow->inval();
-    });
 
     // set up slides
     this->initSlides();
@@ -1049,12 +1062,6 @@ void Viewer::updateTitle() {
     }
     if (fDrawViaSerialize) {
         title.append(" <serialize>");
-    }
-    if (gUseSkVMBlitter) {
-        title.append(" <SkVMBlitter>");
-    }
-    if (!gSkVMAllowJIT) {
-        title.append(" <SkVM interpreter>");
     }
 
     SkPaintTitleUpdater paintTitle(&title);
@@ -1961,33 +1968,6 @@ static std::string build_glsl_highlight_shader(const GrShaderCaps& shaderCaps) {
     return highlight;
 }
 
-#ifdef SK_ENABLE_SKVM
-
-static skvm::Program build_skvm_highlight_program(SkColorType ct, int nargs) {
-    // Code here is heavily tied to (and inspired by) SkVMBlitter::BuildProgram
-    skvm::Builder b;
-
-    // All VM blitters start with two arguments (uniforms, dst surface)
-    SkASSERT(nargs >= 2);
-    (void)b.uniform();
-    skvm::Ptr dst_ptr = b.varying(SkColorTypeBytesPerPixel(ct));
-
-    // Depending on coverage and shader, there can be additional arguments.
-    // Make sure that we append the right number, so that we don't assert when
-    // the CPU backend tries to run this program.
-    for (int i = 2; i < nargs; ++i) {
-        (void)b.uniform();
-    }
-
-    skvm::Color magenta = {b.splat(1.0f), b.splat(0.0f), b.splat(1.0f), b.splat(0.5f)};
-    skvm::PixelFormat dstFormat = skvm::SkColorType_to_PixelFormat(ct);
-    store(dstFormat, dst_ptr, magenta);
-
-    return b.done();
-}
-
-#endif
-
 void Viewer::drawImGui() {
     // Support drawing the ImGui demo window. Superfluous, but gives a good idea of what's possible
     if (fShowImGuiTestWindow) {
@@ -2762,78 +2742,6 @@ void Viewer::drawImGui() {
                     }
                 }
             }
-
-#ifdef SK_ENABLE_SKVM
-            if (ImGui::CollapsingHeader("SkVM")) {
-                auto* cache = SkVMBlitter::TryAcquireProgramCache();
-                SkASSERT(cache);
-
-                if (ImGui::Button("Clear")) {
-                    cache->reset();
-                    fDisassemblyCache.reset();
-                }
-
-                // First, go through the cache and restore the original program if we were hovering
-                if (!fHoveredProgram.empty()) {
-                    auto restoreHoveredProgram = [this](const SkVMBlitter::Key* key,
-                                                        skvm::Program* program) {
-                        if (*key == fHoveredKey) {
-                            *program = std::move(fHoveredProgram);
-                            fHoveredProgram = {};
-                        }
-                    };
-                    cache->foreach(restoreHoveredProgram);
-                }
-
-                // Now iterate again, and dump any expanded program. If any program is hovered,
-                // patch it, and remember the original (so it can be restored next frame).
-                auto showVMEntry = [this](const SkVMBlitter::Key* key, skvm::Program* program) {
-                    SkString keyString = SkVMBlitter::DebugName(*key);
-                    bool inTreeNode = ImGui::TreeNode(keyString.c_str());
-                    bool hovered = ImGui::IsItemHovered();
-
-                    if (inTreeNode) {
-                        auto stringBox = [](const char* label, std::string* str) {
-                            int lines = std::count(str->begin(), str->end(), '\n') + 2;
-                            ImVec2 boxSize(-1.0f, ImGui::GetTextLineHeight() * std::min(lines, 30));
-                            ImGui::InputTextMultiline(label, str, boxSize);
-                        };
-
-                        SkDynamicMemoryWStream stream;
-                        program->dump(&stream);
-                        auto dumpData = stream.detachAsData();
-                        std::string dumpString((const char*)dumpData->data(), dumpData->size());
-                        stringBox("##VM", &dumpString);
-
-#if defined(SKVM_JIT)
-                        std::string* asmString = fDisassemblyCache.find(*key);
-                        if (!asmString) {
-                            program->disassemble(&stream);
-                            auto asmData = stream.detachAsData();
-                            asmString = fDisassemblyCache.set(
-                                    *key,
-                                    std::string((const char*)asmData->data(), asmData->size()));
-                        }
-                        stringBox("##ASM", asmString);
-#endif  // defined(SKVM_JIT)
-
-                        ImGui::TreePop();
-                    }
-                    if (hovered) {
-                        // Generate a new blitter that just draws magenta
-                        skvm::Program highlightProgram = build_skvm_highlight_program(
-                                static_cast<SkColorType>(key->colorType), program->nargs());
-
-                        fHoveredKey = *key;
-                        fHoveredProgram = std::move(*program);
-                        *program = std::move(highlightProgram);
-                    }
-                };
-                cache->foreach(showVMEntry);
-
-                SkVMBlitter::ReleaseProgramCache();
-            }
-#endif  // SK_ENABLE_SKVM
         }
         if (displayParamsChanged || uiParamsChanged) {
             fDeferredActions.push_back([=]() {

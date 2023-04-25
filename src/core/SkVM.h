@@ -20,6 +20,8 @@
 
 class SkWStream;
 
+#if defined(SK_ENABLE_SKVM)
+
 #if defined(SKVM_JIT_WHEN_POSSIBLE) && !defined(SK_BUILD_FOR_IOS)
     #if defined(__x86_64__) || defined(_M_X64)
         #if defined(_WIN32) || defined(__linux) || defined(__APPLE__)
@@ -1353,4 +1355,5 @@ namespace skvm {
 #undef SI
 }  // namespace skvm
 
-#endif//SkVM_DEFINED
+#endif  // defined(SK_ENABLE_SKVM)
+#endif  // SkVM_DEFINED

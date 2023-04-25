@@ -173,6 +173,12 @@ void Builder::inverse_matrix(int32_t n) {
     }
 }
 
+void Builder::pad_stack(int32_t count) {
+    if (count > 0) {
+        fInstructions.push_back({BuilderOp::pad_stack, {}, count});
+    }
+}
+
 void Builder::discard_stack(int32_t count) {
     // If we pushed something onto the stack and then immediately discarded part of it, we can
     // shrink or eliminate the push.
@@ -193,15 +199,17 @@ void Builder::discard_stack(int32_t count) {
             case BuilderOp::push_slots_indirect:
             case BuilderOp::push_uniform:
             case BuilderOp::push_uniform_indirect:
-                // Our last op was a multi-slot push; cancel out one discard and eliminate the op
-                // if its count reached zero.
-                --count;
-                --lastInstruction.fImmA;
+            case BuilderOp::pad_stack: {
+                // Our last op was a multi-slot push; these cancel out. Eliminate the op if its
+                // count reached zero.
+                int cancelOut = std::min(count, lastInstruction.fImmA);
+                count                 -= cancelOut;
+                lastInstruction.fImmA -= cancelOut;
                 if (lastInstruction.fImmA == 0) {
                     fInstructions.pop_back();
                 }
                 continue;
-
+            }
             case BuilderOp::push_condition_mask:
             case BuilderOp::push_loop_mask:
             case BuilderOp::push_return_mask:
@@ -636,6 +644,22 @@ void Builder::pop_slots_unmasked(SlotRange dst) {
     }
 }
 
+void Builder::pop_src_rgba() {
+    if (!fInstructions.empty()) {
+        Instruction& lastInstruction = fInstructions.back();
+
+        // If the previous op is exchanging src.rgba with the stack...
+        if (lastInstruction.fOp == BuilderOp::exchange_src) {
+            // ... both ops can be eliminated. It's just sliding the color back and forth.
+            fInstructions.pop_back();
+            this->discard_stack(4);
+            return;
+        }
+    }
+
+    fInstructions.push_back({BuilderOp::pop_src_rgba, {}});
+}
+
 void Builder::copy_stack_to_slots(SlotRange dst, int offsetFromStackTop) {
     // If the execution mask is known to be all-true, then we can ignore the write mask.
     if (!this->executionMaskWritesAreEnabled()) {
@@ -800,7 +824,8 @@ static int pack_nybbles(SkSpan<const int8_t> components) {
     return packed;
 }
 
-static void unpack_nybbles_to_offsets(uint32_t components, SkSpan<uint16_t> offsets) {
+template <typename T>
+static void unpack_nybbles_to_offsets(uint32_t components, SkSpan<T> offsets) {
     // Unpack component nybbles into byte-offsets pointing at stack slots.
     for (size_t index = 0; index < offsets.size(); ++index) {
         offsets[index] = (components & 0xF) * SkOpts::raster_pipeline_highp_stride * sizeof(float);
@@ -902,14 +927,10 @@ void Builder::swizzle(int consumedSlots, SkSpan<const int8_t> components) {
         return;
     }
 
-    // This is a big swizzle. We use the `shuffle` op to handle these.
-    // Slot usage is packed into immA. The top 16 bits of immA count the consumed slots; the bottom
-    // 16 bits count the generated slots.
-    int slotUsage = consumedSlots << 16;
-    slotUsage |= numElements;
-
-    // Pack immB and immC with the shuffle list in packed-nybble form.
-    fInstructions.push_back({BuilderOp::shuffle, {}, slotUsage,
+    // This is a big swizzle. We use the `shuffle` op to handle these. immA counts the consumed
+    // slots. immB counts the generated slots. immC and immD hold packed-nybble shuffle values.
+    fInstructions.push_back({BuilderOp::shuffle, {},
+                             consumedSlots, numElements,
                              pack_nybbles(SkSpan(&elements[0], 8)),
                              pack_nybbles(SkSpan(&elements[8], 8))});
 }
@@ -974,6 +995,18 @@ void Builder::matrix_resize(int origColumns, int origRows, int newColumns, int n
     this->swizzle(consumedSlots, SkSpan(elements, index));
 }
 
+void Builder::matrix_multiply(int leftColumns, int leftRows, int rightColumns, int rightRows) {
+    BuilderOp op;
+    switch (leftColumns) {
+        case 2:  op = BuilderOp::matrix_multiply_2; break;
+        case 3:  op = BuilderOp::matrix_multiply_3; break;
+        case 4:  op = BuilderOp::matrix_multiply_4; break;
+        default: SkDEBUGFAIL("unsupported matrix dimensions"); return;
+    }
+
+    fInstructions.push_back({op, {}, leftColumns, leftRows, rightColumns, rightRows});
+}
+
 std::unique_ptr<Program> Builder::finish(int numValueSlots,
                                          int numUniformSlots,
                                          DebugTracePriv* debugTrace) {
@@ -1008,6 +1041,7 @@ static int stack_usage(const Instruction& inst) {
         case BuilderOp::push_clone:
         case BuilderOp::push_clone_from_stack:
         case BuilderOp::push_clone_indirect_from_stack:
+        case BuilderOp::pad_stack:
             return inst.fImmA;
 
         case BuilderOp::pop_condition_mask:
@@ -1052,9 +1086,15 @@ static int stack_usage(const Instruction& inst) {
         case BuilderOp::refract_4_floats:
             return -5;  // consumes nine slots (N + I + eta) and emits a 4-slot vector (R)
 
+        case BuilderOp::matrix_multiply_2:
+        case BuilderOp::matrix_multiply_3:
+        case BuilderOp::matrix_multiply_4:
+            // consumes the left- and right-matrices; emits result over existing padding slots
+            return -(inst.fImmA * inst.fImmB + inst.fImmC * inst.fImmD);
+
         case BuilderOp::shuffle: {
-            int consumed = inst.fImmA >> 16;
-            int generated = inst.fImmA & 0xFFFF;
+            int consumed = inst.fImmA;
+            int generated = inst.fImmB;
             return generated - consumed;
         }
         case ALL_SINGLE_SLOT_UNARY_OP_CASES:
@@ -1608,24 +1648,40 @@ void Program::makeStages(TArray<Stage>* pipeline,
             case BuilderOp::swizzle_2:
             case BuilderOp::swizzle_3:
             case BuilderOp::swizzle_4: {
-                auto* ctx = alloc->make<SkRasterPipeline_SwizzleCtx>();
-                ctx->ptr = tempStackPtr - (N * inst.fImmA);
+                SkRasterPipeline_SwizzleCtx ctx;
+                ctx.dst = OffsetFromBase(tempStackPtr - (N * inst.fImmA));
                 // Unpack component nybbles into byte-offsets pointing at stack slots.
-                unpack_nybbles_to_offsets(inst.fImmB, SkSpan(ctx->offsets));
-                pipeline->push_back({(ProgramOp)inst.fOp, ctx});
+                unpack_nybbles_to_offsets(inst.fImmB, SkSpan(ctx.offsets));
+                pipeline->push_back({(ProgramOp)inst.fOp, SkRPCtxUtils::Pack(ctx, alloc)});
                 break;
             }
             case BuilderOp::shuffle: {
-                int consumed = inst.fImmA >> 16;
-                int generated = inst.fImmA & 0xFFFF;
+                int consumed = inst.fImmA;
+                int generated = inst.fImmB;
 
                 auto* ctx = alloc->make<SkRasterPipeline_ShuffleCtx>();
                 ctx->ptr = tempStackPtr - (N * consumed);
                 ctx->count = generated;
                 // Unpack immB and immC from nybble form into the offset array.
-                unpack_nybbles_to_offsets(inst.fImmB, SkSpan(&ctx->offsets[0], 8));
-                unpack_nybbles_to_offsets(inst.fImmC, SkSpan(&ctx->offsets[8], 8));
+                unpack_nybbles_to_offsets(inst.fImmC, SkSpan(&ctx->offsets[0], 8));
+                unpack_nybbles_to_offsets(inst.fImmD, SkSpan(&ctx->offsets[8], 8));
                 pipeline->push_back({ProgramOp::shuffle, ctx});
+                break;
+            }
+            case BuilderOp::matrix_multiply_2:
+            case BuilderOp::matrix_multiply_3:
+            case BuilderOp::matrix_multiply_4: {
+                int consumed = (inst.fImmB * inst.fImmC) +  // result
+                               (inst.fImmA * inst.fImmB) +  // left-matrix
+                               (inst.fImmC * inst.fImmD);   // right-matrix
+
+                SkRasterPipeline_MatrixMultiplyCtx ctx;
+                ctx.dst = OffsetFromBase(tempStackPtr - (N * consumed));
+                ctx.leftColumns  = inst.fImmA;
+                ctx.leftRows     = inst.fImmB;
+                ctx.rightColumns = inst.fImmC;
+                ctx.rightRows    = inst.fImmD;
+                pipeline->push_back({(ProgramOp)inst.fOp, SkRPCtxUtils::Pack(ctx, alloc)});
                 break;
             }
             case BuilderOp::exchange_src: {
@@ -1890,6 +1946,7 @@ void Program::makeStages(TArray<Stage>* pipeline,
                 pipeline->push_back({ProgramOp::case_op, ctx});
                 break;
             }
+            case BuilderOp::pad_stack:
             case BuilderOp::discard_stack:
                 break;
 
@@ -2201,9 +2258,14 @@ void Program::dump(SkWStream* out) const {
             return "ExternalPtr(" + AsRange(0, numSlots) + ")";
         };
 
+        // Converts an RP offset to a pointer.
+        auto OffsetToPtr = [&](SkRPOffset offset) -> std::byte* {
+            return (std::byte*)slots.values.data() + offset;
+        };
+
         // Interprets a slab offset as a slot range.
         auto OffsetCtx = [&](SkRPOffset offset, int numSlots) -> std::string {
-            return PtrCtx((std::byte*)slots.values.data() + offset, numSlots);
+            return PtrCtx(OffsetToPtr(offset), numSlots);
         };
 
         // Interpret the context value as a pointer to two adjacent values.
@@ -2265,7 +2327,7 @@ void Program::dump(SkWStream* out) const {
         };
 
         // Stringize a span of swizzle offsets to the textual equivalent (`xyzw`).
-        auto SwizzleOffsetSpan = [&](SkSpan<const uint16_t> offsets) {
+        auto SwizzleOffsetSpan = [&](const auto offsets) {
             std::string src;
             for (uint16_t offset : offsets) {
                 if (offset == (0 * N * sizeof(float))) {
@@ -2286,7 +2348,7 @@ void Program::dump(SkWStream* out) const {
         // When we decode a swizzle, we don't know the slot width of the original value; that's not
         // preserved in the instruction encoding. (e.g., myFloat4.y would be indistinguishable from
         // myFloat2.y.) We do our best to make a readable dump using the data we have.
-        auto SwizzleWidth = [&](SkSpan<const uint16_t> offsets) {
+        auto SwizzleWidth = [&](const auto offsets) {
             size_t highestComponent = *std::max_element(offsets.begin(), offsets.end()) /
                                       (N * sizeof(float));
             size_t swizzleWidth = offsets.size();
@@ -2294,17 +2356,18 @@ void Program::dump(SkWStream* out) const {
         };
 
         // Stringize a swizzled pointer.
-        auto SwizzlePtr = [&](const float* ptr, SkSpan<const uint16_t> offsets) {
-            return "(" + PtrCtx(ptr, SwizzleWidth(offsets)) + ")." + SwizzleOffsetSpan(offsets);
+        auto SwizzlePtr = [&](const void* ptr, const auto offsets) {
+            return "(" + PtrCtx(ptr, SwizzleWidth(SkSpan(offsets))) + ")." +
+                   SwizzleOffsetSpan(SkSpan(offsets));
         };
 
         // Interpret the context value as a Swizzle structure.
         auto SwizzleCtx = [&](ProgramOp op, const void* v) -> std::tuple<std::string, std::string> {
-            const auto* ctx = static_cast<const SkRasterPipeline_SwizzleCtx*>(v);
+            auto ctx = SkRPCtxUtils::Unpack((const SkRasterPipeline_SwizzleCtx*)v);
             int destSlots = (int)op - (int)BuilderOp::swizzle_1 + 1;
-
-            return std::make_tuple(PtrCtx(ctx->ptr, destSlots),
-                                   SwizzlePtr(ctx->ptr, SkSpan(ctx->offsets, destSlots)));
+            return std::make_tuple(
+                    OffsetCtx(ctx.dst, destSlots),
+                    SwizzlePtr(OffsetToPtr(ctx.dst), SkSpan(ctx.offsets, destSlots)));
         };
 
         // Interpret the context value as a SwizzleCopy structure.
@@ -2397,6 +2460,32 @@ void Program::dump(SkWStream* out) const {
                 std::tie(opArg1, opArg2) = ShuffleCtx(stage.ctx);
                 break;
 
+            case POp::matrix_multiply_2:
+            case POp::matrix_multiply_3:
+            case POp::matrix_multiply_4: {
+                auto ctx =
+                        SkRPCtxUtils::Unpack((const SkRasterPipeline_MatrixMultiplyCtx*)stage.ctx);
+                int leftMatrix = ctx.leftColumns * ctx.leftRows;
+                int rightMatrix = ctx.rightColumns * ctx.rightRows;
+                int resultMatrix = ctx.rightColumns * ctx.leftRows;
+                SkRPOffset leftOffset =
+                        ctx.dst + (ctx.rightColumns * ctx.leftRows * sizeof(float) * N);
+                SkRPOffset rightOffset =
+                        leftOffset + (ctx.leftColumns * ctx.leftRows * sizeof(float) * N);
+                opArg1 = SkSL::String::printf("mat%dx%x(%s)",
+                                              ctx.rightColumns,
+                                              ctx.leftRows,
+                                              OffsetCtx(ctx.dst, resultMatrix).c_str());
+                opArg2 = SkSL::String::printf("mat%dx%x(%s)",
+                                              ctx.leftColumns,
+                                              ctx.leftRows,
+                                              OffsetCtx(leftOffset, leftMatrix).c_str());
+                opArg3 = SkSL::String::printf("mat%dx%x(%s)",
+                                              ctx.rightColumns,
+                                              ctx.rightRows,
+                                              OffsetCtx(rightOffset, rightMatrix).c_str());
+                break;
+            }
             case POp::load_condition_mask:
             case POp::store_condition_mask:
             case POp::load_loop_mask:
@@ -3037,6 +3126,12 @@ void Program::dump(SkWStream* out) const {
                 opText = opArg1 + " /= " + opArg2;
                 break;
 
+            case POp::matrix_multiply_2:
+            case POp::matrix_multiply_3:
+            case POp::matrix_multiply_4:
+                opText = opArg1 + " = " + opArg2 + " * " + opArg3;
+                break;
+
             case POp::mod_float:
             case POp::mod_2_floats:
             case POp::mod_3_floats:
@@ -3142,13 +3237,11 @@ void Program::dump(SkWStream* out) const {
 
         opName = opName.substr(0, 30);
         if (!opText.empty()) {
-            out->writeText(SkSL::String::printf("% 5d. %-30.*s %s\n",
-                                                index + 1,
+            out->writeText(SkSL::String::printf("%-30.*s %s\n",
                                                 (int)opName.size(), opName.data(),
                                                 opText.c_str()).c_str());
         } else {
-            out->writeText(SkSL::String::printf("% 5d. %.*s\n",
-                                                index + 1,
+            out->writeText(SkSL::String::printf("%.*s\n",
                                                 (int)opName.size(), opName.data()).c_str());
         }
     }

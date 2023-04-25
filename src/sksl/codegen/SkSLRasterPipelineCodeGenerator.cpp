@@ -2126,46 +2126,15 @@ bool Generator::pushMatrixMultiply(LValue* lvalue,
     SkASSERT(left.type().isMatrix() || left.type().isVector());
     SkASSERT(right.type().isMatrix() || right.type().isVector());
 
-    SkASSERT(leftColumns == rightRows);
-    int outColumns   = rightColumns,
-        outRows      = leftRows;
+    // Insert padding space on the stack to hold the result.
+    fBuilder.pad_stack(rightColumns * leftRows);
 
-    // Push the left matrix onto the adjacent-neighbor stack. We transpose it so that we can copy
-    // rows from it in a single op, instead of gathering one element at a time.
-    AutoStack matrixStack(this);
-    matrixStack.enter();
-    if (!this->pushLValueOrExpression(lvalue, left)) {
+    // Push the left and right matrices onto the stack.
+    if (!this->pushLValueOrExpression(lvalue, left) || !this->pushExpression(right)) {
         return unsupported();
     }
-    fBuilder.transpose(leftColumns, leftRows);
 
-    // Push the right matrix as well, then go back to the primary stack.
-    if (!this->pushExpression(right)) {
-        return unsupported();
-    }
-    matrixStack.exit();
-
-    // Calculate the offsets of the left- and right-matrix, relative to the stack-top.
-    int leftMtxBase  = left.type().slotCount() + right.type().slotCount();
-    int rightMtxBase = right.type().slotCount();
-
-    // Emit each matrix element.
-    for (int c = 0; c < outColumns; ++c) {
-        for (int r = 0; r < outRows; ++r) {
-            // Dot a vector from left[*][r] with right[c][*].
-            // (Because the left=matrix has been transposed, we actually pull left[r][*], which
-            // allows us to clone a column at once instead of cloning each slot individually.)
-            matrixStack.pushClone(SlotRange{r * leftColumns, leftColumns}, leftMtxBase);
-            matrixStack.pushClone(SlotRange{c * leftColumns, leftColumns}, rightMtxBase);
-            fBuilder.dot_floats(leftColumns);
-        }
-    }
-
-    // Dispose of the source matrices on the adjacent-neighbor stack.
-    matrixStack.enter();
-    this->discardExpression(left.type().slotCount());
-    this->discardExpression(right.type().slotCount());
-    matrixStack.exit();
+    fBuilder.matrix_multiply(leftColumns, leftRows, rightColumns, rightRows);
 
     // If this multiply was actually an assignment (via *=), write the result back to the lvalue.
     return lvalue ? this->store(*lvalue)
@@ -2501,8 +2470,8 @@ bool Generator::pushChildCall(const ChildCall& c) {
     SkASSERT(childIdx != nullptr);
     SkASSERT(!c.arguments().empty());
 
-    // Save the src.rgba fields; these hold our execution masks, and could potentially be
-    // clobbered by the child effect.
+    // Save the src.rgba fields; these hold our execution masks, but are also used to pass colors
+    // and coordinates to the child effect.
     fBuilder.push_src_rgba();
 
     // All child calls have at least one argument.
@@ -2964,14 +2933,18 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0) {
 
         case IntrinsicKind::k_fromLinearSrgb_IntrinsicKind:
         case IntrinsicKind::k_toLinearSrgb_IntrinsicKind: {
+            // Save the src.rgba fields; these hold our execution masks, but are also used to pass
+            // colors and coordinates to the color transform function.
+            fBuilder.push_src_rgba();
+
             // The argument must be a half3.
             SkASSERT(arg0.type().matches(*fContext.fTypes.fHalf3));
             if (!this->pushExpression(arg0)) {
                 return unsupported();
             }
-            // The intrinsics accept a three-component value; add alpha for the push/pop_src_rgba
+            // The intrinsics accept a three-component value; add alpha for the push/pop_src_rgba.
             fBuilder.push_constant_f(1.0f);
-            // Copy arguments from the stack into src
+            // Copy arguments from the stack into src.
             fBuilder.pop_src_rgba();
 
             if (intrinsic == IntrinsicKind::k_fromLinearSrgb_IntrinsicKind) {
@@ -2980,9 +2953,11 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic, const Expression& arg0) {
                 fBuilder.invoke_to_linear_srgb();
             }
 
-            // The xform has left the result color in src.rgba; push it onto the stack
-            fBuilder.push_src_rgba();
-            // The intrinsic returns a three-component value; discard alpha
+            // The xform has left the result color in src.rgba; exchange it with the execution masks
+            // on the top of the stack.
+            fBuilder.exchange_src();
+
+            // The intrinsic returns a three-component value; discard alpha.
             this->discardExpression(/*slots=*/1);
             return true;
         }

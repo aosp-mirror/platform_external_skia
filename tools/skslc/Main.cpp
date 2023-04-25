@@ -46,8 +46,10 @@ void SkDebugf(const char format[], ...) {
 
 namespace SkOpts {
     decltype(hash_fn) hash_fn = SK_OPTS_NS::hash_fn;
-    decltype(interpret_skvm) interpret_skvm = SK_OPTS_NS::interpret_skvm;
     size_t raster_pipeline_highp_stride = 1;
+#if defined(SK_ENABLE_SKVM)
+    decltype(interpret_skvm) interpret_skvm = SK_OPTS_NS::interpret_skvm;
+#endif
 }
 
 static std::unique_ptr<SkWStream> as_SkWStream(SkSL::OutputStream& s) {
@@ -642,9 +644,10 @@ static ResultCode process_command(SkSpan<std::string> args) {
                 [](SkSL::Compiler& compiler, SkSL::Program& program, SkSL::OutputStream& out) {
                     return compiler.toWGSL(program, out);
                 });
+#if defined(SK_ENABLE_SKVM)
     } else if (skstd::ends_with(outputPath, ".skvm")) {
         return compileProgramAsRuntimeShader(
-                [&](SkSL::Compiler&, SkSL::Program& program, SkSL::OutputStream& out) {
+                [&](SkSL::Compiler& compiler, SkSL::Program& program, SkSL::OutputStream& out) {
                     skvm::Builder builder{skvm::Features{}};
                     if (!SkSL::testingOnly_ProgramToSkVMShader(program, &builder,
                                                                debugTrace.get())) {
@@ -658,6 +661,7 @@ static ResultCode process_command(SkSpan<std::string> args) {
                     builder.done().dump(redirect.get());
                     return true;
                 });
+#endif
     } else if (skstd::ends_with(outputPath, ".skrp")) {
         settings.fMaxVersionAllowed = SkSL::Version::k300;
         return compileProgramAsRuntimeShader(

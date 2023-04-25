@@ -59,6 +59,7 @@ SkShaderBase::MatrixRec::apply(const SkStageRec& rec, const SkMatrix& postInv) c
                      /*ctmApplied=*/true};
 }
 
+#if defined(SK_ENABLE_SKVM)
 std::optional<SkShaderBase::MatrixRec>
 SkShaderBase::MatrixRec::apply(skvm::Builder* p,
                                skvm::Coord* local,
@@ -80,7 +81,7 @@ SkShaderBase::MatrixRec::apply(skvm::Builder* p,
                      fTotalMatrixIsValid,
                      /*ctmApplied=*/true};
 }
-
+#endif
 #if defined(SK_GANESH)
 GrFPResult SkShaderBase::MatrixRec::apply(std::unique_ptr<GrFragmentProcessor> fp,
                                           const SkMatrix& postInv) const {
@@ -258,6 +259,7 @@ bool SkShaderBase::appendStages(const SkStageRec& rec, const MatrixRec& mRec) co
     return false;
 }
 
+#if defined(SK_ENABLE_SKVM)
 skvm::Color SkShaderBase::rootProgram(skvm::Builder* p,
                                       skvm::Coord device,
                                       skvm::Color paint,
@@ -298,13 +300,14 @@ skvm::Color SkShaderBase::rootProgram(skvm::Builder* p,
     }
     return {};
 }
+#endif  // defined(SK_ENABLE_SKVM)
 
 // need a cheap way to invert the alpha channel of a shader (i.e. 1 - a)
 sk_sp<SkShader> SkShaderBase::makeInvertAlpha() const {
     return this->makeWithColorFilter(SkColorFilters::Blend(0xFFFFFFFF, SkBlendMode::kSrcOut));
 }
 
-
+#if defined(SK_ENABLE_SKVM)
 skvm::Coord SkShaderBase::ApplyMatrix(skvm::Builder* p, const SkMatrix& m,
                                       skvm::Coord coord, skvm::Uniforms* uniforms) {
     skvm::F32 x = coord.x,
@@ -332,3 +335,4 @@ skvm::Coord SkShaderBase::ApplyMatrix(skvm::Builder* p, const SkMatrix& m,
     }
     return {x,y};
 }
+#endif  // defined(SK_ENABLE_SKVM)
