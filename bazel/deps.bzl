@@ -26,7 +26,7 @@ def git_repos_from_deps(ws = "@"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "9e9c4560752ae71260e921e1c975346e1a2df380",
+        commit = "c1b3c7431680e8e67bfde55ae6dd9ff3b13a235c",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -75,6 +75,13 @@ def git_repos_from_deps(ws = "@"):
         build_file = ws + "//bazel/external/icu:BUILD.bazel",
         commit = "a0718d4f121727e30b8d52c7a189ebf5ab52421f",
         remote = "https://chromium.googlesource.com/chromium/deps/icu.git",
+    )
+
+    new_git_repository(
+        name = "imgui",
+        build_file = ws + "//bazel/external/imgui:BUILD.bazel",
+        commit = "55d35d8387c15bf0cfd71861df67af8cfbda7456",
+        remote = "https://skia.googlesource.com/external/github.com/ocornut/imgui.git",
     )
 
     new_git_repository(
@@ -176,7 +183,7 @@ def git_repos_from_deps(ws = "@"):
     new_git_repository(
         name = "vulkan_tools",
         build_file = ws + "//bazel/external/vulkan_tools:BUILD.bazel",
-        commit = "db7475424c5deed3a8d2acf1b5022ad4accf206f",
+        commit = "df10a2759b4b60d59b735882217a749d8e5be660",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools",
     )
 

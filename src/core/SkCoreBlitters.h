@@ -12,7 +12,6 @@
 #include "src/core/SkBlitRow.h"
 #include "src/core/SkBlitter.h"
 #include "src/core/SkBlitter_A8.h"
-#include "src/core/SkXfermodePriv.h"
 #include "src/shaders/SkBitmapProcShader.h"
 #include "src/shaders/SkShaderBase.h"
 
@@ -116,7 +115,6 @@ public:
     void blitMask(const SkMask&, const SkIRect&) override;
 
 private:
-    SkXfermode*         fXfermode;
     SkPMColor*          fBuffer;
     SkBlitRow::Proc32   fProc32;
     SkBlitRow::Proc32   fProc32Blend;
