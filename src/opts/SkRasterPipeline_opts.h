@@ -121,7 +121,8 @@ namespace SK_OPTS_NS {
     SI F   sqrt_ (F v)          { return sqrtf(v); }
     SI F   rcp_precise (F v)    { return 1.0f / v; }
 
-    SI U32 round (F v, F scale) { return (uint32_t)(v*scale + 0.5f); }
+    SI U32 round(F v)           { return (uint32_t)(v + 0.5f); }
+    SI U32 round(F v, F scale)  { return (uint32_t)(v*scale + 0.5f); }
     SI U16 pack(U32 v)          { return (U16)v; }
     SI U8  pack(U16 v)          { return  (U8)v; }
 
@@ -221,6 +222,7 @@ namespace SK_OPTS_NS {
         SI F  floor_(F v) { return vrndmq_f32(v); }
         SI F   ceil_(F v) { return vrndpq_f32(v); }
         SI F   sqrt_(F v) { return vsqrtq_f32(v); }
+        SI U32 round(F v) { return vcvtnq_u32_f32(v); }
         SI U32 round(F v, F scale) { return vcvtnq_u32_f32(v*scale); }
     #else
         SI bool any(I32 c) { return c[0] | c[1] | c[2] | c[3]; }
@@ -242,6 +244,10 @@ namespace SK_OPTS_NS {
             e *= vrsqrtsq_f32(v,e*e);
             e *= vrsqrtsq_f32(v,e*e);
             return v*e;                // sqrt(v) == v*rsqrt(v).
+        }
+
+        SI U32 round(F v) {
+            return vcvtq_u32_f32(v + 0.5f);
         }
 
         SI U32 round(F v, F scale) {
@@ -396,7 +402,8 @@ namespace SK_OPTS_NS {
         return _mm256_fnmadd_ps(v, e, _mm256_set1_ps(2.0f)) * e;
     }
 
-    SI U32 round (F v, F scale) { return _mm256_cvtps_epi32(v*scale); }
+    SI U32 round(F v)          { return _mm256_cvtps_epi32(v); }
+    SI U32 round(F v, F scale) { return _mm256_cvtps_epi32(v*scale); }
     SI U16 pack(U32 v) {
         return _mm_packus_epi32(_mm256_extractf128_si256(v, 0),
                                 _mm256_extractf128_si256(v, 1));
@@ -770,6 +777,7 @@ template <typename T> using V = T __attribute__((ext_vector_type(4)));
     SI F   rsqrt (F v)         { return _mm_rsqrt_ps(v);    }
     SI F    sqrt_(F v)         { return _mm_sqrt_ps (v);    }
 
+    SI U32 round(F v)          { return _mm_cvtps_epi32(v); }
     SI U32 round(F v, F scale) { return _mm_cvtps_epi32(v*scale); }
 
     SI U16 pack(U32 v) {
@@ -1058,11 +1066,16 @@ SI F approx_log(F x) {
 }
 
 SI F approx_pow2(F x) {
+    constexpr float kInfinityBits = 0x7f800000;
+
     F f = fract(x);
-    return sk_bit_cast<F>(round(1.0f * (1<<23),
-                                x + 121.274057500f
-                                  -   1.490129070f * f
-                                  +  27.728023300f / (4.84252568f - f)));
+    F approx = x + 121.274057500f;
+      approx -= f * 1.490129070f;
+      approx += 27.728023300f / (4.84252568f - f);
+      approx *= 1.0f * (1<<23);
+      approx  = min(max(approx, F(0)), kInfinityBits);  // guard against underflow/overflow
+
+    return sk_bit_cast<F>(round(approx));
 }
 
 SI F approx_exp(F x) {
@@ -3954,6 +3967,15 @@ SI void apply_adjacent_binary_packed(SkRasterPipeline_BinaryOpCtx* packed, std::
     apply_adjacent_binary<T, ApplyFn>(dst, src);
 }
 
+template <typename V, typename S, void (*ApplyFn)(V*, V*)>
+SI void apply_binary_immediate(SkRasterPipeline_ConstantCtx* packed, std::byte* base) {
+    auto ctx = SkRPCtxUtils::Unpack(packed);
+    V* dst = (V*)(base + ctx.dst);         // get a pointer to the destination
+    S scalar = sk_bit_cast<S>(ctx.value);  // bit-pun the constant value as desired
+    V src = scalar;                        // broadcast the constant value into a vector
+    ApplyFn(dst, &src);                    // perform the operation
+}
+
 template <typename T>
 SI void add_fn(T* dst, T* src) {
     *dst += *src;
@@ -4099,6 +4121,30 @@ DECLARE_BINARY_FLOAT(cmpne)  DECLARE_BINARY_INT(cmpne)
 DECLARE_N_WAY_BINARY_FLOAT(atan2)
 DECLARE_N_WAY_BINARY_FLOAT(pow)
 
+// Some ops have an optimized version when the right-side is an immediate value.
+#define DECLARE_IMM_BINARY_FLOAT(name)                                   \
+    STAGE_TAIL(name##_imm_float, SkRasterPipeline_ConstantCtx* packed) { \
+        apply_binary_immediate<F, float, &name##_fn>(packed, base);      \
+    }
+#define DECLARE_IMM_BINARY_INT(name)                                     \
+    STAGE_TAIL(name##_imm_int, SkRasterPipeline_ConstantCtx* packed) {   \
+        apply_binary_immediate<I32, int32_t, &name##_fn>(packed, base);  \
+    }
+#define DECLARE_IMM_BINARY_UINT(name)                                    \
+    STAGE_TAIL(name##_imm_uint, SkRasterPipeline_ConstantCtx* packed) {  \
+        apply_binary_immediate<U32, uint32_t, &name##_fn>(packed, base); \
+    }
+
+DECLARE_IMM_BINARY_FLOAT(add)   DECLARE_IMM_BINARY_INT(add)
+DECLARE_IMM_BINARY_FLOAT(mul)   DECLARE_IMM_BINARY_INT(mul)
+DECLARE_IMM_BINARY_FLOAT(cmplt) DECLARE_IMM_BINARY_INT(cmplt) DECLARE_IMM_BINARY_UINT(cmplt)
+DECLARE_IMM_BINARY_FLOAT(cmple) DECLARE_IMM_BINARY_INT(cmple) DECLARE_IMM_BINARY_UINT(cmple)
+DECLARE_IMM_BINARY_FLOAT(cmpeq) DECLARE_IMM_BINARY_INT(cmpeq)
+DECLARE_IMM_BINARY_FLOAT(cmpne) DECLARE_IMM_BINARY_INT(cmpne)
+
+#undef DECLARE_IMM_BINARY_FLOAT
+#undef DECLARE_IMM_BINARY_INT
+#undef DECLARE_IMM_BINARY_UINT
 #undef DECLARE_BINARY_FLOAT
 #undef DECLARE_BINARY_INT
 #undef DECLARE_BINARY_UINT
@@ -5554,12 +5600,12 @@ STAGE_PP(check_decal_mask, SkRasterPipeline_DecalTileCtx* ctx) {
 }
 
 SI void round_F_to_U16(F R, F G, F B, F A, U16* r, U16* g, U16* b, U16* a) {
-    auto round = [](F x) { return cast<U16>(x * 255.0f + 0.5f); };
+    auto round_color = [](F x) { return cast<U16>(x * 255.0f + 0.5f); };
 
-    *r = round(min(max(0, R), 1));
-    *g = round(min(max(0, G), 1));
-    *b = round(min(max(0, B), 1));
-    *a = round(A);  // we assume alpha is already in [0,1].
+    *r = round_color(min(max(0, R), 1));
+    *g = round_color(min(max(0, G), 1));
+    *b = round_color(min(max(0, B), 1));
+    *a = round_color(A);  // we assume alpha is already in [0,1].
 }
 
 SI void gradient_lookup(const SkRasterPipeline_GradientCtx* c, U32 idx, F t,
