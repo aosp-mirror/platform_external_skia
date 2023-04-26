@@ -57,7 +57,6 @@ namespace RP {
 #define ALL_MULTI_SLOT_UNARY_OP_CASES        \
          BuilderOp::abs_float:               \
     case BuilderOp::abs_int:                 \
-    case BuilderOp::bitwise_not_int:         \
     case BuilderOp::cast_to_float_from_int:  \
     case BuilderOp::cast_to_float_from_uint: \
     case BuilderOp::cast_to_int_from_float:  \
@@ -101,20 +100,21 @@ namespace RP {
     case BuilderOp::cmpne_n_floats:     \
     case BuilderOp::cmpne_n_ints
 
-#define ALL_IMMEDIATE_BINARY_OP_CASES   \
-         BuilderOp::add_imm_float:      \
-    case BuilderOp::add_imm_int:        \
-    case BuilderOp::mul_imm_float:      \
-    case BuilderOp::mul_imm_int:        \
-    case BuilderOp::cmple_imm_float:    \
-    case BuilderOp::cmple_imm_int:      \
-    case BuilderOp::cmple_imm_uint:     \
-    case BuilderOp::cmplt_imm_float:    \
-    case BuilderOp::cmplt_imm_int:      \
-    case BuilderOp::cmplt_imm_uint:     \
-    case BuilderOp::cmpeq_imm_float:    \
-    case BuilderOp::cmpeq_imm_int:      \
-    case BuilderOp::cmpne_imm_float:    \
+#define ALL_IMMEDIATE_BINARY_OP_CASES    \
+         BuilderOp::add_imm_float:       \
+    case BuilderOp::add_imm_int:         \
+    case BuilderOp::mul_imm_float:       \
+    case BuilderOp::mul_imm_int:         \
+    case BuilderOp::bitwise_xor_imm_int: \
+    case BuilderOp::cmple_imm_float:     \
+    case BuilderOp::cmple_imm_int:       \
+    case BuilderOp::cmple_imm_uint:      \
+    case BuilderOp::cmplt_imm_float:     \
+    case BuilderOp::cmplt_imm_int:       \
+    case BuilderOp::cmplt_imm_uint:      \
+    case BuilderOp::cmpeq_imm_float:     \
+    case BuilderOp::cmpeq_imm_int:       \
+    case BuilderOp::cmpne_imm_float:     \
     case BuilderOp::cmpne_imm_int
 
 #define ALL_N_WAY_TERNARY_OP_CASES       \
@@ -2603,7 +2603,6 @@ void Program::dump(SkWStream* out) const {
             case POp::reenable_loop_mask:
             case POp::load_return_mask:
             case POp::store_return_mask:
-            case POp::bitwise_not_int:
             case POp::cast_to_float_from_int: case POp::cast_to_float_from_uint:
             case POp::cast_to_int_from_float: case POp::cast_to_uint_from_float:
             case POp::abs_float:              case POp::abs_int:
@@ -2624,7 +2623,6 @@ void Program::dump(SkWStream* out) const {
                 opArg1 = PtrCtx(stage.ctx, 1);
                 break;
 
-            case POp::bitwise_not_2_ints:
             case POp::load_src_rg:               case POp::store_src_rg:
             case POp::cast_to_float_from_2_ints: case POp::cast_to_float_from_2_uints:
             case POp::cast_to_int_from_2_floats: case POp::cast_to_uint_from_2_floats:
@@ -2635,7 +2633,6 @@ void Program::dump(SkWStream* out) const {
                 opArg1 = PtrCtx(stage.ctx, 2);
                 break;
 
-            case POp::bitwise_not_3_ints:
             case POp::cast_to_float_from_3_ints: case POp::cast_to_float_from_3_uints:
             case POp::cast_to_int_from_3_floats: case POp::cast_to_uint_from_3_floats:
             case POp::abs_3_floats:              case POp::abs_3_ints:
@@ -2651,7 +2648,6 @@ void Program::dump(SkWStream* out) const {
             case POp::store_src:
             case POp::store_dst:
             case POp::store_device_xy01:
-            case POp::bitwise_not_4_ints:
             case POp::cast_to_float_from_4_ints: case POp::cast_to_float_from_4_uints:
             case POp::cast_to_int_from_4_floats: case POp::cast_to_uint_from_4_floats:
             case POp::abs_4_floats:              case POp::abs_4_ints:
@@ -2682,6 +2678,7 @@ void Program::dump(SkWStream* out) const {
 
             case POp::add_imm_int:
             case POp::mul_imm_int:
+            case POp::bitwise_xor_imm_int:
             case POp::cmple_imm_int:
             case POp::cmple_imm_uint:
             case POp::cmplt_imm_int:
@@ -3053,14 +3050,8 @@ void Program::dump(SkWStream* out) const {
             case POp::bitwise_xor_3_ints:
             case POp::bitwise_xor_4_ints:
             case POp::bitwise_xor_n_ints:
+            case POp::bitwise_xor_imm_int:
                 opText = opArg1 + " ^= " + opArg2;
-                break;
-
-            case POp::bitwise_not_int:
-            case POp::bitwise_not_2_ints:
-            case POp::bitwise_not_3_ints:
-            case POp::bitwise_not_4_ints:
-                opText = opArg1 + " = ~" + opArg1;
                 break;
 
             case POp::cast_to_float_from_int:

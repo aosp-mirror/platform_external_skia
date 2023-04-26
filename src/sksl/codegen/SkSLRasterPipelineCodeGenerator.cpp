@@ -1887,7 +1887,8 @@ bool Generator::writeIfStatement(const IfStatement& i) {
     if (i.ifFalse()) {
         // Negate the test-condition, then reapply it to the condition-mask.
         // Then, run the if-false branch.
-        fBuilder.unary_op(BuilderOp::bitwise_not_int, /*slots=*/1);
+        fBuilder.push_constant_u(~0);
+        fBuilder.binary_op(BuilderOp::bitwise_xor_n_ints, /*slots=*/1);
         fBuilder.merge_condition_mask();
         if (!this->writeStatement(*i.ifFalse())) {
             return unsupported();
@@ -3200,7 +3201,7 @@ bool Generator::pushIntrinsic(IntrinsicKind intrinsic,
             // Stack: N, (0 <= dot(I,NRef))
             fBuilder.binary_op(BuilderOp::cmple_n_floats, 1);
             // Stack: N, (0 <= dot(I,NRef)), 0x80000000
-            fBuilder.push_constant_i(0x80000000);
+            fBuilder.push_constant_u(0x80000000);
             // Stack: N, (0 <= dot(I,NRef)) & 0x80000000)
             fBuilder.binary_op(BuilderOp::bitwise_and_n_ints, 1);
             // Stack: N, vec(0 <= dot(I,NRef)) & 0x80000000)
@@ -3362,26 +3363,34 @@ bool Generator::pushPrefixExpression(Operator op, const Expression& expr) {
             if (!this->pushExpression(expr)) {
                 return unsupported();
             }
-            fBuilder.unary_op(BuilderOp::bitwise_not_int, expr.type().slotCount());
+            fBuilder.push_constant_u(~0, expr.type().slotCount());
+            fBuilder.binary_op(BuilderOp::bitwise_xor_n_ints, expr.type().slotCount());
             return true;
 
-        case OperatorKind::MINUS:
-            // Handle negation as a componentwise `0 - expr`.
-            fBuilder.push_zeros(expr.type().slotCount());
+        case OperatorKind::MINUS: {
             if (!this->pushExpression(expr)) {
                 return unsupported();
             }
-            return this->binaryOp(expr.type(), kSubtractOps);
-
+            if (expr.type().componentType().isFloat()) {
+                // Handle float negation as an integer `x ^ 0x80000000`. This toggles the sign bit.
+                fBuilder.push_constant_u(0x80000000, expr.type().slotCount());
+                fBuilder.binary_op(BuilderOp::bitwise_xor_n_ints, expr.type().slotCount());
+            } else {
+                // Handle integer negation as a componentwise `expr * -1`.
+                fBuilder.push_constant_i(-1, expr.type().slotCount());
+                fBuilder.binary_op(BuilderOp::mul_n_ints, expr.type().slotCount());
+            }
+            return true;
+        }
         case OperatorKind::PLUSPLUS: {
             // Rewrite as `expr += 1`.
             Literal oneLiteral{Position{}, 1.0, &expr.type().componentType()};
             return this->pushBinaryExpression(expr, OperatorKind::PLUSEQ, oneLiteral);
         }
         case OperatorKind::MINUSMINUS: {
-            // Rewrite as `expr -= 1`.
-            Literal oneLiteral{Position{}, 1.0, &expr.type().componentType()};
-            return this->pushBinaryExpression(expr, OperatorKind::MINUSEQ, oneLiteral);
+            // Rewrite as `expr += -1`.
+            Literal minusOneLiteral{expr.fPosition, -1.0, &expr.type().componentType()};
+            return this->pushBinaryExpression(expr, OperatorKind::PLUSEQ, minusOneLiteral);
         }
         default:
             break;
@@ -3555,7 +3564,8 @@ bool Generator::pushTernaryExpression(const Expression& test,
 
         // Switch back to the test-expression stack temporarily, and negate the test condition.
         testStack.enter();
-        fBuilder.unary_op(BuilderOp::bitwise_not_int, /*slots=*/1);
+        fBuilder.push_constant_u(~0);
+        fBuilder.binary_op(BuilderOp::bitwise_xor_n_ints, /*slots=*/1);
         fBuilder.merge_condition_mask();
         testStack.exit();
 
