@@ -562,6 +562,11 @@ public:
         fInstructions.push_back({BuilderOp::merge_condition_mask, {}});
     }
 
+    void merge_inv_condition_mask() {
+        SkASSERT(this->executionMaskWritesAreEnabled());
+        fInstructions.push_back({BuilderOp::merge_inv_condition_mask, {}});
+    }
+
     void push_loop_mask() {
         SkASSERT(this->executionMaskWritesAreEnabled());
         fInstructions.push_back({BuilderOp::push_loop_mask, {}});
@@ -684,7 +689,6 @@ public:
 private:
     void simplifyPopSlotsUnmasked(SlotRange* dst);
     bool simplifyImmediateUnmaskedOp();
-    void simplifyOverwrittenRange(SlotRange dst);
 
     skia_private::TArray<Instruction> fInstructions;
     int fNumLabels = 0;

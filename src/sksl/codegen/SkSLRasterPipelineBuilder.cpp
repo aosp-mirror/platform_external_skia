@@ -822,33 +822,10 @@ static bool slot_ranges_overlap(SlotRange x, SlotRange y) {
            y.index < x.index + x.count;
 }
 
-void Builder::simplifyOverwrittenRange(SlotRange dst) {
-    while (!fInstructions.empty()) {
-        // Check if the last instruction is writing a constant. (Any write is potentially a
-        // candidate for this optimization, but in practice, 99% of the benefit comes from
-        // eliminating zero-initialization of newly-declared variables that are assigned on the next
-        // line.)
-        Instruction& lastInstruction = fInstructions.back();
-        if (lastInstruction.fOp != BuilderOp::copy_constant) {
-            return;
-        }
-
-        SlotRange last = {lastInstruction.fSlotA, lastInstruction.fImmA};
-        if (dst.index <= last.index && dst.index + dst.count >= last.index + last.count) {
-            // The overwrite range totally encompasses the last instruction's write range;
-            // the last instruction is dead code and can be eliminated.
-            fInstructions.pop_back();
-        } else {
-            // We can't simplify further.
-            return;
-        }
-    }
-}
-
 void Builder::copy_constant(Slot slot, int constantValue) {
     // If the last instruction copied the same constant, just extend it.
     if (!fInstructions.empty()) {
-        Instruction lastInstr = fInstructions.back();
+        Instruction& lastInstr = fInstructions.back();
 
         // If the last op is copy-constant...
         if (lastInstr.fOp == BuilderOp::copy_constant &&
@@ -858,18 +835,10 @@ void Builder::copy_constant(Slot slot, int constantValue) {
             lastInstr.fSlotA + lastInstr.fImmA == slot) {
             // ... then we can extend the copy!
             lastInstr.fImmA += 1;
-
-            // If the previous instruction was writing to this range, it's dead code.
-            fInstructions.pop_back();
-            this->simplifyOverwrittenRange({lastInstr.fSlotA, lastInstr.fImmA});
-
-            // Put back the copy-constant instruction with the newly increased range.
-            fInstructions.push_back(lastInstr);
             return;
         }
     }
 
-    this->simplifyOverwrittenRange({slot, 1});
     fInstructions.push_back({BuilderOp::copy_constant, {slot}, 1, constantValue});
 }
 
@@ -1965,9 +1934,10 @@ void Program::makeStages(TArray<Stage>* pipeline,
                 pipeline->push_back({ProgramOp::load_condition_mask, src});
                 break;
             }
-            case BuilderOp::merge_condition_mask: {
+            case BuilderOp::merge_condition_mask:
+            case BuilderOp::merge_inv_condition_mask: {
                 float* ptr = tempStackPtr - (2 * N);
-                pipeline->push_back({ProgramOp::merge_condition_mask, ptr});
+                pipeline->push_back({(ProgramOp)inst.fOp, ptr});
                 break;
             }
             case BuilderOp::push_loop_mask: {
@@ -2838,6 +2808,7 @@ void Program::dump(SkWStream* out) const {
                 break;
             }
             case POp::merge_condition_mask:
+            case POp::merge_inv_condition_mask:
             case POp::add_float:   case POp::add_int:
             case POp::sub_float:   case POp::sub_int:
             case POp::mul_float:   case POp::mul_int:
@@ -3040,6 +3011,10 @@ void Program::dump(SkWStream* out) const {
 
             case POp::merge_condition_mask:
                 opText = "CondMask = " + opArg1 + " & " + opArg2;
+                break;
+
+            case POp::merge_inv_condition_mask:
+                opText = "CondMask = " + opArg1 + " & ~" + opArg2;
                 break;
 
             case POp::load_loop_mask:
