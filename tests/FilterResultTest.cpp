@@ -157,7 +157,8 @@ public:
         SkUNREACHABLE;
     }
 
-    sk_sp<SkSpecialImage> renderExpectedImage(sk_sp<SkSpecialImage> source,
+    sk_sp<SkSpecialImage> renderExpectedImage(const Context& ctx,
+                                              sk_sp<SkSpecialImage> source,
                                               const LayerSpace<SkIPoint>& origin,
                                               const LayerSpace<SkIRect>& desiredOutput) const {
         SkASSERT(source);
@@ -167,10 +168,7 @@ public:
             size = {1, 1};
         }
 
-        auto surface = source->makeSurface(source->colorType(),
-                                           source->getColorSpace(),
-                                           size,
-                                           kPremul_SkAlphaType, {});
+        auto surface = ctx.makeSurface(size);
         SkCanvas* canvas = surface->getCanvas();
         canvas->clear(SK_ColorTRANSPARENT);
         canvas->translate(-desiredOutput.left(), -desiredOutput.top());
@@ -266,13 +264,37 @@ public:
         }
     }
 
-    bool compareImages(SkSpecialImage* expectedImage,
+    skif::Context newContext(const FilterResult& source) const {
+        skif::ContextInfo ctxInfo = {skif::Mapping(SkMatrix::I()),
+                                     skif::LayerSpace<SkIRect>::Empty(),
+                                     source,
+                                     kRGBA_8888_SkColorType,
+                                     /*colorSpace=*/nullptr,
+                                     /*surfaceProps=*/{},
+                                     /*cache=*/nullptr};
+#if defined(SK_GANESH)
+        if (fDirectContext) {
+            return skif::Context::MakeGanesh(fDirectContext, kTopLeft_GrSurfaceOrigin, ctxInfo);
+        } else
+#endif
+#if defined(SK_GRAPHITE)
+        if (fRecorder) {
+            return skif::Context::MakeGraphite(fRecorder, ctxInfo);
+        } else
+#endif
+        {
+            return skif::Context::MakeRaster(ctxInfo);
+        }
+    }
+
+    bool compareImages(const skif::Context& ctx,
+                       SkSpecialImage* expectedImage,
                        SkIPoint expectedOrigin,
                        const FilterResult& actual) {
         SkASSERT(expectedImage);
 
         SkIPoint actualOrigin;
-        sk_sp<SkSpecialImage> actualImage = actual.imageAndOffset(&actualOrigin);
+        sk_sp<SkSpecialImage> actualImage = actual.imageAndOffset(ctx, &actualOrigin);
 
         SkBitmap expectedBM = this->readPixels(expectedImage);
         SkBitmap actualBM = this->readPixels(actualImage.get()); // empty if actualImage is null
@@ -576,6 +598,7 @@ public:
             sourceSurface->getCanvas()->clear(fSourceColor);
             source = FilterResult(sourceSurface->makeImageSnapshot(), fSourceBounds.topLeft());
         }
+        Context baseContext = fRunner.newContext(source);
 
         // Applying modifiers to FilterResult might produce a new image, but hopefully it's
         // able to merge properties and even re-order operations to minimize the number of offscreen
@@ -591,13 +614,6 @@ public:
             expectedOrigin = LayerSpace<SkIPoint>({0, 0});
         }
         SkASSERT(expectedImage);
-
-        Context baseContext{Mapping(SkMatrix::I()),
-                            LayerSpace<SkIRect>::Empty(),
-                            /*cache=*/nullptr,
-                            expectedImage->colorType(),
-                            expectedImage->getColorSpace(),
-                            source};
 
         // Apply each action and validate, from first to last action
         for (int i = 0; i < (int) fActions.size(); ++i) {
@@ -640,11 +656,15 @@ public:
                 REPORTER_ASSERT(fRunner, output.sampling() == fActions[i].expectedSampling());
             }
 
-            expectedImage = fActions[i].renderExpectedImage(std::move(expectedImage),
+            expectedImage = fActions[i].renderExpectedImage(ctx,
+                                                            std::move(expectedImage),
                                                             expectedOrigin,
                                                             desiredOutputs[i]);
             expectedOrigin = desiredOutputs[i].topLeft();
-            if (!fRunner.compareImages(expectedImage.get(), SkIPoint(expectedOrigin), output)) {
+            if (!fRunner.compareImages(ctx,
+                                       expectedImage.get(),
+                                       SkIPoint(expectedOrigin),
+                                       output)) {
                 // If one iteration is incorrect, its failures will likely cascade to further
                 // actions so end now as the test has failed.
                 break;

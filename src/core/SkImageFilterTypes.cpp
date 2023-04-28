@@ -10,6 +10,7 @@
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkRectPriv.h"
+#include "src/core/SkSpecialSurface.h"
 
 // This exists to cover up issues where infinite precision would produce integers but float
 // math produces values just larger/smaller than an int and roundOut/In on bounds would produce
@@ -128,6 +129,36 @@ namespace skif {
 SkIRect RoundOut(SkRect r) { return r.makeInset(kRoundEpsilon, kRoundEpsilon).roundOut(); }
 
 SkIRect RoundIn(SkRect r) { return r.makeOutset(kRoundEpsilon, kRoundEpsilon).roundIn(); }
+
+sk_sp<SkSpecialSurface> Context::makeSurface(const SkISize& size,
+                                             const SkSurfaceProps* props) const {
+    if (!props) {
+        props = &fInfo.fSurfaceProps;
+    }
+
+    SkImageInfo imageInfo = SkImageInfo::Make(size,
+                                              fInfo.fColorType,
+                                              kPremul_SkAlphaType,
+                                              sk_ref_sp(fInfo.fColorSpace));
+
+#if defined(SK_GANESH)
+    if (fGaneshContext) {
+        // FIXME: Context should also store a surface origin that matches the source origin
+        return SkSpecialSurface::MakeRenderTarget(fGaneshContext,
+                                                  imageInfo,
+                                                  *props,
+                                                  fGaneshOrigin);
+    } else
+#endif
+#if defined(SK_GRAPHITE)
+    if (fGraphiteRecorder) {
+        return SkSpecialSurface::MakeGraphite(fGraphiteRecorder, imageInfo, *props);
+    } else
+#endif
+    {
+        return SkSpecialSurface::MakeRaster(imageInfo, *props);
+    }
+}
 
 bool Mapping::decomposeCTM(const SkMatrix& ctm, const SkImageFilter* filter,
                            const skif::ParameterSpace<SkPoint>& representativePt) {
@@ -284,8 +315,8 @@ bool LayerSpace<SkMatrix>::inverseMapRect(const LayerSpace<SkIRect>& r,
     }
 }
 
-sk_sp<SkSpecialImage> FilterResult::imageAndOffset(SkIPoint* offset) const {
-    auto [image, origin] = this->resolve(fLayerBounds);
+sk_sp<SkSpecialImage> FilterResult::imageAndOffset(const Context& ctx, SkIPoint* offset) const {
+    auto [image, origin] = this->resolve(ctx, fLayerBounds);
     *offset = SkIPoint(origin);
     return image;
 }
@@ -303,7 +334,7 @@ FilterResult FilterResult::applyCrop(const Context& ctx,
     if (is_nearly_integer_translation(fTransform)) {
         // We can lift the crop to earlier in the order of operations and apply it to the image
         // subset directly, which is handled inside this resolve() call.
-        return this->resolve(tightBounds);
+        return this->resolve(ctx, tightBounds);
     } else {
         // Otherwise cropping is the final operation to the FilterResult's image and can always be
         // applied by adjusting the layer bounds.
@@ -413,7 +444,7 @@ FilterResult FilterResult::applyTransform(const Context& ctx,
         // correctly evaluated. 'nextSampling' will always be 'sampling'.
         LayerSpace<SkIRect> tightBounds;
         if (transform.inverseMapRect(ctx.desiredOutput(), &tightBounds)) {
-            transformed = this->resolve(tightBounds);
+            transformed = this->resolve(ctx, tightBounds);
         }
 
         if (!transformed.fImage) {
@@ -439,6 +470,7 @@ FilterResult FilterResult::applyTransform(const Context& ctx,
 }
 
 std::pair<sk_sp<SkSpecialImage>, LayerSpace<SkIPoint>> FilterResult::resolve(
+        const Context& ctx,
         LayerSpace<SkIRect> dstBounds) const {
     // TODO(michaelludwig): Only valid for kDecal, although kClamp would only need 1 extra
     // pixel of padding so some restriction could happen. We also should skip the intersection if
@@ -473,10 +505,9 @@ std::pair<sk_sp<SkSpecialImage>, LayerSpace<SkIPoint>> FilterResult::resolve(
         return {fImage->makeSubset(subset), imageBounds.topLeft()};
     } // else fall through and attempt a draw
 
-    sk_sp<SkSpecialSurface> surface = fImage->makeSurface(fImage->colorType(),
-                                                          fImage->getColorSpace(),
-                                                          SkISize(dstBounds.size()),
-                                                          kPremul_SkAlphaType, {});
+    // Don't use context properties to avoid DMSAA on internal stages of filter evaluation.
+    SkSurfaceProps props = {};
+    sk_sp<SkSpecialSurface> surface = ctx.makeSurface(SkISize(dstBounds.size()), &props);
     if (!surface) {
         return {nullptr, {}};
     }
