@@ -27,9 +27,10 @@ static uint32_t next_id() {
 
 ComputeStep::ComputeStep(std::string_view name,
                          WorkgroupSize localDispatchSize,
-                         SkSpan<const ResourceDesc> resources)
+                         SkSpan<const ResourceDesc> resources,
+                         Flags baseFlags)
         : fUniqueID(next_id())
-        , fFlags(Flags::kNone)
+        , fFlags(baseFlags)
         , fName(name)
         , fResources(resources.begin(), resources.end())
         , fLocalDispatchSize(localDispatchSize) {
@@ -77,20 +78,44 @@ ComputeStep::ComputeStep(std::string_view name,
     }
 }
 
-void ComputeStep::prepareBuffer(
+void ComputeStep::prepareStorageBuffer(
         const DrawParams&, int, int, const ResourceDesc&, void*, size_t) const {
-    SK_ABORT("ComputeSteps using a mapped resource must override prepareBuffer()");
+    SK_ABORT("ComputeSteps that initialize a mapped storage buffer must override "
+             "prepareStorageBuffer()");
 }
 
-size_t ComputeStep::calculateBufferSize(const DrawParams&,
-                                        int resourceIndex,
-                                        const ResourceDesc&) const {
+void ComputeStep::prepareUniformBuffer(const DrawParams&,
+                                       int,
+                                       const ResourceDesc&,
+                                       UniformManager*) const {
+    SK_ABORT("ComputeSteps that initialize a uniform buffer must override prepareUniformBuffer()");
+}
+
+std::string ComputeStep::computeSkSL(const ResourceBindingRequirements&, int) const {
+    SK_ABORT("ComputeSteps must override computeSkSL() unless they support native shader source");
+    return "";
+}
+
+ComputeStep::NativeShaderSource ComputeStep::nativeShaderSource(NativeShaderFormat) const {
+    SK_ABORT("ComputeSteps that support native shader source must override nativeShaderSource()");
+    return {};
+}
+
+size_t ComputeStep::calculateBufferSize(const DrawParams&, int, const ResourceDesc&) const {
+    SK_ABORT("ComputeSteps that initialize a storage buffer must override calculateBufferSize()");
     return 0u;
 }
 
 std::tuple<SkISize, SkColorType> ComputeStep::calculateTextureParameters(
         const DrawParams&, int resourceIndex, const ResourceDesc&) const {
+    SK_ABORT("ComputeStep that initialize a texture must override calculateTextureParameters()");
     return {SkISize::MakeEmpty(), kUnknown_SkColorType};
+}
+
+WorkgroupSize ComputeStep::calculateGlobalDispatchSize(const DrawParams&) const {
+    SK_ABORT("ComputeSteps must override calculateGlobalDispatchSize() if it participates "
+             "in resource creation");
+    return WorkgroupSize();
 }
 
 }  // namespace skgpu::graphite
