@@ -455,8 +455,6 @@ bool VulkanCommandBuffer::onCopyBufferToBuffer(const Buffer* srcBuffer,
                                                const Buffer* dstBuffer,
                                                size_t dstOffset,
                                                size_t size) {
-    this->submitPipelineBarriers();
-
     auto vkSrcBuffer = static_cast<const VulkanBuffer*>(srcBuffer);
     auto vkDstBuffer = static_cast<const VulkanBuffer*>(dstBuffer);
 
@@ -468,6 +466,8 @@ bool VulkanCommandBuffer::onCopyBufferToBuffer(const Buffer* srcBuffer,
     region.srcOffset = srcOffset;
     region.dstOffset = dstOffset;
     region.size = size;
+
+    this->submitPipelineBarriers();
 
     VULKAN_CALL(fSharedContext->interface(),
                 CmdCopyBuffer(fPrimaryCommandBuffer,
@@ -484,8 +484,6 @@ bool VulkanCommandBuffer::onCopyTextureToBuffer(const Texture* texture,
                                                 const Buffer* buffer,
                                                 size_t bufferOffset,
                                                 size_t bufferRowBytes) {
-    this->submitPipelineBarriers();
-
     const VulkanTexture* srcTexture = static_cast<const VulkanTexture*>(texture);
     auto dstBuffer = static_cast<const VulkanBuffer*>(buffer);
     SkASSERT(dstBuffer->bufferUsageFlags() & VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -512,6 +510,13 @@ bool VulkanCommandBuffer::onCopyTextureToBuffer(const Texture* texture,
                                                            VK_ACCESS_TRANSFER_READ_BIT,
                                                            VK_PIPELINE_STAGE_TRANSFER_BIT,
                                                            false);
+    // Set current access mask for buffer
+    const_cast<VulkanBuffer*>(dstBuffer)->setBufferAccess(this,
+                                                          VK_ACCESS_TRANSFER_WRITE_BIT,
+                                                          VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                                          false);
+
+    this->submitPipelineBarriers();
 
     VULKAN_CALL(fSharedContext->interface(),
                 CmdCopyImageToBuffer(fPrimaryCommandBuffer,
@@ -527,8 +532,6 @@ bool VulkanCommandBuffer::onCopyBufferToTexture(const Buffer* buffer,
                                                 const Texture* texture,
                                                 const BufferTextureCopyData* copyData,
                                                 int count) {
-    this->submitPipelineBarriers();
-
     auto srcBuffer = static_cast<const VulkanBuffer*>(buffer);
     SkASSERT(srcBuffer->bufferUsageFlags() & VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     const VulkanTexture* dstTexture = static_cast<const VulkanTexture*>(texture);
@@ -563,6 +566,8 @@ bool VulkanCommandBuffer::onCopyBufferToTexture(const Buffer* buffer,
                                                            VK_PIPELINE_STAGE_TRANSFER_BIT,
                                                            false);
 
+    this->submitPipelineBarriers();
+
     VULKAN_CALL(fSharedContext->interface(),
             CmdCopyBufferToImage(fPrimaryCommandBuffer,
                                  srcBuffer->vkBuffer(),
@@ -580,8 +585,14 @@ bool VulkanCommandBuffer::onCopyTextureToTexture(const Texture* src,
     return false;
 }
 
-bool VulkanCommandBuffer::onSynchronizeBufferToCpu(const Buffer*, bool* outDidResultInWork) {
-    return false;
+bool VulkanCommandBuffer::onSynchronizeBufferToCpu(const Buffer* buffer, bool* outDidResultInWork) {
+    static_cast<const VulkanBuffer*>(buffer)->setBufferAccess(this,
+                                                              VK_ACCESS_HOST_READ_BIT,
+                                                              VK_PIPELINE_STAGE_HOST_BIT,
+                                                              false);
+
+    *outDidResultInWork = true;
+    return true;
 }
 
 bool VulkanCommandBuffer::onClearBuffer(const Buffer*, size_t offset, size_t size) {
