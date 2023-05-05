@@ -9,6 +9,7 @@
 
 #include "include/core/SkTypes.h"
 #include "include/private/SkSLDefines.h"
+#include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLModifiersPool.h"
 #include "src/sksl/SkSLPosition.h"
 #include "src/sksl/SkSLThreadContext.h"
@@ -63,8 +64,7 @@ SkSL::Variable* DSLWriter::Var(DSLVarBase& var) {
         if (var.storage() != SkSL::VariableStorage::kParameter) {
             var.fDeclaration = VarDeclaration::Convert(ThreadContext::Context(),
                                                        std::move(skslvar),
-                                                       var.fInitialValue.releaseIfPossible(),
-                                                       /*addToSymbolTable=*/false);
+                                                       var.fInitialValue.releaseIfPossible());
             if (var.fDeclaration) {
                 var.fVar = varPtr;
                 var.fInitialized = true;
@@ -121,10 +121,12 @@ void DSLWriter::AddVarDeclaration(DSLStatement& existing, DSLVar& additional) {
 }
 
 void DSLWriter::Reset() {
-    SymbolTable::Pop(&ThreadContext::SymbolTable());
-    SymbolTable::Push(&ThreadContext::SymbolTable());
+    SkSL::Context& context = ThreadContext::Context();
+
+    SymbolTable::Pop(&context.fSymbolTable);
+    SymbolTable::Push(&context.fSymbolTable);
     ThreadContext::ProgramElements().clear();
-    ThreadContext::GetModifiersPool()->clear();
+    context.fModifiersPool->clear();
 }
 
 } // namespace dsl

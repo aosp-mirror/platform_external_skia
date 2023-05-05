@@ -171,9 +171,8 @@ struct SkRasterPipeline_BinaryOpCtx {
 };
 
 struct SkRasterPipeline_TernaryOpCtx {
-    float *dst;
-    const float *src0;
-    const float *src1;
+    SkRPOffset dst;
+    SkRPOffset delta;
 };
 
 struct SkRasterPipeline_MatrixMultiplyCtx {
@@ -225,7 +224,7 @@ struct SkRasterPipeline_BranchIfEqualCtx : public SkRasterPipeline_BranchCtx {
 
 struct SkRasterPipeline_CaseOpCtx {
     int expectedValue;
-    int* ptr;  // points to a pair of adjacent I32s: {I32 actualValue, I32 defaultMask}
+    SkRPOffset offset;  // points to a pair of adjacent I32s: {I32 actualValue, I32 defaultMask}
 };
 
 struct SkRasterPipeline_TraceFuncCtx {

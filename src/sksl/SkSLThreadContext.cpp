@@ -44,13 +44,13 @@ ThreadContext::ThreadContext(SkSL::Compiler* compiler,
     fCompiler->fContext->fConfig = fConfig.get();
     fCompiler->fContext->fErrors = &fDefaultErrorReporter;
     fCompiler->fContext->fModule = module;
-    fCompiler->fSymbolTable = module->fSymbols;
+    fCompiler->fContext->fSymbolTable = module->fSymbols;
     this->setupSymbolTable();
 }
 
 ThreadContext::~ThreadContext() {
-    if (SymbolTable()) {
-        fCompiler->fSymbolTable = nullptr;
+    if (fCompiler->fContext->fSymbolTable) {
+        fCompiler->fContext->fSymbolTable = nullptr;
         fProgramElements.clear();
     } else {
         // We should only be here with a null symbol table if ReleaseProgram was called
@@ -66,10 +66,9 @@ ThreadContext::~ThreadContext() {
 
 void ThreadContext::setupSymbolTable() {
     SkSL::Context& context = *fCompiler->fContext;
-    SymbolTable::Push(&fCompiler->fSymbolTable, context.fConfig->fIsBuiltinCode);
+    SymbolTable::Push(&context.fSymbolTable, context.fConfig->fIsBuiltinCode);
 
-    SkSL::SymbolTable& symbolTable = *fCompiler->fSymbolTable;
-    symbolTable.markModuleBoundary();
+    context.fSymbolTable->markModuleBoundary();
 }
 
 SkSL::Context& ThreadContext::Context() {
@@ -78,10 +77,6 @@ SkSL::Context& ThreadContext::Context() {
 
 const SkSL::ProgramSettings& ThreadContext::Settings() {
     return Context().fConfig->fSettings;
-}
-
-std::shared_ptr<SkSL::SymbolTable>& ThreadContext::SymbolTable() {
-    return Compiler().fSymbolTable;
 }
 
 const SkSL::Modifiers* ThreadContext::Modifiers(const SkSL::Modifiers& modifiers) {

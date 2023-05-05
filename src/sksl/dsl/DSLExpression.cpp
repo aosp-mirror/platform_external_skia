@@ -95,15 +95,6 @@ void DSLExpression::swap(DSLExpression& other) {
     std::swap(fExpression, other.fExpression);
 }
 
-std::unique_ptr<SkSL::Expression> DSLExpression::release() {
-    SkASSERT(this->hasValue());
-    return std::move(fExpression);
-}
-
-std::unique_ptr<SkSL::Expression> DSLExpression::releaseIfPossible() {
-    return std::move(fExpression);
-}
-
 DSLType DSLExpression::type() const {
     if (!this->hasValue()) {
         return kVoid_Type;
@@ -159,8 +150,8 @@ DSLExpression DSLExpression::a(Position pos) {
 }
 
 DSLExpression DSLExpression::field(std::string_view name, Position pos) {
-    return DSLExpression(FieldAccess::Convert(ThreadContext::Context(), pos,
-            *ThreadContext::SymbolTable(), this->release(), name), pos);
+    return DSLExpression(FieldAccess::Convert(ThreadContext::Context(), pos, this->release(), name),
+                         pos);
 }
 
 DSLExpression DSLExpression::assign(DSLExpression right) {
@@ -171,14 +162,13 @@ DSLExpression DSLExpression::assign(DSLExpression right) {
 
 DSLExpression DSLExpression::operator[](DSLExpression right) {
     Position pos = this->position().rangeThrough(right.position());
-    return DSLExpression(IndexExpression::Convert(ThreadContext::Context(),
-                                                  *ThreadContext::SymbolTable(), pos,
+    return DSLExpression(IndexExpression::Convert(ThreadContext::Context(), pos,
                                                   this->release(), right.release()));
 }
 
 DSLExpression DSLExpression::index(DSLExpression index, Position pos) {
-    std::unique_ptr<SkSL::Expression> result = IndexExpression::Convert(ThreadContext::Context(),
-            *ThreadContext::SymbolTable(), pos, this->release(), index.release());
+    std::unique_ptr<SkSL::Expression> result = IndexExpression::Convert(
+            ThreadContext::Context(), pos, this->release(), index.release());
     return DSLExpression(std::move(result), pos);
 }
 

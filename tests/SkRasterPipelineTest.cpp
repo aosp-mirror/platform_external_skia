@@ -344,12 +344,14 @@ DEF_TEST(SkRasterPipeline_CaseOp, reporter) {
     }
 
     SkRasterPipeline_CaseOpCtx ctx;
-    ctx.ptr = caseOpData;
+    ctx.offset = 0;
     ctx.expectedValue = 2;
 
-    SkRasterPipeline_<256> p;
+    SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
+    SkRasterPipeline p(&alloc);
     p.append(SkRasterPipelineOp::load_src, initial);
-    p.append(SkRasterPipelineOp::case_op, &ctx);
+    p.append(SkRasterPipelineOp::set_base_pointer, &caseOpData[0]);
+    p.append(SkRasterPipelineOp::case_op, SkRPCtxUtils::Pack(ctx, &alloc));
     p.append(SkRasterPipelineOp::store_src, src);
     p.run(0,0,SkOpts::raster_pipeline_highp_stride,1);
 
@@ -2307,11 +2309,10 @@ DEF_TEST(SkRasterPipeline_MixTest, r) {
                 p->append(SkRasterPipelineOp::mix_4_floats, slots);
             }},
         {5, [&](SkRasterPipeline* p, SkArenaAlloc* alloc) {
-                auto* ctx = alloc->make<SkRasterPipeline_TernaryOpCtx>();
-                ctx->dst = &slots[0];
-                ctx->src0 = &slots[5 * N];
-                ctx->src1 = &slots[10 * N];
-                p->append(SkRasterPipelineOp::mix_n_floats, ctx);
+                SkRasterPipeline_TernaryOpCtx ctx;
+                ctx.dst = 0;
+                ctx.delta = 5 * N * sizeof(float);
+                p->append(SkRasterPipelineOp::mix_n_floats, SkRPCtxUtils::Pack(ctx, alloc));
             }},
     };
 
@@ -2331,6 +2332,7 @@ DEF_TEST(SkRasterPipeline_MixTest, r) {
         // Run the mix op over our data.
         SkArenaAlloc alloc(/*firstHeapAllocation=*/256);
         SkRasterPipeline p(&alloc);
+        p.append(SkRasterPipelineOp::set_base_pointer, &slots[0]);
         op.append(&p, &alloc);
         p.run(0,0,1,1);
 

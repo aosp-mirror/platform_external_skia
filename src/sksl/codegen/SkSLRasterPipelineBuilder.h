@@ -154,8 +154,8 @@ public:
     virtual bool appendColorFilter(int index) = 0;
     virtual bool appendBlender(int index) = 0;
 
-    virtual void toLinearSrgb() = 0;
-    virtual void fromLinearSrgb() = 0;
+    virtual void toLinearSrgb(const void* color) = 0;
+    virtual void fromLinearSrgb(const void* color) = 0;
 };
 
 class Program {
@@ -262,17 +262,17 @@ private:
     // must refer to an unbounded "apply_to_n_slots" stage, which must be immediately followed by
     // specializations for 1-4 slots.
     void appendAdjacentMultiSlotTernaryOp(skia_private::TArray<Stage>* pipeline,
-                                          SkArenaAlloc* alloc,
-                                          ProgramOp stage, float* dst,
-                                          const float* src0, const float* src1, int numSlots) const;
+                                          SkArenaAlloc* alloc, ProgramOp baseStage,
+                                          std::byte* basePtr, SkRPOffset dst, SkRPOffset src0,
+                                          SkRPOffset src1, int numSlots) const;
 
     // Appends a math operation having three inputs (dst, src0, src1) and one output (dst) to the
     // pipeline. The three inputs must be _immediately_ adjacent in memory. `baseStage` must refer
     // to an unbounded "apply_to_n_slots" stage. A TernaryOpCtx will be used to pass pointers to the
     // destination and sources; the delta between the each pointer implicitly gives the slot count.
     void appendAdjacentNWayTernaryOp(skia_private::TArray<Stage>* pipeline, SkArenaAlloc* alloc,
-                                     ProgramOp stage, float* dst,
-                                     const float* src0, const float* src1, int numSlots) const;
+                                     ProgramOp stage, std::byte* basePtr, SkRPOffset dst,
+                                     SkRPOffset src0, SkRPOffset src1, int numSlots) const;
 
     // Appends a stack_rewind op on platforms where it is needed (when SK_HAS_MUSTTAIL is not set).
     void appendStackRewind(skia_private::TArray<Stage>* pipeline) const;
@@ -654,11 +654,19 @@ public:
     }
 
     void invoke_to_linear_srgb() {
+        // The intrinsics accept a three-component value; add a fourth padding element (which
+        // will be ignored) since our RP ops deal in RGBA colors.
+        this->pad_stack(1);
         fInstructions.push_back({BuilderOp::invoke_to_linear_srgb, {}});
+        this->discard_stack(1);
     }
 
     void invoke_from_linear_srgb() {
+        // The intrinsics accept a three-component value; add a fourth padding element (which
+        // will be ignored) since our RP ops deal in RGBA colors.
+        this->pad_stack(1);
         fInstructions.push_back({BuilderOp::invoke_from_linear_srgb, {}});
+        this->discard_stack(1);
     }
 
     // Writes the current line number to the debug trace.

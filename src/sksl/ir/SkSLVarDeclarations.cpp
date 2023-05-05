@@ -20,7 +20,7 @@
 #include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/ir/SkSLLayout.h"
 #include "src/sksl/ir/SkSLModifiers.h"
-#include "src/sksl/ir/SkSLSymbolTable.h"
+#include "src/sksl/ir/SkSLSymbolTable.h"  // IWYU pragma: keep
 #include "src/sksl/ir/SkSLType.h"
 
 #include <cstddef>
@@ -393,8 +393,7 @@ bool VarDeclaration::ErrorCheckAndCoerce(const Context& context, const Variable&
 
 std::unique_ptr<Statement> VarDeclaration::Convert(const Context& context,
                                                    std::unique_ptr<Variable> var,
-                                                   std::unique_ptr<Expression> value,
-                                                   bool addToSymbolTable) {
+                                                   std::unique_ptr<Expression> value) {
     if (!ErrorCheckAndCoerce(context, *var, value)) {
         return nullptr;
     }
@@ -410,11 +409,10 @@ std::unique_ptr<Statement> VarDeclaration::Convert(const Context& context,
         return nullptr;
     }
 
-    SymbolTable* symbols = ThreadContext::SymbolTable().get();
     if (var->storage() == Variable::Storage::kGlobal ||
         var->storage() == Variable::Storage::kInterfaceBlock) {
         // Check if this globally-scoped variable name overlaps an existing symbol name.
-        if (symbols->find(var->name())) {
+        if (context.fSymbolTable->find(var->name())) {
             context.fErrors->error(var->fPosition,
                                    "symbol '" + std::string(var->name()) + "' was already defined");
             return nullptr;
@@ -435,11 +433,7 @@ std::unique_ptr<Statement> VarDeclaration::Convert(const Context& context,
         }
     }
 
-    if (addToSymbolTable) {
-        symbols->add(std::move(var));
-    } else {
-        symbols->takeOwnershipOfSymbol(std::move(var));
-    }
+    context.fSymbolTable->takeOwnershipOfSymbol(std::move(var));
     return varDecl;
 }
 
