@@ -293,6 +293,29 @@ static const char* get_attr(const SkDOM* dom,
     return get_unique_child_text(*dom, node, name);
 }
 
+// Perform get_attr and parse the result as a bool.
+static bool get_attr_bool(const SkDOM* dom,
+                          const SkDOM::Node* node,
+                          const std::string& prefix,
+                          const std::string& key,
+                          bool* outValue) {
+    const char* attr = get_attr(dom, node, prefix, key);
+    if (!attr) {
+        return false;
+    }
+    switch (SkParse::FindList(attr, "False,True")) {
+        case 0:
+            *outValue = false;
+            return true;
+        case 1:
+            *outValue = true;
+            return true;
+        default:
+            break;
+    }
+    return false;
+}
+
 // Perform get_attr and parse the result as an int32_t.
 static bool get_attr_int32(const SkDOM* dom,
                            const SkDOM::Node* node,
@@ -329,22 +352,76 @@ static bool get_attr_float(const SkDOM* dom,
 
 // Perform get_attr and parse the result as three comma-separated floats. Return the result as an
 // SkColor4f with the alpha component set to 1.
+static bool get_attr_float3_as_list(const SkDOM* dom,
+                                    const SkDOM::Node* node,
+                                    const std::string& prefix,
+                                    const std::string& key,
+                                    SkColor4f* outValue) {
+    const auto name = prefix + ":" + key;
+
+    // Fail if there are multiple children with childName.
+    if (dom->countChildren(node, name.c_str()) != 1) {
+        return false;
+    }
+    // Find the child.
+    const auto* child = dom->getFirstChild(node, name.c_str());
+    if (!child) {
+        return false;
+    }
+
+    // Search for the rdf:Seq child.
+    const auto* seq = dom->getFirstChild(child, "rdf:Seq");
+    if (!seq) {
+        return false;
+    }
+
+    size_t count = 0;
+    SkScalar values[3] = {0.f, 0.f, 0.f};
+    for (const auto* liNode = dom->getFirstChild(seq, "rdf:li"); liNode;
+         liNode = dom->getNextSibling(liNode, "rdf:li")) {
+        if (count > 2) {
+            SkCodecPrintf("Too many items in list.\n");
+            return false;
+        }
+        if (dom->countChildren(liNode) != 1) {
+            SkCodecPrintf("Item can only have one child.\n");
+            return false;
+        }
+        const auto* liTextNode = dom->getFirstChild(liNode);
+        if (dom->getType(liTextNode) != SkDOM::kText_Type) {
+            SkCodecPrintf("Item's only child must be text.\n");
+            return false;
+        }
+        const char* liText = dom->getName(liTextNode);
+        if (!liText) {
+            SkCodecPrintf("Failed to get item's text.\n");
+            return false;
+        }
+        if (!SkParse::FindScalar(liText, values + count)) {
+            SkCodecPrintf("Failed to parse item's text to float.\n");
+            return false;
+        }
+        count += 1;
+    }
+    if (count < 3) {
+        SkCodecPrintf("List didn't have enough items.\n");
+        return false;
+    }
+    *outValue = {values[0], values[1], values[2], 1.f};
+    return true;
+}
+
 static bool get_attr_float3(const SkDOM* dom,
                             const SkDOM::Node* node,
                             const std::string& prefix,
                             const std::string& key,
                             SkColor4f* outValue) {
-    const char* attr = get_attr(dom, node, prefix, key);
-    if (!attr) {
-        return false;
-    }
-    SkScalar values[3] = {0.f, 0.f, 0.f};
-    if (SkParse::FindScalars(attr, values, 3)) {
-        *outValue = {values[0], values[1], values[2], 1.f};
+    if (get_attr_float3_as_list(dom, node, prefix, key, outValue)) {
         return true;
     }
-    if (SkParse::FindScalars(attr, values, 1)) {
-        *outValue = {values[0], values[0], values[0], 1.f};
+    SkScalar value = -1.0;
+    if (get_attr_float(dom, node, prefix, key, &value)) {
+        *outValue = {value, value, value, 1.f};
         return true;
     }
     return false;
@@ -531,7 +608,7 @@ bool SkJpegXmp::getContainerGainmapLocation(size_t* outOffset, size_t* outSize) 
     }
 
     // Iterate through the items in the Container:Directory's sequence. Keep a running sum of the
-    // Item:Length of all items that appear before the RecoveryMap.
+    // Item:Length of all items that appear before the GainMap.
     bool isFirstItem = true;
     size_t offset = 0;
     for (const auto* li = dom->getFirstChild(seq, "rdf:li"); li;
@@ -590,13 +667,13 @@ bool SkJpegXmp::getContainerGainmapLocation(size_t* outOffset, size_t* outSize) 
                 return false;
             }
             // If this is not the recovery map, then read past it.
-            if (strcmp(itemSemantic, "RecoveryMap") != 0) {
+            if (strcmp(itemSemantic, "GainMap") != 0) {
                 offset += length;
                 continue;
             }
             // The recovery map must have mime type image/jpeg in this implementation.
             if (strcmp(itemMime, "image/jpeg") != 0) {
-                SkCodecPrintf("RecoveryMap does not report that it is image/jpeg.\n");
+                SkCodecPrintf("GainMap does not report that it is image/jpeg.\n");
                 return false;
             }
 
@@ -670,6 +747,7 @@ bool SkJpegXmp::getGainmapInfoHDRGM(SkGainmapInfo* outGainmapInfo) const {
     const char* hdrgmPrefix = get_namespace_prefix(namespaces[0]);
 
     // Initialize the parameters to their defaults.
+    bool baseRenditionIsHDR = false;
     SkColor4f gainMapMin = {1.f, 1.f, 1.f, 1.f};
     SkColor4f gainMapMax = {2.f, 2.f, 2.f, 1.f};
     SkColor4f gamma = {1.f, 1.f, 1.f, 1.f};
@@ -679,7 +757,7 @@ bool SkJpegXmp::getGainmapInfoHDRGM(SkGainmapInfo* outGainmapInfo) const {
     SkScalar hdrCapacityMax = 2.f;
 
     // Read all parameters that are present.
-    const char* baseRendition = get_attr(dom, node, hdrgmPrefix, "BaseRendition");
+    get_attr_bool(dom, node, hdrgmPrefix, "BaseRenditionIsHDR", &baseRenditionIsHDR);
     get_attr_float3(dom, node, hdrgmPrefix, "GainMapMin", &gainMapMin);
     get_attr_float3(dom, node, hdrgmPrefix, "GainMapMax", &gainMapMax);
     get_attr_float3(dom, node, hdrgmPrefix, "Gamma", &gamma);
@@ -698,12 +776,12 @@ bool SkJpegXmp::getGainmapInfoHDRGM(SkGainmapInfo* outGainmapInfo) const {
                                         sk_float_exp(gainMapMax.fG * kLog2),
                                         sk_float_exp(gainMapMax.fB * kLog2),
                                         1.f};
-    outGainmapInfo->fGainmapGamma = gamma;
+    outGainmapInfo->fGainmapGamma = {1.f / gamma.fR, 1.f / gamma.fG, 1.f / gamma.fB, 1.f};
     outGainmapInfo->fEpsilonSdr = offsetSdr;
     outGainmapInfo->fEpsilonHdr = offsetHdr;
     outGainmapInfo->fDisplayRatioSdr = sk_float_exp(hdrCapacityMin * kLog2);
     outGainmapInfo->fDisplayRatioHdr = sk_float_exp(hdrCapacityMax * kLog2);
-    if (baseRendition && !strcmp(baseRendition, "HDR")) {
+    if (baseRenditionIsHDR) {
         outGainmapInfo->fBaseImageType = SkGainmapInfo::BaseImageType::kHDR;
     } else {
         outGainmapInfo->fBaseImageType = SkGainmapInfo::BaseImageType::kSDR;

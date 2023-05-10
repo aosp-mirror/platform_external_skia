@@ -57,6 +57,7 @@ if (skia_enable_tools) {
       "../..:tool_utils",
       "../../modules/svg:svg",
     ]
+    defines = [ "SK_GANESH" ]
   }
 }
 
@@ -70,6 +71,7 @@ component("debugger") {
     "../../tools/debugger/DrawCommand.cpp",
     "../../tools/debugger/JsonWriteBuffer.cpp",
   ]
+  defines = [ "SK_GANESH" ]
 }
 
 action("create_notomono_cpp") {
@@ -357,9 +359,9 @@ skia_wasm_lib("canvaskit") {
   if (skia_canvaskit_enable_skp_serialization) {
     defines += [ "CK_SERIALIZE_SKP" ]
   }
-  if (skia_enable_gpu) {
+  if (skia_enable_ganesh) {
     defines += [
-      "SK_SUPPORT_GPU=1",
+      "SK_GANESH",
       "SK_DISABLE_LEGACY_SHADERCONTEXT",
     ]
     if (skia_canvaskit_enable_webgl) {
@@ -375,10 +377,7 @@ skia_wasm_lib("canvaskit") {
       ]
     }
   } else {
-    defines += [
-      "SK_SUPPORT_GPU=0",
-      "SK_ENABLE_SKSL",
-    ]
+    defines += [ "SK_ENABLE_SKSL" ]
   }
 
   if (skia_canvaskit_enable_pathops) {
