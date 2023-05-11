@@ -28,9 +28,6 @@
 #include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/SkSLUtil.h"
 #include "src/sksl/analysis/SkSLProgramUsage.h"
-#include "src/sksl/dsl/DSLExpression.h"
-#include "src/sksl/dsl/DSLType.h"
-#include "src/sksl/dsl/DSLVar.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBlock.h"
 #include "src/sksl/ir/SkSLConstructor.h"
@@ -56,6 +53,7 @@
 #include "src/sksl/ir/SkSLIndexExpression.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
 #include "src/sksl/ir/SkSLLiteral.h"
+#include "src/sksl/ir/SkSLPoison.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLProgram.h"
@@ -1564,13 +1562,15 @@ SpvId SPIRVCodeGenerator::writeSpecialIntrinsic(const FunctionCall& c, SpecialIn
             this->writeWord(fn, out);
             if (!fProgram.fConfig->fSettings.fForceNoRTFlip) {
                 this->addRTFlipUniform(c.fPosition);
-                using namespace dsl;
-                DSLExpression rtFlip(
-                        ThreadContext::Compiler().convertIdentifier(Position(), SKSL_RTFLIP_NAME));
-                SpvId rtFlipY = this->vectorize(*rtFlip.y().release(), callType.columns(), out);
+                ComponentArray componentArray;
+                for (int index = 0; index < callType.columns(); ++index) {
+                    componentArray.push_back(SwizzleComponent::Y);
+                }
+                SpvId rtFlipY = this->writeSwizzle(*this->identifier(SKSL_RTFLIP_NAME),
+                                                   componentArray, out);
                 SpvId flipped = this->nextId(&callType);
-                this->writeInstruction(
-                        SpvOpFMul, this->getType(callType), flipped, result, rtFlipY, out);
+                this->writeInstruction(SpvOpFMul, this->getType(callType), flipped, result,
+                                       rtFlipY, out);
                 result = flipped;
             }
             break;
@@ -2521,6 +2521,12 @@ std::unique_ptr<SPIRVCodeGenerator::LValue> SPIRVCodeGenerator::getLValue(const 
     }
 }
 
+std::unique_ptr<Expression> SPIRVCodeGenerator::identifier(std::string_view name) {
+    std::unique_ptr<Expression> expr = ThreadContext::Compiler().convertIdentifier(Position(),name);
+    return expr ? std::move(expr)
+                : Poison::Make(Position(), fContext);
+}
+
 SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, OutputStream& out) {
     const Variable* variable = ref.variable();
     switch (variable->modifiers().fLayout.fBuiltin) {
@@ -2528,41 +2534,34 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
             // Down below, we rewrite raw references to sk_FragCoord with expressions that reference
             // DEVICE_FRAGCOORDS_BUILTIN. This is a fake variable that means we need to directly
             // access the fragcoord; do so now.
-            dsl::DSLGlobalVar fragCoord("sk_FragCoord");
-            return this->getLValue(*dsl::DSLExpression(fragCoord).release(), out)->load(out);
+            return this->getLValue(*this->identifier("sk_FragCoord"), out)->load(out);
         }
         case DEVICE_CLOCKWISE_BUILTIN: {
             // Down below, we rewrite raw references to sk_Clockwise with expressions that reference
             // DEVICE_CLOCKWISE_BUILTIN. This is a fake variable that means we need to directly
             // access front facing; do so now.
-            dsl::DSLGlobalVar clockwise("sk_Clockwise");
-            return this->getLValue(*dsl::DSLExpression(clockwise).release(), out)->load(out);
+            return this->getLValue(*this->identifier("sk_Clockwise"), out)->load(out);
         }
         case SK_SECONDARYFRAGCOLOR_BUILTIN: {
             // sk_SecondaryFragColor corresponds to gl_SecondaryFragColorEXT, which isn't supposed
             // to appear in a SPIR-V program (it's only valid in ES2). Report an error.
             fContext.fErrors->error(ref.fPosition,
-                    "sk_SecondaryFragColor is not allowed in SPIR-V");
+                                    "sk_SecondaryFragColor is not allowed in SPIR-V");
             return NA;
         }
         case SK_FRAGCOORD_BUILTIN: {
             if (fProgram.fConfig->fSettings.fForceNoRTFlip) {
-                dsl::DSLGlobalVar fragCoord("sk_FragCoord");
-                return this->getLValue(*dsl::DSLExpression(fragCoord).release(), out)->load(out);
+                return this->getLValue(*this->identifier("sk_FragCoord"), out)->load(out);
             }
 
             // Handle inserting use of uniform to flip y when referencing sk_FragCoord.
             this->addRTFlipUniform(ref.fPosition);
             // Use sk_RTAdjust to compute the flipped coordinate
-            using namespace dsl;
-            const char* DEVICE_COORDS_NAME = "$device_FragCoords";
-            SymbolTable& symbols = *fProgram.fSymbols;
             // Use a uniform to flip the Y coordinate. The new expression will be written in
             // terms of $device_FragCoords, which is a fake variable that means "access the
             // underlying fragcoords directly without flipping it".
-            DSLExpression rtFlip(ThreadContext::Compiler().convertIdentifier(Position(),
-                    SKSL_RTFLIP_NAME));
-            if (!symbols.find(DEVICE_COORDS_NAME)) {
+            static constexpr char DEVICE_COORDS_NAME[] = "$device_FragCoords";
+            if (!fProgram.fSymbols->find(DEVICE_COORDS_NAME)) {
                 AutoAttachPoolToThread attach(fProgram.fPool.get());
                 Modifiers modifiers;
                 modifiers.fLayout.fBuiltin = DEVICE_FRAGCOORDS_BUILTIN;
@@ -2574,35 +2573,45 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
                                                             /*builtin=*/true,
                                                             Variable::Storage::kGlobal);
                 fSPIRVBonusVariables.add(coordsVar.get());
-                symbols.add(std::move(coordsVar));
+                fProgram.fSymbols->add(std::move(coordsVar));
             }
-            DSLGlobalVar deviceCoord(DEVICE_COORDS_NAME);
-            std::unique_ptr<Expression> rtFlipSkSLExpr = rtFlip.release();
-            DSLExpression x = DSLExpression(rtFlipSkSLExpr->clone()).x();
-            DSLExpression y = DSLExpression(std::move(rtFlipSkSLExpr)).y();
-            return this->writeExpression(*dsl::Float4(deviceCoord.x(),
-                                                      std::move(x) + std::move(y) * deviceCoord.y(),
-                                                      deviceCoord.z(),
-                                                      deviceCoord.w()).release(),
-                                         out);
+            std::unique_ptr<Expression> deviceCoord = this->identifier(DEVICE_COORDS_NAME);
+            std::unique_ptr<Expression> rtFlip = this->identifier(SKSL_RTFLIP_NAME);
+            SpvId rtFlipX = this->writeSwizzle(*rtFlip, {SwizzleComponent::X}, out);
+            SpvId rtFlipY = this->writeSwizzle(*rtFlip, {SwizzleComponent::Y}, out);
+            SpvId deviceCoordX  = this->writeSwizzle(*deviceCoord, {SwizzleComponent::X}, out);
+            SpvId deviceCoordY  = this->writeSwizzle(*deviceCoord, {SwizzleComponent::Y}, out);
+            SpvId deviceCoordZW = this->writeSwizzle(*deviceCoord, {SwizzleComponent::Z,
+                                                                    SwizzleComponent::W}, out);
+            // Compute `flippedY = u_RTFlip.y * $device_FragCoords.y`.
+            SpvId flippedY = this->writeBinaryExpression(
+                                     *fContext.fTypes.fFloat, rtFlipY, OperatorKind::STAR,
+                                     *fContext.fTypes.fFloat, deviceCoordY,
+                                     *fContext.fTypes.fFloat, out);
+
+            // Compute `flippedY = u_RTFlip.x + flippedY`.
+            flippedY = this->writeBinaryExpression(
+                               *fContext.fTypes.fFloat, rtFlipX, OperatorKind::PLUS,
+                               *fContext.fTypes.fFloat, flippedY,
+                               *fContext.fTypes.fFloat, out);
+
+            // Return `float4(deviceCoord.x, flippedY, deviceCoord.zw)`.
+            return this->writeOpCompositeConstruct(*fContext.fTypes.fFloat4,
+                                                   {deviceCoordX, flippedY, deviceCoordZW},
+                                                   out);
         }
         case SK_CLOCKWISE_BUILTIN: {
             if (fProgram.fConfig->fSettings.fForceNoRTFlip) {
-                dsl::DSLGlobalVar clockwise("sk_Clockwise");
-                return this->getLValue(*dsl::DSLExpression(clockwise).release(), out)->load(out);
+                return this->getLValue(*this->identifier("sk_Clockwise"), out)->load(out);
             }
 
-            // Handle flipping sk_Clockwise.
+            // Apply RTFlip to sk_Clockwise.
             this->addRTFlipUniform(ref.fPosition);
-            using namespace dsl;
-            const char* DEVICE_CLOCKWISE_NAME = "$device_Clockwise";
-            SymbolTable& symbols = *fProgram.fSymbols;
             // Use a uniform to flip the Y coordinate. The new expression will be written in
             // terms of $device_Clockwise, which is a fake variable that means "access the
             // underlying FrontFacing directly".
-            DSLExpression rtFlip(ThreadContext::Compiler().convertIdentifier(Position(),
-                    SKSL_RTFLIP_NAME));
-            if (!symbols.find(DEVICE_CLOCKWISE_NAME)) {
+            static constexpr char DEVICE_CLOCKWISE_NAME[] = "$device_Clockwise";
+            if (!fProgram.fSymbols->find(DEVICE_CLOCKWISE_NAME)) {
                 AutoAttachPoolToThread attach(fProgram.fPool.get());
                 Modifiers modifiers;
                 modifiers.fLayout.fBuiltin = DEVICE_CLOCKWISE_BUILTIN;
@@ -2615,13 +2624,27 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
                         /*builtin=*/true,
                         Variable::Storage::kGlobal);
                 fSPIRVBonusVariables.add(clockwiseVar.get());
-                symbols.add(std::move(clockwiseVar));
+                fProgram.fSymbols->add(std::move(clockwiseVar));
             }
-            DSLGlobalVar deviceClockwise(DEVICE_CLOCKWISE_NAME);
-            // FrontFacing in Vulkan is defined in terms of a top-down render target. In skia,
+            // FrontFacing in Vulkan is defined in terms of a top-down render target. In Skia,
             // we use the default convention of "counter-clockwise face is front".
-            return this->writeExpression(*(LogicalXor(rtFlip.y() > 0, deviceClockwise).release()),
-                                         out);
+
+            // Compute `positiveRTFlip = (rtFlip.y > 0)`.
+            std::unique_ptr<Expression> rtFlip = this->identifier(SKSL_RTFLIP_NAME);
+            SpvId rtFlipY = this->writeSwizzle(*rtFlip, {SwizzleComponent::Y}, out);
+            SpvId zero = this->writeLiteral(0.0, *fContext.fTypes.fFloat);
+            SpvId positiveRTFlip = this->writeBinaryExpression(
+                                           *fContext.fTypes.fFloat, rtFlipY, OperatorKind::GT,
+                                           *fContext.fTypes.fFloat, zero,
+                                           *fContext.fTypes.fBool, out);
+
+            // Compute `positiveRTFlip ^^ $device_Clockwise`.
+            std::unique_ptr<Expression> deviceClockwise = this->identifier(DEVICE_CLOCKWISE_NAME);
+            SpvId deviceClockwiseID = this->writeExpression(*deviceClockwise, out);
+            return this->writeBinaryExpression(
+                           *fContext.fTypes.fBool, positiveRTFlip, OperatorKind::LOGICALXOR,
+                           *fContext.fTypes.fBool, deviceClockwiseID,
+                           *fContext.fTypes.fBool, out);
         }
         default: {
             // Constant-propagate variables that have a known compile-time value.
@@ -2643,13 +2666,12 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
                 SkASSERT(imgPtr);
                 SkASSERT(samplerPtr);
 
-                SpvId img = this->writeOpLoad(
-                        this->getType((*p)->fTexture->type()), Precision::kDefault, *imgPtr, out);
+                SpvId img = this->writeOpLoad(this->getType((*p)->fTexture->type()),
+                                              Precision::kDefault, *imgPtr, out);
                 SpvId sampler = this->writeOpLoad(this->getType((*p)->fSampler->type()),
                                                   Precision::kDefault,
                                                   *samplerPtr,
                                                   out);
-
                 SpvId result = this->nextId(nullptr);
                 this->writeInstruction(SpvOpSampledImage,
                                        this->getType(variable->type()),
@@ -2657,7 +2679,6 @@ SpvId SPIRVCodeGenerator::writeVariableReference(const VariableReference& ref, O
                                        img,
                                        sampler,
                                        out);
-
                 return result;
             }
 
@@ -2682,23 +2703,30 @@ SpvId SPIRVCodeGenerator::writeFieldAccess(const FieldAccess& f, OutputStream& o
     return getLValue(f, out)->load(out);
 }
 
-SpvId SPIRVCodeGenerator::writeSwizzle(const Swizzle& swizzle, OutputStream& out) {
-    SpvId base = this->writeExpression(*swizzle.base(), out);
-    size_t count = swizzle.components().size();
+SpvId SPIRVCodeGenerator::writeSwizzle(const Expression& baseExpr,
+                                       const ComponentArray& components,
+                                       OutputStream& out) {
+    size_t count = components.size();
+    const Type& type = baseExpr.type().componentType().toCompound(fContext, count, /*rows=*/1);
+    SpvId base = this->writeExpression(baseExpr, out);
     if (count == 1) {
-        return this->writeOpCompositeExtract(swizzle.type(), base, swizzle.components()[0], out);
+        return this->writeOpCompositeExtract(type, base, components[0], out);
     }
 
-    SpvId result = this->nextId(&swizzle.type());
+    SpvId result = this->nextId(&type);
     this->writeOpCode(SpvOpVectorShuffle, 5 + (int32_t) count, out);
-    this->writeWord(this->getType(swizzle.type()), out);
+    this->writeWord(this->getType(type), out);
     this->writeWord(result, out);
     this->writeWord(base, out);
     this->writeWord(base, out);
-    for (int component : swizzle.components()) {
+    for (int component : components) {
         this->writeWord(component, out);
     }
     return result;
+}
+
+SpvId SPIRVCodeGenerator::writeSwizzle(const Swizzle& swizzle, OutputStream& out) {
+    return this->writeSwizzle(*swizzle.base(), swizzle.components(), out);
 }
 
 SpvId SPIRVCodeGenerator::writeBinaryOperation(const Type& resultType,
@@ -4050,7 +4078,9 @@ SPIRVCodeGenerator::EntrypointAdapter SPIRVCodeGenerator::writeEntrypointAdapter
                     main.parameters()[0]->type().description() + "' to main()");
             return {};
         }
-        args.push_back(dsl::Float2(0).release());
+        double kZero[2] = {0.0, 0.0};
+        args.push_back(ConstructorCompound::MakeFromConstants(fContext, Position{},
+                                                              *fContext.fTypes.fFloat2, kZero));
     }
     auto callMainFn = std::make_unique<FunctionCall>(Position(), &main.returnType(), &main,
                                                      std::move(args));
