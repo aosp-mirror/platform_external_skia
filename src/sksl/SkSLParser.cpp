@@ -27,6 +27,8 @@
 #include "src/sksl/ir/SkSLDiscardStatement.h"
 #include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLExtension.h"
+#include "src/sksl/ir/SkSLFieldAccess.h"
 #include "src/sksl/ir/SkSLForStatement.h"
 #include "src/sksl/ir/SkSLFunctionCall.h"
 #include "src/sksl/ir/SkSLIfStatement.h"
@@ -45,6 +47,7 @@
 #include "src/sksl/ir/SkSLSwizzle.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
 #include "src/sksl/ir/SkSLTernaryExpression.h"
+#include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLVariable.h"
 
 #include <algorithm>
@@ -376,6 +379,60 @@ void Parser::declarations() {
     }
 }
 
+/* DIRECTIVE(#extension) IDENTIFIER COLON IDENTIFIER NEWLINE */
+void Parser::extensionDirective(Position start) {
+    Token name;
+    if (!this->expectIdentifier(&name)) {
+        return;
+    }
+    if (!this->expect(Token::Kind::TK_COLON, "':'")) {
+        return;
+    }
+    Token behavior;
+    if (!this->expect(Token::Kind::TK_IDENTIFIER, "an identifier", &behavior)) {
+        return;
+    }
+    // We expect a newline immediately after `#extension name : behavior`.
+    if (this->expectNewline()) {
+        std::unique_ptr<SkSL::Extension> ext = Extension::Convert(ThreadContext::Context(),
+                                                                  this->rangeFrom(start),
+                                                                  this->text(name),
+                                                                  this->text(behavior));
+        if (ext) {
+            ThreadContext::ProgramElements().push_back(std::move(ext));
+        }
+    } else {
+        this->error(start, "invalid #extension directive");
+    }
+}
+
+/* DIRECTIVE(#version) INTLITERAL NEWLINE */
+void Parser::versionDirective(Position start, bool allowVersion) {
+    if (!allowVersion) {
+        this->error(start, "#version directive must appear before anything else");
+        return;
+    }
+    SKSL_INT version;
+    if (!this->intLiteral(&version)) {
+        return;
+    }
+    switch (version) {
+        case 100:
+            ThreadContext::GetProgramConfig()->fRequiredSkSLVersion = Version::k100;
+            break;
+        case 300:
+            ThreadContext::GetProgramConfig()->fRequiredSkSLVersion = Version::k300;
+            break;
+        default:
+            this->error(start, "unsupported version number");
+            return;
+    }
+    // We expect a newline after a #version directive.
+    if (!this->expectNewline()) {
+        this->error(start, "invalid #version directive");
+    }
+}
+
 /* DIRECTIVE(#extension) IDENTIFIER COLON IDENTIFIER NEWLINE |
    DIRECTIVE(#version) INTLITERAL NEWLINE */
 void Parser::directive(bool allowVersion) {
@@ -384,60 +441,13 @@ void Parser::directive(bool allowVersion) {
         return;
     }
     std::string_view text = this->text(start);
-    const bool allowExtensions = !ProgramConfig::IsRuntimeEffect(fKind);
-    if (text == "#extension" && allowExtensions) {
-        Token name;
-        if (!this->expectIdentifier(&name)) {
-            return;
-        }
-        if (!this->expect(Token::Kind::TK_COLON, "':'")) {
-            return;
-        }
-        Token behavior;
-        if (!this->expect(Token::Kind::TK_IDENTIFIER, "an identifier", &behavior)) {
-            return;
-        }
-        std::string_view behaviorText = this->text(behavior);
-        if (behaviorText != "disable") {
-            if (behaviorText == "require" || behaviorText == "enable" || behaviorText == "warn") {
-                // We don't currently do anything different between require, enable, and warn
-                dsl::AddExtension(this->text(name));
-            } else {
-                this->error(behavior, "expected 'require', 'enable', 'warn', or 'disable'");
-            }
-        }
-
-        // We expect a newline after an #extension directive.
-        if (!this->expectNewline()) {
-            this->error(start, "invalid #extension directive");
-        }
-    } else if (text == "#version") {
-        if (!allowVersion) {
-            this->error(start, "#version directive must appear before anything else");
-            return;
-        }
-        SKSL_INT version;
-        if (!this->intLiteral(&version)) {
-            return;
-        }
-        switch (version) {
-            case 100:
-                ThreadContext::GetProgramConfig()->fRequiredSkSLVersion = Version::k100;
-                break;
-            case 300:
-                ThreadContext::GetProgramConfig()->fRequiredSkSLVersion = Version::k300;
-                break;
-            default:
-                this->error(start, "unsupported version number");
-                return;
-        }
-        // We expect a newline after a #version directive.
-        if (!this->expectNewline()) {
-            this->error(start, "invalid #version directive");
-        }
-    } else {
-        this->error(start, "unsupported directive '" + std::string(this->text(start)) + "'");
+    if (text == "#extension") {
+        return this->extensionDirective(this->position(start));
     }
+    if (text == "#version") {
+        return this->versionDirective(this->position(start), allowVersion);
+    }
+    this->error(start, "unsupported directive '" + std::string(this->text(start)) + "'");
 }
 
 bool Parser::modifiersDeclarationEnd(Position pos, const dsl::DSLModifiers& mods) {
@@ -534,7 +544,7 @@ bool Parser::functionDeclarationEnd(Position start,
     if (hasFunctionBody) {
         AutoSymbolTable symbols(this);
         for (DSLParameter* var : parameterPointers) {
-            if (!var->name().empty()) {
+            if (!var->fName.empty()) {
                 this->addToSymbolTable(*var);
             }
         }
@@ -675,7 +685,7 @@ DSLStatement Parser::localVarDeclarationEnd(Position pos,
     }
     DSLVar first(mods, type, this->text(name), std::move(initializer), this->rangeFrom(pos),
                  this->position(name));
-    DSLStatement result = Declare(first);
+    DSLStatement result = DSLWriter::Declaration(first);
     this->addToSymbolTable(first);
 
     while (this->checkNext(Token::Kind::TK_COMMA)) {
@@ -771,7 +781,7 @@ DSLType Parser::structDeclaration() {
     if (!depth.increase()) {
         return DSLType(nullptr);
     }
-    TArray<DSLField> fields;
+    TArray<SkSL::Field> fields;
     THashSet<std::string_view> fieldNames;
     while (!this->checkNext(Token::Kind::TK_RBRACE)) {
         Token fieldStart = this->peek();
@@ -802,10 +812,10 @@ DSLType Parser::structDeclaration() {
 
             std::string_view nameText = this->text(memberName);
             if (!fieldNames.contains(nameText)) {
-                fields.push_back(DSLField(modifiers,
-                                          std::move(actualType),
-                                          nameText,
-                                          this->rangeFrom(fieldStart)));
+                fields.push_back(SkSL::Field(this->rangeFrom(fieldStart),
+                                             modifiers.fModifiers,
+                                             nameText,
+                                             &actualType.skslType()));
                 fieldNames.add(nameText);
             } else {
                 this->error(memberName, "field '" + std::string(nameText) +
@@ -821,7 +831,7 @@ DSLType Parser::structDeclaration() {
         this->error(this->rangeFrom(start), "struct '" + std::string(this->text(name)) +
                 "' must contain at least one field");
     }
-    return dsl::Struct(this->text(name), SkSpan(fields), this->rangeFrom(start));
+    return dsl::Struct(this->text(name), std::move(fields), this->rangeFrom(start));
 }
 
 /* structDeclaration ((IDENTIFIER varDeclarationEnd) | SEMICOLON) */
@@ -1138,7 +1148,7 @@ bool Parser::interfaceBlock(const dsl::DSLModifiers& modifiers) {
         return false;
     }
     this->nextToken();
-    TArray<DSLField> fields;
+    TArray<SkSL::Field> fields;
     THashSet<std::string_view> fieldNames;
     while (!this->checkNext(Token::Kind::TK_RBRACE)) {
         Position fieldPos = this->position(this->peek());
@@ -1174,10 +1184,10 @@ bool Parser::interfaceBlock(const dsl::DSLModifiers& modifiers) {
 
             std::string_view nameText = this->text(fieldName);
             if (!fieldNames.contains(nameText)) {
-                fields.push_back(DSLField(fieldModifiers,
-                                          std::move(actualType),
-                                          nameText,
-                                          this->rangeFrom(fieldPos)));
+                fields.push_back(SkSL::Field(this->rangeFrom(fieldPos),
+                                             fieldModifiers.fModifiers,
+                                             nameText,
+                                             &actualType.skslType()));
                 fieldNames.add(nameText);
             } else {
                 this->error(fieldName, "field '" + std::string(nameText) +
@@ -1187,8 +1197,9 @@ bool Parser::interfaceBlock(const dsl::DSLModifiers& modifiers) {
         } while (this->checkNext(Token::Kind::TK_COMMA));
     }
     if (fields.empty()) {
-        this->error(this->rangeFrom(typeName), "interface block '" +
-                std::string(this->text(typeName)) + "' must contain at least one member");
+        this->error(this->rangeFrom(typeName),
+                    "interface block '" + std::string(this->text(typeName)) +
+                    "' must contain at least one member");
     }
     std::string_view instanceName;
     Token instanceNameToken;
@@ -1936,7 +1947,9 @@ DSLExpression Parser::swizzle(Position pos,
                               Position maskPos) {
     SkASSERT(swizzleMask.length() > 0);
     if (!base.type().isVector() && !base.type().isScalar()) {
-        return base.field(swizzleMask, pos);
+        return DSLExpression(
+                FieldAccess::Convert(ThreadContext::Context(), pos, base.release(), swizzleMask),
+                pos);
     }
     int length = swizzleMask.length();
     SkSL::ComponentArray components;

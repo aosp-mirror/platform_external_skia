@@ -8,7 +8,6 @@
 #include "src/sksl/dsl/DSLCore.h"
 
 #include "include/core/SkTypes.h"
-#include "include/private/SkSLDefines.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLModifiersPool.h"  // IWYU pragma: keep
 #include "src/sksl/SkSLPool.h"
@@ -18,15 +17,12 @@
 #include "src/sksl/dsl/DSLType.h"
 #include "src/sksl/dsl/DSLVar.h"
 #include "src/sksl/dsl/priv/DSLWriter.h"
-#include "src/sksl/ir/SkSLBlock.h"
 #include "src/sksl/ir/SkSLExpression.h"
-#include "src/sksl/ir/SkSLExtension.h"
-#include "src/sksl/ir/SkSLFunctionCall.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
 #include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLProgramElement.h"
 #include "src/sksl/ir/SkSLStatement.h"
-#include "src/sksl/ir/SkSLTernaryExpression.h"
+#include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 
 #include <type_traits>
@@ -104,29 +100,6 @@ public:
         return success ? std::move(result) : nullptr;
     }
 
-    template <typename... Args>
-    static DSLExpression Call(const char* name, Position pos, Args... args) {
-        SkSL::ExpressionArray argArray;
-        argArray.reserve_back(sizeof...(args));
-        ((void)argArray.push_back(args.release()), ...);
-
-        return DSLExpression(SkSL::FunctionCall::Convert(ThreadContext::Context(), pos,
-                ThreadContext::Compiler().convertIdentifier(Position(), name),
-                std::move(argArray)));
-    }
-
-    static DSLStatement Declare(DSLVar& var, Position pos) {
-        return DSLWriter::Declaration(var);
-    }
-
-    static DSLStatement Declare(TArray<DSLVar>& vars, Position pos) {
-        StatementArray statements;
-        for (DSLVar& v : vars) {
-            statements.push_back(Declare(v, pos).release());
-        }
-        return SkSL::Block::Make(pos, std::move(statements), Block::Kind::kCompoundStatement);
-    }
-
     static void Declare(DSLGlobalVar& var, Position pos) {
         std::unique_ptr<SkSL::Statement> stmt = DSLWriter::Declaration(var);
         if (stmt && !stmt->isEmpty()) {
@@ -135,17 +108,11 @@ public:
         }
     }
 
-    static void Declare(TArray<DSLGlobalVar>& vars, Position pos) {
-        for (DSLGlobalVar& v : vars) {
-            Declare(v, pos);
-        }
-    }
-
     static DSLExpression InterfaceBlock(const DSLModifiers& modifiers, std::string_view typeName,
-                                        TArray<DSLField> fields, std::string_view varName,
+                                        TArray<Field> fields, std::string_view varName,
                                         int arraySize, Position pos) {
         // Build a struct type corresponding to the passed-in fields and array size.
-        DSLType varType = StructType(typeName, fields, /*interfaceBlock=*/true, pos);
+        DSLType varType = StructType(typeName, std::move(fields), /*interfaceBlock=*/true, pos);
         if (arraySize > 0) {
             varType = Array(varType, arraySize);
         }
@@ -166,22 +133,10 @@ public:
         // The InterfaceBlock couldn't be created; return poison.
         return DSLExpression(nullptr);
     }
-
-    static DSLExpression Select(DSLExpression test, DSLExpression ifTrue, DSLExpression ifFalse,
-            Position pos) {
-        auto result = TernaryExpression::Convert(ThreadContext::Context(), pos, test.release(),
-                                                 ifTrue.release(), ifFalse.release());
-        SkASSERT(!result || result->fPosition == pos);
-        return DSLExpression(std::move(result), pos);
-    }
 };
 
 std::unique_ptr<SkSL::Program> ReleaseProgram(std::unique_ptr<std::string> source) {
     return DSLCore::ReleaseProgram(std::move(source));
-}
-
-void AddExtension(std::string_view name, Position pos) {
-    ThreadContext::ProgramElements().push_back(std::make_unique<SkSL::Extension>(pos, name));
 }
 
 // Logically, we'd want the variable's initial value to appear on here in Declare, since that
@@ -196,31 +151,14 @@ void AddExtension(std::string_view name, Position pos) {
 //
 // So, we put the initial value onto the Var itself instead of the Declare to guarantee that it is
 // always executed in the correct order.
-DSLStatement Declare(DSLVar& var, Position pos) {
-    return DSLCore::Declare(var, pos);
-}
-
-DSLStatement Declare(TArray<DSLVar>& vars, Position pos) {
-    return DSLCore::Declare(vars, pos);
-}
-
 void Declare(DSLGlobalVar& var, Position pos) {
     DSLCore::Declare(var, pos);
 }
 
-void Declare(TArray<DSLGlobalVar>& vars, Position pos) {
-    DSLCore::Declare(vars, pos);
-}
-
 DSLExpression InterfaceBlock(const DSLModifiers& modifiers, std::string_view typeName,
-                             TArray<DSLField> fields, std::string_view varName, int arraySize,
-                             Position pos) {
+                             TArray<Field> fields, std::string_view varName,
+                             int arraySize, Position pos) {
     return DSLCore::InterfaceBlock(modifiers, typeName, std::move(fields), varName, arraySize, pos);
-}
-
-DSLExpression Select(DSLExpression test, DSLExpression ifTrue, DSLExpression ifFalse,
-                     Position pos) {
-    return DSLCore::Select(std::move(test), std::move(ifTrue), std::move(ifFalse), pos);
 }
 
 } // namespace dsl

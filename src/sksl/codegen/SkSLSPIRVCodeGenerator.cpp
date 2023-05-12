@@ -42,8 +42,8 @@
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLExtension.h"
-#include "src/sksl/ir/SkSLField.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
+#include "src/sksl/ir/SkSLFieldSymbol.h"
 #include "src/sksl/ir/SkSLForStatement.h"
 #include "src/sksl/ir/SkSLFunctionCall.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
@@ -72,7 +72,6 @@
 #include "src/utils/SkBitSet.h"
 
 #include <cstring>
-#include <iterator>
 #include <set>
 #include <string>
 #include <utility>
@@ -985,7 +984,7 @@ SpvId SPIRVCodeGenerator::writeStruct(const Type& type, const MemoryLayout& memo
 
     size_t offset = 0;
     for (int32_t i = 0; i < (int32_t) type.fields().size(); i++) {
-        const Type::Field& field = type.fields()[i];
+        const Field& field = type.fields()[i];
         if (!memoryLayout.isSupported(*field.fType)) {
             fContext.fErrors->error(type.fPosition, "type '" + field.fType->displayName() +
                                                     "' is not permitted here");
@@ -3135,7 +3134,7 @@ SpvId SPIRVCodeGenerator::writeStructComparison(const Type& structType, SpvId lh
     // The inputs must be structs containing fields, and the op must be == or !=.
     SkASSERT(op.kind() == Operator::Kind::EQEQ || op.kind() == Operator::Kind::NEQ);
     SkASSERT(structType.isStruct());
-    SkSpan<const Type::Field> fields = structType.fields();
+    SkSpan<const Field> fields = structType.fields();
     SkASSERT(!fields.empty());
 
     // Synthesize equality checks for each field in the struct.
@@ -3563,8 +3562,8 @@ SpvId SPIRVCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf, bool a
         // to one per program), so we need to append rtflip to this one rather than synthesize an
         // entirely new block when the variable is referenced. And we can't modify the existing
         // block, so we instead create a modified copy of it and write that.
-        SkSpan<const Type::Field> fieldSpan = type.fields();
-        std::vector fields(fieldSpan.begin(), fieldSpan.end());
+        SkSpan<const Field> fieldSpan = type.fields();
+        TArray<Field> fields(fieldSpan.data(), fieldSpan.size());
         fields.emplace_back(Position(),
                             Modifiers(Layout(/*flags=*/0,
                                              /*location=*/-1,
@@ -3597,7 +3596,7 @@ SpvId SPIRVCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf, bool a
             fSPIRVBonusVariables.add(modifiedVar);
             InterfaceBlock modifiedCopy(intf.fPosition, modifiedVar, intf.typeOwner());
             result = this->writeInterfaceBlock(modifiedCopy, /*appendRTFlip=*/false);
-            fProgram.fSymbols->add(std::make_unique<Field>(
+            fProgram.fSymbols->add(std::make_unique<FieldSymbol>(
                     Position(), modifiedVar, rtFlipStructType->fields().size() - 1));
         }
         fVariableMap.set(&intfVar, result);
@@ -4126,7 +4125,7 @@ void SPIRVCodeGenerator::writeUniformBuffer(std::shared_ptr<SymbolTable> topLeve
 
     // Convert the list of top-level uniforms into a matching struct named _UniformBuffer, and build
     // a lookup table of variables to UniformBuffer field indices.
-    std::vector<Type::Field> fields;
+    TArray<Field> fields;
     fields.reserve(fTopLevelUniforms.size());
     for (const VarDeclaration* topLevelUniform : fTopLevelUniforms) {
         const Variable* var = topLevelUniform->var();
@@ -4176,7 +4175,7 @@ void SPIRVCodeGenerator::addRTFlipUniform(Position pos) {
     // Flip variable hasn't been written yet. This means we don't have an existing
     // interface block, so we're free to just synthesize one.
     fWroteRTFlip = true;
-    std::vector<Type::Field> fields;
+    TArray<Field> fields;
     if (fProgram.fConfig->fSettings.fRTFlipOffset < 0) {
         fContext.fErrors->error(pos, "RTFlipOffset is negative");
     }
@@ -4193,8 +4192,8 @@ void SPIRVCodeGenerator::addRTFlipUniform(Position pos) {
                         SKSL_RTFLIP_NAME,
                         fContext.fTypes.fFloat2.get());
     std::string_view name = "sksl_synthetic_uniforms";
-    const Type* intfStruct = fSynthetics.takeOwnershipOfSymbol(
-            Type::MakeStructType(fContext, Position(), name, fields, /*interfaceBlock=*/true));
+    const Type* intfStruct = fSynthetics.takeOwnershipOfSymbol(Type::MakeStructType(
+            fContext, Position(), name, std::move(fields), /*interfaceBlock=*/true));
     bool usePushConstants = fProgram.fConfig->fSettings.fUsePushConstants;
     int binding = -1, set = -1;
     if (!usePushConstants) {
@@ -4234,7 +4233,7 @@ void SPIRVCodeGenerator::addRTFlipUniform(Position pos) {
     fSPIRVBonusVariables.add(intfVar);
     {
         AutoAttachPoolToThread attach(fProgram.fPool.get());
-        fProgram.fSymbols->add(std::make_unique<Field>(Position(), intfVar, /*field=*/0));
+        fProgram.fSymbols->add(std::make_unique<FieldSymbol>(Position(), intfVar, /*field=*/0));
     }
     InterfaceBlock intf(Position(), intfVar, std::make_shared<SymbolTable>(/*builtin=*/false));
     this->writeInterfaceBlock(intf, false);

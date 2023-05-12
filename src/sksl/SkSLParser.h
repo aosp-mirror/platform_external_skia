@@ -40,9 +40,9 @@ struct Module;
 struct Program;
 
 namespace dsl {
-class DSLGlobalVar;
-class DSLParameter;
-class DSLVarBase;
+struct DSLGlobalVar;
+struct DSLParameter;
+struct DSLVarBase;
 }
 
 /**
@@ -146,6 +146,10 @@ private:
 
     void directive(bool allowVersion);
 
+    void extensionDirective(Position start);
+
+    void versionDirective(Position start, bool allowVersion);
+
     bool declaration();
 
     bool functionDeclarationEnd(Position start,
@@ -156,7 +160,7 @@ private:
     struct VarDeclarationsPrefix {
         Position fPosition;
         dsl::DSLModifiers fModifiers;
-        dsl::DSLType fType = dsl::DSLType(dsl::kVoid_Type);
+        dsl::DSLType fType = dsl::DSLType::Void();
         Token fName;
     };
 

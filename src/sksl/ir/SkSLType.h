@@ -11,6 +11,7 @@
 #include "include/core/SkSpan.h"
 #include "include/core/SkTypes.h"
 #include "include/private/SkSLDefines.h"
+#include "include/private/base/SkTArray.h"
 #include "src/sksl/SkSLPosition.h"
 #include "src/sksl/ir/SkSLIRNode.h"
 #include "src/sksl/ir/SkSLModifiers.h"
@@ -24,13 +25,13 @@
 #include <string>
 #include <string_view>
 #include <tuple>
-#include <vector>
 
 namespace SkSL {
 
 class Context;
 class Expression;
 class SymbolTable;
+class Type;
 
 struct CoercionCost {
     static CoercionCost Free()              { return {    0,    0, false }; }
@@ -66,6 +67,24 @@ struct CoercionCost {
 };
 
 /**
+ * Represents a single field in a struct type.
+ */
+struct Field {
+    Field(Position pos, Modifiers modifiers, std::string_view name, const Type* type)
+            : fPosition(pos)
+            , fModifiers(modifiers)
+            , fName(name)
+            , fType(type) {}
+
+    std::string description() const;
+
+    Position fPosition;
+    Modifiers fModifiers;
+    std::string_view fName;
+    const Type* fType;
+};
+
+/**
  * Represents a type, such as int or float4.
  */
 class Type : public Symbol {
@@ -74,20 +93,6 @@ public:
     inline static constexpr int kMaxAbbrevLength = 3;
     // Represents unspecified array dimensions, as in `int[]`.
     inline static constexpr int kUnsizedArray = -1;
-    struct Field {
-        Field(Position pos, Modifiers modifiers, std::string_view name, const Type* type)
-                : fPosition(pos)
-                , fModifiers(modifiers)
-                , fName(name)
-                , fType(type) {}
-
-        std::string description() const;
-
-        Position fPosition;
-        Modifiers fModifiers;
-        std::string_view fName;
-        const Type* fType;
-    };
 
     enum class TypeKind : int8_t {
         kArray,
@@ -175,7 +180,7 @@ public:
     static std::unique_ptr<Type> MakeStructType(const Context& context,
                                                 Position pos,
                                                 std::string_view name,
-                                                std::vector<Field> fields,
+                                                skia_private::TArray<Field> fields,
                                                 bool interfaceBlock = false);
 
     /** Create a texture type. */

@@ -11,7 +11,6 @@
 #include "include/private/base/SkTArray.h"
 #include "src/sksl/SkSLProgramKind.h"
 #include "src/sksl/dsl/DSLExpression.h"
-#include "src/sksl/dsl/DSLStatement.h"
 #include "src/sksl/dsl/DSLVar.h"  // IWYU pragma: keep
 
 #include <memory>
@@ -22,13 +21,13 @@ namespace SkSL {
 
 class Compiler;
 class ErrorReporter;
+struct Field;
 class Position;
 struct Program;
 struct ProgramSettings;
 
 namespace dsl {
 
-class DSLField;
 class DSLModifiers;
 
 /**
@@ -65,39 +64,13 @@ ErrorReporter& GetErrorReporter();
 void SetErrorReporter(ErrorReporter* errorReporter);
 
 /**
- * #extension <name> : enable
- */
-void AddExtension(std::string_view name, Position pos = {});
-
-/**
- * Creates a local variable declaration statement.
- */
-DSLStatement Declare(DSLVar& var, Position pos = {});
-
-/**
- * Creates a local variable declaration statement containing multiple variables.
- */
-DSLStatement Declare(skia_private::TArray<DSLVar>& vars, Position pos = {});
-
-/**
  * Declares a global variable.
  */
 void Declare(DSLGlobalVar& var, Position pos = {});
 
-/**
- * Declares a set of global variables.
- */
-void Declare(skia_private::TArray<DSLGlobalVar>& vars, Position pos = {});
-
 DSLExpression InterfaceBlock(const DSLModifiers& modifiers,  std::string_view typeName,
-                             skia_private::TArray<DSLField> fields, std::string_view varName = "",
+                             skia_private::TArray<Field> fields, std::string_view varName = "",
                              int arraySize = 0, Position pos = {});
-
-/**
- * test ? ifTrue : ifFalse
- */
-DSLExpression Select(DSLExpression test, DSLExpression ifTrue, DSLExpression ifFalse,
-                     Position  = {});
 
 } // namespace dsl
 
