@@ -7,24 +7,21 @@
 
 #include "src/sksl/dsl/DSLType.h"
 
+#include "include/core/SkSpan.h"
 #include "include/core/SkTypes.h"
+#include "include/private/base/SkTArray.h"
 #include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLErrorReporter.h"
-#include "src/sksl/SkSLPosition.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLString.h"
 #include "src/sksl/SkSLThreadContext.h"
-#include "src/sksl/dsl/DSLModifiers.h"
-#include "src/sksl/ir/SkSLProgramElement.h"
-#include "src/sksl/ir/SkSLStructDefinition.h"
 #include "src/sksl/ir/SkSLSymbol.h"
-#include "src/sksl/ir/SkSLSymbolTable.h"
+#include "src/sksl/ir/SkSLSymbolTable.h"  // IWYU pragma: keep
 #include "src/sksl/ir/SkSLType.h"
 
 #include <memory>
 #include <string>
-#include <vector>
 
 using namespace skia_private;
 
@@ -51,9 +48,7 @@ static const SkSL::Type* verify_type(const Context& context,
     return type;
 }
 
-static const SkSL::Type* find_type(const Context& context,
-                                   Position pos,
-                                   std::string_view name) {
+static const SkSL::Type* find_type(const Context& context, std::string_view name, Position pos) {
     const Symbol* symbol = context.fSymbolTable->find(name);
     if (!symbol) {
         context.fErrors->error(pos, String::printf("no symbol named '%.*s'",
@@ -70,23 +65,26 @@ static const SkSL::Type* find_type(const Context& context,
 }
 
 static const SkSL::Type* find_type(const Context& context,
-                                   Position overallPos,
                                    std::string_view name,
-                                   Position modifiersPos,
-                                   Modifiers* modifiers) {
-    const Type* type = find_type(context, overallPos, name);
+                                   Position overallPos,
+                                   Modifiers* modifiers,
+                                   Position modifiersPos) {
+    const Type* type = find_type(context, name, overallPos);
     return type->applyQualifiers(context, modifiers, modifiersPos);
 }
 
 DSLType::DSLType(std::string_view name, Position pos)
-        : fSkSLType(find_type(ThreadContext::Context(), pos, name)) {}
+        : fSkSLType(find_type(ThreadContext::Context(), name, pos)) {}
 
-DSLType::DSLType(std::string_view name, DSLModifiers* modifiers, Position pos)
+DSLType::DSLType(std::string_view name,
+                 Position overallPos,
+                 SkSL::Modifiers* modifiers,
+                 Position modifiersPos)
         : fSkSLType(find_type(ThreadContext::Context(),
-                              pos,
                               name,
-                              modifiers->fPosition,
-                              &modifiers->fModifiers)) {}
+                              overallPos,
+                              modifiers,
+                              modifiersPos)) {}
 
 DSLType::DSLType(const SkSL::Type* type, Position pos)
         : fSkSLType(verify_type(ThreadContext::Context(), type, /*allowGenericTypes=*/true, pos)) {}
@@ -170,15 +168,6 @@ DSLType UnsizedArray(const DSLType& base, Position pos) {
         return DSLType::Poison();
     }
     return context.fSymbolTable->addArrayDimension(&base.skslType(), SkSL::Type::kUnsizedArray);
-}
-
-DSLType Struct(std::string_view name, TArray<Field> fields, Position pos) {
-    SkSL::Context& context = ThreadContext::Context();
-    std::unique_ptr<Type> ownedType = Type::MakeStructType(context, pos, name, std::move(fields),
-                                                           /*interfaceBlock=*/false);
-    const SkSL::Type* type = context.fSymbolTable->add(std::move(ownedType));
-    ThreadContext::ProgramElements().push_back(std::make_unique<SkSL::StructDefinition>(pos,*type));
-    return type;
 }
 
 } // namespace dsl
