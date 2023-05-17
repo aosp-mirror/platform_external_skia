@@ -8,8 +8,6 @@
 #include "src/sksl/dsl/priv/DSLWriter.h"
 
 #include "include/core/SkTypes.h"
-#include "src/sksl/SkSLContext.h"
-#include "src/sksl/SkSLModifiersPool.h"
 #include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/dsl/DSLExpression.h"
 #include "src/sksl/dsl/DSLStatement.h"
@@ -17,45 +15,35 @@
 #include "src/sksl/dsl/DSLVar.h"
 #include "src/sksl/ir/SkSLBlock.h"
 #include "src/sksl/ir/SkSLNop.h"
-#include "src/sksl/ir/SkSLProgramElement.h"
 #include "src/sksl/ir/SkSLStatement.h"
-#include "src/sksl/ir/SkSLSymbolTable.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/ir/SkSLVariable.h"
 
 #include <utility>
-#include <vector>
 
 namespace SkSL {
-
 namespace dsl {
 
 SkSL::Variable* DSLWriter::Var(DSLVarBase& var) {
-    // fInitialized is true if we have attempted to create a var, whether or not we actually
-    // succeeded. If it's true, we don't want to try again, to avoid reporting the same error
-    // multiple times.
-    if (!var.fInitialized) {
-        // We haven't even attempted to create a var yet, so fVar and fDeclaration ought to be null
-        SkASSERT(!var.fVar);
-        SkASSERT(!var.fDeclaration);
+    SkASSERT(var.fStorage != SkSL::VariableStorage::kParameter);  // use CreateParameterVar instead
 
-        var.fInitialized = true;
-        std::unique_ptr<SkSL::Variable> skslvar = SkSL::Variable::Convert(ThreadContext::Context(),
-                                                                          var.fPosition,
-                                                                          var.fModifiersPos,
-                                                                          var.fModifiers,
-                                                                          &var.fType.skslType(),
-                                                                          var.fNamePosition,
-                                                                          var.fName,
-                                                                          var.fStorage);
-        if (var.fStorage != SkSL::VariableStorage::kParameter) {
-            var.fDeclaration = VarDeclaration::Convert(ThreadContext::Context(),
-                                                       std::move(skslvar),
-                                                       var.fInitialValue.releaseIfPossible());
-            if (var.fDeclaration) {
-                var.fVar = var.fDeclaration->as<VarDeclaration>().var();
-            }
-        }
+    // We haven't attempted to create a var yet; fVar and fDeclaration ought to be null.
+    SkASSERT(!var.fVar);
+    SkASSERT(!var.fDeclaration);
+
+    std::unique_ptr<SkSL::Variable> skslvar = SkSL::Variable::Convert(ThreadContext::Context(),
+                                                                      var.fPosition,
+                                                                      var.fModifiersPos,
+                                                                      var.fModifiers,
+                                                                      &var.fType.skslType(),
+                                                                      var.fNamePosition,
+                                                                      var.fName,
+                                                                      var.fStorage);
+    var.fDeclaration = VarDeclaration::Convert(ThreadContext::Context(),
+                                               std::move(skslvar),
+                                               var.fInitialValue.releaseIfPossible());
+    if (var.fDeclaration) {
+        var.fVar = var.fDeclaration->as<VarDeclaration>().var();
     }
     return var.fVar;
 }
@@ -90,15 +78,5 @@ void DSLWriter::AddVarDeclaration(DSLStatement& existing, DSLVar& additional) {
                                                          Declaration(additional)));
 }
 
-void DSLWriter::Reset() {
-    SkSL::Context& context = ThreadContext::Context();
-
-    SymbolTable::Pop(&context.fSymbolTable);
-    SymbolTable::Push(&context.fSymbolTable);
-    ThreadContext::ProgramElements().clear();
-    context.fModifiersPool->clear();
-}
-
 } // namespace dsl
-
 } // namespace SkSL
