@@ -39,6 +39,7 @@ class SymbolTable;
 enum class ProgramKind : int8_t;
 struct Module;
 struct Program;
+class VarDeclaration;
 
 /**
  * Consumes .sksl text and invokes DSL functions to instantiate the program.
@@ -178,6 +179,8 @@ private:
 
     bool parseInitializer(Position pos, dsl::DSLExpression* initializer);
 
+    void addGlobalVarDeclaration(std::unique_ptr<SkSL::VarDeclaration> decl);
+
     void globalVarDeclarationEnd(Position position, const dsl::DSLModifiers& mods,
                                  dsl::DSLType baseType, Token name);
 
@@ -284,8 +287,6 @@ private:
     bool identifier(std::string_view* dest);
 
     std::shared_ptr<SymbolTable>& symbolTable();
-
-    void addToSymbolTable(dsl::DSLVarBase& var, Position pos = {});
 
     class Checkpoint {
     public:
