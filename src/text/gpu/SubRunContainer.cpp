@@ -7,33 +7,74 @@
 
 #include "src/text/gpu/SubRunContainer.h"
 
+#include "include/core/SkCanvas.h"
+#include "include/core/SkDrawable.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkMaskFilter.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPathEffect.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkPoint3.h"
+#include "include/core/SkRRect.h"
+#include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
+#include "include/core/SkStrokeRec.h"
+#include "include/core/SkSurfaceProps.h"
 #include "include/core/SkTypes.h"
+#include "include/effects/SkDashPathEffect.h"
+#include "include/private/SkColorData.h"
 #include "include/private/base/SkOnce.h"
+#include "include/private/base/SkSpan_impl.h"
 #include "include/private/base/SkTArray.h"
-#include "include/private/chromium/SkChromeRemoteGlyphCache.h"
-#include "src/core/SkDescriptor.h"
+#include "include/private/base/SkTLogic.h"
+#include "include/private/base/SkTo.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/base/SkZip.h"
+#include "src/core/SkDevice.h"
 #include "src/core/SkDistanceFieldGen.h"
 #include "src/core/SkEnumerate.h"
+#include "src/core/SkFontPriv.h"
 #include "src/core/SkGlyph.h"
+#include "src/core/SkMask.h"
+#include "src/core/SkMaskFilterBase.h"
+#include "src/core/SkMatrixPriv.h"
+#include "src/core/SkMatrixProvider.h"
+#include "src/core/SkPaintPriv.h"
 #include "src/core/SkReadBuffer.h"
-#include "src/core/SkRectPriv.h"
+#include "src/core/SkScalerContext.h"
 #include "src/core/SkStrike.h"
 #include "src/core/SkStrikeCache.h"
+#include "src/core/SkStrikeSpec.h"
+#include "src/core/SkWriteBuffer.h"
 #include "src/gpu/AtlasTypes.h"
 #include "src/text/GlyphRun.h"
 #include "src/text/StrikeForGPU.h"
 #include "src/text/gpu/Glyph.h"
 #include "src/text/gpu/GlyphVector.h"
+#include "src/text/gpu/SDFMaskFilter.h"
+#include "src/text/gpu/SDFTControl.h"
 #include "src/text/gpu/SubRunAllocator.h"
 
-#if defined(SK_GANESH)  // Ganesh Support
+#include <algorithm>
+#include <climits>
+#include <cstdint>
+#include <initializer_list>
+#include <new>
+#include <optional>
+#include <vector>
+
+class GrRecordingContext;
+
+#if defined(SK_GANESH)
 #include "src/gpu/ganesh/GrClip.h"
-#include "src/gpu/ganesh/GrStyle.h"
+#include "src/gpu/ganesh/GrColorInfo.h"
+#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/GrPaint.h"
 #include "src/gpu/ganesh/SkGr.h"
 #include "src/gpu/ganesh/SurfaceDrawContext.h"
+#include "src/gpu/ganesh/effects/GrDistanceFieldGeoProc.h"
 #include "src/gpu/ganesh/ops/AtlasTextOp.h"
 using AtlasTextOp = skgpu::ganesh::AtlasTextOp;
 #endif  // defined(SK_GANESH)
@@ -44,10 +85,6 @@ using AtlasTextOp = skgpu::ganesh::AtlasTextOp;
 #include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/RendererProvider.h"
 #endif
-
-#include <cinttypes>
-#include <cmath>
-#include <optional>
 
 using namespace skia_private;
 using namespace skglyph;
@@ -2189,6 +2226,52 @@ std::tuple<SkZip<const SkGlyphID, const SkPoint>, SkZip<SkGlyphID, SkPoint>>
     return {acceptedBuffer.first(acceptedSize), rejectedBuffer.first(rejectedSize)};
 }
 
+#if !defined(SK_DISABLE_SDF_TEXT)
+static std::tuple<SkStrikeSpec, SkScalar, sktext::gpu::SDFTMatrixRange>
+make_sdft_strike_spec(const SkFont& font, const SkPaint& paint,
+                      const SkSurfaceProps& surfaceProps, const SkMatrix& deviceMatrix,
+                      const SkPoint& textLocation, const sktext::gpu::SDFTControl& control) {
+    // Add filter to the paint which creates the SDFT data for A8 masks.
+    SkPaint dfPaint{paint};
+    dfPaint.setMaskFilter(sktext::gpu::SDFMaskFilter::Make());
+
+    auto [dfFont, strikeToSourceScale, matrixRange] = control.getSDFFont(font, deviceMatrix,
+                                                                         textLocation);
+
+    // Adjust the stroke width by the scale factor for drawing the SDFT.
+    dfPaint.setStrokeWidth(paint.getStrokeWidth() / strikeToSourceScale);
+
+    // Check for dashing and adjust the intervals.
+    if (SkPathEffect* pathEffect = paint.getPathEffect(); pathEffect != nullptr) {
+        SkPathEffect::DashInfo dashInfo;
+        if (pathEffect->asADash(&dashInfo) == SkPathEffect::kDash_DashType) {
+            if (dashInfo.fCount > 0) {
+                // Allocate the intervals.
+                std::vector<SkScalar> scaledIntervals(dashInfo.fCount);
+                dashInfo.fIntervals = scaledIntervals.data();
+                // Call again to get the interval data.
+                (void)pathEffect->asADash(&dashInfo);
+                for (SkScalar& interval : scaledIntervals) {
+                    interval /= strikeToSourceScale;
+                }
+                auto scaledDashes = SkDashPathEffect::Make(scaledIntervals.data(),
+                                                           scaledIntervals.size(),
+                                                           dashInfo.fPhase / strikeToSourceScale);
+                dfPaint.setPathEffect(scaledDashes);
+            }
+        }
+    }
+
+    // Fake-gamma and subpixel antialiasing are applied in the shader, so we ignore the
+    // passed-in scaler context flags. (It's only used when we fall-back to bitmap text).
+    SkScalerContextFlags flags = SkScalerContextFlags::kNone;
+    SkStrikeSpec strikeSpec = SkStrikeSpec::MakeMask(dfFont, dfPaint, surfaceProps, flags,
+                                                     SkMatrix::I());
+
+    return std::make_tuple(std::move(strikeSpec), strikeToSourceScale, matrixRange);
+}
+#endif
+
 SubRunContainerOwner SubRunContainer::MakeInAlloc(
         const GlyphRunList& glyphRunList,
         const SkMatrix& positionMatrix,
@@ -2260,7 +2343,7 @@ SubRunContainerOwner SubRunContainer::MakeInAlloc(
             if (SDFTControl.isSDFT(approximateDeviceTextSize, runPaint, positionMatrix)) {
                 // Process SDFT - This should be the .009% case.
                 const auto& [strikeSpec, strikeToSourceScale, matrixRange] =
-                        SkStrikeSpec::MakeSDFT(
+                        make_sdft_strike_spec(
                                 runFont, runPaint, deviceProps, positionMatrix,
                                 glyphRunListLocation, SDFTControl);
 
