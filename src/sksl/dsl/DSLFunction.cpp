@@ -13,7 +13,6 @@
 #include "include/private/base/SkTo.h"
 #include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLIntrinsicList.h"
-#include "src/sksl/SkSLModifiersPool.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLString.h"
 #include "src/sksl/SkSLThreadContext.h"
@@ -27,12 +26,10 @@
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
 #include "src/sksl/ir/SkSLFunctionPrototype.h"
-#include "src/sksl/ir/SkSLModifiers.h"
 #include "src/sksl/ir/SkSLProgramElement.h"
 #include "src/sksl/ir/SkSLStatement.h"
 #include "src/sksl/ir/SkSLVariable.h"
 
-#include <cstddef>
 #include <memory>
 #include <string>
 #include <utility>
@@ -58,14 +55,6 @@ void DSLFunction::init(DSLModifiers modifiers, const DSLType& returnType, std::s
                        SkSpan<DSLParameter*> params, Position pos) {
     fPosition = pos;
 
-    const Context& context = ThreadContext::Context();
-    if (context.fConfig->fSettings.fForceNoInline) {
-        // Apply the `noinline` modifier to every function. This allows us to test Runtime
-        // Effects without any inlining, even when the code is later added to a paint.
-        modifiers.fModifiers.fFlags &= ~Modifiers::kInline_Flag;
-        modifiers.fModifiers.fFlags |= Modifiers::kNoInline_Flag;
-    }
-
     TArray<std::unique_ptr<Variable>> paramVars;
     paramVars.reserve(params.size());
     for (DSLParameter* param : params) {
@@ -78,20 +67,14 @@ void DSLFunction::init(DSLModifiers modifiers, const DSLType& returnType, std::s
         paramVars.push_back(std::move(paramVar));
     }
     SkASSERT(SkToSizeT(paramVars.size()) == params.size());
-    fDecl = SkSL::FunctionDeclaration::Convert(context,
+    fDecl = SkSL::FunctionDeclaration::Convert(ThreadContext::Context(),
                                                pos,
                                                modifiers.fPosition,
-                                               context.fModifiersPool->add(modifiers.fModifiers),
+                                               &modifiers.fModifiers,
                                                name,
                                                std::move(paramVars),
                                                pos,
                                                &returnType.skslType());
-    if (fDecl) {
-        for (size_t i = 0; i < params.size(); ++i) {
-            params[i]->fVar = fDecl->parameters()[i];
-            params[i]->fInitialized = true;
-        }
-    }
 }
 
 void DSLFunction::prototype() {
@@ -143,6 +126,12 @@ DSLExpression DSLFunction::call(ExpressionArray args, Position pos) {
     std::unique_ptr<SkSL::Expression> result =
             SkSL::FunctionCall::Convert(ThreadContext::Context(), pos, *fDecl, std::move(args));
     return DSLExpression(std::move(result), pos);
+}
+
+void DSLFunction::addParametersToSymbolTable(const Context& context) {
+    if (fDecl) {
+        fDecl->addParametersToSymbolTable(context);
+    }
 }
 
 }  // namespace SkSL::dsl

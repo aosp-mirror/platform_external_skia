@@ -545,11 +545,7 @@ bool Parser::functionDeclarationEnd(Position start,
     const bool hasFunctionBody = !this->checkNext(Token::Kind::TK_SEMICOLON);
     if (hasFunctionBody) {
         AutoSymbolTable symbols(this);
-        for (DSLParameter* var : parameterPointers) {
-            if (!var->fName.empty()) {
-                this->addToSymbolTable(*var);
-            }
-        }
+        result.addParametersToSymbolTable(fCompiler.context());
         Token bodyStart = this->peek();
         std::optional<DSLStatement> body = this->block();
         if (!body) {
@@ -832,11 +828,10 @@ DSLType Parser::structDeclaration() {
 }
 
 /* structDeclaration ((IDENTIFIER varDeclarationEnd) | SEMICOLON) */
-TArray<dsl::DSLGlobalVar> Parser::structVarDeclaration(Position start,
-                                                       const DSLModifiers& modifiers) {
+void Parser::structVarDeclaration(Position start, const DSLModifiers& modifiers) {
     DSLType type = this->structDeclaration();
     if (!type.hasValue()) {
-        return {};
+        return;
     }
     Token name;
     if (this->checkIdentifier(&name)) {
@@ -844,7 +839,6 @@ TArray<dsl::DSLGlobalVar> Parser::structVarDeclaration(Position start,
     } else {
         this->expect(Token::Kind::TK_SEMICOLON, "';'");
     }
-    return {};
 }
 
 /* modifiers type IDENTIFIER (LBRACKET INT_LITERAL RBRACKET)? */

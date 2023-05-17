@@ -465,6 +465,16 @@ FunctionDeclaration* FunctionDeclaration::Convert(const Context& context,
                                                   TArray<std::unique_ptr<Variable>> parameters,
                                                   Position returnTypePos,
                                                   const Type* returnType) {
+    // If requested, apply the `noinline` modifier to every function. This allows us to test Runtime
+    // Effects without any inlining, even when the code is later added to a paint.
+    Modifiers updatedModifiers;
+    if (context.fConfig->fSettings.fForceNoInline) {
+        updatedModifiers = *modifiers;
+        updatedModifiers.fFlags &= ~Modifiers::kInline_Flag;
+        updatedModifiers.fFlags |= Modifiers::kNoInline_Flag;
+        modifiers = &updatedModifiers;
+    }
+
     bool isMain = (name == "main");
 
     FunctionDeclaration* decl = nullptr;
@@ -484,13 +494,19 @@ FunctionDeclaration* FunctionDeclaration::Convert(const Context& context,
     if (decl) {
         return decl;
     }
-    auto result = std::make_unique<FunctionDeclaration>(pos,
-                                                        modifiers,
-                                                        name,
-                                                        std::move(finalParameters),
-                                                        returnType,
-                                                        context.fConfig->fIsBuiltinCode);
-    return context.fSymbolTable->add(std::move(result));
+    return context.fSymbolTable->add(
+            std::make_unique<FunctionDeclaration>(pos,
+                                                  context.fModifiersPool->add(*modifiers),
+                                                  name,
+                                                  std::move(finalParameters),
+                                                  returnType,
+                                                  context.fConfig->fIsBuiltinCode));
+}
+
+void FunctionDeclaration::addParametersToSymbolTable(const Context& context) {
+    for (Variable* param : fParameters) {
+        context.fSymbolTable->addWithoutOwnership(param);
+    }
 }
 
 std::string FunctionDeclaration::mangledName() const {
