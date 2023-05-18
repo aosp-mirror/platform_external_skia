@@ -19,9 +19,6 @@
 #include "src/sksl/SkSLOperator.h"
 #include "src/sksl/SkSLString.h"
 #include "src/sksl/SkSLThreadContext.h"
-#include "src/sksl/dsl/DSLCore.h"
-#include "src/sksl/dsl/DSLFunction.h"
-#include "src/sksl/dsl/DSLVar.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBlock.h"
 #include "src/sksl/ir/SkSLBreakStatement.h"
@@ -33,6 +30,9 @@
 #include "src/sksl/ir/SkSLFieldAccess.h"
 #include "src/sksl/ir/SkSLForStatement.h"
 #include "src/sksl/ir/SkSLFunctionCall.h"
+#include "src/sksl/ir/SkSLFunctionDeclaration.h"
+#include "src/sksl/ir/SkSLFunctionDefinition.h"
+#include "src/sksl/ir/SkSLFunctionPrototype.h"
 #include "src/sksl/ir/SkSLIfStatement.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
@@ -138,10 +138,10 @@ public:
     Checkpoint(Parser* p) : fParser(p) {
         fPushbackCheckpoint = fParser->fPushback;
         fLexerCheckpoint = fParser->fLexer.getCheckpoint();
-        fOldErrorReporter = &dsl::GetErrorReporter();
+        fOldErrorReporter = &ThreadContext::GetErrorReporter();
         fOldEncounteredFatalError = fParser->fEncounteredFatalError;
         SkASSERT(fOldErrorReporter);
-        dsl::SetErrorReporter(&fErrorReporter);
+        ThreadContext::SetErrorReporter(&fErrorReporter);
     }
 
     ~Checkpoint() {
@@ -172,7 +172,7 @@ private:
 
         void forwardErrors() {
             for (Error& error : fErrors) {
-                dsl::GetErrorReporter().error(error.fPos, error.fMsg);
+                ThreadContext::ReportError(error.fMsg, error.fPos);
             }
         }
 
@@ -187,7 +187,7 @@ private:
 
     void restoreErrorReporter() {
         SkASSERT(fOldErrorReporter);
-        dsl::SetErrorReporter(fOldErrorReporter);
+        ThreadContext::SetErrorReporter(fOldErrorReporter);
         fOldErrorReporter = nullptr;
     }
 
@@ -372,7 +372,7 @@ void Parser::error(Token token, std::string_view msg) {
 }
 
 void Parser::error(Position position, std::string_view msg) {
-    GetErrorReporter().error(position, msg);
+    ThreadContext::ReportError(msg, position);
 }
 
 Position Parser::rangeFrom(Position start) {
@@ -388,23 +388,23 @@ Position Parser::rangeFrom(Token start) {
 /* declaration* END_OF_FILE */
 std::unique_ptr<Program> Parser::program() {
     ErrorReporter* errorReporter = &fCompiler.errorReporter();
-    Start(&fCompiler, fKind, fSettings);
-    SetErrorReporter(errorReporter);
+    ThreadContext::Start(&fCompiler, fKind, fSettings);
+    ThreadContext::SetErrorReporter(errorReporter);
     errorReporter->setSource(*fText);
     this->declarations();
     std::unique_ptr<Program> result;
-    if (!GetErrorReporter().errorCount()) {
+    if (!ThreadContext::GetErrorReporter().errorCount()) {
         result = fCompiler.releaseProgram(std::move(fText));
     }
     errorReporter->setSource(std::string_view());
-    End();
+    ThreadContext::End();
     return result;
 }
 
 std::unique_ptr<SkSL::Module> Parser::moduleInheritingFrom(const SkSL::Module* parent) {
     ErrorReporter* errorReporter = &fCompiler.errorReporter();
-    StartModule(&fCompiler, fKind, fSettings, parent);
-    SetErrorReporter(errorReporter);
+    ThreadContext::StartModule(&fCompiler, fKind, fSettings, parent);
+    ThreadContext::SetErrorReporter(errorReporter);
     errorReporter->setSource(*fText);
     this->declarations();
     this->symbolTable()->takeOwnershipOfString(std::move(*fText));
@@ -413,7 +413,7 @@ std::unique_ptr<SkSL::Module> Parser::moduleInheritingFrom(const SkSL::Module* p
     result->fSymbols = this->symbolTable();
     result->fElements = std::move(ThreadContext::ProgramElements());
     errorReporter->setSource(std::string_view());
-    End();
+    ThreadContext::End();
     return result;
 }
 
@@ -570,10 +570,11 @@ bool Parser::declaration() {
 /* (RPAREN | VOID RPAREN | parameter (COMMA parameter)* RPAREN) (block | SEMICOLON) */
 bool Parser::functionDeclarationEnd(Position start,
                                     DSLModifiers& modifiers,
-                                    DSLType type,
+                                    DSLType returnType,
                                     const Token& name) {
-    STArray<8, DSLParameter> parameters;
     Token lookahead = this->peek();
+    bool validParams = true;
+    STArray<8, std::unique_ptr<Variable>> parameters;
     if (lookahead.fKind == Token::Kind::TK_RPAREN) {
         // `()` means no parameters at all.
     } else if (lookahead.fKind == Token::Kind::TK_IDENTIFIER && this->text(lookahead) == "void") {
@@ -581,12 +582,12 @@ bool Parser::functionDeclarationEnd(Position start,
         this->nextToken();
     } else {
         for (;;) {
-            size_t paramIndex = parameters.size();
-            std::optional<DSLParameter> parameter = this->parameter(paramIndex);
-            if (!parameter) {
+            std::unique_ptr<SkSL::Variable> param;
+            if (!this->parameter(&param)) {
                 return false;
             }
-            parameters.push_back(std::move(*parameter));
+            validParams = validParams && param;
+            parameters.push_back(std::move(param));
             if (!this->checkNext(Token::Kind::TK_COMMA)) {
                 break;
             }
@@ -595,28 +596,67 @@ bool Parser::functionDeclarationEnd(Position start,
     if (!this->expect(Token::Kind::TK_RPAREN, "')'")) {
         return false;
     }
-    STArray<8, DSLParameter*> parameterPointers;
-    parameterPointers.reserve_back(parameters.size());
-    for (DSLParameter& param : parameters) {
-        parameterPointers.push_back(&param);
+
+    SkSL::FunctionDeclaration* decl = nullptr;
+    if (validParams) {
+        decl = SkSL::FunctionDeclaration::Convert(ThreadContext::Context(),
+                                                  this->rangeFrom(start),
+                                                  modifiers.fPosition,
+                                                  &modifiers.fModifiers,
+                                                  this->text(name),
+                                                  std::move(parameters),
+                                                  start,
+                                                  &returnType.skslType());
     }
 
-    DSLFunction result(this->text(name), modifiers, type, parameterPointers,
-                       this->rangeFrom(start));
-
-    const bool hasFunctionBody = !this->checkNext(Token::Kind::TK_SEMICOLON);
-    if (hasFunctionBody) {
-        AutoSymbolTable symbols(this);
-        result.addParametersToSymbolTable(fCompiler.context());
-        Token bodyStart = this->peek();
-        std::optional<DSLStatement> body = this->block();
-        if (!body) {
-            return false;
-        }
-        result.define(std::move(*body), this->rangeFrom(bodyStart));
+    if (this->checkNext(Token::Kind::TK_SEMICOLON)) {
+        return this->prototypeFunction(decl);
     } else {
-        result.prototype();
+        return this->defineFunction(decl);
     }
+}
+
+bool Parser::prototypeFunction(SkSL::FunctionDeclaration* decl) {
+    if (!decl) {
+        return false;
+    }
+    ThreadContext::ProgramElements().push_back(std::make_unique<SkSL::FunctionPrototype>(
+            decl->fPosition, decl, fCompiler.context().fConfig->fIsBuiltinCode));
+    return true;
+}
+
+bool Parser::defineFunction(SkSL::FunctionDeclaration* decl) {
+    // Create a symbol table for the function parameters.
+    const Context& context = fCompiler.context();
+    AutoSymbolTable symbols(this);
+    if (decl) {
+        decl->addParametersToSymbolTable(context);
+    }
+
+    // Parse the function body.
+    Token bodyStart = this->peek();
+    std::optional<DSLStatement> body = this->block();
+
+    // If there was a problem with the declarations or body, don't actually create a definition.
+    if (!decl || !body) {
+        return false;
+    }
+
+    std::unique_ptr<SkSL::Statement> block = body->release();
+    SkASSERT(block->is<Block>());
+    Position pos = this->rangeFrom(bodyStart);
+    block->fPosition = pos;
+
+    std::unique_ptr<FunctionDefinition> function = FunctionDefinition::Convert(context,
+                                                                               pos,
+                                                                               *decl,
+                                                                               std::move(block),
+                                                                               /*builtin=*/false);
+    if (!function) {
+        return false;
+    }
+    decl->setDefinition(function.get());
+    ThreadContext::ProgramElements().push_back(std::move(function));
     return true;
 }
 
@@ -933,26 +973,34 @@ void Parser::structVarDeclaration(Position start, const DSLModifiers& modifiers)
 }
 
 /* modifiers type IDENTIFIER (LBRACKET INT_LITERAL RBRACKET)? */
-std::optional<DSLParameter> Parser::parameter(size_t paramIndex) {
+bool Parser::parameter(std::unique_ptr<SkSL::Variable>* outParam) {
     Position pos = this->position(this->peek());
     DSLModifiers modifiers = this->modifiers();
     DSLType type = this->type(&modifiers);
     if (!type.hasValue()) {
-        return std::nullopt;
+        return false;
     }
     Token name;
-    std::string_view paramText;
-    Position paramPos;
+    std::string_view nameText;
+    Position namePos;
     if (this->checkIdentifier(&name)) {
-        paramText = this->text(name);
-        paramPos = this->position(name);
+        nameText = this->text(name);
+        namePos = this->position(name);
     } else {
-        paramPos = this->rangeFrom(pos);
+        namePos = this->rangeFrom(pos);
     }
     if (!this->parseArrayDimensions(pos, &type)) {
-        return std::nullopt;
+        return false;
     }
-    return DSLParameter(modifiers, type, paramText, this->rangeFrom(pos), paramPos);
+    *outParam = SkSL::Variable::Convert(fCompiler.context(),
+                                        this->rangeFrom(pos),
+                                        modifiers.fPosition,
+                                        modifiers.fModifiers,
+                                        &type.skslType(),
+                                        namePos,
+                                        nameText,
+                                        VariableStorage::kParameter);
+    return true;
 }
 
 /** EQ INT_LITERAL */

@@ -18,10 +18,8 @@
 #include "src/sksl/dsl/DSLModifiers.h"
 #include "src/sksl/dsl/DSLStatement.h"
 #include "src/sksl/dsl/DSLType.h"
-#include "src/sksl/dsl/DSLVar.h"  // IWYU pragma: keep
 #include "src/sksl/ir/SkSLLayout.h"
 
-#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -33,11 +31,13 @@ namespace SkSL {
 class Compiler;
 class ErrorReporter;
 class Expression;
+class FunctionDeclaration;
 class SymbolTable;
 enum class ProgramKind : int8_t;
 struct Module;
 struct Program;
 class VarDeclaration;
+class Variable;
 
 /**
  * Consumes .sksl text and invokes DSL functions to instantiate the program.
@@ -149,8 +149,12 @@ private:
 
     bool functionDeclarationEnd(Position start,
                                 dsl::DSLModifiers& modifiers,
-                                dsl::DSLType type,
+                                dsl::DSLType returnType,
                                 const Token& name);
+
+    bool prototypeFunction(SkSL::FunctionDeclaration* decl);
+
+    bool defineFunction(SkSL::FunctionDeclaration* decl);
 
     struct VarDeclarationsPrefix {
         Position fPosition;
@@ -188,7 +192,7 @@ private:
 
     bool modifiersDeclarationEnd(const dsl::DSLModifiers& mods);
 
-    std::optional<dsl::DSLParameter> parameter(size_t paramIndex);
+    bool parameter(std::unique_ptr<SkSL::Variable>* outParam);
 
     int layoutInt();
 
@@ -269,7 +273,7 @@ private:
     dsl::DSLExpression postfixExpression();
 
     dsl::DSLExpression swizzle(Position pos, dsl::DSLExpression base,
-            std::string_view swizzleMask, Position maskPos);
+                               std::string_view swizzleMask, Position maskPos);
 
     dsl::DSLExpression call(Position pos, dsl::DSLExpression base, ExpressionArray args);
 
