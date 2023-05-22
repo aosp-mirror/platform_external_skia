@@ -26,7 +26,7 @@ def git_repos_from_deps(ws = "@"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "34fd751bd753ce1a9b006afd973cc45b6088f7d1",
+        commit = "30dc1b5abb1f90cf32a16008688ebba4476e0e55",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -174,6 +174,13 @@ def git_repos_from_deps(ws = "@"):
     )
 
     new_git_repository(
+        name = "vello",
+        build_file = ws + "//bazel/external/vello:BUILD.bazel",
+        commit = "ef2630ad9c647b90863cb0915701d54725733968",
+        remote = "https://skia.googlesource.com/external/github.com/linebender/vello.git",
+    )
+
+    new_git_repository(
         name = "vulkan_headers",
         build_file = ws + "//bazel/external/vulkan_headers:BUILD.bazel",
         commit = "9e61870ecbd32514113b467e0a0c46f60ed222c7",
@@ -183,7 +190,7 @@ def git_repos_from_deps(ws = "@"):
     new_git_repository(
         name = "vulkan_tools",
         build_file = ws + "//bazel/external/vulkan_tools:BUILD.bazel",
-        commit = "fec27a3f6e3bae96a8f3e784d6d643afb41989d6",
+        commit = "695887a994ef9cc00a7aa3f9c00b31a56ea79534",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools",
     )
 

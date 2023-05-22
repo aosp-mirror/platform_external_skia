@@ -1,6 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
-# Copyright 2017 Google Inc.
+# Copyright 2022 Google LLC
 #
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -14,14 +14,20 @@ import os
 import subprocess
 
 
-URL = 'https://github.com/bazelbuild/bazelisk/releases/download/v1.10.1/bazelisk-linux-amd64'
+URL = 'https://github.com/bazelbuild/bazelisk/releases/download/v1.17.0/bazelisk-darwin-amd64'
+SHA256 = '3cf03dab8f5ef7c29e354b8e9293c82098ace3634253f9c660c26168b9e34720'
+
 BINARY = URL.split('/')[-1]
 
 
 def create_asset(target_dir):
   """Create the asset."""
   target_file = os.path.join(target_dir, 'bazelisk')
-  subprocess.call(['wget', URL, '-O', target_file])
+  subprocess.call(['wget', '--quiet', '--output-document', target_file, URL])
+  output = subprocess.check_output(['sha256sum', target_file], encoding='utf-8')
+  actual_hash = output.split(' ')[0]
+  if actual_hash != SHA256:
+    raise Exception('SHA256 does not match (%s != %s)' % (actual_hash, SHA256))
   subprocess.call(['chmod', 'ugo+x', target_file])
 
 
