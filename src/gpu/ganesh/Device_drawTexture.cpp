@@ -27,7 +27,6 @@
 #include "src/gpu/ganesh/GrStyle.h"
 #include "src/gpu/ganesh/SkGr.h"
 #include "src/gpu/ganesh/SurfaceDrawContext.h"
-#include "src/gpu/ganesh/effects/GrBicubicEffect.h"
 #include "src/gpu/ganesh/effects/GrBlendFragmentProcessor.h"
 #include "src/gpu/ganesh/effects/GrTextureEffect.h"
 #include "src/gpu/ganesh/geometry/GrRect.h"
@@ -140,14 +139,11 @@ int determine_tile_size(const SkIRect& src, int maxTileSize) {
 
 // Given a bitmap, an optional src rect, and a context with a clip and matrix determine what
 // pixels from the bitmap are necessary.
-SkIRect determine_clipped_src_rect(int width, int height,
-                                   const GrClip* clip,
+SkIRect determine_clipped_src_rect(SkIRect clippedSrcIRect,
                                    const SkMatrix& viewMatrix,
                                    const SkMatrix& srcToDstRect,
                                    const SkISize& imageDimensions,
                                    const SkRect* srcRectPtr) {
-    SkIRect clippedSrcIRect = clip ? clip->getConservativeBounds()
-                                   : SkIRect::MakeWH(width, height);
     SkMatrix inv = SkMatrix::Concat(viewMatrix, srcToDstRect);
     if (!inv.invert(&inv)) {
         return SkIRect::MakeEmpty();
@@ -170,8 +166,7 @@ SkIRect determine_clipped_src_rect(int width, int height,
 
 // tileSize and clippedSubset are valid if true is returned
 bool should_tile_image_id(GrRecordingContext* context,
-                          SkISize rtSize,
-                          const GrClip* clip,
+                          SkIRect conservativeClipBounds,
                           uint32_t imageID,
                           const SkISize& imageSize,
                           const SkMatrix& ctm,
@@ -182,7 +177,7 @@ bool should_tile_image_id(GrRecordingContext* context,
                           SkIRect* clippedSubset) {
     // if it's larger than the max tile size, then we have no choice but tiling.
     if (imageSize.width() > maxTileSize || imageSize.height() > maxTileSize) {
-        *clippedSubset = determine_clipped_src_rect(rtSize.width(), rtSize.height(), clip, ctm,
+        *clippedSubset = determine_clipped_src_rect(conservativeClipBounds, ctm,
                                                     srcToDst, imageSize, src);
         *tileSize = determine_tile_size(*clippedSubset, maxTileSize);
         return true;
@@ -216,7 +211,7 @@ bool should_tile_image_id(GrRecordingContext* context,
 
     // Figure out how much of the src we will need based on the src rect and clipping. Reject if
     // tiling memory savings would be < 50%.
-    *clippedSubset = determine_clipped_src_rect(rtSize.width(), rtSize.height(), clip, ctm,
+    *clippedSubset = determine_clipped_src_rect(conservativeClipBounds, ctm,
                                                 srcToDst, imageSize, src);
     *tileSize = kBmpSmallTileSize; // already know whole bitmap fits in one max sized tile.
     size_t usedTileBytes = get_tile_count(*clippedSubset, kBmpSmallTileSize) *
@@ -626,7 +621,7 @@ void draw_tiled_bitmap(GrRecordingContext* rContext,
                     // not bleed across the original clamped edges)
                     srcRect.roundOut(&iClampRect);
                 }
-                int outset = sampling.useCubic ? GrBicubicEffect::kFilterTexelPad : 1;
+                int outset = sampling.useCubic ? kBicubicFilterTexelPad : 1;
                 clamped_outset_with_offset(&iTileR, outset, &offset, iClampRect);
             }
 
@@ -785,7 +780,7 @@ void Device::drawImageQuad(const SkImage* image,
     if (!image->isTextureBacked()) {
         int tileFilterPad;
         if (sampling.useCubic) {
-            tileFilterPad = GrBicubicEffect::kFilterTexelPad;
+            tileFilterPad = kBicubicFilterTexelPad;
         } else if (sampling.filter == SkFilterMode::kLinear || sampling.isAniso()) {
             // Aniso will fallback to linear filtering in the tiling case.
             tileFilterPad = 1;
@@ -796,8 +791,8 @@ void Device::drawImageQuad(const SkImage* image,
         int tileSize;
         SkIRect clippedSubset;
         if (should_tile_image_id(fContext.get(),
-                                 fSurfaceDrawContext->dimensions(),
-                                 clip,
+                                 clip ? clip->getConservativeBounds()
+                                      : SkIRect::MakeSize(fSurfaceDrawContext->dimensions()),
                                  image->unique(),
                                  image->dimensions(),
                                  ctm,
