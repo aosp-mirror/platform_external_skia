@@ -240,7 +240,6 @@ namespace SK_OPTS_NS {
         }
     #endif
 
-
     template <typename T>
     SI V<T> gather(const T* p, U32 ix) {
         return {p[ix[0]], p[ix[1]], p[ix[2]], p[ix[3]]};
@@ -1092,7 +1091,7 @@ SI U16 to_half(F f) {
 }
 
 // Our fundamental vector depth is our pixel stride.
-static const size_t N = sizeof(F) / sizeof(float);
+static constexpr size_t N = sizeof(F) / sizeof(float);
 
 // We're finally going to get to what a Stage function looks like!
 //    tail == 0 ~~> work on a full N pixels
@@ -1402,6 +1401,15 @@ SI void from_1010102(U32 rgba, F* r, F* g, F* b, F* a) {
     *r = cast((rgba      ) & 0x3ff) * (1/1023.0f);
     *g = cast((rgba >> 10) & 0x3ff) * (1/1023.0f);
     *b = cast((rgba >> 20) & 0x3ff) * (1/1023.0f);
+    *a = cast((rgba >> 30)        ) * (1/   3.0f);
+}
+SI void from_1010102_xr(U32 rgba, F* r, F* g, F* b, F* a) {
+    static constexpr float min = -0.752941f;
+    static constexpr float max = 1.25098f;
+    static constexpr float range = max - min;
+    *r = cast((rgba      ) & 0x3ff) * (1/1023.0f) * range + min;
+    *g = cast((rgba >> 10) & 0x3ff) * (1/1023.0f) * range + min;
+    *b = cast((rgba >> 20) & 0x3ff) * (1/1023.0f) * range + min;
     *a = cast((rgba >> 30)        ) * (1/   3.0f);
 }
 SI void from_1616(U32 _1616, F* r, F* g) {
@@ -2570,6 +2578,14 @@ STAGE(load_1010102_dst, const SkRasterPipeline_MemoryCtx* ctx) {
     auto ptr = ptr_at_xy<const uint32_t>(ctx, dx,dy);
     from_1010102(load<U32>(ptr, tail), &dr,&dg,&db,&da);
 }
+STAGE(load_1010102_xr, const SkRasterPipeline_MemoryCtx* ctx) {
+    auto ptr = ptr_at_xy<const uint32_t>(ctx, dx,dy);
+    from_1010102_xr(load<U32>(ptr, tail), &r,&g,&b,&a);
+}
+STAGE(load_1010102_xr_dst, const SkRasterPipeline_MemoryCtx* ctx) {
+    auto ptr = ptr_at_xy<const uint32_t>(ctx, dx,dy);
+    from_1010102_xr(load<U32>(ptr, tail), &dr,&dg,&db,&da);
+}
 STAGE(gather_1010102, const SkRasterPipeline_GatherCtx* ctx) {
     const uint32_t* ptr;
     U32 ix = ix_and_ptr(&ptr, ctx, r,g);
@@ -2581,6 +2597,17 @@ STAGE(store_1010102, const SkRasterPipeline_MemoryCtx* ctx) {
     U32 px = to_unorm(r, 1023)
            | to_unorm(g, 1023) << 10
            | to_unorm(b, 1023) << 20
+           | to_unorm(a,    3) << 30;
+    store(ptr, px, tail);
+}
+STAGE(store_1010102_xr, const SkRasterPipeline_MemoryCtx* ctx) {
+    auto ptr = ptr_at_xy<uint32_t>(ctx, dx,dy);
+    static constexpr float min = -0.752941f;
+    static constexpr float max = 1.25098f;
+    static constexpr float range = max - min;
+    U32 px = to_unorm((r - min) / range, 1023)
+           | to_unorm((g - min) / range, 1023) << 10
+           | to_unorm((b - min) / range, 1023) << 20
            | to_unorm(a,    3) << 30;
     store(ptr, px, tail);
 }
@@ -3438,6 +3465,54 @@ STAGE_TAIL(shuffle, SkRasterPipeline_ShuffleCtx* ctx) {
     shuffle_fn<16>((F*)ctx->ptr, ctx->offsets, ctx->count);
 }
 
+template <int NumSlots>
+SI void swizzle_copy_masked_fn(F* dst, const F* src, uint16_t* offsets, I32 mask) {
+    std::byte* dstB = (std::byte*)dst;
+    for (int count = 0; count < NumSlots; ++count) {
+        F* dstS = (F*)(dstB + *offsets);
+        *dstS = if_then_else(mask, *src, *dstS);
+        offsets += 1;
+        src     += 1;
+    }
+}
+
+STAGE_TAIL(swizzle_copy_slot_masked, SkRasterPipeline_SwizzleCopyCtx* ctx) {
+    swizzle_copy_masked_fn<1>((F*)ctx->dst, (F*)ctx->src, ctx->offsets, execution_mask());
+}
+STAGE_TAIL(swizzle_copy_2_slots_masked, SkRasterPipeline_SwizzleCopyCtx* ctx) {
+    swizzle_copy_masked_fn<2>((F*)ctx->dst, (F*)ctx->src, ctx->offsets, execution_mask());
+}
+STAGE_TAIL(swizzle_copy_3_slots_masked, SkRasterPipeline_SwizzleCopyCtx* ctx) {
+    swizzle_copy_masked_fn<3>((F*)ctx->dst, (F*)ctx->src, ctx->offsets, execution_mask());
+}
+STAGE_TAIL(swizzle_copy_4_slots_masked, SkRasterPipeline_SwizzleCopyCtx* ctx) {
+    swizzle_copy_masked_fn<4>((F*)ctx->dst, (F*)ctx->src, ctx->offsets, execution_mask());
+}
+
+STAGE_TAIL(copy_from_indirect_masked, SkRasterPipeline_CopyIndirectCtx* ctx) {
+    // Clamp the indirect offsets to stay within the limit.
+    U32 offsets = *(U32*)ctx->indirectOffset;
+    offsets = min(offsets, ctx->indirectLimit);
+
+    // Scale up the offsets to account for the N lanes per value.
+    offsets *= N;
+
+    // Adjust the offsets forward so that they fetch from the correct lane.
+    static constexpr uint32_t iota[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+    offsets += sk_unaligned_load<I32>(iota);
+
+    // Use gather to perform indirect lookups; write the results into `dst`.
+    const float* src = ctx->src;
+    F*           dst = (F*)ctx->dst;
+    F*           end = dst + ctx->slots;
+    I32          mask = execution_mask();
+    do {
+        *dst = if_then_else(mask, gather(src, offsets), *dst);
+        dst += 1;
+        src += N;
+    } while (dst != end);
+}
+
 // Unary operations take a single input, and overwrite it with their output.
 // Unlike binary or ternary operations, we provide variations of 1-4 slots, but don't provide
 // an arbitrary-width "n-slot" variation; the Builder can chain together longer sequences manually.
@@ -3908,7 +3983,7 @@ namespace lowp {
     using F   = float    __attribute__((ext_vector_type(8)));
 #endif
 
-static const size_t N = sizeof(U16) / sizeof(uint16_t);
+static constexpr size_t N = sizeof(U16) / sizeof(uint16_t);
 
 // Once again, some platforms benefit from a restricted Stage calling convention,
 // but others can pass tons and tons of registers and we're happy to exploit that.

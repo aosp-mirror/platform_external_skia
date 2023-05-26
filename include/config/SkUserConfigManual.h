@@ -27,7 +27,8 @@
   #define SK_SUPPORT_LEGACY_EMBOSSMASKFILTER
   #define SK_SUPPORT_LEGACY_AAA_CHOICE
 
-  #define SK_ABORT(...) __android_log_assert(nullptr, "skia", ##__VA_ARGS__)
+  #define SK_ABORT(fmt, ...) __android_log_assert(nullptr, "skia", "[skia] \"" fmt "\" in {%s}",  \
+                                                  ##__VA_ARGS__, __PRETTY_FUNCTION__)
 
   // TODO (b/239048372): Remove this flag when we can safely migrate apps to the
   // new behavior.

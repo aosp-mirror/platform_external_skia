@@ -42,7 +42,7 @@
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/tracing/SkVMDebugTrace.h"
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "include/gpu/GrRecordingContext.h"
 #include "src/gpu/SkBackingFit.h"
 #include "src/gpu/ganesh/GrCaps.h"
@@ -56,7 +56,7 @@
 #include "src/image/SkImage_Gpu.h"
 #endif
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
@@ -983,7 +983,7 @@ const SkFilterColorProgram* SkRuntimeEffect::getFilterColorProgram() const {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 static GrFPResult make_effect_fp(sk_sp<SkRuntimeEffect> effect,
                                  const char* name,
                                  sk_sp<const SkData> uniforms,
@@ -1041,7 +1041,7 @@ static GrFPResult make_effect_fp(sk_sp<SkRuntimeEffect> effect,
 }
 #endif
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
 static void add_children_to_key(SkSpan<const SkRuntimeEffect::ChildPtr> children,
                                 SkSpan<const SkRuntimeEffect::Child> childInfo,
                                 const skgpu::graphite::KeyContext& keyContext,
@@ -1171,7 +1171,7 @@ public:
             , fUniforms(std::move(uniforms))
             , fChildren(children.begin(), children.end()) {}
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     GrFPResult asFragmentProcessor(std::unique_ptr<GrFragmentProcessor> inputFP,
                                    GrRecordingContext* context,
                                    const GrColorInfo& colorInfo,
@@ -1193,7 +1193,7 @@ public:
     }
 #endif
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
     void addToKey(const skgpu::graphite::KeyContext& keyContext,
                   skgpu::graphite::PaintParamsKeyBuilder* builder,
                   skgpu::graphite::PipelineDataGatherer* gatherer) const override {
@@ -1343,6 +1343,8 @@ sk_sp<SkFlattenable> SkRuntimeColorFilter::CreateProc(SkReadBuffer& buffer) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+using UniformsCallback = SkRuntimeEffectPriv::UniformsCallback;
+
 class SkRTShader : public SkShaderBase {
 public:
     SkRTShader(sk_sp<SkRuntimeEffect> effect,
@@ -1351,21 +1353,30 @@ public:
                SkSpan<SkRuntimeEffect::ChildPtr> children)
             : fEffect(std::move(effect))
             , fDebugTrace(std::move(debugTrace))
-            , fUniforms(std::move(uniforms))
+            , fUniformData(std::move(uniforms))
+            , fChildren(children.begin(), children.end()) {}
+
+    SkRTShader(sk_sp<SkRuntimeEffect> effect,
+               sk_sp<SkSL::SkVMDebugTrace> debugTrace,
+               UniformsCallback uniformsCallback,
+               SkSpan<SkRuntimeEffect::ChildPtr> children)
+            : fEffect(std::move(effect))
+            , fDebugTrace(std::move(debugTrace))
+            , fUniformsCallback(std::move(uniformsCallback))
             , fChildren(children.begin(), children.end()) {}
 
     SkRuntimeEffect::TracedShader makeTracedClone(const SkIPoint& coord) {
         sk_sp<SkRuntimeEffect> unoptimized = fEffect->makeUnoptimizedClone();
         sk_sp<SkSL::SkVMDebugTrace> debugTrace = make_skvm_debug_trace(unoptimized.get(), coord);
-        auto debugShader = sk_make_sp<SkRTShader>(unoptimized, debugTrace, fUniforms,
-                                                  SkSpan(fChildren));
+        auto debugShader = sk_make_sp<SkRTShader>(
+                unoptimized, debugTrace, this->uniformData(nullptr), SkSpan(fChildren));
 
         return SkRuntimeEffect::TracedShader{std::move(debugShader), std::move(debugTrace)};
     }
 
     bool isOpaque() const override { return fEffect->alwaysOpaque(); }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs& args,
                                                              const MatrixRec& mRec) const override {
         if (!SkRuntimeEffectPriv::CanDraw(args.fContext->priv().caps(), fEffect.get())) {
@@ -1374,7 +1385,7 @@ public:
 
         sk_sp<const SkData> uniforms = SkRuntimeEffectPriv::TransformUniforms(
                 fEffect->uniforms(),
-                fUniforms,
+                this->uniformData(args.fDstColorInfo->colorSpace()),
                 args.fDstColorInfo->colorSpace());
         SkASSERT(uniforms);
 
@@ -1399,7 +1410,7 @@ public:
     }
 #endif
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
     void addToKey(const skgpu::graphite::KeyContext& keyContext,
                   skgpu::graphite::PaintParamsKeyBuilder* builder,
                   skgpu::graphite::PipelineDataGatherer* gatherer) const override {
@@ -1407,7 +1418,7 @@ public:
 
         sk_sp<const SkData> uniforms = SkRuntimeEffectPriv::TransformUniforms(
                 fEffect->uniforms(),
-                fUniforms,
+                this->uniformData(keyContext.dstColorInfo().colorSpace()),
                 keyContext.dstColorInfo().colorSpace());
         SkASSERT(uniforms);
 
@@ -1438,7 +1449,7 @@ public:
             }
 
             sk_sp<const SkData> inputs = SkRuntimeEffectPriv::TransformUniforms(fEffect->uniforms(),
-                                                                                fUniforms,
+                                                                                this->uniformData(rec.fDstCS),
                                                                                 rec.fDstCS);
 
             RuntimeEffectRPCallbacks callbacks(rec, *newMRec, fChildren, fEffect->fSampleUsages);
@@ -1462,9 +1473,10 @@ public:
             return {};
         }
 
-        sk_sp<const SkData> inputs = SkRuntimeEffectPriv::TransformUniforms(fEffect->uniforms(),
-                                                                            fUniforms,
-                                                                            colorInfo.colorSpace());
+        sk_sp<const SkData> inputs =
+                SkRuntimeEffectPriv::TransformUniforms(fEffect->uniforms(),
+                                                       this->uniformData(colorInfo.colorSpace()),
+                                                       colorInfo.colorSpace());
         SkASSERT(inputs);
 
         // Ensure any pending transform is applied before running the runtime shader's code, which
@@ -1492,7 +1504,7 @@ public:
 
     void flatten(SkWriteBuffer& buffer) const override {
         buffer.writeString(fEffect->source().c_str());
-        buffer.writeDataAsByteArray(fUniforms.get());
+        buffer.writeDataAsByteArray(this->uniformData(nullptr).get());
         write_child_effects(buffer, fChildren);
     }
 
@@ -1505,9 +1517,21 @@ private:
         kHasLegacyLocalMatrix_Flag = 1 << 1,
     };
 
+    sk_sp<const SkData> uniformData(const SkColorSpace* dstCS) const {
+        if (fUniformData) {
+            return fUniformData;
+        }
+
+        SkASSERT(fUniformsCallback);
+        sk_sp<const SkData> uniforms = fUniformsCallback({dstCS});
+        SkASSERT(uniforms && uniforms->size() == fEffect->uniformSize());
+        return uniforms;
+    }
+
     sk_sp<SkRuntimeEffect> fEffect;
     sk_sp<SkSL::SkVMDebugTrace> fDebugTrace;
-    sk_sp<const SkData> fUniforms;
+    sk_sp<const SkData> fUniformData;
+    UniformsCallback fUniformsCallback;
     std::vector<SkRuntimeEffect::ChildPtr> fChildren;
 };
 
@@ -1593,7 +1617,7 @@ public:
                                    src, dst, &callbacks);
     }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(
             std::unique_ptr<GrFragmentProcessor> srcFP,
             std::unique_ptr<GrFragmentProcessor> dstFP,
@@ -1619,7 +1643,7 @@ public:
     }
 #endif
 
-#ifdef SK_GRAPHITE_ENABLED
+#if defined(SK_GRAPHITE)
     void addToKey(const skgpu::graphite::KeyContext& keyContext,
                   skgpu::graphite::PaintParamsKeyBuilder* builder,
                   skgpu::graphite::PipelineDataGatherer* gatherer,
@@ -1686,6 +1710,26 @@ sk_sp<SkFlattenable> SkRuntimeBlender::CreateProc(SkReadBuffer& buffer) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+sk_sp<SkShader> SkRuntimeEffectPriv::MakeDeferredShader(const SkRuntimeEffect* effect,
+                                                        UniformsCallback uniformsCallback,
+                                                        SkSpan<SkRuntimeEffect::ChildPtr> children,
+                                                        const SkMatrix* localMatrix) {
+    if (!effect->allowShader()) {
+        return nullptr;
+    }
+    if (!verify_child_effects(effect->fChildren, children)) {
+        return nullptr;
+    }
+    if (!uniformsCallback) {
+        return nullptr;
+    }
+    return SkLocalMatrixShader::MakeWrapped<SkRTShader>(localMatrix,
+                                                        sk_ref_sp(effect),
+                                                        /*debugTrace=*/nullptr,
+                                                        std::move(uniformsCallback),
+                                                        children);
+}
+
 sk_sp<SkShader> SkRuntimeEffect::makeShader(sk_sp<const SkData> uniforms,
                                             sk_sp<SkShader> childShaders[],
                                             size_t childCount,
@@ -1731,7 +1775,7 @@ sk_sp<SkImage> SkRuntimeEffect::makeImage(GrRecordingContext* rContext,
     }
     sk_sp<SkSurface> surface;
     if (rContext) {
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
         if (!rContext->priv().caps()->mipmapSupport()) {
             mipmapped = false;
         }
@@ -1877,15 +1921,14 @@ sk_sp<SkImage> SkRuntimeShaderBuilder::makeImage(GrRecordingContext* recordingCo
                                                  bool mipmapped) {
     return this->effect()->makeImage(recordingContext,
                                      this->uniforms(),
-                                     SkSpan(this->children(), this->numChildren()),
+                                     this->children(),
                                      localMatrix,
                                      resultInfo,
                                      mipmapped);
 }
 
 sk_sp<SkShader> SkRuntimeShaderBuilder::makeShader(const SkMatrix* localMatrix) {
-    return this->effect()->makeShader(
-            this->uniforms(), SkSpan(this->children(), this->numChildren()), localMatrix);
+    return this->effect()->makeShader(this->uniforms(), this->children(), localMatrix);
 }
 
 SkRuntimeBlendBuilder::SkRuntimeBlendBuilder(sk_sp<SkRuntimeEffect> effect)
@@ -1894,8 +1937,7 @@ SkRuntimeBlendBuilder::SkRuntimeBlendBuilder(sk_sp<SkRuntimeEffect> effect)
 SkRuntimeBlendBuilder::~SkRuntimeBlendBuilder() = default;
 
 sk_sp<SkBlender> SkRuntimeBlendBuilder::makeBlender() {
-    return this->effect()->makeBlender(this->uniforms(),
-                                       SkSpan(this->children(), this->numChildren()));
+    return this->effect()->makeBlender(this->uniforms(), this->children());
 }
 
 SkRuntimeColorFilterBuilder::SkRuntimeColorFilterBuilder(sk_sp<SkRuntimeEffect> effect)
@@ -1904,8 +1946,7 @@ SkRuntimeColorFilterBuilder::SkRuntimeColorFilterBuilder(sk_sp<SkRuntimeEffect> 
 SkRuntimeColorFilterBuilder::~SkRuntimeColorFilterBuilder() = default;
 
 sk_sp<SkColorFilter> SkRuntimeColorFilterBuilder::makeColorFilter() {
-    return this->effect()->makeColorFilter(this->uniforms(),
-                                           SkSpan(this->children(), this->numChildren()));
+    return this->effect()->makeColorFilter(this->uniforms(), this->children());
 }
 
 #endif  // SK_ENABLE_SKSL

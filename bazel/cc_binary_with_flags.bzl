@@ -8,7 +8,7 @@ It is based off of https://github.com/bazelbuild/examples/tree/main/rules/starla
 
 """
 
-load("//bazel:copts.bzl", "DEFAULT_COPTS")
+load("@skia_user_config//:copts.bzl", "DEFAULT_COPTS")
 
 _bool_flags = [
     "//bazel/common_config_settings:use_harfbuzz",
@@ -32,7 +32,7 @@ _string_flags = [
 _string_list_flags = [
     "//src/gpu:gpu_backend",
     "//src/codec:include_decoder",
-    "//src/images:include_encoder",
+    "//src/encode:include_encoder",
     "//bazel/common_config_settings:include_fontmgr",
 ]
 

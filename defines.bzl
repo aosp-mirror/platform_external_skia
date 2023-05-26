@@ -3,7 +3,7 @@ This file contains defines used by all builds of Skia.
 """
 
 load("//bazel:extra_defines.bzl", "EXTRA_DEFINES")
-load("//bazel:macros.bzl", "select_multi")
+load("//bazel:skia_rules.bzl", "select_multi")
 
 GENERAL_DEFINES = [
     "SK_GAMMA_APPLY_TO_A8",
@@ -59,21 +59,16 @@ GENERAL_DEFINES = [
 GPU_DEFINES = select_multi({
     "//src/gpu:gl_backend": [
         "SK_GL",
-        "SK_SUPPORT_GPU=1",
+        "SK_GANESH",
     ],
     "//src/gpu:vulkan_backend": [
         "SK_VULKAN",
-        "SK_SUPPORT_GPU=1",
+        "SK_GANESH",
     ],
     "//src/gpu:dawn_backend": [
         "SK_DAWN",
-        "SK_SUPPORT_GPU=1",
+        "SK_GANESH",
         "VK_USE_PLATFORM_XCB_KHR",  # TODO(kjlubick) support dawn's dawn_enable_vulkan etc
-    ],
-}) + select({
-    "//src/gpu:has_gpu_backend": [],
-    "//conditions:default": [
-        "SK_SUPPORT_GPU=0",
     ],
 }) + select({
     "//src/gpu:gl_standard": [
@@ -101,15 +96,22 @@ CODEC_DEFINES = [
         "//src/codec:avif_decode_codec": ["SK_CODEC_DECODES_AVIF"],
         "//src/codec:gif_decode_codec": ["SK_HAS_WUFFS_LIBRARY"],
         "//src/codec:jpeg_decode_codec": ["SK_CODEC_DECODES_JPEG"],
-        "//src/images:jpeg_encode_codec": ["SK_ENCODE_JPEG"],
+        "//src/encode:jpeg_encode_codec": ["SK_ENCODE_JPEG"],
         "//src/codec:png_decode_codec": ["SK_CODEC_DECODES_PNG"],
-        "//src/images:png_encode_codec": ["SK_ENCODE_PNG"],
+        "//src/encode:png_encode_codec": ["SK_ENCODE_PNG"],
         "//src/codec:raw_decode_codec": [
             "SK_CODEC_DECODES_RAW",
             "SK_CODEC_DECODES_JPEG",
         ],
         "//src/codec:webp_decode_codec": ["SK_CODEC_DECODES_WEBP"],
-        "//src/images:webp_encode_codec": ["SK_ENCODE_WEBP"],
+        "//src/encode:webp_encode_codec": ["SK_ENCODE_WEBP"],
+    },
+)
+
+TYPEFACE_DEFINES = select_multi(
+    {
+        "//src/ports:uses_freetype": ["SK_TYPEFACE_FACTORY_FREETYPE"],
+        #TODO: others when they become available
     },
 )
 
@@ -127,6 +129,6 @@ PLATFORM_DEFINES = select({
 # building the library but not exporting it for clients, so they can use whatever vulkan they want.
 GENERAL_LOCAL_DEFINES = ["SKIA_IMPLEMENTATION=1"]
 
-DEFAULT_DEFINES = GENERAL_DEFINES + GPU_DEFINES + CODEC_DEFINES + PLATFORM_DEFINES + EXTRA_DEFINES
+DEFAULT_DEFINES = GENERAL_DEFINES + GPU_DEFINES + CODEC_DEFINES + TYPEFACE_DEFINES + PLATFORM_DEFINES + EXTRA_DEFINES
 
 DEFAULT_LOCAL_DEFINES = GENERAL_LOCAL_DEFINES
