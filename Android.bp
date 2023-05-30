@@ -2423,6 +2423,7 @@ cc_defaults {
         "modules/skottie/src/Skottie.cpp",
         "modules/skottie/src/SkottieJson.cpp",
         "modules/skottie/src/SkottieProperty.cpp",
+        "modules/skottie/src/SlotManager.cpp",
         "modules/skottie/src/Transform.cpp",
         "modules/skottie/src/animator/Animator.cpp",
         "modules/skottie/src/animator/KeyframeAnimator.cpp",
