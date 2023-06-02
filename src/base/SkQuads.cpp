@@ -6,6 +6,7 @@
  */
 #include "src/base/SkQuads.h"
 
+#include "include/private/base/SkAssert.h"
 #include "include/private/base/SkFloatingPoint.h"
 
 #include <cmath>
@@ -27,17 +28,18 @@ static int solve_linear(const double M, const double B, double solution[2]) {
     return 1;
 }
 
-// When the A coefficient of a quadratic is close to 0, there can be floating point error
-// that arises from computing a very large root. In those cases, we would rather be
-// precise about the one smaller root, so we have this arbitrary cutoff for when A is
-// really small or small compared to B.
+// When B >> A, then the x^2 component doesn't contribute much to the output, so the second root
+// will be very large, but have massive round off error. Because of the round off error, the
+// second root will not evaluate to zero when substituted back into the quadratic equation. In
+// the situation when B >> A, then just treat the quadratic as a linear equation.
 static bool close_to_linear(double A, double B) {
-    if (sk_double_nearly_zero(B)) {
-        return sk_double_nearly_zero(A);
+    if (A != 0) {
+        // Return if B is much bigger than A.
+        return std::abs(B / A) >= 1.0e+16;
     }
-    // This is a different threshold (tighter) than the close_to_a_quadratic in SkCubics.cpp
-    // because the SkQuads::RootsReal gives better answers for longer as A/B -> 0.
-    return std::abs(A / B) < 1.0e-16;
+
+    // Otherwise A is zero, and the quadratic is linear.
+    return true;
 }
 
 double SkQuads::Discriminant(const double a, const double b, const double c) {
@@ -89,6 +91,26 @@ double SkQuads::Discriminant(const double a, const double b, const double c) {
     // Add the total rounding error back into the discriminant guess.
     const double discriminant = (b2 - ac) + (b2RoundingError - acRoundingError);
     return discriminant;
+}
+
+SkQuads::RootResult SkQuads::Roots(double A, double B, double C) {
+    SkASSERT(A != 0);
+
+    const double discriminant = Discriminant(A, B, C);
+
+    if (discriminant == 0) {
+        const double root = B / A;
+        return {discriminant, root, root};
+    }
+
+    if (discriminant > 0) {
+        const double D = sqrt(discriminant);
+        const double R = B > 0 ? B + D : B - D;
+        return {discriminant, R / A, C / R};
+    }
+
+    // The discriminant is negative or is not finite.
+    return {discriminant, NAN, NAN};
 }
 
 int SkQuads::RootsReal(const double A, const double B, const double C, double solution[2]) {
