@@ -228,14 +228,8 @@ private:
                                                   Precedence parentPrecedence);
     std::string assembleConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c,
                                                   Precedence parentPrecedence);
-    std::string assembleConstructorMatrixResize(const ConstructorMatrixResize& c,
+    std::string assembleConstructorMatrixResize(const ConstructorMatrixResize& ctor,
                                                 Precedence parentPrecedence);
-
-    // Matrix constructor helpers.
-    bool isMatrixConstructorHelperNeeded(const ConstructorCompound& c);
-    std::string getMatrixConstructorHelper(const AnyConstructor& c);
-    void writeMatrixFromMatrixArgs(const Type& sourceMatrix, int columns, int rows);
-    void writeMatrixFromScalarAndVectorArgs(const AnyConstructor& ctor, int columns, int rows);
 
     // Synthesized helper functions for comparison operators that are not supported by WGSL.
     std::string assembleMatrixEqualityExpression(const Expression& left, const Expression& right);
@@ -246,6 +240,11 @@ private:
     // Writes a scratch let-variable into the program, gives it the value of `expr`, and returns its
     // name (e.g. `_skTemp123`).
     std::string writeScratchLet(const std::string& expr);
+
+    // Converts `expr` into a string and returns a scratch let-variable associated with the
+    // expression. Compile-time constants and plain variable references will return the expression
+    // directly and omit the let-variable.
+    std::string writeNontrivialScratchLet(const Expression& expr, Precedence parentPrecedence);
 
     // Generic recursive ProgramElement visitor.
     void writeProgramElement(const ProgramElement& e);
@@ -308,8 +307,7 @@ private:
     bool fAtLineStart = false;
 
     int fScratchCount = 0;
-    StringStream fExtraFunctions;      // all internally synthesized helpers are written here
-    skia_private::THashSet<std::string> fHelpers;  // all synthesized helper functions, by name
+    StringStream fExtraFunctions;  // all internally synthesized helpers are written here
 };
 
 }  // namespace SkSL
