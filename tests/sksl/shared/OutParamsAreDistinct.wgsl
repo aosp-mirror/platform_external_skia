@@ -10,14 +10,6 @@ struct _GlobalUniforms {
     colorRed: vec4<f32>,
 };
 @binding(0) @group(0) var<uniform> _globalUniforms: _GlobalUniforms;
-fn _outParamHelper_1_out_params_are_distinct_bhh(x: ptr<function, f32>, _unused1: ptr<function, f32>) -> bool {
-    var _var0: f32;
-    var _var1: f32;
-    var _return: bool = out_params_are_distinct_bhh(&_var0, &_var1);
-    (*x) = _var0;
-    (*x) = _var1;
-    return _return;
-}
 fn out_params_are_distinct_bhh(x: ptr<function, f32>, y: ptr<function, f32>) -> bool {
     (*x) = 1.0;
     (*y) = 2.0;
@@ -26,8 +18,12 @@ fn out_params_are_distinct_bhh(x: ptr<function, f32>, y: ptr<function, f32>) -> 
 fn main(coords: vec2<f32>) -> vec4<f32> {
     var x: f32 = 0.0;
     var _skTemp0: vec4<f32>;
-    let _skTemp2 = _outParamHelper_1_out_params_are_distinct_bhh(&x, &x);
-    if _skTemp2 {
+    var _skTemp1: f32;
+    var _skTemp2: f32;
+    let _skTemp3 = out_params_are_distinct_bhh(&_skTemp1, &_skTemp2);
+    x = _skTemp1;
+    x = _skTemp2;
+    if _skTemp3 {
         _skTemp0 = _globalUniforms.colorGreen;
     } else {
         _skTemp0 = _globalUniforms.colorRed;
