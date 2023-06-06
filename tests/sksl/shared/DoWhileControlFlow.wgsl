@@ -9,28 +9,26 @@ fn main(coords: vec2<f32>) -> vec4<f32> {
   {
     var x: vec4<f32> = vec4<f32>(1.0);
     loop {
-      if x.w == 1.0 {
-        {
-          x.x = x.x - 0.25;
-          if (x.x <= 0.0) {
-            break;
-          }
+      {
+        x.x = x.x - 0.25;
+        if (x.x <= 0.0) {
+          break;
         }
-      } else {
-        break;
+      }
+      continuing {
+        break if !(x.w == 1.0);
       }
     }
     loop {
-      if x.z > 0.0 {
-        {
-          x.z = x.z - 0.25;
-          if (x.w == 1.0) {
-            continue;
-          }
-          x.y = 0.0;
+      {
+        x.z = x.z - 0.25;
+        if (x.w == 1.0) {
+          continue;
         }
-      } else {
-        break;
+        x.y = 0.0;
+      }
+      continuing {
+        break if !(x.z > 0.0);
       }
     }
     return x;

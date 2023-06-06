@@ -11,11 +11,16 @@ struct _GlobalUniforms {
 @binding(0) @group(0) var<uniform> _globalUniforms: _GlobalUniforms;
 fn main(coords: vec2<f32>) -> vec4<f32> {
   {
-    var h4: vec4<f32> = vec4<f32>(_globalUniforms.unknownInput);
-    h4 = vec4<f32>(vec2<f32>(_globalUniforms.unknownInput), 0.0, 1.0);
-    h4 = vec4<f32>(0.0, _globalUniforms.unknownInput, 1.0, 0.0);
-    h4 = vec4<f32>(0.0, _globalUniforms.unknownInput, 0.0, _globalUniforms.unknownInput);
-    return h4;
+    var color: vec4<f32> = vec4<f32>(0.0);
+    if (_globalUniforms.unknownInput == 1.0) {
+      color.y = 1.0;
+    }
+    if (_globalUniforms.unknownInput == 2.0) {
+      ;
+    } else {
+      color.w = 1.0;
+    }
+    return color;
   }
 }
 @fragment fn fragmentMain(_stageIn: FSIn) -> FSOut {

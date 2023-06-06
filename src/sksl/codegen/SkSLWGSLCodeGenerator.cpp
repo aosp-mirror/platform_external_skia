@@ -31,6 +31,7 @@
 #include "src/sksl/ir/SkSLConstructorCompound.h"
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 #include "src/sksl/ir/SkSLConstructorMatrixResize.h"
+#include "src/sksl/ir/SkSLDoStatement.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLExpressionStatement.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
@@ -635,7 +636,7 @@ void WGSLCodeGenerator::write(std::string_view s) {
     }
     if (fAtLineStart) {
         for (int i = 0; i < fIndentation; i++) {
-            fOut->writeText("    ");
+            fOut->writeText("  ");
         }
     }
     fOut->writeText(std::string(s).c_str());
@@ -731,8 +732,13 @@ void WGSLCodeGenerator::writeBuiltinIODecl(const Type& type,
 
 void WGSLCodeGenerator::writeFunction(const FunctionDefinition& f) {
     this->writeFunctionDeclaration(f.declaration());
-    this->write(" ");
+    this->writeLine(" {");
+
+    ++fIndentation;
     this->writeBlock(f.body()->as<Block>());
+    --fIndentation;
+
+    this->writeLine("}");
 
     if (f.declaration().isMain()) {
         // We just emitted the user-defined main function. Next, we generate a program entry point
@@ -875,6 +881,9 @@ void WGSLCodeGenerator::writeStatement(const Statement& s) {
         case Statement::Kind::kContinue:
             this->writeLine("continue;");
             break;
+        case Statement::Kind::kDo:
+            this->writeDoStatement(s.as<DoStatement>());
+            break;
         case Statement::Kind::kExpression:
             this->writeExpressionStatement(*s.as<ExpressionStatement>().expression());
             break;
@@ -930,6 +939,32 @@ void WGSLCodeGenerator::writeExpressionStatement(const Expression& expr) {
     // The final result of the expression will be a variable, let-reference, or an expression with
     // no side effects (`foo + bar`). Discarding this result is safe, as the program never uses it.
     (void)this->assembleExpression(expr, Precedence::kStatement);
+}
+
+void WGSLCodeGenerator::writeDoStatement(const DoStatement& s) {
+    // Generate a loop structure like this:
+    //   loop {
+    //       body-statement;
+    //       continuing {
+    //           break if !(test-expression);
+    //       }
+    //   }
+
+    this->writeLine("loop {");
+    fIndentation++;
+    this->writeStatement(*s.statement());
+    this->finishLine();
+
+    this->writeLine("continuing {");
+    fIndentation++;
+    std::string testExpr = this->assembleExpression(*s.test(), Precedence::kExpression);
+    this->write("break if !(");
+    this->write(testExpr);
+    this->writeLine(");");
+    fIndentation--;
+    this->writeLine("}");
+    fIndentation--;
+    this->writeLine("}");
 }
 
 void WGSLCodeGenerator::writeForStatement(const ForStatement& s) {
@@ -2084,7 +2119,7 @@ void WGSLCodeGenerator::writeNonBlockUniformsForTests() {
                     this->write("struct _GlobalUniforms {\n");
                     fDeclaredUniformsStruct = true;
                 }
-                this->write("    ");
+                this->write("  ");
                 this->writeVariableDecl(var.type(), var.mangledName(), Delimiter::kComma);
             }
         }
