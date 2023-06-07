@@ -4,24 +4,22 @@ struct _GlobalUniforms {
 };
 @binding(0) @group(0) var<uniform> _globalUniforms: _GlobalUniforms;
 const kZero: f32 = 0.0;
-fn return_loop_ff(five: f32) -> f32 {
+fn return_loop_ff(_skParam0: f32) -> f32 {
+  let five = _skParam0;
   {
     {
       var i: f32 = kZero;
       loop {
-        if i < 10.0 {
-          {
-            if (i == five) {
-              {
-                return i;
-              }
+        {
+          if (i == five) {
+            {
+              return i;
             }
           }
-        } else {
-          break;
         }
         continuing {
           i = i + f32(1);
+          break if !(i < 10.0);
         }
       }
     }
@@ -29,53 +27,49 @@ fn return_loop_ff(five: f32) -> f32 {
   }
 }
 const kTen: f32 = 10.0;
-fn continue_loop_ff(five: f32) -> f32 {
+fn continue_loop_ff(_skParam0: f32) -> f32 {
+  let five = _skParam0;
   {
     var sum: f32 = 0.0;
     {
       var i: f32 = 0.0;
       loop {
-        if i < kTen {
-          {
-            if (i < five) {
-              {
-                continue;
-              }
+        {
+          if (i < five) {
+            {
+              continue;
             }
-            sum = sum + i;
           }
-        } else {
-          break;
+          sum = sum + i;
         }
         continuing {
           i = i + f32(1);
+          break if !(i < kTen);
         }
       }
     }
     return sum;
   }
 }
-fn break_loop_ff(five: f32) -> f32 {
+fn break_loop_ff(_skParam0: f32) -> f32 {
+  let five = _skParam0;
   {
     var sum: f32 = 0.0;
     let kOne: f32 = 1.0;
     {
       var i: f32 = 0.0;
       loop {
-        if i < 10.0 {
-          {
-            if (i > five) {
-              {
-                break;
-              }
+        {
+          if (i > five) {
+            {
+              break;
             }
-            sum = sum + i;
           }
-        } else {
-          break;
+          sum = sum + i;
         }
         continuing {
           i = i + kOne;
+          break if !(i < 10.0);
         }
       }
     }
@@ -88,15 +82,12 @@ fn float_loop_f() -> f32 {
     {
       var i: f32 = 0.123;
       loop {
-        if i < 0.6 {
-          {
-            sum = sum + i;
-          }
-        } else {
-          break;
+        {
+          sum = sum + i;
         }
         continuing {
           i = i + 0.111;
+          break if !(i < 0.6);
         }
       }
     }
@@ -109,15 +100,12 @@ fn loop_operator_le_b() -> bool {
     {
       var i: f32 = 1.0;
       loop {
-        if i <= 3.0 {
-          {
-            result = vec4<f32>(result.yzw, i);
-          }
-        } else {
-          break;
+        {
+          result = vec4<f32>(result.yzw, i);
         }
         continuing {
           i = i + f32(1);
+          break if !(i <= 3.0);
         }
       }
     }
@@ -130,15 +118,12 @@ fn loop_operator_lt_b() -> bool {
     {
       var i: f32 = 1.0;
       loop {
-        if i < 4.0 {
-          {
-            result = vec4<f32>(result.yzw, i);
-          }
-        } else {
-          break;
+        {
+          result = vec4<f32>(result.yzw, i);
         }
         continuing {
           i = i + f32(1);
+          break if !(i < 4.0);
         }
       }
     }
@@ -151,15 +136,12 @@ fn loop_operator_ge_b() -> bool {
     {
       var i: f32 = 3.0;
       loop {
-        if i >= 1.0 {
-          {
-            result = vec4<f32>(result.yzw, i);
-          }
-        } else {
-          break;
+        {
+          result = vec4<f32>(result.yzw, i);
         }
         continuing {
           i = i - f32(1);
+          break if !(i >= 1.0);
         }
       }
     }
@@ -172,15 +154,12 @@ fn loop_operator_gt_b() -> bool {
     {
       var i: f32 = 3.0;
       loop {
-        if i > 0.0 {
-          {
-            result = vec4<f32>(result.yzw, i);
-          }
-        } else {
-          break;
+        {
+          result = vec4<f32>(result.yzw, i);
         }
         continuing {
           i = i - f32(1);
+          break if !(i > 0.0);
         }
       }
     }
@@ -193,15 +172,12 @@ fn loop_operator_ne_b() -> bool {
     {
       var i: f32 = 1.0;
       loop {
-        if i < 4.0 {
-          {
-            result = vec4<f32>(result.yzw, i);
-          }
-        } else {
-          break;
+        {
+          result = vec4<f32>(result.yzw, i);
         }
         continuing {
           i = i + f32(1);
+          break if !(i < 4.0);
         }
       }
     }
@@ -214,22 +190,20 @@ fn loop_operator_eq_b() -> bool {
     {
       var i: f32 = 1.0;
       loop {
-        if i == 1.0 {
-          {
-            result = vec4<f32>(result.yzw, i);
-          }
-        } else {
-          break;
+        {
+          result = vec4<f32>(result.yzw, i);
         }
         continuing {
           i = i + f32(1);
+          break if !(i == 1.0);
         }
       }
     }
     return all(result == vec4<f32>(9.0, 9.0, 9.0, 1.0));
   }
 }
-fn main(pos: vec2<f32>) -> vec4<f32> {
+fn main(_skParam0: vec2<f32>) -> vec4<f32> {
+  let pos = _skParam0;
   {
     let _skTemp0 = clamp(pos.x, f32(_globalUniforms.colorGreen.y), f32(_globalUniforms.colorGreen.w));
     var five: f32 = _skTemp0 * 5.0;

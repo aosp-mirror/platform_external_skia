@@ -1,10 +1,3 @@
-### Compilation failed:
-
-error: :14:1 error: missing return at end of function
-fn fn_hh4(v: vec4<f32>) -> f32 {
-^^
-
-
 struct FSIn {
   @builtin(front_facing) sk_Clockwise: bool,
   @builtin(position) sk_FragCoord: vec4<f32>,
@@ -18,26 +11,26 @@ struct _GlobalUniforms {
   testInputs: vec4<f32>,
 };
 @binding(0) @group(0) var<uniform> _globalUniforms: _GlobalUniforms;
-fn fn_hh4(v: vec4<f32>) -> f32 {
+fn fn_hh4(_skParam0: vec4<f32>) -> f32 {
+  let v = _skParam0;
   {
     {
       var x: i32 = 1;
       loop {
-        if x <= 2 {
-          {
-            return v.x;
-          }
-        } else {
-          break;
+        {
+          return v.x;
         }
         continuing {
           x = x + i32(1);
+          break if !(x <= 2);
         }
       }
     }
   }
+  return f32();
 }
-fn main(coords: vec2<f32>) -> vec4<f32> {
+fn main(_skParam0: vec2<f32>) -> vec4<f32> {
+  let coords = _skParam0;
   {
     var v: vec4<f32> = _globalUniforms.testInputs;
     v = vec4<f32>(0.0, v.zyx);
@@ -72,5 +65,3 @@ fn main(coords: vec2<f32>) -> vec4<f32> {
   _stageOut.sk_FragColor = main(_stageIn.sk_FragCoord.xy);
   return _stageOut;
 }
-
-1 error

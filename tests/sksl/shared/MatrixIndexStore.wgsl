@@ -19,16 +19,13 @@ fn test3x3_b() -> bool {
     {
       var index: i32 = 0;
       loop {
-        if index < 3 {
-          {
-            matrix[index] = values;
-            values = values + 3.0;
-          }
-        } else {
-          break;
+        {
+          matrix[index] = values;
+          values = values + 3.0;
         }
         continuing {
           index = index + i32(1);
+          break if !(index < 3);
         }
       }
     }
@@ -44,16 +41,13 @@ fn test4x4_b() -> bool {
     {
       var index: i32 = 0;
       loop {
-        if index < 4 {
-          {
-            matrix[index] = values;
-            values = values + 4.0;
-          }
-        } else {
-          break;
+        {
+          matrix[index] = values;
+          values = values + 4.0;
         }
         continuing {
           index = index + i32(1);
+          break if !(index < 4);
         }
       }
     }
@@ -62,7 +56,8 @@ fn test4x4_b() -> bool {
     return (all(_skTemp2[0] == _skTemp3[0]) && all(_skTemp2[1] == _skTemp3[1]) && all(_skTemp2[2] == _skTemp3[2]) && all(_skTemp2[3] == _skTemp3[3]));
   }
 }
-fn main(coords: vec2<f32>) -> vec4<f32> {
+fn main(_skParam0: vec2<f32>) -> vec4<f32> {
+  let coords = _skParam0;
   {
     var _skTemp4: vec4<f32>;
     var _skTemp5: bool;

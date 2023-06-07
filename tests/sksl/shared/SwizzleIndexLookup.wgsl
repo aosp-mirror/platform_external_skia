@@ -18,35 +18,29 @@ fn test3x3_b() -> bool {
     {
       var c: i32 = 0;
       loop {
-        if c < 3 {
+        {
+          var vec: vec3<f32> = _globalUniforms.testMatrix3x3[c];
           {
-            var vec: vec3<f32> = _globalUniforms.testMatrix3x3[c];
-            {
-              var r: i32 = 0;
-              loop {
-                if r < 3 {
+            var r: i32 = 0;
+            loop {
+              {
+                if (vec.zyx[r] != expected[r]) {
                   {
-                    if (vec.zyx[r] != expected[r]) {
-                      {
-                        return false;
-                      }
-                    }
+                    return false;
                   }
-                } else {
-                  break;
-                }
-                continuing {
-                  r = r + i32(1);
                 }
               }
+              continuing {
+                r = r + i32(1);
+                break if !(r < 3);
+              }
             }
-            expected = expected + 3.0;
           }
-        } else {
-          break;
+          expected = expected + 3.0;
         }
         continuing {
           c = c + i32(1);
+          break if !(c < 3);
         }
       }
     }
@@ -59,42 +53,37 @@ fn test4x4_b() -> bool {
     {
       var c: i32 = 0;
       loop {
-        if c < 4 {
+        {
+          var vec: vec4<f32> = _globalUniforms.testMatrix4x4[c];
           {
-            var vec: vec4<f32> = _globalUniforms.testMatrix4x4[c];
-            {
-              var r: i32 = 0;
-              loop {
-                if r < 4 {
+            var r: i32 = 0;
+            loop {
+              {
+                if (vec.wzyx[r] != expected[r]) {
                   {
-                    if (vec.wzyx[r] != expected[r]) {
-                      {
-                        return false;
-                      }
-                    }
+                    return false;
                   }
-                } else {
-                  break;
-                }
-                continuing {
-                  r = r + i32(1);
                 }
               }
+              continuing {
+                r = r + i32(1);
+                break if !(r < 4);
+              }
             }
-            expected = expected + 4.0;
           }
-        } else {
-          break;
+          expected = expected + 4.0;
         }
         continuing {
           c = c + i32(1);
+          break if !(c < 4);
         }
       }
     }
     return true;
   }
 }
-fn main(coords: vec2<f32>) -> vec4<f32> {
+fn main(_skParam0: vec2<f32>) -> vec4<f32> {
+  let coords = _skParam0;
   {
     var _skTemp0: vec4<f32>;
     var _skTemp1: bool;

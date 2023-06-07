@@ -1,3 +1,11 @@
+/*
+
+:46:3 warning: code is unreachable
+  return bool();
+  ^^^^^^
+
+*/
+
 struct FSIn {
   @builtin(front_facing) sk_Clockwise: bool,
   @builtin(position) sk_FragCoord: vec4<f32>,
@@ -43,29 +51,27 @@ fn test_else_b() -> bool {
       }
     }
   }
+  return bool();
 }
 fn test_loop_if_b() -> bool {
   {
     {
       var x: i32 = 0;
       loop {
-        if x <= 1 {
-          {
-            if (_globalUniforms.colorGreen.y == 0.0) {
-              {
-                return false;
-              }
-            } else {
-              {
-                return true;
-              }
+        {
+          if (_globalUniforms.colorGreen.y == 0.0) {
+            {
+              return false;
+            }
+          } else {
+            {
+              return true;
             }
           }
-        } else {
-          break;
         }
         continuing {
           x = x + i32(1);
+          break if !(x <= 1);
         }
       }
     }
@@ -73,7 +79,8 @@ fn test_loop_if_b() -> bool {
     return true;
   }
 }
-fn main(xy: vec2<f32>) -> vec4<f32> {
+fn main(_skParam0: vec2<f32>) -> vec4<f32> {
+  let xy = _skParam0;
   {
     var _skTemp0: vec4<f32>;
     var _skTemp1: bool;
