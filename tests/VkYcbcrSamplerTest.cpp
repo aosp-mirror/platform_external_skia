@@ -27,7 +27,8 @@ static int round_and_clamp(float x) {
     return r;
 }
 
-DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkYCbcrSampler_DrawImageWithYcbcrSampler, reporter, context_info) {
+DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkYCbcrSampler_DrawImageWithYcbcrSampler, reporter, context_info,
+                               CtsEnforcement::kApiLevel_T) {
     VkTestHelper testHelper(false);
     if (!testHelper.init()) {
         ERRORF(reporter, "VkTestHelper initialization failed.");
@@ -116,7 +117,8 @@ DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkYCbcrSampler_DrawImageWithYcbcrSampler, reporte
 }
 
 // Verifies that it's not possible to allocate Ycbcr texture directly.
-DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkYCbcrSampler_NoYcbcrSurface, reporter, context_info) {
+DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkYCbcrSampler_NoYcbcrSurface, reporter, context_info,
+                               CtsEnforcement::kApiLevel_T) {
     VkTestHelper testHelper(false);
     if (!testHelper.init()) {
         ERRORF(reporter, "VkTestHelper initialization failed.");
