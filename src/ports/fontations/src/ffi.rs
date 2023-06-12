@@ -17,18 +17,14 @@ use crate::ffi::SkPathWrapper;
 
 fn lookup_glyph_or_zero(font_ref: &BridgeFontRef, codepoint: u32) -> u16 {
     font_ref
-        .0
-        .as_ref()
-        .and_then(|f| f.charmap().map(codepoint))
-        .map_or(0, |id| id.to_u16())
+        .with_font(|f| Some(f.charmap().map(codepoint)?.to_u16()))
+        .unwrap_or_default()
 }
 
 fn num_glyphs(font_ref: &BridgeFontRef) -> u16 {
     font_ref
-        .0
-        .as_ref()
-        .and_then(|f| f.maxp().ok())
-        .map_or(0, |maxp| maxp.num_glyphs())
+        .with_font(|f| Some(f.maxp().ok()?.num_glyphs()))
+        .unwrap_or_default()
 }
 
 struct PathWrapperPen<'a> {
@@ -69,21 +65,20 @@ fn get_path(
     coords: &BridgeNormalizedCoords,
     path_wrapper: Pin<&mut SkPathWrapper>,
 ) -> bool {
-    font_ref.0.as_ref().map_or(false, |f| {
-        let mut cx = Context::new();
-        let mut scaler = cx
-            .new_scaler()
-            .size(Size::new(size))
-            .normalized_coords(coords.0.into_iter())
-            .build(f);
-        let mut pen_dump = PathWrapperPen {
-            path_wrapper: path_wrapper,
-        };
-        match scaler.outline(GlyphId::new(glyph_id), &mut pen_dump) {
-            Ok(_) => true,
-            _ => false,
-        }
-    })
+    font_ref
+        .with_font(|f| {
+            let mut cx = Context::new();
+            let mut scaler = cx
+                .new_scaler()
+                .size(Size::new(size))
+                .normalized_coords(coords.0.into_iter())
+                .build(f);
+            let mut pen_dump = PathWrapperPen {
+                path_wrapper: path_wrapper,
+            };
+            scaler.outline(GlyphId::new(glyph_id), &mut pen_dump).ok()
+        })
+        .is_some()
 }
 
 fn advance_width_or_zero(
@@ -92,19 +87,18 @@ fn advance_width_or_zero(
     coords: &BridgeNormalizedCoords,
     glyph_id: u16,
 ) -> f32 {
-    font_ref.0.as_ref().map_or(0.0, |f| {
-        GlyphMetrics::new(f, Size::new(size), coords.0.coords())
-            .advance_width(GlyphId::new(glyph_id))
-            .unwrap_or(0.0)
-    })
+    font_ref
+        .with_font(|f| {
+            GlyphMetrics::new(f, Size::new(size), coords.0.coords())
+                .advance_width(GlyphId::new(glyph_id))
+        })
+        .unwrap_or_default()
 }
 
 fn units_per_em_or_zero(font_ref: &BridgeFontRef) -> u16 {
     font_ref
-        .0
-        .as_ref()
-        .and_then(|f| f.head().ok())
-        .map_or(0, |head| head.units_per_em())
+        .with_font(|f| Some(f.head().ok()?.units_per_em()))
+        .unwrap_or_default()
 }
 
 fn convert_metrics(skrifa_metrics: &Metrics) -> ffi::Metrics {
@@ -128,18 +122,19 @@ fn get_skia_metrics(
     size: f32,
     coords: &BridgeNormalizedCoords,
 ) -> ffi::Metrics {
-    font_ref.0.as_ref().map_or(ffi::Metrics::default(), |f| {
-        let fontations_metrics = Metrics::new(f, Size::new(size), coords.0.coords());
-        convert_metrics(&fontations_metrics)
-    })
+    font_ref
+        .with_font(|f| {
+            let fontations_metrics = Metrics::new(f, Size::new(size), coords.0.coords());
+            Some(convert_metrics(&fontations_metrics))
+        })
+        .unwrap_or_default()
 }
 
 fn get_localized_strings<'a>(font_ref: &'a BridgeFontRef<'a>) -> Box<BridgeLocalizedStrings<'a>> {
     Box::new(BridgeLocalizedStrings {
-        localized_strings: match font_ref.0.as_ref() {
-            Some(font_ref) => font_ref.localized_strings(StringId::FAMILY_NAME),
-            _ => LocalizedStrings::default(),
-        },
+        localized_strings: font_ref
+            .with_font(|f| Some(f.localized_strings(StringId::FAMILY_NAME)))
+            .unwrap_or_default(),
     })
 }
 
@@ -163,9 +158,8 @@ fn localized_name_next(
 }
 
 fn english_or_first_font_name(font_ref: &BridgeFontRef, name_id: StringId) -> Option<String> {
-    font_ref.0.as_ref().and_then(|font_ref| {
-        font_ref
-            .localized_strings(name_id)
+    font_ref.with_font(|f| {
+        f.localized_strings(name_id)
             .english_or_first()
             .map(|localized_string| localized_string.to_string())
     })
@@ -183,6 +177,37 @@ fn postscript_name(font_ref: &BridgeFontRef, out_string: &mut String) -> bool {
             true
         }
         _ => false,
+    }
+}
+
+/// Implements the behavior expected for `SkTypeface::getTableData`, compare
+/// documentation for this method and the FreeType implementation in Skia.
+/// * If the target data array is empty, do not copy any data into it, but
+///   return the size of the table.
+/// * If the target data buffer is shorted than from offset to the end of the
+///   table, truncate the data.
+/// * If offset is longer than the table's length, return 0.
+fn table_data(font_ref: &BridgeFontRef, tag: u32, offset: usize, data: &mut [u8]) -> usize {
+    let table_data = font_ref
+        .with_font(|f| f.table_data(Tag::from_be_bytes(tag.to_be_bytes())))
+        .unwrap_or_default();
+    let table_data = table_data.as_ref();
+    // Remaining table data size measured from offset to end, or 0 if offset is
+    // too large.
+    let mut to_copy_length = table_data.len().saturating_sub(offset);
+    match data.len() {
+        0 => to_copy_length,
+        _ => {
+            to_copy_length = to_copy_length.min(data.len());
+            let table_offset_data = table_data
+                .get(offset..offset + to_copy_length)
+                .unwrap_or_default();
+            data.get_mut(..table_offset_data.len())
+                .map_or(0, |data_slice| {
+                    data_slice.copy_from_slice(table_offset_data);
+                    data_slice.len()
+                })
+        }
     }
 }
 
@@ -206,32 +231,27 @@ fn font_ref_is_valid(bridge_font_ref: &BridgeFontRef) -> bool {
 
 use crate::ffi::SkiaDesignCoordinate;
 
-fn u32tag_to_tag(tag: u32) -> Tag {
-    Tag::from_be_bytes([
-        ((tag >> 24) & 0xFF) as u8,
-        ((tag >> 16) & 0xFF) as u8,
-        ((tag >> 8) & 0xFF) as u8,
-        ((tag >> 0) & 0xFF) as u8,
-    ])
-}
-
 fn resolve_into_normalized_coords(
     font_ref: &BridgeFontRef,
     design_coords: &[SkiaDesignCoordinate],
 ) -> Box<BridgeNormalizedCoords> {
     let variation_tuples = design_coords
         .into_iter()
-        .map(|coord| (u32tag_to_tag(coord.axis), coord.value));
+        .map(|coord| (Tag::from_be_bytes(coord.axis.to_be_bytes()), coord.value));
     Box::new(BridgeNormalizedCoords(
         font_ref
-            .0
-            .as_ref()
-            .map(|f| f.axes().location(variation_tuples))
+            .with_font(|f| Some(f.axes().location(variation_tuples)))
             .unwrap_or_default(),
     ))
 }
 
 struct BridgeFontRef<'a>(Option<FontRef<'a>>);
+
+impl<'a> BridgeFontRef<'a> {
+    fn with_font<T>(&'a self, f: impl FnOnce(&'a FontRef) -> Option<T>) -> Option<T> {
+        f(self.0.as_ref()?)
+    }
+}
 
 struct BridgeNormalizedCoords(Location);
 
@@ -304,6 +324,8 @@ mod ffi {
         fn num_glyphs(font_ref: &BridgeFontRef) -> u16;
         fn family_name(font_ref: &BridgeFontRef) -> String;
         fn postscript_name(font_ref: &BridgeFontRef, out_string: &mut String) -> bool;
+
+        fn table_data(font_ref: &BridgeFontRef, tag: u32, offset: usize, data: &mut [u8]) -> usize;
 
         type BridgeLocalizedStrings<'a>;
         unsafe fn get_localized_strings<'a>(
