@@ -56,6 +56,8 @@
 #include "src/sksl/ir/SkSLSetting.h"
 #include "src/sksl/ir/SkSLStatement.h"
 #include "src/sksl/ir/SkSLStructDefinition.h"
+#include "src/sksl/ir/SkSLSwitchCase.h"
+#include "src/sksl/ir/SkSLSwitchStatement.h"
 #include "src/sksl/ir/SkSLSwizzle.h"
 #include "src/sksl/ir/SkSLSymbol.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"
@@ -66,7 +68,9 @@
 #include "src/sksl/ir/SkSLVariableReference.h"
 #include "src/sksl/transform/SkSLTransform.h"
 
+#include <algorithm>
 #include <cstddef>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
@@ -945,12 +949,14 @@ void WGSLCodeGenerator::writeStatement(const Statement& s) {
         case Statement::Kind::kReturn:
             this->writeReturnStatement(s.as<ReturnStatement>());
             break;
+        case Statement::Kind::kSwitch:
+            this->writeSwitchStatement(s.as<SwitchStatement>());
+            break;
+        case Statement::Kind::kSwitchCase:
+            SkDEBUGFAIL("switch-case statements should only be present inside a switch");
+            break;
         case Statement::Kind::kVarDeclaration:
             this->writeVarDeclaration(s.as<VarDeclaration>());
-            break;
-        default:
-            SkDEBUGFAILF("unsupported statement (kind: %d) %s",
-                         static_cast<int>(s.kind()), s.description().c_str());
             break;
     }
 }
@@ -1174,6 +1180,202 @@ void WGSLCodeGenerator::writeReturnStatement(const ReturnStatement& s) {
     this->write("return ");
     this->write(expr);
     this->write(";");
+}
+
+void WGSLCodeGenerator::writeSwitchCaseList(SkSpan<const SwitchCase* const> cases) {
+    auto separator = SkSL::String::Separator();
+    for (const SwitchCase* const sc : cases) {
+        this->write(separator());
+        if (sc->isDefault()) {
+            this->write("default");
+        } else {
+            this->write(std::to_string(sc->value()));
+        }
+    }
+}
+
+void WGSLCodeGenerator::writeSwitchCases(SkSpan<const SwitchCase* const> cases) {
+    if (!cases.empty()) {
+        // Only the last switch-case should have a non-empty statement.
+        SkASSERT(std::all_of(cases.begin(), std::prev(cases.end()), [](const SwitchCase* sc) {
+            return sc->statement()->isEmpty();
+        }));
+
+        // Emit the cases in a comma-separated list.
+        this->write("case ");
+        this->writeSwitchCaseList(cases);
+        this->writeLine(" {");
+        ++fIndentation;
+
+        // Emit the switch-case body.
+        this->writeStatement(*cases.back()->statement());
+        this->finishLine();
+
+        --fIndentation;
+        this->writeLine("}");
+    }
+}
+
+void WGSLCodeGenerator::writeEmulatedSwitchFallthroughCases(SkSpan<const SwitchCase* const> cases,
+                                                            std::string_view switchValue) {
+    // There's no need for fallthrough handling unless we actually have multiple case blocks.
+    if (cases.size() < 2) {
+        this->writeSwitchCases(cases);
+        return;
+    }
+
+    // Match against the entire case group.
+    this->write("case ");
+    this->writeSwitchCaseList(cases);
+    this->writeLine(" {");
+    ++fIndentation;
+
+    std::string fallthroughVar = this->writeScratchVar(*fContext.fTypes.fBool, "false");
+    const size_t secondToLastCaseIndex = cases.size() - 2;
+    const size_t lastCaseIndex = cases.size() - 1;
+
+    for (size_t index = 0; index < cases.size(); ++index) {
+        const SwitchCase& sc = *cases[index];
+        if (index < lastCaseIndex) {
+            // The default case must come last in SkSL, and this case isn't the last one, so it
+            // can't possibly be the default.
+            SkASSERT(!sc.isDefault());
+
+            this->write("if ");
+            if (index > 0) {
+                this->write(fallthroughVar);
+                this->write(" || ");
+            }
+            this->write(switchValue);
+            this->write(" == ");
+            this->write(std::to_string(sc.value()));
+            this->writeLine(" {");
+            fIndentation++;
+
+            // We write the entire case-block statement here, and then set `switchFallthrough`
+            // to 1. If the case-block had a break statement in it, we break out of the outer
+            // for-loop entirely, meaning the `switchFallthrough` assignment never occurs, nor
+            // does any code after it inside the switch. We've forbidden `continue` statements
+            // inside switch case-blocks entirely, so we don't need to consider their effect on
+            // control flow; see the Finalizer in FunctionDefinition::Convert.
+            this->writeStatement(*sc.statement());
+            this->finishLine();
+
+            if (index < secondToLastCaseIndex) {
+                // Set a variable to indicate falling through to the next block. The very last
+                // case-block is reached by process of elimination and doesn't need this
+                // variable, so we don't actually need to set it if we are on the second-to-last
+                // case block.
+                this->write(fallthroughVar);
+                this->write(" = true;  ");
+            }
+            this->writeLine("// fallthrough");
+
+            fIndentation--;
+            this->writeLine("}");
+        } else {
+            // This is the final case. Since it's always last, we can just dump in the code.
+            // (If we didn't match any of the other values, we must have matched this one by
+            // process of elimination. If we did match one of the other values, we either hit a
+            // `break` statement earlier--and won't get this far--or we're falling through.)
+            this->writeStatement(*sc.statement());
+            this->finishLine();
+        }
+    }
+
+    --fIndentation;
+    this->writeLine("}");
+}
+
+void WGSLCodeGenerator::writeSwitchStatement(const SwitchStatement& s) {
+    // WGSL supports the `switch` statement in a limited capacity. A default case must always be
+    // specified. Each switch-case must be scoped inside braces. Fallthrough is not supported; a
+    // trailing break is implied at the end of each switch-case block. (Explicit breaks are also
+    // allowed.)  One minor improvement over a traditional switch is that switch-cases take a list
+    // of values to match, instead of a single value:
+    //   case 1, 2       { foo(); }
+    //   case 3, default { bar(); }
+    //
+    // We will use the native WGSL switch statement for any switch-cases in the SkSL which can be
+    // made to conform to these limitations. The remaining cases which cannot conform will be
+    // emulated with if-else blocks (similar to our GLSL ES2 switch-statement emulation path). This
+    // should give us good performance in the common case, since most switches naturally conform.
+
+    // First, let's emit the switch itself.
+    std::string valueExpr = this->writeNontrivialScratchLet(*s.value(), Precedence::kExpression);
+    this->write("switch ");
+    this->write(valueExpr);
+    this->writeLine(" {");
+    ++fIndentation;
+
+    // Now let's go through the switch-cases, and emit the ones that don't fall through.
+    TArray<const SwitchCase*> nativeCases;
+    TArray<const SwitchCase*> fallthroughCases;
+    bool previousCaseFellThrough = false;
+    bool foundNativeDefault = false;
+    [[maybe_unused]] bool foundFallthroughDefault = false;
+
+    const int lastSwitchCaseIdx = s.cases().size() - 1;
+    for (int index = 0; index <= lastSwitchCaseIdx; ++index) {
+        const SwitchCase& sc = s.cases()[index]->as<SwitchCase>();
+
+        if (sc.statement()->isEmpty()) {
+            // This is a `case X:` that immediately falls through to the next case.
+            // If we aren't already falling through, we can handle this via a comma-separated list.
+            if (previousCaseFellThrough) {
+                fallthroughCases.push_back(&sc);
+                foundFallthroughDefault |= sc.isDefault();
+            } else {
+                nativeCases.push_back(&sc);
+                foundNativeDefault |= sc.isDefault();
+            }
+            continue;
+        }
+
+        if (index == lastSwitchCaseIdx || Analysis::SwitchCaseContainsUnconditionalExit(sc)) {
+            // This is a `case X:` that never falls through.
+            if (previousCaseFellThrough) {
+                // Because the previous cases fell through, we can't use a native switch-case here.
+                fallthroughCases.push_back(&sc);
+                foundFallthroughDefault |= sc.isDefault();
+
+                this->writeEmulatedSwitchFallthroughCases(fallthroughCases, valueExpr);
+                fallthroughCases.clear();
+
+                // Fortunately, we're no longer falling through blocks, so we might be able to use a
+                // native switch-case list again.
+                previousCaseFellThrough = false;
+            } else {
+                // Emit a native switch-case block with a comma-separated case list.
+                nativeCases.push_back(&sc);
+                foundNativeDefault |= sc.isDefault();
+
+                this->writeSwitchCases(nativeCases);
+                nativeCases.clear();
+            }
+            continue;
+        }
+
+        // This case falls through, so it will need to be handled via emulation.
+        fallthroughCases.push_back(&sc);
+        foundFallthroughDefault |= sc.isDefault();
+        previousCaseFellThrough = true;
+    }
+
+    // Finish out the remaining switch-cases.
+    this->writeSwitchCases(nativeCases);
+    nativeCases.clear();
+
+    this->writeEmulatedSwitchFallthroughCases(fallthroughCases, valueExpr);
+    fallthroughCases.clear();
+
+    // WGSL requires a default case.
+    if (!foundNativeDefault && !foundFallthroughDefault) {
+        this->writeLine("case default {}");
+    }
+
+    --fIndentation;
+    this->writeLine("}");
 }
 
 void WGSLCodeGenerator::writeVarDeclaration(const VarDeclaration& varDecl) {
@@ -1500,6 +1702,59 @@ std::string WGSLCodeGenerator::assembleSimpleIntrinsic(std::string_view intrinsi
     return this->writeScratchLet(expr);
 }
 
+std::string WGSLCodeGenerator::assembleVectorizedIntrinsic(std::string_view intrinsicName,
+                                                           const FunctionCall& call) {
+    SkASSERT(!call.type().isVoid());
+
+    // Invoke the function, passing each function argument.
+    std::string expr = std::string(intrinsicName);
+    expr.push_back('(');
+
+    auto separator = SkSL::String::Separator();
+    const ExpressionArray& args = call.arguments();
+    bool returnsVector = call.type().isVector();
+    for (int index = 0; index < args.size(); ++index) {
+        expr += separator();
+
+        bool vectorize = returnsVector && args[index]->type().isScalar();
+        if (vectorize) {
+            expr += to_wgsl_type(call.type());
+            expr.push_back('(');
+        }
+
+        expr += this->assembleExpression(*args[index], Precedence::kSequence);
+
+        if (vectorize) {
+            expr.push_back(')');
+        }
+    }
+    expr.push_back(')');
+
+    return this->writeScratchLet(expr);
+}
+
+std::string WGSLCodeGenerator::assembleUnaryOpIntrinsic(Operator op,
+                                                        const FunctionCall& call,
+                                                        Precedence parentPrecedence) {
+    SkASSERT(!call.type().isVoid());
+
+    bool needParens = Precedence::kPrefix >= parentPrecedence;
+
+    std::string expr;
+    if (needParens) {
+        expr.push_back('(');
+    }
+
+    expr += op.operatorName();
+    expr += this->assembleExpression(*call.arguments()[0], Precedence::kPrefix);
+
+    if (needParens) {
+        expr.push_back(')');
+    }
+
+    return expr;
+}
+
 std::string WGSLCodeGenerator::assembleBinaryOpIntrinsic(Operator op,
                                                          const FunctionCall& call,
                                                          Precedence parentPrecedence) {
@@ -1529,13 +1784,20 @@ std::string WGSLCodeGenerator::assembleIntrinsicCall(const FunctionCall& call,
                                                      Precedence parentPrecedence) {
     const ExpressionArray& arguments = call.arguments();
     switch (kind) {
-        // GLSL includes scalar versions of some geometric intrinsics that aren't included in WGSL
+        case k_atan_IntrinsicKind: {
+            const char* name = (arguments.size() == 1) ? "atan" : "atan2";
+            return this->assembleSimpleIntrinsic(name, call);
+        }
+
         case k_dot_IntrinsicKind: {
             if (arguments[0]->type().columns() == 1) {
                 return this->assembleBinaryOpIntrinsic(OperatorKind::STAR, call, parentPrecedence);
             }
             return this->assembleSimpleIntrinsic("dot", call);
         }
+        case k_equal_IntrinsicKind:
+            return this->assembleBinaryOpIntrinsic(OperatorKind::EQEQ, call, parentPrecedence);
+
         case k_faceforward_IntrinsicKind: {
             if (arguments[0]->type().columns() == 1) {
                 // (select(-1.0, 1.0, (I * Nref) < 0) * N)
@@ -1549,18 +1811,14 @@ std::string WGSLCodeGenerator::assembleIntrinsicCall(const FunctionCall& call,
             }
             return this->assembleSimpleIntrinsic("faceForward", call);
         }
-        case k_normalize_IntrinsicKind: {
-            const char* name = arguments[0]->type().columns() == 1 ? "sign" : "normalize";
-            return this->assembleSimpleIntrinsic(name, call);
-        }
-        case k_equal_IntrinsicKind:
-            return this->assembleBinaryOpIntrinsic(OperatorKind::EQEQ, call, parentPrecedence);
-
         case k_greaterThan_IntrinsicKind:
             return this->assembleBinaryOpIntrinsic(OperatorKind::GT, call, parentPrecedence);
 
         case k_greaterThanEqual_IntrinsicKind:
             return this->assembleBinaryOpIntrinsic(OperatorKind::GTEQ, call, parentPrecedence);
+
+        case k_inversesqrt_IntrinsicKind:
+            return this->assembleSimpleIntrinsic("inverseSqrt", call);
 
         case k_lessThan_IntrinsicKind:
             return this->assembleBinaryOpIntrinsic(OperatorKind::LT, call, parentPrecedence);
@@ -1568,11 +1826,56 @@ std::string WGSLCodeGenerator::assembleIntrinsicCall(const FunctionCall& call,
         case k_lessThanEqual_IntrinsicKind:
             return this->assembleBinaryOpIntrinsic(OperatorKind::LTEQ, call, parentPrecedence);
 
+        case k_mix_IntrinsicKind: {
+            const char* name = arguments[2]->type().componentType().isBoolean() ? "select" : "mix";
+            return this->assembleVectorizedIntrinsic(name, call);
+        }
+        case k_mod_IntrinsicKind: {
+            // WGSL has no intrinsic equivalent to `mod`. Synthesize `x - y * floor(x / y)`.
+            std::string arg0 = this->writeNontrivialScratchLet(*arguments[0],
+                                                               Precedence::kAdditive);
+            std::string arg1 = this->writeNontrivialScratchLet(*arguments[1],
+                                                               Precedence::kAdditive);
+            return this->writeScratchLet(arg0 + " - " + arg1 + " * floor(" +
+                                         arg0 + " / " + arg1 + ")");
+        }
+        case k_normalize_IntrinsicKind: {
+            const char* name = arguments[0]->type().isScalar() ? "sign" : "normalize";
+            return this->assembleSimpleIntrinsic(name, call);
+        }
+        case k_not_IntrinsicKind:
+            return this->assembleUnaryOpIntrinsic(OperatorKind::LOGICALNOT, call, parentPrecedence);
+
         case k_notEqual_IntrinsicKind:
             return this->assembleBinaryOpIntrinsic(OperatorKind::NEQ, call, parentPrecedence);
 
+        case k_clamp_IntrinsicKind:
+        case k_max_IntrinsicKind:
+        case k_min_IntrinsicKind:
+        case k_smoothstep_IntrinsicKind:
+        case k_step_IntrinsicKind:
+            return this->assembleVectorizedIntrinsic(call.function().name(), call);
+
+        case k_abs_IntrinsicKind:
+        case k_acos_IntrinsicKind:
+        case k_asin_IntrinsicKind:
+        case k_ceil_IntrinsicKind:
+        case k_cos_IntrinsicKind:
+        case k_degrees_IntrinsicKind:
+        case k_exp_IntrinsicKind:
+        case k_exp2_IntrinsicKind:
+        case k_floor_IntrinsicKind:
+        case k_fract_IntrinsicKind:
+        case k_log_IntrinsicKind:
+        case k_log2_IntrinsicKind:
+        case k_radians_IntrinsicKind:
+        case k_pow_IntrinsicKind:
+        case k_sign_IntrinsicKind:
+        case k_sin_IntrinsicKind:
+        case k_sqrt_IntrinsicKind:
+        case k_tan_IntrinsicKind:
         default:
-            return "";
+            return this->assembleSimpleIntrinsic(call.function().name(), call);
     }
 }
 

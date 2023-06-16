@@ -60,6 +60,7 @@ enum class GrAA : bool;
 enum class GrColorType;
 enum class SkBackingFit;
 enum class SkBlendMode;
+enum class SkTileMode;
 struct SkDrawShadowRec;
 struct SkISize;
 struct SkPoint;
@@ -204,8 +205,8 @@ public:
     void drawEdgeAAQuad(const SkRect& rect, const SkPoint clip[4], SkCanvas::QuadAAFlags aaFlags,
                         const SkColor4f& color, SkBlendMode mode) override;
     void drawEdgeAAImageSet(const SkCanvas::ImageSetEntry[], int count, const SkPoint dstClips[],
-                            const SkMatrix[], const SkSamplingOptions&, const SkPaint&,
-                            SkCanvas::SrcRectConstraint) override;
+                            const SkMatrix preViewMatrices[], const SkSamplingOptions&,
+                            const SkPaint&, SkCanvas::SrcRectConstraint) override;
 
     sk_sp<SkSpecialImage> makeSpecial(const SkBitmap&) override;
     sk_sp<SkSpecialImage> makeSpecial(const SkImage*) override;
@@ -304,10 +305,27 @@ private:
 
     // If not null, dstClip must be contained inside dst and will also respect the edge AA flags.
     // If 'preViewMatrix' is not null, final CTM will be this->ctm() * preViewMatrix.
-    void drawImageQuad(const SkImage*, const SkRect* src, const SkRect* dst,
-                       const SkPoint dstClip[4], SkCanvas::QuadAAFlags aaFlags,
-                       const SkMatrix* preViewMatrix, const SkSamplingOptions&,
-                       const SkPaint&, SkCanvas::SrcRectConstraint);
+    void drawImageQuad(const SkImage*,
+                       const SkRect& src,
+                       const SkRect& dst,
+                       const SkPoint dstClip[4],
+                       SkCanvas::QuadAAFlags,
+                       const SkMatrix* preViewMatrix,
+                       const SkSamplingOptions&,
+                       const SkPaint&,
+                       SkCanvas::SrcRectConstraint);
+
+    void drawEdgeAAImage(const SkImage*,
+                         const SkRect& src,
+                         const SkRect& dst,
+                         const SkPoint dstClip[4],
+                         SkCanvas::QuadAAFlags,
+                         const SkMatrix& localToDevice,
+                         const SkSamplingOptions&,
+                         const SkPaint&,
+                         SkCanvas::SrcRectConstraint,
+                         const SkMatrix& srcToDst,
+                         SkTileMode tm) override;
 
     // FIXME(michaelludwig) - Should be removed in favor of using drawImageQuad with edge flags to
     // for every element in the SkLatticeIter.

@@ -57,23 +57,6 @@ public:
     };
 
     /**
-     *  Create a filter that updates the alpha of the image based on 'region'. Pixels inside the
-     *  region are made more opaque and pixels outside are made more transparent.
-     *
-     *  Specifically, if a pixel is inside the region, its alpha will be set to
-     *  max(innerMin, pixel's alpha). If a pixel is outside the region, its alpha will be updated to
-     *  min(outerMax, pixel's alpha).
-     *  @param region   The geometric region controlling the inner and outer alpha thresholds.
-     *  @param innerMin The minimum alpha value for pixels inside 'region'.
-     *  @param outerMax The maximum alpha value for pixels outside of 'region'.
-     *  @param input    The input filter, or uses the source bitmap if this is null.
-     *  @param cropRect Optional rectangle that crops the input and output.
-     */
-    static sk_sp<SkImageFilter> AlphaThreshold(const SkRegion& region, SkScalar innerMin,
-                                               SkScalar outerMax, sk_sp<SkImageFilter> input,
-                                               const CropRect& cropRect = {});
-
-    /**
      *  Create a filter that implements a custom blend mode. Each output pixel is the result of
      *  combining the corresponding background and foreground pixels using the 4 coefficients:
      *     k1 * foreground * background + k2 * foreground + k3 * background + k4
@@ -225,20 +208,6 @@ public:
             return nullptr;
         }
     }
-
-    /**
-     *  Create a filter that mimics a zoom/magnifying lens effect.
-     *  DEPRECATED: This factory does not accept enough parameters to fully specify the zoom effect,
-                    and derives the zoom based on the internal allocation size of a saveLayer. This
-                    makes its behavior brittle and respond poorly to SkCanvas transforms.
-     *  @param srcRect
-     *  @param inset
-     *  @param input    The input filter that is magnified, if null the source bitmap is used.
-     *  @param cropRect Optional rectangle that crops the input and output.
-     */
-    static sk_sp<SkImageFilter> Magnifier(const SkRect& srcRect, SkScalar inset,
-                                          sk_sp<SkImageFilter> input,
-                                          const CropRect& cropRect = {});
 
     /**
      *  Create a filter that fills 'lensBounds' with a magnification of the input.

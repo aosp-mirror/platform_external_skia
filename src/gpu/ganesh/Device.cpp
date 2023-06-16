@@ -60,6 +60,7 @@
 #include "src/core/SkMeshPriv.h"
 #include "src/core/SkRasterClip.h"
 #include "src/core/SkSpecialImage.h"
+#include "src/core/SkStrikeCache.h"
 #include "src/core/SkTraceEvent.h"
 #include "src/core/SkVerticesPriv.h"
 #include "src/gpu/SkBackingFit.h"
@@ -95,10 +96,13 @@
 #include "src/gpu/ganesh/geometry/GrStyledShape.h"
 #include "src/gpu/ganesh/image/GrImageUtils.h"
 #include "src/text/GlyphRun.h"
+#include "src/text/gpu/SlugImpl.h"
+#include "src/text/gpu/SubRunContainer.h"
 
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <tuple>
 #include <utility>
@@ -952,7 +956,10 @@ void Device::drawImageRect(const SkImage* image,
     GrAA aa = fSurfaceDrawContext->chooseAA(paint);
     SkCanvas::QuadAAFlags aaFlags = (aa == GrAA::kYes) ? SkCanvas::kAll_QuadAAFlags
                                                        : SkCanvas::kNone_QuadAAFlags;
-    this->drawImageQuad(image, src, &dst, /* dstClip= */ nullptr, aaFlags,
+    this->drawImageQuad(image,
+                        src ? *src
+                            : SkRect::MakeIWH(image->width(), image->height()),
+                        dst, /* dstClip= */ nullptr, aaFlags,
                         /* preViewMatrix= */ nullptr, sampling, paint, constraint);
 }
 
@@ -1392,6 +1399,51 @@ bool Device::android_utils_clipWithStencil() {
 
 SkStrikeDeviceInfo Device::strikeDeviceInfo() const {
     return {this->surfaceProps(), this->scalerContextFlags(), &fSDFTControl};
+}
+
+sk_sp<sktext::gpu::Slug>
+Device::convertGlyphRunListToSlug(const sktext::GlyphRunList& glyphRunList,
+                                  const SkPaint& initialPaint,
+                                  const SkPaint& drawingPaint) {
+    return sktext::gpu::SlugImpl::Make(this->asMatrixProvider(),
+                                       glyphRunList,
+                                       initialPaint,
+                                       drawingPaint,
+                                       this->strikeDeviceInfo(),
+                                       SkStrikeCache::GlobalStrikeCache());
+}
+
+void Device::drawSlug(SkCanvas* canvas, const sktext::gpu::Slug* slug,
+                      const SkPaint& drawingPaint) {
+    SkASSERT(canvas);
+    SkASSERT(slug);
+    const sktext::gpu::SlugImpl* slugImpl = static_cast<const sktext::gpu::SlugImpl*>(slug);
+    auto matrixProvider = this->asMatrixProvider();
+#if defined(SK_DEBUG)
+    if (!fContext->priv().options().fSupportBilerpFromGlyphAtlas) {
+        // We can draw a slug if the atlas has padding or if the creation matrix and the
+        // drawing matrix are the same. If they are the same, then the Slug will use the direct
+        // drawing code and not use bi-lerp.
+        SkMatrix slugMatrix = slugImpl->initialPositionMatrix();
+        SkMatrix positionMatrix = matrixProvider.localToDevice();
+        positionMatrix.preTranslate(slugImpl->origin().x(), slugImpl->origin().y());
+        SkASSERT(slugMatrix == positionMatrix);
+    }
+#endif
+    auto atlasDelegate = [&](const sktext::gpu::AtlasSubRun* subRun,
+                             SkPoint drawOrigin,
+                             const SkPaint& paint,
+                             sk_sp<SkRefCnt> subRunStorage) {
+        auto[drawingClip, op] = subRun->makeAtlasTextOp(
+                this->clip(), matrixProvider.localToDevice(), drawOrigin, paint,
+                std::move(subRunStorage), fSurfaceDrawContext.get());
+        if (op != nullptr) {
+            fSurfaceDrawContext->addDrawOp(drawingClip, std::move(op));
+        }
+    };
+
+    slugImpl->subRuns()->draw(canvas, slugImpl->origin(),
+                              drawingPaint, slugImpl, atlasDelegate);
 }
 
 }  // namespace skgpu::ganesh

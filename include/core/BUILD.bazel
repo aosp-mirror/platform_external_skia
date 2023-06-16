@@ -79,7 +79,7 @@ skia_filegroup(
         "SkPixmap.h",
         "SkPoint.h",
         "SkPoint3.h",
-        "SkPromiseImageTexture.h",
+        "SkPromiseImageTexture.h",  # TODO(kjlubick) remove this shim
         "SkRRect.h",
         "SkRSXform.h",
         "SkRasterHandleAllocator.h",
@@ -101,6 +101,7 @@ skia_filegroup(
         "SkSwizzle.h",
         "SkTextBlob.h",
         "SkTextureCompressionType.h",
+        "SkTiledImageUtils.h",
         "SkTileMode.h",
         "SkTime.h",
         "SkTraceMemoryDump.h",

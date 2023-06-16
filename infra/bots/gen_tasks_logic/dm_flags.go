@@ -287,6 +287,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			// Fail on Iris Xe (skbug:13921)
 			skip("gltestthreading", "gm", ALL, "circular_arcs_stroke_and_fill_round")
 			skip("gltestthreading", "gm", ALL, "degeneratesegments")
+			skip("gltestthreading", "gm", ALL, "imagemakewithfilter")
+			skip("gltestthreading", "gm", ALL, "imagemakewithfilter_crop_ref")
 			skip("gltestthreading", "gm", ALL, "ovals")
 			skip("gltestthreading", "gm", ALL, "persp_images")
 			skip("gltestthreading", "gm", ALL, "rtif_distort")
@@ -1062,6 +1064,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "tests", ALL, "SkSLCommaSideEffects_GPU")
 		skip(ALL, "tests", ALL, "SkSLIntrinsicMixFloatES2_GPU")
 		skip(ALL, "tests", ALL, "SkSLIntrinsicClampFloat_GPU")
+		skip(ALL, "tests", ALL, "SkSLSwitchWithFallthrough_GPU")
 		skip(ALL, "tests", ALL, "SkSLSwizzleIndexLookup_GPU") // skia:14177
 		skip(ALL, "tests", ALL, "SkSLSwizzleIndexStore_GPU")  // skia:14177
 	}
@@ -1117,6 +1120,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "tests", ALL, "SkSLLogicalOrShortCircuit_GPU")
 	}
 
+	if b.matchOs("iOS") && !b.extraConfig("Metal") {
+		skip(ALL, "tests", ALL, "SkSLSwitchWithFallthrough_GPU")
+	}
+
 	if b.matchOs("Mac") && b.extraConfig("Metal") && (b.gpu("IntelIrisPlus") ||
 		b.gpu("IntelHD6000")) {
 		skip(ALL, "tests", ALL, "SkSLIntrinsicNot_GPU")         // skia:14025
@@ -1154,6 +1161,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	if b.extraConfig("Dawn") {
 		// skia:13922: WGSL does not support case fallthrough in switch statements.
 		skip(ALL, "tests", ALL, "SkSLSwitchWithFallthrough_GPU")
+		skip(ALL, "tests", ALL, "SkSLSwitchWithFallthroughAndVarDecls_GPU")
 		skip(ALL, "tests", ALL, "SkSLSwitchWithLoops_GPU")
 	}
 
@@ -1162,6 +1170,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "tests", ALL, "SkSLSwitch_GPU")
 		skip(ALL, "tests", ALL, "SkSLSwitchDefaultOnly_GPU")
 		skip(ALL, "tests", ALL, "SkSLSwitchWithFallthrough_GPU")
+		skip(ALL, "tests", ALL, "SkSLSwitchWithFallthroughAndVarDecls_GPU")
 		skip(ALL, "tests", ALL, "SkSLSwitchWithLoops_GPU")
 		skip(ALL, "tests", ALL, "SkSLSwitchCaseFolding_GPU")
 		skip(ALL, "tests", ALL, "SkSLLoopFloat_GPU")

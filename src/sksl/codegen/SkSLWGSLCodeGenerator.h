@@ -58,6 +58,8 @@ class ProgramElement;
 class ReturnStatement;
 class Statement;
 class StructDefinition;
+class SwitchCase;
+class SwitchStatement;
 class Swizzle;
 class TernaryExpression;
 class Type;
@@ -186,6 +188,11 @@ private:
     void writeForStatement(const ForStatement& s);
     void writeIfStatement(const IfStatement& s);
     void writeReturnStatement(const ReturnStatement& s);
+    void writeSwitchStatement(const SwitchStatement& s);
+    void writeSwitchCases(SkSpan<const SwitchCase* const> cases);
+    void writeEmulatedSwitchFallthroughCases(SkSpan<const SwitchCase* const> cases,
+                                             std::string_view switchValue);
+    void writeSwitchCaseList(SkSpan<const SwitchCase* const> cases);
     void writeVarDeclaration(const VarDeclaration& varDecl);
 
     // Synthesizes an LValue for an expression.
@@ -223,9 +230,14 @@ private:
                                       IntrinsicKind kind,
                                       Precedence parentPrecedence);
     std::string assembleSimpleIntrinsic(std::string_view intrinsicName, const FunctionCall& call);
+    std::string assembleUnaryOpIntrinsic(Operator op,
+                                         const FunctionCall& call,
+                                         Precedence parentPrecedence);
     std::string assembleBinaryOpIntrinsic(Operator op,
                                           const FunctionCall& call,
                                           Precedence parentPrecedence);
+    std::string assembleVectorizedIntrinsic(std::string_view intrinsicName,
+                                            const FunctionCall& call);
 
     // Constructor expressions
     std::string assembleAnyConstructor(const AnyConstructor& c, Precedence parentPrecedence);
