@@ -100,6 +100,7 @@ enum class BuilderOp {
     copy_stack_to_slots_unmasked,
     copy_stack_to_slots_indirect,
     copy_uniform_to_slots_unmasked,
+    store_immutable_value,
     swizzle_copy_stack_to_slots,
     swizzle_copy_stack_to_slots_indirect,
     discard_stack,
@@ -397,6 +398,12 @@ public:
 
     // Translates into copy_uniforms (from uniforms into temp stack) in Raster Pipeline.
     void push_uniform(SlotRange src);
+
+    // Initializes the Raster Pipeline slot with a constant value when the program is first created.
+    // Does not add any instructions to the program.
+    void store_immutable_value_i(Slot slot, int32_t val) {
+        fInstructions.push_back({BuilderOp::store_immutable_value, {slot}, val});
+    }
 
     // Translates into copy_uniforms (from uniforms into value-slots) in Raster Pipeline.
     void copy_uniform_to_slots_unmasked(SlotRange dst, SlotRange src);
