@@ -87,9 +87,6 @@ void GraphiteMetalWindowContext::destroyContext() {
 sk_sp<SkSurface> GraphiteMetalWindowContext::getBackbufferSurface() {
     sk_sp<SkSurface> surface;
     id<CAMetalDrawable> currentDrawable = [fMetalLayer nextDrawable];
-    if (currentDrawable == nil) {
-        return nullptr;
-    }
 
     skgpu::graphite::BackendTexture backendTex(this->dimensions(),
                                                (skgpu::graphite::MtlHandle)currentDrawable.texture);
@@ -99,6 +96,7 @@ sk_sp<SkSurface> GraphiteMetalWindowContext::getBackbufferSurface() {
                                              kBGRA_8888_SkColorType,
                                              fDisplayParams.fColorSpace,
                                              &fDisplayParams.fSurfaceProps);
+
     fDrawableHandle = CFRetain((skgpu::graphite::MtlHandle) currentDrawable);
 
     return surface;
