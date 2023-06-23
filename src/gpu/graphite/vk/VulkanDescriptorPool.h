@@ -27,10 +27,9 @@ public:
      * enough of the descriptor types and quantities requested to allocate the maximum number of
      * sets possible (kMaxNumSets). Counts must be > 0.
     */
-    static sk_sp<VulkanDescriptorPool> Make(const VulkanSharedContext*,
-                                            SkSpan<DescTypeAndCount>);
+    static sk_sp<VulkanDescriptorPool> Make(const VulkanSharedContext*, SkSpan<DescriptorData>);
 
-    VkDescriptorPool* descPool() { return &fDescPool; }
+    VkDescriptorPool descPool() { return fDescPool; }
 
 private:
     // Conservative overestimation of a maximum number of descriptors of any given type that can be

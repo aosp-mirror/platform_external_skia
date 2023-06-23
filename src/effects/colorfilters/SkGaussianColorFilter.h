@@ -25,12 +25,6 @@ class PipelineDataGatherer;
 }
 #endif
 
-#if defined(SK_ENABLE_SKVM)
-#include "src/core/SkVM.h"
-class SkArenaAlloc;
-class SkColorInfo;
-#endif
-
 /**
  * Remaps the input color's alpha to a Gaussian ramp and then outputs premul white using the
  * remapped alpha.
@@ -51,14 +45,6 @@ public:
 
 protected:
     void flatten(SkWriteBuffer&) const override {}
-
-#if defined(SK_ENABLE_SKVM)
-    skvm::Color onProgram(skvm::Builder* p,
-                          skvm::Color c,
-                          const SkColorInfo& dst,
-                          skvm::Uniforms*,
-                          SkArenaAlloc*) const override;
-#endif
 
 private:
     SK_FLATTENABLE_HOOKS(SkGaussianColorFilter)

@@ -13,9 +13,8 @@
 
 namespace skgpu::graphite {
 
-sk_sp<VulkanDescriptorPool> VulkanDescriptorPool::Make(
-        const VulkanSharedContext* context,
-        SkSpan<DescTypeAndCount> requestedDescCounts) {
+sk_sp<VulkanDescriptorPool> VulkanDescriptorPool::Make(const VulkanSharedContext* context,
+                                                       SkSpan<DescriptorData> requestedDescCounts) {
 
     if (requestedDescCounts.empty()) {
         return nullptr;
@@ -38,12 +37,12 @@ sk_sp<VulkanDescriptorPool> VulkanDescriptorPool::Make(
                      kMaxNumDescriptors);
             return nullptr;
         }
-        VkDescriptorPoolSize* poolSize = &poolSizes.at(i);
-        memset(poolSize, 0, sizeof(VkDescriptorPoolSize));
+        VkDescriptorPoolSize& poolSize = poolSizes.push_back();
+        memset(&poolSize, 0, sizeof(VkDescriptorPoolSize));
         // Map each DescriptorSetType to the appropriate backend VkDescriptorType
-        poolSize->type = VulkanDescriptorSet::DsTypeEnumToVkDs(requestedDescCounts[i].type);
+        poolSize.type = VulkanDescriptorSet::DsTypeEnumToVkDs(requestedDescCounts[i].type);
         // Create a pool large enough to accommodate the maximum possible number of descriptor sets
-        poolSize->descriptorCount = requestedDescCounts[i].count * kMaxNumSets;
+        poolSize.descriptorCount = requestedDescCounts[i].count * kMaxNumSets;
     }
 
     VkDescriptorPoolCreateInfo createInfo;
@@ -57,10 +56,12 @@ sk_sp<VulkanDescriptorPool> VulkanDescriptorPool::Make(
 
     VkDescriptorPool pool;
     VkResult result;
-    VULKAN_CALL_RESULT(context->interface(), result, CreateDescriptorPool(context->device(),
-                                                                          &createInfo,
-                                                                          nullptr,
-                                                                          &pool));
+    VULKAN_CALL_RESULT(context->interface(),
+                       result,
+                       CreateDescriptorPool(context->device(),
+                       &createInfo,
+                       /*const VkAllocationCallbacks*=*/nullptr,
+                       &pool));
     if (result != VK_SUCCESS) {
         return nullptr;
     }

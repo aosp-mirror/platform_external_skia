@@ -39,11 +39,6 @@ class SkFlattenable;
 struct GrContextOptions;
 struct SkStageRec;
 
-#if defined(SK_ENABLE_SKVM)
-#include "src/core/SkVM.h"
-class SkArenaAlloc;
-#endif
-
 static sk_sp<SkColorFilter> reincarnate_colorfilter(SkFlattenable* obj) {
     SkBinaryWriteBuffer wb;
     wb.writeFlattenable(obj);
@@ -153,16 +148,6 @@ DEF_TEST(WorkingFormatFilterFlags, r) {
 }
 
 struct FailureColorFilter final : public SkColorFilterBase {
-#if defined(SK_ENABLE_SKVM)
-    skvm::Color onProgram(skvm::Builder*,
-                          skvm::Color c,
-                          const SkColorInfo&,
-                          skvm::Uniforms*,
-                          SkArenaAlloc*) const override {
-        return {};
-    }
-#endif
-
     SkColorFilterBase::Type type() const override { return SkColorFilterBase::Type::kNoop; }
 
     bool appendStages(const SkStageRec&, bool) const override { return false; }

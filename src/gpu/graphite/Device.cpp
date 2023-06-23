@@ -59,6 +59,7 @@
 #include "src/text/gpu/SlugImpl.h"
 #include "src/text/gpu/SubRunContainer.h"
 #include "src/text/gpu/TextBlobRedrawCoordinator.h"
+#include "src/text/gpu/VertexFiller.h"
 
 #include <functional>
 #include <unordered_map>
@@ -149,17 +150,23 @@ SkIRect rect_to_pixelbounds(const Rect& r) {
     return r.makeRoundOut().asSkIRect();
 }
 
-// TODO: this doesn't support the SrcRectConstraint option.
 bool create_img_shader_paint(sk_sp<SkImage> image,
                              const SkRect& subset,
+                             SkCanvas::SrcRectConstraint constraint,
                              const SkSamplingOptions& sampling,
                              const SkMatrix* localMatrix,
                              SkPaint* paint) {
     bool imageIsAlphaOnly = SkColorTypeIsAlphaOnly(image->colorType());
 
-    sk_sp<SkShader> imgShader = SkImageShader::MakeSubset(std::move(image), subset,
-                                                          SkTileMode::kClamp, SkTileMode::kClamp,
-                                                          sampling, localMatrix);
+    sk_sp<SkShader> imgShader;
+    if (constraint == SkCanvas::kStrict_SrcRectConstraint) {
+        imgShader = SkImageShader::MakeSubset(std::move(image), subset,
+                                              SkTileMode::kClamp, SkTileMode::kClamp,
+                                              sampling, localMatrix);
+    } else {
+        imgShader = image->makeShader(SkTileMode::kClamp, SkTileMode::kClamp,
+                                      sampling, localMatrix);
+    }
     if (!imgShader) {
         SKGPU_LOG_W("Couldn't create subset image shader");
         return false;
@@ -774,7 +781,7 @@ void Device::drawEdgeAAImageSet(const SkCanvas::ImageSetEntry set[], int count,
         // TODO: Produce an image shading paint key and data directly without having to reconstruct
         // the equivalent SkPaint for each entry. Reuse the key and data between entries if possible
         paintWithShader.setShader(paint.refShader());
-        if (!create_img_shader_paint(std::move(imageToDraw), src, newSampling,
+        if (!create_img_shader_paint(std::move(imageToDraw), src, constraint, newSampling,
                                      &localMatrix, &paintWithShader)) {
             return;
         }
@@ -823,8 +830,9 @@ sktext::gpu::AtlasDrawDelegate Device::atlasDelegate() {
     return [&](const sktext::gpu::AtlasSubRun* subRun,
                SkPoint drawOrigin,
                const SkPaint& paint,
-               sk_sp<SkRefCnt> subRunStorage) {
-        this->drawAtlasSubRun(subRun, drawOrigin, paint, subRunStorage);
+               sk_sp<SkRefCnt> subRunStorage,
+               sktext::gpu::RendererData rendererData) {
+        this->drawAtlasSubRun(subRun, drawOrigin, paint, subRunStorage, rendererData);
     };
 }
 
@@ -843,7 +851,8 @@ void Device::onDrawGlyphRunList(SkCanvas* canvas,
 void Device::drawAtlasSubRun(const sktext::gpu::AtlasSubRun* subRun,
                              SkPoint drawOrigin,
                              const SkPaint& paint,
-                             sk_sp<SkRefCnt> subRunStorage) {
+                             sk_sp<SkRefCnt> subRunStorage,
+                             sktext::gpu::RendererData rendererData) {
     const int subRunEnd = subRun->glyphCount();
     auto regenerateDelegate = [&](sktext::gpu::GlyphVector* glyphs,
                                   int begin,
@@ -861,7 +870,7 @@ void Device::drawAtlasSubRun(const sktext::gpu::AtlasSubRun* subRun,
             return;
         }
         if (glyphsRegenerated) {
-            auto [bounds, localToDevice] = subRun->boundsAndDeviceMatrix(
+            auto [bounds, localToDevice] = subRun->vertexFiller().boundsAndDeviceMatrix(
                                                    this->localToDeviceTransform(), drawOrigin);
             SkPaint subRunPaint = paint;
             // For color emoji, only the paint alpha affects the final color
@@ -873,9 +882,11 @@ void Device::drawAtlasSubRun(const sktext::gpu::AtlasSubRun* subRun,
                                Geometry(SubRunData(subRun,
                                                    subRunStorage,
                                                    bounds,
+                                                   this->localToDeviceTransform().inverse(),
                                                    subRunCursor,
                                                    glyphsRegenerated,
-                                                   fRecorder)),
+                                                   fRecorder,
+                                                   rendererData)),
                                subRunPaint,
                                DefaultFillStyle(),
                                DrawFlags::kIgnorePathEffect | DrawFlags::kIgnoreMaskFilter);
@@ -974,6 +985,15 @@ void Device::drawGeometry(const Transform& localToDevice,
         return;
     }
 
+    // Calculate the clipped bounds of the draw and determine the clip elements that affect the
+    // draw without updating the clip stack.
+    ClipStack::ElementList clipElements;
+    const Clip clip = fClip.visitClipStackForDraw(localToDevice, geometry, style, &clipElements);
+    if (clip.isClippedOut()) {
+        // Clipped out, so don't record anything.
+        return;
+    }
+
     // Figure out what dst color requirements we have, if any.
     DstReadRequirement dstReadReq = DstReadRequirement::kNone;
     const SkBlenderBase* blender = as_BB(paint.getBlender());
@@ -990,13 +1010,11 @@ void Device::drawGeometry(const Transform& localToDevice,
         this->flushPendingWorkToRecorder();
     }
 
+    // Update the clip stack after issuing a flush (if it was needed). A draw will be recorded after
+    // this point.
     DrawOrder order(fCurrentDepth.next());
-    auto [clip, clipOrder] = fClip.applyClipToDraw(
-            fColorDepthBoundsManager.get(), localToDevice, geometry, style, order.depth());
-    if (clip.drawBounds().isEmptyNegativeOrNaN()) {
-        // Clipped out, so don't record anything
-        return;
-    }
+    CompressedPaintersOrder clipOrder = fClip.updateClipStateForDraw(
+            clip, clipElements, fColorDepthBoundsManager.get(), order.depth());
 
 #if defined(SK_DEBUG)
     // Renderers and their component RenderSteps have flexibility in defining their
@@ -1126,11 +1144,16 @@ const Renderer* Device::chooseRenderer(const Transform& localToDevice,
                                        const SkStrokeRec& style,
                                        bool requireMSAA) const {
     const RendererProvider* renderers = fRecorder->priv().rendererProvider();
+    SkASSERT(renderers);
     SkStrokeRec::Style type = style.getStyle();
 
     if (geometry.isSubRun()) {
         SkASSERT(!requireMSAA);
-        return geometry.subRunData().subRun()->renderer(renderers);
+        sktext::gpu::RendererData rendererData = geometry.subRunData().rendererData();
+        if (!rendererData.isSDF) {
+            return renderers->bitmapText();
+        }
+        return renderers->sdfText(rendererData.isLCD);
     } else if (geometry.isVertices()) {
         SkVerticesPriv info(geometry.vertices()->priv());
         return renderers->vertices(info.mode(), info.hasColors(), info.hasTexCoords());
@@ -1276,7 +1299,8 @@ void Device::drawSpecial(SkSpecialImage* special,
     SkASSERT(srcToDst.isTranslate());
 
     SkPaint paintWithShader(paint);
-    if (!create_img_shader_paint(std::move(img), src, sampling, &srcToDst, &paintWithShader)) {
+    if (!create_img_shader_paint(std::move(img), src, SkCanvas::kStrict_SrcRectConstraint ,sampling,
+                                 &srcToDst, &paintWithShader)) {
         return;
     }
 
@@ -1334,7 +1358,7 @@ TextureProxyView Device::readSurfaceView() const {
 sk_sp<sktext::gpu::Slug> Device::convertGlyphRunListToSlug(const sktext::GlyphRunList& glyphRunList,
                                                            const SkPaint& initialPaint,
                                                            const SkPaint& drawingPaint) {
-    return sktext::gpu::SlugImpl::Make(this->asMatrixProvider(),
+    return sktext::gpu::SlugImpl::Make(this->localToDevice(),
                                        glyphRunList,
                                        initialPaint,
                                        drawingPaint,

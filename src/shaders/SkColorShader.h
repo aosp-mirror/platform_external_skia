@@ -12,7 +12,6 @@
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkFlattenable.h"
 #include "include/core/SkRefCnt.h"
-#include "src/core/SkColorSpaceXformSteps.h"
 #include "src/shaders/SkShaderBase.h"
 
 #if defined(SK_GRAPHITE)
@@ -63,17 +62,6 @@ private:
 
     bool appendStages(const SkStageRec&, const SkShaders::MatrixRec&) const override;
 
-#if defined(SK_ENABLE_SKVM)
-    skvm::Color program(skvm::Builder*,
-                        skvm::Coord device,
-                        skvm::Coord local,
-                        skvm::Color paint,
-                        const SkShaders::MatrixRec&,
-                        const SkColorInfo& dst,
-                        skvm::Uniforms* uniforms,
-                        SkArenaAlloc*) const override;
-#endif
-
     SkColor fColor;
 };
 
@@ -102,46 +90,8 @@ private:
     void flatten(SkWriteBuffer&) const override;
     bool appendStages(const SkStageRec&, const SkShaders::MatrixRec&) const override;
 
-#if defined(SK_ENABLE_SKVM)
-    skvm::Color program(skvm::Builder*,
-                        skvm::Coord device,
-                        skvm::Coord local,
-                        skvm::Color paint,
-                        const SkShaders::MatrixRec&,
-                        const SkColorInfo& dst,
-                        skvm::Uniforms* uniforms,
-                        SkArenaAlloc*) const override;
-#endif
-
     sk_sp<SkColorSpace> fColorSpace;
     const SkColor4f fColor;
-};
-
-class SkUpdatableColorShader : public SkShaderBase {
-public:
-    explicit SkUpdatableColorShader(SkColorSpace* cs);
-#if defined(SK_ENABLE_SKVM)
-    skvm::Color program(skvm::Builder* builder,
-                        skvm::Coord device,
-                        skvm::Coord local,
-                        skvm::Color paint,
-                        const SkShaders::MatrixRec&,
-                        const SkColorInfo& dst,
-                        skvm::Uniforms* uniforms,
-                        SkArenaAlloc* alloc) const override;
-#endif
-
-    ShaderType type() const override { return ShaderType::kUpdatableColor; }
-
-    void updateColor(SkColor c) const;
-
-private:
-    // For serialization.  This will never be called.
-    Factory getFactory() const override { return nullptr; }
-    const char* getTypeName() const override { return nullptr; }
-
-    SkColorSpaceXformSteps fSteps;
-    mutable float fValues[4];
 };
 
 #endif

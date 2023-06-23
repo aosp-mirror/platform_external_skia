@@ -13,13 +13,11 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSpan.h"
 #include "include/effects/SkRuntimeEffect.h"
-#include "include/private/SkColorData.h"
 #include "include/private/base/SkDebug.h"
 #include "src/effects/colorfilters/SkColorFilterBase.h"
 
 #include <vector>
 
-class SkColorSpace;
 class SkReadBuffer;
 class SkWriteBuffer;
 struct SkStageRec;
@@ -37,16 +35,6 @@ public:
 #endif
 
     bool appendStages(const SkStageRec& rec, bool) const override;
-
-#if defined(SK_ENABLE_SKVM)
-    skvm::Color onProgram(skvm::Builder* p,
-                          skvm::Color c,
-                          const SkColorInfo& colorInfo,
-                          skvm::Uniforms* uniforms,
-                          SkArenaAlloc* alloc) const override;
-#endif
-
-    SkPMColor4f onFilterColor4f(const SkPMColor4f& color, SkColorSpace* dstCS) const override;
 
     bool onIsAlphaUnchanged() const override;
 

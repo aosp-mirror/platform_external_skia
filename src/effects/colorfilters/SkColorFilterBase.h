@@ -31,12 +31,6 @@ class PipelineDataGatherer;
 }
 #endif
 
-#if defined(SK_ENABLE_SKVM)
-#include "include/core/SkImageInfo.h"
-#include "src/base/SkArenaAlloc.h"
-#include "src/core/SkVM_fwd.h"
-#endif
-
 #define SK_ALL_COLOR_FILTERS(M) \
     M(BlendMode)                \
     M(ColorSpaceXform)          \
@@ -51,12 +45,6 @@ class SkColorFilterBase : public SkColorFilter {
 public:
     SK_WARN_UNUSED_RESULT
     virtual bool appendStages(const SkStageRec& rec, bool shaderIsOpaque) const = 0;
-
-#if defined(SK_ENABLE_SKVM)
-    SK_WARN_UNUSED_RESULT
-    skvm::Color program(skvm::Builder*, skvm::Color,
-                        const SkColorInfo& dst, skvm::Uniforms*, SkArenaAlloc*) const;
-#endif
 
     /** Returns the flags for this filter. Override in subclasses to return custom flags.
     */
@@ -117,11 +105,6 @@ protected:
     virtual bool onAsAColorMode(SkColor* color, SkBlendMode* bmode) const;
 
 private:
-#if defined(SK_ENABLE_SKVM)
-    virtual skvm::Color onProgram(skvm::Builder*, skvm::Color,
-                                  const SkColorInfo& dst, skvm::Uniforms*, SkArenaAlloc*) const = 0;
-#endif
-
     friend class SkColorFilter;
 
     using INHERITED = SkFlattenable;

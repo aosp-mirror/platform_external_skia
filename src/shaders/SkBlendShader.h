@@ -19,10 +19,6 @@
 #include "src/gpu/graphite/PaintParamsKey.h"
 #endif
 
-#if defined(SK_ENABLE_SKVM)
-#include "src/core/SkVM.h"
-#endif
-
 #include <utility>
 
 class SkReadBuffer;
@@ -51,17 +47,6 @@ protected:
     SkBlendShader(SkReadBuffer&);
     void flatten(SkWriteBuffer&) const override;
     bool appendStages(const SkStageRec&, const SkShaders::MatrixRec&) const override;
-
-#if defined(SK_ENABLE_SKVM)
-    skvm::Color program(skvm::Builder*,
-                        skvm::Coord device,
-                        skvm::Coord local,
-                        skvm::Color paint,
-                        const SkShaders::MatrixRec& mRec,
-                        const SkColorInfo& dst,
-                        skvm::Uniforms*,
-                        SkArenaAlloc*) const override;
-#endif  // defined(SK_ENABLE_SKVM)
 
 private:
     friend void ::SkRegisterBlendShaderFlattenable();

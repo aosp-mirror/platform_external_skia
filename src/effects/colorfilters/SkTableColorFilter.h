@@ -32,10 +32,6 @@ class PipelineDataGatherer;
 }
 #endif
 
-#if defined(SK_ENABLE_SKSL) && defined(SK_ENABLE_SKVM)
-#include "src/core/SkVM.h"
-#endif
-
 class SkTableColorFilter final : public SkColorFilterBase {
 public:
     SkTableColorFilter(sk_sp<SkColorTable> table) : fTable(table) {
@@ -51,14 +47,6 @@ public:
 #endif
 
     bool appendStages(const SkStageRec& rec, bool shaderIsOpaque) const override;
-
-#if defined(SK_ENABLE_SKVM)
-    skvm::Color onProgram(skvm::Builder* p,
-                          skvm::Color c,
-                          const SkColorInfo& dst,
-                          skvm::Uniforms* uniforms,
-                          SkArenaAlloc*) const override;
-#endif
 
     void flatten(SkWriteBuffer& buffer) const override;
 
