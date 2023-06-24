@@ -166,6 +166,7 @@ public:
     Program(skia_private::TArray<Instruction> instrs,
             int numValueSlots,
             int numUniformSlots,
+            int numImmutableSlots,
             int numLabels,
             DebugTracePriv* debugTrace);
     ~Program();
@@ -185,6 +186,7 @@ private:
     struct SlotData {
         SkSpan<float> values;
         SkSpan<float> stack;
+        SkSpan<float> immutable;
     };
     SlotData allocateSlotData(SkArenaAlloc* alloc) const;
 
@@ -203,9 +205,14 @@ private:
     void appendCopy(skia_private::TArray<Stage>* pipeline,
                     SkArenaAlloc* alloc,
                     ProgramOp baseStage,
-                    SkRPOffset dst,
-                    SkRPOffset src,
+                    SkRPOffset dst, int dstStride,
+                    SkRPOffset src, int srcStride,
                     int numSlots) const;
+    void appendCopyImmutableUnmasked(skia_private::TArray<Stage>* pipeline,
+                                     SkArenaAlloc* alloc,
+                                     SkRPOffset dst,
+                                     SkRPOffset src,
+                                     int numSlots) const;
     void appendCopySlotsUnmasked(skia_private::TArray<Stage>* pipeline,
                                  SkArenaAlloc* alloc,
                                  SkRPOffset dst,
@@ -286,6 +293,7 @@ private:
     skia_private::TArray<Instruction> fInstructions;
     int fNumValueSlots = 0;
     int fNumUniformSlots = 0;
+    int fNumImmutableSlots = 0;
     int fNumTempStackSlots = 0;
     int fNumLabels = 0;
     StackDepths fTempStackMaxDepths;
@@ -298,6 +306,7 @@ public:
     /** Finalizes and optimizes the program. */
     std::unique_ptr<Program> finish(int numValueSlots,
                                     int numUniformSlots,
+                                    int numImmutableSlots,
                                     DebugTracePriv* debugTrace = nullptr);
     /**
      * Peels off a label ID for use in the program. Set the label's position in the program with
@@ -422,7 +431,7 @@ public:
         this->push_slots_or_immutable(src, BuilderOp::push_slots);
     }
 
-    // Translates into copy_slots_unmasked (from immutables into temp stack) in Raster Pipeline.
+    // Translates into copy_immutable_unmasked (from immutables into temp stack) in Raster Pipeline.
     void push_immutable(SlotRange src) {
         this->push_slots_or_immutable(src, BuilderOp::push_immutable);
     }
@@ -567,6 +576,8 @@ public:
     }
 
     void copy_slots_unmasked(SlotRange dst, SlotRange src);
+
+    void copy_immutable_unmasked(SlotRange dst, SlotRange src);
 
     // Directly writes a constant value into a slot.
     void copy_constant(Slot slot, int constantValue);
