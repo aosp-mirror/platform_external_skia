@@ -225,6 +225,9 @@ public:
 
     virtual bool android_utils_clipWithStencil() { return false; }
 
+    virtual GrRecordingContext* recordingContext() const { return nullptr; }
+    virtual skgpu::graphite::Recorder* recorder() const { return nullptr; }
+
     virtual skgpu::ganesh::Device* asGaneshDevice() { return nullptr; }
     virtual skgpu::graphite::Device* asGraphiteDevice() { return nullptr; }
 
@@ -614,10 +617,7 @@ protected:
     void drawMesh(const SkMesh&, sk_sp<SkBlender>, const SkPaint&) override {}
 #endif
 
-#if defined(SK_GANESH)
     void drawSlug(SkCanvas*, const sktext::gpu::Slug*, const SkPaint&) override {}
-#endif
-
     void onDrawGlyphRunList(
             SkCanvas*, const sktext::GlyphRunList&, const SkPaint&, const SkPaint&) override {}
 

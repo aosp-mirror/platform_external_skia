@@ -314,19 +314,20 @@ public:
     */
     sk_sp<SkSurface> makeSurface(const SkImageInfo& info, const SkSurfaceProps* props = nullptr);
 
-    /** Returns GPU context of the GPU surface associated with SkCanvas.
+    /** Returns Ganesh context of the GPU surface associated with SkCanvas.
 
         @return  GPU context, if available; nullptr otherwise
 
         example: https://fiddle.skia.org/c/@Canvas_recordingContext
      */
-    virtual GrRecordingContext* recordingContext();
+    virtual GrRecordingContext* recordingContext() const;
+
 
     /** Returns Recorder for the GPU surface associated with SkCanvas.
 
         @return  Recorder, if available; nullptr otherwise
      */
-    virtual skgpu::graphite::Recorder* recorder();
+    virtual skgpu::graphite::Recorder* recorder() const;
 
     /** Sometimes a canvas is owned by a surface. If it is, getSurface() will return a bare
      *  pointer to that surface, else this will return nullptr.
@@ -2441,6 +2442,7 @@ private:
     SkCanvas& operator=(const SkCanvas&) = delete;
 
     friend class sktext::gpu::Slug;
+    friend class SkPicturePlayback;
     /**
      * Convert a SkTextBlob to a sktext::gpu::Slug using the current canvas state.
      */
@@ -2555,7 +2557,11 @@ private:
 
     std::unique_ptr<sktext::GlyphRunBuilder> fScratchGlyphRunBuilder;
 
-    using INHERITED = SkRefCnt;
+#if !defined(SK_LEGACY_GPU_GETTERS_CONST)
+public:
+    virtual GrRecordingContext* recordingContext();
+    virtual skgpu::graphite::Recorder* recorder();
+#endif
 };
 
 /** \class SkAutoCanvasRestore
