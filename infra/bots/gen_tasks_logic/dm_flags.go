@@ -324,19 +324,16 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			// Failed to make lazy image.
 			skip(ALL, "gm", ALL, "image_subset")
 
-			// Could not readback from surface.
+			// Graphite doesn't do auto-image-tiling so these GMs should
+			// remain disabled
 			skip(ALL, "gm", ALL, "verylarge_picture_image")
-			skip(ALL, "gm", ALL, "verylarge_picture_image_manual")
 			skip(ALL, "gm", ALL, "verylargebitmap")
-			skip(ALL, "gm", ALL, "verylargebitmap_manual")
 			skip(ALL, "gm", ALL, "path_huge_aa")
-			skip(ALL, "gm", ALL, "path_huge_aa_manual")
-			skip(ALL, "gm", ALL, "fast_constraint_red_is_allowed_manual")
 			skip(ALL, "gm", ALL, "fast_constraint_red_is_allowed")
-			skip(ALL, "gm", ALL, "strict_constraint_batch_no_red_allowed_manual")
 			skip(ALL, "gm", ALL, "strict_constraint_batch_no_red_allowed")
-			skip(ALL, "gm", ALL, "strict_constraint_no_red_allowed_manual")
 			skip(ALL, "gm", ALL, "strict_constraint_no_red_allowed")
+
+			// Could not readback from surface.
 			skip(ALL, "gm", ALL, "hugebitmapshader")
 			skip(ALL, "gm", ALL, "async_rescale_and_read_no_bleed")
 			skip(ALL, "gm", ALL, "async_rescale_and_read_text_up")
@@ -346,7 +343,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			if b.extraConfig("Metal") {
 				configs = []string{"grmtl"}
 				if b.gpu("IntelIrisPlus") {
-					// We get some 27/255 RGB diffs on the 45 degree rotation case on this device (skbug.com/14408)
+					// We get some 27/255 RGB diffs on the 45 degree
+					// rotation case on this device (skbug.com/14408)
 					skip(ALL, "test", ALL, "BigImageTest_Graphite")
 				}
 			}
@@ -1021,9 +1019,13 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	}
 	if b.matchOs("Mac") && b.cpu() {
 		// skia:6992
-		skip("pic-8888", "gm", ALL, "encode-platform")
+		skip("pic-8888",       "gm", ALL, "encode-platform")
 		skip("serialize-8888", "gm", ALL, "encode-platform")
 	}
+
+	// skia:14411 -- images are visibly identical, not interested in diagnosing non-determinism here
+	skip("pic-8888",       "gm", ALL, "perlinnoise_layered")
+	skip("serialize-8888", "gm", ALL, "perlinnoise_layered")
 
 	// skia:4769
 	skip("pic-8888", "gm", ALL, "drawfilter")

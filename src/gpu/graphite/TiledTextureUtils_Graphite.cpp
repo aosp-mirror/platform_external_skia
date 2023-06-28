@@ -12,7 +12,6 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkSamplingOptions.h"
 #include "include/core/SkSize.h"
-#include "src/base/SkSafeMath.h"
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkDevice.h"
 #include "src/core/SkImagePriv.h"
@@ -147,7 +146,7 @@ void draw_tiled_bitmap_graphite(SkCanvas* canvas,
                                             constraint);
 }
 
-} // anonymous namepace
+} // anonymous namespace
 
 namespace skgpu {
 
@@ -158,6 +157,10 @@ void TiledTextureUtils::DrawImageRect_Graphite(SkCanvas* canvas,
                                                const SkSamplingOptions& origSampling,
                                                const SkPaint* paint,
                                                SkCanvas::SrcRectConstraint constraint) {
+    if (canvas->isClipEmpty()) {
+        return;
+    }
+
     if (!image->isTextureBacked()) {
         SkRect src;
         SkRect dst;
@@ -169,7 +172,7 @@ void TiledTextureUtils::DrawImageRect_Graphite(SkCanvas* canvas,
             return;
         }
 
-        SkASSERT(mode != ImageDrawMode::kDecal); // only happens if there is a 'dstClip;
+        SkASSERT(mode != ImageDrawMode::kDecal); // only happens if there is a 'dstClip'
 
         if (src.contains(image->bounds())) {
             constraint = SkCanvas::kFast_SrcRectConstraint;
@@ -183,10 +186,7 @@ void TiledTextureUtils::DrawImageRect_Graphite(SkCanvas* canvas,
             sampling = SkSamplingOptions(sampling.filter);
         }
 
-        SkIRect clipRect = SkCanvasPriv::DeviceClipBounds(canvas);
-        if (clipRect.isEmpty()) {
-            return;
-        }
+        SkIRect clipRect = device->devClipBounds();
 
         int tileFilterPad;
         if (sampling.useCubic) {
@@ -212,15 +212,15 @@ void TiledTextureUtils::DrawImageRect_Graphite(SkCanvas* canvas,
 
         int tileSize;
         SkIRect clippedSubset;
-        if (skgpu::TiledTextureUtils::ShouldTileImage(clipRect,
-                                                      image->dimensions(),
-                                                      localToDevice,
-                                                      srcToDst,
-                                                      &src,
-                                                      maxTileSize,
-                                                      cacheSize,
-                                                      &tileSize,
-                                                      &clippedSubset)) {
+        if (ShouldTileImage(clipRect,
+                            image->dimensions(),
+                            localToDevice,
+                            srcToDst,
+                            &src,
+                            maxTileSize,
+                            cacheSize,
+                            &tileSize,
+                            &clippedSubset)) {
             // Extract pixels on the CPU, since we have to split into separate textures before
             // sending to the GPU if tiling.
             if (SkBitmap bm; as_IB(image)->getROPixels(nullptr, &bm)) {
@@ -239,7 +239,12 @@ void TiledTextureUtils::DrawImageRect_Graphite(SkCanvas* canvas,
         }
     }
 
-    canvas->drawImageRect(image, srcRect, dstRect, origSampling, paint, constraint);
+    canvas->drawImageRect(image,
+                          srcRect,
+                          dstRect,
+                          origSampling,
+                          paint,
+                          constraint);
 }
 
 } // namespace skgpu
