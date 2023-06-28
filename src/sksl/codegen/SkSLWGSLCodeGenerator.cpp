@@ -91,6 +91,13 @@ enum class PtrAddressSpace {
     kStorage,
 };
 
+const char* operator_name(Operator op) {
+    switch (op.kind()) {
+        case Operator::Kind::LOGICALXOR:  return " != ";
+        default:                          return op.operatorName();
+    }
+}
+
 std::string_view pipeline_struct_prefix(ProgramKind kind) {
     if (ProgramConfig::IsVertex(kind)) {
         return "VS";
@@ -1139,9 +1146,9 @@ void WGSLCodeGenerator::writeIfStatement(const IfStatement& s) {
     ++fConditionalScopeDepth;
 
     std::string testExpr = this->assembleExpression(*s.test(), Precedence::kExpression);
-    this->write("if (");
+    this->write("if ");
     this->write(testExpr);
-    this->writeLine(") {");
+    this->writeLine(" {");
     fIndentation++;
     this->writeStatement(*s.ifTrue());
     this->finishLine();
@@ -1632,12 +1639,33 @@ std::string WGSLCodeGenerator::assembleBinaryExpression(const Expression& left,
     Precedence precedence = op.getBinaryPrecedence();
     bool needParens = precedence >= parentPrecedence;
 
+    // WGSL always requires parentheses for some operators which are deemed to be ambiguous.
+    // (8.19. Operator Precedence and Associativity)
+    switch (op.kind()) {
+        case OperatorKind::LOGICALOR:
+        case OperatorKind::LOGICALAND:
+        case OperatorKind::BITWISEOR:
+        case OperatorKind::BITWISEAND:
+        case OperatorKind::BITWISEXOR:
+        case OperatorKind::SHL:
+        case OperatorKind::SHR:
+        case OperatorKind::LT:
+        case OperatorKind::GT:
+        case OperatorKind::LTEQ:
+        case OperatorKind::GTEQ:
+            precedence = Precedence::kParentheses;
+            break;
+
+        default:
+            break;
+    }
+
     if (needParens) {
         expr.push_back('(');
     }
 
     expr += this->assembleExpression(left, precedence);
-    expr += op.operatorName();
+    expr += operator_name(op);
     expr += this->assembleExpression(right, precedence);
 
     if (needParens) {
@@ -1736,7 +1764,7 @@ std::string WGSLCodeGenerator::assembleUnaryOpIntrinsic(Operator op,
         expr.push_back('(');
     }
 
-    expr += op.operatorName();
+    expr += operator_name(op);
     expr += this->assembleExpression(*call.arguments()[0], Precedence::kPrefix);
 
     if (needParens) {
@@ -1760,7 +1788,7 @@ std::string WGSLCodeGenerator::assembleBinaryOpIntrinsic(Operator op,
     }
 
     expr += this->assembleExpression(*call.arguments()[0], precedence);
-    expr += op.operatorName();
+    expr += operator_name(op);
     expr += this->assembleExpression(*call.arguments()[1], precedence);
 
     if (needParens) {
@@ -2451,7 +2479,7 @@ std::string WGSLCodeGenerator::assembleEqualityExpression(const Type& left,
             std::string suffix = '[' + std::to_string(index) + ']';
             expr += this->assembleEqualityExpression(vecType, leftName + suffix,
                                                      vecType, rightName + suffix,
-                                                     op, Precedence::kLogicalAnd);
+                                                     op, Precedence::kParentheses);
             separator = combiner;
         }
         return expr + ')';
@@ -2466,7 +2494,7 @@ std::string WGSLCodeGenerator::assembleEqualityExpression(const Type& left,
             std::string suffix = '[' + std::to_string(index) + ']';
             expr += this->assembleEqualityExpression(indexedType, leftName + suffix,
                                                      indexedType, rightName + suffix,
-                                                     op, Precedence::kLogicalAnd);
+                                                     op, Precedence::kParentheses);
             separator = combiner;
         }
         return expr + ')';
@@ -2483,7 +2511,7 @@ std::string WGSLCodeGenerator::assembleEqualityExpression(const Type& left,
             expr += this->assembleEqualityExpression(
                             *field.fType, leftName + '.' + std::string(field.fName),
                             *field.fType, rightName + '.' + std::string(field.fName),
-                            op, Precedence::kLogicalAnd);
+                            op, Precedence::kParentheses);
             separator = combiner;
         }
         return expr + ')';
@@ -2496,20 +2524,20 @@ std::string WGSLCodeGenerator::assembleEqualityExpression(const Type& left,
 
         expr += isEqual ? "all(" : "any(";
         expr += leftName;
-        expr += op.operatorName();
+        expr += operator_name(op);
         expr += rightName;
         return expr + ')';
     }
 
     // Compare scalars via `x == y`.
     SkASSERT(right.isScalar());
-    if (Precedence::kEquality >= parentPrecedence) {
+    if (parentPrecedence < Precedence::kSequence) {
         expr = '(';
     }
     expr += leftName;
-    expr += op.operatorName();
+    expr += operator_name(op);
     expr += rightName;
-    if (Precedence::kEquality >= parentPrecedence) {
+    if (parentPrecedence < Precedence::kSequence) {
         expr += ')';
     }
     return expr;
@@ -2523,8 +2551,8 @@ std::string WGSLCodeGenerator::assembleEqualityExpression(const Expression& left
     if (left.type().isScalar() || left.type().isVector()) {
         // WGSL supports scalar and vector comparisons natively. We know the expressions will only
         // be emitted once, so there isn't a benefit to creating a let-declaration.
-        leftName = this->assembleExpression(left, Precedence::kAssignment);
-        rightName = this->assembleExpression(right, Precedence::kAssignment);
+        leftName = this->assembleExpression(left, Precedence::kParentheses);
+        rightName = this->assembleExpression(right, Precedence::kParentheses);
     } else {
         leftName = this->writeNontrivialScratchLet(left, Precedence::kAssignment);
         rightName = this->writeNontrivialScratchLet(right, Precedence::kAssignment);
