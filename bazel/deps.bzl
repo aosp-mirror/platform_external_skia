@@ -122,7 +122,7 @@ def git_repos_from_deps(ws = "@"):
     new_git_repository(
         name = "libwebp",
         build_file = ws + "//bazel/external/libwebp:BUILD.bazel",
-        commit = "fd7b5d48464475408d32d2611bdb6947d4246b97",
+        commit = "fd7bb21c0cb56e8a82e9bfa376164b842f433f3b",
         remote = "https://chromium.googlesource.com/webm/libwebp.git",
     )
 
@@ -169,14 +169,14 @@ def git_repos_from_deps(ws = "@"):
 
     git_repository(
         name = "spirv_tools",
-        commit = "f83f50d23ad576ffe3b89d4713601703950a7b7e",
+        commit = "ea5af2fb5fb2b0f6da9e5bd50e0b3d0616d5be2c",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git",
     )
 
     new_git_repository(
         name = "vello",
         build_file = ws + "//bazel/external/vello:BUILD.bazel",
-        commit = "12e764d58d613c7a5c7d1caede782c42a1e94cab",
+        commit = "443539891c4c1eb3ca4ed891d251cbf4097c9a9c",
         remote = "https://skia.googlesource.com/external/github.com/linebender/vello.git",
     )
 
