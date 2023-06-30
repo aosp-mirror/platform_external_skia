@@ -22,6 +22,8 @@
   // Staging flags
   #define SK_SUPPORT_STROKEANDFILL
   #define SK_DISABLE_LEGACY_SKSURFACE_FLUSH
+  #define SK_DISABLE_LEGACY_CANVAS_FLUSH
+  #define SK_LEGACY_GPU_GETTERS_CONST
 
   // Needed until we fix https://bug.skia.org/2440
   #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
