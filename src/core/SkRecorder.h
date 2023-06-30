@@ -89,7 +89,9 @@ public:
     // Make SkRecorder forget entirely about its SkRecord*; all calls to SkRecorder will fail.
     void forgetRecord();
 
+#if !defined(SK_DISABLE_LEGACY_CANVAS_FLUSH)
     void onFlush() override;
+#endif
 
     void willSave() override;
     SaveLayerStrategy getSaveLayerStrategy(const SaveLayerRec&) override;
@@ -108,9 +110,7 @@ public:
                         SkScalar x,
                         SkScalar y,
                         const SkPaint& paint) override;
-#if defined(SK_GANESH)
     void onDrawSlug(const sktext::gpu::Slug* slug) override;
-#endif
     void onDrawGlyphRunList(
             const sktext::GlyphRunList& glyphRunList, const SkPaint& paint) override;
     void onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],

@@ -17,13 +17,12 @@ class SkBitmap;
 struct SkIRect;
 struct SkISize;
 class SkMatrix;
-class SkMatrixProvider;
 class SkPaint;
 struct SkRect;
 struct SkSamplingOptions;
 
 namespace skgpu::ganesh {
-    class SurfaceDrawContext;
+    class Device;
 }
 
 namespace skgpu {
@@ -39,19 +38,6 @@ public:
                                 size_t cacheSize,
                                 int* tileSize,
                                 SkIRect* clippedSubset);
-
-    static void DrawTiledBitmap(SkBaseDevice*,
-                                const SkBitmap&,
-                                int tileSize,
-                                const SkMatrix& srcToDst,
-                                const SkRect& srcRect,
-                                const SkIRect& clippedSrcIRect,
-                                const SkPaint& paint,
-                                SkCanvas::QuadAAFlags origAAFlags,
-                                const SkMatrix& localToDevice,
-                                SkCanvas::SrcRectConstraint constraint,
-                                SkSamplingOptions sampling,
-                                SkTileMode tileMode);
 
     enum class ImageDrawMode {
         // Src and dst have been restricted to the image content. May need to clamp, no need to
@@ -73,6 +59,38 @@ public:
                                             SkMatrix* outSrcToDst);
 
     static bool CanDisableMipmap(const SkMatrix& viewM, const SkMatrix& localM);
+
+    static void ClampedOutsetWithOffset(SkIRect* iRect, int outset, SkPoint* offset,
+                                        const SkIRect& clamp);
+
+    static void DrawTiledBitmap_Ganesh(SkBaseDevice*,
+                                       const SkBitmap&,
+                                       int tileSize,
+                                       const SkMatrix& srcToDst,
+                                       const SkRect& srcRect,
+                                       const SkIRect& clippedSrcIRect,
+                                       const SkPaint& paint,
+                                       SkCanvas::QuadAAFlags origAAFlags,
+                                       const SkMatrix& localToDevice,
+                                       SkCanvas::SrcRectConstraint constraint,
+                                       SkSamplingOptions sampling);
+
+    static void DrawImageRect_Ganesh(skgpu::ganesh::Device*,
+                                     const SkImage*,
+                                     const SkRect& srcRect,
+                                     const SkRect& dstRect,
+                                     SkCanvas::QuadAAFlags,
+                                     const SkSamplingOptions&,
+                                     const SkPaint&,
+                                     SkCanvas::SrcRectConstraint);
+
+    static void DrawImageRect_Graphite(SkCanvas*,
+                                       const SkImage*,
+                                       const SkRect& src,
+                                       const SkRect& dst,
+                                       const SkSamplingOptions&,
+                                       const SkPaint*,
+                                       SkCanvas::SrcRectConstraint);
 };
 
 } // namespace skgpu

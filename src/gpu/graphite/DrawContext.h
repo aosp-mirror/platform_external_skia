@@ -29,11 +29,11 @@ class Geometry;
 class Recorder;
 class Transform;
 
-class AtlasManager;
 class Caps;
 class DispatchGroup;
 class DrawPass;
 class Task;
+class TextAtlasManager;
 class TextureProxy;
 class TextureProxyView;
 
@@ -71,7 +71,7 @@ public:
                     const PaintParams* paint,
                     const StrokeStyle* stroke);
 
-    bool recordTextUploads(AtlasManager*);
+    bool recordTextUploads(TextAtlasManager*);
     bool recordUpload(Recorder* recorder,
                       sk_sp<TextureProxy> targetProxy,
                       const SkColorInfo& srcColorInfo,
@@ -79,6 +79,9 @@ public:
                       const std::vector<MipLevel>& levels,
                       const SkIRect& dstRect,
                       std::unique_ptr<ConditionalUploadContext>);
+
+    // Record ComputePathAtlas dispatches and clear the atlas contents for new post-flush work.
+    void recordPathAtlasDispatches(Recorder*);
 
     // Ends the current DrawList being accumulated by the SDC, converting it into an optimized and
     // immutable DrawPass. The DrawPass will be ordered after any other snapped DrawPasses or

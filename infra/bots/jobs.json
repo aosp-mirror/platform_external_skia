@@ -5,7 +5,9 @@
   {"name": "BazelBuild-base-enforce_iwyu-linux_x64",
     "cq_config": {}
   },
-  {"name": "BazelBuild-modules_canvaskit-ck_full_webgl2_debug-linux_x64"},
+  {"name": "BazelBuild-modules_canvaskit-ck_full_webgl2_debug-linux_x64",
+    "cq_config": {}
+  },
   {"name": "BazelBuild-example_hello_world_gl-release-linux_x64"},
   {"name": "BazelBuild-example_hello_world_vulkan-release-linux_x64",
       "cq_config": {}
@@ -487,7 +489,6 @@
   {"name": "Perf-Win10-Clang-NUC9i7QN-GPU-RTX3060-x86_64-Release-All"},
   {"name": "Perf-Win10-Clang-NUC9i7QN-GPU-RTX3060-x86_64-Release-All-Vulkan"},
   {"name": "Perf-Win10-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All"},
-  {"name": "Perf-Win10-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-ANGLE"},
   {"name": "Perf-Win10-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-Vulkan"},
   {"name": "Perf-Win10-Clang-NUCD34010WYKH-GPU-IntelHD4400-x86_64-Release-All"},
   {"name": "Perf-Win10-Clang-NUCD34010WYKH-GPU-IntelHD4400-x86_64-Release-All-ANGLE"},
@@ -738,6 +739,7 @@
    "cq_config": {}
    },
   {"name": "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Dawn"},
+  {"name": "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Graphite_Vulkan"},
   {"name": "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-PreAbandonGpuContext"},
   {"name": "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan",
    "cq_config": {}
@@ -746,6 +748,7 @@
    "cq_config": {}
    },
   {"name": "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-DDL3_TSAN"},
+  {"name": "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-Graphite_Vulkan"},
   {"name": "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-PreAbandonGpuContext"},
   {"name": "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-Valgrind_AbandonGpuContext_SK_CPU_LIMIT_SSE41"},
   {"name": "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-Valgrind_PreAbandonGpuContext_SK_CPU_LIMIT_SSE41"},
@@ -797,10 +800,8 @@
   {"name": "Test-Win10-Clang-NUC9i7QN-GPU-RTX3060-x86_64-Release-All"},
   {"name": "Test-Win10-Clang-NUC9i7QN-GPU-RTX3060-x86_64-Release-All-Vulkan"},
   {"name": "Test-Win10-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Debug-All"},
-  {"name": "Test-Win10-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Debug-All-ANGLE"},
   {"name": "Test-Win10-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Debug-All-Vulkan"},
   {"name": "Test-Win10-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All"},
-  {"name": "Test-Win10-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-ANGLE"},
   {"name": "Test-Win10-Clang-NUC11TZi5-GPU-IntelIrisXe-x86_64-Release-All-Vulkan"},
   {"name": "Test-Win10-Clang-NUCD34010WYKH-GPU-IntelHD4400-x86_64-Debug-All"},
   {"name": "Test-Win10-Clang-NUCD34010WYKH-GPU-IntelHD4400-x86_64-Debug-All-ANGLE"},
@@ -840,6 +841,7 @@
    "cq_config": {"location_regexes": ["(tests|src/gpu)/graphite/.*", "dm/.+"]}
   },
   {"name": "Test-Win10-MSVC-Golo-GPU-QuadroP400-x86_64-Release-All-Graphite_Vulkan"},
+  {"name": "Test-Win10-MSVC-Golo-GPU-QuadroP400-x86_64-Debug-All-Graphite_Vulkan"},
   {"name": "Test-Win10-MSVC-Golo-GPU-QuadroP400-x86_64-Release-All-Vulkan"},
   {"name": "Test-Win2019-Clang-GCE-CPU-AVX2-x86-Debug-All"},
   {"name": "Test-Win2019-Clang-GCE-CPU-AVX2-x86-Release-All"},

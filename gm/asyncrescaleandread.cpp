@@ -23,6 +23,11 @@
 #include "tools/ToolUtils.h"
 #include "tools/gpu/YUVUtils.h"
 
+#if defined(SK_GRAPHITE)
+#include "include/gpu/graphite/Context.h"
+#include "src/gpu/graphite/RecorderPriv.h"
+#endif
+
 namespace {
 struct AsyncContext {
     bool fCalled = false;
@@ -70,6 +75,7 @@ static sk_sp<SkImage> do_read_and_scale(Src* src,
 template <typename Src>
 static sk_sp<SkImage> do_read_and_scale_yuv(Src* src,
                                             GrDirectContext* direct,
+                                            skgpu::graphite::Recorder* recorder,
                                             SkYUVColorSpace yuvCS,
                                             const SkIRect& srcRect,
                                             SkISize size,
@@ -83,15 +89,43 @@ static sk_sp<SkImage> do_read_and_scale_yuv(Src* src,
     SkImageInfo uvII = SkImageInfo::Make(uvSize, kGray_8_SkColorType, kPremul_SkAlphaType);
 
     AsyncContext asyncContext;
-    src->asyncRescaleAndReadPixelsYUV420(yuvCS, SkColorSpace::MakeSRGB(), srcRect, size,
-                                         rescaleGamma, rescaleMode, async_callback, &asyncContext);
-    if (direct) {
-        direct->submit();
-    }
-    while (!asyncContext.fCalled) {
-        // Only GPU should actually be asynchronous.
-        SkASSERT(direct);
-        direct->checkAsyncWorkCompletion();
+    if (recorder) {
+#if defined(SK_GRAPHITE)
+        skgpu::graphite::Context* graphiteContext = recorder->priv().context();
+        if (!graphiteContext) {
+            return nullptr;
+        }
+        // We need to flush the existing drawing commands before we try to read
+        std::unique_ptr<skgpu::graphite::Recording> recording = recorder->snap();
+        if (!recording) {
+            return nullptr;
+        }
+        skgpu::graphite::InsertRecordingInfo recordingInfo;
+        recordingInfo.fRecording = recording.get();
+        if (!graphiteContext->insertRecording(recordingInfo)) {
+            return nullptr;
+        }
+
+        graphiteContext->asyncRescaleAndReadPixelsYUV420(src, yuvCS, /*dstColorSpace=*/nullptr,
+                                                         srcRect, size, rescaleGamma, rescaleMode,
+                                                         async_callback, &asyncContext);
+        graphiteContext->submit();
+        while (!asyncContext.fCalled) {
+            graphiteContext->checkAsyncWorkCompletion();
+        }
+#endif
+    } else {
+        src->asyncRescaleAndReadPixelsYUV420(yuvCS, SkColorSpace::MakeSRGB(),
+                                             srcRect, size, rescaleGamma, rescaleMode,
+                                             async_callback, &asyncContext);
+        if (direct) {
+            direct->submit();
+        }
+        while (!asyncContext.fCalled) {
+            // Only GPU should actually be asynchronous.
+            SkASSERT(direct);
+            direct->checkAsyncWorkCompletion();
+        }
     }
     if (!asyncContext.fResult) {
         return nullptr;
@@ -109,7 +143,14 @@ static sk_sp<SkImage> do_read_and_scale_yuv(Src* src,
     SkASSERT(pixmaps.isValid());
     auto lazyYUVImage = sk_gpu_test::LazyYUVImage::Make(pixmaps);
     SkASSERT(lazyYUVImage);
-    return lazyYUVImage->refImage(direct, sk_gpu_test::LazyYUVImage::Type::kFromTextures);
+#if defined(SK_GRAPHITE)
+    if (recorder) {
+        return lazyYUVImage->refImage(recorder, sk_gpu_test::LazyYUVImage::Type::kFromTextures);
+    } else
+#endif
+    {
+        return lazyYUVImage->refImage(direct, sk_gpu_test::LazyYUVImage::Type::kFromTextures);
+    }
 }
 
 // Draws a grid of rescales. The columns are none, low, and high filter quality. The rows are
@@ -118,15 +159,12 @@ template <typename Src>
 static skiagm::DrawResult do_rescale_grid(SkCanvas* canvas,
                                           Src* src,
                                           GrDirectContext* direct,
+                                          skgpu::graphite::Recorder* recorder,
                                           const SkIRect& srcRect,
                                           SkISize newSize,
                                           bool doYUV420,
                                           SkString* errorMsg,
                                           int pad = 0) {
-    if (doYUV420 && !direct) {
-        errorMsg->printf("YUV420 only supported on direct GPU for now.");
-        return skiagm::DrawResult::kSkip;
-    }
     if (canvas->imageInfo().colorType() == kUnknown_SkColorType) {
         *errorMsg = "Not supported on recording/vector backends.";
         return skiagm::DrawResult::kSkip;
@@ -144,7 +182,8 @@ static skiagm::DrawResult do_rescale_grid(SkCanvas* canvas,
             SkScopeExit cleanup;
             sk_sp<SkImage> result;
             if (doYUV420) {
-                result = do_read_and_scale_yuv(src, direct, yuvColorSpace, srcRect, newSize, gamma,
+                result = do_read_and_scale_yuv(src, direct, recorder,
+                                               yuvColorSpace, srcRect, newSize, gamma,
                                                mode, &cleanup);
                 if (!result) {
                     errorMsg->printf("YUV420 async call failed. Allowed for now.");
@@ -191,6 +230,7 @@ static skiagm::DrawResult do_rescale_image_grid(SkCanvas* canvas,
         *errorMsg = "Not supported in DDL mode";
         return skiagm::DrawResult::kSkip;
     }
+    auto recorder = canvas->recorder();
 
     if (doSurface) {
         // Turn the image into a surface in order to call the read and rescale API
@@ -211,7 +251,7 @@ static skiagm::DrawResult do_rescale_image_grid(SkCanvas* canvas,
         SkPaint paint;
         paint.setBlendMode(SkBlendMode::kSrc);
         surface->getCanvas()->drawImage(image, 0, 0, SkSamplingOptions(), &paint);
-        return do_rescale_grid(canvas, surface.get(), dContext, srcRect, newSize,
+        return do_rescale_grid(canvas, surface.get(), dContext, recorder, srcRect, newSize,
                                doYUV420, errorMsg);
     } else if (dContext) {
         image = SkImages::TextureFromImage(dContext, image);
@@ -224,7 +264,7 @@ static skiagm::DrawResult do_rescale_image_grid(SkCanvas* canvas,
             return skiagm::DrawResult::kFail;
         }
     }
-    return do_rescale_grid(canvas, image.get(), dContext, srcRect, newSize, doYUV420,
+    return do_rescale_grid(canvas, image.get(), dContext, recorder, srcRect, newSize, doYUV420,
                            errorMsg);
 }
 
@@ -298,9 +338,10 @@ DEF_SIMPLE_GM_CAN_FAIL(async_yuv_no_scale, canvas, errorMsg, 400, 300) {
     SkPaint paint;
     canvas->drawImage(image.get(), 0, 0);
 
+    skgpu::graphite::Recorder* recorder = canvas->recorder();
     SkScopeExit scopeExit;
     auto yuvImage = do_read_and_scale_yuv(
-            surface, dContext, kRec601_SkYUVColorSpace, SkIRect::MakeWH(400, 300),
+            surface, dContext, recorder, kRec601_SkYUVColorSpace, SkIRect::MakeWH(400, 300),
             {400, 300}, SkImage::RescaleGamma::kSrc, SkImage::RescaleMode::kNearest, &scopeExit);
 
     canvas->clear(SK_ColorWHITE);
@@ -320,6 +361,7 @@ DEF_SIMPLE_GM_CAN_FAIL(async_rescale_and_read_no_bleed, canvas, errorMsg, 60, 60
         *errorMsg = "Not supported in DDL mode";
         return skiagm::DrawResult::kSkip;
     }
+    auto recorder = canvas->recorder();
 
     static constexpr int kBorder = 5;
     static constexpr int kInner = 5;
@@ -345,16 +387,16 @@ DEF_SIMPLE_GM_CAN_FAIL(async_rescale_and_read_no_bleed, canvas, errorMsg, 60, 60
     canvas->translate(kPad, kPad);
     skiagm::DrawResult result;
     SkISize downSize = {static_cast<int>(kInner/2),  static_cast<int>(kInner / 2)};
-    result = do_rescale_grid(canvas, surface.get(), dContext, srcRect, downSize, false, errorMsg,
-                             kPad);
+    result = do_rescale_grid(canvas, surface.get(), dContext, recorder, srcRect, downSize, false,
+                             errorMsg, kPad);
 
     if (result != skiagm::DrawResult::kOk) {
         return result;
     }
     canvas->translate(0, 4 * downSize.height());
     SkISize upSize = {static_cast<int>(kInner * 3.5), static_cast<int>(kInner * 4.6)};
-    result = do_rescale_grid(canvas, surface.get(), dContext, srcRect, upSize, false, errorMsg,
-                             kPad);
+    result = do_rescale_grid(canvas, surface.get(), dContext, recorder, srcRect, upSize, false,
+                             errorMsg, kPad);
     if (result != skiagm::DrawResult::kOk) {
         return result;
     }

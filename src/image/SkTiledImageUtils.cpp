@@ -7,6 +7,10 @@
 
 #include "include/core/SkTiledImageUtils.h"
 
+#if defined(SK_GRAPHITE)
+#include "src/gpu/TiledTextureUtils.h"
+#endif
+
 namespace SkTiledImageUtils {
 
 void DrawImageRect(SkCanvas* canvas,
@@ -16,13 +20,17 @@ void DrawImageRect(SkCanvas* canvas,
                    const SkSamplingOptions& sampling,
                    const SkPaint* paint,
                    SkCanvas::SrcRectConstraint constraint) {
-    if (!image) {
+    if (!image || !canvas) {
         return;
     }
 
-    if (canvas->recordingContext() || canvas->recorder()) {
-        // TODO: branch off into Ganesh and Graphite specific tiling
+#if defined(SK_GRAPHITE)
+    if (canvas->recorder()) {
+        skgpu::TiledTextureUtils::DrawImageRect_Graphite(canvas, image, src, dst, sampling, paint,
+                                                         constraint);
+        return;
     }
+#endif
 
     canvas->drawImageRect(image, src, dst, sampling, paint, constraint);
 }

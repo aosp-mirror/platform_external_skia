@@ -30,6 +30,7 @@
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBlock.h"
 #include "src/sksl/ir/SkSLConstructor.h"
+#include "src/sksl/ir/SkSLConstructorArrayCast.h"
 #include "src/sksl/ir/SkSLConstructorCompound.h"
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 #include "src/sksl/ir/SkSLConstructorMatrixResize.h"
@@ -77,10 +78,6 @@
 
 using namespace skia_private;
 
-// TODO(skia:13092): This is a temporary debug feature. Remove when the implementation is
-// complete and this is no longer needed.
-#define DUMP_SRC_IR 0
-
 namespace SkSL {
 
 enum class ProgramKind : int8_t;
@@ -93,6 +90,13 @@ enum class PtrAddressSpace {
     kPrivate,
     kStorage,
 };
+
+const char* operator_name(Operator op) {
+    switch (op.kind()) {
+        case Operator::Kind::LOGICALXOR:  return " != ";
+        default:                          return op.operatorName();
+    }
+}
 
 std::string_view pipeline_struct_prefix(ProgramKind kind) {
     if (ProgramConfig::IsVertex(kind)) {
@@ -616,16 +620,6 @@ bool WGSLCodeGenerator::generateCode() {
         for (const ProgramElement* e : fProgram.elements()) {
             this->writeProgramElement(*e);
         }
-
-// TODO(skia:13092): This is a temporary debug feature. Remove when the implementation is
-// complete and this is no longer needed.
-#if DUMP_SRC_IR
-        this->writeLine("\n----------");
-        this->writeLine("Source IR:\n");
-        for (const ProgramElement* e : fProgram.elements()) {
-            this->writeLine(e->description().c_str());
-        }
-#endif
     }
 
     write_stringstream(header, *fOut);
@@ -1152,9 +1146,9 @@ void WGSLCodeGenerator::writeIfStatement(const IfStatement& s) {
     ++fConditionalScopeDepth;
 
     std::string testExpr = this->assembleExpression(*s.test(), Precedence::kExpression);
-    this->write("if (");
+    this->write("if ");
     this->write(testExpr);
-    this->writeLine(") {");
+    this->writeLine(" {");
     fIndentation++;
     this->writeStatement(*s.ifTrue());
     this->finishLine();
@@ -1452,6 +1446,12 @@ std::string WGSLCodeGenerator::assembleExpression(const Expression& e,
         case Expression::Kind::kConstructorCompound:
             return this->assembleConstructorCompound(e.as<ConstructorCompound>(), parentPrecedence);
 
+        case Expression::Kind::kConstructorArrayCast:
+            // This is a no-op, since WGSL 1.0 doesn't have any concept of precision qualifiers.
+            // When we add support for f16, this will need to copy the array contents.
+            return this->assembleExpression(*e.as<ConstructorArrayCast>().argument(),
+                                            parentPrecedence);
+
         case Expression::Kind::kConstructorArray:
         case Expression::Kind::kConstructorCompoundCast:
         case Expression::Kind::kConstructorScalarCast:
@@ -1498,9 +1498,7 @@ std::string WGSLCodeGenerator::assembleExpression(const Expression& e,
             return this->assembleVariableReference(e.as<VariableReference>());
 
         default:
-            SkDEBUGFAILF("unsupported expression (kind: %d) %s",
-                         static_cast<int>(e.kind()),
-                         e.description().c_str());
+            SkDEBUGFAILF("unsupported expression:\n%s", e.description().c_str());
             return {};
     }
 }
@@ -1641,12 +1639,33 @@ std::string WGSLCodeGenerator::assembleBinaryExpression(const Expression& left,
     Precedence precedence = op.getBinaryPrecedence();
     bool needParens = precedence >= parentPrecedence;
 
+    // WGSL always requires parentheses for some operators which are deemed to be ambiguous.
+    // (8.19. Operator Precedence and Associativity)
+    switch (op.kind()) {
+        case OperatorKind::LOGICALOR:
+        case OperatorKind::LOGICALAND:
+        case OperatorKind::BITWISEOR:
+        case OperatorKind::BITWISEAND:
+        case OperatorKind::BITWISEXOR:
+        case OperatorKind::SHL:
+        case OperatorKind::SHR:
+        case OperatorKind::LT:
+        case OperatorKind::GT:
+        case OperatorKind::LTEQ:
+        case OperatorKind::GTEQ:
+            precedence = Precedence::kParentheses;
+            break;
+
+        default:
+            break;
+    }
+
     if (needParens) {
         expr.push_back('(');
     }
 
     expr += this->assembleExpression(left, precedence);
-    expr += op.operatorName();
+    expr += operator_name(op);
     expr += this->assembleExpression(right, precedence);
 
     if (needParens) {
@@ -1745,7 +1764,7 @@ std::string WGSLCodeGenerator::assembleUnaryOpIntrinsic(Operator op,
         expr.push_back('(');
     }
 
-    expr += op.operatorName();
+    expr += operator_name(op);
     expr += this->assembleExpression(*call.arguments()[0], Precedence::kPrefix);
 
     if (needParens) {
@@ -1769,7 +1788,7 @@ std::string WGSLCodeGenerator::assembleBinaryOpIntrinsic(Operator op,
     }
 
     expr += this->assembleExpression(*call.arguments()[0], precedence);
-    expr += op.operatorName();
+    expr += operator_name(op);
     expr += this->assembleExpression(*call.arguments()[1], precedence);
 
     if (needParens) {
@@ -1790,7 +1809,7 @@ std::string WGSLCodeGenerator::assembleIntrinsicCall(const FunctionCall& call,
         }
 
         case k_dot_IntrinsicKind: {
-            if (arguments[0]->type().columns() == 1) {
+            if (arguments[0]->type().isScalar()) {
                 return this->assembleBinaryOpIntrinsic(OperatorKind::STAR, call, parentPrecedence);
             }
             return this->assembleSimpleIntrinsic("dot", call);
@@ -1799,7 +1818,7 @@ std::string WGSLCodeGenerator::assembleIntrinsicCall(const FunctionCall& call,
             return this->assembleBinaryOpIntrinsic(OperatorKind::EQEQ, call, parentPrecedence);
 
         case k_faceforward_IntrinsicKind: {
-            if (arguments[0]->type().columns() == 1) {
+            if (arguments[0]->type().isScalar()) {
                 // (select(-1.0, 1.0, (I * Nref) < 0) * N)
                 return this->writeScratchLet(
                         "(select(-1.0, 1.0, (" +
@@ -1826,6 +1845,20 @@ std::string WGSLCodeGenerator::assembleIntrinsicCall(const FunctionCall& call,
         case k_lessThanEqual_IntrinsicKind:
             return this->assembleBinaryOpIntrinsic(OperatorKind::LTEQ, call, parentPrecedence);
 
+        case k_matrixCompMult_IntrinsicKind: {
+            std::string arg0 = this->writeNontrivialScratchLet(*arguments[0], Precedence::kPostfix);
+            std::string arg1 = this->writeNontrivialScratchLet(*arguments[1], Precedence::kPostfix);
+            std::string expr = to_wgsl_type(arguments[0]->type()) + '(';
+
+            auto separator = String::Separator();
+            int columns = arguments[0]->type().columns();
+            for (int c = 0; c < columns; ++c) {
+                String::appendf(&expr, "%s%s[%d] * %s[%d]",
+                                separator().c_str(), arg0.c_str(), c, arg1.c_str(), c);
+            }
+            expr += ')';
+            return this->writeScratchLet(expr);
+        }
         case k_mix_IntrinsicKind: {
             const char* name = arguments[2]->type().componentType().isBoolean() ? "select" : "mix";
             return this->assembleVectorizedIntrinsic(name, call);
@@ -1849,6 +1882,37 @@ std::string WGSLCodeGenerator::assembleIntrinsicCall(const FunctionCall& call,
         case k_notEqual_IntrinsicKind:
             return this->assembleBinaryOpIntrinsic(OperatorKind::NEQ, call, parentPrecedence);
 
+        case k_reflect_IntrinsicKind:
+            if (arguments[0]->type().isScalar()) {
+                // I - 2 * N * I * N
+                std::string I = this->writeNontrivialScratchLet(*arguments[0],
+                                                                Precedence::kAdditive);
+                std::string N = this->writeNontrivialScratchLet(*arguments[1],
+                                                                Precedence::kMultiplicative);
+                return this->writeScratchLet(String::printf("%s - 2 * %s * %s * %s",
+                                                            I.c_str(), N.c_str(),
+                                                            I.c_str(), N.c_str()));
+            }
+            return this->assembleSimpleIntrinsic("reflect", call);
+
+        case k_refract_IntrinsicKind:
+            if (arguments[0]->type().isScalar()) {
+                // WGSL only implements refract for vectors; rather than reimplementing refract from
+                // scratch, we can replace the call with `refract(float2(I,0), float2(N,0), eta).x`.
+                std::string I = this->writeNontrivialScratchLet(*arguments[0],
+                                                                Precedence::kSequence);
+                std::string N = this->writeNontrivialScratchLet(*arguments[1],
+                                                                Precedence::kSequence);
+                std::string Eta = this->writeNontrivialScratchLet(*arguments[2],
+                                                                  Precedence::kSequence);
+                return this->writeScratchLet(
+                        String::printf("refract(vec2<%s>(%s, 0), vec2<%s>(%s, 0), %s).x",
+                                       to_wgsl_type(arguments[0]->type()).c_str(), I.c_str(),
+                                       to_wgsl_type(arguments[1]->type()).c_str(), N.c_str(),
+                                       Eta.c_str()));
+            }
+            return this->assembleSimpleIntrinsic("refract", call);
+
         case k_clamp_IntrinsicKind:
         case k_max_IntrinsicKind:
         case k_min_IntrinsicKind:
@@ -1858,14 +1922,19 @@ std::string WGSLCodeGenerator::assembleIntrinsicCall(const FunctionCall& call,
 
         case k_abs_IntrinsicKind:
         case k_acos_IntrinsicKind:
+        case k_all_IntrinsicKind:
+        case k_any_IntrinsicKind:
         case k_asin_IntrinsicKind:
         case k_ceil_IntrinsicKind:
         case k_cos_IntrinsicKind:
+        case k_cross_IntrinsicKind:
         case k_degrees_IntrinsicKind:
+        case k_distance_IntrinsicKind:
         case k_exp_IntrinsicKind:
         case k_exp2_IntrinsicKind:
         case k_floor_IntrinsicKind:
         case k_fract_IntrinsicKind:
+        case k_length_IntrinsicKind:
         case k_log_IntrinsicKind:
         case k_log2_IntrinsicKind:
         case k_radians_IntrinsicKind:
@@ -2410,7 +2479,7 @@ std::string WGSLCodeGenerator::assembleEqualityExpression(const Type& left,
             std::string suffix = '[' + std::to_string(index) + ']';
             expr += this->assembleEqualityExpression(vecType, leftName + suffix,
                                                      vecType, rightName + suffix,
-                                                     op, Precedence::kLogicalAnd);
+                                                     op, Precedence::kParentheses);
             separator = combiner;
         }
         return expr + ')';
@@ -2425,7 +2494,7 @@ std::string WGSLCodeGenerator::assembleEqualityExpression(const Type& left,
             std::string suffix = '[' + std::to_string(index) + ']';
             expr += this->assembleEqualityExpression(indexedType, leftName + suffix,
                                                      indexedType, rightName + suffix,
-                                                     op, Precedence::kLogicalAnd);
+                                                     op, Precedence::kParentheses);
             separator = combiner;
         }
         return expr + ')';
@@ -2442,7 +2511,7 @@ std::string WGSLCodeGenerator::assembleEqualityExpression(const Type& left,
             expr += this->assembleEqualityExpression(
                             *field.fType, leftName + '.' + std::string(field.fName),
                             *field.fType, rightName + '.' + std::string(field.fName),
-                            op, Precedence::kLogicalAnd);
+                            op, Precedence::kParentheses);
             separator = combiner;
         }
         return expr + ')';
@@ -2455,20 +2524,20 @@ std::string WGSLCodeGenerator::assembleEqualityExpression(const Type& left,
 
         expr += isEqual ? "all(" : "any(";
         expr += leftName;
-        expr += op.operatorName();
+        expr += operator_name(op);
         expr += rightName;
         return expr + ')';
     }
 
     // Compare scalars via `x == y`.
     SkASSERT(right.isScalar());
-    if (Precedence::kEquality >= parentPrecedence) {
+    if (parentPrecedence < Precedence::kSequence) {
         expr = '(';
     }
     expr += leftName;
-    expr += op.operatorName();
+    expr += operator_name(op);
     expr += rightName;
-    if (Precedence::kEquality >= parentPrecedence) {
+    if (parentPrecedence < Precedence::kSequence) {
         expr += ')';
     }
     return expr;
@@ -2482,8 +2551,8 @@ std::string WGSLCodeGenerator::assembleEqualityExpression(const Expression& left
     if (left.type().isScalar() || left.type().isVector()) {
         // WGSL supports scalar and vector comparisons natively. We know the expressions will only
         // be emitted once, so there isn't a benefit to creating a let-declaration.
-        leftName = this->assembleExpression(left, Precedence::kAssignment);
-        rightName = this->assembleExpression(right, Precedence::kAssignment);
+        leftName = this->assembleExpression(left, Precedence::kParentheses);
+        rightName = this->assembleExpression(right, Precedence::kParentheses);
     } else {
         leftName = this->writeNontrivialScratchLet(left, Precedence::kAssignment);
         rightName = this->writeNontrivialScratchLet(right, Precedence::kAssignment);

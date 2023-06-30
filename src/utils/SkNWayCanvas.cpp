@@ -332,14 +332,12 @@ void SkNWayCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y
     }
 }
 
-#if defined(SK_GANESH)
 void SkNWayCanvas::onDrawSlug(const sktext::gpu::Slug* slug) {
     Iter iter(fList);
     while (iter.next()) {
         iter->drawSlug(slug);
     }
 }
-#endif
 
 void SkNWayCanvas::onDrawPicture(const SkPicture* picture, const SkMatrix* matrix,
                                  const SkPaint* paint) {
@@ -406,9 +404,11 @@ void SkNWayCanvas::onDrawEdgeAAImageSet2(const ImageSetEntry set[], int count,
     }
 }
 
+#if !defined(SK_DISABLE_LEGACY_CANVAS_FLUSH)
 void SkNWayCanvas::onFlush() {
     Iter iter(fList);
     while (iter.next()) {
         iter->flush();
     }
 }
+#endif

@@ -17,6 +17,7 @@
 #include "src/core/SkConvertPixels.h"
 #include "src/gpu/AtlasTypes.h"
 #include "src/gpu/RefCntedCallback.h"
+#include "src/gpu/graphite/AtlasProvider.h"
 #include "src/gpu/graphite/BufferManager.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/CommandBuffer.h"
@@ -25,6 +26,7 @@
 #include "src/gpu/graphite/Device.h"
 #include "src/gpu/graphite/GlobalCache.h"
 #include "src/gpu/graphite/Log.h"
+#include "src/gpu/graphite/PathAtlas.h"
 #include "src/gpu/graphite/PipelineData.h"
 #include "src/gpu/graphite/PipelineDataCache.h"
 #include "src/gpu/graphite/ProxyCache.h"
@@ -36,7 +38,7 @@
 #include "src/gpu/graphite/Texture.h"
 #include "src/gpu/graphite/UploadBufferManager.h"
 #include "src/gpu/graphite/UploadTask.h"
-#include "src/gpu/graphite/text/AtlasManager.h"
+#include "src/gpu/graphite/text/TextAtlasManager.h"
 #include "src/image/SkImage_Base.h"
 #include "src/text/gpu/StrikeCache.h"
 #include "src/text/gpu/TextBlobRedrawCoordinator.h"
@@ -83,19 +85,17 @@ static int32_t next_id() {
     return id;
 }
 
-Recorder::Recorder(sk_sp<SharedContext> sharedContext,
-                   const RecorderOptions& options)
+Recorder::Recorder(sk_sp<SharedContext> sharedContext, const RecorderOptions& options)
         : fSharedContext(std::move(sharedContext))
         , fRuntimeEffectDict(std::make_unique<RuntimeEffectDictionary>())
         , fGraph(new TaskGraph)
         , fUniformDataCache(new UniformDataCache)
         , fTextureDataCache(new TextureDataCache)
         , fRecorderID(next_id())
-        , fAtlasManager(std::make_unique<AtlasManager>(this))
+        , fAtlasProvider(std::make_unique<AtlasProvider>(this))
         , fTokenTracker(std::make_unique<TokenTracker>())
         , fStrikeCache(std::make_unique<sktext::gpu::StrikeCache>())
         , fTextBlobCache(std::make_unique<sktext::gpu::TextBlobRedrawCoordinator>(fRecorderID)) {
-
     fClientImageProvider = options.fImageProvider;
     if (!fClientImageProvider) {
         fClientImageProvider = DefaultImageProvider::Make();
@@ -161,7 +161,7 @@ std::unique_ptr<Recording> Recorder::snap() {
         fDrawBufferManager.reset(new DrawBufferManager(fResourceProvider.get(),
                                                        fSharedContext->caps()));
         fTextureDataCache = std::make_unique<TextureDataCache>();
-        // We leave the UniformDataCache alone
+        fUniformDataCache = std::make_unique<UniformDataCache>();
         fGraph->reset();
         fRuntimeEffectDict->reset();
         return nullptr;
@@ -185,10 +185,11 @@ std::unique_ptr<Recording> Recorder::snap() {
     fGraph = std::make_unique<TaskGraph>();
     fRuntimeEffectDict->reset();
     fTextureDataCache = std::make_unique<TextureDataCache>();
+    fUniformDataCache = std::make_unique<UniformDataCache>();
 
     // inject an initial task to maintain atlas state for next Recording
     auto uploads = std::make_unique<UploadList>();
-    fAtlasManager->recordUploads(uploads.get(), /*useCachedUploads=*/true);
+    fAtlasProvider->textAtlasManager()->recordUploads(uploads.get(), /*useCachedUploads=*/true);
     if (uploads->size() > 0) {
         sk_sp<Task> uploadTask = UploadTask::Make(uploads.get());
         this->priv().add(std::move(uploadTask));

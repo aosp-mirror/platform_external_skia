@@ -248,11 +248,6 @@ std::unique_ptr<SkScalerContext> SkTypeface_Fontations::onCreateScalerContext(
             sk_ref_sp(const_cast<SkTypeface_Fontations*>(this)), effects, desc);
 }
 
-SkTypeface_Fontations::Register::Register() {
-    SkTypeface::Register(SkTypeface_Fontations::FactoryId, &SkTypeface_Fontations::MakeFromStream);
-}
-static SkTypeface_Fontations::Register registerer;
-
 void SkTypeface_Fontations::onGetFontDescriptor(SkFontDescriptor* desc, bool* serialize) const {
     SkString familyName;
     onGetFamilyName(&familyName);
@@ -293,4 +288,10 @@ int SkTypeface_Fontations::onGetVariationDesignPosition(
               coordinateCount);
     }
     return fontations_ffi::variation_position(*fBridgeNormalizedCoords, copyToCoordinates);
+}
+
+int SkTypeface_Fontations::onGetVariationDesignParameters(
+        SkFontParameters::Variation::Axis parameters[], int parameterCount) const {
+    fontations_ffi::SkAxisWrapper axisWrapper(parameters, parameterCount);
+    return fontations_ffi::populate_axes(*fBridgeFontRef, axisWrapper);
 }

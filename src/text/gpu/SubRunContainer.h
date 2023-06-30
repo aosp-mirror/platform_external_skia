@@ -22,7 +22,6 @@
 #include <utility>
 
 class SkCanvas;
-class SkMatrixProvider;
 class SkPaint;
 class SkReadBuffer;
 class SkStrikeClient;
@@ -50,28 +49,22 @@ class SurfaceDrawContext;
 }
 #endif
 
-#if defined(SK_GRAPHITE)
-#include "src/gpu/graphite/geom/Rect.h"
-#include "src/gpu/graphite/geom/SubRunData.h"
-#include "src/gpu/graphite/geom/Transform_graphite.h"
-
-namespace skgpu::graphite {
-class DrawWriter;
-class Recorder;
-class Renderer;
-class RendererProvider;
-}
-#endif
-
 namespace sktext::gpu {
 class GlyphVector;
+class Glyph;
 class StrikeCache;
+class VertexFiller;
 
 using RegenerateAtlasDelegate = std::function<std::tuple<bool, int>(GlyphVector*,
                                                                     int begin,
                                                                     int end,
                                                                     skgpu::MaskFormat,
                                                                     int padding)>;
+
+struct RendererData {
+    bool isSDF = false;
+    bool isLCD = false;
+};
 
 // -- AtlasSubRun --------------------------------------------------------------------------------
 // AtlasSubRun is the API that AtlasTextOp uses to generate vertex data for drawing.
@@ -91,16 +84,18 @@ class AtlasSubRun {
 public:
     virtual ~AtlasSubRun() = default;
 
+    virtual SkSpan<const Glyph*> glyphs() const = 0;
     virtual int glyphCount() const = 0;
     virtual skgpu::MaskFormat maskFormat() const = 0;
     virtual int glyphSrcPadding() const = 0;
+    virtual unsigned short instanceFlags() const = 0;
 
 #if defined(SK_GANESH)
     virtual size_t vertexStride(const SkMatrix& drawMatrix) const = 0;
 
     virtual std::tuple<const GrClip*, GrOp::Owner> makeAtlasTextOp(
             const GrClip*,
-            const SkMatrixProvider& viewMatrix,
+            const SkMatrix& viewMatrix,
             SkPoint drawOrigin,
             const SkPaint&,
             sk_sp<SkRefCnt>&& subRunStorage,
@@ -117,20 +112,7 @@ public:
     virtual std::tuple<bool, int> regenerateAtlas(
             int begin, int end, RegenerateAtlasDelegate) const = 0;
 
-#if defined(SK_GRAPHITE)
-    // returns bounds of the stored data and matrix to transform it to device space
-    virtual std::tuple<skgpu::graphite::Rect, skgpu::graphite::Transform> boundsAndDeviceMatrix(
-            const skgpu::graphite::Transform& localToDevice, SkPoint drawOrigin) const = 0;
-
-    virtual const skgpu::graphite::Renderer* renderer(
-            const skgpu::graphite::RendererProvider*) const = 0;
-
-    virtual void fillInstanceData(
-            skgpu::graphite::DrawWriter*,
-            int offset, int count,
-            int ssboIndex,
-            SkScalar depth) const = 0;
-#endif
+    virtual const VertexFiller& vertexFiller() const = 0;
 
     virtual void testingOnly_packedGlyphIDToGlyph(StrikeCache* cache) const = 0;
 };
@@ -138,7 +120,8 @@ public:
 using AtlasDrawDelegate = std::function<void(const sktext::gpu::AtlasSubRun* subRun,
                                              SkPoint drawOrigin,
                                              const SkPaint& paint,
-                                             sk_sp<SkRefCnt> subRunStorage)>;
+                                             sk_sp<SkRefCnt> subRunStorage,
+                                             sktext::gpu::RendererData)>;
 
 // -- SubRun -------------------------------------------------------------------------------------
 // SubRun defines the most basic functionality of a SubRun; the ability to draw, and the
@@ -170,8 +153,8 @@ public:
     virtual const AtlasSubRun* testingOnly_atlasSubRun() const = 0;
 
 protected:
-    enum SubRunType : int;
-    virtual SubRunType subRunType() const = 0;
+    enum SubRunStreamTag : int;
+    virtual SubRunStreamTag subRunStreamTag() const = 0;
     virtual void doFlatten(SkWriteBuffer& buffer) const = 0;
 
 private:
@@ -179,7 +162,7 @@ private:
     SubRunOwner fNext;
 };
 
-// -- SubRunList ---------------------------------------------------------------------------------
+// -- SubRunList -----------------------------------------------------------------------------------
 class SubRunList {
 public:
     class Iterator {

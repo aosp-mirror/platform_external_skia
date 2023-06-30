@@ -7,14 +7,17 @@
 
 #include "include/gpu/graphite/Context.h"
 
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkPathTypes.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/graphite/BackendTexture.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/gpu/graphite/Recording.h"
+#include "include/gpu/graphite/Surface.h"
 #include "include/gpu/graphite/TextureInfo.h"
 #include "src/base/SkRectMemcpy.h"
 #include "src/core/SkConvertPixels.h"
+#include "src/core/SkYUVMath.h"
 #include "src/gpu/RefCntedCallback.h"
 #include "src/gpu/graphite/BufferManager.h"
 #include "src/gpu/graphite/Caps.h"
@@ -183,7 +186,7 @@ void Context::asyncReadPixels(const TextureProxy* proxy,
                               const SkIRect& srcRect,
                               SkImage::ReadPixelsCallback callback,
                               SkImage::ReadPixelsContext callbackContext) {
-    if (!proxy) {
+    if (!proxy || proxy->textureInfo().isProtected() == Protected::kYes) {
         callback(callbackContext, nullptr);
         return;
     }
@@ -249,6 +252,227 @@ void Context::asyncReadPixels(const TextureProxy* proxy,
     // If addFinishInfo() fails, it invokes the finish callback automatically, which handles all the
     // required clean up for us, just log an error message.
     if (!fQueueManager->addFinishInfo(info, fResourceProvider.get())) {
+        SKGPU_LOG_E("Failed to register finish callbacks for asyncReadPixels.");
+    }
+}
+
+void Context::asyncRescaleAndReadPixelsYUV420(const SkImage* image,
+                                              SkYUVColorSpace yuvColorSpace,
+                                              sk_sp<SkColorSpace> dstColorSpace,
+                                              const SkIRect& srcRect,
+                                              const SkISize& dstSize,
+                                              SkImage::RescaleGamma rescaleGamma,
+                                              SkImage::RescaleMode rescaleMode,
+                                              SkImage::ReadPixelsCallback callback,
+                                              SkImage::ReadPixelsContext callbackContext) {
+    if (!image || !as_IB(image)->isGraphiteBacked()) {
+        callback(callbackContext, nullptr);
+        return;
+    }
+
+    const SkImageInfo& srcImageInfo = image->imageInfo();
+    if (!SkIRect::MakeSize(image->imageInfo().dimensions()).contains(srcRect)) {
+        callback(callbackContext, nullptr);
+        return;
+    }
+
+    // Make a recorder to record drawing commands into
+    std::unique_ptr<Recorder> recorder = this->makeRecorder();
+
+    if (srcRect.size() == dstSize &&
+        SkColorSpace::Equals(srcImageInfo.colorInfo().colorSpace(),
+                             dstColorSpace.get())) {
+        // No need for rescale
+        return this->asyncReadPixelsYUV420(recorder.get(),
+                                           image,
+                                           yuvColorSpace,
+                                           srcRect,
+                                           callback,
+                                           callbackContext);
+    }
+
+    // TODO: fill in rescaling code, then call asyncReadPixelsYUV420 on result
+    callback(callbackContext, nullptr);
+}
+
+void Context::asyncRescaleAndReadPixelsYUV420(const SkSurface* surface,
+                                              SkYUVColorSpace yuvColorSpace,
+                                              sk_sp<SkColorSpace> dstColorSpace,
+                                              const SkIRect& srcRect,
+                                              const SkISize& dstSize,
+                                              SkImage::RescaleGamma rescaleGamma,
+                                              SkImage::RescaleMode rescaleMode,
+                                              SkImage::ReadPixelsCallback callback,
+                                              SkImage::ReadPixelsContext callbackContext) {
+    if (!static_cast<const SkSurface_Base*>(surface)->isGraphiteBacked()) {
+        callback(callbackContext, nullptr);
+        return;
+    }
+
+    sk_sp<SkImage> surfaceImage = SkSurfaces::AsImage(sk_ref_sp(surface));
+    this->asyncRescaleAndReadPixelsYUV420(surfaceImage.get(),
+                                          yuvColorSpace,
+                                          dstColorSpace,
+                                          srcRect,
+                                          dstSize,
+                                          rescaleGamma,
+                                          rescaleMode,
+                                          callback,
+                                          callbackContext);
+}
+
+void Context::asyncReadPixelsYUV420(Recorder* recorder,
+                                    const SkImage* srcImage,
+                                    SkYUVColorSpace yuvColorSpace,
+                                    const SkIRect& srcRect,
+                                    SkImage::ReadPixelsCallback callback,
+                                    SkImage::ReadPixelsContext callbackContext) {
+    // Make three Surfaces to draw the YUV planes into
+    SkImageInfo yInfo = SkImageInfo::MakeA8(srcRect.size());
+    sk_sp<SkSurface> ySurface = Surface::MakeGraphite(recorder, yInfo, Budgeted::kNo);
+
+    SkImageInfo uvInfo = yInfo.makeWH(yInfo.width()/2, yInfo.height()/2);
+    sk_sp<SkSurface> uSurface = Surface::MakeGraphite(recorder, uvInfo, Budgeted::kNo);
+    sk_sp<SkSurface> vSurface = Surface::MakeGraphite(recorder, uvInfo, Budgeted::kNo);
+
+    if (!ySurface || !uSurface || !vSurface) {
+        callback(callbackContext, nullptr);
+        return;
+    }
+
+    // Set up draws and transfers
+    // TODO: Use one transfer buffer for all three planes to reduce map/unmap cost?
+    auto drawPlane = [](SkSurface* dstSurface,
+                        const SkImage* srcImage,
+                        float rgb2yuv[20],
+                        const SkMatrix& texMatrix) {
+        // Render the plane defined by rgb2yuv from srcImage into dstSurface
+        SkCanvas* canvas = dstSurface->getCanvas();
+        const SkSamplingOptions sampling(SkFilterMode::kLinear, SkMipmapMode::kNone);
+        sk_sp<SkShader> imgShader = srcImage->makeShader(SkTileMode::kClamp, SkTileMode::kClamp,
+                                                         sampling, texMatrix);
+        sk_sp<SkColorFilter> matrixFilter = SkColorFilters::Matrix(rgb2yuv);
+        SkPaint paint;
+        paint.setShader(std::move(imgShader));
+        paint.setColorFilter(std::move(matrixFilter));
+        canvas->drawPaint(paint);
+    };
+
+    auto copyPlane = [this](SkSurface* dstSurface,
+                            const SkImageInfo& surfaceInfo) {
+        // Transfer result from dstSurface
+        auto graphiteSurface = reinterpret_cast<const skgpu::graphite::Surface*>(dstSurface);
+        TextureProxyView proxyView = graphiteSurface->readSurfaceView();
+
+        return this->transferPixels(proxyView.proxy(),
+                                    surfaceInfo,
+                                    surfaceInfo.colorInfo().makeColorType(kAlpha_8_SkColorType),
+                                    SkIRect::MakeWH(dstSurface->width(), dstSurface->height()));
+    };
+
+    float baseM[20];
+    SkColorMatrix_RGB2YUV(yuvColorSpace, baseM);
+    SkMatrix texMatrix = SkMatrix::Translate(srcRect.fLeft, srcRect.fTop);
+
+    // This matrix generates (r,g,b,a) = (0, 0, 0, y)
+    float yM[20];
+    std::fill_n(yM, 15, 0.f);
+    std::copy_n(baseM + 0, 5, yM + 15);
+    drawPlane(ySurface.get(), srcImage, yM, texMatrix);
+
+    texMatrix.preScale(0.5f, 0.5f);
+    // This matrix generates (r,g,b,a) = (0, 0, 0, u)
+    float uM[20];
+    std::fill_n(uM, 15, 0.f);
+    std::copy_n(baseM + 5, 5, uM + 15);
+    drawPlane(uSurface.get(), srcImage, uM, texMatrix);
+
+    // This matrix generates (r,g,b,a) = (0, 0, 0, v)
+    float vM[20];
+    std::fill_n(vM, 15, 0.f);
+    std::copy_n(baseM + 10, 5, vM + 15);
+    drawPlane(vSurface.get(), srcImage, vM, texMatrix);
+
+    // Add draw commands to queue
+    std::unique_ptr<Recording> recording = recorder->snap();
+    if (!recording) {
+        callback(callbackContext, nullptr);
+        return;
+    }
+    InsertRecordingInfo recordingInfo;
+    recordingInfo.fRecording = recording.get();
+    if (!this->insertRecording(recordingInfo)) {
+        callback(callbackContext, nullptr);
+        return;
+    }
+
+    // Now set up transfers
+    PixelTransferResult yTransfer, uTransfer, vTransfer;
+    yTransfer = copyPlane(ySurface.get(), yInfo);
+    if (!yTransfer.fTransferBuffer) {
+        callback(callbackContext, nullptr);
+        return;
+    }
+    uTransfer = copyPlane(uSurface.get(), uvInfo);
+    if (!uTransfer.fTransferBuffer) {
+        callback(callbackContext, nullptr);
+        return;
+    }
+    vTransfer = copyPlane(vSurface.get(), uvInfo);
+    if (!vTransfer.fTransferBuffer) {
+        callback(callbackContext, nullptr);
+        return;
+    }
+
+    // Set up FinishContext and add transfer commands to queue
+    using AsyncReadResult = skgpu::TAsyncReadResult<Buffer, ContextID, PixelTransferResult>;
+    struct FinishContext {
+        SkImage::ReadPixelsCallback* fClientCallback;
+        SkImage::ReadPixelsContext fClientContext;
+        SkISize fSize;
+        ClientMappedBufferManager* fMappedBufferManager;
+        PixelTransferResult fYTransfer;
+        PixelTransferResult fUTransfer;
+        PixelTransferResult fVTransfer;
+    };
+    auto* finishContext = new FinishContext{callback,
+                                            callbackContext,
+                                            srcRect.size(),
+                                            fMappedBufferManager.get(),
+                                            std::move(yTransfer),
+                                            std::move(uTransfer),
+                                            std::move(vTransfer)};
+    GpuFinishedProc finishCallback = [](GpuFinishedContext c, CallbackResult status) {
+        const auto* context = reinterpret_cast<const FinishContext*>(c);
+        if (status == CallbackResult::kSuccess) {
+            auto manager = context->fMappedBufferManager;
+            auto result = std::make_unique<AsyncReadResult>(manager->ownerID());
+            if (!result->addTransferResult(context->fYTransfer, context->fSize,
+                                           context->fYTransfer.fRowBytes, manager)) {
+                result.reset();
+            }
+            SkISize uvSize = {context->fSize.width() / 2, context->fSize.height() / 2};
+            if (result && !result->addTransferResult(context->fUTransfer, uvSize,
+                                                     context->fUTransfer.fRowBytes, manager)) {
+                result.reset();
+            }
+            if (result && !result->addTransferResult(context->fVTransfer, uvSize,
+                                                     context->fVTransfer.fRowBytes, manager)) {
+                result.reset();
+            }
+            (*context->fClientCallback)(context->fClientContext, std::move(result));
+        } else {
+            (*context->fClientCallback)(context->fClientContext, nullptr);
+        }
+        delete context;
+    };
+
+    InsertFinishInfo finishInfo;
+    finishInfo.fFinishedContext = finishContext;
+    finishInfo.fFinishedProc = finishCallback;
+    // If addFinishInfo() fails, it invokes the finish callback automatically, which handles all the
+    // required clean up for us, just log an error message.
+    if (!fQueueManager->addFinishInfo(finishInfo, fResourceProvider.get())) {
         SKGPU_LOG_E("Failed to register finish callbacks for asyncReadPixels.");
     }
 }

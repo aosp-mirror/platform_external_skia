@@ -37,7 +37,6 @@ skia_filegroup(
         "SkRasterPipeline_opts.h",
         "SkSwizzler_opts.h",
         "SkUtils_opts.h",
-        "SkVM_opts.h",
     ],
     visibility = ["//src:__pkg__"],
 )
@@ -90,7 +89,10 @@ skia_cc_library(
 
 skia_cc_deps(
     name = "deps",
-    visibility = ["//src:__pkg__"],
+    visibility = [
+        "//:__pkg__",  # Needed in G3
+        "//src:__pkg__",
+    ],
     deps = selects.with_or({
         ("@platforms//cpu:x86_64", "@platforms//cpu:x86_32"): [
             ":avx",

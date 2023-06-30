@@ -42,23 +42,19 @@ class PipelineDataGatherer;
 }
 #endif
 
-#if defined(SK_ENABLE_SKVM)
-#include "include/core/SkImageInfo.h"
-#include "src/core/SkVM.h"
-#endif
-
 namespace SkShaders {
 /**
  * This is used to accumulate matrices, starting with the CTM, when building up
- * SkRasterPipeline, SkVM, and GrFragmentProcessor by walking the SkShader tree. It avoids
+ * SkRasterPipeline or GrFragmentProcessor by walking the SkShader tree. It avoids
  * adding a matrix multiply for each individual matrix. It also handles the reverse matrix
  * concatenation order required by Android Framework, see b/256873449.
  *
- * This also tracks the dubious concept of a "total matrix", which includes all the matrices
- * encountered during traversal to the current shader, including ones that have already been
- * applied. The total matrix represents the transformation from the current shader's coordinate
- * space to device space. It is dubious because it doesn't account for SkShaders that manipulate
- * the coordinates passed to their children, which may not even be representable by a matrix.
+ * This also tracks the dubious concept of a "total matrix", in the legacy Context/shadeSpan system.
+ * That includes all the matrices encountered during traversal to the current shader, including ones
+ * that have already been applied. The total matrix represents the transformation from the current
+ * shader's coordinate space to device space. It is dubious because it doesn't account for SkShaders
+ * that manipulate the coordinates passed to their children, which may not even be representable by
+ * a matrix.
  *
  * The total matrix is used for mipmap level selection and a filter downgrade optimizations in
  * SkImageShader and sizing of the SkImage created by SkPictureShader. If we can remove usages
@@ -87,23 +83,11 @@ public:
     std::optional<MatrixRec> SK_WARN_UNUSED_RESULT apply(const SkStageRec& rec,
                                                          const SkMatrix& postInv = {}) const;
 
-#if defined(SK_ENABLE_SKVM)
     /**
-     * Muls local by the inverse of the pending matrix. 'postInv' is an additional matrix to
-     * post-apply to the inverted pending matrix. If the pending matrix is not invertible the
-     * std::optional result won't have a value and the Builder will be unmodified.
-     */
-    std::optional<MatrixRec> SK_WARN_UNUSED_RESULT apply(skvm::Builder*,
-                                                         skvm::Coord* local,  // inout
-                                                         skvm::Uniforms*,
-                                                         const SkMatrix& postInv = {}) const;
-#endif
-
-    /**
-     * FP matrices work differently than SkRasterPipeline and SkVM. The starting coordinates
-     * provided to the root SkShader's FP are already in local space. So we never apply the inverse
-     * CTM. This returns the inverted pending local matrix with the provided postInv matrix
-     * applied after it. If the pending local matrix cannot be inverted, the boolean is false.
+     * FP matrices work differently than SkRasterPipeline. The starting coordinates provided to the
+     * root SkShader's FP are already in local space. So we never apply the inverse CTM. This
+     * returns the inverted pending local matrix with the provided postInv matrix applied after it.
+     * If the pending local matrix cannot be inverted, the boolean is false.
      */
     std::tuple<SkMatrix, bool> applyForFragmentProcessor(const SkMatrix& postInv) const;
 
@@ -198,8 +182,7 @@ private:
     M(Picture)            \
     M(Runtime)            \
     M(Transform)          \
-    M(TriColor)           \
-    M(UpdatableColor)
+    M(TriColor)
 
 #define SK_ALL_GRADIENTS(M) \
     M(Conical)              \
@@ -290,22 +273,30 @@ public:
      *  ContextRec acts as a parameter bundle for creating Contexts.
      */
     struct ContextRec {
-        ContextRec(const SkColor4f& paintColor, const SkMatrix& matrix, const SkMatrix* localM,
-                   SkColorType dstColorType, SkColorSpace* dstColorSpace, SkSurfaceProps props)
-            : fMatrix(&matrix)
-            , fLocalMatrix(localM)
-            , fDstColorType(dstColorType)
-            , fDstColorSpace(dstColorSpace)
-            , fProps(props) {
-                fPaintAlpha = SkColorGetA(paintColor.toSkColor());
-            }
+        ContextRec(SkAlpha paintAlpha,
+                   const SkShaders::MatrixRec& matrixRec,
+                   SkColorType dstColorType,
+                   SkColorSpace* dstColorSpace,
+                   SkSurfaceProps props)
+                : fMatrixRec(matrixRec)
+                , fDstColorType(dstColorType)
+                , fDstColorSpace(dstColorSpace)
+                , fProps(props)
+                , fPaintAlpha(paintAlpha) {}
 
-        const SkMatrix* fMatrix;           // the current matrix in the canvas
-        const SkMatrix* fLocalMatrix;      // optional local matrix
-        SkColorType     fDstColorType;     // the color type of the dest surface
-        SkColorSpace*   fDstColorSpace;    // the color space of the dest surface (if any)
-        SkSurfaceProps  fProps;            // props of the dest surface
-        SkAlpha         fPaintAlpha;
+        static ContextRec Concat(const ContextRec& parentRec, const SkMatrix& localM) {
+            return {parentRec.fPaintAlpha,
+                    parentRec.fMatrixRec.concat(localM),
+                    parentRec.fDstColorType,
+                    parentRec.fDstColorSpace,
+                    parentRec.fProps};
+        }
+
+        const SkShaders::MatrixRec fMatrixRec;
+        SkColorType                fDstColorType;   // the color type of the dest surface
+        SkColorSpace*              fDstColorSpace;  // the color space of the dest surface (if any)
+        SkSurfaceProps             fProps;          // props of the dest surface
+        SkAlpha                    fPaintAlpha;
 
         bool isLegacyCompatible(SkColorSpace* shadersColorSpace) const;
     };
@@ -338,14 +329,10 @@ public:
 
         uint8_t         getPaintAlpha() const { return fPaintAlpha; }
         const SkMatrix& getTotalInverse() const { return fTotalInverse; }
-        const SkMatrix& getCTM() const { return fCTM; }
 
     private:
-        SkMatrix    fCTM;
         SkMatrix    fTotalInverse;
         uint8_t     fPaintAlpha;
-
-        using INHERITED = SkNoncopyable;
     };
 
     /**
@@ -380,10 +367,6 @@ public:
      */
     virtual bool appendStages(const SkStageRec&, const SkShaders::MatrixRec&) const;
 
-    bool SK_WARN_UNUSED_RESULT computeTotalInverse(const SkMatrix& ctm,
-                                                   const SkMatrix* localMatrix,
-                                                   SkMatrix* totalInverse) const;
-
     virtual SkImage* onIsAImage(SkMatrix*, SkTileMode[2]) const {
         return nullptr;
     }
@@ -405,36 +388,6 @@ public:
      *  the localMatrix. If not, return nullptr and ignore the localMatrix parameter.
      */
     virtual sk_sp<SkShader> makeAsALocalMatrixShader(SkMatrix* localMatrix) const;
-
-#if defined(SK_ENABLE_SKVM)
-    /**
-     * Called at the root of a shader tree to build a VM that produces color. The device coords
-     * should be initialized to the centers of device space pixels being shaded and the inverse of
-     * ctm should be the transform of those coords to local space.
-     */
-    SK_WARN_UNUSED_RESULT
-    skvm::Color rootProgram(skvm::Builder*,
-                            skvm::Coord device,
-                            skvm::Color paint,
-                            const SkMatrix& ctm,
-                            const SkColorInfo& dst,
-                            skvm::Uniforms* uniforms,
-                            SkArenaAlloc* alloc) const;
-
-    /**
-     * Virtualized implementation of above. A note on the local coords param: it must be transformed
-     * by the inverse of the "pending" matrix in MatrixRec to be put in the correct space for this
-     * shader. This is done by calling MatrixRec::apply().
-     */
-    virtual skvm::Color program(skvm::Builder*,
-                                skvm::Coord device,
-                                skvm::Coord local,
-                                skvm::Color paint,
-                                const SkShaders::MatrixRec&,
-                                const SkColorInfo& dst,
-                                skvm::Uniforms*,
-                                SkArenaAlloc*) const = 0;
-#endif  // defined(SK_ENABLE_SKVM)
 
 #if defined(SK_GRAPHITE)
     /**
@@ -475,11 +428,6 @@ protected:
     virtual bool onAsLuminanceColor(SkColor*) const {
         return false;
     }
-
-protected:
-#if defined(SK_ENABLE_SKVM)
-    static skvm::Coord ApplyMatrix(skvm::Builder*, const SkMatrix&, skvm::Coord, skvm::Uniforms*);
-#endif
 
     friend class SkShaders::MatrixRec;
 };

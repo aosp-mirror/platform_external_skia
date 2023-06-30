@@ -89,7 +89,6 @@ using namespace skia_private;
 
 extern bool gSkForceRasterPipelineBlitter;
 extern bool gForceHighPrecisionRasterPipeline;
-extern bool gSkBlobAsSlugTesting;
 extern bool gCreateProtectedContext;
 
 static DEFINE_string(src, "tests gm skp mskp lottie rive svg image colorImage",
@@ -125,7 +124,6 @@ static DEFINE_int(shard,  0, "Which shard do I run?");
 static DEFINE_string(mskps, "", "Directory to read mskps from, or a single mskp file.");
 static DEFINE_bool(forceRasterPipeline, false, "sets gSkForceRasterPipelineBlitter");
 static DEFINE_bool(forceRasterPipelineHP, false, "sets gSkForceRasterPipelineBlitter and gForceHighPrecisionRasterPipeline");
-static DEFINE_bool(blobAsSlugTesting, false, "sets gSkBlobAsSlugTesting");
 static DEFINE_bool(createProtected, false, "attempts to create a protected backend context");
 
 static DEFINE_string(bisect, "",
@@ -1052,6 +1050,7 @@ static Sink* create_sink(const GrContextOptions& grCtxOptions, const SkCommandLi
         SINK("rgba",        RasterSink, kRGBA_8888_SkColorType);
         SINK("bgra",        RasterSink, kBGRA_8888_SkColorType);
         SINK("rgbx",        RasterSink, kRGB_888x_SkColorType);
+        SINK("bgrx",        RasterSink, kBGR_888x_SkColorType);
         SINK("1010102",     RasterSink, kRGBA_1010102_SkColorType);
         SINK("101010x",     RasterSink, kRGB_101010x_SkColorType);
         SINK("bgra1010102", RasterSink, kBGRA_1010102_SkColorType);
@@ -1607,7 +1606,6 @@ int main(int argc, char** argv) {
 
     gSkForceRasterPipelineBlitter     = FLAGS_forceRasterPipelineHP || FLAGS_forceRasterPipeline;
     gForceHighPrecisionRasterPipeline = FLAGS_forceRasterPipelineHP;
-    gSkBlobAsSlugTesting              = FLAGS_blobAsSlugTesting;
     gCreateProtectedContext           = FLAGS_createProtected;
 
     // The bots like having a verbose.log to upload, so always touch the file even if --verbose.

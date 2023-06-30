@@ -39,11 +39,7 @@
 #include "include/sksl/SkSLDebugTrace.h"
 #include "include/sksl/SkSLVersion.h"
 
-class GrRecordingContext;
-class SkFilterColorProgram;
-class SkImage;
 struct SkIPoint;
-struct SkImageInfo;
 
 namespace SkSL {
 class DebugTracePriv;
@@ -217,25 +213,18 @@ public:
                                size_t childCount,
                                const SkMatrix* localMatrix = nullptr) const;
     sk_sp<SkShader> makeShader(sk_sp<const SkData> uniforms,
-                               SkSpan<ChildPtr> children,
+                               SkSpan<const ChildPtr> children,
                                const SkMatrix* localMatrix = nullptr) const;
-
-    sk_sp<SkImage> makeImage(GrRecordingContext*,
-                             sk_sp<const SkData> uniforms,
-                             SkSpan<ChildPtr> children,
-                             const SkMatrix* localMatrix,
-                             SkImageInfo resultInfo,
-                             bool mipmapped) const;
 
     sk_sp<SkColorFilter> makeColorFilter(sk_sp<const SkData> uniforms) const;
     sk_sp<SkColorFilter> makeColorFilter(sk_sp<const SkData> uniforms,
                                          sk_sp<SkColorFilter> children[],
                                          size_t childCount) const;
     sk_sp<SkColorFilter> makeColorFilter(sk_sp<const SkData> uniforms,
-                                         SkSpan<ChildPtr> children) const;
+                                         SkSpan<const ChildPtr> children) const;
 
     sk_sp<SkBlender> makeBlender(sk_sp<const SkData> uniforms,
-                                 SkSpan<ChildPtr> children = {}) const;
+                                 SkSpan<const ChildPtr> children = {}) const;
 
     /**
      * Creates a new Runtime Effect patterned after an already-existing one. The new shader behaves
@@ -316,7 +305,6 @@ private:
     bool alwaysOpaque()       const { return (fFlags & kAlwaysOpaque_Flag);       }
     bool isAlphaUnchanged()   const { return (fFlags & kAlphaUnchanged_Flag);     }
 
-    const SkFilterColorProgram* getFilterColorProgram() const;
     const SkSL::RP::Program* getRPProgram(SkSL::DebugTracePriv* debugTrace) const;
 
 #if defined(SK_GANESH)
@@ -328,7 +316,6 @@ private:
     friend class SkRuntimeBlender;      //
     friend class SkRuntimeColorFilter;  //
 
-    friend class SkFilterColorProgram;
     friend class SkRuntimeEffectPriv;
 
     uint32_t fHash;
@@ -340,8 +327,6 @@ private:
     std::vector<Uniform> fUniforms;
     std::vector<Child> fChildren;
     std::vector<SkSL::SampleUsage> fSampleUsages;
-
-    std::unique_ptr<SkFilterColorProgram> fFilterColorProgram;
 
     uint32_t fFlags;  // Flags
 };
@@ -434,8 +419,8 @@ public:
 
     // Get access to the collated uniforms and children (in the order expected by APIs like
     // makeShader on the effect):
-    sk_sp<const SkData> uniforms() { return fUniforms; }
-    SkSpan<SkRuntimeEffect::ChildPtr> children() { return fChildren; }
+    sk_sp<const SkData> uniforms() const { return fUniforms; }
+    SkSpan<const SkRuntimeEffect::ChildPtr> children() const { return fChildren; }
 
 protected:
     SkRuntimeEffectBuilder() = delete;
@@ -495,17 +480,11 @@ public:
     SkRuntimeShaderBuilder(const SkRuntimeShaderBuilder&) = default;
     ~SkRuntimeShaderBuilder();
 
-    sk_sp<SkShader> makeShader(const SkMatrix* localMatrix = nullptr);
-    sk_sp<SkImage> makeImage(GrRecordingContext*,
-                             const SkMatrix* localMatrix,
-                             SkImageInfo resultInfo,
-                             bool mipmapped);
+    sk_sp<SkShader> makeShader(const SkMatrix* localMatrix = nullptr) const;
 
 private:
-    using INHERITED = SkRuntimeEffectBuilder;
-
     explicit SkRuntimeShaderBuilder(sk_sp<SkRuntimeEffect> effect, sk_sp<SkData> uniforms)
-            : INHERITED(std::move(effect), std::move(uniforms)) {}
+            : SkRuntimeEffectBuilder(std::move(effect), std::move(uniforms)) {}
 
     friend class SkRuntimeImageFilter;
 };
@@ -521,10 +500,7 @@ public:
     SkRuntimeColorFilterBuilder(const SkRuntimeColorFilterBuilder&) = delete;
     SkRuntimeColorFilterBuilder& operator=(const SkRuntimeColorFilterBuilder&) = delete;
 
-    sk_sp<SkColorFilter> makeColorFilter();
-
-private:
-    using INHERITED = SkRuntimeEffectBuilder;
+    sk_sp<SkColorFilter> makeColorFilter() const;
 };
 
 /**
@@ -538,10 +514,7 @@ public:
     SkRuntimeBlendBuilder(const SkRuntimeBlendBuilder&) = delete;
     SkRuntimeBlendBuilder& operator=(const SkRuntimeBlendBuilder&) = delete;
 
-    sk_sp<SkBlender> makeBlender();
-
-private:
-    using INHERITED = SkRuntimeEffectBuilder;
+    sk_sp<SkBlender> makeBlender() const;
 };
 
 #endif  // SK_ENABLE_SKSL

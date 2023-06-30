@@ -286,7 +286,7 @@ bool ParagraphImpl::computeCodeUnitProperties() {
     TextIndex firstWhitespace = EMPTY_INDEX;
     for (int i = 0; i < fCodeUnitProperties.size(); ++i) {
         auto flags = fCodeUnitProperties[i];
-        if (SkUnicode::isPartOfWhiteSpaceBreak(flags)) {
+        if (SkUnicode::hasPartOfWhiteSpaceBreakFlag(flags)) {
             if (fTrailingSpaces  == fText.size()) {
                 fTrailingSpaces = i;
             }
@@ -296,7 +296,7 @@ bool ParagraphImpl::computeCodeUnitProperties() {
         } else {
             fTrailingSpaces = fText.size();
         }
-        if (SkUnicode::isHardLineBreak(flags)) {
+        if (SkUnicode::hasHardLineBreakFlag(flags)) {
             fHasLineBreaks = true;
         }
     }
@@ -343,7 +343,8 @@ Cluster::Cluster(ParagraphImpl* owner,
         , fEnd(end)
         , fWidth(width)
         , fHeight(height)
-        , fHalfLetterSpacing(0.0) {
+        , fHalfLetterSpacing(0.0)
+        , fIsIdeographic(false) {
     size_t whiteSpacesBreakLen = 0;
     size_t intraWordBreakLen = 0;
 
@@ -360,6 +361,9 @@ Cluster::Cluster(ParagraphImpl* owner,
             }
             if (fOwner->codeUnitHasProperty(i, SkUnicode::CodeUnitFlags::kPartOfIntraWordBreak)) {
                 ++intraWordBreakLen;
+            }
+            if (fOwner->codeUnitHasProperty(i, SkUnicode::CodeUnitFlags::kIdeographic)) {
+                fIsIdeographic = true;
             }
         }
     }
