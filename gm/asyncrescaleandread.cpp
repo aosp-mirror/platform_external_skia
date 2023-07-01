@@ -42,7 +42,7 @@ static void async_callback(void* c, std::unique_ptr<const SkImage::AsyncReadResu
     auto context = static_cast<AsyncContext*>(c);
     context->fResult = std::move(result);
     context->fCalled = true;
-};
+}
 
 // Draws the image to a surface, does a asyncRescaleAndReadPixels of the image, and then sticks
 // the result in a raster image.
@@ -106,7 +106,7 @@ static sk_sp<SkImage> do_read_and_scale_yuv(Src* src,
             return nullptr;
         }
 
-        graphiteContext->asyncRescaleAndReadPixelsYUV420(src, yuvCS, /*dstColorSpace=*/nullptr,
+        graphiteContext->asyncRescaleAndReadPixelsYUV420(src, yuvCS, SkColorSpace::MakeSRGB(),
                                                          srcRect, size, rescaleGamma, rescaleMode,
                                                          async_callback, &asyncContext);
         graphiteContext->submit();
