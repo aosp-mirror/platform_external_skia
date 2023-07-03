@@ -5,27 +5,28 @@
  * found in the LICENSE file.
  */
 
-// This is a GPU-backend specific test. It relies on static intializers to work
+// This is a GPU-backend specific test. It relies on static initializers to work
 
 #include "include/core/SkTypes.h"
 
-#if SK_SUPPORT_GPU && defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26 && defined(SK_VULKAN)
+#if defined(SK_GANESH) && defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26 && defined(SK_VULKAN)
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrBackendSemaphore.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/vk/GrVkBackendContext.h"
-#include "include/gpu/vk/GrVkExtensions.h"
-#include "src/core/SkAutoMalloc.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrGpu.h"
-#include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/SkGr.h"
-#include "src/gpu/gl/GrGLDefines.h"
-#include "src/gpu/gl/GrGLUtil.h"
+#include "include/gpu/vk/VulkanExtensions.h"
+#include "src/base/SkAutoMalloc.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrGpu.h"
+#include "src/gpu/ganesh/GrProxyProvider.h"
+#include "src/gpu/ganesh/SkGr.h"
+#include "src/gpu/ganesh/gl/GrGLDefines_impl.h"
+#include "src/gpu/ganesh/gl/GrGLUtil.h"
 #include "tests/Test.h"
 #include "tools/gpu/GrContextFactory.h"
 #include "tools/gpu/vk/VkTestUtils.h"
@@ -47,6 +48,8 @@ public:
     virtual bool init(skiatest::Reporter* reporter) = 0;
 
     virtual void cleanup() = 0;
+    // This is used to release a surface back to the external queue in vulkan
+    virtual void releaseSurfaceToExternal(SkSurface*) = 0;
     virtual void releaseImage() = 0;
 
     virtual sk_sp<SkImage> importHardwareBufferForRead(skiatest::Reporter* reporter,
@@ -92,6 +95,8 @@ public:
             fTexID = 0;
         }
     }
+
+    void releaseSurfaceToExternal(SkSurface*) override {}
 
     void cleanup() override {
         this->releaseImage();
@@ -311,6 +316,8 @@ sk_sp<SkSurface> EGLTestHelper::importHardwareBufferForWrite(skiatest::Reporter*
 
 bool EGLTestHelper::flushSurfaceAndSignalSemaphore(skiatest::Reporter* reporter,
                                                       sk_sp<SkSurface> surface) {
+    surface->flushAndSubmit();
+
     EGLDisplay eglDisplay = eglGetCurrentDisplay();
     EGLSyncKHR eglsync = fEGLCreateSyncKHR(eglDisplay, EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr);
     if (EGL_NO_SYNC_KHR == eglsync) {
@@ -318,7 +325,6 @@ bool EGLTestHelper::flushSurfaceAndSignalSemaphore(skiatest::Reporter* reporter,
         return false;
     }
 
-    surface->flushAndSubmit();
     GR_GL_CALL(fGLCtx->gl(), Flush());
     fFdHandle = fEGLDupNativeFenceFDANDROID(eglDisplay, eglsync);
 
@@ -404,6 +410,12 @@ public:
             fMemory = VK_NULL_HANDLE;
         }
     }
+
+    void releaseSurfaceToExternal(SkSurface* surface) override {
+        skgpu::MutableTextureState newState(VK_IMAGE_LAYOUT_UNDEFINED, VK_QUEUE_FAMILY_EXTERNAL);
+        surface->flush({}, &newState);
+    }
+
     void cleanup() override {
         fDirectContext.reset();
         this->releaseImage();
@@ -492,7 +504,7 @@ private:
     VkImage fImage = VK_NULL_HANDLE;
     VkDeviceMemory fMemory = VK_NULL_HANDLE;
 
-    GrVkExtensions*                     fExtensions = nullptr;
+    skgpu::VulkanExtensions*            fExtensions = nullptr;
     VkPhysicalDeviceFeatures2*          fFeatures = nullptr;
     VkDebugReportCallbackEXT            fDebugCallback = VK_NULL_HANDLE;
     PFN_vkDestroyDebugReportCallbackEXT fDestroyDebugCallback = nullptr;
@@ -512,7 +524,7 @@ bool VulkanTestHelper::init(skiatest::Reporter* reporter) {
         return false;
     }
 
-    fExtensions = new GrVkExtensions();
+    fExtensions = new skgpu::VulkanExtensions();
     fFeatures = new VkPhysicalDeviceFeatures2;
     memset(fFeatures, 0, sizeof(VkPhysicalDeviceFeatures2));
     fFeatures->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -731,6 +743,7 @@ bool VulkanTestHelper::importHardwareBuffer(skiatest::Reporter* reporter,
             if (supportedFlags == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
                 typeIndex = i;
                 heapIndex = pdmp.memoryTypes[i].heapIndex;
+                REPORTER_ASSERT(reporter, heapIndex < pdmp.memoryHeapCount);
                 foundHeap = true;
             }
         }
@@ -777,7 +790,7 @@ bool VulkanTestHelper::importHardwareBuffer(skiatest::Reporter* reporter,
         return false;
     }
 
-    GrVkAlloc alloc;
+    skgpu::VulkanAlloc alloc;
     alloc.fMemory = fMemory;
     alloc.fOffset = 0;
     alloc.fSize = hwbProps.allocationSize;
@@ -820,7 +833,7 @@ sk_sp<SkImage> VulkanTestHelper::importHardwareBufferForRead(skiatest::Reporter*
 
 bool VulkanTestHelper::flushSurfaceAndSignalSemaphore(skiatest::Reporter* reporter,
                                                       sk_sp<SkSurface> surface) {
-    surface->flushAndSubmit();
+    this->releaseSurfaceToExternal(surface.get());
     surface.reset();
     GrBackendSemaphore semaphore;
     if (!this->setupSemaphoreForSignaling(reporter, &semaphore)) {
@@ -1086,7 +1099,7 @@ void run_test(skiatest::Reporter* reporter, const GrContextOptions& options,
 #ifdef SK_GL
         srcHelper.reset(new EGLTestHelper(options));
 #else
-        SkASSERT(false, "SrcType::kEGL used without OpenGL support.");
+        SkASSERTF(false, "SrcType::kEGL used without OpenGL support.");
 #endif
     }
     if (srcHelper) {
@@ -1103,7 +1116,7 @@ void run_test(skiatest::Reporter* reporter, const GrContextOptions& options,
         SkASSERT(DstType::kEGL == dstType);
         dstHelper.reset(new EGLTestHelper(options));
 #else
-        SkASSERT(false, "DstType::kEGL used without OpenGL support.");
+        SkASSERTF(false, "DstType::kEGL used without OpenGL support.");
 #endif
     }
     if (dstHelper) {
@@ -1222,8 +1235,9 @@ void run_test(skiatest::Reporter* reporter, const GrContextOptions& options,
                 return;
             }
         } else {
-            surface.reset();
+            srcHelper->releaseSurfaceToExternal(surface.get());
             srcHelper->doClientSync();
+            surface.reset();
             srcHelper->releaseImage();
         }
     }
@@ -1246,10 +1260,8 @@ void run_test(skiatest::Reporter* reporter, const GrContextOptions& options,
     SkImageInfo imageInfo = SkImageInfo::Make(DEV_W, DEV_H, kRGBA_8888_SkColorType,
                                               kPremul_SkAlphaType, nullptr);
 
-    sk_sp<SkSurface> dstSurf = SkSurface::MakeRenderTarget(direct,
-                                                           SkBudgeted::kNo, imageInfo, 0,
-                                                           kTopLeft_GrSurfaceOrigin,
-                                                           nullptr, false);
+    sk_sp<SkSurface> dstSurf = SkSurface::MakeRenderTarget(
+            direct, skgpu::Budgeted::kNo, imageInfo, 0, kTopLeft_GrSurfaceOrigin, nullptr, false);
     if (!dstSurf.get()) {
         ERRORF(reporter, "Failed to create destination SkSurface");
         wrappedImage.reset();
@@ -1284,48 +1296,63 @@ void run_test(skiatest::Reporter* reporter, const GrContextOptions& options,
     cleanup_resources(srcHelper.get(), dstHelper.get(), buffer);
 }
 
-DEF_GPUTEST(VulkanHardwareBuffer_CPU_Vulkan, reporter, options) {
+DEF_GANESH_TEST(VulkanHardwareBuffer_CPU_Vulkan, reporter, options, CtsEnforcement::kApiLevel_T) {
     run_test(reporter, options, SrcType::kCPU, DstType::kVulkan, false);
 }
 
-DEF_GPUTEST(VulkanHardwareBuffer_Vulkan_Vulkan, reporter, options) {
+DEF_GANESH_TEST(VulkanHardwareBuffer_Vulkan_Vulkan,
+                reporter,
+                options,
+                CtsEnforcement::kApiLevel_T) {
     run_test(reporter, options, SrcType::kVulkan, DstType::kVulkan, false);
 }
 
-DEF_GPUTEST(VulkanHardwareBuffer_Vulkan_Vulkan_Syncs, reporter, options) {
+DEF_GANESH_TEST(VulkanHardwareBuffer_Vulkan_Vulkan_Syncs,
+                reporter,
+                options,
+                CtsEnforcement::kApiLevel_T) {
     run_test(reporter, options, SrcType::kVulkan, DstType::kVulkan, true);
 }
 
 #if defined(SK_GL)
-DEF_GPUTEST(VulkanHardwareBuffer_EGL_Vulkan, reporter, options) {
+DEF_GANESH_TEST(VulkanHardwareBuffer_EGL_Vulkan, reporter, options, CtsEnforcement::kApiLevel_T) {
     run_test(reporter, options, SrcType::kEGL, DstType::kVulkan, false);
 }
 
-DEF_GPUTEST(VulkanHardwareBuffer_CPU_EGL, reporter, options) {
+DEF_GANESH_TEST(VulkanHardwareBuffer_CPU_EGL, reporter, options, CtsEnforcement::kApiLevel_T) {
     run_test(reporter, options, SrcType::kCPU, DstType::kEGL, false);
 }
 
-DEF_GPUTEST(VulkanHardwareBuffer_EGL_EGL, reporter, options) {
+DEF_GANESH_TEST(VulkanHardwareBuffer_EGL_EGL, reporter, options, CtsEnforcement::kApiLevel_T) {
     run_test(reporter, options, SrcType::kEGL, DstType::kEGL, false);
 }
 
-DEF_GPUTEST(VulkanHardwareBuffer_Vulkan_EGL, reporter, options) {
+DEF_GANESH_TEST(VulkanHardwareBuffer_Vulkan_EGL, reporter, options, CtsEnforcement::kApiLevel_T) {
     run_test(reporter, options, SrcType::kVulkan, DstType::kEGL, false);
 }
 
-DEF_GPUTEST(VulkanHardwareBuffer_EGL_EGL_Syncs, reporter, options) {
+DEF_GANESH_TEST(VulkanHardwareBuffer_EGL_EGL_Syncs,
+                reporter,
+                options,
+                CtsEnforcement::kApiLevel_T) {
     run_test(reporter, options, SrcType::kEGL, DstType::kEGL, true);
 }
 
-DEF_GPUTEST(VulkanHardwareBuffer_Vulkan_EGL_Syncs, reporter, options) {
+DEF_GANESH_TEST(VulkanHardwareBuffer_Vulkan_EGL_Syncs,
+                reporter,
+                options,
+                CtsEnforcement::kApiLevel_T) {
     run_test(reporter, options, SrcType::kVulkan, DstType::kEGL, true);
 }
 
-DEF_GPUTEST(VulkanHardwareBuffer_EGL_Vulkan_Syncs, reporter, options) {
+DEF_GANESH_TEST(VulkanHardwareBuffer_EGL_Vulkan_Syncs,
+                reporter,
+                options,
+                CtsEnforcement::kApiLevel_T) {
     run_test(reporter, options, SrcType::kEGL, DstType::kVulkan, true);
 }
 #endif
 
-#endif  // SK_SUPPORT_GPU && defined(SK_BUILD_FOR_ANDROID) &&
+#endif  // defined(SK_GANESH) && defined(SK_BUILD_FOR_ANDROID) &&
         // __ANDROID_API__ >= 26 && defined(SK_VULKAN)
 

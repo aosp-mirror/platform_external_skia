@@ -33,13 +33,15 @@
 #include "include/core/SkTypes.h"
 #include "include/core/SkVertices.h"
 #include "include/effects/SkGradientShader.h"
-#include "include/private/SkTemplates.h"
-#include "src/core/SkAutoMalloc.h"
+#include "include/private/base/SkTemplates.h"
+#include "src/base/SkAutoMalloc.h"
 #include "src/core/SkFontPriv.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 
 #include <initializer_list>
+
+using namespace skia_private;
 
 class DrawAtlasGM : public skiagm::GM {
     static sk_sp<SkImage> MakeAtlas(SkCanvas* caller, const SkRect& target) {
@@ -100,7 +102,7 @@ protected:
             { 2, -30, 310, 30 },    // scale + rotate + translate
         };
 
-        const int N = SK_ARRAY_COUNT(rec);
+        const int N = std::size(rec);
         SkRSXform xform[N];
         SkRect tex[N];
         SkColor colors[N];
@@ -146,7 +148,7 @@ static void draw_text_on_path(SkCanvas* canvas, const void* text, size_t length,
                                 std::max(SkScalarAbs(fontb.fTop), SkScalarAbs(fontb.fBottom)));
     const SkRect bounds = path.getBounds().makeOutset(max, max);
 
-    SkAutoTArray<SkGlyphID> glyphs(count);
+    AutoTArray<SkGlyphID> glyphs(count);
     font.textToGlyphs(text, length, SkTextEncoding::kUTF8, glyphs.get(), count);
     font.getWidths(glyphs.get(), count, widths);
 
@@ -271,7 +273,7 @@ DEF_SIMPLE_GM(blob_rsxform_distortable, canvas, 500, 100) {
             { SkSetFourByteTag('w','g','h','t'), 1.618033988749895f }
         };
         SkFontArguments params;
-        params.setVariationDesignPosition({position, SK_ARRAY_COUNT(position)});
+        params.setVariationDesignPosition({position, std::size(position)});
         typeface = fm->makeFromStream(std::move(distortable), params);
     }
 

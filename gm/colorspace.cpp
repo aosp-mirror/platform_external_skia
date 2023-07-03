@@ -7,6 +7,7 @@
 
 #include "gm/gm.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkSurface.h"
 #include "tools/Resources.h"
@@ -111,10 +112,10 @@ static void draw_colorspace_gm(Strategy strategy, SkCanvas* canvas) {
     }
 }
 
-DEF_SIMPLE_GM(colorspace, canvas, W*SK_ARRAY_COUNT(gTFs), H*SK_ARRAY_COUNT(gGamuts)) {
+DEF_SIMPLE_GM(colorspace, canvas, W*std::size(gTFs), H*std::size(gGamuts)) {
     draw_colorspace_gm(SkImage_makeColorSpace, canvas);
 }
 
-DEF_SIMPLE_GM(colorspace2, canvas, W*SK_ARRAY_COUNT(gTFs), H*SK_ARRAY_COUNT(gGamuts)) {
+DEF_SIMPLE_GM(colorspace2, canvas, W*std::size(gTFs), H*std::size(gGamuts)) {
     draw_colorspace_gm(SkCanvas_makeSurface, canvas);
 }
