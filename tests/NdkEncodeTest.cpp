@@ -8,10 +8,11 @@
 #include "include/core/SkTypes.h"
 #ifdef SK_ENABLE_NDK_IMAGES
 #include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkImageEncoder.h"
 #include "include/core/SkImageGenerator.h"
-#include "include/private/SkMalloc.h"
-#include "src/images/SkImageEncoderPriv.h"
+#include "include/private/base/SkMalloc.h"
+#include "src/encode/SkImageEncoderPriv.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"

@@ -18,7 +18,7 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypeface.h"
-#include "include/private/SkOnce.h"
+#include "include/private/base/SkOnce.h"
 #include "src/utils/mac/SkUniqueCFRef.h"
 
 #ifdef SK_BUILD_FOR_MAC
@@ -55,8 +55,6 @@ struct CTFontVariation {
     OpszVariation opsz;
 };
 
-CTFontVariation SkCTVariationFromSkFontArguments(CTFontRef ct, const SkFontArguments& args);
-
 SkUniqueCFRef<CTFontRef> SkCTFontCreateExactCopy(CTFontRef baseFont, CGFloat textSize,
                                                  OpszVariation opsz);
 
@@ -87,9 +85,21 @@ public:
                                   OpszVariation opszVariation,
                                   std::unique_ptr<SkStreamAsset> providedData);
 
+    static constexpr SkTypeface::FactoryId FactoryId = SkSetFourByteTag('c','t','x','t');
+    static sk_sp<SkTypeface> MakeFromStream(std::unique_ptr<SkStreamAsset>, const SkFontArguments&);
+
     SkUniqueCFRef<CTFontRef> fFontRef;
     const OpszVariation fOpszVariation;
     const bool fHasColorGlyphs;
+
+    /**
+     * CTFontCopyVariationAxes provides the localized name of all axes, making it very slow.
+     * This is unfortunate, its result is needed just to see if there are any axes at all.
+     * To avoid calling internal APIs cache the result of CTFontCopyVariationAxes.
+     * https://github.com/WebKit/WebKit/commit/1842365d413ed87868e7d33d4fad1691fa3a8129
+     * https://bugs.webkit.org/show_bug.cgi?id=232690
+     */
+    CFArrayRef getVariationAxes() const;
 
 protected:
     int onGetUPEM() const override;
@@ -121,8 +131,10 @@ protected:
 
 private:
     mutable std::unique_ptr<SkStreamAsset> fStream;
+    mutable SkUniqueCFRef<CFArrayRef> fVariationAxes;
     bool fIsFromStream;
     mutable SkOnce fInitStream;
+    mutable SkOnce fInitVariationAxes;
 
     using INHERITED = SkTypeface;
 };
