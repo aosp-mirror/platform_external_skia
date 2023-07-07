@@ -10,7 +10,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkCubicMap.h"
 #include "include/core/SkTypeface.h"
-#include "include/private/SkTPin.h"
+#include "include/private/base/SkTPin.h"
 #include "modules/sksg/include/SkSGDraw.h"
 #include "modules/sksg/include/SkSGGroup.h"
 #include "modules/sksg/include/SkSGPaint.h"
@@ -306,7 +306,7 @@ void SlideDir::load(SkScalar winWidth, SkScalar winHeight) {
 
     fRoot = sksg::Group::Make();
 
-    for (int i = 0; i < fSlides.count(); ++i) {
+    for (int i = 0; i < fSlides.size(); ++i) {
         const auto& slide     = fSlides[i];
         slide->load(winWidth, winHeight);
 
@@ -347,7 +347,7 @@ void SlideDir::unload() {
         slide->unload();
     }
 
-    fRecs.reset();
+    fRecs.clear();
     fScene.reset();
     fFocusController.reset();
     fRoot.reset();
@@ -356,7 +356,7 @@ void SlideDir::unload() {
 
 SkISize SlideDir::getDimensions() const {
     return SkSize::Make(fWinSize.width(),
-                        fCellSize.height() * (1 + (fSlides.count() - 1) / fColumns)).toCeil();
+                        fCellSize.height() * (1 + (fSlides.size() - 1) / fColumns)).toCeil();
 }
 
 void SlideDir::draw(SkCanvas* canvas) {
@@ -436,5 +436,5 @@ const SlideDir::Rec* SlideDir::findCell(float x, float y) const {
               row = static_cast<int>(y / fCellSize.height()),
               idx = row * fColumns + col;
 
-    return idx < fRecs.count() ? &fRecs[idx] : nullptr;
+    return idx < (int)fRecs.size() ? &fRecs[idx] : nullptr;
 }

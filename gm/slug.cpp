@@ -21,18 +21,22 @@
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkTDArray.h"
-#include "include/private/chromium/GrSlug.h"
+#include "include/private/base/SkTDArray.h"
+#include "include/private/chromium/Slug.h"
 #include "tools/ToolUtils.h"
 
-#if SK_SUPPORT_GPU && defined(SK_EXPERIMENTAL_SIMULATE_DRAWGLYPHRUNLIST_WITH_SLUG)
+#if defined(SK_GANESH)
+#include "include/gpu/GrContextOptions.h"
+
 class SlugGM : public skiagm::GM {
 public:
-    SlugGM(const char* txt)
-            : fText(txt) {
-    }
+    SlugGM(const char* txt) : fText(txt) {}
 
 protected:
+    void modifyGrContextOptions(GrContextOptions* ctxOptions) override {
+        ctxOptions->fSupportBilerpFromGlyphAtlas = true;
+    }
+
     void onOnceBeforeDraw() override {
         fTypeface = ToolUtils::create_portable_typeface("serif", SkFontStyle());
         SkFont font(fTypeface);
@@ -57,7 +61,7 @@ protected:
         p.setAntiAlias(true);
         canvas->clipIRect(SkIRect::MakeSize(this->getISize()).makeInset(40, 50));
         canvas->scale(1.3f, 1.3f);
-        sk_sp<GrSlug> slug = GrSlug::ConvertBlob(canvas, *blob, {10, 10}, p);
+        sk_sp<sktext::gpu::Slug> slug = sktext::gpu::Slug::ConvertBlob(canvas, *blob, {10, 10}, p);
         if (slug == nullptr) {
             return;
         }
@@ -93,8 +97,8 @@ private:
         font.setTypeface(fTypeface);
         font.setSize(16);
 
-        const SkTextBlobBuilder::RunBuffer& buf = builder.allocRun(font, fGlyphs.count(), 0, 0);
-        memcpy(buf.glyphs, fGlyphs.begin(), fGlyphs.count() * sizeof(uint16_t));
+        const SkTextBlobBuilder::RunBuffer& buf = builder.allocRun(font, fGlyphs.size(), 0, 0);
+        memcpy(buf.glyphs, fGlyphs.begin(), fGlyphs.size() * sizeof(uint16_t));
         return builder.make();
     }
 
