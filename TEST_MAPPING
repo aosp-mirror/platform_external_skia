@@ -1,7 +1,11 @@
 {
+  // TODO (b/242858942): periodically re-enable tests on case-by-case basis when they're fixed.
   "presubmit": [
     {
       "name": "CtsGraphicsTestCases"
+    },
+    {
+      "name": "hwui_unit_tests"
     },
     {
       "name": "minikin_tests"
@@ -10,7 +14,12 @@
       "name": "librenderengine_test"
     },
     {
-      "name": "SurfaceFlinger_test"
+      "name": "SurfaceFlinger_test",
+      "options": [
+        {
+          "exclude-filter": "SurfaceFlinger_test.WindowInfosListenerTest#WindowInfoAddedAndRemoved"
+        }
+      ]
     }
   ],
   "imports": [

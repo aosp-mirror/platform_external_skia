@@ -8,13 +8,19 @@
 #ifndef SKSL_CONSTRUCTOR_COMPOUND
 #define SKSL_CONSTRUCTOR_COMPOUND
 
-#include "src/sksl/SkSLContext.h"
+#include "include/private/SkSLDefines.h"
+#include "include/private/SkSLIRNode.h"
+#include "include/sksl/SkSLPosition.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLExpression.h"
 
 #include <memory>
+#include <utility>
 
 namespace SkSL {
+
+class Context;
+class Type;
 
 /**
  * Represents a vector or matrix that is composed from other expressions, such as
@@ -26,19 +32,18 @@ namespace SkSL {
  */
 class ConstructorCompound final : public MultiArgumentConstructor {
 public:
-    inline static constexpr Kind kExpressionKind = Kind::kConstructorCompound;
+    inline static constexpr Kind kIRNodeKind = Kind::kConstructorCompound;
 
-    ConstructorCompound(int line, const Type& type, ExpressionArray args)
-            : INHERITED(line, kExpressionKind, &type, std::move(args)) {}
+    ConstructorCompound(Position pos, const Type& type, ExpressionArray args)
+            : INHERITED(pos, kIRNodeKind, &type, std::move(args)) {}
 
     static std::unique_ptr<Expression> Make(const Context& context,
-                                            int line,
+                                            Position pos,
                                             const Type& type,
                                             ExpressionArray args);
 
-    std::unique_ptr<Expression> clone() const override {
-        return std::make_unique<ConstructorCompound>(fLine, this->type(),
-                                                     this->arguments().clone());
+    std::unique_ptr<Expression> clone(Position pos) const override {
+        return std::make_unique<ConstructorCompound>(pos, this->type(), this->arguments().clone());
     }
 
 private:

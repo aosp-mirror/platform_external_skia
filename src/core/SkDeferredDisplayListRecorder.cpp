@@ -12,7 +12,7 @@
 #include "include/core/SkSurfaceCharacterization.h"
 #include "src/core/SkMessageBus.h"
 
-#if !SK_SUPPORT_GPU
+#if !defined(SK_GANESH)
 SkDeferredDisplayListRecorder::SkDeferredDisplayListRecorder(const SkSurfaceCharacterization&) {}
 
 SkDeferredDisplayListRecorder::~SkDeferredDisplayListRecorder() {}
@@ -28,10 +28,13 @@ sk_sp<SkDeferredDisplayList> SkDeferredDisplayListRecorder::detach() { return nu
 #include "include/core/SkPromiseImageTexture.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/GrYUVABackendTextures.h"
-#include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrTexture.h"
-#include "src/gpu/SkGr.h"
+#include "src/gpu/SkBackingFit.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrProxyProvider.h"
+#include "src/gpu/ganesh/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/GrRenderTargetProxy.h"
+#include "src/gpu/ganesh/GrTexture.h"
+#include "src/gpu/ganesh/SkGr.h"
 #include "src/image/SkImage_Gpu.h"
 #include "src/image/SkImage_GpuYUVA.h"
 #include "src/image/SkSurface_Gpu.h"
@@ -148,7 +151,7 @@ bool SkDeferredDisplayListRecorder::init() {
             optionalTextureInfo,
             GrMipmapStatus::kNotAllocated,
             SkBackingFit::kExact,
-            SkBudgeted::kYes,
+            skgpu::Budgeted::kYes,
             fCharacterization.isProtected(),
             fCharacterization.vulkanSecondaryCBCompatible(),
             GrSurfaceProxy::UseAllocator::kYes);
@@ -163,7 +166,7 @@ bool SkDeferredDisplayListRecorder::init() {
                                                 fCharacterization.refColorSpace(),
                                                 fCharacterization.origin(),
                                                 fCharacterization.surfaceProps(),
-                                                skgpu::BaseDevice::InitContents::kUninit);
+                                                skgpu::v1::Device::InitContents::kUninit);
     if (!device) {
         return false;
     }
@@ -212,7 +215,7 @@ sk_sp<SkImage> SkDeferredDisplayListRecorder::makePromiseTexture(
         const GrBackendFormat& backendFormat,
         int width,
         int height,
-        GrMipmapped mipMapped,
+        GrMipmapped mipmapped,
         GrSurfaceOrigin origin,
         SkColorType colorType,
         SkAlphaType alphaType,
@@ -226,7 +229,7 @@ sk_sp<SkImage> SkDeferredDisplayListRecorder::makePromiseTexture(
     return SkImage::MakePromiseTexture(fContext->threadSafeProxy(),
                                        backendFormat,
                                        {width, height},
-                                       mipMapped,
+                                       mipmapped,
                                        origin,
                                        colorType,
                                        alphaType,

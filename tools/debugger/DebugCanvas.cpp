@@ -7,24 +7,45 @@
 
 #include "tools/debugger/DebugCanvas.h"
 
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkClipOp.h"
+#include "include/core/SkData.h"
+#include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkPicture.h"
 #include "include/core/SkPoint.h"
+#include "include/core/SkRSXform.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkString.h"
 #include "include/core/SkTextBlob.h"
+#include "include/core/SkVertices.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrRecordingContext.h"
+#include "include/private/base/SkTArray.h"
+#include "include/private/base/SkTo.h"
 #include "include/utils/SkPaintFilterCanvas.h"
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkRectPriv.h"
-#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/GrRenderTargetProxy.h"
+#include "src/gpu/ganesh/GrSurfaceProxy.h"
 #include "src/utils/SkJSONWriter.h"
 #include "tools/debugger/DebugLayerManager.h"
 #include "tools/debugger/DrawCommand.h"
 
 #include <string>
+#include <utility>
 
-#if SK_GPU_V1
-#include "src/gpu/GrAuditTrail.h"
+class SkDrawable;
+class SkImage;
+class SkRRect;
+class SkRegion;
+class UrlDataManager;
+struct SkDrawShadowRec;
+
+#if defined(SK_GANESH)
+#include "src/gpu/ganesh/GrAuditTrail.h"
 #endif
 
 #define SKDEBUGCANVAS_VERSION 1
@@ -115,19 +136,24 @@ DebugCanvas::DebugCanvas(int width, int height)
 DebugCanvas::DebugCanvas(SkIRect bounds)
         : DebugCanvas(bounds.width(), bounds.height()) {}
 
-DebugCanvas::~DebugCanvas() { fCommandVector.deleteAll(); }
+DebugCanvas::~DebugCanvas() {
+    for (DrawCommand* p : fCommandVector) {
+        delete p;
+    }
+    fCommandVector.reset();
+}
 
 void DebugCanvas::addDrawCommand(DrawCommand* command) { fCommandVector.push_back(command); }
 
 void DebugCanvas::draw(SkCanvas* canvas) {
-    if (!fCommandVector.isEmpty()) {
-        this->drawTo(canvas, fCommandVector.count() - 1);
+    if (!fCommandVector.empty()) {
+        this->drawTo(canvas, fCommandVector.size() - 1);
     }
 }
 
 void DebugCanvas::drawTo(SkCanvas* originalCanvas, int index, int m) {
-    SkASSERT(!fCommandVector.isEmpty());
-    SkASSERT(index < fCommandVector.count());
+    SkASSERT(!fCommandVector.empty());
+    SkASSERT(index < fCommandVector.size());
 
     int saveCount = originalCanvas->save();
 
@@ -137,7 +163,7 @@ void DebugCanvas::drawTo(SkCanvas* originalCanvas, int index, int m) {
     DebugPaintFilterCanvas filterCanvas(originalCanvas);
     SkCanvas* finalCanvas = fOverdrawViz ? &filterCanvas : originalCanvas;
 
-#if SK_GPU_V1
+#if defined(SK_GANESH)
     auto dContext = GrAsDirectContext(finalCanvas->recordingContext());
 
     // If we have a GPU backend we can also visualize the op information
@@ -149,7 +175,7 @@ void DebugCanvas::drawTo(SkCanvas* originalCanvas, int index, int m) {
 #endif
 
     for (int i = 0; i <= index; i++) {
-#if SK_GPU_V1
+#if defined(SK_GANESH)
         GrAuditTrail::AutoCollectOps* acb = nullptr;
         if (at) {
             // We need to flush any pending operations, or they might combine with commands below.
@@ -164,7 +190,7 @@ void DebugCanvas::drawTo(SkCanvas* originalCanvas, int index, int m) {
         if (fCommandVector[i]->isVisible()) {
             fCommandVector[i]->execute(finalCanvas);
         }
-#if SK_GPU_V1
+#if defined(SK_GANESH)
         if (at && acb) {
             delete acb;
         }
@@ -198,7 +224,7 @@ void DebugCanvas::drawTo(SkCanvas* originalCanvas, int index, int m) {
         finalCanvas->drawRect(fAndroidClip, androidClipPaint);
     }
 
-#if SK_GPU_V1
+#if defined(SK_GANESH)
     // draw any ops if required and issue a full reset onto GrAuditTrail
     if (at) {
         // just in case there is global reordering, we flush the canvas before querying
@@ -232,14 +258,14 @@ void DebugCanvas::drawTo(SkCanvas* originalCanvas, int index, int m) {
         SkPaint paint;
         paint.setStyle(SkPaint::kStroke_Style);
         paint.setStrokeWidth(1);
-        for (int i = 0; i < childrenBounds.count(); i++) {
+        for (int i = 0; i < childrenBounds.size(); i++) {
             if (childrenBounds[i].fProxyUniqueID != proxyID) {
                 // offscreen draw, ignore for now
                 continue;
             }
             paint.setColor(kTotalBounds);
             finalCanvas->drawRect(childrenBounds[i].fBounds, paint);
-            for (int j = 0; j < childrenBounds[i].fOps.count(); j++) {
+            for (int j = 0; j < childrenBounds[i].fOps.size(); j++) {
                 const GrAuditTrail::OpInfo::Op& op = childrenBounds[i].fOps[j];
                 if (op.fClientID != index) {
                     paint.setColor(kOtherOpBounds);
@@ -256,17 +282,17 @@ void DebugCanvas::drawTo(SkCanvas* originalCanvas, int index, int m) {
 }
 
 void DebugCanvas::deleteDrawCommandAt(int index) {
-    SkASSERT(index < fCommandVector.count());
+    SkASSERT(index < fCommandVector.size());
     delete fCommandVector[index];
     fCommandVector.remove(index);
 }
 
 DrawCommand* DebugCanvas::getDrawCommandAt(int index) const {
-    SkASSERT(index < fCommandVector.count());
+    SkASSERT(index < fCommandVector.size());
     return fCommandVector[index];
 }
 
-#if SK_GPU_V1
+#if defined(SK_GANESH)
 GrAuditTrail* DebugCanvas::getAuditTrail(SkCanvas* canvas) {
     GrAuditTrail* at  = nullptr;
     auto ctx = canvas->recordingContext();
@@ -304,12 +330,12 @@ void DebugCanvas::cleanupAuditTrail(GrAuditTrail* at) {
         at->fullReset();
     }
 }
-#endif // SK_GPU_V1
+#endif // defined(SK_GANESH)
 
 void DebugCanvas::toJSON(SkJSONWriter&   writer,
                          UrlDataManager& urlDataManager,
                          SkCanvas*       canvas) {
-#if SK_GPU_V1
+#if defined(SK_GANESH)
     this->drawAndCollectOps(canvas);
 
     // now collect json
@@ -322,7 +348,7 @@ void DebugCanvas::toJSON(SkJSONWriter&   writer,
         writer.beginObject();  // command
         this->getDrawCommandAt(i)->toJSON(writer, urlDataManager);
 
-#if SK_GPU_V1
+#if defined(SK_GANESH)
         if (at) {
             writer.appendName(SKDEBUGCANVAS_ATTRIBUTE_AUDITTRAIL);
             at->toJson(writer, i);
@@ -332,13 +358,13 @@ void DebugCanvas::toJSON(SkJSONWriter&   writer,
     }
 
     writer.endArray();  // commands
-#if SK_GPU_V1
+#if defined(SK_GANESH)
     this->cleanupAuditTrail(at);
 #endif
 }
 
 void DebugCanvas::toJSONOpsTask(SkJSONWriter& writer, SkCanvas* canvas) {
-#if SK_GPU_V1
+#if defined(SK_GANESH)
     this->drawAndCollectOps(canvas);
 
     GrAuditTrail* at = this->getAuditTrail(canvas);
@@ -615,7 +641,7 @@ void DebugCanvas::didSetM44(const SkM44& matrix) {
 }
 
 void DebugCanvas::toggleCommand(int index, bool toggle) {
-    SkASSERT(index < fCommandVector.count());
+    SkASSERT(index < fCommandVector.size());
     fCommandVector[index]->setVisible(toggle);
 }
 

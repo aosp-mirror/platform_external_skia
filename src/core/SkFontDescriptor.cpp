@@ -8,6 +8,7 @@
 #include "include/core/SkData.h"
 #include "include/core/SkStream.h"
 #include "src/core/SkFontDescriptor.h"
+#include "src/core/SkStreamPriv.h"
 
 enum {
     kInvalid        = 0x00,
@@ -27,6 +28,7 @@ enum {
     kFontVariation  = 0xFA, // int count, (u32, scalar)[count]
 
     // Related to font data.
+    kFactoryId      = 0xFC, // int
     kFontIndex      = 0xFD, // int
     kSentinel       = 0xFF, // no data
 };
@@ -37,8 +39,11 @@ static bool SK_WARN_UNUSED_RESULT read_string(SkStream* stream, SkString* string
     size_t length;
     if (!stream->readPackedUInt(&length)) { return false; }
     if (length > 0) {
+        if (StreamRemainingLengthIsBelow(stream, length)) {
+            return false;
+        }
         string->resize(length);
-        if (stream->read(string->writable_str(), length) != length) { return false; }
+        if (stream->read(string->data(), length) != length) { return false; }
     }
     return true;
 }
@@ -76,6 +81,9 @@ static constexpr SkScalar width_for_usWidth[0x10] = {
 };
 
 bool SkFontDescriptor::Deserialize(SkStream* stream, SkFontDescriptor* result) {
+    size_t factoryId;
+    using FactoryIdType = decltype(result->fFactoryId);
+
     size_t coordinateCount;
     using CoordinateCountType = decltype(result->fCoordinateCount);
 
@@ -129,6 +137,9 @@ bool SkFontDescriptor::Deserialize(SkStream* stream, SkFontDescriptor* result) {
             case kFontVariation:
                 if (!stream->readPackedUInt(&coordinateCount)) { return false; }
                 if (!SkTFitsIn<CoordinateCountType>(coordinateCount)) { return false; }
+                if (StreamRemainingLengthIsBelow(stream, coordinateCount)) {
+                    return false;
+                }
                 result->fCoordinateCount = SkTo<CoordinateCountType>(coordinateCount);
 
                 result->fVariation.reset(coordinateCount);
@@ -152,6 +163,9 @@ bool SkFontDescriptor::Deserialize(SkStream* stream, SkFontDescriptor* result) {
                 if (!SkTFitsIn<PaletteEntryOverrideCountType>(paletteEntryOverrideCount)) {
                     return false;
                 }
+                if (StreamRemainingLengthIsBelow(stream, paletteEntryOverrideCount)) {
+                    return false;
+                }
                 result->fPaletteEntryOverrideCount =
                         SkTo<PaletteEntryOverrideCountType>(paletteEntryOverrideCount);
 
@@ -168,6 +182,11 @@ bool SkFontDescriptor::Deserialize(SkStream* stream, SkFontDescriptor* result) {
                     }
                 }
                 break;
+            case kFactoryId:
+                if (!stream->readPackedUInt(&factoryId)) { return false; }
+                if (!SkTFitsIn<FactoryIdType>(factoryId)) { return false; }
+                result->fFactoryId = SkTo<FactoryIdType>(factoryId);
+                break;
             default:
                 SkDEBUGFAIL("Unknown id used by a font descriptor");
                 return false;
@@ -183,6 +202,9 @@ bool SkFontDescriptor::Deserialize(SkStream* stream, SkFontDescriptor* result) {
     size_t length;
     if (!stream->readPackedUInt(&length)) { return false; }
     if (length > 0) {
+        if (StreamRemainingLengthIsBelow(stream, length)) {
+            return false;
+        }
         sk_sp<SkData> data(SkData::MakeUninitialized(length));
         if (stream->read(data->writable_data(), length) != length) {
             SkDEBUGFAIL("Could not read font data");
@@ -206,26 +228,36 @@ void SkFontDescriptor::serialize(SkWStream* stream) const {
     write_scalar(stream, fStyle.slant() == SkFontStyle::kUpright_Slant ? 0 : 14, kSlant);
     write_scalar(stream, fStyle.slant() == SkFontStyle::kItalic_Slant ? 1 : 0, kItalic);
 
-    if (fCollectionIndex) {
+    if (fCollectionIndex > 0) {
         write_uint(stream, fCollectionIndex, kFontIndex);
     }
-    if (fPaletteIndex) {
+    if (fPaletteIndex > 0) {
         write_uint(stream, fPaletteIndex, kPaletteIndex);
     }
-    if (fCoordinateCount) {
+    if (fCoordinateCount > 0) {
         write_uint(stream, fCoordinateCount, kFontVariation);
         for (int i = 0; i < fCoordinateCount; ++i) {
             stream->write32(fVariation[i].axis);
             stream->writeScalar(fVariation[i].value);
         }
     }
-    if (fPaletteEntryOverrideCount) {
-        write_uint(stream, fPaletteEntryOverrideCount, kPaletteEntryOverrides);
+    if (fPaletteEntryOverrideCount > 0) {
+        int nonNegativePaletteOverrideIndexes = 0;
         for (int i = 0; i < fPaletteEntryOverrideCount; ++i) {
-            stream->writePackedUInt(fPaletteEntryOverrides[i].index);
-            stream->write32(fPaletteEntryOverrides[i].color);
+            if (0 <= fPaletteEntryOverrides[i].index) {
+                ++nonNegativePaletteOverrideIndexes;
+            }
+        }
+        write_uint(stream, nonNegativePaletteOverrideIndexes, kPaletteEntryOverrides);
+        for (int i = 0; i < fPaletteEntryOverrideCount; ++i) {
+            if (0 <= fPaletteEntryOverrides[i].index) {
+                stream->writePackedUInt(fPaletteEntryOverrides[i].index);
+                stream->write32(fPaletteEntryOverrides[i].color);
+            }
         }
     }
+
+    write_uint(stream, fFactoryId, kFactoryId);
 
     stream->writePackedUInt(kSentinel);
 
