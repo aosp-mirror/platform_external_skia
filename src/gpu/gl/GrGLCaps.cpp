@@ -2460,7 +2460,7 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
         info.fInternalFormatForRenderbuffer = GR_GL_RGBX8;
         info.fDefaultExternalFormat = GR_GL_RGB;
         info.fDefaultExternalType = GR_GL_UNSIGNED_BYTE;
-        info.fDefaultColorType = GrColorType::kRGB_888x;
+        info.fDefaultColorType = GrColorType::kRGB_888;
 
         bool supportsSizedRGBX = false;
         // The GL_ANGLE_rgbx_internal_format extension only adds the sized GL_RGBX8 type and does
@@ -2495,22 +2495,22 @@ void GrGLCaps::initFormatTable(const GrGLContextInfo& ctxInfo, const GrGLInterfa
                 ctInfo.fExternalIOFormats = std::make_unique<ColorTypeInfo::ExternalIOFormats[]>(
                         ctInfo.fExternalIOFormatCount);
                 int ioIdx = 0;
+                // Format: RGBX8, Surface: kRGB_888x, Data: kRGB_888
+                {
+                    auto& ioFormat = ctInfo.fExternalIOFormats[ioIdx++];
+                    ioFormat.fColorType = GrColorType::kRGB_888;
+                    ioFormat.fExternalType = GR_GL_UNSIGNED_BYTE;
+                    ioFormat.fExternalTexImageFormat = GR_GL_RGB;
+                    ioFormat.fExternalReadFormat = 0;
+                }
+
                 // Format: RGBX8, Surface: kRGB_888x, Data: kRGB_888x
                 {
                     auto& ioFormat = ctInfo.fExternalIOFormats[ioIdx++];
                     ioFormat.fColorType = GrColorType::kRGB_888x;
                     ioFormat.fExternalType = GR_GL_UNSIGNED_BYTE;
-                    ioFormat.fExternalTexImageFormat = GR_GL_RGBA;
-                    ioFormat.fExternalReadFormat = 0;
-                }
-
-                // Format: RGBX8, Surface: kRGB_888x, Data: kRGBA_8888
-                {
-                    auto& ioFormat = ctInfo.fExternalIOFormats[ioIdx++];
-                    ioFormat.fColorType = GrColorType::kRGBA_8888;
-                    ioFormat.fExternalType = GR_GL_UNSIGNED_BYTE;
                     ioFormat.fExternalTexImageFormat = 0;
-                    ioFormat.fExternalReadFormat = GR_GL_RGBA;
+                    ioFormat.fExternalReadFormat = GR_GL_RGBX8;
                 }
             }
         }
