@@ -1,4 +1,6 @@
-load(":defs.bzl", "bool_flag", "string_flag_with_values")
+load("//bazel:flags.bzl", "bool_flag", "selects", "string_flag_with_values")
+
+licenses(["notice"])
 
 # @platforms is found at https://github.com/bazelbuild/platforms
 package(default_visibility = ["//:__subpackages__"])
@@ -8,6 +10,25 @@ config_setting(
     constraint_values = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
+    ],
+)
+
+# Apple devices with intel processors released before the shift to the M1 chip
+# will use this config setting.
+config_setting(
+    name = "mac_x64",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:macos",
+    ],
+)
+
+# M1 Macs (and later) will use this setting.
+config_setting(
+    name = "mac_arm64",
+    constraint_values = [
+        "@platforms//cpu:arm64",
+        "@platforms//os:macos",
     ],
 )
 
@@ -30,6 +51,11 @@ config_setting(
 config_setting(
     name = "debug_build",
     values = {"compilation_mode": "dbg"},
+)
+
+config_setting(
+    name = "fast_build",
+    values = {"compilation_mode": "fastbuild"},
 )
 
 config_setting(
@@ -59,44 +85,67 @@ config_setting(
     },
 )
 
+selects.config_setting_group(
+    name = "release_build_mac",
+    match_all = [
+        "@platforms//os:macos",
+        ":release_build",
+    ],
+    visibility = ["//:__subpackages__"],
+)
+
+selects.config_setting_group(
+    name = "release_build_linux",
+    match_all = [
+        "@platforms//os:linux",
+        ":release_build",
+    ],
+    visibility = ["//:__subpackages__"],
+)
+
+selects.config_setting_group(
+    name = "fast_build_mac",
+    match_all = [
+        "@platforms//os:macos",
+        ":fast_build",
+    ],
+    visibility = ["//:__subpackages__"],
+)
+
+selects.config_setting_group(
+    name = "fast_build_linux",
+    match_all = [
+        "@platforms//os:linux",
+        ":fast_build",
+    ],
+    visibility = ["//:__subpackages__"],
+)
+
 # =============================================================================
 #                     Configurable Skia Features
 # =============================================================================
 # These are flags that we can specify when invoking bazel build to turn on and
 # off certain features, such as GPU backend, or codec support.
-# https://docs.bazel.build/versions/4.2.1/skylark/config.html#using-build-settings-on-the-command-line
-# For example, to use the GL backend with the WebGL flavor, one would run
-# bazel build //:skia-core --//bazel/common_config_settings:gpu_backend=gl_backend \
-#             --//bazel/common_config_settings:with_gl_standard=webgl_standard
+# https://bazel.build/rules/config#defining-build-settings
+# For example, to enable harfbuzz and icu, one would run
+# bazel build //:skia-core --//bazel/common_config_settings:use_harfbuzz \
+#             --//bazel/common_config_settings:use_icu
 # This is a bit wordy, so we define aliases in the //.bazelrc file that condense this to
-# bazel build //:skia-core --gpu_backend=gl_backend --with_gl_standard=webgl_standard
+# bazel build //:skia-core --with_harfbuzz --with_icu
 #
 # Developers can specify their own short-hands by making a .bazelrc file in their home
-# directory. https://docs.bazel.build/versions/main/guide.html#where-are-the-bazelrc-files
+# directory. https://bazel.build/docs/bazelrc#bazelrc-file-locations
 #
+# We check in some Bazel configs for "blessed builds" in //bazel/buildrc.
+#
+# We can also define flags closer to where they have the most impact. For example
+# //src/pdf:enable_pdf_backend.
 
 string_flag_with_values(
-    flag_name = "gpu_backend",
-    multiple = True,
-    values = [
-        "gl_backend",
-        "vulkan_backend",
-    ],
-)
-
-string_flag_with_values(
-    flag_name = "with_gl_standard",
-    values = [
-        "gles_standard",
-        "gl_standard",
-        "webgl_standard",
-    ],
-)
-
-string_flag_with_values(
+    name = "fontmgr_factory",
     default = "empty_fontmgr_factory",
-    flag_name = "fontmgr_factory",
     values = [
+        "android_fontmgr_factory",
         # Makes the default SkFontMgr load fonts from a hard-coded directory on disk.
         "custom_directory_fontmgr_factory",
         # Makes the default SkFontMgr load fonts from an SkEmbeddedResource that has been compiled
@@ -108,6 +157,9 @@ string_flag_with_values(
         "custom_empty_fontmgr_factory",
         # Makes the default SkFontMgr return null. Typically used when font support is not desired.
         "empty_fontmgr_factory",
+        "fontconfig_fontmgr_factory",
+        # Deprecated, do not use.
+        "fci_fontmgr_factory",
     ],
 )
 
@@ -116,9 +168,10 @@ string_flag_with_values(
 # require setting include_fontmgr to custom_embedded_fontmgr, because those sources and settings
 # will already be compiled in due to the _factory flag.
 string_flag_with_values(
-    flag_name = "include_fontmgr",
+    name = "include_fontmgr",
     multiple = True,
     values = [
+        "android_fontmgr",
         # Allows the construction of an SkFontMgr that loads files from a programmatically
         # defined directory on disk.
         "custom_directory_fontmgr",
@@ -127,56 +180,85 @@ string_flag_with_values(
         "custom_embedded_fontmgr",
         # Allows the construction of an SkFontMgr which returns empty fonts.
         "custom_empty_fontmgr",
-    ],
-)
-
-string_flag_with_values(
-    flag_name = "include_decoder",
-    multiple = True,
-    values = [
-        "gif_decode_codec",
-        "jpeg_decode_codec",
-        "png_decode_codec",
-        "raw_decode_codec",
-        "webp_decode_codec",
-    ],
-)
-
-string_flag_with_values(
-    flag_name = "include_encoder",
-    multiple = True,
-    values = [
-        "jpeg_encode_codec",
-        "png_encode_codec",
-        "webp_encode_codec",
-    ],
-)
-
-string_flag_with_values(
-    flag_name = "shaper_backend",
-    multiple = True,
-    values = [
-        "harfbuzz_shaper",
-        "coretext_shaper",
+        "fontconfig_fontmgr",
+        # Deprecated, do not use.
+        "fci_fontmgr",
     ],
 )
 
 bool_flag(
+    # This is necessary because Bazel provides no way to compile header files on their own
+    name = "compile_generated_cpp_files_for_headers",
     default = False,
-    flag_name = "use_icu",
 )
 
 bool_flag(
-    default = False,
-    flag_name = "disable_tracing",
+    name = "enable_effect_serialization",
+    default = True,
 )
 
 bool_flag(
-    default = False,
-    flag_name = "disable_effect_serialization",
+    name = "enable_tracing",
+    # See SkTraceEventCommon.h for more on this type of tracing.
+    default = True,
 )
 
 bool_flag(
+    name = "use_harfbuzz",
     default = False,
-    flag_name = "is_skia_dev_build",
+)
+
+bool_flag(
+    name = "use_icu",
+    default = False,
+)
+
+# These are some helpers to mean "either the fontmgr was enabled or its factory was"
+
+selects.config_setting_group(
+    name = "uses_android_fontmgr",
+    match_any = [
+        ":android_fontmgr",
+        ":android_fontmgr_factory",
+    ],
+)
+
+selects.config_setting_group(
+    name = "uses_custom_directory_fontmgr",
+    match_any = [
+        ":custom_directory_fontmgr",
+        ":custom_directory_fontmgr_factory",
+    ],
+)
+
+selects.config_setting_group(
+    name = "uses_custom_embedded_fontmgr",
+    match_any = [
+        ":custom_embedded_fontmgr",
+        ":custom_embedded_fontmgr_factory",
+    ],
+)
+
+selects.config_setting_group(
+    name = "uses_custom_empty_fontmgr",
+    match_any = [
+        ":custom_empty_fontmgr",
+        ":custom_empty_fontmgr_factory",
+    ],
+)
+
+selects.config_setting_group(
+    name = "uses_fontconfig_fontmgr",
+    match_any = [
+        ":fontconfig_fontmgr",
+        ":fontconfig_fontmgr_factory",
+    ],
+)
+
+selects.config_setting_group(
+    name = "uses_fci_fontmgr",
+    match_any = [
+        ":fci_fontmgr",
+        ":fci_fontmgr_factory",
+    ],
 )
