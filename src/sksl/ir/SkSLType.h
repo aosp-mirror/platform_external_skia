@@ -8,19 +8,28 @@
 #ifndef SKSL_TYPE
 #define SKSL_TYPE
 
+#include "include/core/SkSpan.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkSLDefines.h"
+#include "include/private/SkSLIRNode.h"
 #include "include/private/SkSLModifiers.h"
 #include "include/private/SkSLSymbol.h"
-#include "src/sksl/SkSLUtil.h"
+#include "include/sksl/SkSLPosition.h"
 #include "src/sksl/spirv.h"
-#include <algorithm>
-#include <climits>
-#include <string_view>
-#include <vector>
+
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <vector>
 
 namespace SkSL {
 
 class Context;
+class Expression;
 class SymbolTable;
 
 struct CoercionCost {
@@ -46,6 +55,11 @@ struct CoercionCost {
                std::tie(rhs.fImpossible, rhs.fNarrowingCost, rhs.fNormalCost);
     }
 
+    bool operator<=(CoercionCost rhs) const {
+        return std::tie(    fImpossible,     fNarrowingCost,     fNormalCost) <=
+               std::tie(rhs.fImpossible, rhs.fNarrowingCost, rhs.fNormalCost);
+    }
+
     int  fNormalCost;
     int  fNarrowingCost;
     bool fImpossible;
@@ -56,19 +70,20 @@ struct CoercionCost {
  */
 class Type : public Symbol {
 public:
-    inline static constexpr Kind kSymbolKind = Kind::kType;
+    inline static constexpr Kind kIRNodeKind = Kind::kType;
     inline static constexpr int kMaxAbbrevLength = 3;
-
+    // Represents unspecified array dimensions, as in `int[]`.
+    inline static constexpr int kUnsizedArray = -1;
     struct Field {
-        Field(Modifiers modifiers, std::string_view name, const Type* type)
-        : fModifiers(modifiers)
-        , fName(name)
-        , fType(std::move(type)) {}
+        Field(Position pos, Modifiers modifiers, std::string_view name, const Type* type)
+                : fPosition(pos)
+                , fModifiers(modifiers)
+                , fName(name)
+                , fType(type) {}
 
-        std::string description() const {
-            return fType->displayName() + " " + std::string(fName) + ";";
-        }
+        std::string description() const;
 
+        Position fPosition;
         Modifiers fModifiers;
         std::string_view fName;
         const Type* fType;
@@ -76,6 +91,7 @@ public:
 
     enum class TypeKind : int8_t {
         kArray,
+        kAtomic,
         kGeneric,
         kLiteral,
         kMatrix,
@@ -102,9 +118,16 @@ public:
         kNonnumeric
     };
 
+    enum class TextureAccess : int8_t {
+        kSample,  // `kSample` access level allows both sampling and reading
+        kRead,
+        kWrite,
+        kReadWrite,
+    };
+
     Type(const Type& other) = delete;
 
-    /** Creates an array type. */
+    /** Creates an array type. `columns` may be kUnsizedArray. */
     static std::unique_ptr<Type> MakeArrayType(std::string_view name, const Type& componentType,
                                                int columns);
 
@@ -120,7 +143,7 @@ public:
      * Create a generic type which maps to the listed types--e.g. $genType is a generic type which
      * can match float, float2, float3 or float4.
      */
-    static std::unique_ptr<Type> MakeGenericType(const char* name, std::vector<const Type*> types);
+    static std::unique_ptr<Type> MakeGenericType(const char* name, SkSpan<const Type* const> types);
 
     /** Create a type for literal scalars. */
     static std::unique_ptr<Type> MakeLiteralType(const char* name, const Type& scalarType,
@@ -145,20 +168,27 @@ public:
     static std::unique_ptr<Type> MakeSpecialType(const char* name, const char* abbrev,
                                                  Type::TypeKind typeKind);
 
-    /** Creates a struct type with the given fields. */
-    static std::unique_ptr<Type> MakeStructType(int line,
+    /**
+     * Creates a struct type with the given fields. Reports an error if the struct is not
+     * well-formed.
+     */
+    static std::unique_ptr<Type> MakeStructType(const Context& context,
+                                                Position pos,
                                                 std::string_view name,
                                                 std::vector<Field> fields,
                                                 bool interfaceBlock = false);
 
     /** Create a texture type. */
-    static std::unique_ptr<Type> MakeTextureType(const char* name, SpvDim_ dimensions,
-                                                 bool isDepth, bool isArrayedTexture,
-                                                 bool isMultisampled, bool isSampled);
+    static std::unique_ptr<Type> MakeTextureType(const char* name, SpvDim_ dimensions, bool isDepth,
+                                                 bool isArrayedTexture, bool isMultisampled,
+                                                 TextureAccess textureAccess);
 
     /** Create a vector type. */
     static std::unique_ptr<Type> MakeVectorType(std::string_view name, const char* abbrev,
                                                 const Type& componentType, int columns);
+
+    /** Create an atomic type. */
+    static std::unique_ptr<Type> MakeAtomicType(std::string_view name, const char* abbrev);
 
     template <typename T>
     bool is() const {
@@ -205,9 +235,6 @@ public:
     virtual bool isAllowedInES2() const {
         return true;
     }
-
-    /** Returns true if this type is either private, or contains a private field (recursively). */
-    virtual bool isPrivate() const;
 
     /** If this is an alias, returns the underlying type, otherwise returns this. */
     virtual const Type& resolve() const {
@@ -301,6 +328,7 @@ public:
      */
     bool isOpaque() const {
         switch (fTypeKind) {
+            case TypeKind::kAtomic:
             case TypeKind::kBlender:
             case TypeKind::kColorFilter:
             case TypeKind::kSampler:
@@ -347,11 +375,11 @@ public:
     }
 
     /**
-     * For texturesamplers, returns the type of texture it samples (e.g., sampler2D has
+     * For texture samplers, returns the type of texture it samples (e.g., sampler2D has
      * a texture type of texture2D).
      */
     virtual const Type& textureType() const {
-        SkDEBUGFAIL("not a texture type");
+        SkDEBUGFAIL("not a sampler type");
         return *this;
     }
 
@@ -374,19 +402,15 @@ public:
         return -1;
     }
 
-    /** For integer types, returns the minimum value that can fit in the type. */
-    int64_t minimumValue() const {
-        SkASSERT(this->isInteger());
-        constexpr int64_t k1 = 1;  // ensures that `1 << n` is evaluated as 64-bit
-        return this->isUnsigned() ? 0 : -(k1 << (this->bitWidth() - 1));
+    /** Returns the minimum value that can fit in the type. */
+    virtual double minimumValue() const {
+        SkDEBUGFAIL("type does not have a minimum value");
+        return -INFINITY;
     }
 
-    /** For integer types, returns the maximum value that can fit in the type. */
-    int64_t maximumValue() const {
-        SkASSERT(this->isInteger());
-        constexpr int64_t k1 = 1;  // ensures that `1 << n` is evaluated as 64-bit
-        return (this->isUnsigned() ? (k1 << this->bitWidth())
-                                   : (k1 << (this->bitWidth() - 1))) - 1;
+    virtual double maximumValue() const {
+        SkDEBUGFAIL("type does not have a maximum value");
+        return +INFINITY;
     }
 
     /**
@@ -403,8 +427,9 @@ public:
     /**
      * For generic types, returns the types that this generic type can substitute for.
      */
-    virtual const std::vector<const Type*>& coercibleTypes() const {
-        SK_ABORT("Internal error: not a generic type");
+    virtual SkSpan<const Type* const> coercibleTypes() const {
+        SkDEBUGFAIL("Internal error: not a generic type");
+        return {};
     }
 
     virtual SpvDim_ dimensions() const {
@@ -425,6 +450,12 @@ public:
     bool isVoid() const {
         return fTypeKind == TypeKind::kVoid;
     }
+
+    bool isGeneric() const {
+        return fTypeKind == TypeKind::kGeneric;
+    }
+
+    bool isAtomic() const { return this->typeKind() == TypeKind::kAtomic; }
 
     virtual bool isScalar() const {
         return false;
@@ -450,6 +481,10 @@ public:
         return false;
     }
 
+    virtual bool isUnsizedArray() const {
+        return false;
+    }
+
     virtual bool isStruct() const {
         return false;
     }
@@ -467,13 +502,13 @@ public:
     }
 
     virtual bool isMultisampled() const {
-        SkASSERT(false);
+        SkDEBUGFAIL("not a texture type");
         return false;
     }
 
-    virtual bool isSampled() const {
-        SkASSERT(false);
-        return false;
+    virtual TextureAccess textureAccess() const {
+        SkDEBUGFAIL("not a texture type");
+        return TextureAccess::kSample;
     }
 
     bool hasPrecision() const {
@@ -489,11 +524,8 @@ public:
     }
 
     bool isOrContainsArray() const;
-
-    /**
-     * Returns true if this type is a struct that is too deeply nested.
-     */
-    bool isTooDeeplyNested() const;
+    bool isOrContainsUnsizedArray() const;
+    bool isOrContainsAtomic() const;
 
     /**
      * Returns the corresponding vector or matrix type with the specified number of columns and
@@ -502,14 +534,15 @@ public:
     const Type& toCompound(const Context& context, int columns, int rows) const;
 
     /**
-     * Returns a type which honors the precision qualifiers set in Modifiers. e.g., kMediump_Flag
-     * when applied to `float2` will return `half2`. Generates an error if the precision qualifiers
-     * don't make sense, e.g. `highp bool` or `mediump MyStruct`.
+     * Returns a type which honors the precision and access-level qualifiers set in Modifiers. e.g.:
+     *  - Modifier `mediump` + Type `float2`:     Type `half2`
+     *  - Modifier `readonly` + Type `texture2D`: Type `readonlyTexture2D`
+     * Generates an error if the qualifiers don't make sense (`highp bool`, `writeonly MyStruct`)
      */
-    const Type* applyPrecisionQualifiers(const Context& context,
-                                         Modifiers* modifiers,
-                                         SymbolTable* symbols,
-                                         int line) const;
+    const Type* applyQualifiers(const Context& context,
+                                Modifiers* modifiers,
+                                SymbolTable* symbols,
+                                Position pos) const;
 
     /**
      * Coerces the passed-in expression to this type. If the types are incompatible, reports an
@@ -522,25 +555,40 @@ public:
     bool checkForOutOfRangeLiteral(const Context& context, const Expression& expr) const;
 
     /** Checks if `value` can fit in this type. The type must be scalar. */
-    bool checkForOutOfRangeLiteral(const Context& context, double value, int line) const;
+    bool checkForOutOfRangeLiteral(const Context& context, double value, Position pos) const;
+
+    /**
+     * Reports errors and returns false if this type cannot be used as the base type for an array.
+     */
+    bool checkIfUsableInArray(const Context& context, Position arrayPos) const;
 
     /**
      * Verifies that the expression is a valid constant array size for this type. Returns the array
-     * size, or zero if the expression isn't a valid literal value.
+     * size, or reports errors and returns zero if the expression isn't a valid literal value.
      */
-    SKSL_INT convertArraySize(const Context& context, std::unique_ptr<Expression> size) const;
+    SKSL_INT convertArraySize(const Context& context, Position arrayPos,
+            std::unique_ptr<Expression> size) const;
 
 protected:
-    Type(std::string_view name, const char* abbrev, TypeKind kind, int line = -1)
-        : INHERITED(line, kSymbolKind, name)
+    Type(std::string_view name, const char* abbrev, TypeKind kind,
+            Position pos = Position())
+        : INHERITED(pos, kIRNodeKind, name)
         , fTypeKind(kind) {
         SkASSERT(strlen(abbrev) <= kMaxAbbrevLength);
         strcpy(fAbbreviatedName, abbrev);
     }
 
-private:
-    bool isTooDeeplyNested(int limit) const;
+    const Type* applyPrecisionQualifiers(const Context& context,
+                                         Modifiers* modifiers,
+                                         SymbolTable* symbols,
+                                         Position pos) const;
 
+    const Type* applyAccessQualifiers(const Context& context,
+                                      Modifiers* modifiers,
+                                      SymbolTable* symbols,
+                                      Position pos) const;
+
+private:
     using INHERITED = Symbol;
 
     char fAbbreviatedName[kMaxAbbrevLength + 1] = {};

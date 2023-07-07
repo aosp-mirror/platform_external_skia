@@ -25,7 +25,7 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkDashPathEffect.h"
 #include "include/effects/SkGradientShader.h"
-#include "include/private/SkTArray.h"
+#include "include/private/base/SkTArray.h"
 #include "tools/ToolUtils.h"
 
 #include <initializer_list>
@@ -150,7 +150,7 @@ protected:
         {
             // dashing
             SkScalar intervals[] = { kStrokeWidth, kStrokeWidth };
-            int intervalCount = (int) SK_ARRAY_COUNT(intervals);
+            int intervalCount = (int) std::size(intervals);
             SkPaint p;
             p.setColor(SK_ColorWHITE);
             p.setPathEffect(SkDashPathEffect::Make(intervals, intervalCount, kStrokeWidth));
@@ -206,13 +206,13 @@ protected:
             fMatrices.push_back(m);
         }
 
-        SkASSERT(kNumRows == fPaints.count() + fMatrices.count());
+        SkASSERT(kNumRows == fPaints.size() + fMatrices.size());
     }
 
     void onDraw(SkCanvas* canvas) override {
         canvas->translate(0, kRadius+kPad);
 
-        for (int i = 0; i < fPaints.count(); ++i) {
+        for (int i = 0; i < fPaints.size(); ++i) {
             int saveCount = canvas->save();
             draw_row(canvas, fPaints[i], SkMatrix::I());
             canvas->restoreToCount(saveCount);
@@ -220,7 +220,7 @@ protected:
             canvas->translate(0, 2*(kRadius+kPad));
         }
 
-        for (int i = 0; i < fMatrices.count(); ++i) {
+        for (int i = 0; i < fMatrices.size(); ++i) {
             int saveCount = canvas->save();
             draw_row(canvas, fPaints[0], fMatrices[i]);
             canvas->restoreToCount(saveCount);
