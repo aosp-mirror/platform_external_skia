@@ -35,8 +35,8 @@ class MaskGenerator final : public SkImageGenerator {
 public:
     MaskGenerator(const SkImageInfo& info) : INHERITED(info) {}
 
-    bool onGetPixels(const SkImageInfo& info, void* pixels, size_t rowBytes, const Options&)
-    override {
+    bool onGetPixels(const SkImageInfo& info, void* pixels,
+                     size_t rowBytes, const Options&) override {
         SkImageInfo surfaceInfo = info;
         if (kAlpha_8_SkColorType == info.colorType()) {
             surfaceInfo = surfaceInfo.makeColorSpace(nullptr);
@@ -60,7 +60,14 @@ const MakerT makers[] = {
     // SkImage_Gpu
     [](SkCanvas* c, const SkImageInfo& info) -> sk_sp<SkImage> {
         sk_sp<SkSurface> surface;
-        surface = SkSurface::MakeRenderTarget(c->recordingContext(), SkBudgeted::kNo, info);
+        if (c->recordingContext()) {
+            surface = SkSurface::MakeRenderTarget(c->recordingContext(),
+                                                  skgpu::Budgeted::kNo, info);
+        } else {
+#if defined(SK_GRAPHITE)
+            surface = SkSurface::MakeGraphite(c->recorder(), info);
+#endif
+        }
         return make_mask(surface ? surface : SkSurface::MakeRaster(info));
     },
 
@@ -79,13 +86,21 @@ DEF_SIMPLE_GM(imagemasksubset, canvas, 480, 480) {
 
     const SkImageInfo info = SkImageInfo::MakeA8(kSize.width(), kSize.height());
 
-    for (size_t i = 0; i < SK_ARRAY_COUNT(makers); ++i) {
-        sk_sp<SkImage> image = makers[i](canvas, info);
+    for (size_t i = 0; i < std::size(makers); ++i) {
+        sk_sp<SkImage> image = ToolUtils::MakeTextureImage(canvas, makers[i](canvas, info));
         if (image) {
             canvas->drawImageRect(image, SkRect::Make(kSubset), kDest, SkSamplingOptions(),
                                   &paint, SkCanvas::kStrict_SrcRectConstraint);
-            auto direct = GrAsDirectContext(canvas->recordingContext());
-            sk_sp<SkImage> subset = image->makeSubset(kSubset, direct);
+            sk_sp<SkImage> subset;
+
+            if (auto direct = GrAsDirectContext(canvas->recordingContext())) {
+                subset = image->makeSubset(kSubset, direct);
+            } else {
+#if defined(SK_GRAPHITE)
+                subset = image->makeSubset(kSubset, canvas->recorder());
+#endif
+            }
+
             canvas->drawImageRect(subset, kDest.makeOffset(kSize.width() * 1.5f, 0),
                                   SkSamplingOptions(), &paint);
         }

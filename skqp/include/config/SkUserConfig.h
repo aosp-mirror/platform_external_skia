@@ -3,6 +3,10 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
+#ifndef SKSL_ENABLE_TRACING
+#define SKSL_ENABLE_TRACING
+#endif
+
 #ifndef SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
 #define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 1
 #endif
@@ -29,6 +33,10 @@
 
 #ifndef SK_ENABLE_DUMP_GPU
 #define SK_ENABLE_DUMP_GPU
+#endif
+
+#ifndef SK_ENABLE_PRECOMPILE
+#define SK_ENABLE_PRECOMPILE
 #endif
 
 #ifndef SK_ENABLE_SKSL
@@ -59,6 +67,10 @@
 #define SK_GAMMA_EXPONENT 1.4
 #endif
 
+#ifndef SK_GANESH
+#define SK_GANESH
+#endif
+
 #ifndef SK_GL
 #define SK_GL
 #endif
@@ -69,6 +81,10 @@
 
 #ifndef SK_HAS_WUFFS_LIBRARY
 #define SK_HAS_WUFFS_LIBRARY
+#endif
+
+#ifndef SK_PDF_USE_HARFBUZZ_SUBSET
+#define SK_PDF_USE_HARFBUZZ_SUBSET
 #endif
 
 #ifndef SK_TOOLS_REQUIRE_RESOURCES

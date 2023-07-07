@@ -8,29 +8,33 @@
 #ifndef SkSLAnalysis_DEFINED
 #define SkSLAnalysis_DEFINED
 
-#include "include/core/SkSpan.h"
-#include "include/private/SkSLDefines.h"
 #include "include/private/SkSLSampleUsage.h"
+#include "include/private/base/SkTArray.h"
 
+#include <cstdint>
 #include <memory>
 #include <set>
+#include <vector>
 
 namespace SkSL {
 
+class Context;
 class ErrorReporter;
 class Expression;
-class ForStatement;
 class FunctionDeclaration;
 class FunctionDefinition;
-struct LoadedModule;
-struct Program;
+class Position;
 class ProgramElement;
 class ProgramUsage;
 class Statement;
-struct LoopUnrollInfo;
+class SymbolTable;
 class Variable;
 class VariableReference;
 enum class VariableRefKind : int8_t;
+struct ForLoopPositions;
+struct LoopUnrollInfo;
+struct Module;
+struct Program;
 
 /**
  * Provides utilities for analyzing SkSL statically before it's composed into a full program.
@@ -65,12 +69,28 @@ bool CallsColorTransformIntrinsics(const Program& program);
 bool ReturnsOpaqueColor(const FunctionDefinition& function);
 
 /**
- * Computes the size of the program in a completely flattened state--loops fully unrolled,
+ * Checks for recursion or overly-deep function-call chains, and rejects programs which have them.
+ * Also, computes the size of the program in a completely flattened state--loops fully unrolled,
  * function calls inlined--and rejects programs that exceed an arbitrary upper bound. This is
  * intended to prevent absurdly large programs from overwhemling SkVM. Only strict-ES2 mode is
  * supported; complex control flow is not SkVM-compatible (and this becomes the halting problem)
  */
-bool CheckProgramUnrolledSize(const Program& program);
+bool CheckProgramStructure(const Program& program, bool enforceSizeLimit);
+
+/** Determines if `expr` contains a reference to the variable sk_RTAdjust. */
+bool ContainsRTAdjust(const Expression& expr);
+
+/** Determines if `expr` has any side effects. (Is the expression state-altering or pure?) */
+bool HasSideEffects(const Expression& expr);
+
+/** Determines if `expr` is a compile-time constant (composed of just constructors and literals). */
+bool IsCompileTimeConstant(const Expression& expr);
+
+/**
+ * Determines if `expr` is a dynamically-uniform expression; this returns true if the expression
+ * could be evaluated at compile time if uniform values were known.
+ */
+bool IsDynamicallyUniformExpression(const Expression& expr);
 
 /**
  * Detect an orphaned variable declaration outside of a scope, e.g. if (true) int a;. Returns
@@ -93,10 +113,28 @@ bool SwitchCaseContainsUnconditionalExit(Statement& stmt);
 bool SwitchCaseContainsConditionalExit(Statement& stmt);
 
 std::unique_ptr<ProgramUsage> GetUsage(const Program& program);
-std::unique_ptr<ProgramUsage> GetUsage(const LoadedModule& module);
+std::unique_ptr<ProgramUsage> GetUsage(const Module& module);
 
+/** Returns true if the passed-in statement might alter `var`. */
 bool StatementWritesToVariable(const Statement& stmt, const Variable& var);
 
+/**
+ * Detects if the passed-in block contains a `continue`, `break` or `return` that could directly
+ * affect its control flow. (A `continue` or `break` nested inside an inner loop/switch will not
+ * affect the loop, but a `return` will.)
+ */
+struct LoopControlFlowInfo {
+    bool fHasContinue = false;
+    bool fHasBreak = false;
+    bool fHasReturn = false;
+};
+LoopControlFlowInfo GetLoopControlFlowInfo(const Statement& stmt);
+
+/**
+ * Returns true if the expression can be assigned-into. Pass `info` if you want to know the
+ * VariableReference that will be written to. Pass `errors` to report an error for expressions that
+ * are not actually writable.
+ */
 struct AssignmentInfo {
     VariableReference* fAssignedVar = nullptr;
 };
@@ -123,7 +161,7 @@ bool UpdateVariableRefKind(Expression* expr, VariableRefKind kind, ErrorReporter
  *
  * Trivial-ness is stackable. Somewhat large expressions can occasionally make the cut:
  * - half4(myColor.a)
- * - myStruct.myArrayField[7].xyz
+ * - myStruct.myArrayField[7].xzy
  */
 bool IsTrivialExpression(const Expression& expr);
 
@@ -165,7 +203,8 @@ bool IsConstantIndexExpression(const Expression& expr,
  * If the requirements are not met, the problem is reported via `errors` (if not nullptr), and
  * null is returned.
  */
-std::unique_ptr<LoopUnrollInfo> GetLoopUnrollInfo(int line,
+std::unique_ptr<LoopUnrollInfo> GetLoopUnrollInfo(Position pos,
+                                                  const ForLoopPositions& positions,
                                                   const Statement* loopInitializer,
                                                   const Expression* loopTest,
                                                   const Expression* loopNext,
@@ -177,13 +216,44 @@ void ValidateIndexingForES2(const ProgramElement& pe, ErrorReporter& errors);
 /** Detects functions that fail to return a value on at least one path. */
 bool CanExitWithoutReturningValue(const FunctionDeclaration& funcDecl, const Statement& body);
 
+/** Determines if a given function has multiple and/or early returns. */
+enum class ReturnComplexity {
+    kSingleSafeReturn,
+    kScopedReturns,
+    kEarlyReturns,
+};
+ReturnComplexity GetReturnComplexity(const FunctionDefinition& funcDef);
+
 /**
  * Runs at finalization time to perform any last-minute correctness checks:
- * - Reports @if/@switch statements that didn't optimize away
  * - Reports dangling FunctionReference or TypeReference expressions
  * - Reports function `out` params which are never written to (structs are currently exempt)
  */
 void DoFinalizationChecks(const Program& program);
+
+/**
+ * Error checks compute shader in/outs and returns a vector containing them ordered by location.
+ */
+SkTArray<const SkSL::Variable*> GetComputeShaderMainParams(const Context& context,
+                                                           const Program& program);
+
+/**
+ * Tracks the symbol table stack, in conjunction with a ProgramVisitor. Inside `visitStatement`,
+ * pass the current statement and a symbol-table vector to a SymbolTableStackBuilder and the symbol
+ * table stack will be maintained automatically.
+ */
+class SymbolTableStackBuilder {
+public:
+    // If the passed-in statement holds a symbol table, adds it to the stack.
+    SymbolTableStackBuilder(const Statement* stmt,
+                            std::vector<std::shared_ptr<SymbolTable>>* stack);
+
+    // If a symbol table was added to the stack earlier, removes it from the stack.
+    ~SymbolTableStackBuilder();
+
+private:
+    std::vector<std::shared_ptr<SymbolTable>>* fStackToPop = nullptr;
+};
 
 }  // namespace Analysis
 }  // namespace SkSL
