@@ -6,6 +6,8 @@
 #include <stack>
 #include <string>
 #include <tuple>
+#include "include/private/base/SkOnce.h"
+#include "include/private/base/SkTArray.h"
 #include "modules/skparagraph/include/FontCollection.h"
 #include "modules/skparagraph/include/Paragraph.h"
 #include "modules/skparagraph/include/ParagraphBuilder.h"
@@ -56,11 +58,26 @@ public:
 
     void addPlaceholder(const PlaceholderStyle& placeholderStyle) override;
 
-    void setParagraphStyle(const ParagraphStyle& style) override;
-
     // Constructs a SkParagraph object that can be used to layout and paint the text to a SkCanvas.
     std::unique_ptr<Paragraph> Build() override;
 
+    // Support for "Client" unicode
+    SkSpan<char> getText();
+    const ParagraphStyle& getParagraphStyle() const;
+
+    void setWordsUtf8(std::vector<SkUnicode::Position> wordsUtf8);
+    void setWordsUtf16(std::vector<SkUnicode::Position> wordsUtf16);
+
+    void setGraphemeBreaksUtf8(std::vector<SkUnicode::Position> graphemesUtf8);
+    void setGraphemeBreaksUtf16(std::vector<SkUnicode::Position> graphemesUtf16);
+
+    void setLineBreaksUtf8(std::vector<SkUnicode::LineBreakBefore> lineBreaksUtf8);
+    void setLineBreaksUtf16(std::vector<SkUnicode::LineBreakBefore> lineBreaksUtf16);
+
+    void SetUnicode(std::unique_ptr<SkUnicode> unicode) {
+        fUnicode = std::move(unicode);
+    }
+    // Support for Flutter optimization
     void Reset() override;
 
     static std::unique_ptr<ParagraphBuilder> make(const ParagraphStyle& style,
@@ -70,18 +87,32 @@ public:
     // Just until we fix all the code; calls icu::make inside
     static std::unique_ptr<ParagraphBuilder> make(const ParagraphStyle& style,
                                                   sk_sp<FontCollection> fontCollection);
-private:
+protected:
+    void startStyledBlock();
     void endRunIfNeeded();
+    const TextStyle& internalPeekStyle();
     void addPlaceholder(const PlaceholderStyle& placeholderStyle, bool lastOne);
+    void finalize();
 
     SkString fUtf8;
-    std::stack<TextStyle> fTextStyles;
-    SkTArray<Block, true> fStyledBlocks;
-    SkTArray<Placeholder, true> fPlaceholders;
+    SkSTArray<4, TextStyle, true> fTextStyles;
+    SkSTArray<4, Block, true> fStyledBlocks;
+    SkSTArray<4, Placeholder, true> fPlaceholders;
     sk_sp<FontCollection> fFontCollection;
     ParagraphStyle fParagraphStyle;
 
     std::shared_ptr<SkUnicode> fUnicode;
+private:
+    SkOnce fillUTF16MappingOnce;
+    void ensureUTF16Mapping();
+    SkTArray<TextIndex, true> fUTF8IndexForUTF16Index;
+#if !defined(SK_UNICODE_ICU_IMPLEMENTATION) && defined(SK_UNICODE_CLIENT_IMPLEMENTATION)
+    bool fTextIsFinalized;
+    bool fUsingClientInfo;
+    std::vector<SkUnicode::Position> fWordsUtf8;
+    std::vector<SkUnicode::Position> fGraphemeBreaksUtf8;
+    std::vector<SkUnicode::LineBreakBefore> fLineBreaksUtf8;
+#endif
 };
 }  // namespace textlayout
 }  // namespace skia

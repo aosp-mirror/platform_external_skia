@@ -8,12 +8,11 @@
 #ifndef SKSL_VMGENERATOR
 #define SKSL_VMGENERATOR
 
-#include "include/core/SkSpan.h"
-#include "include/private/SkSLString.h"
 #include "src/core/SkVM.h"
-#include "src/sksl/ir/SkSLType.h"
 
-#include <functional>
+#include <cstddef>
+
+template <typename T> class SkSpan;
 
 namespace SkSL {
 
@@ -70,22 +69,6 @@ bool ProgramToSkVM(const Program& program,
                    SkVMDebugTrace* debugTrace,
                    SkSpan<skvm::Val> uniforms,
                    SkVMSignature* outSignature = nullptr);
-
-const FunctionDefinition* Program_GetFunction(const Program& program, const char* function);
-
-struct UniformInfo {
-    struct Uniform {
-        std::string fName;
-        Type::NumberKind fKind;
-        int fColumns;
-        int fRows;
-        int fSlot;
-    };
-    std::vector<Uniform> fUniforms;
-    int fUniformSlotCount = 0;
-};
-
-std::unique_ptr<UniformInfo> Program_GetUniformInfo(const Program& program);
 
 bool testingOnly_ProgramToSkVMShader(const Program& program,
                                      skvm::Builder* builder,

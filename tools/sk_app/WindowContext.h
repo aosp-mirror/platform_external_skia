@@ -14,8 +14,8 @@
 
 class GrDirectContext;
 class SkSurface;
-#ifdef SK_GRAPHITE_ENABLED
-namespace skgpu {
+#if defined(SK_GRAPHITE)
+namespace skgpu::graphite {
 class Context;
 class Recorder;
 }
@@ -43,9 +43,9 @@ public:
     virtual void setDisplayParams(const DisplayParams& params) = 0;
 
     GrDirectContext* directContext() const { return fContext.get(); }
-#ifdef SK_GRAPHITE_ENABLED
-    skgpu::Context* graphiteContext() const { return fGraphiteContext.get(); }
-    skgpu::Recorder* graphiteRecorder() const { return fGraphiteRecorder.get(); }
+#if defined(SK_GRAPHITE)
+    skgpu::graphite::Context* graphiteContext() const { return fGraphiteContext.get(); }
+    skgpu::graphite::Recorder* graphiteRecorder() const { return fGraphiteRecorder.get(); }
 #endif
 
     int width() const { return fWidth; }
@@ -58,9 +58,9 @@ protected:
     virtual bool isGpuContext() { return true;  }
 
     sk_sp<GrDirectContext> fContext;
-#if SK_GRAPHITE_ENABLED
-    std::unique_ptr<skgpu::Context> fGraphiteContext;
-    std::unique_ptr<skgpu::Recorder> fGraphiteRecorder;
+#if defined(SK_GRAPHITE)
+    std::unique_ptr<skgpu::graphite::Context> fGraphiteContext;
+    std::unique_ptr<skgpu::graphite::Recorder> fGraphiteRecorder;
 #endif
 
     int               fWidth;
