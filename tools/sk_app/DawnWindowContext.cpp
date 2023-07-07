@@ -8,7 +8,7 @@
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
-#include "src/core/SkAutoMalloc.h"
+#include "src/base/SkAutoMalloc.h"
 #include "tools/sk_app/DawnWindowContext.h"
 
 #include "dawn/dawn_proc.h"
@@ -27,7 +27,7 @@ DawnWindowContext::DawnWindowContext(const DisplayParams& params,
                                      wgpu::TextureFormat swapChainFormat)
     : WindowContext(params)
     , fSwapChainFormat(swapChainFormat)
-    , fInstance(std::make_unique<dawn_native::Instance>()) {
+    , fInstance(std::make_unique<dawn::native::Instance>()) {
 }
 
 void DawnWindowContext::initializeContext(int width, int height) {
@@ -41,7 +41,7 @@ void DawnWindowContext::initializeContext(int width, int height) {
     if (!fContext) {
         return;
     }
-    fSwapChainImplementation = this->createSwapChainImplementation(-1, -1, fDisplayParams);
+    fSwapChainImplementation = this->createSwapChainImplementation(width, height, fDisplayParams);
     wgpu::SwapChainDescriptor swapChainDesc;
     swapChainDesc.implementation = reinterpret_cast<int64_t>(&fSwapChainImplementation);
     fSwapChain = fDevice.CreateSwapChain(nullptr, &swapChainDesc);
@@ -93,6 +93,8 @@ void DawnWindowContext::resize(int w, int h) {
     fHeight = h;
     fSwapChainImplementation = this->createSwapChainImplementation(w, h, fDisplayParams);
     wgpu::SwapChainDescriptor swapChainDesc;
+    swapChainDesc.width = w;
+    swapChainDesc.height = h;
     swapChainDesc.implementation = reinterpret_cast<int64_t>(&fSwapChainImplementation);
     fSwapChain = fDevice.CreateSwapChain(nullptr, &swapChainDesc);
     if (!fSwapChain) {
@@ -108,11 +110,11 @@ void DawnWindowContext::setDisplayParams(const DisplayParams& params) {
 
 wgpu::Device DawnWindowContext::createDevice(wgpu::BackendType type) {
     fInstance->DiscoverDefaultAdapters();
-    DawnProcTable backendProcs = dawn_native::GetProcs();
+    DawnProcTable backendProcs = dawn::native::GetProcs();
     dawnProcSetProcs(&backendProcs);
 
-    std::vector<dawn_native::Adapter> adapters = fInstance->GetAdapters();
-    for (dawn_native::Adapter adapter : adapters) {
+    std::vector<dawn::native::Adapter> adapters = fInstance->GetAdapters();
+    for (dawn::native::Adapter adapter : adapters) {
         wgpu::AdapterProperties properties;
         adapter.GetProperties(&properties);
         if (properties.backendType == type) {

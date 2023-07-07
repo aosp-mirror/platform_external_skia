@@ -8,21 +8,30 @@
 #ifndef SKSL_METALCODEGENERATOR
 #define SKSL_METALCODEGENERATOR
 
-#include <unordered_map>
-#include <unordered_set>
-
-#include "src/sksl/SkSLOperators.h"
+#include "include/private/SkSLDefines.h"
+#include "include/private/base/SkTArray.h"
+#include "src/core/SkTHash.h"
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/codegen/SkSLCodeGenerator.h"
+#include "src/sksl/ir/SkSLType.h"
+
+#include <cstdint>
+#include <initializer_list>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace SkSL {
 
+class AnyConstructor;
 class BinaryExpression;
 class Block;
 class ConstructorArrayCast;
 class ConstructorCompound;
 class ConstructorMatrixResize;
+class Context;
 class DoStatement;
+class Expression;
 class ExpressionStatement;
 class Extension;
 class FieldAccess;
@@ -32,29 +41,35 @@ class FunctionDeclaration;
 class FunctionDefinition;
 class FunctionPrototype;
 class IfStatement;
-struct IndexExpression;
 class InterfaceBlock;
-enum IntrinsicKind : int8_t;
 class Literal;
+class Operator;
+class OutputStream;
+class Position;
 class PostfixExpression;
 class PrefixExpression;
+class ProgramElement;
 class ReturnStatement;
-class Setting;
+class Statement;
 class StructDefinition;
 class SwitchStatement;
-struct Swizzle;
 class TernaryExpression;
 class VarDeclaration;
+class Variable;
 class VariableReference;
+enum class OperatorPrecedence : uint8_t;
+enum IntrinsicKind : int8_t;
+struct IndexExpression;
+struct Layout;
+struct Modifiers;
+struct Program;
+struct Swizzle;
 
 /**
  * Converts a Program into Metal code.
  */
 class MetalCodeGenerator : public CodeGenerator {
 public:
-    inline static constexpr const char* SAMPLER_SUFFIX = "Smplr";
-    inline static constexpr const char* PACKED_PREFIX = "packed_";
-
     MetalCodeGenerator(const Context* context, const Program* program, OutputStream* out)
     : INHERITED(context, program, out)
     , fReservedWords({"atan2", "rsqrt", "rint", "dfdx", "dfdy", "vertex", "fragment"})
@@ -63,18 +78,22 @@ public:
     bool generateCode() override;
 
 protected:
-    using Precedence = Operator::Precedence;
+    using Precedence = OperatorPrecedence;
 
     typedef int Requirements;
-    inline static constexpr Requirements kNo_Requirements       = 0;
-    inline static constexpr Requirements kInputs_Requirement    = 1 << 0;
-    inline static constexpr Requirements kOutputs_Requirement   = 1 << 1;
-    inline static constexpr Requirements kUniforms_Requirement  = 1 << 2;
-    inline static constexpr Requirements kGlobals_Requirement   = 1 << 3;
-    inline static constexpr Requirements kFragCoord_Requirement = 1 << 4;
+    inline static constexpr Requirements kNo_Requirements          = 0;
+    inline static constexpr Requirements kInputs_Requirement       = 1 << 0;
+    inline static constexpr Requirements kOutputs_Requirement      = 1 << 1;
+    inline static constexpr Requirements kUniforms_Requirement     = 1 << 2;
+    inline static constexpr Requirements kGlobals_Requirement      = 1 << 3;
+    inline static constexpr Requirements kFragCoord_Requirement    = 1 << 4;
+    inline static constexpr Requirements kThreadgroups_Requirement = 1 << 5;
 
     class GlobalStructVisitor;
     void visitGlobalStruct(GlobalStructVisitor* visitor);
+
+    class ThreadgroupStructVisitor;
+    void visitThreadgroupStruct(ThreadgroupStructVisitor* visitor);
 
     void write(std::string_view s);
 
@@ -83,6 +102,8 @@ protected:
     void finishLine();
 
     void writeHeader();
+
+    void writeSampler2DPolyfill();
 
     void writeUniformStruct();
 
@@ -94,7 +115,9 @@ protected:
 
     void writeStructDefinitions();
 
-    void writeFields(const std::vector<Type::Field>& fields, int parentLine,
+    void writeConstantVariables();
+
+    void writeFields(const std::vector<Type::Field>& fields, Position pos,
                      const InterfaceBlock* parentIntf = nullptr);
 
     int size(const Type* type, bool isPacked) const;
@@ -104,6 +127,10 @@ protected:
     void writeGlobalStruct();
 
     void writeGlobalInit();
+
+    void writeThreadgroupStruct();
+
+    void writeThreadgroupInit();
 
     void writePrecisionModifier();
 
@@ -116,8 +143,6 @@ protected:
     void writeExtension(const Extension& ext);
 
     void writeInterfaceBlock(const InterfaceBlock& intf);
-
-    void writeFunctionStart(const FunctionDeclaration& f);
 
     void writeFunctionRequirementParams(const FunctionDeclaration& f,
                                         const char*& separator);
@@ -149,8 +174,8 @@ protected:
     void writeMinAbsHack(Expression& absExpr, Expression& otherExpr);
 
     std::string getOutParamHelper(const FunctionCall& c,
-                             const ExpressionArray& arguments,
-                             const SkTArray<VariableReference*>& outVars);
+                                  const ExpressionArray& arguments,
+                                  const SkTArray<VariableReference*>& outVars);
 
     std::string getInversePolyfill(const ExpressionArray& arguments);
 
@@ -217,6 +242,11 @@ protected:
     // Splats a scalar expression across a matrix of arbitrary size.
     void writeNumberAsMatrix(const Expression& expr, const Type& matrixType);
 
+    void writeBinaryExpressionElement(const Expression& expr,
+                                      Operator op,
+                                      const Expression& other,
+                                      Precedence precedence);
+
     void writeBinaryExpression(const BinaryExpression& b, Precedence parentPrecedence);
 
     void writeTernaryExpression(const TernaryExpression& t, Precedence parentPrecedence);
@@ -228,8 +258,6 @@ protected:
     void writePostfixExpression(const PostfixExpression& p, Precedence parentPrecedence);
 
     void writeLiteral(const Literal& f);
-
-    void writeSetting(const Setting& s);
 
     void writeStatement(const Statement& s);
 
@@ -255,17 +283,19 @@ protected:
 
     Requirements requirements(const FunctionDeclaration& f);
 
-    Requirements requirements(const Expression* e);
-
     Requirements requirements(const Statement* s);
+
+    // For compute shader main functions, writes and initializes the _in and _out structs (the
+    // instances, not the types themselves)
+    void writeComputeMainInputs();
 
     int getUniformBinding(const Modifiers& m);
 
     int getUniformSet(const Modifiers& m);
 
-    std::unordered_set<std::string_view> fReservedWords;
-    std::unordered_map<const Type::Field*, const InterfaceBlock*> fInterfaceBlockMap;
-    std::unordered_map<const InterfaceBlock*, std::string_view> fInterfaceBlockNameMap;
+    SkTHashSet<std::string_view> fReservedWords;
+    SkTHashMap<const Type::Field*, const InterfaceBlock*> fInterfaceBlockMap;
+    SkTHashMap<const InterfaceBlock*, std::string_view> fInterfaceBlockNameMap;
     int fAnonInterfaceCount = 0;
     int fPaddingCount = 0;
     const char* fLineEnding;
@@ -275,18 +305,22 @@ protected:
     int fVarCount = 0;
     int fIndentation = 0;
     bool fAtLineStart = false;
-    std::set<std::string> fWrittenIntrinsics;
     // true if we have run into usages of dFdx / dFdy
     bool fFoundDerivatives = false;
-    std::unordered_map<const FunctionDeclaration*, Requirements> fRequirements;
-    bool fSetupFragPositionGlobal = false;
-    bool fSetupFragPositionLocal = false;
-    std::unordered_set<std::string> fHelpers;
+    SkTHashMap<const FunctionDeclaration*, Requirements> fRequirements;
+    SkTHashSet<std::string> fHelpers;
     int fUniformBuffer = -1;
     std::string fRTFlipName;
     const FunctionDeclaration* fCurrentFunction = nullptr;
     int fSwizzleHelperCount = 0;
     bool fIgnoreVariableReferenceModifiers = false;
+    static constexpr char kTextureSuffix[] = "_Tex";
+    static constexpr char kSamplerSuffix[] = "_Smplr";
+
+    // Workaround/polyfill flags
+    bool fWrittenInverse2 = false, fWrittenInverse3 = false, fWrittenInverse4 = false;
+    bool fWrittenMatrixCompMult = false;
+    bool fWrittenOuterProduct = false;
 
     using INHERITED = CodeGenerator;
 };
