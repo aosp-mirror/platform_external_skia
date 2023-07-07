@@ -5,28 +5,41 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkBitmap.h"
+#include "src/core/SkReadBuffer.h"
+
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkData.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageGenerator.h"
-#include "include/core/SkStream.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkM44.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint3.h"
+#include "include/core/SkRRect.h"
+#include "include/core/SkRegion.h"
+#include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
-#include "src/core/SkAutoMalloc.h"
-#include "src/core/SkMathPriv.h"
+#include "include/private/base/SkMalloc.h"
+#include "src/base/SkAutoMalloc.h"
+#include "src/base/SkMathPriv.h"
+#include "src/base/SkSafeMath.h"
 #include "src/core/SkMatrixPriv.h"
+#include "src/core/SkMipmap.h"
 #include "src/core/SkMipmapBuilder.h"
-#include "src/core/SkReadBuffer.h"
-#include "src/core/SkSafeMath.h"
+#include "src/core/SkWriteBuffer.h"
+
+#include <memory>
+#include <optional>
+#include <utility>
 
 namespace {
     // This generator intentionally should always fail on all attempts to get its pixels,
     // simulating a bad or empty codec stream.
     class EmptyImageGenerator final : public SkImageGenerator {
     public:
-        EmptyImageGenerator(const SkImageInfo& info) : INHERITED(info) { }
+        EmptyImageGenerator(const SkImageInfo& info) : SkImageGenerator(info) { }
 
-    private:
-        using INHERITED = SkImageGenerator;
     };
 
     static sk_sp<SkImage> MakeEmptyImage(int width, int height) {
@@ -210,6 +223,12 @@ SkRect SkReadBuffer::readRect() {
 }
 
 SkSamplingOptions SkReadBuffer::readSampling() {
+    if (!this->isVersionLT(SkPicturePriv::kAnisotropicFilter)) {
+        int maxAniso = this->readInt();
+        if (maxAniso != 0) {
+            return SkSamplingOptions::Aniso(maxAniso);
+        }
+    }
     if (this->readBool()) {
         float B = this->readScalar();
         float C = this->readScalar();
@@ -314,8 +333,6 @@ uint32_t SkReadBuffer::getArrayCount() {
     return *((uint32_t*)fCurr);
 }
 
-#include "src/core/SkMipmap.h"
-
 // If we see a corrupt stream, we return null (fail). If we just fail trying to decode
 // the image, we don't fail, but return a 1x1 empty image.
 sk_sp<SkImage> SkReadBuffer::readImage() {
@@ -393,13 +410,17 @@ sk_sp<SkTypeface> SkReadBuffer::readTypeface() {
     }
 }
 
-SkFlattenable* SkReadBuffer::readFlattenable(SkFlattenable::Type ft) {
+SkFlattenable* SkReadBuffer::readRawFlattenable() {
     SkFlattenable::Factory factory = nullptr;
 
     if (fFactoryCount > 0) {
         int32_t index = this->read32();
         if (0 == index || !this->isValid()) {
             return nullptr; // writer failed to give us the flattenable
+        }
+        if (index < 0) {
+            this->validate(false);
+            return nullptr;
         }
         index -= 1;     // we stored the index-base-1
         if ((unsigned)index >= (unsigned)fFactoryCount) {
@@ -446,10 +467,6 @@ SkFlattenable* SkReadBuffer::readFlattenable(SkFlattenable::Type ft) {
             this->validate(false);
             return nullptr;
         }
-        if (obj && obj->getFlattenableType() != ft) {
-            this->validate(false);
-            return nullptr;
-        }
     } else {
         // we must skip the remaining data
         this->skip(sizeRecorded);
@@ -458,6 +475,16 @@ SkFlattenable* SkReadBuffer::readFlattenable(SkFlattenable::Type ft) {
         return nullptr;
     }
     return obj.release();
+}
+
+SkFlattenable* SkReadBuffer::readFlattenable(SkFlattenable::Type ft) {
+    SkFlattenable* obj = this->readRawFlattenable();
+    if (obj && obj->getFlattenableType() != ft) {
+        this->validate(false);
+        obj->unref();
+        return nullptr;
+    }
+    return obj;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

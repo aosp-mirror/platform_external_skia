@@ -59,6 +59,7 @@ if (skia_enable_skottie) {
           "tests/Expression.cpp",
           "tests/Image.cpp",
           "tests/Keyframe.cpp",
+          "tests/Shaper.cpp",
           "tests/Text.cpp",
         ]
 
@@ -105,6 +106,50 @@ if (skia_enable_skottie) {
 
         deps = [
           "../..:flags",
+          "../..:gpu_tool_utils",
+          "../..:skia",
+          "../../experimental/ffmpeg:video_encoder",
+        ]
+
+        public_deps = [
+          ":skottie",
+          ":utils",
+        ]
+      }
+
+      # A couple of backend specific targets, to facilitate binary size experiments.
+      skia_source_set("tool_cpu") {
+        check_includes = false
+        testonly = true
+
+        configs = [ "../..:skia_private" ]
+        sources = [ "src/SkottieTool.cpp" ]
+        defines = [ "CPU_ONLY" ]
+
+        deps = [
+          "../..:flags",
+          "../..:gpu_tool_utils",
+          "../..:skia",
+          "../../experimental/ffmpeg:video_encoder",
+        ]
+
+        public_deps = [
+          ":skottie",
+          ":utils",
+        ]
+      }
+
+      skia_source_set("tool_gpu") {
+        check_includes = false
+        testonly = true
+
+        configs = [ "../..:skia_private" ]
+        sources = [ "src/SkottieTool.cpp" ]
+        defines = [ "GPU_ONLY" ]
+
+        deps = [
+          "../..:flags",
+          "../..:gpu_tool_utils",
           "../..:skia",
           "../../experimental/ffmpeg:video_encoder",
         ]

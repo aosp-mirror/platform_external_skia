@@ -7,8 +7,10 @@
 
 #include "tools/CrashHandler.h"
 
-#include "src/core/SkLeanWindows.h"
+#include "include/private/base/SkDebug.h"
+#include "src/base/SkLeanWindows.h"
 
+#include <array>  // for std::size
 #include <stdlib.h>
 
 #if defined(SK_BUILD_FOR_GOOGLE3)
@@ -101,7 +103,7 @@
             backtrace_request();
 #else
             void* stack[64];
-            const int count = backtrace(stack, SK_ARRAY_COUNT(stack));
+            const int count = backtrace(stack, std::size(stack));
             char** symbols = backtrace_symbols(stack, count);
 
             SkDebugf("\nSignal %d [%s]:\n", sig, strsignal(sig));
@@ -109,7 +111,7 @@
                 Dl_info info;
                 if (dladdr(stack[i], &info) && info.dli_sname) {
                     char demangled[256];
-                    size_t len = SK_ARRAY_COUNT(demangled);
+                    size_t len = std::size(demangled);
                     int ok;
 
                     abi::__cxa_demangle(info.dli_sname, demangled, &len, &ok);
@@ -152,7 +154,8 @@
     #elif defined(SK_BUILD_FOR_WIN)
 
         #include <DbgHelp.h>
-        #include "include/private/SkMalloc.h"
+        #include <stdint.h>
+        #include "include/private/base/SkMalloc.h"
 
         static const struct {
             const char* name;
@@ -170,7 +173,7 @@
         static LONG WINAPI handler(EXCEPTION_POINTERS* e) {
             const DWORD code = e->ExceptionRecord->ExceptionCode;
             SkDebugf("\nCaught exception %lu", code);
-            for (size_t i = 0; i < SK_ARRAY_COUNT(kExceptions); i++) {
+            for (size_t i = 0; i < std::size(kExceptions); i++) {
                 if (kExceptions[i].code == code) {
                     SkDebugf(" %s", kExceptions[i].name);
                 }

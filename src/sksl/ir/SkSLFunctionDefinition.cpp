@@ -5,21 +5,36 @@
  * found in the LICENSE file.
  */
 
+#include "src/sksl/ir/SkSLFunctionDefinition.h"
+
+#include "include/core/SkTypes.h"
+#include "include/private/SkSLDefines.h"
+#include "include/private/SkSLSymbol.h"
 #include "include/sksl/DSLCore.h"
-#include "src/core/SkSafeMath.h"
+#include "include/sksl/DSLExpression.h"
+#include "include/sksl/DSLStatement.h"
+#include "include/sksl/DSLType.h"
+#include "include/sksl/SkSLErrorReporter.h"
+#include "src/base/SkSafeMath.h"
 #include "src/sksl/SkSLAnalysis.h"
-#include "src/sksl/SkSLBuiltinMap.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLThreadContext.h"
+#include "src/sksl/ir/SkSLBlock.h"
+#include "src/sksl/ir/SkSLExpression.h"
+#include "src/sksl/ir/SkSLField.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
-#include "src/sksl/ir/SkSLFunctionCall.h"
-#include "src/sksl/ir/SkSLFunctionDefinition.h"
-#include "src/sksl/ir/SkSLInterfaceBlock.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
+#include "src/sksl/ir/SkSLSymbolTable.h"
+#include "src/sksl/ir/SkSLType.h"
+#include "src/sksl/ir/SkSLVarDeclarations.h"
+#include "src/sksl/ir/SkSLVariable.h"
+#include "src/sksl/ir/SkSLVariableReference.h"
 #include "src/sksl/transform/SkSLProgramWriter.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <forward_list>
 #include <string_view>
 #include <vector>
@@ -27,7 +42,8 @@
 namespace SkSL {
 
 static void append_rtadjust_fixup_to_vertex_main(const Context& context,
-        const FunctionDeclaration& decl, Block& body) {
+                                                 const FunctionDeclaration& decl,
+                                                 Block& body) {
     using namespace SkSL::dsl;
     using SkSL::dsl::Swizzle;  // disambiguate from SkSL::Swizzle
     using OwnerKind = SkSL::FieldAccess::OwnerKind;
@@ -36,23 +52,18 @@ static void append_rtadjust_fixup_to_vertex_main(const Context& context,
     ThreadContext::RTAdjustData& rtAdjust = ThreadContext::RTAdjustState();
     if (rtAdjust.fVar || rtAdjust.fInterfaceBlock) {
         // ...append a line to the end of the function body which fixes up sk_Position.
-        const Variable* skPerVertex = nullptr;
-        if (const ProgramElement* perVertexDecl =
-                context.fBuiltins->find(Compiler::PERVERTEX_NAME)) {
-            SkASSERT(perVertexDecl->is<SkSL::InterfaceBlock>());
-            skPerVertex = &perVertexDecl->as<SkSL::InterfaceBlock>().variable();
-        }
+        const SymbolTable* symbolTable = ThreadContext::SymbolTable().get();
+        const Field& skPositionField = symbolTable->find(Compiler::POSITION_NAME)->as<Field>();
 
-        SkASSERT(skPerVertex);
         auto Ref = [](const Variable* var) -> std::unique_ptr<Expression> {
-            return VariableReference::Make(/*line=*/-1, var);
+            return VariableReference::Make(Position(), var);
         };
         auto Field = [&](const Variable* var, int idx) -> std::unique_ptr<Expression> {
-            return FieldAccess::Make(context, Ref(var), idx, OwnerKind::kAnonymousInterfaceBlock);
+            return FieldAccess::Make(context, Position(), Ref(var), idx,
+                                     OwnerKind::kAnonymousInterfaceBlock);
         };
         auto Pos = [&]() -> DSLExpression {
-            return DSLExpression(FieldAccess::Make(context, Ref(skPerVertex), /*fieldIndex=*/0,
-                                                   OwnerKind::kAnonymousInterfaceBlock));
+            return DSLExpression(Field(&skPositionField.owner(), skPositionField.fieldIndex()));
         };
         auto Adjust = [&]() -> DSLExpression {
             return DSLExpression(rtAdjust.fInterfaceBlock
@@ -61,10 +72,10 @@ static void append_rtadjust_fixup_to_vertex_main(const Context& context,
         };
 
         auto fixupStmt = DSLStatement(
-            Pos() = Float4(Swizzle(Pos(), X, Y) * Swizzle(Adjust(), X, Z) +
-                           Swizzle(Pos(), W, W) * Swizzle(Adjust(), Y, W),
-                           0,
-                           Pos().w())
+            Pos().assign(Float4(Swizzle(Pos(), X, Y) * Swizzle(Adjust(), X, Z) +
+                                Swizzle(Pos(), W, W) * Swizzle(Adjust(), Y, W),
+                                0,
+                                Pos().w()))
         );
 
         body.children().push_back(fixupStmt.release());
@@ -72,24 +83,22 @@ static void append_rtadjust_fixup_to_vertex_main(const Context& context,
 }
 
 std::unique_ptr<FunctionDefinition> FunctionDefinition::Convert(const Context& context,
-                                                                int line,
+                                                                Position pos,
                                                                 const FunctionDeclaration& function,
                                                                 std::unique_ptr<Statement> body,
                                                                 bool builtin) {
     class Finalizer : public ProgramWriter {
     public:
-        Finalizer(const Context& context, const FunctionDeclaration& function,
-                  FunctionSet* referencedBuiltinFunctions)
+        Finalizer(const Context& context, const FunctionDeclaration& function, Position pos)
             : fContext(context)
-            , fFunction(function)
-            , fReferencedBuiltinFunctions(referencedBuiltinFunctions) {
+            , fFunction(function) {
             // Function parameters count as local variables.
             for (const Variable* var : function.parameters()) {
-                this->addLocalVariable(var, function.fLine);
+                this->addLocalVariable(var, pos);
             }
         }
 
-        void addLocalVariable(const Variable* var, int line) {
+        void addLocalVariable(const Variable* var, Position pos) {
             // We count the number of slots used, but don't consider the precision of the base type.
             // In practice, this reflects what GPUs actually do pretty well. (i.e., RelaxedPrecision
             // math doesn't mean your variable takes less space.) We also don't attempt to reclaim
@@ -99,8 +108,8 @@ std::unique_ptr<FunctionDefinition> FunctionDefinition::Convert(const Context& c
             // To avoid overzealous error reporting, only trigger the error at the first
             // place where the stack limit is exceeded.
             if (prevSlotsUsed < kVariableSlotLimit && fSlotsUsed >= kVariableSlotLimit) {
-                fContext.fErrors->error(line, "variable '" + std::string(var->name()) +
-                                              "' exceeds the stack size limit");
+                fContext.fErrors->error(pos, "variable '" + std::string(var->name()) +
+                                             "' exceeds the stack size limit");
             }
         }
 
@@ -109,74 +118,34 @@ std::unique_ptr<FunctionDefinition> FunctionDefinition::Convert(const Context& c
             SkASSERT(fContinuableLevel == std::forward_list<int>{0});
         }
 
-        void copyBuiltinFunctionIfNeeded(const FunctionDeclaration& function) {
-            if (const ProgramElement* found =
-                        fContext.fBuiltins->findAndInclude(function.description())) {
-                const FunctionDefinition& original = found->as<FunctionDefinition>();
-
-                // Sort the referenced builtin functions into a consistent order; otherwise our
-                // output will become non-deterministic.
-                std::vector<const FunctionDeclaration*> builtinFunctions(
-                        original.referencedBuiltinFunctions().begin(),
-                        original.referencedBuiltinFunctions().end());
-                std::sort(builtinFunctions.begin(), builtinFunctions.end(),
-                          [](const FunctionDeclaration* a, const FunctionDeclaration* b) {
-                              if (a->isBuiltin() != b->isBuiltin()) {
-                                  return a->isBuiltin() < b->isBuiltin();
-                              }
-                              if (a->fLine != b->fLine) {
-                                  return a->fLine < b->fLine;
-                              }
-                              if (a->name() != b->name()) {
-                                  return a->name() < b->name();
-                              }
-                              return a->description() < b->description();
-                          });
-                for (const FunctionDeclaration* f : builtinFunctions) {
-                    this->copyBuiltinFunctionIfNeeded(*f);
-                }
-
-                ThreadContext::SharedElements().push_back(found);
-            }
-        }
-
         bool functionReturnsValue() const {
             return !fFunction.returnType().isVoid();
         }
 
         bool visitExpression(Expression& expr) override {
-            if (expr.is<FunctionCall>()) {
-                const FunctionDeclaration& func = expr.as<FunctionCall>().function();
-                if (func.isBuiltin()) {
-                    if (func.intrinsicKind() == k_dFdy_IntrinsicKind) {
-                        ThreadContext::Inputs().fUseFlipRTUniform = true;
-                    }
-                    if (func.definition()) {
-                        fReferencedBuiltinFunctions->insert(&func);
-                    }
-                    if (!fContext.fConfig->fIsBuiltinCode && fContext.fBuiltins) {
-                        this->copyBuiltinFunctionIfNeeded(func);
-                    }
-                }
-
-            }
-            return INHERITED::visitExpression(expr);
+            // We don't need to scan expressions.
+            return false;
         }
 
         bool visitStatement(Statement& stmt) override {
             switch (stmt.kind()) {
                 case Statement::Kind::kVarDeclaration: {
-                    const Variable* var = &stmt.as<VarDeclaration>().var();
-                    this->addLocalVariable(var, stmt.fLine);
+                    const Variable* var = stmt.as<VarDeclaration>().var();
+                    if (var->type().isOrContainsUnsizedArray()) {
+                        fContext.fErrors->error(stmt.fPosition,
+                                                "unsized arrays are not permitted here");
+                    } else {
+                        this->addLocalVariable(var, stmt.fPosition);
+                    }
                     break;
                 }
                 case Statement::Kind::kReturn: {
                     // Early returns from a vertex main() function will bypass sk_Position
                     // normalization, so SkASSERT that we aren't doing that. If this becomes an
                     // issue, we can add normalization before each return statement.
-                    if (fContext.fConfig->fKind == ProgramKind::kVertex && fFunction.isMain()) {
+                    if (ProgramConfig::IsVertex(fContext.fConfig->fKind) && fFunction.isMain()) {
                         fContext.fErrors->error(
-                                stmt.fLine,
+                                stmt.fPosition,
                                 "early returns from vertex programs are not supported");
                     }
 
@@ -189,14 +158,14 @@ std::unique_ptr<FunctionDefinition> FunctionDefinition::Convert(const Context& c
                                     std::move(returnStmt.expression()), fContext));
                         } else {
                             // Returning something from a function with a void return type.
-                            returnStmt.setExpression(nullptr);
-                            fContext.fErrors->error(returnStmt.fLine,
+                            fContext.fErrors->error(returnStmt.expression()->fPosition,
                                                     "may not return a value from a void function");
+                            returnStmt.setExpression(nullptr);
                         }
                     } else {
                         if (this->functionReturnsValue()) {
                             // Returning nothing from a function with a non-void return type.
-                            fContext.fErrors->error(returnStmt.fLine,
+                            fContext.fErrors->error(returnStmt.fPosition,
                                                     "expected function to return '" +
                                                     fFunction.returnType().displayName() + "'");
                         }
@@ -222,7 +191,7 @@ std::unique_ptr<FunctionDefinition> FunctionDefinition::Convert(const Context& c
                 }
                 case Statement::Kind::kBreak:
                     if (fBreakableLevel == 0) {
-                        fContext.fErrors->error(stmt.fLine,
+                        fContext.fErrors->error(stmt.fPosition,
                                                 "break statement must be inside a loop or switch");
                     }
                     break;
@@ -231,10 +200,10 @@ std::unique_ptr<FunctionDefinition> FunctionDefinition::Convert(const Context& c
                         if (std::any_of(fContinuableLevel.begin(),
                                         fContinuableLevel.end(),
                                         [](int level) { return level > 0; })) {
-                            fContext.fErrors->error(stmt.fLine,
+                            fContext.fErrors->error(stmt.fPosition,
                                                    "continue statement cannot be used in a switch");
                         } else {
-                            fContext.fErrors->error(stmt.fLine,
+                            fContext.fErrors->error(stmt.fPosition,
                                                     "continue statement must be inside a loop");
                         }
                     }
@@ -248,8 +217,6 @@ std::unique_ptr<FunctionDefinition> FunctionDefinition::Convert(const Context& c
     private:
         const Context& fContext;
         const FunctionDeclaration& fFunction;
-        // which builtin functions have we encountered in this function
-        FunctionSet* fReferencedBuiltinFunctions;
         // how deeply nested we are in breakable constructs (for, do, switch).
         int fBreakableLevel = 0;
         // number of slots consumed by all variables declared in the function
@@ -261,22 +228,19 @@ std::unique_ptr<FunctionDefinition> FunctionDefinition::Convert(const Context& c
         using INHERITED = ProgramWriter;
     };
 
-    FunctionSet referencedBuiltinFunctions;
-    Finalizer(context, function, &referencedBuiltinFunctions).visitStatement(*body);
-    if (function.isMain() && context.fConfig->fKind == ProgramKind::kVertex) {
+    Finalizer(context, function, pos).visitStatement(*body);
+    if (function.isMain() && ProgramConfig::IsVertex(context.fConfig->fKind)) {
         append_rtadjust_fixup_to_vertex_main(context, function, body->as<Block>());
     }
 
     if (Analysis::CanExitWithoutReturningValue(function, *body)) {
-        context.fErrors->error(function.fLine, "function '" + std::string(function.name()) +
-                                               "' can exit without returning a value");
+        context.fErrors->error(body->fPosition, "function '" + std::string(function.name()) +
+                                                "' can exit without returning a value");
     }
 
-    SkASSERTF(!function.isIntrinsic(),
-              "Intrinsic %s should not have a definition",
-              std::string(function.name()).c_str());
-    return std::make_unique<FunctionDefinition>(line, &function, builtin, std::move(body),
-                                                std::move(referencedBuiltinFunctions));
+    SkASSERTF(!function.isIntrinsic(), "Intrinsic function '%.*s' should not have a definition",
+              (int)function.name().size(), function.name().data());
+    return std::make_unique<FunctionDefinition>(pos, &function, builtin, std::move(body));
 }
 
 }  // namespace SkSL

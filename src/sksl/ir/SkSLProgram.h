@@ -8,63 +8,44 @@
 #ifndef SKSL_PROGRAM
 #define SKSL_PROGRAM
 
-#include <vector>
+#include "src/sksl/ir/SkSLType.h"
+
 #include <memory>
-
-#include "include/private/SkSLDefines.h"
-#include "include/private/SkSLModifiers.h"
-#include "include/private/SkSLProgramElement.h"
-#include "include/private/SkTHash.h"
-#include "src/sksl/SkSLAnalysis.h"
-#include "src/sksl/SkSLProgramSettings.h"
-#include "src/sksl/ir/SkSLExpression.h"
-#include "src/sksl/ir/SkSLLiteral.h"
-#include "src/sksl/ir/SkSLSymbolTable.h"
-
-#ifdef SK_VULKAN
-#include "src/gpu/vk/GrVkCaps.h"
-#endif
+#include <string>
+#include <vector>
 
 // name of the uniform used to handle features that are sensitive to whether Y is flipped.
+// TODO: find a better home for this constant
 #define SKSL_RTFLIP_NAME "u_skRTFlip"
 
 namespace SkSL {
 
 class Context;
+class FunctionDeclaration;
+class ModifiersPool;
 class Pool;
+class ProgramElement;
+class ProgramUsage;
+class SymbolTable;
+struct ProgramConfig;
 
-/**
- * Side-car class holding mutable information about a Program's IR
- */
-class ProgramUsage {
-public:
-    struct VariableCounts {
-        int fDeclared = 0;
-        int fRead = 0;
-        int fWrite = 0;
+/** Represents a list the Uniforms contained within a Program. */
+struct UniformInfo {
+    struct Uniform {
+        std::string fName;
+        SkSL::Type::NumberKind fKind;
+        int fColumns;
+        int fRows;
+        int fSlot;
     };
-    VariableCounts get(const Variable&) const;
-    bool isDead(const Variable&) const;
-
-    int get(const FunctionDeclaration&) const;
-
-    void add(const Expression* expr);
-    void add(const Statement* stmt);
-    void add(const ProgramElement& element);
-    void remove(const Expression* expr);
-    void remove(const Statement* stmt);
-    void remove(const ProgramElement& element);
-
-    SkTHashMap<const Variable*, VariableCounts> fVariableCounts;
-    SkTHashMap<const FunctionDeclaration*, int> fCallCounts;
+    std::vector<Uniform> fUniforms;
+    int fUniformSlotCount = 0;
 };
 
 /**
  * Represents a fully-digested program, ready for code generation.
  */
 struct Program {
-    using Settings = ProgramSettings;
-
     struct Inputs {
         bool fUseFlipRTUniform = false;
         bool operator==(const Inputs& that) const {
@@ -81,30 +62,9 @@ struct Program {
             std::unique_ptr<ModifiersPool> modifiers,
             std::shared_ptr<SymbolTable> symbols,
             std::unique_ptr<Pool> pool,
-            Inputs inputs)
-    : fSource(std::move(source))
-    , fConfig(std::move(config))
-    , fContext(context)
-    , fSymbols(symbols)
-    , fPool(std::move(pool))
-    , fOwnedElements(std::move(elements))
-    , fSharedElements(std::move(sharedElements))
-    , fInputs(inputs)
-    , fModifiers(std::move(modifiers)) {
-        fUsage = Analysis::GetUsage(*this);
-    }
+            Inputs inputs);
 
-    ~Program() {
-        // Some or all of the program elements are in the pool. To free them safely, we must attach
-        // the pool before destroying any program elements. (Otherwise, we may accidentally call
-        // delete on a pooled node.)
-        AutoAttachPoolToThread attach(fPool.get());
-
-        fOwnedElements.clear();
-        fContext.reset();
-        fSymbols.reset();
-        fModifiers.reset();
-    }
+    ~Program();
 
     class ElementsCollection {
     public:
@@ -166,24 +126,34 @@ struct Program {
         const Program& fProgram;
     };
 
-    // Can be used to iterate over *all* elements in this Program, both owned and shared (builtin).
-    // The iterator's value type is 'const ProgramElement*', so it's clear that you *must not*
-    // modify anything (as you might be mutating shared data).
+    /**
+     * Iterates over *all* elements in this Program, both owned and shared (builtin). The iterator's
+     * value type is `const ProgramElement*`, so it's clear that you *must not* modify anything (as
+     * you might be mutating shared data).
+     */
     ElementsCollection elements() const { return ElementsCollection(*this); }
 
-    std::string description() const {
-        std::string result;
-        for (const ProgramElement* e : this->elements()) {
-            result += e->description();
-        }
-        return result;
-    }
+    /**
+     * Returns a function declaration with the given name; null is returned if the function doesn't
+     * exist or has no definition. If the function might have overloads, you can use nextOverload()
+     * to search for the function with the expected parameter list.
+     */
+    const FunctionDeclaration* getFunction(const char* functionName) const;
 
+    /**
+     * Returns a list of uniforms used by this Program. The uniform list will exclude opaque types
+     * like textures, samplers, or child effects.
+     */
+    std::unique_ptr<UniformInfo> getUniformInfo();
+
+    std::string description() const;
     const ProgramUsage* usage() const { return fUsage.get(); }
 
     std::unique_ptr<std::string> fSource;
     std::unique_ptr<ProgramConfig> fConfig;
     std::shared_ptr<Context> fContext;
+    std::unique_ptr<ProgramUsage> fUsage;
+    std::unique_ptr<ModifiersPool> fModifiers;
     // it's important to keep fOwnedElements defined after (and thus destroyed before) fSymbols,
     // because destroying elements can modify reference counts in symbols
     std::shared_ptr<SymbolTable> fSymbols;
@@ -194,14 +164,6 @@ struct Program {
     // Use elements() to iterate over the combined set of owned + shared elements.
     std::vector<const ProgramElement*> fSharedElements;
     Inputs fInputs;
-
-private:
-    std::unique_ptr<ModifiersPool> fModifiers;
-    std::unique_ptr<ProgramUsage> fUsage;
-
-    friend class Compiler;
-    friend class Inliner;             // fUsage
-    friend class SPIRVCodeGenerator;  // fModifiers
 };
 
 }  // namespace SkSL
