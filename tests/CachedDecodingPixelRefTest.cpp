@@ -5,9 +5,11 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageGenerator.h"
 #include "include/core/SkImageInfo.h"
@@ -18,6 +20,10 @@
 #include "tests/Test.h"
 #include "tools/ToolUtils.h"
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <utility>
 
 class TestImageGenerator : public SkImageGenerator {
@@ -60,14 +66,14 @@ protected:
         switch (info.colorType()) {
             case kN32_SkColorType:
                 for (int y = 0; y < info.height(); ++y) {
-                    sk_memset32((uint32_t*)bytePtr,
+                    SkOpts::memset32((uint32_t*)bytePtr,
                                 TestImageGenerator::PMColor(), info.width());
                     bytePtr += rowBytes;
                 }
                 break;
             case kRGB_565_SkColorType:
                 for (int y = 0; y < info.height(); ++y) {
-                    sk_memset16((uint16_t*)bytePtr,
+                    SkOpts::memset16((uint16_t*)bytePtr,
                         SkPixel32ToPixel16(TestImageGenerator::PMColor()), info.width());
                     bytePtr += rowBytes;
                 }
@@ -96,7 +102,7 @@ DEF_TEST(Image_NewFromGenerator, r) {
         kN32_SkColorType,
         kRGB_565_SkColorType
     };
-    for (size_t i = 0; i < SK_ARRAY_COUNT(testTypes); ++i) {
+    for (size_t i = 0; i < std::size(testTypes); ++i) {
         TestImageGenerator::TestType test = testTypes[i];
         for (const SkColorType testColorType : testColorTypes) {
             auto gen = std::make_unique<TestImageGenerator>(test, r, testColorType);
