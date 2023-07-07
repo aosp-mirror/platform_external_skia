@@ -11,8 +11,8 @@
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkCompressedDataUtils.h"
-#include "src/gpu/GrCaps.h"
-#include "src/gpu/GrImageContextPriv.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrImageContextPriv.h"
 #include "src/image/SkImage_Base.h"
 #include "src/image/SkImage_GpuBase.h"
 #include "tools/gpu/ProxyUtils.h"
@@ -176,7 +176,8 @@ protected:
         return SkISize::Make(kImgWidth + 2 * kPad, 2 * kImgHeight + 3 * kPad);
     }
 
-    DrawResult onGpuSetup(GrDirectContext* dContext, SkString* errorMsg) override {
+    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg) override {
+        auto dContext = GrAsDirectContext(canvas->recordingContext());
         if (dContext && dContext->abandoned()) {
             // This isn't a GpuGM so a null 'context' is okay but an abandoned context
             // if forbidden.

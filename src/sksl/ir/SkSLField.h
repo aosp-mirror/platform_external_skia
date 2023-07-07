@@ -22,10 +22,10 @@ namespace SkSL {
  */
 class Field final : public Symbol {
 public:
-    inline static constexpr Kind kSymbolKind = Kind::kField;
+    inline static constexpr Kind kIRNodeKind = Kind::kField;
 
-    Field(int line, const Variable* owner, int fieldIndex)
-        : INHERITED(line, kSymbolKind, owner->type().fields()[fieldIndex].fName,
+    Field(Position pos, const Variable* owner, int fieldIndex)
+        : INHERITED(pos, kIRNodeKind, owner->type().fields()[fieldIndex].fName,
                     owner->type().fields()[fieldIndex].fType)
         , fOwner(owner)
         , fFieldIndex(fieldIndex) {}
@@ -39,7 +39,9 @@ public:
     }
 
     std::string description() const override {
-        return this->owner().description() + "." + std::string(this->name());
+        return this->owner().name().empty()
+                       ? std::string(this->name())
+                       : (this->owner().description() + "." + std::string(this->name()));
     }
 
 private:
