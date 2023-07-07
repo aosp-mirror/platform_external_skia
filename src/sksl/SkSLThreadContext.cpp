@@ -7,27 +7,29 @@
 
 #include "src/sksl/SkSLThreadContext.h"
 
-#include "include/sksl/DSLSymbols.h"
-#if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
-#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
-#endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
-#include "src/sksl/SkSLBuiltinMap.h"
+#include "include/private/SkSLProgramElement.h"
+#include "include/sksl/SkSLPosition.h"
 #include "src/sksl/SkSLCompiler.h"
-#include "src/sksl/ir/SkSLExternalFunction.h"
+#include "src/sksl/SkSLModifiersPool.h"
+#include "src/sksl/SkSLPool.h"
+#include "src/sksl/ir/SkSLSymbolTable.h"
+
+#include <type_traits>
 
 namespace SkSL {
 
-ThreadContext::ThreadContext(SkSL::Compiler* compiler, SkSL::ProgramKind kind,
-        const SkSL::ProgramSettings& settings, SkSL::ParsedModule module, bool isModule)
-    : fCompiler(compiler)
-    , fOldErrorReporter(*fCompiler->fContext->fErrors)
-    , fSettings(settings) {
-    fOldModifiersPool = fCompiler->fContext->fModifiersPool;
-
-    fOldConfig = fCompiler->fContext->fConfig;
-
+ThreadContext::ThreadContext(SkSL::Compiler* compiler,
+                             SkSL::ProgramKind kind,
+                             const SkSL::ProgramSettings& settings,
+                             const SkSL::Module* module,
+                             bool isModule)
+        : fCompiler(compiler)
+        , fOldConfig(fCompiler->fContext->fConfig)
+        , fOldModifiersPool(fCompiler->fContext->fModifiersPool)
+        , fOldErrorReporter(*fCompiler->fContext->fErrors)
+        , fSettings(settings) {
     if (!isModule) {
-        if (compiler->context().fCaps.useNodePools() && settings.fDSLUseMemoryPool) {
+        if (settings.fUseMemoryPool) {
             fPool = Pool::Create();
             fPool->attachToThread();
         }
@@ -41,12 +43,8 @@ ThreadContext::ThreadContext(SkSL::Compiler* compiler, SkSL::ProgramKind kind,
     fConfig->fIsBuiltinCode = isModule;
     fCompiler->fContext->fConfig = fConfig.get();
     fCompiler->fContext->fErrors = &fDefaultErrorReporter;
-    fCompiler->fContext->fBuiltins = module.fElements.get();
-    if (fCompiler->fContext->fBuiltins) {
-        fCompiler->fContext->fBuiltins->resetAlreadyIncluded();
-    }
-
-    fCompiler->fSymbolTable = module.fSymbols;
+    fCompiler->fContext->fModule = module;
+    fCompiler->fSymbolTable = module->fSymbols;
     this->setupSymbolTable();
 }
 
@@ -70,13 +68,8 @@ void ThreadContext::setupSymbolTable() {
     SkSL::Context& context = *fCompiler->fContext;
     SymbolTable::Push(&fCompiler->fSymbolTable, context.fConfig->fIsBuiltinCode);
 
-    if (fSettings.fExternalFunctions) {
-        // Add any external values to the new symbol table, so they're only visible to this Program.
-        SkSL::SymbolTable& symbols = *fCompiler->fSymbolTable;
-        for (const std::unique_ptr<ExternalFunction>& ef : *fSettings.fExternalFunctions) {
-            symbols.addWithoutOwnership(ef.get());
-        }
-    }
+    SkSL::SymbolTable& symbolTable = *fCompiler->fSymbolTable;
+    symbolTable.markModuleBoundary();
 }
 
 SkSL::Context& ThreadContext::Context() {
@@ -99,46 +92,18 @@ ThreadContext::RTAdjustData& ThreadContext::RTAdjustState() {
     return Instance().fRTAdjust;
 }
 
-#if !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
-void ThreadContext::StartFragmentProcessor(GrFragmentProcessor::ProgramImpl* processor,
-        GrFragmentProcessor::ProgramImpl::EmitArgs* emitArgs) {
-    ThreadContext& instance = ThreadContext::Instance();
-    instance.fStack.push({processor, emitArgs, StatementArray{}});
-    CurrentEmitArgs()->fFragBuilder->fDeclarations.swap(instance.fStack.top().fSavedDeclarations);
-    dsl::PushSymbolTable();
-}
-
-void ThreadContext::EndFragmentProcessor() {
-    ThreadContext& instance = Instance();
-    SkASSERT(!instance.fStack.empty());
-    CurrentEmitArgs()->fFragBuilder->fDeclarations.swap(instance.fStack.top().fSavedDeclarations);
-    instance.fStack.pop();
-    dsl::PopSymbolTable();
-}
-#endif // !defined(SKSL_STANDALONE) && SK_SUPPORT_GPU
-
 void ThreadContext::SetErrorReporter(ErrorReporter* errorReporter) {
     SkASSERT(errorReporter);
     Context().fErrors = errorReporter;
 }
 
-void ThreadContext::ReportError(std::string_view msg, PositionInfo info) {
-    GetErrorReporter().error(msg, info);
+void ThreadContext::ReportError(std::string_view msg, Position pos) {
+    GetErrorReporter().error(pos, msg);
 }
 
-void ThreadContext::DefaultErrorReporter::handleError(std::string_view msg, PositionInfo pos) {
-    if (pos.line() > -1) {
-        SK_ABORT("error: %s: %d: %.*sNo SkSL error reporter configured, treating this as a fatal "
-                 "error\n", pos.file_name(), pos.line(), (int)msg.length(), msg.data());
-    } else {
-        SK_ABORT("error: %.*s\nNo SkSL error reporter configured, treating this as a fatal error\n",
-                 (int)msg.length(), msg.data());
-    }
-
-}
-
-void ThreadContext::ReportErrors(PositionInfo pos) {
-    GetErrorReporter().reportPendingErrors(pos);
+void ThreadContext::DefaultErrorReporter::handleError(std::string_view msg, Position pos) {
+    SK_ABORT("error: %.*s\nNo SkSL error reporter configured, treating this as a fatal error\n",
+             (int)msg.length(), msg.data());
 }
 
 thread_local ThreadContext* instance = nullptr;

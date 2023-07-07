@@ -8,9 +8,10 @@
 #ifndef SkTypeface_win_dw_DEFINED
 #define SkTypeface_win_dw_DEFINED
 
+#include "include/core/SkFontArguments.h"
 #include "include/core/SkTypeface.h"
+#include "src/base/SkLeanWindows.h"
 #include "src/core/SkAdvancedTypefaceMetrics.h"
-#include "src/core/SkLeanWindows.h"
 #include "src/core/SkTypefaceCache.h"
 #include "src/utils/win/SkDWrite.h"
 #include "src/utils/win/SkHRESULT.h"
@@ -23,6 +24,14 @@
 
 class SkFontDescriptor;
 struct SkScalerContextRec;
+
+/* dwrite_3.h incorrectly uses NTDDI_VERSION to hide immutible interfaces (it should only be used to
+   gate changes to public ABI). The implementation files can (and must) get away with including
+   SkDWriteNTDDI_VERSION.h which simply unsets NTDDI_VERSION, but this doesn't work well for this
+   header which can be included in SkTypeface.cpp. Instead, ensure that any declarations hidden
+   behind the NTDDI_VERSION are forward (backward?) declared here in case dwrite_3.h did not declare
+   them. */
+interface IDWriteFontFace4;
 
 static SkFontStyle get_style(IDWriteFont* font) {
     int weight = font->GetWeight();
@@ -58,41 +67,19 @@ public:
         SkTScopedComPtr<IDWriteFontCollectionLoader> fDWriteFontCollectionLoader;
     };
 
+    static constexpr SkTypeface::FactoryId FactoryId = SkSetFourByteTag('d','w','r','t');
+    static sk_sp<SkTypeface> MakeFromStream(std::unique_ptr<SkStreamAsset>, const SkFontArguments&);
+
+    ~DWriteFontTypeface() override;
 private:
     DWriteFontTypeface(const SkFontStyle& style,
                        IDWriteFactory* factory,
                        IDWriteFontFace* fontFace,
                        IDWriteFont* font,
                        IDWriteFontFamily* fontFamily,
-                       sk_sp<Loaders> loaders)
-        : SkTypeface(style, false)
-        , fFactory(SkRefComPtr(factory))
-        , fDWriteFontFamily(SkRefComPtr(fontFamily))
-        , fDWriteFont(SkRefComPtr(font))
-        , fDWriteFontFace(SkRefComPtr(fontFace))
-        , fLoaders(std::move(loaders))
-    {
-        if (!SUCCEEDED(fDWriteFontFace->QueryInterface(&fDWriteFontFace1))) {
-            // IUnknown::QueryInterface states that if it fails, punk will be set to nullptr.
-            // http://blogs.msdn.com/b/oldnewthing/archive/2004/03/26/96777.aspx
-            SkASSERT_RELEASE(nullptr == fDWriteFontFace1.get());
-        }
-        if (!SUCCEEDED(fDWriteFontFace->QueryInterface(&fDWriteFontFace2))) {
-            SkASSERT_RELEASE(nullptr == fDWriteFontFace2.get());
-        }
-        if (!SUCCEEDED(fDWriteFontFace->QueryInterface(&fDWriteFontFace4))) {
-            SkASSERT_RELEASE(nullptr == fDWriteFontFace4.get());
-        }
-        if (!SUCCEEDED(fFactory->QueryInterface(&fFactory2))) {
-            SkASSERT_RELEASE(nullptr == fFactory2.get());
-        }
-
-        if (fDWriteFontFace1 && fDWriteFontFace1->IsMonospacedFont()) {
-            this->setIsFixedPitch(true);
-        }
-
-        fIsColorFont = fFactory2 && fDWriteFontFace2 && fDWriteFontFace2->IsColorFont();
-    }
+                       sk_sp<Loaders> loaders,
+                       const SkFontArguments::Palette&);
+    HRESULT initializePalette();
 
 public:
     SkTScopedComPtr<IDWriteFactory> fFactory;
@@ -105,15 +92,22 @@ public:
     SkTScopedComPtr<IDWriteFontFace4> fDWriteFontFace4;
     bool fIsColorFont;
 
+    std::unique_ptr<SkFontArguments::Palette::Override> fRequestedPaletteEntryOverrides;
+    SkFontArguments::Palette fRequestedPalette;
+
+    size_t fPaletteEntryCount;
+    std::unique_ptr<SkColor[]> fPalette;
+
     static sk_sp<DWriteFontTypeface> Make(
         IDWriteFactory* factory,
         IDWriteFontFace* fontFace,
         IDWriteFont* font,
         IDWriteFontFamily* fontFamily,
-        sk_sp<Loaders> loaders)
+        sk_sp<Loaders> loaders,
+        const SkFontArguments::Palette& palette)
     {
         return sk_sp<DWriteFontTypeface>(new DWriteFontTypeface(
-            get_style(font), factory, fontFace, font, fontFamily, std::move(loaders)));
+            get_style(font), factory, fontFace, font, fontFamily, std::move(loaders), palette));
     }
 
 protected:

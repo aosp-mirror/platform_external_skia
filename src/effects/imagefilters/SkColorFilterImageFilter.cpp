@@ -5,8 +5,19 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
 #include "include/core/SkColorFilter.h"
+#include "include/core/SkFlattenable.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
 #include "include/effects/SkImageFilters.h"
 #include "src/core/SkColorFilterBase.h"
 #include "src/core/SkImageFilter_Base.h"
@@ -14,6 +25,8 @@
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkSpecialSurface.h"
 #include "src/core/SkWriteBuffer.h"
+
+#include <utility>
 
 namespace {
 
@@ -45,7 +58,17 @@ private:
 sk_sp<SkImageFilter> SkImageFilters::ColorFilter(
         sk_sp<SkColorFilter> cf, sk_sp<SkImageFilter> input, const CropRect& cropRect) {
     if (!cf) {
-        return nullptr;
+        // The color filter is the identity, but 'cropRect' and 'input' may perform actions in the
+        // image filter graph.
+        const SkRect* crop = cropRect;
+        if (crop) {
+            // Wrap 'input' in an offset filter with (0,0) and the crop rect.
+            // TODO(michaelludwig): Replace this with SkCropImageFilter when that's ready for use.
+            return SkImageFilters::Offset(0.f, 0.f, std::move(input), cropRect);
+        } else {
+            // Just forward 'input' on
+            return input;
+        }
     }
 
     SkColorFilter* inputCF;

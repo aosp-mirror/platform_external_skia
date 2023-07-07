@@ -5,9 +5,42 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkShader.h"
 #include "include/utils/SkNWayCanvas.h"
+
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkTDArray.h"
+#include "include/utils/SkNoDrawCanvas.h"
 #include "src/core/SkCanvasPriv.h"
+
+#include <algorithm>
+#include <iterator>
+#include <utility>
+
+namespace sktext {
+class GlyphRunList;
+}
+
+class SkData;
+class SkDrawable;
+class SkImage;
+class SkPaint;
+class SkPath;
+class SkPicture;
+class SkRRect;
+class SkRegion;
+class SkTextBlob;
+class SkVertices;
+enum class SkBlendMode;
+enum class SkClipOp;
+struct SkDrawShadowRec;
 
 SkNWayCanvas::SkNWayCanvas(int width, int height) : INHERITED(width, height) {}
 
@@ -16,15 +49,21 @@ SkNWayCanvas::~SkNWayCanvas() {
 }
 
 void SkNWayCanvas::addCanvas(SkCanvas* canvas) {
+    if (!fList.empty()) {
+        // We are using the nway canvas as a wrapper for the originally added canvas, and the device
+        // on the nway may contradict calls for the device on this canvas. So, to add a second
+        // canvas, the devices on the first canvas, and the nway base device must be different.
+        SkASSERT(fList[0]->baseDevice() != this->baseDevice());
+    }
     if (canvas) {
         *fList.append() = canvas;
     }
 }
 
 void SkNWayCanvas::removeCanvas(SkCanvas* canvas) {
-    int index = fList.find(canvas);
-    if (index >= 0) {
-        fList.removeShuffle(index);
+    auto found = std::find(fList.begin(), fList.end(), canvas);
+    if (found != fList.end()) {
+        fList.removeShuffle(std::distance(fList.begin(), found));
     }
 }
 
@@ -41,7 +80,7 @@ public:
         fIndex = 0;
     }
     bool next() {
-        if (fIndex < fList.count()) {
+        if (fIndex < fList.size()) {
             fCanvas = fList[fIndex++];
             return true;
         }
@@ -277,7 +316,8 @@ void SkNWayCanvas::onDrawAtlas2(const SkImage* image, const SkRSXform xform[], c
     }
 }
 
-void SkNWayCanvas::onDrawGlyphRunList(const SkGlyphRunList& list, const SkPaint &paint) {
+void SkNWayCanvas::onDrawGlyphRunList(const sktext::GlyphRunList& list,
+                                      const SkPaint &paint) {
     Iter iter(fList);
     while (iter.next()) {
         iter->onDrawGlyphRunList(list, paint);
@@ -291,6 +331,15 @@ void SkNWayCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y
         iter->drawTextBlob(blob, x, y, paint);
     }
 }
+
+#if defined(SK_GANESH)
+void SkNWayCanvas::onDrawSlug(const sktext::gpu::Slug* slug) {
+    Iter iter(fList);
+    while (iter.next()) {
+        iter->drawSlug(slug);
+    }
+}
+#endif
 
 void SkNWayCanvas::onDrawPicture(const SkPicture* picture, const SkMatrix* matrix,
                                  const SkPaint* paint) {

@@ -5,30 +5,45 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkBitmap.h"
-#include "include/core/SkColorSpace.h"
-#include "include/core/SkMath.h"
-#include "include/core/SkPoint3.h"
+#include "src/codec/SkPngCodec.h"
+
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkData.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPngChunkReader.h"
+#include "include/core/SkRect.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkStream.h"
-#include "include/private/SkColorData.h"
-#include "include/private/SkMacros.h"
-#include "include/private/SkTemplates.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkEncodedInfo.h"
+#include "include/private/base/SkNoncopyable.h"
+#include "include/private/base/SkTemplates.h"
+#include "modules/skcms/skcms.h"
 #include "src/codec/SkCodecPriv.h"
 #include "src/codec/SkColorTable.h"
-#include "src/codec/SkPngCodec.h"
 #include "src/codec/SkPngPriv.h"
 #include "src/codec/SkSwizzler.h"
 #include "src/core/SkOpts.h"
 
-#include <png.h>
+#include <csetjmp>
 #include <algorithm>
+#include <cstring>
+#include <utility>
+
+#include <png.h>
+#include <pngconf.h>
+
+using namespace skia_private;
+
+class SkSampler;
 
 #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
     #include "include/android/SkAndroidFrameworkUtils.h"
 #endif
 
-// This warning triggers false postives way too often in here.
+// This warning triggers false positives way too often in here.
 #if defined(__GNUC__) && !defined(__clang__)
     #pragma GCC diagnostic ignored "-Wclobbered"
 #endif
@@ -312,7 +327,7 @@ bool SkPngCodec::createColorTable(const SkImageInfo& dstInfo) {
     const int maxColors = 1 << fBitDepth;
     if (numColors < maxColors) {
         SkPMColor lastColor = numColors > 0 ? colorTable[numColors - 1] : SK_ColorBLACK;
-        sk_memset32(colorTable + numColors, lastColor, maxColors - numColors);
+        SkOpts::memset32(colorTable + numColors, lastColor, maxColors - numColors);
     }
 
     fColorTable.reset(new SkColorTable(colorTable, maxColors));
@@ -632,7 +647,7 @@ private:
     int                     fLinesDecoded;
     bool                    fInterlacedComplete;
     size_t                  fPng_rowbytes;
-    SkAutoTMalloc<png_byte> fInterlaceBuffer;
+    AutoTMalloc<png_byte> fInterlaceBuffer;
 
     using INHERITED = SkPngCodec;
 
