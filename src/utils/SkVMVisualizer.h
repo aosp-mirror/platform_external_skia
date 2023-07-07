@@ -6,17 +6,20 @@
  */
 #ifndef SkVMVisualizer_DEFINED
 #define SkVMVisualizer_DEFINED
-#include <unordered_map>
-#include <vector>
-#include "include/core/SkSpan.h"
-#include "include/core/SkStream.h"
+
 #include "include/core/SkString.h"
-#include "include/private/SkBitmaskEnum.h"
-#include "include/private/SkChecksum.h"
-#include "include/private/SkTHash.h"
-#include "src/core/SkOpts.h"
-#include "src/sksl/SkSLOutputStream.h"
-#include "src/sksl/tracing/SkVMDebugTrace.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkTArray.h"
+#include "src/core/SkTHash.h"
+#include "src/core/SkVM.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <type_traits>
+#include <vector>
+
+class SkWStream;
+namespace SkSL { class SkVMDebugTrace; }
 
 namespace skvm::viz {
     enum InstructionFlags : uint8_t {
@@ -25,18 +28,8 @@ namespace skvm::viz {
         kDead = 0x02,
     };
 
-    struct MachineCommand {
-        size_t address;
-        SkString label;
-        SkString command;
-        SkString extra;
-    };
-
     struct Instruction {
         InstructionFlags kind = InstructionFlags::kNormal;
-        // Machine commands range (for disassembling):
-        size_t startCode = 0;
-        size_t endCode = 0;
         int instructionIndex; // index in the actual instructions list
         int duplicates = 0;   // number of duplicates;
                               // -1 means it's a duplicate itself; 0 - it does not have dups
@@ -51,10 +44,9 @@ namespace skvm::viz {
 
     class Visualizer {
     public:
-        explicit Visualizer(SkSL::SkVMDebugTrace* debugInfo)
-                : fDebugInfo(debugInfo), fOutput(nullptr) {}
+        explicit Visualizer(SkSL::SkVMDebugTrace* debugInfo);
         ~Visualizer() = default;
-        void dump(SkWStream* output, const char* code);
+        void dump(SkWStream* output);
         void markAsDeadCode(std::vector<bool>& live, const std::vector<int>& newIds);
         void finalize(const std::vector<skvm::Instruction>& all,
                       const std::vector<skvm::OptimizedInstruction>& optimized);
@@ -63,10 +55,8 @@ namespace skvm::viz {
             ++fInstructions[origin].duplicates;
         }
         void addInstruction(Instruction skvm);
-        void addMachineCommands(int id, size_t start, size_t end);
         SkString V(int reg) const;
     private:
-        void parseDisassembler(SkWStream* output, const char* code);
         void dumpInstruction(int id) const;
         void dumpHead() const;
         void dumpTail() const;
@@ -86,20 +76,18 @@ namespace skvm::viz {
         void formatA_VC(int id, const char* op,  int v, int imm) const;
 
         void writeText(const char* format, ...) const SK_PRINTF_LIKE(2, 3);
-
+#if defined(SK_ENABLE_SKSL)
         SkSL::SkVMDebugTrace* fDebugInfo;
+#endif
         SkTHashMap<Instruction, size_t, InstructionHash> fIndex;
         SkTArray<Instruction> fInstructions;
         SkWStream* fOutput;
         SkTHashMap<int, size_t> fToDisassembler;
-        SkTArray<MachineCommand> fAsm;
-        mutable size_t fAsmLine = 0;
-        size_t fAsmStart = 0;
-        size_t fAsmEnd = 0;
     };
 } // namespace skvm::viz
 
 namespace sknonstd {
+template <typename T> struct is_bitmask_enum;
 template <> struct is_bitmask_enum<skvm::viz::InstructionFlags> : std::true_type {};
 }  // namespace sknonstd
 

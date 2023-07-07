@@ -10,7 +10,7 @@
 
 #include "modules/svg/include/SkSVGContainer.h"
 #include "modules/svg/include/SkSVGTypes.h"
-#include "src/core/SkTLazy.h"
+#include "src/base/SkTLazy.h"
 
 class SkSVGLengthContext;
 
@@ -31,6 +31,8 @@ public:
     SVG_OPTIONAL_ATTR(ViewBox, SkSVGViewBoxType)
 
     SkSize intrinsicSize(const SkSVGLengthContext&) const;
+
+    void renderNode(const SkSVGRenderContext&, const SkSVGIRI& iri) const;
 
 protected:
     bool onPrepareToRender(SkSVGRenderContext*) const override;

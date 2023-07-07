@@ -20,7 +20,7 @@ vec4 MatrixEffect_Stage1_c0_c0_h4h4f2(vec4 _input, vec2 _coords) {
     vec2 _3_clampedCoord;
     _3_clampedCoord = _2_subsetCoord;
     vec4 _4_textureColor = texture(uTextureSampler_0_Stage1, _3_clampedCoord * unorm_Stage1_c0_c0_c0.zw);
-    float _5_snappedX = floor(_1_inCoord.x + 0.0010000000474974513) + 0.5;
+    float _5_snappedX = floor(_1_inCoord.x + 0.001) + 0.5;
     if (_5_snappedX < usubset_Stage1_c0_c0_c0.x || _5_snappedX > usubset_Stage1_c0_c0_c0.z) {
         _4_textureColor = uborder_Stage1_c0_c0_c0;
     }
@@ -35,9 +35,9 @@ void main() {
     }
     vec4 output_Stage1;
     vec4 _6_output;
-    _6_output = vec4(0.0, 0.0, 0.0, 0.0);
+    _6_output = vec4(0.0);
     vec2 _7_coord = vLocalCoord_Stage0 - 12.0 * uIncrement_Stage1_c0;
-    vec2 _8_coordSampled = vec2(0.0, 0.0);
+    vec2 _8_coordSampled = vec2(0.0);
     _8_coordSampled = _7_coord;
     _6_output += MatrixEffect_Stage1_c0_c0_h4h4f2(outputColor_Stage0, _8_coordSampled) * uKernel_Stage1_c0[0].x;
     _7_coord += uIncrement_Stage1_c0;

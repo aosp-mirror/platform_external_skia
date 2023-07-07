@@ -13,14 +13,14 @@
 #include "include/gpu/GrRecordingContext.h"
 #include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkMipmap.h"
-#include "src/gpu/GrImageContextPriv.h"
-#include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/gl/GrGLDefines.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrImageContextPriv.h"
+#include "src/gpu/ganesh/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/gl/GrGLDefines_impl.h"
 #include "src/image/SkImage_Base.h"
 #include "src/image/SkImage_GpuBase.h"
-#include "tools/gpu/ProxyUtils.h"
-
 #include "tools/Resources.h"
+#include "tools/gpu/ProxyUtils.h"
 
 //-------------------------------------------------------------------------------------------------
 struct ImageInfo {
@@ -135,7 +135,7 @@ static sk_sp<SkData> load_ktx(const char* filename, ImageInfo* imageInfo) {
                                            { (int) pixelWidth, (int) pixelHeight },
                                            &individualMipOffsets,
                                            imageInfo->fMipmapped == GrMipmapped::kYes);
-    SkASSERT(individualMipOffsets.size() == (size_t) numberOfMipmapLevels);
+    SkASSERT(individualMipOffsets.size() == numberOfMipmapLevels);
 
     sk_sp<SkData> data = SkData::MakeUninitialized(dataSize);
 
@@ -289,7 +289,7 @@ static sk_sp<SkData> load_dds(const char* filename, ImageInfo* imageInfo) {
                                            { (int) header.dwWidth, (int) header.dwHeight },
                                            &individualMipOffsets,
                                            imageInfo->fMipmapped == GrMipmapped::kYes);
-    SkASSERT(individualMipOffsets.size() == (size_t) numberOfMipmapLevels);
+    SkASSERT(individualMipOffsets.size() == numberOfMipmapLevels);
 
     sk_sp<SkData> data = SkData::MakeUninitialized(dataSize);
 
@@ -401,7 +401,8 @@ protected:
         }
     }
 
-    DrawResult onGpuSetup(GrDirectContext* dContext, SkString* errorMsg) override {
+    DrawResult onGpuSetup(SkCanvas* canvas, SkString* errorMsg) override {
+        auto dContext = GrAsDirectContext(canvas->recordingContext());
         if (dContext && dContext->abandoned()) {
             // This isn't a GpuGM so a null 'context' is okay but an abandoned context
             // if forbidden.
