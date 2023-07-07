@@ -23,20 +23,20 @@ static DEFINE_double(frame, 1.0,
                      "A double value in [0, 1] that specifies the point in animation to draw.");
 
 #include "include/gpu/GrBackendSurface.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrGpu.h"
-#include "src/gpu/GrRenderTarget.h"
-#include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrGpu.h"
+#include "src/gpu/ganesh/GrRenderTarget.h"
+#include "src/gpu/ganesh/GrResourceProvider.h"
+#include "src/gpu/ganesh/GrTexture.h"
 #include "tools/gpu/ManagedBackendTexture.h"
 #include "tools/gpu/gl/GLTestContext.h"
 
+using namespace skia_private;
+
 // Globals externed in fiddle_main.h
-sk_sp<sk_gpu_test::ManagedBackendTexture> backEndTexture;
-sk_sp<sk_gpu_test::ManagedBackendTexture> backEndTextureRenderTarget;
-
-sk_sp<GrRenderTarget> backingRenderTarget; // not externed
+GrBackendTexture backEndTexture;
 GrBackendRenderTarget backEndRenderTarget;
-
+GrBackendTexture backEndTextureRenderTarget;
 SkBitmap source;
 sk_sp<SkImage> image;
 double duration; // The total duration of the animation in seconds.
@@ -47,6 +47,10 @@ std::ostringstream gTextOutput;
 
 // Global to record the GL driver info via create_direct_context().
 std::ostringstream gGLDriverInfo;
+
+sk_sp<sk_gpu_test::ManagedBackendTexture> managedBackendTextureRenderTarget;
+sk_sp<sk_gpu_test::ManagedBackendTexture> managedBackendTexture;
+sk_sp<GrRenderTarget> backingRenderTarget;
 
 void SkDebugf(const char * fmt, ...) {
     va_list args;
@@ -152,34 +156,44 @@ static bool setup_backend_objects(GrDirectContext* dContext,
             pixmap = &rgbaPixmap;
         }
 
-        backEndTexture = sk_gpu_test::ManagedBackendTexture::MakeFromPixmap(dContext,
-                                                                            *pixmap,
-                                                                            options.fMipMapping,
-                                                                            GrRenderable::kNo,
-                                                                            GrProtected::kNo);
-        if (!backEndTexture) {
+        managedBackendTexture = sk_gpu_test::ManagedBackendTexture::MakeFromPixmap(
+                dContext,
+                *pixmap,
+                options.fMipMapping,
+                GrRenderable::kNo,
+                GrProtected::kNo);
+        if (!managedBackendTexture) {
             fputs("Failed to create backEndTexture.\n", stderr);
             return false;
         }
+        backEndTexture = managedBackendTexture->texture();
     }
 
     {
         auto resourceProvider = dContext->priv().resourceProvider();
 
         SkISize offscreenDims = {options.fOffScreenWidth, options.fOffScreenHeight};
-        SkAutoTMalloc<uint32_t> data(offscreenDims.area());
-        sk_memset32(data.get(), 0, offscreenDims.area());
+        AutoTMalloc<uint32_t> data(offscreenDims.area());
+        SkOpts::memset32(data.get(), 0, offscreenDims.area());
 
         // This backend object should be renderable but not textureable. Given the limitations
         // of how we're creating it though it will wind up being secretly textureable.
         // We use this fact to initialize it with data but don't allow mipmaps
         GrMipLevel level0 = {data.get(), offscreenDims.width()*sizeof(uint32_t), nullptr};
 
-        constexpr int kSampleCnt = 0;
-        sk_sp<GrTexture> tmp = resourceProvider->createTexture(
-                offscreenDims, renderableFormat, GrTextureType::k2D, GrColorType::kRGBA_8888,
-                GrRenderable::kYes, kSampleCnt, SkBudgeted::kNo, GrMipMapped::kNo, GrProtected::kNo,
-                &level0);
+        constexpr int kSampleCnt = 1;
+        sk_sp<GrTexture> tmp =
+                resourceProvider->createTexture(offscreenDims,
+                                                renderableFormat,
+                                                GrTextureType::k2D,
+                                                GrColorType::kRGBA_8888,
+                                                GrRenderable::kYes,
+                                                kSampleCnt,
+                                                skgpu::Budgeted::kNo,
+                                                GrMipmapped::kNo,
+                                                GrProtected::kNo,
+                                                &level0,
+                                                /*label=*/"Fiddle_SetupBackendObjects");
         if (!tmp || !tmp->asRenderTarget()) {
             fputs("GrTexture is invalid.\n", stderr);
             return false;
@@ -195,19 +209,20 @@ static bool setup_backend_objects(GrDirectContext* dContext,
     }
 
     {
-        backEndTextureRenderTarget = sk_gpu_test::ManagedBackendTexture::MakeWithData(
-                                                                    dContext,
-                                                                    options.fOffScreenWidth,
-                                                                    options.fOffScreenHeight,
-                                                                    renderableFormat,
-                                                                    SkColors::kTransparent,
-                                                                    options.fOffScreenMipMapping,
-                                                                    GrRenderable::kYes,
-                                                                    GrProtected::kNo);
-        if (!backEndTextureRenderTarget) {
+        managedBackendTextureRenderTarget = sk_gpu_test::ManagedBackendTexture::MakeWithData(
+            dContext,
+            options.fOffScreenWidth,
+            options.fOffScreenHeight,
+            renderableFormat,
+            SkColors::kTransparent,
+            options.fOffScreenMipMapping,
+            GrRenderable::kYes,
+            GrProtected::kNo);
+        if (!managedBackendTextureRenderTarget) {
             fputs("Failed to create backendTextureRenderTarget.\n", stderr);
             return false;
         }
+        backEndTextureRenderTarget = managedBackendTextureRenderTarget->texture();
     }
 
     return true;
@@ -271,7 +286,7 @@ int main(int argc, char** argv) {
                 exit(1);
             }
 
-            auto surface = SkSurface::MakeRenderTarget(direct.get(), SkBudgeted::kNo, info);
+            auto surface = SkSurface::MakeRenderTarget(direct.get(), skgpu::Budgeted::kNo, info);
             if (!surface) {
                 fputs("Unable to get render surface.\n", stderr);
                 exit(1);

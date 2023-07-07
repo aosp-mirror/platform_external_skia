@@ -12,8 +12,11 @@
 #include "include/core/SkColor.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
+#include "include/core/SkSurfaceProps.h"
 #include "include/core/SkYUVAPixmaps.h"
-#include "include/private/SkTOptional.h"
+
+#include <memory>
+#include <optional>
 
 class GrRecordingContext;
 class GrSurfaceProxyView;
@@ -112,22 +115,10 @@ public:
      */
     bool getYUVAPlanes(const SkYUVAPixmaps& yuvaPixmaps);
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     /**
      *  If the generator can natively/efficiently return its pixels as a GPU image (backed by a
      *  texture) this will return that image. If not, this will return NULL.
-     *
-     *  This routine also supports retrieving only a subset of the pixels. That subset is specified
-     *  by the following rectangle:
-     *
-     *      subset = SkIRect::MakeXYWH(origin.x(), origin.y(), info.width(), info.height())
-     *
-     *  If subset is not contained inside the generator's bounds, this returns false.
-     *
-     *      whole = SkIRect::MakeWH(getInfo().width(), getInfo().height())
-     *      if (!whole.contains(subset)) {
-     *          return false;
-     *      }
      *
      *  Regarding the GrRecordingContext parameter:
      *
@@ -135,7 +126,7 @@ public:
      *  - its internal context is the same
      *  - it can somehow convert its texture into one that is valid for the provided context.
      *
-     *  If the willNeedMipMaps flag is true, the generator should try to create a TextureProxy that
+     *  If the mipmapped parameter is kYes, the generator should try to create a TextureProxy that
      *  at least has the mip levels allocated and the base layer filled in. If this is not possible,
      *  the generator is allowed to return a non mipped proxy, but this will have some additional
      *  overhead in later allocating mips and copying of the base layer.
@@ -144,9 +135,16 @@ public:
      *  status) or whether this may (but is not required to) return a pre-existing texture that is
      *  retained by the generator (kDraw).
      */
-    GrSurfaceProxyView generateTexture(GrRecordingContext*, const SkImageInfo& info,
-                                       const SkIPoint& origin, GrMipmapped, GrImageTexGenPolicy);
+    GrSurfaceProxyView generateTexture(GrRecordingContext*,
+                                       const SkImageInfo& info,
+                                       skgpu::Mipmapped mipmapped,
+                                       GrImageTexGenPolicy);
+#endif
 
+#if SK_GRAPHITE
+    sk_sp<SkImage> makeTextureImage(skgpu::graphite::Recorder*,
+                                    const SkImageInfo&,
+                                    skgpu::Mipmapped);
 #endif
 
     /**
@@ -168,7 +166,8 @@ public:
     static std::unique_ptr<SkImageGenerator> MakeFromPicture(const SkISize&, sk_sp<SkPicture>,
                                                              const SkMatrix*, const SkPaint*,
                                                              SkImage::BitDepth,
-                                                             sk_sp<SkColorSpace>);
+                                                             sk_sp<SkColorSpace>,
+                                                             SkSurfaceProps props = {});
 
 protected:
     static constexpr int kNeedNewImageUniqueID = 0;
@@ -182,16 +181,22 @@ protected:
     virtual bool onQueryYUVAInfo(const SkYUVAPixmapInfo::SupportedDataTypes&,
                                  SkYUVAPixmapInfo*) const { return false; }
     virtual bool onGetYUVAPlanes(const SkYUVAPixmaps&) { return false; }
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     // returns nullptr
     virtual GrSurfaceProxyView onGenerateTexture(GrRecordingContext*, const SkImageInfo&,
-                                                 const SkIPoint&, GrMipmapped, GrImageTexGenPolicy);
+                                                 GrMipmapped, GrImageTexGenPolicy);
 
     // Most internal SkImageGenerators produce textures and views that use kTopLeft_GrSurfaceOrigin.
     // If the generator may produce textures with different origins (e.g.
     // GrAHardwareBufferImageGenerator) it should override this function to return the correct
     // origin.
     virtual GrSurfaceOrigin origin() const { return kTopLeft_GrSurfaceOrigin; }
+#endif
+
+#if SK_GRAPHITE
+    virtual sk_sp<SkImage> onMakeTextureImage(skgpu::graphite::Recorder*,
+                                              const SkImageInfo&,
+                                              skgpu::Mipmapped);
 #endif
 
 private:
