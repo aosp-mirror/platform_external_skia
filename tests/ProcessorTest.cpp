@@ -5,28 +5,81 @@
  * found in the LICENSE file.
  */
 
-#include "tests/Test.h"
-
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrClip.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrFragmentProcessor.h"
-#include "src/gpu/GrGpuResource.h"
-#include "src/gpu/GrImageInfo.h"
-#include "src/gpu/GrMemoryPool.h"
-#include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrResourceProvider.h"
+#include "include/gpu/GrTypes.h"
+#include "include/private/SkColorData.h"
+#include "include/private/SkSLSampleUsage.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkTArray.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/base/SkRandom.h"
 #include "src/gpu/KeyBuilder.h"
-#include "src/gpu/SkGr.h"
-#include "src/gpu/effects/GrTextureEffect.h"
-#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
-#include "src/gpu/ops/GrMeshDrawOp.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include "src/gpu/SkBackingFit.h"
+#include "src/gpu/Swizzle.h"
+#include "src/gpu/ganesh/GrAppliedClip.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/GrImageInfo.h"
+#include "src/gpu/ganesh/GrPixmap.h"
+#include "src/gpu/ganesh/GrProcessorAnalysis.h"
+#include "src/gpu/ganesh/GrProcessorSet.h"
+#include "src/gpu/ganesh/GrProcessorUnitTest.h"
+#include "src/gpu/ganesh/GrProxyProvider.h"
+#include "src/gpu/ganesh/GrSurfaceProxy.h"
+#include "src/gpu/ganesh/GrSurfaceProxyView.h"
+#include "src/gpu/ganesh/GrTextureProxy.h"
+#include "src/gpu/ganesh/GrUserStencilSettings.h"
+#include "src/gpu/ganesh/SkGr.h"
+#include "src/gpu/ganesh/SurfaceContext.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
+#include "src/gpu/ganesh/effects/GrTextureEffect.h"
+#include "src/gpu/ganesh/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/ganesh/ops/GrMeshDrawOp.h"
+#include "src/gpu/ganesh/ops/GrOp.h"
+#include "tests/CtsEnforcement.h"
+#include "tests/Test.h"
 #include "tests/TestHarness.h"
 #include "tests/TestUtils.h"
+#include "tools/flags/CommandLineFlags.h"
 
+#include <algorithm>
 #include <atomic>
+#include <cmath>
+#include <cstdint>
+#include <initializer_list>
+#include <memory>
 #include <random>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <vector>
+
+class GrDstProxyView;
+class GrMeshDrawTarget;
+class GrOpFlushState;
+class GrProgramInfo;
+class GrRecordingContext;
+class GrResourceProvider;
+class SkArenaAlloc;
+enum class GrXferBarrierFlags;
+struct GrContextOptions;
+struct GrShaderCaps;
 
 namespace {
 class TestOp : public GrMeshDrawOp {
@@ -142,7 +195,7 @@ private:
 };
 }  // namespace
 
-DEF_GPUTEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo, CtsEnforcement::kNever) {
     auto dContext = ctxInfo.directContext();
     GrProxyProvider* proxyProvider = dContext->priv().proxyProvider();
 
@@ -158,11 +211,18 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo) {
         for (int parentCnt = 0; parentCnt < 2; parentCnt++) {
             auto sdc = skgpu::v1::SurfaceDrawContext::Make(
                     dContext, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kApprox, {1, 1},
-                    SkSurfaceProps());
+                    SkSurfaceProps(), /*label=*/{});
             {
-                sk_sp<GrTextureProxy> proxy = proxyProvider->createProxy(
-                        format, kDims, GrRenderable::kNo, 1, GrMipmapped::kNo, SkBackingFit::kExact,
-                        SkBudgeted::kYes, GrProtected::kNo);
+                sk_sp<GrTextureProxy> proxy =
+                        proxyProvider->createProxy(format,
+                                                   kDims,
+                                                   GrRenderable::kNo,
+                                                   1,
+                                                   GrMipmapped::kNo,
+                                                   SkBackingFit::kExact,
+                                                   skgpu::Budgeted::kYes,
+                                                   GrProtected::kNo,
+                                                   /*label=*/"ProcessorRefTest");
 
                 {
                     SkTArray<GrSurfaceProxyView> views;
@@ -197,7 +257,6 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ProcessorRefTest, reporter, ctxInfo) {
     }
 }
 
-#include "tools/flags/CommandLineFlags.h"
 static DEFINE_bool(randomProcessorTest, false,
                    "Use non-deterministic seed for random processor tests?");
 static DEFINE_int(processorSeed, 0,
@@ -323,7 +382,7 @@ class TestFPGenerator {
             // it's called. Call `reroll` to get a different FP.
             SkRandom random{fRandomSeed};
             GrProcessorTestData testData{&random, fContext, randomTreeDepth,
-                                         SK_ARRAY_COUNT(fTestViews), fTestViews,
+                                         static_cast<int>(std::size(fTestViews)), fTestViews,
                                          std::move(inputFP)};
             return GrFragmentProcessorTestFactory::MakeIdx(type, &testData);
         }
@@ -517,7 +576,10 @@ static bool legal_modulation(const GrColor inGr[3], const GrColor outGr[3]) {
     return isLegalColorModulation || isLegalAlphaModulation;
 }
 
-DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorOptimizationValidationTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_GL_RENDERING_CONTEXTS(ProcessorOptimizationValidationTest,
+                                          reporter,
+                                          ctxInfo,
+                                          CtsEnforcement::kNever) {
     GrDirectContext* context = ctxInfo.directContext();
     GrResourceProvider* resourceProvider = context->priv().resourceProvider();
     using FPFactory = GrFragmentProcessorTestFactory;
@@ -532,7 +594,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorOptimizationValidationTest, repor
     static constexpr int kRenderSize = 256;
     auto sdc = skgpu::v1::SurfaceDrawContext::Make(
             context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
-            {kRenderSize, kRenderSize}, SkSurfaceProps());
+            {kRenderSize, kRenderSize}, SkSurfaceProps(), /*label=*/{});
 
     // Coverage optimization uses three frames with a linearly transformed input texture.  The first
     // frame has no offset, second frames add .2 and .4, which should then be present as a fixed
@@ -879,7 +941,10 @@ static void log_clone_failure(skiatest::Reporter* reporter, int renderSize,
 
 // Tests that a fragment processor returned by GrFragmentProcessor::clone() is equivalent to its
 // progenitor.
-DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorCloneTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_GL_RENDERING_CONTEXTS(ProcessorCloneTest,
+                                          reporter,
+                                          ctxInfo,
+                                          CtsEnforcement::kNever) {
     GrDirectContext* context = ctxInfo.directContext();
     GrResourceProvider* resourceProvider = context->priv().resourceProvider();
 
@@ -893,7 +958,7 @@ DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(ProcessorCloneTest, reporter, ctxInfo) {
     static constexpr int kRenderSize = 1024;
     auto sdc = skgpu::v1::SurfaceDrawContext::Make(
             context, GrColorType::kRGBA_8888, nullptr, SkBackingFit::kExact,
-            {kRenderSize, kRenderSize}, SkSurfaceProps());
+            {kRenderSize, kRenderSize}, SkSurfaceProps(), /*label=*/{});
 
     std::vector<GrColor> inputPixels = make_input_pixels(kRenderSize, kRenderSize, 0.0f);
     GrSurfaceProxyView inputTexture =

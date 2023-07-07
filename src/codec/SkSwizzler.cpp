@@ -5,16 +5,28 @@
  * found in the LICENSE file.
  */
 
-#include "include/private/SkColorData.h"
-#include "include/private/SkHalf.h"
-#include "include/private/SkTemplates.h"
-#include "src/codec/SkCodecPriv.h"
 #include "src/codec/SkSwizzler.h"
+
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRect.h"
+#include "include/private/SkColorData.h"
+#include "include/private/SkEncodedInfo.h"
+#include "include/private/base/SkAlign.h"
+#include "include/private/base/SkCPUTypes.h"
+#include "include/private/base/SkMath.h"
+#include "src/base/SkHalf.h"
+#include "include/private/base/SkTemplates.h"
+#include "src/codec/SkCodecPriv.h"
 #include "src/core/SkOpts.h"
 
 #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
     #include "include/android/SkAndroidFrameworkUtils.h"
 #endif
+
+#include <cstring>
 
 static void copy(void* dst, const uint8_t* src, int width, int bpp, int deltaSrc, int offset,
         const SkPMColor ctable[]) {
