@@ -3,7 +3,7 @@ This file contains defines used by all builds of Skia.
 """
 
 load("//bazel:extra_defines.bzl", "EXTRA_DEFINES")
-load("//bazel:macros.bzl", "select_multi")
+load("//bazel:skia_rules.bzl", "select_multi")
 
 GENERAL_DEFINES = [
     "SK_GAMMA_APPLY_TO_A8",
@@ -59,21 +59,16 @@ GENERAL_DEFINES = [
 GPU_DEFINES = select_multi({
     "//src/gpu:gl_backend": [
         "SK_GL",
-        "SK_SUPPORT_GPU=1",
+        "SK_GANESH",
     ],
     "//src/gpu:vulkan_backend": [
         "SK_VULKAN",
-        "SK_SUPPORT_GPU=1",
+        "SK_GANESH",
     ],
     "//src/gpu:dawn_backend": [
         "SK_DAWN",
-        "SK_SUPPORT_GPU=1",
+        "SK_GANESH",
         "VK_USE_PLATFORM_XCB_KHR",  # TODO(kjlubick) support dawn's dawn_enable_vulkan etc
-    ],
-}) + select({
-    "//src/gpu:has_gpu_backend": [],
-    "//conditions:default": [
-        "SK_SUPPORT_GPU=0",
     ],
 }) + select({
     "//src/gpu:gl_standard": [
@@ -113,6 +108,13 @@ CODEC_DEFINES = [
     },
 )
 
+TYPEFACE_DEFINES = select_multi(
+    {
+        "//src/ports:uses_freetype": ["SK_TYPEFACE_FACTORY_FREETYPE"],
+        #TODO: others when they become available
+    },
+)
+
 PLATFORM_DEFINES = select({
     "//bazel/common_config_settings:cpu_wasm": [
         # working around https://github.com/emscripten-core/emscripten/issues/10072
@@ -127,6 +129,6 @@ PLATFORM_DEFINES = select({
 # building the library but not exporting it for clients, so they can use whatever vulkan they want.
 GENERAL_LOCAL_DEFINES = ["SKIA_IMPLEMENTATION=1"]
 
-DEFAULT_DEFINES = GENERAL_DEFINES + GPU_DEFINES + CODEC_DEFINES + PLATFORM_DEFINES + EXTRA_DEFINES
+DEFAULT_DEFINES = GENERAL_DEFINES + GPU_DEFINES + CODEC_DEFINES + TYPEFACE_DEFINES + PLATFORM_DEFINES + EXTRA_DEFINES
 
 DEFAULT_LOCAL_DEFINES = GENERAL_LOCAL_DEFINES

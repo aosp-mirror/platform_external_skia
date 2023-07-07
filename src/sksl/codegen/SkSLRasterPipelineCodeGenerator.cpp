@@ -233,6 +233,18 @@ public:
         return fCurrentStack;
     }
 
+    /**
+     * Returns an LValue for the passed-in expression; if the expression isn't supported as an
+     * LValue, returns nullptr.
+     */
+    std::unique_ptr<LValue> makeLValue(const Expression& e, bool allowScratch = false);
+
+    /** Copies the top-of-stack value into this lvalue, without discarding it from the stack. */
+    [[nodiscard]] bool store(LValue& lvalue);
+
+    /** Pushes the lvalue onto the top-of-stack. */
+    [[nodiscard]] bool push(LValue& lvalue);
+
     /** The Builder stitches our instructions together into Raster Pipeline code. */
     Builder* builder() { return &fBuilder; }
 
@@ -329,8 +341,13 @@ public:
                                           const Expression& right,
                                           int leftColumns, int leftRows,
                                           int rightColumns, int rightRows);
+    [[nodiscard]] bool pushStructuredComparison(LValue* left,
+                                                Operator op,
+                                                LValue* right,
+                                                const Type& type);
 
     void foldWithMultiOp(BuilderOp op, int elements);
+    void foldComparisonOp(Operator op, int elements);
 
     BuilderOp getTypedOp(const SkSL::Type& type, const TypedOps& ops) const;
 
@@ -459,216 +476,220 @@ class LValue {
 public:
     virtual ~LValue() = default;
 
-    /**
-     * Returns an LValue for the passed-in expression; if the expression isn't supported as an
-     * LValue, returns nullptr.
-     */
-    static std::unique_ptr<LValue> Make(const Expression& e);
-
-    /** Copies the top-of-stack value into this lvalue, without discarding it from the stack. */
-    void store(Generator* gen);
-
-    /** Pushes the lvalue onto the top-of-stack. */
-    [[nodiscard]] bool push(Generator* gen);
-
     /** Returns true if this lvalue is actually writable--temporaries and uniforms are not. */
     virtual bool isWritable() const = 0;
 
-    /** Returns the number of slots in this LValue. */
-    virtual int numSlots() const = 0;
-
-    /** Pushes a single slot directly onto the stack. */
-    [[nodiscard]] virtual bool push(Generator* gen, Slot slot) = 0;
-
     /**
-     * Stores a single stack value directly into the lvalue. The value on the stack covers
-     * `numSlots` in total, and we are taking the value from the `index`th stack position in range
-     * [0, numSlots).
+     * Returns the slot range of the lvalue, after it is winnowed down to the selected field/index.
+     * The range is calculated assuming every dynamic index will evaluate to zero.
      */
-    virtual void store(Generator* gen, Slot slot, int index, int numSlots) = 0;
+    virtual SlotRange fixedSlotRange(Generator* gen) = 0;
+
+    /** Pushes values directly onto the stack. */
+    [[nodiscard]] virtual bool push(Generator* gen,
+                                    SlotRange fixedOffset,
+                                    SkSpan<const int8_t> swizzle) = 0;
+
+    /** Stores topmost values from the stack directly into the lvalue. */
+    [[nodiscard]] virtual bool store(Generator* gen,
+                                     SlotRange fixedOffset,
+                                     SkSpan<const int8_t> swizzle) = 0;
+};
+
+class ScratchLValue final : public LValue {
+public:
+    explicit ScratchLValue(const Expression& e)
+            : fExpression(&e)
+            , fNumSlots(e.type().slotCount()) {}
+
+    ~ScratchLValue() override {
+        if (fGenerator && fDedicatedStack.has_value()) {
+            // Jettison the scratch expression.
+            fDedicatedStack->enter();
+            fGenerator->discardExpression(fNumSlots);
+            fDedicatedStack->exit();
+        }
+    }
+
+    bool isWritable() const override {
+        return false;
+    }
+
+    SlotRange fixedSlotRange(Generator* gen) override {
+        return SlotRange{0, fNumSlots};
+    }
+
+    [[nodiscard]] bool push(Generator* gen,
+                            SlotRange fixedOffset,
+                            SkSpan<const int8_t> swizzle) override {
+        if (!fDedicatedStack.has_value()) {
+            // Push the scratch expression onto a dedicated stack.
+            fGenerator = gen;
+            fDedicatedStack.emplace(fGenerator);
+            fDedicatedStack->enter();
+            if (!fGenerator->pushExpression(*fExpression)) {
+                return unsupported();
+            }
+            fDedicatedStack->exit();
+        }
+
+        fDedicatedStack->pushClone(fixedOffset.count,
+                                   fNumSlots - fixedOffset.count - fixedOffset.index);
+        if (!swizzle.empty()) {
+            gen->builder()->swizzle(fixedOffset.count, swizzle);
+        }
+        return true;
+    }
+
+    [[nodiscard]] bool store(Generator*, SlotRange, SkSpan<const int8_t>) override {
+        SkDEBUGFAIL("scratch lvalues cannot be stored into");
+        return unsupported();
+    }
+
+private:
+    Generator* fGenerator = nullptr;
+    const Expression* fExpression = nullptr;
+    std::optional<AutoStack> fDedicatedStack;
+    int fNumSlots = 0;
 };
 
 class VariableLValue final : public LValue {
 public:
-    VariableLValue(const Variable* v) : fVariable(v) {}
+    explicit VariableLValue(const Variable* v) : fVariable(v) {}
 
     bool isWritable() const override {
         return !Generator::IsUniform(*fVariable);
     }
 
-    int numSlots() const override {
-        return fVariable->type().slotCount();
+    SlotRange fixedSlotRange(Generator* gen) override {
+        return Generator::IsUniform(*fVariable) ? gen->getUniformSlots(*fVariable)
+                                                : gen->getVariableSlots(*fVariable);
     }
 
-    [[nodiscard]] bool push(Generator* gen, Slot slot) override {
+    [[nodiscard]] bool push(Generator* gen,
+                            SlotRange fixedOffset,
+                            SkSpan<const int8_t> swizzle) override {
         if (Generator::IsUniform(*fVariable)) {
-            SlotRange range = gen->getUniformSlots(*fVariable);
-            gen->builder()->push_uniform(SlotRange{range.index + slot, 1});
+            gen->builder()->push_uniform(fixedOffset);
         } else {
-            SlotRange range = gen->getVariableSlots(*fVariable);
-            gen->builder()->push_slots(SlotRange{range.index + slot, 1});
+            gen->builder()->push_slots(fixedOffset);
+        }
+        if (!swizzle.empty()) {
+            gen->builder()->swizzle(fixedOffset.count, swizzle);
         }
         return true;
     }
 
-    void store(Generator* gen, Slot slot, int index, int numSlots) override {
+    [[nodiscard]] bool store(Generator* gen,
+                             SlotRange fixedOffset,
+                             SkSpan<const int8_t> swizzle) override {
         SkASSERT(!Generator::IsUniform(*fVariable));
 
-        SlotRange range = gen->getVariableSlots(*fVariable);
-        int offsetFromStackTop = numSlots - index;
-        gen->builder()->copy_stack_to_slots(SlotRange{range.index + slot, 1}, offsetFromStackTop);
+        if (swizzle.empty()) {
+            gen->builder()->copy_stack_to_slots(fixedOffset, fixedOffset.count);
+        } else {
+            gen->builder()->swizzle_copy_stack_to_slots(fixedOffset, swizzle, swizzle.size());
+        }
+        return true;
     }
 
+private:
     const Variable* fVariable;
 };
 
 class SwizzleLValue final : public LValue {
 public:
-    SwizzleLValue(std::unique_ptr<LValue> p, const ComponentArray& c)
+    explicit SwizzleLValue(std::unique_ptr<LValue> p, const ComponentArray& c)
             : fParent(std::move(p))
-            , fComponents(c) {}
+            , fComponents(c) {
+        SkASSERT(!fComponents.empty() && fComponents.size() <= 4);
+    }
 
     bool isWritable() const override {
         return fParent->isWritable();
     }
 
-    int numSlots() const override {
-        return fComponents.size();
+    SlotRange fixedSlotRange(Generator* gen) override {
+        return fParent->fixedSlotRange(gen);
     }
 
-    Slot adjust(Slot slot) const {
-        SkASSERT(slot < fComponents.size());
-        return fComponents[slot];
+    [[nodiscard]] bool push(Generator* gen,
+                            SlotRange fixedOffset,
+                            SkSpan<const int8_t> swizzle) override {
+        if (!swizzle.empty()) {
+            SkDEBUGFAIL("swizzle-of-a-swizzle should have been folded out in front end");
+            return unsupported();
+        }
+        return fParent->push(gen, fixedOffset, fComponents);
     }
 
-    [[nodiscard]] bool push(Generator* gen, Slot slot) override {
-        return fParent->push(gen, this->adjust(slot));
+    [[nodiscard]] bool store(Generator* gen,
+                             SlotRange fixedOffset,
+                             SkSpan<const int8_t> swizzle) override {
+        if (!swizzle.empty()) {
+            SkDEBUGFAIL("swizzle-of-a-swizzle should have been folded out in front end");
+            return unsupported();
+        }
+        return fParent->store(gen, fixedOffset, fComponents);
     }
 
-    void store(Generator* gen, Slot slot, int index, int numSlots) override {
-        fParent->store(gen, this->adjust(slot), index, numSlots);
-    }
-
+private:
     std::unique_ptr<LValue> fParent;
     const ComponentArray& fComponents;
 };
 
-class FixedIndexLValue final : public LValue {
+class UnownedLValueSlice : public LValue {
 public:
-    FixedIndexLValue(std::unique_ptr<LValue> p, SKSL_INT v, const Type& ti)
-            : fParent(std::move(p))
-            , fIndexValue(v)
-            , fIndexedType(ti) {}
-
-    bool isWritable() const override {
-        return fParent->isWritable();
-    }
-
-    int numSlots() const override {
-        return fIndexedType.slotCount();
-    }
-
-    Slot adjust(Slot slot) const {
-        int numElements = fIndexedType.slotCount();
-        int startingIndex = numElements * fIndexValue;
-        return slot + startingIndex;
-    }
-
-    [[nodiscard]] bool push(Generator* gen, Slot slot) override {
-        return fParent->push(gen, this->adjust(slot));
-    }
-
-    void store(Generator* gen, Slot slot, int index, int numSlots) override {
-        fParent->store(gen, this->adjust(slot), index, numSlots);
-    }
-
-    std::unique_ptr<LValue> fParent;
-    SKSL_INT fIndexValue;
-    const Type& fIndexedType;
-};
-
-class FieldLValue final : public LValue {
-public:
-    FieldLValue(std::unique_ptr<LValue> p, const FieldAccess& fieldAccess)
-            : fParent(std::move(p)) {
-        fInitialSlot = fieldAccess.initialSlot();
-        fNumSlots = fieldAccess.type().slotCount();
+    explicit UnownedLValueSlice(LValue* p, int initialSlot, int numSlots)
+            : fParent(p)
+            , fInitialSlot(initialSlot)
+            , fNumSlots(numSlots) {
+        SkASSERT(fInitialSlot >= 0);
+        SkASSERT(fNumSlots > 0);
     }
 
     bool isWritable() const override {
         return fParent->isWritable();
     }
 
-    int numSlots() const override {
-        return fNumSlots;
+    SlotRange fixedSlotRange(Generator* gen) override {
+        SlotRange range = fParent->fixedSlotRange(gen);
+        SlotRange adjusted = range;
+        adjusted.index += fInitialSlot;
+        adjusted.count = fNumSlots;
+        SkASSERT((adjusted.index + adjusted.count) <= (range.index + range.count));
+        return adjusted;
     }
 
-    [[nodiscard]] bool push(Generator* gen, Slot slot) override {
-        return fParent->push(gen, slot + fInitialSlot);
+    [[nodiscard]] bool push(Generator* gen,
+                            SlotRange fixedOffset,
+                            SkSpan<const int8_t> swizzle) override {
+        return fParent->push(gen, fixedOffset, swizzle);
     }
 
-    void store(Generator* gen, Slot slot, int index, int numSlots) override {
-        fParent->store(gen, slot + fInitialSlot, index, numSlots);
+    [[nodiscard]] bool store(Generator* gen,
+                             SlotRange fixedOffset,
+                             SkSpan<const int8_t> swizzle) override {
+        return fParent->store(gen, fixedOffset, swizzle);
     }
 
-    std::unique_ptr<LValue> fParent;
+protected:
+    LValue* fParent;
+
+private:
     int fInitialSlot = 0;
     int fNumSlots = 0;
 };
 
-std::unique_ptr<LValue> LValue::Make(const Expression& e) {
-    if (e.is<VariableReference>()) {
-        return std::make_unique<VariableLValue>(e.as<VariableReference>().variable());
-    }
-    if (e.is<Swizzle>()) {
-        if (std::unique_ptr<LValue> base = LValue::Make(*e.as<Swizzle>().base())) {
-            return std::make_unique<SwizzleLValue>(std::move(base), e.as<Swizzle>().components());
-        }
-    }
-    if (e.is<FieldAccess>()) {
-        if (std::unique_ptr<LValue> base = LValue::Make(*e.as<FieldAccess>().base())) {
-            return std::make_unique<FieldLValue>(std::move(base), e.as<FieldAccess>());
-        }
-    }
-    if (e.is<IndexExpression>()) {
-        const IndexExpression& indexExpr = e.as<IndexExpression>();
-        if (std::unique_ptr<LValue> base = LValue::Make(*indexExpr.base())) {
-            // If the index is a compile-time constant, we can generate simpler code.
-            SKSL_INT indexValue;
-            if (ConstantFolder::GetConstantInt(*indexExpr.index(), &indexValue)) {
-                return std::make_unique<FixedIndexLValue>(std::move(base), indexValue,
-                                                          indexExpr.type());
-            }
+class LValueSlice final : public UnownedLValueSlice {
+public:
+    explicit LValueSlice(std::unique_ptr<LValue> p, int initialSlot, int numSlots)
+            : UnownedLValueSlice(p.release(), initialSlot, numSlots) {}
 
-            // TODO(skia:13676): support non-constant indices
-        }
+    ~LValueSlice() override {
+        delete fParent;
     }
-    // TODO(skia:13676): add support for other kinds of lvalues
-    return nullptr;
-}
-
-void LValue::store(Generator* gen) {
-    SkASSERT(this->isWritable());
-
-    // Copy our slots from the stack into their slots. The Builder will coalesce single-slot pushes
-    // into contiguous ranges where possible.
-    int numSlots = this->numSlots();
-    for (Slot slot = 0; slot < numSlots; ++slot) {
-        this->store(gen, slot, /*index=*/(int)slot, numSlots);
-    }
-}
-
-bool LValue::push(Generator* gen) {
-    // Push our slots onto the stack one-by-one. The Builder will coalesce single-slot pushes into
-    // contiguous ranges where possible.
-    int numSlots = this->numSlots();
-    for (Slot slot = 0; slot < numSlots; ++slot) {
-        if (!this->push(gen, slot)) {
-            return unsupported();
-        }
-    }
-    return true;
-}
+};
 
 void SlotManager::addSlotDebugInfoForGroup(const std::string& varName,
                                            const Type& type,
@@ -813,6 +834,79 @@ SlotRange SlotManager::getFunctionSlots(const IRNode& callSite, const FunctionDe
                                         /*isFunctionReturnValue=*/true);
     fSlotMap.set(&callSite, range);
     return range;
+}
+
+static bool is_sliceable_swizzle(SkSpan<const int8_t> components) {
+    // Determine if the swizzle rearranges its elements, or if it's a simple subset of its elements.
+    // (A simple subset would be a sequential non-repeating range of components, like `.xyz` or
+    // `.yzw` or `.z`, but not `.xx` or `.xz`, which can be accessed as a slice of the variable.)
+    for (size_t index = 1; index < components.size(); ++index) {
+        if (components[index] != int8_t(components[0] + index)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::unique_ptr<LValue> Generator::makeLValue(const Expression& e, bool allowScratch) {
+    if (e.is<VariableReference>()) {
+        return std::make_unique<VariableLValue>(e.as<VariableReference>().variable());
+    }
+    if (e.is<Swizzle>()) {
+        const Swizzle& swizzleExpr = e.as<Swizzle>();
+        if (std::unique_ptr<LValue> base = this->makeLValue(*swizzleExpr.base(),
+                                                            allowScratch)) {
+            const ComponentArray& components = swizzleExpr.components();
+            if (is_sliceable_swizzle(components)) {
+                // If the swizzle is a contiguous subset, we can represent it with a fixed slice.
+                return std::make_unique<LValueSlice>(std::move(base), components[0],
+                                                     components.size());
+            }
+            return std::make_unique<SwizzleLValue>(std::move(base), components);
+        }
+        return nullptr;
+    }
+    if (e.is<FieldAccess>()) {
+        const FieldAccess& fieldExpr = e.as<FieldAccess>();
+        if (std::unique_ptr<LValue> base = this->makeLValue(*fieldExpr.base(),
+                                                            allowScratch)) {
+            // Represent field access with a slice.
+            return std::make_unique<LValueSlice>(std::move(base), fieldExpr.initialSlot(),
+                                                 fieldExpr.type().slotCount());
+        }
+        return nullptr;
+    }
+    if (e.is<IndexExpression>()) {
+        const IndexExpression& indexExpr = e.as<IndexExpression>();
+        if (std::unique_ptr<LValue> base = this->makeLValue(*indexExpr.base(),
+                                                            allowScratch)) {
+            // If the index is a compile-time constant, we can represent it with a fixed slice.
+            SKSL_INT indexValue;
+            if (ConstantFolder::GetConstantInt(*indexExpr.index(), &indexValue)) {
+                int numSlots = indexExpr.type().slotCount();
+                return std::make_unique<LValueSlice>(std::move(base), numSlots * indexValue,
+                                                     numSlots);
+            }
+
+            // TODO(skia:13676): support non-constant indices
+        }
+        return nullptr;
+    }
+    if (allowScratch) {
+        // This path allows us to perform field- and index-accesses on an expression as if it were
+        // an lvalue, but is a temporary and shouldn't be written back to.
+        return std::make_unique<ScratchLValue>(e);
+    }
+    return nullptr;
+}
+
+bool Generator::store(LValue& lvalue) {
+    SkASSERT(lvalue.isWritable());
+    return lvalue.store(this, lvalue.fixedSlotRange(this), /*swizzle=*/{});
+}
+
+bool Generator::push(LValue& lvalue) {
+    return lvalue.push(this, lvalue.fixedSlotRange(this), /*swizzle=*/{});
 }
 
 int Generator::getFunctionDebugInfo(const FunctionDeclaration& decl) {
@@ -1459,7 +1553,7 @@ void Generator::foldWithMultiOp(BuilderOp op, int elements) {
 }
 
 bool Generator::pushLValueOrExpression(LValue* lvalue, const Expression& expr) {
-    return lvalue ? lvalue->push(this)
+    return lvalue ? this->push(*lvalue)
                   : this->pushExpression(expr);
 }
 
@@ -1515,10 +1609,95 @@ bool Generator::pushMatrixMultiply(LValue* lvalue,
     matrixStack.exit();
 
     // If this multiply was actually an assignment (via *=), write the result back to the lvalue.
-    if (lvalue) {
-        lvalue->store(this);
+    return lvalue ? this->store(*lvalue)
+                  : true;
+}
+
+void Generator::foldComparisonOp(Operator op, int elements) {
+    switch (op.kind()) {
+        case OperatorKind::EQEQ:
+            // equal(x,y) returns a vector; use & to fold into a scalar.
+            this->foldWithMultiOp(BuilderOp::bitwise_and_n_ints, elements);
+            break;
+
+        case OperatorKind::NEQ:
+            // notEqual(x,y) returns a vector; use | to fold into a scalar.
+            this->foldWithMultiOp(BuilderOp::bitwise_or_n_ints, elements);
+            break;
+
+        default:
+            SkDEBUGFAIL("comparison only allows == and !=");
+            break;
+    }
+}
+
+bool Generator::pushStructuredComparison(LValue* left,
+                                         Operator op,
+                                         LValue* right,
+                                         const Type& type) {
+    if (type.isStruct()) {
+        // Compare every field in the struct.
+        SkSpan<const Type::Field> fields = type.fields();
+        int currentSlot = 0;
+        for (size_t index = 0; index < fields.size(); ++index) {
+            const Type& fieldType = *fields[index].fType;
+            const int   fieldSlotCount = fieldType.slotCount();
+            UnownedLValueSlice fieldLeft {left,  currentSlot, fieldSlotCount};
+            UnownedLValueSlice fieldRight{right, currentSlot, fieldSlotCount};
+            if (!this->pushStructuredComparison(&fieldLeft, op, &fieldRight, fieldType)) {
+                return unsupported();
+            }
+            currentSlot += fieldSlotCount;
+        }
+
+        this->foldComparisonOp(op, fields.size());
+        return true;
     }
 
+    if (type.isArray()) {
+        const Type& indexedType = type.componentType();
+        if (indexedType.numberKind() == Type::NumberKind::kNonnumeric) {
+            // Compare every element in the array.
+            const int indexedSlotCount = indexedType.slotCount();
+            int       currentSlot = 0;
+            for (int index = 0; index < type.columns(); ++index) {
+                UnownedLValueSlice indexedLeft {left,  currentSlot, indexedSlotCount};
+                UnownedLValueSlice indexedRight{right, currentSlot, indexedSlotCount};
+                if (!this->pushStructuredComparison(&indexedLeft, op, &indexedRight, indexedType)) {
+                    return unsupported();
+                }
+                currentSlot += indexedSlotCount;
+            }
+
+            this->foldComparisonOp(op, type.columns());
+            return true;
+        }
+    }
+
+    // We've winnowed down to a single element, or an array of homogeneous numeric elements.
+    // Push the elements onto the stack, then compare them.
+    if (!this->push(*left) || !this->push(*right)) {
+        return unsupported();
+    }
+    switch (op.kind()) {
+        case OperatorKind::EQEQ:
+            if (!this->binaryOp(type, kEqualOps)) {
+                return unsupported();
+            }
+            break;
+
+        case OperatorKind::NEQ:
+            if (!this->binaryOp(type, kNotEqualOps)) {
+                return unsupported();
+            }
+            break;
+
+        default:
+            SkDEBUGFAIL("comparison only allows == and !=");
+            break;
+    }
+
+    this->foldComparisonOp(op, type.slotCount());
     return true;
 }
 
@@ -1527,23 +1706,37 @@ bool Generator::pushBinaryExpression(const BinaryExpression& e) {
 }
 
 bool Generator::pushBinaryExpression(const Expression& left, Operator op, const Expression& right) {
-    // Rewrite greater-than ops as their less-than equivalents.
-    if (op.kind() == OperatorKind::GT) {
-        return this->pushBinaryExpression(right, OperatorKind::LT, left);
-    }
-    if (op.kind() == OperatorKind::GTEQ) {
-        return this->pushBinaryExpression(right, OperatorKind::LTEQ, left);
-    }
+    switch (op.kind()) {
+        // Rewrite greater-than ops as their less-than equivalents.
+        case OperatorKind::GT:
+            return this->pushBinaryExpression(right, OperatorKind::LT, left);
 
-    // Emit comma expressions.
-    if (op.kind() == OperatorKind::COMMA) {
-        if (Analysis::HasSideEffects(left)) {
-            if (!this->pushExpression(left, /*usesResult=*/false)) {
-                return unsupported();
+        case OperatorKind::GTEQ:
+            return this->pushBinaryExpression(right, OperatorKind::LTEQ, left);
+
+        // Handle struct and array comparisons.
+        case OperatorKind::EQEQ:
+        case OperatorKind::NEQ:
+            if (left.type().isStruct() || left.type().isArray()) {
+                SkASSERT(left.type().matches(right.type()));
+                std::unique_ptr<LValue> lvLeft = this->makeLValue(left, /*allowScratch=*/true);
+                std::unique_ptr<LValue> lvRight = this->makeLValue(right, /*allowScratch=*/true);
+                return this->pushStructuredComparison(lvLeft.get(), op, lvRight.get(), left.type());
             }
-            this->discardExpression(left.type().slotCount());
-        }
-        return this->pushExpression(right);
+            break;
+
+        // Emit comma expressions.
+        case OperatorKind::COMMA:
+            if (Analysis::HasSideEffects(left)) {
+                if (!this->pushExpression(left, /*usesResult=*/false)) {
+                    return unsupported();
+                }
+                this->discardExpression(left.type().slotCount());
+            }
+            return this->pushExpression(right);
+
+        default:
+            break;
     }
 
     // Handle binary expressions with mismatched types.
@@ -1565,18 +1758,15 @@ bool Generator::pushBinaryExpression(const Expression& left, Operator op, const 
     std::unique_ptr<LValue> lvalue;
     if (op.isAssignment()) {
         // ... turn the left side into an lvalue.
-        lvalue = LValue::Make(left);
+        lvalue = this->makeLValue(left);
         if (!lvalue) {
             return unsupported();
         }
 
         // Handle simple assignment (`var = expr`).
         if (op.kind() == OperatorKind::EQ) {
-            if (!this->pushExpression(right)) {
-                return unsupported();
-            }
-            lvalue->store(this);
-            return true;
+            return this->pushExpression(right) &&
+                   this->store(*lvalue);
         }
 
         // Strip off the assignment from the op (turning += into +).
@@ -1700,16 +1890,14 @@ bool Generator::pushBinaryExpression(const Expression& left, Operator op, const 
             if (!this->binaryOp(type, kEqualOps)) {
                 return unsupported();
             }
-            // equal(x,y) returns a vector; use & to fold into a scalar.
-            this->foldWithMultiOp(BuilderOp::bitwise_and_n_ints, type.slotCount());
+            this->foldComparisonOp(op, type.slotCount());
             break;
 
         case OperatorKind::NEQ:
             if (!this->binaryOp(type, kNotEqualOps)) {
                 return unsupported();
             }
-            // notEqual(x,y) returns a vector; use | to fold into a scalar.
-            this->foldWithMultiOp(BuilderOp::bitwise_or_n_ints, type.slotCount());
+            this->foldComparisonOp(op, type.slotCount());
             break;
 
         case OperatorKind::LOGICALAND:
@@ -1736,11 +1924,8 @@ bool Generator::pushBinaryExpression(const Expression& left, Operator op, const 
     }
 
     // If we have an lvalue, we need to write the result back into it.
-    if (lvalue) {
-        lvalue->store(this);
-    }
-
-    return true;
+    return lvalue ? this->store(*lvalue)
+                  : true;
 }
 
 bool Generator::pushConstructorCompound(const AnyConstructor& c) {
@@ -1916,30 +2101,8 @@ bool Generator::pushConstructorSplat(const ConstructorSplat& c) {
 
 bool Generator::pushFieldAccess(const FieldAccess& f) {
     // If possible, get direct field access via the lvalue.
-    std::unique_ptr<LValue> lvalue = LValue::Make(f);
-    if (lvalue) {
-        return lvalue->push(this);
-    }
-    // Push the entire base expression onto a separate stack.
-    AutoStack baseStack(this);
-    baseStack.enter();
-    if (!this->pushExpression(*f.base())) {
-        return unsupported();
-    }
-    baseStack.exit();
-
-    // Copy the field we want onto the primary stack.
-    int totalSlots = f.base()->type().slotCount();
-    int fieldOffset = f.initialSlot();
-    int fieldSlots = f.type().slotCount();
-
-    baseStack.pushClone(fieldSlots, totalSlots - fieldOffset - fieldSlots);
-
-    // The rest of the base expression, on the separate stack, can now be jettisoned.
-    baseStack.enter();
-    this->discardExpression(totalSlots);
-    baseStack.exit();
-    return true;
+    std::unique_ptr<LValue> lvalue = this->makeLValue(f, /*allowScratch=*/true);
+    return lvalue && this->push(*lvalue);
 }
 
 bool Generator::pushFunctionCall(const FunctionCall& c) {
@@ -1975,14 +2138,14 @@ bool Generator::pushFunctionCall(const FunctionCall& c) {
 
         // Use LValues for out-parameters and inout-parameters, so we can store back to them later.
         if (IsInoutParameter(param) || IsOutParameter(param)) {
-            lvalues[index] = LValue::Make(arg);
+            lvalues[index] = this->makeLValue(arg);
             if (!lvalues[index]) {
                 return unsupported();
             }
             // There are no guarantees on the starting value of an out-parameter, so we only need to
             // store the lvalues associated with an inout parameter.
             if (IsInoutParameter(param)) {
-                if (!lvalues[index]->push(this)) {
+                if (!this->push(*lvalues[index])) {
                     return unsupported();
                 }
                 this->popToSlotRangeUnmasked(this->getVariableSlots(param));
@@ -2020,7 +2183,9 @@ bool Generator::pushFunctionCall(const FunctionCall& c) {
 
             // Copy the parameter's slots directly into the lvalue.
             fBuilder.push_slots(this->getVariableSlots(param));
-            lvalues[index]->store(this);
+            if (!this->store(*lvalues[index])) {
+                return unsupported();
+            }
             this->discardExpression(param.type().slotCount());
         }
     }
@@ -2032,38 +2197,8 @@ bool Generator::pushFunctionCall(const FunctionCall& c) {
 }
 
 bool Generator::pushIndexExpression(const IndexExpression& i) {
-    // If possible, get direct access via the lvalue.
-    std::unique_ptr<LValue> lvalue = LValue::Make(i);
-    if (lvalue) {
-        return lvalue->push(this);
-    }
-
-    // Handle fixed-index lookups into temporary values.
-    SKSL_INT indexValue;
-    if (ConstantFolder::GetConstantInt(*i.index(), &indexValue)) {
-        // Push the temporary array onto a separate stack.
-        AutoStack tempStack(this);
-        tempStack.enter();
-        if (!this->pushExpression(*i.base())) {
-            return unsupported();
-        }
-        tempStack.exit();
-
-        // Clone the indexed item from the array onto the main stack.
-        int totalSlots = i.base()->type().slotCount();
-        int perItemSlots = i.type().slotCount();
-
-        tempStack.pushClone(perItemSlots, totalSlots - ((indexValue + 1) * perItemSlots));
-
-        // The rest of the array, on the separate stack, can now be jettisoned.
-        tempStack.enter();
-        this->discardExpression(totalSlots);
-        tempStack.exit();
-        return true;
-    }
-
-    // TODO: implement dynamic-index lookups.
-    return unsupported();
+    std::unique_ptr<LValue> lvalue = this->makeLValue(i, /*allowScratch=*/true);
+    return lvalue && this->push(*lvalue);
 }
 
 bool Generator::pushIntrinsic(const FunctionCall& c) {
@@ -2478,8 +2613,8 @@ bool Generator::pushPostfixExpression(const PostfixExpression& p, bool usesResul
         return this->pushPrefixExpression(p.getOperator(), *p.operand());
     }
     // Get the operand as an lvalue, and push it onto the stack as-is.
-    std::unique_ptr<LValue> lvalue = LValue::Make(*p.operand());
-    if (!lvalue || !lvalue->push(this)) {
+    std::unique_ptr<LValue> lvalue = this->makeLValue(*p.operand());
+    if (!lvalue || !this->push(*lvalue)) {
         return unsupported();
     }
 
@@ -2510,7 +2645,9 @@ bool Generator::pushPostfixExpression(const PostfixExpression& p, bool usesResul
     }
 
     // Write the new value back to the operand.
-    lvalue->store(this);
+    if (!this->store(*lvalue)) {
+        return unsupported();
+    }
 
     // Discard the scratch copy, leaving only the original value as-is.
     this->discardExpression(p.type().slotCount());
@@ -2560,17 +2697,8 @@ bool Generator::pushPrefixExpression(Operator op, const Expression& expr) {
 bool Generator::pushSwizzle(const Swizzle& s) {
     SkASSERT(!s.components().empty() && s.components().size() <= 4);
 
-    // Determine if the swizzle rearranges its elements, or if it's a simple subset of its elements.
-    // (A simple subset would be a sequential non-repeating range of components, like `.xyz` or
-    // `.yzw` or `.z`, but not `.xx` or `.xz`.)
-    bool isSimpleSubset = true;
-    for (int index = 1; index < s.components().size(); ++index) {
-        if (s.components()[index] != s.components()[0] + index) {
-            isSimpleSubset = false;
-            break;
-        }
-    }
     // If this is a simple subset of a variable's slots...
+    bool isSimpleSubset = is_sliceable_swizzle(s.components());
     if (isSimpleSubset && s.base()->is<VariableReference>()) {
         // ... we can just push part of the variable directly onto the stack, rather than pushing
         // the whole expression and then immediately cutting it down. (Either way works, but this
