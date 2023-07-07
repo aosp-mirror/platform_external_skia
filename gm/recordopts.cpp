@@ -19,7 +19,6 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypes.h"
 #include "include/effects/SkImageFilters.h"
-#include "include/effects/SkTableColorFilter.h"
 #include "include/gpu/GrDirectContext.h"
 
 constexpr int kTestRectSize = 50;
@@ -38,7 +37,7 @@ static sk_sp<SkColorFilter> make_detector_color_filter() {
     uint8_t tableB[256] = { 0, };
     tableA[255] = 255;
     tableG[kDetectorGreenValue] = 255;
-    return SkTableColorFilter::MakeARGB(tableA, tableR, tableG, tableB);
+    return SkColorFilters::TableARGB(tableA, tableR, tableG, tableB);
 }
 
 // This detector detects that color filter phase of the pixel pipeline receives the correct value.
@@ -156,7 +155,7 @@ DEF_SIMPLE_GM(recordopts, canvas, (kTestRectSize+1)*2, (kTestRectSize+1)*15) {
     // the optimization applied.
 
     SkColor shapeColor = SkColorSetARGB(255, 0, 255, 0);
-    for (size_t k = 0; k < SK_ARRAY_COUNT(funcs); ++k) {
+    for (size_t k = 0; k < std::size(funcs); ++k) {
         canvas->save();
 
         TestVariantSequence drawTestSequence = funcs[k];
@@ -198,11 +197,11 @@ DEF_SIMPLE_GM(recordopts, canvas, (kTestRectSize+1)*2, (kTestRectSize+1)*15) {
         install_detector_color_filter
     };
 
-    for (size_t i = 0; i < SK_ARRAY_COUNT(shapeColors); ++i) {
+    for (size_t i = 0; i < std::size(shapeColors); ++i) {
         shapeColor = shapeColors[i];
-        for (size_t j = 0; j < SK_ARRAY_COUNT(detectorInstallFuncs); ++j) {
+        for (size_t j = 0; j < std::size(detectorInstallFuncs); ++j) {
             InstallDetectorFunc detectorInstallFunc = detectorInstallFuncs[j];
-            for (size_t k = 0; k < SK_ARRAY_COUNT(funcs); ++k) {
+            for (size_t k = 0; k < std::size(funcs); ++k) {
                 TestVariantSequence drawTestSequence = funcs[k];
                 canvas->save();
                 drawTestSequence(canvas, shapeColor, detectorInstallFunc);

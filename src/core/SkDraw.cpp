@@ -12,21 +12,25 @@
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPathEffect.h"
+#include "include/core/SkPathUtils.h"
 #include "include/core/SkRRect.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkString.h"
 #include "include/core/SkStrokeRec.h"
 #include "include/private/SkColorData.h"
-#include "include/private/SkImageInfoPriv.h"
-#include "include/private/SkMacros.h"
-#include "include/private/SkTemplates.h"
-#include "include/private/SkTo.h"
-#include "src/core/SkArenaAlloc.h"
+#include "include/private/base/SkMacros.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkArenaAlloc.h"
+#include "src/base/SkTLazy.h"
+#include "src/base/SkUtils.h"
 #include "src/core/SkAutoBlitterChoose.h"
 #include "src/core/SkBlendModePriv.h"
 #include "src/core/SkBlitter.h"
 #include "src/core/SkDevice.h"
 #include "src/core/SkDrawProcs.h"
+#include "src/core/SkImageInfoPriv.h"
+#include "src/core/SkImagePriv.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkMatrixUtils.h"
 #include "src/core/SkPathEffectBase.h"
@@ -36,10 +40,10 @@
 #include "src/core/SkSamplingPriv.h"
 #include "src/core/SkScan.h"
 #include "src/core/SkStroke.h"
-#include "src/core/SkTLazy.h"
-#include "src/core/SkUtils.h"
 
 #include <utility>
+
+using namespace skia_private;
 
 static SkPaint make_paint_with_image(const SkPaint& origPaint, const SkBitmap& bitmap,
                                      const SkSamplingOptions& sampling,
@@ -938,8 +942,8 @@ void SkDraw::drawPath(const SkPath& origSrcPath, const SkPaint& origPaint,
         if (this->computeConservativeLocalClipBounds(&cullRect)) {
             cullRectPtr = &cullRect;
         }
-        doFill = paint->getFillPath(*pathPtr, tmpPath, cullRectPtr,
-                                    fMatrixProvider->localToDevice());
+        doFill = skpathutils::FillPathWithPaint(*pathPtr, *paint, tmpPath, cullRectPtr,
+                                                fMatrixProvider->localToDevice());
         pathPtr = tmpPath;
     }
 
@@ -969,7 +973,7 @@ void SkDraw::drawBitmapAsMask(const SkBitmap& bitmap, const SkSamplingOptions& s
     }
 
     SkMatrix ctm = fMatrixProvider->localToDevice();
-    if (SkTreatAsSprite(ctm, bitmap.dimensions(), sampling, paint))
+    if (SkTreatAsSprite(ctm, bitmap.dimensions(), sampling, paint.isAntiAlias()))
     {
         int ix = SkScalarRoundToInt(ctm.getTranslateX());
         int iy = SkScalarRoundToInt(ctm.getTranslateY());
@@ -1015,7 +1019,7 @@ void SkDraw::drawBitmapAsMask(const SkBitmap& bitmap, const SkSamplingOptions& s
         }
 
         // allocate (and clear) our temp buffer to hold the transformed bitmap
-        SkAutoTMalloc<uint8_t> storage(size);
+        AutoTMalloc<uint8_t> storage(size);
         mask.fImage = storage.get();
         memset(mask.fImage, 0, size);
 
@@ -1089,7 +1093,7 @@ void SkDraw::drawBitmap(const SkBitmap& bitmap, const SkMatrix& prematrix,
     }
 
     if (!SkColorTypeIsAlphaOnly(bitmap.colorType()) &&
-        SkTreatAsSprite(matrix, bitmap.dimensions(), sampling, *paint)) {
+        SkTreatAsSprite(matrix, bitmap.dimensions(), sampling, paint->isAntiAlias())) {
         //
         // It is safe to call lock pixels now, since we know the matrix is
         // (more or less) identity.
@@ -1183,7 +1187,7 @@ void SkDraw::drawSprite(const SkBitmap& bitmap, int x, int y, const SkPaint& ori
     matrix.setTranslate(r.fLeft, r.fTop);
     SkPaint paintWithShader = make_paint_with_image(paint, bitmap, SkSamplingOptions(), &matrix);
     SkDraw draw(*this);
-    SkOverrideDeviceMatrixProvider matrixProvider(SkMatrix::I());
+    SkMatrixProvider matrixProvider(SkMatrix::I());
     draw.fMatrixProvider = &matrixProvider;
     // call ourself with a rect
     draw.drawRect(r, paintWithShader);

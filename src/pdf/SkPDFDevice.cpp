@@ -12,6 +12,7 @@
 #include "include/core/SkColorFilter.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkPathEffect.h"
+#include "include/core/SkPathUtils.h"
 #include "include/core/SkRRect.h"
 #include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
@@ -19,20 +20,20 @@
 #include "include/docs/SkPDFDocument.h"
 #include "include/encode/SkJpegEncoder.h"
 #include "include/pathops/SkPathOps.h"
-#include "include/private/SkTemplates.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkScopeExit.h"
+#include "src/base/SkUTF.h"
 #include "src/core/SkAdvancedTypefaceMetrics.h"
 #include "src/core/SkAnnotationKeys.h"
 #include "src/core/SkBitmapDevice.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkDraw.h"
-#include "src/core/SkGlyphRun.h"
 #include "src/core/SkImageFilterCache.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkRasterClip.h"
-#include "src/core/SkScalerCache.h"
-#include "src/core/SkScopeExit.h"
+#include "src/core/SkStrike.h"
 #include "src/core/SkStrikeSpec.h"
 #include "src/core/SkTextFormatParams.h"
 #include "src/core/SkXfermodeInterpretation.h"
@@ -47,8 +48,8 @@
 #include "src/pdf/SkPDFShader.h"
 #include "src/pdf/SkPDFTypes.h"
 #include "src/pdf/SkPDFUtils.h"
+#include "src/text/GlyphRun.h"
 #include "src/utils/SkClipStackUtils.h"
-#include "src/utils/SkUTF.h"
 
 #include <vector>
 
@@ -158,23 +159,28 @@ static void draw_points(SkCanvas::PointMode mode,
     draw.drawPoints(mode, count, points, paint, device);
 }
 
-// A shader's matrix is:  CTMM x LocalMatrix x WrappingLocalMatrix.  We want to
-// switch to device space, where CTM = I, while keeping the original behavior.
-//
-//               I * LocalMatrix * NewWrappingMatrix = CTM * LocalMatrix
-//                   LocalMatrix * NewWrappingMatrix = CTM * LocalMatrix
-//  InvLocalMatrix * LocalMatrix * NewWrappingMatrix = InvLocalMatrix * CTM * LocalMatrix
-//                                 NewWrappingMatrix = InvLocalMatrix * CTM * LocalMatrix
-//
 static void transform_shader(SkPaint* paint, const SkMatrix& ctm) {
     SkASSERT(!ctm.isIdentity());
+#if defined(SK_BUILD_FOR_ANDROID_FRAMEWORK)
+    // A shader's matrix is:  CTM x LocalMatrix x WrappingLocalMatrix.  We want to
+    // switch to device space, where CTM = I, while keeping the original behavior.
+    //
+    //               I * LocalMatrix * NewWrappingMatrix = CTM * LocalMatrix
+    //                   LocalMatrix * NewWrappingMatrix = CTM * LocalMatrix
+    //  InvLocalMatrix * LocalMatrix * NewWrappingMatrix = InvLocalMatrix * CTM * LocalMatrix
+    //                                 NewWrappingMatrix = InvLocalMatrix * CTM * LocalMatrix
+    //
     SkMatrix lm = SkPDFUtils::GetShaderLocalMatrix(paint->getShader());
     SkMatrix lmInv;
     if (lm.invert(&lmInv)) {
         SkMatrix m = SkMatrix::Concat(SkMatrix::Concat(lmInv, ctm), lm);
         paint->setShader(paint->getShader()->makeWithLocalMatrix(m));
     }
+    return;
+#endif
+    paint->setShader(paint->getShader()->makeWithLocalMatrix(ctm));
 }
+
 
 static SkTCopyOnFirstWrite<SkPaint> clean_paint(const SkPaint& srcPaint) {
     SkTCopyOnFirstWrite<SkPaint> paint(srcPaint);
@@ -497,7 +503,7 @@ void SkPDFDevice::internalDrawPathWithFilter(const SkClipStack& clipStack,
     SkPath path(origPath);
     SkTCopyOnFirstWrite<SkPaint> paint(origPaint);
 
-    SkStrokeRec::InitStyle initStyle = paint->getFillPath(path, &path)
+    SkStrokeRec::InitStyle initStyle = skpathutils::FillPathWithPaint(path, *paint, &path)
                                      ? SkStrokeRec::kFill_InitStyle
                                      : SkStrokeRec::kHairline_InitStyle;
     path.transform(ctm, &path);
@@ -582,7 +588,7 @@ void SkPDFDevice::internalDrawPath(const SkClipStack& clipStack,
             pathPtr = &modifiedPath;
             pathIsMutable = true;
         }
-        if (paint->getFillPath(*pathPtr, pathPtr)) {
+        if (skpathutils::FillPathWithPaint(*pathPtr, *paint, pathPtr)) {
             set_style(&paint, SkPaint::kFill_Style);
         } else {
             set_style(&paint, SkPaint::kStroke_Style);
@@ -753,7 +759,7 @@ static bool contains(const SkRect& r, SkPoint p) {
 }
 
 void SkPDFDevice::drawGlyphRunAsPath(
-        const SkGlyphRun& glyphRun, SkPoint offset, const SkPaint& runPaint) {
+        const sktext::GlyphRun& glyphRun, SkPoint offset, const SkPaint& runPaint) {
     const SkFont& font = glyphRun.font();
     SkPath path;
 
@@ -778,7 +784,7 @@ void SkPDFDevice::drawGlyphRunAsPath(
 
     SkFont transparentFont = glyphRun.font();
     transparentFont.setEmbolden(false); // Stop Recursion
-    SkGlyphRun tmpGlyphRun(glyphRun, transparentFont);
+    sktext::GlyphRun tmpGlyphRun(glyphRun, transparentFont);
 
     SkPaint transparent;
     transparent.setColor(SK_ColorTRANSPARENT);
@@ -809,7 +815,7 @@ static bool needs_new_font(SkPDFFont* font, const SkGlyph* glyph,
 }
 
 void SkPDFDevice::internalDrawGlyphRun(
-        const SkGlyphRun& glyphRun, SkPoint offset, const SkPaint& runPaint) {
+        const sktext::GlyphRun& glyphRun, SkPoint offset, const SkPaint& runPaint) {
 
     const SkGlyphID* glyphIDs = glyphRun.glyphsIDs().data();
     uint32_t glyphCount = SkToU32(glyphRun.glyphsIDs().size());
@@ -896,23 +902,14 @@ void SkPDFDevice::internalDrawGlyphRun(
             if (unichar < 0) {
                 return;
             }
-            if (textPtr < textEnd ||                                  // more characters left
-                glyphLimit > index + 1 ||                             // toUnicode wouldn't work
-                unichar != map_glyph(glyphToUnicode, glyphIDs[index]))  // test single Unichar map
+            if (textPtr < textEnd ||                                    // >1 code points in cluster
+                c.fGlyphCount > 1 ||                                    // >1 glyphs in cluster
+                unichar != map_glyph(glyphToUnicode, glyphIDs[index]))  // 1:1 but wrong mapping
             {
                 glyphPositioner.flush();
-                out->writeText("/Span<</ActualText <");
-                SkPDFUtils::WriteUTF16beHex(out, 0xFEFF);  // U+FEFF = BYTE ORDER MARK
-                // the BOM marks this text as UTF-16BE, not PDFDocEncoding.
-                SkPDFUtils::WriteUTF16beHex(out, unichar);  // first char
-                while (textPtr < textEnd) {
-                    unichar = SkUTF::NextUTF8(&textPtr, textEnd);
-                    if (unichar < 0) {
-                        break;
-                    }
-                    SkPDFUtils::WriteUTF16beHex(out, unichar);
-                }
-                out->writeText("> >> BDC\n");  // begin marked-content sequence
+                out->writeText("/Span<</ActualText ");
+                SkPDFWriteTextString(out, c.fUtf8Text, c.fTextByteLength);
+                out->writeText(" >> BDC\n");  // begin marked-content sequence
                                                // with an associated property list.
                 actualText = true;
             }
@@ -957,27 +954,30 @@ void SkPDFDevice::internalDrawGlyphRun(
 }
 
 void SkPDFDevice::onDrawGlyphRunList(SkCanvas*,
-                                     const SkGlyphRunList& glyphRunList,
-                                     const SkPaint& paint) {
+                                     const sktext::GlyphRunList& glyphRunList,
+                                     const SkPaint& initialPaint,
+                                     const SkPaint& drawingPaint) {
     SkASSERT(!glyphRunList.hasRSXForm());
-    for (const SkGlyphRun& glyphRun : glyphRunList) {
-        this->internalDrawGlyphRun(glyphRun, glyphRunList.origin(), paint);
+    for (const sktext::GlyphRun& glyphRun : glyphRunList) {
+        this->internalDrawGlyphRun(glyphRun, glyphRunList.origin(), drawingPaint);
     }
 }
 
-void SkPDFDevice::drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&) {
+void SkPDFDevice::drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&, bool) {
     if (this->hasEmptyClip()) {
         return;
     }
     // TODO: implement drawVertices
 }
 
-void SkPDFDevice::drawCustomMesh(SkCustomMesh, sk_sp<SkBlender>, const SkPaint&) {
+#ifdef SK_ENABLE_SKSL
+void SkPDFDevice::drawMesh(const SkMesh&, sk_sp<SkBlender>, const SkPaint&) {
     if (this->hasEmptyClip()) {
         return;
     }
-    // TODO: implement drawCustomMesh
+    // TODO: implement drawMesh
 }
+#endif
 
 void SkPDFDevice::drawFormXObject(SkPDFIndirectReference xObject, SkDynamicMemoryWStream* content) {
     ScopedOutputMarkedContentTags mark(fNodeId, fDocument, content);
@@ -1058,7 +1058,7 @@ bool SkPDFDevice::handleInversePath(const SkPath& origPath,
     // Merge stroking operations into final path.
     if (SkPaint::kStroke_Style == paint.getStyle() ||
         SkPaint::kStrokeAndFill_Style == paint.getStyle()) {
-        bool doFillPath = paint.getFillPath(origPath, &modifiedPath);
+        bool doFillPath = skpathutils::FillPathWithPaint(origPath, paint, &modifiedPath);
         if (doFillPath) {
             noInversePaint.setStyle(SkPaint::kFill_Style);
             noInversePaint.setStrokeWidth(0);
@@ -1172,14 +1172,15 @@ static void populate_graphic_state_entry_from_paint(
     if (shader) {
         // note: we always present the alpha as 1 for the shader, knowing that it will be
         //       accounted for when we create our newGraphicsState (below)
-        if (SkShader::kColor_GradientType == shader->asAGradient(nullptr)) {
+        if (as_SB(shader)->asGradient() == SkShaderBase::GradientType::kColor) {
             // We don't have to set a shader just for a color.
-            SkShader::GradientInfo gradientInfo;
+            SkShaderBase::GradientInfo gradientInfo;
             SkColor gradientColor = SK_ColorBLACK;
             gradientInfo.fColors = &gradientColor;
             gradientInfo.fColorOffsets = nullptr;
             gradientInfo.fColorCount = 1;
-            SkAssertResult(shader->asAGradient(&gradientInfo) == SkShader::kColor_GradientType);
+            SkAssertResult(as_SB(shader)->asGradient(&gradientInfo) ==
+                           SkShaderBase::GradientType::kColor);
             color = SkColor4f::FromColor(gradientColor);
             entry->fColor ={color.fR, color.fG, color.fB, 1};
 

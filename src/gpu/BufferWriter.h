@@ -8,11 +8,12 @@
 #ifndef skgpu_BufferWriter_DEFINED
 #define skgpu_BufferWriter_DEFINED
 
+#include <type_traits>
 #include "include/core/SkRect.h"
 #include "include/private/SkColorData.h"
-#include "include/private/SkNx.h"
-#include "include/private/SkTemplates.h"
-#include <type_traits>
+#include "include/private/base/SkTemplates.h"
+#include "src/base/SkVx.h"
+#include "src/core/SkConvertPixels.h"
 
 namespace skgpu {
 
@@ -303,7 +304,7 @@ inline VertexWriter& operator<<(VertexWriter& w, const VertexWriter::RepeatDesc<
 }
 
 template <>
-SK_MAYBE_UNUSED inline VertexWriter& operator<<(VertexWriter& w, const Sk4f& vector) {
+[[maybe_unused]] inline VertexWriter& operator<<(VertexWriter& w, const skvx::float4& vector) {
     w.validate(sizeof(vector));
     vector.store(w.fPtr);
     w = w.makeOffset(sizeof(vector));
@@ -353,7 +354,7 @@ private:
 };
 
 template <>
-SK_MAYBE_UNUSED inline VertexWriter& operator<<(VertexWriter& w, const VertexColor& color) {
+[[maybe_unused]] inline VertexWriter& operator<<(VertexWriter& w, const VertexColor& color) {
     w << color.fColor[0];
     if (color.fWideColor) {
         w << color.fColor[1]
@@ -427,6 +428,45 @@ struct UniformWriter : public BufferWriter {
         this->validate(bytes);
         memcpy(fPtr, src, bytes);
         fPtr = SkTAddOffset<void>(fPtr, bytes);
+    }
+    void skipBytes(size_t bytes) {
+        this->validate(bytes);
+        fPtr = SkTAddOffset<void>(fPtr, bytes);
+    }
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct UploadWriter : public BufferWriter {
+    UploadWriter() = default;
+
+    UploadWriter(void* ptr, size_t size) : BufferWriter(ptr, size) {}
+
+    UploadWriter(const UploadWriter&) = delete;
+    UploadWriter(UploadWriter&& that) { *this = std::move(that); }
+
+    UploadWriter& operator=(const UploadWriter&) = delete;
+    UploadWriter& operator=(UploadWriter&& that) {
+        BufferWriter::operator=(std::move(that));
+        return *this;
+    }
+
+    // Writes a block of image data to the upload buffer, starting at `offset`. The source image is
+    // `srcRowBytes` wide, and the written block is `dstRowBytes` wide and `rowCount` bytes tall.
+    void write(size_t offset, const void* src, size_t srcRowBytes, size_t dstRowBytes,
+               size_t trimRowBytes, int rowCount) {
+        this->validate(dstRowBytes * rowCount);
+        void* dst = SkTAddOffset<void>(fPtr, offset);
+        SkRectMemcpy(dst, dstRowBytes, src, srcRowBytes, trimRowBytes, rowCount);
+    }
+
+    void convertAndWrite(size_t offset,
+                         const SkImageInfo& srcInfo, const void* src, size_t srcRowBytes,
+                         const SkImageInfo& dstInfo, size_t dstRowBytes) {
+        SkASSERT(srcInfo.width() == dstInfo.width() && srcInfo.height() == dstInfo.height());
+        this->validate(dstRowBytes * dstInfo.height());
+        void* dst = SkTAddOffset<void>(fPtr, offset);
+        SkAssertResult(SkConvertPixels(dstInfo, dst, dstRowBytes, srcInfo, src, srcRowBytes));
     }
 };
 

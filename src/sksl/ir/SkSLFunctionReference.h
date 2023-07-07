@@ -20,37 +20,32 @@ namespace SkSL {
  */
 class FunctionReference final : public Expression {
 public:
-    inline static constexpr Kind kExpressionKind = Kind::kFunctionReference;
+    inline static constexpr Kind kIRNodeKind = Kind::kFunctionReference;
 
-    FunctionReference(const Context& context, int line,
-                      std::vector<const FunctionDeclaration*> functions)
-        : INHERITED(line, kExpressionKind, context.fTypes.fInvalid.get())
-        , fFunctions(std::move(functions)) {}
+    FunctionReference(const Context& context, Position pos,
+                      const FunctionDeclaration* overloadChain)
+        : INHERITED(pos, kIRNodeKind, context.fTypes.fInvalid.get())
+        , fOverloadChain(overloadChain) {}
 
-    const std::vector<const FunctionDeclaration*>& functions() const {
-        return fFunctions;
+    const FunctionDeclaration* overloadChain() const {
+        return fOverloadChain;
     }
 
-    bool hasProperty(Property property) const override {
-        return false;
-    }
-
-    std::unique_ptr<Expression> clone() const override {
-        return std::unique_ptr<Expression>(new FunctionReference(fLine, this->functions(),
+    std::unique_ptr<Expression> clone(Position pos) const override {
+        return std::unique_ptr<Expression>(new FunctionReference(pos, this->overloadChain(),
                                                                  &this->type()));
     }
 
-    std::string description() const override {
+    std::string description(OperatorPrecedence) const override {
         return "<function>";
     }
 
 private:
-    FunctionReference(int line, std::vector<const FunctionDeclaration*> functions,
-                      const Type* type)
-        : INHERITED(line, kExpressionKind, type)
-        , fFunctions(std::move(functions)) {}
+    FunctionReference(Position pos, const FunctionDeclaration* overloadChain, const Type* type)
+            : INHERITED(pos, kIRNodeKind, type)
+            , fOverloadChain(overloadChain) {}
 
-    std::vector<const FunctionDeclaration*> fFunctions;
+    const FunctionDeclaration* fOverloadChain;
 
     using INHERITED = Expression;
 };

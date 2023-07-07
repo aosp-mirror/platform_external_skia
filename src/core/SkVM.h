@@ -10,10 +10,11 @@
 
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkSpan.h"
-#include "include/private/SkMacros.h"
-#include "include/private/SkTArray.h"
-#include "include/private/SkTHash.h"
+#include "include/private/base/SkMacros.h"
+#include "include/private/base/SkTArray.h"
+#include "src/core/SkTHash.h"
 #include "src/core/SkVM_fwd.h"
 #include <vector>      // std::vector
 
@@ -30,10 +31,6 @@ class SkWStream;
             #define SKVM_JIT
         #endif
     #endif
-#endif
-
-#if 0
-    #define SKVM_LLVM
 #endif
 
 #if 0
@@ -484,7 +481,7 @@ namespace skvm {
     }
 
     using Val = int;
-    // We reserve an impossibe Val ID as a sentinel
+    // We reserve an impossible Val ID as a sentinel
     // NA meaning none, n/a, null, nil, etc.
     static const Val NA = -1;
 
@@ -557,7 +554,7 @@ namespace skvm {
             for (int bits : ints) {
                 buf.push_back(bits);
             }
-            return {base, (int)( sizeof(int)*(buf.size() - SK_ARRAY_COUNT(ints)) )};
+            return {base, (int)( sizeof(int)*(buf.size() - std::size(ints)) )};
         }
 
         Uniform pushArray(int32_t a[]) {
@@ -570,7 +567,7 @@ namespace skvm {
     };
 
     struct PixelFormat {
-        enum { UNORM, SRGB, FLOAT} encoding;
+        enum { UNORM, SRGB, FLOAT, XRNG } encoding;
         int r_bits,  g_bits,  b_bits,  a_bits,
             r_shift, g_shift, b_shift, a_shift;
     };
@@ -1007,6 +1004,17 @@ namespace skvm {
             return this->allImm(id, &imm) && imm == want;
         }
 
+        // `canonicalizeIdOrder` and has two rules:
+        // - Immediate values go last; that is, `x + 1` is preferred over `1 + x`.
+        // - If both/neither of x and y are immediate, lower IDs go before higher IDs.
+        // Canonicalizing the IDs helps with opcode deduplication. Putting immediates in a
+        // consistent position makes it easier to detect no-op arithmetic like `x + 0`.
+        template <typename F32_or_I32>
+        void canonicalizeIdOrder(F32_or_I32& x, F32_or_I32& y);
+
+        // If the passed in ID is a bit-not, return the value being bit-notted. Otherwise, NA.
+        Val holdsBitNot(Val id);
+
         SkTHashMap<Instruction, Val, InstructionHash> fIndex;
         std::vector<Instruction>                      fProgram;
         std::vector<TraceHook*>                       fTraceHooks;
@@ -1067,7 +1075,7 @@ namespace skvm {
         bool hasJIT() const;         // Has this Program been JITted?
         bool hasTraceHooks() const;  // Is this program instrumented for debugging?
 
-        void visualize(SkWStream* output, const char* code) const;
+        void visualize(SkWStream* output) const;
         void dump(SkWStream* = nullptr) const;
         void disassemble(SkWStream* = nullptr) const;
         viz::Visualizer* visualizer();
@@ -1075,13 +1083,11 @@ namespace skvm {
     private:
         void setupInterpreter(const std::vector<OptimizedInstruction>&);
         void setupJIT        (const std::vector<OptimizedInstruction>&, const char* debug_name);
-        void setupLLVM       (const std::vector<OptimizedInstruction>&, const char* debug_name);
 
         bool jit(const std::vector<OptimizedInstruction>&,
                  int* stack_hint, uint32_t* registers_used,
                  Assembler*) const;
 
-        void waitForLLVM() const;
         void dropJIT();
 
         struct Impl;
