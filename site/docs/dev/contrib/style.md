@@ -370,9 +370,9 @@ void myVirtual() override {
 ```
 
 If you call a method on a parent type that must stand out as specifically the
-parent's version of that method, we usually privately alias that parent type to
-`INHERITED` within the class. That lets calls like `INHERITED::onFoo()` stand
-out visually. No need for `this->` when using `INHERITED::`.
+parent's version of that method, such as `Parent::method()`. The `this->` that
+would normally be required before a method call on the current object is not
+necessary when using a scope qualifier.
 
 <!--?prettify?-->
 
@@ -380,27 +380,28 @@ out visually. No need for `this->` when using `INHERITED::`.
 class GrDillPickle : public GrPickle {
     ...
     bool onTasty() const override {
-        return INHERITED::onTasty()
+        return GrPickle::onTasty()
             && fFreshDill;
     }
     ...
 private:
     bool fFreshDill;
-    using INHERITED = GrPickle;
 };
 ```
 
-Constructor initializers should be one per line, indented, with punctuation
-placed before the initializer.
+Constructor initializers should be placed on the same line as the constructor,
+if they fit. Otherwise, each initializer should be on its own line, indented,
+with punctuation placed before the initializer.
 
 <!--?prettify?-->
 
 ```
-GrDillPickle::GrDillPickle()
-    : GrPickle()
-    , fSize(kDefaultPickleSize) {
-    ...
-}
+GrDillPickle::GrDillPickle() : GrPickle(), fSize(kDefaultPickleSize) {}
+
+GrDillPickle::GrDillPickle(float size, float crunchiness, const PickleOptions* options)
+        : GrPickle(options)
+        , fSize(size)
+        , fCrunchiness(crunchiness) {}
 ```
 
 Constructors that take one argument should almost always be explicit, with
@@ -429,7 +430,7 @@ A common pattern for virtual methods in Skia is to include a public non-virtual
 (or final) method, paired with a private virtual method named "onMethodName".
 This ensures that the base-class method is always invoked and gives it control
 over how the virtual method is used, rather than relying on each subclass to
-call `INHERITED::onMethodName`. For example:
+call `Parent::onMethodName()`. For example:
 
 <!--?prettify?-->
 

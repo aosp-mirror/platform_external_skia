@@ -7,30 +7,33 @@
 
 #include "include/core/SkBitmap.h"
 
-#include "include/core/SkData.h"
+#include "include/core/SkColorSpace.h" // IWYU pragma: keep
+#include "include/core/SkColorType.h"
+#include "include/core/SkImage.h"
 #include "include/core/SkMallocPixelRef.h"
-#include "include/core/SkMath.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
 #include "include/core/SkPixelRef.h"
 #include "include/core/SkRect.h"
-#include "include/core/SkScalar.h"
-#include "include/core/SkUnPreMultiply.h"
-#include "include/private/SkColorData.h"
-#include "include/private/SkHalf.h"
-#include "include/private/SkImageInfoPriv.h"
-#include "include/private/SkTemplates.h"
-#include "include/private/SkTo.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkTileMode.h"
+#include "include/private/base/SkAlign.h"
+#include "include/private/base/SkTFitsIn.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkTo.h"
 #include "src/core/SkConvertPixels.h"
+#include "src/core/SkImageInfoPriv.h"
+#include "src/core/SkImagePriv.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkMipmap.h"
 #include "src/core/SkPixelRefPriv.h"
-#include "src/core/SkPixmapPriv.h"
-#include "src/core/SkReadBuffer.h"
-#include "src/core/SkWriteBuffer.h"
 #include "src/core/SkWritePixelsRec.h"
+#include "src/shaders/SkImageShader.h"
 
 #include <cstring>
 #include <utility>
+class SkMaskFilter;
 
 static bool reset_return_false(SkBitmap* bm) {
     bm->reset();
@@ -101,6 +104,10 @@ void SkBitmap::getBounds(SkIRect* bounds) const {
     SkASSERT(bounds);
     *bounds = fPixmap.bounds();
 }
+
+SkColorSpace* SkBitmap::colorSpace() const { return fPixmap.colorSpace(); }
+
+sk_sp<SkColorSpace> SkBitmap::refColorSpace() const { return fPixmap.info().refColorSpace(); }
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -187,7 +194,7 @@ void SkBitmap::setPixelRef(sk_sp<SkPixelRef> pr, int dx, int dy) {
             p = (char*)p + dy * rowBytes + dx * this->bytesPerPixel();
         }
     }
-    SkPixmapPriv::ResetPixmapKeepInfo(&fPixmap, p, rowBytes);
+    fPixmap.reset(fPixmap.info(), p, rowBytes);
     SkDEBUGCODE(this->validate();)
 }
 
@@ -196,7 +203,7 @@ void SkBitmap::setPixels(void* p) {
         p = nullptr;
     }
     size_t rb = this->rowBytes();
-    SkPixmapPriv::ResetPixmapKeepInfo(&fPixmap, p, rb);
+    fPixmap.reset(fPixmap.info(), p, rb);
     fPixelRef = p ? sk_make_sp<SkPixelRef>(this->width(), this->height(), p, rb) : nullptr;
     SkDEBUGCODE(this->validate();)
 }
@@ -398,7 +405,7 @@ void* SkBitmap::getAddr(int x, int y) const {
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkBitmap::erase(SkColor c, const SkIRect& area) const {
+void SkBitmap::erase(SkColor4f c, SkColorSpace* colorSpace, const SkIRect& area) const {
     SkDEBUGCODE(this->validate();)
 
     if (kUnknown_SkColorType == this->colorType()) {
@@ -411,13 +418,25 @@ void SkBitmap::erase(SkColor c, const SkIRect& area) const {
         return;
     }
 
-    if (result.erase(c, area)) {
+    if (result.erase(c, colorSpace, &area)) {
         this->notifyPixelsChanged();
     }
 }
 
+void SkBitmap::erase(SkColor c, const SkIRect& area) const {
+    this->erase(SkColor4f::FromColor(c), nullptr, area);
+}
+
+void SkBitmap::erase(SkColor4f c, const SkIRect& area) const {
+    this->erase(c, nullptr, area);
+}
+
+void SkBitmap::eraseColor(SkColor4f c, SkColorSpace* colorSpace) const {
+    this->erase(c, colorSpace, SkIRect::MakeWH(this->width(), this->height()));
+}
+
 void SkBitmap::eraseColor(SkColor c) const {
-    this->erase(c, SkIRect::MakeWH(this->width(), this->height()));
+    this->erase(SkColor4f::FromColor(c), nullptr, SkIRect::MakeWH(this->width(), this->height()));
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -508,10 +527,6 @@ static bool GetBitmapAlpha(const SkBitmap& src, uint8_t* SK_RESTRICT alpha, int 
     return SkConvertPixels(SkImageInfo::MakeA8(pmap.width(), pmap.height()), alpha, alphaRowBytes,
                            pmap.info(), pmap.addr(), pmap.rowBytes());
 }
-
-#include "include/core/SkMaskFilter.h"
-#include "include/core/SkMatrix.h"
-#include "include/core/SkPaint.h"
 
 bool SkBitmap::extractAlpha(SkBitmap* dst, const SkPaint* paint,
                             Allocator *allocator, SkIPoint* offset) const {
@@ -621,4 +636,36 @@ bool SkBitmap::peekPixels(SkPixmap* pmap) const {
 
 sk_sp<SkImage> SkBitmap::asImage() const {
     return SkImage::MakeFromBitmap(*this);
+}
+
+sk_sp<SkShader> SkBitmap::makeShader(const SkSamplingOptions& sampling,
+                                     const SkMatrix& lm) const {
+    return this->makeShader(SkTileMode::kClamp, SkTileMode::kClamp,
+                            sampling, &lm);
+}
+
+sk_sp<SkShader> SkBitmap::makeShader(const SkSamplingOptions& sampling,
+                                     const SkMatrix* lm) const {
+    return this->makeShader(SkTileMode::kClamp, SkTileMode::kClamp,
+                            sampling, lm);
+}
+
+sk_sp<SkShader> SkBitmap::makeShader(SkTileMode tmx, SkTileMode tmy,
+                                     const SkSamplingOptions& sampling,
+                                     const SkMatrix& lm) const {
+    if (!lm.invert(nullptr)) {
+        return nullptr;
+    }
+    return SkImageShader::Make(SkMakeImageFromRasterBitmap(*this, kIfMutable_SkCopyPixelsMode),
+                               tmx, tmy, sampling, &lm);
+}
+
+sk_sp<SkShader> SkBitmap::makeShader(SkTileMode tmx, SkTileMode tmy,
+                                     const SkSamplingOptions& sampling,
+                                     const SkMatrix* lm) const {
+    if (lm && !lm->invert(nullptr)) {
+        return nullptr;
+    }
+    return SkImageShader::Make(SkMakeImageFromRasterBitmap(*this, kIfMutable_SkCopyPixelsMode),
+                               tmx, tmy, sampling, lm);
 }

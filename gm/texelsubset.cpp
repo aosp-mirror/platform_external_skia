@@ -16,14 +16,15 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
-#include "include/private/SkTArray.h"
+#include "include/private/base/SkTArray.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrSamplerState.h"
-#include "src/gpu/SkGr.h"
-#include "src/gpu/effects/GrTextureEffect.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrProxyProvider.h"
+#include "src/gpu/ganesh/GrSamplerState.h"
+#include "src/gpu/ganesh/SkGr.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
+#include "src/gpu/ganesh/effects/GrTextureEffect.h"
 #include "tools/Resources.h"
 #include "tools/gpu/TestOps.h"
 
@@ -96,7 +97,8 @@ protected:
         if (mipmapped == GrMipmapped::kYes && !rContext->priv().caps()->mipmapSupport()) {
             return DrawResult::kSkip;
         }
-        auto view = std::get<0>(GrMakeCachedBitmapProxyView(rContext, fBitmap, mipmapped));
+        auto view = std::get<0>(GrMakeCachedBitmapProxyView(
+                rContext, fBitmap, /*label=*/"DrawResult_Draw_BitMap", mipmapped));
         if (!view) {
             *errorMsg = "Failed to create proxy.";
             return DrawResult::kFail;
@@ -129,7 +131,8 @@ protected:
         SkBitmap subsetBmp;
         fBitmap.extractSubset(&subsetBmp, texelSubset);
         subsetBmp.setImmutable();
-        auto subsetView = std::get<0>(GrMakeCachedBitmapProxyView(rContext, subsetBmp, mipmapped));
+        auto subsetView = std::get<0>(GrMakeCachedBitmapProxyView(
+                rContext, subsetBmp, /*label=*/"DrawResult_Draw_SubsetBitMap", mipmapped));
 
         SkRect localRect = SkRect::Make(fBitmap.bounds()).makeOutset(kDrawPad, kDrawPad);
 
@@ -137,7 +140,7 @@ protected:
 
         SkScalar y = kDrawPad + kTestPad;
         SkRect drawRect;
-        for (int tm = 0; tm < textureMatrices.count(); ++tm) {
+        for (int tm = 0; tm < textureMatrices.size(); ++tm) {
             for (int my = 0; my < GrSamplerState::kWrapModeCount; ++my) {
                 SkScalar x = kDrawPad + kTestPad;
                 auto wmy = static_cast<Wrap>(my);
@@ -203,7 +206,7 @@ protected:
                 }
                 y += localRect.height() + kTestPad;
             }
-            if (tm < textureMatrices.count() - 1) {
+            if (tm < textureMatrices.size() - 1) {
                 SkPaint paint;
                 paint.setColor(SK_ColorRED);
                 SkScalar midY = SkScalarFloorToScalar(drawRect.bottom() + kTestPad/2.f) + 0.5f;
