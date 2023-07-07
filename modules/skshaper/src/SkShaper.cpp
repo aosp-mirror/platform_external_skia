@@ -11,14 +11,14 @@
 #include "include/core/SkFontStyle.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
-#include "include/private/SkTFitsIn.h"
+#include "include/private/base/SkTFitsIn.h"
 #include "modules/skshaper/include/SkShaper.h"
 
 #ifdef SK_UNICODE_AVAILABLE
 #include "modules/skunicode/include/SkUnicode.h"
 #endif
+#include "src/base/SkUTF.h"
 #include "src/core/SkTextBlobPriv.h"
-#include "src/utils/SkUTF.h"
 
 #include <limits.h>
 #include <string.h>
@@ -69,7 +69,7 @@ SkShaper::MakeScriptRunIterator(const char* utf8, size_t utf8Bytes, SkFourByteTa
         return nullptr;
     }
     std::unique_ptr<SkShaper::ScriptRunIterator> script =
-        SkShaper::MakeSkUnicodeHbScriptRunIterator(unicode.get(), utf8, utf8Bytes);
+        SkShaper::MakeSkUnicodeHbScriptRunIterator(utf8, utf8Bytes, scriptTag);
     if (script) {
         return script;
     }

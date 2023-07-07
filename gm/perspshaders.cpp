@@ -71,9 +71,9 @@ protected:
         };
         constexpr SkScalar pos[] = { 0, 0.25f, 0.5f, 0.75f, SK_Scalar1 };
 
-        fLinearGrad1 = SkGradientShader::MakeLinear(pts1, colors, pos, SK_ARRAY_COUNT(colors),
+        fLinearGrad1 = SkGradientShader::MakeLinear(pts1, colors, pos, std::size(colors),
                                                     SkTileMode::kClamp);
-        fLinearGrad2 = SkGradientShader::MakeLinear(pts2, colors, pos, SK_ARRAY_COUNT(colors),
+        fLinearGrad2 = SkGradientShader::MakeLinear(pts2, colors, pos, std::size(colors),
                                                     SkTileMode::kClamp);
 
         fPerspMatrix.reset();
@@ -158,10 +158,12 @@ protected:
         canvas->translate(0, SkIntToScalar(kCellSize));
         this->drawRow(canvas, SkSamplingOptions(SkCubicResampler::Mitchell()));
         canvas->translate(0, SkIntToScalar(kCellSize));
+        this->drawRow(canvas, SkSamplingOptions::Aniso(16));
+        canvas->translate(0, SkIntToScalar(kCellSize));
     }
 private:
     inline static constexpr int kCellSize = 50;
-    inline static constexpr int kNumRows = 4;
+    inline static constexpr int kNumRows = 5;
     inline static constexpr int kNumCols = 6;
 
     bool            fDoAA;

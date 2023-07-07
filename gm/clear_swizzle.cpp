@@ -6,13 +6,15 @@
  */
 
 #include "gm/gm.h"
+
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/private/SkColorData.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/SurfaceFillContext.h"
 #include "src/gpu/Swizzle.h"
+#include "src/gpu/ganesh/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/SurfaceFillContext.h"
 
 namespace skiagm {
 
@@ -47,7 +49,8 @@ DEF_SIMPLE_GPU_GM_CAN_FAIL(clear_swizzle, rContext, canvas, errorMsg, 6*kSize, 2
                                         readSwizzle,
                                         writeSwizzle,
                                         kTopLeft_GrSurfaceOrigin,
-                                        SkBudgeted::kYes);
+                                        skgpu::Budgeted::kYes,
+                                        /*label=*/{});
     };
 
     struct {

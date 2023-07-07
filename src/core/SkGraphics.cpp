@@ -8,14 +8,16 @@
 #include "include/core/SkGraphics.h"
 
 #include "include/core/SkCanvas.h"
-#include "include/core/SkMath.h"
 #include "include/core/SkMatrix.h"
+#include "include/core/SkOpenTypeSVGDecoder.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkPathEffect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTime.h"
+#include "include/private/base/SkMath.h"
+#include "src/base/SkTSearch.h"
 #include "src/core/SkBlitter.h"
 #include "src/core/SkCpu.h"
 #include "src/core/SkGeometry.h"
@@ -24,7 +26,6 @@
 #include "src/core/SkResourceCache.h"
 #include "src/core/SkScalerContext.h"
 #include "src/core/SkStrikeCache.h"
-#include "src/core/SkTSearch.h"
 #include "src/core/SkTypefaceCache.h"
 
 #include <stdlib.h>
@@ -79,7 +80,7 @@ void SkGraphics::SetFlags(const char* flags) {
             paramEnd = nextSemi;
         }
         size_t paramLen = paramEnd - flags;
-        for (int i = 0; i < (int)SK_ARRAY_COUNT(gFlags); ++i) {
+        for (int i = 0; i < (int)std::size(gFlags); ++i) {
             if (paramLen != gFlags[i].fLen) {
                 continue;
             }
@@ -123,6 +124,19 @@ int SkGraphics::GetFontCacheCountUsed() {
 void SkGraphics::PurgeFontCache() {
     SkStrikeCache::GlobalStrikeCache()->purgeAll();
     SkTypefaceCache::PurgeAll();
+}
+
+static SkGraphics::OpenTypeSVGDecoderFactory gSVGDecoderFactory = nullptr;
+
+SkGraphics::OpenTypeSVGDecoderFactory
+SkGraphics::SetOpenTypeSVGDecoderFactory(OpenTypeSVGDecoderFactory svgDecoderFactory) {
+    OpenTypeSVGDecoderFactory old(gSVGDecoderFactory);
+    gSVGDecoderFactory = svgDecoderFactory;
+    return old;
+}
+
+SkGraphics::OpenTypeSVGDecoderFactory SkGraphics::GetOpenTypeSVGDecoderFactory() {
+    return gSVGDecoderFactory;
 }
 
 extern bool gSkVMAllowJIT;

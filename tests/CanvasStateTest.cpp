@@ -5,24 +5,34 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkClipOp.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkData.h"
+#include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkPixmap.h"
 #include "include/core/SkRRect.h"
 #include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkRegion.h"
 #include "include/core/SkScalar.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkTDArray.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkTDArray.h"
 #include "include/utils/SkCanvasStateUtils.h"
-#include "src/core/SkCanvasPriv.h"
-#include "src/core/SkTLazy.h"
+#include "src/base/SkTLazy.h"
 #include "tests/Test.h"
-#include "tools/flags/CommandLineFlags.h"
 
+#include <array>
+#include <cstdint>
 #include <cstring>
 
 class SkCanvasState;
@@ -140,7 +150,7 @@ DEF_TEST(CanvasState_test_complex_layers, reporter) {
         return;
     }
 
-    for (size_t i = 0; i < SK_ARRAY_COUNT(colorTypes); ++i) {
+    for (size_t i = 0; i < std::size(colorTypes); ++i) {
         sk_sp<SkImage> images[2];
         for (int j = 0; j < 2; ++j) {
             auto surf = SkSurface::MakeRaster(SkImageInfo::Make(WIDTH, HEIGHT,
@@ -150,7 +160,7 @@ DEF_TEST(CanvasState_test_complex_layers, reporter) {
 
             canvas->drawColor(SK_ColorRED);
 
-            for (size_t k = 0; k < SK_ARRAY_COUNT(layerAlpha); ++k) {
+            for (size_t k = 0; k < std::size(layerAlpha); ++k) {
                 SkTLazy<SkPaint> paint;
                 if (layerAlpha[k] != 0xFF) {
                     paint.init()->setAlpha(layerAlpha[k]);
@@ -246,7 +256,7 @@ DEF_TEST(CanvasState_test_complex_clips, reporter) {
 
         SkPaint paint;
         paint.setAlpha(128);
-        for (size_t j = 0; j < SK_ARRAY_COUNT(clipOps); ++j) {
+        for (size_t j = 0; j < std::size(clipOps); ++j) {
             SkRect layerBounds = SkRect::Make(layerRect);
             canvas->saveLayer(SkCanvas::SaveLayerRec(&layerBounds, &paint));
 
@@ -265,7 +275,7 @@ DEF_TEST(CanvasState_test_complex_clips, reporter) {
                 }
                 bool success = drawFn(state, clipRect.fLeft, clipRect.fTop,
                                       clipRect.fRight, clipRect.fBottom, clipOps[j],
-                                      rectCoords.count() / 4, rectCoords.begin());
+                                      rectCoords.size() / 4, rectCoords.begin());
                 REPORTER_ASSERT(reporter, success);
 
                 SkCanvasStateUtils::ReleaseCanvasState(state);
