@@ -58,7 +58,7 @@ static sk_sp<SkImage> make_texture(GrRecordingContext* ctx,
     if (!ctx) {
         return nullptr;
     }
-    auto surface(SkSurface::MakeRenderTarget(ctx, SkBudgeted::kNo, info));
+    auto surface(SkSurface::MakeRenderTarget(ctx, skgpu::Budgeted::kNo, info));
     if (!surface) {
         return nullptr;
     }
@@ -141,7 +141,7 @@ protected:
 
         const SkImageInfo info = SkImageInfo::MakeN32Premul(100, 100);
 
-        for (size_t i = 0; i < SK_ARRAY_COUNT(gProcs); ++i) {
+        for (size_t i = 0; i < std::size(gProcs); ++i) {
             sk_sp<SkImage> image(gProcs[i](canvas->recordingContext(), fPicture.get(), info));
             if (image) {
                 this->testImage(canvas, image.get());

@@ -7,7 +7,12 @@
 
 #include "src/sksl/SkSLPool.h"
 
-#include "include/private/SkSLDefines.h"
+#include "include/core/SkTypes.h"
+
+#if defined(SK_GANESH)
+// With GPU support, SkSL::MemoryPool is really GrMemoryPool
+#include "src/gpu/ganesh/GrMemoryPool.h"
+#endif
 
 #define VLOG(...) // printf(__VA_ARGS__)
 

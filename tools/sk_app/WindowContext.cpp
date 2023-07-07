@@ -8,9 +8,9 @@
 #include "tools/sk_app/WindowContext.h"
 
 #include "include/gpu/GrDirectContext.h"
-#ifdef SK_GRAPHITE_ENABLED
-#include "experimental/graphite/include/Context.h"
-#include "experimental/graphite/include/Recorder.h"
+#if defined(SK_GRAPHITE)
+#include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/Recorder.h"
 #endif
 
 namespace sk_app {

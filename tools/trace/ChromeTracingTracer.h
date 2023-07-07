@@ -10,8 +10,8 @@
 
 #include "include/core/SkString.h"
 #include "include/private/SkSpinlock.h"
-#include "include/private/SkTHash.h"
 #include "include/utils/SkEventTracer.h"
+#include "src/core/SkTHash.h"
 #include "tools/trace/EventTracingPriv.h"
 
 class SkJSONWriter;
@@ -45,6 +45,9 @@ public:
     const char* getCategoryGroupName(const uint8_t* categoryEnabledFlag) override {
         return fCategories.getCategoryGroupName(categoryEnabledFlag);
     }
+
+    // The Chrome tracer does not yet support splitting up trace output into sections.
+    void newTracingSection(const char* name) override {}
 
 private:
     void flush();

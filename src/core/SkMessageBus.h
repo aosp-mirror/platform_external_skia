@@ -12,11 +12,11 @@
 
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTypes.h"
-#include "include/private/SkMutex.h"
-#include "include/private/SkNoncopyable.h"
-#include "include/private/SkOnce.h"
-#include "include/private/SkTArray.h"
-#include "include/private/SkTDArray.h"
+#include "include/private/base/SkMutex.h"
+#include "include/private/base/SkNoncopyable.h"
+#include "include/private/base/SkOnce.h"
+#include "include/private/base/SkTArray.h"
+#include "include/private/base/SkTDArray.h"
 
 /**
  * The following method must have a specialization for type 'Message':
@@ -98,7 +98,7 @@ SkMessageBus<Message, IDType, AllowCopyableMessage>::Inbox::~Inbox() {
     auto* bus = SkMessageBus<Message, IDType, AllowCopyableMessage>::Get();
     SkAutoMutexExclusive lock(bus->fInboxesMutex);
     // This is a cheaper fInboxes.remove(fInboxes.find(this)) when order doesn't matter.
-    for (int i = 0; i < bus->fInboxes.count(); i++) {
+    for (int i = 0; i < bus->fInboxes.size(); i++) {
         if (this == bus->fInboxes[i]) {
             bus->fInboxes.removeShuffle(i);
             break;
@@ -115,7 +115,7 @@ void SkMessageBus<Message, IDType, AllowCopyableMessage>::Inbox::receive(Message
 template <typename Message, typename IDType, bool AllowCopyableMessage>
 void SkMessageBus<Message, IDType, AllowCopyableMessage>::Inbox::poll(SkTArray<Message>* messages) {
     SkASSERT(messages);
-    messages->reset();
+    messages->clear();
     SkAutoMutexExclusive lock(fMessagesMutex);
     fMessages.swap(*messages);
 }
@@ -129,7 +129,7 @@ template <typename Message, typename IDType, bool AllowCopyableMessage>
 /*static*/ void SkMessageBus<Message, IDType, AllowCopyableMessage>::Post(Message m) {
     auto* bus = SkMessageBus<Message, IDType, AllowCopyableMessage>::Get();
     SkAutoMutexExclusive lock(bus->fInboxesMutex);
-    for (int i = 0; i < bus->fInboxes.count(); i++) {
+    for (int i = 0; i < bus->fInboxes.size(); i++) {
         if (SkShouldPostMessageToBus(m, bus->fInboxes[i]->fUniqueID)) {
             if constexpr (AllowCopyableMessage) {
                 bus->fInboxes[i]->receive(m);
