@@ -201,7 +201,6 @@ cc_library_static {
         "src/codec/SkSampler.cpp",
         "src/codec/SkSwizzler.cpp",
         "src/codec/SkWbmpCodec.cpp",
-        "src/codec/SkXmp.cpp",
         "src/core/SkAAClip.cpp",
         "src/core/SkATrace.cpp",
         "src/core/SkAlphaRuns.cpp",
