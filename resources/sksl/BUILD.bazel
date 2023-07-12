@@ -885,6 +885,7 @@ skia_filegroup(
         "shared/InoutParameters.sksl",
         "shared/InoutParamsAreDistinct.sksl",
         "shared/InstanceID.vert",
+        "shared/InstanceIDInFunction.vert",
         "shared/IntegerDivisionES3.sksl",
         "shared/InterfaceBlockBuffer.sksl",
         "shared/InterfaceBlockMultipleAnonymous.sksl",
@@ -1000,6 +1001,7 @@ skia_filegroup(
         "shared/VectorScalarMath.sksl",
         "shared/VectorToMatrixCast.sksl",
         "shared/VertexID.vert",
+        "shared/VertexIDInFunction.vert",
         "shared/WhileLoopControlFlow.sksl",
     ],
 )
