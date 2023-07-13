@@ -274,6 +274,31 @@ std::string MetalCodeGenerator::getBitcastIntrinsic(const Type& outType) {
     return "as_type<" +  outType.displayName() + ">";
 }
 
+void MetalCodeGenerator::writeWithIndexSubstitution(const std::function<void()>& fn) {
+    auto oldIndexSubstitutionData = std::make_unique<IndexSubstitutionData>();
+    fIndexSubstitutionData.swap(oldIndexSubstitutionData);
+
+    // Invoke our helper function, with output going into our temporary stream.
+    {
+        AutoOutputStream outputToMainStream(this, &fIndexSubstitutionData->fMainStream);
+        fn();
+    }
+
+    if (fIndexSubstitutionData->fPrefixStream.bytesWritten() == 0) {
+        // Emit the main stream into the program as-is.
+        write_stringstream(fIndexSubstitutionData->fMainStream, *fOut);
+    } else {
+        // Emit the prefix stream and main stream into the program as a sequence-expression.
+        // (Each prefix-expression must end with a comma.)
+        this->write("(");
+        write_stringstream(fIndexSubstitutionData->fPrefixStream, *fOut);
+        write_stringstream(fIndexSubstitutionData->fMainStream, *fOut);
+        this->write(")");
+    }
+
+    fIndexSubstitutionData.swap(oldIndexSubstitutionData);
+}
+
 void MetalCodeGenerator::writeFunctionCall(const FunctionCall& c) {
     const FunctionDeclaration& function = c.function();
 
@@ -323,76 +348,75 @@ void MetalCodeGenerator::writeFunctionCall(const FunctionCall& c) {
         // is necessary for out-parameters, as well as allowing us to support things like swizzles
         // and array indices which Metal references cannot natively handle.
 
-        // Enable index-expression substitution.
-        auto oldIndexSubstitutionMap = std::make_unique<IndexSubstitutionMap>();
-        fIndexSubstitutionMap.swap(oldIndexSubstitutionMap);
+        // We will be emitting inout expressions twice, so it's important to enable index
+        // substitution in case we encounter any side-effecting indexes.
+        this->writeWithIndexSubstitution([&] {
+            this->write("((");
 
-        this->write("((");
-
-        // ((_skResult =
-        std::string scratchResultName;
-        if (!function.returnType().isVoid()) {
-            scratchResultName = this->getTempVariable(c.type());
-            this->write(scratchResultName);
-            this->write(" = ");
-        }
-
-        // ((_skResult = func(
-        this->write(function.mangledName());
-        this->write("(");
-
-        // ((_skResult = func((_skTemp = myOutParam.x), 123
-        const char* separator = "";
-        this->writeFunctionRequirementArgs(function, separator);
-
-        for (int i = 0; i < arguments.size(); ++i) {
-            this->write(separator);
-            separator = ", ";
-            if (parameters[i]->modifiers().fFlags & Modifiers::kOut_Flag) {
-                SkASSERT(!scratchVarName[i].empty());
-                if (parameters[i]->modifiers().fFlags & Modifiers::kIn_Flag) {
-                    // `inout` parameters initialize the scratch variable with the passed-in
-                    // argument's value.
-                    this->write("(");
-                    this->write(scratchVarName[i]);
-                    this->write(" = ");
-                    this->writeExpression(*arguments[i], Precedence::kAssignment);
-                    this->write(")");
-                } else {
-                    // `out` parameters pass a reference to the uninitialized scratch variable.
-                    this->write(scratchVarName[i]);
-                }
-            } else {
-                // Regular parameters are passed as-is.
-                this->writeExpression(*arguments[i], Precedence::kSequence);
-            }
-        }
-
-        // ((_skResult = func((_skTemp = myOutParam.x), 123))
-        this->write("))");
-
-        // ((_skResult = func((_skTemp = myOutParam.x), 123)), (myOutParam.x = _skTemp)
-        for (int i = 0; i < arguments.size(); ++i) {
-            if (!scratchVarName[i].empty()) {
-                this->write(", (");
-                this->writeExpression(*arguments[i], Precedence::kAssignment);
+            // ((_skResult =
+            std::string scratchResultName;
+            if (!function.returnType().isVoid()) {
+                scratchResultName = this->getTempVariable(c.type());
+                this->write(scratchResultName);
                 this->write(" = ");
-                this->write(scratchVarName[i]);
-                this->write(")");
             }
-        }
 
-        // ((_skResult = func((_skTemp = myOutParam.x), 123)), (myOutParam.x = _skTemp), _skResult
-        if (!scratchResultName.empty()) {
-            this->write(", ");
-            this->write(scratchResultName);
-        }
+            // ((_skResult = func(
+            this->write(function.mangledName());
+            this->write("(");
 
-        // ((_skResult = func((_skTemp = myOutParam.x), 123)), (myOutParam.x = _skTemp), _skResult)
-        this->write(")");
+            // ((_skResult = func((_skTemp = myOutParam.x), 123
+            const char* separator = "";
+            this->writeFunctionRequirementArgs(function, separator);
 
-        // We no longer need index-expression substitution (unless it was enabled previously!).
-        fIndexSubstitutionMap.swap(oldIndexSubstitutionMap);
+            for (int i = 0; i < arguments.size(); ++i) {
+                this->write(separator);
+                separator = ", ";
+                if (parameters[i]->modifiers().fFlags & Modifiers::kOut_Flag) {
+                    SkASSERT(!scratchVarName[i].empty());
+                    if (parameters[i]->modifiers().fFlags & Modifiers::kIn_Flag) {
+                        // `inout` parameters initialize the scratch variable with the passed-in
+                        // argument's value.
+                        this->write("(");
+                        this->write(scratchVarName[i]);
+                        this->write(" = ");
+                        this->writeExpression(*arguments[i], Precedence::kAssignment);
+                        this->write(")");
+                    } else {
+                        // `out` parameters pass a reference to the uninitialized scratch variable.
+                        this->write(scratchVarName[i]);
+                    }
+                } else {
+                    // Regular parameters are passed as-is.
+                    this->writeExpression(*arguments[i], Precedence::kSequence);
+                }
+            }
+
+            // ((_skResult = func((_skTemp = myOutParam.x), 123))
+            this->write("))");
+
+            // ((_skResult = func((_skTemp = myOutParam.x), 123)), (myOutParam.x = _skTemp)
+            for (int i = 0; i < arguments.size(); ++i) {
+                if (!scratchVarName[i].empty()) {
+                    this->write(", (");
+                    this->writeExpression(*arguments[i], Precedence::kAssignment);
+                    this->write(" = ");
+                    this->write(scratchVarName[i]);
+                    this->write(")");
+                }
+            }
+
+            // ((_skResult = func((_skTemp = myOutParam.x), 123)), (myOutParam.x = _skTemp),
+            //                                                     _skResult
+            if (!scratchResultName.empty()) {
+                this->write(", ");
+                this->write(scratchResultName);
+            }
+
+            // ((_skResult = func((_skTemp = myOutParam.x), 123)), (myOutParam.x = _skTemp),
+            //                                                     _skResult)
+            this->write(")");
+        });
     } else {
         // Emit the function call as-is, only prepending the required arguments.
         this->write(function.mangledName());
@@ -1489,21 +1513,29 @@ void MetalCodeGenerator::writeVariableReference(const VariableReference& ref) {
 }
 
 void MetalCodeGenerator::writeIndexInnerExpression(const Expression& expr) {
-    if (fIndexSubstitutionMap) {
+    if (fIndexSubstitutionData) {
         // If this expression already exists in the index-substitution map, use the substitute.
-        if (const std::string* existing = fIndexSubstitutionMap->find(&expr)) {
+        if (const std::string* existing = fIndexSubstitutionData->fMap.find(&expr)) {
             this->write(*existing);
             return;
         }
 
         // If this expression is non-trivial, we will need to create a scratch variable and store
-        // its value there. Fortunately, `array[_skTemp = func()]` is a valid expression.
-        if (!Analysis::IsTrivialExpression(expr)) {
+        // its value there.
+        if (fIndexSubstitutionData->fCreateSubstitutes && !Analysis::IsTrivialExpression(expr)) {
+            // Create a substitute variable and emit it into the main stream.
             std::string scratchVar = this->getTempVariable(expr.type());
+            this->write(scratchVar);
+
+            // Initialize the substitute variable in the prefix-stream.
+            AutoOutputStream outputToPrefixStream(this, &fIndexSubstitutionData->fPrefixStream);
             this->write(scratchVar);
             this->write(" = ");
             this->writeExpression(expr, Precedence::kAssignment);
-            fIndexSubstitutionMap->set(&expr, std::move(scratchVar));
+            this->write(", ");
+
+            // Remember the substitute variable in our map.
+            fIndexSubstitutionData->fMap.set(&expr, std::move(scratchVar));
             return;
         }
     }
@@ -1516,27 +1548,24 @@ void MetalCodeGenerator::writeIndexExpression(const IndexExpression& expr) {
     // Metal does not seem to handle assignment into `vec.zyx[i]` properly--it compiles, but the
     // results are wrong. We rewrite the expression as `vec[uint3(2,1,0)[i]]` instead. (Filed with
     // Apple as FB12055941.)
-    if (expr.base()->is<Swizzle>()) {
+    if (expr.base()->is<Swizzle>() && expr.base()->as<Swizzle>().components().size() > 1) {
         const Swizzle& swizzle = expr.base()->as<Swizzle>();
-        if (swizzle.components().size() > 1) {
-            this->writeExpression(*swizzle.base(), Precedence::kPostfix);
-            this->write("[uint" + std::to_string(swizzle.components().size()) + "(");
-            auto separator = SkSL::String::Separator();
-            for (int8_t component : swizzle.components()) {
-                this->write(separator());
-                this->write(std::to_string(component));
-            }
-            this->write(")[");
-            this->writeIndexInnerExpression(*expr.index());
-            this->write("]]");
-            return;
+        this->writeExpression(*swizzle.base(), Precedence::kPostfix);
+        this->write("[uint" + std::to_string(swizzle.components().size()) + "(");
+        auto separator = SkSL::String::Separator();
+        for (int8_t component : swizzle.components()) {
+            this->write(separator());
+            this->write(std::to_string(component));
         }
+        this->write(")[");
+        this->writeIndexInnerExpression(*expr.index());
+        this->write("]]");
+    } else {
+        this->writeExpression(*expr.base(), Precedence::kPostfix);
+        this->write("[");
+        this->writeIndexInnerExpression(*expr.index());
+        this->write("]");
     }
-
-    this->writeExpression(*expr.base(), Precedence::kPostfix);
-    this->write("[");
-    this->writeIndexInnerExpression(*expr.index());
-    this->write("]");
 }
 
 void MetalCodeGenerator::writeFieldAccess(const FieldAccess& f) {
@@ -1844,25 +1873,34 @@ void MetalCodeGenerator::writeBinaryExpression(const BinaryExpression& b,
         this->write("(");
     }
 
-    this->writeBinaryExpressionElement(left, op, right, precedence);
+    // Some expressions need to be rewritten from `lhs *= rhs` to `lhs = lhs * rhs`, e.g.:
+    //     float4 x = float4(1);
+    //     x.xy *= float2x2(...);
+    // will report the error "non-const reference cannot bind to vector element."
+    if (op.isCompoundAssignment() && left.kind() == Expression::Kind::kSwizzle) {
+        // We need to do the rewrite. This could be dangerous if the lhs contains an index
+        // expression with a side effect (such as `array[Func()]`), so we enable index-substitution
+        // here for the LHS; any index-expression with side effects will be evaluated into a scratch
+        // variable.
+        this->writeWithIndexSubstitution([&] {
+            this->writeExpression(left, precedence);
+            this->write(" = ");
+            this->writeExpression(left, Precedence::kAssignment);
+            this->write(operator_name(op.removeAssignment()));
 
-    if (op.kind() != Operator::Kind::EQ && op.isAssignment() &&
-        left.kind() == Expression::Kind::kSwizzle && !Analysis::HasSideEffects(left)) {
-        // This doesn't compile in Metal:
-        // float4 x = float4(1);
-        // x.xy *= float2x2(...);
-        // with the error message "non-const reference cannot bind to vector element",
-        // but switching it to x.xy = x.xy * float2x2(...) fixes it. We perform this tranformation
-        // as long as the LHS has no side effects, and hope for the best otherwise.
-        this->write(" = ");
-        this->writeExpression(left, Precedence::kAssignment);
-        this->write(operator_name(op.removeAssignment()));
-        precedence = op.removeAssignment().getBinaryPrecedence();
+            // We never want to create index-expression substitutes on the RHS of the expression;
+            // the RHS is only emitted one time.
+            fIndexSubstitutionData->fCreateSubstitutes = false;
+
+            this->writeBinaryExpressionElement(right, op, left,
+                                               op.removeAssignment().getBinaryPrecedence());
+        });
     } else {
+        // We don't need any rewrite; emit the binary expression as-is.
+        this->writeBinaryExpressionElement(left, op, right, precedence);
         this->write(operator_name(op));
+        this->writeBinaryExpressionElement(right, op, left, precedence);
     }
-
-    this->writeBinaryExpressionElement(right, op, left, precedence);
 
     if (needParens) {
         this->write(")");
