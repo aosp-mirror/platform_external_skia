@@ -316,6 +316,14 @@ protected:
     virtual void drawImageRect(const SkImage*, const SkRect* src, const SkRect& dst,
                                const SkSamplingOptions&, const SkPaint&,
                                SkCanvas::SrcRectConstraint) = 0;
+    virtual bool drawAsTiledImageRect(SkCanvas*,
+                                      const SkImage*,
+                                      const SkRect* src,
+                                      const SkRect& dst,
+                                      const SkSamplingOptions&,
+                                      const SkPaint&,
+                                      SkCanvas::SrcRectConstraint) { return false; }
+
     virtual void drawImageLattice(const SkImage*, const SkCanvas::Lattice&,
                                   const SkRect& dst, SkFilterMode, const SkPaint&);
 
@@ -483,7 +491,6 @@ private:
     friend class SkDrawBase;
     friend class SkSurface_Raster;
     friend class DeviceTestingAccess;
-    friend class skgpu::TiledTextureUtils; // for drawEdgeAAImage
 
     void simplifyGlyphRunRSXFormAndRedraw(SkCanvas*,
                                           const sktext::GlyphRunList&,

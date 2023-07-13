@@ -144,11 +144,24 @@ void draw_tiled_bitmap_ganesh(skgpu::ganesh::Device* device,
                                constraint);
 }
 
+size_t get_cache_size(SkBaseDevice* device) {
+    if (auto dContext = GrAsDirectContext(device->recordingContext())) {
+        // NOTE: if the context is not a direct context, it doesn't have access to the resource
+        // cache, and theoretically, the resource cache's limits could be being changed on
+        // another thread, so even having access to just the limit wouldn't be a reliable
+        // test during recording here.
+        return dContext->getResourceCacheLimit();
+    }
+
+    return 0;
+}
+
 } // anonymous namespace
 
 namespace skgpu {
 
-void TiledTextureUtils::DrawImageRect_Ganesh(skgpu::ganesh::Device* device,
+bool TiledTextureUtils::DrawImageRect_Ganesh(SkCanvas*,
+                                             skgpu::ganesh::Device* device,
                                              const SkImage* image,
                                              const SkRect& srcRect,
                                              const SkRect& dstRect,
@@ -156,32 +169,32 @@ void TiledTextureUtils::DrawImageRect_Ganesh(skgpu::ganesh::Device* device,
                                              const SkSamplingOptions& origSampling,
                                              const SkPaint& paint,
                                              SkCanvas::SrcRectConstraint constraint) {
-    SkRect src;
-    SkRect dst;
-    SkMatrix srcToDst;
-    ImageDrawMode mode = OptimizeSampleArea(SkISize::Make(image->width(), image->height()),
-                                            srcRect, dstRect, /* dstClip= */ nullptr,
-                                            &src, &dst, &srcToDst);
-    if (mode == ImageDrawMode::kSkip) {
-        return;
-    }
-
-    SkASSERT(mode != ImageDrawMode::kDecal); // only happens if there is a 'dstClip'
-
-    if (src.contains(image->bounds())) {
-        constraint = SkCanvas::kFast_SrcRectConstraint;
-    }
-
-    const SkMatrix& localToDevice = device->localToDevice();
-
-    SkSamplingOptions sampling = origSampling;
-    if (sampling.mipmap != SkMipmapMode::kNone && CanDisableMipmap(localToDevice, srcToDst)) {
-        sampling = SkSamplingOptions(sampling.filter);
-    }
-    const GrClip* clip = device->clip();
-    SkIRect clipRect = clip ? clip->getConservativeBounds() : device->bounds();
-
     if (!image->isTextureBacked()) {
+        SkRect src;
+        SkRect dst;
+        SkMatrix srcToDst;
+        ImageDrawMode mode = OptimizeSampleArea(SkISize::Make(image->width(), image->height()),
+                                                srcRect, dstRect, /* dstClip= */ nullptr,
+                                                &src, &dst, &srcToDst);
+        if (mode == ImageDrawMode::kSkip) {
+            return true;
+        }
+
+        SkASSERT(mode != ImageDrawMode::kDecal); // only happens if there is a 'dstClip'
+
+        if (src.contains(image->bounds())) {
+            constraint = SkCanvas::kFast_SrcRectConstraint;
+        }
+
+        const SkMatrix& localToDevice = device->localToDevice();
+
+        SkSamplingOptions sampling = origSampling;
+        if (sampling.mipmap != SkMipmapMode::kNone && CanDisableMipmap(localToDevice, srcToDst)) {
+            sampling = SkSamplingOptions(sampling.filter);
+        }
+        const GrClip* clip = device->clip();
+        SkIRect clipRect = clip ? clip->getConservativeBounds() : device->bounds();
+
         int tileFilterPad;
         if (sampling.useCubic) {
             tileFilterPad = kBicubicFilterTexelPad;
@@ -199,14 +212,8 @@ void TiledTextureUtils::DrawImageRect_Ganesh(skgpu::ganesh::Device* device,
             maxTileSize = gOverrideMaxTextureSize - 2 * tileFilterPad;
         }
 #endif
-        size_t cacheSize = 0;
-        if (auto dContext = rContext->asDirectContext(); dContext) {
-            // NOTE: if the context is not a direct context, it doesn't have access to the resource
-            // cache, and theoretically, the resource cache's limits could be being changed on
-            // another thread, so even having access to just the limit wouldn't be a reliable
-            // test during recording here.
-            cacheSize = dContext->getResourceCacheLimit();
-        }
+        size_t cacheSize = get_cache_size(device);
+
         int tileSize;
         SkIRect clippedSubset;
         if (ShouldTileImage(clipRect,
@@ -231,22 +238,12 @@ void TiledTextureUtils::DrawImageRect_Ganesh(skgpu::ganesh::Device* device,
                                          aaFlags,
                                          constraint,
                                          sampling);
-                return;
+                return true;
             }
         }
     }
 
-    device->drawEdgeAAImage(image,
-                            src,
-                            dst,
-                            /* dstClip= */ nullptr,
-                            aaFlags,
-                            localToDevice,
-                            sampling,
-                            paint,
-                            constraint,
-                            srcToDst,
-                            SkTileMode::kClamp);
+    return false;
 }
 
 } // namespace skgpu
