@@ -63,23 +63,15 @@ public:
     static void ClampedOutsetWithOffset(SkIRect* iRect, int outset, SkPoint* offset,
                                         const SkIRect& clamp);
 
-    static bool DrawImageRect_Ganesh(SkCanvas*,
-                                     skgpu::ganesh::Device*,
+    static bool DrawAsTiledImageRect(SkCanvas*,
                                      const SkImage*,
                                      const SkRect& srcRect,
                                      const SkRect& dstRect,
                                      SkCanvas::QuadAAFlags,
                                      const SkSamplingOptions&,
-                                     const SkPaint&,
+                                     const SkPaint*,
                                      SkCanvas::SrcRectConstraint);
 
-    static bool DrawImageRect_Graphite(SkCanvas*,
-                                       const SkImage*,
-                                       const SkRect& src,
-                                       const SkRect& dst,
-                                       const SkSamplingOptions&,
-                                       const SkPaint*,
-                                       SkCanvas::SrcRectConstraint);
 };
 
 } // namespace skgpu
