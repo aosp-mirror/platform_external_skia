@@ -26,7 +26,7 @@ def git_repos_from_deps(ws = "@"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "7a6604d0564b56cce77b72ae759b3773a756423c",
+        commit = "eb355bb3edcf7f667597bae78f1be93c70e6297a",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -150,14 +150,14 @@ def git_repos_from_deps(ws = "@"):
     new_git_repository(
         name = "vulkanmemoryallocator",
         build_file = ws + "//bazel/external/vulkanmemoryallocator:BUILD.bazel",
-        commit = "7de5cc00de50e71a3aab22dea52fbb7ff4efceb6",
+        commit = "a6bfc237255a6bac1513f7c1ebde6d8aed6b5191",
         remote = "https://chromium.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator",
     )
 
     new_git_repository(
         name = "spirv_cross",
         build_file = ws + "//bazel/external/spirv_cross:BUILD.bazel",
-        commit = "b8e742c91ba47eb3238c939ee11ec9ba2ba247bf",
+        commit = "b43c1a1e63ca7ac967c3b0e71ba29dbe08aa3dc0",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross",
     )
 
@@ -169,7 +169,7 @@ def git_repos_from_deps(ws = "@"):
 
     git_repository(
         name = "spirv_tools",
-        commit = "9ab811a12525ed741eb42d7b22e2153f79cad6a9",
+        commit = "29431859f575633790365a0ac841b27440274f42",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git",
     )
 
