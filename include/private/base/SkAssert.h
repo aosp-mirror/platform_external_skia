@@ -94,7 +94,7 @@
     #define SkDEBUGFAILF(fmt, ...)
 
     // unlike SkASSERT, this macro executes its condition in the non-debug build.
-    // The if is present so that this can be used with functions marked SK_WARN_UNUSED_RESULT.
+    // The if is present so that this can be used with functions marked [[nodiscard]].
     #define SkAssertResult(cond)         if (cond) {} do {} while(false)
 #endif
 
@@ -113,6 +113,10 @@
 
 [[noreturn]] SK_API inline void sk_print_index_out_of_bounds(size_t i, size_t size) {
     SK_ABORT("Index (%zu) out of bounds for size %zu.\n", i, size);
+}
+
+[[noreturn]] SK_API inline void sk_print_length_too_big(size_t i, size_t size) {
+    SK_ABORT("Length (%zu) is too big for size %zu.\n", i, size);
 }
 
 #endif

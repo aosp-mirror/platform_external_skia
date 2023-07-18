@@ -545,9 +545,9 @@ public:
     // Sets this Mapping to the default decomposition of the canvas's total transform, given the
     // requirements of the 'filter'. Returns false if the decomposition failed or would produce an
     // invalid device matrix. Assumes 'ctm' is invertible.
-    bool SK_WARN_UNUSED_RESULT decomposeCTM(const SkMatrix& ctm,
-                                            const SkImageFilter* filter,
-                                            const skif::ParameterSpace<SkPoint>& representativePt);
+    [[nodiscard]] bool decomposeCTM(const SkMatrix& ctm,
+                                    const SkImageFilter* filter,
+                                    const skif::ParameterSpace<SkPoint>& representativePt);
 
     // Update the mapping's parameter-to-layer matrix to be pre-concatenated with the specified
     // local space transformation. This changes the definition of parameter space, any
@@ -1011,25 +1011,12 @@ public:
         return Context(info, fGaneshContext, fMakeSurfaceDelegate, fMakeImageDelegate);
     }
 
-#if defined(SK_USE_LEGACY_COMPOSE_IMAGEFILTER)
-   Context withNewSource(sk_sp<SkSpecialImage> source, LayerSpace<SkIPoint> origin) const {
-        // TODO: Some legacy image filter implementations assume that the source FilterResult's
-        // origin/transform is at (0,0). To accommodate that, we push the typical origin transform
-        // into the param-to-layer matrix and adjust the desired output.
-        ContextInfo info = fInfo;
-        info.fMapping.applyOrigin(origin);
-        info.fDesiredOutput.offset(-origin);
-        info.fSource = FilterResult(std::move(source));
-        return Context(info, fGaneshContext, fMakeSurfaceDelegate, fMakeImageDelegate);
-    }
-#else
     // Create a new context that matches this context, but with an overridden source.
     Context withNewSource(const FilterResult& source) const {
         ContextInfo info = fInfo;
         info.fSource = source;
         return Context(info, fGaneshContext, fMakeSurfaceDelegate, fMakeImageDelegate);
     }
-#endif
 
 private:
     using MakeSurfaceDelegate = std::function<sk_sp<SkSpecialSurface>(const SkImageInfo& info,
