@@ -1478,6 +1478,7 @@ skia_component("skia") {
   if (skia_enable_sksl) {
     deps += [ ":minify_sksl" ]
     sources += skia_sksl_sources
+    sources += skia_needs_sksl_sources
     sources += skia_colorfilters_sksl_sources
 
     if (skia_enable_sksl_tracing) {
@@ -2011,7 +2012,7 @@ if (skia_enable_tools) {
       sources += [ "tools/graphite/GraphiteTestContext.h" ]
       sources += [ "tools/graphite/GraphiteTestContext.cpp" ]
       if (skia_use_dawn) {
-        sources += [ "tools/graphite/dawn/DawnTestContext.cpp" ]
+        sources += [ "tools/graphite/dawn/GraphiteDawnTestContext.cpp" ]
         sources += [ "tools/graphite/dawn/GraphiteDawnTestContext.h" ]
       }
       if (skia_use_metal) {
@@ -2019,8 +2020,8 @@ if (skia_enable_tools) {
         sources += [ "tools/graphite/mtl/GraphiteMtlTestContext.mm" ]
       }
       if (skia_use_vulkan) {
-        sources += [ "tools/graphite/vk/VulkanTestContext.cpp" ]
-        sources += [ "tools/graphite/vk/VulkanTestContext.h" ]
+        sources += [ "tools/graphite/vk/GraphiteVulkanTestContext.cpp" ]
+        sources += [ "tools/graphite/vk/GraphiteVulkanTestContext.h" ]
       }
     }
 
