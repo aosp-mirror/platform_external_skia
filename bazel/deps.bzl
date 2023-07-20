@@ -26,7 +26,7 @@ def git_repos_from_deps(ws = "@"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "937670a0ed00021d0e31dd5f0b58facc7d40c232",
+        commit = "beaf20f90f1bf21d235c99d5b49b8bb507b722b2",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -53,14 +53,14 @@ def git_repos_from_deps(ws = "@"):
     new_git_repository(
         name = "freetype",
         build_file = ws + "//bazel/external/freetype:BUILD.bazel",
-        commit = "e4586d960f339cf75e2e0b34aee30a0ed8353c0d",
+        commit = "5769f13a6b9fafa3840726f06dde07e755501a16",
         remote = "https://chromium.googlesource.com/chromium/src/third_party/freetype2.git",
     )
 
     new_git_repository(
         name = "harfbuzz",
         build_file = ws + "//bazel/external/harfbuzz:BUILD.bazel",
-        commit = "49c52fa95316042390bc07bc9fe9438b63cd3320",
+        commit = "f94508edd60e26a015586c37c29104d6bdc26462",
         remote = "https://chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz.git",
     )
 
@@ -88,7 +88,7 @@ def git_repos_from_deps(ws = "@"):
         name = "libavif",
         build_file = ws + "//bazel/external/libavif:BUILD.bazel",
         commit = "f49462dc93784bf34148715eee36ab6697ca0b35",
-        remote = "https://github.com/AOMediaCodec/libavif.git",
+        remote = "https://skia.googlesource.com/external/github.com/AOMediaCodec/libavif.git",
     )
 
     new_git_repository(
@@ -169,7 +169,7 @@ def git_repos_from_deps(ws = "@"):
 
     git_repository(
         name = "spirv_tools",
-        commit = "61221e7d6271abcd34f173276521a2d55515191c",
+        commit = "6c7e1acc5f9921b9a609dce62f30620bd6855764",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git",
     )
 
@@ -190,14 +190,14 @@ def git_repos_from_deps(ws = "@"):
     new_git_repository(
         name = "vulkan_tools",
         build_file = ws + "//bazel/external/vulkan_tools:BUILD.bazel",
-        commit = "6e7fa4d975f44f1050e554180636dca3fd51fb44",
+        commit = "9ded295c5b35ed21dab93b0227b1a9f49714758b",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools",
     )
 
     new_git_repository(
         name = "wuffs",
         build_file = ws + "//bazel/external/wuffs:BUILD.bazel",
-        commit = "a0041ac0310b3156b963e2f2bea09245f25ec073",
+        commit = "e3f919ccfe3ef542cfc983a82146070258fb57f8",
         remote = "https://skia.googlesource.com/external/github.com/google/wuffs-mirror-release-c.git",
     )
 
