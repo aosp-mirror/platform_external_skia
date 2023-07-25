@@ -819,9 +819,9 @@ void SkRuntimeEffectPriv::AddChildrenToKey(SkSpan<const SkRuntimeEffect::ChildPt
         if (type == ChildType::kShader) {
             as_SB(child.shader())->addToKey(keyContext, builder, gatherer);
         } else if (type == ChildType::kColorFilter) {
-            as_CFB(child.colorFilter())->addToKey(keyContext, builder, gatherer);
+            AddToKey(keyContext, builder, gatherer, child.colorFilter());
         } else if (type == ChildType::kBlender) {
-            as_BB(child.blender())->addToKey(keyContext, builder, gatherer);
+            AddToKey(keyContext, builder, gatherer, child.blender());
         } else {
             // We don't have a child effect. Substitute in a no-op effect.
             switch (childInfo[index].type) {
