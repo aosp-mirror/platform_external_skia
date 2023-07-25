@@ -187,15 +187,19 @@ TextureInfo VulkanCaps::getDefaultSampledTextureInfo(SkColorType ct,
 
 TextureInfo VulkanCaps::getDefaultMSAATextureInfo(const TextureInfo& singleSampledInfo,
                                                   Discardable discardable) const {
+    if (fDefaultMSAASamples <= 1) {
+        return {};
+    }
+
     const VkFormat singleSpecFormat = singleSampledInfo.vulkanTextureSpec().fFormat;
     const FormatInfo& formatInfo = this->getFormatInfo(singleSpecFormat);
     if ((singleSampledInfo.isProtected() == Protected::kYes && !this->protectedSupport()) ||
-        !formatInfo.isRenderable(VK_IMAGE_TILING_OPTIMAL, this->defaultMSAASamples())) {
+        !formatInfo.isRenderable(VK_IMAGE_TILING_OPTIMAL, fDefaultMSAASamples)) {
         return {};
     }
 
     VulkanTextureInfo info;
-    info.fSampleCount = this->defaultMSAASamples();
+    info.fSampleCount = fDefaultMSAASamples;
     info.fMipmapped = Mipmapped::kNo;
     info.fFlags = (singleSampledInfo.isProtected() == Protected::kYes) ?
         VK_IMAGE_CREATE_PROTECTED_BIT : 0;
@@ -270,11 +274,6 @@ TextureInfo VulkanCaps::getDefaultStorageTextureInfo(SkColorType colorType) cons
 
 uint32_t VulkanCaps::channelMask(const TextureInfo& textureInfo) const {
     return skgpu::VkFormatChannels(textureInfo.vulkanTextureSpec().fFormat);
-}
-
-size_t VulkanCaps::bytesPerPixel(const TextureInfo& info) const {
-    const VkFormat format = info.vulkanTextureSpec().fFormat;
-    return VkFormatBytesPerBlock(format);
 }
 
 void VulkanCaps::initFormatTable(const skgpu::VulkanInterface* interface,
@@ -1222,4 +1221,3 @@ uint64_t VulkanCaps::getRenderPassDescKey(const RenderPassDesc& renderPassDesc) 
 }
 
 } // namespace skgpu::graphite
-

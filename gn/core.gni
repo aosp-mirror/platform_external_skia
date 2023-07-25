@@ -142,7 +142,6 @@ skia_core_public = [
 #  //src/text:text_hdrs
 #  //src/text:text_srcs
 skia_core_sources = [
-  "$_include/private/SkBitmaskEnum.h",
   "$_include/private/SkColorData.h",
   "$_include/private/SkEncodedInfo.h",
   "$_include/private/SkGainmapInfo.h",
@@ -197,6 +196,7 @@ skia_core_sources = [
   "$_src/base/SkAutoMalloc.h",
   "$_src/base/SkBezierCurves.cpp",
   "$_src/base/SkBezierCurves.h",
+  "$_src/base/SkBitmaskEnum.h",
   "$_src/base/SkBlockAllocator.cpp",
   "$_src/base/SkBlockAllocator.h",
   "$_src/base/SkBuffer.cpp",
@@ -206,6 +206,7 @@ skia_core_sources = [
   "$_src/base/SkCubics.h",
   "$_src/base/SkDeque.cpp",
   "$_src/base/SkEndian.h",
+  "$_src/base/SkEnumBitMask.h",
   "$_src/base/SkFloatingPoint.cpp",
   "$_src/base/SkHalf.cpp",
   "$_src/base/SkHalf.h",
@@ -348,7 +349,6 @@ skia_core_sources = [
   "$_src/core/SkEdgeClipper.cpp",
   "$_src/core/SkEdgeClipper.h",
   "$_src/core/SkEffectPriv.h",
-  "$_src/core/SkEnumBitMask.h",
   "$_src/core/SkEnumerate.h",
   "$_src/core/SkExecutor.cpp",
   "$_src/core/SkFDot6.h",
