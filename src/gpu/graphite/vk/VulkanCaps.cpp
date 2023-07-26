@@ -54,7 +54,9 @@ void VulkanCaps::init(const skgpu::VulkanInterface* vkInterface,
     fRequiredTransferBufferAlignment = 4;
 
     fResourceBindingReqs.fUniformBufferLayout = Layout::kStd140;
-    fResourceBindingReqs.fStorageBufferLayout = Layout::kStd430;
+    // TODO(skia:14639): We cannot use std430 layout for SSBOs until SkSL gracefully handles
+    // implicit array stride.
+    fResourceBindingReqs.fStorageBufferLayout = Layout::kStd140;
     fResourceBindingReqs.fSeparateTextureAndSamplerBinding = false;
     fResourceBindingReqs.fDistinctIndexRanges = false;
 
@@ -98,6 +100,11 @@ void VulkanCaps::init(const skgpu::VulkanInterface* vkInterface,
     } else {
         fMaxVertexAttributes = physDevProperties.limits.maxVertexInputAttributes;
     }
+    // TODO: Add support for using regular uniform buffers or push constants to store intrinsic
+    // constant information. For now, require inline uniform support.
+    fSupportsInlineUniformBlocks =
+            extensions->hasExtension(VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME, 1);
+    SkASSERT(fSupportsInlineUniformBlocks);
 
     this->finishInitialization(contextOptions);
 }
