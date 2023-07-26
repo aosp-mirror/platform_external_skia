@@ -72,6 +72,7 @@ SkScalerContext::GlyphMetrics RandomScalerContext::generateMetrics(const SkGlyph
     mx.advance.fY = glyph.fAdvanceY;
     mx.bounds = SkIRect::MakeXYWH(glyph.left(), glyph.top(), glyph.width(), glyph.height());
     mx.maskFormat = glyph.maskFormat();
+    mx.extraBits = glyph.fScalerContextBits;
 
     if (fFakeIt || (glyph.getGlyphID() % 4) != 2) {
         mx.neverRequestPath = glyph.setPathHasBeenCalled() && !glyph.path();
@@ -95,6 +96,7 @@ SkScalerContext::GlyphMetrics RandomScalerContext::generateMetrics(const SkGlyph
     mx.maskFormat = SkMask::kARGB32_Format;
     mx.advance.fX = proxyGlyph->fAdvanceX;
     mx.advance.fY = proxyGlyph->fAdvanceY;
+    mx.extraBits = proxyGlyph->fScalerContextBits;
 
     SkRect         storage;
     const SkPaint& paint = this->getRandomTypeface()->paint();
