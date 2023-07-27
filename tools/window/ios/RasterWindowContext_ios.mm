@@ -8,6 +8,8 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorFilter.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrRecordingContext.h"
 #include "include/gpu/gl/GrGLInterface.h"
 #include "tools/ToolUtils.h"
 #include "tools/window/GLWindowContext.h"
@@ -164,7 +166,9 @@ void RasterWindowContext_ios::onSwapBuffers() {
         sk_sp<SkSurface> gpuSurface = GLWindowContext::getBackbufferSurface();
         SkCanvas* gpuCanvas = gpuSurface->getCanvas();
         gpuCanvas->drawImage(snapshot, 0, 0);
-        gpuCanvas->flush();
+        auto dContext = GrAsDirectContext(gpuCanvas->recordingContext());
+        dContext->flushAndSubmit();
+
         glBindRenderbuffer(GL_RENDERBUFFER, fRenderbuffer);
         [fGLContext presentRenderbuffer:GL_RENDERBUFFER];
     }
