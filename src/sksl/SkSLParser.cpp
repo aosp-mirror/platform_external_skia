@@ -10,6 +10,7 @@
 #include "include/core/SkSpan.h"
 #include "include/private/base/SkTArray.h"
 #include "include/sksl/SkSLVersion.h"
+#include "src/base/SkEnumBitMask.h"
 #include "src/base/SkNoDestructor.h"
 #include "src/core/SkTHash.h"
 #include "src/sksl/SkSLCompiler.h"
@@ -70,28 +71,28 @@ namespace SkSL {
 
 static constexpr int kMaxParseDepth = 50;
 
-static int parse_modifier_token(Token::Kind token) {
+static ModifierFlags parse_modifier_token(Token::Kind token) {
     switch (token) {
-        case Token::Kind::TK_UNIFORM:        return Modifiers::kUniform_Flag;
-        case Token::Kind::TK_CONST:          return Modifiers::kConst_Flag;
-        case Token::Kind::TK_IN:             return Modifiers::kIn_Flag;
-        case Token::Kind::TK_OUT:            return Modifiers::kOut_Flag;
-        case Token::Kind::TK_INOUT:          return Modifiers::kIn_Flag | Modifiers::kOut_Flag;
-        case Token::Kind::TK_FLAT:           return Modifiers::kFlat_Flag;
-        case Token::Kind::TK_NOPERSPECTIVE:  return Modifiers::kNoPerspective_Flag;
-        case Token::Kind::TK_PURE:           return Modifiers::kPure_Flag;
-        case Token::Kind::TK_INLINE:         return Modifiers::kInline_Flag;
-        case Token::Kind::TK_NOINLINE:       return Modifiers::kNoInline_Flag;
-        case Token::Kind::TK_HIGHP:          return Modifiers::kHighp_Flag;
-        case Token::Kind::TK_MEDIUMP:        return Modifiers::kMediump_Flag;
-        case Token::Kind::TK_LOWP:           return Modifiers::kLowp_Flag;
-        case Token::Kind::TK_EXPORT:         return Modifiers::kExport_Flag;
-        case Token::Kind::TK_ES3:            return Modifiers::kES3_Flag;
-        case Token::Kind::TK_WORKGROUP:      return Modifiers::kWorkgroup_Flag;
-        case Token::Kind::TK_READONLY:       return Modifiers::kReadOnly_Flag;
-        case Token::Kind::TK_WRITEONLY:      return Modifiers::kWriteOnly_Flag;
-        case Token::Kind::TK_BUFFER:         return Modifiers::kBuffer_Flag;
-        default:                             return 0;
+        case Token::Kind::TK_UNIFORM:        return ModifierFlag::kUniform;
+        case Token::Kind::TK_CONST:          return ModifierFlag::kConst;
+        case Token::Kind::TK_IN:             return ModifierFlag::kIn;
+        case Token::Kind::TK_OUT:            return ModifierFlag::kOut;
+        case Token::Kind::TK_INOUT:          return ModifierFlag::kIn | ModifierFlag::kOut;
+        case Token::Kind::TK_FLAT:           return ModifierFlag::kFlat;
+        case Token::Kind::TK_NOPERSPECTIVE:  return ModifierFlag::kNoPerspective;
+        case Token::Kind::TK_PURE:           return ModifierFlag::kPure;
+        case Token::Kind::TK_INLINE:         return ModifierFlag::kInline;
+        case Token::Kind::TK_NOINLINE:       return ModifierFlag::kNoInline;
+        case Token::Kind::TK_HIGHP:          return ModifierFlag::kHighp;
+        case Token::Kind::TK_MEDIUMP:        return ModifierFlag::kMediump;
+        case Token::Kind::TK_LOWP:           return ModifierFlag::kLowp;
+        case Token::Kind::TK_EXPORT:         return ModifierFlag::kExport;
+        case Token::Kind::TK_ES3:            return ModifierFlag::kES3;
+        case Token::Kind::TK_WORKGROUP:      return ModifierFlag::kWorkgroup;
+        case Token::Kind::TK_READONLY:       return ModifierFlag::kReadOnly;
+        case Token::Kind::TK_WRITEONLY:      return ModifierFlag::kWriteOnly;
+        case Token::Kind::TK_BUFFER:         return ModifierFlag::kBuffer;
+        default:                             return ModifierFlag::kNone;
     }
 }
 
@@ -1044,25 +1045,25 @@ std::string_view Parser::layoutIdentifier() {
 
 /* LAYOUT LPAREN IDENTIFIER (EQ INT_LITERAL)? (COMMA IDENTIFIER (EQ INT_LITERAL)?)* RPAREN */
 SkSL::Layout Parser::layout() {
-    using LayoutMap = THashMap<std::string_view, SkSL::Layout::Flag>;
+    using LayoutMap = THashMap<std::string_view, SkSL::LayoutFlag>;
     static SkNoDestructor<LayoutMap> sLayoutTokens(LayoutMap{
-            {"location",                    SkSL::Layout::kLocation_Flag},
-            {"offset",                      SkSL::Layout::kOffset_Flag},
-            {"binding",                     SkSL::Layout::kBinding_Flag},
-            {"texture",                     SkSL::Layout::kTexture_Flag},
-            {"sampler",                     SkSL::Layout::kSampler_Flag},
-            {"index",                       SkSL::Layout::kIndex_Flag},
-            {"set",                         SkSL::Layout::kSet_Flag},
-            {"builtin",                     SkSL::Layout::kBuiltin_Flag},
-            {"input_attachment_index",      SkSL::Layout::kInputAttachmentIndex_Flag},
-            {"origin_upper_left",           SkSL::Layout::kOriginUpperLeft_Flag},
-            {"blend_support_all_equations", SkSL::Layout::kBlendSupportAllEquations_Flag},
-            {"push_constant",               SkSL::Layout::kPushConstant_Flag},
-            {"color",                       SkSL::Layout::kColor_Flag},
-            {"spirv",                       SkSL::Layout::kSPIRV_Flag},
-            {"metal",                       SkSL::Layout::kMetal_Flag},
-            {"gl",                          SkSL::Layout::kGL_Flag},
-            {"wgsl",                        SkSL::Layout::kWGSL_Flag},
+            {"location",                    SkSL::LayoutFlag::kLocation},
+            {"offset",                      SkSL::LayoutFlag::kOffset},
+            {"binding",                     SkSL::LayoutFlag::kBinding},
+            {"texture",                     SkSL::LayoutFlag::kTexture},
+            {"sampler",                     SkSL::LayoutFlag::kSampler},
+            {"index",                       SkSL::LayoutFlag::kIndex},
+            {"set",                         SkSL::LayoutFlag::kSet},
+            {"builtin",                     SkSL::LayoutFlag::kBuiltin},
+            {"input_attachment_index",      SkSL::LayoutFlag::kInputAttachmentIndex},
+            {"origin_upper_left",           SkSL::LayoutFlag::kOriginUpperLeft},
+            {"blend_support_all_equations", SkSL::LayoutFlag::kBlendSupportAllEquations},
+            {"push_constant",               SkSL::LayoutFlag::kPushConstant},
+            {"color",                       SkSL::LayoutFlag::kColor},
+            {"spirv",                       SkSL::LayoutFlag::kSPIRV},
+            {"metal",                       SkSL::LayoutFlag::kMetal},
+            {"gl",                          SkSL::LayoutFlag::kGL},
+            {"wgsl",                        SkSL::LayoutFlag::kWGSL},
     });
 
     Layout result;
@@ -1072,7 +1073,7 @@ SkSL::Layout Parser::layout() {
         for (;;) {
             Token t = this->nextToken();
             std::string_view text = this->text(t);
-            SkSL::Layout::Flag* found = sLayoutTokens->find(text);
+            SkSL::LayoutFlag* found = sLayoutTokens->find(text);
 
             if (!found) {
                 this->error(t, "'" + std::string(text) + "' is not a valid layout qualifier");
@@ -1085,31 +1086,31 @@ SkSL::Layout Parser::layout() {
                 result.fFlags |= *found;
 
                 switch (*found) {
-                    case SkSL::Layout::kLocation_Flag:
+                    case SkSL::LayoutFlag::kLocation:
                         result.fLocation = this->layoutInt();
                         break;
-                    case SkSL::Layout::kOffset_Flag:
+                    case SkSL::LayoutFlag::kOffset:
                         result.fOffset = this->layoutInt();
                         break;
-                    case SkSL::Layout::kBinding_Flag:
+                    case SkSL::LayoutFlag::kBinding:
                         result.fBinding = this->layoutInt();
                         break;
-                    case SkSL::Layout::kIndex_Flag:
+                    case SkSL::LayoutFlag::kIndex:
                         result.fIndex = this->layoutInt();
                         break;
-                    case SkSL::Layout::kSet_Flag:
+                    case SkSL::LayoutFlag::kSet:
                         result.fSet = this->layoutInt();
                         break;
-                    case SkSL::Layout::kTexture_Flag:
+                    case SkSL::LayoutFlag::kTexture:
                         result.fTexture = this->layoutInt();
                         break;
-                    case SkSL::Layout::kSampler_Flag:
+                    case SkSL::LayoutFlag::kSampler:
                         result.fSampler = this->layoutInt();
                         break;
-                    case SkSL::Layout::kBuiltin_Flag:
+                    case SkSL::LayoutFlag::kBuiltin:
                         result.fBuiltin = this->layoutInt();
                         break;
-                    case SkSL::Layout::kInputAttachmentIndex_Flag:
+                    case SkSL::LayoutFlag::kInputAttachmentIndex:
                         result.fInputAttachmentIndex = this->layoutInt();
                         break;
                     default:
@@ -1137,14 +1138,14 @@ DSLModifiers Parser::modifiers() {
     if (!is_whitespace(raw.fKind)) {
         this->pushback(raw);
     }
-    int flags = 0;
+    ModifierFlags flags = ModifierFlag::kNone;
     for (;;) {
-        int tokenFlag = parse_modifier_token(peek().fKind);
-        if (!tokenFlag) {
+        ModifierFlags tokenFlag = parse_modifier_token(peek().fKind);
+        if (tokenFlag == ModifierFlag::kNone) {
             break;
         }
         Token modifier = this->nextToken();
-        if (int duplicateFlags = (tokenFlag & flags)) {
+        if (ModifierFlags duplicateFlags = (tokenFlag & flags)) {
             this->error(modifier, "'" + Modifiers::DescribeFlags(duplicateFlags) +
                                   "' appears more than once");
         }
