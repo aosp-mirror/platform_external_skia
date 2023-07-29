@@ -8,17 +8,84 @@
 #include "src/sksl/ir/SkSLModifiers.h"
 
 #include "include/core/SkTypes.h"
-#include "src/base/SkMathPriv.h"
 #include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/SkSLPosition.h"
 
 namespace SkSL {
 
-bool Modifiers::checkPermitted(const Context& context,
-                               Position pos,
-                               ModifierFlags permittedModifierFlags,
-                               LayoutFlags permittedLayoutFlags) const {
+std::string ModifierFlags::description() const {
+    // SkSL extensions
+    std::string result;
+    if (*this & ModifierFlag::kExport) {
+        result += "$export ";
+    }
+    if (*this & ModifierFlag::kES3) {
+        result += "$es3 ";
+    }
+    if (*this & ModifierFlag::kPure) {
+        result += "$pure ";
+    }
+    if (*this & ModifierFlag::kInline) {
+        result += "inline ";
+    }
+    if (*this & ModifierFlag::kNoInline) {
+        result += "noinline ";
+    }
+
+    // Real GLSL qualifiers (must be specified in order in GLSL 4.1 and below)
+    if (*this & ModifierFlag::kFlat) {
+        result += "flat ";
+    }
+    if (*this & ModifierFlag::kNoPerspective) {
+        result += "noperspective ";
+    }
+    if (*this & ModifierFlag::kConst) {
+        result += "const ";
+    }
+    if (*this & ModifierFlag::kUniform) {
+        result += "uniform ";
+    }
+    if ((*this & ModifierFlag::kIn) && (*this & ModifierFlag::kOut)) {
+        result += "inout ";
+    } else if (*this & ModifierFlag::kIn) {
+        result += "in ";
+    } else if (*this & ModifierFlag::kOut) {
+        result += "out ";
+    }
+    if (*this & ModifierFlag::kHighp) {
+        result += "highp ";
+    }
+    if (*this & ModifierFlag::kMediump) {
+        result += "mediump ";
+    }
+    if (*this & ModifierFlag::kLowp) {
+        result += "lowp ";
+    }
+    if (*this & ModifierFlag::kReadOnly) {
+        result += "readonly ";
+    }
+    if (*this & ModifierFlag::kWriteOnly) {
+        result += "writeonly ";
+    }
+    if (*this & ModifierFlag::kBuffer) {
+        result += "buffer ";
+    }
+
+    // We're using a non-GLSL name for this one; the GLSL equivalent is "shared"
+    if (*this & ModifierFlag::kWorkgroup) {
+        result += "workgroup ";
+    }
+
+    if (!result.empty()) {
+        result.pop_back();
+    }
+    return result;
+}
+
+bool ModifierFlags::checkPermittedFlags(const Context& context,
+                                        Position pos,
+                                        ModifierFlags permittedModifierFlags) const {
     static constexpr struct { ModifierFlag flag; const char* name; } kModifierFlags[] = {
         { ModifierFlag::kConst,          "const" },
         { ModifierFlag::kIn,             "in" },
@@ -41,7 +108,7 @@ bool Modifiers::checkPermitted(const Context& context,
     };
 
     bool success = true;
-    ModifierFlags modifierFlags = fFlags;
+    ModifierFlags modifierFlags = *this;
     for (const auto& f : kModifierFlags) {
         if (modifierFlags & f.flag) {
             if (!(permittedModifierFlags & f.flag)) {
@@ -53,62 +120,6 @@ bool Modifiers::checkPermitted(const Context& context,
     }
     SkASSERT(modifierFlags == ModifierFlag::kNone);
 
-    LayoutFlags backendFlags = fLayout.fFlags & LayoutFlag::kAllBackends;
-    if (SkPopCount(backendFlags.value()) > 1) {
-        context.fErrors->error(pos, "only one backend qualifier can be used");
-        success = false;
-    }
-
-    static constexpr struct { LayoutFlag flag; const char* name; } kLayoutFlags[] = {
-        { LayoutFlag::kOriginUpperLeft,          "origin_upper_left"},
-        { LayoutFlag::kPushConstant,             "push_constant"},
-        { LayoutFlag::kBlendSupportAllEquations, "blend_support_all_equations"},
-        { LayoutFlag::kColor,                    "color"},
-        { LayoutFlag::kLocation,                 "location"},
-        { LayoutFlag::kOffset,                   "offset"},
-        { LayoutFlag::kBinding,                  "binding"},
-        { LayoutFlag::kTexture,                  "texture"},
-        { LayoutFlag::kSampler,                  "sampler"},
-        { LayoutFlag::kIndex,                    "index"},
-        { LayoutFlag::kSet,                      "set"},
-        { LayoutFlag::kBuiltin,                  "builtin"},
-        { LayoutFlag::kInputAttachmentIndex,     "input_attachment_index"},
-        { LayoutFlag::kSPIRV,                    "spirv"},
-        { LayoutFlag::kMetal,                    "metal"},
-        { LayoutFlag::kGL,                       "gl"},
-        { LayoutFlag::kWGSL,                     "wgsl"},
-    };
-
-    LayoutFlags layoutFlags = fLayout.fFlags;
-    if ((layoutFlags & (LayoutFlag::kTexture | LayoutFlag::kSampler)) &&
-        layoutFlags & LayoutFlag::kBinding) {
-        context.fErrors->error(pos, "'binding' modifier cannot coexist with 'texture'/'sampler'");
-        success = false;
-    }
-    // The `texture` and `sampler` flags are only allowed when explicitly targeting Metal and WGSL
-    if (!(layoutFlags & (LayoutFlag::kMetal | LayoutFlag::kWGSL))) {
-        permittedLayoutFlags &= ~LayoutFlag::kTexture;
-        permittedLayoutFlags &= ~LayoutFlag::kSampler;
-    }
-    // The `set` flag is not allowed when explicitly targeting Metal and GLSL. It is currently
-    // allowed when no backend flag is present.
-    // TODO(skia:14023): Further restrict the `set` flag to SPIR-V and WGSL
-    if (layoutFlags & (LayoutFlag::kMetal | LayoutFlag::kGL)) {
-        permittedLayoutFlags &= ~LayoutFlag::kSet;
-    }
-    // TODO(skia:14023): Restrict the `push_constant` flag to SPIR-V and WGSL
-
-    for (const auto& lf : kLayoutFlags) {
-        if (layoutFlags & lf.flag) {
-            if (!(permittedLayoutFlags & lf.flag)) {
-                context.fErrors->error(pos, "layout qualifier '" + std::string(lf.name) +
-                                            "' is not permitted here");
-                success = false;
-            }
-            layoutFlags &= ~lf.flag;
-        }
-    }
-    SkASSERT(layoutFlags == 0);
     return success;
 }
 
