@@ -946,7 +946,8 @@ DSLType Parser::structDeclaration() {
             }
 
             fields.push_back(SkSL::Field(this->rangeFrom(fieldStart),
-                                         modifiers.fModifiers,
+                                         modifiers.fModifiers.fLayout,
+                                         modifiers.fModifiers.fFlags,
                                          this->text(memberName),
                                          &actualType.skslType()));
         } while (this->checkNext(Token::Kind::TK_COMMA));
@@ -1146,8 +1147,7 @@ DSLModifiers Parser::modifiers() {
         }
         Token modifier = this->nextToken();
         if (ModifierFlags duplicateFlags = (tokenFlag & flags)) {
-            this->error(modifier, "'" + Modifiers::DescribeFlags(duplicateFlags) +
-                                  "' appears more than once");
+            this->error(modifier, "'" + duplicateFlags.description() + "' appears more than once");
         }
         flags |= tokenFlag;
         end = this->position(modifier).endOffset();
@@ -1288,7 +1288,8 @@ bool Parser::interfaceBlock(const dsl::DSLModifiers& modifiers) {
             }
 
             fields.push_back(SkSL::Field(this->rangeFrom(fieldPos),
-                                         fieldModifiers.fModifiers,
+                                         fieldModifiers.fModifiers.fLayout,
+                                         fieldModifiers.fModifiers.fFlags,
                                          this->text(fieldName),
                                          &actualType.skslType()));
         } while (this->checkNext(Token::Kind::TK_COMMA));
