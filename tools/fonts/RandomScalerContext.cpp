@@ -27,7 +27,7 @@ public:
 
 protected:
     GlyphMetrics generateMetrics(const SkGlyph&, SkArenaAlloc*) override;
-    void     generateImage(const SkGlyph&) override;
+    void     generateImage(const SkGlyph&, void*) override;
     bool     generatePath(const SkGlyph&, SkPath*) override;
     sk_sp<SkDrawable> generateDrawable(const SkGlyph&) override;
     void     generateFontMetrics(SkFontMetrics*) override;
@@ -68,11 +68,10 @@ SkScalerContext::GlyphMetrics RandomScalerContext::generateMetrics(const SkGlyph
     auto glyph = fProxy->internalMakeGlyph(origGlyph.getPackedID(), format, alloc);
 
     GlyphMetrics mx(SkMask::kA8_Format);
-    mx.advance.fX = glyph.fAdvanceX;
-    mx.advance.fY = glyph.fAdvanceY;
-    mx.bounds = SkIRect::MakeXYWH(glyph.left(), glyph.top(), glyph.width(), glyph.height());
+    mx.advance = glyph.advanceVector();
+    mx.bounds = glyph.iRect();
     mx.maskFormat = glyph.maskFormat();
-    mx.extraBits = glyph.fScalerContextBits;
+    mx.extraBits = glyph.extraBits();
 
     if (fFakeIt || (glyph.getGlyphID() % 4) != 2) {
         mx.neverRequestPath = glyph.setPathHasBeenCalled() && !glyph.path();
@@ -94,9 +93,8 @@ SkScalerContext::GlyphMetrics RandomScalerContext::generateMetrics(const SkGlyph
 
     mx.neverRequestPath = true;
     mx.maskFormat = SkMask::kARGB32_Format;
-    mx.advance.fX = proxyGlyph->fAdvanceX;
-    mx.advance.fY = proxyGlyph->fAdvanceY;
-    mx.extraBits = proxyGlyph->fScalerContextBits;
+    mx.advance = proxyGlyph->advanceVector();
+    mx.extraBits = proxyGlyph->extraBits();
 
     SkRect         storage;
     const SkPaint& paint = this->getRandomTypeface()->paint();
@@ -107,9 +105,9 @@ SkScalerContext::GlyphMetrics RandomScalerContext::generateMetrics(const SkGlyph
     return mx;
 }
 
-void RandomScalerContext::generateImage(const SkGlyph& glyph) {
+void RandomScalerContext::generateImage(const SkGlyph& glyph, void* imageBuffer) {
     if (fFakeIt) {
-        sk_bzero(glyph.fImage, glyph.imageSize());
+        sk_bzero(imageBuffer, glyph.imageSize());
         return;
     }
 
@@ -122,13 +120,12 @@ void RandomScalerContext::generateImage(const SkGlyph& glyph) {
     const bool hairline = proxyGlyph->pathIsHairline();
 
     SkBitmap bm;
-    bm.installPixels(SkImageInfo::MakeN32Premul(glyph.fWidth, glyph.fHeight),
-                     glyph.fImage,
-                     glyph.rowBytes());
+    bm.installPixels(SkImageInfo::MakeN32Premul(glyph.width(), glyph.height()),
+                     imageBuffer, glyph.rowBytes());
     bm.eraseColor(0);
 
     SkCanvas canvas(bm);
-    canvas.translate(-SkIntToScalar(glyph.fLeft), -SkIntToScalar(glyph.fTop));
+    canvas.translate(-SkIntToScalar(glyph.left()), -SkIntToScalar(glyph.top()));
     SkPaint paint = this->getRandomTypeface()->paint();
     if (hairline) {
         // We have a device path with effects already applied which is normally a fill path.
