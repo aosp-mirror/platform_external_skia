@@ -1840,6 +1840,7 @@ cc_library_static {
           "src/ports/SkDebug_stdio.cpp",
           "src/ports/SkOSFile_posix.cpp",
           "src/ports/SkOSLibrary_posix.cpp",
+          "src/text/EmptyMailboxImpl.cpp",
           "src/text/EmptySlugImpl.cpp",
         ],
         local_include_dirs: [
@@ -1856,6 +1857,7 @@ cc_library_static {
           "src/ports/SkImageGeneratorCG.cpp",
           "src/ports/SkOSFile_posix.cpp",
           "src/ports/SkOSLibrary_posix.cpp",
+          "src/text/EmptyMailboxImpl.cpp",
           "src/text/EmptySlugImpl.cpp",
         ],
         local_include_dirs: [
@@ -1875,6 +1877,7 @@ cc_library_static {
           "src/ports/SkImageGeneratorWIC.cpp",
           "src/ports/SkOSFile_win.cpp",
           "src/ports/SkOSLibrary_win.cpp",
+          "src/text/EmptyMailboxImpl.cpp",
           "src/text/EmptySlugImpl.cpp",
         ],
         local_include_dirs: [
