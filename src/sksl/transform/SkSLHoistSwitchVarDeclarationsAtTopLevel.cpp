@@ -14,7 +14,7 @@
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLIRHelpers.h"
 #include "src/sksl/ir/SkSLIRNode.h"
-#include "src/sksl/ir/SkSLModifiers.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
 #include "src/sksl/ir/SkSLNop.h"
 #include "src/sksl/ir/SkSLStatement.h"
 #include "src/sksl/ir/SkSLSwitchStatement.h"
@@ -93,7 +93,7 @@ std::unique_ptr<Statement> Transform::HoistSwitchVarDeclarationsAtTopLevel(
     for (std::unique_ptr<Statement>* innerDeclaration : visitor.fVarDeclarations) {
         VarDeclaration& decl = (*innerDeclaration)->as<VarDeclaration>();
         std::unique_ptr<Statement> replacementStmt;
-        bool isConst = decl.var()->modifiers().isConst();
+        bool isConst = decl.var()->modifierFlags().isConst();
         if (decl.value() && !isConst) {
             // The inner variable-declaration has an initial-value; we must replace the declaration
             // with an assignment to the variable. This also has the helpful effect of stripping off

@@ -24,7 +24,6 @@
 #include "src/sksl/SkSLConstantFolder.h"
 #include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLIntrinsicList.h"
-#include "src/sksl/SkSLModifiersPool.h"
 #include "src/sksl/SkSLOperator.h"
 #include "src/sksl/SkSLPosition.h"
 #include "src/sksl/analysis/SkSLProgramUsage.h"
@@ -51,7 +50,7 @@
 #include "src/sksl/ir/SkSLIndexExpression.h"
 #include "src/sksl/ir/SkSLLayout.h"
 #include "src/sksl/ir/SkSLLiteral.h"
-#include "src/sksl/ir/SkSLModifiers.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLProgram.h"
@@ -186,7 +185,6 @@ public:
             , fProgramSlots(debugTrace ? &debugTrace->fSlotInfo : nullptr)
             , fUniformSlots(debugTrace ? &debugTrace->fUniformInfo : nullptr)
             , fImmutableSlots(nullptr) {
-        fContext.fModifiersPool = &fModifiersPool;
         fContext.fConfig = fProgram.fConfig.get();
         fContext.fModule = fProgram.fContext->fModule;
     }
@@ -454,23 +452,22 @@ public:
     }
 
     static bool IsUniform(const Variable& var) {
-       return var.modifiers().isUniform();
+       return var.modifierFlags().isUniform();
     }
 
     static bool IsOutParameter(const Variable& var) {
-        return (var.modifiers().fFlags & (ModifierFlag::kIn | ModifierFlag::kOut)) ==
+        return (var.modifierFlags() & (ModifierFlag::kIn | ModifierFlag::kOut)) ==
                ModifierFlag::kOut;
     }
 
     static bool IsInoutParameter(const Variable& var) {
-        return (var.modifiers().fFlags & (ModifierFlag::kIn | ModifierFlag::kOut)) ==
+        return (var.modifierFlags() & (ModifierFlag::kIn | ModifierFlag::kOut)) ==
                (ModifierFlag::kIn | ModifierFlag::kOut);
     }
 
 private:
     const SkSL::Program& fProgram;
     SkSL::Context fContext;
-    SkSL::ModifiersPool fModifiersPool;
     Builder fBuilder;
     DebugTracePriv* fDebugTrace = nullptr;
     bool fWriteTraceOps = false;
@@ -1548,7 +1545,7 @@ bool Generator::writeGlobals() {
             SkASSERT(!var->type().isOpaque());
 
             // Builtin variables are system-defined, with special semantics.
-            if (int builtin = var->modifiers().fLayout.fBuiltin; builtin >= 0) {
+            if (int builtin = var->layout().fBuiltin; builtin >= 0) {
                 if (builtin == SK_FRAGCOORD_BUILTIN) {
                     fBuilder.store_device_xy01(this->getVariableSlots(*var));
                     continue;
@@ -3941,33 +3938,29 @@ bool Generator::writeProgram(const FunctionDefinition& function) {
     }
 
     // Assign slots to the parameters of main; copy src and dst into those slots as appropriate.
+    const SkSL::Variable* mainCoordsParam = function.declaration().getMainCoordsParameter();
+    const SkSL::Variable* mainInputColorParam = function.declaration().getMainInputColorParameter();
+    const SkSL::Variable* mainDestColorParam = function.declaration().getMainDestColorParameter();
+
     for (const SkSL::Variable* param : function.declaration().parameters()) {
-        switch (param->modifiers().fLayout.fBuiltin) {
-            case SK_MAIN_COORDS_BUILTIN: {
-                // Coordinates are passed via RG.
-                SlotRange fragCoord = this->getVariableSlots(*param);
-                SkASSERT(fragCoord.count == 2);
-                fBuilder.store_src_rg(fragCoord);
-                break;
-            }
-            case SK_INPUT_COLOR_BUILTIN: {
-                // Input colors are passed via RGBA.
-                SlotRange srcColor = this->getVariableSlots(*param);
-                SkASSERT(srcColor.count == 4);
-                fBuilder.store_src(srcColor);
-                break;
-            }
-            case SK_DEST_COLOR_BUILTIN: {
-                // Dest colors are passed via dRGBA.
-                SlotRange destColor = this->getVariableSlots(*param);
-                SkASSERT(destColor.count == 4);
-                fBuilder.store_dst(destColor);
-                break;
-            }
-            default: {
-                SkDEBUGFAIL("Invalid parameter to main()");
-                return unsupported();
-            }
+        if (param == mainCoordsParam) {
+            // Coordinates are passed via RG.
+            SlotRange fragCoord = this->getVariableSlots(*param);
+            SkASSERT(fragCoord.count == 2);
+            fBuilder.store_src_rg(fragCoord);
+        } else if (param == mainInputColorParam) {
+            // Input colors are passed via RGBA.
+            SlotRange srcColor = this->getVariableSlots(*param);
+            SkASSERT(srcColor.count == 4);
+            fBuilder.store_src(srcColor);
+        } else if (param == mainDestColorParam) {
+            // Dest colors are passed via dRGBA.
+            SlotRange destColor = this->getVariableSlots(*param);
+            SkASSERT(destColor.count == 4);
+            fBuilder.store_dst(destColor);
+        } else {
+            SkDEBUGFAIL("Invalid parameter to main()");
+            return unsupported();
         }
     }
 

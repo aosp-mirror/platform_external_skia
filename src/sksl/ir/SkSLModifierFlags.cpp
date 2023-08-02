@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "src/sksl/ir/SkSLModifiers.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
 
 #include "include/core/SkTypes.h"
 #include "src/sksl/SkSLContext.h"
@@ -14,7 +14,7 @@
 
 namespace SkSL {
 
-std::string ModifierFlags::description() const {
+std::string ModifierFlags::paddedDescription() const {
     // SkSL extensions
     std::string result;
     if (*this & ModifierFlag::kExport) {
@@ -77,10 +77,15 @@ std::string ModifierFlags::description() const {
         result += "workgroup ";
     }
 
-    if (!result.empty()) {
-        result.pop_back();
-    }
     return result;
+}
+
+std::string ModifierFlags::description() const {
+    std::string s = this->paddedDescription();
+    if (!s.empty()) {
+        s.pop_back();
+    }
+    return s;
 }
 
 bool ModifierFlags::checkPermittedFlags(const Context& context,

@@ -32,7 +32,7 @@
 #include "src/sksl/ir/SkSLFieldAccess.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
-#include "src/sksl/ir/SkSLModifiers.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
 #include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLProgramElement.h"
 #include "src/sksl/ir/SkSLReturnStatement.h"
@@ -88,7 +88,7 @@ gather_uniforms_and_check_for_main(const SkSL::Program& program,
             const SkSL::GlobalVarDeclaration& global = elem->as<SkSL::GlobalVarDeclaration>();
             const SkSL::VarDeclaration& varDecl = global.declaration()->as<SkSL::VarDeclaration>();
             const SkSL::Variable& var = *varDecl.var();
-            if (var.modifiers().isUniform()) {
+            if (var.modifierFlags().isUniform()) {
                 auto iter = find_uniform(*uniforms, var.name());
                 const auto& context = *program.fContext;
                 if (iter == uniforms->end()) {

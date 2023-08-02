@@ -21,7 +21,7 @@
 #include "src/sksl/ir/SkSLConstructorSplat.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLLiteral.h"
-#include "src/sksl/ir/SkSLModifiers.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLType.h"
 #include "src/sksl/ir/SkSLVariable.h"
@@ -445,7 +445,7 @@ const Expression* ConstantFolder::GetConstantValueOrNull(const Expression& inExp
             return nullptr;
         }
         const Variable& var = *varRef.variable();
-        if (!var.modifiers().isConst()) {
+        if (!var.modifierFlags().isConst()) {
             return nullptr;
         }
         expr = var.initialValue();

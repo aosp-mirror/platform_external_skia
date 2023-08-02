@@ -13,7 +13,7 @@
 #include "src/core/SkTHash.h"
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/codegen/SkSLCodeGenerator.h"
-#include "src/sksl/ir/SkSLModifiers.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
 
 #include <cstdint>
 #include <functional>
@@ -290,9 +290,9 @@ protected:
     // instances, not the types themselves)
     void writeComputeMainInputs();
 
-    int getUniformBinding(const Modifiers& m);
+    int getUniformBinding(const Layout& layout);
 
-    int getUniformSet(const Modifiers& m);
+    int getUniformSet(const Layout& layout);
 
     void writeWithIndexSubstitution(const std::function<void()>& fn);
 

@@ -12,7 +12,7 @@
 #include "src/sksl/ir/SkSLFunctionCall.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLIRNode.h"
-#include "src/sksl/ir/SkSLModifiers.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
 #include "src/sksl/ir/SkSLVariable.h"
 #include "src/sksl/ir/SkSLVariableReference.h"
 
@@ -46,7 +46,8 @@ bool Analysis::IsDynamicallyUniformExpression(const Expression& expr) {
                 case Expression::Kind::kVariableReference: {
                     // Verify that variable references are const or uniform.
                     const Variable* var = expr.as<VariableReference>().variable();
-                    if (var && (var->modifiers().isConst() || var->modifiers().isUniform())) {
+                    if (var && (var->modifierFlags().isConst() ||
+                                var->modifierFlags().isUniform())) {
                         break;
                     }
                     fIsDynamicallyUniform = false;

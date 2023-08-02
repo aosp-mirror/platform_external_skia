@@ -50,7 +50,7 @@
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
 #include "src/sksl/ir/SkSLLayout.h"
 #include "src/sksl/ir/SkSLLiteral.h"
-#include "src/sksl/ir/SkSLModifiers.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
 #include "src/sksl/ir/SkSLProgram.h"
@@ -254,7 +254,7 @@ std::string_view wgsl_builtin_type(WGSLCodeGenerator::Builtin builtin) {
 // reference. Returns the WGSL type of the conversion target if conversion is needed, otherwise
 // returns std::nullopt.
 std::optional<std::string_view> needs_builtin_type_conversion(const Variable& v) {
-    switch (v.modifiers().fLayout.fBuiltin) {
+    switch (v.layout().fBuiltin) {
         case SK_VERTEXID_BUILTIN:
         case SK_INSTANCEID_BUILTIN:
             return {"i32"};
@@ -341,12 +341,12 @@ private:
     bool visitExpression(const Expression& e) override {
         if (e.is<VariableReference>()) {
             const VariableReference& v = e.as<VariableReference>();
-            const Modifiers& modifiers = v.variable()->modifiers();
             if (v.variable()->storage() == Variable::Storage::kGlobal) {
-                if (modifiers.fFlags & ModifierFlag::kIn) {
+                ModifierFlags flags = v.variable()->modifierFlags();
+                if (flags & ModifierFlag::kIn) {
                     fDeps |= WGSLFunctionDependency::kPipelineInputs;
                 }
-                if (modifiers.fFlags & ModifierFlag::kOut) {
+                if (flags & ModifierFlag::kOut) {
                     fDeps |= WGSLFunctionDependency::kPipelineOutputs;
                 }
             }
@@ -400,14 +400,7 @@ WGSLCodeGenerator::ProgramRequirements resolve_program_requirements(const Progra
         }
 
         const FunctionDeclaration& decl = e->as<FunctionDefinition>().declaration();
-        if (decl.isMain()) {
-            for (const Variable* v : decl.parameters()) {
-                if (v->modifiers().fLayout.fBuiltin == SK_MAIN_COORDS_BUILTIN) {
-                    mainNeedsCoordsArgument = true;
-                    break;
-                }
-            }
-        }
+        mainNeedsCoordsArgument |= (decl.getMainCoordsParameter() != nullptr);
 
         FunctionDependencyResolver resolver(program, &decl, &dependencies);
         dependencies.set(&decl, resolver.resolve());
@@ -421,12 +414,12 @@ int count_pipeline_inputs(const Program* program) {
     for (const ProgramElement* e : program->elements()) {
         if (e->is<GlobalVarDeclaration>()) {
             const Variable* v = e->as<GlobalVarDeclaration>().varDeclaration().var();
-            if (v->modifiers().fFlags & ModifierFlag::kIn) {
+            if (v->modifierFlags() & ModifierFlag::kIn) {
                 inputCount++;
             }
         } else if (e->is<InterfaceBlock>()) {
             const Variable* v = e->as<InterfaceBlock>().var();
-            if (v->modifiers().fFlags & ModifierFlag::kIn) {
+            if (v->modifierFlags() & ModifierFlag::kIn) {
                 inputCount++;
             }
         }
@@ -436,7 +429,7 @@ int count_pipeline_inputs(const Program* program) {
 
 bool is_in_global_uniforms(const Variable& var) {
     SkASSERT(var.storage() == VariableStorage::kGlobal);
-    return  var.modifiers().isUniform() &&
+    return  var.modifierFlags().isUniform() &&
            !var.type().isOpaque() &&
            !var.interfaceBlock();
 }
@@ -739,7 +732,7 @@ void WGSLCodeGenerator::writeFunction(const FunctionDefinition& f) {
             // Variables which are never written-to don't need dedicated storage and can use `let`.
             // Out-parameters are passed as pointers; the pointer itself is never modified, so it
             // doesn't need a dedicated variable and can use `let`.
-            this->write(((param.modifiers().fFlags & ModifierFlag::kOut) || counts.fWrite == 0)
+            this->write(((param.modifierFlags() & ModifierFlag::kOut) || counts.fWrite == 0)
                                 ? "let "
                                 : "var ");
             this->write(this->assembleName(param.mangledName()));
@@ -787,7 +780,7 @@ void WGSLCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& decl
         this->write(": ");
 
         // Declare an "out" function parameter as a pointer.
-        if (param.modifiers().fFlags & ModifierFlag::kOut) {
+        if (param.modifierFlags() & ModifierFlag::kOut) {
             this->write(to_ptr_type(param.type()));
         } else {
             this->write(to_wgsl_type(param.type()));
@@ -874,20 +867,16 @@ void WGSLCodeGenerator::writeEntryPoint(const FunctionDefinition& main) {
         }
     }
     // TODO(armansito): Handle arbitrary parameters.
-    if (main.declaration().parameters().size() != 0) {
-        const Variable* v = main.declaration().parameters()[0];
+    if (const Variable* v = main.declaration().getMainCoordsParameter()) {
         const Type& type = v->type();
-        if (v->modifiers().fLayout.fBuiltin == SK_MAIN_COORDS_BUILTIN) {
-            if (!type.matches(*fContext.fTypes.fFloat2)) {
-                fContext.fErrors->error(
-                        main.fPosition,
-                        "main function has unsupported parameter: " + type.description());
-                return;
-            }
-
-            this->write(separator());
-            this->write("_stageIn.sk_FragCoord.xy");
+        if (!type.matches(*fContext.fTypes.fFloat2)) {
+            fContext.fErrors->error(main.fPosition, "main function has unsupported parameter: "
+                                                    + type.description());
+            return;
         }
+
+        this->write(separator());
+        this->write("_stageIn.sk_FragCoord.xy");
     }
     this->writeLine(");");
     this->writeLine("return _stageOut;");
@@ -1362,7 +1351,7 @@ void WGSLCodeGenerator::writeVarDeclaration(const VarDeclaration& varDecl) {
             varDecl.value() ? this->assembleExpression(*varDecl.value(), Precedence::kAssignment)
                             : std::string();
 
-    if (varDecl.var()->modifiers().isConst()) {
+    if (varDecl.var()->modifierFlags().isConst()) {
         // Use `const` at global scope, or if the value is a compile-time constant.
         SkASSERTF(varDecl.value(), "a constant variable must specify a value");
         this->write((!fAtFunctionScope || Analysis::IsCompileTimeConstant(*varDecl.value()))
@@ -1691,7 +1680,14 @@ std::string WGSLCodeGenerator::assembleFieldAccess(const FieldAccess& f) {
             break;
     }
 
-    return expr + std::string(field->fName);
+    expr += std::string(field->fName);
+
+    if (fMatrixPolyfillFields.contains(field)) {
+        expr = String::printf("_skMatrixUnpack%d%d(%s)",
+                              field->fType->columns(), field->fType->rows(), expr.c_str());
+    }
+
+    return expr;
 }
 
 static bool all_arguments_constant(const ExpressionArray& arguments) {
@@ -2019,9 +2015,9 @@ std::string WGSLCodeGenerator::assembleFunctionCall(const FunctionCall& call,
     substituteArgument.reserve_exact(args.size());
 
     for (int index = 0; index < args.size(); ++index) {
-        if (params[index]->modifiers().fFlags & ModifierFlag::kOut) {
+        if (params[index]->modifierFlags() & ModifierFlag::kOut) {
             std::unique_ptr<LValue> lvalue = this->makeLValue(*args[index]);
-            if (params[index]->modifiers().fFlags & ModifierFlag::kIn) {
+            if (params[index]->modifierFlags() & ModifierFlag::kIn) {
                 // Load the lvalue's contents into the substitute argument.
                 substituteArgument.push_back(this->writeScratchVar(args[index]->type(),
                                                                    lvalue->load()));
@@ -2321,10 +2317,10 @@ std::string WGSLCodeGenerator::variablePrefix(const Variable& v) {
         // structs. We make an explicit exception for `sk_PointSize` which we declare as a
         // placeholder variable in global scope as it is not supported by WebGPU as a pipeline IO
         // parameter (see comments in `writeStageOutputStruct`).
-        if (v.modifiers().fFlags & ModifierFlag::kIn) {
+        if (v.modifierFlags() & ModifierFlag::kIn) {
             return "_stageIn.";
         }
-        if (v.modifiers().fFlags & ModifierFlag::kOut) {
+        if (v.modifierFlags() & ModifierFlag::kOut) {
             return "(*_stageOut).";
         }
 
@@ -2351,7 +2347,7 @@ std::string WGSLCodeGenerator::variableReferenceNameForLValue(const VariableRefe
     const Variable& v = *r.variable();
 
     if ((v.storage() == Variable::Storage::kParameter &&
-         v.modifiers().fFlags & ModifierFlag::kOut)) {
+         v.modifierFlags() & ModifierFlag::kOut)) {
         // This is an out-parameter; it's pointer-typed, so we need to dereference it. We wrap the
         // dereference in parentheses, in case the value is used in an access expression later.
         return "(*" + this->assembleName(v.mangledName()) + ')';
@@ -2648,7 +2644,7 @@ void WGSLCodeGenerator::writeProgramElement(const ProgramElement& e) {
 
 void WGSLCodeGenerator::writeGlobalVarDeclaration(const GlobalVarDeclaration& d) {
     const Variable& var = *d.declaration()->as<VarDeclaration>().var();
-    if ((var.modifiers().fFlags & (ModifierFlag::kIn | ModifierFlag::kOut)) ||
+    if ((var.modifierFlags() & (ModifierFlag::kIn | ModifierFlag::kOut)) ||
         is_in_global_uniforms(var)) {
         // Pipeline stage I/O parameters and top-level (non-block) uniforms are handled specially
         // in generateCode().
@@ -2665,7 +2661,7 @@ void WGSLCodeGenerator::writeGlobalVarDeclaration(const GlobalVarDeclaration& d)
         initializer += this->assembleExpression(*d.varDeclaration().value(),
                                                 Precedence::kAssignment);
     }
-    this->write(var.modifiers().isConst() ? "const " : "var<private> ");
+    this->write(var.modifierFlags().isConst() ? "const " : "var<private> ");
     this->write(this->assembleName(var.mangledName()));
     this->write(": " + to_wgsl_type(var.type()));
     this->write(initializer);
@@ -2709,7 +2705,16 @@ void WGSLCodeGenerator::writeFields(SkSpan<const Field> fields, const MemoryLayo
             }
         }
 
-        this->writeVariableDecl(*field.fType, field.fName, Delimiter::kComma);
+        this->write(this->assembleName(field.fName));
+        this->write(": ");
+        if (fMatrixPolyfillFields.contains(&field)) {
+            this->write("_skMatrix");
+            this->write(std::to_string(field.fType->columns()));
+            this->write(std::to_string(field.fType->rows()));
+        } else {
+            this->write(to_wgsl_type(*field.fType));
+        }
+        this->writeLine(",");
     }
 
     fIndentation--;
@@ -2737,10 +2742,10 @@ void WGSLCodeGenerator::writeStageInputStruct() {
         if (e->is<GlobalVarDeclaration>()) {
             const Variable* v = e->as<GlobalVarDeclaration>().declaration()
                                  ->as<VarDeclaration>().var();
-            if (v->modifiers().fFlags & ModifierFlag::kIn) {
-                this->writePipelineIODeclaration(v->modifiers().fLayout, v->type(),
-                                                 v->mangledName(), Delimiter::kComma);
-                if (v->modifiers().fLayout.fBuiltin == SK_FRAGCOORD_BUILTIN) {
+            if (v->modifierFlags() & ModifierFlag::kIn) {
+                this->writePipelineIODeclaration(v->layout(), v->type(), v->mangledName(),
+                                                 Delimiter::kComma);
+                if (v->layout().fBuiltin == SK_FRAGCOORD_BUILTIN) {
                     declaredFragCoordsBuiltin = true;
                 }
             }
@@ -2751,7 +2756,7 @@ void WGSLCodeGenerator::writeStageInputStruct() {
             //
             // TODO(armansito): Is it legal to have an interface block without a storage qualifier
             // but with members that have individual storage qualifiers?
-            if (v->modifiers().fFlags & ModifierFlag::kIn) {
+            if (v->modifierFlags() & ModifierFlag::kIn) {
                 for (const auto& f : v->type().fields()) {
                     this->writePipelineIODeclaration(f.fLayout, *f.fType, f.fName,
                                                      Delimiter::kComma);
@@ -2792,9 +2797,9 @@ void WGSLCodeGenerator::writeStageOutputStruct() {
         if (e->is<GlobalVarDeclaration>()) {
             const Variable* v = e->as<GlobalVarDeclaration>().declaration()
                                  ->as<VarDeclaration>().var();
-            if (v->modifiers().fFlags & ModifierFlag::kOut) {
-                this->writePipelineIODeclaration(v->modifiers().fLayout, v->type(),
-                                                 v->mangledName(), Delimiter::kComma);
+            if (v->modifierFlags() & ModifierFlag::kOut) {
+                this->writePipelineIODeclaration(v->layout(), v->type(), v->mangledName(),
+                                                 Delimiter::kComma);
             }
         } else if (e->is<InterfaceBlock>()) {
             const Variable* v = e->as<InterfaceBlock>().var();
@@ -2803,7 +2808,7 @@ void WGSLCodeGenerator::writeStageOutputStruct() {
             //
             // TODO(armansito): Is it legal to have an interface block without a storage qualifier
             // but with members that have individual storage qualifiers?
-            if (v->modifiers().fFlags & ModifierFlag::kOut) {
+            if (v->modifierFlags() & ModifierFlag::kOut) {
                 for (const auto& f : v->type().fields()) {
                     this->writePipelineIODeclaration(f.fLayout, *f.fType, f.fName,
                                                      Delimiter::kComma);
@@ -2839,6 +2844,80 @@ void WGSLCodeGenerator::writeStageOutputStruct() {
     }
 }
 
+void WGSLCodeGenerator::writeUniformPolyfills(const Type& structType,
+                                              MemoryLayout::Standard nativeLayout) {
+    SkSL::MemoryLayout std140(MemoryLayout::Standard::k140);
+    SkSL::MemoryLayout native(nativeLayout);
+
+    for (const Field& field : structType.fields()) {
+        // Matrices will be represented as 16-byte aligned arrays in std140, and reconstituted into
+        // proper matrices as they are later accessed. We need to synthesize helpers for this.
+        if (field.fType->isMatrix()) {
+            // A polyfill is only necessary if the std140 layout (what Skia provides) actually
+            // differs from native layout (what WGSL expects). Otherwise the matrix is used as-is.
+            if (std140.stride(*field.fType) == native.stride(*field.fType)) {
+                continue;
+            }
+
+            // Add a polyfill for this matrix type.
+            fMatrixPolyfillFields.add(&field);
+
+            int c = field.fType->columns();
+            int r = field.fType->rows();
+            if (!fWrittenUniformRowPolyfill[r]) {
+                fWrittenUniformRowPolyfill[r] = true;
+
+                this->write("struct _skRow");
+                this->write(std::to_string(r));
+                this->writeLine(" {");
+                this->write("    @size(16) r : vec");
+                this->write(std::to_string(r));
+                this->write("<");
+                this->write(to_wgsl_type(field.fType->componentType()));
+                this->writeLine(">");
+                this->writeLine("};");
+            }
+
+            if (!fWrittenUniformMatrixPolyfill[c][r]) {
+                fWrittenUniformMatrixPolyfill[c][r] = true;
+
+                this->write("struct _skMatrix");
+                this->write(std::to_string(c));
+                this->write(std::to_string(r));
+                this->writeLine(" {");
+                this->write("    c : array<_skRow");
+                this->write(std::to_string(r));
+                this->write(", ");
+                this->write(std::to_string(c));
+                this->writeLine(">");
+                this->writeLine("};");
+
+                this->write("fn _skMatrixUnpack");
+                this->write(std::to_string(c));
+                this->write(std::to_string(r));
+                this->write("(m : _skMatrix");
+                this->write(std::to_string(c));
+                this->write(std::to_string(r));
+                this->write(") -> ");
+                this->write(to_wgsl_type(*field.fType));
+                this->writeLine(" {");
+                this->write("    return ");
+                this->write(to_wgsl_type(*field.fType));
+                this->write("(");
+                auto separator = String::Separator();
+                for (int column = 0; column < c; column++) {
+                    this->write(separator());
+                    this->write("m.c[");
+                    this->write(std::to_string(column));
+                    this->write("].r");
+                }
+                this->writeLine(");");
+                this->writeLine("}");
+            }
+        }
+    }
+}
+
 void WGSLCodeGenerator::writeUniformsAndBuffers() {
     for (const ProgramElement* e : fProgram.elements()) {
         // Iterate through the interface blocks.
@@ -2850,13 +2929,16 @@ void WGSLCodeGenerator::writeUniformsAndBuffers() {
         // Determine if this interface block holds uniforms, buffers, or something else (skip it).
         std::string_view addressSpace;
         std::string_view accessMode;
-        if (ib.var()->modifiers().isUniform()) {
+        MemoryLayout::Standard nativeLayout;
+        if (ib.var()->modifierFlags().isUniform()) {
             addressSpace = "uniform";
-        } else if (ib.var()->modifiers().isBuffer()) {
+            nativeLayout = MemoryLayout::Standard::kWGSLUniform;
+        } else if (ib.var()->modifierFlags().isBuffer()) {
             addressSpace = "storage";
-            if (ib.var()->modifiers().isReadOnly()) {
+            nativeLayout = MemoryLayout::Standard::kWGSLStorage;
+            if (ib.var()->modifierFlags().isReadOnly()) {
                 accessMode = ", read";
-            } else if (ib.var()->modifiers().isWriteOnly()) {
+            } else if (ib.var()->modifierFlags().isWriteOnly()) {
                 accessMode = ", write";
             } else {
                 accessMode = ", read_write";
@@ -2864,6 +2946,8 @@ void WGSLCodeGenerator::writeUniformsAndBuffers() {
         } else {
             continue;
         }
+
+        this->writeUniformPolyfills(ib.var()->type().componentType(), nativeLayout);
 
         // Create a struct to hold all of the fields from this InterfaceBlock.
         SkASSERT(!ib.typeName().empty());
@@ -2891,9 +2975,9 @@ void WGSLCodeGenerator::writeUniformsAndBuffers() {
         this->writeFields(ibFields, &layout);
         this->writeLine("};");
         this->write("@group(");
-        this->write(std::to_string(std::max(0, ib.var()->modifiers().fLayout.fSet)));
+        this->write(std::to_string(std::max(0, ib.var()->layout().fSet)));
         this->write(") @binding(");
-        this->write(std::to_string(std::max(0, ib.var()->modifiers().fLayout.fBinding)));
+        this->write(std::to_string(std::max(0, ib.var()->layout().fBinding)));
         this->write(") var<");
         this->write(addressSpace);
         this->write(accessMode);
@@ -2906,21 +2990,23 @@ void WGSLCodeGenerator::writeUniformsAndBuffers() {
 }
 
 void WGSLCodeGenerator::writeNonBlockUniformsForTests() {
+    bool declaredUniformsStruct = false;
+
     for (const ProgramElement* e : fProgram.elements()) {
         if (e->is<GlobalVarDeclaration>()) {
             const GlobalVarDeclaration& decls = e->as<GlobalVarDeclaration>();
             const Variable& var = *decls.varDeclaration().var();
             if (is_in_global_uniforms(var)) {
-                if (!fDeclaredUniformsStruct) {
+                if (!declaredUniformsStruct) {
                     this->write("struct _GlobalUniforms {\n");
-                    fDeclaredUniformsStruct = true;
+                    declaredUniformsStruct = true;
                 }
                 this->write("  ");
                 this->writeVariableDecl(var.type(), var.mangledName(), Delimiter::kComma);
             }
         }
     }
-    if (fDeclaredUniformsStruct) {
+    if (declaredUniformsStruct) {
         int binding = fProgram.fConfig->fSettings.fDefaultUniformBinding;
         int set = fProgram.fConfig->fSettings.fDefaultUniformSet;
         this->write("};\n");

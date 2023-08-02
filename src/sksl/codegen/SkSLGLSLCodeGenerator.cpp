@@ -47,7 +47,7 @@
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
 #include "src/sksl/ir/SkSLLayout.h"
 #include "src/sksl/ir/SkSLLiteral.h"
-#include "src/sksl/ir/SkSLModifiers.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
 #include "src/sksl/ir/SkSLModifiersDeclaration.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
@@ -881,7 +881,7 @@ void GLSLCodeGenerator::writeFragCoord() {
 }
 
 void GLSLCodeGenerator::writeVariableReference(const VariableReference& ref) {
-    switch (ref.variable()->modifiers().fLayout.fBuiltin) {
+    switch (ref.variable()->layout().fBuiltin) {
         case SK_FRAGCOLOR_BUILTIN:
             if (this->caps().mustDeclareFragmentShaderOutput()) {
                 this->writeIdentifier("sk_FragColor");
@@ -1121,17 +1121,18 @@ void GLSLCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& f) {
         const Variable* param = f.parameters()[index];
 
         // This is a workaround for our test files. They use the runtime effect signature, so main
-        // takes a coords parameter. The IR generator tags those with a builtin ID (sk_FragCoord),
-        // and we omit them from the declaration here, so the function is valid GLSL.
-        if (f.isMain() && param->modifiers().fLayout.fBuiltin != -1) {
+        // takes a coords parameter. We detect these at IR generation time, and we omit them from
+        // the declaration here, so the function is valid GLSL. (Well, valid as long as the
+        // coordinates aren't actually referenced.)
+        if (f.isMain() && param == f.getMainCoordsParameter()) {
             continue;
         }
         this->write(separator());
-        Modifiers modifiers = param->modifiers();
+        ModifierFlags flags = param->modifierFlags();
         if (this->caps().fRemoveConstFromFunctionParameters) {
-            modifiers.fFlags &= ~ModifierFlag::kConst;
+            flags &= ~ModifierFlag::kConst;
         }
-        this->writeModifiers(modifiers.fLayout, modifiers.fFlags, /*globalContext=*/false);
+        this->writeModifiers(param->layout(), flags, /*globalContext=*/false);
         std::vector<int> sizes;
         const Type* type = &param->type();
         if (type->isArray()) {
@@ -1193,10 +1194,7 @@ void GLSLCodeGenerator::writeFunctionPrototype(const FunctionPrototype& f) {
 void GLSLCodeGenerator::writeModifiers(const Layout& layout,
                                        ModifierFlags flags,
                                        bool globalContext) {
-    std::string layoutDesc = layout.description();
-    if (!layoutDesc.empty()) {
-        this->write(layoutDesc + " ");
-    }
+    this->write(layout.paddedDescription());
 
     // For GLSL 4.1 and below, qualifier-order matters! These are written out in Modifier-bit order.
     if (flags & ModifierFlag::kFlat) {
@@ -1245,9 +1243,7 @@ void GLSLCodeGenerator::writeInterfaceBlock(const InterfaceBlock& intf) {
         return;
     }
     const Type* structType = &intf.var()->type().componentType();
-    this->writeModifiers(intf.var()->modifiers().fLayout,
-                         intf.var()->modifiers().fFlags,
-                         /*globalContext=*/true);
+    this->writeModifiers(intf.var()->layout(), intf.var()->modifierFlags(), /*globalContext=*/true);
     this->writeType(*structType);
     this->writeLine(" {");
     fIndentation++;
@@ -1313,7 +1309,7 @@ void GLSLCodeGenerator::writeTypePrecision(const Type& type) {
 }
 
 void GLSLCodeGenerator::writeVarDeclaration(const VarDeclaration& var, bool global) {
-    this->writeModifiers(var.var()->modifiers().fLayout, var.var()->modifiers().fFlags, global);
+    this->writeModifiers(var.var()->layout(), var.var()->modifierFlags(), global);
     this->writeTypePrecision(var.baseType());
     this->writeType(var.baseType());
     this->write(" ");
@@ -1649,7 +1645,7 @@ void GLSLCodeGenerator::writeProgramElement(const ProgramElement& e) {
             break;
         case ProgramElement::Kind::kGlobalVar: {
             const VarDeclaration& decl = e.as<GlobalVarDeclaration>().varDeclaration();
-            int builtin = decl.var()->modifiers().fLayout.fBuiltin;
+            int builtin = decl.var()->layout().fBuiltin;
             if (builtin == -1) {
                 // normal var
                 this->writeVarDeclaration(decl, true);
@@ -1678,8 +1674,8 @@ void GLSLCodeGenerator::writeProgramElement(const ProgramElement& e) {
             this->writeFunctionPrototype(e.as<FunctionPrototype>());
             break;
         case ProgramElement::Kind::kModifiers: {
-            const Modifiers& modifiers = e.as<ModifiersDeclaration>().modifiers();
-            this->writeModifiers(modifiers.fLayout, modifiers.fFlags, /*globalContext=*/true);
+            const ModifiersDeclaration& d = e.as<ModifiersDeclaration>();
+            this->writeModifiers(d.layout(), d.modifierFlags(), /*globalContext=*/true);
             this->writeLine(";");
             break;
         }

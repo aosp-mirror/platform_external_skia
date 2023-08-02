@@ -42,7 +42,7 @@
 #include "src/sksl/ir/SkSLIfStatement.h"
 #include "src/sksl/ir/SkSLIndexExpression.h"
 #include "src/sksl/ir/SkSLLiteral.h"
-#include "src/sksl/ir/SkSLModifiers.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
 #include "src/sksl/ir/SkSLNop.h"
 #include "src/sksl/ir/SkSLPostfixExpression.h"
 #include "src/sksl/ir/SkSLPrefixExpression.h"
@@ -339,8 +339,8 @@ std::unique_ptr<Statement> Inliner::inlineStatement(Position pos,
         return nullptr;
     };
     auto variableModifiers = [&](const Variable& variable,
-                                 const Expression* initialValue) -> const Modifiers* {
-        return Transform::AddConstToVarModifiers(*fContext, variable, initialValue, &usage);
+                                 const Expression* initialValue) -> ModifierFlags {
+        return Transform::AddConstToVarModifiers(variable, initialValue, &usage);
     };
 
     ++fInlinedStatementCounter;
@@ -447,14 +447,15 @@ std::unique_ptr<Statement> Inliner::inlineStatement(Position pos,
             // names are important.
             const std::string* name = symbolTableForStatement->takeOwnershipOfString(
                     fMangler.uniqueName(variable->name(), symbolTableForStatement));
-            auto clonedVar =
-                    std::make_unique<Variable>(pos,
-                                               variable->modifiersPosition(),
-                                               variableModifiers(*variable, initialValue.get()),
-                                               name->c_str(),
-                                               variable->type().clone(symbolTableForStatement),
-                                               isBuiltinCode,
-                                               variable->storage());
+            auto clonedVar = Variable::Make(pos,
+                                            variable->modifiersPosition(),
+                                            variable->layout(),
+                                            variableModifiers(*variable, initialValue.get()),
+                                            variable->type().clone(symbolTableForStatement),
+                                            name->c_str(),
+                                            /*mangledName=*/"",
+                                            isBuiltinCode,
+                                            variable->storage());
             varMap->set(variable, VariableReference::Make(pos, clonedVar.get()));
             std::unique_ptr<Statement> result =
                     VarDeclaration::Make(*fContext,
@@ -528,7 +529,7 @@ Inliner::InlinedCall Inliner::inlineCall(const FunctionCall& call,
                                                             fMangler,
                                                             function.declaration().name(),
                                                             &function.declaration().returnType(),
-                                                            Modifiers{},
+                                                            ModifierFlag::kNone,
                                                             symbolTable.get(),
                                                             /*initialValue=*/nullptr);
         inlineStatements.push_back(std::move(var.fVarDecl));
@@ -549,7 +550,7 @@ Inliner::InlinedCall Inliner::inlineCall(const FunctionCall& call,
                                                             fMangler,
                                                             param->name(),
                                                             &arg->type(),
-                                                            param->modifiers(),
+                                                            param->modifierFlags(),
                                                             symbolTable.get(),
                                                             arg->clone());
         inlineStatements.push_back(std::move(var.fVarDecl));
@@ -615,7 +616,7 @@ bool Inliner::isSafeToInline(const FunctionDefinition* functionDef, const Progra
         // We don't allow inlining functions with parameters that are written-to, if they...
         // - are `out` parameters (see skia:11326 for rationale.)
         // - are arrays or structures (introducing temporary copies is non-trivial)
-        if ((param->modifiers().fFlags & ModifierFlag::kOut) ||
+        if ((param->modifierFlags() & ModifierFlag::kOut) ||
             param->type().isArray() ||
             param->type().isStruct()) {
             ProgramUsage::VariableCounts counts = usage.get(*param);

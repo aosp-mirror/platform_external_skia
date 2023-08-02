@@ -41,7 +41,7 @@
 #include "src/sksl/codegen/SkSLRasterPipelineBuilder.h"
 #include "src/sksl/codegen/SkSLRasterPipelineCodeGenerator.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
-#include "src/sksl/ir/SkSLModifiers.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
 #include "src/sksl/ir/SkSLProgram.h"
 #include "src/sksl/ir/SkSLProgramElement.h"
 #include "src/sksl/ir/SkSLStatement.h"
@@ -421,7 +421,7 @@ static void test_raster_pipeline(skiatest::Reporter* r,
                 return;
             }
             // 'uniform' variables
-            if (var.modifiers().isUniform()) {
+            if (var.modifierFlags().isUniform()) {
                 uniforms.push_back(SkRuntimeEffectPriv::VarAsUniform(var, ctx, &offset));
             }
         }
