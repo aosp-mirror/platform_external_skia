@@ -16,6 +16,7 @@
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLString.h"
 #include "src/sksl/SkSLThreadContext.h"
+#include "src/sksl/ir/SkSLModifiers.h"
 #include "src/sksl/ir/SkSLSymbol.h"
 #include "src/sksl/ir/SkSLSymbolTable.h"  // IWYU pragma: keep
 #include "src/sksl/ir/SkSLType.h"
@@ -25,11 +26,7 @@
 
 using namespace skia_private;
 
-namespace SkSL {
-
-struct Modifiers;
-
-namespace dsl {
+namespace SkSL::dsl {
 
 static const SkSL::Type* verify_type(const Context& context,
                                      const SkSL::Type* type,
@@ -67,39 +64,19 @@ static const SkSL::Type* find_type(const Context& context, std::string_view name
 static const SkSL::Type* find_type(const Context& context,
                                    std::string_view name,
                                    Position overallPos,
-                                   Modifiers* modifiers,
-                                   Position modifiersPos) {
+                                   Modifiers* modifiers) {
     const Type* type = find_type(context, name, overallPos);
-    return type->applyQualifiers(context, modifiers, modifiersPos);
+    return type->applyQualifiers(context, &modifiers->fFlags, modifiers->fPosition);
 }
 
 DSLType::DSLType(std::string_view name, Position pos)
         : fSkSLType(find_type(ThreadContext::Context(), name, pos)) {}
 
-DSLType::DSLType(std::string_view name,
-                 Position overallPos,
-                 SkSL::Modifiers* modifiers,
-                 Position modifiersPos)
-        : fSkSLType(find_type(ThreadContext::Context(),
-                              name,
-                              overallPos,
-                              modifiers,
-                              modifiersPos)) {}
+DSLType::DSLType(std::string_view name, Position overallPos, Modifiers* modifiers)
+        : fSkSLType(find_type(ThreadContext::Context(), name, overallPos, modifiers)) {}
 
 DSLType::DSLType(const SkSL::Type* type, Position pos)
         : fSkSLType(verify_type(ThreadContext::Context(), type, /*allowGenericTypes=*/true, pos)) {}
-
-DSLType DSLType::Invalid() {
-    return DSLType(ThreadContext::Context().fTypes.fInvalid.get(), Position());
-}
-
-DSLType DSLType::Poison() {
-    return DSLType(ThreadContext::Context().fTypes.fPoison.get(), Position());
-}
-
-DSLType DSLType::Void() {
-    return DSLType(ThreadContext::Context().fTypes.fVoid.get(), Position());
-}
 
 bool DSLType::isBoolean() const {
     return this->skslType().isBoolean();
@@ -157,7 +134,7 @@ DSLType Array(const DSLType& base, int count, Position pos) {
     SkSL::Context& context = ThreadContext::Context();
     count = base.skslType().convertArraySize(context, pos, pos, count);
     if (!count) {
-        return DSLType::Poison();
+        return DSLType(context.fTypes.fPoison.get());
     }
     return DSLType(context.fSymbolTable->addArrayDimension(&base.skslType(), count), pos);
 }
@@ -165,11 +142,9 @@ DSLType Array(const DSLType& base, int count, Position pos) {
 DSLType UnsizedArray(const DSLType& base, Position pos) {
     SkSL::Context& context = ThreadContext::Context();
     if (!base.skslType().checkIfUsableInArray(context, pos)) {
-        return DSLType::Poison();
+        return DSLType(context.fTypes.fPoison.get());
     }
     return context.fSymbolTable->addArrayDimension(&base.skslType(), SkSL::Type::kUnsizedArray);
 }
 
-} // namespace dsl
-
-} // namespace SkSL
+}  // namespace SkSL::dsl

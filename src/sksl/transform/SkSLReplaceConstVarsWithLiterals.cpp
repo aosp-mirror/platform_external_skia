@@ -12,7 +12,7 @@
 #include "src/sksl/analysis/SkSLProgramUsage.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
-#include "src/sksl/ir/SkSLModifiers.h"
+#include "src/sksl/ir/SkSLModifierFlags.h"
 #include "src/sksl/ir/SkSLProgramElement.h"
 #include "src/sksl/ir/SkSLVariable.h"
 #include "src/sksl/ir/SkSLVariableReference.h"
@@ -68,7 +68,7 @@ void Transform::ReplaceConstVarsWithLiterals(Module& module, ProgramUsage* usage
         if (!count.fVarExists || count.fWrite != 1) {
             continue;
         }
-        if (!var->modifiers().isConst()) {
+        if (!var->modifierFlags().isConst()) {
             continue;
         }
         if (!var->initialValue()) {
