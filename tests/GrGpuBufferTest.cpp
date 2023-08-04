@@ -219,7 +219,7 @@ private:
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrGpuBufferTransferTest,
                                        reporter,
                                        ctxInfo,
-                                       CtsEnforcement::kApiLevel_T) {
+                                       CtsEnforcement::kNextRelease) {
     if (!ctxInfo.directContext()->priv().caps()->transferFromBufferToBufferSupport()) {
         return;
     }
@@ -372,7 +372,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrGpuBufferTransferTest,
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrGpuBufferUpdateDataTest,
                                        reporter,
                                        ctxInfo,
-                                       CtsEnforcement::kApiLevel_T) {
+                                       CtsEnforcement::kNextRelease) {
     GrDirectContext* dc = ctxInfo.directContext();
 
     GrGpu* gpu = ctxInfo.directContext()->priv().getGpu();
