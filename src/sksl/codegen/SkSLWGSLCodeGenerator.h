@@ -246,6 +246,9 @@ private:
                                           Precedence parentPrecedence);
     std::string assembleVectorizedIntrinsic(std::string_view intrinsicName,
                                             const FunctionCall& call);
+    std::string assemblePartialSampleCall(std::string_view functionName,
+                                          const Expression& sampler,
+                                          const Expression& coords);
 
     // Constructor expressions
     std::string assembleAnyConstructor(const AnyConstructor& c, Precedence parentPrecedence);
@@ -301,6 +304,11 @@ private:
     void writeStageOutputStruct();
     void writeUniformsAndBuffers();
     void writeUniformPolyfills(const Type& structType, MemoryLayout::Standard nativeLayout);
+
+    void writeTextureOrSampler(const Variable& var,
+                               int bindingLocation,
+                               std::string_view suffix,
+                               std::string_view wgslType);
 
     // Writes all top-level non-opaque global uniform declarations (i.e. not part of an interface
     // block) into a single uniform block binding.
