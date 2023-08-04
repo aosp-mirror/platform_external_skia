@@ -21,6 +21,7 @@
 #include "src/gpu/graphite/ShaderCodeDictionary.h"
 #include "src/gpu/graphite/UniformManager.h"
 #include "src/gpu/graphite/UniquePaintParamsID.h"
+#include "src/gpu/graphite/compute/ComputeStep.h"
 #include "src/sksl/SkSLString.h"
 #include "src/sksl/SkSLUtil.h"
 
@@ -349,10 +350,10 @@ std::string EmitVaryings(const RenderStep* step,
     return result;
 }
 
-std::string GetSkSLVS(const ResourceBindingRequirements& bindingReqs,
-                      const RenderStep* step,
-                      bool defineShadingSsboIndexVarying,
-                      bool defineLocalCoordsVarying) {
+std::string BuildVertexSkSL(const ResourceBindingRequirements& bindingReqs,
+                            const RenderStep* step,
+                            bool defineShadingSsboIndexVarying,
+                            bool defineLocalCoordsVarying) {
     // TODO: To more completely support end-to-end rendering, this will need to be updated so that
     // the RenderStep shader snippet can produce a device coord, a local coord, and depth.
     // If the paint combination doesn't need the local coord it can be ignored, otherwise we need
@@ -406,13 +407,13 @@ std::string GetSkSLVS(const ResourceBindingRequirements& bindingReqs,
     return sksl;
 }
 
-FragSkSLInfo GetSkSLFS(const Caps* caps,
-                       const ShaderCodeDictionary* dict,
-                       const RuntimeEffectDictionary* rteDict,
-                       const RenderStep* step,
-                       UniquePaintParamsID paintID,
-                       bool useStorageBuffers,
-                       skgpu::Swizzle writeSwizzle) {
+FragSkSLInfo BuildFragmentSkSL(const Caps* caps,
+                               const ShaderCodeDictionary* dict,
+                               const RuntimeEffectDictionary* rteDict,
+                               const RenderStep* step,
+                               UniquePaintParamsID paintID,
+                               bool useStorageBuffers,
+                               skgpu::Swizzle writeSwizzle) {
     if (!paintID.isValid()) {
         // TODO: we should return the error shader code here
         return {};
@@ -437,6 +438,16 @@ FragSkSLInfo GetSkSLFS(const Caps* caps,
     result.fRequiresLocalCoords = shaderInfo.needsLocalCoords();
 
     return result;
+}
+
+std::string BuildComputeSkSL(const Caps* caps, const ComputeStep* step) {
+    std::string sksl =
+            SkSL::String::printf("layout(local_size_x=%u, local_size_y=%u, local_size_z=%u) in;\n",
+                                 step->localDispatchSize().fWidth,
+                                 step->localDispatchSize().fHeight,
+                                 step->localDispatchSize().fDepth);
+    sksl += step->computeSkSL(caps->resourceBindingRequirements(), /*nextBindingIndex=*/0);
+    return sksl;
 }
 
 } // namespace skgpu::graphite

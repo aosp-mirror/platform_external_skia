@@ -16,6 +16,7 @@
 #include "include/private/base/SkMacros.h"
 #include "tools/Registry.h"
 
+#include <functional>
 #include <memory>
 
 class GrRecordingContext;
@@ -172,6 +173,29 @@ namespace skiagm {
 
         virtual std::unique_ptr<verifiers::VerifierList> getVerifiers() const;
 
+        // Convenience method to skip Bazel-only GMs from DM.
+        //
+        // As of Q3 2023, lovisolo@ is experimenting with reimplementing some DM behaviors as
+        // smaller, independent Bazel targets. For example, file //gm/BazelGMRunner.cpp provides a
+        // main function that can run GMs. With this file, one can define multiple small Bazel
+        // tests to run groups of related GMs with Bazel. However, GMs are only one kind of
+        // "source" supported by DM (see class GMSrc). DM supports other kinds of sources as well,
+        // such as codecs (CodecSrc class) and image generators (ImageGenSrc class). One possible
+        // strategy to support these sources in our Bazel build is to turn them into GMs. For
+        // example, instead of using the CodecSrc class from Bazel, we could have a GM subclass
+        // that takes an image as an input, decodes it using a codec, and draws in on a canvas.
+        // Given that this overlaps with existing DM functionality, we would mark such GMs as
+        // Bazel-only.
+        //
+        // Another possibility is to slowly replace all existing DM source types with just GMs.
+        // This would lead to a simpler DM architecture where there is only one source type and
+        // multiple sinks, as opposed to the current design with multiple sources and sinks.
+        // Furthermore, it would simplify the migration to Bazel because it would allow us to
+        // leverage existing work to run GMs with Bazel.
+        //
+        // TODO(lovisolo): Delete once it's no longer needed.
+        virtual bool isBazelOnly() const { return false; }
+
     protected:
         // onGpuSetup is called once before any other processing with a direct context.
         virtual DrawResult onGpuSetup(SkCanvas*, SkString*) { return DrawResult::kOk; }
@@ -196,7 +220,7 @@ namespace skiagm {
         DrawResult fGpuSetupResult = DrawResult::kOk;
     };
 
-    using GMFactory = std::unique_ptr<skiagm::GM> (*)();
+    using GMFactory = std::function<std::unique_ptr<skiagm::GM>()>;
     using GMRegistry = sk_tools::Registry<GMFactory>;
 
 #if defined(SK_GANESH)
