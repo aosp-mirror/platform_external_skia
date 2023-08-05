@@ -1,10 +1,3 @@
-### Compilation failed:
-
-error: :9:17 error: unresolved type 'sampler2D'
-var<private> t: sampler2D;
-                ^^^^^^^^^
-
-
 diagnostic(off, derivative_uniformity);
 struct FSIn {
   @builtin(front_facing) sk_Clockwise: bool,
@@ -13,14 +6,14 @@ struct FSIn {
 struct FSOut {
   @location(0) sk_FragColor: vec4<f32>,
 };
-var<private> t: sampler2D;
+@group(0) @binding(10000) var t_Sampler: sampler;
+@group(0) @binding(10001) var t_Texture: texture_2d<f32>;
 fn main(_skParam0: vec2<f32>) -> vec4<f32> {
   let coords = _skParam0;
   {
-    let _skTemp0 = dFdx(coords);
-    let _skTemp1 = dFdy(coords);
-    let _skTemp2 = sampleGrad(t, coords, _skTemp0, _skTemp1);
-    return _skTemp2;
+    let _skTemp2 = dpdx(coords);
+    let _skTemp3 = dpdy(coords);
+    return textureSampleGrad(t_Texture, t_Sampler, coords, _skTemp2, _skTemp3);
   }
 }
 @fragment fn fragmentMain(_stageIn: FSIn) -> FSOut {
@@ -28,5 +21,3 @@ fn main(_skParam0: vec2<f32>) -> vec4<f32> {
   _stageOut.sk_FragColor = main(_stageIn.sk_FragCoord.xy);
   return _stageOut;
 }
-
-1 error

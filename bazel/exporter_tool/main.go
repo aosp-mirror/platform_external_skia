@@ -190,7 +190,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/sksl/analysis:analysis_srcs",
 				"//src/sksl/codegen:core_srcs",
 				"//src/sksl/codegen:private_hdrs",
-				"//src/sksl/dsl:srcs",
 				"//src/sksl/ir:ir_hdrs",
 				"//src/sksl/ir:ir_srcs",
 				"//src/sksl/tracing:private_hdrs",
@@ -359,7 +358,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			}},
 		{Var: "skia_gpu_vk_private",
 			Rules: []string{
-				"//include/gpu/vk:public_hdrs",
 				"//include/private/gpu/ganesh:vk_private_hdrs",
 				"//src/gpu/ganesh/vk:vk_hdrs",
 				"//src/gpu/ganesh/vk:vk_srcs",

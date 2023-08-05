@@ -10,18 +10,14 @@
 #if !defined(SK_ENABLE_OPTIMIZE_SIZE)
 
 #define SK_OPTS_NS hsw
-#include "src/opts/SkBitmapProcState_opts.h"
 #include "src/opts/SkBlitRow_opts.h"
 #include "src/opts/SkRasterPipeline_opts.h"
 #include "src/opts/SkSwizzler_opts.h"
-#include "src/opts/SkUtils_opts.h"
 
 namespace SkOpts {
     void Init_hsw() {
         blit_row_color32     = hsw::blit_row_color32;
         blit_row_s32a_opaque = hsw::blit_row_s32a_opaque;
-
-        S32_alpha_D32_filter_DX  = hsw::S32_alpha_D32_filter_DX;
 
         RGBA_to_BGRA          = SK_OPTS_NS::RGBA_to_BGRA;
         RGBA_to_rgbA          = SK_OPTS_NS::RGBA_to_rgbA;
