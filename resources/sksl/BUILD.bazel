@@ -289,7 +289,6 @@ skia_filegroup(
         "errors/InvalidAssignmentPipelineInputs.sksl",
         "errors/InvalidAtomicDeclarations.compute",
         "errors/InvalidAtomicOperations.compute",
-        "errors/InvalidBackendBindingFlagsGL.sksl",
         "errors/InvalidBackendBindingFlagsMetal.sksl",
         "errors/InvalidBackendBindingFlagsSPIRV.sksl",
         "errors/InvalidBackendBindingFlagsWGSL.sksl",
@@ -547,6 +546,7 @@ skia_filegroup(
 skia_filegroup(
     name = "sksl_inliner_tests",
     srcs = [
+        "inliner/CommaExpressionsAllowInlining.sksl",
         "inliner/DoWhileBodyMustBeInlinedIntoAScope.sksl",
         "inliner/DoWhileTestCannotBeInlined.sksl",
         "inliner/ForBodyMustBeInlinedIntoAScope.sksl",
