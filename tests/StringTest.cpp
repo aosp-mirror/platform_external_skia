@@ -5,13 +5,18 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkScalar.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkTArray.h"
+#include "src/core/SkStringUtils.h"
 #include "tests/Test.h"
 
-#include "include/core/SkString.h"
-#include "src/core/SkStringUtils.h"
-
-#include <math.h>
-#include <stdio.h>
+#include <cmath>
+#include <cstdarg>
+#include <cstdint>
+#include <cstring>
+#include <string_view>
 #include <thread>
 
 DEF_TEST(String, reporter) {
@@ -19,19 +24,21 @@ DEF_TEST(String, reporter) {
     SkString    b((size_t)0);
     SkString    c("");
     SkString    d(nullptr, 0);
+    SkString    v{std::string_view()};
 
     REPORTER_ASSERT(reporter, a.isEmpty());
-    REPORTER_ASSERT(reporter, a == b && a == c && a == d);
+    REPORTER_ASSERT(reporter, a == b && a == c && a == d && a == v);
 
     a.set("hello");
     b.set("hellox", 5);
     c.set(a);
     d.resize(5);
-    memcpy(d.writable_str(), "helloz", 5);
+    memcpy(d.data(), "helloz", 5);
+    v.set(std::string_view("hellooooo").substr(0, 5));
 
     REPORTER_ASSERT(reporter, !a.isEmpty());
     REPORTER_ASSERT(reporter, a.size() == 5);
-    REPORTER_ASSERT(reporter, a == b && a == c && a == d);
+    REPORTER_ASSERT(reporter, a == b && a == c && a == d && a == v);
     REPORTER_ASSERT(reporter, a.equals("hello", 5));
     REPORTER_ASSERT(reporter, a.equals("hello"));
     REPORTER_ASSERT(reporter, !a.equals("help"));
@@ -54,6 +61,13 @@ DEF_TEST(String, reporter) {
     REPORTER_ASSERT(reporter,  a.contains(""));
     REPORTER_ASSERT(reporter,  a.contains('e'));
     REPORTER_ASSERT(reporter, !a.contains('z'));
+
+    v.prepend(std::string_view("[["));
+    v.append(std::string_view("]]"));
+    REPORTER_ASSERT(reporter, v.equals("[[hello]]"));
+
+    v.insert(2, std::string_view("?!").substr(0, 1));
+    REPORTER_ASSERT(reporter, v.equals("[[?hello]]"));
 
     SkString    e(a);
     SkString    f("hello");
@@ -157,7 +171,7 @@ DEF_TEST(String, reporter) {
         { -3.4028234e38f, "-3.4028235e+38" },
   #endif
     };
-    for (size_t i = 0; i < SK_ARRAY_COUNT(gRec); i++) {
+    for (size_t i = 0; i < std::size(gRec); i++) {
         a.reset();
         a.appendScalar(gRec[i].fValue);
         REPORTER_ASSERT(reporter, a.size() <= kSkStrAppendScalar_MaxSize);
@@ -202,7 +216,7 @@ DEF_TEST(String_SkStrSplit, r) {
     SkTArray<SkString> results;
 
     SkStrSplit("a-_b_c-dee--f-_-_-g-", "-_", &results);
-    REPORTER_ASSERT(r, results.count() == 6);
+    REPORTER_ASSERT(r, results.size() == 6);
     REPORTER_ASSERT(r, results[0].equals("a"));
     REPORTER_ASSERT(r, results[1].equals("b"));
     REPORTER_ASSERT(r, results[2].equals("c"));
@@ -210,23 +224,23 @@ DEF_TEST(String_SkStrSplit, r) {
     REPORTER_ASSERT(r, results[4].equals("f"));
     REPORTER_ASSERT(r, results[5].equals("g"));
 
-    results.reset();
+    results.clear();
     SkStrSplit("\n", "\n", &results);
-    REPORTER_ASSERT(r, results.count() == 0);
+    REPORTER_ASSERT(r, results.size() == 0);
 
-    results.reset();
+    results.clear();
     SkStrSplit("", "\n", &results);
-    REPORTER_ASSERT(r, results.count() == 0);
+    REPORTER_ASSERT(r, results.size() == 0);
 
-    results.reset();
+    results.clear();
     SkStrSplit("a", "\n", &results);
-    REPORTER_ASSERT(r, results.count() == 1);
+    REPORTER_ASSERT(r, results.size() == 1);
     REPORTER_ASSERT(r, results[0].equals("a"));
 }
 DEF_TEST(String_SkStrSplit_All, r) {
     SkTArray<SkString> results;
     SkStrSplit("a-_b_c-dee--f-_-_-g-", "-_", kStrict_SkStrSplitMode, &results);
-    REPORTER_ASSERT(r, results.count() == 13);
+    REPORTER_ASSERT(r, results.size() == 13);
     REPORTER_ASSERT(r, results[0].equals("a"));
     REPORTER_ASSERT(r, results[1].equals(""));
     REPORTER_ASSERT(r, results[2].equals("b"));
@@ -241,31 +255,31 @@ DEF_TEST(String_SkStrSplit_All, r) {
     REPORTER_ASSERT(r, results[11].equals("g"));
     REPORTER_ASSERT(r, results[12].equals(""));
 
-    results.reset();
+    results.clear();
     SkStrSplit("\n", "\n", kStrict_SkStrSplitMode, &results);
-    REPORTER_ASSERT(r, results.count() == 2);
+    REPORTER_ASSERT(r, results.size() == 2);
     REPORTER_ASSERT(r, results[0].equals(""));
     REPORTER_ASSERT(r, results[1].equals(""));
 
-    results.reset();
+    results.clear();
     SkStrSplit("", "\n", kStrict_SkStrSplitMode, &results);
-    REPORTER_ASSERT(r, results.count() == 0);
+    REPORTER_ASSERT(r, results.size() == 0);
 
-    results.reset();
+    results.clear();
     SkStrSplit("a", "\n", kStrict_SkStrSplitMode, &results);
-    REPORTER_ASSERT(r, results.count() == 1);
+    REPORTER_ASSERT(r, results.size() == 1);
     REPORTER_ASSERT(r, results[0].equals("a"));
 
-    results.reset();
+    results.clear();
     SkStrSplit(",,", ",", kStrict_SkStrSplitMode, &results);
-    REPORTER_ASSERT(r, results.count() == 3);
+    REPORTER_ASSERT(r, results.size() == 3);
     REPORTER_ASSERT(r, results[0].equals(""));
     REPORTER_ASSERT(r, results[1].equals(""));
     REPORTER_ASSERT(r, results[2].equals(""));
 
-    results.reset();
+    results.clear();
     SkStrSplit(",a,b,", ",", kStrict_SkStrSplitMode, &results);
-    REPORTER_ASSERT(r, results.count() == 4);
+    REPORTER_ASSERT(r, results.size() == 4);
     REPORTER_ASSERT(r, results[0].equals(""));
     REPORTER_ASSERT(r, results[1].equals("a"));
     REPORTER_ASSERT(r, results[2].equals("b"));
@@ -316,17 +330,17 @@ DEF_TEST(String_fromUTF16, r) {
         0xD835, 0xDCD0, 0xD835, 0xDCD1, 0xD835, 0xDCD2, 0xD835, 0xDCD3, 0xD835, 0xDCD4, 0x0020,
         0xD835, 0xDCD5, 0xD835, 0xDCD6, 0xD835, 0xDCD7, 0xD835, 0xDCD8, 0xD835, 0xDCD9
     };
-    REPORTER_ASSERT(r, SkStringFromUTF16(test1, SK_ARRAY_COUNT(test1)).equals("𝓐𝓑𝓒𝓓𝓔 𝓕𝓖𝓗𝓘𝓙"));
+    REPORTER_ASSERT(r, SkStringFromUTF16(test1, std::size(test1)).equals("𝓐𝓑𝓒𝓓𝓔 𝓕𝓖𝓗𝓘𝓙"));
 
     const uint16_t test2[] = {
         0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x0020, 0x0046, 0x0047, 0x0048, 0x0049, 0x004A,
     };
-    REPORTER_ASSERT(r, SkStringFromUTF16(test2, SK_ARRAY_COUNT(test2)).equals("ABCDE FGHIJ"));
+    REPORTER_ASSERT(r, SkStringFromUTF16(test2, std::size(test2)).equals("ABCDE FGHIJ"));
 
     const uint16_t test3[] = {
         0x03B1, 0x03B2, 0x03B3, 0x03B4, 0x03B5, 0x0020, 0x03B6, 0x03B7, 0x03B8, 0x03B9, 0x03BA,
     };
-    REPORTER_ASSERT(r, SkStringFromUTF16(test3, SK_ARRAY_COUNT(test3)).equals("αβγδε ζηθικ"));
+    REPORTER_ASSERT(r, SkStringFromUTF16(test3, std::size(test3)).equals("αβγδε ζηθικ"));
 }
 
 static void test_va_list_print(skiatest::Reporter* r, const char format[], ...)

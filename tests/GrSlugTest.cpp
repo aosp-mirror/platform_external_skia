@@ -5,16 +5,36 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkFont.h"
+#include "include/core/SkFontStyle.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSurface.h"
 #include "include/core/SkTextBlob.h"
-#include "include/private/chromium/GrSlug.h"
-#include "src/gpu/GrDirectContextPriv.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/private/base/SkTDArray.h"
+#include "include/private/chromium/Slug.h"
+#include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tools/ToolUtils.h"
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrSlug_empty, reporter, ctxInfo) {
+#include <cstdint>
+#include <cstring>
+
+struct GrContextOptions;
+
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(GrSlug_empty,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     auto dContext = ctxInfo.directContext();
     SkImageInfo info = SkImageInfo::MakeN32Premul(256, 256);
-    auto surface(SkSurface::MakeRenderTarget(dContext, SkBudgeted::kNo, info));
+    auto surface(SkSurface::MakeRenderTarget(dContext, skgpu::Budgeted::kNo, info));
     auto canvas = surface->getCanvas();
 
     static const char* kText = " ";
@@ -34,13 +54,12 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(GrSlug_empty, reporter, ctxInfo) {
     font.setTypeface(typeface);
     font.setSize(16);
 
-    const SkTextBlobBuilder::RunBuffer& buf = builder.allocRun(font, glyphs.count(), 0, 0);
-    memcpy(buf.glyphs, glyphs.begin(), glyphs.count() * sizeof(uint16_t));
+    const SkTextBlobBuilder::RunBuffer& buf = builder.allocRun(font, glyphs.size(), 0, 0);
+    memcpy(buf.glyphs, glyphs.begin(), glyphs.size() * sizeof(uint16_t));
     auto blob = builder.make();
 
     SkPaint p;
     p.setAntiAlias(true);
-    sk_sp<GrSlug> slug = GrSlug::ConvertBlob(canvas, *blob, {10, 10}, p);
+    sk_sp<sktext::gpu::Slug> slug = sktext::gpu::Slug::ConvertBlob(canvas, *blob, {10, 10}, p);
     REPORTER_ASSERT(reporter, slug == nullptr);
 }
-
