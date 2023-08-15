@@ -17,6 +17,7 @@
 #include "tools/Registry.h"
 
 #include <functional>
+#include <map>
 #include <memory>
 
 class GrRecordingContext;
@@ -199,6 +200,14 @@ namespace skiagm {
         //
         // TODO(lovisolo): Delete once it's no longer needed.
         virtual bool isBazelOnly() const { return false; }
+
+        // Ignored by DM. Returns the set of Gold key/value pairs specific to this GM. For example,
+        // codec GMs might return the parameters utilized to initialize the codec.
+        virtual std::map<std::string, std::string> getGoldKeys() const {
+            return std::map<std::string, std::string>{
+                    {"source_type", "gm"},
+            };
+        }
 
     protected:
         // onGpuSetup is called once before any other processing with a direct context.

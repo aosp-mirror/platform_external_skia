@@ -157,7 +157,7 @@ public:
         kGetFromCanvas,
     };
 
-    static constexpr const char* ModeToString(DecodeMode decodeMode) {
+    static constexpr const char* DecodeModeToString(DecodeMode decodeMode) {
         switch (decodeMode) {
             case DecodeMode::kGetAllPixels:
                 return "kGetAllPixels";
@@ -196,6 +196,15 @@ public:
     bool isBazelOnly() const override {
         // This GM class overlaps with DM's CodecSrc and related sources.
         return true;
+    }
+
+    std::map<std::string, std::string> getGoldKeys() const override {
+        return std::map<std::string, std::string>{
+                {"source_type", "image"},
+                {"decode_mode", DecodeModeToString(fDecodeMode)},
+                {"dst_color_type", DstColorTypeToString(fDstColorType)},
+                {"dst_alpha_type", sk_alpha_type_to_str(fDstAlphaType)},
+        };
     }
 
 protected:
