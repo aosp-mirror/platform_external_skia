@@ -66,8 +66,10 @@ static DEFINE_string(via,
 // Takes a SkBitmap and writes the resulting PNG and MD5 hash into the given files. Returns an
 // empty string on success, or an error message in the case of failures.
 static std::string write_png_and_json_files(std::string name,
-                                            std::string config,
-                                            SkBitmap& bitmap,
+                                            std::map<std::string, std::string> gmGoldKeys,
+                                            std::string surfaceConfig,
+                                            std::map<std::string, std::string> surfaceGoldKeys,
+                                            const SkBitmap& bitmap,
                                             const char* pngPath,
                                             const char* jsonPath) {
     HashAndEncode hashAndEncode(bitmap);
@@ -88,13 +90,28 @@ static std::string write_png_and_json_files(std::string name,
         return "Error encoding or writing PNG to " + std::string(pngPath);
     }
 
+    // Validate Gold keys.
+    if (gmGoldKeys.find("source_type") == gmGoldKeys.end()) {
+        SK_ABORT("gmGoldKeys does not contain key \"source_type\"");
+    }
+
+    // Compute Gold keys.
+    std::map<std::string, std::string> keys = {
+            {"name", name},
+            {"image_md5", md5.c_str()},
+            {"surface_config", surfaceConfig},
+            {"build_system", "bazel"},
+    };
+    keys.merge(surfaceGoldKeys);
+    keys.merge(gmGoldKeys);
+
     // Write JSON file with MD5 hash.
     SkFILEWStream jsonFile(jsonPath);
     SkJSONWriter jsonWriter(&jsonFile, SkJSONWriter::Mode::kPretty);
     jsonWriter.beginObject();  // Root object.
-    jsonWriter.appendString("name", name);
-    jsonWriter.appendString("md5", md5);
-    jsonWriter.appendString("config", config);
+    for (auto const& [param, value] : keys) {
+        jsonWriter.appendString(param.c_str(), SkString(value));
+    }
     jsonWriter.endObject();
 
     return "";
@@ -132,16 +149,16 @@ void run_gm(std::unique_ptr<skiagm::GM> gm, std::string config, std::string outp
     SkDebugf("[%s] GM: %s\n", now().c_str(), gm->getName());
 
     // Create surface and canvas.
-    std::unique_ptr<SurfaceManager> surface_manager =
+    std::unique_ptr<SurfaceManager> surfaceManager =
             SurfaceManager::FromConfig(config, gm->getISize().width(), gm->getISize().height());
-    if (surface_manager == nullptr) {
+    if (surfaceManager == nullptr) {
         SK_ABORT("Unknown --surfaceConfig flag value: %s.", config.c_str());
     }
 
     // Set up GPU.
     SkDebugf("[%s]     Setting up GPU...\n", now().c_str());
     SkString msg;
-    skiagm::DrawResult result = gm->gpuSetup(surface_manager->getSurface()->getCanvas(), &msg);
+    skiagm::DrawResult result = gm->gpuSetup(surfaceManager->getSurface()->getCanvas(), &msg);
 
     // Draw GM into canvas if GPU setup was successful.
     SkBitmap bitmap;
@@ -149,7 +166,7 @@ void run_gm(std::unique_ptr<skiagm::GM> gm, std::string config, std::string outp
         GMOutput output;
         std::string viaName = FLAGS_via.size() == 0 ? "" : (FLAGS_via[0]);
         SkDebugf("[%s]     Drawing GM via \"%s\"...\n", now().c_str(), viaName.c_str());
-        output = draw(gm.get(), surface_manager->getSurface().get(), viaName);
+        output = draw(gm.get(), surfaceManager->getSurface().get(), viaName);
         result = output.result;
         msg = SkString(output.msg.c_str());
         bitmap = output.bitmap;
@@ -161,7 +178,7 @@ void run_gm(std::unique_ptr<skiagm::GM> gm, std::string config, std::string outp
             // We don't increment numSuccessfulGMs just yet. We still need to successfully save
             // its output bitmap to disk.
             SkDebugf("[%s]     Flushing surface...\n", now().c_str());
-            surface_manager->flush();
+            surfaceManager->flush();
             break;
         case skiagm::DrawResult::kFail:
             gNumFailedGMs++;
@@ -185,8 +202,13 @@ void run_gm(std::unique_ptr<skiagm::GM> gm, std::string config, std::string outp
         SkString pngPath = SkOSPath::Join(outputDir.c_str(), (name + ".png").c_str());
         SkString jsonPath = SkOSPath::Join(outputDir.c_str(), (name + ".json").c_str());
 
-        std::string pngAndJSONResult = write_png_and_json_files(
-                gm->getName(), config, bitmap, pngPath.c_str(), jsonPath.c_str());
+        std::string pngAndJSONResult = write_png_and_json_files(gm->getName(),
+                                                                gm->getGoldKeys(),
+                                                                config,
+                                                                surfaceManager->getGoldKeys(),
+                                                                bitmap,
+                                                                pngPath.c_str(),
+                                                                jsonPath.c_str());
         if (pngAndJSONResult != "") {
             SkDebugf("[%s] %s\n", now().c_str(), pngAndJSONResult.c_str());
             gNumFailedGMs++;
