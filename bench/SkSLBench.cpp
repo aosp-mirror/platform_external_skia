@@ -30,10 +30,8 @@
 #include "src/sksl/generated/sksl_public.minified.sksl"
 #include "src/sksl/generated/sksl_rt_shader.minified.sksl"
 #include "src/sksl/generated/sksl_vert.minified.sksl"
-#if defined(SK_GRAPHITE)
 #include "src/sksl/generated/sksl_graphite_frag.minified.sksl"
 #include "src/sksl/generated/sksl_graphite_vert.minified.sksl"
-#endif
 
 class SkSLCompilerStartupBench : public Benchmark {
 protected:
@@ -117,7 +115,7 @@ protected:
             fSrc = std::regex_replace(fSrc, std::regex(input), replacement);
         };
 
-        // Runtime shaders which have slightly different conventions than fragment shaders.
+        // Runtime shaders have slightly different conventions than fragment shaders.
         // Perform a handful of fixups to compensate. These are hand-tuned for our current set of
         // test shaders and will probably need to be updated if we add more.
         if (this->usesRuntimeShader()) {
@@ -490,17 +488,12 @@ void main()
 
 COMPILER_BENCH(tiny, "void main() { sk_FragColor = half4(1); }");
 
-#if defined(SK_GRAPHITE)
-
 #define GRAPHITE_BENCH(name, text)                                                                \
     static constexpr char name##_SRC[] = text;                                                    \
     DEF_BENCH(return new SkSLCompileBench(#name, name##_SRC, /*optimize=*/true, Output::kGrMtl);) \
     DEF_BENCH(return new SkSLCompileBench(#name, name##_SRC, /*optimize=*/true, Output::kGrWGSL);)
 
-#else
-#define GRAPHITE_BENCH(name, text) /* Graphite is disabled */
-#endif
-
+// This fragment shader is from the third tile on the top row of GM_gradients_2pt_conical_outside.
 GRAPHITE_BENCH(graphite_large, R"(
 layout(location=0) in flat int shadingSsboIndexVar;
 layout(location=1) in float2 localCoordsVar;
@@ -561,6 +554,47 @@ void main()
 	half4 outputCoverage;
 	outputCoverage = analytic_rrect_coverage_fn(sk_FragCoord, jacobian, edgeDistances, xRadii, yRadii, strokeParams, perPixelControl);
 	sk_FragColor = outColor_5 * outputCoverage;
+}
+)");
+
+// This fragment shader is taken from GM_lcdtext.
+GRAPHITE_BENCH(graphite_small, R"(
+layout(location=0) in flat int shadingSsboIndexVar;
+layout(location=1) in float2 textureCoords;
+layout(location=2) in half texIndex;
+layout(location=3) in half maskFormat;
+layout (binding=1) uniform StepUniforms
+{
+	layout(offset=0) float4x4 subRunDeviceMatrix;
+	layout(offset=64) float4x4 deviceToLocal;
+	layout(offset=128) float2 atlasSizeInv;
+}
+;
+struct FSUniformData
+{
+	// 0 - SolidColor uniforms
+	float4 color_0;
+}
+;
+layout (binding=2) buffer FSUniforms
+{
+	FSUniformData fsUniformData[];
+}
+;
+layout(binding=0) uniform sampler2D text_atlas_0;
+layout(binding=1) uniform sampler2D text_atlas_1;
+layout(binding=2) uniform sampler2D text_atlas_2;
+layout(binding=3) uniform sampler2D text_atlas_3;
+void main()
+{
+	half4 initialColor = half4(0);
+	// [0] SolidColor
+	half4 outColor_0 = sk_solid_shader(fsUniformData[shadingSsboIndexVar].color_0);
+	// [1] SrcOver
+	half4 outColor_1 = outColor_0;
+	half4 outputCoverage;
+	outputCoverage = bitmap_text_coverage_fn(sample_indexed_atlas(textureCoords, int(texIndex), text_atlas_0, text_atlas_1, text_atlas_2, text_atlas_3), int(maskFormat));
+	sk_FragColor = outColor_1 * outputCoverage;
 }
 )");
 
@@ -628,7 +662,6 @@ void RunSkSLModuleBenchmarks(NanoJSONResultsWriter* log) {
         bench(log, "sksl_compiler_gpu", gpuBytes);
     }
 
-#if defined(SK_GRAPHITE)
     // Heap used by a compiler with the Graphite modules loaded.
     before = heap_bytes_used();
     compiler.moduleForProgramKind(SkSL::ProgramKind::kGraphiteVertex);
@@ -638,7 +671,6 @@ void RunSkSLModuleBenchmarks(NanoJSONResultsWriter* log) {
         graphiteBytes = (graphiteBytes - before) + gpuBytes;
         bench(log, "sksl_compiler_graphite", graphiteBytes);
     }
-#endif
 
     // Heap used by a compiler with compute-shader support loaded.
     before = heap_bytes_used();
@@ -658,11 +690,9 @@ void RunSkSLModuleBenchmarks(NanoJSONResultsWriter* log) {
                                 std::size(SKSL_MINIFIED_sksl_rt_shader);
     bench(log, "sksl_binary_size_gpu", compilerGPUBinarySize);
 
-#if defined(SK_GRAPHITE)
     int compilerGraphiteBinarySize = std::size(SKSL_MINIFIED_sksl_graphite_frag) +
                                      std::size(SKSL_MINIFIED_sksl_graphite_vert);
     bench(log, "sksl_binary_size_graphite", compilerGraphiteBinarySize);
-#endif
 
     int compilerComputeBinarySize = std::size(SKSL_MINIFIED_sksl_compute);
     bench(log, "sksl_binary_size_compute", compilerComputeBinarySize);

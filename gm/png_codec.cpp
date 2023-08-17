@@ -200,6 +200,7 @@ public:
 
     std::map<std::string, std::string> getGoldKeys() const override {
         return std::map<std::string, std::string>{
+                {"name", getName().c_str()},
                 {"source_type", "image"},
                 {"decode_mode", DecodeModeToString(fDecodeMode)},
                 {"dst_color_type", DstColorTypeToString(fDstColorType)},
@@ -210,14 +211,14 @@ public:
 protected:
     // Based on CodecSrc::name().
     // https://skia.googlesource.com/skia/+/ce49fc71bc7cc25244020cd3e64764a6d08e54fb/dm/DMSrcSink.cpp#828
-    SkString onShortName() override {
+    SkString getName() const override {
         SkString name = SkOSPath::Basename(fPath.c_str());
         return name;
     }
 
     // Based on CodecSrc::size().
     // https://skia.googlesource.com/skia/+/ce49fc71bc7cc25244020cd3e64764a6d08e54fb/dm/DMSrcSink.cpp#803
-    SkISize onISize() override {
+    SkISize getISize() override {
         DecodeResult decodeResult = decode(fPath);
         if (decodeResult.errorMsg != "") {
             return {0, 0};

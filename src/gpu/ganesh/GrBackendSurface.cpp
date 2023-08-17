@@ -588,7 +588,7 @@ GrBackendTexture& GrBackendTexture::operator=(const GrBackendTexture& that) {
             break;
 #ifdef SK_VULKAN
         case GrBackendApi::kVulkan:
-            fVkInfo.assign(that.fVkInfo, this->isValid());
+            fVkInfo.assign(that.fVkInfo);
             break;
 #endif
 #ifdef SK_METAL
@@ -906,13 +906,6 @@ GrBackendRenderTarget::GrBackendRenderTarget(int width, int height, const GrMtlT
         , fStencilBits(0)
         , fBackend(GrBackendApi::kMetal)
         , fMtlInfo(mtlInfo) {}
-
-GrBackendRenderTarget::GrBackendRenderTarget(int width, int height,
-                                             int sampleCount,
-                                             const GrMtlTextureInfo& mtlInfo)
-        : GrBackendRenderTarget(width, height, mtlInfo) {
-    fSampleCnt = sampleCount;
-}
 #endif
 
 #ifdef SK_DIRECT3D
@@ -999,7 +992,7 @@ GrBackendRenderTarget& GrBackendRenderTarget::operator=(const GrBackendRenderTar
             break;
 #ifdef SK_VULKAN
         case GrBackendApi::kVulkan:
-            fVkInfo.assign(that.fVkInfo, this->isValid());
+            fVkInfo.assign(that.fVkInfo);
             break;
 #endif
 #ifdef SK_METAL
