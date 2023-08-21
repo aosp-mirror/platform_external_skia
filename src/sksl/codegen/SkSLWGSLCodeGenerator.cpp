@@ -12,6 +12,7 @@
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkEnumBitMask.h"
+#include "src/base/SkStringView.h"
 #include "src/sksl/SkSLAnalysis.h"
 #include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLCompiler.h"
@@ -74,6 +75,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <initializer_list>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -102,6 +104,274 @@ const char* operator_name(Operator op) {
         case Operator::Kind::LOGICALXOR:  return " != ";
         default:                          return op.operatorName();
     }
+}
+
+bool is_reserved_word(std::string_view word) {
+    static const THashSet<std::string_view> kReservedWords{
+            // Used by SkSL:
+            "FSIn",
+            "FSOut",
+            "VSIn",
+            "VSOut",
+            "_globalUniforms",
+            "_GlobalUniforms",
+            "_return",
+            "_stageIn",
+            "_stageOut",
+            // Keywords: https://www.w3.org/TR/WGSL/#keyword-summary
+            "alias",
+            "break",
+            "case",
+            "const",
+            "const_assert",
+            "continue",
+            "continuing",
+            "default",
+            "diagnostic",
+            "discard",
+            "else",
+            "enable",
+            "false",
+            "fn",
+            "for",
+            "if",
+            "let",
+            "loop",
+            "override",
+            "requires",
+            "return",
+            "struct",
+            "switch",
+            "true",
+            "var",
+            "while",
+            // Pre-declared types: https://www.w3.org/TR/WGSL/#predeclared-types
+            "bool",
+            "f16",
+            "f32",
+            "i32",
+            "u32",
+            // ... and pre-declared type generators:
+            "array",
+            "atomic",
+            "mat2x2",
+            "mat2x3",
+            "mat2x4",
+            "mat3x2",
+            "mat3x3",
+            "mat3x4",
+            "mat4x2",
+            "mat4x3",
+            "mat4x4",
+            "ptr",
+            "texture_1d",
+            "texture_2d",
+            "texture_2d_array",
+            "texture_3d",
+            "texture_cube",
+            "texture_cube_array",
+            "texture_multisampled_2d",
+            "texture_storage_1d",
+            "texture_storage_2d",
+            "texture_storage_2d_array",
+            "texture_storage_3d",
+            "vec2",
+            "vec3",
+            "vec4",
+            // Pre-declared enumerants: https://www.w3.org/TR/WGSL/#predeclared-enumerants
+            "read",
+            "write",
+            "read_write",
+            "function",
+            "private",
+            "workgroup",
+            "uniform",
+            "storage",
+            "perspective",
+            "linear",
+            "flat",
+            "center",
+            "centroid",
+            "sample",
+            "vertex_index",
+            "instance_index",
+            "position",
+            "front_facing",
+            "frag_depth",
+            "local_invocation_id",
+            "local_invocation_index",
+            "global_invocation_id",
+            "workgroup_id",
+            "num_workgroups",
+            "sample_index",
+            "sample_mask",
+            "rgba8unorm",
+            "rgba8snorm",
+            "rgba8uint",
+            "rgba8sint",
+            "rgba16uint",
+            "rgba16sint",
+            "rgba16float",
+            "r32uint",
+            "r32sint",
+            "r32float",
+            "rg32uint",
+            "rg32sint",
+            "rg32float",
+            "rgba32uint",
+            "rgba32sint",
+            "rgba32float",
+            "bgra8unorm",
+            // Reserved words: https://www.w3.org/TR/WGSL/#reserved-words
+            "_",
+            "NULL",
+            "Self",
+            "abstract",
+            "active",
+            "alignas",
+            "alignof",
+            "as",
+            "asm",
+            "asm_fragment",
+            "async",
+            "attribute",
+            "auto",
+            "await",
+            "become",
+            "binding_array",
+            "cast",
+            "catch",
+            "class",
+            "co_await",
+            "co_return",
+            "co_yield",
+            "coherent",
+            "column_major",
+            "common",
+            "compile",
+            "compile_fragment",
+            "concept",
+            "const_cast",
+            "consteval",
+            "constexpr",
+            "constinit",
+            "crate",
+            "debugger",
+            "decltype",
+            "delete",
+            "demote",
+            "demote_to_helper",
+            "do",
+            "dynamic_cast",
+            "enum",
+            "explicit",
+            "export",
+            "extends",
+            "extern",
+            "external",
+            "fallthrough",
+            "filter",
+            "final",
+            "finally",
+            "friend",
+            "from",
+            "fxgroup",
+            "get",
+            "goto",
+            "groupshared",
+            "highp",
+            "impl",
+            "implements",
+            "import",
+            "inline",
+            "instanceof",
+            "interface",
+            "layout",
+            "lowp",
+            "macro",
+            "macro_rules",
+            "match",
+            "mediump",
+            "meta",
+            "mod",
+            "module",
+            "move",
+            "mut",
+            "mutable",
+            "namespace",
+            "new",
+            "nil",
+            "noexcept",
+            "noinline",
+            "nointerpolation",
+            "noperspective",
+            "null",
+            "nullptr",
+            "of",
+            "operator",
+            "package",
+            "packoffset",
+            "partition",
+            "pass",
+            "patch",
+            "pixelfragment",
+            "precise",
+            "precision",
+            "premerge",
+            "priv",
+            "protected",
+            "pub",
+            "public",
+            "readonly",
+            "ref",
+            "regardless",
+            "register",
+            "reinterpret_cast",
+            "require",
+            "resource",
+            "restrict",
+            "self",
+            "set",
+            "shared",
+            "sizeof",
+            "smooth",
+            "snorm",
+            "static",
+            "static_assert",
+            "static_cast",
+            "std",
+            "subroutine",
+            "super",
+            "target",
+            "template",
+            "this",
+            "thread_local",
+            "throw",
+            "trait",
+            "try",
+            "type",
+            "typedef",
+            "typeid",
+            "typename",
+            "typeof",
+            "union",
+            "unless",
+            "unorm",
+            "unsafe",
+            "unsized",
+            "use",
+            "using",
+            "varying",
+            "virtual",
+            "volatile",
+            "wgsl",
+            "where",
+            "with",
+            "writeonly",
+            "yield",
+    };
+
+    return kReservedWords.contains(word);
 }
 
 std::string_view pipeline_struct_prefix(ProgramKind kind) {
@@ -873,9 +1143,12 @@ std::string WGSLCodeGenerator::assembleName(std::string_view name) {
         // WGSL doesn't allow anonymous function parameters.
         return "_skAnonymous" + std::to_string(fScratchCount++);
     }
-    // Add underscore before name to avoid conflict with reserved words.
-    return fReservedWords.contains(name) ? std::string("_") + std::string(name)
-                                         : std::string(name);
+    // Add `R_` before reserved names to avoid any potential reserved-word conflict.
+    return (skstd::starts_with(name, "_sk") ||
+            skstd::starts_with(name, "R_") ||
+            is_reserved_word(name))
+                   ? std::string("R_") + std::string(name)
+                   : std::string(name);
 }
 
 void WGSLCodeGenerator::writeVariableDecl(const Type& type,
@@ -993,7 +1266,7 @@ void WGSLCodeGenerator::writeFunction(const FunctionDefinition& f) {
 
 void WGSLCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& decl) {
     this->write("fn ");
-    this->write(decl.mangledName());
+    this->write(this->assembleName(decl.mangledName()));
     this->write("(");
     auto separator = SkSL::String::Separator();
     if (this->writeFunctionDependencyParams(decl)) {
@@ -1740,45 +2013,42 @@ std::string WGSLCodeGenerator::assembleExpression(const Expression& e,
     }
 }
 
-std::string WGSLCodeGenerator::binaryOpOrComponentwiseDivision(const Expression& left,
-                                                               const Expression& right,
-                                                               const std::string& lhs,
-                                                               const std::string& rhs,
-                                                               Operator op) {
-    if (left.type().isMatrix() && right.type().matches(left.type()) &&
-        op.kind() == OperatorKind::SLASH) {
-        // WGSL does not natively support componentwise matrix-division-by-matrix.
-        // We break it apart into componentwise vector division.
-        return this->assembleComponentwiseMatrixBinary(left.type(), lhs, rhs, op);
+static bool is_nontrivial_expression(const Expression& expr) {
+    // We consider a "trivial expression" one which we can repeat multiple times in the output
+    // without being dangerous or spammy. We avoid emitting temporary variables for very trivial
+    // expressions: literals, unadorned variable references, or constant vectors.
+    if (expr.is<VariableReference>() || expr.is<Literal>()) {
+        // Variables and literals are trivial; adding a let-declaration won't simplify anything.
+        return false;
     }
-    // Every other SkSL operator has a direct analogue.
-    return lhs + operator_name(op) + rhs;
+    if (expr.type().isVector() && Analysis::IsConstantExpression(expr)) {
+        // Compile-time constant vectors are also considered trivial; they're short and sweet.
+        return false;
+    }
+    return true;
 }
 
-std::string WGSLCodeGenerator::assembleBinaryExpressionElement(const Expression& expr,
-                                                               Operator op,
-                                                               const Expression& other,
-                                                               Precedence precedence) {
-    // SkSL supports `matrix op scalar` for any operator, but WGSL only supports multiplication.
-    // If we detect a matrix-op-scalar expression that isn't multiplication, we need to manually
-    // splat the scalar into a matrix.
-    bool needMatrixSplatOnScalar = other.type().isMatrix() && expr.type().isScalar() &&
-                                   op.isValidForMatrixOrVector() &&
-                                   op.removeAssignment().kind() != Operator::Kind::STAR;
-    if (needMatrixSplatOnScalar) {
-        std::string scalar = this->writeNontrivialScratchLet(expr, Precedence::kSequence);
-        std::string result = to_wgsl_type(other.type()) + '(';
-        auto separator = String::Separator();
-        int numSlots = other.type().slotCount();
-        for (int index = 0; index < numSlots; ++index) {
-            result += separator();
-            result += scalar;
-        }
-        return result + ')';
-    }
+bool WGSLCodeGenerator::binaryOpNeedsComponentwiseMatrixPolyfill(const Type& left,
+                                                                 const Type& right,
+                                                                 Operator op) {
+    switch (op.kind()) {
+        case OperatorKind::SLASH:
+            // WGSL does not natively support componentwise matrix-op-matrix for division.
+            if (left.isMatrix() && right.isMatrix()) {
+                return true;
+            }
+            [[fallthrough]];
 
-    // For other expression types, we can emit them as-is.
-    return this->assembleExpression(expr, precedence);
+        case OperatorKind::PLUS:
+        case OperatorKind::MINUS:
+            // WGSL does not natively support componentwise matrix-op-scalar or scalar-op-matrix for
+            // addition, subtraction or division.
+            return (left.isMatrix() && right.isScalar()) ||
+                   (left.isScalar() && right.isMatrix());
+
+        default:
+            return false;
+    }
 }
 
 std::string WGSLCodeGenerator::assembleBinaryExpression(const BinaryExpression& b,
@@ -1895,15 +2165,24 @@ std::string WGSLCodeGenerator::assembleBinaryExpression(const Expression& left,
 
         if (op.kind() == OperatorKind::EQ) {
             // Evaluate the right-hand side of simple assignment (`a = b` --> `b`).
-            expr = this->assembleBinaryExpressionElement(right, op, left, Precedence::kAssignment);
+            expr = this->assembleExpression(right, Precedence::kAssignment);
         } else {
             // Evaluate the right-hand side of compound-assignment (`a += b` --> `a + b`).
             op = op.removeAssignment();
 
             std::string lhs = lvalue->load();
-            std::string rhs = this->assembleBinaryExpressionElement(right, op, left,
-                                                                    op.getBinaryPrecedence());
-            expr = this->binaryOpOrComponentwiseDivision(left, right, lhs, rhs, op);
+            std::string rhs = this->assembleExpression(right, op.getBinaryPrecedence());
+
+            if (this->binaryOpNeedsComponentwiseMatrixPolyfill(left.type(), right.type(), op)) {
+                if (is_nontrivial_expression(right)) {
+                    rhs = this->writeScratchLet(rhs);
+                }
+
+                expr = this->assembleComponentwiseMatrixBinary(left.type(), right.type(),
+                                                               lhs, rhs, op);
+            } else {
+                expr = lhs + operator_name(op) + rhs;
+            }
         }
 
         // Emit the assignment statement (`a = a + b`).
@@ -1953,12 +2232,26 @@ std::string WGSLCodeGenerator::assembleBinaryExpression(const Expression& left,
     // infinity or nan here, as we would expect. (skia:14385)
     bool bothSidesConstant = ConstantFolder::GetConstantValueOrNull(left) &&
                              ConstantFolder::GetConstantValueOrNull(right);
-    std::string lhs = bothSidesConstant
-                              ? this->writeScratchLet(left, precedence)
-                              : this->assembleBinaryExpressionElement(left, op, right, precedence);
-    std::string rhs = this->assembleBinaryExpressionElement(right, op, left, precedence);
 
-    expr += this->binaryOpOrComponentwiseDivision(left, right, lhs, rhs, op);
+    std::string lhs = this->assembleExpression(left, precedence);
+    std::string rhs = this->assembleExpression(right, precedence);
+
+    if (this->binaryOpNeedsComponentwiseMatrixPolyfill(left.type(), right.type(), op)) {
+        if (bothSidesConstant || is_nontrivial_expression(left)) {
+            lhs = this->writeScratchLet(lhs);
+        }
+        if (is_nontrivial_expression(right)) {
+            rhs = this->writeScratchLet(rhs);
+        }
+
+        expr += this->assembleComponentwiseMatrixBinary(left.type(), right.type(), lhs, rhs, op);
+    } else {
+        if (bothSidesConstant) {
+            lhs = this->writeScratchLet(lhs);
+        }
+
+        expr += lhs + operator_name(op) + rhs;
+    }
 
     if (needParens) {
         expr += ')';
@@ -2166,17 +2459,33 @@ std::string WGSLCodeGenerator::assemblePartialSampleCall(std::string_view functi
     return expr;
 }
 
-std::string WGSLCodeGenerator::assembleComponentwiseMatrixBinary(const Type& matrixType,
+std::string WGSLCodeGenerator::assembleComponentwiseMatrixBinary(const Type& leftType,
+                                                                 const Type& rightType,
                                                                  const std::string& left,
                                                                  const std::string& right,
                                                                  Operator op) {
-    std::string expr = to_wgsl_type(matrixType) + '(';
+    bool leftIsMatrix = leftType.isMatrix();
+    bool rightIsMatrix = rightType.isMatrix();
+    const Type& matrixType = leftIsMatrix ? leftType : rightType;
 
+    std::string expr = to_wgsl_type(matrixType) + '(';
     auto separator = String::Separator();
     int columns = matrixType.columns();
     for (int c = 0; c < columns; ++c) {
-        String::appendf(&expr, "%s%s[%d]%s%s[%d]",
-                        separator().c_str(), left.c_str(), c, op.operatorName(), right.c_str(), c);
+        expr += separator();
+        expr += left;
+        if (leftIsMatrix) {
+            expr += '[';
+            expr += std::to_string(c);
+            expr += ']';
+        }
+        expr += op.operatorName();
+        expr += right;
+        if (rightIsMatrix) {
+            expr += '[';
+            expr += std::to_string(c);
+            expr += ']';
+        }
     }
     return expr + ')';
 }
@@ -2252,8 +2561,12 @@ std::string WGSLCodeGenerator::assembleIntrinsicCall(const FunctionCall& call,
                             ? this->writeScratchLet(*arguments[0], Precedence::kPostfix)
                             : this->writeNontrivialScratchLet(*arguments[0], Precedence::kPostfix);
             std::string arg1 = this->writeNontrivialScratchLet(*arguments[1], Precedence::kPostfix);
-            return this->writeScratchLet(this->assembleComponentwiseMatrixBinary(
-                    arguments[0]->type(), arg0, arg1, OperatorKind::STAR));
+            return this->writeScratchLet(
+                    this->assembleComponentwiseMatrixBinary(arguments[0]->type(),
+                                                            arguments[1]->type(),
+                                                            arg0,
+                                                            arg1,
+                                                            OperatorKind::STAR));
         }
         case k_mix_IntrinsicKind: {
             const char* name = arguments[2]->type().componentType().isBoolean() ? "select" : "mix";
@@ -2750,16 +3063,8 @@ std::string WGSLCodeGenerator::writeScratchLet(const Expression& expr,
 std::string WGSLCodeGenerator::writeNontrivialScratchLet(const Expression& expr,
                                                          Precedence parentPrecedence) {
     std::string result = this->assembleExpression(expr, parentPrecedence);
-
-    if (expr.is<VariableReference>() || expr.is<Literal>()) {
-        // Variables and literals are trivial; adding a let-declaration won't simplify anything.
-        return result;
-    }
-    if (expr.type().isVector() && Analysis::IsConstantExpression(expr)) {
-        // Compile-time constant vectors are also considered trivial; they're short and sweet.
-        return result;
-    }
-    return this->writeScratchLet(result);
+    return is_nontrivial_expression(expr) ? this->writeScratchLet(result)
+                                          : result;
 }
 
 std::string WGSLCodeGenerator::assembleTernaryExpression(const TernaryExpression& t,
