@@ -20,7 +20,6 @@
 
 #ifdef SK_VULKAN
 #include "include/gpu/vk/GrVkTypes.h"
-#include "include/private/gpu/ganesh/GrVkTypesPriv.h"
 #include "include/private/gpu/vk/SkiaVulkan.h"
 #endif
 
@@ -423,7 +422,7 @@ private:
 
     union {
 #ifdef SK_VULKAN
-        GrVkBackendSurfaceInfo fVkInfo;
+        GrVkImageInfo fVkInfo;
 #endif
         GrMockTextureInfo fMockInfo;
 #ifdef SK_DIRECT3D
@@ -455,9 +454,6 @@ public:
 #endif
 
 #ifdef SK_VULKAN
-    /** Deprecated. Sample count is now part of GrVkImageInfo. */
-    GrBackendRenderTarget(int width, int height, int sampleCnt, const GrVkImageInfo& vkInfo);
-
     GrBackendRenderTarget(int width, int height, const GrVkImageInfo& vkInfo);
 #endif
 
@@ -616,7 +612,7 @@ private:
 
     union {
 #ifdef SK_VULKAN
-        GrVkBackendSurfaceInfo fVkInfo;
+        GrVkImageInfo fVkInfo;
 #endif
         GrMockRenderTargetInfo fMockInfo;
 #ifdef SK_DIRECT3D

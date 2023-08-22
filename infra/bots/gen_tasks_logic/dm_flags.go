@@ -185,6 +185,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		configs = append(configs, "vk", "vkdmsaa")
 		// skbug.com/12826
 		skip(ALL, "test", ALL, "GrThreadSafeCache16Verts")
+                // b/296440036
+                skip(ALL, "test", ALL, "ImageAsyncReadPixels")
 		// skbug.com/12829
 		skip(ALL, "test", ALL, "image_subset")
 	} else if b.cpu() {
@@ -337,6 +339,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				skip(ALL, "test", ALL, "GraphiteTextureProxyTest")
 				skip(ALL, "test", ALL, "GraphiteYUVAPromiseImageMultipleImgUses")
 				skip(ALL, "test", ALL, "GraphiteYUVAPromiseImageRecorderLoss")
+				skip(ALL, "test", ALL, "ImageOriginTest_drawImage_Graphite")
+				skip(ALL, "test", ALL, "ImageOriginTest_imageShader_Graphite")
 				skip(ALL, "test", ALL, "ImageProviderTest_Graphite_Testing")
 				skip(ALL, "test", ALL, "ImageProviderTest_Graphite_Default")
 				skip(ALL, "test", ALL, "MakeColorSpace_Test")
@@ -1085,6 +1089,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	}
 
 	if b.matchGpu("Adreno[3456]") { // disable broken tests on Adreno 3/4/5/6xx
+		skip(ALL, "tests", ALL, "ImageAsyncReadPixels")   // b/296440036
+		skip(ALL, "tests", ALL, "SurfaceAsyncReadPixels") // b/296440036
 		skip(ALL, "tests", ALL, "SkSLArrayCast_Ganesh")       // skia:12332
 		skip(ALL, "tests", ALL, "SkSLArrayComparison_Ganesh") // skia:12332
 		skip(ALL, "tests", ALL, "SkSLCommaSideEffects_Ganesh")
@@ -1182,7 +1188,7 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 	if b.extraConfig("ANGLE") && b.matchOs("Win") && b.matchGpu("IntelIris(540|655|Xe)") {
 		skip(ALL, "tests", ALL, "SkSLSwitchDefaultOnly_Ganesh") // skia:12465
-		skip(ALL, "tests", ALL, "ImageFilterCropRect_Ganesh")   // b/294080402
+		skip(ALL, "tests", ALL, "ImageFilterCropRect_Gpu")      // b/294080402
 	}
 
 	if b.extraConfig("Dawn") {

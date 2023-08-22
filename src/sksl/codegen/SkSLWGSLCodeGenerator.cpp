@@ -1266,8 +1266,12 @@ void WGSLCodeGenerator::writeFunction(const FunctionDefinition& f) {
 
 void WGSLCodeGenerator::writeFunctionDeclaration(const FunctionDeclaration& decl) {
     this->write("fn ");
-    this->write(this->assembleName(decl.mangledName()));
-    this->write("(");
+    if (decl.isMain()) {
+        this->write("_skslMain(");
+    } else {
+        this->write(this->assembleName(decl.mangledName()));
+        this->write("(");
+    }
     auto separator = SkSL::String::Separator();
     if (this->writeFunctionDependencyParams(decl)) {
         separator();  // update the separator as parameters have been written
@@ -1321,10 +1325,10 @@ void WGSLCodeGenerator::writeEntryPoint(const FunctionDefinition& main) {
         // Synthesize a basic entrypoint which just calls straight through to main.
         // This is only used by skslc and just needs to pass the WGSL validator; Skia won't ever
         // emit functions like this.
-        this->writeLine("@fragment fn runtimeShaderMain(@location(0) _coords: vec2<f32>) -> "
+        this->writeLine("@fragment fn main(@location(0) _coords: vec2<f32>) -> "
                                      "@location(0) vec4<f32> {");
         ++fIndentation;
-        this->writeLine("return main(_coords);");
+        this->writeLine("return _skslMain(_coords);");
         --fIndentation;
         this->writeLine("}");
         return;
@@ -1337,14 +1341,14 @@ void WGSLCodeGenerator::writeEntryPoint(const FunctionDefinition& main) {
     // function.
     std::string outputType;
     if (ProgramConfig::IsVertex(fProgram.fConfig->fKind)) {
-        this->write("@vertex fn vertexMain(");
+        this->write("@vertex fn main(");
         if (fPipelineInputCount > 0) {
             this->write("_stageIn: VSIn");
         }
         this->writeLine(") -> VSOut {");
         outputType = "VSOut";
     } else if (ProgramConfig::IsFragment(fProgram.fConfig->fKind)) {
-        this->write("@fragment fn fragmentMain(");
+        this->write("@fragment fn main(");
         if (fPipelineInputCount > 0) {
             this->write("_stageIn: FSIn");
         }
@@ -1380,8 +1384,7 @@ void WGSLCodeGenerator::writeEntryPoint(const FunctionDefinition& main) {
     }
 
     // Generate the function call to the user-defined main:
-    this->write(main.declaration().mangledName());
-    this->write("(");
+    this->write("_skslMain(");
     auto separator = SkSL::String::Separator();
     WGSLFunctionDependencies* deps = fRequirements.dependencies.find(&main.declaration());
     if (deps) {
@@ -1951,7 +1954,7 @@ std::string WGSLCodeGenerator::assembleExpression(const Expression& e,
             return this->assembleBinaryExpression(e.as<BinaryExpression>(), parentPrecedence);
 
         case Expression::Kind::kConstructorCompound:
-            return this->assembleConstructorCompound(e.as<ConstructorCompound>(), parentPrecedence);
+            return this->assembleConstructorCompound(e.as<ConstructorCompound>());
 
         case Expression::Kind::kConstructorArrayCast:
             // This is a no-op, since WGSL 1.0 doesn't have any concept of precision qualifiers.
@@ -1964,15 +1967,13 @@ std::string WGSLCodeGenerator::assembleExpression(const Expression& e,
         case Expression::Kind::kConstructorScalarCast:
         case Expression::Kind::kConstructorSplat:
         case Expression::Kind::kConstructorStruct:
-            return this->assembleAnyConstructor(e.asAnyConstructor(), parentPrecedence);
+            return this->assembleAnyConstructor(e.asAnyConstructor());
 
         case Expression::Kind::kConstructorDiagonalMatrix:
-            return this->assembleConstructorDiagonalMatrix(e.as<ConstructorDiagonalMatrix>(),
-                                                           parentPrecedence);
+            return this->assembleConstructorDiagonalMatrix(e.as<ConstructorDiagonalMatrix>());
 
         case Expression::Kind::kConstructorMatrixResize:
-            return this->assembleConstructorMatrixResize(e.as<ConstructorMatrixResize>(),
-                                                         parentPrecedence);
+            return this->assembleConstructorMatrixResize(e.as<ConstructorMatrixResize>());
 
         case Expression::Kind::kEmpty:
             return "false";
@@ -2026,6 +2027,28 @@ static bool is_nontrivial_expression(const Expression& expr) {
         return false;
     }
     return true;
+}
+
+static bool binary_op_is_ambiguous_in_wgsl(Operator op) {
+    // WGSL always requires parentheses for some operators which are deemed to be ambiguous.
+    // (8.19. Operator Precedence and Associativity)
+    switch (op.kind()) {
+        case OperatorKind::LOGICALOR:
+        case OperatorKind::LOGICALAND:
+        case OperatorKind::BITWISEOR:
+        case OperatorKind::BITWISEAND:
+        case OperatorKind::BITWISEXOR:
+        case OperatorKind::SHL:
+        case OperatorKind::SHR:
+        case OperatorKind::LT:
+        case OperatorKind::GT:
+        case OperatorKind::LTEQ:
+        case OperatorKind::GTEQ:
+            return true;
+
+        default:
+            return false;
+    }
 }
 
 bool WGSLCodeGenerator::binaryOpNeedsComponentwiseMatrixPolyfill(const Type& left,
@@ -2198,28 +2221,9 @@ std::string WGSLCodeGenerator::assembleBinaryExpression(const Expression& left,
 
     Precedence precedence = op.getBinaryPrecedence();
     bool needParens = precedence >= parentPrecedence;
-
-    // WGSL always requires parentheses for some operators which are deemed to be ambiguous.
-    // (8.19. Operator Precedence and Associativity)
-    switch (op.kind()) {
-        case OperatorKind::LOGICALOR:
-        case OperatorKind::LOGICALAND:
-        case OperatorKind::BITWISEOR:
-        case OperatorKind::BITWISEAND:
-        case OperatorKind::BITWISEXOR:
-        case OperatorKind::SHL:
-        case OperatorKind::SHR:
-        case OperatorKind::LT:
-        case OperatorKind::GT:
-        case OperatorKind::LTEQ:
-        case OperatorKind::GTEQ:
-            precedence = Precedence::kParentheses;
-            break;
-
-        default:
-            break;
+    if (binary_op_is_ambiguous_in_wgsl(op)) {
+        precedence = Precedence::kParentheses;
     }
-
     if (needParens) {
         expr = "(";
     }
@@ -2409,8 +2413,8 @@ std::string WGSLCodeGenerator::assembleBinaryOpIntrinsic(Operator op,
     SkASSERT(!call.type().isVoid());
 
     Precedence precedence = op.getBinaryPrecedence();
-    bool needParens = precedence >= parentPrecedence;
-
+    bool needParens = precedence >= parentPrecedence ||
+                      binary_op_is_ambiguous_in_wgsl(op);
     std::string expr;
     if (needParens) {
         expr.push_back('(');
@@ -3084,9 +3088,9 @@ std::string WGSLCodeGenerator::assembleTernaryExpression(const TernaryExpression
             expr.push_back('(');
         }
         expr += "select(";
-        expr += this->assembleExpression(*t.ifFalse(), Precedence::kTernary);
+        expr += this->assembleExpression(*t.ifFalse(), Precedence::kSequence);
         expr += ", ";
-        expr += this->assembleExpression(*t.ifTrue(), Precedence::kTernary);
+        expr += this->assembleExpression(*t.ifTrue(), Precedence::kSequence);
         expr += ", ";
 
         bool isVector = t.type().isVector();
@@ -3094,7 +3098,7 @@ std::string WGSLCodeGenerator::assembleTernaryExpression(const TernaryExpression
             // Splat the condition expression into a vector.
             expr += String::printf("vec%d<bool>(", t.type().columns());
         }
-        expr += this->assembleExpression(*t.test(), Precedence::kTernary);
+        expr += this->assembleExpression(*t.test(), Precedence::kSequence);
         if (isVector) {
             expr.push_back(')');
         }
@@ -3204,8 +3208,7 @@ std::string WGSLCodeGenerator::assembleVariableReference(const VariableReference
     return expr;
 }
 
-std::string WGSLCodeGenerator::assembleAnyConstructor(const AnyConstructor& c,
-                                                      Precedence parentPrecedence) {
+std::string WGSLCodeGenerator::assembleAnyConstructor(const AnyConstructor& c) {
     std::string expr = to_wgsl_type(c.type());
     expr.push_back('(');
     auto separator = SkSL::String::Separator();
@@ -3217,20 +3220,18 @@ std::string WGSLCodeGenerator::assembleAnyConstructor(const AnyConstructor& c,
     return expr;
 }
 
-std::string WGSLCodeGenerator::assembleConstructorCompound(const ConstructorCompound& c,
-                                                           Precedence parentPrecedence) {
+std::string WGSLCodeGenerator::assembleConstructorCompound(const ConstructorCompound& c) {
     if (c.type().isVector()) {
-        return this->assembleConstructorCompoundVector(c, parentPrecedence);
+        return this->assembleConstructorCompoundVector(c);
     } else if (c.type().isMatrix()) {
-        return this->assembleConstructorCompoundMatrix(c, parentPrecedence);
+        return this->assembleConstructorCompoundMatrix(c);
     } else {
         fContext.fErrors->error(c.fPosition, "unsupported compound constructor");
         return {};
     }
 }
 
-std::string WGSLCodeGenerator::assembleConstructorCompoundVector(const ConstructorCompound& c,
-                                                                 Precedence parentPrecedence) {
+std::string WGSLCodeGenerator::assembleConstructorCompoundVector(const ConstructorCompound& c) {
     // WGSL supports constructing vectors from a mix of scalars and vectors but
     // not matrices (see https://www.w3.org/TR/WGSL/#type-constructor-expr).
     //
@@ -3246,11 +3247,10 @@ std::string WGSLCodeGenerator::assembleConstructorCompoundVector(const Construct
                                   to_wgsl_type(c.type()).c_str(), matrix.c_str(), matrix.c_str());
         }
     }
-    return this->assembleAnyConstructor(c, parentPrecedence);
+    return this->assembleAnyConstructor(c);
 }
 
-std::string WGSLCodeGenerator::assembleConstructorCompoundMatrix(const ConstructorCompound& ctor,
-                                                                 Precedence parentPrecedence) {
+std::string WGSLCodeGenerator::assembleConstructorCompoundMatrix(const ConstructorCompound& ctor) {
     SkASSERT(ctor.type().isMatrix());
 
     std::string expr = to_wgsl_type(ctor.type()) + '(';
@@ -3272,8 +3272,8 @@ std::string WGSLCodeGenerator::assembleConstructorCompoundMatrix(const Construct
     return expr + ')';
 }
 
-std::string WGSLCodeGenerator::assembleConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c,
-                                                                 Precedence parentPrecedence) {
+std::string WGSLCodeGenerator::assembleConstructorDiagonalMatrix(
+        const ConstructorDiagonalMatrix& c) {
     const Type& type = c.type();
     SkASSERT(type.isMatrix());
     SkASSERT(c.argument()->type().isScalar());
@@ -3297,8 +3297,8 @@ std::string WGSLCodeGenerator::assembleConstructorDiagonalMatrix(const Construct
     return expr + ')';
 }
 
-std::string WGSLCodeGenerator::assembleConstructorMatrixResize(const ConstructorMatrixResize& ctor,
-                                                               Precedence parentPrecedence) {
+std::string WGSLCodeGenerator::assembleConstructorMatrixResize(
+        const ConstructorMatrixResize& ctor) {
     std::string source = this->writeScratchLet(this->assembleExpression(*ctor.argument(),
                                                                         Precedence::kSequence));
     int columns = ctor.type().columns();
