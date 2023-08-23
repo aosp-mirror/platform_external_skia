@@ -74,13 +74,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/text:text_hdrs",
 				"//src/text:text_srcs",
 			}},
-		{Var: "skia_needs_sksl_sources",
-			Rules: []string{
-				"//src/core:sksl_hdrs",
-				"//src/core:sksl_srcs",
-				"//src/shaders:sksl_hdrs",
-				"//src/shaders:sksl_srcs",
-			}},
 		{Var: "skia_pathops_public",
 			Rules: []string{"//include/pathops:public_hdrs"}},
 		{Var: "skia_pathops_sources",
@@ -151,11 +144,7 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			}},
 		{Var: "skia_colorfilters_sksl_sources",
 			Rules: []string{
-				"//src/effects/colorfilters:sksl_srcs",
-			}},
-		{Var: "skia_colorfilters_nosksl_sources",
-			Rules: []string{
-				"//src/effects/colorfilters:no_sksl_srcs",
+				// TODO(b/294209201): remove skia_colorfilters_sksl_sources from Chrome GN files
 			}},
 	}},
 	{GNI: "gn/effects_imagefilters.gni", Vars: []exporter.GNIFileListExportDesc{
@@ -200,6 +189,10 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/sksl:core_hdrs",
 				"//src/sksl:core_srcs",
 			}},
+		{Var: "skia_needs_sksl_sources",
+			Rules: []string{
+				// TODO(b/294209201): remove skia_needs_sksl_sources from Chrome GN files
+			}},
 		{Var: "skia_sksl_tracing_sources",
 			Rules: []string{
 				"//src/sksl/tracing:enabled_hdrs",
@@ -213,13 +206,15 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		{Var: "skslc_deps",
 			Rules: []string{
 				"//src/base:skslc_srcs",
+				"//src/core:core_skslc_hdrs",
 				"//src/core:core_skslc_srcs",
+				"//src/gpu/ganesh:core_skslc_hdrs",
 				"//src/gpu/ganesh:core_skslc_srcs",
 				"//src/ports:malloc",
 				"//src/ports:osfile",
+				"//src/utils:core_skslc_hdrs",
 				"//src/utils:core_skslc_srcs",
 				"//src/utils:json_srcs",
-				"//src/utils:sksl_srcs",
 			}}},
 	},
 	{GNI: "gn/sksl_tests.gni", Vars: []exporter.GNIFileListExportDesc{
@@ -254,8 +249,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/utils:core_srcs",
 				"//src/utils:json_hdrs",
 				"//src/utils:json_srcs",
-				"//src/utils:sksl_hdrs",
-				"//src/utils:sksl_srcs",
 				"//src/utils/mac:core_hdrs",
 				"//src/utils/mac:core_srcs",
 				"//src/utils/win:core_hdrs",
@@ -450,20 +443,20 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//modules/svg/src:srcs",
 			}},
 	}},
-    {GNI: "modules/bentleyottmann/bentleyottmann.gni", Vars: []exporter.GNIFileListExportDesc{
-        {Var: "bentleyottmann_public",
-            Rules: []string{
-                "//modules/bentleyottmann/include:hdrs",
-            }},
-        {Var: "bentleyottmann_sources",
-            Rules: []string{
-                "//modules/bentleyottmann/src:srcs",
-            }},
-        {Var: "bentleyottmann_tests",
-            Rules: []string{
-                "//modules/bentleyottmann/tests:tests",
-            }},
-    }},
+	{GNI: "modules/bentleyottmann/bentleyottmann.gni", Vars: []exporter.GNIFileListExportDesc{
+		{Var: "bentleyottmann_public",
+			Rules: []string{
+				"//modules/bentleyottmann/include:hdrs",
+			}},
+		{Var: "bentleyottmann_sources",
+			Rules: []string{
+				"//modules/bentleyottmann/src:srcs",
+			}},
+		{Var: "bentleyottmann_tests",
+			Rules: []string{
+				"//modules/bentleyottmann/tests:tests",
+			}},
+	}},
 	{GNI: "modules/skparagraph/skparagraph.gni", Vars: []exporter.GNIFileListExportDesc{
 		{Var: "skparagraph_public",
 			Rules: []string{

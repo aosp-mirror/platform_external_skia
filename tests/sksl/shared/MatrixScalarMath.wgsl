@@ -56,13 +56,13 @@ fn divisionTest_b() -> bool {
     var div: mat2x2<f32> = mat * (1.0 / _globalUniforms.testInputs.x);
     mat = mat * (1.0 / _globalUniforms.testInputs.x);
     let _skTemp2 = abs(vec4<f32>(div[0], div[1]) + vec4<f32>(8.0));
-    let _skTemp3 = all(_skTemp2 < vec4<f32>(0.01));
+    let _skTemp3 = all((_skTemp2 < vec4<f32>(0.01)));
     let _skTemp4 = abs(vec4<f32>(mat[0], mat[1]) + vec4<f32>(8.0));
-    let _skTemp5 = all(_skTemp4 < vec4<f32>(0.01));
+    let _skTemp5 = all((_skTemp4 < vec4<f32>(0.01)));
     return _skTemp3 && _skTemp5;
   }
 }
-fn main(_skParam0: vec2<f32>) -> vec4<f32> {
+fn _skslMain(_skParam0: vec2<f32>) -> vec4<f32> {
   let coords = _skParam0;
   {
     var f1: f32 = f32(_globalUniforms.colorGreen.y);
@@ -112,8 +112,8 @@ fn main(_skParam0: vec2<f32>) -> vec4<f32> {
     return _skTemp6;
   }
 }
-@fragment fn fragmentMain(_stageIn: FSIn) -> FSOut {
+@fragment fn main(_stageIn: FSIn) -> FSOut {
   var _stageOut: FSOut;
-  _stageOut.sk_FragColor = main(_stageIn.sk_FragCoord.xy);
+  _stageOut.sk_FragColor = _skslMain(_stageIn.sk_FragCoord.xy);
   return _stageOut;
 }

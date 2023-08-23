@@ -9,14 +9,14 @@ struct S {
   b: i32,
   c: i32,
 };
-fn main(_skParam0: vec2<f32>) -> vec4<f32> {
+fn _skslMain(_skParam0: vec2<f32>) -> vec4<f32> {
   let coords = _skParam0;
   {
     const _6_two: i32 = 2;
     var _8_flatten1: i32 = _6_two;
-    return select(_globalUniforms.colorRed, _globalUniforms.colorGreen, vec4<bool>((_8_flatten1 == 2)));
+    return select(_globalUniforms.colorRed, _globalUniforms.colorGreen, vec4<bool>(_8_flatten1 == 2));
   }
 }
-@fragment fn runtimeShaderMain(@location(0) _coords: vec2<f32>) -> @location(0) vec4<f32> {
-  return main(_coords);
+@fragment fn main(@location(0) _coords: vec2<f32>) -> @location(0) vec4<f32> {
+  return _skslMain(_coords);
 }

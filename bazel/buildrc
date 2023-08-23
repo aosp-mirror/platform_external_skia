@@ -85,7 +85,7 @@ build:canvaskit_full --noincompatible_enable_cc_toolchain_resolution \
 build:ck_webgl2 --with_gl_standard=webgl_standard --gpu_backend=gl_ganesh \
                 --disable_legacy_shader_context
 # CPU build needs legacy shader context otherwise SkPerlinNoiseShader does not render
-build:ck_cpu --enable_sksl --enable_legacy_shader_context
+build:ck_cpu --enable_legacy_shader_context
 
 # flags for using the CanvasKit debugger.
 build:ck_debugger --enable_build_for_debugger
@@ -113,6 +113,11 @@ build:jsfiddle_container --config=ck_full_webgl2_release \
 # config when building //infra/shaders:shaders_container.
 # This is invoked in a Louhi flow.
 build:shaders_container --config=ck_full_webgl2_release \
+                        --workspace_status_command=bazel/get_workspace_status.sh
+
+# config when building //infra/skottie:skottie_container.
+# This is invoked in a Louhi flow.
+build:skottie_container --config=ck_full_webgl2_release \
                         --workspace_status_command=bazel/get_workspace_status.sh
 
 # We only want to enforce IWYU on debug builds because we have some things that are only
