@@ -260,18 +260,14 @@ static sk_sp<SkImage> generate_picture_texture(skgpu::graphite::Recorder* record
                                                const SkImage_Picture* img,
                                                const SkImageInfo& info,
                                                SkImage::RequiredProperties requiredProps) {
-    auto sharedGenerator = img->generator();
-    SkAutoMutexExclusive mutex(sharedGenerator->fMutex);
-
     auto mm = requiredProps.fMipmapped ? skgpu::Mipmapped::kYes : skgpu::Mipmapped::kNo;
-    sk_sp<SkSurface> surface = SkSurfaces::RenderTarget(recorder, info, mm);
+    sk_sp<SkSurface> surface = SkSurfaces::RenderTarget(recorder, info, mm, img->props());
     if (!surface) {
         SKGPU_LOG_E("Failed to create Surface");
         return nullptr;
     }
 
-    surface->getCanvas()->clear(SkColors::kTransparent);
-    surface->getCanvas()->drawPicture(img->picture(), img->matrix(), img->paint());
+    img->replay(surface->getCanvas());
 
     if (requiredProps.fMipmapped) {
         skgpu::graphite::Flush(surface);
