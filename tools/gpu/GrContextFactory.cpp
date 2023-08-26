@@ -88,7 +88,7 @@ void GrContextFactory::abandonContexts() {
                 context.fTestContext->testAbandon();
             }
             GrBackendApi api = context.fGrContext->backend();
-            bool requiresEarlyAbandon = api == GrBackendApi::kVulkan || api == GrBackendApi::kDawn;
+            bool requiresEarlyAbandon = api == GrBackendApi::kVulkan;
             if (requiresEarlyAbandon) {
                 context.fGrContext->abandonContext();
             }
@@ -162,7 +162,7 @@ ContextInfo GrContextFactory::getContextInfoInternal(ContextType type, ContextOv
     }
 
     std::unique_ptr<TestContext> testCtx;
-    GrBackendApi backend = ContextTypeBackend(type);
+    GrBackendApi backend = skgpu::ganesh::ContextTypeBackend(type);
     switch (backend) {
 #ifdef SK_GL
         case GrBackendApi::kOpenGL: {
