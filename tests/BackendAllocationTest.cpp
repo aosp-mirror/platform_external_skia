@@ -208,9 +208,6 @@ static bool isBGRA8(const GrBackendFormat& format) {
             return false;
 #endif
         }
-        case GrBackendApi::kDawn: {
-            return false;
-        }
         case GrBackendApi::kMock: {
             SkTextureCompressionType compression = format.asMockCompressionType();
             if (compression != SkTextureCompressionType::kNone) {
@@ -218,6 +215,9 @@ static bool isBGRA8(const GrBackendFormat& format) {
             }
 
             return format.asMockColorType() == GrColorType::kBGRA_8888;
+        }
+        case GrBackendApi::kUnsupported: {
+            return false;
         }
     }
     SkUNREACHABLE;
@@ -244,10 +244,10 @@ static bool isRGB(const GrBackendFormat& format) {
             return false;  // Metal doesn't even pretend to support this
         case GrBackendApi::kDirect3D:
             return false;  // Not supported in Direct3D 12
-        case GrBackendApi::kDawn:
-            return false;
         case GrBackendApi::kMock:
             return format.asMockColorType() == GrColorType::kRGB_888;
+        case GrBackendApi::kUnsupported:
+            return false;
     }
     SkUNREACHABLE;
 }
@@ -759,7 +759,7 @@ void color_type_backend_allocation_test(const sk_gpu_test::ContextInfo& ctxInfo,
 DEF_GANESH_TEST(ColorTypeBackendAllocationTest, reporter, options, CtsEnforcement::kApiLevel_T) {
     for (int t = 0; t < skgpu::kContextTypeCount; ++t) {
         auto type = static_cast<skgpu::ContextType>(t);
-        if (!sk_gpu_test::GrContextFactory::IsRenderingContext(type)) {
+        if (!skgpu::IsRenderingContext(type)) {
             continue;
         }
         sk_gpu_test::GrContextFactory factory(options);
@@ -784,10 +784,10 @@ DEF_GANESH_TEST(ColorTypeBackendAllocationTest, reporter, options, CtsEnforcemen
 ///////////////////////////////////////////////////////////////////////////////
 #ifdef SK_GL
 
-DEF_GANESH_TEST_FOR_ALL_GL_CONTEXTS(GLBackendAllocationTest,
-                                    reporter,
-                                    ctxInfo,
-                                    CtsEnforcement::kApiLevel_T) {
+DEF_GANESH_TEST_FOR_GL_CONTEXT(GLBackendAllocationTest,
+                               reporter,
+                               ctxInfo,
+                               CtsEnforcement::kApiLevel_T) {
     sk_gpu_test::GLTestContext* glCtx = ctxInfo.glContext();
     GrGLStandard standard = glCtx->gl()->fStandard;
     auto context = ctxInfo.directContext();
