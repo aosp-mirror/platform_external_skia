@@ -102,7 +102,9 @@ Recorder::Recorder(sk_sp<SharedContext> sharedContext, const RecorderOptions& op
         fClientImageProvider = DefaultImageProvider::Make();
     }
 
-    fResourceProvider = fSharedContext->makeResourceProvider(this->singleOwner(), fRecorderID);
+    fResourceProvider = fSharedContext->makeResourceProvider(this->singleOwner(),
+                                                             fRecorderID,
+                                                             options.fGpuBudgetInBytes);
     fDrawBufferManager.reset( new DrawBufferManager(fResourceProvider.get(),
                                                     fSharedContext->caps()));
     fUploadBufferManager.reset(new UploadBufferManager(fResourceProvider.get(),
@@ -339,6 +341,29 @@ void Recorder::addFinishInfo(const InsertFinishInfo& info) {
                 RefCntedCallback::Make(info.fFinishedProc, info.fFinishedContext);
         fFinishedProcs.push_back(std::move(callback));
     }
+}
+
+void Recorder::freeGpuResources() {
+    ASSERT_SINGLE_OWNER
+
+    // We don't want to free the Uniform/TextureDataCaches or the Draw/UploadBufferManagers since
+    // all their resources need to be held on to until a Recording is snapped. And once snapped, all
+    // their held resources are released. The StrikeCache and TextBlobCache don't hold onto any Gpu
+    // resources.
+
+    // The AtlasProvider gives out refs to TextureProxies so it should be safe to clear its pool
+    // in the middle of Recording since those using the previous TextureProxies will have refs on
+    // them.
+    fAtlasProvider->clearTexturePool();
+
+    fResourceProvider->freeGpuResources();
+}
+
+void Recorder::performDeferredCleanup(std::chrono::milliseconds msNotUsed) {
+    ASSERT_SINGLE_OWNER
+
+    auto purgeTime = skgpu::StdSteadyClock::now() - msNotUsed;
+    fResourceProvider->purgeResourcesNotUsedSince(purgeTime);
 }
 
 void RecorderPriv::add(sk_sp<Task> task) {

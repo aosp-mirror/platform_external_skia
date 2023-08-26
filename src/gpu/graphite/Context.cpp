@@ -72,7 +72,9 @@ Context::Context(sk_sp<SharedContext> sharedContext,
         , fContextID(ContextID::Next()) {
     // We have to create this outside the initializer list because we need to pass in the Context's
     // SingleOwner object and it is declared last
-    fResourceProvider = fSharedContext->makeResourceProvider(&fSingleOwner, SK_InvalidGenID);
+    fResourceProvider = fSharedContext->makeResourceProvider(&fSingleOwner,
+                                                             SK_InvalidGenID,
+                                                             options.fGpuBudgetInBytes);
     fMappedBufferManager = std::make_unique<ClientMappedBufferManager>(this->contextID());
     fPlotUploadTracker = std::make_unique<PlotUploadTracker>();
 }
@@ -733,6 +735,23 @@ void Context::deleteBackendTexture(BackendTexture& texture) {
         return;
     }
     fResourceProvider->deleteBackendTexture(texture);
+}
+
+void Context::freeGpuResources() {
+    ASSERT_SINGLE_OWNER
+
+    this->checkAsyncWorkCompletion();
+
+    fResourceProvider->freeGpuResources();
+}
+
+void Context::performDeferredCleanup(std::chrono::milliseconds msNotUsed) {
+    ASSERT_SINGLE_OWNER
+
+    this->checkAsyncWorkCompletion();
+
+    auto purgeTime = skgpu::StdSteadyClock::now() - msNotUsed;
+    fResourceProvider->purgeResourcesNotUsedSince(purgeTime);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////

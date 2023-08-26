@@ -38,7 +38,7 @@ class Texture;
 
 class ResourceCache : public SkRefCnt {
 public:
-    static sk_sp<ResourceCache> Make(SingleOwner*, uint32_t recorderID);
+    static sk_sp<ResourceCache> Make(SingleOwner*, uint32_t recorderID, size_t maxBytes);
     ~ResourceCache() override;
 
     ResourceCache(const ResourceCache&) = delete;
@@ -66,6 +66,10 @@ public:
     // want to be able to differentiate between things like Pipelines (probably never want to purge)
     // and things like descriptor sets.
     void purgeResourcesNotUsedSince(StdSteadyClock::time_point purgeTime);
+
+    // Purge any unlocked resources. Resources that have a gpu memory size of zero will not be
+    // purged.
+    void purgeResources();
 
     // Called by the ResourceProvider when it is dropping its ref to the ResourceCache. After this
     // is called no more Resources can be returned to the ResourceCache (besides those already in
@@ -99,7 +103,7 @@ public:
     ProxyCache* proxyCache() { return fProxyCache.get(); }
 
 private:
-    ResourceCache(SingleOwner*, uint32_t recorderID);
+    ResourceCache(SingleOwner*, uint32_t recorderID, size_t maxBytes);
 
     // All these private functions are not meant to be thread safe. We don't check for is single
     // owner in them as we assume that has already been checked by the public api calls.
@@ -119,6 +123,8 @@ private:
     bool overbudget() const { return fBudgetedBytes > fMaxBytes; }
     void purgeAsNeeded();
     void purgeResource(Resource*);
+    // Passing in a nullptr for purgeTime will trigger us to try and free all unlocked resources.
+    void purgeResources(const StdSteadyClock::time_point* purgeTime);
 
 #ifdef SK_DEBUG
     bool isInCache(const Resource* r) const;
@@ -158,11 +164,8 @@ private:
 
     ResourceMap fResourceMap;
 
-    // Default maximum number of bytes of gpu memory of budgeted resources in the cache.
-    static const size_t kDefaultMaxSize = 256 * (1 << 20);
-
     // Our budget
-    size_t fMaxBytes = kDefaultMaxSize;
+    size_t fMaxBytes;
     size_t fBudgetedBytes = 0;
 
     SingleOwner* fSingleOwner = nullptr;

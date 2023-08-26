@@ -470,7 +470,8 @@ bool GrVkImage::InitImageInfo(GrVkGpu* gpu, const ImageDesc& imageDesc, GrVkImag
     if (0 == imageDesc.fWidth || 0 == imageDesc.fHeight) {
         return false;
     }
-    if ((imageDesc.fIsProtected == GrProtected::kYes) && !gpu->vkCaps().supportsProtectedMemory()) {
+    if ((imageDesc.fIsProtected == GrProtected::kYes) &&
+        !gpu->vkCaps().supportsProtectedContent()) {
         return false;
     }
 
@@ -711,9 +712,8 @@ GrVkGpu* GrVkImage::getVkGpu() const {
     return static_cast<GrVkGpu*>(this->getGpu());
 }
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 void GrVkImage::setCurrentQueueFamilyToGraphicsQueue(GrVkGpu* gpu) {
     fMutableState->setQueueFamilyIndex(gpu->queueIndex());
 }
 #endif
-

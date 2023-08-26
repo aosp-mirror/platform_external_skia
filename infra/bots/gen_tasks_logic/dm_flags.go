@@ -309,7 +309,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				// https://skbug.com/14105
 				skip(ALL, "test", ALL, "BackendTextureTest")
 				skip(ALL, "test", ALL, "GraphitePurgeNotUsedSinceResourcesTest")
-				skip(ALL, "test", ALL, "MakeColorSpace_Test")
 				skip(ALL, "test", ALL, "PaintParamsKeyTest")
 
 				if b.matchOs("Win10") {
@@ -1157,7 +1156,10 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 
 		// TODO(skia:296960708): The IntelIrisPlus+Metal config hangs on this test, but passes
 		// SurfaceContextWritePixelsMipped so let that one keep running.
-		skip(ALL, "tests", ALL, "SurfaceContextWritePixels$")
+		skip(ALL, "tests", ALL, "SurfaceContextWritePixels")
+		skip(ALL, "tests", ALL, "SurfaceContextWritePixelsMipped")
+		skip(ALL, "tests", ALL, "ImageAsyncReadPixels")
+		skip(ALL, "tests", ALL, "SurfaceAsyncReadPixels")
 	}
 
 	if b.gpu("IntelIris6100", "IntelHD4400") && b.matchOs("Win") && b.extraConfig("ANGLE") {

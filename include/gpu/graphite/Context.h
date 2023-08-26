@@ -16,6 +16,7 @@
 #include "include/gpu/graphite/Recorder.h"
 #include "include/private/base/SingleOwner.h"
 
+#include <chrono>
 #include <functional>
 #include <memory>
 
@@ -125,6 +126,21 @@ public:
      * The BackendTexture will be reset to an invalid state and should not be used again.
      */
     void deleteBackendTexture(BackendTexture&);
+
+    /**
+     * Frees GPU resources created and held by the Context. Can be called to reduce GPU memory
+     * pressure. Any resources that are still in use (e.g. being used by work submitted to the GPU)
+     * will not be deleted by this call. If the caller wants to make sure all resources are freed,
+     * then they should first make sure to submit and wait on any outstanding work.
+     */
+    void freeGpuResources();
+
+    /**
+     * Purge GPU resources on the Context that haven't been used in the past 'msNotUsed'
+     * milliseconds or are otherwise marked for deletion, regardless of whether the context is under
+     * budget.
+     */
+    void performDeferredCleanup(std::chrono::milliseconds msNotUsed);
 
     // Provides access to functions that aren't part of the public API.
     ContextPriv priv();
