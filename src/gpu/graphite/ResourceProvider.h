@@ -79,6 +79,9 @@ public:
 
     size_t getResourceCacheLimit() const { return fResourceCache->getMaxBudget(); }
 
+    void freeGpuResources();
+    void purgeResourcesNotUsedSince(StdSteadyClock::time_point purgeTime);
+
 #if GRAPHITE_TEST_UTILS
     ResourceCache* resourceCache() { return fResourceCache.get(); }
     const SharedContext* sharedContext() { return fSharedContext; }
@@ -87,7 +90,8 @@ public:
 protected:
     ResourceProvider(SharedContext* sharedContext,
                      SingleOwner* singleOwner,
-                     uint32_t recorderID);
+                     uint32_t recorderID,
+                     size_t resourceBudget);
 
     SharedContext* fSharedContext;
     // Each ResourceProvider owns one local cache; for some resources it also refers out to the

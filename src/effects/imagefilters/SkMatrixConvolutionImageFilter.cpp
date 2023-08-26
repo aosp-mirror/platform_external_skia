@@ -8,8 +8,6 @@
 #include "include/effects/SkImageFilters.h"
 #include "src/effects/imagefilters/SkCropImageFilter.h"
 
-#ifdef SK_ENABLE_SKSL
-
 #include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkColorType.h"
@@ -64,10 +62,6 @@ static constexpr int kMaxKernelDimension = 2048;
 // smaller orders like 3x3 or 5x4, etc.), but must be a multiple of 4 for better packing in std140.
 static constexpr int kMaxUniformKernelSize = 28;
 
-// TODO: This replicates a lot of the logic in GrMatrixConvolutionEffect::KernelWrapper. Once
-// fully landed, GrMatrixConvolutionEffect will only be used for 2D Gaussian blurs, in which case
-// its support for texture-backed kernels can be removed. It may also be fully removed if the 2D
-// logic can be folded into GrGaussianConvolutionFragmentProcessor.
 SkBitmap create_kernel_bitmap(const SkISize& kernelSize, const float* kernel,
                               float* innerGain, float* innerBias);
 
@@ -578,22 +572,3 @@ SkRect SkMatrixConvolutionImageFilter::computeFastBounds(const SkRect& bounds) c
     // expectations of an image filter that "affects" transparent black.
     return SkRectPriv::MakeLargeS32();
 }
-
-#else
-
-// The matrix convolution effect requires SkSL, just return the input, possibly cropped
-sk_sp<SkImageFilter> SkImageFilters::MatrixConvolution(const SkISize& kernelSize,
-                                                       const SkScalar kernel[],
-                                                       SkScalar gain,
-                                                       SkScalar bias,
-                                                       const SkIPoint& kernelOffset,
-                                                       SkTileMode tileMode,
-                                                       bool convolveAlpha,
-                                                       sk_sp<SkImageFilter> input,
-                                                       const CropRect& cropRect) {
-    return cropRect ? SkMakeCropImageFilter(*cropRect, std::move(input)) : input;
-}
-
-void SkRegisterMatrixConvolutionImageFilterFlattenable() {}
-
-#endif // SK_ENABLE_SKSL

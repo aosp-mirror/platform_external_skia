@@ -15,6 +15,7 @@
 #include "include/private/base/SingleOwner.h"
 #include "include/private/base/SkTArray.h"
 
+#include <chrono>
 #include <vector>
 
 class SkCanvas;
@@ -63,6 +64,10 @@ struct SK_API RecorderOptions final {
     ~RecorderOptions();
 
     sk_sp<ImageProvider> fImageProvider;
+
+    const size_t kDefaultRecorderBudget = 256 * (1 << 20);
+    // What is the budget for GPU resources allocated and held by this Recorder.
+    size_t fGpuBudgetInBytes = kDefaultRecorderBudget;
 };
 
 class SK_API Recorder final {
@@ -133,6 +138,22 @@ public:
     // Recording is snapped. Additionally, the returned SkCanvas is only valid until the next
     // Recording snap, at which point it is deleted.
     SkCanvas* makeDeferredCanvas(const SkImageInfo&, const TextureInfo&);
+
+    /**
+     * Frees GPU resources created and held by the Recorder. Can be called to reduce GPU memory
+     * pressure. Any resources that are still in use (e.g. being used by work submitted to the GPU)
+     * will not be deleted by this call. If the caller wants to make sure all resources are freed,
+     * then they should first make sure to submit and wait on any outstanding work.
+     */
+    void freeGpuResources();
+
+    /**
+     * Purge GPU resources on the Recorder that haven't been used in the past 'msNotUsed'
+     * milliseconds or are otherwise marked for deletion, regardless of whether the context is under
+     * budget.
+     */
+    void performDeferredCleanup(std::chrono::milliseconds msNotUsed);
+
 
     // Provides access to functions that aren't part of the public API.
     RecorderPriv priv();

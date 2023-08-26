@@ -50,6 +50,7 @@
 #include "tests/Test.h"
 #include "tests/TestUtils.h"
 #include "tools/ToolUtils.h"
+#include "tools/gpu/ContextType.h"
 #include "tools/gpu/ManagedBackendTexture.h"
 #include "tools/gpu/ProxyUtils.h"
 
@@ -58,10 +59,6 @@
 #include <initializer_list>
 #include <memory>
 #include <utility>
-
-#if defined(SK_DAWN)
-#include <dawn/webgpu_cpp.h>
-#endif
 
 #if defined(SK_GL)
 #include "include/gpu/ganesh/gl/GrGLBackendSurface.h"
@@ -212,13 +209,7 @@ static bool isBGRA8(const GrBackendFormat& format) {
 #endif
         }
         case GrBackendApi::kDawn: {
-#ifdef SK_DAWN
-            wgpu::TextureFormat dawnFormat;
-            format.asDawnFormat(&dawnFormat);
-            return dawnFormat == wgpu::TextureFormat::BGRA8Unorm;
-#else
             return false;
-#endif
         }
         case GrBackendApi::kMock: {
             SkTextureCompressionType compression = format.asMockCompressionType();
@@ -766,8 +757,8 @@ void color_type_backend_allocation_test(const sk_gpu_test::ContextInfo& ctxInfo,
 }
 
 DEF_GANESH_TEST(ColorTypeBackendAllocationTest, reporter, options, CtsEnforcement::kApiLevel_T) {
-    for (int t = 0; t < sk_gpu_test::GrContextFactory::kContextTypeCnt; ++t) {
-        auto type = static_cast<sk_gpu_test::GrContextFactory::ContextType>(t);
+    for (int t = 0; t < skgpu::kContextTypeCount; ++t) {
+        auto type = static_cast<skgpu::ContextType>(t);
         if (!sk_gpu_test::GrContextFactory::IsRenderingContext(type)) {
             continue;
         }

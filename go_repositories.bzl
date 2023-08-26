@@ -1248,6 +1248,12 @@ def go_repositories():
         sum = "h1:Z8tu5sraLXCXIcARxBp/8cbvlwVa7Z1NHg9XEKhtSvM=",
         version = "v1.0.0",
     )
+    go_repository(
+        name = "com_github_invopop_jsonschema",
+        importpath = "github.com/invopop/jsonschema",
+        sum = "h1:2vgQcBz1n256N+FpX3Jq7Y17AjYt46Ig3zIWyy770So=",
+        version = "v0.7.0",
+    )
 
     go_repository(
         name = "com_github_jackc_chunkreader",
@@ -2427,8 +2433,8 @@ def go_repositories():
     go_repository(
         name = "com_google_cloud_go_bigquery",
         importpath = "cloud.google.com/go/bigquery",
-        sum = "h1:oq1PIpl9u1thzdsX0K9w5H8OlqH5gRu3zGc7FCk19IY=",
-        version = "v1.17.0",
+        sum = "h1:PQcPefKFdaIzjQFbiyOgAqyx8q5djaE7x9Sqe712DPA=",
+        version = "v1.8.0",
     )
     go_repository(
         name = "com_google_cloud_go_bigtable",
@@ -3068,8 +3074,8 @@ def go_repositories():
     go_repository(
         name = "org_skia_go_infra",
         importpath = "go.skia.org/infra",
-        sum = "h1:+xV3BLrWZHvC2zZKWyk8kRV4N9TfZW4uZHXokDias1Y=",
-        version = "v0.0.0-20230817185840-228e9620e667",
+        sum = "h1:v5hq+2sGYyfGfq5PkzIC7FTdpcCEiWcD8Bbxb8psiqQ=",
+        version = "v0.0.0-20230824231944-7a3cf15a1fc1",
     )
     go_repository(
         name = "org_uber_go_atomic",

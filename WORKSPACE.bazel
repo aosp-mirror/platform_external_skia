@@ -445,6 +445,38 @@ local_repository(
 load("//bazel:cipd_install.bzl", "cipd_install")
 
 cipd_install(
+    name = "git_linux_amd64",
+    build_file_content = """
+filegroup(
+  name = "all_files",
+  # The exclude pattern prevents files with spaces in their names from tripping up Bazel.
+  srcs = glob(include=["**/*"], exclude=["**/* *"]),
+  visibility = ["//visibility:public"],
+)
+""",
+    cipd_package = "infra/3pp/tools/git/linux-amd64",
+    # Based on
+    # https://skia.googlesource.com/buildbot/+/f1d21dc58818cd6aba0a7822e59d37636aefe936/WORKSPACE#391.
+    #
+    # Note that the below "git config" commands do not affect the user's Git configuration. These
+    # settings are only visible to Bazel targets that depend on @git_linux_amd64//:all_files via
+    # the "data" attribute. The result of these commands can be examined as follows:
+    #
+    #     $ cat $(bazel info output_base)/external/git_linux_amd64/etc/gitconfig
+    #     [user]
+    #             name = Bazel Test User
+    #             email = bazel-test-user@example.com
+    postinstall_cmds_posix = [
+        "mkdir etc",
+        "bin/git config --system user.name \"Bazel Test User\"",
+        "bin/git config --system user.email \"bazel-test-user@example.com\"",
+    ],
+    # From https://chrome-infra-packages.appspot.com/p/infra/3pp/tools/git/linux-amd64/+/version:2.29.2.chromium.6
+    sha256 = "36cb96051827d6a3f6f59c5461996fe9490d997bcd2b351687d87dcd4a9b40fa",
+    tag = "version:2.29.2.chromium.6",
+)
+
+cipd_install(
     name = "gn_linux_amd64",
     build_file_content = """
 exports_files(
@@ -540,7 +572,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/jsfiddle-base container.
 container_pull(
     name = "jsfiddle-base",
-    digest = "sha256:3590e8eac703671789ed9ddf31abde9689ad490d81c59b2ba064a8ef96562fd4",
+    digest = "sha256:2e999b8eedf768b6deae7405789ccdac92dcc01c36720f268c9d1b58fcd8ec1b",
     registry = "gcr.io",
     repository = "skia-public/jsfiddle-base",
 )
@@ -548,7 +580,15 @@ container_pull(
 # Pulls the gcr.io/skia-public/shaders-base container.
 container_pull(
     name = "shaders-base",
-    digest = "sha256:94dcae54daa5be93632e8fc2998458cc8acf6341701447e723a240e0abc55080",
+    digest = "sha256:6246ccdc88e01a5dc92d83e9a0698d76f53529978df070f7c93ecbfb3226d10d",
     registry = "gcr.io",
     repository = "skia-public/shaders-base",
+)
+
+# Pulls the gcr.io/skia-public/skottie-base container.
+container_pull(
+    name = "skottie-base",
+    digest = "sha256:d5998642c25ba6826e7e69628c64fbf618d50196fd6256a323b6582581a49f79",
+    registry = "gcr.io",
+    repository = "skia-public/skottie-base",
 )

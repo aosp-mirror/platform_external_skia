@@ -17,17 +17,14 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkPicture.h"  // IWYU pragma: keep
 #include "include/core/SkShader.h"
+#include "include/effects/SkRuntimeEffect.h"
 #include "include/private/base/SkFloatingPoint.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkRectPriv.h"
+#include "src/core/SkRuntimeEffectPriv.h"
 #include "src/core/SkSpecialSurface.h"
 #include "src/effects/colorfilters/SkColorFilterBase.h"
-
-#ifdef SK_ENABLE_SKSL
-#include "include/effects/SkRuntimeEffect.h"
-#include "src/core/SkRuntimeEffectPriv.h"
-#endif
 
 #include <algorithm>
 
@@ -186,8 +183,6 @@ std::optional<LayerSpace<SkMatrix>> periodic_axis_transform(
     }
 }
 
-#ifdef SK_ENABLE_SKSL
-
 // Returns true if decal tiling an image with 'imageBounds' subject to 'transform', limited to
 // the un-transformed 'sampleBounds' would exhibit significantly different visual quality from
 // drawing the image with clamp tiling and limited geometrically to 'imageBounds'.
@@ -286,8 +281,6 @@ sk_sp<SkShader> apply_decal(
     }
     return decalShader;
 }
-
-#endif
 
 // AutoSurface manages an SkSpecialSurface and canvas state to draw to a layer-space bounding box,
 // and then snap it into a FilterResult. It provides operators to be used directly as a canvas,
@@ -638,6 +631,10 @@ sk_sp<SkSpecialImage> FilterResult::imageAndOffset(const Context& ctx, SkIPoint*
     return image;
 }
 
+std::pair<sk_sp<SkSpecialImage>, LayerSpace<SkIPoint>>FilterResult::imageAndOffset(
+        const Context& ctx) const {
+    return this->resolve(ctx, fLayerBounds);
+}
 
 bool FilterResult::modifiesPixelsBeyondImage(const LayerSpace<SkIRect>& dstBounds) const {
     // If there is no transparency-affecting color filter and it's just decal tiling, it doesn't
@@ -1050,13 +1047,10 @@ void FilterResult::draw(SkCanvas* canvas, const LayerSpace<SkIRect>& dstBounds) 
     }
 
     if (this->modifiesPixelsBeyondImage(dstBounds)) {
-#ifdef SK_ENABLE_SKSL
         if (fTileMode == SkTileMode::kDecal) {
             // apply_decal consumes the transform, so we don't modify the canvas
             paint.setShader(apply_decal(fTransform, fImage, fLayerBounds, sampling));
-        } else
-#endif
-        {
+        } else {
             // For clamp/repeat/mirror, tiling at the layer resolution vs. resolving the image to
             // the layer resolution and then tiling produces much more compatible results than
             // decal would, so just always use a simple shader. If we don't have SkSL to let us use
@@ -1117,12 +1111,9 @@ sk_sp<SkShader> FilterResult::asShader(const Context& ctx,
     } else {
         // Since we didn't need to resolve, we know the content being sampled isn't cropped by
         // fLayerBounds. fTransform and fColorFilter are handled in the shader directly.
-#ifdef SK_ENABLE_SKSL
         if (fTileMode == SkTileMode::kDecal) {
             shader = apply_decal(fTransform, fImage, sampleBounds, sampling);
-        } else
-#endif
-        {
+        } else {
             shader = fImage->asShader(fTileMode, sampling, SkMatrix(fTransform));
         }
 
@@ -1137,10 +1128,7 @@ sk_sp<SkShader> FilterResult::asShader(const Context& ctx,
 FilterResult FilterResult::MakeFromPicture(const Context& ctx,
                                            sk_sp<SkPicture> pic,
                                            ParameterSpace<SkRect> cullRect) {
-    if (!pic) {
-        return {};
-    }
-
+    SkASSERT(pic);
     LayerSpace<SkIRect> dstBounds = ctx.mapping().paramToLayer(cullRect).roundOut();
     if (!dstBounds.intersect(ctx.desiredOutput())) {
         return {};
@@ -1163,10 +1151,7 @@ FilterResult FilterResult::MakeFromPicture(const Context& ctx,
 FilterResult FilterResult::MakeFromShader(const Context& ctx,
                                           sk_sp<SkShader> shader,
                                           bool dither) {
-    if (!shader) {
-        return {};
-    }
-
+    SkASSERT(shader);
     AutoSurface surface{ctx, ctx.desiredOutput(), /*renderInParameterSpace=*/true};
     if (surface) {
         SkPaint paint;
@@ -1182,10 +1167,7 @@ FilterResult FilterResult::MakeFromImage(const Context& ctx,
                                          const SkRect& srcRect,
                                          const ParameterSpace<SkRect>& dstRect,
                                          const SkSamplingOptions& sampling) {
-    if (!image) {
-        return {};
-    }
-
+    SkASSERT(image);
     // Check for direct conversion to an SkSpecialImage and then FilterResult. Eventually this
     // whole function should be replaceable with:
     //    FilterResult(fImage, fSrcRect, fDstRect).applyTransform(mapping.layerMatrix(), fSampling);
@@ -1291,9 +1273,10 @@ FilterResult FilterResult::Builder::drawShader(sk_sp<SkShader> shader,
 }
 
 FilterResult FilterResult::Builder::merge() {
-    if (fInputs.empty()) {
-        return {};
-    } else if (fInputs.size() == 1) {
+    // merge() could return an empty image on 0 added inputs, but this should have been caught
+    // earlier and routed to SkImageFilters::Empty() instead.
+    SkASSERT(!fInputs.empty());
+    if (fInputs.size() == 1) {
         SkASSERT(!fInputs[0].fSampleBounds.has_value() &&
                  fInputs[0].fSampling == kDefaultSampling &&
                  fInputs[0].fFlags == ShaderFlags::kNone);

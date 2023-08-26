@@ -203,7 +203,7 @@ sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
                                       instanceVersion, physDevVersion,
                                       std::move(memoryAllocator)));
      if (backendContext.fProtectedContext == GrProtected::kYes &&
-         !vkGpu->vkCaps().supportsProtectedMemory()) {
+         !vkGpu->vkCaps().supportsProtectedContent()) {
          return nullptr;
      }
      return std::move(vkGpu);
@@ -2063,7 +2063,7 @@ bool GrVkGpu::compile(const GrProgramDesc& desc, const GrProgramInfo& programInf
     return stat != GrThreadSafePipelineBuilder::Stats::ProgramCacheResult::kHit;
 }
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 bool GrVkGpu::isTestingOnlyBackendTexture(const GrBackendTexture& tex) const {
     SkASSERT(GrBackendApi::kVulkan == tex.fBackend);
 
@@ -2103,7 +2103,7 @@ GrBackendRenderTarget GrVkGpu::createTestingOnlyBackendRenderTarget(SkISize dime
                                               isProtected)) {
         return {};
     }
-    return GrBackendRenderTarget(dimensions.width(), dimensions.height(), 0, info);
+    return GrBackendRenderTarget(dimensions.width(), dimensions.height(), info);
 }
 
 void GrVkGpu::deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget& rt) {

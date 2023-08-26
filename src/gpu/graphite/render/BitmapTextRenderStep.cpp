@@ -32,10 +32,12 @@ constexpr int kNumTextAtlasTextures = 4;
 
 }  // namespace
 
-BitmapTextRenderStep::BitmapTextRenderStep()
+BitmapTextRenderStep::BitmapTextRenderStep(bool isLCD)
         : RenderStep("BitmapTextRenderStep",
                      "",
-                     Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage,
+                     isLCD ? Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage |
+                             Flags::kLCDCoverage
+                           : Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage,
                      /*uniforms=*/{{"subRunDeviceMatrix", SkSLType::kFloat4x4},
                                    {"deviceToLocal"     , SkSLType::kFloat4x4},
                                    {"atlasSizeInv"      , SkSLType::kFloat2}},
@@ -83,7 +85,7 @@ std::string BitmapTextRenderStep::texturesAndSamplersSkSL(
 
     for (unsigned int i = 0; i < kNumTextAtlasTextures; ++i) {
         result += EmitSamplerLayout(bindingReqs, nextBindingIndex);
-        SkSL::String::appendf(&result, " uniform sampler2D text_atlas_%d;\n", i);
+        SkSL::String::appendf(&result, " sampler2D text_atlas_%d;\n", i);
     }
 
     return result;

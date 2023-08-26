@@ -398,7 +398,7 @@ void GrVkCaps::init(const GrContextOptions& contextOptions,
 
     if ((isProtected == GrProtected::kYes) &&
         (physicalDeviceVersion >= VK_MAKE_VERSION(1, 1, 0))) {
-        fSupportsProtectedMemory = true;
+        fSupportsProtectedContent = true;
         fAvoidUpdateBuffers = true;
         fShouldAlwaysUseDedicatedImageMemory = true;
     }
@@ -517,9 +517,9 @@ void GrVkCaps::applyDriverCorrectnessWorkarounds(const VkPhysicalDevicePropertie
 #endif
 
     // Protected memory features have problems in Android P and earlier.
-    if (fSupportsProtectedMemory && (kQualcomm_VkVendor == properties.vendorID)) {
+    if (fSupportsProtectedContent && (kQualcomm_VkVendor == properties.vendorID)) {
         if (androidAPIVersion <= 28) {
-            fSupportsProtectedMemory = false;
+            fSupportsProtectedContent = false;
         }
     }
 
@@ -2005,7 +2005,7 @@ GrVkCaps::IntelGPUType GrVkCaps::GetIntelGPUType(uint32_t deviceID) {
     return IntelGPUType::kOther;
 }
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 std::vector<GrTest::TestFormatColorTypeCombination> GrVkCaps::getTestingCombinations() const {
     std::vector<GrTest::TestFormatColorTypeCombination> combos = {
         { GrColorType::kAlpha_8,          GrBackendFormat::MakeVk(VK_FORMAT_R8_UNORM)             },

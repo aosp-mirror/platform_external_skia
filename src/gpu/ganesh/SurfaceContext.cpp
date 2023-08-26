@@ -578,20 +578,9 @@ void SurfaceContext::asyncRescaleAndReadPixels(GrDirectContext* dContext,
                         this->origin() == kBottomLeft_GrSurfaceOrigin     ||
                         this->colorInfo().alphaType() != info.alphaType() ||
                         !SkColorSpace::Equals(this->colorInfo().colorSpace(), info.colorSpace());
-    auto colorTypeOfFinalContext = this->colorInfo().colorType();
-    auto backendFormatOfFinalContext = this->asSurfaceProxy()->backendFormat();
-    if (needsRescale) {
-        colorTypeOfFinalContext = dstCT;
-        backendFormatOfFinalContext =
-                this->caps()->getDefaultBackendFormat(dstCT, GrRenderable::kYes);
-        if (!backendFormatOfFinalContext.isValid()) {
-            constexpr int kSampleCnt = 1;
-            std::tie(colorTypeOfFinalContext, backendFormatOfFinalContext) =
-                    this->caps()->getFallbackColorTypeAndFormat(colorTypeOfFinalContext, kSampleCnt);
-        }
-    }
-    auto readInfo = this->caps()->supportedReadPixelsColorType(colorTypeOfFinalContext,
-                                                               backendFormatOfFinalContext,
+    auto surfaceBackendFormat = this->asSurfaceProxy()->backendFormat();
+    auto readInfo = this->caps()->supportedReadPixelsColorType(this->colorInfo().colorType(),
+                                                               surfaceBackendFormat,
                                                                dstCT);
     // Fail if we can't read from the source surface's color type.
     if (readInfo.fColorType == GrColorType::kUnknown) {
@@ -612,7 +601,9 @@ void SurfaceContext::asyncRescaleAndReadPixels(GrDirectContext* dContext,
     int x = srcRect.fLeft;
     int y = srcRect.fTop;
     if (needsRescale) {
-        tempFC = this->rescale(info, kTopLeft_GrSurfaceOrigin, srcRect, rescaleGamma, rescaleMode);
+        auto tempInfo = GrImageInfo(info).makeColorType(this->colorInfo().colorType());
+        tempFC = this->rescale(tempInfo, kTopLeft_GrSurfaceOrigin, srcRect,
+                               rescaleGamma, rescaleMode);
         if (!tempFC) {
             callback(callbackContext, nullptr);
             return;
