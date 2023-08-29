@@ -150,6 +150,7 @@ SKIA_PUBLIC_HDRS = [
     "include/gpu/ganesh/SkSurfaceGanesh.h",
     "include/gpu/ganesh/gl/GrGLBackendSurface.h",
     "include/gpu/ganesh/mtl/SkSurfaceMetal.h",
+    "include/gpu/ganesh/vk/GrVkBackendSurface.h",
     "include/gpu/gl/egl/GrGLMakeEGLInterface.h",
     "include/gpu/gl/glx/GrGLMakeGLXInterface.h",
     "include/gpu/gl/GrGLAssembleHelpers.h",
@@ -1074,8 +1075,6 @@ BASE_SRCS_ALL = [
     "src/gpu/ganesh/effects/GrDisableColorXP.h",
     "src/gpu/ganesh/effects/GrDistanceFieldGeoProc.cpp",
     "src/gpu/ganesh/effects/GrDistanceFieldGeoProc.h",
-    "src/gpu/ganesh/effects/GrGaussianConvolutionFragmentProcessor.cpp",
-    "src/gpu/ganesh/effects/GrGaussianConvolutionFragmentProcessor.h",
     "src/gpu/ganesh/effects/GrMatrixEffect.cpp",
     "src/gpu/ganesh/effects/GrMatrixEffect.h",
     "src/gpu/ganesh/effects/GrModulateAtlasCoverageEffect.cpp",
@@ -2139,6 +2138,8 @@ MTL_SRCS = [
 ]
 
 VULKAN_SRCS = [
+    "src/gpu/ganesh/vk/GrVkBackendSurface.cpp",
+    "src/gpu/ganesh/vk/GrVkBackendSurfacePriv.h",
     "src/gpu/ganesh/vk/GrVkBuffer.cpp",
     "src/gpu/ganesh/vk/GrVkBuffer.h",
     "src/gpu/ganesh/vk/GrVkCaps.cpp",
