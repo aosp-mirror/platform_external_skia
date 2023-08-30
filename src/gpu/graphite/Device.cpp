@@ -21,7 +21,6 @@
 #include "src/gpu/graphite/DrawContext.h"
 #include "src/gpu/graphite/DrawList.h"
 #include "src/gpu/graphite/DrawParams.h"
-#include "src/gpu/graphite/ImageUtils.h"
 #include "src/gpu/graphite/Image_Graphite.h"
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/PathAtlas.h"
@@ -434,7 +433,7 @@ TextureProxyView TextureProxyView::Copy(Recorder* recorder,
 }
 
 bool Device::onReadPixels(const SkPixmap& pm, int srcX, int srcY) {
-#if GRAPHITE_TEST_UTILS
+#if defined(GRAPHITE_TEST_UTILS)
     if (Context* context = fRecorder->priv().context()) {
         this->flushPendingWorkToRecorder();
         // Add all previous commands generated to the command buffer.

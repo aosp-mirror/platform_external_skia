@@ -2529,6 +2529,7 @@ cc_defaults {
         "modules/skottie/src/text/TextAnimator.cpp",
         "modules/skottie/src/text/TextValue.cpp",
         "modules/skottie/utils/SkottieUtils.cpp",
+        "modules/skottie/utils/TextEditor.cpp",
         "modules/skparagraph/gm/simple_gm.cpp",
         "modules/skparagraph/src/Decorations.cpp",
         "modules/skparagraph/src/FontArguments.cpp",
