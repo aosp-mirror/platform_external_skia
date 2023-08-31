@@ -432,9 +432,6 @@ static bool detect_shader_settings(const std::string& text,
                 if (consume_suffix(&settingsText, " NoRTFlip")) {
                     settings->fForceNoRTFlip = true;
                 }
-                if (consume_suffix(&settingsText, " NoTraceVarInDebugTrace")) {
-                    settings->fAllowTraceVarInDebugTrace = false;
-                }
                 if (consume_suffix(&settingsText, " InlineThresholdMax")) {
                     settings->fInlineThreshold = INT_MAX;
                 }
@@ -444,9 +441,6 @@ static bool detect_shader_settings(const std::string& text,
                 if (consume_suffix(&settingsText, " DebugTrace")) {
                     settings->fOptimize = false;
                     *debugTrace = std::make_unique<SkSL::DebugTracePriv>();
-                }
-                if (consume_suffix(&settingsText, " SPIRVDawnCompatMode")) {
-                    settings->fSPIRVDawnCompatMode = true;
                 }
 
                 if (settingsText.empty()) {
