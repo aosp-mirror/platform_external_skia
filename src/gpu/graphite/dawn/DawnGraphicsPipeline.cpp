@@ -262,7 +262,6 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
     SkSL::ProgramSettings settings;
 
     settings.fForceNoRTFlip = true;
-    settings.fSPIRVDawnCompatMode = true;
 
     ShaderErrorHandler* errorHandler = caps.shaderErrorHandler();
 
@@ -558,20 +557,21 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
     }
 
 #if defined(GRAPHITE_TEST_UTILS)
-    GraphicsPipeline::Shaders pipelineShaders = {
-        std::move(vsSkSL),
-        std::move(fsSkSL),
-        enableWGSL ? std::move(vsCode) : std::string("SPIR-V disassembly not available"),
-        enableWGSL ? std::move(fsCode) : std::string("SPIR-V disassembly not available"),
-    };
-    GraphicsPipeline::Shaders* pipelineShadersPtr = &pipelineShaders;
+    GraphicsPipeline::PipelineInfo pipelineInfo = {
+            pipelineDesc.renderStepID(),
+            pipelineDesc.paintParamsID(),
+            std::move(vsSkSL),
+            std::move(fsSkSL),
+            enableWGSL ? std::move(vsCode) : std::string("SPIR-V disassembly not available"),
+            enableWGSL ? std::move(fsCode) : std::string("SPIR-V disassembly not available")};
+    GraphicsPipeline::PipelineInfo* pipelineInfoPtr = &pipelineInfo;
 #else
-    GraphicsPipeline::Shaders* pipelineShadersPtr = nullptr;
+    GraphicsPipeline::PipelineInfo* pipelineInfoPtr = nullptr;
 #endif
 
     return sk_sp<DawnGraphicsPipeline>(
             new DawnGraphicsPipeline(sharedContext,
-                                     pipelineShadersPtr,
+                                     pipelineInfoPtr,
                                      std::move(pipeline),
                                      step->primitiveType(),
                                      depthStencilSettings.fStencilReferenceValue,
@@ -580,13 +580,13 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
 }
 
 DawnGraphicsPipeline::DawnGraphicsPipeline(const skgpu::graphite::SharedContext* sharedContext,
-                                           Shaders* pipelineShaders,
+                                           PipelineInfo* pipelineInfo,
                                            wgpu::RenderPipeline renderPipeline,
                                            PrimitiveType primitiveType,
                                            uint32_t refValue,
                                            bool hasStepUniforms,
                                            bool hasFragment)
-        : GraphicsPipeline(sharedContext, pipelineShaders)
+        : GraphicsPipeline(sharedContext, pipelineInfo)
         , fRenderPipeline(std::move(renderPipeline))
         , fPrimitiveType(primitiveType)
         , fStencilReferenceValue(refValue)
