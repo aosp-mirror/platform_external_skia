@@ -17,6 +17,7 @@
 #include "src/gpu/graphite/RendererProvider.h"
 #include "src/gpu/graphite/UniformManager.h"
 #include "src/gpu/graphite/dawn/DawnCaps.h"
+#include "src/gpu/graphite/dawn/DawnErrorChecker.h"
 #include "src/gpu/graphite/dawn/DawnGraphiteUtilsPriv.h"
 #include "src/gpu/graphite/dawn/DawnResourceProvider.h"
 #include "src/gpu/graphite/dawn/DawnSharedContext.h"
@@ -320,9 +321,7 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
     }
 
     wgpu::RenderPipelineDescriptor descriptor;
-#if defined(SK_DEBUG)
     descriptor.label = step->name();
-#endif
 
     // Fragment state
     skgpu::BlendEquation equation = blendInfo.fEquation;
@@ -551,8 +550,10 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
     descriptor.multisample.mask = 0xFFFFFFFF;
     descriptor.multisample.alphaToCoverageEnabled = false;
 
-    auto pipeline = device.CreateRenderPipeline(&descriptor);
-    if (!pipeline) {
+    DawnErrorChecker errorChecker(device);
+    wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&descriptor);
+    SkASSERT(pipeline);
+    if (errorChecker.popErrorScopes() != DawnErrorType::kNoError) {
         return {};
     }
 
