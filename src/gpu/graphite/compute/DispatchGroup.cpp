@@ -108,51 +108,54 @@ bool Builder::appendStep(const ComputeStep* step, std::optional<WorkgroupSize> g
     // how Graphite assigns indices on Metal, as these map directly to the buffer/texture/sampler
     // index ranges. On Dawn/Vulkan buffers and textures/samplers are allocated from separate bind
     // groups/descriptor sets but texture and sampler indices need to not overlap.
-    //
-    // TODO(armansito): Count the indices based on
-    // `ResourceBindingRequirements::fDistinctIndexRanges` obtained from Caps.
-    //
-    // TODO(armansito): The Metal backend index binding scheme happens to be compatible with the
-    // vello_shaders crate's WGSL->MSL translation (see
-    // https://github.com/linebender/vello/blob/main/crates/shaders/src/compile/msl.rs#L10).
-    // However, Vello's WGSL shaders assign all resources to the same bind group (at index 0) which
-    // differs from how Graphite binds textures and samplers (at index 1). We can handle this by
-    // having ComputeStep resources define a bind group index explicitly and assigning them to the
-    // specified bind group during command encoding.
-    int bufferIndex = 0;
+    const auto& bindingReqs = fRecorder->priv().caps()->resourceBindingRequirements();
+    bool distinctRanges = bindingReqs.fDistinctIndexRanges;
+    bool separateSampler = bindingReqs.fSeparateTextureAndSamplerBinding;
+    int bufferOrGlobalIndex = 0;
     int texIndex = 0;
-    int samplerIndex = 0;
+    // NOTE: SkSL Metal codegen always assigns the same binding index to a texture and its sampler.
+    // TODO: This could cause sampler indices to not be tightly packed if the sampler2D declaration
+    // comes after 1 or more storage texture declarations (which don't have samplers).
     for (const ComputeStep::ResourceDesc& r : resources) {
         SkASSERT(r.fSlot == -1 || (r.fSlot >= 0 && r.fSlot < kMaxComputeDataFlowSlots));
-        int index = nextIndex++;
+        const int index = nextIndex++;
 
         DispatchResourceOptional maybeResource;
 
         using DataFlow = ComputeStep::DataFlow;
+        using Type = ComputeStep::ResourceType;
         switch (r.fFlow) {
             case DataFlow::kPrivate:
+                // A sampled or fetched-type readonly texture must either get assigned via
+                // `assignSharedTexture()` or internally allocated as a storage texture of a
+                // preceding step. Such a texture always has a data slot.
+                SkASSERT(r.fType != Type::kReadOnlyTexture);
+                SkASSERT(r.fType != Type::kSampledTexture);
                 maybeResource = this->allocateResource(step, r, index);
                 break;
             case DataFlow::kShared: {
-                // TODO: Support allocating a scratch texture
                 SkASSERT(r.fSlot >= 0);
-                // Allocate a new buffer only if the shared slot is empty.
+                // Allocate a new resource only if the shared slot is empty (except for a
+                // SampledTexture which needs its sampler to be allocated internally).
                 DispatchResourceOptional* slot = &fOutputTable.fSharedSlots[r.fSlot];
                 if (std::holds_alternative<std::monostate>(*slot)) {
+                    SkASSERT(r.fType != Type::kReadOnlyTexture);
+                    SkASSERT(r.fType != Type::kSampledTexture);
                     maybeResource = this->allocateResource(step, r, index);
                     *slot = maybeResource;
                 } else {
-                    SkDEBUGCODE(using Type = ComputeStep::ResourceType;)
-                    SkASSERT(
-                        (r.fType == Type::kStorageBuffer &&
-                         std::holds_alternative<BufferView>(*slot)) ||
-                        ((r.fType == Type::kTexture || r.fType == Type::kStorageTexture) &&
-                         std::holds_alternative<TextureIndex>(*slot)));
+                    SkASSERT((r.fType == Type::kStorageBuffer &&
+                              std::holds_alternative<BufferView>(*slot)) ||
+                             ((r.fType == Type::kReadOnlyTexture ||
+                               r.fType == Type::kWriteOnlyStorageTexture) &&
+                              std::holds_alternative<TextureIndex>(*slot)) ||
+                             (r.fType == Type::kSampledTexture &&
+                              std::holds_alternative<TextureIndex>(*slot)));
 #ifdef SK_DEBUG
                     // Ensure that the texture has the right format if it was assigned via
                     // `assignSharedTexture()`.
                     const TextureIndex* texIdx = std::get_if<TextureIndex>(slot);
-                    if (texIdx && r.fType == Type::kStorageTexture) {
+                    if (texIdx && r.fType == Type::kWriteOnlyStorageTexture) {
                         const TextureProxy* t = fObj->fTextures[texIdx->fValue].get();
                         SkASSERT(t);
                         auto [_, colorType] = step->calculateTextureParameters(index, r);
@@ -160,7 +163,23 @@ bool Builder::appendStep(const ComputeStep* step, std::optional<WorkgroupSize> g
                                 fRecorder->priv().caps()->getDefaultStorageTextureInfo(colorType)));
                     }
 #endif  // SK_DEBUG
+
                     maybeResource = *slot;
+
+                    if (r.fType == Type::kSampledTexture) {
+                        // The shared slot holds the texture part of the sampled texture but we
+                        // still need to allocate the sampler.
+                        SkASSERT(std::holds_alternative<TextureIndex>(*slot));
+                        auto samplerResource = this->allocateResource(step, r, index);
+                        const SamplerIndex* samplerIdx =
+                                std::get_if<SamplerIndex>(&samplerResource);
+                        SkASSERT(samplerIdx);
+                        int bindingIndex = distinctRanges    ? texIndex
+                                           : separateSampler ? bufferOrGlobalIndex++
+                                                             : bufferOrGlobalIndex;
+                        dispatch.fBindings.push_back(
+                                {static_cast<BindingIndex>(bindingIndex), *samplerIdx});
+                    }
                 }
                 break;
             }
@@ -170,13 +189,10 @@ bool Builder::appendStep(const ComputeStep* step, std::optional<WorkgroupSize> g
         DispatchResource dispatchResource;
         if (const BufferView* buffer = std::get_if<BufferView>(&maybeResource)) {
             dispatchResource = *buffer;
-            bindingIndex = bufferIndex++;
+            bindingIndex = bufferOrGlobalIndex++;
         } else if (const TextureIndex* texIdx = std::get_if<TextureIndex>(&maybeResource)) {
             dispatchResource = *texIdx;
-            bindingIndex = texIndex++;
-        } else if (const SamplerIndex* samplerIdx = std::get_if<SamplerIndex>(&maybeResource)) {
-            dispatchResource = *samplerIdx;
-            bindingIndex = samplerIndex++;
+            bindingIndex = distinctRanges ? texIndex++ : bufferOrGlobalIndex++;
         } else {
             SKGPU_LOG_W("Failed to allocate resource for compute dispatch");
             return false;
@@ -296,7 +312,7 @@ DispatchResourceOptional Builder::allocateResource(const ComputeStep* step,
             }
             break;
         }
-        case Type::kStorageTexture: {
+        case Type::kWriteOnlyStorageTexture: {
             auto [size, colorType] = step->calculateTextureParameters(resourceIdx, resource);
             SkASSERT(!size.isEmpty());
             SkASSERT(colorType != kUnknown_SkColorType);
@@ -309,7 +325,7 @@ DispatchResourceOptional Builder::allocateResource(const ComputeStep* step,
             }
             break;
         }
-        case Type::kTexture:
+        case Type::kReadOnlyTexture:
             // This resource type is meant to be populated externally (e.g. by an upload or a render
             // pass) and only read/sampled by a ComputeStep. It's not meaningful to allocate an
             // internal texture for a DispatchGroup if none of the ComputeSteps will write to it.
@@ -319,9 +335,9 @@ DispatchResourceOptional Builder::allocateResource(const ComputeStep* step,
             //
             // Note: A ComputeStep is allowed to read/sample from a storage texture that a previous
             // ComputeStep has written to.
-            SK_ABORT("a sampled texture must be externally assigned to a ComputeStep");
+            SK_ABORT("a readonly texture must be externally assigned to a ComputeStep");
             break;
-        case Type::kSampler: {
+        case Type::kSampledTexture: {
             fObj->fSamplerDescs.push_back(step->calculateSamplerParameters(resourceIdx, resource));
             result = SamplerIndex{fObj->fSamplerDescs.size() - 1u};
             break;

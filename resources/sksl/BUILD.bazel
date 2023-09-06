@@ -388,6 +388,9 @@ skia_filegroup(
         "errors/OverflowUintLiteral.sksl",
         "errors/OverloadedBuiltin.sksl",
         "errors/OverloadedMain.sksl",
+        "errors/PixelFormatMismatch.compute",
+        "errors/PixelFormatMissing.compute",
+        "errors/PixelFormatOverloads.compute",
         "errors/PrecisionQualifiersDisallowed.sksl",
         "errors/PrivateTypes.rts",
         "errors/PrivateVariables.rts",
@@ -455,6 +458,7 @@ skia_filegroup(
         "errors/ReturnFromVoid.rts",
         "errors/ReturnMissingValue.rts",
         "errors/ReturnTypeMismatch.rts",
+        "errors/SamplerExternalOES.frag",
         "errors/SelfReferentialInitializerExpression.rts",
         "errors/SpuriousFloat.rts",
         "errors/StructMemberReservedName.rts",
@@ -1062,6 +1066,7 @@ skia_filegroup(
 skia_filegroup(
     name = "sksl_wgsl_tests",
     srcs = [
+        "compute/Barrier.compute",
         "shared/Derivatives.sksl",
         "shared/Optimizations.sksl",
         "shared/Switch.sksl",
@@ -1094,9 +1099,11 @@ skia_filegroup(
         "wgsl/OutParams.sksl",
         "wgsl/Sample.sksl",
         "wgsl/TernaryThenShortCircuit.sksl",
+        "wgsl/TextureIntrinsics.compute",
         "wgsl/UniformArrays.sksl",
         "wgsl/UniformMatrices.sksl",
         "wgsl/UserDefinedPipelineIO.sksl",
         "wgsl/VertexPositionOutputIsAlwaysDeclared.vert",
+        "wgsl/WorkgroupSize.compute",
     ],
 )
