@@ -305,9 +305,10 @@ GrGLSLUniformHandler::SamplerHandle GrVkUniformHandler::addInputSampler(
     const char prefix = 'u';
     SkString mangleName = fProgramBuilder->nameVariable(prefix, name, /*mangle=*/true);
 
-    SkString layoutQualifier;
-    layoutQualifier.appendf("input_attachment_index=%d, set=%d, binding=%d",
-                            kDstInputAttachmentIndex, kInputDescSet, kInputBinding);
+    auto layoutQualifier = SkStringPrintf("vulkan, input_attachment_index=%d, set=%d, binding=%d",
+                                          kDstInputAttachmentIndex,
+                                          kInputDescSet,
+                                          kInputBinding);
 
     fInputUniform = {GrShaderVar{std::move(mangleName),
                                  SkSLType::kInput,
@@ -370,9 +371,9 @@ void GrVkUniformHandler::appendUniformDecls(GrShaderFlags visibility, SkString* 
 
     if (!uniformsString.isEmpty()) {
         if (fUsePushConstants) {
-            out->append("layout (push_constant) ");
+            out->append("layout (vulkan, push_constant) ");
         } else {
-            out->appendf("layout (set=%d, binding=%d) ",
+            out->appendf("layout (vulkan, set=%d, binding=%d) ",
                          kUniformBufferDescSet, kUniformBinding);
         }
         out->append("uniform uniformBuffer\n{\n");
