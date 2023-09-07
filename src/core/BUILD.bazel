@@ -1,4 +1,4 @@
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup", "split_srcs_and_hdrs")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_library", "skia_filegroup", "split_srcs_and_hdrs")
 
 licenses(["notice"])
 
@@ -42,6 +42,8 @@ CORE_FILES = [
     "SkAutoPixmapStorage.cpp",
     "SkAutoPixmapStorage.h",
     "SkBBHFactory.cpp",
+    "SkBigPicture.cpp",
+    "SkBigPicture.h",
     "SkBitmap.cpp",
     "SkBitmapCache.cpp",
     "SkBitmapCache.h",
@@ -209,8 +211,8 @@ CORE_FILES = [
     "SkNextID.h",
     "SkOSFile.h",
     "SkOpts.cpp",
-    "SkOptsTargets.h",
     "SkOpts.h",
+    "SkOptsTargets.h",
     "SkOverdrawCanvas.cpp",
     "SkPaint.cpp",
     "SkPaintDefaults.h",
@@ -228,7 +230,17 @@ CORE_FILES = [
     "SkPathRef.cpp",
     "SkPathUtils.cpp",
     "SkPath_serial.cpp",
+    "SkPicture.cpp",
+    "SkPictureData.cpp",
+    "SkPictureData.h",
+    "SkPictureFlat.cpp",
+    "SkPictureFlat.h",
+    "SkPicturePlayback.cpp",
+    "SkPicturePlayback.h",
     "SkPicturePriv.h",
+    "SkPictureRecord.cpp",
+    "SkPictureRecord.h",
+    "SkPictureRecorder.cpp",
     "SkPixelRef.cpp",
     "SkPixelRefPriv.h",
     "SkPixmap.cpp",
@@ -265,6 +277,10 @@ CORE_FILES = [
     "SkRecordOpts.cpp",
     "SkRecordOpts.h",
     "SkRecordPattern.h",
+    "SkRecordedDrawable.cpp",
+    "SkRecordedDrawable.h",
+    "SkRecorder.cpp",
+    "SkRecorder.h",
     "SkRecords.cpp",
     "SkRecords.h",
     "SkRect.cpp",
@@ -329,7 +345,6 @@ CORE_FILES = [
     "SkTextBlobTrace.cpp",
     "SkTextBlobTrace.h",
     "SkTextFormatParams.h",
-    "SkTime.cpp",
     "SkTraceEvent.h",
     "SkTraceEventCommon.h",
     "SkTypeface.cpp",
@@ -359,7 +374,7 @@ CORE_FILES = [
 ]
 
 split_srcs_and_hdrs(
-    name = "core",
+    name = "_core",
     files = CORE_FILES,
 )
 
@@ -370,38 +385,11 @@ skia_filegroup(
     ],
 )
 
-# SkPicture files are maintained as a separate skia_filegroups for backward compatability
-# with GNI files. This allows the generation of skia_skpicture_sources GNI file list.
-SKPICTURE_FILES = [
-    "SkBigPicture.cpp",
-    "SkBigPicture.h",
-    "SkPicture.cpp",
-    "SkPictureData.cpp",
-    "SkPictureData.h",
-    "SkPictureFlat.cpp",
-    "SkPictureFlat.h",
-    "SkPicturePlayback.cpp",
-    "SkPicturePlayback.h",
-    "SkPictureRecord.cpp",
-    "SkPictureRecord.h",
-    "SkPictureRecorder.cpp",
-    "SkRecordedDrawable.cpp",
-    "SkRecordedDrawable.h",
-    "SkRecorder.cpp",
-    "SkRecorder.h",
-]
-
-split_srcs_and_hdrs(
-    name = "skpicture",
-    files = SKPICTURE_FILES,
-)
-
 skia_filegroup(
     name = "srcs",
     srcs = [
+        ":_core_srcs",
         ":core_skslc_srcs",
-        ":core_srcs",
-        ":skpicture_srcs",
     ],
     visibility = ["//src:__pkg__"],
 )
@@ -409,9 +397,8 @@ skia_filegroup(
 skia_filegroup(
     name = "private_hdrs",
     srcs = [
-        ":core_hdrs",
+        ":_core_hdrs",
         ":core_skslc_hdrs",
-        ":skpicture_hdrs",
     ],
     visibility = ["//src:__pkg__"],
 )
@@ -434,7 +421,6 @@ skia_filegroup(
         "SkStreamPriv.h",
         "SkSwizzlePriv.h",
     ],
-    visibility = ["//src:__pkg__"],
 )
 
 skia_filegroup(
@@ -471,5 +457,35 @@ skia_filegroup(
         "SkString.cpp",
         "SkStringUtils.cpp",
     ],
-    visibility = ["//src:__pkg__"],
+)
+
+skia_cc_library(
+    name = "core",
+    srcs = [
+        ":buffet_hdrs",
+        ":buffet_srcs",
+        "//include/private:buffet_hdrs",
+        "//include/private:buffet_srcs",
+    ],
+    hdrs = ["//include/core:core_hdrs"],
+    features = ["layering_check"],
+    visibility = [
+        "//:__pkg__",
+        "//src:__subpackages__",
+    ],
+    deps = ["//src/base"],
+)
+
+skia_cc_library(
+    name = "core_priv",
+    hdrs = [
+        ":buffet_hdrs",
+        "//include/private:buffet_hdrs",
+    ],
+    features = ["layering_check"],
+    visibility = ["//src:__subpackages__"],
+    deps = [
+        ":core",
+        "//src/base",
+    ],
 )
