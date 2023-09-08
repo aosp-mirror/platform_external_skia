@@ -10,6 +10,7 @@
 
 #include "include/core/SkSpan.h"
 #include "include/private/SkSLDefines.h"
+#include "include/private/base/SkTArray.h"
 #include "src/base/SkEnumBitMask.h"
 #include "src/core/SkTHash.h"
 #include "src/sksl/SkSLMemoryLayout.h"
@@ -99,7 +100,8 @@ public:
         kFrontFacing,  // input
         kSampleIndex,  // input
         kFragDepth,    // output
-        kSampleMask,   // input, output
+        kSampleMaskIn, // input
+        kSampleMask,   // output
 
         // Compute stage:
         kLocalInvocationId,     // input
@@ -296,7 +298,9 @@ private:
     void writeFields(SkSpan<const Field> fields, const MemoryLayout* memoryLayout = nullptr);
 
     // We bundle uniforms, and all varying pipeline stage inputs and outputs, into separate structs.
+    bool needsStageInputStruct() const;
     void writeStageInputStruct();
+    bool needsStageOutputStruct() const;
     void writeStageOutputStruct();
     void writeUniformsAndBuffers();
     void prepareUniformPolyfillsForInterfaceBlock(const InterfaceBlock* interfaceBlock,
@@ -337,7 +341,8 @@ private:
 
     // Stores the disallowed identifier names.
     ProgramRequirements fRequirements;
-    int fPipelineInputCount = 0;
+    skia_private::TArray<const Variable*> fPipelineInputs;
+    skia_private::TArray<const Variable*> fPipelineOutputs;
 
     // These fields track whether we have written the polyfill for `inverse()` for a given matrix
     // type.
