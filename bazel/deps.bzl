@@ -125,7 +125,7 @@ def c_plus_plus_deps(ws = "@"):
     new_git_repository(
         name = "libwebp",
         build_file = ws + "//bazel/external/libwebp:BUILD.bazel",
-        commit = "fd7bb21c0cb56e8a82e9bfa376164b842f433f3b",
+        commit = "2af26267cdfcb63a88e5c74a85927a12d6ca1d76",
         remote = "https://chromium.googlesource.com/webm/libwebp.git",
     )
 
@@ -186,7 +186,7 @@ def c_plus_plus_deps(ws = "@"):
     new_git_repository(
         name = "vulkan_headers",
         build_file = ws + "//bazel/external/vulkan_headers:BUILD.bazel",
-        commit = "2634c969d7dc0e983f005f7f2e665cce8449efe6",
+        commit = "4f51aac14f65629dfe83702b806f740dbd7bd701",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Headers",
     )
 

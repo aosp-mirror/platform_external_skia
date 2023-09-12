@@ -12,7 +12,6 @@
 #include "include/core/SkCapabilities.h"
 #include "include/core/SkColorFilter.h"
 #include "include/core/SkData.h"
-#include "include/private/SkSLDefines.h"
 #include "include/private/base/SkAlign.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkMutex.h"
@@ -43,6 +42,7 @@
 #include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLContext.h"
+#include "src/sksl/SkSLDefines.h"
 #include "src/sksl/SkSLProgramKind.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLUtil.h"
@@ -68,12 +68,6 @@ class SkColorSpace;
 struct SkIPoint;
 
 constexpr bool kRPEnableLiveTrace = false;
-
-#if defined(SK_BUILD_FOR_DEBUGGER)
-    #define SK_LENIENT_SKSL_DESERIALIZATION 1
-#else
-    #define SK_LENIENT_SKSL_DESERIALIZATION 0
-#endif
 
 using ChildType = SkRuntimeEffect::ChildType;
 
