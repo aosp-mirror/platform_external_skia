@@ -9,9 +9,9 @@
 #define SKSL_SPIRVCODEGENERATOR
 
 #include "include/core/SkSpan.h"
-#include "include/private/SkSLDefines.h"
 #include "include/private/base/SkTArray.h"
 #include "src/core/SkTHash.h"
+#include "src/sksl/SkSLDefines.h"
 #include "src/sksl/SkSLMemoryLayout.h"
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/codegen/SkSLCodeGenerator.h"
@@ -508,8 +508,6 @@ private:
     void writeLabel(SpvId label, BranchingLabelType type, ConditionalOpCounts ops,
                     OutputStream& out);
 
-    bool isDead(const Variable& var) const;
-
     MemoryLayout memoryLayoutForStorageClass(SpvStorageClass_ storageClass);
     MemoryLayout memoryLayoutForVariable(const Variable&) const;
 
@@ -613,7 +611,6 @@ private:
     std::vector<const VarDeclaration*> fTopLevelUniforms;
     skia_private::THashMap<const Variable*, int>
             fTopLevelUniformMap;  // <var, UniformBuffer field index>
-    skia_private::THashSet<const Variable*> fSPIRVBonusVariables;
     SpvId fUniformBufferId = NA;
 
     friend class PointerLValue;
