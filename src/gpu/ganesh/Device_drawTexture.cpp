@@ -151,7 +151,7 @@ void draw_texture(skgpu::ganesh::SurfaceDrawContext* sdc,
         // Conservative estimate of how much a coord could be outset from src rect:
         // 1/2 pixel for AA and 1/2 pixel for linear filtering
         float buffer = 0.5f * (aaFlags != GrQuadAAFlags::kNone) +
-                       0.5f * (filter == GrSamplerState::Filter::kLinear);
+                       GrTextureEffect::kLinearInset * (filter == GrSamplerState::Filter::kLinear);
         SkRect safeBounds = proxy->getBoundsRect();
         safeBounds.inset(buffer, buffer);
         if (!safeBounds.contains(srcRect)) {
@@ -232,7 +232,7 @@ void Device::drawEdgeAAImage(const SkImage* image,
     if (tm == SkTileMode::kClamp && !ib->isYUVA() && can_use_draw_texture(paint, sampling)) {
         // We've done enough checks above to allow us to pass ClampNearest() and not check for
         // scaling adjustments.
-        auto [view, ct] = skgpu::ganesh::AsView(rContext, image, GrMipmapped::kNo);
+        auto [view, ct] = skgpu::ganesh::AsView(rContext, image, skgpu::Mipmapped::kNo);
         if (!view) {
             return;
         }
@@ -535,7 +535,7 @@ void Device::drawEdgeAAImageSet(const SkCanvas::ImageSetEntry set[], int count,
         // drawImageQuad and the proper effect to dynamically sample their planes.
         if (!image->isYUVA()) {
             std::tie(view, std::ignore) =
-                    skgpu::ganesh::AsView(this->recordingContext(), image, GrMipmapped::kNo);
+                    skgpu::ganesh::AsView(this->recordingContext(), image, skgpu::Mipmapped::kNo);
             if (image->isAlphaOnly()) {
                 skgpu::Swizzle swizzle = skgpu::Swizzle::Concat(view.swizzle(),
                                                                 skgpu::Swizzle("aaaa"));
