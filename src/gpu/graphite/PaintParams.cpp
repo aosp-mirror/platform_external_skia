@@ -104,6 +104,28 @@ SkColor4f PaintParams::Color4fPrepForDst(SkColor4f srcColor, const SkColorInfo& 
     return result;
 }
 
+void PaintParams::Blend(const KeyContext& keyContext,
+                        PaintParamsKeyBuilder* keyBuilder,
+                        PipelineDataGatherer* gatherer,
+                        const SkBlender* blender,
+                        AddToKeyFn addSrcToKey,
+                        AddToKeyFn addDstToKey) {
+    if (!blender) {
+        addSrcToKey();
+        return;
+    }
+
+    BlendShaderBlock::BeginBlock(keyContext, keyBuilder, gatherer);
+
+        addSrcToKey();
+
+        addDstToKey();
+
+        AddToKey(keyContext, keyBuilder, gatherer, blender);
+
+    keyBuilder->endBlock();  // BlendShaderBlock
+}
+
 void PaintParams::addPaintColorToKey(const KeyContext& keyContext,
                                      PaintParamsKeyBuilder* keyBuilder,
                                      PipelineDataGatherer* gatherer) const {
@@ -114,6 +136,41 @@ void PaintParams::addPaintColorToKey(const KeyContext& keyContext,
                                           keyContext.paintColor());
         keyBuilder->endBlock();
     }
+}
+
+/**
+ * Primitive blend blocks are used to blend either the paint color or the output of another shader
+ * with a primitive color emitted by certain draw geometry calls (drawVertices, drawAtlas, etc.).
+ * Dst: primitiveColor Src: Paint color/shader output
+ */
+void PaintParams::handlePrimitiveColor(const KeyContext& keyContext,
+                                       PaintParamsKeyBuilder* keyBuilder,
+                                       PipelineDataGatherer* gatherer) const {
+    Blend(keyContext, keyBuilder, gatherer, fPrimitiveBlender.get(),
+          /* addSrcToKey= */ [&]() -> void {
+              this->addPaintColorToKey(keyContext, keyBuilder, gatherer);
+          },
+          /* addDstToKey= */ [&]() -> void {
+              PrimitiveColorBlock::BeginBlock(keyContext, keyBuilder, gatherer);
+              keyBuilder->endBlock();
+          });
+}
+
+// Apply the paint's alpha value.
+void PaintParams::handlePaintAlpha(const KeyContext& keyContext,
+                                   PaintParamsKeyBuilder* keyBuilder,
+                                   PipelineDataGatherer* gatherer) const {
+    sk_sp<SkBlender> blender = fColor.fA != 1.0f ? SkBlender::Mode(SkBlendMode::kSrcIn) : nullptr;
+
+    Blend(keyContext, keyBuilder, gatherer, blender.get(),
+          /* addSrcToKey= */ [&]() -> void {
+              this->handlePrimitiveColor(keyContext, keyBuilder, gatherer);
+          },
+          /* addDstToKey= */ [&]() -> void {
+              SolidColorShaderBlock::BeginBlock(keyContext, keyBuilder, gatherer,
+                                                {0, 0, 0, fColor.fA});
+              keyBuilder->endBlock();
+          });
 }
 
 void PaintParams::toKey(const KeyContext& keyContext,
@@ -136,17 +193,7 @@ void PaintParams::toKey(const KeyContext& keyContext,
         builder->endBlock();
     }
 
-    this->addPaintColorToKey(keyContext, builder, gatherer);
-
-    if (fPrimitiveBlender) {
-        AddPrimitiveBlendBlock(keyContext, builder, gatherer, fPrimitiveBlender.get());
-    }
-
-    // Apply the paint's alpha value.
-    if (fColor.fA != 1.0f) {
-        AddColorBlendBlock(
-                keyContext, builder, gatherer, SkBlendMode::kDstIn, {0, 0, 0, fColor.fA});
-    }
+    this->handlePaintAlpha(keyContext, builder, gatherer);
 
     AddToKey(keyContext, builder, gatherer, fColorFilter.get());
 
