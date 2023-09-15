@@ -991,7 +991,7 @@ void Device::drawGeometry(const Transform& localToDevice,
 
     // If an atlas path renderer was chosen we need to insert the shape into the atlas and schedule
     // it to be drawn.
-    AtlasShape::MaskInfo atlasMaskInfo;  // only used if `pathAtlas != nullptr`
+    CoverageMaskShape::MaskInfo atlasMaskInfo;  // only used if `pathAtlas != nullptr`
 
     // It is possible for the transformed shape bounds to be fully clipped out while the draw still
     // produces coverage due to an inverse fill. In this case, don't render any mask;
@@ -1082,14 +1082,16 @@ void Device::drawGeometry(const Transform& localToDevice,
         order.dependsOnStencil(setIndex);
     }
 
-    // If the atlas path renderer was chosen, then schedule the shape to be rendered into the atlas
-    // and record a single AtlashShape draw.
+    // If an atlas path renderer was chosen, then record a single CoverageMaskShape draw.
+    // The shape will be scheduled to be rendered or uploaded into the atlas during the
+    // next invocation of flushPendingWorkToRecorder().
     if (pathAtlas != nullptr) {
-        // Record the draw as a fill since stroking is handled by the atlas render.
-        Geometry atlasShape(
-                AtlasShape(geometry.shape(), pathAtlas, localToDevice.inverse(), atlasMaskInfo));
+        // Record the draw as a fill since stroking is handled by the atlas render/upload.
+        Geometry coverageMask(
+                CoverageMaskShape(geometry.shape(), pathAtlas->texture(), localToDevice.inverse(),
+                                  atlasMaskInfo));
         fDC->recordDraw(
-                renderer, Transform::Identity(), atlasShape, clip, order, &shading, nullptr);
+                renderer, Transform::Identity(), coverageMask, clip, order, &shading, nullptr);
     } else {
         if (styleType == SkStrokeRec::kStroke_Style ||
             styleType == SkStrokeRec::kHairline_Style ||
@@ -1215,7 +1217,7 @@ std::pair<const Renderer*, PathAtlas*> Device::chooseRenderer(const Transform& l
     if (!requireMSAA && pathAtlas) {
         // TODO: vello can't do correct strokes yet. Maybe this shouldn't get selected for stroke
         // renders until all stroke styles are supported?
-        return {renderers->atlasShape(), pathAtlas};
+        return {renderers->coverageMask(), pathAtlas};
     }
 
     // If we got here, it requires tessellated path rendering or an MSAA technique applied to a
