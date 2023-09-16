@@ -10,10 +10,12 @@ require (
 	github.com/google/uuid v1.1.2
 	github.com/stretchr/testify v1.7.0
 	go.chromium.org/luci v0.0.0-20201121231857-b9ab316d7198 // indirect
-	go.skia.org/infra v0.0.0-20230913045906-5f6a13cae14e
+	go.skia.org/infra v0.0.0-20230914222051-18fd0925a396
 	google.golang.org/api v0.74.0
 	google.golang.org/protobuf v1.28.0
 )
+
+require github.com/shirou/gopsutil v3.21.11+incompatible
 
 require (
 	cloud.google.com/go v0.100.2 // indirect
@@ -31,6 +33,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fiorix/go-web v1.0.1-0.20150221144011-5b593f1e8966 // indirect
 	github.com/go-chi/chi/v5 v5.0.8 // indirect
+	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
@@ -60,6 +63,7 @@ require (
 	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
+	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	github.com/zeebo/bencode v1.0.0 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	golang.org/x/net v0.8.0 // indirect

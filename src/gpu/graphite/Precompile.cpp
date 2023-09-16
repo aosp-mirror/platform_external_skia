@@ -10,6 +10,7 @@
 #include "src/gpu/graphite/FactoryFunctions.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
+#include "src/gpu/graphite/PaintParams.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #include "src/gpu/graphite/Precompile.h"
 #include "src/gpu/graphite/PrecompileBasePriv.h"
@@ -119,6 +120,59 @@ void PaintOptions::addPaintColorToKey(const KeyContext& keyContext,
     }
 }
 
+void PaintOptions::handlePrimitiveColor(const KeyContext& keyContext,
+                                        PaintParamsKeyBuilder* keyBuilder,
+                                        int desiredShaderCombination,
+                                        bool addPrimitiveBlender) const {
+    if (addPrimitiveBlender) {
+        Blend(keyContext, keyBuilder, /* gatherer= */ nullptr,
+            /* addBlendToKey= */ [&] () -> void {
+                // TODO: Support runtime blenders for primitive blending in the precompile API.
+                // In the meantime, assume for now that we're using kSrcOver here.
+                AddToKey(keyContext, keyBuilder, /* gatherer= */ nullptr,
+                         SkBlender::Mode(SkBlendMode::kSrcOver).get());
+            },
+            /* addSrcToKey= */ [&]() -> void {
+                this->addPaintColorToKey(keyContext, keyBuilder, desiredShaderCombination);
+            },
+            /* addDstToKey= */ [&]() -> void {
+                PrimitiveColorBlock::BeginBlock(keyContext, keyBuilder, /* gatherer= */ nullptr);
+                keyBuilder->endBlock();
+            });
+    } else {
+        this->addPaintColorToKey(keyContext, keyBuilder, desiredShaderCombination);
+    }
+}
+
+void PaintOptions::handlePaintAlpha(const KeyContext& keyContext,
+                                    PaintParamsKeyBuilder* keyBuilder,
+                                    int desiredShaderCombination,
+                                    bool addPrimitiveBlender,
+                                    bool nonOpaquePaintColor) const {
+    if (nonOpaquePaintColor) {
+        Blend(keyContext, keyBuilder, /* gatherer= */ nullptr,
+              /* addBlendToKey= */ [&] () -> void {
+                  auto coeffs = skgpu::GetPorterDuffBlendConstants(SkBlendMode::kSrcIn);
+                  SkASSERT(!coeffs.empty());
+                  CoeffBlenderBlock::BeginBlock(keyContext, keyBuilder, /* gatherer= */ nullptr,
+                                                coeffs);
+                  keyBuilder->endBlock();
+              },
+              /* addSrcToKey= */ [&]() -> void {
+                  this->handlePrimitiveColor(keyContext, keyBuilder, desiredShaderCombination,
+                                             addPrimitiveBlender);
+              },
+              /* addDstToKey= */ [&]() -> void {
+                  SolidColorShaderBlock::BeginBlock(keyContext, keyBuilder, /* gatherer= */ nullptr,
+                                                    {0, 0, 0, 0.5f});
+                  keyBuilder->endBlock();
+              });
+    } else {
+        this->handlePrimitiveColor(keyContext, keyBuilder, desiredShaderCombination,
+                                   addPrimitiveBlender);
+    }
+}
+
 void PaintOptions::createKey(const KeyContext& keyContext,
                              int desiredCombination,
                              PaintParamsKeyBuilder* keyBuilder,
@@ -165,24 +219,11 @@ void PaintOptions::createKey(const KeyContext& keyContext,
         keyBuilder->endBlock();
     }
 
-    this->addPaintColorToKey(keyContext, keyBuilder, desiredShaderCombination);
+    // TODO: this probably needs to be passed in just like addPrimitiveBlender
+    const bool kNonOpaquePaintColor = false;
 
-    if (addPrimitiveBlender) {
-        BlendShaderBlock::BeginBlock(keyContext, keyBuilder, /* gatherer= */ nullptr);
-        // src -- prior output
-        PriorOutputBlock::BeginBlock(keyContext, keyBuilder, /* gatherer= */ nullptr);
-        keyBuilder->endBlock();
-        // dst -- primitive color
-        PrimitiveColorBlock::BeginBlock(keyContext, keyBuilder, /* gatherer= */ nullptr);
-        keyBuilder->endBlock();
-        // blender -- shader based blending
-        // TODO: Support runtime blenders for primitive blending in the precompile API.
-        // In the meantime, assume for now that we're using a coefficient blend mode here.
-        SkSpan<const float> coeffs = skgpu::GetPorterDuffBlendConstants(SkBlendMode::kSrcOver);
-        CoeffBlenderBlock::BeginBlock(keyContext, keyBuilder, /* gatherer= */ nullptr, coeffs);
-        keyBuilder->endBlock();
-        keyBuilder->endBlock();  // BlendShaderBlock
-    }
+    this->handlePaintAlpha(keyContext, keyBuilder, desiredShaderCombination,
+                           addPrimitiveBlender, kNonOpaquePaintColor);
 
     PrecompileBase::AddToKey(keyContext, keyBuilder, fMaskFilterOptions,
                              desiredMaskFilterCombination);
