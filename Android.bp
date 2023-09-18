@@ -906,6 +906,7 @@ cc_library_static {
         "src/sksl/transform/SkSLReplaceConstVarsWithLiterals.cpp",
         "src/sksl/transform/SkSLRewriteIndexedSwizzle.cpp",
         "src/text/GlyphRun.cpp",
+        "src/text/SlugFromBuffer.cpp",
         "src/text/StrikeForGPU.cpp",
         "src/text/gpu/DistanceFieldAdjustTable.cpp",
         "src/text/gpu/GlyphVector.cpp",
@@ -1474,6 +1475,7 @@ cc_library_static {
         "src/svg/SkSVGCanvas.cpp",
         "src/svg/SkSVGDevice.cpp",
         "src/text/GlyphRun.cpp",
+        "src/text/SlugFromBuffer.cpp",
         "src/text/StrikeForGPU.cpp",
         "src/utils/SkAnimCodecPlayer.cpp",
         "src/utils/SkBase64.cpp",
@@ -1857,7 +1859,6 @@ cc_library_static {
           "src/ports/SkOSFile_posix.cpp",
           "src/ports/SkOSLibrary_posix.cpp",
           "src/text/EmptyMailboxImpl.cpp",
-          "src/text/EmptySlugImpl.cpp",
         ],
         local_include_dirs: [
           "linux",
@@ -1874,7 +1875,6 @@ cc_library_static {
           "src/ports/SkOSFile_posix.cpp",
           "src/ports/SkOSLibrary_posix.cpp",
           "src/text/EmptyMailboxImpl.cpp",
-          "src/text/EmptySlugImpl.cpp",
         ],
         local_include_dirs: [
           "mac",
@@ -1894,7 +1894,6 @@ cc_library_static {
           "src/ports/SkOSFile_win.cpp",
           "src/ports/SkOSLibrary_win.cpp",
           "src/text/EmptyMailboxImpl.cpp",
-          "src/text/EmptySlugImpl.cpp",
         ],
         local_include_dirs: [
           "win",
@@ -4602,6 +4601,7 @@ cc_library_shared {
         "src/svg/SkSVGCanvas.cpp",
         "src/svg/SkSVGDevice.cpp",
         "src/text/GlyphRun.cpp",
+        "src/text/SlugFromBuffer.cpp",
         "src/text/StrikeForGPU.cpp",
         "src/text/gpu/DistanceFieldAdjustTable.cpp",
         "src/text/gpu/GlyphVector.cpp",
