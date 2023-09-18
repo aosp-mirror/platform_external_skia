@@ -346,7 +346,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 				skip(ALL, "test", ALL, "RecordingSurfacesTestClear")
 				skip(ALL, "test", ALL, "ShaderTestNestedBlendsGraphite")
 				skip(ALL, "test", ALL, "SkRuntimeEffectSimple_Graphite")
-				skip(ALL, "test", ALL, "SkSLMatrixScalarNoOpFolding_Ganesh")
 				skip(ALL, "test", ALL, "VolatileGraphiteYUVAPromiseImageTest")
 				skip(ALL, "test", ALL, "VolatileGraphitePromiseImageTest")
 			}
@@ -1197,13 +1196,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	if b.extraConfig("ANGLE") && b.matchOs("Win") && b.matchGpu("IntelIris(540|655|Xe)") {
 		skip(ALL, "tests", ALL, "SkSLSwitchDefaultOnly_Ganesh") // skia:12465
 		skip(ALL, "tests", ALL, "ImageFilterCropRect_Gpu")      // b/294080402
-	}
-
-	if b.extraConfig("Dawn") {
-		// skia:13922: WGSL does not support case fallthrough in switch statements.
-		skip(ALL, "tests", ALL, "SkSLSwitchWithFallthrough_Ganesh")
-		skip(ALL, "tests", ALL, "SkSLSwitchWithFallthroughAndVarDecls_Ganesh")
-		skip(ALL, "tests", ALL, "SkSLSwitchWithLoops_Ganesh")
 	}
 
 	if b.gpu("Tegra3") {
