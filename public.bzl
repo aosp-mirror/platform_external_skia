@@ -47,7 +47,6 @@ SKIA_PUBLIC_HDRS = [
     "include/core/SkDocument.h",
     "include/core/SkDrawLooper.h",
     "include/core/SkDrawable.h",
-    "include/core/SkEncodedImageFormat.h",  # TODO(kjlubick) remove this shim
     "include/core/SkExecutor.h",
     "include/core/SkFlattenable.h",
     "include/core/SkFont.h",
@@ -1704,9 +1703,9 @@ BASE_SRCS_ALL = [
     "src/text/gpu/TextBlobRedrawCoordinator.h",
     "src/text/gpu/VertexFiller.cpp",
     "src/text/gpu/VertexFiller.h",
+    "src/text/SlugFromBuffer.cpp",
     "src/text/StrikeForGPU.cpp",
     "src/text/StrikeForGPU.h",
-    "src/text/TextBlobMailbox.h",
     "src/utils/SkAnimCodecPlayer.cpp",
     "src/utils/SkBase64.cpp",
     "src/utils/SkBitSet.h",
