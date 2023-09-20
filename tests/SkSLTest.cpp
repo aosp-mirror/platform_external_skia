@@ -303,6 +303,9 @@ static bool failure_is_expected(std::string_view deviceName,    // "Geforce RTX4
         // Switch fallthrough has some issues on iOS.
         disables["SwitchWithFallthrough"].push_back({_, "OpenGL", GPU, kiOS});
 
+        // Pack intrinsics do not work properly on Mac + OpenGL + Radeon. (b/40043515)
+        disables["SwitchWithFallthrough"].push_back({regex("Radeon"), "OpenGL", GPU, kMac});
+
         // - ARM ----------------------------------------------------------------------------------
         // Mali 400 is a very old driver its share of quirks, particularly in relation to matrices.
         for (const char* test : {"Matrices",                // b/40043539
@@ -316,17 +319,21 @@ static bool failure_is_expected(std::string_view deviceName,    // "Geforce RTX4
         }
 
         // - Nvidia -------------------------------------------------------------------------------
-        // Tegra3 fails to compile break stmts inside a for loop (b/40043561)
-        for (const char* test : {"Switch",
-                                 "SwitchDefaultOnly",
-                                 "SwitchWithFallthrough",
-                                 "SwitchWithFallthroughAndVarDecls",
-                                 "SwitchWithLoops",
-                                 "SwitchCaseFolding",
-                                 "LoopFloat",
-                                 "LoopInt",
-                                 "MatrixScalarNoOpFolding",  // b/40044644 - matrix trouble as well
-                                 "MatrixScalarMath"}) {      // b/40043764
+        // Tegra3 has several issues, but the inability to break from a for loop is a common theme.
+        for (const char* test : {"Switch",                            // b/40043561
+                                 "SwitchDefaultOnly",                 //  "      "
+                                 "SwitchWithFallthrough",             //  "      "
+                                 "SwitchWithFallthroughAndVarDecls",  //  "      "
+                                 "SwitchWithLoops",                   //  "      "
+                                 "SwitchCaseFolding",                 //  "      "
+                                 "LoopFloat",                         //  "      "
+                                 "LoopInt",                           //  "      "
+                                 "MatrixScalarNoOpFolding",           // b/40044644
+                                 "MatrixScalarMath",                  // b/40043764
+                                 "MatrixFoldingES2",                  // b/40043017
+                                 "MatrixEquality",                    // b/40043017
+                                 "IntrinsicFract",
+                                 "ModifiedStructParametersCannotBeInlined"}) {
             disables[test].push_back({regex("Tegra 3"), _, GPU, _});
         }
 
@@ -347,6 +354,30 @@ static bool failure_is_expected(std::string_view deviceName,    // "Geforce RTX4
         for (const char* test : {"PreserveSideEffects",  // b/40044140
                                  "CommaSideEffects"}) {
             disables[test].push_back({regex("Quadro P400"), _, _, kLinux});
+        }
+
+        // - PowerVR ------------------------------------------------------------------------------
+        for (const char* test : {"OutParamsAreDistinct"              // b/40044222
+                                 "OutParamsAreDistinctFromGlobal"}) {
+            disables[test].push_back({regex("PowerVR Rogue GE8300"), _, GPU, _});
+        }
+
+        // - Radeon -------------------------------------------------------------------------------
+        for (const char* test : {"IntrinsicAll",               // b/40045114
+                                 "MatrixConstructors",         // b/40043524
+                                 "MatrixScalarNoOpFolding",    // b/40044644
+                                 "StructIndexStore",           // b/40045236
+                                 "SwizzleIndexLookup",         // b/40045254
+                                 "SwizzleIndexStore"}) {       // b/40045254
+            disables[test].push_back({regex("Radeon.*(R9|HD)"), "OpenGL", GPU, _});
+            disables[test].push_back({regex("Radeon.*(R9|HD)"), "ANGLE GL", GPU, _});
+        }
+
+        // The Radeon Vega 6 doesn't return zero for the derivative of a uniform.
+        for (const char* test : {"IntrinsicDFdy",
+                                 "IntrinsicDFdx",
+                                 "IntrinsicFwidth"}) {
+            disables[test].push_back({regex("AMD RADV RENOIR"), _, GPU, _});
         }
 
         // - Adreno -------------------------------------------------------------------------------
@@ -430,7 +461,7 @@ static bool failure_is_expected(std::string_view deviceName,    // "Geforce RTX4
                                  "OutParamsAreDistinctFromGlobal",  // b/40044222
                                  "StructFieldFolding"}) {           // b/40044477
             disables[test].push_back({regex("Intel"), "OpenGL", _, kWindows});
-            disables[test].push_back({regex("Intel"), "Angle GL", _, kWindows});
+            disables[test].push_back({regex("Intel"), "ANGLE GL", _, kWindows});
         }
 
         for (const char* test : {"SwitchDefaultOnly",               // b/40043548
@@ -497,7 +528,7 @@ static bool failure_is_expected(std::string_view deviceName,    // "Geforce RTX4
 
 static void test_one_permutation(skiatest::Reporter* r,
                                  std::string_view deviceName,
-                                 std::string_view backend,
+                                 std::string_view backendAPI,
                                  SkSurface* surface,
                                  const char* name,
                                  const char* testFile,
@@ -513,10 +544,11 @@ static void test_one_permutation(skiatest::Reporter* r,
         ERRORF(r, "%s%s: %s", testFile, permutationSuffix, result.errorText.c_str());
         return;
     }
-    if (failure_is_expected(deviceName, backend, name, testType)) {
+    if (failure_is_expected(deviceName, backendAPI, name, testType)) {
         // Some driver bugs can be catastrophic (e.g. crashing dm entirely), so we don't even try to
         // run a shader if we expect that it might fail.
-        SkDebugf("%s%s: skipped\n", testFile, permutationSuffix);
+        SkDebugf("%s: skipped %.*s%s\n", testFile, (int)backendAPI.size(), backendAPI.data(),
+                                         permutationSuffix);
         return;
     }
 
@@ -548,7 +580,7 @@ static void test_one_permutation(skiatest::Reporter* r,
                                           "%02X%02X%02X%02X %02X%02X%02X%02X",
                                           permutationSuffix,
                                           (int)deviceName.size(), deviceName.data(),
-                                          (int)backend.size(),    backend.data(),
+                                          (int)backendAPI.size(), backendAPI.data(),
 
                                           SkColorGetR(color[0][0]), SkColorGetG(color[0][0]),
                                           SkColorGetB(color[0][0]), SkColorGetA(color[0][0]),
@@ -568,7 +600,7 @@ static void test_one_permutation(skiatest::Reporter* r,
 
 static void test_permutations(skiatest::Reporter* r,
                               std::string_view deviceName,
-                              std::string_view backend,
+                              std::string_view backendAPI,
                               SkSurface* surface,
                               const char* name,
                               const char* testFile,
@@ -577,10 +609,10 @@ static void test_permutations(skiatest::Reporter* r,
     SkRuntimeEffect::Options options = strictES2 ? SkRuntimeEffect::Options{}
                                                  : SkRuntimeEffectPriv::ES3Options();
     options.forceUnoptimized = false;
-    test_one_permutation(r, deviceName, backend, surface, name, testFile, testType, "", options);
+    test_one_permutation(r, deviceName, backendAPI, surface, name, testFile, testType, "", options);
 
     options.forceUnoptimized = true;
-    test_one_permutation(r, deviceName, backend, surface, name, testFile, testType,
+    test_one_permutation(r, deviceName, backendAPI, surface, name, testFile, testType,
                          " (Unoptimized)", options);
 }
 
@@ -916,9 +948,7 @@ SKSL_TEST(CPU | GPU,     kApiLevel_U, MatrixNoOpFolding,               "folding/
 SKSL_TEST(CPU | GPU,     kApiLevel_U, MatrixScalarNoOpFolding,         "folding/MatrixScalarNoOpFolding.rts")
 SKSL_TEST(CPU | GPU,     kApiLevel_U, MatrixVectorNoOpFolding,         "folding/MatrixVectorNoOpFolding.rts")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, Negation,                        "folding/Negation.rts")
-// TODO(skia:13035): This test fails on Nvidia GPUs on OpenGL but passes Vulkan. Re-enable the test
-// on Vulkan when granular GPU backend selection is supported.
-SKSL_TEST(CPU,           kApiLevel_T, PreserveSideEffects,             "folding/PreserveSideEffects.rts")
+SKSL_TEST(CPU | GPU,     kApiLevel_T, PreserveSideEffects,             "folding/PreserveSideEffects.rts")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, SelfAssignment,                  "folding/SelfAssignment.rts")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, ShortCircuitBoolFolding,         "folding/ShortCircuitBoolFolding.rts")
 SKSL_TEST(CPU | GPU,     kApiLevel_U, StructFieldFolding,              "folding/StructFieldFolding.rts")
@@ -952,8 +982,7 @@ SKSL_TEST(CPU | GPU,     kApiLevel_T, InlineWithModifiedArgument,               
 SKSL_TEST(CPU | GPU,     kApiLevel_T, InlineWithNestedBigCalls,                         "inliner/InlineWithNestedBigCalls.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, InlineWithUnmodifiedArgument,                     "inliner/InlineWithUnmodifiedArgument.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, InlineWithUnnecessaryBlocks,                      "inliner/InlineWithUnnecessaryBlocks.sksl")
-// TODO(tint:1932): GPU is disabled for now; test exposes a bug in the Tint SPIR-V Reader
-SKSL_TEST(CPU,           kNextRelease,IntrinsicNameCollision,                           "inliner/IntrinsicNameCollision.sksl")
+SKSL_TEST(CPU | GPU,     kNextRelease,IntrinsicNameCollision,                           "inliner/IntrinsicNameCollision.sksl")
 SKSL_TEST(CPU | GPU,     kNextRelease,ModifiedArrayParametersCannotBeInlined,           "inliner/ModifiedArrayParametersCannotBeInlined.sksl")
 SKSL_TEST(CPU | GPU,     kNextRelease,ModifiedStructParametersCannotBeInlined,          "inliner/ModifiedStructParametersCannotBeInlined.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, NoInline,                                         "inliner/NoInline.sksl")
@@ -1003,8 +1032,7 @@ SKSL_TEST(ES3 | GPU_ES3, kNever,      IntrinsicMixFloatES3,            "intrinsi
 SKSL_TEST(GPU_ES3,       kNever,      IntrinsicModf,                   "intrinsics/Modf.sksl")
 SKSL_TEST(CPU | GPU,     kNever,      IntrinsicNot,                    "intrinsics/Not.sksl")
 SKSL_TEST(GPU_ES3,       kNever,      IntrinsicOuterProduct,           "intrinsics/OuterProduct.sksl")
-// Fails on Mac OpenGL + Radeon 5300M (skia:12434)
-// SKSL_TEST(GPU_ES3,    kNever,      IntrinsicPackUnorm2x16,          "intrinsics/PackUnorm2x16.sksl")
+SKSL_TEST(GPU_ES3,       kNever,      IntrinsicPackUnorm2x16,          "intrinsics/PackUnorm2x16.sksl")
 SKSL_TEST(CPU | GPU,     kNever,      IntrinsicRadians,                "intrinsics/Radians.sksl")
 SKSL_TEST(GPU_ES3,       kNever,      IntrinsicRound,                  "intrinsics/Round.sksl")
 SKSL_TEST(GPU_ES3,       kNever,      IntrinsicRoundEven,              "intrinsics/RoundEven.sksl")
@@ -1050,8 +1078,7 @@ SKSL_TEST(CPU | GPU,     kNever,      DeadGlobals,                     "shared/D
 SKSL_TEST(ES3 | GPU_ES3, kNever,      DeadLoopVariable,                "shared/DeadLoopVariable.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, DeadIfStatement,                 "shared/DeadIfStatement.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, DeadReturn,                      "shared/DeadReturn.sksl")
-// TODO(skia:12012): some Radeons crash when compiling this code; disable them.
-SKSL_TEST(ES3/* | GPU_ES3*/,kNever,   DeadReturnES3,                   "shared/DeadReturnES3.sksl")
+SKSL_TEST(ES3 | GPU_ES3, kNever,      DeadReturnES3,                   "shared/DeadReturnES3.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, DeadStripFunctions,              "shared/DeadStripFunctions.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, DependentInitializers,           "shared/DependentInitializers.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_U, DoubleNegation,                  "shared/DoubleNegation.sksl")
@@ -1076,10 +1103,8 @@ SKSL_TEST(CPU | GPU,     kApiLevel_U, LogicalAndShortCircuit,          "shared/L
 SKSL_TEST(CPU | GPU,     kApiLevel_U, LogicalOrShortCircuit,           "shared/LogicalOrShortCircuit.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, Matrices,                        "shared/Matrices.sksl")
 SKSL_TEST(ES3 | GPU_ES3, kNever,      MatricesNonsquare,               "shared/MatricesNonsquare.sksl")
-// TODO(skia:12443) The MatrixConstructors tests actually don't work on MANY devices. The GLSL SkQP
-// suite does a terrible job of enforcing this rule. We still test the ES2 variant on CPU.
-SKSL_TEST(CPU,           kNever,      MatrixConstructorsES2,           "shared/MatrixConstructorsES2.sksl")
-SKSL_TEST(ES3,           kNever,      MatrixConstructorsES3,           "shared/MatrixConstructorsES3.sksl")
+SKSL_TEST(CPU | GPU,     kNever,      MatrixConstructorsES2,           "shared/MatrixConstructorsES2.sksl")
+SKSL_TEST(ES3 | GPU_ES3, kNever,      MatrixConstructorsES3,           "shared/MatrixConstructorsES3.sksl")
 SKSL_TEST(CPU | GPU,     kApiLevel_T, MatrixEquality,                  "shared/MatrixEquality.sksl")
 SKSL_TEST(CPU | GPU,     kNextRelease,MatrixIndexLookup,               "shared/MatrixIndexLookup.sksl")
 SKSL_TEST(CPU | GPU,     kNextRelease,MatrixIndexStore,                "shared/MatrixIndexStore.sksl")
