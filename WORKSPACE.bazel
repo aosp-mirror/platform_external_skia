@@ -552,7 +552,7 @@ load(
 # Pulls the gcr.io/skia-public/debugger-app-base container.
 container_pull(
     name = "debugger-app-base",
-    digest = "sha256:34426197856b6183c99879b61ada44df40fd7cccdab766c55d467484a9cb0701",
+    digest = "sha256:4bd4f2832866ebba746763634a8953e59eabdbeffc865f174fe2f7337bd40de8",
     registry = "gcr.io",
     repository = "skia-public/debugger-app-base",
 )
@@ -568,7 +568,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/shaders-base container.
 container_pull(
     name = "shaders-base",
-    digest = "sha256:ca3aa4986e49e997d1fcfc720584165a3580a02fc0cfa1a4cf525c39d052e105",
+    digest = "sha256:40f881ed7b8b722ea03a1112b3bccb1b7a6ead568f326fbcdbef2de6a0804fc1",
     registry = "gcr.io",
     repository = "skia-public/shaders-base",
 )
@@ -576,7 +576,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/skottie-base container.
 container_pull(
     name = "skottie-base",
-    digest = "sha256:4983a463d62a4269f4b00881ed020269f4528a3ddb49a0c3e82a04a10ef73715",
+    digest = "sha256:a8dcc44b58142f20ea2a5ede40c53978f4e97dba159eaa6084f479919a09c41d",
     registry = "gcr.io",
     repository = "skia-public/skottie-base",
 )
