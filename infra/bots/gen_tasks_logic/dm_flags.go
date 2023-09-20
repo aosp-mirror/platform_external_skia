@@ -1065,17 +1065,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 			skip(glMsaaConfig, "gm", ALL, "imageblurtiled")
 			skip(glMsaaConfig, "gm", ALL, "imagefiltersbase")
 		}
-
-		skip(ALL, "tests", ALL, "SkSLUnaryPositiveNegative_Ganesh")
-	}
-
-	if b.model("Pixel3") || b.model("Pixel2XL") {
-		skip(ALL, "tests", ALL, "SkSLEmptyBlocksES3_Ganesh") // skia:13309
-	}
-
-	if b.extraConfig("Vulkan") &&
-		(b.model("Pixel2XL") || b.model("Pixel3") || b.model("Pixel4XL") || b.model("Pixel3a")) {
-		skip(ALL, "tests", ALL, "SkSLVoidInSequenceExpressions_Ganesh") // b/295217166
 	}
 
         // b/296440036
@@ -1088,67 +1077,15 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "tests", ALL, "SurfaceAsyncReadPixels")
 	}
 
-        if b.matchGpu("Adreno[3456]") { // disable broken tests on Adreno 3/4/5/6xx
-		skip(ALL, "tests", ALL, "SkSLArrayCast_Ganesh")       // skia:12332
-		skip(ALL, "tests", ALL, "SkSLArrayComparison_Ganesh") // skia:12332
-		skip(ALL, "tests", ALL, "SkSLCommaSideEffects_Ganesh")
-		skip(ALL, "tests", ALL, "SkSLIntrinsicMixFloatES2_Ganesh")
-		skip(ALL, "tests", ALL, "SkSLIntrinsicClampFloat_Ganesh")
-		skip(ALL, "tests", ALL, "SkSLSwitchWithFallthrough_Ganesh")
-		skip(ALL, "tests", ALL, "SkSLSwizzleIndexLookup_Ganesh") // skia:14177
-		skip(ALL, "tests", ALL, "SkSLSwizzleIndexStore_Ganesh")  // skia:14177
-	}
-
-	if b.matchGpu("Adreno[345]") && !b.extraConfig("Vulkan") { // disable broken tests on Adreno 3/4/5xx GLSL
-		skip(ALL, "tests", ALL, "DSLFPTest_SwitchStatement")  // skia:11891
-		skip(ALL, "tests", ALL, "SkSLMatrixToVectorCast_Ganesh") // skia:12192
-		skip(ALL, "tests", ALL, "SkSLStructsInFunctions_Ganesh") // skia:11929
-	}
-
-	if b.matchGpu("Adreno[3456]") && !b.extraConfig("Vulkan") { // disable broken tests on Adreno 3/4/5/6xx GLSL
-		skip(ALL, "tests", ALL, "SkSLOutParamsAreDistinctFromGlobal_Ganesh") // skia:13115
-	}
-
-	if b.matchGpu("Adreno6") && !b.extraConfig("Vulkan") { // disable broken tests on Adreno 6xx GLSL
-		skip(ALL, "tests", ALL, "SkSLIntrinsicIsInf_Ganesh") // skia:12377
-	}
-
-	if b.matchGpu("Adreno[56]") && !b.extraConfig("Vulkan") { // disable broken tests on Adreno 5/6xx GLSL
-		skip(ALL, "tests", ALL, "SkSLStructFieldFolding_Ganesh") // skia:13393
-	}
-
-	if b.matchGpu("Adreno[56]") && b.extraConfig("Vulkan") { // disable broken tests on Adreno 5/6xx Vulkan
-		skip(ALL, "tests", ALL, "SkSLInoutParameters_Ganesh")        // skia:12869
-		skip(ALL, "tests", ALL, "SkSLOutParams_Ganesh")              // skia:11919
-		skip(ALL, "tests", ALL, "SkSLOutParamsDoubleSwizzle_Ganesh") // skia:11919
-		skip(ALL, "tests", ALL, "SkSLOutParamsNoInline_Ganesh")      // skia:11919
-		skip(ALL, "tests", ALL, "SkSLOutParamsFunctionCallInArgument")
-	}
-
-	if (b.matchGpu("Adreno3") || b.matchGpu("Mali400")) && !b.extraConfig("Vulkan") {
-		skip(ALL, "tests", ALL, "SkSLMatrices") // skia:12456
-		skip(ALL, "tests", ALL, "SkSLMatrixNoOpFolding_Ganesh")
-	}
-
 	if b.gpu("QuadroP400") {
 		skip(ALL, "tests", ALL, "SkSLCommaSideEffects")
 	}
 
-	if b.matchGpu("Mali400") || b.matchGpu("Tegra3") {
-		skip(ALL, "tests", ALL, "SkSLMatrixScalarMath") // skia:12681
-	}
 
 	if b.matchGpu("Mali400") {
 		skip(ALL, "tests", ALL, "BlendRequiringDstReadWithLargeCoordinates")
-		skip(ALL, "tests", ALL, "SkSLCross")
-		skip(ALL, "tests", ALL, "SkSLMatrixSwizzleStore_Ganesh")
-	}
-
-	if (b.matchOs("Mac") || b.matchOs("iOS")) && !b.extraConfig("Metal") {
-		// MacOS/iOS do not handle short-circuit evaluation properly in OpenGL (chromium:307751)
-		skip(ALL, "tests", ALL, "SkSLLogicalAndShortCircuit_Ganesh")
-		skip(ALL, "tests", ALL, "SkSLLogicalOrShortCircuit_Ganesh")
-	}
+		skip(ALL, "tests", ALL, "SkSLCross")  // despite the name, it's not in SkSLTest.cpp
+    }
 
 	if b.matchOs("iOS") && !b.extraConfig("Metal") {
 		skip(ALL, "tests", ALL, "SkSLSwitchWithFallthrough_Ganesh")
@@ -1198,18 +1135,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		skip(ALL, "tests", ALL, "ImageFilterCropRect_Gpu")      // b/294080402
 	}
 
-	if b.gpu("Tegra3") {
-		// Tegra3 fails to compile break stmts inside a for loop (skia:12477)
-		skip(ALL, "tests", ALL, "SkSLSwitch_Ganesh")
-		skip(ALL, "tests", ALL, "SkSLSwitchDefaultOnly_Ganesh")
-		skip(ALL, "tests", ALL, "SkSLSwitchWithFallthrough_Ganesh")
-		skip(ALL, "tests", ALL, "SkSLSwitchWithFallthroughAndVarDecls_Ganesh")
-		skip(ALL, "tests", ALL, "SkSLSwitchWithLoops_Ganesh")
-		skip(ALL, "tests", ALL, "SkSLSwitchCaseFolding_Ganesh")
-		skip(ALL, "tests", ALL, "SkSLLoopFloat_Ganesh")
-		skip(ALL, "tests", ALL, "SkSLLoopInt_Ganesh")
-	}
-
 	if b.gpu("QuadroP400") || b.gpu("GTX660") || b.gpu("GTX960") || b.gpu("Tegra3") || b.gpu("RTX3060") {
 		if !b.extraConfig("Vulkan") {
 			// Various Nvidia GPUs crash or generate errors when assembling weird matrices
@@ -1224,11 +1149,9 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 	}
 
 	if !b.extraConfig("Vulkan") && (b.gpu("RTX3060") ||
-		b.gpu("QuadroP400") ||
-		b.matchGpu("GTX[6-9]60") ||
-		b.matchGpu("Mali400") ||
-		b.matchGpu("Tegra3") ||
-		b.matchGpu("Radeon(R9|HD)")) {
+		                            b.gpu("QuadroP400") ||
+		                            b.matchGpu("GTX[6-9]60") ||
+		                            b.matchGpu("Radeon(R9|HD)")) {
 		skip(ALL, "tests", ALL, "SkSLMatrixScalarNoOpFolding_Ganesh") // skia:13556
 	}
 

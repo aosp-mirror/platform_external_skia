@@ -57,6 +57,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <regex>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -68,6 +69,7 @@
 #include "include/gpu/graphite/Surface.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/ContextPriv.h"
+#include "tools/graphite/GraphiteTestContext.h"
 #if defined(SK_DAWN)
 #include "src/gpu/graphite/dawn/DawnCaps.h"
 #endif
@@ -236,7 +238,163 @@ static bool failure_is_expected(std::string_view deviceName,    // "Geforce RTX4
                                 std::string_view backendAPI,    // "OpenGL"
                                 std::string_view name,          // "MatrixToVectorCast"
                                 skiatest::TestType testType) {  // skiatest::TestType::kGraphite
-    // TODO(b/40044139): migrate test-disable list from dm_flags into this file
+    enum TestTypeMatcher { CPU, Ganesh, Graphite, GPU /* either Ganesh or Graphite */ };
+
+    struct TestDisable {
+        std::optional<std::regex> deviceName;
+        std::optional<std::string_view> backendAPI;
+        std::optional<TestTypeMatcher> testTypeMatcher;
+        std::optional<bool> platform;
+    };
+
+    using TestDisableMap = THashMap<std::string_view, std::vector<TestDisable>>;
+
+    // TODO(b/40044139): migrate test-disable list from dm_flags into this map
+    static SkNoDestructor<TestDisableMap> testDisableMap{[] {
+        #define ADRENO "Adreno \\(TM\\) "
+
+        TestDisableMap disables;
+        constexpr std::nullopt_t _ = std::nullopt;
+        using regex = std::regex;
+
+#if defined(SK_BUILD_FOR_UNIX)
+        [[maybe_unused]] constexpr bool kLinux = true;
+#else
+        [[maybe_unused]] constexpr bool kLinux = false;
+#endif
+#if defined(SK_BUILD_FOR_MAC)
+        constexpr bool kMac = true;
+#else
+        constexpr bool kMac = false;
+#endif
+#if defined(SK_BUILD_FOR_IOS)
+        constexpr bool kiOS = true;
+#else
+        constexpr bool kiOS = false;
+#endif
+#if defined(SK_BUILD_FOR_WIN)
+        [[maybe_unused]] constexpr bool kWindows = true;
+#else
+        [[maybe_unused]] constexpr bool kWindows = false;
+#endif
+#if defined(SK_BUILD_FOR_ANDROID)
+        [[maybe_unused]] constexpr bool kAndroid = true;
+#else
+        [[maybe_unused]] constexpr bool kAndroid = false;
+#endif
+
+        // MacOS/iOS do not handle short-circuit evaluation properly in OpenGL (chromium:307751)
+        for (const char* test : {"LogicalAndShortCircuit",
+                                 "LogicalOrShortCircuit"}) {
+            disables[test].push_back({_, "OpenGL", GPU, kMac || kiOS});
+        }
+
+        // Mali 400 is a very old driver its share of quirks, particularly in relation to matrices.
+        for (const char* test : {"Matrices",                // b/40043539
+                                 "MatrixNoOpFolding",
+                                 "MatrixScalarMath",        // b/40043764
+                                 "MatrixSwizzleStore",
+                                 "MatrixScalarNoOpFolding", // b/40044644
+                                 "UnaryPositiveNegative",
+                                 "Cross"}) {
+            disables[test].push_back({regex("Mali-400"), _, GPU, _});
+        }
+
+        // Tegra3 fails to compile break stmts inside a for loop (b/40043561)
+        for (const char* test : {"Switch",
+                                 "SwitchDefaultOnly",
+                                 "SwitchWithFallthrough",
+                                 "SwitchWithFallthroughAndVarDecls",
+                                 "SwitchWithLoops",
+                                 "SwitchCaseFolding",
+                                 "LoopFloat",
+                                 "LoopInt",
+                                 "MatrixScalarNoOpFolding",  // b/40044644 - matrix trouble as well
+                                 "MatrixScalarMath"}) {      // b/40043764
+            disables[test].push_back({regex("Tegra 3"), _, GPU, _});
+        }
+
+        // Disable broken tests on Android with Adreno GPUs (b/40043413, b/40045254)
+        for (const char* test : {"ArrayCast",
+                                 "ArrayComparison",
+                                 "CommaSideEffects",
+                                 "IntrinsicMixFloatES2",
+                                 "IntrinsicClampFloat",
+                                 "SwitchWithFallthrough",
+                                 "SwizzleIndexLookup",
+                                 "SwizzleIndexStore"}) {
+            disables[test].push_back({regex(ADRENO "[3456]"), _, _, kAndroid});
+        }
+
+        // Older Adreno 5/6xx drivers report a pipeline error or silently fail when handling inouts.
+        for (const char* test : {"VoidInSequenceExpressions",  // b/295217166
+                                 "InoutParameters",            // b/40043966
+                                 "OutParams",
+                                 "OutParamsDoubleSwizzle",
+                                 "OutParamsNoInline",
+                                 "OutParamsFunctionCallInArgument"}) {
+            disables[test].push_back({regex(ADRENO "[56]"), "Vulkan", _, kAndroid});
+        }
+
+        for (const char* test : {"MatrixToVectorCast",     // b/40043288
+                                 "StructsInFunctions"}) {  // b/40043024
+            disables[test].push_back({regex(ADRENO "[345]"), "OpenGL", _, kAndroid});
+        }
+
+        // Constructing a matrix from vectors and scalars can be surprisingly finicky (b/40043539)
+        for (const char* test : {"Matrices",
+                                 "MatrixNoOpFolding"}) {
+            disables[test].push_back({regex(ADRENO "3"), "OpenGL", _, kAndroid});
+        }
+
+        // Adreno 600 doesn't handle isinf() in OpenGL correctly. (b/40043464)
+        disables["IntrinsicIsInf"].push_back({regex(ADRENO "6"), "OpenGL", _, kAndroid});
+
+        // Older Adreno drivers crash when presented with an empty block (b/40044390)
+        disables["EmptyBlocksES3"].push_back({regex(ADRENO "(540|630)"), _, _, kAndroid});
+
+        // Various drivers alias out-params to globals improperly (b/40044222)
+        disables["OutParamsAreDistinctFromGlobal"].push_back({regex(ADRENO "[3456]"), "OpenGL",
+                                                              _, kAndroid});
+        // Adreno generates the wrong result for this test. (b/40044477)
+        disables["StructFieldFolding"].push_back({regex(ADRENO "[56]"), "OpenGL",
+                                                        _, kAndroid});
+
+        #undef ADRENO
+
+        return disables;
+    }()};
+
+    if (const std::vector<TestDisable>* testDisables = testDisableMap->find(name)) {
+        for (const TestDisable& d : *testDisables) {
+            if (d.platform.has_value() && !*d.platform) {
+                continue;  // disable applies to a different platform
+            }
+            if (d.backendAPI.has_value() && !skstd::contains(backendAPI, *d.backendAPI)) {
+                continue;  // disable applies to a different backend API
+            }
+            if (d.deviceName.has_value() &&
+                !std::regex_search(deviceName.begin(), deviceName.end(), *d.deviceName)) {
+                continue;  // disable applies to a different device
+            }
+            if (d.testTypeMatcher == CPU && testType != skiatest::TestType::kCPU) {
+                continue;  // disable only applies to CPU
+            }
+            if (d.testTypeMatcher == Ganesh && testType != skiatest::TestType::kGanesh) {
+                continue;  // disable only applies to Ganesh
+            }
+            if (d.testTypeMatcher == Graphite && testType != skiatest::TestType::kGraphite) {
+                continue;  // disable only applies to Graphites
+            }
+            if (d.testTypeMatcher == GPU && testType == skiatest::TestType::kCPU) {
+                continue;  // disable only applies to GPU
+            }
+            // This test was disabled.
+            return true;
+        }
+    }
+
+    // This test was not in our disable list.
     return false;
 }
 
@@ -256,6 +414,12 @@ static void test_one_permutation(skiatest::Reporter* r,
     SkRuntimeEffect::Result result = SkRuntimeEffect::MakeForShader(shaderString, options);
     if (!result.effect) {
         ERRORF(r, "%s%s: %s", testFile, permutationSuffix, result.errorText.c_str());
+        return;
+    }
+    if (failure_is_expected(deviceName, backend, name, testType)) {
+        // Some driver bugs can be catastrophic (e.g. crashing dm entirely), so we don't even try to
+        // run a shader if we expect that it might fail.
+        SkDebugf("%s%s: skipped\n", testFile, permutationSuffix);
         return;
     }
 
@@ -301,11 +465,7 @@ static void test_one_permutation(skiatest::Reporter* r,
                                           SkColorGetR(color[1][1]), SkColorGetG(color[1][1]),
                                           SkColorGetB(color[1][1]), SkColorGetA(color[1][1]));
 
-        if (failure_is_expected(deviceName, backend, name, testType)) {
-            INFOF(r, "(KNOWN ISSUE) %s", message.c_str());
-        } else {
-            ERRORF(r, "%s", message.c_str());
-        }
+        ERRORF(r, "%s", message.c_str());
     }
 }
 
@@ -385,6 +545,7 @@ static void test_ganesh(skiatest::Reporter* r,
 #if defined(SK_GRAPHITE)
 static void test_graphite(skiatest::Reporter* r,
                           skgpu::graphite::Context* ctx,
+                          skiatest::graphite::GraphiteTestContext* testCtx,
                           const char* name,
                           const char* testFile,
                           SkSLTestFlags flags) {
@@ -415,14 +576,7 @@ static void test_graphite(skiatest::Reporter* r,
                                                 kPremul_SkAlphaType);
     sk_sp<SkSurface> surface = SkSurfaces::RenderTarget(recorder.get(), info);
     std::string_view deviceName = ctx->priv().caps()->deviceName();
-    std::string_view backendAPI;
-    switch (ctx->backend()) {
-        case skgpu::BackendApi::kDawn:   backendAPI = "Dawn"; break;
-        case skgpu::BackendApi::kMetal:  backendAPI = "Metal"; break;
-        case skgpu::BackendApi::kVulkan: backendAPI = "Vulkan"; break;
-        case skgpu::BackendApi::kMock:   backendAPI = "Mock"; break;
-        default:                         backendAPI = "Unknown"; break;
-    }
+    std::string_view backendAPI = skgpu::ContextTypeName(testCtx->contextType());
 
     if (shouldRunGPU) {
         test_permutations(r, deviceName, backendAPI, surface.get(), name, testFile,
@@ -609,10 +763,11 @@ static bool is_native_context_or_dawn(skgpu::ContextType type) {
                                                is_native_context_or_dawn, \
                                                r,                         \
                                                context,                   \
+                                               testContext,               \
                                                /*opt_filter=*/nullptr,    \
                                                is_gpu(flags),             \
                                                ctsEnforcement) {          \
-        test_graphite(r, context, #name, path, flags);                    \
+        test_graphite(r, context, testContext, #name, path, flags);       \
     }
 #else
 #define DEF_GRAPHITE_SKSL_TEST(flags, ctsEnforcement, name, path) /* Graphite is disabled */
