@@ -552,7 +552,7 @@ load(
 # Pulls the gcr.io/skia-public/debugger-app-base container.
 container_pull(
     name = "debugger-app-base",
-    digest = "sha256:5b191a5ec3d19e77ab144e7249989caff415688ee62cd67e0e841ced27350339",
+    digest = "sha256:4880b92b4f1cb28b557c4a8ee90cfef82abe58d332761c8adc57c6823bfd8444",
     registry = "gcr.io",
     repository = "skia-public/debugger-app-base",
 )
@@ -560,7 +560,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/jsfiddle-base container.
 container_pull(
     name = "jsfiddle-base",
-    digest = "sha256:420bf03c7a802ae9804e79728bf2418e06d25bfa19250498657855c8f7355a26",
+    digest = "sha256:3c3b69cdbecdc962aa8570cd6532f84177ccf2a416c39558a27ffc7abd90fe31",
     registry = "gcr.io",
     repository = "skia-public/jsfiddle-base",
 )
@@ -568,7 +568,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/shaders-base container.
 container_pull(
     name = "shaders-base",
-    digest = "sha256:45116d485d17e073a6dc04016cd0aed0d2bf24916fbbcde6fd33698edcad08a7",
+    digest = "sha256:75c3a7bb1f1964fb5dd07cda42d2af73d117625aa9cd154898741beef95a24c2",
     registry = "gcr.io",
     repository = "skia-public/shaders-base",
 )
@@ -576,7 +576,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/skottie-base container.
 container_pull(
     name = "skottie-base",
-    digest = "sha256:ac643e8ecce3bc7094534ea4fd78df956ef9a7779c1512b01c1baa3c4fc83b94",
+    digest = "sha256:6fbc053bdad0ecf8193ac1128355c076db359e79a57f63ffd46fa488c6f0c3c0",
     registry = "gcr.io",
     repository = "skia-public/skottie-base",
 )
