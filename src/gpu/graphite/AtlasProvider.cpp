@@ -16,11 +16,19 @@
 namespace skgpu::graphite {
 
 AtlasProvider::AtlasProvider(Recorder* recorder)
-        : fTextAtlasManager(std::make_unique<TextAtlasManager>(recorder)) {}
+        : fTextAtlasManager(std::make_unique<TextAtlasManager>(recorder)) {
+    // Disable for now.
+    //fPathAtlasFlags |= PathAtlasFlags::kSoftware;
+#ifdef SK_ENABLE_VELLO_SHADERS
+    if (recorder->priv().caps()->computeSupport()) {
+        fPathAtlasFlags |= PathAtlasFlag::kCompute;
+    }
+#endif  // SK_ENABLE_VELLO_SHADERS
+}
 
 std::unique_ptr<ComputePathAtlas> AtlasProvider::createComputePathAtlas(Recorder* recorder) const {
 #ifdef SK_ENABLE_VELLO_SHADERS
-    if (recorder->priv().caps()->computeSupport()) {
+    if (fPathAtlasFlags & PathAtlasFlag::kCompute) {
         return std::make_unique<VelloComputePathAtlas>();
     }
 #endif  // SK_ENABLE_VELLO_SHADERS
@@ -28,24 +36,27 @@ std::unique_ptr<ComputePathAtlas> AtlasProvider::createComputePathAtlas(Recorder
 }
 
 std::unique_ptr<SoftwarePathAtlas> AtlasProvider::createSoftwarePathAtlas() const {
-    return std::make_unique<SoftwarePathAtlas>();
+    if (fPathAtlasFlags & PathAtlasFlags::kSoftware) {
+        return std::make_unique<SoftwarePathAtlas>();
+    }
+    return nullptr;
 }
 
 sk_sp<TextureProxy> AtlasProvider::getAtlasTexture(Recorder* recorder,
-                                                   uint32_t width,
-                                                   uint32_t height) {
-    uint64_t key = (static_cast<uint64_t>(width) << 32) | static_cast<uint64_t>(height);
+                                                   uint16_t width,
+                                                   uint16_t height,
+                                                   SkColorType colorType) {
+    uint64_t key = static_cast<uint64_t>(width)  << 48 |
+                   static_cast<uint64_t>(height) << 32 |
+                   static_cast<uint64_t>(colorType);
     auto iter = fTexturePool.find(key);
     if (iter != fTexturePool.end()) {
         return iter->second;
     }
 
-    // TODO(chromium:1856): WebGPU does not support the "storage binding" usage for the R8Unorm
-    // texture format. This means that we may have to use RGBA8 on Dawn until it provides an
-    // optional feature.
     auto proxy = TextureProxy::MakeStorage(recorder->priv().caps(),
                                            SkISize::Make(int32_t(width), int32_t(height)),
-                                           kAlpha_8_SkColorType,
+                                           colorType,
                                            skgpu::Budgeted::kYes);
     if (!proxy) {
         return nullptr;
