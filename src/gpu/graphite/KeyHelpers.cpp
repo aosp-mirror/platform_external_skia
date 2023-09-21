@@ -9,6 +9,7 @@
 
 #include "include/core/SkColorFilter.h"
 #include "include/core/SkData.h"
+#include "include/core/SkImageInfo.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/graphite/Surface.h"
 #include "src/base/SkHalf.h"
@@ -679,9 +680,6 @@ void DitherShaderBlock::BeginBlock(const KeyContext& keyContext,
                                    PaintParamsKeyBuilder* builder,
                                    PipelineDataGatherer* gatherer,
                                    const DitherData* ditherData) {
-    SkASSERT(!gatherer == !ditherData);
-
-    auto dict = keyContext.dict();
     if (gatherer) {
         static const SkBitmap gLUT = skgpu::MakeDitherLUT();
 
@@ -693,7 +691,7 @@ void DitherShaderBlock::BeginBlock(const KeyContext& keyContext,
             return;
         }
 
-        add_dither_uniform_data(dict, *ditherData, gatherer);
+        add_dither_uniform_data(keyContext.dict(), *ditherData, gatherer);
 
         static constexpr SkSamplingOptions kNearest(SkFilterMode::kNearest, SkMipmapMode::kNone);
         static constexpr SkTileMode kRepeatTiling[2] = { SkTileMode::kRepeat, SkTileMode::kRepeat };
@@ -1228,14 +1226,17 @@ static void add_to_key(const KeyContext& keyContext,
                        const SkWorkingFormatColorFilter* filter) {
     SkASSERT(filter);
 
-    const SkAlphaType dstAT = keyContext.dstColorInfo().alphaType();
-    sk_sp<SkColorSpace> dstCS = keyContext.dstColorInfo().refColorSpace();
+    const SkColorInfo& dstInfo = keyContext.dstColorInfo();
+    const SkAlphaType dstAT = dstInfo.alphaType();
+    sk_sp<SkColorSpace> dstCS = dstInfo.refColorSpace();
     if (!dstCS) {
         dstCS = SkColorSpace::MakeSRGB();
     }
 
     SkAlphaType workingAT;
     sk_sp<SkColorSpace> workingCS = filter->workingFormat(dstCS, &workingAT);
+    SkColorInfo workingInfo(dstInfo.colorType(), workingAT, workingCS);
+    KeyContextWithColorInfo workingContext(keyContext, workingInfo);
 
     // Use two nested compose blocks to chain (dst->working), child, and (working->dst) together
     // while appearing as one block to the parent node.
@@ -1253,7 +1254,7 @@ static void add_to_key(const KeyContext& keyContext,
                         },
                         /* addOuterToKey= */ [&]() -> void {
                             // Middle (outer of inner compose)
-                            AddToKey(keyContext, builder, gatherer, filter->child().get());
+                            AddToKey(workingContext, builder, gatherer, filter->child().get());
                         });
             },
             /* addOuterToKey= */ [&]() -> void {
