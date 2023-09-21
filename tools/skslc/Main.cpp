@@ -145,17 +145,6 @@ public:
         return sCaps;
     }
 
-    static const SkSL::ShaderCaps* IncompleteShortIntPrecision() {
-        static const SkSL::ShaderCaps* sCaps = [] {
-            std::unique_ptr<SkSL::ShaderCaps> caps = MakeShaderCaps();
-            caps->fVersionDeclString = "#version 310es";
-            caps->fUsesPrecisionModifiers = true;
-            caps->fIncompleteShortIntPrecision = true;
-            return caps.release();
-        }();
-        return sCaps;
-    }
-
     static const SkSL::ShaderCaps* MustForceNegatedAtanParamToFloat() {
         static const SkSL::ShaderCaps* sCaps = [] {
             std::unique_ptr<SkSL::ShaderCaps> caps = MakeShaderCaps();
@@ -200,6 +189,16 @@ public:
             std::unique_ptr<SkSL::ShaderCaps> caps = MakeShaderCaps();
             caps->fVersionDeclString = "#version 400";
             caps->fBuiltinFMASupport = false;
+            return caps.release();
+        }();
+        return sCaps;
+    }
+
+    static const SkSL::ShaderCaps* NoExternalTextureSupport() {
+        static const SkSL::ShaderCaps* sCaps = [] {
+            std::unique_ptr<SkSL::ShaderCaps> caps = MakeShaderCaps();
+            caps->fVersionDeclString = "#version 400";
+            caps->fExternalTextureSupport = false;
             return caps.release();
         }();
         return sCaps;
@@ -368,9 +367,6 @@ static bool detect_shader_settings(const std::string& text,
                 if (consume_suffix(&settingsText, " FramebufferFetchSupport")) {
                     *caps = Factory::FramebufferFetchSupport();
                 }
-                if (consume_suffix(&settingsText, " IncompleteShortIntPrecision")) {
-                    *caps = Factory::IncompleteShortIntPrecision();
-                }
                 if (consume_suffix(&settingsText, " MustGuardDivisionEvenAfterExplicitZeroCheck")) {
                     *caps = Factory::MustGuardDivisionEvenAfterExplicitZeroCheck();
                 }
@@ -385,6 +381,9 @@ static bool detect_shader_settings(const std::string& text,
                 }
                 if (consume_suffix(&settingsText, " NoBuiltinFMASupport")) {
                     *caps = Factory::NoBuiltinFMASupport();
+                }
+                if (consume_suffix(&settingsText, " NoExternalTextureSupport")) {
+                    *caps = Factory::NoExternalTextureSupport();
                 }
                 if (consume_suffix(&settingsText, " RemovePowWithConstantExponent")) {
                     *caps = Factory::RemovePowWithConstantExponent();
@@ -432,9 +431,6 @@ static bool detect_shader_settings(const std::string& text,
                 if (consume_suffix(&settingsText, " NoRTFlip")) {
                     settings->fForceNoRTFlip = true;
                 }
-                if (consume_suffix(&settingsText, " NoTraceVarInDebugTrace")) {
-                    settings->fAllowTraceVarInDebugTrace = false;
-                }
                 if (consume_suffix(&settingsText, " InlineThresholdMax")) {
                     settings->fInlineThreshold = INT_MAX;
                 }
@@ -444,9 +440,6 @@ static bool detect_shader_settings(const std::string& text,
                 if (consume_suffix(&settingsText, " DebugTrace")) {
                     settings->fOptimize = false;
                     *debugTrace = std::make_unique<SkSL::DebugTracePriv>();
-                }
-                if (consume_suffix(&settingsText, " SPIRVDawnCompatMode")) {
-                    settings->fSPIRVDawnCompatMode = true;
                 }
 
                 if (settingsText.empty()) {
@@ -538,8 +531,7 @@ static ResultCode process_command(SkSpan<std::string> args) {
     }
 
     std::ifstream in(inputPath);
-    std::string text((std::istreambuf_iterator<char>(in)),
-                       std::istreambuf_iterator<char>());
+    std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     if (in.rdstate()) {
         printf("error reading '%s'\n", inputPath.c_str());
         return ResultCode::kInputError;

@@ -65,10 +65,10 @@ QueueManager::OutstandingSubmission DawnQueueManager::onSubmitToGpu() {
     std::unique_ptr<DawnWorkSubmission> submission(new DawnWorkSubmission(
             std::move(fCurrentCommandBuffer), this, dawnSharedContext()->device()));
 
-    return std::move(submission);
+    return submission;
 }
 
-#if GRAPHITE_TEST_UTILS
+#if defined(GRAPHITE_TEST_UTILS)
 void DawnQueueManager::startCapture() {
     // TODO: Dawn doesn't have capturing feature yet.
 }

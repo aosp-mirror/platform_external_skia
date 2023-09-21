@@ -46,7 +46,7 @@
 #include "src/gpu/ganesh/ops/QuadPerEdgeAA.h"
 #include "src/gpu/ganesh/ops/TextureOp.h"
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 #include "src/gpu/ganesh/GrProxyProvider.h"
 #endif
 
@@ -157,7 +157,8 @@ SkRect normalize_and_inset_subset(GrSamplerState::Filter filter,
         ltrb = skvx::floor(ltrb*flipHi)*flipHi;
     }
     // Inset with pin to the rect center.
-    ltrb += skvx::Vec<4, float>({.5f, .5f, -.5f, -.5f});
+    ltrb += skvx::Vec<4, float>({ GrTextureEffect::kLinearInset,  GrTextureEffect::kLinearInset,
+                                 -GrTextureEffect::kLinearInset, -GrTextureEffect::kLinearInset});
     auto mid = (skvx::shuffle<2, 3, 0, 1>(ltrb) + ltrb)*0.5f;
     ltrb = skvx::min(ltrb*flipHi, mid*flipHi)*flipHi;
 
@@ -218,7 +219,9 @@ bool safe_to_ignore_subset_rect(GrAAType aaType, GrSamplerState::Filter filter,
 
     // If the local quad is inset by at least 0.5 pixels into the subset rect's bounds, the
     // sampler shouldn't overshoot, even when antialiasing and filtering is taken into account.
-    if (subsetRect.makeInset(0.5f, 0.5f).contains(localBounds)) {
+    if (subsetRect.makeInset(GrTextureEffect::kLinearInset,
+                             GrTextureEffect::kLinearInset)
+                  .contains(localBounds)) {
         return true;
     }
 
@@ -279,7 +282,7 @@ public:
     void visitProxies(const GrVisitProxyFunc& func) const override {
         bool mipped = (fMetadata.mipmapMode() != GrSamplerState::MipmapMode::kNone);
         for (unsigned p = 0; p <  fMetadata.fProxyCount; ++p) {
-            func(fViewCountPairs[p].fProxy.get(), GrMipmapped(mipped));
+            func(fViewCountPairs[p].fProxy.get(), skgpu::Mipmapped(mipped));
         }
         if (fDesc && fDesc->fProgramInfo) {
             fDesc->fProgramInfo->visitFPProxies(func);
@@ -527,7 +530,7 @@ private:
         for (int q = 0; q < cnt; ++q) {
             SkASSERT(mm == GrSamplerState::MipmapMode::kNone ||
                      (set[0].fProxyView.proxy()->asTextureProxy()->mipmapped() ==
-                      GrMipmapped::kYes));
+                      skgpu::Mipmapped::kYes));
             if (q == 0) {
                 // We do not placement new the first ViewCountPair since that one is allocated and
                 // initialized as part of the TextureOp creation.
@@ -812,7 +815,7 @@ private:
 
 #endif
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     int numQuads() const final { return this->totNumQuads(); }
 #endif
 
@@ -1090,7 +1093,7 @@ private:
         return CombineResult::kMerged;
     }
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     SkString onDumpInfo() const override {
         SkString str = SkStringPrintf("# draws: %d\n", fQuads.count());
         auto iter = fQuads.iterator();
@@ -1140,7 +1143,7 @@ private:
 
 namespace skgpu::ganesh {
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 uint32_t TextureOp::ClassID() {
     return TextureOpImpl::ClassID();
 }
@@ -1402,15 +1405,16 @@ void TextureOp::AddTextureSetOps(ganesh::SurfaceDrawContext* sdc,
 
 } // namespace skgpu::ganesh
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 GR_DRAW_OP_TEST_DEFINE(TextureOpImpl) {
     SkISize dims;
     dims.fHeight = random->nextULessThan(90) + 10;
     dims.fWidth = random->nextULessThan(90) + 10;
     auto origin = random->nextBool() ? kTopLeft_GrSurfaceOrigin : kBottomLeft_GrSurfaceOrigin;
-    GrMipmapped mipmapped = random->nextBool() ? GrMipmapped::kYes : GrMipmapped::kNo;
+    skgpu::Mipmapped mipmapped =
+            random->nextBool() ? skgpu::Mipmapped::kYes : skgpu::Mipmapped::kNo;
     SkBackingFit fit = SkBackingFit::kExact;
-    if (mipmapped == GrMipmapped::kNo) {
+    if (mipmapped == skgpu::Mipmapped::kNo) {
         fit = random->nextBool() ? SkBackingFit::kApprox : SkBackingFit::kExact;
     }
     const GrBackendFormat format =
@@ -1439,7 +1443,7 @@ GR_DRAW_OP_TEST_DEFINE(TextureOpImpl) {
     GrSamplerState::Filter filter = (GrSamplerState::Filter)random->nextULessThan(
             static_cast<uint32_t>(GrSamplerState::Filter::kLast) + 1);
     GrSamplerState::MipmapMode mm = GrSamplerState::MipmapMode::kNone;
-    if (mipmapped == GrMipmapped::kYes) {
+    if (mipmapped == skgpu::Mipmapped::kYes) {
         mm = (GrSamplerState::MipmapMode)random->nextULessThan(
                 static_cast<uint32_t>(GrSamplerState::MipmapMode::kLast) + 1);
     }
@@ -1470,4 +1474,4 @@ GR_DRAW_OP_TEST_DEFINE(TextureOpImpl) {
                            useSubset ? &srcRect : nullptr);
 }
 
-#endif // GR_TEST_UTILS
+#endif // defined(GR_TEST_UTILS)

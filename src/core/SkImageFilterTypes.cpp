@@ -8,8 +8,10 @@
 #include "src/core/SkImageFilterTypes.h"
 
 #include "include/core/SkAlphaType.h"
+#include "include/core/SkBitmap.h"
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkClipOp.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkImage.h"
@@ -17,17 +19,16 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkPicture.h"  // IWYU pragma: keep
 #include "include/core/SkShader.h"
+#include "include/effects/SkRuntimeEffect.h"
 #include "include/private/base/SkFloatingPoint.h"
+#include "src/core/SkBitmapDevice.h"
+#include "src/core/SkCanvasPriv.h"
+#include "src/core/SkDevice.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkRectPriv.h"
-#include "src/core/SkSpecialSurface.h"
-#include "src/effects/colorfilters/SkColorFilterBase.h"
-
-#ifdef SK_ENABLE_SKSL
-#include "include/effects/SkRuntimeEffect.h"
 #include "src/core/SkRuntimeEffectPriv.h"
-#endif
+#include "src/effects/colorfilters/SkColorFilterBase.h"
 
 #include <algorithm>
 
@@ -186,8 +187,6 @@ std::optional<LayerSpace<SkMatrix>> periodic_axis_transform(
     }
 }
 
-#ifdef SK_ENABLE_SKSL
-
 // Returns true if decal tiling an image with 'imageBounds' subject to 'transform', limited to
 // the un-transformed 'sampleBounds' would exhibit significantly different visual quality from
 // drawing the image with clamp tiling and limited geometrically to 'imageBounds'.
@@ -287,11 +286,11 @@ sk_sp<SkShader> apply_decal(
     return decalShader;
 }
 
-#endif
-
-// AutoSurface manages an SkSpecialSurface and canvas state to draw to a layer-space bounding box,
-// and then snap it into a FilterResult. It provides operators to be used directly as a canvas,
-// assuming surface creation succeeded. Usage:
+// AutoSurface manages an SkCanvas and device state to draw to a layer-space bounding box,
+// and then snap it into a FilterResult. It provides operators to be used directly as an SkDevice,
+// assuming surface creation succeeded. It can also be viewed as an SkCanvas (for when an operation
+// is unavailable on SkDevice). A given AutoSurface should only rely on one access API.
+// Usage:
 //
 //     AutoSurface surface{ctx, dstBounds, renderInParameterSpace}; // if true, concats layer matrix
 //     if (surface) {
@@ -304,45 +303,51 @@ public:
                 const LayerSpace<SkIRect>& dstBounds,
                 bool renderInParameterSpace,
                 const SkSurfaceProps* props = nullptr)
-            : fSurface(nullptr)
-            , fDstBounds(dstBounds) {
+            : fDstBounds(dstBounds) {
         // We don't intersect by ctx.desiredOutput() and only use the Context to make the surface.
         // It is assumed the caller has already accounted for the desired output, or it's a
         // situation where the desired output shouldn't apply (e.g. this surface will be transformed
         // to align with the actual desired output via FilterResult metadata).
-        fSurface = ctx.makeSurface(SkISize(fDstBounds.size()), props);
-        if (!fSurface) {
+        auto device = ctx.makeDevice(SkISize(dstBounds.size()), props);
+        if (!device) {
             return;
         }
 
-        // Configure the canvas
-        SkCanvas* canvas = fSurface->getCanvas();
-        // skbug.com/5075: GPU-backed special surfaces don't reset their contents.
-        canvas->clear(SK_ColorTRANSPARENT);
-        canvas->translate(-fDstBounds.left(), -fDstBounds.top()); // dst's origin adjustment
+        // Wrap the device in a canvas and use that to configure its origin and clip. This ensures
+        // the device and the canvas are in sync regardless of how the AutoSurface user intends
+        // to render.
+        fCanvas.emplace(std::move(device));
+        fCanvas->translate(-fDstBounds.left(), -fDstBounds.top());
+        fCanvas->clear(SkColors::kTransparent);
+        // The device functor may have provided an approx-fit backing surface so clip to the
+        // expected dst bounds.
+        fCanvas->clipIRect(SkIRect(fDstBounds));
 
         if (renderInParameterSpace) {
-            canvas->concat(ctx.mapping().layerMatrix());
+            fCanvas->concat(SkMatrix(ctx.mapping().layerMatrix()));
         }
     }
 
-    explicit operator bool() const { return SkToBool(fSurface); }
+    explicit operator bool() const { return fCanvas.has_value(); }
 
-    SkCanvas* canvas() { SkASSERT(fSurface); return fSurface->getCanvas(); }
-    SkCanvas* operator->() { SkASSERT(fSurface); return fSurface->getCanvas(); }
+    SkDevice* device() { SkASSERT(fCanvas.has_value()); return SkCanvasPriv::TopDevice(&*fCanvas); }
+    SkCanvas* operator->() { SkASSERT(fCanvas.has_value()); return &*fCanvas; }
 
     // NOTE: This pair is equivalent to a FilterResult but we keep it this way for use by resolve(),
     // which wants them separate while the legacy imageAndOffset() function is around.
     std::pair<sk_sp<SkSpecialImage>, LayerSpace<SkIPoint>> snap() {
-        if (fSurface) {
-            return {fSurface->makeImageSnapshot(), fDstBounds.topLeft()};
+        if (fCanvas.has_value()) {
+            // Snap a subset of the device matching the expected dst bounds.
+            SkIRect subset = SkIRect::MakeWH(fDstBounds.width(), fDstBounds.height());
+            fCanvas->restoreToCount(0);
+            return {this->device()->snapSpecial(subset), fDstBounds.topLeft()};
         } else {
             return {nullptr, {}};
         }
     }
 
 private:
-    sk_sp<SkSpecialSurface> fSurface;
+    std::optional<SkCanvas> fCanvas;
     LayerSpace<SkIRect> fDstBounds;
 };
 
@@ -350,30 +355,43 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+Functors MakeRasterFunctors() {
+    auto makeDeviceFunctor = [](const SkImageInfo& imageInfo,
+                                const SkSurfaceProps& props) -> sk_sp<SkDevice> {
+        SkBitmap bitmap;
+        if (!bitmap.tryAllocPixels(imageInfo)) {
+            return nullptr;
+        }
+
+        return sk_make_sp<SkBitmapDevice>(bitmap, props);
+    };
+    auto makeImageFunctor = [](const SkIRect& subset,
+                               sk_sp<SkImage> image,
+                               const SkSurfaceProps& props) {
+        return SkSpecialImages::MakeFromRaster(subset, image, props);
+    };
+    auto makeCachedBitmapFunctor = [](const SkBitmap& data) {
+        return SkImages::RasterFromBitmap(data);
+    };
+
+    // TODO: For now pass null for the blur image functor so that SkBlurImageFilter uses its N32
+    // implementation.
+    return Functors(makeDeviceFunctor, makeImageFunctor, makeCachedBitmapFunctor,
+                    /*blurImageFunctor=*/ nullptr);
+}
+
 Context Context::MakeRaster(const ContextInfo& info) {
     // TODO (skbug:14286): Remove this forcing to 8888. Many legacy image filters only support
     // N32 on CPU, but once they are implemented in terms of draws and SkSL they will support
     // all color types, like the GPU backends.
     ContextInfo n32 = info;
     n32.fColorType = kN32_SkColorType;
-    auto makeSurfaceCallback = [](const SkImageInfo& imageInfo,
-                                  const SkSurfaceProps* props) {
-        return SkSpecialSurfaces::MakeRaster(imageInfo, *props);
-    };
-    auto makeImageCallback = [](const SkIRect& subset,
-                                sk_sp<SkImage> image,
-                                const SkSurfaceProps& props) {
-        return SkSpecialImages::MakeFromRaster(subset, image, props);
-    };
-    auto makeCachedBitmapCallback = [](const SkBitmap& data) {
-        return SkImages::RasterFromBitmap(data);
-    };
-    return Context(n32, nullptr, makeSurfaceCallback, makeImageCallback, makeCachedBitmapCallback);
+
+    return Context(n32, MakeRasterFunctors());
 }
 
-sk_sp<SkSpecialSurface> Context::makeSurface(const SkISize& size,
-                                             const SkSurfaceProps* props) const {
-    SkASSERT(fMakeSurfaceDelegate);
+sk_sp<SkDevice> Context::makeDevice(const SkISize& size, const SkSurfaceProps* props) const {
+    SkASSERT(fFunctors.fMakeDeviceFunctor);
     if (!props) {
         props = &fInfo.fSurfaceProps;
     }
@@ -382,17 +400,17 @@ sk_sp<SkSpecialSurface> Context::makeSurface(const SkISize& size,
                                               fInfo.fColorType,
                                               kPremul_SkAlphaType,
                                               sk_ref_sp(fInfo.fColorSpace));
-    return fMakeSurfaceDelegate(imageInfo, props);
+    return fFunctors.fMakeDeviceFunctor(imageInfo, *props);
 }
 
 sk_sp<SkSpecialImage> Context::makeImage(const SkIRect& subset, sk_sp<SkImage> image) const {
-    SkASSERT(fMakeImageDelegate);
-    return fMakeImageDelegate(subset, image, fInfo.fSurfaceProps);
+    SkASSERT(fFunctors.fMakeImageFunctor);
+    return fFunctors.fMakeImageFunctor(subset, image, fInfo.fSurfaceProps);
 }
 
 sk_sp<SkImage> Context::getCachedBitmap(const SkBitmap& data) const {
-    SkASSERT(fMakeCachedBitmapDelegate);
-    return fMakeCachedBitmapDelegate(data);
+    SkASSERT(fFunctors.fMakeCachedBitmapFunctor);
+    return fFunctors.fMakeCachedBitmapFunctor(data);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -638,6 +656,10 @@ sk_sp<SkSpecialImage> FilterResult::imageAndOffset(const Context& ctx, SkIPoint*
     return image;
 }
 
+std::pair<sk_sp<SkSpecialImage>, LayerSpace<SkIPoint>>FilterResult::imageAndOffset(
+        const Context& ctx) const {
+    return this->resolve(ctx, fLayerBounds);
+}
 
 bool FilterResult::modifiesPixelsBeyondImage(const LayerSpace<SkIRect>& dstBounds) const {
     // If there is no transparency-affecting color filter and it's just decal tiling, it doesn't
@@ -1020,19 +1042,20 @@ std::pair<sk_sp<SkSpecialImage>, LayerSpace<SkIPoint>> FilterResult::resolve(
     SkSurfaceProps props = {};
     AutoSurface surface{ctx, dstBounds, /*renderInParameterSpace=*/false, &props};
     if (surface) {
-        this->draw(surface.canvas(), dstBounds);
+        this->draw(surface.device(), dstBounds);
     }
     return surface.snap();
 }
 
-void FilterResult::draw(SkCanvas* canvas, const LayerSpace<SkIRect>& dstBounds) const {
+void FilterResult::draw(SkDevice* device, const LayerSpace<SkIRect>& dstBounds) const {
     if (!fImage) {
         return;
     }
 
-    // When this is called by resolve(), the surface and canvas matrix are such that this clip is
+    // When this is called by resolve(), the surface and transform are such that this clip is
     // trivially a no-op, but including the clip means draw() works correctly in other scenarios.
-    canvas->clipIRect(SkIRect(fLayerBounds));
+    device->pushClipStack();
+    device->clipRect(SkRect::Make(SkIRect(fLayerBounds)), SkClipOp::kIntersect, /*aa=*/false);
 
     SkPaint paint;
     paint.setAntiAlias(true);
@@ -1050,13 +1073,10 @@ void FilterResult::draw(SkCanvas* canvas, const LayerSpace<SkIRect>& dstBounds) 
     }
 
     if (this->modifiesPixelsBeyondImage(dstBounds)) {
-#ifdef SK_ENABLE_SKSL
         if (fTileMode == SkTileMode::kDecal) {
             // apply_decal consumes the transform, so we don't modify the canvas
             paint.setShader(apply_decal(fTransform, fImage, fLayerBounds, sampling));
-        } else
-#endif
-        {
+        } else {
             // For clamp/repeat/mirror, tiling at the layer resolution vs. resolving the image to
             // the layer resolution and then tiling produces much more compatible results than
             // decal would, so just always use a simple shader. If we don't have SkSL to let us use
@@ -1065,11 +1085,16 @@ void FilterResult::draw(SkCanvas* canvas, const LayerSpace<SkIRect>& dstBounds) 
             paint.setShader(fImage->asShader(fTileMode, sampling, SkMatrix(fTransform)));
         }
         // Fill the canvas with the shader, relying on it to do the transform
-        canvas->drawPaint(paint);
+        device->drawPaint(paint);
     } else {
-        canvas->concat(SkMatrix(fTransform)); // src's origin is embedded in fTransform
-        fImage->draw(canvas, 0.f, 0.f, sampling, &paint);
+        // src's origin is embedded in fTransform. For historical reasons, drawSpecial() does
+        // not automatically use the device's current local-to-device matrix, but that's what preps
+        // it to match the expected layer coordinate system.
+        SkMatrix netTransform = SkMatrix::Concat(device->localToDevice(), SkMatrix(fTransform));
+        device->drawSpecial(fImage.get(), netTransform, sampling, paint);
     }
+
+    device->popClipStack();
 }
 
 sk_sp<SkShader> FilterResult::asShader(const Context& ctx,
@@ -1117,12 +1142,9 @@ sk_sp<SkShader> FilterResult::asShader(const Context& ctx,
     } else {
         // Since we didn't need to resolve, we know the content being sampled isn't cropped by
         // fLayerBounds. fTransform and fColorFilter are handled in the shader directly.
-#ifdef SK_ENABLE_SKSL
         if (fTileMode == SkTileMode::kDecal) {
             shader = apply_decal(fTransform, fImage, sampleBounds, sampling);
-        } else
-#endif
-        {
+        } else {
             shader = fImage->asShader(fTileMode, sampling, SkMatrix(fTransform));
         }
 
@@ -1137,10 +1159,7 @@ sk_sp<SkShader> FilterResult::asShader(const Context& ctx,
 FilterResult FilterResult::MakeFromPicture(const Context& ctx,
                                            sk_sp<SkPicture> pic,
                                            ParameterSpace<SkRect> cullRect) {
-    if (!pic) {
-        return {};
-    }
-
+    SkASSERT(pic);
     LayerSpace<SkIRect> dstBounds = ctx.mapping().paramToLayer(cullRect).roundOut();
     if (!dstBounds.intersect(ctx.desiredOutput())) {
         return {};
@@ -1163,10 +1182,7 @@ FilterResult FilterResult::MakeFromPicture(const Context& ctx,
 FilterResult FilterResult::MakeFromShader(const Context& ctx,
                                           sk_sp<SkShader> shader,
                                           bool dither) {
-    if (!shader) {
-        return {};
-    }
-
+    SkASSERT(shader);
     AutoSurface surface{ctx, ctx.desiredOutput(), /*renderInParameterSpace=*/true};
     if (surface) {
         SkPaint paint;
@@ -1182,10 +1198,7 @@ FilterResult FilterResult::MakeFromImage(const Context& ctx,
                                          const SkRect& srcRect,
                                          const ParameterSpace<SkRect>& dstRect,
                                          const SkSamplingOptions& sampling) {
-    if (!image) {
-        return {};
-    }
-
+    SkASSERT(image);
     // Check for direct conversion to an SkSpecialImage and then FilterResult. Eventually this
     // whole function should be replaceable with:
     //    FilterResult(fImage, fSrcRect, fDstRect).applyTransform(mapping.layerMatrix(), fSampling);
@@ -1213,7 +1226,7 @@ FilterResult FilterResult::MakeFromImage(const Context& ctx,
     if (surface) {
         SkPaint paint;
         paint.setAntiAlias(true);
-        surface->drawImageRect(image, srcRect, SkRect(dstRect), sampling, &paint,
+        surface->drawImageRect(std::move(image), srcRect, SkRect(dstRect), sampling, &paint,
                                SkCanvas::kStrict_SrcRectConstraint);
     }
     return surface.snap();
@@ -1291,9 +1304,10 @@ FilterResult FilterResult::Builder::drawShader(sk_sp<SkShader> shader,
 }
 
 FilterResult FilterResult::Builder::merge() {
-    if (fInputs.empty()) {
-        return {};
-    } else if (fInputs.size() == 1) {
+    // merge() could return an empty image on 0 added inputs, but this should have been caught
+    // earlier and routed to SkImageFilters::Empty() instead.
+    SkASSERT(!fInputs.empty());
+    if (fInputs.size() == 1) {
         SkASSERT(!fInputs[0].fSampleBounds.has_value() &&
                  fInputs[0].fSampling == kDefaultSampling &&
                  fInputs[0].fFlags == ShaderFlags::kNone);
@@ -1311,12 +1325,66 @@ FilterResult FilterResult::Builder::merge() {
             SkASSERT(!input.fSampleBounds.has_value() &&
                      input.fSampling == kDefaultSampling &&
                      input.fFlags == ShaderFlags::kNone);
-            surface->save();
-            input.fImage.draw(surface.canvas(), outputBounds);
-            surface->restore();
+            // draw() leaves the Device state unmodified when it's done
+            input.fImage.draw(surface.device(), outputBounds);
         }
     }
     return surface.snap();
+}
+
+FilterResult FilterResult::Builder::blur(const LayerSpace<SkSize>& sigma) {
+    SkASSERT(fInputs.size() == 1);
+
+    // TODO: The blur functor is only supported for GPU contexts; SkBlurImageFilter should have
+    // detected this.
+    SkASSERT(fContext.fFunctors.fBlurImageFunctor);
+
+    // TODO: De-duplicate this logic between SkBlurImageFilter, here, and skgpu::BlurUtils.
+    skif::LayerSpace<SkISize> radii =
+            LayerSpace<SkSize>({3.f*sigma.width(), 3.f*sigma.height()}).ceil();
+    auto maxOutput = fInputs[0].fImage.layerBounds();
+    maxOutput.outset(radii);
+
+    // TODO: If the input image is periodic, the output that's calculated can be the original image
+    // size and then have the layer bounds and tilemode of the output image apply the tile again.
+    // Similarly, a clamped blur can be restricted to a radius-outset buffer of the image bounds
+    // (vs. layer bounds) and rendered with clamp tiling.
+    const auto outputBounds = this->outputBounds(maxOutput);
+    if (outputBounds.isEmpty()) {
+        return {};
+    }
+
+    // These are the source pixels that will be read from the input image, which can be calculated
+    // internally because the blur's access pattern is well defined (vs. needing it to be provided
+    // in Builder::add()).
+    auto sampleBounds = outputBounds;
+    sampleBounds.outset(radii);
+
+    // TODO: If the blur implementation requires downsampling, we should incorporate any deferred
+    // transform and colorfilter to the first rescale step instead of generating a full resolution
+    // simple image first.
+    // TODO: The presence of a non-decal tilemode should not force resolving to a simple image; it
+    // should be incorporated into the image that's sampled by the blur effect (modulo biasing edge
+    // pixels somehow for very large clamp blurs).
+    auto [image, origin] = fInputs[0].fImage.resolve(fContext, sampleBounds);
+    if (!image) {
+        return {};
+    }
+
+    // TODO: Can blur() take advantage of AutoSurface? Right now the GPU functions are responsible
+    // for creating their own target surfaces.
+    auto srcRelativeOutput = outputBounds;
+    srcRelativeOutput.offset(-origin);
+    image = fContext.fFunctors.fBlurImageFunctor(SkSize(sigma),
+                                                 image,
+                                                 SkIRect::MakeSize(image->dimensions()),
+                                                 SkIRect(srcRelativeOutput),
+                                                 fContext.refColorSpace(),
+                                                 fContext.surfaceProps());
+
+    // TODO: Allow the blur functor to provide an upscaling transform that is applied to the
+    // FilterResult so that a render pass can possibly be elided if this is the final operation.
+    return {image, outputBounds.topLeft()};
 }
 
 } // end namespace skif

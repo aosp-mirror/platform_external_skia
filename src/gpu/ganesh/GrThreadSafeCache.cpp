@@ -29,7 +29,7 @@ GrThreadSafeCache::~GrThreadSafeCache() {
     this->dropAllRefs();
 }
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 int GrThreadSafeCache::numEntries() const {
     SkAutoSpinlock lock{fSpinLock};
 
@@ -339,7 +339,7 @@ GrThreadSafeCache::CreateLazyView(GrDirectContext* dContext,
 
     sk_sp<Trampoline> trampoline(new Trampoline);
 
-    GrProxyProvider::TextureInfo texInfo{ GrMipmapped::kNo, GrTextureType::k2D };
+    GrProxyProvider::TextureInfo texInfo{skgpu::Mipmapped::kNo, GrTextureType::k2D};
 
     sk_sp<GrRenderTargetProxy> proxy = proxyProvider->createLazyRenderTargetProxy(
             [trampoline](

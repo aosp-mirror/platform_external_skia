@@ -18,9 +18,11 @@ import (
 	"path/filepath"
 
 	sk_exec "go.skia.org/infra/go/exec"
+	"go.skia.org/infra/go/skerr"
 	"go.skia.org/infra/task_driver/go/lib/bazel"
 	"go.skia.org/infra/task_driver/go/lib/os_steps"
 	"go.skia.org/infra/task_driver/go/td"
+	"go.skia.org/skia/infra/bots/task_drivers/common"
 )
 
 var (
@@ -28,14 +30,10 @@ var (
 	//
 	// We want the cache to be on a bigger disk than default. The root disk, where the home directory
 	// (and default Bazel cache) lives, is only 15 GB on our GCE VMs.
-	cachePath = flag.String("cache_path", "/mnt/pd0/bazel_cache", "The path where the Bazel cache should live. This should be able to hold tens of GB at least.")
-	cross     = flag.String("cross", "", "An identifier specifying the target platform that Bazel should build for. If empty, Bazel builds for the host platform (the machine on which this executable is run).")
-	label     = flag.String("test_label", "", "The label of the Bazel target to test.")
-	config    = flag.String("test_config", "", "A custom configuration specified in //bazel/buildrc. This configuration potentially encapsulates many features and options.")
 	projectId = flag.String("project_id", "", "ID of the Google Cloud project.")
 	taskId    = flag.String("task_id", "", "ID of this task.")
 	taskName  = flag.String("task_name", "", "Name of the task.")
-	workdir   = flag.String("workdir", ".", "Working directory, the root directory of a full Skia checkout")
+	workdir   = flag.String("workdir", ".", "Working directory.")
 
 	// goldctl data.
 	goldctlPath      = flag.String("goldctl_path", "", "The path to the golctl binary on disk.")
@@ -50,51 +48,82 @@ var (
 )
 
 func main() {
+	bazelFlags := common.MakeBazelFlags(common.MakeBazelFlagsOpts{
+		Label:  true,
+		Config: true,
+	})
+
 	// StartRun calls flag.Parse().
 	ctx := td.StartRun(projectId, taskId, taskName, output, local)
 	defer td.EndRun(ctx)
 
-	if *label == "" {
-		td.Fatal(ctx, fmt.Errorf("--test_label is required"))
-	}
-
-	if *config == "" {
-		td.Fatal(ctx, fmt.Errorf("--test_config is required"))
-	}
+	bazelFlags.Validate(ctx)
 
 	wd, err := os_steps.Abs(ctx, *workdir)
 	if err != nil {
 		td.Fatal(ctx, err)
 	}
-	skiaDir := filepath.Join(wd, "skia")
 
 	opts := bazel.BazelOptions{
-		CachePath: *cachePath,
+		CachePath: *bazelFlags.CacheDir,
 	}
 	if err := bazel.EnsureBazelRCFile(ctx, opts); err != nil {
 		td.Fatal(ctx, err)
 	}
 
-	if *cross != "" {
-		// See https://bazel.build/concepts/platforms-intro and https://bazel.build/docs/platforms when
-		// ready to support this.
-		td.Fatal(ctx, fmt.Errorf("cross compilation not yet supported"))
-	}
-
-	if err := bazelTest(ctx, skiaDir, *label, *config); err != nil {
+	if err := run(ctx, *bazelFlags.CacheDir, taskDriverArgs{
+		UploadToGoldArgs: common.UploadToGoldArgs{
+			BazelLabel:    *bazelFlags.Label,
+			GoldctlPath:   filepath.Join(wd, *goldctlPath),
+			GitCommit:     *gitCommit,
+			ChangelistID:  *changelistID,
+			PatchsetOrder: *patchsetOrderStr,
+			TryjobID:      *tryjobID,
+		},
+		checkoutDir: filepath.Join(wd, "skia"),
+		bazelConfig: *bazelFlags.Config,
+	}); err != nil {
 		td.Fatal(ctx, err)
 	}
+}
 
-	if err := uploadToGold(ctx); err != nil {
-		td.Fatal(ctx, err)
+// taskDriverArgs gathers the inputs to this task driver, and decouples the task driver's
+// entry-point function from the command line flags, which facilitates writing unit tests.
+type taskDriverArgs struct {
+	common.UploadToGoldArgs
+
+	checkoutDir string
+	bazelConfig string
+}
+
+// run is the entrypoint of this task driver.
+func run(ctx context.Context, bazelCacheDir string, tdArgs taskDriverArgs) error {
+	outputsZipPath, err := common.ValidateLabelAndReturnOutputsZipPath(tdArgs.checkoutDir, tdArgs.BazelLabel)
+	if err != nil {
+		return skerr.Wrap(err)
 	}
+
+	if err := bazelTest(ctx, tdArgs.checkoutDir, tdArgs.BazelLabel, tdArgs.bazelConfig); err != nil {
+		return skerr.Wrap(err)
+	}
+
+	if err := common.UploadToGold(ctx, tdArgs.UploadToGoldArgs, outputsZipPath); err != nil {
+		return skerr.Wrap(err)
+	}
+
+	if !*local {
+		if err := common.BazelCleanIfLowDiskSpace(ctx, bazelCacheDir, tdArgs.checkoutDir, "bazelisk"); err != nil {
+			return skerr.Wrap(err)
+		}
+	}
+
+	return nil
 }
 
 // bazelTest runs the test referenced by the given fully qualified Bazel label under the given
 // config.
 func bazelTest(ctx context.Context, checkoutDir, label, config string) error {
-	step := fmt.Sprintf("Test %s with config %s", label, config)
-	return td.Do(ctx, td.Props(step), func(ctx context.Context) error {
+	return td.Do(ctx, td.Props(fmt.Sprintf("Test %s with config %s", label, config)), func(ctx context.Context) error {
 		runCmd := &sk_exec.Command{
 			Name: "bazelisk",
 			Args: []string{"test",
@@ -112,14 +141,6 @@ func bazelTest(ctx context.Context, checkoutDir, label, config string) error {
 		if err != nil {
 			return err
 		}
-		return nil
-	})
-}
-
-// uploadToGold uploads any GM results to Gold via goldctl.
-func uploadToGold(ctx context.Context) error {
-	return td.Do(ctx, td.Props("[Not yet implemented] Upload GM results to Gold via goldctl"), func(ctx context.Context) error {
-		// TODO(lovisolo): Implement.
 		return nil
 	})
 }

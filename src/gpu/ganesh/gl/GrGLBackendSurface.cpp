@@ -12,7 +12,6 @@
 #include "include/gpu/GrTypes.h"
 #include "include/gpu/gl/GrGLTypes.h"
 #include "include/private/base/SkAssert.h"
-#include "include/private/base/SkTo.h"
 #include "include/private/gpu/ganesh/GrGLTypesPriv.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/gpu/MutableTextureStateRef.h"  // IWYU pragma: keep
@@ -72,7 +71,7 @@ private:
     }
 
     std::string toString() const override {
-#if defined(SK_DEBUG) || GR_TEST_UTILS
+#if defined(SK_DEBUG) || defined(GR_TEST_UTILS)
         return GrGLFormatToStr(fGLFormat);
 #else
         return "";
@@ -238,11 +237,6 @@ public:
     GrGLFramebufferInfo info() const { return fGLInfo; }
 
 private:
-    bool isValid() const override {
-        // the glInfo must have a valid format
-        return SkToBool(fGLInfo.fFormat);
-    }
-
     GrBackendFormat getBackendFormat() const override {
         return GrBackendFormats::MakeGL(fGLInfo.fFormat, GR_GL_TEXTURE_NONE);
     }
@@ -299,55 +293,3 @@ SK_API bool GetGLFramebufferInfo(const GrBackendRenderTarget& rt, GrGLFramebuffe
 }
 
 }  // namespace GrBackendRenderTargets
-
-#if !defined(SK_DISABLE_LEGACY_GL_BACKEND_SURFACE) && defined(SK_GL)
-GrBackendFormat GrBackendFormat::MakeGL(GrGLenum format, GrGLenum target) {
-    return GrBackendFormats::MakeGL(format, target);
-}
-
-GrGLFormat GrBackendFormat::asGLFormat() const {
-    return GrBackendFormats::AsGLFormat(*this);
-}
-
-GrGLenum GrBackendFormat::asGLFormatEnum() const {
-    return GrBackendFormats::AsGLFormatEnum(*this);
-}
-
-GrBackendTexture::GrBackendTexture(int width,
-                                   int height,
-                                   skgpu::Mipmapped mipped,
-                                   const GrGLTextureInfo& glInfo,
-                                   std::string_view label)
-        : GrBackendTexture(width,
-                           height,
-                           label,
-                           mipped,
-                           GrBackendApi::kOpenGL,
-                           gl_target_to_gr_target(glInfo.fTarget),
-                           GrGLBackendTextureData(glInfo, sk_make_sp<GrGLTextureParameters>())) {
-    // Make no assumptions about client's texture's parameters.
-    GrBackendTextures::GLTextureParametersModified(this);
-}
-
-bool GrBackendTexture::getGLTextureInfo(GrGLTextureInfo* outInfo) const {
-    return GrBackendTextures::GetGLTextureInfo(*this, outInfo);
-}
-
-void GrBackendTexture::glTextureParametersModified() {
-    GrBackendTextures::GLTextureParametersModified(this);
-}
-
-GrBackendRenderTarget::GrBackendRenderTarget(
-        int width, int height, int sampleCnt, int stencilBits, const GrGLFramebufferInfo& glInfo)
-        : GrBackendRenderTarget(width,
-                                height,
-                                std::max(1, sampleCnt),
-                                stencilBits,
-                                GrBackendApi::kOpenGL,
-                                /*framebufferOnly=*/false,
-                                GrGLBackendRenderTargetData(glInfo)) {}
-
-bool GrBackendRenderTarget::getGLFramebufferInfo(GrGLFramebufferInfo* outInfo) const {
-    return GrBackendRenderTargets::GetGLFramebufferInfo(*this, outInfo);
-}
-#endif

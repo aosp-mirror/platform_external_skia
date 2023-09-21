@@ -11,6 +11,7 @@
 #include "include/core/SkRefCnt.h"
 #include "include/gpu/graphite/GraphiteTypes.h"
 #include "include/private/base/SkDeque.h"
+#include "src/core/SkTHash.h"
 
 #include <memory>
 #include <vector>
@@ -41,7 +42,7 @@ public:
     [[nodiscard]] bool submitToGpu();
     void checkForFinishedWork(SyncToCpu);
 
-#if GRAPHITE_TEST_UTILS
+#if defined(GRAPHITE_TEST_UTILS)
     virtual void startCapture() {}
     virtual void stopCapture() {}
 #endif
@@ -65,6 +66,8 @@ private:
     SkDeque fOutstandingSubmissions;
 
     std::vector<std::unique_ptr<CommandBuffer>> fAvailableCommandBuffers;
+
+    skia_private::THashMap<uint32_t, uint32_t> fLastAddedRecordingIDs;
 };
 
 } // namespace skgpu::graphite

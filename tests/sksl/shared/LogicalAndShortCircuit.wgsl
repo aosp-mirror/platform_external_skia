@@ -1,24 +1,20 @@
 /*
 
-:35:3 warning: code is unreachable
+:31:3 warning: code is unreachable
   return bool();
   ^^^^^^
 
-:58:3 warning: code is unreachable
+:54:3 warning: code is unreachable
   return bool();
   ^^^^^^
 
-:81:3 warning: code is unreachable
+:77:3 warning: code is unreachable
   return bool();
   ^^^^^^
 
 */
 
 diagnostic(off, derivative_uniformity);
-struct FSIn {
-  @builtin(front_facing) sk_Clockwise: bool,
-  @builtin(position) sk_FragCoord: vec4<f32>,
-};
 struct FSOut {
   @location(0) sk_FragColor: vec4<f32>,
 };
@@ -96,7 +92,7 @@ fn FalseFalse_b() -> bool {
   }
   return bool();
 }
-fn main(_skParam0: vec2<f32>) -> vec4<f32> {
+fn _skslMain(_skParam0: vec2<f32>) -> vec4<f32> {
   {
     var _0_TrueTrue: bool;
     var _2_y: i32 = 1;
@@ -140,8 +136,8 @@ fn main(_skParam0: vec2<f32>) -> vec4<f32> {
     return _skTemp3;
   }
 }
-@fragment fn fragmentMain(_stageIn: FSIn) -> FSOut {
+@fragment fn main() -> FSOut {
   var _stageOut: FSOut;
-  _stageOut.sk_FragColor = main(_stageIn.sk_FragCoord.xy);
+  _stageOut.sk_FragColor = _skslMain(/*fragcoord*/ vec2<f32>());
   return _stageOut;
 }

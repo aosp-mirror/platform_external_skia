@@ -9,20 +9,19 @@
 #define SKSL_WGSLCODEGENERATOR
 
 #include "include/core/SkSpan.h"
-#include "include/private/SkSLDefines.h"
+#include "include/private/base/SkTArray.h"
 #include "src/base/SkEnumBitMask.h"
 #include "src/core/SkTHash.h"
+#include "src/sksl/SkSLDefines.h"
 #include "src/sksl/SkSLMemoryLayout.h"
 #include "src/sksl/SkSLOperator.h"
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/codegen/SkSLCodeGenerator.h"
 
 #include <cstdint>
-#include <initializer_list>
 #include <memory>
 #include <string>
 #include <string_view>
-#include <utility>
 
 namespace SkSL {
 
@@ -48,6 +47,7 @@ class InterfaceBlock;
 enum IntrinsicKind : int8_t;
 struct Layout;
 class Literal;
+class ModifiersDeclaration;
 class OutputStream;
 class PostfixExpression;
 class PrefixExpression;
@@ -99,7 +99,8 @@ public:
         kFrontFacing,  // input
         kSampleIndex,  // input
         kFragDepth,    // output
-        kSampleMask,   // input, output
+        kSampleMaskIn, // input
+        kSampleMask,   // output
 
         // Compute stage:
         kLocalInvocationId,     // input
@@ -125,32 +126,16 @@ public:
         using DepsMap = skia_private::THashMap<const FunctionDeclaration*,
                                                WGSLFunctionDependencies>;
 
-        ProgramRequirements() = default;
-        ProgramRequirements(DepsMap dependencies, bool mainNeedsCoordsArgument)
-                : dependencies(std::move(dependencies))
-                , mainNeedsCoordsArgument(mainNeedsCoordsArgument) {}
-
         // Mappings used to synthesize function parameters according to dependencies on pipeline
         // input/output variables.
-        DepsMap dependencies;
+        DepsMap fDependencies;
 
-        // True, if the main function takes a coordinate parameter. This is used to ensure that
-        // sk_FragCoord is declared as part of pipeline inputs.
-        bool mainNeedsCoordsArgument;
+        // These flags track extensions that will need to be enabled.
+        bool fPixelLocalExtension = false;
     };
 
     WGSLCodeGenerator(const Context* context, const Program* program, OutputStream* out)
-            : INHERITED(context, program, out)
-            , fReservedWords({"array",
-                              "FSIn",
-                              "FSOut",
-                              "_globalUniforms",
-                              "_GlobalUniforms",
-                              "_return",
-                              "_stageIn",
-                              "_stageOut",
-                              "VSIn",
-                              "VSOut"}) {}
+            : INHERITED(context, program, out) {}
 
     bool generateCode() override;
 
@@ -165,25 +150,29 @@ private:
     void write(std::string_view s);
     void writeLine(std::string_view s = std::string_view());
     void finishLine();
-    void writeVariableDecl(const Type& type, std::string_view name, Delimiter delimiter);
 
     // Helpers to declare a pipeline stage IO parameter declaration.
     void writePipelineIODeclaration(const Layout& layout,
                                     const Type& type,
                                     std::string_view name,
                                     Delimiter delimiter);
-    void writeUserDefinedIODecl(const Type& type,
+    void writeUserDefinedIODecl(const Layout& layout,
+                                const Type& type,
                                 std::string_view name,
-                                int location,
                                 Delimiter delimiter);
     void writeBuiltinIODecl(const Type& type,
                             std::string_view name,
                             Builtin builtin,
                             Delimiter delimiter);
+    void writeVariableDecl(const Layout& layout,
+                           const Type& type,
+                           std::string_view name,
+                           Delimiter delimiter);
 
     // Write a function definition.
     void writeFunction(const FunctionDefinition& f);
-    void writeFunctionDeclaration(const FunctionDeclaration& f);
+    void writeFunctionDeclaration(const FunctionDeclaration& f,
+                                  SkSpan<const bool> paramNeedsDedicatedStorage);
 
     // Write the program entry point.
     void writeEntryPoint(const FunctionDefinition& f);
@@ -214,6 +203,8 @@ private:
     std::string variableReferenceNameForLValue(const VariableReference& r);
     std::string variablePrefix(const Variable& v);
 
+    bool binaryOpNeedsComponentwiseMatrixPolyfill(const Type& left, const Type& right, Operator op);
+
     // Writers for expressions. These return the final expression text as a string, and emit any
     // necessary setup code directly into the program as necessary. The returned expression may be
     // a `let`-alias that cannot be assigned-into; use `makeLValue` for an assignable expression.
@@ -224,10 +215,6 @@ private:
                                          const Expression& right,
                                          const Type& resultType,
                                          Precedence parentPrecedence);
-    std::string assembleBinaryExpressionElement(const Expression& expr,
-                                                Operator op,
-                                                const Expression& other,
-                                                Precedence parentPrecedence);
     std::string assembleFieldAccess(const FieldAccess& f);
     std::string assembleFunctionCall(const FunctionCall& call, Precedence parentPrecedence);
     std::string assembleIndexExpression(const IndexExpression& i);
@@ -238,6 +225,8 @@ private:
     std::string assembleTernaryExpression(const TernaryExpression& t, Precedence parentPrecedence);
     std::string assembleVariableReference(const VariableReference& r);
     std::string assembleName(std::string_view name);
+
+    std::string assembleIncrementExpr(const Type& type);
 
     // Intrinsic helper functions.
     std::string assembleIntrinsicCall(const FunctionCall& call,
@@ -256,19 +245,19 @@ private:
                                           const Expression& sampler,
                                           const Expression& coords);
     std::string assembleInversePolyfill(const FunctionCall& call);
+    std::string assembleComponentwiseMatrixBinary(const Type& leftType,
+                                                  const Type& rightType,
+                                                  const std::string& left,
+                                                  const std::string& right,
+                                                  Operator op);
 
     // Constructor expressions
-    std::string assembleAnyConstructor(const AnyConstructor& c, Precedence parentPrecedence);
-    std::string assembleConstructorCompound(const ConstructorCompound& c,
-                                            Precedence parentPrecedence);
-    std::string assembleConstructorCompoundVector(const ConstructorCompound& c,
-                                                  Precedence parentPrecedence);
-    std::string assembleConstructorCompoundMatrix(const ConstructorCompound& c,
-                                                  Precedence parentPrecedence);
-    std::string assembleConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c,
-                                                  Precedence parentPrecedence);
-    std::string assembleConstructorMatrixResize(const ConstructorMatrixResize& ctor,
-                                                Precedence parentPrecedence);
+    std::string assembleAnyConstructor(const AnyConstructor& c);
+    std::string assembleConstructorCompound(const ConstructorCompound& c);
+    std::string assembleConstructorCompoundVector(const ConstructorCompound& c);
+    std::string assembleConstructorCompoundMatrix(const ConstructorCompound& c);
+    std::string assembleConstructorDiagonalMatrix(const ConstructorDiagonalMatrix& c);
+    std::string assembleConstructorMatrixResize(const ConstructorMatrixResize& ctor);
 
     // Synthesized helper functions for comparison operators that are not supported by WGSL.
     std::string assembleEqualityExpression(const Type& left,
@@ -299,6 +288,7 @@ private:
     void writeProgramElement(const ProgramElement& e);
     void writeGlobalVarDeclaration(const GlobalVarDeclaration& d);
     void writeStructDefinition(const StructDefinition& s);
+    void writeModifiersDeclaration(const ModifiersDeclaration&);
 
     // Writes the WGSL struct fields for SkSL structs and interface blocks. Enforces WGSL address
     // space layout constraints
@@ -307,12 +297,15 @@ private:
     void writeFields(SkSpan<const Field> fields, const MemoryLayout* memoryLayout = nullptr);
 
     // We bundle uniforms, and all varying pipeline stage inputs and outputs, into separate structs.
+    bool needsStageInputStruct() const;
     void writeStageInputStruct();
+    bool needsStageOutputStruct() const;
     void writeStageOutputStruct();
     void writeUniformsAndBuffers();
     void prepareUniformPolyfillsForInterfaceBlock(const InterfaceBlock* interfaceBlock,
                                                   std::string_view instanceName,
                                                   MemoryLayout::Standard nativeLayout);
+    void writeEnables();
     void writeUniformPolyfills();
 
     void writeTextureOrSampler(const Variable& var,
@@ -346,10 +339,10 @@ private:
     // We assign unique names to anonymous interface blocks based on the type.
     skia_private::THashMap<const Type*, std::string> fInterfaceBlockNameMap;
 
-    // Stores the disallowed identifier names.
-    skia_private::THashSet<std::string_view> fReservedWords;
+    // Stores the functions which use stage inputs/outputs as well as required WGSL extensions.
     ProgramRequirements fRequirements;
-    int fPipelineInputCount = 0;
+    skia_private::TArray<const Variable*> fPipelineInputs;
+    skia_private::TArray<const Variable*> fPipelineOutputs;
 
     // These fields track whether we have written the polyfill for `inverse()` for a given matrix
     // type.
@@ -378,6 +371,9 @@ private:
     bool fHasUnconditionalReturn = false;
     bool fAtFunctionScope = false;
     int fConditionalScopeDepth = 0;
+    int fLocalSizeX = 1;
+    int fLocalSizeY = 1;
+    int fLocalSizeZ = 1;
 
     int fScratchCount = 0;
 };

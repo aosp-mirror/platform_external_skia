@@ -45,9 +45,6 @@ config("skia_public") {
       "SK_FORCE_AAA",
     ]
   }
-  if (skia_enable_sksl) {
-    defines += [ "SK_ENABLE_SKSL" ]
-  }
   if (skia_enable_precompile) {
     defines += [ "SK_ENABLE_PRECOMPILE" ]
   }
@@ -171,26 +168,6 @@ template("opts") {
 }
 
 is_x86 = current_cpu == "x64" || current_cpu == "x86"
-
-opts("ssse3") {
-  enabled = is_x86
-  sources = skia_opts.ssse3_sources
-  if (!is_clang && is_win) {
-    defines = [ "SK_CPU_SSE_LEVEL=SK_CPU_SSE_LEVEL_SSSE3" ]
-  } else {
-    cflags = [ "-mssse3" ]
-  }
-}
-
-opts("avx") {
-  enabled = is_x86
-  sources = skia_opts.avx_sources
-  if (is_win) {
-    cflags = [ "/arch:AVX" ]
-  } else {
-    cflags = [ "-mavx" ]
-  }
-}
 
 opts("hsw") {
   enabled = is_x86
@@ -722,7 +699,8 @@ if (skia_compile_modules) {
         dir = get_path_info(dst, "dir")
         name = get_path_info(dst, "name")
         ext = get_path_info(dst, "extension")
-        if (ext == "rts" || ext == "rtcf" || ext == "rtb") {
+        if (ext == "rts" || ext == "rtcf" || ext == "rtb" || ext == "mfrag" ||
+            ext == "mvert") {
           response_file_contents += [ rebase_path(src) ]
           sources += [ src ]
           outputs += [ target_out_dir + "/" +
@@ -777,7 +755,7 @@ if (skia_compile_sksl_tests) {
     include_dirs = [ "." ]
     deps = [
       ":run_sksllex",
-      "//third_party/externals/dawn/src/tint:libtint",
+      "//third_party/externals/dawn/src/tint/api:api",
       "//third_party/externals/spirv-tools:spvtools",
       "//third_party/externals/spirv-tools:spvtools_val",
       "//third_party/spirv-cross:spirv_cross",
@@ -1056,11 +1034,6 @@ optional("gpu") {
     if (defined(ndk_api) && ndk_api >= 26) {
       libs += [ "android" ]
     }
-  }
-
-  if (skia_use_dawn) {
-    public += skia_gpu_dawn_public
-    sources += skia_gpu_dawn_private
   }
 
   if (skia_use_direct3d) {
@@ -1496,16 +1469,15 @@ skia_component("skia") {
   deps = [
     ":android_utils",
     ":avif",
-    ":avx",
     ":fontmgr_factory",
     ":heif",
     ":hsw",
     ":jpeg_decode",
     ":jpegxl_decode",
+    ":minify_sksl",
     ":ndk_images",
     ":png_decode",
     ":raw",
-    ":ssse3",
     ":typeface_fontations",
     ":vello",
     ":webp_decode",
@@ -1529,6 +1501,7 @@ skia_component("skia") {
   sources += skia_codec_core
   sources += skia_codec_decode_bmp
   sources += skia_encode_srcs
+  sources += skia_sksl_sources
   sources += [
     "src/android/SkAndroidFrameworkUtils.cpp",
     "src/android/SkAnimatedImage.cpp",
@@ -1549,18 +1522,9 @@ skia_component("skia") {
   defines = []
   libs = []
 
-  if (skia_enable_sksl) {
-    deps += [ ":minify_sksl" ]
-    sources += skia_sksl_sources
-    sources += skia_needs_sksl_sources
-    sources += skia_colorfilters_sksl_sources
-
-    if (skia_enable_sksl_tracing) {
-      defines += [ "SKSL_ENABLE_TRACING" ]
-      sources += skia_sksl_tracing_sources
-    }
-  } else {
-    sources += skia_colorfilters_nosksl_sources
+  if (skia_enable_sksl_tracing) {
+    defines += [ "SKSL_ENABLE_TRACING" ]
+    sources += skia_sksl_tracing_sources
   }
 
   if (skia_build_for_debugger) {
@@ -1695,11 +1659,7 @@ skia_static_library("pathkit") {
   public_configs = [ ":skia_public" ]
   configs = skia_library_configs
 
-  deps = [
-    ":avx",
-    ":hsw",
-    ":ssse3",
-  ]
+  deps = [ ":hsw" ]
 
   sources = []
   sources += skia_pathops_sources
@@ -1992,9 +1952,12 @@ if (skia_enable_tools) {
       "tools/gpu/BackendSurfaceFactory.h",
       "tools/gpu/BackendTextureImageFactory.cpp",
       "tools/gpu/BackendTextureImageFactory.h",
+      "tools/gpu/ContextType.cpp",
+      "tools/gpu/ContextType.h",
       "tools/gpu/FlushFinishTracker.cpp",
       "tools/gpu/FlushFinishTracker.h",
       "tools/gpu/GrContextFactory.cpp",
+      "tools/gpu/GrContextFactory.h",
       "tools/gpu/GrTest.cpp",
       "tools/gpu/ManagedBackendTexture.cpp",
       "tools/gpu/ManagedBackendTexture.h",
@@ -2070,7 +2033,6 @@ if (skia_enable_tools) {
     }
     if (skia_use_dawn) {
       public_deps += [ "//third_party/externals/dawn/include/dawn:headers" ]
-      sources += [ "tools/gpu/dawn/DawnTestContext.cpp" ]
       if (is_clang) {
         cflags_cc = [ "-Wno-microsoft-cast" ]
       }
@@ -2106,11 +2068,18 @@ if (skia_enable_tools) {
   }  # test_lib("gpu_tool_utils")
 
   test_lib("flags") {
-    sources = [ "tools/flags/CommandLineFlags.cpp" ]
+    sources = [
+      "tools/flags/CommandLineFlags.cpp",
+      "tools/flags/CommandLineFlags.h",
+    ]
   }
 
   test_lib("common_flags_config") {
-    sources = [ "tools/flags/CommonFlagsConfig.cpp" ]
+    sources = [
+      "tools/flags/CommonFlags.h",
+      "tools/flags/CommonFlagsConfig.cpp",
+      "tools/flags/CommonFlagsConfig.h",
+    ]
     deps = [ ":flags" ]
     public_deps = [ ":gpu_tool_utils" ]
   }
@@ -2717,7 +2686,7 @@ if (skia_enable_tools) {
     }
   }
   if (is_android) {
-    shared_library("libskqp_app") {  # Not a skia_shared_library
+    shared_library("libskqp_jni") {  # Not a skia_shared_library
       configs += [ ":skia_private" ]
       testonly = true
       sources = [ "tools/skqp/src/jni_skqp.cpp" ]
@@ -2957,8 +2926,6 @@ if (skia_enable_tools) {
         "tools/viewer/SkSLSlide.h",
         "tools/viewer/SkottieSlide.cpp",
         "tools/viewer/SkottieSlide.h",
-        "tools/viewer/SkottieTextEditor.cpp",
-        "tools/viewer/SkottieTextEditor.h",
         "tools/viewer/Slide.h",
         "tools/viewer/SlideDir.cpp",
         "tools/viewer/SlideDir.h",

@@ -122,7 +122,7 @@ protected:
             fixup(R"(void main\(\))",                              "half4 main(float2 xy)");
             fixup(R"(sk_FragColor =)",                             "return");
             fixup(R"(sk_FragCoord)",                               "_FragCoord");
-            fixup(R"(uniform sampler2D )",                         "uniform shader ");
+            fixup(R"(sampler2D )",                                 "uniform shader ");
             fixup(R"((flat |noperspective |)in )",                 "uniform ");
             fixup(R"(sample\(([A-Za-z0-9_]+), ([A-Za-z0-9_]+)\))", "$01.eval($02)");
             fSrc = "#version 300\nuniform float4 _FragCoord;\n" + fSrc;
@@ -223,7 +223,7 @@ uniform half4 uleftBorderColor_S1_c0_c0;
 uniform half4 urightBorderColor_S1_c0_c0;
 uniform float3x3 umatrix_S1_c1;
 uniform half urange_S1;
-uniform sampler2D uTextureSampler_0_S1;
+sampler2D uTextureSampler_0_S1;
 flat in half4 vcolor_S0;
 noperspective in float2 vTransformedCoords_6_S0;
 half4 UnrolledBinaryColorizer_S1_c0_c0_c0(half4 _input, float2 _coords)
@@ -396,8 +396,8 @@ COMPILER_BENCH(medium, R"(
 uniform float3x3 umatrix_S1_c0;
 uniform float3x3 umatrix_S2_c0_c0;
 uniform float4 urect_S2_c0;
-uniform sampler2D uTextureSampler_0_S1;
-uniform sampler2D uTextureSampler_0_S2;
+sampler2D uTextureSampler_0_S1;
+sampler2D uTextureSampler_0_S2;
 flat in half4 vcolor_S0;
 noperspective in float2 vTransformedCoords_3_S0;
 half4 TextureEffect_S1_c0_c0(half4 _input)
@@ -465,7 +465,7 @@ void main()
 
 // This fragment shader is taken from GM_lcdtext.
 COMPILER_BENCH(small, R"(
-uniform sampler2D uTextureSampler_0_S0;
+sampler2D uTextureSampler_0_S0;
 noperspective in float2 vTextureCoords_S0;
 flat in float vTexIndex_S0;
 noperspective in half4 vinColor_S0;
@@ -520,10 +520,9 @@ struct FSUniformData
 	// 3 - ColorSpaceTransform uniforms
 	int flags_3;
 	int srcKind_3;
-	half srcCoeffs_3[7];
 	half3x3 gamutTransform_3;
 	int dstKind_3;
-	half dstCoeffs_3[7];
+	half4x4 csXformCoeffs_3;
 	// 4 - DitherShader uniforms
 	half range_4;
 }
@@ -534,11 +533,11 @@ layout (binding=2) buffer FSUniforms
 }
 ;
 // 4 - DitherShader samplers
-layout(binding=0) uniform sampler2D sampler_4;
+layout(binding=0) sampler2D sampler_4;
 // [1]   1: ColorFilterShader
 half4 ColorFilterShader_1(half4 inColor, half4 destColor, float2 coords)
 {
-	return sk_color_space_transform(sk_conical_grad_8_shader(coords, fsUniformData[shadingSsboIndexVar].colors_2, fsUniformData[shadingSsboIndexVar].offsets_2, fsUniformData[shadingSsboIndexVar].point0_2, fsUniformData[shadingSsboIndexVar].point1_2, fsUniformData[shadingSsboIndexVar].radius0_2, fsUniformData[shadingSsboIndexVar].radius1_2, fsUniformData[shadingSsboIndexVar].tilemode_2, fsUniformData[shadingSsboIndexVar].colorSpace_2, fsUniformData[shadingSsboIndexVar].doUnPremul_2), fsUniformData[shadingSsboIndexVar].flags_3, fsUniformData[shadingSsboIndexVar].srcKind_3, fsUniformData[shadingSsboIndexVar].srcCoeffs_3, fsUniformData[shadingSsboIndexVar].gamutTransform_3, fsUniformData[shadingSsboIndexVar].dstKind_3, fsUniformData[shadingSsboIndexVar].dstCoeffs_3);
+	return sk_color_space_transform(sk_conical_grad_8_shader(coords, fsUniformData[shadingSsboIndexVar].colors_2, fsUniformData[shadingSsboIndexVar].offsets_2, fsUniformData[shadingSsboIndexVar].point0_2, fsUniformData[shadingSsboIndexVar].point1_2, fsUniformData[shadingSsboIndexVar].radius0_2, fsUniformData[shadingSsboIndexVar].radius1_2, fsUniformData[shadingSsboIndexVar].tilemode_2, fsUniformData[shadingSsboIndexVar].colorSpace_2, fsUniformData[shadingSsboIndexVar].doUnPremul_2), fsUniformData[shadingSsboIndexVar].flags_3, fsUniformData[shadingSsboIndexVar].srcKind_3, fsUniformData[shadingSsboIndexVar].gamutTransform_3, fsUniformData[shadingSsboIndexVar].dstKind_3, fsUniformData[shadingSsboIndexVar].csXformCoeffs_3);
 }
 void main()
 {
@@ -581,10 +580,10 @@ layout (binding=2) buffer FSUniforms
 	FSUniformData fsUniformData[];
 }
 ;
-layout(binding=0) uniform sampler2D text_atlas_0;
-layout(binding=1) uniform sampler2D text_atlas_1;
-layout(binding=2) uniform sampler2D text_atlas_2;
-layout(binding=3) uniform sampler2D text_atlas_3;
+layout(binding=0) sampler2D text_atlas_0;
+layout(binding=1) sampler2D text_atlas_1;
+layout(binding=2) sampler2D text_atlas_2;
+layout(binding=3) sampler2D text_atlas_3;
 void main()
 {
 	half4 initialColor = half4(0);

@@ -20,6 +20,7 @@
 #include "src/gpu/graphite/RendererProvider.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/gpu/graphite/vk/VulkanGraphicsPipeline.h"
+#include "src/gpu/graphite/vk/VulkanRenderPass.h"
 #include "src/gpu/graphite/vk/VulkanSharedContext.h"
 #include "src/sksl/SkSLProgramKind.h"
 #include "src/sksl/SkSLProgramSettings.h"
@@ -542,7 +543,9 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
         const RuntimeEffectDictionary* runtimeDict,
         const GraphicsPipelineDesc& pipelineDesc,
         const RenderPassDesc& renderPassDesc,
+        sk_sp<VulkanRenderPass> compatibleRenderPass,
         VkPipelineCache pipelineCache) {
+
     SkSL::Program::Interface vsInterface, fsInterface;
     SkSL::ProgramSettings settings;
     settings.fForceNoRTFlip = true; // TODO: Confirm
@@ -665,20 +668,10 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
     VkPipelineDynamicStateCreateInfo dynamicInfo;
     setup_dynamic_state(&dynamicInfo, dynamicStates);
 
-    VkPipelineRenderingCreateInfoKHR pipelineRenderingInfo;
-    memset(&pipelineRenderingInfo, 0, sizeof(VkPipelineRenderingCreateInfoKHR));
-    pipelineRenderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
-    pipelineRenderingInfo.colorAttachmentCount = 1;
-    VulkanTextureInfo textureInfo;
-    bool validTextureInfo =
-            renderPassDesc.fColorAttachment.fTextureInfo.getVulkanTextureInfo(&textureInfo);
-    pipelineRenderingInfo.pColorAttachmentFormats = validTextureInfo ? &textureInfo.fFormat
-                                                                     : VK_NULL_HANDLE;
-
     VkGraphicsPipelineCreateInfo pipelineCreateInfo;
     memset(&pipelineCreateInfo, 0, sizeof(VkGraphicsPipelineCreateInfo));
     pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineCreateInfo.pNext = &pipelineRenderingInfo;
+    pipelineCreateInfo.pNext = nullptr;
     pipelineCreateInfo.flags = 0;
     pipelineCreateInfo.stageCount = hasFragment ? 2 : 1;
     pipelineCreateInfo.pStages = &pipelineShaderStages[0];
@@ -692,9 +685,9 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
     pipelineCreateInfo.pColorBlendState = &colorBlendInfo;
     pipelineCreateInfo.pDynamicState = &dynamicInfo;
     pipelineCreateInfo.layout = pipelineLayout;
-    pipelineCreateInfo.renderPass = VK_NULL_HANDLE;
-    // For the vast majority of cases we only have one subpass so we default piplines to subpass 0.
-    // TODO: However, if we need to load a resolve into msaa attachment for discardable msaa then
+    pipelineCreateInfo.renderPass = compatibleRenderPass->renderPass();
+    // TODO: Consider setting pipeline to a subpass other than subpass 0 once we support >1 subpass.
+    // For example, if we need to load a resolve into msaa attachment for discardable msaa then
     // the main subpass will be 1.
     pipelineCreateInfo.subpass = 0;
     pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
@@ -703,7 +696,7 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
     VkPipeline vkPipeline;
     VkResult result;
     {
-        TRACE_EVENT0_ALWAYS("skia.shaders", "CreateGraphicsPipeline");
+        TRACE_EVENT0_ALWAYS("skia.shaders", "VkCreateGraphicsPipeline");
         VULKAN_CALL_RESULT(sharedContext->interface(),
                            result,
                            CreateGraphicsPipelines(sharedContext->device(),
@@ -721,21 +714,21 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
     // After creating the pipeline object, we can clean up the VkShaderModule(s).
     destroy_shader_modules(sharedContext, vsModule, fsModule);
 
-#if GRAPHITE_TEST_UTILS
-    GraphicsPipeline::Shaders pipelineShaders = {
-        std::move(vsSkSL),
-        std::move(fsSkSL),
-        "SPIR-V disassembly not available",
-        "SPIR-V disassembly not available",
-    };
-    GraphicsPipeline::Shaders* pipelineShadersPtr = &pipelineShaders;
+#if defined(GRAPHITE_TEST_UTILS)
+    GraphicsPipeline::PipelineInfo pipelineInfo = {pipelineDesc.renderStepID(),
+                                                   pipelineDesc.paintParamsID(),
+                                                   std::move(vsSkSL),
+                                                   std::move(fsSkSL),
+                                                   "SPIR-V disassembly not available",
+                                                   "SPIR-V disassembly not available"};
+    GraphicsPipeline::PipelineInfo* pipelineInfoPtr = &pipelineInfo;
 #else
-    GraphicsPipeline::Shaders* pipelineShadersPtr = nullptr;
+    GraphicsPipeline::PipelineInfo* pipelineInfoPtr = nullptr;
 #endif
 
     return sk_sp<VulkanGraphicsPipeline>(
             new VulkanGraphicsPipeline(sharedContext,
-                                       pipelineShadersPtr,
+                                       pipelineInfoPtr,
                                        pipelineLayout,
                                        vkPipeline,
                                        hasFragment,
@@ -744,18 +737,18 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
 }
 
 VulkanGraphicsPipeline::VulkanGraphicsPipeline(const skgpu::graphite::SharedContext* sharedContext,
-                                               Shaders* pipelineShaders,
+                                               PipelineInfo* pipelineInfo,
                                                VkPipelineLayout pipelineLayout,
                                                VkPipeline pipeline,
                                                bool hasFragment,
                                                bool hasStepUniforms,
                                                int numTextureSamplers)
-    : GraphicsPipeline(sharedContext, pipelineShaders)
-    , fPipelineLayout(pipelineLayout)
-    , fPipeline(pipeline)
-    , fHasFragment(hasFragment)
-    , fHasStepUniforms(hasStepUniforms)
-    , fNumTextureSamplers(numTextureSamplers) {}
+        : GraphicsPipeline(sharedContext, pipelineInfo)
+        , fPipelineLayout(pipelineLayout)
+        , fPipeline(pipeline)
+        , fHasFragment(hasFragment)
+        , fHasStepUniforms(hasStepUniforms)
+        , fNumTextureSamplers(numTextureSamplers) {}
 
 void VulkanGraphicsPipeline::freeGpuData() {
     auto sharedCtxt = static_cast<const VulkanSharedContext*>(this->sharedContext());

@@ -58,7 +58,6 @@
 #include "include/encode/SkJpegEncoder.h"
 #include "include/encode/SkPngEncoder.h"
 #include "include/encode/SkWebpEncoder.h"
-#include "include/private/SkShadowFlags.h"
 #include "include/utils/SkParsePath.h"
 #include "include/utils/SkShadowUtils.h"
 #include "src/core/SkPathPriv.h"
@@ -124,6 +123,10 @@
 
 #ifndef CK_NO_FONTS
 #include "include/ports/SkFontMgr_data.h"
+#endif
+
+#if GR_TEST_UTILS
+#error "This define should not be set, as it brings in test-only things and bloats codesize."
 #endif
 
 struct OptionalMatrix : SkMatrix {
@@ -896,29 +899,27 @@ public:
         fCallback.call<void>("freeSrc");
     }
 
-  std::unique_ptr<GrExternalTexture> generateExternalTexture(GrRecordingContext *ctx,
-                                                             GrMipMapped mipmapped) override {
-    GrGLTextureInfo glInfo;
+    std::unique_ptr<GrExternalTexture> generateExternalTexture(
+            GrRecordingContext* ctx, skgpu::Mipmapped mipmapped) override {
+        GrGLTextureInfo glInfo;
 
-    // This callback is defined in webgl.js
-    glInfo.fID     = fCallback.call<uint32_t>("makeTexture");
+        // This callback is defined in webgl.js
+        glInfo.fID = fCallback.call<uint32_t>("makeTexture");
 
-    // The format and target should match how we make the texture on the JS side
-    // See the implementation of the makeTexture function.
-    glInfo.fFormat = GR_GL_RGBA8;
-    glInfo.fTarget = GR_GL_TEXTURE_2D;
+        // The format and target should match how we make the texture on the JS side
+        // See the implementation of the makeTexture function.
+        glInfo.fFormat = GR_GL_RGBA8;
+        glInfo.fTarget = GR_GL_TEXTURE_2D;
 
-    auto backendTexture = GrBackendTextures::MakeGL(fInfo.width(),
-                                                    fInfo.height(),
-                                                    mipmapped,
-                                                    glInfo);
+        auto backendTexture =
+                GrBackendTextures::MakeGL(fInfo.width(), fInfo.height(), mipmapped, glInfo);
 
-    // In order to bind the image source to the texture, makeTexture has changed which
-    // texture is "in focus" for the WebGL context.
-    GrAsDirectContext(ctx)->resetContext(kTextureBinding_GrGLBackendState);
-    return std::make_unique<ExternalWebGLTexture>(
-        backendTexture, glInfo.fID, emscripten_webgl_get_current_context());
-  }
+        // In order to bind the image source to the texture, makeTexture has changed which
+        // texture is "in focus" for the WebGL context.
+        GrAsDirectContext(ctx)->resetContext(kTextureBinding_GrGLBackendState);
+        return std::make_unique<ExternalWebGLTexture>(
+                backendTexture, glInfo.fID, emscripten_webgl_get_current_context());
+    }
 
 private:
     JSObject fCallback;

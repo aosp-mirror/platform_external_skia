@@ -47,11 +47,11 @@ public:
     const Renderer* convexTessellatedWedges() const { return &fConvexTessellatedWedges; }
     const Renderer* tessellatedStrokes() const { return &fTessellatedStrokes; }
 
-    // Atlas'ed path rendering
-    const Renderer* atlasShape() const { return &fAtlasShape; }
+    // Coverage mask rendering
+    const Renderer* coverageMask() const { return &fCoverageMask; }
 
     // Atlas'ed text rendering
-    const Renderer* bitmapText() const { return &fBitmapText; }
+    const Renderer* bitmapText(bool useLCDText) const { return &fBitmapText[useLCDText]; }
     const Renderer* sdfText(bool useLCDText) const { return &fSDFText[useLCDText]; }
 
     // Mesh rendering
@@ -103,9 +103,9 @@ private:
     Renderer fConvexTessellatedWedges;
     Renderer fTessellatedStrokes;
 
-    Renderer fAtlasShape;
+    Renderer fCoverageMask;
 
-    Renderer fBitmapText;
+    Renderer fBitmapText[2];  // bool isLCD
     Renderer fSDFText[2]; // bool isLCD
 
     Renderer fAnalyticRRect;

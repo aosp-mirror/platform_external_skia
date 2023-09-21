@@ -16,6 +16,10 @@
 #include "src/core/SkBlenderBase.h"
 #include "src/sksl/SkSLUtil.h"
 
+#if defined(GRAPHITE_TEST_UTILS)
+#include "include/private/gpu/graphite/ContextOptionsPriv.h"
+#endif
+
 namespace skgpu::graphite {
 
 Caps::Caps()
@@ -35,15 +39,21 @@ void Caps::finishInitialization(const ContextOptions& options) {
         fShaderErrorHandler = DefaultShaderErrorHandler();
     }
 
-#if GRAPHITE_TEST_UTILS
-    fMaxTextureSize = std::min(fMaxTextureSize, options.fMaxTextureSizeOverride);
-    fMaxTextureAtlasSize = options.fMaxTextureAtlasSize;
+#if defined(GRAPHITE_TEST_UTILS)
+    if (options.fOptionsPriv) {
+        fMaxTextureSize = std::min(fMaxTextureSize, options.fOptionsPriv->fMaxTextureSizeOverride);
+        fMaxTextureAtlasSize = options.fOptionsPriv->fMaxTextureAtlasSize;
+    }
 #endif
     fGlyphCacheTextureMaximumBytes = options.fGlyphCacheTextureMaximumBytes;
     fMinDistanceFieldFontSize = options.fMinDistanceFieldFontSize;
     fGlyphsAsPathsFontSize = options.fGlyphsAsPathsFontSize;
     fAllowMultipleGlyphCacheTextures = options.fAllowMultipleGlyphCacheTextures;
     fSupportBilerpFromGlyphAtlas = options.fSupportBilerpFromGlyphAtlas;
+    fDisableCachedGlyphUploads = options.fDisableCachedGlyphUploads;
+    if (fDisableCachedGlyphUploads) {
+        fRequireOrderedRecordings = true;
+    }
 }
 
 sk_sp<SkCapabilities> Caps::capabilities() const { return fCapabilities; }

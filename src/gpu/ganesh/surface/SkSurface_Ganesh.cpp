@@ -48,6 +48,11 @@
 #include "src/gpu/ganesh/image/SkImage_Ganesh.h"
 #include "src/image/SkImage_Base.h"
 
+#ifdef SK_IN_RENDERENGINE
+#include "include/gpu/ganesh/gl/GrGLBackendSurface.h"
+#include "include/gpu/gl/GrGLTypes.h"
+#endif
+
 #include <algorithm>
 #include <cstddef>
 #include <utility>
@@ -162,7 +167,7 @@ sk_sp<SkImage> SkSurface_Ganesh::onNewImageSnapshot(const SkIRect* subset) {
                     sk_ref_sp(rContext), srcView, fDevice->imageInfo().colorInfo());
         }
         auto rect = subset ? *subset : SkIRect::MakeSize(srcView.dimensions());
-        GrMipmapped mipmapped = srcView.mipmapped();
+        skgpu::Mipmapped mipmapped = srcView.mipmapped();
         srcView = GrSurfaceProxyView::Copy(rContext,
                                            std::move(srcView),
                                            mipmapped,
@@ -262,9 +267,10 @@ bool SkSurface_Ganesh::onCharacterize(GrSurfaceCharacterization* characterizatio
     GrSurfaceProxyView readSurfaceView = fDevice->readSurfaceView();
     size_t maxResourceBytes = direct->getResourceCacheLimit();
 
-    bool mipmapped = readSurfaceView.asTextureProxy()
-                             ? GrMipmapped::kYes == readSurfaceView.asTextureProxy()->mipmapped()
-                             : false;
+    bool mipmapped =
+            readSurfaceView.asTextureProxy()
+                    ? skgpu::Mipmapped::kYes == readSurfaceView.asTextureProxy()->mipmapped()
+                    : false;
 
     bool usesGLFBO0 = readSurfaceView.asRenderTargetProxy()->glRTFBOIDIs0();
     // We should never get in the situation where we have a texture render target that is also
@@ -364,7 +370,7 @@ bool SkSurface_Ganesh::onIsCompatible(const GrSurfaceCharacterization& character
         }
 
         if (characterization.isMipMapped() &&
-            GrMipmapped::kNo == targetView.asTextureProxy()->mipmapped()) {
+            skgpu::Mipmapped::kNo == targetView.asTextureProxy()->mipmapped()) {
             // Fail if the DDL's surface was mipmapped but the replay surface is not.
             // Allow drawing to proceed if the DDL was not mipmapped but the replay surface is.
             return false;
@@ -565,7 +571,7 @@ sk_sp<SkSurface> RenderTarget(GrRecordingContext* rContext,
                                                 c.imageInfo(),
                                                 SkBackingFit::kExact,
                                                 c.sampleCount(),
-                                                GrMipmapped(c.isMipMapped()),
+                                                skgpu::Mipmapped(c.isMipMapped()),
                                                 c.isProtected(),
                                                 c.origin(),
                                                 c.surfaceProps(),
@@ -596,10 +602,11 @@ sk_sp<SkSurface> RenderTarget(GrRecordingContext* rContext,
         return nullptr;
     }
     sampleCount = std::max(1, sampleCount);
-    GrMipmapped mipmapped = shouldCreateWithMips ? GrMipmapped::kYes : GrMipmapped::kNo;
+    skgpu::Mipmapped mipmapped =
+            shouldCreateWithMips ? skgpu::Mipmapped::kYes : skgpu::Mipmapped::kNo;
 
     if (!rContext->priv().caps()->mipmapSupport()) {
-        mipmapped = GrMipmapped::kNo;
+        mipmapped = skgpu::Mipmapped::kNo;
     }
 
     auto device = rContext->priv().createDevice(budgeted,
@@ -651,9 +658,11 @@ sk_sp<SkSurface> WrapBackendTexture(GrRecordingContext* rContext,
             GrWrapCacheable::kNo,
             std::move(releaseHelper)));
     if (!proxy) {
+        // TODO(scroggo,kjlubick) inline this into Android's AutoBackendTexture.cpp so we
+        // don't have a sometimes-dependency on the GL backend.
 #ifdef SK_IN_RENDERENGINE
         GrGLTextureInfo textureInfo;
-        bool retrievedTextureInfo = tex.getGLTextureInfo(&textureInfo);
+        bool retrievedTextureInfo = GrBackendTextures::GetGLTextureInfo(tex, &textureInfo);
         RENDERENGINE_ABORTF(
                 "%s failed to wrap the texture into a renderable target "
                 "\n\tGrBackendTexture: (%i x %i) hasMipmaps: %i isProtected: %i texType: %i"
@@ -781,7 +790,7 @@ GrSemaphoresSubmitted Flush(sk_sp<SkSurface> surface) {
         return GrSemaphoresSubmitted::kNo;
     }
     if (auto rContext = surface->recordingContext(); rContext != nullptr) {
-        return rContext->asDirectContext()->flush(surface, {});
+        return rContext->asDirectContext()->flush(surface.get(), {});
     }
     return GrSemaphoresSubmitted::kNo;
 }
@@ -791,7 +800,7 @@ void FlushAndSubmit(SkSurface* surface) {
         return;
     }
     if (auto rContext = surface->recordingContext(); rContext != nullptr) {
-        rContext->asDirectContext()->flushAndSubmit(surface);
+        rContext->asDirectContext()->flushAndSubmit(surface, GrSyncCpu::kNo);
     }
 }
 
@@ -800,7 +809,7 @@ void FlushAndSubmit(sk_sp<SkSurface> surface) {
         return;
     }
     if (auto rContext = surface->recordingContext(); rContext != nullptr) {
-        rContext->asDirectContext()->flushAndSubmit(surface);
+        rContext->asDirectContext()->flushAndSubmit(surface.get(), GrSyncCpu::kNo);
     }
 }
 

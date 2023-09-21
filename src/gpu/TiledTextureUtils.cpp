@@ -29,7 +29,7 @@
 #include "src/gpu/graphite/RecorderPriv.h"
 #endif
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 // GrContextOptions::fMaxTextureSizeOverride exists but doesn't allow for changing the
 // maxTextureSize on the fly.
 int gOverrideMaxTextureSize = 0;
@@ -116,7 +116,7 @@ void draw_tiled_bitmap(SkCanvas* canvas,
     int nx = bitmap.width() / tileSize;
     int ny = bitmap.height() / tileSize;
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     gNumTilesDrawn.store(0, std::memory_order_relaxed);
 #endif
 
@@ -200,7 +200,7 @@ void draw_tiled_bitmap(SkCanvas* canvas,
                                                          aaFlags,
                                                          /* hasClip= */ false));
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
                 (void)gNumTilesDrawn.fetch_add(+1, std::memory_order_relaxed);
 #endif
             }
@@ -216,7 +216,7 @@ void draw_tiled_bitmap(SkCanvas* canvas,
                                             constraint);
 }
 
-size_t get_cache_size(SkBaseDevice* device) {
+size_t get_cache_size(SkDevice* device) {
 #if defined(SK_GANESH)
     if (auto dContext = GrAsDirectContext(device->recordingContext())) {
         // NOTE: if the context is not a direct context, it doesn't have access to the resource
@@ -442,7 +442,7 @@ bool TiledTextureUtils::DrawAsTiledImageRect(SkCanvas* canvas,
             constraint = SkCanvas::kFast_SrcRectConstraint;
         }
 
-        SkBaseDevice* device = SkCanvasPriv::TopDevice(canvas);
+        SkDevice* device = SkCanvasPriv::TopDevice(canvas);
         const SkMatrix& localToDevice = device->localToDevice();
 
         SkSamplingOptions sampling = origSampling;
@@ -463,7 +463,7 @@ bool TiledTextureUtils::DrawAsTiledImageRect(SkCanvas* canvas,
         }
 
         int maxTileSize = get_max_texture_size(canvas) - 2*tileFilterPad;
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
         if (gOverrideMaxTextureSize) {
             maxTileSize = gOverrideMaxTextureSize - 2 * tileFilterPad;
         }

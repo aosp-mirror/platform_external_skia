@@ -9,6 +9,8 @@
 #define skgpu_graphite_Caps_DEFINED
 
 #include <optional>
+#include <string>
+#include <string_view>
 
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkRefCnt.h"
@@ -68,6 +70,10 @@ public:
 
     sk_sp<SkCapabilities> capabilities() const;
 
+#if defined(GRAPHITE_TEST_UTILS)
+    std::string_view deviceName() const { return fDeviceName; }
+#endif
+
     virtual TextureInfo getDefaultSampledTextureInfo(SkColorType,
                                                      Mipmapped mipmapped,
                                                      Protected,
@@ -97,6 +103,7 @@ public:
     virtual bool isStorage(const TextureInfo&) const = 0;
 
     int maxTextureSize() const { return fMaxTextureSize; }
+    int defaultMSAASamplesCount() const { return fDefaultMSAASamples; }
 
     virtual void buildKeyForTexture(SkISize dimensions,
                                     const TextureInfo&,
@@ -183,6 +190,9 @@ public:
     // Returns whether a draw buffer can be mapped.
     bool drawBufferCanBeMapped() const { return fDrawBufferCanBeMapped; }
 
+    // Returns whether multisampled render to single sampled is supported.
+    bool msaaRenderToSingleSampledSupport() const { return fMSAARenderToSingleSampledSupport; }
+
     // Returns whether compute shaders are supported.
     bool computeSupport() const { return fComputeSupport; }
 
@@ -207,6 +217,10 @@ public:
     bool allowMultipleGlyphCacheTextures() const { return fAllowMultipleGlyphCacheTextures; }
     bool supportBilerpFromGlyphAtlas() const { return fSupportBilerpFromGlyphAtlas; }
 
+    bool disableCachedGlyphUploads() const { return fDisableCachedGlyphUploads; }
+
+    bool requireOrderedRecordings() const { return fRequireOrderedRecordings; }
+
     sktext::gpu::SDFTControl getSDFTControl(bool useSDFTForSmallText) const;
 
 protected:
@@ -215,6 +229,12 @@ protected:
     // Subclasses must call this at the end of their init method in order to do final processing on
     // the caps.
     void finishInitialization(const ContextOptions&);
+
+#if defined(GRAPHITE_TEST_UTILS)
+    void setDeviceName(const char* n) {
+        fDeviceName = n;
+    }
+#endif
 
     // There are only a few possible valid sample counts (1, 2, 4, 8, 16). So we can key on those 5
     // options instead of the actual sample value.
@@ -267,6 +287,7 @@ protected:
     bool fStorageBufferSupport = false;
     bool fStorageBufferPreferred = false;
     bool fDrawBufferCanBeMapped = true;
+    bool fMSAARenderToSingleSampledSupport = false;
 
     bool fComputeSupport = false;
 
@@ -281,8 +302,9 @@ protected:
      */
     ShaderErrorHandler* fShaderErrorHandler = nullptr;
 
-#if GRAPHITE_TEST_UTILS
-    int  fMaxTextureAtlasSize = 2048;
+#if defined(GRAPHITE_TEST_UTILS)
+    std::string fDeviceName;
+    int fMaxTextureAtlasSize = 2048;
 #endif
     size_t fGlyphCacheTextureMaximumBytes = 2048 * 1024 * 4;
 
@@ -291,6 +313,10 @@ protected:
 
     bool fAllowMultipleGlyphCacheTextures = true;
     bool fSupportBilerpFromGlyphAtlas = false;
+    bool fDisableCachedGlyphUploads = false;
+
+    // Set based on client options
+    bool fRequireOrderedRecordings = false;
 
 private:
     virtual bool onIsTexturable(const TextureInfo&) const = 0;

@@ -187,7 +187,7 @@ bool SurfaceContext::readPixels(GrDirectContext* dContext, GrPixmap dst, SkIPoin
             sk_sp<GrSurfaceProxy> copy;
             static constexpr auto kFit = SkBackingFit::kExact;
             static constexpr auto kBudgeted = skgpu::Budgeted::kYes;
-            static constexpr auto kMipMapped = GrMipmapped::kNo;
+            static constexpr auto kMipMapped = skgpu::Mipmapped::kNo;
             if (restrictions.fMustCopyWholeSrc) {
                 copy = GrSurfaceProxy::Copy(fContext,
                                             std::move(srcProxy),
@@ -301,7 +301,8 @@ bool SurfaceContext::writePixels(GrDirectContext* dContext,
         }
         return this->writePixels(dContext, src[0], {0, 0});
     }
-    if (!this->asTextureProxy() || this->asTextureProxy()->proxyMipmapped() == GrMipmapped::kNo) {
+    if (!this->asTextureProxy() ||
+        this->asTextureProxy()->proxyMipmapped() == skgpu::Mipmapped::kNo) {
         return false;
     }
 
@@ -335,8 +336,8 @@ bool SurfaceContext::internalWritePixels(GrDirectContext* dContext,
 
     // We can either write to a subset or write MIP levels, but not both.
     SkASSERT((src[0].dimensions() == this->dimensions() && pt.isZero()) || numLevels == 1);
-    SkASSERT(numLevels == 1 ||
-             (this->asTextureProxy() && this->asTextureProxy()->mipmapped() == GrMipmapped::kYes));
+    SkASSERT(numLevels == 1 || (this->asTextureProxy() &&
+                                this->asTextureProxy()->mipmapped() == skgpu::Mipmapped::kYes));
     // Our public caller should have clipped to the bounds of the surface already.
     SkASSERT(SkIRect::MakeSize(this->dimensions()).contains(
             SkIRect::MakePtSize(pt, src[0].dimensions())));
@@ -429,7 +430,7 @@ bool SurfaceContext::internalWritePixels(GrDirectContext* dContext,
                 src[0].dimensions(),
                 GrRenderable::kNo,
                 1,
-                GrMipmapped::kNo,
+                skgpu::Mipmapped::kNo,
                 SkBackingFit::kApprox,
                 skgpu::Budgeted::kYes,
                 GrProtected::kNo,
@@ -578,20 +579,9 @@ void SurfaceContext::asyncRescaleAndReadPixels(GrDirectContext* dContext,
                         this->origin() == kBottomLeft_GrSurfaceOrigin     ||
                         this->colorInfo().alphaType() != info.alphaType() ||
                         !SkColorSpace::Equals(this->colorInfo().colorSpace(), info.colorSpace());
-    auto colorTypeOfFinalContext = this->colorInfo().colorType();
-    auto backendFormatOfFinalContext = this->asSurfaceProxy()->backendFormat();
-    if (needsRescale) {
-        colorTypeOfFinalContext = dstCT;
-        backendFormatOfFinalContext =
-                this->caps()->getDefaultBackendFormat(dstCT, GrRenderable::kYes);
-        if (!backendFormatOfFinalContext.isValid()) {
-            constexpr int kSampleCnt = 1;
-            std::tie(colorTypeOfFinalContext, backendFormatOfFinalContext) =
-                    this->caps()->getFallbackColorTypeAndFormat(colorTypeOfFinalContext, kSampleCnt);
-        }
-    }
-    auto readInfo = this->caps()->supportedReadPixelsColorType(colorTypeOfFinalContext,
-                                                               backendFormatOfFinalContext,
+    auto surfaceBackendFormat = this->asSurfaceProxy()->backendFormat();
+    auto readInfo = this->caps()->supportedReadPixelsColorType(this->colorInfo().colorType(),
+                                                               surfaceBackendFormat,
                                                                dstCT);
     // Fail if we can't read from the source surface's color type.
     if (readInfo.fColorType == GrColorType::kUnknown) {
@@ -612,7 +602,9 @@ void SurfaceContext::asyncRescaleAndReadPixels(GrDirectContext* dContext,
     int x = srcRect.fLeft;
     int y = srcRect.fTop;
     if (needsRescale) {
-        tempFC = this->rescale(info, kTopLeft_GrSurfaceOrigin, srcRect, rescaleGamma, rescaleMode);
+        auto tempInfo = GrImageInfo(info).makeColorType(this->colorInfo().colorType());
+        tempFC = this->rescale(tempInfo, kTopLeft_GrSurfaceOrigin, srcRect,
+                               rescaleGamma, rescaleMode);
         if (!tempFC) {
             callback(callbackContext, nullptr);
             return;
@@ -765,7 +757,7 @@ void SurfaceContext::asyncRescaleAndReadPixelsYUV420(GrDirectContext* dContext,
         srcView = GrSurfaceProxyView::Copy(
                 fContext,
                 std::move(srcView),
-                GrMipmapped::kNo,
+                skgpu::Mipmapped::kNo,
                 srcRect,
                 SkBackingFit::kApprox,
                 skgpu::Budgeted::kYes,
@@ -1043,14 +1035,31 @@ sk_sp<GrRenderTask> SurfaceContext::copyScaled(sk_sp<GrSurfaceProxy> src,
         // axis where we are copying up to the logical dimension, but that dimension is less than
         // the actual backing store dimension, the linear filter will access one texel beyond the
         // logical size, potentially incorporating undefined values.
+        // NOTE: Identity scales that sample along the logical boundary of an approxi-fit texture
+        // can still technically access a row or column of undefined data (albeit with a weight that
+        // *should* be zero). We also disallow copying with linear filtering in that scenario,
+        // just in case.
+#if defined(SK_USE_SAFE_INSET_FOR_TEXTURE_SAMPLING)
+        const bool upscalingXAtApproxEdge =
+            dstRect.width() >= srcRect.width() &&
+            srcRect.fRight == src->width() &&
+            srcRect.fRight < src->backingStoreDimensions().width();
+        const bool upscalingYAtApproxEdge =
+            dstRect.height() >= srcRect.height() &&
+            srcRect.fBottom == src->height() &&
+            srcRect.fBottom < src->backingStoreDimensions().height();
+#else
+        // In this mode we allow non-scaling copies through even if the linear filtering would
+        // access the adjacent undefined row or column.
         const bool upscalingXAtApproxEdge =
             dstRect.width() > srcRect.width() &&
             srcRect.fRight == src->width() &&
-            src->width() < src->backingStoreDimensions().width();
+            srcRect.fRight < src->backingStoreDimensions().width();
         const bool upscalingYAtApproxEdge =
             dstRect.height() > srcRect.height() &&
-            srcRect.height() == src->height() &&
-            srcRect.height() < src->backingStoreDimensions().height();
+            srcRect.fBottom == src->height() &&
+            srcRect.fBottom < src->backingStoreDimensions().height();
+#endif
         if (upscalingXAtApproxEdge || upscalingYAtApproxEdge) {
             return nullptr;
         }
@@ -1077,7 +1086,7 @@ std::unique_ptr<SurfaceFillContext> SurfaceContext::rescale(const GrImageInfo& i
     auto sfc = fContext->priv().makeSFCWithFallback(info,
                                                     SkBackingFit::kExact,
                                                     /* sampleCount= */ 1,
-                                                    GrMipmapped::kNo,
+                                                    skgpu::Mipmapped::kNo,
                                                     this->asSurfaceProxy()->isProtected(),
                                                     origin);
     if (!sfc || !this->rescaleInto(sfc.get(),
@@ -1118,7 +1127,7 @@ bool SurfaceContext::rescaleInto(SurfaceFillContext* dst,
             // when there are no other conversions.
             texView = GrSurfaceProxyView::Copy(fContext,
                                                std::move(texView),
-                                               GrMipmapped::kNo,
+                                               skgpu::Mipmapped::kNo,
                                                srcRect,
                                                SkBackingFit::kApprox,
                                                skgpu::Budgeted::kNo,
@@ -1160,7 +1169,7 @@ bool SurfaceContext::rescaleInto(SurfaceFillContext* dst,
         auto linearRTC = fContext->priv().makeSFCWithFallback(std::move(ii),
                                                               SkBackingFit::kApprox,
                                                               /* sampleCount= */ 1,
-                                                              GrMipmapped::kNo,
+                                                              skgpu::Mipmapped::kNo,
                                                               texView.proxy()->isProtected(),
                                                               dst->origin());
         if (!linearRTC) {

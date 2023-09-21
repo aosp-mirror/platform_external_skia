@@ -16,14 +16,14 @@
 
 #include <cstddef>
 
-class SkBaseDevice;
+class SkDevice;
 class SkImageFilter;
 class SkMatrix;
 class SkReadBuffer;
 struct SkRect;
 class SkWriteBuffer;
 
-#if GRAPHITE_TEST_UTILS
+#if defined(GRAPHITE_TEST_UTILS)
 namespace skgpu::graphite {
     class TextureProxy;
 }
@@ -62,11 +62,11 @@ public:
         canvas->internal_private_resetClip();
     }
 
-    static SkBaseDevice* TopDevice(const SkCanvas* canvas) {
+    static SkDevice* TopDevice(const SkCanvas* canvas) {
         return canvas->topDevice();
     }
 
-#if GRAPHITE_TEST_UTILS
+#if defined(GRAPHITE_TEST_UTILS)
     static skgpu::graphite::TextureProxy* TopDeviceGraphiteTargetProxy(SkCanvas*);
 #endif
 

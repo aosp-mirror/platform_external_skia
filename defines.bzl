@@ -43,9 +43,6 @@ GENERAL_DEFINES = [
     "//src/sksl:enable_sksl_tracing_true": ["SKSL_ENABLE_TRACING"],
     "//conditions:default": [],
 }) + select({
-    "//src/sksl:needs_sksl": ["SK_ENABLE_SKSL"],
-    "//conditions:default": [],
-}) + select({
     "//src/pdf:enable_pdf_backend_true": ["SK_SUPPORT_PDF"],
     "//conditions:default": [],
 }) + select({
@@ -67,11 +64,6 @@ GPU_DEFINES = select_multi({
     "//src/gpu:vulkan_ganesh": [
         "SK_VULKAN",
         "SK_GANESH",
-    ],
-    "//src/gpu:dawn_ganesh": [
-        "SK_DAWN",
-        "SK_GANESH",
-        "VK_USE_PLATFORM_XCB_KHR",  # TODO(kjlubick) support dawn's dawn_enable_vulkan etc
     ],
     "//src/gpu:metal_ganesh": [
         "SK_METAL",

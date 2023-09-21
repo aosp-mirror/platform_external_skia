@@ -1,24 +1,20 @@
 /*
 
-:62:3 warning: code is unreachable
+:57:3 warning: code is unreachable
   return bool();
   ^^^^^^
 
-:95:3 warning: code is unreachable
+:90:3 warning: code is unreachable
   return bool();
   ^^^^^^
 
-:128:3 warning: code is unreachable
+:123:3 warning: code is unreachable
   return bool();
   ^^^^^^
 
 */
 
 diagnostic(off, derivative_uniformity);
-struct FSIn {
-  @builtin(front_facing) sk_Clockwise: bool,
-  @builtin(position) sk_FragCoord: vec4<f32>,
-};
 struct FSOut {
   @location(0) sk_FragColor: vec4<f32>,
 };
@@ -27,8 +23,7 @@ struct _GlobalUniforms {
   colorRed: vec4<f32>,
 };
 @binding(0) @group(0) var<uniform> _globalUniforms: _GlobalUniforms;
-fn Increment_ii(_skParam0: ptr<function, i32>) -> i32 {
-  let y = _skParam0;
+fn Increment_ii(y: ptr<function, i32>) -> i32 {
   {
     (*y) = (*y) + 1;
     return (*y);
@@ -143,8 +138,7 @@ fn FalseFalse_b() -> bool {
   }
   return bool();
 }
-fn main(_skParam0: vec2<f32>) -> vec4<f32> {
-  let coords = _skParam0;
+fn _skslMain(coords: vec2<f32>) -> vec4<f32> {
   {
     var _0_TrueTrue: bool;
     var _2_y: i32 = 1;
@@ -197,8 +191,8 @@ fn main(_skParam0: vec2<f32>) -> vec4<f32> {
     return _skTemp22;
   }
 }
-@fragment fn fragmentMain(_stageIn: FSIn) -> FSOut {
+@fragment fn main() -> FSOut {
   var _stageOut: FSOut;
-  _stageOut.sk_FragColor = main(_stageIn.sk_FragCoord.xy);
+  _stageOut.sk_FragColor = _skslMain(/*fragcoord*/ vec2<f32>());
   return _stageOut;
 }

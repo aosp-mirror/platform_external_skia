@@ -22,6 +22,7 @@
 #include "include/gpu/GrTypes.h"
 #include "include/gpu/ganesh/SkImageGanesh.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "include/gpu/ganesh/vk/GrVkBackendSurface.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tools/gpu/vk/VkTestHelper.h"
@@ -156,8 +157,12 @@ DEF_GANESH_TEST_FOR_VULKAN_CONTEXT(VkYCbcrSampler_NoYcbcrSurface,
     }
 
     GrBackendTexture texture = testHelper.directContext()->createBackendTexture(
-            kImageWidth, kImageHeight, GrBackendFormat::MakeVk(VK_FORMAT_G8_B8R8_2PLANE_420_UNORM),
-            GrMipmapped::kNo, GrRenderable::kNo, GrProtected::kNo);
+            kImageWidth,
+            kImageHeight,
+            GrBackendFormats::MakeVk(VK_FORMAT_G8_B8R8_2PLANE_420_UNORM),
+            skgpu::Mipmapped::kNo,
+            GrRenderable::kNo,
+            GrProtected::kNo);
     if (texture.isValid()) {
         ERRORF(reporter,
                "GrDirectContext::createBackendTexture() didn't fail as expected for Ycbcr format.");

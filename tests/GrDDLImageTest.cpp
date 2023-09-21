@@ -24,14 +24,15 @@
 #include "include/private/chromium/GrSurfaceCharacterization.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
+#include "tools/gpu/ContextType.h"
 
 class GrRecordingContext;
 struct GrContextOptions;
 
 DEF_GANESH_TEST(GrDDLImage_MakeSubset, reporter, options, CtsEnforcement::kApiLevel_T) {
     sk_gpu_test::GrContextFactory factory(options);
-    for (int ct = 0; ct < sk_gpu_test::GrContextFactory::kContextTypeCnt; ++ct) {
-        auto contextType = static_cast<sk_gpu_test::GrContextFactory::ContextType>(ct);
+    for (int ct = 0; ct < skgpu::kContextTypeCount; ++ct) {
+        auto contextType = static_cast<skgpu::ContextType>(ct);
         auto dContext = factory.get(contextType);
         if (!dContext) {
             continue;
@@ -63,7 +64,7 @@ DEF_GANESH_TEST(GrDDLImage_MakeSubset, reporter, options, CtsEnforcement::kApiLe
         GrBackendTexture tex = dContext->createBackendTexture(ii.width(),
                                                               ii.height(),
                                                               ii.colorType(),
-                                                              GrMipmapped(sc.isMipMapped()),
+                                                              skgpu::Mipmapped(sc.isMipMapped()),
                                                               GrRenderable::kYes);
         auto gpuImage = SkImages::BorrowTextureFrom(dContext,
                                                     tex,
@@ -81,7 +82,7 @@ DEF_GANESH_TEST(GrDDLImage_MakeSubset, reporter, options, CtsEnforcement::kApiLe
         REPORTER_ASSERT(reporter, !gpuImage->makeSubset(nullptr, subsetBounds));
 
         dContext->flush();
-        dContext->submit(true);
+        dContext->submit(GrSyncCpu::kYes);
         dContext->deleteBackendTexture(tex);
     }
 }

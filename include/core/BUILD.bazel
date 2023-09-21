@@ -4,17 +4,6 @@ licenses(["notice"])
 
 exports_files_legacy()
 
-# Maintain SkPicture files in separate skia_filegroup so that the legacy
-# skia_skpicture_public GNI file list can be created.
-skia_filegroup(
-    name = "skpicture_public_hdrs",
-    srcs = [
-        "SkPicture.h",
-        "SkPictureRecorder.h",
-    ],
-    visibility = ["//include:__pkg__"],
-)
-
 skia_filegroup(
     name = "public_hdrs",
     srcs = [
@@ -42,7 +31,6 @@ skia_filegroup(
         "SkDataTable.h",
         "SkDocument.h",
         "SkDrawable.h",
-        "SkEncodedImageFormat.h",  # TODO(kjlubick) remove this shim
         "SkExecutor.h",
         "SkFlattenable.h",
         "SkFont.h",
@@ -53,7 +41,6 @@ skia_filegroup(
         "SkFontStyle.h",
         "SkFontTypes.h",
         "SkGraphics.h",
-        "SkICC.h",  # Remove shim
         "SkImage.h",
         "SkImageFilter.h",
         "SkImageGenerator.h",
@@ -73,6 +60,8 @@ skia_filegroup(
         "SkPathMeasure.h",
         "SkPathTypes.h",
         "SkPathUtils.h",
+        "SkPicture.h",
+        "SkPictureRecorder.h",
         "SkPixelRef.h",
         "SkPixmap.h",
         "SkPoint.h",
@@ -97,9 +86,8 @@ skia_filegroup(
         "SkSwizzle.h",
         "SkTextBlob.h",
         "SkTextureCompressionType.h",
-        "SkTiledImageUtils.h",
         "SkTileMode.h",
-        "SkTime.h",
+        "SkTiledImageUtils.h",
         "SkTraceMemoryDump.h",
         "SkTypeface.h",
         "SkTypes.h",
@@ -107,7 +95,6 @@ skia_filegroup(
         "SkVertices.h",
         "SkYUVAInfo.h",
         "SkYUVAPixmaps.h",
-        ":skpicture_public_hdrs",
     ],
     visibility = ["//include:__pkg__"],
 )
@@ -153,5 +140,5 @@ skia_filegroup(
         "SkStrokeRec.h",
         "SkTypes.h",
     ],
-    visibility = ["//src:__pkg__"],
+    visibility = ["//src/core:__pkg__"],
 )

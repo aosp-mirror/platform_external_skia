@@ -11,7 +11,6 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
-#include "include/core/SkTime.h"
 #include "include/private/base/SkNoncopyable.h"
 #include "include/private/base/SkTPin.h"
 #include "modules/audioplayer/SkAudioPlayer.h"
@@ -19,12 +18,13 @@
 #include "modules/skottie/include/SkottieProperty.h"
 #include "modules/skottie/include/SlotManager.h"
 #include "modules/skottie/utils/SkottieUtils.h"
+#include "modules/skottie/utils/TextEditor.h"
 #include "modules/skresources/include/SkResources.h"
+#include "src/base/SkTime.h"
 #include "src/core/SkOSFile.h"
 #include "src/utils/SkOSPath.h"
 #include "tools/Resources.h"
 #include "tools/timer/TimeUtils.h"
-#include "tools/viewer/SkottieTextEditor.h"
 
 #include <cmath>
 #include <vector>
@@ -261,7 +261,9 @@ public:
                 auto& cSlot = fColorSlots.at(i);
                 ImGui::PushID(i);
                 ImGui::Text("%s", cSlot.first.c_str());
-                ImGui::ColorEdit4("Color", cSlot.second.data());
+                if (ImGui::ColorEdit4("Color", cSlot.second.data())) {
+                    this->pushSlots();
+                }
                 ImGui::PopID();
             }
             ImGui::Text("Scalar Slots");
@@ -269,7 +271,9 @@ public:
                 auto& oSlot = fScalarSlots.at(i);
                 ImGui::PushID(i);
                 ImGui::Text("%s", oSlot.first.c_str());
-                ImGui::InputFloat("Scalar", &(oSlot.second));
+                if (ImGui::InputFloat("Scalar", &(oSlot.second))) {
+                    this->pushSlots();
+                }
                 ImGui::PopID();
             }
             ImGui::Text("Vec2 Slots");
@@ -277,7 +281,9 @@ public:
                 auto& vSlot = fVec2Slots.at(i);
                 ImGui::PushID(i);
                 ImGui::Text("%s", vSlot.first.c_str());
-                ImGui::InputFloat2("x, y", &(vSlot.second.x));
+                if (ImGui::InputFloat2("x, y", &(vSlot.second.x))) {
+                    this->pushSlots();
+                }
                 ImGui::PopID();
             }
             ImGui::Text("Text Slots");
@@ -285,11 +291,15 @@ public:
                 auto& tSlot = fTextStringSlots.at(i);
                 ImGui::PushID(i);
                 ImGui::Text("%s", tSlot.first.c_str());
-                ImGui::InputText("Text", tSlot.second.source.data(), tSlot.second.source.size());
+                if (ImGui::InputText("Text", tSlot.second.source.data(),
+                                             tSlot.second.source.size())) {
+                    this->pushSlots();
+                }
                 if (ImGui::BeginCombo("Font", tSlot.second.font.data())) {
                     for (const auto& typeface : fTypefaceList) {
                         if (ImGui::Selectable(typeface, false)) {
                             tSlot.second.font = typeface;
+                            this->pushSlots();
                         }
                     }
                     ImGui::EndCombo();
@@ -306,16 +316,13 @@ public:
                     for (const auto& res : fResList) {
                         if (ImGui::Selectable(res.c_str(), false)) {
                             iSlot.second = res.c_str();
+                            this->pushSlots();
                         }
                     }
                     ImGui::EndCombo();
                 }
                 ImGui::PopID();
             }
-            if (ImGui::Button("Apply Slots")) {
-                this->pushSlots();
-            }
-
         }
         ImGui::End();
     }
@@ -551,8 +558,8 @@ void SkottieSlide::init() {
             // Attach the editor to the first text layer, and track the rest as dependents.
             auto editor_target = std::move(text_props[0]);
             text_props.erase(text_props.cbegin());
-            fTextEditor = sk_make_sp<SkottieTextEditor>(std::move(editor_target),
-                                                        std::move(text_props));
+            fTextEditor = sk_make_sp<skottie_utils::TextEditor>(std::move(editor_target),
+                                                                std::move(text_props));
         }
     } else {
         SkDebugf("failed to load Bodymovin animation: %s\n", fPath.c_str());

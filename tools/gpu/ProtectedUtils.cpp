@@ -13,37 +13,7 @@
 #include "tools/gpu/BackendSurfaceFactory.h"
 #include "tools/gpu/BackendTextureImageFactory.h"
 
-#ifdef SK_GL
-#include "src/gpu/ganesh/gl/GrGLCaps.h"
-#endif
-#ifdef SK_VULKAN
-#include "src/gpu/ganesh/vk/GrVkCaps.h"
-#endif
-
 namespace ProtectedUtils {
-
-bool ContextSupportsProtected(GrDirectContext* dContext) {
-    [[maybe_unused]] const GrCaps* caps = dContext->priv().caps();
-
-#ifdef SK_GL
-    if (dContext->backend() == GrBackendApi::kOpenGL) {
-        const GrGLCaps* glCaps = static_cast<const GrGLCaps*>(caps);
-        return glCaps->supportsProtected();
-    }
-#endif
-#ifdef SK_VULKAN
-    if (dContext->backend() == GrBackendApi::kVulkan) {
-        const GrVkCaps* vkCaps = static_cast<const GrVkCaps*>(caps);
-        return vkCaps->supportsProtectedMemory();
-    }
-#endif
-    if (dContext->backend() == GrBackendApi::kMock) {
-        return true;
-    }
-
-    // Metal, Dawn and D3D don't support protected textures
-    return false;
-}
 
 sk_sp<SkSurface> CreateProtectedSkSurface(GrDirectContext* dContext,
                                           SkISize size,
@@ -58,7 +28,7 @@ sk_sp<SkSurface> CreateProtectedSkSurface(GrDirectContext* dContext,
                                                          1,
                                                          kRGBA_8888_SkColorType,
                                                          /* colorSpace= */ nullptr,
-                                                         GrMipmapped::kNo,
+                                                         skgpu::Mipmapped::kNo,
                                                          skgpu::Protected(isProtected),
                                                          &surfaceProps);
     } else {
@@ -120,7 +90,7 @@ sk_sp<SkImage> CreateProtectedSkImage(GrDirectContext* dContext,
     sk_sp<SkImage> image = sk_gpu_test::MakeBackendTextureImage(dContext,
                                                                 ii,
                                                                 color,
-                                                                GrMipmapped::kNo,
+                                                                skgpu::Mipmapped::kNo,
                                                                 GrRenderable::kNo,
                                                                 kTopLeft_GrSurfaceOrigin,
                                                                 skgpu::Protected(isProtected));

@@ -21,50 +21,36 @@
 
 namespace skiatest::graphite {
 
-ContextFactory::ContextInfo::ContextInfo(ContextInfo&& other)
-    : fType(other.fType)
-    , fTestContext(std::move(other.fTestContext))
-    , fContext(std::move(other.fContext)) {
-}
-
-ContextFactory::ContextInfo::ContextInfo(GrContextFactory::ContextType type,
-                                         std::unique_ptr<GraphiteTestContext> testContext,
-                                         std::unique_ptr<skgpu::graphite::Context> context)
-    : fType(type)
-    , fTestContext(std::move(testContext))
-    , fContext(std::move(context)) {
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
 ContextFactory::ContextFactory(const skgpu::graphite::ContextOptions& options)
-        : fOptions(options) {
+        : fOptions(options) {}
+
+ContextInfo ContextFactory::AsContextInfo(const OwnedContextInfo& owned) {
+    return ContextInfo{owned.fTestContext.get(), owned.fContext.get()};
 }
 
-ContextFactory::~ContextFactory() {}
-
-std::tuple<GraphiteTestContext*, skgpu::graphite::Context*> ContextFactory::getContextInfo(
-        GrContextFactory::ContextType type) {
-
-    for (ContextInfo& c : fContexts) {
-        if (c.type() == type) {
-            return { c.testContext(), c.context() };
+ContextInfo ContextFactory::getContextInfo(skgpu::ContextType type) {
+    // Look for an existing ContextInfo that we can re-use.
+    for (const OwnedContextInfo& ctxInfo : fContexts) {
+        if (ctxInfo.fType == type) {
+            return AsContextInfo(ctxInfo);
         }
     }
 
+    // Create a new ContextInfo from this context type.
     std::unique_ptr<GraphiteTestContext> testCtx;
 
     switch (type) {
-        case GrContextFactory::kMetal_ContextType: {
+        case skgpu::ContextType::kMetal: {
 #ifdef SK_METAL
             testCtx = graphite::MtlTestContext::Make();
 #endif
         } break;
-        case GrContextFactory::kVulkan_ContextType: {
+        case skgpu::ContextType::kVulkan: {
 #ifdef SK_VULKAN
             testCtx = graphite::VulkanTestContext::Make();
 #endif
         } break;
-        case GrContextFactory::kDawn_ContextType:
+        case skgpu::ContextType::kDawn:
         {
 #ifdef SK_DAWN
             // Pass nullopt for default backend.
@@ -73,14 +59,13 @@ std::tuple<GraphiteTestContext*, skgpu::graphite::Context*> ContextFactory::getC
         } break;
 #ifdef SK_DAWN
 
-#define CASE(TYPE)                                                              \
-        case GrContextFactory::kDawn_##TYPE##_ContextType:                      \
-        {                                                                       \
-            testCtx = graphite::DawnTestContext::Make(wgpu::BackendType::TYPE); \
-        } break;
+#define CASE(TYPE)                                                          \
+    case skgpu::ContextType::kDawn_##TYPE:                                  \
+        testCtx = graphite::DawnTestContext::Make(wgpu::BackendType::TYPE); \
+        break;
 #else
-#define CASE(TYPE)                                                              \
-        case GrContextFactory::kDawn_##TYPE##_ContextType:                      \
+#define CASE(TYPE)                         \
+    case skgpu::ContextType::kDawn_##TYPE: \
         break;
 #endif // SK_DAWN
         CASE(D3D11)
@@ -96,17 +81,16 @@ std::tuple<GraphiteTestContext*, skgpu::graphite::Context*> ContextFactory::getC
     }
 
     if (!testCtx) {
-        return {};
+        return ContextInfo{};
     }
 
     std::unique_ptr<skgpu::graphite::Context> context = testCtx->makeContext(fOptions);
     if (!context) {
-        return {};
+        return ContextInfo{};
     }
 
-    fContexts.push_back({ type, std::move(testCtx), std::move(context) });
-
-    return { fContexts.back().testContext(), fContexts.back().context() };
+    fContexts.push_back({type, std::move(testCtx), std::move(context)});
+    return AsContextInfo(fContexts.back());
 }
 
 } // namespace skiatest::graphite

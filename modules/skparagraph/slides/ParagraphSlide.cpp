@@ -9,7 +9,6 @@
 #include "include/core/SkShader.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTextBlob.h"
-#include "include/core/SkTime.h"
 #include "include/core/SkTypeface.h"
 #include "include/effects/SkGradientShader.h"
 #include "modules/skparagraph/include/Paragraph.h"
@@ -19,6 +18,7 @@
 #include "modules/skparagraph/src/TextLine.h"
 #include "modules/skparagraph/utils/TestFontCollection.h"
 #include "src/base/SkRandom.h"
+#include "src/base/SkTime.h"
 #include "src/base/SkUTF.h"
 #include "src/core/SkOSFile.h"
 #include "src/utils/SkOSPath.h"
@@ -802,28 +802,28 @@ public:
             ParagraphBuilderImpl builder(paraStyle, getFontCollection());
 
             builder.pushStyle(style0);
-            builder.addText(logo11, strlen(logo1));
+            builder.addText(logo11, strlen(logo11));
             builder.pop();
             builder.pushStyle(style1);
-            builder.addText(logo12, strlen(logo2));
+            builder.addText(logo12, strlen(logo12));
             builder.pop();
 
             builder.addText("   ", 3);
 
             builder.pushStyle(style0);
-            builder.addText(logo13, strlen(logo3));
+            builder.addText(logo13, strlen(logo13));
             builder.pop();
             builder.pushStyle(style1);
-            builder.addText(logo14, strlen(logo4));
+            builder.addText(logo14, strlen(logo14));
             builder.pop();
 
             builder.addText("   ", 3);
 
             builder.pushStyle(style0);
-            builder.addText(logo15, strlen(logo5));
+            builder.addText(logo15, strlen(logo15));
             builder.pop();
             builder.pushStyle(style1);
-            builder.addText(logo16, strlen(logo6));
+            builder.addText(logo16, strlen(logo16));
             builder.pop();
 
             auto paragraph = builder.Build();

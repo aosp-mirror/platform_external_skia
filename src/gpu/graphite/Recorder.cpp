@@ -16,6 +16,7 @@
 #include "include/gpu/graphite/Recording.h"
 
 #include "src/core/SkConvertPixels.h"
+#include "src/core/SkTraceEvent.h"
 #include "src/gpu/AtlasTypes.h"
 #include "src/gpu/RefCntedCallback.h"
 #include "src/gpu/graphite/AtlasProvider.h"
@@ -77,9 +78,9 @@ RecorderOptions::RecorderOptions(const RecorderOptions&) = default;
 RecorderOptions::~RecorderOptions() = default;
 
 /**************************************************************************************************/
-static int32_t next_id() {
-    static std::atomic<int32_t> nextID{1};
-    int32_t id;
+static uint32_t next_id() {
+    static std::atomic<uint32_t> nextID{1};
+    uint32_t id;
     do {
         id = nextID.fetch_add(1, std::memory_order_relaxed);
     } while (id == SK_InvalidGenID);
@@ -92,17 +93,19 @@ Recorder::Recorder(sk_sp<SharedContext> sharedContext, const RecorderOptions& op
         , fGraph(new TaskGraph)
         , fUniformDataCache(new UniformDataCache)
         , fTextureDataCache(new TextureDataCache)
-        , fRecorderID(next_id())
+        , fUniqueID(next_id())
         , fAtlasProvider(std::make_unique<AtlasProvider>(this))
         , fTokenTracker(std::make_unique<TokenTracker>())
         , fStrikeCache(std::make_unique<sktext::gpu::StrikeCache>())
-        , fTextBlobCache(std::make_unique<sktext::gpu::TextBlobRedrawCoordinator>(fRecorderID)) {
+        , fTextBlobCache(std::make_unique<sktext::gpu::TextBlobRedrawCoordinator>(fUniqueID)) {
     fClientImageProvider = options.fImageProvider;
     if (!fClientImageProvider) {
         fClientImageProvider = DefaultImageProvider::Make();
     }
 
-    fResourceProvider = fSharedContext->makeResourceProvider(this->singleOwner(), fRecorderID);
+    fResourceProvider = fSharedContext->makeResourceProvider(this->singleOwner(),
+                                                             fUniqueID,
+                                                             options.fGpuBudgetInBytes);
     fDrawBufferManager.reset( new DrawBufferManager(fResourceProvider.get(),
                                                     fSharedContext->caps()));
     fUploadBufferManager.reset(new UploadBufferManager(fResourceProvider.get(),
@@ -119,7 +122,7 @@ Recorder::~Recorder() {
     for (auto& device : fTrackedDevices) {
         device->abandonRecorder();
     }
-#if GRAPHITE_TEST_UTILS
+#if defined(GRAPHITE_TEST_UTILS)
     if (fContext) {
         fContext->priv().deregisterRecorder(this);
     }
@@ -132,6 +135,7 @@ Recorder::~Recorder() {
 BackendApi Recorder::backend() const { return fSharedContext->backend(); }
 
 std::unique_ptr<Recording> Recorder::snap() {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     ASSERT_SINGLE_OWNER
     for (auto& device : fTrackedDevices) {
         device->flushPendingWorkToRecorder();
@@ -174,7 +178,9 @@ std::unique_ptr<Recording> Recorder::snap() {
         fTargetProxyDevice.reset();
         fTargetProxyCanvas.reset();
     }
-    std::unique_ptr<Recording> recording(new Recording(std::move(fGraph),
+    std::unique_ptr<Recording> recording(new Recording(fNextRecordingID++,
+                                                       fUniqueID,
+                                                       std::move(fGraph),
                                                        std::move(nonVolatileLazyProxies),
                                                        std::move(volatileLazyProxies),
                                                        std::move(targetProxyData),
@@ -188,12 +194,14 @@ std::unique_ptr<Recording> Recorder::snap() {
     fTextureDataCache = std::make_unique<TextureDataCache>();
     fUniformDataCache = std::make_unique<UniformDataCache>();
 
-    // inject an initial task to maintain atlas state for next Recording
-    auto uploads = std::make_unique<UploadList>();
-    fAtlasProvider->textAtlasManager()->recordUploads(uploads.get(), /*useCachedUploads=*/true);
-    if (uploads->size() > 0) {
-        sk_sp<Task> uploadTask = UploadTask::Make(uploads.get());
-        this->priv().add(std::move(uploadTask));
+    if (!this->priv().caps()->disableCachedGlyphUploads()) {
+        // inject an initial task to maintain atlas state for next Recording
+        auto uploads = std::make_unique<UploadList>();
+        fAtlasProvider->textAtlasManager()->recordUploads(uploads.get(), /*useCachedUploads=*/true);
+        if (uploads->size() > 0) {
+            sk_sp<Task> uploadTask = UploadTask::Make(uploads.get());
+            this->priv().add(std::move(uploadTask));
+        }
     }
 
     return recording;
@@ -232,18 +240,6 @@ void Recorder::deregisterDevice(const Device* device) {
         }
     }
 }
-
-#if GRAPHITE_TEST_UTILS
-bool Recorder::deviceIsRegistered(Device* device) {
-    ASSERT_SINGLE_OWNER
-    for (auto& currentDevice : fTrackedDevices) {
-        if (device == currentDevice) {
-            return true;
-        }
-    }
-    return false;
-}
-#endif
 
 BackendTexture Recorder::createBackendTexture(SkISize dimensions, const TextureInfo& info) {
     ASSERT_SINGLE_OWNER
@@ -341,6 +337,29 @@ void Recorder::addFinishInfo(const InsertFinishInfo& info) {
     }
 }
 
+void Recorder::freeGpuResources() {
+    ASSERT_SINGLE_OWNER
+
+    // We don't want to free the Uniform/TextureDataCaches or the Draw/UploadBufferManagers since
+    // all their resources need to be held on to until a Recording is snapped. And once snapped, all
+    // their held resources are released. The StrikeCache and TextBlobCache don't hold onto any Gpu
+    // resources.
+
+    // The AtlasProvider gives out refs to TextureProxies so it should be safe to clear its pool
+    // in the middle of Recording since those using the previous TextureProxies will have refs on
+    // them.
+    fAtlasProvider->clearTexturePool();
+
+    fResourceProvider->freeGpuResources();
+}
+
+void Recorder::performDeferredCleanup(std::chrono::milliseconds msNotUsed) {
+    ASSERT_SINGLE_OWNER
+
+    auto purgeTime = skgpu::StdSteadyClock::now() - msNotUsed;
+    fResourceProvider->purgeResourcesNotUsedSince(purgeTime);
+}
+
 void RecorderPriv::add(sk_sp<Task> task) {
     ASSERT_SINGLE_OWNER_PRIV
     fRecorder->fGraph->add(std::move(task));
@@ -364,7 +383,17 @@ size_t RecorderPriv::getResourceCacheLimit() const {
     return fRecorder->fResourceProvider->getResourceCacheLimit();
 }
 
-#if GRAPHITE_TEST_UTILS
+#if defined(GRAPHITE_TEST_UTILS)
+bool RecorderPriv::deviceIsRegistered(Device* device) {
+    ASSERT_SINGLE_OWNER_PRIV
+    for (auto& currentDevice : fRecorder->fTrackedDevices) {
+        if (device == currentDevice) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // used by the Context that created this Recorder to set a back pointer
 void RecorderPriv::setContext(Context* context) {
     fRecorder->fContext = context;

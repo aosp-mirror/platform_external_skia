@@ -104,20 +104,22 @@ static std::string write_png_and_json_files(std::string name,
 
     // Gather all Gold keys.
     std::map<std::string, std::string> keys = {
-            {"image_md5", md5.c_str()},
             {"build_system", "bazel"},
     };
     keys.merge(surfaceGoldKeys);
     keys.merge(gmGoldKeys);
 
-    // Write JSON file with MD5 hash.
+    // Write JSON file with MD5 hash and Gold key-value pairs.
     SkFILEWStream jsonFile(jsonPath);
     SkJSONWriter jsonWriter(&jsonFile, SkJSONWriter::Mode::kPretty);
     jsonWriter.beginObject();  // Root object.
+    jsonWriter.appendString("md5", md5);
+    jsonWriter.beginObject("keys");  // "keys" dictionary.
     for (auto const& [param, value] : keys) {
         jsonWriter.appendString(param.c_str(), SkString(value));
     }
-    jsonWriter.endObject();
+    jsonWriter.endObject();  // "keys" dictionary.
+    jsonWriter.endObject();  // Root object.
 
     return "";
 }

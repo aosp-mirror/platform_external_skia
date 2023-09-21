@@ -11,7 +11,6 @@
 
 #include "include/core/SkSamplingOptions.h"
 #include "include/core/SkYUVAPixmaps.h"
-#include "include/gpu/GrTypes.h"
 #include "src/gpu/ganesh/GrSurfaceProxyView.h"  // IWYU pragma: keep
 #include "src/gpu/ganesh/SkGr.h"
 
@@ -28,6 +27,7 @@ class SkImage;
 class SkImage_Lazy;
 class SkImage_Raster;
 class SkMatrix;
+enum GrSurfaceOrigin : int;
 enum SkAlphaType : int;
 enum SkColorType : int;
 enum class GrColorType;
@@ -43,13 +43,13 @@ namespace skgpu::ganesh {
 std::tuple<GrSurfaceProxyView, GrColorType> AsView(
         GrRecordingContext*,
         const SkImage*,
-        GrMipmapped,
+        skgpu::Mipmapped,
         GrImageTexGenPolicy = GrImageTexGenPolicy::kDraw);
 
 inline std::tuple<GrSurfaceProxyView, GrColorType> AsView(
         GrRecordingContext* ctx,
         sk_sp<const SkImage> img,
-        GrMipmapped mm,
+        skgpu::Mipmapped mm,
         GrImageTexGenPolicy policy = GrImageTexGenPolicy::kDraw) {
     return AsView(ctx, img.get(), mm, policy);
 }
@@ -57,13 +57,13 @@ inline std::tuple<GrSurfaceProxyView, GrColorType> AsView(
 std::tuple<GrSurfaceProxyView, GrColorType> RasterAsView(
         GrRecordingContext*,
         const SkImage_Raster*,
-        GrMipmapped,
+        skgpu::Mipmapped,
         GrImageTexGenPolicy = GrImageTexGenPolicy::kDraw);
 
 // Utility for making a copy of an existing view when the GrImageTexGenPolicy is not kDraw.
 GrSurfaceProxyView CopyView(GrRecordingContext*,
                             GrSurfaceProxyView src,
-                            GrMipmapped,
+                            skgpu::Mipmapped,
                             GrImageTexGenPolicy,
                             std::string_view label);
 
@@ -134,6 +134,8 @@ SkYUVAPixmapInfo::SupportedDataTypes SupportedTextureFormats(const GrImageContex
 namespace skif {
 class Context;
 struct ContextInfo;
+struct Functors;
+Functors MakeGaneshFunctors(GrRecordingContext* context, GrSurfaceOrigin origin);
 Context MakeGaneshContext(GrRecordingContext* context,
                           GrSurfaceOrigin origin,
                           const ContextInfo& info);

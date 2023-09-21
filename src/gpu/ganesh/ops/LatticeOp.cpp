@@ -177,7 +177,7 @@ public:
     const char* name() const override { return "NonAALatticeOp"; }
 
     void visitProxies(const GrVisitProxyFunc& func) const override {
-        func(fView.proxy(), GrMipmapped::kNo);
+        func(fView.proxy(), skgpu::Mipmapped::kNo);
         if (fProgramInfo) {
             fProgramInfo->visitFPProxies(func);
         } else {
@@ -360,7 +360,7 @@ private:
         return CombineResult::kMerged;
     }
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     SkString onDumpInfo() const override {
         SkString str;
 
@@ -413,7 +413,7 @@ GrOp::Owner MakeNonAA(GrRecordingContext* context,
 
 }  // namespace skgpu::ganesh::LatticeOp
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 #include "src/gpu/ganesh/GrDrawOpTest.h"
 #include "src/gpu/ganesh/GrProxyProvider.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
@@ -476,7 +476,7 @@ GR_DRAW_OP_TEST_DEFINE(NonAALatticeOp) {
                                                               dims,
                                                               GrRenderable::kNo,
                                                               1,
-                                                              GrMipmapped::kNo,
+                                                              skgpu::Mipmapped::kNo,
                                                               SkBackingFit::kExact,
                                                               skgpu::Budgeted::kYes,
                                                               GrProtected::kNo,

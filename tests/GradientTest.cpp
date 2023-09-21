@@ -454,7 +454,7 @@ static void test_unsorted_degenerate(skiatest::Reporter* r) {
     GrMockOptions options;
     auto context = GrDirectContext::MakeMock(&options);
 
-    GrFPArgs args(context.get(), &dstColorInfo, props);
+    GrFPArgs args(context.get(), &dstColorInfo, props, GrFPArgs::Scope::kDefault);
     GrFragmentProcessors::Make(gradient.get(), args, SkMatrix::I());
 }
 
@@ -673,7 +673,8 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(TestSweepGradientZeroXGanesh,
 
 // TODO: Fix this bug in Graphite as well.
 // #if defined(SK_GRAPHITE)
-// DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(TestSweepGradientZeroXGraphite, reporter, context) {
+// DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(TestSweepGradientZeroXGraphite, reporter, context,
+//                                          CtsEnforcement::kNextRelease) {
 //     using namespace skgpu::graphite;
 //     SkImageInfo ii = SkImageInfo::Make(SkISize::Make(5, 5),
 //                                        SkColorType::kRGBA_8888_SkColorType,

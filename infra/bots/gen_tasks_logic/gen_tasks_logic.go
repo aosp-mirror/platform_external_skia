@@ -91,6 +91,10 @@ const (
 	// src/core/SkPicturePriv.h
 	// See the comment in that file on how to find the version to use here.
 	oldestSupportedSkpVersion = 293
+
+	// bazelCacheDir is the path where Bazel should write its cache. It can grow large (>10GB), so
+	// this should be in a partition with enough free space.
+	bazelCacheDir = "/mnt/pd0/bazel_cache"
 )
 
 var (
@@ -428,8 +432,10 @@ func GenTasks(cfg *Config) {
 			"skia/resources",
 			"skia/package.json",
 			"skia/package-lock.json",
-			"skia/DEPS", // needed to check generation
+			"skia/DEPS",       // needed to check generation
+			"skia/infra/bots", // Many Go tests live here.
 			// Needed to run bazel
+			"skia/.bazelignore",
 			"skia/.bazelrc",
 			"skia/.bazelversion",
 			"skia/BUILD.bazel",
@@ -931,7 +937,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"MacMini7.1":     "x86-64-i5-4278U",
 					"NUC5i7RYH":      "x86-64-i7-5557U",
 					"NUC9i7QN":       "x86-64-i7-9750H",
-					"NUC11TZi5":      "x86-64-avx2",
+					"NUC11TZi5":      "x86-64-i5-1135G7",
 				},
 				"AVX512": {
 					"GCE":  "x86-64-Skylake_GCE",
@@ -969,7 +975,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"IntelIris540":  "8086:1926-31.0.101.2115",
 					"IntelIris6100": "8086:162b-20.19.15.4963",
 					"IntelIris655":  "8086:3ea5-26.20.100.7463",
-					"IntelIrisXe":   "8086:9a49-31.0.101.4338",
+					"IntelIrisXe":   "8086:9a49-31.0.101.4575",
 					"RadeonHD7770":  "1002:683d-26.20.13031.18002",
 					"RadeonR9M470X": "1002:6646-26.20.13031.18002",
 					"QuadroP400":    "10de:1cb3-30.0.15.1179",
@@ -1189,6 +1195,7 @@ func (b *jobBuilder) createPushAppsFromSkiaDockerImage() {
 			"--patch_issue", specs.PLACEHOLDER_ISSUE,
 			"--patch_set", specs.PLACEHOLDER_PATCHSET,
 			"--patch_server", specs.PLACEHOLDER_CODEREVIEW_SERVER,
+			"--bazel_cache_dir", bazelCacheDir,
 		)
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
 		b.dep(b.createDockerImage(false))
@@ -1211,12 +1218,12 @@ func (b *jobBuilder) createPushBazelAppsFromWASMDockerImage() {
 		// TODO(borenet): Make this task not use Git.
 		b.usesGit()
 		b.cmd(
-			"./push_bazel_apps_from_wasm_image",
 			"--project_id", "skia-swarming-bots",
 			"--task_id", specs.PLACEHOLDER_TASK_ID,
 			"--task_name", b.Name,
 			"--workdir", ".",
 			"--skia_revision", specs.PLACEHOLDER_REVISION,
+			"--bazel_cache_dir", bazelCacheDir,
 		)
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
 		b.dep(b.createDockerImage(true))
@@ -1414,6 +1421,7 @@ func (b *jobBuilder) checkGeneratedFiles() {
 			"--project_id", "skia-swarming-bots",
 			"--task_id", specs.PLACEHOLDER_TASK_ID,
 			"--task_name", b.Name,
+			"--bazel_cache_dir", bazelCacheDir,
 			"--bazel_arg=--config=for_linux_x64_with_rbe",
 			"--bazel_arg=--jobs=100",
 		)
@@ -1737,6 +1745,13 @@ func (b *jobBuilder) dm() {
 		}
 		if b.extraConfig("NativeFonts") && !b.matchOs("Android") {
 			b.needsFontsForParagraphTests()
+		}
+		if b.extraConfig("Fontations") {
+			b.cipd(&specs.CipdPackage{
+				Name:    "chromium/third_party/googlefonts_testdata",
+				Path:    "skia/third_party/externals/googlefonts_testdata",
+				Version: "version:20230913",
+			})
 		}
 		b.commonTestPerfAssets()
 		if b.matchExtraConfig("Lottie") {
@@ -2122,7 +2137,7 @@ type labelAndSavedOutputDir struct {
 // label or "target pattern" https://bazel.build/docs/build#specifying-build-targets
 // The reason we need this mapping is because Buildbucket build names cannot have / or : in them.
 var shorthandToLabel = map[string]labelAndSavedOutputDir{
-	"base":                           {"//src:base", ""},
+	"base":                           {"//src/base:base", ""},
 	"example_hello_world_dawn":       {"//example:hello_world_dawn", ""},
 	"example_hello_world_gl":         {"//example:hello_world_gl", ""},
 	"example_hello_world_vulkan":     {"//example:hello_world_vulkan", ""},
@@ -2133,6 +2148,29 @@ var shorthandToLabel = map[string]labelAndSavedOutputDir{
 	"tests":                          {"//tests:linux_rbe_build", ""},
 	"experimental_bazel_test_client": {"//experimental/bazel_test/client:client_lib", ""},
 	"cpu_gms":                        {"//gm:cpu_gm_tests", ""},
+	"hello_bazel_world_test":         {"//gm:hello_bazel_world_test", ""},
+
+	// Currently there is no way to tell Bazel "only test go_test targets", so we must group them
+	// under a test_suite.
+	//
+	// Alternatives:
+	//
+	// - Use --test_lang_filters, which currently does not work for non-native rules. See
+	//   https://github.com/bazelbuild/bazel/issues/12618.
+	//
+	// - As suggested in the same GitHub issue, "bazel query 'kind(go_test, //...)'" would normally
+	//   return the list of labels. However, this fails due to BUILD.bazel files in
+	//   //third_party/externals and //bazel/external/vello. We could try either fixing those files
+	//   when possible, or adding them to //.bazelignore (either permanently or temporarily inside a
+	//   specialized task driver just for Go tests).
+	//
+	// - Have Gazelle add a tag to all Go tests: go_test(name = "foo_test", tag = "go", ... ). Then,
+	//   we can use a wildcard label such as //... and tell Bazel to only test those targets with
+	//   said tag, e.g. "bazel test //... --test_tag_filters=go"
+	//   (https://bazel.build/reference/command-line-reference#flag--test_tag_filters). Today this
+	//   does not work due to the third party and external BUILD.bazel files mentioned in the
+	//   previous bullet point.
+	"all_go_tests": {"//:all_go_tests", ""},
 
 	// Android tests that run on a device. We store the //bazel-bin/tests directory into CAS for use
 	// by subsequent CI tasks.
@@ -2141,6 +2179,7 @@ var shorthandToLabel = map[string]labelAndSavedOutputDir{
 	"android_pathops_test":            {"//tests:android_pathops_test", "tests"},
 	"android_cpu_only_test":           {"//tests:android_cpu_only_test", "tests"},
 	"android_discardable_memory_test": {"//tests:android_discardable_memory_test", "tests"},
+	"hello_bazel_world_android_test":  {"//gm:hello_bazel_world_android_test", "gm"},
 }
 
 // bazelBuild adds a task which builds the specified single-target label (//foo:bar) or
@@ -2162,8 +2201,9 @@ func (b *jobBuilder) bazelBuild() {
 			"--project_id=skia-swarming-bots",
 			"--task_id=" + specs.PLACEHOLDER_TASK_ID,
 			"--task_name=" + b.Name,
-			"--label=" + labelAndSavedOutputDir.label,
-			"--config=" + config,
+			"--bazel_label=" + labelAndSavedOutputDir.label,
+			"--bazel_config=" + config,
+			"--bazel_cache_dir=" + bazelCacheDir,
 			"--workdir=.",
 		}
 
@@ -2233,8 +2273,13 @@ func (b *jobBuilder) bazelTest() {
 	}
 
 	// Expand task driver name to keep task names short.
+	isPrecompiledGM := false
 	if taskdriverName == "precompiled" {
 		taskdriverName = "bazel_test_precompiled"
+	}
+	if taskdriverName == "precompiled_gm" {
+		taskdriverName = "bazel_test_precompiled"
+		isPrecompiledGM = true
 	}
 	if taskdriverName == "gm" {
 		taskdriverName = "bazel_test_gm"
@@ -2251,16 +2296,14 @@ func (b *jobBuilder) bazelTest() {
 		switch taskdriverName {
 		case "canvaskit_gold":
 			cmd = append(cmd,
-				"--test_label="+labelAndSavedOutputDir.label,
-				"--test_config="+config,
+				"--bazel_label="+labelAndSavedOutputDir.label,
+				"--bazel_config="+config,
+				"--bazel_cache_dir="+bazelCacheDir,
 				"--goldctl_path=./cipd_bin_packages/goldctl",
 				"--git_commit="+specs.PLACEHOLDER_REVISION,
 				"--changelist_id="+specs.PLACEHOLDER_ISSUE,
 				"--patchset_order="+specs.PLACEHOLDER_PATCHSET,
-				"--tryjob_id="+specs.PLACEHOLDER_BUILDBUCKET_BUILD_ID,
-				// It is unclear why this is needed, but it helps resolve issues like
-				// Middleman ...tests-runfiles failed: missing input file 'external/npm/node_modules/karma-chrome-launcher/...'
-				"--expunge_cache")
+				"--tryjob_id="+specs.PLACEHOLDER_BUILDBUCKET_BUILD_ID)
 			b.cipd(CIPD_PKGS_GOLDCTL)
 			switch config {
 			case "ck_full_cpu_release_chrome":
@@ -2275,13 +2318,15 @@ func (b *jobBuilder) bazelTest() {
 
 		case "cpu_tests":
 			cmd = append(cmd,
-				"--test_label="+labelAndSavedOutputDir.label,
-				"--test_config="+config)
+				"--bazel_label="+labelAndSavedOutputDir.label,
+				"--bazel_config="+config,
+				"--bazel_cache_dir="+bazelCacheDir)
 
 		case "toolchain_layering_check":
 			cmd = append(cmd,
-				"--test_label="+labelAndSavedOutputDir.label,
-				"--test_config="+config)
+				"--bazel_label="+labelAndSavedOutputDir.label,
+				"--bazel_config="+config,
+				"--bazel_cache_dir="+bazelCacheDir)
 
 		case "bazel_test_precompiled":
 			// Compute the file name of the test based on its Bazel label. The file name will be relative to
@@ -2298,10 +2343,23 @@ func (b *jobBuilder) bazelTest() {
 				"--command="+command,
 				"--command_workdir="+commandWorkDir)
 
+			if isPrecompiledGM {
+				cmd = append(cmd,
+					"--gm",
+					"--bazel_label="+labelAndSavedOutputDir.label,
+					"--goldctl_path=./cipd_bin_packages/goldctl",
+					"--git_commit="+specs.PLACEHOLDER_REVISION,
+					"--changelist_id="+specs.PLACEHOLDER_ISSUE,
+					"--patchset_order="+specs.PLACEHOLDER_PATCHSET,
+					"--tryjob_id="+specs.PLACEHOLDER_BUILDBUCKET_BUILD_ID)
+				b.cipd(CIPD_PKGS_GOLDCTL)
+			}
+
 		case "bazel_test_gm":
 			cmd = append(cmd,
-				"--test_label="+labelAndSavedOutputDir.label,
-				"--test_config="+config,
+				"--bazel_label="+labelAndSavedOutputDir.label,
+				"--bazel_config="+config,
+				"--bazel_cache_dir="+bazelCacheDir,
 				"--goldctl_path=./cipd_bin_packages/goldctl",
 				"--git_commit="+specs.PLACEHOLDER_REVISION,
 				"--changelist_id="+specs.PLACEHOLDER_ISSUE,

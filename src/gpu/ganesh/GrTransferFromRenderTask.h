@@ -39,12 +39,12 @@ private:
 
     bool onExecute(GrOpFlushState*) override;
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     const char* name() const final { return "TransferFrom"; }
 #endif
 #ifdef SK_DEBUG
     void visitProxies_debugOnly(const GrVisitProxyFunc& func) const override {
-        func(fSrcProxy.get(), GrMipmapped::kNo);
+        func(fSrcProxy.get(), skgpu::Mipmapped::kNo);
     }
 #endif
 

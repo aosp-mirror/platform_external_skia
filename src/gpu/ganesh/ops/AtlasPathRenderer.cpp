@@ -35,7 +35,7 @@ std::pair<skvx::float2, skvx::float2> round_out(const SkRect& r) {
 // Returns whether the given proxyOwner uses the atlasProxy.
 template<typename T> bool refs_atlas(const T* proxyOwner, const GrSurfaceProxy* atlasProxy) {
     bool refsAtlas = false;
-    auto checkForAtlasRef = [atlasProxy, &refsAtlas](GrSurfaceProxy* proxy, GrMipmapped) {
+    auto checkForAtlasRef = [atlasProxy, &refsAtlas](GrSurfaceProxy* proxy, skgpu::Mipmapped) {
         if (proxy == atlasProxy) {
             refsAtlas = true;
         }
@@ -137,7 +137,7 @@ sk_sp<AtlasPathRenderer> AtlasPathRenderer::Make(GrRecordingContext* rContext) {
 AtlasPathRenderer::AtlasPathRenderer(GrDirectContext* dContext) {
     SkASSERT(IsSupported(dContext));
     const GrCaps& caps = *dContext->priv().caps();
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     fAtlasMaxSize = dContext->priv().options().fMaxTextureAtlasSize;
 #else
     fAtlasMaxSize = 2048;
@@ -408,7 +408,7 @@ bool AtlasPathRenderer::preFlush(GrOnFlushResourceProvider* onFlushRP) {
 
     bool successful;
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     if (onFlushRP->failFlushTimeCallbacks()) {
         successful = false;
     } else

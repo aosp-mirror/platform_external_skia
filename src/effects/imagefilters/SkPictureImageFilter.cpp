@@ -20,6 +20,7 @@
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
 
+#include <optional>
 #include <utility>
 
 namespace {
@@ -27,12 +28,11 @@ namespace {
 class SkPictureImageFilter final : public SkImageFilter_Base {
 public:
     SkPictureImageFilter(sk_sp<SkPicture> picture, const SkRect& cullRect)
-            : SkImageFilter_Base(nullptr, 0, nullptr)
+            : SkImageFilter_Base(nullptr, 0)
             , fPicture(std::move(picture))
             , fCullRect(cullRect) {
         // The external cullrect should already have been intersected with the internal cull rect
-        SkASSERT((!fPicture && cullRect.isEmpty()) ||
-                 (fPicture && fPicture->cullRect().contains(cullRect)));
+        SkASSERT(fPicture && fPicture->cullRect().contains(cullRect));
     }
 
     SkRect computeFastBounds(const SkRect&) const override { return SkRect(fCullRect); }
@@ -49,13 +49,13 @@ private:
     skif::FilterResult onFilterImage(const skif::Context& ctx) const override;
 
     skif::LayerSpace<SkIRect> onGetInputLayerBounds(
-            const skif::Mapping&,
+            const skif::Mapping& mapping,
             const skif::LayerSpace<SkIRect>& desiredOutput,
-            const skif::LayerSpace<SkIRect>& contentBounds) const override;
+            std::optional<skif::LayerSpace<SkIRect>> contentBounds) const override;
 
-    skif::LayerSpace<SkIRect> onGetOutputLayerBounds(
-            const skif::Mapping&,
-            const skif::LayerSpace<SkIRect>& contentBounds) const override;
+    std::optional<skif::LayerSpace<SkIRect>> onGetOutputLayerBounds(
+            const skif::Mapping& mapping,
+            std::optional<skif::LayerSpace<SkIRect>> contentBounds) const override;
 
     sk_sp<SkPicture> fPicture;
     skif::ParameterSpace<SkRect> fCullRect;
@@ -70,8 +70,7 @@ sk_sp<SkImageFilter> SkImageFilters::Picture(sk_sp<SkPicture> pic, const SkRect&
             return sk_sp<SkImageFilter>(new SkPictureImageFilter(std::move(pic), cullRect));
         }
     }
-    // Will always produce an empty image
-    return sk_sp<SkImageFilter>(new SkPictureImageFilter(nullptr, SkRect::MakeEmpty()));
+    return SkImageFilters::Empty();
 }
 
 void SkRegisterPictureImageFilterFlattenable() {
@@ -108,19 +107,14 @@ skif::FilterResult SkPictureImageFilter::onFilterImage(const skif::Context& ctx)
 skif::LayerSpace<SkIRect> SkPictureImageFilter::onGetInputLayerBounds(
         const skif::Mapping&,
         const skif::LayerSpace<SkIRect>&,
-        const skif::LayerSpace<SkIRect>&) const {
+        std::optional<skif::LayerSpace<SkIRect>>) const {
     // This is a leaf filter, it requires no input and no further recursion
     return skif::LayerSpace<SkIRect>::Empty();
 }
 
-skif::LayerSpace<SkIRect> SkPictureImageFilter::onGetOutputLayerBounds(
+std::optional<skif::LayerSpace<SkIRect>> SkPictureImageFilter::onGetOutputLayerBounds(
         const skif::Mapping& mapping,
-        const skif::LayerSpace<SkIRect>&) const {
-    if (fPicture) {
-        // The output is the transformed bounds of the picture.
-        return mapping.paramToLayer(fCullRect).roundOut();
-    } else {
-        // An empty picture is fully transparent
-        return skif::LayerSpace<SkIRect>::Empty();
-    }
+        std::optional<skif::LayerSpace<SkIRect>>) const {
+    // The output is the transformed bounds of the picture.
+    return mapping.paramToLayer(fCullRect).roundOut();
 }

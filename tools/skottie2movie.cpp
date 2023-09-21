@@ -10,10 +10,10 @@
 #include "include/core/SkGraphics.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
-#include "include/core/SkTime.h"
 #include "include/private/base/SkTPin.h"
 #include "modules/skottie/include/Skottie.h"
 #include "modules/skresources/include/SkResources.h"
+#include "src/base/SkTime.h"
 #include "src/utils/SkOSPath.h"
 
 #include "tools/flags/CommandLineFlags.h"
@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    auto contextType = sk_gpu_test::GrContextFactory::kGL_ContextType;
+    auto contextType = skgpu::ContextType::kGL;
     GrContextOptions grCtxOptions;
     sk_gpu_test::GrContextFactory factory(grCtxOptions);
 

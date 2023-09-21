@@ -131,6 +131,7 @@ skia_wasm_lib("canvaskit") {
   if (skia_canvaskit_enable_skottie) {
     sources += [
       "../../modules/skottie/utils/SkottieUtils.cpp",
+      "../../modules/skottie/utils/TextEditor.cpp",
       "skottie_bindings.cpp",
     ]
   }
@@ -365,14 +366,6 @@ skia_wasm_lib("canvaskit") {
         "CK_ENABLE_WEBGL",
       ]
     }
-    if (skia_canvaskit_enable_webgpu) {
-      defines += [
-        "SK_DAWN",
-        "CK_ENABLE_WEBGPU",
-      ]
-    }
-  } else {
-    defines += [ "SK_ENABLE_SKSL" ]
   }
 
   if (skia_canvaskit_enable_pathops) {

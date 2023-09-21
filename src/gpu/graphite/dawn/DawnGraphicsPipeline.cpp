@@ -16,10 +16,14 @@
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/RendererProvider.h"
 #include "src/gpu/graphite/UniformManager.h"
+#include "src/gpu/graphite/dawn/DawnAsyncWait.h"
+#include "src/gpu/graphite/dawn/DawnCaps.h"
+#include "src/gpu/graphite/dawn/DawnErrorChecker.h"
 #include "src/gpu/graphite/dawn/DawnGraphiteUtilsPriv.h"
 #include "src/gpu/graphite/dawn/DawnResourceProvider.h"
 #include "src/gpu/graphite/dawn/DawnSharedContext.h"
 #include "src/sksl/SkSLProgramSettings.h"
+#include "src/sksl/SkSLUtil.h"
 #include "src/sksl/ir/SkSLProgram.h"
 
 #include <vector>
@@ -159,7 +163,7 @@ size_t create_vertex_attributes(SkSpan<const Attribute> attrs,
 }
 
 // TODO: share this w/ Ganesh dawn backend?
-static wgpu::BlendFactor blend_coeff_to_dawn_blend(skgpu::BlendCoeff coeff) {
+static wgpu::BlendFactor blend_coeff_to_dawn_blend(const DawnCaps& caps, skgpu::BlendCoeff coeff) {
     switch (coeff) {
         case skgpu::BlendCoeff::kZero:
             return wgpu::BlendFactor::Zero;
@@ -186,16 +190,37 @@ static wgpu::BlendFactor blend_coeff_to_dawn_blend(skgpu::BlendCoeff coeff) {
         case skgpu::BlendCoeff::kIConstC:
             return wgpu::BlendFactor::OneMinusConstant;
         case skgpu::BlendCoeff::kS2C:
+            if (caps.shaderCaps()->fDualSourceBlendingSupport) {
+                return wgpu::BlendFactor::Src1;
+            } else {
+                return wgpu::BlendFactor::Zero;
+            }
         case skgpu::BlendCoeff::kIS2C:
+            if (caps.shaderCaps()->fDualSourceBlendingSupport) {
+                return wgpu::BlendFactor::OneMinusSrc1;
+            } else {
+                return wgpu::BlendFactor::Zero;
+            }
         case skgpu::BlendCoeff::kS2A:
+            if (caps.shaderCaps()->fDualSourceBlendingSupport) {
+                return wgpu::BlendFactor::Src1Alpha;
+            } else {
+                return wgpu::BlendFactor::Zero;
+            }
         case skgpu::BlendCoeff::kIS2A:
+            if (caps.shaderCaps()->fDualSourceBlendingSupport) {
+                return wgpu::BlendFactor::OneMinusSrc1Alpha;
+            } else {
+                return wgpu::BlendFactor::Zero;
+            }
         case skgpu::BlendCoeff::kIllegal:
             return wgpu::BlendFactor::Zero;
     }
     SkUNREACHABLE;
 }
 
-static wgpu::BlendFactor blend_coeff_to_dawn_blend_for_alpha(skgpu::BlendCoeff coeff) {
+static wgpu::BlendFactor blend_coeff_to_dawn_blend_for_alpha(const DawnCaps& caps,
+                                                             skgpu::BlendCoeff coeff) {
     switch (coeff) {
         // Force all srcColor used in alpha slot to alpha version.
         case skgpu::BlendCoeff::kSC:
@@ -207,7 +232,7 @@ static wgpu::BlendFactor blend_coeff_to_dawn_blend_for_alpha(skgpu::BlendCoeff c
         case skgpu::BlendCoeff::kIDC:
             return wgpu::BlendFactor::OneMinusDstAlpha;
         default:
-            return blend_coeff_to_dawn_blend(coeff);
+            return blend_coeff_to_dawn_blend(caps, coeff);
     }
 }
 
@@ -235,50 +260,26 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
                                                        const RuntimeEffectDictionary* runtimeDict,
                                                        const GraphicsPipelineDesc& pipelineDesc,
                                                        const RenderPassDesc& renderPassDesc) {
-    constexpr bool kEnableWGSL = false;
-
-    using SkSLCompileFn = bool (*)(SkSL::Compiler*,
-                                   const std::string&,
-                                   SkSL::ProgramKind,
-                                   const SkSL::ProgramSettings&,
-                                   std::string*,
-                                   SkSL::Program::Interface*,
-                                   ShaderErrorHandler*);
-    const SkSLCompileFn kSkSLCompileFn = kEnableWGSL ? SkSLToWGSL
-                                                     : SkSLToSPIRV;
-
-    using DawnCompileFn = bool (*)(const DawnSharedContext* sharedContext,
-                                   const std::string&,
-                                   wgpu::ShaderModule* module,
-                                   ShaderErrorHandler*);
-    const DawnCompileFn kDawnCompileFn = kEnableWGSL ? DawnCompileWGSLShaderModule
-                                                     : DawnCompileSPIRVShaderModule;
-
-    constexpr const char *kVSEntrypoint = kEnableWGSL ? "vertexMain" : "main";
-    constexpr const char *kFSEntrypoint = kEnableWGSL ? "fragmentMain" : "main";
-
+    const DawnCaps& caps = *static_cast<const DawnCaps*>(sharedContext->caps());
     const auto& device = sharedContext->device();
 
     SkSL::Program::Interface vsInterface, fsInterface;
     SkSL::ProgramSettings settings;
 
     settings.fForceNoRTFlip = true;
-    settings.fSPIRVDawnCompatMode = true;
 
-    ShaderErrorHandler* errorHandler = sharedContext->caps()->shaderErrorHandler();
+    ShaderErrorHandler* errorHandler = caps.shaderErrorHandler();
 
-    const RenderStep* step =
-            sharedContext->rendererProvider()->lookup(pipelineDesc.renderStepID());
+    const RenderStep* step = sharedContext->rendererProvider()->lookup(pipelineDesc.renderStepID());
 
-    bool useShadingSsboIndex =
-            sharedContext->caps()->storageBufferPreferred() && step->performsShading();
+    bool useShadingSsboIndex = caps.storageBufferPreferred() && step->performsShading();
 
     std::string vsCode, fsCode;
     wgpu::ShaderModule fsModule, vsModule;
 
     // Some steps just render depth buffer but not color buffer, so the fragment
     // shader is null.
-    FragSkSLInfo fsSkSLInfo = BuildFragmentSkSL(sharedContext->caps(),
+    FragSkSLInfo fsSkSLInfo = BuildFragmentSkSL(&caps,
                                                 sharedContext->shaderCodeDictionary(),
                                                 runtimeDict,
                                                 step,
@@ -292,41 +293,39 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
 
     bool hasFragment = !fsSkSL.empty();
     if (hasFragment) {
-        if (!kSkSLCompileFn(compiler,
-                            fsSkSL,
-                            SkSL::ProgramKind::kGraphiteFragment,
-                            settings,
-                            &fsCode,
-                            &fsInterface,
-                            errorHandler)) {
+        if (!SkSLToWGSL(compiler,
+                        fsSkSL,
+                        SkSL::ProgramKind::kGraphiteFragment,
+                        settings,
+                        &fsCode,
+                        &fsInterface,
+                        errorHandler)) {
             return {};
         }
-        if (!kDawnCompileFn(sharedContext, fsCode, &fsModule, errorHandler)) {
+        if (!DawnCompileWGSLShaderModule(sharedContext, fsCode, &fsModule, errorHandler)) {
             return {};
         }
     }
 
-    std::string vsSkSL = BuildVertexSkSL(sharedContext->caps()->resourceBindingRequirements(),
+    std::string vsSkSL = BuildVertexSkSL(caps.resourceBindingRequirements(),
                                          step,
                                          useShadingSsboIndex,
                                          localCoordsNeeded);
-    if (!kSkSLCompileFn(compiler,
-                        vsSkSL,
-                        SkSL::ProgramKind::kGraphiteVertex,
-                        settings,
-                        &vsCode,
-                        &vsInterface,
-                        errorHandler)) {
+    if (!SkSLToWGSL(compiler,
+                    vsSkSL,
+                    SkSL::ProgramKind::kGraphiteVertex,
+                    settings,
+                    &vsCode,
+                    &vsInterface,
+                    errorHandler)) {
         return {};
     }
-    if (!kDawnCompileFn(sharedContext, vsCode, &vsModule, errorHandler)) {
+    if (!DawnCompileWGSLShaderModule(sharedContext, vsCode, &vsModule, errorHandler)) {
         return {};
     }
 
     wgpu::RenderPipelineDescriptor descriptor;
-#if defined(SK_DEBUG)
     descriptor.label = step->name();
-#endif
 
     // Fragment state
     skgpu::BlendEquation equation = blendInfo.fEquation;
@@ -337,11 +336,11 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
     wgpu::BlendState blend;
     if (blendOn) {
         blend.color.operation = blend_equation_to_dawn_blend_op(equation);
-        blend.color.srcFactor = blend_coeff_to_dawn_blend(srcCoeff);
-        blend.color.dstFactor = blend_coeff_to_dawn_blend(dstCoeff);
+        blend.color.srcFactor = blend_coeff_to_dawn_blend(caps, srcCoeff);
+        blend.color.dstFactor = blend_coeff_to_dawn_blend(caps, dstCoeff);
         blend.alpha.operation = blend_equation_to_dawn_blend_op(equation);
-        blend.alpha.srcFactor = blend_coeff_to_dawn_blend_for_alpha(srcCoeff);
-        blend.alpha.dstFactor = blend_coeff_to_dawn_blend_for_alpha(dstCoeff);
+        blend.alpha.srcFactor = blend_coeff_to_dawn_blend_for_alpha(caps, srcCoeff);
+        blend.alpha.dstFactor = blend_coeff_to_dawn_blend_for_alpha(caps, dstCoeff);
     }
 
     wgpu::ColorTargetState colorTarget;
@@ -354,7 +353,7 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
     // Dawn doesn't allow having a color attachment but without fragment shader, so have to use a
     // noop fragment shader, if fragment shader is null.
     fragment.module = hasFragment ? std::move(fsModule) : sharedContext->noopFragment();
-    fragment.entryPoint = kFSEntrypoint;
+    fragment.entryPoint = "main";
     fragment.targetCount = 1;
     fragment.targets = &colorTarget;
     descriptor.fragment = &fragment;
@@ -517,7 +516,7 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
 
     auto& vertex = descriptor.vertex;
     vertex.module = std::move(vsModule);
-    vertex.entryPoint = kVSEntrypoint;
+    vertex.entryPoint = "main";
     vertex.constantCount = 0;
     vertex.constants = nullptr;
     vertex.bufferCount = vertexBufferLayouts.size();
@@ -539,31 +538,69 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
             break;
     }
 
-    descriptor.multisample.count = renderPassDesc.fColorAttachment.fTextureInfo.numSamples();
+    // Multisampled state
+    descriptor.multisample.count = renderPassDesc.fSampleCount;
+    wgpu::DawnMultisampleStateRenderToSingleSampled pipelineMSAARenderToSingleSampledDesc;
+    if (renderPassDesc.fSampleCount > 1 && renderPassDesc.fColorAttachment.fTextureInfo.isValid() &&
+        renderPassDesc.fColorAttachment.fTextureInfo.numSamples() == 1) {
+        // If render pass is multi sampled but the color attachment is single sampled, we need
+        // to activate multisampled render to single sampled feature for this graphics pipeline.
+        SkASSERT(device.HasFeature(wgpu::FeatureName::MSAARenderToSingleSampled));
+
+        descriptor.multisample.nextInChain = &pipelineMSAARenderToSingleSampledDesc;
+        pipelineMSAARenderToSingleSampledDesc.enabled = true;
+    }
+
     descriptor.multisample.mask = 0xFFFFFFFF;
     descriptor.multisample.alphaToCoverageEnabled = false;
 
-    auto pipeline = device.CreateRenderPipeline(&descriptor);
-    if (!pipeline) {
+    struct PipelineAsyncArg {
+        PipelineAsyncArg(const wgpu::Device& device) : sync(device) {}
+        DawnAsyncWait sync;
+        wgpu::RenderPipeline pipeline;
+    };
+    PipelineAsyncArg asyncArg(device);
+
+    device.CreateRenderPipelineAsync(
+            &descriptor,
+            [](WGPUCreatePipelineAsyncStatus status,
+               WGPURenderPipeline pipeline,
+               char const* message,
+               void* userdata) {
+                PipelineAsyncArg* arg = static_cast<PipelineAsyncArg*>(userdata);
+
+                if (status != WGPUCreatePipelineAsyncStatus_Success) {
+                    SKGPU_LOG_E("Failed to create render pipeline (%d): %s", status, message);
+                    arg->pipeline = nullptr;
+                } else {
+                    arg->pipeline = wgpu::RenderPipeline::Acquire(pipeline);
+                }
+                arg->sync.signal();
+            },
+            &asyncArg);
+
+    asyncArg.sync.busyWait();
+
+    if (asyncArg.pipeline == nullptr) {
         return {};
     }
 
-#if GRAPHITE_TEST_UTILS
-    GraphicsPipeline::Shaders pipelineShaders = {
-        std::move(vsSkSL),
-        std::move(fsSkSL),
-        "SPIR-V disassembly not available",
-        "SPIR-V disassembly not available",
-    };
-    GraphicsPipeline::Shaders* pipelineShadersPtr = &pipelineShaders;
+#if defined(GRAPHITE_TEST_UTILS)
+    GraphicsPipeline::PipelineInfo pipelineInfo = {pipelineDesc.renderStepID(),
+                                                   pipelineDesc.paintParamsID(),
+                                                   std::move(vsSkSL),
+                                                   std::move(fsSkSL),
+                                                   std::move(vsCode),
+                                                   std::move(fsCode)};
+    GraphicsPipeline::PipelineInfo* pipelineInfoPtr = &pipelineInfo;
 #else
-    GraphicsPipeline::Shaders* pipelineShadersPtr = nullptr;
+    GraphicsPipeline::PipelineInfo* pipelineInfoPtr = nullptr;
 #endif
 
     return sk_sp<DawnGraphicsPipeline>(
             new DawnGraphicsPipeline(sharedContext,
-                                     pipelineShadersPtr,
-                                     std::move(pipeline),
+                                     pipelineInfoPtr,
+                                     std::move(asyncArg.pipeline),
                                      step->primitiveType(),
                                      depthStencilSettings.fStencilReferenceValue,
                                      !step->uniforms().empty(),
@@ -571,13 +608,13 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(const DawnSharedContext* 
 }
 
 DawnGraphicsPipeline::DawnGraphicsPipeline(const skgpu::graphite::SharedContext* sharedContext,
-                                           Shaders* pipelineShaders,
+                                           PipelineInfo* pipelineInfo,
                                            wgpu::RenderPipeline renderPipeline,
                                            PrimitiveType primitiveType,
                                            uint32_t refValue,
                                            bool hasStepUniforms,
                                            bool hasFragment)
-        : GraphicsPipeline(sharedContext, pipelineShaders)
+        : GraphicsPipeline(sharedContext, pipelineInfo)
         , fRenderPipeline(std::move(renderPipeline))
         , fPrimitiveType(primitiveType)
         , fStencilReferenceValue(refValue)

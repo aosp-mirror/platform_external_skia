@@ -473,6 +473,7 @@ CPU_GMS = [
     # "wacky_yuv_formats.cpp",
     # "widebuttcaps.cpp",
     # "windowrectangles.cpp",
+    # "workingspace.cpp",
     # "xfermodeimagefilter.cpp",
     # "xfermodes2.cpp",
     # "xfermodes3.cpp",
@@ -508,7 +509,6 @@ cc_test_with_flags(
     ],
     data = ["//resources"],
     set_flags = {
-        "enable_sksl": ["True"],
         "include_decoder": [
             "gif_decode_codec",
             "webp_decode_codec",
@@ -534,7 +534,6 @@ cc_test_with_flags(
     ],
     data = ["//resources"],
     set_flags = {
-        "enable_sksl": ["True"],
         "include_decoder": [
             "gif_decode_codec",
             "webp_decode_codec",
@@ -558,7 +557,6 @@ cc_test_with_flags(
     ],
     data = ["//resources"],
     set_flags = {
-        "enable_sksl": ["True"],
         "include_decoder": [
             "gif_decode_codec",
             "webp_decode_codec",
@@ -592,12 +590,33 @@ cc_test_with_flags(
     ],
     data = ["//resources"],
     set_flags = {
-        "enable_sksl": ["True"],
         "include_decoder": [
             "gif_decode_codec",
             "webp_decode_codec",
         ],
     },
+    deps = [":tests_base"],
+)
+
+cc_test_with_flags(
+    name = "hello_bazel_world_test",
+    srcs = [
+        "BazelGMRunner.cpp",
+        "hello_bazel_world.cpp",
+    ],
+    args = [
+        "--surfaceConfig",
+        "8888",
+    ],
+    data = ["//resources"],
+    deps = [":tests_base"],
+)
+
+android_gm_test(
+    name = "hello_bazel_world_android_test",
+    srcs = ["hello_bazel_world.cpp"],
+    config = "8888",
+    requires_resources_dir = True,
     deps = [":tests_base"],
 )
 
@@ -614,7 +633,6 @@ cc_test_with_flags(
         srcs = CPU_GMS,
         config = config,
         flags = {
-            "enable_sksl": ["True"],
             "include_decoder": [
                 "gif_decode_codec",
                 "webp_decode_codec",

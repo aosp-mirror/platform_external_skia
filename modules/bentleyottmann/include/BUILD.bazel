@@ -7,8 +7,11 @@ exports_files_legacy()
 skia_filegroup(
     name = "hdrs",
     srcs = [
+        "BentleyOttmann1.h",
         "EventQueue.h",
+        "Int96.h",
         "Point.h",
+        "Segment.h",
     ],
     visibility = ["//modules/bentleyottmann:__pkg__"],
 )

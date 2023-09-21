@@ -35,7 +35,7 @@
 struct GrContextOptions;
 
 // This is the repro of a CastOS memory regression bug (b/138674523).
-// The test simply keeps calling SkImage::makeWithFilter (with a blur image filter) while
+// The test simply keeps calling SkImages::MakeWithFilter (with a blur image filter) while
 // shrinking the clip.
 // When explicit resource allocation was enabled the last (re-expanded) image in the
 // blur creation process became exact.
@@ -116,8 +116,8 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(RepeatedClippedBlurTest,
 
         SkIRect outSubset;
         SkIPoint offset;
-        sk_sp<SkImage> filteredImg = smImg->makeWithFilter(dContext, blur.get(), subset, clip,
-                                                           &outSubset, &offset);
+        sk_sp<SkImage> filteredImg = SkImages::MakeWithFilter(dContext, smImg, blur.get(), subset,
+                                                              clip, &outSubset, &offset);
 
         SkRect dstRect = SkRect::MakeXYWH(offset.fX, offset.fY,
                                           outSubset.width(), outSubset.height());

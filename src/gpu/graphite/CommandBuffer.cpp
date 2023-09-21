@@ -61,6 +61,8 @@ bool CommandBuffer::addRenderPass(const RenderPassDesc& renderPassDesc,
                                   sk_sp<Texture> depthStencilTexture,
                                   SkRect viewport,
                                   const DrawPassList& drawPasses) {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
+
     fRenderPassSize = colorTexture->dimensions();
     if (!this->onAddRenderPass(renderPassDesc,
                                colorTexture.get(),
@@ -89,6 +91,8 @@ bool CommandBuffer::addRenderPass(const RenderPassDesc& renderPassDesc,
 }
 
 bool CommandBuffer::addComputePass(const DispatchGroupList& dispatchGroups) {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
+
     if (!this->onAddComputePass(dispatchGroups)) {
         return false;
     }
@@ -161,7 +165,8 @@ bool CommandBuffer::copyBufferToTexture(const Buffer* buffer,
 bool CommandBuffer::copyTextureToTexture(sk_sp<Texture> src,
                                          SkIRect srcRect,
                                          sk_sp<Texture> dst,
-                                         SkIPoint dstPoint) {
+                                         SkIPoint dstPoint,
+                                         int mipLevel) {
     SkASSERT(src);
     SkASSERT(dst);
     if (src->textureInfo().isProtected() == Protected::kYes &&
@@ -170,7 +175,7 @@ bool CommandBuffer::copyTextureToTexture(sk_sp<Texture> src,
         return false;
     }
 
-    if (!this->onCopyTextureToTexture(src.get(), srcRect, dst.get(), dstPoint)) {
+    if (!this->onCopyTextureToTexture(src.get(), srcRect, dst.get(), dstPoint, mipLevel)) {
         return false;
     }
 

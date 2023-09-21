@@ -31,10 +31,6 @@
 #define SK_ENABLE_PRECOMPILE
 #endif
 
-#ifndef SK_ENABLE_SKSL
-#define SK_ENABLE_SKSL
-#endif
-
 #ifndef SK_GAMMA_APPLY_TO_A8
 #define SK_GAMMA_APPLY_TO_A8
 #endif

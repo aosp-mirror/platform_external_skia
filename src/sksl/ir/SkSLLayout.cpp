@@ -19,14 +19,17 @@ namespace SkSL {
 std::string Layout::paddedDescription() const {
     std::string result;
     auto separator = SkSL::String::Separator();
-    if (fFlags & LayoutFlag::kSPIRV) {
-        result += separator() + "spirv";
+    if (fFlags & LayoutFlag::kVulkan) {
+        result += separator() + "vulkan";
     }
     if (fFlags & LayoutFlag::kMetal) {
         result += separator() + "metal";
     }
-    if (fFlags & LayoutFlag::kWGSL) {
-        result += separator() + "wgsl";
+    if (fFlags & LayoutFlag::kWebGPU) {
+        result += separator() + "webgpu";
+    }
+    if (fFlags & LayoutFlag::kDirect3D) {
+        result += separator() + "direct3d";
     }
     if (fFlags & LayoutFlag::kRGBA8) {
         result += separator() + "rgba8";
@@ -62,8 +65,7 @@ std::string Layout::paddedDescription() const {
         result += separator() + "builtin = " + std::to_string(fBuiltin);
     }
     if (fInputAttachmentIndex >= 0) {
-        result += separator() + "input_attachment_index = " +
-                  std::to_string(fInputAttachmentIndex);
+        result += separator() + "input_attachment_index = " + std::to_string(fInputAttachmentIndex);
     }
     if (fFlags & LayoutFlag::kOriginUpperLeft) {
         result += separator() + "origin_upper_left";
@@ -117,9 +119,10 @@ bool Layout::checkPermittedLayout(const Context& context,
         { LayoutFlag::kSet,                      "set"},
         { LayoutFlag::kBuiltin,                  "builtin"},
         { LayoutFlag::kInputAttachmentIndex,     "input_attachment_index"},
-        { LayoutFlag::kSPIRV,                    "spirv"},
+        { LayoutFlag::kVulkan,                   "vulkan"},
         { LayoutFlag::kMetal,                    "metal"},
-        { LayoutFlag::kWGSL,                     "wgsl"},
+        { LayoutFlag::kWebGPU,                   "webgpu"},
+        { LayoutFlag::kDirect3D,                 "direct3d"},
         { LayoutFlag::kRGBA8,                    "rgba8"},
         { LayoutFlag::kRGBA32F,                  "rgba32f"},
         { LayoutFlag::kR32F,                     "r32f"},
@@ -148,18 +151,19 @@ bool Layout::checkPermittedLayout(const Context& context,
         context.fErrors->error(pos, "'binding' modifier cannot coexist with 'texture'/'sampler'");
         success = false;
     }
-    // The `texture` and `sampler` flags are only allowed when explicitly targeting Metal and WGSL.
-    if (!(layoutFlags & (LayoutFlag::kMetal | LayoutFlag::kWGSL))) {
+    // The `texture` and `sampler` flags are only allowed when targeting Metal, WebGPU or Direct3D.
+    if (!(layoutFlags & (LayoutFlag::kMetal | LayoutFlag::kWebGPU | LayoutFlag::kDirect3D))) {
         permittedLayoutFlags &= ~LayoutFlag::kTexture;
         permittedLayoutFlags &= ~LayoutFlag::kSampler;
     }
-    // The `set` flag is not allowed when explicitly targeting Metal. It is currently allowed when
-    // no backend flag is present.
-    // TODO(skia:14023): Further restrict the `set` flag to SPIR-V and WGSL
+    // The `push_constant` flag is only allowed when targeting Vulkan or WebGPU.
+    if (!(layoutFlags & (LayoutFlag::kVulkan | LayoutFlag::kWebGPU))) {
+        permittedLayoutFlags &= ~LayoutFlag::kPushConstant;
+    }
+    // The `set` flag is not allowed when explicitly targeting Metal.
     if (layoutFlags & LayoutFlag::kMetal) {
         permittedLayoutFlags &= ~LayoutFlag::kSet;
     }
-    // TODO(skia:14023): Restrict the `push_constant` flag to SPIR-V and WGSL.
 
     for (const auto& lf : kLayoutFlags) {
         if (layoutFlags & lf.flag) {

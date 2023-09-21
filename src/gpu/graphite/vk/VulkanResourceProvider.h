@@ -17,11 +17,16 @@ namespace skgpu::graphite {
 
 class VulkanCommandBuffer;
 class VulkanDescriptorSet;
+class VulkanFramebuffer;
+class VulkanRenderPass;
 class VulkanSharedContext;
 
 class VulkanResourceProvider final : public ResourceProvider {
 public:
-    VulkanResourceProvider(SharedContext* sharedContext, SingleOwner*, uint32_t recorderID);
+    VulkanResourceProvider(SharedContext* sharedContext,
+                           SingleOwner*,
+                           uint32_t recorderID,
+                           size_t resourceBudget);
     ~VulkanResourceProvider() override;
 
     sk_sp<Texture> createWrappedTexture(const BackendTexture&) override;
@@ -40,11 +45,21 @@ private:
     sk_sp<Sampler> createSampler(const SkSamplingOptions&,
                                  SkTileMode xTileMode,
                                  SkTileMode yTileMode) override;
+    sk_sp<VulkanFramebuffer> createFramebuffer(
+            const VulkanSharedContext*,
+            const skia_private::TArray<VkImageView>& attachmentViews,
+            const VulkanRenderPass&,
+            const int width,
+            const int height);
 
     BackendTexture onCreateBackendTexture(SkISize dimensions, const TextureInfo&) override;
     void onDeleteBackendTexture(BackendTexture&) override {}
 
     sk_sp<VulkanDescriptorSet> findOrCreateDescriptorSet(SkSpan<DescriptorData>);
+    // Find or create a compatible (needed when creating a framebuffer and graphics pipeline) or
+    // full (needed when beginning a render pass from the command buffer) RenderPass.
+    sk_sp<VulkanRenderPass> findOrCreateRenderPass(const RenderPassDesc&,
+                                                   bool compatibleOnly);
     VkPipelineCache pipelineCache();
 
     friend class VulkanCommandBuffer;

@@ -62,7 +62,7 @@ public:
     int width() const { return fReadView.proxy()->width(); }
     int height() const { return fReadView.proxy()->height(); }
 
-    GrMipmapped mipmapped() const { return fReadView.mipmapped(); }
+    skgpu::Mipmapped mipmapped() const { return fReadView.mipmapped(); }
 
     const GrCaps* caps() const;
 
@@ -163,7 +163,7 @@ public:
                      SkImage::RescaleGamma,
                      SkImage::RescaleMode);
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     bool testCopy(sk_sp<GrSurfaceProxy> src, const SkIRect& srcRect, const SkIPoint& dstPoint) {
         return this->copy(std::move(src), srcRect, dstPoint) != nullptr;
     }

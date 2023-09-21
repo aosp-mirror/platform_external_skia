@@ -1,19 +1,13 @@
 diagnostic(off, derivative_uniformity);
-struct FSIn {
-  @builtin(front_facing) sk_Clockwise: bool,
-  @builtin(position) sk_FragCoord: vec4<f32>,
-};
 struct FSOut {
   @location(0) sk_FragColor: vec4<f32>,
 };
-fn userfunc_ff(_skParam0: f32) -> f32 {
-  let v = _skParam0;
+fn userfunc_ff(v: f32) -> f32 {
   {
     return v + 1.0;
   }
 }
-fn main(_skParam0: vec2<f32>) -> vec4<f32> {
-  let coords = _skParam0;
+fn _skslMain(coords: vec2<f32>) -> vec4<f32> {
   {
     var b: f32 = 2.0;
     var c: f32 = 3.0;
@@ -45,8 +39,8 @@ fn main(_skParam0: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(f32(b == 2.0), f32(b == 3.0), f32(d == 5.0), f32(d == 4.0));
   }
 }
-@fragment fn fragmentMain(_stageIn: FSIn) -> FSOut {
+@fragment fn main() -> FSOut {
   var _stageOut: FSOut;
-  _stageOut.sk_FragColor = main(_stageIn.sk_FragCoord.xy);
+  _stageOut.sk_FragColor = _skslMain(/*fragcoord*/ vec2<f32>());
   return _stageOut;
 }

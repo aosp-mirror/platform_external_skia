@@ -21,14 +21,15 @@
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
+#include "tools/gpu/ContextType.h"
 
 DEF_GANESH_TEST(GrContext_oomed, reporter, originalOptions, CtsEnforcement::kApiLevel_T) {
     GrContextOptions options = originalOptions;
     options.fRandomGLOOM = true;
     options.fSkipGLErrorChecks = GrContextOptions::Enable::kNo;
     sk_gpu_test::GrContextFactory factory(options);
-    for (int ct = 0; ct < sk_gpu_test::GrContextFactory::kContextTypeCnt; ++ct) {
-        auto contextType = static_cast<sk_gpu_test::GrContextFactory::ContextType>(ct);
+    for (int ct = 0; ct < skgpu::kContextTypeCount; ++ct) {
+        auto contextType = static_cast<skgpu::ContextType>(ct);
         auto context = factory.get(contextType);
         if (!context) {
             continue;
@@ -48,7 +49,7 @@ DEF_GANESH_TEST(GrContext_oomed, reporter, originalOptions, CtsEnforcement::kApi
                         SkSurfaces::RenderTarget(context, skgpu::Budgeted::kYes, info, 1, nullptr);
                 SkPaint paint;
                 surf->getCanvas()->drawRect(SkRect::MakeLTRB(100, 100, 2000, 2000), paint);
-                context->flushAndSubmit(surf);
+                context->flushAndSubmit(surf.get(), GrSyncCpu::kNo);
                 if ((oomed = context->oomed())) {
                     REPORTER_ASSERT(reporter, !context->oomed(), "oomed() wasn't cleared");
                     break;

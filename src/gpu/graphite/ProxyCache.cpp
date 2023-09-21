@@ -106,7 +106,7 @@ sk_sp<TextureProxy> ProxyCache::findOrCreateCachedProxy(Recorder* recorder,
     auto [ view, ct ] = MakeBitmapProxyView(recorder, bitmap, nullptr,
                                             mipmapped, skgpu::Budgeted::kYes);
     if (view) {
-        auto listener = make_unique_key_invalidation_listener(key, recorder->priv().recorderID());
+        auto listener = make_unique_key_invalidation_listener(key, recorder->priv().uniqueID());
         bitmap.pixelRef()->addGenIDChangeListener(std::move(listener));
 
         fCache.set(key, view.refProxy());
@@ -124,7 +124,12 @@ void ProxyCache::processInvalidKeyMsgs() {
 
     if (!invalidKeyMsgs.empty()) {
         for (int i = 0; i < invalidKeyMsgs.size(); ++i) {
-            fCache.remove(invalidKeyMsgs[i].key());
+            // TODO: this should stop crbug.com/1480570 for now but more investigation needs to be
+            // done into how we're getting into the situation where an invalid key has been
+            // purged from the cache prior to processing of the invalid key messages.
+            if (fCache.find(invalidKeyMsgs[i].key())) {
+                fCache.remove(invalidKeyMsgs[i].key());
+            }
         }
     }
 }
@@ -145,14 +150,15 @@ void ProxyCache::freeUniquelyHeld() {
     }
 }
 
-void ProxyCache::purgeProxiesNotUsedSince(skgpu::StdSteadyClock::time_point purgeTime) {
+void ProxyCache::purgeProxiesNotUsedSince(const skgpu::StdSteadyClock::time_point* purgeTime) {
     this->processInvalidKeyMsgs();
 
     std::vector<skgpu::UniqueKey> toRemove;
 
     fCache.foreach([&](const skgpu::UniqueKey& key, const sk_sp<TextureProxy>* proxy) {
         if (Resource* resource = (*proxy)->texture();
-            resource && resource->lastAccessTime() < purgeTime) {
+            resource &&
+            (!purgeTime || resource->lastAccessTime() < *purgeTime)) {
             resource->setDeleteASAP();
             toRemove.push_back(key);
         }
@@ -163,7 +169,7 @@ void ProxyCache::purgeProxiesNotUsedSince(skgpu::StdSteadyClock::time_point purg
     }
 }
 
-#if GRAPHITE_TEST_UTILS
+#if defined(GRAPHITE_TEST_UTILS)
 int ProxyCache::numCached() const {
     return fCache.count();
 }
@@ -190,9 +196,9 @@ void ProxyCache::forceFreeUniquelyHeld() {
 }
 
 void ProxyCache::forcePurgeProxiesNotUsedSince(skgpu::StdSteadyClock::time_point purgeTime) {
-    this->purgeProxiesNotUsedSince(purgeTime);
+    this->purgeProxiesNotUsedSince(&purgeTime);
 }
 
-#endif // GRAPHITE_TEST_UTILS
+#endif // defined(GRAPHITE_TEST_UTILS)
 
 } // namespace skgpu::graphite

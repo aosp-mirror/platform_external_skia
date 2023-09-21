@@ -22,6 +22,7 @@
 #include "src/core/SkSamplingPriv.h"
 #include "src/core/SkWriteBuffer.h"
 
+#include <optional>
 #include <utility>
 
 namespace {
@@ -32,14 +33,13 @@ public:
                        const SkRect& srcRect,
                        const SkRect& dstRect,
                        const SkSamplingOptions& sampling)
-            : SkImageFilter_Base(nullptr, 0, nullptr)
+            : SkImageFilter_Base(nullptr, 0)
             , fImage(std::move(image))
             , fSrcRect(srcRect)
             , fDstRect(dstRect)
             , fSampling(sampling) {
-        // The dst rect should be empty if the image is null and non-empty for an actual image
-        SkASSERT((!fImage && dstRect.isEmpty()) ||
-                 (fImage && !dstRect.isEmpty()));
+        // The dst rect should be non-empty
+        SkASSERT(fImage && !dstRect.isEmpty());
     }
 
     SkRect computeFastBounds(const SkRect&) const override { return SkRect(fDstRect); }
@@ -56,13 +56,13 @@ private:
     skif::FilterResult onFilterImage(const skif::Context&) const override;
 
     skif::LayerSpace<SkIRect> onGetInputLayerBounds(
-            const skif::Mapping&,
+            const skif::Mapping& mapping,
             const skif::LayerSpace<SkIRect>& desiredOutput,
-            const skif::LayerSpace<SkIRect>& contentBounds) const override;
+            std::optional<skif::LayerSpace<SkIRect>> contentBounds) const override;
 
-    skif::LayerSpace<SkIRect> onGetOutputLayerBounds(
-            const skif::Mapping&,
-            const skif::LayerSpace<SkIRect>& contentBounds) const override;
+    std::optional<skif::LayerSpace<SkIRect>> onGetOutputLayerBounds(
+            const skif::Mapping& mapping,
+            std::optional<skif::LayerSpace<SkIRect>> contentBounds) const override;
 
     sk_sp<SkImage> fImage;
     // The src rect is relative to the image's contents, so is not technically in the parameter
@@ -78,14 +78,9 @@ sk_sp<SkImageFilter> SkImageFilters::Image(sk_sp<SkImage> image,
                                            const SkRect& srcRect,
                                            const SkRect& dstRect,
                                            const SkSamplingOptions& sampling) {
-    auto emptyFilter = []() {
-        return sk_sp<SkImageFilter>(new SkImageImageFilter(
-                nullptr, SkRect::MakeEmpty(), SkRect::MakeEmpty(), {}));
-    };
-
     if (srcRect.isEmpty() || dstRect.isEmpty() || !image) {
         // There is no content to draw, so the filter should produce transparent black
-        return emptyFilter();
+        return SkImageFilters::Empty();
     } else {
         SkRect imageBounds = SkRect::Make(image->dimensions());
         if (imageBounds.contains(srcRect)) {
@@ -96,7 +91,7 @@ sk_sp<SkImageFilter> SkImageFilters::Image(sk_sp<SkImage> image,
             SkMatrix srcToDst = SkMatrix::RectToRect(srcRect, dstRect);
             if (!imageBounds.intersect(srcRect)) {
                 // No overlap, so draw empty
-                return emptyFilter();
+                return SkImageFilters::Empty();
             }
 
             // Adjust dstRect to match the updated src (which is stored in imageBounds)
@@ -148,19 +143,14 @@ skif::FilterResult SkImageImageFilter::onFilterImage(const skif::Context& ctx) c
 skif::LayerSpace<SkIRect> SkImageImageFilter::onGetInputLayerBounds(
         const skif::Mapping&,
         const skif::LayerSpace<SkIRect>&,
-        const skif::LayerSpace<SkIRect>&) const {
+        std::optional<skif::LayerSpace<SkIRect>>) const {
     // This is a leaf filter, it requires no input and no further recursion
     return skif::LayerSpace<SkIRect>::Empty();
 }
 
-skif::LayerSpace<SkIRect> SkImageImageFilter::onGetOutputLayerBounds(
+std::optional<skif::LayerSpace<SkIRect>> SkImageImageFilter::onGetOutputLayerBounds(
         const skif::Mapping& mapping,
-        const skif::LayerSpace<SkIRect>&) const {
-    if (fImage) {
-        // The output is the transformed bounds of the image.
-        return mapping.paramToLayer(fDstRect).roundOut();
-    } else {
-        // An empty picture is fully transparent
-        return skif::LayerSpace<SkIRect>::Empty();
-    }
+        std::optional<skif::LayerSpace<SkIRect>>) const {
+    // The output is the transformed bounds of the image.
+    return mapping.paramToLayer(fDstRect).roundOut();
 }

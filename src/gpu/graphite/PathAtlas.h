@@ -9,8 +9,9 @@
 #define skgpu_graphite_PathAtlas_DEFINED
 
 #include "include/core/SkStrokeRec.h"
+#include "src/core/SkAutoPixmapStorage.h"
 #include "src/gpu/RectanizerSkyline.h"
-#include "src/gpu/graphite/geom/AtlasShape.h"
+#include "src/gpu/graphite/geom/CoverageMaskShape.h"
 
 #ifdef SK_ENABLE_VELLO_SHADERS
 #include "src/gpu/graphite/compute/VelloRenderer.h"
@@ -20,6 +21,7 @@
 
 namespace skgpu::graphite {
 
+class DrawContext;
 class Recorder;
 class Rect;
 class Shape;
@@ -72,7 +74,7 @@ public:
                   const Shape& shape,
                   const Transform& localToDevice,
                   const SkStrokeRec& style,
-                  AtlasShape::MaskInfo* outMaskInfo);
+                  CoverageMaskShape::MaskInfo* outMaskInfo);
 
     // Clear all scheduled atlas draws and free up atlas allocations. After this call the atlas can
     // be considered cleared and available for new shape insertions. However this method does not
@@ -154,6 +156,34 @@ private:
 };
 
 #endif  // SK_ENABLE_VELLO_SHADERS
+
+/**
+ * PathAtlas class that rasterizes coverage masks on the CPU.
+ *
+ * When a new shape gets added, its path is rasterized in preparation for upload. These
+ * uploads are recorded by `recordUploads()` and subsequently added to an UploadTask.
+ *
+ * After a successful call to `recordUploads()`, the client is free to call `reset()` and start
+ * adding new shapes for a future atlas render.
+ * TODO: We should cache Shapes for future frames to avoid the cost of software rendering.
+ */
+class SoftwarePathAtlas : public PathAtlas {
+public:
+    SoftwarePathAtlas();
+    ~SoftwarePathAtlas() override {}
+    void recordUploads(DrawContext*, Recorder*);
+
+protected:
+    void onAddShape(const Shape&,
+                    const Transform& transform,
+                    const Rect& atlasBounds,
+                    skvx::int2 deviceOffset,
+                    const SkStrokeRec&) override;
+    void onReset() override;
+
+    SkAutoPixmapStorage fPixels;
+    SkIRect fDirtyRect;
+};
 
 }  // namespace skgpu::graphite
 

@@ -18,6 +18,7 @@
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLStringStream.h"
 #include "src/sksl/SkSLUtil.h"
+#include "src/sksl/ir/SkSLStructDefinition.h"
 #include "src/sksl/transform/SkSLTransform.h"
 #include "src/utils/SkOSPath.h"
 #include "tools/SkGetExecutablePath.h"
@@ -61,7 +62,7 @@ static std::string remove_extension(const std::string& path) {
  */
 static void show_usage() {
     printf("usage: sksl-minify <output> <input> [--frag|--vert|--compute|--shader|"
-           "--colorfilter|--blender] [dependencies...]\n");
+           "--colorfilter|--blender|--meshfrag|--meshvert] [dependencies...]\n");
 }
 
 static std::string_view stringize(const SkSL::Token& token, std::string_view text) {
@@ -121,14 +122,12 @@ static std::forward_list<std::unique_ptr<const SkSL::Module>> compile_module_lis
         if (!m) {
             return {};
         }
-        if (!gUnoptimized) {
-            // We need to optimize every module in the chain. We rename private functions at global
-            // scope, and we need to make sure there are no name collisions between nested modules.
-            // (i.e., if module A claims names `$a` and `$b` at global scope, module B will need to
-            // start at `$c`. The most straightforward way to handle this is to actually perform the
-            // renames.)
-            compiler.optimizeModuleBeforeMinifying(kind, *m);
-        }
+        // We need to optimize every module in the chain. We rename private functions at global
+        // scope, and we need to make sure there are no name collisions between nested modules.
+        // (i.e., if module A claims names `$a` and `$b` at global scope, module B will need to
+        // start at `$c`. The most straightforward way to handle this is to actually perform the
+        // renames.)
+        compiler.optimizeModuleBeforeMinifying(kind, *m, /*shrinkSymbols=*/!gUnoptimized);
         modules.push_front(std::move(m));
     }
     // Return all of the modules to transfer their ownership to the caller.
@@ -226,7 +225,10 @@ static ResultCode process_command(SkSpan<std::string> args) {
     bool isShader = find_boolean_flag(&args, "--shader");
     bool isColorFilter = find_boolean_flag(&args, "--colorfilter");
     bool isBlender = find_boolean_flag(&args, "--blender");
-    if (has_overlapping_flags({isFrag, isVert, isCompute, isShader, isColorFilter, isBlender})) {
+    bool isMeshFrag = find_boolean_flag(&args, "--meshfrag");
+    bool isMeshVert = find_boolean_flag(&args, "--meshvert");
+    if (has_overlapping_flags({isFrag, isVert, isCompute, isShader, isColorFilter,
+                               isBlender, isMeshFrag, isMeshVert})) {
         show_usage();
         return ResultCode::kInputError;
     }
@@ -240,6 +242,10 @@ static ResultCode process_command(SkSpan<std::string> args) {
         gProgramKind = SkSL::ProgramKind::kRuntimeColorFilter;
     } else if (isBlender) {
         gProgramKind = SkSL::ProgramKind::kRuntimeBlender;
+    } else if (isMeshFrag) {
+        gProgramKind = SkSL::ProgramKind::kMeshFragment;
+    } else if (isMeshVert) {
+        gProgramKind = SkSL::ProgramKind::kMeshVertex;
     } else {
         // Default case, if no option is specified.
         gProgramKind = SkSL::ProgramKind::kRuntimeShader;
@@ -276,6 +282,14 @@ static ResultCode process_command(SkSpan<std::string> args) {
     // Generate the program text by getting the program's description.
     std::string text;
     for (const std::unique_ptr<SkSL::ProgramElement>& element : module->fElements) {
+        if ((isMeshFrag || isMeshVert) && element->is<SkSL::StructDefinition>()) {
+            std::string_view name = element->as<SkSL::StructDefinition>().type().name();
+            if (name == "Attributes" || name == "Varyings") {
+                // Don't emit the Attributes or Varyings structs from a mesh program into the
+                // minified output; those are synthesized via the SkMeshSpecification.
+                continue;
+            }
+        }
         text += element->description();
     }
 

@@ -178,9 +178,8 @@ bool MtlCommandBuffer::onAddComputePass(const DispatchGroupList& groups) {
         for (const auto& dispatch : group->dispatches()) {
             this->bindComputePipeline(group->getPipeline(dispatch.fPipelineIndex));
             for (const ResourceBinding& binding : dispatch.fBindings) {
-                if (const BindBufferInfo* buffer =
-                            std::get_if<BindBufferInfo>(&binding.fResource)) {
-                    this->bindBuffer(buffer->fBuffer, buffer->fOffset, binding.fIndex);
+                if (const BufferView* buffer = std::get_if<BufferView>(&binding.fResource)) {
+                    this->bindBuffer(buffer->fInfo.fBuffer, buffer->fInfo.fOffset, binding.fIndex);
                 } else if (const TextureIndex* texIdx =
                                    std::get_if<TextureIndex>(&binding.fResource)) {
                     SkASSERT(texIdx);
@@ -193,7 +192,9 @@ bool MtlCommandBuffer::onAddComputePass(const DispatchGroupList& groups) {
             }
             SkASSERT(fActiveComputeCommandEncoder);
             for (const ComputeStep::WorkgroupBufferDesc& wgBuf : dispatch.fWorkgroupBuffers) {
-                fActiveComputeCommandEncoder->setThreadgroupMemoryLength(wgBuf.size, wgBuf.index);
+                fActiveComputeCommandEncoder->setThreadgroupMemoryLength(
+                        SkAlignTo(wgBuf.size, 16),
+                        wgBuf.index);
             }
             this->dispatchThreadgroups(dispatch.fParams.fGlobalDispatchSize,
                                        dispatch.fParams.fLocalDispatchSize);
@@ -870,7 +871,8 @@ bool MtlCommandBuffer::onCopyBufferToTexture(const Buffer* buffer,
 bool MtlCommandBuffer::onCopyTextureToTexture(const Texture* src,
                                               SkIRect srcRect,
                                               const Texture* dst,
-                                              SkIPoint dstPoint) {
+                                              SkIPoint dstPoint,
+                                              int mipLevel) {
     SkASSERT(!fActiveRenderCommandEncoder);
     SkASSERT(!fActiveComputeCommandEncoder);
 
@@ -886,7 +888,7 @@ bool MtlCommandBuffer::onCopyTextureToTexture(const Texture* src,
     blitCmdEncoder->pushDebugGroup(@"copyTextureToTexture");
 #endif
 
-    blitCmdEncoder->copyTextureToTexture(srcMtlTexture, srcRect, dstMtlTexture, dstPoint);
+    blitCmdEncoder->copyTextureToTexture(srcMtlTexture, srcRect, dstMtlTexture, dstPoint, mipLevel);
 
 #ifdef SK_ENABLE_MTL_DEBUG_INFO
     blitCmdEncoder->popDebugGroup();

@@ -31,6 +31,7 @@
 #include "src/gpu/graphite/Precompile.h"
 #include "src/gpu/graphite/PublicPrecompile.h"
 #include "src/gpu/graphite/RecorderPriv.h"
+#include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "tools/ToolUtils.h"
 #include "tools/gpu/GrContextFactory.h"
@@ -338,16 +339,18 @@ void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
 
     auto [paint, paintOptions] = create_random_paint(fuzz, depth);
 
-
-    bool hasCoverage;
-    fuzz->next(&hasCoverage);
+    constexpr Coverage coverageOptions[3] = {
+            Coverage::kNone, Coverage::kSingleChannel, Coverage::kLCD};
+    uint32_t temp;
+    fuzz->next(&temp);
+    Coverage coverage = coverageOptions[temp % 3];
 
     DstReadRequirement dstReadReq = DstReadRequirement::kNone;
     const SkBlenderBase* blender = as_BB(paint.getBlender());
     if (blender) {
         dstReadReq = GetDstReadRequirement(recorder->priv().caps(),
                                            blender->asBlendMode(),
-                                           hasCoverage);
+                                           coverage);
     }
     bool needsDstSample = dstReadReq == DstReadRequirement::kTextureCopy ||
                           dstReadReq == DstReadRequirement::kTextureSample;
@@ -364,7 +367,7 @@ void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
     std::vector<UniquePaintParamsID> precompileIDs;
     paintOptions.priv().buildCombinations(precompileKeyContext,
                                           /* addPrimitiveBlender= */ false,
-                                          hasCoverage,
+                                          coverage,
                                           [&](UniquePaintParamsID id) {
                                               precompileIDs.push_back(id);
                                           });
@@ -406,18 +409,17 @@ void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
 DEF_FUZZ(Precompile, fuzz) {
     skiatest::graphite::ContextFactory factory;
 
-    sk_gpu_test::GrContextFactory::ContextType contextType;
+    skgpu::ContextType contextType;
 #if defined(SK_METAL)
-    contextType = sk_gpu_test::GrContextFactory::kMetal_ContextType;
+    contextType = skgpu::ContextType::kMetal;
 #elif defined(SK_VULKAN)
-    contextType = sk_gpu_test::GrContextFactory::kVulkan_ContextType;
-#elif defined(SK_DAWN)
-    contextType = sk_gpu_test::GrContextFactory::kDawn_ContextType;
+    contextType = skgpu::ContextType::kVulkan;
 #else
-    contextType = sk_gpu_test::GrContextFactory::kMock_ContextType;
+    contextType = skgpu::ContextType::kMock;
 #endif
 
-    auto [_, context] = factory.getContextInfo(contextType);
+    skiatest::graphite::ContextInfo ctxInfo = factory.getContextInfo(contextType);
+    skgpu::graphite::Context* context = ctxInfo.fContext;
     if (!context) {
         return;
     }

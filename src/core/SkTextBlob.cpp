@@ -19,7 +19,6 @@
 #include "src/core/SkTextBlobPriv.h"
 #include "src/core/SkWriteBuffer.h"
 #include "src/text/GlyphRun.h"
-#include "src/text/TextBlobMailbox.h"
 
 #include <atomic>
 #include <limits>
@@ -145,11 +144,14 @@ static int32_t next_id() {
 SkTextBlob::SkTextBlob(const SkRect& bounds)
     : fBounds(bounds)
     , fUniqueID(next_id())
-    , fCacheID(SK_InvalidUniqueID) {}
+    , fCacheID(SK_InvalidUniqueID)
+    , fPurgeDelegate(nullptr) {}
 
 SkTextBlob::~SkTextBlob() {
     if (SK_InvalidUniqueID != fCacheID.load()) {
-        sktext::PostPurgeBlobMessage(fUniqueID, fCacheID);
+        PurgeDelegate f = fPurgeDelegate.load();
+        SkASSERT(f);
+        f(fUniqueID, fCacheID);
     }
 
     const auto* run = RunRecord::First(this);
@@ -830,8 +832,7 @@ sk_sp<SkTextBlob> SkTextBlob::MakeFromRSXform(const void* text, size_t byteLengt
 }
 
 sk_sp<SkData> SkTextBlob::serialize(const SkSerialProcs& procs) const {
-    SkBinaryWriteBuffer buffer;
-    buffer.setSerialProcs(procs);
+    SkBinaryWriteBuffer buffer(procs);
     SkTextBlobPriv::Flatten(*this, buffer);
 
     size_t total = buffer.bytesWritten();
@@ -850,8 +851,7 @@ sk_sp<SkTextBlob> SkTextBlob::Deserialize(const void* data, size_t length,
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 size_t SkTextBlob::serialize(const SkSerialProcs& procs, void* memory, size_t memory_size) const {
-    SkBinaryWriteBuffer buffer(memory, memory_size);
-    buffer.setSerialProcs(procs);
+    SkBinaryWriteBuffer buffer(memory, memory_size, procs);
     SkTextBlobPriv::Flatten(*this, buffer);
     return buffer.usingInitialStorage() ? buffer.bytesWritten() : 0u;
 }

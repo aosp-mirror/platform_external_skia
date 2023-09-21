@@ -34,6 +34,7 @@
 #include "src/image/SkImage_Base.h"
 
 #ifdef SK_VULKAN
+#include "include/gpu/ganesh/vk/GrVkBackendSurface.h"
 #include "include/gpu/vk/GrVkTypes.h"
 #endif
 
@@ -118,7 +119,7 @@ sk_sp<GrTextureProxy> GrProxyProvider::findProxyByUniqueKey(const skgpu::UniqueK
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 sk_sp<GrTextureProxy> GrProxyProvider::testingOnly_createInstantiatedProxy(
         SkISize dimensions,
         const GrBackendFormat& format,
@@ -160,7 +161,7 @@ sk_sp<GrTextureProxy> GrProxyProvider::testingOnly_createInstantiatedProxy(
                                               format.textureType(),
                                               renderable,
                                               renderTargetSampleCnt,
-                                              GrMipmapped::kNo,
+                                              skgpu::Mipmapped::kNo,
                                               budgeted,
                                               isProtected,
                                               /*label=*/"InstantiatedProxyViaTexture_Test");
@@ -273,11 +274,11 @@ GrSurfaceProxyView GrProxyProvider::findCachedProxyWithColorTypeFallback(
 }
 
 sk_sp<GrTextureProxy> GrProxyProvider::createProxyFromBitmap(const SkBitmap& bitmap,
-                                                             GrMipmapped mipmapped,
+                                                             skgpu::Mipmapped mipmapped,
                                                              SkBackingFit fit,
                                                              skgpu::Budgeted budgeted) {
     ASSERT_SINGLE_OWNER
-    SkASSERT(fit == SkBackingFit::kExact || mipmapped == GrMipmapped::kNo);
+    SkASSERT(fit == SkBackingFit::kExact || mipmapped == skgpu::Mipmapped::kNo);
 
     if (this->isAbandoned()) {
         return nullptr;
@@ -288,8 +289,9 @@ sk_sp<GrTextureProxy> GrProxyProvider::createProxyFromBitmap(const SkBitmap& bit
     }
 
     ATRACE_ANDROID_FRAMEWORK("Upload %sTexture [%ux%u]",
-                             GrMipmapped::kYes == mipmapped ? "MipMap " : "",
-                             bitmap.width(), bitmap.height());
+                             skgpu::Mipmapped::kYes == mipmapped ? "MipMap " : "",
+                             bitmap.width(),
+                             bitmap.height());
 
     // In non-ddl we will always instantiate right away. Thus we never want to copy the SkBitmap
     // even if its mutable. In ddl, if the bitmap is mutable then we must make a copy since the
@@ -300,7 +302,7 @@ sk_sp<GrTextureProxy> GrProxyProvider::createProxyFromBitmap(const SkBitmap& bit
         if (!bitmap.readPixels(copyBitmap.pixmap())) {
             return nullptr;
         }
-        if (mipmapped == GrMipmapped::kYes && bitmap.fMips) {
+        if (mipmapped == skgpu::Mipmapped::kYes && bitmap.fMips) {
             copyBitmap.fMips = sk_sp<SkMipmap>(SkMipmap::Build(copyBitmap.pixmap(),
                                                                nullptr,
                                                                false));
@@ -315,7 +317,8 @@ sk_sp<GrTextureProxy> GrProxyProvider::createProxyFromBitmap(const SkBitmap& bit
     }
 
     sk_sp<GrTextureProxy> proxy;
-    if (mipmapped == GrMipmapped::kNo || !SkMipmap::ComputeLevelCount(copyBitmap.dimensions())) {
+    if (mipmapped == skgpu::Mipmapped::kNo ||
+        !SkMipmap::ComputeLevelCount(copyBitmap.dimensions())) {
         proxy = this->createNonMippedProxyFromBitmap(copyBitmap, fit, budgeted);
     } else {
         proxy = this->createMippedProxyFromBitmap(copyBitmap, budgeted);
@@ -351,7 +354,7 @@ sk_sp<GrTextureProxy> GrProxyProvider::createNonMippedProxyFromBitmap(const SkBi
 
     sk_sp<GrTextureProxy> proxy = this->createLazyProxy(
             [bitmap](GrResourceProvider* resourceProvider, const LazySurfaceDesc& desc) {
-                SkASSERT(desc.fMipmapped == GrMipmapped::kNo);
+                SkASSERT(desc.fMipmapped == skgpu::Mipmapped::kNo);
                 GrMipLevel mipLevel = {bitmap.getPixels(), bitmap.rowBytes(), nullptr};
                 auto colorType = SkColorTypeToGrColorType(bitmap.colorType());
                 return LazyCallbackResult(resourceProvider->createTexture(desc.fDimensions,
@@ -366,8 +369,15 @@ sk_sp<GrTextureProxy> GrProxyProvider::createNonMippedProxyFromBitmap(const SkBi
                                                                           mipLevel,
                                                                           desc.fLabel));
             },
-            format, dims, GrMipmapped::kNo, GrMipmapStatus::kNotAllocated,
-            GrInternalSurfaceFlags::kNone, fit, budgeted, GrProtected::kNo, UseAllocator::kYes,
+            format,
+            dims,
+            skgpu::Mipmapped::kNo,
+            GrMipmapStatus::kNotAllocated,
+            GrInternalSurfaceFlags::kNone,
+            fit,
+            budgeted,
+            GrProtected::kNo,
+            UseAllocator::kYes,
             "ProxyProvider_CreateNonMippedProxyFromBitmap");
 
     if (!proxy) {
@@ -421,12 +431,16 @@ sk_sp<GrTextureProxy> GrProxyProvider::createMippedProxyFromBitmap(const SkBitma
                                                                           GrRenderable::kNo,
                                                                           1,
                                                                           desc.fBudgeted,
-                                                                          GrMipmapped::kYes,
+                                                                          skgpu::Mipmapped::kYes,
                                                                           GrProtected::kNo,
                                                                           texels.get(),
                                                                           desc.fLabel));
             },
-            format, dims, GrMipmapped::kYes, GrMipmapStatus::kValid, GrInternalSurfaceFlags::kNone,
+            format,
+            dims,
+            skgpu::Mipmapped::kYes,
+            GrMipmapStatus::kValid,
+            GrInternalSurfaceFlags::kNone,
             SkBackingFit::kExact,
             budgeted,
             GrProtected::kNo,
@@ -446,7 +460,7 @@ sk_sp<GrTextureProxy> GrProxyProvider::createProxy(const GrBackendFormat& format
                                                    SkISize dimensions,
                                                    GrRenderable renderable,
                                                    int renderTargetSampleCnt,
-                                                   GrMipmapped mipmapped,
+                                                   skgpu::Mipmapped mipmapped,
                                                    SkBackingFit fit,
                                                    skgpu::Budgeted budgeted,
                                                    GrProtected isProtected,
@@ -465,11 +479,11 @@ sk_sp<GrTextureProxy> GrProxyProvider::createProxy(const GrBackendFormat& format
         return nullptr;
     }
 
-    if (GrMipmapped::kYes == mipmapped) {
+    if (skgpu::Mipmapped::kYes == mipmapped) {
         // SkMipmap doesn't include the base level in the level count so we have to add 1
         int mipCount = SkMipmap::ComputeLevelCount(dimensions.fWidth, dimensions.fHeight) + 1;
         if (1 == mipCount) {
-            mipmapped = GrMipmapped::kNo;
+            mipmapped = skgpu::Mipmapped::kNo;
         }
     }
 
@@ -481,9 +495,9 @@ sk_sp<GrTextureProxy> GrProxyProvider::createProxy(const GrBackendFormat& format
                                      GrTextureType::k2D)) {
         return nullptr;
     }
-    GrMipmapStatus mipmapStatus = (GrMipmapped::kYes == mipmapped)
-            ? GrMipmapStatus::kDirty
-            : GrMipmapStatus::kNotAllocated;
+    GrMipmapStatus mipmapStatus = (skgpu::Mipmapped::kYes == mipmapped)
+                                          ? GrMipmapStatus::kDirty
+                                          : GrMipmapStatus::kNotAllocated;
     if (renderable == GrRenderable::kYes) {
         renderTargetSampleCnt = caps->getRenderTargetSampleCount(renderTargetSampleCnt, format);
         SkASSERT(renderTargetSampleCnt);
@@ -521,7 +535,7 @@ sk_sp<GrTextureProxy> GrProxyProvider::createProxy(const GrBackendFormat& format
 sk_sp<GrTextureProxy> GrProxyProvider::createCompressedTextureProxy(
         SkISize dimensions,
         skgpu::Budgeted budgeted,
-        GrMipmapped mipmapped,
+        skgpu::Mipmapped mipmapped,
         GrProtected isProtected,
         SkTextureCompressionType compressionType,
         sk_sp<SkData> data) {
@@ -536,8 +550,9 @@ sk_sp<GrTextureProxy> GrProxyProvider::createCompressedTextureProxy(
         return nullptr;
     }
 
-    GrMipmapStatus mipmapStatus = (GrMipmapped::kYes == mipmapped) ? GrMipmapStatus::kValid
-                                                                   : GrMipmapStatus::kNotAllocated;
+    GrMipmapStatus mipmapStatus = (skgpu::Mipmapped::kYes == mipmapped)
+                                          ? GrMipmapStatus::kValid
+                                          : GrMipmapStatus::kNotAllocated;
 
     sk_sp<GrTextureProxy> proxy = this->createLazyProxy(
             [data](GrResourceProvider* resourceProvider, const LazySurfaceDesc& desc) {
@@ -753,7 +768,7 @@ sk_sp<GrRenderTargetProxy> GrProxyProvider::wrapVulkanSecondaryCBAsRenderTarget(
     GrColorType colorType = SkColorTypeToGrColorType(imageInfo.colorType());
 
     if (!this->caps()->isFormatAsColorTypeRenderable(
-            colorType, GrBackendFormat::MakeVk(vkInfo.fFormat), /*sampleCount=*/1)) {
+            colorType, GrBackendFormats::MakeVk(vkInfo.fFormat), /*sampleCount=*/1)) {
         return nullptr;
     }
 
@@ -773,7 +788,7 @@ sk_sp<GrTextureProxy> GrProxyProvider::CreatePromiseProxy(GrContextThreadSafePro
                                                           LazyInstantiateCallback&& callback,
                                                           const GrBackendFormat& format,
                                                           SkISize dimensions,
-                                                          GrMipmapped mipmapped) {
+                                                          skgpu::Mipmapped mipmapped) {
     if (threadSafeProxy->priv().abandoned()) {
         return nullptr;
     }
@@ -789,8 +804,9 @@ sk_sp<GrTextureProxy> GrProxyProvider::CreatePromiseProxy(GrContextThreadSafePro
     }
     // Ganesh assumes that, when wrapping a mipmapped backend texture from a client, that its
     // mipmaps are fully fleshed out.
-    GrMipmapStatus mipmapStatus = (GrMipmapped::kYes == mipmapped) ? GrMipmapStatus::kValid
-                                                                   : GrMipmapStatus::kNotAllocated;
+    GrMipmapStatus mipmapStatus = (skgpu::Mipmapped::kYes == mipmapped)
+                                          ? GrMipmapStatus::kValid
+                                          : GrMipmapStatus::kNotAllocated;
 
     // We pass kReadOnly here since we should treat content of the client's texture as immutable.
     // The promise API provides no way for the client to indicate that the texture is protected.
@@ -813,7 +829,7 @@ sk_sp<GrTextureProxy> GrProxyProvider::CreatePromiseProxy(GrContextThreadSafePro
 sk_sp<GrTextureProxy> GrProxyProvider::createLazyProxy(LazyInstantiateCallback&& callback,
                                                        const GrBackendFormat& format,
                                                        SkISize dimensions,
-                                                       GrMipmapped mipmapped,
+                                                       skgpu::Mipmapped mipmapped,
                                                        GrMipmapStatus mipmapStatus,
                                                        GrInternalSurfaceFlags surfaceFlags,
                                                        SkBackingFit fit,
@@ -942,7 +958,7 @@ sk_sp<GrTextureProxy> GrProxyProvider::MakeFullyLazyProxy(LazyInstantiateCallbac
                                                format,
                                                kLazyDims,
                                                renderTargetSampleCnt,
-                                               GrMipmapped::kNo,
+                                               skgpu::Mipmapped::kNo,
                                                GrMipmapStatus::kNotAllocated,
                                                SkBackingFit::kApprox,
                                                skgpu::Budgeted::kYes,
@@ -955,7 +971,7 @@ sk_sp<GrTextureProxy> GrProxyProvider::MakeFullyLazyProxy(LazyInstantiateCallbac
         return sk_sp<GrTextureProxy>(new GrTextureProxy(std::move(callback),
                                                         format,
                                                         kLazyDims,
-                                                        GrMipmapped::kNo,
+                                                        skgpu::Mipmapped::kNo,
                                                         GrMipmapStatus::kNotAllocated,
                                                         SkBackingFit::kApprox,
                                                         skgpu::Budgeted::kYes,

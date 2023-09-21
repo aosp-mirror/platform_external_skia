@@ -47,6 +47,8 @@ public:
                             GraphiteResourceKey*) const override;
     uint64_t getRenderPassDescKey(const RenderPassDesc& renderPassDesc) const;
 
+    static constexpr size_t kFormatCnt = 14;
+
 private:
     const ColorTypeInfo* getColorTypeInfo(SkColorType, const TextureInfo&) const override;
     bool onIsTexturable(const TextureInfo&) const override;
@@ -59,8 +61,8 @@ private:
                                              const TextureInfo& srcTextureInfo,
                                              SkColorType dstColorType) const override;
 
-    void initCaps(const wgpu::Device& device);
-    void initShaderCaps();
+    void initCaps(const wgpu::Device& device, const ContextOptions& options);
+    void initShaderCaps(const wgpu::Device& device);
     void initFormatTable(const wgpu::Device& device);
 
     wgpu::TextureFormat getFormatFromColorType(SkColorType colorType) const {
@@ -98,7 +100,7 @@ private:
         int fColorTypeInfoCount = 0;
     };
     // Size here must match size of kFormats in DawnCaps.cpp
-    std::array<FormatInfo, 12> fFormatTable;
+    std::array<FormatInfo, kFormatCnt> fFormatTable;
 
     static size_t GetFormatIndex(wgpu::TextureFormat format);
     const FormatInfo& getFormatInfo(wgpu::TextureFormat format) const {

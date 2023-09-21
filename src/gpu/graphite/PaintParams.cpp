@@ -9,9 +9,11 @@
 
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkShader.h"
+#include "src/core/SkBlendModeBlender.h"
 #include "src/core/SkBlenderBase.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/effects/colorfilters/SkColorFilterBase.h"
+#include "src/gpu/Blend.h"
 #include "src/gpu/DitherUtils.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/KeyHelpers.h"
@@ -24,7 +26,7 @@ namespace skgpu::graphite {
 
 namespace {
 
-// This should be kept in sync w/ SkPaintPriv::ShouldDither
+// This should be kept in sync w/ SkPaintPriv::ShouldDither and PaintOption::shouldDither
 bool should_dither(const PaintParams& p, SkColorType dstCT) {
     // The paint dither flag can veto.
     if (!p.dither()) {
@@ -103,6 +105,139 @@ SkColor4f PaintParams::Color4fPrepForDst(SkColor4f srcColor, const SkColorInfo& 
     return result;
 }
 
+void Blend(const KeyContext& keyContext,
+           PaintParamsKeyBuilder* keyBuilder,
+           PipelineDataGatherer* gatherer,
+           AddToKeyFn addBlendToKey,
+           AddToKeyFn addSrcToKey,
+           AddToKeyFn addDstToKey) {
+    BlendShaderBlock::BeginBlock(keyContext, keyBuilder, gatherer);
+
+        addSrcToKey();
+
+        addDstToKey();
+
+        addBlendToKey();
+
+    keyBuilder->endBlock();  // BlendShaderBlock
+}
+
+void Compose(const KeyContext& keyContext,
+             PaintParamsKeyBuilder* keyBuilder,
+             PipelineDataGatherer* gatherer,
+             AddToKeyFn addInnerToKey,
+             AddToKeyFn addOuterToKey) {
+    ComposeBlock::BeginBlock(keyContext, keyBuilder, gatherer);
+
+        addInnerToKey();
+
+        addOuterToKey();
+
+    keyBuilder->endBlock();  // ComposeBlock
+}
+
+void PaintParams::addPaintColorToKey(const KeyContext& keyContext,
+                                     PaintParamsKeyBuilder* keyBuilder,
+                                     PipelineDataGatherer* gatherer) const {
+    if (fShader) {
+        AddToKey(keyContext, keyBuilder, gatherer, fShader.get());
+    } else {
+        SolidColorShaderBlock::BeginBlock(keyContext, keyBuilder, gatherer,
+                                          keyContext.paintColor());
+        keyBuilder->endBlock();
+    }
+}
+
+/**
+ * Primitive blend blocks are used to blend either the paint color or the output of another shader
+ * with a primitive color emitted by certain draw geometry calls (drawVertices, drawAtlas, etc.).
+ * Dst: primitiveColor Src: Paint color/shader output
+ */
+void PaintParams::handlePrimitiveColor(const KeyContext& keyContext,
+                                       PaintParamsKeyBuilder* keyBuilder,
+                                       PipelineDataGatherer* gatherer) const {
+    if (fPrimitiveBlender) {
+        Blend(keyContext, keyBuilder, gatherer,
+              /* addBlendToKey= */ [&] () -> void {
+                  AddToKey(keyContext, keyBuilder, gatherer, fPrimitiveBlender.get());
+              },
+              /* addSrcToKey= */ [&]() -> void {
+                  this->addPaintColorToKey(keyContext, keyBuilder, gatherer);
+              },
+              /* addDstToKey= */ [&]() -> void {
+                  PrimitiveColorBlock::BeginBlock(keyContext, keyBuilder, gatherer);
+                  keyBuilder->endBlock();
+              });
+    } else {
+        this->addPaintColorToKey(keyContext, keyBuilder, gatherer);
+    }
+}
+
+// Apply the paint's alpha value.
+void PaintParams::handlePaintAlpha(const KeyContext& keyContext,
+                                   PaintParamsKeyBuilder* keyBuilder,
+                                   PipelineDataGatherer* gatherer) const {
+    if (fColor.fA != 1.0f) {
+        Blend(keyContext, keyBuilder, gatherer,
+              /* addBlendToKey= */ [&] () -> void {
+                  auto coeffs = skgpu::GetPorterDuffBlendConstants(SkBlendMode::kSrcIn);
+                  SkASSERT(!coeffs.empty());
+                  CoeffBlenderBlock::BeginBlock(keyContext, keyBuilder, gatherer, coeffs);
+                  keyBuilder->endBlock();
+              },
+              /* addSrcToKey= */ [&]() -> void {
+                  this->handlePrimitiveColor(keyContext, keyBuilder, gatherer);
+              },
+              /* addDstToKey= */ [&]() -> void {
+                  SolidColorShaderBlock::BeginBlock(keyContext, keyBuilder, gatherer,
+                                                    {0, 0, 0, fColor.fA});
+                  keyBuilder->endBlock();
+              });
+    } else {
+        this->handlePrimitiveColor(keyContext, keyBuilder, gatherer);
+    }
+}
+
+void PaintParams::handleColorFilter(const KeyContext& keyContext,
+                                    PaintParamsKeyBuilder* builder,
+                                    PipelineDataGatherer* gatherer) const {
+    if (fColorFilter) {
+        Compose(keyContext, builder, gatherer,
+                /* addInnerToKey= */ [&]() -> void {
+                    this->handlePaintAlpha(keyContext, builder, gatherer);
+                },
+                /* addOuterToKey= */ [&]() -> void {
+                    AddToKey(keyContext, builder, gatherer, fColorFilter.get());
+                });
+    } else {
+        this->handlePaintAlpha(keyContext, builder, gatherer);
+    }
+}
+
+void PaintParams::handleDithering(const KeyContext& keyContext,
+                                  PaintParamsKeyBuilder* builder,
+                                  PipelineDataGatherer* gatherer) const {
+
+#ifndef SK_IGNORE_GPU_DITHER
+    SkColorType ct = keyContext.dstColorInfo().colorType();
+    if (should_dither(*this, ct)) {
+        Compose(keyContext, builder, gatherer,
+                /* addInnerToKey= */ [&]() -> void {
+                    this->handleColorFilter(keyContext, builder, gatherer);
+                },
+                /* addOuterToKey= */ [&]() -> void {
+                    DitherShaderBlock::DitherData data(skgpu::DitherRangeForConfig(ct));
+
+                    DitherShaderBlock::BeginBlock(keyContext, builder, gatherer, &data);
+                    builder->endBlock();
+                });
+    } else
+#endif
+    {
+        this->handleColorFilter(keyContext, builder, gatherer);
+    }
+}
+
 void PaintParams::toKey(const KeyContext& keyContext,
                         PaintParamsKeyBuilder* builder,
                         PipelineDataGatherer* gatherer) const {
@@ -123,40 +258,27 @@ void PaintParams::toKey(const KeyContext& keyContext,
         builder->endBlock();
     }
 
-    AddToKey(keyContext, builder, gatherer, fShader.get());
-
-    if (fPrimitiveBlender) {
-        AddPrimitiveBlendBlock(keyContext, builder, gatherer, fPrimitiveBlender.get());
-    }
-
-    // Apply the paint's alpha value.
-    if (fColor.fA != 1.0f) {
-        AddColorBlendBlock(
-                keyContext, builder, gatherer, SkBlendMode::kDstIn, {0, 0, 0, fColor.fA});
-    }
-
-    AddToKey(keyContext, builder, gatherer, fColorFilter.get());
-
-#ifndef SK_IGNORE_GPU_DITHER
-    SkColorType ct = keyContext.dstColorInfo().colorType();
-    if (should_dither(*this, ct)) {
-        DitherShaderBlock::DitherData data(skgpu::DitherRangeForConfig(ct));
-
-        DitherShaderBlock::BeginBlock(keyContext, builder, gatherer, &data);
-        builder->endBlock();
-    }
-#endif
+    this->handleDithering(keyContext, builder, gatherer);
 
     std::optional<SkBlendMode> finalBlendMode = this->asFinalBlendMode();
-    if (finalBlendMode && *finalBlendMode <= SkBlendMode::kLastCoeffMode) {
-        BuiltInCodeSnippetID fixedFuncBlendModeID = static_cast<BuiltInCodeSnippetID>(
-                kFixedFunctionBlendModeIDOffset + (int) *finalBlendMode);
-        builder->beginBlock(fixedFuncBlendModeID);
-        builder->endBlock();
-
-    } else {
-        AddDstBlendBlock(keyContext, builder, gatherer, fFinalBlender.get());
+    // If this draw needs a dst read, we are either doing custom blending or we cannot handle the
+    // combination of blend mode and coverage using fixed function blend hardware.
+    if (fDstReadReq != DstReadRequirement::kNone) {
+        // Add a block to implement the blending in the shader.
+        static const SkBlendModeBlender kDefaultBlender(SkBlendMode::kSrcOver);
+        AddDstBlendBlock(keyContext,
+                         builder,
+                         gatherer,
+                         fFinalBlender ? fFinalBlender.get() : &kDefaultBlender);
+        finalBlendMode = SkBlendMode::kSrc;
     }
+
+    // Set the hardware blend mode.
+    SkASSERT(finalBlendMode);
+    BuiltInCodeSnippetID fixedFuncBlendModeID = static_cast<BuiltInCodeSnippetID>(
+            kFixedFunctionBlendModeIDOffset + static_cast<int>(*finalBlendMode));
+    builder->beginBlock(fixedFuncBlendModeID);
+    builder->endBlock();
 }
 
 } // namespace skgpu::graphite

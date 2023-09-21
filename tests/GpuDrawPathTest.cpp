@@ -23,6 +23,7 @@
 #include "include/effects/SkDashPathEffect.h"
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrTypes.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "tests/CtsEnforcement.h"
 
@@ -81,7 +82,7 @@ static void test_drawSameRectOvals(skiatest::Reporter*, SkCanvas* canvas) {
     fill_and_stroke(canvas, oval1, oval2, SkDashPathEffect::Make(intervals, 2, 0));
 }
 
-DEF_GANESH_TEST_FOR_ALL_GL_CONTEXTS(GpuDrawPath, reporter, ctxInfo, CtsEnforcement::kNever) {
+DEF_GANESH_TEST_FOR_GL_CONTEXT(GpuDrawPath, reporter, ctxInfo, CtsEnforcement::kNever) {
     for (auto& test_func : { &test_drawPathEmpty, &test_drawSameRectOvals }) {
         for (auto& sampleCount : {1, 4, 16}) {
             SkImageInfo info = SkImageInfo::MakeN32Premul(255, 255);
@@ -121,7 +122,7 @@ DEF_GANESH_TEST_FOR_ALL_CONTEXTS(GrDrawCollapsedPath,
              -8.94321693e-06f, -0.00173384184f, 0.998692870f);
     surface->getCanvas()->setMatrix(m);
     surface->getCanvas()->drawPath(path, paint);
-    dContext->flushAndSubmit(surface);
+    dContext->flushAndSubmit(surface.get(), GrSyncCpu::kNo);
 }
 
 DEF_GANESH_TEST_FOR_ALL_CONTEXTS(PathTest_CrBug1232834,
@@ -143,5 +144,5 @@ DEF_GANESH_TEST_FOR_ALL_CONTEXTS(PathTest_CrBug1232834,
     path.cubicTo(0, 3.40282e+38f, 0, 3.40282e+38f, 0, 0);
 
     surface->getCanvas()->drawPath(path, paint);
-    dContext->flushAndSubmit(surface);
+    dContext->flushAndSubmit(surface.get(), GrSyncCpu::kNo);
 }

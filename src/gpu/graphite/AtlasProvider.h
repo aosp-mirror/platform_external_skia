@@ -17,6 +17,7 @@ namespace skgpu::graphite {
 
 class ComputePathAtlas;
 class Recorder;
+class SoftwarePathAtlas;
 class TextAtlasManager;
 class TextureProxy;
 
@@ -37,8 +38,14 @@ public:
     // owning Recorder's context.
     std::unique_ptr<ComputePathAtlas> createComputePathAtlas(Recorder*) const;
 
+    // Creates a new atlas handler that uses the CPU pipeline to rasterize coverage masks
+    // for path rendering.
+    std::unique_ptr<SoftwarePathAtlas> createSoftwarePathAtlas() const;
+
     // Return an Alpha_8 TextureProxy with the given dimensions.
     sk_sp<TextureProxy> getAtlasTexture(Recorder*, uint32_t width, uint32_t height);
+
+    void clearTexturePool();
 
 private:
     std::unique_ptr<TextAtlasManager> fTextAtlasManager;

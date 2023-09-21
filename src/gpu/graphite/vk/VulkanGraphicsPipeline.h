@@ -27,6 +27,7 @@ class GraphicsPipelineDesc;
 class RuntimeEffectDictionary;
 class VulkanSharedContext;
 struct RenderPassDesc;
+class VulkanRenderPass;
 
 class VulkanGraphicsPipeline final : public GraphicsPipeline {
 public:
@@ -65,6 +66,7 @@ public:
                                               const RuntimeEffectDictionary*,
                                               const GraphicsPipelineDesc&,
                                               const RenderPassDesc&,
+                                              sk_sp<VulkanRenderPass> compatibleRenderPass,
                                               VkPipelineCache);
 
     ~VulkanGraphicsPipeline() override {}
@@ -85,7 +87,7 @@ public:
 
 private:
     VulkanGraphicsPipeline(const skgpu::graphite::SharedContext* sharedContext,
-                           Shaders* pipelineShaders,
+                           PipelineInfo* pipelineInfo,
                            VkPipelineLayout,
                            VkPipeline,
                            bool hasFragment,

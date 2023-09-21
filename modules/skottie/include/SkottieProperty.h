@@ -17,7 +17,7 @@
 #include "include/core/SkSpan.h"
 #include "include/core/SkTypeface.h"
 #include "include/utils/SkTextUtils.h"
-#include "modules/skottie/src/text/SkottieShaper.h"
+#include "modules/skottie/include/TextShaper.h"
 
 #include <functional>
 #include <vector>
@@ -116,6 +116,8 @@ public:
         : fNode(std::move(node))
         , fRevalidator(std::move(revalidator)) {}
     ~PropertyHandle();
+
+    PropertyHandle(const PropertyHandle&);
 
     ValueT get() const;
     void set(const ValueT&);

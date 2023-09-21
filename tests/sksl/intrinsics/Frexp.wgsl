@@ -1,6 +1,6 @@
 ### Compilation failed:
 
-error: :21:20 error: no matching call to frexp(f32, i32)
+error: :16:20 error: no matching call to frexp(f32, i32)
 
 2 candidate functions:
   frexp(T) -> __frexp_result_T  where: T is abstract-float, f32 or f16
@@ -11,10 +11,6 @@ error: :21:20 error: no matching call to frexp(f32, i32)
 
 
 diagnostic(off, derivative_uniformity);
-struct FSIn {
-  @builtin(front_facing) sk_Clockwise: bool,
-  @builtin(position) sk_FragCoord: vec4<f32>,
-};
 struct FSOut {
   @location(0) sk_FragColor: vec4<f32>,
 };
@@ -23,8 +19,7 @@ struct _GlobalUniforms {
   colorRed: vec4<f32>,
 };
 @binding(0) @group(0) var<uniform> _globalUniforms: _GlobalUniforms;
-fn main(_skParam0: vec2<f32>) -> vec4<f32> {
-  let coords = _skParam0;
+fn _skslMain(coords: vec2<f32>) -> vec4<f32> {
   {
     var value: vec4<f32> = vec4<f32>(_globalUniforms.colorGreen.yyyy * 6.0);
     var _0_exp: vec4<i32>;
@@ -46,9 +41,9 @@ fn main(_skParam0: vec2<f32>) -> vec4<f32> {
     return select(_globalUniforms.colorRed, _globalUniforms.colorGreen, vec4<bool>(_skTemp4));
   }
 }
-@fragment fn fragmentMain(_stageIn: FSIn) -> FSOut {
+@fragment fn main() -> FSOut {
   var _stageOut: FSOut;
-  _stageOut.sk_FragColor = main(_stageIn.sk_FragCoord.xy);
+  _stageOut.sk_FragColor = _skslMain(/*fragcoord*/ vec2<f32>());
   return _stageOut;
 }
 

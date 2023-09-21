@@ -75,8 +75,11 @@ public:
     /*
      * Notify this GrRenderTask that it relies on the contents of 'dependedOn'
      */
-    void addDependency(GrDrawingManager*, GrSurfaceProxy* dependedOn, GrMipmapped,
-                       GrTextureResolveManager, const GrCaps& caps);
+    void addDependency(GrDrawingManager*,
+                       GrSurfaceProxy* dependedOn,
+                       skgpu::Mipmapped,
+                       GrTextureResolveManager,
+                       const GrCaps& caps);
 
     /*
      * Notify this GrRenderTask that it relies on the contents of all GrRenderTasks which otherTask
@@ -105,7 +108,7 @@ public:
      */
     virtual skgpu::ganesh::OpsTask* asOpsTask() { return nullptr; }
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     /*
      * Dump out the GrRenderTask dependency DAG
      */
@@ -124,7 +127,7 @@ public:
     void visitTargetAndSrcProxies_debugOnly(const GrVisitProxyFunc& func) const {
         this->visitProxies_debugOnly(func);
         for (const sk_sp<GrSurfaceProxy>& target : fTargets) {
-            func(target.get(), GrMipmapped::kNo);
+            func(target.get(), skgpu::Mipmapped::kNo);
         }
     }
 #endif
@@ -149,7 +152,7 @@ public:
     // Used by GrRenderTaskCluster.
     SK_DECLARE_INTERNAL_LLIST_INTERFACE(GrRenderTask);
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     const GrTextureResolveRenderTask* resolveTask() const { return fTextureResolveTask; }
 #endif
 protected:

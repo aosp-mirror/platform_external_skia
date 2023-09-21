@@ -163,7 +163,7 @@ public:
 
     void addOnFlushCallbackObject(GrOnFlushCallbackObject*);
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
     void testingOnly_removeOnFlushCallbackObject(GrOnFlushCallbackObject*);
     PathRendererChain::Options testingOnly_getOptionsForPathRendererChain() {
         return fOptionsForPathRendererChain;
@@ -211,7 +211,7 @@ private:
     GrRenderTask* appendTask(sk_sp<GrRenderTask>);
     GrRenderTask* insertTaskBeforeLast(sk_sp<GrRenderTask>);
 
-    bool submitToGpu(bool syncToCpu);
+    bool submitToGpu(GrSyncCpu sync);
 
     SkDEBUGCODE(void validate() const);
 

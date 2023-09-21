@@ -90,7 +90,7 @@ public:
 #ifdef SK_VULKAN
         if (rContext->backend() == GrBackendApi::kVulkan) {
             auto vkCaps = static_cast<const GrVkCaps*>(rContext->priv().caps());
-            fCanBeProtected = vkCaps->supportsProtectedMemory();
+            fCanBeProtected = vkCaps->supportsProtectedContent();
             if (fCanBeProtected) {
                 fIsProtected = GrProtected::kYes;
             }
@@ -274,7 +274,7 @@ public:
                                                              fSampleCount,
                                                              fColorType,
                                                              fColorSpace,
-                                                             GrMipmapped(fShouldCreateMipMaps),
+                                                             skgpu::Mipmapped(fShouldCreateMipMaps),
                                                              fIsProtected,
                                                              &fSurfaceProps);
         } else {
@@ -636,10 +636,10 @@ void DDLSurfaceCharacterizationTestImpl(GrDirectContext* dContext, skiatest::Rep
 //    FBO0 w/ MSAA, FBO0 w/o MSAA, not-FBO0 w/ MSAA, not-FBO0 w/o MSAA
 // and then tries all sixteen combinations to check the expected compatibility.
 // Note: this is a GL-only test
-DEF_GANESH_TEST_FOR_GL_RENDERING_CONTEXTS(CharacterizationFBO0nessTest,
-                                          reporter,
-                                          ctxInfo,
-                                          CtsEnforcement::kApiLevel_T) {
+DEF_GANESH_TEST_FOR_GL_CONTEXT(CharacterizationFBO0nessTest,
+                               reporter,
+                               ctxInfo,
+                               CtsEnforcement::kApiLevel_T) {
     auto context = ctxInfo.directContext();
     const GrCaps* caps = context->priv().caps();
     sk_sp<GrContextThreadSafeProxy> proxy = context->threadSafeProxy();
@@ -917,7 +917,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(DDLWrapBackendTest,
                                                                     kSize,
                                                                     kSize,
                                                                     kRGBA_8888_SkColorType,
-                                                                    GrMipmapped::kNo,
+                                                                    skgpu::Mipmapped::kNo,
                                                                     GrRenderable::kNo,
                                                                     GrProtected::kNo);
     if (!mbet) {
@@ -1151,7 +1151,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(DDLSkSurfaceFlush,
                 SkImages::PromiseTextureFrom(canvas->recordingContext()->threadSafeProxy(),
                                              format,
                                              SkISize::Make(32, 32),
-                                             GrMipmapped::kNo,
+                                             skgpu::Mipmapped::kNo,
                                              kTopLeft_GrSurfaceOrigin,
                                              kRGBA_8888_SkColorType,
                                              kPremul_SkAlphaType,
@@ -1170,14 +1170,14 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(DDLSkSurfaceFlush,
     REPORTER_ASSERT(reporter, skgpu::ganesh::DrawDDL(s, ddl));
 
     GrFlushInfo flushInfo;
-    context->flush(s, SkSurfaces::BackendSurfaceAccess::kPresent, flushInfo);
-    context->submit();
+    context->flush(s.get(), SkSurfaces::BackendSurfaceAccess::kPresent, flushInfo);
+    context->submit(GrSyncCpu::kNo);
 
     REPORTER_ASSERT(reporter, fulfillInfo.fFulfilled);
 
     // In order to receive the done callback with the low-level APIs we need to re-flush
-    context->flush(s);
-    context->submit(true);
+    context->flush(s.get());
+    context->submit(GrSyncCpu::kYes);
 
     REPORTER_ASSERT(reporter, fulfillInfo.fReleased);
 
@@ -1250,10 +1250,7 @@ static sk_sp<GrPromiseImageTexture> noop_fulfill_proc(void*) {
 ////////////////////////////////////////////////////////////////////////////////
 // Check that the texture-specific flags (i.e., for external & rectangle textures) work
 // for promise images. As such, this is a GL-only test.
-DEF_GANESH_TEST_FOR_GL_RENDERING_CONTEXTS(DDLTextureFlagsTest,
-                                          reporter,
-                                          ctxInfo,
-                                          CtsEnforcement::kNever) {
+DEF_GANESH_TEST_FOR_GL_CONTEXT(DDLTextureFlagsTest, reporter, ctxInfo, CtsEnforcement::kNever) {
     auto context = ctxInfo.directContext();
 
     SkImageInfo ii = SkImageInfo::MakeN32Premul(32, 32);
@@ -1265,7 +1262,7 @@ DEF_GANESH_TEST_FOR_GL_RENDERING_CONTEXTS(DDLTextureFlagsTest,
     GrDeferredDisplayListRecorder recorder(characterization);
 
     for (GrGLenum target : { GR_GL_TEXTURE_EXTERNAL, GR_GL_TEXTURE_RECTANGLE, GR_GL_TEXTURE_2D } ) {
-        for (auto mipmapped : { GrMipmapped::kNo, GrMipmapped::kYes }) {
+        for (auto mipmapped : {skgpu::Mipmapped::kNo, skgpu::Mipmapped::kYes}) {
             GrBackendFormat format = GrBackendFormats::MakeGL(GR_GL_RGBA8, target);
 
             sk_sp<SkImage> image = SkImages::PromiseTextureFrom(
@@ -1280,7 +1277,7 @@ DEF_GANESH_TEST_FOR_GL_RENDERING_CONTEXTS(DDLTextureFlagsTest,
                     noop_fulfill_proc,
                     /*release proc*/ nullptr,
                     /*context*/ nullptr);
-            if (GR_GL_TEXTURE_2D != target && mipmapped == GrMipmapped::kYes) {
+            if (GR_GL_TEXTURE_2D != target && mipmapped == skgpu::Mipmapped::kYes) {
                 REPORTER_ASSERT(reporter, !image);
                 continue;
             }
@@ -1305,10 +1302,7 @@ DEF_GANESH_TEST_FOR_GL_RENDERING_CONTEXTS(DDLTextureFlagsTest,
 
 ////////////////////////////////////////////////////////////////////////////////
 // Test colorType and pixelConfig compatibility.
-DEF_GANESH_TEST_FOR_GL_RENDERING_CONTEXTS(DDLCompatibilityTest,
-                                          reporter,
-                                          ctxInfo,
-                                          CtsEnforcement::kNever) {
+DEF_GANESH_TEST_FOR_GL_CONTEXT(DDLCompatibilityTest, reporter, ctxInfo, CtsEnforcement::kNever) {
     auto context = ctxInfo.directContext();
 
     for (int ct = 0; ct <= kLastEnum_SkColorType; ++ct) {

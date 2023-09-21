@@ -162,7 +162,9 @@ public:
                 if (child && child->sampleUsage().isPassThrough()) {
                     coords.clear();
                 }
-                return std::string(fSelf->invokeChild(index, fInputColor, fArgs, coords).c_str());
+                return child ? std::string(fSelf->invokeChild(index, fInputColor, fArgs, coords)
+                                                   .c_str())
+                             : std::string("half4(0)");
             }
 
             std::string sampleColorFilter(int index, std::string color) override {
@@ -497,7 +499,7 @@ SkPMColor4f GrSkSLFP::constantOutputForConstantInput(const SkPMColor4f& inputCol
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrSkSLFP)
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 
 std::unique_ptr<GrFragmentProcessor> GrSkSLFP::TestCreate(GrProcessorTestData* d) {
     SkColor colors[SkOverdrawColorFilter::kNumColors];

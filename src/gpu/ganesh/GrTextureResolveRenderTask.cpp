@@ -50,7 +50,7 @@ void GrTextureResolveRenderTask::addProxy(GrDrawingManager* drawingMgr,
 
     if (GrSurfaceProxy::ResolveFlags::kMipMaps & newFlags) {
         GrTextureProxy* textureProxy = proxy->asTextureProxy();
-        SkASSERT(GrMipmapped::kYes == textureProxy->mipmapped());
+        SkASSERT(skgpu::Mipmapped::kYes == textureProxy->mipmapped());
         SkASSERT(textureProxy->mipmapsAreDirty());
         textureProxy->markMipmapsClean();
     }
@@ -60,11 +60,8 @@ void GrTextureResolveRenderTask::addProxy(GrDrawingManager* drawingMgr,
     if (newProxy) {
         // Add the proxy as a dependency: We will read the existing contents of this texture while
         // generating mipmap levels and/or resolving MSAA.
-        this->addDependency(drawingMgr,
-                            proxy,
-                            GrMipmapped::kNo,
-                            GrTextureResolveManager(nullptr),
-                            caps);
+        this->addDependency(
+                drawingMgr, proxy, skgpu::Mipmapped::kNo, GrTextureResolveManager(nullptr), caps);
         this->addTarget(drawingMgr, GrSurfaceProxyView(std::move(proxyRef)));
     }
 }
@@ -114,7 +111,7 @@ bool GrTextureResolveRenderTask::onExecute(GrOpFlushState* flushState) {
 void GrTextureResolveRenderTask::visitProxies_debugOnly(const GrVisitProxyFunc&) const {}
 #endif
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 GrSurfaceProxy::ResolveFlags
 GrTextureResolveRenderTask::flagsForProxy(sk_sp<GrSurfaceProxy> proxy) const {
     if (auto found = std::find(fTargets.begin(), fTargets.end(), proxy);
