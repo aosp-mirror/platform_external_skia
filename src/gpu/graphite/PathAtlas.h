@@ -21,6 +21,7 @@
 
 namespace skgpu::graphite {
 
+class Caps;
 class DrawContext;
 class Recorder;
 class Rect;
@@ -82,13 +83,16 @@ public:
     // commands that are in-flight or yet to be submitted.
     void reset();
 
-    // Returns a pointer to the atlas texture.
-    const TextureProxy* texture() const { return fTexture.get(); }
+    // Returns a pointer to the atlas texture. Initializes a texture proxy if necessary. Returns
+    // nullptr if a texture can not be created.
+    const TextureProxy* getTexture(Recorder*);
 
     uint32_t width() const { return static_cast<uint32_t>(fRectanizer.width()); }
     uint32_t height() const { return static_cast<uint32_t>(fRectanizer.height()); }
 
 protected:
+    const TextureProxy* texture() const { return fTexture.get(); }
+
     virtual void onAddShape(const Shape&,
                             const Transform& transform,
                             const Rect& atlasBounds,
@@ -96,7 +100,11 @@ protected:
                             const SkStrokeRec&) = 0;
     virtual void onReset() = 0;
 
+    virtual SkColorType coverageMaskFormat(const Caps*) const = 0;
+
 private:
+    bool initializeTextureIfNeeded(Recorder*);
+
     skgpu::RectanizerSkyline fRectanizer;
 
     // A PathAtlas lazily requests a texture from the AtlasProvider when the first shape gets added
@@ -127,6 +135,9 @@ class ComputePathAtlas : public PathAtlas {
 public:
     ComputePathAtlas();
     virtual std::unique_ptr<DispatchGroup> recordDispatches(Recorder*) const = 0;
+
+protected:
+    SkColorType coverageMaskFormat(const Caps*) const override;
 };
 
 #ifdef SK_ENABLE_VELLO_SHADERS
@@ -180,6 +191,7 @@ protected:
                     skvx::int2 deviceOffset,
                     const SkStrokeRec&) override;
     void onReset() override;
+    SkColorType coverageMaskFormat(const Caps*) const override;
 
     SkAutoPixmapStorage fPixels;
     SkIRect fDirtyRect;
