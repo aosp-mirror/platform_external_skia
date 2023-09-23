@@ -15,6 +15,7 @@
 #include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/RendererProvider.h"
 #include "src/gpu/graphite/TextureProxy.h"
+#include "src/gpu/graphite/TextureUtils.h"
 #include "src/gpu/graphite/geom/Rect.h"
 #include "src/gpu/graphite/geom/Shape.h"
 #include "src/gpu/graphite/geom/Transform_graphite.h"
@@ -35,10 +36,10 @@ namespace {
 
 // TODO: select atlas size dynamically? Take ContextOptions::fMaxTextureAtlasSize into account?
 // TODO: This is the maximum target dimension that vello can handle today
-constexpr uint32_t kComputeAtlasDim = 4096;
+constexpr uint16_t kComputeAtlasDim = 4096;
 
 // TODO: for now
-constexpr uint32_t kSoftwareAtlasDim = 4096;
+constexpr uint16_t kSoftwareAtlasDim = 4096;
 
 }  // namespace
 
@@ -55,13 +56,9 @@ bool PathAtlas::addShape(Recorder* recorder,
     SkASSERT(out);
     SkASSERT(!transformedShapeBounds.isEmptyNegativeOrNaN());
 
-    if (!fTexture) {
-        fTexture = recorder->priv().atlasProvider()->getAtlasTexture(
-                recorder, this->width(), this->height());
-        if (!fTexture) {
-            SKGPU_LOG_E("Failed to instantiate an atlas texture");
-            return false;
-        }
+    if (!this->initializeTextureIfNeeded(recorder)) {
+        SKGPU_LOG_E("Failed to instantiate an atlas texture");
+        return false;
     }
 
     // Round out the shape bounds to preserve any fractional offset so that it is present in the
@@ -95,7 +92,31 @@ void PathAtlas::reset() {
     this->onReset();
 }
 
+const TextureProxy* PathAtlas::getTexture(Recorder* recorder) {
+    if (!this->initializeTextureIfNeeded(recorder)) {
+        SKGPU_LOG_E("Failed to instantiate an atlas texture");
+    }
+    return fTexture.get();
+}
+
+bool PathAtlas::initializeTextureIfNeeded(Recorder* recorder) {
+    if (!fTexture) {
+        fTexture = recorder->priv().atlasProvider()->getAtlasTexture(
+                recorder,
+                this->width(),
+                this->height(),
+                this->coverageMaskFormat(recorder->priv().caps()));
+    }
+    return fTexture != nullptr;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+
 ComputePathAtlas::ComputePathAtlas() : PathAtlas(kComputeAtlasDim, kComputeAtlasDim) {}
+
+SkColorType ComputePathAtlas::coverageMaskFormat(const Caps* caps) const {
+    return ComputeShaderCoverageMaskTargetFormat(caps);
+}
 
 #ifdef SK_ENABLE_VELLO_SHADERS
 
@@ -257,6 +278,10 @@ void SoftwarePathAtlas::onAddShape(const Shape& shape,
                                    atlasBounds.y() + 1 - deviceOffset.y());
     draw.fCTM = &translatedMatrix;
     SkPath path = shape.asPath();
+    if (path.isInverseFillType()) {
+        // The shader will handle the inverse fill in this case
+        path.toggleInverseFillType();
+    }
     draw.drawPathCoverage(path, paint);
 
     // Add atlasBounds to dirtyRect for later upload
@@ -269,6 +294,10 @@ void SoftwarePathAtlas::onReset() {
     // clear backing data for next pass
     fDirtyRect.setEmpty();
     fPixels.erase(0);
+}
+
+SkColorType SoftwarePathAtlas::coverageMaskFormat(const Caps*) const {
+    return kAlpha_8_SkColorType;
 }
 
 }  // namespace skgpu::graphite
