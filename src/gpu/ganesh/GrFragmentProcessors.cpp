@@ -21,6 +21,7 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSize.h"
+#include "include/core/SkSpan.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrRecordingContext.h"
@@ -150,50 +151,60 @@ bool IsSupported(const SkMaskFilter* maskfilter) {
 
 using ChildType = SkRuntimeEffect::ChildType;
 
-GrFPResult make_effect_fp(sk_sp<SkRuntimeEffect> effect,
-                          const char* name,
-                          sk_sp<const SkData> uniforms,
-                          std::unique_ptr<GrFragmentProcessor> inputFP,
-                          std::unique_ptr<GrFragmentProcessor> destColorFP,
-                          SkSpan<const SkRuntimeEffect::ChildPtr> children,
-                          const GrFPArgs& childArgs) {
-    skia_private::STArray<8, std::unique_ptr<GrFragmentProcessor>> childFPs;
-    for (const auto& child : children) {
-        std::optional<ChildType> type = child.type();
-        if (type == ChildType::kShader) {
+GrFPResult MakeChildFP(const SkRuntimeEffect::ChildPtr& child, const GrFPArgs& childArgs) {
+    std::optional<ChildType> type = child.type();
+    if (!type.has_value()) {
+        // We have a null child effect.
+        return GrFPNullableSuccess(nullptr);
+    }
+
+    switch (*type) {
+        case ChildType::kShader: {
             // Convert a SkShader into a child FP.
             SkShaders::MatrixRec mRec(SkMatrix::I());
             mRec.markTotalMatrixInvalid();
-            auto childFP = Make(child.shader(), childArgs, mRec);
-            if (!childFP) {
-                return GrFPFailure(std::move(inputFP));
-            }
-            childFPs.push_back(std::move(childFP));
-        } else if (type == ChildType::kColorFilter) {
+            auto childFP = GrFragmentProcessors::Make(child.shader(), childArgs, mRec);
+            return childFP ? GrFPSuccess(std::move(childFP))
+                           : GrFPFailure(nullptr);
+        }
+        case ChildType::kColorFilter: {
             // Convert a SkColorFilter into a child FP.
-            auto [success, childFP] = Make(childArgs.fContext,
-                                           child.colorFilter(),
-                                           /*inputFP=*/nullptr,
-                                           *childArgs.fDstColorInfo,
-                                           childArgs.fSurfaceProps);
-            if (!success) {
-                return GrFPFailure(std::move(inputFP));
-            }
-            childFPs.push_back(std::move(childFP));
-        } else if (type == ChildType::kBlender) {
+            auto [success, childFP] = GrFragmentProcessors::Make(childArgs.fContext,
+                                                                 child.colorFilter(),
+                                                                 /*inputFP=*/nullptr,
+                                                                 *childArgs.fDstColorInfo,
+                                                                 childArgs.fSurfaceProps);
+            return success ? GrFPSuccess(std::move(childFP))
+                           : GrFPFailure(nullptr);
+        }
+        case ChildType::kBlender: {
             // Convert a SkBlender into a child FP.
             auto childFP = GrFragmentProcessors::Make(as_BB(child.blender()),
                                                       /*srcFP=*/nullptr,
                                                       GrFragmentProcessor::DestColor(),
                                                       childArgs);
-            if (!childFP) {
-                return GrFPFailure(std::move(inputFP));
-            }
-            childFPs.push_back(std::move(childFP));
-        } else {
-            // We have a null child effect.
-            childFPs.push_back(nullptr);
+            return childFP ? GrFPSuccess(std::move(childFP))
+                           : GrFPFailure(nullptr);
         }
+    }
+
+    SkUNREACHABLE;
+}
+
+static GrFPResult make_effect_fp(sk_sp<SkRuntimeEffect> effect,
+                                 const char* name,
+                                 sk_sp<const SkData> uniforms,
+                                 std::unique_ptr<GrFragmentProcessor> inputFP,
+                                 std::unique_ptr<GrFragmentProcessor> destColorFP,
+                                 SkSpan<const SkRuntimeEffect::ChildPtr> children,
+                                 const GrFPArgs& childArgs) {
+    skia_private::STArray<8, std::unique_ptr<GrFragmentProcessor>> childFPs;
+    for (const auto& child : children) {
+        auto [success, childFP] = MakeChildFP(child, childArgs);
+        if (!success) {
+            return GrFPFailure(std::move(inputFP));
+        }
+        childFPs.push_back(std::move(childFP));
     }
     auto fp = GrSkSLFP::MakeWithData(std::move(effect),
                                      name,
