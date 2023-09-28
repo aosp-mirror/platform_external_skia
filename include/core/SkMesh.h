@@ -174,13 +174,16 @@ public:
      */
     SkSpan<const Child> children() const { return SkSpan(fChildren); }
 
-    /** Returns pointer to the named uniform variable's description, or nullptr if not found. */
+    /** Returns a pointer to the named child's description, or nullptr if not found. */
+    const Child* findChild(std::string_view name) const;
+
+    /** Returns a pointer to the named uniform variable's description, or nullptr if not found. */
     const Uniform* findUniform(std::string_view name) const;
 
-    /** Returns pointer to the named attribute, or nullptr if not found. */
+    /** Returns a pointer to the named attribute, or nullptr if not found. */
     const Attribute* findAttribute(std::string_view name) const;
 
-    /** Returns pointer to the named varying, or nullptr if not found. */
+    /** Returns a pointer to the named varying, or nullptr if not found. */
     const Varying* findVarying(std::string_view name) const;
 
     size_t stride() const { return fStride; }
@@ -315,15 +318,6 @@ public:
      * vertex buffer was null or uniform data too small).
      */
 
-    // TODO(b/40045302): this form of Make is deprecated; remove existing callers in Android/google3
-    static Result Make(sk_sp<SkMeshSpecification>,
-                       Mode,
-                       sk_sp<VertexBuffer>,
-                       size_t vertexCount,
-                       size_t vertexOffset,
-                       sk_sp<const SkData> uniforms,
-                       const SkRect& bounds);
-
     // TODO(b/40045302): support for `children` is a work-in-progress
     static Result Make(sk_sp<SkMeshSpecification>,
                        Mode,
@@ -340,18 +334,6 @@ public:
      * If the mesh is invalid the returned string give contain the reason for the failure (e.g. the
      * index buffer was null or uniform data too small).
      */
-
-    // TODO(b/40045302): this form of MakeIndexed is deprecated; remove existing callers
-    static Result MakeIndexed(sk_sp<SkMeshSpecification>,
-                              Mode,
-                              sk_sp<VertexBuffer>,
-                              size_t vertexCount,
-                              size_t vertexOffset,
-                              sk_sp<IndexBuffer>,
-                              size_t indexCount,
-                              size_t indexOffset,
-                              sk_sp<const SkData> uniforms,
-                              const SkRect& bounds);
 
     // TODO(b/40045302): support for `children` is a work-in-progress
     static Result MakeIndexed(sk_sp<SkMeshSpecification>,
