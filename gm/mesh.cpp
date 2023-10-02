@@ -57,17 +57,18 @@ protected:
                     }
             )";
             static constexpr char kFS[] = R"(
+                    uniform colorFilter filter;
+
                     float2 main(const in Varyings varyings, out float4 color) {
-                        color = varyings.color;
+                        color = filter.eval(varyings.color);
                         return varyings.uv;
                     }
             )";
-            auto[spec, error] =
-                    SkMeshSpecification::Make(kAttributes,
-                                              sizeof(ColorVertex),
-                                              kVaryings,
-                                              SkString(kVS),
-                                              SkString(kFS));
+            auto [spec, error] = SkMeshSpecification::Make(kAttributes,
+                                                           sizeof(ColorVertex),
+                                                           kVaryings,
+                                                           SkString(kVS),
+                                                           SkString(kFS));
             if (!spec) {
                 SkDebugf("%s\n", error.c_str());
             }
@@ -94,12 +95,11 @@ protected:
                         return helper(varyings.vux2);
                     }
             )";
-            auto[spec, error] =
-                    SkMeshSpecification::Make(kAttributes,
-                                              sizeof(NoColorVertex),
-                                              kVaryings,
-                                              SkString(kVS),
-                                              SkString(kFS));
+            auto [spec, error] = SkMeshSpecification::Make(kAttributes,
+                                                           sizeof(NoColorVertex),
+                                                           kVaryings,
+                                                           SkString(kVS),
+                                                           SkString(kFS));
             if (!spec) {
                 SkDebugf("%s\n", error.c_str());
             }
@@ -142,6 +142,7 @@ protected:
     SkString getName() const override { return SkString("custommesh"); }
 
     DrawResult onDraw(SkCanvas* canvas, SkString*) override {
+        SkRuntimeEffect::ChildPtr nullChild[1] = {};
         int i = 0;
         for (const sk_sp<SkBlender>& blender : {SkBlender::Mode(SkBlendMode::kDst),
                                                 SkBlender::Mode(SkBlendMode::kSrc),
@@ -160,7 +161,7 @@ protected:
                                             /*vertexCount=*/4,
                                             /*vertexOffset=*/0,
                                             /*uniforms=*/nullptr,
-                                            /*children=*/{},
+                                            /*children=*/nullChild,
                                             kRect);
                     } else {
                         result = SkMesh::Make(fSpecWithNoColor,
@@ -174,7 +175,7 @@ protected:
                     }
                 } else {
                     // Alternate between CPU and GPU-backend index buffers.
-                    auto ib = (i%4 == 0) ? fIB[0] : fIB[1];
+                    auto ib = (i % 4 == 0) ? fIB[0] : fIB[1];
                     if (colors) {
                         result = SkMesh::MakeIndexed(fSpecWithColor,
                                                      SkMesh::Mode::kTriangles,
@@ -185,7 +186,7 @@ protected:
                                                      /*indexCount=*/6,
                                                      kIndexOffset,
                                                      /*uniforms=*/nullptr,
-                                                     /*children=*/{},
+                                                     /*children=*/nullChild,
                                                      kRect);
                     } else {
                         result = SkMesh::MakeIndexed(fSpecWithNoColor,
