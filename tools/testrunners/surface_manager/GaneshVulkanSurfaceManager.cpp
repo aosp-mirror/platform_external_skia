@@ -5,12 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "gm/surface_manager/SurfaceManager.h"
+#include "tools/testrunners/surface_manager/SurfaceManager.h"
 
 #include <string>
 
 std::unique_ptr<SurfaceManager> SurfaceManager::FromConfig(std::string config,
-                                                           int width,
-                                                           int height) {
+                                                           SurfaceOptions surfaceOptions) {
     return nullptr;  // TODO(lovisolo): Implement.
 }

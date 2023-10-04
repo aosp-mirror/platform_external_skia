@@ -53,24 +53,12 @@ enum class DstColorType {
  * as parent-child relationships.
  */
 
-struct PriorOutputBlock {
-    static void BeginBlock(const KeyContext&,
-                           PaintParamsKeyBuilder*,
-                           PipelineDataGatherer*);
-};
-
 struct DstReadSampleBlock {
     static void BeginBlock(const KeyContext&,
                            PaintParamsKeyBuilder*,
                            PipelineDataGatherer*,
                            sk_sp<TextureProxy> dst,
                            SkIPoint dstOffset);
-};
-
-struct DstReadFetchBlock {
-    static void BeginBlock(const KeyContext&,
-                           PaintParamsKeyBuilder*,
-                           PipelineDataGatherer*);
 };
 
 struct SolidColorShaderBlock {
@@ -230,16 +218,19 @@ struct CoordClampShaderBlock {
 
 struct DitherShaderBlock {
     struct DitherData {
-        DitherData(float range) : fRange(range) {}
+        DitherData(float range, sk_sp<TextureProxy> proxy)
+            : fRange(range)
+            , fLUTProxy(std::move(proxy)) {}
 
         float fRange;
+        sk_sp<TextureProxy> fLUTProxy;
     };
 
     // The gatherer and data should be null or non-null together
     static void BeginBlock(const KeyContext&,
                            PaintParamsKeyBuilder*,
                            PipelineDataGatherer*,
-                           const DitherData*);
+                           const DitherData&);
 };
 
 struct PerlinNoiseShaderBlock {
@@ -295,10 +286,6 @@ struct CoeffBlenderBlock {
                            SkSpan<const float> coeffs);
 };
 
-struct PrimitiveColorBlock {
-    static void BeginBlock(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*);
-};
-
 struct ComposeBlock {
     static void BeginBlock(const KeyContext&,
                            PaintParamsKeyBuilder*,
@@ -340,12 +327,6 @@ struct TableColorFilterBlock {
                            PaintParamsKeyBuilder*,
                            PipelineDataGatherer*,
                            const TableColorFilterData&);
-};
-
-struct GaussianColorFilterBlock {
-    static void BeginBlock(const KeyContext&,
-                           PaintParamsKeyBuilder*,
-                           PipelineDataGatherer*);
 };
 
 struct ColorSpaceTransformBlock {
