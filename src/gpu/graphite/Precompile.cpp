@@ -155,8 +155,7 @@ void PaintOption::addPaintColorToKey(const KeyContext& keyContext,
     if (fShader.first) {
         fShader.first->priv().addToKey(keyContext, fShader.second, builder);
     } else {
-        SolidColorShaderBlock::BeginBlock(keyContext, builder, gatherer, {1, 0, 0, 1});
-        builder->endBlock();
+        SolidColorShaderBlock::AddBlock(keyContext, builder, gatherer, {1, 0, 0, 1});
     }
 }
 
@@ -175,8 +174,7 @@ void PaintOption::handlePrimitiveColor(const KeyContext& keyContext,
                   this->addPaintColorToKey(keyContext, keyBuilder, gatherer);
               },
               /* addDstToKey= */ [&]() -> void {
-                  PrimitiveColorBlock::BeginBlock(keyContext, keyBuilder, gatherer);
-                  keyBuilder->endBlock();
+                  keyBuilder->addBlock(BuiltInCodeSnippetID::kPrimitiveColor);
               });
     } else {
         this->addPaintColorToKey(keyContext, keyBuilder, gatherer);
@@ -195,9 +193,8 @@ void PaintOption::handlePaintAlpha(const KeyContext& keyContext,
                   this->handlePrimitiveColor(keyContext, keyBuilder, gatherer);
               },
               /* addDstToKey= */ [&]() -> void {
-                  SolidColorShaderBlock::BeginBlock(keyContext, keyBuilder, gatherer,
-                                                    {0, 0, 0, 0.5f});
-                  keyBuilder->endBlock();
+                  SolidColorShaderBlock::AddBlock(keyContext, keyBuilder, gatherer,
+                                                  {0, 0, 0, 0.5f});
               });
     } else {
         this->handlePrimitiveColor(keyContext, keyBuilder, gatherer);
@@ -241,8 +238,8 @@ bool PaintOption::shouldDither(SkColorType dstCT) const {
 }
 
 void PaintOption::handleDithering(const KeyContext& keyContext,
-                                   PaintParamsKeyBuilder* builder,
-                                   PipelineDataGatherer* gatherer) const {
+                                  PaintParamsKeyBuilder* builder,
+                                  PipelineDataGatherer* gatherer) const {
 
 #ifndef SK_IGNORE_GPU_DITHER
     SkColorType ct = keyContext.dstColorInfo().colorType();
@@ -252,10 +249,7 @@ void PaintOption::handleDithering(const KeyContext& keyContext,
                     this->handleColorFilter(keyContext, builder, gatherer);
                 },
                 /* addOuterToKey= */ [&]() -> void {
-                    DitherShaderBlock::DitherData data(skgpu::DitherRangeForConfig(ct));
-
-                    DitherShaderBlock::BeginBlock(keyContext, builder, gatherer, &data);
-                    builder->endBlock();
+                    AddDitherBlock(keyContext, builder, gatherer, ct);
                 });
     } else
 #endif
@@ -319,11 +313,6 @@ void PaintOptions::createKey(const KeyContext& keyContext,
     const int desiredShaderCombination = remainingCombinations;
     SkASSERT(desiredShaderCombination < this->numShaderCombinations());
 
-    // TODO: eliminate this block for the Paint's color when it isn't needed
-    SolidColorShaderBlock::BeginBlock(keyContext, keyBuilder, /* gatherer= */ nullptr,
-                                      {1, 0, 0, 1});
-    keyBuilder->endBlock();
-
     // TODO: this probably needs to be passed in just like addPrimitiveBlender
     const bool kOpaquePaintColor = true;
 
@@ -354,8 +343,8 @@ void PaintOptions::createKey(const KeyContext& keyContext,
     SkASSERT(finalBlendMode);
     BuiltInCodeSnippetID fixedFuncBlendModeID = static_cast<BuiltInCodeSnippetID>(
             kFixedFunctionBlendModeIDOffset + static_cast<int>(*finalBlendMode));
-    keyBuilder->beginBlock(fixedFuncBlendModeID);
-    keyBuilder->endBlock();
+
+    keyBuilder->addBlock(fixedFuncBlendModeID);
 }
 
 void PaintOptions::buildCombinations(
