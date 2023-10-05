@@ -6,16 +6,17 @@
  */
 
 #include "gm/gm.h"
+#include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkTypes.h"
 #include "src/core/SkCanvasPriv.h"
-#include "src/gpu/GrFragmentProcessor.h"
-#include "src/gpu/SkGr.h"
-#include "src/gpu/SurfaceFillContext.h"
-#include "src/gpu/effects/GrTextureEffect.h"
+#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/SkGr.h"
+#include "src/gpu/ganesh/SurfaceFillContext.h"
+#include "src/gpu/ganesh/effects/GrTextureEffect.h"
 #include "tools/Resources.h"
 
 DEF_SIMPLE_GPU_GM(swizzle, rContext, canvas, 512, 512) {
@@ -26,7 +27,8 @@ DEF_SIMPLE_GPU_GM(swizzle, rContext, canvas, 512, 512) {
 
     SkBitmap bmp;
     GetResourceAsBitmap("images/mandrill_512_q075.jpg", &bmp);
-    auto view = std::get<0>(GrMakeCachedBitmapProxyView(rContext, bmp, GrMipmapped::kNo));
+    auto view = std::get<0>(
+            GrMakeCachedBitmapProxyView(rContext, bmp, /*label=*/"Gm_Swizzle", GrMipmapped::kNo));
     if (!view) {
         return;
     }

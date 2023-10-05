@@ -10,7 +10,7 @@
 
 #include "include/core/SkRefCnt.h"
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 
 #include "include/core/SkImageInfo.h"
 #include "include/gpu/GrContextOptions.h"
@@ -21,11 +21,12 @@
 class GrBackendFormat;
 class GrCaps;
 class GrContextThreadSafeProxyPriv;
-class GrTextBlobRedrawCoordinator;
 class GrThreadSafeCache;
 class GrThreadSafePipelineBuilder;
 class SkSurfaceCharacterization;
 class SkSurfaceProps;
+
+namespace sktext::gpu { class TextBlobRedrawCoordinator; }
 
 /**
  * Can be used to perform actions related to the generating GrContext in a thread safe manner. The
@@ -114,6 +115,13 @@ public:
      */
     GrBackendFormat compressedBackendFormat(SkImage::CompressionType c) const;
 
+    /**
+     * Gets the maximum supported sample count for a color type. 1 is returned if only non-MSAA
+     * rendering is supported for the color type. 0 is returned if rendering to this color type
+     * is not supported at all.
+     */
+    int maxSurfaceSampleCountForColorType(SkColorType colorType) const;
+
     bool isValid() const { return nullptr != fCaps; }
 
     bool operator==(const GrContextThreadSafeProxy& that) const {
@@ -142,17 +150,17 @@ private:
     // `init` method on GrContext_Base).
     void init(sk_sp<const GrCaps>, sk_sp<GrThreadSafePipelineBuilder>);
 
-    const GrBackendApi                           fBackend;
-    const GrContextOptions                       fOptions;
-    const uint32_t                               fContextID;
-    sk_sp<const GrCaps>                          fCaps;
-    std::unique_ptr<GrTextBlobRedrawCoordinator> fTextBlobRedrawCoordinator;
-    std::unique_ptr<GrThreadSafeCache>           fThreadSafeCache;
-    sk_sp<GrThreadSafePipelineBuilder>           fPipelineBuilder;
-    std::atomic<bool>                            fAbandoned{false};
+    const GrBackendApi                                      fBackend;
+    const GrContextOptions                                  fOptions;
+    const uint32_t                                          fContextID;
+    sk_sp<const GrCaps>                                     fCaps;
+    std::unique_ptr<sktext::gpu::TextBlobRedrawCoordinator> fTextBlobRedrawCoordinator;
+    std::unique_ptr<GrThreadSafeCache>                      fThreadSafeCache;
+    sk_sp<GrThreadSafePipelineBuilder>                      fPipelineBuilder;
+    std::atomic<bool>                                       fAbandoned{false};
 };
 
-#else // !SK_SUPPORT_GPU
+#else // !defined(SK_GANESH)
 class SK_API GrContextThreadSafeProxy final : public SkNVRefCnt<GrContextThreadSafeProxy> {};
 #endif
 

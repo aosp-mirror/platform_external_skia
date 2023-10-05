@@ -25,23 +25,25 @@
 #include "include/core/SkTypes.h"
 #include "include/docs/SkPDFDocument.h"
 #include "include/private/SkBitmaskEnum.h"
-#include "include/private/SkTHash.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkUTF.h"
 #include "src/core/SkGlyph.h"
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkMask.h"
-#include "src/core/SkScalerCache.h"
 #include "src/core/SkScalerContext.h"
+#include "src/core/SkStrike.h"
 #include "src/core/SkStrikeSpec.h"
+#include "src/core/SkTHash.h"
 #include "src/pdf/SkPDFBitmap.h"
+#include "src/pdf/SkPDFDevice.h"
 #include "src/pdf/SkPDFDocumentPriv.h"
 #include "src/pdf/SkPDFFont.h"
+#include "src/pdf/SkPDFFormXObject.h"
 #include "src/pdf/SkPDFMakeCIDGlyphWidthsArray.h"
 #include "src/pdf/SkPDFMakeToUnicodeCmap.h"
 #include "src/pdf/SkPDFSubsetFont.h"
 #include "src/pdf/SkPDFType1Font.h"
 #include "src/pdf/SkPDFUtils.h"
-#include "src/utils/SkUTF.h"
 
 #include <limits.h>
 #include <initializer_list>
@@ -171,6 +173,12 @@ const std::vector<SkUnichar>& SkPDFFont::GetUnicodeMap(const SkTypeface* typefac
 SkAdvancedTypefaceMetrics::FontType SkPDFFont::FontType(const SkTypeface& typeface,
                                                         const SkAdvancedTypefaceMetrics& metrics) {
     if (SkToBool(metrics.fFlags & SkAdvancedTypefaceMetrics::kVariable_FontFlag) ||
+        // PDF is actually interested in the encoding of the data, not just the logical format.
+        // If the TrueType is actually wOFF or wOF2 then it should not be directly embedded in PDF.
+        // For now export these as Type3 until the subsetter can handle table based fonts.
+        // See https://github.com/harfbuzz/harfbuzz/issues/3609 and
+        // https://skia-review.googlesource.com/c/skia/+/543485
+        SkToBool(metrics.fFlags & SkAdvancedTypefaceMetrics::kAltDataFormat_FontFlag) ||
         SkToBool(metrics.fFlags & SkAdvancedTypefaceMetrics::kNotEmbeddable_FontFlag)) {
         // force Type3 fallback.
         return SkAdvancedTypefaceMetrics::kOther_Font;
@@ -327,7 +335,7 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
                                 "FontFile2",
                                 SkPDFStreamOut(std::move(tmp),
                                                SkMemoryStream::Make(std::move(subsetFontData)),
-                                               doc, true));
+                                               doc, SkPDFSteamCompressionEnabled::Yes));
                         break;
                     }
                     // If subsetting fails, fall back to original font data.
@@ -340,7 +348,7 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
                 tmp->insertInt("Length1", fontSize);
                 descriptor->insertRef("FontFile2",
                                       SkPDFStreamOut(std::move(tmp), std::move(fontAsset),
-                                                     doc, true));
+                                                     doc, SkPDFSteamCompressionEnabled::Yes));
                 break;
             }
             case SkAdvancedTypefaceMetrics::kType1CID_Font: {
@@ -348,7 +356,7 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
                 tmp->insertName("Subtype", "CIDFontType0C");
                 descriptor->insertRef("FontFile3",
                                       SkPDFStreamOut(std::move(tmp), std::move(fontAsset),
-                                                     doc, true));
+                                                     doc, SkPDFSteamCompressionEnabled::Yes));
                 break;
             }
             default:
@@ -372,8 +380,9 @@ static void emit_subset_type0(const SkPDFFont& font, SkPDFDocument* doc) {
             SkASSERT(false);
     }
     auto sysInfo = SkPDFMakeDict();
-    sysInfo->insertString("Registry", "Adobe");
-    sysInfo->insertString("Ordering", "Identity");
+    // These are actually ASCII strings.
+    sysInfo->insertByteString("Registry", "Adobe");
+    sysInfo->insertByteString("Ordering", "Identity");
     sysInfo->insertInt("Supplement", 0);
     newCIDFont->insertObject("CIDSystemInfo", std::move(sysInfo));
 
@@ -530,7 +539,7 @@ SkStrikeSpec make_small_strike(const SkTypeface& typeface) {
     return SkStrikeSpec::MakeMask(font,
                                   SkPaint(),
                                   SkSurfaceProps(0, kUnknown_SkPixelGeometry),
-                                  kFakeGammaAndBoostContrast,
+                                  SkScalerContextFlags::kFakeGammaAndBoostContrast,
                                   SkMatrix::I());
 }
 
@@ -551,7 +560,8 @@ static void emit_subset_type3(const SkPDFFont& pdfFont, SkPDFDocument* doc) {
     SkASSERT(strike);
     SkScalar emSize = (SkScalar)unitsPerEm;
     SkScalar xHeight = strike->getFontMetrics().fXHeight;
-    SkBulkGlyphMetricsAndPaths metricsAndPaths(std::move(strike));
+    SkBulkGlyphMetricsAndPaths metricsAndPaths((sk_sp<SkStrike>(strike)));
+    SkBulkGlyphMetricsAndDrawables metricsAndDrawables(std::move(strike));
 
     SkStrikeSpec strikeSpecSmall = kBitmapFontSize > 0 ? make_small_strike(*typeface)
                                                        : strikeSpec;
@@ -594,24 +604,41 @@ static void emit_subset_type3(const SkPDFFont& pdfFont, SkPDFDocument* doc) {
             characterName.set("g0");
         } else {
             characterName.printf("g%X", gID);
-            const SkGlyph* glyph = metricsAndPaths.glyph(gID);
-            advance = glyph->advanceX();
-            glyphBBox = glyph->iRect();
+            const SkGlyph* pathGlyph = metricsAndPaths.glyph(gID);
+            const SkGlyph* drawableGlyph = metricsAndDrawables.glyph(gID);
+            advance = pathGlyph->advanceX();
+            glyphBBox = pathGlyph->iRect();
             bbox.join(glyphBBox);
-            const SkPath* path = glyph->path();
+            const SkPath* path = pathGlyph->path();
+            SkDrawable* drawable = drawableGlyph->drawable();
             SkDynamicMemoryWStream content;
-            if (path && !path->isEmpty()) {
-                setGlyphWidthAndBoundingBox(glyph->advanceX(), glyphBBox, &content);
+            if (drawable && !drawable->getBounds().isEmpty()) {
+                sk_sp<SkPDFDevice> glyphDevice = sk_make_sp<SkPDFDevice>(glyphBBox.size(), doc);
+                SkCanvas canvas(glyphDevice);
+                canvas.translate(-glyphBBox.fLeft, -glyphBBox.fTop);
+                canvas.drawDrawable(drawable);
+                SkPDFIndirectReference xobject = SkPDFMakeFormXObject(
+                        doc, glyphDevice->content(),
+                        SkPDFMakeArray(0, 0, glyphBBox.width(), glyphBBox.height()),
+                        glyphDevice->makeResourceDict(),
+                        SkMatrix::Translate(glyphBBox.fLeft, glyphBBox.fTop), nullptr);
+                imageGlyphs.emplace_back(gID, xobject);
+                SkPDFUtils::AppendScalar(drawableGlyph->advanceX(), &content);
+                content.writeText(" 0 d0\n1 0 0 1 0 0 cm\n/X");
+                content.write(characterName.c_str(), characterName.size());
+                content.writeText(" Do\n");
+            } else if (path && !path->isEmpty()) {
+                setGlyphWidthAndBoundingBox(pathGlyph->advanceX(), glyphBBox, &content);
                 SkPDFUtils::EmitPath(*path, SkPaint::kFill_Style, &content);
                 SkPDFUtils::PaintPath(SkPaint::kFill_Style, path->getFillType(), &content);
             } else {
                 auto pimg = to_image(gID, &smallGlyphs);
                 if (!pimg.fImage) {
-                    setGlyphWidthAndBoundingBox(glyph->advanceX(), glyphBBox, &content);
+                    setGlyphWidthAndBoundingBox(pathGlyph->advanceX(), glyphBBox, &content);
                 } else {
                     using SkPDFUtils::AppendScalar;
                     imageGlyphs.emplace_back(gID, SkPDFSerializeImage(pimg.fImage.get(), doc));
-                    AppendScalar(glyph->advanceX(), &content);
+                    AppendScalar(pathGlyph->advanceX(), &content);
                     content.writeText(" 0 d0\n");
                     AppendScalar(pimg.fImage->width() * bitmapScale, &content);
                     content.writeText(" 0 0 ");

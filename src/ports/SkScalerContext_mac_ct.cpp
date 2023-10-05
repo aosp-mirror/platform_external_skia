@@ -30,15 +30,15 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkTypeface.h"
 #include "include/private/SkColorData.h"
-#include "include/private/SkFixed.h"
-#include "include/private/SkTemplates.h"
-#include "include/private/SkTo.h"
-#include "src/core/SkAutoMalloc.h"
+#include "include/private/base/SkFixed.h"
+#include "include/private/base/SkTemplates.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkAutoMalloc.h"
+#include "src/base/SkMathPriv.h"
 #include "src/core/SkEndian.h"
 #include "src/core/SkGlyph.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskGamma.h"
-#include "src/core/SkMathPriv.h"
 #include "src/core/SkOpts.h"
 #include "src/ports/SkScalerContext_mac_ct.h"
 #include "src/ports/SkTypeface_mac_ct.h"
@@ -54,8 +54,9 @@
 class SkDescriptor;
 
 
-// Set to make glyph bounding boxes visible.
-#define SK_SHOW_TEXT_BLIT_COVERAGE 0
+namespace {
+static inline const constexpr bool kSkShowTextBlitCoverage = false;
+}
 
 static void sk_memset_rect32(uint32_t* ptr, uint32_t value,
                              int width, int height, size_t rowBytes) {
@@ -64,7 +65,7 @@ static void sk_memset_rect32(uint32_t* ptr, uint32_t value,
 
     if (width >= 32) {
         while (height) {
-            sk_memset32(ptr, value, width);
+            SkOpts::memset32(ptr, value, width);
             ptr = (uint32_t*)((char*)ptr + rowBytes);
             height -= 1;
         }
@@ -128,7 +129,7 @@ SkScalerContext_Mac::SkScalerContext_Mac(sk_sp<SkTypeface_Mac> typeface,
     // As a result, it is necessary to know the actual device size and request that.
     SkVector scale;
     SkMatrix skTransform;
-    bool invertible = fRec.computeMatrices(SkScalerContextRec::kVertical_PreMatrixScale,
+    bool invertible = fRec.computeMatrices(SkScalerContextRec::PreMatrixScale::kVertical,
                                            &scale, &skTransform, nullptr, nullptr, nullptr);
     fTransform = MatrixToCGAffineTransform(skTransform);
     // CGAffineTransformInvert documents that if the transform is non-invertible it will return the
@@ -409,9 +410,9 @@ static inline uint8_t rgb_to_a8(CGRGBPixel rgb, const uint8_t* table8) {
     U8CPU g = 0xFF - ((rgb >>  8) & 0xFF);
     U8CPU b = 0xFF - ((rgb >>  0) & 0xFF);
     U8CPU lum = sk_apply_lut_if<APPLY_PREBLEND>(SkComputeLuminance(r, g, b), table8);
-#if SK_SHOW_TEXT_BLIT_COVERAGE
-    lum = std::max(lum, (U8CPU)0x30);
-#endif
+    if constexpr (kSkShowTextBlitCoverage) {
+        lum = std::max(lum, (U8CPU)0x30);
+    }
     return lum;
 }
 
@@ -438,11 +439,11 @@ static uint16_t RGBToLcd16(CGRGBPixel rgb,
     U8CPU r = sk_apply_lut_if<APPLY_PREBLEND>(0xFF - ((rgb >> 16) & 0xFF), tableR);
     U8CPU g = sk_apply_lut_if<APPLY_PREBLEND>(0xFF - ((rgb >>  8) & 0xFF), tableG);
     U8CPU b = sk_apply_lut_if<APPLY_PREBLEND>(0xFF - ((rgb >>  0) & 0xFF), tableB);
-#if SK_SHOW_TEXT_BLIT_COVERAGE
-    r = std::max(r, (U8CPU)0x30);
-    g = std::max(g, (U8CPU)0x30);
-    b = std::max(b, (U8CPU)0x30);
-#endif
+    if constexpr (kSkShowTextBlitCoverage) {
+        r = std::max(r, (U8CPU)0x30);
+        g = std::max(g, (U8CPU)0x30);
+        b = std::max(b, (U8CPU)0x30);
+    }
     return SkPack888ToRGB16(r, g, b);
 }
 
@@ -469,9 +470,9 @@ static SkPMColor cgpixels_to_pmcolor(CGRGBPixel rgb) {
     U8CPU r = (rgb >> 16) & 0xFF;
     U8CPU g = (rgb >>  8) & 0xFF;
     U8CPU b = (rgb >>  0) & 0xFF;
-#if SK_SHOW_TEXT_BLIT_COVERAGE
-    a = std::max(a, (U8CPU)0x30);
-#endif
+    if constexpr (kSkShowTextBlitCoverage) {
+        a = std::max(a, (U8CPU)0x30);
+    }
     return SkPackARGB32(a, r, g, b);
 }
 
@@ -659,10 +660,10 @@ bool SkScalerContext_Mac::generatePath(const SkGlyph& glyph, SkPath* path) {
         scaleX = scaleY = kScaleForSubPixelPositionHinting;
         // now see if we need to restore hinting for axis-aligned baselines
         switch (this->computeAxisAlignmentForHText()) {
-            case kX_SkAxisAlignment:
+            case SkAxisAlignment::kX:
                 scaleY = SK_Scalar1; // want hinting in the Y direction
                 break;
-            case kY_SkAxisAlignment:
+            case SkAxisAlignment::kY:
                 scaleX = SK_Scalar1; // want hinting in the X direction
                 break;
             default:
@@ -713,41 +714,60 @@ void SkScalerContext_Mac::generateFontMetrics(SkFontMetrics* metrics) {
     metrics->fCapHeight    = SkScalarFromCGFloat( CTFontGetCapHeight(fCTFont.get()));
     metrics->fUnderlineThickness = SkScalarFromCGFloat( CTFontGetUnderlineThickness(fCTFont.get()));
     metrics->fUnderlinePosition = -SkScalarFromCGFloat( CTFontGetUnderlinePosition(fCTFont.get()));
+    metrics->fStrikeoutThickness = 0;
+    metrics->fStrikeoutPosition = 0;
 
     metrics->fFlags = 0;
     metrics->fFlags |= SkFontMetrics::kUnderlineThicknessIsValid_Flag;
     metrics->fFlags |= SkFontMetrics::kUnderlinePositionIsValid_Flag;
 
-    SkUniqueCFRef<CFArrayRef> ctAxes(CTFontCopyVariationAxes(fCTFont.get()));
-    if (ctAxes && CFArrayGetCount(ctAxes.get()) > 0) {
-        // The bounds are only valid for the default variation.
+    CFArrayRef ctAxes = ((SkTypeface_Mac*)this->getTypeface())->getVariationAxes();
+    if ((ctAxes && CFArrayGetCount(ctAxes) > 0) ||
+        ((SkTypeface_Mac*)this->getTypeface())->fHasColorGlyphs)
+    {
+        // The bounds are only valid for the default outline variation.
+        // In particular `sbix` and `SVG ` data may draw outside these bounds.
         metrics->fFlags |= SkFontMetrics::kBoundsInvalid_Flag;
     }
 
-    // See https://bugs.chromium.org/p/skia/issues/detail?id=6203
-    // At least on 10.12.3 with memory based fonts the x-height is always 0.6666 of the ascent and
-    // the cap-height is always 0.8888 of the ascent. It appears that the values from the 'OS/2'
-    // table are read, but then overwritten if the font is not a system font. As a result, if there
-    // is a valid 'OS/2' table available use the values from the table if they aren't too strange.
-    struct OS2HeightMetrics {
-        SK_OT_SHORT sxHeight;
-        SK_OT_SHORT sCapHeight;
-    } heights;
-    size_t bytesRead = this->getTypeface()->getTableData(
-            SkTEndian_SwapBE32(SkOTTableOS2::TAG), offsetof(SkOTTableOS2, version.v2.sxHeight),
-            sizeof(heights), &heights);
-    if (bytesRead == sizeof(heights)) {
+    sk_sp<SkData> os2 = this->getTypeface()->copyTableData(SkTEndian_SwapBE32(SkOTTableOS2::TAG));
+    if (os2) {
         // 'fontSize' is correct because the entire resolved size is set by the constructor.
-        CGFloat fontSize = CTFontGetSize(this->fCTFont.get());
-        unsigned upem = CTFontGetUnitsPerEm(this->fCTFont.get());
-        unsigned maxSaneHeight = upem * 2;
-        uint16_t xHeight = SkEndian_SwapBE16(heights.sxHeight);
-        if (xHeight && xHeight < maxSaneHeight) {
-            metrics->fXHeight = SkScalarFromCGFloat(xHeight * fontSize / upem);
+        const CGFloat fontSize = CTFontGetSize(fCTFont.get());
+        const unsigned int upem = CTFontGetUnitsPerEm(fCTFont.get());
+        const unsigned int maxSaneHeight = upem * 2;
+
+        // See https://bugs.chromium.org/p/skia/issues/detail?id=6203
+        // At least on 10.12.3 with memory based fonts the x-height is always 0.6666 of the ascent
+        // and the cap-height is always 0.8888 of the ascent. It appears that the values from the
+        // 'OS/2' table are read, but then overwritten if the font is not a system font. As a
+        // result, if there is a valid 'OS/2' table available use the values from the table if they
+        // aren't too strange.
+        if (sizeof(SkOTTableOS2_V2) <= os2->size()) {
+            const SkOTTableOS2_V2* os2v2 = static_cast<const SkOTTableOS2_V2*>(os2->data());
+            uint16_t xHeight = SkEndian_SwapBE16(os2v2->sxHeight);
+            if (xHeight && xHeight < maxSaneHeight) {
+                metrics->fXHeight = SkScalarFromCGFloat(xHeight * fontSize / upem);
+            }
+            uint16_t capHeight = SkEndian_SwapBE16(os2v2->sCapHeight);
+            if (capHeight && capHeight < maxSaneHeight) {
+                metrics->fCapHeight = SkScalarFromCGFloat(capHeight * fontSize / upem);
+            }
         }
-        uint16_t capHeight = SkEndian_SwapBE16(heights.sCapHeight);
-        if (capHeight && capHeight < maxSaneHeight) {
-            metrics->fCapHeight = SkScalarFromCGFloat(capHeight * fontSize / upem);
+
+        // CoreText does not provide the strikeout metrics, which are available in OS/2 version 0.
+        if (sizeof(SkOTTableOS2_V0) <= os2->size()) {
+            const SkOTTableOS2_V0* os2v0 = static_cast<const SkOTTableOS2_V0*>(os2->data());
+            uint16_t strikeoutSize = SkEndian_SwapBE16(os2v0->yStrikeoutSize);
+            if (strikeoutSize && strikeoutSize < maxSaneHeight) {
+                metrics->fStrikeoutThickness = SkScalarFromCGFloat(strikeoutSize * fontSize / upem);
+                metrics->fFlags |= SkFontMetrics::kStrikeoutThicknessIsValid_Flag;
+            }
+            uint16_t strikeoutPos = SkEndian_SwapBE16(os2v0->yStrikeoutPosition);
+            if (strikeoutPos && strikeoutPos < maxSaneHeight) {
+                metrics->fStrikeoutPosition = -SkScalarFromCGFloat(strikeoutPos * fontSize / upem);
+                metrics->fFlags |= SkFontMetrics::kStrikeoutPositionIsValid_Flag;
+            }
         }
     }
 }

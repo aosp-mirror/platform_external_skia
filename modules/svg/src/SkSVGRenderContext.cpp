@@ -10,8 +10,9 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImageFilter.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkPathEffect.h"
 #include "include/effects/SkDashPathEffect.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTo.h"
 #include "modules/svg/include/SkSVGAttribute.h"
 #include "modules/svg/include/SkSVGClipPath.h"
 #include "modules/svg/include/SkSVGFilter.h"
@@ -116,7 +117,7 @@ static sk_sp<SkPathEffect> dash_effect(const SkSVGPresentationAttributes& props,
     }
 
     const auto& da = *props.fStrokeDashArray;
-    const auto count = da.dashArray().count();
+    const auto count = da.dashArray().size();
     SkSTArray<128, SkScalar, true> intervals(count);
     for (const auto& dash : da.dashArray()) {
         intervals.push_back(lctx.resolve(dash, SkSVGLengthContext::LengthType::kOther));
@@ -129,12 +130,12 @@ static sk_sp<SkPathEffect> dash_effect(const SkSVGPresentationAttributes& props,
         memcpy(intervals.begin() + count, intervals.begin(), count * sizeof(SkScalar));
     }
 
-    SkASSERT((intervals.count() & 1) == 0);
+    SkASSERT((intervals.size() & 1) == 0);
 
     const auto phase = lctx.resolve(*props.fStrokeDashOffset,
                                     SkSVGLengthContext::LengthType::kOther);
 
-    return SkDashPathEffect::Make(intervals.begin(), intervals.count(), phase);
+    return SkDashPathEffect::Make(intervals.begin(), intervals.size(), phase);
 }
 
 }  // namespace
@@ -401,6 +402,7 @@ SkTLazy<SkPaint> SkSVGRenderContext::commonPaint(const SkSVGPaint& paint_selecto
         // (e.g. gradient control points), which requires access to the render context
         // and node being rendered.
         SkSVGPresentationContext pctx;
+        pctx.fNamedColors = fPresentationContext->fNamedColors;
         SkSVGRenderContext local_ctx(fCanvas,
                                      fFontMgr,
                                      fResourceProvider,
@@ -459,6 +461,14 @@ SkTLazy<SkPaint> SkSVGRenderContext::strokePaint() const {
 }
 
 SkSVGColorType SkSVGRenderContext::resolveSvgColor(const SkSVGColor& color) const {
+    if (fPresentationContext->fNamedColors) {
+        for (auto&& ident : color.vars()) {
+            SkSVGColorType* c = fPresentationContext->fNamedColors->find(ident);
+            if (c) {
+                return *c;
+            }
+        }
+    }
     switch (color.type()) {
         case SkSVGColor::Type::kColor:
             return color.color();

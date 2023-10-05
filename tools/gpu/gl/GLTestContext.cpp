@@ -8,7 +8,7 @@
 #include "tools/gpu/gl/GLTestContext.h"
 
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/gl/GrGLUtil.h"
+#include "src/gpu/ganesh/gl/GrGLUtil.h"
 #include "tools/gpu/GpuTimer.h"
 
 namespace {
@@ -247,7 +247,7 @@ void GLTestContext::overrideVersion(const char* version, const char* shadingLang
     newInterface->fFunctions.fGetString = getString;
     fGLInterface = std::move(newInterface);
 #endif
-};
+}
 
 sk_sp<GrDirectContext> GLTestContext::makeContext(const GrContextOptions& options) {
 #ifdef SK_GL

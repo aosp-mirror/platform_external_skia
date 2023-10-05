@@ -1,17 +1,17 @@
 OpCapability Shader
 %1 = OpExtInstImport "GLSL.std.450"
 OpMemoryModel Logical GLSL450
-OpEntryPoint Fragment %main "main" %sk_FragColor %sk_Clockwise
+OpEntryPoint Fragment %main "main" %sk_Clockwise %sk_FragColor
 OpExecutionMode %main OriginUpperLeft
-OpName %sk_FragColor "sk_FragColor"
 OpName %sk_Clockwise "sk_Clockwise"
+OpName %sk_FragColor "sk_FragColor"
 OpName %test2D "test2D"
 OpName %test2DRect "test2DRect"
 OpName %main "main"
+OpDecorate %sk_Clockwise BuiltIn FrontFacing
 OpDecorate %sk_FragColor RelaxedPrecision
 OpDecorate %sk_FragColor Location 0
 OpDecorate %sk_FragColor Index 0
-OpDecorate %sk_Clockwise BuiltIn FrontFacing
 OpDecorate %test2D RelaxedPrecision
 OpDecorate %test2D Binding 0
 OpDecorate %test2D DescriptorSet 0
@@ -21,22 +21,22 @@ OpDecorate %test2DRect DescriptorSet 0
 OpDecorate %19 RelaxedPrecision
 OpDecorate %24 RelaxedPrecision
 OpDecorate %26 RelaxedPrecision
+%bool = OpTypeBool
+%_ptr_Input_bool = OpTypePointer Input %bool
+%sk_Clockwise = OpVariable %_ptr_Input_bool Input
 %float = OpTypeFloat 32
 %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
 %sk_FragColor = OpVariable %_ptr_Output_v4float Output
-%bool = OpTypeBool
-%_ptr_Input_bool = OpTypePointer Input %bool
-%sk_Clockwise = OpVariable %_ptr_Input_bool Input
-%13 = OpTypeImage %float 2D 0 0 0 1 Unknown
-%12 = OpTypeSampledImage %13
+%11 = OpTypeImage %float 2D 0 0 0 1 Unknown
+%12 = OpTypeSampledImage %11
 %_ptr_UniformConstant_12 = OpTypePointer UniformConstant %12
 %test2D = OpVariable %_ptr_UniformConstant_12 UniformConstant
 %test2DRect = OpVariable %_ptr_UniformConstant_12 UniformConstant
 %void = OpTypeVoid
 %16 = OpTypeFunction %void
-%v2float = OpTypeVector %float 2
 %float_0_5 = OpConstant %float 0.5
+%v2float = OpTypeVector %float 2
 %22 = OpConstantComposite %v2float %float_0_5 %float_0_5
 %v3float = OpTypeVector %float 3
 %28 = OpConstantComposite %v3float %float_0_5 %float_0_5 %float_0_5

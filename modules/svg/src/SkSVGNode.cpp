@@ -8,11 +8,11 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkMatrix.h"
 #include "include/pathops/SkPathOps.h"
-#include "include/private/SkTPin.h"
+#include "include/private/base/SkTPin.h"
 #include "modules/svg/include/SkSVGNode.h"
 #include "modules/svg/include/SkSVGRenderContext.h"
 #include "modules/svg/include/SkSVGValue.h"
-#include "src/core/SkTLazy.h"
+#include "src/base/SkTLazy.h"
 
 SkSVGNode::SkSVGNode(SkSVGTag t) : fTag(t) {
     // Uninherited presentation attributes need a non-null default value.
@@ -132,8 +132,9 @@ bool SkSVGNode::parseAndSetAttribute(const char* n, const char* v) {
 SkMatrix SkSVGNode::ComputeViewboxMatrix(const SkRect& viewBox,
                                          const SkRect& viewPort,
                                          SkSVGPreserveAspectRatio par) {
-    SkASSERT(!viewBox.isEmpty());
-    SkASSERT(!viewPort.isEmpty());
+    if (viewBox.isEmpty() || viewPort.isEmpty()) {
+        return SkMatrix::Scale(0, 0);
+    }
 
     auto compute_scale = [&]() -> SkV2 {
         const auto sx = viewPort.width()  / viewBox.width(),
@@ -161,8 +162,8 @@ SkMatrix SkSVGNode::ComputeViewboxMatrix(const SkRect& viewBox,
         const size_t x_coeff = par.fAlign >> 0 & 0x03,
                      y_coeff = par.fAlign >> 2 & 0x03;
 
-        SkASSERT(x_coeff < SK_ARRAY_COUNT(gAlignCoeffs) &&
-                 y_coeff < SK_ARRAY_COUNT(gAlignCoeffs));
+        SkASSERT(x_coeff < std::size(gAlignCoeffs) &&
+                 y_coeff < std::size(gAlignCoeffs));
 
         const auto tx = -viewBox.x() * scale.x,
                    ty = -viewBox.y() * scale.y,

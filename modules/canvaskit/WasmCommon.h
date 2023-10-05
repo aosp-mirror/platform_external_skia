@@ -12,11 +12,12 @@
 #include <emscripten/bind.h>
 #include "include/core/SkColor.h"
 #include "include/core/SkSpan.h"
-#include "include/private/SkMalloc.h"
+#include "include/private/base/SkMalloc.h"
 
 using namespace emscripten;
 
 // Self-documenting types
+using JSColor = int32_t;
 using JSArray = emscripten::val;
 using JSObject = emscripten::val;
 using JSString = emscripten::val;
@@ -35,6 +36,7 @@ using Float32Array = emscripten::val;
 // This doesn't stop us from using these as different types; e.g. a float* can be treated as an
 // SkPoint* in some APIs.
 using WASMPointerF32 = uintptr_t;
+using WASMPointerI32 = uintptr_t;
 using WASMPointerU8  = uintptr_t;
 using WASMPointerU16 = uintptr_t;
 using WASMPointerU32 = uintptr_t;

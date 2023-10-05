@@ -5,12 +5,17 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkTypes.h"
+#include "src/base/SkRandom.h"
+#include "src/gpu/tessellate/CullTest.h"
 #include "tests/Test.h"
 
-#include "include/utils/SkRandom.h"
-#include "src/gpu/tessellate/CullTest.h"
+#include <initializer_list>
 
-namespace skgpu {
+namespace skgpu::tess {
 
 const SkMatrix gMatrices[] = {
     SkMatrix::I(),
@@ -78,4 +83,4 @@ DEF_TEST(CullTestTest, reporter) {
     }
 }
 
-}  // namespace skgpu
+}  // namespace skgpu::tess

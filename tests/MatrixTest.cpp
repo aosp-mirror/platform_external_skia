@@ -5,12 +5,26 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkMath.h"
+#include "include/core/SkM44.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPoint.h"
 #include "include/core/SkPoint3.h"
-#include "include/utils/SkRandom.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkFloatingPoint.h"
+#include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkDebug.h"
+#include "src/base/SkRandom.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkMatrixUtils.h"
+#include "src/core/SkPointPriv.h"
 #include "tests/Test.h"
+
+#include <cstring>
+#include <initializer_list>
+#include <string>
 
 static bool nearly_equal_scalar(SkScalar a, SkScalar b) {
     const SkScalar tolerance = SK_Scalar1 / 200000;
@@ -250,10 +264,10 @@ static void test_matrix_min_max_scale(skiatest::Reporter* reporter) {
 
     SkMatrix baseMats[] = {scale, rot90Scale, rotate,
                            translate, perspX, perspY};
-    SkMatrix mats[2*SK_ARRAY_COUNT(baseMats)];
-    for (size_t i = 0; i < SK_ARRAY_COUNT(baseMats); ++i) {
+    SkMatrix mats[2*std::size(baseMats)];
+    for (size_t i = 0; i < std::size(baseMats); ++i) {
         mats[i] = baseMats[i];
-        bool invertible = mats[i].invert(&mats[i + SK_ARRAY_COUNT(baseMats)]);
+        bool invertible = mats[i].invert(&mats[i + std::size(baseMats)]);
         REPORTER_ASSERT(reporter, invertible);
     }
     SkRandom rand;
@@ -261,7 +275,7 @@ static void test_matrix_min_max_scale(skiatest::Reporter* reporter) {
         SkMatrix mat;
         mat.reset();
         for (int i = 0; i < 4; ++i) {
-            int x = rand.nextU() % SK_ARRAY_COUNT(mats);
+            int x = rand.nextU() % std::size(mats);
             mat.postConcat(mats[x]);
         }
 
@@ -285,7 +299,7 @@ static void test_matrix_min_max_scale(skiatest::Reporter* reporter) {
         static const SkScalar gCloseScaleTol = (97 * SK_Scalar1) / 100;
         SkScalar max = 0, min = SK_ScalarMax;
         SkVector vectors[1000];
-        for (size_t i = 0; i < SK_ARRAY_COUNT(vectors); ++i) {
+        for (size_t i = 0; i < std::size(vectors); ++i) {
             vectors[i].fX = rand.nextSScalar1();
             vectors[i].fY = rand.nextSScalar1();
             if (!vectors[i].normalize()) {
@@ -293,8 +307,8 @@ static void test_matrix_min_max_scale(skiatest::Reporter* reporter) {
                 continue;
             }
         }
-        mat.mapVectors(vectors, SK_ARRAY_COUNT(vectors));
-        for (size_t i = 0; i < SK_ARRAY_COUNT(vectors); ++i) {
+        mat.mapVectors(vectors, std::size(vectors));
+        for (size_t i = 0; i < std::size(vectors); ++i) {
             SkScalar d = vectors[i].length();
             REPORTER_ASSERT(reporter, d / maxScale < gVectorScaleTol);
             REPORTER_ASSERT(reporter, minScale / d < gVectorScaleTol);
@@ -909,7 +923,7 @@ DEF_TEST(Matrix, reporter) {
             { 1, 1, 1, 1, false }
         };
 
-        for (size_t i = 0; i < SK_ARRAY_COUNT(gRectStaysRectSamples); i++) {
+        for (size_t i = 0; i < std::size(gRectStaysRectSamples); i++) {
             SkMatrix    m;
 
             m.reset();
@@ -1041,4 +1055,29 @@ DEF_TEST(Matrix_mapRect_skbug12335, r) {
 
 DEF_TEST(Matrix_Ctor, r) {
     REPORTER_ASSERT(r, SkMatrix{} == SkMatrix::I());
+}
+
+DEF_TEST(Matrix_LookAt, r) {
+    // Degenerate inputs should not trigger *SAN errors.
+    const auto m = SkM44::LookAt({0,0,0}, {0,0,0}, {0,0,0});
+    REPORTER_ASSERT(r, m == SkM44());
+}
+
+DEF_TEST(Matrix_SetRotateSnap, r) {
+    SkMatrix m;
+
+    // We need to snap sin & cos when we call setRotate, or rotations by multiples of 90 degrees
+    // will end up with slight drift (and we won't consider them to satisfy rectStaysRect, which
+    // is an important performance constraint). We test up to +-1080 degrees.
+    for (float deg = 90.0f; deg <= 1080.0f; deg += 90.0f) {
+        m.setRotate(deg);
+        REPORTER_ASSERT(r, m.rectStaysRect());
+        m.setRotate(-deg);
+        REPORTER_ASSERT(r, m.rectStaysRect());
+    }
+
+    // But: we don't want to be too lenient with snapping. That prevents small rotations from being
+    // registered at all. Ensure that .01 degrees produces an actual rotation. (crbug.com/1345038)
+    m.setRotate(0.01f);
+    REPORTER_ASSERT(r, !m.rectStaysRect());
 }
