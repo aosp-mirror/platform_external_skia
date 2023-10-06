@@ -5,27 +5,67 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkString.h"
 #include "include/core/SkSurface.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrRecordingContext.h"
+#include "include/gpu/GrTypes.h"
+#include "include/private/base/SkTArray.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/core/SkAutoPixmapStorage.h"
 #include "src/core/SkConvertPixels.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrImageInfo.h"
-#include "src/gpu/SurfaceContext.h"
-#include "src/gpu/SurfaceFillContext.h"
-#include "src/gpu/effects/GrTextureEffect.h"
+#include "src/core/SkImageInfoPriv.h"
+#include "src/gpu/SkBackingFit.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrDataUtils.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/GrImageInfo.h"
+#include "src/gpu/ganesh/GrPixmap.h"
+#include "src/gpu/ganesh/GrSamplerState.h"
+#include "src/gpu/ganesh/GrSurfaceProxy.h"
+#include "src/gpu/ganesh/SurfaceContext.h"
+#include "src/gpu/ganesh/SurfaceFillContext.h"
+#include "src/gpu/ganesh/effects/GrTextureEffect.h"
+#include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tests/TestUtils.h"
 #include "tools/ToolUtils.h"
 #include "tools/gpu/BackendSurfaceFactory.h"
 #include "tools/gpu/BackendTextureImageFactory.h"
-#include "tools/gpu/GrContextFactory.h"
-#include "tools/gpu/ProxyUtils.h"
 
+#include <algorithm>
+#include <array>
+#include <cstring>
+#include <functional>
 #include <initializer_list>
+#include <memory>
+#include <utility>
+#include <vector>
+
+struct GrContextOptions;
 
 static constexpr int min_rgb_channel_bits(SkColorType ct) {
     switch (ct) {
@@ -46,6 +86,7 @@ static constexpr int min_rgb_channel_bits(SkColorType ct) {
         case kRGB_101010x_SkColorType:        return 10;
         case kBGRA_1010102_SkColorType:       return 10;
         case kBGR_101010x_SkColorType:        return 10;
+        case kBGR_101010x_XR_SkColorType:     return 10;
         case kGray_8_SkColorType:             return 8;   // counting gray as "rgb"
         case kRGBA_F16Norm_SkColorType:       return 10;  // just counting the mantissa
         case kRGBA_F16_SkColorType:           return 10;  // just counting the mantissa
@@ -75,6 +116,7 @@ static constexpr int alpha_channel_bits(SkColorType ct) {
         case kRGB_101010x_SkColorType:        return 0;
         case kBGRA_1010102_SkColorType:       return 2;
         case kBGR_101010x_SkColorType:        return 0;
+        case kBGR_101010x_XR_SkColorType:     return 0;
         case kGray_8_SkColorType:             return 0;
         case kRGBA_F16Norm_SkColorType:       return 10;  // just counting the mantissa
         case kRGBA_F16_SkColorType:           return 10;  // just counting the mantissa
@@ -225,7 +267,7 @@ static SkAutoPixmapStorage make_ref_data(const SkImageInfo& info, bool forceOpaq
         surface->getCanvas()->drawPaint(paint);
     }
     return result;
-};
+}
 
 template <typename T>
 static void gpu_read_pixels_test_driver(skiatest::Reporter* reporter,
@@ -480,8 +522,11 @@ static void gpu_read_pixels_test_driver(skiatest::Reporter* reporter,
     }
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceContextReadPixels, reporter, ctxInfo) {
-    using Surface = std::unique_ptr<skgpu::SurfaceContext>;
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceContextReadPixels,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
+    using Surface = std::unique_ptr<skgpu::v1::SurfaceContext>;
     GrDirectContext* direct = ctxInfo.directContext();
     auto reader = std::function<GpuReadSrcFn<Surface>>(
             [direct](const Surface& surface, const SkIPoint& offset, const SkPixmap& pixels) {
@@ -519,9 +564,12 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceContextReadPixels, reporter, ctxInfo) 
     }
 }
 
-DEF_GPUTEST_FOR_ALL_CONTEXTS(ReadPixels_InvalidRowBytes_Gpu, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_ALL_CONTEXTS(ReadPixels_InvalidRowBytes_Gpu,
+                                 reporter,
+                                 ctxInfo,
+                                 CtsEnforcement::kApiLevel_T) {
     auto srcII = SkImageInfo::Make({10, 10}, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-    auto surf = SkSurface::MakeRenderTarget(ctxInfo.directContext(), SkBudgeted::kYes, srcII);
+    auto surf = SkSurface::MakeRenderTarget(ctxInfo.directContext(), skgpu::Budgeted::kYes, srcII);
     for (int ct = 0; ct < kLastEnum_SkColorType + 1; ++ct) {
         auto colorType = static_cast<SkColorType>(ct);
         size_t bpp = SkColorTypeBytesPerPixel(colorType);
@@ -535,9 +583,12 @@ DEF_GPUTEST_FOR_ALL_CONTEXTS(ReadPixels_InvalidRowBytes_Gpu, reporter, ctxInfo) 
     }
 }
 
-DEF_GPUTEST_FOR_ALL_CONTEXTS(WritePixels_InvalidRowBytes_Gpu, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_ALL_CONTEXTS(WritePixels_InvalidRowBytes_Gpu,
+                                 reporter,
+                                 ctxInfo,
+                                 CtsEnforcement::kApiLevel_T) {
     auto dstII = SkImageInfo::Make({10, 10}, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-    auto surf = SkSurface::MakeRenderTarget(ctxInfo.directContext(), SkBudgeted::kYes, dstII);
+    auto surf = SkSurface::MakeRenderTarget(ctxInfo.directContext(), skgpu::Budgeted::kYes, dstII);
     for (int ct = 0; ct < kLastEnum_SkColorType + 1; ++ct) {
         auto colorType = static_cast<SkColorType>(ct);
         size_t bpp = SkColorTypeBytesPerPixel(colorType);
@@ -568,9 +619,12 @@ static void async_callback(void* c, std::unique_ptr<const SkImage::AsyncReadResu
     auto context = static_cast<AsyncContext*>(c);
     context->fResult = std::move(result);
     context->fCalled = true;
-};
+}
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceAsyncReadPixels, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceAsyncReadPixels,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     using Surface = sk_sp<SkSurface>;
     auto reader = std::function<GpuReadSrcFn<Surface>>(
             [](const Surface& surface, const SkIPoint& offset, const SkPixmap& pixels) {
@@ -606,7 +660,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceAsyncReadPixels, reporter, ctxInfo) {
         auto factory = std::function<GpuSrcFactory<Surface>>(
                 [context = ctxInfo.directContext(), origin](const SkPixmap& src) {
                     auto surf = SkSurface::MakeRenderTarget(context,
-                                                            SkBudgeted::kYes,
+                                                            skgpu::Budgeted::kYes,
                                                             src.info(),
                                                             1,
                                                             origin,
@@ -639,7 +693,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceAsyncReadPixels, reporter, ctxInfo) {
     }
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixels, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixels,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     using Image = sk_sp<SkImage>;
     auto context = ctxInfo.directContext();
     auto reader = std::function<GpuReadSrcFn<Image>>([context](const Image& image,
@@ -689,7 +746,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(ImageAsyncReadPixels, reporter, ctxInfo) {
     }
 }
 
-DEF_GPUTEST(AsyncReadPixelsContextShutdown, reporter, options) {
+DEF_GANESH_TEST(AsyncReadPixelsContextShutdown, reporter, options, CtsEnforcement::kApiLevel_T) {
     const auto ii = SkImageInfo::Make(10, 10, kRGBA_8888_SkColorType, kPremul_SkAlphaType,
                                       SkColorSpace::MakeSRGB());
     enum class ShutdownSequence {
@@ -735,7 +792,8 @@ DEF_GPUTEST(AsyncReadPixelsContextShutdown, reporter, options) {
                 if (!direct->priv().caps()->transferFromSurfaceToBufferSupport()) {
                     continue;
                 }
-                auto surf = SkSurface::MakeRenderTarget(direct, SkBudgeted::kYes, ii, 1, nullptr);
+                auto surf = SkSurface::MakeRenderTarget(direct, skgpu::Budgeted::kYes, ii, 1,
+                                                        nullptr);
                 if (!surf) {
                     continue;
                 }
@@ -1059,8 +1117,11 @@ static void gpu_write_pixels_test_driver(skiatest::Reporter* reporter,
     }
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceContextWritePixels, reporter, ctxInfo) {
-    using Surface = std::unique_ptr<skgpu::SurfaceContext>;
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceContextWritePixels,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
+    using Surface = std::unique_ptr<skgpu::v1::SurfaceContext>;
     GrDirectContext* direct = ctxInfo.directContext();
     auto writer = std::function<GpuWriteDstFn<Surface>>(
             [direct](const Surface& surface, const SkIPoint& offset, const SkPixmap& pixels) {
@@ -1101,7 +1162,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceContextWritePixels, reporter, ctxInfo)
     }
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceContextWritePixelsMipped, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SurfaceContextWritePixelsMipped,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     auto direct = ctxInfo.directContext();
     if (!direct->priv().caps()->mipmapSupport()) {
         return;
@@ -1172,7 +1236,7 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceContextWritePixelsMipped, reporter, ct
                     // Going through intermediate textures is not supported for MIP levels (because
                     // we don't support rendering to non-base levels). So it's hard to have any hard
                     // rules about when we expect success.
-                    if (!sc->writePixels(direct, levels.begin(), levels.count())) {
+                    if (!sc->writePixels(direct, levels.begin(), levels.size())) {
                         continue;
                     }
                     // Make sure the pixels from the unowned pixmap are released and then put the
@@ -1208,9 +1272,9 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceContextWritePixelsMipped, reporter, ct
 
                         auto skCT = GrColorTypeToSkColorType(info.colorType());
                         int rgbBits = std::min(min_rgb_channel_bits(skCT), 8);
-                        float rgbTol = 2.f / ((1 << rgbBits) - 1);
+                        float rgbTol = (rgbBits == 0) ? 1.f : 2.f / ((1 << rgbBits) - 1);
                         int alphaBits = std::min(alpha_channel_bits(skCT), 8);
-                        float alphaTol = 2.f / ((1 << alphaBits) - 1);
+                        float alphaTol = (alphaBits == 0) ? 1.f : 2.f / ((1 << alphaBits) - 1);
                         float tol[] = {rgbTol, rgbTol, rgbTol, alphaTol};
 
                         GrCPixmap a = levels[i];
@@ -1248,7 +1312,10 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SurfaceContextWritePixelsMipped, reporter, ct
 // Tests a bug found in OOP-R canvas2d in Chrome. The GPU backend would incorrectly not bind
 // buffer 0 to GL_PIXEL_PACK_BUFFER before a glReadPixels() that was supposed to read into
 // client memory if a GrDirectContext::resetContext() occurred.
-DEF_GPUTEST_FOR_GL_RENDERING_CONTEXTS(GLReadPixelsUnbindPBO, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_GL_RENDERING_CONTEXTS(GLReadPixelsUnbindPBO,
+                                          reporter,
+                                          ctxInfo,
+                                          CtsEnforcement::kApiLevel_T) {
     // Start with a async read so that we bind to GL_PIXEL_PACK_BUFFER.
     auto info = SkImageInfo::Make(16, 16, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
     SkAutoPixmapStorage pmap = make_ref_data(info, /*forceOpaque=*/false);

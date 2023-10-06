@@ -11,6 +11,7 @@ from __future__ import print_function
 
 import os
 import pprint
+import shutil
 import string
 import subprocess
 import tempfile
@@ -76,14 +77,10 @@ cc_defaults {
     name: "skia_arch_defaults",
     arch: {
         arm: {
-            srcs: [
-                $arm_srcs
-            ],
+            srcs: [],
 
             neon: {
-                srcs: [
-                    $arm_neon_srcs
-                ],
+                srcs: [],
             },
         },
 
@@ -91,6 +88,18 @@ cc_defaults {
             srcs: [
                 $arm64_srcs
             ],
+            // TODO(b/267542007): Re-enable stack tagging when miscompile is
+            // fixed
+            sanitize: {
+                memtag_stack: false,
+            },
+        },
+
+        riscv64: {
+            // TODO(b/254713216): Re-enable thinlto for targets failing the build
+            lto: {
+                thin: false,
+            },
         },
 
         x86: {
@@ -113,6 +122,7 @@ cc_defaults {
         ],
         local_include_dirs: [
           "third_party/vulkanmemoryallocator/",
+          "vma_android/include",
         ],
       },
     },
@@ -247,6 +257,9 @@ cc_defaults {
             "libGLESv2",
             "libvulkan",
             "libnativewindow",
+        ],
+        static_libs: [
+            "libperfetto_client_experimental",
         ],
         export_shared_lib_headers: [
             "libvulkan",
@@ -447,7 +460,10 @@ cc_library_shared {
 android_test {
     name: "CtsSkQPTestCases",
     defaults: ["cts_defaults"],
-    test_suites: ["cts"],
+    test_suites: [
+        "general-tests",
+        "cts",
+    ],
 
     libs: ["android.test.runner.stubs"],
     jni_libs: ["libskqp_jni"],
@@ -486,22 +502,33 @@ def generate_args(target_os, enable_gpu, renderengine = False):
     'skia_enable_fontmgr_win_gdi':          'false',
     'skia_use_fonthost_mac':                'false',
 
+    'skia_use_system_harfbuzz':             'false',
+
     # enable features used in skia_nanobench
     'skia_tools_require_resources':         'true',
 
     'skia_use_fontconfig':                  'false',
     'skia_include_multiframe_procs':        'false',
+    # Required for some SKSL tests
+    'skia_enable_sksl_tracing':             'true',
+    # The two Perfetto integrations are currently mutually exclusive due to
+    # complexity.
+    'skia_use_perfetto':                    'false',
   }
   d['target_os'] = target_os
   if target_os == '"android"':
     d['skia_enable_tools'] = 'true'
     d['skia_include_multiframe_procs'] = 'true'
+    # Only enable for actual Android framework builds targeting Android devices.
+    # (E.g. disabled for host builds and SkQP)
+    d['skia_android_framework_use_perfetto'] = 'true'
 
   if enable_gpu:
-    d['skia_use_vulkan']   = 'true'
+    d['skia_use_vulkan']    = 'true'
+    d['skia_enable_ganesh'] = 'true'
   else:
-    d['skia_use_vulkan']   = 'false'
-    d['skia_enable_gpu']   = 'false'
+    d['skia_use_vulkan']    = 'false'
+    d['skia_enable_ganesh'] = 'false'
 
   if target_os == '"win"':
     # The Android Windows build system does not provide FontSub.h
@@ -516,6 +543,7 @@ def generate_args(target_os, enable_gpu, renderengine = False):
 
   if target_os == '"android"' and not renderengine:
     d['skia_use_libheif']  = 'true'
+    d['skia_use_jpeg_gainmaps'] = 'true'
   else:
     d['skia_use_libheif']  = 'false'
 
@@ -525,7 +553,7 @@ def generate_args(target_os, enable_gpu, renderengine = False):
     d['skia_use_libjpeg_turbo_encode'] = 'false'
     d['skia_use_libwebp_decode'] = 'false'
     d['skia_use_libwebp_encode'] = 'false'
-    d['skia_use_libgifcodec'] = 'false'
+    d['skia_use_wuffs'] = 'false'
     d['skia_enable_pdf'] = 'false'
     d['skia_use_freetype'] = 'false'
     d['skia_use_fixed_gamma_text'] = 'false'
@@ -579,8 +607,8 @@ gn_to_bp_utils.GrabDependentValues(js, '//:nanobench', 'sources',
                                    nanobench_srcs, ['//:skia', '//:gm'])
 
 # skcms is a little special, kind of a second-party library.
-local_includes.add("include/third_party/skcms")
-gm_includes   .add("include/third_party/skcms")
+local_includes.add("modules/skcms")
+gm_includes   .add("modules/skcms")
 
 # Android's build will choke if we list headers.
 def strip_headers(sources):
@@ -609,6 +637,7 @@ win_srcs        = strip_headers(win_srcs)
 
 srcs = android_srcs.intersection(linux_srcs).intersection(mac_srcs)
 srcs = srcs.intersection(win_srcs)
+
 android_srcs    = android_srcs.difference(srcs)
 linux_srcs      =   linux_srcs.difference(srcs)
 mac_srcs        =     mac_srcs.difference(srcs)
@@ -648,8 +677,11 @@ skqp_includes.update(strip_slashes(js_skqp['targets']['//:public']['include_dirs
 
 gn_to_bp_utils.GrabDependentValues(js_skqp, '//:libskqp_app', 'sources',
                                    skqp_srcs, None)
+# We are exlcuding gpu here to get rid of the includes that are being added from
+# vulkanmemoryallocator. This does not seem to remove any other incldues from gpu so things
+# should work out fine for now
 gn_to_bp_utils.GrabDependentValues(js_skqp, '//:libskqp_app', 'include_dirs',
-                                   skqp_includes, ['//:gif'])
+                                   skqp_includes, ['//:gif', '//:gpu'])
 gn_to_bp_utils.GrabDependentValues(js_skqp, '//:libskqp_app', 'cflags',
                                    skqp_cflags, None)
 gn_to_bp_utils.GrabDependentValues(js_skqp, '//:libskqp_app', 'cflags_cc',
@@ -660,6 +692,7 @@ gn_to_bp_utils.GrabDependentValues(js_skqp, '//:libskqp_app', 'defines',
 skqp_defines.add("SK_ENABLE_DUMP_GPU")
 skqp_defines.add("SK_BUILD_FOR_SKQP")
 skqp_defines.add("SK_ALLOW_STATIC_GLOBAL_INITIALIZERS=1")
+skqp_defines.remove("SK_USE_PERFETTO")
 
 skqp_srcs = strip_headers(skqp_srcs)
 skqp_cflags = gn_to_bp_utils.CleanupCFlags(skqp_cflags)
@@ -686,6 +719,11 @@ mkdir_if_not_exists('mac/include/config/')
 mkdir_if_not_exists('win/include/config/')
 mkdir_if_not_exists('renderengine/include/config/')
 mkdir_if_not_exists('skqp/include/config/')
+mkdir_if_not_exists('vma_android/include')
+
+shutil.copy('third_party/externals/vulkanmemoryallocator/include/vk_mem_alloc.h',
+            'vma_android/include')
+shutil.copy('third_party/externals/vulkanmemoryallocator/LICENSE.txt', 'vma_android/')
 
 platforms = { 'IOS', 'MAC', 'WIN', 'ANDROID', 'UNIX' }
 
@@ -755,13 +793,8 @@ with open('Android.bp', 'w') as Android_bp:
     'cflags':          bpfmt(8, cflags, False),
     'cflags_cc':       bpfmt(8, cflags_cc),
 
-    'arm_srcs':      bpfmt(16, strip_headers(defs['armv7'])),
-    'arm_neon_srcs': bpfmt(20, strip_headers(defs['neon'])),
-    'arm64_srcs':    bpfmt(16, strip_headers(defs['arm64'] +
-                                             defs['crc32'])),
-    'x86_srcs':      bpfmt(16, strip_headers(defs['sse2'] +
-                                             defs['ssse3'] +
-                                             defs['sse41'] +
+    'arm64_srcs':    bpfmt(16, strip_headers(defs['crc32'])),
+    'x86_srcs':      bpfmt(16, strip_headers(defs['ssse3'] +
                                              defs['sse42'] +
                                              defs['avx'  ] +
                                              defs['hsw'  ] +

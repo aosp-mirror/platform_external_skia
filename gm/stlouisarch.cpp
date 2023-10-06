@@ -12,7 +12,7 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
-#include "include/private/SkTArray.h"
+#include "include/private/base/SkTArray.h"
 
 namespace skiagm {
 
@@ -75,7 +75,7 @@ protected:
         canvas->save();
         canvas->scale(1, -1);
         canvas->translate(0, -kHeight);
-        for (int p = 0; p < fPaths.count(); ++p) {
+        for (int p = 0; p < fPaths.size(); ++p) {
             SkPaint paint;
             paint.setARGB(0xff, 0, 0, 0);
             paint.setAntiAlias(true);

@@ -1,15 +1,22 @@
 /*
- * Copyright 2020 Google Inc.
+ * Copyright 2020 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
 #ifndef SkUnicode_DEFINED
 #define SkUnicode_DEFINED
-
 #include "include/core/SkSpan.h"
+#include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "src/utils/SkUTF.h"
+#include "include/private/SkBitmaskEnum.h" // IWYU pragma: keep
+#include "include/private/base/SkTArray.h"
+#include "src/base/SkUTF.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
 #include <vector>
 
 #if !defined(SKUNICODE_IMPLEMENTATION)
@@ -50,7 +57,6 @@ public:
     virtual ~SkBidiIterator() = default;
     virtual Position getLength() = 0;
     virtual Level getLevelAt(Position) = 0;
-    static void ReorderVisual(const Level runLevels[], int levelsCount, int32_t logicalFromVisual[]);
 };
 
 class SKUNICODE_API SkBreakIterator {
@@ -61,25 +67,25 @@ public:
     virtual Position first() = 0;
     virtual Position current() = 0;
     virtual Position next() = 0;
-    virtual Position preceding(Position offset) = 0;
-    virtual Position following(Position offset) = 0;
     virtual Status status() = 0;
     virtual bool isDone() = 0;
     virtual bool setText(const char utftext8[], int utf8Units) = 0;
     virtual bool setText(const char16_t utftext16[], int utf16Units) = 0;
 };
 
-class SKUNICODE_API SkScriptIterator {
- public:
-    typedef uint32_t ScriptID;
-    virtual ~SkScriptIterator() = default;
-    virtual bool getScript(SkUnichar u, ScriptID* script) = 0;
-};
-
 class SKUNICODE_API SkUnicode {
     public:
-        typedef uint32_t CombiningClass;
-        typedef uint32_t GeneralCategory;
+        enum CodeUnitFlags {
+            kNoCodeUnitFlag = 0x00,
+            kPartOfWhiteSpaceBreak = 0x01,
+            kGraphemeStart = 0x02,
+            kSoftLineBreakBefore = 0x04,
+            kHardLineBreakBefore = 0x08,
+            kPartOfIntraWordBreak = 0x10,
+            kControl = 0x20,
+            kTabulation = 0x40,
+            kGlyphClusterStart = 0x80,
+        };
         enum class TextDirection {
             kLTR,
             kRTL,
@@ -112,9 +118,6 @@ class SKUNICODE_API SkUnicode {
 
         virtual ~SkUnicode() = default;
 
-        virtual bool isControl(SkUnichar utf8) = 0;
-        virtual bool isWhitespace(SkUnichar utf8) = 0;
-        virtual bool isSpace(SkUnichar utf8) = 0;
         virtual SkString toUpper(const SkString&) = 0;
 
         // Methods used in SkShaper and SkText
@@ -125,53 +128,78 @@ class SKUNICODE_API SkUnicode {
         virtual std::unique_ptr<SkBreakIterator> makeBreakIterator
             (const char locale[], BreakType breakType) = 0;
         virtual std::unique_ptr<SkBreakIterator> makeBreakIterator(BreakType type) = 0;
-        virtual std::unique_ptr<SkScriptIterator> makeScriptIterator() = 0;
 
-        // High level methods (that we actually use somewhere=SkParagraph)
-        virtual bool getBidiRegions
-               (const char utf8[], int utf8Units, TextDirection dir, std::vector<BidiRegion>* results) = 0;
-        virtual bool getLineBreaks
-               (const char utf8[], int utf8Units, std::vector<LineBreakBefore>* results) = 0;
-        virtual bool getWords
-               (const char utf8[], int utf8Units, std::vector<Position>* results) = 0;
-        virtual bool getGraphemes
-               (const char utf8[], int utf8Units, std::vector<Position>* results) = 0;
+        // Methods used in SkParagraph
+        static bool isTabulation(SkUnicode::CodeUnitFlags flags);
+        static bool isHardLineBreak(SkUnicode::CodeUnitFlags flags);
+        static bool isSoftLineBreak(SkUnicode::CodeUnitFlags flags);
+        static bool isGraphemeStart(SkUnicode::CodeUnitFlags flags);
+        static bool isControl(SkUnicode::CodeUnitFlags flags);
+        static bool isPartOfWhiteSpaceBreak(SkUnicode::CodeUnitFlags flags);
+        static bool extractBidi(const char utf8[],
+                                int utf8Units,
+                                TextDirection dir,
+                                std::vector<BidiRegion>* bidiRegions);
+        virtual bool getBidiRegions(const char utf8[],
+                                    int utf8Units,
+                                    TextDirection dir,
+                                    std::vector<BidiRegion>* results) = 0;
+        virtual bool getWords(const char utf8[], int utf8Units, const char* locale,
+                              std::vector<Position>* results) = 0;
+        virtual bool computeCodeUnitFlags(char utf8[], int utf8Units, bool replaceTabs,
+                                      SkTArray<SkUnicode::CodeUnitFlags, true>* results) = 0;
+        virtual bool computeCodeUnitFlags(char16_t utf16[], int utf16Units, bool replaceTabs,
+                                      SkTArray<SkUnicode::CodeUnitFlags, true>* results) = 0;
 
-        static SkString convertUtf16ToUtf8(const char16_t * utf16, int utf16Units) {
+        static SkString convertUtf16ToUtf8(const char16_t * utf16, int utf16Units);
+        static SkString convertUtf16ToUtf8(const std::u16string& utf16);
+        static std::u16string convertUtf8ToUtf16(const char* utf8, int utf8Units);
+        static std::u16string convertUtf8ToUtf16(const SkString& utf8);
 
-            int utf8Units = SkUTF::UTF16ToUTF8(nullptr, 0, (uint16_t*)utf16, utf16Units);
-            if (utf8Units < 0) {
-                SkDEBUGF("Convert error: Invalid utf16 input");
-                return SkString();
+        template <typename Appender8, typename Appender16>
+        static bool extractUtfConversionMapping(SkSpan<const char> utf8, Appender8&& appender8, Appender16&& appender16) {
+            size_t size8 = 0;
+            size_t size16 = 0;
+            auto ptr = utf8.begin();
+            auto end = utf8.end();
+            while (ptr < end) {
+
+                size_t index = ptr - utf8.begin();
+                SkUnichar u = SkUTF::NextUTF8(&ptr, end);
+
+                // All UTF8 code units refer to the same codepoint
+                size_t next = ptr - utf8.begin();
+                for (auto i = index; i < next; ++i) {
+                    //fUTF16IndexForUTF8Index.emplace_back(fUTF8IndexForUTF16Index.size());
+                    appender16(size8);
+                    ++size16;
+                }
+                //SkASSERT(fUTF16IndexForUTF8Index.size() == next);
+                SkASSERT(size16 == next);
+                if (size16 != next) {
+                    return false;
+                }
+
+                // One or two UTF16 code units refer to the same codepoint
+                uint16_t buffer[2];
+                size_t count = SkUTF::ToUTF16(u, buffer);
+                //fUTF8IndexForUTF16Index.emplace_back(index);
+                appender8(index);
+                ++size8;
+                if (count > 1) {
+                    //fUTF8IndexForUTF16Index.emplace_back(index);
+                    appender8(index);
+                    ++size8;
+                }
             }
-            SkAutoTArray<char> utf8(utf8Units);
-            SkDEBUGCODE(int dstLen =) SkUTF::UTF16ToUTF8(utf8.data(), utf8Units, (uint16_t*)utf16, utf16Units);
-            SkASSERT(dstLen == utf8Units);
+            //fUTF16IndexForUTF8Index.emplace_back(fUTF8IndexForUTF16Index.size());
+            appender16(size8);
+            ++size16;
+            //fUTF8IndexForUTF16Index.emplace_back(fText.size());
+            appender8(utf8.size());
+            ++size8;
 
-            return SkString(utf8.data(), utf8Units);
-        }
-
-        static SkString convertUtf16ToUtf8(const std::u16string& utf16) {
-            return convertUtf16ToUtf8(utf16.c_str(), utf16.size());
-        }
-
-        static std::u16string convertUtf8ToUtf16(const char* utf8, int utf8Units) {
-
-            int utf16Units = SkUTF::UTF8ToUTF16(nullptr, 0, utf8, utf8Units);
-            if (utf16Units < 0) {
-                SkDEBUGF("Convert error: Invalid utf8 input");
-                return std::u16string();
-            }
-
-            SkAutoTArray<uint16_t> utf16(utf16Units);
-            SkDEBUGCODE(int dstLen =) SkUTF::UTF8ToUTF16(utf16.data(), utf16Units, utf8, utf8Units);
-            SkASSERT(dstLen == utf16Units);
-
-            return std::u16string((char16_t *)utf16.data(), utf16Units);
-        }
-
-        static std::u16string convertUtf8ToUtf16(const SkString& utf8) {
-            return convertUtf8ToUtf16(utf8.c_str(), utf8.size());
+            return true;
         }
 
         template <typename Callback>
@@ -238,7 +266,20 @@ class SKUNICODE_API SkUnicode {
 
         virtual void reorderVisual(const BidiLevel runLevels[], int levelsCount, int32_t logicalFromVisual[]) = 0;
 
+        virtual std::unique_ptr<SkUnicode> copy() = 0;
+
         static std::unique_ptr<SkUnicode> Make();
+
+        static std::unique_ptr<SkUnicode> MakeIcuBasedUnicode();
+
+        static std::unique_ptr<SkUnicode> MakeClientBasedUnicode(
+                SkSpan<char> text,
+                std::vector<SkUnicode::Position> words,
+                std::vector<SkUnicode::Position> graphemeBreaks,
+                std::vector<SkUnicode::LineBreakBefore> lineBreaks);
 };
 
+namespace sknonstd {
+    template <> struct is_bitmask_enum<SkUnicode::CodeUnitFlags> : std::true_type {};
+}  // namespace sknonstd
 #endif // SkUnicode_DEFINED

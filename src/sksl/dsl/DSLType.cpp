@@ -7,26 +7,42 @@
 
 #include "include/sksl/DSLType.h"
 
+#include "include/core/SkTypes.h"
+#include "include/private/SkSLDefines.h"
+#include "include/private/SkSLProgramElement.h"
+#include "include/private/SkSLString.h"
+#include "include/private/SkSLSymbol.h"
+#include "include/sksl/SkSLErrorReporter.h"
+#include "src/sksl/SkSLBuiltinTypes.h"
+#include "src/sksl/SkSLContext.h"
+#include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLStructDefinition.h"
+#include "src/sksl/ir/SkSLSymbolTable.h"
+#include "src/sksl/ir/SkSLType.h"
+
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace SkSL {
+
+struct Modifiers;
 
 namespace dsl {
 
 static const SkSL::Type* verify_type(const Context& context,
                                      const SkSL::Type* type,
-                                     bool allowPrivateTypes,
-                                     PositionInfo pos) {
-    if (!context.fConfig->fIsBuiltinCode) {
-        if (!allowPrivateTypes && type->isPrivate()) {
-            context.fErrors->error("type '" + std::string(type->name()) + "' is private", pos);
+                                     bool allowGenericTypes,
+                                     Position pos) {
+    if (!context.fConfig->fIsBuiltinCode && type) {
+        if (!allowGenericTypes && (type->isGeneric() || type->isLiteral())) {
+            context.fErrors->error(pos, "type '" + std::string(type->name()) + "' is generic");
             return context.fTypes.fPoison.get();
         }
         if (!type->isAllowedInES2(context)) {
-            context.fErrors->error("type '" + std::string(type->name()) + "' is not supported",
-                                   pos);
+            context.fErrors->error(pos, "type '" + std::string(type->name()) +"' is not supported");
             return context.fTypes.fPoison.get();
         }
     }
@@ -34,35 +50,35 @@ static const SkSL::Type* verify_type(const Context& context,
 }
 
 static const SkSL::Type* find_type(const Context& context,
-                                   std::string_view name,
-                                   PositionInfo pos) {
-    const Symbol* symbol = (*ThreadContext::SymbolTable())[name];
+                                   Position pos,
+                                   std::string_view name) {
+    const Symbol* symbol = ThreadContext::SymbolTable()->find(name);
     if (!symbol) {
-        context.fErrors->error(String::printf("no symbol named '%.*s'",
-                                              (int)name.length(), name.data()), pos);
+        context.fErrors->error(pos, String::printf("no symbol named '%.*s'",
+                                                   (int)name.length(), name.data()));
         return context.fTypes.fPoison.get();
     }
     if (!symbol->is<SkSL::Type>()) {
-        context.fErrors->error(String::printf("symbol '%.*s' is not a type",
-                                              (int)name.length(), name.data()), pos);
+        context.fErrors->error(pos, String::printf("symbol '%.*s' is not a type",
+                                                   (int)name.length(), name.data()));
         return context.fTypes.fPoison.get();
     }
     const SkSL::Type* type = &symbol->as<SkSL::Type>();
-    return verify_type(context, type, /*allowPrivateTypes=*/false, pos);
+    return verify_type(context, type, /*allowGenericTypes=*/false, pos);
 }
 
 static const SkSL::Type* find_type(const Context& context,
+                                   Position overallPos,
                                    std::string_view name,
-                                   Modifiers* modifiers,
-                                   PositionInfo pos) {
-    const Type* type = find_type(context, name, pos);
-    type = type->applyPrecisionQualifiers(context, modifiers, ThreadContext::SymbolTable().get(),
-                                          pos.line());
-    ThreadContext::ReportErrors(pos);
-    return type;
+                                   Position modifiersPos,
+                                   Modifiers* modifiers) {
+    const Type* type = find_type(context, overallPos, name);
+    return type->applyQualifiers(context, modifiers, ThreadContext::SymbolTable().get(),
+                                 modifiersPos);
 }
 
-static const SkSL::Type* get_type_from_type_constant(const Context& context, TypeConstant tc) {
+static const SkSL::Type* get_type_from_type_constant(TypeConstant tc) {
+    const Context& context = ThreadContext::Context();
     switch (tc) {
         case kBool_Type:
             return context.fTypes.fBool.get();
@@ -167,15 +183,28 @@ static const SkSL::Type* get_type_from_type_constant(const Context& context, Typ
     }
 }
 
-DSLType::DSLType(std::string_view name)
-        : fSkSLType(find_type(ThreadContext::Context(), name, PositionInfo())) {}
+DSLType::DSLType(TypeConstant tc, Position pos)
+        : fSkSLType(verify_type(ThreadContext::Context(),
+                                get_type_from_type_constant(tc),
+                                /*allowGenericTypes=*/false,
+                                pos)) {}
 
-DSLType::DSLType(std::string_view name, DSLModifiers* modifiers, PositionInfo position)
-        : fSkSLType(find_type(ThreadContext::Context(), name, &modifiers->fModifiers, position)) {}
+DSLType::DSLType(std::string_view name, Position pos)
+        : fSkSLType(find_type(ThreadContext::Context(), pos, name)) {}
 
-DSLType::DSLType(const SkSL::Type* type)
-        : fSkSLType(verify_type(ThreadContext::Context(), type, /*allowPrivateTypes=*/true,
-                                PositionInfo())) {}
+DSLType::DSLType(std::string_view name, DSLModifiers* modifiers, Position pos)
+        : fSkSLType(find_type(ThreadContext::Context(),
+                              pos,
+                              name,
+                              modifiers->fPosition,
+                              &modifiers->fModifiers)) {}
+
+DSLType::DSLType(const SkSL::Type* type, Position pos)
+        : fSkSLType(verify_type(ThreadContext::Context(), type, /*allowGenericTypes=*/true, pos)) {}
+
+DSLType DSLType::Invalid() {
+    return DSLType(ThreadContext::Context().fTypes.fInvalid.get(), Position());
+}
 
 bool DSLType::isBoolean() const {
     return this->skslType().isBoolean();
@@ -225,77 +254,56 @@ bool DSLType::isEffectChild() const {
     return this->skslType().isEffectChild();
 }
 
-const SkSL::Type& DSLType::skslType() const {
-    if (fSkSLType) {
-        return *fSkSLType;
-    }
-    const Context& context = ThreadContext::Context();
-    return *verify_type(context,
-                        get_type_from_type_constant(context, fTypeConstant),
-                        /*allowPrivateTypes=*/true,
-                        PositionInfo());
-}
-
-DSLPossibleExpression DSLType::Construct(DSLType type, SkSpan<DSLExpression> argArray) {
+DSLExpression DSLType::Construct(DSLType type, SkSpan<DSLExpression> argArray) {
     SkSL::ExpressionArray skslArgs;
     skslArgs.reserve_back(argArray.size());
 
     for (DSLExpression& arg : argArray) {
         if (!arg.hasValue()) {
-            return DSLPossibleExpression(nullptr);
+            return DSLExpression();
         }
         skslArgs.push_back(arg.release());
     }
-    return SkSL::Constructor::Convert(ThreadContext::Context(), /*line=*/-1, type.skslType(),
-            std::move(skslArgs));
+    return DSLExpression(SkSL::Constructor::Convert(ThreadContext::Context(), Position(),
+                                                    type.skslType(), std::move(skslArgs)));
 }
 
-DSLType Array(const DSLType& base, int count, PositionInfo pos) {
-    count = base.skslType().convertArraySize(ThreadContext::Context(),
-            DSLExpression(count, pos).release());
-    ThreadContext::ReportErrors(pos);
+DSLType Array(const DSLType& base, int count, Position pos) {
+    count = base.skslType().convertArraySize(ThreadContext::Context(), pos,
+                                             DSLExpression(count, pos).release());
     if (!count) {
         return DSLType(kPoison_Type);
     }
-    return ThreadContext::SymbolTable()->addArrayDimension(&base.skslType(), count);
+    return DSLType(ThreadContext::SymbolTable()->addArrayDimension(&base.skslType(), count), pos);
 }
 
-DSLType Struct(std::string_view name, SkSpan<DSLField> fields, PositionInfo pos) {
+DSLType UnsizedArray(const DSLType& base, Position pos) {
+    if (!base.skslType().checkIfUsableInArray(ThreadContext::Context(), pos)) {
+        return DSLType(kPoison_Type);
+    }
+    return ThreadContext::SymbolTable()->addArrayDimension(&base.skslType(),
+                                                           SkSL::Type::kUnsizedArray);
+}
+
+DSLType StructType(std::string_view name,
+                   SkSpan<DSLField> fields,
+                   bool interfaceBlock,
+                   Position pos) {
     std::vector<SkSL::Type::Field> skslFields;
     skslFields.reserve(fields.size());
     for (const DSLField& field : fields) {
-        if (field.fModifiers.fModifiers.fFlags != Modifiers::kNo_Flag) {
-            std::string desc = field.fModifiers.fModifiers.description();
-            desc.pop_back();  // remove trailing space
-            ThreadContext::ReportError("modifier '" + desc + "' is not permitted on a struct field",
-                    field.fPosition);
-        }
-        if (field.fModifiers.fModifiers.fLayout.fFlags & Layout::kBinding_Flag) {
-            ThreadContext::ReportError(
-                    "layout qualifier 'binding' is not permitted on a struct field",
-                    field.fPosition);
-        }
-        if (field.fModifiers.fModifiers.fLayout.fFlags & Layout::kSet_Flag) {
-            ThreadContext::ReportError("layout qualifier 'set' is not permitted on a struct field",
-                                       field.fPosition);
-        }
+        skslFields.emplace_back(field.fPosition, field.fModifiers.fModifiers, field.fName,
+                                &field.fType.skslType());
+    }
+    std::unique_ptr<Type> newType = Type::MakeStructType(ThreadContext::Context(), pos, name,
+                                                         std::move(skslFields), interfaceBlock);
+    return DSLType(ThreadContext::SymbolTable()->add(std::move(newType)), pos);
+}
 
-        const SkSL::Type& type = field.fType.skslType();
-        if (type.isVoid()) {
-            ThreadContext::ReportError("type 'void' is not permitted in a struct", field.fPosition);
-        } else if (type.isOpaque()) {
-            ThreadContext::ReportError("opaque type '" + type.displayName() +
-                                       "' is not permitted in a struct", field.fPosition);
-        }
-        skslFields.emplace_back(field.fModifiers.fModifiers, field.fName, &type);
-    }
-    const SkSL::Type* result = ThreadContext::SymbolTable()->add(Type::MakeStructType(pos.line(),
-            name, skslFields));
-    if (result->isTooDeeplyNested()) {
-        ThreadContext::ReportError("struct '" + std::string(name) + "' is too deeply nested", pos);
-    }
-    ThreadContext::ProgramElements().push_back(std::make_unique<SkSL::StructDefinition>(/*line=*/-1,
-            *result));
+DSLType Struct(std::string_view name, SkSpan<DSLField> fields, Position pos) {
+    DSLType result = StructType(name, fields, /*interfaceBlock=*/false, pos);
+    ThreadContext::ProgramElements().push_back(
+            std::make_unique<SkSL::StructDefinition>(pos, result.skslType()));
     return result;
 }
 

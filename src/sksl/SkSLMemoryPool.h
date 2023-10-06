@@ -12,9 +12,9 @@
 
 #include "include/core/SkTypes.h"
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 
-#include "src/gpu/GrMemoryPool.h"
+#include "src/gpu/ganesh/GrMemoryPool.h"
 
 namespace SkSL {
 using MemoryPool = ::GrMemoryPool;
@@ -40,5 +40,5 @@ public:
 
 }  // namespace SkSL
 
-#endif // SK_SUPPORT_GPU
+#endif // defined(SK_GANESH)
 #endif // SKSL_MEMORYPOOL

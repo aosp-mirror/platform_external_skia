@@ -8,16 +8,33 @@
 #ifndef SkImage_GpuBase_DEFINED
 #define SkImage_GpuBase_DEFINED
 
-#include "include/core/SkDeferredDisplayListRecorder.h"
-#include "include/gpu/GrBackendSurface.h"
-#include "include/private/GrTypesPriv.h"
-#include "src/core/SkYUVAInfoLocation.h"
+#include "include/core/SkRefCnt.h"
+#include "include/private/gpu/ganesh/GrImageContext.h"
 #include "src/image/SkImage_Base.h"
 
-class GrColorSpaceXform;
+#include <cstddef>
+#include <cstdint>
+
+class GrBackendFormat;
+class GrBackendTexture;
+class GrCaps;
+class GrContextThreadSafeProxy;
 class GrDirectContext;
-class GrImageContext;
+class GrRecordingContext;
+class GrTextureProxy;
+class SkBitmap;
 class SkColorSpace;
+class SkImage;
+enum SkAlphaType : int;
+enum SkColorType : int;
+enum class GrColorType;
+struct SkIRect;
+struct SkISize;
+struct SkImageInfo;
+namespace skgpu {
+enum class Mipmapped : bool;
+class RefCntedCallback;
+}
 
 class SkImage_GpuBase : public SkImage_Base {
 public:
@@ -44,20 +61,30 @@ public:
 
     // Helper for making a lazy proxy for a promise image.
     // PromiseImageTextureFulfillProc must not be null.
-    static sk_sp<GrTextureProxy> MakePromiseImageLazyProxy(GrContextThreadSafeProxy*,
-                                                           SkISize dimensions,
-                                                           GrBackendFormat,
-                                                           GrMipmapped,
-                                                           PromiseImageTextureFulfillProc,
-                                                           sk_sp<GrRefCntedCallback> releaseHelper);
+    static sk_sp<GrTextureProxy> MakePromiseImageLazyProxy(
+            GrContextThreadSafeProxy*,
+            SkISize dimensions,
+            GrBackendFormat,
+            skgpu::Mipmapped,
+            PromiseImageTextureFulfillProc,
+            sk_sp<skgpu::RefCntedCallback> releaseHelper);
 
 protected:
     SkImage_GpuBase(sk_sp<GrImageContext>, SkImageInfo, uint32_t uniqueID);
 
     sk_sp<GrImageContext> fContext;
 
-private:
-    using INHERITED = SkImage_Base;
+#if defined(SK_GRAPHITE)
+    sk_sp<SkImage> onMakeTextureImage(skgpu::graphite::Recorder*,
+                                      RequiredImageProperties) const final;
+    sk_sp<SkImage> onMakeSubset(const SkIRect& subset,
+                                skgpu::graphite::Recorder*,
+                                RequiredImageProperties) const final;
+    sk_sp<SkImage> onMakeColorTypeAndColorSpace(SkColorType,
+                                                sk_sp<SkColorSpace>,
+                                                skgpu::graphite::Recorder*,
+                                                RequiredImageProperties) const final;
+#endif
 };
 
 #endif

@@ -6,20 +6,33 @@
  */
 
 #include "include/core/SkFont.h"
+#include "include/core/SkFontArguments.h"
 #include "include/core/SkFontMgr.h"
-#include "include/core/SkPaint.h"
+#include "include/core/SkFontParameters.h"
+#include "include/core/SkFontStyle.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkStream.h"
+#include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
-#include "src/core/SkAdvancedTypefaceMetrics.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkMalloc.h"
+#include "include/private/base/SkDebug.h"
+#include "src/core/SkAdvancedTypefaceMetrics.h" // IWYU pragma: keep
 #include "src/core/SkScalerContext.h"
 #include "tests/Test.h"
 #include "tools/flags/CommandLineFlags.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <initializer_list>
-#include <limits>
+#include <memory>
 #include <vector>
 
-DEFINE_bool(verboseFontMgr, false, "FontMgr will be very verbose.");
+class SkDescriptor;
+class SkFontDescriptor;
+
+DECLARE_bool(verboseFontMgr)
 
 DEF_TEST(FontMgr_Font, reporter) {
     SkFont font(nullptr, 24);
@@ -38,7 +51,7 @@ DEF_TEST(FontMgr_Font, reporter) {
     for (const auto glyph : glyphs) { REPORTER_ASSERT(reporter, glyph == 0); }
 
     SkAssertResult(font.textToGlyphs("Hello", 5, SkTextEncoding::kUTF8, glyphs,
-                                     SK_ARRAY_COUNT(glyphs)) == count);
+                                     std::size(glyphs)) == count);
 
     for (int i = 0; i < count; ++i) {
         REPORTER_ASSERT(reporter, 0 != glyphs[i]);
@@ -62,7 +75,7 @@ DEF_TEST(FontMgr_AliasNames, reporter) {
         "sans", "sans-serif", "serif", "monospace", "times", "helvetica"
     };
 
-    for (size_t i = 0; i < SK_ARRAY_COUNT(inNames); ++i) {
+    for (size_t i = 0; i < std::size(inNames); ++i) {
         sk_sp<SkTypeface> first(SkTypeface::MakeFromName(inNames[i], SkFontStyle()));
         if (nullptr == first.get()) {
             continue;
