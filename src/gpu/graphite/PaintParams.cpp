@@ -154,8 +154,7 @@ void AddModeBlend(const KeyContext& keyContext,
                   SkBlendMode bm) {
     SkSpan<const float> coeffs = skgpu::GetPorterDuffBlendConstants(bm);
     if (!coeffs.empty()) {
-        CoeffBlenderBlock::BeginBlock(keyContext, builder, gatherer, coeffs);
-        builder->endBlock();
+        CoeffBlenderBlock::AddBlock(keyContext, builder, gatherer, coeffs);
     } else {
         BlendModeBlenderBlock::AddBlock(keyContext, builder, gatherer, bm);
     }
@@ -244,6 +243,16 @@ void PaintParams::handlePrimitiveColor(const KeyContext& keyContext,
 void PaintParams::handlePaintAlpha(const KeyContext& keyContext,
                                    PaintParamsKeyBuilder* keyBuilder,
                                    PipelineDataGatherer* gatherer) const {
+
+    if (!fShader && !fPrimitiveBlender) {
+        // If there is no shader and no primitive blending the input to the colorFilter stage
+        // is just the premultiplied paint color.
+        SkPMColor4f paintColor = PaintParams::Color4fPrepForDst(fColor,
+                                                                keyContext.dstColorInfo()).premul();
+        SolidColorShaderBlock::AddBlock(keyContext, keyBuilder, gatherer, paintColor);
+        return;
+    }
+
     if (fColor.fA != 1.0f) {
         Blend(keyContext, keyBuilder, gatherer,
               /* addBlendToKey= */ [&] () -> void {

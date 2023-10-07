@@ -19,6 +19,7 @@
 #include "include/gpu/graphite/dawn/DawnUtils.h"
 #include "include/private/gpu/graphite/ContextOptionsPriv.h"
 #include "tools/ToolUtils.h"
+#include "tools/GpuToolUtils.h"
 
 #include "dawn/dawn_proc.h"
 
@@ -156,7 +157,8 @@ wgpu::SwapChain GraphiteDawnWindowContext::createSwapChain() {
     swapChainDesc.format = fSwapChainFormat;
     swapChainDesc.width = fWidth;
     swapChainDesc.height = fHeight;
-    swapChainDesc.presentMode = wgpu::PresentMode::Fifo;
+    swapChainDesc.presentMode =
+            fDisplayParams.fDisableVsync ? wgpu::PresentMode::Immediate : wgpu::PresentMode::Fifo;
     auto swapChain = fDevice.CreateSwapChain(fSurface, &swapChainDesc);
     SkASSERT(swapChain);
     return swapChain;
