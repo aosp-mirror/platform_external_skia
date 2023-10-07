@@ -59,16 +59,19 @@ static constexpr char g_type_message[] = "How to interpret --bytes, one of:\n"
                                          "region_set_path\n"
                                          "skdescriptor_deserialize\n"
                                          "skmeshspecialization\n"
-                                         "skp\n"
-                                         "skruntimeeffect\n"
-                                         "sksl2glsl\n"
-                                         "svg_dom\n"
-                                         "sksl2metal\n"
-                                         "sksl2pipeline\n"
-                                         "sksl2spirv\n"
 #if defined(SK_ENABLE_SKOTTIE)
                                          "skottie_json\n"
 #endif
+                                         "skp\n"
+                                         "skruntimeblender\n"
+                                         "skruntimecolorfilter\n"
+                                         "skruntimeeffect\n"
+                                         "sksl2glsl\n"
+                                         "sksl2metal\n"
+                                         "sksl2pipeline\n"
+                                         "sksl2spirv\n"
+                                         "sksl2wgsl\n"
+                                         "svg_dom\n"
                                          "textblob";
 
 static DEFINE_string2(type, t, "", g_type_message);
@@ -93,11 +96,14 @@ static void fuzz_region_set_path(sk_sp<SkData>);
 static void fuzz_skdescriptor_deserialize(sk_sp<SkData>);
 static void fuzz_skmeshspecification(sk_sp<SkData>);
 static void fuzz_skp(sk_sp<SkData>);
+static void fuzz_skruntimeblender(sk_sp<SkData>);
+static void fuzz_skruntimecolorfilter(sk_sp<SkData>);
 static void fuzz_skruntimeeffect(sk_sp<SkData>);
 static void fuzz_sksl2glsl(sk_sp<SkData>);
 static void fuzz_sksl2metal(sk_sp<SkData>);
 static void fuzz_sksl2pipeline(sk_sp<SkData>);
 static void fuzz_sksl2spirv(sk_sp<SkData>);
+static void fuzz_sksl2wgsl(sk_sp<SkData>);
 static void fuzz_textblob_deserialize(sk_sp<SkData>);
 
 static void print_api_names();
@@ -245,6 +251,14 @@ static int fuzz_file(SkString path, SkString type) {
         fuzz_skp(bytes);
         return 0;
     }
+    if (type.equals("skruntimeblender")) {
+        fuzz_skruntimeblender(bytes);
+        return 0;
+    }
+    if (type.equals("skruntimecolorfilter")) {
+        fuzz_skruntimecolorfilter(bytes);
+        return 0;
+    }
     if (type.equals("skruntimeeffect")) {
         fuzz_skruntimeeffect(bytes);
         return 0;
@@ -257,12 +271,16 @@ static int fuzz_file(SkString path, SkString type) {
         fuzz_sksl2metal(bytes);
         return 0;
     }
+    if (type.equals("sksl2pipeline")) {
+        fuzz_sksl2pipeline(bytes);
+        return 0;
+    }
     if (type.equals("sksl2spirv")) {
         fuzz_sksl2spirv(bytes);
         return 0;
     }
-    if (type.equals("sksl2pipeline")) {
-        fuzz_sksl2pipeline(bytes);
+    if (type.equals("sksl2wgsl")) {
+        fuzz_sksl2wgsl(bytes);
         return 0;
     }
 #if defined(SK_ENABLE_SVG)
@@ -786,13 +804,33 @@ static void fuzz_skmeshspecification(sk_sp<SkData> bytes) {
     SkDebugf("[terminated] SkMeshSpecification::Make didn't crash!\n");
 }
 
+bool FuzzSkRuntimeBlender(sk_sp<SkData> bytes);
+
+static void fuzz_skruntimeblender(sk_sp<SkData> bytes) {
+    if (FuzzSkRuntimeBlender(bytes)) {
+        SkDebugf("[terminated] Success! Compiled and executed SkSL blender.\n");
+    } else {
+        SkDebugf("[terminated] Could not compile or execute SkSL blender.\n");
+    }
+}
+
+bool FuzzSkRuntimeColorFilter(sk_sp<SkData> bytes);
+
+static void fuzz_skruntimecolorfilter(sk_sp<SkData> bytes) {
+    if (FuzzSkRuntimeColorFilter(bytes)) {
+        SkDebugf("[terminated] Success! Compiled and executed SkSL color filter.\n");
+    } else {
+        SkDebugf("[terminated] Could not compile or execute SkSL color filter.\n");
+    }
+}
+
 bool FuzzSkRuntimeEffect(sk_sp<SkData> bytes);
 
 static void fuzz_skruntimeeffect(sk_sp<SkData> bytes) {
     if (FuzzSkRuntimeEffect(bytes)) {
-        SkDebugf("[terminated] Success! Compiled and Executed sksl code.\n");
+        SkDebugf("[terminated] Success! Compiled and executed SkSL shader.\n");
     } else {
-        SkDebugf("[terminated] Could not Compile or Execute sksl code.\n");
+        SkDebugf("[terminated] Could not compile or execute SkSL shader.\n");
     }
 }
 
@@ -803,16 +841,6 @@ static void fuzz_sksl2glsl(sk_sp<SkData> bytes) {
         SkDebugf("[terminated] Success! Compiled input to GLSL.\n");
     } else {
         SkDebugf("[terminated] Could not compile input to GLSL.\n");
-    }
-}
-
-bool FuzzSKSL2SPIRV(sk_sp<SkData> bytes);
-
-static void fuzz_sksl2spirv(sk_sp<SkData> bytes) {
-    if (FuzzSKSL2SPIRV(bytes)) {
-        SkDebugf("[terminated] Success! Compiled input to SPIRV.\n");
-    } else {
-        SkDebugf("[terminated] Could not compile input to SPIRV.\n");
     }
 }
 
@@ -833,6 +861,26 @@ static void fuzz_sksl2pipeline(sk_sp<SkData> bytes) {
         SkDebugf("[terminated] Success! Compiled input to pipeline stage.\n");
     } else {
         SkDebugf("[terminated] Could not compile input to pipeline stage.\n");
+    }
+}
+
+bool FuzzSKSL2SPIRV(sk_sp<SkData> bytes);
+
+static void fuzz_sksl2spirv(sk_sp<SkData> bytes) {
+    if (FuzzSKSL2SPIRV(bytes)) {
+        SkDebugf("[terminated] Success! Compiled input to SPIR-V.\n");
+    } else {
+        SkDebugf("[terminated] Could not compile input to SPIR-V.\n");
+    }
+}
+
+bool FuzzSKSL2WGSL(sk_sp<SkData> bytes);
+
+static void fuzz_sksl2wgsl(sk_sp<SkData> bytes) {
+    if (FuzzSKSL2WGSL(bytes)) {
+        SkDebugf("[terminated] Success! Compiled input to WGSL.\n");
+    } else {
+        SkDebugf("[terminated] Could not compile input to WGSL.\n");
     }
 }
 

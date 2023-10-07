@@ -1,5 +1,5 @@
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_library", "skia_objc_library")
 load("//bazel:macros.bzl", "py_binary")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_library", "skia_objc_library")
 
 licenses(["notice"])
 
@@ -9,6 +9,9 @@ skia_cc_library(
     name = "tool_utils",
     testonly = True,
     srcs = [
+        "EncodeUtils.cpp",
+        "DecodeUtils.cpp",
+        "GpuToolUtils.cpp",
         "Resources.cpp",
         "ToolUtils.cpp",
         "ResourceFactory.h",
@@ -18,7 +21,9 @@ skia_cc_library(
         "SkMetaData.cpp",
     ],
     hdrs = [
-        "DecodeFile.h",
+        "DecodeUtils.h",
+        "EncodeUtils.h",
+        "GpuToolUtils.h",
         "Resources.h",
         "SkMetaData.h",
         "ToolUtils.h",
