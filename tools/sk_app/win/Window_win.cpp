@@ -5,15 +5,13 @@
 * found in the LICENSE file.
 */
 
-#include "include/gpu/vk/GrVkVulkan.h"
-
 #include "tools/sk_app/win/Window_win.h"
 
 #include <tchar.h>
 #include <windows.h>
 #include <windowsx.h>
 
-#include "src/utils/SkUTF.h"
+#include "src/base/SkUTF.h"
 #include "tools/sk_app/WindowContext.h"
 #include "tools/sk_app/win/WindowContextFactory_win.h"
 #include "tools/skui/ModifierKey.h"
@@ -152,7 +150,7 @@ static skui::Key get_key(WPARAM vk) {
         { 'Y',        skui::Key::kY        },
         { 'Z',        skui::Key::kZ        },
     };
-    for (size_t i = 0; i < SK_ARRAY_COUNT(gPair); i++) {
+    for (size_t i = 0; i < std::size(gPair); i++) {
         if (gPair[i].fVK == vk) {
             return gPair[i].fKey;
         }
@@ -366,6 +364,12 @@ bool Window_win::attach(BackendType attachType) {
             fWindowContext =
                     window_context_factory::MakeDawnD3D12ForWin(fHWnd, fRequestedDisplayParams);
             break;
+#if defined(SK_GRAPHITE)
+        case kGraphiteDawn_BackendType:
+            fWindowContext = window_context_factory::MakeGraphiteDawnD3D12ForWin(
+                    fHWnd, fRequestedDisplayParams);
+            break;
+#endif
 #endif
         case kRaster_BackendType:
             fWindowContext =

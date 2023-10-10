@@ -27,7 +27,7 @@
 #include "include/core/SkTypes.h"
 #include "include/effects/SkGradientShader.h"
 #include "include/utils/SkTextUtils.h"
-#include "src/utils/SkUTF.h"
+#include "src/base/SkUTF.h"
 #include "tools/ToolUtils.h"
 
 #include <string.h>
@@ -52,7 +52,7 @@ protected:
         local.setRotate(180);
         SkPaint paint;
         paint.setAntiAlias(true);
-        paint.setShader(SkGradientShader::MakeSweep(0, 0, colors, nullptr, SK_ARRAY_COUNT(colors),
+        paint.setShader(SkGradientShader::MakeSweep(0, 0, colors, nullptr, std::size(colors),
                                                     0, &local));
 
         sk_sp<SkTypeface> orig(ToolUtils::create_portable_typeface("serif", SkFontStyle::Bold()));
@@ -126,7 +126,7 @@ protected:
         SkScalar x0 = 0;
         SkScalar y0 = 0;
         SkScalar x = x0, y = y0;
-        for (size_t i = 0; i < SK_ARRAY_COUNT(gModes); i++) {
+        for (size_t i = 0; i < std::size(gModes); i++) {
             SkRect r;
             r.setLTRB(x, y, x+w, y+h);
 

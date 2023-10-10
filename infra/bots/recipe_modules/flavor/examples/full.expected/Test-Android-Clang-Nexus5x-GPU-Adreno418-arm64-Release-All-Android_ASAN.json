@@ -2,7 +2,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "import os\nprint(os.environ.get('SWARMING_BOT_ID', ''))\n"
     ],
     "name": "get swarming bot id",
@@ -32,6 +31,23 @@
     "cmd": [
       "/opt/infra-android/tools/adb",
       "shell",
+      "test",
+      "-f",
+      "file.txt"
+    ],
+    "cwd": "[START_DIR]/skia",
+    "env": {
+      "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "check if file.txt exists"
+  },
+  {
+    "cmd": [
+      "/opt/infra-android/tools/adb",
+      "shell",
       "cat",
       "file.txt"
     ],
@@ -47,7 +63,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport subprocess\nimport sys\n\n# Remove the path.\nadb = sys.argv[1]\npath = sys.argv[2]\nprint('Removing %s' % path)\ncmd = [adb, 'shell', 'rm', '-rf', path]\nprint(' '.join(cmd))\nsubprocess.check_call(cmd)\n\n# Verify that the path was deleted.\nprint('Checking for existence of %s' % path)\ncmd = [adb, 'shell', 'ls', path]\nprint(' '.join(cmd))\ntry:\n  output = subprocess.check_output(\n      cmd, stderr=subprocess.STDOUT).decode('utf-8')\nexcept subprocess.CalledProcessError as e:\n  output = e.output.decode('utf-8')\nprint('Output was:')\nprint('======')\nprint(output)\nprint('======')\nif 'No such file or directory' not in output:\n  raise Exception('%s exists despite being deleted' % path)\n",
       "/opt/infra-android/tools/adb",
       "file.txt"
@@ -91,7 +106,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -104,7 +119,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -120,7 +135,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport subprocess\nimport sys\n\n# Remove the path.\nadb = sys.argv[1]\npath = sys.argv[2]\nprint('Removing %s' % path)\ncmd = [adb, 'shell', 'rm', '-rf', path]\nprint(' '.join(cmd))\nsubprocess.check_call(cmd)\n\n# Verify that the path was deleted.\nprint('Checking for existence of %s' % path)\ncmd = [adb, 'shell', 'ls', path]\nprint(' '.join(cmd))\ntry:\n  output = subprocess.check_output(\n      cmd, stderr=subprocess.STDOUT).decode('utf-8')\nexcept subprocess.CalledProcessError as e:\n  output = e.output.decode('utf-8')\nprint('Output was:')\nprint('======')\nprint(output)\nprint('======')\nif 'No such file or directory' not in output:\n  raise Exception('%s exists despite being deleted' % path)\n",
       "/opt/infra-android/tools/adb",
       "device_results_dir"
@@ -199,7 +213,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport os\nimport subprocess\nimport sys\nimport time\nADB = sys.argv[1]\nASAN_SETUP = sys.argv[2]\n\ndef wait_for_device():\n  while True:\n    time.sleep(5)\n    print('Waiting for device')\n    subprocess.check_call([ADB, 'wait-for-device'])\n    bit1 = subprocess.check_output([ADB, 'shell', 'getprop',\n                                   'dev.bootcomplete']).decode('utf-8')\n    bit2 = subprocess.check_output([ADB, 'shell', 'getprop',\n                                   'sys.boot_completed']).decode('utf-8')\n    if '1' in bit1 and '1' in bit2:\n      print('Device detected')\n      break\n\nlog = subprocess.check_output([ADB, 'root']).decode('utf-8')\n# check for message like 'adbd cannot run as root in production builds'\nprint(log)\nif 'cannot' in log:\n  raise Exception('adb root failed')\n\noutput = subprocess.check_output([ADB, 'disable-verity']).decode('utf-8')\nprint(output)\n\nif 'already disabled' not in output:\n  print('Rebooting device')\n  subprocess.check_call([ADB, 'reboot'])\n  wait_for_device()\n\ndef installASAN(revert=False):\n  # ASAN setup script is idempotent, either it installs it or\n  # says it's installed.  Returns True on success, false otherwise.\n  out = subprocess.check_output([ADB, 'wait-for-device']).decode('utf-8')\n  print(out)\n  cmd = [ASAN_SETUP]\n  if revert:\n    cmd = [ASAN_SETUP, '--revert']\n  process = subprocess.Popen(cmd, env={'ADB': ADB},\n                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)\n\n  # this also blocks until command finishes\n  (stdout, stderr) = process.communicate()\n  print(stdout.decode('utf-8'))\n  print('Stderr: %s' % stderr.decode('utf-8'))\n  return process.returncode == 0\n\nif not installASAN():\n  print('Trying to revert the ASAN install and then re-install')\n  # ASAN script sometimes has issues if it was interrupted or partially applied\n  # Try reverting it, then re-enabling it\n  if not installASAN(revert=True):\n    raise Exception('reverting ASAN install failed')\n\n  # Sleep because device does not reboot instantly\n  time.sleep(10)\n\n  if not installASAN():\n    raise Exception('Tried twice to setup ASAN and failed.')\n\n# Sleep because device does not reboot instantly\ntime.sleep(10)\nwait_for_device()\n# Sleep again to hopefully avoid error \"secure_mkdirs failed: No such file or\n# directory\" when pushing resources to the device.\ntime.sleep(60)\n",
       "/opt/infra-android/tools/adb",
       "[START_DIR]/android_ndk_linux/toolchains/llvm/prebuilt/linux-x86_64/lib64/clang/9.0.8/bin/asan_device_setup"
@@ -289,7 +302,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport os\nimport subprocess\nimport sys\nimport time\nADB = sys.argv[1]\ncpu = int(sys.argv[2])\nvalue = int(sys.argv[3])\n\nlog = subprocess.check_output([ADB, 'root']).decode('utf-8')\n# check for message like 'adbd cannot run as root in production builds'\nprint(log)\nif 'cannot' in log:\n  raise Exception('adb root failed')\n\n# If we try to echo 1 to an already online cpu, adb returns exit code 1.\n# So, check the value before trying to write it.\nprior_status = subprocess.check_output([ADB, 'shell', 'cat '\n    '/sys/devices/system/cpu/cpu%d/online' % cpu]).decode('utf-8').strip()\nif prior_status == str(value):\n  print('CPU %d online already %d' % (cpu, value))\n  sys.exit()\n\nsubprocess.check_call([ADB, 'shell', 'echo %s > '\n    '/sys/devices/system/cpu/cpu%d/online' % (value, cpu)])\nactual_status = subprocess.check_output([ADB, 'shell', 'cat '\n    '/sys/devices/system/cpu/cpu%d/online' % cpu]).decode('utf-8').strip()\nif actual_status != str(value):\n  raise Exception('(actual, expected) (%s, %d)'\n                  % (actual_status, value))\n",
       "/opt/infra-android/tools/adb",
       "0",
@@ -339,7 +351,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport os\nimport subprocess\nimport sys\nimport time\nADB = sys.argv[1]\ncpu = int(sys.argv[2])\nvalue = int(sys.argv[3])\n\nlog = subprocess.check_output([ADB, 'root']).decode('utf-8')\n# check for message like 'adbd cannot run as root in production builds'\nprint(log)\nif 'cannot' in log:\n  raise Exception('adb root failed')\n\n# If we try to echo 1 to an already online cpu, adb returns exit code 1.\n# So, check the value before trying to write it.\nprior_status = subprocess.check_output([ADB, 'shell', 'cat '\n    '/sys/devices/system/cpu/cpu%d/online' % cpu]).decode('utf-8').strip()\nif prior_status == str(value):\n  print('CPU %d online already %d' % (cpu, value))\n  sys.exit()\n\nsubprocess.check_call([ADB, 'shell', 'echo %s > '\n    '/sys/devices/system/cpu/cpu%d/online' % (value, cpu)])\nactual_status = subprocess.check_output([ADB, 'shell', 'cat '\n    '/sys/devices/system/cpu/cpu%d/online' % cpu]).decode('utf-8').strip()\nif actual_status != str(value):\n  raise Exception('(actual, expected) (%s, %d)'\n                  % (actual_status, value))\n",
       "/opt/infra-android/tools/adb",
       "1",
@@ -389,7 +400,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport os\nimport subprocess\nimport sys\nimport time\nADB = sys.argv[1]\ncpu = int(sys.argv[2])\nvalue = int(sys.argv[3])\n\nlog = subprocess.check_output([ADB, 'root']).decode('utf-8')\n# check for message like 'adbd cannot run as root in production builds'\nprint(log)\nif 'cannot' in log:\n  raise Exception('adb root failed')\n\n# If we try to echo 1 to an already online cpu, adb returns exit code 1.\n# So, check the value before trying to write it.\nprior_status = subprocess.check_output([ADB, 'shell', 'cat '\n    '/sys/devices/system/cpu/cpu%d/online' % cpu]).decode('utf-8').strip()\nif prior_status == str(value):\n  print('CPU %d online already %d' % (cpu, value))\n  sys.exit()\n\nsubprocess.check_call([ADB, 'shell', 'echo %s > '\n    '/sys/devices/system/cpu/cpu%d/online' % (value, cpu)])\nactual_status = subprocess.check_output([ADB, 'shell', 'cat '\n    '/sys/devices/system/cpu/cpu%d/online' % cpu]).decode('utf-8').strip()\nif actual_status != str(value):\n  raise Exception('(actual, expected) (%s, %d)'\n                  % (actual_status, value))\n",
       "/opt/infra-android/tools/adb",
       "2",
@@ -439,7 +449,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport os\nimport subprocess\nimport sys\nimport time\nADB = sys.argv[1]\ncpu = int(sys.argv[2])\nvalue = int(sys.argv[3])\n\nlog = subprocess.check_output([ADB, 'root']).decode('utf-8')\n# check for message like 'adbd cannot run as root in production builds'\nprint(log)\nif 'cannot' in log:\n  raise Exception('adb root failed')\n\n# If we try to echo 1 to an already online cpu, adb returns exit code 1.\n# So, check the value before trying to write it.\nprior_status = subprocess.check_output([ADB, 'shell', 'cat '\n    '/sys/devices/system/cpu/cpu%d/online' % cpu]).decode('utf-8').strip()\nif prior_status == str(value):\n  print('CPU %d online already %d' % (cpu, value))\n  sys.exit()\n\nsubprocess.check_call([ADB, 'shell', 'echo %s > '\n    '/sys/devices/system/cpu/cpu%d/online' % (value, cpu)])\nactual_status = subprocess.check_output([ADB, 'shell', 'cat '\n    '/sys/devices/system/cpu/cpu%d/online' % cpu]).decode('utf-8').strip()\nif actual_status != str(value):\n  raise Exception('(actual, expected) (%s, %d)'\n                  % (actual_status, value))\n",
       "/opt/infra-android/tools/adb",
       "3",
@@ -489,7 +498,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport os\nimport subprocess\nimport sys\nimport time\nADB = sys.argv[1]\ncpu = int(sys.argv[2])\ngov = sys.argv[3]\n\nlog = subprocess.check_output([ADB, 'root']).decode('utf-8')\n# check for message like 'adbd cannot run as root in production builds'\nprint(log)\nif 'cannot' in log:\n  raise Exception('adb root failed')\n\nsubprocess.check_output([\n    ADB, 'shell',\n    'echo \"%s\" > /sys/devices/system/cpu/cpu%d/cpufreq/scaling_governor' % (\n        gov, cpu)]).decode('utf-8')\nactual_gov = subprocess.check_output([\n    ADB, 'shell', 'cat /sys/devices/system/cpu/cpu%d/cpufreq/scaling_governor' %\n        cpu]).decode('utf-8').strip()\nif actual_gov != gov:\n  raise Exception('(actual, expected) (%s, %s)'\n                  % (actual_gov, gov))\n",
       "/opt/infra-android/tools/adb",
       "4",
@@ -534,7 +542,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport os\nimport subprocess\nimport sys\nimport time\nADB = sys.argv[1]\ncpu = int(sys.argv[2])\ngov = sys.argv[3]\n\nlog = subprocess.check_output([ADB, 'root']).decode('utf-8')\n# check for message like 'adbd cannot run as root in production builds'\nprint(log)\nif 'cannot' in log:\n  raise Exception('adb root failed')\n\nsubprocess.check_output([\n    ADB, 'shell',\n    'echo \"%s\" > /sys/devices/system/cpu/cpu%d/cpufreq/scaling_governor' % (\n        gov, cpu)]).decode('utf-8')\nactual_gov = subprocess.check_output([\n    ADB, 'shell', 'cat /sys/devices/system/cpu/cpu%d/cpufreq/scaling_governor' %\n        cpu]).decode('utf-8').strip()\nif actual_gov != gov:\n  raise Exception('(actual, expected) (%s, %s)'\n                  % (actual_gov, gov))\n",
       "/opt/infra-android/tools/adb",
       "0",
@@ -594,7 +601,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -626,11 +633,11 @@
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
     },
     "infra_step": true,
-    "name": "push --sync [START_DIR]/skia/resources/* /sdcard/revenge_of_the_skiabot/resources"
+    "name": "push [START_DIR]/skia/resources/* /sdcard/revenge_of_the_skiabot/resources"
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -648,7 +655,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -663,6 +670,23 @@
       "@@@STEP_LOG_LINE@SKP_VERSION@42@@@",
       "@@@STEP_LOG_END@SKP_VERSION@@@"
     ]
+  },
+  {
+    "cmd": [
+      "/opt/infra-android/tools/adb",
+      "shell",
+      "test",
+      "-f",
+      "/sdcard/revenge_of_the_skiabot/SKP_VERSION"
+    ],
+    "cwd": "[START_DIR]/skia",
+    "env": {
+      "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "check if /sdcard/revenge_of_the_skiabot/SKP_VERSION exists"
   },
   {
     "cmd": [
@@ -683,7 +707,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport subprocess\nimport sys\n\n# Remove the path.\nadb = sys.argv[1]\npath = sys.argv[2]\nprint('Removing %s' % path)\ncmd = [adb, 'shell', 'rm', '-rf', path]\nprint(' '.join(cmd))\nsubprocess.check_call(cmd)\n\n# Verify that the path was deleted.\nprint('Checking for existence of %s' % path)\ncmd = [adb, 'shell', 'ls', path]\nprint(' '.join(cmd))\ntry:\n  output = subprocess.check_output(\n      cmd, stderr=subprocess.STDOUT).decode('utf-8')\nexcept subprocess.CalledProcessError as e:\n  output = e.output.decode('utf-8')\nprint('Output was:')\nprint('======')\nprint(output)\nprint('======')\nif 'No such file or directory' not in output:\n  raise Exception('%s exists despite being deleted' % path)\n",
       "/opt/infra-android/tools/adb",
       "/sdcard/revenge_of_the_skiabot/SKP_VERSION"
@@ -728,7 +751,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport subprocess\nimport sys\n\n# Remove the path.\nadb = sys.argv[1]\npath = sys.argv[2]\nprint('Removing %s' % path)\ncmd = [adb, 'shell', 'rm', '-rf', path]\nprint(' '.join(cmd))\nsubprocess.check_call(cmd)\n\n# Verify that the path was deleted.\nprint('Checking for existence of %s' % path)\ncmd = [adb, 'shell', 'ls', path]\nprint(' '.join(cmd))\ntry:\n  output = subprocess.check_output(\n      cmd, stderr=subprocess.STDOUT).decode('utf-8')\nexcept subprocess.CalledProcessError as e:\n  output = e.output.decode('utf-8')\nprint('Output was:')\nprint('======')\nprint(output)\nprint('======')\nif 'No such file or directory' not in output:\n  raise Exception('%s exists despite being deleted' % path)\n",
       "/opt/infra-android/tools/adb",
       "/sdcard/revenge_of_the_skiabot/skps"
@@ -789,7 +811,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -821,7 +843,7 @@
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
     },
     "infra_step": true,
-    "name": "push --sync [START_DIR]/skp/* /sdcard/revenge_of_the_skiabot/skps"
+    "name": "push [START_DIR]/skp/* /sdcard/revenge_of_the_skiabot/skps"
   },
   {
     "cmd": [
@@ -841,7 +863,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -859,7 +881,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -874,6 +896,23 @@
       "@@@STEP_LOG_LINE@SK_IMAGE_VERSION@42@@@",
       "@@@STEP_LOG_END@SK_IMAGE_VERSION@@@"
     ]
+  },
+  {
+    "cmd": [
+      "/opt/infra-android/tools/adb",
+      "shell",
+      "test",
+      "-f",
+      "/sdcard/revenge_of_the_skiabot/SK_IMAGE_VERSION"
+    ],
+    "cwd": "[START_DIR]/skia",
+    "env": {
+      "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "check if /sdcard/revenge_of_the_skiabot/SK_IMAGE_VERSION exists"
   },
   {
     "cmd": [
@@ -894,7 +933,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport subprocess\nimport sys\n\n# Remove the path.\nadb = sys.argv[1]\npath = sys.argv[2]\nprint('Removing %s' % path)\ncmd = [adb, 'shell', 'rm', '-rf', path]\nprint(' '.join(cmd))\nsubprocess.check_call(cmd)\n\n# Verify that the path was deleted.\nprint('Checking for existence of %s' % path)\ncmd = [adb, 'shell', 'ls', path]\nprint(' '.join(cmd))\ntry:\n  output = subprocess.check_output(\n      cmd, stderr=subprocess.STDOUT).decode('utf-8')\nexcept subprocess.CalledProcessError as e:\n  output = e.output.decode('utf-8')\nprint('Output was:')\nprint('======')\nprint(output)\nprint('======')\nif 'No such file or directory' not in output:\n  raise Exception('%s exists despite being deleted' % path)\n",
       "/opt/infra-android/tools/adb",
       "/sdcard/revenge_of_the_skiabot/SK_IMAGE_VERSION"
@@ -939,7 +977,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport subprocess\nimport sys\n\n# Remove the path.\nadb = sys.argv[1]\npath = sys.argv[2]\nprint('Removing %s' % path)\ncmd = [adb, 'shell', 'rm', '-rf', path]\nprint(' '.join(cmd))\nsubprocess.check_call(cmd)\n\n# Verify that the path was deleted.\nprint('Checking for existence of %s' % path)\ncmd = [adb, 'shell', 'ls', path]\nprint(' '.join(cmd))\ntry:\n  output = subprocess.check_output(\n      cmd, stderr=subprocess.STDOUT).decode('utf-8')\nexcept subprocess.CalledProcessError as e:\n  output = e.output.decode('utf-8')\nprint('Output was:')\nprint('======')\nprint(output)\nprint('======')\nif 'No such file or directory' not in output:\n  raise Exception('%s exists despite being deleted' % path)\n",
       "/opt/infra-android/tools/adb",
       "/sdcard/revenge_of_the_skiabot/images"
@@ -1000,7 +1037,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -1032,7 +1069,7 @@
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
     },
     "infra_step": true,
-    "name": "push --sync [START_DIR]/skimage/* /sdcard/revenge_of_the_skiabot/images"
+    "name": "push [START_DIR]/skimage/* /sdcard/revenge_of_the_skiabot/images"
   },
   {
     "cmd": [
@@ -1052,7 +1089,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -1070,7 +1107,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -1085,6 +1122,23 @@
       "@@@STEP_LOG_LINE@SVG_VERSION@42@@@",
       "@@@STEP_LOG_END@SVG_VERSION@@@"
     ]
+  },
+  {
+    "cmd": [
+      "/opt/infra-android/tools/adb",
+      "shell",
+      "test",
+      "-f",
+      "/sdcard/revenge_of_the_skiabot/SVG_VERSION"
+    ],
+    "cwd": "[START_DIR]/skia",
+    "env": {
+      "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "check if /sdcard/revenge_of_the_skiabot/SVG_VERSION exists"
   },
   {
     "cmd": [
@@ -1105,7 +1159,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport subprocess\nimport sys\n\n# Remove the path.\nadb = sys.argv[1]\npath = sys.argv[2]\nprint('Removing %s' % path)\ncmd = [adb, 'shell', 'rm', '-rf', path]\nprint(' '.join(cmd))\nsubprocess.check_call(cmd)\n\n# Verify that the path was deleted.\nprint('Checking for existence of %s' % path)\ncmd = [adb, 'shell', 'ls', path]\nprint(' '.join(cmd))\ntry:\n  output = subprocess.check_output(\n      cmd, stderr=subprocess.STDOUT).decode('utf-8')\nexcept subprocess.CalledProcessError as e:\n  output = e.output.decode('utf-8')\nprint('Output was:')\nprint('======')\nprint(output)\nprint('======')\nif 'No such file or directory' not in output:\n  raise Exception('%s exists despite being deleted' % path)\n",
       "/opt/infra-android/tools/adb",
       "/sdcard/revenge_of_the_skiabot/SVG_VERSION"
@@ -1150,7 +1203,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport subprocess\nimport sys\n\n# Remove the path.\nadb = sys.argv[1]\npath = sys.argv[2]\nprint('Removing %s' % path)\ncmd = [adb, 'shell', 'rm', '-rf', path]\nprint(' '.join(cmd))\nsubprocess.check_call(cmd)\n\n# Verify that the path was deleted.\nprint('Checking for existence of %s' % path)\ncmd = [adb, 'shell', 'ls', path]\nprint(' '.join(cmd))\ntry:\n  output = subprocess.check_output(\n      cmd, stderr=subprocess.STDOUT).decode('utf-8')\nexcept subprocess.CalledProcessError as e:\n  output = e.output.decode('utf-8')\nprint('Output was:')\nprint('======')\nprint(output)\nprint('======')\nif 'No such file or directory' not in output:\n  raise Exception('%s exists despite being deleted' % path)\n",
       "/opt/infra-android/tools/adb",
       "/sdcard/revenge_of_the_skiabot/svgs"
@@ -1211,7 +1263,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -1243,7 +1295,7 @@
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
     },
     "infra_step": true,
-    "name": "push --sync [START_DIR]/svg/* /sdcard/revenge_of_the_skiabot/svgs"
+    "name": "push [START_DIR]/svg/* /sdcard/revenge_of_the_skiabot/svgs"
   },
   {
     "cmd": [
@@ -1263,7 +1315,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -1313,7 +1365,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport subprocess\nimport sys\nbin_dir = sys.argv[1]\nsh      = sys.argv[2]\nsubprocess.check_call(['/opt/infra-android/tools/adb', 'shell', 'sh', bin_dir + sh])\ntry:\n  sys.exit(int(subprocess.check_output([\n      '/opt/infra-android/tools/adb', 'shell', 'cat', bin_dir + 'rc']).decode('utf-8')))\nexcept ValueError:\n  print(\"Couldn't read the return code.  Probably killed for OOM.\")\n  sys.exit(1)\n",
       "/data/local/tmp/",
       "dm.sh"
@@ -1360,7 +1411,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -1380,7 +1431,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -1397,7 +1448,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -1415,7 +1466,36 @@
   {
     "cmd": [
       "/opt/infra-android/tools/adb",
-      "wait-for-device"
+      "reboot"
+    ],
+    "env": {
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "adb reboot device",
+    "timeout": 30
+  },
+  {
+    "cmd": [
+      "/opt/infra-android/tools/adb",
+      "wait-for-device",
+      "shell",
+      "while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done"
+    ],
+    "env": {
+      "CHROME_HEADLESS": "1",
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "name": "wait for device after rebooting",
+    "timeout": 180
+  },
+  {
+    "cmd": [
+      "/opt/infra-android/tools/adb",
+      "wait-for-device",
+      "shell",
+      "while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done"
     ],
     "env": {
       "CHROME_HEADLESS": "1",
@@ -1441,7 +1521,6 @@
   {
     "cmd": [
       "python",
-      "-u",
       "\nimport os\nimport subprocess\nimport sys\nout = sys.argv[1]\nlog = subprocess.check_output([\n    '/opt/infra-android/tools/adb', 'logcat', '-d']).decode('utf-8', errors='ignore')\nfor line in log.split('\\n'):\n  tokens = line.split()\n  if len(tokens) == 11 and tokens[-7] == 'F' and tokens[-3] == 'pc':\n    addr, path = tokens[-2:]\n    local = os.path.join(out, os.path.basename(path))\n    if os.path.exists(local):\n      try:\n        sym = subprocess.check_output([\n            'addr2line', '-Cfpe', local, addr]).decode('utf-8')\n        line = line.replace(addr, addr + ' ' + sym.strip())\n      except subprocess.CalledProcessError:\n        pass\n  print(line)\n",
       "[START_DIR]/build"
     ],
@@ -1475,20 +1554,6 @@
       "@@@STEP_LOG_LINE@python.inline@  print(line)@@@",
       "@@@STEP_LOG_END@python.inline@@@"
     ]
-  },
-  {
-    "cmd": [
-      "/opt/infra-android/tools/adb",
-      "kill-server"
-    ],
-    "cwd": "[START_DIR]/skia",
-    "env": {
-      "ADB_VENDOR_KEYS": "/home/chrome-bot/.android/chrome_infrastructure_adbkey",
-      "CHROME_HEADLESS": "1",
-      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
-    },
-    "infra_step": true,
-    "name": "kill adb server"
   },
   {
     "name": "$result"

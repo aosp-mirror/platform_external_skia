@@ -210,8 +210,11 @@ private:
     void render(SkCanvas* canvas, double t) override {
         fAnimation->seekFrameTime(t);
 
+        // The main animation will layer-isolate if needed - we don't want the nested animation
+        // to override that decision.
+        const auto flags = skottie::Animation::RenderFlag::kSkipTopLevelIsolation;
         const auto dst_rect = SkRect::MakeSize(fSize);
-        fAnimation->render(canvas, &dst_rect);
+        fAnimation->render(canvas, &dst_rect, flags);
     }
 
     const sk_sp<skottie::Animation> fAnimation;
@@ -241,10 +244,97 @@ sk_sp<skottie::ExternalLayer> ExternalAnimationPrecompInterceptor::onLoadPrecomp
 
     auto anim = skottie::Animation::Builder()
                     .setPrecompInterceptor(sk_ref_sp(this))
+                    .setResourceProvider(fResourceProvider)
                     .make(static_cast<const char*>(data->data()), data->size());
 
     return anim ? sk_make_sp<ExternalAnimationLayer>(std::move(anim), size)
                 : nullptr;
+}
+
+/**
+ * An implementation of ResourceProvider designed for Lottie template asset substitution (images,
+ * audio, etc)
+ */
+class SlotManager::SlottableResourceProvider final : public skresources::ResourceProvider {
+public:
+    SlottableResourceProvider() {}
+
+    sk_sp<skresources::ImageAsset> loadImageAsset(const char /*resource_path*/[],
+                                                  const char slot_name[],
+                                                  const char /*resource_id*/[]) const override {
+        const auto it = fImageAssetMap.find(slot_name);
+        return it == fImageAssetMap.end() ? nullptr : it->second;
+    }
+
+private:
+    std::unordered_map<std::string, sk_sp<skresources::ImageAsset>> fImageAssetMap;
+
+    friend class SlotManager;
+};
+
+/**
+ * An implementation of PropertyObserver designed for Lottie template property substitution (color,
+ * text, etc)
+ *
+ * PropertyObserver looks for slottable nodes then manipulates their PropertyValue on the fly
+ *
+ */
+class SlotManager::SlottablePropertyObserver final : public skottie::PropertyObserver {
+public:
+    SlottablePropertyObserver() {}
+
+    void onColorProperty(const char node_name[],
+                         const LazyHandle<skottie::ColorPropertyHandle>& c) override {
+        const auto it = fColorMap.find(node_name);
+        if (it != fColorMap.end()) {
+            c()->set(it->second);
+        }
+    }
+
+    void onTextProperty(const char node_name[],
+                        const LazyHandle<skottie::TextPropertyHandle>& t) override {
+        const auto it = fTextMap.find(node_name);
+        if (it != fTextMap.end()) {
+            auto value = t()->get();
+            value.fText = it->second;
+            t()->set(value);
+        }
+    }
+
+    // TODO(jmbetancourt): add support for other PropertyObserver callbacks
+private:
+    using SlotID = std::string;
+
+    std::unordered_map<SlotID, skottie::ColorPropertyValue> fColorMap;
+    std::unordered_map<SlotID, SkString>                    fTextMap;
+
+    friend class SlotManager;
+};
+
+SlotManager::SlotManager() {
+    fResourceProvider = sk_make_sp<SlottableResourceProvider>();
+    fPropertyObserver = sk_make_sp<SlottablePropertyObserver>();
+}
+
+// TODO: consider having a generic setSlotMethod that is overloaded by PropertyValue type
+void SlotManager::setColorSlot(std::string slotID, SkColor color) {
+    fPropertyObserver->fColorMap[slotID] = color;
+}
+
+void SlotManager::setTextStringSlot(std::string slotID, SkString text) {
+    fPropertyObserver->fTextMap[slotID] = std::move(text);
+}
+
+void SlotManager::setImageSlot(std::string slotID, sk_sp<skresources::ImageAsset> img) {
+    fResourceProvider->fImageAssetMap[slotID] = std::move(img);
+}
+
+sk_sp<skresources::ResourceProvider> SlotManager::getResourceProvider() {
+    return fResourceProvider;
+}
+
+sk_sp<skottie::PropertyObserver> SlotManager::getPropertyObserver() {
+    return fPropertyObserver;
 }
 
 } // namespace skottie_utils

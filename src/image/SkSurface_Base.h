@@ -21,8 +21,9 @@ public:
     ~SkSurface_Base() override;
 
     virtual GrRecordingContext* onGetRecordingContext();
+    virtual skgpu::graphite::Recorder* onGetRecorder();
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     virtual GrBackendTexture onGetBackendTexture(BackendHandleAccess);
     virtual GrBackendRenderTarget onGetBackendRenderTarget(BackendHandleAccess);
     virtual bool onReplaceBackendTexture(const GrBackendTexture&,
@@ -39,7 +40,7 @@ public:
      * gpu and inits the array of GrBackendSemaphores with the signaled semaphores.
      */
     virtual GrSemaphoresSubmitted onFlush(BackendSurfaceAccess access, const GrFlushInfo&,
-                                          const GrBackendSurfaceMutableState*) {
+                                          const skgpu::MutableTextureState*) {
         return GrSemaphoresSubmitted::kNo;
     }
 #endif
@@ -65,13 +66,22 @@ public:
      */
     virtual sk_sp<SkImage> onNewImageSnapshot(const SkIRect* subset = nullptr) { return nullptr; }
 
+#if defined(SK_GRAPHITE)
+    virtual sk_sp<SkImage> onAsImage() { return nullptr; }
+
+    virtual sk_sp<SkImage> onMakeImageCopy(const SkIRect* /* subset */,
+                                           skgpu::Mipmapped) {
+        return nullptr;
+    }
+#endif
+
     virtual void onWritePixels(const SkPixmap&, int x, int y) = 0;
 
     /**
      * Default implementation does a rescale/read and then calls the callback.
      */
     virtual void onAsyncRescaleAndReadPixels(const SkImageInfo&,
-                                             const SkIRect& srcRect,
+                                             const SkIRect srcRect,
                                              RescaleGamma,
                                              RescaleMode,
                                              ReadPixelsCallback,
@@ -81,8 +91,8 @@ public:
      */
     virtual void onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace,
                                                    sk_sp<SkColorSpace> dstColorSpace,
-                                                   const SkIRect& srcRect,
-                                                   const SkISize& dstSize,
+                                                   SkIRect srcRect,
+                                                   SkISize dstSize,
                                                    RescaleGamma,
                                                    RescaleMode,
                                                    ReadPixelsCallback,
@@ -135,6 +145,13 @@ public:
     virtual bool onDraw(sk_sp<const SkDeferredDisplayList>, SkIPoint offset) {
         return false;
     }
+
+    // TODO: Remove this (make it pure virtual) after updating Android (which has a class derived
+    // from SkSurface_Base).
+    virtual sk_sp<const SkCapabilities> onCapabilities();
+
+    // True for surfaces instantiated by Graphite in GPU memory
+    virtual bool isGraphiteBacked() const { return false; }
 
     inline SkCanvas* getCachedCanvas();
     inline sk_sp<SkImage> refCachedImage();

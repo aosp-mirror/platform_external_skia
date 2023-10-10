@@ -1,5 +1,5 @@
 int sampler3D;
 
 /*%%*
-expected an identifier, but found type 'sampler3D'
+name 'sampler3D' is reserved
 *%%*/

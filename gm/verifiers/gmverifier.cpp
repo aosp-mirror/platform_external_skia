@@ -9,6 +9,7 @@
 #include "gm/verifiers/gmverifier.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkSurface.h"
 #include "include/effects/SkImageFilters.h"
 #include "include/encode/SkPngEncoder.h"
@@ -68,7 +69,7 @@ SkBitmap GMVerifier::RenderGoldBmp(skiagm::GM* gm, const SkColorInfo& colorInfo)
     goldBmp.allocPixels(SkImageInfo::Make(size, colorInfo));
     SkCanvas canvas(goldBmp);
 
-    if (gm->gpuSetup(nullptr, &canvas) == DrawResult::kOk) {
+    if (gm->gpuSetup(&canvas) == DrawResult::kOk) {
         gm->draw(&canvas);
     }
 

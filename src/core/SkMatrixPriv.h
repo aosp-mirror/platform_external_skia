@@ -10,8 +10,15 @@
 
 #include "include/core/SkM44.h"
 #include "include/core/SkMatrix.h"
-#include "include/private/SkNx.h"
-#include "src/core/SkPointPriv.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
+#include "src/base/SkVx.h"
+
+#include <cstdint>
+#include <cstring>
+struct SkPoint3;
 
 class SkMatrixPriv {
 public:
@@ -49,8 +56,8 @@ public:
         if (mx.getType() <= SkMatrix::kTranslate_Mask) {
             SkScalar tx = mx.getTranslateX();
             SkScalar ty = mx.getTranslateY();
-            Sk4f trans(tx, ty, tx, ty);
-            (Sk4f::Load(&src.fLeft) - trans).store(&dst->fLeft);
+            skvx::float4 trans(tx, ty, tx, ty);
+            (skvx::float4::Load(&src.fLeft) - trans).store(&dst->fLeft);
             return true;
         }
         // Insert other special-cases here (e.g. scale+translate)
@@ -94,9 +101,9 @@ public:
         if (SkMatrix::kTranslate_Mask == tm) {
             const SkScalar tx = mx.getTranslateX();
             const SkScalar ty = mx.getTranslateY();
-            Sk2s trans(tx, ty);
+            skvx::float2 trans(tx, ty);
             for (int i = 0; i < count; ++i) {
-                (Sk2s::Load(&pts->fX) + trans).store(&pts->fX);
+                (skvx::float2::Load(&pts->fX) + trans).store(&pts->fX);
                 pts = (SkPoint*)((intptr_t)pts + stride);
             }
             return;
@@ -180,6 +187,15 @@ public:
     //
     // Returns positive infinity if the transformed homogeneous point has w <= 0.
     static SkScalar DifferentialAreaScale(const SkMatrix& m, const SkPoint& p);
+
+    // Determines if the transformation m applied to the bounds can be approximated by
+    // an affine transformation, i.e., the perspective part of the transformation has little
+    // visible effect.
+    static bool NearlyAffine(const SkMatrix& m,
+                             const SkRect& bounds,
+                             SkScalar tolerance = SK_ScalarNearlyZero);
+
+    static SkScalar ComputeResScaleForStroking(const SkMatrix& matrix);
 };
 
 #endif

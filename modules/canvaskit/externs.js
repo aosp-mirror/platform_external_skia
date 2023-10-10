@@ -38,7 +38,8 @@ var CanvasKit = {
   GetWebGLContext: function() {},
   MakeCanvas: function() {},
   MakeCanvasSurface: function() {},
-  MakeGrContext: function() {},
+  MakeGrContext: function() {}, // deprecated
+  MakeWebGLContext: function() {},
   /** @return {CanvasKit.AnimatedImage} */
   MakeAnimatedImageFromEncoded: function() {},
   /** @return {CanvasKit.Image} */
@@ -51,9 +52,12 @@ var CanvasKit = {
   MakePicture: function() {},
   MakeSWCanvasSurface: function() {},
   MakeManagedAnimation: function() {},
-  MakeParticles: function() {},
   MakeVertices: function() {},
   MakeSurface: function() {},
+  MakeGPUDeviceContext: function() {},
+  MakeGPUCanvasContext: function() {},
+  MakeGPUCanvasSurface: function() {},
+  MakeGPUTextureSurface: function() {},
   MakeRasterDirectSurface: function() {},
   MakeWebGLCanvasSurface: function() {},
   Malloc: function() {},
@@ -72,13 +76,16 @@ var CanvasKit = {
   // Defined by emscripten.
   createContext: function() {},
 
+  // Added by debugger when it extends canvaskit
+  MinVersion: function() {},
+  SkpFilePlayer: function() {},
+
   // private API (i.e. things declared in the bindings that we use
   // in the pre-js file)
   _MakeGrContext: function() {},
   _MakeImage: function() {},
   _MakeManagedAnimation: function() {},
   _MakeOnScreenGLSurface: function() {},
-  _MakeParticles: function() {},
   _MakePicture: function() {},
   _MakeRenderTargetII: function() {},
   _MakeRenderTargetWH: function() {},
@@ -103,12 +110,20 @@ var CanvasKit = {
     _size: function() {},
   },
 
-  GrContext: {
-    // public API (from C++ bindings)
-    getResourceCacheLimitBytes: function() {},
-    getResourceCacheUsageBytes: function() {},
-    releaseResourcesAndAbandonContext: function() {},
-    setResourceCacheLimitBytes: function() {},
+  GrDirectContext: {
+    // public API (from webgl.js)
+    prototype: {
+      getResourceCacheLimitBytes: function () {},
+      getResourceCacheUsageBytes: function () {},
+      releaseResourcesAndAbandonContext: function () {},
+      setResourceCacheLimitBytes: function () {},
+    },
+
+    // private API (from C++ bindings)
+    _getResourceCacheLimitBytes: function() {},
+    _getResourceCacheUsageBytes: function() {},
+    _releaseResourcesAndAbandonContext: function() {},
+    _setResourceCacheLimitBytes: function() {},
   },
 
   ManagedAnimation: {
@@ -153,6 +168,15 @@ var CanvasKit = {
     ShapeText: function() {},
     addText: function() {},
     build: function() {},
+
+    setWordsUtf8: function() {},
+    setWordsUtf16: function() {},
+    setGraphemeBreaksUtf8: function() {},
+    setGraphemeBreaksUtf16: function() {},
+    setLineBreaksUtf8: function() {},
+    setLineBreaksUtf16: function() {},
+
+    getText: function() {},
     pop: function() {},
     reset: function() {},
 
@@ -169,6 +193,13 @@ var CanvasKit = {
     _pushStyle: function() {},
     _pushPaintStyle: function() {},
     _addPlaceholder: function() {},
+
+    _setWordsUtf8: function() {},
+    _setWordsUtf16: function() {},
+    _setGraphemeBreaksUtf8: function() {},
+    _setGraphemeBreaksUtf16: function() {},
+    _setLineBreaksUtf8: function() {},
+    _setLineBreaksUtf16: function() {},
   },
 
   RuntimeEffect: {
@@ -250,6 +281,7 @@ var CanvasKit = {
       drawText: function() {},
       drawTextBlob: function() {},
       drawVertices: function() {},
+      getDeviceClipBounds: function() {},
       getLocalToDevice: function() {},
       getTotalMatrix: function() {},
       readPixels: function() {},
@@ -292,6 +324,7 @@ var CanvasKit = {
     _drawSimpleText: function() {},
     _drawTextBlob: function() {},
     _drawVertices: function() {},
+    _getDeviceClipBounds: function() {},
     _getLocalToDevice: function() {},
     _getTotalMatrix: function() {},
     _readPixels: function() {},
@@ -416,12 +449,24 @@ var CanvasKit = {
   },
 
   ImageFilter: {
+    MakeBlend: function() {},
     MakeBlur: function() {},
     MakeColorFilter: function() {},
     MakeCompose: function() {},
+    MakeDilate: function() {},
+    MakeDisplacementMap: function() {},
+    MakeDropShadow: function() {},
+    MakeDropShadowOnly: function() {},
+    MakeErode: function() {},
+    MakeImage: function() {},
     MakeMatrixTransform: function() {},
+    MakeOffset: function() {},
 
     // private API
+    _MakeDropShadow: function() {},
+    _MakeDropShadowOnly: function() {},
+    _MakeImageCubic: function() {},
+    _MakeImageOptions: function() {},
     _MakeMatrixTransformCubic: function() {},
     _MakeMatrixTransformOptions: function() {},
   },
@@ -512,30 +557,11 @@ var CanvasKit = {
     _MakePath2D: function() {},
   },
 
-  ParticleEffect: {
-    // public API (from C++ bindings)
-    draw: function() {},
-    getUniform: function() {},
-    getUniformCount: function() {},
-    getUniformFloatCount: function() {},
-    getUniformName: function() {},
-    setRate: function() {},
-    start: function() {},
-    update: function() {},
-
-    prototype: {
-      setPosition: function() {},
-      uniforms: function() {},
-    },
-
-    // private API (from C++ bindings)
-    _uniformPtr: function() {},
-    _setPosition: function() {},
-  },
-
   Path: {
     // public API (from C++ and JS bindings)
+    CanInterpolate: function() {},
     MakeFromCmds: function() {},
+    MakeFromPathInterpolation: function() {},
     MakeFromSVGString: function() {},
     MakeFromOp: function() {},
     MakeFromVerbsPointsWeights: function() {},
@@ -557,6 +583,7 @@ var CanvasKit = {
 
     prototype: {
       addArc: function() {},
+      addCircle: function() {},
       addOval: function() {},
       addPath: function() {},
       addPoly: function() {},
@@ -595,6 +622,7 @@ var CanvasKit = {
     _MakeFromCmds: function() {},
     _MakeFromVerbsPointsWeights: function() {},
     _addArc: function() {},
+    _addCircle: function() {},
     _addOval: function() {},
     _addPath: function() {},
     _addPoly: function() {},
@@ -755,6 +783,11 @@ var CanvasKit = {
   },
 
   TextStyle: function() {},
+
+  SkpDebugPlayer: {
+    // public API (from C++ bindings)
+    loadSkp: function() {},
+  },
 
   // Constants and Enums
   gpu: {},
@@ -969,6 +1002,11 @@ var CanvasKit = {
   TextDirection: {
     LTR: {},
     RTL: {},
+  },
+
+  LineBreakType : {
+    SoftLineBreak: {},
+    HardLineBreak: {},
   },
 
   TextHeightBehavior: {

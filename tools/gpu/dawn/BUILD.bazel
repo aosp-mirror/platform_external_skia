@@ -1,23 +1,30 @@
-load("//bazel:macros.bzl", "generated_cc_atom")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_cc_deps", "skia_filegroup")
 
-generated_cc_atom(
-    name = "DawnTestContext_hdr",
-    hdrs = ["DawnTestContext.h"],
-    visibility = ["//:__subpackages__"],
-    deps = ["//tools/gpu:TestContext_hdr"],
+licenses(["notice"])
+
+exports_files_legacy()
+
+skia_filegroup(
+    name = "private_hdrs",
+    srcs = [
+        "DawnTestContext.h",
+    ],
+    visibility = ["//tools/gpu:__pkg__"],
 )
 
-generated_cc_atom(
-    name = "DawnTestContext_src",
-    srcs = ["DawnTestContext.cpp"],
-    visibility = ["//:__subpackages__"],
-    deps = [
-        ":DawnTestContext_hdr",
-        "//GL:glx_hdr",
-        "//dawn:dawn_proc_hdr",
-        "//dawn:webgpu_hdr",
-        "//dawn_native:OpenGLBackend_hdr",
-        "//include/gpu:GrDirectContext_hdr",
-        "//tools:AutoreleasePool_hdr",
+skia_filegroup(
+    name = "srcs",
+    srcs = [
+        "DawnTestContext.cpp",
     ],
+    visibility = ["//tools/gpu:__pkg__"],
+)
+
+skia_cc_deps(
+    name = "deps",
+    visibility = ["//tools/gpu:__pkg__"],
+    deps = select({
+        "@platforms//os:linux": ["//include/third_party/vulkan"],
+        "//conditions:default": [],
+    }),
 )

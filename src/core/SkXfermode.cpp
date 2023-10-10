@@ -7,19 +7,19 @@
 
 #include "include/core/SkString.h"
 #include "include/private/SkColorData.h"
-#include "include/private/SkOnce.h"
+#include "include/private/base/SkOnce.h"
+#include "src/base/SkMathPriv.h"
 #include "src/core/SkBlendModePriv.h"
-#include "src/core/SkMathPriv.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkWriteBuffer.h"
 #include "src/core/SkXfermodePriv.h"
 
-#if SK_SUPPORT_GPU
-#include "src/gpu/GrFragmentProcessor.h"
-#include "src/gpu/effects/GrCustomXfermode.h"
-#include "src/gpu/effects/GrPorterDuffXferProcessor.h"
+#if defined(SK_GANESH)
+#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/effects/GrCustomXfermode.h"
+#include "src/gpu/ganesh/effects/GrPorterDuffXferProcessor.h"
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -43,13 +43,13 @@ public:
 
         if (SkBlendMode_ShouldPreScaleCoverage(fMode, /*rgb_coverage=*/false)) {
             if (aa) {
-                p.append(SkRasterPipeline::scale_u8, &aa_ctx);
+                p.append(SkRasterPipelineOp::scale_u8, &aa_ctx);
             }
             SkBlendMode_AppendStages(fMode, &p);
         } else {
             SkBlendMode_AppendStages(fMode, &p);
             if (aa) {
-                p.append(SkRasterPipeline::lerp_u8, &aa_ctx);
+                p.append(SkRasterPipelineOp::lerp_u8, &aa_ctx);
             }
         }
 
@@ -112,10 +112,8 @@ sk_sp<SkXfermode> SkXfermode::Make(SkBlendMode mode) {
         return nullptr;
     }
 
-    const int COUNT_BLENDMODES = (int)SkBlendMode::kLastMode + 1;
-
-    static SkOnce        once[COUNT_BLENDMODES];
-    static SkXfermode* cached[COUNT_BLENDMODES];
+    static SkOnce        once[kSkBlendModeCount];
+    static SkXfermode* cached[kSkBlendModeCount];
 
     once[(int)mode]([mode] {
         if (auto xfermode = SkOpts::create_xfermode(mode)) {
@@ -158,10 +156,9 @@ bool SkXfermode::IsOpaque(SkBlendMode mode, SrcColorOpacity opacityType) {
         default:
             return false;
     }
-    return false;
 }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 const GrXPFactory* SkBlendMode_AsXPFactory(SkBlendMode mode) {
     if (SkBlendMode_AsCoeff(mode, nullptr, nullptr)) {
         const GrXPFactory* result = GrPorterDuffXPFactory::Get(mode);

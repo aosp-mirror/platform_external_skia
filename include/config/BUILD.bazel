@@ -1,7 +1,18 @@
-load("//bazel:macros.bzl", "generated_cc_atom")
+licenses(["notice"])
 
-generated_cc_atom(
-    name = "SkUserConfig_hdr",
-    hdrs = ["SkUserConfig.h"],
-    visibility = ["//:__subpackages__"],
+# aka exports_files_legacy()
+exports_files(
+    ["SkUserConfig.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "user_config",
+    hdrs = [
+        "SkUserConfig.h",
+    ],
+    defines = [
+        "SK_USE_BAZEL_CONFIG_HEADER",
+    ],
+    visibility = ["//visibility:public"],
 )
