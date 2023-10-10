@@ -5,16 +5,23 @@
  * found in the LICENSE file.
  */
 
+#include "src/sksl/ir/SkSLConstructorScalarCast.h"
+
+#include "include/core/SkTypes.h"
+#include "include/private/SkSLDefines.h"
+#include "include/private/base/SkTArray.h"
 #include "include/sksl/SkSLErrorReporter.h"
 #include "src/sksl/SkSLConstantFolder.h"
-#include "src/sksl/SkSLProgramSettings.h"
-#include "src/sksl/ir/SkSLConstructorScalarCast.h"
+#include "src/sksl/SkSLContext.h"
 #include "src/sksl/ir/SkSLLiteral.h"
+#include "src/sksl/ir/SkSLType.h"
+
+#include <string>
 
 namespace SkSL {
 
 std::unique_ptr<Expression> ConstructorScalarCast::Convert(const Context& context,
-                                                           int line,
+                                                           Position pos,
                                                            const Type& rawType,
                                                            ExpressionArray args) {
     // As you might expect, scalar-cast constructors should only be created with scalar types.
@@ -22,9 +29,9 @@ std::unique_ptr<Expression> ConstructorScalarCast::Convert(const Context& contex
     SkASSERT(type.isScalar());
 
     if (args.size() != 1) {
-        context.fErrors->error(line, "invalid arguments to '" + type.displayName() +
-                                     "' constructor, (expected exactly 1 argument, but found " +
-                                     std::to_string(args.size()) + ")");
+        context.fErrors->error(pos, "invalid arguments to '" + type.displayName() +
+                "' constructor, (expected exactly 1 argument, but found " +
+                std::to_string(args.size()) + ")");
         return nullptr;
     }
 
@@ -41,7 +48,7 @@ std::unique_ptr<Expression> ConstructorScalarCast::Convert(const Context& contex
             }
         }
 
-        context.fErrors->error(line,
+        context.fErrors->error(pos,
                                "'" + argType.displayName() + "' is not a valid parameter to '" +
                                type.displayName() + "' constructor" + swizzleHint);
         return nullptr;
@@ -50,11 +57,11 @@ std::unique_ptr<Expression> ConstructorScalarCast::Convert(const Context& contex
         return nullptr;
     }
 
-    return ConstructorScalarCast::Make(context, line, type, std::move(args[0]));
+    return ConstructorScalarCast::Make(context, pos, type, std::move(args[0]));
 }
 
 std::unique_ptr<Expression> ConstructorScalarCast::Make(const Context& context,
-                                                        int line,
+                                                        Position pos,
                                                         const Type& type,
                                                         std::unique_ptr<Expression> arg) {
     SkASSERT(type.isScalar());
@@ -67,7 +74,7 @@ std::unique_ptr<Expression> ConstructorScalarCast::Make(const Context& context,
     }
     // Look up the value of constant variables. This allows constant-expressions like `int(zero)` to
     // be replaced with a literal zero.
-    arg = ConstantFolder::MakeConstantValueForVariable(std::move(arg));
+    arg = ConstantFolder::MakeConstantValueForVariable(pos, std::move(arg));
 
     // We can cast scalar literals at compile-time when possible. (If the resulting literal would be
     // out of range for its type, we report an error and return zero to minimize error cascading.
@@ -75,12 +82,12 @@ std::unique_ptr<Expression> ConstructorScalarCast::Make(const Context& context,
     // such, it's not safe to return null or assert.)
     if (arg->is<Literal>()) {
         double value = arg->as<Literal>().value();
-        if (type.checkForOutOfRangeLiteral(context, value, arg->fLine)) {
+        if (type.checkForOutOfRangeLiteral(context, value, arg->fPosition)) {
             value = 0.0;
         }
-        return Literal::Make(line, value, &type);
+        return Literal::Make(pos, value, &type);
     }
-    return std::make_unique<ConstructorScalarCast>(line, type, std::move(arg));
+    return std::make_unique<ConstructorScalarCast>(pos, type, std::move(arg));
 }
 
 }  // namespace SkSL

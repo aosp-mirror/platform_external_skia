@@ -1,25 +1,42 @@
-load("//bazel:macros.bzl", "generated_cc_atom")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "skia_filegroup", "split_srcs_and_hdrs")
+load("//bazel:flags.bzl", "bool_flag")
 
-generated_cc_atom(
-    name = "SkDiscardableMemoryPool_hdr",
-    hdrs = ["SkDiscardableMemoryPool.h"],
-    visibility = ["//:__subpackages__"],
-    deps = [
-        "//include/private:SkMutex_hdr",
-        "//src/core:SkDiscardableMemory_hdr",
-    ],
+licenses(["notice"])
+
+exports_files_legacy()
+
+bool_flag(
+    name = "enable_discardable_memory",
+    default = False,
 )
 
-generated_cc_atom(
-    name = "SkDiscardableMemoryPool_src",
-    srcs = ["SkDiscardableMemoryPool.cpp"],
-    visibility = ["//:__subpackages__"],
-    deps = [
-        ":SkDiscardableMemoryPool_hdr",
-        "//include/private:SkMalloc_hdr",
-        "//include/private:SkMutex_hdr",
-        "//include/private:SkTemplates_hdr",
-        "//src/core:SkDiscardableMemory_hdr",
-        "//src/core:SkTInternalLList_hdr",
+bool_flag(
+    name = "use_default_global_memory_pool",
+    default = False,
+)
+
+LAZY_FILES = [
+    "SkDiscardableMemoryPool.cpp",
+    "SkDiscardableMemoryPool.h",
+]
+
+split_srcs_and_hdrs(
+    name = "lazy",
+    files = LAZY_FILES,
+)
+
+skia_filegroup(
+    name = "srcs",
+    srcs = [
+        ":lazy_srcs",
     ],
+    visibility = ["//src:__pkg__"],
+)
+
+skia_filegroup(
+    name = "private_hdrs",
+    srcs = [
+        ":lazy_hdrs",
+    ],
+    visibility = ["//src:__pkg__"],
 )

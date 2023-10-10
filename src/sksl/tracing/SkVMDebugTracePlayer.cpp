@@ -5,7 +5,12 @@
  * found in the LICENSE file.
  */
 
+#include "src/sksl/tracing/SkSLDebugInfo.h"
 #include "src/sksl/tracing/SkVMDebugTracePlayer.h"
+
+#include <limits.h>
+#include <algorithm>
+#include <utility>
 
 namespace SkSL {
 
@@ -25,15 +30,17 @@ void SkVMDebugTracePlayer::reset(sk_sp<SkVMDebugTrace> debugTrace) {
     fDirtyMask.emplace(nslots);
     fReturnValues.emplace(nslots);
 
-    for (size_t slotIdx = 0; slotIdx < nslots; ++slotIdx) {
-        if (fDebugTrace->fSlotInfo[slotIdx].fnReturnValue >= 0) {
-            fReturnValues->set(slotIdx);
+    if (fDebugTrace) {
+        for (size_t slotIdx = 0; slotIdx < nslots; ++slotIdx) {
+            if (fDebugTrace->fSlotInfo[slotIdx].fnReturnValue >= 0) {
+                fReturnValues->set(slotIdx);
+            }
         }
-    }
 
-    for (const SkVMTraceInfo& trace : fDebugTrace->fTraceInfo) {
-        if (trace.op == SkVMTraceInfo::Op::kLine) {
-            fLineNumbers[trace.data[0]] += 1;
+        for (const SkVMTraceInfo& trace : fDebugTrace->fTraceInfo) {
+            if (trace.op == SkVMTraceInfo::Op::kLine) {
+                fLineNumbers[trace.data[0]] += 1;
+            }
         }
     }
 }
@@ -182,7 +189,7 @@ void SkVMDebugTracePlayer::updateVariableWriteTime(int slotIdx, size_t cursor) {
     // The slotIdx could point to any slot within a variable.
     // We want to update the write time on EVERY slot associated with this variable.
     // The SlotInfo's groupIndex gives us enough information to find the affected range.
-    const SkSL::SkVMSlotInfo& changedSlot = fDebugTrace->fSlotInfo[slotIdx];
+    const SkSL::SlotDebugInfo& changedSlot = fDebugTrace->fSlotInfo[slotIdx];
     slotIdx -= changedSlot.groupIndex;
     SkASSERT(slotIdx >= 0);
     SkASSERT(slotIdx < (int)fDebugTrace->fSlotInfo.size());

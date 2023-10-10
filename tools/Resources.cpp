@@ -6,6 +6,7 @@
  */
 
 #include "include/core/SkBitmap.h"
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkData.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkImageGenerator.h"
@@ -36,10 +37,15 @@ bool DecodeDataToBitmap(sk_sp<SkData> data, SkBitmap* dst) {
         gen->getPixels(gen->getInfo().makeColorSpace(nullptr), dst->getPixels(), dst->rowBytes());
 }
 
-std::unique_ptr<SkStreamAsset> GetResourceAsStream(const char* resource) {
-    auto data = GetResourceAsData(resource);
-    return data ? std::unique_ptr<SkStreamAsset>(new SkMemoryStream(std::move(data)))
-                : nullptr;
+std::unique_ptr<SkStreamAsset> GetResourceAsStream(const char* resource, bool useFileStream) {
+    if (useFileStream) {
+        auto path = GetResourcePath(resource);
+        return SkFILEStream::Make(path.c_str());
+    } else {
+        auto data = GetResourceAsData(resource);
+        return data ? std::unique_ptr<SkStreamAsset>(new SkMemoryStream(std::move(data)))
+                    : nullptr;
+    }
 }
 
 sk_sp<SkData> GetResourceAsData(const char* resource) {

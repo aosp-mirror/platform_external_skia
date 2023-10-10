@@ -7,14 +7,14 @@
 
 #include "src/sksl/ir/SkSLConstructorDiagonalMatrix.h"
 
+#include "include/core/SkTypes.h"
 #include "src/sksl/SkSLConstantFolder.h"
-#include "src/sksl/ir/SkSLConstructor.h"
 #include "src/sksl/ir/SkSLType.h"
 
 namespace SkSL {
 
 std::unique_ptr<Expression> ConstructorDiagonalMatrix::Make(const Context& context,
-                                                            int line,
+                                                            Position pos,
                                                             const Type& type,
                                                             std::unique_ptr<Expression> arg) {
     SkASSERT(type.isMatrix());
@@ -24,9 +24,9 @@ std::unique_ptr<Expression> ConstructorDiagonalMatrix::Make(const Context& conte
 
     // Look up the value of constant variables. This allows constant-expressions like `mat4(five)`
     // to be replaced with `mat4(5.0)`.
-    arg = ConstantFolder::MakeConstantValueForVariable(std::move(arg));
+    arg = ConstantFolder::MakeConstantValueForVariable(pos, std::move(arg));
 
-    return std::make_unique<ConstructorDiagonalMatrix>(line, type, std::move(arg));
+    return std::make_unique<ConstructorDiagonalMatrix>(pos, type, std::move(arg));
 }
 
 std::optional<double> ConstructorDiagonalMatrix::getConstantValue(int n) const {

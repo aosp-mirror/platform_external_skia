@@ -5,32 +5,41 @@
  * found in the LICENSE file.
  */
 
-// This is a GPU-backend specific test. It relies on static intializers to work
+// This is a GPU-backend specific test. It relies on static initializers to work
 
 #include "include/core/SkTypes.h"
 
 #if defined(SK_VULKAN)
-
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkRefCnt.h"
+#include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrTypes.h"
 #include "include/gpu/vk/GrVkTypes.h"
-#include "include/gpu/vk/GrVkVulkan.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrTexture.h"
-#include "src/gpu/GrTextureProxy.h"
-#include "src/gpu/vk/GrVkGpu.h"
-#include "src/gpu/vk/GrVkImageLayout.h"
-#include "src/gpu/vk/GrVkTexture.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrSurface.h"
+#include "src/gpu/ganesh/GrSurfaceProxy.h"
+#include "src/gpu/ganesh/GrTextureProxy.h"
+#include "src/gpu/ganesh/vk/GrVkCaps.h"
+#include "src/gpu/ganesh/vk/GrVkImage.h"
+#include "src/gpu/ganesh/vk/GrVkTexture.h"
 #include "src/image/SkImage_Base.h"
-#include "src/image/SkImage_Gpu.h"
-#include "src/image/SkImage_GpuBase.h"
-#include "src/image/SkSurface_Gpu.h"
+#include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tools/gpu/ManagedBackendTexture.h"
 #include "tools/gpu/ProxyUtils.h"
 
-DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkDRMModifierTest, reporter, ctxInfo) {
+#include <vulkan/vulkan_core.h>
+
+class GrTexture;
+struct GrContextOptions;
+
+DEF_GANESH_TEST_FOR_VULKAN_CONTEXT(VkDRMModifierTest, reporter, ctxInfo, CtsEnforcement::kNever) {
     auto dContext = ctxInfo.directContext();
 
     const GrVkCaps* vkCaps = static_cast<const GrVkCaps*>(dContext->priv().caps());
@@ -85,7 +94,7 @@ DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkDRMModifierTest, reporter, ctxInfo) {
     drmImage.reset();
 }
 
-DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkImageLayoutTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_VULKAN_CONTEXT(VkImageLayoutTest, reporter, ctxInfo, CtsEnforcement::kNever) {
     auto dContext = ctxInfo.directContext();
 
     auto mbet = sk_gpu_test::ManagedBackendTexture::MakeWithoutData(
@@ -188,7 +197,8 @@ DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkImageLayoutTest, reporter, ctxInfo) {
 // renenabled, see skbug.com/8936.
 #if 0
 // Test to make sure we transition from the EXTERNAL queue even when no layout transition is needed.
-DEF_GPUTEST_FOR_VULKAN_CONTEXT(VkTransitionExternalQueueTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_VULKAN_CONTEXT(VkTransitionExternalQueueTest, reporter, ctxInfo,
+                                   CtsEnforcement::kApiLevel_T) {
     auto dContext = ctxInfo.directContext();
     GrGpu* gpu = dContext->priv().getGpu();
     GrVkGpu* vkGpu = static_cast<GrVkGpu*>(gpu);

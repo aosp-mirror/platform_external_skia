@@ -5,42 +5,72 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkImage.h"
+
 #include "include/core/SkBitmap.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
 #include "include/core/SkData.h"
+#include "include/core/SkEncodedImageFormat.h"
 #include "include/core/SkImageEncoder.h"
-#include "include/core/SkImageFilter.h"
 #include "include/core/SkImageGenerator.h"
+#include "include/core/SkMatrix.h"
 #include "include/core/SkPicture.h"
-#include "include/core/SkSurface.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
 #include "src/core/SkBitmapCache.h"
-#include "src/core/SkCachedData.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkImageFilterCache.h"
+#include "src/core/SkImageFilterTypes.h"
 #include "src/core/SkImageFilter_Base.h"
+#include "src/core/SkImageInfoPriv.h"
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkMipmap.h"
 #include "src/core/SkMipmapBuilder.h"
 #include "src/core/SkNextID.h"
+#include "src/core/SkSamplingPriv.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/image/SkImage_Base.h"
-#include "src/image/SkReadPixelsRec.h"
 #include "src/image/SkRescaleAndReadPixels.h"
 #include "src/shaders/SkImageShader.h"
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 #include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrContextThreadSafeProxy.h"
 #include "include/gpu/GrDirectContext.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrFragmentProcessor.h"
-#include "src/gpu/GrImageContextPriv.h"
-#include "src/gpu/GrProxyProvider.h"
-#include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/SkGr.h"
-#include "src/gpu/effects/GrBicubicEffect.h"
-#include "src/gpu/effects/GrTextureEffect.h"
-#include "src/image/SkImage_Gpu.h"
+#include "include/gpu/GrRecordingContext.h"
+#include "include/private/gpu/ganesh/GrImageContext.h"
+#include "src/gpu/ResourceKey.h"
+#include "src/gpu/SkBackingFit.h"
+#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/GrImageContextPriv.h"
+#include "src/gpu/ganesh/GrProxyProvider.h"
+#include "src/gpu/ganesh/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/GrSamplerState.h"
+#include "src/gpu/ganesh/GrSurfaceProxy.h"
+#include "src/gpu/ganesh/GrSurfaceProxyView.h"
+#include "src/gpu/ganesh/GrTextureProxy.h"
+#include "src/gpu/ganesh/SkGr.h"
+#include "src/gpu/ganesh/effects/GrBicubicEffect.h"
+#include "src/gpu/ganesh/effects/GrTextureEffect.h"
+enum class GrColorType;
 #endif
+
+#if defined(SK_GRAPHITE)
+#include "src/gpu/graphite/Image_Graphite.h"
+#include "src/gpu/graphite/Log.h"
+#endif
+
+#include <atomic>
+#include <string_view>
+#include <tuple>
+#include <utility>
+
+class SkShader;
 
 SkImage::SkImage(const SkImageInfo& info, uint32_t uniqueID)
         : fInfo(info)
@@ -141,11 +171,51 @@ SkColorSpace* SkImage::colorSpace() const { return fInfo.colorSpace(); }
 
 sk_sp<SkColorSpace> SkImage::refColorSpace() const { return fInfo.refColorSpace(); }
 
+sk_sp<SkShader> SkImage::makeShader(const SkSamplingOptions& sampling, const SkMatrix& lm) const {
+    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)),
+                               SkTileMode::kClamp, SkTileMode::kClamp,
+                               sampling, &lm);
+}
+
+sk_sp<SkShader> SkImage::makeShader(const SkSamplingOptions& sampling, const SkMatrix* lm) const {
+    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)),
+                               SkTileMode::kClamp, SkTileMode::kClamp,
+                               sampling, lm);
+}
+
+sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
+                                    const SkSamplingOptions& sampling,
+                                    const SkMatrix& lm) const {
+    return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy,
+                               sampling, &lm);
+}
+
 sk_sp<SkShader> SkImage::makeShader(SkTileMode tmx, SkTileMode tmy,
                                     const SkSamplingOptions& sampling,
                                     const SkMatrix* localMatrix) const {
     return SkImageShader::Make(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy,
                                sampling, localMatrix);
+}
+
+sk_sp<SkShader> SkImage::makeRawShader(SkTileMode tmx, SkTileMode tmy,
+                                       const SkSamplingOptions& sampling,
+                                       const SkMatrix& lm) const {
+    return SkImageShader::MakeRaw(sk_ref_sp(const_cast<SkImage*>(this)), tmx, tmy,
+                                  sampling, &lm);
+}
+
+sk_sp<SkShader> SkImage::makeRawShader(const SkSamplingOptions& sampling,
+                                       const SkMatrix& lm) const {
+    return SkImageShader::MakeRaw(sk_ref_sp(const_cast<SkImage*>(this)),
+                                  SkTileMode::kClamp, SkTileMode::kClamp,
+                                  sampling, &lm);
+}
+
+sk_sp<SkShader> SkImage::makeRawShader(const SkSamplingOptions& sampling,
+                                       const SkMatrix* localMatrix) const {
+    return SkImageShader::MakeRaw(sk_ref_sp(const_cast<SkImage*>(this)),
+                                  SkTileMode::kClamp, SkTileMode::kClamp,
+                                  sampling, localMatrix);
 }
 
 sk_sp<SkShader> SkImage::makeRawShader(SkTileMode tmx, SkTileMode tmy,
@@ -198,7 +268,7 @@ sk_sp<SkImage> SkImage::makeSubset(const SkIRect& subset, GrDirectContext* direc
         return nullptr;
     }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     auto myContext = as_IB(this)->context();
     // This check is also performed in the subclass, but we do it here for the short-circuit below.
     if (myContext && !myContext->priv().matches(direct)) {
@@ -214,9 +284,11 @@ sk_sp<SkImage> SkImage::makeSubset(const SkIRect& subset, GrDirectContext* direc
     return as_IB(this)->onMakeSubset(subset, direct);
 }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 
-bool SkImage::isTextureBacked() const { return as_IB(this)->onIsTextureBacked(); }
+bool SkImage::isTextureBacked() const {
+    return as_IB(this)->isGaneshBacked() || as_IB(this)->isGraphiteBacked();
+}
 
 size_t SkImage::textureSize() const { return as_IB(this)->onTextureSize(); }
 
@@ -258,7 +330,7 @@ bool SkImage::isValid(GrRecordingContext* rContext) const {
 ///////////////////////////////////////////////////////////////////////////////
 
 SkImage_Base::SkImage_Base(const SkImageInfo& info, uint32_t uniqueID)
-        : INHERITED(info, uniqueID), fAddedToRasterCache(false) {}
+        : SkImage(info, uniqueID), fAddedToRasterCache(false) {}
 
 SkImage_Base::~SkImage_Base() {
     if (fAddedToRasterCache.load()) {
@@ -267,7 +339,7 @@ SkImage_Base::~SkImage_Base() {
 }
 
 void SkImage_Base::onAsyncRescaleAndReadPixels(const SkImageInfo& info,
-                                               const SkIRect& origSrcRect,
+                                               SkIRect origSrcRect,
                                                RescaleGamma rescaleGamma,
                                                RescaleMode rescaleMode,
                                                ReadPixelsCallback callback,
@@ -294,8 +366,8 @@ void SkImage_Base::onAsyncRescaleAndReadPixels(const SkImageInfo& info,
 
 void SkImage_Base::onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace,
                                                      sk_sp<SkColorSpace> dstColorSpace,
-                                                     const SkIRect& srcRect,
-                                                     const SkISize& dstSize,
+                                                     SkIRect srcRect,
+                                                     SkISize dstSize,
                                                      RescaleGamma,
                                                      RescaleMode,
                                                      ReadPixelsCallback callback,
@@ -305,7 +377,7 @@ void SkImage_Base::onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace,
     callback(context, nullptr);
 }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 std::tuple<GrSurfaceProxyView, GrColorType> SkImage_Base::asView(GrRecordingContext* context,
                                                                  GrMipmapped mipmapped,
                                                                  GrImageTexGenPolicy policy) const {
@@ -386,10 +458,20 @@ std::unique_ptr<GrFragmentProcessor> SkImage_Base::MakeFragmentProcessorFromView
                                      GrBicubicEffect::Direction::kXY,
                                      *rContext->priv().caps());
     }
-    if (view.proxy()->asTextureProxy()->mipmapped() == GrMipmapped::kNo) {
+    if (sampling.isAniso()) {
+        if (!rContext->priv().caps()->anisoSupport()) {
+            // Fallback to linear
+            sampling = SkSamplingPriv::AnisoFallback(view.mipmapped() == GrMipmapped::kYes);
+        }
+    } else if (view.mipmapped() == GrMipmapped::kNo) {
         sampling = SkSamplingOptions(sampling.filter);
     }
-    GrSamplerState sampler(wmx, wmy, sampling.filter, sampling.mipmap);
+    GrSamplerState sampler;
+    if (sampling.isAniso()) {
+        sampler = GrSamplerState::Aniso(wmx, wmy, sampling.maxAniso, view.mipmapped());
+    } else {
+        sampler = GrSamplerState(wmx, wmy, sampling.filter, sampling.mipmap);
+    }
     if (subset) {
         if (domain) {
             return GrTextureEffect::MakeSubset(std::move(view),
@@ -451,10 +533,87 @@ GrBackendTexture SkImage_Base::onGetBackendTexture(bool flushPendingGrContextIO,
     return GrBackendTexture(); // invalid
 }
 
-#endif // SK_SUPPORT_GPU
+GrSurfaceProxyView SkImage_Base::CopyView(GrRecordingContext* context,
+                                                 GrSurfaceProxyView src,
+                                                 GrMipmapped mipmapped,
+                                                 GrImageTexGenPolicy policy,
+                                                 std::string_view label) {
+    skgpu::Budgeted budgeted = policy == GrImageTexGenPolicy::kNew_Uncached_Budgeted
+                                       ? skgpu::Budgeted::kYes
+                                       : skgpu::Budgeted::kNo;
+    return GrSurfaceProxyView::Copy(context,
+                                    std::move(src),
+                                    mipmapped,
+                                    SkBackingFit::kExact,
+                                    budgeted,
+                                    /*label=*/label);
+}
+
+#endif // defined(SK_GANESH)
+
+#if defined(SK_GRAPHITE)
+std::tuple<skgpu::graphite::TextureProxyView, SkColorType> SkImage_Base::asView(
+        skgpu::graphite::Recorder* recorder,
+        skgpu::Mipmapped mipmapped) const {
+    if (!recorder) {
+        return {};
+    }
+
+    if (!as_IB(this)->isGraphiteBacked()) {
+        return {};
+    }
+
+    auto image = reinterpret_cast<const skgpu::graphite::Image*>(this);
+
+    if (this->dimensions().area() <= 1) {
+        mipmapped = skgpu::Mipmapped::kNo;
+    }
+
+    if (mipmapped == skgpu::Mipmapped::kYes &&
+        image->textureProxyView().proxy()->mipmapped() != skgpu::Mipmapped::kYes) {
+        SKGPU_LOG_W("Graphite does not auto-generate mipmap levels");
+        return {};
+    }
+
+    SkColorType ct = this->colorType();
+    return { image->textureProxyView(), ct };
+}
+
+sk_sp<SkImage> SkImage::makeColorSpace(sk_sp<SkColorSpace> targetColorSpace,
+                                       skgpu::graphite::Recorder* recorder,
+                                       RequiredImageProperties requiredProps) const {
+    return this->makeColorTypeAndColorSpace(this->colorType(), std::move(targetColorSpace),
+                                            recorder, requiredProps);
+}
+
+sk_sp<SkImage> SkImage::makeColorTypeAndColorSpace(SkColorType targetColorType,
+                                                   sk_sp<SkColorSpace> targetColorSpace,
+                                                   skgpu::graphite::Recorder* recorder,
+                                                   RequiredImageProperties requiredProps) const {
+    if (kUnknown_SkColorType == targetColorType || !targetColorSpace) {
+        return nullptr;
+    }
+
+    SkColorType colorType = this->colorType();
+    SkColorSpace* colorSpace = this->colorSpace();
+    if (!colorSpace) {
+        colorSpace = sk_srgb_singleton();
+    }
+    if (colorType == targetColorType &&
+        (SkColorSpace::Equals(colorSpace, targetColorSpace.get()) || this->isAlphaOnly())) {
+        return sk_ref_sp(const_cast<SkImage*>(this));
+    }
+
+    return as_IB(this)->onMakeColorTypeAndColorSpace(targetColorType,
+                                                     std::move(targetColorSpace),
+                                                     recorder,
+                                                     requiredProps);
+}
+
+#endif // SK_GRAPHITE
 
 GrDirectContext* SkImage_Base::directContext() const {
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     return GrAsDirectContext(this->context());
 #else
     return nullptr;
@@ -511,9 +670,16 @@ bool SkImage_Base::onAsLegacyBitmap(GrDirectContext* dContext, SkBitmap* bitmap)
 sk_sp<SkImage> SkImage::MakeFromPicture(sk_sp<SkPicture> picture, const SkISize& dimensions,
                                         const SkMatrix* matrix, const SkPaint* paint,
                                         BitDepth bitDepth, sk_sp<SkColorSpace> colorSpace) {
+    return SkImage::MakeFromPicture(picture, dimensions, matrix, paint, bitDepth, colorSpace, {});
+}
+
+sk_sp<SkImage> SkImage::MakeFromPicture(sk_sp<SkPicture> picture, const SkISize& dimensions,
+                                        const SkMatrix* matrix, const SkPaint* paint,
+                                        BitDepth bitDepth, sk_sp<SkColorSpace> colorSpace,
+                                        SkSurfaceProps props) {
     return MakeFromGenerator(SkImageGenerator::MakeFromPicture(dimensions, std::move(picture),
                                                                matrix, paint, bitDepth,
-                                                               std::move(colorSpace)));
+                                                               std::move(colorSpace), props));
 }
 
 sk_sp<SkImage> SkImage::makeWithFilter(GrRecordingContext* rContext, const SkImageFilter* filter,
@@ -524,7 +690,7 @@ sk_sp<SkImage> SkImage::makeWithFilter(GrRecordingContext* rContext, const SkIma
         return nullptr;
     }
     sk_sp<SkSpecialImage> srcSpecialImage;
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     auto myContext = as_IB(this)->context();
     if (myContext && !myContext->priv().matches(rContext)) {
         return nullptr;
@@ -597,7 +763,7 @@ sk_sp<SkImage> SkImage::makeColorTypeAndColorSpace(SkColorType targetColorType,
         return nullptr;
     }
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
     auto myContext = as_IB(this)->context();
     // This check is also performed in the subclass, but we do it here for the short-circuit below.
     if (myContext && !myContext->priv().matches(dContext)) {
@@ -723,10 +889,6 @@ sk_sp<SkImage> SkMipmapBuilder::attachTo(const SkImage* src) {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "src/core/SkReadBuffer.h"
-#include "src/core/SkSamplingPriv.h"
-#include "src/core/SkWriteBuffer.h"
-
 SkSamplingOptions SkSamplingPriv::FromFQ(SkLegacyFQ fq, SkMediumAs behavior) {
     switch (fq) {
         case kHigh_SkLegacyFQ:
@@ -741,27 +903,4 @@ SkSamplingOptions SkSamplingPriv::FromFQ(SkLegacyFQ fq, SkMediumAs behavior) {
             break;
     }
     return SkSamplingOptions(SkFilterMode::kNearest, SkMipmapMode::kNone);
-}
-
-SkSamplingOptions SkSamplingPriv::Read(SkReadBuffer& buffer) {
-    if (buffer.readBool()) {
-        SkScalar B = buffer.readScalar(),
-                 C = buffer.readScalar();
-        return SkSamplingOptions({B,C});
-    } else {
-        auto filter = buffer.read32LE<SkFilterMode>(SkFilterMode::kLinear);
-        auto mipmap = buffer.read32LE<SkMipmapMode>(SkMipmapMode::kLinear);
-        return SkSamplingOptions(filter, mipmap);
-    }
-}
-
-void SkSamplingPriv::Write(SkWriteBuffer& buffer, const SkSamplingOptions& sampling) {
-    buffer.writeBool(sampling.useCubic);
-    if (sampling.useCubic) {
-        buffer.writeScalar(sampling.cubic.B);
-        buffer.writeScalar(sampling.cubic.C);
-    } else {
-        buffer.writeUInt((unsigned)sampling.filter);
-        buffer.writeUInt((unsigned)sampling.mipmap);
-    }
 }

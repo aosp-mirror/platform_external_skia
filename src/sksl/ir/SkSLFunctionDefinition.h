@@ -8,28 +8,33 @@
 #ifndef SKSL_FUNCTIONDEFINITION
 #define SKSL_FUNCTIONDEFINITION
 
+#include "include/private/SkSLIRNode.h"
 #include "include/private/SkSLProgramElement.h"
-#include "src/sksl/ir/SkSLBlock.h"
+#include "include/private/SkSLStatement.h"
+#include "include/sksl/SkSLPosition.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+
 namespace SkSL {
+
+class Context;
 
 /**
  * A function definition (a declaration plus an associated block of code).
  */
 class FunctionDefinition final : public ProgramElement {
 public:
-    inline static constexpr Kind kProgramElementKind = Kind::kFunction;
+    inline static constexpr Kind kIRNodeKind = Kind::kFunction;
 
-    using FunctionSet = std::unordered_set<const FunctionDeclaration*>;
-
-    FunctionDefinition(int line, const FunctionDeclaration* declaration, bool builtin,
-                       std::unique_ptr<Statement> body, FunctionSet referencedBuiltinFunctions)
-        : INHERITED(line, kProgramElementKind)
+    FunctionDefinition(Position pos, const FunctionDeclaration* declaration, bool builtin,
+                       std::unique_ptr<Statement> body)
+        : INHERITED(pos, kIRNodeKind)
         , fDeclaration(declaration)
         , fBuiltin(builtin)
-        , fBody(std::move(body))
-        , fReferencedBuiltinFunctions(std::move(referencedBuiltinFunctions)) {}
+        , fBody(std::move(body)) {}
 
     /**
      * Coerces `return` statements to the return type of the function, and reports errors in the
@@ -43,7 +48,7 @@ public:
      * errors when trying to call a function with an error in it.)
      */
     static std::unique_ptr<FunctionDefinition> Convert(const Context& context,
-                                                       int line,
+                                                       Position pos,
                                                        const FunctionDeclaration& function,
                                                        std::unique_ptr<Statement> body,
                                                        bool builtin);
@@ -64,14 +69,9 @@ public:
         return fBody;
     }
 
-    const FunctionSet& referencedBuiltinFunctions() const {
-        return fReferencedBuiltinFunctions;
-    }
-
     std::unique_ptr<ProgramElement> clone() const override {
-        return std::make_unique<FunctionDefinition>(fLine, &this->declaration(),
-                                                    /*builtin=*/false, this->body()->clone(),
-                                                    this->referencedBuiltinFunctions());
+        return std::make_unique<FunctionDefinition>(fPosition, &this->declaration(),
+                                                    /*builtin=*/false, this->body()->clone());
     }
 
     std::string description() const override {
@@ -82,9 +82,6 @@ private:
     const FunctionDeclaration* fDeclaration;
     bool fBuiltin;
     std::unique_ptr<Statement> fBody;
-    // We track the builtin functions we reference so that we can ensure that all of them end up
-    // copied into the final output.
-    FunctionSet fReferencedBuiltinFunctions;
 
     using INHERITED = ProgramElement;
 };

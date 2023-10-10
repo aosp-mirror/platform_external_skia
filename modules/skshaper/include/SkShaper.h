@@ -47,7 +47,8 @@ public:
     #ifdef SK_SHAPER_HARFBUZZ_AVAILABLE
     static std::unique_ptr<SkShaper> MakeShaperDrivenWrapper(sk_sp<SkFontMgr> = nullptr);
     static std::unique_ptr<SkShaper> MakeShapeThenWrap(sk_sp<SkFontMgr> = nullptr);
-    static std::unique_ptr<SkShaper> MakeShapeDontWrapOrReorder(sk_sp<SkFontMgr> = nullptr);
+    static std::unique_ptr<SkShaper> MakeShapeDontWrapOrReorder(std::unique_ptr<SkUnicode> unicode,
+                                                                sk_sp<SkFontMgr> = nullptr);
     static void PurgeHarfBuzzCache();
     #endif
     #ifdef SK_SHAPER_CORETEXT_AVAILABLE
@@ -149,7 +150,10 @@ public:
     MakeScriptRunIterator(const char* utf8, size_t utf8Bytes, SkFourByteTag script);
     #if defined(SK_SHAPER_HARFBUZZ_AVAILABLE) && defined(SK_UNICODE_AVAILABLE)
     static std::unique_ptr<ScriptRunIterator>
-    MakeSkUnicodeHbScriptRunIterator(SkUnicode* unicode, const char* utf8, size_t utf8Bytes);
+    MakeSkUnicodeHbScriptRunIterator(const char* utf8, size_t utf8Bytes);
+    static std::unique_ptr<ScriptRunIterator>
+    MakeSkUnicodeHbScriptRunIterator(const char* utf8, size_t utf8Bytes, SkFourByteTag script);
+    // Still used in some cases
     static std::unique_ptr<ScriptRunIterator>
     MakeHbIcuScriptRunIterator(const char* utf8, size_t utf8Bytes);
     #endif

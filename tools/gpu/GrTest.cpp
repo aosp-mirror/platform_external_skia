@@ -9,25 +9,25 @@
 #include "include/gpu/GrBackendSurface.h"
 #include "include/gpu/GrContextOptions.h"
 #include "include/gpu/GrRecordingContext.h"
-#include "include/private/SkTo.h"
-#include "src/core/SkMathPriv.h"
-#include "src/gpu/GrClip.h"
-#include "src/gpu/GrDirectContextPriv.h"
-#include "src/gpu/GrDrawOpAtlas.h"
-#include "src/gpu/GrDrawingManager.h"
-#include "src/gpu/GrGpu.h"
-#include "src/gpu/GrGpuResourceCacheAccess.h"
-#include "src/gpu/GrMemoryPool.h"
-#include "src/gpu/GrRecordingContextPriv.h"
-#include "src/gpu/GrRenderTargetProxy.h"
-#include "src/gpu/GrResourceCache.h"
-#include "src/gpu/GrSemaphore.h"
-#include "src/gpu/GrTexture.h"
-#include "src/gpu/SkGr.h"
-#include "src/gpu/text/GrStrikeCache.h"
-#include "src/gpu/text/GrTextBlobRedrawCoordinator.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkMathPriv.h"
+#include "src/gpu/ganesh/GrClip.h"
+#include "src/gpu/ganesh/GrDirectContextPriv.h"
+#include "src/gpu/ganesh/GrDrawOpAtlas.h"
+#include "src/gpu/ganesh/GrDrawingManager.h"
+#include "src/gpu/ganesh/GrGpu.h"
+#include "src/gpu/ganesh/GrGpuResourceCacheAccess.h"
+#include "src/gpu/ganesh/GrMemoryPool.h"
+#include "src/gpu/ganesh/GrRecordingContextPriv.h"
+#include "src/gpu/ganesh/GrRenderTargetProxy.h"
+#include "src/gpu/ganesh/GrResourceCache.h"
+#include "src/gpu/ganesh/GrSemaphore.h"
+#include "src/gpu/ganesh/GrTexture.h"
+#include "src/gpu/ganesh/SkGr.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
 #include "src/image/SkImage_Gpu.h"
+#include "src/text/gpu/StrikeCache.h"
+#include "src/text/gpu/TextBlobRedrawCoordinator.h"
 
 #include <algorithm>
 
@@ -46,22 +46,32 @@ DRAW_OP_TEST_EXTERN(AAFlatteningConvexPathOp);
 DRAW_OP_TEST_EXTERN(AAHairlineOp);
 DRAW_OP_TEST_EXTERN(AAStrokeRectOp);
 DRAW_OP_TEST_EXTERN(AtlasTextOp);
+#if !defined(SK_ENABLE_OPTIMIZE_SIZE)
 DRAW_OP_TEST_EXTERN(ButtCapDashedCircleOp);
 DRAW_OP_TEST_EXTERN(CircleOp);
+#endif
 DRAW_OP_TEST_EXTERN(DashOpImpl);
 DRAW_OP_TEST_EXTERN(DefaultPathOp);
 DRAW_OP_TEST_EXTERN(DrawAtlasOp);
+#if !defined(SK_ENABLE_OPTIMIZE_SIZE)
 DRAW_OP_TEST_EXTERN(DIEllipseOp);
 DRAW_OP_TEST_EXTERN(EllipseOp);
+#endif
 DRAW_OP_TEST_EXTERN(FillRectOp);
 DRAW_OP_TEST_EXTERN(NonAALatticeOp);
 DRAW_OP_TEST_EXTERN(NonAAStrokeRectOp);
 DRAW_OP_TEST_EXTERN(RegionOp);
+#if !defined(SK_ENABLE_OPTIMIZE_SIZE)
 DRAW_OP_TEST_EXTERN(RRectOp);
+#endif
 DRAW_OP_TEST_EXTERN(ShadowRRectOp);
+#if !defined(SK_ENABLE_OPTIMIZE_SIZE)
 DRAW_OP_TEST_EXTERN(SmallPathOp);
+#endif
 DRAW_OP_TEST_EXTERN(TextureOpImpl);
+#if !defined(SK_ENABLE_OPTIMIZE_SIZE)
 DRAW_OP_TEST_EXTERN(TriangulatingPathOp);
+#endif
 
 void GrDrawRandomOp(SkRandom* random, skgpu::v1::SurfaceDrawContext* sdc, GrPaint&& paint) {
     auto rContext = sdc->recordingContext();
@@ -76,25 +86,35 @@ void GrDrawRandomOp(SkRandom* random, skgpu::v1::SurfaceDrawContext* sdc, GrPain
             DRAW_OP_TEST_ENTRY(AAHairlineOp),
             DRAW_OP_TEST_ENTRY(AAStrokeRectOp),
             DRAW_OP_TEST_ENTRY(AtlasTextOp),
+#if !defined(SK_ENABLE_OPTIMIZE_SIZE)
             DRAW_OP_TEST_ENTRY(ButtCapDashedCircleOp),
             DRAW_OP_TEST_ENTRY(CircleOp),
+#endif
             DRAW_OP_TEST_ENTRY(DashOpImpl),
             DRAW_OP_TEST_ENTRY(DefaultPathOp),
             DRAW_OP_TEST_ENTRY(DrawAtlasOp),
+#if !defined(SK_ENABLE_OPTIMIZE_SIZE)
             DRAW_OP_TEST_ENTRY(DIEllipseOp),
             DRAW_OP_TEST_ENTRY(EllipseOp),
+#endif
             DRAW_OP_TEST_ENTRY(FillRectOp),
             DRAW_OP_TEST_ENTRY(NonAALatticeOp),
             DRAW_OP_TEST_ENTRY(NonAAStrokeRectOp),
             DRAW_OP_TEST_ENTRY(RegionOp),
+#if !defined(SK_ENABLE_OPTIMIZE_SIZE)
             DRAW_OP_TEST_ENTRY(RRectOp),
+#endif
             DRAW_OP_TEST_ENTRY(ShadowRRectOp),
+#if !defined(SK_ENABLE_OPTIMIZE_SIZE)
             DRAW_OP_TEST_ENTRY(SmallPathOp),
+#endif
             DRAW_OP_TEST_ENTRY(TextureOpImpl),
+#if !defined(SK_ENABLE_OPTIMIZE_SIZE)
             DRAW_OP_TEST_ENTRY(TriangulatingPathOp),
+#endif
     };
 
-    static constexpr size_t kTotal = SK_ARRAY_COUNT(gFactories);
+    static constexpr size_t kTotal = std::size(gFactories);
     uint32_t index = random->nextULessThan(static_cast<uint32_t>(kTotal));
     auto op = gFactories[index](std::move(paint),
                                 random,

@@ -12,12 +12,13 @@
 #include "include/core/SkCanvasVirtualEnforcer.h"
 #include "include/core/SkFlattenable.h"
 #include "include/core/SkPicture.h"
+#include "include/core/SkTextBlob.h"
 #include "include/core/SkVertices.h"
-#include "include/private/SkTArray.h"
-#include "include/private/SkTDArray.h"
-#include "include/private/SkTHash.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTArray.h"
+#include "include/private/base/SkTDArray.h"
+#include "include/private/base/SkTo.h"
 #include "src/core/SkPictureData.h"
+#include "src/core/SkTHash.h"
 #include "src/core/SkWriter32.h"
 
 // These macros help with packing and unpacking a single byte value and
@@ -46,6 +47,12 @@ public:
     const SkTArray<sk_sp<const SkTextBlob>>& getTextBlobs() const {
         return fTextBlobs;
     }
+
+#if defined(SK_GANESH)
+    const SkTArray<sk_sp<const sktext::gpu::Slug>>& getSlugs() const {
+        return fSlugs;
+    }
+#endif
 
     const SkTArray<sk_sp<const SkVertices>>& getVertices() const {
         return fVertices;
@@ -144,6 +151,7 @@ private:
     void addSampling(const SkSamplingOptions&);
     void addText(const void* text, size_t byteLength);
     void addTextBlob(const SkTextBlob* blob);
+    void addSlug(const sktext::gpu::Slug* slug);
     void addVertices(const SkVertices*);
 
     int find(const SkBitmap& bitmap);
@@ -172,7 +180,9 @@ protected:
 
     void onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
                                 const SkPaint& paint) override;
-
+#if defined(SK_GANESH)
+    void onDrawSlug(const sktext::gpu::Slug* slug) override;
+#endif
     void onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
                      const SkPoint texCoords[4], SkBlendMode, const SkPaint& paint) override;
 
@@ -246,6 +256,9 @@ private:
     SkTArray<sk_sp<SkDrawable>>       fDrawables;
     SkTArray<sk_sp<const SkTextBlob>> fTextBlobs;
     SkTArray<sk_sp<const SkVertices>> fVertices;
+#if defined(SK_GANESH)
+    SkTArray<sk_sp<const sktext::gpu::Slug>> fSlugs;
+#endif
 
     uint32_t fRecordFlags;
     int      fInitialSaveCount;

@@ -8,11 +8,24 @@
 #include "src/core/SkGlyph.h"
 
 #include "include/core/SkDrawable.h"
-#include "src/core/SkArenaAlloc.h"
+#include "include/core/SkScalar.h"
+#include "include/private/base/SkFloatingPoint.h"
+#include "include/private/base/SkTo.h"
+#include "src/base/SkArenaAlloc.h"
 #include "src/core/SkScalerContext.h"
 #include "src/pathops/SkPathOpsCubic.h"
+#include "src/pathops/SkPathOpsPoint.h"
 #include "src/pathops/SkPathOpsQuad.h"
+#include "src/text/StrikeForGPU.h"
 
+#include <cstring>
+#include <tuple>
+#include <utility>
+
+using namespace skglyph;
+using namespace sktext;
+
+//-- SkGlyph ---------------------------------------------------------------------------------------
 SkGlyph::SkGlyph(const SkGlyph&) = default;
 SkGlyph& SkGlyph::operator=(const SkGlyph&) = default;
 SkGlyph::SkGlyph(SkGlyph&&) = default;
@@ -29,6 +42,7 @@ SkMask SkGlyph::mask() const {
 }
 
 SkMask SkGlyph::mask(SkPoint position) const {
+    SkASSERT(SkScalarIsInt(position.x()) && SkScalarIsInt(position.y()));
     SkMask answer = this->mask();
     answer.fBounds.offset(SkScalarFloorToInt(position.x()), SkScalarFloorToInt(position.y()));
     return answer;
@@ -117,7 +131,7 @@ size_t SkGlyph::setMetricsAndImage(SkArenaAlloc* alloc, const SkGlyph& from) {
         fHeight = from.fHeight;
         fTop = from.fTop;
         fLeft = from.fLeft;
-        fForceBW = from.fForceBW;
+        fScalerContextBits = from.fScalerContextBits;
         fMaskFormat = from.fMaskFormat;
 
         // From glyph may not have an image because the glyph is too large.
@@ -394,11 +408,121 @@ void SkGlyph::ensureIntercepts(const SkScalar* bounds, SkScalar scale, SkScalar 
     offsetResults(intercept, array, count);
 }
 
+namespace {
+uint32_t init_actions(const SkGlyph& glyph) {
+    constexpr uint32_t kAllUnset = 0;
+    constexpr uint32_t kDrop = SkTo<uint32_t>(GlyphAction::kDrop);
+    constexpr uint32_t kAllDrop =
+            kDrop << kDirectMask |
+            kDrop << kDirectMaskCPU |
+            kDrop << kMask |
+            kDrop << kSDFT |
+            kDrop << kPath |
+            kDrop << kDrawable;
+    return glyph.isEmpty() ? kAllDrop : kAllUnset;
+}
+}  // namespace
+
+// -- SkGlyphDigest --------------------------------------------------------------------------------
 SkGlyphDigest::SkGlyphDigest(size_t index, const SkGlyph& glyph)
-        : fPackedGlyphID{glyph.getPackedID().value()}
-        , fIndex{SkTo<uint32_t>(index)}
+        : fIndex{SkTo<uint32_t>(index)}
         , fIsEmpty(glyph.isEmpty())
-        , fIsColor(glyph.isColor())
-        , fCanDrawAsMask{SkStrikeForGPU::CanDrawAsMask(glyph)}
-        , fCanDrawAsSDFT{SkStrikeForGPU::CanDrawAsSDFT(glyph)}
-        , fMaxDimension{(uint16_t)glyph.maxDimension()} {}
+        , fFormat(glyph.maskFormat())
+        , fActions{init_actions(glyph)}
+        , fLeft{SkTo<int16_t>(glyph.left())}
+        , fTop{SkTo<int16_t>(glyph.top())}
+        , fWidth{SkTo<uint16_t>(glyph.width())}
+        , fHeight{SkTo<uint16_t>(glyph.height())} {}
+
+void SkGlyphDigest::setActionFor(skglyph::ActionType actionType,
+                                 SkGlyph* glyph,
+                                 StrikeForGPU* strike) {
+    // We don't have to do any more if the glyph is marked as kDrop because it was isEmpty().
+    if (this->actionFor(actionType) == GlyphAction::kUnset) {
+        GlyphAction action = GlyphAction::kReject;
+        switch (actionType) {
+            case kDirectMask: {
+                if (this->fitsInAtlasDirect()) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+            case kDirectMaskCPU: {
+                if (strike->prepareForImage(glyph)) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+            case kMask: {
+                if (this->fitsInAtlasInterpolated()) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+            case kSDFT: {
+                if (this->fitsInAtlasDirect() &&
+                    this->maskFormat() == SkMask::Format::kSDF_Format) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+            case kPath: {
+                if (strike->prepareForPath(glyph)) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+            case kDrawable: {
+                if (strike->prepareForDrawable(glyph)) {
+                    action = GlyphAction::kAccept;
+                }
+                break;
+            }
+        }
+        this->setAction(actionType, action);
+    }
+}
+
+bool SkGlyphDigest::FitsInAtlas(const SkGlyph& glyph) {
+    return glyph.maxDimension() <= kSkSideTooBigForAtlas;
+}
+
+// -- SkGlyphPositionRoundingSpec ------------------------------------------------------------------
+SkVector SkGlyphPositionRoundingSpec::HalfAxisSampleFreq(
+        bool isSubpixel, SkAxisAlignment axisAlignment) {
+    if (!isSubpixel) {
+        return {SK_ScalarHalf, SK_ScalarHalf};
+    } else {
+        switch (axisAlignment) {
+            case SkAxisAlignment::kX:
+                return {SkPackedGlyphID::kSubpixelRound, SK_ScalarHalf};
+            case SkAxisAlignment::kY:
+                return {SK_ScalarHalf, SkPackedGlyphID::kSubpixelRound};
+            case SkAxisAlignment::kNone:
+                return {SkPackedGlyphID::kSubpixelRound, SkPackedGlyphID::kSubpixelRound};
+        }
+    }
+
+    // Some compilers need this.
+    return {0, 0};
+}
+
+SkIPoint SkGlyphPositionRoundingSpec::IgnorePositionMask(
+        bool isSubpixel, SkAxisAlignment axisAlignment) {
+    return SkIPoint::Make((!isSubpixel || axisAlignment == SkAxisAlignment::kY) ? 0 : ~0,
+                          (!isSubpixel || axisAlignment == SkAxisAlignment::kX) ? 0 : ~0);
+}
+
+SkIPoint SkGlyphPositionRoundingSpec::IgnorePositionFieldMask(bool isSubpixel,
+                                                              SkAxisAlignment axisAlignment) {
+    SkIPoint ignoreMask = IgnorePositionMask(isSubpixel, axisAlignment);
+    SkIPoint answer{ignoreMask.x() & SkPackedGlyphID::kXYFieldMask.x(),
+                    ignoreMask.y() & SkPackedGlyphID::kXYFieldMask.y()};
+    return answer;
+}
+
+SkGlyphPositionRoundingSpec::SkGlyphPositionRoundingSpec(
+        bool isSubpixel, SkAxisAlignment axisAlignment)
+    : halfAxisSampleFreq{HalfAxisSampleFreq(isSubpixel, axisAlignment)}
+    , ignorePositionMask{IgnorePositionMask(isSubpixel, axisAlignment)}
+    , ignorePositionFieldMask {IgnorePositionFieldMask(isSubpixel, axisAlignment)} {}

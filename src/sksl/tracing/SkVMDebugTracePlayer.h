@@ -6,11 +6,17 @@
  */
 
 #include "src/sksl/tracing/SkVMDebugTrace.h"
+
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypes.h"
 #include "src/utils/SkBitSet.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace SkSL {
 

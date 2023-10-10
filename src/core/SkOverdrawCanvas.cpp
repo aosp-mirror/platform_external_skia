@@ -13,14 +13,16 @@
 #include "include/core/SkRRect.h"
 #include "include/core/SkRSXform.h"
 #include "include/core/SkTextBlob.h"
-#include "include/private/SkTo.h"
+#include "include/private/base/SkTo.h"
 #include "src/core/SkDevice.h"
 #include "src/core/SkDrawShadowInfo.h"
+#include "src/core/SkGlyphBuffer.h"
 #include "src/core/SkGlyphRunPainter.h"
 #include "src/core/SkImagePriv.h"
 #include "src/core/SkLatticeIter.h"
 #include "src/core/SkStrikeCache.h"
 #include "src/core/SkTextBlobPriv.h"
+#include "src/text/GlyphRun.h"
 #include "src/utils/SkPatchUtils.h"
 
 SkOverdrawCanvas::SkOverdrawCanvas(SkCanvas* canvas)
@@ -43,52 +45,58 @@ SkOverdrawCanvas::SkOverdrawCanvas(SkCanvas* canvas)
 }
 
 namespace {
-class TextDevice : public SkNoPixelsDevice, public SkGlyphRunListPainter::BitmapDevicePainter {
+class TextDevice : public SkNoPixelsDevice, public SkGlyphRunListPainterCPU::BitmapDevicePainter {
 public:
     TextDevice(SkCanvas* overdrawCanvas, const SkSurfaceProps& props)
             : SkNoPixelsDevice{SkIRect::MakeWH(32767, 32767), props},
               fOverdrawCanvas{overdrawCanvas},
-              fPainter{props, kN32_SkColorType, nullptr, SkStrikeCache::GlobalStrikeCache()} {}
+              fPainter{props, kN32_SkColorType, nullptr} {}
 
-    void paintMasks(SkDrawableGlyphBuffer* accepted, const SkPaint& paint) const override {
-        for (auto t : accepted->accepted()) {
-            SkGlyphVariant glyph; SkPoint pos;
-            std::tie(glyph, pos) = t;
-            SkMask mask = glyph.glyph()->mask(pos);
+    void paintMasks(SkZip<const SkGlyph*, SkPoint> accepted, const SkPaint& paint) const override {
+        for (auto [glyph, pos] : accepted) {
+            SkMask mask = glyph->mask(pos);
+            // We need to ignore any matrix on the overdraw canvas (it's already been baked into
+            // our glyph positions). Otherwise, the CTM is double-applied. (skbug.com/13732)
+            fOverdrawCanvas->save();
+            fOverdrawCanvas->resetMatrix();
             fOverdrawCanvas->drawRect(SkRect::Make(mask.fBounds), SkPaint());
+            fOverdrawCanvas->restore();
         }
     }
 
     void    drawBitmap(const SkBitmap&, const SkMatrix&, const SkRect* dstOrNull,
                        const SkSamplingOptions&, const SkPaint&) const override {}
 
-    void onDrawGlyphRunList(SkCanvas* canvas, const SkGlyphRunList& glyphRunList,
-                            const SkPaint& paint) override {
+    void onDrawGlyphRunList(SkCanvas* canvas,
+                            const sktext::GlyphRunList& glyphRunList,
+                            const SkPaint& initialPaint,
+                            const SkPaint& drawingPaint) override {
         SkASSERT(!glyphRunList.hasRSXForm());
-        fPainter.drawForBitmapDevice(canvas, this, glyphRunList, paint,
+        fPainter.drawForBitmapDevice(canvas, this, glyphRunList, drawingPaint,
                                      fOverdrawCanvas->getTotalMatrix());
     }
 
 private:
     SkCanvas* const fOverdrawCanvas;
-    SkGlyphRunListPainter fPainter;
+    SkGlyphRunListPainterCPU fPainter;
 };
 }  // namespace
 
 void SkOverdrawCanvas::onDrawTextBlob(
         const SkTextBlob* blob, SkScalar x, SkScalar y, const SkPaint& paint) {
-    SkGlyphRunBuilder b;
+    sktext::GlyphRunBuilder b;
     auto glyphRunList = b.blobToGlyphRunList(*blob, {x, y});
     this->onDrawGlyphRunList(glyphRunList, paint);
 }
 
 void SkOverdrawCanvas::onDrawGlyphRunList(
-        const SkGlyphRunList& glyphRunList, const SkPaint& paint) {
+        const sktext::GlyphRunList& glyphRunList,
+        const SkPaint& paint) {
     SkSurfaceProps props{0, kUnknown_SkPixelGeometry};
     this->getProps(&props);
     TextDevice device{this, props};
 
-    device.drawGlyphRunList(this, glyphRunList, paint);
+    device.drawGlyphRunList(this, glyphRunList, paint, paint);
 }
 
 void SkOverdrawCanvas::onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],

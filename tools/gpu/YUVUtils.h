@@ -8,10 +8,11 @@
 #ifndef YUVUtils_DEFINED
 #define YUVUtils_DEFINED
 
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkYUVAPixmaps.h"
 #include "include/gpu/GrBackendSurface.h"
-#include "src/core/SkAutoMalloc.h"
+#include "src/base/SkAutoMalloc.h"
 
 #include <tuple>
 

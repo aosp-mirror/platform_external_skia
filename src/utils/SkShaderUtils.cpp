@@ -9,6 +9,10 @@
 
 #include "include/core/SkString.h"
 #include "include/private/SkSLString.h"
+#include "include/private/base/SkTArray.h"
+#include "src/sksl/SkSLProgramSettings.h"
+
+#include <cstddef>
 
 namespace SkShaderUtils {
 
@@ -193,7 +197,7 @@ void VisitLineByLine(const std::string& text,
                      const std::function<void(int lineNumber, const char* lineText)>& visitFn) {
     SkTArray<SkString> lines;
     SkStrSplit(text.c_str(), "\n", kStrict_SkStrSplitMode, &lines);
-    for (int i = 0; i < lines.count(); ++i) {
+    for (int i = 0; i < lines.size(); ++i) {
         visitFn(i + 1, lines[i].c_str());
     }
 }
@@ -210,10 +214,10 @@ std::string BuildShaderErrorMessage(const char* shader, const char* errors) {
 
 void PrintShaderBanner(SkSL::ProgramKind programKind) {
     const char* typeName = "Unknown";
-    switch (programKind) {
-        case SkSL::ProgramKind::kVertex:   typeName = "Vertex";   break;
-        case SkSL::ProgramKind::kFragment: typeName = "Fragment"; break;
-        default: break;
+    if (SkSL::ProgramConfig::IsVertex(programKind)) {
+        typeName = "Vertex";
+    } else if (SkSL::ProgramConfig::IsFragment(programKind)) {
+        typeName = "Fragment";
     }
     SkDebugf("---- %s shader ----------------------------------------------------\n", typeName);
 }

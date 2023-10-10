@@ -12,6 +12,7 @@
 #include "include/core/SkColor.h"
 #include "include/core/SkImageFilter.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkPathEffect.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkSurface.h"
 #include "include/effects/SkDashPathEffect.h"
@@ -19,6 +20,7 @@
 #include "include/effects/SkImageFilters.h"
 
 #include "tools/Resources.h"
+#include "tools/ToolUtils.h"
 
 // TODO(michaelludwig) - This will be made public within SkImageFilters.h at some point
 #include "src/effects/imagefilters/SkCropImageFilter.h"
@@ -179,16 +181,19 @@ void draw_example(
     {
         SkRect clippedContentBounds;
         if (clippedContentBounds.intersect(contentBounds, kExampleBounds)) {
-            auto contentImage = image->makeSubset(clippedContentBounds.roundOut());
-            SkPaint tiledPaint;
-            tiledPaint.setShader(contentImage->makeShader(
-                    inputMode, inputMode, SkSamplingOptions(SkFilterMode::kLinear)));
-            tiledPaint.setAlphaf(0.15f);
+            auto contentImage = ToolUtils::MakeTextureImage(
+                    canvas, image->makeSubset(clippedContentBounds.roundOut()));
+            if (contentImage) {
+                SkPaint tiledPaint;
+                tiledPaint.setShader(contentImage->makeShader(
+                        inputMode, inputMode, SkSamplingOptions(SkFilterMode::kLinear)));
+                tiledPaint.setAlphaf(0.15f);
 
-            canvas->save();
-            canvas->translate(clippedContentBounds.fLeft, clippedContentBounds.fTop);
-            canvas->drawPaint(tiledPaint);
-            canvas->restore();
+                canvas->save();
+                canvas->translate(clippedContentBounds.fLeft, clippedContentBounds.fTop);
+                canvas->drawPaint(tiledPaint);
+                canvas->restore();
+            }
         }
     }
 
@@ -204,7 +209,8 @@ void draw_example(
         canvas->clipRect(outputBounds);
         canvas->saveLayer(hintContent ? &contentBounds : nullptr, &layerPaint);
 
-        canvas->drawImageRect(image.get(), contentBounds, contentBounds,
+        auto tmp = ToolUtils::MakeTextureImage(canvas, image);
+        canvas->drawImageRect(tmp, contentBounds, contentBounds,
                               SkSamplingOptions(SkFilterMode::kLinear), nullptr,
                               SkCanvas::kFast_SrcRectConstraint);
         canvas->restore();

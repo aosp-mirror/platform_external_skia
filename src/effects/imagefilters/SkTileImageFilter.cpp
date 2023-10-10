@@ -5,19 +5,31 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkFlattenable.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkImageFilter.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
-#include "include/core/SkShader.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkScalar.h"
 #include "include/core/SkSurface.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
 #include "include/effects/SkImageFilters.h"
+#include "src/core/SkImageFilterTypes.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkSpecialImage.h"
 #include "src/core/SkSpecialSurface.h"
 #include "src/core/SkValidationUtils.h"
 #include "src/core/SkWriteBuffer.h"
+
+#include <utility>
 
 namespace {
 
@@ -105,15 +117,14 @@ sk_sp<SkSpecialImage> SkTileImageFilter::onFilterImage(const Context& ctx,
         return nullptr;
     }
 
-    static const float kRoundOutInset = 1e-3f;
-    const SkIRect dstIRect = dstRect.makeInset(kRoundOutInset, kRoundOutInset).roundOut();
+    const SkIRect dstIRect = skif::RoundOut(dstRect);
     if (!fSrcRect.width() || !fSrcRect.height() || !dstIRect.width() || !dstIRect.height()) {
         return nullptr;
     }
 
     SkRect srcRect;
     ctx.ctm().mapRect(&srcRect, fSrcRect);
-    SkIRect srcIRect = srcRect.makeInset(kRoundOutInset, kRoundOutInset).roundOut();
+    SkIRect srcIRect = skif::RoundOut(srcRect);
     srcIRect.offset(-inputOffset);
     const SkIRect inputBounds = SkIRect::MakeWH(input->width(), input->height());
 

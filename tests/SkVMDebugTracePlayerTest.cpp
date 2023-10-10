@@ -5,20 +5,35 @@
  * found in the LICENSE file.
  */
 
-#include "include/core/SkM44.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSpan.h"
+#include "include/private/SkSLProgramKind.h"
+#include "include/private/SkSLString.h"
+#include "src/core/SkVM.h"
 #include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLProgramSettings.h"
+#include "src/sksl/SkSLUtil.h"
 #include "src/sksl/codegen/SkSLVMCodeGenerator.h"
+#include "src/sksl/ir/SkSLFunctionDeclaration.h"
+#include "src/sksl/ir/SkSLProgram.h"
+#include "src/sksl/tracing/SkSLDebugInfo.h"
 #include "src/sksl/tracing/SkVMDebugTrace.h"
 #include "src/sksl/tracing/SkVMDebugTracePlayer.h"
-
 #include "tests/Test.h"
+
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 using LineNumberMap = SkSL::SkVMDebugTracePlayer::LineNumberMap;
 
 static sk_sp<SkSL::SkVMDebugTrace> make_trace(skiatest::Reporter* r, std::string src) {
     SkSL::ShaderCaps caps;
     SkSL::Compiler compiler(&caps);
-    SkSL::Program::Settings settings;
+    SkSL::ProgramSettings settings;
     settings.fOptimize = false;
 
     skvm::Builder b;
@@ -26,9 +41,9 @@ static sk_sp<SkSL::SkVMDebugTrace> make_trace(skiatest::Reporter* r, std::string
                                                                      src, settings);
     REPORTER_ASSERT(r, program);
 
-    const SkSL::FunctionDefinition* main = SkSL::Program_GetFunction(*program, "main");
+    const SkSL::FunctionDeclaration* main = program->getFunction("main");
     auto debugTrace = sk_make_sp<SkSL::SkVMDebugTrace>();
-    SkSL::ProgramToSkVM(*program, *main, &b, debugTrace.get(), /*uniforms=*/{});
+    SkSL::ProgramToSkVM(*program, *main->definition(), &b, debugTrace.get(), /*uniforms=*/{});
     skvm::Program p = b.done();
     REPORTER_ASSERT(r, p.nargs() == 1);
 
@@ -61,17 +76,16 @@ static std::string make_vars_string(
         const SkSL::SkVMDebugTrace& trace,
         const std::vector<SkSL::SkVMDebugTracePlayer::VariableData>& vars) {
     std::string text;
-    const char* separator = "";
+    auto separator = SkSL::String::Separator();
     for (const SkSL::SkVMDebugTracePlayer::VariableData& var : vars) {
-        text += separator;
-        separator = ", ";
+        text += separator();
 
         if (var.fSlotIndex < 0 || (size_t)var.fSlotIndex >= trace.fSlotInfo.size()) {
             text += "???";
             continue;
         }
 
-        const SkSL::SkVMSlotInfo& slot = trace.fSlotInfo[var.fSlotIndex];
+        const SkSL::SlotDebugInfo& slot = trace.fSlotInfo[var.fSlotIndex];
         text += var.fDirty ? "##": "";
         text += slot.name;
         text += trace.getSlotComponentSuffix(var.fSlotIndex);
@@ -91,6 +105,19 @@ static std::string make_local_vars_string(const SkSL::SkVMDebugTrace& trace,
 static std::string make_global_vars_string(const SkSL::SkVMDebugTrace& trace,
                                            const SkSL::SkVMDebugTracePlayer& player) {
     return make_vars_string(trace, player.getGlobalVariables());
+}
+
+DEF_TEST(SkSLTracePlayerCanResetToNull, r) {
+    SkSL::SkVMDebugTracePlayer player;
+    player.reset(nullptr);
+
+    // We should be in a reasonable state.
+    REPORTER_ASSERT(r, player.cursor() == 0);
+    REPORTER_ASSERT(r, player.getCurrentLine() == -1);
+    REPORTER_ASSERT(r, player.traceHasCompleted());
+    REPORTER_ASSERT(r, player.getCallStack().empty());
+    REPORTER_ASSERT(r, player.getGlobalVariables().empty());
+    REPORTER_ASSERT(r, player.getLineNumbersReached().empty());
 }
 
 DEF_TEST(SkSLTracePlayerHelloWorld, r) {
@@ -266,7 +293,7 @@ int main() {                          // Line 6
     SkSL::SkVMDebugTracePlayer player;
     player.reset(trace);
 
-    REPORTER_ASSERT(r, player.getLineNumbersReached() == LineNumberMap({{3, 3}, {4, 1}, {7, 1},
+    REPORTER_ASSERT(r, player.getLineNumbersReached() == LineNumberMap({{3, 1}, {4, 1}, {7, 1},
                                                                         {8, 1}, {9, 1}, {10, 1},
                                                                         {11, 1}, {12, 1}}));
     player.step();
@@ -291,19 +318,9 @@ int main() {                          // Line 6
     REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "");
     player.step();
 
-    REPORTER_ASSERT(r, player.getCurrentLine() == 3);
-    REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main() -> float func()");
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##x = 4");
-    player.step();
-
-    REPORTER_ASSERT(r, player.getCurrentLine() == 3);
-    REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main() -> float func()");
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##y = 5, x = 4");
-    player.step();
-
     REPORTER_ASSERT(r, player.getCurrentLine() == 4);
     REPORTER_ASSERT(r, make_stack_string(*trace, player) == "int main() -> float func()");
-    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##z = 6, y = 5, x = 4");
+    REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##z = 6, ##y = 5, ##x = 4");
     player.step();
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 9);
@@ -568,7 +585,6 @@ int main() {      // Line 9
     REPORTER_ASSERT(r, make_global_vars_string(*trace, player) == "##[main].result = 44");
 }
 
-
 DEF_TEST(SkSLTracePlayerVariableScope, r) {
     sk_sp<SkSL::SkVMDebugTrace> trace = make_trace(r,
 R"(                         // Line 1
@@ -640,6 +656,68 @@ int main() {                // Line 2
 
     REPORTER_ASSERT(r, player.getCurrentLine() == 20);
     REPORTER_ASSERT(r, make_local_vars_string(*trace, player) == "##i = 9, e = 5, a = 1");
+    player.step();
+
+    REPORTER_ASSERT(r, player.traceHasCompleted());
+}
+
+DEF_TEST(SkSLTracePlayerNestedBlocks, r) {
+    sk_sp<SkSL::SkVMDebugTrace> trace = make_trace(r,
+R"(                         // Line 1
+int main() {                // Line 2
+    {{{{{{{                 // Line 3
+            int a, b;       // Line 4
+    }}}}}}}                 // Line 5
+    return 0;               // Line 6
+}
+)");
+    SkSL::SkVMDebugTracePlayer player;
+    player.reset(trace);
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 4);
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 6);
+    player.step();
+
+    REPORTER_ASSERT(r, player.traceHasCompleted());
+}
+
+DEF_TEST(SkSLTracePlayerSwitchStatement, r) {
+    sk_sp<SkSL::SkVMDebugTrace> trace = make_trace(r,
+R"(                         // Line 1
+int main() {                // Line 2
+    int x = 2;              // Line 3
+    switch (x) {            // Line 4
+        case 1:             // Line 5
+            break;          // Line 6
+        case 2:             // Line 7
+            ++x;            // Line 8
+        case 3:             // Line 9
+            break;          // Line 10
+        case 4:             // Line 11
+    }                       // Line 12
+    return x;               // Line 13
+}
+)");
+    SkSL::SkVMDebugTracePlayer player;
+    player.reset(trace);
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 3);
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 4);
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 8);
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 10);
+    player.step();
+
+    REPORTER_ASSERT(r, player.getCurrentLine() == 13);
     player.step();
 
     REPORTER_ASSERT(r, player.traceHasCompleted());

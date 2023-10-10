@@ -13,6 +13,7 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSpan.h"
 #include "include/core/SkSurfaceCharacterization.h"
+#include "include/private/base/SkTemplates.h"
 
 class DDLPromiseImageHelper;
 class PromiseImageCallbackContext;
@@ -137,7 +138,8 @@ public:
 private:
     int                                    fNumXDivisions; // number of tiles horizontally
     int                                    fNumYDivisions; // number of tiles vertically
-    SkAutoTArray<TileData>                 fTiles;        // 'fNumXDivisions' x 'fNumYDivisions'
+    skia_private::AutoTArray<TileData>   fTiles;        // 'fNumXDivisions' x
+    // 'fNumYDivisions'
 
     sk_sp<SkDeferredDisplayList>           fComposeDDL;
 
