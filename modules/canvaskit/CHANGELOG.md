@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.1] - 2023-10-12
+
+### Fixed
+ - `@webgpu/types` is actually a dependency, not just a devDependency.
+
+## [0.39.0] - 2023-10-11
+
 ### Added
 - `ImageFilter.getOutputBounds` returns the adjusted bounds of a rect after
    applying the `ImageFilter`.
