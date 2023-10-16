@@ -1,10 +1,10 @@
 OpCapability Shader
 %1 = OpExtInstImport "GLSL.std.450"
 OpMemoryModel Logical GLSL450
-OpEntryPoint Fragment %_entrypoint_v "_entrypoint" %sk_FragColor %sk_Clockwise
+OpEntryPoint Fragment %_entrypoint_v "_entrypoint" %sk_Clockwise %sk_FragColor
 OpExecutionMode %_entrypoint_v OriginUpperLeft
-OpName %sk_FragColor "sk_FragColor"
 OpName %sk_Clockwise "sk_Clockwise"
+OpName %sk_FragColor "sk_FragColor"
 OpName %_UniformBuffer "_UniformBuffer"
 OpMemberName %_UniformBuffer 0 "colorGreen"
 OpMemberName %_UniformBuffer 1 "colorRed"
@@ -19,10 +19,10 @@ OpName %test_loop_return_b "test_loop_return_b"
 OpName %test_loop_break_b "test_loop_break_b"
 OpName %x "x"
 OpName %main "main"
+OpDecorate %sk_Clockwise BuiltIn FrontFacing
 OpDecorate %sk_FragColor RelaxedPrecision
 OpDecorate %sk_FragColor Location 0
 OpDecorate %sk_FragColor Index 0
-OpDecorate %sk_Clockwise BuiltIn FrontFacing
 OpMemberDecorate %_UniformBuffer 0 Offset 0
 OpMemberDecorate %_UniformBuffer 0 RelaxedPrecision
 OpMemberDecorate %_UniformBuffer 1 Offset 16
@@ -39,20 +39,20 @@ OpDecorate %89 RelaxedPrecision
 OpDecorate %146 RelaxedPrecision
 OpDecorate %148 RelaxedPrecision
 OpDecorate %149 RelaxedPrecision
+%bool = OpTypeBool
+%_ptr_Input_bool = OpTypePointer Input %bool
+%sk_Clockwise = OpVariable %_ptr_Input_bool Input
 %float = OpTypeFloat 32
 %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
 %sk_FragColor = OpVariable %_ptr_Output_v4float Output
-%bool = OpTypeBool
-%_ptr_Input_bool = OpTypePointer Input %bool
-%sk_Clockwise = OpVariable %_ptr_Input_bool Input
 %_UniformBuffer = OpTypeStruct %v4float %v4float
 %_ptr_Uniform__UniformBuffer = OpTypePointer Uniform %_UniformBuffer
 %18 = OpVariable %_ptr_Uniform__UniformBuffer Uniform
 %void = OpTypeVoid
 %23 = OpTypeFunction %void
-%v2float = OpTypeVector %float 2
 %float_0 = OpConstant %float 0
+%v2float = OpTypeVector %float 2
 %27 = OpConstantComposite %v2float %float_0 %float_0
 %_ptr_Function_v2float = OpTypePointer Function %v2float
 %31 = OpTypeFunction %bool
@@ -81,8 +81,6 @@ OpLoopMerge %37 %36 None
 OpBranch %34
 %34 = OpLabel
 OpReturnValue %true
-%35 = OpLabel
-OpBranch %36
 %36 = OpLabel
 OpBranchConditional %false %33 %37
 %37 = OpLabel
@@ -96,8 +94,6 @@ OpLoopMerge %45 %44 None
 OpBranch %42
 %42 = OpLabel
 OpBranch %45
-%43 = OpLabel
-OpBranch %44
 %44 = OpLabel
 OpBranchConditional %false %41 %45
 %45 = OpLabel
@@ -110,8 +106,6 @@ OpBranch %47
 OpLoopMerge %51 %50 None
 OpBranch %48
 %48 = OpLabel
-OpBranch %50
-%49 = OpLabel
 OpBranch %50
 %50 = OpLabel
 OpBranchConditional %false %47 %51
@@ -136,8 +130,6 @@ OpReturnValue %true
 %66 = OpLabel
 OpBranch %57
 %67 = OpLabel
-OpBranch %56
-%55 = OpLabel
 OpBranch %56
 %56 = OpLabel
 OpBranchConditional %false %53 %57

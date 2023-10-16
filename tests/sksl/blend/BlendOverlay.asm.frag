@@ -1,20 +1,20 @@
 OpCapability Shader
 %1 = OpExtInstImport "GLSL.std.450"
 OpMemoryModel Logical GLSL450
-OpEntryPoint Fragment %main "main" %sk_FragColor %sk_Clockwise
+OpEntryPoint Fragment %main "main" %sk_Clockwise %sk_FragColor
 OpExecutionMode %main OriginUpperLeft
-OpName %sk_FragColor "sk_FragColor"
 OpName %sk_Clockwise "sk_Clockwise"
+OpName %sk_FragColor "sk_FragColor"
 OpName %_UniformBuffer "_UniformBuffer"
 OpMemberName %_UniformBuffer 0 "src"
 OpMemberName %_UniformBuffer 1 "dst"
 OpName %blend_overlay_component_Qhh2h2 "blend_overlay_component_Qhh2h2"
 OpName %main "main"
 OpName %_0_result "_0_result"
+OpDecorate %sk_Clockwise BuiltIn FrontFacing
 OpDecorate %sk_FragColor RelaxedPrecision
 OpDecorate %sk_FragColor Location 0
 OpDecorate %sk_FragColor Index 0
-OpDecorate %sk_Clockwise BuiltIn FrontFacing
 OpMemberDecorate %_UniformBuffer 0 Offset 0
 OpMemberDecorate %_UniformBuffer 0 RelaxedPrecision
 OpMemberDecorate %_UniformBuffer 1 Offset 16
@@ -93,20 +93,19 @@ OpDecorate %126 RelaxedPrecision
 OpDecorate %127 RelaxedPrecision
 OpDecorate %128 RelaxedPrecision
 OpDecorate %129 RelaxedPrecision
-OpDecorate %130 RelaxedPrecision
+%bool = OpTypeBool
+%_ptr_Input_bool = OpTypePointer Input %bool
+%sk_Clockwise = OpVariable %_ptr_Input_bool Input
 %float = OpTypeFloat 32
 %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
 %sk_FragColor = OpVariable %_ptr_Output_v4float Output
-%bool = OpTypeBool
-%_ptr_Input_bool = OpTypePointer Input %bool
-%sk_Clockwise = OpVariable %_ptr_Input_bool Input
 %_UniformBuffer = OpTypeStruct %v4float %v4float
 %_ptr_Uniform__UniformBuffer = OpTypePointer Uniform %_UniformBuffer
 %11 = OpVariable %_ptr_Uniform__UniformBuffer Uniform
 %v2float = OpTypeVector %float 2
 %_ptr_Function_v2float = OpTypePointer Function %v2float
-%15 = OpTypeFunction %float %_ptr_Function_v2float %_ptr_Function_v2float
+%16 = OpTypeFunction %float %_ptr_Function_v2float %_ptr_Function_v2float
 %float_2 = OpConstant %float 2
 %_ptr_Function_float = OpTypePointer Function %float
 %void = OpTypeVoid
@@ -118,7 +117,7 @@ OpDecorate %130 RelaxedPrecision
 %int_1 = OpConstant %int 1
 %float_1 = OpConstant %float 1
 %v3float = OpTypeVector %float 3
-%blend_overlay_component_Qhh2h2 = OpFunction %float None %15
+%blend_overlay_component_Qhh2h2 = OpFunction %float None %16
 %17 = OpFunctionParameter %_ptr_Function_v2float
 %18 = OpFunctionParameter %_ptr_Function_v2float
 %19 = OpLabel
@@ -238,7 +237,6 @@ OpStore %_0_result %106
 %128 = OpLoad %v4float %_0_result
 %129 = OpVectorShuffle %v4float %128 %127 4 5 6 3
 OpStore %_0_result %129
-%130 = OpLoad %v4float %_0_result
-OpStore %sk_FragColor %130
+OpStore %sk_FragColor %129
 OpReturn
 OpFunctionEnd

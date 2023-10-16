@@ -6,27 +6,44 @@
  */
 
 #include "include/core/SkData.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontArguments.h"
 #include "include/core/SkFontMgr.h"
+#include "include/core/SkFontParameters.h"
+#include "include/core/SkFontStyle.h"
+#include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
 #include "include/core/SkStream.h"
+#include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
-#include "include/ports/SkTypeface_win.h"
-#include "include/private/SkFixed.h"
-#include "src/core/SkAdvancedTypefaceMetrics.h"
+#include "include/core/SkTypes.h"
+#include "include/private/base/SkFixed.h"
+#include "include/private/base/SkTemplates.h"
+#include "src/base/SkUTF.h"
+#include "src/core/SkEndian.h"
 #include "src/core/SkFontDescriptor.h"
-#include "src/core/SkFontMgrPriv.h"
 #include "src/core/SkFontPriv.h"
 #include "src/core/SkTypefaceCache.h"
 #include "src/sfnt/SkOTTable_OS_2.h"
+#include "src/sfnt/SkOTTable_OS_2_V0.h"
 #include "src/sfnt/SkSFNTHeader.h"
-#include "src/utils/SkUTF.h"
 #include "tests/Test.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 #include "tools/fonts/TestEmptyTypeface.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <string>
+#include <utility>
+
+#if defined(SK_BUILD_FOR_WIN)
+#include "include/ports/SkTypeface_win.h"
+#include "src/core/SkFontMgrPriv.h"
+#endif
 
 static void TypefaceStyle_test(skiatest::Reporter* reporter,
                                uint16_t weight, uint16_t width, SkData* data)
@@ -127,8 +144,7 @@ DEF_TEST(TypefaceRoundTrip, reporter) {
     int fontIndex;
     std::unique_ptr<SkStreamAsset> stream = typeface->openStream(&fontIndex);
 
-    sk_sp<SkFontMgr> fm = SkFontMgr::RefDefault();
-    sk_sp<SkTypeface> typeface2 = fm->makeFromStream(std::move(stream), fontIndex);
+    sk_sp<SkTypeface> typeface2 = SkTypeface::MakeFromStream(std::move(stream), fontIndex);
     REPORTER_ASSERT(reporter, typeface2);
 }
 
@@ -154,7 +170,7 @@ DEF_TEST(FontDescriptorNegativeVariationSerialize, reporter) {
     }
 
     REPORTER_ASSERT(reporter, descD.getVariation()[0].value == -1.0f);
-};
+}
 
 DEF_TEST(TypefaceAxes, reporter) {
     using Variation = SkFontArguments::VariationPosition;
@@ -255,7 +271,7 @@ DEF_TEST(TypefaceAxes, reporter) {
             { SkSetFourByteTag('w','g','h','t'), 600.0f },
         };
         SkFontArguments params;
-        params.setVariationDesignPosition({position, SK_ARRAY_COUNT(position)});
+        params.setVariationDesignPosition({position, std::size(position)});
         sk_sp<SkTypeface> typeface = fm->makeFromStream(std::move(dupTags), params);
         test(typeface.get(), Variation{&position[1], 2}, 1);
     }
@@ -275,7 +291,7 @@ DEF_TEST(TypefaceAxes, reporter) {
             { SkSetFourByteTag('w','g','h','t'), SK_ScalarSqrt2 },
         };
         SkFontArguments params;
-        params.setVariationDesignPosition({position, SK_ARRAY_COUNT(position)});
+        params.setVariationDesignPosition({position, std::size(position)});
         sk_sp<SkTypeface> typeface = fm->makeFromStream(std::move(distortable), params);
         test(typeface.get(), Variation{&position[1], 1}, -1);
 
@@ -312,7 +328,7 @@ DEF_TEST(TypefaceVariationIndex, reporter) {
     }
 
     SkFontArguments::VariationPosition::Coordinate positionRead[1];
-    count = typeface->getVariationDesignPosition(positionRead, SK_ARRAY_COUNT(positionRead));
+    count = typeface->getVariationDesignPosition(positionRead, std::size(positionRead));
     if (count == -1) {
         return;
     }
@@ -439,7 +455,7 @@ DEF_TEST(TypefaceAxesParameters, reporter) {
             Axis(SkSetFourByteTag('w','d','t','h'),  50.0f, 100.0f, 200.0f, false),
         };
         sk_sp<SkTypeface> typeface = fm->makeFromStream(std::move(variable), 0);
-        test(typeface.get(), &expected[0], SK_ARRAY_COUNT(expected), -1);
+        test(typeface.get(), &expected[0], std::size(expected), -1);
     }
 
     // Multiple axes with the same tag (and min, max, default) works.
@@ -457,7 +473,7 @@ DEF_TEST(TypefaceAxesParameters, reporter) {
             Axis(SkSetFourByteTag('w','g','h','t'), 100.0f, 400.0f, 900.0f, false),
         };
         sk_sp<SkTypeface> typeface = fm->makeFromStream(std::move(dupTags), 0);
-        test(typeface.get(), &expected[0], SK_ARRAY_COUNT(expected), 1);
+        test(typeface.get(), &expected[0], std::size(expected), 1);
     }
 
     // Simple single axis GX variable font.
@@ -471,7 +487,7 @@ DEF_TEST(TypefaceAxesParameters, reporter) {
             Axis(SkSetFourByteTag('w','g','h','t'), 0.5f, 1.0f, 2.0f, true),
         };
         sk_sp<SkTypeface> typeface = fm->makeFromStream(std::move(distortable), 0);
-        test(typeface.get(), &expected[0], SK_ARRAY_COUNT(expected), -1);
+        test(typeface.get(), &expected[0], std::size(expected), -1);
     }
 }
 
@@ -508,18 +524,22 @@ DEF_TEST(TypefaceCache, reporter) {
     REPORTER_ASSERT(reporter, t1->unique());
 }
 
-static void check_serialize_behaviors(sk_sp<SkTypeface> tf, bool isLocalData,
-                                      skiatest::Reporter* reporter) {
+static void check_serialize_behaviors(sk_sp<SkTypeface> tf, skiatest::Reporter* reporter) {
     if (!tf) {
         return;
     }
+
+    SkFontDescriptor desc;
+    bool serialize;
+    tf->getFontDescriptor(&desc, &serialize);
+
     auto data0 = tf->serialize(SkTypeface::SerializeBehavior::kDoIncludeData);
     auto data1 = tf->serialize(SkTypeface::SerializeBehavior::kDontIncludeData);
     auto data2 = tf->serialize(SkTypeface::SerializeBehavior::kIncludeDataIfLocal);
 
     REPORTER_ASSERT(reporter, data0->size() >= data1->size());
 
-    if (isLocalData) {
+    if (serialize) {
         REPORTER_ASSERT(reporter, data0->equals(data2.get()));
     } else {
         REPORTER_ASSERT(reporter, data1->equals(data2.get()));
@@ -527,10 +547,9 @@ static void check_serialize_behaviors(sk_sp<SkTypeface> tf, bool isLocalData,
 }
 
 DEF_TEST(Typeface_serialize, reporter) {
-    check_serialize_behaviors(SkTypeface::MakeDefault(), false, reporter);
-    check_serialize_behaviors(SkTypeface::MakeFromStream(
-                                         GetResourceAsStream("fonts/Distortable.ttf")),
-                              true, reporter);
+    check_serialize_behaviors(SkTypeface::MakeDefault(), reporter);
+    check_serialize_behaviors(
+        SkTypeface::MakeFromStream(GetResourceAsStream("fonts/Distortable.ttf")), reporter);
 
 }
 

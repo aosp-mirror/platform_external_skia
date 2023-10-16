@@ -26,7 +26,7 @@
 
 #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS) || defined(SK_BUILD_FOR_WIN) \
  || defined(SK_ENABLE_NDK_IMAGES)
-#include "src/images/SkImageEncoderPriv.h"
+#include "src/encode/SkImageEncoderPriv.h"
 #endif
 
 namespace {
@@ -104,7 +104,7 @@ protected:
     }
 
     SkISize onISize() override {
-        return SkISize::Make(256 * SK_ARRAY_COUNT(gRecs), 256 * 3);
+        return SkISize::Make(256 * std::size(gRecs), 256 * 3);
     }
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {

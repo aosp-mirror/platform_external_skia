@@ -21,7 +21,7 @@ if [[ $@ != *force_tracing* ]] ; then
   FORCE_TRACING="true"
 fi
 
-if [[ $@ == *debug* ]]; then
+if [[ $@ == *debug_build* ]]; then
   echo "Building a Debug build"
   IS_DEBUG="true"
   IS_OFFICIAL_BUILD="false"
@@ -39,10 +39,17 @@ mkdir -p $BUILD_DIR
 # we get a fresh build.
 rm -f $BUILD_DIR/*.a
 
-ENABLE_GPU="true"
+ENABLE_GANESH="true"
+ENABLE_WEBGL="false"
+ENABLE_WEBGPU="false"
 if [[ $@ == *cpu* ]]; then
   echo "Using the CPU backend instead of the GPU backend"
-  ENABLE_GPU="false"
+  ENABLE_GANESH="false"
+elif [[ $@ == *webgpu* ]]; then
+  echo "Using WebGPU instead of WebGL"
+  ENABLE_WEBGPU="true"
+else
+  ENABLE_WEBGL="true"
 fi
 
 SERIALIZE_SKP="true"
@@ -71,12 +78,6 @@ if [[ $@ == *viewer* ]]; then
   INCLUDE_VIEWER="true"
   USE_EXPAT="true"
   IS_OFFICIAL_BUILD="false"
-fi
-
-ENABLE_PARTICLES="true"
-if [[ $@ == *no_particles* ]]; then
-  echo "Omitting Particles"
-  ENABLE_PARTICLES="false"
 fi
 
 ENABLE_PATHOPS="true"
@@ -119,14 +120,17 @@ if [[ $@ == *no_font* ]]; then
   echo "Omitting the built-in font(s), font manager and all code dealing with fonts"
   ENABLE_FONT="false"
   ENABLE_EMBEDDED_FONT="false"
-  GN_FONT+="skia_enable_fontmgr_custom_embedded=false skia_enable_fontmgr_custom_empty=false"
+  GN_FONT+="skia_enable_fontmgr_custom_embedded=false skia_enable_fontmgr_custom_empty=false "
+  GN_FONT+="skia_fontmgr_factory=\":fontmgr_empty_factory\""
 elif [[ $@ == *no_embedded_font* ]]; then
   echo "Omitting the built-in font(s)"
   ENABLE_EMBEDDED_FONT="false"
-  GN_FONT+="skia_enable_fontmgr_custom_embedded=false skia_enable_fontmgr_custom_empty=true"
+  GN_FONT+="skia_enable_fontmgr_custom_embedded=true skia_enable_fontmgr_custom_empty=true "
+  GN_FONT+="skia_fontmgr_factory=\":fontmgr_custom_empty_factory\""
 else
   # Generate the font's binary file (which is covered by .gitignore)
-  GN_FONT+="skia_enable_fontmgr_custom_embedded=true skia_enable_fontmgr_custom_empty=false"
+  GN_FONT+="skia_enable_fontmgr_custom_embedded=true skia_enable_fontmgr_custom_empty=false "
+  GN_FONT+="skia_fontmgr_factory=\":fontmgr_custom_embedded_factory\""
 fi
 
 if [[ $@ == *no_woff2* ]]; then
@@ -138,7 +142,17 @@ if [[ $@ == *no_alias_font* ]]; then
   ENABLE_ALIAS_FONT="false"
 fi
 
-GN_SHAPER="skia_use_icu=true skia_use_system_icu=false skia_use_harfbuzz=true skia_use_system_harfbuzz=false"
+LEGACY_DRAW_VERTICES="false"
+if [[ $@ == *legacy_draw_vertices* ]]; then
+  LEGACY_DRAW_VERTICES="true"
+fi
+
+DEBUGGER_ENABLED="false"
+if [[ $@ == *enable_debugger* ]]; then
+  DEBUGGER_ENABLED="true"
+fi
+
+GN_SHAPER="skia_use_icu=true skia_use_client_icu=false skia_use_system_icu=false skia_use_harfbuzz=true skia_use_system_harfbuzz=false"
 if [[ $@ == *primitive_shaper* ]] || [[ $@ == *no_font* ]]; then
   echo "Using the primitive shaper instead of the harfbuzz/icu one"
   GN_SHAPER="skia_use_icu=false skia_use_harfbuzz=false"
@@ -176,15 +190,8 @@ else
 
 fi # no_codecs
 
-# Turn off exiting while we check for ninja (which may not be on PATH)
-set +e
-NINJA=`which ninja`
-if [[ -z $NINJA ]]; then
-  git clone "https://chromium.googlesource.com/chromium/tools/depot_tools.git" --depth 1 $BUILD_DIR/depot_tools
-  NINJA=$BUILD_DIR/depot_tools/ninja
-fi
-# Re-enable error checking
-set -e
+./bin/fetch-ninja
+NINJA=third_party/ninja/ninja
 
 echo "Compiling"
 
@@ -197,7 +204,9 @@ echo "Compiling"
   \
   skia_use_angle=false \
   skia_use_dng_sdk=false \
-  skia_use_webgl=true \
+  skia_use_dawn=${ENABLE_WEBGPU} \
+  skia_use_webgl=${ENABLE_WEBGL} \
+  skia_use_webgpu=${ENABLE_WEBGPU} \
   skia_use_expat=${USE_EXPAT} \
   skia_use_fontconfig=false \
   skia_use_freetype=true \
@@ -218,7 +227,9 @@ echo "Compiling"
   skia_use_vulkan=false \
   skia_use_wuffs=true \
   skia_use_zlib=true \
-  skia_enable_gpu=${ENABLE_GPU} \
+  skia_enable_ganesh=${ENABLE_GANESH} \
+  skia_build_for_debugger=${DEBUGGER_ENABLED} \
+  skia_enable_sksl_tracing=${ENABLE_SKSL_TRACE} \
   \
   ${GN_SHAPER} \
   ${GN_FONT} \
@@ -233,15 +244,17 @@ echo "Compiling"
   skia_canvaskit_enable_effects_deserialization=${DESERIALIZE_EFFECTS} \
   skia_canvaskit_enable_skottie=${ENABLE_SKOTTIE} \
   skia_canvaskit_include_viewer=${INCLUDE_VIEWER} \
-  skia_canvaskit_enable_particles=${ENABLE_PARTICLES} \
   skia_canvaskit_enable_pathops=${ENABLE_PATHOPS} \
   skia_canvaskit_enable_rt_shader=${ENABLE_RT_SHADER} \
-  skia_canvaskit_enable_sksl_trace=${ENABLE_SKSL_TRACE} \
   skia_canvaskit_enable_matrix_helper=${ENABLE_MATRIX} \
   skia_canvaskit_enable_canvas_bindings=${ENABLE_CANVAS} \
   skia_canvaskit_enable_font=${ENABLE_FONT} \
   skia_canvaskit_enable_embedded_font=${ENABLE_EMBEDDED_FONT} \
   skia_canvaskit_enable_alias_font=${ENABLE_ALIAS_FONT} \
-  skia_canvaskit_enable_paragraph=${ENABLE_PARAGRAPH}"
+  skia_canvaskit_legacy_draw_vertices_blend_mode=${LEGACY_DRAW_VERTICES} \
+  skia_canvaskit_enable_debugger=${DEBUGGER_ENABLED} \
+  skia_canvaskit_enable_paragraph=${ENABLE_PARAGRAPH} \
+  skia_canvaskit_enable_webgl=${ENABLE_WEBGL} \
+  skia_canvaskit_enable_webgpu=${ENABLE_WEBGPU}"
 
 ${NINJA} -C ${BUILD_DIR} canvaskit.js

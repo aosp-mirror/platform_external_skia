@@ -8,7 +8,12 @@
 #ifndef SkBlitMask_opts_DEFINED
 #define SkBlitMask_opts_DEFINED
 
+#include "include/private/base/SkFeatures.h"
 #include "src/core/Sk4px.h"
+
+#if defined(SK_ARM_HAS_NEON)
+    #include <arm_neon.h>
+#endif
 
 namespace SK_OPTS_NS {
 
@@ -205,7 +210,7 @@ namespace SK_OPTS_NS {
             //   ~~~>
             // a = 1*aa + d(1-1*aa) = aa + d(1-aa)
             // c = 0*aa + d(1-1*aa) =      d(1-aa)
-            return Sk4px(Sk16b(aa) & Sk16b(0,0,0,255, 0,0,0,255, 0,0,0,255, 0,0,0,255))
+            return (aa & Sk4px(skvx::byte16{0,0,0,255, 0,0,0,255, 0,0,0,255, 0,0,0,255}))
                  + d.approxMulDiv255(aa.inv());
         };
         while (h --> 0) {

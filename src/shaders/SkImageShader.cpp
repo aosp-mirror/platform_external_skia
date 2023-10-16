@@ -7,25 +7,50 @@
 
 #include "src/shaders/SkImageShader.h"
 
-#include "include/private/SkImageInfoPriv.h"
-#include "src/core/SkArenaAlloc.h"
+#include "src/base/SkArenaAlloc.h"
 #include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkColorSpaceXformSteps.h"
-#include "src/core/SkKeyHelpers.h"
+#include "src/core/SkImageInfoPriv.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkMatrixProvider.h"
 #include "src/core/SkMipmapAccessor.h"
 #include "src/core/SkOpts.h"
 #include "src/core/SkRasterPipeline.h"
 #include "src/core/SkReadBuffer.h"
-#include "src/core/SkSamplingPriv.h"
-#include "src/core/SkScopeExit.h"
 #include "src/core/SkVM.h"
 #include "src/core/SkWriteBuffer.h"
 #include "src/image/SkImage_Base.h"
 #include "src/shaders/SkBitmapProcShader.h"
-#include "src/shaders/SkEmptyShader.h"
+#include "src/shaders/SkLocalMatrixShader.h"
 #include "src/shaders/SkTransformShader.h"
+
+#if defined(SK_GRAPHITE)
+#include "src/gpu/graphite/ImageUtils.h"
+#include "src/gpu/graphite/Image_Graphite.h"
+#include "src/gpu/graphite/KeyContext.h"
+#include "src/gpu/graphite/KeyHelpers.h"
+#include "src/gpu/graphite/PaintParamsKey.h"
+#include "src/gpu/graphite/ReadWriteSwizzle.h"
+#include "src/gpu/graphite/TextureProxyView.h"
+
+
+static skgpu::graphite::ReadSwizzle swizzle_class_to_read_enum(const skgpu::Swizzle& swizzle) {
+    if (swizzle == skgpu::Swizzle::RGBA()) {
+        return skgpu::graphite::ReadSwizzle::kRGBA;
+    } else if (swizzle == skgpu::Swizzle::RGB1()) {
+        return skgpu::graphite::ReadSwizzle::kRGB1;
+    } else if (swizzle == skgpu::Swizzle("rrrr")) {
+        return skgpu::graphite::ReadSwizzle::kRRRR;
+    } else if (swizzle == skgpu::Swizzle("rrr1")) {
+        return skgpu::graphite::ReadSwizzle::kRRR1;
+    } else if (swizzle == skgpu::Swizzle::BGRA()) {
+        return skgpu::graphite::ReadSwizzle::kBGRA;
+    } else {
+        SkDebugf("Encountered unsupported read swizzle. Defaulting to RGBA.");
+        return skgpu::graphite::ReadSwizzle::kRGBA;
+    }
+}
+#endif
 
 SkM44 SkImageShader::CubicResamplerMatrix(float B, float C) {
 #if 0
@@ -71,7 +96,7 @@ static SkTileMode optimize(SkTileMode tm, int dimension) {
 // TODO: currently this only *always* used in asFragmentProcessor(), which is excluded on no-gpu
 // builds. No-gpu builds only use needs_subset() in asserts, so release+no-gpu doesn't use it, which
 // can cause builds to fail if unused warnings are treated as errors.
-SK_MAYBE_UNUSED static bool needs_subset(SkImage* img, const SkRect& subset) {
+[[maybe_unused]] static bool needs_subset(SkImage* img, const SkRect& subset) {
     return subset != SkRect::Make(img->dimensions());
 }
 
@@ -79,11 +104,9 @@ SkImageShader::SkImageShader(sk_sp<SkImage> img,
                              const SkRect& subset,
                              SkTileMode tmx, SkTileMode tmy,
                              const SkSamplingOptions& sampling,
-                             const SkMatrix* localMatrix,
                              bool raw,
                              bool clampAsIfUnpremul)
-        : INHERITED(localMatrix)
-        , fImage(std::move(img))
+        : fImage(std::move(img))
         , fSampling(sampling)
         , fTileModeX(optimize(tmx, fImage->width()))
         , fTileModeY(optimize(tmy, fImage->height()))
@@ -129,11 +152,13 @@ sk_sp<SkFlattenable> SkImageShader::CreateProc(SkReadBuffer& buffer) {
         // we just default to Nearest in sampling
     }
     if (readSampling) {
-        sampling = SkSamplingPriv::Read(buffer);
+        sampling = buffer.readSampling();
     }
 
     SkMatrix localMatrix;
-    buffer.readMatrix(&localMatrix);
+    if (buffer.isVersionLT(SkPicturePriv::Version::kNoShaderLocalMatrix)) {
+        buffer.readMatrix(&localMatrix);
+    }
     sk_sp<SkImage> img = buffer.readImage();
     if (!img) {
         return nullptr;
@@ -153,9 +178,8 @@ void SkImageShader::flatten(SkWriteBuffer& buffer) const {
     buffer.writeUInt((unsigned)fTileModeX);
     buffer.writeUInt((unsigned)fTileModeY);
 
-    SkSamplingPriv::Write(buffer, fSampling);
+    buffer.writeSampling(fSampling);
 
-    buffer.writeMatrix(this->getLocalMatrix());
     buffer.writeImage(fImage.get());
     SkASSERT(fClampAsIfUnpremul == false);
 
@@ -169,13 +193,6 @@ void SkImageShader::flatten(SkWriteBuffer& buffer) const {
 bool SkImageShader::isOpaque() const {
     return fImage->isOpaque() &&
            fTileModeX != SkTileMode::kDecal && fTileModeY != SkTileMode::kDecal;
-}
-
-constexpr SkCubicResampler kDefaultCubicResampler{1.0f/3, 1.0f/3};
-
-static bool is_default_cubic_resampler(SkCubicResampler cubic) {
-    return SkScalarNearlyEqual(cubic.B, kDefaultCubicResampler.B) &&
-           SkScalarNearlyEqual(cubic.C, kDefaultCubicResampler.C);
 }
 
 #ifdef SK_ENABLE_LEGACY_SHADERCONTEXT
@@ -220,6 +237,11 @@ SkShaderBase::Context* SkImageShader::onMakeContext(const ContextRec& rec,
         return nullptr;
     }
 
+    SkSamplingOptions sampling = fSampling;
+    if (sampling.isAniso()) {
+        sampling = SkSamplingPriv::AnisoFallback(fImage->hasMipmaps());
+    }
+
     auto supported = [](const SkSamplingOptions& sampling) {
         const std::tuple<SkFilterMode,SkMipmapMode> supported[] = {
             {SkFilterMode::kNearest, SkMipmapMode::kNone},    // legacy None
@@ -233,7 +255,7 @@ SkShaderBase::Context* SkImageShader::onMakeContext(const ContextRec& rec,
         }
         return false;
     };
-    if (fSampling.useCubic || !supported(fSampling)) {
+    if (sampling.useCubic || !supported(sampling)) {
         return nullptr;
     }
 
@@ -262,14 +284,14 @@ SkShaderBase::Context* SkImageShader::onMakeContext(const ContextRec& rec,
         return nullptr;
     }
 
-    return SkBitmapProcLegacyShader::MakeContext(*this, fTileModeX, fTileModeY, fSampling,
+    return SkBitmapProcLegacyShader::MakeContext(*this, fTileModeX, fTileModeY, sampling,
                                                  as_IB(fImage.get()), rec, alloc);
 }
 #endif
 
 SkImage* SkImageShader::onIsAImage(SkMatrix* texM, SkTileMode xy[]) const {
     if (texM) {
-        *texM = this->getLocalMatrix();
+        *texM = SkMatrix::I();
     }
     if (xy) {
         xy[0] = fTileModeX;
@@ -295,11 +317,16 @@ sk_sp<SkShader> SkImageShader::MakeRaw(sk_sp<SkImage> image,
         return nullptr;
     }
     if (!image) {
-        return sk_make_sp<SkEmptyShader>();
+        return SkShaders::Empty();
     }
-    return sk_sp<SkShader>{new SkImageShader(
-            image, SkRect::Make(image->dimensions()), tmx, tmy, options, localMatrix,
-            /*raw=*/true, /*clampAsIfUnpremul=*/false)};
+    auto subset = SkRect::Make(image->dimensions());
+    return SkLocalMatrixShader::MakeWrapped<SkImageShader>(localMatrix,
+                                                           image,
+                                                           subset,
+                                                           tmx, tmy,
+                                                           options,
+                                                           /*raw=*/true,
+                                                           /*clampAsIfUnpremul=*/false);
 }
 
 sk_sp<SkShader> SkImageShader::MakeSubset(sk_sp<SkImage> image,
@@ -317,7 +344,7 @@ sk_sp<SkShader> SkImageShader::MakeSubset(sk_sp<SkImage> image,
         }
     }
     if (!image || subset.isEmpty()) {
-        return sk_make_sp<SkEmptyShader>();
+        return SkShaders::Empty();
     }
 
     // Validate subset and check if we can drop it
@@ -326,33 +353,39 @@ sk_sp<SkShader> SkImageShader::MakeSubset(sk_sp<SkImage> image,
     }
     // TODO(skbug.com/12784): GPU-only for now since it's only supported in onAsFragmentProcessor()
     SkASSERT(!needs_subset(image.get(), subset) || image->isTextureBacked());
-    return sk_sp<SkShader>{new SkImageShader(
-            image, subset, tmx, tmy, options, localMatrix, /*raw=*/false, clampAsIfUnpremul)};
+    return SkLocalMatrixShader::MakeWrapped<SkImageShader>(localMatrix,
+                                                           std::move(image),
+                                                           subset,
+                                                           tmx, tmy,
+                                                           options,
+                                                           /*raw=*/false,
+                                                           clampAsIfUnpremul);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#if SK_SUPPORT_GPU
+#if defined(SK_GANESH)
 
-#include "src/gpu/GrColorInfo.h"
-#include "src/gpu/effects/GrBlendFragmentProcessor.h"
+#include "src/gpu/ganesh/GrColorInfo.h"
+#include "src/gpu/ganesh/GrFPArgs.h"
+#include "src/gpu/ganesh/effects/GrBlendFragmentProcessor.h"
 
-std::unique_ptr<GrFragmentProcessor> SkImageShader::asFragmentProcessor(
-        const GrFPArgs& args) const {
-    const auto lm = this->totalLocalMatrix(args.fPreLocalMatrix);
-    SkMatrix lmInverse;
-    if (!lm->invert(&lmInverse)) {
-        return nullptr;
-    }
-
+std::unique_ptr<GrFragmentProcessor>
+SkImageShader::asFragmentProcessor(const GrFPArgs& args, const MatrixRec& mRec) const {
     SkTileMode tileModes[2] = {fTileModeX, fTileModeY};
     const SkRect* subset = needs_subset(fImage.get(), fSubset) ? &fSubset : nullptr;
     auto fp = as_IB(fImage.get())->asFragmentProcessor(args.fContext,
                                                        fSampling,
                                                        tileModes,
-                                                       lmInverse,
+                                                       SkMatrix::I(),
                                                        subset);
     if (!fp) {
+        return nullptr;
+    }
+
+    bool success;
+    std::tie(success, fp) = mRec.apply(std::move(fp));
+    if (!success) {
         return nullptr;
     }
 
@@ -364,7 +397,7 @@ std::unique_ptr<GrFragmentProcessor> SkImageShader::asFragmentProcessor(
                                            kPremul_SkAlphaType);
 
         if (fImage->isAlphaOnly()) {
-            fp = GrBlendFragmentProcessor::Make(std::move(fp), nullptr, SkBlendMode::kDstIn);
+            fp = GrBlendFragmentProcessor::Make<SkBlendMode::kDstIn>(std::move(fp), nullptr);
         }
     }
 
@@ -373,12 +406,42 @@ std::unique_ptr<GrFragmentProcessor> SkImageShader::asFragmentProcessor(
 
 #endif
 
-void SkImageShader::addToKey(SkShaderCodeDictionary* dict,
-                             SkBackend backend,
-                             SkPaintParamsKeyBuilder* builder,
-                             SkUniformBlock* uniformBlock) const {
-    ImageShaderBlock::AddToKey(dict, backend, builder, uniformBlock, { fTileModeX, fTileModeY });
+#if defined(SK_GRAPHITE)
+void SkImageShader::addToKey(const skgpu::graphite::KeyContext& keyContext,
+                             skgpu::graphite::PaintParamsKeyBuilder* builder,
+                             skgpu::graphite::PipelineDataGatherer* gatherer) const {
+    using namespace skgpu::graphite;
+
+    ImageShaderBlock::ImageData imgData(fSampling, fTileModeX, fTileModeY, fSubset,
+                                        ReadSwizzle::kRGBA);
+
+    if (!fRaw) {
+        imgData.fSteps = SkColorSpaceXformSteps(fImage->colorSpace(),
+                                                fImage->alphaType(),
+                                                keyContext.dstColorInfo().colorSpace(),
+                                                keyContext.dstColorInfo().alphaType());
+
+        // TODO: add alpha-only image handling here
+    }
+
+    auto [ imageToDraw, newSampling ] = skgpu::graphite::GetGraphiteBacked(keyContext.recorder(),
+                                                                           fImage.get(),
+                                                                           fSampling);
+
+    if (imageToDraw) {
+        imgData.fSampling = newSampling;
+        skgpu::Mipmapped mipmapped = (newSampling.mipmap != SkMipmapMode::kNone)
+                                         ? skgpu::Mipmapped::kYes : skgpu::Mipmapped::kNo;
+
+        auto [view, _] = as_IB(imageToDraw)->asView(keyContext.recorder(), mipmapped);
+        imgData.fTextureProxy = view.refProxy();
+        imgData.fReadSwizzle = swizzle_class_to_read_enum(view.swizzle());
+    }
+
+    ImageShaderBlock::BeginBlock(keyContext, builder, gatherer, &imgData);
+    builder->endBlock();
 }
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 #include "src/core/SkImagePriv.h"
@@ -403,24 +466,73 @@ sk_sp<SkShader> SkMakeBitmapShaderForPaint(const SkPaint& paint, const SkBitmap&
 
 void SkShaderBase::RegisterFlattenables() { SK_REGISTER_FLATTENABLE(SkImageShader); }
 
-class SkImageShader::TransformShader : public SkTransformShader {
-public:
-    explicit TransformShader(const SkImageShader& shader)
-            : SkTransformShader{shader}
-            , fImageShader{shader} {}
+namespace {
 
-    skvm::Color onProgram(skvm::Builder* b,
-                          skvm::Coord device, skvm::Coord local, skvm::Color color,
-                          const SkMatrixProvider& matrices, const SkMatrix* localM,
-                          const SkColorInfo& dst,
-                          skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const override {
-        return fImageShader.makeProgram(
-                b, device, local, color, matrices, localM, dst, uniforms, this, alloc);
+struct MipLevelHelper {
+    SkPixmap pm;
+    SkMatrix inv;
+    SkRasterPipeline_GatherCtx* gather;
+    SkRasterPipeline_TileCtx* limitX;
+    SkRasterPipeline_TileCtx* limitY;
+    SkRasterPipeline_DecalTileCtx* decalCtx = nullptr;
+
+    void allocAndInit(SkArenaAlloc* alloc,
+                      const SkSamplingOptions& sampling,
+                      SkTileMode tileModeX,
+                      SkTileMode tileModeY) {
+        gather = alloc->make<SkRasterPipeline_GatherCtx>();
+        gather->pixels = pm.addr();
+        gather->stride = pm.rowBytesAsPixels();
+        gather->width = pm.width();
+        gather->height = pm.height();
+
+        if (sampling.useCubic) {
+            SkImageShader::CubicResamplerMatrix(sampling.cubic.B, sampling.cubic.C)
+                    .getColMajor(gather->weights);
+        }
+
+        limitX = alloc->make<SkRasterPipeline_TileCtx>();
+        limitY = alloc->make<SkRasterPipeline_TileCtx>();
+        limitX->scale = pm.width();
+        limitX->invScale = 1.0f / pm.width();
+        limitY->scale = pm.height();
+        limitY->invScale = 1.0f / pm.height();
+
+        // We would like an image that is mapped 1:1 with device pixels but at a half pixel offset
+        // to select every pixel from the src image once. Our rasterizer biases upward. That is a
+        // rect from 0.5...1.5 fills pixel 1 and not pixel 0. So we make exact integer pixel sample
+        // values select the pixel to the left/above the integer value.
+        //
+        // Note that a mirror mapping between canvas and image space will not have this property -
+        // on one side of the image a row/column will be skipped and one repeated on the other side.
+        //
+        // The GM nearest_half_pixel_image tests both of the above scenarios.
+        //
+        // The implementation of SkTileMode::kMirror also modifies integer pixel snapping to create
+        // consistency when the sample coords are running backwards and must account for gather
+        // modification we perform here. The GM mirror_tile tests this.
+        if (!sampling.useCubic && sampling.filter == SkFilterMode::kNearest) {
+            gather->roundDownAtInteger = true;
+            limitX->mirrorBiasDir = limitY->mirrorBiasDir = 1;
+        }
+
+        if (tileModeX == SkTileMode::kDecal || tileModeY == SkTileMode::kDecal) {
+            decalCtx = alloc->make<SkRasterPipeline_DecalTileCtx>();
+            decalCtx->limit_x = limitX->scale;
+            decalCtx->limit_y = limitY->scale;
+
+            // When integer sample coords snap left/up then we want the right/bottom edge of the
+            // image bounds to be inside the image rather than the left/top edge, that is (0, w]
+            // rather than [0, w).
+            if (gather->roundDownAtInteger) {
+                decalCtx->inclusiveEdge_x = decalCtx->limit_x;
+                decalCtx->inclusiveEdge_y = decalCtx->limit_y;
+            }
+        }
     }
-
-private:
-    const SkImageShader& fImageShader;
 };
+
+}  // namespace
 
 static SkSamplingOptions tweak_sampling(SkSamplingOptions sampling, const SkMatrix& matrix) {
     SkFilterMode filter = sampling.filter;
@@ -436,168 +548,174 @@ static SkSamplingOptions tweak_sampling(SkSamplingOptions sampling, const SkMatr
     return SkSamplingOptions(filter, sampling.mipmap);
 }
 
-static SkMatrix tweak_inv_matrix(SkFilterMode filter, SkMatrix matrix) {
-    // See skia:4649 and the GM image_scale_aligned.
-    if (filter == SkFilterMode::kNearest) {
-        if (matrix.getScaleX() >= 0) {
-            matrix.setTranslateX(nextafterf(matrix.getTranslateX(),
-                                            floorf(matrix.getTranslateX())));
-        }
-        if (matrix.getScaleY() >= 0) {
-            matrix.setTranslateY(nextafterf(matrix.getTranslateY(),
-                                            floorf(matrix.getTranslateY())));
-        }
-    }
-    return matrix;
-}
+bool SkImageShader::appendStages(const SkStageRec& rec, const MatrixRec& mRec) const {
+    SkASSERT(!needs_subset(fImage.get(), fSubset));  // TODO(skbug.com/12784)
 
-bool SkImageShader::doStages(const SkStageRec& rec, TransformShader* updater) const {
-    SkASSERT(!needs_subset(fImage.get(), fSubset)); // TODO(skbug.com/12784)
     // We only support certain sampling options in stages so far
     auto sampling = fSampling;
-    if (sampling.useCubic) {
-        if (!is_default_cubic_resampler(sampling.cubic)) {
-            return false;
-        }
-    } else if (sampling.mipmap == SkMipmapMode::kLinear) {
-        return false;
-    }
-
-
-    if (updater && (sampling.mipmap != SkMipmapMode::kNone)) {
-        // TODO: medium: recall RequestBitmap and update width/height accordingly
-        return false;
+    if (sampling.isAniso()) {
+        sampling = SkSamplingPriv::AnisoFallback(fImage->hasMipmaps());
     }
 
     SkRasterPipeline* p = rec.fPipeline;
     SkArenaAlloc* alloc = rec.fAlloc;
 
-    SkMatrix matrix;
-    if (!this->computeTotalInverse(rec.fMatrixProvider.localToDevice(), rec.fLocalM, &matrix)) {
-        return false;
+    SkMatrix baseInv;
+    // If the total matrix isn't valid then we will always access the base MIP level.
+    if (mRec.totalMatrixIsValid()) {
+        if (!mRec.totalInverse(&baseInv)) {
+            return false;
+        }
+        baseInv.normalizePerspective();
     }
-    matrix.normalizePerspective();
 
     SkASSERT(!sampling.useCubic || sampling.mipmap == SkMipmapMode::kNone);
-    auto* access = SkMipmapAccessor::Make(alloc, fImage.get(), matrix, sampling.mipmap);
+    auto* access = SkMipmapAccessor::Make(alloc, fImage.get(), baseInv, sampling.mipmap);
     if (!access) {
         return false;
     }
-    SkPixmap pm;
-    std::tie(pm, matrix) = access->level();
 
-    p->append(SkRasterPipeline::seed_shader);
+    MipLevelHelper upper;
+    std::tie(upper.pm, upper.inv) = access->level();
 
-    if (updater) {
-        updater->appendMatrix(rec.fMatrixProvider.localToDevice(), p);
-    } else {
-        if (!sampling.useCubic) {
-            // TODO: can tweak_sampling sometimes for cubic too when B=0
-            if (rec.fMatrixProvider.localToDeviceHitsPixelCenters()) {
-                sampling = tweak_sampling(sampling, matrix);
-            }
-            matrix = tweak_inv_matrix(sampling.filter, matrix);
+    if (!sampling.useCubic) {
+        // TODO: can tweak_sampling sometimes for cubic too when B=0
+        if (mRec.totalMatrixIsValid()) {
+            sampling = tweak_sampling(sampling, SkMatrix::Concat(upper.inv, baseInv));
         }
-        p->append_matrix(alloc, matrix);
     }
 
-    auto gather = alloc->make<SkRasterPipeline_GatherCtx>();
-    gather->pixels = pm.addr();
-    gather->stride = pm.rowBytesAsPixels();
-    gather->width  = pm.width();
-    gather->height = pm.height();
-
-    auto limit_x = alloc->make<SkRasterPipeline_TileCtx>(),
-         limit_y = alloc->make<SkRasterPipeline_TileCtx>();
-    limit_x->scale = pm.width();
-    limit_x->invScale = 1.0f / pm.width();
-    limit_y->scale = pm.height();
-    limit_y->invScale = 1.0f / pm.height();
-
-    SkRasterPipeline_DecalTileCtx* decal_ctx = nullptr;
-    bool decal_x_and_y = fTileModeX == SkTileMode::kDecal && fTileModeY == SkTileMode::kDecal;
-    if (fTileModeX == SkTileMode::kDecal || fTileModeY == SkTileMode::kDecal) {
-        decal_ctx = alloc->make<SkRasterPipeline_DecalTileCtx>();
-        decal_ctx->limit_x = limit_x->scale;
-        decal_ctx->limit_y = limit_y->scale;
+    if (!mRec.apply(rec, upper.inv)) {
+        return false;
     }
 
-    auto append_tiling_and_gather = [&] {
-        if (decal_x_and_y) {
-            p->append(SkRasterPipeline::decal_x_and_y,  decal_ctx);
+    upper.allocAndInit(alloc, sampling, fTileModeX, fTileModeY);
+
+    MipLevelHelper lower;
+    SkRasterPipeline_MipmapCtx* mipmapCtx = nullptr;
+    float lowerWeight = access->lowerWeight();
+    if (lowerWeight > 0) {
+        std::tie(lower.pm, lower.inv) = access->lowerLevel();
+        mipmapCtx = alloc->make<SkRasterPipeline_MipmapCtx>();
+        mipmapCtx->lowerWeight = lowerWeight;
+        mipmapCtx->scaleX = static_cast<float>(lower.pm.width()) / upper.pm.width();
+        mipmapCtx->scaleY = static_cast<float>(lower.pm.height()) / upper.pm.height();
+
+        lower.allocAndInit(alloc, sampling, fTileModeX, fTileModeY);
+
+        p->append(SkRasterPipelineOp::mipmap_linear_init, mipmapCtx);
+    }
+
+    const bool decalBothAxes = fTileModeX == SkTileMode::kDecal && fTileModeY == SkTileMode::kDecal;
+
+    auto append_tiling_and_gather = [&](const MipLevelHelper* level) {
+        if (decalBothAxes) {
+            p->append(SkRasterPipelineOp::decal_x_and_y,  level->decalCtx);
         } else {
             switch (fTileModeX) {
-                case SkTileMode::kClamp:  /* The gather_xxx stage will clamp for us. */     break;
-                case SkTileMode::kMirror: p->append(SkRasterPipeline::mirror_x, limit_x);   break;
-                case SkTileMode::kRepeat: p->append(SkRasterPipeline::repeat_x, limit_x);   break;
-                case SkTileMode::kDecal:  p->append(SkRasterPipeline::decal_x,  decal_ctx); break;
+                case SkTileMode::kClamp: /* The gather_xxx stage will clamp for us. */
+                    break;
+                case SkTileMode::kMirror:
+                    p->append(SkRasterPipelineOp::mirror_x, level->limitX);
+                    break;
+                case SkTileMode::kRepeat:
+                    p->append(SkRasterPipelineOp::repeat_x, level->limitX);
+                    break;
+                case SkTileMode::kDecal:
+                    p->append(SkRasterPipelineOp::decal_x, level->decalCtx);
+                    break;
             }
             switch (fTileModeY) {
-                case SkTileMode::kClamp:  /* The gather_xxx stage will clamp for us. */     break;
-                case SkTileMode::kMirror: p->append(SkRasterPipeline::mirror_y, limit_y);   break;
-                case SkTileMode::kRepeat: p->append(SkRasterPipeline::repeat_y, limit_y);   break;
-                case SkTileMode::kDecal:  p->append(SkRasterPipeline::decal_y,  decal_ctx); break;
+                case SkTileMode::kClamp: /* The gather_xxx stage will clamp for us. */
+                    break;
+                case SkTileMode::kMirror:
+                    p->append(SkRasterPipelineOp::mirror_y, level->limitY);
+                    break;
+                case SkTileMode::kRepeat:
+                    p->append(SkRasterPipelineOp::repeat_y, level->limitY);
+                    break;
+                case SkTileMode::kDecal:
+                    p->append(SkRasterPipelineOp::decal_y, level->decalCtx);
+                    break;
             }
         }
 
-        void* ctx = gather;
-        switch (pm.colorType()) {
-            case kAlpha_8_SkColorType:      p->append(SkRasterPipeline::gather_a8,      ctx); break;
-            case kA16_unorm_SkColorType:    p->append(SkRasterPipeline::gather_a16,     ctx); break;
-            case kA16_float_SkColorType:    p->append(SkRasterPipeline::gather_af16,    ctx); break;
-            case kRGB_565_SkColorType:      p->append(SkRasterPipeline::gather_565,     ctx); break;
-            case kARGB_4444_SkColorType:    p->append(SkRasterPipeline::gather_4444,    ctx); break;
-            case kR8G8_unorm_SkColorType:   p->append(SkRasterPipeline::gather_rg88,    ctx); break;
-            case kR16G16_unorm_SkColorType: p->append(SkRasterPipeline::gather_rg1616,  ctx); break;
-            case kR16G16_float_SkColorType: p->append(SkRasterPipeline::gather_rgf16,  ctx);  break;
-            case kRGBA_8888_SkColorType:    p->append(SkRasterPipeline::gather_8888,    ctx); break;
-            case kRGBA_1010102_SkColorType: p->append(SkRasterPipeline::gather_1010102, ctx); break;
+        void* ctx = level->gather;
+        switch (level->pm.colorType()) {
+            case kAlpha_8_SkColorType:      p->append(SkRasterPipelineOp::gather_a8,    ctx); break;
+            case kA16_unorm_SkColorType:    p->append(SkRasterPipelineOp::gather_a16,   ctx); break;
+            case kA16_float_SkColorType:    p->append(SkRasterPipelineOp::gather_af16,  ctx); break;
+            case kRGB_565_SkColorType:      p->append(SkRasterPipelineOp::gather_565,   ctx); break;
+            case kARGB_4444_SkColorType:    p->append(SkRasterPipelineOp::gather_4444,  ctx); break;
+            case kR8G8_unorm_SkColorType:   p->append(SkRasterPipelineOp::gather_rg88,  ctx); break;
+            case kR16G16_unorm_SkColorType: p->append(SkRasterPipelineOp::gather_rg1616,ctx); break;
+            case kR16G16_float_SkColorType: p->append(SkRasterPipelineOp::gather_rgf16, ctx); break;
+            case kRGBA_8888_SkColorType:    p->append(SkRasterPipelineOp::gather_8888,  ctx); break;
+
+            case kRGBA_1010102_SkColorType:
+                p->append(SkRasterPipelineOp::gather_1010102, ctx);
+                break;
+
             case kR16G16B16A16_unorm_SkColorType:
-                                            p->append(SkRasterPipeline::gather_16161616,ctx); break;
+                p->append(SkRasterPipelineOp::gather_16161616, ctx);
+                break;
+
             case kRGBA_F16Norm_SkColorType:
-            case kRGBA_F16_SkColorType:     p->append(SkRasterPipeline::gather_f16,     ctx); break;
-            case kRGBA_F32_SkColorType:     p->append(SkRasterPipeline::gather_f32,     ctx); break;
+            case kRGBA_F16_SkColorType:     p->append(SkRasterPipelineOp::gather_f16,   ctx); break;
+            case kRGBA_F32_SkColorType:     p->append(SkRasterPipelineOp::gather_f32,   ctx); break;
 
-            case kGray_8_SkColorType:       p->append(SkRasterPipeline::gather_a8,      ctx);
-                                            p->append(SkRasterPipeline::alpha_to_gray      ); break;
+            case kGray_8_SkColorType:       p->append(SkRasterPipelineOp::gather_a8,    ctx);
+                                            p->append(SkRasterPipelineOp::alpha_to_gray    ); break;
 
-            case kR8_unorm_SkColorType:     p->append(SkRasterPipeline::gather_a8,      ctx);
-                                            p->append(SkRasterPipeline::alpha_to_red       ); break;
+            case kR8_unorm_SkColorType:     p->append(SkRasterPipelineOp::gather_a8,    ctx);
+                                            p->append(SkRasterPipelineOp::alpha_to_red     ); break;
 
-            case kRGB_888x_SkColorType:     p->append(SkRasterPipeline::gather_8888,    ctx);
-                                            p->append(SkRasterPipeline::force_opaque       ); break;
+            case kRGB_888x_SkColorType:     p->append(SkRasterPipelineOp::gather_8888,  ctx);
+                                            p->append(SkRasterPipelineOp::force_opaque     ); break;
 
-            case kBGRA_1010102_SkColorType: p->append(SkRasterPipeline::gather_1010102, ctx);
-                                            p->append(SkRasterPipeline::swap_rb            ); break;
+            case kBGRA_1010102_SkColorType:
+                p->append(SkRasterPipelineOp::gather_1010102, ctx);
+                p->append(SkRasterPipelineOp::swap_rb);
+                break;
 
-            case kRGB_101010x_SkColorType:  p->append(SkRasterPipeline::gather_1010102, ctx);
-                                            p->append(SkRasterPipeline::force_opaque       ); break;
+            case kRGB_101010x_SkColorType:
+                p->append(SkRasterPipelineOp::gather_1010102, ctx);
+                p->append(SkRasterPipelineOp::force_opaque);
+                break;
 
-            case kBGR_101010x_SkColorType:  p->append(SkRasterPipeline::gather_1010102, ctx);
-                                            p->append(SkRasterPipeline::force_opaque       );
-                                            p->append(SkRasterPipeline::swap_rb            ); break;
+            case kBGR_101010x_XR_SkColorType:
+                SkASSERT(false);
+                break;
 
-            case kBGRA_8888_SkColorType:    p->append(SkRasterPipeline::gather_8888,    ctx);
-                                            p->append(SkRasterPipeline::swap_rb            ); break;
+            case kBGR_101010x_SkColorType:
+                p->append(SkRasterPipelineOp::gather_1010102, ctx);
+                p->append(SkRasterPipelineOp::force_opaque);
+                p->append(SkRasterPipelineOp::swap_rb);
+                break;
+
+            case kBGRA_8888_SkColorType:
+                p->append(SkRasterPipelineOp::gather_8888, ctx);
+                p->append(SkRasterPipelineOp::swap_rb);
+                break;
 
             case kSRGBA_8888_SkColorType:
-                p->append(SkRasterPipeline::gather_8888, ctx);
+                p->append(SkRasterPipelineOp::gather_8888, ctx);
                 p->append_transfer_function(*skcms_sRGB_TransferFunction());
                 break;
 
             case kUnknown_SkColorType: SkASSERT(false);
         }
-        if (decal_ctx) {
-            p->append(SkRasterPipeline::check_decal_mask, decal_ctx);
+        if (level->decalCtx) {
+            p->append(SkRasterPipelineOp::check_decal_mask, level->decalCtx);
         }
     };
 
     auto append_misc = [&] {
-        SkColorSpace* cs = pm.colorSpace();
-        SkAlphaType   at = pm.alphaType();
+        SkColorSpace* cs = upper.pm.colorSpace();
+        SkAlphaType   at = upper.pm.alphaType();
 
         // Color for alpha-only images comes from the paint.
-        if (SkColorTypeIsAlphaOnly(pm.colorType()) && !fRaw) {
+        if (SkColorTypeIsAlphaOnly(upper.pm.colorType()) && !fRaw) {
             SkColor4f rgb = rec.fPaint.getColor4f();
             p->append_set_rgb(alloc, rgb);
 
@@ -607,10 +725,9 @@ bool SkImageShader::doStages(const SkStageRec& rec, TransformShader* updater) co
 
         // Bicubic filtering naturally produces out of range values on both sides of [0,1].
         if (sampling.useCubic) {
-            p->append(SkRasterPipeline::clamp_0);
             p->append(at == kUnpremul_SkAlphaType || fClampAsIfUnpremul
-                          ? SkRasterPipeline::clamp_1
-                          : SkRasterPipeline::clamp_a);
+                          ? SkRasterPipelineOp::clamp_01
+                          : SkRasterPipelineOp::clamp_gamut);
         }
 
         // Transform color space and alpha type to match shader convention (dst CS, premul alpha).
@@ -622,32 +739,18 @@ bool SkImageShader::doStages(const SkStageRec& rec, TransformShader* updater) co
     };
 
     // Check for fast-path stages.
-    auto ct = pm.colorType();
+    // TODO: Could we use the fast-path stages for each level when doing linear mipmap filtering?
+    SkColorType ct = upper.pm.colorType();
     if (true
         && (ct == kRGBA_8888_SkColorType || ct == kBGRA_8888_SkColorType)
         && !sampling.useCubic && sampling.filter == SkFilterMode::kLinear
+        && sampling.mipmap != SkMipmapMode::kLinear
         && fTileModeX == SkTileMode::kClamp && fTileModeY == SkTileMode::kClamp) {
 
-        p->append(SkRasterPipeline::bilerp_clamp_8888, gather);
+        p->append(SkRasterPipelineOp::bilerp_clamp_8888, upper.gather);
         if (ct == kBGRA_8888_SkColorType) {
-            p->append(SkRasterPipeline::swap_rb);
+            p->append(SkRasterPipelineOp::swap_rb);
         }
-        return append_misc();
-    }
-    if (true
-        && (ct == kRGBA_8888_SkColorType || ct == kBGRA_8888_SkColorType) // TODO: all formats
-        && !sampling.useCubic && sampling.filter == SkFilterMode::kLinear
-        && fTileModeX != SkTileMode::kDecal // TODO decal too?
-        && fTileModeY != SkTileMode::kDecal) {
-
-        auto ctx = alloc->make<SkRasterPipeline_SamplerCtx2>();
-        *(SkRasterPipeline_GatherCtx*)(ctx) = *gather;
-        ctx->ct = ct;
-        ctx->tileX = fTileModeX;
-        ctx->tileY = fTileModeY;
-        ctx->invWidth  = 1.0f / ctx->width;
-        ctx->invHeight = 1.0f / ctx->height;
-        p->append(SkRasterPipeline::bilinear, ctx);
         return append_misc();
     }
     if (true
@@ -655,125 +758,116 @@ bool SkImageShader::doStages(const SkStageRec& rec, TransformShader* updater) co
         && sampling.useCubic
         && fTileModeX == SkTileMode::kClamp && fTileModeY == SkTileMode::kClamp) {
 
-        p->append(SkRasterPipeline::bicubic_clamp_8888, gather);
+        p->append(SkRasterPipelineOp::bicubic_clamp_8888, upper.gather);
         if (ct == kBGRA_8888_SkColorType) {
-            p->append(SkRasterPipeline::swap_rb);
+            p->append(SkRasterPipelineOp::swap_rb);
         }
         return append_misc();
     }
-    if (true
-        && (ct == kRGBA_8888_SkColorType || ct == kBGRA_8888_SkColorType) // TODO: all formats
-        && sampling.useCubic
-        && fTileModeX != SkTileMode::kDecal // TODO decal too?
-        && fTileModeY != SkTileMode::kDecal) {
 
-        auto ctx = alloc->make<SkRasterPipeline_SamplerCtx2>();
-        *(SkRasterPipeline_GatherCtx*)(ctx) = *gather;
-        ctx->ct = ct;
-        ctx->tileX = fTileModeX;
-        ctx->tileY = fTileModeY;
-        ctx->invWidth  = 1.0f / ctx->width;
-        ctx->invHeight = 1.0f / ctx->height;
-        p->append(SkRasterPipeline::bicubic, ctx);
-        return append_misc();
-    }
-
+    // This context can be shared by both levels when doing linear mipmap filtering
     SkRasterPipeline_SamplerCtx* sampler = alloc->make<SkRasterPipeline_SamplerCtx>();
 
-    auto sample = [&](SkRasterPipeline::StockStage setup_x,
-                      SkRasterPipeline::StockStage setup_y) {
+    auto sample = [&](SkRasterPipelineOp setup_x,
+                      SkRasterPipelineOp setup_y,
+                      const MipLevelHelper* level) {
         p->append(setup_x, sampler);
         p->append(setup_y, sampler);
-        append_tiling_and_gather();
-        p->append(SkRasterPipeline::accumulate, sampler);
+        append_tiling_and_gather(level);
+        p->append(SkRasterPipelineOp::accumulate, sampler);
     };
 
-    if (sampling.useCubic) {
-        p->append(SkRasterPipeline::save_xy, sampler);
+    auto sample_level = [&](const MipLevelHelper* level) {
+        if (sampling.useCubic) {
+            CubicResamplerMatrix(sampling.cubic.B, sampling.cubic.C).getColMajor(sampler->weights);
 
-        sample(SkRasterPipeline::bicubic_n3x, SkRasterPipeline::bicubic_n3y);
-        sample(SkRasterPipeline::bicubic_n1x, SkRasterPipeline::bicubic_n3y);
-        sample(SkRasterPipeline::bicubic_p1x, SkRasterPipeline::bicubic_n3y);
-        sample(SkRasterPipeline::bicubic_p3x, SkRasterPipeline::bicubic_n3y);
+            p->append(SkRasterPipelineOp::bicubic_setup, sampler);
 
-        sample(SkRasterPipeline::bicubic_n3x, SkRasterPipeline::bicubic_n1y);
-        sample(SkRasterPipeline::bicubic_n1x, SkRasterPipeline::bicubic_n1y);
-        sample(SkRasterPipeline::bicubic_p1x, SkRasterPipeline::bicubic_n1y);
-        sample(SkRasterPipeline::bicubic_p3x, SkRasterPipeline::bicubic_n1y);
+            sample(SkRasterPipelineOp::bicubic_n3x, SkRasterPipelineOp::bicubic_n3y, level);
+            sample(SkRasterPipelineOp::bicubic_n1x, SkRasterPipelineOp::bicubic_n3y, level);
+            sample(SkRasterPipelineOp::bicubic_p1x, SkRasterPipelineOp::bicubic_n3y, level);
+            sample(SkRasterPipelineOp::bicubic_p3x, SkRasterPipelineOp::bicubic_n3y, level);
 
-        sample(SkRasterPipeline::bicubic_n3x, SkRasterPipeline::bicubic_p1y);
-        sample(SkRasterPipeline::bicubic_n1x, SkRasterPipeline::bicubic_p1y);
-        sample(SkRasterPipeline::bicubic_p1x, SkRasterPipeline::bicubic_p1y);
-        sample(SkRasterPipeline::bicubic_p3x, SkRasterPipeline::bicubic_p1y);
+            sample(SkRasterPipelineOp::bicubic_n3x, SkRasterPipelineOp::bicubic_n1y, level);
+            sample(SkRasterPipelineOp::bicubic_n1x, SkRasterPipelineOp::bicubic_n1y, level);
+            sample(SkRasterPipelineOp::bicubic_p1x, SkRasterPipelineOp::bicubic_n1y, level);
+            sample(SkRasterPipelineOp::bicubic_p3x, SkRasterPipelineOp::bicubic_n1y, level);
 
-        sample(SkRasterPipeline::bicubic_n3x, SkRasterPipeline::bicubic_p3y);
-        sample(SkRasterPipeline::bicubic_n1x, SkRasterPipeline::bicubic_p3y);
-        sample(SkRasterPipeline::bicubic_p1x, SkRasterPipeline::bicubic_p3y);
-        sample(SkRasterPipeline::bicubic_p3x, SkRasterPipeline::bicubic_p3y);
+            sample(SkRasterPipelineOp::bicubic_n3x, SkRasterPipelineOp::bicubic_p1y, level);
+            sample(SkRasterPipelineOp::bicubic_n1x, SkRasterPipelineOp::bicubic_p1y, level);
+            sample(SkRasterPipelineOp::bicubic_p1x, SkRasterPipelineOp::bicubic_p1y, level);
+            sample(SkRasterPipelineOp::bicubic_p3x, SkRasterPipelineOp::bicubic_p1y, level);
 
-        p->append(SkRasterPipeline::move_dst_src);
-    } else if (sampling.filter == SkFilterMode::kLinear) {
-        p->append(SkRasterPipeline::save_xy, sampler);
+            sample(SkRasterPipelineOp::bicubic_n3x, SkRasterPipelineOp::bicubic_p3y, level);
+            sample(SkRasterPipelineOp::bicubic_n1x, SkRasterPipelineOp::bicubic_p3y, level);
+            sample(SkRasterPipelineOp::bicubic_p1x, SkRasterPipelineOp::bicubic_p3y, level);
+            sample(SkRasterPipelineOp::bicubic_p3x, SkRasterPipelineOp::bicubic_p3y, level);
 
-        sample(SkRasterPipeline::bilinear_nx, SkRasterPipeline::bilinear_ny);
-        sample(SkRasterPipeline::bilinear_px, SkRasterPipeline::bilinear_ny);
-        sample(SkRasterPipeline::bilinear_nx, SkRasterPipeline::bilinear_py);
-        sample(SkRasterPipeline::bilinear_px, SkRasterPipeline::bilinear_py);
+            p->append(SkRasterPipelineOp::move_dst_src);
+        } else if (sampling.filter == SkFilterMode::kLinear) {
+            p->append(SkRasterPipelineOp::bilinear_setup, sampler);
 
-        p->append(SkRasterPipeline::move_dst_src);
-    } else {
-        append_tiling_and_gather();
+            sample(SkRasterPipelineOp::bilinear_nx, SkRasterPipelineOp::bilinear_ny, level);
+            sample(SkRasterPipelineOp::bilinear_px, SkRasterPipelineOp::bilinear_ny, level);
+            sample(SkRasterPipelineOp::bilinear_nx, SkRasterPipelineOp::bilinear_py, level);
+            sample(SkRasterPipelineOp::bilinear_px, SkRasterPipelineOp::bilinear_py, level);
+
+            p->append(SkRasterPipelineOp::move_dst_src);
+        } else {
+            append_tiling_and_gather(level);
+        }
+    };
+
+    sample_level(&upper);
+
+    if (mipmapCtx) {
+        p->append(SkRasterPipelineOp::mipmap_linear_update, mipmapCtx);
+        sample_level(&lower);
+        p->append(SkRasterPipelineOp::mipmap_linear_finish, mipmapCtx);
     }
 
     return append_misc();
 }
 
-bool SkImageShader::onAppendStages(const SkStageRec& rec) const {
-    return this->doStages(rec, nullptr);
-}
-
-SkStageUpdater* SkImageShader::onAppendUpdatableStages(const SkStageRec& rec) const {
-    TransformShader* updater = rec.fAlloc->make<TransformShader>(*this);
-    return this->doStages(rec, updater) ? updater : nullptr;
-}
-
-SkUpdatableShader* SkImageShader::onUpdatableShader(SkArenaAlloc* alloc) const {
-    return alloc->make<TransformShader>(*this);
-}
-
-skvm::Color SkImageShader::onProgram(skvm::Builder* b,
-                                     skvm::Coord device, skvm::Coord origLocal, skvm::Color paint,
-                                     const SkMatrixProvider& matrices, const SkMatrix* localM,
-                                     const SkColorInfo& dst,
-                                     skvm::Uniforms* uniforms, SkArenaAlloc* alloc) const {
-    return this->makeProgram(
-            b, device, origLocal, paint, matrices, localM, dst, uniforms, nullptr, alloc);
-}
-
-skvm::Color SkImageShader::makeProgram(
-        skvm::Builder* p, skvm::Coord device, skvm::Coord origLocal, skvm::Color paint,
-        const SkMatrixProvider& matrices, const SkMatrix* localM, const SkColorInfo& dst,
-        skvm::Uniforms* uniforms, const TransformShader* coordShader, SkArenaAlloc* alloc) const {
-    SkASSERT(!needs_subset(fImage.get(), fSubset)); // TODO(skbug.com/12784)
-    SkMatrix baseInv;
-    if (!this->computeTotalInverse(matrices.localToDevice(), localM, &baseInv)) {
-        return {};
-    }
-    baseInv.normalizePerspective();
+skvm::Color SkImageShader::program(skvm::Builder* p,
+                                   skvm::Coord device,
+                                   skvm::Coord origLocal,
+                                   skvm::Color paint,
+                                   const MatrixRec& mRec,
+                                   const SkColorInfo& dst,
+                                   skvm::Uniforms* uniforms,
+                                   SkArenaAlloc* alloc) const {
+    SkASSERT(!needs_subset(fImage.get(), fSubset));  // TODO(skbug.com/12784)
 
     auto sampling = fSampling;
+    if (sampling.isAniso()) {
+        sampling = SkSamplingPriv::AnisoFallback(fImage->hasMipmaps());
+    }
+
+    SkMatrix baseInv;
+    // If the total matrix isn't valid then we will always access the base MIP level.
+    if (mRec.totalMatrixIsValid()) {
+        if (!mRec.totalInverse(&baseInv)) {
+            return {};
+        }
+        baseInv.normalizePerspective();
+    }
+
+    SkASSERT(!sampling.useCubic || sampling.mipmap == SkMipmapMode::kNone);
     auto* access = SkMipmapAccessor::Make(alloc, fImage.get(), baseInv, sampling.mipmap);
     if (!access) {
         return {};
     }
-    auto [upper, upperInv] = access->level();
-    // If we are using a coordShader, then we can't make guesses about the state of the matrix.
-    if (!sampling.useCubic && !coordShader) {
+
+    SkPixmap upper;
+    SkMatrix upperInv;
+    std::tie(upper, upperInv) = access->level();
+
+    if (!sampling.useCubic) {
         // TODO: can tweak_sampling sometimes for cubic too when B=0
-        if (matrices.localToDeviceHitsPixelCenters()) {
-            sampling = tweak_sampling(sampling, upperInv);
+        if (mRec.totalMatrixIsValid()) {
+            sampling = tweak_sampling(sampling, SkMatrix::Concat(upperInv, baseInv));
         }
-        upperInv = tweak_inv_matrix(sampling.filter, upperInv);
     }
 
     SkPixmap lowerPixmap;
@@ -785,11 +879,9 @@ skvm::Color SkImageShader::makeProgram(
         lower = &lowerPixmap;
     }
 
-    skvm::Coord upperLocal;
-    if (coordShader != nullptr) {
-        upperLocal = coordShader->applyMatrix(p, upperInv, origLocal, uniforms);
-    } else {
-        upperLocal = SkShaderBase::ApplyMatrix(p, upperInv, origLocal, uniforms);
+    skvm::Coord upperLocal = origLocal;
+    if (!mRec.apply(p, &upperLocal, uniforms, upperInv).has_value()) {
+        return {};
     }
 
     // We can exploit image opacity to skip work unpacking alpha channels.
@@ -903,7 +995,7 @@ skvm::Color SkImageShader::makeProgram(
         return c;
     };
 
-    auto sample_level = [&](const SkPixmap& pm, const SkMatrix& inv, skvm::Coord local) {
+    auto sample_level = [&](const SkPixmap& pm, skvm::Coord local) {
         const Uniforms u = setup_uniforms(pm);
 
         if (sampling.useCubic) {
@@ -967,16 +1059,25 @@ skvm::Color SkImageShader::makeProgram(
                         lerp(sample_texel(u, left,bottom), sample_texel(u, right,bottom), fx), fy);
         } else {
             SkASSERT(sampling.filter == SkFilterMode::kNearest);
+            // Our rasterizer biases upward. That is a rect from 0.5...1.5 fills pixel 1 and not
+            // pixel 0. To make an image that is mapped 1:1 with device pixels but at a half pixel
+            // offset select every pixel from the src image once we make exact integer pixel sample
+            // values round down not up. Note that a mirror mapping will not have this property.
+            local.x = skvm::pun_to_F32(skvm::pun_to_I32(local.x) - 1);
+            local.y = skvm::pun_to_F32(skvm::pun_to_I32(local.y) - 1);
             return sample_texel(u, local.x,local.y);
         }
     };
 
-    skvm::Color c = sample_level(upper, upperInv, upperLocal);
+    skvm::Color c = sample_level(upper, upperLocal);
     if (lower) {
-        auto lowerLocal = SkShaderBase::ApplyMatrix(p, lowerInv, origLocal, uniforms);
+        skvm::Coord lowerLocal = origLocal;
+        if (!mRec.apply(p, &lowerLocal, uniforms, lowerInv)) {
+            return {};
+        }
         // lower * weight + upper * (1 - weight)
         c = lerp(c,
-                 sample_level(*lower, lowerInv, lowerLocal),
+                 sample_level(*lower, lowerLocal),
                  p->uniformF(uniforms->pushF(lowerWeight)));
     }
 

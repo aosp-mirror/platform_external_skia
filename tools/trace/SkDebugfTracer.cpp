@@ -24,7 +24,7 @@ SkEventTracer::Handle SkDebugfTracer::addTraceEvent(char phase,
         } else {
             args.append(" ");
         }
-        skia::tracing_internals::TraceValueUnion value;
+        skia_private::TraceValueUnion value;
         value.as_uint = argValues[i];
         switch (argTypes[i]) {
             case TRACE_VALUE_TYPE_BOOL:
@@ -82,4 +82,8 @@ void SkDebugfTracer::updateTraceEventDuration(const uint8_t* categoryEnabledFlag
                                               SkEventTracer::Handle handle) {
     fIndent.resize(fIndent.size() - 1);
     SkDebugf("[% 2d]%s } %s\n", (int)fIndent.size(), fIndent.c_str(), name);
+}
+
+void SkDebugfTracer::newTracingSection(const char* name) {
+    SkDebugf("\n\n- - - New tracing section: %s - - -\n", name);
 }

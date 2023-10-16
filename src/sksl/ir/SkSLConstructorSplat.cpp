@@ -5,14 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "src/sksl/SkSLConstantFolder.h"
-#include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/ir/SkSLConstructorSplat.h"
+
+#include "src/sksl/SkSLConstantFolder.h"
 
 namespace SkSL {
 
 std::unique_ptr<Expression> ConstructorSplat::Make(const Context& context,
-                                                   int line,
+                                                   Position pos,
                                                    const Type& type,
                                                    std::unique_ptr<Expression> arg) {
     SkASSERT(type.isAllowedInES2(context));
@@ -23,15 +23,16 @@ std::unique_ptr<Expression> ConstructorSplat::Make(const Context& context,
 
     // A "splat" to a scalar type is a no-op and can be eliminated.
     if (type.isScalar()) {
+        arg->fPosition = pos;
         return arg;
     }
 
     // Replace constant variables with their corresponding values, so `float3(five)` can compile
     // down to `float3(5.0)` (the latter is a compile-time constant).
-    arg = ConstantFolder::MakeConstantValueForVariable(std::move(arg));
+    arg = ConstantFolder::MakeConstantValueForVariable(pos, std::move(arg));
 
     SkASSERT(type.isVector());
-    return std::make_unique<ConstructorSplat>(line, type, std::move(arg));
+    return std::make_unique<ConstructorSplat>(pos, type, std::move(arg));
 }
 
 }  // namespace SkSL

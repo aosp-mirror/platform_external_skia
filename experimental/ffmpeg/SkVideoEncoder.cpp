@@ -8,7 +8,7 @@
 #include "experimental/ffmpeg/SkVideoEncoder.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkImage.h"
-#include "include/private/SkTDArray.h"
+#include "include/private/base/SkTDArray.h"
 
 extern "C" {
 #include "libswscale/swscale.h"
@@ -163,12 +163,12 @@ bool SkVideoEncoder::init(int fps) {
     SkASSERT(fFormatCtx);
     fFormatCtx->pb = fStreamCtx;
 
-    AVOutputFormat *output_format = fFormatCtx->oformat;
+    const auto* output_format = fFormatCtx->oformat;
 
     if (output_format->video_codec == AV_CODEC_ID_NONE) {
         return false;
     }
-    AVCodec* codec = avcodec_find_encoder(output_format->video_codec);
+    const auto* codec = avcodec_find_encoder(output_format->video_codec);
     SkASSERT(codec);
 
     fStream = avformat_new_stream(fFormatCtx, codec);

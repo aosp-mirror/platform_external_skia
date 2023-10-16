@@ -8,21 +8,37 @@
 #ifndef TestUtils_DEFINED
 #define TestUtils_DEFINED
 
-#include "include/core/SkBitmap.h"
-#include "src/gpu/GrDataUtils.h"
-#include "tests/Test.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/GrTypes.h"
+#include "src/gpu/SkBackingFit.h"
+#include "src/gpu/ganesh/GrImageInfo.h"
+#include "src/gpu/ganesh/GrPixmap.h"
 
-namespace skgpu { class SurfaceContext; }
+#include <cstdint>
+#include <functional>
+#include <memory>
+
+class GrDirectContext;
+class GrRecordingContext;
 class GrSurfaceProxy;
+class SkBitmap;
+class SkPixmap;
+class SkString;
+enum class GrColorType;
+namespace skiatest { class Reporter; }
+namespace skgpu::v1 { class SurfaceContext; }
 typedef uint32_t GrColor;
 
 // Ensure that reading back from 'srcContext' as RGBA 8888 matches 'expectedPixelValues
-void TestReadPixels(skiatest::Reporter*, GrDirectContext*, skgpu::SurfaceContext*,
+void TestReadPixels(skiatest::Reporter*, GrDirectContext*, skgpu::v1::SurfaceContext*,
                     uint32_t expectedPixelValues[], const char* testName);
 
-// See if trying to write RGBA 8888 pixels to 'dstContext' matches matches the
+// See if trying to write RGBA 8888 pixels to 'dstContext' matches the
 // expectation ('expectedToWork')
-void TestWritePixels(skiatest::Reporter*, GrDirectContext*, skgpu::SurfaceContext*,
+void TestWritePixels(skiatest::Reporter*, GrDirectContext*, skgpu::v1::SurfaceContext*,
                      bool expectedToWork, const char* testName);
 
 // Ensure that the pixels can be copied from 'proxy' viewed as colorType, to an RGBA 8888
@@ -43,8 +59,7 @@ bool BipmapToBase64DataURI(const SkBitmap& bitmap, SkString* dst);
 using ComparePixmapsErrorReporter = void(int x, int y, const float diffs[4]);
 
 /**
- * Compares pixels pointed to by 'a' with 'infoA' and rowBytesA to pixels pointed to by 'b' with
- * 'infoB' and 'rowBytesB'.
+ * Compares pixels pointed to by 'a' to pixels pointed to by 'b'.
  *
  * If the pixmaps have different dimensions error is called with negative coordinate values and
  * zero diffs and no comparisons are made.
@@ -86,15 +101,15 @@ void CheckSingleThreadedProxyRefs(skiatest::Reporter* reporter,
 // Makes either a SurfaceContext, SurfaceFillContext, or a SurfaceDrawContext, depending on
 // GrRenderable and the GrImageInfo.
 // The texture format is the default for the provided color type.
-std::unique_ptr<skgpu::SurfaceContext> CreateSurfaceContext(
-            GrRecordingContext*,
-            const GrImageInfo&,
-            SkBackingFit = SkBackingFit::kExact,
-            GrSurfaceOrigin = kTopLeft_GrSurfaceOrigin,
-            GrRenderable = GrRenderable::kNo,
-            int sampleCount = 1,
-            GrMipmapped = GrMipmapped::kNo,
-            GrProtected = GrProtected::kNo,
-            SkBudgeted = SkBudgeted::kYes);
+std::unique_ptr<skgpu::v1::SurfaceContext> CreateSurfaceContext(
+        GrRecordingContext*,
+        const GrImageInfo&,
+        SkBackingFit = SkBackingFit::kExact,
+        GrSurfaceOrigin = kTopLeft_GrSurfaceOrigin,
+        GrRenderable = GrRenderable::kNo,
+        int sampleCount = 1,
+        GrMipmapped = GrMipmapped::kNo,
+        GrProtected = GrProtected::kNo,
+        skgpu::Budgeted = skgpu::Budgeted::kYes);
 
 #endif

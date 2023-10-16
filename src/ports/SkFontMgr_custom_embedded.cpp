@@ -65,7 +65,7 @@ public:
 static SkFontStyleSet_Custom* find_family(SkFontMgr_Custom::Families& families,
                                           const char familyName[])
 {
-   for (int i = 0; i < families.count(); ++i) {
+   for (int i = 0; i < families.size(); ++i) {
         if (families[i]->getFamilyName().equals(familyName)) {
             return families[i].get();
         }
@@ -101,9 +101,8 @@ static void load_font_from_data(const SkTypeface_FreeType::Scanner& scanner,
         }
         auto data = std::make_unique<SkFontData>(stream->duplicate(), faceIndex, 0,
                                                  nullptr, 0, nullptr, 0);
-        addTo->appendTypeface(sk_make_sp<SkTypeface_Stream>(std::move(data),
-                                                            style, isFixedPitch,
-                                                            true, realname));
+        addTo->appendTypeface(sk_make_sp<SkTypeface_FreeTypeStream>(
+            std::move(data), realname, style, isFixedPitch));
     }
 }
 

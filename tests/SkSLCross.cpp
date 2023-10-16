@@ -5,11 +5,39 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkAlphaType.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/private/SkColorData.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/core/SkSLTypeShared.h"
+#include "src/gpu/SkBackingFit.h"
+#include "src/gpu/ganesh/GrColor.h"
+#include "src/gpu/ganesh/GrFragmentProcessor.h"
+#include "src/gpu/ganesh/GrImageInfo.h"
+#include "src/gpu/ganesh/GrPaint.h"
+#include "src/gpu/ganesh/GrPixmap.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
+#include "src/gpu/ganesh/glsl/GrGLSLFragmentShaderBuilder.h"
+#include "src/gpu/ganesh/glsl/GrGLSLProgramDataManager.h"
+#include "src/gpu/ganesh/glsl/GrGLSLUniformHandler.h"
+#include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 
-#include "src/gpu/GrFragmentProcessor.h"
-#include "src/gpu/glsl/GrGLSLFragmentShaderBuilder.h"
-#include "src/gpu/v1/SurfaceDrawContext_v1.h"
+#include <memory>
+#include <utility>
+
+namespace skgpu { class KeyBuilder; }
+struct GrContextOptions;
+struct GrShaderCaps;
 
 static void run_test(skiatest::Reporter*, GrDirectContext*,
                      skgpu::v1::SurfaceDrawContext*, SkVector a,
@@ -17,10 +45,11 @@ static void run_test(skiatest::Reporter*, GrDirectContext*,
 
 // This is a GPU test that ensures the SkSL 2d cross() intrinsic returns the correct sign (negative,
 // positive, or zero).
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SkSLCross, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkSLCross, reporter, ctxInfo, CtsEnforcement::kApiLevel_T) {
     GrDirectContext* dContext = ctxInfo.directContext();
     auto sdc = skgpu::v1::SurfaceDrawContext::Make(dContext, GrColorType::kRGBA_8888, nullptr,
-                                                   SkBackingFit::kExact, {1, 1}, SkSurfaceProps());
+                                                   SkBackingFit::kExact, {1, 1}, SkSurfaceProps(),
+                                                   /*label=*/"SkSLCross_Test");
     if (!sdc) {
         ERRORF(reporter, "could not create render target context.");
         return;

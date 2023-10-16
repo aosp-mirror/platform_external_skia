@@ -4,6 +4,9 @@
 #include "experimental/sktext/src/VisualRun.h"
 #include <memory>
 #include <stack>
+
+using namespace skia_private;
+
 namespace skia {
 namespace text {
 UnicodeText::UnicodeText(std::unique_ptr<SkUnicode> unicode, SkSpan<uint16_t> utf16)
@@ -20,7 +23,7 @@ UnicodeText::UnicodeText(std::unique_ptr<SkUnicode> unicode, const SkString& utf
 
 bool UnicodeText::isWhitespaces(TextRange range) const {
     for (auto i = range.fStart; i < range.fEnd; ++i) {
-        if (!this->hasProperty(i, CodeUnitFlags::kPartOfWhiteSpace)) {
+        if (!this->hasProperty(i, SkUnicode::CodeUnitFlags::kPartOfWhiteSpaceBreak)) {
             return false;
         }
     }
@@ -32,32 +35,11 @@ void UnicodeText::initialize(SkSpan<uint16_t> utf16) {
         SkASSERT(fUnicode);
         return;
     }
-    // Get white spaces
-    fCodeUnitProperties.push_back_n(utf16.size() + 1, CodeUnitFlags::kNoCodeUnitFlag);
-    this->fUnicode->forEachCodepoint((char16_t*)utf16.data(), utf16.size(),
-       [this](SkUnichar unichar, int32_t start, int32_t end) {
-            if (this->fUnicode->isWhitespace(unichar)) {
-                for (auto i = start; i < end; ++i) {
-                    fCodeUnitProperties[i] |=  CodeUnitFlags::kPartOfWhiteSpace;
-                }
-            }
-       });
-    // Get graphemes
-    this->fUnicode->forEachBreak((char16_t*)utf16.data(), utf16.size(), SkUnicode::BreakType::kGraphemes,
-                           [this](SkBreakIterator::Position pos, SkBreakIterator::Status) {
-                                fCodeUnitProperties[pos]|= CodeUnitFlags::kGraphemeStart;
-                            });
-    // Get line breaks
-    this->fUnicode->forEachBreak((char16_t*)utf16.data(), utf16.size(), SkUnicode::BreakType::kLines,
-                           [this](SkBreakIterator::Position pos, SkBreakIterator::Status status) {
-                                if (status == (SkBreakIterator::Status)SkUnicode::LineBreakType::kHardLineBreak) {
-                                    // Hard line breaks clears off all the other flags
-                                    // TODO: Treat \n as a formatting mark and do not pass it to SkShaper
-                                    fCodeUnitProperties[pos - 1] = CodeUnitFlags::kHardLineBreakBefore;
-                                } else {
-                                    fCodeUnitProperties[pos] |= CodeUnitFlags::kSoftLineBreakBefore;
-                                }
-                            });
+
+    if (!fUnicode->computeCodeUnitFlags(
+                (char16_t*)utf16.data(), utf16.size(), false, &fCodeUnitProperties)) {
+        return;
+    }
 }
 
 std::unique_ptr<FontResolvedText> UnicodeText::resolveFonts(SkSpan<FontBlock> blocks) {
@@ -77,7 +59,8 @@ std::unique_ptr<FontResolvedText> UnicodeText::resolveFonts(SkSpan<FontBlock> bl
         }
 
         // Move the end of the block to the right until it's on the grapheme edge
-        while (adjustedBlock.fEnd < this->fText16.size() &&  !this->hasProperty(adjustedBlock.fEnd, CodeUnitFlags::kGraphemeStart)) {
+        while (adjustedBlock.fEnd < this->fText16.size() &&
+               !this->hasProperty(adjustedBlock.fEnd, SkUnicode::CodeUnitFlags::kGraphemeStart)) {
             ++adjustedBlock.fEnd;
         }
         SkASSERT(block.type == BlockType::kFontChain);
@@ -94,7 +77,7 @@ std::unique_ptr<FontResolvedText> UnicodeText::resolveFonts(SkSpan<FontBlock> bl
         SkDebugf("[%d:%d)\n", f.textRange.fStart, f.textRange.fEnd);
     }
 */
-    return std::move(fontResolvedText);
+    return fontResolvedText;
 }
 
 bool FontResolvedText::resolveChain(UnicodeText* unicodeText, TextRange textRange, const FontChain& fontChain) {
@@ -115,7 +98,7 @@ bool FontResolvedText::resolveChain(UnicodeText* unicodeText, TextRange textRang
             auto start = newUnresolvedTexts.size();
             unicodeText->forEachGrapheme(unresolvedText, [&](TextRange grapheme) {
                 auto count = typeface->textToGlyphs(unicodeText->getText16().data() + grapheme.fStart, grapheme.width() * 2, SkTextEncoding::kUTF16, nullptr, 0);
-                SkAutoTArray<SkGlyphID> glyphs(count);
+                AutoTArray<SkGlyphID> glyphs(count);
                 typeface->textToGlyphs(unicodeText->getText16().data() + grapheme.fStart, grapheme.width() * 2, SkTextEncoding::kUTF16, glyphs.data(), count);
                 for (auto i = 0; i < count; ++i) {
                     if (glyphs[i] == 0) {
@@ -259,7 +242,6 @@ std::unique_ptr<ShapedText> FontResolvedText::shape(UnicodeText* unicodeText,
     formattingMarks.emplace_back(text8.size()/* UTF8FromUTF16[text16.size() */);
     // Convert fontBlocks from utf16 to utf8
     SkTArray<ResolvedFontBlock, true> fontBlocks8;
-    TextIndex index8 = 0;
     for (auto& fb : fResolvedFonts) {
         TextRange text8(UTF8FromUTF16[fb.textRange.fStart], UTF8FromUTF16[fb.textRange.fEnd]);
         fontBlocks8.emplace_back(text8, fb.typeface, fb.size, fb.style);
@@ -274,8 +256,8 @@ std::unique_ptr<ShapedText> FontResolvedText::shape(UnicodeText* unicodeText,
         SkShaper::MakeSkUnicodeBidiRunIterator(
             unicodeText->getUnicode(), text8.c_str(), text8.size(), textDirection == TextDirection::kLtr ? 0 : 1));
     std::unique_ptr<SkShaper::ScriptRunIterator> scriptIter(
-        SkShaper::MakeSkUnicodeHbScriptRunIterator(unicodeText->getUnicode(), text8.c_str(), text8.size()));
-    auto shaper = SkShaper::MakeShapeDontWrapOrReorder();
+        SkShaper::MakeSkUnicodeHbScriptRunIterator(text8.c_str(), text8.size()));
+    auto shaper = SkShaper::MakeShapeDontWrapOrReorder(unicodeText->getUnicode()->copy());
     if (shaper == nullptr) {
         // For instance, loadICU does not work. We have to stop the process
         return nullptr;
@@ -313,7 +295,7 @@ std::unique_ptr<ShapedText> FontResolvedText::shape(UnicodeText* unicodeText,
             logicalRun.setRunType(LogicalRunType::kLineBreak);
         }
     }
-    return std::move(shapedText);
+    return shapedText;
 }
 
 // TODO: Implement the vertical restriction (height) and add ellipsis
@@ -370,9 +352,7 @@ std::unique_ptr<WrappedText> ShapedText::wrap(UnicodeText* unicodeText, float wi
             clusterGlyphs.fEnd = glyphIndex;
             cluster = Stretch(runIndex, clusterGlyphs, clusterText.normalized(), run.calculateWidth(clusterGlyphs), runMetrics);
 
-            auto isSoftLineBreak = unicodeText->isSoftLineBreak(cluster.textStart());
             auto isWhitespaces = unicodeText->isWhitespaces(cluster.textRange());
-            auto isEndOfText = run.leftToRight() ? textIndex == run.fUtf16Range.fEnd : textIndex == run.fUtf16Range.fStart;
             // line + spaces + clusters + cluster
             if (isWhitespaces) {
                 // This is the end of the word
@@ -429,7 +409,7 @@ std::unique_ptr<WrappedText> ShapedText::wrap(UnicodeText* unicodeText, float wi
     }
     this->addLine(wrappedText.get(), unicodeText->getUnicode(), line, spaces, false);
     wrappedText->fActualSize.fWidth = width;
-    return std::move(wrappedText);
+    return wrappedText;
 }
 
 SkTArray<int32_t> ShapedText::getVisualOrder(SkUnicode* unicode, RunIndex startRun, RunIndex endRun) {
@@ -458,7 +438,7 @@ void ShapedText::addLine(WrappedText* wrappedText, SkUnicode* unicode, Stretch& 
     auto startRun = lineStretch.glyphStart().runIndex();
     auto endRun = lineStretch.glyphEnd().runIndex();
     // Reorder and cut (if needed) runs so they fit the line
-    auto visualOrder = std::move(this->getVisualOrder(unicode, startRun, endRun));
+    auto visualOrder = this->getVisualOrder(unicode, startRun, endRun);
     // Walk through the line's runs in visual order
     auto firstRunIndex = startRun;
     auto runStart = wrappedText->fVisualRuns.size();
@@ -547,7 +527,7 @@ std::vector<TextIndex> WrappedText::chunksToBlocks(SkSpan<size_t> chunks) {
         index += chunk;
     }
     blocks.emplace_back(index);
-    return std::move(blocks);
+    return blocks;
 }
 
 SkSpan<TextIndex> WrappedText::limitBlocks(TextRange textRange, SkSpan<TextIndex> blocks) {
@@ -617,7 +597,8 @@ GlyphRange WrappedText::textToGlyphs(UnicodeText* unicodeText, PositionType posi
     GlyphRange glyphRange(0, run.size());
     for (GlyphIndex glyph = 0; glyph < run.size(); ++glyph) {
         auto textIndex = run.fClusters[glyph];
-        if (positionType == PositionType::kGraphemeCluster && unicodeText->hasProperty(textIndex, CodeUnitFlags::kGraphemeStart)) {
+        if (positionType == PositionType::kGraphemeCluster &&
+            unicodeText->hasProperty(textIndex, SkUnicode::CodeUnitFlags::kGraphemeStart)) {
             if (dirTextRange.after(textIndex)) {
                 glyphRange.fStart = glyph;
             } else if (dirTextRange.before(textIndex)) {
@@ -636,13 +617,13 @@ std::unique_ptr<SelectableText> WrappedText::prepareToEdit(UnicodeText* unicodeT
     this->visit(selectableText.get());
     selectableText->fGlyphUnitProperties.push_back_n(unicodeText->getText16().size() + 1, GlyphUnitFlags::kNoGlyphUnitFlag);
     for (auto index = 0; index < unicodeText->getText16().size(); ++index) {
-        if (unicodeText->hasProperty(index, CodeUnitFlags::kHardLineBreakBefore)) {
+        if (unicodeText->hasProperty(index, SkUnicode::CodeUnitFlags::kHardLineBreakBefore)) {
             selectableText->fGlyphUnitProperties[index] = GlyphUnitFlags::kGraphemeClusterStart;
         }
     }
     for (const auto& run : fVisualRuns) {
         for (auto& cluster : run.fClusters) {
-            if (unicodeText->hasProperty(cluster, CodeUnitFlags::kGraphemeStart)) {
+            if (unicodeText->hasProperty(cluster, SkUnicode::CodeUnitFlags::kGraphemeStart)) {
                 selectableText->fGlyphUnitProperties[cluster] = GlyphUnitFlags::kGraphemeClusterStart;
             }
         }
