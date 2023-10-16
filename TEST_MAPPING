@@ -6,6 +6,10 @@
       "options": [
         {
           "exclude-annotation": "androidx.test.filters.FlakyTest"
+        },
+        // Broken very frequently; provides little value for our presubmit
+        {
+          "exclude-filter": "android.graphics.cts.ColorTest#resourceColor"
         }
       ]
     },
