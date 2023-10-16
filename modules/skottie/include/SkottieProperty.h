@@ -9,15 +9,19 @@
 #define SkottieProperty_DEFINED
 
 #include "include/core/SkColor.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
 #include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTypeface.h"
 #include "include/utils/SkTextUtils.h"
 #include "modules/skottie/src/text/SkottieShaper.h"
 
 #include <functional>
+#include <vector>
 
-class SkMatrix;
+class SkCanvas;
 
 namespace sksg {
 
@@ -36,6 +40,20 @@ enum class TextPaintOrder : uint8_t {
     kStrokeFill,
 };
 
+// EXPERIMENTAL
+// Optional callback invoked when drawing text layers.
+// Allows clients to render custom text decorations.
+class GlyphDecorator : public SkRefCnt {
+public:
+    struct GlyphInfo {
+        SkRect   fBounds;  // visual glyph bounds
+        SkMatrix fMatrix;  // glyph matrix
+        size_t   fCluster; // cluster index in the original text string
+    };
+
+    virtual void onDecorate(SkCanvas*, const GlyphInfo[], size_t size) = 0;
+};
+
 struct TextPropertyValue {
     sk_sp<SkTypeface>       fTypeface;
     SkString                fText;
@@ -46,6 +64,7 @@ struct TextPropertyValue {
                             fLineHeight     = 0,
                             fLineShift      = 0,
                             fAscent         = 0;
+    size_t                  fMaxLines       = 0;                                 // when auto-sizing
     SkTextUtils::Align      fHAlign         = SkTextUtils::kLeft_Align;
     Shaper::VAlign          fVAlign         = Shaper::VAlign::kTop;
     Shaper::ResizePolicy    fResize         = Shaper::ResizePolicy::kNone;
@@ -56,8 +75,10 @@ struct TextPropertyValue {
     SkColor                 fFillColor      = SK_ColorTRANSPARENT,
                             fStrokeColor    = SK_ColorTRANSPARENT;
     TextPaintOrder          fPaintOrder     = TextPaintOrder::kFillStroke;
+    SkPaint::Join           fStrokeJoin     = SkPaint::Join::kMiter_Join;
     bool                    fHasFill        = false,
                             fHasStroke      = false;
+    sk_sp<GlyphDecorator>   fDecorator;
 
     bool operator==(const TextPropertyValue& other) const;
     bool operator!=(const TextPropertyValue& other) const;

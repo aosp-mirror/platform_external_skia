@@ -5,7 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "src/core/SkGlyphRun.h"
+#if 0   // should we revitalize this by consing up a device for drawTextBlob() ?
+#include "src/text/GlyphRun.h"
 
 #include "include/core/SkTextBlob.h"
 #include "tests/Test.h"
@@ -13,8 +14,6 @@
 #include <algorithm>
 #include <memory>
 
-
-#if 0   // should we revitalize this by consing up a device for drawTextBlob() ?
 DEF_TEST(GlyphRunBlob, reporter) {
     constexpr uint16_t count = 5;
     constexpr int runCount = 2;
@@ -40,7 +39,7 @@ DEF_TEST(GlyphRunBlob, reporter) {
 
     auto blob = blobBuilder.make();
 
-    SkGlyphRunBuilder runBuilder;
+    sktext::GlyphRunBuilder runBuilder;
     SkPaint legacy_paint;
     font.LEGACY_applyToPaint(&legacy_paint);
     runBuilder.drawTextBlob(legacy_paint, *blob, SkPoint::Make(0, 0));

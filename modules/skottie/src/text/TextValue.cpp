@@ -46,7 +46,7 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
         SkTextUtils::kCenter_Align // 'j': 2
     };
     v->fHAlign = gAlignMap[std::min<size_t>(ParseDefault<size_t>((*jtxt)["j"], 0),
-                                            SK_ARRAY_COUNT(gAlignMap) - 1)];
+                                            std::size(gAlignMap) - 1)];
 
     // Optional text box size.
     if (const skjson::ArrayValue* jsz = (*jtxt)["sz"]) {
@@ -72,11 +72,12 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
     // TODO: remove "sk_rs" support after migrating clients.
     v->fResize = gResizeMap[std::min(std::max(ParseDefault<size_t>((*jtxt)[   "rs"], 0),
                                               ParseDefault<size_t>((*jtxt)["sk_rs"], 0)),
-                                     SK_ARRAY_COUNT(gResizeMap) - 1)];
+                                     std::size(gResizeMap) - 1)];
 
-    // Optional min/max font size (used when aute-resizing)
+    // Optional min/max font size and line count (used when aute-resizing)
     v->fMinTextSize = ParseDefault<SkScalar>((*jtxt)["mf"], 0.0f);
     v->fMaxTextSize = ParseDefault<SkScalar>((*jtxt)["xf"], std::numeric_limits<float>::max());
+    v->fMaxLines    = ParseDefault<size_t>  ((*jtxt)["xl"], 0);
 
     // At the moment, BM uses the paragraph box to discriminate point mode vs. paragraph mode.
     v->fLineBreak = v->fBox.isEmpty()
@@ -99,41 +100,51 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
         Shaper::Capitalization::kUpperCase, // 'ca': 1
     };
     v->fCapitalization = gCapMap[std::min<size_t>(ParseDefault<size_t>((*jtxt)["ca"], 0),
-                                                  SK_ARRAY_COUNT(gCapMap) - 1)];
+                                                  std::size(gCapMap) - 1)];
 
     // In point mode, the text is baseline-aligned.
     v->fVAlign = v->fBox.isEmpty() ? Shaper::VAlign::kTopBaseline
                                    : Shaper::VAlign::kTop;
 
     static constexpr Shaper::VAlign gVAlignMap[] = {
-        Shaper::VAlign::kVisualTop,    // 'vj': 0
-        Shaper::VAlign::kVisualCenter, // 'vj': 1
-        Shaper::VAlign::kVisualBottom, // 'vj': 2
+        Shaper::VAlign::kHybridTop,    // 'vj': 0
+        Shaper::VAlign::kHybridCenter, // 'vj': 1
+        Shaper::VAlign::kHybridBottom, // 'vj': 2
+        Shaper::VAlign::kVisualTop,    // 'vj': 3
+        Shaper::VAlign::kVisualCenter, // 'vj': 4
+        Shaper::VAlign::kVisualBottom, // 'vj': 5
     };
     size_t vj;
-    if (skottie::Parse((*jtxt)[   "vj"], &vj) ||
-        skottie::Parse((*jtxt)["sk_vj"], &vj)) { // TODO: remove after migrating clients.
-        if (vj < SK_ARRAY_COUNT(gVAlignMap)) {
+    if (skottie::Parse((*jtxt)["vj"], &vj)) {
+        if (vj < std::size(gVAlignMap)) {
             v->fVAlign = gVAlignMap[vj];
         } else {
-            // Legacy sk_vj values.
-            // TODO: remove after clients update.
-            switch (vj) {
-            case 3:
-                // 'sk_vj': 3 -> kVisualCenter/kScaleToFit
-                v->fVAlign = Shaper::VAlign::kVisualCenter;
-                v->fResize = Shaper::ResizePolicy::kScaleToFit;
-                break;
-            case 4:
-                // 'sk_vj': 4 -> kVisualCenter/kDownscaleToFit
-                v->fVAlign = Shaper::VAlign::kVisualCenter;
-                v->fResize = Shaper::ResizePolicy::kDownscaleToFit;
-                break;
-            default:
-                abuilder.log(Logger::Level::kWarning, nullptr,
-                             "Ignoring unknown 'vj' value: %zu", vj);
-                break;
-            }
+            abuilder.log(Logger::Level::kWarning, nullptr, "Ignoring unknown 'vj' value: %zu", vj);
+        }
+    } else if (skottie::Parse((*jtxt)["sk_vj"], &vj)) {
+        // Legacy sk_vj values.
+        // TODO: remove after clients update.
+        switch (vj) {
+        case 0:
+        case 1:
+        case 2:
+            static_assert(std::size(gVAlignMap) > 2);
+            v->fVAlign = gVAlignMap[vj];
+            break;
+        case 3:
+            // 'sk_vj': 3 -> kHybridCenter/kScaleToFit
+            v->fVAlign = Shaper::VAlign::kHybridCenter;
+            v->fResize = Shaper::ResizePolicy::kScaleToFit;
+            break;
+        case 4:
+            // 'sk_vj': 4 -> kHybridCenter/kDownscaleToFit
+            v->fVAlign = Shaper::VAlign::kHybridCenter;
+            v->fResize = Shaper::ResizePolicy::kDownscaleToFit;
+            break;
+        default:
+            abuilder.log(Logger::Level::kWarning, nullptr,
+                         "Ignoring unknown 'sk_vj' value: %zu", vj);
+            break;
         }
     }
 
@@ -160,6 +171,14 @@ bool Parse(const skjson::Value& jv, const internal::AnimationBuilder& abuilder, 
         v->fPaintOrder  = ParseDefault((*jtxt)["of"], true)
                 ? TextPaintOrder::kFillStroke
                 : TextPaintOrder::kStrokeFill;
+
+        static constexpr SkPaint::Join gJoins[] = {
+            SkPaint::kMiter_Join,  // lj: 1
+            SkPaint::kRound_Join,  // lj: 2
+            SkPaint::kBevel_Join,  // lj: 3
+        };
+        v->fStrokeJoin = gJoins[std::min<size_t>(ParseDefault<size_t>((*jtxt)["lj"], 1) - 1,
+                                                 std::size(gJoins) - 1)];
     }
 
     return true;

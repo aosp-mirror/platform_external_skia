@@ -14,8 +14,8 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSize.h"
 #include "include/private/SkIDChangeListener.h"
-#include "include/private/SkMutex.h"
-#include "include/private/SkTDArray.h"
+#include "include/private/base/SkMutex.h"
+#include "include/private/base/SkTDArray.h"
 
 #include <atomic>
 
@@ -112,7 +112,7 @@ private:
 
     void setTemporarilyImmutable();
     void restoreMutability();
-    friend class SkSurface_Raster;   // For the two methods above.
+    friend class SkSurface_Raster;  // For temporary immutable methods above.
 
     void setImmutableWithID(uint32_t genID);
     friend void SkBitmapCache_setImmutableWithID(SkPixelRef*, uint32_t);

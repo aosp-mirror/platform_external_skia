@@ -16,8 +16,8 @@
 #include "include/effects/SkGradientShader.h"
 #include "include/gpu/GrDirectContext.h"
 #include "include/gpu/GrRecordingContext.h"
+#include "src/base/SkScopeExit.h"
 #include "src/core/SkAutoPixmapStorage.h"
-#include "src/core/SkScopeExit.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
 #include "tools/gpu/YUVUtils.h"
@@ -388,7 +388,7 @@ DEF_SIMPLE_GM_CAN_FAIL(async_rescale_and_read_alpha_type, canvas, errorMsg, 512,
                                                colors,
                                                nullptr,
                                                nullptr,
-                                               SK_ARRAY_COUNT(colors),
+                                               std::size(colors),
                                                SkTileMode::kRepeat);
     SkPaint paint;
     paint.setShader(std::move(shader));

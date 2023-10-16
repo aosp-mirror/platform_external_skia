@@ -11,7 +11,7 @@
 #include "include/core/SkFont.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
-#include "include/core/SkPathEffect.h"
+#include "include/core/SkPathEffect.h" // IWYU pragma: keep
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
@@ -24,6 +24,7 @@
 #include "tests/Test.h"
 
 #include <cmath>
+#include <string>
 
 static const SkColor bgColor = SK_ColorWHITE;
 
@@ -96,7 +97,7 @@ DEF_TEST(DrawText_dashout, reporter) {
     paint.setStrokeWidth(2);
     constexpr SkScalar bigInterval = 10000;
     static constexpr SkScalar intervals[] = { 1, bigInterval };
-    paint.setPathEffect(SkDashPathEffect::Make(intervals, SK_ARRAY_COUNT(intervals), 2));
+    paint.setPathEffect(SkDashPathEffect::Make(intervals, std::size(intervals), 2));
 
     drawDashedTextCanvas.drawColor(SK_ColorWHITE);
     drawDashedTextCanvas.drawString("A", point.fX, point.fY, font, paint);

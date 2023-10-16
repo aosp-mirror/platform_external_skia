@@ -45,7 +45,7 @@ static void show_bounds(SkCanvas* canvas, const SkIRect* clip, const SkIRect* in
     SkPaint paint;
     paint.setStyle(SkPaint::kStroke_Style);
 
-    for (size_t i = 0; i < SK_ARRAY_COUNT(rects); ++i) {
+    for (size_t i = 0; i < std::size(rects); ++i) {
         // Skip null bounds rects, since not all methods have subsets
         if (rects[i]) {
             paint.setColor(colors[i]);
@@ -257,7 +257,7 @@ protected:
             "Lighting",
             "Tile"
         };
-        static_assert(SK_ARRAY_COUNT(filters) == SK_ARRAY_COUNT(filterNames), "filter name length");
+        static_assert(std::size(filters) == std::size(filterNames), "filter name length");
 
         SkIRect clipBounds[] {
             { -20, -20, 100, 100 },
@@ -267,10 +267,6 @@ protected:
             {  20,  20,  50,  50 },
             {  30,  30,  75,  75 }
         };
-
-        // These need to be GPU-backed when on the GPU to ensure that the image filters use the GPU
-        // code paths (otherwise they may choose to do CPU filtering then upload)
-        sk_sp<SkImage> mainImage, auxImage;
 
         auto rContext = canvas->recordingContext();
         // In a DDL context, we can't use the GPU code paths and we will drop the work – skip.
@@ -284,17 +280,17 @@ protected:
                 *errorMsg = "Direct context abandoned.";
                 return DrawResult::kSkip;
             }
-            mainImage = fMainImage->makeTextureImage(dContext);
-            auxImage = fAuxImage->makeTextureImage(dContext);
-        } else {
-            mainImage = fMainImage;
-            auxImage = fAuxImage;
         }
+
+        // These need to be GPU-backed when on the GPU to ensure that the image filters use the GPU
+        // code paths (otherwise they may choose to do CPU filtering then upload)
+        sk_sp<SkImage> mainImage = ToolUtils::MakeTextureImage(canvas, fMainImage);
+        sk_sp<SkImage> auxImage = ToolUtils::MakeTextureImage(canvas, fAuxImage);
         if (!mainImage || !auxImage) {
             return DrawResult::kFail;
         }
-        SkASSERT(mainImage && (mainImage->isTextureBacked() || !rContext));
-        SkASSERT(auxImage && (auxImage->isTextureBacked() || !rContext));
+        SkASSERT(mainImage && (mainImage->isTextureBacked() || !dContext));
+        SkASSERT(auxImage && (auxImage->isTextureBacked() || !dContext));
 
         SkScalar MARGIN = SkIntToScalar(40);
         SkScalar DX = mainImage->width() + MARGIN;
@@ -304,7 +300,7 @@ protected:
         SkPaint textPaint;
         textPaint.setAntiAlias(true);
         SkFont font(nullptr, 12);
-        for (size_t i = 0; i < SK_ARRAY_COUNT(filterNames); ++i) {
+        for (size_t i = 0; i < std::size(filterNames); ++i) {
             canvas->drawString(filterNames[i], DX * i + MARGIN, 15, font, textPaint);
         }
 
@@ -312,7 +308,7 @@ protected:
 
         for (auto clipBound : clipBounds) {
             canvas->save();
-            for (size_t i = 0; i < SK_ARRAY_COUNT(filters); ++i) {
+            for (size_t i = 0; i < std::size(filters); ++i) {
                 SkIRect subset = SkIRect::MakeXYWH(25, 25, 50, 50);
                 SkIRect outSubset;
 
@@ -382,8 +378,10 @@ private:
             auto rContext = canvas->recordingContext();
             result = mainImage->makeWithFilter(rContext, filter.get(), subset, clip,
                                                &outSubset, &offset);
+            if (!result) {
+                return;
+            }
 
-            SkASSERT(result);
             SkASSERT(mainImage->isTextureBacked() == result->isTextureBacked());
 
             *dstRect = SkIRect::MakeXYWH(offset.x(), offset.y(),

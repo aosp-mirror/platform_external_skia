@@ -9,8 +9,9 @@
 #define SKSL_DSL_BLOCK
 
 #include "include/private/SkSLDefines.h"
-#include "include/sksl/DSLExpression.h"
+#include "include/private/base/SkTArray.h"
 #include "include/sksl/DSLStatement.h"
+#include "include/sksl/SkSLPosition.h"
 
 #include <memory>
 
@@ -26,27 +27,19 @@ public:
     template<class... Statements>
     DSLBlock(Statements... statements) {
         fStatements.reserve_back(sizeof...(statements));
-        // in C++17, we could just do:
-        // (fStatements.push_back(DSLStatement(statements.release()).release()), ...);
-        int unused[] =
-            {0,
-            (static_cast<void>(fStatements.push_back(DSLStatement(statements.release()).release())),
-             0)...};
-        static_cast<void>(unused);
+        ((void)fStatements.push_back(DSLStatement(statements.release()).release()), ...);
     }
+
+    DSLBlock(SkSL::StatementArray statements, std::shared_ptr<SymbolTable> symbols = nullptr,
+            Position pos = {});
+
+    DSLBlock(SkTArray<DSLStatement> statements, std::shared_ptr<SymbolTable> symbols = nullptr,
+            Position pos = {});
 
     DSLBlock(DSLBlock&& other) = default;
+    DSLBlock& operator=(DSLBlock&& other) = default;
 
-    DSLBlock(SkSL::StatementArray statements, std::shared_ptr<SymbolTable> symbols = nullptr);
-
-    DSLBlock(SkTArray<DSLStatement> statements, std::shared_ptr<SymbolTable> symbols = nullptr);
-
-    ~DSLBlock();
-
-    DSLBlock& operator=(DSLBlock&& other) {
-        fStatements = std::move(other.fStatements);
-        return *this;
-    }
+    ~DSLBlock() = default;
 
     void append(DSLStatement stmt);
 
@@ -55,9 +48,7 @@ public:
 private:
     SkSL::StatementArray fStatements;
     std::shared_ptr<SkSL::SymbolTable> fSymbols;
-
-    friend class DSLStatement;
-    friend class DSLFunction;
+    Position fPosition;
 };
 
 } // namespace dsl

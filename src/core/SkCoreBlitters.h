@@ -15,6 +15,8 @@
 #include "src/shaders/SkBitmapProcShader.h"
 #include "src/shaders/SkShaderBase.h"
 
+class SkSurfaceProps;
+
 class SkRasterBlitter : public SkBlitter {
 public:
     SkRasterBlitter(const SkPixmap& device) : fDevice(device) {}
@@ -143,30 +145,12 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-typedef void (*SkS32D16BlendProc)(uint16_t*, const SkPMColor*, int, uint8_t);
-
-class SkRGB565_Shader_Blitter : public SkShaderBlitter {
-public:
-    SkRGB565_Shader_Blitter(const SkPixmap& device, const SkPaint&, SkShaderBase::Context*);
-    ~SkRGB565_Shader_Blitter() override;
-    void blitH(int x, int y, int width) override;
-    void blitAntiH(int x, int y, const SkAlpha[], const int16_t[]) override;
-
-    static bool Supports(const SkPixmap& device, const SkPaint&);
-
-private:
-    SkPMColor*          fBuffer;
-    SkS32D16BlendProc   fBlend;
-    SkS32D16BlendProc   fBlendCoverage;
-
-    using INHERITED = SkShaderBlitter;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-SkBlitter* SkCreateRasterPipelineBlitter(const SkPixmap&, const SkPaint&,
-                                         const SkMatrixProvider& matrixProvider, SkArenaAlloc*,
-                                         sk_sp<SkShader> clipShader);
+SkBlitter* SkCreateRasterPipelineBlitter(const SkPixmap&,
+                                         const SkPaint&,
+                                         const SkMatrix& ctm,
+                                         SkArenaAlloc*,
+                                         sk_sp<SkShader> clipShader,
+                                         const SkSurfaceProps& props);
 // Use this if you've pre-baked a shader pipeline, including modulating with paint alpha.
 SkBlitter* SkCreateRasterPipelineBlitter(const SkPixmap&, const SkPaint&,
                                          const SkRasterPipeline& shaderPipeline,

@@ -8,6 +8,8 @@
 #include "tools/skiaserve/urlhandlers/UrlHandler.h"
 
 #include "microhttpd.h"
+#include "src/utils/SkJSONWriter.h"
+#include "tools/debugger/DrawCommand.h"
 #include "tools/skiaserve/Request.h"
 #include "tools/skiaserve/Response.h"
 
@@ -25,7 +27,7 @@ int BreakHandler::handle(Request* request, MHD_Connection* connection,
     SkTArray<SkString> commands;
     SkStrSplit(url, "/", &commands);
 
-    if (!request->hasPicture() || commands.count() != 4) {
+    if (!request->hasPicture() || commands.size() != 4) {
         return MHD_NO;
     }
 

@@ -14,8 +14,8 @@
 #include "include/core/SkFontTypes.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkString.h"
-#include "include/private/SkOnce.h"
 #include "include/private/SkWeakRefCnt.h"
+#include "include/private/base/SkOnce.h"
 
 class SkData;
 class SkDescriptor;
@@ -359,6 +359,12 @@ public:
     void* internal_private_getCTFontRef() const {
         return this->onGetCTFontRef();
     }
+
+    /* Skia reserves all tags that begin with a lower case letter and 0 */
+    using FactoryId = SkFourByteTag;
+    static void Register(
+            FactoryId id,
+            sk_sp<SkTypeface> (*make)(std::unique_ptr<SkStreamAsset>, const SkFontArguments&));
 
 protected:
     explicit SkTypeface(const SkFontStyle& style, bool isFixedPitch = false);

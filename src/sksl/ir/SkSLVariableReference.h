@@ -8,12 +8,19 @@
 #ifndef SKSL_VARIABLEREFERENCE
 #define SKSL_VARIABLEREFERENCE
 
+#include "include/core/SkTypes.h"
+#include "include/private/SkSLIRNode.h"
+#include "include/sksl/SkSLPosition.h"
 #include "src/sksl/ir/SkSLExpression.h"
+
+#include <cstdint>
+#include <memory>
+#include <string>
 
 namespace SkSL {
 
-class IRGenerator;
 class Variable;
+enum class OperatorPrecedence : uint8_t;
 
 enum class VariableRefKind : int8_t {
     kRead,
@@ -35,17 +42,17 @@ class VariableReference final : public Expression {
 public:
     using RefKind = VariableRefKind;
 
-    inline static constexpr Kind kExpressionKind = Kind::kVariableReference;
+    inline static constexpr Kind kIRNodeKind = Kind::kVariableReference;
 
-    VariableReference(int line, const Variable* variable, RefKind refKind);
+    VariableReference(Position pos, const Variable* variable, RefKind refKind);
 
     // Creates a VariableReference. There isn't much in the way of error-checking or optimization
     // opportunities here.
-    static std::unique_ptr<Expression> Make(int line,
+    static std::unique_ptr<Expression> Make(Position pos,
                                             const Variable* variable,
                                             RefKind refKind = RefKind::kRead) {
         SkASSERT(variable);
-        return std::make_unique<VariableReference>(line, variable, refKind);
+        return std::make_unique<VariableReference>(pos, variable, refKind);
     }
 
     VariableReference(const VariableReference&) = delete;
@@ -62,15 +69,11 @@ public:
     void setRefKind(RefKind refKind);
     void setVariable(const Variable* variable);
 
-    bool hasProperty(Property property) const override;
-
-    bool isConstantOrUniform() const override;
-
-    std::unique_ptr<Expression> clone() const override {
-        return std::make_unique<VariableReference>(fLine, this->variable(), this->refKind());
+    std::unique_ptr<Expression> clone(Position pos) const override {
+        return std::make_unique<VariableReference>(pos, this->variable(), this->refKind());
     }
 
-    std::string description() const override;
+    std::string description(OperatorPrecedence) const override;
 
 private:
     const Variable* fVariable;

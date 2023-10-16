@@ -7,17 +7,28 @@
 
 // This is a GPU-backend specific test.
 
-#include "tests/Test.h"
-
-using namespace sk_gpu_test;
-
-#include "tools/gpu/GrContextFactory.h"
-
+#include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorType.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRefCnt.h"
 #include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrDirectContext.h"
+#include "include/gpu/mock/GrMockTypes.h"
 #include "src/core/SkImagePriv.h"
+#include "tests/CtsEnforcement.h"
+#include "tests/Test.h"
+#include "tools/gpu/FenceSync.h"
+
+class GrRecordingContext;
+struct GrContextOptions;
+
+using namespace sk_gpu_test;
 
 static bool surface_is_expected_color(SkSurface* surf, const SkImageInfo& ii, SkColor color) {
     SkBitmap bm;
@@ -48,7 +59,7 @@ static void basic_test(skiatest::Reporter* reporter, GrRecordingContext* rContex
     // We start off with the raster image being all red.
     sk_sp<SkImage> img = SkMakeImageFromRasterBitmap(bm, kNever_SkCopyPixelsMode);
 
-    sk_sp<SkSurface> gpuSurface = SkSurface::MakeRenderTarget(rContext, SkBudgeted::kYes, ii);
+    sk_sp<SkSurface> gpuSurface = SkSurface::MakeRenderTarget(rContext, skgpu::Budgeted::kYes, ii);
     SkCanvas* canvas = gpuSurface->getCanvas();
 
     // w/o pinning - the gpu draw always reflects the current state of the underlying bitmap
@@ -129,7 +140,10 @@ static void cleanup_test(skiatest::Reporter* reporter) {
     }
 }
 
-DEF_GPUTEST_FOR_RENDERING_CONTEXTS(PinnedImageTest, reporter, ctxInfo) {
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(PinnedImageTest,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kApiLevel_T) {
     basic_test(reporter, ctxInfo.directContext());
     cleanup_test(reporter);
 }

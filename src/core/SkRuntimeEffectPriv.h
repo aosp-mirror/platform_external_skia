@@ -16,23 +16,72 @@
 
 #ifdef SK_ENABLE_SKSL
 
+namespace SkSL {
+class Context;
+class Variable;
+struct Program;
+}
+
+class SkCapabilities;
+struct SkColorSpaceXformSteps;
+
 class SkRuntimeEffectPriv {
 public:
+    struct UniformsCallbackContext {
+        const SkColorSpace* fDstColorSpace;
+    };
+
+    // Private (experimental) API for creating runtime shaders with late-bound uniforms.
+    // The callback must produce a uniform data blob of the correct size for the effect.
+    // It is invoked at "draw" time (essentially, when a draw call is made against the canvas
+    // using the resulting shader). There are no strong guarantees about timing.
+    // Serializing the resulting shader will immediately invoke the callback (and record the
+    // resulting uniforms).
+    using UniformsCallback = std::function<sk_sp<const SkData>(const UniformsCallbackContext&)>;
+    static sk_sp<SkShader> MakeDeferredShader(const SkRuntimeEffect* effect,
+                                              UniformsCallback uniformsCallback,
+                                              SkSpan<SkRuntimeEffect::ChildPtr> children,
+                                              const SkMatrix* localMatrix = nullptr);
+
     // Helper function when creating an effect for a GrSkSLFP that verifies an effect will
     // implement the constant output for constant input optimization flag.
-    static bool SupportsConstantOutputForConstantInput(sk_sp<SkRuntimeEffect> effect) {
+    static bool SupportsConstantOutputForConstantInput(const SkRuntimeEffect* effect) {
         return effect->getFilterColorProgram();
+    }
+
+    static uint32_t Hash(const SkRuntimeEffect& effect) {
+        return effect.hash();
+    }
+
+    static const SkSL::Program& Program(const SkRuntimeEffect& effect) {
+        return *effect.fBaseProgram;
     }
 
     static SkRuntimeEffect::Options ES3Options() {
         SkRuntimeEffect::Options options;
-        options.enforceES2Restrictions = false;
+        options.maxVersionAllowed = SkSL::Version::k300;
         return options;
     }
 
-    static void EnableFragCoord(SkRuntimeEffect::Options* options) {
-        options->allowFragCoord = true;
+    static void AllowPrivateAccess(SkRuntimeEffect::Options* options) {
+        options->allowPrivateAccess = true;
     }
+
+    static SkRuntimeEffect::Uniform VarAsUniform(const SkSL::Variable&,
+                                                 const SkSL::Context&,
+                                                 size_t* offset);
+
+    // If there are layout(color) uniforms then this performs color space transformation on the
+    // color values and returns a new SkData. Otherwise, the original data is returned.
+    static sk_sp<const SkData> TransformUniforms(SkSpan<const SkRuntimeEffect::Uniform> uniforms,
+                                                 sk_sp<const SkData> originalData,
+                                                 const SkColorSpaceXformSteps&);
+    static sk_sp<const SkData> TransformUniforms(SkSpan<const SkRuntimeEffect::Uniform> uniforms,
+                                                 sk_sp<const SkData> originalData,
+                                                 const SkColorSpace* dstCS);
+
+    static bool CanDraw(const SkCapabilities*, const SkSL::Program*);
+    static bool CanDraw(const SkCapabilities*, const SkRuntimeEffect*);
 };
 
 // These internal APIs for creating runtime effects vary from the public API in two ways:
@@ -43,58 +92,37 @@ public:
 // Users of the public SkRuntimeEffect::Make*() can of course cache however they like themselves;
 // keeping these APIs private means users will not be forced into our cache or cache policy.
 
-sk_sp<SkRuntimeEffect> SkMakeCachedRuntimeEffect(SkRuntimeEffect::Result (*make)(SkString sksl),
-                                                 SkString sksl);
+sk_sp<SkRuntimeEffect> SkMakeCachedRuntimeEffect(
+        SkRuntimeEffect::Result (*make)(SkString sksl, const SkRuntimeEffect::Options&),
+        SkString sksl);
 
-inline sk_sp<SkRuntimeEffect> SkMakeCachedRuntimeEffect(SkRuntimeEffect::Result (*make)(SkString),
-                                                        const char* sksl) {
+inline sk_sp<SkRuntimeEffect> SkMakeCachedRuntimeEffect(
+        SkRuntimeEffect::Result (*make)(SkString, const SkRuntimeEffect::Options&),
+        const char* sksl) {
     return SkMakeCachedRuntimeEffect(make, SkString{sksl});
 }
 
 // Internal API that assumes (and asserts) that the shader code is valid, but does no internal
-// caching. Used when the caller will cache the result in a static variable.
-inline sk_sp<SkRuntimeEffect> SkMakeRuntimeEffect(
+// caching. Used when the caller will cache the result in a static variable. Ownership is passed to
+// the caller; the effect will be leaked if it the pointer is not stored or explicitly deleted.
+inline SkRuntimeEffect* SkMakeRuntimeEffect(
         SkRuntimeEffect::Result (*make)(SkString, const SkRuntimeEffect::Options&),
         const char* sksl,
         SkRuntimeEffect::Options options = SkRuntimeEffect::Options{}) {
-    SkRuntimeEffectPriv::EnableFragCoord(&options);
+#if defined(SK_DEBUG)
+    // Our SKSL snippets we embed in Skia should not have comments or excess indentation.
+    // Removing them helps trim down code size and speeds up parsing
+    if (SkStrContains(sksl, "//") || SkStrContains(sksl, "    ")) {
+        SkDEBUGFAILF("Found SkSL snippet that can be minified: \n %s\n", sksl);
+    }
+#endif
+    SkRuntimeEffectPriv::AllowPrivateAccess(&options);
     auto result = make(SkString{sksl}, options);
-    SkASSERTF(result.effect, "%s", result.errorText.c_str());
-    return result.effect;
+    if (!result.effect) {
+        SK_ABORT("%s", result.errorText.c_str());
+    }
+    return result.effect.release();
 }
-
-// This is mostly from skvm's rgb->hsl code, with some GPU-related finesse pulled from
-// GrHighContrastFilterEffect.fp, see next comment.
-inline constexpr char kRGB_to_HSL_sksl[] =
-    "half3 rgb_to_hsl(half3 c) {"
-        "half mx = max(max(c.r,c.g),c.b),"
-        "     mn = min(min(c.r,c.g),c.b),"
-        "      d = mx-mn,                "
-        "   invd = 1.0 / d,              "
-        " g_lt_b = c.g < c.b ? 6.0 : 0.0;"
-
-        // We'd prefer to write these tests like `mx == c.r`, but on some GPUs max(x,y) is
-        // not always equal to either x or y.  So we use long form, c.r >= c.g && c.r >= c.b.
-        "half h = (1/6.0) * (mx == mn                 ? 0.0 :"
-        "     /*mx==c.r*/    c.r >= c.g && c.r >= c.b ? invd * (c.g - c.b) + g_lt_b :"
-        "     /*mx==c.g*/    c.g >= c.b               ? invd * (c.b - c.r) + 2.0  "
-        "     /*mx==c.b*/                             : invd * (c.r - c.g) + 4.0);"
-
-        "half sum = mx+mn,"
-        "       l = sum * 0.5,"
-        "       s = mx == mn ? 0.0"
-        "                    : d / (l > 0.5 ? 2.0 - sum : sum);"
-        "return half3(h,s,l);"
-    "}";
-
-//This is straight out of GrHSLToRGBFilterEffect.fp.
-inline constexpr char kHSL_to_RGB_sksl[] =
-    "half3 hsl_to_rgb(half3 hsl) {"
-        "half  C = (1 - abs(2 * hsl.z - 1)) * hsl.y;"
-        "half3 p = hsl.xxx + half3(0, 2/3.0, 1/3.0);"
-        "half3 q = saturate(abs(fract(p) * 6 - 3) - 1);"
-        "return (q - 0.5) * C + hsl.z;"
-    "}";
 
 /**
  * Runtime effects are often long lived & cached. Individual color filters or FPs created from them

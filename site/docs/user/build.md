@@ -74,7 +74,7 @@ bin/gn gen out/Shared --args='is_official_build=true is_component_build=true'
 If you find that you don't have `bin/gn`, make sure you've run:
 
 ```
-python2 tools/git-sync-deps
+python3 tools/git-sync-deps
 ```
 
 For a list of available build arguments, take a look at `gn/skia.gni`, or run:
@@ -123,9 +123,10 @@ If you do not have an NDK and have access to CIPD, you can use one of these
 commands to fetch the NDK our bots use:
 
 ```
-./bin/sk asset download android_ndk_linux /tmp/ndk
-./bin/sk asset download android_ndk_darwin /tmp/ndk
-./bin/sk.exe asset download android_ndk_windows C:/ndk
+./bin/fetch-sk
+./bin/sk asset download android_ndk_linux /tmp/ndk     # on Linux
+./bin/sk asset download android_ndk_darwin /tmp/ndk    # on Mac
+./bin/sk.exe asset download android_ndk_windows C:/ndk # on Windows
 ```
 
 When generating your GN build files, pass the path to your `ndk` and your
@@ -255,15 +256,29 @@ sudo mount -i -o remount,exec /home/chronos
 Mac users may want to pass `--ide=xcode` to `bin/gn gen` to generate an Xcode
 project.
 
+Mac GN builds assume an Intel CPU by default. If you are building for Apple
+Silicon (M1 and newer) instead, add a gn arg to set `target_cpu="arm64"`:
+
+```
+bin/gn gen out/AppleSilicon --args='target_cpu="arm64"'
+```
+
+Googlers should see [go/skia-corp-xcode](http://go/skia-corp-xcode) for
+instructions on setting up Xcode on a corp machine.
+
 ## iOS
 
 Run GN to generate your build files. Set `target_os="ios"` to build for iOS.
-This defaults to `target_cpu="arm64"`. Choosing `x64` targets the iOS simulator.
+This defaults to `target_cpu="arm64"`. To use the iOS simulator, set
+`ios_use_simulator=true` and set `target_cpu` to your Mac's architecture.
+On an Intel Mac, setting `target_cpu="x64"` alone will also target the iOS
+simulator.
 
 ```
 bin/gn gen out/ios64  --args='target_os="ios"'
 bin/gn gen out/ios32  --args='target_os="ios" target_cpu="arm"'
-bin/gn gen out/iossim --args='target_os="ios" target_cpu="x64"'
+bin/gn gen out/iossim-apple --args='target_os="ios" target_cpu="arm64" ios_use_simulator=true'
+bin/gn gen out/iossim-intel --args='target_os="ios" target_cpu="x64"'
 ```
 
 This will also package (and for devices, sign) iOS test binaries. This defaults
@@ -362,7 +377,7 @@ the `out` directory. First, create all of your GN configurations as usual. Pass
 `--ide=vs` when running `bin/gn gen` for each one. Then:
 
 ```
-python2 gn/gn_meta_sln.py
+python3 gn/gn_meta_sln.py
 ```
 
 This creates a new dedicated output directory and solution file

@@ -12,6 +12,8 @@ class SkCanvas;
 namespace skia {
 namespace textlayout {
 
+class ParagraphPainter;
+
 class Paragraph {
 
 public:
@@ -38,6 +40,8 @@ public:
     virtual void layout(SkScalar width) = 0;
 
     virtual void paint(SkCanvas* canvas, SkScalar x, SkScalar y) = 0;
+
+    virtual void paint(ParagraphPainter* painter, SkScalar x, SkScalar y) = 0;
 
     // Returns a vector of bounding boxes that enclose all text between
     // start and end glyph indexes, including start and excluding end
@@ -66,9 +70,9 @@ public:
     // -1 if not applicable (has not been shaped yet - valid case)
     virtual int32_t unresolvedGlyphs() = 0;
 
-    // Experimental API that allows fast way to update "immutable" paragraph
+    // Experimental API that allows fast way to update some of "immutable" paragraph attributes
+    // but not the text itself
     virtual void updateTextAlign(TextAlign textAlign) = 0;
-    virtual void updateText(size_t from, SkString text) = 0;
     virtual void updateFontSize(size_t from, size_t to, SkScalar fontSize) = 0;
     virtual void updateForegroundPaint(size_t from, size_t to, SkPaint paint) = 0;
     virtual void updateBackgroundPaint(size_t from, size_t to, SkPaint paint) = 0;

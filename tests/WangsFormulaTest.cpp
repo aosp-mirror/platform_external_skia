@@ -5,14 +5,25 @@
  * found in the LICENSE file.
  */
 
-#include "include/utils/SkRandom.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
+#include "src/base/SkRandom.h"
+#include "src/base/SkVx.h"
 #include "src/core/SkGeometry.h"
+#include "src/gpu/tessellate/Tessellation.h"
 #include "src/gpu/tessellate/WangsFormula.h"
 #include "tests/Test.h"
 
-namespace skgpu {
+#include <algorithm>
+#include <cmath>
+#include <functional>
+#include <limits>
+#include <string>
 
-constexpr static float kPrecision = 4;  // 1/4 pixel max error.
+namespace skgpu::tess {
 
 const SkPoint kSerp[4] = {
         {285.625f, 499.687f}, {411.625f, 808.188f}, {1064.62f, 135.688f}, {1042.63f, 585.187f}};
@@ -344,7 +355,7 @@ DEF_TEST(wangs_formula_worst_case_cubic, r) {
     }
     // Make sure overflow saturates at infinity (not NaN).
     constexpr static float inf = std::numeric_limits<float>::infinity();
-    REPORTER_ASSERT(r, wangs_formula::worst_case_cubic_pow4(kPrecision, inf, inf) == inf);
+    REPORTER_ASSERT(r, wangs_formula::worst_case_cubic_p4(kPrecision, inf, inf) == inf);
     REPORTER_ASSERT(r, wangs_formula::worst_case_cubic(kPrecision, inf, inf) == inf);
 }
 
@@ -523,4 +534,4 @@ DEF_TEST(wangs_formula_conic_vectorXforms, r) {
     }
 }
 
-}  // namespace skgpu
+}  // namespace skgpu::tess
