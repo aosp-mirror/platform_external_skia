@@ -31,14 +31,6 @@ public:
     ~RasterPathAtlas() override {}
     void recordUploads(DrawContext*, Recorder*);
 
-    // Clear all scheduled atlas draws and free up atlas allocations, if necessary. After this call
-    // the atlas can be considered cleared and available for new shape insertions. However this
-    // method does not have any bearing on the contents of any atlas textures themselves, which may
-    // be in use by GPU commands that are in-flight or yet to be submitted.
-    // TODO: can probably remove this once caching is working, or only use it for the LRU page
-    // when out of space
-    void reset();
-
 protected:
     const TextureProxy* onAddShape(Recorder* recorder,
                                    const Shape&,
@@ -82,11 +74,16 @@ private:
     };
 
     void makeMRU(Page*);
+    // Free up atlas allocations, if necessary. After this call the atlas can be considered
+    // available for new shape insertions. However this method does not have any bearing on the
+    // contents of any atlas textures themselves, which may be in use by GPU commands that are
+    // in-flight or yet to be submitted.
+    void reset();
 
-    // Moving from one cached page to two gives improved results on some of our more complex SKPs.
-    // Any higher uses more memory seemly without much of an overall perf gain. More investigation
-    // will have to be done to tune this value.
-    static constexpr int kMaxPages = 2;
+    // Investigation shows that eight pages helps with some of the more complex skps, and
+    // since we're using less complex vertex setups with the RPA, we have more GPU memory
+    // to take advantage of.
+    static constexpr int kMaxPages = 8;
     typedef SkTInternalLList<Page> PageList;
     // LRU list of Pages (MRU at head - LRU at tail)
     PageList fPageList;

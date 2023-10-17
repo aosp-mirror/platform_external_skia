@@ -1,6 +1,7 @@
 workspace(name = "skia")
 
 load("//bazel:deps.bzl", "bazel_deps", "c_plus_plus_deps")
+
 bazel_deps()
 
 load("//toolchain:download_toolchains.bzl", "download_toolchains_for_skia")
@@ -34,6 +35,19 @@ emsdk_emscripten_deps(emscripten_version = "3.1.44")
 load("@bazel_toolchains//repositories:repositories.bzl", bazel_toolchains_repositories = "repositories")
 
 bazel_toolchains_repositories()
+
+http_archive(
+    name = "rules_pkg",
+    sha256 = "8f9ee2dc10c1ae514ee599a8b42ed99fa262b757058f65ad3c384289ff70c4b8",
+    urls = gcs_mirror_url(
+        sha256 = "8f9ee2dc10c1ae514ee599a8b42ed99fa262b757058f65ad3c384289ff70c4b8",
+        url = "https://github.com/bazelbuild/rules_pkg/releases/download/0.9.1/rules_pkg-0.9.1.tar.gz",
+    ),
+)
+
+load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
+
+rules_pkg_dependencies()
 
 #######################################################################################
 # Python
@@ -567,7 +581,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/skottie-base container.
 container_pull(
     name = "skottie-base",
-    digest = "sha256:bbf6a30f67f486a9513633bb1df0d96b0637a76c55886f62ea9477cbd0717678",
+    digest = "sha256:444eb9b78e14aba1caf1d13ad857f42acb170dc0761d39ed0b20316d076c1a76",
     registry = "gcr.io",
     repository = "skia-public/skottie-base",
 )
