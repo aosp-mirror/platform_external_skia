@@ -41,7 +41,6 @@ class SkTaskGroup;
 class SkTraceMemoryDump;
 enum SkColorType : int;
 enum class SkTextureCompressionType;
-struct GrGLInterface;
 struct GrMockOptions;
 struct GrVkBackendContext; // IWYU pragma: keep
 struct GrD3DBackendContext; // IWYU pragma: keep
@@ -62,17 +61,6 @@ enum class BackendSurfaceAccess;
 
 class SK_API GrDirectContext : public GrRecordingContext {
 public:
-#if defined(SK_GL) && !defined(SK_DISABLE_LEGACY_GL_GRDIRECTCONTEXT_FACTORIES)
-    /**
-     * Creates a GrDirectContext for a backend context. If no GrGLInterface is provided then the
-     * result of GrGLMakeNativeInterface() is used if it succeeds.
-     */
-    static sk_sp<GrDirectContext> MakeGL(sk_sp<const GrGLInterface>, const GrContextOptions&);
-    static sk_sp<GrDirectContext> MakeGL(sk_sp<const GrGLInterface>);
-    static sk_sp<GrDirectContext> MakeGL(const GrContextOptions&);
-    static sk_sp<GrDirectContext> MakeGL();
-#endif
-
 #if defined(SK_VULKAN) && !defined(SK_DISABLE_LEGACY_VK_GRDIRECTCONTEXT_FACTORIES)
     /**
      * The Vulkan context (VkQueue, VkDevice, VkInstance) must be kept alive until the returned
@@ -357,10 +345,9 @@ public:
 
     /**
      * Inserts a list of GPU semaphores that the current GPU-backed API must wait on before
-     * executing any more commands on the GPU. We only guarantee blocking fragment shader work,
-     * but may block earlier stages as well depending on the backend.If this call returns false,
-     * then the GPU back-end will not wait on any passed in semaphores, and the client will still
-     * own the semaphores, regardless of the value of deleteSemaphoresAfterWait.
+     * executing any more commands on the GPU. If this call returns false, then the GPU back-end
+     * will not wait on any passed in semaphores, and the client will still own the semaphores,
+     * regardless of the value of deleteSemaphoresAfterWait.
      *
      * If deleteSemaphoresAfterWait is false then Skia will not delete the semaphores. In this case
      * it is the client's responsibility to not destroy or attempt to reuse the semaphores until it
