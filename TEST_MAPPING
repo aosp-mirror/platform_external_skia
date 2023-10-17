@@ -2,7 +2,12 @@
   // TODO(b/242858942): periodically re-enable tests on case-by-case basis when they're fixed.
   "presubmit": [
     {
-      "name": "CtsGraphicsTestCases"
+      "name": "CtsGraphicsTestCases",
+      "options": [
+        {
+          "exclude-annotation": "androidx.test.filters.FlakyTest"
+        }
+      ]
     },
     {
       "name": "CtsSkQPTestCases",
@@ -23,7 +28,13 @@
       "name": "minikin_tests"
     },
     {
-      "name": "SurfaceFlinger_test"
+      "name": "SurfaceFlinger_test",
+      "options": [
+        // TODO(b/302314649): re-enable after presubmit flakiness fixed
+        {
+          "exclude-filter": "*ChildLayerTest*"
+        }
+      ]
     }
   ],
   "imports": [
