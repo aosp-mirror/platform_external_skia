@@ -1,9 +1,9 @@
 """This module defines the android_test macro."""
 
-load("//tools/testrunners/common/android:adb_test.bzl", "adb_test")
-load("//bazel:binary_wrapper_script_with_cmdline_flags.bzl", "binary_wrapper_script_with_cmdline_flags")
 load("//bazel:cc_binary_with_flags.bzl", "cc_binary_with_flags")
 load("//bazel/devices:android_devices.bzl", "ANDROID_DEVICES")
+load("//tools/testrunners/common:binary_wrapper_script_with_cmdline_flags.bzl", "binary_wrapper_script_with_cmdline_flags")
+load("//tools/testrunners/common/android:adb_test.bzl", "adb_test")
 
 def android_test(
         name,
@@ -13,6 +13,7 @@ def android_test(
         deps = [],
         flags = {},
         extra_args = [],
+        benchmark = False,
         requires_condition = "//bazel/common_config_settings:always_true",
         requires_resources_dir = False,
         save_output_files = False):
@@ -79,9 +80,11 @@ def android_test(
             various codecs included, but most tests won't need that.
         extra_args: Additional command-line arguments to pass to the test, for example, any
             device-specific --skip flags to skip incompatible or buggy test cases.
+        benchmark: Set up the device for benchmark tests. This might affect e.g. CPU and GPU
+            settings specific to the Android device under test.
         requires_condition: A necessary condition for the test to work. For example, Ganesh tests
             should set this argument to "//src/gpu:has_ganesh_backend". If the condition is
-            satisfied, test_runner_if_required_condition_is_satisfied will be appended to the srcs
+            satisfied, test_runner_if_required_condition_is_satisfied will be appended to the deps
             attribute.
             If the condition is not satisfied, test_runner_if_required_condition_is_not_satisfied
             will be included as the only source file, and no deps will be included. This prevents
@@ -140,7 +143,7 @@ def android_test(
         srcs = archive_srcs,
         outs = ["%s.tar.gz" % name],
         cmd = """
-            $(location //bazel/make_tarball) \
+            $(location //tools/testrunners/common/make_tarball) \
                 --execpaths "{execpaths}" \
                 --rootpaths "{rootpaths}" \
                 --output-file $@
@@ -152,7 +155,7 @@ def android_test(
         # Tools are always built for the exec platform
         # (https://bazel.build/reference/be/general#genrule.tools), e.g. Linux on x86_64 when
         # running on a gLinux workstation or on a Linux GCE machine.
-        tools = ["//bazel/make_tarball"],
+        tools = ["//tools/testrunners/common/make_tarball"],
     )
 
     adb_test(
@@ -167,6 +170,7 @@ def android_test(
                 ("//conditions:default", "unknown"),
             ],
         )),
+        benchmark = benchmark,
         save_output_files = save_output_files,
         tags = ["no-remote"],  # Incompatible with RBE because it requires an Android device.
         target_compatible_with = select({
