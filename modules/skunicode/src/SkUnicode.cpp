@@ -34,8 +34,8 @@ std::unique_ptr<SkUnicode> MakeClientBasedUnicode(
         std::vector<SkUnicode::Position> graphemeBreaks,
         std::vector<SkUnicode::LineBreakBefore> lineBreaks) {
 #ifdef SK_UNICODE_CLIENT_IMPLEMENTATION
-    std::unique_ptr<SkUnicode> unicode =
-            SkUnicode::MakeClientBasedUnicode(text, words, graphemeBreaks, lineBreaks);
+    std::unique_ptr<SkUnicode> unicode = SkUnicode::MakeClientBasedUnicode(
+            text, std::move(words), std::move(graphemeBreaks), std::move(lineBreaks));
     if (unicode) {
         return unicode;
     }
