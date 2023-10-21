@@ -50,6 +50,7 @@
 #include "include/private/base/SkTemplates.h"
 #include "src/base/SkAutoMalloc.h"
 #include "src/core/SkAnnotationKeys.h"
+#include "src/core/SkFontPriv.h"
 #include "src/core/SkImageFilter_Base.h"
 #include "src/core/SkPicturePriv.h"
 #include "src/core/SkReadBuffer.h"
@@ -58,6 +59,7 @@
 #include "tests/Test.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <algorithm>
 #include <array>
@@ -541,7 +543,8 @@ SkString DumpFontMetrics(const SkFontMetrics& metrics) {
     m.appendf("StrikeoutPosition: %f\n", metrics.fStrikeoutPosition);
     return m;
 }
-static void TestTypefaceSerialization(skiatest::Reporter* reporter, sk_sp<SkTypeface> typeface) {
+static void TestTypefaceSerialization(skiatest::Reporter* reporter,
+                                      const sk_sp<SkTypeface>& typeface) {
     SkDynamicMemoryWStream typefaceWStream;
     typeface->serialize(&typefaceWStream);
 
@@ -575,8 +578,8 @@ static void TestTypefaceSerialization(skiatest::Reporter* reporter, sk_sp<SkType
 }
 DEF_TEST(Serialization_Typeface, reporter) {
     SkFont font;
-    TestTypefaceSerialization(reporter, font.refTypefaceOrDefault());
-    TestTypefaceSerialization(reporter, ToolUtils::sample_user_typeface());
+    TestTypefaceSerialization(reporter, SkFontPriv::RefTypefaceOrDefault(font));
+    TestTypefaceSerialization(reporter, ToolUtils::SampleUserTypeface());
 }
 
 static void setup_bitmap_for_canvas(SkBitmap* bitmap) {
