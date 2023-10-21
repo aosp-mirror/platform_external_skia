@@ -58,6 +58,7 @@
 #include "tools/GpuToolUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #if defined(SK_GANESH)
 #include "include/gpu/GrDirectContext.h"
@@ -158,7 +159,7 @@ SkBitmap make_gradient_circle(int width, int height) {
 
 class FilterList {
 public:
-    FilterList(sk_sp<SkImageFilter> input, const SkIRect* cropRect = nullptr) {
+    FilterList(const sk_sp<SkImageFilter>& input, const SkIRect* cropRect = nullptr) {
         static const SkScalar kBlurSigma = SkIntToScalar(5);
 
         SkPoint3 location = SkPoint3::Make(0, 0, SK_Scalar1);
@@ -792,7 +793,7 @@ DEF_TEST(ImageFilterDrawTiled, reporter) {
 
     SkPaint textPaint;
     textPaint.setColor(SK_ColorWHITE);
-    SkFont font(ToolUtils::create_portable_typeface(), height);
+    SkFont font(ToolUtils::DefaultPortableTypeface(), height);
 
     const char* text = "ABC";
     const SkScalar yPos = SkIntToScalar(height);
@@ -2102,8 +2103,8 @@ static void test_arithmetic_bounds(skiatest::Reporter* reporter, float k1, float
                                    float k4, sk_sp<SkImageFilter> background,
                                    sk_sp<SkImageFilter> foreground,
                                    const SkIRect* crop, const SkIRect& expected) {
-    sk_sp<SkImageFilter> arithmetic(
-            SkImageFilters::Arithmetic(k1, k2, k3, k4, false, background, foreground, crop));
+    sk_sp<SkImageFilter> arithmetic(SkImageFilters::Arithmetic(
+            k1, k2, k3, k4, false, std::move(background), std::move(foreground), crop));
     // Use a very large input bounds so that the crop rects stored in 'background' and 'foreground'
     // aren't restricted.
     SkIRect src = SkRectPriv::MakeILarge();

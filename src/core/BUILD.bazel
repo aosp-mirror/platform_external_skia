@@ -74,6 +74,7 @@ CORE_FILES = [
     "SkBlitter_A8.h",
     "SkBlitter_ARGB32.cpp",
     "SkBlitter_Sprite.cpp",
+    "SkBlurEngine.h",
     "SkBlurMask.cpp",
     "SkBlurMask.h",
     "SkBlurMaskFilterImpl.cpp",
@@ -418,6 +419,7 @@ skia_filegroup(
         "SkBlendModePriv.h",
         "SkBlenderBase.h",
         "SkBlitter_A8.h",
+        "SkBlurEngine.h",
         "SkBlurMask.h",
         "SkBlurMaskFilterImpl.h",
         "SkCachedData.h",
@@ -837,6 +839,7 @@ skia_cc_library(
         "SK_SLUG_DISABLE_LEGACY_DESERIALIZE",
         "SK_DISABLE_LEGACY_PNG_WRITEBUFFER",
         "SK_DISABLE_LEGACY_IMAGE_READBUFFER",
+        "SK_DEFAULT_TYPEFACE_IS_EMPTY",
     ],
     textual_hdrs = [
         "//src/opts:textual_hdrs",
