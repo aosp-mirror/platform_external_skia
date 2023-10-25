@@ -3,6 +3,10 @@
 #pragma once
 #include "SkUserConfigManual.h"
 
+#ifndef GRAPHITE_TEST_UTILS
+#define GRAPHITE_TEST_UTILS
+#endif
+
 #ifndef SKSL_ENABLE_TRACING
 #define SKSL_ENABLE_TRACING
 #endif
@@ -57,6 +61,10 @@
 
 #ifndef SK_GL
 #define SK_GL
+#endif
+
+#ifndef SK_GRAPHITE
+#define SK_GRAPHITE
 #endif
 
 #ifndef SK_HAS_WUFFS_LIBRARY
