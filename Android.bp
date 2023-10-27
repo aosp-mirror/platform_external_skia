@@ -3217,6 +3217,7 @@ cc_test {
         "bench/CodecBench.cpp",
         "bench/ColorFilterBench.cpp",
         "bench/ColorPrivBench.cpp",
+        "bench/ColorSpaceBench.cpp",
         "bench/CompositingImagesBench.cpp",
         "bench/ControlBench.cpp",
         "bench/CoverageBench.cpp",
