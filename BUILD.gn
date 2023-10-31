@@ -28,7 +28,7 @@ import("gn/ios.gni")
 config("skia_public") {
   include_dirs = [ "." ]
 
-  defines = []
+  defines = [ "SK_DEFAULT_TYPEFACE_IS_EMPTY" ]
   cflags_objcc = []
   if (is_component_build) {
     defines += [ "SKIA_DLL" ]
@@ -975,6 +975,10 @@ optional("gpu") {
   libs = []
   frameworks = []
 
+  if (is_android) {
+    sources += skia_gpu_android_private
+  }
+
   if (skia_use_gl) {
     public_defines += [ "SK_GL" ]
     if (is_android) {
@@ -982,6 +986,7 @@ optional("gpu") {
         "src/gpu/ganesh/gl/egl/GrGLMakeEGLInterface.cpp",
         "src/gpu/ganesh/gl/egl/GrGLMakeNativeInterface_egl.cpp",
       ]
+      sources += skia_android_gl_sources
 
       # this lib is required to link against AHardwareBuffer
       if (defined(ndk_api) && ndk_api >= 26) {
@@ -1026,6 +1031,9 @@ optional("gpu") {
       } else {
         public_deps += [ "//src/graphics/lib/vulkan" ]
       }
+    }
+    if (is_android) {
+      sources += skia_gpu_vk_android_private
     }
   }
 
@@ -2636,6 +2644,7 @@ if (skia_enable_tools) {
       "tools/debugger/DebugLayerManager.cpp",
       "tools/debugger/DrawCommand.cpp",
       "tools/debugger/JsonWriteBuffer.cpp",
+      "tools/fonts/FontToolUtils.cpp",
     ]
     if (skia_enable_graphite && skia_enable_precompile) {
       sources += [ "fuzz/FuzzPrecompile.cpp" ]

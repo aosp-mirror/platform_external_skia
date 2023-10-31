@@ -437,30 +437,6 @@ static bool setup_features(const skgpu::VulkanGetProc& getProc, VkInstance inst,
         tailPNext = &ycbcrFeature->pNext;
     }
 
-    VkPhysicalDeviceDynamicRenderingFeaturesKHR* dynamicRenderingFeature = nullptr;
-    if (extensions->hasExtension(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, 1)) {
-        dynamicRenderingFeature = (VkPhysicalDeviceDynamicRenderingFeaturesKHR*)sk_malloc_throw(
-            sizeof(VkPhysicalDeviceDynamicRenderingFeaturesKHR));
-        dynamicRenderingFeature->sType =
-                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
-        dynamicRenderingFeature->pNext = nullptr;
-        dynamicRenderingFeature->dynamicRendering = VK_TRUE;
-        *tailPNext = dynamicRenderingFeature;
-        tailPNext = &dynamicRenderingFeature->pNext;
-    }
-
-    VkPhysicalDeviceInlineUniformBlockFeaturesEXT* inlineUniformFeature = nullptr;
-    if (extensions->hasExtension(VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME, 1)) {
-        inlineUniformFeature = (VkPhysicalDeviceInlineUniformBlockFeaturesEXT*)sk_malloc_throw(
-            sizeof(VkPhysicalDeviceInlineUniformBlockFeaturesEXT));
-        inlineUniformFeature->sType =
-                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES_EXT;
-        inlineUniformFeature->pNext = nullptr;
-        inlineUniformFeature->inlineUniformBlock = VK_TRUE;
-        *tailPNext = inlineUniformFeature;
-        tailPNext = &inlineUniformFeature->pNext;
-    }
-
     if (physDeviceVersion >= VK_MAKE_VERSION(1, 1, 0)) {
         ACQUIRE_VK_PROC_LOCAL(GetPhysicalDeviceFeatures2, inst, VK_NULL_HANDLE);
         grVkGetPhysicalDeviceFeatures2(physDev, features);
@@ -773,10 +749,11 @@ bool CreateVkBackendContext(PFN_vkGetInstanceProcAddr getInstProc,
 
             // This is an nvidia extension that isn't supported by the debug layers so we get lots
             // of warnings. We don't actually use it, so it is easiest to just not enable it.
-            if (0 == strcmp(deviceExtensions[i].extensionName, "VK_NV_low_latency") ||
+            if (0 == strcmp(deviceExtensions[i].extensionName, "VK_EXT_provoking_vertex") ||
                 0 == strcmp(deviceExtensions[i].extensionName, "VK_NV_acquire_winrt_display") ||
                 0 == strcmp(deviceExtensions[i].extensionName, "VK_NV_cuda_kernel_launch") ||
-                0 == strcmp(deviceExtensions[i].extensionName, "VK_EXT_provoking_vertex")) {
+                0 == strcmp(deviceExtensions[i].extensionName, "VK_NV_low_latency") ||
+                0 == strcmp(deviceExtensions[i].extensionName, "VK_NV_present_barrier")) {
                 continue;
             }
 
