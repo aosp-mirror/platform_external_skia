@@ -2689,16 +2689,6 @@ cc_defaults {
     ],
 
     srcs: [
-        "experimental/sktext/src/Line.cpp",
-        "experimental/sktext/src/LogicalRun.cpp",
-        "experimental/sktext/src/Paint.cpp",
-        "experimental/sktext/src/Text.cpp",
-        "experimental/sktext/src/VisualRun.cpp",
-        "experimental/sktext/tests/FontResolvedText.cpp",
-        "experimental/sktext/tests/SelectableText.cpp",
-        "experimental/sktext/tests/ShapedText.cpp",
-        "experimental/sktext/tests/UnicodeText.cpp",
-        "experimental/sktext/tests/WrappedText.cpp",
         "modules/bentleyottmann/src/BentleyOttmann1.cpp",
         "modules/bentleyottmann/src/BruteForceCrossings.cpp",
         "modules/bentleyottmann/src/EventQueue.cpp",
