@@ -276,12 +276,15 @@ sk_sp<Device> Device::Make(Recorder* recorder,
 // These default tuning numbers for the HybridBoundsManager were chosen from looking at performance
 // and accuracy curves produced by the BoundsManagerBench for random draw bounding boxes. This
 // config will use brute force for the first 64 draw calls to the Device and then switch to a grid
-// that is dynamically sized to produce cells that are 16x16, which seemed to be in the sweet spot
-// for maintaining good performance without becoming too inaccurate.
+// that is dynamically sized to produce cells that are 16x16, up to a grid that's 32x32 cells.
+// This seemed like a sweet spot balancing accuracy for low-draw count surfaces and overhead for
+// high-draw count and high-resolution surfaces. With the 32x32 grid limit, cell size will increase
+// above 16px when the surface dimension goes above 512px.
 // TODO: These could be exposed as context options or surface options, and we may want to have
 // different strategies in place for a base device vs. a layer's device.
 static constexpr int kGridCellSize = 16;
 static constexpr int kMaxBruteForceN = 64;
+static constexpr int kMaxGridSize = 32;
 
 Device::Device(Recorder* recorder, sk_sp<DrawContext> dc, bool addInitialClear)
         : SkDevice(dc->imageInfo(), dc->surfaceProps())
@@ -291,12 +294,12 @@ Device::Device(Recorder* recorder, sk_sp<DrawContext> dc, bool addInitialClear)
         , fColorDepthBoundsManager(
                     std::make_unique<HybridBoundsManager>(fDC->imageInfo().dimensions(),
                                                           kGridCellSize,
-                                                          kMaxBruteForceN))
+                                                          kMaxBruteForceN,
+                                                          kMaxGridSize))
         , fDisjointStencilSet(std::make_unique<IntersectionTreeSet>())
         , fCachedLocalToDevice(SkM44())
         , fCurrentDepth(DrawOrder::kClearDepth)
-        , fSDFTControl(recorder->priv().caps()->getSDFTControl(false))
-        , fDrawsOverlap(false) {
+        , fSDFTControl(recorder->priv().caps()->getSDFTControl(false)) {
     SkASSERT(SkToBool(fDC) && SkToBool(fRecorder));
     fRecorder->registerDevice(this);
 
@@ -1024,9 +1027,9 @@ void Device::drawGeometry(const Transform& localToDevice,
     // also lets Device easily track whether or not there are any overlapping draws.
     PaintParams shading{paint, std::move(primitiveBlender), dstReadReq, skipColorXform};
     const bool dependsOnDst = rendererCoverage != Coverage::kNone || paint_depends_on_dst(shading);
-    CompressedPaintersOrder prevDraw =
-            fColorDepthBoundsManager->getMostRecentDraw(clip.drawBounds());
     if (dependsOnDst) {
+        CompressedPaintersOrder prevDraw =
+            fColorDepthBoundsManager->getMostRecentDraw(clip.drawBounds());
         order.dependsOnPaintersOrder(prevDraw);
     }
 
@@ -1076,7 +1079,11 @@ void Device::drawGeometry(const Transform& localToDevice,
     // Post-draw book keeping (bounds manager, depth tracking, etc.)
     fColorDepthBoundsManager->recordDraw(clip.drawBounds(), order.paintOrder());
     fCurrentDepth = order.depth();
-    fDrawsOverlap |= (prevDraw != DrawOrder::kNoIntersection);
+
+    // TODO(b/238758897): When we enable layer elision that depends on draws not overlapping, we
+    // can use the `getMostRecentDraw()` query to determine that, although that will mean querying
+    // even if the draw does not depend on dst (so should be only be used when the Device is an
+    // elision candidate).
 }
 
 void Device::drawClipShape(const Transform& localToDevice,
@@ -1307,8 +1314,6 @@ void Device::flushPendingWorkToRecorder() {
     fColorDepthBoundsManager->reset();
     fDisjointStencilSet->reset();
     fCurrentDepth = DrawOrder::kClearDepth;
-    // NOTE: fDrawsOverlap is not reset here because that is a persistent property of everything
-    // drawn into the Device, and not just the currently accumulating pass.
 }
 
 bool Device::needsFlushBeforeDraw(int numNewRenderSteps, DstReadRequirement dstReadReq) const {
