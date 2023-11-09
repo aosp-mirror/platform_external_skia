@@ -5279,6 +5279,7 @@ cc_library_shared {
         "tools/gpu/vk/VkYcbcrSamplerHelper.cpp",
         "tools/graphite/ContextFactory.cpp",
         "tools/graphite/GraphiteTestContext.cpp",
+        "tools/graphite/ProtectedUtils_Graphite.cpp",
         "tools/graphite/vk/GraphiteVulkanTestContext.cpp",
         "tools/skqp/src/jni_skqp.cpp",
         "tools/skqp/src/skqp.cpp",
