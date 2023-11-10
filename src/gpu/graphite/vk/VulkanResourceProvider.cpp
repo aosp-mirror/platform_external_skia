@@ -9,6 +9,7 @@
 
 #include "include/core/SkSpan.h"
 #include "include/gpu/graphite/BackendTexture.h"
+#include "include/gpu/graphite/vk/VulkanGraphiteTypes.h"
 #include "src/gpu/MutableTextureStateRef.h"
 #include "src/gpu/graphite/Buffer.h"
 #include "src/gpu/graphite/ComputePipeline.h"
@@ -23,6 +24,7 @@
 #include "src/gpu/graphite/vk/VulkanGraphicsPipeline.h"
 #include "src/gpu/graphite/vk/VulkanRenderPass.h"
 #include "src/gpu/graphite/vk/VulkanSampler.h"
+#include "src/gpu/graphite/vk/VulkanSamplerYcbcrConversion.h"
 #include "src/gpu/graphite/vk/VulkanSharedContext.h"
 #include "src/gpu/graphite/vk/VulkanTexture.h"
 #include "src/gpu/vk/VulkanMemory.h"
@@ -30,6 +32,100 @@
 
 namespace skgpu::graphite {
 
+VulkanResourceProvider::VulkanResourceProvider(SharedContext* sharedContext,
+                                               SingleOwner* singleOwner,
+                                               uint32_t recorderID,
+                                               size_t resourceBudget,
+                                               sk_sp<Buffer> intrinsicConstantUniformBuffer)
+        : ResourceProvider(sharedContext, singleOwner, recorderID, resourceBudget)
+        , fIntrinsicUniformBuffer(std::move(intrinsicConstantUniformBuffer)) {
+}
+
+VulkanResourceProvider::~VulkanResourceProvider() {
+    if (fPipelineCache != VK_NULL_HANDLE) {
+        VULKAN_CALL(this->vulkanSharedContext()->interface(),
+                    DestroyPipelineCache(this->vulkanSharedContext()->device(),
+                                         fPipelineCache,
+                                         nullptr));
+    }
+}
+
+const VulkanSharedContext* VulkanResourceProvider::vulkanSharedContext() const {
+    return static_cast<const VulkanSharedContext*>(fSharedContext);
+}
+
+sk_sp<Texture> VulkanResourceProvider::createWrappedTexture(const BackendTexture& texture) {
+    return VulkanTexture::MakeWrapped(this->vulkanSharedContext(),
+                                      this,
+                                      texture.dimensions(),
+                                      texture.info(),
+                                      texture.getMutableState(),
+                                      texture.getVkImage(),
+                                      /*alloc=*/{}); // Skia does not own wrapped texture memory
+}
+
+sk_sp<Buffer> VulkanResourceProvider::refIntrinsicConstantBuffer() const {
+    return fIntrinsicUniformBuffer;
+}
+
+
+sk_sp<GraphicsPipeline> VulkanResourceProvider::createGraphicsPipeline(
+        const RuntimeEffectDictionary* runtimeDict,
+        const GraphicsPipelineDesc& pipelineDesc,
+        const RenderPassDesc& renderPassDesc) {
+    SkSL::Compiler skslCompiler(fSharedContext->caps()->shaderCaps());
+    auto compatibleRenderPass =
+            this->findOrCreateRenderPass(renderPassDesc, /*compatibleOnly=*/true);
+    return VulkanGraphicsPipeline::Make(this->vulkanSharedContext(),
+                                        &skslCompiler,
+                                        runtimeDict,
+                                        pipelineDesc,
+                                        renderPassDesc,
+                                        compatibleRenderPass,
+                                        this->pipelineCache());
+}
+
+sk_sp<ComputePipeline> VulkanResourceProvider::createComputePipeline(const ComputePipelineDesc&) {
+    return nullptr;
+}
+
+sk_sp<Texture> VulkanResourceProvider::createTexture(SkISize size, const TextureInfo& info,
+                                                     skgpu::Budgeted budgeted) {
+    return VulkanTexture::Make(this->vulkanSharedContext(), this, size, info, budgeted);
+}
+
+sk_sp<Buffer> VulkanResourceProvider::createBuffer(size_t size,
+                                                   BufferType type,
+                                                   AccessPattern accessPattern) {
+    return VulkanBuffer::Make(this->vulkanSharedContext(), size, type, accessPattern);
+}
+
+sk_sp<Sampler> VulkanResourceProvider::createSampler(const SkSamplingOptions& samplingOptions,
+                                                     SkTileMode xTileMode,
+                                                     SkTileMode yTileMode) {
+    return VulkanSampler::Make(this->vulkanSharedContext(), samplingOptions, xTileMode, yTileMode);
+}
+
+BackendTexture VulkanResourceProvider::onCreateBackendTexture(SkISize dimensions,
+                                                              const TextureInfo& info) {
+    VulkanTextureInfo vkTexInfo;
+    if (!info.getVulkanTextureInfo(&vkTexInfo)) {
+        return {};
+    }
+    VulkanTexture::CreatedImageInfo createdTextureInfo;
+    if (!VulkanTexture::MakeVkImage(this->vulkanSharedContext(), dimensions, info,
+                                    &createdTextureInfo)) {
+        return {};
+    }
+    return {dimensions,
+            vkTexInfo,
+            createdTextureInfo.fMutableState->getImageLayout(),
+            createdTextureInfo.fMutableState->getQueueFamilyIndex(),
+            createdTextureInfo.fImage,
+            createdTextureInfo.fMemoryAlloc};
+}
+
+namespace {
 GraphiteResourceKey build_desc_set_key(const SkSpan<DescriptorData>& requestedDescriptors,
                                        const uint32_t uniqueId) {
     // TODO(nicolettep): Finalize & optimize key structure. Refactor to have the order of the
@@ -69,98 +165,20 @@ GraphiteResourceKey build_desc_set_key(const SkSpan<DescriptorData>& requestedDe
     return key;
 }
 
-VulkanResourceProvider::VulkanResourceProvider(SharedContext* sharedContext,
-                                               SingleOwner* singleOwner,
-                                               uint32_t recorderID,
-                                               size_t resourceBudget,
-                                               sk_sp<Buffer> intrinsicConstantUniformBuffer)
-        : ResourceProvider(sharedContext, singleOwner, recorderID, resourceBudget)
-        , fIntrinsicUniformBuffer(std::move(intrinsicConstantUniformBuffer)) {
-}
-
-VulkanResourceProvider::~VulkanResourceProvider() {
-    if (fPipelineCache != VK_NULL_HANDLE) {
-        VULKAN_CALL(this->vulkanSharedContext()->interface(),
-                    DestroyPipelineCache(this->vulkanSharedContext()->device(),
-                                         fPipelineCache,
-                                         nullptr));
+sk_sp<VulkanDescriptorSet> add_new_desc_set_to_cache(const VulkanSharedContext* context,
+                                                     const sk_sp<VulkanDescriptorPool>& pool,
+                                                     const GraphiteResourceKey& descSetKey,
+                                                     ResourceCache* resourceCache) {
+    sk_sp<VulkanDescriptorSet> descSet = VulkanDescriptorSet::Make(context, pool);
+    if (!descSet) {
+        return nullptr;
     }
-}
+    descSet->setKey(descSetKey);
+    resourceCache->insertResource(descSet.get());
 
-const VulkanSharedContext* VulkanResourceProvider::vulkanSharedContext() {
-    return static_cast<const VulkanSharedContext*>(fSharedContext);
+    return descSet;
 }
-
-sk_sp<Texture> VulkanResourceProvider::createWrappedTexture(const BackendTexture& texture) {
-    return VulkanTexture::MakeWrapped(this->vulkanSharedContext(),
-                                      texture.dimensions(),
-                                      texture.info(),
-                                      texture.getMutableState(),
-                                      texture.getVkImage(),
-                                      {});
-}
-
-sk_sp<Buffer> VulkanResourceProvider::refIntrinsicConstantBuffer() const {
-    return fIntrinsicUniformBuffer;
-}
-
-
-sk_sp<GraphicsPipeline> VulkanResourceProvider::createGraphicsPipeline(
-        const RuntimeEffectDictionary* runtimeDict,
-        const GraphicsPipelineDesc& pipelineDesc,
-        const RenderPassDesc& renderPassDesc) {
-    SkSL::Compiler skslCompiler(fSharedContext->caps()->shaderCaps());
-    auto compatibleRenderPass =
-            this->findOrCreateRenderPass(renderPassDesc, /*compatibleOnly=*/true);
-    return VulkanGraphicsPipeline::Make(this->vulkanSharedContext(),
-                                        &skslCompiler,
-                                        runtimeDict,
-                                        pipelineDesc,
-                                        renderPassDesc,
-                                        compatibleRenderPass,
-                                        this->pipelineCache());
-}
-
-sk_sp<ComputePipeline> VulkanResourceProvider::createComputePipeline(const ComputePipelineDesc&) {
-    return nullptr;
-}
-
-sk_sp<Texture> VulkanResourceProvider::createTexture(SkISize size, const TextureInfo& info,
-                                                     skgpu::Budgeted budgeted) {
-    return VulkanTexture::Make(this->vulkanSharedContext(), size, info, budgeted);
-}
-
-sk_sp<Buffer> VulkanResourceProvider::createBuffer(size_t size,
-                                                   BufferType type,
-                                                   AccessPattern accessPattern) {
-    return VulkanBuffer::Make(this->vulkanSharedContext(), size, type, accessPattern);
-}
-
-sk_sp<Sampler> VulkanResourceProvider::createSampler(const SkSamplingOptions& samplingOptions,
-                                                     SkTileMode xTileMode,
-                                                     SkTileMode yTileMode) {
-    return VulkanSampler::Make(this->vulkanSharedContext(), samplingOptions, xTileMode, yTileMode);
-}
-
-BackendTexture VulkanResourceProvider::onCreateBackendTexture(SkISize dimensions,
-                                                              const TextureInfo& info) {
-    VulkanTextureInfo vkTexInfo;
-    if (!info.getVulkanTextureInfo(&vkTexInfo)) {
-        return {};
-    }
-    VulkanTexture::CreatedImageInfo createdTextureInfo;
-    if (!VulkanTexture::MakeVkImage(this->vulkanSharedContext(), dimensions, info,
-                                    &createdTextureInfo)) {
-        return {};
-    } else {
-        return {dimensions,
-                vkTexInfo,
-                createdTextureInfo.fMutableState->getImageLayout(),
-                createdTextureInfo.fMutableState->getQueueFamilyIndex(),
-                createdTextureInfo.fImage,
-                createdTextureInfo.fMemoryAlloc};
-    }
-}
+} // anonymous namespace
 
 sk_sp<VulkanDescriptorSet> VulkanResourceProvider::findOrCreateDescriptorSet(
         SkSpan<DescriptorData> requestedDescriptors) {
@@ -174,7 +192,7 @@ sk_sp<VulkanDescriptorSet> VulkanResourceProvider::findOrCreateDescriptorSet(
     GraphiteResourceKey descSetKeys [VulkanDescriptorPool::kMaxNumSets];
     for (uint32_t i = 0; i < VulkanDescriptorPool::kMaxNumSets; i++) {
         GraphiteResourceKey key = build_desc_set_key(requestedDescriptors, i);
-        if (auto descSet = fResourceCache->findAndRefResource(key, skgpu::Budgeted::kNo)) {
+        if (auto descSet = fResourceCache->findAndRefResource(key, skgpu::Budgeted::kYes)) {
             // A non-null resource pointer indicates we have found an available descriptor set.
             return sk_sp<VulkanDescriptorSet>(static_cast<VulkanDescriptorSet*>(descSet));
         }
@@ -184,46 +202,62 @@ sk_sp<VulkanDescriptorSet> VulkanResourceProvider::findOrCreateDescriptorSet(
     // If we did not find an existing avilable desc set, allocate sets with the appropriate layout
     // and add them to the cache.
     VkDescriptorSetLayout layout;
-    DescriptorDataToVkDescSetLayout(this->vulkanSharedContext(), requestedDescriptors, &layout);
+    const VulkanSharedContext* context = this->vulkanSharedContext();
+    DescriptorDataToVkDescSetLayout(context, requestedDescriptors, &layout);
     if (!layout) {
         return nullptr;
     }
-    auto pool = VulkanDescriptorPool::Make(this->vulkanSharedContext(),
-                                           requestedDescriptors,
-                                           layout);
-    SkASSERT(pool);
-
-    // Allocate the maximum number of sets so they can be easily accessed as needed from the cache.
-    for (int i = 0; i < VulkanDescriptorPool::kMaxNumSets ; i++) {
-        auto descSet = VulkanDescriptorSet::Make(this->vulkanSharedContext(), pool, layout);
-        SkASSERT(descSet);
-        descSet->setKey(descSetKeys[i]);
-        fResourceCache->insertResource(descSet.get());
+    auto pool = VulkanDescriptorPool::Make(context, requestedDescriptors, layout);
+    if (!pool) {
+        VULKAN_CALL(context->interface(), DestroyDescriptorSetLayout(context->device(),
+                                                                     layout,
+                                                                     nullptr));
+        return nullptr;
     }
-    auto descSet = fResourceCache->findAndRefResource(descSetKeys[0], skgpu::Budgeted::kNo);
-    return descSet ? sk_sp<VulkanDescriptorSet>(static_cast<VulkanDescriptorSet*>(descSet))
-                   : nullptr;
+
+    // Start with allocating one descriptor set. If one cannot be successfully created, then we can
+    // return early before attempting to allocate more. Storing a ptr to the first set also
+    // allows us to return that later without having to perform a find operation on the cache once
+    // all the sets are added.
+    auto firstDescSet =
+            add_new_desc_set_to_cache(context, pool, descSetKeys[0], fResourceCache.get());
+    if (!firstDescSet) {
+        return nullptr;
+    }
+
+    // Continue to allocate & cache the maximum number of sets so they can be easily accessed as
+    // they're needed.
+    for (int i = 1; i < VulkanDescriptorPool::kMaxNumSets ; i++) {
+        auto descSet =
+                add_new_desc_set_to_cache(context, pool, descSetKeys[i], fResourceCache.get());
+        if (!descSet) {
+            SKGPU_LOG_W("Descriptor set allocation %d of %d was unsuccessful; no more sets will be"
+                        "allocated from this pool.", i, VulkanDescriptorPool::kMaxNumSets);
+            break;
+        }
+    }
+
+    return firstDescSet;
 }
 
 sk_sp<VulkanRenderPass> VulkanResourceProvider::findOrCreateRenderPass(
         const RenderPassDesc& renderPassDesc, bool compatibleOnly) {
     auto renderPassKey = VulkanRenderPass::MakeRenderPassKey(renderPassDesc, compatibleOnly);
-    Resource* existingRenderPass =
-            fResourceCache->findAndRefResource(renderPassKey, skgpu::Budgeted::kYes);
-
-    if (existingRenderPass) {
-        return sk_sp<VulkanRenderPass>(static_cast<VulkanRenderPass*>(existingRenderPass));
-    } else {
-        auto newRenderPass = VulkanRenderPass::MakeRenderPass(
-                this->vulkanSharedContext(), renderPassDesc, compatibleOnly);
-        SkASSERT(newRenderPass);
-        newRenderPass->setKey(renderPassKey);
-        fResourceCache->insertResource(newRenderPass.get());
+    if (Resource* resource =
+            fResourceCache->findAndRefResource(renderPassKey, skgpu::Budgeted::kYes)) {
+        return sk_sp<VulkanRenderPass>(static_cast<VulkanRenderPass*>(resource));
     }
 
-    auto renderPass = fResourceCache->findAndRefResource(renderPassKey, skgpu::Budgeted::kYes);
-    return renderPass ? sk_sp<VulkanRenderPass>(static_cast<VulkanRenderPass*>(renderPass))
-                      : nullptr;
+    auto renderPass = VulkanRenderPass::MakeRenderPass(this->vulkanSharedContext(), renderPassDesc,
+                                                       compatibleOnly);
+    if (!renderPass) {
+        return nullptr;
+    }
+
+    renderPass->setKey(renderPassKey);
+    fResourceCache->insertResource(renderPass.get());
+
+    return renderPass;
 }
 
 VkPipelineCache VulkanResourceProvider::pipelineCache() {
@@ -279,6 +313,35 @@ void VulkanResourceProvider::onDeleteBackendTexture(const BackendTexture& textur
             this->vulkanSharedContext()->memoryAllocator(), *(texture.getMemoryAlloc()));
 
     VULKAN_CALL(this->vulkanSharedContext()->interface(),
-                DestroyImage(this->vulkanSharedContext()->device(), texture.getVkImage(), nullptr));
+                DestroyImage(this->vulkanSharedContext()->device(), texture.getVkImage(),
+                             /*VkAllocationCallbacks=*/nullptr));
 }
+
+sk_sp<VulkanSamplerYcbcrConversion>
+        VulkanResourceProvider::findOrCreateCompatibleSamplerYcbcrConversion(
+                const VulkanYcbcrConversionInfo& ycbcrInfo) const {
+    if (!ycbcrInfo.isValid()) {
+        return nullptr;
+    }
+    auto ycbcrConversionKey = VulkanSamplerYcbcrConversion::MakeYcbcrConversionKey(
+            this->vulkanSharedContext(), ycbcrInfo);
+
+    if (Resource* resource = fResourceCache->findAndRefResource(ycbcrConversionKey,
+                                                                skgpu::Budgeted::kNo)) {
+        return sk_sp<VulkanSamplerYcbcrConversion>(
+                static_cast<VulkanSamplerYcbcrConversion*>(resource));
+    }
+
+    auto ycbcrConversion = VulkanSamplerYcbcrConversion::Make(this->vulkanSharedContext(),
+                                                              ycbcrInfo);
+    if (!ycbcrConversion) {
+        return nullptr;
+    }
+
+    ycbcrConversion->setKey(ycbcrConversionKey);
+    fResourceCache->insertResource(ycbcrConversion.get());
+
+    return ycbcrConversion;
+}
+
 } // namespace skgpu::graphite

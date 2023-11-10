@@ -13,7 +13,7 @@
 #ifdef SK_VULKAN
 
 #include "include/core/SkRefCnt.h"
-#include "include/gpu/vk/GrVkBackendContext.h"
+#include "include/gpu/vk/VulkanBackendContext.h"
 #include "include/gpu/vk/VulkanExtensions.h"
 
 class GrDirectContext;
@@ -23,17 +23,21 @@ class SkSurface;
 
 class VkTestHelper {
 public:
-    VkTestHelper(bool isProtected) : fIsProtected(isProtected) {}
+    static std::unique_ptr<VkTestHelper> Make(bool isProtected);
 
     ~VkTestHelper() {
         this->cleanup();
     }
 
-    bool init();
+    bool isValid() const { return fDirectContext != nullptr; }
 
     GrDirectContext* directContext() { return fDirectContext.get(); }
 
+
 private:
+    VkTestHelper(bool isProtected) : fIsProtected(isProtected) {}
+
+    bool init();
     void cleanup();
 
     DECLARE_VK_PROC(DestroyInstance);
@@ -62,7 +66,7 @@ private:
     VkPhysicalDeviceFeatures2 fFeatures = {};
     VkDebugReportCallbackEXT fDebugCallback = VK_NULL_HANDLE;
     PFN_vkDestroyDebugReportCallbackEXT fDestroyDebugCallback = nullptr;
-    GrVkBackendContext fBackendContext;
+    skgpu::VulkanBackendContext fBackendContext;
     sk_sp<GrDirectContext> fDirectContext;
 };
 
