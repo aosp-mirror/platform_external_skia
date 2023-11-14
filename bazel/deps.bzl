@@ -29,7 +29,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "d3e897d992221ddddce7a9a7893fa66db8559c52",
+        commit = "dc295723a2e40c7156cc8ef98e3a799cb2c1dec0",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -179,7 +179,7 @@ def c_plus_plus_deps(ws = "@skia"):
 
     git_repository(
         name = "spirv_tools",
-        commit = "fbf047cc8b51d396d66c747f1eee472feb1b2441",
+        commit = "6b1e609ef1609ac695cc465374d7e50831c1937b",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git",
     )
 
@@ -193,21 +193,21 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "vulkan_headers",
         build_file = ws + "//bazel/external/vulkan_headers:BUILD.bazel",
-        commit = "aff5071d4ee6215c60a91d8d983cad91bb25fb57",
+        commit = "af4fb97d7bde80997b0f61d53bb50bd6c56b8f50",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Headers",
     )
 
     new_git_repository(
         name = "vulkan_tools",
         build_file = ws + "//bazel/external/vulkan_tools:BUILD.bazel",
-        commit = "322e7b3f0850c4892b69b326959811c82344e18f",
+        commit = "90e25ec83a56f0e1c79480b934d7e255fde7869e",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Tools",
     )
 
     new_git_repository(
         name = "vulkan_utility_libraries",
         build_file = ws + "//bazel/external/vulkan_utility_libraries:BUILD.bazel",
-        commit = "5b3147a535e28a48ae760efacdf97b296d9e8c73",
+        commit = "177e2312faf83374d049111a194954fcdfb84b73",
         remote = "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Utility-Libraries",
     )
 
