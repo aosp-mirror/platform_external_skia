@@ -42,6 +42,7 @@
   {"name": "BazelTest-cpu_tests-all_go_tests-linux_rbe-linux_x64"},
   {"name": "BazelTest-external_client-path_combiner-default-linux_x64"},
   {"name": "BazelTest-external_client-png_decoder-default-linux_x64"},
+  {"name": "BazelTest-external_client-write_text_to_png-default-linux_x64"},
   {"name": "BazelTest-cpu_tests-all_tests-cpu_only_debug_rbe-linux_x64",
     "cq_config": {"experimental": true}
   },
@@ -367,7 +368,6 @@
   {"name": "Housekeeper-PerCommit-CheckGeneratedFiles",
    "cq_config": {}
    },
-  {"name": "Housekeeper-PerCommit-CreateDockerImage_Skia_Release"},
   {"name": "Housekeeper-PerCommit-InfraTests_Linux",
    "cq_config": {}
    },
@@ -375,7 +375,6 @@
   {"name": "Housekeeper-PerCommit-IsolateSKP"},
   {"name": "Housekeeper-PerCommit-IsolateSVG"},
   {"name": "Housekeeper-PerCommit-IsolateSkImage"},
-  {"name": "Housekeeper-PerCommit-PushAppsFromSkiaDockerImage"},
   {"name": "Housekeeper-PerCommit-RunGnToBp",
    "cq_config": {}
    },

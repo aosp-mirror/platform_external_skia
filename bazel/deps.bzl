@@ -8,6 +8,7 @@ Instead, do:
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "maybe")
+load("//bazel:download_config_files.bzl", "download_config_files")
 load("//bazel:gcs_mirror.bzl", "gcs_mirror_url")
 
 def c_plus_plus_deps(ws = "@skia"):
@@ -29,7 +30,7 @@ def c_plus_plus_deps(ws = "@skia"):
     new_git_repository(
         name = "dawn",
         build_file = ws + "//bazel/external/dawn:BUILD.bazel",
-        commit = "dc295723a2e40c7156cc8ef98e3a799cb2c1dec0",
+        commit = "ba1fc4223d17c35e6637ce82c751a0fe13176e05",
         remote = "https://dawn.googlesource.com/dawn.git",
     )
 
@@ -179,7 +180,7 @@ def c_plus_plus_deps(ws = "@skia"):
 
     git_repository(
         name = "spirv_tools",
-        commit = "6b1e609ef1609ac695cc465374d7e50831c1937b",
+        commit = "c91e9d09b5dba4461872cb4f0a40e95df699536d",
         remote = "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git",
     )
 
@@ -246,3 +247,18 @@ def bazel_deps():
             url = "https://github.com/bazelbuild/bazel-toolchains/archive/refs/tags/v5.1.1.tar.gz",
         ),
     )
+
+def header_based_configs():
+    maybe(
+        download_config_files,
+        name = "freetype_config",
+        skia_revision = "7b730016006e6b66d24a6f94eefe8bec00ac1674",
+        files = {
+            "BUILD.bazel": "bazel/external/freetype/config/BUILD.bazel",
+            "android/freetype/config/ftmodule.h": "third_party/freetype2/include/freetype-android/freetype/config/ftmodule.h",
+            "android/freetype/config/ftoption.h": "third_party/freetype2/include/freetype-android/freetype/config/ftoption.h",
+            "no-type1/freetype/config/ftmodule.h": "third_party/freetype2/include/freetype-no-type1/freetype/config/ftmodule.h",
+            "no-type1/freetype/config/ftoption.h": "third_party/freetype2/include/freetype-no-type1/freetype/config/ftoption.h",
+        },
+    )
+    # TODO(kjlubick) add the other configurations (e.g. harfbuzz, icu)
