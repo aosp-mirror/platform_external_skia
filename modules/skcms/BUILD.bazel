@@ -78,6 +78,8 @@ skia_cc_library(
         "src/skcms_internals.h",
         "src/skcms_public.h",
     ],
+    # The following comment will be replaced with G3-specific settings
+    # SKCMS_REPLACE_IN_GOOGLE3_COMPATIBLE_WITH
     # This header does not compile on its own and is meant to be included from skcms_Transform*.cc
     textual_hdrs = [
         "src/Transform_inl.h",
@@ -92,6 +94,8 @@ skia_cc_library(
         "src/skcms_internals.h",
         "src/skcms_public.h",
     ],
+    # The following comment will be replaced with G3-specific settings
+    # SKCMS_REPLACE_IN_GOOGLE3_COMPATIBLE_WITH
     # This header does not compile on its own and is meant to be included from skcms_Transform*.cc
     textual_hdrs = [
         "src/Transform_inl.h",
@@ -106,6 +110,8 @@ skia_cc_library(
         "src/skcms_internals.h",
         "src/skcms_public.h",
     ],
+    # The following comment will be replaced with G3-specific settings
+    # SKCMS_REPLACE_IN_GOOGLE3_COMPATIBLE_WITH
     # This header does not compile on its own and is meant to be included from skcms_Transform*.cc
     textual_hdrs = [
         "src/Transform_inl.h",
