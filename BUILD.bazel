@@ -127,6 +127,7 @@ test_suite(
     name = "all_go_tests",
     tests = [
         # Go tests in this list will be tested in CI. Please add any new Go tests to this suite.
+        "//bazel/configs:configs_test",
         "//bazel/exporter:exporter_test",
         "//infra/bots/task_drivers/bazel_test_benchmark:bazel_test_benchmark_test",
         "//infra/bots/task_drivers/bazel_test_gm:bazel_test_gm_test",
@@ -180,6 +181,28 @@ alias(
     visibility = ["//visibility:public"],
 )
 
+#########
+# gofmt #
+#########
+
+# Sample usage: "bazel run //:gofmt -- -s -w .".
+alias(
+    name = "gofmt",
+    actual = "@go_sdk//:bin/gofmt",
+    visibility = ["//visibility:public"],
+)
+
+############
+# Errcheck #
+############
+
+# Sample usage: "bazel run //:errcheck -- go.skia.org/skia/...".
+alias(
+    name = "errcheck",
+    actual = "//infra:errcheck",
+    visibility = ["//visibility:public"],
+)
+
 ##############
 # buildifier #
 ##############
@@ -188,5 +211,4 @@ alias(
 alias(
     name = "buildifier",
     actual = "//bazel:buildifier",
-    visibility = ["//visibility:public"],
 )
