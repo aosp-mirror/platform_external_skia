@@ -427,7 +427,7 @@ func GenTasks(cfg *Config) {
 	b.MustAddCasSpec(CAS_BAZEL, &specs.CasSpec{
 		Root: "..",
 		Paths: []string{
-			// source code
+			// Source code.
 			"skia/example",
 			"skia/experimental/bazel_test",
 			"skia/include",
@@ -436,16 +436,18 @@ func GenTasks(cfg *Config) {
 			"skia/tests",
 			"skia/third_party",
 			"skia/tools",
-			// needed for tests
+			// Needed for tests.
 			"skia/bench", // Needed to run benchmark tests with Bazel.
 			"skia/gm",    // Needed to run GMs with Bazel.
-			"skia/gn",    // some Python scripts still live here
+			"skia/gn",    // Some Python scripts still live here.
 			"skia/resources",
 			"skia/package.json",
 			"skia/package-lock.json",
-			"skia/DEPS",       // needed to check generation
-			"skia/infra/bots", // Many Go tests live here.
-			// Needed to run bazel
+			"skia/DEPS",   // Needed to check generation.
+			"skia/infra",  // Many Go tests and Bazel tools live here.
+			"skia/go.mod", // Needed by Gazelle.
+			"skia/go.sum", // Needed by Gazelle.
+			// Needed to run Bazel.
 			"skia/.bazelignore",
 			"skia/.bazelrc",
 			"skia/.bazelversion",
@@ -1420,13 +1422,36 @@ func (b *jobBuilder) recreateSKPs() {
 	})
 }
 
-// checkGeneratedFiles verifies that no generated SKSL files have been edited
-// by hand.
+// checkGeneratedFiles verifies that no generated SKSL files have been edited by hand, and that
+// we do not get any diffs after regenerating all files (go generate, Gazelle, etc.).
 func (b *jobBuilder) checkGeneratedFiles() {
 	b.addTask(b.Name, func(b *taskBuilder) {
 		b.cas(CAS_BAZEL)
 		b.dep(b.buildTaskDrivers("linux", "amd64"))
 		b.cmd("./check_generated_files",
+			"--local=false",
+			"--git_path=cipd_bin_packages/git",
+			"--project_id", "skia-swarming-bots",
+			"--task_id", specs.PLACEHOLDER_TASK_ID,
+			"--task_name", b.Name,
+			"--bazel_cache_dir", bazelCacheDirOnGCELinux,
+			"--bazel_arg=--config=for_linux_x64_with_rbe",
+			"--bazel_arg=--jobs=100",
+		)
+		b.cipd(specs.CIPD_PKGS_GIT_LINUX_AMD64...)
+		b.usesBazel("linux_x64")
+		b.linuxGceDimensions(MACHINE_TYPE_MEDIUM)
+		b.serviceAccount(b.cfg.ServiceAccountHousekeeper)
+	})
+}
+
+// goLinters runs various Go linters (gofmt, errcheck, etc.) and fails if there are any errors or
+// diffs.
+func (b *jobBuilder) goLinters() {
+	b.addTask(b.Name, func(b *taskBuilder) {
+		b.cas(CAS_BAZEL)
+		b.dep(b.buildTaskDrivers("linux", "amd64"))
+		b.cmd("./go_linters",
 			"--local=false",
 			"--git_path=cipd_bin_packages/git",
 			"--project_id", "skia-swarming-bots",
