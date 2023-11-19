@@ -7,6 +7,14 @@
 #define GRAPHITE_TEST_UTILS
 #endif
 
+#ifndef SKCMS_DISABLE_HSW
+#define SKCMS_DISABLE_HSW
+#endif
+
+#ifndef SKCMS_DISABLE_SKX
+#define SKCMS_DISABLE_SKX
+#endif
+
 #ifndef SKSL_ENABLE_TRACING
 #define SKSL_ENABLE_TRACING
 #endif
