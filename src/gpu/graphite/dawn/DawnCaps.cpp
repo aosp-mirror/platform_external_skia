@@ -299,6 +299,7 @@ void DawnCaps::initCaps(const wgpu::Device& device, const ContextOptions& option
     fStorageBufferPreferred = false;
 
     fDrawBufferCanBeMapped = false;
+    fBufferMapsAreAsync = true;
 
     fComputeSupport = true;
 
@@ -326,6 +327,9 @@ void DawnCaps::initShaderCaps(const wgpu::Device& device) {
 #if !defined(__EMSCRIPTEN__)
     if (device.HasFeature(wgpu::FeatureName::DualSourceBlending)) {
         shaderCaps->fDualSourceBlendingSupport = true;
+    }
+    if (device.HasFeature(wgpu::FeatureName::FramebufferFetch)) {
+        shaderCaps->fFBFetchSupport = true;
     }
 #endif
 }
