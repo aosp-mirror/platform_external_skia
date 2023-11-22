@@ -1144,6 +1144,14 @@ Result SKPSrc::draw(SkCanvas* canvas) const {
     };
     procs.fImageCtx = &ctx;
 
+    // SKPs may have typefaces encoded in them (e.g. with FreeType). We can try falling back
+    // to the Test FontMgr (possibly a native one) if we have do not have FreeType built-in.
+    procs.fTypefaceProc = [](const void* data, size_t size, void*) -> sk_sp<SkTypeface> {
+        SkStream** stream = reinterpret_cast<SkStream**>(const_cast<void*>(data));
+        return SkTypeface::MakeDeserialize(*stream, ToolUtils::TestFontMgr());
+    };
+
+
     std::unique_ptr<SkStream> stream = SkStream::MakeFromFile(fPath.c_str());
     if (!stream) {
         return Result::Fatal("Couldn't read %s.", fPath.c_str());
@@ -1258,6 +1266,7 @@ Result SkottieSrc::draw(SkCanvas* canvas) const {
     }
 
     auto animation = skottie::Animation::Builder(flags)
+        .setFontManager(ToolUtils::TestFontMgr())
         .setResourceProvider(std::move(resource_provider))
         .setPrecompInterceptor(std::move(precomp_interceptor))
         .makeFromFile(fPath.c_str());
@@ -2284,7 +2293,7 @@ Result ViaSerialization::draw(
 
     SkSerialProcs procs = serial_procs_using_png();
     // Serialize it and then deserialize it.
-    sk_sp<SkPicture> deserialized(SkPicture::MakeFromData(pic->serialize(&procs).get()));
+    sk_sp<SkPicture> deserialized = SkPicture::MakeFromData(pic->serialize(&procs).get());
 
     result = draw_to_canvas(fSink.get(), bitmap, stream, log, size,
                             [&](SkCanvas* canvas) {
