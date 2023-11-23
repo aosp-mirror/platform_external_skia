@@ -8,9 +8,10 @@
 #include "src/gpu/graphite/vk/VulkanResourceProvider.h"
 
 #include "include/core/SkSpan.h"
+#include "include/gpu/MutableTextureState.h"
 #include "include/gpu/graphite/BackendTexture.h"
 #include "include/gpu/graphite/vk/VulkanGraphiteTypes.h"
-#include "src/gpu/MutableTextureStateRef.h"
+#include "include/gpu/vk/VulkanMutableTextureState.h"
 #include "src/gpu/graphite/Buffer.h"
 #include "src/gpu/graphite/ComputePipeline.h"
 #include "src/gpu/graphite/GraphicsPipeline.h"
@@ -119,8 +120,8 @@ BackendTexture VulkanResourceProvider::onCreateBackendTexture(SkISize dimensions
     }
     return {dimensions,
             vkTexInfo,
-            createdTextureInfo.fMutableState->getImageLayout(),
-            createdTextureInfo.fMutableState->getQueueFamilyIndex(),
+            skgpu::MutableTextureStates::GetVkImageLayout(createdTextureInfo.fMutableState.get()),
+            skgpu::MutableTextureStates::GetVkQueueFamilyIndex(createdTextureInfo.fMutableState.get()),
             createdTextureInfo.fImage,
             createdTextureInfo.fMemoryAlloc};
 }
@@ -343,5 +344,18 @@ sk_sp<VulkanSamplerYcbcrConversion>
 
     return ycbcrConversion;
 }
+
+#ifdef SK_BUILD_FOR_ANDROID
+
+BackendTexture VulkanResourceProvider::onCreateBackendTexture(AHardwareBuffer* hardwareBuffer,
+                                                              bool isRenderable,
+                                                              bool isProtectedContent,
+                                                              SkISize dimensions,
+                                                              bool fromAndroidWindow) const {
+    // TODO(b/299475636): Implement.
+    return {};
+}
+
+#endif // SK_BUILD_FOR_ANDROID
 
 } // namespace skgpu::graphite
