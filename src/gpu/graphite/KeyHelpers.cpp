@@ -469,7 +469,7 @@ void add_image_uniform_data(const ShaderCodeDictionary* dict,
     SkASSERT(!imgData.fSampling.useCubic);
     VALIDATE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kImageShader)
 
-    gatherer->write(SkSize::Make(imgData.fImgSize));
+    gatherer->write(SkSize::Make(1.f/imgData.fImgSize.width(), 1.f/imgData.fImgSize.height()));
     gatherer->write(imgData.fSubset);
     gatherer->write(SkTo<int>(imgData.fTileModes[0]));
     gatherer->write(SkTo<int>(imgData.fTileModes[1]));
@@ -485,7 +485,7 @@ void add_cubic_image_uniform_data(const ShaderCodeDictionary* dict,
     SkASSERT(imgData.fSampling.useCubic);
     VALIDATE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kCubicImageShader)
 
-    gatherer->write(SkSize::Make(imgData.fImgSize));
+    gatherer->write(SkSize::Make(1.f/imgData.fImgSize.width(), 1.f/imgData.fImgSize.height()));
     gatherer->write(imgData.fSubset);
     gatherer->write(SkTo<int>(imgData.fTileModes[0]));
     gatherer->write(SkTo<int>(imgData.fTileModes[1]));
@@ -502,7 +502,7 @@ void add_hw_image_uniform_data(const ShaderCodeDictionary* dict,
     SkASSERT(!imgData.fSampling.useCubic);
     VALIDATE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kHWImageShader)
 
-    gatherer->write(SkSize::Make(imgData.fImgSize));
+    gatherer->write(SkSize::Make(1.f/imgData.fImgSize.width(), 1.f/imgData.fImgSize.height()));
     gatherer->write(SkTo<int>(imgData.fReadSwizzle));
 
     add_color_space_uniforms(imgData.fSteps, gatherer);
@@ -572,7 +572,7 @@ void add_yuv_image_uniform_data(const ShaderCodeDictionary* dict,
                                 PipelineDataGatherer* gatherer) {
     VALIDATE_UNIFORMS(gatherer, dict, BuiltInCodeSnippetID::kYUVImageShader)
 
-    gatherer->write(SkSize::Make(imgData.fImgSize));
+    gatherer->write(SkSize::Make(1.f/imgData.fImgSize.width(), 1.f/imgData.fImgSize.height()));
     gatherer->write(imgData.fSubset);
     gatherer->write(SkTo<int>(imgData.fTileModes[0]));
     gatherer->write(SkTo<int>(imgData.fTileModes[1]));
@@ -1352,8 +1352,6 @@ static skgpu::graphite::ReadSwizzle swizzle_class_to_read_enum(const skgpu::Swiz
         return skgpu::graphite::ReadSwizzle::kRGBA;
     } else if (swizzle == skgpu::Swizzle::RGB1()) {
         return skgpu::graphite::ReadSwizzle::kRGB1;
-    } else if (swizzle == skgpu::Swizzle("rrrr")) {
-        return skgpu::graphite::ReadSwizzle::kRRRR;
     } else if (swizzle == skgpu::Swizzle("rrr1")) {
         return skgpu::graphite::ReadSwizzle::kRRR1;
     } else if (swizzle == skgpu::Swizzle::BGRA()) {

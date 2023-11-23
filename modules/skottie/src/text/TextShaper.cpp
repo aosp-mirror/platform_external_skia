@@ -319,7 +319,8 @@ public:
                 ? std::make_unique<SkShaper::TrivialLanguageRunIterator>(fDesc.fLocale, utf8_bytes)
                 : SkShaper::MakeStdLanguageRunIterator(start, utf8_bytes);
         const auto font_iter = SkShaper::MakeFontMgrRunIterator(
-                                    start, utf8_bytes, fFont, fFontMgr, // used as fallback
+                                    start, utf8_bytes, fFont,
+                                    fFontMgr ? fFontMgr : SkFontMgr::RefEmpty(), // used as fallback
                                     nullptr,
                                     SkFontPriv::RefTypefaceOrDefault(fFont)->fontStyle(),
                                     lang_iter.get());
