@@ -121,7 +121,7 @@ sk_sp<const SkCapabilities> Surface::onCapabilities() {
     return fDevice->recorder()->priv().caps()->capabilities();
 }
 
-TextureProxy* Surface::backingTextureProxy() { return fDevice->target(); }
+TextureProxy* Surface::backingTextureProxy() const { return fDevice->target(); }
 
 sk_sp<SkSurface> Surface::MakeGraphite(Recorder* recorder,
                                        const SkImageInfo& info,
@@ -129,7 +129,6 @@ sk_sp<SkSurface> Surface::MakeGraphite(Recorder* recorder,
                                        Mipmapped mipmapped,
                                        const SkSurfaceProps* props) {
     sk_sp<Device> device = Device::Make(recorder, info, budgeted, mipmapped,
-                                        Protected::kNo,
                                         SkSurfacePropsCopyOrDefault(props),
                                         /* addInitialClear= */ true);
     if (!device) {
