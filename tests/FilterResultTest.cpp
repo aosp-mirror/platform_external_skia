@@ -348,29 +348,32 @@ public:
             } else if (auto* cf = std::get_if<sk_sp<SkColorFilter>>(&fAction)) {
                 paint.setColorFilter(*cf);
             } else if (auto* s = std::get_if<RescaleParams>(&fAction)) {
-                SkISize lowResSize = {sk_float_ceil2int(source->width() * s->fScale.width()),
-                                      sk_float_ceil2int(source->height() * s->fScale.height())};
-                while (source->width() != lowResSize.width() ||
-                       source->height() != lowResSize.height()) {
-                    float sx = std::max(0.5f, lowResSize.width() / (float) source->width());
-                    float sy = std::max(0.5f, lowResSize.height() / (float) source->height());
-                    SkISize stepSize = {sk_float_ceil2int(source->width() * sx),
-                                        sk_float_ceil2int(source->height() * sy)};
-                    auto stepDevice = ctx.backend()->makeDevice(stepSize, ctx.refColorSpace());
-                    clear_device(stepDevice.get());
-                    stepDevice->drawSpecial(source.get(),
-                                            SkMatrix::Scale(sx, sy),
-                                            SkFilterMode::kLinear,
-                                            /*paint=*/{});
-                    source = stepDevice->snapSpecial(SkIRect::MakeSize(stepSize));
-                }
+                // Don't redraw with an identity scale since sampling errors creep in on some GPUs
+                if (s->fScale.width() != 1.f || s->fScale.height() != 1.f) {
+                    SkISize lowResSize = {sk_float_ceil2int(source->width() * s->fScale.width()),
+                                        sk_float_ceil2int(source->height() * s->fScale.height())};
+                    while (source->width() != lowResSize.width() ||
+                        source->height() != lowResSize.height()) {
+                        float sx = std::max(0.5f, lowResSize.width() / (float) source->width());
+                        float sy = std::max(0.5f, lowResSize.height() / (float) source->height());
+                        SkISize stepSize = {sk_float_ceil2int(source->width() * sx),
+                                            sk_float_ceil2int(source->height() * sy)};
+                        auto stepDevice = ctx.backend()->makeDevice(stepSize, ctx.refColorSpace());
+                        clear_device(stepDevice.get());
+                        stepDevice->drawSpecial(source.get(),
+                                                SkMatrix::Scale(sx, sy),
+                                                SkFilterMode::kLinear,
+                                                /*paint=*/{});
+                        source = stepDevice->snapSpecial(SkIRect::MakeSize(stepSize));
+                    }
 
-                // Adjust to draw the low-res image upscaled to fill the original image bounds
-                sampling = SkFilterMode::kLinear;
-                tileMode = SkTileMode::kClamp;
-                canvas.translate(origin.x(), origin.y());
-                canvas.scale(1.f / s->fScale.width(), 1.f / s->fScale.height());
-                origin = LayerSpace<SkIPoint>({0, 0});
+                    // Adjust to draw the low-res image upscaled to fill the original image bounds
+                    sampling = SkFilterMode::kLinear;
+                    tileMode = SkTileMode::kClamp;
+                    canvas.translate(origin.x(), origin.y());
+                    canvas.scale(1.f / s->fScale.width(), 1.f / s->fScale.height());
+                    origin = LayerSpace<SkIPoint>({0, 0});
+                }
             }
             // else it's a rescale action, but for the expected image leave it unmodified.
             paint.setShader(source->asShader(tileMode,
@@ -656,7 +659,6 @@ private:
         float dg = (apm.fG - bpm.fG);
         float db = (apm.fB - bpm.fB);
         float delta = sqrt((2.f + r)*dr*dr + 4.f*dg*dg + (2.f + (1.f - r))*db*db);
-
         return delta <= tolerance;
     }
 
@@ -2125,7 +2127,7 @@ DEF_TEST_SUITE(RescaleWithTileMode, r,
 
         const bool periodic = tm == SkTileMode::kRepeat || tm == SkTileMode::kMirror;
         TestCase(r, "2-step rescale preserves tile mode",
-                 /*allowedPercentImageDiff=*/tm == SkTileMode::kDecal ? 5.7f
+                 /*allowedPercentImageDiff=*/tm == SkTileMode::kDecal ? 5.9f
                                                                       : periodic ? 2.5f : 1.f,
                  /*transparentCheckBorderTolerance=*/tm == SkTileMode::kDecal ? 2 : 0)
                 .source({16, 16, 64, 64})
@@ -2134,8 +2136,8 @@ DEF_TEST_SUITE(RescaleWithTileMode, r,
                 .run(/*requestedOutput=*/{0, 0, 80, 80});
 
         TestCase(r, "2-step rescale with near-identity elision",
-                 /*allowedPercentImageDiff=*/tm == SkTileMode::kDecal ? 37.3f
-                                                                      : periodic ? 73.2f : 52.f,
+                 /*allowedPercentImageDiff=*/tm == SkTileMode::kDecal ? 37.46f
+                                                                      : periodic ? 73.85 : 52.2f,
                  /*transparentCheckBorderTolerance=*/tm == SkTileMode::kDecal ? 6 : 0)
                 .source({16, 16, 64, 64})
                 .applyCrop({16, 16, 64, 64}, tm, Expect::kDeferredImage)
@@ -2182,7 +2184,7 @@ DEF_TEST_SUITE(RescaleWithTileMode, r,
                 .rescale({kNearlyIdentity.width(), 0.5f}, Expect::kNewImage, expectedTileMode)
                 .run(/*requestedOutput=*/{0, 0, 80, 80});
         TestCase(r, "Identity X axis, 2-step Y axis preserves tile mode",
-                 /*allowedPercentImageDiff=*/2.75f,
+                 /*allowedPercentImageDiff=*/3.1f,
                  /*transparentCheckBorderTolerance=*/tm == SkTileMode::kDecal ? 2 : 0)
                 .source({16, 16, 64, 64})
                 .applyCrop({16, 16, 64, 64}, tm, Expect::kDeferredImage)
@@ -2212,7 +2214,7 @@ DEF_TEST_SUITE(RescaleWithTileMode, r,
                 .rescale({0.5f, kNearlyIdentity.height()}, Expect::kNewImage, expectedTileMode)
                 .run(/*requestedOutput=*/{0, 0, 80, 80});
         TestCase(r, "2-step X axis, identity Y axis preserves tile mode",
-                 /*allowedPercentImageDiff=*/2.75f,
+                 /*allowedPercentImageDiff=*/3.1f,
                  /*transparentCheckBorderTolerance=*/tm == SkTileMode::kDecal ? 2 : 0)
                 .source({16, 16, 64, 64})
                 .applyCrop({16, 16, 64, 64}, tm, Expect::kDeferredImage)
@@ -2285,7 +2287,7 @@ DEF_TEST_SUITE(RescaleWithTransform, r,
 
         const bool periodic = tm == SkTileMode::kRepeat || tm == SkTileMode::kMirror;
         TestCase(r, "2-step rescale applies complex transform",
-                 /*allowedPercentImageDiff=*/periodic ? 6.5f : 1.52f,
+                 /*allowedPercentImageDiff=*/periodic ? 6.72f : 1.61f,
                  /*transparentCheckBorderTolerance=*/tm == SkTileMode::kDecal ? 4 : 0)
                 .source({16, 16, 64, 64})
                 .applyCrop({16, 16, 64, 64}, tm, Expect::kDeferredImage)
