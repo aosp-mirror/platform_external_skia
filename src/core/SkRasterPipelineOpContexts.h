@@ -192,14 +192,18 @@ struct SkRasterPipeline_TablesCtx {
 
 using SkRPOffset = uint32_t;
 
+struct SkRasterPipeline_InitLaneMasksCtx {
+    uint8_t* tail;
+};
+
 struct SkRasterPipeline_ConstantCtx {
     float value;
     SkRPOffset dst;
 };
 
 struct SkRasterPipeline_UniformCtx {
-    float *dst;
-    const float *src;
+    float* dst;
+    const float* src;
 };
 
 struct SkRasterPipeline_BinaryOpCtx {
@@ -227,20 +231,20 @@ struct SkRasterPipeline_SwizzleCtx {
 };
 
 struct SkRasterPipeline_ShuffleCtx {
-    float *ptr;
+    float* ptr;
     int count;
     uint16_t offsets[16];  // values must be byte offsets (4 * highp-stride * component-index)
 };
 
 struct SkRasterPipeline_SwizzleCopyCtx {
-    float *dst;
-    float *src;           // src values must _not_ overlap dst values
+    float* dst;
+    float* src;           // src values must _not_ overlap dst values
     uint16_t offsets[4];  // values must be byte offsets (4 * highp-stride * component-index)
 };
 
 struct SkRasterPipeline_CopyIndirectCtx {
-    float *dst;
-    const float *src;
+    float* dst;
+    const float* src;
     const uint32_t *indirectOffset;  // this applies to `src` or `dst` based on the op
     uint32_t indirectLimit;          // the indirect offset is clamped to this upper bound
     uint32_t slots;                  // the number of slots to copy
@@ -252,6 +256,10 @@ struct SkRasterPipeline_SwizzleCopyIndirectCtx : public SkRasterPipeline_CopyInd
 
 struct SkRasterPipeline_BranchCtx {
     int offset;  // contains the label ID during compilation, and the program offset when compiled
+};
+
+struct SkRasterPipeline_BranchIfAllLanesActiveCtx : public SkRasterPipeline_BranchCtx {
+    uint8_t* tail = nullptr;  // lanes past the tail are _never_ active, so we need to exclude them
 };
 
 struct SkRasterPipeline_BranchIfEqualCtx : public SkRasterPipeline_BranchCtx {
