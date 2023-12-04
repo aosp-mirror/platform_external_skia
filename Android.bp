@@ -3332,10 +3332,6 @@ cc_test {
         "tools/trace/EventTracingPriv.cpp",
         "tools/trace/SkDebugfTracer.cpp",
     ],
-
-    lto: {
-        never: true,
-    },
 }
 
 cc_library_shared {
