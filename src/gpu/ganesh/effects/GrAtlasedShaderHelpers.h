@@ -90,11 +90,13 @@ static inline void append_multitexture_lookup(GrGeometryProcessor::ProgramImpl::
     // conditionally load from the indexed texture sampler
     for (int i = 0; i < numTextureSamplers-1; ++i) {
         args.fFragBuilder->codeAppendf("if (%s == %d) { %s = ", texIdx.fsIn(), i, colorName);
-        args.fFragBuilder->appendTextureLookup(args.fTexSamplers[i], coordName);
+        args.fFragBuilder->appendTextureLookup(args.fTexSamplers[i],
+                                               coordName);
         args.fFragBuilder->codeAppend("; } else ");
     }
     args.fFragBuilder->codeAppendf("{ %s = ", colorName);
-    args.fFragBuilder->appendTextureLookup(args.fTexSamplers[numTextureSamplers - 1], coordName);
+    args.fFragBuilder->appendTextureLookup(args.fTexSamplers[numTextureSamplers - 1],
+                                           coordName);
     args.fFragBuilder->codeAppend("; }");
 }
 
