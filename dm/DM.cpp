@@ -147,6 +147,7 @@ static DEFINE_bool2(veryVerbose, V, false, "tell individual tests to be verbose.
 static DEFINE_bool(cpu, true, "Run CPU-bound work?");
 static DEFINE_bool(gpu, true, "Run GPU-bound work?");
 static DEFINE_bool(graphite, true, "Run Graphite work?");
+static DEFINE_bool(neverYieldToWebGPU, false, "Run Graphite with never-yield context option.");
 
 static DEFINE_bool(dryRun, false,
                    "just print the tests that would be run, without actually running them.");
@@ -979,7 +980,7 @@ static void push_sink(const SkCommandLineConfig& config, Sink* s) {
 
     // Try a simple Src as a canary.  If it fails, skip this sink.
     struct : public Src {
-        Result draw(SkCanvas* c) const override {
+        Result draw(SkCanvas* c, skiatest::graphite::GraphiteTestContext*) const override {
             c->drawRect(SkRect::MakeWH(1,1), SkPaint());
             return Result::Ok();
         }
@@ -1538,11 +1539,11 @@ static void run_ganesh_test(skiatest::Test test, const GrContextOptions& grCtxOp
     done("unit", "test", "", test.fName);
 }
 
-static void run_graphite_test(skiatest::Test test, skgpu::graphite::ContextOptions options) {
+static void run_graphite_test(skiatest::Test test, skiatest::graphite::TestOptions& options) {
     DMReporter reporter;
     if (!FLAGS_dryRun && !should_skip("_", "tests", "_", test.fName)) {
         AutoreleasePool pool;
-        test.modifyGraphiteContextOptions(&options);
+        test.modifyGraphiteContextOptions(&options.fContextOptions);
 
         skiatest::ReporterContext ctx(&reporter, SkString(test.fName));
         start("unit", "test", "", test.fName);
@@ -1595,8 +1596,10 @@ int main(int argc, char** argv) {
         gVLog = stderr;
     }
 
-    skgpu::graphite::ContextOptions graphiteCtxOptions;
-    // Currently no command line flags directly control the Graphite context options
+    skiatest::graphite::TestOptions graphiteOptions;
+    if (FLAGS_neverYieldToWebGPU) {
+        graphiteOptions.fNeverYieldToWebGPU = true;
+    }
 
     GrContextOptions grCtxOptions;
     CommonFlags::SetCtxOptions(&grCtxOptions);
@@ -1667,7 +1670,7 @@ int main(int argc, char** argv) {
     // With the parallel work running, run serial tasks and tests here on main thread.
     for (Task& task : serial) { Task::Run(task); }
     for (skiatest::Test& test : *gGaneshTests) { run_ganesh_test(test, grCtxOptions); }
-    for (skiatest::Test& test : *gGraphiteTests) { run_graphite_test(test, graphiteCtxOptions); }
+    for (skiatest::Test& test : *gGraphiteTests) { run_graphite_test(test, graphiteOptions); }
 
     // Wait for any remaining parallel work to complete (including any spun off of serial tasks).
     parallel.wait();
