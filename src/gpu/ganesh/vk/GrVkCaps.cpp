@@ -450,11 +450,6 @@ void GrVkCaps::init(const GrContextOptions& contextOptions,
         fAvoidUpdateBuffers = true;
     }
 
-    if (kQualcomm_VkVendor == properties.vendorID) {
-        // Adreno devices don't support push constants well
-        fMaxPushConstantsSize = 0;
-    }
-
     fNativeDrawIndirectSupport = features.features.drawIndirectFirstInstance;
     if (properties.vendorID == kQualcomm_VkVendor) {
         // Indirect draws seem slow on QC. Disable until we can investigate. http://skbug.com/11139
@@ -2073,6 +2068,7 @@ std::vector<GrTest::TestFormatColorTypeCombination> GrVkCaps::getTestingCombinat
         { GrColorType::kRGBA_8888,        GrBackendFormats::MakeVk(VK_FORMAT_R8G8B8A8_UNORM)      },
         { GrColorType::kRGBA_8888_SRGB,   GrBackendFormats::MakeVk(VK_FORMAT_R8G8B8A8_SRGB)       },
         { GrColorType::kRGB_888x,         GrBackendFormats::MakeVk(VK_FORMAT_R8G8B8A8_UNORM)      },
+        { GrColorType::kRGB_888x,         GrBackendFormats::MakeVk(VK_FORMAT_B8G8R8A8_UNORM)      },
         { GrColorType::kRGB_888x,         GrBackendFormats::MakeVk(VK_FORMAT_R8G8B8_UNORM)        },
         { GrColorType::kRG_88,            GrBackendFormats::MakeVk(VK_FORMAT_R8G8_UNORM)          },
         { GrColorType::kBGRA_8888,        GrBackendFormats::MakeVk(VK_FORMAT_B8G8R8A8_UNORM)      },
