@@ -1343,7 +1343,6 @@ cc_library_static {
         "src/pathops/SkReduceOrder.cpp",
         "src/pdf/SkClusterator.cpp",
         "src/pdf/SkDeflate.cpp",
-        "src/pdf/SkJpegInfo_libjpegturbo.cpp",
         "src/pdf/SkKeyedImage.cpp",
         "src/pdf/SkPDFBitmap.cpp",
         "src/pdf/SkPDFDevice.cpp",
