@@ -35,13 +35,15 @@ SkSpecialImage::SkSpecialImage(const SkIRect& subset,
     , fProps(props) {
 }
 
-sk_sp<SkImage> SkSpecialImage::asImage(const SkIRect* subset) const {
-    if (subset) {
-        SkIRect absolute = subset->makeOffset(this->subset().topLeft());
-        return this->onAsImage(&absolute);
-    } else {
-        return this->onAsImage(nullptr);
-    }
+void SkSpecialImage::draw(SkCanvas* canvas,
+                          SkScalar x, SkScalar y,
+                          const SkSamplingOptions& sampling,
+                          const SkPaint* paint, bool strict) const {
+    SkRect dst = SkRect::MakeXYWH(x, y, this->subset().width(), this->subset().height());
+
+    canvas->drawImageRect(this->asImage(), SkRect::Make(this->subset()), dst,
+                          sampling, paint, strict ? SkCanvas::kStrict_SrcRectConstraint
+                                                  : SkCanvas::kFast_SrcRectConstraint);
 }
 
 sk_sp<SkShader> SkSpecialImage::asShader(SkTileMode tileMode,
@@ -74,32 +76,11 @@ public:
 
     size_t getSize() const override { return fBitmap.computeByteSize(); }
 
-    void onDraw(SkCanvas* canvas, SkScalar x, SkScalar y, const SkSamplingOptions& sampling,
-                const SkPaint* paint) const override {
-        SkRect dst = SkRect::MakeXYWH(x, y,
-                                      this->subset().width(), this->subset().height());
-
-        canvas->drawImageRect(fBitmap.asImage(), SkRect::Make(this->subset()), dst,
-                              sampling, paint, SkCanvas::kStrict_SrcRectConstraint);
-    }
+    sk_sp<SkImage> asImage() const override { return fBitmap.asImage(); }
 
     sk_sp<SkSpecialImage> onMakeSubset(const SkIRect& subset) const override {
         // No need to extract subset, onGetROPixels handles that when needed
         return SkSpecialImages::MakeFromRaster(subset, fBitmap, this->props());
-    }
-
-    sk_sp<SkImage> onAsImage(const SkIRect* subset) const override {
-        if (subset) {
-            SkBitmap subsetBM;
-
-            if (!fBitmap.extractSubset(&subsetBM, *subset)) {
-                return nullptr;
-            }
-
-            return subsetBM.asImage();
-        }
-
-        return fBitmap.asImage();
     }
 
     sk_sp<SkShader> onAsShader(SkTileMode tileMode,
