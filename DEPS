@@ -4,7 +4,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling different
   # dependencies without interference from each other.
-  'sk_tool_revision': 'git_revision:9196dd4707244d414a0e6ea18899136f00a68750',
+  'sk_tool_revision': 'git_revision:f92827c3066c072b7cb10d2817f36706383d590f',
 
   # ninja CIPD package version.
   # https://chrome-infra-packages.appspot.com/p/infra/3pp/tools/ninja
@@ -23,12 +23,12 @@ vars = {
 #     ./tools/git-sync-deps
 deps = {
   "buildtools"                                   : "https://chromium.googlesource.com/chromium/src/buildtools.git@b138e6ce86ae843c42a1a08f37903207bebcca75",
-  "third_party/externals/angle2"                 : "https://chromium.googlesource.com/angle/angle.git@b8ca8de438417fefeb821d184322b26cb5d56a2c",
+  "third_party/externals/angle2"                 : "https://chromium.googlesource.com/angle/angle.git@de591cff03161df5601291ac3deef54933d209a4",
   "third_party/externals/brotli"                 : "https://skia.googlesource.com/external/github.com/google/brotli.git@6d03dfbedda1615c4cba1211f8d81735575209c8",
   "third_party/externals/d3d12allocator"         : "https://skia.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git@169895d529dfce00390a20e69c2f516066fe7a3b",
   # Dawn requires jinja2 and markupsafe for the code generator, tint for SPIRV compilation, and abseil for string formatting.
   # When the Dawn revision is updated these should be updated from the Dawn DEPS as well.
-  "third_party/externals/dawn"                   : "https://dawn.googlesource.com/dawn.git@29ab089da26563ce8069fd5c1a7963b5c75702c3",
+  "third_party/externals/dawn"                   : "https://dawn.googlesource.com/dawn.git@cebf22738909498596d4c7ede83d229addbd5e9e",
   "third_party/externals/jinja2"                 : "https://chromium.googlesource.com/chromium/src/third_party/jinja2@515dd10de9bf63040045902a4a310d2ba25213a0",
   "third_party/externals/markupsafe"             : "https://chromium.googlesource.com/chromium/src/third_party/markupsafe@006709ba3ed87660a17bd4548c45663628f5ed85",
   "third_party/externals/abseil-cpp"             : "https://skia.googlesource.com/external/github.com/abseil/abseil-cpp.git@cb436cf0142b4cbe47aae94223443df7f82e2920",
@@ -60,7 +60,7 @@ deps = {
   "third_party/externals/vulkanmemoryallocator"  : "https://chromium.googlesource.com/external/github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator@a6bfc237255a6bac1513f7c1ebde6d8aed6b5191",
   # vulkan-deps is a meta-repo containing several interdependent Khronos Vulkan repositories.
   # When the vulkan-deps revision is updated, those repos (spirv-*, vulkan-*) should be updated as well.
-  "third_party/externals/vulkan-deps"            : "https://chromium.googlesource.com/vulkan-deps@ad5595d637f0eca3ccb8fa7f015cef0a8fd6f263",
+  "third_party/externals/vulkan-deps"            : "https://chromium.googlesource.com/vulkan-deps@ebfd5875d4b769d547c26945915805bd72ba86f5",
   "third_party/externals/spirv-cross"            : "https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Cross@f349c91274b91c1a7c173f2df70ec53080076191",
   "third_party/externals/spirv-headers"          : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers.git@1c6bb2743599e6eb6f37b2969acc0aef812e32e3",
   "third_party/externals/spirv-tools"            : "https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git@e03c8f5c8ed77f0b1a2408d55bb8f00a7ee9793c",
