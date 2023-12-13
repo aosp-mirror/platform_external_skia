@@ -7,44 +7,31 @@
 
 #include "src/gpu/ganesh/image/SkSpecialImage_Ganesh.h"
 
-#include "include/core/SkCanvas.h"
 #include "include/core/SkColorSpace.h"  // IWYU pragma: keep
 #include "include/core/SkImage.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkRect.h"
-#include "include/core/SkScalar.h"
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrRecordingContext.h"
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkPoint_impl.h"
-#include "include/private/gpu/ganesh/GrImageContext.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/core/SkSpecialImage.h"
-#include "src/gpu/SkBackingFit.h"
 #include "src/gpu/ganesh/GrSurfaceProxy.h"
 #include "src/gpu/ganesh/GrSurfaceProxyPriv.h"
 #include "src/gpu/ganesh/GrSurfaceProxyView.h"
 #include "src/gpu/ganesh/image/GrImageUtils.h"
 #include "src/gpu/ganesh/image/SkImage_Ganesh.h"
-#include "src/image/SkImage_Base.h"
 #include "src/shaders/SkImageShader.h"
 
 #include <cstddef>
 #include <utility>
 
-class SkPaint;
 class SkShader;
 struct SkSamplingOptions;
 enum SkColorType : int;
 enum class SkTileMode;
-
-static sk_sp<SkImage> wrap_proxy_in_image(GrRecordingContext* context,
-                                          GrSurfaceProxyView view,
-                                          const SkColorInfo& colorInfo) {
-    return sk_make_sp<SkImage_Ganesh>(
-            sk_ref_sp(context), kNeedNewImageUniqueID, std::move(view), colorInfo);
-}
 
 class SkSpecialImage_Gpu final : public SkSpecialImage {
 public:
@@ -62,30 +49,6 @@ public:
 
     bool isGaneshBacked() const override { return true; }
 
-    void onDraw(SkCanvas* canvas,
-                SkScalar x,
-                SkScalar y,
-                const SkSamplingOptions& sampling,
-                const SkPaint* paint) const override {
-        SkRect dst = SkRect::MakeXYWH(x, y, this->subset().width(), this->subset().height());
-
-        // TODO: In this instance we know we're going to draw a sub-portion of the backing
-        // texture into the canvas so it is okay to wrap it in an SkImage. This poses
-        // some problems for full deferral however in that when the deferred SkImage_Ganesh
-        // instantiates itself it is going to have to either be okay with having a larger
-        // than expected backing texture (unlikely) or the 'fit' of the SurfaceProxy needs
-        // to be tightened (if it is deferred).
-        sk_sp<SkImage> img = sk_sp<SkImage>(new SkImage_Ganesh(
-                sk_ref_sp(canvas->recordingContext()), this->uniqueID(), fView, this->colorInfo()));
-
-        canvas->drawImageRect(img,
-                              SkRect::Make(this->subset()),
-                              dst,
-                              sampling,
-                              paint,
-                              SkCanvas::kStrict_SrcRectConstraint);
-    }
-
     GrRecordingContext* getContext() const override { return fContext; }
 
     GrSurfaceProxyView view(GrRecordingContext*) const { return fView; }
@@ -95,36 +58,10 @@ public:
                 fContext, subset, this->uniqueID(), fView, this->colorInfo(), this->props());
     }
 
-    sk_sp<SkImage> onAsImage(const SkIRect* subset) const override {
-        GrSurfaceProxy* proxy = fView.proxy();
-        if (subset) {
-            if (proxy->isFunctionallyExact() && *subset == SkIRect::MakeSize(proxy->dimensions())) {
-                proxy->priv().exactify(false);
-                // The existing GrTexture is already tight so reuse it in the SkImage
-                return wrap_proxy_in_image(fContext, fView, this->colorInfo());
-            }
-
-            auto subsetView = GrSurfaceProxyView::Copy(fContext,
-                                                       fView,
-                                                       skgpu::Mipmapped::kNo,
-                                                       *subset,
-                                                       SkBackingFit::kExact,
-                                                       skgpu::Budgeted::kYes,
-                                                       /*label=*/"SkSpecialImage_AsImage");
-            if (!subsetView) {
-                return nullptr;
-            }
-            SkASSERT(subsetView.asTextureProxy());
-            SkASSERT(subsetView.proxy()->priv().isExact());
-
-            // MDB: this is acceptable (wrapping subsetProxy in an SkImage) bc Copy will
-            // return a kExact-backed proxy
-            return wrap_proxy_in_image(fContext, std::move(subsetView), this->colorInfo());
-        }
-
-        proxy->priv().exactify(true);
-
-        return wrap_proxy_in_image(fContext, fView, this->colorInfo());
+    sk_sp<SkImage> asImage() const override {
+        fView.proxy()->priv().exactify(true);
+        return sk_make_sp<SkImage_Ganesh>(
+                sk_ref_sp(fContext), this->uniqueID(), fView, this->colorInfo());
     }
 
     sk_sp<SkShader> onAsShader(SkTileMode tileMode,
